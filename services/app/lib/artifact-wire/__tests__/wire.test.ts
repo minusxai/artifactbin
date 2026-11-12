@@ -1,3 +1,4 @@
+import { EVENTS_SCHEMA } from '@/lib/platform';
 /**
  * THE WIRE through the interface: the body parsers every write door shares, the read and write echoes (summary,
  * full row, create and replace replies, an archived version), placement from a wire `parent_id`, and the
@@ -113,7 +114,7 @@ describe('route adapters', () => {
     const doc = await mine(owner);
     expect(await resolveImageReference(`ref:${doc.id}`, owner)).toBeNull();
     const view = (id: string, headers: Record<string, string> = {}, query = '') => new Request(`https://app.test/api/page/artifact/${id}/view${query}`, { method: 'POST', headers });
-    const views = async () => { await flushViews(); return (await sql<{ n: number }>("SELECT count(*)::int AS n FROM analytics_events WHERE event='view'"))[0]!.n; };
+    const views = async () => { await flushViews(); return (await sql<{ n: number }>(`SELECT count(*)::int AS n FROM ${EVENTS_SCHEMA}.events WHERE object_kind='artifact' AND verb='viewed'`))[0]!.n; };
     expect(await recordArtifactView(view(doc.id, { 'sec-fetch-site': 'cross-site' }), doc.id, async () => owner)).toBe('forbidden');
     expect(await recordArtifactView(view(doc.id), doc.id, async () => stranger)).toBe('not_found');
     expect(await recordArtifactView(view(image.id), image.id, async () => owner)).toBe('not_found');

@@ -24,15 +24,6 @@
  *      harnesses are held to rule 4 alone: their own module freely, another module through its entries, test-only
  *      entries and leaves, or a white-box import recorded in module-graph.allowed-test-imports.json.
  *
- *   5. the GraphQL fence (GRAPHQL_COMPAT below): the deprecated GraphQL compatibility layer — lib/graphql-compat and the
- *      page runtime's GraphQL client — is imported only by itself, by tests and by the listed importers (its routes,
- *      the browser client entry and the composition points that still wire it in). The list only shrinks: a listed
- *      file that no longer imports it is a violation, and every file of the layer opens with its DEPRECATED header.
- *
- * Three layers, separable: `scanImports` (files → imports), `buildModuleGraph` (imports → module
- * edges), `checkModuleGraph` (graph + allow-list → violations). Nothing is cached on disk.
- *
- *   node scripts/ci/module-graph.mjs [--root <dir>] [--allowed <file>] [--allowed-tests <file>] [--write-allowed] [--write-allowed-tests]
  */
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -123,8 +114,6 @@ const BUNDLED_IMPORTERS = [
   'services/app/lib/artifact-backend/retrying.ts',
   'services/app/lib/dataflow/image-source.ts',
 
-  'services/app/lib/dataset-access/local-files.ts',
-  'services/app/lib/graphql-compat/dataset/local-preview.ts',
   'services/app/lib/document-serving/document-frame.ts',
   'services/app/lib/document/annotation-range.ts',
 
@@ -144,7 +133,6 @@ const BUNDLED_IMPORTERS = [
 
   'services/app/lib/libraries/index.ts',
   'services/app/lib/local-connection/read-backend.ts',
-  'services/app/lib/mermaid-images/mermaid-render.ts',
 
   'services/app/lib/html-systems/story-systems.ts',
   'services/app/lib/html-systems/story-themes.ts',
@@ -152,22 +140,20 @@ const BUNDLED_IMPORTERS = [
   'services/app/lib/html-components/table-comparison.ts',
 
   'services/app/lib/validation/atlas-schemas.ts',
-  'services/app/lib/viz/deck-engine-core.ts',
   'services/app/lib/viz/geo-assets.ts',
   'services/app/lib/viz/theme.ts',
 ];
 const BUNDLED_LEAVES = {
-  'lib/html-component-specs': ['boundary-ids', 'comparison', 'deck-spec', 'isometric-spec', 'mermaid-source'],
+  'lib/html-component-specs': ['boundary-ids', 'comparison', 'isometric-spec'],
   'lib/ui-runtime': ['dialog-shell', 'file-display', 'person-face', 'popper', 'popup-dismiss', 'tooltip-core', 'trusted-overlay-host', 'trusted-portal', 'trusted-ui-styles'],
   'lib/html-reader': ['anchor', 'anchor-restore', 'ast-path', 'contract', 'document-endpoint', 'document-sources', 'edit-bar', 'follow-version', 'frame-bridge/parent', 'frame-markup', 'frame-navigation', 'frame-session', 'frame-src', 'host-comments-contract', 'reader-mode', 'reload'],
   'lib/annotations': ['comment-folds', 'markdown-lite', 'pages', 'region-comment', 'remote-reply', 'session-mentions'],
   'lib/artifact-backend': ['browser-artifact-write', 'errors', 'http', 'reader-http', 'region-http'],
   'lib/capture': ['contract', 'png', 'screen'],
   'lib/chart': ['chart-theme'],
-  'lib/data-ingest': ['coerce', 'csv', 'types'],
+  'lib/data-ingest': ['types'],
   'lib/datasets': ['dataset-usage', 'definition', 'graphql-names', 'types'],
-  // The skill's local preview bundle (graphql-compat/dataset/local-preview) reads local files and runs local SQL without the index.
-  'lib/dataset-access': ['local-files', 'local-sql', 'model'],
+  'lib/dataset-access': [],
   'lib/html-bridge': ['annotations', 'comment-actions-presentation', 'comment-view-session', 'imported-observation', 'observe', 'presence', 'reader', 'region-carets', 'selection', 'selection-contract', ],
   'lib/html-components': ['hosted.json', 'markdown-styles', 'row-identity', 'table-comparison', 'table-values'],
   'lib/html-page': ['core-script', 'design-system', 'html-source', 'pwa-settings'],
@@ -184,15 +170,11 @@ const BUNDLED_LEAVES = {
   ],
   'lib/local-connection': ['broker', 'browser', 'contracts', 'read-backend'],
   'lib/markdown': ['content', 'code-block'],
-  'lib/mermaid-images': ['reader-draw'],
-  'lib/page-operations': ['namespaces'],
   'lib/skills': ['agent-discovery', 'setup-instructions'],
   'lib/html-systems': ['story-systems', 'story-themes', ],
   'lib/story-ui': [
     'comment-target', ],
   'lib/validation': [ 'html-system-modes', 'story-system-names', 'story-theme-names'],
-  'lib/viz': [
-    'deck-engine-core', ],
   'lib/workspace': ['artifact-starters', 'breadcrumb', 'visibility-icons'],
 };
 // Declared leaves are reviewed public entries: any importer may use them (`leavesForAll`), so a light caller never has to
@@ -250,23 +232,6 @@ export const DEEP_MODULES = {
   'lib/object-store': { entries: [''] },
   // server.ts imports these two statically, before it reads configuration; the index loads lib/platform.
   'lib/runtime': { entries: ['', 'dev-vite', 'request-log'] },
-};
-/**
- * Rule 5's table: the deprecated GraphQL compatibility layer (lib/graphql-compat/AGENTS.md) as path prefixes or exact
- * paths without extension, the header each of its files opens with, and the only files outside it that may import
- * it, each with why. New code reads and writes data through `sql` (lib/dataset-access, lib/page-doors); an entry here
- * is a reviewed edit, and the list only shrinks.
- */
-export const GRAPHQL_COMPAT = {
-  paths: ['services/app/lib/graphql-compat/', 'services/app/lib/html-runtime/apollo/graphql-compat'],
-  header: '/** DEPRECATED: GraphQL compatibility for pages published before SQL. Do not use in new code; do not extend. */',
-  importers: {
-    'services/app/app/api/artifacts/[id]/graphql/route.ts': 'the page and dataset GraphQL route',
-    'services/app/lib/operations/registry.ts': "the dataset GraphQL route's operation (executeDatasetGraphql)",
-    'services/app/lib/local-connection/server.ts': "the local connection's page GraphQL route",
-    'services/app/lib/html-runtime/browser-client.ts': 'the browser client entry: `client` and `gql` in @afbin/apollo',
-    'services/app/lib/publish/publish/requests.ts': "publishing checks a page's generated root names",
-  },
 };
 /** A lib module without a row: entered only through its index (rule 4's default). */
 const INDEX_ONLY = Object.freeze({ entries: [''] });
@@ -478,15 +443,10 @@ function buildModuleGraph(imports) {
 }
 
 /** The source graph; its `tests` property is the same graph drawn from tests and harnesses, checked by rule 4 alone. */
-export const scanModuleGraph = (root, fence = GRAPHQL_COMPAT) => {
+export const scanModuleGraph = (root) => {
   const sources = listSourceFiles(root), imports = scanImports(root, sources);
-  const fenced = [...sources, ...listSourceFiles(root, true)].filter(file => inFence(fence, file.replace(/\.[^.]+$/, '')));
   return Object.assign(buildModuleGraph(imports), {
     tests: buildModuleGraph(scanImports(root, listSourceFiles(root, true))),
-    // Rule 5 reads every import (within one module too: the browser client is a file of lib/html-runtime) and the
-    // opening line of each file of the fence.
-    imports,
-    fenced: fenced.map(file => ({ file, opening: fs.readFileSync(path.join(root, file), 'utf8').split('\n', 1)[0] })),
   });
 };
 
@@ -518,36 +478,7 @@ const edgesWithin = (graph, members) => {
   return members.flatMap(from => [...graph.get(from).keys()].filter(to => inside.has(to)).sort().map(to => [from, to]));
 };
 
-const inFence = (fence, base) => fence.paths.some(entry => (entry.endsWith('/') ? base.startsWith(entry) || base === entry.slice(0, -1) : base === entry));
-/**
- * Rule 5: every import of the GraphQL fence from a file outside it that is not a listed importer, every listed importer
- * that no longer imports it, and every file of the fence that does not open with its header. A tree without the fence
- * (a synthetic test tree) has nothing to check.
- */
-function graphqlFenceViolations(imports, fenced, fence) {
-  if (!fenced.length) return [];
-  const refused = [], used = new Set();
-  for (const { file, specifier } of imports) {
-    const base = importPath(file, specifier);
-    if (base === null || !inFence(fence, base.replace(/\/$/, '')) || inFence(fence, file.replace(/\.[^.]+$/, ''))) continue;
-    if (Object.hasOwn(fence.importers, file)) used.add(file);
-    else refused.push(`  ${file} imports ${specifier}`);
-  }
-  const stale = Object.keys(fence.importers).filter(file => !used.has(file)).sort();
-  const unheaded = fenced.filter(({ opening }) => opening !== fence.header).map(({ file }) => `  ${file}`);
-  return [
-    ...(refused.length ? ['The GraphQL compatibility layer (lib/graphql-compat, html-runtime/apollo/graphql-compat) is deprecated: only its routes, the browser client entry and the files in GRAPHQL_COMPAT.importers (scripts/ci/module-graph.mjs) import it. Read and write data with `sql` (lib/dataset-access, lib/page-doors) instead:', ...[...new Set(refused)]] : []),
-    ...(stale.length ? ['GraphQL compatibility importers that no longer import it; remove them from GRAPHQL_COMPAT.importers in scripts/ci/module-graph.mjs:', ...stale.map(file => `  ${file}`)] : []),
-    ...(unheaded.length ? [`Every file of the GraphQL compatibility layer opens with its header line: ${fence.header}`, ...unheaded] : []),
-  ];
-}
-
-/**
- * Policy: the violations of the rules above, each a readable line naming the offending edge(s).
- * `islands` ({ importers, leaves }) checks rule 4 for lib/islands alone, with those lists;
- * `deepModules` replaces rule 4's whole table.
- */
-export function checkModuleGraph(graph, allowed, _legacy = undefined, deepModules = DEEP_MODULES, fence = GRAPHQL_COMPAT) {
+export function checkModuleGraph(graph, allowed, _legacy = undefined, deepModules = DEEP_MODULES) {
   const violations = [];
   const allowedEdges = new Set((allowed.cycles ?? []).flatMap(cycle => cycle.edges));
   const cyclicEdges = new Set();
@@ -573,7 +504,6 @@ export function checkModuleGraph(graph, allowed, _legacy = undefined, deepModule
   }
   violations.push(...deepModuleViolations(graph, deepModules));
   if (graph.tests) violations.push(...testDeepModuleViolations(graph.tests, deepModules, allowed.testImports));
-  if (graph.imports) violations.push(...graphqlFenceViolations(graph.imports, graph.fenced ?? [], fence));
   return { violations };
 }
 

@@ -111,7 +111,7 @@ try {
   });
   await lane(check, "published HTML and private local state").run(async () => {
     const owner = await startDocument(BASE);
-    const html = (label) => pageHtml(label, `<h1>${label}</h1><button id="inc">Increment</button><output id="count"></output>`, `const query=gql\`{count}\`;const draw=async()=>document.querySelector('#count').textContent=(await client.query({query})).data.count;document.querySelector('#inc').onclick=async()=>{await client.updateQuery({query},({count})=>({count:count+1}));await draw()};await draw();document.documentElement.dataset.afReady='yes';`, { count: 0 });
+    const html = (label) => pageHtml(label, `<h1>${label}</h1><button id="inc">Increment</button><output id="count"></output>`, `const draw=async()=>document.querySelector('#count').textContent=state.getState().count;document.querySelector('#inc').onclick=async()=>{await state.setState(({count})=>({count:count+1}));await draw()};await draw();document.documentElement.dataset.afReady='yes';`, { count: 0 });
     await put(owner, html("Original"));
     const reader = await open(owner.id);
     await reader.frame.locator("#inc").click();

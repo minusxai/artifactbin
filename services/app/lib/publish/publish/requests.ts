@@ -7,7 +7,6 @@ import { committedOpenAnnotations, createdArtifactWire, parseAccessValue, parseE
 import {htmlAssetLinks, htmlPageDeclarations} from '@/lib/html-page';
 import { trackEvent } from '@/lib/analytics';
 import {authorizeDatasetBinding,DatasetBindingUnsupportedError} from '@/lib/dataset-access';
-import {pageDatasetRoots} from '@/lib/graphql-compat';
 import type {HtmlDatasetLink,HtmlDeclaredQuery,HtmlDefaultConnectionLink,HtmlLiveDatasetLink} from '@artifactbin/contracts';
 import {hasDefaultConnection} from '@/lib/connections';
 import {LiveDatasetRefusal,livePageDeclarations,prepareLiveDataset,withoutSecrets} from '@/lib/live-datasets';
@@ -21,9 +20,9 @@ import {liveConnectionOf} from '@/lib/datasets';
  * body parsers and the folder placement), so this module calls down into
  * artifacts and nothing in artifacts calls up into it.
  */
-import { CONTENT_FIELDS, PAGE_SQL_ROOT, PAGE_SQL_TYPES, PAGE_VIEWER_ROOT, PAGE_VIEWER_TYPE, type DatasetAccess, type Visibility } from '@artifactbin/contracts';
+import { CONTENT_FIELDS, type DatasetAccess, type Visibility } from '@artifactbin/contracts';
 import { identityForUser, shareTargetsRefusal, TEST_ACCOUNT_RESTRICTED, type AccessActor, type TokenHoldingActor } from '@/lib/accounts';
-import { prepareCatalog, catalogOf, DatasetError, graphqlRootNameProblem } from '@/lib/datasets';
+import { prepareCatalog, DatasetError } from '@/lib/datasets';
 import { json } from '@/lib/http';
 import { ID_RE, getDb } from '@/lib/platform';
 import { prepareContentInput, applyPreparedContent, type PreparedContent } from '../prepared/prepare-content';
@@ -52,8 +51,6 @@ async function prepareHtmlDatasets(body:Record<string,unknown>,actor:AccessActor
   const {links,queries}=await livePageDeclarations(actor,publisher,declared,written);
   const datasets=links.filter((link):link is HtmlDatasetLink=>link.kind==='dataset');
   await Promise.all(datasets.map(binding=>authorizeDatasetBinding(actor,binding)));
-  const collision=await graphqlRootCollision(actor,datasets);
-  if(collision)return json({error:'graphql_root_collision',details:[collision]},400);
   return {links:[...links,...connections],queries};
  }catch(error){
   if(error instanceof LiveDatasetRefusal)return json(error.body,error.status);
@@ -62,41 +59,7 @@ async function prepareHtmlDatasets(body:Record<string,unknown>,actor:AccessActor
  }
 }
 
-/**
- * A dataset link mounts its roots flat at the top of the page schema: one equal to another link's name or to
- * another link's generated root or type refuses the page, naming both links; so does one meeting the built-in viewer
- * or `_sql`.
- */
-async function graphqlRootCollision(actor:AccessActor,datasets:readonly HtmlDatasetLink[]):Promise<string|null>{
- const reserved=(name:string)=>name===PAGE_VIEWER_ROOT||name===PAGE_VIEWER_TYPE?'the built-in viewer query':name===PAGE_SQL_ROOT||(PAGE_SQL_TYPES as readonly string[]).includes(name)?'the built-in read-only SQL query':null;
- const builtIn=(link:string,name:string)=>`link "${link}" ${link===name?'names':'generates'} ${name}, ${reserved(name)}; rename the link`;
- // Every page answers the built-in viewer and `_sql`: no link may be named, or generate, their roots or types.
- const owner=new Map<string,string>(datasets.map(link=>[link.name,link.name]));
- for(const link of datasets){
-  for(const name of await pageDatasetRoots(actor,link)){
-   if(reserved(name))return builtIn(link.name,name);
-   const other=owner.get(name);
-   if(other!==undefined&&!(other===link.name&&name===link.name))return `link "${link.name}" generates ${name}, which link "${other}" also names; rename one link`;
-   owner.set(name,link.name);
-  }
- }
- return null;
-}
 
-/**
- * `name` on create: the new dataset's GraphQL root (lib/datasets graphqlRootNameProblem), stored in its policy's
- * configuration and never changed. Only a new single-table stored dataset takes one, never a copy (forked_from).
- */
-function parseGraphqlName(body:Record<string,unknown>,parsed:{format:string;meta:Record<string,unknown>},forkedFrom:string|null|undefined):string|undefined|Response{
- if(body.name===undefined)return undefined;
- const refuse=(detail:string)=>json({error:'invalid_graphql_name',details:[detail]},400);
- const problem=graphqlRootNameProblem(body.name);if(problem)return refuse(problem);
- const catalog=catalogOf(parsed);
- if(parsed.format!=='dataset'||liveConnectionOf(parsed.meta))return refuse('name sets the GraphQL root of a new stored dataset (CSV or JSON rows)');
- if((catalog?.tables.length??1)>1)return refuse('a multi-table dataset\'s GraphQL roots are its table names');
- if(forkedFrom)return refuse('a copy takes its GraphQL root from its title: drop name or forked_from');
- return body.name as string;
-}
 
 function parseAccessField(body: Record<string, unknown>, format: string | undefined): DatasetAccess | undefined | Response {
   return parseAccessValue(body.access, format);
@@ -130,7 +93,6 @@ export async function replaceArtifactWithBody(
 ): Promise<Response> {
   if (!body) return json({ error: 'invalid_json' }, 400);
   if(['markup','jsx','markdown','document_update'].some(key=>Object.hasOwn(body!,key)))return json({error:'native_html_required',hint:'Replace native pages with the complete html field and observed version and state.'},400);
-  if(Object.hasOwn(body,'name'))return json({error:'graphql_name_immutable',details:['A dataset\'s GraphQL name is chosen once, when it is created, and never changes: drop name. Publish a new dataset with the name you want.']},400);
   // The row FIRST: refs and imports resolve as the DOCUMENT's owner, never as
   // the writer — an editor (artifact_shares.role) replacing a document that
   // carries its owner's <Mutation> or private image must not fail on assets
@@ -391,7 +353,6 @@ async function createArtifactFromBodyPrepared(
   if (visibility instanceof Response) return visibility;
   const access = parseAccessField(body, parsed.format);
   if (access instanceof Response) return access;
-  const graphqlName=parseGraphqlName(body,parsed,forkedFrom);if(graphqlName instanceof Response)return graphqlName;
 
   const htmlData=await prepareHtmlDatasets(body,publicationActor,actor);if(htmlData instanceof Response)return htmlData;
   const htmlDatasets=htmlData?.links;
@@ -410,7 +371,7 @@ async function createArtifactFromBodyPrepared(
     ...(access ? { access } : {}),
     ancestor_ids: placement.ancestor_ids,
     destination,
-  }, {...(live?{liveConnection:live.connection}:{}),reservedId:body.reserved_id as string|undefined,operation,shares,...(link?{linkRole:link}:{}),...(forkedFrom?{forkedFrom}:{}),...(graphqlName!==undefined?{graphqlName}:{})});}catch(error){if(error instanceof LiveRegionRefusal)return json({error:error.code,details:error.details},409);if(error instanceof CreationReplay)return json(error.reply.body,error.reply.status);if(error instanceof DatasetError)return json({error:'dataset_error',details:[error.message]},error.status);throw error;}
+  }, {...(live?{liveConnection:live.connection}:{}),reservedId:body.reserved_id as string|undefined,operation,shares,...(link?{linkRole:link}:{}),...(forkedFrom?{forkedFrom}:{})});}catch(error){if(error instanceof LiveRegionRefusal)return json({error:error.code,details:error.details},409);if(error instanceof CreationReplay)return json(error.reply.body,error.reply.status);if(error instanceof DatasetError)return json({error:'dataset_error',details:[error.message]},error.status);throw error;}
   return json(responseBody(row), 201);
 }
 

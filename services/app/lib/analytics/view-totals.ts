@@ -1,85 +1,101 @@
 /**
- * ALL-TIME VIEW COUNTS, read in time that does not follow the number of view events.
+ * Canonical viewed/UTC-v1 totals. Each artifact has a source/version cursor and a durable set of
+ * (UTC day, visitor) memberships. A fold reads only events above its ingestion position, inserts
+ * unseen memberships, and increments the total in the same transaction. Backdated deliveries are
+ * ordinary new positions; the membership key still dedupes them against previously folded days.
  *
- * A document's views are its unique daily visitors, summed over every day it was opened: one row per
- * (visitor, day), where the visitor key is a hash salted with the day (lib/analytics/events), and a
- * legacy row with no visitor counts once on its own `seq`. Counting that from analytics_events costs
- * every event the document ever received, on every read of every listing.
+ * Sorted cursor upserts lock rows and serialize overlapping folds, including across processes. The fold's
+ * statement snapshot is taken AFTER those locks: a waiting reader must see its predecessor's
+ * memberships and cursor together. Committed event positions cannot arrive behind that cursor.
+ * All queries inside a transaction use tx (never an events-service call or getDb query).
  *
- * A UTC day that has ended gains no more views, so its count is final. `artifact_view_totals` holds the
- * sum of the final days up to `closed_through`; a read adds the days after it, counted live from the
- * events (an index range on (artifact_id, created_at): today's views, not all of them), and then folds the
- * days that closed since into the row so the next read starts later. The fold is compare-and-set on
- * `closed_through`, so racing readers add a day once. The table is derived and disposable: with no row
- * the live range starts at the beginning of time and the answer is the same, only slower once.
+ * History starts at retained canonical events on first read. Legacy analytics/cache rows are never
+ * read or changed. Once folded, memberships and totals survive log pruning; events pruned before
+ * the first fold cannot be recovered. Series still show the retained log only. Exact arbitrary-late
+ * deduplication requires keeping these derived memberships (one per unique visitor/day), so their
+ * storage grows with observed unique visits. Resetting either derived table requires resetting both.
+ *
+ * Initial folds include pre-position rows for installations awaiting events-service boot. That boot
+ * assigns every such row a position before appending; later manual NULL-position inserts are not
+ * supported ingestion. A source reset/replacement must use a new source/version or reset both caches.
  */
-import { getDb } from '../platform';
+import { EVENTS_SCHEMA, getDb, type Db } from '../platform';
+import { dailySeries } from '../viz';
+import { eventsTablePresent } from './log';
 
-const TODAY = "(now() AT TIME ZONE 'UTC')::date";
+const SOURCE = `${EVENTS_SCHEMA}:artifact/viewed:utc-v1`;
 
-interface TotalRow {
-  id: string;
-  /** The day the stored total is final through, or null when none is stored. */
-  prior: string | null;
-  /** Stored total plus the live days after it. */
-  views: number;
-  /** Of the live days, the views on days that have ended: what the fold adds. */
-  closed: number;
-  /** Yesterday (UTC) as this statement saw it: the day the fold advances to. */
-  through: string;
+/** Unique visitors per artifact and UTC day, incrementally folded from the canonical log. */
+export async function viewTotalsFor(ids: readonly string[]): Promise<Map<string, number>> {
+  const totals = new Map(ids.map(id => [id, 0]));
+  if (!ids.length || !(await eventsTablePresent())) return totals;
+  return canonicalViewTotals(await getDb(), ids);
 }
 
-/**
- * Unique daily visitors, all time, per artifact. Every requested id is present in the answer (0 when
- * never viewed). Two statements: the read, and, only when a day has closed since an artifact's last
- * fold, one batched fold.
- */
-export async function viewTotalsFor(ids: readonly string[]): Promise<Map<string, number>> {
-  const totals = new Map<string, number>();
-  if (ids.length === 0) return totals;
-  const db = await getDb();
-  const read = await db.query<TotalRow>(
-    `SELECT i.id, t.closed_through::text AS prior,
-       (COALESCE(t.views, 0) + COALESCE(SUM(d.n), 0))::int AS views,
-       COALESCE(SUM(d.n) FILTER (WHERE d.day < ${TODAY}), 0)::int AS closed,
-       (${TODAY} - 1)::text AS through
-     FROM unnest($1::text[]) AS i(id)
-     LEFT JOIN artifact_view_totals t ON t.artifact_id = i.id
-     LEFT JOIN LATERAL (
-       SELECT (e.created_at AT TIME ZONE 'UTC')::date AS day, COUNT(DISTINCT COALESCE(e.visitor, e.seq::text)) AS n
-       FROM analytics_events e
-       WHERE e.artifact_id = i.id AND e.event IS NOT DISTINCT FROM 'view'
-         AND e.created_at >= COALESCE((t.closed_through + 1)::timestamp AT TIME ZONE 'UTC', '-infinity'::timestamptz)
-       GROUP BY 1
-     ) d ON true
-     GROUP BY i.id, t.closed_through, t.views`,
-    [[...ids]],
-  );
-  const stale = read.rows.filter((row) => row.prior === null || row.prior < row.through);
-  for (const row of read.rows) totals.set(row.id, row.views);
-  if (stale.length > 0) await foldClosedDays(stale);
+/** Internal aggregation seam for real multi-connection database verification. */
+export async function canonicalViewTotals(db: Pick<Db, 'query' | 'transaction'>, ids: readonly string[]): Promise<Map<string, number>> {
+  const totals = new Map(ids.map(id => [id, 0]));
+  const requested = [...totals.keys()];
+  // One snapshot is enough for an unchanged listing. A commit after this snapshot belongs to the
+  // next read; an in-flight fold leaves its old cursor and memberships visible together.
+  const cached = await db.query<{ id: string; views: string | null; pending: boolean }>(`
+    SELECT requested.artifact_id AS id,c.views::text AS views,
+      c.position IS NULL OR EXISTS (
+        SELECT 1 FROM ${EVENTS_SCHEMA}.events e
+        WHERE e.object_id=requested.artifact_id AND e.position>c.position
+      ) AS pending
+    FROM unnest($2::text[]) requested(artifact_id)
+    LEFT JOIN canonical_view_totals c ON c.source=$1 AND c.artifact_id=requested.artifact_id`, [SOURCE, requested]);
+  if (cached.rows.every(row => !row.pending)) {
+    for (const row of cached.rows) totals.set(row.id, Number(row.views));
+    return totals;
+  }
+  const rows = await db.transaction(async tx => {
+    // Both admission and locking use the same bytewise order to avoid overlapping-batch deadlocks.
+    await tx.query(`INSERT INTO canonical_view_totals AS c (source, artifact_id)
+      SELECT $1, id FROM unnest($2::text[]) id ORDER BY id COLLATE "C"
+      ON CONFLICT (source,artifact_id) DO UPDATE SET position=c.position`, [SOURCE, requested]);
+    return (await tx.query<{ id: string; views: string }>(`WITH incoming AS MATERIALIZED (
+        SELECT c.artifact_id, e.position, e.at, e.verb, e.object_kind, COALESCE(e.subject_id,e.id) AS visitor
+        FROM canonical_view_totals c CROSS JOIN LATERAL (
+          SELECT position,at,verb,object_kind,subject_id,id FROM ${EVENTS_SCHEMA}.events
+          WHERE object_id=c.artifact_id AND position>c.position
+          UNION ALL
+          SELECT position,at,verb,object_kind,subject_id,id FROM ${EVENTS_SCHEMA}.events
+          WHERE object_id=c.artifact_id AND c.position IS NULL
+        ) e
+        WHERE c.source=$1 AND c.artifact_id=ANY($2::text[])
+      ), added AS (
+        INSERT INTO canonical_view_visitors (source,artifact_id,day,visitor)
+        SELECT DISTINCT $1, artifact_id, (at AT TIME ZONE 'UTC')::date, visitor FROM incoming
+        WHERE object_kind='artifact' AND verb='viewed'
+        ON CONFLICT DO NOTHING RETURNING artifact_id
+      ), counts AS (
+        SELECT artifact_id, count(*) AS n FROM added GROUP BY artifact_id
+      ), heads AS (
+        SELECT artifact_id, max(position) AS position FROM incoming GROUP BY artifact_id
+      ) UPDATE canonical_view_totals c
+      SET views=c.views+COALESCE((SELECT n FROM counts WHERE artifact_id=c.artifact_id),0),
+          position=GREATEST(COALESCE(c.position,0),COALESCE((SELECT position FROM heads WHERE artifact_id=c.artifact_id),0))
+      WHERE c.source=$1 AND c.artifact_id=ANY($2::text[])
+      RETURNING c.artifact_id AS id,c.views::text AS views`, [SOURCE, requested])).rows;
+  });
+  for (const row of rows) totals.set(row.id, Number(row.views));
   return totals;
 }
 
-/**
- * Advance each artifact's stored total to yesterday, adding the days that closed. Best effort: a fold
- * that fails (or loses the race) leaves the answer unchanged, so it never fails the read it rides on.
- */
-async function foldClosedDays(rows: TotalRow[]): Promise<void> {
-  try {
-    const db = await getDb();
-    await db.query(
-      `WITH x AS (SELECT * FROM unnest($1::text[], $2::date[], $3::int[], $4::date[]) AS x(id, prior, closed, through)),
-         advanced AS (
-           UPDATE artifact_view_totals t SET closed_through = x.through, views = t.views + x.closed
-           FROM x WHERE x.prior IS NOT NULL AND t.artifact_id = x.id AND t.closed_through = x.prior
-           RETURNING t.artifact_id)
-       INSERT INTO artifact_view_totals (artifact_id, closed_through, views)
-       SELECT id, through, closed FROM x WHERE prior IS NULL
-       ON CONFLICT (artifact_id) DO NOTHING`,
-      [rows.map((row) => row.id), rows.map((row) => row.prior), rows.map((row) => row.closed), rows.map((row) => row.through)],
-    );
-  } catch {
-    // A derived total that could not be advanced is recomputed by the next read.
-  }
+/** Daily unique visitors, in one bounded-window query for the whole shelf. Missing series are zero. */
+export async function viewSeriesFor(ids: readonly string[], days = 14): Promise<Map<string, number[]>> {
+  if (!ids.length || !(await eventsTablePresent())) return new Map();
+  const db = await getDb();
+  const read = await db.query<{ artifact_id: string; day: string; n: number }>(
+    `SELECT e.object_id AS artifact_id,
+       to_char(e.at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day,
+       COUNT(DISTINCT COALESCE(e.subject_id, e.id))::int AS n
+     FROM ${EVENTS_SCHEMA}.events e
+     WHERE e.object_id = ANY($1::text[]) AND e.object_kind = 'artifact' AND e.verb = 'viewed'
+       AND e.at >= (((now() AT TIME ZONE 'UTC')::date - ($2::int - 1))::timestamp AT TIME ZONE 'UTC')
+     GROUP BY e.object_id, day`, [[...ids], days],
+  );
+  return dailySeries(read.rows, days);
 }

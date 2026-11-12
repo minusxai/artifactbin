@@ -107,8 +107,8 @@ describe('native user fields',()=>{
   const dataset=await create(a.token,{dataset:[{id:1,who:null}],columns:[{name:'who',type:'user',constraints:{self:true}}],access:'readwrite',shares:[{email:b.user.email,role:'editor'}]});
   const report=await create(a.token,{visibility:'public',html:`<!doctype html><html><head><link rel="af-dataset" data-af-name="records" href="ref:${dataset.id}" data-af-mode="live"></head><body><h1>Tasks</h1></body></html>`});
   const client=nativeDatasetClient(report.id),rows=await client.rows('records','who',{token:b.token});
-  expect(rows.body.errors).toBeUndefined();const row=rows.body.data!.records[0]!;
-  const change=(who:string,key:string)=>client.gql('mutation($id: ID!, $who: String) { update_records_by_pk(pk_columns: {_id: $id}, _set: {who: $who}) { _id } }',{id:row._id,who},{token:b.token},key);
+  expect(rows.body.error).toBeUndefined();const row=rows.body.rows![0]!;
+  const change=(who:string,key:string)=>client.sql('update records set who = $who where _id = $id',{id:row._id,who},{token:b.token},key);
   const forged=await change(a.user.id,'forged_self_0123456789');
   expect(client.committed(forged)).toBe(false);
   expect((await getArtifactById(dataset.id))?.version).toBe(1);

@@ -10,9 +10,10 @@ import type { HtmlJsonObject } from '@artifactbin/contracts';
 import type { HtmlAssemblyInput } from './contract';
 export type { HtmlAssemblyInput, HtmlRuntimeConfig } from './contract';
 export { createLocalStore } from './apollo/local-store';
+export {createStateStore} from './state-store';
 export { assertStorable } from './apollo/storable';
 export { decodeState, encodeState, readStateFragment, stateUrl } from './apollo/state-url';
-export type { AfClient, StatePort, RemotePort } from './apollo/apollo-contracts';
+export type { StatePort, RemotePort } from './apollo/apollo-contracts';
 
 /** Native HTML only: no JSX compilation, component evaluation, or author code execution. */
 export function assembleHtmlPage(input: HtmlAssemblyInput): string {

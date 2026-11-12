@@ -8,7 +8,7 @@ import {execFileSync} from 'node:child_process';
 import {pathToFileURL} from 'node:url';
 import {POST as publish} from '@/app/api/artifacts/route';
 import {GET as read,PUT as update} from '@/app/api/artifacts/[id]/route';
-import {GET as readPolicy} from '@/app/api/artifacts/[id]/policy/route';
+import {POST as pageSql} from '@/app/api/artifacts/[id]/sql/route';
 import {GET as listComments,POST as addComment} from '@/app/api/artifacts/[id]/annotations/route';
 import {POST as replyComment,PATCH as editComment} from '@/app/api/artifacts/[id]/annotations/[annId]/route';
 import {request,useAppHarness,mintAccountToken} from './harness';
@@ -58,8 +58,10 @@ describe('installed native author examples',()=>{
    // Each dataset is named by its file: the name its page links it by, and its title.
    for(const [file,name] of [['deliveries.csv','deliveries'],['notes.csv','notes']]){
     const id=byPath[file].id,dataset=await get(id);expect(dataset.title).toBe(file);
-    const policy=await (await readPolicy(request(`/api/artifacts/${id}/policy`,{token:owner.token}),{params:Promise.resolve({id})})).json();
-    expect(policy.policy.tables[0].configuration).toEqual({custom_name:name});
+    expect(page.html).toContain(`data-af-name="${name}" href="ref:${id}"`);
+    const result=await pageSql(request(`/api/artifacts/${first.id}/sql`,{method:'POST',token:owner.token,json:{revision:'1',sql:`select count(*) as n from ${name}`}}),{params:Promise.resolve({id:first.id})});
+    expect(result.status,await result.clone().text()).toBe(200);
+    expect((await result.json()).rows).toEqual([{n:dataset.rowCount}]);
    }
    expect((await get(byPath['notes.csv'].id)).columns.map((c:any)=>c.name)).toEqual(['note','created_by']);
    // The author's file keeps the path, so a changed CSV updates that same dataset; nothing is duplicated.

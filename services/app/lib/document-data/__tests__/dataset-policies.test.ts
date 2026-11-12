@@ -5,7 +5,7 @@ import { POST as create } from '@/app/api/artifacts/route';
 import { PUT as replace } from '@/app/api/artifacts/[id]/route';
 import { artifactState, getArtifactById, replaceArtifactFor, updateSharingFor } from '@/lib/artifacts';
 import { loadDatasetRows } from '@/lib/datasets';
-import {linkedGql,liveLink} from '@/__tests__/linked-datasets';
+import {linkedSql,liveLink} from '@/__tests__/linked-datasets';
 // The policy API serves the app's editor and the read-only view since the old app policy route was retired.
 import { GET as readPolicy, PUT as writePolicy } from '@/app/api/artifacts/[id]/policy/route';
 import { setDatasetPolicy } from '@/lib/document-data/dataset-policy';
@@ -45,11 +45,11 @@ async function fixture() {
   // A write through the page's generated API: committed only when every root it names answered.
   const link=liveLink(ds);
   const writeAs=async(caller:AccessActor,mutation='add',n=2)=>{
-    const row=((await linkedGql(actor,link,'{ data(limit: 1) { _id } }')).data!.data as Array<{_id:string}>)[0]!;
+    const row=((await linkedSql(actor,link,'select _id from data limit 1')).rows! as Array<{_id:string}>)[0]!;
     const reply=mutation==='remove'
-      ?await linkedGql(caller,link,'mutation($id: ID!) { delete_data_by_pk(_id: $id) { _id } }',{variables:{id:row._id},pageId:doc})
-      :await linkedGql(caller,link,'mutation($n: Float) { insert_data_one(object: {n: $n}) { _id } }',{variables:{n},pageId:doc});
-    return {outcome:!reply.errors?.length&&reply.data&&Object.values(reply.data).every(value=>value!==null)?'committed':'rejected'};
+      ?await linkedSql(caller,link,'delete from data where _id = $id',{variables:{id:row._id},pageId:doc})
+      :await linkedSql(caller,link,'insert into data(n) values($n)',{variables:{n},pageId:doc});
+    return {outcome:!reply.error&&typeof reply.affected==='number'?'committed':'rejected'};
   };
   const write=(mutation='add',n=2)=>writeAs(ANONYMOUS_ACTOR,mutation,n);
   return {owner,actor,ds,doc,policy,write,writeAs,link};

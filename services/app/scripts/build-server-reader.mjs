@@ -36,7 +36,7 @@ else {
 // A separate process: the repository build scripts import from this package's scripts, never the reverse.
 execFileSync(process.execPath, [path.join(root, '../../scripts/build/build-html-components.mjs')], { stdio: 'inherit' });
 const hosted = JSON.parse(fs.readFileSync(path.join(root, 'lib/html-components/hosted.json'), 'utf8'));
-const components = [...hosted.components, ...hosted.legacy];
+const components = hosted.components;
 
 // Older checkouts also wrote mermaid-modules.json here; nothing reads it.
 fs.rmSync(path.join(output, 'mermaid-modules.json'), { force: true });

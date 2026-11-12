@@ -31,8 +31,8 @@ const ROOT_MARKDOWN = ['README.md', 'SETUP.md', 'SECURITY.md', 'AGENTS.md', 'CLA
 /** The directories that hold a scoped AGENTS.md/CLAUDE.md pair, each linked from the root's dispatch table. */
 export const SCOPED_DIRS = [
   'services/app/lib/platform', 'services/app/lib/artifact-access', 'services/app/lib/html-runtime',
-  'services/app/lib/html-components', 'services/app/lib/page-operations', 'services/app/lib/dataflow',
-  'services/app/lib/graphql-compat', 'services/app/lib/skills', 'services/app/solid', 'services/app/server',
+  'services/app/lib/html-components', 'services/app/lib/page-doors', 'services/app/lib/dataflow',
+  'services/app/lib/skills', 'services/app/solid', 'services/app/server',
   'services/browser', 'scripts', 'scripts/ci',
 ];
 /** The author skill: product content with its own guard (services/app/lib/skills/__tests__/skill-tree.test.ts). */

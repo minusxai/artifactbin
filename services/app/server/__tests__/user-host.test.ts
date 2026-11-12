@@ -84,13 +84,9 @@ it('denies retired compiler, identity and encoded doors even carrying credential
  }
  for(const host of ['https://u.example.test','https://app.u.example.test','https://a.b.u.example.test'])expect((await server.request(host+'/')).status).toBe(404);
 });
-it('only admits operation-selected guest GraphQL queries, never mutations or ambiguous requests',async()=>{
- const user=await owner(),post=await page(user.token,'unlisted'),server=app(),url=`${base}/api/artifacts/${post.id}/graphql`;
- for(const query of ['mutation { anything }','query Read { __typename } mutation Write { anything }']){
-  const res=await server.request(url,{method:'POST',headers:{'content-type':'text/plain',authorization:`Bearer ${user.token}`},body:JSON.stringify({query})});
-  expect(res.status).toBe(query.startsWith('mutation')?403:400);expect(res.headers.get('access-control-allow-origin')).toBe('*');expect(res.headers.has('access-control-allow-credentials')).toBe(false);expect(res.headers.has('set-cookie')).toBe(false);
- }
- const res=await server.request(url,{method:'POST',body:JSON.stringify({query:'query Read { __typename }',operationName:'Read',revision:'1'})});expect(res.status).toBe(200);expect(res.headers.get('x-robots-tag')).toContain('noindex');
+it('refuses every retired GraphQL request, even carrying account credentials',async()=>{
+ const user=await owner(),post=await page(user.token,'unlisted'),server=app();
+ for(const method of ['GET','POST']){const res=await server.request(`${base}/api/artifacts/${post.id}/graphql`,{method,headers:{authorization:`Bearer ${user.token}`,'content-type':'text/plain'},...(method==='POST'?{body:JSON.stringify({query:'{__typename}'})}:{})});expect(res.status).toBe(404);expect(res.headers.has('set-cookie')).toBe(false);}
 });
 it('removes retired domain API routes on the app host',async()=>{
  await owner();const server=app();for(const path of ['/api/my/domain','/api/my/domain/verify','/api/domains/allow'])expect((await server.request('https://app.example.test'+path)).status).toBe(404);
@@ -118,7 +114,7 @@ it('never turns an account bearer into dataset guest authority',async()=>{
  const created=await publish(request('/api/artifacts',{method:'POST',token:user.token,json:{dataset:[{secret:'hidden'}],visibility:'private'}}));expect(created.status).toBe(201);const dataset=await created.json();
  const linked=await page(user.token,'unlisted',{html:`<link rel="af-dataset" data-af-name="secret_data" href="ref:${dataset.id}"><h1>Dataset guest</h1>`});
  const response=await app().request(`${base}/api/artifacts/${linked.id}/graphql`,{method:'POST',headers:{authorization:`Bearer ${user.token}`,cookie:'session=secret','content-type':'text/plain'},body:JSON.stringify({revision:'1',query:'{ secret_data { secret } }'})});
- expect(response.headers.has('set-cookie')).toBe(false);expect(response.headers.get('access-control-allow-origin')).toBe('*');expect(await response.text()).not.toContain('hidden');
+ expect(response.status).toBe(404);expect(response.headers.has('set-cookie')).toBe(false);expect(await response.text()).not.toContain('hidden');
 });
 
 it('bypasses composition authentication before it can resolve or refresh a session',async()=>{
@@ -154,8 +150,8 @@ it('exposes the same eligible public-view URL on reads, replacements and the app
 });
 
 it('shares one static allowlist with dev ingress and rejects encoded or executable Vite paths',()=>{
- for(const path of ['/af/apollo.js','/af/reader.js','/af/components/chunk-ab12.js','/af/styles.css','/fonts/test.woff2','/af/app/app-123.css','/af/lib/vega-6.3.1/index.js','/geojson/world.json'])expect(userHostStaticPath(path),path).toBe(true);
- for(const path of ['/solid-entry.tsx','/@vite/client','/@fs/private.ts','/islands/entry.js','/af/app/app-123.js','/assets/app-123.css','/af/chrome.js','/fonts/%2f../private.ts','/api/internal/build-assets/assets/app.css'])expect(userHostStaticPath(path),path).toBe(false);
+ for(const path of ['/af/apollo.js','/af/reader.js','/af/components/chunk-ab12.js','/af/styles.css','/af/fonts/test.woff2','/af/app/app-123.css','/af/lib/vega-6.3.1/index.js','/af/geojson/world.json'])expect(userHostStaticPath(path),path).toBe(true);
+ for(const path of ['/fonts/test.woff2','/geojson/world.json','/solid-entry.tsx','/@vite/client','/@fs/private.ts','/islands/entry.js','/af/app/app-123.js','/assets/app-123.css','/af/chrome.js','/fonts/%2f../private.ts','/api/internal/build-assets/assets/app.css'])expect(userHostStaticPath(path),path).toBe(false);
 });
 
 it('an owner host has no function door: its unframed CSP admits no function path, and a function path is not found',async()=>{

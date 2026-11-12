@@ -6,8 +6,7 @@
  * usage, references teach technique. ONE table, one reason per row (its ruling): a hit says why the phrase went. The
  * scopes are SKILL.md, references, examples, component and design-system CSS headers, script sources, the API's monitoring guidance, the
  * operations registry, the page runtime, and every product source's strings outside the deprecated GraphQL layer (the hints
- * and replies the product hands an agent: a create reply's note, a refusal's hint). The single exception is lib/html-runtime/legacy-page-names.ts, the
- * isolated alias live pages still call. It reads files by path, so it runs in the `pr fast` guard tier
+ * and replies the product hands an agent: a create reply's note, a refusal's hint). It reads files by path, so it runs in the `pr fast` guard tier
  * (scripts/ci/guard-tests.json).
  */
 import {readdirSync, readFileSync} from 'node:fs';
@@ -22,16 +21,13 @@ type Scope = 'skill' | 'references' | 'examples' | 'components' | 'scripts' | 'm
 const read = (url: URL) => readFileSync(url, 'utf8');
 const dir = (name: string, pattern: RegExp) => readdirSync(new URL(name, SKILL)).filter(file => pattern.test(file)).sort()
   .map(file => ({path: `skills/artifactbin/${name}${file}`, text: read(new URL(name + file, SKILL))}));
-/** The one file allowed to name the old runtime listener: live pages published before 2026-11-04 call it. */
-const COMPAT = 'legacy-page-names.ts';
 const runtime = readdirSync(new URL('html-runtime/', LIB)).filter(file => file.endsWith('.ts')).sort();
 const APP = new URL('../../../', import.meta.url);
 /** The deprecated GraphQL layer (scripts/ci/module-graph.mjs GRAPHQL_COMPAT.paths): what it answers older pages stays. */
-const GRAPHQL_LAYER = ['lib/graphql-compat/', 'lib/html-runtime/apollo/graphql-compat'];
 /** The product's own sources (the skill tree has its scopes above), tests and the GraphQL layer left out. */
 const product = ['app', 'lib', 'server', 'solid'].flatMap(top => readdirSync(new URL(top + '/', APP), {recursive: true,
   encoding: 'utf8'}).map(file => `${top}/${file}`)).filter(file => /\.tsx?$/.test(file) &&
-  !/(?:^|\/)(?:__tests__|node_modules)\//.test(file) && !GRAPHQL_LAYER.some(prefix => file.startsWith(prefix))).sort()
+  !/(?:^|\/)(?:__tests__|node_modules)\//.test(file)).sort()
   .map(file => ({path: file, text: read(new URL(file, APP))}));
 /** A source with all but its string, template and JSX text blanked, newlines kept: what it says, never its comments. */
 function literals({path, text}: {path: string; text: string}): {path: string; text: string} {
@@ -57,7 +53,7 @@ const FILES: Record<Scope, Array<{path: string; text: string}>> = {
   monitoring: [{path: 'lib/artifact-wire/monitoring-guidance.ts', text: read(new URL('artifact-wire/monitoring-guidance.ts', LIB))}],
   registry: [{path: 'lib/operations/registry.ts', text: read(new URL('operations/registry.ts', LIB))}],
   designSystems: dir('design-systems/', /\.css$/).map(file => ({...file, text: file.text.slice(0, file.text.indexOf('*/') + 2)})),
-  runtime: runtime.filter(file => file !== COMPAT)
+  runtime: runtime
     .map(file => ({path: `lib/html-runtime/${file}`, text: read(new URL('html-runtime/' + file, LIB))})),
   product,
   productStrings: product.map(literals),
@@ -101,7 +97,7 @@ const RETIRED: Retired[] = [
   {pattern: /\/af\/core\.js/, scopes: DOCS,
     reason: 'H9: the platform loads the core runtime; no page or example writes the core script'},
   {pattern: /(?<![\w/.])\/(?:libraries|geojson|fonts|people|email|workspace)\//, scopes: [...AGENT_TEXT, 'monitoring', 'registry'],
-    reason: 'URL space: public files live under /af/ (/af/lib/, /af/geojson/, /af/fonts/) and links under /api/; the old addresses answer only for what already names them (contracts legacy-public-paths)'},
+    reason: 'URL space: public files live under /af/ (/af/lib/, /af/geojson/, /af/fonts/) and links under /api/; retired addresses have no mappings'},
   {pattern: /\bcore script\b/i, scopes: ['references'],
     reason: 'H9: runtime.md says the platform loads the core runtime'},
   {pattern: /\bedit_artifact\b/, scopes: [...AGENT_TEXT, 'registry'],
@@ -109,7 +105,7 @@ const RETIRED: Retired[] = [
   {pattern: /(?:^|[\s`'"])--param\b/m, scopes: [...AGENT_TEXT, 'registry'],
     reason: 'H13: the retired --param flag'},
   {pattern: /\bonBackendChange\b/, scopes: [...AGENT_TEXT, 'monitoring', 'runtime'],
-    reason: 'L1: onResolverChange is the only change listener (live pages keep the alias in legacy-page-names.ts)'},
+    reason: 'L1: onResolverChange is the only change listener'},
   {pattern: /Publish it unchanged/i, scopes: AGENT_TEXT,
     reason: 'H4: step 3 is "publish after step 2"; publish refuses leftover starter placeholders itself'},
   {pattern: /never publish (?:the|a) (?:ref: )?placeholder/i, scopes: DOCS,
@@ -257,13 +253,6 @@ describe('retired skill phrasing', () => {
     expect(strings('const usage = `const q=gql\\`{rows}\\`;`;')).toMatch(gqlHint);
     expect(strings('// the page\'s own gql`…` documents\nconst gql = 1;')).not.toMatch(gqlHint);
     expect(FILES.product.map(file => file.path)).toContain('lib/datasets/dataset-usage.ts');
-    expect(FILES.product.some(file => GRAPHQL_LAYER.some(prefix => file.path.startsWith(prefix)))).toBe(false);
-  });
-  it('allows the old runtime name only in its isolated compatibility module, which says when to delete it', () => {
-    expect(runtime).toContain(COMPAT);
-    expect(FILES.runtime.map(file => file.path)).not.toContain(`lib/html-runtime/${COMPAT}`);
-    expect(read(new URL('html-runtime/' + COMPAT, LIB)))
-      .toMatch(/Delete when no live page uses it\.[\s\S]*export const onBackendChange = onResolverChange;/);
   });
   it('keeps the monitor instruction and the served watch guide on the same loop sentence (H1 drift)', () => {
     const guide = FILES.references.find(file => file.path.endsWith('/html-operations.md'))!.text;

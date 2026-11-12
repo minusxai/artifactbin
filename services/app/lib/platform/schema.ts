@@ -388,13 +388,9 @@ const ANALYTICS_EVENTS: Table = {
 };
 
 /**
- * An artifact's all-time view count, folded: `views` is the sum of its unique daily visitors over every
- * UTC day up to and including `closed_through`. A day that has ended never gains a view (the visitor
- * key is salted with the day, and events are stamped on arrival), so each read folds the days that
- * closed since the last fold into this row once, and counts only the days after it live from
- * analytics_events (lib/analytics/view-totals). The cost of a view count is then the views of
- * the days since the last fold, not the artifact's whole history. The row is derived: deleting it
- * costs one full count at the next read and changes no answer.
+ * Retired analytics_events-derived totals, retained with their source records for explicit migration.
+ * Active analytics read the canonical events log and never reuse these incompatible cached totals.
+ * No boot-time deletion or backfill: older legacy-only history needs a separate migration decision.
  */
 const ARTIFACT_VIEW_TOTALS: Table = {
   name: 'artifact_view_totals',
@@ -404,6 +400,33 @@ const ARTIFACT_VIEW_TOTALS: Table = {
     { name: 'views', type: 'INTEGER', notNull: true, default: '0' },
   ],
   primaryKey: ['artifact_id'],
+};
+
+/** Canonical viewed/UTC-v1 derived state, separate from retired analytics totals.
+ * Source identifies the events schema and aggregation contract. Visitor membership survives log
+ * pruning; only explicit cache reset discards observed history. Never populated during boot. */
+const CANONICAL_VIEW_TOTALS: Table = {
+  name: 'canonical_view_totals',
+  columns: [
+    { name: 'source', type: 'TEXT', notNull: true },
+    { name: 'artifact_id', type: 'TEXT', notNull: true },
+    { name: 'position', type: 'BIGINT' },
+    { name: 'views', type: 'BIGINT', notNull: true, default: '0' },
+  ],
+  primaryKey: ['source', 'artifact_id'],
+};
+
+/** Membership is the minimum identity needed to dedupe arbitrarily late deliveries exactly.
+ * No raw IP/account metadata: visitor is the canonical subject, or envelope id when subjectless. */
+const CANONICAL_VIEW_VISITORS: Table = {
+  name: 'canonical_view_visitors',
+  columns: [
+    { name: 'source', type: 'TEXT', notNull: true },
+    { name: 'artifact_id', type: 'TEXT', notNull: true },
+    { name: 'day', type: 'DATE', notNull: true },
+    { name: 'visitor', type: 'TEXT', notNull: true },
+  ],
+  primaryKey: ['source', 'artifact_id', 'day', 'visitor'],
 };
 
 /**
@@ -938,7 +961,7 @@ const NATIVE_IDENTITY_IMPORTS:Table={name:'native_identity_imports',columns:[
  {name:'original_state',type:'JSONB',notNull:true},{name:'created_at',type:'TIMESTAMPTZ',notNull:true},
 ],primaryKey:['source_namespace','kind','source_id'],indexes:[{name:'idx_native_identity_imports_target',columns:['kind','target_id']}]};
 
-export const TABLES: Table[] = [LEGACY_PAGE_MIGRATIONS,IDENTITY_SETTINGS,GROUP_QUOTAS,GROUP_AUDIT,ARTIFACT_GROUP_SHARES,NATIVE_IDENTITY_IMPORTS,GROUP_LINKS,ACCOUNT_PREFERENCES,DEPLOYMENT_STATE,DEPLOYMENT_MEMBERS,OWNERSHIP_TRANSFERS,PAGES_SESSIONS, DOCUMENT_TRUST, GROUP_TRUST, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, DATASET_IMAGES, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_CONNECTIONS, DATASET_USAGE, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, REGION_STATES, REGION_UPDATES, REGION_SNAPSHOTS, ARTIFACT_SOURCE_IDS, ARTIFACT_SHARES, ANNOTATIONS, COMMENT_REACTIONS, CODES, ANALYTICS_EVENTS, ARTIFACT_VIEW_TOTALS, RELATIONS, WEB_ASSETS, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY];
+export const TABLES: Table[] = [LEGACY_PAGE_MIGRATIONS,IDENTITY_SETTINGS,GROUP_QUOTAS,GROUP_AUDIT,ARTIFACT_GROUP_SHARES,NATIVE_IDENTITY_IMPORTS,GROUP_LINKS,ACCOUNT_PREFERENCES,DEPLOYMENT_STATE,DEPLOYMENT_MEMBERS,OWNERSHIP_TRANSFERS,PAGES_SESSIONS, DOCUMENT_TRUST, GROUP_TRUST, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, DATASET_IMAGES, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_CONNECTIONS, DATASET_USAGE, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, REGION_STATES, REGION_UPDATES, REGION_SNAPSHOTS, ARTIFACT_SOURCE_IDS, ARTIFACT_SHARES, ANNOTATIONS, COMMENT_REACTIONS, CODES, ANALYTICS_EVENTS, ARTIFACT_VIEW_TOTALS, CANONICAL_VIEW_TOTALS, CANONICAL_VIEW_VISITORS, RELATIONS, WEB_ASSETS, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY];
 
 /**
  * Tables no code reads or writes, dropped on every boot (their rows were backed up): retired custom domains,

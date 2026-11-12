@@ -82,7 +82,7 @@ describe('actual fixture publication payloads',()=>{
     await publishBaselineFixtures({implementation:'html',skillArchive,serverOrigin:'https://example.test',publish:async(body,request)=>{
       expect(body.publicationBundle).toBeDefined();expect(request.idempotencyKey).toMatch(/^[a-f0-9-]{36}$/);keys.add(request.idempotencyKey);
       const plan=planPublicationBundle(body.html,body.publicationBundle);expect(Buffer.byteLength(body.html)).toBeLessThan(4_000_000);
-      // Each fixture module loads by its hosted name (legacy wrappers by /af/components/ URL); nothing component-shaped is uploaded.
+      // Each fixture module loads by its hosted name; nothing component-shaped is uploaded.
       const fixture=browserParityFixtures[Math.floor(bodies.length/parityThemes.length)];
       for(const name of fixture.modules)expect(body.html).toContain(componentImport(name));
       expect(body.html).not.toMatch(/\bregister[A-Z]|\.\/components\//);
@@ -127,7 +127,7 @@ describe('actual fixture publication payloads',()=>{
     const {execFileSync}=await import('node:child_process'),root=await mkdtemp(path.join(tmpdir(),'old-component-publisher-'));try{
       const fixtureDir=path.join(root,'scripts/fixtures/component-baseline');await mkdir(fixtureDir,{recursive:true});
       for(const name of ['publication.mjs','index.mjs','controls.mjs','rich.mjs','interaction.mjs'])await copyFile(new URL('../fixtures/component-baseline/'+name,import.meta.url),path.join(fixtureDir,name));
-      await writeFile(path.join(root,'verify.mjs'),'import {publishBaselineFixtures} from "./scripts/fixtures/component-baseline/publication.mjs";let count=0;const entries=await publishBaselineFixtures({implementation:"jsx",publish:async body=>{if(body.publicationBundle)throw Error("candidate payload entered old path");count++;return {id:body.dataset?"Dataset123":"Page123"};}});if(entries.length!==56||count!==57)throw Error("original fixture publication missing");process.stdout.write("original-complete");');
+      await writeFile(path.join(root,'verify.mjs'),'import {publishBaselineFixtures} from "./scripts/fixtures/component-baseline/publication.mjs";let count=0;const entries=await publishBaselineFixtures({implementation:"jsx",publish:async body=>{if(body.publicationBundle)throw Error("candidate payload entered old path");count++;return {id:body.dataset?"Dataset123":"Page123"};}});if(entries.length!==52||count!==53)throw Error("original fixture publication missing");process.stdout.write("original-complete");');
       expect(execFileSync(process.execPath,[path.join(root,'verify.mjs')],{cwd:root,encoding:'utf8'})).toContain('original-complete');
     }finally{await rm(root,{recursive:true,force:true});}
   });

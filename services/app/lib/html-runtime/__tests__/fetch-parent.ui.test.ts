@@ -1,6 +1,6 @@
 import {expect,it,vi} from 'vitest';
 import {createFrameBridgeParent} from '../../html-reader/frame-bridge/parent';
-it.each(['response','transport-error','body-error'] as const)('a stale GraphQL %s cannot satisfy a replacement frame call',async outcome=>{
+it.each(['response','transport-error','body-error'] as const)('a stale SQL %s cannot satisfy a replacement frame call',async outcome=>{
  const frame=document.createElement('iframe');document.body.append(frame);const messages:any[]=[];
  vi.spyOn(frame.contentWindow!,'postMessage').mockImplementation(message=>messages.push(message));
  const jobs:Array<{resolve:(response:Response)=>void;reject:(error:Error)=>void}>=[];
@@ -8,7 +8,7 @@ it.each(['response','transport-error','body-error'] as const)('a stale GraphQL %
  let revision='1';
  const parent=createFrameBridgeParent({win:window,frame,frameOrigin:'https://runner.example',id:'Page123',editId:()=> 'trusted-edit',source:()=>null,htmlContext:()=>({revision,readOnly:false}),appFetch});
  const send=(key:string,payload:unknown)=>window.dispatchEvent(new MessageEvent('message',{data:{type:'mx:frame-bridge',key,payload},origin:'https://runner.example',source:frame.contentWindow}));
- const query={kind:'fetch',call:1,path:'/api/artifacts/Page123/graphql',method:'POST',headers:{authorization:'Bearer forged'},body:JSON.stringify({operation:'query',query:'{records{value}}',revision:'forged'})};
+ const query={kind:'fetch',call:1,path:'/api/artifacts/Page123/sql',method:'POST',headers:{authorization:'Bearer forged'},body:JSON.stringify({sql:'select value from records',params:{},revision:'forged'})};
  try{
   const oldKey=messages[0].key;send(oldKey,{kind:'ready',nonce:'old'});send(oldKey,query);expect(jobs).toHaveLength(1);
   expect(JSON.parse(appFetch.mock.calls[0]![1].body as string).revision).toBe('1');expect(appFetch.mock.calls[0]![1].headers).not.toHaveProperty('authorization');

@@ -29,8 +29,7 @@ import { restoreArtifactFor, trashArtifactFor } from '@/lib/workspace';
 import { trackEvent } from '@/lib/analytics';
 import { exportImageResponse } from '@/lib/export';
 import { datasetExportable, datasetReadAccess } from '@/lib/dataset-permissions';
-import { DatasetBindingUnsupportedError, datasetPermissionTemplates, readDatasetPermissions, writeDatasetPermissions } from '@/lib/dataset-access';
-import { executeDatasetGraphql } from '@/lib/graphql-compat';
+import {  datasetPermissionTemplates, readDatasetPermissions, writeDatasetPermissions } from '@/lib/dataset-access';
 import type { AnnotationAuthor } from '@artifactbin/contracts';
 
 /** What an operation answers: a status and a JSON body, transport-free. */
@@ -199,7 +198,7 @@ const createArtifactOp: Operation = {
   title: 'Create an artifact',
   http: { method: 'POST', path: '/api/artifacts' },
   description: 'Create an artifact from exactly one native HTML document or retained dataset/media input. HTML pages use a complete html source, stable server-assigned data-af-id identities and the original sharing and ownership controls.',
-  input: { ...CONTENT_FIELDS, name: z.string().optional().describe("dataset only: the new dataset's GraphQL root name (default from the title, else data), stored as its policy configuration.custom_name and never changeable. ^[A-Za-z][A-Za-z0-9_]*$, at most 64 characters, not reserved (__*, _id, _and, _or, _not, true, false, null) and generating no shared type (Query, String, order_by, dataset_meta…); single-table stored datasets only, not with forked_from"), destination:z.union([z.object({type:z.literal('personal')}),z.object({type:z.literal('group'),id:z.string()})]).optional(), forked_from: z.string().optional().describe("the id of the artifact this one was copied from, when you built the copy yourself instead of calling fork_artifact — it must be an artifact you can READ, and it is recorded once here and never editable afterwards") },
+  input: { ...CONTENT_FIELDS, destination:z.union([z.object({type:z.literal('personal')}),z.object({type:z.literal('group'),id:z.string()})]).optional(), forked_from: z.string().optional().describe("the id of the artifact this one was copied from, when you built the copy yourself instead of calling fork_artifact — it must be an artifact you can READ, and it is recorded once here and never editable afterwards") },
   annotations: {},
   example: {
     input: { html: '<!doctype html><html><head><title>Report</title></head><body><h1>Report</h1></body></html>' },
@@ -207,7 +206,6 @@ const createArtifactOp: Operation = {
   },
   errors: [
     { status: 403, code: 'quota_exceeded', fix: 'a cap was reached — either the artifact COUNT for this token, or the stored BYTES for its account (an upload or an imported url); the message names which. Delete what you no longer need' },
-    { status: 400, code: 'invalid_graphql_name', fix: 'details names the problem: use a valid, unreserved GraphQL name on a new single-table stored dataset, or omit name to take the title' },
     ...CONTENT_ERRORS,
   ],
   async run(ctx, input) {
@@ -238,7 +236,6 @@ const updateArtifactOp: Operation = {
     // the data tiers answer; the FIX has to be different, because "replace it
     // whole instead" is the thing that just failed.
     { status: 400, code: 'not_editable', fix: 'a folder has no content — send title, visibility or parent_id instead; its page is its listing' },
-    { status: 400, code: 'graphql_name_immutable', fix: "a dataset's GraphQL name is set once at creation: drop name, or publish a new dataset with the name you want" },
     POLICY_LOCKED,
     POLICY_MISMATCH,
     ...CONTENT_ERRORS,
@@ -498,14 +495,14 @@ const POLICY_INVALID: OperationError = { status: 400, code: 'invalid_policy', fi
 const getDatasetPolicyOp: Operation = {
   name:'get_dataset_policy', title:'Read dataset permissions',
   http:{method:'GET',path:'/api/artifacts/{id}/policy'},
-  description:'Owners and editors: a dataset\'s Hasura-style version 3 permissions as {policy, revision, source, report, roles, templates, tables, readBack, warnings}. policy is the stored v3 document, or the default when none is stored (source none); source unreadable (policy null, report naming why) means the stored policy is not a valid version 3 one: save one over it. Rules name source columns; tables[].root and tables[].columns[].field are the GraphQL names the dataset API serves. readBack is the plain-language summary of who can see and change what. Owner and editors always have full access; rules name viewer (shared viewers), signed_in (signed-in link holders) and anonymous.',
+  description:'Owners and editors: a dataset\'s Hasura-style version 3 permissions as {policy, revision, source, report, roles, templates, tables, readBack, warnings}. policy is the stored v3 document, or the default when none is stored (source none); source unreadable (policy null, report naming why) means the stored policy is not a valid version 3 one: save one over it. Rules name source columns; tables[].root and tables[].columns[].field are persisted field identifiers used by native cells. readBack is the plain-language summary of who can see and change what. Owner and editors always have full access; rules name viewer (shared viewers), signed_in (signed-in link holders) and anonymous.',
   input:{id:z.string()}, annotations:{readOnly:true},example:{input:{id:'aB3xK9'}},errors:[NOT_FOUND],
   async run(ctx,input){const r=await readDatasetPermissions(ctx.actor,String(input.id));return reply(r.body,r.status);},
 };
 const setDatasetPolicyOp: Operation = {
   name:'set_dataset_policy',title:'Set dataset permissions',
   http:{method:'PUT',path:'/api/artifacts/{id}/policy'},
-  description:'Owners and editors: replace a dataset\'s version 3 permissions, Hasura metadata shape: tables[] of {table:{schema,name}, select_permissions, insert_permissions, update_permissions, delete_permissions}, each entry {role, permission} with role viewer, signed_in or anonymous (one entry per role per operation; owner and editors always have full access and take no entries). select: columns ("*" or source names), filter, limit, allow_aggregations (may run SQL: totals, group by, joins). insert: columns, check, set. update: columns, filter, check, set. delete: filter. backend_only:true limits a write to the owner\'s saved programs. Session values are X-Hasura-User-Id, X-Hasura-Page-Id and X-Hasura-Role. configuration (GraphQL names) is server-owned: omit it or send it unchanged. dryRun:true validates and answers the read-back without saving; a save needs expectedPolicyRevision from GET. Version 1 and 2 policies are refused, dry runs too; policy null clears the stored policy (read as the read-only template). Every problem is listed in errors by JSON path. Templates: get_dataset_policy_templates.',
+  description:'Owners and editors: replace a dataset\'s version 3 permissions, Hasura metadata shape: tables[] of {table:{schema,name}, select_permissions, insert_permissions, update_permissions, delete_permissions}, each entry {role, permission} with role viewer, signed_in or anonymous (one entry per role per operation; owner and editors always have full access and take no entries). select: columns ("*" or source names), filter, limit, allow_aggregations (may run SQL: totals, group by, joins). insert: columns, check, set. update: columns, filter, check, set. delete: filter. backend_only:true limits a write to the owner\'s saved programs. Session values are X-Hasura-User-Id, X-Hasura-Page-Id and X-Hasura-Role. configuration (persisted field identifiers) is server-owned: omit it or send it unchanged. dryRun:true validates and answers the read-back without saving; a save needs expectedPolicyRevision from GET. Version 1 and 2 policies are refused, dry runs too; policy null clears the stored policy (read as the read-only template). Every problem is listed in errors by JSON path. Templates: get_dataset_policy_templates.',
   input:{id:z.string(),policy:z.record(z.string(),z.unknown()).nullable(),expectedPolicyRevision:z.number().int().min(0).optional(),dryRun:z.boolean().optional()},
   annotations:{},example:{input:{id:'aB3xK9',expectedPolicyRevision:0,policy:{version:3,tables:[{table:{schema:'public',name:'rows'},select_permissions:[{role:'viewer',permission:{columns:'*',filter:{}}}]}]}}},
   errors:[NOT_FOUND,POLICY_INVALID,{status:409,code:'policy_changed',fix:'GET the policy again, reapply your change and send the revision it answers'}],
@@ -558,10 +555,8 @@ const mutateDatasetOp: Operation = {
   description: 'Run one INSERT, UPDATE or DELETE against a dataset you own (selected by the path ID; SQL names a catalog table such as public.rows, scalars bound via $params in values) — append or fix rows without re-sending the whole table. The dataset must be access: readwrite. Answers the new version and how many rows were affected; documents charting the dataset update live.',
   input: {
     id: z.string(),
-    sql: z.string().optional().describe('one INSERT/UPDATE/DELETE naming a catalog table such as public.rows; bind scalars as $name, never interpolate'),
-    name: z.string().optional().describe('instead of sql: a mutation the document declares by name; the id is then the document, and args fill its signature'),
+    sql: z.string().describe('one INSERT/UPDATE/DELETE naming a catalog table such as public.rows; bind scalars as $name, never interpolate'),
     values: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).optional().describe('with sql: the $params it binds'),
-    args: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).optional().describe('with name: the declared mutation\'s arguments'),
     expectedState: z.string().regex(/^[a-f0-9]{64}$/).optional().describe('the state the operation was prepared from; refused as row_changed when the dataset moved'),
     expectedPolicyRevision: z.number().int().min(0).optional().describe('the policy_revision the operation was prepared under; refused as row_changed when the policy changed'),
   },
@@ -781,42 +776,16 @@ const refreshAssetOp: Operation = {
 };
 
 const queryResourceOp:Operation={
- name:'query_resource',title:'Query dataset rows or declared document queries',http:{method:'POST',path:'/api/artifacts/{id}/query'},
- description:'Read bounded dataset SQL or selected declared document queries, with scalar parameters and state-bound pagination. Never mutates rows. SQL needs your role\'s SQL permission (allow_aggregations in its select rule) for every table you can read (owner and editors always have it); without it, read rows by table name.',
+ name:'query_resource',title:'Query dataset rows',http:{method:'POST',path:'/api/artifacts/{id}/query'},
+ description:'Read bounded dataset SQL or named tables, with scalar parameters and state-bound pagination. Never mutates rows. SQL needs your role\'s SQL permission (allow_aggregations in its select rule) for every table you can read (owner and editors always have it); without it, read rows by table name.',
  input:{id:z.string(),sql:z.string().optional(),name:z.string().optional(),values:z.record(z.string(),z.union([z.string(),z.number(),z.boolean(),z.null()])).optional(),limit:z.number().int().min(1).max(100).optional(),cursor:z.string().optional(),refresh:z.boolean().optional()},
  annotations:{readOnly:true},example:{input:{id:'aB3xK9',limit:20}},
  errors:[NOT_FOUND,{status:400,code:'invalid_sql',fix:'the statement was refused — the message names the reason (an undeclared $parameter, a disallowed function, unsupported syntax); fix the SQL or pass the parameter in values'},{status:403,code:'permission_denied',fix:'your role\'s select rule does not allow aggregations, so SQL is refused; omit sql and pass name to read the table\'s rows, or ask the owner to allow aggregations'}],
  async run(ctx,input){const {id,...body}=input;return fromResponse(await queryResourceForRequest(ctx.actor,String(id),body,ctx.request));},
 };
 
-/**
- * A dataset's generated GraphQL API (Hasura v2 subset): reads, and mutations generated from the role's write
- * rules. The role is the dataset's own sharing; the schema, every read and every write are that role's. GET on
- * the same path answers {sdl, revision, role} (the route). A mutation's Idempotency-Key is the header or
- * `idempotencyKey`.
- */
-const queryDatasetGraphqlOp:Operation={
- name:'query_dataset_graphql',title:'Query a dataset through its generated GraphQL API',http:{method:'POST',path:'/api/artifacts/{id}/graphql'},
- description:'The legacy GraphQL door, for older pages only: run a GraphQL query or mutation against one dataset\'s generated, Hasura-style API. New code uses SQL: a page\'s datasets through its SQL door (POST /api/artifacts/PAGE/sql, see /llms/datasets), a dataset\'s own rows with query_resource. The schema is your role\'s (GET the same path for {sdl, revision, role}); columns or rows its rules hide do not exist for you. Each readable table has <name>(where, order_by, limit, offset), <name>_by_pk(_id) and <name>_can; no aggregates (use SQL). Lists answer 100 rows unless limit says otherwise, at most 1000. Writable tables have insert_<name>(objects), insert_<name>_one(object), update_<name>(where, _set, _inc), update_<name>_by_pk(pk_columns:{_id}, _set, _inc), delete_<name>(where) and delete_<name>_by_pk(_id), answering affected_rows and returning. One mutation is one atomic write of at most 100 rows on the head; send an Idempotency-Key (header or idempotencyKey) to replay it safely. Answers {data} and/or {errors} with extensions.code (validation_failed, permission_denied, check_violation, too_many_rows, outcome_unknown, dataset_changed, result_too_large); check errors even on HTTP 200.',
- input:{id:z.string(),query:z.string(),variables:z.record(z.string(),z.unknown()).optional(),operationName:z.string().optional(),idempotencyKey:z.string().optional()},
- annotations:{},example:{input:{id:'aB3xK9',query:'{ orders(where: {region: {_eq: "west"}}, order_by: {amount: desc}, limit: 10) { _id region amount } }'}},
- errors:[NOT_FOUND,{status:400,code:'invalid_graphql_request',fix:'send {"query": "...", "variables": {...}} with variables an object'},{status:400,code:'dataset_stable_identity_unavailable',fix:'only stored CSV/JSON datasets have a GraphQL API; import the rows into a stored dataset'}],
- async run(ctx,input){
-  const variables=input.variables;
-  const idempotencyKey=ctx.request.headers.get('idempotency-key')??input.idempotencyKey;
-  if(typeof input.query!=='string'||(variables!==undefined&&(!variables||typeof variables!=='object'||Array.isArray(variables)))||(input.operationName!==undefined&&typeof input.operationName!=='string')||(idempotencyKey!==undefined&&typeof idempotencyKey!=='string'))return {status:400,body:{error:'invalid_graphql_request'}};
-  try{
-   const reply=await executeDatasetGraphql(ctx.actor,String(input.id),{query:input.query,...(variables?{variables:variables as Record<string,unknown>}:{}),...(typeof input.operationName==='string'?{operationName:input.operationName}:{}),...(typeof idempotencyKey==='string'?{idempotencyKey}:{})},ctx.request.signal);
-   return {status:200,body:reply as Record<string,unknown>,headers:{'Cache-Control':'no-store'}};
-  }catch(error){
-   if(error instanceof DatasetBindingUnsupportedError)return {status:400,body:{error:error.code,hint:error.hint}};
-   return {status:404,body:{error:'not_found'}};
-  }
- },
-};
-
 export const OPERATIONS: Operation[] = [
-  ...GROUP_OPERATIONS,...MEMBERSHIP_OPERATIONS,...ACCOUNT_OPERATIONS,...BROWSER_SESSION_OPERATIONS,...TESTUSER_OPERATIONS,queryResourceOp,queryDatasetGraphqlOp,
+  ...GROUP_OPERATIONS,...MEMBERSHIP_OPERATIONS,...ACCOUNT_OPERATIONS,...BROWSER_SESSION_OPERATIONS,...TESTUSER_OPERATIONS,queryResourceOp,
   createArtifactOp, updateArtifactOp, forkArtifactOp, getArtifactOp, listArtifactsOp,
   listVersionsOp, getVersionOp, updateMetadataOp, transferArtifactOp, revertArtifactOp, deleteArtifactOp, restoreArtifactOp, annotateOp, editCommentOp, reactCommentOp, getDatasetPolicyOp, setDatasetPolicyOp, getDatasetPolicyTemplatesOp, getLiveConnectionOp, updateLiveConnectionOp, testLiveConnectionOp, getLiveSchemaOp, mutateDatasetOp,
   exportArtifactOp, refreshAssetOp, ...REGION_OPERATIONS,

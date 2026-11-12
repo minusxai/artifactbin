@@ -185,7 +185,7 @@ const api = bearerApi(BASE, anon.token, fetch);
 
 // ── 3. the reader: the app page, framing the document on its own origin (was gate-secure-arch §1–2) ──
 await section('reader', async () => {
-  const PROBE = htmlPage('<h1>SEC-PROBE-DOC</h1><pre id="sec-probe">loading</pre><script type="module">import {client,gql} from "@afbin/apollo";client.query({query:gql`{probe}`}).then(({data})=>document.querySelector("#sec-probe").textContent=data.probe);</script>', 'Sec Probe', '<script type="application/json" data-af="state">{"probe":"native-runtime-ready"}</script>');
+  const PROBE = htmlPage('<h1>SEC-PROBE-DOC</h1><pre id="sec-probe">loading</pre><script type="module">import {state} from "@afbin/state";document.querySelector("#sec-probe").textContent=state.getState().probe;</script>', 'Sec Probe', '<script type="application/json" data-af="state">{"probe":"native-runtime-ready"}</script>');
   const doc = await api('/api/artifacts', { title: 'Sec Probe', html: PROBE, visibility: 'public' });
   check(doc.visibility === 'public', 'probe doc is public');
 
@@ -216,9 +216,9 @@ await section('reader', async () => {
   await reader.mouse.move(0, 0);
   await paintedTooltip.waitFor({state:'hidden'});
 
-  // Native pages use the scoped GraphQL read surface, rather than the retired markup query door.
+  // Retired GraphQL paths are unavailable.
   const scopedRead = await reader.request.post(`${BASE}/api/artifacts/${doc.id}/graphql`, { data: {revision:String(doc.version),query:'{__typename}'} });
-  check(scopedRead.status() === 200 && !(await scopedRead.json()).errors, `the public page exposes its scoped GraphQL read (${scopedRead.status()})`);
+  check(scopedRead.status() === 404, `the public page refuses the retired GraphQL door (${scopedRead.status()})`);
 
   // signed-in NON-owner: same document, same URL, no hop
   await other.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });

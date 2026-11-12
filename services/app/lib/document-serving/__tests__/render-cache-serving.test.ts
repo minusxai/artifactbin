@@ -1,3 +1,4 @@
+import { EVENTS_SCHEMA } from '@/lib/platform';
 /**
  * THE RENDER CACHE, through the real app server: an anonymous reader's shell (the app page at /a/<id>) and frame
  * (the document on its own origin) are rendered once per version, and never at the cost of an access decision or a
@@ -101,7 +102,7 @@ describe('an anonymous reader is served a shared render', () => {
     const {id} = await publish();
     for (let i = 0; i < 3; i++) expect((await frame(id)).status).toBe(200);
     await flushViews();
-    const {rows} = await (await harness.db()).query<{n: number}>("SELECT count(*)::int AS n FROM analytics_events WHERE artifact_id=$1 AND event='view'", [id]);
+    const {rows} = await (await harness.db()).query<{n: number}>(`SELECT count(*)::int AS n FROM ${EVENTS_SCHEMA}.events WHERE object_id=$1 AND object_kind='artifact' AND verb='viewed'`, [id]);
     expect(rows[0]!.n).toBe(3);
   });
 });

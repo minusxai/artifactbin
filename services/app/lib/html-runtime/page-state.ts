@@ -47,14 +47,11 @@ export interface PageStateOptions {
 export interface PageState { port: ViewerStatePort; state: PageStore; dispose(): void }
 
 export function createPageState(options: PageStateOptions): PageState {
-  // The overrides live under their own key. The legacy key holds the full document older runtimes read and write (tabs
-  // open across a deploy still do): it is only ever read, to migrate (./viewer-overrides).
-  const key = `af:viewer:v2:${options.pageId}`, legacyKey = `af:viewer:${options.pageId}`;
+  const key = `af:viewer:v2:${options.pageId}`;
   const carried = readStateFragment(options.hash);
   const port = createViewerState({
     defaults: options.initial, version: options.version ?? null, revision: options.revision ?? null, ...(carried.state ? { seed: carried.state } : {}),
     storage: { read: () => options.storage.getItem(key), write: (json) => options.storage.setItem(key, json) },
-    legacy: () => options.storage.getItem(legacyKey),
     observe: (listener) => options.onStorage((changed) => { if (changed === key) listener(); }),
     ...(options.lock ? { lock: (work: () => Promise<StoreReceipt>) => options.lock!(key, work) } : {}),
   });

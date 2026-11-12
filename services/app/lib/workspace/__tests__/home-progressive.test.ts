@@ -64,7 +64,8 @@ it('deferred lifetime counts preserve distinct visitors, exclude trash and remai
   const token = await mintToken('counts');
   await db.query("INSERT INTO artifacts (id,user_id,token_id,format,title,meta,version) VALUES ('cnt123',$1,$2,'html','Counted','{}',1),('trash1',$1,$2,'html','Trash','{}',1)", [user.id, token.id]);
   await db.query("UPDATE artifacts SET deleted_at=now() WHERE id='trash1'");
-  await db.query("INSERT INTO analytics_events (event,artifact_id,visitor) VALUES ('view','cnt123','same'),('view','cnt123','same'),('view','cnt123','different'),('view','cnt123',NULL),('edit','cnt123','ignored'),('view','trash1','hidden')");
+  await ensureEventsSchema(db, EVENTS_SCHEMA);
+  await db.query(`INSERT INTO ${EVENTS_SCHEMA}.events (id,source,verb,object_kind,object_id,subject_id) SELECT n::text,'app',verb,'artifact',artifact,visitor FROM (VALUES (1,'viewed','cnt123','same'),(2,'viewed','cnt123','same'),(3,'viewed','cnt123','different'),(4,'viewed','cnt123',NULL),(5,'edited','cnt123','ignored'),(6,'viewed','trash1','hidden')) v(n,verb,artifact,visitor)`);
   const insights = await accountWorkspaceInsightsFor(user.id);
   expect(insights.views).toEqual({ cnt123: 3 });
   const full = await accountWorkspaceFor(user.id, user.email);
@@ -85,7 +86,8 @@ it('separates the 1000-document shelf, aggregate totals and paginated assets', a
   await db.query(`INSERT INTO artifacts (id, user_id, token_id, format, title, meta, version)
     VALUES ('foreign', $1, $2, 'image', 'Foreign', '{}', 1)`, [other.id, token.id]);
   await db.query("UPDATE artifacts SET deleted_at = now() WHERE id IN ('doc1005', 'asset0205')");
-  await db.query("INSERT INTO analytics_events (artifact_id, event, visitor) VALUES ('doc1004', 'view', 'v'), ('doc1004', 'view', 'v'), ('doc1', 'view', 'v'), ('doc1005', 'view', 'v'), ('asset0001', 'view', 'v')");
+  await ensureEventsSchema(db, EVENTS_SCHEMA);
+  await db.query(`INSERT INTO ${EVENTS_SCHEMA}.events (id,source,verb,object_kind,object_id,subject_id) SELECT n::text,'app','viewed','artifact',artifact,'v' FROM (VALUES (1,'doc1004'),(2,'doc1004'),(3,'doc1'),(4,'doc1005'),(5,'asset0001')) v(n,artifact)`);
   const actor = { credential: 'session' as const, userId: user.id, email: user.email!, emailVerified: true };
   const core = await (await GET(request('/api/page/home?part=core', { actor }))).json();
   expect(core.artifacts).toHaveLength(1000);

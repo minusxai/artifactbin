@@ -9,8 +9,8 @@
  *     Unless it is the app's own hostname (documents one label under the app's address, so one wildcard name and
  *     certificate serve both): then it is the app, answered as the app, and only the hex labels under it are documents.
  *  2. HOST `<hex(id)>.<pages host>`: that document and nothing else — its standalone page at `/` (the
- *     `/raw` page under the document CSP, reader chrome off), its own doors (`/a/<id>/query`, `/mutate`,
- *     `/events`, …) and the public static runtime directories; and, anonymously, another artifact's
+ *     `/raw` page under the document CSP, reader chrome off), its own doors (`/a/<id>/events`,
+ *     `/events/frame`, …) and the public static runtime directories; and, anonymously, another artifact's
  *     `/a/<other>/raw` bytes the document embeds (a `ref:` image). Everything else is 404.
  *     THE PAGE IS WHERE THE READER ARRIVES. The app page's frame is `https://<hex>.<pages host>/?…&_pt=<ticket>`:
  *     the ticket is spent here, before any byte of the document is produced, and the response that serves
@@ -48,7 +48,7 @@ import { GET as rawGet, HEAD as rawHead } from '@/app/a/[id]/raw/route';
 import { compressDynamic } from './content-encoding';
 
 /** A document's own sub-paths: the doors its page calls, and nothing else of the app. */
-const DOORS = ['query', 'mutate', 'events', 'events/frame', 'story', 'viewer', 'assets', 'resolve', 'fetch', 'css'] as const;
+const DOORS = ['events', 'events/frame', 'story', 'viewer', 'assets', 'resolve', 'fetch', 'css'] as const;
 /**
  * Public bytes any origin may load (contracts `documentHostServes`): every `/af/` file (none reads a credential),
  * the old file directories that still answer, stored bytes (`/assets/`), the basemap proxy and the icon.

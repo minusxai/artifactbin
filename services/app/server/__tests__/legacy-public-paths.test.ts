@@ -1,17 +1,10 @@
-/**
- * EVERY OLD ADDRESS ANSWERS EXACTLY AS ITS NEW ONE (contracts legacy-public-paths), and nothing else old exists.
- *
- * Each table row is requested at both addresses through the whole app: same status, same body bytes, same headers
- * (a timing header aside), for a hit, a miss and a HEAD; the link rows (people, email, workspace) the same redirect.
- * The second half keeps the scheme from eroding: no route or static tree serves a root-level prefix of files outside
- * `/af/` except the table's rows and the fixed paths the URL map names, and public/ holds only what is mounted.
- */
+/** Current files and short links keep their contracts without retired URL aliases. */
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
-import { LEGACY_PUBLIC_PATHS, classifyPath, emailLinkPath } from '@artifactbin/contracts';
+import { classifyPath, emailLinkPath } from '@artifactbin/contracts';
 import { setNotificationDelivery } from '@/lib/notifications';
 import { useAppHarness } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
@@ -28,61 +21,51 @@ put('fonts/inter-latin-standard-normal.2c295d99.woff2', 'wOF2-bytes');
 afterAll(() => fs.rmSync(dir, { recursive: true, force: true }));
 
 const app = () => createAppServer({ indexHtml: async () => '<html><head></head><body><div id="root"></div></body></html>', publicDir: dir });
-/** Everything a client can observe of an answer, minus the per-request timing. */
-async function observed(res: Response) {
-  const headers = Object.fromEntries([...res.headers].filter(([name]) => !['server-timing', 'date'].includes(name)));
-  return { status: res.status, headers, body: Buffer.from(await res.arrayBuffer()).toString('base64') };
-}
-async function same(oldPath: string, newPath: string, init?: RequestInit) {
-  const server = app();
-  const [before, after] = await Promise.all([server.request(oldPath, init), server.request(newPath, init)]);
-  const left = await observed(before), right = await observed(after);
-  expect(left, `${oldPath} answers as ${newPath}`).toEqual(right);
-  return left;
-}
-
-describe('old public-file addresses', () => {
-  const files: Record<string, string> = { '/libraries/': 'vega-6.3.1/index.js', '/geojson/': 'world.json', '/fonts/': 'inter-latin-standard-normal.2c295d99.woff2' };
-  for (const row of LEGACY_PUBLIC_PATHS.filter((r) => r.kind === 'file')) {
-    it(`${row.from} answers as ${row.to}: hit, HEAD and miss`, async () => {
-      const file = files[row.from];
-      expect(file, `a fixture for ${row.from}`).toBeDefined();
-      const hit = await same(row.from + file, row.to + file);
-      expect(hit.status).toBe(200);
-      expect(hit.headers['access-control-allow-origin']).toBe('*');
-      expect((await same(row.from + file, row.to + file, { method: 'HEAD' })).status).toBe(200);
-      expect((await same(row.from + 'missing-file.json', row.to + 'missing-file.json')).status).toBe(404);
-    });
-  }
-});
-
-describe('old link addresses', () => {
-  it('/people/<id> redirects exactly as /api/people/<id>', async () => {
-    const user = await createUser({ email: 'mxmx_test_legacy_people@example.com' });
-    await (await getDb()).query('UPDATE users SET username=$2 WHERE id=$1', [user.id, 'legacy_reader']);
-    const answer = await same(`/people/${user.id}`, `/api/people/${user.id}`);
-    expect(answer.status).toBe(302);
-    expect(answer.headers.location).toBe('/@legacy_reader');
-    expect((await same('/people/missing', '/api/people/missing')).status).toBe(404);
+describe('supported public paths without aliases', () => {
+  it('serves current public files with CORS and HEAD, while old paths do not serve their bytes', async () => {
+    const server = app();
+    for (const [current, retired] of [
+      ['/af/lib/vega-6.3.1/index.js', '/libraries/vega-6.3.1/index.js'],
+      ['/af/geojson/world.json', '/geojson/world.json'],
+      ['/af/fonts/inter-latin-standard-normal.2c295d99.woff2', '/fonts/inter-latin-standard-normal.2c295d99.woff2'],
+    ]) {
+      const response = await server.request(current!);
+      expect(response.status).toBe(200);
+      expect(response.headers.get('access-control-allow-origin')).toBe('*');
+      const source = await response.text();
+      expect((await server.request(current!, {method:'HEAD'})).status).toBe(200);
+      const old = await server.request(retired!);
+      expect(await old.text(), retired).not.toBe(source);
+      expect(old.headers.get('access-control-allow-origin'), retired).toBeNull();
+    }
   });
 
-  it('/email/<id> records the click and redirects exactly as the address emailLinkPath writes', async () => {
-    const clicks: string[] = [];
-    const none = { invitations: false, comments: false, activity: false };
-    setNotificationDelivery({ preferences: async () => none, updatePreferences: async () => none, click: async (id) => { clicks.push(id); return '/a/Abc123'; } });
+  it('keeps current person and email links while removing old link redirects and effects', async () => {
+    const server = app(), user = await createUser({email:'mxmx_test_links@example.com'});
+    await (await getDb()).query('UPDATE users SET username=$2 WHERE id=$1', [user.id, 'current_reader']);
+    expect((await server.request(`/api/people/${user.id}`)).headers.get('location')).toBe('/@current_reader');
+    const clicks: string[] = [], none = {invitations:false,comments:false,activity:false};
+    setNotificationDelivery({preferences:async()=>none,updatePreferences:async()=>none,click:async id=>{clicks.push(id);return '/a/Abc123';}});
     try {
-      const answer = await same('/email/d1', emailLinkPath('d1'));
-      expect(answer.status).toBe(302);
-      expect(answer.headers.location).toBe('/a/Abc123');
-      expect(answer.headers['cache-control']).toBe('no-store');
-      expect(answer.headers['referrer-policy']).toBe('no-referrer');
-      expect(clicks).toEqual(['d1', 'd1']);
+      expect((await server.request(emailLinkPath('d1'))).status).toBe(302);
+      for (const retired of [`/people/${user.id}`, '/email/d1', '/workspace/Abc123', '/api/workspace/Abc123']) {
+        expect((await server.request(retired)).headers.get('location'), retired).toBeNull();
+      }
+      expect(clicks).toEqual(['d1']);
     } finally { setNotificationDelivery(undefined); }
   });
 
-  it('/workspace/<id> answers exactly as /api/workspace/<id>', async () => {
-    expect((await same('/workspace/Abc123', '/api/workspace/Abc123')).status).toBeGreaterThanOrEqual(300);
-    expect((await same('/workspace/bad', '/api/workspace/bad')).status).toBe(404);
+  it('has no runtime alias routes while keeping current runtime modules', async () => {
+    const server = app();
+    for (const current of ['/af/core.js','/af/apollo.js','/af/reader.js','/af/native-regions.js']) {
+      const response = await server.request(current);
+      expect(response.status,current).toBe(200);
+      expect(response.headers.get('content-type')).toContain('javascript');
+      expect(response.headers.get('set-cookie')).toBeNull();
+    }
+    for (const retired of ['/af/v1/core.js','/af/v1/apollo/'+'a'.repeat(64),'/af/v1/reader/'+'a'.repeat(64),'/af/regions.js']) {
+      expect((await server.request(retired)).status,retired).toBe(404);
+    }
   });
 });
 
@@ -94,8 +77,8 @@ describe('no other root-level public-file prefix', () => {
       const trees = /\/\*$|\{\.[+*]\}\??$/.test(route);
       const sample = route.replace(/\/\*$/, '/x').replace(/:\w+\{\.[+*]\}\??/, 'x/y').replace(/:\w+/g, 'Abc123');
       const kind = classifyPath(sample);
-      if (trees) expect(['fixed', 'legacy'], `${route} serves a tree outside /af/`).toContain(kind);
-      else expect(['fixed', 'legacy', 'screen'], route).toContain(kind);
+      if (trees) expect(['fixed'], `${route} serves a tree outside /af/`).toContain(kind);
+      else expect(['fixed', 'screen'], route).toContain(kind);
     }
   });
 

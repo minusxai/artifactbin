@@ -4,8 +4,6 @@ import { createPageState, type PageStateOptions } from '../page-state';
 import { createStateStore } from '../state-store';
 import { createLocalStore } from '../apollo/local-store';
 import { encodeState } from '../apollo/state-url';
-// The one GraphQL import: gql interop with the store (old pages read the same document).
-import { createClient, gql } from '../apollo/graphql-compat';
 import type { StatePort } from '../apollo/apollo-contracts';
 import { createHtmlCommentViewSession, withHtmlCommentView } from '../../html-bridge/comment-view-session';
 
@@ -174,18 +172,6 @@ it('comment views capture and restore the same document the store holds', async 
   expect(seen).toHaveBeenCalled();
 });
 
-it('gql local state and the store are one document, in both directions', async () => {
-  const { state, port } = createPageState(browser().tab({ initial: { count: 0, name: 'a' } }));
-  const client = createClient({ backends: [], state: port });
-  const query = gql`{count name}`;
-  const watched = vi.fn();
-  client.watchQuery({ query }).subscribe(({ data }) => watched(data));
-  await state.setState({ count: 7 });
-  expect((await client.query({ query })).data).toEqual({ count: 7, name: 'a' });
-  expect(watched).toHaveBeenLastCalledWith({ count: 7, name: 'a' });
-  await client.updateQuery({ query: gql`{name}` }, () => ({ name: 'b' }));
-  expect(state.getState()).toEqual({ count: 7, name: 'b' });
-});
 
 it('offline and exported copies keep the same contract in their own browser storage, keyed by the copy\'s page id', async () => {
   // A downloaded copy's runtime block names the page id (or `local:<path>` when it carries none); its origin's

@@ -107,7 +107,7 @@ describe('portable files',()=>{
  it('digests the parsed page ignoring only the replaceable core loader',()=>{
   const digest=portableRenderedDigest(source);
   expect(digest).toMatch(/^[0-9a-f]{64}$/);
-  expect(portableRenderedDigest(source.replace('/af/core.js','/af/v1/core.js'))).toBe(digest);
+  expect(portableRenderedDigest(source.replace('/af/core.js','/af/v1/core.js'))).not.toBe(digest);
   expect(portableRenderedDigest(source.replace('<script src="/af/core.js" data-af-id="c1"></script>',''))).toBe(digest);
   expect(portableRenderedDigest(source.replace('☕','🍵'))).not.toBe(digest);
   expect(portableRenderedDigest(source.replace('<script src="/af/core.js"','<script src="/other.js"'))).not.toBe(digest);

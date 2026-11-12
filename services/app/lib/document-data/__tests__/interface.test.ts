@@ -1,16 +1,11 @@
-/**
- * lib/document-data's reader-side interface, through its index: what a stored document's imports may hand a reader
- * (held rows only for a reader of the dataset, never a stranger of a private one or a deleted one), the artifacts
- * its refs reach, the dataset resolver an actor reads through, the people a reader may see named, the mutation
- * door's refusals for documents without that mutation, and the dataset file doors' refusals.
- */
+/** Dataset reference resolution, read authorization and dataset file door refusals through the public interface. */
 import { describe, expect, it } from 'vitest';
 import { request, useAppHarness } from '@/__tests__/harness';
-import { ANONYMOUS_ACTOR, identityForUser } from '@/lib/accounts';
+import { ANONYMOUS_ACTOR } from '@/lib/accounts';
 import { getArtifactById } from '@/lib/artifacts';
 import { getDb } from '@/lib/platform';
 import {
-  datasetResolverForActor, nameablePeople, readFileRequest, referencedArtifactForRow,
+  datasetResolverForActor, readFileRequest, referencedArtifactForRow,
   uploadFileRequest,
 } from '@/lib/document-data';
 import { account, datasetFixture } from './dataset-fixture';
@@ -46,18 +41,6 @@ describe('the actor\'s dataset resolver', () => {
     expect(await datasetResolverForActor(f.owner.actor)(f.id)).toMatchObject({ tables: { rows: { rows: [{ n: 1 }] } } });
     expect(await datasetResolverForActor(stranger.actor)(f.id)).toBeNull();
     expect(await datasetResolverForActor(ANONYMOUS_ACTOR)(f.id)).toBeNull();
-  });
-});
-
-describe('people a reader may see named', () => {
-  it('names the signed-in reader when asked, and nobody for an anonymous reader', async () => {
-    const f = await datasetFixture();
-    const doc = await documentImporting(f.owner, f.id);
-    const reader = await account('reader');
-    expect(Object.keys(await nameablePeople(doc, reader.actor))).toEqual([reader.id]);
-    expect(await nameablePeople(doc, reader.actor, ['someone-else'])).toEqual({});
-    expect(await nameablePeople(doc, null)).toEqual({});
-    expect(await nameablePeople(doc, identityForUser(null, reader.tokenId))).toEqual({});
   });
 });
 

@@ -187,7 +187,7 @@ it('captures each failed sql statement with its detail, keeps a detail-less read
  expect(evidence.consoleErrors).toEqual(['before any call',failed]);expect(evidence.httpErrors).toEqual([]);
 });
 
-it('counts the page\'s dataset reads (sql, older GraphQL and dataset cells) on load and in its steps, not other requests',async()=>{
+it('counts the page\'s dataset reads (SQL and dataset cells) on load and in its steps, ignoring retired GraphQL and other requests',async()=>{
  const {inspectPage}=await import('../../../skills/artifactbin/scripts/check.mjs');
  const listeners:Record<string,Function>={};
  const send=(url:string)=>listeners.request!({url:()=>url,isNavigationRequest:()=>false,frame:()=>null});
@@ -197,7 +197,7 @@ it('counts the page\'s dataset reads (sql, older GraphQL and dataset cells) on l
  const loaded=await inspectPage(page,{target:'/a/PAGE12',viewport:{width:390,height:844}});
  expect(loaded.datasetReads).toBe(1);
  // A read a step triggers (a lazy load after a click) counts, and so does a live dataset cell.
- const stepped=await inspectPage(page,{target:'/a/PAGE12',viewport:{width:390,height:844}},async()=>{send('https://doc.example.test/api/artifacts/PAGE12/graphql');send('https://example.test/api/artifacts/PAGE12/regions/cell%3ADATA12%3Ar1%3Aname/open');});
+ const stepped=await inspectPage(page,{target:'/a/PAGE12',viewport:{width:390,height:844}},async()=>{send('https://doc.example.test/api/artifacts/PAGE12/sql');send('https://doc.example.test/api/artifacts/PAGE12/graphql');send('https://example.test/api/artifacts/PAGE12/regions/cell%3ADATA12%3Ar1%3Aname/open');});
  expect(stepped.datasetReads).toBe(3);
 });
 

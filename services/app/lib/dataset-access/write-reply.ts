@@ -16,7 +16,7 @@ import type { CatalogRowView, DatasetTable } from '@/lib/datasets';
 import { datasetReadAccess, datasetView, viewCatalog } from '@/lib/dataset-permissions';
 import { datasetBindingCatalog } from './authority';
 import { ID_COLUMN, quote, tableIdentity } from './model';
-import type { DatasetGraphqlPort, DatasetSnapshot } from './types';
+import type { DatasetRowPort, DatasetSnapshot } from './types';
 
 /** The reader's role view and the tables (visible columns) it shows, decided at one point in time. */
 export interface ReadAuthority { view: CatalogRowView | null; tables: readonly DatasetTable[]; role: string }
@@ -29,7 +29,6 @@ export const authorityShape = (authority: { role?: string | null; view?: Catalog
   JSON.stringify(authority ? [authority.role ?? null, authority.view?.identity ?? null] : null);
 
 /** A receipt's record of one written field: never rows. */
-export interface WrittenOutcome { key: string; kind: string; affected: number; ids: string[] }
 
 /**
  * The reader's read authority over one dataset decided INSIDE `tx` (a write's commit): the dataset row as the commit
@@ -64,7 +63,7 @@ export function shownRows(authority: ReadAuthority | null, declared: DatasetTabl
  * The rows of `ids` as the reader sees them NOW, read through the request's own load (its port applies the current
  * role view; a fenced load's caller checks its fences after), in `ids` order, visible columns only.
  */
-export async function rowsNow(actor: AccessActor, loaded: { snapshot: DatasetSnapshot | null; port: DatasetGraphqlPort }, tableId: string, ids: readonly string[], signal: AbortSignal): Promise<Array<Record<string, unknown>>> {
+export async function rowsNow(actor: AccessActor, loaded: { snapshot: DatasetSnapshot | null; port: DatasetRowPort }, tableId: string, ids: readonly string[], signal: AbortSignal): Promise<Array<Record<string, unknown>>> {
   const snapshot = loaded.snapshot;
   const visible = snapshot?.catalog.tables.find((t) => tableIdentity(t) === tableId);
   if (!snapshot || !visible || !ids.length) return [];

@@ -13,15 +13,12 @@ it('rejects unknown windows, origins and nonces before requesting authority',asy
 
 
 
-it('does not replay duplicate calls and revokes an unavailable connection',async()=>{
- history.replaceState(null,'','/#nonce=test-nonce');
- const fetch=vi.fn().mockResolvedValueOnce({ok:true,json:async()=>({capability:'secret',role:'viewer',readOnly:true})}).mockResolvedValueOnce({ok:true,text:async()=>'{"data":{"saved":true}}'}).mockResolvedValueOnce({ok:false,status:404,text:async()=>'{"error":"unavailable"}'}).mockResolvedValue({ok:true,json:async()=>({})});vi.stubGlobal('fetch',fetch);
+it('never dispatches retired operation messages to a data door',async()=>{
+ history.replaceState(null,'','/#nonce=test-nonce');const fetch=vi.fn().mockResolvedValue({ok:true,json:async()=>({capability:'secret',role:'viewer',readOnly:true})});vi.stubGlobal('fetch',fetch);
  const states:string[]=[];const broker=installLocalConnectionBroker({win:window,onState:s=>states.push(s)}),port=fakePort();
- window.dispatchEvent(new MessageEvent('message',{origin:'null',source:window,data:{kind:'af:local-bind',nonce:'test-nonce',identity:identity()},ports:[port]}));await vi.waitFor(()=>expect(states.at(-1)).toBe('connected'));
- const operation={kind:'operation',call:1,operation:{query:'{ tasks { count } }',operation:'query'}};
- await port.onmessage?.({data:operation} as MessageEvent);await port.onmessage?.({data:operation} as MessageEvent);expect(fetch).toHaveBeenCalledTimes(2);
- await port.onmessage?.({data:{...operation,call:2}} as MessageEvent);expect(states.at(-1)).toBe('unavailable');
- await port.onmessage?.({data:{...operation,call:3}} as MessageEvent);expect(fetch).toHaveBeenCalledTimes(4);broker.dispose();
+ try{window.dispatchEvent(new MessageEvent('message',{origin:'null',source:window,data:{kind:'af:local-bind',nonce:'test-nonce',identity:identity()},ports:[port]}));await vi.waitFor(()=>expect(states.at(-1)).toBe('connected'));
+ const calls=fetch.mock.calls.length;for(const operation of [{query:'{tasks{count}}'},{sql:'select 1'}])await port.onmessage?.({data:{kind:'operation',call:1,operation}} as MessageEvent);expect(fetch).toHaveBeenCalledTimes(calls);
+ }finally{broker.dispose();}
 });
 it('reports readable remote evidence for a stale base without connecting or sending authority',async()=>{
  history.replaceState(null,'','/#nonce=test-nonce');

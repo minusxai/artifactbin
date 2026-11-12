@@ -1,4 +1,4 @@
-import {POST as pageMutation} from '@/app/api/artifacts/[id]/graphql/route';
+import {POST as pageMutation} from '@/app/api/artifacts/[id]/sql/route';
 /**
  * AN OLDER VERSION, IN THE BROWSER. `?version=N` on the served document renders that archived
  * version read-only for whoever may read the version history (the owner and editors), so a
@@ -130,22 +130,33 @@ describe('who may open an archived version', () => {
     expect(res.headers.get('cache-control')).toBe('no-store');
   });
 
-  /*
-   * THE WORDS A REFUSED WRITE SHOWS, carried on the island itself. Dropping
-   * `mutateUrl` already disables every control; it disables them saying "This
-   * view cannot save changes", which is about the wrong thing — the reader may
-   * well be able to edit this document, just not this version of it. The
-   * control that draws the reason is pinned in
-   * lib/story-runtime/__tests__/runtime-button.ui.test.tsx; what belongs here
-   * is that the ROUTE puts it on the document.
-   */
   it('refuses an HTTP mutation from an archived revision without changing the head', async () => {
-    const {owner,id}=await twoVersions();
-    const response=await pageMutation(request(`/api/artifacts/${id}/graphql`,{
-      method:'POST',token:owner.token,json:{revision:'1',query:'mutation { tasks { add(title:"forbidden") { id } } }'},
+    const owner=await mintToken('archived-sql');
+    const datasetResponse=await createArtifactRoute(request('/api/artifacts',{method:'POST',token:owner.token,json:{dataset:[{title:'original'}],visibility:'private'}}));
+    expect(datasetResponse.status).toBe(201);
+    const dataset=(await datasetResponse.json()).id;
+    const html=(text:string)=>nativeHtml(`<p>${text}</p>`).replace('</head>',`<link rel="af-dataset" data-af-name="tasks" href="ref:${dataset}"></head>`);
+    const created=await createArtifactRoute(request('/api/artifacts',{method:'POST',token:owner.token,json:{html:html('Version one'),visibility:'public'}}));
+    expect(created.status,await created.clone().text()).toBe(201);
+    const id=(await created.json()).id;
+    const replaced=await replaceRoute(await observedRequest(`/api/artifacts/${id}`,{method:'PUT',token:owner.token,json:{html:html('Version two')}}),params({id}));
+    expect(replaced.status).toBe(200);
+    const sql=async(revision:string,text:string)=>pageMutation(request(`/api/artifacts/${id}/sql`,{method:'POST',token:owner.token,json:{revision,sql:text}}),params({id}));
+    // The same linked table is readable in the archive and writable on the head.
+    const read=await sql('1','select title from tasks');
+    expect(read.status,await read.clone().text()).toBe(200);
+    expect((await read.json()).rows).toEqual([{title:'original'}]);
+    const live=await sql('2',"insert into tasks(title) values('allowed')");
+    expect(live.status,await live.clone().text()).toBe(200);
+    expect((await live.json()).affected).toBe(1);
+    const response=await pageMutation(request(`/api/artifacts/${id}/sql`,{
+      method:'POST',token:owner.token,json:{revision:'1',sql:"insert into tasks(title) values('forbidden')"},
     }),params({id}));
     expect(response.status).toBe(403);
-    expect(await response.json()).toEqual({error:'archived_page_readonly'});
+    expect(await response.json()).toMatchObject({error:'permission_denied'});
+    const rows=await sql('2','select title from tasks order by title');
+    expect(rows.status).toBe(200);
+    expect((await rows.json()).rows).toEqual([{title:'allowed'},{title:'original'}]);
     const head=await serveArtifact(request(`/a/${id}/raw`,{token:owner.token}),params({id}));
     expect(head.status).toBe(200);expect(await head.text()).toContain('Version two');
   });

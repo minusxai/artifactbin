@@ -9,20 +9,6 @@ import {writeComponentAssetReceipt} from './component-asset-proof.mjs';
  * @typedef {{sourceDir: string, outputDir: string, readableDir?: string, entries?: readonly string[], readableEntries?: readonly string[], readableOmit?: readonly string[], appDir?: string, receipt?:{root:string,path?:string}}} ComponentBuildOptions */
 const ASSET_NAME=/^[a-z][a-z0-9-]*\.(?:ts|js)$/;
 const APP_DIR=fileURLToPath(new URL('../../services/app/',import.meta.url));
-/** Flatten optional engines while retaining the author-facing lazy boundary.
- * Pele's complete graph fits a single portable module without external solvers. */
-function boundedEngines(appDir) {
-  const renderer=path.resolve(appDir,'lib/mermaid-images/reader-draw.ts');
-  const deck=path.resolve(appDir,'lib/html-components/deck-gl-engine.ts');
-  return {name:'bounded-component-engines',setup(builder){
-    builder.onLoad({filter:/(?:reader-draw|deck-gl-engine)\.ts$/},async ({path:filename})=>{
-      if(filename!==renderer && filename!==deck) return;
-      const result=await build({bundle:true,write:false,format:'esm',platform:'browser',target:'es2022',minify:true,logLevel:'silent',alias:{'@':path.resolve(appDir)},entryPoints:[filename]});
-      return {contents:result.outputFiles[0].text,loader:'js',resolveDir:path.dirname(filename)};
-    });
-  }};
-}
-
 /** Compile one closed ESM graph, preserving lazy engines and sharing their chunks.
  * Flat lowercase names obey the installed skill asset contract. Compile and validate
  * every output before replacing the previous installation; readable sources remain. */
@@ -37,12 +23,11 @@ export async function buildComponentAssets({sourceDir,outputDir,readableDir,entr
   const names=entries?entries.map(name=>name+'.ts').sort():available;
   for(const name of names)if(!available.includes(name))throw new Error(`Missing HTML component entry: ${name}`);
   if(!names.length) throw new Error('No HTML component sources found');
-  const packed=new Map();
   const result=await build({entryPoints:names.map(name=>path.join(sourceDir,name)),outdir:outputDir,
-    bundle:true,splitting:true,minify:true,plugins:[boundedEngines(appDir)],write:false,metafile:true,format:'esm',platform:'browser',target:'es2022',
+    bundle:true,splitting:true,minify:true,write:false,metafile:true,format:'esm',platform:'browser',target:'es2022',
     entryNames:'[name]',chunkNames:'chunk-[hash]',alias:{'@':path.resolve(appDir)},logLevel:'silent'});
   for(const output of Object.values(result.metafile.outputs)) for(const dependency of output.imports) {
-    if(dependency.external && !packed.has(dependency.path.replace(/^\.\//,''))) throw new Error(`HTML components must bundle module dependency: ${dependency.path}`);
+    if(dependency.external) throw new Error(`HTML components must bundle module dependency: ${dependency.path}`);
   }
   // esbuild hashes use uppercase ASCII. Lowercase that alphabet (a bijection), and
   // rewrite only emitted relative module references so entry/chunk names all match
@@ -66,7 +51,6 @@ export async function buildComponentAssets({sourceDir,outputDir,readableDir,entr
     });
     return {name,content};
   });
-  compiled.push(...[...packed].map(([name,content])=>({name,content})));
   for(const {name,content} of compiled) if(Buffer.byteLength(content)>4_000_000) throw new Error(`Component exceeds publication file limit: ${name}`);
   // Preserve unrelated files but replace all owned entries/chunks in one directory
   // swap. Compilation, remote-dependency errors and staging errors leave the old

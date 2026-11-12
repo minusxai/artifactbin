@@ -1,11 +1,5 @@
-/**
- * trackEvent dual-writes: the analytics_events row it always wrote, AND one
- * sentence to services().events. The mapping is the one the view migration
- * relies on — a VIEW's subject is always the daily visitor hash (the user id
- * rides in the payload), any other verb's subject is the user when known;
- * `fork` is recorded against the ORIGINAL with the copy as `fork_id`; and
- * `sse_connect` is not a moment anyone cares about, so it emits nothing.
- */
+/** Canonical-only telemetry: catalogue mapping, visitor identity, fork payload and failure isolation.
+ * Retired rows must never be written, even when the canonical service fails. */
 import { beforeEach, describe, expect, it } from 'vitest';
 import { overrideRequestHeaders, setServices } from '@/lib/platform';
 import { fakeEvents, type FakeEvents } from '@artifactbin/utils';
@@ -22,10 +16,10 @@ let fake: FakeEvents;
 beforeEach(() => { fake = fakeEvents(); setServices({ events: fake }); });
 const analyticsRows = async () => (await (await harness.db()).query<{ n: number }>('SELECT count(*)::int AS n FROM analytics_events')).rows[0]!.n;
 
-describe('trackEvent dual-write', () => {
-  it('a view: the analytics row as before, plus artifact.viewed whose subject is the visitor hash even when signed in', async () => {
+describe('trackEvent canonical-only write', () => {
+  it('a view: no retired row, and artifact.viewed whose subject is the visitor hash even when signed in', async () => {
     await trackEvent('view', 'abc123', { userId: 'usr_x' });
-    expect(await analyticsRows()).toBe(1);
+    expect(await analyticsRows()).toBe(0);
     expect(fake.events).toHaveLength(1);
     expect(fake.events[0]).toMatchObject({ source: 'app', verb: 'viewed', object_kind: 'artifact', object_id: 'abc123', subject_kind: 'visitor', payload: { user_id: 'usr_x' } });
     expect(fake.events[0]!.subject_id).toMatch(/^[0-9a-f]{32}$/);
@@ -43,7 +37,7 @@ describe('trackEvent dual-write', () => {
     const n = fake.events.length;
     await trackEvent('sse_connect', 'abc123');
     expect(fake.events).toHaveLength(n);
-    expect(await analyticsRows()).toBe(8);
+    expect(await analyticsRows()).toBe(0);
   });
   it('an anonymous, off-request write has a null subject and still lands', async () => {
     requestHeaders.clear();
@@ -54,9 +48,9 @@ describe('trackEvent dual-write', () => {
       requestHeaders.set('user-agent', 'Mozilla/5.0 (test)');
     }
   });
-  it('a failing events service never fails the caller and never loses the analytics row', async () => {
+  it('a failing events service never fails the caller and never falls back to a retired write', async () => {
     fake.fail = new Error('down');
     await expect(trackEvent('view', 'abc123')).resolves.toBeUndefined();
-    expect(await analyticsRows()).toBe(1);
+    expect(await analyticsRows()).toBe(0);
   });
 });

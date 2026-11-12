@@ -10,6 +10,5 @@ export {
   canRunSql, datasetExportable, datasetReadAccess, datasetRowsFor, datasetView, sqlRefusal, sqlRefusalMessage, viewCatalog, viewDatasetWire, type DatasetReadDecision,
 } from './read';
 export { storedPolicy, type StoredPolicy } from './stored-policy';
-export { filterAdmits } from './view';
 export { assertWriteCommit, canInsert, canUpdateCell, cellCheckAdmits, datasetWriteAccess, tableMutationPolicy, type DatasetWriteOptions } from './write';
-export { datasetRole, pageRole } from './role';
+export { datasetRole } from './role';

@@ -19,8 +19,7 @@
  * declared host is reached through the document's `/fetch` door. Each is re-checked with the publish grammar
  * (`parseCspOrigin`: an https origin, or a whole leading `*.` label); anything else is refused, never quoted into the header.
  */
-import { assetsPath, mutatePath, queryPath } from './markup-csp';
-import { withLegacy } from '@artifactbin/contracts';
+import { assetsPath } from './markup-csp';
 import { FONT_FILES, FRAME_HOSTS, FONT_STYLES, MODULE_CDNS } from '@/lib/html-reader/document-sources';
 import { EMPTY_CSP_EXTENSIONS, parseCspOrigin, type CspExtensions } from '@/lib/document';
 
@@ -64,7 +63,7 @@ export function buildDocumentCsp({ self, app, id, assetOrigin = null, extensions
     frame: httpsOrigins(extensions.frame ?? []), media: httpsOrigins(extensions.media ?? []),
   };
   void ext.connect; // validated like the rest; reached through `/fetch`, never connected to
-  const appDoors = [queryPath(id), mutatePath(id), eventsPath(id), fetchPath(id), ...(asset.length ? [assetsPath(id)] : [])].map((path) => `${appOrigin}${path}`);
+  const appDoors = [eventsPath(id), fetchPath(id), ...(asset.length ? [assetsPath(id)] : [])].map((path) => `${appOrigin}${path}`);
   return [
     "default-src 'none'",
     join('script-src', "'self'", 'blob:', "'wasm-unsafe-eval'", MODULE_CDNS, asset, ext.script),
@@ -74,7 +73,7 @@ export function buildDocumentCsp({ self, app, id, assetOrigin = null, extensions
     join('connect-src', "'self'", appDoors, MODULE_CDNS, asset, 'blob: data:'),
     // The faces a document's sheets declare are the app's /af/fonts/ files (and their old /fonts/ address).
     join('style-src', "'self'", "'unsafe-inline'", FONT_STYLES, ext.style),
-    join('font-src', "'self'", 'data:', withLegacy('/af/fonts/').map((dir) => `${appOrigin}${dir}`), FONT_FILES, asset, ext.style),
+    join('font-src', "'self'", 'data:', ['/af/fonts/'].map((dir) => `${appOrigin}${dir}`), FONT_FILES, asset, ext.style),
     join('img-src', "'self'", 'https:', 'data:', 'blob:', `${appOrigin}/api/users/`, asset, ext.img),
     join('media-src', "'self'", 'https:', 'blob:', asset, ext.media),
     // An author `<iframe>` (lib/jsx/validate): the default players, then the hosts the document declares.

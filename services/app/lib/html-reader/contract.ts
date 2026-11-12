@@ -6,7 +6,6 @@ import type {RegionFrameMessage, RegionParentMessage, UploadContext} from '@arti
  * composition lives in lib/islands (rt.tsx, boot.ts) and the compiler in
  * lib/compiled-page. The in-place editing and annotation messages are lib/html-bridge/selection-contract's.
  */
-export const QUERY_REQUEST_PARAM = 'q';
 /** Live data widget contents belong to Solid, rather than the server-fragment morph. */
 export const LIVE_DATA_ATTR = 'data-mx-live';
 

@@ -1,31 +1,5 @@
-/**
- * The served markup document's Content-Security-Policy — the response header
- * that IS the sandbox (app/a/[id]/raw). One function, because the policy is
- * per document: `connect-src` admits that document's own query endpoint
- * (`<origin>/a/<id>/query`), its own live stream (`<origin>/a/<id>/events`) and
- * that stream's `/frame` sub-path, its own write endpoint
- * (`<origin>/a/<id>/mutate`), its anonymous asset resolver
- * (`<origin>/a/<id>/resolve`), the `/af/geojson/` boundary files, and
- * `blob:`/`data:` for the local URLs GLB loaders build, its own published files
- * (`<origin>/a/<id>/assets`) — and nothing else on the origin. A configured asset
- * origin adds itself, and nothing else again.
- *
- * Why a path, not 'self': 'self' would open every `/api/*` route to the
- * author's script (minting tokens from a viewer's IP, for one). A CSP source
- * may carry a path — without a trailing slash it matches that path exactly,
- * and the query string is ignored — so the document can fetch its re-runs
- * (GET ?q=…, anonymous ACL, see app/a/[id]/query) and reach nothing else.
- * The origin must be ABSOLUTE for a path to be expressed, hence the argument
- * (lib/http baseUrl: the public origin behind the proxy).
- *
- * Everything else is content-independent: opaque origin
- * (`sandbox` without allow-same-origin), no form navigation, no base, no
- * third-party destinations of any kind. The two additions to the fixed source
- * directives are the pinned library directory on `script-src` and, when one is
- * configured, the asset origin on `script`/`img`/`font`/`media-src`. Guarded by
- * __tests__/raw-document.test.ts.
- */
-import { BASEMAP_PATH, withLegacy } from '@artifactbin/contracts';
+/** Sandboxed document policy: explicit current document doors and public assets, never general API access. */
+import { BASEMAP_PATH } from '@artifactbin/contracts';
 import { FONT_FILES, FONT_STYLES, MODULE_CDNS } from '@/lib/html-reader/document-sources';
 import { CSP_DIRECTIVES, EMPTY_CSP_EXTENSIONS, type CspDirective, type CspExtensions } from '@/lib/document';
 /** Where each kind of subresource may come from — content-independent. */
@@ -70,28 +44,16 @@ const BEHAVIOUR_DIRECTIVES = [
   'sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation',
 ] as const;
 
-/** The path the document may fetch: its own query endpoint. */
-export const queryPath = (id: string): string => `/a/${id}/query`;
 const resolvePath = (id: string): string => `/a/${id}/resolve`;
 
 /**
  * …and the one it may LISTEN on: its own live stream, so a reader sees their
- * author write. Same shape and the same reasoning as the query path — absolute
+ * author write. Absolute
  * and path-exact, so nothing else on this origin is reachable — and the same
  * answer to "what can this leak": the stream carries this document, to someone
  * already reading this document, under the same read ACL as the page itself.
  */
 const eventsPath = (id: string): string => `/a/${id}/events`;
-
-/**
- * …and the one it may WRITE to: its own mutate endpoint, which performs the
- * `<Mutation>`s this document declares (app/a/[id]/mutate). Admitted on the
- * same terms as the two above — absolute and path-exact, so nothing else on
- * this origin is reachable — and safe on the same reasoning: the caller
- * supplies a mutation NAME and scalar values, the SQL is the stored one, and
- * the route answers a cookie-less caller as a stranger.
- */
-export const mutatePath = (id: string): string => `/a/${id}/mutate`;
 
 /**
  * …and the document-scoped endpoint where a
@@ -102,28 +64,13 @@ export const mutatePath = (id: string): string => `/a/${id}/mutate`;
  */
 export const assetsPath = (id: string): string => `/a/${id}/assets`;
 
-/**
- * …and the one static directory: the boundary geometry the geo charts fetch
- * (`loadGeoFeatures` → `/af/geojson/<file>.json`, an allowlisted registry of
- * public files under `public/`; saved pages may still name the old `/geojson/`,
- * which `withLegacy` adds from the legacy table). A trailing slash makes a CSP source a
- * directory-prefix match, so this admits exactly those files and nothing
- * else on the origin. Without it every choropleth/point map rendered inside
- * a served document failed its boundary fetch — connect-src governs fetch()
- * even same-origin.
- */
-const GEOJSON_DIRS = withLegacy('/af/geojson/');
+/** Public boundary files fetched by maps; the trailing slash confines the CSP source to this directory. */
+const GEOJSON_DIRS = ['/af/geojson/'];
 
-/**
- * …and the bundled font files (public/fonts, the manifest's faces): the kit
- * reads the files the page already loaded — from the HTTP cache — to put them
- * into its Mermaid drawings, which an `<img>` shows and which cannot reach the
- * page's fonts otherwise (lib/mermaid-images/mermaid-fonts). Public, immutable
- * files, like /geojson/ and /story/.
- */
-const FONTS_DIRS = withLegacy('/af/fonts/');
-/** The hosted libraries' directory (and its old address, which saved pages import by URL). */
-const LIBRARY_DIRS = withLegacy('/af/lib/');
+/** Public platform fonts used by pages and their diagrams. */
+const FONTS_DIRS = ['/af/fonts/'];
+/** The hosted libraries' directory. */
+const LIBRARY_DIRS = ['/af/lib/'];
 
 export function markupCsp(origin: string, id: string, assetOrigin?: string): string {
   // connect-src sits with the other source directives, before the behaviour
@@ -133,7 +80,7 @@ export function markupCsp(origin: string, id: string, assetOrigin?: string): str
   // without a trailing slash exactly, so `/events` does not cover `/events/frame`.
   // GLB loaders fetch embedded textures/buffers through local blob/data URLs;
   // these add no network destination or access to the application's APIs.
-  const connect = `connect-src ${self}${queryPath(id)} ${self}${eventsPath(id)} ${self}${eventsPath(id)}/frame ${self}${mutatePath(id)} ${self}${resolvePath(id)} ${self}/a/${id}/fetch ${[...GEOJSON_DIRS, BASEMAP_PATH, ...FONTS_DIRS].map((dir) => self + dir).join(' ')} blob: data: ${MODULE_CDNS.join(' ')}`;
+  const connect = `connect-src ${self}${eventsPath(id)} ${self}${eventsPath(id)}/frame ${self}${resolvePath(id)} ${self}/a/${id}/fetch ${[...GEOJSON_DIRS, BASEMAP_PATH, ...FONTS_DIRS].map((dir) => self + dir).join(' ')} blob: data: ${MODULE_CDNS.join(' ')}`;
   if(assetOrigin && (new URL(assetOrigin).origin!==assetOrigin||!/^https?:\/\//.test(assetOrigin)))throw Error('Invalid asset origin');
   const sources=SOURCE_DIRECTIVES.map(d=>{
     // The hosted library and component directories stay explicit for documents that

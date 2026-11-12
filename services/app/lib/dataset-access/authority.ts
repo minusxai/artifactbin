@@ -23,9 +23,9 @@ async function authorizedDataset(actor:AccessActor,id:string){
  return row;
 }
 /**
- * A read of a dataset's rows through GraphQL: the head and the reader's role view (lib/dataset-permissions).
+ * A read of a dataset's rows through its data doors: the head and the reader's role view (lib/dataset-permissions).
  * Through a page linking it (the default), a reader without sharing of their own is signed_in or anonymous;
- * directly (`throughPage:false`, the dataset's own GraphQL endpoint), the dataset's sharing alone decides. `facts`
+ * directly (`throughPage:false`, a direct dataset request), the dataset's sharing alone decides. `facts`
  * is the request's memo of the caller's access facts; without it every fact is asked live.
  */
 export async function authorizedDatasetRead(actor:AccessActor,id:string,options:{throughPage:boolean;pageId?:string;facts?:AccessFacts}={throughPage:true}):Promise<{row:ArtifactRow;decision:DatasetReadDecision&{allowed:true}}>{

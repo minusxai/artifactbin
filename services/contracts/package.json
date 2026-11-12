@@ -12,7 +12,6 @@
     "./font-sources": "./src/font-sources.ts",
     "./basemap": "./src/basemap.ts",
     "./domain-footer": "./src/domain-footer.ts",
-    "./query-request": "./src/query-request.ts",
     "./sign-in-required": "./src/sign-in-required.ts",
     "./loopback-names": "./src/loopback-names.ts",
     "./url-space": "./src/url-space.ts"

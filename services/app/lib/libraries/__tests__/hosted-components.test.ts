@@ -14,7 +14,7 @@ const built=(file:string)=>readFileSync(path.resolve('lib/build-assets/component
 const chunks=(source:string)=>[...source.matchAll(/["']\.\/(chunk-[a-z0-9]+\.js)["']/g)].map(match=>match[1]!);
 
 it('serves each hosted component entry revalidated and its content-addressed chunks immutable',async()=>{
- for(const name of [...hosted.components,...hosted.legacy]){
+ for(const name of hosted.components){
   const response=await servedFile(name+'.js');
   expect(response.status,name).toBe(200);expect(response.headers.get('content-type')).toMatch(/^text\/javascript/);
   expect(response.headers.get('cache-control'),name).toBe('no-cache');expect(response.headers.get('access-control-allow-origin')).toBe('*');
@@ -29,7 +29,7 @@ it('serves each hosted component entry revalidated and its content-addressed chu
  expect((await servedFile('tabs.js',{'if-none-match':encoded.headers.get('etag')!,'accept-encoding':'br'})).status).toBe(304);
  const chunk=chunks(built('select.js').toString())[0]!;expect(chunk).toBeTruthy();
  const shared=await servedFile(chunk);expect(shared.status).toBe(200);expect(shared.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
- for(const refused of ['register-component.js','tabs-model.js','../hosted.json','tabs.ts','chunk-UPPER.js','chunk-missing0.js','deck-gl-engine.js'])expect((await servedFile(refused)).status,refused).toBe(404);
+ for(const refused of ['mermaid.js','deck-gl.js','register-component.js','tabs-model.js','../hosted.json','tabs.ts','chunk-UPPER.js','chunk-missing0.js','deck-gl-engine.js'])expect((await servedFile(refused)).status,refused).toBe(404);
 });
 
 it('admits the component directory as a script source of the sandboxed copy',()=>{

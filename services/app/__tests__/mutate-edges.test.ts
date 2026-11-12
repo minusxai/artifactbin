@@ -11,7 +11,6 @@
  *    or a process slowly pins channels for documents nobody is reading.
  */
 import { afterAll, describe, expect, it, vi } from 'vitest';
-import { POST as mutateDocRoute } from '@/app/a/[id]/mutate/route';
 import { POST as mutateDatasetRoute } from '@/app/api/artifacts/[id]/mutate/route';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
@@ -71,14 +70,6 @@ async function alwaysContended(datasetId: string) {
 }
 
 describe('contention', () => {
-  it('does not execute retired declared mutations from a native page', async () => {
-    const t=await mintToken('t'),ds=(await create(t.token,{dataset:ROWS,access:'readwrite'})).id;
-    const doc=(await create(t.token,{html:DOC(ds)})).id;
-    const before=await getArtifactById(ds);
-    const res=await mutateDocRoute(request(`/a/${doc}/mutate`,{method:'POST',token:t.token,json:{mutation:'vote'}}),params({id:doc}));
-    expect(res.status).toBe(400);expect(await res.json()).toMatchObject({error:'unknown_mutation'});expect(await getArtifactById(ds)).toEqual(before);
-  });
-
   it('answers the same on the owner door', async () => {
     const t = await mintToken('t');
     const ds = (await create(t.token, { dataset: ROWS, columns: [{ name: 'choice', type: 'string' }], access: 'readwrite' })).id;

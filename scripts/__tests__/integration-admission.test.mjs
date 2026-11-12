@@ -41,3 +41,18 @@ it('keeps both secret precedence cases and fresh-database bearer coverage in int
   expect(source).toContain('expect(bearer.status).toBe(200)');
   expect(source).toContain("expect(await bearer.json()).toMatchObject({ user: null })");
 });
+
+it('runs the canonical overlap proof in the provisioned real-database lane without an optional database URL', () => {
+  const config = readFileSync(path.join(root, 'vitest.config.ts'), 'utf8');
+  const file = 'services/app/lib/analytics/__tests__/canonical-totals-postgres.test.ts';
+  const realDatabases = config.match(/const REAL_DATABASE_TESTS = \[([\s\S]*?)\];/)?.[1];
+  expect(realDatabases).toContain(`'${file}'`);
+  expect(config).toMatch(/exclude: \[[\s\S]*?\.\.\.REAL_DATABASE_TESTS/);
+  expect(config).toMatch(/name: 'integration'[\s\S]*?include: \[[\s\S]*?\.\.\.REAL_DATABASE_TESTS/);
+  const source = readFileSync(path.join(root, file), 'utf8');
+  expect(source).not.toMatch(/ANALYTICS_TEST_DATABASE_URL|describe\.skip|describe\.skipIf/);
+  expect(source).toContain("'127.0.0.1::5432'");
+  expect(source).toContain("'postgres:17-alpine'");
+  const ci = readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8');
+  expect(ci).toMatch(/integration:[\s\S]*?docker pull postgres:17-alpine[\s\S]*?npm run test:integration/);
+});

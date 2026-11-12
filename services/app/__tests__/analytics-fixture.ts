@@ -5,7 +5,7 @@ import { expect, vi } from 'vitest';
 import { request } from '@/__tests__/harness';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { flushViews } from '@/lib/analytics';
-import { getDb } from '@/lib/platform';
+import { EVENTS_SCHEMA, getDb } from '@/lib/platform';
 
 export const BASE = 'http://localhost:3000';
 
@@ -45,7 +45,12 @@ export async function create(token: string, body: Record<string, unknown>): Prom
 export async function eventRows(artifactId?: string): Promise<{ event: string; artifact_id: string; user_id: string | null; client: string | null }[]> {
   const db = await getDb();
   const r = await db.query<{ event: string; artifact_id: string; user_id: string | null; client: string | null }>(
-    `SELECT event, artifact_id, user_id, client FROM analytics_events ${artifactId ? 'WHERE artifact_id = $1' : ''} ORDER BY seq`,
+    `SELECT CASE verb WHEN 'viewed' THEN 'view' WHEN 'exported' THEN 'export'
+       WHEN 'created' THEN 'create' WHEN 'updated' THEN 'update' WHEN 'edited' THEN 'edit'
+       WHEN 'mutated' THEN 'mutate' WHEN 'reverted' THEN 'revert' WHEN 'forked' THEN 'fork'
+       WHEN 'deleted' THEN 'delete' END AS event,
+       object_id AS artifact_id, payload->>'user_id' AS user_id, payload->>'client' AS client
+     FROM ${EVENTS_SCHEMA}.events WHERE object_kind='artifact' ${artifactId ? 'AND object_id = $1' : ''} ORDER BY position`,
     artifactId ? [artifactId] : [],
   );
   return r.rows;

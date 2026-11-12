@@ -1,7 +1,7 @@
 /**
  * The live co-editing contract (src/region-sessions.ts): the channel name, the limits, and one value of every
  * wire shape, so a change to any of them is a deliberate edit here and in both ends (lib/region-sessions and the
- * @afbin/regions frame editor).
+ * @afbin/native-regions frame editor).
  */
 import { describe, expect, it } from 'vitest';
 import {

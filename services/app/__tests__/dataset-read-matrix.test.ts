@@ -12,7 +12,7 @@ import {ANONYMOUS_ACTOR,createUser,identityForUser,type AccessActor} from '@/lib
 import {getDb} from '@/lib/platform';
 import {canReadArtifact,getArtifactById} from '@/lib/artifacts';
 import {createArtifactFromBody} from '@/lib/publish';
-import {linkedGql,errorCode} from './linked-datasets';
+import {linkedSql,errorCode} from './linked-datasets';
 
 useAppHarness();
 
@@ -77,7 +77,7 @@ it('decides every policy shape × caller × read door as the stored rules say',a
    const actor=actors[caller],key=`${shape.name}|${caller}|${door}`;
    const row=(await getArtifactById(id))!;
    const sql=()=>tables(request(`/a/${id}/tables`,{method:'POST',json:{sql:'select 1 as one'},...(tokens[caller]?{token:tokens[caller]}:{})}),{params:Promise.resolve({id})}).then(r=>r.status===200);
-   actual[key]=await opens(door==='direct'?()=>canReadArtifact(row,actor):door==='page'?async()=>{const reply=await linkedGql(actor,binding,'{ data(limit: 1) { _id } }');if(reply.errors?.length)throw Error(errorCode(reply)??'refused');}:sql);
+   actual[key]=await opens(door==='direct'?()=>canReadArtifact(row,actor):door==='page'?async()=>{const reply=await linkedSql(actor,binding,'select _id from data limit 1');if(reply.error)throw Error(errorCode(reply)??'refused');}:sql);
    want[key]=expected(shape,caller,door);
   }
  }

@@ -13,7 +13,7 @@ import {fileURLToPath} from 'node:url';
 
 // regions (the live region editor) and collab (live dataset cells) are served for completeness;
 // Save HTML never embeds them (an offline page never opens a session).
-const RUNTIME=/^\/af\/(?:core|apollo|reader|chrome|portable|morph|regions|collab|state)\.js$/;
+const RUNTIME=/^\/af\/(?:core|apollo|reader|chrome|portable|morph|collab|state)\.js$/;
 const NATIVE_RUNTIME=/^\/af\/native-(?:regions|markdown)\.js$/;
 const LIBRARY=/^\/af\/lib\/[a-z][a-z0-9-]*-\d+\.\d+\.\d+\/index\.js$/;
 const COMPONENT=/^\/af\/components\/[a-z][a-z0-9-]*\.js$/;
@@ -23,13 +23,8 @@ const RUNTIME_MODULES={core:'/af/core.js',apollo:'/af/apollo.js',reader:'/af/rea
   '/af/chrome.js',portableEngine:'/af/portable.js',morph:'/af/morph.js',collab:'/af/collab.js',
   state:'/af/state.js'};
 
-/** The core address some saved pages load, served as the current core. This file ships raw,
- * so it keeps this one copy of LEGACY_CORE_PATH in services/app/lib/html-page/core-script.ts
- * (html-preview.test.mjs pins them equal). */
-export const LEGACY_CORE_PATH='/af/v1/core.js';
-
 /** True for a path this module may answer. */
-export const isPlatformModulePath=pathname=>pathname===LEGACY_CORE_PATH||RUNTIME.test(pathname)||
+export const isPlatformModulePath=pathname=>RUNTIME.test(pathname)||
   NATIVE_RUNTIME.test(pathname)||LIBRARY.test(pathname)||COMPONENT.test(pathname);
 
 /** A source checkout's own build outputs (absent in the installed archive). */
@@ -72,7 +67,6 @@ if(bytes.length>MAX_BYTES||!check(response.headers.get('content-type')??''))thro
  /** The bytes of one platform module path, or null when the path is not one or neither source
   * has it. */
  async function module(pathname){
-  if(pathname===LEGACY_CORE_PATH)pathname=RUNTIME_MODULES.core;
   if(!isPlatformModulePath(pathname))return null;
   return explicit.get(pathname)??await checkoutModule(pathname)??await remote(pathname,javascript);
  }

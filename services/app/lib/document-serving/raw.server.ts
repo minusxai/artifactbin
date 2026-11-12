@@ -26,8 +26,8 @@ import {cspExtensionsFor} from '@/lib/trust';
 import { requestOrSessionActor } from '@/lib/authentication';
 import { baseUrl, parseByteRange, pagesRequestOf, etagOf, matchingTag, notModified } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
-import { LIVE_DATASET_REFUSAL, liveConnectionOf, loadDatasetRows, serveStoredFile, catalogOf, publicCatalogOf } from '@/lib/datasets';
-import { datasetReadAccess, datasetRowsFor, viewCatalog } from '@/lib/dataset-permissions';
+import { LIVE_DATASET_REFUSAL, liveConnectionOf, serveStoredFile, publicCatalogOf } from '@/lib/datasets';
+import { datasetReadAccess, viewCatalog } from '@/lib/dataset-permissions';
 import { ObjectUnavailable, loadImage, loadPdfStream, pdfFilename, pdfMetaOf } from '@/lib/object-store';
 import { Readable } from 'node:stream';
 import { servesDocument } from '@/lib/user-pages';
@@ -145,12 +145,9 @@ async function serveRaw(request: Request, ctx: RawDocumentRequest): Promise<Resp
   const base = pages?.site.app ?? baseUrl(request);
   /*
    * THE EXPORTER'S CAPTURE (lib/export photographs `raw?chrome=0&key=…` here): a top-level page in the opaque sandbox
-   * with no app frame, so the frame relay never attaches and every `@afbin/apollo` read answered "offline: nothing was
-   * sent" — a deck that guards the read exported with no numbers, one that throws drew no slide at all. It reads its
-   * data straight from the page GraphQL endpoint, as an anonymous owner host's page does (html-runtime/domain-reads),
-   * (its `sql` from the page SQL door, which admits an opaque origin only with that key, lib/page-doors `opaqueSqlRead`),
-   * and that endpoint answers an opaque origin as the requester the key was minted for, or as nobody (lib/graphql-compat):
-   * the image shows what its requester may read, never a session's view, and lib/export stores it for that audience.
+   * with no app frame. Its SQL reads go straight to the page SQL door, read-only, carrying the capture key.
+   * The door admits an opaque origin only as the requester that key names (lib/page-doors `opaqueSqlRead`).
+   * The image shows what its requester may read, never a session's view, and lib/export stores it for that audience.
    * Its page's own published files are read the same way: this response names each own-door address with the key
    * (native-html `captureKey`), as the asset door admits it. Only this response carries it: a keyed request is never a
    * shared render, and nothing stored, cached or downloaded holds it.
@@ -223,14 +220,11 @@ async function serveRaw(request: Request, ctx: RawDocumentRequest): Promise<Resp
       // A live dataset's raw view is its connection's summary (never a secret): its rows stay in its database.
       const live=liveConnectionOf(artifact.meta);
       if(live)return new Response(JSON.stringify({connection:live,message:LIVE_DATASET_REFUSAL}),{headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'}});
-      const catalog=catalogOf(artifact);
-      const legacyFlat=catalog?.kind==='stored'&&catalog.tables.length===1&&catalog.tables[0].schema==='public'&&catalog.tables[0].name==='rows'&&typeof (artifact.meta as Record<string,unknown>).objectKey==='string';
       // The reader's role view (lib/dataset-permissions); the creating token and a verified export key read whole.
       const decision=holdsCreatingToken(header,actor)||byExportKey?null:await datasetReadAccess(header as ArtifactRow,actor);
       if(decision&&!decision.allowed)return notFound();
-      const rows=async()=>decision&&!decision.full?datasetRowsFor(decision,artifact):loadDatasetRows(artifact);
       const described=()=>{const open=publicCatalogOf(artifact);return open&&decision?viewCatalog(decision,open):open;};
-      return new Response(JSON.stringify(legacyFlat||!catalog ? await rows() : {catalog:described()}), {
+      return new Response(JSON.stringify({catalog:described()}), {
         status: 200,
         headers: { 'Content-Type': 'application/json; charset=utf-8', ...COMMON },
       });

@@ -16,7 +16,7 @@ const comparisons: Record<string, string> = {
 /**
  * The pattern operators as SQL: the engine library function (`like_matches`, `ilike_matches`, both `datasetPatternMatch`)
  * and whether the operator is its negation. Rules' filters and checks (compilePolicyPredicate) and the generated API's
- * `where` (app lib/graphql-compat) compile them the same way, so every door decides a pattern alike.
+ * SQL filters (app lib/dataset-access) compile them the same way, so every door decides a pattern alike.
  */
 const PATTERN_OPERATORS: Readonly<Record<string, { readonly fn: 'like_matches' | 'ilike_matches'; readonly negated: boolean }>> = {
   _like: { fn: 'like_matches', negated: false },
@@ -25,7 +25,7 @@ const PATTERN_OPERATORS: Readonly<Record<string, { readonly fn: 'like_matches' |
   _nilike: { fn: 'ilike_matches', negated: true },
 };
 /** `column` against a bound `pattern` by one pattern operator, as SQL (NOT of NULL stays NULL: three-valued). */
-export function patternSql(op: string, column: string, pattern: string): string | null {
+function patternSql(op: string, column: string, pattern: string): string | null {
   const known = Object.hasOwn(PATTERN_OPERATORS, op) ? PATTERN_OPERATORS[op] : undefined;
   if (!known) return null;
   const call = `${known.fn}(${column}, ${pattern})`;

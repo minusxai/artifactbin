@@ -11,7 +11,7 @@ export interface LibrarySpec {
 }
 const libraries: Record<string, LibrarySpec> = registry;
 
-/** Where hosted libraries are served (public/libraries on disk; the old `/libraries/` answers through the legacy table). */
+/** Where hosted libraries are served (public/libraries on disk). */
 export const LIBRARIES_PATH = '/af/lib/';
 
 /** Pages import hosted libraries as `@afbin/<name>`; the whole `@afbin/` prefix is platform-reserved. */
@@ -44,9 +44,8 @@ export function libraryVersions(): Record<string, string> {
  */
 export const COMPONENTS_PATH = '/af/components/';
 const components: readonly string[] = hostedComponents.components;
-/** Served at /af/components/: the components, and the legacy `af-deck-gl`/`af-mermaid` wrappers, which have no
- * `@afbin/` name (the deck.gl library owns `@afbin/deck-gl`; new maps and diagrams use the libraries) and load by URL. */
-export const isHostedComponent = (name: string): boolean => components.includes(name) || hostedComponents.legacy.includes(name);
+/** Only current components are served under /af/components/. */
+export const isHostedComponent = (name: string): boolean => components.includes(name);
 /** The public components (`hosted.json` `components`): what a page imports as `@afbin/<name>` and a host page loads. */
 export const hostedComponentEntries = (): readonly string[] => components;
 export const componentUrl = (name: string, origin = ''): string => `${origin}${COMPONENTS_PATH}${name}.js`;

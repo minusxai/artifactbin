@@ -47,9 +47,11 @@ describe('autofix rules',()=>{
    expect(canonicalizeHtmlPage(result.html).html.replace(/ data-af-id="[^"]+"/g,'')).toBe(result.html);
   }
  });
- it('keeps a stored page\'s legacy /af/v1/core.js script: it is still the core, served as an alias',()=>{
-  const html=page('<meta charset="utf-8"><meta name="viewport" content="x"><script src="/af/v1/core.js"></script>');
-  const result=autofixHtml(html);expect(result.fixes).toEqual([]);expect(result.routine).toEqual([]);expect(result.html).toBe(html);
+ it('does not recognize a retired core URL as the current runtime',()=>{
+  const html=page('<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><script src="/af/v1/core.js"></script>');
+  const result=autofixHtml(html);
+  expect(result.routine).toContain('added core script');
+  expect(result.html).toContain('src="/af/core.js"');
  });
  it('adds a missing core as routine, not as an author fix',()=>{
   const result=autofixHtml(page('<meta charset="utf-8"><meta name="viewport" content="x">'));
@@ -108,22 +110,22 @@ describe('autofix rules',()=>{
   expect(result.problems).toEqual([]);
   expect(result.warnings.map(warning=>[warning.rule,warning.message])).toEqual([['unlinked-file',"a script names ./geo.json, which publishes with the page only when a script fetches it by that literal path: fetch('./geo.json')"]]);
  });
- it('moves design selection from <html> into head metadata and drops the copied system stylesheet (D2)',()=>{
+ it('drops platform-owned attributes and copied styles without inferring author metadata',()=>{
   const html=page(OK+'\n<link data-af="design-system" rel="stylesheet" href="./design-systems/riso.css">').replace('<html>','<html data-af-dark="false" data-af-design-system="riso">');
   const fixed=autofixHtml(html);
   expect(fixed.fixes.map(fix=>fix.rule)).toEqual(['design-system-meta','design-system-link']);
-  expect(fixed.html).toContain('<html>');expect(fixed.html).toContain('<meta name="artifactbin:design-system" content="riso">');
+  expect(fixed.html).toContain('<html>');expect(fixed.html).not.toContain('artifactbin:design-system');
   expect(fixed.html).not.toContain('data-af="design-system"');expect(fixed.html).not.toContain('data-af-dark');
   expect(autofixHtml(fixed.html).html).toBe(fixed.html);
   expect(formatAutofixReport(fixed)).toContain('fixed design-system-link');
  });
- it('names the system a copied stylesheet implies, keeps an existing meta, and leaves unknown systems linked',()=>{
+ it('does not infer design selection from a stylesheet; keeps explicit metadata',()=>{
   const linked=autofixHtml(page(OK+'\n<link data-af="design-system" rel="stylesheet" href="./design-systems/volta.css">'));
-  expect(linked.html).toContain('content="volta"');expect(linked.html).not.toContain('volta.css');
+  expect(linked.html).not.toContain('content="volta"');expect(linked.html).not.toContain('volta.css');
   const meta=page(OK+'\n<meta name="artifactbin:design-system" content="redline">').replace('<html>','<html data-af-design-system="riso">');
   const kept=autofixHtml(meta).html;expect(kept.match(/artifactbin:design-system/g)).toHaveLength(1);expect(kept).toContain('content="redline"');
   const custom=page(OK+'\n<link data-af="design-system" rel="stylesheet" href="./mine.css">');
-  expect(autofixHtml(custom).html).toBe(custom);
+  expect(autofixHtml(custom).html).not.toContain('data-af="design-system"');
  });
  it('is deterministic and idempotent',()=>{
   const html=page('<title>t</title>','<p>x</p><script defer src="/af/core.js"></script>');

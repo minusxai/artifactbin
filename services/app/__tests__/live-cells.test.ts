@@ -16,7 +16,6 @@ import { locateDatasetCell, writeDatasetCells } from '@/lib/dataset-access';
 import { getDb, runWithRequest } from '@/lib/platform';
 import { attachActor } from '@artifactbin/utils';
 import { POST as publishRoute } from '@/app/api/artifacts/route';
-import { GET as graphqlSchema } from '@/app/api/artifacts/[id]/graphql/route';
 import { POST as openRoute } from '@/app/api/artifacts/[id]/regions/[regionId]/open/route';
 import { POST as updatesRoute } from '@/app/api/artifacts/[id]/regions/[regionId]/updates/route';
 import { POST as flushRoute } from '@/app/api/artifacts/[id]/regions/flush/route';
@@ -134,7 +133,7 @@ async function join(person: Person, regionId = key(red)) {
 
 const stored = async () => loadDatasetRows((await getArtifactById(datasetId))!) as Promise<typeof ROWS>;
 const datasetVersion = async () => (await getArtifactById(datasetId))!.version;
-const gqlAsOwner = (query: string, variables: Record<string, unknown> = {}) => client.gql(query, variables, { token: ownerToken });
+const sqlAsOwner = (query: string, variables: Record<string, unknown> = {}) => client.sql(query, variables, { token: ownerToken });
 
 beforeEach(async () => {
   const person = async (name: string) => { const user = await createUser({ email: `mxmx_test_cells_${name}@example.com` }); return { id: user.id, email: user.email! }; };
@@ -155,9 +154,9 @@ beforeEach(async () => {
   const saved = await patchMetadata(ownerToken, datasetId, { policy: POLICY(), expectedPolicyRevision: head.policy_revision ?? 0 });
   expect(saved.status, await saved.clone().text()).toBe(200);
   client = nativeDatasetClient(pageId);
-  const read = await gqlAsOwner('{ tasks { _id team } }');
-  expect(read.body.errors).toBeUndefined();
-  const ids = Object.fromEntries((read.body.data!.tasks as { _id: string; team: string }[]).map((row) => [row.team, row._id]));
+  const read = await sqlAsOwner('select _id, team from tasks');
+  expect(read.body.error).toBeUndefined();
+  const ids = Object.fromEntries((read.body.rows! as { _id: string; team: string }[]).map((row) => [row.team, row._id]));
   red = ids.red!; blue = ids.blue!;
 });
 afterEach(async () => {
@@ -293,8 +292,8 @@ describe('saving through the dataset', () => {
     expect(merged).toContain('\non mobile');
     expect(merged.replace('Urgent: ', '')).toBe('Fix the login bug\non mobile');
     // Readers see it through GraphQL as a plain string, and the row keeps its _id.
-    const read = await gqlAsOwner('query($id: ID!) { tasks_by_pk(_id: $id) { _id description } }', { id: red });
-    expect(read.body.data!.tasks_by_pk).toEqual({ _id: red, description: merged });
+    const read = await sqlAsOwner('select _id, description from tasks where _id = $id', { id: red });
+    expect(read.body.rows![0]).toEqual({ _id: red, description: merged });
     // Nothing left to save: no new version.
     expect(await (await flushCells(editor)).json()).toEqual({ saved: 0 });
     expect(await datasetVersion()).toBe(before + 1);
@@ -318,8 +317,8 @@ describe('saving through the dataset', () => {
     const pushed = await a.push();
     expect(pushed.status).toBe(200);
     // The owner rewrites a word through the page's generated API, from the stored value.
-    const written = await gqlAsOwner('mutation($id: ID!) { update_tasks_by_pk(pk_columns: {_id: $id}, _set: {description: "Fix the signup bug"}) { description } }', { id: red });
-    expect(written.body.errors).toBeUndefined();
+    const written = await sqlAsOwner("update tasks set description = 'Fix the signup bug' where _id = $id", { id: red });
+    expect(written.body.error).toBeUndefined();
     expect((await stored())[0]!.description).toBe('Fix the signup bug');
     // The live cell takes the write merged in (one update attributed to nobody), streamed to the typist.
     const frames = await framesUntil(watching.frames!, (frame) => frame.type === 'updates' && (frame.to as number) > (pushed.body.seq as number));
@@ -335,7 +334,7 @@ describe('saving through the dataset', () => {
     a.text.insert(0, 'A: ');
     await a.push();
     // Another column of the same row changes (the dataset moves under the cell, its value does not).
-    await gqlAsOwner('mutation($id: ID!) { update_tasks_by_pk(pk_columns: {_id: $id}, _set: {title: "Login 2"}) { title } }', { id: red });
+    await sqlAsOwner("update tasks set title = 'Login 2' where _id = $id", { id: red });
     expect(await (await flushCells(viewer)).json()).toEqual({ saved: 1 });
     expect((await stored())[0]).toMatchObject({ title: 'Login 2', description: 'A: Fix the login bug' });
   });
@@ -350,7 +349,7 @@ describe('saving through the dataset', () => {
     try {
       seam.beforeWrite = async () => {
         // A write lands first (the save must retry) and, in the other process, someone types in a cell nobody had touched.
-        await gqlAsOwner('mutation($id: ID!) { update_tasks_by_pk(pk_columns: {_id: $id}, _set: {title: "Login 2"}) { title } }', { id: red });
+        await sqlAsOwner("update tasks set title = 'Login 2' where _id = $id", { id: red });
         const actor = identityForUser(editor.id, null, editor.email) as AccessActor;
         const opened = await other.cells.open(actor, pageId, key(blue));
         if (opened.status !== 200) throw new Error(`open ${opened.status}`);
@@ -388,8 +387,8 @@ describe('saving through the dataset', () => {
   it('a deleted row closes its cell (closed: removed) and deletes its rows', async () => {
     const a = await join(editor);
     const watching = await stream(editor, `${key(red)}:${a.reply.seq}`);
-    const deleted = await gqlAsOwner('mutation($id: ID!) { delete_tasks_by_pk(_id: $id) { _id } }', { id: red });
-    expect(deleted.body.errors).toBeUndefined();
+    const deleted = await sqlAsOwner('delete from tasks where _id = $id', { id: red });
+    expect(deleted.body.error).toBeUndefined();
     const frames = await framesUntil(watching.frames!, (frame) => frame.type === 'closed');
     expect(frames.at(-1)).toEqual({ type: 'closed', regionId: key(red), reason: 'removed' });
     expect((await (await getDb()).query("SELECT 1 FROM region_states WHERE artifact_id = $1 AND region_id LIKE 'cell:%'", [datasetId])).rows).toEqual([]);
@@ -400,7 +399,7 @@ describe('saving through the dataset', () => {
     const a = await join(viewer);
     const watching = await stream(viewer, `${key(red)}:${a.reply.seq}`);
     // The row leaves the rule's filter.
-    await gqlAsOwner('mutation($id: ID!) { update_tasks_by_pk(pk_columns: {_id: $id}, _set: {team: "blue"}) { team } }', { id: red });
+    await sqlAsOwner("update tasks set team = 'blue' where _id = $id", { id: red });
     const frames = await framesUntil(watching.frames!, (frame) => frame.type === 'closed');
     expect(frames.at(-1)).toEqual({ type: 'closed', regionId: key(red), reason: 'access' });
   });
@@ -443,7 +442,7 @@ describe('the dataset write a save makes', () => {
   it('is guarded on the head it was merged from: a write that landed first is not overwritten', async () => {
     const stale = (await getArtifactById(datasetId))!;
     const target = await cell(red);
-    await gqlAsOwner('mutation($id: ID!) { update_tasks_by_pk(pk_columns: {_id: $id}, _set: {description: "Theirs"}) { _id } }', { id: red });
+    await sqlAsOwner("update tasks set description = 'Theirs' where _id = $id", { id: red });
     let effects = 0;
     const outcome = await writeDatasetCells(actorOf(viewer), stale, pageId, target, [{ rowId: red, source: 'description', value: 'Mine' }], async () => { effects++; });
     expect(outcome).toMatchObject({ refused: 'row_changed' });
@@ -541,23 +540,5 @@ describe('text the dataset will not take', () => {
     expect((await stored())[0]!.description).toBe('Fix the login bug');
     // A new session starts clean from the stored text.
     expect((await join(viewer)).value()).toBe('Fix the login bug');
-  });
-});
-
-describe('the flag in the GraphQL schema', () => {
-  it('describes a collaborative field in the dataset\'s and the page\'s SDL, and no other', async () => {
-    const sdl = async (id: string) => {
-      const response = await graphqlSchema(request(`/api/artifacts/${id}/graphql`, { token: ownerToken }), { params: Promise.resolve({ id }) });
-      expect(response.status, await response.clone().text()).toBe(200);
-      return (await response.json()).sdl as string;
-    };
-    // As generated (one line) and as the page composition prints it (a block string): the description precedes the field.
-    const described = (field: string) => new RegExp(`Collaborative: typed live together with @afbin/collab \\(collaborative_columns\\)\\."+\\s*${field}: String`);
-    for (const text of [await sdl(datasetId), await sdl(pageId)]) {
-      expect(text).toMatch(described('description'));
-      expect(text).toMatch(described('notes'));
-      expect(text).not.toMatch(described('title'));
-      expect(text.match(/Collaborative: typed live together/g)).toHaveLength(2);
-    }
   });
 });

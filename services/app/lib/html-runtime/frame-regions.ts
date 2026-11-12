@@ -29,7 +29,7 @@ export interface FrameRegionsOptions {
   win: Window;
   /** The bridge's post (the door adds the session key); region messages only. */
   post: (message: RegionFrameMessage | { kind: 'error'; message: string }) => void;
-  /** Fetches the editor module (`@afbin/regions` in a page; the module itself in tests). */
+  /** Fetches the editor module (`@afbin/native-regions` in a page; the module itself in tests). */
   load: (kind?: string) => Promise<RegionEditorModule>;
   /** The page's id: the caret kept across a rebuild (`keepForRebuild`) is this page's alone. */
   pageId?: string;

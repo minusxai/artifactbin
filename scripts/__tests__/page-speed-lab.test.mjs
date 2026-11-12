@@ -136,7 +136,7 @@ describe('page-speed fixtures', () => {
     }
     const dashboard=bodies.find(body=>body.title==='Perf C dashboard');
     expect(dashboard.html).toContain('data-af="state"');
-    expect(dashboard.html).toContain('await client.query');
+    expect(dashboard.html).toContain('state.getState()');
     expect(dashboard.html).toContain('Revenue by product');
     expect(PAGE_SPEED_FIXTURES.find(f=>f.key==='mermaid').painted).toEqual({diagrams:1});
     const kitchen=bodies.find(body=>body.title==='Perf G kitchen sink');

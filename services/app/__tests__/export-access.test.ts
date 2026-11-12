@@ -19,12 +19,12 @@ import { getDb, setServices } from '@/lib/platform';
 import { createArtifactFromBody } from '@/lib/publish';
 import { exportCacheKey, exportKeyReader, mintExportKey, resetExportRenderer } from '@/lib/export';
 import { GET as serveRaw } from '@/app/a/[id]/raw/route';
-import { POST as graphql } from '@/app/api/artifacts/[id]/graphql/route';
+import { POST as sqlDoor } from '@/app/api/artifacts/[id]/sql/route';
 
 useAppHarness();
 
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
-type Reply = { data?: Record<string, any> | null; errors?: Array<{ message: string }> };
+type Reply = {rows?:Array<Record<string,unknown>>;error?:string};
 const STAFF = [{ name: 'ada', team: 'red' }, { name: 'bo', team: 'blue' }];
 const ROWS = { schema: 'public', name: 'rows' };
 /** Signed-in readers see every column; anonymous readers see names only. */
@@ -36,8 +36,8 @@ const POLICY = { version: 3, tables: [{
   ],
   insert_permissions: [{ role: 'signed_in', permission: { columns: ['name', 'team'], check: {} } }],
 }] };
-const QUERY = '{staff(order_by:{name:asc}){name team}}';
-const NAMES = '{staff(order_by:{name:asc}){name}}';
+const QUERY = 'select name, team from staff order by name';
+const NAMES = 'select name from staff order by name';
 
 async function account(name: string) {
   const minted = await mintAccountToken(name);
@@ -58,10 +58,10 @@ async function deck(owner: Awaited<ReturnType<typeof account>>, visibility: 'pri
 
 const runtime = (html: string) => JSON.parse(/<script type="application\/json" data-af="runtime">([^<]*)<\/script>/.exec(html)![1]!) as { domainReads?: true; revision: string };
 /** One read as the capture page sends it: an opaque origin, no credentials, a text/plain body naming the key on its address. */
-const captureRead = (page: string, revision: string, key: string | null, query: string) => graphql(request(`/api/artifacts/${page}/graphql`, {
+const captureRead = (page: string, revision: string, key: string | null, query: string) => sqlDoor(request(`/api/artifacts/${page}/sql`, {
   method: 'POST',
   headers: { 'content-type': 'text/plain;charset=UTF-8', origin: 'null' },
-  body: JSON.stringify({ query, variables: {}, operation: /^\s*mutation\b/.test(query) ? 'mutation' : 'query', revision, ...(key ? { key } : {}) }),
+  body: JSON.stringify({ sql: query, params: {}, readOnly:true, revision, ...(key ? { key } : {}) }),
 }), params(page));
 
 const picture = (width: number, height: number) => sharp({ create: { width, height, channels: 3, background: '#000' } }).png().toBuffer();
@@ -79,8 +79,8 @@ beforeEach(async () => {
     const config = runtime(await capture.text());
     expect(config.domainReads).toBe(true);
     const reply = await (await captureRead(id, config.revision, url.searchParams.get('key'), QUERY)).json() as Reply;
-    const named = reply.errors?.length ? await (await captureRead(id, config.revision, url.searchParams.get('key'), NAMES)).json() as Reply : reply;
-    const rows = (named.data?.staff ?? []) as Array<{ team?: string }>;
+    const named = reply.error ? await (await captureRead(id, config.revision, url.searchParams.get('key'), NAMES)).json() as Reply : reply;
+    const rows = (named.rows ?? []) as Array<{ team?: string }>;
     return { ok: true, mime: 'image/png', bytes: await picture(1 + rows.length, rows.some((row) => row.team) ? 2 : 1) };
   } } });
 });
@@ -144,15 +144,15 @@ it('reads as the key\'s requester from an opaque origin, never more, and still r
   const read = await captureRead(page, '1', ownerKey, QUERY);
   expect(read.status).toBe(200);
   expect(read.headers.get('access-control-allow-origin')).toBe('*');
-  expect((await read.json() as Reply).data?.staff).toEqual(STAFF);
+  expect((await read.json() as Reply).rows).toEqual(STAFF);
   // No key, an anonymous key, a stranger's key, another page's key: the private page is refused to all of them.
   for (const key of [null, mintExportKey(page), mintExportKey(page, undefined, undefined, stranger.actor), mintExportKey('ffffffffffff', undefined, undefined, owner.actor), `${ownerKey.slice(0, -1)}${ownerKey.endsWith('0') ? '1' : '0'}`]) {
     const refused = await captureRead(page, '1', key, QUERY);
-    expect((await refused.json() as Reply).data?.staff, String(key)).toBeUndefined();
+    expect((await refused.json() as Reply).rows, String(key)).toBeUndefined();
   }
-  const write = await captureRead(page, '1', ownerKey, 'mutation{insert_staff_one(object:{name:"cy",team:"red"}){name}}');
+  const write = await captureRead(page, '1', ownerKey, "insert into staff(name,team) values('cy','red')");
   expect(write.status).toBe(403);
-  expect((await (await captureRead(page, '1', ownerKey, NAMES)).json() as Reply).data?.staff).toEqual([{ name: 'ada' }, { name: 'bo' }]);
+  expect((await (await captureRead(page, '1', ownerKey, NAMES)).json() as Reply).rows).toEqual([{ name: 'ada' }, { name: 'bo' }]);
 });
 
 it('splits the cache key by audience and leaves the anonymous key where it was', () => {
@@ -176,32 +176,32 @@ async function emailFixture(suffix: string, claimOnly: boolean) {
   await db.query("UPDATE artifacts SET visibility='private',dataset_policy=$2::jsonb,policy_revision=policy_revision+1 WHERE id=$1", [staff, JSON.stringify({ version: 3, tables: [{ table: ROWS, select_permissions: [{ role: 'viewer', permission: { columns: '*', filter: {} } }] }] })]);
   await db.query("INSERT INTO artifact_shares(artifact_id,email,role) VALUES($1,$2,'viewer')", [staff, email]);
   setSession({ user: { id: reader.actor.userId!, email } });
-  const ordinary = async () => await (await graphql(request(`/api/artifacts/${page}/graphql`, { method: 'POST', json: { query: QUERY, revision: '1' } }), params(page))).json() as Reply;
+  const ordinary = async () => await (await sqlDoor(request(`/api/artifacts/${page}/sql`, { method: 'POST', json: { sql: QUERY, revision: '1' } }), params(page))).json() as Reply;
   return { page, staff, reader, email, current, db, ordinary };
 }
 it('unresolved account-email share matches capture and cache, then revocation invalidates', async () => {
   const f = await emailFixture('account', false);
   // Export first: neither an earlier ordinary read nor another surface has resolved the invitation.
   expect(await exported(f.page)).toEqual({ status: 200, size: [3, 2] });
-  expect((await f.ordinary()).data?.staff).toEqual(STAFF);
+  expect((await f.ordinary()).rows).toEqual(STAFF);
   expect(await exported(f.page)).toEqual({ status: 200, size: [3, 2] });
   expect(renders).toHaveLength(1);
   await f.db.query('DELETE FROM artifact_shares WHERE artifact_id=$1', [f.staff]);
-  expect((await f.ordinary()).data?.staff).toBeUndefined();
+  expect((await f.ordinary()).rows).toBeUndefined();
   expect(await exported(f.page)).toEqual({ status: 200, size: [1, 1] });
   expect(renders).toHaveLength(2);
 });
 it('credential-only email share survives capture and revocation invalidates cache', async () => {
   const f = await emailFixture('claim', true);
   expect(f.email).not.toBe(f.current);
-  expect((await f.ordinary()).data?.staff).toEqual(STAFF);
+  expect((await f.ordinary()).rows).toEqual(STAFF);
   expect((await f.db.query('SELECT user_id FROM artifact_shares WHERE artifact_id=$1', [f.staff])).rows).toEqual([{ user_id: null }]);
   expect(await exported(f.page)).toEqual({ status: 200, size: [3, 2] });
   expect(renders).toHaveLength(1);
   expect(await exported(f.page)).toEqual({ status: 200, size: [3, 2] });
   expect(renders).toHaveLength(1);
   await f.db.query('DELETE FROM artifact_shares WHERE artifact_id=$1', [f.staff]);
-  expect((await f.ordinary()).data?.staff).toBeUndefined();
+  expect((await f.ordinary()).rows).toBeUndefined();
   expect(await exported(f.page)).toEqual({ status: 200, size: [1, 1] });
   expect(renders).toHaveLength(2);
 });
@@ -212,7 +212,7 @@ for (const mode of ['session', 'bearer'] as const) {
     setSession(null);
     const actor = { credential: mode, userId: f.reader.actor.userId!, email: f.email, emailVerified: true, ...(mode === 'bearer' ? { tokenId: f.reader.actor.tokenId } : {}) };
     const auth = { actor, ...(mode === 'bearer' ? { headers: { authorization: 'Bearer ' + f.reader.token } } : {}) };
-    const read = async () => await (await graphql(request(`/api/artifacts/${f.page}/graphql`, { ...auth, method: 'POST', json: { query: QUERY, revision: '1' } }), params(f.page))).json() as Reply;
+    const read = async () => await (await sqlDoor(request(`/api/artifacts/${f.page}/sql`, { ...auth, method: 'POST', json: { sql: QUERY, revision: '1' } }), params(f.page))).json() as Reply;
     const capture = async () => {
       const res = await exportImage(request(`/a/${f.page}/export`, auth), params(f.page));
       expect(res.status).toBe(200);
@@ -220,9 +220,9 @@ for (const mode of ['session', 'bearer'] as const) {
     };
     expect(await capture()).toEqual([3, 2]);
     expect((await f.db.query<{ email: string }>('SELECT email FROM users WHERE id=$1', [f.reader.actor.userId])).rows[0]?.email).toBe(f.email);
-    expect((await read()).data?.staff).toEqual(STAFF);
+    expect((await read()).rows).toEqual(STAFF);
     await f.db.query('DELETE FROM artifact_shares WHERE artifact_id=$1', [f.staff]);
-    expect((await read()).data?.staff).toBeUndefined();
+    expect((await read()).rows).toBeUndefined();
     expect(await capture()).toEqual([1, 1]);
     expect(renders).toHaveLength(2);
   });
@@ -233,8 +233,8 @@ it('explicit bearer duplicate-profile fallback preserves ordinary claim in expor
   const holder = await account('mxmx_test_claim_holder');
   await f.db.query('UPDATE users SET email=$2 WHERE id=$1', [holder.actor.userId, f.email]);
   const auth = { headers: { authorization: 'Bearer ' + f.reader.token }, actor: { credential: 'bearer' as const, userId: f.reader.actor.userId!, tokenId: f.reader.actor.tokenId, email: f.email, emailVerified: true } };
-  const read = await (await graphql(request(`/api/artifacts/${f.page}/graphql`, { ...auth, method: 'POST', json: { query: QUERY, revision: '1' } }), params(f.page))).json() as Reply;
-  expect(read.data?.staff).toEqual(STAFF);
+  const read = await (await sqlDoor(request(`/api/artifacts/${f.page}/sql`, { ...auth, method: 'POST', json: { sql: QUERY, revision: '1' } }), params(f.page))).json() as Reply;
+  expect(read.rows).toEqual(STAFF);
   expect((await f.db.query<{ email: string }>('SELECT email FROM users WHERE id=$1', [f.reader.actor.userId])).rows[0]?.email).toBe(f.current);
   const res = await exportImage(request(`/a/${f.page}/export`, auth), params(f.page));
   expect(res.status).toBe(200);
@@ -243,7 +243,7 @@ it('explicit bearer duplicate-profile fallback preserves ordinary claim in expor
   const key = new URL(renders[0]!.url).searchParams.get('key')!;
   expect(exportKeyReader(f.page, key)).toMatchObject({ userId: f.reader.actor.userId, email: f.email, documentEditor: false });
   await f.db.query('DELETE FROM artifact_shares WHERE artifact_id=$1', [f.staff]);
-  expect((await (await captureRead(f.page, '1', key, QUERY)).json() as Reply).data?.staff).toBeUndefined();
+  expect((await (await captureRead(f.page, '1', key, QUERY)).json() as Reply).rows).toBeUndefined();
   const revoked = await exportImage(request(`/a/${f.page}/export`, auth), params(f.page));
   expect(revoked.status).toBe(200);
   const after = await sharp(Buffer.from(await revoked.arrayBuffer())).metadata();
@@ -270,7 +270,7 @@ it('isolates same-account claim audiences and never stores or transports an expo
   }
   // A key minted before revocation rechecks access, and the old cached pixels are no longer served.
   await f.db.query('DELETE FROM artifact_shares WHERE artifact_id=$1', [f.staff]);
-  expect((await (await captureRead(f.page, '1', key, QUERY)).json() as Reply).data?.staff).toBeUndefined();
+  expect((await (await captureRead(f.page, '1', key, QUERY)).json() as Reply).rows).toBeUndefined();
   expect(await exported(f.page)).toEqual({ status: 200, size: [1, 1] });
   expect(renders).toHaveLength(3);
 });

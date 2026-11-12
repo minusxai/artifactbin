@@ -15,7 +15,6 @@ import {POST as preflight} from '@/app/api/artifacts/preflight/route';
 import {GET as versions} from '@/app/api/artifacts/[id]/versions/route';
 import {GET as version} from '@/app/api/artifacts/[id]/versions/[version]/route';
 import {GET as raw} from '@/app/a/[id]/raw/route';
-import {POST as mutate} from '@/app/a/[id]/mutate/route';
 import {GET as events} from '@/app/a/[id]/events/route';
 import {GET as exportImage} from '@/app/api/artifacts/[id]/export/route';
 import {GET as list} from '@/app/api/artifacts/route';
@@ -69,7 +68,6 @@ beforeEach(async()=>{
  app.get('/api/events',c=>feed(c.req.raw));
  app.get('/api/artifacts/:id/comment-images/:imageId',routed(commentImage));
  app.get('/a/:id/raw',routed(raw));
- app.post('/a/:id/mutate',routed(mutate));
  proxy=createAuthHost({upstream:inProcess(app),tokens:bearers.reader,sessions:{resolve:async()=>null},cookieSecret:'mxmx_test_cookie_secret_0123456789',env:{}});
 });
 afterEach(()=>setDocumentEditorPolicy());

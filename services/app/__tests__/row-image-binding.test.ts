@@ -5,7 +5,7 @@ import {PUT as replace,DELETE as remove} from '@/app/api/artifacts/[id]/route';
 import {GET as assets} from '@/app/a/[id]/assets/route';
 import {GET as raw} from '@/app/a/[id]/raw/route';
 import { findDependentsFor, getArtifactById } from '@/lib/artifacts';
-import {POST as graphql} from '@/app/api/artifacts/[id]/graphql/route';
+import {POST as sqlDoor} from '@/app/api/artifacts/[id]/sql/route';
 import {artifactState} from '@/lib/artifacts';
 import { mintExportKey } from '@/lib/export';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
@@ -20,8 +20,8 @@ const create=async(token:string,body:Record<string,unknown>)=>{
 };
 const html=(dataset:string)=>`<!doctype html><html><head><link rel="af-dataset" data-af-name="books_data" href="ref:${dataset}"></head><body><article data-af-id="book-list"></article></body></html>`;
 async function readRows(id:string,token:string){
- const ask=async(query:string,variables?:Record<string,unknown>)=>{const response=await graphql(request(`/api/artifacts/${id}/graphql`,{method:'POST',token,json:{query,variables,revision:"1"}}),params(id));expect(response.status,await response.clone().text()).toBe(200);const result=await response.json();expect(result.errors).toBeUndefined();return result.data.books_data;};
- return await ask('{books_data{id title cover_ref}}') as Array<{id:string;title:string;cover_ref:string}>;
+ const ask=async(query:string,variables?:Record<string,unknown>)=>{const response=await sqlDoor(request(`/api/artifacts/${id}/sql`,{method:'POST',token,json:{sql:query,params:variables,revision:"1"}}),params(id));expect(response.status,await response.clone().text()).toBe(200);const result=await response.json();expect(result.error).toBeUndefined();return result.rows;};
+ return await ask('select id, title, cover_ref from books_data') as Array<{id:string;title:string;cover_ref:string}>;
 }
 async function fixture(){
  const token=await mintToken('row-images');

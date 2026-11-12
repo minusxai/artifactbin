@@ -6,48 +6,15 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import { setSession, useAppHarness } from './harness';
 import { getDb, services } from '@/lib/platform';
-import { person, publish, sql, gql, ROWS, fixture, stored, refused } from './page-sql-door-fixture';
+import { person, publish, sql, ROWS, fixture, stored, refused } from './page-sql-door-fixture';
 
 useAppHarness();
 beforeEach(() => setSession(null));
 
-/* ------------------------------------------------------------------------------------------- GraphQL parity */
-
-it('parity: the same writes through GraphQL and SQL allow and deny alike and leave the same rows', async () => {
-  const viaGraphql = await fixture(), viaSql = await fixture();
-  const cases: Array<{ who: 'owner' | 'viewer' | 'other' | null; gql: string; sql: string }> = [
-    { who: 'other', gql: 'mutation { insert_staff_one(object: {name: "cy", team: "red"}) { name } }', sql: "insert into staff (name, team) values ('cy', 'red')" },
-    { who: 'other', gql: 'mutation { insert_staff_one(object: {name: "dee", team: "black"}) { name } }', sql: "insert into staff (name, team) values ('dee', 'black')" },
-    { who: 'other', gql: 'mutation { insert_staff_one(object: {name: "x", salary: 5}) { name } }', sql: "insert into staff (name, salary) values ('x', 5)" },
-    { who: 'other', gql: 'mutation { update_staff(where: {name: {_eq: "cy"}}, _set: {team: "green"}) { affected_rows } }', sql: "update staff set team = 'green' where name = 'cy'" },
-    { who: 'other', gql: 'mutation { update_staff(where: {name: {_eq: "ada"}}, _set: {team: "green"}) { affected_rows } }', sql: "update staff set team = 'green' where name = 'ada'" },
-    { who: 'other', gql: 'mutation { update_staff(where: {name: {_eq: "cy"}}, _set: {team: "black"}) { affected_rows } }', sql: "update staff set team = 'black' where name = 'cy'" },
-    { who: null, gql: 'mutation { insert_staff_one(object: {name: "an", team: "t"}) { name } }', sql: "insert into staff (name, team) values ('an', 't')" },
-    { who: null, gql: 'mutation { delete_staff(where: {}) { affected_rows } }', sql: 'delete from staff' },
-    { who: 'viewer', gql: 'mutation { insert_staff_one(object: {name: "v"}) { name } }', sql: "insert into staff (name) values ('v')" },
-    { who: 'owner', gql: 'mutation { update_staff(where: {name: {_eq: "bo"}}, _set: {salary: 21}) { affected_rows } }', sql: "update staff set salary = 21 where name = 'bo'" },
-    { who: 'other', gql: 'mutation { delete_staff(where: {name: {_eq: "cy"}}) { affected_rows } }', sql: "delete from staff where name = 'cy'" },
-  ];
-  for (const c of cases) {
-    const g = await gql(viaGraphql.page, c.who ? viaGraphql[c.who] : null, c.gql);
-    const s = await sql(viaSql.page, c.who ? viaSql[c.who] : null, c.sql);
-    const gAllowed = !g.body.errors?.length, sAllowed = s.status === 200;
-    expect([c.sql, sAllowed], JSON.stringify({ g: g.body, s: s.body })).toEqual([c.sql, gAllowed]);
-    if (gAllowed) {
-      const field = Object.values(g.body.data ?? {})[0] as { affected_rows?: number } | null;
-      if (field && 'affected_rows' in field) expect([c.sql, s.body.affected]).toEqual([c.sql, field.affected_rows]);
-    } else if (g.body.errors?.[0]?.extensions?.code === 'check_violation') expect(s.body.error).toBe('check_violation');
-    const strip = (rows: Array<Record<string, unknown>>, page: string, other: string) => rows.map((r) => ({ ...r, page: r.page === page ? 'PAGE' : r.page, by: r.by === other ? 'OTHER' : r.by }));
-    expect(strip(await stored(viaSql.staff), viaSql.page, viaSql.other.userId!), c.sql).toEqual(strip(await stored(viaGraphql.staff), viaGraphql.page, viaGraphql.other.userId!));
-  }
-});
-
-it('parity, deliberate divergence: SQL reaches only rows the reader can select, GraphQL every row in the update filter', async () => {
-  const viaGraphql = await fixture(), viaSql = await fixture();
-  // The viewer's update filter is every row, its select filter the red ones.
-  expect((await gql(viaGraphql.page, viaGraphql.viewer, 'mutation { update_staff(where: {}, _set: {team: "red"}) { affected_rows } }')).body.data).toEqual({ update_staff: { affected_rows: 2 } });
-  expect((await sql(viaSql.page, viaSql.viewer, "update staff set team = 'red'")).body).toEqual({ affected: 1, returning: [expect.objectContaining({ name: 'ada', team: 'red' })] });
-  expect((await stored(viaSql.staff)).map((r) => r.team)).toEqual(['red', 'blue']);
+it('SQL updates only rows the reader can select even when its update filter is wider', async () => {
+  const f = await fixture();
+  expect((await sql(f.page, f.viewer, "update staff set team = 'red'")).body).toEqual({affected:1, returning:[expect.objectContaining({name:'ada',team:'red'})]});
+  expect((await stored(f.staff)).map(r=>r.team)).toEqual(['red','blue']);
 });
 
 /* ------------------------------------------------------------------------------- table naming and write-only roles */

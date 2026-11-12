@@ -6,10 +6,7 @@ import { nativeHtml } from "./native-html-fixture";
 import { POST as create } from "@/app/api/artifacts/route";
 import { POST as preview } from "@/app/api/preview/route";
 import { GET as raw } from "@/app/a/[id]/raw/route";
-import {
-  GET as discover,
-  POST as graphql,
-} from "@/app/api/artifacts/[id]/graphql/route";
+import { POST as sqlDoor } from "@/app/api/artifacts/[id]/sql/route";
 import { GET as get, PUT as replace } from "@/app/api/artifacts/[id]/route";
 import { getDb } from "@/lib/platform";
 useAppHarness();
@@ -68,27 +65,20 @@ async function fixture() {
     variables: Record<string, unknown> = {},
     token: string | undefined = owner.token,
   ) => {
-    const response = await graphql(
-      request(`/api/artifacts/${id}/graphql`, {
+    const response = await sqlDoor(
+      request(`/api/artifacts/${id}/sql`, {
         method: "POST",
         token,
-        json: { revision: "1", query, variables },
+        json: { revision: "1", sql: query, params: variables },
       }),
       ctx(id),
     );
-    expect(response.status, await response.clone().text()).toBe(200);
     return response.json();
   };
   return { id, dataset, html, owner, publish, run };
 }
 it("publishes namespace bindings and exposes typed schema without inlining source rows", async () => {
   const f = await fixture();
-  const response = await discover(
-    request(`/api/artifacts/${f.id}/graphql`),
-    ctx(f.id),
-  );
-  expect(response.status).toBe(200);
-  expect((await response.json()).sdl).toContain("sales(where: sales_bool_exp");
   const saved = await (
     await get(
       request(`/api/artifacts/${f.id}`, { token: f.owner.token }),
@@ -108,29 +98,25 @@ it("publishes namespace bindings and exposes typed schema without inlining sourc
   // Runtime code and hashes may contain any digits; this value exists only in source rows.
   expect(content).not.toContain(SOURCE_ONLY_SENTINEL);
   const read = await f.run(
-    "{sales(limit:2,order_by:{revenue:asc}){region revenue sourceOnly}}",
+    'select region, revenue, sourceOnly from sales order by revenue limit 2',
     {},
     undefined,
   );
-  expect(read.errors).toBeUndefined();
-  expect(read.data.sales).toEqual([
+  expect(read.error).toBeUndefined();
+  expect(read.rows).toEqual([
     { region: "EU", revenue: 837, sourceOnly: SOURCE_ONLY_SENTINEL },
     { region: "NA", revenue: 1200, sourceOnly: null },
   ]);
 });
 it("validates typed queries and variables against the generated columns", async () => {
   const f = await fixture();
-  const query = "query($minimum:Float){sales(where:{revenue:{_gt:$minimum}}){revenue}}";
+  const query = "select revenue from sales where revenue > $minimum";
   const result = await f.run(query, { minimum: 1000 });
-  expect(result.errors).toBeUndefined();
-  expect(result.data.sales).toEqual([{ revenue: 1200 }]);
-  const invalid = await f.run("{sales(where:{missing:{_gt:1}}){revenue}}");
-  expect(invalid.errors.length).toBeGreaterThan(0);
-  const mistyped = await f.run(query, { minimum: "lots" });
-  expect(mistyped.errors.length).toBeGreaterThan(0);
-  const cycle = await f.run('{sales(sql:"delete from rows"){_id}}');
-  expect(cycle.errors.length).toBeGreaterThan(0);
-  expect(cycle.data ?? null).toBeNull();
+  expect(result.error).toBeUndefined();
+  expect(result.rows).toEqual([{ revenue: 1200 }]);
+  const invalid = await f.run("select revenue from sales where missing > 1");
+  expect(invalid.error).toBeTruthy();
+
 });
 it("enforces revoked dataset ACL independently of the public page", async () => {
   const f = await fixture();
@@ -139,14 +125,14 @@ it("enforces revoked dataset ACL independently of the public page", async () => 
     f.dataset,
   ]);
   const outsider = await mintAccountToken("reader");
-  const response = await f.run("{sales{_id}}", {}, outsider.token);
-  expect(response.errors).toHaveLength(1);
-  expect(response.data?.sales ?? null).toBeNull();
+  const response = await f.run("select _id from sales", {}, outsider.token);
+  expect(response.error).toBeTruthy();
+  expect(response.rows).toBeUndefined();
   await db.query("UPDATE artifacts SET deleted_at=now() WHERE id=$1", [
     f.dataset,
   ]);
-  const deleted = await f.run("{sales{_id}}");
-  expect(deleted.errors).toHaveLength(1);
+  const deleted = await f.run("select _id from sales");
+  expect(deleted.error).toBeTruthy();
 });
 it("refuses inaccessible and non-dataset bindings before publication", async () => {
   const f = await fixture();

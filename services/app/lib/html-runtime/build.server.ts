@@ -20,7 +20,7 @@ export function buildHtmlAssets():Promise<HtmlRuntimeAssets>{return assets??=com
 export async function buildHtmlCore():Promise<string>{return (await buildHtmlAssets()).core;}
 async function compile():Promise<HtmlRuntimeAssets>{
  const options={bundle:true,minify:true,write:false,platform:'browser' as const,target:'es2022'};
- const reader=await build({...options,entryPoints:[fileURLToPath(new URL('./browser-reader.ts',import.meta.url))],format:'esm',external:['@afbin/chrome','@afbin/portable','@afbin/morph','@afbin/regions'],banner:{js:`const __AF_RUNTIME_CONFIG__=(()=>{const supplied=document.querySelector('[data-af="runtime"]');return supplied?JSON.parse(supplied.textContent):{pageId:'local:'+location.pathname,revision:'local',backends:[],offline:true};})();`}});
+ const reader=await build({...options,entryPoints:[fileURLToPath(new URL('./browser-reader.ts',import.meta.url))],format:'esm',external:['@afbin/chrome','@afbin/portable','@afbin/morph'],banner:{js:`const __AF_RUNTIME_CONFIG__=(()=>{const supplied=document.querySelector('[data-af="runtime"]');return supplied?JSON.parse(supplied.textContent):{pageId:'local:'+location.pathname,revision:'local',backends:[],offline:true};})();`}});
  // `@afbin/state` owns the page's one local-state document; `@afbin/apollo` imports it rather than carrying a second copy.
  const sharedState={name:'shared-state',setup(builder:PluginBuild){builder.onResolve({filter:/^\.\/browser-state$/},()=>({path:'@afbin/state',external:true}));}};
  const sharedReader={name:'shared-reader',setup(builder:PluginBuild){builder.onResolve({filter:/^\.\/browser-reader$/},()=>({path:'@afbin/reader',external:true}));}};
@@ -42,8 +42,6 @@ async function compile():Promise<HtmlRuntimeAssets>{
    contents:(await readFile(path,'utf8')).replaceAll('= $.$custom(', '= /* @__PURE__ */ $.$custom('),loader:'js',
   }));},
  }];
- // Keep the public name for existing import maps without shipping the retired engine.
- const regionsSource='export {mountRegionEditor} from "@afbin/native-regions";';
  // Live dataset text cells (./collab: Yjs, no ProseMirror) load only when a page imports `@afbin/collab`; the frame's cell port is the reader's.
  const nativeMarkdownBuild=await build({...options,entryPoints:[fileURLToPath(new URL('./native-region-markdown.ts',import.meta.url))],format:'esm'});
  const nativeRegionsBuild=await build({...options,entryPoints:[fileURLToPath(new URL('./native-region-editor.ts',import.meta.url))],format:'esm',conditions:['production'],define:{'process.env.NODE_ENV':'"production"'},plugins:regionPlugins});
@@ -62,10 +60,10 @@ async function compile():Promise<HtmlRuntimeAssets>{
  const chrome=await buildPortableChrome();
  // D17: flat platform addresses, revalidated by ETag (no version or hash). A page open across a deploy can load a newer
  // lazy module against its older core, so every lazy module carries this build's id and refuses another core's (skewGuard).
- const unguarded={apollo,reader:readerSource,chrome,portableEngine:portableBuild.outputFiles![0]!.text,morph:morphBuild.outputFiles![0]!.text,regions:regionsSource,nativeRegions:nativeRegionsBuild.outputFiles![0]!.text,nativeMarkdown:nativeMarkdownBuild.outputFiles![0]!.text,collab:collabBuild.outputFiles![0]!.text,state:stateBuild.outputFiles![0]!.text,offlineSql:offlineSqlBuild.outputFiles![0]!.text};
+ const unguarded={apollo,reader:readerSource,chrome,portableEngine:portableBuild.outputFiles![0]!.text,morph:morphBuild.outputFiles![0]!.text,nativeRegions:nativeRegionsBuild.outputFiles![0]!.text,nativeMarkdown:nativeMarkdownBuild.outputFiles![0]!.text,collab:collabBuild.outputFiles![0]!.text,state:stateBuild.outputFiles![0]!.text,offlineSql:offlineSqlBuild.outputFiles![0]!.text};
  const buildId=createHash('sha256').update(JSON.stringify(unguarded)).digest('hex').slice(0,16);
  const guarded=Object.fromEntries(Object.entries(unguarded).map(([key,source])=>[key,skewGuard(buildId)+source])) as typeof unguarded;
- const {apolloPath,readerPath,chromePath,portableEnginePath,morphPath,regionsPath,nativeRegionsPath,nativeMarkdownPath,collabPath,statePath}=RUNTIME_MODULE_PATHS;
+ const {apolloPath,readerPath,chromePath,portableEnginePath,morphPath,nativeRegionsPath,nativeMarkdownPath,collabPath,statePath}=RUNTIME_MODULE_PATHS;
  const entry=`import {installHtmlReaderCommands} from ${JSON.stringify(fileURLToPath(new URL('../html-bridge/reader.ts',import.meta.url)))};
 import {openFrameDoor} from ${JSON.stringify(fileURLToPath(new URL('./frame-door.ts',import.meta.url)))};
 import {installPageFetch} from ${JSON.stringify(fileURLToPath(new URL('./page-fetch.ts',import.meta.url)))};
@@ -107,7 +105,7 @@ const sharedBlock=config.offline?document.querySelector('[data-af="offline-modul
 const sharedImports={};if(sharedBlock)for(const [key,source]of Object.entries(JSON.parse(sharedBlock.textContent))){if(!(key.startsWith('@afbin/offline/')&&/^[a-f0-9]{64}$/.test(key.slice(15)))||typeof source!=='string')throw Error('Invalid embedded module table');sharedImports[key]=blob(source);}
 if(Object.keys(sharedImports).length)addEventListener('pagehide',event=>{if(!event.persisted)for(const url of Object.values(sharedImports))URL.revokeObjectURL(url);});
 const libraries={};if(!portable)for(const [key,value]of Object.entries(config.libraries??{}))if(/^@afbin\\/[a-z][a-z0-9-]*$/.test(key)&&/^\\/af\\/(?:lib\\/[a-z][a-z0-9-]*-\\d+\\.\\d+\\.\\d+\\/index|components\\/[a-z][a-z0-9-]*)\\.js$/.test(value))libraries[key]=new URL(value,document.currentScript.src||location.href).href;
-const map=document.createElement('script');if(platformNonce)map.nonce=platformNonce;map.type='importmap';map.textContent=JSON.stringify({imports:{...libraries,...sharedImports,'@afbin/apollo':apollo,'@afbin/state':state,'@afbin/reader':reader,'@afbin/chrome':chrome,'@afbin/portable':portableEngine,...(collab?{'@afbin/collab':collab}:{}),...(sqlBlock?{'@afbin/offline-sql':blob(JSON.parse(sqlBlock.textContent))}:{}),...(live?{'@afbin/morph':new URL(${JSON.stringify(morphPath)},document.currentScript.src||location.href).href,'@afbin/native-markdown':new URL(${JSON.stringify(nativeMarkdownPath)},document.currentScript.src||location.href).href,'@afbin/native-regions':new URL(${JSON.stringify(nativeRegionsPath)},document.currentScript.src||location.href).href,'@afbin/regions':new URL(${JSON.stringify(regionsPath)},document.currentScript.src||location.href).href}:{})}});document.currentScript.after(map);
+const map=document.createElement('script');if(platformNonce)map.nonce=platformNonce;map.type='importmap';map.textContent=JSON.stringify({imports:{...libraries,...sharedImports,'@afbin/apollo':apollo,'@afbin/state':state,'@afbin/reader':reader,'@afbin/chrome':chrome,'@afbin/portable':portableEngine,...(collab?{'@afbin/collab':collab}:{}),...(sqlBlock?{'@afbin/offline-sql':blob(JSON.parse(sqlBlock.textContent))}:{}),...(live?{'@afbin/morph':new URL(${JSON.stringify(morphPath)},document.currentScript.src||location.href).href,'@afbin/native-markdown':new URL(${JSON.stringify(nativeMarkdownPath)},document.currentScript.src||location.href).href,'@afbin/native-regions':new URL(${JSON.stringify(nativeRegionsPath)},document.currentScript.src||location.href).href}:{})}});document.currentScript.after(map);
 // A fetch of a file the page published reads it wherever the page is (config.files), and a GET to a host it declares
 // goes through its fetch door (config.connect), before any author script runs (./page-fetch).
 installPageFetch(window,config.files,!config.offline&&Array.isArray(config.connect)&&config.connect.length?{pageId:config.pageId,origins:config.connect}:undefined);
@@ -115,5 +113,5 @@ if(config.offline&&window.parent===window){void import(reader).then(module=>modu
 if(live){installHtmlReaderCommands(window,config.appOrigin);openFrameDoor(window,config.appOrigin,()=>import(reader));}`;
  const core=await build({...options,stdin:{contents:entry,resolveDir:process.cwd(),loader:'ts'},format:'iife'});
  if(!core.outputFiles?.[0]?.text)throw Error('HTML core is empty');
- return {core:core.outputFiles[0].text,systems:htmlSystemsCss(),apollo:guarded.apollo,apolloPath,reader:guarded.reader,readerPath,chrome:guarded.chrome,chromePath,portableEngine:guarded.portableEngine,portableEnginePath,morph:guarded.morph,morphPath,regions:guarded.regions,regionsPath,nativeRegions:guarded.nativeRegions,nativeRegionsPath,nativeMarkdown:guarded.nativeMarkdown,nativeMarkdownPath,collab:guarded.collab,collabPath,state:guarded.state,statePath,offlineSql:guarded.offlineSql,host:hostBuild.outputFiles![0]!.text,hostComments};
+ return {core:core.outputFiles[0].text,systems:htmlSystemsCss(),apollo:guarded.apollo,apolloPath,reader:guarded.reader,readerPath,chrome:guarded.chrome,chromePath,portableEngine:guarded.portableEngine,portableEnginePath,morph:guarded.morph,morphPath,nativeRegions:guarded.nativeRegions,nativeRegionsPath,nativeMarkdown:guarded.nativeMarkdown,nativeMarkdownPath,collab:guarded.collab,collabPath,state:guarded.state,statePath,offlineSql:guarded.offlineSql,host:hostBuild.outputFiles![0]!.text,hostComments};
 }

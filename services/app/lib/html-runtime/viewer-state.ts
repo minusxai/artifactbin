@@ -1,6 +1,6 @@
 import { createLocalStore } from './apollo/local-store';
 import type { StoreReceipt } from './apollo/apollo-contracts';
-import { entryDocument, isNewerRevision, legacyEntry, overridesOf, parseEntry, storedOverrides, type OverrideEntry } from './viewer-overrides';
+import { entryDocument, isNewerRevision, overridesOf, parseEntry, storedOverrides, type OverrideEntry } from './viewer-overrides';
 import type { ViewerStateOptions, ViewerStatePort } from './viewer-state-contract';
 
 /** What a write from an instance of an older page revision gets: the newer revision's saved state is not its to change. */
@@ -8,8 +8,7 @@ const STALE_REVISION = 'This page was updated in another tab; reload it to save 
 
 /**
  * One browser's private document. The only persistence port is that browser's storage, which holds only the viewer's
- * overrides of the page's defaults (./viewer-overrides). Reads (and so every storage notification) never write; the
- * legacy key is only ever read. Writes compare-and-swap against the merged document and store the overrides it leaves.
+ * overrides of the page's defaults (./viewer-overrides). Reads (and so every storage notification) never write. Writes compare-and-swap against the merged document and store the overrides it leaves.
  * An instance whose page revision is older than the entry's never writes: its writes are rejected (`state.setState`
  * reports and shows the saved document again; `updateQuery` rejects) until the viewer reloads it.
  */
@@ -23,15 +22,13 @@ export function createViewerState(options: ViewerStateOptions): ViewerStatePort 
   let queue = Promise.resolve();
   /** An `#af-state` seed this instance shows until its persistence (under the page lock) has run. */
   let seeding: OverrideEntry | null = null;
-  /** The stored entry, or the legacy document migrated in memory while the new key is empty. Never writes. */
+  /** The current stored overrides entry. Never writes. */
   const stored = (): OverrideEntry | null => {
     if (!storageEnabled) return memory;
     try {
       const raw = options.storage.read();
       // Any present value, even an empty string, is this viewer's entry: an invalid one is never overwritten.
-      if (raw !== null) return parseEntry(raw);
-      const legacy = options.legacy?.();
-      return legacy ? legacyEntry(legacy, defaults) : null;
+      return raw !== null ? parseEntry(raw) : null;
     } catch { storageEnabled = false; return memory; /* invalid or unavailable storage: never overwritten, memory from here */ }
   };
   const save = (next: OverrideEntry) => {

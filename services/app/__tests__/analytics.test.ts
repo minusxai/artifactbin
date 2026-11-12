@@ -1,5 +1,5 @@
 /**
- * Fire-and-forget analytics (lib/analytics.ts + the analytics_events table).
+ * Fire-and-forget analytics (lib/analytics + the canonical events log).
  *
  * The properties under test: every read/write surface logs its event through
  * the REAL route/page handlers; a failed insert never surfaces (trackEvent
@@ -13,7 +13,7 @@ import { nativeHtml } from './native-html-fixture';
 import { artifactState, getArtifactById, getVersionFor } from '@/lib/artifacts';
 import { observedRequest } from '@/__tests__/conditional-request';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { overrideRequestHeaders } from '@/lib/platform';
+import { EVENTS_SCHEMA, overrideRequestHeaders } from '@/lib/platform';
 import { useAppHarness, request, setSession } from '@/__tests__/harness';
 import { DELETE as deleteArtifactRoute, PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
 import { DELETE as deleteMyArtifactRoute } from '@/app/api/my/artifacts/[id]/route';
@@ -44,11 +44,13 @@ describe('trackEvent', () => {
 
   it('NEVER rejects, even when the insert fails', async () => {
     const db = await harness.db();
-    await db.query('ALTER TABLE analytics_events RENAME TO analytics_events_x');
+    await trackEvent('create', 'initialize');
+    await db.query(`ALTER TABLE ${EVENTS_SCHEMA}.events RENAME TO unavailable_events`);
     try {
       await expect(trackEvent('view', 'abc123')).resolves.toBeUndefined();
+      expect((await db.query('SELECT * FROM analytics_events')).rows).toEqual([]);
     } finally {
-      await db.query('ALTER TABLE analytics_events_x RENAME TO analytics_events');
+      await db.query(`ALTER TABLE ${EVENTS_SCHEMA}.unavailable_events RENAME TO events`);
     }
   });
 });
@@ -141,7 +143,7 @@ describe('unique daily visitors', () => {
     expect((await listArtifactsByUser(user.id))[0].views).toBe(3);
   });
 
-  it('legacy rows without a visitor each count — there is nothing to dedupe them on', async () => {
+  it('legacy-only rows remain stored but do not enter canonical totals', async () => {
     const user = await createUser({ email: 'mxmx_test_viewer@example.com' });
     const t = await mintToken('laptop', user.id);
     const doc = await create(t.token, { html: nativeHtml('<p>x</p>') });
@@ -150,7 +152,8 @@ describe('unique daily visitors', () => {
     asVisitor('9.9.9.9');
     await trackEvent('view', doc.id);
     await trackEvent('view', doc.id);
-    expect((await listArtifactsByUser(user.id))[0].views).toBe(3); // 2 legacy + 1 unique
+    expect((await listArtifactsByUser(user.id))[0].views).toBe(1); // Legacy-only history is not silently imported.
+    expect((await db.query('SELECT * FROM analytics_events')).rows).toHaveLength(2);
   });
 
   it('the visitor key is a salted hash — no raw ip or user-agent lands in the row', async () => {
@@ -158,7 +161,7 @@ describe('unique daily visitors', () => {
     await trackEvent('view', 'abc123');
     const db = await harness.db();
     const r = await db.query<{ visitor: string | null; client: string | null }>(
-      `SELECT visitor, client FROM analytics_events WHERE artifact_id = 'abc123'`,
+      `SELECT subject_id AS visitor, payload->>'client' AS client FROM ${EVENTS_SCHEMA}.events WHERE object_id = 'abc123' AND verb='viewed'`,
     );
     expect(r.rows[0].visitor).toMatch(/^[0-9a-f]{32}$/);
     expect(JSON.stringify(r.rows)).not.toContain('9.9.9.9');
@@ -175,10 +178,11 @@ describe('per-artifact totals', () => {
     const b = await create(t.token, { html: nativeHtml('<p>b</p>'), title: 'b' });
     const db = await harness.db();
     await db.query(
-      `INSERT INTO analytics_events (event, artifact_id, created_at) VALUES
-       ('view', $1, now()), ('view', $1, now()), ('view', $2, now()),
-       ('view', $1, now() - interval '2 days'),
-       ('export', $1, now())`,
+      `INSERT INTO ${EVENTS_SCHEMA}.events (id, source, verb, object_kind, object_id, at) VALUES
+       ('v1', 'app', 'viewed', 'artifact', $1, now()), ('v2', 'app', 'viewed', 'artifact', $1, now()),
+       ('v3', 'app', 'viewed', 'artifact', $2, now()),
+       ('v4', 'app', 'viewed', 'artifact', $1, now() - interval '2 days'),
+       ('x1', 'app', 'exported', 'artifact', $1, now())`,
       [a.id, b.id],
     );
 

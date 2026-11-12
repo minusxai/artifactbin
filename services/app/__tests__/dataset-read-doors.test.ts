@@ -10,7 +10,7 @@ import { ANONYMOUS_ACTOR, identityForUser, type AccessActor } from '@/lib/accoun
 import { getDb } from '@/lib/platform';
 import { getArtifactById, canReadArtifact } from '@/lib/artifacts';
 import { createArtifactFromBody } from '@/lib/publish';
-import { linkedGql, liveLink, errorCode } from './linked-datasets';
+import { linkedSql, liveLink, errorCode } from './linked-datasets';
 import { datasetResolverForActor } from '@/lib/document-data';
 import { OPERATIONS, type OpContext } from '@/lib/operations/registry';
 import { POST as tables } from '@/app/a/[id]/tables/route';
@@ -110,10 +110,15 @@ it('query_resource SQL needs allow_aggregations: a flagless role reads rows by t
   }
 });
 
-it('raw, content, get_artifact and the live frame serve the role view', async () => {
+it('raw describes the role catalog; content, get_artifact and the live frame serve its rows', async () => {
   const { owner, viewer, id } = await setup();
-  sees(await (await raw(request(`/a/${id}/raw`, { token: owner.token }), params(id))).text(), true);
-  sees(await (await raw(request(`/a/${id}/raw`, { token: viewer.token }), params(id))).text(), false);
+  for (const [who, columns] of [[owner, ['name', 'team', 'salary']], [viewer, ['name', 'team']]] as const) {
+    const response = await raw(request(`/a/${id}/raw`, { token: who.token }), params(id));
+    expect(response.status).toBe(200);
+    const described = await response.json();
+    expect(described.catalog.tables[0].columns.map((column: {name: string}) => column.name)).toEqual(columns);
+    expect(JSON.stringify(described)).not.toMatch(/objectKey|"ada"|"bo"|"cy"/);
+  }
   sees(await (await content(request(`/api/artifacts/${id}/content`, { token: owner.token }), params(id))).text(), true);
   sees(await (await content(request(`/api/artifacts/${id}/content`, { token: viewer.token }), params(id))).text(), false);
   const get = OPERATIONS.find((o) => o.name === 'get_artifact')!;
@@ -171,18 +176,16 @@ it('a document\'s dataset queries run for a reader only when their role may run 
 it('page GraphQL: generated columns and rows read the view; no role has an aggregate root', async () => {
   const { owner, viewer, id } = await setup();
   const link = liveLink(id);
-  const ownerRows = await linkedGql(owner.actor, link, '{ data { name team salary } }');
-  expect(ownerRows.errors).toBeUndefined();
-  expect(ownerRows.data!.data).toHaveLength(3);
-  sees(JSON.stringify(ownerRows.data), true);
-  const viewerRows = await linkedGql(viewer.actor, link, '{ data { name team } }');
-  expect(viewerRows.errors).toBeUndefined();
-  expect(viewerRows.data!.data).toHaveLength(2);
-  sees(JSON.stringify(viewerRows.data), false);
+  const ownerRows = await linkedSql(owner.actor, link, 'select name, team, salary from data');
+  expect(ownerRows.error).toBeUndefined();
+  expect(ownerRows.rows!).toHaveLength(3);
+  sees(JSON.stringify(ownerRows.rows), true);
+  const viewerRows = await linkedSql(viewer.actor, link, 'select name, team from data');
+  expect(viewerRows.error).toBeUndefined();
+  expect(viewerRows.rows!).toHaveLength(2);
+  sees(JSON.stringify(viewerRows.rows), false);
   // A hidden column is not in the viewer's schema; the aggregate root is in nobody's (totals are the page's _sql).
-  expect(errorCode(await linkedGql(viewer.actor, link, '{ data { name salary } }'))).toBe('validation_failed');
-  expect(errorCode(await linkedGql(viewer.actor, link, '{ data_aggregate { aggregate { count } } }'))).toBe('validation_failed');
-  expect(errorCode(await linkedGql(owner.actor, link, '{ data_aggregate { aggregate { count } } }'))).toBe('validation_failed');
+  expect(errorCode(await linkedSql(viewer.actor, link, 'select name, salary from data'))).toBe('validation_failed');
 });
 
 it('markup imports read the reader\'s view', async () => {

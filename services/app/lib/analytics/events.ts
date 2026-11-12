@@ -1,37 +1,14 @@
 /**
- * Fire-and-forget usage analytics — the only module that WRITES
- * `analytics_events`, and, since the log arrived, only a writer: the dashboard
- * reads its view counts out of `lib/workspace-analytics` (the events log, with this table as
- * the fallback while it still exists).
- *
- * The contract that matters: `trackEvent` NEVER rejects and never throws. It
- * is called as `void trackEvent(...)` from request paths, and an unhandled
- * rejection would kill the process (there is no global handler on purpose).
- * The other rule is placement: never call it from INSIDE a `db.transaction`
- * callback — on PGLite the transaction holds the serialized op queue, so an
- * unawaited query enqueued behind it deadlocks. Fire after the txn resolves.
- *
- * The `client` column is the harness guess from lib/accounts/client-identity, derived
- * from the request's User-Agent via the request context — so lib callers need
- * no signature change to carry it. Outside a request scope (tests calling
- * helpers directly) the column stays NULL.
- * Bearer callers are stateless per request, so they are identified by UA only —
- * Claude Code's bare `node` UA lands as 'script'. Telemetry only: nothing may
- * ever gate on this value.
- *
- * The `visitor` column is a daily-rotating fingerprint —
- * sha256(day:ip:ua:ANALYTICS_SECRET) — its OWN secret (ANALYTICS__SECRET, falling back to the auth secret), so rotating auth never rewrites every "views" number — and every "views" number counted off
- * this column (lib/users' per-artifact totals, lib/workspace-analytics's daily series) is
- * COUNT(DISTINCT visitor): unique people per day, so a refresh
- * never inflates a count. No raw IP or UA is ever stored, the embedded day
- * kills cross-day identity, and legacy NULL-visitor rows coalesce to their
- * own seq — their own row id once copied into the log (each counts once, undedupable). Known trade: one office NAT +
- * one browser build = one visitor that day.
+ * Usage telemetry writes only the canonical events log. Retired analytics_events rows stay stored;
+ * no implicit migration is performed. trackEvent never rejects. Call after the caller's transaction
+ * commits: an events service can share PGLite's serialized connection.
+ * Views use a daily salted visitor hash, including the account when signed in. Raw IP/UA never leave
+ * request scope. Without request identity each envelope counts separately. sse_connect has no log verb.
  */
 import { createHash } from 'crypto';
 import type { EventEnvelope, EventVerb } from '@artifactbin/contracts';
 import { forwardedFor, identifyClient } from '../accounts';
-import { ANALYTICS_SECRET, TRUSTED_PROXY_HOPS, currentHeaders, emit, envelope, getDb, services, type EventSubject } from '../platform';
+import { ANALYTICS_SECRET, TRUSTED_PROXY_HOPS, currentHeaders, emit, envelope, services, type EventSubject } from '../platform';
 
 type AnalyticsEvent =
   | 'view'
@@ -49,7 +26,7 @@ type AnalyticsEvent =
 
 /**
  * The same moment, said in the log's words. `sse_connect` is not a moment
- * anyone reads back, so it stays a row and never becomes a sentence.
+ * anyone reads back, so it produces no telemetry.
  */
 const EVENT_VERBS_BY_ANALYTICS = {
   view: 'viewed',
@@ -71,21 +48,6 @@ export async function trackEvent(
   opts: { userId?: string | null; forkId?: string | null; parentId?: string | null; format?: string; subtree?: number } = {},
 ): Promise<void> {
   const {client,visitor}=await analyticsIdentity(opts.userId);
-  try {
-    const db = await getDb();
-    await db.query('INSERT INTO analytics_events (event, artifact_id, user_id, client, visitor) VALUES ($1, $2, $3, $4, $5)', [
-      event,
-      artifactId,
-      opts.userId ?? null,
-      client,
-      visitor,
-    ]);
-  } catch {
-    // Analytics must never take a request down with it.
-  }
-  // The counter row and the sentence are INDEPENDENT telemetry, dual-written
-  // for one release: neither one failing may stop the other, and `emit` itself
-  // never rejects.
   try {
     const verb = EVENT_VERBS_BY_ANALYTICS[event];
     if (!verb) return;
@@ -112,8 +74,8 @@ export async function trackEvent(
 }
 
 /**
- * A SERVED VIEW, batched: the document frame's view is the one write every render made (a counter row and a log
- * sentence each), so views are buffered and written together — one multi-row INSERT and one log append — every
+ * A SERVED VIEW, batched: the document frame's view is the one write every render made (a log
+ * sentence), so views are buffered and written together — one log append — every
  * few seconds, or sooner when the buffer fills, and on shutdown (lib/runtime/app-background-tasks).
  *
  * Each view keeps its own row and sentence: the visitor, client and moment are taken NOW, in the request's scope,
@@ -121,7 +83,7 @@ export async function trackEvent(
  */
 const VIEW_FLUSH_MS = 2_000;
 const VIEW_BATCH_MAX = 500;
-interface PendingView { artifactId: string; userId: string | null; client: string | null; visitor: string | null; at: Date; sentence: EventEnvelope }
+interface PendingView { sentence: EventEnvelope }
 let pendingViews: PendingView[] = [];
 let viewTimer: ReturnType<typeof setTimeout> | undefined;
 let viewBatch: { promise: Promise<void>; resolve: () => void } | undefined;
@@ -130,7 +92,7 @@ export async function recordView(artifactId: string, opts: { userId?: string | n
   const userId = opts.userId ?? null;
   // A VIEW's subject is ALWAYS the daily visitor hash (see trackEvent); the sentence is stamped now, at the view.
   const sentence = envelope(visitor ? { kind: 'visitor', id: visitor } : null, 'viewed', { kind: 'artifact', id: artifactId }, { client, user_id: userId });
-  pendingViews.push({ artifactId, userId, client, visitor, at: new Date(sentence.at), sentence });
+  pendingViews.push({ sentence });
   let resolve!: () => void;
   const batch = viewBatch ??= { promise: new Promise<void>(r => { resolve = r; }), resolve: () => resolve() };
   if (pendingViews.length >= VIEW_BATCH_MAX) void flushViews();
@@ -149,14 +111,6 @@ export async function flushViews(): Promise<void> {
   pendingViews = [];
   viewBatch = undefined;
   if (!views.length) { batch?.resolve(); return; }
-  try {
-    const db = await getDb();
-    const params = views.flatMap(v => ['view', v.artifactId, v.userId, v.client, v.visitor, v.at]);
-    const rows = views.map((_, i) => `($${i * 6 + 1}, $${i * 6 + 2}, $${i * 6 + 3}, $${i * 6 + 4}, $${i * 6 + 5}, $${i * 6 + 6})`).join(', ');
-    await db.query(`INSERT INTO analytics_events (event, artifact_id, user_id, client, visitor, created_at) VALUES ${rows}`, params);
-  } catch {
-    // Analytics must never take a request down with it.
-  }
   try {
     await services().events.emit(views.map(v => v.sentence));
   } catch (error) {

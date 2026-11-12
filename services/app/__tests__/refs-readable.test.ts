@@ -1,7 +1,7 @@
 /** Native dataset links use the original dataset read ACL, independently of page ownership. */
 import {describe,it,expect} from 'vitest';
 import {POST as create} from '@/app/api/artifacts/route';
-import {POST as graphql} from '@/app/api/artifacts/[id]/graphql/route';
+import {POST as sqlDoor} from '@/app/api/artifacts/[id]/sql/route';
 import {mintAccountToken,request,useAppHarness} from './harness';
 useAppHarness();
 const link=(id:string)=>`<html><head><link rel="af-dataset" data-af-name="data" href="ref:${id}"></head><body>Rows</body></html>`;
@@ -10,8 +10,8 @@ describe('native foreign dataset links',()=>{
   const a=await mintAccountToken('a'),b=await mintAccountToken('b');
   const dataset=await(await create(request('/api/artifacts',{method:'POST',token:a.token,json:{dataset:[{value:12}],visibility}}))).json();
   const result=await create(request('/api/artifacts',{method:'POST',token:b.token,json:{html:link(dataset.id),visibility:'public'}}));expect(result.status).toBe(201);const page=await result.json();
-  const response=await graphql(request(`/api/artifacts/${page.id}/graphql`,{method:'POST',json:{revision:'1',query:'{data{value}}'}}),{params:Promise.resolve({id:page.id})});
-  expect((await response.json()).data).toEqual({data:[{value:12}]});
+  const response=await sqlDoor(request(`/api/artifacts/${page.id}/sql`,{method:'POST',json:{revision:'1',sql:'select value from data'}}),{params:Promise.resolve({id:page.id})});
+  expect((await response.json()).rows).toEqual([{value:12}]);
  });
  it('refuses private and missing references uniformly at publication',async()=>{
   const owner=await mintAccountToken('owner'),stranger=await mintAccountToken('stranger');

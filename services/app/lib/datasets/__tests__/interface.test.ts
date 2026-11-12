@@ -11,7 +11,7 @@ import { objectStore, prepareObjects } from '@/lib/object-store';
 import { MAX_FILE_BYTES, MAX_IMAGE_BYTES, getDb } from '@/lib/platform';
 import { seedOwnerJoin } from '@/lib/social';
 import {
-  DatasetError, catalogOf, executeDocumentQueries, datasetResponse, importedRows, importedTables, loadDatasetRows,
+  DatasetError, catalogOf, datasetResponse, importedRows, importedTables, loadDatasetRows,
   publicCatalogOf, publishDataset, publishFile, publishImage, publishPdf, publishVizRecipe,
   readFileUpload, resolveUserColumnScope, retainUserScope, serveStoredFile,
   storeDatasetRows, storeFileContent, storeImageContent, storePdfContent, storedMediaReferences, throttlePublicMutation, uploadedSha256,
@@ -209,25 +209,5 @@ describe('the public mutation throttle and the JSON door', () => {
     expect(await failure(await datasetResponse(async () => ({ ok: true }), 201))).toEqual({ status: 201, ok: true });
     expect(await failure(await datasetResponse(async () => { throw new DatasetError('nope', 403); }))).toEqual({ status: 403, error: 'dataset_error', details: ['nope'] });
     expect(await failure(await datasetResponse(async () => { throw 'string'; }))).toEqual({ status: 400, error: 'dataset_error', details: ['Dataset request failed'] });
-  });
-});
-
-describe('document queries', () => {
-  const query = (name: string, sql: string, imports: string[]) => ({ name, engine: 'sqlite', sql, params: [], reads: { imports, queries: [], values: [], builtins: [] }, columns: [{ name: 'n', type: 'number' }], start: 0, end: 0 });
-  const flow = {
-    imports: [{ name: 'data', ref: 'DSabc123', tables: [{ name: 'rows', columns: [{ name: 'n', type: 'number' }] }] }],
-    values: [], mutations: [], queries: [query('total', 'select sum(n) as n from data.rows', ['data']), query('constant', 'select 7 as n', [])],
-  } as never;
-
-  it('resolves only the imports the selected queries read, and reports their sources', async () => {
-    const asked: string[] = [];
-    const resolve = async (ref: string) => { asked.push(ref); return { tables: { rows: { rows: [{ n: 2 }, { n: 3 }], columns: [{ name: 'n', type: 'number' }] } } } as never; };
-    const all = await executeDocumentQueries(flow, resolve);
-    expect((all.state as { tables: Record<string, { rows: unknown[] }> }).tables.total!.rows).toEqual([{ n: 5 }]);
-    expect(all.sourceIds).toEqual(['DSabc123']);
-    asked.length = 0;
-    const only = await executeDocumentQueries(flow, resolve, { only: ['constant'] });
-    expect(asked).toEqual([]);
-    expect((only.state as { tables: Record<string, { rows: unknown[] }> }).tables.constant!.rows).toEqual([{ n: 7 }]);
   });
 });

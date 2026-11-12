@@ -9,7 +9,7 @@
  *  FIXED   core-script  a hand-written core script misplaced, duplicated, async/defer/typed → exactly what the server expects
  *          charset      missing <meta charset> → <meta charset="utf-8"> first in <head>
  *          viewport     missing viewport meta → width=device-width, initial-scale=1
- *          design-system-meta  (D2) data-af-design-system / data-af-dark on <html> → the artifactbin:design-system meta
+ *          design-system-meta  (D2) strip platform-owned data-af-design-system / data-af-dark on <html>
  *          design-system-link  a copied <link data-af="design-system"> → removed; the platform stylesheet carries every system
  *          duplicate-data-af-id a later static element repeating an identity → its data-af-id dropped, so the server mints a new one
  *  ROUTINE hand-written ids     with `newPage` (a new page): every static data-af-id dropped; the platform assigns them
@@ -101,8 +101,7 @@ export function autofixHtml(input: string, options: AutofixOptions = {}): Autofi
   if (design.changed) {
     html = design.html;
     const root = parseSource(html).html;
-    if (design.rootBefore) pending.push({ rule: 'design-system-meta', reason: 'the platform sets <html> design attributes; the page names its system in head metadata', before: [design.rootBefore], inserted: [...(design.insertedMeta ? [design.insertedMeta] : []), root ? startTag(html, root) : ''] });
-    else if (design.insertedMeta) pending.push({ rule: 'design-system-meta', reason: 'the copied stylesheet named the system; head metadata names it now', before: [], inserted: [design.insertedMeta] });
+    if (design.rootBefore) pending.push({ rule: 'design-system-meta', reason: 'the platform sets <html> design attributes; the page names its system in head metadata', before: [design.rootBefore], inserted: [root ? startTag(html, root) : ''] });
     if (design.removedLinks.length) pending.push({ rule: 'design-system-link', reason: 'the platform adds the design-system stylesheet and fonts; no copy is uploaded', before: design.removedLinks, inserted: [] });
   }
 

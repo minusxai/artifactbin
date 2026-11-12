@@ -4,7 +4,7 @@ import {mintAccountToken,request,useAppHarness} from '@/__tests__/harness';
 import {identityForUser} from '@/lib/accounts';
 import {readHtmlPage} from '@/lib/html-publication';
 import {createArtifactFromBody} from '@/lib/publish';
-import {grantLocalConnection,localConnectionGraphql,localConnectionStatus,observeLocalSource,revokeLocalConnection} from '..';
+import {grantLocalConnection,localConnectionStatus,observeLocalSource,revokeLocalConnection} from '..';
 const harness=useAppHarness();
 const ORIGIN='http://localhost:3000';
 const sha=(text:string)=>createHash('sha256').update(text).digest('hex');
@@ -19,7 +19,6 @@ async function page(visibility='public'){
 const post=(path:string,json:unknown,headers:Record<string,string>={})=>request(path,{method:'POST',json,headers});
 const grant=async(identity:unknown,extra:Record<string,unknown>={})=>grantLocalConnection(post('/api/local-connection',{identity,...extra}));
 const capabilityOf=async(identity:unknown)=>((await (await grant(identity)).json()) as {capability:string}).capability;
-const graphql=(id:string,capability:string,body:Record<string,unknown>,headers:Record<string,string>={})=>localConnectionGraphql(post(`/api/local-connection/${id}/graphql`,body,{'X-Af-Local-Capability':capability,...headers}),id);
 
 it('grants an anonymous read-only capability for the exact current source, never cross-site or upgraded',async()=>{
  const {identity}=await page();
@@ -38,22 +37,14 @@ it('refuses a private page as unavailable without saying whether it exists',asyn
  const {identity}=await page('private');
  const refused=await grant(identity);expect(refused.status).toBe(404);expect(await refused.json()).toEqual({error:'unavailable'});
 });
-it('runs queries at the granted revision, rejects every mutation before dispatch, and stops at revocation',async()=>{
+it('revokes the exact capability and refuses cross-origin revocation',async()=>{
  const {id,identity}=await page(),capability=await capabilityOf(identity);
- const read=await graphql(id,capability,{revision:identity.baseRevision,query:'{ __typename }'});
- expect(read.status).toBe(200);
- expect((await graphql(id,capability,{revision:'99',query:'{ __typename }'})).status).toBe(409);
- const invalid=await graphql(id,capability,{revision:identity.baseRevision,query:'not graphql'});expect(invalid.status).toBe(400);expect(await invalid.json()).toEqual({error:'invalid_operation'});
- expect((await graphql(id,capability,{revision:identity.baseRevision})).status).toBe(400);
- const write=await graphql(id,capability,{revision:identity.baseRevision,query:'mutation { tasks { add } }'});
- expect(write.status).toBe(200);expect(await write.json()).toMatchObject({data:null,errors:[{path:['tasks','add'],message:expect.stringContaining('read-only')}],extensions:{outcomes:{'tasks.add':'rejected'}}});
- expect((await graphql(id,capability,{revision:identity.baseRevision,query:'{ __typename }'},{origin:'https://evil.example'})).status).toBe(403);
- expect((await graphql('Other123',capability,{revision:identity.baseRevision,query:'{ __typename }'})).status).toBe(410);
- const stop=request('/api/local-connection',{method:'DELETE',headers:{'X-Af-Local-Capability':capability}});
- const stopped=await revokeLocalConnection(stop);expect(stopped.status).toBe(200);expect(await stopped.json()).toEqual({disconnected:true});
- expect((await graphql(id,capability,{revision:identity.baseRevision,query:'{ __typename }'})).status).toBe(410);
+ const status=()=>localConnectionStatus(request(`/api/local-connection/${id}/status`,{headers:{'X-Af-Local-Capability':capability}}),id);
+ expect((await status()).status).toBe(200);
  expect((await revokeLocalConnection(request('/api/local-connection',{method:'DELETE',origin:'https://evil.example'}))).status).toBe(403);
- expect((await graphql(id,'',{revision:identity.baseRevision,query:'{ __typename }'})).status).toBe(410);
+ expect((await status()).status).toBe(200);
+ expect((await revokeLocalConnection(request('/api/local-connection',{method:'DELETE',headers:{'X-Af-Local-Capability':capability}}))).status).toBe(200);
+ expect((await status()).status).toBe(410);
 });
 it('observes the current head of a readable page without granting anything',async()=>{
  const {id,identity}=await page();

@@ -14,9 +14,11 @@ describe('buildDocumentCsp', () => {
     expect(policy.startsWith("default-src 'none'; ")).toBe(true);
     expect(policy.endsWith('frame-ancestors https://app.example')).toBe(true);
     const connect = directive(policy, 'connect-src');
-    for (const door of ['query', 'mutate', 'events', 'fetch']) expect(connect).toContain(`https://app.example/a/doc1/${door}`);
+    for (const door of ['events', 'fetch']) expect(connect).toContain(`https://app.example/a/doc1/${door}`);
     expect(connect).not.toContain('/a/doc1/assets');
     expect(connect).not.toContain('/a/doc1/css');
+    expect(connect).not.toContain('/a/doc1/query');
+    expect(connect).not.toContain('/a/doc1/mutate');
     expect(directive(policy, 'script-src')).not.toContain("'unsafe-inline'");
     expect(directive(policy, 'frame-src')).toContain('https://www.youtube.com');
   });
@@ -46,7 +48,8 @@ describe('markupCsp', () => {
     const policy = markupCsp('https://app.example//', 'doc1');
     expect(directive(policy, 'script-src')).toContain("'unsafe-inline'");
     const connect = directive(policy, 'connect-src');
-    expect(connect).toContain('https://app.example/a/doc1/query');
+    expect(connect).not.toContain('/a/doc1/query');
+    expect(connect).not.toContain('/a/doc1/mutate');
     expect(connect).toContain('https://app.example/a/doc1/events/frame');
     expect(connect).not.toContain('/a/doc1/viewer');
     // Its own published files (lib/html-publication-bundle): a script reads one through the link that names it.

@@ -166,7 +166,7 @@ export async function createArtifact(
    *                inside a transaction would enqueue a query behind the
    *                transaction that holds PGLite's one connection.
    */
-  atCreation: { liveConnection?: LiveConnectionInsert; seedOwnerParticipation?:boolean; reservedId?:string; forkedFrom?: string; linkRole?: ShareRole | null; operation?: CreationOperation | null; shares?:ShareEntry[]; datasetPolicy?: { policy: unknown; revision: number }; graphqlName?: string; tx?: Queryable } = {},
+  atCreation: { liveConnection?: LiveConnectionInsert; seedOwnerParticipation?:boolean; reservedId?:string; forkedFrom?: string; linkRole?: ShareRole | null; operation?: CreationOperation | null; shares?:ShareEntry[]; datasetPolicy?: { policy: unknown; revision: number }; tx?: Queryable } = {},
 ): Promise<ArtifactRow> {
   if (!userId && !tokenId) throw new Error("Artifact creation requires a user or token");
   const destination=atCreation.tx ? (input.destination??{type:'personal'} as const) : await newArtifactDestination(identityForUser(userId,tokenId),input.destination,input.ancestor_ids?.at(-1));
@@ -252,12 +252,9 @@ async function insertArtifact(
         : input.format === 'image' || input.format === 'dataset' || input.format === 'pdf' || input.format === 'file' ? 'unlisted' : 'private');
   // A new stored dataset that names no access gets the read-only template (v3) and `readwrite` access: every
   // reader of the dataset reads, and only the owner and editors write (no rule admits anyone else).
-  // A GraphQL name (validated by the create door) is stored in that template's configuration, whatever the access.
-  const named = atCreation.graphqlName !== undefined;
   // A live dataset is born with no rules (lib/live-datasets): only its owner and editors may query it until one is set.
-  const defaultPolicy = !atCreation.datasetPolicy && !atCreation.forkedFrom && (input.access===undefined || named) && input.format==='dataset' && !liveConnectionOf(input.meta);
-  if (named && !defaultPolicy) throw new Error('A GraphQL name is set only on a new stored dataset');
-  const datasetPolicy = atCreation.datasetPolicy?.policy ?? (defaultPolicy ? readOnlyDatasetPolicy(input, atCreation.graphqlName) : null);
+  const defaultPolicy = !atCreation.datasetPolicy && !atCreation.forkedFrom && input.access===undefined && input.format==='dataset' && !liveConnectionOf(input.meta);
+  const datasetPolicy = atCreation.datasetPolicy?.policy ?? (defaultPolicy ? readOnlyDatasetPolicy(input) : null);
   if(input.format==='html'&&input.htmlDatasets)input={...input,meta:{...input.meta,htmlLinks:[...input.htmlDatasets]}};
   if (!!atCreation.liveConnection !== !!liveConnectionOf(input.meta) || (atCreation.liveConnection && input.format !== 'dataset')) throw new Error('A live dataset is created with its connection, and only it');
   const created = await artifactQuery<ArtifactRow>(tx,

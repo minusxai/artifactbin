@@ -57,21 +57,7 @@ describe('full-suite ownership', () => {
   });
 });
 
-describe('reviewed GraphQL resolver dispatch', () => {
-  const dispatch = 'source[info.fieldName](args, contextValue, info)';
-  it('permits only the bundled GraphQL default field resolver dispatch', () => {
-    expect(auditFastSource(dispatch, 'node_modules/graphql/execution/execute.js')).toEqual([]);
-    expect(auditFastSource(dispatch, 'node_modules/graphql/execution/execute.mjs')).toEqual([]);
-    expect(auditFastSource('iterable[Symbol.asyncIterator]()', 'node_modules/graphql/execution/mapAsyncIterator.js')).toEqual([]);
-    expect(auditFastSource('iterable[Symbol.asyncIterator]()', 'services/app/operation.ts')).not.toEqual([]);
-    expect(auditFastSource(dispatch, 'services/app/operation.ts')).not.toEqual([]);
-    expect(auditFastSource(dispatch, 'node_modules/unreviewed/execute.js')).not.toEqual([]);
-  });
-  it('keeps ambient capabilities and other computed calls forbidden in GraphQL', () => {
-    expect(auditFastSource('fetch(url)', 'node_modules/graphql/execution/execute.js')).not.toEqual([]);
-    expect(auditFastSource('globalThis[capability]()', 'node_modules/graphql/execution/execute.js')).not.toEqual([]);
-  });
-});
+
 
 
 describe('reviewed presence clock ports', () => {
@@ -119,12 +105,12 @@ describe('reviewed CSS parser dispatch', () => {
   });
 });
 
-describe('reviewed query request port', () => {
+describe('removed query request port', () => {
   const file='services/app/lib/html-runtime/apollo/watch-query.ts';
-  it('admits only the no-argument request callback injected into the pure watch model', () => {
+  it('rejects fetch callbacks even at the retired query watcher path', () => {
     for(const path of [file,file.replaceAll('/', '\\')]) {
-      expect(auditFastSource('options.remote!.fetch()',path)).toEqual([]);
-      expect(auditFastSource('options.remote.fetch()',path)).toEqual([]);
+      expect(auditFastSource('options.remote!.fetch()',path)).not.toEqual([]);
+      expect(auditFastSource('options.remote.fetch()',path)).not.toEqual([]);
     }
   });
   it('continues rejecting ambient transport and other capability receivers', () => {

@@ -9,12 +9,10 @@ import { getDb } from '@/lib/platform';
 import { createArtifactFromBody } from '@/lib/publish';
 import { getArtifactById } from '@/lib/artifacts';
 import { loadDatasetRows } from '@/lib/datasets';
-import { POST as graphqlPost } from '@/app/api/artifacts/[id]/graphql/route';
 import { POST as sqlPost } from '@/app/api/artifacts/[id]/sql/route';
 
 export type Person = Awaited<ReturnType<typeof person>>;
 export type SqlReply = { columns?: Array<{ name: string; type: string }>; rows?: Array<Record<string, unknown>>; affected?: number; returning?: Array<Record<string, unknown>>; error?: string; message?: string };
-type GqlReply = { data?: Record<string, any> | null; errors?: Array<{ message: string; extensions?: { code: string } }> };
 export async function person(name: string) {
   const token = await mintAccountToken(`psd_${name}`);
   return { ...token, actor: identityForUser(token.userId, token.id, token.email) as AccessActor & { tokenId: string } };
@@ -27,10 +25,6 @@ export async function publish(owner: Person, body: Record<string, unknown>) {
 export async function sql(page: string, who: Person | null, text: string, values: Record<string, unknown> = {}, options: { key?: string; revision?: string; readOnly?: boolean } = {}) {
   const response = await sqlPost(request(`/api/artifacts/${page}/sql`, { method: 'POST', json: { sql: text, params: values, revision: options.revision ?? '1', ...(options.readOnly ? { readOnly: true } : {}) }, ...(who ? { token: who.token } : {}), ...(options.key ? { headers: { 'Idempotency-Key': options.key } } : {}) }), params(page));
   return { status: response.status, body: await response.json() as SqlReply };
-}
-export async function gql(page: string, who: Person | null, query: string, variables?: Record<string, unknown>, key?: string) {
-  const response = await graphqlPost(request(`/api/artifacts/${page}/graphql`, { method: 'POST', json: { query, revision: '1', ...(variables ? { variables } : {}) }, ...(who ? { token: who.token } : {}), ...(key ? { headers: { 'Idempotency-Key': key } } : {}) }), params(page));
-  return { status: response.status, body: await response.json() as GqlReply };
 }
 
 const STAFF = [{ name: 'ada', team: 'red', salary: 10, page: 'seed', by: 'seed' }, { name: 'bo', team: 'blue', salary: 20, page: 'seed', by: 'seed' }];

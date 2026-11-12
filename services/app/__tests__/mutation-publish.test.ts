@@ -5,7 +5,7 @@ import {PUT as replace} from '@/app/api/artifacts/[id]/route';
 import {observedRequest} from '@/__tests__/conditional-request';
 import {getArtifactById} from '@/lib/artifacts';
 import { requestOrSessionActor } from '@/lib/authentication';
-import {linkedGql,liveLink} from './linked-datasets';
+import {linkedSql,liveLink} from './linked-datasets';
 import {firstSaveLinks} from './stored-links';
 import {getDb} from '@/lib/platform';
 import {loadDatasetRows} from '@/lib/datasets';
@@ -19,7 +19,7 @@ async function fixture(access='readwrite'){
  const id=(await made.json()).id as string,link=liveLink(id,'votes');
  const publish=(body:string=html(id),credential=token.token)=>create(request('/api/artifacts',{method:'POST',token:credential,json:{html:body,visibility:'public'}}));
  // An update through the dataset link's generated API: committed only when its root answered.
- const update=async(caller=actor)=>{const reply=await linkedGql(caller,link,'mutation { update_votes(where: {}, _set: {choice: "tacos"}) { affected_rows } }');return {outcome:!reply.errors?.length&&reply.data?.update_votes?'committed':'rejected'};};
+ const update=async(caller=actor)=>{const reply=await linkedSql(caller,link,"update votes set choice = 'tacos'");return {outcome:!reply.error&&reply.affected?'committed':'rejected'};};
  return {token,actor,id,link,publish,update};
 }
 it('persists the native dataset binding without adding page-level write authority',async()=>{

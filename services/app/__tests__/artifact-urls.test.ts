@@ -70,12 +70,12 @@ describe('/a/<id>/raw', () => {
     expect(await res.text()).toContain('Stored html');
   });
 
-  it('serves dataset rows as JSON', async () => {
+  it('serves the dataset catalog as JSON', async () => {
     const { id } = await publish({ title: 'd', dataset: [{ a: 1 }, { a: 2 }] });
     const res = await raw(request(`/a/${id}/raw`), params(id));
     expect(res.status).toBe(200);
     expect(res.headers.get('Content-Type')).toContain('application/json');
-    expect(await res.json()).toEqual([{ a: 1 }, { a: 2 }]);
+    expect(await res.json()).toEqual({ catalog: { kind: 'stored', defaultSchema: 'public', refreshSeconds: 0, tables: [{ schema: 'public', name: 'rows', columns: [{ name: 'a', type: 'number' }] }] } });
   });
 
   it('serves a viz recipe as JSON', async () => {

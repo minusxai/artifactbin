@@ -24,8 +24,8 @@ const TTL_MS = 60_000;
 
 /**
  * WHO A CAPTURE READS AS. An export shows what its requester may see: the door that admitted the requester mints the
- * key FOR them, and the capture's data reads (page GraphQL, resolvers, `_sql`) run as that account or token, reads
- * only (lib/graphql-compat). A key minted for nobody reads as nobody — the shared anonymous render.
+ * key FOR them, and the capture's page SQL reads run as that account or token, reads
+ * only (lib/page-doors). A key minted for nobody reads as nobody — the shared anonymous render.
  */
 export type ExportReader = Pick<AccessActor, 'userId' | 'tokenId'> & Partial<Pick<AccessActor, 'email'>>;
 

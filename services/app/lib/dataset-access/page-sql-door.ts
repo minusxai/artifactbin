@@ -1,5 +1,5 @@
 /**
- * THE PAGE SQL DOOR: one reader-authored SQL statement over the page's dataset links, outside GraphQL execution,
+ * THE PAGE SQL DOOR: one reader-authored SQL statement over the page's dataset links,
  * read or write, as the reader through the page (the page audience rule, `X-Hasura-Page-Id` the page). Tables are
  * link names (single-table dataset `<link>`, multi-table `<link>.<table>`), every table carries `_id`.
  *
@@ -15,23 +15,23 @@
  *     less PAGE_SQL_DENIED_FUNCTIONS). Whatever the statement reads, a subquery, an error, a count, its timing,
  *     depends on visible data only. Its EFFECT is recorded: inserted rows and the columns they named, updated row
  *     ids with the assigned columns' new values, deleted row ids.
- *  2. THE GRAPHQL WRITE PATH. The effect is compiled to row-addressed statements over the stored table, bound
+ *  2. THE GUARDED WRITE PATH. The effect is compiled to row-addressed statements over the stored table, bound
  *     values only, the way ./hasura-write compiles a generated mutation, and written by lib/document-data
  *     `mutateDataset` with exactly the generated API's guard: the role's insert/update/delete rule as the engine
  *     enforces it (columns, filter as row-level security, presets, check on the effect), the decision again under
- *     the row lock, the public-write rate limit, at most DATASET_GRAPHQL_WRITE_LIMITS.rows rows, `_id`s generated
+ *     the row lock, the public-write rate limit, at most DATASET_SQL_WRITE_LIMITS.rows rows, `_id`s generated
  *     from the Idempotency-Key, the reply saved in the committing transaction (a replay answers it exactly).
  *
  * Phase 2's values are phase 1's results, frozen (`n = n + 1` became `n = 6`), so a lost version CAS must not
  * re-run them: the write is pinned to the head phase 1 read (`expectedState`, no internal retry) and a moved
  * head re-runs BOTH phases on the new one, a bounded number of times.
  *
- * Deliberately narrower than GraphQL: a row inside the update/delete filter but outside the select filter is not
- * reachable (GraphQL's `where` reaches it), since only visible rows exist in phase 1.
+ * A row inside the update/delete filter but outside the select filter is not reachable: only visible rows
+ * exist in phase 1.
  */
 import { createHash, randomUUID } from 'node:crypto';
-import { GraphQLError } from 'graphql';
-import { DATASET_GRAPHQL_WRITE_LIMITS, SQL_READ_LIMITS, type DatasetColumn, type DatasetMutationPolicy, type HtmlDatasetLink, type Row, type Scalar } from '@artifactbin/contracts';
+import { DatasetAccessError } from './errors';
+import { DATASET_SQL_WRITE_LIMITS, SQL_READ_LIMITS, type DatasetColumn, type DatasetMutationPolicy, type HtmlDatasetLink, type Row, type Scalar } from '@artifactbin/contracts';
 import { loadSqlite } from '@artifactbin/sql/core';
 import type { AccessActor } from '@/lib/accounts';
 import { artifactState, completeMutationReceipt, durableMutation, getArtifactById, type ArtifactRow } from '@/lib/artifacts';
@@ -179,7 +179,7 @@ async function phaseOne(target: Mounted, others: readonly Mounted[], call: PageS
   const result = out as Exclude<typeof out, { error: string }>;
   const analysis = result.analysis ?? refuse('validation_failed', 'the statement was refused');
   if (analysis.columns.some((c) => c.toLowerCase() === '_id')) refuse('validation_failed', '_id is the platform\'s row ID: it is generated on insert and never written');
-  if (result.affected > DATASET_GRAPHQL_WRITE_LIMITS.rows) refuse('too_many_rows', `a write changes at most ${DATASET_GRAPHQL_WRITE_LIMITS.rows} rows; nothing was written`);
+  if (result.affected > DATASET_SQL_WRITE_LIMITS.rows) refuse('too_many_rows', `a write changes at most ${DATASET_SQL_WRITE_LIMITS.rows} rows; nothing was written`);
   const written = (result.written ?? []) as Scalar[];
   if (analysis.operation === 'delete') return { op: 'delete', ids: written.map(String) };
   if (analysis.operation === 'insert') {
@@ -257,14 +257,14 @@ const outcomeBody = (affected: number, op: Effect['op'], step: MutationStep | un
 export async function executePageSql(actor: AccessActor, links: readonly HtmlDatasetLink[], raw: { sql?: unknown; params?: unknown }, scope: PageSqlDoorScope, signal: AbortSignal): Promise<PageSqlDoorReply> {
   try {
     const call = checked(raw);
-    const load = (fenced: boolean) => loadLinked(actor, links, { pageId: scope.pageId, fenced }, signal).catch((e) => { if (e instanceof GraphQLError) refuse('validation_failed', e.message); throw e; });
+    const load = (fenced: boolean) => loadLinked(actor, links, { pageId: scope.pageId, fenced }, signal).catch((e) => { if (e instanceof DatasetAccessError) refuse('validation_failed', e.message); throw e; });
     const first = await load(true);
     if (!first.length) refuse('dataset_not_found', 'no linked dataset is readable');
     const mounts = mountsOf(first, call.sql);
     const analysis = await analyzed(mounts, call.sql);
     if (analysis.kind === 'select') {
       const answer = await runPageSql(first.map((l) => ({ link: l.link!.name, snapshot: l.snapshot, tables: l.tables.map((t) => ({ tableId: t.tableId, selectable: t.model.select !== false })) })), call, signal, { aggregates: 'visible' })
-        .catch((e) => { if (e instanceof GraphQLError) refuse(String(e.extensions?.code ?? 'validation_failed'), e.message); throw e; });
+        .catch((e) => { if (e instanceof DatasetAccessError) refuse(String(e.extensions?.code ?? 'validation_failed'), e.message); throw e; });
       for (const l of first) for (const verify of l.fences) await verify();
       return { status: 200, body: { ...answer } };
     }
@@ -309,7 +309,7 @@ async function write(actor: AccessActor, call: PageSqlDoorCall, scope: PageSqlDo
           pagePolicy: scope.pageId,
           expectedState: artifactState(head!),
           casRetries: 0,
-          maxAffected: DATASET_GRAPHQL_WRITE_LIMITS.rows,
+          maxAffected: DATASET_SQL_WRITE_LIMITS.rows,
           trace: true,
           // The public-write rate limit is charged once per call: the first attempt's, never a retry's.
           // Every other dataset phase 1 read is locked with the authorization rows, before the decisions.

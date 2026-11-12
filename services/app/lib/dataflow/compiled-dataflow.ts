@@ -56,7 +56,7 @@ interface CompiledReads {
   builtins: Array<BuiltinInput | BuiltinTable>;
 }
 
-export interface CompiledQuery {
+interface CompiledQuery {
   name: string;
   /** `sqlite` runs wherever its reads allow; `postgres` runs inside the connected database, on the server. */
   engine: 'sqlite' | 'postgres';
@@ -74,7 +74,7 @@ export interface CompiledQuery {
   end: number;
 }
 
-export interface CompiledMutation {
+interface CompiledMutation {
   name: string;
   sql: string;
   /** What it writes: an imported dataset table, or a local table value. */

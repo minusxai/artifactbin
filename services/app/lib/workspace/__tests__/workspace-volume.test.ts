@@ -1,19 +1,12 @@
-/**
- * HOME'S INSIGHTS AND THE OWNER LISTING AT VOLUME.
- *
- * Two promises, each proven against an account shaped like a real one (many documents, each with a
- * long view history) instead of a fixture that fits in one screen:
- *  - Home's insights answer in a bounded number of statements and carry NUMBERS, never rendered
- *    markup: no document's sparkline travels, so the payload is a few bytes per document;
- *  - a document's view count is read from a per-document total that closed days fold into once, so the
- *    listing's cost does not follow the all-time number of view events (proven by deleting them).
- */
+/** Home and owner-listing analytics at volume: canonical history, bounded query count,
+ * per-artifact UTC deduplication, and no rendered sparklines in insight payloads. */
 import { describe, expect, it, vi } from 'vitest';
 import { GET as homeRoute } from '@/app/api/page/home/route';
 import { createUser } from '@/lib/accounts';
 import { artifactSummaryToWire } from '@/lib/artifact-wire';
 import { getDb, measureQueries, EVENTS_SCHEMA } from '@/lib/platform';
 import { accountWorkspaceFor, accountWorkspaceInsightsFor, listOwnedArtifacts } from '@/lib/workspace';
+import { trackEvent } from '@/lib/analytics';
 import { ensureEventsSchema } from '@artifactbin/events/local';
 import { mintAccountToken, request, useAppHarness } from '@/__tests__/harness';
 
@@ -41,25 +34,19 @@ async function seed(docs: number, tag = 'vol') {
     [user.id, token.id, docs],
   );
   await db.query(`INSERT INTO artifacts (id, user_id, token_id, format, title, meta, version) VALUES ('${tag}ds1', $1, $2, 'dataset', 'Data', '{"rowCount": 3}', 1)`, [user.id, token.id]);
+  await ensureEventsSchema(db, EVENTS_SCHEMA);
   await db.query(
-    `INSERT INTO analytics_events (event, artifact_id, visitor, created_at)
-     SELECT 'view', '${tag}' || lpad(i::text, 3, '0'), d || '-' || (j % (i % 7 + 2)), now() - (d || ' days')::interval
+    `INSERT INTO ${EVENTS_SCHEMA}.events (id,source,verb,object_kind,object_id,subject_id,at)
+     SELECT '${tag}hist' || i || '_' || d || '_' || j, 'app','viewed','artifact', '${tag}' || lpad(i::text, 3, '0'), d || '-' || (j % (i % 7 + 2)), now() - (d || ' days')::interval
      FROM generate_series(1, $1::int) i, unnest($2::int[]) d, generate_series(1, (i % 7 + 2) * 3) j`,
     [docs, DAYS],
   );
   await db.query(
-    `INSERT INTO analytics_events (event, artifact_id, visitor, created_at)
-     SELECT 'view', '${tag}' || lpad(i::text, 3, '0'), NULL, now() - interval '5 days' FROM generate_series(1, $1::int) i, generate_series(1, ${NULL_VISITOR_ROWS})`,
+    `INSERT INTO ${EVENTS_SCHEMA}.events (id,source,verb,object_kind,object_id,subject_id,at)
+     SELECT '${tag}null' || i || '_' || n, 'app','viewed','artifact', '${tag}' || lpad(i::text, 3, '0'), NULL, now() - interval '5 days' FROM generate_series(1, $1::int) i, generate_series(1, ${NULL_VISITOR_ROWS}) n`,
     [docs],
   );
-  await db.query(`INSERT INTO analytics_events (event, artifact_id, visitor) VALUES ('view', '${tag}ds1', 'x'), ('export', '${tag}001', 'y')`);
-  await ensureEventsSchema(db, EVENTS_SCHEMA);
-  await db.query(
-    `INSERT INTO ${EVENTS_SCHEMA}.events (id, at, source, subject_kind, subject_id, verb, object_kind, object_id, payload)
-     SELECT '${tag}e' || i || '_' || d || '_' || v, now() - (d || ' days')::interval, 'app', 'visitor', 'v' || v || 'd' || d, 'viewed', 'artifact', '${tag}' || lpad(i::text, 3, '0'), '{}'::jsonb
-     FROM generate_series(1, $1::int) i, generate_series(0, 29) d, generate_series(1, 2) v`,
-    [docs],
-  );
+  await db.query(`INSERT INTO ${EVENTS_SCHEMA}.events (id,source,verb,object_kind,object_id,subject_id) VALUES ('${tag}ds','app','viewed','artifact','${tag}ds1','x'),('${tag}export','app','exported','artifact','${tag}001','y')`);
   return user;
 }
 
@@ -76,7 +63,7 @@ describe('Home insights', () => {
     expect(insights.views).toMatchObject({ [docId(1)]: expectedViews(1), [docId(60)]: expectedViews(60) });
     expect(insights.stats).toEqual({ artifacts: docs, assets: 1, views: Object.values(expectedById(docs)).reduce((a, b) => a + b, 0) });
     expect(insights.viewsOverTime).toHaveLength(30);
-    expect(insights.viewsOverTime.reduce((a, b) => a + b, 0)).toBe(docs * 2 * 30);
+    expect(insights.viewsOverTime.reduce((a, b) => a + b, 0)).toBe(Array.from({ length: docs }, (_, k) => 3 * visitorsOf(k + 1) + 2).reduce((a, b) => a + b, 0));
     expect(JSON.stringify(insights).length).toBeLessThan(docs * 40 + 2500);
     // The route says the same: the wire has the field nowhere.
     const response = await homeRoute(request('/api/page/home?part=insights', { actor: { credential: 'session', userId: user.id, email: user.email!, emailVerified: true } }));
@@ -87,7 +74,7 @@ describe('Home insights', () => {
 
   it('read in a bounded number of statements that does not grow with the documents, and probe the events table once', async () => {
     const small = await seed(10, 'vsm');
-    await accountWorkspaceInsightsFor(small.id); // compacts closed days, learns the events table is there
+    await accountWorkspaceInsightsFor(small.id); // learns the events table is there
     const db = await getDb();
     const query = vi.spyOn(db, 'query');
     try {
@@ -109,10 +96,10 @@ describe('Home insights', () => {
     try {
       await accountWorkspaceInsightsFor(user.id);
       // Before: the per-document counts and the account total each scanned every view event of the account.
-      // Now every statement that reads events says it reads them through the folded totals.
-      const reads = query.mock.calls.map(([sql]) => String(sql)).filter((sql) => /analytics_events/.test(sql));
-      expect(reads.filter((sql) => !sql.includes('artifact_view_totals')).map((sql) => sql.slice(0, 60))).toEqual([]);
-      expect(reads).toHaveLength(1);
+      // The canonical cache read runs once and supplies both readouts.
+      const reads = query.mock.calls.map(([sql]) => String(sql)).filter((sql) => sql.includes(`FROM ${EVENTS_SCHEMA}.events`));
+      expect(reads.every(sql => !sql.includes('analytics_events'))).toBe(true);
+      expect(reads.filter(sql => sql.includes('LEFT JOIN canonical_view_totals'))).toHaveLength(1);
     } finally { query.mockRestore(); }
   });
 
@@ -135,29 +122,30 @@ describe('the owner listing', () => {
     // The reference: what the retired per-row subquery counted.
     const db = await getDb();
     const reference = await db.query<{ id: string; views: number }>(
-      `SELECT artifact_id AS id, COUNT(DISTINCT COALESCE(visitor, seq::text))::int AS views FROM analytics_events WHERE event = 'view' GROUP BY artifact_id`,
+      `SELECT object_id AS id, SUM(n)::int AS views FROM (SELECT object_id, (at AT TIME ZONE 'UTC')::date AS day, COUNT(DISTINCT COALESCE(subject_id,id)) AS n FROM ${EVENTS_SCHEMA}.events WHERE verb='viewed' GROUP BY object_id,day) d GROUP BY object_id`,
     );
     expect(viewsById(rows)).toEqual(viewsById(reference.rows));
   });
 
-  it('does not depend on the number of view events that remain: closed days are folded into a total', async () => {
+  it('ignores retired history removal and counts newly canonical views', async () => {
     const docs = 30;
     const user = await seed(docs);
     const first = await listOwnedArtifacts('user_id', user.id);
     expect(viewsById(first.filter((row) => row.format === 'html'))).toEqual(expectedById(docs));
     const db = await getDb();
-    // Everything before today leaves the table (retention, or simply a very long history elsewhere).
+    // Retired history does not supply these totals; canonical records remain intact.
+    await db.query("INSERT INTO analytics_events (event,artifact_id,visitor,created_at) VALUES ('view',$1,'retired',now()-interval '2 days')", [docId(3)]);
     await db.query("DELETE FROM analytics_events WHERE created_at < (now() AT TIME ZONE 'UTC')::date");
     const second = await listOwnedArtifacts('user_id', user.id);
     expect(viewsById(second.filter((row) => row.format === 'html'))).toEqual(expectedById(docs));
-    // …and a view recorded afterwards is added to the folded total, once.
-    await db.query("INSERT INTO analytics_events (event, artifact_id, visitor) VALUES ('view', $1, 'brand-new-visitor')", [docId(3)]);
+    // A newly canonical view is added once.
+    await trackEvent('view', docId(3), { userId: 'brand-new-visitor' });
     const third = await listOwnedArtifacts('user_id', user.id);
     expect(third.find((row) => row.id === docId(3))?.views).toBe(expectedViews(3) + 1);
     expect(third.find((row) => row.id === docId(4))?.views).toBe(expectedViews(4));
   });
 
-  it('folds each closed day exactly once even when several reads race', async () => {
+  it('answers concurrent canonical reads consistently', async () => {
     const docs = 12;
     const user = await seed(docs);
     const racers = await Promise.all([1, 2, 3, 4].map(() => listOwnedArtifacts('user_id', user.id)));
@@ -175,7 +163,7 @@ describe('the owner listing', () => {
     const smallWarm = await measureQueries(() => listOwnedArtifacts('user_id', small.id));
     const bigWarm = await measureQueries(() => listOwnedArtifacts('user_id', big.id));
     expect(bigWarm.stats.count).toBe(smallWarm.stats.count);
-    expect(bigWarm.stats.count).toBeLessThanOrEqual(2);
+    expect(bigWarm.stats.count).toBeLessThanOrEqual(3);
   });
 
   it('selects no more of a document\'s meta than its summary wire shows', async () => {

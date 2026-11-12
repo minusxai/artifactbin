@@ -2,7 +2,7 @@ import {describe,it,expect} from 'vitest';
 import {tableIdentity,initialRowIds,rowIdsForObject} from '../model';
 const table={schema:'public',name:'rows',columns:[{name:'label',type:'string' as const},{name:'amount',type:'number' as const},{name:'date',type:'date' as const}],objectKey:'blob'};
 const id=tableIdentity(table);
-describe('dataset GraphQL row identity',()=>{
+describe('dataset stable row identity',()=>{
  it('allocates reproducible opaque row identities per original object',()=>{
   expect(initialRowIds('dataset',id,'blob',2)).toEqual(initialRowIds('dataset',id,'blob',2));
   expect(initialRowIds('dataset',id,'blob',2)[0]).not.toEqual(initialRowIds('dataset',id,'blob2',2)[0]);

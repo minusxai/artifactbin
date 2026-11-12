@@ -1,3 +1,4 @@
+import { EVENTS_SCHEMA } from '@/lib/platform';
 import {nativeHtml} from './native-html-fixture';
 /**
  * A shared link must unfurl, and the og: tags have to be on the DOCUMENT.
@@ -20,11 +21,11 @@ import { useAppHarness } from '@/__tests__/harness';
 
 const harness = useAppHarness();
 
-/** Rows the analytics table holds for this artifact's `view` event. */
+/** Canonical viewed envelopes for this artifact. */
 const views = async (id: string): Promise<number> => {
   const db = await harness.db();
   const r = await db.query<{ n: string }>(
-    "SELECT COUNT(*)::text AS n FROM analytics_events WHERE artifact_id = $1 AND event = 'view'", [id],
+    `SELECT COUNT(*)::text AS n FROM ${EVENTS_SCHEMA}.events WHERE object_id = $1 AND object_kind='artifact' AND verb='viewed'`, [id],
   );
   return Number(r.rows[0].n);
 };

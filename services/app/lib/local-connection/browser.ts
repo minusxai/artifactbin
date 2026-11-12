@@ -1,7 +1,7 @@
 import {LOCAL_CHROME_COLLAPSED_HEIGHT,LOCAL_CHROME_CANVAS_SCHEME,validLocalSourceEvidence} from './contracts';
 import {runtimeId} from '@artifactbin/utils/runtime-id';
 import {validLinkedDocument} from './registry';
-import type {LinkedDocument,LocalConnection,LocalConnectionState,LocalOperation,SourceObservation} from './contracts';
+import type {LinkedDocument,LocalConnection,LocalConnectionState,SourceObservation} from './contracts';
 export interface ConnectLocalDocumentOptions {
  win:Window;identity:LinkedDocument;privatePreview?:boolean;stayOffline?:boolean;
  onState(state:LocalConnectionState):void;
@@ -15,14 +15,12 @@ export interface LocalDocumentConnection extends LocalConnection {post(message:u
 /** No credential enters this window. The remote broker owns normal browser authentication. */
 export function connectLocalDocument(options:ConnectLocalDocumentOptions):LocalDocumentConnection{
  const {win,identity}=options;let disposed=false,stopped=false,connected=false;
- let iframe:HTMLIFrameElement|undefined,remote:Window|null=null,port:MessagePort|undefined,timer:ReturnType<typeof setTimeout>|undefined,nonce='';let call=0,generation=0;
+ let iframe:HTMLIFrameElement|undefined,remote:Window|null=null,port:MessagePort|undefined,timer:ReturnType<typeof setTimeout>|undefined,nonce='';let generation=0;
  let localDigest:string|undefined;
  let chromeHeight:number|'viewport'=LOCAL_CHROME_COLLAPSED_HEIGHT;
  const resizeChrome=()=>{if(iframe)iframe.style.height=Math.max(40,Math.min(win.innerHeight||1000,chromeHeight==='viewport'?(win.innerHeight||1000):chromeHeight))+'px';};
- const pending=new Map<number,{resolve:(value:unknown)=>void;reject:(reason:Error)=>void;timer:ReturnType<typeof setTimeout>}>();
  const state=(value:LocalConnectionState)=>{if(!disposed)options.onState(value);};
- const failPending=()=>{for(const value of pending.values()){clearTimeout(value.timer);value.reject(Error('Connection ended; operation outcome may be unknown'));}pending.clear();};
- const cleanup=()=>{generation++;connected=false;clearTimeout(timer);port?.postMessage({kind:'disconnect'});port?.close();port=undefined;iframe?.remove();iframe=undefined;remote=null;failPending();};
+ const cleanup=()=>{generation++;connected=false;clearTimeout(timer);port?.postMessage({kind:'disconnect'});port?.close();port=undefined;iframe?.remove();iframe=undefined;remote=null;};
  const receive=(event:MessageEvent)=>{
   if(disposed||stopped||event.source!==remote||event.origin!==identity.platformOrigin||!event.data||event.data.kind!=='af:local-ready'||event.data.nonce!==nonce||port)return;
   const epoch=generation,channel=new MessageChannel();port=channel.port1;
@@ -38,10 +36,6 @@ export function connectLocalDocument(options:ConnectLocalDocumentOptions):LocalD
     if(!valid.includes(data.state))return;
     connected=data.state==='connected';clearTimeout(timer);state(data.state);
     if(connected&&typeof data.role==='string')options.onConnected?.({identity,role:data.role});
-    if(!connected)failPending();
-   }else if(data.kind==='result'&&Number.isSafeInteger(data.call)){
-    const waiter=pending.get(data.call);if(!waiter)return;clearTimeout(waiter.timer);pending.delete(data.call);
-    if(typeof data.error==='string')waiter.reject(Error(data.error));else waiter.resolve(data.value);
    }else if(data.kind==='bridge'&&connected)options.onMessage?.(data.message);
   };
   if(localDigest)port.postMessage({kind:'local-source-evidence',localDigest});
@@ -66,14 +60,7 @@ export function connectLocalDocument(options:ConnectLocalDocumentOptions):LocalD
   dispose(){if(disposed)return;stopped=true;cleanup();win.removeEventListener('message',receive);win.removeEventListener('resize',resizeChrome);disposed=true;},
   reportSource(value){if(disposed||stopped||!validLocalSourceEvidence({kind:'local-source-evidence',localDigest:value}))return;localDigest=value;port?.postMessage({kind:'local-source-evidence',localDigest});},
   post(message){if(connected)port?.postMessage({kind:'bridge',message});},
-  request(operation:LocalOperation){
-   if(!connected||!port)return Promise.reject(Error('Document is disconnected'));
-   const id=++call;
-   return new Promise((resolve,reject)=>{
-    const deadline=setTimeout(()=>{pending.delete(id);cleanup();state('unknown-outcome');reject(Error('Operation outcome is unknown; check the remote result before retrying'));},options.timeoutMs??30_000);
-    pending.set(id,{resolve,reject,timer:deadline});port!.postMessage({kind:'operation',call:id,operation});
-   });
-  },
+
  };
  if(!validLinkedDocument(identity)){state('unavailable');}
  else if(options.privatePreview||options.stayOffline){state('offline');}

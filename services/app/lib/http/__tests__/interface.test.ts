@@ -9,7 +9,7 @@ import {
   APP_BUILD_HEADER, APP_BUILD_META, GITHUB_EXTERNAL_URL, GUEST_TICKET, LIVE_KEEPALIVE_EVENT, MARKDOWN_CONTENT_TYPE, PAGES_TICKET_PARAM,
   REPO_URL, REVALIDATE, appBuild, artifactViewPath, baseUrl, canonicalArtifactPath, decodePage, domainPostPath, encodeCursor,
   forgetShared, internalRedirectTarget, isCrossSiteRequest, liveKeepaliveFrame, loginHref, loginRedirectTarget, markPagesRequest,
-  pagesRequestOf, pagesSite, parseByteRange, parseCookie, parsePrettyPath, parseQueryRequest, primeShared, publicOrigin,
+  pagesRequestOf, pagesSite, parseByteRange, parseCookie, parsePrettyPath, parseScalarValues, primeShared, publicOrigin,
   publicRevalidatedResponse, setAppBuild, sharedRequest, spaPaths, titleSlug, unauthorized,
 } from '@/lib/http';
 import { DEV_SPA_PATHS, SPA_PATHS, isAppPagePath } from '@/lib/http/app-pages';
@@ -17,7 +17,7 @@ import { readIntent, withIntent } from '@/lib/http/intent';
 import { resetShared } from '@/lib/http/shared-request';
 import { artifactEditPath } from '@/lib/http/urls';
 import { retryingFetch } from '@/lib/http/retry-lazily';
-import { MAX_QUERY_ROWS, PUBLIC_BASE_URL, overrideRequestHeaders, runWithRequest } from '@/lib/platform';
+import { PUBLIC_BASE_URL, overrideRequestHeaders, runWithRequest } from '@/lib/platform';
 import { request } from '@/__tests__/harness';
 import { overrideConfig, resetConfigOverrides } from '@/lib/platform/config';
 
@@ -213,31 +213,17 @@ describe('the app build', () => {
   });
 });
 
-describe('query requests', () => {
-  const refusal = async (body: Record<string, unknown>) => { const r = parseQueryRequest(body); return r instanceof Response ? { status: r.status, ...(await r.json()) } : r; };
-  it('accepts the declared fields', async () => {
-    expect(await refusal({})).toEqual({});
-    expect(await refusal({ values: { a: 1, b: 'x', c: null, d: true }, only: ['q'], tz: 'UTC', page: { name: 'q', offset: 0, limit: 1, sort: { col: 'a', dir: 'desc' } } }))
-      .toEqual({ values: { a: 1, b: 'x', c: null, d: true }, only: ['q'], tz: 'UTC', page: { name: 'q', offset: 0, limit: 1, sort: { col: 'a', dir: 'desc' } } });
-    expect(await refusal({ hold: 'imp' })).toEqual({ hold: 'imp' });
-    expect(await refusal({ people: ['u1'] })).toEqual({ people: ['u1'] });
+describe('SQL scalar parameters', () => {
+  it('accepts absent values and finite scalar records', () => {
+    expect(parseScalarValues(undefined)).toEqual({});
+    const values = { a: 1, b: 'x', c: null, d: true };
+    expect(parseScalarValues(values)).toEqual(values);
   });
-
-  it('refuses unknown fields, SQL, malformed values and pages past the row cap', async () => {
-    expect(await refusal({ sql: 'select 1' })).toMatchObject({ status: 400, error: 'unknown_query_fields' });
-    expect(await refusal({ hold: 'imp', only: [] })).toMatchObject({ error: 'invalid_hold' });
-    expect(await refusal({ people: 'u1' })).toMatchObject({ error: 'invalid_people' });
-    expect(await refusal({ people: ['x'.repeat(201)] })).toMatchObject({ error: 'invalid_people' });
-    expect(await refusal({ tz: 3 })).toMatchObject({ error: 'invalid_tz' });
-    expect(await refusal({ values: [] })).toMatchObject({ error: 'invalid_values' });
-    expect(await refusal({ values: { a: Number.NaN } })).toMatchObject({ error: 'invalid_values' });
-    expect(await refusal({ values: { a: {} } })).toMatchObject({ error: 'invalid_values' });
-    expect(await refusal({ only: 'q' })).toMatchObject({ error: 'invalid_only' });
-    expect(await refusal({ localTables: 'x' })).toMatchObject({ error: 'invalid_local_state' });
-    expect(await refusal({ page: { name: 'q', offset: 0, limit: MAX_QUERY_ROWS + 1 } })).toMatchObject({ error: 'invalid_page' });
-    expect(await refusal({ page: { name: 'q', offset: -1, limit: 1 } })).toMatchObject({ error: 'invalid_page' });
-    expect(await refusal({ page: { name: 'q', offset: 0, limit: 1, sort: { col: 'a', dir: 'up' } } })).toMatchObject({ error: 'invalid_page' });
-    expect(await refusal({ page: null })).toMatchObject({ error: 'invalid_page' });
+  it.each([null, [], 'x', { a: NaN }, { a: Infinity }, { a: -Infinity }, { a: {} }, { a: [] }])('refuses malformed values %j', async (value) => {
+    const response = parseScalarValues(value);
+    expect(response).toBeInstanceOf(Response);
+    expect((response as Response).status).toBe(400);
+    expect(await (response as Response).json()).toMatchObject({ error: 'invalid_values' });
   });
 });
 

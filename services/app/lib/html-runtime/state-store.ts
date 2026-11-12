@@ -1,10 +1,10 @@
 /**
  * `@afbin/state`'s store: a real Zustand vanilla store over the page's local-state document (a StatePort, the one
- * `@afbin/apollo`'s client reads). Pure: no DOM, storage or timers; ./page-state supplies the port.
+ * comment views read). Pure: no DOM, storage or timers; ./page-state supplies the port.
  *
  * Zustand's own `persist` middleware hydrates it from the port and hands every setState to the storage adapter below,
- * which writes it with the port's compare-and-swap. The adapter also feeds every port change (another tab, a gql
- * write, a comment view) back into the store, which `persist` alone never does.
+ * which writes it with the port's compare-and-swap. The adapter also feeds every port change (another tab, a comment-view
+ * restore, a comment view) back into the store, which `persist` alone never does.
  *
  * getState, setState(partial | fn, replace) and subscribe behave as in Zustand (subscribe never fires on the current
  * value). Two differences follow from the document being one viewer's storable JSON:
@@ -108,7 +108,7 @@ export function createStateStore(port: StatePort, options: { initial?: Doc; name
     try { void persisted(result, true); } finally { pending = previous; }
     return committed;
   }) as PageStore['setState'];
-  // Every change to the document (another tab, a gql write, a restored comment view, this store's own commits).
+  // Every change to the document (another tab, a comment-view restore, a restored comment view, this store's own commits).
   port.subscribe(() => { if (!inflight) void store.persist.rehydrate(); });
   return store;
 }

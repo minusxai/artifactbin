@@ -1,7 +1,6 @@
 /**
  * THE PAGE'S SQL DOOR (`POST /api/artifacts/<page>/sql`, `sql` in the page runtime), with what every page door
- * shares: the request's reader, the after-read page verification and the write's commit guard. The GraphQL
- * compatibility layer (lib/graphql-compat) admits its requests through the same verifier and guard.
+ * shares: the request's reader, the after-read page verification and the write's commit guard.
  */
 import {ACTOR_HEADER,REVALIDATE_ACTOR_HEADER,SQL_READ_LIMITS,type HtmlDatasetLink,type HtmlPageVersion} from '@artifactbin/contracts';
 import type { AccessActor } from '@/lib/accounts';
@@ -17,19 +16,19 @@ import {exportKeyReader} from '@/lib/export';
 import {json,readBody,readJson,PayloadTooLarge} from '@/lib/http';
 import { requestOrSessionActor, refusesCrossSite } from '@/lib/authentication';
 /** The page's dataset links. */
-export const datasetLinks=(page:HtmlPageVersion)=>page.links.filter((link):link is HtmlDatasetLink=>link.kind==='dataset');
+const datasetLinks=(page:HtmlPageVersion)=>page.links.filter((link):link is HtmlDatasetLink=>link.kind==='dataset');
 /** How many times a read raced by a linked dataset's write runs before the request is refused. */
-export const RACED_READ_ATTEMPTS=3;
+const RACED_READ_ATTEMPTS=3;
 /** Today's receipt key shape (lib/artifacts `durableMutation`): a client Idempotency-Key is held to it. */
-export const IDEMPOTENCY_KEY=/^[A-Za-z0-9_-]{16,128}$/;
+const IDEMPOTENCY_KEY=/^[A-Za-z0-9_-]{16,128}$/;
 /** Every header a credential arrives in (the proxy's attached actor included); an opaque origin's read carries none. */
-export const CREDENTIAL_HEADERS=['cookie','authorization','proxy-authorization',ACTOR_HEADER];
-export type ArtifactHeader=NonNullable<Awaited<ReturnType<typeof getArtifactHeaderById>>>;
+const CREDENTIAL_HEADERS=['cookie','authorization','proxy-authorization',ACTOR_HEADER];
+type ArtifactHeader=NonNullable<Awaited<ReturnType<typeof getArtifactHeaderById>>>;
 /**
  * After a read: the reader is still who they were, may still read the page, and its head (access, edit, version,
  * links) did not move since `admitted`; otherwise the answer is withheld (`page_unavailable`).
  */
-export function pageVerifier(request:Request,pageId:string,actor:AccessActor,reader:AccessActor|undefined,admitted:ArtifactHeader){
+function pageVerifier(request:Request,pageId:string,actor:AccessActor,reader:AccessActor|undefined,admitted:ArtifactHeader){
  return async(revision:string)=>{
   const currentActor:AccessActor=reader??await requestOrSessionActor(request,{revalidate:true});
   if(JSON.stringify(currentActor)!==JSON.stringify(actor))throw Error('page_unavailable');
@@ -47,7 +46,7 @@ export function pageVerifier(request:Request,pageId:string,actor:AccessActor,rea
  * decided from facts read on `tx` alone. Otherwise nothing commits: removing a link, republishing the page or
  * revoking the reader's access while the write runs refuses it.
  */
-export function pageCommitGuard(pageId:string,actor:AccessActor,admitted:ArtifactHeader):PageCommitGuard{
+function pageCommitGuard(pageId:string,actor:AccessActor,admitted:ArtifactHeader):PageCommitGuard{
  return async tx=>{
   // LOCK ORDER (lib/artifact-access locks.ts): this guard runs inside the dataset write's commit,
   // after assertWriteCommit locked the page and the datasets in the one global order; the page row below is already
@@ -63,7 +62,7 @@ export function pageCommitGuard(pageId:string,actor:AccessActor,admitted:Artifac
 /**
  * THE PAGE SQL DOOR (POST /api/artifacts/<page>/sql, lib/dataset-access `executePageSql`): `{sql, params?, revision,
  * readOnly?}` and an optional Idempotency-Key, one statement over the revision's dataset links as the request's
- * reader, read or write. The same reader, cross-site guard and page audience as the page GraphQL: a page the reader
+ * reader, read or write. The same reader, cross-site guard and page audience for every page door: a page the reader
  * cannot read is the uniform 404. Only the head revision writes (an archived one, or `readOnly`, reads); a read
  * whose dataset moved while it ran re-runs, a bounded number of times, and leaves only if the page still holds.
  * An opaque origin reads here only as an export capture's requester (opaqueSqlRead); otherwise it has no SQL door.
@@ -76,7 +75,7 @@ const SQL_HEADERS={'Cache-Control':'no-store',[REVALIDATE_ACTOR_HEADER]:'1'};
 /**
  * AN EXPORT CAPTURE'S SQL READ: the exporter photographs the page as a top-level opaque-origin document with no app
  * frame (document-serving/raw), so its `sql` comes here directly (html-runtime/domain-reads), carrying the capture's
- * export key in the body, as its GraphQL reads do (lib/graphql-compat `opaqueOriginRead`). Every credential header is
+ * export key in the body. Every credential header is
  * dropped: the read runs as the requester the key was minted for (lib/export read-key), or as nobody for an anonymous
  * key, re-checked at read time like any reader's, and reads only. No key that verifies for this page: no SQL door.
  * The `*` CORS exposes the answer to that capture page alone: the key is seconds-long, scoped to this page and never

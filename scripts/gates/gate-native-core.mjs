@@ -14,18 +14,18 @@ const connection=await connectAgent(base),browser=await launchChromium(),directo
 const publish=async body=>{const res=await fetch(base+'/api/artifacts',{method:'POST',headers:{authorization:`Bearer ${connection.token}`,'content-type':'application/json','Idempotency-Key':`native_core_${randomUUID().replaceAll('-','')}`},body:JSON.stringify({visibility:'public',...body})});if(!res.ok)throw Error(`publish ${res.status}`);return res.json();};
 const dataset=await publish({dataset:[{value:7}]});
 const body='<p data-af-id="words">The reader works before the author engine loads.</p><button id="start">Load client</button><output id="count"></output><button id="remote">Read shared data</button><output id="status"></output>';
-const script=`document.querySelector('#start').onclick=async()=>{const {client,gql}=await import('@afbin/apollo');const query=gql\`{count}\`;await client.updateQuery({query},({count})=>({count:count+1}));document.querySelector('#count').textContent=(await client.query({query})).data.count;document.querySelector('#remote').onclick=async()=>{document.querySelector('#status').textContent=JSON.stringify(await client.query({query:gql\`{orders{value}}\`}))}}`;
+const script=`document.querySelector('#start').onclick=async()=>{const {state}=await import('@afbin/state');const {sql}=await import('@afbin/apollo');await state.setState(({count})=>({count:count+1}));document.querySelector('#count').textContent=state.getState().count;document.querySelector('#remote').onclick=async()=>{document.querySelector('#status').textContent=JSON.stringify(await sql\`select value from orders\`)}}`;
 const html=`<!doctype html><html><head><script data-af="core" src="/af/core.js"></script><script type="application/json" data-af="state">{"count":3}</script><link rel="af-dataset" data-af-name="orders" href="ref:${dataset.id}"></head><body>${body}<script>${script}</script></body></html>`;
 try{
  const doc=await publish({html}),page=await browser.newPage();let authorRequests=0,relayRequests=0;
- page.on('request',request=>{if(new URL(request.url()).pathname==='/af/apollo.js')authorRequests++;if(request.url().endsWith(`/api/artifacts/${doc.id}/graphql`))relayRequests++;});
+ page.on('request',request=>{if(new URL(request.url()).pathname==='/af/apollo.js')authorRequests++;if(request.url().endsWith(`/api/artifacts/${doc.id}/sql`))relayRequests++;});
  await page.goto(`${base}/a/${doc.id}`,{waitUntil:'load'});const frame=await documentFrame(page);
  await frame.locator('[data-af="presence-overlay"]').waitFor();
  check(authorRequests===0,'reader/comments/presence initialize without fetching the author engine');
  await frame.locator('#start').click();await frame.locator('#count').filter({hasText:'4'}).waitFor();
  check(authorRequests===1,'first actual author import fetches the one author module');
  check(await frame.locator('#count').textContent()==='4','lazy client initializes and updates private viewer state');
- await frame.locator('#remote').click();await frame.locator('#status').filter({hasText:'data'}).waitFor();
+ await frame.locator('#remote').click();await frame.locator('#status').filter({hasText:'7'}).waitFor();
  check(relayRequests===1,'lazy client reuses the already attached trusted parent relay');
  const downloaded=await fetch(`${base}/a/${doc.id}/download`);if(!downloaded.ok)throw Error(`download ${downloaded.status}`);
  const file=path.join(directory,'portable.html');await writeFile(file,await downloaded.text());
@@ -33,9 +33,9 @@ try{
  local.on('request',request=>{if(/^https?:/.test(request.url()))network++;});
  await local.goto(pathToFileURL(file).href);await local.locator('#start').click();await local.locator('#count').filter({hasText:'4'}).waitFor();
  check(await local.locator('#count').textContent()==='4','download initializes the same client without a network');
- await local.locator('#remote').click();await local.locator('#status').filter({hasText:'offline'}).waitFor();
+ await local.locator('#remote').click();await local.locator('#status').filter({hasText:'7'}).waitFor();
  check(network===0,'portable author module and reader have no network dependencies');
- check((await local.locator('#status').textContent()).includes('offline'),'downloaded remote requests report offline without sending');
+ check((await local.locator('#status').textContent()).includes('7'),'downloaded SQL reads use embedded rows without sending');
  await offline.close();
  // Exact initial code is admitted without permitting newly inserted inline code.
  const policyScript=`window.initialClassic=true;window.tryInline=()=>{const node=document.createElement('script');node.textContent='window.unadmittedInline=true';document.head.appendChild(node);return window.unadmittedInline===true;};window.tryEval=()=>{try{new Function('return 1')();return true;}catch{return false;}};window.evalAllowed=window.tryEval();window.removePolicy=()=>document.querySelector('meta[data-af="script-policy"]').remove();`;

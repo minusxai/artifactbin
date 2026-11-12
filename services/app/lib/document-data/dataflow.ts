@@ -2,14 +2,11 @@ import { type ArtifactRow, getArtifactFor, getLinkReadableArtifact, childrenTabl
 import { writerFor } from '@/lib/artifact-access';
 import { datasetReadAccess, datasetView, sqlRefusal } from '@/lib/dataset-permissions';
 import { ANONYMOUS_ACTOR, type AccessActor } from '@/lib/accounts';
-import { type DocumentQuerySourceMode } from '../datasets';
-import { type PersonCard } from '@artifactbin/contracts';
-import { type ImportTables } from '@/lib/dataflow';
-import { people, catalogOf, importedRows, importedTables, type CatalogRowView } from '@/lib/datasets';
-import { getDb } from '../platform';
+import type { Row, DatasetColumn } from '@artifactbin/contracts';
+import { catalogOf, importedRows, importedTables, type CatalogRowView } from '@/lib/datasets';
 
-type RefData = {tables:ImportTables[string];catalog?:import('@/lib/datasets').DatasetCatalog;view?:CatalogRowView|null};
-type DatasetResolver = (id:string,mode?:DocumentQuerySourceMode)=>Promise<RefData|null>;
+type RefData = {tables:Record<string,{rows:Row[];columns:DatasetColumn[]}>;catalog?:import('@/lib/datasets').DatasetCatalog;view?:CatalogRowView|null};
+type DatasetResolver = (id:string,mode?:'import'|'catalog'|'verify')=>Promise<RefData|null>;
 
 /**
  * A resolved ref row → its data, under the viewer whose run this is. A document's queries are SQL over these rows
@@ -37,12 +34,6 @@ async function tableForRef(r: ArtifactRow | null, viewer: AccessActor | null, lo
     if(view)for(const table of importedTables(view.catalog(catalog))){const loaded=tables[table.name];if(loaded)tables[table.name]={rows:view.rows(table,loaded.rows),columns:table.columns};}
     return { tables, catalog, view };
   } catch { return null; } // the query reports the missing table
-}
-
-/** A native reader may request its own person card, never arbitrary identities. */
-export async function nameablePeople(_row:ArtifactRow,viewer:AccessActor|null,ids?:string[]):Promise<Record<string,PersonCard>> {
- const id=viewer?.userId;
- return id&&(!ids||ids.includes(id))?people(await getDb(),[id]):{};
 }
 
 /** A bearer/session actor's scope — the editor running a DRAFT's queries. Reach and viewer are the same person here. */

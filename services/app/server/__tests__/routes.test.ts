@@ -6,7 +6,7 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { Hono } from 'hono';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { mountRoutes } from '../api';
 import { createAppServer } from '../app';
 import { ROUTES } from '../routes.generated';
@@ -17,7 +17,6 @@ import {createGroup} from '@/lib/groups';
 import {admitGroupMember} from '@/__tests__/harness';
 import { useAppHarness } from '@/__tests__/harness';
 
-vi.mock('@/lib/page-operations', async original => ({ ...await original<typeof import('@/lib/page-operations')>(), compilePageBackend: async (source: string) => ({ typeDefs: 'type Query { value: String }', compiled: source, secretBindings: ['TOKEN'], secretHosts: { TOKEN: 'api.example.com' } }) }));
 useAppHarness();
 
 describe('the route table', () => {

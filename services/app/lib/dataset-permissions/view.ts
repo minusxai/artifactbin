@@ -143,9 +143,7 @@ export function keptRows(rows: readonly Row[], columns: readonly string[], permi
 }
 
 /** Does a rule's filter admit this one row, as the role view reads a filter (TRUE only, fail closed)? */
-export function filterAdmits(filter: DatasetBoolExp, columns: readonly string[], row: Row, session: DatasetSession): boolean {
-  return keptRows([row], columns, { columns: '*', filter }, session).length === 1;
-}
+
 
 /**
  * The columns a door adds to stored rows, never stored or declared (the page GraphQL row ID): a column list

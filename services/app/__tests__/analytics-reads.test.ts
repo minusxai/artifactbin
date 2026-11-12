@@ -77,7 +77,7 @@ describe('read events', () => {
     expect(await expectEvent(doc.id, 'view')).toMatchObject({ user_id: owner.id });
   });
 
-  it('the export route logs export; the SSE connect logs sse_connect once', async () => {
+  it('the export route logs export; the SSE connect emits no telemetry', async () => {
     const t = await mintToken('public-reader-owner');
     const doc = await create(t.token, { html: nativeHtml('<p>x</p>'), visibility: 'public' });
 
@@ -86,8 +86,8 @@ describe('read events', () => {
 
     const res = await eventsRoute(request(`/a/${doc.id}/events`), params({ id: doc.id }));
     expect(res.status).toBe(200);
-    await expectEvent(doc.id, 'sse_connect');
     await res.body?.cancel();
-    expect((await eventRows(doc.id)).filter((r) => r.event === 'sse_connect')).toHaveLength(1);
+    await settle();
+    expect((await eventRows(doc.id)).filter((r) => r.event !== 'create' && r.event !== 'export')).toEqual([]);
   });
 });

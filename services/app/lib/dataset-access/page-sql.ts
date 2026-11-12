@@ -1,9 +1,8 @@
 /**
- * A PAGE'S `_sql`: one read-only statement over the datasets the page VERSION links, as the reader, on the SQL
+ * A PAGE'S SQL READ: one read-only statement over the datasets the page VERSION links, as the reader, on the SQL
  * service (lib/datasets `executeMounted`). The links are the ones the request already loaded for the page's dataset
- * roots (`loadPageDatasets`): the same page audience rule, pinned revisions and read fences, so `_sql` never reads
- * more than the reader's GraphQL reads. A single-table dataset is the table `<link>`; a multi-table one is
- * `<link>.<table>`; every table carries `_id`, the row's GraphQL id. Each table is the role view's: hidden columns
+ * links: the page audience rule, pinned revisions and read fences apply to every read. A single-table dataset is the table `<link>`; a multi-table one is
+ * `<link>.<table>`; every table carries `_id`, the stable row id. Each table is the role view's: hidden columns
  * absent, the rule's filter and limit applied, tables the role cannot select absent.
  *
  * SQL can aggregate, so only the links the SQL text names are mounted, and a mounted table whose rule for the reader
@@ -14,7 +13,7 @@
  * Mounts are keyed by content (object, columns, row IDs, role view), so repeated reads of unchanged rows under one
  * view answer from the engine's prepared database: a live refetch after an unrelated write costs one query.
  */
-import { GraphQLError } from 'graphql';
+import { DatasetAccessError } from './errors';
 import { SQL_READ_LIMITS, type ColumnType, type DatasetColumn, type Scalar } from '@artifactbin/contracts';
 import { CatalogQueryFailure, executeMounted, selectSqlLinks, type CatalogMount } from '@/lib/datasets';
 import { sqlRefusalMessage } from '@/lib/dataset-permissions';
@@ -26,7 +25,7 @@ export interface SqlLinkedDataset { link: string; snapshot: DatasetSnapshot | nu
 export interface PageSqlCall { sql: string; params: Readonly<Record<string, Scalar>> }
 export interface PageSqlAnswer { columns: Array<{ name: string; type: ColumnType }>; rows: Array<Record<string, unknown>> }
 
-const refuse = (code: string, message: string): never => { throw new GraphQLError(message, { extensions: { code } }); };
+const refuse = (code: string, message: string): never => { throw new DatasetAccessError(message, { extensions: { code } }); };
 
 /** The reader's tables of the links the statement names, refused whole when one may not run SQL. */
 export function pageSqlMounts(loaded: readonly SqlLinkedDataset[], selected: ReadonlySet<string>, authorize = true): CatalogMount[] {

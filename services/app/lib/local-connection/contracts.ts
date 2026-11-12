@@ -10,7 +10,6 @@ export interface LinkedDocument {
  sourceDigest:string;
 }
 export type LocalConnectionState='offline'|'connecting'|'connected'|'signin-required'|'permission-required'|'blocked'|'stale'|'unavailable'|'unknown-outcome';
-export interface LocalOperation {query:string;variables?:Record<string,unknown>;operationName?:string;operation?:'query'|'mutation'}
 export interface ConnectionAdmission {identity:LinkedDocument;actor:string;role:string;authenticated?:boolean}
 export interface ConnectionGrant {readOnly:true;capability:string;expires:number;role:string;authenticated:boolean}
 export interface ConnectionAuthority {
@@ -35,7 +34,6 @@ export interface LocalConnection {
  retry():void;
  disconnect():void;
  dispose():void;
- request(operation:LocalOperation):Promise<unknown>;
 }
 /** Current readable remote head metadata. Observation grants no execution authority. */
 export interface SourceObservation {remoteDigest:string;remoteRevision:string}

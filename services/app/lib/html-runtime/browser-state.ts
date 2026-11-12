@@ -1,7 +1,7 @@
 /**
  * `@afbin/state` (/af/state.js): `import {state} from '@afbin/state'` is a Zustand vanilla store for this viewer's
  * saved page state (./state-store, ./page-state). It owns the page's one local-state document: `@afbin/apollo` imports
- * this module for its StatePort (the build marks `./browser-state` external, as `@afbin/state`), so `gql` local fields
+ * this module for its StatePort (the build marks `./browser-state` external, as `@afbin/state`), so comment views
  * and `state` are the same values. Loaded only when a page (or `@afbin/apollo`) imports it; never part of the reader.
  */
 import type { StoreReceipt } from './apollo/apollo-contracts';

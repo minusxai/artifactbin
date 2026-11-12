@@ -10,7 +10,7 @@
  *   2. A and B type at once and converge, and each status goes `pending` → `synced`;
  *   3. latency: A types 20 marker characters, each timed from the key to the character in B's textarea (p50/p95
  *      logged, p95 > 1000 ms fails);
- *   4. a GraphQL write of the cell (the owner's bearer, through the page) while B has unsaved typing: both open pages
+ *   4. a SQL write of the cell (the owner's bearer, through the page) while B has unsaved typing: both open pages
  *      show the write merged with the typing, and the next save keeps both;
  *   5. both leave: the typing is saved as the cell's value through the dataset, and the signed-out reader, reloading,
  *      reads exactly it;
@@ -59,10 +59,10 @@ const page = (datasetId) => `<!doctype html><html><head><title>Tracker</title>
 <body style="padding:40px;font:18px/1.5 sans-serif"><h1>Tracker</h1>
 <textarea id="description" rows="5" cols="70">Offline default</textarea><p>Status: <output id="status">loading</output></p>
 <script type="module">
-import {client,gql} from '@afbin/apollo';
+import {sql} from '@afbin/apollo';
 import {collab} from '@afbin/collab';
 // Offline (a downloaded copy) the read fails and the field keeps its default; the cell is read-only there.
-let row=null;try{row=(await client.query({query:gql\`{ tasks(where:{title:{_eq:"Login"}}) { _id description } }\`})).data.tasks[0];}catch{}
+let row=null;try{row=(await sql\`select _id, description from tasks where title = 'Login'\`)[0];}catch{}
 const field=document.getElementById('description'), status=document.getElementById('status');
 if(row)field.value=row.description??'';
 const text=collab.text('tasks',row?._id??'r_offline','description');
@@ -98,8 +98,8 @@ const api = async (path, init = {}) => {
   if (!response.ok) throw new Error(`${init.method ?? 'GET'} ${path} → ${response.status} ${JSON.stringify(body)}`);
   return body;
 };
-const gql = (query, variables = {}) => api(`/api/artifacts/${pageId}/graphql`, { method: 'POST', body: JSON.stringify({ query, variables, revision: '1' }), headers: { 'idempotency-key': randomUUID().replaceAll('-', '') } });
-const stored = async () => (await gql('query($id: ID!) { tasks_by_pk(_id: $id) { description } }', { id: rowId })).data?.tasks_by_pk?.description;
+const sql = (sql, params = {}) => api(`/api/artifacts/${pageId}/sql`, { method: 'POST', body: JSON.stringify({ sql, params, revision: '1' }), headers: { 'idempotency-key': randomUUID().replaceAll('-', '') } });
+const stored = async () => (await sql('select description from tasks where _id = $id', { id: rowId })).rows?.[0]?.description;
 
 try {
   await section('setup: a dataset with a collaborative column, a tracker page binding it, two accounts and a reader', async () => {
@@ -111,7 +111,7 @@ try {
     check(saved.saved === true && /Typed live together/.test(saved.readBack), 'the owner made `description` collaborative (the read-back says so)');
     ({ id: pageId } = await api('/api/artifacts', { method: 'POST', body: JSON.stringify({ html: page(datasetId), title: 'Tracker', visibility: 'public' }), headers: { 'idempotency-key': randomUUID() } }));
     // The first task by title (rows come back in `_id` order, which says nothing about which is first).
-    rowId = (await gql('{ tasks(where: {title: {_eq: "Login"}}) { _id } }')).data.tasks[0]._id;
+    rowId = (await sql("select _id from tasks where title = 'Login'")).rows[0]._id;
     await Promise.all([A, B, C].map((p) => p.goto(`${BASE}/a/${pageId}`, { waitUntil: 'load' })));
     const [a, b, c] = await Promise.all([A, B, C].map((p) => documentFrame(p)));
     frames = { a, b, c };
@@ -159,14 +159,14 @@ try {
     check(at(0.95) <= 1000, `key-to-peer latency p95 ${at(0.95).toFixed(0)} ms is within 1000 ms`);
   });
 
-  await section('a GraphQL write during live typing keeps both', async () => {
+  await section('a SQL write during live typing keeps both', async () => {
     const before = await stored();
     check(before === 'Fix the login bug', `nothing typed is saved yet (${JSON.stringify(before)})`);
     await atEnd(b, B);
     await B.keyboard.type(' unsaved-B');
     await both([a, b], 'unsaved-B');
-    const written = await gql('mutation($id: ID!) { update_tasks_by_pk(pk_columns: {_id: $id}, _set: {description: "Fix the signup bug"}) { description } }', { id: rowId });
-    check(!written.errors?.length, `the owner's GraphQL write landed (${JSON.stringify(written.errors ?? [])})`);
+    const written = await sql("update tasks set description = 'Fix the signup bug' where _id = $id", { id: rowId });
+    check(!written.error, `the owner's SQL write landed (${JSON.stringify(written.error ?? null)})`);
     const [atA, atB] = await both([a, b], 'signup', 'unsaved-B', 'alpha-A');
     check(atA?.includes('signup') && !atA.includes('login') && atA.includes('unsaved-B') && atA.includes('bravo-B'), `the open pages show the write merged with everyone's typing (${JSON.stringify(atA)})`);
     check(atB === atA, 'both open pages agree');
