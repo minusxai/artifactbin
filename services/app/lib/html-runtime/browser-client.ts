@@ -5,8 +5,6 @@ import {RemoteUnreachable} from './apollo/apollo-contracts';
 import {offlineSqlNoData} from './portable-chrome-contract';
 import {createDomainSql} from './domain-reads';
 export {startFrameBridge,onResolverChange,remoteReadOnly,uploadFile,watchUploadContext,bindFileUpload} from './browser-reader';
-// Names live pages still call (onResolverChange's old name); isolated with their deletion rule in legacy-page-names.
-export * from './legacy-page-names';
 export {gql};
 /** One statement over the page's dataset links as the reader (./apollo/sql): `${…}` values are always bound parameters. */
 /**

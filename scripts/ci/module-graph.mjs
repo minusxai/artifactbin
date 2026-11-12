@@ -144,7 +144,6 @@ const BUNDLED_IMPORTERS = [
 
   'services/app/lib/libraries/index.ts',
   'services/app/lib/local-connection/read-backend.ts',
-  'services/app/lib/mermaid-images/mermaid-render.ts',
 
   'services/app/lib/html-systems/story-systems.ts',
   'services/app/lib/html-systems/story-themes.ts',
@@ -152,12 +151,11 @@ const BUNDLED_IMPORTERS = [
   'services/app/lib/html-components/table-comparison.ts',
 
   'services/app/lib/validation/atlas-schemas.ts',
-  'services/app/lib/viz/deck-engine-core.ts',
   'services/app/lib/viz/geo-assets.ts',
   'services/app/lib/viz/theme.ts',
 ];
 const BUNDLED_LEAVES = {
-  'lib/html-component-specs': ['boundary-ids', 'comparison', 'deck-spec', 'isometric-spec', 'mermaid-source'],
+  'lib/html-component-specs': ['boundary-ids', 'comparison', 'isometric-spec'],
   'lib/ui-runtime': ['dialog-shell', 'file-display', 'person-face', 'popper', 'popup-dismiss', 'tooltip-core', 'trusted-overlay-host', 'trusted-portal', 'trusted-ui-styles'],
   'lib/html-reader': ['anchor', 'anchor-restore', 'ast-path', 'contract', 'document-endpoint', 'document-sources', 'edit-bar', 'follow-version', 'frame-bridge/parent', 'frame-markup', 'frame-navigation', 'frame-session', 'frame-src', 'host-comments-contract', 'reader-mode', 'reload'],
   'lib/annotations': ['comment-folds', 'markdown-lite', 'pages', 'region-comment', 'remote-reply', 'session-mentions'],
@@ -184,15 +182,12 @@ const BUNDLED_LEAVES = {
   ],
   'lib/local-connection': ['broker', 'browser', 'contracts', 'read-backend'],
   'lib/markdown': ['content', 'code-block'],
-  'lib/mermaid-images': ['reader-draw'],
   'lib/page-operations': ['namespaces'],
   'lib/skills': ['agent-discovery', 'setup-instructions'],
   'lib/html-systems': ['story-systems', 'story-themes', ],
   'lib/story-ui': [
     'comment-target', ],
   'lib/validation': [ 'html-system-modes', 'story-system-names', 'story-theme-names'],
-  'lib/viz': [
-    'deck-engine-core', ],
   'lib/workspace': ['artifact-starters', 'breadcrumb', 'visibility-icons'],
 };
 // Declared leaves are reviewed public entries: any importer may use them (`leavesForAll`), so a light caller never has to

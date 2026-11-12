@@ -28,7 +28,6 @@
   "services/app/lib/__tests__/native-author-skill.test.ts",
   "services/app/lib/__tests__/retired-names.test.ts",
   "services/app/lib/html-runtime/__tests__/built-watch.test.ts",
-  "services/app/lib/html-runtime/__tests__/region-editor-budget.test.ts",
   "services/app/lib/live-regions/__tests__/region-doc-guard.test.ts",
   "services/app/lib/operations/__tests__/coverage.test.ts",
   "services/app/lib/operations/__tests__/registry.test.ts",
