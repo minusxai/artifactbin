@@ -14,10 +14,19 @@ const cacheOf = async (path: string) => (await app.request(path)).headers.get('c
 describe('static cache headers', () => {
   it('serves the content-addressed trees immutable for a year, CORS-open', async () => {
     const hashed = storyFontManifest.app[0]!.url;
-    for (const path of [hashed, hashed.replace('/af/fonts/', '/fonts/')]) {
-      expect(await cacheOf(path), path).toContain('immutable');
+    for (const path of [hashed, hashed.replace(/\.[a-f0-9]{8}\.woff2$/, '.woff2')]) {
+      const response = await app.request(path);
+      expect(response.status, path).toBe(200);
+      expect(response.headers.get('content-type'), path).toContain('font/woff2');
+      expect(response.headers.get('cache-control'), path).toBe('public, max-age=31536000, immutable');
       expect((await app.request(path)).headers.get('access-control-allow-origin'), path).toBe('*');
     }
+  });
+
+  it('does not serve the retired root font prefix', async () => {
+    const response = await app.request(storyFontManifest.app[0]!.url.replace('/af/fonts/', '/fonts/'));
+    expect(response.status).toBe(404);
+    expect(response.headers.get('cache-control') ?? '').not.toContain('immutable');
   });
 
   it('gives the geojson a day, not a year', async () => {

@@ -40,14 +40,17 @@ it('installs every theme on /af/fonts/ names and previews them through the selec
    }
    for(const [,url] of css.matchAll(/src:\s*url\("([^"\n]+)"\)/g))expect(url).toMatch(/^\/af\/fonts\/[a-z0-9-]+\.woff2$/);
   }
-  const html='<html data-af-design-system="almanac" data-af-dark="true"><head><link data-af="design-system" rel="stylesheet" href="./design-systems/almanac.css"></head><body class="t-body">Portable type</body></html>';
+  const html='<html><head><meta name="artifactbin:design-system" content="almanac"><link rel="stylesheet" href="./design-systems/almanac.css"></head><body class="t-body">Portable type</body></html>';
   writeFileSync(path.join(installed,'index.html'),html);
   const {startPreview}=await import(/* @vite-ignore */pathToFileURL(path.join(installed,'scripts/preview-server.mjs')).href);
   const preview=await startPreview({root:installed,port:0,revisionIntervalMs:0,platformOrigin:origin.base});
   try{
    const page=await fetch(preview.url);expect(page.status).toBe(200);
    // The served page carries the platform stylesheet for its system only (the server's /af/styles.css?system=); its /af/fonts/ files come from the selected server, served from the preview's own origin.
-   const served=await page.text(),platform=/<style data-af="platform-styles">([\s\S]*?)<\/style>/.exec(served)![1]!;
+   const served=await page.text();
+   expect(served).toContain('<meta name="artifactbin:design-system" content="almanac">');
+   expect(served).toContain('<style data-af="platform-styles">');
+   const platform=/<style data-af="platform-styles">([\s\S]*?)<\/style>/.exec(served)![1]!;
    expect(platform).toContain(':root[data-af-design-system="almanac"]');expect(platform).not.toContain('data-af-design-system="redline"');
    expect(origin.requests).toContain('/af/styles.css?system=almanac');
    const hosted=/src: url\("(\/af\/fonts\/[^"]+)"\)/.exec(platform)![1]!,hostedFont=await fetch(new URL(hosted,preview.url));

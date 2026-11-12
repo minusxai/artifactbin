@@ -63,9 +63,10 @@ it('sets up the team task tracker in one call: every feature, its dataset, rules
   expect(result).toMatchObject({kind:'tracker',preset:'tasks',features:['own-rows','team','collab','table'],
    created:['index.html','steps.mjs','guest.mjs','cleanup.mjs','entries.csv'],kept:[],
    datasets:{entries:{id:'DATA0001',rows:0,reused:false}}});
-  // One create (the header, named entries), the own-rows template, then the team and collab rules on top.
+  // One create (the entries header), the own-rows template, then the team and collab rules on top.
   expect(p.calls.map(c=>c.method+' '+c.path)).toEqual(['POST /api/artifacts','GET /api/artifacts/DATA0001/policy/templates','PUT /api/artifacts/DATA0001/policy','GET /api/artifacts/DATA0001/policy','PUT /api/artifacts/DATA0001/policy']);
-  expect(p.calls[0]!.body).toMatchObject({title:'Launch tasks entries',name:'entries',dataset:'name,grp,note,created_by,description\n'});
+  expect(p.calls[0]!.body).toMatchObject({title:'Launch tasks entries',dataset:'name,grp,note,created_by,description\n'});
+  expect(p.calls[0]!.body).not.toHaveProperty('name');
   const table=p.calls[4]!.body.policy.tables[0];
   expect(table.collaborative_columns).toEqual(['description']);
   expect(table.update_permissions.map((e:any)=>[e.role,e.permission.filter])).toEqual([['viewer',{}],['signed_in',{created_by:{_eq:USER}}]]);
@@ -87,8 +88,10 @@ it('sets up the list preset (--kind list): own-rows only, no rule beyond the tem
   expect(await p.files()).toEqual(['cleanup.mjs','entries.csv','guest.mjs','index.html','steps.mjs']);
   expect(result).toMatchObject({kind:'list',preset:'list',features:['own-rows'],datasets:{entries:{id:'DATA0001',rows:0,reused:false}}});
   expect(p.calls.map(c=>c.method+' '+c.path)).toEqual(['POST /api/artifacts','GET /api/artifacts/DATA0001/policy/templates','PUT /api/artifacts/DATA0001/policy']);
-  expect(p.calls[0]!.body).toMatchObject({title:'Riverside cleanup entries',name:'entries',dataset:'name,grp,note,created_by\n',columns:[{name:'name'},{name:'grp'},{name:'note'},{name:'created_by'}]});
+  expect(p.calls[0]!.body).toMatchObject({title:'Riverside cleanup entries',dataset:'name,grp,note,created_by\n',columns:[{name:'name'},{name:'grp'},{name:'note'},{name:'created_by'}]});
+  expect(p.calls[0]!.body).not.toHaveProperty('name');
   const html=await readFile(path.join(p.dir,'index.html'),'utf8');
+  expect(html).toContain('data-af-name="entries"');expect(html).toContain('href="ref:DATA0001"');
   expect(html).toContain("kicker: '[Event · dates]'");expect(html).toContain("groups: ['[First choice]', '[Second choice]', '[Third choice]']");
   expect(html).not.toMatch(/af-resolver|@afbin\/collab|@afbin\/data-table|@(?:feature|only) (?:team|collab|table)\b/);
   expect(html).toMatch(/<p id="signin" hidden>/);
