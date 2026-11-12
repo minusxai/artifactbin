@@ -84,3 +84,8 @@ This repository has no request proxy or rate-limit policy: put your own TLS prox
 
 Read [AGENTS.md](AGENTS.md): it holds the checks (`npm run validate`, `npm test -- --files <paths>`) and the rules.
 Open pull requests against `main`.
+
+Named default connections use the same setting with an envelope: `{"default":{...},"connections":{"analytics":{...}}}`.
+Each value is a connector configuration. A page or agent selects one with `default:analytics:database`; a plain
+`default:database` keeps using the default connector. Each query runs on one connector as the signed-in reader;
+credentials stay in the install settings. Names are operator-defined, lowercase, and at most 32 characters.
