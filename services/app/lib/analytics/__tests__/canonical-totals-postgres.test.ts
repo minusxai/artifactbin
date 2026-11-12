@@ -1,33 +1,47 @@
-/** Real READ COMMITTED overlap proof. ANALYTICS_TEST_DATABASE_URL must name a disposable database;
- * this suite creates and drops only its canonical derived tables and configured events schema.
+/** Real READ COMMITTED overlap proof on a test-owned disposable PostgreSQL 17 container.
+ * The integration lane provisions the image; missing Docker or startup failures fail this suite.
  * PGLite's serialized connection cannot exercise a fold waiting behind another connection's lock. */
 // harness-exempt: this suite owns a disposable PostgreSQL database, never the app harness database
+import { execFileSync } from 'node:child_process';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { Pool } from 'pg';
 import { createEvents, ensureEventsSchema } from '@artifactbin/events/local';
 import { EVENTS_SCHEMA, PostgresDb, SCHEMA_STATEMENTS, envelope, type Db } from '@/lib/platform';
 import { canonicalViewTotals } from '../view-totals';
 
-const database = process.env.ANALYTICS_TEST_DATABASE_URL;
 const barrier = () => {
   let resolve!: () => void;
   const promise = new Promise<void>(r => { resolve = r; });
   return { promise, resolve };
 };
 
-describe.skipIf(!database)('canonical folds over independent PostgreSQL connections', () => {
+describe('canonical folds over independent PostgreSQL connections', () => {
+  let container = '';
   let pool: Pool;
   let db: Db;
   beforeAll(async () => {
-    pool = new Pool({ connectionString: database, max: 8 });
+    container = execFileSync('docker', ['run', '--rm', '-d', '-e', 'POSTGRES_PASSWORD=pw',
+      '-p', '127.0.0.1::5432', 'postgres:17-alpine'], { encoding: 'utf8' }).trim();
+    const port = Number(execFileSync('docker', ['port', container, '5432/tcp'], { encoding: 'utf8' })
+      .trim().split('\n')[0]!.split(':').at(-1));
+    pool = new Pool({ host: '127.0.0.1', port, user: 'postgres', password: 'pw', database: 'postgres', max: 8,
+      connectionTimeoutMillis: 1_000 });
+    for (let attempt = 0; ; attempt++) {
+      try { await pool.query('SELECT 1'); break; }
+      catch (error) {
+        if (attempt >= 120) throw error;
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
     db = new PostgresDb(pool as unknown as ConstructorParameters<typeof PostgresDb>[0]);
     for (const statement of SCHEMA_STATEMENTS.filter(sql => /^CREATE TABLE IF NOT EXISTS canonical_view_/.test(sql))) await db.query(statement);
     await ensureEventsSchema(db, EVENTS_SCHEMA);
-  });
+  }, 120_000);
   afterAll(async () => {
-    if (!pool) return;
-    await pool.query(`DROP TABLE IF EXISTS canonical_view_visitors,canonical_view_totals; DROP SCHEMA IF EXISTS ${EVENTS_SCHEMA} CASCADE`);
-    await pool.end();
+    try { await pool?.end(); }
+    finally {
+      if (container) execFileSync('docker', ['rm', '-f', container], { stdio: 'ignore' });
+    }
   });
 
   it('waits in sorted artifact order, then folds the new snapshot including late appends exactly once', async () => {

@@ -43,10 +43,10 @@ const API_MOCKING = leaking(API_INCLUDE, API_EXCLUDE);
 
 const NODE_INCLUDE = ['services/app/lib/html-components/**/*.test.ts', 'services/app/lib/**/__tests__/**/*.test.{ts,tsx}', 'services/app/components/**/__tests__/**/*.test.{ts,tsx}', 'evals/**/__tests__/**/*.test.{ts,tsx}', 'services/{contracts,utils,sql,browser,auth,events,connectors}/**/__tests__/**/*.test.{ts,tsx}', 'scripts/**/__tests__/**/*.test.mjs'];
 /**
- * The authorization lock order across two real Postgres connections and the split-role grants: `integration` only,
+ * Canonical analytics folds, authorization lock order across independent Postgres connections and split-role grants: `integration` only,
  * as the Docker proofs are.
  */
-const REAL_DATABASE_TESTS = ['services/connectors/__tests__/connectors-docker.test.ts', 'services/app/lib/artifact-access/__tests__/lock-order-postgres.test.ts', 'services/app/lib/platform/__tests__/identity-roles-postgres.test.ts'];
+const REAL_DATABASE_TESTS = ['services/app/lib/analytics/__tests__/canonical-totals-postgres.test.ts', 'services/connectors/__tests__/connectors-docker.test.ts', 'services/app/lib/artifact-access/__tests__/lock-order-postgres.test.ts', 'services/app/lib/platform/__tests__/identity-roles-postgres.test.ts'];
 /** Real Chromium (the browser contract, internal asset rendering, render lifecycle, session pages): `integration` only. */
 const CHROMIUM_TESTS = chromiumTests(import.meta.dirname, NODE_INCLUDE);
 
@@ -142,10 +142,10 @@ export default defineConfig({
       },
       {
         // Heavy, environment-dependent tests: a disposable Dockerised Postgres
-        // (guarded by `describe.skipIf` on `docker image inspect postgres:17-alpine`) and a real headless
+        // (the analytics proof requires Docker; older suites skip without their image) and a real headless
         // Chromium (browser contract and internal asset rendering). Kept
         // out of the default `npm test` for a fast inner loop; CI runs this
-        // project in the `node` job, which already provisions both (see
+        // project in the `integration` job, which already provisions both (see
         // .github/workflows/ci.yml). Same shape as `node` — node env, root
         // env/globalSetup via `extends`, the shared setup file — so the moved
         // tests behave identically; only the include set differs.
