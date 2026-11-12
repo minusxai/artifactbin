@@ -110,10 +110,15 @@ it('query_resource SQL needs allow_aggregations: a flagless role reads rows by t
   }
 });
 
-it('raw, content, get_artifact and the live frame serve the role view', async () => {
+it('raw describes the role catalog; content, get_artifact and the live frame serve its rows', async () => {
   const { owner, viewer, id } = await setup();
-  sees(await (await raw(request(`/a/${id}/raw`, { token: owner.token }), params(id))).text(), true);
-  sees(await (await raw(request(`/a/${id}/raw`, { token: viewer.token }), params(id))).text(), false);
+  for (const [who, columns] of [[owner, ['name', 'team', 'salary']], [viewer, ['name', 'team']]] as const) {
+    const response = await raw(request(`/a/${id}/raw`, { token: who.token }), params(id));
+    expect(response.status).toBe(200);
+    const described = await response.json();
+    expect(described.catalog.tables[0].columns.map((column: {name: string}) => column.name)).toEqual(columns);
+    expect(JSON.stringify(described)).not.toMatch(/objectKey|"ada"|"bo"|"cy"/);
+  }
   sees(await (await content(request(`/api/artifacts/${id}/content`, { token: owner.token }), params(id))).text(), true);
   sees(await (await content(request(`/api/artifacts/${id}/content`, { token: viewer.token }), params(id))).text(), false);
   const get = OPERATIONS.find((o) => o.name === 'get_artifact')!;

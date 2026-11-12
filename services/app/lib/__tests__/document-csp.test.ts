@@ -33,9 +33,9 @@ describe('buildDocumentCsp', () => {
   });
 
   it('pins styles, fonts, images, media, frames and the behaviour directives', () => {
-    // The faces a document's sheets declare are the app's /af/fonts/ files, and their old /fonts/ address (the legacy table).
+    // Platform font faces use the current /af/fonts/ address.
     expect(directive(csp, 'style-src')).toBe("style-src 'self' 'unsafe-inline' https://fonts.googleapis.com");
-    expect(directive(csp, 'font-src')).toBe("font-src 'self' data: https://app.example.com/af/fonts/ https://app.example.com/fonts/ https://fonts.gstatic.com");
+    expect(directive(csp, 'font-src')).toBe("font-src 'self' data: https://app.example.com/af/fonts/ https://fonts.gstatic.com");
     expect(directive(csp, 'img-src')).toBe("img-src 'self' https: data: blob: https://app.example.com/api/users/");
     expect(directive(csp, 'media-src')).toBe("media-src 'self' https: blob:");
     // An author <iframe> frames popular providers' embed origins by default; any other host is a `csp-frame` meta.
