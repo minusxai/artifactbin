@@ -99,7 +99,7 @@ describe('dataset tier', () => {
     expect(body.error).toBe('invalid_dataset');
   });
 
-  it('serves rows as JSON at /a/<id>', async () => {
+  it('serves the catalog as JSON at /a/<id>/raw', async () => {
     const t = await mintToken('t');
     const { body } = await create(t.token, { title: 'sales', dataset: ROWS });
     const res = await serveArtifact(request(`/a/${body.id}/raw`), params({ id: body.id }));
