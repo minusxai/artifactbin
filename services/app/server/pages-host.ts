@@ -6,6 +6,8 @@
  * and every request is answered as before. Three kinds of request are decided here:
  *
  *  1. HOST `<pages host>` (the apex): nothing. It is not a document and mints no session; every path is 404.
+ *     Unless it is the app's own hostname (documents one label under the app's address, so one wildcard name and
+ *     certificate serve both): then it is the app, answered as the app, and only the hex labels under it are documents.
  *  2. HOST `<hex(id)>.<pages host>`: that document and nothing else — its standalone page at `/` (the
  *     `/raw` page under the document CSP, reader chrome off), its own doors (`/a/<id>/events`,
  *     `/events/frame`, …) and the public static runtime directories; and, anonymously, another artifact's
@@ -169,11 +171,13 @@ export function pagesHost(site: PagesSite): MiddlewareHandler {
 
   /** The apex is not a document and mints nothing. */
   const apex = (): Response => notFound();
+  /** The app's own hostname as the pages host: that host is the app, never the empty apex. */
+  const appIsApex = new URL(site.app).hostname.toLowerCase() === site.host;
 
   return async (c, next) => {
     const request = c.req.raw;
     const host = addressedHost(request);
-    if (isPagesApexHost(host, site)) return apex();
+    if (!appIsApex && isPagesApexHost(host, site)) return apex();
     const pathname = new URL(request.url).pathname;
     const origin = request.headers.get('origin');
     const hostId = idFromPagesHost(host, site);

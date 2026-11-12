@@ -271,7 +271,8 @@ export let OUTBOUND_IPS = parseOutboundIps(env('APP', 'OUTBOUND_IPS'));
 /**
  * EVERY DOCUMENT ON ITS OWN ORIGIN (lib/http/pages-origin) — the only way a document is rendered.
  * The hostname documents are served under, one label per document: `<hex(id)>.<pages host>`, and the
- * app page frames that origin. It may be a subdomain of the app's registrable domain or a domain of its
+ * app page frames that origin. It may be a subdomain of the app's registrable domain, the app's own hostname
+ * (documents one label under the app's address) or a domain of its
  * own (a separate site, recommended in production): on https the frame's `afbin_pages` cookie is
  * partitioned (SameSite=None; Partitioned), so it is kept either way — and the scheme and port are the public URL's
  * (`APP__PUBLIC_BASE_URL`), so development appends its port. A bare hostname: no scheme, port, path

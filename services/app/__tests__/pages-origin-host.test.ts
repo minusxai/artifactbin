@@ -814,6 +814,29 @@ describe('a reader\'s consent reaches the document\'s own origin with the pages 
   });
 });
 
+describe('documents on subdomains of the app\'s own address (APP__PAGES_HOST is the app\'s hostname)', () => {
+  const OWN = 'https://data.example.test';
+  const own = pagesSiteFor('data.example.test', OWN)!;
+  const serving = () => createAppServer({ indexHtml: async () => SHELL, pagesSite: own });
+
+  it('still serves the app at that address, and frames each document one label under it', async () => {
+    const w = await world();
+    const app = serving();
+    const page = await app.request(as(`${OWN}/a/${w.secret}`, w.actor, { headers: { accept: 'text/html' } }));
+    expect(page.status).toBe(200);
+    const src = new URL(/<iframe data-mx-document-frame="" src="([^"]+)"/.exec(await page.text())![1]!.replaceAll('&amp;', '&'));
+    expect(src.origin).toBe(pagesOriginFor(w.secret, own));
+    expect(src.hostname.endsWith('.data.example.test')).toBe(true);
+    expect(page.headers.get('content-security-policy')!.split('; ').find((d) => d.startsWith('frame-src'))).toBe(`frame-src 'self' https://*.data.example.test`);
+    const framed = await app.request(src.href);
+    expect(framed.status).toBe(200);
+    expect(await framed.text()).toContain('Private plan</h1>');
+    // A document's script still may not call the app's own routes with the reader's cookie.
+    const crossed = await app.request(as(`${OWN}/api/artifacts`, w.actor, { headers: { origin: src.origin } }));
+    expect(crossed.status).toBe(403);
+  });
+});
+
 describe('development on lvh.me', () => {
   it('mints a connection bound to the same-site development app (lvh.me names are loopback), and nothing else on http', async () => {
     const w = await world();
