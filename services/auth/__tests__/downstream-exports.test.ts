@@ -14,6 +14,7 @@ import {
   type LoginProviders, type OutgoingMail, type SessionInfo, type SessionStore,
 } from '@artifactbin/auth';
 import { migrateHumanAccountSchema } from '@artifactbin/auth/auth/account-migration';
+import { migrateGroupRoles } from '@artifactbin/auth/identity-store/group-role-migration';
 import { createHumanAuth, humanAuthOptions, type BetterAuthOptions, type HumanAuth, type HumanAuthOptions, type Mailer, type OidcProvider } from '@artifactbin/auth/auth/human';
 import { pgliteDialect } from '@artifactbin/auth/auth/pglite';
 import { createOAuthStore } from '@artifactbin/auth/identity/oauth';
@@ -26,7 +27,7 @@ it('exports the values the deployment imports', () => {
     authEnvNamesRead, createBearerReader, ensureAuthSchema, ensureHumanAuthSchema, IdentityNotReady, ensureIdentitySchema, identityDbOf, identityMoveStatements, internalBoundary, loginProvidersOf, loginRoutes, oauthRoutes,
     resendMailer, session, sessionStoreOf, testDomainSignInOf, migrateHumanAccountSchema, createHumanAuth, humanAuthOptions, pgliteDialect,
     createOAuthStore, DEV_OUTBOX_DEFAULT_PATH, DEV_OUTBOX_RELATIVE_PATH, MailNotConfigured, MailSendFailed, devOutboxMailer, mailerForRuntime,
-    usesDevOutbox, baseUrlOf, sessionAuthority,
+    usesDevOutbox, baseUrlOf, sessionAuthority, migrateGroupRoles,
   };
   for (const [name, value] of Object.entries(values)) expect(value, name).toBeDefined();
 });
