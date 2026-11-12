@@ -14,7 +14,7 @@
  * viewer on the server.
  */
 import { getDb } from '@/lib/platform';
-import { viewTotalsFor } from '@/lib/analytics';
+import { viewSeriesFor, viewTotalsFor } from '@/lib/analytics';
 import { canAnnotate, canEdit, canRead } from '@artifactbin/contracts';
 // The hierarchy builds its own statements rather than going through the
 // row-loading seam, so every one of them names the trash gate: a trashed
@@ -24,7 +24,7 @@ import { effectiveRole, roleWithoutLink } from '@/lib/artifact-access';
 import { ANONYMOUS_ACTOR, type AccessActor } from '@/lib/accounts';
 import type { ArtifactFormat } from '@artifactbin/contracts';
 import { artifactChannel } from '@artifactbin/contracts';
-import { renderSparklineSvg, dailySeries } from '@/lib/viz';
+import { renderSparklineSvg } from '@/lib/viz';
 // The TYPED column shape (@artifactbin/contracts), not dataset-usage's loose
 // one: these columns are registered into the engine, so their types are the
 // engine's vocabulary.
@@ -139,7 +139,7 @@ export async function selectChildren(
     children.push(c);
   }
   // The numbers cost nothing for a viewer who is told none, and one aggregate over the shelf for one who is
-  // (lib/analytics/view-totals: the folded all-time counts), never a subquery per child.
+  // (lib/analytics/view-totals: the retained canonical counts), never a subquery per child.
   const views = numbers && children.length ? await viewTotalsFor(children.map((c) => c.id)) : new Map<string, number>();
   /*
    * THE SPARKLINE is the children table's alone (the Files kit draws it; the folder page's shelf shows none),
@@ -155,7 +155,7 @@ export async function selectChildren(
   let series: Promise<Map<string, number[]>> | undefined;
   const drawn = new Map<string, Promise<string>>();
   const sparkline = async (id: string): Promise<string> => {
-    series ??= viewSeries(children.map((c) => c.id));
+    series ??= viewSeriesFor(children.map((c) => c.id));
     const s = (await series).get(id) ?? new Array<number>(SPARKLINE_DAYS).fill(0);
     const key = s.join(',');
     let svg = drawn.get(key);
@@ -306,26 +306,6 @@ export async function childrenTableFor(
     });
   }
   return { rows, columns: CHILDREN_COLUMNS };
-}
-
-/**
- * Daily unique visitors per artifact, zero-filled — the same shape and the same
- * two pins the dashboard's series uses: `COUNT(DISTINCT COALESCE(visitor,
- * seq::text))` is unique PEOPLE per day, and the bucket is cut `AT TIME ZONE
- * 'UTC'` to match the JS zero-fill below (a bare `date_trunc` cuts in the
- * session timezone, and every evening west of UTC lands in the wrong day).
- */
-async function viewSeries(ids: string[], days = SPARKLINE_DAYS): Promise<Map<string, number[]>> {
-  const db = await getDb();
-  const r = await db.query<{ artifact_id: string; day: string; n: number }>(
-    `SELECT e.artifact_id, to_char(date_trunc('day', e.created_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS day,
-       COUNT(DISTINCT COALESCE(e.visitor, e.seq::text))::int AS n
-     FROM analytics_events e
-     WHERE e.artifact_id = ANY($1::text[]) AND e.event = 'view' AND e.created_at > now() - ($2::int * interval '1 day')
-     GROUP BY e.artifact_id, day`,
-    [ids, days],
-  );
-  return dailySeries(r.rows, days);
 }
 
 /**

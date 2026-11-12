@@ -1,20 +1,11 @@
-/**
- * A FOLDER'S SHELF AT VOLUME.
- *
- * A folder of 100 documents, each with a long view history, read as its page (app chrome) and as its
- * `rows` table (a document's `<Files>`):
- *  - the view counts come from the folded totals (lib/analytics/view-totals), one aggregate over the
- *    children, never a subquery per row and never a read of all-time events: the answer does not
- *    change when old events leave the table, and a view recorded since is added once;
- *  - a viewer who is told no numbers pays for none: no statement reads the view events for them;
- *  - the folder page draws no sparkline (its shelf shows none), so none travels and none is drawn;
- *  - the children table, whose `<Files>` kit does draw one, keeps it.
- */
+/** Folder access and analytics at volume: canonical counts batched across the shelf; no numbers
+ * for unauthorized readers, no eager sparkline rendering, and shared series for children tables. */
 import { describe, expect, it, vi } from 'vitest';
 import { GET as pageRoute } from '@/app/api/page/artifact/[id]/route';
 import { identityForUser, createUser, type AccessActor } from '@/lib/accounts';
 import { getArtifactById, childrenTableFor } from '@/lib/artifacts';
-import { getDb, measureQueries } from '@/lib/platform';
+import { getDb, measureQueries, EVENTS_SCHEMA } from '@/lib/platform';
+import { ensureEventsSchema } from '@artifactbin/events/local';
 import { folderPageFor } from '@/lib/workspace';
 import { mintAccountToken, request, useAppHarness } from '@/__tests__/harness';
 
@@ -41,15 +32,16 @@ async function seed(children: number) {
      FROM generate_series(1, $3::int) i`,
     [user.id, token.id, children],
   );
+  await ensureEventsSchema(db, EVENTS_SCHEMA);
   await db.query(
-    `INSERT INTO analytics_events (event, artifact_id, visitor, created_at)
-     SELECT 'view', 'fv' || lpad(i::text, 3, '0'), d || '-' || (j % (i % 7 + 2)), now() - (d || ' days')::interval
+    `INSERT INTO ${EVENTS_SCHEMA}.events (id,source,verb,object_kind,object_id,subject_id,at)
+     SELECT 'fvhist' || i || '_' || d || '_' || j, 'app','viewed','artifact', 'fv' || lpad(i::text, 3, '0'), d || '-' || (j % (i % 7 + 2)), now() - (d || ' days')::interval
      FROM generate_series(1, $1::int) i, unnest($2::int[]) d, generate_series(1, (i % 7 + 2) * 3) j`,
     [children, DAYS],
   );
   await db.query(
-    `INSERT INTO analytics_events (event, artifact_id, visitor, created_at)
-     SELECT 'view', 'fv' || lpad(i::text, 3, '0'), NULL, now() - interval '5 days' FROM generate_series(1, $1::int) i, generate_series(1, 2)`,
+    `INSERT INTO ${EVENTS_SCHEMA}.events (id,source,verb,object_kind,object_id,subject_id,at)
+     SELECT 'fvnull' || i || '_' || n, 'app','viewed','artifact', 'fv' || lpad(i::text, 3, '0'), NULL, now() - interval '5 days' FROM generate_series(1, $1::int) i, generate_series(1, 2) n`,
     [children],
   );
   return { user, token, viewer: identityForUser(user.id, token.id, user.email) };
@@ -60,26 +52,27 @@ const expectedAll = (n: number) => Object.fromEntries(Array.from({ length: n }, 
 const STRANGER = identityForUser(null, null, null);
 
 describe('the folder page at volume', () => {
-  it('counts every child\'s views from the folded totals, exactly as the raw events say', async () => {
+  it('counts every child\'s views from the canonical log, exactly as the raw events say', async () => {
     const { viewer } = await seed(100);
     const page = await folderPageFor((await getArtifactById('fvfolder'))!, viewer);
     expect(page.rows).toHaveLength(100);
     expect(viewsOf(page.rows)).toEqual(expectedAll(100));
     const db = await getDb();
     const reference = await db.query<{ id: string; views: number }>(
-      `SELECT artifact_id AS id, COUNT(DISTINCT COALESCE(visitor, seq::text))::int AS views FROM analytics_events WHERE event = 'view' GROUP BY artifact_id`,
+      `SELECT object_id AS id, SUM(n)::int AS views FROM (SELECT object_id, (at AT TIME ZONE 'UTC')::date AS day, COUNT(DISTINCT COALESCE(subject_id,id)) AS n FROM ${EVENTS_SCHEMA}.events WHERE verb='viewed' GROUP BY object_id,day) d GROUP BY object_id`,
     );
     expect(viewsOf(page.rows)).toEqual(viewsOf(reference.rows));
   });
 
-  it('does not depend on the view events that remain: closed days are folded into a total, once', async () => {
+  it('ignores retired history removal and counts newly canonical views', async () => {
     const { viewer } = await seed(40);
     const folder = (await getArtifactById('fvfolder'))!;
     expect(viewsOf((await folderPageFor(folder, viewer)).rows)).toEqual(expectedAll(40));
     const db = await getDb();
+    await db.query("INSERT INTO analytics_events (event,artifact_id,visitor,created_at) VALUES ('view',$1,'retired',now()-interval '2 days')", [childId(3)]);
     await db.query("DELETE FROM analytics_events WHERE created_at < (now() AT TIME ZONE 'UTC')::date");
     expect(viewsOf((await folderPageFor(folder, viewer)).rows)).toEqual(expectedAll(40));
-    await db.query("INSERT INTO analytics_events (event, artifact_id, visitor) VALUES ('view', $1, 'brand-new-visitor')", [childId(3)]);
+    await db.query(`INSERT INTO ${EVENTS_SCHEMA}.events (id,source,verb,object_kind,object_id,subject_id) VALUES ('new','app','viewed','artifact',$1,'brand-new-visitor')`, [childId(3)]);
     const third = viewsOf((await folderPageFor(folder, viewer)).rows);
     expect(third[childId(3)]).toBe(expectedViews(3) + 1);
     expect(third[childId(4)]).toBe(expectedViews(4));
@@ -94,8 +87,8 @@ describe('the folder page at volume', () => {
     const query = vi.spyOn(db, 'query');
     try {
       await folderPageFor((await getArtifactById('fvfolder'))!, viewer);
-      const reads = query.mock.calls.map(([sql]) => String(sql)).filter((sql) => /analytics_events/.test(sql));
-      expect(reads.filter((sql) => !sql.includes('artifact_view_totals')).map((sql) => sql.slice(0, 60))).toEqual([]);
+      const reads = query.mock.calls.map(([sql]) => String(sql)).filter((sql) => sql.includes(`FROM ${EVENTS_SCHEMA}.events`));
+      expect(reads.every(sql => !sql.includes('analytics_events'))).toBe(true);
       expect(reads).toHaveLength(1);
     } finally { query.mockRestore(); }
   });
@@ -109,7 +102,7 @@ describe('the folder page at volume', () => {
     const small = await measureQueries(() => folderPageFor(folder, viewer));
     expect(small.value.rows).toHaveLength(10);
     await seed100Again(db, viewer);
-    // The first read of a child folds its closed days into its total (one more statement, once): read, then measure.
+    // Warm the presence probe before measuring both shelf sizes.
     await folderPageFor(folder, viewer);
     const large = await measureQueries(() => folderPageFor(folder, viewer));
     expect(large.value.rows.length).toBeGreaterThan(50);
@@ -125,7 +118,7 @@ describe('the folder page at volume', () => {
       const page = await folderPageFor((await getArtifactById('fvfolder'))!, STRANGER);
       expect(page.rows).toHaveLength(30);
       for (const row of page.rows) expect(row).not.toHaveProperty('views');
-      expect(query.mock.calls.map(([sql]) => String(sql)).filter((sql) => /analytics_events/.test(sql))).toEqual([]);
+      expect(query.mock.calls.map(([sql]) => String(sql)).filter((sql) => sql.includes(`FROM ${EVENTS_SCHEMA}.events`))).toEqual([]);
     } finally { query.mockRestore(); }
     expect(user.id).toBeTruthy();
   });

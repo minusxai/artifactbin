@@ -388,13 +388,9 @@ const ANALYTICS_EVENTS: Table = {
 };
 
 /**
- * An artifact's all-time view count, folded: `views` is the sum of its unique daily visitors over every
- * UTC day up to and including `closed_through`. A day that has ended never gains a view (the visitor
- * key is salted with the day, and events are stamped on arrival), so each read folds the days that
- * closed since the last fold into this row once, and counts only the days after it live from
- * analytics_events (lib/analytics/view-totals). The cost of a view count is then the views of
- * the days since the last fold, not the artifact's whole history. The row is derived: deleting it
- * costs one full count at the next read and changes no answer.
+ * Retired analytics_events-derived totals, retained with their source records for explicit migration.
+ * Active analytics read the canonical events log and never reuse these incompatible cached totals.
+ * No boot-time deletion or backfill: older legacy-only history needs a separate migration decision.
  */
 const ARTIFACT_VIEW_TOTALS: Table = {
   name: 'artifact_view_totals',
