@@ -64,7 +64,7 @@ describe('the classifier and the allowlists that derive from it', () => {
   });
 
   it('lets an owner host load the reader\'s part only', () => {
-    for (const p of ['/af/apollo.js', '/af/reader.js', '/af/styles.css', '/af/components/tabs.js', '/af/fonts/inter-latin-standard-normal.woff2', '/af/fonts/inter-latin-standard-normal.2c295d99.woff2', '/af/lib/vega-6.3.1/index.js', '/af/geojson/world.json', '/af/app/index-abc.css', '/favicon.ico']) expect(ownerHostServes(p), p).toBe(true);
+    for (const p of ['/af/state.js', '/af/apollo.js', '/af/reader.js', '/af/styles.css', '/af/components/tabs.js', '/af/fonts/inter-latin-standard-normal.woff2', '/af/fonts/inter-latin-standard-normal.2c295d99.woff2', '/af/lib/vega-6.3.1/index.js', '/af/geojson/world.json', '/af/app/index-abc.css', '/favicon.ico']) expect(ownerHostServes(p), p).toBe(true);
     for (const p of ['/libraries/vega-6.3.1/index.js', '/geojson/world.json', '/fonts/a.woff2', '/af/chrome.js', '/af/core.js', '/af/app/index-abc.js', '/af/v1/core.js', '/af/img/logo.png', '/assets/' + 'a'.repeat(64), '/people/u1']) expect(ownerHostServes(p), p).toBe(false);
   });
 

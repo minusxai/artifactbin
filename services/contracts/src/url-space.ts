@@ -69,7 +69,7 @@ const PUBLIC_FILE_CLASSES: readonly PublicFileClass[] = [
   { prefix: '/af/geojson/', what: 'boundary files a map fetches, `/af/geojson/<name>.json`', cache: 'day', staticDirectory: true, ownerHost: '^/af/geojson/[a-z0-9-]+\\.json$' },
   { prefix: '/af/img/', what: 'the app\'s images: logos, design-system previews', cache: 'day', staticDirectory: true, ownerHost: null },
   { prefix: '/af/v1/', what: 'pinned host, component and style builds', cache: 'immutable', staticDirectory: false, ownerHost: null },
-  { prefix: PUBLIC_FILES_PREFIX, what: 'runtime modules (`/af/<name>.js`), styles.css, import-map.json, manifest.json, host.js, host-comments.js, url-space.json', cache: 'revalidate', staticDirectory: false, ownerHost: '^/af/(?:apollo|reader)\\.js$|^/af/styles\\.css$' },
+  { prefix: PUBLIC_FILES_PREFIX, what: 'runtime modules (`/af/<name>.js`), styles.css, import-map.json, manifest.json, host.js, host-comments.js, url-space.json', cache: 'revalidate', staticDirectory: false, ownerHost: '^/af/(?:apollo|reader|state)\\.js$|^/af/styles\\.css$' },
 ];
 
 /** A short link a person clicks (from an e-mail, a mention): a GET that answers a 302/303, never JSON on success. */
