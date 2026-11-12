@@ -7,12 +7,19 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { colonParameters, connectionSummary, connectorError, connectorList, mapQualifiers, mysqlLiteral, openConnection, parseConnectionConfig, qualifierNames, type OpenConnection } from '@artifactbin/connectors';
+import { readOnlyStatement } from '../src/statement';
 import { startPgliteWire, type PgliteWire } from '@artifactbin/test-support/pglite-wire';
 
 const DEV = { allowPrivateNetwork: true }, PUBLIC = { allowPrivateNetwork: false };
 const failure = async (p: Promise<unknown>) => p.then(() => { throw Error('expected a refusal'); }, (e) => connectorError(e));
 
 describe('statement rules', () => {
+  it('autocommit engines reject writes behind WITH and EXPLAIN without confusing quoted text with SQL', () => {
+    for (const text of ['WITH x AS (SELECT 1) DELETE FROM orders', 'EXPLAIN INSERT INTO orders VALUES (1)', 'WITH x AS (SELECT 1) UPDATE orders SET n=2']) {
+      expect(() => readOnlyStatement('mysql', text, true)).toThrow(/read/);
+    }
+    expect(() => readOnlyStatement('mysql', "WITH x AS (SELECT 'delete' AS label) SELECT * FROM x", true)).not.toThrow();
+  });
   it('maps a page link qualifier to its namespace, quoted, or removes it; nothing inside literals, quotes or comments', () => {
     const map = new Map([['wh', 'sales'], ['raw', '']]);
     expect(mapQualifiers('postgres', 'select * from wh.orders o join raw.items i on i.o = o.id', map)).toBe('select * from "sales".orders o join items i on i.o = o.id');
