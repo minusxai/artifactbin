@@ -14,7 +14,6 @@ beforeEach(async () => {
   headers.set('user-agent', 'Mozilla/5.0 (test)');
   const db = await harness.db();
   await ensureEventsSchema(db, EVENTS_SCHEMA);
-  await db.query(`DELETE FROM ${EVENTS_SCHEMA}.events`);
   setServices({ events: createEvents({ db, schema: EVENTS_SCHEMA }) });
 });
 afterAll(() => setServices({ events: previous }));

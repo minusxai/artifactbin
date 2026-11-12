@@ -329,7 +329,21 @@ it('keeps a live dataset\'s rules to "who may run declared queries", and every s
   expect([replaced.status, (await replaced.json()).error]).toEqual([400, 'live_dataset_connection']);
   const fork = await forkArtifact(alice.actor, row, {});
   expect(fork instanceof Response ? [fork.status, (await fork.json()).error] : 'forked').toEqual([400, 'not_forkable']);
-  expect((await publish(alice, { connection: config(), name: 'shop_api' })).status).toBe(400);
+});
+
+it('ignores retired GraphQL naming metadata without granting live query access', async () => {
+  const { alice, bob } = await people();
+  const created = await createLive(alice, { name: 'shop_api' });
+  expect(created.status).toBe(201);
+  const id = created.body.id;
+  const row = (await getArtifactById(id))!;
+  expect(row.meta).not.toHaveProperty('name');
+  expect(row.dataset_policy).toBeNull();
+  await updateSharingFor(alice.actor, id, { shares: [{ email: bob.email!, role: 'viewer' }] });
+  expect((await call(queryPost as never, `/api/artifacts/${id}/query`, id, bob, { method: 'POST', json: { sql: 'select * from sales.orders' } })).status).toBe(403);
+  const page = await publish(alice, { html: PAGE(id, MINE), visibility: 'public' });
+  expect(page.status).toBe(201);
+  expect((await door(page.body.id, bob, { query: 'mine', params: { min: 0 } })).status).toBe(403);
 });
 
 it('lets a group own a live dataset (its editors change and query it), and keeps the secret out of the creation ledger', async () => {
