@@ -15,8 +15,7 @@ const SSE_HEADERS = {
    * is what the reader is looking at — so its origin is "null" and its own
    * stream is a cross-origin request to it.
    *
-   * Safe for exactly the reason the query endpoint's is (app/a/[id]/query):
-   * an opaque-origin request carries NO cookies, so this answers it as a
+   * An opaque-origin request carries NO cookies, so this answers it as a
    * stranger — a public document streams, a private one is the uniform 404
    * — and `*` cannot hand a third-party site anything it could not fetch
    * for itself anyway. The owner's page, being same-origin, is unaffected.

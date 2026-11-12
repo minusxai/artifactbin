@@ -3,7 +3,6 @@ import {isTimestamp} from '@artifactbin/utils/shape';
 import type {ColumnType,DatasetColumn} from './dataset-shape';
 export type Scalar=string|number|boolean|null;
 export type Row=Record<string,unknown>;
-export const DECL_NAME_RE=/^[A-Za-z_]\w*$/;
 const DATE_RE=/^\d{4}-\d{2}-\d{2}([T ].*)?$/;
 export interface TableResult {
   rows: Row[];

@@ -55,7 +55,6 @@ export * from './artifact-format';
 export * from './live-channels';
 export { BASEMAP_PATH } from './basemap';
 export * from './url-space';
-export { MAX_PEOPLE_IDS } from './query-request';
 export * from './sign-in-required';
 
 export * from './agent-guidance';

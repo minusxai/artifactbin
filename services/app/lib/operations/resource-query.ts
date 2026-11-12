@@ -5,7 +5,7 @@ import type { AccessActor } from '@/lib/accounts';
 import {catalogOf, executeCatalog, DatasetError, liveConnectionOf} from '../datasets';
 import {liveDatasetSql} from '@/lib/live-datasets';
 import {datasetReadAccess, datasetView, sqlRefusal, sqlRefusalMessage, viewCatalog} from '../dataset-permissions';
-import {json, parseQueryRequest} from '../http';
+import {json, parseScalarValues} from '../http';
 import type {TableResult} from '@artifactbin/contracts';
 import {REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts';
 
@@ -13,7 +13,7 @@ import {REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts';
 async function queryResource(actor:AccessActor,id:string,body:Record<string,unknown>,signal?:AbortSignal,checkActor?:()=>Promise<void>):Promise<Response>{
  if(Object.keys(body).some(key=>!['sql','values','name','limit','cursor','refresh'].includes(key)))return json({error:'unknown_query_fields'},400);
  if(body.sql!==undefined&&(typeof body.sql!=='string'||!body.sql.trim())||body.name!==undefined&&(typeof body.name!=='string'||!body.name)||body.refresh!==undefined&&typeof body.refresh!=='boolean')return json({error:'invalid_query'},400);
- const parsed=parseQueryRequest({...(body.values===undefined?{}:{values:body.values})});if(parsed instanceof Response)return parsed;
+ const values=parseScalarValues(body.values);if(values instanceof Response)return values;
  const limit=body.limit??20;if(!Number.isInteger(limit)||Number(limit)<1||Number(limit)>100)return json({error:'invalid_limit'},400);
  await checkActor?.();
  const readable=await readableArtifact(actor,id);if(!readable)return json({error:'not_found'},404);
@@ -22,14 +22,14 @@ async function queryResource(actor:AccessActor,id:string,body:Record<string,unkn
  if(row.format==='dataset'&&liveConnectionOf(row.meta)){
   if(typeof body.sql!=='string')return json({error:'invalid_query',hint:'A live dataset is read with SQL in its database\'s dialect (sql); its tables: GET /api/artifacts/ID/connection/schema.'},400);
   if(body.cursor!==undefined)return json({error:'invalid_cursor',hint:'A live dataset answers every row at once (up to its row limit): page with LIMIT and OFFSET in the SQL.'},400);
-  const reply=await liveDatasetSql(actor,id,{sql:body.sql,params:parsed.values??{}},signal);
+  const reply=await liveDatasetSql(actor,id,{sql:body.sql,params:values},signal);
   if(reply.status!==200)return json(reply.body,reply.status);
   return json({results:[{id,name:'result',execution:'remote',columns:reply.body.columns,rows:reply.body.rows,next_cursor:null,...(reply.body.truncated?{truncated:true}:{})}]},200,{[REVALIDATE_ACTOR_HEADER]:'1'});
  }
  // A dataset is queried over the caller's role view (lib/dataset-permissions): the rows and columns their select rule shows.
  const decision=row.format==='dataset'?await datasetReadAccess(row,actor):null;
  if(decision&&!decision.allowed)return json({error:'not_found'},404);
- const fingerprint=createHash('sha256').update(JSON.stringify([id,state,body.sql??null,body.name??null,parsed.values??{},limit])).digest('hex');
+ const fingerprint=createHash('sha256').update(JSON.stringify([id,state,body.sql??null,body.name??null,values,limit])).digest('hex');
  let offset=0;
  if(body.cursor!==undefined){
   try{
@@ -56,13 +56,10 @@ async function queryResource(actor:AccessActor,id:string,body:Record<string,unkn
    if(body.name&&!selected||!body.sql&&!selected)return json({error:'unknown_table',hint:'Select a table with --name.',names:catalog.tables.map(table=>`${table.schema}.${table.name}`)},400);
    const quote=(value:string)=>'"'+value.replaceAll('"','""')+'"';
    const sql=typeof body.sql==='string'?body.sql:`select * from ${quote(selected!.schema)}.${quote(selected!.name)}`;
-   const table=await executeCatalog(stored,sql,parsed.values??{},{datasetId:id,view:decision?.allowed?datasetView(decision):null,limit:Number(limit)+1,offset,refresh:body.refresh===true,authorize,signal});
+   const table=await executeCatalog(stored,sql,values,{datasetId:id,view:decision?.allowed?datasetView(decision):null,limit:Number(limit)+1,offset,refresh:body.refresh===true,authorize,signal});
    await authorize();return json({results:[result(selected?`${selected.schema}.${selected.name}`:'result',table)]},200,{[REVALIDATE_ACTOR_HEADER]:'1'});
   }
-  if(body.sql!==undefined)return json({error:'invalid_query',hint:'Use --name for a declared document query; --input SQL applies to datasets.'},400);
-  if(row.format!=='folder')return json({error:'not_queryable'},400);
-  if(body.name)return json({error:'unknown_query',names:[]},400);
-  await authorize();return json({results:[]},200,{[REVALIDATE_ACTOR_HEADER]:'1'});
+  return json({error:'not_queryable'},400);
  }catch(error){
   // The SQL validator refuses a statement with a bare Error ("Dataset SQL: …"); that is the caller's
   // statement, not a server fault, and preflight already reports it as invalid_sql. Left to escape it

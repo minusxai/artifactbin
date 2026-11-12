@@ -11,7 +11,6 @@ export { platformValues, readerZone, rowField, VIEWER, VIEWER_ID } from './built
 
 export { bindParams, bindTypes } from './compiled-flow';
 
-export { parseMutationRequest } from './mutation-request';
 
 export { LocalStateInputError, localTableOverrides, parseLocalTables } from './local-tables';
 

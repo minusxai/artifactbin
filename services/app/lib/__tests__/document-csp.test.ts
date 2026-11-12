@@ -24,7 +24,8 @@ describe('buildDocumentCsp', () => {
   it('connects to its own origin, this document\'s app-origin doors path-exact, and the module CDNs only', () => {
     const connect = directive(csp, 'connect-src')!.split(' ');
     expect(connect.slice(0, 2)).toEqual(['connect-src', "'self'"]);
-    for (const door of ['query', 'mutate', 'events', 'fetch']) expect(connect).toContain(`${APP}/a/Ab3xK9/${door}`);
+    for (const door of ['events', 'fetch']) expect(connect).toContain(`${APP}/a/Ab3xK9/${door}`);
+    for (const door of ['query', 'mutate']) expect(connect).not.toContain(`${APP}/a/Ab3xK9/${door}`);
     for (const cdn of ['https://esm.sh', 'https://cdn.jsdelivr.net', 'https://unpkg.com']) expect(connect).toContain(cdn);
     // Never the app's other routes, and never any https host.
     expect(connect).not.toContain(APP);

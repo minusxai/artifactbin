@@ -11,7 +11,6 @@ import { POST as createRoute, GET as listRoute } from '@/app/api/artifacts/route
 import { GET as getRoute } from '@/app/api/artifacts/[id]/route';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { GET as pageRoute } from '@/app/api/page/artifact/[id]/route';
-import { GET as queryRoute } from '@/app/a/[id]/query/route';
 import { GET as exportRoute } from '@/app/a/[id]/export/route';
 import { GET as frameRoute } from '@/app/a/[id]/events/frame/route';
 import { GET as versionsRoute } from '@/app/api/my/artifacts/[id]/versions/route';
@@ -28,7 +27,6 @@ import { createUser, ensureUsername } from '@/lib/accounts';
 
 useAppHarness();
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
-const q = encodeURIComponent(JSON.stringify({ values: {}, only: ['children'] }));
 
 async function trashedWorld() {
   const u = await ensureUsername(await createUser({ email: 'o@example.com' }));
@@ -72,7 +70,6 @@ describe('a trashed row is nonexistent to', () => {
     ['GET /a/:id/raw (anonymous, public doc)', (w) => rawRoute(request(`/a/${w.doc.id}/raw`), params(w.doc.id))],
     ['GET /a/:id/raw (owner session)', (w) => rawRoute(request(`/a/${w.doc.id}/raw`, { actor: w.actor }), params(w.doc.id))],
     ['GET /api/page/artifact/:id (owner session)', (w) => pageRoute(request(`/api/page/artifact/${w.doc.id}`, { actor: w.actor }), params(w.doc.id))],
-    ['GET /a/:id/query (anonymous)', (w) => queryRoute(request(`/a/${w.doc.id}/query?q=${q}`), params(w.doc.id))],
     ['GET /a/:id/export (owner token)', (w) => exportRoute(request(`/a/${w.doc.id}/export`, { token: w.token }), params(w.doc.id))],
     ['GET /a/:id/events/frame (anonymous)', (w) => frameRoute(request(`/a/${w.doc.id}/events/frame`), params(w.doc.id))],
     ['GET /api/my/artifacts/:id/versions (owner session)', (w) => versionsRoute(request(`/api/my/artifacts/${w.doc.id}/versions`, { actor: w.actor }), params(w.doc.id))],
@@ -89,12 +86,10 @@ describe('a trashed row is nonexistent to', () => {
     });
   }
 
-  it('the owner list and the folder\'s children table omit it', async () => {
+  it('the owner list omits it', async () => {
     const w = await trashedWorld();
     const list = (await (await listRoute(request('/api/artifacts', { token: w.token }))).json()) as { artifacts: Array<{ id: string }> };
     expect(list.artifacts.map((a) => a.id)).not.toContain(w.doc.id);
-    const children = (await (await queryRoute(request(`/a/${w.folder.id}/query?q=${q}`), params(w.folder.id))).json()) as { tables?: { children?: { rows: Array<{ id: string }> } } };
-    expect((children.tables?.children?.rows ?? []).map((r) => r.id)).not.toContain(w.doc.id);
   });
 
   it('the public profile listing omits it, and its pretty URL falls through to the listing', async () => {

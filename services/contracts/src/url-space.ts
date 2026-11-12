@@ -99,7 +99,7 @@ const PAGE_SPACE = {
   doors: [
     'assets', 'css', 'datasets/:datasetId/files', 'datasets/:datasetId/files/:fileId', 'datasets/:datasetId/images',
     'datasets/:datasetId/images/:imageId', 'download', 'events', 'events/authorize', 'events/frame', 'export', 'fetch',
-    'mutate', 'query', 'raw', 'resolve', 'story', 'tables', 'app/:asset',
+    'raw', 'resolve', 'story', 'tables', 'app/:asset',
   ],
 };
 

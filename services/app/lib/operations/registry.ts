@@ -558,10 +558,8 @@ const mutateDatasetOp: Operation = {
   description: 'Run one INSERT, UPDATE or DELETE against a dataset you own (selected by the path ID; SQL names a catalog table such as public.rows, scalars bound via $params in values) — append or fix rows without re-sending the whole table. The dataset must be access: readwrite. Answers the new version and how many rows were affected; documents charting the dataset update live.',
   input: {
     id: z.string(),
-    sql: z.string().optional().describe('one INSERT/UPDATE/DELETE naming a catalog table such as public.rows; bind scalars as $name, never interpolate'),
-    name: z.string().optional().describe('instead of sql: a mutation the document declares by name; the id is then the document, and args fill its signature'),
+    sql: z.string().describe('one INSERT/UPDATE/DELETE naming a catalog table such as public.rows; bind scalars as $name, never interpolate'),
     values: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).optional().describe('with sql: the $params it binds'),
-    args: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).optional().describe('with name: the declared mutation\'s arguments'),
     expectedState: z.string().regex(/^[a-f0-9]{64}$/).optional().describe('the state the operation was prepared from; refused as row_changed when the dataset moved'),
     expectedPolicyRevision: z.number().int().min(0).optional().describe('the policy_revision the operation was prepared under; refused as row_changed when the policy changed'),
   },
@@ -781,8 +779,8 @@ const refreshAssetOp: Operation = {
 };
 
 const queryResourceOp:Operation={
- name:'query_resource',title:'Query dataset rows or declared document queries',http:{method:'POST',path:'/api/artifacts/{id}/query'},
- description:'Read bounded dataset SQL or selected declared document queries, with scalar parameters and state-bound pagination. Never mutates rows. SQL needs your role\'s SQL permission (allow_aggregations in its select rule) for every table you can read (owner and editors always have it); without it, read rows by table name.',
+ name:'query_resource',title:'Query dataset rows',http:{method:'POST',path:'/api/artifacts/{id}/query'},
+ description:'Read bounded dataset SQL or named tables, with scalar parameters and state-bound pagination. Never mutates rows. SQL needs your role\'s SQL permission (allow_aggregations in its select rule) for every table you can read (owner and editors always have it); without it, read rows by table name.',
  input:{id:z.string(),sql:z.string().optional(),name:z.string().optional(),values:z.record(z.string(),z.union([z.string(),z.number(),z.boolean(),z.null()])).optional(),limit:z.number().int().min(1).max(100).optional(),cursor:z.string().optional(),refresh:z.boolean().optional()},
  annotations:{readOnly:true},example:{input:{id:'aB3xK9',limit:20}},
  errors:[NOT_FOUND,{status:400,code:'invalid_sql',fix:'the statement was refused — the message names the reason (an undeclared $parameter, a disallowed function, unsupported syntax); fix the SQL or pass the parameter in values'},{status:403,code:'permission_denied',fix:'your role\'s select rule does not allow aggregations, so SQL is refused; omit sql and pass name to read the table\'s rows, or ask the owner to allow aggregations'}],

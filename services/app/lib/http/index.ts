@@ -14,7 +14,6 @@ export {
   pagesOriginFor, pagesRequestOf, pagesSite, withoutPagesTicket,
 } from './pages-origin';
 export type { PagesSite } from './pages-origin';
-export { parseQueryRequest } from './query-request';
-export type { QueryRequest } from './query-request';
+export { parseScalarValues } from './scalar-values';
 export type { RetryOptions } from './retry';
 export { REVALIDATE, etagOf, matchingTag, notModified, publicRevalidatedResponse, revalidationHeaders, withEncoding } from './revalidation';

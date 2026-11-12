@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import {
   imageReferenceId, imageRefData,
   EMPTY_COMPILED_DATAFLOW, LocalStateInputError, localTableOverrides, NUMERIC_AGGS,
-  parseLocalTables, parseMutationRequest, platformValues, rawUrl, readerZone, rowField, scalarMatches,
+  parseLocalTables, platformValues, rawUrl, readerZone, rowField, scalarMatches,
   VIEWER, VIEWER_ID, type CompiledDataflow,
 } from '..';
 
@@ -92,30 +92,6 @@ it('localTableOverrides validates only declared inline tables', () => {
   expect(localTableOverrides(flow, { t: [{ a: 2 }, {}] })).toEqual({ t: { columns: [{ name: 'a', type: 'number' }], rows: [{ a: 2 }, { a: null }] } });
   expect(localTableOverrides(flow)).toEqual({});
   expect(() => localTableOverrides(flow, { missing: [] })).toThrow(LocalStateInputError);
-});
-
-describe('parseMutationRequest', () => {
-  it('reads the bounded wire shape', () => {
-    expect(parseMutationRequest({ mutation: 'save', args: { a: 1, b: null }, row: { id: 'x' }, value: true, tz: 'UTC' }))
-      .toEqual({ mutation: 'save', args: { a: 1, b: null }, row: { id: 'x' }, value: true, tz: 'UTC' });
-    expect(parseMutationRequest({ mutation: 'save' })).toEqual({ mutation: 'save', args: {} });
-    expect(parseMutationRequest({ mutation: 'save', operationKey: 'k'.repeat(16) })).toMatchObject({ operationKey: 'k'.repeat(16) });
-  });
-
-  it.each([
-    [{ mutation: 'save', sql: 'drop table x' }, 'unknown_mutation_fields'],
-    [{ mutation: '1bad' }, 'invalid_mutation'],
-    [{}, 'invalid_mutation'],
-    [{ mutation: 'save', operationKey: 'short' }, 'invalid_idempotency_key'],
-    [{ mutation: 'save', value: { nested: 1 } }, 'invalid_value'],
-    [{ mutation: 'save', tz: 3 }, 'invalid_tz'],
-    [{ mutation: 'save', localTables: [] }, 'invalid_local_state'],
-  ])('refuses %j with a 400', async (body, code) => {
-    const response = parseMutationRequest(body as Record<string, unknown>);
-    expect(response).toBeInstanceOf(Response);
-    expect((response as Response).status).toBe(400);
-    expect(JSON.stringify(await (response as Response).json())).toContain(code);
-  });
 });
 
 describe('reader local tables', () => {
