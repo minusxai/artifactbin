@@ -5,12 +5,12 @@ import { gettingStarted } from '@/lib/agent-copy/getting-started';
 import { CopyBlock } from '../ui/CopyBlock';
 import { LINK } from '../ui/ui';
 
-export function GettingStartedPage(): JSX.Element {
+export function GettingStartedPage(props:{backHref?:string}={}): JSX.Element {
   const deployment=useSetupDeployment();
   const guide = ()=>gettingStarted(window.location.origin,deployment());
   return <main class="workspace-page">
     <header class="border-b border-edge pb-6">
-      <a href="/docs-human" class={`text-sm ${LINK}`}>Human docs</a>
+      <a href={props.backHref??"/docs-human"} rel={props.backHref?'external':undefined} class={`text-sm ${LINK}`}>{props.backHref?'Back to setup':'Human docs'}</a>
       <div class="mt-3 flex flex-wrap items-baseline justify-between gap-3">
         <h1 class="font-sans text-3xl font-semibold tracking-tight">{guide().title}</h1>
         <a href="/llms.txt" rel="external" class={`text-sm ${LINK}`}>Markdown for agents ↗</a>
