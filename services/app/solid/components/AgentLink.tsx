@@ -3,6 +3,7 @@ import type { ArtifactDestination } from '@artifactbin/contracts';
 import { createSignal, onCleanup, Show, type JSX } from 'solid-js';
 import { Check, Copy, Loader2 } from 'lucide-solid';
 import { Button } from '../ui/Button';
+import {Textarea} from '../ui/Field';
 import { Panel } from '../ui/Panel';
 import { StatusMessage } from '../ui/StatusMessage';
 import { Tooltip } from '../ui/Tooltip';
@@ -11,9 +12,10 @@ import { copyText } from '../lib/copy-text';
 
 interface StartResponse { id: string; url: string; prompt?: string; error?: string }
 const COUNTDOWN_S = 3;
-export function AgentLink(props: { docsLink?: boolean; frame?: boolean; size?: 'panel' | 'inline'; destination?: ArtifactDestination }): JSX.Element {
+export function AgentLink(props: { docsLink?: boolean; frame?: boolean; size?: 'panel' | 'inline'; destination?: ArtifactDestination; request?:string }): JSX.Element {
   const [state, setState] = createSignal<'idle' | 'working' | 'done' | 'error'>('idle');
   const [message, setMessage] = createSignal('');
+  const [manualPrompt,setManualPrompt]=createSignal('');
   const [countdown, setCountdown] = createSignal<number | null>(null);
   let timer: ReturnType<typeof setInterval> | null = null;
   onCleanup(() => { if (timer) clearInterval(timer); });
@@ -24,13 +26,18 @@ export function AgentLink(props: { docsLink?: boolean; frame?: boolean; size?: '
       const response = await fetch('/api/start', { method: 'POST', ...(props.destination ? {headers:{'Content-Type':'application/json'},body:JSON.stringify({destination:props.destination})} : {}) });
       const body = await response.json().catch(() => ({})) as StartResponse;
       if (!response.ok) { setState('error'); setMessage(body.error === 'rate_limited' ? 'too many new documents from here — try again shortly' : 'could not start a document'); return; }
-      setMessage(typeof body.prompt === 'string' && await copyText(body.prompt) ? 'copied! paste it in the agent' : 'created! copy the prompt from the document page');
-      setState('done'); setCountdown(COUNTDOWN_S);
+      const prompt=typeof body.prompt==='string'?body.prompt+(props.request?.trim()?`\n\n${props.request.trim()}`:''):'';
+      const copied=!!prompt&&await copyText(prompt);
+      setMessage(copied?'copied! paste it in the agent':'created! select and copy the instructions below');
+      setState('done');
+      // Do not navigate away from the person's request when the clipboard is unavailable, or create twice.
+      if(!copied){setManualPrompt(prompt||body.url);return;}
+      setCountdown(COUNTDOWN_S);
       let left = COUNTDOWN_S;
       timer = setInterval(() => { left--; if (left > 0) { setCountdown(left); return; } if (timer) clearInterval(timer); timer = null; window.location.assign(`/a/${body.id}`); }, 1000);
     } catch { setState('error'); setMessage('could not reach the server'); }
   };
   const label = () => state() === 'working' ? 'creating your document…' : state() === 'done' ? message() : 'copy agent instructions';
-  const body = <><Tooltip content={state() === 'done' ? 'copied!' : 'creates a live doc'}><Button type="button" onClick={() => void start()} disabled={state() === 'working'} aria-label="Create a live document for my agent" size={(props.size ?? 'panel') === 'inline' ? 'sm' : 'md'} class={(props.size ?? 'panel') === 'inline' ? '' : 'w-full'}><span class={`flex min-w-0 flex-1 items-center gap-2 whitespace-normal ${countdown() === null ? 'justify-center' : 'justify-between'}`}><span class="flex min-w-0 items-center gap-2"><span class="min-w-0 break-words">{label()}</span><Show when={state() === 'working'} fallback={<Show when={state() === 'done'} fallback={<Copy size={13} />}><Check size={13} /></Show>}><Loader2 size={13} class="animate-spin" /></Show></span><Show when={countdown() !== null}><span class="shrink-0 font-normal tabular-nums opacity-75">going to the artifact in {countdown()}…</span></Show></span></Button></Tooltip><Show when={state() === 'error'}><StatusMessage kind="error" class="mt-1.5 text-2xs">{message()}</StatusMessage></Show></>;
+  const body = <><Tooltip content={state() === 'done' ? (manualPrompt() ? 'instructions ready to copy' : 'copied!') : 'creates a live doc'}><Button type="button" onClick={() => void start()} disabled={state() === 'working'} aria-label="Create a live document for my agent" size={(props.size ?? 'panel') === 'inline' ? 'sm' : 'md'} class={(props.size ?? 'panel') === 'inline' ? '' : 'w-full'}><span class={`flex min-w-0 flex-1 items-center gap-2 whitespace-normal ${countdown() === null ? 'justify-center' : 'justify-between'}`}><span class="flex min-w-0 items-center gap-2"><span class="min-w-0 break-words">{label()}</span><Show when={state() === 'working'} fallback={<Show when={state() === 'done'} fallback={<Copy size={13} />}><Check size={13} /></Show>}><Loader2 size={13} class="animate-spin" /></Show></span><Show when={countdown() !== null}><span class="shrink-0 font-normal tabular-nums opacity-75">going to the artifact in {countdown()}…</span></Show></span></Button></Tooltip><Show when={state() === 'error'}><StatusMessage kind="error" class="mt-1.5 text-2xs">{message()}</StatusMessage></Show><Show when={manualPrompt()}><Textarea aria-label="Agent instructions" readOnly value={manualPrompt()} rows={8}/></Show></>;
   return <Show when={props.frame !== false} fallback={<div>{body}</div>}><Panel padding="sm"><div class="flex items-baseline justify-between gap-3"><span class="font-mono text-xs text-fg">Start a live document:</span><Show when={props.docsLink !== false}><a href="/docs-human" class={`shrink-0 font-mono text-xs ${LINK}`}>how it works →</a></Show></div><div class="mt-2">{body}</div></Panel></Show>;
 }

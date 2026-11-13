@@ -1,15 +1,19 @@
 /* @jsxImportSource solid-js */
 import { loginHref } from '@/lib/http/login-href';
 import { replaceDocument } from '../lib/document-navigation';
-import { createSignal, onMount, Show, type JSX } from 'solid-js';
+import { createSignal, lazy, onMount, Show, type JSX } from 'solid-js';
 import { Button } from '../ui/Button';
 import { apiFetch } from '../lib/api';
 import { artifactStarter } from '@/lib/workspace/artifact-starters';
+
+// Setup is needed only on explicit onboarding, not the ordinary create door.
+const AgentSetupPage=lazy(()=>import('./AgentSetup').then(m=>({default:m.AgentSetupPage})));
 
 /** `/start` makes a doc and opens it, ready to type in (lib/workspace artifactStarter, the normal create door).
  * ?agent=1 retains the external-agent handoff (`/api/start`, the placeholder an agent fills).
  * One POST per mounted entry; never retry an uncertain creation. */
 export function StartPage(): JSX.Element {
+  if(new URLSearchParams(window.location.search).get('setup')==='1')return <AgentSetupPage/>;
   const [failed, setFailed] = createSignal(false);
   onMount(() => {
     const handoff = new URLSearchParams(window.location.search).get('agent') === '1';
