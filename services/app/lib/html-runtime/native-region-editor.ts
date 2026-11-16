@@ -1,5 +1,6 @@
 /** Native-only page editor chunk. Credentials and HTTP remain exclusively in the trusted parent. */
 import { isolated, structural, undoNative, moveSibling, normalizeChecklist, toggleCheck } from './native-editor-actions';
+import { deleteListSeparator } from './native-separator-deletion';
 import { Editor } from '@tiptap/core';
 import Collaboration from '@tiptap/extension-collaboration';
 import { NativeIdentityRepair, NativeIndentation, freshClipboard, indentNative } from './native-editing-behavior';
@@ -51,6 +52,7 @@ export function mountRegionEditor(options:RegionEditorOptions):RegionEditor {
   editorProps:{transformPasted:freshClipboard,transformPastedHTML:html=>normalizeChecklist(html,root.ownerDocument),
    handleTextInput(view,from,to,text){const at=view.state.doc.resolve(from);if(text==='/'&&from===to&&at.parent.isTextblock&&!at.parent.type.spec.code&&!at.parent.content.size){const box=view.coordsAtPos(from);post({kind:'region-slash',regionId,x:box.left,y:box.bottom});}return false;},
    handleKeyDown(view,event){
+    if(!event.ctrlKey&&!event.metaKey&&!event.altKey&&['Backspace','Delete'].includes(event.key)&&deleteListSeparator(editor,true))return true;
     if(event.ctrlKey&&!event.metaKey&&event.shiftKey&&['ArrowUp','ArrowDown'].includes(event.key))return moveSibling(editor,event.key==='ArrowDown');
     if(!(event.ctrlKey||event.metaKey))return false;
     if(event.altKey&&event.key==='Enter')return isolated(editor,()=>toggleCheck(editor));
@@ -69,7 +71,7 @@ export function mountRegionEditor(options:RegionEditorOptions):RegionEditor {
     const undo=yUndoPluginKey.getState(view.state)?.undoManager;undo?.stopCapturing();
     view.dispatch(view.state.tr.replaceRange(from,to,new Slice(parsed.content,1,1)));undo?.stopCapturing();
    }).catch(()=>{if(!destroyed){const from=decode(view.state,anchor),to=decode(view.state,head);if(from!==null&&to!==null)view.dispatch(view.state.tr.insertText(text,from,to));}});
-   return true;},attributes:{'data-af-region-editor':'rich-native-v1'},handleDOMEvents:{keydown:(_,event)=>{plainPaste=event.shiftKey;return false;},keyup:()=>{plainPaste=false;return false;},compositionend:()=>{setTimeout(()=>{apply(held);held=[];flush();},0);return false;},blur:()=>{post({kind:'region-blur'});return false;}}},
+   return true;},attributes:{'data-af-region-editor':'rich-native-v1'},handleDOMEvents:{cut:(view,event)=>{const slice=view.state.selection.content();const clipboard=event.clipboardData;if(!clipboard)return false;const serialized=view.serializeForClipboard(slice);if(!deleteListSeparator(editor))return false;clipboard.clearData();clipboard.setData('text/html',serialized.dom.innerHTML);clipboard.setData('text/plain',serialized.text);event.preventDefault();return true;},keydown:(_,event)=>{plainPaste=event.shiftKey;return false;},keyup:()=>{plainPaste=false;return false;},compositionend:()=>{setTimeout(()=>{apply(held);held=[];flush();},0);return false;},blur:()=>{post({kind:'region-blur'});return false;}}},
   onTransaction:()=>caret(),onUpdate:()=>{painter?.refresh();},
  });
  const view=editor.view;

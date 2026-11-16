@@ -1,6 +1,6 @@
 import { afterEach, expect, it } from 'vitest';
 import * as Y from 'yjs';
-import { TextSelection } from 'prosemirror-state';
+import { NodeSelection, TextSelection } from 'prosemirror-state';
 import { canonicalizeHtmlPage } from '../../html-page';
 import { compactRegion, createRegionState, validateRegionUpdate, regionHtml } from '../../live-regions';
 import { createHtmlAnnotationPainter, revealHtmlAnnotation } from '../../html-bridge/annotations';
@@ -576,4 +576,97 @@ it.each([[false,false],[true,false],[true,true]])('heading undo handles peer reo
  else {expect(a.view.state.doc.child(0).textContent).toBe('Same peer');expect(a.command('redo')).toBe(true);a.flush();}
  expect(a.view.state.doc.toJSON()).toEqual(b.view.state.doc.toJSON());
  expect(single(regionHtml('rich-native-v1',state)).view.state.doc.toJSON()).toEqual(a.view.state.doc.toJSON());
+});
+
+it.each(['Backspace','Delete'])('removing a separator with %s joins task lists without losing task identities',key=>{
+ const e=single('<ul data-type="taskList" data-af-id="left-list"><li data-type="taskItem" data-checked="false" data-af-id="alpha"><p data-af-id="alpha-text">Alpha</p></li></ul><p data-af-id="separator">Middle</p><ul data-type="taskList" data-af-id="right-list"><li data-type="taskItem" data-checked="true" data-af-id="beta"><p data-af-id="beta-text">Beta</p><ul data-type="taskList"><li data-type="taskItem" data-checked="false" data-af-id="child"><p data-af-id="child-text">Child</p></li></ul></li></ul>');
+ const before=e.view.state.doc.toJSON();
+ let at=0;e.view.state.doc.descendants((node,pos)=>{if(node.attrs.afId==='separator')at=pos;});
+ e.view.dispatch(e.view.state.tr.setSelection(NodeSelection.create(e.view.state.doc,at)));
+ e.replay([{key}]);
+ expect(e.view.state.doc.childCount).toBe(1);
+ const joined=e.view.state.doc.firstChild!;
+ expect(joined.type.name).toBe('taskList');expect(joined.attrs.afId).toBe('left-list');expect(joined.childCount).toBe(2);
+ expect(joined.child(0).attrs).toMatchObject({afId:'alpha',checked:false});
+ expect(joined.child(1).attrs).toMatchObject({afId:'beta',checked:true});
+ expect(e.view.dom.querySelector('[data-af-id="child-text"]')?.textContent).toBe('Child');
+ expect(e.view.dom.querySelector('[data-af-id="beta-text"]')?.textContent).toBe('Beta');
+ expect(e.view.dom.querySelector('[data-af-id="right-list"]')).toBeNull();
+ const after=e.view.state.doc.toJSON();
+ expect(e.command('undo')).toBe(true);expect(e.view.state.doc.toJSON()).toEqual(before);
+ expect(e.command('redo')).toBe(true);expect(e.view.state.doc.toJSON()).toEqual(after);
+});
+it('deleting only separator text preserves an intentional empty paragraph',()=>{
+ const e=single('<ul data-type="taskList"><li data-type="taskItem" data-checked="false"><p>Alpha</p></li></ul><p>Middle</p><ul data-type="taskList"><li data-type="taskItem" data-checked="false"><p>Beta</p></li></ul>');
+ let at=0;e.view.state.doc.descendants((node,pos)=>{if(node.type.name==='paragraph'&&node.textContent==='Middle')at=pos+1;});
+ e.view.dispatch(e.view.state.tr.setSelection(TextSelection.create(e.view.state.doc,at,at+6)));
+ e.replay([{key:'Backspace'}]);expect(e.view.state.doc.childCount).toBe(3);
+ expect(e.view.state.doc.child(1).type.name).toBe('paragraph');expect(e.view.state.doc.child(1).textContent).toBe('');
+});
+it('undo of separator deletion preserves later peer text in the joined task',()=>{
+ const initial=createRegionState('rich-native-v1','<ul data-type="taskList"><li data-type="taskItem" data-checked="false"><p data-af-id="alpha-text">Alpha</p></li></ul><p data-af-id="separator">Middle</p><ul data-type="taskList"><li data-type="taskItem" data-checked="true"><p data-af-id="beta-text">Beta</p></li></ul>').state;
+ let state=initial,a:RegionEditor,b:RegionEditor;
+ const make=(clientId:number,peer:()=>RegionEditor)=>{
+  const root=document.createElement('article');document.body.append(root);
+  const e=mountRegionEditor({win:window,root,regionId:'generic-gap',kind:'rich-native-v1',clientId,state:initial,post:m=>{if(m.kind==='region-update'){state=Y.encodeStateAsUpdate(validateRegionUpdate('rich-native-v1',state,m.update,clientId).doc);peer().remote([m.update]);}}});
+  cleanup.push(()=>{e.destroy();root.remove();});return e;
+ };
+ a=make(971,()=>b);b=make(972,()=>a);
+ let at=0;a.view.state.doc.descendants((n,p)=>{if(n.attrs.afId==='separator')at=p;});
+ a.view.dispatch(a.view.state.tr.setSelection(NodeSelection.create(a.view.state.doc,at)));
+ a.replay([{key:'Backspace'}]);a.flush();
+ expect(a.view.state.doc.childCount).toBe(1);
+ let end=0;b.view.state.doc.descendants((n,p)=>{if(n.attrs.afId==='beta-text')end=p+1+n.content.size;});
+ b.view.dispatch(b.view.state.tr.insertText(' peer',end));b.flush();
+ expect(a.command('undo')).toBe(true);a.flush();
+ expect(a.view.state.doc.childCount).toBe(3);
+ expect(a.view.dom.querySelector('[data-af-id="separator"]')?.textContent).toBe('Middle');
+ expect(a.view.dom.querySelector('[data-af-id="beta-text"]')?.textContent).toBe('Beta peer');
+ expect(a.command('redo')).toBe(true);a.flush();
+ expect(a.view.state.doc.childCount).toBe(1);
+ expect(a.view.dom.querySelector('[data-af-id="beta-text"]')?.textContent).toBe('Beta peer');
+ expect(a.view.state.doc.toJSON()).toEqual(b.view.state.doc.toJSON());
+ const html=regionHtml('rich-native-v1',state);
+ const reopened=single(html);expect(reopened.view.state.doc.toJSON()).toEqual(a.view.state.doc.toJSON());
+});
+
+it('cutting a whole nested separator joins only the newly adjacent task lists',()=>{
+ const e=single('<blockquote><ul data-type="taskList"><li data-type="taskItem" data-checked="false"><p>Alpha</p></li></ul><p data-af-id="separator">Middle</p><ul data-type="taskList"><li data-type="taskItem" data-checked="true"><p><strong>Beta</strong></p></li></ul></blockquote>');
+ let at=0;e.view.state.doc.descendants((n,p)=>{if(n.attrs.afId==='separator')at=p;});
+ e.view.dispatch(e.view.state.tr.setSelection(NodeSelection.create(e.view.state.doc,at)));
+ const event=new Event('cut',{bubbles:true,cancelable:true});
+ Object.defineProperty(event,'clipboardData',{value:{clearData(){},setData(){}}});
+ e.view.dom.dispatchEvent(event);
+ expect(e.view.state.doc.firstChild!.childCount).toBe(1);
+ expect(e.view.state.doc.firstChild!.firstChild!.childCount).toBe(2);
+ expect(e.view.dom.querySelector('strong')?.textContent).toBe('Beta');
+});
+it('deletion preserves incompatible ordered numbering and previously adjacent lists',()=>{
+ const e=single('<ul><li><p>One</p></li></ul><ul><li><p>Two</p></li></ul><ol start="1"><li><p>Alpha</p></li></ol><p data-af-id="separator">Middle</p><ol start="8"><li><p>Beta</p></li></ol>');
+ let at=0;e.view.state.doc.descendants((n,p)=>{if(n.attrs.afId==='separator')at=p;});
+ e.view.dispatch(e.view.state.tr.setSelection(NodeSelection.create(e.view.state.doc,at)));
+ e.replay([{key:'Delete'}]);expect(e.view.state.doc.childCount).toBe(4);
+ expect(e.view.state.doc.child(3).attrs.start).toBe(8);
+});
+
+it.each(['<ul>','<ol start="3">'])('whole separator deletion joins compatible ordinary lists: %s',tag=>{
+ const end=tag.startsWith('<ol')?'ol':'ul',right=end==='ol'?'<ol start="4">':'<ul>';
+ const e=single(`${tag}<li><p>Alpha</p></li></${end}><p data-af-id="separator">Middle</p>${right}<li><p>Beta</p></li></${end}>`);
+ const before=e.view.state.doc.toJSON();let at=0;
+ e.view.state.doc.descendants((n,p)=>{if(n.attrs.afId==='separator')at=p;});
+ e.view.dispatch(e.view.state.tr.setSelection(NodeSelection.create(e.view.state.doc,at)));
+ e.replay([{key:'Delete'}]);expect(e.view.state.doc.childCount).toBe(1);
+ expect(e.view.state.doc.firstChild!.childCount).toBe(2);
+ expect(e.command('undo')).toBe(true);expect(e.view.state.doc.toJSON()).toEqual(before);
+});
+
+it.each(['Backspace','Delete'])('ordinary caret deletion with %s removes an empty list separator and joins its lists',key=>{
+ const e=single('<ul data-type="taskList"><li data-type="taskItem" data-checked="false"><p>Alpha</p></li></ul><p data-af-id="separator"></p><ul data-type="taskList"><li data-type="taskItem" data-checked="true"><p>Beta</p></li></ul>');
+ let at=0;e.view.state.doc.descendants((node,pos)=>{if(node.attrs.afId==='separator')at=pos+1;});
+ e.view.dispatch(e.view.state.tr.setSelection(TextSelection.create(e.view.state.doc,at)));
+ const before=e.view.state.doc.toJSON();e.replay([{key}]);
+ expect(e.view.state.doc.childCount).toBe(1);expect(e.view.state.doc.firstChild?.childCount).toBe(2);
+ expect(e.view.state.doc.firstChild?.lastChild?.attrs.checked).toBe(true);
+ const after=e.view.state.doc.toJSON();expect(e.command('undo')).toBe(true);expect(e.view.state.doc.toJSON()).toEqual(before);
+ expect(e.command('redo')).toBe(true);expect(e.view.state.doc.toJSON()).toEqual(after);
 });
