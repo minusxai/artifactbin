@@ -5,8 +5,9 @@
  * the version the publish saw, refused when a newer version exists, and nothing is overwritten.
  */
 import {expect,it} from 'vitest';
+import {identityForUser} from '@/lib/accounts';
 import {createHash} from 'node:crypto';
-import {artifactState,getArtifactById} from '@/lib/artifacts';
+import {artifactState,getArtifactById,setMetadataFor} from '@/lib/artifacts';
 import {loadDatasetRows} from '@/lib/datasets';
 import {POST as create} from '@/app/api/artifacts/route';
 import {PUT as update} from '@/app/api/artifacts/[id]/route';
@@ -65,4 +66,21 @@ it('a changed CSV keeps the replace rule: a newer dataset version refuses it, an
  expect(await response.text()).toMatch(/conflict/i);
  expect(await rows(w.dataset)).toEqual(before);
  expect((await getArtifactById(w.page))!.source).toContain('v1');
+});
+
+// JSON dependencies are user-visible datasets too: their real file name is their initial title.
+it('names a JSON dataset dependency from its source file and preserves an existing title on republish',async()=>{
+ const owner=await mintAccountToken('mxmx_test_json_dependency_title');
+ const file={path:'data/monthly-summary.json',contentType:'application/json',base64:Buffer.from(JSON.stringify({kind:'stored',tables:[{schema:'public',name:'rows',rows:[{month:'June',total:12}]}]})).toString('base64')};
+ const markup='<html><head><title>Summary</title><link rel="af-dataset" data-af-name="summary" href="./data/monthly-summary.json"></head><body>Summary</body></html>';
+ const response=await create(request('/api/artifacts',{method:'POST',token:owner.token,headers:{'Idempotency-Key':key()},json:{html:markup,publicationBundle:{entryPath:'index.html',files:[file]}}}));
+ const saved=await response.json();expect(response.status,JSON.stringify(saved)).toBe(201);
+ const dependency=saved.dependencyReceipts.find((r:{path:string})=>r.path===file.path);
+ expect((await getArtifactById(dependency.id))?.title).toBe('monthly-summary.json');
+ await setMetadataFor(identityForUser(owner.userId,owner.id),dependency.id,{title:'Monthly totals'});
+ const {path:_path,...mapping}=dependency;
+ const head=(await getArtifactById(saved.id))!;
+ const replaced=await update(request(`/api/artifacts/${saved.id}`,{method:'PUT',token:owner.token,headers:{'Idempotency-Key':key()},json:{expectedVersion:head.version,expectedState:artifactState(head),html:markup,publicationBundle:{entryPath:'index.html',files:[file],mappings:{[file.path]:mapping}}}}),params(saved.id));
+ expect(replaced.status,await replaced.clone().text()).toBe(200);
+ expect((await getArtifactById(dependency.id))?.title).toBe('Monthly totals');
 });
