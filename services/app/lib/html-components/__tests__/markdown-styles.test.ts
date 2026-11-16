@@ -78,3 +78,10 @@ describe('the Markdown stylesheet',()=>{
   expect(getComputedStyle(plain.querySelector('h2')!).letterSpacing).not.toBe('-0.02em');
  });
 });
+
+it('carries native checklist presentation before an editor mounts',()=>{
+ expect(MARKDOWN_CSS).toContain('ul[data-type="taskList"]');
+ expect(MARKDOWN_CSS).toContain('li[data-checked]');
+ expect(MARKDOWN_CSS).toContain('li[data-checked="true"]');
+ expect(MARKDOWN_CSS).toContain('li[data-checked]>label');
+});

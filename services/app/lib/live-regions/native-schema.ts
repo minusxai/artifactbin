@@ -76,13 +76,13 @@ const IdentifiedStarterKit = StarterKit.extend({
           ...(node.attrs.codeAfId ? {'data-af-id':node.attrs.codeAfId} : {}),
           ...(node.attrs.language ? {class:this.options.languageClassPrefix+node.attrs.language} : {}),
         },0]];
-      } }) : extension);
+      } }) : extension.name === 'listItem' ? (extension as Node).extend({content:'(paragraph | heading) block*'}) : extension);
   },
 });
 export function nativeExtensions() {
   return [IdentifiedStarterKit.configure({ undoRedo: false, trailingNode: false, underline: false, strike: false,
     codeBlock: { enableTabIndentation: true, tabSize: 2 },
     link: { openOnClick: false, autolink: false, linkOnPaste: false, isAllowedUri: href => safeHref(href) === href },
-  }), TaskList, TaskItem.configure({ nested: true }), Identity, LegacyCheckbox];
+  }), TaskList, TaskItem.extend({content:'(paragraph | heading) block*'}).configure({ nested: true }), Identity, LegacyCheckbox];
 }
 export const nativeSchema = /* @__PURE__ */ getSchema(/* @__PURE__ */ nativeExtensions());

@@ -598,6 +598,7 @@ it.each([['a guest', 'anon'], ['a signed-in viewer', 'account']])('%s reads, nav
     // Live: a newer version's title reaches the bar.
     setLiveFrame({ version: 4, editId: 'e4', title: 'A newer title', format: 'markup', by: null } as ArtifactLiveEvent);
     await waitFor(() => expect(screen.getByText('A newer title', { selector: '[data-mx-document-title]' })).toBeInTheDocument());
+    expect(document.title).toBe('A newer title');
     expect(nodeFetches()).toBe(0);
   } finally { delete document.documentElement.dataset.theme; }
 });

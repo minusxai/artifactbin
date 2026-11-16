@@ -348,3 +348,168 @@ it.each(['<ul><li','<ol><li','<ul data-type="taskList"><li data-type="taskItem" 
  expect(e.view.dom.querySelector('[data-af-id="item"] p')?.textContent).toBe('alpha');
  expect(e.view.dom.querySelector('[data-af-id="paragraph"]')?.textContent).toBe('alpha');
 });
+
+// Synthetic external clipboard contract; not a captured provider payload.
+it('imports explicit external checkbox lists as native tasks with mixed checked states',()=>{
+ const e=single('<p></p>');
+ const html='<ul><li><input type="checkbox" checked><strong>Complete</strong></li><li><input type="checkbox">Pending</li></ul>';
+ e.view.pasteHTML(html,clipboard('Complete\nPending',html));
+ const list=e.view.state.doc.firstChild!;
+ expect(list.type.name).toBe('taskList');
+ expect(list.childCount).toBe(2);
+ expect(list.child(0).attrs.checked).toBe(true);
+ expect(list.child(1).attrs.checked).toBe(false);
+ expect(list.textContent).toBe('CompletePending');
+ expect(list.child(0).firstChild?.firstChild?.marks.map(mark=>mark.type.name)).toContain('bold');
+});
+it('Control Shift Down moves a task with its children and supports undo',()=>{
+ const e=single('<ul data-type="taskList"><li data-type="taskItem" data-checked="true"><p>First</p><ul data-type="taskList"><li data-type="taskItem" data-checked="false"><p>Child</p></li></ul></li><li data-type="taskItem" data-checked="false"><p>Second</p></li></ul>');
+ const before=e.view.state.doc.toJSON();
+ let at=0;e.view.state.doc.descendants((node,pos)=>{if(node.isText&&node.text==='First')at=pos;});
+ e.view.dispatch(e.view.state.tr.setSelection(TextSelection.create(e.view.state.doc,at,at+5)));
+ const key=new KeyboardEvent('keydown',{key:'ArrowDown',ctrlKey:true,shiftKey:true,bubbles:true,cancelable:true});
+ e.view.dom.dispatchEvent(key);
+ expect(key.defaultPrevented).toBe(true);
+ const list=e.view.state.doc.firstChild!;
+ expect(list.child(0).textContent).toBe('Second');
+ expect(list.child(1).textContent).toBe('FirstChild');
+ expect(list.child(1).attrs.checked).toBe(true);
+ expect(e.view.state.doc.textBetween(e.view.state.selection.from,e.view.state.selection.to)).toBe('First');
+ expect(e.command('undo')).toBe(true);
+ expect(e.view.state.doc.toJSON()).toEqual(before);
+});
+it('Command Shift 9 creates a checklist and Command Option Enter toggles its check',()=>{
+ const e=single('<p>Task</p>');
+ e.view.dom.dispatchEvent(new KeyboardEvent('keydown',{key:'9',code:'Digit9',metaKey:true,shiftKey:true,bubbles:true,cancelable:true}));
+ expect(e.view.state.doc.firstChild?.type.name).toBe('taskList');
+ e.view.dom.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',metaKey:true,altKey:true,bubbles:true,cancelable:true}));
+ expect(e.view.state.doc.firstChild?.firstChild?.attrs.checked).toBe(true);
+});
+
+it('heading shortcut undo restores paragraph style without undoing earlier typing',()=>{
+ const e=single('<p>Original</p>');
+ e.view.dispatch(e.view.state.tr.insertText(' text',9));
+ e.view.dom.dispatchEvent(new KeyboardEvent('keydown',{key:'1',code:'Digit1',metaKey:true,altKey:true,bubbles:true,cancelable:true}));
+ expect(e.view.state.doc.firstChild?.type.name).toBe('heading');
+ expect(e.command('undo')).toBe(true);
+ expect(e.view.state.doc.firstChild?.type.name).toBe('paragraph');
+ expect(e.view.state.doc.textContent).toBe('Original text');
+ expect(e.command('redo')).toBe(true);
+ expect(e.view.state.doc.firstChild?.type.name).toBe('heading');
+ expect(e.view.state.doc.textContent).toBe('Original text');
+});
+
+it.each([
+ ['orderedList','listItem','<ol start="3"><li><p>Parent</p><ol><li><p>Nested</p></li></ol></li></ol>'],
+ ['taskList','taskItem','<ul data-type="taskList"><li data-type="taskItem" data-checked="true"><p>Parent</p><ul data-type="taskList"><li data-type="taskItem" data-checked="true"><p>Nested</p></li></ul></li></ul>'],
+])('heading styles compose with nested %s structure', (listType,itemType,html)=>{
+ const e=single(html);let at=0;
+ e.view.state.doc.descendants((node,pos)=>{if(node.isText&&node.text==='Nested')at=pos;});
+ e.view.dispatch(e.view.state.tr.setSelection(TextSelection.create(e.view.state.doc,at)));
+ const before=e.view.state.doc.toJSON();
+ e.view.dom.dispatchEvent(new KeyboardEvent('keydown',{key:'2',code:'Digit2',metaKey:true,altKey:true,bubbles:true,cancelable:true}));
+ const list=e.view.state.doc.firstChild!;
+ expect(list.type.name).toBe(listType);
+ expect(list.firstChild?.type.name).toBe(itemType);
+ const nested=list.firstChild?.lastChild!;
+ expect(nested.type.name).toBe(listType);
+ expect(nested.firstChild?.firstChild?.type.name).toBe('heading');
+ expect(nested.firstChild?.firstChild?.attrs.level).toBe(2);
+ expect(nested.firstChild?.textContent).toBe('Nested');
+ if(listType==='taskList')expect(nested.firstChild?.attrs.checked).toBe(true);
+ if(listType==='orderedList')expect(list.attrs.start).toBe(3);
+ e.view.dom.dispatchEvent(new KeyboardEvent('keydown',{key:'0',code:'Digit0',metaKey:true,altKey:true,bubbles:true,cancelable:true}));
+ expect(e.view.state.doc.toJSON()).toEqual(before);
+});
+
+it('moves contiguous siblings with identities, backwards selection, redo and safe boundaries',()=>{
+ const e=single('<ol start="4"><li data-af-id="af-1"><p>A</p></li><li data-af-id="af-2"><p><strong>B</strong></p><ul><li><p>Child</p></li></ul></li><li data-af-id="af-3"><p>C</p></li><li data-af-id="af-4"><p>D</p></li></ol>');
+ const positions:Record<string,number>={};e.view.state.doc.descendants((n,p)=>{if(n.isText)positions[n.text!]=p;});
+ e.view.dispatch(e.view.state.tr.setSelection(TextSelection.create(e.view.state.doc,positions.C!+1,positions.B!)));
+ e.replay([{key:'ArrowDown',ctrlKey:true,shiftKey:true}]);
+ expect(Array.from(e.view.dom.querySelector('ol')!.children).map(n=>n.getAttribute('data-af-id'))).toEqual(['af-1','af-4','af-2','af-3']);
+ expect(e.view.state.selection.anchor).toBeGreaterThan(e.view.state.selection.head);
+ const after=e.view.state.doc.toJSON();e.command('undo');e.command('redo');expect(e.view.state.doc.toJSON()).toEqual(after);
+ e.replay([{key:'ArrowDown',ctrlKey:true,shiftKey:true}]);expect(e.view.state.doc.toJSON()).toEqual(after);
+ e.replay([{key:'ArrowUp',metaKey:true,shiftKey:true}]);expect(e.view.state.doc.toJSON()).toEqual(after);
+});
+it('external nested mixed lists retain peer order, marks and ordinary lists inside a task',()=>{
+ const e=single('<ul data-type="taskList"><li data-type="taskItem" data-checked="false"><p>Parent</p><ul data-type="taskList"><li data-type="taskItem" data-checked="true"><p></p></li></ul></li></ul>');
+ e.view.dispatch(e.view.state.tr.setSelection(TextSelection.atEnd(e.view.state.doc)));
+ const html='<ul><li role="checkbox" aria-checked="true"><p><em>First</em></p><ul><li><input type="checkbox">Child</li></ul></li><li><p>Ordinary □ prose</p></li><li><input type="checkbox" checked>Last</li></ul>';
+ e.view.pasteHTML(html,clipboard('First Child Ordinary □ prose Last',html));
+ const doc=e.view.state.doc;expect(doc.textContent).toBe('ParentFirstChildOrdinary □ proseLast');
+ expect(e.view.dom.querySelector('em')?.textContent).toBe('First');
+ expect(e.view.dom.querySelectorAll('ul:not([data-type])').length).toBe(1);
+ expect(e.view.dom.querySelectorAll('li[data-checked="true"]').length).toBeGreaterThanOrEqual(2);
+ expect(e.view.state.doc.textContent.match(/□/g)).toHaveLength(1);
+});
+it.each([
+ '<ul><li data-af-id="af-1"><p data-af-id="af-2">Parent</p><ul><li><p>Child</p></li></ul></li></ul>',
+ '<ol start="5"><li data-af-id="af-1"><p data-af-id="af-2">Parent</p><ol><li><p>Child</p></li></ol></li></ol>',
+ '<ul data-type="taskList"><li data-af-id="af-1" data-type="taskItem" data-checked="true"><p data-af-id="af-2">Parent</p><ul><li><p>Child</p></li></ul></li></ul>',
+])('heading-first lists validate, reopen, indent and split: %s',html=>{
+ let state=createRegionState('rich-native-v1',html).state;
+ const root=document.createElement('article');document.body.append(root);
+ const e=mountRegionEditor({win:window,root,regionId:'synthetic',kind:'rich-native-v1',clientId:701,state,post:m=>{if(m.kind==='region-update')state=Y.encodeStateAsUpdate(validateRegionUpdate('rich-native-v1',state,m.update,701).doc);}});
+ cleanup.push(()=>{e.destroy();root.remove();});
+ e.view.dispatch(e.view.state.tr.setSelection(TextSelection.create(e.view.state.doc,3)));
+ e.command('heading',{level:2});e.flush();
+ const saved=regionHtml('rich-native-v1',state);expect(saved).toContain('<h2 data-af-id="af-2">Parent</h2>');
+ expect(saved).toContain('data-af-id="af-1"');expect(saved).not.toContain('<label');
+ const reopened=single(saved);expect(reopened.view.state.doc.toJSON()).toEqual(e.view.state.doc.toJSON());
+ e.replay([{key:'Enter'}]);e.flush();expect(regionHtml('rich-native-v1',state)).toContain('Parent');
+ e.command('undo');expect(e.view.state.doc.toJSON()).toEqual(reopened.view.state.doc.toJSON());
+ e.command('paragraph');expect(e.view.dom.querySelector('[data-af-id="af-2"]')?.tagName).toBe('P');
+});
+it('keyboard undo isolates heading formatting from typing on either side',()=>{
+ const e=single('<p>Text</p>');e.replay([{text:'Before '}]);
+ e.replay([{key:'2',code:'Digit2',ctrlKey:true,altKey:true}]);e.replay([{text:'After '}]);
+ e.replay([{key:'z',ctrlKey:true}]);expect(e.view.state.doc.textContent).toBe('Before Text');expect(e.view.dom.querySelector('h2')).not.toBeNull();
+ e.replay([{key:'z',ctrlKey:true}]);expect(e.view.state.doc.textContent).toBe('Before Text');expect(e.view.dom.querySelector('h2')).toBeNull();
+});
+
+it('movement and heading formatting converge, persist, and local undo keeps peer typing',()=>{
+ const initial=createRegionState('rich-native-v1','<ul><li data-af-id="af-1"><p data-af-id="af-2">First</p></li><li data-af-id="af-3"><p>Second</p></li></ul>').state;
+ let state=initial;let a:RegionEditor,b:RegionEditor;
+ const make=(clientId:number,peer:()=>RegionEditor)=>{const root=document.createElement('article');document.body.append(root);const e=mountRegionEditor({win:window,root,regionId:'synthetic',kind:'rich-native-v1',clientId,state:initial,post:m=>{if(m.kind==='region-update'){state=Y.encodeStateAsUpdate(validateRegionUpdate('rich-native-v1',state,m.update,clientId).doc);peer().remote([m.update]);}}});cleanup.push(()=>{e.destroy();root.remove();});return e;};
+ a=make(811,()=>b);b=make(812,()=>a);
+ a.view.dispatch(a.view.state.tr.setSelection(TextSelection.create(a.view.state.doc,3)));
+ a.replay([{key:'ArrowDown',ctrlKey:true,shiftKey:true}]);a.flush();
+ a.command('heading',{level:3});a.flush();expect(a.view.state.doc.toJSON()).toEqual(b.view.state.doc.toJSON());
+ let at=0;b.view.state.doc.descendants((n,p)=>{if(n.attrs.afId==='af-2')at=p+1+n.content.size;});
+ b.view.dispatch(b.view.state.tr.insertText(' peer',at));b.flush();
+ a.command('undo');a.flush();expect(a.view.state.doc.textContent).toContain('First peer');
+ a.command('undo');a.flush();expect(a.view.state.doc.textContent).toContain('First peer');
+ a.command('redo');a.flush();expect(a.view.state.doc.textContent).toContain('First peer');
+ a.command('redo');a.flush();expect(a.view.state.doc.textContent).toContain('First peer');
+ expect(a.view.state.doc.toJSON()).toEqual(b.view.state.doc.toJSON());
+ expect(single(regionHtml('rich-native-v1',state)).view.state.doc.toJSON()).toEqual(a.view.state.doc.toJSON());
+});
+
+it('external paste persists and reopens as exact mixed native hierarchy',()=>{
+ let state=createRegionState('rich-native-v1','<p></p>').state;
+ const root=document.createElement('article');document.body.append(root);
+ const e=mountRegionEditor({win:window,root,regionId:'synthetic',kind:'rich-native-v1',clientId:901,state,post:m=>{if(m.kind==='region-update')state=Y.encodeStateAsUpdate(validateRegionUpdate('rich-native-v1',state,m.update,901).doc);}});
+ cleanup.push(()=>{e.destroy();root.remove();});
+ const html='<ul><li><input type="checkbox" checked><strong>First</strong><ul><li role="checkbox" aria-checked="false">Child</li></ul></li><li>Ordinary</li><li><input type="checkbox">Last</li></ul>';
+ e.view.pasteHTML(html,clipboard('First Child Ordinary Last',html));e.flush();
+ const saved=regionHtml('rich-native-v1',state);
+ expect(saved).toBe('<ul data-type="taskList"><li data-type="taskItem" data-checked="true"><p><strong>First</strong></p><ul data-type="taskList"><li data-type="taskItem" data-checked="false"><p>Child</p></li></ul></li></ul><ul><li><p>Ordinary</p></li></ul><ul data-type="taskList"><li data-type="taskItem" data-checked="false"><p>Last</p></li></ul>');
+ expect(single(saved).view.state.doc.toJSON()).toEqual(e.view.state.doc.toJSON());
+});
+it.each(['ul','ol','task'])('heading-first %s items indent and outdent without losing text style',kind=>{
+ const list=kind==='ol'?'ol':'ul',attrs=kind==='task'?' data-type="taskList"':'',item=kind==='task'?' data-type="taskItem" data-checked="true"':'';
+ const e=single(`<${list}${attrs}><li${item}><h2>First</h2></li><li${item}><h3>Second</h3></li></${list}>`);
+ const before=e.view.state.doc.toJSON();e.view.dispatch(e.view.state.tr.setSelection(TextSelection.atEnd(e.view.state.doc)));
+ e.command('indent');expect(e.view.state.doc.firstChild?.childCount).toBe(1);expect(e.view.dom.querySelector('h3')?.textContent).toBe('Second');
+ e.command('outdent');expect(e.view.state.doc.toJSON()).toEqual(before);
+});
+it('checkbox click and keyboard toggle each undo independently of prior typing',async()=>{
+ const e=single('<ul data-type="taskList"><li data-type="taskItem" data-checked="false"><p>Task</p></li></ul>');
+ e.view.dispatch(e.view.state.tr.setSelection(TextSelection.create(e.view.state.doc,3)));e.replay([{text:'New '}]);
+ const checkbox=e.view.dom.querySelector<HTMLInputElement>('input')!;checkbox.click();await Promise.resolve();
+ expect(e.view.state.doc.firstChild?.firstChild?.attrs.checked).toBe(true);e.command('undo');
+ expect(e.view.state.doc.firstChild?.firstChild?.attrs.checked).toBe(false);expect(e.view.state.doc.textContent).toBe('New Task');
+ e.replay([{key:'Enter',ctrlKey:true,altKey:true}]);e.command('undo');expect(e.view.state.doc.firstChild?.firstChild?.attrs.checked).toBe(false);expect(e.view.state.doc.textContent).toBe('New Task');
+});

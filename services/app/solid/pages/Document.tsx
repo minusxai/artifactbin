@@ -345,6 +345,7 @@ export function DocumentPage(): JSX.Element {
     // An HTML page's stream names each new version (a doc renames itself from its heading as it saves).
     return published ? rowTitle({ title: published.title, heading }) : rowTitle(live() ?? page?.surface ?? {});
   };
+  createEffect(() => { document.title = shownTitle(); });
   return <Show when={id && page && page.surface?.framedOrigin} fallback={<Suspense fallback={<main role="status" aria-busy="true">Loading page…</main>}><NotFoundPage /></Suspense>}>
     <Show when={embedded}><TrustedUi overlay layer="navigation"><div class="fixed right-3 top-3 z-40"><DocumentCommentAction count={openAnnotationCount()} active={railOpen()} onClick={() => act('comment')} /></div></TrustedUi></Show>
     <Show when={!embedded}><DocumentChrome id={id!} title={shownTitle} author={page!.surface?.author ?? null} follow={page!.follow ?? null}
