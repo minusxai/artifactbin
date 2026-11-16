@@ -1,3 +1,4 @@
+import type {ArtifactFormat} from './artifact-format';
 import {isValidHandle} from './handles';
 /** Group identity is independent of accounts and artifacts. IDs, never handles, carry authority. */
 export type GroupRole = 'member' | 'editor' | 'admin';
@@ -58,3 +59,12 @@ export function normalizeCreateGroup(input:{handle?:unknown;name?:unknown;descri
  if(!isValidHandle(handle)||!name||name.length>120||description.length>2000)return null;
  return {handle,name,description,parentId:(input.parent_id as string|null|undefined)??null};
 }
+
+/** A content-free collection row. A parent outside this collection is redacted to null. */
+export interface GroupCollectionItem {
+ id:string;title:string;format:ArtifactFormat;updated_at:string;parent_id:string|null;
+ owner:{kind:'user'|'group';name:string};
+}
+/** Folders first, then newest first, with an ID tiebreaker; cursors are opaque and scope-bound. */
+export interface GroupCollection {items:GroupCollectionItem[];next_cursor:string|null;}
+export interface GroupCollectionInput {parent_id?:string;limit?:number;cursor?:string;}
