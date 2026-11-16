@@ -9,7 +9,7 @@ import {scriptFingerprint} from '../html-autofix';
 import {assertOwnerPlacement,assertDestination,newArtifactDestination} from './ownership';
 import { identityForUser, type AccessActor } from '@/lib/accounts';
 import type {ArtifactDestination} from '@artifactbin/contracts';
-import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, groupMemberPredicate, editorScope, lockOrder, ownerPredicate, ownerScope, writerFor, type ArtifactRow, type Scope } from '@/lib/artifact-access';
+import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, groupMemberPredicate, reactionScope, editorScope, lockOrder, ownerPredicate, ownerScope, writerFor, type ArtifactRow, type Scope } from '@/lib/artifact-access';
 import { headBumpSql } from './table';
 import type { DatasetPermissions, DocumentGraph } from '@artifactbin/contracts';
 import { artifactChannel } from '@artifactbin/contracts';
@@ -869,7 +869,7 @@ export function replaceArtifactFor(actor: AccessActor, id: string, input: Artifa
 }
 
 export async function listVersionPageFor(actor: AccessActor, id: string, limit: number, before?: number, through?:number, filters:{author?:string;since?:string;until?:string}={}): Promise<{rows: VersionSummary[]; next?: number} | null> {
-  const scope = editorScope(actor);
+  const scope = actor.workload ? reactionScope(actor) : editorScope(actor);
   const db = await getDb();
   // Keep authorization and the head/history snapshot in one statement.
   const result = await db.query<VersionSummary & {visible: boolean}>(`
@@ -895,11 +895,11 @@ export async function listVersionPageFor(actor: AccessActor, id: string, limit: 
 }
 
 export function listVersionsFor(actor: AccessActor, id: string): Promise<VersionSummary[] | null> {
-  return listVersionsScoped(editorScope(actor), id);
+  return listVersionsScoped(actor.workload ? reactionScope(actor) : editorScope(actor), id);
 }
 
 export function getVersionFor(actor: AccessActor, id: string, version: number): Promise<VersionContent | null> {
-  return getVersionScoped(editorScope(actor), id, version);
+  return getVersionScoped(actor.workload ? reactionScope(actor) : editorScope(actor), id, version);
 }
 
 /**

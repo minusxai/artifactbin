@@ -3,6 +3,7 @@
  * and the facts (./access-facts). `./scopes` is the same rule in SQL; lib/artifacts `canReadArtifact` is the one
  * read decision every serving path makes with it.
  */
+import {getDb} from '@/lib/platform';
 import type { AccessActor } from '@/lib/accounts';
 import { isLinkOnlyKind } from '@/lib/user-kinds';
 import { liveAccessFacts, type AccessFacts } from './access-facts';
@@ -11,6 +12,7 @@ import { ANONYMOUS_CEILING, capRole, maxRole, type ArtifactRole } from '@artifac
 
 /** Does this actor OWN the row — pure, the account by user_id, a bare token by token_id. */
 export function ownsArtifact(row: Pick<ArtifactRow, 'user_id' | 'token_id'> & Partial<Pick<ArtifactRow,'group_id'>>, actor: AccessActor): boolean {
+  if(actor.workload)return false;
   if (row.group_id) return !!actor.groupId && actor.groupId===row.group_id;
   if (row.user_id) return !!actor.userId && row.user_id === actor.userId;
   return holdsCreatingToken(row, actor);
@@ -42,6 +44,10 @@ export async function roleWithoutLink(
   actor: AccessActor,
   facts: AccessFacts = liveAccessFacts(actor),
 ): Promise<ArtifactRole> {
+  if(actor.workload){
+    const grant=actor.workload;
+    return row.group_id===grant.principal.groupId&&grant.readArtifactIds.includes(row.id)&&(await (await getDb()).query('SELECT 1 FROM groups WHERE id=$1 AND deleted_at IS NULL',[row.group_id])).rows.length?'viewer':'none';
+  }
   if (ownsArtifact(row, actor)) return 'owner';
   let groupRole:ArtifactRole='none';
   if (row.group_id) {
@@ -79,6 +85,7 @@ export async function effectiveRole(
   facts: AccessFacts = liveAccessFacts(actor),
 ): Promise<ArtifactRole> {
   const held = await roleWithoutLink(row, actor, facts);
+  if(actor.workload)return held;
   if (held === 'owner') return 'owner';
   // THE ANONYMOUS CEILING applies to the LINK only, never to a named share:
   // being invited by address is itself an account-shaped act, while holding a

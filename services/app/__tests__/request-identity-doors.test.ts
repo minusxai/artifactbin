@@ -8,7 +8,7 @@
  *  - session door `sessionActor`           GET /api/page/session
  */
 import {afterEach,beforeEach,describe,expect,it} from 'vitest';
-import type {Actor} from '@artifactbin/contracts';
+import type {Actor,HumanActor} from '@artifactbin/contracts';
 import {BROWSER_SESSION_HEADER} from '@artifactbin/contracts';
 import {nativeHtml} from './native-html-fixture';
 import { createArtifact } from '@/lib/artifacts';
@@ -21,7 +21,7 @@ import {createGuestOwner,mintAccountToken,request,setSession,useAppHarness} from
 import { sessionActor } from '@/lib/authentication';
 
 const harness=useAppHarness();
-const verified=(userId:string,email:string,extra:Partial<Actor>={}):Actor=>({credential:'session',userId,email,emailVerified:true,...extra});
+const verified=(userId:string,email:string,extra:Partial<HumanActor>={}):Actor=>({credential:'session',userId,email,emailVerified:true,...extra});
 /** A request carrying BOTH an Authorization header and a proxy-attached actor (the harness refuses to build one). */
 const both=(path:string,bearer:string,actor:Actor,init:{method?:string;headers?:Record<string,string>}={})=>{
  const built=request(path,{actor,...init});built.headers.set('authorization',`Bearer ${bearer}`);return built;

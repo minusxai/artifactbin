@@ -2,7 +2,7 @@
  * THE ACTOR TYPES: who is asking, as identity knows it. Resource policy (lib/artifact-access,
  * grants, membership) reads `AccessActor`; nothing here decides what an actor may do.
  */
-import type { Credential } from '@artifactbin/contracts';
+import type { WorkloadAuthorization, Credential } from '@artifactbin/contracts';
 
 /**
  * THE ACTOR every access decision reads: ownership, shares, the link, the SQL scopes, dataset grants and
@@ -13,6 +13,8 @@ import type { Credential } from '@artifactbin/contracts';
  * `identityForUser` below for a principal the server rebuilds from its own rows.
  */
 export interface AccessActor {
+  /** Host-admitted read-only scope, never an owner descriptor. */
+  workload?: Extract<WorkloadAuthorization,{allowed:true}>;
   /** The account, or null for a bare token (or nobody). */
   userId: string | null;
   /** The presented token's id, for token-scope ownership. Null for an account session and for nobody. */
@@ -41,7 +43,7 @@ export interface AccessActor {
  */
 export interface RequestIdentity extends AccessActor {
   sessionId?:string;
-  credential: Credential;
+  credential: Credential | 'workload';
   emailVerified: boolean | null;
 }
 

@@ -115,3 +115,15 @@ export async function browserActor(request: Request): Promise<RequestIdentity | 
 export function refusesCrossSite(request: Request, actor: Pick<RequestIdentity, 'credential'>): boolean {
   return isCookieCredential(actor) && isMutation(request) && isCrossSiteRequest(request);
 }
+
+/** Canonical source reads admit a host workload without manufacturing a token. */
+export function withAuthorReadAuth(handler:AgentOrBrowserHandler) {
+ const token=withTokenAuth(handler);
+ return async(request:Request,routeCtx?:{params:Promise<Record<string,string>>}):Promise<Response>=>{
+  const resolved=await resolveRequestIdentity(request,'token',{readOnly:true});
+  if(resolved.kind==='identity'&&resolved.identity.workload){
+   return handler(request,{actor:resolved.identity,params:routeCtx?await routeCtx.params:{}});
+  }
+  return token(request,routeCtx);
+ };
+}

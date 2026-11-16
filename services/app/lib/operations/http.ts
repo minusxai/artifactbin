@@ -80,6 +80,7 @@ export async function runOperation(
   input: Record<string, unknown>,
   author: AnnotationAuthor = { kind: 'agent', label: null, transport: 'http' },
 ): Promise<Response> {
+  if(actor.workload&&!['get_artifact','list_versions','get_version'].includes(name))return json({error:'forbidden'},403);
   const scope=await hostedAuthorization(actor.userId,actor.tokenId,name,input);
   const refusal=hostedRefusal(scope);if(refusal)return refusal;
   const complete=async(response:Response)=>{if(scope.kind==='allowed')await hostedOperationCompleted(actor.userId,actor.tokenId,name,input,response);return response;};
