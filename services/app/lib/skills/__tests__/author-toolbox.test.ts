@@ -926,3 +926,24 @@ it('names new file datasets from CSV and JSON basenames while preserving explici
   }
  }finally{await rm(root,{recursive:true,force:true});}
 });
+it('explicit schema uses only the exact revision schema door and query sends its supplied revision',async()=>{
+ const {sqlCommand}=await import('../../../skills/artifactbin/scripts/sql.mjs');
+ const sent:Array<{url:string;body:any}>=[];
+ let denied=false;
+ const options={env:{ARTIFACTBIN_URL:'https://example.test',ARTIFACTBIN_TOKEN:'synthetic'},fetcher:async(url:any,init:any)=>{
+  const path=new URL(url).pathname;sent.push({url:String(url),body:init.body?JSON.parse(init.body):undefined});
+  if(path==='/api/artifacts/PAGE12')return Response.json({format:'html',version:9});
+  if(path==='/api/artifacts/PAGE12/sql/schema')return Response.json(denied?{error:'conflict'}:{pageId:'PAGE12',revision:'2',bindings:[],tables:[{schema:'main',name:'metrics',columns:[{name:'amount',type:'number'}]},{schema:'multi',name:'items',columns:[]}]},{status:denied?409:200});
+  if(path==='/api/artifacts/PAGE12/sql')return Response.json({columns:[],rows:[]});
+  throw Error('prohibited extra request '+path);
+ }};
+ expect(await sqlCommand({sub:'schema',values:{revision:'2'},positionals:['PAGE12']},options)).toEqual({target:'page',revision:'2',tables:[{name:'metrics',columns:[{name:'amount',type:'number'}]},{name:'multi.items',columns:[]}],schema:'CREATE TABLE "metrics" (\n  "amount" REAL\n);\nCREATE TABLE "multi"."items" (\n\n);'});
+ expect(sent.map(s=>s.url)).toEqual(['https://example.test/api/artifacts/PAGE12','https://example.test/api/artifacts/PAGE12/sql/schema?revision=2']);
+ sent.length=0;denied=true;
+ await expect(sqlCommand({sub:'schema',values:{revision:'2'},positionals:['PAGE12']},options)).rejects.toMatchObject({exit:4});
+ expect(sent).toHaveLength(2);
+ sent.length=0;
+ expect(await sqlCommand({sub:'query',values:{revision:'2'},positionals:['PAGE12','select 1']},options)).toEqual({columns:[],rows:[]});
+ expect(sent.map(s=>s.url)).toEqual(['https://example.test/api/artifacts/PAGE12','https://example.test/api/artifacts/PAGE12/sql']);
+ expect(sent[1].body).toEqual({sql:'select 1',params:{},revision:'2'});
+});

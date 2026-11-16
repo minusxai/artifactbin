@@ -9,6 +9,22 @@
   stamping; the auth owner buffers at most 200 KiB and rechecks parent/account and current artifact access
   before delivery. Absent and inaccessible artifacts both answer 404.
 
+- Saved-page evidence adds exact operations `{kind:'page-evidence-schema',pageId,revision}` and
+  `{kind:'page-evidence-sql',pageId,revision,sql,params}` (digest fields in that order). Both callbacks must
+  supply a viewer/private/null-root scope, page readership AND `pageDatasetSelect:{pageId,revision,
+  links:[{name,datasetId,revision}],role:'viewer'}`. Only approved canonical pinned stored links mount;
+  the page must still be at that exact current revision and every dataset in its exact live owning group.
+  The invocation-only dataset viewer decision uses current select policies, never a human or editor bypass.
+  Final callback, buffered-result cap (200 KiB), fresh dataset/archive/policy fences and canonical page fence
+  precede delivery. No connection, default/live binding, author code or generic dataset authority is added.
+- Personal evidence: `/api/internal/identity/page-evidence` accepts exactly `{grant,operation}` using the
+  existing artifact_reads opt-in, per-service introspection secret and purpose-only arg_ grant. Identity
+  checks account, grant expiry and original parent before/after bounded buffering. Its fixed internal app
+  seam POST `/api/internal/page-evidence` accepts `{operation}` then `{operation,fingerprint}`: the first
+  returns internal `{body,fingerprint}`, the second recomputes schema/access/policy identity without row
+  SQL. The digest covers page identity, current dataset metadata and canonical policy decisions; it conveys
+  no authority and never leaves identity. Both use the actual verified human and ordinary current ACLs.
+
 - Service workload RPC is `/api/internal/identity/artifact-workload`, authenticated only by the opted-in service's
   own introspection secret. `artifact_workloads` in that audience config holds the operator's fixed
   `authorization_url` and `authorization_secret`; both identity and app hosts need the same configuration.
@@ -39,6 +55,8 @@
 /** Service workload door: fixed callback, fresh admission/final fences and canonical bounded static operations.
  * Final creation admission precedes dispatch; cancellation cannot retract an already committed result.
  */
+import {pageEvidenceStep,preparePageEvidence} from '@/lib/page-doors';
+import {isPageDatasetSelect} from '@artifactbin/contracts';
 import {createHash,randomUUID} from 'node:crypto';
 import {isDeepStrictEqual} from 'node:util';
 import {artifactWorkloadOperationJson,ARTIFACT_WORKLOAD_LIMIT,isArtifactWorkloadOperation,isWorkloadBinding,type Actor,type ArtifactWorkloadScope,type ArtifactWorkloadOperation} from '@artifactbin/contracts';
@@ -51,28 +69,38 @@ import {parseContentInput} from '@/lib/publish';
 import {htmlPageDeclarations,htmlAssetLinks,htmlPwaSettings,isStaticWorkloadHtml} from '@/lib/html-page';
 const reply=(body:unknown,status=200)=>Response.json(body,{status,headers:{'cache-control':'no-store'}});
 export async function artifactWorkload(request:Request,actor:Actor|null|undefined):Promise<Response>{
+ request=new Request(request,{signal:AbortSignal.any([request.signal,AbortSignal.timeout(20000)])});
  const denied=()=>reply({error:'forbidden'},403);
  if(actor?.credential!=='workload'||!isWorkloadBinding(actor.workload)||request.signal.aborted)return denied();
  const principal=actor.workload,config=serviceAudiences().find(service=>service.id===principal.issuerId)?.artifactWorkloads;
  if(!config)return denied();
  try{
-  const body=JSON.parse(await readBody(request,{limit:ARTIFACT_WORKLOAD_LIMIT+8192,as:'text'}));
+  const body=JSON.parse(await pageEvidenceStep(request.signal,readBody(request,{limit:ARTIFACT_WORKLOAD_LIMIT+8192,as:'text'})));
   if(!body||Object.keys(body).length!==1||!isArtifactWorkloadOperation(body.operation))return reply({error:'bad_request'},400);
   const operation:ArtifactWorkloadOperation=body.operation;
   const digest=createHash('sha256').update(artifactWorkloadOperationJson(operation)).digest('hex');
   const authorize=async(phase:'admission'|'final'):Promise<ArtifactWorkloadScope|null>=>{
    if(request.signal.aborted)return null;
    const nonce=randomUUID();
-   const response=await fetch(config.authorizationUrl,{method:'POST',redirect:'error',headers:{'content-type':'application/json',authorization:'Bearer '+config.authorizationSecret},body:JSON.stringify({principal,operation,digest,nonce,phase}),signal:AbortSignal.any([request.signal,AbortSignal.timeout(10000)])});
-   if(!response.ok){await response.body?.cancel();return null;}
-   const answer=JSON.parse(await readBody(response,{limit:32768,as:'text'})),scope=answer?.scope;
+   const response=await pageEvidenceStep(request.signal,fetch(config.authorizationUrl,{method:'POST',redirect:'error',headers:{'content-type':'application/json',authorization:'Bearer '+config.authorizationSecret},body:JSON.stringify({principal,operation,digest,nonce,phase}),signal:AbortSignal.any([request.signal,AbortSignal.timeout(10000)])}));
+   if(!response.ok){void response.body?.cancel().catch(()=>{});return null;}
+   const answer=JSON.parse(await pageEvidenceStep(request.signal,readBody(response,{limit:32768,as:'text'}))),scope=answer?.scope;
    if(request.signal.aborted||answer.digest!==digest||answer.nonce!==nonce||!scope||scope.allowed!==true||!isWorkloadBinding(scope.principal)||!isDeepStrictEqual(scope.principal,principal)||!['viewer','editor'].includes(scope.role)||scope.visibility!=='private'||!Array.isArray(scope.readArtifactIds)||scope.readArtifactIds.length>128||scope.readArtifactIds.some((id:unknown)=>typeof id!=='string'||id.length>128)||(scope.rootFolderId!==null&&(typeof scope.rootFolderId!=='string'||!scope.rootFolderId||scope.rootFolderId.length>128)))return null;
    if(operation.kind==='artifact-outputs'&&(scope.outputLookup!==true||scope.role!=='viewer'||scope.readArtifactIds.length!==0||scope.rootFolderId!==null||Object.keys(scope).some(key=>!['allowed','principal','role','readArtifactIds','rootFolderId','visibility','outputLookup'].includes(key))))return null;
    if(operation.kind==='artifact-read'&&!scope.readArtifactIds.includes(operation.artifactId))return null;
+   if((operation.kind==='page-evidence-schema'||operation.kind==='page-evidence-sql')&&(scope.role!=='viewer'||scope.rootFolderId!==null||new Set(scope.readArtifactIds).size!==scope.readArtifactIds.length||scope.readArtifactIds.some((id:string)=>!/^[A-Za-z0-9_-]{1,128}$/.test(id))||!scope.readArtifactIds.includes(operation.pageId)||!isPageDatasetSelect(scope.pageDatasetSelect)||scope.pageDatasetSelect.pageId!==operation.pageId||scope.pageDatasetSelect.revision!==operation.revision||Object.keys(scope).some(key=>!['allowed','principal','role','readArtifactIds','rootFolderId','visibility','pageDatasetSelect'].includes(key))))return null;
    if(operation.kind==='artifact-create'&&(!scope.publication||!Number.isSafeInteger(scope.publication.maxArtifacts)||scope.publication.maxArtifacts<1||scope.publication.maxArtifacts>10000||!Number.isSafeInteger(scope.publication.maxBytes)||scope.publication.maxBytes<1||scope.publication.maxBytes>1024*1024*1024||scope.role!=='editor'||!scope.rootFolderId||typeof scope.creationKey!=='string'||!scope.creationKey||scope.creationKey.length>200||(scope.expectedTitle!==undefined&&scope.expectedTitle!==operation.title)))return null;
    return scope;
   };
   const scope=await authorize('admission');if(!scope)return denied();
+  if(operation.kind==='page-evidence-schema'||operation.kind==='page-evidence-sql'){
+   const reader={userId:null,tokenId:null,email:null,documentEditor:false,workload:{...scope,writeArtifactIds:[],publication:undefined}};
+   const result=await pageEvidenceStep(request.signal,preparePageEvidence(request,reader,operation,scope.pageDatasetSelect));
+   const final=await authorize('final');
+   if(!final||!isDeepStrictEqual(final.pageDatasetSelect,scope.pageDatasetSelect))return denied();
+   await pageEvidenceStep(request.signal,result.verify());
+   return new Response(result.encoded,{status:result.status,headers:{'content-type':'application/json','cache-control':'no-store'}});
+  }
   if(operation.kind==='artifact-outputs'){
    const page=await readWorkloadOutputPage(principal,operation.after);
    if(!await authorize('final')||!isDeepStrictEqual(page,await readWorkloadOutputPage(principal,operation.after)))return denied();

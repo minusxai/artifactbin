@@ -1,3 +1,4 @@
+import {PAGE_EVIDENCE_PATH,CANONICAL_PAGE_EVIDENCE_PATH,isPageEvidenceOperation} from '@artifactbin/contracts';
 import {ARTIFACT_WORKLOAD_PATH,APP_ARTIFACT_WORKLOAD_PATH,ARTIFACT_WORKLOAD_LIMIT,isWorkloadBinding,isArtifactWorkloadOperation} from '@artifactbin/contracts';
 /**
  * Auth-owned RPC, mounted before browser/session resolution and the public internal-path refusal. Every route here
@@ -105,6 +106,38 @@ export function sessionAuthority(o:AuthOptions):Part<AuthEnv>{return {name:'sess
   }catch(error){return answer({error:error instanceof BodyTooLargeError?'too_large':'workload_unavailable'},error instanceof BodyTooLargeError?413:503);}
  });
  const grantKey=artifactReadKey(o.cookieSecret);
+ // Identity owns its deadline boundary too, including stalled upstream/body readers after app buffering.
+ const evidenceStep=<T>(signal:AbortSignal,pending:Promise<T>):Promise<T>=>new Promise((resolve,reject)=>{
+  const abort=()=>reject(signal.reason);signal.addEventListener('abort',abort,{once:true});
+  pending.then(value=>{signal.removeEventListener('abort',abort);signal.aborted?reject(signal.reason):resolve(value);},error=>{signal.removeEventListener('abort',abort);reject(error);});
+  if(signal.aborted)abort();
+ });
+ app.all(PAGE_EVIDENCE_PATH,async c=>{
+  let service:ServiceAudience|undefined;
+  const signal=AbortSignal.any([c.req.raw.signal,AbortSignal.timeout(20000)]);
+  let input:Response|Record<string,unknown>;
+  try{input=await evidenceStep(signal,admit(c,presented=>!!(service=serviceOf(audiences,presented))&&service.artifactReads===true,ARTIFACT_WORKLOAD_LIMIT+8192));}catch{return answer({error:'evidence_unavailable'},503);}
+  if(input instanceof Response)return input;
+  if(Object.keys(input).length!==2||typeof input.grant!=='string'||!isPageEvidenceOperation(input.operation))return answer({error:'bad_request'},400);
+  try{
+   const claims=verifyArtifactReadGrant(grantKey,audiences,input.grant);
+   const liveClaims=async()=>{signal.throwIfAborted();return !!claims&&claims.exp>Math.floor(Date.now()/1000)&&claims.svc===service!.id&&claims.aud===service!.origin&&await activeUser(claims.sub)&&await parentLive(claims.par,claims.sub)&&(!o.admitIdentity||await o.admitIdentity({userId:claims.sub}));};
+   if(!await evidenceStep(signal,liveClaims())||!claims)return answer({error:'unauthorized'},401);
+   const invoke=(fingerprint?:string)=>o.upstream(new Request(new URL(CANONICAL_PAGE_EVIDENCE_PATH,c.req.url),{method:'POST',body:JSON.stringify({operation:input.operation,...(fingerprint?{fingerprint}:{})}),signal}),{credential:'session',userId:claims.sub});
+   const response=await evidenceStep(signal,invoke());
+   const buffered=await evidenceStep(signal,readBody(response,{limit:2*ARTIFACT_READ_LIMIT+2048,as:'text'}));
+   if(response.status!==200)return answer({error:'evidence_unavailable'},response.status);
+   const envelope=JSON.parse(buffered);
+   if(typeof envelope.body!=='string'||Buffer.byteLength(envelope.body)>ARTIFACT_READ_LIMIT||typeof envelope.fingerprint!=='string')return answer({error:'too_large'},413);
+   if(!await evidenceStep(signal,liveClaims()))return answer({error:'unauthorized'},401);
+   const checked=await evidenceStep(signal,invoke(envelope.fingerprint));
+   void checked.body?.cancel().catch(()=>{});
+   if(checked.status!==200)return answer({error:'evidence_unavailable'},409);
+   if(!await evidenceStep(signal,liveClaims()))return answer({error:'unauthorized'},401);
+   signal.throwIfAborted();
+   return new Response(envelope.body,{headers:{'content-type':'application/json','cache-control':'no-store'}});
+  }catch(error){return answer({error:error instanceof BodyTooLargeError?'too_large':'evidence_unavailable'},error instanceof BodyTooLargeError?413:503);}
+ });
  for(const path of [ARTIFACT_READ_GRANT_PATH,ARTIFACT_READ_PATH])app.all(path,async c=>{
   let service:ServiceAudience|undefined;
   const input=await admit(c,presented=>!!(service=serviceOf(audiences,presented))&&service.artifactReads===true);

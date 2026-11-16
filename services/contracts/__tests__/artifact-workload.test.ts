@@ -25,3 +25,17 @@ it('requires the exact host observer operation and canonical digest order',()=>{
  for(const after of ['', 'x'.repeat(129), 'a/b', 1])expect(isArtifactWorkloadOperation({...operation,after})).toBe(false);
  for(const value of [{kind:operation.kind,credential:operation.credential},{...operation,writeArtifactIds:[]},{...operation,credential:null}])expect(isArtifactWorkloadOperation(value)).toBe(false);
 });
+it('binds exact saved evidence operations and bounded viewer grants',async()=>{
+ const {isPageEvidenceOperation,isPageDatasetSelect}=await import('../src');
+ const shape={kind:'page-evidence-schema',pageId:'PAGE12',revision:'2'};
+ const query={kind:'page-evidence-sql',pageId:'PAGE12',revision:'2',sql:'select n from metrics',params:{n:1}};
+ expect(isArtifactWorkloadOperation(shape)).toBe(true);expect(isArtifactWorkloadOperation(query)).toBe(true);
+ expect(artifactWorkloadOperationJson(shape as any)).toBe('{"kind":"page-evidence-schema","pageId":"PAGE12","revision":"2"}');
+ expect(artifactWorkloadOperationJson(query as any)).toBe(JSON.stringify(query));
+ for(const revision of [undefined,2,'0','01','-1','1.2','9007199254740992'])expect(isPageEvidenceOperation({...shape,revision})).toBe(false);
+ for(const extra of [{actor:'owner'},{sql:'select 1'},{url:'https://example.test'}])expect(isPageEvidenceOperation({...shape,...extra})).toBe(false);
+ for(const params of [undefined,null,[],{n:{}},{n:Infinity},{'bad-key':1}])expect(isPageEvidenceOperation({...query,params})).toBe(false);
+ const grant={pageId:'PAGE12',revision:'2',links:[{name:'metrics',datasetId:'DATA12',revision:'1'}],role:'viewer'};
+ expect(isPageDatasetSelect(grant)).toBe(true);
+ for(const wrong of [{...grant,links:[]},{...grant,role:'editor'},{...grant,write:true},{...grant,links:[grant.links[0],grant.links[0]]},{...grant,links:[grant.links[0],{...grant.links[0],name:'other'}]},{...grant,links:[{...grant.links[0],revision:'latest'}]}])expect(isPageDatasetSelect(wrong)).toBe(false);
+});

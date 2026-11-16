@@ -2,9 +2,10 @@
  * THE PAGE'S SQL DOOR (`POST /api/artifacts/<page>/sql`, `sql` in the page runtime), with what every page door
  * shares: the request's reader, the after-read page verification and the write's commit guard.
  */
+import {pageVerifier} from './verify';
 import {ACTOR_HEADER,REVALIDATE_ACTOR_HEADER,SQL_READ_LIMITS,type HtmlDatasetLink,type HtmlPageVersion} from '@artifactbin/contracts';
 import { ANONYMOUS_ACTOR, type AccessActor } from '@/lib/accounts';
-import { canReadArtifact, getArtifactHeaderById, accessMoved, readableArtifactHeader, type ArtifactRow } from '@/lib/artifacts';
+import { canReadArtifact, getArtifactHeaderById, accessMoved, type ArtifactRow } from '@/lib/artifacts';
 import {readHtmlPage} from '@/lib/html-publication';
 import {executePageSql,type PageCommitGuard} from '@/lib/dataset-access';
 import {pageConnectionSql} from '@/lib/connections';
@@ -24,21 +25,6 @@ const IDEMPOTENCY_KEY=/^[A-Za-z0-9_-]{16,128}$/;
 /** Every header a credential arrives in (the proxy's attached actor included); an opaque origin's read carries none. */
 const CREDENTIAL_HEADERS=['cookie','authorization','proxy-authorization',ACTOR_HEADER];
 type ArtifactHeader=NonNullable<Awaited<ReturnType<typeof getArtifactHeaderById>>>;
-/**
- * After a read: the reader is still who they were, may still read the page, and its head (access, edit, version,
- * links) did not move since `admitted`; otherwise the answer is withheld (`page_unavailable`).
- */
-function pageVerifier(request:Request,pageId:string,actor:AccessActor,reader:AccessActor|undefined,admitted:ArtifactHeader){
- return async(revision:string)=>{
-  const currentActor:AccessActor=reader??await requestOrSessionActor(request,{revalidate:true});
-  if(JSON.stringify(currentActor)!==JSON.stringify(actor))throw Error('page_unavailable');
-  // One header read decides both: the head did not move, and this reader may still read it.
-  const readable=await readableArtifactHeader(currentActor,pageId),current=readable?.row;
-  if(!current||current.format!=='html'||accessMoved(admitted,current)||current.edit_id!==admitted.edit_id||current.version!==admitted.version||JSON.stringify(current.meta.htmlLinks)!==JSON.stringify(admitted.meta.htmlLinks))throw Error('page_unavailable');
-  // An archived revision is immutable; its own row is checked only when it is not the head just read.
-  if(revision!==String(current.version))await readHtmlPage(currentActor,pageId,revision);
- };
-}
 /**
  * A page write's commit guard (lib/dataset-access PageCommitGuard): inside the dataset write's transaction, the page
  * row is locked and read on `tx`, and the write commits only if the page is the head the request was admitted on
@@ -150,3 +136,7 @@ async function answerSql(request:Request,pageId:string,reader?:AccessActor,hostH
   }
  }catch{return json({error:'not_found'},404,headers);}
 }
+
+export {preparePageEvidence,pageEvidenceSchemaDoor} from './evidence';
+
+export {pageEvidenceStep} from './deadline';

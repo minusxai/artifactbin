@@ -12,3 +12,5 @@ export {
 export { storedPolicy, type StoredPolicy } from './stored-policy';
 export { assertWriteCommit, canInsert, canUpdateCell, cellCheckAdmits, datasetWriteAccess, tableMutationPolicy, type DatasetWriteOptions } from './write';
 export { datasetRole } from './role';
+
+export {withPageEvidenceSelect} from './evidence';
