@@ -1,15 +1,27 @@
-/**
- * Internal: write journals for unsafe requests: saved before sending, replayed with the same
- * Idempotency-Key on resume, and the server receipt saved beside them.
- * Used by: toolbox-client.mjs (re-exported), hence toolbox-publish.mjs, comment.mjs, doc.mjs and
- *   author-toolbox.test.ts.
- */
+/** Internal: durable keyed writes, saved before sending; resume saves the server receipt.
+ * Used by: toolbox-client.mjs and write commands. */
 import path from 'node:path';
 import {mkdir,realpath} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
 import {ToolError,serverOrigin,credentialRoot,platform,jsonFile,safeParent,
   within} from './toolbox-client.mjs';
 
+const invalid=()=>new ToolError('invalid_folder_request',
+ 'Private group folders need a nonblank title (max 200).',2);
+/** Validate the entire replayable body; no other artifact kind or write field is accepted. */
+export function folderBody(body){
+ if(!body||Array.isArray(body)||typeof body!=='object'||
+ Object.keys(body).some(key=>!['format','title','visibility',
+ 'destination','parent_id'].includes(key))||
+ body.format!=='folder'||body.visibility!=='private'||typeof body.title!=='string'||
+ !body.title.trim()||body.title.length>200||!body.destination||
+ Object.keys(body.destination).sort().join(',')!=='id,type'||body.destination.type!=='group'||
+ typeof body.destination.id!=='string'||!body.destination.id)throw invalid();
+ if(!/^[A-Za-z0-9_]{1,100}$/.test(body.destination.id))throw invalid();
+ if(body.parent_id!==undefined&&(!/^[A-Za-z0-9]{6,12}$/.test(body.parent_id)||
+ typeof body.parent_id!=='string'))throw invalid();
+ return body;
+}
 export async function createJournal(value,{file,root,project}={}){
 if(!file){const directory=path.join(root??credentialRoot(),'requests');await mkdir(directory,{
    recursive:true,mode:0o700});file=path.join(directory,randomUUID()+'.json');}
@@ -26,7 +38,15 @@ export function journalIntent({server,method,path:route,body,operation,source,ba
   body,operation,...(source?{source}:{}),...(baseline?{baseline}:{})};}
 export async function resumeJournal(file,client,operation){
  const saved=await jsonFile(file);
-if(saved.kind!=='author-request'||saved.schema!==1||saved.operation!==operation||
+ if(!saved||typeof saved!=='object')throw new ToolError('invalid_journal',
+  'Expected a request journal.',2);
+ if(operation==='folder-create'){
+  if(saved.method!=='POST'||saved.path!=='/api/artifacts'||saved.source||saved.baseline)
+   throw new ToolError('invalid_journal','Journal is not a folder create request.',2);
+  folderBody(saved.body);
+ }
+if(!['publish','comment','doc','folder-create'].includes(operation)||
+   saved.kind!=='author-request'||saved.schema!==1||saved.operation!==operation||
    saved.server!==client.server||!['POST','PUT','PATCH'].includes(saved.method)||
    !/^[A-Za-z0-9_-]{16,128}$/.test(saved.key??'')||!saved.body||typeof saved.body!=='object'||
    operation==='publish'&&!/^\/api\/artifacts(?:\/[A-Za-z0-9]{6,12})?$/.test(saved.path??'')||

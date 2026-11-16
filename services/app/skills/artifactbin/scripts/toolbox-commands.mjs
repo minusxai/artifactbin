@@ -1,14 +1,7 @@
-/**
- * Internal: strict argument parsing for the installed commands. Flag metadata (type, repeatable)
- * lives here because the parser needs it; everything a reader needs (purpose, usage, flags,
- * examples, gotchas) lives in each script's DESCRIPTION export, which --help prints. SKILL.md's
- * Core flows quote real commands; a test checks them against these descriptions.
- * Used by: toolbox-client.mjs (runTool), toolbox-description.mjs, author-commands and
- *   author-toolbox tests.
- */
+/** Internal: strict installed-command flag metadata. User help lives in DESCRIPTION exports.
+ * Used by: toolbox-client.mjs, toolbox-description.mjs and author-command tests. */
 import {parseArgs} from 'node:util';
 
-// Flags every command accepts.
 const shared = {
   help: flag('boolean'),
   json: flag('boolean'),
@@ -19,8 +12,6 @@ function flag(type = 'string', multiple = false) {
   return {type, ...(multiple ? {multiple: true} : {})};
 }
 
-// Per command: positional verb(s) in `sub` (flags per subcommand) or plain `flags`;
-// `listed:false` keeps a command out of the table; `starter` names the starter that routes it.
 const commands = {
   auth: {sub: {
     login: {email: flag(), challenge: flag(), 'code-file': flag(), audience: flag()},
@@ -39,6 +30,7 @@ const commands = {
       'secret-file': flag(),
       visibility: flag(),
       group: flag(),
+      parent: flag(),
       personal: flag('boolean'),
       'dry-run': flag('boolean'),
       strict: flag('boolean'),
@@ -68,6 +60,8 @@ const commands = {
   },
   groups: {sub: {
     list: {}, show: {pages: flag('boolean'), cursor: flag()},
+    collection: {parent: flag(), cursor: flag(), limit: flag()},
+    'folder-create': {title: flag(), parent: flag(), request: flag(), resume: flag()},
     create: {name: flag(), description: flag(), parent: flag()},
     update: {name: flag(), description: flag()},
     reparent: {parent: flag(), root: flag('boolean'), yes: flag('boolean')},
@@ -112,7 +106,6 @@ const commands = {
       }
     }
   },
-  // The one events watch; comment.mjs watch is its comment alias.
   events: {sub: {watch: {
     artifact: flag(), category: flag(), types: flag(), next: flag('boolean'), wait: flag(),
     bounded: flag('boolean')
@@ -136,14 +129,12 @@ const commands = {
       artifact: flag()}
   }
 };
-// --as NAME: the name this agent session's comments show (toolbox-agent), on every comment verb.
 for (const flags of Object.values(commands.comment.sub)) flags.as = flag();
 export const COMMANDS = Object.freeze(commands);
 
 export function parseCommand(name, args) {
   const command = COMMANDS[name];
   if (!command) throw Error('Unknown command');
-  // The command verb is positional and must precede flags, except global offline --help.
   const sub = command.sub && Object.hasOwn(command.sub, args[0]) ? args[0] : undefined;
   if (command.sub && !sub && !['read'].includes(name) && !args.includes('--help'))
     throw Error('Choose a subcommand; see --help.');

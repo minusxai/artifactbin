@@ -1,7 +1,10 @@
 /** What this command does and how to use it; also printed by --help. */
-export const DESCRIPTION = `Groups: membership, invitations, sharing, ownership and links.
+export const DESCRIPTION = `Groups: members, sharing, ownership, folders and links.
 Usage: node scripts/groups.mjs list
        node scripts/groups.mjs show GROUP [--pages] [--cursor CURSOR]
+       node scripts/groups.mjs collection GROUP [--parent FOLDER] [--cursor CURSOR] [--limit N]
+       node scripts/groups.mjs folder-create GROUP --title TITLE [--parent FOLDER] [--request FILE]
+       node scripts/groups.mjs folder-create --resume JOURNAL
        node scripts/groups.mjs create HANDLE --name NAME [--description TEXT] [--parent GROUP]
        node scripts/groups.mjs reparent GROUP --parent GROUP|--root --yes
        node scripts/groups.mjs update GROUP [--name NAME] [--description TEXT]
@@ -19,32 +22,24 @@ Usage: node scripts/groups.mjs list
        node scripts/groups.mjs delete GROUP --handle HANDLE --yes
        node scripts/groups.mjs addresses GROUP
        node scripts/groups.mjs allow|disallow GROUP ORIGIN... [--kind connect|img|media] --yes
-Flags: --server ORIGIN, --json, --output FILE (exclusive; never overwrites), --help.
+Flags: --server ORIGIN, --json, --output FILE (exclusive), --help.
 Examples:
-  node scripts/groups.mjs create design_crit --name "Design Crit"
-  node scripts/groups.mjs invite design_crit one@example.test two@example.test --role member
-  node scripts/groups.mjs share PAGE12 --group design_crit --role commenter
-  node scripts/groups.mjs share PAGE12 --group design_crit --datasets
-  node scripts/groups.mjs show design_crit --pages
-Gotchas: GROUP is an ID, handle or @handle, resolved once; writes use stable IDs. USER must
-  resolve uniquely inside that group's current members (ID, handle or exact name); invite by email
-  to add someone. Invitations are listed only for admins; uninvite resolves their email there.
-  Multiple invitations return individual successes/failures; a partial failure is not atomic.
-  Share preserves personal ownership and host. Move deliberately transfers ownership, including
-  folder descendants; publish --group instead creates new group-owned work. Links only navigate.
-  A page share never lets members change a dataset's rows. --datasets also shares each dataset
-  the page links with the group at viewer, never editor, so the dataset's rules decide (a team
-  tracker's members then change every entry); unshare --datasets takes them back too.
-  --yes (destructive actions, editor invitations, promotions, page shares) needs the user's
-  consent in this conversation (references/groups.md).
-  --parent: a subgroup of a group you edit; parent shares reach its members, never the reverse.
-  Delete requires an empty group without subgroups, its exact handle; defaults are protected.
-  Unknown write outcomes must be reconciled by reading current state before another write.
+  node scripts/groups.mjs folder-create design_crit --title Reports
+Gotchas: GROUP resolves ID/handle/@handle once; USER matches a unique member ID/handle/name.
+  Invite/uninvite use email; admins see invitations. Bulk invites may partially fail.
+  Share keeps ownership; move transfers descendants; links navigate. --datasets shares at
+  viewer; row rules decide writes. --yes needs conversational consent (references/groups.md).
+  collection returns one page/next_cursor; root omits parent; listing grants no writes.
+  folder-create needs Editor/Admin, creates private folders and returns publish --parent's ID.
+  --request is exclusive; resume replays unchanged. Folder --parent accepts same-origin ID/URL;
+  create --parent nests groups inheriting parent shares. Delete needs empty/nondefault group,
+  no subgroups, exact handle. Reconcile other unknown writes by reading state before retrying.
 Exit: 0 ok; 1 failed or partial failure; 2 invocation/confirmation; 3 auth/access; 4 conflict;
   5 unknown write outcome. Results never contain credentials.`;
 
 import {runTool,makeClient,selectedServer,resolveTarget,positional,requireFlags,enumValue,
  ToolError,toolFailure,toolExit} from './toolbox-client.mjs';
+import {groupFolders} from './toolbox-group-folders.mjs';
 import {confirmation,groupReference,resolveGroup,resolveMember,resolveInvitation,
  invitationEmail,segment,withDatasets,editorGrant,EDITOR_GRANT} from './toolbox-groups.mjs';
 
@@ -62,6 +57,8 @@ export async function groupsCommand(parsed,options={}){
   {...result,note:EDITOR_GRANT}:result;
 }
 async function command({sub,values,positionals},options){
+ if(['collection','folder-create'].includes(sub))return groupFolders({sub,values,positionals},
+  options);
  // These checks precede even identity lookup HTTP, so refusal cannot accidentally mutate.
  confirmation(sub,values);
  const pageVerb=['share','unshare','move'].includes(sub);
