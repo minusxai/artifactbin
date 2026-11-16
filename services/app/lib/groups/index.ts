@@ -1,3 +1,4 @@
+import {admissionPolicyOf} from '@artifactbin/auth';
 import {isGroupRole} from '@artifactbin/contracts';
 import {GroupError} from './errors';
 import {groupAttempt,recordGroupChanges,type GroupMutationActor} from './mutations';
@@ -11,7 +12,7 @@ import {subtreeSql} from './hierarchy';
  */
 import {normalizeCreateGroup} from '@artifactbin/contracts';
 import type {UpdateGroupInput,AccountPreferences,CreateGroupInput,DefaultDestination,GroupAudienceMember,GroupDetail,GroupInvitation,GroupMember,GroupRelative,GroupRole,GroupSummary,Queryable as ContractQueryable} from '@artifactbin/contracts';
-import { getDb, services } from '../platform';
+import { getDb, services, deploymentConfig, env } from '../platform';
 export interface GroupRecord {id:string;handle:string;name:string;description:string;created_by:string;deleted_at:string|null;parent_id:string|null;}
 export {GroupError} from './errors';
 const summary=(group:GroupRecord,role:GroupRole|null):GroupSummary=>({id:group.id,handle:group.handle,name:group.name,description:group.description,role,parent_id:group.parent_id??null});
@@ -69,6 +70,18 @@ export async function removeGroupMember(actorId:string,groupId:string,userId:str
 }
 export async function inviteGroupMember(actorId:string,groupId:string,email:string,role:GroupRole,actor?:GroupMutationActor):Promise<GroupInvitation>{
  if(typeof email!=='string'||!/^\S+@\S+\.\S+$/.test(email.trim())||email.length>320||!isGroupRole(role))throw new GroupError('invalid_invitation');
+ // Admission must be checked before identity queues mail; an invitation cannot override sign-in policy.
+ if(deploymentConfig().mode==='company'){
+  const actorRole=await getGroupRole(actorId,groupId);
+  if(!actorRole)throw new GroupError('not_found',404);
+  if(actorRole!=='admin')throw new GroupError('forbidden',403);
+  const policy=admissionPolicyOf({},(_source,key)=>{const [module,name]=key.split('__');return env(module!,name!);});
+  if(!policy.matches(email)){
+   // Previously admitted people retain access when an operator tightens the new-account policy.
+   const admitted=await (await getDb()).query('SELECT 1 FROM users u JOIN deployment_members m ON m.user_id=u.id WHERE lower(u.email)=$1 LIMIT 1',[email.trim().toLowerCase()]);
+   if(!admitted.rows.length)throw new GroupError('invitation_email_not_allowed',400);
+  }
+ }
  await groupAttempt(actorId,'invite');
  const invited=await services().identity.inviteGroupMember({actorId,groupId,email,role});
  await recordGroupChanges(invited.changes,actor);
