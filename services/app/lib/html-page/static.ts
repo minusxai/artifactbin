@@ -1,7 +1,7 @@
 /** A workload's static page may style and link its content, but never load author-controlled active/network content. */
 import {parse} from 'parse5';
 import type {DefaultTreeAdapterMap} from 'parse5';
-import {RUNTIME_CORE_PATH} from './core-script';
+import {RUNTIME_CORE_PATH} from './core-script.ts';
 const active=new Set(['iframe','frame','frameset','object','embed','applet','portal','form','input','button','textarea','select','base','foreignobject','animate','animatemotion','animatetransform','set','audio','video','source','track']);
 const loading=new Set(['src','srcset','imagesrcset','poster','background','data','codebase','archive','action','formaction','ping','srcdoc','xlink:href','xml:base']);
 function staticCss(css:string):boolean {
