@@ -109,12 +109,15 @@ function liveBlock(editor:Editor,block:Block):Block|undefined {
 }
 export function undoNative(editor:Editor,redo=false):boolean {
  const undo=yUndoPluginKey.getState(editor.state)?.undoManager;
- const item=(redo?undo?.redoStack:undo?.undoStack)?.at(-1);
- const pairs=item?.meta.get(STRUCTURE) as Pair[]|undefined;
- // A peer may replace/move a shell itself. There is no Yjs resurrection link
- // from that peer replacement to this action. Refuse this undo without popping
- // history rather than restore a duplicate or guess at a different block.
- if(pairs?.some(pair=>!liveBlock(editor,redo?pair.before:pair.after)))return false;
+ const stack=redo?undo?.redoStack:undo?.undoStack;
+ let item=stack?.at(-1);
+ let pairs=item?.meta.get(STRUCTURE) as Pair[]|undefined;
+ // A peer replacement supersedes this structural operation. Retire only that
+ // obsolete entry, preserving peer content and access to earlier local history.
+ // Never guess a replacement identity from text or an old document position.
+ while(item&&pairs?.some(pair=>!liveBlock(editor,redo?pair.before:pair.after))){
+  stack!.pop();item=stack?.at(-1);pairs=item?.meta.get(STRUCTURE) as Pair[]|undefined;
+ }
  // Capture every replaced/mapped block, even unchanged content: reconciliation
  // can reuse XML shells positionally for equal siblings. Undo then leaves peer
  // text in the old slot, which the inverse permutation must restore as well.

@@ -558,19 +558,21 @@ it.each([['heading',false,false],['move',false,false],['heading',true,false],['m
   expect(single(regionHtml('rich-native-v1',state)).view.state.doc.toJSON()).toEqual(a.view.state.doc.toJSON());
  }
 });
-it.each([false,true])('heading undo handles peer reorder (affected shell %s) without duplicating content',affected=>{
+it.each([[false,false],[true,false],[true,true]])('heading undo handles peer reorder (affected shell %s, earlier edit %s) without blocking history',(affected,earlier)=>{
  const initial=createRegionState('rich-native-v1','<p>Same</p><p>Other</p><p>Last</p>').state;
  let state=initial;let a:RegionEditor,b:RegionEditor;
  const make=(clientId:number,peer:()=>RegionEditor)=>{const root=document.createElement('article');document.body.append(root);const e=mountRegionEditor({win:window,root,regionId:'synthetic',kind:'rich-native-v1',clientId,state:initial,post:m=>{if(m.kind==='region-update'){state=Y.encodeStateAsUpdate(validateRegionUpdate('rich-native-v1',state,m.update,clientId).doc);peer().remote([m.update]);}}});cleanup.push(()=>{e.destroy();root.remove();});return e;};
  a=make(941,()=>b);b=make(942,()=>a);
+ if(earlier){a.view.dispatch(a.view.state.tr.insertText(' local',a.view.state.doc.content.size-1));a.flush();}
  a.view.dispatch(a.view.state.tr.setSelection(TextSelection.create(a.view.state.doc,1)));a.command('heading',{level:2});a.flush();
  b.view.dispatch(b.view.state.tr.setSelection(affected?TextSelection.atStart(b.view.state.doc):TextSelection.atEnd(b.view.state.doc)));
  b.replay([{key:affected?'ArrowDown':'ArrowUp',ctrlKey:true,shiftKey:true}]);b.flush();
  let end=0;b.view.state.doc.descendants((node,pos)=>{if(node.type.name==='heading')end=pos+1+node.content.size;});
  b.view.dispatch(b.view.state.tr.insertText(' peer',end));b.flush();
  const before=a.view.state.doc.toJSON();
- expect(a.command('undo')).toBe(!affected);a.flush();
- if(affected)expect(a.view.state.doc.toJSON()).toEqual(before);
+ expect(a.command('undo')).toBe(!affected||earlier);a.flush();
+ if(affected&&earlier){expect(a.view.state.doc.textContent).not.toContain(' local');expect(a.view.dom.querySelector('h2')?.textContent).toBe('Same peer');expect(a.command('redo')).toBe(true);a.flush();expect(a.view.state.doc.textContent).toContain('Last local');}
+ else if(affected)expect(a.view.state.doc.toJSON()).toEqual(before);
  else {expect(a.view.state.doc.child(0).textContent).toBe('Same peer');expect(a.command('redo')).toBe(true);a.flush();}
  expect(a.view.state.doc.toJSON()).toEqual(b.view.state.doc.toJSON());
  expect(single(regionHtml('rich-native-v1',state)).view.state.doc.toJSON()).toEqual(a.view.state.doc.toJSON());
