@@ -898,3 +898,31 @@ it('read --output refreshes an unchanged file in place and saves beside a file w
   await noCompanions(dir);
  }finally{await rm(dir,{recursive:true,force:true});}
 });
+
+
+it('names new file datasets from CSV and JSON basenames while preserving explicit and update titles',async()=>{
+ const {mkdtemp,writeFile,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
+ const {publishCommand}=await import('../../../skills/artifactbin/scripts/toolbox-publish.mjs');
+ const root=await mkdtemp(path.join(tmpdir(),'dataset-title-')),server='https://example.test';
+ try{
+  const project=path.join(root,'project');await (await import('node:fs/promises')).mkdir(project);
+  const seen:any[]=[];
+  const fetcher=async(_url:any,init:any)=>{
+   if((init?.method??'GET')==='GET')return Response.json({id:'DATA12',format:'dataset',title:'Existing title',version:1,state:'a'.repeat(64)});
+   seen.push(JSON.parse(String(init.body)));
+   return Response.json({id:'DATA12',url:server+'/a/DATA12',version:2,state:'b'.repeat(64),format:'dataset'},{status:201});
+  };
+  const options={env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic',ARTIFACTBIN_HOME:path.join(root,'home')},fetcher,log:()=>{}};
+  for(const [name,source] of [['Query Results.csv','n\n1\n'],['query-results.json','[{"n":1}]']]){
+   const file=path.join(project,name!);await writeFile(file,source!);
+   await publishCommand({values:{create:true},positionals:[file]},options);
+   expect(seen.at(-1).title).toBe(name);
+   await publishCommand({values:{create:true,title:'Chosen title'},positionals:[file]},options);
+   expect(seen.at(-1).title).toBe('Chosen title');
+   await publishCommand({values:{artifact:'DATA12'},positionals:[file]},options);
+   expect(seen.at(-1)).not.toHaveProperty('title');
+   await publishCommand({values:{artifact:'DATA12',title:'Renamed title'},positionals:[file]},options);
+   expect(seen.at(-1).title).toBe('Renamed title');
+  }
+ }finally{await rm(root,{recursive:true,force:true});}
+});
