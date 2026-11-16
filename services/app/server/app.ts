@@ -1,3 +1,5 @@
+import {personalPageEvidence} from './page-evidence';
+import {CANONICAL_PAGE_EVIDENCE_PATH} from '@artifactbin/contracts';
 import {artifactWorkload} from './artifact-workload';
 import {APP_ARTIFACT_WORKLOAD_PATH} from '@artifactbin/contracts';
 import {getDeploymentState} from '@/lib/deployment';
@@ -621,6 +623,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     return json(source);
   })));
   app.post(APP_ARTIFACT_WORKLOAD_PATH,c=>runWithRequest(c.req.raw,()=>artifactWorkload(c.req.raw,actorOf(c.req.raw))));
+  app.post(CANONICAL_PAGE_EVIDENCE_PATH,c=>runWithRequest(c.req.raw,()=>personalPageEvidence(c.req.raw,actorOf(c.req.raw))));
   mountRoutes(app);
 
   app.all('/api', apiNotFound);

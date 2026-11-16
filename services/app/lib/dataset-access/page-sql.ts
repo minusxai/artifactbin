@@ -53,7 +53,7 @@ export function pageSqlMounts(loaded: readonly SqlLinkedDataset[], selected: Rea
  * `aggregates: 'visible'` (the page SQL door, ./page-sql-door): no `allow_aggregations` gate; the reader aggregates
  * over the rows its role view shows, which is all a mount ever holds.
  */
-export async function runPageSql(loaded: readonly SqlLinkedDataset[], call: PageSqlCall, signal: AbortSignal, options: { aggregates?: 'gated' | 'visible' } = {}): Promise<PageSqlAnswer> {
+export async function runPageSql(loaded: readonly SqlLinkedDataset[], call: PageSqlCall, signal: AbortSignal, options: { aggregates?: 'gated' | 'visible';retainSelected?:(links:ReadonlySet<string>)=>void } = {}): Promise<PageSqlAnswer> {
   let result;
   const deadline = performance.now() + SQL_READ_LIMITS.timeoutMs;
   try {
@@ -70,6 +70,7 @@ export async function runPageSql(loaded: readonly SqlLinkedDataset[], call: Page
       return refuse('validation_failed', 'SQL statement could not be prepared');
     }
     signal.throwIfAborted();
+    options.retainSelected?.(selected);
     const mounts = pageSqlMounts(loaded, selected, options.aggregates !== 'visible');
     result = await executeMounted(mounts, call.sql, { ...call.params }, { limit: SQL_READ_LIMITS.rows, timeoutMs: Math.max(1, deadline - performance.now()), outputBytes: SQL_READ_LIMITS.outputBytes, signal });
   } catch (e) {

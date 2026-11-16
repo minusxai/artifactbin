@@ -49,6 +49,8 @@ import { jsonBytes, runPageSql } from './page-sql';
 interface PageSqlDoorCall { sql: string; params: Readonly<Record<string, Scalar>> }
 export interface PageSqlDoorScope {
   pageId: string;
+  retainReadFence?:(verify:()=>Promise<void>)=>void;
+  retainMountedLinks?:(links:ReadonlySet<string>)=>void;
   /** Writes: the client's Idempotency-Key (one per `sql` write); absent, a fresh one. */
   idempotencyKey?: string;
   /** The page is read here only (an archived revision, a read-only frame): any write is refused. */
@@ -257,13 +259,13 @@ const outcomeBody = (affected: number, op: Effect['op'], step: MutationStep | un
 export async function executePageSql(actor: AccessActor, links: readonly HtmlDatasetLink[], raw: { sql?: unknown; params?: unknown }, scope: PageSqlDoorScope, signal: AbortSignal): Promise<PageSqlDoorReply> {
   try {
     const call = checked(raw);
-    const load = (fenced: boolean) => loadLinked(actor, links, { pageId: scope.pageId, fenced }, signal).catch((e) => { if (e instanceof DatasetAccessError) refuse('validation_failed', e.message); throw e; });
+    const load = (fenced: boolean) => loadLinked(actor, links, { pageId: scope.pageId, fenced, retainReadFence:scope.retainReadFence }, signal).catch((e) => { if (e instanceof DatasetAccessError) refuse('validation_failed', e.message); throw e; });
     const first = await load(true);
     if (!first.length) refuse('dataset_not_found', 'no linked dataset is readable');
     const mounts = mountsOf(first, call.sql);
     const analysis = await analyzed(mounts, call.sql);
     if (analysis.kind === 'select') {
-      const answer = await runPageSql(first.map((l) => ({ link: l.link!.name, snapshot: l.snapshot, tables: l.tables.map((t) => ({ tableId: t.tableId, selectable: t.model.select !== false })) })), call, signal, { aggregates: 'visible' })
+      const answer = await runPageSql(first.map((l) => ({ link: l.link!.name, snapshot: l.snapshot, tables: l.tables.map((t) => ({ tableId: t.tableId, selectable: t.model.select !== false })) })), call, signal, { aggregates: 'visible',retainSelected:scope.retainMountedLinks })
         .catch((e) => { if (e instanceof DatasetAccessError) refuse(String(e.extensions?.code ?? 'validation_failed'), e.message); throw e; });
       for (const l of first) for (const verify of l.fences) await verify();
       return { status: 200, body: { ...answer } };

@@ -6,7 +6,7 @@ import {signActor,verifyActor} from '@artifactbin/utils';
 import {createAuthHost} from '../src/parts';
 it('authenticates opt-in service independently of a person and pins its issuer',async()=>{
  const principal={issuerId:'worker',subjectId:'subject',grantId:'grant',groupId:'group',executionId:'execution',environmentId:'environment',intentHash:'intent',epoch:1};
- const operation={kind:'artifact-outputs',credential:'q'.repeat(43),after:null};
+ let operation:Record<string,unknown>={kind:'artifact-outputs',credential:'q'.repeat(43),after:null};
  let calls=0;
  const app=createAuthHost({env:{IDENTITY__SERVICE_AUDIENCES:JSON.stringify([{id:'ordinary',origin:'https://ordinary.example',introspection_secret_sha256:createHash('sha256').update('ordinary-secret').digest('hex')},{id:'worker',origin:'https://worker.example',introspection_secret_sha256:createHash('sha256').update('service-secret').digest('hex'),artifact_workloads:{authorization_url:'http://127.0.0.1/authorize',authorization_secret:'callback-secret-test'}}])},cookieSecret:'test',tokens:{byToken:async()=>null},sessions:{resolve:async()=>null},upstream:async(request,actor)=>{calls++;expect(new URL(request.url).pathname).toBe(APP_ARTIFACT_WORKLOAD_PATH);expect(actor).toEqual({credential:'workload',serviceWorkload:true,workload:principal});expect(await request.json()).toEqual({operation});return Response.json({id:'abc'});}});
  const call=(body:unknown,secret='service-secret')=>app.request(ARTIFACT_WORKLOAD_PATH,{method:'POST',headers:{[SERVICE_AUTH_HEADER]:secret},body:JSON.stringify(body)});
@@ -19,4 +19,6 @@ it('authenticates opt-in service independently of a person and pins its issuer',
  expect((await call({principal,operation,path:'/api/artifacts'})).status).toBe(400);
  expect((await call({principal,operation:{...operation,after:'../source'}})).status).toBe(400);
  expect((await call({principal,operation})).status).toBe(200);expect(calls).toBe(1);
+ for(const evidence of [{kind:'page-evidence-schema',pageId:'PAGE12',revision:'2'},{kind:'page-evidence-sql',pageId:'PAGE12',revision:'2',sql:'select 1',params:{}}]){operation=evidence;expect((await call({principal,operation})).status).toBe(200);expect((await call({principal,operation:{...operation,role:'viewer'}})).status).toBe(400);}
+ expect(calls).toBe(3);
 });

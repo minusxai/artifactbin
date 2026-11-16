@@ -66,3 +66,8 @@ export const ARTIFACT_READ_PATH = '/api/internal/identity/artifact-read';
 export const CANONICAL_ARTIFACT_READ_PATH = '/api/internal/artifact-read';
 export const ARTIFACT_READ_LIMIT = 200 * 1024;
 export interface IssuedArtifactReadGrant {grant:string; expires_at:string; user_id:string; audience:string}
+
+/** Purpose-only saved pinned evidence delegation, same service opt-in and arg_ grants as artifact-read. */
+export const PAGE_EVIDENCE_PATH='/api/internal/identity/page-evidence';
+/** Auth-only fixed seam. POST {operation}; then POST {operation,fingerprint} verifies metadata only. */
+export const CANONICAL_PAGE_EVIDENCE_PATH='/api/internal/page-evidence';
