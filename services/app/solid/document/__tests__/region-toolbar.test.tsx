@@ -33,6 +33,18 @@ const bar = () => screen.getByRole('toolbar', { name: 'Formatting' });
 const button = (name: string) => within(bar()).getByRole('button', { name });
 
 describe('the region toolbar', () => {
+  it('does not advertise the checklist shortcut on Quote', async () => {
+    const page = chrome();
+    page.state([], 'paragraph');
+    expect(button('Quote')).not.toHaveAttribute('aria-keyshortcuts', 'Control+Shift+9');
+    fireEvent.focus(button('Quote'));
+    await waitFor(() => expect(screen.getByRole('tooltip')).toHaveTextContent('Quote'));
+    expect(screen.getByRole('tooltip')).not.toHaveTextContent('Ctrl+Shift+9');
+    fireEvent.click(button('Quote'));
+    expect(page.commands).toEqual([['quote', { on: true }]]);
+  });
+
+
   it('shows only while this person has a region editor, and every control is named', () => {
     const page = chrome();
     expect(screen.queryByRole('toolbar')).toBeNull();
@@ -101,7 +113,7 @@ describe('the region toolbar', () => {
     const page = chrome();
     page.state([], 'paragraph');
     expect(shortcutText('Mod-Shift-8')).toBe('Ctrl+Shift+8');
-    for (const [name, keys] of [['Bold', 'Control+B'], ['Italic', 'Control+I'], ['Inline code', 'Control+E'], ['Link', 'Control+K'], ['Bulleted list', 'Control+Shift+8'], ['Numbered list', 'Control+Shift+7'], ['Quote', 'Control+Shift+9'], ['Undo', 'Control+Z']] as const)
+    for (const [name, keys] of [['Bold', 'Control+B'], ['Italic', 'Control+I'], ['Inline code', 'Control+E'], ['Link', 'Control+K'], ['Bulleted list', 'Control+Shift+8'], ['Numbered list', 'Control+Shift+7'], ['Undo', 'Control+Z']] as const)
       expect(button(name)).toHaveAttribute('aria-keyshortcuts', keys);
     fireEvent.focus(button('Bold'));
     await waitFor(() => expect(screen.getByRole('tooltip')).toHaveTextContent('Bold (Ctrl+B)'));
