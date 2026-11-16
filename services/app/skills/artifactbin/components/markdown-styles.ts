@@ -50,23 +50,29 @@ export const MARKDOWN_CSS = [
   rule('hr', 'border:0;border-top:1px solid var(--border,currentColor);margin-block:2em'),
   // GitHub-flavoured extras af-markdown renders (a doc's rich region holds none of these).
   rule('ul[data-type="taskList"]', 'list-style:none;padding-inline-start:40px'),
-  rule('li[data-checked]>label', 'position:absolute;inset-inline-start:0;top:0;width:1.6em;height:1.7em;opacity:0'),
+  rule('li[data-checked]>label', 'position:absolute;inset-inline-start:0;top:0;' +
+    'width:1.6em;height:1.7em;opacity:0'),
   rule('li[data-checked]>div', 'min-width:0'),
   rule('.mx-md-check-list', 'list-style:none;padding-inline-start:0'),
   rule('li>.mx-md-check-list', 'padding-inline-start:1.6em'),
-  rule('li[role="checkbox"],li[data-checked]', 'position:relative;list-style:none;padding-inline-start:1.6em;' +
+  rule('li[role="checkbox"],li[data-checked]', 'position:relative;' +
+    'list-style:none;padding-inline-start:1.6em;' +
     'min-height:1.7em'),
-  `${R} :where(li[role="checkbox"],li[data-checked])::before{content:'';position:absolute;inset-inline-start:0;` +
+  `${R} :where(li[role="checkbox"],li[data-checked])::before{content:'';` +
+    `position:absolute;inset-inline-start:0;` +
     `top:.35em;width:1em;height:1em;box-sizing:border-box;` +
     `border:1px solid var(--muted-foreground,currentColor);border-radius:.2em;` +
     `background:var(--background,transparent)}`,
-  `${R} :where(li[aria-checked="true"],li[data-checked="true"])::before{background:var(--primary,currentColor);` +
+  `${R} :where(li[aria-checked="true"],li[data-checked="true"])::before{` +
+    `background:var(--primary,currentColor);` +
     `border-color:var(--primary,currentColor)}`,
-  `${R} :where(li[aria-checked="true"],li[data-checked="true"])::after{content:'';position:absolute;` +
+  `${R} :where(li[aria-checked="true"],li[data-checked="true"])::after{` +
+    `content:'';position:absolute;` +
     `inset-inline-start:.32em;top:.5em;width:.3em;height:.5em;` +
     `border:solid var(--primary-foreground,Canvas);border-width:0 2px 2px 0;` +
     `transform:rotate(45deg)}`,
-  rule('li[role="checkbox"]:focus-visible,li[data-checked]:focus-visible', 'outline:2px solid var(--ring,Highlight);' +
+  rule('li[role="checkbox"]:focus-visible,li[data-checked]:focus-visible',
+    'outline:2px solid var(--ring,Highlight);' +
     'outline-offset:2px'),
   rule('.mx-md-table-scroll', 'overflow-x:auto;max-width:100%'),
   rule('table', 'border-collapse:collapse;display:block;width:fit-content;max-width:100%;' +
