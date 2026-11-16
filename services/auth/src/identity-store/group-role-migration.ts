@@ -2,7 +2,7 @@
 import type {Queryable,TransactionalQueryable} from '@artifactbin/contracts';
 import {identityTables} from './tables';
 
-export const GROUP_ROLE_UPGRADE = 'Stop all identity and app processes and verify a restorable database backup, then run npm run migrate:groups -w services/auth -- --writes-paused-backup-verified with AUTH__MIGRATION_DATABASE_URL and AUTH__SCHEMA identifying the reviewed database. Start only the new release; older releases cannot interpret these roles. Startup never applies this migration.';
+export const GROUP_ROLE_UPGRADE = 'Stop all identity and app processes and verify a restorable database backup, then run npm run migrate:groups -w services/auth -- --writes-paused-backup-verified with AUTH__MIGRATION_DATABASE_URL and AUTH__SCHEMA identifying the reviewed database, and IDENTITY__SCHEMA when using separate read views. Start only the new release; older releases cannot interpret these roles. Startup never applies this migration.';
 const versionColumn=async(db:Queryable,schema:string)=>!!(await db.query('SELECT 1 FROM information_schema.columns WHERE table_schema=$1 AND table_name=$2 AND column_name=$3',[schema,'group_hierarchy','role_model_version'])).rows.length;
 
 /** Works against the identity base schema or its read views (for a split app host). */
@@ -22,21 +22,29 @@ export async function initializeGroupRoleModel(db:Queryable,schema:string):Promi
 }
 
 /** All old editors become Admins and all old viewers become Members, invitations included, exactly once. */
-export async function migrateGroupRoles(db:TransactionalQueryable,options:{schema:string;writesPausedAndBackupVerified:boolean}):Promise<{changed:boolean}>{
+export async function migrateGroupRoles(db:TransactionalQueryable,options:{schema:string;readSchema?:string;writesPausedAndBackupVerified:boolean}):Promise<{changed:boolean}>{
  if(options.writesPausedAndBackupVerified!==true)throw new Error(GROUP_ROLE_UPGRADE);
  const t=identityTables(options.schema);
+ const read=options.readSchema===undefined?undefined:identityTables(options.readSchema);
+ if(read?.group_hierarchy===t.group_hierarchy)throw new Error('The read schema must differ from the identity base schema.');
+ // Append the version column without dropping the view, so existing grants and
+ // dependent views survive. The split app checks it before the auth host boots.
+ const refreshReadView=async(tx:Queryable)=>{
+  if(read)await tx.query(`CREATE OR REPLACE VIEW ${read.group_hierarchy} AS SELECT id,revision,role_model_version FROM ${t.group_hierarchy}`);
+ };
  return db.transaction(async tx=>{
   await tx.query("SELECT pg_advisory_xact_lock(hashtext('artifactbin.identity.schema'))");
   await tx.query(`LOCK TABLE ${t.group_hierarchy},${t.group_members},${t.group_invitations} IN ACCESS EXCLUSIVE MODE`);
   await tx.query(`ALTER TABLE ${t.group_hierarchy} ADD COLUMN IF NOT EXISTS role_model_version INTEGER NOT NULL DEFAULT 1`);
   const version=(await tx.query<{role_model_version:number}>(`SELECT role_model_version FROM ${t.group_hierarchy} WHERE id='installation'`)).rows[0]?.role_model_version??1;
-  if(version===2)return {changed:false};
+  if(version===2){await refreshReadView(tx);return {changed:false};}
   if(version!==1)throw new Error('Unexpected group role model version; no changes applied.');
   for(const table of [t.group_members,t.group_invitations]){
    if((await tx.query(`SELECT 1 FROM ${table} WHERE role NOT IN ('editor','viewer') LIMIT 1`)).rows.length)throw new Error('Unexpected group role in legacy membership or invitation; no changes applied.');
    await tx.query(`UPDATE ${table} SET role=CASE role WHEN 'editor' THEN 'admin' WHEN 'viewer' THEN 'member' END`);
   }
   await tx.query(`INSERT INTO ${t.group_hierarchy}(id,revision,role_model_version) VALUES('installation',0,2) ON CONFLICT(id) DO UPDATE SET role_model_version=2`);
+  await refreshReadView(tx);
   return {changed:true};
  });
 }

@@ -10,7 +10,7 @@ async function main(){
  const {connectionString,schema}=migrationTarget(process.env);
  const pool=new Pool({connectionString,max:1});
  try{
-  const result=await migrateGroupRoles(identityDbOf(pool),{schema,writesPausedAndBackupVerified:true});
+  const result=await migrateGroupRoles(identityDbOf(pool),{schema,readSchema:process.env.IDENTITY__SCHEMA,writesPausedAndBackupVerified:true});
   console.log(result.changed?'Group roles migrated; existing membership and invitation authority preserved.':'Group roles already compatible; no changes.');
  }finally{await pool.end();}
 }
