@@ -3,10 +3,14 @@
 import type { Editor } from '@tiptap/core';
 import { NodeSelection } from 'prosemirror-state';
 import { structural } from './native-editor-actions';
-export function deleteListSeparator(editor:Editor):boolean {
+export function deleteListSeparator(editor:Editor,emptyCaret=false):boolean {
  const {selection}=editor.state;
- if(!(selection instanceof NodeSelection)||selection.node.type.name!=='paragraph')return false;
- const {$from,from,to}=selection,index=$from.index(),parent=$from.parent;
+ let {from,to}=selection;
+ if(selection instanceof NodeSelection){if(selection.node.type.name!=='paragraph')return false;}
+ else if(emptyCaret&&selection.empty&&selection.$from.depth>0&&selection.$from.parent.type.name==='paragraph'&&!selection.$from.parent.content.size){
+  from=selection.$from.before();to=selection.$from.after();
+ }else return false;
+ const $from=editor.state.doc.resolve(from),index=$from.index(),parent=$from.parent;
  if(index===0||index+1>=parent.childCount)return false;
  const left=parent.child(index-1),right=parent.child(index+1);
  if(left.type!==right.type||!['taskList','bulletList','orderedList'].includes(left.type.name))return false;

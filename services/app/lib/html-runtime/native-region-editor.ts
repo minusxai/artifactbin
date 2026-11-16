@@ -52,7 +52,7 @@ export function mountRegionEditor(options:RegionEditorOptions):RegionEditor {
   editorProps:{transformPasted:freshClipboard,transformPastedHTML:html=>normalizeChecklist(html,root.ownerDocument),
    handleTextInput(view,from,to,text){const at=view.state.doc.resolve(from);if(text==='/'&&from===to&&at.parent.isTextblock&&!at.parent.type.spec.code&&!at.parent.content.size){const box=view.coordsAtPos(from);post({kind:'region-slash',regionId,x:box.left,y:box.bottom});}return false;},
    handleKeyDown(view,event){
-    if(!event.ctrlKey&&!event.metaKey&&!event.altKey&&['Backspace','Delete'].includes(event.key)&&deleteListSeparator(editor))return true;
+    if(!event.ctrlKey&&!event.metaKey&&!event.altKey&&['Backspace','Delete'].includes(event.key)&&deleteListSeparator(editor,true))return true;
     if(event.ctrlKey&&!event.metaKey&&event.shiftKey&&['ArrowUp','ArrowDown'].includes(event.key))return moveSibling(editor,event.key==='ArrowDown');
     if(!(event.ctrlKey||event.metaKey))return false;
     if(event.altKey&&event.key==='Enter')return isolated(editor,()=>toggleCheck(editor));

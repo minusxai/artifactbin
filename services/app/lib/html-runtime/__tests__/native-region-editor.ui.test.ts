@@ -659,3 +659,14 @@ it.each(['<ul>','<ol start="3">'])('whole separator deletion joins compatible or
  expect(e.view.state.doc.firstChild!.childCount).toBe(2);
  expect(e.command('undo')).toBe(true);expect(e.view.state.doc.toJSON()).toEqual(before);
 });
+
+it.each(['Backspace','Delete'])('ordinary caret deletion with %s removes an empty list separator and joins its lists',key=>{
+ const e=single('<ul data-type="taskList"><li data-type="taskItem" data-checked="false"><p>Alpha</p></li></ul><p data-af-id="separator"></p><ul data-type="taskList"><li data-type="taskItem" data-checked="true"><p>Beta</p></li></ul>');
+ let at=0;e.view.state.doc.descendants((node,pos)=>{if(node.attrs.afId==='separator')at=pos+1;});
+ e.view.dispatch(e.view.state.tr.setSelection(TextSelection.create(e.view.state.doc,at)));
+ const before=e.view.state.doc.toJSON();e.replay([{key}]);
+ expect(e.view.state.doc.childCount).toBe(1);expect(e.view.state.doc.firstChild?.childCount).toBe(2);
+ expect(e.view.state.doc.firstChild?.lastChild?.attrs.checked).toBe(true);
+ const after=e.view.state.doc.toJSON();expect(e.command('undo')).toBe(true);expect(e.view.state.doc.toJSON()).toEqual(before);
+ expect(e.command('redo')).toBe(true);expect(e.view.state.doc.toJSON()).toEqual(after);
+});
