@@ -16,7 +16,7 @@ export async function personalPageEvidence(request:Request,caller:Actor|null|und
   const actor=identityForUser(caller.userId),operation=input.fingerprint?{kind:'page-evidence-schema' as const,pageId:input.operation.pageId,revision:input.operation.revision}:input.operation;
   const result=await pageEvidenceStep(request.signal,withReadOnlyAccessFacts(()=>preparePageEvidence(request,actor,operation)));
   if(result.status!==200)return new Response(result.encoded,{status:result.status,headers:{'content-type':'application/json'}});
-  await pageEvidenceStep(request.signal,result.verify());
+  await pageEvidenceStep(request.signal,withReadOnlyAccessFacts(()=>result.verify()));
   if(input.fingerprint)return Response.json({valid:result.fingerprint===input.fingerprint},{status:result.fingerprint===input.fingerprint?200:409});
   return Response.json({body:result.encoded,fingerprint:result.fingerprint});
  }catch(error){return Response.json({error:error instanceof BodyTooLargeError?'too_large':'not_found'},{status:error instanceof BodyTooLargeError?413:404});}

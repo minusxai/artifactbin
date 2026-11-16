@@ -18,7 +18,7 @@ it('buffers human evidence and rechecks current app policy and identity parent w
  const policy={version:3,tables:[{table:{schema:'public',name:'rows'},select_permissions:[{role:'viewer',permission:{columns:['name','team'],filter:{team:{_eq:'red'}}}}]}]};
  await db.query('UPDATE artifacts SET dataset_policy=$2::jsonb,policy_revision=policy_revision+1 WHERE id=$1',[dataset.id,JSON.stringify(policy)]);
  const page=await create({title:'Evidence',html:`<html><head><link rel="af-dataset" data-af-name="metrics" href="ref:${dataset.id}" data-af-mode="pinned" data-af-revision="1"></head><body>Evidence</body></html>`,visibility:'private',destination:{type:'group',id:group.id}});
- for(const id of [page.id,dataset.id])await db.query("INSERT INTO artifact_shares(artifact_id,user_id,email,role) VALUES($1,$2,$3,'viewer')",[id,viewer.userId,viewer.email]);
+ for(const id of [page.id,dataset.id])await db.query("INSERT INTO artifact_shares(artifact_id,user_id,email,role) VALUES($1,$2,$3,'viewer')",[id,null,viewer.email]);
  const service={id:'reader',origin:'https://reader.example',introspectionSecretSha256:createHash('sha256').update('synthetic-secret').digest('hex')};
  let afterBuffer:(()=>Promise<unknown>)|undefined;const operations:unknown[]=[];
  const auth=createAuthHost({env:{IDENTITY__SERVICE_AUDIENCES:JSON.stringify([{id:service.id,origin:service.origin,introspection_secret_sha256:service.introspectionSecretSha256,artifact_reads:true}])},cookieSecret:'synthetic-cookie',tokens:{byToken:async()=>null},sessions:{resolve:async()=>null},identityDb:db,upstream:async(request,actor)=>{
@@ -32,6 +32,7 @@ it('buffers human evidence and rechecks current app policy and identity parent w
  const call=(body:unknown={grant,operation},secret='synthetic-secret')=>auth.request(PAGE_EVIDENCE_PATH,{method:'POST',headers:{[SERVICE_AUTH_HEADER]:secret},body:JSON.stringify(body)});
  const result=await call();expect(result.status,await result.clone().text()).toBe(200);expect((await result.json()).rows).toEqual([{name:'red'}]);
  expect(operations).toHaveLength(2);expect(operations[0]).toEqual({operation});expect(operations[1]).toMatchObject({operation,fingerprint:expect.stringMatching(/^[a-f0-9]{64}$/)});
+ expect((await db.query('SELECT user_id FROM artifact_shares WHERE artifact_id=ANY($1::text[])',[[page.id,dataset.id]])).rows.map(r=>r.user_id)).toEqual([null,null]);
  const schema=await call({grant,operation:{kind:'page-evidence-schema',pageId:page.id,revision:'1'}});expect(schema.status).toBe(200);expect(JSON.stringify(await schema.json())).not.toContain('secret');
  expect((await call(undefined,'wrong')).status).toBe(401);
  expect((await call({grant,operation,userId:owner.userId})).status).toBe(400);
