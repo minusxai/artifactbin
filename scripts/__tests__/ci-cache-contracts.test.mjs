@@ -43,3 +43,16 @@ it('gives every browser a disjoint immutable cache that the main warmer also pop
  for(const browser of browsers)expect(install.if).toContain(`steps.browser-${browser}.outputs.cache-hit != 'true'`);
 });
 
+
+it('pins browser system-package producers and consumers to the same supported distro',()=>{
+ const jobs=workflow().jobs;
+ for(const name of ['gates','warm-caches']){
+  expect(jobs[name]['runs-on']).toBe('ubuntu-24.04');
+  const systemCaches=jobs[name].steps.filter(step=>['~/browser-debs','~/session-debs'].includes(step.with?.path));
+  expect(systemCaches).toHaveLength(2);
+  for(const step of systemCaches){
+   expect(step.with.key).toContain(jobs[name]['runs-on']);
+   expect(step.with['restore-keys']).toBeUndefined();
+  }
+ }
+});
