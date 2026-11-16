@@ -31,7 +31,7 @@ export interface AuthorBaseline {
 }
 export interface AuthorJournal {
  kind:'author-request'; schema:1; server:string; method:'POST'|'PUT'|'PATCH'; path:string; key:string;
- body:Record<string,unknown>; operation:'publish'|'comment'; source?:{file:string;sha256:string;root:string;entryPath:string;output?:string};
+ body:Record<string,unknown>; operation:'publish'|'comment'|'doc'|'folder-create'; source?:{file:string;sha256:string;root:string;entryPath:string;output?:string};
  baseline?:AuthorBaseline;
 }
 export interface AuthorResult {ok:boolean;code:string;recovery?:string;[key:string]:unknown}

@@ -1,10 +1,5 @@
-/**
- * Internal: the publish command (publishCommand): classify the file, settle what it replaces from
- * its af-authoring marker (or --artifact, or --create), autofix and bundle a page, journal the
- * write, send it and save the canonical source (toolbox-publish-finish.mjs); a publish counts as
- * activity in the page's comment watch (toolbox-watch-state.mjs).
- * Used by: publish.mjs, author-toolbox.test.ts, skill-examples.test.ts.
- */
+/** Internal: prepare, journal and finish publication with marker-based update guards.
+ * Used by: publish.mjs and author-toolbox tests. */
 import path from 'node:path';
 import {readFile,realpath} from 'node:fs/promises';
 import {prepareBundle} from './toolbox-publication-bundle.mjs';
@@ -36,7 +31,10 @@ const client=makeClient(server,options),done=await finishPublication(await resum
 const file=await realpath(positional(positionals)),server=serverOrigin(selectedServer(values,
    options.env)),client=makeClient(server,options),bytes=await readFile(file),extension=
    path.extname(file).toLowerCase();
-if(values.type==='connection')return publishConnection(client,file,values);
+const parent=values.parent===undefined?undefined:resolveTarget(values.parent,server).id;
+if(values.type==='connection'){if(parent!==undefined)throw new ToolError('parent_not_supported',
+   'Connection publishing does not support --parent.',2);
+ return publishConnection(client,file,values);}
 const type=values.type?enumValue(values.type,['html','dataset','asset'],'type'):['.html',
    '.htm'].includes(extension)?'html':['.csv','.json'].includes(extension)?'dataset':media[
    extension]?'asset':null;
@@ -50,17 +48,14 @@ if((values.template!==undefined||values['owner-column']!==undefined)&&(type!=='d
  let baseline=null,source=bytes.toString('utf8'),replaced=null,marker=null;
  const target=values.artifact?resolveTarget(values.artifact,server).id:null,name=path.basename(
   file);
- // The marker is the baseline; --artifact ID replaces that page over its current head when the
- // marker is missing, broken or names another page; --create makes a new page of a file that
- // carries no marker of this server.
  if(type==='html')try{marker=markerOf(file,source,server);}catch(error){if(!target&&!values.create)
   throw error;}
  if(values.create&&marker)throw new ToolError('already_published',`${name} is already page `+
   `${marker.id}.`,2,`To update page ${marker.id}: node scripts/publish.mjs ${name}. For a second `+
   'page from it, delete its last line (the af-authoring marker) first.');
- // An update keeps its owner, permissions and name: refused before anything is read.
  const updating=!values.create&&Boolean(target||marker);
- for(const flag of ['group','personal'])if(updating&&values[flag]!==undefined)throw new ToolError(
+ for(const flag of ['group','personal','parent'])if(updating&&values[flag]!==undefined)
+ throw new ToolError(
   flag+'_not_for_update',`--${flag} places a new page; it never moves an existing one.`,2,
   `Drop --${flag} (updates keep their owner) or use --create for a new page.`);
 if(updating&&values.template)throw new ToolError('template_not_for_update',
@@ -70,14 +65,10 @@ if(updating&&values.template)throw new ToolError('template_not_for_update',
   replaced=`${name} replaced page ${target} (its version ${baseline.version} was the baseline).`;}
  else if(marker&&!values.create)baseline=await markedBaseline(client,marker,name,source);
  if(type==='html'&&!baseline&&!values.create)unmarked(source,name);
- // An export (export.mjs --format html) carries its reader's rows and the runtime: only its
- // page is published, as the app's local publish does it (recoverPortableSource).
  let exported=null;if(type==='html'){const recovered=(await platform()).recoverPortableSource(
   source);if(recovered!==source)exported=`${name} is an exported copy: published without the `+
   'rows and runtime it carries.';source=recovered;}
  if(values.create){if(type==='html')source=stripMarker(source);baseline=null;}
- // The page's receipts are relative to the root it was published from: the marker's entryPath
- // says how far above the file that is.
  const up=baseline&&marker?.id===baseline.id?marker.entryPath.split('/').length-1:0;
  const root=await realpath(values.root??path.resolve(path.dirname(file),...Array(up).fill('..')));
  if(!within(root,file))throw new ToolError('source_outside_root',
@@ -85,8 +76,6 @@ if(updating&&values.template)throw new ToolError('template_not_for_update',
  const entryPath=path.relative(root,file).split(path.sep).join('/');let body,fixed=null;
  const log=options.log??(text=>process.stderr.write(text));
  if(type==='html'){
-  // One autofix pass before anything is sent (lib/html-autofix); its fixes land in the file with
-  // the canonical result.
 const {autofixSource,autofixDetail}=await import('./autofix.mjs'),{formatAutofixReport}=
     await import('./preview-html.mjs');
   const published=new Set((baseline?.dependencyReceipts??[]).map(receipt=>receipt.path));
@@ -118,21 +107,15 @@ let dataset=source;if(extension==='.json'){try{dataset=JSON.parse(source);}catch
 }else body={file:{filename:baseline?.filename??path.basename(file),contentType:
    baseline?.contentType??media[extension]??'application/octet-stream',base64:bytes.toString(
    'base64')}};
-// An update sends no visibility unless --visibility asks for one: the page keeps the one it has.
 if(baseline){delete body.visibility;body.expectedVersion=baseline.version;body.expectedState=
    baseline.state;
- // A visibility change on an update names the sharing revision it saw, when the baseline has one.
  if(values.visibility&&Number.isSafeInteger(baseline.sharingRevision))
   body.expectedSharingRevision=baseline.sharingRevision;
 }else body.visibility='unlisted';
 if(values.visibility)body.visibility=enumValue(values.visibility,['private','unlisted','public'],
    'visibility');if(values.title!==undefined)body.title=values.title;
- // A new dataset is named after its file (sales.csv → sales), the name a page links it by.
- const stem=path.basename(file).replace(/\.[^.]+$/,'').toLowerCase().replace(/[^a-z0-9]+/g,'_')
-  .replace(/^_+|_+$/g,''),named=/^(?!dataset|true$|false$|null$)[a-z][a-z0-9_]{0,40}$/;
+ if(parent!==undefined)body.parent_id=parent;
  if(values.personal)body.destination={type:'personal'};
- // --group HANDLE: create the page directly in a group you can edit. The server refuses a
- // destination that conflicts with the parent's owner.
  if(values.group!==undefined){
   const detail=await client.request('/api/groups/'+encodeURIComponent(
     values.group.replace(/^@/,'')));
@@ -144,7 +127,8 @@ if(!['editor','admin'].includes(detail.group?.role))throw new ToolError('group_n
 const report=fixed&&(await import('./preview-html.mjs')).formatAutofixReport(fixed,{file:
     path.basename(file),landed:'dry run; nothing written',dryRun:true,routine:fixed.routine});if(
     report)log(report);
-return {dryRun:true,...(body.destination?{destination:body.destination}:{}),...(fixed?{autofix:(
+return {dryRun:true,...(parent!==undefined?{parent_id:parent}:{}),
+ ...(body.destination?{destination:body.destination}:{}),...(fixed?{autofix:(
     await import('./autofix.mjs')).autofixDetail(fixed,report)}:{}),server,type,method:
     baseline?'PUT':'POST',artifact:baseline?.id??null,files:body.publicationBundle?.files.map(file=>
     ({path:file.path,contentType:file.contentType,bytes:Buffer.from(file.base64,
@@ -159,7 +143,6 @@ intent.source.output=path.join(path.dirname(file),path.basename(file,
  const journal=await createJournal(intent,{file:values.request,root:client.root,project:root});
  const published=await watched(client,await finishPublication(await resumeJournal(journal,client,
   'publish')),options);
- // A page's author ends by replying and watching for comments: say so as the last line printed.
  const notes=[replaced,exported,published.note].filter(Boolean);
  const done={...published,...(notes.length?{note:notes.join(' ')}:{}),next:type==='html'?
   watchNext(published.id):updateNext(name,published.id,type)};
@@ -173,8 +156,6 @@ const routine=[...fixed.routine,...routineChanges(source,await readFile(done.sou
 const report=formatAutofixReport(fixed,{file:path.basename(file),landed:
    fixed.changed?done.updatedInPlace?`also written to ${path.basename(file)}`:
    `written to ${path.basename(done.source)}`:undefined,routine});log(report);
- // Exact-text edits written against the file as it was before publishing silently miss once ids
- // are added: say so where the agent reads (runTool prints it after the result).
  const ids=text=>(text.match(/\sdata-af-id\s*=/g)??[]).length,added=ids(await readFile(done.source,
   'utf8'))-ids(bytes.toString('utf8'));
  const rewritten=done.updatedInPlace&&added>0?`${path.basename(file)} was rewritten with ${added} `+
