@@ -50,7 +50,7 @@ export { findDependentsFor } from './dependents';
 export { getSharingFor, updateSharingFor,setArtifactGroupShare } from './sharing';
 export { MembershipError, changeMembership, invitePeople, membershipState, mentionCandidates } from './membership/membership';
 export { accountProfile, updateAccountProfile } from './membership/account-profile';
-export { PARENT_REFUSED, isParentRefusal, notifyParent, parentOf, resolveParent, selectChildren } from './placement';
+export { PARENT_REFUSED, isParentRefusal, notifyParent, listedFolderChild, parentOf, resolveParent, selectChildren } from './placement';
 /** The trash's writes, for lib/workspace's delete and restore. */
 export { rerootArtifact, restoreTrashedSubtree, trashSubtree } from './trash';
 

@@ -69,6 +69,15 @@ export const PARENT_REFUSED: ParentRefusal = {
 /** Narrow `resolveParent`'s answer: the refusal, or a placement. */
 export const isParentRefusal = (r: { ancestor_ids: string[] } | ParentRefusal): r is ParentRefusal => 'error' in r;
 
+/** Shared shelf admission, also used by paginated group collections. */
+export async function listedFolderChild(
+  child: Pick<ArtifactRow, 'id'|'user_id'|'token_id'|'visibility'> & Partial<Pick<ArtifactRow,'group_id'|'format'>>,
+  actor: AccessActor,
+  insider: boolean,
+): Promise<boolean> {
+  return insider || child.visibility === 'public' || canRead(await roleWithoutLink(child, actor));
+}
+
 /**
  * WHICH CHILDREN THIS VIEWER GETS, and whether they get the numbers — asked
  * ONCE, by the folder page and by an imported folder's `rows` table alike.
@@ -135,7 +144,7 @@ export async function selectChildren(
      * anonymous viewer (`roleWithoutLink` returns `none` with no query).
      * Measured at 100 children read by a signed-in stranger: 25ms → 1ms.
      */
-    if (!insider && c.visibility !== 'public' && !canRead(await roleWithoutLink(c, actor))) continue;
+    if (!await listedFolderChild(c, actor, insider)) continue;
     children.push(c);
   }
   // The numbers cost nothing for a viewer who is told none, and one aggregate over the shelf for one who is

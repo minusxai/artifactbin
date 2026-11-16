@@ -18,3 +18,5 @@ export type { HomeBootstrap } from './home';
 export type { AssetSelection, WorkspaceAssets, WorkspaceStats } from './inventory';
 export type { ShelfRow } from '@/lib/shelf';
 export type { SharingVerdict } from './visibility-icons';
+
+export {groupCollectionFor} from './group-collection';
