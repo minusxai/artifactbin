@@ -41,6 +41,10 @@ export async function groupFolders({sub,values,positionals},options){
     project:options.project??process.cwd()});
  }
  const {receipt}=await resumeJournal(journal,client,'folder-create');
+ if(typeof receipt?.id!=='string'||!/^[A-Za-z0-9]{6,12}$/.test(receipt.id)||
+  receipt.format!=='folder')
+  throw new ToolError('outcome_unknown','Incomplete folder receipt.',5,
+   'Resume the same journal; do not create again.',{journal});
  return {id:receipt.id,title:receipt.title,url:receipt.url??client.server+'/a/'+receipt.id,
-  parent_id:receipt.parent_id??null,format:receipt.format??'folder',journal};
+  parent_id:receipt.parent_id??null,format:receipt.format,journal};
 }

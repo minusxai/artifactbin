@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {promisify} from 'node:util';
 import {execFile} from 'node:child_process';
-import {createServer} from 'node:http';
+import {withHttpServer} from '@artifactbin/test-support/net';
 import {archiveFor} from '..';
 import {publishCommand} from '../../../skills/artifactbin/scripts/toolbox-publish.mjs';
 import {groupsCommand} from '../../../skills/artifactbin/scripts/groups.mjs';
@@ -103,18 +103,27 @@ it('keeps root collection one page and does not imply publication access',async(
    {group:{id:'grp_team',handle:'team',role:'member'}}:page);}})).toEqual(page);
  expect(calls).toEqual([server+'/api/groups/team',server+'/api/groups/grp_team/collection']);
 });
+it.each([{}, {id:'FOLD12',format:'html'}, {id:'bad',format:'folder'}, {id:123456,format:'folder'}])('refuses an incomplete or wrong-kind success receipt %j',async receipt=>workspace(async root=>{
+ const journal=path.join(root,'request.json');let posts=0;
+ const options={env,fetcher:async(url:any)=>{
+  if(String(url).endsWith('/api/groups/team'))return Response.json({group:{id:'grp_team',handle:'team',role:'editor'}});
+  posts++;return Response.json(receipt,{status:201});
+ }};
+ await expect(groupsCommand({sub:'folder-create',positionals:['team'],values:{title:'Notes',request:journal}},options))
+  .rejects.toMatchObject({code:'outcome_unknown',exit:5,details:{journal:expect.stringContaining('/request.json')}});
+ expect(posts).toBe(1);expect(JSON.parse(await readFile(journal,'utf8')).body.format).toBe('folder');
+}));
 it('fresh candidate archive executes the real folder-create parser and helper',async()=>workspace(async root=>{
  const received:any[]=[];
- const fixture=createServer(async(req,res)=>{
+ const fixture=await withHttpServer(async(req,res)=>{
   let raw='';for await(const chunk of req)raw+=chunk;
   received.push({url:req.url,method:req.method,body:raw&&JSON.parse(raw)});
   res.setHeader('Content-Type','application/json');
   res.end(JSON.stringify(req.method==='POST'?{id:'FOLD12',title:'Notes',format:'folder',parent_id:null}:
    {group:{id:'grp_team',handle:'team',role:'editor'}}));
  });
- await new Promise<void>(resolve=>fixture.listen(0,'127.0.0.1',resolve));
  try{
-  const origin='http://127.0.0.1:'+(fixture.address() as {port:number}).port;
+  const origin=fixture.base;
   const archive=await archiveFor(origin);const zip=path.join(root,'candidate.zip');
   await writeFile(zip,archive.bytes);await run('unzip',['-q',zip,'-d',root]);
   const cwd=path.join(root,'artifactbin'),journal=path.join(root,'request.json');
@@ -129,5 +138,5 @@ it('fresh candidate archive executes the real folder-create parser and helper',a
    destination:{type:'group',id:'grp_team'}});
   const help=await run(process.execPath,['scripts/groups.mjs','--help'],{cwd,env:commandEnv});
   expect(help.stdout).toContain('collection GROUP');expect(help.stdout).toContain('folder-create');
- }finally{await new Promise<void>((resolve,reject)=>fixture.close(error=>error?reject(error):resolve()));}
+ }finally{await fixture.close();}
 }));

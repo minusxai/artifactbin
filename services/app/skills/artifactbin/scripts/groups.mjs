@@ -59,7 +59,7 @@ export async function groupsCommand(parsed,options={}){
 async function command({sub,values,positionals},options){
  if(['collection','folder-create'].includes(sub))return groupFolders({sub,values,positionals},
   options);
- // These checks precede even identity lookup HTTP, so refusal cannot accidentally mutate.
+ // Confirm before HTTP.
  confirmation(sub,values);
  const pageVerb=['share','unshare','move'].includes(sub);
  if(['invite','allow','disallow'].includes(sub)){
@@ -112,7 +112,6 @@ async function command({sub,values,positionals},options){
  const detail=await resolveGroup(client,pageVerb?values.group:positionals[0]);
  const group=detail.group,base='/api/groups/'+segment(group.id);
  if(sub==='show'){
-  // Members show handles, not the addresses the user knows them by: a change names who, then waits.
   const shown={...detail,...([detail.members,detail.invitations].some(list=>list?.length)?{next:
    PROPOSE}:{})};
   if(!values.pages)return shown;

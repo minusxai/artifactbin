@@ -114,8 +114,6 @@ if(baseline){delete body.visibility;body.expectedVersion=baseline.version;body.e
 }else body.visibility='unlisted';
 if(values.visibility)body.visibility=enumValue(values.visibility,['private','unlisted','public'],
    'visibility');if(values.title!==undefined)body.title=values.title;
- const stem=path.basename(file).replace(/\.[^.]+$/,'').toLowerCase().replace(/[^a-z0-9]+/g,'_')
-  .replace(/^_+|_+$/g,''),named=/^(?!dataset|true$|false$|null$)[a-z][a-z0-9_]{0,40}$/;
  if(parent!==undefined)body.parent_id=parent;
  if(values.personal)body.destination={type:'personal'};
  if(values.group!==undefined){
