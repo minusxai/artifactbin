@@ -17,6 +17,10 @@ export function parseArtifactDestination(value:unknown):ArtifactDestination|unde
  throw new DatasetError('Invalid destination',400);
 }
 const destinationOf=(row:Pick<ArtifactRow,'user_id'> & Partial<Pick<ArtifactRow,'group_id'>>):ArtifactDestination=>row.group_id?{type:'group',id:row.group_id}:{type:'personal'};
+/** Preserve the uniform placement refusal when resolving a parent's destination first. */
+export class ArtifactParentRefusal extends DatasetError {
+ constructor(){super('Invalid parent',400);}
+}
 export async function newArtifactDestination(actor:AccessActor,explicit?:ArtifactDestination,parentId?:string|null):Promise<ArtifactDestination>{
  const db=await getDb();
  if(actor.workload){
@@ -24,8 +28,8 @@ export async function newArtifactDestination(actor:AccessActor,explicit?:Artifac
   return explicit;
  }
  const parent=parentId?(await db.query<ArtifactRow>('SELECT * FROM artifacts WHERE id=$1 AND deleted_at IS NULL',[parentId])).rows[0]:undefined;
- if(parentId&&!parent)throw new DatasetError('Invalid parent',400);
- if(parent&&!parent.group_id&&(parent.user_id?parent.user_id!==actor.userId:parent.token_id!==actor.tokenId))throw new DatasetError('Invalid parent',400);
+ if(parentId&&(!parent||parent.format!=='folder'))throw new ArtifactParentRefusal();
+ if(parent&&(parent.group_id?!canEditGroupContent(await getGroupRole(actor.userId,parent.group_id)):(parent.user_id?parent.user_id!==actor.userId:parent.token_id!==actor.tokenId)))throw new ArtifactParentRefusal();
  const preference=actor.userId?(await getAccountPreferences(actor.userId)).default_destination:undefined;
  let deployment_default:ArtifactDestination|undefined;
  if(!explicit&&!parent&&(!preference||preference.type==='inherit')){

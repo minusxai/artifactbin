@@ -20,6 +20,16 @@ async function owner(id:string|undefined){
  const db=await getDb();return(await db.query('SELECT user_id,group_id,creator_user_id FROM artifacts WHERE id=$1',[id])).rows[0];
 }
 describe('publication uses shared account destination through the real HTTP handler',()=>{
+ it('keeps inaccessible group parents indistinguishable from missing parents',async()=>{
+  const a=await account('folder-owner'),b=await account('folder-outsider');
+  const group=await createGroup(a.user.id,{handle:'private_folders',name:'Private folders'});
+  const folder=await create(a.token,{format:'folder',title:'Reports',destination:{type:'group',id:group.id}});
+  expect(folder.status).toBe(201);
+  const missing=await create(b.token,{html:nativeHtml('<p>Report</p>'),parent_id:'zzzzzz'});
+  const inaccessible=await create(b.token,{html:nativeHtml('<p>Report</p>'),parent_id:folder.body.id});
+  expect(missing.status).toBe(400);expect(missing.body).toMatchObject({error:'invalid_parent'});
+  expect(inaccessible).toEqual(missing);
+ });
  it('accepts a present but empty request stream from the HTTP server',async()=>{
   const a=await account('empty-stream');const base=request('/api/start',{method:'POST',token:a.token});
   const incoming=new Request(base.url,{method:'POST',headers:base.headers,body:''});

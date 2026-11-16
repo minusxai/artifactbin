@@ -1,4 +1,5 @@
 import {planPublicationBundle,type PublicationBundle} from '@/lib/html-publication-bundle';
+import {ArtifactParentRefusal,PARENT_REFUSED} from '@/lib/artifacts';
 import {LiveRegionRefusal} from '@/lib/live-regions';
 import {documentOwner,type UserPagesOwner} from '@/lib/user-pages';
 import {preparePublicationBundle} from './bundle';
@@ -376,7 +377,7 @@ async function createArtifactFromBodyPrepared(
   // own folder or this is the one refusal.
   // Resolve and authorize the destination before looking up its folder namespace.
   // A direct group Editor may publish there without owning the group personally.
-  try{destination=await newArtifactDestination(actor,destination,parent);}catch(error){if(error instanceof DatasetError)return json({error:'invalid_destination',details:[error.message]},error.status);throw error;}
+  try{destination=await newArtifactDestination(actor,destination,parent);}catch(error){if(error instanceof ArtifactParentRefusal)return json(PARENT_REFUSED,400);if(error instanceof DatasetError)return json({error:'invalid_destination',details:[error.message]},error.status);throw error;}
   const placementOwner = destination.type==='group' ? {...identityForUser(actor.userId,actor.tokenId),groupId:destination.id} : actor;
   const placement = (await placementFor(placementOwner, parent, null)) ?? { ancestor_ids: [] };
   if (placement instanceof Response) return placement;
