@@ -141,7 +141,7 @@ export function RegionToolbar(props: { ui: RegionUi; state: Accessor<RegionToolb
       <ToolbarSeparator />
       <Command label="Bulleted list" keys="Mod-Shift-8" pressed={block() === 'bullet'} onPress={() => run('list', { type: block() === 'bullet' ? null : 'bullet' })}><List size={16} /></Command>
       <Command label="Numbered list" keys="Mod-Shift-7" pressed={block() === 'ordered'} onPress={() => run('list', { type: block() === 'ordered' ? null : 'ordered' })}><ListOrdered size={16} /></Command>
-      <Command label="Quote" keys="Mod-Shift-9" pressed={block() === 'quote'} onPress={() => run('quote', { on: block() !== 'quote' })}><Quote size={16} /></Command>
+      <Command label="Quote" pressed={block() === 'quote'} onPress={() => run('quote', { on: block() !== 'quote' })}><Quote size={16} /></Command>
       <Command label="Code block" hint="```" pressed={block() === 'code'} onPress={() => run('codeBlock', { on: block() !== 'code' })}><SquareCode size={16} /></Command>
       <ToolbarSeparator />
       <Command label="Decrease indent" keys="Shift-Tab" onPress={() => run('outdent')}><IndentDecrease size={16} /></Command>
