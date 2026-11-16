@@ -59,14 +59,18 @@ Host boundaries: `app.ts` (app and API), `public-files.ts` (files), `pages-host.
   `authorization_url` and `authorization_secret`; both identity and app hosts need the same configuration.
   The app calls that URL with Bearer callback authorization, no redirects, a 10-second timeout and a 32-KiB
   response cap. Only a signed auth-owned service-workload principal crosses the internal transport; caller
-  scopes and human impersonation are refused. Native host workload authority remains read-only.
+  scopes and human impersonation are refused. Native host workload authority retains its independently admitted publication capabilities.
   The request is exactly `{principal,operation}`. Operations are canonical group HTML read
   `{kind:'artifact-read',artifactId,source:'canonical'}` or new private static HTML
   `{kind:'artifact-create',title,html}`. HTML/output are bounded at 200 KiB, title at 500 characters.
   Each callback receives `{principal,operation,digest,nonce,phase}` (`admission` then `final`); digest is SHA-256
   of JSON with operation fields in the order shown. It must echo digest/nonce and a fresh scope containing
   `allowed:true`, exact `principal`, `role`, `readArtifactIds`, `rootFolderId`, `visibility:'private'`, and for
-  creation an opaque stable `creationKey` (at most 200 characters), optionally trusted `expectedTitle`.
+  creation an opaque stable `creationKey` (at most 200 characters), trusted `publication:{maxArtifacts,maxBytes}`
+  (positive integers, at most 10,000 artifacts and 1 GiB cumulatively across that grant), optionally trusted `expectedTitle`.
+  The stable key is the canonical publication slot; existing group/operator quotas additionally apply. The RPC
+  uses the same canonical workload actor, placement validation, publication intent, cumulative charge and output
+  graph as native host publication; no separate group writer or identity bypass exists.
   Scope comes from the service's persisted current authority, never caller assertions. Creation requires editor,
   exact same-group live folder/ancestry, no data declarations, references, remote ingestion or bundles.
   Author scripts, event handlers, embedded contexts, forms, automatic URL loads and CSS URL/imports are refused;

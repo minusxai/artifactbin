@@ -18,7 +18,7 @@ it('creates group-owned private HTML atomically, replays, conflicts and never re
  const fetch=vi.spyOn(globalThis,'fetch').mockImplementation(async(input,init)=>{
   expect(String(input)).toBe('http://127.0.0.1/authorize');expect(new Headers(init?.headers).get('authorization')).toBe('Bearer callback-secret-test');
   const envelope=JSON.parse(String(init?.body));calls++;
-  return Response.json({digest:envelope.digest,nonce:envelope.nonce,scope:allowed&&!(denyFinal&&envelope.phase==='final')?{allowed:true,principal,role:'editor',readArtifactIds:reads,rootFolderId:root,visibility:'private',creationKey:key}:{allowed:false}});
+  return Response.json({digest:envelope.digest,nonce:envelope.nonce,scope:allowed&&!(denyFinal&&envelope.phase==='final')?{allowed:true,principal,role:'editor',readArtifactIds:reads,rootFolderId:root,visibility:'private',creationKey:key,publication:{maxArtifacts:100,maxBytes:16*1024*1024}}:{allowed:false}});
  });
  const config=await import('@/lib/platform');vi.spyOn(config,'serviceAudiences').mockReturnValue([{id:'worker',origin:'https://worker.example',introspectionSecretSha256:'0'.repeat(64),artifactWorkloads:{authorizationUrl:'http://127.0.0.1/authorize',authorizationSecret:'callback-secret-test'}}]);
  const operation={kind:'artifact-create',title:'Scheduled report',html:nativeHtml('<p>Static result</p>')};

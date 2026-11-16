@@ -30,7 +30,7 @@ export async function artifactWorkload(request:Request,actor:Actor|null|undefine
    const answer=JSON.parse(await readBody(response,{limit:32768,as:'text'})),scope=answer?.scope;
    if(request.signal.aborted||answer.digest!==digest||answer.nonce!==nonce||!scope||scope.allowed!==true||!isWorkloadBinding(scope.principal)||!isDeepStrictEqual(scope.principal,principal)||!['viewer','editor'].includes(scope.role)||scope.visibility!=='private'||!Array.isArray(scope.readArtifactIds)||scope.readArtifactIds.length>128||scope.readArtifactIds.some((id:unknown)=>typeof id!=='string'||id.length>128)||(scope.rootFolderId!==null&&(typeof scope.rootFolderId!=='string'||!scope.rootFolderId||scope.rootFolderId.length>128)))return null;
    if(operation.kind==='artifact-read'&&!scope.readArtifactIds.includes(operation.artifactId))return null;
-   if(operation.kind==='artifact-create'&&(scope.role!=='editor'||!scope.rootFolderId||typeof scope.creationKey!=='string'||!scope.creationKey||scope.creationKey.length>200||(scope.expectedTitle!==undefined&&scope.expectedTitle!==operation.title)))return null;
+   if(operation.kind==='artifact-create'&&(!scope.publication||!Number.isSafeInteger(scope.publication.maxArtifacts)||scope.publication.maxArtifacts<1||scope.publication.maxArtifacts>10000||!Number.isSafeInteger(scope.publication.maxBytes)||scope.publication.maxBytes<1||scope.publication.maxBytes>1024*1024*1024||scope.role!=='editor'||!scope.rootFolderId||typeof scope.creationKey!=='string'||!scope.creationKey||scope.creationKey.length>200||(scope.expectedTitle!==undefined&&scope.expectedTitle!==operation.title)))return null;
    return scope;
   };
   const scope=await authorize('admission');if(!scope)return denied();
@@ -39,7 +39,7 @@ export async function artifactWorkload(request:Request,actor:Actor|null|undefine
     if(!(await (await getDb()).query('SELECT 1 FROM groups WHERE id=$1 AND deleted_at IS NULL',[principal.groupId])).rows.length)return null;
     const row=await getArtifactById(operation.artifactId);
     if(!row||row.deleted_at||row.group_id!==principal.groupId||row.format!=='html')return null;
-    const snapshot:Record<string,unknown>|null=await withReadOnlyAccessFacts(()=>readArtifactSnapshot({userId:null,tokenId:null,email:null,documentEditor:false,workload:{...scope,writeArtifactIds:[]}},operation.artifactId,PUBLIC_BASE_URL,{currentReadOnly:true}));
+    const snapshot:Record<string,unknown>|null=await withReadOnlyAccessFacts(()=>readArtifactSnapshot({userId:null,tokenId:null,email:null,documentEditor:false,workload:{...scope,writeArtifactIds:[],publication:undefined}},operation.artifactId,PUBLIC_BASE_URL,{currentReadOnly:true}));
     return snapshot?{id:snapshot.id,title:snapshot.title,format:snapshot.format,version:snapshot.version,html:snapshot.html}:null;
    };
    const source=await read();if(!source)return reply({error:'not_found'},404);

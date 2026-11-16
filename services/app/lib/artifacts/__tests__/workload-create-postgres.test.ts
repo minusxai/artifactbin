@@ -21,12 +21,15 @@ describe.skipIf(!available)('workload receipt on PostgreSQL',()=>{
  },30000);
  afterAll(async()=>{vi.restoreAllMocks();await db?.close();if(container)execFileSync('docker',['rm','-f',container],{stdio:'ignore'});});
  it('atomically returns one original id across concurrent create/replay/conflict/deletion',async()=>{
-  const scope={allowed:true as const,principal:{issuerId:'worker',subjectId:'subject',grantId:'grant',groupId:'group',executionId:'execution',environmentId:'environment',intentHash:'intent',epoch:1},role:'editor' as const,readArtifactIds:[],rootFolderId:'folder',visibility:'private' as const,creationKey:'slot-action'};
+  const scope={allowed:true as const,principal:{issuerId:'worker',subjectId:'subject',grantId:'grant',groupId:'group',executionId:'execution',environmentId:'environment',intentHash:'intent',epoch:1},role:'editor' as const,readArtifactIds:[],rootFolderId:'folder',visibility:'private' as const,creationKey:'slot-action',publication:{maxArtifacts:100,maxBytes:16*1024*1024}};
   const input={format:'html' as const,source:'<!doctype html><html><head></head><body><p>Report</p></body></html>',title:'Report',meta:{}};
   const [first,second]=await Promise.all([createWorkloadArtifact(scope,input,'payload'),createWorkloadArtifact(scope,input,'payload')]);
   expect((await pool.query("SELECT response_until='infinity'::timestamptz AS durable FROM artifact_creation_operations")).rows).toEqual([{durable:true}]);
   expect(first.status).toBe(201);expect(second.body.id).toBe(first.body.id);
   expect((await pool.query("SELECT id FROM artifacts WHERE format='html'")).rows).toHaveLength(1);
+  expect((await pool.query('SELECT artifact_id FROM workload_publication_audit')).rows).toEqual([{artifact_id:first.body.id}]);
+  expect((await pool.query('SELECT artifact_id FROM workload_publication_outputs')).rows).toEqual([{artifact_id:first.body.id}]);
+  expect((await createWorkloadArtifact({...scope,creationKey:'next-slot',publication:{maxArtifacts:1,maxBytes:16*1024*1024}},input,'next')).status).toBe(403);
   expect((await createWorkloadArtifact(scope,{...input,title:'Changed'},'changed')).status).toBe(409);
   await pool.query('DELETE FROM artifacts WHERE id=$1',[first.body.id]);
   expect(await createWorkloadArtifact(scope,input,'payload')).toMatchObject({status:410,body:{id:first.body.id}});

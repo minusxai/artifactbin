@@ -12,6 +12,7 @@ export interface ArtifactWorkloadScope {
  rootFolderId:string|null;
  visibility:'private';
  creationKey?:string;
+ publication?:{maxArtifacts:number;maxBytes:number};
  expectedTitle?:string;
 }
 const workloadBindingKeys=['issuerId','subjectId','grantId','groupId','executionId','environmentId','intentHash'] as const;
