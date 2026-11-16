@@ -24,6 +24,7 @@ describe.skipIf(!available)('workload receipt on PostgreSQL',()=>{
   const scope={allowed:true as const,principal:{issuerId:'worker',subjectId:'subject',grantId:'grant',groupId:'group',executionId:'execution',environmentId:'environment',intentHash:'intent',epoch:1},role:'editor' as const,readArtifactIds:[],rootFolderId:'folder',visibility:'private' as const,creationKey:'slot-action'};
   const input={format:'html' as const,source:'<!doctype html><html><head></head><body><p>Report</p></body></html>',title:'Report',meta:{}};
   const [first,second]=await Promise.all([createWorkloadArtifact(scope,input,'payload'),createWorkloadArtifact(scope,input,'payload')]);
+  expect((await pool.query("SELECT response_until='infinity'::timestamptz AS durable FROM artifact_creation_operations")).rows).toEqual([{durable:true}]);
   expect(first.status).toBe(201);expect(second.body.id).toBe(first.body.id);
   expect((await pool.query("SELECT id FROM artifacts WHERE format='html'")).rows).toHaveLength(1);
   expect((await createWorkloadArtifact(scope,{...input,title:'Changed'},'changed')).status).toBe(409);

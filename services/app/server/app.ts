@@ -620,7 +620,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     for(const key of ['id','title','format','version','html','markup','meta'])if(key in snapshot)source[key]=snapshot[key as keyof typeof snapshot];
     return json(source);
   })));
-  app.post(APP_ARTIFACT_WORKLOAD_PATH,c=>artifactWorkload(c.req.raw,actorOf(c.req.raw)));
+  app.post(APP_ARTIFACT_WORKLOAD_PATH,c=>runWithRequest(c.req.raw,()=>artifactWorkload(c.req.raw,actorOf(c.req.raw))));
   mountRoutes(app);
 
   app.all('/api', apiNotFound);

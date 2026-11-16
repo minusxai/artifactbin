@@ -34,7 +34,7 @@ it('creates group-owned private HTML atomically, replays, conflicts and never re
   denyFinal=true;expect((await read()).status).toBe(403);expect((await create()).status).toBe(403);denyFinal=false;
   expect((await create({...operation,html:nativeHtml('<link rel="af-dataset" data-af-name="data" href="default:db">')})).status).toBe(400);
   expect((await create({...operation,html:nativeHtml('<img src="ref:abcdef">')})).status).toBe(400);
-  key='concurrent-slot';const concurrent=await Promise.all([create(),create()]);const results=await Promise.all(concurrent.map(result=>result.json()));expect(results[0].id).toBe(results[1].id);expect(results[0].id).not.toBe(id);key='stable-slot-action';
+  key='concurrent-slot';const concurrent=await Promise.all([create(),create()]);const results=await Promise.all(concurrent.map(async result=>{const value=await result.json();expect(result.status,JSON.stringify(value)).toBe(201);return value;}));expect(results[0].id).toBe(results[1].id);expect(results[0].id).not.toBe(id);key='stable-slot-action';
   root='missing-folder';expect((await create()).status).toBe(403);root=folder;
   const foreign=await createGroup(owner.userId!,{handle:'foreign_workload',name:'Other group'});
   const foreignFolder=await host.request(req('/api/artifacts',{format:'folder',title:'Other',destination:{type:'group',id:foreign.id}}),human);

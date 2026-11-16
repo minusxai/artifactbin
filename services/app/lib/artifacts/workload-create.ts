@@ -25,7 +25,10 @@ export async function createWorkloadArtifact(scope:ArtifactWorkloadScope,input:A
    const live=await tx.query('SELECT id FROM artifacts WHERE id=ANY($1::text[]) AND group_id=$2 AND format=\'folder\' AND deleted_at IS NULL ORDER BY id COLLATE "C" FOR SHARE',[ancestors,scope.principal.groupId]);
    if(live.rows.length!==ancestors.length)throw new WorkloadCreationRefusal('Invalid workload ancestry');
    const replay=await lookupCreation(tx,operation);if(replay)throw new CreationReplay(replay);
-   return createArtifact(null,null,{...input,title:input.title,format:'html',visibility:'private',destination:{type:'group',id:scope.principal.groupId},ancestor_ids:ancestors},{tx,operation,workloadGroup:scope.principal.groupId});
+   const created=await createArtifact(null,null,{...input,title:input.title,format:'html',visibility:'private',destination:{type:'group',id:scope.principal.groupId},ancestor_ids:ancestors},{tx,operation,workloadGroup:scope.principal.groupId});
+   // Unlike an interactive publication journal, this stable scheduled slot must remain recoverable indefinitely.
+   await tx.query("UPDATE artifact_creation_operations SET response_until='infinity' WHERE scope=$1 AND operation_key=$2",[operation.scope,operation.key]);
+   return created;
   }));
   await afterCreated(result,null);return operation.reply(result);
  }catch(error){if(error instanceof CreationReplay)return error.reply;throw error;}
