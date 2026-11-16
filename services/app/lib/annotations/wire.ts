@@ -42,14 +42,15 @@ const openAnnotationsFor = (row: ArtifactRow): Promise<number> =>
   row.format === 'html' ? countOpenAnnotations(row.id) : Promise.resolve(0);
 
 /** One artifact as the bearer read door answers it: the head this reader may see, its open threads, and their capabilities. */
-export async function readArtifactSnapshot(actor: AccessActor, id: string, base: string, options: { dryRun?: boolean } = {}) {
+export async function readArtifactSnapshot(actor: AccessActor, id: string, base: string, options: { dryRun?: boolean; currentReadOnly?: boolean } = {}) {
   // An agent that may edit the page reads a saved version: its unsaved live text is saved first (a checkpoint), so a
   // write made from what it read never applies people's typing twice. Readers read the current page as it is. A dry
-  // run ("would this work?") leaves no trace: it reads the saved head.
-  if (!options.dryRun) await checkpointLiveRegions(actor, id);
+  // run ("would this work?") leaves no trace: it reads the saved head. A currentReadOnly caller
+  // composes current live text for every reader without checkpointing it.
+  if (!options.dryRun && !options.currentReadOnly) await checkpointLiveRegions(actor, id);
   const head = await snapshotHeadFor(actor, id);
   if (!head) return null;
-  const wire: Record<string, unknown> = await artifactToWireWithAnnotations(head.snapshot, base, actor.userId, canEdit(head.role) ? 'saved' : 'current');
+  const wire: Record<string, unknown> = await artifactToWireWithAnnotations(head.snapshot, base, actor.userId, canEdit(head.role) && !options.currentReadOnly ? 'saved' : 'current');
   const narrowed = snapshotForReader(wire, head.row, head.role);
   // A dataset answers with the reader's role view: the rows, columns and counts their select rule shows.
   if (head.row.format !== 'dataset') return narrowed;

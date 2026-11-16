@@ -44,3 +44,12 @@ Host boundaries: `app.ts` (app and API), `public-files.ts` (files), `pages-host.
 - `npm test -- --files services/app/server/__tests__/routes.test.ts services/app/lib/__tests__/app-page-csp.test.ts services/app/lib/local-connection/__tests__/server.test.ts services/app/__tests__/downstream-exports.test.ts`,
   plus the edited boundary's own `__tests__` file.
 - Own-origin serving in a browser: `node scripts/gate-container.mjs own-origin-script`, once, at the end.
+
+- Delegated canonical reads use only the auth-owned `artifact-read-grant` and `artifact-read` identity RPCs.
+  A service must opt in with `artifact_reads: true` in `IDENTITY__SERVICE_AUDIENCES` and present its own
+  introspection secret. Issue accepts only `{token}` (a live exchanged service token); read accepts only
+  `{grant, artifact_id}`. Grants last one hour, remain bound to the original person/service/parent, and are
+  never general API bearers. Keep them in trusted encrypted service storage, never agent sandboxes.
+  The fixed app read seam returns allowlisted current canonical source without checkpoints or invitation
+  stamping; the auth owner buffers at most 200 KiB and rechecks parent/account and current artifact access
+  before delivery. Absent and inaccessible artifacts both answer 404.

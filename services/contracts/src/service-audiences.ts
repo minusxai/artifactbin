@@ -22,6 +22,8 @@ export interface ServiceAudience {
   origin: string;
   /** Hex SHA-256 of the secret the service introspects with; null: it introspects with nothing of its own. */
   introspectionSecretSha256: string | null;
+  /** Explicit opt-in to delegated canonical artifact reads. */
+  artifactReads?: boolean;
 }
 
 /** The exchange: a short-lived token for one configured service, for the caller's own session or API bearer. */
@@ -52,12 +54,13 @@ export function parseServiceAudiences(raw: string | undefined): readonly Service
   const out: ServiceAudience[] = [];
   for (const entry of parsed) {
     const e = entry as Record<string, unknown> | null;
-    if (!e || typeof e !== 'object' || Array.isArray(e) || Object.keys(e).some((key) => !['id', 'origin', 'introspection_secret_sha256'].includes(key))) throw new Error(WHAT);
+    if (!e || typeof e !== 'object' || Array.isArray(e) || Object.keys(e).some((key) => !['id', 'origin', 'introspection_secret_sha256', 'artifact_reads'].includes(key))) throw new Error(WHAT);
     const origin = typeof e.origin === 'string' ? normalizeOrigin(e.origin) : null;
     const secret = e.introspection_secret_sha256;
+    if (e.artifact_reads !== undefined && typeof e.artifact_reads !== 'boolean') throw new Error(WHAT);
     if (typeof e.id !== 'string' || !ID.test(e.id) || !origin || (secret !== undefined && (typeof secret !== 'string' || !HEX64.test(secret)))) throw new Error(WHAT);
     if (out.some((other) => other.id === e.id || other.origin === origin)) throw new Error(`IDENTITY__SERVICE_AUDIENCES repeats ${JSON.stringify(e.id)} or its origin`);
-    out.push({ id: e.id, origin, introspectionSecretSha256: typeof secret === 'string' ? secret : null });
+    out.push({ id: e.id, origin, introspectionSecretSha256: typeof secret === 'string' ? secret : null, ...(e.artifact_reads !== undefined ? {artifactReads:e.artifact_reads as boolean} : {}) });
   }
   return Object.freeze(out);
 }

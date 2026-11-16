@@ -58,3 +58,11 @@ export const IDENTITY_VIEWS = {
   group_mail_outbox: ['id', 'email', 'recipient_id', 'group_id', 'group_name', 'handle', 'action', 'sender_id', 'lease_until', 'claim_token', 'attempts', 'next_attempt_at', 'quarantined_at', 'sent_at', 'created_at'],
   sessions: ['id', 'expiresAt', 'createdAt', 'updatedAt', 'ipAddress', 'userAgent', 'userId', 'live'],
 } as const;
+
+/** Purpose-only delegation, service-secret authenticated; never a public API bearer. */
+export const ARTIFACT_READ_GRANT_PATH = '/api/internal/identity/artifact-read-grant';
+export const ARTIFACT_READ_PATH = '/api/internal/identity/artifact-read';
+/** Fixed app upstream route; only the identity owner calls it with a verified human actor. */
+export const CANONICAL_ARTIFACT_READ_PATH = '/api/internal/artifact-read';
+export const ARTIFACT_READ_LIMIT = 200 * 1024;
+export interface IssuedArtifactReadGrant {grant:string; expires_at:string; user_id:string; audience:string}
