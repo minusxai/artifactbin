@@ -46,7 +46,7 @@ const NODE_INCLUDE = ['services/app/lib/html-components/**/*.test.ts', 'services
  * Canonical analytics folds, authorization lock order across independent Postgres connections and split-role grants: `integration` only,
  * as the Docker proofs are.
  */
-const REAL_DATABASE_TESTS = ['services/app/lib/analytics/__tests__/canonical-totals-postgres.test.ts', 'services/connectors/__tests__/connectors-docker.test.ts', 'services/app/lib/artifact-access/__tests__/lock-order-postgres.test.ts', 'services/app/lib/platform/__tests__/identity-roles-postgres.test.ts'];
+const REAL_DATABASE_TESTS = ['services/app/lib/artifacts/__tests__/workload-create-postgres.test.ts', 'services/app/lib/analytics/__tests__/canonical-totals-postgres.test.ts', 'services/connectors/__tests__/connectors-docker.test.ts', 'services/app/lib/artifact-access/__tests__/lock-order-postgres.test.ts', 'services/app/lib/platform/__tests__/identity-roles-postgres.test.ts'];
 /** Real Chromium (the browser contract, internal asset rendering, render lifecycle, session pages): `integration` only. */
 const CHROMIUM_TESTS = chromiumTests(import.meta.dirname, NODE_INCLUDE);
 

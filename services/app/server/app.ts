@@ -1,7 +1,9 @@
+import {artifactWorkload} from './artifact-workload';
+import {APP_ARTIFACT_WORKLOAD_PATH} from '@artifactbin/contracts';
 import {getDeploymentState} from '@/lib/deployment';
 import { ID_RE, measureQueries, runWithRequest, ASSETS_ORIGIN, setEventProjection, embedTrustedOrigins, shellFile } from '@/lib/platform';
 import { type ArtifactRow, canReadArtifact, type PageRead, readPageRow, slugAddress, slugAddressTarget, UnservableDocument } from '@/lib/artifacts';
-import { effectiveRole, requestAccessFacts } from '@/lib/artifact-access';
+import { withReadOnlyAccessFacts, effectiveRole, requestAccessFacts } from '@/lib/artifact-access';
 import { artifactAppAsset, artifactAppPath, readableApp, withArtifactAppHead, publicRefAssetResponse, artifactPageAnswer, type ArtifactPageAnswer, DOCUMENT_FRAME_CSS, documentFrameFallback, documentFrameHtml, documentHeadFor, documentHeadTags, type DocumentFrame, cachedShell } from '@/lib/document-serving';
 import { loginRedirectTarget, artifactViewPath, canonicalArtifactPath, parsePrettyPath, spaPaths, APP_BUILD_HEADER, APP_BUILD_META, baseUrl, json, setAppBuild, GITHUB_EXTERNAL_URL, pagesSite as deployedPagesSite, type PagesSite } from '@/lib/http';
 /**
@@ -31,7 +33,10 @@ import { projectNotifications } from '@/lib/notifications';
 /** Every static address solid/App.tsx routes: a direct load or a reload of one missing here is a 404. */
 import { ANONYMOUS_ACTOR, ownerUsername, AGENT_COOKIE } from '@/lib/accounts';
 import { sessionActor } from '@/lib/authentication';
-import { canEdit } from '@artifactbin/contracts';
+import { canEdit, CANONICAL_ARTIFACT_READ_PATH } from '@artifactbin/contracts';
+import {actorOf} from '@artifactbin/utils';
+import {identityForUser} from '@/lib/accounts';
+import {readArtifactSnapshot} from '@/lib/annotations';
 import { GET as publicAssetBytes } from '@/app/assets/[hash]/route';
 import { mountRoutes } from './api';
 import { ROUTES } from './routes.generated';
@@ -603,6 +608,19 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   // Page data is finished JSON: brotli for a client that takes it (server/content-encoding).
   app.use('/api/page/*', dynamicEncoding());
   // The app's API and document handlers.
+  // Fixed auth-owner read seam: never accepts an arbitrary operation or checkpoints live text.
+  app.get(CANONICAL_ARTIFACT_READ_PATH, async c => runWithRequest(c.req.raw, () => withReadOnlyAccessFacts(async () => {
+    const caller=actorOf(c.req.raw),id=c.req.query('id');
+    if(!caller?.userId||!id||!ID_RE.test(id))return json({error:'not_found'},404);
+    const actor=identityForUser(caller.userId);
+    const snapshot=await readArtifactSnapshot(actor,id,baseUrl(c.req.raw),{currentReadOnly:true});
+    if(!snapshot)return json({error:'not_found'},404);
+    // Allowlist source fields only. No owner, shares, annotations, credentials or write capabilities.
+    const source:Record<string,unknown>={};
+    for(const key of ['id','title','format','version','html','markup','meta'])if(key in snapshot)source[key]=snapshot[key as keyof typeof snapshot];
+    return json(source);
+  })));
+  app.post(APP_ARTIFACT_WORKLOAD_PATH,c=>runWithRequest(c.req.raw,()=>artifactWorkload(c.req.raw,actorOf(c.req.raw))));
   mountRoutes(app);
 
   app.all('/api', apiNotFound);

@@ -12,7 +12,7 @@ export {
   policyReaderSql, reactionScope, writerFor,
 } from './scopes';
 export { documentEditorReaches, effectiveRole, holdsCreatingToken, linkRoleOf, ownsArtifact, reachesAsAccount, roleWithoutLink } from './access';
-export { liveAccessFacts, memoAccessFacts, preloadAccessFacts, requestAccessFacts, transactionAccessFacts } from './access-facts';
+export { withReadOnlyAccessFacts, liveAccessFacts, memoAccessFacts, preloadAccessFacts, requestAccessFacts, transactionAccessFacts } from './access-facts';
 export type { AccessFacts } from './access-facts';
 export { lockAuthorization, lockOrder } from './locks';
 export { readThrough, uploadGrantContext } from './grants';

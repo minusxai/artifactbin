@@ -9,6 +9,10 @@
  *    readers deciding many rows at once (the notification inbox). Share resolution, the one write a
  *    role read performs, is deferred to `settle()` and applied in one statement.
  */
+import {AsyncLocalStorage} from 'node:async_hooks';
+const readOnlyDecisions=new AsyncLocalStorage<boolean>();
+/** Canonical read-only doors match invitations without stamping them. */
+export const withReadOnlyAccessFacts=<T>(read:()=>T):T=>readOnlyDecisions.run(true,read);
 import { maxRole, type ArtifactRole, type GroupRole, type Queryable, type UserKind } from '@artifactbin/contracts';
 import { getGroupRole, reachedGroupsSql, subtreeSql } from '@/lib/groups';
 import { userKindOf } from '@/lib/user-kinds';
@@ -80,7 +84,7 @@ export function liveAccessFacts(actor: AccessActor, query?: Queryable): AccessFa
          )`,
         [artifactId, actor.userId, sessionEmail(actor)],
       );
-      if (r.rows.some((x) => x.unresolved)) await q.query(RESOLVE_SHARES_SQL('= $1'), [artifactId, actor.userId]);
+      if (!readOnlyDecisions.getStore() && r.rows.some((x) => x.unresolved)) await q.query(RESOLVE_SHARES_SQL('= $1'), [artifactId, actor.userId]);
       return maxRole(...r.rows.map((x) => x.role));
     },
     async editorGroupIds() {

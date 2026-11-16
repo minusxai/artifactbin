@@ -115,6 +115,8 @@ if(baseline){delete body.visibility;body.expectedVersion=baseline.version;body.e
 if(values.visibility)body.visibility=enumValue(values.visibility,['private','unlisted','public'],
    'visibility');if(values.title!==undefined)body.title=values.title;
  if(parent!==undefined)body.parent_id=parent;
+ // New file datasets keep their actual filename; updates retain the saved title unless asked.
+ if(type==='dataset'&&!baseline&&values.title===undefined)body.title=path.basename(file);
  if(values.personal)body.destination={type:'personal'};
  if(values.group!==undefined){
   const detail=await client.request('/api/groups/'+encodeURIComponent(

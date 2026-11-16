@@ -1,8 +1,7 @@
 # Serving and the trust boundary
 
-Host boundaries: `app.ts` (app and API), `public-files.ts` (files), `pages-host.ts` (document origins),
-`user-host.ts` (anonymous publishing) and `host.ts` (downstream composition). Also covers
-`lib/document-serving` and the local-file doors in `lib/local-connection`.
+Hosts: `app.ts`, `public-files.ts`, `pages-host.ts`, `user-host.ts`, `host.ts`. Also covers
+`lib/document-serving` and `lib/local-connection`.
 
 ## Rules
 - An artifact ID is an address, not a credential: `public` is readable and may be listed on the owner's profile,
@@ -15,7 +14,7 @@ Host boundaries: `app.ts` (app and API), `public-files.ts` (files), `pages-host.
 - Other origins frame `/a/<id>` only if listed in `EMBED__TRUSTED_ORIGINS` (`app.ts`).
 - One URL map, contracts `url-space.ts` (`/af/url-space.json`): `/api/` (JSON, links), `/af/` (public,
   credential-free files), `/a/<id>/`, `/@handle`, a few fixed paths, else a screen; host allowlists derive from it.
-  Public paths are never rewritten from retired root prefixes (`url-space.test.ts`).
+  Never rewrite public paths from retired root prefixes.
 - A pages origin is same-site with the app, so on another host it reaches only its own document's doors and the
   public files; everything else stays 403 `forbidden_origin` (`pages-host.ts`). The pages session comes
   from a one-use ticket and a host-only cookie, never the app-session cookie; sign-out ends it server-side.
@@ -28,19 +27,21 @@ Host boundaries: `app.ts` (app and API), `public-files.ts` (files), `pages-host.
   `ADMIN__SECRET`. Connections are stored hash-only, shown once.
 - An export capture holds no session: its short-lived key names the requester the export door admitted
   (`lib/export/read-key.ts`); a requester's render is kept for them alone. The capture's own response
-  alone names its page's `/a/<id>/assets` addresses with that key; a keyed answer is never cached, and nothing
-  stored, downloaded or shared carries the key.
+  alone names keyed asset addresses; never cache keyed answers or store/share/download their credentials.
 - A portable download holds canonical source, identity and runtime assets, never a credential. An export also
   carries the rows its reader's `sql` may read through the page (`offlinePageSqlData`); past 16 MiB, none, and
   the copy says so. Create and replace keep only an export's verified source (`verifiedPortableSource`);
   `canonicalizeHtmlPage` refuses `offline-data` or `offline-sql`. A linked local file stays read-only: the local-connection broker strips ambient authority, refuses mutations,
   `authorizePrivate` and `checkSession`, and rechecks revision and public access on every grant.
 - `host.ts` opens no socket and imports no local SQL or browser engine and no deployment identity. Customise
-  through its narrow options (`documentEditorPolicy`, adapters, session providers, subscribers), never by
-  importing a downstream deployment.
-- A coordinated change: commit here, then move the downstream pin and run its checks.
+  through its narrow options; never import a downstream deployment.
+- Coordinate downstream changes through a committed upstream pin and its checks.
 
 ## Checks
 - `npm test -- --files services/app/server/__tests__/routes.test.ts services/app/lib/__tests__/app-page-csp.test.ts services/app/lib/local-connection/__tests__/server.test.ts services/app/__tests__/downstream-exports.test.ts`,
   plus the edited boundary's own `__tests__` file.
 - Own-origin serving in a browser: `node scripts/gate-container.mjs own-origin-script`, once, at the end.
+
+- Delegation requires opted-in per-service RPCs, fresh authority fences and bounded canonical results.
+  Keep grants outside sandboxes. Group creates use canonical workload quotas and durable receipts; no human
+  impersonation. Exact contracts are in `artifact-workload.ts` and contracts.

@@ -22,6 +22,9 @@ export interface ServiceAudience {
   origin: string;
   /** Hex SHA-256 of the secret the service introspects with; null: it introspects with nothing of its own. */
   introspectionSecretSha256: string | null;
+  /** Explicit opt-in to delegated canonical artifact reads. */
+  artifactReads?: boolean;
+  artifactWorkloads?: {authorizationUrl:string;authorizationSecret:string};
 }
 
 /** The exchange: a short-lived token for one configured service, for the caller's own session or API bearer. */
@@ -52,12 +55,22 @@ export function parseServiceAudiences(raw: string | undefined): readonly Service
   const out: ServiceAudience[] = [];
   for (const entry of parsed) {
     const e = entry as Record<string, unknown> | null;
-    if (!e || typeof e !== 'object' || Array.isArray(e) || Object.keys(e).some((key) => !['id', 'origin', 'introspection_secret_sha256'].includes(key))) throw new Error(WHAT);
+    if (!e || typeof e !== 'object' || Array.isArray(e) || Object.keys(e).some((key) => !['id', 'origin', 'introspection_secret_sha256', 'artifact_reads', 'artifact_workloads'].includes(key))) throw new Error(WHAT);
+    let workload:ServiceAudience['artifactWorkloads'];
+    if(e.artifact_workloads!==undefined){
+      const w=e.artifact_workloads as Record<string,unknown>;
+      if(!w||typeof w!=='object'||Array.isArray(w)||Object.keys(w).length!==2||typeof w.authorization_url!=='string'||typeof w.authorization_secret!=='string'||w.authorization_secret.length<16||w.authorization_secret.length>4096||/[\r\n]/.test(w.authorization_secret))throw new Error(WHAT);
+      let url:URL;try{url=new URL(w.authorization_url);}catch{throw new Error(WHAT);}
+      if(!['https:','http:'].includes(url.protocol)||url.username||url.password||url.hash||url.search)throw new Error(WHAT);
+      workload={authorizationUrl:url.href,authorizationSecret:w.authorization_secret};
+      if(typeof e.introspection_secret_sha256!=='string')throw new Error(WHAT);
+    }
     const origin = typeof e.origin === 'string' ? normalizeOrigin(e.origin) : null;
     const secret = e.introspection_secret_sha256;
+    if (e.artifact_reads !== undefined && typeof e.artifact_reads !== 'boolean') throw new Error(WHAT);
     if (typeof e.id !== 'string' || !ID.test(e.id) || !origin || (secret !== undefined && (typeof secret !== 'string' || !HEX64.test(secret)))) throw new Error(WHAT);
     if (out.some((other) => other.id === e.id || other.origin === origin)) throw new Error(`IDENTITY__SERVICE_AUDIENCES repeats ${JSON.stringify(e.id)} or its origin`);
-    out.push({ id: e.id, origin, introspectionSecretSha256: typeof secret === 'string' ? secret : null });
+    out.push({ ...(workload?{artifactWorkloads:workload}:{}), id: e.id, origin, introspectionSecretSha256: typeof secret === 'string' ? secret : null, ...(e.artifact_reads !== undefined ? {artifactReads:e.artifact_reads as boolean} : {}) });
   }
   return Object.freeze(out);
 }

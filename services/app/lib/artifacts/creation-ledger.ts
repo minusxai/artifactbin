@@ -46,7 +46,7 @@ export async function lookupCreation(db: Queryable, operation: CreationOperation
   const row = (await db.query<{
     request_hash: string; artifact_id: string | null; existing_id: string | null;
     deleted_at: unknown; response: Record<string,unknown> | null; response_status: number | null; fresh: boolean;
-  }>(`SELECT o.*,a.id AS existing_id,a.deleted_at,(o.response_until>now()) AS fresh
+  }>(`SELECT o.request_hash,o.artifact_id,o.response,o.response_status,a.id AS existing_id,a.deleted_at,(o.response_until>now()) AS fresh
     FROM artifact_creation_operations o LEFT JOIN artifacts a ON a.id=o.artifact_id
     WHERE o.scope=$1 AND o.operation_key=$2`,[operation.scope,operation.key])).rows[0];
   if (!row) return null;
