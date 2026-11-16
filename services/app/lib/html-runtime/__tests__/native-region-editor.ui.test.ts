@@ -513,3 +513,65 @@ it('checkbox click and keyboard toggle each undo independently of prior typing',
  expect(e.view.state.doc.firstChild?.firstChild?.attrs.checked).toBe(false);expect(e.view.state.doc.textContent).toBe('New Task');
  e.replay([{key:'Enter',ctrlKey:true,altKey:true}]);e.command('undo');expect(e.view.state.doc.firstChild?.firstChild?.attrs.checked).toBe(false);expect(e.view.state.doc.textContent).toBe('New Task');
 });
+
+it('external ARIA checkbox wrappers preserve their label text and inline marks',()=>{
+ const e=single('<p></p>');
+ const html='<ul><li><span role="checkbox" aria-checked="true"><strong>Keep this task</strong></span></li></ul>';
+ e.view.pasteHTML(html,clipboard('Keep this task',html));
+ expect(e.view.state.doc.textContent).toBe('Keep this task');
+ expect(e.view.dom.querySelector('strong')?.textContent).toBe('Keep this task');
+});
+it('heading undo does not copy peer edits to another identical unassigned paragraph',()=>{
+ const initial=createRegionState('rich-native-v1','<p>Same</p><p>Same</p>').state;
+ let a:RegionEditor,b:RegionEditor;
+ const make=(clientId:number,peer:()=>RegionEditor)=>{const root=document.createElement('article');document.body.append(root);const e=mountRegionEditor({win:window,root,regionId:'synthetic',kind:'rich-native-v1',clientId,state:initial,post:m=>{if(m.kind==='region-update')peer().remote([m.update]);}});cleanup.push(()=>{e.destroy();root.remove();});return e;};
+ a=make(921,()=>b);b=make(922,()=>a);
+ a.view.dispatch(a.view.state.tr.setSelection(TextSelection.create(a.view.state.doc,1)));
+ a.command('heading',{level:2});a.flush();
+ b.view.dispatch(b.view.state.tr.insertText(' peer',5));b.flush();
+ a.command('undo');a.flush();
+ expect(a.view.state.doc.child(0).textContent).toBe('Same peer');
+ expect(a.view.state.doc.child(1).textContent).toBe('Same');
+ expect(a.view.state.doc.toJSON()).toEqual(b.view.state.doc.toJSON());
+});
+
+it.each([['heading',false,false],['move',false,false],['heading',true,false],['move',true,false],['move',false,true]] as const)('duplicate blocks keep peer edits after insertion and %s undo/redo (assigned %s, pair %s)',(action,assigned,pairOnly)=>{
+ const html=action==='heading'?'<p>Same</p><p>Same</p>':'<ul><li><p>Same</p></li><li><p>Same</p></li><li><p>Last</p></li></ul>';
+ const source=pairOnly?html.replace('<li><p>Last</p></li>',''):html;
+ let id=0;const initial=createRegionState('rich-native-v1',assigned?source.replace(/<p>/g,()=>`<p data-af-id="af-${++id}">`):source).state;
+ let state=initial;let a:RegionEditor,b:RegionEditor;
+ const make=(clientId:number,peer:()=>RegionEditor)=>{const root=document.createElement('article');document.body.append(root);const e=mountRegionEditor({win:window,root,regionId:'synthetic',kind:'rich-native-v1',clientId,state:initial,post:m=>{if(m.kind==='region-update'){state=Y.encodeStateAsUpdate(validateRegionUpdate('rich-native-v1',state,m.update,clientId).doc);peer().remote([m.update]);}}});cleanup.push(()=>{e.destroy();root.remove();});return e;};
+ a=make(931,()=>b);b=make(932,()=>a);
+ a.view.dispatch(a.view.state.tr.setSelection(TextSelection.create(a.view.state.doc,action==='heading'?1:3)));
+ if(action==='heading')a.command('heading',{level:2});else a.replay([{key:'ArrowDown',ctrlKey:true,shiftKey:true}]);a.flush();
+ // Inserting before the affected blocks invalidates every old absolute position.
+ b.view.dispatch(b.view.state.tr.insert(0,b.view.state.schema.nodes.paragraph!.create(null,b.view.state.schema.text('Prefix'))));
+ const positions:number[]=[];b.view.state.doc.descendants((n,p)=>{if(n.isTextblock&&n.textContent==='Same')positions.push(p+1+n.content.size);});
+ if(action==='move'&&!pairOnly)b.view.dispatch(b.view.state.tr.insertText(' selected',positions[1]!));
+ b.view.dispatch(b.view.state.tr.insertText(' peer',positions[0]!).addMark(positions[0]!,positions[0]!+5,b.view.state.schema.marks.bold!.create()));b.flush();
+ const texts=(e:RegionEditor)=>{const result:string[]=[];e.view.state.doc.descendants(n=>{if(n.isTextblock)result.push(n.textContent);});return result;};
+ for(const command of ['undo','redo','undo','redo']){
+  a.command(command);a.flush();
+  const expected=action==='heading'?['Prefix','Same peer','Same']:command==='undo'?['Prefix','Same selected','Same peer','Last']:['Prefix','Same peer','Same selected','Last'];
+  expect(texts(a)).toEqual(pairOnly?expected.filter(text=>text!=='Last').map(text=>text==='Same selected'?'Same':text):expected);
+  expect(a.view.state.doc.toJSON()).toEqual(b.view.state.doc.toJSON());
+  expect(single(regionHtml('rich-native-v1',state)).view.state.doc.toJSON()).toEqual(a.view.state.doc.toJSON());
+ }
+});
+it.each([false,true])('heading undo handles peer reorder (affected shell %s) without duplicating content',affected=>{
+ const initial=createRegionState('rich-native-v1','<p>Same</p><p>Other</p><p>Last</p>').state;
+ let state=initial;let a:RegionEditor,b:RegionEditor;
+ const make=(clientId:number,peer:()=>RegionEditor)=>{const root=document.createElement('article');document.body.append(root);const e=mountRegionEditor({win:window,root,regionId:'synthetic',kind:'rich-native-v1',clientId,state:initial,post:m=>{if(m.kind==='region-update'){state=Y.encodeStateAsUpdate(validateRegionUpdate('rich-native-v1',state,m.update,clientId).doc);peer().remote([m.update]);}}});cleanup.push(()=>{e.destroy();root.remove();});return e;};
+ a=make(941,()=>b);b=make(942,()=>a);
+ a.view.dispatch(a.view.state.tr.setSelection(TextSelection.create(a.view.state.doc,1)));a.command('heading',{level:2});a.flush();
+ b.view.dispatch(b.view.state.tr.setSelection(affected?TextSelection.atStart(b.view.state.doc):TextSelection.atEnd(b.view.state.doc)));
+ b.replay([{key:affected?'ArrowDown':'ArrowUp',ctrlKey:true,shiftKey:true}]);b.flush();
+ let end=0;b.view.state.doc.descendants((node,pos)=>{if(node.type.name==='heading')end=pos+1+node.content.size;});
+ b.view.dispatch(b.view.state.tr.insertText(' peer',end));b.flush();
+ const before=a.view.state.doc.toJSON();
+ expect(a.command('undo')).toBe(!affected);a.flush();
+ if(affected)expect(a.view.state.doc.toJSON()).toEqual(before);
+ else {expect(a.view.state.doc.child(0).textContent).toBe('Same peer');expect(a.command('redo')).toBe(true);a.flush();}
+ expect(a.view.state.doc.toJSON()).toEqual(b.view.state.doc.toJSON());
+ expect(single(regionHtml('rich-native-v1',state)).view.state.doc.toJSON()).toEqual(a.view.state.doc.toJSON());
+});
