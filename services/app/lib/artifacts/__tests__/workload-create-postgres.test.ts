@@ -5,7 +5,7 @@ import pg from 'pg';
 import * as platform from '@/lib/platform';
 import {PostgresDb} from '@/lib/platform/db';
 import {SCHEMA_STATEMENTS} from '@/lib/platform';
-import {createWorkloadArtifact} from '../index';
+import {createWorkloadArtifact,readWorkloadOutputPage} from '../index';
 const available=spawnSync('docker',['image','inspect','postgres:17-alpine'],{stdio:'ignore'}).status===0;
 describe.skipIf(!available)('workload receipt on PostgreSQL',()=>{
  let container='',pool:pg.Pool,db:PostgresDb;
@@ -31,6 +31,8 @@ describe.skipIf(!available)('workload receipt on PostgreSQL',()=>{
   expect((await pool.query('SELECT artifact_id FROM workload_publication_outputs')).rows).toEqual([{artifact_id:first.body.id}]);
   expect((await createWorkloadArtifact({...scope,creationKey:'next-slot',publication:{maxArtifacts:1,maxBytes:16*1024*1024}},input,'next')).status).toBe(403);
   expect((await createWorkloadArtifact(scope,{...input,title:'Changed'},'changed')).status).toBe(409);
+  const page=await readWorkloadOutputPage(scope.principal,null);expect(page.items.map(row=>row.id)).toEqual([first.body.id]);
+  expect((await readWorkloadOutputPage({...scope.principal,executionId:'sibling'},null)).items).toEqual([]);
   await pool.query('DELETE FROM artifacts WHERE id=$1',[first.body.id]);
   expect(await createWorkloadArtifact(scope,input,'payload')).toMatchObject({status:410,body:{id:first.body.id}});
  });

@@ -78,4 +78,4 @@ export * from './connectors';
 export type {WorkloadBinding, WorkloadOperation, WorkloadReadOperation, WorkloadAuthorization, WorkloadAuthority} from './workload';
 
 export {artifactWorkloadOperationJson,ARTIFACT_WORKLOAD_PATH,APP_ARTIFACT_WORKLOAD_PATH,ARTIFACT_WORKLOAD_LIMIT,isWorkloadBinding,isArtifactWorkloadOperation} from './artifact-workload';
-export type {ArtifactWorkloadOperation,ArtifactWorkloadScope} from './artifact-workload';
+export type {ArtifactWorkloadOperation,ArtifactWorkloadScope,ArtifactWorkloadOutputPage} from './artifact-workload';

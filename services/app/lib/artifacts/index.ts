@@ -79,3 +79,5 @@ export {migrateLegacyPage} from './store';
 export {publicationNamespace,publicationFingerprint,claimPublicationIntent,publicationOutputs,validatePublicationParent} from './workload-publication';
 /** Trusted purpose-only service workload creation. */
 export {createWorkloadArtifact,WorkloadCreationRefusal} from './workload-create';
+/** Host-only receipt metadata, fenced by service reader callbacks. */
+export {readWorkloadOutputPage} from './workload-output-read';
