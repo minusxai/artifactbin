@@ -1,3 +1,5 @@
+import {artifactWorkload} from './artifact-workload';
+import {APP_ARTIFACT_WORKLOAD_PATH} from '@artifactbin/contracts';
 import {getDeploymentState} from '@/lib/deployment';
 import { ID_RE, measureQueries, runWithRequest, ASSETS_ORIGIN, setEventProjection, embedTrustedOrigins, shellFile } from '@/lib/platform';
 import { type ArtifactRow, canReadArtifact, type PageRead, readPageRow, slugAddress, slugAddressTarget, UnservableDocument } from '@/lib/artifacts';
@@ -618,6 +620,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     for(const key of ['id','title','format','version','html','markup','meta'])if(key in snapshot)source[key]=snapshot[key as keyof typeof snapshot];
     return json(source);
   })));
+  app.post(APP_ARTIFACT_WORKLOAD_PATH,c=>artifactWorkload(c.req.raw,actorOf(c.req.raw)));
   mountRoutes(app);
 
   app.all('/api', apiNotFound);

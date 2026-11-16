@@ -21,9 +21,11 @@ export interface HumanActor {
   sessionId?: string;
 }
 
-/** A binding offered only through the trusted in-process host adapter. */
+/** Native host bindings are in-process only; the explicit auth-owned service marker permits principal-only signed transport. */
 export interface WorkloadActor {
  readonly credential:'workload';
+ /** Auth-owned purpose RPC transport marker; no permission scope. */
+ readonly serviceWorkload?:true;
  readonly workload:WorkloadBinding;
  readonly userId?:never;
  readonly tokenId?:never;

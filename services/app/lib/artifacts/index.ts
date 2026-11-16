@@ -77,3 +77,5 @@ export { childrenTableFor } from './placement';
 export {migrateLegacyPage} from './store';
 
 export {publicationNamespace,publicationFingerprint,claimPublicationIntent,publicationOutputs,validatePublicationParent} from './workload-publication';
+/** Trusted purpose-only service workload creation. */
+export {createWorkloadArtifact,WorkloadCreationRefusal} from './workload-create';

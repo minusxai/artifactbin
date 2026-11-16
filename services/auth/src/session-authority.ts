@@ -1,3 +1,4 @@
+import {ARTIFACT_WORKLOAD_PATH,APP_ARTIFACT_WORKLOAD_PATH,ARTIFACT_WORKLOAD_LIMIT,isWorkloadBinding,isArtifactWorkloadOperation} from '@artifactbin/contracts';
 /**
  * Auth-owned RPC, mounted before browser/session resolution and the public internal-path refusal. Every route here
  * is service-authenticated (SERVICE_AUTH_HEADER) and refused without it:
@@ -42,11 +43,11 @@ export function sessionAuthority(o:AuthOptions):Part<AuthEnv>{return {name:'sess
  const audiences=parseServiceAudiences(readEnv(o.env,'IDENTITY__SERVICE_AUDIENCES'));
  const tokenKey=o.cookieSecret?serviceTokenKey(o.cookieSecret):null;
  /** A refusal Response, or the parsed JSON object body. `admitted` decides the credential (default: the installation's). */
- const admit=async(c:Context<AuthEnv>,admitted:(presented:string|undefined)=>boolean=presented=>serviceSecretMatches(presented,secret)):Promise<Response|Record<string,unknown>>=>{
+ const admit=async(c:Context<AuthEnv>,admitted:(presented:string|undefined)=>boolean=presented=>serviceSecretMatches(presented,secret),limit=8192):Promise<Response|Record<string,unknown>>=>{
   if(c.req.method!=='POST')return answer({error:'method_not_allowed'},405);
   if(!admitted(c.req.header(SERVICE_AUTH_HEADER)))return answer({error:'unauthorized'},401);
   let body:unknown;
-  try{body=JSON.parse(await readBody(c.req.raw,{limit:8192,as:'text'}));}catch(e){return answer({error:e instanceof BodyTooLargeError?'too_large':'bad_request'},e instanceof BodyTooLargeError?413:400);}
+  try{body=JSON.parse(await readBody(c.req.raw,{limit,as:'text'}));}catch(e){return answer({error:e instanceof BodyTooLargeError?'too_large':'bad_request'},e instanceof BodyTooLargeError?413:400);}
   return body&&typeof body==='object'&&!Array.isArray(body)?body as Record<string,unknown>:answer({error:'bad_request'},400);
  };
  app.all(HUMAN_SESSION_LIVE_PATH,async c=>{
@@ -88,6 +89,20 @@ export function sessionAuthority(o:AuthOptions):Part<AuthEnv>{return {name:'sess
    if(!token||(only&&token.audience!==only.origin))return inactive;
    return answer({active:true,user_id:token.userId,token_id:token.id,scopes:token.scope?.split(/\s+/).filter(Boolean)??[],audience:token.audience??null,expires_at:token.expiresAt??null,parent:null} satisfies IdentityIntrospectResponse);
   }catch{return answer({error:'session_unavailable'},503);}
+ });
+ app.all(ARTIFACT_WORKLOAD_PATH,async c=>{
+  let service:ServiceAudience|undefined;
+  const input=await admit(c,presented=>!!(service=serviceOf(audiences,presented))&&!!service.artifactWorkloads,ARTIFACT_WORKLOAD_LIMIT+8192);
+  if(input instanceof Response)return input;
+  if(Object.keys(input).length!==2||!isWorkloadBinding(input.principal)||!isArtifactWorkloadOperation(input.operation))return answer({error:'bad_request'},400);
+  if(input.principal.issuerId!==service!.id)return answer({error:'forbidden'},403);
+  if(c.req.raw.signal.aborted)return answer({error:'cancelled'},403);
+  try{
+   const request=new Request(new URL(APP_ARTIFACT_WORKLOAD_PATH,c.req.url),{method:'POST',body:JSON.stringify({operation:input.operation}),signal:c.req.raw.signal});
+   const response=await o.upstream(request,{credential:'workload',serviceWorkload:true,workload:input.principal});
+   const body=await readBody(response,{limit:ARTIFACT_WORKLOAD_LIMIT,as:'text'});
+   return new Response(body,{status:response.status,headers:{'content-type':'application/json','cache-control':'no-store'}});
+  }catch(error){return answer({error:error instanceof BodyTooLargeError?'too_large':'workload_unavailable'},error instanceof BodyTooLargeError?413:503);}
  });
  const grantKey=artifactReadKey(o.cookieSecret);
  for(const path of [ARTIFACT_READ_GRANT_PATH,ARTIFACT_READ_PATH])app.all(path,async c=>{
