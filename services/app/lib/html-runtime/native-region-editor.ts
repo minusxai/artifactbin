@@ -1,4 +1,5 @@
 /** Native-only page editor chunk. Credentials and HTTP remain exclusively in the trusted parent. */
+import { isolated, structural, undoNative, moveSibling, normalizeChecklist, toggleCheck } from './native-editor-actions';
 import { Editor } from '@tiptap/core';
 import Collaboration from '@tiptap/extension-collaboration';
 import { NativeIdentityRepair, NativeIndentation, freshClipboard, indentNative } from './native-editing-behavior';
@@ -47,14 +48,19 @@ export function mountRegionEditor(options:RegionEditorOptions):RegionEditor {
   if(kept){const anchor=decode(editor.state,kept.anchor),head=decode(editor.state,kept.head);if(anchor!==null&&head!==null)editor.view.dispatch(editor.state.tr.setSelection(TextSelection.between(editor.state.doc.resolve(anchor),editor.state.doc.resolve(head))));}
  };
  editor=new Editor({element:root,extensions:[...nativeExtensions(),NativeIdentityRepair,NativeIndentation,NativeCodePresentation,Collaboration.configure({document:doc,field:NATIVE_ROOT})],
-  editorProps:{transformPasted:freshClipboard,
+  editorProps:{transformPasted:freshClipboard,transformPastedHTML:html=>normalizeChecklist(html,root.ownerDocument),
    handleTextInput(view,from,to,text){const at=view.state.doc.resolve(from);if(text==='/'&&from===to&&at.parent.isTextblock&&!at.parent.type.spec.code&&!at.parent.content.size){const box=view.coordsAtPos(from);post({kind:'region-slash',regionId,x:box.left,y:box.bottom});}return false;},
    handleKeyDown(view,event){
+    if(event.ctrlKey&&!event.metaKey&&event.shiftKey&&['ArrowUp','ArrowDown'].includes(event.key))return moveSibling(editor,event.key==='ArrowDown');
     if(!(event.ctrlKey||event.metaKey))return false;
+    if(event.altKey&&event.key==='Enter')return isolated(editor,()=>toggleCheck(editor));
+    if(!event.altKey&&event.key.toLowerCase()==='z')return undoNative(editor,event.shiftKey);
+    if(!event.altKey&&event.key.toLowerCase()==='y'&&event.ctrlKey)return undoNative(editor,true);
+    if(!event.altKey&&!event.shiftKey&&['b','i','e'].includes(event.key.toLowerCase()))return isolated(editor,()=>event.key.toLowerCase()==='b'?editor.commands.toggleBold():event.key.toLowerCase()==='i'?editor.commands.toggleItalic():editor.commands.toggleCode());
     if(event.key.toLowerCase()==='k'){post({kind:'region-link',regionId,href:linkAround(view.state)?.href??null});return true;}
     const digit=event.code?.replace('Digit','')||String(event.keyCode-48);
-    if(event.altKey&&/^[0-6]$/.test(digit))return digit==='0'?editor.commands.setParagraph():editor.commands.toggleHeading({level:Number(digit) as 1|2|3|4|5|6});
-    if(event.shiftKey){if(digit==='7')return editor.commands.toggleOrderedList();if(digit==='8')return editor.commands.toggleBulletList();if(digit==='9')return editor.commands.toggleBlockquote();}
+    if(event.altKey&&/^[0-6]$/.test(digit))return structural(editor,()=>digit==='0'?editor.commands.setParagraph():editor.commands.toggleHeading({level:Number(digit) as 1|2|3|4|5|6}));
+    if(event.shiftKey){if(digit==='7')return isolated(editor,()=>editor.commands.toggleOrderedList());if(digit==='8')return isolated(editor,()=>editor.commands.toggleBulletList());if(digit==='9')return isolated(editor,()=>editor.commands.toggleTaskList());}
     return false;
    },handlePaste(view,event){if(plainPaste){const text=event.clipboardData?.getData('text/plain');if(text===undefined)return false;view.dispatch(view.state.tr.insertText(text));return true;}if(event.clipboardData?.getData('text/html')||view.state.selection.$from.parent.type.spec.code)return false;const text=event.clipboardData?.getData('text/plain');if(text===undefined)return false;const anchor=encode(view.state.selection.from),head=encode(view.state.selection.to);
    void import(/* @vite-ignore */ MARKDOWN_MODULE).then((module:typeof import('./native-region-markdown'))=>{
@@ -67,9 +73,13 @@ export function mountRegionEditor(options:RegionEditorOptions):RegionEditor {
   onTransaction:()=>caret(),onUpdate:()=>{painter?.refresh();},
  });
  const view=editor.view;
+ // Native task node views dispatch their checkbox change at the input target.
+ // Bracket it from capture so mouse toggles share the keyboard undo contract.
+ const checkboxBoundary=(event:Event)=>{if(!(event.target as Element)?.matches('input[type="checkbox"]'))return;const undo=yUndoPluginKey.getState(view.state)?.undoManager;undo?.stopCapturing();queueMicrotask(()=>undo?.stopCapturing());};
+ root.addEventListener('change',checkboxBoundary,true);
  painter=createRegionCaretPainter(view,regionId,decode);
  if(!root.ownerDocument.querySelector('[data-af-native-editor-style]')){
-  const style=root.ownerDocument.createElement('style');style.setAttribute('data-af-native-editor-style','');style.textContent=`[data-af-region-editor="rich-native-v1"] .tiptap{outline:none;white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;line-height:1.5}[data-af-region-editor="rich-native-v1"] ul,[data-af-region-editor="rich-native-v1"] ol{padding-left:28px}[data-af-region-editor="rich-native-v1"] li{margin-block:4px}[data-af-region-editor="rich-native-v1"] li>p,[data-af-region-editor="rich-native-v1"] li>div>p{margin:0}[data-af-region-editor="rich-native-v1"] li ul,[data-af-region-editor="rich-native-v1"] li ol{margin-block:0}[data-af-region-editor="rich-native-v1"] ul[data-type="taskList"]{list-style:none}[data-af-region-editor="rich-native-v1"] ul[data-type="taskList"]>li{display:flex;gap:.5em}[data-af-region-editor="rich-native-v1"] ul[data-type="taskList"]>li>div{flex:1}[data-af-region-editor="rich-native-v1"] li[role="checkbox"][aria-checked="true"]::marker{content:"☑  "}[data-af-region-editor="rich-native-v1"] li[role="checkbox"][aria-checked="false"]::marker{content:"☐  "}[data-af-region-editor="rich-native-v1"] pre{white-space:pre-wrap;padding:1em;background:var(--muted,#f4f4f5);border-radius:6px}`;root.ownerDocument.head.append(style);
+  const style=root.ownerDocument.createElement('style');style.setAttribute('data-af-native-editor-style','');style.textContent=`[data-af-region-editor="rich-native-v1"] .tiptap{outline:none;white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}`;root.ownerDocument.head.append(style);
  }
  if(options.at!==undefined){let at:ReturnType<typeof view.posAtCoords>|null=null;if(options.at)try{at=view.posAtCoords({left:options.at.x,top:options.at.y});}catch{/* A detached or layout-less frame has no coordinate target. */}if(at)view.dispatch(view.state.tr.setSelection(TextSelection.near(view.state.doc.resolve(at.pos))));if(options.focus!==false)view.focus();}
  if(options.caret){const a=decode(view.state,options.caret.anchor),h=decode(view.state,options.caret.head);if(a!==null&&h!==null)view.dispatch(view.state.tr.setSelection(TextSelection.between(view.state.doc.resolve(a),view.state.doc.resolve(h))));view.focus();}
@@ -77,12 +87,14 @@ export function mountRegionEditor(options:RegionEditorOptions):RegionEditor {
   session(id,state){clientId=id;doc.clientID=id;if(view.composing)held.push(state);else apply([state]);},
   remote(updates){if(view.composing)held.push(...updates);else apply(updates);},
   command(name,args={}){
+   const undo=yUndoPluginKey.getState(editor.state)?.undoManager;
+   if(name!=='undo'&&name!=='redo')undo?.stopCapturing();
    const c=editor.commands;let done=false;
-   if(name==='strong')done=c.toggleBold();else if(name==='em')done=c.toggleItalic();else if(name==='code')done=c.toggleCode();else if(name==='undo')done=c.undo();else if(name==='redo')done=c.redo();
+   if(name==='strong')done=c.toggleBold();else if(name==='em')done=c.toggleItalic();else if(name==='code')done=c.toggleCode();else if(name==='undo')done=undoNative(editor);else if(name==='redo')done=undoNative(editor,true);
    else if(name==='list')done=args.type==='ordered'?c.toggleOrderedList():c.toggleBulletList();
    else if(name==='indent')done=indentNative(editor);else if(name==='outdent')done=indentNative(editor,true);
-   else if(name==='heading'&&Number.isInteger(args.level)&&Number(args.level)>=1&&Number(args.level)<=6)done=c.toggleHeading({level:args.level as 1|2|3|4|5|6});
-   else if(name==='paragraph')done=c.setParagraph();else if(name==='quote')done=c.toggleBlockquote();else if(name==='codeBlock')done=c.toggleCodeBlock();else if(name==='rule'){const {$head}=view.state.selection;if($head.depth===1&&$head.parent.isTextblock){const from=$head.before(1);const tr=view.state.tr.insert(from,view.state.schema.nodes.horizontalRule!.create());view.dispatch(tr.setSelection(TextSelection.near(tr.doc.resolve(from+2))));done=true;}}
+   else if(name==='heading'&&Number.isInteger(args.level)&&Number(args.level)>=1&&Number(args.level)<=6)done=structural(editor,()=>c.toggleHeading({level:args.level as 1|2|3|4|5|6}));
+   else if(name==='paragraph')done=structural(editor,()=>c.setParagraph());else if(name==='quote')done=c.toggleBlockquote();else if(name==='codeBlock')done=c.toggleCodeBlock();else if(name==='rule'){const {$head}=view.state.selection;if($head.depth===1&&$head.parent.isTextblock){const from=$head.before(1);const tr=view.state.tr.insert(from,view.state.schema.nodes.horizontalRule!.create());view.dispatch(tr.setSelection(TextSelection.near(tr.doc.resolve(from+2))));done=true;}}
    else if(name==='removeSlash'){const {$head}=view.state.selection;if($head.parent.isTextblock&&$head.parent.textContent.startsWith('/')){view.dispatch(view.state.tr.delete($head.start(),$head.start()+1));done=true;}}
    else if(name==='link'){
     const href=args.href===null?null:typeof args.href==='string'?safeHref(args.href):undefined;
@@ -93,6 +105,7 @@ export function mountRegionEditor(options:RegionEditorOptions):RegionEditor {
     }
    }
    else if(name==='resume'||name==='focus'){if(name==='focus')view.dispatch(view.state.tr.setSelection(Selection.atStart(view.state.doc)));view.focus();done=true;}
+   if(name!=='undo'&&name!=='redo')undo?.stopCapturing();
    view.focus();return done;
   },
   replay(entries){for(const entry of entries){if('text' in entry){for(const char of entry.composed?[entry.text]:Array.from(entry.text)){const {from,to}=view.state.selection;const insert=()=>view.state.tr.insertText(char,from,to);if(!view.someProp('handleTextInput',fn=>fn(view,from,to,char,insert)))view.dispatch(insert());}}else {const event=new KeyboardEvent('keydown',{...entry,bubbles:true,cancelable:true});if(!view.someProp('handleKeyDown',fn=>fn(view,event))&&(entry.key==='Backspace'||entry.key==='Delete')){
@@ -102,6 +115,6 @@ export function mountRegionEditor(options:RegionEditorOptions):RegionEditor {
      else if(entry.key==='Delete'&&$from.parentOffset<$from.parent.content.size){const width=Array.from($from.parent.textBetween($from.parentOffset,$from.parent.content.size)).at(0)!.length;view.dispatch(view.state.tr.delete(to,to+width));}
     }}}},
   paint(carets){painter?.paint(carets);},owns:node=>!!painter?.owns(node),caret(){if(!view.hasFocus())return null;return {anchor:encode(view.state.selection.anchor),head:encode(view.state.selection.head)};},
-  destroy(){flush();destroyed=true;if(timer)clearTimeout(timer);painter?.dispose();editor.destroy();doc.destroy();root.removeAttribute('data-af-region-editor');root.innerHTML=previous;},
+  destroy(){root.removeEventListener('change',checkboxBoundary,true);flush();destroyed=true;if(timer)clearTimeout(timer);painter?.dispose();editor.destroy();doc.destroy();root.removeAttribute('data-af-region-editor');root.innerHTML=previous;},
  };
 }

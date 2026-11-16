@@ -1,4 +1,5 @@
 /** Native keyboard/clipboard behavior, independent of transport and presentation. */
+import { isolated } from './native-editor-actions';
 import { safeHref } from '../live-regions/href';
 import type { Editor } from '@tiptap/core';
 import { Extension } from '@tiptap/core';
@@ -42,8 +43,8 @@ export function indentNative(editor:Editor,outdent=false):boolean {
 export const NativeIndentation=Extension.create({
  name:'nativeIndentation',priority:1100,
  addKeyboardShortcuts(){return {
-  Tab:()=>this.editor.isActive('codeBlock')?false:indentNative(this.editor),
-  'Shift-Tab':()=>this.editor.isActive('codeBlock')?false:indentNative(this.editor,true),
+  Tab:()=>this.editor.isActive('codeBlock')?false:isolated(this.editor,()=>indentNative(this.editor)),
+  'Shift-Tab':()=>this.editor.isActive('codeBlock')?false:isolated(this.editor,()=>indentNative(this.editor,true)),
   Escape:()=>{this.editor.view.dom.blur();return true;},
  };},
 });
@@ -81,6 +82,8 @@ export const NativeIdentityRepair=Extension.create({
    for(const key of ['afId','codeAfId']){const id=attrs[key];if(typeof id!=='string'||!id)continue;if(retained.get(id)!==pos)attrs={...attrs,[key]:null};}
    if(attrs!==node.attrs){repair??=state.tr;repair.setNodeMarkup(pos,undefined,attrs);}
   });
-  return repair?.setMeta('addToHistory',false)??null;
+  // Identity repair belongs to the triggering edit's undo group. Excluding the
+  // appended transaction also excludes the Yjs synchronization of the split.
+  return repair??null;
  }});return [plugin];},
 });

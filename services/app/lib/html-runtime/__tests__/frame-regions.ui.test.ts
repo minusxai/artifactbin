@@ -596,7 +596,7 @@ describe('the editor\'s toolbar, menu and shortcut commands', () => {
     expect(content(h.root).firstElementChild!.innerHTML.replace(/ target="[^"]*"| rel="[^"]*"/g,'')).toBe('Live https://a.example/!text');
   });
 
-  it('Mod-K asks the parent for a link with the one at the caret; Mod-Alt-1..3, Mod-Shift-7/8/9 toggle headings, lists and quote', async () => {
+  it('Mod-K asks the parent for a link with the one at the caret; Mod-Alt-1..3, Mod-Shift-7/8/9 toggle headings, lists and checklist', async () => {
     const h = open();
     const editor = await session(h);
     select(editor, 1 + 'Live'.length);
@@ -619,7 +619,7 @@ describe('the editor\'s toolbar, menu and shortcut commands', () => {
     keyDown(editor, { key: '&', code: 'Digit7', keyCode: 55, ctrlKey: true, shiftKey: true });
     expect(blocks(h.root)[0]).toMatch(/^p:/);
     keyDown(editor, { key: '(', code: 'Digit9', keyCode: 57, ctrlKey: true, shiftKey: true });
-    expect(blocks(h.root)[0]).toMatch(/^blockquote:/);
+    expect(content(h.root).querySelector('ul[data-type="taskList"] input[type="checkbox"]')).not.toBeNull();
     keyDown(editor, { key: '(', code: 'Digit9', keyCode: 57, ctrlKey: true, shiftKey: true });
     expect(blocks(h.root)[0]).toMatch(/^p:/);
   });

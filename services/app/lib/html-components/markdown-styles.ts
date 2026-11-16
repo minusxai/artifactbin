@@ -9,9 +9,8 @@
  *   --font-display, --font-mono, --primary, --muted, --muted-foreground, --border) and any page
  *   `<style>` win, e.g. `article { line-height: 1.4 }`.
  * Geometry: block margins are vertical only. Lists and quotes keep the browser's 40px indent,
- *   which is what a rich region's editor draws for its flat list and quote blocks
- *   (`p[data-list]`, `p[data-quote]`; lib/html-runtime region-editor-styles), so text does not
- *   move when editing starts.
+ *   shared by saved native lists and their editor node views. Task markers use the same
+ *   pseudo-elements before and after mount; the editor label is an invisible click target.
  * Pure strings, no imports: lib/html-systems loads this module under plain Node too (the skill's
  *   local preview).
  */
@@ -35,8 +34,9 @@ export const MARKDOWN_CSS = [
   rule('h4,h5,h6', 'font-size:1em'),
   // Blocks: vertical rhythm only (see the header).
   rule('p,ul,ol,blockquote,pre,.mx-md-table-scroll', 'margin-block:0 1em'),
-  rule('li>p,p[data-list]', 'margin-block:0 .3em'),
-  rule('li>ul,li>ol', 'margin-block:0'),
+  rule('ul,ol', 'padding-inline-start:40px'),
+  rule('li>p,li>div>p,p[data-list]', 'margin-block:0 .3em'),
+  rule('li>ul,li>ol,li>div>ul,li>div>ol', 'margin-block:0'),
   // While edited, a list is flat items with no list box to carry its 1em end margin: the block
   //   after one gets it.
   `${R} :where(p[data-list])+:where(p:not([data-list]),pre){margin-block-start:1em}`,
@@ -49,21 +49,30 @@ export const MARKDOWN_CSS = [
   rule('pre code', 'font-size:inherit;background:none;padding:0;border-radius:0'),
   rule('hr', 'border:0;border-top:1px solid var(--border,currentColor);margin-block:2em'),
   // GitHub-flavoured extras af-markdown renders (a doc's rich region holds none of these).
+  rule('ul[data-type="taskList"]', 'list-style:none;padding-inline-start:40px'),
+  rule('li[data-checked]>label', 'position:absolute;inset-inline-start:0;top:0;' +
+    'width:1.6em;height:1.7em;opacity:0'),
+  rule('li[data-checked]>div', 'min-width:0'),
   rule('.mx-md-check-list', 'list-style:none;padding-inline-start:0'),
   rule('li>.mx-md-check-list', 'padding-inline-start:1.6em'),
-  rule('li[role="checkbox"]', 'position:relative;list-style:none;padding-inline-start:1.6em;' +
+  rule('li[role="checkbox"],li[data-checked]', 'position:relative;' +
+    'list-style:none;padding-inline-start:1.6em;' +
     'min-height:1.7em'),
-  `${R} :where(li[role="checkbox"])::before{content:'';position:absolute;inset-inline-start:0;` +
+  `${R} :where(li[role="checkbox"],li[data-checked])::before{content:'';` +
+    `position:absolute;inset-inline-start:0;` +
     `top:.35em;width:1em;height:1em;box-sizing:border-box;` +
     `border:1px solid var(--muted-foreground,currentColor);border-radius:.2em;` +
     `background:var(--background,transparent)}`,
-  `${R} :where(li[aria-checked="true"])::before{background:var(--primary,currentColor);` +
+  `${R} :where(li[aria-checked="true"],li[data-checked="true"])::before{` +
+    `background:var(--primary,currentColor);` +
     `border-color:var(--primary,currentColor)}`,
-  `${R} :where(li[aria-checked="true"])::after{content:'';position:absolute;` +
+  `${R} :where(li[aria-checked="true"],li[data-checked="true"])::after{` +
+    `content:'';position:absolute;` +
     `inset-inline-start:.32em;top:.5em;width:.3em;height:.5em;` +
     `border:solid var(--primary-foreground,Canvas);border-width:0 2px 2px 0;` +
     `transform:rotate(45deg)}`,
-  rule('li[role="checkbox"]:focus-visible', 'outline:2px solid var(--ring,Highlight);' +
+  rule('li[role="checkbox"]:focus-visible,li[data-checked]:focus-visible',
+    'outline:2px solid var(--ring,Highlight);' +
     'outline-offset:2px'),
   rule('.mx-md-table-scroll', 'overflow-x:auto;max-width:100%'),
   rule('table', 'border-collapse:collapse;display:block;width:fit-content;max-width:100%;' +
