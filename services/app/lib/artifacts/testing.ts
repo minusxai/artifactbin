@@ -4,6 +4,10 @@
  * Only test files and the test harness may import it (`testOnly` in DEEP_MODULES['lib/artifacts'], scripts/ci/module-graph.mjs); product code uses the index.
  */
 export { ARTIFACT_HEADER_COLUMNS } from './rows';
-export { listArtifactsFor, setArtifactQuotaForTests } from './store';
+export { listArtifactsFor } from './store';
 export { assetBytesForToken, setAssetByteQuotaForTests } from './asset-quota';
 export { onDatasetCommitted, onHeadCommitted } from './after-commit';
+
+export {setArtifactQuotaForTests} from './quota-policy';
+
+export {claimPublicationIntent,chargePublication} from './workload-publication';

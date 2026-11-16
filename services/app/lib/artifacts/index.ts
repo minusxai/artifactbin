@@ -59,7 +59,7 @@ export { UnservableDocument, refusingUnservable, servableDocument, unservable } 
 export { VERSION_PARAM, archivedVersionFor, archivedVersionForActor, servedRow } from './archived-version';
 
 /** Independent ownership destinations and atomic ownership transfer. */
-export {parseArtifactDestination,newArtifactDestination} from './ownership';
+export {parseArtifactDestination,newArtifactDestination,ArtifactParentRefusal} from './ownership';
 export {transferArtifact} from './transfer';
 
 /**
@@ -75,3 +75,5 @@ export { emitDatasetCommitted } from './after-commit';
 export { childrenTableFor } from './placement';
 
 export {migrateLegacyPage} from './store';
+
+export {publicationNamespace,publicationFingerprint,claimPublicationIntent,publicationOutputs,validatePublicationParent} from './workload-publication';

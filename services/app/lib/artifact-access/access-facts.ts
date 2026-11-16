@@ -16,6 +16,7 @@ import { getDb } from '@/lib/platform';
 import type { AccessActor } from '@/lib/accounts';
 
 export interface AccessFacts {
+  groupLive(groupId:string):Promise<boolean>;
   /** The actor's role in a live group, or null (always null without an account). */
   groupShareRole(artifactId:string):Promise<ArtifactRole>;
   /** The actor's DIRECT role in a live group (administration and group ownership never come from the tree). */
@@ -51,6 +52,7 @@ const sessionEmail = (actor: AccessActor) => actor.email?.toLowerCase().trim() ?
 export function liveAccessFacts(actor: AccessActor, query?: Queryable): AccessFacts {
   const db = async () => query ?? await getDb();
   return {
+    async groupLive(groupId){return !!(await (await db()).query('SELECT 1 FROM groups WHERE id=$1 AND deleted_at IS NULL',[groupId])).rows.length;},
     async groupShareRole(artifactId){
       if(!actor.userId)return 'none';
       const rows=await (await db()).query<{role:ArtifactRole}>(GROUP_SHARE_ROLES_SQL,[artifactId,actor.userId]);
@@ -110,6 +112,7 @@ export function transactionAccessFacts(actor: AccessActor, tx: Queryable): Acces
     )).rows;
   };
   return {
+    async groupLive(groupId){return !!(await tx.query('SELECT 1 FROM groups WHERE id=$1 AND deleted_at IS NULL',[groupId])).rows.length;},
     async groupShareRole(artifactId) {
       if (!actor.userId) return 'none';
       // The artifact's group shares, locked as they are read (inserted under the artifact's row lock, which the write
@@ -179,6 +182,7 @@ export function memoAccessFacts(facts: AccessFacts): AccessFacts {
     return found;
   };
   return {
+    groupLive: (groupId) => once('groupLive',groupId,()=>facts.groupLive(groupId)),
     groupShareRole: (artifactId) => once('groupShareRole', artifactId, () => facts.groupShareRole(artifactId)),
     groupRole: (groupId) => once('groupRole', groupId, () => facts.groupRole(groupId)),
     groupAudience: (groupId) => once('groupAudience', groupId, () => facts.groupAudience(groupId)),
@@ -228,6 +232,7 @@ export async function preloadAccessFacts(db: Queryable, actor: AccessActor, rows
   const resolving = new Set<string>();
   let editorGroups: Promise<string[]> | undefined;
   return {
+    groupLive: groupId=>live.groupLive(groupId),
     async groupShareRole(id){return preloaded.has(id)?groupShares.get(id)??'none':live.groupShareRole(id);},
     async groupRole(groupId) { return actor.userId ? groups.get(groupId) ?? null : null; },
     async groupAudience(groupId) { return !!actor.userId && reached.has(groupId); },

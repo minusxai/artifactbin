@@ -12,3 +12,5 @@ export { setDocumentEditorPolicy, type DocumentEditorPolicy } from './document-e
 export { hostedAuthorization, hostedOperationCompleted, hostedRefusal } from './request-authority';
 
 export {workloadRequest} from './workload';
+
+export {withPublicationAuth} from './doors';

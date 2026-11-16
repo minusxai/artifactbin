@@ -32,6 +32,7 @@ describe('datasetRoleFrom (the contract)', () => {
 
 function fakeFacts(over: { group?: GroupRole | null; kinds?: Record<string, UserKind>; named?: ArtifactRole } = {}): AccessFacts {
   return {
+    groupLive:async()=>true,
     groupRole: async () => over.group ?? null,
     groupAudience: async () => !!over.group,
     groupShareRole: async () => 'none',

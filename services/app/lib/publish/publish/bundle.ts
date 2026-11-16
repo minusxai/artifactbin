@@ -1,5 +1,5 @@
 import {createHash} from 'node:crypto';
-import type { TokenHoldingActor } from '@/lib/accounts';
+import type { PublicationActor } from '@/lib/accounts';
 import {getArtifactById,getArtifactFor,recoverCreationIds,reserveIds} from '@/lib/artifacts';
 import {json,thrownMessage} from '@/lib/http';
 import {changedBundlePaths,planPublicationBundle,publishBundleDependencies,type PublicationBundle} from '@/lib/html-publication-bundle';
@@ -12,7 +12,7 @@ class BundleFileRefusal extends Error {constructor(readonly code:'bundle_file_no
  * even when an editor saves); `dependencies` are the page's recorded receipts, the
  * only mappings reused without an edit-access check.
  */
-export interface BundlePage {id:string;dependencies:readonly unknown[];creator:TokenHoldingActor;newFilesRefused?:boolean}
+export interface BundlePage {id:string;dependencies:readonly unknown[];creator:PublicationActor;newFilesRefused?:boolean}
 const MAPPING_ID=/^[A-Za-z0-9]{6,128}$/;
 /** Why a project file cannot publish with its page, and what to do instead. */
 const unsupportedFile=(path:string):string=>/\.html?$/i.test(path)?`unsupported_file_type: ${path} is a page: publish it on its own and link its address`:`unsupported_file_type: ${path}; a page publishes files of these types: ${FILE_EXTENSIONS.join(', ')}`;
@@ -25,7 +25,7 @@ function csvDatasetFields(path:string,csv:string):{title:string;columns?:{name:s
  const {headers,rows}=parseCsv(csv);
  return {title:file,...(headers.length&&!rows.length?{columns:headers.map(name=>({name,type:'string' as const}))}:{})};
 }
-export async function preparePublicationBundle(body:Record<string,unknown>,actor:TokenHoldingActor,base:string,request:Request|undefined,create:(body:Record<string,unknown>,request:Request)=>Promise<Response>,update:(id:string,body:Record<string,unknown>,key:string)=>Promise<Response>,page?:BundlePage):Promise<{body:Record<string,unknown>;receipts:unknown[];entryPath?:string}|Response>{
+export async function preparePublicationBundle(body:Record<string,unknown>,actor:PublicationActor,base:string,request:Request|undefined,create:(body:Record<string,unknown>,request:Request,resource?:string)=>Promise<Response>,update:(id:string,body:Record<string,unknown>,key:string)=>Promise<Response>,page?:BundlePage):Promise<{body:Record<string,unknown>;receipts:unknown[];entryPath?:string}|Response>{
  if(typeof body.html!=='string')return body.publicationBundle===undefined?{body,receipts:[]}:json({error:'invalid_publication_bundle'},400);
  let plan;const bundle=body.publicationBundle as PublicationBundle|undefined;
  try{plan=planPublicationBundle(body.html,bundle??{entryPath:'index.html',files:[]},{linksAsWritten:!bundle});}catch(error){return json({error:'unresolved_publication_dependencies',details:[(error as Error).message]},400);}
@@ -67,6 +67,7 @@ export async function preparePublicationBundle(body:Record<string,unknown>,actor
  }
 
  const result=await publishBundleDependencies(plan,key,{
+  resourceIdentity:actor.workload?'path':undefined,
   async reuse(path,mapping){
    if(!mapping||!['asset','dataset'].includes(mapping.kind)||!MAPPING_ID.test(mapping.id)||!/^\d+$/.test(mapping.revision))throw Error('Invalid dependency mapping');
    const row=reusable(path,mapping)?await getArtifactById(mapping.id):await getArtifactFor(actor,mapping.id);
@@ -91,8 +92,8 @@ export async function preparePublicationBundle(body:Record<string,unknown>,actor
   async create(input){
    const requestKey=createHash('sha256').update(input.key).digest('hex');
    const headers=new Headers(request?.headers);headers.set('Idempotency-Key',requestKey);if(creator!==actor)headers.delete('X-Artifactbin-Account');
-   const dependencyBody:Record<string,unknown>={reserved_id:reservedByPath.get(input.path),visibility:body.visibility??'unlisted',...(body.shares?{shares:body.shares}:{}),...(body.destination?{destination:body.destination}:{}),...(input.kind==='dataset'?{dataset:Buffer.from(input.base64,'base64').toString('utf8'),...(/^text\/csv\b/.test(input.contentType)?csvDatasetFields(input.path,Buffer.from(input.base64,'base64').toString('utf8')):{})}:{file:{filename:input.path.split('/').at(-1),contentType:input.contentType,base64:input.base64}})};
-   const response=await create(dependencyBody,new Request(base+'/api/artifacts',{method:'POST',headers}));
+   const dependencyBody:Record<string,unknown>={reserved_id:reservedByPath.get(input.path),visibility:body.visibility??'unlisted',...(body.shares?{shares:body.shares}:{}),...(body.destination?{destination:body.destination}:{}),...(body.parent_id!==undefined?{parent_id:body.parent_id}:{}),...(input.kind==='dataset'?{dataset:Buffer.from(input.base64,'base64').toString('utf8'),...(/^text\/csv\b/.test(input.contentType)?csvDatasetFields(input.path,Buffer.from(input.base64,'base64').toString('utf8')):{})}:{file:{filename:input.path.split('/').at(-1),contentType:input.contentType,base64:input.base64}})};
+   const response=await create(dependencyBody,new Request(base+'/api/artifacts',{method:'POST',headers}),input.path);
    const saved=await response.json() as Record<string,unknown>;if(!response.ok||typeof saved.id!=='string')throw Error(saved.error==='unsupported_file_type'?unsupportedFile(input.path):typeof saved.error==='string'?saved.error:'Dependency publication failed');
    const revision=String(saved.version??1);return {id:saved.id,revision,state:typeof saved.state==='string'?saved.state:undefined,address:input.kind==='dataset'?'ref:'+saved.id:assetAddress(saved.id,revision)};
   },

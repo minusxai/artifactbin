@@ -1,3 +1,4 @@
+import {publicationNamespace} from './workload-publication';
 /** Shared namespace for reserved and normally created identities. */
 import type { AccessActor } from '@/lib/accounts';
 import { getDb, type Queryable, generateFileId } from '../platform';
@@ -5,7 +6,7 @@ import {CreationReplay} from './creation-ledger';
 import { accountOf, matchesWorkspaceAccount } from '@/lib/accounts';
 import {reserveArtifactIdentityPool} from './reservation-pool';
 import type {ArtifactReservationCandidate} from './reservation-pool-contracts';
-const owner=accountOf;
+const owner=(actor:AccessActor)=>actor.workload?publicationNamespace(actor):accountOf(actor);
 export async function reserveIds(actor:AccessActor,batch:string,workspaceAccount?:string|null):Promise<string[]>{
  if(!/^[A-Za-z0-9_-]{16,128}$/.test(batch))throw new CreationReplay({status:400,body:{error:'invalid_batch'}});
  // Preserve the original guest batch namespace after verified adoption, even

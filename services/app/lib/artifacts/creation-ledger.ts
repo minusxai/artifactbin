@@ -1,3 +1,4 @@
+import {publicationNamespace} from './workload-publication';
 import {createHash} from 'node:crypto';
 import { getDb } from '../platform';
 import type {Queryable} from '@artifactbin/contracts';
@@ -26,6 +27,7 @@ export async function creationOperation(actor: AccessActor, origin: string, key:
 }
 
 async function creationScope(actor:AccessActor,origin:string,workspaceAccount?:string|null):Promise<string>{
+  if(actor.workload)return publicationNamespace(actor);
   const current = accountOf(actor);
   // A retry retains its original ledger scope after verified adoption. Never
   // trust a caller-supplied account pin without checking its relationship.

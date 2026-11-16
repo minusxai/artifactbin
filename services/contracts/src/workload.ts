@@ -14,6 +14,9 @@ export interface WorkloadReadOperation {
  readonly artifactId:string;
  readonly source:'canonical'|'versions'|'version'|'raw';
 }
+export type WorkloadOperation = WorkloadReadOperation | {
+ readonly kind:'artifact-create'; readonly format:string; readonly parentId:string|null; readonly resource:string;
+} | {readonly kind:'artifact-update'; readonly artifactId:string; readonly format:string};
 export type WorkloadAuthorization = {readonly allowed:false} | {
  readonly allowed:true;
  readonly principal:WorkloadBinding;
@@ -22,8 +25,9 @@ export type WorkloadAuthorization = {readonly allowed:false} | {
  readonly writeArtifactIds:readonly string[];
  readonly rootFolderId:string|null;
  readonly visibility:'private';
+ readonly publication?: {readonly slot:string;readonly maxArtifacts:number;readonly maxBytes:number};
 };
-/** Later writes use final admission: revocation cannot retract already committed effects. */
+/** Writes use final admission: revocation cannot retract already committed effects. */
 export interface WorkloadAuthority {
- authorize(binding:WorkloadBinding,operation:WorkloadReadOperation,signal?:AbortSignal):Promise<WorkloadAuthorization>;
+ authorize(binding:WorkloadBinding,operation:WorkloadOperation,signal?:AbortSignal):Promise<WorkloadAuthorization>;
 }

@@ -1,4 +1,4 @@
-import { withAuthorReadAuth, withTokenAuth } from '@/lib/authentication';
+import { withAuthorReadAuth, withTokenAuth, withPublicationAuth } from '@/lib/authentication';
 import { runOperation } from '@/lib/operations';
 import { PUBLISH_BODY_LIMIT, json, readJson } from '@/lib/http';
 
@@ -10,7 +10,7 @@ export const GET = withAuthorReadAuth((request: Request, { actor, params }) =>
  * PUT /api/artifacts/:id — full replace with `markup` or a data tier (may switch
  * formats): archives the current state and bumps version. URL never changes.
  */
-export const PUT = withTokenAuth(async (request: Request, { actor, params }) => {
+export const PUT = withPublicationAuth(async (request: Request, { actor, params }) => {
   const body = await readJson(request, { limit: PUBLISH_BODY_LIMIT });
   if (!body) return json({ error: 'invalid_json' }, 400);
   // The path names the document; a body `id` never overrides it.
