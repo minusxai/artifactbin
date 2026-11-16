@@ -75,3 +75,5 @@ export { emitDatasetCommitted } from './after-commit';
 export { childrenTableFor } from './placement';
 
 export {migrateLegacyPage} from './store';
+
+export {publicationNamespace,publicationFingerprint,claimPublicationIntent,publicationOutputs,validatePublicationParent} from './workload-publication';

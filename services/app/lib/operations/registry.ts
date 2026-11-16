@@ -209,7 +209,7 @@ const createArtifactOp: Operation = {
     ...CONTENT_ERRORS,
   ],
   async run(ctx, input) {
-    const creator = await withAccountToken(ctx.actor);
+    const creator = ctx.actor.workload?{...ctx.actor,workload:ctx.actor.workload}:await withAccountToken(ctx.actor);
     if (!creator) return reply({ error: 'unauthorized' }, 401);
     const authored = authoredHtml(input);
     if (authored instanceof Response) return fromResponse(authored);

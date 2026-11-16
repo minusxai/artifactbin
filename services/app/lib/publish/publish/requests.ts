@@ -1,7 +1,8 @@
+import {planPublicationBundle,type PublicationBundle} from '@/lib/html-publication-bundle';
 import {LiveRegionRefusal} from '@/lib/live-regions';
 import {documentOwner,type UserPagesOwner} from '@/lib/user-pages';
 import {preparePublicationBundle} from './bundle';
-import { getSharingFor, durableMutation, type MutationReceipt, type MutationReply, parseArtifactDestination, newArtifactDestination, type ArtifactInput, artifactQuotaExceeded, type ArtifactRow, byteQuotaFor, canReadArtifact, createArtifact, creationOperation, CreationReplay, findDependentsFor, getArtifactById, getArtifactFor, getOwnedArtifactFor, isVersionConflict, lookupCreation, observedChange, versionConflict, refLoaderForActor, replaceArtifactFor, setMetadataFor } from '@/lib/artifacts';
+import { getSharingFor, durableMutation, type MutationReceipt, type MutationReply, parseArtifactDestination, newArtifactDestination, type ArtifactInput, artifactQuotaExceeded, type ArtifactRow, byteQuotaFor, canReadArtifact, createArtifact, validatePublicationParent, publicationNamespace, publicationOutputs, publicationFingerprint, claimPublicationIntent, creationOperation, CreationReplay, findDependentsFor, getArtifactById, getArtifactFor, getOwnedArtifactFor, isVersionConflict, lookupCreation, observedChange, versionConflict, refLoaderForActor, replaceArtifactFor, setMetadataFor } from '@/lib/artifacts';
 import { ownsArtifact, writerFor } from '@/lib/artifact-access';
 import { committedOpenAnnotations, createdArtifactWire, parseAccessValue, parseExpectedVersion, parseLinkRoleValue, parseParentField, parseShareEntries, parseSharingRevision, parseVisibilityValue, placementFor, replacedArtifactWire } from '@/lib/artifact-wire';
 import {htmlAssetLinks, htmlPageDeclarations} from '@/lib/html-page';
@@ -21,14 +22,14 @@ import {liveConnectionOf} from '@/lib/datasets';
  * artifacts and nothing in artifacts calls up into it.
  */
 import { CONTENT_FIELDS, type DatasetAccess, type Visibility } from '@artifactbin/contracts';
-import { identityForUser, shareTargetsRefusal, TEST_ACCOUNT_RESTRICTED, type AccessActor, type TokenHoldingActor } from '@/lib/accounts';
+import { identityForUser, shareTargetsRefusal, TEST_ACCOUNT_RESTRICTED, type AccessActor, type PublicationActor } from '@/lib/accounts';
 import { prepareCatalog, DatasetError } from '@/lib/datasets';
 import { json } from '@/lib/http';
 import { ID_RE, getDb } from '@/lib/platform';
 import { prepareContentInput, applyPreparedContent, type PreparedContent } from '../prepared/prepare-content';
 import { lookupWebAssets, refreshWebAssets, type WebAssetImporter } from '../assets/web-assets';
 
-async function updateBundleDependency(actor:TokenHoldingActor,base:string,id:string,body:Record<string,unknown>,key:string):Promise<Response>{
+async function updateBundleDependency(actor:PublicationActor,base:string,id:string,body:Record<string,unknown>,key:string):Promise<Response>{
  // A changed bundle file needs edit access to its own artifact, never page ownership.
  if(!await getArtifactFor(actor,id))return json({error:'bundle_file_not_editable'},403);
  const saved=await durableMutation(actor,base,key,{id,body},async receipt=>{
@@ -46,6 +47,7 @@ async function prepareHtmlDatasets(body:Record<string,unknown>,actor:AccessActor
  if(typeof body.html!=='string')return undefined;
  try{
   const {datasets:declared,connections,queries:written}=htmlPageDeclarations(body.html);
+  if(publisher.workload&&(connections.length||written.length))return json({error:'forbidden'},403);
   // `default:` reads the install's default connection: refused where the install has none.
   if(connections.length&&!hasDefaultConnection())return json({error:'default_connection_not_configured',details:connections.map(link=>`link "${link.name}" reads the install's default connection (href="default:${link.namespace}"), and this server has none (DATASETS__DEFAULT_CONNECTION)`)},400);
   const {links,queries}=await livePageDeclarations(actor,publisher,declared,written);
@@ -92,6 +94,9 @@ export async function replaceArtifactWithBody(
   options: {dryRun?:boolean;mutationReceipt?:MutationReceipt;request?:Request} = {},
 ): Promise<Response> {
   if (!body) return json({ error: 'invalid_json' }, 400);
+  if(actor.workload){
+   if(['visibility','parent_id','destination','shares','linkRole','access','connection','publicationBundle','policy','format'].some(key=>Object.hasOwn(body!,key))||typeof body.html!=='string'||body.expectedVersion===undefined||body.expectedState===undefined)return json({error:'forbidden'},403);
+  }
   if(['markup','jsx','markdown','document_update'].some(key=>Object.hasOwn(body!,key)))return json({error:'native_html_required',hint:'Replace native pages with the complete html field and observed version and state.'},400);
   // The row FIRST: refs and imports resolve as the DOCUMENT's owner, never as
   // the writer — an editor (artifact_shares.role) replacing a document that
@@ -106,7 +111,7 @@ export async function replaceArtifactWithBody(
   if(Object.hasOwn(body,'policy')||Object.hasOwn(body,'expectedPolicyRevision'))return json({error:'combined_policy_write',hint:'Publish content first, then change policy in the dataset YAML without replacing content.'},400);
   // Sharing settings use edit access; filing under an owner's folder still checks placement.
   const owned = body.parent_id !== undefined ? await getOwnedArtifactFor(actor, id) : null;
-  const owner = writerFor(current);
+  const owner = actor.workload?actor:writerFor(current);
   const sentMarkup = body.markup;
   if(body.annotation_ops!==undefined)return json({error:'invalid_annotation_operations'},400);
   const expected = parseExpectedVersion(body);
@@ -125,17 +130,17 @@ export async function replaceArtifactWithBody(
     // page owner, so an editor's save never leaves the owner's page depending on
     // the editor's artifacts. The injected visibility/shares are the page's
     // current values, written under the same edit access a plain save has.
-    let creator=actor as TokenHoldingActor,newFilesRefused=false;
+    let creator=actor as PublicationActor,newFilesRefused=false;
     if(body.publicationBundle!==undefined){
       if(!await getOwnedArtifactFor(actor,id)){
         // A group page's files can be created as the group only by its editors, who own the page already.
         if(current.group_id)newFilesRefused=true;
-        else creator={...writerFor(current),tokenId:current.token_id??creator.tokenId};
+        else creator={...writerFor(current),tokenId:current.token_id??creator.tokenId!};
       }
       const sharing=await getSharingFor(actor,id);
       body={...body,visibility:body.visibility??current.visibility,shares:body.shares??sharing?.shares};
     }
-    const bundled=await preparePublicationBundle(body,actor as TokenHoldingActor,base,options.request,(dependency,dependencyRequest)=>createArtifactFromBody(dependency,creator,base,dependencyRequest),(dependencyId,input,key)=>updateBundleDependency(actor as TokenHoldingActor,base,dependencyId,input,key),{id,dependencies:Array.isArray(current.meta.htmlPublicationDependencies)?current.meta.htmlPublicationDependencies:[],creator,newFilesRefused});
+    const bundled=await preparePublicationBundle(body,actor as PublicationActor,base,options.request,(dependency,dependencyRequest)=>createArtifactFromBody(dependency,creator,base,dependencyRequest),(dependencyId,input,key)=>updateBundleDependency(actor as PublicationActor,base,dependencyId,input,key),{id,dependencies:Array.isArray(current.meta.htmlPublicationDependencies)?current.meta.htmlPublicationDependencies:[],creator,newFilesRefused});
     if(bundled instanceof Response)return bundled;
     body=bundled.body;bundleReceipts=bundled.receipts;bundleEntryPath=bundled.entryPath;
   }
@@ -171,12 +176,12 @@ export async function replaceArtifactWithBody(
       prepareDataset: (input,objects) => prepareCatalog(input,current,objects),
       loadRef: refLoaderForActor(owner),
       // Account-owned imports may have no historical creator credential.
-      overByteQuota: byteQuotaFor(owner.tokenId, owner.userId),
-    }, {allowRemoteInputs:!options.dryRun});
+      overByteQuota: actor.workload?async()=>false:byteQuotaFor(owner.tokenId, owner.userId),
+    }, {allowRemoteInputs:!options.dryRun&&!actor.workload});
   if (prepared instanceof Response) return prepared;
   let parsed = prepared.content;
 
-  const visibility = parseVisibility(body, !!actor.userId);
+  const visibility = parseVisibility(body, !!actor.userId||!!actor.workload);
   if (visibility instanceof Response) return visibility;
   const parent = parseParentField(body);
   if (parent instanceof Response) return parent;
@@ -216,10 +221,11 @@ export async function replaceArtifactWithBody(
   const htmlData=await prepareHtmlDatasets(body,owner,actor);if(htmlData instanceof Response)return htmlData;
   const htmlDatasets=htmlData?.links;
   if (options.dryRun) return preflightReply(prepared);
-  const applied = await applyPreparedContent(prepared);
+  const applied = actor.workload?prepared.content:await applyPreparedContent(prepared);
   parsed = applied;
   const input: ArtifactInput = {
     ...parsed,
+    ...(actor.workload?{publicationBytes:prepared.objects.reduce((total,object)=>total+object.bytes.length,0)}:{}),
     meta:{...parsed.meta,...(htmlData?{htmlQueries:htmlData.queries}:{}),...(bundleSupplied?publicationRecord(bundleReceipts,bundleEntryPath):current.meta.htmlPublicationDependencies?publicationRecord(current.meta.htmlPublicationDependencies as unknown[],current.meta.htmlPublicationEntryPath):{})},
     ...(htmlDatasets?{htmlDatasets}:{}),
     ...(body.title===null || typeof body.title === 'string' ? { title: body.title } : parsed.format==='html'?{title:parsed.derivedTitle}:{}),
@@ -256,7 +262,7 @@ export async function replaceArtifactWithBody(
       ...(visibility ? { visibility } : {}),
       ...(placement ? { ancestor_ids: placement.ancestor_ids } : {}),
     }, {...expected,expectedSharingRevision})
-    : await replaceArtifactFor(actor, id, input, {...expected,expectedSharingRevision,shares,...(options.mutationReceipt?{mutationReceipt:options.mutationReceipt,mutationReply:async(saved:ArtifactRow):Promise<MutationReply>=>({status:200,body:{...await replacedArtifactWire(saved,base,sentMarkup,{affected:receiptEffects?.affected??null,warnings:receiptEffects?.warnings??[],openAnnotations:committedOpenAnnotations(saved)},receiptOwner),...(bundleReceipts.length?{dependencyReceipts:bundleReceipts}:{})}})}:{})});
+    : await replaceArtifactFor(actor, id, input, {...expected,expectedSharingRevision,shares,...(actor.workload?{persistPrepared:()=>applyPreparedContent(prepared)}:{}),...(options.mutationReceipt?{mutationReceipt:options.mutationReceipt,mutationReply:async(saved:ArtifactRow):Promise<MutationReply>=>({status:200,body:{...await replacedArtifactWire(saved,base,sentMarkup,{affected:receiptEffects?.affected??null,warnings:receiptEffects?.warnings??[],openAnnotations:committedOpenAnnotations(saved)},receiptOwner),...(bundleReceipts.length?{dependencyReceipts:bundleReceipts}:{})}})}:{})});
   } catch(error) {if(error instanceof DatasetError)return json({error:"dataset_error",details:[error.message]},error.status);throw error;}
   // A refusal the replace composed for itself — `policy_locked` (409) or
   // `policy_mismatch` (400). It exists so this door stops answering the
@@ -281,10 +287,44 @@ export async function replaceArtifactWithBody(
  * transport-only branch of its own: a raw `Content-Type: image/*` body, which
  * has no JSON envelope for this function to read.
  */
-export async function createArtifactFromBody(body:Record<string,unknown>,actor:TokenHoldingActor,base:string,request?:Request,options:{dryRun?:boolean}={}):Promise<Response>{
+export async function createArtifactFromBody(body:Record<string,unknown>,actor:PublicationActor,base:string,request?:Request,options:{dryRun?:boolean;workloadResource?:string}={}):Promise<Response>{
+ if(actor.workload){
+  const g=actor.workload;if(!g.publication||g.role!=='editor')return json({error:'forbidden'},403);
+  const forbidden=['sheetUrl','csvUrl','imageUrl','pdfUrl','shares','linkRole','access','connection','forked_from','policy','reserved_id'];
+  if(forbidden.some(key=>Object.hasOwn(body,key))||body.visibility!==undefined&&body.visibility!=='private')return json({error:'forbidden'},403);
+  if(body.destination!==undefined){
+   try{const destination=parseArtifactDestination(body.destination);if(destination?.type!=='group'||destination.id!==g.principal.groupId)return json({error:'forbidden'},403);}catch{return json({error:'invalid_destination'},400);}
+  }
+  if(body.format==='folder'&&typeof body.title==='string')body={...body,title:body.title.trim()};
+  if(body.publicationBundle&&(body.publicationBundle as {mappings?:unknown}).mappings!==undefined)return json({error:'forbidden'},403);
+  if(typeof body.html==='string'){
+   try{
+    const plan=body.publicationBundle?planPublicationBundle(body.html,body.publicationBundle as PublicationBundle):null;
+    const declarationSource=plan?plan.rewrite(body.html,plan.entryPath,new Map(plan.dependencies.map(dependency=>[dependency.path,dependency.kind==='dataset'?'ref:PLACEHOLDER':'/fixture-asset']))):body.html;
+    const declarations=htmlPageDeclarations(declarationSource);
+    if(declarations.connections.length||declarations.queries.length)return json({error:'forbidden'},403);
+    for(const link of declarations.datasets){const row=await getArtifactById(link.datasetId);if(row&&liveConnectionOf(row.meta))return json({error:'forbidden'},403);}
+   }catch{return json({error:'invalid_html'},400);}
+  }
+  body={...body,visibility:'private',destination:{type:'group',id:g.principal.groupId},parent_id:body.parent_id===undefined?g.rootFolderId:body.parent_id};
+  if(body.parent_id!==null&&typeof body.parent_id!=='string')return json({error:'invalid_parent'},400);
+  const parent=typeof body.parent_id==='string'?body.parent_id:null;
+  if(g.rootFolderId&&parent!==g.rootFolderId&&!g.writeArtifactIds.includes(parent??''))return json({error:'forbidden'},403);
+  const resource=options.workloadResource??(body.format==='folder'?'folder:'+publicationFingerprint([parent,body.title]):'primary');
+  if(!options.workloadResource&&body.format!=='folder'&&typeof body.html!=='string')return json({error:'forbidden'},403);
+  const key=request?.headers.get('Idempotency-Key');
+  if(key&&!/^[-_A-Za-z0-9]{16,128}$/.test(key))return json({error:'invalid_idempotency_key'},400);
+  if(!await actor.finalWorkloadAdmission?.({kind:'artifact-create',format:typeof body.html==='string'?'html':String(body.format??'file'),parentId:parent,resource}))return json({error:'forbidden'},403);
+  try{await (await getDb()).transaction(async tx=>{await validatePublicationParent(tx,actor,parent);await claimPublicationIntent(tx,actor,resource,body,key);});}catch(error){if(error instanceof DatasetError)return json({error:'publication_conflict',details:[error.message]},error.status);throw error;}
+  options={...options,workloadResource:resource};
+  const headers=new Headers(request?.headers);headers.set('Idempotency-Key',publicationFingerprint([publicationNamespace(actor),resource]));
+  request=new Request(base+'/api/artifacts',{method:'POST',headers});
+ }
  if(options.dryRun&&body.publicationBundle!==undefined)return json({error:'bundle_preflight_requires_dependency_plan'},400);
- const bundled=await preparePublicationBundle(body,actor,base,request,(dependency,dependencyRequest)=>createArtifactFromBody(dependency,actor,base,dependencyRequest),(dependencyId,input,key)=>updateBundleDependency(actor,base,dependencyId,input,key));
+ const bundled=await preparePublicationBundle(body,actor,base,request,(dependency,dependencyRequest,resource)=>createArtifactFromBodyPrepared(dependency,actor,base,dependencyRequest,{workloadResource:'dependency:'+resource}),(dependencyId,input,key)=>updateBundleDependency(actor,base,dependencyId,input,key));
  if(bundled instanceof Response)return bundled;
+
+ if(actor.workload){const ids=await publicationOutputs(await getDb(),actor);actor={...actor,workload:{...actor.workload,readArtifactIds:[...new Set([...actor.workload.readArtifactIds,...ids])],writeArtifactIds:ids}};}
  const response=await createArtifactFromBodyPrepared(bundled.body,actor,base,request,{...options,bundleReceipts:bundled.receipts,bundleEntryPath:bundled.entryPath});
  if(!bundled.receipts.length)return response;
  return json({...await response.json(),dependencyReceipts:bundled.receipts},response.status);
@@ -292,10 +332,10 @@ export async function createArtifactFromBody(body:Record<string,unknown>,actor:T
 
 async function createArtifactFromBodyPrepared(
   body: Record<string, unknown>,
-  actor: TokenHoldingActor,
+  actor: PublicationActor,
   base: string,
   request?: Request,
-  options: {dryRun?:boolean;bundleReceipts?:unknown[];bundleEntryPath?:string} = {},
+  options: {dryRun?:boolean;bundleReceipts?:unknown[];bundleEntryPath?:string;workloadResource?:string} = {},
 ): Promise<Response> {
   let destination;
   try{destination=parseArtifactDestination(body.destination);}catch(error){if(error instanceof DatasetError)return json({error:'invalid_destination',details:[error.message]},error.status);throw error;}
@@ -325,7 +365,7 @@ async function createArtifactFromBodyPrepared(
   try {operation = await creationOperation(actor,base,request?.headers.get('Idempotency-Key'),live?{...body,connection:withoutSecrets(body.connection)}:body,row=>({status:201,body:responseBody(row)}),request?.headers.get('X-Artifactbin-Account'));}
   catch(error){if(error instanceof LiveRegionRefusal)return json({error:error.code,details:error.details},409);if(error instanceof CreationReplay)return json(error.reply.body,error.reply.status);throw error;}
   if(operation){const replay=await lookupCreation(await getDb(),operation);if(replay)return json(replay.body,replay.status);}
-  if (await artifactQuotaExceeded(actor.tokenId)) return json({ error: 'quota_exceeded', details: ['this token has hit its artifact COUNT quota — deleting does not free it (nothing is erased), so ask your user for another token'] }, 403);
+  if (!actor.workload && await artifactQuotaExceeded(actor.tokenId!)) return json({ error: 'quota_exceeded', details: ['this token has hit its artifact COUNT quota — deleting does not free it (nothing is erased), so ask your user for another token'] }, 403);
   const shares=parseShareEntries(body.shares);if(shares instanceof Response)return shares;const boxed=await shareTargetsRefusal(actor,shares);if(boxed)return json({error:TEST_ACCOUNT_RESTRICTED,detail:boxed},403);
   if(body.visibility===null||body.linkRole===null)return json({error:'invalid_metadata',hint:'visibility and linkRole cannot be null.'},400);
   const link=parseLinkRoleValue(body.linkRole);if(link instanceof Response)return link;
@@ -334,22 +374,25 @@ async function createArtifactFromBodyPrepared(
   // Nothing exists yet to be unreachable, so there is no ordering question
   // here: the parent is the only row being read, and it must be the caller's
   // own folder or this is the one refusal.
-  const placement = (await placementFor(actor, parent, null)) ?? { ancestor_ids: [] };
-  if (placement instanceof Response) return placement;
+  // Resolve and authorize the destination before looking up its folder namespace.
+  // A direct group Editor may publish there without owning the group personally.
   try{destination=await newArtifactDestination(actor,destination,parent);}catch(error){if(error instanceof DatasetError)return json({error:'invalid_destination',details:[error.message]},error.status);throw error;}
+  const placementOwner = destination.type==='group' ? {...identityForUser(actor.userId,actor.tokenId),groupId:destination.id} : actor;
+  const placement = (await placementFor(placementOwner, parent, null)) ?? { ancestor_ids: [] };
+  if (placement instanceof Response) return placement;
   receiptOwner = await documentOwner({user_id:actor.userId,group_id:destination?.type==='group'?destination.id:null});
   // A group publishes as the group: the creating token, no account, the group as owner (never the actor's grant).
-  const publicationActor:AccessActor=destination.type==='group'?{...identityForUser(null,actor.tokenId),groupId:destination.id}:actor;
+  const publicationActor:AccessActor=actor.workload?actor:destination.type==='group'?{...identityForUser(null,actor.tokenId),groupId:destination.id}:actor;
   const sentMarkup=body.markup;
   const prepared: PreparedContent | Response = live ? {content:live.content,objects:[]} : await prepareContentInput(body, {
     creating: true,
     prepareDataset: (input,objects) => prepareCatalog(input,undefined,objects),
     loadRef: refLoaderForActor(publicationActor),
-    overByteQuota: byteQuotaFor(actor.tokenId),
-  }, {allowRemoteInputs:!options.dryRun});
+    overByteQuota: actor.workload?async()=>false:byteQuotaFor(actor.tokenId),
+  }, {allowRemoteInputs:!options.dryRun&&!actor.workload});
   if (prepared instanceof Response) return prepared;
   let parsed = prepared.content;
-  const visibility = parseVisibility(body, !!actor.userId);
+  const visibility = parseVisibility(body, !!actor.userId||!!actor.workload);
   if (visibility instanceof Response) return visibility;
   const access = parseAccessField(body, parsed.format);
   if (access instanceof Response) return access;
@@ -357,12 +400,13 @@ async function createArtifactFromBodyPrepared(
   const htmlData=await prepareHtmlDatasets(body,publicationActor,actor);if(htmlData instanceof Response)return htmlData;
   const htmlDatasets=htmlData?.links;
   if (options.dryRun) return preflightReply(prepared);
-  const applied = await applyPreparedContent(prepared);
+  const applied = actor.workload?prepared.content:await applyPreparedContent(prepared);
   parsed = applied;
   responseBody = row => ({...createdArtifactWire(row,base,sentMarkup,receiptOwner)});
   let row;
   try{row = await createArtifact(actor.tokenId, actor.userId, {
     ...parsed,
+    ...(actor.workload?{publicationBytes:prepared.objects.reduce((total,object)=>total+object.bytes.length,0)}:{}),
     meta:{...parsed.meta,...(htmlData?{htmlQueries:htmlData.queries}:{}),...(options.bundleReceipts?.length?publicationRecord(options.bundleReceipts,options.bundleEntryPath):{})},
     ...(htmlDatasets?{htmlDatasets}:{}),
     title: body.title===null || typeof body.title === 'string' ? body.title : parsed.derivedTitle,
@@ -371,7 +415,7 @@ async function createArtifactFromBodyPrepared(
     ...(access ? { access } : {}),
     ancestor_ids: placement.ancestor_ids,
     destination,
-  }, {...(live?{liveConnection:live.connection}:{}),reservedId:body.reserved_id as string|undefined,operation,shares,...(link?{linkRole:link}:{}),...(forkedFrom?{forkedFrom}:{})});}catch(error){if(error instanceof LiveRegionRefusal)return json({error:error.code,details:error.details},409);if(error instanceof CreationReplay)return json(error.reply.body,error.reply.status);if(error instanceof DatasetError)return json({error:'dataset_error',details:[error.message]},error.status);throw error;}
+  }, {...(actor.workload?{workloadActor:actor,resource:options.workloadResource,persistPrepared:()=>applyPreparedContent(prepared)}:{}),...(live?{liveConnection:live.connection}:{}),reservedId:body.reserved_id as string|undefined,operation,shares,...(link?{linkRole:link}:{}),...(forkedFrom?{forkedFrom}:{})});}catch(error){if(error instanceof LiveRegionRefusal)return json({error:error.code,details:error.details},409);if(error instanceof CreationReplay)return json(error.reply.body,error.reply.status);if(error instanceof DatasetError)return json({error:'dataset_error',details:[error.message]},error.status);throw error;}
   return json(responseBody(row), 201);
 }
 

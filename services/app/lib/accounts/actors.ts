@@ -2,7 +2,7 @@
  * THE ACTOR TYPES: who is asking, as identity knows it. Resource policy (lib/artifact-access,
  * grants, membership) reads `AccessActor`; nothing here decides what an actor may do.
  */
-import type { WorkloadAuthorization, Credential } from '@artifactbin/contracts';
+import type { WorkloadAuthorization, WorkloadOperation, Credential } from '@artifactbin/contracts';
 
 /**
  * THE ACTOR every access decision reads: ownership, shares, the link, the SQL scopes, dataset grants and
@@ -13,7 +13,9 @@ import type { WorkloadAuthorization, Credential } from '@artifactbin/contracts';
  * `identityForUser` below for a principal the server rebuilds from its own rows.
  */
 export interface AccessActor {
-  /** Host-admitted read-only scope, never an owner descriptor. */
+  /** Host-admitted exact scope, never a group owner descriptor. */
+  /** Request-local capability, invoked outside app transactions before each effect. */
+  finalWorkloadAdmission?: (operation:WorkloadOperation)=>Promise<boolean>;
   workload?: Extract<WorkloadAuthorization,{allowed:true}>;
   /** The account, or null for a bare token (or nobody). */
   userId: string | null;
@@ -51,6 +53,8 @@ export interface RequestIdentity extends AccessActor {
  * The same actor, holding a token: what creating, the per-token quotas and web imports are charged to. Every
  * token-door identity is one (`withTokenAuth`), and an account session becomes one by minting its own token.
  */
+export type PublicationActor = AccessActor & ({tokenId:string}|{workload:Extract<WorkloadAuthorization,{allowed:true}>});
+
 export type TokenHoldingActor = AccessActor & { tokenId: string };
 
 /** The account a write is scoped to: the user, else the bare token. Nobody owns nothing, so nobody is refused. */

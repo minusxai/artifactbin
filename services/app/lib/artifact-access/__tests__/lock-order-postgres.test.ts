@@ -1,3 +1,4 @@
+import {claimPublicationIntent,chargePublication,setArtifactQuotaForTests} from '@/lib/artifacts/testing';
 /**
  * THE AUTHORIZATION LOCKS on a real PostgreSQL 17 (a disposable `postgres:17-alpine`), across two connections: what
  * PGLite (one serialized connection) can never interleave. The guarded side is the production code: the artifact
@@ -355,4 +356,27 @@ describe.skipIf(!dockerAvailable)('authorization locks on PostgreSQL', () => {
     // Direct-only: the Retail member is no member of Finance itself.
     expect(await transaction(next, () => transactionAccessFacts(ACTOR, tx(next)).groupRole('fin'))).toBeNull();
   });
+  it('serializes durable workload intent and cumulative group charges across independent connections',async()=>{
+    const a=await connect(),b=await connect();
+    await a.query(`CREATE SCHEMA workload_fixture;
+      CREATE TABLE workload_fixture.groups(id text PRIMARY KEY,deleted_at timestamptz);
+      CREATE TABLE workload_fixture.workload_publication_intents(namespace text,resource text,fingerprint text,intent_hash text,PRIMARY KEY(namespace,resource));
+      CREATE TABLE workload_fixture.workload_publication_audit(namespace text,grant_namespace text,group_id text,artifact_id text,bytes bigint,binding jsonb);
+      INSERT INTO workload_fixture.groups VALUES('group',NULL)`);
+    await a.query('SET search_path=workload_fixture');await b.query('SET search_path=workload_fixture');
+    const actor={userId:null,tokenId:null,email:null,documentEditor:false,workload:{allowed:true as const,principal:{issuerId:'fixture',subjectId:'fixture',groupId:'group',grantId:'occurrence',executionId:'attempt',environmentId:'fixture',intentHash:'fixture',epoch:1},role:'editor' as const,readArtifactIds:[],writeArtifactIds:[],rootFolderId:null,visibility:'private' as const,publication:{slot:'report',maxArtifacts:1,maxBytes:1000}}};
+    try{
+      const intents=await Promise.allSettled([transaction(a,()=>claimPublicationIntent(tx(a),actor,'primary',{html:'one'})),transaction(b,()=>claimPublicationIntent(tx(b),actor,'primary',{html:'two'}))]);
+      expect(intents.filter(result=>result.status==='fulfilled')).toHaveLength(1);
+      const charges=await Promise.allSettled([transaction(a,()=>chargePublication(tx(a),actor,{source:'one',meta:{}},'one',true)),transaction(b,()=>chargePublication(tx(b),actor,{source:'two',meta:{}},'two',true))]);
+      expect(charges.filter(result=>result.status==='fulfilled')).toHaveLength(1);
+      expect((await a.query('SELECT * FROM workload_publication_audit')).rows).toHaveLength(1);
+      setArtifactQuotaForTests(1);
+      const next={...actor,workload:{...actor.workload,principal:{...actor.workload.principal,grantId:'next_occurrence'}}};
+      await expect(transaction(b,()=>chargePublication(tx(b),next,{source:'next',meta:{}},'next',true))).rejects.toThrow('Workload quota exceeded');
+    }finally{
+      setArtifactQuotaForTests(null);await a.query('SET search_path=public');await b.query('SET search_path=public');await a.query('DROP SCHEMA workload_fixture CASCADE');
+    }
+  });
+
 });

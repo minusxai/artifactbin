@@ -703,6 +703,21 @@ const MERMAID_HARVESTS: Table = {
  indexes:[{name:'idx_mermaid_harvests_pending',columns:['created_at'],where:"state = 'pending'"}],
 };
 
+/** Honest workload attribution and retained cumulative charges, independent of human accounts. */
+const WORKLOAD_PUBLICATION_AUDIT:Table={name:'workload_publication_audit',columns:[
+ {name:'id',type:'BIGSERIAL',notNull:true},{name:'namespace',type:'TEXT',notNull:true},{name:'grant_namespace',type:'TEXT',notNull:true},
+ {name:'group_id',type:'TEXT',notNull:true},{name:'artifact_id',type:'TEXT',notNull:true},
+ {name:'bytes',type:'BIGINT',notNull:true},{name:'binding',type:'JSONB',notNull:true},
+ {name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
+],primaryKey:['id']};
+const WORKLOAD_PUBLICATION_INTENTS:Table={name:'workload_publication_intents',columns:[
+ {name:'namespace',type:'TEXT',notNull:true},{name:'resource',type:'TEXT',notNull:true},
+ {name:'fingerprint',type:'TEXT',notNull:true},{name:'intent_hash',type:'TEXT',notNull:true},
+],primaryKey:['namespace','resource']};
+const WORKLOAD_PUBLICATION_OUTPUTS:Table={name:'workload_publication_outputs',columns:[
+ {name:'namespace',type:'TEXT',notNull:true},{name:'artifact_id',type:'TEXT',notNull:true},
+],primaryKey:['namespace','artifact_id']};
+
 /** At-most-once mutation admission, before the content transaction. */
 const MUTATION_RECEIPTS: Table = {
  name:'mutation_receipts',
@@ -961,7 +976,7 @@ const NATIVE_IDENTITY_IMPORTS:Table={name:'native_identity_imports',columns:[
  {name:'original_state',type:'JSONB',notNull:true},{name:'created_at',type:'TIMESTAMPTZ',notNull:true},
 ],primaryKey:['source_namespace','kind','source_id'],indexes:[{name:'idx_native_identity_imports_target',columns:['kind','target_id']}]};
 
-export const TABLES: Table[] = [LEGACY_PAGE_MIGRATIONS,IDENTITY_SETTINGS,GROUP_QUOTAS,GROUP_AUDIT,ARTIFACT_GROUP_SHARES,NATIVE_IDENTITY_IMPORTS,GROUP_LINKS,ACCOUNT_PREFERENCES,DEPLOYMENT_STATE,DEPLOYMENT_MEMBERS,OWNERSHIP_TRANSFERS,PAGES_SESSIONS, DOCUMENT_TRUST, GROUP_TRUST, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, DATASET_IMAGES, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_CONNECTIONS, DATASET_USAGE, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, REGION_STATES, REGION_UPDATES, REGION_SNAPSHOTS, ARTIFACT_SOURCE_IDS, ARTIFACT_SHARES, ANNOTATIONS, COMMENT_REACTIONS, CODES, ANALYTICS_EVENTS, ARTIFACT_VIEW_TOTALS, CANONICAL_VIEW_TOTALS, CANONICAL_VIEW_VISITORS, RELATIONS, WEB_ASSETS, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY];
+export const TABLES: Table[] = [WORKLOAD_PUBLICATION_INTENTS,WORKLOAD_PUBLICATION_AUDIT,WORKLOAD_PUBLICATION_OUTPUTS,LEGACY_PAGE_MIGRATIONS,IDENTITY_SETTINGS,GROUP_QUOTAS,GROUP_AUDIT,ARTIFACT_GROUP_SHARES,NATIVE_IDENTITY_IMPORTS,GROUP_LINKS,ACCOUNT_PREFERENCES,DEPLOYMENT_STATE,DEPLOYMENT_MEMBERS,OWNERSHIP_TRANSFERS,PAGES_SESSIONS, DOCUMENT_TRUST, GROUP_TRUST, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, DATASET_IMAGES, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_CONNECTIONS, DATASET_USAGE, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, REGION_STATES, REGION_UPDATES, REGION_SNAPSHOTS, ARTIFACT_SOURCE_IDS, ARTIFACT_SHARES, ANNOTATIONS, COMMENT_REACTIONS, CODES, ANALYTICS_EVENTS, ARTIFACT_VIEW_TOTALS, CANONICAL_VIEW_TOTALS, CANONICAL_VIEW_VISITORS, RELATIONS, WEB_ASSETS, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY];
 
 /**
  * Tables no code reads or writes, dropped on every boot (their rows were backed up): retired custom domains,

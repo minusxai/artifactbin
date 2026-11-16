@@ -75,4 +75,4 @@ export type {PortableIdentity} from './portable-document';
 export * from './region-sessions';
 export * from './connectors';
 
-export type {WorkloadBinding, WorkloadReadOperation, WorkloadAuthorization, WorkloadAuthority} from './workload';
+export type {WorkloadBinding, WorkloadOperation, WorkloadReadOperation, WorkloadAuthorization, WorkloadAuthority} from './workload';

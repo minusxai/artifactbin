@@ -3,7 +3,6 @@
  * and the facts (./access-facts). `./scopes` is the same rule in SQL; lib/artifacts `canReadArtifact` is the one
  * read decision every serving path makes with it.
  */
-import {getDb} from '@/lib/platform';
 import type { AccessActor } from '@/lib/accounts';
 import { isLinkOnlyKind } from '@/lib/user-kinds';
 import { liveAccessFacts, type AccessFacts } from './access-facts';
@@ -46,7 +45,7 @@ export async function roleWithoutLink(
 ): Promise<ArtifactRole> {
   if(actor.workload){
     const grant=actor.workload;
-    return row.group_id===grant.principal.groupId&&grant.readArtifactIds.includes(row.id)&&(await (await getDb()).query('SELECT 1 FROM groups WHERE id=$1 AND deleted_at IS NULL',[row.group_id])).rows.length?'viewer':'none';
+    return row.group_id===grant.principal.groupId&&grant.readArtifactIds.includes(row.id)&&await facts.groupLive(row.group_id)?(grant.publication&&grant.role==='editor'&&grant.writeArtifactIds.includes(row.id)?'editor':'viewer'):'none';
   }
   if (ownsArtifact(row, actor)) return 'owner';
   let groupRole:ArtifactRole='none';
