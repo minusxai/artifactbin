@@ -1,15 +1,16 @@
 import {setNotificationDelivery,type NotificationDelivery} from '@/lib/notifications';
 export type {NotificationDelivery} from '@/lib/notifications';
 import {startAppBackgroundTasks} from '@/lib/runtime';
-import { setDocumentEditorPolicy, type DocumentEditorPolicy } from '@/lib/authentication';
+import { workloadRequest, setDocumentEditorPolicy, type DocumentEditorPolicy } from '@/lib/authentication';
 import {setMutationInvocation,type MutationInvocationFactory} from '@/lib/artifacts';
 import {useSqlExtensions} from '@/lib/sql';
-import type {Actor,Upstream} from '@artifactbin/contracts';
+import type {Actor,Upstream,WorkloadAuthority} from '@artifactbin/contracts';
 import {getDb, type Db, setServices, services, type Services} from '@/lib/platform';
 import {inProcess} from '@artifactbin/utils';
 import {skillExtras} from '@/lib/skills';
 import {createAppServer,type AppServerOptions} from './app';
 export interface AppHostOptions extends AppServerOptions {
+ workloadAuthority?:WorkloadAuthority;
  services?:Partial<Services>;
  notificationDelivery?:NotificationDelivery;
  documentEditorPolicy?:DocumentEditorPolicy;
@@ -44,7 +45,7 @@ export async function createAppHost(options:AppHostOptions={}):Promise<AppHost>{
  const app=createAppServer(options),request=inProcess(app);
  const fetch=options.identity?.(request).fetch??((incoming:Request)=>Promise.resolve(app.fetch(incoming)));
  let closing:Promise<void>|undefined;
- return {fetch,request,close:()=>closing??=(async()=>{
+ return {fetch,request:(incoming,actor)=>actor.credential==='workload'?workloadRequest(incoming,actor,options.workloadAuthority,()=>request(incoming,actor)):request(incoming,actor),close:()=>closing??=(async()=>{
   try{await stopBackgroundTasks();await services().events.close?.();await options.shutdown?.();}
   finally{await db.close();}
  })()};

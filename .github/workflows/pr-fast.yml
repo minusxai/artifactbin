@@ -202,6 +202,10 @@ jobs:
             batch: 3/3
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        # Abort an idle HTTP transfer so checkout can retry before it consumes the CI budget.
+        env:
+          GIT_HTTP_LOW_SPEED_LIMIT: '1024'
+          GIT_HTTP_LOW_SPEED_TIME: '10'
       # Node 22, the install cache's (its key says node22; its native modules are compiled for that major's ABI). The runner's
       # own Node serves when it is a 22 already, skipping setup-node's ~0.5s step and ~0.2s post step (run 42812079087,
       # job api-3); any other major gets setup-node exactly as before. The step prints the version it found.

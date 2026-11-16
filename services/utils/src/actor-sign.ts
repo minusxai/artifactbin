@@ -12,7 +12,7 @@ import { ACTOR_TTL_SECONDS, CREDENTIALS, type Actor, type Credential } from '@ar
 /** Tolerated clock difference between proxy and app. */
 const SKEW_SECONDS = 30;
 
-interface Claims extends Actor { iat: number; exp: number }
+type Claims = Actor & { iat:number; exp:number };
 
 function canonical(obj: Record<string, unknown>): string {
   const keys = Object.keys(obj).filter((k) => obj[k] !== undefined).sort();
@@ -50,6 +50,7 @@ export function verifyActor(header: string | null | undefined, secret: string, o
   } catch {
     return null;
   }
+  if (claims?.credential === 'workload') return null;
   if (!claims || typeof claims !== 'object' || !isCredential(claims.credential)) return null;
   if (typeof claims.iat !== 'number' || typeof claims.exp !== 'number') return null;
   const now = Math.floor((opts.now ?? Date.now()) / 1000);

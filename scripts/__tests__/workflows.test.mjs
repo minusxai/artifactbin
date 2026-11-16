@@ -25,6 +25,14 @@ describe('the public repository boundary', () => {
 });
 
 describe('workflow supply-chain pins', () => {
+  it('bounds stalled PR checkout transfers without changing the tested revision', () => {
+    const fast = yaml.parse(readFileSync(path.join(root, '.github/workflows/pr-fast.yml'), 'utf8'));
+    const checkout = fast.jobs.fast.steps.find(step => step.uses?.startsWith('actions/checkout@'));
+    expect(checkout.env?.GIT_HTTP_LOW_SPEED_LIMIT).toBe('1024');
+    expect(checkout.env?.GIT_HTTP_LOW_SPEED_TIME).toBe('10');
+    expect(checkout.with?.ref).toBeUndefined();
+    expect(checkout['continue-on-error']).not.toBe(true);
+  });
   it('uses immutable full commit SHAs for every third-party action', () => {
     for (const file of ['ci.yml', 'pr-fast.yml', 'v3-codeql.yml', 'page-speed.yml']) {
       const text = readFileSync(path.join(root, '.github/workflows', file), 'utf8');

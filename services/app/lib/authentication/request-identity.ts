@@ -35,6 +35,7 @@ import { DuplicateProfileEmail, NO_IDENTITY, answeredOnce, rememberTokenClient, 
 import { canAuthenticateUser } from '../user-kinds';
 import { hasDocumentEditorAccess } from './document-editor';
 import { hostedRequestRefusal } from './request-authority';
+import {workloadIdentity} from './workload';
 import { auth } from './session';
 
 /**
@@ -67,6 +68,8 @@ const nobody = (): IdentityResolution => ({ kind: 'identity', identity: NO_IDENT
 
 export function resolveRequestIdentity(request: Request | undefined, door: Door, options: ResolveOptions = {}): Promise<IdentityResolution> {
   const carrying = request ?? currentRequest() ?? undefined;
+  const workload=carrying&&workloadIdentity(carrying);
+  if(workload)return Promise.resolve({kind:'identity',identity:workload,clientHarness:null});
   const effects = !options.revalidate;
   if (door !== 'session' && carrying) {
     const presented = explicitBearer(carrying);
@@ -190,6 +193,7 @@ async function sessionIdentity(carrying: Request | undefined, headerOnly: boolea
 /** The proxy's verdict, re-admitted by the app: admission, the agent-cookie and browser-session token checks, hosted authority. */
 async function attachedIdentity(request: Request, effects: boolean): Promise<IdentityResolution> {
   const wire = actorOf(request)!;
+  if(wire.credential==='workload')return nobody();
   const userId = wire.userId ?? null, tokenId = wire.tokenId ?? null, browserSession = request.headers.get(BROWSER_SESSION_HEADER) === '1';
   const verifiable = (wire.credential === 'session' || wire.credential === 'bearer') && !request.headers.has(BROWSER_SESSION_HEADER);
   const identity = identityOf({

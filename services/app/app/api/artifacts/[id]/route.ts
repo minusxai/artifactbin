@@ -1,9 +1,9 @@
-import { withTokenAuth } from '@/lib/authentication';
+import { withAuthorReadAuth, withTokenAuth } from '@/lib/authentication';
 import { runOperation } from '@/lib/operations';
 import { PUBLISH_BODY_LIMIT, json, readJson } from '@/lib/http';
 
 /** GET /api/artifacts/:id — full read-back (source markup + meta). Actor-scope; else uniform 404. */
-export const GET = withTokenAuth((request: Request, { actor, params }) =>
+export const GET = withAuthorReadAuth((request: Request, { actor, params }) =>
   runOperation('get_artifact', request, actor, { id: params.id }));
 
 /**

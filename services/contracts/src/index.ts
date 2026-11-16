@@ -1,5 +1,5 @@
 export type { Part, Upstream } from './part';
-export { HUMAN_SESSION_LIVE_PATH, ACTOR_HEADER, REVALIDATE_ACTOR_HEADER, ACTOR_TTL_SECONDS, ANONYMOUS, CREDENTIALS, type Actor, type HumanSessionAuthority, type Credential } from './actor';
+export { HUMAN_SESSION_LIVE_PATH, ACTOR_HEADER, REVALIDATE_ACTOR_HEADER, ACTOR_TTL_SECONDS, ANONYMOUS, CREDENTIALS, type Actor, type HumanActor, type WorkloadActor, type HumanSessionAuthority, type Credential } from './actor';
 export type { Queryable } from './db';
 export * from './sql';
 export * from './sql-analysis';
@@ -74,3 +74,5 @@ export * from './page-operation';
 export type {PortableIdentity} from './portable-document';
 export * from './region-sessions';
 export * from './connectors';
+
+export type {WorkloadBinding, WorkloadReadOperation, WorkloadAuthorization, WorkloadAuthority} from './workload';
