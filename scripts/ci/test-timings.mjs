@@ -4,6 +4,7 @@
  * (scripts/lib/timed-sequencer.mjs), from Vitest's per-file lines in CI job logs.
  *
  *   node scripts/ci/test-timings.mjs --run <ci run id> [--run <id> ...]   # reads those runs' logs with gh
+ *   node scripts/ci/test-timings.mjs --projects api,api-isolated --run <id> ...  # lays only those projects' times over
  *   node scripts/ci/test-timings.mjs <log file> ...                       # or saved logs, one run per file
  *   node scripts/ci/test-timings.mjs --sums                               # print each shard's packed load and predicted wall
  *   node scripts/ci/test-timings.mjs --measured <out> --run <id> ...      # write only the runs' `node` medians to <out>
@@ -116,6 +117,11 @@ export function steadyTimings(groups) {
   return steady;
 }
 
+/** `measured` cut to `projects` (all of it without any): what `--projects` lays over the table. */
+export function onlyProjects(measured, projects) {
+  return projects ? Object.fromEntries(Object.entries(measured).filter(([project]) => projects.includes(project))) : measured;
+}
+
 /** The recorded table with these measured times laid over it. A file runs in one of the full suite's projects, so one
  * measured under such a project leaves the one it was recorded under before (a mock moves a file to `api-isolated`);
  * a `LENSES` project's times stand beside the full suite's and move nothing, and a project not `RECORDED` is ignored. */
@@ -173,7 +179,7 @@ if (import.meta.url === `file://${process.argv[1]}` && process.argv[2] === '--ap
   const runs = args.flatMap((arg, i) => (args[i - 1] === '--run' ? [arg] : []));
   const logs = runs.length
     ? runs.map((run) => execFileSync('gh', ['run', 'view', run, '--log'], { encoding: 'utf8', maxBuffer: 1 << 30 }))
-    : args.filter((arg, i) => arg !== '--measured' && args[i - 1] !== '--measured').map((file) => readFileSync(file, 'utf8'));
+    : args.filter((arg, i) => !['--measured', '--projects'].includes(arg) && !['--measured', '--projects'].includes(args[i - 1])).map((file) => readFileSync(file, 'utf8'));
   if (out) {
     const measured = medianTimings(logs.map(parseTimings));
     const node = nodeMeasurements(measured, (file) => existsSync(path.join(ROOT, file)), runs);
@@ -184,7 +190,9 @@ if (import.meta.url === `file://${process.argv[1]}` && process.argv[2] === '--ap
   const workflow = (run) => execFileSync('gh', ['run', 'view', run, '--json', 'workflowName', '--jq', '.workflowName'], { encoding: 'utf8' }).trim();
   const groups = new Map();
   logs.forEach((log, i) => { const key = runs.length ? workflow(runs[i]) : 'logs'; groups.set(key, [...(groups.get(key) ?? []), parseTimings(log)]); });
-  const measured = steadyTimings([...groups.values()]);
+  // `--projects`: a refresh of some projects leaves every other section as it was recorded (the node batch, chosen by its
+  // recorded times, keeps its files).
+  const measured = onlyProjects(steadyTimings([...groups.values()]), option(args, '--projects')?.split(','));
   const timings = mergeTimings(readTimings(OUT), measured);
   const count = Object.values(measured).reduce((sum, files) => sum + Object.keys(files).length, 0);
   // Only the recorded projects, and only files that still exist.

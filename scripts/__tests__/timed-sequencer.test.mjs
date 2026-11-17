@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CI_RUNNER, CONTENDED_START, ISOLATED_FILE_MS, SHARED_FIRST_FILE_MS, WORKERS, pack, readTimings, runOrder, shardWall, weigher } from '../lib/timed-sequencer.mjs';
-import { JOBS, LENSES, RECORDED, medianTimings, mergeTimings, nodeMeasurements, parseTimings, shardLoads, steadyTimings } from '../ci/test-timings.mjs';
+import { JOBS, LENSES, RECORDED, medianTimings, mergeTimings, nodeMeasurements, onlyProjects, parseTimings, shardLoads, steadyTimings } from '../ci/test-timings.mjs';
 
 const items = (weights) => Object.entries(weights).map(([key, weight]) => ({ key, weight }));
 const load = (shard, weights) => shard.reduce((sum, key) => sum + weights[key], 0);
@@ -115,6 +115,16 @@ describe('timed shard packing', () => {
     // One group is its median, as before.
     expect(steadyTimings([prFast])).toEqual(medianTimings(prFast));
     expect(steadyTimings([])).toEqual({});
+  });
+
+  // A refresh from ci.yml's logs also measures its node shards, and the node batch is chosen by recorded node time: an api
+  // refresh that rewrote the node section moved eight files out of pr fast's batch and eight others in.
+  it('refreshes only the projects asked for, leaving every other section as recorded', () => {
+    const measured = { api: { 'a.test.ts': 900 }, 'api-isolated': { 'm.test.ts': 40 }, node: { 'n.test.mjs': 300 } };
+    expect(onlyProjects(measured, ['api', 'api-isolated'])).toEqual({ api: { 'a.test.ts': 900 }, 'api-isolated': { 'm.test.ts': 40 } });
+    expect(onlyProjects(measured, undefined)).toBe(measured);
+    const recorded = { files: { api: { 'a.test.ts': 100 }, node: { 'n.test.mjs': 150 } } };
+    expect(mergeTimings(recorded, onlyProjects(measured, ['api'])).files.node).toEqual({ 'n.test.mjs': 150 });
   });
 
   it('hands main\'s automatic refresh the node medians alone, of files that still exist', () => {
