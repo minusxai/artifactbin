@@ -1,8 +1,8 @@
 /**
  * THE DRAFT STORE. A draft is the reader's own page, assembled once (lib/document-serving nativeDraftDocument) with the
  * tables its linked CSV or JSON files are, and the files it links, kept in this process's memory: keyed by reader and
- * content, never written to the database, bounded per reader (DRAFT_LIMITS) and forgotten `ttlSeconds` after it was last
- * asked for. Re-sending the same content is the same draft at the same origin, with a fresh ticket.
+ * content, never written to the database, bounded per reader (DRAFT_LIMITS: past a cap the reader's least recently
+ * shown draft is forgotten) and forgotten `ttlSeconds` after it, or a file it links, was last asked for. Re-sending the same content is the same draft at the same origin, with a fresh ticket.
  *
  * Its origin is `draft-<label>.<pages host>`; the label is an HMAC of reader and content under a key drawn when the
  * process starts, so it cannot be guessed, differs per reader, and names nothing after a restart. The document is
@@ -121,8 +121,6 @@ export async function createDraft(reader: string, input: unknown, appOrigin: str
   const label = `draft-${base32(createHmac('sha256', KEY).update(reader).update('\0').update(digest).digest()).slice(0, 26)}`;
   const held = drafts.get(label);
   if (held && held.reader === reader) { held.expires = now + DRAFT_LIMITS.ttlSeconds * 1000; return { label, ticket: ticketFor(held, now), entryPath: held.entryPath }; }
-  const mine = [...drafts.values()].filter((other) => other.reader === reader);
-  if (mine.length >= DRAFT_LIMITS.perReader) throw new DraftRefusal('draft_limit', `at most ${DRAFT_LIMITS.perReader} drafts at once; one is forgotten ${DRAFT_LIMITS.ttlSeconds / 60} minutes after it was last shown`);
   let plan;
   try { plan = planPublicationBundle(draft.html, { entryPath: draft.entryPath, files: draft.files.map((file) => ({ path: file.path, contentType: file.contentType, base64: file.bytes.toString('base64') })) }); }
   catch (cause) { throw new DraftRefusal('unresolved_draft_files', cause instanceof Error ? cause.message : 'the page links files the draft does not carry'); }
@@ -137,10 +135,15 @@ export async function createDraft(reader: string, input: unknown, appOrigin: str
     const name = names.get(dependency.path);
     if (dependency.kind === 'dataset' && name) tables.push(tableOf(name, dependency.path, content));
   }
-  const heldBytes = mine.reduce((sum, other) => sum + other.bytes, 0);
-  if (heldBytes + bytes > DRAFT_LIMITS.readerBytes) throw new DraftRefusal('draft_limit', `drafts held at once are at most ${DRAFT_LIMITS.readerBytes} bytes`);
   const html = await nativeDraftDocument({ label, html: draft.html, appOrigin, datasets: tables.map((table) => table.name), tables });
-  const made: Draft = { label, reader, html, files, entryPath: plan.entryPath, bytes: bytes + Buffer.byteLength(html), expires: now + DRAFT_LIMITS.ttlSeconds * 1000, tickets: new Map() };
+  // What is held is the assembled page (its tables inside) and the files: that is what the reader's caps count.
+  const size = bytes + Buffer.byteLength(html);
+  if (size > DRAFT_LIMITS.readerBytes) throw new DraftRefusal('draft_limit', `this draft holds ${size} bytes once assembled; a reader's drafts hold at most ${DRAFT_LIMITS.readerBytes}`);
+  // At a cap, the reader's least recently shown drafts are forgotten first (a frame still showing one asks for it again).
+  const mine = [...drafts.values()].filter((other) => other.reader === reader).sort((a, b) => a.expires - b.expires);
+  let total = mine.reduce((sum, other) => sum + other.bytes, 0);
+  while (mine.length && (mine.length >= DRAFT_LIMITS.perReader || total + size > DRAFT_LIMITS.readerBytes)) { const oldest = mine.shift()!; total -= oldest.bytes; drafts.delete(oldest.label); }
+  const made: Draft = { label, reader, html, files, entryPath: plan.entryPath, bytes: size, expires: now + DRAFT_LIMITS.ttlSeconds * 1000, tickets: new Map() };
   drafts.set(label, made);
   return { label, ticket: ticketFor(made, now), entryPath: made.entryPath };
 }
@@ -163,5 +166,7 @@ export function draftFile(label: string, pathname: string, now = Date.now()): { 
   let wanted: string;
   try { wanted = decodeURIComponent(pathname.replace(/^\//, '')); } catch { return null; }
   const file = draft.files.get(wanted);
+  // A page still reading its files keeps its draft.
+  if (file) draft.expires = now + DRAFT_LIMITS.ttlSeconds * 1000;
   return file ?? null;
 }

@@ -28,6 +28,7 @@
  * POST /api/page/drafts with this origin's session), framed on a fresh `draft-<label>.<pages host>` origin. A CSV or JSON
  * file it links as a dataset is a read-only table its `sql` reads in the frame; it relays nothing to the app (no
  * document, no comments, no uploads, no writes), and a refused draft rejects with the refusal's own code and message.
+ * Reloading it later can fail (`af-draft-unavailable`) or move it to a new origin (`af-draft-moved`): mount it again.
  *
  * Public code: it carries no credential and adds none (requests are this origin's own, `same-origin`). A document
  * trusts exactly one parent origin, baked in when it is served; the module refuses to mount anywhere else, and the
@@ -279,7 +280,12 @@ export async function mountDraft(container: HTMLElement, options: MountDraftOpti
     onClosed: (reason) => emit('af-document-closed', { reason }),
   });
   const stopEvents = bridge.subscribe((event) => emit('af-document-event', event));
-  const remint = async () => { try { const next = await freshDraft(win, body); return next.origin === origin ? next.src : null; } catch { return null; } };
+  // The same content keeps its origin while this server holds the key; after a restart it moves, and the frame's
+  // bridge cannot follow: the host is told (`af-draft-moved`) and mounts the draft again.
+  const remint = async () => {
+    try { const next = await freshDraft(win, body); if (next.origin === origin) return next.src; emit('af-draft-moved', { origin: next.origin }); return null; }
+    catch (error) { emit('af-draft-unavailable', { code: error instanceof HostShellError ? error.code : 'unavailable', message: error instanceof Error ? error.message : '' }); return null; }
+  };
   const stopSession = keepFrameSession({ win, frame, origin, id: label, remint });
   const stopNavigation = answerFrameNavigation({ win, frame, frameOrigin: origin, navigate: (path) => emit('af-document-navigate', { path }) });
   return {

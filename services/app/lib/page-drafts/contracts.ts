@@ -15,7 +15,7 @@ export const DRAFT_LIMITS = {
   /** Rows in any one linked dataset, and its columns. */
   rows: 50_000,
   columns: 200,
-  /** Drafts one reader holds at once, and their bytes. */
+  /** Drafts one reader holds at once, and their assembled bytes: past either, the least recently shown is forgotten. */
   perReader: 20,
   readerBytes: 64_000_000,
   /** How long a draft lives after it was last asked for, and how long its document's one-time ticket waits to be spent. */

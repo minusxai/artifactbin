@@ -133,10 +133,16 @@ describe('POST /api/page/drafts', () => {
     expect(await refusal({ html: PAGE, files: [FILES[0], { path: 'orders.csv', base64: b64(many) }] })).toMatchObject({ status: 400, body: { error: 'draft_too_large', message: expect.stringContaining(String(DRAFT_LIMITS.rows)) } });
     const big = 'x'.repeat(DRAFT_LIMITS.fileBytes + 1);
     expect(await refusal({ html: PAGE, files: [FILES[1], { path: 'style.css', base64: b64(big) }] })).toMatchObject({ status: 400, body: { error: 'draft_too_large' } });
-    for (let i = 0; i < DRAFT_LIMITS.perReader; i++) expect((await post(session(owner), { html: `<p>${i}</p>`, files: [] })).status).toBe(200);
-    expect(await refusal({ html: '<p>one more</p>', files: [] })).toMatchObject({ status: 429, body: { error: 'draft_limit' } });
-    // The same content again is the same draft, never one more.
-    expect((await post(session(owner), { html: '<p>0</p>', files: [] })).status).toBe(200);
+    const made: Array<{ src: string; origin: string }> = [];
+    for (let i = 0; i < DRAFT_LIMITS.perReader; i++) made.push(await (await post(session(owner), { html: `<p>${i}</p>`, files: [] })).json() as { src: string; origin: string });
+    // The same content again is the same draft, never one more; it is now the most recently shown.
+    const again = await (await post(session(owner), { html: '<p>0</p>', files: [] })).json() as { src: string; origin: string };
+    expect(again.origin).toBe(made[0]!.origin);
+    // Past the cap the least recently shown (here the second) is forgotten, never refused.
+    const more = await post(session(owner), { html: '<p>one more</p>', files: [] });
+    expect(more.status).toBe(200);
+    expect((await get(made[1]!.src)).status).toBe(404);
+    expect((await get(again.src)).status).toBe(200);
   });
 });
 
