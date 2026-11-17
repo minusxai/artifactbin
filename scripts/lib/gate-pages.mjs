@@ -41,6 +41,13 @@ const REFUSED_PACKAGES = /^(?:playwright|tsx)(?:\/|$)/;
 const AsyncFunction = (async () => {}).constructor;
 /** Calls that hand a value to a page in a browser rather than to a server. */
 const BROWSER_CALLS = Object.freeze(['evaluate', 'evaluateHandle', 'addInitScript', 'postMessage', 'exposeBinding', 'exposeFunction']);
+/** How long one awaited value may take to evaluate (a publish answered in process takes milliseconds). */
+const SLOT_MS = 5000;
+class SlotTimeout extends Error {
+  constructor(alias) { super(`${alias.replace(/^\$\d+_/, '')} did not settle within ${SLOT_MS} ms (a helper waiting on a browser or a server?)`); }
+}
+/** At most this many items of one loop are evaluated (a gate's fixture catalogue is a few dozen). */
+const LOOP_ITEMS = 200;
 const PAGE = /<script\b[^>]*>[\s\S]*?<\/script>|<!doctype html|<html[\s>]/i;
 
 /** Every child node of `node`, in source order. */
@@ -243,10 +250,21 @@ class Module {
   }
 }
 
-/** A module whose top level only declares (imports, exports, functions, classes, awaitless constants): safe to import. */
+/** Built-ins a module's own top-level statement may use: plain data, no input or output. */
+const PLAIN_GLOBALS = new Set(['Object', 'Array', 'JSON', 'Math', 'String', 'Number', 'Boolean', 'Symbol', 'Map', 'Set', 'WeakMap', 'WeakSet', 'Date', 'RegExp', 'Error', 'TypeError', 'structuredClone', 'encodeURIComponent', 'decodeURIComponent', 'parseInt', 'parseFloat', 'isNaN', 'Infinity', 'NaN', 'undefined']);
+/**
+ * A module whose top level only declares (imports, exports, functions, classes, awaitless constants), and whose other
+ * top-level statements touch only its own names and plain built-ins (`fixtures.push({...})`, a loop filling in a
+ * fixture's states): safe to import, since nothing it runs on import reaches outside the module.
+ */
 function declaresOnly(module) {
+  const own = (statement) => !containsAwait(statement) && module.refsIn(statement).every(({ node, decl }) => decl
+    ? within(decl.id, statement) || (module.program.names.get(decl.name) === decl && decl.kind !== 'import')
+    : PLAIN_GLOBALS.has(node.name));
   return module.ast.body.every((statement) => {
-    if (statement.type === 'ExpressionStatement') return statement.directive !== undefined;
+    if (statement.type === 'ExpressionStatement' && statement.directive !== undefined) return true;
+    if (/^(?:Expression|For|ForOf|ForIn|If|Block|While)Statement$/.test(statement.type)) return own(statement);
+    if (/Statement$/.test(statement.type)) return statement.type === 'EmptyStatement'; // a try, a throw: runs code
     if (['ImportDeclaration', 'ExportAllDeclaration', 'FunctionDeclaration', 'ClassDeclaration', 'EmptyStatement'].includes(statement.type)) return true;
     const declaration = statement.type === 'ExportNamedDeclaration' || statement.type === 'ExportDefaultDeclaration' ? statement.declaration : statement;
     if (!declaration) return true;
@@ -480,6 +498,7 @@ class Evaluator {
     const defs = [];
     const keys = new Map();
     const imports = [];
+    const values = [];
     const root = { deps: [] };
     const slot = (key, name) => {
       const def = { alias: `$${defs.length}_${name}`, body: '$ph', deps: [], async: false };
@@ -514,7 +533,8 @@ class Evaluator {
       const def = slot(key, decl.name);
       const { module: mod, owner } = decl;
       const bound = bindings.get(decl);
-      if (bound) def.body = rewrite(bound.module, bound.node, def);
+      if (bound && 'value' in bound) { values.push(bound.value); def.body = `$values[${values.length - 1}]`; }
+      else if (bound) def.body = rewrite(bound.module, bound.node, def);
       else if (decl.kind === 'import') {
         imports.push({ from: mod.file, specifier: owner.parent.source.value });
         const ns = `$imports[${imports.length - 1}]`;
@@ -562,8 +582,8 @@ class Evaluator {
     const code = `"use strict";\n${defs.map(({ alias, body: value, async }) => `$lazy(${JSON.stringify(alias)}, ${async ? 'async ' : ''}() => (${value}), ${async});`).join('\n')}\nreturn async () => (${body});`;
     const meta = { url: pathToFileURL(module.file).href, filename: module.file, dirname: path.dirname(module.file) };
     const proc = { ...process, argv: [process.argv[0], module.file], env: {}, exit() { throw Error('a gate expression called process.exit'); }, on() { return proc; }, once() { return proc; } };
-    const program = new AsyncFunction('$lazy', '$s', '$meta', '$ph', '$imports', 'process', 'fetch', code);
-    const run = await program(lazy, $s, meta, ph, namespaces, proc, this.fetch);
+    const program = new AsyncFunction('$lazy', '$s', '$meta', '$ph', '$imports', '$values', 'process', 'fetch', code);
+    const run = await program(lazy, $s, meta, ph, namespaces, values, proc, this.fetch);
     // The awaited constants the expression reaches, dependencies first; one that fails is a placeholder.
     const order = [];
     const seen = new Set();
@@ -571,7 +591,13 @@ class Evaluator {
     for (const dep of root.deps) visit(dep);
     for (const def of order) {
       if (!def.async || settled.has(def.alias)) continue;
-      try { settled.set(def.alias, await thunks.get(def.alias)()); } catch { settled.set(def.alias, ph); }
+      // A value that does not settle in time (a helper polling a page that is not there) fails the evaluation loudly
+      // instead of holding the lane; one that throws is a placeholder.
+      let timer;
+      const late = new Promise((_resolve, reject) => { timer = setTimeout(() => reject(new SlotTimeout(def.alias)), SLOT_MS); });
+      try { settled.set(def.alias, await Promise.race([thunks.get(def.alias)(), late])); }
+      catch (error) { if (error instanceof SlotTimeout) throw error; settled.set(def.alias, ph); }
+      finally { clearTimeout(timer); }
     }
     return run();
   }
@@ -634,9 +660,10 @@ class Evaluator {
    * The evaluations of `node`: once per call of the innermost function around it whose parameters it reads (each
    * parameter bound to that call's argument), or once with placeholders when no gate module calls that function.
    */
-  variants(module, node) {
-    // The parameters it reads, directly or through the function's own local declarations.
+  async variants(module, node) {
+    // The parameters and loop variables it reads, directly or through the function's own local declarations.
     const reads = new Set();
+    const loops = new Set();
     const seen = new Set();
     const follow = (range) => {
       for (const ref of module.refsIn(range)) {
@@ -644,20 +671,56 @@ class Evaluator {
         if (!decl || within(decl.id, range) || seen.has(decl)) continue;
         seen.add(decl);
         if (decl.kind === 'param' && !within(decl.owner, node)) reads.add(decl);
+        else if (decl.kind === 'loop' && decl.id === decl.owner.id && decl.owner.parent?.parent?.type === 'ForOfStatement' && !within(decl.owner, node)) loops.add(decl);
         else if (['const', 'let', 'var'].includes(decl.kind) && decl.owner.init && decl.module === module && FUNCTION.test(enclosingFunction(decl.owner)?.type ?? '')) follow(decl.owner.init);
       }
     };
     follow(node);
-    if (!reads.size) return [{ via: null, bindings: new Map() }];
-    const fn = [...reads].map((decl) => decl.owner).sort((a, b) => b.start - a.start)[0];
-    const params = [...reads].filter((decl) => decl.owner === fn);
-    const calls = this.callsOf(fn);
-    if (!calls.length) return [{ via: null, bindings: new Map() }];
-    return calls.map(({ module: caller, call }) => ({
-      via: caller.where(call),
-      bindings: new Map(params.flatMap((decl) => { const arg = Evaluator.argumentFor(fn, decl, call); return arg ? [[decl, { node: arg, module: caller }]] : []; })),
-    }));
+    let variants = [{ via: null, bindings: new Map() }];
+    if (reads.size) {
+      const fn = [...reads].map((decl) => decl.owner).sort((a, b) => b.start - a.start)[0];
+      const params = [...reads].filter((decl) => decl.owner === fn);
+      const calls = this.callsOf(fn);
+      if (calls.length) {
+        variants = calls.map(({ module: caller, call }) => ({
+          via: caller.where(call),
+          bindings: new Map(params.flatMap((decl) => { const arg = Evaluator.argumentFor(fn, decl, call); return arg ? [[decl, { node: arg, module: caller }]] : []; })),
+        }));
+      }
+    }
+    // A `for (const x of list)` it reads runs once per item of the list, outer loops first, when the list evaluates.
+    for (const decl of [...loops].sort((a, b) => a.owner.start - b.owner.start)) {
+      const expanded = [];
+      for (const variant of variants) {
+        let items = null;
+        try { items = await this.evaluate(module, decl.owner.parent.parent.right, variant.bindings); } catch { items = null; }
+        if (isPlaceholder(items) || !items || typeof items[Symbol.iterator] !== 'function' || typeof items === 'string') { expanded.push(variant); continue; }
+        for (const item of [...items].slice(0, LOOP_ITEMS)) expanded.push({ via: variant.via, bindings: new Map([...variant.bindings, [decl, { value: item }]]) });
+      }
+      variants = expanded;
+    }
+    return variants;
   }
+}
+
+/**
+ * Which parameter a function sends as a create or replace body (`JSON.stringify(body)`, or spread into the object it
+ * stringifies, in a request to a publish route named in the function): its index, or -1.
+ */
+function sentParameter({ module, node: fn }) {
+  if (!fn.params.length) return -1;
+  const nodes = module.between(fn);
+  if (!nodes.some((n) => { const text = literalText(n); return text !== null && publishRoute(text); })) return -1;
+  for (const n of nodes) {
+    if (n.type !== 'CallExpression' || n.callee.type !== 'MemberExpression' || n.callee.object.name !== 'JSON' || n.callee.property.name !== 'stringify') continue;
+    const sent = n.arguments[0];
+    const names = sent?.type === 'Identifier' ? [sent] : sent?.type === 'ObjectExpression' ? sent.properties.filter((p) => p.type === 'SpreadElement' && p.argument.type === 'Identifier').map((p) => p.argument) : [];
+    for (const id of names) {
+      const index = fn.params.findIndex((param) => param.type === 'Identifier' && param.name === id.name && module.refOf.get(id)?.decl === param.__decl);
+      if (index >= 0) return index;
+    }
+  }
+  return -1;
 }
 
 /** The function `node` sits in, or null at a module's top level. */
@@ -682,9 +745,10 @@ function carrier(payload) {
 
 /**
  * Every publish body and every page the manifest's gates use, evaluated: { modules, publishes: [{ at, route, body }],
- * pages: [{ at, html }], failures: [{ at, error }], unrouted: [at] }. `at` is file:line, with ` via file:line` for a
- * helper's call. `failures` are sites that would not evaluate and `unrouted` bodies sent through a call no route could be
- * read from: both should be empty, so a site is never dropped quietly.
+ * pages: [{ at, html }], failures: [{ at, error }], unrouted: [at], unseen: [at] }. `at` is file:line, with
+ * ` via file:line` for a helper's call. `failures` are sites that would not evaluate, `unrouted` bodies sent through a
+ * call no route could be read from, `unseen` publishes whose body is built elsewhere: a caller asserts each, so no
+ * site is dropped quietly.
  * @param {string} root the repository root
  * @param {{ placeholder?: string, serve?: (method: string, path: string, body: unknown) => Promise<Response | null> }} [options]
  *   `placeholder`: what a value known only at run time reads as; `serve`: answers the requests evaluated code makes
@@ -694,9 +758,9 @@ export async function gateInputs(root, { placeholder = 'afPlaceholder', serve } 
   const modules = gateModules(root);
   const evaluator = new Evaluator(root, modules, placeholder, serve);
   const relative = (where) => path.relative(root, where);
-  const result = { modules: modules.map((module) => relative(module.file)), publishes: [], pages: [], failures: [], unrouted: [] };
+  const result = { modules: modules.map((module) => relative(module.file)), publishes: [], pages: [], failures: [], unrouted: [], unseen: [] };
   const evaluate = async (module, node, record) => {
-    for (const { via, bindings } of evaluator.variants(module, node)) {
+    for (const { via, bindings } of await evaluator.variants(module, node)) {
       const at = relative(module.where(node)) + (via ? ` via ${relative(via)}` : '');
       try { record(at, await evaluator.evaluate(module, node, bindings)); }
       catch (error) { result.failures.push({ at, error: error instanceof Error ? error.message : String(error) }); }
@@ -724,6 +788,16 @@ export async function gateInputs(root, { placeholder = 'afPlaceholder', serve } 
           continue;
         }
         sites.push({ module, node, route });
+      }
+    }
+    // A call of a publish helper (a function that sends a parameter as a create or replace body) whose argument there is
+    // not a literal sends a body built elsewhere: nothing here can evaluate it, so it is listed rather than passed over.
+    for (const module of modules) {
+      for (const node of module.nodes) {
+        if (node.type !== 'CallExpression') continue;
+        const index = evaluator.targets(module, node.callee).map((target) => sentParameter(target)).find((i) => i >= 0);
+        const arg = index === undefined ? null : node.arguments[index];
+        if (arg && arg.type !== 'ObjectExpression') result.unseen.push(relative(module.where(node)));
       }
     }
     for (const { module, node, route } of sites) await evaluate(module, node, (at, body) => result.publishes.push({ at, route, body }));
