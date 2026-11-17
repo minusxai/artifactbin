@@ -9,7 +9,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import yaml from 'yaml';
-import { debsToInstall, installedFrom, packageOfDeb, parseArgs } from '../ci/system-debs.mjs';
+import { ONLINE_BOUND_MS, debsToInstall, failureSummary, installedFrom, packageOfDeb, parseArgs, recoverDpkg } from '../ci/system-debs.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const workflows = readdirSync(path.join(root, '.github/workflows')).filter((file) => /\.ya?ml$/.test(file))
@@ -42,6 +42,40 @@ describe('the planner', () => {
     expect(parseArgs(['/c', '--', 'npx', 'playwright', 'install-deps', 'webkit']).online).toEqual(['npx', 'playwright', 'install-deps', 'webkit']);
     expect(() => parseArgs(['/c'])).toThrow(/usage/);
     expect(() => parseArgs(['/c', '--provides', '--', 'x'])).toThrow(/usage/);
+  });
+});
+
+// THE ONLINE COMMAND IS BOUNDED (its process behaviour, timers and real child processes, is system-debs-online.test.mjs,
+// kept out of this guard file's pr fast runner): one minute an attempt, and one line that says why it failed.
+describe('the online install', () => {
+  it('allows each attempt a minute', () => {
+    expect(ONLINE_BOUND_MS).toBe(60_000);
+  });
+
+  // A dpkg that outlived its stopped attempt holds the lock: the retry waits for it, then has dpkg finish what it began.
+  it('waits for a dpkg that outlived the stopped attempt before the retry, and for nothing else', async () => {
+    const locked = { status: 2, errors: ['dpkg: error: dpkg frontend lock was locked by another process with pid 3409'] };
+    const answers = (...results) => { const calls = []; return { calls, run: async (command, args) => { calls.push([command, ...args].join(' ')); return results[Math.min(calls.length - 1, results.length - 1)]; } }; };
+    const freed = answers(locked, locked, { status: 0, errors: [] });
+    expect((await recoverDpkg(freed.run, { boundMs: 5_000, pauseMs: 0 })).status).toBe(0);
+    expect(freed.calls).toHaveLength(3);
+    expect(freed.calls[0]).toMatch(/(^|sudo )dpkg --configure -a$/);
+    const broken = answers({ status: 1, errors: ['dpkg: error processing package x (--configure)'] });
+    expect((await recoverDpkg(broken.run, { boundMs: 5_000, pauseMs: 0 })).status).toBe(1);
+    expect(broken.calls).toHaveLength(1);
+    const held = answers(locked);
+    expect((await recoverDpkg(held.run, { boundMs: 30, pauseMs: 10 })).status).toBe(2);
+    expect(held.calls.length).toBeLessThanOrEqual(4);
+  });
+
+  it('sums a failure up in one line: each attempt, then apt\'s last errors, else its last output', () => {
+    const hung = { status: null, timedOut: true, errors: [], last: '0% [Connecting to azure.archive.ubuntu.com (52.252.75.106)]' };
+    expect(failureSummary(['sh', '-c', 'sudo apt-get update'], [hung, { ...hung, status: 100, timedOut: false }])).toBe(
+      '::error::system-debs: `sh -c sudo apt-get update` failed twice (1: timed out after 60s, 2: exit 100); last output: 0% [Connecting to azure.archive.ubuntu.com (52.252.75.106)]');
+    const broken = { status: 100, timedOut: false, errors: ['E: Failed to fetch a', 'E: Unable to fetch some archives'], last: 'E: Unable to fetch some archives' };
+    expect(failureSummary(['npx', 'playwright', 'install-deps', 'webkit'], [broken, { ...broken, errors: ['E: Unable to fetch some archives', 'W: mixed mirror'] }])).toBe(
+      '::error::system-debs: `npx playwright install-deps webkit` failed twice (1: exit 100, 2: exit 100); apt said: E: Failed to fetch a | E: Unable to fetch some archives | W: mixed mirror');
+    expect(failureSummary(['x'], [{ status: null, timedOut: false, errors: [] }, { status: 3, timedOut: false, errors: [] }])).toBe('::error::system-debs: `x` failed twice (1: did not start, 2: exit 3)');
   });
 });
 

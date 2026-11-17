@@ -18,7 +18,7 @@ The workflows themselves are `.github/workflows/*.yml`; job, runner and shard co
 - `CI_BUDGETS` in `scripts/lib/ci-elapsed.mjs`, pinned by `scripts/__tests__/ci-budget.test.mjs`, owns these
   numbers. Never raise a budget, skip coverage, subtract queues or rerun unchanged code to hide slowness,
   and never move a file out of the lane: investigate the critical path and repetition.
-- `ci.yml`, page-speed and credential-platform run on main or by hand, never on automatic PRs.
+- `ci.yml`, page-speed, credential-platform and node-timings run on main or by hand, never on automatic PRs.
   Never add an unbounded PR workflow or wait for full release checks before merging; a green `pr fast` is
   never tested-release evidence. The 40/60 policy holds in the application, proxy, evaluator and deployment
   repositories alike.
@@ -33,7 +33,8 @@ The workflows themselves are `.github/workflows/*.yml`; job, runner and shard co
   - `contract-tests.json`: route contracts another repository runs after merge, with the full suite's setup.
   A file sits in at most one list; enrollment only narrows the lane and the full suite still runs every file.
 - `test-timings.json` packs the shards by measured time: refresh it from a CI run's logs with
-  `node scripts/ci/test-timings.mjs --run <id>`; files a log does not mention keep their recorded time.
+  `node scripts/ci/test-timings.mjs --run <id>`; files a log does not mention keep their recorded time. Node
+  files join the node batch without one: `node-timings.yml` (`scripts/lib/node-batch.mjs` says how).
 - The timing observer reads main's workflow: a PR may add `fast (…)` jobs, but one that drops or renames a job
   main expects is refused (`completedFastAttempt`).
 - Merge a PR into `main` only with `node scripts/ci/merge-fast.mjs owner/repo PR`: it checks the completed fast

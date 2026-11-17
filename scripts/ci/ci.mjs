@@ -2,10 +2,11 @@
 /** GitHub adapter for the pure CI planner. All CI environment reads live here. Missing tested-tree
  * evidence selects all jobs. */
 import { execFileSync, spawnSync } from 'node:child_process';
-import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { installFingerprint } from '../lib/lock-fingerprint.mjs';
-import { CI_JOBS, buildKey, checkCiResults, planCi, testBuildsKey } from '../lib/ci-plan.mjs';
+import { CI_JOBS, buildKey, checkCiResults, planCi, testBuildsKey, vitestConfigKey } from '../lib/ci-plan.mjs';
+import { NODE_TIMINGS_ARTIFACT, measuredArtifact, withMeasuredTimes } from '../lib/node-batch.mjs';
 import { NATIVE_ROOT_BUILD_INFO } from '../lib/type-check.mjs';
 
 const env = process.env;
@@ -97,8 +98,10 @@ if (mode === 'plan') {
 } else if (mode === 'test-builds-key') {
   // The test-builds cache's key (scripts/lib/ci-plan.mjs `testBuildsKey`).
   const { key, inputs } = testBuildsKey(execFileSync('git', ['ls-files', '-s'], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }));
-  if (env.GITHUB_OUTPUT) appendFileSync(env.GITHUB_OUTPUT, `key=${key}\n`);
-  console.log(`test-builds key ${key} over ${inputs} inputs`);
+  // And the module caches' (`vitestConfigKey`): pr fast's runner kinds key their entries by both.
+  const modules = vitestConfigKey();
+  if (env.GITHUB_OUTPUT) appendFileSync(env.GITHUB_OUTPUT, `key=${key}\nmodules=${modules.key}\n`);
+  console.log(`test-builds key ${key} over ${inputs} inputs; module caches ${modules.key} over ${modules.files.length} configuration files`);
 } else if (mode === 'type-info') {
   // THE ROOT TYPE CHECK'S INCREMENTAL STATE, from the newest `tsgo-buildinfo` artifact any run of this
   // repository uploaded (pr-fast.yml's `types` job and main's `warm-caches`): the native compiler's build info
@@ -131,6 +134,46 @@ if (mode === 'plan') {
   } catch (error) {
     console.log(`No type check build info (${error.message}); the type check runs cold.`);
   }
+} else if (mode === 'node-timings') {
+  // PR FAST'S NODE BATCH AS MAIN LAST MEASURED IT (scripts/lib/node-batch.mjs): the newest `node-batch-timings` artifact
+  // uploaded no later than this run was created, laid over this checkout's table before the batch chooses its files.
+  // Every node runner of the run, and of its re-runs, picks the same one. None uploaded yet leaves the committed table;
+  // anything unreadable fails the runner (after one retry), since a runner that silently chose from another table than
+  // its siblings could leave a file to neither.
+  const repo = env.GITHUB_REPOSITORY;
+  const token = env.GH_TOKEN || env.GITHUB_TOKEN;
+  const runId = env.GITHUB_RUN_ID;
+  if (!repo || !token || !runId) throw new Error('node-timings needs GITHUB_REPOSITORY, GH_TOKEN and GITHUB_RUN_ID');
+  const api = env.GITHUB_API_URL || 'https://api.github.com';
+  const headers = { authorization: `Bearer ${token}`, accept: 'application/vnd.github+json', 'x-github-api-version': '2022-11-28' };
+  const get = async (url) => {
+    let failure;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const response = await fetch(url, { headers, redirect: 'follow', signal: AbortSignal.timeout(10_000) });
+        if (response.ok) return response;
+        failure = `answered ${response.status}`;
+      } catch (error) { failure = error.message; }
+    }
+    throw new Error(`node-timings: ${url.replace(api, '')} ${failure}, twice`);
+  };
+  const [run, listing] = await Promise.all([
+    get(`${api}/repos/${repo}/actions/runs/${runId}`).then((response) => response.json()),
+    get(`${api}/repos/${repo}/actions/artifacts?name=${NODE_TIMINGS_ARTIFACT}&per_page=100`).then((response) => response.json()),
+  ]);
+  const match = measuredArtifact(listing.artifacts ?? [], run.created_at);
+  if (!match) {
+    console.log(`No ${NODE_TIMINGS_ARTIFACT} uploaded on main before ${run.created_at}: the committed table chooses the batch.`);
+  } else {
+    const dir = 'tmp/node-timings';
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(`${dir}.zip`, Buffer.from(await (await get(`${api}/repos/${repo}/actions/artifacts/${match.id}/zip`)).arrayBuffer()));
+    execFileSync('unzip', ['-o', '-q', `${dir}.zip`, '-d', dir]);
+    const measured = JSON.parse(readFileSync(`${dir}/node-timings.json`, 'utf8'));
+    const table = 'scripts/ci/test-timings.json';
+    writeFileSync(table, `${JSON.stringify(withMeasuredTimes(JSON.parse(readFileSync(table, 'utf8')), measured), null, 1)}\n`);
+    console.log(`Node batch chosen with ${Object.keys(measured.files?.node ?? {}).length} times main measured (runs ${(measured.runs ?? []).join(', ')}; artifact ${match.id} of run ${match.workflow_run.id}, ${match.created_at}).`);
+  }
 } else {
-  throw new Error('Expected plan, node, check, record-tree, lock-fingerprint, build-key, test-builds-key or type-info');
+  throw new Error('Expected plan, node, check, record-tree, lock-fingerprint, build-key, test-builds-key, type-info or node-timings');
 }

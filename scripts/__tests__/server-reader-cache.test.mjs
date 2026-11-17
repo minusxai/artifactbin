@@ -8,7 +8,8 @@
  * failed on a stale build. The marker now also stamps the inputs of the receipt the build just wrote.
  */
 import { describe, expect, it } from 'vitest';
-import { lockedClosure, withComponentGraph } from '../../services/app/scripts/server-reader-cache.mjs';
+import { entrySources, lockedClosure, withComponentGraph } from '../../services/app/scripts/server-reader-cache.mjs';
+import { testBuildsKey } from '../lib/ci-plan.mjs';
 
 describe('server reader cache marker', () => {
   it('stamps the inputs a first build discovered, so an edit to one is a miss', () => {
@@ -60,5 +61,30 @@ describe('the hosted libraries\' lock digest', () => {
     for (const location of ['node_modules/vega', 'node_modules/d3-format', 'services/app/node_modules/vega-util/node_modules/d3-format', 'node_modules/zod']) {
       expect(lockedClosure(roots, changed(location, '9.9.9')), location).not.toBe(lockedClosure(roots, lock));
     }
+  });
+});
+
+// #1295 added services/app/lib/libraries/__tests__/vega-lite-boundary.test.ts. The test-builds key ignores test files, so it
+// stayed put and main's entry was never resaved, but the markers' source list counted them: every test runner of every
+// pull request after it restored builds whose markers no longer matched and rebuilt the libraries and the server reader
+// (~10s each; pr fast run 44138698759, its api runners' Vitest 25-30s against 15-19s before). The entry sets are the
+// component and library sources; a test file is never one, so it moves neither the key nor the markers.
+describe('the entry sets the markers record', () => {
+  const sources = ['lib/libraries/vega.ts', 'lib/libraries/registry.json', 'lib/html-components/tabs.ts'];
+  const tests = ['lib/libraries/__tests__/vega-lite-boundary.test.ts', 'lib/html-components/tabs.test.ts', 'lib/html-components/__tests__/fixtures/page.html', 'lib/html-components/chart.spec.test.mjs'];
+  const index = (files) => files.map((file) => `100644 ${'a'.repeat(40)} 0\tservices/app/${file}`).join('\n');
+
+  it('leave out test files and fixtures, keeping every source', () => {
+    expect(entrySources([...sources, ...tests])).toEqual(sources);
+  });
+
+  it('move exactly when the test-builds key does', () => {
+    for (const test of tests) {
+      expect(entrySources([...sources, test]), test).toEqual(entrySources(sources));
+      expect(testBuildsKey(index([...sources, test])).key, test).toBe(testBuildsKey(index(sources)).key);
+    }
+    const added = 'lib/html-components/carousel.ts';
+    expect(entrySources([...sources, added])).not.toEqual(entrySources(sources));
+    expect(testBuildsKey(index([...sources, added])).key).not.toBe(testBuildsKey(index(sources)).key);
   });
 });

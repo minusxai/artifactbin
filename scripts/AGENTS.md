@@ -9,6 +9,12 @@ delegated agents: `agent-worktree.mjs`, `gate-container.mjs`, `gates.mjs`, `port
   script names must exist (`scripts/__tests__/script-paths.test.mjs`). Paths another repository runs or
   imports are a contract pinned by `services/app/__tests__/downstream-script-paths.test.ts`: move one only with
   a paired change there.
+- Gates run on main only, so their inputs are read without a browser (`scripts/lib/gate-pages.mjs`, evaluated
+  from the gate sources): in pr fast, every page a gate builds must parse and import only what the build ships
+  (`gate-pages.test.mjs`) and every name or text it locates by must still be rendered (`gate-labels.test.mjs`);
+  after merge, the full suite sends every body a gate publishes through the real handlers
+  (`services/app/lib/publish/__tests__/gate-publish.test.ts`, too slow for pr fast). Keep a gate's inputs
+  evaluable: a body or page those readers cannot evaluate fails them, never skips.
 - Benchmarks (`*-latency.ts`) are never run by CI and assert no budget; their results are not kept in the repo.
 - Delegating: the orchestrator owns the design, contracts, core behavioural tests and risk register, seeds them
   before handoff and proves the seeded tests catch what they claim to. Each implementer gets a bounded brief

@@ -6,6 +6,12 @@
  *   node scripts/ci/test-timings.mjs --run <ci run id> [--run <id> ...]   # reads those runs' logs with gh
  *   node scripts/ci/test-timings.mjs <log file> ...                       # or saved logs, one run per file
  *   node scripts/ci/test-timings.mjs --sums                               # print each shard's packed load and predicted wall
+ *   node scripts/ci/test-timings.mjs --measured <out> --run <id> ...      # write only the runs' `node` medians to <out>
+ *   node scripts/ci/test-timings.mjs --apply <measured>                   # lay such a file over the table, add-only
+ *
+ * `--measured` and `--apply` are main's automatic refresh of the node batch (`.github/workflows/node-timings.yml`,
+ * scripts/lib/node-batch.mjs says why it is an artifact and not a commit); `--apply` is also how a hand refresh takes
+ * the same measurements into the committed table without moving any file out of the lane.
  *
  * Give it several runs: each file takes its MEDIAN time over the runs that measured it. One run is one draw of the
  * runners' speed: refreshed from pr fast run 43016154761 alone (a slow draw, median job 42s), three api files were
@@ -18,7 +24,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { CI_RUNNER, pack, readTimings, shardWall, weigher } from '../lib/timed-sequencer.mjs';
-import { laneFiles, nodeBatchFiles } from '../lib/node-batch.mjs';
+import { FULL_SUITE_PROJECTS, laneFiles, nodeBatchFiles, withMeasuredTimes } from '../lib/node-batch.mjs';
 
 /**
  * PROJECTS THAT RE-RUN ANOTHER PROJECT'S FILES: pr-fast.yml's node batch (`node` files in one shared graph) and its guard
@@ -35,7 +41,7 @@ const ROOT = path.resolve(import.meta.dirname, '../..');
 /** The projects the table records: those CI runs with `--shard` (ci.yml's api, ui and node jobs; pr-fast.yml's suite
  * shards, node batch and guard runners) and ci.yml's integration job, whose order they set. Any other project in a log
  * (pr fast's fast module list, `fast-module-unit`) is ignored: it re-runs `node` files, and once moved 97 of them out. */
-export const RECORDED = Object.freeze(['api', 'api-isolated', 'node', 'ui', 'islands', 'integration', ...LENSES]);
+export const RECORDED = Object.freeze([...FULL_SUITE_PROJECTS, ...LENSES]);
 // ` ✓  api  services/app/__tests__/x.test.ts (12 tests) 3456ms` (also ✗/× for a failed file).
 const LINE = /[✓✗×]\s+([\w-]+)\s+(\S+\.test\.\w+)\s+\(\d+ tests?[^)]*\)\s+(\d+)ms/;
 // Vitest colours its lines in CI; `gh run view --log` hands them back as ESC bytes or as literal `^[[…m`.
@@ -116,17 +122,40 @@ export function shardLoads(timings) {
   }));
 }
 
-if (import.meta.url === `file://${process.argv[1]}` && process.argv[2] === '--sums') {
+/** The `node` medians of `measured` (`medianTimings`) for files that still exist, sorted: what `--measured` writes. */
+export function nodeMeasurements(measured, exists, runs = []) {
+  const node = Object.entries(measured.node ?? {}).filter(([file]) => exists(file)).sort(([a], [b]) => (a < b ? -1 : 1));
+  return { runs, files: { node: Object.fromEntries(node) } };
+}
+
+const write = (file, value) => writeFileSync(file, `${JSON.stringify(value, null, 1)}\n`);
+const option = (args, name) => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined);
+
+if (import.meta.url === `file://${process.argv[1]}` && process.argv[2] === '--apply') {
+  const measured = JSON.parse(readFileSync(process.argv[3], 'utf8'));
+  const timings = withMeasuredTimes(readTimings(OUT), measured);
+  timings.files.node = Object.fromEntries(Object.entries(timings.files.node).sort(([a], [b]) => (a < b ? -1 : 1)));
+  write(OUT, timings);
+  console.log(`test-timings: laid ${Object.keys(measured.files?.node ?? {}).length} measured node times${measured.runs?.length ? ` (runs ${measured.runs.join(', ')})` : ''} over the table, add-only`);
+} else if (import.meta.url === `file://${process.argv[1]}` && process.argv[2] === '--sums') {
   for (const [job, shards] of Object.entries(shardLoads(readTimings(OUT)))) {
     console.log(`${job}: ${shards.map(({ files, ms, wallMs }, i) => `${i + 1}/${shards.length} ${(ms / 1000).toFixed(1)}s, wall ${(wallMs / 1000).toFixed(1)}s (${files} files)`).join(', ')}`);
   }
 } else if (import.meta.url === `file://${process.argv[1]}`) {
   const args = process.argv.slice(2);
+  const out = option(args, '--measured');
+  if (args.includes('--measured') && !out) throw new Error('usage: test-timings.mjs --measured <out> (--run <id> ... | <log> ...)');
   const runs = args.flatMap((arg, i) => (args[i - 1] === '--run' ? [arg] : []));
   const logs = runs.length
     ? runs.map((run) => execFileSync('gh', ['run', 'view', run, '--log'], { encoding: 'utf8', maxBuffer: 1 << 30 }))
-    : args.map((file) => readFileSync(file, 'utf8'));
+    : args.filter((arg, i) => arg !== '--measured' && args[i - 1] !== '--measured').map((file) => readFileSync(file, 'utf8'));
   const measured = medianTimings(logs.map(parseTimings));
+  if (out) {
+    const node = nodeMeasurements(measured, (file) => existsSync(path.join(ROOT, file)), runs);
+    write(out, node);
+    console.log(`test-timings: ${Object.keys(node.files.node).length} node file times in ${out}, each the median of ${runs.length ? `runs ${runs.join(', ')}` : `${logs.length} log(s)`}`);
+    process.exit(0);
+  }
   const timings = mergeTimings(readTimings(OUT), measured);
   const count = Object.values(measured).reduce((sum, files) => sum + Object.keys(files).length, 0);
   // Only the recorded projects, and only files that still exist.
@@ -137,6 +166,6 @@ if (import.meta.url === `file://${process.argv[1]}` && process.argv[2] === '--su
       .filter(([file]) => existsSync(path.join(root, file)))
       .sort(([a], [b]) => (a < b ? -1 : 1)));
   }
-  writeFileSync(OUT, `${JSON.stringify(timings, null, 1)}\n`);
+  write(OUT, timings);
   console.log(`test-timings: ${count} file times, each the median of ${runs.length ? `runs ${runs.join(', ')}` : `${args.length} log(s)`}`);
 }
