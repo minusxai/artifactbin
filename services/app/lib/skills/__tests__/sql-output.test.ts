@@ -2,6 +2,7 @@
 import {mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
+import {pathToFileURL} from 'node:url';
 import {afterEach, beforeEach, expect, it} from 'vitest';
 import {sqlCommand} from '../../../skills/artifactbin/scripts/sql.mjs';
 
@@ -72,4 +73,24 @@ it('refuses what it cannot save before querying', async () => {
   await expect(query('DATA12', undefined, {'sql-file': sql})).rejects.toMatchObject({code: 'invalid_sql_file'});
   expect(sent).toEqual([]);
   expect(await readFile(out, 'utf8')).toBe('old');
+});
+
+it('through runTool, the rows file stays the command\'s own and the summary is printed', async () => {
+  const {runTool} = await import('../../../skills/artifactbin/scripts/toolbox-client.mjs');
+  const {realpath} = await import('node:fs/promises');
+  const out = path.join(root, 'rows.csv'), argv = process.argv[1];
+  await writeFile(path.join(root, 'sql.mjs'), '');
+  const entry = await realpath(path.join(root, 'sql.mjs'));
+  let printed = '';
+  const write = process.stdout.write.bind(process.stdout);
+  process.argv[1] = entry;
+  process.stdout.write = ((text: string) => { printed += text; return true; }) as typeof process.stdout.write;
+  try {
+    await runTool('sql', pathToFileURL(entry).href, (parsed: any) => sqlCommand(parsed, options()),
+      ['query', 'default:wh', 'select * from monthly', '--output', out, '--json', '--no-update']);
+  } finally { process.stdout.write = write; process.argv[1] = argv; }
+  const summary = JSON.parse(printed);
+  expect(summary).toMatchObject({ok: true, rowCount: 8, output: {format: 'csv'}});
+  expect(summary).not.toHaveProperty('rows');
+  expect((await readFile(out, 'utf8')).split('\r\n')[0]).toBe('month,region,note,revenue');
 });
