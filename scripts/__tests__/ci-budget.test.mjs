@@ -7,6 +7,7 @@ import {spawnSync} from 'node:child_process';
 import yaml from 'yaml';
 import {CI_BUDGETS, describeCiElapsed, measureCiElapsed} from '../lib/ci-elapsed.mjs';
 import {JOBS, shardLoads} from '../ci/test-timings.mjs';
+import {NODE_TIMINGS_ARTIFACT} from '../lib/node-batch.mjs';
 const workflow=(name='ci.yml')=>yaml.parse(readFileSync(new URL(`../../.github/workflows/${name}`,import.meta.url),'utf8'));
 
 it('reports four-minute per-job diagnostics while the complete chain owns the hard limit',()=>{
@@ -151,7 +152,7 @@ it('runs the cheap node batch on every pull request: its own runners, its config
  const {count}=JOBS['pr-node'];
  expect(batches).toEqual(Array.from({length:count},(_,i)=>({part:`node-${i+1}`,batch:`${i+1}/${count}`})));
  for(const entry of batches)expect(job.strategy.matrix.part).not.toContain(entry.part);
- const run=job.steps.find(step=>step.if==='matrix.batch');
+ const run=job.steps.find(step=>step.if==='matrix.batch'&&(step.run??'').includes('vitest'));
  expect(run.run).toBe('node node_modules/vitest/vitest.mjs run --config vitest.node-batch.config.ts --shard=${{ matrix.batch }}');
  const config=readFileSync(new URL('../../vitest.node-batch.config.ts',import.meta.url),'utf8');
  expect(config).toContain('sequence: { sequencer: TimedSequencer }');
@@ -161,6 +162,71 @@ it('runs the cheap node batch on every pull request: its own runners, its config
  expect(steps[restore].if).toContain('matrix.batch');
  expect(restore).toBeLessThan(steps.indexOf(run));
  expect(shardLoads(JSON.parse(readFileSync(new URL('../ci/test-timings.json',import.meta.url),'utf8')))['pr-node']).toHaveLength(count);
+});
+// A node file with no recorded time never ran on a pull request until someone refreshed the table by hand (70 of 668 on
+// 2026-11-17). Main measures them after each green ci run, and every node runner lays those times over the table.
+it('lays main\'s measured node times over the table on every node runner, fetched beside the install and awaited before the batch',()=>{
+ const steps=workflow('pr-fast.yml').jobs.fast.steps;
+ const at=(predicate)=>steps.findIndex(predicate);
+ const fetch=at(step=>(step.run??'').includes('scripts/ci/ci.mjs node-timings'));
+ const wait=at(step=>(step.run??'').includes('node-timings.status')&&!(step.run??'').includes('ci.mjs'));
+ const batch=at(step=>step.if==='matrix.batch'&&(step.run??'').includes('vitest.node-batch.config.ts'));
+ for(const index of [fetch,wait])expect(steps[index].if).toBe('matrix.batch');
+ // Started right after checkout, on the runner's own Node (ci.mjs is builtin-only), in the background.
+ expect(fetch).toBe(1);
+ expect(steps[fetch].run.trim()).toMatch(/&$/);
+ expect(steps[fetch].run).toContain('< /dev/null > /dev/null 2>&1 &');
+ expect(steps[fetch].env.GH_TOKEN).toBe('${{ github.token }}');
+ // Its status is written whole (moved into place), so the wait never reads a half-written one.
+ expect(steps[fetch].run).toContain('mv "$RUNNER_TEMP/node-timings.part" "$RUNNER_TEMP/node-timings.status"');
+ // Run as Actions runs them (bash -e), a fetch that fails hands its status and log to the wait, which fails with it,
+ // instead of leaving the wait spinning to the job's timeout; one that succeeds lets the batch run.
+ for(const [fetcher,status] of [['sh -c "echo answered 503, twice >&2; exit 7"',7],['echo chosen',0]]){
+  const temp=mkdtempSync(join(tmpdir(),'node-timings-step-'));
+  try{
+   const env={PATH:process.env.PATH,RUNNER_TEMP:temp};
+   const started=spawnSync('bash',['-e','-c',`${steps[fetch].run.replace('node scripts/ci/ci.mjs node-timings',fetcher)}\nwait`],{env,encoding:'utf8'});
+   expect(started.status).toBe(0);
+   const waited=spawnSync('bash',['-e','-c',steps[wait].run],{env,encoding:'utf8',timeout:5000});
+   expect(waited.status).toBe(status);
+   expect(waited.stdout).toContain(status?'answered 503, twice':'chosen');
+  }finally{rmSync(temp,{recursive:true,force:true});}
+ }
+ expect(fetch).toBeLessThan(at(step=>step.id==='slim'));
+ expect(wait).toBe(batch-1);
+ // No other runner fetches them: the api, ui and guard runners pack by the committed table alone.
+ expect(steps.filter(step=>(step.run??'').includes('node-timings')).map(step=>step.if)).toEqual(['matrix.batch','matrix.batch']);
+});
+it('measures the node batch on main after each green ci push run, checks it, and only then publishes it, starting nothing',()=>{
+ const flow=workflow('node-timings.yml');
+ expect(flow.on.workflow_run).toEqual({workflows:['ci'],types:['completed'],branches:['main']});
+ expect(Object.keys(flow.on).sort()).toEqual(['workflow_dispatch','workflow_run']);
+ expect(flow.permissions).toEqual({contents:'read',actions:'read'});
+ const [[,job]]=Object.entries(flow.jobs);
+ expect(Object.keys(flow.jobs)).toHaveLength(1);
+ expect(job.permissions).toBeUndefined();
+ expect(job.if).toContain("github.event.workflow_run.conclusion == 'success'");
+ expect(job.if).toContain("github.event.workflow_run.event == 'push'");
+ expect(job.steps[0].with.ref).toBe('${{ github.event.workflow_run.head_sha || github.sha }}');
+ const runs=job.steps.map(step=>step.run??'').join('\n');
+ // Nothing it does starts another run, so it cannot loop: no push, dispatch, pull request or comment.
+ expect(runs).not.toMatch(/git push|gh (workflow|pr|issue|api)|repository_dispatch/);
+ // Several green runs, each file's median.
+ expect(runs).toContain('--status success --limit 3');
+ expect(runs).toContain('node scripts/ci/test-timings.mjs --measured tmp/node-timings/node-timings.json "${args[@]}"');
+ const check=job.steps.find(step=>step.id==='check');
+ expect(check['continue-on-error']).toBe(true);
+ expect(check.run).toContain('node scripts/ci/test-timings.mjs --apply tmp/node-timings/node-timings.json');
+ // The batch as pr fast's node runners run it: the same config and shard count.
+ const {count}=JOBS['pr-node'];
+ expect(check.run).toContain(`for shard in ${Array.from({length:count},(_,i)=>`${i+1}/${count}`).join(' ')}; do`);
+ expect(check.run).toContain('node node_modules/vitest/vitest.mjs run --config vitest.node-batch.config.ts --shard="$shard"');
+ const upload=job.steps.find(step=>step.uses?.startsWith('actions/upload-artifact@'));
+ expect(upload.if).toBe("steps.check.outcome == 'success'");
+ expect(upload.with).toMatchObject({name:NODE_TIMINGS_ARTIFACT,path:'tmp/node-timings/node-timings.json','if-no-files-found':'error'});
+ expect(job.steps.find(step=>step.if==="steps.check.outcome != 'success'").run).toMatch(/^echo "::warning::/);
+ // Nothing waits for it: no workflow names it as a need, and pr fast never runs on its account.
+ expect(workflow('pr-fast.yml').on).not.toHaveProperty('workflow_run');
 });
 // The install cache holds Node 22's build of every native module; the lane may use the runner's own Node only when it is a 22.
 it('uses Node 22 in every pr fast job: the runner\'s own when it is a 22, setup-node\'s otherwise',()=>{

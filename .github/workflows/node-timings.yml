@@ -1,0 +1,91 @@
+name: node timings
+
+# MAIN MEASURES PR FAST'S NODE BATCH, SO NO FILE WAITS FOR A HAND REFRESH (scripts/lib/node-batch.mjs says why this is an
+# artifact and not a commit: main takes no commit that skipped a pull request). After each green `ci` push run on main,
+# the `node` file times of the last three green runs (each file's median: one run is one draw of the runners' speed) are
+# laid over this revision's table, the node batch they choose is run as pr fast runs it, and only if it passes are they
+# uploaded as the `node-batch-timings` artifact each pr fast node runner reads (scripts/ci/ci.mjs `node-timings`).
+# A failed check keeps the previous artifact and says so in one line. Nothing here pushes, dispatches or comments, so it
+# starts no other run, and nothing waits for it. By hand (workflow_dispatch) it measures the same way; an artifact a
+# branch uploads is never read, since pr fast reads main's alone.
+on:
+  workflow_run:
+    workflows: [ ci ]
+    types: [ completed ]
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: node-timings
+  cancel-in-progress: false
+
+jobs:
+  measure:
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    name: measure the node batch
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+      # ci.yml's whole-install cache (its `checks` job says why it holds the fonts too), restored only: main's own jobs save it.
+      - run: node scripts/ci/ci.mjs lock-fingerprint
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: install
+        with:
+          path: |
+            node_modules
+            services/*/node_modules
+            services/app/public/fonts
+            services/app/lib/html-systems/font-manifest.json
+          key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
+      - if: steps.install.outputs.cache-hit != 'true'
+        run: npm ci --no-audit --no-fund
+      - id: test-builds-key
+        run: node scripts/ci/ci.mjs test-builds-key
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            services/app/lib/build-assets
+            services/app/public/libraries
+            tmp/test-schema-image
+            tmp/vitest-module-cache
+          key: test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}
+          restore-keys: test-builds-v2-${{ runner.os }}-
+      - name: Measure the node files of the last three green main runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mapfile -t runs < <(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --branch main --event push --status success --limit 3 --json databaseId --jq '.[].databaseId')
+          args=()
+          for run in "${runs[@]}"; do args+=(--run "$run"); done
+          mkdir -p tmp/node-timings
+          node scripts/ci/test-timings.mjs --measured tmp/node-timings/node-timings.json "${args[@]}"
+      # The batch these times choose, run as pr fast's three node runners run it (vitest.node-batch.config.ts): a file the
+      # full suite's isolated `node` project passes can still fail beside others in a shared graph.
+      - name: Run the node batch they choose
+        id: check
+        continue-on-error: true
+        run: |
+          node scripts/ci/test-timings.mjs --apply tmp/node-timings/node-timings.json
+          for shard in 1/3 2/3 3/3; do
+            node node_modules/vitest/vitest.mjs run --config vitest.node-batch.config.ts --shard="$shard"
+          done
+      - if: steps.check.outcome != 'success'
+        run: echo "::warning::The node batch these times choose failed (above); pr fast keeps the previous node-batch-timings. Exclude the file that fails in a shared graph (scripts/lib/node-batch.mjs NODE_BATCH_EXCLUDED)."
+      - if: steps.check.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: node-batch-timings
+          path: tmp/node-timings/node-timings.json
+          retention-days: 30
+          if-no-files-found: error
