@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 
 /** CI boundary: the jobs ci.yml runs after a merge. Every push to main runs all of them, unless a green run
  * already tested this exact tree (scripts/ci/ci.mjs `plan`), which selects none.
@@ -76,4 +78,40 @@ export function testBuildsKey(stagedIndex) {
     return line && TEST_BUILD_INPUTS.test(file) && !/(^|\/)__tests__\//.test(file) && !/\.test\.[cm]?[jt]sx?$/.test(file);
   });
   return { key: createHash('sha256').update(index.join('\n')).digest('hex').slice(0, 32), inputs: index.length };
+}
+
+const ROOT = path.resolve(import.meta.dirname, '../..');
+/** The Vitest configurations pr fast and ci.yml run, at the repository root. */
+const VITEST_CONFIGS = ['vitest.config.ts', 'vitest.guard.config.ts', 'vitest.node-batch.config.ts', 'vitest.fast.config.ts'];
+const LOCAL_IMPORT = /(?:\bfrom|\bimport\s*\()\s*['"](\.{1,2}\/[^'"]+)['"]/g;
+const EXTENSIONS = ['', '.ts', '.mts', '.mjs', '.js'];
+
+/**
+ * The module caches' key: the content of the Vitest configurations and every local module they import, transitively.
+ * Vitest keys each transformed module by that same content (Vite's configFileDependencies), so an edit to one of them
+ * leaves every cached module cold; keyed by it, the runner kinds' entries are written again for the new configuration.
+ * A specifier names a file with or without its extension, as the configurations write them. Repository-relative paths.
+ * @param {(file: string) => string} [read]
+ * @returns {{ key: string, files: string[] }}
+ */
+export function vitestConfigKey(read = (file) => readFileSync(path.join(ROOT, file), 'utf8')) {
+  const contents = new Map();
+  const tryRead = (file) => { try { return read(file); } catch { return undefined; } };
+  const queue = [...VITEST_CONFIGS];
+  while (queue.length) {
+    const file = queue.shift();
+    if (contents.has(file)) continue;
+    const text = tryRead(file);
+    if (text === undefined) continue;
+    contents.set(file, text);
+    for (const [, specifier] of text.matchAll(LOCAL_IMPORT)) {
+      const base = path.posix.normalize(path.posix.join(path.posix.dirname(file), specifier));
+      const found = EXTENSIONS.map((extension) => base + extension).find((candidate) => contents.has(candidate) || tryRead(candidate) !== undefined);
+      if (found) queue.push(found);
+    }
+  }
+  const files = [...contents.keys()].sort();
+  const hash = createHash('sha256');
+  for (const file of files) hash.update(`${file}\0${contents.get(file)}\0`);
+  return { key: hash.digest('hex').slice(0, 16), files };
 }

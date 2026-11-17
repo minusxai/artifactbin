@@ -720,7 +720,7 @@ jobs:
             services/app/public/libraries
             tmp/test-schema-image
             tmp/vitest-module-cache
-          key: test-builds-v3-${{ runner.os }}-api-${{ steps.test-builds-key.outputs.key }}
+          key: test-builds-v3-${{ runner.os }}-api-${{ steps.test-builds-key.outputs.key }}-${{ steps.test-builds-key.outputs.modules }}
       - run: |
           rm -rf tmp/vitest-module-cache
           node node_modules/vitest/vitest.mjs list --project=ui --project=islands --filesOnly=false > /dev/null
@@ -731,7 +731,7 @@ jobs:
             services/app/public/libraries
             tmp/test-schema-image
             tmp/vitest-module-cache
-          key: test-builds-v3-${{ runner.os }}-ui-${{ steps.test-builds-key.outputs.key }}
+          key: test-builds-v3-${{ runner.os }}-ui-${{ steps.test-builds-key.outputs.key }}-${{ steps.test-builds-key.outputs.modules }}
       - run: |
           rm -rf tmp/vitest-module-cache
           node node_modules/vitest/vitest.mjs list --config vitest.guard.config.ts --filesOnly=false > /dev/null
@@ -742,7 +742,7 @@ jobs:
             services/app/public/libraries
             tmp/test-schema-image
             tmp/vitest-module-cache
-          key: test-builds-v3-${{ runner.os }}-guards-${{ steps.test-builds-key.outputs.key }}
+          key: test-builds-v3-${{ runner.os }}-guards-${{ steps.test-builds-key.outputs.key }}-${{ steps.test-builds-key.outputs.modules }}
       - run: |
           rm -rf tmp/vitest-module-cache
           node node_modules/vitest/vitest.mjs list --config vitest.node-batch.config.ts --filesOnly=false > /dev/null
@@ -753,7 +753,7 @@ jobs:
             services/app/public/libraries
             tmp/test-schema-image
             tmp/vitest-module-cache
-          key: test-builds-v3-${{ runner.os }}-node-${{ steps.test-builds-key.outputs.key }}
+          key: test-builds-v3-${{ runner.os }}-node-${{ steps.test-builds-key.outputs.key }}-${{ steps.test-builds-key.outputs.modules }}
 
   # THE ROLL-UP, AND THE RECORD OF WHAT IT PASSED ON.
   #

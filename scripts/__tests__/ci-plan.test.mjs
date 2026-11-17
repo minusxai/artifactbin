@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import yaml from 'yaml';
 import { createServer } from 'node:http';
-import { CI_JOBS, checkCiResults, isBuildInput, planCi, testBuildsKey } from '../lib/ci-plan.mjs';
+import { CI_JOBS, checkCiResults, isBuildInput, planCi, testBuildsKey, vitestConfigKey } from '../lib/ci-plan.mjs';
 import { MODULE_CACHE_DIR, SCHEMA_IMAGE_DIR } from '../lib/suite-env.mjs';
 import { CI_GATE_SHARDS, CI_ISOLATED_GATES, CI_SHARD_OPTIONS, gateNamesOnDisk, shardWeight, specFor } from '../gates.manifest.mjs';
 import { shardOf } from '../gates.shard.mjs';
@@ -332,7 +332,7 @@ describe('CI avoids duplicate integration setup', () => {
     const isList = step => /vitest\.mjs list /.test(step.run ?? '');
     const lists = steps.flatMap((step, i) => isList(step) ? [i] : []);
     for (const [kind, selection] of Object.entries(kinds)) {
-      const save = steps.findIndex(step => (step.uses ?? '').startsWith('actions/cache/save') && step.with.key === `test-builds-v3-\${{ runner.os }}-${kind}-\${{ steps.test-builds-key.outputs.key }}`);
+      const save = steps.findIndex(step => (step.uses ?? '').startsWith('actions/cache/save') && step.with.key === `test-builds-v3-\${{ runner.os }}-${kind}-\${{ steps.test-builds-key.outputs.key }}-\${{ steps.test-builds-key.outputs.modules }}`);
       expect(save, kind).toBeGreaterThan(-1);
       expect(steps[save].with.path.split('\n').filter(Boolean), kind).toEqual(['services/app/lib/build-assets', 'services/app/public/libraries', SCHEMA_IMAGE_DIR, MODULE_CACHE_DIR]);
       const last = Math.max(...lists.filter(i => i < save));
@@ -355,10 +355,10 @@ describe('CI avoids duplicate integration setup', () => {
         if (name === 'pr-fast.yml fast') {
           // A runner kind's entry, falling back to main's whole entry for these very sources (fresh builds, the api
           // modules), then the kind's newest, then the newest of all.
-          expect(cache.with.key, name).toBe('test-builds-v3-${{ runner.os }}-${{ env.TEST_BUILDS_KIND }}-${{ steps.test-builds-key.outputs.key }}');
+          expect(cache.with.key, name).toBe('test-builds-v3-${{ runner.os }}-${{ env.TEST_BUILDS_KIND }}-${{ steps.test-builds-key.outputs.key }}-${{ steps.test-builds-key.outputs.modules }}');
           if (cache.with['restore-keys'] !== undefined) expect(cache.with['restore-keys'].trim().split('\n'), name).toEqual(['test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}', 'test-builds-v3-${{ runner.os }}-${{ env.TEST_BUILDS_KIND }}-', 'test-builds-v2-${{ runner.os }}-']);
         } else {
-          expect(cache.with.key, name).toMatch(/^test-builds-v(2|3-\$\{\{ runner\.os \}\}-(api|ui|guards|node))-\$\{\{ (runner\.os \}\}-\$\{\{ )?steps\.test-builds-key\.outputs\.key \}\}$/);
+          expect(cache.with.key, name).toMatch(/^test-builds-v(2-\$\{\{ runner\.os \}\}-\$\{\{ steps\.test-builds-key\.outputs\.key \}\}|3-\$\{\{ runner\.os \}\}-(api|ui|guards|node)-\$\{\{ steps\.test-builds-key\.outputs\.key \}\}-\$\{\{ steps\.test-builds-key\.outputs\.modules \}\})$/);
           if (!cache.with.key.startsWith('test-builds-v3-')) expect(cache.with.key, name).toBe('test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}');
           if (cache.with['restore-keys'] !== undefined) expect(cache.with['restore-keys'], name).toBe('test-builds-v2-${{ runner.os }}-');
         }
@@ -369,6 +369,33 @@ describe('CI avoids duplicate integration setup', () => {
       }
     }
     expect(entries).toBeGreaterThanOrEqual(10);
+  });
+  // Vitest keys every module cache entry by the content of its configuration's local imports too (Vite's
+  // configFileDependencies), so one edit to timed-sequencer.mjs left every runner's restored modules cold: pr fast run
+  // 44142401757 restored warm-keyed entries and transformed 8.7s summed on an api runner that had taken ~2s. Keyed only by
+  // what the builds are built from, those entries were never written again, cold for every pull request, until the next
+  // build input changed. The runner kinds' entries are keyed by the configurations' local import graph as well.
+  it('keys the module caches by the Vitest configurations\' whole local import graph, and by nothing else there', () => {
+    const tree = {
+      'vitest.config.ts': "import x from './scripts/lib/a.mjs';\nimport y from 'vitest/config';",
+      'vitest.guard.config.ts': "import full from './vitest.config';\nimport { b } from './scripts/lib/b.mjs';",
+      'vitest.node-batch.config.ts': "const c = await import('./scripts/lib/c.mjs');",
+      'vitest.fast.config.ts': '',
+      'scripts/lib/a.mjs': "import { d } from './d.mjs';",
+      'scripts/lib/b.mjs': '', 'scripts/lib/c.mjs': '', 'scripts/lib/d.mjs': '', 'scripts/lib/unrelated.mjs': '',
+    };
+    const key = (changes = {}) => vitestConfigKey((file) => {
+      const all = { ...tree, ...changes };
+      if (!Object.hasOwn(all, file)) throw Object.assign(new Error(`ENOENT ${file}`), { code: 'ENOENT' });
+      return all[file];
+    });
+    const base = key();
+    expect(base.files).toEqual(['scripts/lib/a.mjs', 'scripts/lib/b.mjs', 'scripts/lib/c.mjs', 'scripts/lib/d.mjs', 'vitest.config.ts', 'vitest.fast.config.ts', 'vitest.guard.config.ts', 'vitest.node-batch.config.ts']);
+    for (const file of base.files) expect(key({ [file]: `${tree[file]}\n// edited` }).key, file).not.toBe(base.key);
+    expect(key({ 'scripts/lib/unrelated.mjs': '// edited' }).key).toBe(base.key);
+    // This repository's own graph: every configuration and the modules they load.
+    const own = vitestConfigKey().files;
+    for (const file of ['vitest.config.ts', 'vitest.guard.config.ts', 'vitest.node-batch.config.ts', 'scripts/lib/timed-sequencer.mjs', 'scripts/lib/suite-env.mjs', 'scripts/lib/node-batch.mjs', 'scripts/lib/test-isolation.mjs']) expect(own, file).toContain(file);
   });
   it('keys the test builds on their own inputs, so a change elsewhere keeps the entry and one here moves it', () => {
     const line = (file, id = 'a'.repeat(40)) => `100644 ${id} 0\t${file}`;

@@ -451,7 +451,7 @@ jobs:
             services/app/public/libraries
             tmp/test-schema-image
             tmp/vitest-module-cache
-          key: test-builds-v3-${{ runner.os }}-${{ env.TEST_BUILDS_KIND }}-${{ steps.test-builds-key.outputs.key }}
+          key: test-builds-v3-${{ runner.os }}-${{ env.TEST_BUILDS_KIND }}-${{ steps.test-builds-key.outputs.key }}-${{ steps.test-builds-key.outputs.modules }}
           restore-keys: |
             test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}
             test-builds-v3-${{ runner.os }}-${{ env.TEST_BUILDS_KIND }}-
@@ -477,7 +477,7 @@ jobs:
             services/app/public/libraries
             tmp/test-schema-image
             tmp/vitest-module-cache
-          key: test-builds-v3-${{ runner.os }}-${{ env.TEST_BUILDS_KIND }}-${{ steps.test-builds-key.outputs.key }}
+          key: test-builds-v3-${{ runner.os }}-${{ env.TEST_BUILDS_KIND }}-${{ steps.test-builds-key.outputs.key }}-${{ steps.test-builds-key.outputs.modules }}
       - name: PR CI clock (warns at 40s; fails over 60s)
         if: always()
         env:

@@ -5,7 +5,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { installFingerprint } from '../lib/lock-fingerprint.mjs';
-import { CI_JOBS, buildKey, checkCiResults, planCi, testBuildsKey } from '../lib/ci-plan.mjs';
+import { CI_JOBS, buildKey, checkCiResults, planCi, testBuildsKey, vitestConfigKey } from '../lib/ci-plan.mjs';
 import { NODE_TIMINGS_ARTIFACT, measuredArtifact, withMeasuredTimes } from '../lib/node-batch.mjs';
 import { NATIVE_ROOT_BUILD_INFO } from '../lib/type-check.mjs';
 
@@ -98,8 +98,10 @@ if (mode === 'plan') {
 } else if (mode === 'test-builds-key') {
   // The test-builds cache's key (scripts/lib/ci-plan.mjs `testBuildsKey`).
   const { key, inputs } = testBuildsKey(execFileSync('git', ['ls-files', '-s'], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }));
-  if (env.GITHUB_OUTPUT) appendFileSync(env.GITHUB_OUTPUT, `key=${key}\n`);
-  console.log(`test-builds key ${key} over ${inputs} inputs`);
+  // And the module caches' (`vitestConfigKey`): pr fast's runner kinds key their entries by both.
+  const modules = vitestConfigKey();
+  if (env.GITHUB_OUTPUT) appendFileSync(env.GITHUB_OUTPUT, `key=${key}\nmodules=${modules.key}\n`);
+  console.log(`test-builds key ${key} over ${inputs} inputs; module caches ${modules.key} over ${modules.files.length} configuration files`);
 } else if (mode === 'type-info') {
   // THE ROOT TYPE CHECK'S INCREMENTAL STATE, from the newest `tsgo-buildinfo` artifact any run of this
   // repository uploaded (pr-fast.yml's `types` job and main's `warm-caches`): the native compiler's build info

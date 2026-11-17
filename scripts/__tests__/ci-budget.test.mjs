@@ -141,7 +141,7 @@ it('runs every api, api-isolated, ui and islands test on every pull request, pac
  const steps=job.steps,restore=steps.findIndex(step=>step.id==='test-builds');
  expect(restore).toBeGreaterThan(-1);expect(restore).toBeLessThan(steps.indexOf(run));
  expect(steps[restore].uses).toMatch(/^actions\/cache\/restore@/);
- expect(steps[restore].with.key).toBe('test-builds-v3-${{ runner.os }}-${{ env.TEST_BUILDS_KIND }}-${{ steps.test-builds-key.outputs.key }}');
+ expect(steps[restore].with.key).toBe('test-builds-v3-${{ runner.os }}-${{ env.TEST_BUILDS_KIND }}-${{ steps.test-builds-key.outputs.key }}-${{ steps.test-builds-key.outputs.modules }}');
  expect(job.env.TEST_BUILDS_KIND).toBe("${{ matrix.shard && 'guards' || matrix.batch && 'node' || matrix.suite && startsWith(matrix.part, 'ui-') && 'ui' || 'api' }}");
  const save=steps.filter(step=>step.uses?.startsWith('actions/cache/save')&&step.with.key.startsWith('test-builds-'));
  expect(save).toHaveLength(1);
@@ -370,7 +370,7 @@ it('reconciles the nearest install on a lock miss, restore only, and falls back 
  // only when this lock's exact key is missing, and every other runner skips it. The other save is the test builds.
  // (The slim install's own save, from the same runner, is scripts/__tests__/slim-install.test.mjs's.)
  const saves=steps.filter(step=>(step.uses?.startsWith('actions/cache/save')||step.uses?.startsWith('actions/cache@'))&&!step.with.key.startsWith('install-slim-'));
- expect(saves.map(step=>step.with.key)).toEqual([exact.with.key,'test-builds-v3-${{ runner.os }}-${{ env.TEST_BUILDS_KIND }}-${{ steps.test-builds-key.outputs.key }}']);
+ expect(saves.map(step=>step.with.key)).toEqual([exact.with.key,'test-builds-v3-${{ runner.os }}-${{ env.TEST_BUILDS_KIND }}-${{ steps.test-builds-key.outputs.key }}-${{ steps.test-builds-key.outputs.modules }}']);
  const own=steps.find(step=>step.id==='own-install');
  expect(own).toMatchObject({if:'matrix.install',with:{path:exact.with.path,key:exact.with.key,'lookup-only':true}});
  expect(saves[0]).toMatchObject({if:"matrix.install && steps.own-install.outputs.cache-hit != 'true'",with:{path:exact.with.path,key:exact.with.key}});
