@@ -71,11 +71,32 @@ it('warns rather than fails when a PR consumer includes a long prerequisite wait
  }finally{rmSync(directory,{recursive:true,force:true});}
 });
 
+// No step's preparation hashes files on the runner: the install keys come from the fingerprint step's output
+// (scripts/__tests__/ci-plan.test.mjs says why and pins that the digest is hashFiles').
+it('keys every install cache, whole or slim, by the fingerprint step\'s output, in the same shape as before',()=>{
+ const files=['ci.yml','pr-fast.yml','node-timings.yml','page-speed.yml'];
+ for(const file of files)expect(readFileSync(new URL(`../../.github/workflows/${file}`,import.meta.url),'utf8'),file).not.toContain(".ci-cache-key/install.json')");
+ const keys=files.flatMap(file=>Object.values(workflow(file).jobs).flatMap(job=>job.steps??[])).map(step=>step.with?.key).filter(key=>/^install-/.test(key??''));
+ expect(keys.length).toBeGreaterThan(15);
+ expect([...new Set(keys)].sort()).toEqual(['install-slim-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.lock.outputs.install }}','install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.lock.outputs.install }}']);
+ // Each job that reads the output writes it first, in a step of its own named `lock`.
+ for(const file of files)for(const [name,job] of Object.entries(workflow(file).jobs)){
+  const steps=job.steps??[],readers=steps.filter(step=>JSON.stringify(step).includes('steps.lock.outputs.install'));
+  if(!readers.length)continue;
+  const lock=steps.findIndex(step=>step.id==='lock');
+  expect(steps[lock]?.run,`${file} ${name}`).toBe('node scripts/ci/ci.mjs lock-fingerprint');
+  for(const reader of readers)expect(steps.indexOf(reader),`${file} ${name}`).toBeGreaterThan(lock);
+ }
+ const prFast=workflow('pr-fast.yml').jobs.fast.steps;
+ expect(prFast.find(step=>step.run==='node scripts/ci/ci.mjs lock-fingerprint').id).toBe('lock');
+ expect(prFast.find(step=>step.id==='near-install').with['restore-keys']).toBe('install-v5-${{ runner.os }}-${{ runner.arch }}-node22-');
+});
+
 it('keys repository install caches on the shared font pipeline without removed vendored inputs',()=>{
  const caches=Object.values(workflow().jobs).flatMap(job=>job.steps??[]).filter(step=>step.with?.key?.startsWith('install-v5-'));
  expect(caches.length).toBeGreaterThan(0);
  for(const cache of caches){
-  expect(cache.with.key).toContain("hashFiles('.ci-cache-key/install.json')");
+  expect(cache.with.key).toBe('install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.lock.outputs.install }}');
   expect(cache.with['restore-keys']).toBeUndefined();
   expect(cache.with.key).not.toContain('design-systems/font-assets');
   expect(cache.with.key).not.toContain('design-systems/lib/font-assets.mjs');

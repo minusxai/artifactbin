@@ -4,7 +4,7 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { installFingerprint } from '../lib/lock-fingerprint.mjs';
+import { installCacheHash, installFingerprint } from '../lib/lock-fingerprint.mjs';
 import { CI_JOBS, buildKey, checkCiResults, planCi, testBuildsKey, vitestConfigKey } from '../lib/ci-plan.mjs';
 import { NODE_TIMINGS_ARTIFACT, measuredArtifact, withMeasuredTimes } from '../lib/node-batch.mjs';
 import { NATIVE_ROOT_BUILD_INFO } from '../lib/type-check.mjs';
@@ -89,6 +89,8 @@ if (mode === 'plan') {
   const lock = installFingerprint();
   mkdirSync('.ci-cache-key', { recursive: true });
   writeFileSync('.ci-cache-key/install.json', lock);
+  // The install caches' key, as hashFiles would give it for that file (scripts/lib/lock-fingerprint.mjs installCacheHash).
+  if (env.GITHUB_OUTPUT) appendFileSync(env.GITHUB_OUTPUT, `install=${installCacheHash(lock)}\n`);
   console.log('Wrote .ci-cache-key/install.json (normalised lock, install configuration and postinstall inputs).');
 } else if (mode === 'build-key') {
   // The build cache's key (scripts/lib/ci-plan.mjs `buildKey`).

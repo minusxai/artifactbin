@@ -18,6 +18,17 @@ import path from 'node:path';
  * @param {string} lockText  package-lock.json's contents
  * @returns {string} the lockfile with every workspace version normalised, as JSON
  */
+/**
+ * The install caches' key digest: what the runner's `hashFiles('.ci-cache-key/install.json')` gives for the fingerprint
+ * file (a sha256 over each matched file's raw sha256 digest; one file here), so the keys main's caches were saved under
+ * still match. Computed by the fingerprint step itself and handed to every cache step as an output, because the runner
+ * evaluates a key's hashFiles while preparing its step, once 26s on one runner (scripts/__tests__/ci-plan.test.mjs).
+ * @param {string} fingerprint  the file's contents
+ */
+export function installCacheHash(fingerprint) {
+  return createHash('sha256').update(createHash('sha256').update(fingerprint).digest()).digest('hex');
+}
+
 export function normalisedLock(lockText) {
   const lock = JSON.parse(lockText);
   for (const [name, meta] of Object.entries(lock.packages ?? {})) {

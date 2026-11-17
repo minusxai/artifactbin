@@ -69,7 +69,8 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22
-      - run: node scripts/ci/ci.mjs lock-fingerprint
+      - id: lock
+        run: node scripts/ci/ci.mjs lock-fingerprint
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: install
         with:
@@ -78,7 +79,7 @@ jobs:
             services/*/node_modules
             services/app/public/fonts
             services/app/lib/html-systems/font-manifest.json
-          key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
+          key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.lock.outputs.install }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
@@ -161,6 +162,7 @@ jobs:
       # flight or expired, or this is a dispatched timing run). Measure the base here, as the retired
       # `measure base` job did. Only this rare case runs after the head measurement instead of beside it.
       - if: needs.scope.outputs.relevant == 'true' && steps.base.outputs.found != 'true'
+        id: lock
         run: node scripts/ci/ci.mjs lock-fingerprint
       - if: needs.scope.outputs.relevant == 'true' && steps.base.outputs.found != 'true'
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
@@ -171,7 +173,7 @@ jobs:
             services/*/node_modules
             services/app/public/fonts
             services/app/lib/html-systems/font-manifest.json
-          key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
+          key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.lock.outputs.install }}
       - if: needs.scope.outputs.relevant == 'true' && steps.base.outputs.found != 'true' && steps.install.outputs.cache-hit != 'true'
         run: npm ci
       - if: needs.scope.outputs.relevant == 'true' && steps.base.outputs.found != 'true'

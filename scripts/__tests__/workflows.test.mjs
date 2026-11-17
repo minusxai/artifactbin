@@ -356,9 +356,9 @@ describe('whole-install cache equivalence', () => {
       const install = job.steps?.find(step => step.id === 'install');
       if (!install) continue;
       expect(install.with).toEqual(installs[0].with);
-      expect(install.with.key).toContain("hashFiles('.ci-cache-key/install.json')");
+      expect(install.with.key).toContain('${{ steps.lock.outputs.install }}');
       const index = job.steps.indexOf(install);
-      expect(job.steps.slice(0, index).some(step => step.run === 'node scripts/ci/ci.mjs lock-fingerprint')).toBe(true);
+      expect(job.steps.slice(0, index).some(step => step.run === 'node scripts/ci/ci.mjs lock-fingerprint' && step.id === 'lock')).toBe(true);
       expect(job.steps.some(step => /^npm ci(?: |$)/.test(step.run ?? '') && step.if?.includes("steps.install.outputs.cache-hit != 'true'"))).toBe(true);
       expect(job.steps.some(step => step.with?.cache === 'npm')).toBe(false);
     }
