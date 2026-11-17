@@ -117,8 +117,12 @@ export const uiChunkName = (id: string, ctx: { getModuleInfo: ModuleInfoOf }): s
 
 export default defineConfig({
   root: webRoot,
-  // Dev ESM otherwise requests every icon in the barrel, overflowing live-session request queues.
-  plugins: [{ ...declaredLucideIcons(import.meta.dirname), apply: 'serve' }, appFontFaces(), solid({ include: [/\/services\/app\/(?!node_modules\/).*\.(?:tsx|jsx)$/, /\/node_modules\/@solidjs\/router\/.*\.jsx$/, /\/node_modules\/lucide-solid\/.*\.jsx$/], hot: false }), tailwindcss(), precompressAssets()],
+  // The bare `lucide-solid` import is only the icons the app declares (services/app/solid/lucide-solid.d.ts). Dev ESM
+  // would otherwise request every icon in the barrel, overflowing live-session request queues; a build would load and
+  // Solid-transform all ~2,000 of them to keep a few dozen (2,671 transforms, 55% of the build's 3.5s, locally), which
+  // made the shell size guard the slowest file of its pr fast runner (15.6s on CI). An icon missing from the list fails
+  // the build by name, as it fails the type check.
+  plugins: [declaredLucideIcons(import.meta.dirname), appFontFaces(), solid({ include: [/\/services\/app\/(?!node_modules\/).*\.(?:tsx|jsx)$/, /\/node_modules\/@solidjs\/router\/.*\.jsx$/, /\/node_modules\/lucide-solid\/.*\.jsx$/], hot: false }), tailwindcss(), precompressAssets()],
   resolve: {
     alias: [
       { find: '@', replacement: path.resolve(import.meta.dirname, 'services/app') },

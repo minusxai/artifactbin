@@ -1,5 +1,5 @@
 import {expect,it} from 'vitest';
-import {uiChunkName} from '../../vite.config.mts';
+import config,{uiChunkName} from '../../vite.config.mts';
 const reader='/repo/services/app/solid/pages/Document.tsx';
 const entry='/repo/services/app/web/solid-app.tsx';
 const local='/repo/services/app/solid/pages/LocalDocument.tsx';
@@ -35,4 +35,9 @@ it('keeps the entry\'s retry door, live stream and preload helper in one chunk, 
  expect(grouping([entry],[],'\0vite/preload-helper.js')).toBe('http');
  expect(grouping([reader,local],[],door)).toBe('reader');
  expect(grouping([local],[],'/repo/services/app/lib/http/live-stream.ts')).toBeNull();
+});
+
+it('serves the bare lucide-solid import as the declared icons in the build too, never the ~2,000-icon barrel',()=>{
+ const icons=config.plugins.flat().find(plugin=>plugin?.name==='declared-lucide-icons');
+ expect([icons?.apply,icons?.resolveId('lucide-solid')]).toEqual([undefined,'\0lucide-solid-declared']);
 });
