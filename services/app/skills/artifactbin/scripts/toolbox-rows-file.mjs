@@ -62,5 +62,5 @@ export async function writeRows({output, shown, format}, {rows, ...read}) {
   await exclusive(output, bytes);
   return {...read, rowCount: rows.length, sample: rows.slice(0, SAMPLE).map(row =>
     Object.fromEntries(Object.entries(row).map(([k, v]) => [k, cut(v)]))),
-  output: {file: shown, format, bytes: bytes.length}};
+  output: {file: shown, format, bytes: bytes.length}, outputOwned: true};
 }
