@@ -75,7 +75,7 @@ export interface HtmlAssemblyInput {
   /**
    * `@afbin/offline-sql` (./offline-sql: the SQLite engine and its wasm), embedded only in a portable export that
    * carries `offlineData`. A draft (`config.draft`) loads the same module from its hosted address instead
-   * (RUNTIME_MODULE_PATHS.offlineSqlPath); a published page never loads an engine.
+   * (DRAFT_SQL_ENGINE_PATH); a published page never loads an engine.
    */
   offlineSql?: string;
   /** The rows the downloading reader's `sql` reads through the page (lib/dataset-access offlinePageSqlData), in an offline export; a draft's own CSV tables (`config.draft`). */
@@ -94,6 +94,8 @@ export interface HtmlRuntimeAssets { core:string; apollo:string; apolloPath:stri
  /** The host comments module (solid/document/browser-host-comments) the host module imports when a shell asks for comments. */
  hostComments?:string }
 /** D17: the platform runtime's flat public addresses (core: lib/html-page/core-script). No version or hash; strong ETag and `no-cache`. */
-export const RUNTIME_MODULE_PATHS={apolloPath:'/af/apollo.js',readerPath:'/af/reader.js',chromePath:'/af/chrome.js',portableEnginePath:'/af/portable.js',morphPath:'/af/morph.js',nativeRegionsPath:'/af/native-regions.js',nativeMarkdownPath:'/af/native-markdown.js',collabPath:'/af/collab.js',statePath:'/af/state.js',offlineSqlPath:'/af/offline-sql.js'} as const;
+export const RUNTIME_MODULE_PATHS={apolloPath:'/af/apollo.js',readerPath:'/af/reader.js',chromePath:'/af/chrome.js',portableEnginePath:'/af/portable.js',morphPath:'/af/morph.js',nativeRegionsPath:'/af/native-regions.js',nativeMarkdownPath:'/af/native-markdown.js',collabPath:'/af/collab.js',statePath:'/af/state.js'} as const;
+/** A draft's `sql` engine (`@afbin/offline-sql`, ./offline-sql), served for drafts only (lib/page-drafts): no published page maps it. */
+export const DRAFT_SQL_ENGINE_PATH='/af/offline-sql.js';
 /** `Symbol.for` key under which core records its build id for the lazy modules' skew guard (build.server). */
 export const RUNTIME_BUILD_KEY='afbin.runtime-build';

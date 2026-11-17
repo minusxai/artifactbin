@@ -12,7 +12,7 @@ import { getDb } from '@/lib/platform';
 import { pagesSite } from '@/lib/http';
 import { DRAFT_LIMITS, resetDrafts } from '@/lib/page-drafts';
 import { createAppServer } from '@/server/app';
-import { mintAccountToken, useAppHarness } from './harness';
+import { mintAccountToken, request, useAppHarness } from './harness';
 
 const site = pagesSite();
 const APP = site.app;
@@ -31,10 +31,8 @@ const FILES = [
   { path: 'style.css', base64: b64('h1{color:teal}') },
   { path: 'orders.csv', base64: b64('region,amount,day\nWest,10,2026-01-02\nEast,2.5,2026-01-03\nWest,4,2026-01-04\n') },
 ];
-const post = (reader: Actor | null, body: unknown, origin = APP) => {
-  const request = new Request(`${APP}/api/page/drafts`, { method: 'POST', headers: { 'content-type': 'application/json', origin }, body: JSON.stringify(body) });
-  return app.request(reader ? attachActor(request, reader) : request);
-};
+const post = (reader: Actor | null, body: unknown, origin = APP) =>
+  app.request(request('/api/page/drafts', { method: 'POST', json: body, origin, headers: { 'sec-fetch-site': origin === APP ? 'same-origin' : 'same-site' }, ...(reader ? { actor: reader } : {}) }));
 const get = (url: string, headers: Record<string, string> = {}) => app.request(url, { headers });
 const artifacts = async () => (await (await getDb()).query<{ n: number }>('SELECT count(*)::int n FROM artifacts')).rows[0]!.n;
 

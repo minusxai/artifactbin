@@ -5,7 +5,7 @@ import { expect, it } from 'vitest';
 import { buildHtmlCore,buildHtmlAssets } from '../build.server';
 import { hostCommentsPath } from '../host-comments-address.server';
 import { downloadableHtml,assembleHtmlPage } from '../index';
-import { RUNTIME_MODULE_PATHS } from '../contract';
+import { DRAFT_SQL_ENGINE_PATH } from '../contract';
 import { PLATFORM_STYLES_PATH } from '../../html-systems';
 /** `@afbin/offline-sql` gzipped: the SQLite engine and its wasm, carried only by an export with rows (594,406 B measured 2026-11-10). */
 const OFFLINE_SQL_GZIP_BUDGET=600*1024;
@@ -165,7 +165,7 @@ it('ships the offline sql engine inside an export that carries rows and at its o
  const empty=downloadableHtml({...page,offlineData:undefined});
  expect(empty).not.toMatch(block('offline-sql'));expect(empty).not.toMatch(block('offline-data'));
  // A draft carries its tables but never the engine: its core maps `@afbin/offline-sql` to the one hosted module.
- expect(assets.core).toContain(RUNTIME_MODULE_PATHS.offlineSqlPath);
+ expect(assets.core).toContain(DRAFT_SQL_ENGINE_PATH);
  const draft=assembleHtmlPage({...page,config:{...page.config,draft:true}});
  expect(draft).not.toMatch(block('offline-sql'));
  expect(JSON.parse(/data-af="offline-data">([^<]*)<\/script>/.exec(draft)![1]!)).toEqual(offlineData);
