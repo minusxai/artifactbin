@@ -37,10 +37,12 @@ it.each([0, -1, 1.5, NaN, Infinity, 120_001])('rejects invalid operator read tim
 });
 
 describe.each(['local', 'http'] as const)('%s SQL read lifecycle', transport => {
+  // The claim is "cancellation, not the execution limit": the bounds sit well under timeoutMs, never near the 70 ms abort,
+  // so a loaded runner cannot fail it (a 650 ms bound under a 1200 ms limit did, at 772 ms, on main).
   it('cancels actual work before the execution limit and makes the one-worker service usable again', async () => {
-    const engine = createSql({ timeoutMs: 1200 }, { workers: 1 });
+    const engine = createSql({ timeoutMs: 3000 }, { workers: 1 });
     const server = transport === 'http' ? serveSql(engine) : undefined;
-    const service: ReadService = server ? sqlClient(server.listen(0).url, { deadlineMs: 3000 }) : engine;
+    const service: ReadService = server ? sqlClient(server.listen(0).url, { deadlineMs: 6000 }) : engine;
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
@@ -49,10 +51,10 @@ describe.each(['local', 'http'] as const)('%s SQL read lifecycle', transport => 
       timer = setTimeout(() => controller.abort(), 70);
       const answer = await service.run(ENDLESS, { signal: controller.signal });
       expect(answer.q).toHaveProperty('error');
-      expect(performance.now() - start).toBeLessThan(650);
+      expect(performance.now() - start).toBeLessThan(1500);
       const resumed = performance.now();
       expect(await service.run(QUICK)).toMatchObject({ q: { rows: [{ n: 7 }] } });
-      expect(performance.now() - resumed).toBeLessThan(650);
+      expect(performance.now() - resumed).toBeLessThan(1500);
     } finally { clearTimeout(timer); await server?.close(); await engine.close(); }
   });
 
