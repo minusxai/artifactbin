@@ -168,9 +168,12 @@ it('bounds every first cache download and lets the next tier of the same chain t
  const bound=(step)=>step.env?.SEGMENT_DOWNLOAD_TIMEOUT_MINS;
  // Six seconds a segment for the 164-193 MB installs, three for the 15 MB test builds: twice and more their p99.
  expect(bound(by('slim'))).toBe('0.1');
- // The whole install is the first tier for the runners that skip the slim one (types, lint, tests), the second for the rest.
- expect(bound(by('install'))).toBe("${{ steps.slim.outcome == 'skipped' && '0.1' || '' }}");
+ // The whole install is bounded as well, first tier or second: as a slim install's fallback it once stalled 32s at 68.2%
+ // after the slim one was abandoned at 73.3% (run 44174517646's ui-5, a 67s run). Its fallback is the nearest install,
+ // which on this lock's key restores the same entry, unbounded: a network slow everywhere still ends in an install.
+ expect(bound(by('install'))).toBe('0.1');
  expect(bound(by('near-install'))).toBeUndefined();
+ expect(by('near-install').with.key).toBe(by('install').with.key);
  expect(bound(by('test-builds'))).toBe('0.05');
  const retry=by('test-builds-retry');
  expect(steps.indexOf(retry)).toBe(steps.indexOf(by('test-builds'))+1);
@@ -398,6 +401,8 @@ it('reconciles the nearest install on a lock miss, restore only, and falls back 
  expect(steps.indexOf(near)).toBe(steps.indexOf(exact)+1);
  const reconcile=steps.find(step=>step.run?.startsWith('npm install '));
  expect(reconcile.if).toContain("steps.near-install.outputs.cache-matched-key != ''");
+ // The nearest install on this lock's own key (the whole install's download abandoned) is that install: nothing to reconcile.
+ expect(reconcile.if).toContain("steps.near-install.outputs.cache-hit != 'true'");
  expect(reconcile.run).toMatch(/git diff --quiet -- package-lock\.json[^\n]*\n[\s\S]*copy-assets\.mjs[\s\S]*else[\s\S]*git checkout -- package-lock\.json[\s\S]*npm ci /);
  const cold=steps.filter(step=>/^npm ci /.test(step.run??''));
  expect(cold.map(step=>step.if)).toEqual(["matrix.install && steps.own-install.outputs.cache-hit != 'true'","${{ !matrix.install && steps.slim.outputs.cache-hit != 'true' && steps.install.outputs.cache-hit != 'true' && steps.near-install.outputs.cache-matched-key == '' }}"]);
