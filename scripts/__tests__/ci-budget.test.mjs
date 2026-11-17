@@ -179,7 +179,19 @@ it('lays main\'s measured node times over the table on every node runner, fetche
  expect(steps[fetch].env.GH_TOKEN).toBe('${{ github.token }}');
  // Its status is written whole (moved into place), so the wait never reads a half-written one.
  expect(steps[fetch].run).toContain('mv "$RUNNER_TEMP/node-timings.part" "$RUNNER_TEMP/node-timings.status"');
- expect(steps[wait].run).toContain('exit "$(cat "$RUNNER_TEMP/node-timings.status")"');
+ // Run as Actions runs them (bash -e), a fetch that fails hands its status and log to the wait, which fails with it,
+ // instead of leaving the wait spinning to the job's timeout; one that succeeds lets the batch run.
+ for(const [fetcher,status] of [['sh -c "echo answered 503, twice >&2; exit 7"',7],['echo chosen',0]]){
+  const temp=mkdtempSync(join(tmpdir(),'node-timings-step-'));
+  try{
+   const env={PATH:process.env.PATH,RUNNER_TEMP:temp};
+   const started=spawnSync('bash',['-e','-c',`${steps[fetch].run.replace('node scripts/ci/ci.mjs node-timings',fetcher)}\nwait`],{env,encoding:'utf8'});
+   expect(started.status).toBe(0);
+   const waited=spawnSync('bash',['-e','-c',steps[wait].run],{env,encoding:'utf8',timeout:5000});
+   expect(waited.status).toBe(status);
+   expect(waited.stdout).toContain(status?'answered 503, twice':'chosen');
+  }finally{rmSync(temp,{recursive:true,force:true});}
+ }
  expect(fetch).toBeLessThan(at(step=>step.id==='slim'));
  expect(wait).toBe(batch-1);
  // No other runner fetches them: the api, ui and guard runners pack by the committed table alone.
