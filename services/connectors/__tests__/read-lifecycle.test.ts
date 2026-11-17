@@ -1,5 +1,5 @@
 /** A cancelled waiter cannot dispatch later; a closing session continues to own its pool capacity. */
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { SessionPool } from '../src/sessions';
 import { openConnection } from '../src/index';
 
@@ -53,7 +53,8 @@ it.each([0,-1,1.5,NaN,Infinity,120001])('rejects invalid trusted connector query
 it('quarantines failed termination and permits explicit bounded cleanup retry',async()=>{
  let confirmed=false,opened=0;
  const pool=new SessionPool({open:async()=>++opened,close:async()=>{if(!confirmed)throw Error('termination unavailable');}},bounds);
- await expect(pool.use('db',async(_,discard)=>{discard();})).rejects.toThrow();
+ // Only cleanup failed: the work's own result stands, and the slot stays quarantined.
+ await expect(pool.use('db',async(_,discard)=>{discard();return 'answer';})).resolves.toBe('answer');
  expect(pool.count()).toBe(1);
  await expect(pool.use('db',async()=>{throw Error('must never dispatch');},{timeoutMs:20})).rejects.toMatchObject({code:'timeout'});
  expect(opened).toBe(1);
@@ -64,4 +65,33 @@ it.each([0,-1,1.5,NaN,Infinity])('rejects malformed per-query timeout %s before 
  const connection=openConnection({connector:'postgres',host:'127.0.0.1',port:1,database:'example',user:'reader',tls:'disable'},{allowPrivateNetwork:true});
  try{await expect(connection.query({text:'select 1',params:{},viewer:null,limits:{timeoutMs}})).rejects.toThrow();expect(connection.sessions()).toBe(0);}
  finally{await connection.close();}
+});
+
+it('reports the work error, not a failed cleanup, and keeps the unconfirmed slot counted',async()=>{
+ const warn=vi.spyOn(console,'warn').mockImplementation(()=>{});
+ let confirmed=false;
+ const pool=new SessionPool({open:async()=>({}),close:async()=>{if(!confirmed)throw Error('termination unavailable');}},bounds);
+ try{
+  await expect(pool.use('db',async()=>{throw Error('syntax error at or near "selec"');})).rejects.toThrow('syntax error at or near "selec"');
+  expect(pool.count()).toBe(1);
+  expect(warn).toHaveBeenCalled();
+ }finally{warn.mockRestore();confirmed=true;await pool.close();}
+});
+
+it('never fails an acquiring caller because evicting another idle session failed',async()=>{
+ const warn=vi.spyOn(console,'warn').mockImplementation(()=>{});
+ let confirmed=false;
+ const pool=new SessionPool<{key:string}>({open:async key=>({key}),close:async s=>{if(!confirmed&&s.key==='stuck')throw Error('termination unavailable');}},{size:2,idleMs:1000,waitMs:1000});
+ try{
+  await pool.use('stuck',async()=>{});
+  await pool.use('other',async()=>{});
+  // The least recently used idle session cannot be terminated: the caller evicts the next one and runs.
+  expect(await pool.use('fresh',async s=>s.key)).toBe('fresh');
+  expect(pool.count()).toBe(2);
+  // Capacity never frees past the quarantined slot and a busy one: the caller gets its own timeout.
+  const busy=latch();
+  const holding=pool.use('fresh',()=>busy.promise);
+  await expect(pool.use('late',async()=>'ran',{timeoutMs:50})).rejects.toMatchObject({code:'timeout'});
+  busy.resolve();await holding;
+ }finally{warn.mockRestore();confirmed=true;await pool.close();}
 });
