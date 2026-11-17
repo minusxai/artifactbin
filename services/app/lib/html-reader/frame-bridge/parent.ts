@@ -28,6 +28,8 @@ interface FrameBridgeParentOptions {
   onReady?: (nonce: string) => void;
   /** The framed document scrolled. */
   onScroll?: (scroll: { x: number; y: number }) => void;
+  /** The framed document's content height: whole px, at most FRAME_MAX_HEIGHT; a payload that is no height is dropped. */
+  onSize?: (size: { height: number }) => void;
   /** The bridge closed itself (the frame navigated away, or reported it cannot run the editor). */
   onClosed?: (reason: string) => void;
   /**
@@ -72,6 +74,8 @@ export interface FrameBridgeParent extends IslandStoryController {
 
 /** The longest `$` query a document may hand the page's address. */
 const MAX_URL_VALUES = 8192;
+/** The tallest frame a reported height asks for (px): a page that grows with its frame stops here. */
+const FRAME_MAX_HEIGHT = 20000;
 
 /** A document's `$` params as the page will take them (STORY_URL_VALUES_MESSAGE), or null: a bounded query, no hash or space. */
 export function urlValuesOf(data: unknown): string | null {
@@ -289,6 +293,7 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
       case 'fetch': void relay(payload); return;
       case 'pressed': options.onPressed?.(); return;
       case 'scroll': options.onScroll?.({ x: Number(payload.scrollX) || 0, y: Number(payload.scrollY) || 0 }); return;
+      case 'size': { const height = payload.height; if (typeof height === 'number' && Number.isFinite(height) && height >= 0) options.onSize?.({ height: Math.min(Math.round(height), FRAME_MAX_HEIGHT) }); return; }
       case 'error': console.error('[frame-bridge]', payload.message); return;
       default: return;
     }

@@ -189,6 +189,24 @@ it('keeps area drags separate from native text selection and restores normal sel
   document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}));
   bridge.dispose(); vi.restoreAllMocks();
 });
+it('reports the document height to its parent when it starts and each time it changes, once per new height', async () => {
+  vi.stubGlobal('__AF_RUNTIME_CONFIG__', { pageId: 'p1', revision: '3', backends: [] });
+  const observed: Array<() => void> = [];
+  vi.stubGlobal('ResizeObserver', class { constructor(callback: () => void) { observed.push(callback); } observe() {} disconnect() { observed.length = 0; } });
+  let height = 640.2;
+  vi.spyOn(document.documentElement, 'getBoundingClientRect').mockImplementation(() => ({ height }) as DOMRect);
+  const runtime = await import('../browser-client');
+  const events: Array<{ kind: string; [key: string]: unknown }> = [];
+  const bridge = runtime.startFrameBridge({ win: window, post: (event) => events.push(event), attach: { kind: 'attach', id: 'p1', editId: '3', source: null } });
+  bridges.push(bridge);
+  const sizes = () => events.filter((event) => event.kind === 'size');
+  expect(sizes()).toEqual([{ kind: 'size', height: 641 }]);
+  observed.forEach((callback) => callback());
+  height = 1800; observed.forEach((callback) => callback());
+  expect(sizes()).toEqual([{ kind: 'size', height: 641 }, { kind: 'size', height: 1800 }]);
+  bridge.dispose();
+  expect(observed).toHaveLength(0);
+});
 it('initializes local defaults on first author import after the blocking reader has already loaded',async()=>{
  vi.stubGlobal('__AF_RUNTIME_CONFIG__',{pageId:'local-first-import',revision:'local',backends:[],offline:true});
  await import('../browser-reader');

@@ -174,6 +174,8 @@ export type FrameBridgeFramePayload =
   | { kind: 'fetch'; call: number; path: string; method: 'GET' | 'POST'; headers: Record<string, string>; body: string | null }
   /** The document scrolled: geometry the page placed over it moves. */
   | { kind: 'scroll'; scrollX: number; scrollY: number }
+  /** The document's content height in px: on start and on each change, for a parent that sizes its frame to it. */
+  | { kind: 'size'; height: number }
   | { kind: 'error'; message: string }
   /** Live co-editing of the page's editable regions (contracts region-sessions). */
   | Flat<RegionFrameMessage>;
