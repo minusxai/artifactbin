@@ -54,8 +54,36 @@ function workerEntry(): { url: URL; execArgv?: string[] } {
 }
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
-/** `prepared`: the identity of the catalog database a keyed read mounts (./sqlite/prepared), for affinity. */
-interface Task { request: PoolRequest; deadline: number; prepared: string | null; settle: (answer: PoolAnswer) => void }
+
+/**
+ * THE SHAPE THE POOL ITSELF READS. Over HTTP a request is whatever JSON arrived (./index.ts serves it unchecked), and
+ * the pool dereferences its arrays outside any awaited chain: the watchdog budget, the affinity key and every failure
+ * answer. One missing there killed the process. So each method refuses, before anything is queued or armed, a body
+ * whose lists are not lists of objects; the engine judges everything else, inside its thread.
+ */
+const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
+const objects = (value: unknown): boolean => Array.isArray(value) && value.every(isObject);
+const catalogShaped = (catalog: unknown): boolean => catalog == null || (isObject(catalog) && objects(catalog.tables));
+const queriesShaped = (run: unknown): boolean => isObject(run) && objects(run.queries);
+function wellFormed(method: PoolRequest['method'], input: unknown): boolean {
+  if (!isObject(input)) return false;
+  switch (method) {
+    case 'run': return queriesShaped(input) && catalogShaped(input.catalog);
+    case 'runMany': return Array.isArray(input.runs) && input.runs.every(queriesShaped) && (input.shared == null || queriesShaped(input.shared));
+    case 'mutate': return input.mounted == null || (isObject(input.mounted) && catalogShaped(input.mounted.catalog));
+    case 'dryRun': return queriesShaped(input);
+    case 'dryRunMutations': return objects(input.mutations);
+  }
+}
+/** Refuses a malformed request to its caller; the shell answers `bad_request`. */
+function admit(method: PoolRequest['method'], input: unknown): void {
+  if (!wellFormed(method, input)) throw new TypeError('malformed SQL request');
+}
+/**
+ * `prepared`: the identity of the catalog database a keyed read mounts (./sqlite/prepared), for affinity.
+ * `executionMs`: the silent-thread watchdog's budget, fixed when the call is admitted.
+ */
+interface Task { request: PoolRequest; deadline: number; executionMs: number; prepared: string | null; settle: (answer: PoolAnswer) => void }
 /** How many prepared databases the pool remembers a thread for. */
 const AFFINITY_ENTRIES = 1024;
 interface Thread { retiring?:Promise<void>; worker: Worker; ready: Promise<void>; task: Task | null; timer: ReturnType<typeof setTimeout> | null }
@@ -143,23 +171,27 @@ export function createSqlitePool(opts: Partial<SqlCaps> = {}, pool: SqlPoolOptio
         }
         idle.worker.postMessage(task.request);
         // Retain the execution watchdog for silent workers, bounded by the admission deadline.
-        const r = task.request;
-        const executionMs = r.method === 'run' ? r.bounds.timeoutMs * Math.max(1, r.input.queries.length)
-          : r.method === 'runMany' ? r.bounds.reduce((sum, b, i) => sum + b.timeoutMs * Math.max(1, (r.input.runs[i] ?? r.input.shared)?.queries.length ?? 1), 0)
-          : r.method === 'mutate' ? r.bounds.timeoutMs : r.method === 'dryRun' ? caps.timeoutMs : caps.mutationTimeoutMs;
         idle.timer = setTimeout(() => {
           void retire(idle).then(() => { task.settle({id:task.request.id,ok:false,error:'timed_out'}); pump(); });
-        }, Math.min(executionMs + grace, Math.max(1, task.deadline - performance.now())));
+        }, Math.min(task.executionMs + grace, Math.max(1, task.deadline - performance.now())));
 
       }, () => {});
     }
   };
+
+  /** The watchdog's budget: every statement's own deadline, summed, for the runs share one thread one after another. */
+  const executionBudget = (r: DistributiveOmit<PoolRequest, 'id'>): number => r.method === 'run' ? r.bounds.timeoutMs * Math.max(1, r.input.queries.length)
+    : r.method === 'runMany' ? r.bounds.reduce((sum, b, i) => sum + b.timeoutMs * Math.max(1, (r.input.runs[i] ?? r.input.shared)?.queries.length ?? 1), 0)
+    : r.method === 'mutate' ? r.bounds.timeoutMs : r.method === 'dryRun' ? caps.timeoutMs : caps.mutationTimeoutMs;
 
   const call = <T>(request: DistributiveOmit<PoolRequest, 'id'>, deadlineMs: number, onError: (error: string) => T, context?: SqlCallContext, started = performance.now()): Promise<T> => {
     deadlineMs = sqlTimeout(context?.wallTimeoutMs, deadlineMs, deadlineMs, 'wallTimeoutMs', true);
     const deadline = started + deadlineMs;
     if (context?.signal?.aborted) return Promise.resolve(onError('SQL call cancelled'));
     if(closed)return Promise.resolve(onError('the SQL engine is closed'));
+    // Everything that reads the request is computed here, before the call is queued or its deadline armed.
+    const executionMs = executionBudget(request);
+    const prepared = request.method==='run'?preparedKey(request.input):request.method==='mutate'&&request.input.mounted?preparedKey({catalog:request.input.mounted.catalog}):null;
     return new Promise<T>(resolve=>{
       let done=false;
       const settle=(answer:PoolAnswer)=>{if(done)return;done=true;clearTimeout(timer);context?.signal?.removeEventListener('abort', abort);resolve(answer.ok?answer.result as T:onError(answer.error));};
@@ -170,8 +202,8 @@ export function createSqlitePool(opts: Partial<SqlCaps> = {}, pool: SqlPoolOptio
         if (thread) void retire(thread).then(() => { settle({id:task.request.id,ok:false,error}); pump(); });
       };
       const abort = () => cancel('SQL call cancelled');
+      const task: Task = {request:{...request,id:++ids} as PoolRequest,deadline,executionMs,prepared,settle};
       const timer = setTimeout(() => cancel('timed_out'), Math.max(0, deadline - performance.now()));
-      const task: Task = {request:{...request,id:++ids} as PoolRequest,deadline,prepared:request.method==='run'?preparedKey(request.input):request.method==='mutate'&&request.input.mounted?preparedKey({catalog:request.input.mounted.catalog}):null,settle};
       queue.push(task);context?.signal?.addEventListener('abort', abort, {once:true});pump();
     });
   };
@@ -181,6 +213,7 @@ export function createSqlitePool(opts: Partial<SqlCaps> = {}, pool: SqlPoolOptio
     readPolicy:Object.freeze({queryTimeoutMs:caps.timeoutMs}),
     run: async (input, context) => {
       const started = performance.now();
+      admit('run', input);
       try {
         const { limit, timeoutMs } = queryBounds(input, caps);
         const bounds: ReadBounds = { limit, timeoutMs, pageLimit: queryBounds(input, caps, input.page).limit, ...(input.outputBytes !== undefined ? { outputBytes: input.outputBytes } : {}) };
@@ -190,6 +223,7 @@ export function createSqlitePool(opts: Partial<SqlCaps> = {}, pool: SqlPoolOptio
     },
     runMany: async (input, context) => {
       const started = performance.now();
+      admit('runMany', input);
       try {
         const clamp = (run: { limit?: number; timeoutMs?: number }): ReadBounds => { const { limit, timeoutMs } = queryBounds(run, caps); return { limit, timeoutMs, pageLimit: limit }; };
         // The shared run's bounds last (index -1 in the engine's callback).
@@ -199,14 +233,21 @@ export function createSqlitePool(opts: Partial<SqlCaps> = {}, pool: SqlPoolOptio
       } catch { return input.runs.map(run => Object.fromEntries([...(input.shared?.queries ?? []), ...run.queries].map(q => [q.name, {error:'Invalid SQL read budget'}]))); }
     },
     mutate: (input) => {
+      admit('mutate', input);
       const bounds = queryBounds(input, { ...caps, timeoutMs: caps.mutationTimeoutMs });
       return call<MutationOutcome>({ method: 'mutate', input, bounds }, bounds.timeoutMs + grace,
         (error) => (timedOut(error) ? { error: `the mutation ran too long and was stopped (limit ${bounds.timeoutMs}ms)`, timedOut: true } : { error }));
     },
-    dryRun: (input) => call<DryRunResult>({ method: 'dryRun', input }, caps.timeoutMs + SQL_WALL_OVERHEAD_MS,
-      (error) => ({ errors: input.queries.map((q) => ({ name: q.name, error })), columns: {} })),
-    dryRunMutations: (input) => call<DryRunMutationsResult>({ method: 'dryRunMutations', input }, caps.mutationTimeoutMs + grace,
-      (error) => ({ errors: input.mutations.map((m) => ({ name: m.name, error })) })),
+    dryRun: (input) => {
+      admit('dryRun', input);
+      return call<DryRunResult>({ method: 'dryRun', input }, caps.timeoutMs + SQL_WALL_OVERHEAD_MS,
+        (error) => ({ errors: input.queries.map((q) => ({ name: q.name, error })), columns: {} }));
+    },
+    dryRunMutations: (input) => {
+      admit('dryRunMutations', input);
+      return call<DryRunMutationsResult>({ method: 'dryRunMutations', input }, caps.mutationTimeoutMs + grace,
+        (error) => ({ errors: input.mutations.map((m) => ({ name: m.name, error })) }));
+    },
     close: async () => {
       closed = true;
       for (const task of queue.splice(0)) task.settle({ id: task.request.id, ok: false, error: 'the SQL engine is closed' });
