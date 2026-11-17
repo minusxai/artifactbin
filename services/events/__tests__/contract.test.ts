@@ -130,7 +130,7 @@ describe('eventsClient (the batching client)', () => {
     const client = eventsClient(url, { batchMs: 100, batchMax: 50, deadlineMs: 1000 });
     const t0 = Date.now();
     await client.emit([envelope()]);
-    expect(Date.now() - t0).toBeLessThan(50);
+    expect(Date.now() - t0).toBeLessThan(50); // wall-clock-ok: emit only enqueues (no I/O, no worker); half the 100 ms batch window it is told apart from
     expect(batches).toHaveLength(0);
     await until(async () => batches.length === 1);
     await client.close?.();

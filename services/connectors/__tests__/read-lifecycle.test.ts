@@ -99,12 +99,16 @@ it('never fails an acquiring caller because evicting another idle session failed
 it('bounds an eviction whose termination never settles by the acquiring caller deadline',async()=>{
  const warn=vi.spyOn(console,'warn').mockImplementation(()=>{});
  const hung=latch();
+ // Fake clocks: the caller's 50 ms deadline is the only time that passes, never the 5 s termination quarantine.
+ vi.useFakeTimers({toFake:['setTimeout','clearTimeout','performance']});
  const pool=new SessionPool<{key:string}>({open:async key=>({key}),close:async s=>{if(s.key==='stuck')await hung.promise;}},bounds);
  try{
   await pool.use('stuck',async()=>{});
-  const started=performance.now();
-  await expect(pool.use('late',async()=>'ran',{timeoutMs:50})).rejects.toMatchObject({code:'timeout'});
-  expect(performance.now()-started).toBeLessThan(1000);
+  let outcome:unknown='pending';
+  const late=pool.use('late',async()=>'ran',{timeoutMs:50}).then(value=>{outcome=value;},error=>{outcome=error;});
+  await vi.advanceTimersByTimeAsync(50);
+  expect(outcome).toMatchObject({code:'timeout'});
+  await late;
   expect(pool.count()).toBe(1);
- }finally{warn.mockRestore();hung.resolve();await pool.close();}
+ }finally{vi.useRealTimers();warn.mockRestore();hung.resolve();await pool.close();}
 });
