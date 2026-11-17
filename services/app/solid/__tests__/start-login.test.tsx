@@ -3,6 +3,10 @@ import { render, screen, cleanup, waitFor, fireEvent } from '@solidjs/testing-li
 import { afterEach, expect, it, vi } from 'vitest';
 import { StartPage } from '../pages/Start';
 import { replaceDocument } from '../lib/document-navigation';
+// StartPage loads its setup page lazily (`?setup=1` only). Loaded here, before any test renders, the lazy import resolves
+// from the module registry; left to the first render, its cold transform raced findByRole's one second and lost on loaded
+// ui runners (pr fast runs 44147179117, 44141023943: an empty <div />).
+import '../pages/AgentSetup';
 vi.mock('../lib/document-navigation', () => ({ replaceDocument: vi.fn() }));
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.clearAllMocks(); window.history.replaceState(null, '', '/'); });
 it('returns a signed-out creator to this exact start entry after email login', async () => {
