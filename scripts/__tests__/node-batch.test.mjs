@@ -11,6 +11,13 @@ const [guarded] = NODE_BATCH_GUARDED;
 const [excluded] = Object.keys(NODE_BATCH_EXCLUDED);
 
 describe('pr fast\'s node batch', () => {
+  it('always includes PostgreSQL viewer setup and native cancellation regressions', () => {
+    const files = batch.test.projects[0].test.include;
+    for (const file of ['connectors', 'postgres-cancel-wire', 'postgres-operation']) {
+      expect(files).toContain(`services/connectors/__tests__/${file}.test.ts`);
+    }
+  });
+
   it('takes the cheap recorded node files no other list runs and that leave nothing behind, and the guarded ones', () => {
     const timings = { files: { node: { 'cheap.test.ts': 40, 'slow.test.ts': NODE_BATCH_MAX_MS, 'mocks.test.ts': 10, 'listed.test.ts': 10, [excluded]: 10, [guarded]: 5000 }, 'node-batch': { 'moved.test.ts': 30 } } };
     const text = { 'mocks.test.ts': "vi.mock('x')", 'env.test.ts': 'process.env.X = "1"' };
