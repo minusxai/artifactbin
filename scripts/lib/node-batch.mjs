@@ -38,6 +38,12 @@ export const NODE_BATCH_EXCLUDED = Object.freeze({
  * guard), in the batch whatever their recorded time. Each must still leave nothing behind in a shared graph.
  */
 export const NODE_BATCH_GUARDED = Object.freeze([
+  // Creation's parent refusal: failed on main after the preflight refused a non-folder parent as the uniform
+  // `Invalid parent`, and no pr fast list ran the write path's own file (4.8s recorded, past the batch's cut).
+  'services/app/lib/artifacts/__tests__/writes.test.ts',
+  // The SQL worker pool behind its HTTP shell: a malformed body crashed the service process on main after merge; its
+  // process test (services/app/lib/sql/__tests__/service.test.ts) stubs the environment and cannot share a graph.
+  'services/sql/__tests__/malformed-requests.test.ts',
   // Viewer-first setup and keyed cancellation are required by governed PostgreSQL endpoints.
   'services/connectors/__tests__/connectors.test.ts',
   'services/connectors/__tests__/postgres-cancel-wire.test.ts',

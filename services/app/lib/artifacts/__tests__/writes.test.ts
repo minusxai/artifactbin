@@ -8,7 +8,7 @@ import { useAppHarness } from '@/__tests__/harness';
 import { mintToken } from '@/lib/accounts';
 import { ALLOW_PUBLIC_VISIBILITY } from '@/lib/platform';
 import { artifactChannel } from '@artifactbin/contracts';
-import { afterCreated, artifactQuotaExceeded, artifactState, assetByteQuotaExceeded, assetByteQuotaLimit, byteQuotaFor, createArtifact, emitDatasetCommitted, emitHeadCommitted, getArtifactById, getArtifactHeaderById, isVersionConflict, isVersionNotArchived, replaceArtifactFor, reserveArtifactIds, revertArtifactFor, setMetadataFor, updateSharingFor } from '@/lib/artifacts';
+import { ArtifactParentRefusal, afterCreated, artifactQuotaExceeded, artifactState, assetByteQuotaExceeded, assetByteQuotaLimit, byteQuotaFor, createArtifact, emitDatasetCommitted, emitHeadCommitted, getArtifactById, getArtifactHeaderById, isVersionConflict, isVersionNotArchived, replaceArtifactFor, reserveArtifactIds, revertArtifactFor, setMetadataFor, updateSharingFor } from '@/lib/artifacts';
 import { ARTIFACT_HEADER_COLUMNS, assetBytesForToken, listArtifactsFor, onDatasetCommitted, onHeadCommitted, setArtifactQuotaForTests, setAssetByteQuotaForTests } from '@/lib/artifacts/testing';
 import { type ArtifactRow } from '@/lib/artifact-access';
 import { account, dataset, head, mine, page, readAllPolicy, sql } from '@/__tests__/artifact-fixtures';
@@ -33,7 +33,10 @@ describe('creation', () => {
     expect((await dataset(owner)).visibility).toBe('unlisted');
     expect((await createArtifact(loose.id, null, page('Anon'))).visibility).toBe(ALLOW_PUBLIC_VISIBILITY ? 'public' : 'unlisted');
     await expect(createArtifact(null, null, page('Nobody'))).rejects.toThrow('requires a user or token');
-    await expect(mine(owner, 'Misfiled', { ancestor_ids: [doc.id] })).rejects.toThrow('Parent owner or placement changed');
+    // A page is no folder: refused like a missing or foreign parent, before the write (lib/artifacts/placement).
+    const misfiled = mine(owner, 'Misfiled', { ancestor_ids: [doc.id] });
+    await expect(misfiled).rejects.toBeInstanceOf(ArtifactParentRefusal);
+    await expect(misfiled).rejects.toMatchObject({ message: 'Invalid parent', status: 400 });
     await (await harness.db()).query('SELECT 1');
     expect(channel.payloads).toEqual(['child']);
     await channel.stop();
@@ -53,6 +56,9 @@ describe('creation', () => {
     expect(channel.payloads).toEqual(['child']);
     await channel.stop();
     await expect(createArtifact(null, owner.userId, page('Again'), { reservedId: id })).rejects.toMatchObject({ reply: { status: 409, body: { error: 'identity_consumed' } } });
+    // The caller's transaction skips the preflight: the placement recheck under the write lock still refuses a page.
+    const leaf = await mine(owner, 'Leaf');
+    await expect((await harness.db()).transaction(tx => createArtifact(null, owner.userId, page('Misfiled', { ancestor_ids: [leaf.id] }), { tx }))).rejects.toMatchObject({ message: 'Parent owner or placement changed', status: 409 });
   });
 });
 
