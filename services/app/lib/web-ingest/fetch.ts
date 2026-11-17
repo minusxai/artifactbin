@@ -19,7 +19,7 @@ import { request as httpRequest, type IncomingHttpHeaders } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import dns from 'node:dns';
 import type { LookupFunction } from 'node:net';
-import { WEB_INGEST_ALLOW_PRIVATE, WEB_INGEST_TIMEOUT_MS } from '@/lib/platform';
+import { WEB_INGEST_ALLOW_PRIVATE, WEB_INGEST_TIMEOUT_MS, registerTestOverride } from '@/lib/platform';
 import { isForbiddenIp, parseWebUrl, WebIngestError, type WebIngestPolicy } from './guard';
 
 interface WebResource {
@@ -56,6 +56,7 @@ let policyOverride: WebIngestPolicy | null = null;
 export function setWebIngestPolicyForTests(policy: WebIngestPolicy | null): void {
   policyOverride = policy;
 }
+registerTestOverride(() => { policyOverride = null; });
 const activePolicy = (): WebIngestPolicy =>
   policyOverride ?? { allowPrivate: WEB_INGEST_ALLOW_PRIVATE, allowHttp: WEB_INGEST_ALLOW_PRIVATE };
 /** Whether plain http is fetchable here (the dev switch, or a test's policy): a dev checkout's own servers are http. */

@@ -6,7 +6,7 @@
  * what time it is. One bucket map serves all three, bounded by a sweep.
  */
 import { forwardedFor } from '../accounts';
-import { TRUSTED_PROXY_HOPS, WEB_INGEST_MAX_PER_HOUR } from '../platform';
+import { TRUSTED_PROXY_HOPS, WEB_INGEST_MAX_PER_HOUR, registerTestOverride } from '../platform';
 
 // ── Web-ingest allowance ─────────────────────────────────────────────────────
 // Importing an asset makes THIS SERVER fetch a URL, so an identity gets a
@@ -83,6 +83,7 @@ const DOC_ASSET_IMPORTS_PER_HOUR = 30;
 let docAssetCap: number | null = null;
 /** Test hook, mirroring setAssetByteQuotaForTests — the ceiling is a constant. */
 export function setDocAssetImportCapForTests(cap: number | null): void { docAssetCap = cap; }
+registerTestOverride(() => { docAssetCap = null; });
 
 export function docAssetImportRateLimited(id: string, now = Date.now()): boolean {
   return hourlyAttemptsExhausted(`doc-assets:${id}`, docAssetCap ?? DOC_ASSET_IMPORTS_PER_HOUR, now);
@@ -107,6 +108,7 @@ export function documentFetchReader(actor: { userId?: string | null; tokenId?: s
 
 /** Test hook for the per-document fetch ceiling. */
 export function setDocumentFetchCapForTests(cap: number | null): void { docFetchCap = cap; }
+registerTestOverride(() => { docFetchCap = null; });
 export function documentFetchRateLimited(id: string, reader: string, now = Date.now()): boolean {
   return hourlyAttemptsExhausted(`doc-fetch:${id}:${reader}`, docFetchCap ?? DOC_FETCHES_PER_HOUR, now);
 }
