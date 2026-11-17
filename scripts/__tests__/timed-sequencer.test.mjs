@@ -159,6 +159,14 @@ describe('a shard\'s wall time', () => {
     expect(SHARED_FIRST_FILE_MS['pr-guards']).toBe(4000);
     expect(SHARED_FIRST_FILE_MS['pr-contracts']).toBe(4000);
   });
+  // Replaying each api runner's own file times from 8 pr fast runs (224 shards; 44027030734-44141931756) under this model,
+  // 5s per worker's first api file and 4s per api-isolated file over-predicted their walls by 2.0s on average (2.7s on a
+  // runner given one long file, so the packer left those runners idle at 8-11s while others ran 19-23s); 3s and 2s fit
+  // them within 0.7s.
+  it('charges the api projects what their runners measure: 3s per worker\'s first api file, 2s per api-isolated file', () => {
+    expect(SHARED_FIRST_FILE_MS.api).toBe(3000);
+    expect(ISOLATED_FILE_MS['api-isolated']).toBe(2000);
+  });
   const runner = { workers: 3, firstFileMs: { api: 5 } };
   const file = (key, weight, project = 'api') => ({ key, weight, project });
 
