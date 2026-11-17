@@ -148,7 +148,7 @@ describe('the shipped skill folder',()=>{
   const refs=Object.keys(files).filter(name=>/^references\//.test(name)).sort();
   expect(refs).toEqual(['references/datasets.md','references/dataviz.md','references/diagrams.md','references/groups.md','references/live-docs.md','references/maps.md','references/page-apps.md','references/permissions.md','references/runtime.md']);
   // The design systems ship as self-documenting stylesheets, not guides.
-  expect(Object.keys(files).filter(name=>/^design-systems\/[a-z0-9-]+\.css$/.test(name))).toHaveLength(13);
+  expect(Object.keys(files).filter(name=>/^design-systems\/[a-z0-9-]+\.css$/.test(name))).toHaveLength(14);
   // Direct-HTTP guides are served at /llms/TOPIC but never packed; the packed SKILL.md must not link them.
   expect(files['SKILL.md']).not.toMatch(/http-auth|html-operations/);
   for(const topic of ['http-auth','html-operations']){

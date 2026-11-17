@@ -46,7 +46,9 @@ import {archiveFor} from '@/lib/skills';
 // 1.598 MiB: af-chart (one analytical chart over SQL, a linked dataset or rows; its readable contract, data sources,
 // frame, model, renderer and styles, ~36 KB stored) is how every page draws a chart, and sql.mjs --chart
 // (toolbox-chart.mjs) shows an agent that chart before publishing, leaving 1,675,360 bytes.
-const SKILL_ARCHIVE_MAX_BYTES=1.598*1024*1024;
+// 1.618 MiB: Graphite (design-systems/graphite.css, ~17 KB stored), a quiet analytical system of grey and ink chrome
+// with flat colour only for data, gives analytics apps and internal tools a fitting look, leaving 1,693,053 bytes.
+const SKILL_ARCHIVE_MAX_BYTES=1.618*1024*1024;
 
 describe('the downloadable author skill archive',()=>{
  it('fits its size budget',async()=>{
