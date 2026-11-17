@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { CI_RUNNER, ISOLATED_FILE_MS, SHARED_FIRST_FILE_MS, WORKERS, pack, readTimings, runOrder, shardWall, weigher } from '../lib/timed-sequencer.mjs';
-import { JOBS, LENSES, RECORDED, medianTimings, mergeTimings, nodeMeasurements, parseTimings, shardLoads } from '../ci/test-timings.mjs';
+import { CI_RUNNER, CONTENDED_START, ISOLATED_FILE_MS, SHARED_FIRST_FILE_MS, WORKERS, pack, readTimings, runOrder, shardWall, weigher } from '../lib/timed-sequencer.mjs';
+import { JOBS, LENSES, RECORDED, medianTimings, mergeTimings, nodeMeasurements, onlyProjects, parseTimings, shardLoads, steadyTimings } from '../ci/test-timings.mjs';
 
 const items = (weights) => Object.entries(weights).map(([key, weight]) => ({ key, weight }));
 const load = (shard, weights) => shard.reduce((sum, key) => sum + weights[key], 0);
@@ -106,6 +106,27 @@ describe('timed shard packing', () => {
     ])).toEqual({ api: { 'a.test.ts': 8948, 'b.test.ts': 201 }, ui: { 'u.test.ts': 5 } });
   });
 
+  // A worker's first file carries that worker's first-use costs, and each workflow starts the same files first every run:
+  // dataflow.test.ts ran 8.1s as one of pr fast's first files and 0.9s in ci.yml's api shards.
+  it('records a file\'s warm time: its median within each workflow\'s runs, then the lower of those', () => {
+    const prFast = [{ api: { 'first.test.ts': 8139, 'b.test.ts': 400 } }, { api: { 'first.test.ts': 9203, 'b.test.ts': 420 } }, { api: { 'first.test.ts': 7980 } }];
+    const ci = [{ api: { 'first.test.ts': 852, 'b.test.ts': 2400 } }, { api: { 'first.test.ts': 910, 'b.test.ts': 2600 } }, { api: { 'c.test.ts': 70 } }];
+    expect(steadyTimings([prFast, ci])).toEqual({ api: { 'first.test.ts': 881, 'b.test.ts': 410, 'c.test.ts': 70 } });
+    // One group is its median, as before.
+    expect(steadyTimings([prFast])).toEqual(medianTimings(prFast));
+    expect(steadyTimings([])).toEqual({});
+  });
+
+  // A refresh from ci.yml's logs also measures its node shards, and the node batch is chosen by recorded node time: an api
+  // refresh that rewrote the node section moved eight files out of pr fast's batch and eight others in.
+  it('refreshes only the projects asked for, leaving every other section as recorded', () => {
+    const measured = { api: { 'a.test.ts': 900 }, 'api-isolated': { 'm.test.ts': 40 }, node: { 'n.test.mjs': 300 } };
+    expect(onlyProjects(measured, ['api', 'api-isolated'])).toEqual({ api: { 'a.test.ts': 900 }, 'api-isolated': { 'm.test.ts': 40 } });
+    expect(onlyProjects(measured, undefined)).toBe(measured);
+    const recorded = { files: { api: { 'a.test.ts': 100 }, node: { 'n.test.mjs': 150 } } };
+    expect(mergeTimings(recorded, onlyProjects(measured, ['api'])).files.node).toEqual({ 'n.test.mjs': 150 });
+  });
+
   it('hands main\'s automatic refresh the node medians alone, of files that still exist', () => {
     const measured = medianTimings([
       { node: { 'b.test.ts': 30, 'gone.test.ts': 5, 'a.test.ts': 10 }, api: { 'c.test.ts': 900 } },
@@ -159,13 +180,25 @@ describe('a shard\'s wall time', () => {
     expect(SHARED_FIRST_FILE_MS['pr-guards']).toBe(4000);
     expect(SHARED_FIRST_FILE_MS['pr-contracts']).toBe(4000);
   });
-  // Replaying each api runner's own file times from 8 pr fast runs (224 shards; 44027030734-44141931756) under this model,
-  // 5s per worker's first api file and 4s per api-isolated file over-predicted their walls by 2.0s on average (2.7s on a
-  // runner given one long file, so the packer left those runners idle at 8-11s while others ran 19-23s); 3s and 2s fit
-  // them within 0.7s.
-  it('charges the api projects what their runners measure: 3s per worker\'s first api file, 2s per api-isolated file', () => {
-    expect(SHARED_FIRST_FILE_MS.api).toBe(3000);
+  // The api files' times are warm ones (test-timings.mjs `steadyTimings`): a worker's start is the packer's to add, not a
+  // first file's. Replayed over 10 pr fast runs (320 shards, 44142985506-44157005924) with those times, the walls fit 8-9s
+  // per worker when three start together and a third of it for a worker alone; those runs compiled the page runtime in
+  // every worker, which the suite now builds once per run (services/app/test/setup/html-assets-file.ts): 7.5s fits the
+  // runs since (44166185767, 44168708400).
+  it('charges the api projects what their runners measure: 7.5s per worker\'s first api file when three start, 2s per api-isolated file', () => {
+    expect(SHARED_FIRST_FILE_MS.api).toBe(7500);
     expect(ISOLATED_FILE_MS['api-isolated']).toBe(2000);
+    expect(CONTENDED_START).toEqual(['api']);
+  });
+
+  it('charges a worker that starts alone a third of a start shared by three', () => {
+    const start = { workers: 3, firstFileMs: { api: 9, 'pr-guards': 9 } };
+    // One file: its worker starts alone. Three: each of three pays the whole start.
+    expect(shardWall([file('a', 30)], start)).toBe(33);
+    expect(shardWall([file('a', 30), file('b', 1), file('c', 1)], start)).toBe(39);
+    expect(shardWall([file('a', 30), file('b', 1)], start)).toBe(36);
+    // A project fitted without it pays its whole start however many workers start.
+    expect(shardWall([file('g', 30, 'pr-guards')], start)).toBe(39);
   });
   const runner = { workers: 3, firstFileMs: { api: 5 } };
   const file = (key, weight, project = 'api') => ({ key, weight, project });

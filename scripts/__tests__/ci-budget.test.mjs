@@ -71,11 +71,32 @@ it('warns rather than fails when a PR consumer includes a long prerequisite wait
  }finally{rmSync(directory,{recursive:true,force:true});}
 });
 
+// No step's preparation hashes files on the runner: the install keys come from the fingerprint step's output
+// (scripts/__tests__/ci-plan.test.mjs says why and pins that the digest is hashFiles').
+it('keys every install cache, whole or slim, by the fingerprint step\'s output, in the same shape as before',()=>{
+ const files=['ci.yml','pr-fast.yml','node-timings.yml','page-speed.yml'];
+ for(const file of files)expect(readFileSync(new URL(`../../.github/workflows/${file}`,import.meta.url),'utf8'),file).not.toContain(".ci-cache-key/install.json')");
+ const keys=files.flatMap(file=>Object.values(workflow(file).jobs).flatMap(job=>job.steps??[])).map(step=>step.with?.key).filter(key=>/^install-/.test(key??''));
+ expect(keys.length).toBeGreaterThan(15);
+ expect([...new Set(keys)].sort()).toEqual(['install-slim-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.lock.outputs.install }}','install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.lock.outputs.install }}']);
+ // Each job that reads the output writes it first, in a step of its own named `lock`.
+ for(const file of files)for(const [name,job] of Object.entries(workflow(file).jobs)){
+  const steps=job.steps??[],readers=steps.filter(step=>JSON.stringify(step).includes('steps.lock.outputs.install'));
+  if(!readers.length)continue;
+  const lock=steps.findIndex(step=>step.id==='lock');
+  expect(steps[lock]?.run,`${file} ${name}`).toBe('node scripts/ci/ci.mjs lock-fingerprint');
+  for(const reader of readers)expect(steps.indexOf(reader),`${file} ${name}`).toBeGreaterThan(lock);
+ }
+ const prFast=workflow('pr-fast.yml').jobs.fast.steps;
+ expect(prFast.find(step=>step.run==='node scripts/ci/ci.mjs lock-fingerprint').id).toBe('lock');
+ expect(prFast.find(step=>step.id==='near-install').with['restore-keys']).toBe('install-v5-${{ runner.os }}-${{ runner.arch }}-node22-');
+});
+
 it('keys repository install caches on the shared font pipeline without removed vendored inputs',()=>{
  const caches=Object.values(workflow().jobs).flatMap(job=>job.steps??[]).filter(step=>step.with?.key?.startsWith('install-v5-'));
  expect(caches.length).toBeGreaterThan(0);
  for(const cache of caches){
-  expect(cache.with.key).toContain("hashFiles('.ci-cache-key/install.json')");
+  expect(cache.with.key).toBe('install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.lock.outputs.install }}');
   expect(cache.with['restore-keys']).toBeUndefined();
   expect(cache.with.key).not.toContain('design-systems/font-assets');
   expect(cache.with.key).not.toContain('design-systems/lib/font-assets.mjs');
@@ -168,9 +189,12 @@ it('bounds every first cache download and lets the next tier of the same chain t
  const bound=(step)=>step.env?.SEGMENT_DOWNLOAD_TIMEOUT_MINS;
  // Six seconds a segment for the 164-193 MB installs, three for the 15 MB test builds: twice and more their p99.
  expect(bound(by('slim'))).toBe('0.1');
- // The whole install is the first tier for the runners that skip the slim one (types, lint, tests), the second for the rest.
- expect(bound(by('install'))).toBe("${{ steps.slim.outcome == 'skipped' && '0.1' || '' }}");
+ // The whole install is bounded as well, first tier or second: as a slim install's fallback it once stalled 32s at 68.2%
+ // after the slim one was abandoned at 73.3% (run 44174517646's ui-5, a 67s run). Its fallback is the nearest install,
+ // which on this lock's key restores the same entry, unbounded: a network slow everywhere still ends in an install.
+ expect(bound(by('install'))).toBe('0.1');
  expect(bound(by('near-install'))).toBeUndefined();
+ expect(by('near-install').with.key).toBe(by('install').with.key);
  expect(bound(by('test-builds'))).toBe('0.05');
  const retry=by('test-builds-retry');
  expect(steps.indexOf(retry)).toBe(steps.indexOf(by('test-builds'))+1);
@@ -398,6 +422,8 @@ it('reconciles the nearest install on a lock miss, restore only, and falls back 
  expect(steps.indexOf(near)).toBe(steps.indexOf(exact)+1);
  const reconcile=steps.find(step=>step.run?.startsWith('npm install '));
  expect(reconcile.if).toContain("steps.near-install.outputs.cache-matched-key != ''");
+ // The nearest install on this lock's own key (the whole install's download abandoned) is that install: nothing to reconcile.
+ expect(reconcile.if).toContain("steps.near-install.outputs.cache-hit != 'true'");
  expect(reconcile.run).toMatch(/git diff --quiet -- package-lock\.json[^\n]*\n[\s\S]*copy-assets\.mjs[\s\S]*else[\s\S]*git checkout -- package-lock\.json[\s\S]*npm ci /);
  const cold=steps.filter(step=>/^npm ci /.test(step.run??''));
  expect(cold.map(step=>step.if)).toEqual(["matrix.install && steps.own-install.outputs.cache-hit != 'true'","${{ !matrix.install && steps.slim.outputs.cache-hit != 'true' && steps.install.outputs.cache-hit != 'true' && steps.near-install.outputs.cache-matched-key == '' }}"]);

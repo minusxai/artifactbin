@@ -37,6 +37,19 @@ import { request } from '@/__tests__/harness';
 
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
+/**
+ * A database nothing has touched: its own copy of one empty cluster, initialised once for the file. initdb is most of a
+ * new PGlite's start (~540ms of ~660ms locally, several seconds on a CI runner), and a restored copy holds the same files.
+ */
+let emptyCluster: Promise<Blob | File> | undefined;
+async function untouchedDatabase(): Promise<PGlite> {
+  emptyCluster ??= (async () => {
+    const empty = new PGlite();
+    try { return await empty.dumpDataDir('none'); } finally { await empty.close(); }
+  })();
+  return new PGlite({ loadDataDir: await emptyCluster });
+}
+
 interface Wire { id: string; edit_id: string; html: string | null; version: number }
 
 const mint = async (): Promise<string> => {
@@ -57,7 +70,7 @@ afterAll(async () => {
 
 describe('the additive DDL is replay-safe', () => {
   it('moves identity tables left in the app schema into the identity module\'s, rows and indexes kept, new columns NULL, reads through the views', async () => {
-    const legacy = new PGlite();
+    const legacy = await untouchedDatabase();
     try {
       // A database from before the identity module owned its tables: tokens, users and a group in the app's schema.
       await legacy.exec(`
@@ -104,7 +117,7 @@ describe('the additive DDL is replay-safe', () => {
   it('applies twice to a fresh database with no error, leaving the tables in place', async () => {
     // A throwaway instance so the replay is observed in isolation, exactly as
     // it happens on a cold boot.
-    const fresh = new PGlite();
+    const fresh = await untouchedDatabase();
     for (const stmt of SCHEMA_STATEMENTS) await fresh.exec(stmt);
     // The second pass is the one that matters: it runs on every restart.
     for (const stmt of SCHEMA_STATEMENTS) await fresh.exec(stmt);
@@ -159,7 +172,7 @@ describe('the additive DDL is replay-safe', () => {
   });
 
   it('gives every row its OWN edit_id — the default is per-row, not one shared secret', async () => {
-    const fresh = new PGlite();
+    const fresh = await untouchedDatabase();
     for (const stmt of SCHEMA_STATEMENTS) await fresh.exec(stmt);
 
     // Rows written without an explicit head pointer fall to the column

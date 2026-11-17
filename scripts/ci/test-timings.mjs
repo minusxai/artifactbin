@@ -4,6 +4,7 @@
  * (scripts/lib/timed-sequencer.mjs), from Vitest's per-file lines in CI job logs.
  *
  *   node scripts/ci/test-timings.mjs --run <ci run id> [--run <id> ...]   # reads those runs' logs with gh
+ *   node scripts/ci/test-timings.mjs --projects api,api-isolated --run <id> ...  # lays only those projects' times over
  *   node scripts/ci/test-timings.mjs <log file> ...                       # or saved logs, one run per file
  *   node scripts/ci/test-timings.mjs --sums                               # print each shard's packed load and predicted wall
  *   node scripts/ci/test-timings.mjs --measured <out> --run <id> ...      # write only the runs' `node` medians to <out>
@@ -17,7 +18,16 @@
  * runners' speed: refreshed from pr fast run 43016154761 alone (a slow draw, median job 42s), three api files were
  * recorded at 15.7-17.6s that ran 6.8-9.7s in the next runs, and each was packed alone onto its own runner while the
  * busiest runners took 25-27s. Files a log does not mention keep their recorded time. No shard carries work outside Vitest, so the table holds file
- * times and nothing else. The integration project is a job of its own, never sharded; its times are here only so its
+ * times and nothing else.
+ *
+ * AND GIVE IT BOTH WORKFLOWS' RUNS: the table holds each file's time on a warm worker, and a worker's FIRST file carries
+ * that worker's first-use costs (its first database, the first pages it serves) inside its own time; the packer adds a
+ * worker's start itself (timed-sequencer.mjs `SHARED_FIRST_FILE_MS`). Both workflows put the files they weigh longest
+ * first, so a file is first on a worker in the same place every run: dataflow.test.ts ran 8.1s as one of pr fast's first
+ * files and 0.9s in ci.yml's api shards (runs 44142985506-44157005924 and 44139124964-44157428149), and a median of
+ * either workflow's runs alone records that, and packs it first again. Runs are grouped by workflow, each file takes its
+ * median within each group, and then the lowest of those (`steadyTimings`): pr fast's 32 api runners and ci.yml's 4 pack
+ * the api files differently, so a file first on a worker in one is a later file in the other. Saved logs are one group. The integration project is a job of its own, never sharded; its times are here only so its
  * files start longest first (scripts/__tests__/timed-sequencer.test.mjs says why).
  */
 import { execFileSync } from 'node:child_process';
@@ -91,6 +101,27 @@ export function medianTimings(runs) {
   }))]));
 }
 
+/**
+ * Each file's time on a warm worker: its median within each group of runs (`medianTimings`; a group is one workflow's
+ * runs, which pack and order the files alike), then the lowest of those medians.
+ * @param {Array<Array<Record<string, Record<string, number>>>>} groups
+ */
+export function steadyTimings(groups) {
+  const steady = {};
+  for (const group of groups) for (const [project, times] of Object.entries(medianTimings(group))) {
+    for (const [file, ms] of Object.entries(times)) {
+      const recorded = (steady[project] ??= {})[file];
+      steady[project][file] = recorded === undefined ? ms : Math.min(recorded, ms);
+    }
+  }
+  return steady;
+}
+
+/** `measured` cut to `projects` (all of it without any): what `--projects` lays over the table. */
+export function onlyProjects(measured, projects) {
+  return projects ? Object.fromEntries(Object.entries(measured).filter(([project]) => projects.includes(project))) : measured;
+}
+
 /** The recorded table with these measured times laid over it. A file runs in one of the full suite's projects, so one
  * measured under such a project leaves the one it was recorded under before (a mock moves a file to `api-isolated`);
  * a `LENSES` project's times stand beside the full suite's and move nothing, and a project not `RECORDED` is ignored. */
@@ -148,14 +179,20 @@ if (import.meta.url === `file://${process.argv[1]}` && process.argv[2] === '--ap
   const runs = args.flatMap((arg, i) => (args[i - 1] === '--run' ? [arg] : []));
   const logs = runs.length
     ? runs.map((run) => execFileSync('gh', ['run', 'view', run, '--log'], { encoding: 'utf8', maxBuffer: 1 << 30 }))
-    : args.filter((arg, i) => arg !== '--measured' && args[i - 1] !== '--measured').map((file) => readFileSync(file, 'utf8'));
-  const measured = medianTimings(logs.map(parseTimings));
+    : args.filter((arg, i) => !['--measured', '--projects'].includes(arg) && !['--measured', '--projects'].includes(args[i - 1])).map((file) => readFileSync(file, 'utf8'));
   if (out) {
+    const measured = medianTimings(logs.map(parseTimings));
     const node = nodeMeasurements(measured, (file) => existsSync(path.join(ROOT, file)), runs);
     write(out, node);
     console.log(`test-timings: ${Object.keys(node.files.node).length} node file times in ${out}, each the median of ${runs.length ? `runs ${runs.join(', ')}` : `${logs.length} log(s)`}`);
     process.exit(0);
   }
+  const workflow = (run) => execFileSync('gh', ['run', 'view', run, '--json', 'workflowName', '--jq', '.workflowName'], { encoding: 'utf8' }).trim();
+  const groups = new Map();
+  logs.forEach((log, i) => { const key = runs.length ? workflow(runs[i]) : 'logs'; groups.set(key, [...(groups.get(key) ?? []), parseTimings(log)]); });
+  // `--projects`: a refresh of some projects leaves every other section as it was recorded (the node batch, chosen by its
+  // recorded times, keeps its files).
+  const measured = onlyProjects(steadyTimings([...groups.values()]), option(args, '--projects')?.split(','));
   const timings = mergeTimings(readTimings(OUT), measured);
   const count = Object.values(measured).reduce((sum, files) => sum + Object.keys(files).length, 0);
   // Only the recorded projects, and only files that still exist.
@@ -167,5 +204,5 @@ if (import.meta.url === `file://${process.argv[1]}` && process.argv[2] === '--ap
       .sort(([a], [b]) => (a < b ? -1 : 1)));
   }
   write(OUT, timings);
-  console.log(`test-timings: ${count} file times, each the median of ${runs.length ? `runs ${runs.join(', ')}` : `${args.length} log(s)`}`);
+  console.log(`test-timings: ${count} file times, each the lowest of its medians over ${[...groups].map(([name, group]) => `${name} (${group.length} run${group.length === 1 ? '' : 's'})`).join(' and ')}${runs.length ? `: runs ${runs.join(', ')}` : ''}`);
 }

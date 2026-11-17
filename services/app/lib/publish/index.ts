@@ -8,5 +8,5 @@ export {
   replaceArtifactWithBody,
 } from './publish';
 export type { ForkOverrides } from './publish';
-export { openDocumentEvents } from './realtime/document-events';
+export { openDocumentEvents, overridePresenceFrameInterval } from './realtime/document-events';
 export { TooManyLiveChannels, subscribeChannel, subscribeToAnnotations } from './realtime/live';

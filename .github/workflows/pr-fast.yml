@@ -24,7 +24,7 @@ name: pr fast
 # THE RUN TAKES AS LONG AS ITS SLOWEST JOB, so one stalled transfer on one of ~49 runners sets it (a 62.5s fetch made run
 # 44148017273 93s). The transfers seen stalling are hedged or bounded, each with a fallback that may cost time but never
 # changes what that runner tests: the checkout starts a second fetch of the same sha beside one that has not landed, and
-# each chain's first cache download gives up on a stalled segment for the chain's next tier, whose last tier stays
+# every cache download but each chain's last gives up on a stalled segment for the chain's next tier, and the last stays
 # unbounded (scripts/__tests__/workflows.test.mjs, ci-budget.test.mjs). Not yet bounded: the cache lookups and saves, the
 # type-info and node-timings fetches, the artifact upload and the clock's fallback `gh api`; one seen stalling joins them.
 #
@@ -357,7 +357,10 @@ jobs:
       # ci.yml's whole-install cache, same key (see its `checks` job for why it holds the fonts too). Main's
       # `warm-caches` and every ci.yml miss save it; in this lane only the `install` runner saves, a clean `npm ci` of a
       # lock main has not installed yet (its matrix entry says why).
-      - run: node scripts/ci/ci.mjs lock-fingerprint
+      # It hands the install key out (`install`, the digest hashFiles gives for the file it writes): no cache step's key
+      # hashes files while the runner prepares it, which once took 26.1s against a 0.2s median (run 44175264458's api-29).
+      - id: lock
+        run: node scripts/ci/ci.mjs lock-fingerprint
       - if: matrix.install
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         id: own-install
@@ -367,7 +370,7 @@ jobs:
             services/*/node_modules
             services/app/public/fonts
             services/app/lib/html-systems/font-manifest.json
-          key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
+          key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.lock.outputs.install }}
           lookup-only: true
       - if: matrix.install
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
@@ -382,7 +385,7 @@ jobs:
             !node_modules/@fontsource
             !node_modules/@fontsource-variable
             !node_modules/lucide-static/font
-          key: install-slim-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
+          key: install-slim-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.lock.outputs.install }}
           lookup-only: true
       - if: matrix.install && steps.own-install.outputs.cache-hit != 'true'
         run: npm ci --no-audit --no-fund
@@ -394,7 +397,7 @@ jobs:
             services/*/node_modules
             services/app/public/fonts
             services/app/lib/html-systems/font-manifest.json
-          key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
+          key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.lock.outputs.install }}
       # The slim install of a lock whose whole install exists but whose slim one does not (this pull request's first
       # run after the slim entry was introduced): the whole one, restored, is what it is cut from.
       - if: matrix.install && steps.own-install.outputs.cache-hit == 'true' && steps.own-slim.outputs.cache-hit != 'true'
@@ -405,7 +408,7 @@ jobs:
             services/*/node_modules
             services/app/public/fonts
             services/app/lib/html-systems/font-manifest.json
-          key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
+          key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.lock.outputs.install }}
       - if: matrix.install && steps.own-slim.outputs.cache-hit != 'true'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
@@ -418,7 +421,7 @@ jobs:
             !node_modules/@fontsource
             !node_modules/@fontsource-variable
             !node_modules/lucide-static/font
-          key: install-slim-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
+          key: install-slim-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.lock.outputs.install }}
       # THE SLIM INSTALL, for the runners that only run Vitest: the whole install minus what no test here can load
       # (scripts/__tests__/slim-install.test.mjs names each and refuses an import of one): the native TypeScript compiler
       # (the `types` runner's), the @fontsource packages (copy-assets reads them at install; the fonts they make are kept),
@@ -427,9 +430,11 @@ jobs:
       # EVERY FIRST CACHE DOWNLOAD IS BOUNDED (SEGMENT_DOWNLOAD_TIMEOUT_MINS, minutes a 128 MB segment, fractions allowed):
       # over 575 install restores the download took 1.4s median and 6.2s p99, then 35.5s once (run 44141023943's node-2,
       # stuck at 70.8% and again at 92.7%). Past the bound actions/cache abandons the download, extracts nothing and reports a
-      # miss, so the next tier of this chain runs: the slim install falls back to the whole one, which (bounded only where it
-      # is a runner's first tier) falls back to the nearest. That last tier keeps the default, so a network slow everywhere
-      # costs time, never a cold `npm ci`. scripts/__tests__/ci-budget.test.mjs pins each bound.
+      # miss, so the next tier of this chain runs: the slim install falls back to the whole one, which falls back to the
+      # nearest. The whole one is bounded as a second tier too: after ui-5's slim download was abandoned at 73.3%, the whole
+      # one stalled 32s at 68.2% (run 44174517646, 67s). The nearest keeps the default and, on this lock's key, restores that
+      # same entry, so a network slow everywhere costs time, never a cold `npm ci`. scripts/__tests__/ci-budget.test.mjs pins
+      # each bound.
       - if: matrix.suite || matrix.shard || matrix.batch
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         id: slim
@@ -445,19 +450,19 @@ jobs:
             !node_modules/@fontsource
             !node_modules/@fontsource-variable
             !node_modules/lucide-static/font
-          key: install-slim-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
+          key: install-slim-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.lock.outputs.install }}
       - if: ${{ !matrix.install && steps.slim.outputs.cache-hit != 'true' }}
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         id: install
         env:
-          SEGMENT_DOWNLOAD_TIMEOUT_MINS: ${{ steps.slim.outcome == 'skipped' && '0.1' || '' }}
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: '0.1'
         with:
           path: |
             node_modules
             services/*/node_modules
             services/app/public/fonts
             services/app/lib/html-systems/font-manifest.json
-          key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
+          key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.lock.outputs.install }}
       # A PULL REQUEST THAT CHANGES THE LOCK MISSES THAT KEY ON EVERY PUSH: only main saves it, after the merge.
       # A cold `npm ci` was 14-24s of #1018's 47s and 55s runs. So on a miss, restore the newest whole install
       # (this branch's, else main's; restore only, so no stale tree is ever saved) and let `npm install`
@@ -473,9 +478,10 @@ jobs:
             services/*/node_modules
             services/app/public/fonts
             services/app/lib/html-systems/font-manifest.json
-          key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
+          key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.lock.outputs.install }}
           restore-keys: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-
-      - if: ${{ !matrix.install && steps.slim.outputs.cache-hit != 'true' && steps.install.outputs.cache-hit != 'true' && steps.near-install.outputs.cache-matched-key != '' }}
+      # An exact hit here is this lock's own install, restored after the whole install's download was abandoned: nothing to reconcile.
+      - if: ${{ !matrix.install && steps.slim.outputs.cache-hit != 'true' && steps.install.outputs.cache-hit != 'true' && steps.near-install.outputs.cache-hit != 'true' && steps.near-install.outputs.cache-matched-key != '' }}
         name: Reconcile the nearest install to this lock
         run: |
           npm install --no-audit --no-fund

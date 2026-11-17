@@ -7,6 +7,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import yaml from 'yaml';
 import { createServer } from 'node:http';
+import { createHash } from 'node:crypto';
+import { installCacheHash } from '../lib/lock-fingerprint.mjs';
 import { CI_JOBS, checkCiResults, isBuildInput, planCi, testBuildsKey, vitestConfigKey } from '../lib/ci-plan.mjs';
 import { MODULE_CACHE_DIR, SCHEMA_IMAGE_DIR } from '../lib/suite-env.mjs';
 import { CI_GATE_SHARDS, CI_ISOLATED_GATES, CI_SHARD_OPTIONS, gateNamesOnDisk, shardWeight, specFor } from '../gates.manifest.mjs';
@@ -147,6 +149,24 @@ describe('GitHub CI adapter', () => {
       }));
       execFileSync(process.execPath, [script, 'lock-fingerprint'], { cwd, encoding: 'utf8' });
       expect(readFileSync(path.join(cwd, '.ci-cache-key/install.json'), 'utf8')).not.toBe(before);
+    } finally { rmSync(cwd, { recursive: true, force: true }); }
+  });
+
+  // THE INSTALL CACHE KEY IS HANDED OUT, NOT HASHED BY THE RUNNER: a `hashFiles(...)` in a step's key is evaluated while the
+  // runner prepares that step, and on one runner that took 26.1s against a 0.2s median (pr fast run 44175264458's api-29,
+  // 80s). The fingerprint step writes the same digest hashFiles gives for its file (a sha256 over each matched file's
+  // sha256 digest), so main's warmed entries keep their keys: install-v5-…-3ac830e5… was both the runner's and this one's.
+  it('hands the install cache key out as the digest hashFiles gives for the fingerprint file', () => {
+    const cwd = mkdtempSync(path.join(tmpdir(), 'ci-install-key-'));
+    try {
+      writeFileSync(path.join(cwd, 'package-lock.json'), JSON.stringify({ packages: { '': { version: '0.1.0' }, 'node_modules/left-pad': { version: '1.3.0' } } }));
+      const output = path.join(cwd, 'github-output');
+      writeFileSync(output, '');
+      execFileSync(process.execPath, [script, 'lock-fingerprint'], { cwd, env: { ...process.env, GITHUB_OUTPUT: output } });
+      // The runner's hashFiles, for one file: sha256 over that file's raw sha256 digest.
+      const hashFiles = (...files) => { const all = createHash('sha256'); for (const file of files) all.update(createHash('sha256').update(readFileSync(file)).digest()); return all.digest('hex'); };
+      expect(readFileSync(output, 'utf8')).toBe(`install=${hashFiles(path.join(cwd, '.ci-cache-key/install.json'))}\n`);
+      expect(installCacheHash('abc')).toBe('4f8b42c22dd3729b519ba6f68d2da7cc5b2d606d05daed5ad5128cc03e6c6358');
     } finally { rmSync(cwd, { recursive: true, force: true }); }
   });
 
@@ -436,11 +456,12 @@ describe('CI job shape', () => {
         expect(cache.with.path).toContain('services/app/lib/html-systems/font-manifest.json');
         // Keyed on the lockfile, but not on the one line of it a release rewrites: the fingerprint
         // is that file with workspace versions normalised, written by the step just above.
-        expect(cache.with.key).toMatch(/hashFiles\('(candidate\/package-lock\.json|\.ci-cache-key\/install\.json)'/);
-        if (cache.with.key.includes('.ci-cache-key')) {
+        expect(cache.with.key).toMatch(/hashFiles\('candidate\/package-lock\.json'\)|\$\{\{ steps\.lock\.outputs\.install \}\}$/);
+        if (cache.with.key.includes('steps.lock.outputs.install')) {
           const job = Object.values(workflow.jobs).find((entry) => (entry.steps ?? []).includes(cache));
-          expect(job.steps.indexOf(cache), 'the fingerprint is written first').toBeGreaterThan(
-            job.steps.findIndex((step) => step.run === 'node scripts/ci/ci.mjs lock-fingerprint'));
+          const lock = job.steps.findIndex((step) => step.run === 'node scripts/ci/ci.mjs lock-fingerprint');
+          expect(job.steps.indexOf(cache), 'the fingerprint is written first').toBeGreaterThan(lock);
+          expect(job.steps[lock].id).toBe('lock');
         }
       }
       for (const step of steps(workflow.jobs)) expect(step.run ?? '').not.toContain('copy-assets.mjs');

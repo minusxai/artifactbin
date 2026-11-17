@@ -93,13 +93,27 @@ export const WORKERS = 3;
  * each of the three workers ran 3.8s, 4.9s and 6.8s over its recorded time; in job ui-2 the first islands files ran
  * 0.6-1.4s over theirs. The node batch's ~1.4s locally per worker (the full suite's setup file and its graph) makes
  * ~4s on a runner, an ESTIMATE. Isolated projects pay theirs on every file (`ISOLATED_FILE_MS`, in the file's weight).
- * The api projects' replay over 224 later runner walls (see `ISOLATED_FILE_MS`) puts api's at 3s, not 5s.
+ * The api projects' is what each of three workers starting together pays (`CONTENDED_START`), against warm file times
+ * (scripts/ci/test-timings.mjs `steadyTimings`): its graph's import and, inside its first file, its first database and
+ * first pages. Fitted at 8-9s over 10 pr fast runs whose workers each compiled the page runtime on their first page; with
+ * one build per run (services/app/test/setup/html-assets-file.ts), 7.5s fits pr fast runs 44166185767 and 44168708400
+ * (their 37 multi-file api shards within 0.4s at the median; the one-file shards 1.2s over, the safe side).
  * The guard runners' two shared-graph projects (vitest.guard.config.ts) pay theirs too: without it their packing predicted
  * 12.2s for shards that ran 21-25s beside one holding only the longest file that ran 10.5s (pr fast run 44140374300).
  * Replaying each guard shard's own file times from 8 runs (24 shards), 4s per worker's first file fits their walls within
  * 1.4s on average; with none they ran 6.1s over the prediction.
  */
-export const SHARED_FIRST_FILE_MS = Object.freeze({ api: 3000, islands: 1000, 'node-batch': 4000, 'pr-guards': 4000, 'pr-contracts': 4000 });
+export const SHARED_FIRST_FILE_MS = Object.freeze({ api: 7500, islands: 1000, 'node-batch': 4000, 'pr-guards': 4000, 'pr-contracts': 4000 });
+
+/**
+ * THE PROJECTS WHOSE WORKERS' STARTS SHARE THE RUNNER: a shard's workers start together and import their graphs on the
+ * same four vCPUs, so a worker that starts alone (a shard of one file) pays a third of what each of three pays. Measured
+ * on the api runners (`SHARED_FIRST_FILE_MS.api` is the cost when all three start): replayed over 10 pr fast runs (320
+ * shards, 44142985506-44157005924) with warm file times (scripts/ci/test-timings.mjs `steadyTimings`), one cost for every
+ * shard over-predicted the one-file shards by the same amount it under-predicted the rest (4.6s each way at 7s); scaled
+ * by the workers starting, both medians fit within 0.8s. The guard and node batch costs were fitted without it.
+ */
+export const CONTENDED_START = Object.freeze(['api']);
 
 /** How a shard's wall is predicted: the CI runner by default; `{ workers: 1, firstFileMs: {} }` is the plain sum. */
 export const CI_RUNNER = Object.freeze({ workers: WORKERS, firstFileMs: SHARED_FIRST_FILE_MS });
@@ -127,11 +141,12 @@ export function runOrder(items) {
 export function shardWall(items, runner = CI_RUNNER) {
   const loads = Array.from({ length: runner.workers }, () => 0);
   const graphs = Array.from({ length: runner.workers }, () => new Set());
+  const starting = Math.min(items.length, runner.workers) / runner.workers;
   for (const item of runOrder(items)) {
     let worker = 0;
     for (let i = 1; i < loads.length; i++) if (loads[i] < loads[worker]) worker = i;
     const graph = runner.firstFileMs[item.project ?? ''];
-    const first = graph && !graphs[worker].has(item.project) ? graph : 0;
+    const first = graph && !graphs[worker].has(item.project) ? graph * (CONTENDED_START.includes(item.project) ? starting : 1) : 0;
     graphs[worker].add(item.project);
     loads[worker] += item.weight + first;
   }

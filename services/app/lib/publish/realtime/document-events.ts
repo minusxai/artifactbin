@@ -13,7 +13,7 @@
  * wakeup converges on the next event with no cursor bookkeeping.
  */
 import {presenceAccountIdentity, createPresenceRoom, presenceChannel, PRESENCE_EVENT, type PresenceFrame} from '@/lib/html-presence';
-import { getDb, ID_RE } from '@/lib/platform';
+import { getDb, ID_RE, registerTestOverride } from '@/lib/platform';
 import { htmlLiveLinks, htmlSharedRevisions, changedHtmlSharedRevisions } from '@/lib/html-publication';
 import { trackEvent } from '@/lib/analytics';
 import { canReadArtifact, currentPage, getArtifactAccessById, getArtifactById } from '@/lib/artifacts';
@@ -24,6 +24,15 @@ import { LIVE_KEEPALIVE_MS, liveKeepaliveFrame } from '@/lib/http';
 import { subscribeChannel, subscribeToAnnotations, subscribeToArtifact, TooManyLiveChannels } from './live';
 import { changedSince, marksOf, marksOfToken, tokenOf,liveDatasetIds } from './dataset-marks';
 import { livePings } from './live-pings';
+
+/**
+ * A test's presence frame interval (`overridePresenceFrameInterval`): the room's one-second interval made every wait for
+ * a reader's next frame in services/app/__tests__/html-presence.test.ts a second (7.6s of its 7.6s). Cleared with the
+ * test overrides at the end of each file.
+ */
+let presenceFrameIntervalMs: number | undefined;
+export function overridePresenceFrameInterval(ms: number | undefined): void { presenceFrameIntervalMs = ms; }
+registerTestOverride(() => { presenceFrameIntervalMs = undefined; });
 
 /** What a live ping names: the head and its live revision, and the current page's title. */
 interface LiveHead { editId: string; version: number; live: number; title: string | null }
@@ -278,7 +287,7 @@ export async function openDocumentEvents(request: Request, id: string): Promise<
       authorize:async()=>{const current=await getArtifactAccessById(id);return !!current&&await canReadArtifact(current,actor);},
       subscribe:(receive,lost)=>subscribeChannel(presenceChannel(id),receive,lost),
       subscribeAcl:(changed,lost)=>subscribeToArtifact(id,changed,lost),
-      send:frame=>{latestPresence=frame;writePresence();},close:()=>{if(!replacingPresence)void close();},
+      send:frame=>{latestPresence=frame;writePresence();},close:()=>{if(!replacingPresence)void close();},frameIntervalMs:presenceFrameIntervalMs,
       clock:{now:Date.now,setTimeout:(work,ms)=>setTimeout(work,ms),clearTimeout:timer=>clearTimeout(timer as ReturnType<typeof setTimeout>),setInterval:(work,ms)=>setInterval(work,ms),clearInterval:timer=>clearInterval(timer as ReturnType<typeof setInterval>)}
     });
     presenceRoom=room;if(closed)room.dispose();

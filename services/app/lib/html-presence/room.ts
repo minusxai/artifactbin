@@ -9,6 +9,8 @@ interface PresenceRoomPorts {
  subscribeAcl(changed:()=>void,lost:()=>void):Promise<()=>Promise<void>>;
  send(frame:PresenceFrame):void;
  close():void;
+ /** At most one frame per this many ms after the first: PRESENCE_FRAME_INTERVAL_MS unless given. */
+ frameIntervalMs?:number;
  clock:{now():number;setTimeout(work:()=>void,ms:number):unknown;clearTimeout(timer:unknown):void;setInterval(work:()=>void,ms:number):unknown;clearInterval(timer:unknown):void};
 }
 /**
@@ -31,7 +33,7 @@ export async function createPresenceRoom(ports:PresenceRoomPorts){
  };
  const schedule=()=>{
   if(closed||flushTimer!==undefined)return;
-  const wait=sentAt===undefined?0:sentAt+PRESENCE_FRAME_INTERVAL_MS-ports.clock.now();
+  const wait=sentAt===undefined?0:sentAt+(ports.frameIntervalMs??PRESENCE_FRAME_INTERVAL_MS)-ports.clock.now();
   if(wait<=0)flush();else flushTimer=ports.clock.setTimeout(flush,wait);
  };
  const revalidate=async()=>{

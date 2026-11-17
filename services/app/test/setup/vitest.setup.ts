@@ -5,7 +5,7 @@
 // all hand them services/app as the cwd.
 process.chdir(process.env.APP_PACKAGE_ROOT ?? path.resolve(import.meta.dirname, '../..')); // cwd = services/app
 
-import { afterAll } from 'vitest';
+import { afterAll, beforeAll, inject } from 'vitest';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -50,6 +50,17 @@ const { createEvents } = await import('@artifactbin/events/local');
 const { setEventProjection } = await import('@/lib/platform/event-outbox');
 
 await import('./database');
+
+// The run's page runtime build, compiled by the first worker to need it and read by the rest (./html-assets-file).
+// Supplied before the file's first test, not here: the runtime's graph reaches the platform config, which a file that
+// mocks it or rewrites the environment (api-isolated) must reach first. Never started here either: a worker none of whose
+// files serve a page would import the runtime for nothing, and an import still loading when its last file ends fails
+// every file on it (EnvironmentTeardownError on sharp, pr fast run 44170388774's api-22).
+const htmlAssetsFile = inject('htmlAssetsFile');
+if (htmlAssetsFile) beforeAll(async () => {
+  const [{ supplyHtmlAssets }, { htmlAssetsSupply }] = await Promise.all([import('@/lib/html-runtime/server'), import('./html-assets-file')]);
+  supplyHtmlAssets(htmlAssetsSupply(htmlAssetsFile));
+});
 
 let localBrowser: import('@artifactbin/contracts').BrowserService | undefined;
 const browser = async () => (localBrowser ??= (await import('@artifactbin/browser/local')).createBrowser());
