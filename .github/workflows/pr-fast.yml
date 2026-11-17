@@ -434,7 +434,7 @@ jobs:
       # built from (scripts/ci/ci.mjs `test-builds-key`) and this runner's kind (`TEST_BUILDS_KIND` above); main's
       # warm-caches writes each kind's entry. Without one for this kind, main's whole entry for the same sources serves
       # (ci.yml's: the builds and the api modules), then this kind's newest. A pull request that changes those inputs
-      # rebuilds them (~10s) and the first runner of each kind saves its entry, so its next push restores it.
+      # rebuilds them (~10s) and the last runner of each kind saves its entry, so its next push restores it.
       # The entry also carries the test database's schema image (services/app/test/setup/schema-image-file.ts): with it,
       # each Vitest worker restores its first database instead of running initdb and the boot DDL (660ms -> 170ms
       # measured locally). Only the file named by this checkout's schema key loads, so a stale entry is a miss. The
@@ -468,8 +468,9 @@ jobs:
           exit "$(cat "$RUNNER_TEMP/node-timings.status")"
       - if: matrix.batch
         run: node node_modules/vitest/vitest.mjs run --config vitest.node-batch.config.ts --shard=${{ matrix.batch }}
-      # The first runner of each kind saves that kind's entry on an exact miss, after its tests, so its transforms are in it.
-      - if: contains(fromJSON('["api-1","ui-1","guards","node-1"]'), matrix.part) && steps.test-builds.outputs.cache-hit != 'true'
+      # The last runner of each kind saves that kind's entry on an exact miss, after its tests, so its transforms are in it:
+      # packing puts the longest files first, often one to a runner, so the last runner holds the most files.
+      - if: contains(fromJSON('["api-32","ui-7","guards-3","node-3"]'), matrix.part) && steps.test-builds.outputs.cache-hit != 'true'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: |
