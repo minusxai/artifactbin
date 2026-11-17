@@ -200,7 +200,7 @@ it('lets an owner pick the design system as page metadata: 13 systems or null, a
  const appearance=async()=>JSON.parse(new JSDOM(await (await raw(request(`/a/${id}/raw`,{token:actor.token}),params(id))).text()).window.document.querySelector('[data-af="runtime"]')!.textContent!).appearance;
  expect(await appearance()).toEqual({designSystem:'redline',mode:'light'});
  const story=await PATCH(request(`/api/artifacts/${id}`,{method:'PATCH',token:actor.token,json:{theme:'modernist',expectedState:state}}),params(id));
- expect(story.status).toBe(400);expect((await story.json()).allowed).toHaveLength(13);
+ expect(story.status).toBe(400);expect((await story.json()).allowed).toHaveLength(14);
  const picked=await PATCH(request(`/api/artifacts/${id}`,{method:'PATCH',token:actor.token,json:{theme:'nocturne',expectedState:state}}),params(id));
  expect(picked.status,await picked.clone().text()).toBe(200);
  const row=await artifacts.getArtifactById(id);expect(row!.version).toBe(1);expect(row!.source).toContain('content="redline"');

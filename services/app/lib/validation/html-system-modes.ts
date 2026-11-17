@@ -5,6 +5,7 @@ export const HTML_SYSTEM_MODES: Readonly<Record<string, 'light' | 'dark'>> = {
  "phosphor": "dark",
  "drafting": "light",
  "meridian": "light",
+ "graphite": "light",
  "dossier": "light",
  "riso": "light",
  "almanac": "light",

@@ -49,7 +49,7 @@ describe('resolveCssColor', () => {
 
 describe('the image tokens', () => {
   it('resolve every mapped token of every design system, light and dark, to concrete sRGB', () => {
-    expect(DESIGN_SYSTEM_VARIABLES.names).toHaveLength(13);
+    expect(DESIGN_SYSTEM_VARIABLES.names).toHaveLength(14);
     for (const name of DESIGN_SYSTEM_VARIABLES.names) for (const mode of ['light', 'dark'] as const) {
       const variables = DESIGN_SYSTEM_VARIABLES.variables(name, mode)!;
       const tokens = imageTokens(variables, mode), label = `${name} ${mode}`;

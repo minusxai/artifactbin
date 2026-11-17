@@ -22,6 +22,7 @@
   "phosphor",
   "drafting",
   "meridian",
+  "graphite",
   "dossier",
   "riso",
   "almanac",
@@ -68,6 +69,15 @@
    2,
    2,
    2
+  ],
+  "graphite": [
+   2,
+   1,
+   0,
+   0,
+   2,
+   2,
+   1
   ],
   "dossier": [
    0,
@@ -156,6 +166,7 @@
   "phosphor": "Ten Systems gallery, extended with a paper mode",
   "drafting": "Scrolly winner (exploded phone) + plan winner (drafting set)",
   "meridian": "New: the sleek professional one",
+  "graphite": "New: the quiet analytical one, grey and ink with flat data colour",
   "dossier": "editorial_opus-c + plan_opus-c (paper, ink, violet, lime)",
   "riso": "scrolly_opus-c (risograph picture book)",
   "almanac": "scrolly_codex_2 (warm studio editorial)",
@@ -171,6 +182,7 @@
   "phosphor": "ODaz7L",
   "drafting": "anUtqy",
   "meridian": "9q4LBf",
+  "graphite": "SatPJ5",
   "dossier": "hOMxYy",
   "riso": "XcH5C6",
   "almanac": "bvesY2",

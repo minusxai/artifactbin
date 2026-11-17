@@ -5,5 +5,5 @@
  * (./story-theme-names). A dependency-free leaf for the same reason: the reader route resolves a
  * document's mode from the name alone. The registry itself is lib/html-systems/story-systems.
  */
-export const STORY_SYSTEM_NAMES = ['volta', 'phosphor', 'drafting', 'meridian', 'dossier', 'riso', 'almanac', 'redline', 'nocturne', 'broadsheet', 'signout', 'sorbet', 'arcade'] as const;
+export const STORY_SYSTEM_NAMES = ['volta', 'phosphor', 'drafting', 'meridian', 'graphite', 'dossier', 'riso', 'almanac', 'redline', 'nocturne', 'broadsheet', 'signout', 'sorbet', 'arcade'] as const;
 export type StorySystemName = (typeof STORY_SYSTEM_NAMES)[number];
