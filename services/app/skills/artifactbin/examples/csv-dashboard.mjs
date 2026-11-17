@@ -1,20 +1,22 @@
 /**
- * Example: the renderer of examples/csv-dashboard.html. It reads window.DATA, watches every DATA
- *   query with sql (sql.watch), and draws the stats, the Vega-Lite charts, the
- *   deck.gl map, a value table per chart and the filters that link them. A file of its own so
- *   the page stays short enough to read whole.
+ * Example: the renderer of examples/csv-dashboard.html. It reads window.DATA, draws each chart
+ *   as an <af-chart> that runs its DATA query (sql.watch inside it), watches every other query
+ *   with sql for the stats and texts, and draws the deck.gl map, a value table per chart and the
+ *   filters that link them. A file of its own so the page stays short enough to read whole.
  * Usage: keep it next to index.html as csv-dashboard.mjs (new-page.mjs copies it); index.html
  *   loads it with <script type="module" src="./csv-dashboard.mjs">. Change DATA, not this file.
  * Gotchas: a chart's mark is bar, line, point, rect (a heatmap) or map; series with multiples:true
- *   draws one small panel per series value on a shared scale. Picking a filter reruns every
- *   query with its $param set; a late answer for an older pick is dropped. A map names only
+ *   draws one small panel per series value on a shared scale. Picking a filter sets every
+ *   chart's query again and reruns the other queries with its $param; a late answer for an
+ *   older pick is dropped. af-chart sizes, themes and tears down each chart. A map names only
  *   the places whose names fit; every dot keeps its tooltip and the table lists them all.
  */
 import {sql} from '@afbin/apollo';
-import * as vega from '@afbin/vega';
-import {compile} from '@afbin/vega-lite';
+import '@afbin/chart';
 const D=window.DATA,$=s=>document.querySelector(s),status=$('#status'),names=Object.keys(D.queries);
 const label=col=>D.labels[col]??col,filters=D.filters??{};
+// Charts drawn by af-chart run their own query; the page watches the rest (stats, texts, map).
+const charted=D.charts.filter(c=>c.mark!=='map'),own=names.filter(n=>!charted.some(c=>c.query===n));
 // Each filter is a parameter: null shows every row; a picked value narrows the queries that read
 // it. A DATA query's $names become the sql tag's bound values, never text spliced into the SQL.
 const picked=Object.fromEntries(Object.keys(filters).map(key=>[key,null]));
@@ -22,16 +24,15 @@ const statement=text=>{const parts=text.split(/\$([A-Za-z_]\w*)/),strings=parts.
   i%2===0),values=parts.filter((_,i)=>i%2).map(name=>{if(!(name in picked))throw Error(
   `$${name} is not one of DATA.filters`);return picked[name];});
   return sql(Object.assign(strings,{raw:strings}),...values);};
-let answers={},views=[],stops=[],round=0,width=0,drawn=Promise.resolve(),pending=false;
+let answers={},stops=[],round=0,waiting=new Set(),deck=null,drawing=Promise.resolve();
 const fmt=(n,digits=0)=>Number.isFinite(n)?n.toLocaleString(undefined,{minimumFractionDigits:digits,
   maximumFractionDigits:digits}):'–';
-// What every text reads: a query's rows as SQL answered them.
+// What every text reads: a query's rows as SQL answered them (a chart's once it has drawn).
 const helpers={rows:name=>answers[name]??[],one:name=>answers[name]?.[0]??{},fmt};
-// One value per row of the chart's query; the chart and its table share them.
-const values=c=>helpers.rows(c.query).filter(row=>Number.isFinite(row[c.y])&&(c.mark!=='point'||
-  Number.isFinite(row[c.x]))).map(row=>({x:c.mark==='point'?row[c.x]:String(row[c.x]??''),
-  series:c.series?String(row[c.series]??''):'',y:row[c.y],
-  ...c.lat?{lat:row[c.lat],lon:row[c.lon]}:{}}));
+// One value per row of the chart's query, for its table (and the map's dots).
+const values=c=>helpers.rows(c.query).filter(row=>Number.isFinite(row[c.y])).map(row=>({
+  x:c.mark==='point'?row[c.x]:String(row[c.x]??''),series:c.series?String(row[c.series]??''):'',
+  y:row[c.y],...c.lat?{lat:row[c.lat],lon:row[c.lon]}:{}}));
 // Script-made nodes take data-af-ids from DATA ids and row values, stable on every render.
 const node=(tag,id,text)=>{const n=document.createElement(tag);n.dataset.afId=id;
   if(text!==undefined)n.textContent=text;return n;};
@@ -53,33 +54,33 @@ function table(c,list){const id='chart-'+c.id+'-table',series=[...new Set(list.m
       return node('td',`${id}-row-${x}-${s||'y'}`,fmt(y??NaN,Number.isInteger(y)?0:2));}));
     t.append(tr);}
   return box;}
+// A chart's table again, kept open and focused as the reader left it.
+function retable(c){if(c.table===false)return;const old=byId(`chart-${c.id}-table-box`),
+  focus=document.activeElement?.dataset?.afId,box=table(c,values(c));
+  if(old?.open)box.open=true;old?old.replaceWith(box):byId('chart-'+c.id)?.append(box);
+  if(focus)byId(focus)?.focus();}
+// What af-chart draws: the chart's own columns, titled; the theme and size are af-chart's.
+function spec(c,w){const point=c.mark==='point',many=c.series&&c.multiples,sel=c.filter&&
+  picked[c.filter],x={field:c.x,type:point?'quantitative':'ordinal',sort:null,title:label(c.x),
+  axis:{labelOverlap:true}},y={field:c.y,type:'quantitative',title:label(c.y)},s=c.series&&
+  {field:c.series,type:'nominal',sort:null,title:label(c.series)};
+  const encoding=c.mark==='rect'?{x,y:{...s,type:'ordinal'},color:y}:{x,y:{...y,scale:
+    {zero:true}},...s&&!many?{color:s}:{}};
+  encoding.tooltip=[{field:c.x,type:point?'quantitative':'nominal',title:label(c.x)},
+    ...s?[{field:c.series,type:'nominal',title:label(c.series)}]:[],{...y,format:','}];
+  if(sel)encoding.opacity={condition:{test:`datum[${JSON.stringify(c.x)}]===${JSON
+    .stringify(sel)}`,value:1},value:.3};
+  const mark={bar:{type:'bar'},point:{type:'point',filled:true,opacity:.6},line:many?{type:
+    'line',point:false}:{type:'line'},rect:{type:'rect'}}[c.mark];
+  const view={mark:{...mark,...c.filter?{cursor:'pointer'}:{}},encoding};
+  return many?{description:c.title,facet:{...s,title:null},columns:Math.max(1,Math.min(4,
+    Math.floor(w/170))),spec:{height:110,...view}}:{description:c.title,...view};}
 const token=name=>getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-// Tokens as concrete sRGB for Vega and deck.gl, whatever colour syntax the design system uses.
+// Tokens as concrete sRGB for deck.gl, whatever colour syntax the design system uses.
 const paint=document.createElement('canvas').getContext('2d',{willReadFrequently:true});
 const rgb=name=>{if(!paint)return [128,128,128];paint.fillStyle='#808080';
   paint.fillStyle=token(name)||'#808080';paint.fillRect(0,0,1,1);
   return [...paint.getImageData(0,0,1,1).data.slice(0,3)];};
-const css=name=>`rgb(${rgb(name)})`;
-function spec(c,list,w,config){const point=c.mark==='point',many=c.series&&c.multiples,
-  sel=c.filter&&picked[c.filter],cols=many?Math.max(1,Math.min(4,Math.floor(w/170))):1;
-  const x={field:'x',type:point?'quantitative':'ordinal',sort:null,title:label(c.x),
-    axis:{labelAngle:0,labelOverlap:true}},y={field:'y',type:'quantitative',title:label(c.y)};
-  const encoding=c.mark==='rect'?{x,y:{field:'series',type:'ordinal',sort:null,
-    title:label(c.series)},color:{...y,scale:{range:[css('--muted'),config.range.category[0]]}}}:
-    {x,y:{...y,scale:{zero:true},axis:{format:'.3~s'}},...c.series&&!many?{color:{
-      field:'series',type:'nominal',sort:null,title:label(c.series)}}:{}};
-  encoding.tooltip=[{field:'x',type:point?'quantitative':'nominal',title:label(c.x)},
-    ...c.series?[{field:'series',type:'nominal',title:label(c.series)}]:[],{...y,format:','}];
-  if(sel)encoding.opacity={condition:{test:`datum.x===${JSON.stringify(sel)}`,value:1},value:.3};
-  const mark={bar:{type:'bar',cornerRadiusEnd:2},point:{type:'point',filled:true,opacity:.6},
-    line:{type:'line',strokeWidth:2,point:!many&&{filled:true,size:25}},rect:{type:'rect'}}[c.mark];
-  const view={mark:{...mark,...c.filter?{cursor:'pointer'}:{}},encoding};
-  const rows=new Set(list.map(v=>v.series)).size;
-  return {description:c.title,background:'transparent',data:{values:list},config,...many?{
-    facet:{field:'series',type:'nominal',sort:null,title:null},columns:cols,spec:{
-      width:Math.max(120,Math.floor(w/cols)-70),height:120,...view}}:{width:w,
-      height:c.mark==='rect'?Math.max(160,rows*24+110):240,autosize:{type:'fit',contains:'padding'},
-      ...view}};}
 // A map: one dot per place, sized by y, without basemap tiles; it picks c.filter as a bar does.
 async function map(c,host,list){const unavailable=()=>{host.textContent=
   'Map unavailable here: the table under it lists the same values.';return {finalize(){}};};
@@ -119,25 +120,24 @@ function fits(list,view,w,h,r,sel,font){const size=12,taken=[],hit=(a,b)=>a[0]<b
         d.v.x!==sel&&dots.some(o=>o!==d&&hit(o.box,box)))continue;
       taken.push(box);return [{...d.v,offset:[dx,dy]}];}
     return [];});}
-async function draw(){views.forEach(view=>view.finalize());width=$('#charts').clientWidth;
-  const ink=css('--foreground'),line=css('--border'),font=token('--font-body'),config={
-    view:{stroke:null},font,range:{category:[1,2,3,4,5].map(n=>css('--chart-'+n))},
-    mark:{color:css('--chart-1')},axis:{labelColor:ink,titleColor:ink,domainColor:line,
-      tickColor:line,gridColor:line,gridDash:[3,3],labelFontSize:11,titleFontSize:12,
-      titleFontWeight:'normal'},legend:{orient:'top',labelColor:ink,titleColor:ink},
-    header:{labelColor:ink,labelFontSize:12},facet:{spacing:16}};
-  views=await Promise.all(D.charts.map(async c=>{const host=byId(`chart-${c.id}-plot`),
-    list=values(c);host.replaceChildren();if(c.mark==='map')return map(c,host,list);
-    const view=new vega.View(vega.parse(compile(spec(c,list,host.clientWidth||320,config)).spec,
-      undefined,{ast:true}),{container:host,renderer:'svg',expr:vega.expressionInterpreter});
-    if(c.filter)view.addEventListener('click',(_,item)=>{if(item?.datum?.x!==undefined)
-      pick(c.filter,String(item.datum.x));});
-    await view.runAsync();return view;}));}
-// One draw at a time; resizes and theme changes while one is waiting share it.
-const redraw=()=>{if(!pending){pending=true;drawn=drawn.catch(()=>{}).then(()=>{pending=false;
-  return draw();});}return drawn;};
-function render(){const h=helpers,open=[...document.querySelectorAll('details[open]')]
-  .map(d=>d.dataset.afId),focus=document.activeElement?.dataset?.afId;
+// One map drawing at a time; resizes and theme changes while one is waiting share it.
+const redraw=()=>drawing=drawing.catch(()=>{}).then(async()=>{const c=D.charts.find(c=>c.mark===
+  'map');if(!c||!answers[c.query])return;deck?.finalize();const host=byId(`chart-${c.id}-plot`);
+  host.replaceChildren();deck=await map(c,host,values(c));});
+// The page's sections, once: each chart an af-chart that keeps its view across filters.
+$('#charts').replaceChildren(...D.charts.map(c=>{const section=node('section','chart-'+c.id),
+  plot=node(c.mark==='map'?'div':'af-chart',`chart-${c.id}-plot`);section.className=c.wide?
+    'rule wide':'rule';section.append(node('h2',`chart-${c.id}-title`,c.title),plot);
+  if(c.mark==='map'){plot.className='chart map';plot.setAttribute('role','img');
+    plot.setAttribute('aria-label',c.title);return section;}
+  plot.setAttribute('label',c.title);plot.setAttribute('table','false');
+  plot.setAttribute('height',c.mark==='rect'?'300':'260');
+  plot.addEventListener('af-chart-ready',({detail})=>{answers[c.query]=detail.rows;retable(c);
+    if(c.filter)detail.view?.addEventListener('click',(_,item)=>{const x=item?.datum?.[c.x];
+      if(x!==undefined)pick(c.filter,String(x));});waiting.delete(c.id);done();});
+  plot.addEventListener('af-chart-error',({detail})=>{status.textContent=detail.message;});
+  return section;}));
+function render(){const h=helpers,focus=document.activeElement?.dataset?.afId;
   $('#title').textContent=document.title;$('#kicker').textContent=D.kicker;$('#lead').textContent=
     D.lead(h);
   const chips=Object.keys(filters).filter(k=>picked[k]!==null).map(k=>{const b=node('button',
@@ -149,37 +149,33 @@ function render(){const h=helpers,open=[...document.querySelectorAll('details[op
   $('#stats').replaceChildren(...D.stats.map(s=>{const box=node('div','stat-'+s.id);
     box.append(node('span',`stat-${s.id}-label`,s.label),node('b',`stat-${s.id}-value`,
       s.value(h)));return box;}));
-  $('#charts').replaceChildren(...D.charts.map(c=>{const section=node('section','chart-'+c.id),
-    plot=node('div',`chart-${c.id}-plot`);plot.className=c.mark==='map'?'chart map':'chart';
-    plot.setAttribute('role','img');plot.setAttribute('aria-label',c.title);
-    section.className=c.wide?'rule wide':'rule';
-    section.append(node('h2',`chart-${c.id}-title`,c.title),plot,...c.table===false?[]:
-      [table(c,values(c))]);
-    return section;}));
   $('#sections').replaceChildren(...D.sections.map(s=>{const section=node('section',
     'section-'+s.id);section.className='rule';section.append(node('h2',`section-${s.id}-title`,
     s.title),node('p',`section-${s.id}-text`,s.text(h)));return section;}));
-  open.forEach(id=>byId(id)?.setAttribute('open',''));if(focus)byId(focus)?.focus();}
-// sql.watch answers now and again whenever the linked dataset changes (another reader's write);
-// once every query has answered, the page draws. A picked filter starts new watches, and an
-// older watch's late answer is ignored.
-function listen(){stops.forEach(stop=>stop());const mine=++round,got={};
-  status.textContent='Computing…';
+  D.charts.filter(c=>c.mark==='map').forEach(retable);if(focus)byId(focus)?.focus();}
+// Once the page's own queries answered and every chart drew this round's rows: the texts.
+function done(){if(own.some(name=>!(name in answers))||waiting.size)return;render();
+  status.textContent=`Computed ${names.length} queries from the linked dataset.`;}
+// sql.watch answers now and again whenever the linked dataset changes (another reader's write).
+// A picked filter starts new watches and sets every chart's query again; an older watch's late
+// answer is ignored here, and af-chart drops a superseded query's rows itself.
+function listen(){stops.forEach(stop=>stop());const mine=++round;answers={};
+  waiting=new Set(charted.map(c=>c.id));status.textContent='Computing…';
   const failed=error=>{if(mine===round)status.textContent=error.message||
     'Could not read the linked dataset.';};
-  try{stops=names.map(name=>sql.watch(statement(D.queries[name]),async rows=>{
-    if(mine!==round)return;got[name]=rows;if(Object.keys(got).length<names.length)return;
-    try{answers={...got};render();await redraw();
-      status.textContent=`Computed ${names.length} queries from the linked dataset.`;
-    }catch(error){status.textContent=error.message||'Could not draw the linked dataset.';}},
-    failed));}catch(error){stops=[];failed(error);}}
+  try{for(const c of charted){const el=byId(`chart-${c.id}-plot`);el.chart=spec(c,el.clientWidth||
+      $('#charts').clientWidth||640);el.query=statement(D.queries[c.query]);}
+    stops=own.map(name=>sql.watch(statement(D.queries[name]),async rows=>{if(mine!==round)return;
+      answers[name]=rows;try{if(D.charts.some(c=>c.mark==='map'&&c.query===name))await redraw();
+        done();}catch(error){status.textContent=error.message||
+        'Could not draw the linked dataset.';}},failed));}catch(error){stops=[];failed(error);}}
 listen();
-// Charts follow the reader's light or dark mode, the owner's design system and the page width.
-const ready=()=>names.some(name=>answers[name]);
-const theme=new MutationObserver(()=>{if(ready())void redraw();});
+// The map follows the reader's light or dark mode, the owner's design system and the page width.
+const theme=new MutationObserver(()=>void redraw());
 theme.observe(document.documentElement,{attributes:true,attributeFilter:['data-af-dark',
   'data-af-design-system']});
-const resize=new ResizeObserver(()=>{if(ready()&&$('#charts').clientWidth!==width)void redraw();});
+let width=0;const resize=new ResizeObserver(()=>{if($('#charts').clientWidth!==width){
+  width=$('#charts').clientWidth;void redraw();}});
 resize.observe($('#charts'));
 addEventListener('pagehide',()=>{stops.forEach(stop=>stop());theme.disconnect();resize.disconnect();
-  views.forEach(view=>view.finalize());},{once:true});
+  deck?.finalize();},{once:true});

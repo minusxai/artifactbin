@@ -30,7 +30,7 @@ filter each other. Usage: and Gotchas: are above DATA; keep this line. -->
 //   city = $city), and the picking chart's own query leaves its filter out. labels names columns
 //   for readers. ids are unique keys.
 // Built with: one HTML page; a published CSV dataset; every number computed by sql (sql.watch
-//   keeps them live); Vega-Lite charts (deck.gl for a map), each with a table of its values.
+//   keeps them live); <af-chart> charts (deck.gl for a map), each with a table of its values.
 window.DATA = {
   filters: {city:'City', category:'Category'},
   queries: {
@@ -108,7 +108,6 @@ p{max-width:68ch}.muted{opacity:.72}.lead{font-size:clamp(19px,3vw,26px);line-he
 .charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));
   gap:clamp(24px,5vw,56px)}.charts>.wide{grid-column:1/-1}
 .charts>*,.sections>*{min-width:0}.rule{border-top:1px solid var(--border);padding-top:24px}
-.chart{width:100%;min-height:240px}.chart svg{max-width:100%;height:auto}
 .map{position:relative;height:360px;border:1px solid var(--border);background:var(--muted)}
 .filters{display:flex;flex-wrap:wrap;align-items:center;gap:8px;min-height:2.4em}
 button{font:inherit;color:inherit;background:transparent;border:1px solid var(--border);

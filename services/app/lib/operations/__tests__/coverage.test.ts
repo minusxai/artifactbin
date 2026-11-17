@@ -65,6 +65,7 @@ describe('the registry covers the surface', () => {
       ...routePaths(path.join(ROOT, 'app/api/artifacts'), '/api/artifacts'),
       ...routePaths(path.join(ROOT, 'app/api/browser-sessions'), '/api/browser-sessions'),
       ...routePaths(path.join(ROOT, 'app/api/testusers'), '/api/testusers'),
+      ...routePaths(path.join(ROOT, 'app/api/charts'), '/api/charts'),
       // export_artifact's HTTP twin lives under the document's own sub-path.
       ...routePaths(path.join(ROOT, 'app/a'), '/a'),
     ].map(normalize));

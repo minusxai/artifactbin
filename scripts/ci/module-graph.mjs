@@ -140,11 +140,19 @@ const BUNDLED_IMPORTERS = [
   'services/app/lib/html-components/table-comparison.ts',
 
   'services/app/lib/validation/atlas-schemas.ts',
+  'services/app/lib/viz/annotation-layers.ts',
+  'services/app/lib/viz/chart-plan.ts',
+  'services/app/lib/viz/chart-resolve.ts',
+  'services/app/lib/viz/facet-layout.ts',
   'services/app/lib/viz/geo-assets.ts',
+  'services/app/lib/viz/prepare.ts',
   'services/app/lib/viz/theme.ts',
+  'services/app/lib/viz/tiles.ts',
+  'services/app/lib/viz/types.ts',
+  'services/app/lib/viz/viz-templates.ts',
 ];
 const BUNDLED_LEAVES = {
-  'lib/html-component-specs': ['boundary-ids', 'comparison', 'isometric-spec'],
+  'lib/html-component-specs': ['boundary-ids', 'chart-spec', 'comparison', 'isometric-spec'],
   'lib/ui-runtime': ['dialog-shell', 'file-display', 'person-face', 'popper', 'popup-dismiss', 'tooltip-core', 'trusted-overlay-host', 'trusted-portal', 'trusted-ui-styles'],
   'lib/html-reader': ['anchor', 'anchor-restore', 'ast-path', 'contract', 'document-endpoint', 'document-sources', 'edit-bar', 'follow-version', 'frame-bridge/parent', 'frame-markup', 'frame-navigation', 'frame-session', 'frame-src', 'host-comments-contract', 'reader-mode', 'reload'],
   'lib/annotations': ['comment-folds', 'markdown-lite', 'pages', 'region-comment', 'remote-reply', 'session-mentions'],
@@ -176,6 +184,9 @@ const BUNDLED_LEAVES = {
     'comment-target', ],
   'lib/validation': [ 'html-system-modes', 'story-system-names', 'story-theme-names'],
   'lib/workspace': ['artifact-starters', 'breadcrumb', 'visibility-icons'],
+  // <af-chart> (lib/html-components/chart-render.ts) plans and builds its views with the query image's code; the
+  // recipe builders (chart-resolve, viz-templates) load as a lazy chunk of their own.
+  'lib/viz': ['chart-plan', 'chart-resolve', 'facet-layout', 'theme'],
 };
 // Declared leaves are reviewed public entries: any importer may use them (`leavesForAll`), so a light caller never has to
 // pull a module's whole index. BUNDLED_IMPORTERS still marks the browser-bundled code the serverOnly rule guards.

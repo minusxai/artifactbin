@@ -111,7 +111,7 @@ const VIZ_GRAMMAR_VEGA = 'vega@6';
 const VizSourceRecipe = Type.Object({
   kind: Type.Literal('recipe'),
   recipe: Type.String({ description:
-    "a SHIPPED recipe id, e.g. 'minusx/funnel@1' or 'minusx/waterfall@1'. The chart is generated from the " +
+    "a SHIPPED recipe id, e.g. 'funnel' or 'waterfall'. The chart is generated from the " +
     'recipe + bindings at render time — nothing else to author. Available recipes and their bindings are ' +
     'listed in the questions skill.' }),
   bindings: Type.Record(Type.String(), Type.Union([Type.String(), Type.Array(Type.String())]), { description:

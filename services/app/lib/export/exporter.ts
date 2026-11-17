@@ -275,6 +275,7 @@ function renderRequest(
   capture: ExportCapture,
   slide = 0,
   crop?: SocialPreviewCrop,
+  timeoutMs = RENDER_TIMEOUT_MS,
 ): RenderRequest {
   return {
     // The key is minted HERE, at the moment the request goes out — see
@@ -304,7 +305,7 @@ function renderRequest(
     // A script document runs its script for the shot: its module hosts load, and its components get to mount.
     ...scriptRenderAllowance(input.scriptOrigins ?? []),
     settleMs: PAGE_SETTLE_MS,
-    timeoutMs: RENDER_TIMEOUT_MS,
+    timeoutMs,
   };
 }
 
@@ -334,12 +335,16 @@ interface ImageOptions {
  audience?:ExportReader|null;
  /** What that audience may read of the page's data now (datasetAccessRevision), appended to the revision. */
  access?:string;
+ /** An absolute time (ms) the whole answer must be ready by: the render, its retry and a wait on another's render. */
+ deadline?:number;
 }
-async function renderWithRetry(input:RenderInput,format:ExportFormat,capture:ExportCapture,slide=0,crop?:SocialPreviewCrop):Promise<Shot>{
- const started=Date.now();let result=await renderOnce(input,format,capture,slide,crop);
- if(!result.ok&&result.reason==='failed'&&Date.now()-started<=RENDER_TIMEOUT_MS/2){
+/** What is left of the render budget: the default per render, or less when the caller holds a deadline. */
+const renderBudget=(deadline?:number)=>deadline===undefined?RENDER_TIMEOUT_MS:Math.max(1,Math.min(RENDER_TIMEOUT_MS,deadline-Date.now()));
+async function renderWithRetry(input:RenderInput,format:ExportFormat,capture:ExportCapture,slide=0,crop?:SocialPreviewCrop,deadline?:number):Promise<Shot>{
+ const started=Date.now(),budget=renderBudget(deadline);let result=await renderOnce(input,format,capture,slide,crop,budget);
+ if(!result.ok&&result.reason==='failed'&&Date.now()-started<=budget/2){
   await new Promise(r=>setTimeout(r,RENDER_RETRY_MS));
-  result=await renderOnce(input,format,capture,slide,crop,Math.max(1,RENDER_TIMEOUT_MS-(Date.now()-started)));
+  result=await renderOnce(input,format,capture,slide,crop,Math.max(1,budget-(Date.now()-started)));
  }
  return result;
 }
@@ -356,12 +361,13 @@ async function resolveArtifactImage(artifact:ExportIdentity,format:ExportFormat,
   const image=await (await sharedCache()).read({
    cacheKey:exportCacheKey(artifact,format,capture,slide,opts.selection,opts.version??null,opts.audience??null,opts.element??''),
    artifactId:artifact.id,revision:`${exportRevision(artifact)}${opts.access??''}`,refresh:opts.refresh,current:capture!=='card'||opts.current===true,stable:capture==='card',
+   ...(opts.deadline===undefined?{}:{waitMs:renderBudget(opts.deadline)}),
   },async id=>{
    const input={urlFor:opts.pageUrl,target:opts.target,scriptOrigins:opts.scriptOrigins,...(opts.element?{element:opts.element}:{})},store=objectStore(),browser=services().browser;
    if(store.signedUpload&&browser.renderAndUpload){
     const object_key=`exports/objects/${id}.${format}`;
     const upload=await store.signedUpload(object_key,EXPORT_MIME[format]);
-    const result=await browser.renderAndUpload({render:renderRequest(input,format,capture,slide,opts.crop),upload});
+    const result=await browser.renderAndUpload({render:renderRequest(input,format,capture,slide,opts.crop,renderBudget(opts.deadline)),upload});
     // An older service's whole-surface upload for an element is never recorded: the object stays unreferenced.
     if(result.ok&&input.element&&!result.element)throw new RenderFailure({ok:false,reason:'unavailable'});
     if(result.ok)return {object_key,mime:result.mime,bytes:result.bytes,width:result.width,height:result.height};
@@ -369,7 +375,7 @@ async function resolveArtifactImage(artifact:ExportIdentity,format:ExportFormat,
     // A mixed-version or unconfigured browser retains the original byte
     // transport. Upload failures themselves never silently switch transports.
    }
-   const result=await renderWithRetry(input,format,capture,slide,opts.crop);
+   const result=await renderWithRetry(input,format,capture,slide,opts.crop,opts.deadline);
    if(!result.ok)throw new RenderFailure(result.reason==='navigation'?{ok:false,reason:'failed'}:result);
    return storeBytes(id,result.bytes,format);
   });
@@ -379,7 +385,7 @@ async function resolveArtifactImage(artifact:ExportIdentity,format:ExportFormat,
 /** Binary adapter used by operations; completed exports are never retained in RAM. */
 export async function renderArtifactImage(artifact:ExportIdentity,format:ExportFormat,opts:ImageOptions):Promise<RenderResult>{
  if(opts.volatile){
-  const result=await renderWithRetry({urlFor:opts.pageUrl,target:opts.target,scriptOrigins:opts.scriptOrigins,...(opts.element?{element:opts.element}:{})},format,opts.capture??'full',opts.slide,opts.crop);
+  const result=await renderWithRetry({urlFor:opts.pageUrl,target:opts.target,scriptOrigins:opts.scriptOrigins,...(opts.element?{element:opts.element}:{})},format,opts.capture??'full',opts.slide,opts.crop,opts.deadline);
   return !result.ok&&result.reason==='navigation'?{ok:false,reason:'failed'}:result;
  }
  const resolved=await resolveArtifactImage(artifact,format,opts);
@@ -433,7 +439,9 @@ export async function exportImageResponse(
      * what they may read is what their export shows — and their render is stored as theirs (exportAudience).
      * Absent: nobody, the shared anonymous render.
      */
-    reader?: AccessActor },
+    reader?: AccessActor;
+    /** An absolute time (ms) the answer must be ready by (a bounded delegated call); absent, the render's own deadline and one retry. */
+    deadline?: number },
   base: string,
   delivery:'bytes'|'redirect'='bytes',
 ): Promise<Response> {
@@ -507,6 +515,7 @@ export async function exportImageResponse(
   const audience = await exportAudience(artifact, q.reader);
   const access = isDocument ? await datasetAccessRevision(artifact, audience) : '';
   const options:ImageOptions = {
+    ...(q.deadline === undefined ? {} : { deadline: q.deadline }),
     ...(audience ? { audience } : {}),
     ...(access ? { access } : {}),
     refresh,

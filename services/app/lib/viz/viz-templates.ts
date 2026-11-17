@@ -1,7 +1,7 @@
 /**
  * SHIPPED recipe registry (the `recipe` source kind).
  *
- * A recipe instance stores ONLY the reference — {kind: 'recipe', recipe: 'minusx/x@1',
+ * A recipe instance stores ONLY the reference — {kind: 'recipe', recipe: 'x',
  * bindings} — and the spec is materialized at render time from this registry. Shipped
  * recipes are app code: they can't be deleted or shadowed, so a reference is safe
  * (workspace-authored `.viz` recipes can be, so they re-materialize on every read —
@@ -72,7 +72,7 @@ interface VizTemplate {
   assets?(bindings: Record<string, string | string[]>, params?: VizParams): Record<string, string>;
 }
 
-// ── minusx/funnel@1 ─────────────────────────────────────────────────────────────
+// ── funnel ─────────────────────────────────────────────────────────────
 // Classic ECharts funnel: one tapered trapezoid PER STAGE (each spans its own value
 // down to the next stage's; the last tapers to a tip), single hue with ZEBRA
 // alternation (the two opacities below) so adjacent stages read as distinct bands.
@@ -81,7 +81,7 @@ interface VizTemplate {
 const FUNNEL_OPACITY_ODD = 0.92;
 const FUNNEL_OPACITY_EVEN = 0.74;
 const funnel: VizTemplate = {
-  id: 'minusx/funnel@1',
+  id: 'funnel',
   vizType: 'funnel',
   engine: 'vega-lite',
   bindings: [
@@ -174,7 +174,7 @@ const funnel: VizTemplate = {
   },
 };
 
-// ── minusx/waterfall@1 ──────────────────────────────────────────────────────────
+// ── waterfall ──────────────────────────────────────────────────────────
 // Floating bars on a running total, data order preserved (waterfall order is
 // semantic). Increases use the theme palette; decreases use the danger red —
 // matching the classic ECharts waterfall. Value labels ride each bar.
@@ -182,7 +182,7 @@ const funnel: VizTemplate = {
 const WATERFALL_COLOR_DOMAIN = ['Increase', 'Decrease', 'Total'];
 
 const waterfall: VizTemplate = {
-  id: 'minusx/waterfall@1',
+  id: 'waterfall',
   vizType: 'waterfall',
   engine: 'vega-lite',
   bindings: [
@@ -263,14 +263,14 @@ const waterfall: VizTemplate = {
 };
 
 
-// ── minusx/radar@1 ──────────────────────────────────────────────────────────────
+// ── radar ──────────────────────────────────────────────────────────────
 // NATIVE VEGA (no polar coordinates in vega-lite). Adapted from the official Vega
 // radar example: angular point scale over metrics, linear radial scale, closed
 // series polygons via trig, rule spokes, metric labels. Values SUM-aggregate per
 // metric×series; the radial domain is [0, max] shared across metrics (bind
 // pre-normalized values when metrics use different units).
 const radar: VizTemplate = {
-  id: 'minusx/radar@1',
+  id: 'radar',
   vizType: 'radar',
   engine: 'vega',
   bindings: [
@@ -459,7 +459,7 @@ const radar: VizTemplate = {
   },
 };
 
-// ── minusx/trend@1 ──────────────────────────────────────────────────────────────
+// ── trend ──────────────────────────────────────────────────────────────
 // KPI cards on the NATIVE VEGA engine: one card per bound measure — big value,
 // delta vs the comparison period, period labels, and a sparkline.
 // Comparison semantics:
@@ -487,7 +487,7 @@ const radar: VizTemplate = {
 // from the past (near-transparent history → full series color at the latest point)
 // and terminates in a single beacon dot.
 const trend: VizTemplate = {
-  id: 'minusx/trend@1',
+  id: 'trend',
   vizType: 'trend',
   engine: 'vega',
   bindings: [
@@ -868,7 +868,7 @@ const trend: VizTemplate = {
   },
 };
 
-// ── minusx/single-value@1 ───────────────────────────────────────────────────────
+// ── single-value ───────────────────────────────────────────────────────
 // One bound measure rendered as a cardless data poster. The FIRST query row owns
 // the value (matching the classic single-value viz); SQL owns which row that is.
 // The field alias and numeric format come from columnFormats. Typography scales to
@@ -876,7 +876,7 @@ const trend: VizTemplate = {
 // showLabel, label, caption, align, valueFontSize, labelFontSize, captionFontSize,
 // and valueColor.
 const singleValue: VizTemplate = {
-  id: 'minusx/single-value@1',
+  id: 'single-value',
   vizType: 'single_value',
   engine: 'vega',
   bindings: [
@@ -985,7 +985,7 @@ const singleValue: VizTemplate = {
   },
 };
 
-// ── minusx/combo@1 ─────────────────────────────────────────────────────────────
+// ── combo ─────────────────────────────────────────────────────────────
 // Canonical dual-axis composition: quiet bars establish magnitude, one crisp line
 // carries the contrasting measure. An optional categorical split colors/groups both
 // layers consistently. Both layers share one X encoding and color scale while their
@@ -993,7 +993,7 @@ const singleValue: VizTemplate = {
 // everything else stays ordinal, because combo charts compare aligned
 // periods/categories rather than interpolate a continuous domain.
 const combo: VizTemplate = {
-  id: 'minusx/combo@1',
+  id: 'combo',
   vizType: 'combo',
   engine: 'vega-lite',
   bindings: [
@@ -1112,7 +1112,7 @@ const combo: VizTemplate = {
   },
 };
 
-// ── minusx/choropleth@1 ─────────────────────────────────────────────────────────
+// ── choropleth ─────────────────────────────────────────────────────────
 // Region-keyed thematic map: each boundary polygon is filled by a value
 // looked up from the query result by region NAME. The boundary geometry is the
 // primary data (one mark per region) injected from the named-asset registry under
@@ -1137,7 +1137,7 @@ const CHOROPLETH_SCHEMES: Record<string, string> = {
 };
 
 const choropleth: VizTemplate = {
-  id: 'minusx/choropleth@1',
+  id: 'choropleth',
   vizType: 'choropleth',
   engine: 'vega',
   bindings: [
@@ -1258,7 +1258,7 @@ export function themeTileUrl(current: unknown, colorMode: 'light' | 'dark'): str
   return colorMode === 'dark' ? POINT_MAP_DARK_TILE_URL : POINT_MAP_DEFAULT_TILE_URL;
 }
 
-// ── minusx/point-map@1 ──────────────────────────────────────────────────────────
+// ── point-map ──────────────────────────────────────────────────────────
 // Coordinate map: point/marker rows plotted over a vector basemap backdrop
 // via a projection. The query result is the primary data (`main`); the boundary is a
 // light outline layer beneath (injected from the asset registry — the reverse of
@@ -1271,7 +1271,7 @@ export function themeTileUrl(current: unknown, colorMode: 'light' | 'dark'): str
 // color scheme), markColor (solid marker color), zoom/center (view state),
 // basemap ('tiles' opts into the slippy-tile backdrop) and tileUrl.
 const pointMap: VizTemplate = {
-  id: 'minusx/point-map@1',
+  id: 'point-map',
   vizType: 'point_map',
   engine: 'vega',
   bindings: [

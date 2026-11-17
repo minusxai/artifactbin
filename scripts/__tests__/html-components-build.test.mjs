@@ -4,7 +4,7 @@ import path from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {afterEach, expect, it} from 'vitest';
 import {build} from 'esbuild';
-import {buildComponentAssets} from '../lib/html-components-build.mjs';
+import {buildComponentAssets,PAGE_MODULE_EXTERNALS} from '../lib/html-components-build.mjs';
 
 const roots=[];
 async function fixture(){
@@ -66,6 +66,20 @@ it('refuses unresolved remote module dependencies without touching installed ass
  await writeFile(path.join(dirs.sourceDir,'remote.ts'),'export const load=()=>import("https://example.invalid/engine.js");'); await expect(buildComponentAssets(dirs)).rejects.toThrow();
  expect(await readFile(path.join(dirs.outputDir,'kept.js'),'utf8')).toBe('kept');
 });
+it('leaves exactly the allowlisted hosted page modules to the page import map, and refuses every other bare import',async()=>{
+ expect(PAGE_MODULE_EXTERNALS).toEqual(['@afbin/vega','@afbin/vega-lite','@afbin/apollo']);
+ const dirs=await fixture();
+ await writeFile(path.join(dirs.sourceDir,'chart.ts'),'export const load=()=>Promise.all([import("@afbin/vega"),import("@afbin/vega-lite"),import("@afbin/apollo")]);');
+ await buildComponentAssets(dirs);
+ const built=await readFile(path.join(dirs.outputDir,'chart.js'),'utf8');
+ for(const name of PAGE_MODULE_EXTERNALS)expect(built).toContain(`import("${name}")`);
+ for(const source of ['import("@afbin/deck-gl")','import("@afbin/vega/extra")','import("left-pad")']){
+  const other=await fixture(); await mkdir(other.outputDir); await writeFile(path.join(other.outputDir,'kept.js'),'kept');
+  await writeFile(path.join(other.sourceDir,'chart.ts'),`export const load=()=>${source};`);
+  await expect(buildComponentAssets(other),source).rejects.toThrow();
+  expect(await readFile(path.join(other.outputDir,'kept.js'),'utf8')).toBe('kept');
+ }
+});
 it('accepts the build wrapper trailing output separator without staging inside the installed directory',async()=>{
  const dirs=await fixture(); await mkdir(dirs.outputDir); await writeFile(path.join(dirs.outputDir,'README.md'),'keep'); await writeFile(path.join(dirs.outputDir,'tabs.js'),'old');
  await writeFile(path.join(dirs.sourceDir,'tabs.ts'),'export const value="new";');
@@ -83,6 +97,10 @@ it('fits supported controls under publication limits',async()=>{
  expect(files.size).toBeLessThanOrEqual(99);expect([...files.values()].reduce((total,text)=>total+Buffer.byteLength(text),0)).toBeLessThan(16_000_000);
  expect(Math.max(...[...files.values()].map(text=>Buffer.byteLength(text)))).toBeLessThanOrEqual(4_000_000);
  expect(files.has('engine-mermaid-elk.js')).toBe(false);
+ // <af-chart> leaves its engines to the page's import map: literal imports, and no Vega or Vega-Lite code in any output.
+ const outputs=await Promise.all((await readdir(dirs.outputDir)).filter(name=>name.endsWith('.js')).map(name=>readFile(path.join(dirs.outputDir,name),'utf8')));
+ for(const name of PAGE_MODULE_EXTERNALS)expect(outputs.join('\n')).toContain(`import("${name}")`);
+ for(const text of outputs)expect(text).not.toMatch(/Unrecognized signal name|Invalid specification/);
  const {planPublicationBundle}=await import('../../services/app/lib/html-publication-bundle/plan');
  const html='<html><head><script type="module">import "./button.js";import "./slider.js";import "./tabs.js";</script></head><body><af-button>Run</af-button></body></html>';
  const bundle={entryPath:'index.html',files:[{path:'index.html',base64:Buffer.from(html).toString('base64'),contentType:'text/html'},...[...files].map(([name,text])=>({path:name,base64:Buffer.from(text).toString('base64'),contentType:'text/javascript'}))]};

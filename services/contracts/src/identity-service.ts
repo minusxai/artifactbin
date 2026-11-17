@@ -67,7 +67,41 @@ export const CANONICAL_ARTIFACT_READ_PATH = '/api/internal/artifact-read';
 export const ARTIFACT_READ_LIMIT = 200 * 1024;
 export interface IssuedArtifactReadGrant {grant:string; expires_at:string; user_id:string; audience:string}
 
+/** The image equivalent of artifact-read: the same opt-in and grant, body `{grant, artifact_id, format?, element?, slide?}`. */
+export const ARTIFACT_IMAGE_PATH = '/api/internal/identity/artifact-image';
+/** Fixed app upstream route: POST `{artifact_id, format?, element?, slide?}` as the verified human; answers ArtifactImage. */
+export const CANONICAL_ARTIFACT_IMAGE_PATH = '/api/internal/artifact-image';
+/** The whole artifact-image call's bound at identity: a relay cuts a request at 35 s. */
+export const ARTIFACT_IMAGE_DEADLINE_MS = 25_000;
+/** The largest image an artifact-image answer carries, before base64: its whole JSON stays under ARTIFACT_READ_LIMIT. */
+export const ARTIFACT_IMAGE_BYTES = 140_000;
+/** An artifact-image answer: `data` is the image, base64; `bytes` its decoded length. */
+export interface ArtifactImage {id:string; version:number; format:'png'|'jpg'; mime:'image/png'|'image/jpeg'; width:number; height:number; bytes:number; data:string}
+/** The refusals identity passes through from the app seam, with the export door's own details; any other is 503 `image_unavailable`. */
+export const ARTIFACT_IMAGE_ERRORS: Readonly<Record<string, number>> = {
+  not_found: 404, element_not_found: 404, slide_not_found: 404, unknown_element: 400, unknown_format: 400, unknown_slide: 400,
+  element_too_large: 422, too_large: 413, render_failed: 500, render_unavailable: 503,
+};
+/** The detail fields a passed-through refusal keeps. */
+export const ARTIFACT_IMAGE_ERROR_FIELDS = ['error', 'element', 'found', 'slides', 'width', 'height', 'max', 'bytes', 'hint', 'allowed'] as const;
+
 /** Purpose-only saved pinned evidence delegation, same service opt-in and arg_ grants as artifact-read. */
 export const PAGE_EVIDENCE_PATH='/api/internal/identity/page-evidence';
 /** Auth-only fixed seam. POST {operation}; then POST {operation,fingerprint} verifies metadata only. */
 export const CANONICAL_PAGE_EVIDENCE_PATH='/api/internal/page-evidence';
+
+/**
+ * Purpose-only chart drawing for a trusted relay (the same `artifact_reads` opt-in and per-service introspection
+ * secret as artifact-read, no grant: drawing reads no data, so a run with no personal grant may use it too). POST
+ * exactly a subset of CHART_IMAGE_KEYS with `chart` and `rows`, at most CHART_IMAGE_BODY_LIMIT bytes. The identity
+ * owner forwards that body to the fixed app seam and passes its status and JSON through, buffered to at most
+ * ARTIFACT_READ_LIMIT: `ChartImageWire`, or `{error, message, hint?}`.
+ */
+export const CHART_IMAGE_PATH = '/api/internal/identity/chart-image';
+/** Fixed app upstream route; only the identity owner calls it. */
+export const CANONICAL_CHART_IMAGE_PATH = '/api/internal/chart-image';
+/** What a chart image request may carry; `chart` and `rows` are required. */
+export const CHART_IMAGE_KEYS = ['chart', 'rows', 'width', 'height', 'theme', 'designSystem'] as const;
+export const CHART_IMAGE_BODY_LIMIT = 512 * 1024;
+/** A drawn chart: base64 PNG bytes (`data`), its pixel size and byte count. */
+export interface ChartImageWire {mime:'image/png'; width:number; height:number; bytes:number; data:string}

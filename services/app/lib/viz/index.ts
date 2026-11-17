@@ -3,3 +3,4 @@ export { BASEMAP_ALLOWED, BASEMAP_UPSTREAM, BASEMAP_WORKER_URL } from './basemap
 export { dailySeries } from './daily-series';
 export { renderSparklineSvg } from './sparkline';
 export { tileUpstreamUrl } from './tiles';
+export { chartImageAnswer } from './chart-image.server';

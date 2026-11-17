@@ -8,6 +8,24 @@
   The fixed app read seam returns allowlisted current canonical source without checkpoints or invitation
   stamping; the auth owner buffers at most 200 KiB and rechecks parent/account and current artifact access
   before delivery. Absent and inaccessible artifacts both answer 404.
+- Delegated images: `/api/internal/identity/artifact-image` accepts exactly `{grant, artifact_id, format?,
+  element?, slide?}` (png default or jpg; element the export door's CSS selector; slide 1-based) under the same
+  opt-in, secret, grant and before/after fences as artifact-read, bounded whole to 25 s. Its fixed app seam POST
+  `/api/internal/artifact-image` makes the read seam's decision, renders through the export path as that person
+  (their data, their stored render) and fits the image under 140,000 bytes in the asked format, never narrower
+  than 320 px; identity then rechecks CURRENT ACL on the read seam. It answers `{id, version, format, mime, width,
+  height, bytes, data}` (data base64) under 200 KiB; refusals keep the export door's codes and details (404
+  `not_found`, `element_not_found`, `slide_not_found`; 422 `element_too_large`; 413 `too_large`; 503
+  `render_unavailable`), anything else is 503 `image_unavailable`.
+
+- Chart drawing for a relay is `/api/internal/identity/chart-image` (contracts `CHART_IMAGE_PATH`), with the same
+  `artifact_reads` opt-in and per-service introspection secret, and no grant: it reads no data, so a scheduled run
+  with no personal grant may use it. The body is exactly a subset of `{chart, rows, width, height, theme,
+  designSystem}` holding `chart` and `rows`, at most 512 KiB. Identity forwards it to the fixed app seam
+  `/api/internal/chart-image` as the anonymous actor; the seam refuses any other caller, draws it with the
+  renderer `render_chart_image` uses (lib/viz chart-image.server: 5,000 rows, 160-1600 x 120-1200 px, a PNG of at
+  most 140,000 bytes, one worker thread with a 5 s deadline) and answers `{mime, width, height, bytes, data}` or
+  `{error, message, hint?}`. Identity passes the status and JSON through, buffered to at most 200 KiB.
 
 - Saved-page evidence adds exact operations `{kind:'page-evidence-schema',pageId,revision}` and
   `{kind:'page-evidence-sql',pageId,revision,sql,params}` (digest fields in that order). Both callbacks must

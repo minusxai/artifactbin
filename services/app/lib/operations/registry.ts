@@ -28,6 +28,8 @@ import {DatasetError} from '@/lib/datasets';
 import { restoreArtifactFor, trashArtifactFor } from '@/lib/workspace';
 import { trackEvent } from '@/lib/analytics';
 import { exportImageResponse } from '@/lib/export';
+import { chartImageAnswer } from '@/lib/viz';
+import { DESIGN_SYSTEM_VARIABLES } from '@/lib/html-systems/server';
 import { datasetExportable, datasetReadAccess } from '@/lib/dataset-permissions';
 import {  datasetPermissionTemplates, readDatasetPermissions, writeDatasetPermissions } from '@/lib/dataset-access';
 import type { AnnotationAuthor } from '@artifactbin/contracts';
@@ -633,6 +635,42 @@ const exportArtifactOp: Operation = {
 };
 
 /**
+ * DRAW A CHART — the caller's own rows through a chart description, as a PNG. No artifact or
+ * dataset is read (rows arrive in the body), so any signed-in caller may; the bounds are the
+ * renderer's (lib/viz chart-image.server). The answer is JSON, the PNG base64 in `data`, so a relay
+ * can carry it unchanged.
+ */
+const renderChartImageOp: Operation = {
+  name: 'render_chart_image',
+  title: 'Draw a chart as an image',
+  http: { method: 'POST', path: '/api/charts/image' },
+  description: 'Draw rows you already hold (a query result) through a chart description, the one <af-chart> takes: a Vega-Lite spec, a Vega spec, or {recipe, bindings}. Rows bind as the dataset `main`; external data and images are refused. Returns {mime: "image/png", width, height, bytes, data} with the PNG base64 in data, at most 140,000 bytes, drawn in the named design system (default: the house theme) and light or dark. At most 5,000 rows; aggregate in SQL first.',
+  input: {
+    chart: z.union([z.record(z.string(), z.unknown()), z.string()]).describe('the chart description (JSON object, or its text)'),
+    rows: z.array(z.record(z.string(), z.unknown())).max(5000).describe('the rows to draw, bound as `main`'),
+    width: z.number().int().min(160).max(1600).optional().describe('pixels; default 640'),
+    height: z.number().int().min(120).max(1200).optional().describe('pixels; default 400'),
+    theme: z.enum(['light', 'dark']).optional().describe("default: the design system's own mode, else light"),
+    designSystem: z.string().optional().describe('a design system name (volta, riso, …); default: the house theme'),
+  },
+  annotations: { readOnly: true },
+  example: { input: { chart: { mark: 'bar', encoding: { x: { field: 'region', type: 'nominal' }, y: { field: 'orders', type: 'quantitative' } } }, rows: [{ region: 'EU', orders: 12 }, { region: 'US', orders: 30 }] } },
+  errors: [
+    { status: 400, code: 'invalid_chart', fix: 'the description was refused or could not be drawn; the message names why' },
+    { status: 400, code: 'invalid_request', fix: 'rows, width, height, theme or designSystem is out of range; the message gives the range' },
+    { status: 413, code: 'too_large', fix: 'more than 5,000 rows or a body past 512 KiB: aggregate in SQL to fewer rows or columns' },
+    { status: 422, code: 'image_too_large', fix: 'the PNG passed 140,000 bytes: ask for a smaller width and height, or draw fewer marks' },
+    { status: 422, code: 'render_failed', fix: 'drawing exhausted the renderer: draw fewer marks or simplify the spec' },
+    { status: 503, code: 'render_busy', fix: 'other charts are drawing: retry in a few seconds' },
+    { status: 503, code: 'render_unavailable', fix: 'this server cannot draw charts right now; retry shortly' },
+    { status: 504, code: 'render_timeout', fix: 'the chart took longer than 5 s to draw: draw fewer marks or simpler transforms' },
+  ],
+  async run(_ctx, input) {
+    return chartImageAnswer(input, DESIGN_SYSTEM_VARIABLES);
+  },
+};
+
+/**
  * FORK — take a copy of anything you can READ, as yourself.
  *
  * The reach is the read ACL rather than ownership (the whole point: adapting
@@ -788,5 +826,5 @@ export const OPERATIONS: Operation[] = [
   ...GROUP_OPERATIONS,...MEMBERSHIP_OPERATIONS,...ACCOUNT_OPERATIONS,...BROWSER_SESSION_OPERATIONS,...TESTUSER_OPERATIONS,queryResourceOp,
   createArtifactOp, updateArtifactOp, forkArtifactOp, getArtifactOp, listArtifactsOp,
   listVersionsOp, getVersionOp, updateMetadataOp, transferArtifactOp, revertArtifactOp, deleteArtifactOp, restoreArtifactOp, annotateOp, editCommentOp, reactCommentOp, getDatasetPolicyOp, setDatasetPolicyOp, getDatasetPolicyTemplatesOp, getLiveConnectionOp, updateLiveConnectionOp, testLiveConnectionOp, getLiveSchemaOp, mutateDatasetOp,
-  exportArtifactOp, refreshAssetOp, ...REGION_OPERATIONS,
+  exportArtifactOp, refreshAssetOp, renderChartImageOp, ...REGION_OPERATIONS,
 ];
