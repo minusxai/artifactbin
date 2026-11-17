@@ -700,6 +700,13 @@ jobs:
         # -1.1s median per api runner. Entries are keyed by source, so one saved here and restored after main moved on is
         # a partial hit, never a stale module.
       - run: node node_modules/vitest/vitest.mjs list --project=api --project=api-isolated --filesOnly=false > /dev/null
+        # And for every other configuration pr fast shards: an entry is keyed by the configuration that transformed it too,
+        # so its ui, guard and node runners transformed their whole graphs cold, 9-15s summed over three workers each
+        # against ~2s on an api runner (pr fast runs 44114175470, 44133274884). Measured locally, warm: a guard shard
+        # 6.6 -> 4.3s, a ui shard 4.2 -> 2.5s. The four make the module cache ~22 MB compressed, api's alone ~6 MB.
+      - run: node node_modules/vitest/vitest.mjs list --project=ui --project=islands --filesOnly=false > /dev/null
+      - run: node node_modules/vitest/vitest.mjs list --config vitest.guard.config.ts --filesOnly=false > /dev/null
+      - run: node node_modules/vitest/vitest.mjs list --config vitest.node-batch.config.ts --filesOnly=false > /dev/null
       - id: test-builds-key
         run: node scripts/ci/ci.mjs test-builds-key
       - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830

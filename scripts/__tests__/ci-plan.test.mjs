@@ -313,6 +313,24 @@ describe('CI avoids duplicate integration setup', () => {
     expect(modules).toBeLessThan(save);
     expect(readFileSync(path.join(root, 'services/app/__tests__/schema-image.test.ts'), 'utf8')).toContain("inject('schemaImageDir')");
   });
+  // Vitest's module cache is keyed by each module's source AND the configuration that transformed it, so warming it for
+  // the api projects alone left every other pr fast runner to transform its whole graph cold: 9-15s of transform summed
+  // over three workers on each ui, guard and node runner against ~2s on an api one (pr fast runs 44114175470,
+  // 44133274884). Every configuration pr fast shards is listed here, so each of those runners restores its modules warm.
+  it('warms the module cache for every Vitest configuration pr fast shards before saving the test builds', () => {
+    const fast = yaml.parse(readFileSync(path.join(root, '.github/workflows/pr-fast.yml'), 'utf8')).jobs.fast;
+    const configs = fast.steps.flatMap(step => [...(step.run ?? '').matchAll(/vitest\.mjs run (--config \S+) --shard=/g)].map(match => match[1]));
+    const projects = [...new Set(fast.strategy.matrix.include.map(entry => entry.projects).filter(Boolean))];
+    expect(configs).toEqual(['--config vitest.guard.config.ts', '--config vitest.node-batch.config.ts']);
+    expect(projects).toEqual(['--project=api --project=api-isolated', '--project=ui --project=islands']);
+    const steps = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8')).jobs['warm-caches'].steps;
+    const save = steps.findIndex(step => (step.uses ?? '').startsWith('actions/cache/save') && step.with.key.startsWith('test-builds-v2-'));
+    for (const selection of [...projects, ...configs]) {
+      const list = steps.findIndex(step => step.run === `node node_modules/vitest/vitest.mjs list ${selection} --filesOnly=false > /dev/null`);
+      expect(list, selection).toBeGreaterThan(-1);
+      expect(list, selection).toBeLessThan(save);
+    }
+  });
   // The server-reader marker lists the hosted libraries as outputs: an entry without them is a miss on every shard,
   // which rebuilt both (~10s) at the start of every api, node, ui and integration shard (run 42349357334).
   it('caches the test builds whole, under the key of what they are built from, in every workflow that reads them', () => {
