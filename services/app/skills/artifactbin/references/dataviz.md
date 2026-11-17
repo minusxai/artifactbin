@@ -1,38 +1,30 @@
 ---
 name: dataviz
-description: "Read before drawing any chart: chart choice, truthful encodings and Vega-Lite or Vega in a native HTML page."
+description: "Read before drawing any chart: chart choice, truthful encodings and af-chart (Vega-Lite or Vega) in a native HTML page."
 ---
 ## Read first
 
-Use **Vega-Lite** for analytical charts; **Vega** for custom layouts/signals. They are separate libraries: Vega-Lite compiles to Vega. Use the documented imports: no globals, embed helper or automatic theme. Maps and regions: deck.gl ([maps](maps.md)); Vega `geoshape` draws standard GeoJSON inside out.
+Draw every analytical chart with **`<af-chart>`** (`import '@afbin/chart'`; contract: `head -40 components/chart.ts`): it runs the chart's SQL, draws Vega-Lite or Vega, sizes to its width, takes the page's design tokens in light and dark, wraps legends, shows loading, empty and error states, lists the drawn values and tears down. Raw Vega stays for custom work. Maps and regions: deck.gl ([maps](maps.md)); diagrams: Pele ([diagrams](diagrams.md)).
 
 Name question, unit, grain, source, period, timezone and missing data. See [runtime](runtime.md) and [datasets](datasets.md).
 
-## Bootstrap
-
-Import hosted libraries as `@afbin/<name>` (`@afbin/vega`, `@afbin/vega-lite`); never bare `vega` or globals. The platform's import map supplies them, and the `@afbin/` prefix is reserved: your own import map keys win. `serve.mjs` and downloads resolve the same names.
+## af-chart
 
 ```html
-<div id="chart" role="img" aria-label="Completed tasks by category"></div>
-<script type="module">
-import * as vega from "@afbin/vega";
-import {compile} from "@afbin/vega-lite";
-const spec = compile({width:280, height:160,
-  data:{values:[{category:"A", count:18},{category:"B", count:12}]},
-  mark:"bar", encoding:{x:{field:"category",type:"nominal"},
-    y:{field:"count",type:"quantitative"},
-    tooltip:[{field:"category",title:"Category"},
-      {field:"count",type:"quantitative",title:"Completed tasks",format:","}]}}).spec;
-const view = new vega.View(vega.parse(spec, undefined, {ast:true}), {
-  container:document.querySelector("#chart"), renderer:"svg",
-  expr:vega.expressionInterpreter
-});
-await view.runAsync();
-window.addEventListener("pagehide", () => view.finalize(), {once:true});
-</script>
+<af-chart label="Completed tasks by category"
+  sql="select category, count(*) as n from tasks where done group by category order by n desc">
+<script type="application/json">{"mark":"bar","encoding":{
+  "x":{"field":"category","type":"nominal","sort":null,"title":"Category"},
+  "y":{"field":"n","type":"quantitative","title":"Completed tasks"},
+  "tooltip":[{"field":"category","title":"Category"},
+    {"field":"n","type":"quantitative","title":"Completed tasks","format":","}]}}</script>
+</af-chart>
+<script type="module">import '@afbin/chart';</script>
 ```
 
-For native Vega, omit the compiler import and pass the Vega spec directly to `parse`. The hosted `View` shows a themed tooltip by default (design tokens, light/dark; closes on leave, Escape, outside press, `finalize()`): give each chart a `tooltip` encoding. `{ast:true}` and `expressionInterpreter` work with the page's no-eval CSP. Add table, resizing, theme and teardown below.
+Rows bind as the dataset `main`: write no `data` (a spec's own `values` draw instead). Data is one of `sql`, `dataset="NAME"` (a link's `data-af-name`), `rows` (objects) or `query`, a statement from `` sql`…` `` with bound values: set it again to filter (`chart.query = sql`… where city = ${city}``). A recipe names columns: `{"recipe":"trend","bindings":{"date":"week","value":"n"}}` (also funnel, waterfall, radar, single-value, combo). `url` data is refused; `data-af-chart="ready"` marks a drawn chart. `node scripts/sql.mjs query ID 'SQL' --chart chart.json --chart-output chart.png` draws the same description as an image before you publish (`--chart-width N --chart-height N --chart-theme light|dark`).
+
+Custom work keeps the element: `chart.view` (and the `af-chart-ready` event's `{view, rows}`) is the live Vega View for signals and listeners; `draw` replaces the renderer while af-chart keeps data, states, size and teardown. Or import `@afbin/vega` (`parse(spec, config, {ast:true})`, `new View(runtime, {expr: expressionInterpreter, renderer:"svg", container})`, the themed tooltip built in) and `@afbin/vega-lite` (`compile`); `{ast:true}` and `expressionInterpreter` work with the page's no-eval CSP. Never bare `vega` or globals.
 
 ## Contents
 
@@ -54,13 +46,13 @@ Choose explicit timestamp offsets and reporting timezone before grouping. Vega-L
 
 Set chart styling explicitly through Vega-Lite `config`; native Vega uses parser config/mark encodings. Categorical colors convey identity; lightness ramps convey magnitude; diverging scales need a meaningful center.
 
-Chart token resolution and legend wrapping are **not automatic**. Resolve font/colors from the chart's design-system scope; pass concrete sRGB colors, since CSS-variable/OKLCH strings can fail in expressions. Observe the host’s theme scope (`data-af-dark`, `data-af-design-system`, class/style changes on ancestors); rebuild configuration when resolved tokens change, and disconnect the observer on teardown. Check text, grids, ramps and explicit colors in both modes.
+af-chart resolves the tokens to concrete sRGB and rebuilds when they change; a spec's own `config` wins. A raw view must do this itself: resolve font/colors from the design-system scope (CSS-variable/OKLCH strings can fail in expressions), observe `data-af-dark`, `data-af-design-system` and class/style changes, rebuild, and disconnect on teardown. Check text, grids, ramps and explicit colors in both modes.
 
 ## Layout and interaction
 
-Size the host. Single/layered Vega-Lite supports `width: "container"`. For Vega observe size, update dimensions, `resize()` and `runAsync()`. Test narrow hosts, hidden panels and long labels.
+af-chart fills its width (`height`, default 320). A raw view sizes its host: single/layered Vega-Lite supports `width: "container"`; for Vega observe size, update dimensions, `resize()` and `runAsync()`. Test narrow hosts, hidden panels and long labels.
 
-Provide title, units, `description` and an accessible table. Supplement color with labels/shapes. Necessary actions/information must work with keyboard/touch and without hover.
+Provide title, units, `description` (af-chart's label) and an accessible table. Supplement color with labels/shapes. Necessary actions/information must work with keyboard/touch and without hover.
 
 Tooltips list fields by `title`: name each for readers, never raw columns (`{"field":"pts","type":"quantitative","title":"Points","format":","}`); a `title` field is the heading. `format` errors on nominal fields. Add no other tooltip handler. Explain selection/reset; keep events view-scoped. Honor `prefers-reduced-motion`: avoid animated transitions/auto-play, keep static updates usable, and remove media listeners on teardown. Legend highlighting must not silently change totals. Query filters need loading/errors and stale-response protection.
 
@@ -68,19 +60,13 @@ Tooltips list fields by `title`: name each for readers, never raw columns (`{"fi
 
 Import CSV through the dataset flow, not a credentialed chart URL. CSV fields may be strings: preserve identifiers, parse declared numeric/date fields, and reject non-finite values rather than turning blanks into zero. Read rows as [datasets](datasets.md#read) says, from the table named by the link's `data-af-name`. Disclose source truncation. Keep rows transient; persist only viewer filters/selections through `@afbin/state`. `sql.watch` renders linked dataset data directly and reruns on change; `onResolverChange` supports explicitly managed re-querying. Selection is local. Keep credentials out of specs/files.
 
-Retain one view per chart. Update named data then run the dataflow; discard superseded renders. On replacement call `view.finalize()`, disconnect observers, stop state and sql listeners and remove listeners. Rebuild for compile-time theme/layout changes while preserving intended viewer choices.
+A raw view: retain one per chart, update named data then run the dataflow, discard superseded renders; on replacement `view.finalize()`, disconnect observers and stop listeners. Rebuild for compile-time theme/layout changes while preserving viewer choices.
 
-Offline needs local libraries/assets and permitted data. Download does not snapshot dataset rows or pack arbitrary dependencies. Show unavailable states honestly; test downloads offline.
+A download carries the rows its reader's `sql` may read (none past 16 MiB, and the copy says so) and the hosted libraries, so charts draw offline; declared queries and writes need the app. Show unavailable states honestly; test downloads offline.
 
 ## Examples
 
-Vega-Lite:
-
-```json
-{"$schema":"https://vega.github.io/schema/vega-lite/v6.json","description":"Illustrative completed tasks by category.","width":"container","height":180,"data":{"values":[{"category":"A","count":18},{"category":"B","count":12}]},"mark":"bar","encoding":{"y":{"field":"category","type":"nominal","sort":"-x","title":"Category"},"x":{"field":"count","type":"quantitative","scale":{"zero":true},"title":"Completed tasks"},"tooltip":[{"field":"category","type":"nominal","title":"Category"},{"field":"count","type":"quantitative","title":"Completed tasks","format":",.0f"}]}}
-```
-
-Vega: update via `view.data("rows", rows).runAsync()`.
+Vega, raw or as an af-chart `chart` (`data-name="rows"` fills `rows` with its rows; a raw view updates with `view.data("rows", rows).runAsync()`):
 
 ```json
 {"width":280,"height":160,"data":[{"name":"rows","values":[{"category":"A","count":18},{"category":"B","count":12}]}],"scales":[{"name":"x","type":"band","domain":{"data":"rows","field":"category"},"range":"width","padding":0.2},{"name":"y","type":"linear","domain":{"data":"rows","field":"count"},"range":"height","zero":true,"nice":true}],"axes":[{"orient":"bottom","scale":"x"},{"orient":"left","scale":"y"}],"marks":[{"type":"rect","from":{"data":"rows"},"encode":{"update":{"x":{"scale":"x","field":"category"},"width":{"scale":"x","band":1},"y":{"scale":"y","field":"count"},"y2":{"scale":"y","value":0},"fill":{"value":"#2980b9"}}}}]}

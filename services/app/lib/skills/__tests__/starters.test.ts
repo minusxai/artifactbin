@@ -3,9 +3,11 @@
  * modules, and the data-driven ones, filled with the sample CSV (examples/gen-deliveries.mjs) through a stubbed
  * `@afbin/apollo` `sql` tag whose statements run on the real SQLite engine, build their queries from their DATA
  * block, take every number from SQL (never summing rows in script), hand
- * Vega-Lite a spec naming those values with titled tooltips, and pass their own copy-unchanged steps files. jsdom runs
- * the page scripts with the hosted modules stubbed; every spec a page hands Vega-Lite is then compiled and rendered
- * headless by the pinned vega and vega-lite packages, as the page's no-eval interpreter would.
+ * Vega-Lite (directly, or through an <af-chart> that runs the chart's query) a spec naming those values with titled
+ * tooltips, and pass their own copy-unchanged steps files. jsdom runs the page scripts with the hosted modules stubbed
+ * (an <af-chart> stand-in answers its query through the same stubbed `sql`); every spec is then compiled and rendered
+ * headless by the pinned vega and vega-lite packages, an <af-chart> one through the element's own plan
+ * (lib/viz/chart-plan), as the page's no-eval interpreter would.
  */
 import {readFileSync} from 'node:fs';
 import {execFileSync} from 'node:child_process';
@@ -16,6 +18,7 @@ import * as vega from 'vega';
 import {compile} from 'vega-lite';
 import {expressionInterpreter} from 'vega-interpreter';
 import {createSqliteSql} from '@artifactbin/sql/sqlite';
+import {createChartView, planChart} from '@/lib/viz/chart-plan';
 import {trackerFeatures, trackerFiles} from '../../../skills/artifactbin/scripts/toolbox-tracker.mjs';
 
 const EXAMPLES = new URL('../../../skills/artifactbin/examples/', import.meta.url);
@@ -41,6 +44,7 @@ const ROWS = LINES.map((line, index) => Object.fromEntries([['_id', 'r' + index]
   distance_km: number; minutes: number; amount: number}>;
 
 interface Page {dom: JSDOM; queries: string[]; variables: Array<Record<string, any>>; specs: Array<Record<string, any>>;
+  charted: Array<{spec: Record<string, any>; rows: Array<Record<string, unknown>>}>;
   writes: Array<{text: string; params: Record<string, unknown>}>;
   watches: Array<() => Promise<unknown>>; error?: unknown; signIn?: (state: SignIn) => void; settled: Array<Promise<unknown>>;
   clicks: Array<(event: unknown, item: unknown) => void>; decks: Array<Record<string, any>>; observers: Array<() => void>}
@@ -71,7 +75,7 @@ async function load(html: string, answer: Answer, signedIn: SignIn = 'signed-out
   html = inline(html);
   const scripts = [...html.matchAll(/<script type="module"[^>]*>([\s\S]*?)<\/script>/g)].map(m => m[1]!);
   const dom = new JSDOM(html.replace(/<script type="module"[\s\S]*?<\/script>/g, ''), {runScripts: 'outside-only', url: 'https://page.test/'});
-  const page: Page = {dom, queries: [], variables: [], specs: [], writes: [], watches: [], settled: [], clicks: [], decks: [], observers: []};
+  const page: Page = {dom, queries: [], variables: [], specs: [], charted: [], writes: [], watches: [], settled: [], clicks: [], decks: [], observers: []};
   // The sql tag as the runtime builds it: every value bound as $p0, $p1…; a statement runs each time it is awaited.
   const run = async (text: string, params: Record<string, unknown>) => {
     page.queries.push(text);page.variables.push(params);
@@ -94,6 +98,28 @@ async function load(html: string, answer: Answer, signedIn: SignIn = 'signed-out
   const store = (initial: Record<string, unknown>) => { let doc = initial; const listeners = new Set<(s: unknown) => void>();
     return {getState: () => doc, subscribe: (l: (s: unknown) => void) => { listeners.add(l); return () => listeners.delete(l); },
       setState: async (partial: unknown) => { doc = {...doc, ...(typeof partial === 'function' ? partial(doc) : partial)}; listeners.forEach(l => l(doc)); }}; };
+  // <af-chart> as its contract has it: setting `query` watches it through `sql` (a newer query's rows win), then the
+  // chart draws (one path per row), sets data-af-chart="ready" and sends af-chart-ready with its view and rows.
+  class AfChart extends dom.window.HTMLElement {
+    chart: Record<string, any> = {}; drawn?: Record<string, any>; epoch = 0;
+    statement: {text: string; params: Record<string, unknown>} | null = null;
+    get query() { return this.statement; }
+    set query(statement: {text: string; params: Record<string, unknown>} | null) {
+      if (!statement) return;
+      this.statement = statement; const mine = ++this.epoch; this.removeAttribute('data-af-chart');
+      sql.watch(statement, rows => { if (mine === this.epoch) this.draw(rows as Array<Record<string, unknown>>); },
+        e => this.dispatchEvent(new dom.window.CustomEvent('af-chart-error', {detail: {message: (e as Error).message}})));
+    }
+    draw(rows: Array<Record<string, unknown>>) {
+      this.drawn = {...this.chart, data: {values: rows}};
+      page.specs.push(this.drawn);page.charted.push({spec: this.chart, rows});
+      this.innerHTML = `<svg><g class="mark-rect">${'<path></path>'.repeat(rows.length)}</g></svg>`;
+      this.setAttribute('data-af-chart', 'ready');
+      const view = {addEventListener: (type: string, listener: (event: unknown, item: unknown) => void) => { if (type === 'click') page.clicks.push(listener); }};
+      this.dispatchEvent(new dom.window.CustomEvent('af-chart-ready', {detail: {view, rows}}));
+    }
+  }
+  dom.window.customElements.define('af-chart', AfChart);
   const stateBlock = dom.window.document.querySelector('[data-af="state"]')?.textContent;
   // No page code reaches the network here: a starter reads and writes only through `sql`.
   dom.window.fetch = (async () => { throw new TypeError('Failed to fetch'); }) as never;
@@ -201,22 +227,23 @@ it('imports only hosted @afbin modules from every starter', () => {
   expect(source('csv-dashboard.html')).toContain("import('@afbin/deck-gl')");
 });
 
-it('draws no hand-made SVG chart in any data starter: charts go through Vega-Lite', () => {
+it('draws no hand-made SVG chart in any data starter: charts go through Vega-Lite or <af-chart>', () => {
+  expect(source('csv-dashboard.html')).toContain("import '@afbin/chart'");
+  expect(source('deck.html')).toContain("from '@afbin/vega-lite'");
   for (const name of ['csv-dashboard.html', 'deck.html']) {
     const html = source(name);
-    expect(html, name).toContain("from '@afbin/vega-lite'");
     expect(html, name).not.toMatch(/createElementNS\([^)]*\)[^;]*\b(?:rect|line)\b|['"]rect['"],\{x:/);
   }
 });
 
 type Chart = {id: string; mark: string; filter?: string; table?: boolean};
 const dataOf = (page: Page) => (page.dom.window as unknown as {DATA: {queries: Record<string, string>; charts: Chart[]}}).DATA;
-/** The spec chart `id` was last drawn with (the map is drawn by deck.gl, not Vega-Lite). */
-const drawn = (page: Page, id: string) => {
-  const charts = dataOf(page).charts.filter(c => c.mark !== 'map');
-  return page.specs.slice(-charts.length)[charts.findIndex(c => c.id === id)]!;
-};
-const total = (values: Array<{y: number}>) => values.reduce((sum, v) => sum + v.y, 0);
+/** What chart `id`'s <af-chart> last drew: its spec with the rows its query answered as `data.values`. */
+const drawn = (page: Page, id: string) =>
+  (page.dom.window.document.querySelector(`[data-af-id="chart-${id}-plot"]`) as unknown as {drawn: Record<string, any>}).drawn;
+const total = (values: Array<Record<string, any>>, key = 'y') => values.reduce((sum, v) => sum + v[key], 0);
+/** A chart's rows add up its deliveries. */
+const orders = (values: Array<Record<string, any>>) => total(values, 'orders');
 const text = (page: Page, id: string) => page.dom.window.document.querySelector(`[data-af-id="${id}"]`)?.textContent;
 const countBy = (rows: typeof ROWS, key: 'category' | 'city') => {
   const counts = new Map<string, number>();
@@ -228,9 +255,10 @@ it('fills the csv dashboard from its DATA queries, each one watched sql statemen
   const page = await load(read('csv-dashboard.html').replace('ref:DATASET_ID', 'ref:Ab12Cd34'), sqlAnswer());
   expect(page.error).toBeUndefined();
   const doc = page.dom.window.document, data = dataOf(page);
-  // One watched statement per DATA query, its $filters bound values (never text); no row is paged into script.
+  // One watched statement per DATA query (a chart's run by its <af-chart>), its $filters bound values (never text); no
+  // row is paged into script.
   const queryNames = Object.keys(data.queries);
-  expect(page.queries).toEqual(queryNames.map(name => {let i = 0;return data.queries[name]!.replace(/\$[A-Za-z_]\w*/g, () => '$p' + i++);}));
+  expect([...page.queries].sort()).toEqual(queryNames.map(name => {let i = 0;return data.queries[name]!.replace(/\$[A-Za-z_]\w*/g, () => '$p' + i++);}).sort());
   for (const query of page.queries) expect(query).not.toMatch(/offset|\$(?!p\d)/);
   expect(picked(page, queryNames.length)).toEqual(new Set());
   expect(doc.querySelector('#status')!.textContent).toBe(`Computed ${Object.keys(data.queries).length} queries from the linked dataset.`);
@@ -245,32 +273,34 @@ it('fills the csv dashboard from its DATA queries, each one watched sql statemen
   const weekly = drawn(page, 'weekly');
   expect(weekly.mark.type).toBe('line');
   expect(weekly.data.values).toHaveLength(26);
-  expect(weekly.data.values[0]).toMatchObject({x: '2025-12-01', series: ''});
-  expect(total(weekly.data.values)).toBe(ROWS.length);
+  expect(weekly.data.values[0]).toMatchObject({week: '2025-12-01'});
+  expect(weekly.encoding.x.field).toBe('week');
+  expect(orders(weekly.data.values)).toBe(ROWS.length);
   // ...a breakdown, largest first, that picks the category filter...
   const categories = [...countBy(ROWS, 'category')].sort((a, b) => b[1] - a[1]);
-  expect(drawn(page, 'categories').data.values.map((v: {x: string; y: number}) => [v.x, v.y])).toEqual(categories);
+  expect(drawn(page, 'categories').data.values.map((v: {category: string; orders: number}) => [v.category, v.orders])).toEqual(categories);
   expect(drawn(page, 'categories').mark.cursor).toBe('pointer');
   // ...one small panel per city on a shared scale, a day-by-hour heatmap, bins of minutes and one point per delivery.
   const monthly = drawn(page, 'monthly');
-  expect(monthly.facet).toMatchObject({field: 'series'});expect(monthly.spec.mark.type).toBe('line');
-  expect(monthly.data.values).toHaveLength(8 * 6);expect(total(monthly.data.values)).toBe(ROWS.length);
+  expect(monthly.facet).toMatchObject({field: 'city'});expect(monthly.spec.mark.type).toBe('line');
+  expect(monthly.data.values).toHaveLength(8 * 6);expect(orders(monthly.data.values)).toBe(ROWS.length);
   const hours = drawn(page, 'hours');
-  expect(hours.mark.type).toBe('rect');expect(hours.encoding.y.field).toBe('series');expect(hours.encoding.color.field).toBe('y');
-  expect([...new Set(hours.data.values.map((v: {series: string}) => v.series))]).toEqual(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
-  expect(total(hours.data.values)).toBe(ROWS.length);
+  expect(hours.mark.type).toBe('rect');expect(hours.encoding.y.field).toBe('weekday');expect(hours.encoding.color.field).toBe('orders');
+  expect([...new Set(hours.data.values.map((v: {weekday: string}) => v.weekday))]).toEqual(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
+  expect(orders(hours.data.values)).toBe(ROWS.length);
   // Every hour by every day, zero cells included, in hour order.
   const hoursSeen = [...new Set(ROWS.map(row => row.hour))].sort((a, b) => a - b).map(String);
   expect(hours.data.values).toHaveLength(hoursSeen.length * 7);
-  expect([...new Set(hours.data.values.map((v: {x: string}) => v.x))]).toEqual(hoursSeen);
-  const bins = drawn(page, 'minutes').data.values.map((v: {x: string}) => Number(v.x));
-  expect(bins).toEqual([...bins].sort((a, b) => a - b));expect(total(drawn(page, 'minutes').data.values)).toBe(ROWS.length);
+  expect([...new Set(hours.data.values.map((v: {hour: number}) => String(v.hour)))]).toEqual(hoursSeen);
+  const bins = drawn(page, 'minutes').data.values.map((v: {minutes_from: number}) => v.minutes_from);
+  expect(bins).toEqual([...bins].sort((a, b) => a - b));expect(orders(drawn(page, 'minutes').data.values)).toBe(ROWS.length);
   const scatter = drawn(page, 'distance');
   expect(scatter.mark.type).toBe('point');expect(scatter.encoding.x.type).toBe('quantitative');
-  expect(scatter.data.values.map((v: {x: number}) => v.x)).toEqual(ROWS.map(row => row.distance_km));
+  expect(scatter.data.values.map((v: {distance_km: number}) => v.distance_km)).toEqual(ROWS.map(row => row.distance_km));
+  // Titled tooltips everywhere; the theme, sizes and container are <af-chart>'s, never the spec's.
   for (const spec of page.specs) {
     for (const field of spec.encoding?.tooltip ?? spec.spec.encoding.tooltip) expect(field.title, JSON.stringify(field)).toBeTruthy();
-    expect(spec.config.axis.gridDash).toEqual([3, 3]);
+    expect(spec.config).toBeUndefined();expect(spec.width).toBeUndefined();
   }
   // The map: one dot per city at its rows' mean position, sized by its deliveries, named, and a canvas in its host.
   expect(page.decks).toHaveLength(1);
@@ -282,7 +312,7 @@ it('fills the csv dashboard from its DATA queries, each one watched sql statemen
   expect(doc.querySelector('[data-af-id="chart-cities-plot"] canvas')).not.toBeNull();
   // Each chart's table lists its values; a picking chart's rows are buttons; the scatter has none.
   const cells = [...doc.querySelectorAll('[data-af-id="chart-weekly-table"] td')].map(td => td.textContent);
-  expect(cells).toEqual(weekly.data.values.map((v: {y: number}) => fmt(v.y)));
+  expect(cells).toEqual(weekly.data.values.map((v: {orders: number}) => fmt(v.orders)));
   const buttons = [...doc.querySelectorAll('[data-af-id="chart-categories-table"] button')];
   expect(buttons.map(b => [b.textContent, b.getAttribute('aria-pressed')])).toEqual(categories.map(([name]) => [name, 'false']));
   expect(doc.querySelector('[data-af-id="chart-distance-table"]')).toBeNull();
@@ -301,16 +331,17 @@ it('links its charts: a picked category or city reruns every query with it as a 
   await settle(page);
   expect(picked(page, n)).toEqual(new Set(['Meals']));
   expect(text(page, 'stat-orders-value')).toBe(fmt(meals.length));
-  expect(total(drawn(page, 'weekly').data.values)).toBe(meals.length);
-  expect(total(drawn(page, 'hours').data.values)).toBe(meals.length);
+  expect(orders(drawn(page, 'weekly').data.values)).toBe(meals.length);
+  expect(orders(drawn(page, 'hours').data.values)).toBe(meals.length);
   // A filtered heatmap keeps its grid: the same cells in the same order, the empty ones zero.
-  expect(drawn(page, 'hours').data.values.map((v: {x: string; series: string}) => v.x + v.series))
-    .toEqual(page.specs.find(spec => spec.mark?.type === 'rect')!.data.values.map((v: {x: string; series: string}) => v.x + v.series));
-  expect(drawn(page, 'hours').data.values.some((v: {y: number}) => v.y === 0)).toBe(true);
+  const cell = (v: {hour: number; weekday: string}) => v.hour + v.weekday;
+  expect(drawn(page, 'hours').data.values.map(cell))
+    .toEqual(page.specs.find(spec => spec.mark?.type === 'rect')!.data.values.map(cell));
+  expect(drawn(page, 'hours').data.values.some((v: {orders: number}) => v.orders === 0)).toBe(true);
   expect(total(page.decks.at(-1)!.layers[0].props.data)).toBe(meals.length);
   // The picking chart still shows every category, the picked one highlighted, its button pressed.
   expect(drawn(page, 'categories').data.values).toHaveLength(4);
-  expect(drawn(page, 'categories').encoding.opacity.condition.test).toBe('datum.x==="Meals"');
+  expect(drawn(page, 'categories').encoding.opacity.condition.test).toBe('datum["category"]==="Meals"');
   expect(doc.querySelector('[data-af-id="chart-categories-table-row-Meals-pick"]')!.getAttribute('aria-pressed')).toBe('true');
   expect(text(page, 'filter-category')).toBe('Category: Meals ✕');
   expect(doc.querySelector('[data-af-id="filter-category"]')!.getAttribute('aria-label')).toBe('Clear Category: Meals');
@@ -320,12 +351,12 @@ it('links its charts: a picked category or city reruns every query with it as a 
   expect(picked(page, n)).toEqual(new Set(['Utrecht', 'Meals']));
   expect(text(page, 'stat-orders-value')).toBe(fmt(meals.filter(row => row.city === 'Utrecht').length));
   const utrecht = countBy(ROWS.filter(row => row.city === 'Utrecht'), 'category');
-  expect(drawn(page, 'categories').data.values.map((v: {x: string; y: number}) => v.y).sort()).toEqual([...utrecht.values()].sort());
+  expect(drawn(page, 'categories').data.values.map((v: {orders: number}) => v.orders).sort()).toEqual([...utrecht.values()].sort());
   // Its chip clears the city; a click on the picked bar clears the category.
   (doc.querySelector('[data-af-id="filter-city"]') as HTMLButtonElement).click();
   await settle(page);
   expect(picked(page, n)).toEqual(new Set(['Meals']));
-  page.clicks.at(-1)!(null, {datum: {x: 'Meals', y: meals.length}});
+  page.clicks.at(-1)!(null, {datum: {category: 'Meals', orders: meals.length}});
   await settle(page);
   expect(picked(page, n)).toEqual(new Set());
   expect(text(page, 'stat-orders-value')).toBe(fmt(ROWS.length));
@@ -404,9 +435,9 @@ it('draws a chart from its query\'s rows as SQL grouped them, split by a series 
     "      \" count(*) as orders from deliveries group by category, reach order by category, reach\",");
   const page = await load(html, sqlAnswer());
   expect(page.error).toBeUndefined();
-  const expected = [...new Set(ROWS.map(row => row.category))].sort().flatMap(category => ['far', 'near'].map(reach => ({x: category,
-    series: reach, y: ROWS.filter(row => row.category === category && (row.distance_km > 3 ? 'far' : 'near') === reach).length})));
-  expect(page.specs[0]!.data.values).toEqual(expected);
+  const expected = [...new Set(ROWS.map(row => row.category))].sort().flatMap(category => ['far', 'near'].map(reach => ({category,
+    reach, orders: ROWS.filter(row => row.category === category && (row.distance_km > 3 ? 'far' : 'near') === reach).length})));
+  expect([...page.specs[0]!.data.values]).toEqual(expected);
   expect(page.specs[0]!.encoding.color.title).toBe('reach');
 });
 
@@ -428,7 +459,7 @@ it('passes its own unchanged steps once filled, and names starter text, an empty
   const template = await load(read('csv-dashboard.html'), sqlAnswer());
   expect((await steps(template.dom, source)).failure).toContain('replace every [bracketed] part');
   const broken = await load(filled.replace("x:'week',\n      y:'orders'", "x:'week',\n      y:'done'"), sqlAnswer());
-  expect((await steps(broken.dom, source)).failure).toContain('charts with no data: weekly (0 marks, 0 table rows)');
+  expect((await steps(broken.dom, source)).failure).toMatch(/charts with no data: weekly \(\d+ marks, 0 table rows\)/);
   // Queries that ignore $city: picking a city changes nothing else, and the step says which parameter to read.
   const unlinked = await load(filled.replaceAll(/\(\$city is null or (d\.)?city = \$city\)/g, '($city is null or 1)'), sqlAnswer());
   expect((await steps(unlinked.dom, source)).failure).toBe('picking Amsterdam changed no other chart: do the other queries read $city?');
@@ -463,12 +494,18 @@ it('reads a linked dataset into deck chart slides before drawing, and its steps 
 });
 
 it('hands Vega-Lite specs that the pinned libraries compile and render with marks, in every data starter', async () => {
-  const pages = [await load(read('csv-dashboard.html'), sqlAnswer()), await load(read('deck.html'), sqlAnswer())];
-  const specs = pages.flatMap(page => page.specs);
-  expect(specs.length).toBeGreaterThanOrEqual(8);
-  for (const spec of specs) {
-    const view = new vega.View(vega.parse(compile(spec as never).spec, undefined, {ast: true}),
-      {renderer: 'none', expr: expressionInterpreter as never});
+  const [dashboard, deck] = [await load(read('csv-dashboard.html'), sqlAnswer()), await load(read('deck.html'), sqlAnswer())];
+  expect(dashboard.charted).toHaveLength(6);
+  const engines = {compile, parse: vega.parse, View: vega.View, expressionInterpreter} as never;
+  const views = [...dashboard.charted.map(({spec, rows}) => {
+    const plan = planChart(engines, {spec, engine: 'vega-lite'}, rows as never, {width: 640, height: 320}, 'light');
+    return createChartView(engines, plan.vegaSpec, rows as never, {renderer: 'none', width: 640, height: 320,
+      facetLayout: plan.facetLayout});
+  }), ...deck.specs.map(spec => new vega.View(vega.parse(compile(spec as never).spec, undefined, {ast: true}),
+    {renderer: 'none', expr: expressionInterpreter as never}))];
+  expect(views.length).toBeGreaterThanOrEqual(8);
+  for (const [i, view] of views.entries()) {
+    const spec = i < dashboard.charted.length ? dashboard.charted[i]!.spec : deck.specs[i - dashboard.charted.length]!;
     const svg = await view.toSVG();
     view.finalize();
     expect(svg, JSON.stringify(spec.mark ?? spec.spec?.mark)).toMatch(/class="mark-(?:rect|line|symbol)[^"]*"[^>]*>\s*<path/);

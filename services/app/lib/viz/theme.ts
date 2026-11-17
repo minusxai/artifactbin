@@ -38,7 +38,7 @@ export function houseTokens(mode: 'light' | 'dark', palette?: string[] | null): 
 }
 
 /** A mode name means the house tokens; tokens pass through. */
-export const resolveTokens = (theme: 'light' | 'dark' | ChartTokens, palette?: string[] | null): ChartTokens =>
+const resolveTokens = (theme: 'light' | 'dark' | ChartTokens, palette?: string[] | null): ChartTokens =>
   typeof theme === 'string' ? houseTokens(theme, palette) : palette?.length ? { ...theme, category: palette } : theme;
 
 const channels = (color: string): [number, number, number] | null => {
@@ -120,6 +120,8 @@ export function getVegaLiteConfig(theme: 'light' | 'dark' | ChartTokens, palette
     legend: {
       orient: 'top',
       labelColor: colors.fgMuted,
+      // An authored legend title would otherwise be vega's black, unreadable in dark mode.
+      titleColor: colors.fgDefault,
       labelFontSize: 11,
       labelLimit: 220,
     },
@@ -136,6 +138,8 @@ export function getVegaLiteConfig(theme: 'light' | 'dark' | ChartTokens, palette
       fontWeight: 'normal',
       anchor: 'start',
     },
+    // Facet headers (small multiples) default to black in vega-lite, unreadable in dark mode.
+    header: { labelColor: colors.fgDefault, titleColor: colors.fgDefault },
     view: { stroke: 'transparent' },
     // Sensible mark defaults; spec-level mark properties win natively.
     // Small filled dots on every line point (house default). Kept intentionally small so
@@ -195,6 +199,8 @@ export function getVegaParserConfig(theme: 'light' | 'dark' | ChartTokens, palet
       labelColor: colors.fgMuted,
       labelFont: font,
       labelFontSize: 11,
+      titleColor: colors.fgDefault,
+      titleFont: font,
     },
     title: { color: colors.fgDefault, font, fontSize: 14 },
   };

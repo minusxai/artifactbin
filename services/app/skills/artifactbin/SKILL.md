@@ -155,7 +155,7 @@ comments (every page you may see): `node scripts/events.mjs watch --help`.
   A page that shows a dataset links it (`<link rel="af-dataset">`), reads and writes its rows
   with `` sql`…` `` from `@afbin/apollo` (each table named by its link, every `${…}` a bound
   value; `sql.watch` for live updates) and computes every number (counts, totals, group by,
-  joins) in SQL, never by summing rows in script; charts use Vega-Lite
+  joins) in SQL, never by summing rows in script; charts are `<af-chart>` over that SQL
   ([dataviz](references/dataviz.md)). For sample data copy
   `examples/gen-transactions.mjs`, change only its names (payers, categories, merchants) and run it
   once; label the data as sample. Who may see and change rows:
@@ -202,17 +202,17 @@ DOM and the page's design-system tokens and carry no credentials. Decks use `exa
 | Overlays | `af-dialog`, `af-popover`, `af-tooltip` |
 | Identity/status | `af-avatar`, `af-user`, `af-icon`, `af-progress` |
 | Prose/diagrams | `af-markdown`, `af-isometric` |
-| Data/media | `af-data-table`, `af-file-upload`; typing in a dataset cell together: `@afbin/collab`
-  ([datasets](references/datasets.md#type-together-afbincollab)) |
+| Data/media | `af-chart`, `af-data-table`, `af-file-upload`; typing in a dataset cell together:
+  `@afbin/collab` ([datasets](references/datasets.md#type-together-afbincollab)) |
 
 [% if not shipped %]The same components and design systems in another web shell, outside any
 page: [host pages](references/host-pages.md).[% endif %]
 
-For charts, maps and diagrams, use the direct library APIs rather than a custom element:
+Analytical charts are `af-chart`; maps and diagrams use the libraries directly:
 
 | Need | Guide |
 |---|---|
-| Analytical charts or custom chart layouts | [Vega and Vega-Lite](references/dataviz.md) |
+| Analytical charts (`af-chart`), custom layouts | [Vega and Vega-Lite](references/dataviz.md) |
 | Interactive maps and geospatial layers | [deck.gl](references/maps.md) |
 | Flowcharts, sequences and other diagrams | [Pele](references/diagrams.md) |
 

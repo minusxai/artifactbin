@@ -2,8 +2,9 @@
  * Example: check.mjs steps for examples/csv-dashboard.html (a function body that receives page).
  * Usage: cp examples/csv-dashboard-steps.mjs steps.mjs (no edits needed: it reads DATA from the
  *   page); then node scripts/check.mjs index.html --steps steps.mjs
- * Gotchas: it waits for #status "Computed N queries" (every DATA query answered through sql),
- *   then checks that every DATA chart drew marks (a map: its canvas or its unavailable note) and
+ * Gotchas: it waits for #status "Computed N queries" (every DATA query answered through sql) and
+ *   every <af-chart> data-af-chart="ready", then checks that every DATA chart drew marks (a map:
+ *   its canvas or its unavailable note; a chart that did not draw: what its status says) and
  *   a table; when a chart has a filter it picks that chart's first table row, checks that another
  *   chart changed, then clears it and checks every chart is back; and that no [bracketed] starter
  *   text is left. Add a step for each requested number.
@@ -12,6 +13,8 @@ const PLACEHOLDERS_OK=false;
 const status=()=>page.evaluate(()=>document.querySelector('#status')?.textContent??'');
 await page.waitForFunction(()=>/^Computed \d+ queries|Could not|error|allow/i.test(document
   .querySelector('#status')?.textContent??''),null,{timeout:6000}).catch(()=>{});
+await page.waitForFunction(()=>[...document.querySelectorAll('af-chart')].every(c=>c.dataset
+  .afChart==='ready'),null,{timeout:6000}).catch(()=>{});
 const count=(await status()).match(/^Computed (\d+) queries/)?.[1];
 await step(`page computed its ${count} queries from the dataset`,async()=>{
   if(!Number(count))throw Error('no query answered: '+await status());});
@@ -20,9 +23,11 @@ await step('every chart draws marks and lists its values in a table',async()=>{
     const section=document.querySelector(`[data-af-id="chart-${c.id}"]`);
     const marks=section?.querySelectorAll(c.mark==='map'?'canvas':'.mark-rect path, '+
       '.mark-line path, .mark-symbol path').length??0,rows=section?.querySelectorAll('table tr')
-      .length??0,drawn=marks||c.mark==='map'&&/Map unavailable/.test(section?.textContent);
+      .length??0,drawn=marks||c.mark==='map'&&/Map unavailable/.test(section?.textContent),
+      said=section?.querySelector('af-chart:not([data-af-chart=ready]) .af-chart-status')
+      ?.textContent;
     return drawn&&(rows>1||c.table===false)?[]:[`${c.id} (${marks} marks, ${Math.max(0,rows-1)}`+
-      ' table rows)'];}));
+      ` table rows${said?': '+said:''})`];}));
   if(missing.length)throw Error('charts with no data: '+missing.join(', ')+
     ': check DATA x, y and where against the dataset columns');});
 // What each chart shows: its table's text and its mark count.

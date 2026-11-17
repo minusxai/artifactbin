@@ -44,6 +44,16 @@ it('answers one design system’s platform stylesheet for the local preview',asy
  expect((await styles(new Request('https://app.example/af/styles.css?system=nope'))).status).toBe(404);
 });
 
+it('carries the engines <af-chart> loads by import map in the offline copy of a page that imports it',async()=>{
+ const html='<!doctype html><html><head></head><body><af-chart sql="select 1"></af-chart><script type="module">import "@afbin/chart";</script></body></html>';
+ const resources=await referencedLibraryResources(html,[],'https://app.example/a/Page123');
+ const urls=resources.map(resource=>resource.url);
+ expect(urls).toContain('/af/components/chart.js');
+ expect(urls.filter(url=>/^\/af\/lib\/vega(?:-lite)?-[\d.]+\//.test(url))).toHaveLength(2);
+ const packed=await packOfflineDependencies({html,baseUrl:'https://app.example/a/Page123',resources});
+ expect(packed.html).not.toMatch(/import\(\s*["']@afbin\/vega/);
+},30000);
+
 it('embeds a page’s components and the chunks they import in the offline copy',async()=>{
  const html='<!doctype html><html><head></head><body><af-tabs></af-tabs><script type="module">import "@afbin/tabs";import "@afbin/select";</script></body></html>';
  const resources=await referencedLibraryResources(html,[],'https://app.example/a/Page123');

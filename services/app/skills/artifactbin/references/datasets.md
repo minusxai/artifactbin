@@ -56,7 +56,7 @@ const months=await sql`select substr(date, 1, 7) as month, count(*) as n, sum(am
 Compute every count, total, group by and join in SQL, never by summing rows in script; join
 linked datasets freely. A reader sees only the rows and columns their rule shows. A refusal
 rejects with `SqlError` (`code`, `message`): `validation_failed`, `permission_denied`,
-`timeout`, `result_too_large`, `unavailable` (no app frame: a downloaded copy or local preview).
+`timeout`, `result_too_large`, `unavailable` (local preview; a copy without rows or for a declared query).
 At most 10,000 input rows, 5 s and 4 MiB per answer; column and table names cannot be bound.
 
 ## Write

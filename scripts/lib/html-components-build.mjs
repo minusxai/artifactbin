@@ -8,6 +8,11 @@ import {writeComponentAssetReceipt} from './component-asset-proof.mjs';
  * (the skill's reference copy), minus `readableOmit`; without it both land in `outputDir`.
  * @typedef {{sourceDir: string, outputDir: string, readableDir?: string, entries?: readonly string[], readableEntries?: readonly string[], readableOmit?: readonly string[], appDir?: string, receipt?:{root:string,path?:string}}} ComponentBuildOptions */
 const ASSET_NAME=/^[a-z][a-z0-9-]*\.(?:ts|js)$/;
+/** The one exception to a closed graph: hosted page modules a component may leave to the page's import map, by exact
+ * bare specifier. A component reaches them only by literal `import('@afbin/…')`, so a download packs them the way it
+ * packs a page's own imports (lib/offline-dependencies) and vega never ships inside a component. Any other external
+ * import, a subpath of one of these or a URL, still fails the build. */
+export const PAGE_MODULE_EXTERNALS=Object.freeze(['@afbin/vega','@afbin/vega-lite','@afbin/apollo']);
 const APP_DIR=fileURLToPath(new URL('../../services/app/',import.meta.url));
 /** Compile one closed ESM graph, preserving lazy engines and sharing their chunks.
  * Flat lowercase names obey the installed skill asset contract. Compile and validate
@@ -25,9 +30,12 @@ export async function buildComponentAssets({sourceDir,outputDir,readableDir,entr
   if(!names.length) throw new Error('No HTML component sources found');
   const result=await build({entryPoints:names.map(name=>path.join(sourceDir,name)),outdir:outputDir,
     bundle:true,splitting:true,minify:true,write:false,metafile:true,format:'esm',platform:'browser',target:'es2022',
-    entryNames:'[name]',chunkNames:'chunk-[hash]',alias:{'@':path.resolve(appDir)},logLevel:'silent'});
+    entryNames:'[name]',chunkNames:'chunk-[hash]',alias:{'@':path.resolve(appDir)},logLevel:'silent',
+    plugins:[{name:'page-module-externals',setup(builder){
+      builder.onResolve({filter:/^@afbin\//},args=>PAGE_MODULE_EXTERNALS.includes(args.path)?{path:args.path,external:true}:undefined);
+    }}]});
   for(const output of Object.values(result.metafile.outputs)) for(const dependency of output.imports) {
-    if(dependency.external) throw new Error(`HTML components must bundle module dependency: ${dependency.path}`);
+    if(dependency.external && !PAGE_MODULE_EXTERNALS.includes(dependency.path)) throw new Error(`HTML components must bundle module dependency: ${dependency.path}`);
   }
   // esbuild hashes use uppercase ASCII. Lowercase that alphabet (a bijection), and
   // rewrite only emitted relative module references so entry/chunk names all match

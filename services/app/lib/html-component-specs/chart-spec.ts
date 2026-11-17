@@ -24,8 +24,8 @@ export const CHART_LIMITS = {
 } as const;
 
 /** The recipes a description may name (the shipped registry's non-map builders, lib/viz/viz-templates). */
-export const CHART_RECIPES = ['funnel', 'waterfall', 'radar', 'trend', 'single-value', 'combo'] as const;
-export type ChartRecipe = typeof CHART_RECIPES[number];
+const CHART_RECIPES = ['funnel', 'waterfall', 'radar', 'trend', 'single-value', 'combo'] as const;
+type ChartRecipe = typeof CHART_RECIPES[number];
 
 export type ChartDescription =
   | { kind: 'vega-lite'; spec: Record<string, unknown> }
