@@ -7,7 +7,11 @@ import {request,useAppHarness} from './harness';
 import {attachActor} from '@artifactbin/utils';
 import { createUser } from '@/lib/accounts';
 import {runWithRequest} from '@/lib/platform';
+import {overridePresenceFrameInterval} from '@/lib/publish';
 import {getDb} from '@/lib/platform/db';
+// Frames every 50ms, not every second: every wait below is for a reader's next frame (the interval itself is the room's
+// test, lib/html-presence/__tests__/room.test.ts).
+overridePresenceFrameInterval(50);
 const harness=useAppHarness();let owner:Awaited<ReturnType<typeof createUser>>;
 beforeEach(async()=>{owner=await createUser({email:'mxmx_test_presence@example.com'});await(await harness.db()).query("INSERT INTO artifacts(id,token_id,user_id,format,visibility,version) VALUES ('prespublic','tok_presence',$1,'html','public',1),('presprivate','tok_presence',$1,'html','private',1),('presMixed','tok_presence',$1,'html','public',1)",[owner.id]);});
 const params=(id:string)=>({params:Promise.resolve({id})});

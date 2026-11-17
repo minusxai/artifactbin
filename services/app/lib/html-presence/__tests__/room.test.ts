@@ -88,3 +88,11 @@ it('closes explicitly on state overload instead of publishing a silently truncat
  for(let i=0;i<2049;i++)receive(JSON.stringify({id:i.toString(16).padStart(64,'0'),label:'Guest',revision:'1',seen:1000,cursor:null,selection:null}));
  expect(closed).toBe(1);expect(sent).toHaveLength(1);room.dispose();expect(closed).toBe(1);
 });
+it('holds later frames to the interval it is given, the first still at once',async()=>{
+ let now=0,notification=(_payload:string)=>{};const sent:PresenceFrame[]=[],delays:number[]=[];
+ await createPresenceRoom({revision:'1',frameIntervalMs:50,authorize:async()=>true,subscribe:async receive=>{notification=receive;return async()=>{};},subscribeAcl:async()=>async()=>{},send:frame=>sent.push(frame),close:()=>{},
+  clock:{now:()=>now,setTimeout:(_work,ms)=>{delays.push(ms);return 1;},clearTimeout:()=>{},setInterval:()=>2,clearInterval:()=>{}}});
+ expect(sent).toHaveLength(1);
+ now=20;notification(JSON.stringify({id:'a'.repeat(64),label:'Guest',revision:'1',seen:now,cursor:{nodeId:'p',x:.5,y:.5},selection:null}));
+ expect(delays).toContain(30);
+});
