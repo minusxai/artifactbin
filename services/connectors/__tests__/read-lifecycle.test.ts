@@ -95,3 +95,16 @@ it('never fails an acquiring caller because evicting another idle session failed
   busy.resolve();await holding;
  }finally{warn.mockRestore();confirmed=true;await pool.close();}
 });
+
+it('bounds an eviction whose termination never settles by the acquiring caller deadline',async()=>{
+ const warn=vi.spyOn(console,'warn').mockImplementation(()=>{});
+ const hung=latch();
+ const pool=new SessionPool<{key:string}>({open:async key=>({key}),close:async s=>{if(s.key==='stuck')await hung.promise;}},bounds);
+ try{
+  await pool.use('stuck',async()=>{});
+  const started=performance.now();
+  await expect(pool.use('late',async()=>'ran',{timeoutMs:50})).rejects.toMatchObject({code:'timeout'});
+  expect(performance.now()-started).toBeLessThan(1000);
+  expect(pool.count()).toBe(1);
+ }finally{warn.mockRestore();hung.resolve();await pool.close();}
+});
