@@ -313,22 +313,32 @@ describe('CI avoids duplicate integration setup', () => {
     expect(modules).toBeLessThan(save);
     expect(readFileSync(path.join(root, 'services/app/__tests__/schema-image.test.ts'), 'utf8')).toContain("inject('schemaImageDir')");
   });
-  // Vitest's module cache is keyed by each module's source AND the configuration that transformed it, so warming it for
-  // the api projects alone left every other pr fast runner to transform its whole graph cold: 9-15s of transform summed
-  // over three workers on each ui, guard and node runner against ~2s on an api one (pr fast runs 44114175470,
-  // 44133274884). Every configuration pr fast shards is listed here, so each of those runners restores its modules warm.
-  it('warms the module cache for every Vitest configuration pr fast shards before saving the test builds', () => {
+  // Vitest's module cache is keyed by each module's source AND the configuration that transformed it, so one entry warmed
+  // for the api projects alone left every other pr fast runner to transform its whole graph cold: 9-15s of transform
+  // summed over three workers on each ui, guard and node runner against ~2s on an api one (pr fast runs 44114175470,
+  // 44133274884), and one entry warmed for all four would make every runner download all four (~22 MB against api's ~6).
+  // So pr fast restores one entry per runner kind, which main writes with that kind's configuration listed alone.
+  it('writes each pr fast runner kind its own test builds on main, its module cache listed from that configuration alone', () => {
     const fast = yaml.parse(readFileSync(path.join(root, '.github/workflows/pr-fast.yml'), 'utf8')).jobs.fast;
+    const kinds = {
+      api: '--project=api --project=api-isolated', ui: '--project=ui --project=islands',
+      guards: '--config vitest.guard.config.ts', node: '--config vitest.node-batch.config.ts',
+    };
+    // Every selection pr fast runs is one of the kinds.
     const configs = fast.steps.flatMap(step => [...(step.run ?? '').matchAll(/vitest\.mjs run (--config \S+) --shard=/g)].map(match => match[1]));
     const projects = [...new Set(fast.strategy.matrix.include.map(entry => entry.projects).filter(Boolean))];
-    expect(configs).toEqual(['--config vitest.guard.config.ts', '--config vitest.node-batch.config.ts']);
-    expect(projects).toEqual(['--project=api --project=api-isolated', '--project=ui --project=islands']);
+    expect([...projects, ...configs].sort()).toEqual(Object.values(kinds).sort());
     const steps = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8')).jobs['warm-caches'].steps;
-    const save = steps.findIndex(step => (step.uses ?? '').startsWith('actions/cache/save') && step.with.key.startsWith('test-builds-v2-'));
-    for (const selection of [...projects, ...configs]) {
-      const list = steps.findIndex(step => step.run === `node node_modules/vitest/vitest.mjs list ${selection} --filesOnly=false > /dev/null`);
-      expect(list, selection).toBeGreaterThan(-1);
-      expect(list, selection).toBeLessThan(save);
+    const isList = step => /vitest\.mjs list /.test(step.run ?? '');
+    const lists = steps.flatMap((step, i) => isList(step) ? [i] : []);
+    for (const [kind, selection] of Object.entries(kinds)) {
+      const save = steps.findIndex(step => (step.uses ?? '').startsWith('actions/cache/save') && step.with.key === `test-builds-v3-\${{ runner.os }}-${kind}-\${{ steps.test-builds-key.outputs.key }}`);
+      expect(save, kind).toBeGreaterThan(-1);
+      expect(steps[save].with.path.split('\n').filter(Boolean), kind).toEqual(['services/app/lib/build-assets', 'services/app/public/libraries', SCHEMA_IMAGE_DIR, MODULE_CACHE_DIR]);
+      const last = Math.max(...lists.filter(i => i < save));
+      expect(steps[last].run, kind).toContain(`node node_modules/vitest/vitest.mjs list ${selection} --filesOnly=false > /dev/null`);
+      // Every list after the first starts from an empty module cache, so an entry holds its own kind's modules only.
+      if (last !== lists[0]) expect(steps[last].run.trim().split('\n')[0], kind).toBe(`rm -rf ${MODULE_CACHE_DIR}`);
     }
   });
   // The server-reader marker lists the hosted libraries as outputs: an entry without them is a miss on every shard,
@@ -342,8 +352,16 @@ describe('CI avoids duplicate integration setup', () => {
       for (const cache of caches) {
         entries++;
         expect(cache.with.path.split('\n').filter(Boolean), name).toEqual(['services/app/lib/build-assets', 'services/app/public/libraries', SCHEMA_IMAGE_DIR, MODULE_CACHE_DIR]);
-        expect(cache.with.key, name).toBe('test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}');
-        if (cache.with['restore-keys'] !== undefined) expect(cache.with['restore-keys'], name).toBe('test-builds-v2-${{ runner.os }}-');
+        if (name === 'pr-fast.yml fast') {
+          // A runner kind's entry, falling back to main's whole entry for these very sources (fresh builds, the api
+          // modules), then the kind's newest, then the newest of all.
+          expect(cache.with.key, name).toBe('test-builds-v3-${{ runner.os }}-${{ env.TEST_BUILDS_KIND }}-${{ steps.test-builds-key.outputs.key }}');
+          if (cache.with['restore-keys'] !== undefined) expect(cache.with['restore-keys'].trim().split('\n'), name).toEqual(['test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}', 'test-builds-v3-${{ runner.os }}-${{ env.TEST_BUILDS_KIND }}-', 'test-builds-v2-${{ runner.os }}-']);
+        } else {
+          expect(cache.with.key, name).toMatch(/^test-builds-v(2|3-\$\{\{ runner\.os \}\}-(api|ui|guards|node))-\$\{\{ (runner\.os \}\}-\$\{\{ )?steps\.test-builds-key\.outputs\.key \}\}$/);
+          if (!cache.with.key.startsWith('test-builds-v3-')) expect(cache.with.key, name).toBe('test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}');
+          if (cache.with['restore-keys'] !== undefined) expect(cache.with['restore-keys'], name).toBe('test-builds-v2-${{ runner.os }}-');
+        }
         const key = jobSteps.findIndex(step => step.id === 'test-builds-key');
         expect(key, name).toBeGreaterThan(-1);
         expect(key, name).toBeLessThan(jobSteps.indexOf(cache));

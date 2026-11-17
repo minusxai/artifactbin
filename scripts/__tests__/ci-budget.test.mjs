@@ -136,14 +136,23 @@ it('runs every api, api-isolated, ui and islands test on every pull request, pac
  }
  // No browser: no file in these projects launches Chromium.
  expect(JSON.stringify(job.steps)).not.toContain('playwright');
- // The test builds restore before the run; only the first api runner saves, and only on an exact miss.
+ // The test builds restore before the run, each runner its own kind's entry (its configuration's module cache: see
+ // scripts/__tests__/ci-plan.test.mjs); only the first runner of each kind saves, and only on an exact miss.
  const steps=job.steps,restore=steps.findIndex(step=>step.id==='test-builds');
  expect(restore).toBeGreaterThan(-1);expect(restore).toBeLessThan(steps.indexOf(run));
  expect(steps[restore].uses).toMatch(/^actions\/cache\/restore@/);
+ expect(steps[restore].with.key).toBe('test-builds-v3-${{ runner.os }}-${{ env.TEST_BUILDS_KIND }}-${{ steps.test-builds-key.outputs.key }}');
+ expect(job.env.TEST_BUILDS_KIND).toBe("${{ matrix.shard && 'guards' || matrix.batch && 'node' || matrix.suite && startsWith(matrix.part, 'ui-') && 'ui' || 'api' }}");
  const save=steps.filter(step=>step.uses?.startsWith('actions/cache/save')&&step.with.key.startsWith('test-builds-'));
  expect(save).toHaveLength(1);
- expect(save[0].if).toBe("matrix.part == 'api-1' && steps.test-builds.outputs.cache-hit != 'true'");
+ expect(save[0].if).toBe("contains(fromJSON('[\"api-1\",\"ui-1\",\"guards\",\"node-1\"]'), matrix.part) && steps.test-builds.outputs.cache-hit != 'true'");
  expect(save[0].with).toEqual({path:steps[restore].with.path,key:steps[restore].with.key});
+ // Saved after every test step, so a saver's own transforms are in its entry.
+ expect(steps.indexOf(save[0])).toBeGreaterThan(Math.max(...steps.flatMap((step,i)=>(step.run??'').includes('vitest.mjs run')?[i]:[])));
+ const savers=JSON.parse(save[0].if.match(/fromJSON\('(.*?)'\)/)[1]);
+ const parts=job.strategy.matrix.include.filter(entry=>entry.suite||entry.shard||entry.batch).map(entry=>entry.part);
+ // The first runner of each kind, and no other.
+ expect(savers).toEqual([parts.find(part=>part.startsWith('api-')),parts.find(part=>part.startsWith('ui-')),parts.find(part=>part.startsWith('guards')),parts.find(part=>part.startsWith('node-'))]);
 });
 // The full suite's cheap node files ran only after the merge. pr fast runs them as one shared-graph batch, sharded by time.
 it('runs the cheap node batch on every pull request: its own runners, its config\'s timed shards, each file once',()=>{
@@ -361,7 +370,7 @@ it('reconciles the nearest install on a lock miss, restore only, and falls back 
  // only when this lock's exact key is missing, and every other runner skips it. The other save is the test builds.
  // (The slim install's own save, from the same runner, is scripts/__tests__/slim-install.test.mjs's.)
  const saves=steps.filter(step=>(step.uses?.startsWith('actions/cache/save')||step.uses?.startsWith('actions/cache@'))&&!step.with.key.startsWith('install-slim-'));
- expect(saves.map(step=>step.with.key)).toEqual([exact.with.key,'test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}']);
+ expect(saves.map(step=>step.with.key)).toEqual([exact.with.key,'test-builds-v3-${{ runner.os }}-${{ env.TEST_BUILDS_KIND }}-${{ steps.test-builds-key.outputs.key }}']);
  const own=steps.find(step=>step.id==='own-install');
  expect(own).toMatchObject({if:'matrix.install',with:{path:exact.with.path,key:exact.with.key,'lookup-only':true}});
  expect(saves[0]).toMatchObject({if:"matrix.install && steps.own-install.outputs.cache-hit != 'true'",with:{path:exact.with.path,key:exact.with.key}});
