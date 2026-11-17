@@ -36,6 +36,8 @@ describe('the registry is curated, not generated', () => {
       'set_dataset_policy', 'testuser_create', 'testuser_delete', 'testuser_list', 'transfer_artifact', 'update_artifact', 'update_metadata',
       // Agents on live regions (lib/region-sessions agents.ts): a region's text read and written while people type; their typing saved.
       'read_region', 'save_regions', 'write_region',
+      // Drawing the caller's own rows (lib/viz chart-image.server): no artifact is read.
+      'render_chart_image',
     ].sort());
   });
 
@@ -56,7 +58,7 @@ describe('the registry is curated, not generated', () => {
 
   it('read/write/destructive is annotated, and the reads are the reads', () => {
     const readOnly = OPERATIONS.filter((o) => o.annotations.readOnly).map((o) => o.name).sort();
-    expect(readOnly).toEqual(['get_group','list_group_artifacts','list_group_collection','list_group_invitations','list_group_members','list_groups', 'export_artifact', 'get_artifact', 'get_artifact_members', 'get_dataset_policy', 'get_dataset_policy_templates', 'get_live_connection', 'get_live_schema', 'test_live_connection', 'get_version', 'list_artifacts', 'list_versions', 'query_resource', 'read_region', 'testuser_list'].sort());
+    expect(readOnly).toEqual(['get_group','list_group_artifacts','list_group_collection','list_group_invitations','list_group_members','list_groups', 'export_artifact', 'get_artifact', 'get_artifact_members', 'get_dataset_policy', 'get_dataset_policy_templates', 'get_live_connection', 'get_live_schema', 'test_live_connection', 'get_version', 'list_artifacts', 'list_versions', 'query_resource', 'read_region', 'render_chart_image', 'testuser_list'].sort());
     expect(OPERATIONS.find((o) => o.name === 'delete_artifact')!.annotations.destructive).toBe(true);
   });
 
@@ -65,8 +67,8 @@ describe('the registry is curated, not generated', () => {
       // /api/artifacts is the bearer surface; export is the one op whose HTTP
       // twin is the document's own sub-path (a page can't return bytes); and
       // /api/testusers is the throwaway-people family, which is about the
-      // CALLER rather than about any one artifact.
-      expect(op.http.path, op.name).toMatch(/^\/api\/(groups|artifacts|datasets|secrets|sessions|browser-sessions|testusers)(\/|$)|^\/a\/\{id\}\/export$/);
+      // CALLER rather than about any one artifact; /api/charts draws the caller's own rows and reads none.
+      expect(op.http.path, op.name).toMatch(/^\/api\/(groups|artifacts|datasets|secrets|sessions|browser-sessions|testusers|charts)(\/|$)|^\/a\/\{id\}\/export$/);
       expect(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']).toContain(op.http.method);
       for (const [, param] of op.http.path.matchAll(/\{(\w+)\}/g)) {
         expect(Object.keys(op.input), `${op.name}: path param ${param}`).toContain(param);

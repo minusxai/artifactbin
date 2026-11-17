@@ -71,3 +71,19 @@ export interface IssuedArtifactReadGrant {grant:string; expires_at:string; user_
 export const PAGE_EVIDENCE_PATH='/api/internal/identity/page-evidence';
 /** Auth-only fixed seam. POST {operation}; then POST {operation,fingerprint} verifies metadata only. */
 export const CANONICAL_PAGE_EVIDENCE_PATH='/api/internal/page-evidence';
+
+/**
+ * Purpose-only chart drawing for a trusted relay (the same `artifact_reads` opt-in and per-service introspection
+ * secret as artifact-read, no grant: drawing reads no data, so a run with no personal grant may use it too). POST
+ * exactly a subset of CHART_IMAGE_KEYS with `chart` and `rows`, at most CHART_IMAGE_BODY_LIMIT bytes. The identity
+ * owner forwards that body to the fixed app seam and passes its status and JSON through, buffered to at most
+ * ARTIFACT_READ_LIMIT: `ChartImageWire`, or `{error, message, hint?}`.
+ */
+export const CHART_IMAGE_PATH = '/api/internal/identity/chart-image';
+/** Fixed app upstream route; only the identity owner calls it. */
+export const CANONICAL_CHART_IMAGE_PATH = '/api/internal/chart-image';
+/** What a chart image request may carry; `chart` and `rows` are required. */
+export const CHART_IMAGE_KEYS = ['chart', 'rows', 'width', 'height', 'theme', 'designSystem'] as const;
+export const CHART_IMAGE_BODY_LIMIT = 512 * 1024;
+/** A drawn chart: base64 PNG bytes (`data`), its pixel size and byte count. */
+export interface ChartImageWire {mime:'image/png'; width:number; height:number; bytes:number; data:string}

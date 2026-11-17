@@ -37,6 +37,28 @@ export function houseTokens(mode: 'light' | 'dark', palette?: string[] | null): 
   };
 }
 
+/**
+ * THE PAGE-TOKEN MAPPING, one for <af-chart> and the query image: a design system's custom
+ * properties → chart tokens. `color(name)` answers a property as a concrete sRGB string (the
+ * page resolves through its own computed style; the server through lib/viz/css-color), or null
+ * when unset, which keeps the house value for `mode`. The surface is `--background`; `subtle`
+ * and `grid` are derived toward it from `--muted-foreground` and `--border`. `font` is the
+ * family list text is drawn in.
+ */
+export function tokensFromThemeVariables(
+  color: (name: string) => string | null, font: string, mode: 'light' | 'dark',
+): ChartTokens {
+  const house = houseTokens(mode);
+  const surface = color('--background') ?? house.surface;
+  const muted = color('--muted-foreground') ?? house.muted;
+  const border = color('--border') ?? house.border;
+  const category = [1, 2, 3, 4, 5].map(i => color(`--chart-${i}`)).filter((c): c is string => !!c);
+  return {
+    category: category.length ? category : house.category, foreground: color('--foreground') ?? house.foreground,
+    muted, subtle: mixColor(muted, surface, 0.35), border, grid: mixColor(border, surface, 0.45), surface, font,
+  };
+}
+
 /** A mode name means the house tokens; tokens pass through. */
 export const resolveTokens = (theme: 'light' | 'dark' | ChartTokens, palette?: string[] | null): ChartTokens =>
   typeof theme === 'string' ? houseTokens(theme, palette) : palette?.length ? { ...theme, category: palette } : theme;
@@ -189,12 +211,20 @@ export function getVegaParserConfig(theme: 'light' | 'dark' | ChartTokens, palet
     background: 'transparent',
     range: chartRanges(t),
     text: { fill: colors.fgDefault, font, fontSize: 11 },
+    // Axes too: without these a native spec drew Vega's default black labels and grey rules,
+    // unreadable on a dark surface.
+    axis: {
+      labelColor: colors.fgMuted, labelFont: font, labelFontSize: 11, titleColor: colors.fgDefault,
+      titleFont: font, titleFontWeight: 'normal', gridColor: t.grid, domainColor: t.border, tickColor: t.border,
+    },
     legend: {
       orient: 'top',
       layout: { top: { anchor: 'middle' } },
       labelColor: colors.fgMuted,
       labelFont: font,
       labelFontSize: 11,
+      titleColor: colors.fgDefault,
+      titleFont: font,
     },
     title: { color: colors.fgDefault, font, fontSize: 14 },
   };

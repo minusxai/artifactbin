@@ -4,11 +4,14 @@ Page tables use link names (data-af-name) and _id; dataset IDs read their rows; 
 reads the install's database. All reads use your current dataset rules.
 Usage: node scripts/sql.mjs schema ID|URL|default:DB [--revision N]
        node scripts/sql.mjs query ID|URL|default:DB 'SQL' [--params FILE] [--limit N]
-         [--revision N] [--idempotency-key KEY]
+         [--revision N] [--idempotency-key KEY] [--chart FILE --chart-output FILE.png
+         [--chart-width N] [--chart-height N] [--chart-theme light|dark]]
 Flags: --params FILE a JSON object of the $name values the SQL binds; --limit N the most rows a
   read prints (default 1000, at most 10000); --revision N a saved page revision (default:
   current; pages only; it reads only); --idempotency-key KEY replays a page write (default: a
-  new key, printed as idempotencyKey). Common: --server, --json, --help.
+  new key, printed as idempotencyKey); --chart FILE a chart description (the JSON <af-chart>
+  takes) drawn over the read's rows into a new --chart-output FILE.png, --chart-width/height N
+  pixels (default 640x400), --chart-theme light|dark. Common: --server, --json, --help.
 Examples:
   node scripts/sql.mjs schema ID
   node scripts/sql.mjs query ID 'select grp, count(*) as n from entries group by grp'
@@ -24,7 +27,8 @@ Gotchas: quote the SQL in single quotes, so the shell leaves $name alone. schema
   returning [] (read the rows after it). Pass values in --params, never inside the SQL text.
   Live dataset SQL needs owner/editor; :name or $name binds.
   Exit 5 means a write's outcome is unknown: repeat it with the printed --idempotency-key (a
-  page write applies at most once).
+  page write applies at most once). --chart draws reads only, at most 120 KiB of rows and chart
+  (else chart_rows_too_large: aggregate in SQL); the result adds chart: {output, width, height}.
 Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write outcome.
   Results never contain credentials.`;
 
@@ -39,6 +43,7 @@ import {
   ToolError
 } from './toolbox-client.mjs';
 import {datasetLinks} from './toolbox-check-reply.mjs';
+import {chartRequest, drawChart} from './toolbox-chart.mjs';
 
 const WRITE = /^\s*(?:insert|update|delete)\b/i;
 const ROWS = {default: 1000, max: 10000}, PAGE = 100;
@@ -82,11 +87,16 @@ export async function sqlCommand({sub, values, positionals}, options = {}) {
   if (!target || extra.length || (sub === 'schema') !== (statement === undefined))
     throw new ToolError('invalid_arguments', sub === 'schema' ? 'schema takes one ID.' :
       'query takes an ID and one SQL statement.', 2, 'Read --help.');
-  if (target.startsWith('default:')) return makeClient(selectedServer(values, options.env),
-    options).request('/api/default-connection/sql', {method: 'POST', safeToRepeat: true,
-    timeoutMs: WAREHOUSE_MS, body:
-    {sql: statement, namespace: target.slice(8), params: values.params &&
-    await jsonFile(values.params)}});
+  const chart = await chartRequest(values, sub, WRITE.test(statement ?? ''));
+  /** The read, and its chart when --chart asks for one. */
+  const drawn = async (client, read) => chart ? {...read, chart: await drawChart(client, chart,
+    read)} : read;
+  if (target.startsWith('default:')) {
+    const client = makeClient(selectedServer(values, options.env), options);
+    return drawn(client, await client.request('/api/default-connection/sql', {method: 'POST',
+      safeToRepeat: true, timeoutMs: WAREHOUSE_MS, body: {sql: statement,
+        namespace: target.slice(8), params: values.params && await jsonFile(values.params)}}));
+  }
   const {server, id} = resolveTarget(target, selectedServer(values, options.env)),
     client = makeClient(server, options);
   const revision = values.revision ? String(integer(values.revision, 'revision')) : undefined;
@@ -130,7 +140,7 @@ export async function sqlCommand({sub, values, positionals}, options = {}) {
       body: {sql: statement, values: params}, unsafe: true});
     return {affected: done.affected, returning: [], version: done.version};
   }
-  if (!page) return datasetRead(client, id, statement, params, limit);
+  if (!page) return drawn(client, await datasetRead(client, id, statement, params, limit));
   if (write && revision) throw new ToolError('revision_read_only',
     'A saved revision reads only.', 2, 'Drop --revision to write to the current page.');
   const at = revision ?? String(head.version);
@@ -139,8 +149,8 @@ export async function sqlCommand({sub, values, positionals}, options = {}) {
     const result = await pageSql(client, id, {sql: statement, params, revision: at}, key);
     if (key)
       return {affected: result.affected, returning: result.returning ?? [], idempotencyKey: key};
-    return {columns: result.columns, rows: result.rows.slice(0, limit),
-      ...result.rows.length > limit ? {truncated: true} : {}};
+    return drawn(client, {columns: result.columns, rows: result.rows.slice(0, limit),
+      ...result.rows.length > limit ? {truncated: true} : {}});
   } catch (error) {
     if (key && error instanceof ToolError) {
       if (error.exit === 5) error.recovery = 'Read the rows before any other write, or repeat ' +
