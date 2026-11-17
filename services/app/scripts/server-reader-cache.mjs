@@ -39,7 +39,18 @@ const SOURCE_DIRS = ['lib/html-components', 'lib/libraries'];
 const sha = (buffer) => createHash('sha256').update(buffer).digest('hex');
 
 function sourceList() {
-  return sha(sourceFiles().sort().join('\0'));
+  return sha(entrySources(sourceFiles()).sort().join('\0'));
+}
+
+/**
+ * The entry-set files among `files`: a test or a test fixture is never an entry, and the test-builds cache key that picks
+ * which build CI restores ignores them too (scripts/lib/ci-plan.mjs `testBuildsKey`). Counted here, a test file added
+ * under lib/libraries (#1295's) left the key and main's saved entry in place while every marker in it went stale, so
+ * every pull request's test runners rebuilt the libraries and the server reader (~10s each, pr fast run 44138698759).
+ * @param {string[]} files
+ */
+export function entrySources(files) {
+  return files.filter((file) => !/(^|\/)__tests__\//.test(file) && !/\.test\.[cm]?[jt]sx?$/.test(file));
 }
 
 // The gate container builds from a copy of the tree with no repository, so git is a fast path, not a requirement.
