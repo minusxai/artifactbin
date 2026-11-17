@@ -8,6 +8,7 @@ import type {RenderRequest} from '@artifactbin/contracts';
 import {CARD_HEIGHT,CARD_WIDTH} from '@artifactbin/contracts';
 import {useAppHarness} from '@/__tests__/harness';
 import {getDb,setServices} from '@/lib/platform';
+import {objectStore} from '@/lib/object-store';
 import {ELEMENT_CAPTURE} from '@artifactbin/contracts';
 import {EXPORT_RENDER_GENERATION,exportCacheKey,exportImageResponse,exportKeyReader,mintExportKey,parseExportCapture,parseExportElement,parseExportFormat,parseExportSlide,renderArtifactImage,resetExportRenderer,verifyExportKey} from '..';
 
@@ -253,6 +254,17 @@ describe('a bounded export',()=>{
   const unbounded=browser(()=>({ok:true,mime:'image/png',bytes:PNG}));
   expect((await exportImageResponse(page(),{},BASE)).status).toBe(200);
   expect(unbounded[0]!.timeoutMs).toBe(30_000);
+ });
+ it('bounds a direct-upload render by the same deadline',async()=>{
+  const store=objectStore(),original=store.signedUpload;const uploads:RenderRequest[]=[];
+  store.signedUpload=async()=>({url:'https://storage.example/exports/objects/test.png',contentType:'image/png'});
+  setServices({browser:{render:async()=>({ok:true,mime:'image/png',bytes:PNG}),renderAndUpload:async request=>{uploads.push(request.render);return {ok:false,reason:'upload_unavailable'};}}});
+  try{
+   expect((await exportImageResponse(page(),{deadline:Date.now()+8_000},BASE)).status).toBe(200);
+   expect(uploads).toHaveLength(1);
+   expect(uploads[0]!.timeoutMs).toBeLessThanOrEqual(8_000);
+   expect(uploads[0]!.timeoutMs).toBeGreaterThan(7_000);
+  }finally{if(original)store.signedUpload=original;else delete store.signedUpload;}
  });
 });
 
