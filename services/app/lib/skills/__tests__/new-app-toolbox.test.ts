@@ -9,6 +9,8 @@ import {it,expect} from 'vitest';
 import {mkdtemp,mkdir,readFile,writeFile,rm,readdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
+import {newAppCommand} from '../../../skills/artifactbin/scripts/new-app.mjs';
+import {stampSource} from '../../../skills/artifactbin/scripts/toolbox-source.mjs';
 
 const server='https://example.test';
 type Call={method:string;path:string;body?:any};
@@ -44,7 +46,6 @@ function fakeServer(){
 }
 
 async function project(){
- const {newAppCommand}=await import('../../../skills/artifactbin/scripts/new-app.mjs');
  const root=await mkdtemp(path.join(tmpdir(),'new-app-')),dir=path.join(root,'app');await mkdir(dir);
  const fake=fakeServer();
  const options={env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'private-fixture',ARTIFACTBIN_HOME:path.join(root,'home')},fetcher:fake.fetcher,cwd:root,log:()=>{}};
@@ -151,7 +152,6 @@ it('keeps a file that already exists and says so, and reuses the dataset and rul
   expect(await readFile(path.join(p.dir,'index.html'),'utf8')).toBe(before);
   // Once the page is published (its marker is in index.html) the dataset is still the one it links, and the
   // next step publishes it plainly.
-  const {stampSource}=await import('../../../skills/artifactbin/scripts/toolbox-source.mjs');
   await writeFile(path.join(p.dir,'index.html'),stampSource(before,{server,id:'PAGE01',version:2,state:'a'.repeat(64),sha256:'b'.repeat(64),entryPath:'index.html'}));
   const published=await p.run({dir:'app',title:'Launch tasks'});
   expect(published.datasets).toMatchObject({entries:{id:'DATA0001',reused:true}});
