@@ -77,10 +77,11 @@ it('expires stalled actor admission without continuing into SQL',async()=>{
 
 it('includes the final owner-host fence in the read lifetime',async()=>{
  const f=await fixture(),timer=setTimeout;
- const timerSpy=vi.spyOn(globalThis,'setTimeout').mockImplementation(((handler:Parameters<typeof setTimeout>[0],ms?:number,...args:unknown[])=>timer(handler,ms!==undefined&&ms>40000&&ms<=45000?40:ms,...args)) as typeof setTimeout);
+ // The shortened lifetime must outlast the first two fences on a loaded runner and expire inside the stalled third.
+ const timerSpy=vi.spyOn(globalThis,'setTimeout').mockImplementation(((handler:Parameters<typeof setTimeout>[0],ms?:number,...args:unknown[])=>timer(handler,ms!==undefined&&ms>40000&&ms<=45000?400:ms,...args)) as typeof setTimeout);
  let checks=0;
  try{
-  const response=await ownerHostSqlRead(request(`/api/artifacts/${f.page}/sql`,{method:'POST',json:{revision:'1',sql:'select name from staff'}}),f.page,async()=>{if(++checks===3)await new Promise(resolve=>timer(resolve,100));return true;});
+  const response=await ownerHostSqlRead(request(`/api/artifacts/${f.page}/sql`,{method:'POST',json:{revision:'1',sql:'select name from staff'}}),f.page,async()=>{if(++checks===3)await new Promise(resolve=>timer(resolve,1000));return true;});
   expect(checks).toBe(3);expect(response.status).toBe(404);
  }finally{timerSpy.mockRestore();}
 });
