@@ -147,7 +147,7 @@ it('runs every api, api-isolated, ui and islands test on every pull request, pac
  expect(job.env.TEST_BUILDS_KIND).toBe("${{ matrix.shard && 'guards' || matrix.batch && 'node' || matrix.suite && startsWith(matrix.part, 'ui-') && 'ui' || 'api' }}");
  const save=steps.filter(step=>step.uses?.startsWith('actions/cache/save')&&step.with.key.startsWith('test-builds-'));
  expect(save).toHaveLength(1);
- expect(save[0].if).toBe("contains(fromJSON('[\"api-32\",\"ui-7\",\"guards-3\",\"node-3\"]'), matrix.part) && steps.test-builds.outputs.cache-hit != 'true'");
+ expect(save[0].if).toBe("contains(fromJSON('[\"api-32\",\"ui-7\",\"guards-3\",\"node-3\"]'), matrix.part) && steps.test-builds.outputs.cache-hit != 'true' && steps.test-builds-retry.outputs.cache-hit != 'true'");
  expect(save[0].with).toEqual({path:steps[restore].with.path,key:steps[restore].with.key});
  // Saved after every test step, so a saver's own transforms are in its entry.
  expect(steps.indexOf(save[0])).toBeGreaterThan(Math.max(...steps.flatMap((step,i)=>(step.run??'').includes('vitest.mjs run')?[i]:[])));
@@ -155,6 +155,35 @@ it('runs every api, api-isolated, ui and islands test on every pull request, pac
  const parts=job.strategy.matrix.include.filter(entry=>entry.suite||entry.shard||entry.batch).map(entry=>entry.part);
  // The last runner of each kind, and no other.
  expect(savers).toEqual([parts.findLast(part=>part.startsWith('api-')),parts.findLast(part=>part.startsWith('ui-')),parts.findLast(part=>part.startsWith('guards')),parts.findLast(part=>part.startsWith('node-'))]);
+});
+// A CACHE DOWNLOAD THAT STALLS IS ABANDONED, NOT AWAITED. Over 575 install restores the download took 1.4s median and 6.2s
+// p99, then 35.5s (run 44141023943's node-2, stuck at 70.8% then 92.7%); over 538 test-builds restores 0.8s median and 1.9s
+// p99, then 20.4s and a 16.9s "server is busy" that ended in no entry at all (44150141230's ui-5). actions/cache gives up
+// on a 128 MB segment after SEGMENT_DOWNLOAD_TIMEOUT_MINS (fractions allowed) and reports a miss, extracting nothing, so
+// the next tier of the same chain runs: the slim install falls back to the whole one, the whole one to the nearest, the
+// test builds to one more restore, then to building them. The last tier of each chain keeps its default, so a network that
+// is slow everywhere costs time, never a cold `npm ci`.
+it('bounds every first cache download and lets the next tier of the same chain take over, the last one unbounded',()=>{
+ const steps=workflow('pr-fast.yml').jobs.fast.steps,by=(id)=>steps.find(step=>step.id===id);
+ const bound=(step)=>step.env?.SEGMENT_DOWNLOAD_TIMEOUT_MINS;
+ // Six seconds a segment for the 164-193 MB installs, three for the 15 MB test builds: twice and more their p99.
+ expect(bound(by('slim'))).toBe('0.1');
+ // The whole install is the first tier for the runners that skip the slim one (types, lint, tests), the second for the rest.
+ expect(bound(by('install'))).toBe("${{ steps.slim.outcome == 'skipped' && '0.1' || '' }}");
+ expect(bound(by('near-install'))).toBeUndefined();
+ expect(bound(by('test-builds'))).toBe('0.05');
+ const retry=by('test-builds-retry');
+ expect(steps.indexOf(retry)).toBe(steps.indexOf(by('test-builds'))+1);
+ expect(retry.uses).toBe(by('test-builds').uses);
+ expect(retry.with).toEqual(by('test-builds').with);
+ expect(retry.if).toBe("(matrix.suite || matrix.shard || matrix.batch) && steps.test-builds.outputs.cache-matched-key == ''");
+ expect(bound(retry)).toBe('0.25');
+ // Every bound is a fraction of a minute that actions/cache parses: Number(value) * 60 * 1000 ms a segment.
+ const values=steps.flatMap(step=>bound(step)===undefined?[]:[String(bound(step)).match(/'([\d.]+)'|^([\d.]+)$/)]);
+ for(const match of values){const minutes=Number(match[1]??match[2]);expect(minutes).toBeGreaterThan(0);expect(minutes).toBeLessThan(1);}
+ expect(values).toHaveLength(4);
+ // A runner whose restore was abandoned builds its test builds itself, as on any miss, and still runs every one of its tests.
+ expect(steps.filter(step=>step.if?.includes('steps.test-builds.outputs')).map(step=>step.id??step.uses.split('@')[0])).toEqual(['test-builds-retry','actions/cache/save']);
 });
 // The full suite's cheap node files ran only after the merge. pr fast runs them as one shared-graph batch, sharded by time.
 it('runs the cheap node batch on every pull request: its own runners, its config\'s timed shards, each file once',()=>{
@@ -184,7 +213,7 @@ it('lays main\'s measured node times over the table on every node runner, fetche
  const batch=at(step=>step.if==='matrix.batch'&&(step.run??'').includes('vitest.node-batch.config.ts'));
  for(const index of [fetch,wait])expect(steps[index].if).toBe('matrix.batch');
  // Started right after checkout (ci.mjs is builtin-only, so any Node runs it), in the background.
- expect(fetch).toBe(steps.findIndex(step=>step.uses?.startsWith('actions/checkout@'))+1);
+ expect(fetch).toBe(steps.findIndex(step=>step.id==='checkout')+1);
  expect(steps[fetch].run.trim()).toMatch(/&$/);
  expect(steps[fetch].run).toContain('< /dev/null > /dev/null 2>&1 &');
  expect(steps[fetch].env.GH_TOKEN).toBe('${{ github.token }}');
@@ -250,7 +279,7 @@ it('uses Node 22 in every pr fast job: the tool cache\'s, else the runner\'s own
  const steps=workflow('pr-fast.yml').jobs.fast.steps;
  const probe=steps.findIndex(step=>step.id==='runner-node'),setup=steps.findIndex(step=>step.uses?.startsWith('actions/setup-node@'));
  expect(probe).toBe(0);
- expect(steps[1].uses).toMatch(/^actions\/checkout@/);
+ expect(steps[1].id).toBe('checkout');
  expect(steps[probe].run).toContain('node --version');
  expect(steps[probe].run).toContain('$GITHUB_OUTPUT');
  expect(steps[probe].run).toContain('$GITHUB_PATH');
@@ -259,12 +288,16 @@ it('uses Node 22 in every pr fast job: the tool cache\'s, else the runner\'s own
  expect(setup).toBeLessThan(steps.findIndex(step=>step.id==='install'));
  expect(steps.find(step=>step.id==='install').with.key).toContain('-node22-');
 });
-// No step of pr fast fetches or pushes after checkout, so its token is never written into the checkout's git config: that
-// saves the auth setup (~0.3s, run 44114175470's api-14) and the post step that removed it again after the tests, and no
-// test can reach a credential through git.
-it('checks out without persisting the token',()=>{
- const checkout=workflow('pr-fast.yml').jobs.fast.steps.find(step=>step.uses?.startsWith('actions/checkout@'));
- expect(checkout.with).toEqual({'persist-credentials':false});
+// No step of pr fast fetches or pushes after checkout, so its token is never written into the checkout's git config: no auth
+// setup (~0.3s, run 44114175470's api-14), no post step removing it again after the tests, and no test can reach a credential
+// through git. The hedged checkout hands it to git in the environment alone (scripts/__tests__/workflows.test.mjs runs it
+// and reads the checkout's config); here, that no step runs anything after the tests but the clock.
+it('checks out without persisting the token, and leaves no post step',()=>{
+ const steps=workflow('pr-fast.yml').jobs.fast.steps,checkout=steps.find(step=>step.id==='checkout');
+ expect(checkout.uses).toBeUndefined();
+ expect(checkout.run).toContain('export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=');
+ expect(checkout.run).not.toMatch(/git config|extraheader=|credential/);
+ expect(steps.filter(step=>step.uses&&!/^actions\/(cache\/(restore|save)|setup-node|upload-artifact)@/.test(step.uses))).toEqual([]);
 });
 // Runs the probe step's shell with `node` answering only --version: any JavaScript evaluation fails the probe.
 // The default `gh` and `cat` answer at once; the probe returns only once its background fetch has landed, so nothing still
