@@ -21,6 +21,12 @@ name: pr fast
 # The full suite stays in ci.yml: it runs on every push to main (and on demand) and gates deploys there; it does
 # not run on pull requests. page-speed.yml is informational.
 #
+# THE RUN TAKES AS LONG AS ITS SLOWEST JOB, so one stalled transfer on one of ~49 runners sets it (a 62.5s fetch made run
+# 44148017273 93s). Every network step on a runner's path is therefore hedged or bounded, with a fallback that may cost
+# time but never changes what that runner tests: the checkout starts a second fetch of the same sha beside one that has not
+# landed, and each first cache download gives up on a stalled segment for the next tier of its own chain, whose last tier
+# stays unbounded. A new network step joins them the same way (scripts/__tests__/workflows.test.mjs, ci-budget.test.mjs).
+#
 # No workflow-level `concurrency` group: cancel-in-progress holds a new run pending until the old one
 # stops (ci.yml's header has the measurements), which alone would cost more than this lane's budget.
 on:
