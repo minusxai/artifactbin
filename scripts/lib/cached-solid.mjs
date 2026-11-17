@@ -49,13 +49,15 @@ export function cachedSolid(root, options = {}) {
 }
 
 /**
- * The bare `lucide-solid` import, for the test runner: only the icons the app declares.
+ * The bare `lucide-solid` import, for the test runner, the dev server and the app build (vite.config.mts):
+ * only the icons the app declares.
  *
  * The package's index re-exports ~2,000 icon modules, and Vitest (which inlines the package so the
  * Solid transform applies) transformed and evaluated every one of them for each file that renders an
- * icon. services/app/solid/lucide-solid.d.ts already lists, as ES re-exports, every icon the app
+ * icon; the build loaded and transformed them all to tree-shake all but a few dozen away.
+ * services/app/solid/lucide-solid.d.ts already lists, as ES re-exports, every icon the app
  * imports from the bare specifier (tsc refuses any other), so this serves that list as the module:
- * an icon added there for the type check is what makes it importable in the tests too.
+ * an icon added there for the type check is what makes it importable in the tests and the build too.
  */
 export function declaredLucideIcons(root) {
   const declarations = path.join(root, 'services/app/solid/lucide-solid.d.ts');

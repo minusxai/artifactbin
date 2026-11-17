@@ -5,6 +5,12 @@
  * transactions (tests run their queries one after another). It answers
  * SSLRequest 'N' (no TLS) and ignores startup parameters and passwords; it runs as a superuser (row policies do not
  * apply), so tests prove what the database sees with views keyed on `current_setting`.
+ *
+ * NO NAGLE DELAY, as a real Postgres sets TCP_NODELAY on its sockets: the wire answers each frontend message with a
+ * write of its own, and on Linux Nagle's algorithm held every second small write for the client's delayed ACK (~40ms),
+ * so each extended-protocol round trip waited for it. Measured in a Linux container, 30 of the connector's read-only
+ * transactions took 5510ms with it and 15ms without (on macOS, 25ms either way); on CI the live-dataset suite spent
+ * 14.6s, most of it there.
  */
 import net from 'node:net';
 import { PGlite } from '@electric-sql/pglite';
@@ -19,6 +25,7 @@ export async function startPgliteWire(setup: string): Promise<PgliteWire> {
   const messages: WireMessage[] = [];
   let chain = Promise.resolve();
   function serve(sock: net.Socket) {
+    sock.setNoDelay(true);
     let buf = Buffer.alloc(0), started = false;
     sock.on('error', () => sock.destroy());
     const pump = async () => {

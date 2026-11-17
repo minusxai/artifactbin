@@ -5,7 +5,8 @@
  * and the viewer's values as the database sees them. TLS, statement timeouts, row policies and MySQL run against
  * real servers in services/app/lib/connections/__tests__/connectors-docker.test.ts (integration project).
  */
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import net from 'node:net';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { colonParameters, connectionSummary, connectorError, connectorList, mapQualifiers, mysqlLiteral, openConnection, parseConnectionConfig, qualifierNames, type OpenConnection } from '@artifactbin/connectors';
 import { numberValue } from '../src/answer';
 import { readOnlyStatement } from '../src/statement';
@@ -109,6 +110,16 @@ describe('postgres, end to end', () => {
     pg = openConnection({ connector: 'postgres', host: '127.0.0.1', port: wire.port, database: 'postgres', user: 'postgres', password: 'hunter2-secret', tls: 'disable' }, DEV);
   });
   afterAll(async () => { await pg?.close(); await wire?.close(); });
+
+  it('the test wire turns Nagle off on every socket it accepts, as a real Postgres does', async () => {
+    // With Nagle on, Linux held each second small answer for the client's delayed ACK: ~40ms per round trip.
+    const noDelay = vi.spyOn(net.Socket.prototype, 'setNoDelay');
+    const client = net.connect(wire.port, '127.0.0.1');
+    try {
+      await new Promise<void>((resolve, reject) => client.once('connect', resolve).once('error', reject));
+      await vi.waitFor(() => expect((noDelay.mock.contexts as net.Socket[]).flatMap((socket, i) => socket.remotePort === client.localPort ? [noDelay.mock.calls[i]] : [])).toEqual([[true]]));
+    } finally { client.destroy(); noDelay.mockRestore(); }
+  });
 
   it('answers columns in the common types and rows, binding every value', async () => {
     const answer = await pg.query({ text: 'select id, item, amount, big, placed, at, meta, ok from sales.orders where amount >= $min order by id', params: { min: 4 }, viewer: null });
