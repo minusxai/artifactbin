@@ -105,7 +105,7 @@ export default defineConfig({
           // And one database per worker: the harness recycles it between files and opens a fresh one after any file
           // that changed what a wipe cannot undo (services/app/__tests__/harness.ts). Both keys: a project's
           // `provide` is its own.
-          // And the page runtime build, made once per run by the global setup (services/app/test/setup/html-assets-file.ts).
+          // And one page runtime build per run, compiled by the first worker that serves a page (services/app/test/setup/html-assets-file.ts).
           provide: { schemaImageDir: schemaImageDir(import.meta.dirname), harnessReusesDatabase: true, htmlAssetsShared: true },
         },
       },
