@@ -24,7 +24,7 @@ Name question, unit, grain, source, period, timezone and missing data. See [runt
 
 Rows bind as the dataset `main`: write no `data` (a spec's own `values` draw instead). Data is one of `sql`, `dataset="NAME"` (a link's `data-af-name`), `rows` (objects) or `query`, a statement from `` sql`…` `` with bound values: set it again to filter (`chart.query = sql`… where city = ${city}``). A recipe names columns: `{"recipe":"trend","bindings":{"date":"week","value":"n"}}` (also funnel, waterfall, radar, single-value, combo). `url` data is refused; `data-af-chart="ready"` marks a drawn chart. `node scripts/sql.mjs query ID 'SQL' --chart chart.json --chart-output chart.png` draws the same description as an image before you publish (`--chart-width N --chart-height N --chart-theme light|dark`).
 
-Custom work keeps the element: `chart.view` (and the `af-chart-ready` event's `{view, rows}`) is the live Vega View for signals and listeners; `draw` replaces the renderer while af-chart keeps data, states, size and teardown. Or import `@afbin/vega` (`parse(spec, config, {ast:true})`, `new View(runtime, {expr: expressionInterpreter, renderer:"svg", container})`, the themed tooltip built in) and `@afbin/vega-lite` (`compile`); `{ast:true}` and `expressionInterpreter` work with the page's no-eval CSP. Never bare `vega` or globals.
+Custom work keeps the element: `chart.view` (and the `af-chart-ready` event's `{view, rows}`) is the live Vega View for signals and listeners; `draw` replaces the renderer while af-chart keeps data, states, size and teardown. Or import `@afbin/vega` (`parse(spec, config, {ast:true})`, `new View(runtime, {expr: expressionInterpreter, container})`; themed tooltip built in) and `@afbin/vega-lite` (`compile`), which suit the no-eval CSP. Never bare `vega` or globals.
 
 ## Contents
 
@@ -42,7 +42,7 @@ Missing is not zero. Null observations can create line gaps; absent rows cannot.
 
 Aggregate once at the stated grain, in SQL for a dataset (`sql` GROUP BY, [datasets](datasets.md#read)). Ratios need the right denominator/weighting. Unaggregated Vega-Lite tooltip fields can change grouping. Preserve calculation precision; format labels with units. `.1%` expects a fraction. `.3~s` compacts large numbers; offer exact values too.
 
-Choose explicit timestamp offsets and reporting timezone before grouping. Vega-Lite time units default to local time; UTC units use the `utc` prefix. UTC scales govern positioning, not arbitrary timezone conversion. Precompute reporting-zone buckets when needed; preserve date-only calendar semantics.
+Choose timestamp offsets and reporting timezone before grouping. Vega-Lite time units default to local time; UTC units use the `utc` prefix. UTC scales govern positioning, not arbitrary timezone conversion. Precompute reporting-zone buckets; keep date-only semantics.
 
 Set chart styling explicitly through Vega-Lite `config`; native Vega uses parser config/mark encodings. Categorical colors convey identity; lightness ramps convey magnitude; diverging scales need a meaningful center.
 
@@ -52,19 +52,25 @@ af-chart resolves the tokens to concrete sRGB and rebuilds when they change; a s
 
 af-chart fills its width (`height`, default 320). A raw view sizes its host: single/layered Vega-Lite supports `width: "container"`; for Vega observe size, update dimensions, `resize()` and `runAsync()`. Test narrow hosts, hidden panels and long labels.
 
-Provide title, units, `description` (af-chart's label) and an accessible table. Supplement color with labels/shapes. Necessary actions/information must work with keyboard/touch and without hover.
+Provide title, units, `description` (af-chart's label) and an accessible table. Supplement color with labels/shapes. Actions must work by keyboard/touch, without hover.
 
-Tooltips list fields by `title`: name each for readers, never raw columns (`{"field":"pts","type":"quantitative","title":"Points","format":","}`); a `title` field is the heading. `format` errors on nominal fields. Add no other tooltip handler. Explain selection/reset; keep events view-scoped. Honor `prefers-reduced-motion`: avoid animated transitions/auto-play, keep static updates usable, and remove media listeners on teardown. Legend highlighting must not silently change totals. Query filters need loading/errors and stale-response protection.
+Tooltips list fields by `title`: name each for readers, never raw columns (`{"field":"pts","type":"quantitative","title":"Points","format":","}`); a `title` field is the heading. `format` errors on nominal fields. Add no other tooltip handler. Explain selection/reset; keep events view-scoped. Honor `prefers-reduced-motion`: avoid animated transitions/auto-play, keep static updates usable, and remove media listeners on teardown. Legend highlighting must not silently change totals.
 
 ## Data and lifetime
 
-Import CSV through the dataset flow, not a credentialed chart URL. CSV fields may be strings: preserve identifiers, parse declared numeric/date fields, and reject non-finite values rather than turning blanks into zero. Read rows as [datasets](datasets.md#read) says, from the table named by the link's `data-af-name`. Disclose source truncation. Keep rows transient; persist only viewer filters/selections through `@afbin/state`. `sql.watch` renders linked dataset data directly and reruns on change; `onResolverChange` supports explicitly managed re-querying. Selection is local. Keep credentials out of specs/files.
+Import CSV through the dataset flow. CSV fields may be strings: preserve identifiers, parse declared numeric/date fields, reject non-finite values (blanks are not zero). Read rows as [datasets](datasets.md#read) says, from the table named by the link's `data-af-name`. Disclose source truncation. Keep rows transient; persist only viewer filters/selections through `@afbin/state`. `sql.watch` reruns on change; `onResolverChange` supports managed re-querying. Keep credentials out of specs/files.
 
 A raw view: retain one per chart, update named data then run the dataflow, discard superseded renders; on replacement `view.finalize()`, disconnect observers and stop listeners. Rebuild for compile-time theme/layout changes while preserving viewer choices.
 
 A download carries the rows its reader's `sql` may read (none past 16 MiB, and the copy says so) and the hosted libraries, so charts draw offline; declared queries and writes need the app. Show unavailable states honestly; test downloads offline.
 
 ## Examples
+
+Vega-Lite with its own values:
+
+```json
+{"description":"Completed tasks by category.","data":{"values":[{"category":"A","count":18},{"category":"B","count":12}]},"mark":"bar","encoding":{"y":{"field":"category","type":"nominal","sort":"-x","title":"Category"},"x":{"field":"count","type":"quantitative","title":"Completed tasks"}}}
+```
 
 Vega, raw or as an af-chart `chart` (`data-name="rows"` fills `rows` with its rows; a raw view updates with `view.data("rows", rows).runAsync()`):
 
