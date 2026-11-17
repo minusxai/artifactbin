@@ -4,6 +4,12 @@ export interface HtmlRuntimeConfig {
   /** Server-verified imported source; preserve its annotation invalidation lifecycle. */
   annotationObservation?: 'imported-source-v1';
   pageId: string;
+  /**
+   * A draft (lib/page-drafts): a reader's own unpublished page on a draft origin. Its `sql` reads the tables it carries
+   * (`offline-data`), answered in the frame by the hosted engine (`/af/offline-sql.js`); it keeps the hosted runtime,
+   * libraries and components, and its parent relays nothing of a document's.
+   */
+  draft?: boolean;
   /** The saved version this page is (annotations anchor to it, presence and reads classify against it). */
   revision: string;
   /**
@@ -68,10 +74,11 @@ export interface HtmlAssemblyInput {
   state?: string;
   /**
    * `@afbin/offline-sql` (./offline-sql: the SQLite engine and its wasm), embedded only in a portable export that
-   * carries `offlineData`. Embed-only, so it has no RUNTIME_MODULE_PATHS address: a hosted page never loads an engine.
+   * carries `offlineData`. A draft (`config.draft`) loads the same module from its hosted address instead
+   * (DRAFT_SQL_ENGINE_PATH); a published page never loads an engine.
    */
   offlineSql?: string;
-  /** The rows the downloading reader's `sql` reads through the page (lib/dataset-access offlinePageSqlData); offline exports only. */
+  /** The rows the downloading reader's `sql` reads through the page (lib/dataset-access offlinePageSqlData), in an offline export; a draft's own CSV tables (`config.draft`). */
   offlineData?: { tables: ReadonlyArray<{ schema: string; name: string; columns: ReadonlyArray<{ name: string; type: string }>; rows: ReadonlyArray<Readonly<Record<string, unknown>>> }> };
   /** Canonical source and nonsecret published identity carried by downloaded files. */
   portable?: PortableDocument;
@@ -88,5 +95,7 @@ export interface HtmlRuntimeAssets { core:string; apollo:string; apolloPath:stri
  hostComments?:string }
 /** D17: the platform runtime's flat public addresses (core: lib/html-page/core-script). No version or hash; strong ETag and `no-cache`. */
 export const RUNTIME_MODULE_PATHS={apolloPath:'/af/apollo.js',readerPath:'/af/reader.js',chromePath:'/af/chrome.js',portableEnginePath:'/af/portable.js',morphPath:'/af/morph.js',nativeRegionsPath:'/af/native-regions.js',nativeMarkdownPath:'/af/native-markdown.js',collabPath:'/af/collab.js',statePath:'/af/state.js'} as const;
+/** A draft's `sql` engine (`@afbin/offline-sql`, ./offline-sql), served for drafts only (lib/page-drafts): no published page maps it. */
+export const DRAFT_SQL_ENGINE_PATH='/af/offline-sql.js';
 /** `Symbol.for` key under which core records its build id for the lazy modules' skew guard (build.server). */
 export const RUNTIME_BUILD_KEY='afbin.runtime-build';

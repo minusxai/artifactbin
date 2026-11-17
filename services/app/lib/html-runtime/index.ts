@@ -84,7 +84,9 @@ export function assembleHtmlPage(input: HtmlAssemblyInput): string {
   const collab=input.offline&&input.collab&&/["']@afbin\/collab["']/.test(input.html)?`<script type="application/json" data-af="collab">${JSON.stringify(input.collab).replace(/</g,'\\u003c')}</script>`:'';
   const engine=input.offline&&input.portableEngine?`<script type="application/json" data-af="portable-engine">${JSON.stringify(input.portableEngine).replace(/</g,'\\u003c')}</script>`:'';
   // The rows an offline copy's `sql` reads, and the engine that answers it (./offline-sql): both or neither, export only.
-  const sqlData=input.offline&&input.offlineSql&&input.offlineData?.tables.length?`<script type="application/json" data-af="offline-data">${JSON.stringify(input.offlineData).replace(/</g,'\\u003c')}</script><script type="application/json" data-af="offline-sql">${JSON.stringify(input.offlineSql).replace(/</g,'\\u003c')}</script>`:'';
+  // A draft carries its tables alone: its core maps the engine to the hosted module (build.server).
+  const sqlData=!input.offline&&config.draft===true&&input.offlineData?.tables.length?`<script type="application/json" data-af="offline-data">${JSON.stringify(input.offlineData).replace(/</g,'\\u003c')}</script>`
+   :input.offline&&input.offlineSql&&input.offlineData?.tables.length?`<script type="application/json" data-af="offline-data">${JSON.stringify(input.offlineData).replace(/</g,'\\u003c')}</script><script type="application/json" data-af="offline-sql">${JSON.stringify(input.offlineSql).replace(/</g,'\\u003c')}</script>`:'';
   const stateModule=input.offline&&input.state?`<script type="application/json" data-af="state-module">${JSON.stringify(input.state).replace(/</g,'\\u003c')}</script>`:'';
   const boot = parseFragment(`<script type="application/json" data-af="runtime">${json}</script>${canonical}${portable}${stateModule}${portableReader}${chrome}${engine}${collab}${sqlData}<script data-af="core">${safeCore}</script>`);
   for (const node of boot.childNodes) {

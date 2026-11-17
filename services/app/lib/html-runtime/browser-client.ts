@@ -23,7 +23,7 @@ const offlineSql=(request:{sql?:string;query?:string;params:Record<string,string
 };
 export const sql=createSql({
   run:(request)=>config.localPreview?Promise.reject(new SqlError('unavailable','sql runs in a page the app frames'))
-   :config.offline?offlineSql(request) as never
+   :config.offline||config.draft?offlineSql(request) as never
    :(config.domainReads&&window.parent===window?createDomainSql(config,location,fetch.bind(window))(request):remote.execute(request)).then((reply)=>reply as never,(error:unknown)=>{throw error instanceof RemoteUnreachable?new SqlError('unavailable','sql runs in a page the app frames'):error;}),
   subscribe:(listener)=>{const subscription=onResolverChange((names,reason)=>listener(reason==='authority'?undefined:names));return()=>subscription.unsubscribe();},
 });

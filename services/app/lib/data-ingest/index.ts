@@ -1,6 +1,7 @@
 import { coerceRows } from './coerce';
 import { parseCsv } from './csv';
 export { parseCsv } from './csv';
+export { coerceRows } from './coerce';
 import { fetchSheetCsv } from './sheets';
 import { fetchCsvFromUrl } from './csv-url';
 import { MAX_ROWS_LIMIT } from '@/lib/platform';

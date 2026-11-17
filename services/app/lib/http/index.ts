@@ -10,7 +10,7 @@ export { forgetShared, primeShared, sharedRequest } from './shared-request';
 export { GITHUB_EXTERNAL_URL, REPO_URL, artifactViewPath, canonicalArtifactPath, domainPostPath, parsePrettyPath, titleSlug } from './urls';
 export { spaPaths } from './app-pages';
 export {
-  GUEST_TICKET, PAGES_TICKET_PARAM, idFromPagesHost, idFromPagesOrigin, isPagesApexHost, markPagesRequest, pagesCookieName, pagesFrameUrl,
+  GUEST_TICKET, PAGES_TICKET_PARAM, draftFromPagesHost, draftFromPagesOrigin, draftOriginFor, idFromPagesHost, idFromPagesOrigin, isPagesApexHost, markPagesRequest, pagesCookieName, pagesFrameUrl,
   pagesOriginFor, pagesRequestOf, pagesSite, withoutPagesTicket,
 } from './pages-origin';
 export type { PagesSite } from './pages-origin';

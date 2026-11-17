@@ -86,6 +86,32 @@ export function idFromPagesOrigin(origin: string | null | undefined, site: Pages
 }
 
 /**
+ * A DRAFT'S ORIGIN (lib/page-drafts): `draft-<26 base32 letters>.<pages host>`. A draft is a reader's own unpublished
+ * page, never an artifact: its label carries a `-`, which no hex document label has, so the two never collide.
+ */
+const DRAFT_LABEL = /^draft-[a-z2-7]{26}$/;
+export function draftOriginFor(label: string, site: PagesSite): string {
+  if (!DRAFT_LABEL.test(label)) throw new Error('not a draft label');
+  return `${site.scheme}//${label}.${site.host}${suffix(site)}`;
+}
+/** The draft label a `Host` names, or null for any other host. */
+export function draftFromPagesHost(host: string | null | undefined, site: PagesSite | null): string | null {
+  if (!host || !site) return null;
+  const name = hostnameOf(host);
+  const tail = `.${site.host}`;
+  if (!name.endsWith(tail)) return null;
+  const label = name.slice(0, -tail.length);
+  return DRAFT_LABEL.test(label) ? label : null;
+}
+/** The draft label an `Origin` names, or null. */
+export function draftFromPagesOrigin(origin: string | null | undefined, site: PagesSite | null): string | null {
+  if (!origin || !site) return null;
+  let url: URL;
+  try { url = new URL(origin); } catch { return null; }
+  return url.protocol === site.scheme ? draftFromPagesHost(url.host, site) : null;
+}
+
+/**
  * THE DOCUMENT'S FIRST URL. The ticket that hands the app page's reader across rides ON the document's own
  * address, in this reserved query parameter, and is spent by the document's origin in the same response that
  * serves the document (server/pages-host): there is no hop through another host. `GUEST_TICKET` is the app

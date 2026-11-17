@@ -18,7 +18,7 @@ import {EMPTY_CSP_EXTENSIONS,type CspExtensions} from '@/lib/document';
 import {declaredCspExtensions} from '@/lib/trust';
 import { ASSETS_ORIGIN, embedTrustedOrigins } from '@/lib/platform';
 import { PLATFORM_FONTS_PATH, PLATFORM_STYLES_PATH, htmlSystemsCss, isHtmlSystem } from '@/lib/html-systems';
-import {libraryImports} from '@/lib/libraries';
+import {libraryImports,libraryVersions} from '@/lib/libraries';
 import { parse, type DefaultTreeAdapterMap } from 'parse5';
 
 /** Inputs from one permission-checked immutable version. No credential belongs here but `captureKey`, for that one response. */
@@ -78,6 +78,22 @@ export async function nativeHtmlDocument(input: NativeHtmlRender): Promise<Nativ
   const assembly={platformScriptNonce:input.platformScriptNonce??randomUUID().replaceAll('-',''),...(input.unsavedIds?.size?{unsavedNodeIds:input.unsavedIds}:{}),portable,html:nativeCodeHtml(rendered),config,core:await htmlCore(),systemsHref:PLATFORM_STYLES_PATH,designSystem:input.designSystem??null,...(input.offline?{apollo:(await htmlAssets()).apollo,reader:(await htmlAssets()).reader,chrome:(await htmlAssets()).chrome,portableEngine:(await htmlAssets()).portableEngine,collab:(await htmlAssets()).collab,state:(await htmlAssets()).state,...(input.offlineData?.tables.length?{offlineData:input.offlineData,offlineSql:(await htmlAssets()).offlineSql}:{})}:{})};
   return {html:input.offline?downloadableHtml(assembly):assembleHtmlPage(assembly),config};
 }
+/** A draft's page (lib/page-drafts): the reader's own source, never stored, and the tables its linked CSV files are. */
+export interface NativeDraftRender { label: string; html: string; appOrigin: string; datasets: readonly string[]; tables: NonNullable<HtmlAssemblyInput['offlineData']>['tables'] }
+/**
+ * A DRAFT, assembled as a published page is (the hosted core, runtime modules, libraries and components) with no
+ * artifact behind it: no bindings, files table, connect hosts or portable identity, and its `sql` answered in the frame
+ * from the tables it carries (`config.draft`, html-runtime browser-client). Its relative links stay as written: the draft
+ * origin serves the files beside it at their paths (server/pages-host).
+ */
+export async function nativeDraftDocument(input: NativeDraftRender): Promise<string> {
+  const config:HtmlRuntimeConfig={pageId:`draft:${input.label}`,revision:'draft',draft:true,backends:[...input.datasets],...(input.datasets.length?{datasets:[...input.datasets]}:{}),appOrigin:new URL(input.appOrigin).origin,libraries:libraryImports(libraryVersions()),scriptFingerprint:scriptFingerprint(input.html)};
+  return assembleHtmlPage({platformScriptNonce:randomUUID().replaceAll('-',''),html:nativeCodeHtml(input.html),config,core:await htmlCore(),systemsHref:PLATFORM_STYLES_PATH,designSystem:null,...(input.tables.length?{offlineData:{tables:input.tables}}:{})});
+}
+/** A draft's policy: a document's on its own origin, with no door of the app, no declared extension and no other framer. */
+export function nativeDraftPolicy(self:string,app:string):string {
+  return buildDocumentCsp({self,app}).replace(/script-src ([^;]+)/,"script-src 'unsafe-inline' $1");
+}
 /** Inline author code is confined to the per-page origin, or the opaque /raw sandbox. */
 export function nativeHtmlPolicy(id:string,base:string,pages?:{self:string;app:string},extensions:CspExtensions=EMPTY_CSP_EXTENSIONS,options:{domainReads?:boolean}={}):string {
   if (!pages){
@@ -117,8 +133,8 @@ export async function nativeHtmlCoreResponse(request:Request):Promise<Response>{
  return publicRevalidatedResponse(request,await htmlCore(),JS);
 }
 
-/** A flat runtime module (D17: /af/apollo.js, /af/reader.js, /af/chrome.js, /af/portable.js, /af/morph.js, /af/collab.js, /af/state.js) or the document host module (/af/host.js) and its comments (/af/host-comments.js), always this build's bytes. */
-export type NativeHtmlModule='apollo'|'reader'|'chrome'|'portableEngine'|'morph'|'nativeRegions'|'nativeMarkdown'|'collab'|'state'|'host'|'hostComments';
+/** A flat runtime module (D17: /af/apollo.js, /af/reader.js, /af/chrome.js, /af/portable.js, /af/morph.js, /af/collab.js, /af/state.js, a draft's SQL engine /af/offline-sql.js) or the document host module (/af/host.js) and its comments (/af/host-comments.js), always this build's bytes. */
+export type NativeHtmlModule='apollo'|'reader'|'chrome'|'portableEngine'|'morph'|'nativeRegions'|'nativeMarkdown'|'collab'|'state'|'host'|'hostComments'|'offlineSql';
 export async function nativeHtmlModuleResponse(request:Request,module:NativeHtmlModule):Promise<Response>{
  const source=(await htmlAssets())[module];
  if(!source)return new Response('Not found',{status:404});
