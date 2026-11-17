@@ -10,6 +10,9 @@ export interface HtmlRuntimeConfig {
    * libraries and components, and its parent relays nothing of a document's.
    */
   draft?: boolean;
+  /** A draft's `default:` link names, and whether its embedding app allowed them to read live (through the parent's relay). */
+  draftConnections?: readonly string[];
+  draftLive?: boolean;
   /** The saved version this page is (annotations anchor to it, presence and reads classify against it). */
   revision: string;
   /**

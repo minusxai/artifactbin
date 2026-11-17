@@ -79,7 +79,7 @@ export async function nativeHtmlDocument(input: NativeHtmlRender): Promise<Nativ
   return {html:input.offline?downloadableHtml(assembly):assembleHtmlPage(assembly),config};
 }
 /** A draft's page (lib/page-drafts): the reader's own source, never stored, and the tables its linked CSV files are. */
-export interface NativeDraftRender { label: string; html: string; appOrigin: string; datasets: readonly string[]; tables: NonNullable<HtmlAssemblyInput['offlineData']>['tables'] }
+export interface NativeDraftRender { label: string; html: string; appOrigin: string; datasets: readonly string[]; tables: NonNullable<HtmlAssemblyInput['offlineData']>['tables']; connections?: readonly string[]; liveSql?: boolean }
 /**
  * A DRAFT, assembled as a published page is (the hosted core, runtime modules, libraries and components) with no
  * artifact behind it: no bindings, files table, connect hosts or portable identity, and its `sql` answered in the frame
@@ -87,7 +87,7 @@ export interface NativeDraftRender { label: string; html: string; appOrigin: str
  * origin serves the files beside it at their paths (server/pages-host).
  */
 export async function nativeDraftDocument(input: NativeDraftRender): Promise<string> {
-  const config:HtmlRuntimeConfig={pageId:`draft:${input.label}`,revision:'draft',draft:true,backends:[...input.datasets],...(input.datasets.length?{datasets:[...input.datasets]}:{}),appOrigin:new URL(input.appOrigin).origin,libraries:libraryImports(libraryVersions()),scriptFingerprint:scriptFingerprint(input.html)};
+  const config:HtmlRuntimeConfig={pageId:`draft:${input.label}`,revision:'draft',draft:true,backends:[...input.datasets,...(input.connections??[])],...(input.connections?.length?{draftConnections:[...input.connections],draftLive:input.liveSql===true}:{}),...(input.datasets.length?{datasets:[...input.datasets]}:{}),appOrigin:new URL(input.appOrigin).origin,libraries:libraryImports(libraryVersions()),scriptFingerprint:scriptFingerprint(input.html)};
   return assembleHtmlPage({platformScriptNonce:randomUUID().replaceAll('-',''),html:nativeCodeHtml(input.html),config,core:await htmlCore(),systemsHref:PLATFORM_STYLES_PATH,designSystem:null,...(input.tables.length?{offlineData:{tables:input.tables}}:{})});
 }
 /** A draft's policy: a document's on its own origin, with no door of the app, no declared extension and no other framer. */

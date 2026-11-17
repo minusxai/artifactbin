@@ -58,6 +58,31 @@ describe('mountDraft (/af/host.js)', () => {
     expect(container.querySelector('iframe')).toBeNull();
   });
 
+  it('relays a statement naming a default: link to the draft\'s own door only when this mount allowed live data', async () => {
+    const owner = await mintAccountToken('draft_owner');
+    const html = '<html><head><link rel="af-dataset" data-af-name="wh" href="default:warehouse"></head><body></body></html>';
+    for (const liveSql of [false, true]) {
+      const { win, container } = hostPage(session(owner));
+      const mounted = await mountDraft(container, { html, files: [], liveSql }, win);
+      expect({ connections: mounted.connections, liveSql: mounted.liveSql }).toEqual({ connections: ['wh'], liveSql });
+      const posted: Array<{ payload: Record<string, unknown> }> = [];
+      const frameWindow = mounted.frame.contentWindow!;
+      frameWindow.postMessage = ((message: never) => { posted.push(message); }) as Window['postMessage'];
+      const send = (payload: unknown, key?: string) => win.dispatchEvent(new win.MessageEvent('message', { data: { type: STORY_FRAME_BRIDGE_MESSAGE, ...(key ? { key } : {}), payload }, origin: mounted.origin, source: frameWindow }));
+      send({ kind: 'hello' });
+      const attach = posted.find((entry) => entry.payload?.kind === 'attach') as unknown as { key: string; payload: { id: string } };
+      expect(attach.payload.id).toBe(`draft:${new URL(mounted.origin).hostname.split('.')[0]}`);
+      send({ kind: 'ready', nonce: 'n'.repeat(16) }, attach.key);
+      send({ kind: 'fetch', call: 1, path: `/api/artifacts/${encodeURIComponent(attach.payload.id)}/sql`, method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sql: 'select 1 from wh.t', params: {} }) }, attach.key);
+      await expect.poll(() => posted.some((entry) => entry.payload?.kind === 'fetch-result')).toBe(true);
+      const result = posted.find((entry) => entry.payload?.kind === 'fetch-result')!.payload as { status: number; body: string };
+      // Allowed: the draft's door answers (this test install has no default connection); not allowed: the relay refuses.
+      if (liveSql) expect({ status: result.status, error: JSON.parse(result.body).error }).toEqual({ status: 404, error: 'dataset_not_found' });
+      else expect(result.status).toBe(403);
+      mounted.destroy();
+    }
+  });
+
   it('rejects with the refusal the embedding app can show', async () => {
     const owner = await mintAccountToken('draft_owner');
     const { win, container } = hostPage(session(owner));

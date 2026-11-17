@@ -8,9 +8,11 @@
  * document only for a one-time ticket under a document policy with no app door (nativeDraftPolicy), its linked files
  * read-only, no cookie and no door, and reaches nothing else of the app (403 forbidden_origin). A file linked as a
  * dataset is a read-only table read by `sql` in the frame (`config.draft`, the engine at /af/offline-sql.js); the
- * parent relays nothing of the app for it. Checks: __tests__/page-drafts.test.ts,
+ * parent relays nothing of the app for it, except, when the embedding app allowed it for this mount (`liveSql`), a
+ * statement naming a `default:` link, which runs on the install's default connection as the signed-in reader
+ * (POST /api/page/drafts/sql, lib/connections pageConnectionSql: read-only, the page door's code). Checks: __tests__/page-drafts.test.ts,
  * lib/html-reader/__tests__/host-shell-draft.test.ts, lib/html-runtime/__tests__/build.test.ts, and the
  * own-origin-script gate.
  */
 export { DRAFT_LIMITS } from './contracts';
-export { createDraft, draftDocument, draftFile, DraftRefusal, resetDrafts } from './drafts';
+export { createDraft, draftConnections, draftDocument, draftFile, DraftRefusal, resetDrafts } from './drafts';

@@ -21,9 +21,22 @@ const offlineSql=(request:{sql?:string;query?:string;params:Record<string,string
   const name='@afbin/offline-sql';
   return (import(name) as Promise<typeof import('./offline-sql')>).then((engine)=>engine.runOfflineSql({sql:request.sql??'',params:request.params}),offlineSqlNoData);
 };
+/**
+ * A draft's `sql` (lib/page-drafts): its own files' tables answer here (./offline-sql); a statement naming one of its
+ * `default:` links is relayed to the parent, which runs it on the install's connection as the reader, only when the
+ * embedding app allowed live reads for this mount (`config.draftLive`).
+ */
+const namesLink=(text:string,name:string)=>new RegExp(`(^|[^\\w$."])${name}\\s*\\.`,'i').test(text);
+const draftSql=(request:{sql?:string;query?:string;params:Record<string,string|number|boolean|null>})=>{
+  const live=(config.draftConnections??[]).find((name)=>namesLink(request.sql??'',name));
+  if(!live)return offlineSql(request);
+  if(!config.draftLive)return Promise.reject(new SqlError('unavailable',`${live} reads live data, which this draft may read only when the app showing it allows it`));
+  return remote.execute(request).then((reply)=>reply as never,(error:unknown)=>{throw error instanceof RemoteUnreachable?new SqlError('unavailable','live data is read through the app showing this draft'):error;});
+};
 export const sql=createSql({
   run:(request)=>config.localPreview?Promise.reject(new SqlError('unavailable','sql runs in a page the app frames'))
-   :config.offline||config.draft?offlineSql(request) as never
+   :config.draft?draftSql(request) as never
+   :config.offline?offlineSql(request) as never
    :(config.domainReads&&window.parent===window?createDomainSql(config,location,fetch.bind(window))(request):remote.execute(request)).then((reply)=>reply as never,(error:unknown)=>{throw error instanceof RemoteUnreachable?new SqlError('unavailable','sql runs in a page the app frames'):error;}),
   subscribe:(listener)=>{const subscription=onResolverChange((names,reason)=>listener(reason==='authority'?undefined:names));return()=>subscription.unsubscribe();},
 });
