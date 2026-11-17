@@ -91,8 +91,12 @@ export const WORKERS = 3;
  * each of the three workers ran 3.8s, 4.9s and 6.8s over its recorded time; in job ui-2 the first islands files ran
  * 0.6-1.4s over theirs. The node batch's ~1.4s locally per worker (the full suite's setup file and its graph) makes
  * ~4s on a runner, an ESTIMATE. Isolated projects pay theirs on every file (`ISOLATED_FILE_MS`, in the file's weight).
+ * The guard runners' two shared-graph projects (vitest.guard.config.ts) pay theirs too: without it their packing predicted
+ * 12.2s for shards that ran 21-25s beside one holding only the longest file that ran 10.5s (pr fast run 44140374300).
+ * Replaying each guard shard's own file times from 8 runs (24 shards), 4s per worker's first file fits their walls within
+ * 1.4s on average; with none they ran 6.1s over the prediction.
  */
-export const SHARED_FIRST_FILE_MS = Object.freeze({ api: 5000, islands: 1000, 'node-batch': 4000 });
+export const SHARED_FIRST_FILE_MS = Object.freeze({ api: 5000, islands: 1000, 'node-batch': 4000, 'pr-guards': 4000, 'pr-contracts': 4000 });
 
 /** How a shard's wall is predicted: the CI runner by default; `{ workers: 1, firstFileMs: {} }` is the plain sum. */
 export const CI_RUNNER = Object.freeze({ workers: WORKERS, firstFileMs: SHARED_FIRST_FILE_MS });
