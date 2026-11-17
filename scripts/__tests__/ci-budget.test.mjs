@@ -172,8 +172,8 @@ it('lays main\'s measured node times over the table on every node runner, fetche
  const wait=at(step=>(step.run??'').includes('node-timings.status')&&!(step.run??'').includes('ci.mjs'));
  const batch=at(step=>step.if==='matrix.batch'&&(step.run??'').includes('vitest.node-batch.config.ts'));
  for(const index of [fetch,wait])expect(steps[index].if).toBe('matrix.batch');
- // Started right after checkout, on the runner's own Node (ci.mjs is builtin-only), in the background.
- expect(fetch).toBe(1);
+ // Started right after checkout (ci.mjs is builtin-only, so any Node runs it), in the background.
+ expect(fetch).toBe(steps.findIndex(step=>step.uses?.startsWith('actions/checkout@'))+1);
  expect(steps[fetch].run.trim()).toMatch(/&$/);
  expect(steps[fetch].run).toContain('< /dev/null > /dev/null 2>&1 &');
  expect(steps[fetch].env.GH_TOKEN).toBe('${{ github.token }}');
@@ -228,13 +228,18 @@ it('measures the node batch on main after each green ci push run, checks it, and
  // Nothing waits for it: no workflow names it as a need, and pr fast never runs on its account.
  expect(workflow('pr-fast.yml').on).not.toHaveProperty('workflow_run');
 });
-// The install cache holds Node 22's build of every native module; the lane may use the runner's own Node only when it is a 22.
-// When it is not (ubuntu-latest's is a 24), the hosted tool cache's newest 22 goes on PATH: setup-node found that very
-// directory too, then spent 0.6s median, 2.9s p90 and 6.3s at worst printing npm's and yarn's versions from a cold disk
-// (pr fast runs 44027030734-44133274884), and added a post step. setup-node remains for a runner with no cached 22.
-it('uses Node 22 in every pr fast job: the runner\'s own, else the hosted tool cache\'s, else setup-node\'s',()=>{
+// The install cache holds Node 22's build of every native module. The hosted tool cache's newest 22 goes on PATH (the runner's
+// own is a 24 on ubuntu-latest): setup-node found that very directory too, then spent 0.6s median, 2.9s p90 and 6.3s at
+// worst printing npm's and yarn's versions from a cold disk (pr fast runs 44027030734-44133274884), plus a post step.
+// Without it, the first start of that Node from the cold disk moved into the next step (lock-fingerprint: up to 4s, run
+// 44139796324), so the probe runs first, before checkout, and reads the binary into the page cache in the background
+// while checkout runs. It starts no Node itself when the cache has a 22; the runner's own serves when it is a 22, and
+// setup-node remains for a runner with neither.
+it('uses Node 22 in every pr fast job: the tool cache\'s, else the runner\'s own 22, else setup-node\'s, chosen first',()=>{
  const steps=workflow('pr-fast.yml').jobs.fast.steps;
  const probe=steps.findIndex(step=>step.id==='runner-node'),setup=steps.findIndex(step=>step.uses?.startsWith('actions/setup-node@'));
+ expect(probe).toBe(0);
+ expect(steps[1].uses).toMatch(/^actions\/checkout@/);
  expect(steps[probe].run).toContain('node --version');
  expect(steps[probe].run).toContain('$GITHUB_OUTPUT');
  expect(steps[probe].run).toContain('$GITHUB_PATH');
@@ -247,17 +252,16 @@ it('uses Node 22 in every pr fast job: the runner\'s own, else the hosted tool c
 // saves the auth setup (~0.3s, run 44114175470's api-14) and the post step that removed it again after the tests, and no
 // test can reach a credential through git.
 it('checks out without persisting the token',()=>{
- const [checkout]=workflow('pr-fast.yml').jobs.fast.steps;
- expect(checkout.uses).toMatch(/^actions\/checkout@/);
+ const checkout=workflow('pr-fast.yml').jobs.fast.steps.find(step=>step.uses?.startsWith('actions/checkout@'));
  expect(checkout.with).toEqual({'persist-credentials':false});
 });
 // Runs the probe step's shell with `node` answering only --version: any JavaScript evaluation fails the probe.
-// The default `gh` answers at once; the probe returns only once its background fetch has landed, so nothing still writes
-// into the directory the test removes.
-function probeRun(version,{toolCache,gh=`gh(){ printf '{}'; }`,settle=true}={}){
+// The default `gh` and `cat` answer at once; the probe returns only once its background fetch has landed, so nothing still
+// writes into the directory the test removes.
+function probeRun(version,{toolCache,gh=`gh(){ printf '{}'; }`,cat='cat(){ :; }',node,settle=true}={}){
  const directory=mkdtempSync(join(tmpdir(),'afbin-node-probe-')),output=join(directory,'output'),pathFile=join(directory,'path');
  const probe=workflow('pr-fast.yml').jobs.fast.steps.find(step=>step.id==='runner-node').run;
- const shell=`node(){ [ "$#" = 1 ] && [ "$1" = --version ] || return 91; printf '%s\\n' '${version}'; };\n${gh};\n${probe}`;
+ const shell=`${node??`node(){ [ "$#" = 1 ] && [ "$1" = --version ] || return 91; printf '%s\\n' '${version}'; }`};\n${gh};\n${cat};\n${probe}`;
  const result=spawnSync('bash',['-e','-c',shell],{env:{...process.env,GITHUB_OUTPUT:output,GITHUB_PATH:pathFile,RUNNER_TEMP:directory,GITHUB_REPOSITORY:'o/r',GITHUB_RUN_ID:'7',GITHUB_RUN_ATTEMPT:'1',RUNNER_TOOL_CACHE:toolCache??join(directory,'no-tool-cache')},encoding:'utf8',timeout:5000});
  const read=(file)=>{try{return readFileSync(file,'utf8');}catch{return '';}};
  if(settle)waitFor(join(directory,'pr-attempt.json'));
@@ -272,7 +276,7 @@ function toolCacheWith(versions){
  for(const version of versions){const bin=join(cache,'node',version,'x64','bin');mkdirSync(bin,{recursive:true});writeFileSync(join(bin,'node'),'#!/bin/sh\nexit 92\n',{mode:0o755});}
  return cache;
 }
-it.each([['v22.23.4','22'],['v24.11.0','24']])('probes %s without starting a JavaScript evaluation', (version,major)=>{
+it.each([['v22.23.4','22'],['v24.11.0','24']])('probes the runner\'s %s, with no cached 22, without starting a JavaScript evaluation', (version,major)=>{
  const {directory,result,output,path}=probeRun(version);
  try {
   expect(result.status,result.stderr).toBe(0);
@@ -280,17 +284,22 @@ it.each([['v22.23.4','22'],['v24.11.0','24']])('probes %s without starting a Jav
   expect(path).toBe('');
  } finally {rmSync(directory,{recursive:true,force:true});}
 });
-it('puts the tool cache\'s newest Node 22 on PATH when the runner\'s is another major, and runs none of them',()=>{
+it('puts the tool cache\'s newest Node 22 on PATH, starts no Node, and warms that one\'s binary in the background',()=>{
  const cache=toolCacheWith(['20.19.5','22.9.0','22.23.4','24.11.0']);
- const {directory,result,output,path}=probeRun('v24.11.0',{toolCache:cache});
+ const release=join(cache,'release'),read=join(cache,'read');
+ // Any node at all fails the probe; cat records what it reads and then blocks until the test releases it: had the step
+ // waited for it, the 5s spawn timeout would fail the probe.
+ const cat=`cat(){ printf '%s\\n' "$*" >> '${read}'; while [ ! -e '${release}' ]; do sleep 0.01; done; }`;
+ const {directory,result,output,path}=probeRun('v24.11.0',{toolCache:cache,cat,node:'node(){ return 91; }'});
  try {
+  expect(result.error).toBeUndefined();
   expect(result.status,result.stderr).toBe(0);
   expect(output).toBe('major=22\n');
-  expect(path).toBe(`${join(cache,'node','22.23.4','x64','bin')}\n`);
-  // The runner's own 22 needs no tool cache.
-  const own=probeRun('v22.23.4',{toolCache:cache});
-  try {expect(own.output).toBe('major=22\n');expect(own.path).toBe('');} finally {rmSync(own.directory,{recursive:true,force:true});}
- } finally {rmSync(directory,{recursive:true,force:true});rmSync(cache,{recursive:true,force:true});}
+  const bin=join(cache,'node','22.23.4','x64','bin');
+  expect(path).toBe(`${bin}\n`);
+  waitFor(read);
+  expect(readFileSync(read,'utf8')).toBe(`${bin}/node\n`);
+ } finally {writeFileSync(release,'');rmSync(directory,{recursive:true,force:true});spawnSync('sleep',['0.05']);rmSync(cache,{recursive:true,force:true});}
 });
 // THE CLOCK'S ATTEMPT, FETCHED OFF THE CRITICAL PATH. The clock reads only the attempt's run_started_at, fixed for the
 // attempt, so the first step fetches it in the background; the clock's own `gh api` took 0.6s median, 2.0s p90 and 4.1s at
