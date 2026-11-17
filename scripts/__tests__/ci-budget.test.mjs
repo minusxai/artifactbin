@@ -1,7 +1,7 @@
 import {it,expect} from 'vitest';
-import {readFileSync, mkdtempSync, writeFileSync, rmSync} from 'node:fs';
+import {readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync} from 'node:fs';
 import {tmpdir} from 'node:os';
-import {join} from 'node:path';
+import {dirname, join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
 import yaml from 'yaml';
@@ -229,25 +229,101 @@ it('measures the node batch on main after each green ci push run, checks it, and
  expect(workflow('pr-fast.yml').on).not.toHaveProperty('workflow_run');
 });
 // The install cache holds Node 22's build of every native module; the lane may use the runner's own Node only when it is a 22.
-it('uses Node 22 in every pr fast job: the runner\'s own when it is a 22, setup-node\'s otherwise',()=>{
+// When it is not (ubuntu-latest's is a 24), the hosted tool cache's newest 22 goes on PATH: setup-node found that very
+// directory too, then spent 0.6s median, 2.9s p90 and 6.3s at worst printing npm's and yarn's versions from a cold disk
+// (pr fast runs 44027030734-44133274884), and added a post step. setup-node remains for a runner with no cached 22.
+it('uses Node 22 in every pr fast job: the runner\'s own, else the hosted tool cache\'s, else setup-node\'s',()=>{
  const steps=workflow('pr-fast.yml').jobs.fast.steps;
  const probe=steps.findIndex(step=>step.id==='runner-node'),setup=steps.findIndex(step=>step.uses?.startsWith('actions/setup-node@'));
  expect(steps[probe].run).toContain('node --version');
  expect(steps[probe].run).toContain('$GITHUB_OUTPUT');
+ expect(steps[probe].run).toContain('$GITHUB_PATH');
  expect(steps[setup]).toMatchObject({if:"steps.runner-node.outputs.major != '22'",with:{'node-version':22}});
  expect(probe).toBeLessThan(setup);
  expect(setup).toBeLessThan(steps.findIndex(step=>step.id==='install'));
  expect(steps.find(step=>step.id==='install').with.key).toContain('-node22-');
 });
+// Runs the probe step's shell with `node` answering only --version: any JavaScript evaluation fails the probe.
+// The default `gh` answers at once; the probe returns only once its background fetch has landed, so nothing still writes
+// into the directory the test removes.
+function probeRun(version,{toolCache,gh=`gh(){ printf '{}'; }`,settle=true}={}){
+ const directory=mkdtempSync(join(tmpdir(),'afbin-node-probe-')),output=join(directory,'output'),pathFile=join(directory,'path');
+ const probe=workflow('pr-fast.yml').jobs.fast.steps.find(step=>step.id==='runner-node').run;
+ const shell=`node(){ [ "$#" = 1 ] && [ "$1" = --version ] || return 91; printf '%s\\n' '${version}'; };\n${gh};\n${probe}`;
+ const result=spawnSync('bash',['-e','-c',shell],{env:{...process.env,GITHUB_OUTPUT:output,GITHUB_PATH:pathFile,RUNNER_TEMP:directory,GITHUB_REPOSITORY:'o/r',GITHUB_RUN_ID:'7',GITHUB_RUN_ATTEMPT:'1',RUNNER_TOOL_CACHE:toolCache??join(directory,'no-tool-cache')},encoding:'utf8',timeout:5000});
+ const read=(file)=>{try{return readFileSync(file,'utf8');}catch{return '';}};
+ if(settle)waitFor(join(directory,'pr-attempt.json'));
+ return {directory,result,output:read(output),path:read(pathFile)};
+}
+function waitFor(file){
+ const until=Date.now()+3000;
+ while(!existsSync(file)&&Date.now()<until)spawnSync('sleep',['0.02']);
+}
+function toolCacheWith(versions){
+ const cache=mkdtempSync(join(tmpdir(),'afbin-tool-cache-'));
+ for(const version of versions){const bin=join(cache,'node',version,'x64','bin');mkdirSync(bin,{recursive:true});writeFileSync(join(bin,'node'),'#!/bin/sh\nexit 92\n',{mode:0o755});}
+ return cache;
+}
 it.each([['v22.23.4','22'],['v24.11.0','24']])('probes %s without starting a JavaScript evaluation', (version,major)=>{
- const directory=mkdtempSync(join(tmpdir(),'afbin-node-probe-')),output=join(directory,'output');
+ const {directory,result,output,path}=probeRun(version);
  try {
-  const probe=workflow('pr-fast.yml').jobs.fast.steps.find(step=>step.id==='runner-node').run;
-  const shell=`node(){ [ "$#" = 1 ] && [ "$1" = --version ] || return 91; printf '%s\\n' '${version}'; };\n${probe}`;
-  const result=spawnSync('bash',['-e','-c',shell],{env:{...process.env,GITHUB_OUTPUT:output},encoding:'utf8'});
   expect(result.status,result.stderr).toBe(0);
-  expect(readFileSync(output,'utf8')).toBe(`major=${major}\n`);
+  expect(output).toBe(`major=${major}\n`);
+  expect(path).toBe('');
  } finally {rmSync(directory,{recursive:true,force:true});}
+});
+it('puts the tool cache\'s newest Node 22 on PATH when the runner\'s is another major, and runs none of them',()=>{
+ const cache=toolCacheWith(['20.19.5','22.9.0','22.23.4','24.11.0']);
+ const {directory,result,output,path}=probeRun('v24.11.0',{toolCache:cache});
+ try {
+  expect(result.status,result.stderr).toBe(0);
+  expect(output).toBe('major=22\n');
+  expect(path).toBe(`${join(cache,'node','22.23.4','x64','bin')}\n`);
+  // The runner's own 22 needs no tool cache.
+  const own=probeRun('v22.23.4',{toolCache:cache});
+  try {expect(own.output).toBe('major=22\n');expect(own.path).toBe('');} finally {rmSync(own.directory,{recursive:true,force:true});}
+ } finally {rmSync(directory,{recursive:true,force:true});rmSync(cache,{recursive:true,force:true});}
+});
+// THE CLOCK'S ATTEMPT, FETCHED OFF THE CRITICAL PATH. The clock reads only the attempt's run_started_at, fixed for the
+// attempt, so the first step fetches it in the background; the clock's own `gh api` took 0.6s median, 2.0s p90 and 4.1s at
+// worst after every job's tests (the same runs). The clock still runs last, on always(), and fetches it itself when the
+// prefetch has not landed. Every stream of the background fetch is redirected, or the runner holds the step open until it ends.
+it('prefetches the clock\'s attempt in the background, returning before the fetch ends, and lands it whole',()=>{
+ const steps=workflow('pr-fast.yml').jobs.fast.steps,probe=steps.find(step=>step.id==='runner-node');
+ expect(probe.env).toEqual({GH_TOKEN:'${{ github.token }}'});
+ const release=join(mkdtempSync(join(tmpdir(),'afbin-attempt-release-')),'release');
+ // gh blocks until the test releases it: had the step waited for it, the 5s spawn timeout would fail the probe.
+ const gh=`gh(){ [ "$1" = api ] && [ "$2" = /repos/o/r/actions/runs/7/attempts/1 ] || return 93; while [ ! -e '${release}' ]; do sleep 0.01; done; printf '{"run_started_at":"2026-11-17T00:00:00Z"}'; }`;
+ const {directory,result}=probeRun('v22.23.4',{gh,settle:false});
+ try {
+  expect(result.error).toBeUndefined();
+  expect(result.status,result.stderr).toBe(0);
+  expect(existsSync(join(directory,'pr-attempt.json'))).toBe(false);
+  writeFileSync(release,'');
+  waitFor(join(directory,'pr-attempt.json'));
+  expect(JSON.parse(readFileSync(join(directory,'pr-attempt.json'),'utf8'))).toEqual({run_started_at:'2026-11-17T00:00:00Z'});
+ } finally {rmSync(directory,{recursive:true,force:true});rmSync(dirname(release),{recursive:true,force:true});}
+});
+it('clocks from the prefetched attempt without fetching it again, and fetches it itself when the prefetch never landed',()=>{
+ const clock=workflow('pr-fast.yml').jobs.fast.steps.at(-1);
+ const started=new Date(Date.now()-5000).toISOString();
+ const run=(prefetched)=>{
+  const directory=mkdtempSync(join(tmpdir(),'afbin-pr-clock-')),calls=join(directory,'calls');
+  if(prefetched)writeFileSync(join(directory,'pr-attempt.json'),JSON.stringify({run_started_at:started}));
+  const gh=`gh(){ printf '%s\\n' "$*" >> '${calls}'; printf '{"run_started_at":"${started}"}'; }`;
+  const result=spawnSync('bash',['-e','-c',`${gh};\n${clock.run}`],{cwd:fileURLToPath(new URL('../..',import.meta.url)),env:{...process.env,GH_TOKEN:'test',GITHUB_REPOSITORY:'o/r',GITHUB_RUN_ID:'7',GITHUB_RUN_ATTEMPT:'1',RUNNER_TEMP:directory,GITHUB_STEP_SUMMARY:join(directory,'summary.md')},encoding:'utf8',timeout:10000});
+  const fetched=existsSync(calls)?readFileSync(calls,'utf8'):'';
+  rmSync(directory,{recursive:true,force:true});
+  return {result,fetched};
+ };
+ const warm=run(true);
+ expect(warm.result.status,warm.result.stderr).toBe(0);
+ expect(warm.result.stdout).toContain('(target): aim for 40s; the limit is 60s');
+ expect(warm.fetched).toBe('');
+ const cold=run(false);
+ expect(cold.result.status,cold.result.stderr).toBe(0);
+ expect(cold.result.stdout).toContain('(target): aim for 40s; the limit is 60s');
+ expect(cold.fetched).toBe('api /repos/o/r/actions/runs/7/attempts/1\n');
 });
 // A lock change misses the exact install key on every push; reconciling main's install beats a cold npm ci.
 it('reconciles the nearest install on a lock miss, restore only, and falls back to npm ci if the lock would move',()=>{

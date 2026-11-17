@@ -221,15 +221,33 @@ jobs:
         run: |
           ( rc=0; node scripts/ci/ci.mjs node-timings > "$RUNNER_TEMP/node-timings.log" 2>&1 || rc=$?; echo "$rc" > "$RUNNER_TEMP/node-timings.part"; mv "$RUNNER_TEMP/node-timings.part" "$RUNNER_TEMP/node-timings.status" ) < /dev/null > /dev/null 2>&1 &
       # Node 22, the install cache's (its key says node22; its native modules are compiled for that major's ABI). The runner's
-      # own Node serves when it is a 22 already, skipping setup-node's ~0.5s step and ~0.2s post step (run 42812079087,
-      # job api-3); any other major gets setup-node exactly as before. The step prints the version it found.
+      # own Node serves when it is a 22; else the hosted tool cache's newest 22 goes on PATH. ubuntu-latest's own is a 24, and
+      # setup-node found that same cached 22, then spent 0.6s median, 2.9s p90 and 6.3s at worst printing npm's and yarn's
+      # versions from a cold disk (runs 44027030734-44133274884), plus a post step; it now runs only when no 22 is cached.
       # --version exits before JavaScript initialization; evaluating process.versions took 14.7s on the slowest
       # runner of run 43196988989, making its complete attempt 61s. Shell expansion needs only the version string.
+      # THE CLOCK'S ATTEMPT, FETCHED HERE IN THE BACKGROUND: the clock (the last step) reads only its run_started_at, and its
+      # own `gh api` took 0.6s median, 2.0s p90 and 4.1s at worst after every job's tests. Every stream is redirected, or
+      # the runner holds this step open until the fetch ends; written whole, then renamed, so the clock reads it complete or
+      # fetches it itself.
       - id: runner-node
+        name: Node 22 on PATH, and this attempt fetched for the clock
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          attempt="$RUNNER_TEMP/pr-attempt.json"
+          { gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}" > "$attempt.part" && mv "$attempt.part" "$attempt"; } < /dev/null > /dev/null 2>&1 &
           runner_version=$(node --version)
           runner_major=${runner_version#v}
           runner_major=${runner_major%%.*}
+          if [ "$runner_major" != 22 ]; then
+            cached=$(printf '%s\n' "$RUNNER_TOOL_CACHE"/node/22.*/x64/bin | sort -V | tail -n 1)
+            if [ -x "$cached/node" ]; then
+              printf '%s\n' "$cached" >> "$GITHUB_PATH"
+              runner_version="$runner_version; Node 22 from $cached"
+              runner_major=22
+            fi
+          fi
           printf 'major=%s\n' "$runner_major" >> "$GITHUB_OUTPUT"
           printf 'Runner Node: %s\n' "$runner_version"
       # No `cache: npm`: the whole install is restored below, and npm's download cache would only add a restore.
@@ -444,6 +462,8 @@ jobs:
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
+        # The attempt the first step fetched in the background; fetched here only if that never landed.
         run: |
-          gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}" > "$RUNNER_TEMP/pr-attempt.json"
-          node scripts/lib/ci-elapsed.mjs --pr "$RUNNER_TEMP/pr-attempt.json" "$GITHUB_STEP_SUMMARY"
+          attempt="$RUNNER_TEMP/pr-attempt.json"
+          [ -s "$attempt" ] || gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}" > "$attempt"
+          node scripts/lib/ci-elapsed.mjs --pr "$attempt" "$GITHUB_STEP_SUMMARY"
