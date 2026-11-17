@@ -1,13 +1,27 @@
 import type {HtmlRuntimeAssets} from './contract';
 /**
- * THE RUNTIME BUILD ANOTHER PROCESS ALREADY MADE. A composition that holds this checkout's built assets names how to read
- * them, and the first buildHtmlAssets() (./build.server) reads them instead of compiling: the test suite's global setup
- * builds them once per run for every worker (services/app/test/setup/html-assets-file). A supplier that answers nothing
- * leaves the compile to buildHtmlAssets. A module of its own, apart from the build, because a production server replaces
- * that module with its prebuilt assets (scripts/build/html-core.mjs) and supplies nothing.
+ * THE RUNTIME BUILD, SHARED WITH OTHER PROCESSES. A composition whose processes build the same checkout supplies where
+ * the build is kept: the first buildHtmlAssets() (./build.server) reads it from there, or compiles it when there is none
+ * yet and hands the result back to be kept. The test suite's workers share one per run this way
+ * (services/app/test/setup/html-assets-file). A module of its own, apart from the build, because a production server
+ * replaces that module with its prebuilt assets (scripts/build/html-core.mjs) and supplies nothing.
  */
-type Supplier=()=>Promise<HtmlRuntimeAssets|undefined>;
-let supplier:Supplier|undefined;
-export function supplyHtmlAssets(load:Supplier|undefined):void{supplier=load;}
-/** The supplied build, or undefined when none is supplied or the supplier has none. */
-export async function suppliedHtmlAssets():Promise<HtmlRuntimeAssets|undefined>{return supplier?.();}
+export interface HtmlAssetsSupply {
+ /** The kept build, or undefined when this process is to compile it. */
+ read():Promise<HtmlRuntimeAssets|undefined>;
+ /** This process compiled the build. */
+ built(assets:HtmlRuntimeAssets):void;
+ /** This process's compile failed. */
+ failed():void;
+}
+let supply:HtmlAssetsSupply|undefined;
+export function supplyHtmlAssets(next:HtmlAssetsSupply|undefined):void{supply=next;}
+/** The supplied build, or `compile`'s, handed to the supply. */
+export async function suppliedOrCompiled(compile:()=>Promise<HtmlRuntimeAssets>):Promise<HtmlRuntimeAssets>{
+ const current=supply,kept=await current?.read();
+ if(kept)return kept;
+ let assets:HtmlRuntimeAssets;
+ try{assets=await compile();}catch(error){current?.failed();throw error;}
+ current?.built(assets);
+ return assets;
+}

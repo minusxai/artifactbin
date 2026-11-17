@@ -4,5 +4,5 @@ export { createSourceRetention } from './asset-retention';
 export type { SourceRetention } from './asset-retention-contract';
 export { retainedPublicAssets } from './asset-retention.server';
 export { buildHtmlAssets } from './build.server';
-export { supplyHtmlAssets } from './assets-supply.server';
+export { supplyHtmlAssets, type HtmlAssetsSupply } from './assets-supply.server';
 export { hostCommentsPath } from './host-comments-address.server';

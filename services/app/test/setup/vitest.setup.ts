@@ -51,13 +51,13 @@ const { setEventProjection } = await import('@/lib/platform/event-outbox');
 
 await import('./database');
 
-// The run's page runtime build, read from the global setup's file instead of compiled in this worker (./html-assets-file).
+// The run's page runtime build, compiled by the first worker to need it and read by the rest (./html-assets-file).
 // Supplied before the file's first test, not here: the runtime's graph reaches the platform config, which a file that
 // mocks it or rewrites the environment (api-isolated) must reach first.
 const htmlAssetsFile = inject('htmlAssetsFile');
 if (htmlAssetsFile) beforeAll(async () => {
-  const [{ supplyHtmlAssets }, { readHtmlAssets }] = await Promise.all([import('@/lib/html-runtime/server'), import('./html-assets-file')]);
-  supplyHtmlAssets(() => readHtmlAssets(htmlAssetsFile));
+  const [{ supplyHtmlAssets }, { htmlAssetsSupply }] = await Promise.all([import('@/lib/html-runtime/server'), import('./html-assets-file')]);
+  supplyHtmlAssets(htmlAssetsSupply(htmlAssetsFile));
 });
 
 let localBrowser: import('@artifactbin/contracts').BrowserService | undefined;
