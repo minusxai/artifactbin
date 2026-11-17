@@ -21,7 +21,7 @@ import {ARTIFACT_WORKLOAD_PATH,APP_ARTIFACT_WORKLOAD_PATH,ARTIFACT_WORKLOAD_LIMI
  *    failure) is 503 and the caller's call throws.
  */
 import {createHash,timingSafeEqual} from 'node:crypto';
-import {ARTIFACT_READ_GRANT_PATH,ARTIFACT_READ_PATH,CANONICAL_ARTIFACT_READ_PATH,ARTIFACT_READ_LIMIT,API_RESOURCE_PATH,HUMAN_SESSION_LIVE_PATH,IDENTITY_CALL_PATH,IDENTITY_SCHEMA,IDENTITY_INTROSPECT_PATH,IDENTITY_METHODS,IdentityError,SERVICE_AUTH_HEADER,parseAliasOrigins,parseServiceAudiences,type IssuedArtifactReadGrant,type IdentityIntrospectResponse,type IdentityMethod,type IdentityService,type Part,type ServiceAudience,type ServiceTokenParent,type TokenRecord,type TransactionalQueryable} from '@artifactbin/contracts';
+import {ARTIFACT_IMAGE_DEADLINE_MS,ARTIFACT_IMAGE_ERRORS,ARTIFACT_IMAGE_ERROR_FIELDS,ARTIFACT_IMAGE_PATH,CANONICAL_ARTIFACT_IMAGE_PATH,ELEMENT_CAPTURE,ARTIFACT_READ_GRANT_PATH,ARTIFACT_READ_PATH,CANONICAL_ARTIFACT_READ_PATH,ARTIFACT_READ_LIMIT,API_RESOURCE_PATH,HUMAN_SESSION_LIVE_PATH,IDENTITY_CALL_PATH,IDENTITY_SCHEMA,IDENTITY_INTROSPECT_PATH,IDENTITY_METHODS,IdentityError,SERVICE_AUTH_HEADER,parseAliasOrigins,parseServiceAudiences,type IssuedArtifactReadGrant,type IdentityIntrospectResponse,type IdentityMethod,type IdentityService,type Part,type ServiceAudience,type ServiceTokenParent,type TokenRecord,type TransactionalQueryable} from '@artifactbin/contracts';
 import {BodyTooLargeError,readBody,serviceSecretMatches} from '@artifactbin/utils';
 import type {Context} from 'hono';
 import type {AuthEnv,AuthOptions} from './parts';
@@ -138,31 +138,58 @@ export function sessionAuthority(o:AuthOptions):Part<AuthEnv>{return {name:'sess
    return new Response(envelope.body,{headers:{'content-type':'application/json','cache-control':'no-store'}});
   }catch(error){return answer({error:error instanceof BodyTooLargeError?'too_large':'evidence_unavailable'},error instanceof BodyTooLargeError?413:503);}
  });
- for(const path of [ARTIFACT_READ_GRANT_PATH,ARTIFACT_READ_PATH])app.all(path,async c=>{
+ /** A passed-through image refusal: one of the export door's codes at its own status, with only its detail fields. */
+ const imageRefusal=async(response:Response):Promise<Response>=>{
+  let told:Record<string,unknown>={};
+  try{told=JSON.parse(await readBody(response,{limit:8192,as:'text'}));}catch{await response.body?.cancel().catch(()=>{});}
+  const code=typeof told?.error==='string'?told.error:response.status===404?'not_found':'';
+  if(!Object.hasOwn(ARTIFACT_IMAGE_ERRORS,code)||ARTIFACT_IMAGE_ERRORS[code]!==response.status)return answer({error:'image_unavailable'},503);
+  return answer(Object.fromEntries(ARTIFACT_IMAGE_ERROR_FIELDS.filter(key=>key in told&&told[key]!==null&&typeof told[key]!=='object').map(key=>[key,told[key]]).concat([['error',code]])),response.status);
+ };
+ const imageOptions=(input:Record<string,unknown>)=>(input.format===undefined||input.format==='png'||input.format==='jpg')
+  &&(input.element===undefined||typeof input.element==='string'&&input.element.length>0&&input.element.length<=ELEMENT_CAPTURE.selectorChars)
+  &&(input.slide===undefined||Number.isSafeInteger(input.slide)&&Number(input.slide)>0);
+ /**
+  * Delegated canonical reads by an arg_ grant: issue (`{token}`), read (`{grant, artifact_id}`) and image (read's keys
+  * plus `format?`, `element?`, `slide?`). One sequence for read and image: the grant and its live claims, the fixed app
+  * seam as the grant's person, the answer buffered under ARTIFACT_READ_LIMIT, the claims again, the canonical READ
+  * seam's decision again (CURRENT ACL, after the answer was made), the claims again, then delivery. The image call is
+  * bounded whole by ARTIFACT_IMAGE_DEADLINE_MS, a relay's request cut being above it.
+  */
+ for(const path of [ARTIFACT_READ_GRANT_PATH,ARTIFACT_READ_PATH,ARTIFACT_IMAGE_PATH])app.all(path,async c=>{
+  const issuing=path===ARTIFACT_READ_GRANT_PATH,image=path===ARTIFACT_IMAGE_PATH;
+  const signal=image?AbortSignal.any([c.req.raw.signal,AbortSignal.timeout(ARTIFACT_IMAGE_DEADLINE_MS)]):undefined;
+  const step=<T>(pending:Promise<T>):Promise<T>=>signal?evidenceStep(signal,pending):pending;
+  const unavailable=image?'image_unavailable':'read_unavailable';
   let service:ServiceAudience|undefined;
-  const input=await admit(c,presented=>!!(service=serviceOf(audiences,presented))&&service.artifactReads===true);
+  let input:Response|Record<string,unknown>;
+  try{input=await step(admit(c,presented=>!!(service=serviceOf(audiences,presented))&&service.artifactReads===true));}catch{return answer({error:unavailable},503);}
   if(input instanceof Response)return input;
-  const issuing=path===ARTIFACT_READ_GRANT_PATH;
-  const keys=issuing?['token']:['grant','artifact_id'];
-  if(Object.keys(input).length!==keys.length||Object.keys(input).some(key=>!keys.includes(key))||keys.some(key=>typeof input[key]!=='string'||!input[key]))return answer({error:'bad_request'},400);
+  const keys=issuing?['token']:['grant','artifact_id'],optional=image?['format','element','slide']:[];
+  if(Object.keys(input).some(key=>!keys.includes(key)&&!optional.includes(key))||keys.some(key=>typeof input[key]!=='string'||!input[key])||image&&!imageOptions(input))return answer({error:'bad_request'},400);
   try{
    const claims=issuing?(tokenKey?verifyServiceToken(tokenKey,audiences,input.token as string):null):verifyArtifactReadGrant(grantKey,audiences,input.grant as string);
-   const liveClaims=async()=>!!claims&&claims.svc===service!.id&&claims.aud===service!.origin&&await activeUser(claims.sub)&&await parentLive(claims.par,claims.sub)&&(!o.admitIdentity||await o.admitIdentity({userId:claims.sub}));
-   if(!await liveClaims()||!claims)return answer({error:'unauthorized'},401);
+   const liveClaims=async()=>{signal?.throwIfAborted();return !!claims&&(issuing||claims.exp>Math.floor(Date.now()/1000))&&claims.svc===service!.id&&claims.aud===service!.origin&&await activeUser(claims.sub)&&await parentLive(claims.par,claims.sub)&&(!o.admitIdentity||await o.admitIdentity({userId:claims.sub}));};
+   if(!await step(liveClaims())||!claims)return answer({error:'unauthorized'},401);
    if(issuing){const issued=signArtifactReadGrant(grantKey,service!,{userId:claims.sub,parent:claims.par});return answer({grant:issued.token,expires_at:issued.expiresAt,user_id:claims.sub,audience:claims.aud} satisfies IssuedArtifactReadGrant);}
-   if(!/^[A-Za-z0-9_-]{1,128}$/.test(input.artifact_id as string))return answer({error:'bad_request'},400);
-   const request=new Request(new URL(CANONICAL_ARTIFACT_READ_PATH+'?id='+encodeURIComponent(input.artifact_id as string),c.req.url));
-   const response=await o.upstream(request,{credential:'session',userId:claims.sub});
-   if(response.status!==200){await response.body?.cancel();return answer({error:'not_found'},404);}
-   const body=await readBody(response,{limit:ARTIFACT_READ_LIMIT,as:'text'});
-   if(!await liveClaims())return answer({error:'unauthorized'},401);
-   // The app's second decision rechecks CURRENT ACL after the buffered read.
-   const checked=await o.upstream(request,{credential:'session',userId:claims.sub});
+   const id=input.artifact_id as string;
+   if(!/^[A-Za-z0-9_-]{1,128}$/.test(id))return answer({error:'bad_request'},400);
+   const read=new Request(new URL(CANONICAL_ARTIFACT_READ_PATH+'?id='+encodeURIComponent(id),c.req.url),signal?{signal}:{});
+   const first=image?new Request(new URL(CANONICAL_ARTIFACT_IMAGE_PATH,c.req.url),{method:'POST',signal,
+    body:JSON.stringify({artifact_id:id,...Object.fromEntries(optional.filter(key=>input[key]!==undefined).map(key=>[key,input[key]]))})}):read;
+   const response=await step(o.upstream(first,{credential:'session',userId:claims.sub}));
+   if(response.status!==200){if(image)return await step(imageRefusal(response));await response.body?.cancel();return answer({error:'not_found'},404);}
+   const body=await step(readBody(response,{limit:ARTIFACT_READ_LIMIT,as:'text'}));
+   if(image&&typeof JSON.parse(body)?.data!=='string')return answer({error:unavailable},503);
+   if(!await step(liveClaims()))return answer({error:'unauthorized'},401);
+   // The app's second decision rechecks CURRENT ACL after the buffered answer.
+   const checked=await step(o.upstream(read,{credential:'session',userId:claims.sub}));
    await checked.body?.cancel();
    if(checked.status!==200)return answer({error:'not_found'},404);
-   if(!await liveClaims())return answer({error:'unauthorized'},401);
+   if(!await step(liveClaims()))return answer({error:'unauthorized'},401);
+   signal?.throwIfAborted();
    return new Response(body,{headers:{'content-type':'application/json','cache-control':'no-store'}});
-  }catch(error){return answer({error:error instanceof BodyTooLargeError?'too_large':'read_unavailable'},error instanceof BodyTooLargeError?413:503);}
+  }catch(error){return answer({error:error instanceof BodyTooLargeError?'too_large':unavailable},error instanceof BodyTooLargeError?413:503);}
  });
  const transactional=(db:unknown):db is TransactionalQueryable=>typeof (db as TransactionalQueryable|undefined)?.transaction==='function';
  let identity:Promise<IdentityService>|null=null;

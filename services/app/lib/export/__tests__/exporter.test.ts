@@ -238,6 +238,24 @@ describe('the export answer',()=>{
  });
 });
 
+describe('a bounded export',()=>{
+ it('gives the render, its retry and the wait only what is left of the caller\'s deadline',async()=>{
+  const requests=browser(()=>({ok:false,reason:'failed'}));
+  const started=Date.now();
+  const response=await exportImageResponse(page(),{deadline:started+8_000},BASE);
+  expect([response.status,(await response.json() as {error:string}).error]).toEqual([500,'render_failed']);
+  // One retry, both inside the deadline: never the 30 s default each.
+  expect(requests).toHaveLength(2);
+  expect(requests[0]!.timeoutMs).toBeLessThanOrEqual(8_000);
+  expect(requests[0]!.timeoutMs).toBeGreaterThan(7_000);
+  expect(requests[1]!.timeoutMs).toBeLessThan(requests[0]!.timeoutMs!);
+  await resetExportRenderer();
+  const unbounded=browser(()=>({ok:true,mime:'image/png',bytes:PNG}));
+  expect((await exportImageResponse(page(),{},BASE)).status).toBe(200);
+  expect(unbounded[0]!.timeoutMs).toBe(30_000);
+ });
+});
+
 describe('renderArtifactImage',()=>{
  it('returns bytes from a volatile render and from the stored cache, and narrows navigation to failed',async()=>{
   const requests=browser(()=>({ok:true,mime:'image/png',bytes:PNG}));
