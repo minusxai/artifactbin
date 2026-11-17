@@ -25,6 +25,7 @@ const HEALTH = '/health';
  */
 export function serveSql(svc: SqlService, opts: { maxBody?: number; serviceSecret?: string } = {}): JsonServer {
   const routes: JsonRoutes = {
+    [SQL_ROUTES.readPolicy]: async () => ({version:1,queryTimeoutMs:svc.readPolicy?.queryTimeoutMs??null}),
     [SQL_ROUTES.run]: async (b, context) => ({ results: await svc.run(b as Parameters<SqlService['run']>[0], context) }),
     [SQL_ROUTES.runMany]: async (b, context) => ({ results: await svc.runMany(b as Parameters<SqlService['runMany']>[0], context) }),
     [SQL_ROUTES.mutate]: async (b) => ({ result: await svc.mutate(b as Parameters<SqlService['mutate']>[0]) }),

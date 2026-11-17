@@ -234,4 +234,19 @@ describe.skipIf(!has('apache/doris:all-in-one-4.1.3'))('Doris through the MySQL 
     }
     expect((await my.query(q)).rows).toHaveLength(1);
   });
+  it('installs positive native deadlines and confirms cancelled Doris statements are gone',async()=>{
+    const native=await my.query({text:'SELECT @@query_timeout AS budget',params:{},viewer:alice,limits:{timeoutMs:900}});
+    expect(Number(native.rows[0]!.budget)).toBe(1);
+    const controller=new AbortController();
+    const pending=failure(my.query({text:'SELECT SLEEP(30) /* doris_cancel_probe */',params:{},viewer:alice,signal:controller.signal}));
+    const active=()=>execFileSync('docker',['exec',container,'mysql','-h127.0.0.1','-P9030','-uroot','-N','-e','SHOW FULL PROCESSLIST'],{encoding:'utf8'}).split('\n').some(line=>line.includes('doris_cancel_probe'));
+    try{
+      const until=performance.now()+3000;
+      while(!active()&&performance.now()<until)await new Promise(resolve=>setTimeout(resolve,25));
+      expect(active()).toBe(true);
+      controller.abort();expect(await pending).toMatchObject({code:'timeout'});
+      expect(active()).toBe(false);
+      expect((await my.query({text:'SELECT 1 AS n',params:{},viewer:bob})).rows).toEqual([{n:1}]);
+    }finally{controller.abort();await pending;}
+  });
 });

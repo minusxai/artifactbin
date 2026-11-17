@@ -178,6 +178,7 @@ export function createSqlitePool(opts: Partial<SqlCaps> = {}, pool: SqlPoolOptio
 
   const timedOut = (error: string) => error === 'timed_out';
   return {
+    readPolicy:Object.freeze({queryTimeoutMs:caps.timeoutMs}),
     run: async (input, context) => {
       const started = performance.now();
       try {

@@ -24,6 +24,7 @@ export function createSqliteSql(opts: Partial<SqlCaps> = {}, extensions: SqlExte
     return { remaining: () => Math.max(0, deadline - performance.now()), failure: (): QueryFailure | undefined => context?.signal?.aborted ? {error:'SQL call cancelled'} : performance.now() >= deadline ? {error:'SQL deadline exceeded', timedOut:true} : undefined };
   };
   return {
+    readPolicy:Object.freeze({queryTimeoutMs:caps.timeoutMs}),
     run: async (input, context) => {
       try {
         const life = lifecycle(context);

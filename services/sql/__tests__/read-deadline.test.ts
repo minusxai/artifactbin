@@ -3,7 +3,7 @@ import http from 'node:http';
 import { createSqliteSql } from '@artifactbin/sql/sqlite';
 import { sqlCaps } from '../src/caps';
 import { describe, expect, it } from 'vitest';
-import { SQL_READ_LIMITS, type RunInput, type SqlService } from '@artifactbin/contracts';
+import { SQL_READ_LIMITS, SERVICE_AUTH_HEADER, type RunInput, type SqlService } from '@artifactbin/contracts';
 import { serveSql } from '@artifactbin/sql';
 import { createSql } from '@artifactbin/sql/local';
 import { sqlClient } from '@artifactbin/utils';
@@ -11,6 +11,16 @@ import { DEFAULT_CAPS } from '../src/caps';
 
 const QUICK: RunInput = { tables: {}, params: {}, queries: [{ name: 'q', sql: 'select 7 as n' }] };
 const ENDLESS: RunInput = { tables: {}, params: {}, queries: [{ name: 'q', sql: 'with recursive c(n) as (select 1 union all select n+1 from c) select count(*) as n from c' }] };
+it('reports the actual engine read policy only through the protected service door',async()=>{
+  const engine=createSql({timeoutMs:7000}),server=serveSql(engine,{serviceSecret:'synthetic_policy_secret'});
+  const url=server.listen(0).url+'/read-policy';
+  try{
+    expect((await fetch(url,{method:'POST',body:'{}'})).status).toBe(401);
+    const response=await fetch(url,{method:'POST',body:'{}',headers:{[SERVICE_AUTH_HEADER]:'synthetic_policy_secret'}});
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({version:1,queryTimeoutMs:7000});
+  }finally{await server.close();await engine.close();}
+});
 // The second argument is trusted process-local call context, never part of the serialized SQL payload.
 type ReadService = { run(input: RunInput, context?: { signal?: AbortSignal; wallTimeoutMs?: number }): ReturnType<SqlService['run']> };
 

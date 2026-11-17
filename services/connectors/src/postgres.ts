@@ -90,12 +90,17 @@ export const postgresConnector: ConnectorModule = {
       async open(database,context){return Object.assign(create(database,context),{database});},
       async close(session){
         if(session.pid&&session.active){
+          const deadline=performance.now()+4500;
           const control=create(session.database,{timeoutMs:4500});
           try{
             await withinTime(4500,undefined,()=>{void control.sql.end({timeout:0});},async()=>{
             await control.sql.unsafe('SELECT pg_terminate_backend($1)',[session.pid]);
-            const rows=await control.sql.unsafe('SELECT pid FROM pg_stat_activity WHERE pid=$1',[session.pid]);
-            if(rows.length)throw new ConnectorFailure('unavailable','database termination unconfirmed');
+            for(;;){
+              if(performance.now()>=deadline)throw new ConnectorFailure('unavailable','database termination unconfirmed');
+              const rows=await control.sql.unsafe('SELECT pid FROM pg_stat_activity WHERE pid=$1',[session.pid]);
+              if(!rows.length)break;
+              await new Promise(resolve=>setTimeout(resolve,10));
+            }
             });
           }finally{await control.sql.end({timeout:0});}
         }

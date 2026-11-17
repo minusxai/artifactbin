@@ -2,12 +2,17 @@ import {afterEach,expect,it,vi} from 'vitest';
 import {stackHealth} from '..';
 afterEach(()=>{vi.unstubAllGlobals();vi.restoreAllMocks();});
 const up=async()=>true;
-it('probes each configured service’s own /health once, in parallel, without credentials or redirects',async()=>{
+it.each([5000,undefined])('refuses remote SQL with an incompatible or absent read policy (%s)',async queryTimeoutMs=>{
+ vi.stubGlobal('fetch',vi.fn(async(url:string)=>url.endsWith('/read-policy')?Response.json({version:1,queryTimeoutMs}):new Response('ok')));
+ expect(await stackHealth({sql:'http://sql.internal',browser:null,events:null},up)).toEqual({ok:false,failing:['sql']});
+});
+it('probes liveness without credentials and verifies SQL policy under the same deadline',async()=>{
  const calls:Array<{url:string;init:RequestInit}>=[];
- vi.stubGlobal('fetch',vi.fn(async(url:string,init:RequestInit)=>{calls.push({url,init});return new Response('ok');}));
+ vi.stubGlobal('fetch',vi.fn(async(url:string,init:RequestInit)=>{calls.push({url,init});return url.endsWith('/read-policy')?Response.json({version:1,queryTimeoutMs:30000}):new Response('ok');}));
  expect(await stackHealth({sql:'http://sql.internal/',browser:'http://browser.internal//',events:null},up)).toEqual({ok:true,failing:[]});
- expect(calls.map(c=>c.url).sort()).toEqual(['http://browser.internal/health','http://sql.internal/health']);
- for(const {init} of calls){expect(init.redirect).toBe('manual');expect(init.signal).toBeInstanceOf(AbortSignal);expect(init).not.toHaveProperty('headers');}
+ expect(calls.map(c=>c.url).sort()).toEqual(['http://browser.internal/health','http://sql.internal/health','http://sql.internal/read-policy']);
+ for(const {url,init} of calls){expect(init.redirect).toBe('manual');expect(init.signal).toBeInstanceOf(AbortSignal);if(url.endsWith('/health'))expect(init).not.toHaveProperty('headers');}
+ expect(calls.find(c=>c.url.endsWith('/read-policy'))!.init.signal).toBe(calls.find(c=>c.url==='http://sql.internal/health')!.init.signal);
 });
 it('names every service that answers non-2xx, a redirect, refuses or times out, then the database, in order',async()=>{
  const deadline=new AbortController(),timeouts:number[]=[];

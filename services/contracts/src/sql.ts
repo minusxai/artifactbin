@@ -220,6 +220,8 @@ export function sqlTimeout(value: unknown, fallback: number, maximum: number, la
   return Math.min(n, maximum);
 }
 export interface SqlService {
+  /** Engine-owned cap, reported privately so split-service readiness rejects configuration drift. */
+  readonly readPolicy?: { readonly queryTimeoutMs:number };
   run(input: RunInput, context?: SqlCallContext): Promise<Record<string, QueryOutcome>>;
   runMany(input: RunManyInput, context?: SqlCallContext): Promise<Array<Record<string, QueryOutcome>>>;
   mutate(input: MutationInput): Promise<MutationOutcome>;
@@ -249,7 +251,7 @@ export const SQL_READ_LIMITS = Object.freeze({
 });
 
 /** The wire: one POST per method. `serveSql`/`sqlClient` (the sql package) implement exactly this. */
-export const SQL_ROUTES = { run: '/run', runMany: '/run-many', mutate: '/mutate', dryRun: '/dry-run', dryRunMutations: '/dry-run-mutations' } as const;
+export const SQL_ROUTES = { readPolicy:'/read-policy', run: '/run', runMany: '/run-many', mutate: '/mutate', dryRun: '/dry-run', dryRunMutations: '/dry-run-mutations' } as const;
 
 /** End-to-end mutation response budget, including persistence and downstream execution. */
 export const MUTATION_REPLY_TIMEOUT_MS = 200_000;
