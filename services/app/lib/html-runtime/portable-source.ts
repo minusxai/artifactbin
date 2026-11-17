@@ -3,13 +3,21 @@ import {isRuntimeCoreSrc,RUNTIME_CORE_PATH} from '../html-page/core-script';
 import {INLINE_SCRIPT_POLICY} from './inline-scripts';
 import {sha256Hex} from '@artifactbin/utils/sha256';
 import { parse, serialize, type DefaultTreeAdapterMap } from 'parse5';
-import { readPortableDocument,hasPortableDocument } from './portable';
+import { portableDocumentIn } from './portable';
+import type { PortableDocument } from './portable-contract';
 const generated=new Set(['runtime','apollo','reader','portable','chrome','portable-engine','collab','state-module','offline-data','offline-sql','core',INLINE_SCRIPT_POLICY]);
 /** Recover author bytes from an explicitly selected disk file, never the running DOM. */
 export function recoverPortableRendering(fileBytes:string):string {
- if(!hasPortableDocument(fileBytes))return fileBytes;
- readPortableDocument(fileBytes);
+ return recovered(fileBytes)?.rendering??fileBytes;
+}
+/**
+ * A portable file's envelope (an unreadable one throws) and its rendering with every generated block removed, from ONE
+ * parse of the file; undefined when it carries no envelope.
+ */
+function recovered(fileBytes:string):{envelope:PortableDocument;rendering:string}|undefined {
  const document=parse(fileBytes,{sourceCodeLocationInfo:true});
+ const envelope=portableDocumentIn(document);
+ if(!envelope)return undefined;
  const spans:{start:number;end:number;replacement:string}[]=[];
  const walk=(node:DefaultTreeAdapterMap['node'])=>{
   if('attrs' in node && (node.nodeName==='script'||node.nodeName==='meta'&&node.attrs.some(attr=>attr.name==='data-af'&&attr.value===INLINE_SCRIPT_POLICY)) && generated.has(node.attrs.find(attr=>attr.name==='data-af')?.value??'')) {
@@ -24,7 +32,7 @@ export function recoverPortableRendering(fileBytes:string):string {
  walk(document);
  let source=fileBytes;
  for(const span of spans.sort((a,b)=>b.start-a.start))source=source.slice(0,span.start)+span.replacement+source.slice(span.end);
- return source;
+ return {envelope,rendering:source};
 }
 /** Compare normalized parser output while ignoring only the replaceable core loader. */
 export function portableRenderedDigest(html:string):string {
@@ -33,15 +41,16 @@ export function portableRenderedDigest(html:string):string {
  clean(doc);return sha256Hex(serialize(doc));
 }
 /** The envelope's source when the file's own rendering still matches it, else null; and that rendering, stripped. */
-function envelopeSource(fileBytes:string):{source:string|null;rendering:string} {
- const envelope=readPortableDocument(fileBytes),rendering=recoverPortableRendering(fileBytes),digest=portableRenderedDigest(rendering);
+function envelopeSource({envelope,rendering}:{envelope:PortableDocument;rendering:string}):{source:string|null;rendering:string} {
+ const digest=portableRenderedDigest(rendering);
  return {source:digest===portableRenderedDigest(envelope.source)||digest===envelope.renderedDigest?envelope.source:null,rendering};
 }
 /** A file a person picked (local publish, the skill): its source, or its disk edits with every generated block removed. */
 export function recoverPortableSource(fileBytes:string):string {
- if(!hasPortableDocument(fileBytes))return fileBytes;
- const recovered=envelopeSource(fileBytes);
- return recovered.source??recovered.rendering;
+ const file=recovered(fileBytes);
+ if(!file)return fileBytes;
+ const recovery=envelopeSource(file);
+ return recovery.source??recovery.rendering;
 }
 /** Why a server refuses a portable file: it no longer verifies, so no source in it can be trusted to be the author's. */
 export class PortableSourceUnverified extends Error {
@@ -54,9 +63,12 @@ export class PortableSourceUnverified extends Error {
  * PortableSourceUnverified. HTML with no envelope is returned as it is.
  */
 export function verifiedPortableSource(html:string):string {
- if(!hasPortableDocument(html))return html;
  let source:string|null=null;
- try{source=envelopeSource(html).source;}catch{/* An unreadable envelope verifies nothing. */}
+ try{
+  const file=recovered(html);
+  if(!file)return html;
+  source=envelopeSource(file).source;
+ }catch{/* An unreadable envelope verifies nothing. */}
  if(source===null)throw new PortableSourceUnverified();
  return source;
 }
