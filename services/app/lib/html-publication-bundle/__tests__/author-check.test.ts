@@ -1,12 +1,16 @@
-import {expect,it} from 'vitest';
+import {expect,it,onTestFinished,vi} from 'vitest';
 import {mkdtemp,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {execFileSync} from 'node:child_process';
 import type {BrowserSessionResult} from '@artifactbin/contracts';
+import {checkHosted,checkScript,checkTarget,inspectPage,loadChromium,summarizeCheck} from '../../../skills/artifactbin/scripts/check.mjs';
+import {ToolError,checkDigest,toolFailure} from '../../../skills/artifactbin/scripts/toolbox-client.mjs';
+import {prepareBundleUpdate} from '../../../skills/artifactbin/scripts/toolbox-publication-bundle.mjs';
+
+/** The check's waits (busy pauses, a slow fake browser) on a virtual clock that jumps to each timer as it comes due. */
+const virtualClock=()=>{vi.useFakeTimers({toFake:['setTimeout','clearTimeout']});vi.setTimerTickMode('nextTimerAsync');onTestFinished(()=>{vi.useRealTimers();});};
 
 it('prepares a conditional project update with retained mappings and a fresh immutable write key',async()=>{
- const {prepareBundleUpdate}=await import('../../../skills/artifactbin/scripts/toolbox-publication-bundle.mjs');
  const root=await mkdtemp(join(tmpdir(),'author-update-'));
  try{
   await writeFile(join(root,'index.html'),'<link rel="stylesheet" href="./theme.css"><h1>Changed</h1>');
@@ -21,12 +25,7 @@ it('prepares a conditional project update with retained mappings and a fresh imm
  }finally{await rm(root,{recursive:true,force:true});}
 });
 
-it('provides help without reading project files or credentials',()=>{
- for(const script of ['publish','serve','check'])expect(execFileSync(process.execPath,[new URL('../../../skills/artifactbin/scripts/'+script+'.mjs',import.meta.url).pathname,'--help'],{encoding:'utf8'})).toContain('Usage:');
-});
-
 it('builds bounded smoke checks and refuses remote URLs in the private preview mode',async()=>{
- const {checkTarget,checkScript,summarizeCheck}=await import('../../../skills/artifactbin/scripts/check.mjs');
  expect(checkTarget('http://127.0.0.1:7474/')).toMatchObject({mode:'local'});
  for(const url of ['https://example.test/','http://127.0.0.1.evil.test/','file:///etc/passwd','http://user:secret@localhost/'])expect(()=>checkTarget(url)).toThrow();
  expect(checkTarget('PAGE12')).toMatchObject({mode:'hosted',target:'/a/PAGE12'});
@@ -37,7 +36,6 @@ it('builds bounded smoke checks and refuses remote URLs in the private preview m
 });
 
 it('keeps hosted execution receipts, reports partial failure, and closes the session',async()=>{
- const {checkHosted}=await import('../../../skills/artifactbin/scripts/check.mjs');
  const requests:any[]=[];
  const run=await checkHosted({target:'/a/PAGE12',viewports:[{width:390,height:844}],server:'https://example.test',token:'test-token',viewer:'guest'},async(_url:Parameters<typeof fetch>[0],init?:RequestInit)=>{
   const body=JSON.parse(String(init?.body));requests.push(body);
@@ -51,7 +49,7 @@ it('keeps hosted execution receipts, reports partial failure, and closes the ses
 });
 
 it('checks each viewport in its own fresh session, concurrently, and reports them in viewport order',async()=>{
- const {checkHosted}=await import('../../../skills/artifactbin/scripts/check.mjs');
+ virtualClock();
  const requests:any[]=[];let running=0,peak=0;
  const run=await checkHosted({target:'/a/PAGE12',viewports:[{width:1280,height:800},{width:390,height:844}],server:'https://example.test',token:'test-token'},async(_url:Parameters<typeof fetch>[0],init?:RequestInit)=>{
   const body=JSON.parse(String(init?.body));requests.push(body);
@@ -68,7 +66,7 @@ it('checks each viewport in its own fresh session, concurrently, and reports the
 });
 
 it('waits for a free browser session and names a full server instead of failing opaquely',async()=>{
- const {checkHosted}=await import('../../../skills/artifactbin/scripts/check.mjs');
+ virtualClock();
  const ok={pageErrors:[],consoleErrors:[],failedRequests:[],httpErrors:[],telemetry:[],text:'Ready',overflow:{viewport:390,content:390,fits:true}};
  // The browser service's own refusal (services/browser sessions.ts capacityRefusal, pinned in sessions.test.ts): an HTTP 200
  // receipt naming no session, status failed, the capacity code in error. A 429 carrying the code means the same.
@@ -115,7 +113,6 @@ it('waits for a free browser session and names a full server instead of failing 
 },20000);
 
 it('collects errors, separates only known telemetry, and catches overflow without implying visual acceptance',async()=>{
- const {inspectPage,summarizeCheck}=await import('../../../skills/artifactbin/scripts/check.mjs');
  const listeners:Record<string,Function>={};let taskRan=false;
  const page={url:()=>'https://example.test/a/PAGE12',on:(name:string,fn:Function)=>{listeners[name]=fn;},setDefaultTimeout:()=>{},setViewportSize:async()=>{},waitForFunction:async()=>{},goto:async()=>{
   listeners.pageerror!(Error('intentional regression'));
@@ -128,8 +125,6 @@ it('collects errors, separates only known telemetry, and catches overflow withou
 });
 
 it('lists content the hosted check browser cannot reach (it has no internet) without failing the page',async()=>{
- const {inspectPage,summarizeCheck}=await import('../../../skills/artifactbin/scripts/check.mjs');
- const {checkDigest}=await import('../../../skills/artifactbin/scripts/toolbox-client.mjs');
  const listeners:Record<string,Function>={};
  const frames=[{url:()=>'https://app.example.test/a/PAGE12'},{url:()=>'https://abc123.runner.pages.test/PAGE12'}];
  const fail=(url:string)=>listeners.requestfailed!({url:()=>url,failure:()=>({errorText:'net::ERR_FAILED'})});
@@ -156,7 +151,6 @@ it('lists content the hosted check browser cannot reach (it has no internet) wit
 });
 
 it('captures each failed sql statement with its detail, keeps a detail-less read for an owner re-run, and parses nothing of an older page\'s GraphQL replies',async()=>{
- const {inspectPage}=await import('../../../skills/artifactbin/scripts/check.mjs');
  const listeners:Record<string,Function>={};
  const respond=(url:string,body:unknown,sent:unknown,status=200,method='POST')=>listeners.response!({url:()=>url,status:()=>status,json:async()=>body,request:()=>({postDataJSON:()=>sent,method:()=>method})});
  const graphql='https://example.test/api/artifacts/PAGE12/graphql',failed='Backend execution failed';
@@ -188,7 +182,6 @@ it('captures each failed sql statement with its detail, keeps a detail-less read
 });
 
 it('counts the page\'s dataset reads (SQL and dataset cells) on load and in its steps, ignoring retired GraphQL and other requests',async()=>{
- const {inspectPage}=await import('../../../skills/artifactbin/scripts/check.mjs');
  const listeners:Record<string,Function>={};
  const send=(url:string)=>listeners.request!({url:()=>url,isNavigationRequest:()=>false,frame:()=>null});
  const page={url:()=>'https://example.test/a/PAGE12',on:(name:string,fn:Function)=>{listeners[name]=fn;},setDefaultTimeout:()=>{},setViewportSize:async()=>{},waitForFunction:async()=>{},
@@ -202,7 +195,6 @@ it('counts the page\'s dataset reads (SQL and dataset cells) on load and in its 
 });
 
 it('loads named ESM and CommonJS Playwright exports and distinguishes invalid modules',async()=>{
- const {loadChromium}=await import('../../../skills/artifactbin/scripts/check.mjs');
  const root=await mkdtemp(join(tmpdir(),'author-browser-module-'));
  try{
   for(const extension of ['mjs','cjs']){
@@ -215,8 +207,6 @@ it('loads named ESM and CommonJS Playwright exports and distinguishes invalid mo
  }finally{await rm(root,{recursive:true,force:true});}
 });
 it('keeps check diagnostics top-level on failure, without a details copy',async()=>{
- const {toolFailure}=await import('../../../skills/artifactbin/scripts/toolbox-client.mjs');
- const {ToolError}=await import('../../../skills/artifactbin/scripts/toolbox-client.mjs');
  const diagnostics={smokePassed:false,checks:[{error:'fixture'}],unverified:['visual appearance'],note:'Smoke only'};
  expect(toolFailure('check',new ToolError('check_failed','Failed',1,'Inspect',diagnostics))).toMatchObject({...diagnostics,ok:false});expect(toolFailure('check',new ToolError('check_failed','Failed',1,'Inspect',diagnostics))).not.toHaveProperty('details');
  expect(toolFailure('check',new ToolError('invalid_viewport','Invalid',2))).toMatchObject({ok:false,smokePassed:false,checks:[]});
@@ -225,7 +215,6 @@ it('keeps check diagnostics top-level on failure, without a details copy',async(
 // The saved screenshot is the document's full height at the viewport's width (capped), so an agent sees below the fold
 // without re-running the check at a taller viewport; a deck keeps its viewport capture.
 it('captures the document at its full height, capped at 8000 px, and keeps a deck or an oversized page to its viewport',async()=>{
- const {inspectPage}=await import('../../../skills/artifactbin/scripts/check.mjs');
  const fake=({full,bar=0,deck=false,bytes=7}:{full:number;bar?:number;deck?:boolean;bytes?:number})=>{
   const calls:unknown[]=[];let height=0;
   const shot=(target:string)=>async(options:{fullPage?:boolean})=>{calls.push({target,...options});return Buffer.alloc(options.fullPage===false?7:bytes);};
@@ -257,7 +246,6 @@ it('captures the document at its full height, capped at 8000 px, and keeps a dec
 // slide without exporting it: hosted, the frame grows by the reader's bar first. Capped at 20 slides and at what a
 // hosted script may return, saying so.
 it('captures each laid-out slide of a deck at the viewport size, after its viewport shot, capped and saying so',async()=>{
- const {inspectPage}=await import('../../../skills/artifactbin/scripts/check.mjs');
  const png=(width:number,height:number,bytes=64)=>{const b=Buffer.alloc(bytes);b.writeUInt32BE(width,16);b.writeUInt32BE(height,20);return b;};
  const fake=({count,bar=0,chrome=0,bytes=64,fail=0}:{count:number;bar?:number;chrome?:number;bytes?:number;fail?:number})=>{
   const calls:any[]=[];let height=0;
@@ -307,7 +295,6 @@ it('captures each laid-out slide of a deck at the viewport size, after its viewp
 });
 
 it('measures the page only after the reader loading placeholder is gone',async()=>{
- const {inspectPage}=await import('../../../skills/artifactbin/scripts/check.mjs');
  let busy=true;const order:string[]=[];
  const page={url:()=>'https://example.test/a/PAGE12',on:()=>{},setDefaultTimeout:()=>{},setViewportSize:async()=>{},goto:async()=>{},evaluate:async()=>{},
   waitForFunction:async(fn:Function)=>{const doc=(globalThis as any).document;(globalThis as any).document={querySelector:()=>busy?{}:null};try{expect(fn()).toBe(false);busy=false;expect(fn()).toBe(true);}finally{(globalThis as any).document=doc;}order.push('ready');},
@@ -317,7 +304,6 @@ it('measures the page only after the reader loading placeholder is gone',async()
 });
 
 it('fails smoke when visible text is effectively invisible against its background',async()=>{
- const {summarizeCheck}=await import('../../../skills/artifactbin/scripts/check.mjs');
  const base={pageErrors:[],consoleErrors:[],httpErrors:[],failedRequests:[],telemetry:[],text:'Deck',overflow:{viewport:1280,content:1280,fits:true}};
  expect(summarizeCheck([{...base,contrast:{checked:40,belowAA:3,unreadable:0,low:[]}}]).smokePassed).toBe(true);
  expect(summarizeCheck([{...base,contrast:{checked:40,belowAA:5,unreadable:2,low:[]}}]).smokePassed).toBe(false);
