@@ -38,6 +38,10 @@ export const NODE_BATCH_EXCLUDED = Object.freeze({
  * guard), in the batch whatever their recorded time. Each must still leave nothing behind in a shared graph.
  */
 export const NODE_BATCH_GUARDED = Object.freeze([
+  // Viewer-first setup and keyed cancellation are required by governed PostgreSQL endpoints.
+  'services/connectors/__tests__/connectors.test.ts',
+  'services/connectors/__tests__/postgres-cancel-wire.test.ts',
+  'services/connectors/__tests__/postgres-operation.test.ts',
   // The hosted runtime's build: failed on main after merge, and no pr fast list ran it (its watch-mode twin,
   // built-watch.test.ts, is a guard test).
   'services/app/lib/html-runtime/__tests__/build.test.ts',
