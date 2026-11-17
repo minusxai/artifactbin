@@ -7,8 +7,8 @@
  *
  * Theme: a named design system's variables (lib/html-systems server entry), resolved to concrete
  * sRGB here (./css-color) and mapped by theme.ts `tokensFromThemeVariables`, the page's own
- * mapping; none means the house tokens. Text is drawn in the system's body families followed by
- * families a Linux image carries (the platform's own fonts are woff2, which librsvg cannot load).
+ * mapping; none means the house tokens. Text is drawn in the system's body families, then the
+ * faces the thread registered for its generic family (./chart-fonts.server.ts), then system ones.
  *
  * Bounds: the image fits the requested box (a spec that sizes itself larger is scaled down, never
  * rasterised past it), and a PNG past `maxPngBytes` is retried as a palette PNG before it is
@@ -22,6 +22,7 @@ import { resolveChartDescription } from './chart-resolve';
 import { SERVER_ENGINES } from './render-vega';
 import { houseTokens, tokensFromThemeVariables, type ChartTokens } from './theme';
 import { resolveCssColor } from './css-color';
+import { IMAGE_FONTS } from './chart-fonts.server';
 
 export interface ChartDrawJob {
   description: ChartDescription;
@@ -38,9 +39,10 @@ export type ChartDrawResult =
   | { ok: true; png: Uint8Array; width: number; height: number }
   | { ok: false; status: number; code: string; message: string; hint?: string };
 
-const SANS = '"Liberation Sans", "DejaVu Sans", "Noto Sans", Arial, Helvetica, sans-serif';
-const MONO = '"DejaVu Sans Mono", "Liberation Mono", "Noto Sans Mono", Menlo, monospace';
-const SERIF = '"DejaVu Serif", "Liberation Serif", "Noto Serif", Georgia, serif';
+// The registered faces (./chart-fonts.server.ts), then what a Linux image commonly carries.
+const SANS = `"${IMAGE_FONTS.sans}", "Liberation Sans", "DejaVu Sans", Arial, sans-serif`;
+const MONO = `"${IMAGE_FONTS.mono}", "DejaVu Sans Mono", "Liberation Mono", monospace`;
+const SERIF = `"${IMAGE_FONTS.serif}", "DejaVu Serif", "Liberation Serif", Georgia, serif`;
 const GENERIC = /^(?:system-ui|ui-(?:sans-serif|serif|monospace|rounded)|sans-serif|serif|monospace|cursive|fantasy)$/i;
 
 /** A CSS font-family list → its named families, then the installed fallbacks for its generic family. */
