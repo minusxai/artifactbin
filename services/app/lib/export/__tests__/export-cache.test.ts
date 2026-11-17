@@ -59,6 +59,15 @@ describe('shared export refresh leases',()=>{
   release.resolve();expect((await first).id).toBe(winner.id);
   expect((await a.read(cacheRequest,async()=>image)).id).toBe(winner.id);
  });
+ it('a caller\'s own shorter wait gives up on another\'s render before the cache default',async()=>{
+  const db=await getDb(),a=createExportCache(db,options),b=createExportCache(db,options);
+  const entered=gate(),release=gate();
+  const first=a.read(cacheRequest,async()=>{entered.resolve();await release.promise;return image;});void first.catch(()=>{});await Promise.race([entered.promise,first]);
+  const started=performance.now();
+  await expect(b.read({...cacheRequest,waitMs:40},async()=>image)).rejects.toThrow('Export refresh did not complete');
+  expect(performance.now()-started).toBeLessThan(options.waitMs-100);
+  release.resolve();await first;
+ });
  it('an explicit refresh waits for a new result and concurrent refresh callers share it',async()=>{
   const db=await getDb(),a=createExportCache(db,options),b=createExportCache(db,options);
   const old=await a.read(cacheRequest,async()=>image),entered=gate(),release=gate();let calls=0;

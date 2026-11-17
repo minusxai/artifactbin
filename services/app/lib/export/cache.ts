@@ -7,7 +7,8 @@ export interface ExportImage {
 }
 /** `current`: never answer with an image of another source revision (explicit exports); social cards may serve the previous one while refreshing.
  * `stable`: the picture is a function of its revision alone (a social card), so an image of this revision never goes stale. */
-interface ExportCacheRequest { cacheKey:string; artifactId:string; revision:string; refresh?:boolean; current?:boolean; stable?:boolean }
+/** `waitMs`: this caller's own bound on waiting for a render (a bounded delegated call), below the cache's default. */
+interface ExportCacheRequest { cacheKey:string; artifactId:string; revision:string; refresh?:boolean; current?:boolean; stable?:boolean; waitMs?:number }
 interface ExportCacheOptions { freshMs?:number; leaseMs?:number; waitMs?:number; retryMs?:number; pollMs?:number[] }
 export type ExportProducer=(id:string)=>Promise<Omit<ExportImage,'id'|'artifact_id'>>;
 
@@ -55,7 +56,7 @@ export function createExportCache(db:Db,options:ExportCacheOptions={}) {
     async read(request:ExportCacheRequest,produce:ExportProducer):Promise<ExportImage> {
       await db.query('INSERT INTO export_image_cache(cache_key,artifact_id) VALUES($1,$2) ON CONFLICT(cache_key) DO NOTHING',[request.cacheKey,request.artifactId]);
       let state=await snapshot(request.cacheKey);
-      const baseline=state.image?.id??null,deadline=performance.now()+waitMs;
+      const baseline=state.image?.id??null,deadline=performance.now()+Math.min(waitMs,request.waitMs??waitMs);
       let attempt=0;
       for(;;){
         const image=state.image,usable=!!image&&!request.refresh&&(!request.current||state.source_revision===request.revision);

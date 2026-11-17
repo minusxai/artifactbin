@@ -1,5 +1,7 @@
 import {personalPageEvidence} from './page-evidence';
 import {CANONICAL_PAGE_EVIDENCE_PATH} from '@artifactbin/contracts';
+import {canonicalArtifactImage} from './artifact-image';
+import {CANONICAL_ARTIFACT_IMAGE_PATH} from '@artifactbin/contracts';
 import {artifactWorkload} from './artifact-workload';
 import {APP_ARTIFACT_WORKLOAD_PATH,CANONICAL_CHART_IMAGE_PATH} from '@artifactbin/contracts';
 import {chartImageSeam} from './chart-image-seam';
@@ -626,6 +628,8 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   app.post(APP_ARTIFACT_WORKLOAD_PATH,c=>runWithRequest(c.req.raw,()=>artifactWorkload(c.req.raw,actorOf(c.req.raw))));
   app.post(CANONICAL_PAGE_EVIDENCE_PATH,c=>runWithRequest(c.req.raw,()=>personalPageEvidence(c.req.raw,actorOf(c.req.raw))));
   app.post(CANONICAL_CHART_IMAGE_PATH,c=>runWithRequest(c.req.raw,()=>chartImageSeam(c.req.raw,actorOf(c.req.raw))));
+  // Fixed auth-owner image seam: the read seam's decision, then the one export path as that person (./artifact-image).
+  app.post(CANONICAL_ARTIFACT_IMAGE_PATH,c=>runWithRequest(c.req.raw,()=>canonicalArtifactImage(c.req.raw,actorOf(c.req.raw),baseUrl(c.req.raw))));
   mountRoutes(app);
 
   app.all('/api', apiNotFound);
