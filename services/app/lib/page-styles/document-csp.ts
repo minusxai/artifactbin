@@ -28,8 +28,8 @@ interface DocumentCspInput {
   self: string;
   /** The app's origin: the one framer, and where this document's doors also answer. */
   app: string;
-  /** The document's id, for its app-origin doors. */
-  id: string;
+  /** The document's id, for its app-origin doors; a draft (lib/page-drafts) has none, and reaches no door of the app. */
+  id?: string;
   /** A configured public asset origin (APP__ASSETS_ORIGIN), admitted for its bytes. */
   assetOrigin?: string | null;
   extensions?: CspExtensions;
@@ -63,7 +63,7 @@ export function buildDocumentCsp({ self, app, id, assetOrigin = null, extensions
     frame: httpsOrigins(extensions.frame ?? []), media: httpsOrigins(extensions.media ?? []),
   };
   void ext.connect; // validated like the rest; reached through `/fetch`, never connected to
-  const appDoors = [eventsPath(id), fetchPath(id), ...(asset.length ? [assetsPath(id)] : [])].map((path) => `${appOrigin}${path}`);
+  const appDoors = id === undefined ? [] : [eventsPath(id), fetchPath(id), ...(asset.length ? [assetsPath(id)] : [])].map((path) => `${appOrigin}${path}`);
   return [
     "default-src 'none'",
     join('script-src', "'self'", 'blob:', "'wasm-unsafe-eval'", MODULE_CDNS, asset, ext.script),

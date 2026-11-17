@@ -11,6 +11,10 @@ Hosts: `app.ts`, `public-files.ts`, `pages-host.ts`, `user-host.ts`, `host.ts`. 
   its bootstrap carries no page source or author script. A document runs only at `<hex id>.<pages host>`, and
   `/a/<id>/raw` answers under the document sandbox CSP (`raw.server.ts`). The app CSP's `frame-src` admits only
   itself and the pages hosts.
+- A draft (`lib/page-drafts`, `POST /api/page/drafts`) is a signed-in reader's own unpublished page, never an artifact:
+  kept in memory for minutes, bound to its reader, served at `draft-<label>.<pages host>` (a label no hex id has) under a
+  document policy with no app door (`nativeDraftPolicy`), its document only for a one-time ticket, its linked files
+  read-only, no cookie, no door; a draft origin reaches only the public files anywhere else. Limits: `DRAFT_LIMITS`.
 - Other origins frame `/a/<id>` only if listed in `EMBED__TRUSTED_ORIGINS` (`app.ts`).
 - One URL map, contracts `url-space.ts` (`/af/url-space.json`): `/api/` (JSON, links), `/af/` (public,
   credential-free files), `/a/<id>/`, `/@handle`, a few fixed paths, else a screen; host allowlists derive from it.

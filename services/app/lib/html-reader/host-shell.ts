@@ -24,6 +24,11 @@
  * publishes this reader's presence and reports the others. `openComments(panel?)` / `closeComments()` show the rail.
  * Not included: uploads (refused, no upload session), region and cell editing.
  *
+ * `mountDraft(container, {html, files, title})`: the reader's OWN unpublished page and the files beside it (lib/page-drafts,
+ * POST /api/page/drafts with this origin's session), framed on a fresh `draft-<label>.<pages host>` origin. A CSV or JSON
+ * file it links as a dataset is a read-only table its `sql` reads in the frame; it relays nothing to the app (no
+ * document, no comments, no uploads, no writes), and a refused draft rejects with the refusal's own code and message.
+ *
  * Public code: it carries no credential and adds none (requests are this origin's own, `same-origin`). A document
  * trusts exactly one parent origin, baked in when it is served; the module refuses to mount anywhere else, and the
  * document's door (lib/html-runtime/frame-door) drops every message from another origin regardless.
@@ -86,8 +91,10 @@ export interface MountedDocument {
 /** The frame endpoint's answer (lib/document-serving/artifact-page FreshFrame). */
 interface FreshFrame { src: string; origin: string; appOrigin: string; revision: string; editId: string }
 
+/** A draft's refusals are lib/page-drafts DraftRefusalCode, passed through as the server named them. */
+type HostShellErrorCode = 'not_found' | 'wrong_origin' | 'unavailable' | 'unauthorized' | 'invalid_draft' | 'unresolved_draft_files' | 'invalid_draft_csv' | 'draft_too_large' | 'draft_limit';
 export class HostShellError extends Error {
-  constructor(readonly code: 'not_found' | 'wrong_origin' | 'unavailable', message: string) { super(message); this.name = 'HostShellError'; }
+  constructor(readonly code: HostShellErrorCode, message: string) { super(message); this.name = 'HostShellError'; }
 }
 
 async function freshFrame(win: Window, id: string, search: string): Promise<FreshFrame> {
@@ -196,5 +203,91 @@ export async function mountDocument(container: HTMLElement, options: MountDocume
     openComments(panel) { wanted = { open: true, panel: panel ?? null }; comments?.open(panel ?? null); },
     closeComments() { wanted = { open: false, panel: null }; comments?.close(); },
     destroy() { destroyed = true; comments?.destroy(); nonceListeners.clear(); stopEvents(); stopNavigation(); stopSession(); bridge.dispose(); frame.remove(); },
+  };
+}
+
+/** A file beside a draft's page, by its path in the page's folder. */
+export interface DraftFileInput { path: string; bytes: Uint8Array; contentType?: string }
+export interface MountDraftOptions {
+  /** The page's source, as written. */
+  html: string;
+  /** The page's own path in its folder (default `index.html`): its relative links resolve from here. */
+  entryPath?: string;
+  files: DraftFileInput[];
+  /** The frame's accessible name. */
+  title?: string;
+}
+export interface MountedDraft {
+  readonly frame: HTMLIFrameElement;
+  /** The draft's own origin: the only one its messages count from. */
+  readonly origin: string;
+  readonly bridge: FrameBridgeParent;
+  setMode(mode: Mode): void;
+  setDesignSystem(name: string, mode: Mode): void;
+  setInset(px: number): void;
+  /** Load the draft afresh (a new ticket for the same content). */
+  reload(): void;
+  destroy(): void;
+}
+interface DraftAnswer { src: string; origin: string; appOrigin: string }
+const DRAFT_CODES = new Set<string>(['invalid_draft', 'unresolved_draft_files', 'invalid_draft_csv', 'draft_too_large', 'draft_limit']);
+
+function base64Of(bytes: Uint8Array): string {
+  let text = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) text += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(text);
+}
+
+async function freshDraft(win: Window, body: string): Promise<DraftAnswer> {
+  let response: Response;
+  try {
+    response = await win.fetch('/api/page/drafts', { method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: { 'content-type': 'application/json' }, body });
+  } catch { throw new HostShellError('unavailable', 'The draft could not be requested.'); }
+  const answer = await response.json().catch(() => null) as Partial<DraftAnswer> & { error?: unknown; message?: unknown } | null;
+  if (response.status === 401) throw new HostShellError('unauthorized', 'Sign in to show this draft.');
+  if (!response.ok || !answer || typeof answer.src !== 'string' || typeof answer.origin !== 'string' || typeof answer.appOrigin !== 'string') {
+    const code = typeof answer?.error === 'string' && DRAFT_CODES.has(answer.error) ? answer.error as HostShellErrorCode : 'unavailable';
+    throw new HostShellError(code, typeof answer?.message === 'string' ? answer.message : 'The draft could not be shown.');
+  }
+  return { src: answer.src, origin: answer.origin, appOrigin: answer.appOrigin };
+}
+
+/** Mount the reader's own draft into `container`. Rejects with a HostShellError (a draft's refusal keeps its code). */
+export async function mountDraft(container: HTMLElement, options: MountDraftOptions, win: Window = window): Promise<MountedDraft> {
+  const body = JSON.stringify({ html: options.html, ...(options.entryPath ? { entryPath: options.entryPath } : {}), ...(options.title ? { title: options.title } : {}),
+    files: options.files.map((file) => ({ path: file.path, base64: base64Of(file.bytes), ...(file.contentType ? { contentType: file.contentType } : {}) })) });
+  const first = await freshDraft(win, body);
+  if (first.appOrigin !== win.location.origin) throw new HostShellError('wrong_origin', `This draft trusts only ${first.appOrigin} as its parent; a host page must be served there, not at ${win.location.origin}.`);
+  const { origin } = first;
+  const label = new URL(origin).hostname.split('.')[0]!;
+  const emit = (name: string, detail: unknown) => container.dispatchEvent(new (win as unknown as typeof globalThis).CustomEvent(name, { detail }));
+  const frame = container.ownerDocument.createElement('iframe');
+  frame.setAttribute('sandbox', FRAME_SANDBOX);
+  frame.setAttribute('allow', FRAME_ALLOW);
+  frame.setAttribute('referrerpolicy', 'no-referrer');
+  frame.title = options.title ?? 'Draft';
+  frame.src = first.src;
+  container.append(frame);
+  // Nothing a draft asks of its parent reaches the app: no document, no session, no upload, no write.
+  const refuse = async () => new Response(JSON.stringify({ error: 'unavailable', message: 'a draft reads only its own files' }), { status: 403, headers: { 'content-type': 'application/json' } });
+  const bridge = createFrameBridgeParent({
+    win, frame, frameOrigin: origin, id: label,
+    editId: () => '', source: () => null, appFetch: refuse,
+    htmlContext: () => ({ revision: 'draft', readOnly: true }),
+    onReady: (nonce) => { if (nonce) emit('af-document-ready', { nonce }); },
+    onScroll: (scroll) => emit('af-document-scroll', scroll),
+    onClosed: (reason) => emit('af-document-closed', { reason }),
+  });
+  const stopEvents = bridge.subscribe((event) => emit('af-document-event', event));
+  const remint = async () => { try { const next = await freshDraft(win, body); return next.origin === origin ? next.src : null; } catch { return null; } };
+  const stopSession = keepFrameSession({ win, frame, origin, id: label, remint });
+  const stopNavigation = answerFrameNavigation({ win, frame, frameOrigin: origin, navigate: (path) => emit('af-document-navigate', { path }) });
+  return {
+    frame, origin, bridge,
+    setMode: (mode) => bridge.send({ type: STORY_READER_MODE_MESSAGE, mode }),
+    setDesignSystem: (name, mode) => bridge.send({ type: 'mx:design-system', name, mode }),
+    setInset: (px) => bridge.setTopInset(px),
+    reload() { void remint().then((src) => { if (src) frame.src = src; }); },
+    destroy() { stopEvents(); stopNavigation(); stopSession(); bridge.dispose(); frame.remove(); },
   };
 }

@@ -27,6 +27,11 @@
  *                       and the same response ends and clears it.
  *       no `_pt`        a bookmark or a direct visit: whatever the browser's cookie for this host says, as it always did.
  *     The parameter never reaches the document's handlers, and the response is never cached or sent as a referrer.
+ *  4. HOST `draft-<label>.<pages host>` (lib/page-drafts): a reader's own unpublished page. Its document for a one-time
+ *     ticket (`_pt`, spent here) under a document's policy with no door of the app (nativeDraftPolicy); the files it
+ *     links at their paths, read-only; the public static directories. No cookie is read or set, no door exists, and
+ *     every other path is 404. ORIGIN `draft-<label>.<pages host>` anywhere else reaches only the static directories:
+ *     everything else is 403 `forbidden_origin`, as for a document's origin.
  *  3. ORIGIN `<hex(id)>.<pages host>` on any other host: the same doors of the SAME id with credentialed
  *     CORS for exactly that origin, the static directories, and 403 `forbidden_origin` for everything
  *     else. That last rule is load-bearing: a pages origin is SAME-SITE with the app, so the app's
@@ -43,9 +48,11 @@ import { attachActor, readCookie } from '@artifactbin/utils';
 import { ANONYMOUS, documentHostServes } from '@artifactbin/contracts';
 import { endPagesSession, exchangePagesTicket, pagesSessionOf, type PagesSession } from '@/lib/accounts';
 import { runWithRequest } from '@/lib/platform';
-import { addressedHost as requestHost, GUEST_TICKET, idFromPagesHost, idFromPagesOrigin, isPagesApexHost, markPagesRequest, PAGES_TICKET_PARAM, pagesCookieName, pagesOriginFor, withoutPagesTicket, type PagesSite } from '@/lib/http';
+import { addressedHost as requestHost, draftFromPagesHost, draftFromPagesOrigin, draftOriginFor, GUEST_TICKET, idFromPagesHost, idFromPagesOrigin, isPagesApexHost, markPagesRequest, PAGES_TICKET_PARAM, pagesCookieName, pagesOriginFor, withoutPagesTicket, type PagesSite } from '@/lib/http';
 import { GET as rawGet, HEAD as rawHead } from '@/app/a/[id]/raw/route';
 import { compressDynamic } from './content-encoding';
+import { nativeDraftPolicy } from '@/lib/document-serving';
+import { draftDocument, draftFile } from '@/lib/page-drafts';
 
 /** A document's own sub-paths: the doors its page calls, and nothing else of the app. */
 const DOORS = ['events', 'events/frame', 'story', 'viewer', 'assets', 'resolve', 'fetch', 'css'] as const;
@@ -169,6 +176,22 @@ export function pagesHost(site: PagesSite): MiddlewareHandler {
     return new Response(answer.body, { status: answer.status, statusText: answer.statusText, headers });
   };
 
+  /** A draft's own origin (case 4 above): its document for its ticket, the files it links, nothing else. */
+  const draft = async (request: Request, label: string, pathname: string): Promise<Response> => {
+    if (request.method !== 'GET' && request.method !== 'HEAD') return notFound();
+    const self = draftOriginFor(label, site);
+    const headers = { ...NO_STORE, 'content-security-policy': nativeDraftPolicy(self, site.app), 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer' };
+    const ticket = new URL(request.url).searchParams.get(PAGES_TICKET_PARAM);
+    if (ticket !== null) {
+      // A HEAD never spends a ticket.
+      const html = request.method === 'GET' ? draftDocument(label, ticket) : null;
+      return html === null ? notFound() : compressDynamic(request, new Response(html, { status: 200, headers: { ...headers, 'content-type': 'text/html; charset=utf-8' } }));
+    }
+    const file = draftFile(label, pathname);
+    if (!file) return notFound();
+    return new Response(request.method === 'HEAD' ? null : new Uint8Array(file.bytes), { status: 200, headers: { ...headers, 'content-type': file.contentType, 'content-length': String(file.bytes.byteLength) } });
+  };
+
   /** The apex is not a document and mints nothing. */
   const apex = (): Response => notFound();
   /** The app's own hostname as the pages host: that host is the app, never the empty apex. */
@@ -180,6 +203,13 @@ export function pagesHost(site: PagesSite): MiddlewareHandler {
     if (!appIsApex && isPagesApexHost(host, site)) return apex();
     const pathname = new URL(request.url).pathname;
     const origin = request.headers.get('origin');
+    const draftLabel = draftFromPagesHost(host, site);
+    if (draftLabel) {
+      if (isStatic(pathname)) return next();
+      if (origin !== null && draftFromPagesOrigin(origin, site) !== draftLabel) return forbidden(origin, `may not call the draft at ${draftOriginFor(draftLabel, site)}`);
+      return draft(request, draftLabel, pathname);
+    }
+    if (draftFromPagesOrigin(origin, site)) return isStatic(pathname) ? next() : forbidden(origin, 'is a draft: it may load only the public files');
     const hostId = idFromPagesHost(host, site);
     const originId = idFromPagesOrigin(origin, site);
     if (hostId) {
