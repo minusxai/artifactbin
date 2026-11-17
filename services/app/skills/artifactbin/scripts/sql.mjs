@@ -28,7 +28,8 @@ Gotchas: quote the SQL in single quotes, so the shell leaves $name alone. schema
   Live dataset SQL needs owner/editor; :name or $name binds.
   Exit 5 means a write's outcome is unknown: repeat it with the printed --idempotency-key (a
   page write applies at most once). --chart draws reads only, at most 120 KiB of rows and chart
-  (else chart_rows_too_large: aggregate in SQL); the result adds chart: {output, width, height}.
+  (else chart_rows_too_large: aggregate in SQL); the result adds chart: {output, width, height,
+  bytes}.
 Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write outcome.
   Results never contain credentials.`;
 

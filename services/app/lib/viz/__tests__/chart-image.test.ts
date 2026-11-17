@@ -97,11 +97,14 @@ describe('renderChartImage', () => {
     expect(results[2]).toMatchObject({ status: 503 });
   });
 
-  it('fails closed without a renderer thread', async () => {
+  it('fails closed without a renderer thread, and answers a thread that dies mid-chart', async () => {
     await configureChartRenderer({ workerUrl: new URL('file:///nonexistent/chart-image-worker.mjs') });
-    const result = await renderChartImage({ chart: bar, rows });
+    expect(await renderChartImage({ chart: bar, rows })).toMatchObject({ ok: false, status: 503, code: 'render_unavailable' });
+    const dying = "import {parentPort} from 'node:worker_threads';parentPort.postMessage({ready:true});parentPort.on('message',()=>process.exit(1));";
+    await configureChartRenderer({ workerUrl: new URL('data:text/javascript,' + encodeURIComponent(dying)) });
+    expect(await renderChartImage({ chart: bar, rows })).toMatchObject({ ok: false, status: 422, code: 'render_failed', hint: expect.stringContaining('fewer marks') });
     await configureChartRenderer(null);
-    expect(result).toMatchObject({ ok: false, status: expect.any(Number), code: expect.stringMatching(/^render_(unavailable|failed)$/) });
+    expect(await renderChartImage({ chart: bar, rows })).toMatchObject({ ok: true });
   });
 });
 
