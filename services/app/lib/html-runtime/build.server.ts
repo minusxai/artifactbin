@@ -1,4 +1,5 @@
 import {buildHostComments,buildPortableChrome} from './build-portable-chrome.server';
+import {suppliedHtmlAssets} from './assets-supply.server';
 import {hostCommentsPath} from './host-comments-address.server';
 import {build,type PluginBuild,type Plugin} from 'esbuild';
 import {readFile} from 'node:fs/promises';
@@ -15,8 +16,8 @@ import {DRAFT_SQL_ENGINE_PATH,RUNTIME_BUILD_KEY,RUNTIME_MODULE_PATHS} from './co
  */
 const skewGuard=(id:string)=>`{const c=globalThis[Symbol.for(${JSON.stringify(RUNTIME_BUILD_KEY)})];if(c&&c!==${JSON.stringify(id)}){let r=!1;try{const n="afbin:runtime-reload";if(sessionStorage.getItem(n)!==${JSON.stringify(id)}){sessionStorage.setItem(n,${JSON.stringify(id)});r=!0}}catch{}if(r)location.reload();throw Error("Artifactbin runtime updated; reload the page")}}\n`;
 let assets:Promise<HtmlRuntimeAssets>|undefined;
-/** Build immutable code once. Page configuration is supplied only by assembly. */
-export function buildHtmlAssets():Promise<HtmlRuntimeAssets>{return assets??=compile().catch(error=>{assets=undefined;throw error;});}
+/** Build immutable code once, or read the build a composition supplies (./assets-supply.server). Page configuration is supplied only by assembly. */
+export function buildHtmlAssets():Promise<HtmlRuntimeAssets>{return assets??=(async()=>await suppliedHtmlAssets()??await compile())().catch(error=>{assets=undefined;throw error;});}
 export async function buildHtmlCore():Promise<string>{return (await buildHtmlAssets()).core;}
 async function compile():Promise<HtmlRuntimeAssets>{
  const options={bundle:true,minify:true,write:false,platform:'browser' as const,target:'es2022'};

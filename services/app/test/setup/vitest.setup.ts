@@ -5,7 +5,7 @@
 // all hand them services/app as the cwd.
 process.chdir(process.env.APP_PACKAGE_ROOT ?? path.resolve(import.meta.dirname, '../..')); // cwd = services/app
 
-import { afterAll } from 'vitest';
+import { afterAll, beforeAll, inject } from 'vitest';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -50,6 +50,15 @@ const { createEvents } = await import('@artifactbin/events/local');
 const { setEventProjection } = await import('@/lib/platform/event-outbox');
 
 await import('./database');
+
+// The run's page runtime build, read from the global setup's file instead of compiled in this worker (./html-assets-file).
+// Supplied before the file's first test, not here: the runtime's graph reaches the platform config, which a file that
+// mocks it or rewrites the environment (api-isolated) must reach first.
+const htmlAssetsFile = inject('htmlAssetsFile');
+if (htmlAssetsFile) beforeAll(async () => {
+  const [{ supplyHtmlAssets }, { readHtmlAssets }] = await Promise.all([import('@/lib/html-runtime/server'), import('./html-assets-file')]);
+  supplyHtmlAssets(() => readHtmlAssets(htmlAssetsFile));
+});
 
 let localBrowser: import('@artifactbin/contracts').BrowserService | undefined;
 const browser = async () => (localBrowser ??= (await import('@artifactbin/browser/local')).createBrowser());
