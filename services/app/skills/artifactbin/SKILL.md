@@ -196,8 +196,8 @@ DOM and the page's design-system tokens and carry no credentials. Decks use `exa
 
 | Purpose | Elements (`af-NAME`: `components/NAME.ts`) |
 |---|---|
-| Controls | `af-button`, `af-input`, `af-textarea`, `af-slider`, `af-switch`, `af-select`,
-  `af-segmented`, `af-date-picker` |
+| Controls | `af-button`, `af-input`, `af-textarea`, `af-markdown-editor`, `af-slider`, `af-switch`,
+  `af-select`, `af-segmented`, `af-date-picker` |
 | Navigation/disclosure | `af-tabs`, `af-accordion`, `af-collapsible` |
 | Overlays | `af-dialog`, `af-popover`, `af-tooltip` |
 | Identity/status | `af-avatar`, `af-user`, `af-icon`, `af-progress` |

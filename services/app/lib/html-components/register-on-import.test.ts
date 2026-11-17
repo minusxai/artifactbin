@@ -18,6 +18,7 @@ const components: Record<string, { style?: string; tags: string[] }> = {
   input: { style: 'af-input-styles', tags: ['af-input'] },
   isometric: { tags: ['af-isometric'] },
   markdown: { style: 'af-markdown-styles', tags: ['af-markdown'] },
+  'markdown-editor': { style: 'af-markdown-editor-styles', tags: ['af-markdown-editor'] },
   popover: { style: 'af-popover-styles', tags: ['af-popover', 'af-popover-trigger', 'af-popover-content', 'af-popover-anchor', 'af-popover-header', 'af-popover-title', 'af-popover-description'] },
   progress: { style: 'af-progress-styles', tags: ['af-progress'] },
   segmented: { style: 'af-segmented-styles', tags: ['af-segmented'] },
@@ -33,7 +34,7 @@ const components: Record<string, { style?: string; tags: string[] }> = {
 const helpers = ['accordion-model', 'date-calendar', 'file-upload-model', 'floating-geometry', 'floating-position', 'host-name', 'icon-glyphs', 'isometric-model', 'register-component', 'select-model', 'slide-navigation', 'tab-navigation', 'table-model', 'text-control',
   // Parts split out of their components to keep each source under 200 lines.
   'isometric-geometry', 'isometric-mesh', 'isometric-scene', 'isometric-visibility',
-  'markdown-styles', 'row-identity', 'table-comparison', 'table-values', 'avatar-model', 'data-table-cells', 'data-table-compare', 'data-table-frame', 'data-table-grid', 'data-table-measure', 'date-picker-styles', 'dialog-model', 'popover-model', 'segmented-model', 'slide-deck-parts', 'tooltip-model', 'user-model'];
+  'markdown-styles', 'markdown-editor-commands', 'markdown-editor-model', 'markdown-editor-styles', 'row-identity', 'table-comparison', 'table-values', 'avatar-model', 'data-table-cells', 'data-table-compare', 'data-table-frame', 'data-table-grid', 'data-table-measure', 'date-picker-styles', 'dialog-model', 'popover-model', 'segmented-model', 'slide-deck-parts', 'tooltip-model', 'user-model'];
 const load = (name: string): Promise<Record<string, unknown>> => import(`./${name}.ts`);
 const define = vi.spyOn(customElements, 'define');
 const baselineStyles = document.querySelectorAll('style').length;
