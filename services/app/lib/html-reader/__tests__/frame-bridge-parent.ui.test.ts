@@ -8,12 +8,12 @@ function setup(frameOrigin = FRAME, extra: Partial<Parameters<typeof createFrame
   const contentWindow = { postMessage: (data: never, target: string) => posted.push({ data, target }) };
   const win = Object.assign(new EventTarget(), { location: { origin: APP } }) as unknown as Window;
   const frame = Object.assign(new EventTarget(), { contentWindow, clientLeft: 2, clientTop: 3, clientWidth: 300, clientHeight: 200, getBoundingClientRect: () => ({ left: 10, top: 20 }) }) as unknown as HTMLIFrameElement;
-  const events = { ready: [] as string[], closed: [] as string[], values: [] as string[], scroll: [] as unknown[], pressed: 0 };
+  const events = { ready: [] as string[], closed: [] as string[], values: [] as string[], scroll: [] as unknown[], size: [] as unknown[], pressed: 0 };
   const appFetch = vi.fn(async () => new Response('{"ok":true}', { status: 200, headers: { 'content-type': 'application/json', 'x-secret': 'no', 'retry-after': '3' } }));
   const bridge = createFrameBridgeParent({
     win, frame, frameOrigin, id: 'doc', editId: () => 'edit_1', source: () => '<p/>', appFetch,
     onReady: nonce => events.ready.push(nonce), onClosed: reason => events.closed.push(reason), onUrlValues: search => events.values.push(search),
-    onScroll: value => events.scroll.push(value), onPressed: () => { events.pressed++; }, ...extra,
+    onScroll: value => events.scroll.push(value), onSize: value => events.size.push(value), onPressed: () => { events.pressed++; }, ...extra,
   });
   const key = () => posted.at(-1)!.data.key;
   const from = (data: unknown, overrides: { origin?: string; source?: unknown } = {}) =>
@@ -95,6 +95,13 @@ describe('createFrameBridgeParent', () => {
     expect(seen).toEqual([{ type: 'selection' }]);
     expect(t.events.scroll).toEqual([{ x: 0, y: 40 }]);
     expect(t.events.pressed).toBe(1);
+  });
+
+  it('reports the document height as a bounded whole number and drops one that is not a height', () => {
+    const t = setup();
+    t.say({ kind: 'ready', nonce: 'n' });
+    for (const height of [812.4, 'bad', -1, Infinity, null, 1e9, 0]) t.say({ kind: 'size', height });
+    expect(t.events.size).toEqual([{ height: 812 }, { height: 20000 }, { height: 0 }]);
   });
 
   it('relays an admitted fetch with only the kept response headers, and refuses others', async () => {

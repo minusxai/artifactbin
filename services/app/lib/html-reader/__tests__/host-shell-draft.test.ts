@@ -83,6 +83,29 @@ describe('mountDraft (/af/host.js)', () => {
     }
   });
 
+  it('tells the host the page\'s height and, with fitHeight, sizes the frame to it', async () => {
+    const owner = await mintAccountToken('draft_owner');
+    for (const fitHeight of [false, true]) {
+      const { win, container } = hostPage(session(owner));
+      const mounted = await mountDraft(container, { html: '<p>x</p>', files: [], fitHeight }, win);
+      mounted.frame.style.height = '560px';
+      const posted: Array<{ key: string; payload: Record<string, unknown> }> = [];
+      const frameWindow = mounted.frame.contentWindow!;
+      frameWindow.postMessage = ((message: never) => { posted.push(message); }) as Window['postMessage'];
+      const send = (payload: unknown, key?: string) => win.dispatchEvent(new win.MessageEvent('message', { data: { type: STORY_FRAME_BRIDGE_MESSAGE, ...(key ? { key } : {}), payload }, origin: mounted.origin, source: frameWindow }));
+      const sizes: unknown[] = [];
+      container.addEventListener('af-draft-size', (event) => sizes.push((event as CustomEvent).detail));
+      send({ kind: 'hello' });
+      const { key } = posted.find((entry) => entry.payload?.kind === 'attach')!;
+      send({ kind: 'ready', nonce: 'n'.repeat(16) }, key);
+      send({ kind: 'size', height: 1234.6 }, key);
+      send({ kind: 'size', height: -5 }, key);
+      expect(sizes).toEqual([{ height: 1235 }]);
+      expect(mounted.frame.style.height).toBe(fitHeight ? '1235px' : '560px');
+      mounted.destroy();
+    }
+  });
+
   it('rejects with the refusal the embedding app can show', async () => {
     const owner = await mintAccountToken('draft_owner');
     const { win, container } = hostPage(session(owner));

@@ -29,6 +29,8 @@
  * file it links as a dataset is a read-only table its `sql` reads in the frame; it relays nothing to the app (no
  * document, no comments, no uploads, no writes), and a refused draft rejects with the refusal's own code and message.
  * Reloading it later can fail (`af-draft-unavailable`) or move it to a new origin (`af-draft-moved`): mount it again.
+ * The page reports its content height (`af-draft-size`, `{height}` px, at most 20000) on load and on each change, which
+ * the frame on another origin cannot otherwise show its host; with `fitHeight: true` the frame takes that height itself.
  *
  * Public code: it carries no credential and adds none (requests are this origin's own, `same-origin`). A document
  * trusts exactly one parent origin, baked in when it is served; the module refuses to mount anywhere else, and the
@@ -222,6 +224,8 @@ export interface MountDraftOptions {
    * live, as the signed-in reader (the person this page is shown to). Off by default: they are refused in the frame.
    */
   liveSql?: boolean;
+  /** The frame's height follows the page's (`af-draft-size`), so the whole page shows with no scroll of its own. */
+  fitHeight?: boolean;
 }
 export interface MountedDraft {
   readonly frame: HTMLIFrameElement;
@@ -292,6 +296,7 @@ export async function mountDraft(container: HTMLElement, options: MountDraftOpti
     htmlContext: () => ({ revision: 'draft', readOnly: true }),
     onReady: (nonce) => { if (nonce) emit('af-document-ready', { nonce }); },
     onScroll: (scroll) => emit('af-document-scroll', scroll),
+    onSize: (size) => { if (options.fitHeight) frame.style.height = `${size.height}px`; emit('af-draft-size', size); },
     onClosed: (reason) => emit('af-document-closed', { reason }),
   });
   const stopEvents = bridge.subscribe((event) => emit('af-document-event', event));

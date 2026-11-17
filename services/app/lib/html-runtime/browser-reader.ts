@@ -187,6 +187,12 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
   win.addEventListener('scroll', scroll, { passive: true });
   win.addEventListener('resize', resize);
   post({ kind: 'ready', nonce });
+  // The document's height, once per new value, for a parent that sizes its frame to the page (host-shell `fitHeight`).
+  let height = -1;
+  const size = () => { const next = Math.ceil(Math.max(win.document.documentElement.getBoundingClientRect().height, win.document.body?.scrollHeight ?? 0)); if (next !== height) post({ kind: 'size', height: height = next }); };
+  const sizes = typeof ResizeObserver === 'function' ? new ResizeObserver(size) : null;
+  sizes?.observe(win.document.documentElement); if (win.document.body) sizes?.observe(win.document.body);
+  size();
   return {
     receive(payload) {
       if (cells.receive(payload) || regions.receive(payload)) return;
@@ -237,6 +243,7 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
       win.document.removeEventListener('selectionchange', selection);
       win.removeEventListener('scroll', scroll);
       win.removeEventListener('resize', resize);
+      sizes?.disconnect();
     },
   };
 }
