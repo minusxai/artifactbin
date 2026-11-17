@@ -1,5 +1,5 @@
 import http from 'node:http';
-import { SERVICE_AUTH_HEADER, SQL_WALL_HEADER, sqlTimeout, type SqlCallContext } from '@artifactbin/contracts';
+import { SERVICE_AUTH_HEADER, SQL_QUERY_MAX_MS, SQL_WALL_OVERHEAD_MS, SQL_WALL_HEADER, sqlTimeout, type SqlCallContext } from '@artifactbin/contracts';
 import { collectNodeBody } from './body';
 
 /** JSON with a Set on the wire as an array — a Set stringifies to `{}` and binds nothing, which is a bug this was found by. */
@@ -83,19 +83,36 @@ export function postServer(
     const started = performance.now();
     const abort = () => { if (!res.writableFinished) controller.abort(); };
     res.once('close', abort);
-    const raw = await collectNodeBody(req, opts.maxBody);
-    if (!raw) { json(413, { error: 'too_large' }); req.destroy(); return; }
-    // Admission and body buffering consume the transported allowance too.
     const header = req.headers[SQL_WALL_HEADER];
     let wallTimeoutMs: number | undefined;
+    let admissionTimer: ReturnType<typeof setTimeout> | undefined;
+    let expired = false;
+    try {
     if (header !== undefined) {
-      try { wallTimeoutMs = sqlTimeout(header, 1, Number.MAX_SAFE_INTEGER); }
+      try { wallTimeoutMs = sqlTimeout(header, 1, SQL_QUERY_MAX_MS + SQL_WALL_OVERHEAD_MS, 'wallTimeoutMs', true); }
       catch { json(400, {error:'bad_request'}); return; }
+      // An unfinished upload must expire too, rather than checking only after its body finally arrives.
+      admissionTimer = setTimeout(() => {
+        expired = true;
+        controller.abort();
+        res.setHeader('connection', 'close');
+        res.once('finish', () => req.destroy());
+        json(408, {error:'deadline_exceeded'});
+      }, wallTimeoutMs);
+    }
+    const raw = await collectNodeBody(req, opts.maxBody);
+    clearTimeout(admissionTimer);
+    if (expired || controller.signal.aborted) return;
+    if (!raw) { json(413, { error: 'too_large' }); req.destroy(); return; }
+    // Body buffering consumes the transported allowance, without refreshing the execution deadline.
+    if (wallTimeoutMs !== undefined) {
       wallTimeoutMs = Math.floor(wallTimeoutMs - (performance.now() - started));
       if (wallTimeoutMs <= 0) { json(408, {error:'deadline_exceeded'}); return; }
     }
-    try { return await handle(req, res, raw, { signal: controller.signal, ...(wallTimeoutMs !== undefined ? {wallTimeoutMs} : {}) }); }
-    finally { res.off('close', abort); }
+    return await handle(req, res, raw, { signal: controller.signal, ...(wallTimeoutMs !== undefined ? {wallTimeoutMs} : {}) });
+    } catch {
+      if (!expired && !res.headersSent && !res.destroyed) json(400, {error:'bad_request'});
+    } finally { clearTimeout(admissionTimer); res.off('close', abort); }
   });
   return {
     // No host → Node binds synchronously; a hostname bind resolves asynchronously.

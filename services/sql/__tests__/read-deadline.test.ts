@@ -200,3 +200,24 @@ it('bounds synchronous batches at statement boundaries and honors pre-abort with
   expect(await engine.runMany({runs:[ENDLESS,ENDLESS]}, {wallTimeoutMs:70})).toMatchObject([{q:{timedOut:true}},{q:{timedOut:true}}]);
   expect(performance.now()-start).toBeLessThan(650);
 });
+
+it('expires an unfinished SQL upload at its admission deadline without dispatching work', async () => {
+  const engine = createSql();
+  let dispatched = 0;
+  const server = serveSql({...engine, run: async (...args) => { dispatched++; return engine.run(...args); }});
+  const {url} = server.listen(0);
+  let request: ReturnType<typeof http.request> | undefined;
+  let guard: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const status = await new Promise<number | undefined>((resolve, reject) => {
+      request = http.request(`${url}/run`, {method:'POST',headers:{'x-sql-wall-timeout-ms':'30'}}, response => {
+        response.resume(); response.on('end', () => resolve(response.statusCode));
+      });
+      request.on('error', reject);
+      request.write(' ');
+      guard = setTimeout(() => reject(new Error('unfinished upload exceeded its deadline')), 600);
+    });
+    expect(status).toBe(408);
+    expect(dispatched).toBe(0);
+  } finally { clearTimeout(guard); request?.destroy(); await server.close(); await engine.close(); }
+});
