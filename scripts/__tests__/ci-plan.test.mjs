@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import yaml from 'yaml';
 import { createServer } from 'node:http';
-import { CI_JOBS, checkCiResults, isBuildInput, planCi, testBuildsKey } from '../lib/ci-plan.mjs';
+import { CI_JOBS, checkCiResults, isBuildInput, planCi, testBuildsKey, vitestConfigKey } from '../lib/ci-plan.mjs';
 import { MODULE_CACHE_DIR, SCHEMA_IMAGE_DIR } from '../lib/suite-env.mjs';
 import { CI_GATE_SHARDS, CI_ISOLATED_GATES, CI_SHARD_OPTIONS, gateNamesOnDisk, shardWeight, specFor } from '../gates.manifest.mjs';
 import { shardOf } from '../gates.shard.mjs';
@@ -313,6 +313,34 @@ describe('CI avoids duplicate integration setup', () => {
     expect(modules).toBeLessThan(save);
     expect(readFileSync(path.join(root, 'services/app/__tests__/schema-image.test.ts'), 'utf8')).toContain("inject('schemaImageDir')");
   });
+  // Vitest's module cache is keyed by each module's source AND the configuration that transformed it, so one entry warmed
+  // for the api projects alone left every other pr fast runner to transform its whole graph cold: 9-15s of transform
+  // summed over three workers on each ui, guard and node runner against ~2s on an api one (pr fast runs 44114175470,
+  // 44133274884), and one entry warmed for all four would make every runner download all four (~22 MB against api's ~6).
+  // So pr fast restores one entry per runner kind, which main writes with that kind's configuration listed alone.
+  it('writes each pr fast runner kind its own test builds on main, its module cache listed from that configuration alone', () => {
+    const fast = yaml.parse(readFileSync(path.join(root, '.github/workflows/pr-fast.yml'), 'utf8')).jobs.fast;
+    const kinds = {
+      api: '--project=api --project=api-isolated', ui: '--project=ui --project=islands',
+      guards: '--config vitest.guard.config.ts', node: '--config vitest.node-batch.config.ts',
+    };
+    // Every selection pr fast runs is one of the kinds.
+    const configs = fast.steps.flatMap(step => [...(step.run ?? '').matchAll(/vitest\.mjs run (--config \S+) --shard=/g)].map(match => match[1]));
+    const projects = [...new Set(fast.strategy.matrix.include.map(entry => entry.projects).filter(Boolean))];
+    expect([...projects, ...configs].sort()).toEqual(Object.values(kinds).sort());
+    const steps = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8')).jobs['warm-caches'].steps;
+    const isList = step => /vitest\.mjs list /.test(step.run ?? '');
+    const lists = steps.flatMap((step, i) => isList(step) ? [i] : []);
+    for (const [kind, selection] of Object.entries(kinds)) {
+      const save = steps.findIndex(step => (step.uses ?? '').startsWith('actions/cache/save') && step.with.key === `test-builds-v3-\${{ runner.os }}-${kind}-\${{ steps.test-builds-key.outputs.key }}-\${{ steps.test-builds-key.outputs.modules }}`);
+      expect(save, kind).toBeGreaterThan(-1);
+      expect(steps[save].with.path.split('\n').filter(Boolean), kind).toEqual(['services/app/lib/build-assets', 'services/app/public/libraries', SCHEMA_IMAGE_DIR, MODULE_CACHE_DIR]);
+      const last = Math.max(...lists.filter(i => i < save));
+      expect(steps[last].run, kind).toContain(`node node_modules/vitest/vitest.mjs list ${selection} --filesOnly=false > /dev/null`);
+      // Every list after the first starts from an empty module cache, so an entry holds its own kind's modules only.
+      if (last !== lists[0]) expect(steps[last].run.trim().split('\n')[0], kind).toBe(`rm -rf ${MODULE_CACHE_DIR}`);
+    }
+  });
   // The server-reader marker lists the hosted libraries as outputs: an entry without them is a miss on every shard,
   // which rebuilt both (~10s) at the start of every api, node, ui and integration shard (run 42349357334).
   it('caches the test builds whole, under the key of what they are built from, in every workflow that reads them', () => {
@@ -324,8 +352,16 @@ describe('CI avoids duplicate integration setup', () => {
       for (const cache of caches) {
         entries++;
         expect(cache.with.path.split('\n').filter(Boolean), name).toEqual(['services/app/lib/build-assets', 'services/app/public/libraries', SCHEMA_IMAGE_DIR, MODULE_CACHE_DIR]);
-        expect(cache.with.key, name).toBe('test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}');
-        if (cache.with['restore-keys'] !== undefined) expect(cache.with['restore-keys'], name).toBe('test-builds-v2-${{ runner.os }}-');
+        if (name === 'pr-fast.yml fast') {
+          // A runner kind's entry, falling back to main's whole entry for these very sources (fresh builds, the api
+          // modules), then the kind's newest, then the newest of all.
+          expect(cache.with.key, name).toBe('test-builds-v3-${{ runner.os }}-${{ env.TEST_BUILDS_KIND }}-${{ steps.test-builds-key.outputs.key }}-${{ steps.test-builds-key.outputs.modules }}');
+          if (cache.with['restore-keys'] !== undefined) expect(cache.with['restore-keys'].trim().split('\n'), name).toEqual(['test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}', 'test-builds-v3-${{ runner.os }}-${{ env.TEST_BUILDS_KIND }}-', 'test-builds-v2-${{ runner.os }}-']);
+        } else {
+          expect(cache.with.key, name).toMatch(/^test-builds-v(2-\$\{\{ runner\.os \}\}-\$\{\{ steps\.test-builds-key\.outputs\.key \}\}|3-\$\{\{ runner\.os \}\}-(api|ui|guards|node)-\$\{\{ steps\.test-builds-key\.outputs\.key \}\}-\$\{\{ steps\.test-builds-key\.outputs\.modules \}\})$/);
+          if (!cache.with.key.startsWith('test-builds-v3-')) expect(cache.with.key, name).toBe('test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}');
+          if (cache.with['restore-keys'] !== undefined) expect(cache.with['restore-keys'], name).toBe('test-builds-v2-${{ runner.os }}-');
+        }
         const key = jobSteps.findIndex(step => step.id === 'test-builds-key');
         expect(key, name).toBeGreaterThan(-1);
         expect(key, name).toBeLessThan(jobSteps.indexOf(cache));
@@ -333,6 +369,33 @@ describe('CI avoids duplicate integration setup', () => {
       }
     }
     expect(entries).toBeGreaterThanOrEqual(10);
+  });
+  // Vitest keys every module cache entry by the content of its configuration's local imports too (Vite's
+  // configFileDependencies), so one edit to timed-sequencer.mjs left every runner's restored modules cold: pr fast run
+  // 44142401757 restored warm-keyed entries and transformed 8.7s summed on an api runner that had taken ~2s. Keyed only by
+  // what the builds are built from, those entries were never written again, cold for every pull request, until the next
+  // build input changed. The runner kinds' entries are keyed by the configurations' local import graph as well.
+  it('keys the module caches by the Vitest configurations\' whole local import graph, and by nothing else there', () => {
+    const tree = {
+      'vitest.config.ts': "import x from './scripts/lib/a.mjs';\nimport y from 'vitest/config';",
+      'vitest.guard.config.ts': "import full from './vitest.config';\nimport { b } from './scripts/lib/b.mjs';",
+      'vitest.node-batch.config.ts': "const c = await import('./scripts/lib/c.mjs');",
+      'vitest.fast.config.ts': '',
+      'scripts/lib/a.mjs': "import { d } from './d.mjs';",
+      'scripts/lib/b.mjs': '', 'scripts/lib/c.mjs': '', 'scripts/lib/d.mjs': '', 'scripts/lib/unrelated.mjs': '',
+    };
+    const key = (changes = {}) => vitestConfigKey((file) => {
+      const all = { ...tree, ...changes };
+      if (!Object.hasOwn(all, file)) throw Object.assign(new Error(`ENOENT ${file}`), { code: 'ENOENT' });
+      return all[file];
+    });
+    const base = key();
+    expect(base.files).toEqual(['scripts/lib/a.mjs', 'scripts/lib/b.mjs', 'scripts/lib/c.mjs', 'scripts/lib/d.mjs', 'vitest.config.ts', 'vitest.fast.config.ts', 'vitest.guard.config.ts', 'vitest.node-batch.config.ts']);
+    for (const file of base.files) expect(key({ [file]: `${tree[file]}\n// edited` }).key, file).not.toBe(base.key);
+    expect(key({ 'scripts/lib/unrelated.mjs': '// edited' }).key).toBe(base.key);
+    // This repository's own graph: every configuration and the modules they load.
+    const own = vitestConfigKey().files;
+    for (const file of ['vitest.config.ts', 'vitest.guard.config.ts', 'vitest.node-batch.config.ts', 'scripts/lib/timed-sequencer.mjs', 'scripts/lib/suite-env.mjs', 'scripts/lib/node-batch.mjs', 'scripts/lib/test-isolation.mjs']) expect(own, file).toContain(file);
   });
   it('keys the test builds on their own inputs, so a change elsewhere keeps the entry and one here moves it', () => {
     const line = (file, id = 'a'.repeat(40)) => `100644 ${id} 0\t${file}`;

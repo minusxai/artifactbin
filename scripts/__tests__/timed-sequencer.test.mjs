@@ -146,6 +146,27 @@ describe('the integration job\'s order', () => {
 });
 
 describe('a shard\'s wall time', () => {
+  // The guard runners' two shared-graph projects had no import cost, so their packing predicted 12.2s for shards that ran
+  // 21-25s while the one holding the longest file alone ran 10.5s (pr fast run 44140374300). Replaying each guard shard's
+  // own file times from 8 runs (24 shards) under this model, 4s per worker's first file fits them within 1.4s on average;
+  // with none they ran 6.1s over it.
+  it('charges every shared-graph project a runner packs its import on each worker\'s first file', () => {
+    const projects = [...new Set(Object.values(JOBS).flatMap((job) => job.projects))];
+    const shared = projects.filter((project) => !Object.hasOwn(ISOLATED_FILE_MS, project) && !/-isolated$/.test(project));
+    expect(shared.sort()).toEqual(['api', 'islands', 'node', 'node-batch', 'pr-contracts', 'pr-guards']);
+    // ci.yml's node shards run isolated per file (vitest.config.ts's node project), never one shared graph.
+    for (const project of shared.filter((name) => name !== 'node')) expect(SHARED_FIRST_FILE_MS[project], project).toBeGreaterThan(0);
+    expect(SHARED_FIRST_FILE_MS['pr-guards']).toBe(4000);
+    expect(SHARED_FIRST_FILE_MS['pr-contracts']).toBe(4000);
+  });
+  // Replaying each api runner's own file times from 8 pr fast runs (224 shards; 44027030734-44141931756) under this model,
+  // 5s per worker's first api file and 4s per api-isolated file over-predicted their walls by 2.0s on average (2.7s on a
+  // runner given one long file, so the packer left those runners idle at 8-11s while others ran 19-23s); 3s and 2s fit
+  // them within 0.7s.
+  it('charges the api projects what their runners measure: 3s per worker\'s first api file, 2s per api-isolated file', () => {
+    expect(SHARED_FIRST_FILE_MS.api).toBe(3000);
+    expect(ISOLATED_FILE_MS['api-isolated']).toBe(2000);
+  });
   const runner = { workers: 3, firstFileMs: { api: 5 } };
   const file = (key, weight, project = 'api') => ({ key, weight, project });
 

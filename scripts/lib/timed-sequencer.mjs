@@ -42,9 +42,11 @@ function median(values) {
  * test. The shared projects (`api`, `islands`) pay that once per worker, not per file. Measured on pr fast run
  * 42356365156: api runners given two or three api-isolated files spent 24-30s in Vitest against 13-20s for those given
  * none at the same recorded load (~4s of import and transform per file), and the jsdom runners' environment time came
- * to ~2s per `ui` file.
+ * to ~2s per `ui` file. Replayed later against each api runner's own file times over 8 pr fast runs (224 shards,
+ * 44027030734-44141931756), an api-isolated file's import came to 2s (with 3s per worker's first api file, below):
+ * 4s and 5s over-predicted those walls by 2.0s on average, and most for a runner given one long file.
  */
-export const ISOLATED_FILE_MS = Object.freeze({ 'api-isolated': 4000, ui: 2000 });
+export const ISOLATED_FILE_MS = Object.freeze({ 'api-isolated': 2000, ui: 2000 });
 
 /**
  * WHAT EVERY FILE OF A SHARED-GRAPH PROJECT STILL PAYS: its setup files, environment and collection run per file even when
@@ -91,8 +93,13 @@ export const WORKERS = 3;
  * each of the three workers ran 3.8s, 4.9s and 6.8s over its recorded time; in job ui-2 the first islands files ran
  * 0.6-1.4s over theirs. The node batch's ~1.4s locally per worker (the full suite's setup file and its graph) makes
  * ~4s on a runner, an ESTIMATE. Isolated projects pay theirs on every file (`ISOLATED_FILE_MS`, in the file's weight).
+ * The api projects' replay over 224 later runner walls (see `ISOLATED_FILE_MS`) puts api's at 3s, not 5s.
+ * The guard runners' two shared-graph projects (vitest.guard.config.ts) pay theirs too: without it their packing predicted
+ * 12.2s for shards that ran 21-25s beside one holding only the longest file that ran 10.5s (pr fast run 44140374300).
+ * Replaying each guard shard's own file times from 8 runs (24 shards), 4s per worker's first file fits their walls within
+ * 1.4s on average; with none they ran 6.1s over the prediction.
  */
-export const SHARED_FIRST_FILE_MS = Object.freeze({ api: 5000, islands: 1000, 'node-batch': 4000 });
+export const SHARED_FIRST_FILE_MS = Object.freeze({ api: 3000, islands: 1000, 'node-batch': 4000, 'pr-guards': 4000, 'pr-contracts': 4000 });
 
 /** How a shard's wall is predicted: the CI runner by default; `{ workers: 1, firstFileMs: {} }` is the plain sum. */
 export const CI_RUNNER = Object.freeze({ workers: WORKERS, firstFileMs: SHARED_FIRST_FILE_MS });

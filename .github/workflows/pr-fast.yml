@@ -42,6 +42,13 @@ jobs:
     permissions:
       contents: read
       actions: read
+    # WHICH TEST BUILDS THIS RUNNER RESTORES: one entry per runner kind, because Vitest keys its module cache by the
+    # configuration that transformed each module as well as its source. One entry warmed for the api projects alone left
+    # the ui, guard and node runners to transform their whole graphs cold (9-15s summed over three workers each, against
+    # ~2s on an api runner: runs 44114175470, 44133274884); one warmed for all four would make every runner download all
+    # four (~22 MB compressed against api's ~6). Main's warm-caches writes each kind's entry with its configuration alone.
+    env:
+      TEST_BUILDS_KIND: ${{ matrix.shard && 'guards' || matrix.batch && 'node' || matrix.suite && startsWith(matrix.part, 'ui-') && 'ui' || 'api' }}
     strategy:
       fail-fast: false
       matrix:
@@ -202,7 +209,44 @@ jobs:
           - part: node-3
             batch: 3/3
     steps:
+      # Node 22, the install cache's (its key says node22; its native modules are compiled for that major's ABI): the hosted
+      # tool cache's newest 22 goes on PATH (ubuntu-latest's own Node is a 24). setup-node found that same cached 22, then
+      # spent 0.6s median, 2.9s p90 and 6.3s at worst printing npm's and yarn's versions from a cold disk (runs
+      # 44027030734-44133274884), plus a post step; it now runs only when neither the cache nor the runner has a 22.
+      # Without it, that Node's first start from the cold disk moved into the next step instead (lock-fingerprint, up to 4s,
+      # run 44139796324): so this step runs FIRST, needing no checkout, and reads the binary into the page cache in the
+      # background while checkout runs. It starts no Node when the cache has a 22; otherwise the runner's own is probed with
+      # --version, which exits before JavaScript initialization (evaluating process.versions took 14.7s on the slowest
+      # runner of run 43196988989, making its complete attempt 61s).
+      # THE CLOCK'S ATTEMPT, FETCHED HERE IN THE BACKGROUND: the clock (the last step) reads only its run_started_at, and its
+      # own `gh api` took 0.6s median, 2.0s p90 and 4.1s at worst after every job's tests. Every stream of each background
+      # process is redirected, or the runner holds this step open until it ends; the attempt is written whole, then renamed,
+      # so the clock reads it complete or fetches it itself.
+      - id: runner-node
+        name: Node 22 on PATH, and this attempt fetched for the clock
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          attempt="$RUNNER_TEMP/pr-attempt.json"
+          { gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}" > "$attempt.part" && mv "$attempt.part" "$attempt"; } < /dev/null > /dev/null 2>&1 &
+          cached=$(printf '%s\n' "$RUNNER_TOOL_CACHE"/node/22.*/x64/bin | sort -V | tail -n 1)
+          if [ -x "$cached/node" ]; then
+            printf '%s\n' "$cached" >> "$GITHUB_PATH"
+            cat "$cached/node" < /dev/null > /dev/null 2>&1 &
+            printf 'major=22\n' >> "$GITHUB_OUTPUT"
+            printf 'Node 22 from the tool cache: %s\n' "$cached"
+          else
+            runner_version=$(node --version)
+            runner_major=${runner_version#v}
+            runner_major=${runner_major%%.*}
+            printf 'major=%s\n' "$runner_major" >> "$GITHUB_OUTPUT"
+            printf 'Runner Node: %s\n' "$runner_version"
+          fi
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        # Nothing here fetches or pushes after checkout: no token in the git config, so no auth setup and no post step
+        # removing it after the tests.
+        with:
+          persist-credentials: false
         # Abort an idle HTTP transfer so checkout can retry before it consumes the CI budget.
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: '1024'
@@ -220,18 +264,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           ( rc=0; node scripts/ci/ci.mjs node-timings > "$RUNNER_TEMP/node-timings.log" 2>&1 || rc=$?; echo "$rc" > "$RUNNER_TEMP/node-timings.part"; mv "$RUNNER_TEMP/node-timings.part" "$RUNNER_TEMP/node-timings.status" ) < /dev/null > /dev/null 2>&1 &
-      # Node 22, the install cache's (its key says node22; its native modules are compiled for that major's ABI). The runner's
-      # own Node serves when it is a 22 already, skipping setup-node's ~0.5s step and ~0.2s post step (run 42812079087,
-      # job api-3); any other major gets setup-node exactly as before. The step prints the version it found.
-      # --version exits before JavaScript initialization; evaluating process.versions took 14.7s on the slowest
-      # runner of run 43196988989, making its complete attempt 61s. Shell expansion needs only the version string.
-      - id: runner-node
-        run: |
-          runner_version=$(node --version)
-          runner_major=${runner_version#v}
-          runner_major=${runner_major%%.*}
-          printf 'major=%s\n' "$runner_major" >> "$GITHUB_OUTPUT"
-          printf 'Runner Node: %s\n' "$runner_version"
       # No `cache: npm`: the whole install is restored below, and npm's download cache would only add a restore.
       - if: steps.runner-node.outputs.major != '22'
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -399,8 +431,10 @@ jobs:
       - if: matrix.part == 'tests'
         run: node scripts/ci/fast-check.mjs
       # The test global setup's server reader and hosted libraries (build-runtime.global.ts), keyed by what they are
-      # built from (scripts/ci/ci.mjs `test-builds-key`); main's warm-caches writes the entry. A pull request that
-      # changes those inputs rebuilds them (~10s) and its first runner saves the result, so its next push restores it.
+      # built from (scripts/ci/ci.mjs `test-builds-key`) and this runner's kind (`TEST_BUILDS_KIND` above); main's
+      # warm-caches writes each kind's entry. Without one for this kind, main's whole entry for the same sources serves
+      # (ci.yml's: the builds and the api modules), then this kind's newest. A pull request that changes those inputs
+      # rebuilds them (~10s) and the last runner of each kind saves its entry, so its next push restores it.
       # The entry also carries the test database's schema image (services/app/test/setup/schema-image-file.ts): with it,
       # each Vitest worker restores its first database instead of running initdb and the boot DDL (660ms -> 170ms
       # measured locally). Only the file named by this checkout's schema key loads, so a stale entry is a miss. The
@@ -417,8 +451,11 @@ jobs:
             services/app/public/libraries
             tmp/test-schema-image
             tmp/vitest-module-cache
-          key: test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}
-          restore-keys: test-builds-v2-${{ runner.os }}-
+          key: test-builds-v3-${{ runner.os }}-${{ env.TEST_BUILDS_KIND }}-${{ steps.test-builds-key.outputs.key }}-${{ steps.test-builds-key.outputs.modules }}
+          restore-keys: |
+            test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}
+            test-builds-v3-${{ runner.os }}-${{ env.TEST_BUILDS_KIND }}-
+            test-builds-v2-${{ runner.os }}-
       - if: matrix.shard
         run: node node_modules/vitest/vitest.mjs run --config vitest.guard.config.ts --shard=${{ matrix.shard }}
       - if: matrix.suite
@@ -431,7 +468,9 @@ jobs:
           exit "$(cat "$RUNNER_TEMP/node-timings.status")"
       - if: matrix.batch
         run: node node_modules/vitest/vitest.mjs run --config vitest.node-batch.config.ts --shard=${{ matrix.batch }}
-      - if: matrix.part == 'api-1' && steps.test-builds.outputs.cache-hit != 'true'
+      # The last runner of each kind saves that kind's entry on an exact miss, after its tests, so its transforms are in it:
+      # packing puts the longest files first, often one to a runner, so the last runner holds the most files.
+      - if: contains(fromJSON('["api-32","ui-7","guards-3","node-3"]'), matrix.part) && steps.test-builds.outputs.cache-hit != 'true'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: |
@@ -439,11 +478,13 @@ jobs:
             services/app/public/libraries
             tmp/test-schema-image
             tmp/vitest-module-cache
-          key: test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}
+          key: test-builds-v3-${{ runner.os }}-${{ env.TEST_BUILDS_KIND }}-${{ steps.test-builds-key.outputs.key }}-${{ steps.test-builds-key.outputs.modules }}
       - name: PR CI clock (warns at 40s; fails over 60s)
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
+        # The attempt the first step fetched in the background; fetched here only if that never landed.
         run: |
-          gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}" > "$RUNNER_TEMP/pr-attempt.json"
-          node scripts/lib/ci-elapsed.mjs --pr "$RUNNER_TEMP/pr-attempt.json" "$GITHUB_STEP_SUMMARY"
+          attempt="$RUNNER_TEMP/pr-attempt.json"
+          [ -s "$attempt" ] || gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}" > "$attempt"
+          node scripts/lib/ci-elapsed.mjs --pr "$attempt" "$GITHUB_STEP_SUMMARY"
