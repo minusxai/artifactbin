@@ -1,5 +1,5 @@
 import type {ArtifactRow} from '@/lib/artifacts';
-import {catalogOf, executeCatalog, storedRowCount} from '@/lib/datasets';
+import {readLifetime, catalogOf, executeCatalog, storedRowCount} from '@/lib/datasets';
 import type {DatasetRowPort,DatasetSnapshot} from './types';
 import {ID_COLUMN,rowIdsForObject,tableIdentity} from './model';
 import {authorizedDatasetRead,resolveDatasetBinding,datasetBindingCatalog} from './authority';
@@ -85,17 +85,21 @@ export function retainedDatasetPort(options:RetainedReadOptions={}):DatasetRowPo
   },
   async execute(actor,snapshot,tableId,statement,window,signal){
    signal.throwIfAborted();
-   await hydrate.get(snapshot)?.(signal);
+   const life=readLifetime(signal);
+   signal=life.signal;
+   try{
+   await life.step(Promise.resolve(hydrate.get(snapshot)?.(signal)));
    signal.throwIfAborted();
    const table=snapshot.catalog.tables.find(t=>tableIdentity(t)===tableId);if(!table?.objectKey)throw unavailable();
    if(table.columns.some(c=>c.name===ID_COLUMN))throw new Error('dataset_reserved_column');
    const catalog={...snapshot.catalog,tables:snapshot.catalog.tables.map(t=>t===table?{...t,columns:[...t.columns,{name:ID_COLUMN,type:'string' as const}]}:t)};
    // Fenced, the snapshot's authorization holds until the caller's fence; otherwise each statement checks around itself.
    const authorize=options.fenced?undefined:async()=>{if(snapshot.policyIdentity!==(await freshIdentity(actor,snapshot.id,options)).identity)throw new Error('dataset_changed');};
-   const result=await executeCatalog(catalog,statement.sql,statement.params,{...window,timeoutMs:5000,actor,datasetId:snapshot.id,signal,...(authorize?{authorize}:{}),view:snapshot.view??null,
+   const result=await executeCatalog(catalog,statement.sql,statement.params,{...window,wallTimeoutMs:life.remaining(),actor,datasetId:snapshot.id,signal,...(authorize?{authorize}:{}),view:snapshot.view??null,
     rowIds:{table:snapshot.catalog.tables.indexOf(table),column:ID_COLUMN,ids:snapshot.rowIds[tableId]!}});
    signal.throwIfAborted();
-   return result.rows;
+   life.check();return result.rows;
+   }finally{life.close();}
   },
  };
 }

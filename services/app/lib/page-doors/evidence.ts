@@ -5,7 +5,7 @@ import {createHash} from 'node:crypto';
 import {ARTIFACT_WORKLOAD_LIMIT,type PageEvidenceSql,type HtmlDatasetLink,type PageEvidenceOperation,type PageDatasetSelect} from '@artifactbin/contracts';
 import type {AccessActor} from '@/lib/accounts';
 import {getArtifactHeaderById,getArtifactById} from '@/lib/artifacts';
-import {getDb} from '@/lib/platform';
+import {SQL_READ_WALL_TIMEOUT_MS,getDb} from '@/lib/platform';
 import {readHtmlPage} from '@/lib/html-publication';
 import {executePageSql,pageEvidenceSchema} from '@/lib/dataset-access';
 import {withPageEvidenceSelect} from '@/lib/dataset-permissions';
@@ -62,7 +62,7 @@ export async function preparePageEvidence(request:Request,actor:AccessActor,oper
 export async function pageEvidenceSchemaDoor(request:Request,pageId:string){
  const revision=new URL(request.url).searchParams.get('revision');
  if(!revision||!/^[1-9]\d*$/.test(revision)||!Number.isSafeInteger(Number(revision)))return Response.json({error:'bad_request'},{status:400});
- const bounded=new Request(request,{signal:AbortSignal.any([request.signal,AbortSignal.timeout(20000)])});
+ const bounded=new Request(request,{signal:AbortSignal.any([request.signal,AbortSignal.timeout(SQL_READ_WALL_TIMEOUT_MS)])});
  try{
   const actor=await pageEvidenceStep(bounded.signal,requestOrSessionActor(request));
   if(actor.workload)return Response.json({error:'forbidden'},{status:403});

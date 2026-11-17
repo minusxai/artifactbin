@@ -1,4 +1,5 @@
 /** Schema-only SQL dependency selection. SQLite is the sole SQL parser; no dataset rows enter planning. */
+import {QUERY_TIMEOUT_MS} from '@/lib/platform';
 import { loadSqlite, TimedOut, type Relation } from '@artifactbin/sql/core';
 import { SQL_READ_LIMITS, type DryRunInput } from '@artifactbin/contracts';
 
@@ -41,7 +42,7 @@ export async function selectSqlLinks(relations: readonly SqlLinkRelation[], inpu
         try {
           check();
           columns = prepared.bind(Object.fromEntries(input.paramNames.map((name) => [name, null])), input.paramTypes)
-            .rows(SQL_READ_LIMITS.rows, Math.min(SQL_READ_LIMITS.timeoutMs, scope ? Math.max(1, scope.deadline - performance.now()) : SQL_READ_LIMITS.timeoutMs)).columns;
+            .rows(SQL_READ_LIMITS.rows, Math.min(QUERY_TIMEOUT_MS, scope ? Math.max(1, scope.deadline - performance.now()) : QUERY_TIMEOUT_MS)).columns;
         } finally { prepared.finalize(); }
       } finally { db.close(); }
       const output = { schema: 'main', table: query.name, columns };

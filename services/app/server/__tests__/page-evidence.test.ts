@@ -2,7 +2,7 @@
 import {it,expect,vi} from 'vitest';
 import {createAppHost} from '@/server/host';
 import {createGroup,deleteGroup} from '@/lib/groups';
-import {getDb} from '@/lib/platform';
+import {SQL_READ_WALL_TIMEOUT_MS,getDb} from '@/lib/platform';
 import {APP_ARTIFACT_WORKLOAD_PATH} from '@artifactbin/contracts';
 import {mintAccountToken,useAppHarness} from '../../__tests__/harness';
 useAppHarness();
@@ -80,9 +80,9 @@ it('reads only explicitly approved pinned page evidence under current viewer pol
   await db.query('UPDATE artifacts SET dataset_policy=$2::jsonb,policy_revision=policy_revision+1 WHERE id=$1',[dataset.id,JSON.stringify(priorPolicy)]);
   const abortFinal=new AbortController();change=async()=>{abortFinal.abort();await new Promise(()=>{});};
   const cancelled=await host.request(new Request(req(APP_ARTIFACT_WORKLOAD_PATH,{operation}),{signal:abortFinal.signal}),{credential:'workload',workload:principal});expect(cancelled.status).toBeGreaterThanOrEqual(400);expect(await cancelled.text()).not.toContain('visible');change=null;
-  const nativeTimeout=AbortSignal.timeout.bind(AbortSignal),timeout=vi.spyOn(AbortSignal,'timeout').mockImplementation(ms=>nativeTimeout(ms===20000?25:ms));
+  const nativeTimeout=AbortSignal.timeout.bind(AbortSignal),timeout=vi.spyOn(AbortSignal,'timeout').mockImplementation(ms=>nativeTimeout(ms>20000&&ms<=SQL_READ_WALL_TIMEOUT_MS?25:ms));
   vi.mocked(globalThis.fetch).mockImplementationOnce(async()=>new Promise(()=>{}));
-  const timed=await call();expect(timed.status).toBeGreaterThanOrEqual(400);expect(await timed.text()).not.toContain('visible');timeout.mockRestore();
+  const timed=await call();expect(timed.status).toBeGreaterThanOrEqual(400);expect(await timed.text()).not.toContain('visible');expect(timeout.mock.calls.some(([ms])=>ms>20000&&ms<=SQL_READ_WALL_TIMEOUT_MS)).toBe(true);expect(timeout.mock.calls.map(([ms])=>ms)).toContain(10000);timeout.mockRestore();
   // Schema discovery cannot open row objects, and the full metadata JSON has the same 200 KiB budget.
   const datasets=await import('@/lib/datasets'),loadRows=vi.spyOn(datasets,'loadDatasetRows').mockRejectedValue(Error('schema opened rows'));
   expect((await call({kind:'page-evidence-schema',pageId:page.id,revision:'1'})).status).toBe(200);expect(loadRows).not.toHaveBeenCalled();loadRows.mockRestore();

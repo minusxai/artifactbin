@@ -1,4 +1,4 @@
-import { sqlTimeout, SQL_QUERY_DEFAULT_MS, SQL_QUERY_MAX_MS } from '@artifactbin/contracts';
+import { SQL_WALL_OVERHEAD_MS, sqlTimeout, SQL_QUERY_DEFAULT_MS, SQL_QUERY_MAX_MS } from '@artifactbin/contracts';
 import {isIP} from 'node:net';
 
 import { parseAssetsOrigin } from '@artifactbin/utils';
@@ -194,6 +194,7 @@ export const MAX_QUERY_ROWS = Number(env('SQL', 'MAX_QUERY_ROWS') ?? String(MAX_
  * handler interrupts it inside the statement, and its thread is free again.
  */
 export const QUERY_TIMEOUT_MS = sqlTimeout(env('SQL', 'QUERY_TIMEOUT_MS'), SQL_QUERY_DEFAULT_MS, SQL_QUERY_MAX_MS, 'SQL__QUERY_TIMEOUT_MS');
+export const SQL_READ_WALL_TIMEOUT_MS = QUERY_TIMEOUT_MS + SQL_WALL_OVERHEAD_MS;
 export const SQL_MUTATION_TIMEOUT_MS = sqlTimeout(env('SQL', 'QUERY_TIMEOUT_MS'), 5_000, SQL_QUERY_MAX_MS, 'SQL__QUERY_TIMEOUT_MS');
 
 /** Where the local fallback writes when S3_URL is unset. */

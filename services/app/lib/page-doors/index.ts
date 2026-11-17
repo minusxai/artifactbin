@@ -2,6 +2,7 @@
  * THE PAGE'S SQL DOOR (`POST /api/artifacts/<page>/sql`, `sql` in the page runtime), with what every page door
  * shares: the request's reader, the after-read page verification and the write's commit guard.
  */
+import {pageEvidenceStep} from './deadline';
 import {pageVerifier} from './verify';
 import {ACTOR_HEADER,REVALIDATE_ACTOR_HEADER,SQL_READ_LIMITS,type HtmlDatasetLink,type HtmlPageVersion} from '@artifactbin/contracts';
 import { ANONYMOUS_ACTOR, type AccessActor } from '@/lib/accounts';
@@ -99,6 +100,10 @@ export async function ownerHostSqlRead(request:Request,pageId:string,hostHolds:(
 }
 /** `reader`: a host-selected anonymous reader or capture requester, always read-only; otherwise the request's own. */
 async function answerSql(request:Request,pageId:string,reader?:AccessActor,hostHolds?:()=>Promise<boolean>):Promise<Response>{
+ const readStartedAt=performance.now();
+ let readDeadline:number|undefined;
+ let readSignal:AbortSignal|undefined;
+ const checkRead=()=>{if(readDeadline!==undefined){request.signal.throwIfAborted();if(performance.now()>=readDeadline)throw Error('sql_deadline');}};
  const headers=SQL_HEADERS;
  const requested=reader?null:await requestOrSessionActor(request);
  // An export reader carries no cookie, so no same-site guard applies; it never writes (readOnly below).
@@ -115,7 +120,7 @@ async function answerSql(request:Request,pageId:string,reader?:AccessActor,hostH
   const idempotencyKey=request.headers.get('idempotency-key')??undefined;
   if(idempotencyKey!==undefined&&!IDEMPOTENCY_KEY.test(idempotencyKey))return json({error:'invalid_idempotency_key'},400,headers);
   const page=body.revision===head.revision?head:await readHtmlPage(actor,pageId,body.revision);
-  const scope={pageId,...(idempotencyKey?{idempotencyKey}:{}),readOnly:!!reader||body.readOnly===true||page.revision!==head.revision,commitGuard:pageCommitGuard(pageId,actor,admitted)};
+  const scope={pageId,readStartedAt,retainReadDeadline:(deadline:number)=>{readDeadline=deadline;readSignal=AbortSignal.any([request.signal,AbortSignal.timeout(Math.max(0,Math.floor(deadline-performance.now())))]);},...(idempotencyKey?{idempotencyKey}:{}),readOnly:!!reader||body.readOnly===true||page.revision!==head.revision,commitGuard:pageCommitGuard(pageId,actor,admitted)};
   const verifyPage=pageVerifier(request,pageId,actor,reader,admitted);
   for(let attempt=1;;attempt++){
    try{
@@ -123,11 +128,13 @@ async function answerSql(request:Request,pageId:string,reader?:AccessActor,hostH
     // one naming a default-connection link wholly on the install's connection (lib/connections).
     const reply=await pageLiveDatasetSql(actor,page,{sql:body.sql,params:body.params,query:body.query},request.signal)??await pageConnectionSql(actor,page.links,{sql:body.sql,params:body.params},request.signal)??await executePageSql(actor,datasetLinks(page),{sql:body.sql,params:body.params},scope,request.signal);
     // Every reply (rows, a write's reply, a replayed receipt, a refusal) leaves only while the page still holds.
-    await verifyPage(page.revision);
-    if(hostHolds&&!await hostHolds())throw Error('page_unavailable');
+    checkRead();
+    await (readSignal?pageEvidenceStep(readSignal,verifyPage(page.revision)):verifyPage(page.revision));
+    if(hostHolds&&!await (readSignal?pageEvidenceStep(readSignal,hostHolds()):hostHolds()))throw Error('page_unavailable');
     // The last guard: nothing past the SQL output budget leaves, however it was produced.
     const text=JSON.stringify(reply.body);
     if(new TextEncoder().encode(text).length>SQL_READ_LIMITS.outputBytes)return json({error:'result_too_large',message:`an answer is at most ${SQL_READ_LIMITS.outputBytes} bytes; select fewer rows or columns`},413,headers);
+    checkRead();
     return new Response(text,{status:reply.status,headers:{'content-type':'application/json',...headers}});
    }catch(error){
     if(attempt<RACED_READ_ATTEMPTS&&error instanceof Error&&error.message==='dataset_changed'&&!request.signal.aborted)continue;

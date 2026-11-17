@@ -61,7 +61,7 @@ import {createHash,randomUUID} from 'node:crypto';
 import {isDeepStrictEqual} from 'node:util';
 import {artifactWorkloadOperationJson,ARTIFACT_WORKLOAD_LIMIT,isArtifactWorkloadOperation,isWorkloadBinding,type Actor,type ArtifactWorkloadScope,type ArtifactWorkloadOperation} from '@artifactbin/contracts';
 import {readBody,BodyTooLargeError} from '@artifactbin/utils';
-import {serviceAudiences,getDb,PUBLIC_BASE_URL} from '@/lib/platform';
+import {SQL_READ_WALL_TIMEOUT_MS,serviceAudiences,getDb,PUBLIC_BASE_URL} from '@/lib/platform';
 import {readWorkloadOutputPage,createWorkloadArtifact,getArtifactById,WorkloadCreationRefusal} from '@/lib/artifacts';
 import {readArtifactSnapshot} from '@/lib/annotations';
 import {withReadOnlyAccessFacts} from '@/lib/artifact-access';
@@ -69,7 +69,8 @@ import {parseContentInput} from '@/lib/publish';
 import {htmlPageDeclarations,htmlAssetLinks,htmlPwaSettings,isStaticWorkloadHtml} from '@/lib/html-page';
 const reply=(body:unknown,status=200)=>Response.json(body,{status,headers:{'cache-control':'no-store'}});
 export async function artifactWorkload(request:Request,actor:Actor|null|undefined):Promise<Response>{
- request=new Request(request,{signal:AbortSignal.any([request.signal,AbortSignal.timeout(20000)])});
+ const started=performance.now(),original=request;
+ request=new Request(original,{signal:AbortSignal.any([original.signal,AbortSignal.timeout(20000)])});
  const denied=()=>reply({error:'forbidden'},403);
  if(actor?.credential!=='workload'||!isWorkloadBinding(actor.workload)||request.signal.aborted)return denied();
  const principal=actor.workload,config=serviceAudiences().find(service=>service.id===principal.issuerId)?.artifactWorkloads;
@@ -78,13 +79,20 @@ export async function artifactWorkload(request:Request,actor:Actor|null|undefine
   const body=JSON.parse(await pageEvidenceStep(request.signal,readBody(request,{limit:ARTIFACT_WORKLOAD_LIMIT+8192,as:'text'})));
   if(!body||Object.keys(body).length!==1||!isArtifactWorkloadOperation(body.operation))return reply({error:'bad_request'},400);
   const operation:ArtifactWorkloadOperation=body.operation;
+  if(operation.kind==='page-evidence-schema'||operation.kind==='page-evidence-sql'){
+   const remaining=Math.floor(SQL_READ_WALL_TIMEOUT_MS-(performance.now()-started));
+   if(remaining<1)return denied();
+   // Body admission retains its old ceiling; evidence execution uses the original caller signal.
+   request=new Request(original.url,{headers:original.headers,signal:AbortSignal.any([original.signal,AbortSignal.timeout(remaining)])});
+  }
   const digest=createHash('sha256').update(artifactWorkloadOperationJson(operation)).digest('hex');
   const authorize=async(phase:'admission'|'final'):Promise<ArtifactWorkloadScope|null>=>{
    if(request.signal.aborted)return null;
    const nonce=randomUUID();
-   const response=await pageEvidenceStep(request.signal,fetch(config.authorizationUrl,{method:'POST',redirect:'error',headers:{'content-type':'application/json',authorization:'Bearer '+config.authorizationSecret},body:JSON.stringify({principal,operation,digest,nonce,phase}),signal:AbortSignal.any([request.signal,AbortSignal.timeout(10000)])}));
+   const callbackSignal=AbortSignal.any([request.signal,AbortSignal.timeout(10000)]);
+   const response=await pageEvidenceStep(callbackSignal,fetch(config.authorizationUrl,{method:'POST',redirect:'error',headers:{'content-type':'application/json',authorization:'Bearer '+config.authorizationSecret},body:JSON.stringify({principal,operation,digest,nonce,phase}),signal:callbackSignal}));
    if(!response.ok){void response.body?.cancel().catch(()=>{});return null;}
-   const answer=JSON.parse(await pageEvidenceStep(request.signal,readBody(response,{limit:32768,as:'text'}))),scope=answer?.scope;
+   const answer=JSON.parse(await pageEvidenceStep(callbackSignal,readBody(response,{limit:32768,as:'text'}))),scope=answer?.scope;
    if(request.signal.aborted||answer.digest!==digest||answer.nonce!==nonce||!scope||scope.allowed!==true||!isWorkloadBinding(scope.principal)||!isDeepStrictEqual(scope.principal,principal)||!['viewer','editor'].includes(scope.role)||scope.visibility!=='private'||!Array.isArray(scope.readArtifactIds)||scope.readArtifactIds.length>128||scope.readArtifactIds.some((id:unknown)=>typeof id!=='string'||id.length>128)||(scope.rootFolderId!==null&&(typeof scope.rootFolderId!=='string'||!scope.rootFolderId||scope.rootFolderId.length>128)))return null;
    if(operation.kind==='artifact-outputs'&&(scope.outputLookup!==true||scope.role!=='viewer'||scope.readArtifactIds.length!==0||scope.rootFolderId!==null||Object.keys(scope).some(key=>!['allowed','principal','role','readArtifactIds','rootFolderId','visibility','outputLookup'].includes(key))))return null;
    if(operation.kind==='artifact-read'&&!scope.readArtifactIds.includes(operation.artifactId))return null;
