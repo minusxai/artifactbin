@@ -1,0 +1,1069 @@
+{
+ "slug": "graphite",
+ "cover_svg": "<svg viewBox=\"0 0 480 288\" preserveAspectRatio=\"xMaxYMax meet\"><title>Graphite cover: an analytics window with a grey rail, shelves of column pills, and a chart of soft flat bars on a dashed grid</title>\n<rect className=\"gr-ground\" x=\"0\" y=\"0\" width=\"480\" height=\"288\"/>\n<rect className=\"gr-frame\" x=\"16\" y=\"20\" width=\"448\" height=\"268\" rx=\"10\"/>\n<rect className=\"gr-railbg\" x=\"16.5\" y=\"20.5\" width=\"96\" height=\"267\" rx=\"9.5\"/><rect className=\"gr-railbg\" x=\"100\" y=\"20.5\" width=\"12.5\" height=\"267\"/>\n<line className=\"gr-hair\" x1=\"112.5\" y1=\"20\" x2=\"112.5\" y2=\"288\"/>\n<rect className=\"gr-ink-sq\" x=\"28\" y=\"34\" width=\"16\" height=\"16\" rx=\"4\"/><rect className=\"gr-line-on\" x=\"50\" y=\"39\" width=\"34\" height=\"6\" rx=\"3\"/>\n<rect className=\"gr-field\" x=\"26\" y=\"62\" width=\"76\" height=\"18\" rx=\"5\"/><rect className=\"gr-line-h\" x=\"33\" y=\"68\" width=\"34\" height=\"6\" rx=\"3\"/>\n<rect className=\"gr-line-f\" x=\"30\" y=\"94\" width=\"28\" height=\"4\" rx=\"2\"/>\n<rect className=\"gr-line-h\" x=\"34\" y=\"108\" width=\"40\" height=\"6\" rx=\"3\"/><rect className=\"gr-line-h\" x=\"34\" y=\"126\" width=\"48\" height=\"6\" rx=\"3\"/>\n<rect className=\"gr-active\" x=\"26\" y=\"138\" width=\"78\" height=\"20\" rx=\"5\"/><rect className=\"gr-line-on\" x=\"34\" y=\"145\" width=\"42\" height=\"6\" rx=\"3\"/>\n<rect className=\"gr-line-h\" x=\"34\" y=\"168\" width=\"30\" height=\"6\" rx=\"3\"/>\n<rect className=\"gr-line-f\" x=\"30\" y=\"190\" width=\"22\" height=\"4\" rx=\"2\"/><rect className=\"gr-line-h\" x=\"34\" y=\"204\" width=\"46\" height=\"6\" rx=\"3\"/><rect className=\"gr-line-h\" x=\"34\" y=\"222\" width=\"38\" height=\"6\" rx=\"3\"/>\n<rect className=\"gr-line-on\" x=\"128\" y=\"36\" width=\"54\" height=\"8\" rx=\"4\"/><rect className=\"gr-btn-ink\" x=\"402\" y=\"31\" width=\"48\" height=\"18\" rx=\"5\"/><rect className=\"gr-line-inv\" x=\"414\" y=\"38\" width=\"24\" height=\"4\" rx=\"2\"/>\n<rect className=\"gr-card\" x=\"128\" y=\"58\" width=\"322\" height=\"58\" rx=\"7\"/><line className=\"gr-hair\" x1=\"128\" y1=\"87\" x2=\"450\" y2=\"87\"/><line className=\"gr-hair\" x1=\"236\" y1=\"58\" x2=\"236\" y2=\"87\"/>\n<rect className=\"gr-line-f\" x=\"136\" y=\"70\" width=\"8\" height=\"5\" rx=\"2.5\"/><rect className=\"gr-pill-r\" x=\"150\" y=\"64\" width=\"78\" height=\"16\" rx=\"4\"/><circle className=\"gr-k-date\" cx=\"158\" cy=\"72\" r=\"3\"/><rect className=\"gr-line-on\" x=\"165\" y=\"69.5\" width=\"28\" height=\"5\" rx=\"2.5\"/><rect className=\"gr-mini-r\" x=\"198\" y=\"67\" width=\"24\" height=\"10\" rx=\"3\"/>\n<rect className=\"gr-line-f\" x=\"244\" y=\"70\" width=\"8\" height=\"5\" rx=\"2.5\"/><rect className=\"gr-pill-r\" x=\"258\" y=\"64\" width=\"80\" height=\"16\" rx=\"4\"/><rect className=\"gr-k-num\" x=\"263\" y=\"69\" width=\"6\" height=\"6\" rx=\"1.5\"/><rect className=\"gr-line-on\" x=\"273\" y=\"69.5\" width=\"32\" height=\"5\" rx=\"2.5\"/><rect className=\"gr-mini-r\" x=\"310\" y=\"67\" width=\"24\" height=\"10\" rx=\"3\"/><rect className=\"gr-add-r\" x=\"344\" y=\"64\" width=\"62\" height=\"16\" rx=\"4\"/>\n<rect className=\"gr-line-f\" x=\"136\" y=\"99\" width=\"22\" height=\"5\" rx=\"2.5\"/><rect className=\"gr-pill-r\" x=\"164\" y=\"93\" width=\"58\" height=\"16\" rx=\"4\"/><rect className=\"gr-k-text\" x=\"169\" y=\"98\" width=\"6\" height=\"6\" rx=\"1.5\"/><rect className=\"gr-line-on\" x=\"179\" y=\"98.5\" width=\"30\" height=\"5\" rx=\"2.5\"/><rect className=\"gr-add-r\" x=\"236\" y=\"93\" width=\"70\" height=\"16\" rx=\"4\"/>\n<rect className=\"gr-card\" x=\"128\" y=\"128\" width=\"322\" height=\"148\" rx=\"7\"/>\n<line className=\"gr-grid\" x1=\"150\" y1=\"150\" x2=\"438\" y2=\"150\"/><line className=\"gr-grid\" x1=\"150\" y1=\"180\" x2=\"438\" y2=\"180\"/><line className=\"gr-grid\" x1=\"150\" y1=\"210\" x2=\"438\" y2=\"210\"/><line className=\"gr-grid\" x1=\"150\" y1=\"240\" x2=\"438\" y2=\"240\"/>\n<line className=\"gr-grid\" x1=\"192\" y1=\"144\" x2=\"192\" y2=\"256\"/><line className=\"gr-grid\" x1=\"252\" y1=\"144\" x2=\"252\" y2=\"256\"/><line className=\"gr-grid\" x1=\"312\" y1=\"144\" x2=\"312\" y2=\"256\"/><line className=\"gr-grid\" x1=\"372\" y1=\"144\" x2=\"372\" y2=\"256\"/>\n<line className=\"gr-zero\" x1=\"150\" y1=\"256\" x2=\"438\" y2=\"256\"/>\n<rect className=\"gr-s1\" x=\"160\" y=\"226\" width=\"20\" height=\"30\"/><rect className=\"gr-s2\" x=\"160\" y=\"204\" width=\"20\" height=\"22\"/><rect className=\"gr-s3\" x=\"160\" y=\"190\" width=\"20\" height=\"14\"/>\n<rect className=\"gr-s1\" x=\"200\" y=\"220\" width=\"20\" height=\"36\"/><rect className=\"gr-s2\" x=\"200\" y=\"194\" width=\"20\" height=\"26\"/><rect className=\"gr-s3\" x=\"200\" y=\"178\" width=\"20\" height=\"16\"/>\n<rect className=\"gr-s1\" x=\"240\" y=\"216\" width=\"20\" height=\"40\"/><rect className=\"gr-s2\" x=\"240\" y=\"190\" width=\"20\" height=\"26\"/><rect className=\"gr-s3\" x=\"240\" y=\"170\" width=\"20\" height=\"20\"/>\n<rect className=\"gr-s1\" x=\"280\" y=\"222\" width=\"20\" height=\"34\"/><rect className=\"gr-s2\" x=\"280\" y=\"186\" width=\"20\" height=\"36\"/><rect className=\"gr-s3\" x=\"280\" y=\"166\" width=\"20\" height=\"20\"/>\n<rect className=\"gr-s1\" x=\"320\" y=\"212\" width=\"20\" height=\"44\"/><rect className=\"gr-s2\" x=\"320\" y=\"180\" width=\"20\" height=\"32\"/><rect className=\"gr-s3\" x=\"320\" y=\"160\" width=\"20\" height=\"20\"/>\n<rect className=\"gr-s1\" x=\"360\" y=\"206\" width=\"20\" height=\"50\"/><rect className=\"gr-s2\" x=\"360\" y=\"172\" width=\"20\" height=\"34\"/><rect className=\"gr-s3\" x=\"360\" y=\"152\" width=\"20\" height=\"20\"/>\n<rect className=\"gr-s1\" x=\"400\" y=\"200\" width=\"20\" height=\"56\"/><rect className=\"gr-s2\" x=\"400\" y=\"168\" width=\"20\" height=\"32\"/><rect className=\"gr-s3\" x=\"400\" y=\"148\" width=\"20\" height=\"20\"/>\n<circle className=\"gr-k-date\" cx=\"160\" cy=\"268\" r=\"3\"/><rect className=\"gr-line-h\" x=\"166\" y=\"265.5\" width=\"20\" height=\"5\" rx=\"2.5\"/><circle className=\"gr-k-num-c\" cx=\"196\" cy=\"268\" r=\"3\"/><rect className=\"gr-line-h\" x=\"202\" y=\"265.5\" width=\"20\" height=\"5\" rx=\"2.5\"/><circle className=\"gr-k-red\" cx=\"232\" cy=\"268\" r=\"3\"/><rect className=\"gr-line-h\" x=\"238\" y=\"265.5\" width=\"20\" height=\"5\" rx=\"2.5\"/>\n</svg>",
+ "name": "Graphite",
+ "tagline": "Ink on white. Colour only where the data is.",
+ "mood": "Quiet, Analytical",
+ "jobs": "Analytics apps, internal apps and tools",
+ "color_mode": "light",
+ "fonts": [
+  [
+   "Instrument Sans",
+   "ital,wght@0,400;0,500;0,600;1,400"
+  ],
+  [
+   "JetBrains Mono",
+   "wght@400;500;600;700"
+  ]
+ ],
+ "families": {
+  "display": "\"Instrument Sans\", system-ui, -apple-system, \"Segoe UI\", sans-serif",
+  "sans": "\"Instrument Sans\", system-ui, -apple-system, \"Segoe UI\", sans-serif",
+  "mono": "\"JetBrains Mono\", ui-monospace, SFMono-Regular, Menlo, monospace"
+ },
+ "tokens": [
+  {
+   "name": "canvas",
+   "light": "#FFFFFF",
+   "dark": "#161616",
+   "usage": "Page ground: plain white by day, near-black by night. Content sits directly on it.",
+   "group": "Grounds"
+  },
+  {
+   "name": "surface",
+   "light": "#FFFFFF",
+   "dark": "#1D1D1D",
+   "usage": "Cards, fields, menus, dialogs. The same white as the page by day, so a card is drawn by its hairline alone.",
+   "group": "Grounds"
+  },
+  {
+   "name": "sunk",
+   "light": "#F8F8F7",
+   "dark": "#1B1B1B",
+   "usage": "The side rail, table headers, code wells, a tip at the foot of a page: the one ground a step off white.",
+   "group": "Grounds"
+  },
+  {
+   "name": "tint",
+   "light": "#F2F2F2",
+   "dark": "#262626",
+   "usage": "Hover, the selected nav item, secondary buttons and the small selects inside a pill.",
+   "group": "Grounds"
+  },
+  {
+   "name": "hairline",
+   "light": "#E7E7E5",
+   "dark": "#2C2C2C",
+   "usage": "Every border and divider, and chart gridlines (dashed). One weight, everywhere.",
+   "group": "Grounds"
+  },
+  {
+   "name": "hairline-strong",
+   "light": "#D9D9D6",
+   "dark": "#3A3A3A",
+   "usage": "Field borders, the zero line of a chart, borders on hover.",
+   "group": "Grounds"
+  },
+  {
+   "name": "ink",
+   "light": "#171717",
+   "dark": "#EDEDEC",
+   "usage": "Text, icons and the primary fill: the filled button is ink, not a colour.",
+   "group": "Ink"
+  },
+  {
+   "name": "ink-soft",
+   "light": "#6B6B6B",
+   "dark": "#A1A1A0",
+   "usage": "Secondary text: labels, timestamps, helper text, axis labels, group headings in the rail.",
+   "group": "Ink"
+  },
+  {
+   "name": "ink-faint",
+   "light": "#767674",
+   "dark": "#8A8A88",
+   "usage": "Tertiary text and the drawing line: placeholders, disabled labels, hints.",
+   "group": "Ink"
+  },
+  {
+   "name": "on-ink",
+   "light": "#FFFFFF",
+   "dark": "#161616",
+   "usage": "Text and icons on an ink fill.",
+   "group": "Ink"
+  },
+  {
+   "name": "mark",
+   "light": "#0F7A64",
+   "dark": "#1ABC9C",
+   "usage": "A mark, never a fill: the focus ring, the running dot, a selected chart-type icon, one glyph of a logo. Never a button, surface or body text.",
+   "group": "Mark"
+  },
+  {
+   "name": "positive",
+   "light": "#1A7F45",
+   "dark": "#2ECC71",
+   "usage": "Success text and dots, the up-delta. Always beside a word.",
+   "group": "Status"
+  },
+  {
+   "name": "positive-soft",
+   "light": "#E9F4EE",
+   "dark": "#14271C",
+   "usage": "Ground for success tags.",
+   "group": "Status"
+  },
+  {
+   "name": "caution",
+   "light": "#8A5A00",
+   "dark": "#F2C66D",
+   "usage": "Warnings and pending states.",
+   "group": "Status"
+  },
+  {
+   "name": "caution-soft",
+   "light": "#FFF6DF",
+   "dark": "#2D2513",
+   "usage": "Ground for warning tags and notes.",
+   "group": "Status"
+  },
+  {
+   "name": "negative",
+   "light": "#C0392B",
+   "dark": "#E5604F",
+   "usage": "Errors, destructive actions, the down-delta.",
+   "group": "Status"
+  },
+  {
+   "name": "negative-soft",
+   "light": "#FBEBE9",
+   "dark": "#301B18",
+   "usage": "Ground for error tags and callouts.",
+   "group": "Status"
+  },
+  {
+   "name": "turquoise",
+   "light": "#1ABC9C",
+   "dark": "#1ABC9C",
+   "usage": "First chart series; the date-column mark. Data only.",
+   "group": "Chart"
+  },
+  {
+   "name": "river",
+   "light": "#3498DB",
+   "dark": "#3498DB",
+   "usage": "Second chart series; the number-column mark. Data only.",
+   "group": "Chart"
+  },
+  {
+   "name": "alizarin",
+   "light": "#E74C3C",
+   "dark": "#E74C3C",
+   "usage": "Third chart series. Data only; status red is negative.",
+   "group": "Chart"
+  },
+  {
+   "name": "amethyst",
+   "light": "#9B59B6",
+   "dark": "#9B59B6",
+   "usage": "Fourth chart series. Data only.",
+   "group": "Chart"
+  },
+  {
+   "name": "carrot",
+   "light": "#E67E22",
+   "dark": "#E67E22",
+   "usage": "Fifth chart series; the mark of a string column. Data only.",
+   "group": "Chart"
+  },
+  {
+   "name": "asphalt",
+   "light": "#34495E",
+   "dark": "#95A5A6",
+   "usage": "Sixth chart series, for \"other\": wet asphalt by day, concrete by night.",
+   "group": "Chart"
+  },
+  {
+   "name": "sunflower",
+   "light": "#F1C40F",
+   "dark": "#F1C40F",
+   "usage": "Seventh chart series. Data only; never text on white.",
+   "group": "Chart"
+  },
+  {
+   "name": "emerald",
+   "light": "#2ECC71",
+   "dark": "#2ECC71",
+   "usage": "Eighth chart series, kept last: beside turquoise the two blur.",
+   "group": "Chart"
+  }
+ ],
+ "contract": {
+  "background": "canvas",
+  "foreground": "ink",
+  "card": "surface",
+  "card-foreground": "ink",
+  "popover": "surface",
+  "popover-foreground": "ink",
+  "primary": "ink",
+  "primary-foreground": "on-ink",
+  "secondary": "tint",
+  "secondary-foreground": "ink",
+  "muted": "sunk",
+  "muted-foreground": "ink-soft",
+  "accent": "tint",
+  "accent-foreground": "ink",
+  "destructive": "negative",
+  "destructive-foreground": "on-ink",
+  "border": "hairline",
+  "input": "hairline-strong",
+  "ring": "mark",
+  "chart-1": "turquoise",
+  "chart-2": "river",
+  "chart-3": "alizarin",
+  "chart-4": "amethyst",
+  "chart-5": "carrot"
+ },
+ "radius_contract": "8px",
+ "extra_vars": {
+  "shadow-tile": {
+   "light": "none",
+   "dark": "none"
+  },
+  "shadow-float": {
+   "light": "0 1px 2px rgba(0,0,0,.06), 0 12px 32px -12px rgba(0,0,0,.18)",
+   "dark": "0 1px 2px rgba(0,0,0,.5), 0 16px 40px -16px rgba(0,0,0,.7)"
+  },
+  "shadow-key": {
+   "light": "inset 0 -1px 0 #E7E7E5",
+   "dark": "inset 0 -1px 0 #2C2C2C"
+  },
+  "shadow-pressed": {
+   "light": "0 1px 2px rgba(0,0,0,.06)",
+   "dark": "0 1px 2px rgba(0,0,0,.4)"
+  },
+  "focus-ring": {
+   "light": "0 0 0 2px #FFFFFF, 0 0 0 4px #0F7A64",
+   "dark": "0 0 0 2px #161616, 0 0 0 4px #1ABC9C"
+  },
+  "grid-dash": "2 4",
+  "fill-bar": ".82",
+  "fill-area": ".38",
+  "chip-radius": "8px"
+ },
+ "type_roles": [
+  {
+   "name": "display-xl",
+   "family": "display",
+   "size": "clamp(40px, 6vw, 72px)",
+   "lh": "1.02",
+   "weight": 600,
+   "ls": "-0.035em",
+   "sample": "Ask anything about your data.",
+   "usage": "One per page, for a landing hero. Semibold with tight tracking; Graphite never goes bold."
+  },
+  {
+   "name": "display-l",
+   "family": "display",
+   "size": "clamp(28px, 3.6vw, 40px)",
+   "lh": "1.1",
+   "weight": 600,
+   "ls": "-0.03em",
+   "sample": "Revenue held through the quarter",
+   "usage": "Section openers and slide titles."
+  },
+  {
+   "name": "display-m",
+   "family": "display",
+   "size": "34px",
+   "lh": "39px",
+   "weight": 600,
+   "ls": "-0.025em",
+   "sample": "Good morning, Alice",
+   "usage": "The one greeting or page heading that opens a screen."
+  },
+  {
+   "name": "title",
+   "family": "display",
+   "size": "16px",
+   "lh": "22px",
+   "weight": 600,
+   "ls": "-0.01em",
+   "sample": "Your conversations",
+   "usage": "Card titles, dialog titles, list heads. The page name in a top bar."
+  },
+  {
+   "name": "body-l",
+   "family": "sans",
+   "size": "16px",
+   "lh": "26px",
+   "weight": 400,
+   "sample": "Charts read best when the chrome around them says nothing at all.",
+   "usage": "Lead paragraphs and the question box."
+  },
+  {
+   "name": "body",
+   "family": "sans",
+   "size": "14px",
+   "lh": "21px",
+   "weight": 400,
+   "sample": "Each query runs as you, under the active group, so you only see what you may.",
+   "usage": "Default UI and reading text: 14px at 1.5."
+  },
+  {
+   "name": "body-s",
+   "family": "sans",
+   "size": "13px",
+   "lh": "18px",
+   "weight": 400,
+   "sample": "Updated 4 minutes ago",
+   "usage": "Captions, helper text, dense cells, timestamps."
+  },
+  {
+   "name": "label",
+   "family": "sans",
+   "size": "13px",
+   "lh": "18px",
+   "weight": 500,
+   "sample": "Connection",
+   "usage": "Field labels, shelf labels, column heads. Medium weight, sentence case, no tracking."
+  },
+  {
+   "name": "eyebrow",
+   "family": "sans",
+   "size": "12px",
+   "lh": "16px",
+   "weight": 500,
+   "sample": "Analytics",
+   "usage": "Group headings in a rail or above a list: the soft ink at 12px, sentence case. Graphite has no caps and no letter-spacing."
+  },
+  {
+   "name": "numeral",
+   "family": "display",
+   "size": "32px",
+   "lh": "36px",
+   "weight": 600,
+   "ls": "-0.03em",
+   "sample": "48,210",
+   "usage": "KPI figures, tabular, in the sans.",
+   "extra": "font-variant-numeric: tabular-nums"
+  },
+  {
+   "name": "mono",
+   "family": "mono",
+   "size": "13px",
+   "lh": "20px",
+   "weight": 400,
+   "sample": "select region, sum(amount) from invoices",
+   "usage": "SQL, code, IDs, paths. Nowhere else."
+  }
+ ],
+ "idea_headline": "Grey and ink, so the data is the colour.",
+ "idea": "Graphite is the look of an analytics tool that keeps its own voice down: a white page, a light grey rail, hairline borders and near-black ink. The filled button is ink, not a brand colour; selection is a grey pill. Colour appears in exactly two places, the data (flat, vivid series on a dashed grid) and small marks (a kind icon, a status dot, the focus ring), so the first coloured thing anyone sees is an answer.",
+ "use_for": "Analytics and BI apps, data exploration and query tools, internal admin tools, run and job monitors, settings and access screens, and any product where charts and tables are the content.",
+ "avoid_when": "Editorial or narrative subjects, consumer brands with a colour to show, warm or textured subjects, or a marketing page that needs a loud brand moment.",
+ "principles_headline": "Monochrome until the data.",
+ "principles": [
+  [
+   "Ink acts, colour reports.",
+   "Actions, selection and navigation are grey and ink. Colour is reserved for series, column kinds and status, so it always means data or state, never \"click here\"."
+  ],
+  [
+   "Flat, with hairlines.",
+   "No shadows on anything that sits on the page: a card is a hairline on white. Only menus, dialogs and popovers float, with one soft shadow."
+  ],
+  [
+   "One white, one grey.",
+   "The page and its cards are the same white; the rail and table headers are one step of grey. Two grounds are enough."
+  ],
+  [
+   "Charts are calm.",
+   "Dashed hairline grids both ways, a solid zero, no axis lines, compact labels, softened fills and a legend underneath. The data sits forward; the scaffolding recedes."
+  ],
+  [
+   "Sentence case, 14 at 1.5.",
+   "Instrument Sans at 14px with 1.5 leading for everything readable; semibold with tight tracking for headings. No caps, no letter-spacing, no bold."
+  ]
+ ],
+ "voice": [
+  "Plain and literal: \"Run a query to see rows.\" \"No rows match. Loosen a filter.\"",
+  "Sentence case everywhere, including buttons, shelf labels and column heads.",
+  "Say what happened and what to do next; an error names the reason, never apologises.",
+  "Name things by what people see: \"Open in SQL\", not \"View compiled statement\"."
+ ],
+ "colour_headline": "White, one grey, ink, and the data.",
+ "colour_note": "Day is a white page with a light grey rail; Night is near-black with cards one step lighter. The hairline is the only structural colour. Ink is the action colour. The mark (a deep teal) is a mark only: the focus ring, the running dot, a selected icon. Status colours always come with a word. The chart series are a flat palette used for data alone.",
+ "chart_series": [
+  "turquoise",
+  "river",
+  "alizarin",
+  "amethyst",
+  "carrot",
+  "asphalt",
+  "sunflower",
+  "emerald"
+ ],
+ "chart_note": "Flat, equally vivid hues, ordered so neighbours differ most: turquoise, river blue, alizarin, amethyst, carrot, then asphalt for \"other\". Emerald is last because it blurs into turquoise. Gridlines are the dashed hairline; zero is solid; fills are softened (bars 82%, areas 38%).",
+ "type_headline": "Instrument Sans at 14, semibold above 16.",
+ "type_note": "One family for headings and UI: 400 for reading, 500 for labels and buttons, 600 for headings and titles with tracking that tightens as size grows. JetBrains Mono is for SQL, code and IDs only. Numbers in tables and stats are tabular.",
+ "space_headline": "A 4px step, an 8px corner, a 1px line.",
+ "space": [
+  [
+   "space-1 · 4px",
+   "Icon to label; inside a pill."
+  ],
+  [
+   "space-2 · 8px",
+   "Between pills; inside controls; between stacked fields."
+  ],
+  [
+   "space-3 · 12px",
+   "Card gaps in dense views; table cell padding-x."
+  ],
+  [
+   "space-4 · 16px",
+   "Card padding; gap between cards and boards."
+  ],
+  [
+   "space-6 · 24px",
+   "Page padding inside the main column."
+  ],
+  [
+   "space-8 · 32px",
+   "Between page sections."
+  ],
+  [
+   "space-12 · 48px",
+   "Above a page-closing tip or footer."
+  ],
+  [
+   "space-18 · 72px+",
+   "The top of a greeting page: the question sits low, in its own air."
+  ]
+ ],
+ "edges": [
+  [
+   "radius-sm · 6px",
+   "Small selects inside a pill, keyboard keys, nav items in a dense rail."
+  ],
+  [
+   "radius · 8px",
+   "Buttons, fields, pills, menus. The default."
+  ],
+  [
+   "radius-lg · 12px",
+   "Cards, boards, dialogs, the question box."
+  ],
+  [
+   "hairline · 1px",
+   "Every border, every divider, dashed for chart grids and empty adders."
+  ]
+ ],
+ "depth": [
+  [
+   "flat",
+   "Everything on the page is flat: a hairline on white, no shadow, no highlight."
+  ],
+  [
+   "float",
+   "Menus, dialogs, popovers and toasts: a 1px contact shadow and one soft 32px drop. The only shadow."
+  ],
+  [
+   "pressed",
+   "The selected item in a segmented control or mode rail is a white tile with the faintest contact shadow on the grey track."
+  ],
+  [
+   "focus-ring",
+   "A 2px gap then 2px of the mark colour, on every control."
+  ]
+ ],
+ "motion": [
+  [
+   "Hover",
+   "Surfaces tint one grey step in 120ms. Nothing moves."
+  ],
+  [
+   "Press",
+   "No scale, no bounce; the hover tint holds."
+  ],
+  [
+   "Reveal",
+   "None by default. A chart redraws in place; a running query dims the old result to 55% until the new one lands."
+  ],
+  [
+   "Float",
+   "Menus and dialogs fade in 120ms."
+  ],
+  [
+   "Loop",
+   "One: the running dot pulses in the mark colour every 1.2s."
+  ],
+  [
+   "Charts",
+   "No entry animation: the answer appears. Reduced motion changes nothing."
+  ]
+ ],
+ "components_headline": "The kit, in grey and ink.",
+ "components_note": "Graphite maps the kit's primary to ink and its secondary and accent to the grey tint, so kit components arrive monochrome: ink buttons, grey selection, hairline fields. Charts take the flat series in order.",
+ "buttons": "<Button>Save result</Button><Button variant=\"secondary\">Duplicate</Button><Button variant=\"outline\">Set up your agent</Button><Button variant=\"ghost\">Cancel</Button><button className=\"gr-btn gr-btn-primary\">Ask <kbd className=\"gr-kbd gr-kbd-on\">↵</kbd></button><button className=\"gr-btn\">Save result</button><button className=\"gr-btn gr-btn-ghost\">Open in SQL</button><button className=\"gr-btn gr-btn-danger\">Remove filter</button>",
+ "buttons_note": "Kit buttons left; authored gr-btn right. The primary is an ink fill with white text, inverted at night, and fades slightly on hover; the secondary is white with the strong hairline; the ghost is bare text that takes the tint on hover. Danger is red text until hovered.",
+ "tags": "<Badge>Admin</Badge><Badge variant=\"secondary\">Model</Badge><Badge variant=\"outline\">Draft</Badge><Badge variant=\"destructive\">Refused</Badge><span className=\"gr-tag gr-tag-ok\"><i></i>Succeeded</span><span className=\"gr-tag gr-tag-warn\"><i></i>Queued</span><span className=\"gr-tag gr-tag-bad\"><i></i>Failed</span><span className=\"gr-tag\"><i></i>Draft</span><span className=\"gr-tag gr-tag-live\"><i></i>Running</span>",
+ "tags_note": "A tag is a dot and a word on a soft ground, sentence case. Running is ink text with a pulsing mark-colour dot; every other state holds still.",
+ "fields_note": "Fields are white with the strong hairline, the label above in the label role (13px medium, sentence case). Focus adds the mark-colour ring; the border stays.",
+ "stats": "<div className=\"gr-stat-card ds-stats-card\"><div className=\"gr-stat\"><span className=\"t-label\">Revenue</span><span className=\"t-numeral\"><Cell data=\"$totals\" col=\"revenue\" prefix=\"$\" format=\",.0f\" /></span><span className=\"gr-delta gr-up\">↑ 12.4% vs last month</span></div><div className=\"gr-stat\"><span className=\"t-label\">Orders</span><span className=\"t-numeral\"><Cell data=\"$totals\" col=\"orders\" format=\",.0f\" /></span><span className=\"gr-delta\">+84 this month</span></div></div>",
+ "stats_note": "A stat is a label, a sans numeral and a delta, sharing one card split by hairlines. Only the delta takes colour, and only with an arrow and a word.",
+ "callouts": "<Alert><AlertTitle>Query refused</AlertTitle><AlertDescription>Your group may not read finance.ledger. An administrator grants access in Data policy.</AlertDescription></Alert><div className=\"gr-callout\"><strong>Runs as you.</strong> Every query uses your group's policy; nothing is unrestricted by default.</div><div className=\"gr-callout gr-callout-ok\"><strong>Saved.</strong> The result is in Artifacts as Revenue by region.</div><div className=\"gr-callout gr-callout-bad\"><strong>No rows match.</strong> Loosen a filter to see data.</div>",
+ "callouts_note": "A callout is a quiet grey box with a bold lead-in; success and error swap the ground for their soft colour. No left rules, no icons needed.",
+ "chart_comp_note": "Charts take turquoise first and river second. Dashed hairline grids both ways, zero solid, no axis lines or ticks, compact value labels, the value title rotated beside its axis, the legend underneath with no title.",
+ "table_note": "Tables are dense and flat: 8px rows on hairlines, a sunk header in 12px semibold, numbers right-aligned and tabular over a soft turquoise bar scaled to the column. Row hover takes the sunk grey.",
+ "card": "<div className=\"gr-card-x\"><div className=\"gr-card-head\"><span className=\"t-title\">Revenue by region</span><span className=\"gr-tag gr-tag-ok\"><i></i>Fresh</span></div><div className=\"gr-qrow\"><span>north</span><span className=\"gr-qbar\"><span style={{ width: '100%' }}></span><b>$18,400</b></span></div><div className=\"gr-qrow\"><span>east</span><span className=\"gr-qbar\"><span style={{ width: '78%' }}></span><b>$14,350</b></span></div><div className=\"gr-qrow\"><span>south</span><span className=\"gr-qbar\"><span style={{ width: '61%' }}></span><b>$11,220</b></span></div><div className=\"gr-qrow\"><span>west</span><span className=\"gr-qbar\"><span style={{ width: '23%' }}></span><b>$4,240</b></span></div><div className=\"gr-card-foot\"><button className=\"gr-btn\">Open in SQL</button><span className=\"gr-faint\">4 rows · up to 1,000</span></div></div>",
+ "card_note": "A result card: a title and a state tag, then rows whose numbers sit over the quiet bar, and a footer with one outline action and the row count. Hairline, 12px corner, no shadow.",
+ "hand": {
+  "mode": "outline",
+  "shadow": false,
+  "headline": "Grey lines, flat colour, nothing raised.",
+  "note": "Graphite draws like its charts: 1.5px lines in the soft ink with round caps on a white ground, shapes filled flat in the first series at 82%, the second series as a 38% wash under a solid edge. No shadows, no texture; a drawing should look like a chart someone made carefully.",
+  "rules": [
+   [
+    "Stroke",
+    "1.5px in ink-soft, round caps and joins."
+   ],
+   [
+    "Fill",
+    "Flat: turquoise at 82% for the subject, river blue at 38% for the comparison. Everything else is white."
+   ],
+   [
+    "Shadow",
+    "None."
+   ],
+   [
+    "Texture",
+    "None; grids are dashed hairlines."
+   ],
+   [
+    "Figures",
+    "The sans at 11 to 13px in ink-soft; the one number in the semibold numeral."
+   ],
+   [
+    "Motion",
+    "None: the drawing is simply there."
+   ]
+  ]
+ },
+ "motifs_headline": "Ink buttons, pills, and a dashed grid.",
+ "motifs_note": "Graphite's devices come from analytics work: the ink button, the shelf pill, the dashed grid, the kind mark, the quiet bar behind a number, and the status dot with a mode rail. Each keeps colour for data.",
+ "motifs": [
+  {
+   "title": "The ink button",
+   "usage": "The filled button is ink on white (17:1), inverted at night; there is no brand-coloured button. Secondary is white with a hairline, ghost is text that tints on hover. One ink fill per view: the action the screen exists for.",
+   "svg": "<svg viewBox=\"0 0 480 200\"><title>Ink, outline and ghost buttons</title><rect className=\"gr-btn-ink\" x=\"48\" y=\"76\" width=\"112\" height=\"40\" rx=\"8\"/><text x=\"104\" y=\"101\" className=\"gr-svg-inv\" textAnchor=\"middle\">Save result</text><rect className=\"gr-card\" x=\"184\" y=\"76\" width=\"132\" height=\"40\" rx=\"8\"/><text x=\"250\" y=\"101\" className=\"gr-svg-on\" textAnchor=\"middle\">Set up your agent</text><text x=\"388\" y=\"101\" className=\"gr-svg-label\" textAnchor=\"middle\">Open in SQL</text><line className=\"gr-hair-dash\" x1=\"340\" y1=\"132\" x2=\"436\" y2=\"132\"/><text x=\"388\" y=\"152\" className=\"gr-svg-cap\" textAnchor=\"middle\">ghost: tint on hover</text></svg>"
+  },
+  {
+   "title": "The shelf pill",
+   "usage": "A column placed on a shelf: a 32px hairline pill with the column's kind mark, its name, a small tinted select for its grain or aggregation, and a quiet ×. An empty shelf shows a dashed adder in the same size, so filling a shelf never moves the layout.",
+   "svg": "<svg viewBox=\"0 0 480 200\"><title>Shelf pills and an adder</title><text x=\"40\" y=\"86\" className=\"gr-svg-label\">X</text><rect className=\"gr-pill-r\" x=\"76\" y=\"66\" width=\"168\" height=\"32\" rx=\"8\"/><circle className=\"gr-k-date\" cx=\"94\" cy=\"82\" r=\"5\"/><text x=\"108\" y=\"87\" className=\"gr-svg-on\">month</text><rect className=\"gr-mini-r\" x=\"158\" y=\"72\" width=\"58\" height=\"20\" rx=\"5\"/><text x=\"168\" y=\"86\" className=\"gr-svg-cap\">Month ⌄</text><text x=\"230\" y=\"87\" className=\"gr-svg-cap\">×</text><rect className=\"gr-pill-r\" x=\"256\" y=\"66\" width=\"164\" height=\"32\" rx=\"8\"/><rect className=\"gr-k-num\" x=\"268\" y=\"77\" width=\"10\" height=\"10\" rx=\"2\"/><text x=\"288\" y=\"87\" className=\"gr-svg-on\">revenue</text><rect className=\"gr-mini-r\" x=\"346\" y=\"72\" width=\"46\" height=\"20\" rx=\"5\"/><text x=\"355\" y=\"86\" className=\"gr-svg-cap\">Sum ⌄</text><text x=\"404\" y=\"87\" className=\"gr-svg-cap\">×</text><text x=\"40\" y=\"136\" className=\"gr-svg-label\">Facet</text><rect className=\"gr-add-r\" x=\"76\" y=\"116\" width=\"196\" height=\"32\" rx=\"8\"/><text x=\"92\" y=\"137\" className=\"gr-svg-label\">One chart per value of… ⌄</text></svg>"
+  },
+  {
+   "title": "The dashed grid",
+   "usage": "Gridlines run both ways in the hairline, dashed 2 on 4; zero is the one solid line. No axis lines, no ticks, compact value labels (20K, 1.2M), the value title rotated beside its axis and the legend underneath. Bars fill at 82% and stacks part on a hairline of the card colour; areas fill at 38% under a solid edge.",
+   "svg": "<svg viewBox=\"0 0 480 200\"><title>A chart on the dashed grid</title><line className=\"gr-grid\" x1=\"70\" y1=\"40\" x2=\"440\" y2=\"40\"/><line className=\"gr-grid\" x1=\"70\" y1=\"80\" x2=\"440\" y2=\"80\"/><line className=\"gr-grid\" x1=\"70\" y1=\"120\" x2=\"440\" y2=\"120\"/><line className=\"gr-grid\" x1=\"140\" y1=\"30\" x2=\"140\" y2=\"160\"/><line className=\"gr-grid\" x1=\"230\" y1=\"30\" x2=\"230\" y2=\"160\"/><line className=\"gr-grid\" x1=\"320\" y1=\"30\" x2=\"320\" y2=\"160\"/><line className=\"gr-grid\" x1=\"410\" y1=\"30\" x2=\"410\" y2=\"160\"/><line className=\"gr-zero\" x1=\"70\" y1=\"160\" x2=\"440\" y2=\"160\"/><text x=\"60\" y=\"44\" className=\"gr-svg-cap\" textAnchor=\"end\">30K</text><text x=\"60\" y=\"84\" className=\"gr-svg-cap\" textAnchor=\"end\">20K</text><text x=\"60\" y=\"124\" className=\"gr-svg-cap\" textAnchor=\"end\">10K</text><text x=\"60\" y=\"164\" className=\"gr-svg-cap\" textAnchor=\"end\">0</text><rect className=\"gr-s1\" x=\"120\" y=\"112\" width=\"40\" height=\"48\"/><rect className=\"gr-s2\" x=\"120\" y=\"84\" width=\"40\" height=\"28\"/><rect className=\"gr-s1\" x=\"210\" y=\"98\" width=\"40\" height=\"62\"/><rect className=\"gr-s2\" x=\"210\" y=\"66\" width=\"40\" height=\"32\"/><rect className=\"gr-s1\" x=\"300\" y=\"104\" width=\"40\" height=\"56\"/><rect className=\"gr-s2\" x=\"300\" y=\"54\" width=\"40\" height=\"50\"/><rect className=\"gr-s1\" x=\"390\" y=\"88\" width=\"40\" height=\"72\"/><rect className=\"gr-s2\" x=\"390\" y=\"44\" width=\"40\" height=\"44\"/><circle className=\"gr-k-date\" cx=\"200\" cy=\"184\" r=\"4\"/><text x=\"210\" y=\"188\" className=\"gr-svg-cap\">north</text><circle className=\"gr-k-num-c\" cx=\"262\" cy=\"184\" r=\"4\"/><text x=\"272\" y=\"188\" className=\"gr-svg-cap\">east</text></svg>"
+  },
+  {
+   "title": "The kind mark",
+   "usage": "Every column carries a small mark for what it holds: a clock in turquoise for dates, a hash in river blue for numbers, a letter in carrot for text. The only colour in a list of columns, and the same three everywhere a column appears.",
+   "svg": "<svg viewBox=\"0 0 480 200\"><title>Kind marks beside column names</title><text x=\"64\" y=\"46\" className=\"gr-svg-cap\">Dates</text><circle className=\"gr-k-date-o\" cx=\"72\" cy=\"70\" r=\"6\"/><path className=\"gr-k-date-h\" d=\"M72 66 v4 l3 2\"/><text x=\"90\" y=\"75\" className=\"gr-svg-on\">entry_date</text><text x=\"64\" y=\"106\" className=\"gr-svg-cap\">Text</text><text x=\"66\" y=\"135\" className=\"gr-k-text-t\">A</text><text x=\"90\" y=\"135\" className=\"gr-svg-on\">account</text><text x=\"250\" y=\"46\" className=\"gr-svg-cap\">Numbers</text><text x=\"252\" y=\"75\" className=\"gr-k-num-t\">#</text><text x=\"276\" y=\"75\" className=\"gr-svg-on\">amount</text><text x=\"252\" y=\"105\" className=\"gr-k-num-t\">#</text><text x=\"276\" y=\"105\" className=\"gr-svg-on\">orders</text><rect className=\"gr-active\" x=\"244\" y=\"122\" width=\"170\" height=\"24\" rx=\"6\"/><text x=\"252\" y=\"139\" className=\"gr-k-num-t\">#</text><text x=\"276\" y=\"139\" className=\"gr-svg-on\">revenue</text><text x=\"404\" y=\"139\" className=\"gr-svg-cap\" textAnchor=\"end\">hover</text></svg>"
+  },
+  {
+   "title": "The quiet bar",
+   "usage": "In a table every number is right-aligned and tabular, over a soft turquoise bar scaled to its column's largest magnitude. The table reads as a chart without becoming one; text columns stay plain.",
+   "svg": "<svg viewBox=\"0 0 480 200\"><title>Numbers over quiet bars</title><rect className=\"gr-railbg\" x=\"40\" y=\"30\" width=\"400\" height=\"28\" rx=\"0\"/><line className=\"gr-hair\" x1=\"40\" y1=\"58\" x2=\"440\" y2=\"58\"/><text x=\"52\" y=\"49\" className=\"gr-svg-label\">region</text><text x=\"428\" y=\"49\" className=\"gr-svg-label\" textAnchor=\"end\">Sum of revenue</text><rect className=\"gr-qbar-r\" x=\"240\" y=\"62\" width=\"200\" height=\"28\"/><text x=\"52\" y=\"81\" className=\"gr-svg-on\">north</text><text x=\"428\" y=\"81\" className=\"gr-svg-num\" textAnchor=\"end\">18,400</text><line className=\"gr-hair\" x1=\"40\" y1=\"90\" x2=\"440\" y2=\"90\"/><rect className=\"gr-qbar-r\" x=\"284\" y=\"94\" width=\"156\" height=\"28\"/><text x=\"52\" y=\"113\" className=\"gr-svg-on\">east</text><text x=\"428\" y=\"113\" className=\"gr-svg-num\" textAnchor=\"end\">14,350</text><line className=\"gr-hair\" x1=\"40\" y1=\"122\" x2=\"440\" y2=\"122\"/><rect className=\"gr-qbar-r\" x=\"318\" y=\"126\" width=\"122\" height=\"28\"/><text x=\"52\" y=\"145\" className=\"gr-svg-on\">south</text><text x=\"428\" y=\"145\" className=\"gr-svg-num\" textAnchor=\"end\">11,220</text><line className=\"gr-hair\" x1=\"40\" y1=\"154\" x2=\"440\" y2=\"154\"/><rect className=\"gr-qbar-r\" x=\"394\" y=\"158\" width=\"46\" height=\"28\"/><text x=\"52\" y=\"177\" className=\"gr-svg-on\">west</text><text x=\"428\" y=\"177\" className=\"gr-svg-num\" textAnchor=\"end\">4,240</text></svg>"
+  },
+  {
+   "title": "The status dot and the mode rail",
+   "usage": "State is a 6px dot beside a word; only \"running\" pulses, in the mark colour. Modes of one screen sit on a slim rail at its left edge: an icon over a short name, the current one on a white tile, never a coloured tab.",
+   "svg": "<svg viewBox=\"0 0 480 200\"><title>Status dots and a mode rail</title><rect className=\"gr-railbg-s\" x=\"40\" y=\"40\" width=\"64\" height=\"124\" rx=\"12\"/><rect className=\"gr-card\" x=\"46\" y=\"46\" width=\"52\" height=\"54\" rx=\"9\"/><rect className=\"gr-k-ink\" x=\"64\" y=\"58\" width=\"4\" height=\"12\" rx=\"1\"/><rect className=\"gr-k-ink\" x=\"70\" y=\"54\" width=\"4\" height=\"16\" rx=\"1\"/><rect className=\"gr-k-ink\" x=\"76\" y=\"62\" width=\"4\" height=\"8\" rx=\"1\"/><text x=\"72\" y=\"88\" className=\"gr-svg-cap-on\" textAnchor=\"middle\">Visual</text><rect className=\"gr-line-f\" x=\"62\" y=\"114\" width=\"20\" height=\"14\" rx=\"3\"/><text x=\"72\" y=\"148\" className=\"gr-svg-cap\" textAnchor=\"middle\">SQL</text><circle className=\"gr-dot-live\" cx=\"170\" cy=\"62\" r=\"5\"/><circle className=\"gr-dot-live gr-dot-ring\" cx=\"170\" cy=\"62\" r=\"10\"/><text x=\"186\" y=\"67\" className=\"gr-svg-on\">Running</text><circle className=\"gr-dot-ok\" cx=\"170\" cy=\"102\" r=\"5\"/><text x=\"186\" y=\"107\" className=\"gr-svg-on\">Succeeded</text><circle className=\"gr-dot-warn\" cx=\"170\" cy=\"142\" r=\"5\"/><text x=\"186\" y=\"147\" className=\"gr-svg-on\">Queued</text><circle className=\"gr-dot-bad\" cx=\"320\" cy=\"62\" r=\"5\"/><text x=\"336\" y=\"67\" className=\"gr-svg-on\">Failed</text><circle className=\"gr-dot-idle\" cx=\"320\" cy=\"102\" r=\"5\"/><text x=\"336\" y=\"107\" className=\"gr-svg-on\">Draft</text></svg>"
+  }
+ ],
+ "sample_headline": "A first viewport in Graphite.",
+ "sample_note": "An explore screen in the full app shell: a grey rail with a group picker and sectioned nav, the page heading with an ink primary, shelves of column pills packed in rows, a stacked chart on the dashed grid beside a table with quiet bars, and a run list with status dots.",
+ "sample": "<div className=\"gr-sample\"><div className=\"gr-shell\">\n  <aside className=\"gr-rail\">\n    <div className=\"gr-ws\"><span className=\"gr-ws-sq\">a</span><span className=\"gr-ws-name\">acme</span></div>\n    <div className=\"gr-pick\"><span className=\"t-eyebrow\">Group</span><span className=\"gr-pick-box\">@finance <span className=\"gr-faint\">⌄</span></span></div>\n    <nav className=\"gr-nav\"><span className=\"t-eyebrow gr-nav-h\">Analytics</span><span className=\"gr-nav-item\">Chat</span><span className=\"gr-nav-item\">Artifacts</span><span className=\"gr-nav-item gr-nav-on\">Explore</span><span className=\"gr-nav-item\">Runs</span><span className=\"t-eyebrow gr-nav-h\">Data</span><span className=\"gr-nav-item\">Databases</span><span className=\"gr-nav-item\">Models</span></nav>\n    <div className=\"gr-rail-foot\"><span className=\"gr-avatar\">A</span><span className=\"gr-rail-user\">alice<small>Admin</small></span></div>\n  </aside>\n  <div className=\"gr-main\">\n    <div className=\"gr-topbar\"><span className=\"gr-crumbs\"><span className=\"t-title\">Explore</span> <span className=\"gr-faint\">· Chart your data or query it in SQL</span></span><span className=\"gr-pick-box\">Finance warehouse ⌄</span></div>\n    <div className=\"gr-sample-head\"><div><h2 className=\"t-display-m\">Revenue by region</h2><p className=\"gr-head-sub\">Updated 4 minutes ago · <span className=\"gr-live\"><i></i>Running</span></p></div><div className=\"ds-row\"><button className=\"gr-btn gr-btn-ghost\">Open in SQL</button><button className=\"gr-btn gr-btn-primary\">Save result</button></div></div>\n    <div className=\"gr-shelves\">\n      <div className=\"gr-shelf\"><span className=\"t-label\">X</span><span className=\"gr-pill\" data-kind=\"date\"><i className=\"gr-kind\">◷</i>month<span className=\"gr-mini\">Month ⌄</span><span className=\"gr-x\">×</span></span></div>\n      <div className=\"gr-shelf gr-shelf-wide\"><span className=\"t-label\">Y</span><span className=\"gr-pill\" data-kind=\"number\"><i className=\"gr-kind\">#</i>revenue<span className=\"gr-mini\">Sum ⌄</span><span className=\"gr-x\">×</span></span><span className=\"gr-add\">Add another ⌄</span></div>\n      <div className=\"gr-shelf\"><span className=\"t-label\">Colour</span><span className=\"gr-pill\" data-kind=\"text\"><i className=\"gr-kind\">A</i>region<span className=\"gr-x\">×</span></span></div>\n      <div className=\"gr-shelf\"><span className=\"t-label\">Facet</span><span className=\"gr-add\">One chart per value of… ⌄</span></div>\n      <div className=\"gr-shelf gr-shelf-full\"><span className=\"t-label\">Filters</span><span className=\"gr-pill\" data-kind=\"date\"><i className=\"gr-kind\">◷</i>month in the last 365 days<span className=\"gr-x\">×</span></span><span className=\"gr-add\">Add a filter ⌄</span></div>\n    </div>\n    <div className=\"gr-sample-grid\">\n      <div className=\"gr-card-x\"><div className=\"gr-card-head\"><span className=\"t-title\">Revenue by month</span><Segmented value=\"$pick\" options={[\"Bar\",\"Line\",\"Area\"]} /></div><Chart data=\"$series\" height=\"240px\" viz={{\"kind\":\"vega-lite\",\"spec\":{\"mark\":{\"type\":\"bar\",\"fillOpacity\":0.82,\"stroke\":\"#FFFFFF\",\"strokeWidth\":1},\"encoding\":{\"x\":{\"field\":\"month\",\"type\":\"ordinal\",\"title\":null,\"sort\":[\"May\",\"Jun\",\"Jul\",\"Aug\",\"Sep\",\"Oct\"]},\"y\":{\"field\":\"revenue\",\"type\":\"quantitative\",\"title\":\"Sum of revenue\",\"axis\":{\"gridDash\":[2,4],\"domain\":false,\"ticks\":false}},\"color\":{\"field\":\"region\",\"type\":\"nominal\",\"legend\":{\"title\":null,\"orient\":\"bottom\"}}}}}} /></div>\n      <div className=\"gr-card-x gr-card-table\"><div className=\"gr-card-head\"><span className=\"t-title\">By region</span><span className=\"t-label gr-faint\">4 rows</span></div>\n        <table className=\"gr-table\"><thead><tr><th>region</th><th className=\"gr-r\">Sum of revenue</th><th className=\"gr-r\">Orders</th></tr></thead><tbody>\n          <tr><td>north</td><td className=\"gr-r gr-num\" style={{ '--w': '100%' }}>$18,400</td><td className=\"gr-r\">412</td></tr>\n          <tr><td>east</td><td className=\"gr-r gr-num\" style={{ '--w': '78%' }}>$14,350</td><td className=\"gr-r\">366</td></tr>\n          <tr><td>south</td><td className=\"gr-r gr-num\" style={{ '--w': '61%' }}>$11,220</td><td className=\"gr-r\">298</td></tr>\n          <tr><td>west</td><td className=\"gr-r gr-num\" style={{ '--w': '23%' }}>$4,240</td><td className=\"gr-r\">208</td></tr>\n        </tbody></table></div>\n    </div>\n  </div>\n  <aside className=\"gr-activity\">\n    <p className=\"t-eyebrow gr-act-h\">Runs</p>\n    <div className=\"gr-act\"><i className=\"gr-act-dot gr-act-live\"></i><div><span>Daily revenue</span><span className=\"gr-act-t\">Running · started 1 min ago</span></div></div>\n    <div className=\"gr-act\"><i className=\"gr-act-dot gr-act-ok\"></i><div><span>Weekly cohort refresh</span><span className=\"gr-act-t\">Succeeded · 22 min ago</span></div></div>\n    <div className=\"gr-act\"><i className=\"gr-act-dot gr-act-bad\"></i><div><span>Ledger reconciliation</span><span className=\"gr-act-t\">Failed · table_not_allowed · 2 h ago</span></div></div>\n    <div className=\"gr-act\"><i className=\"gr-act-dot\"></i><div><span>Monthly board pack</span><span className=\"gr-act-t\">Queued · tomorrow 9:00</span></div></div>\n  </aside>\n</div></div>",
+ "dos": [
+  "Make the primary action an ink fill and everything else outline or ghost.",
+  "Keep colour for data, kinds and status; the chrome stays grey and ink.",
+  "Draw cards with a hairline on white, never a shadow.",
+  "Give charts dashed hairline grids both ways and a solid zero.",
+  "Write sentence case everywhere, including shelf labels and column heads."
+ ],
+ "donts": [
+  "No brand-coloured buttons, tabs or selected states.",
+  "No shadows on cards or tiles; only menus and dialogs float.",
+  "No caps, no letter-spaced labels, no bold.",
+  "No axis lines, ticks or solid gridlines on charts.",
+  "No mark colour as a fill or as body text."
+ ],
+ "binding_losses": "The dashed chart grid, the softened fills, the kind marks, the quiet bar behind numbers and the pressed tile in a mode rail have no contract slot; they are the --ds-grid-dash, --ds-fill-bar, --ds-fill-area and gr-* rules, and a kit chart keeps its own grid unless its spec sets gridDash.",
+ "footer": "Day first, Night second. Fonts: Instrument Sans 400/500/600 and JetBrains Mono 400/500/600/700, Google-hosted.",
+ "btn_primary": "gr-btn gr-btn-primary",
+ "btn_secondary": "gr-btn",
+ "tpl": {
+  "brand": "Graphite",
+  "dash_title": "Finance · Revenue",
+  "kpis": [
+   [
+    "Revenue",
+    "revenue",
+    "$",
+    "",
+    ",.0f",
+    "↑ 12.4% vs last month"
+   ],
+   [
+    "Orders",
+    "orders",
+    "",
+    "",
+    ",.0f",
+    "+84 this month"
+   ],
+   [
+    "Average order",
+    "aov",
+    "$",
+    "",
+    ",.2f",
+    "↓ 1.1% vs last month"
+   ]
+  ],
+  "dash_table_title": "By month and region",
+  "dash_chart": {
+   "kind": "vega-lite",
+   "spec": {
+    "mark": {
+     "type": "line",
+     "strokeWidth": 2.25,
+     "point": {
+      "filled": true,
+      "size": 42
+     }
+    },
+    "encoding": {
+     "x": {
+      "field": "month",
+      "type": "ordinal",
+      "title": null,
+      "sort": [
+       "May",
+       "Jun",
+       "Jul",
+       "Aug",
+       "Sep",
+       "Oct"
+      ]
+     },
+     "y": {
+      "field": "revenue",
+      "type": "quantitative",
+      "title": null,
+      "axis": {
+       "gridDash": [
+        2,
+        4
+       ],
+       "domain": false,
+       "ticks": false
+      }
+     },
+     "color": {
+      "field": "region",
+      "type": "nominal",
+      "legend": {
+       "title": null,
+       "orient": "bottom"
+      }
+     }
+    }
+   }
+  },
+  "slide_eyebrow": "Quarterly review",
+  "slide_title": "Revenue grew 12% with the north region leading.",
+  "slide_sub": "North now carries 38% of revenue; west is flat and needs a plan, not more spend.",
+  "slide_foot": "Synthetic data · Q3 2026",
+  "slide_stat_label": "Net revenue retention",
+  "slide_stat_col": "nrr",
+  "slide_stat_suffix": "%",
+  "slide_body": "Existing accounts grew their spend faster than churn removed it. Above 100 is expansion; this quarter it is the highest on record.",
+  "split": [
+   "North · 38%",
+   "Other regions · 62%"
+  ],
+  "ed_kicker": "Analytics notes · October",
+  "ed_headline": "Every chart is one query you can read",
+  "ed_deck": "The visual builder no longer hides its work. Each chart shows the SQL it ran, and one click opens it in the editor as a starting point.",
+  "ed_byline": "By the data team · 2 Oct 2026 · 3 min read",
+  "ed_body": "A chart used to be a black box: you dragged columns around and trusted the picture. Now the shelves compile to a single statement in the connection's own dialect, it runs under the same policy as anything you type, and the statement sits one click under the chart. Copy it, change it, save the result: the picture and the query are the same object.",
+  "ed_pull_col": "revenue",
+  "ed_pull_prefix": "$",
+  "ed_pull_fmt": ",.0f",
+  "ed_pull_label": "Revenue this month",
+  "steps": [
+   [
+    "Start from every order.",
+    "Each square is one order this quarter, grey until it is placed: 1,284 of them."
+   ],
+   [
+    "Group them by region.",
+    "The same squares take their region's colour. North is the largest block; west is the smallest and the flattest."
+   ]
+  ],
+  "step_caption": "Fig. 1 · Orders this quarter, by region · synthetic",
+  "app_rows": [
+   [
+    "Daily revenue",
+    "Every day at 6:00 · Finance",
+    "Running",
+    "ok"
+   ],
+   [
+    "Weekly cohort refresh",
+    "Mondays · Growth",
+    "Queued",
+    "warn"
+   ],
+   [
+    "Ledger reconciliation",
+    "table_not_allowed · 2 h ago",
+    "Failed",
+    "bad"
+   ],
+   [
+    "Monthly board pack",
+    "Draft · not scheduled",
+    "Draft",
+    "idle"
+   ]
+  ],
+  "app_cta": "Save result",
+  "app_cta2": "Open in SQL",
+  "landing_eyebrow": "Analytics for the whole team",
+  "landing_headline": "Ask your data. Read the answer.",
+  "landing_sub": "Chart any table by placing columns, or ask in plain words. Every answer is one governed query you can open, check and save.",
+  "cta": "Start exploring",
+  "cta2": "Read the docs",
+  "features": [
+   [
+    "One query per chart",
+    "Shelves compile to a single statement in your warehouse's dialect; open it in SQL with one click."
+   ],
+   [
+    "Governed by default",
+    "Every query runs as the person asking, under their group's policy. Nothing is unrestricted."
+   ],
+   [
+    "Charts that stay calm",
+    "Flat colour only where the data is, on a dashed grid, with the chrome in grey and ink."
+   ]
+  ],
+  "plan_eyebrow": "Product plan · Review draft",
+  "plan_title": "Visual explore: from columns to one query",
+  "plan_outcome": "A person can place columns on shelves in S1, see the chart and the exact SQL it ran, open that SQL in S2 and save the result, all under their group's policy.",
+  "plan_scope": "Shelves (X, Y, Colour, Facet, Filters), the chart (S1), the SQL editor (S2) and the refusal state (S2e). Out: joins across tables, calculated fields, dashboards.",
+  "plan_status": "Plan only · 2 of 6 tasks done · compiler verified on both dialects, nothing in production",
+  "plan_screens_note": "S1 desktop keeps the column list beside the shelves and the chart; S1 mobile stacks the shelves over the chart and moves the mode rail to a row at the top.",
+  "plan_flow": "flowchart LR\n  A((Pick a table)) -->|Place columns| B[S1 Chart]\n  B -->|Open in SQL| C{Policy admits?}\n  C -->|Yes| D[S2 SQL and rows]\n  C -->|No| E[S2e Refused, with the reason]\n  E -->|Change the query| C\n  D -->|Save result| F((Saved to Artifacts))",
+  "plan_flow_title": "Screen transitions · S1 → S2",
+  "plan_decisions": [
+   [
+    "The chart is a query.",
+    "Shelves compile to one statement that runs exactly as typed SQL does, so the picture can always be opened and checked."
+   ],
+   [
+    "Ink acts, colour reports.",
+    "Buttons and selection are grey and ink; colour is reserved for series, kinds and status."
+   ],
+   [
+    "Bound time by default.",
+    "A date on X arrives with a last-365-days filter, so a first look never scans a decade."
+   ]
+  ],
+  "plan_tasks": [
+   [
+    "Shelf layout and pills reviewed",
+    "Design",
+    "Done",
+    true
+   ],
+   [
+    "Compiler admitted on both dialects",
+    "Platform",
+    "Done",
+    true
+   ],
+   [
+    "Dashed grid chart config",
+    "App",
+    "In progress",
+    false
+   ],
+   [
+    "Refusal state S2e",
+    "App",
+    "Pending",
+    false
+   ],
+   [
+    "Mode rail on mobile",
+    "App",
+    "Pending",
+    false
+   ],
+   [
+    "Verify every grain against a live warehouse",
+    "QA",
+    "Pending",
+    false
+   ]
+  ],
+  "plan_acceptance": "Done means: a fixture warehouse charts revenue by month and region from S1 in one query, the same SQL opens in S2 and returns the same rows, and a refused table routes to S2e with the reason."
+ },
+ "data": {
+  "rows": [
+   {
+    "month": "May",
+    "region": "north",
+    "revenue": 3600,
+    "orders": 86
+   },
+   {
+    "month": "May",
+    "region": "east",
+    "revenue": 2900,
+    "orders": 69
+   },
+   {
+    "month": "May",
+    "region": "south",
+    "revenue": 2400,
+    "orders": 57
+   },
+   {
+    "month": "May",
+    "region": "west",
+    "revenue": 900,
+    "orders": 21
+   },
+   {
+    "month": "Jun",
+    "region": "north",
+    "revenue": 3800,
+    "orders": 90
+   },
+   {
+    "month": "Jun",
+    "region": "east",
+    "revenue": 3100,
+    "orders": 74
+   },
+   {
+    "month": "Jun",
+    "region": "south",
+    "revenue": 2300,
+    "orders": 55
+   },
+   {
+    "month": "Jun",
+    "region": "west",
+    "revenue": 1000,
+    "orders": 24
+   },
+   {
+    "month": "Jul",
+    "region": "north",
+    "revenue": 4100,
+    "orders": 98
+   },
+   {
+    "month": "Jul",
+    "region": "east",
+    "revenue": 3000,
+    "orders": 71
+   },
+   {
+    "month": "Jul",
+    "region": "south",
+    "revenue": 2600,
+    "orders": 62
+   },
+   {
+    "month": "Jul",
+    "region": "west",
+    "revenue": 900,
+    "orders": 21
+   },
+   {
+    "month": "Aug",
+    "region": "north",
+    "revenue": 4300,
+    "orders": 102
+   },
+   {
+    "month": "Aug",
+    "region": "east",
+    "revenue": 3300,
+    "orders": 79
+   },
+   {
+    "month": "Aug",
+    "region": "south",
+    "revenue": 2500,
+    "orders": 60
+   },
+   {
+    "month": "Aug",
+    "region": "west",
+    "revenue": 1100,
+    "orders": 26
+   },
+   {
+    "month": "Sep",
+    "region": "north",
+    "revenue": 4700,
+    "orders": 112
+   },
+   {
+    "month": "Sep",
+    "region": "east",
+    "revenue": 3600,
+    "orders": 86
+   },
+   {
+    "month": "Sep",
+    "region": "south",
+    "revenue": 2700,
+    "orders": 64
+   },
+   {
+    "month": "Sep",
+    "region": "west",
+    "revenue": 1200,
+    "orders": 29
+   },
+   {
+    "month": "Oct",
+    "region": "north",
+    "revenue": 5200,
+    "orders": 124
+   },
+   {
+    "month": "Oct",
+    "region": "east",
+    "revenue": 3900,
+    "orders": 93
+   },
+   {
+    "month": "Oct",
+    "region": "south",
+    "revenue": 2900,
+    "orders": 69
+   },
+   {
+    "month": "Oct",
+    "region": "west",
+    "revenue": 1100,
+    "orders": 26
+   }
+  ],
+  "queries": {
+   "series": "select month, region, revenue from rows order by region, month",
+   "table": "select month, region, revenue, orders from rows order by revenue desc",
+   "totals": "select 48210 as revenue, 1284 as orders, 37.55 as aov, 118 as nrr from rows limit 1"
+  },
+  "segments": [
+   "30 days",
+   "90 days",
+   "12 months"
+  ],
+  "segment_default": "12 months",
+  "select_label": "Grain",
+  "input_placeholder": "Find a column",
+  "switch_label": "Include models",
+  "tabs": [
+   "Visual",
+   "SQL",
+   "Runs"
+  ],
+  "tab_body": "Visual: place columns on shelves and the chart draws from one query.",
+  "progress_label": "Rows returned · 72% of the limit",
+  "progress": 72,
+  "chart_title": "Revenue by region",
+  "chart": {
+   "kind": "vega-lite",
+   "spec": {
+    "mark": {
+     "type": "bar",
+     "fillOpacity": 0.82
+    },
+    "encoding": {
+     "x": {
+      "field": "month",
+      "type": "ordinal",
+      "title": null,
+      "sort": [
+       "May",
+       "Jun",
+       "Jul",
+       "Aug",
+       "Sep",
+       "Oct"
+      ]
+     },
+     "y": {
+      "field": "revenue",
+      "type": "quantitative",
+      "title": null,
+      "axis": {
+       "gridDash": [
+        2,
+        4
+       ],
+       "domain": false,
+       "ticks": false
+      }
+     },
+     "color": {
+      "field": "region",
+      "type": "nominal",
+      "legend": {
+       "title": null,
+       "orient": "bottom"
+      }
+     }
+    }
+   }
+  },
+  "row_key": "month",
+  "table_columns": [
+   {
+    "col": "month",
+    "title": "month"
+   },
+   {
+    "col": "region",
+    "title": "region"
+   },
+   {
+    "col": "revenue",
+    "title": "Sum of revenue",
+    "fmt": ",.0f",
+    "align": "right"
+   },
+   {
+    "col": "orders",
+    "title": "Orders",
+    "fmt": ",.0f",
+    "align": "right"
+   }
+  ],
+  "table_height": "240px"
+ },
+ "css": "\n.ds-graphite { --ds-cover-bg: var(--ds-canvas); --ds-hand-ink: var(--ds-ink-soft); --ds-hand-fill: var(--ds-turquoise); --ds-hand-fill2: var(--ds-river); --ds-hand-muted: var(--ds-tint); --ds-hand-ground: var(--ds-surface); --ds-hand-stroke: 1.5; --ds-hand-cap: round; --ds-hand-bg: var(--ds-canvas); --ds-hand-text-stroke: var(--ds-surface);\n  --ds-tpl-edge: 1px solid var(--ds-hairline); --ds-tpl-radius: 8px; --ds-tpl-rule: 1px solid var(--ds-hairline); --ds-tpl-tile-shadow: none; --ds-tag-radius: 999px; --ds-slide-bg: var(--ds-surface); --ds-slide-title-bg: var(--ds-ink); --ds-slide-title-fg: var(--ds-on-ink); --ds-slide-split-a: var(--ds-turquoise); --ds-slide-split-b: var(--ds-tint); --ds-slide-split-b-fg: var(--ds-ink); --ds-slide-h-size: 8.5cqw;\n  --ds-hero-bg: var(--ds-canvas); }\n.ds-graphite .ds-section h2, .ds-graphite .ds-cover-name { font-family: var(--font-display); letter-spacing: -.03em; font-weight: 600; }\n.ds-graphite .ds-chip { font-weight: 500; letter-spacing: 0; text-transform: none; border-color: var(--ds-hairline); opacity: 1; color: var(--ds-ink-soft); background: var(--ds-surface); border-radius: 8px; }\n.ds-graphite .ds-eyebrow, .ds-graphite .t-label { text-transform: none; letter-spacing: 0; }\n.ds-graphite .ds-eyebrow { font-size: 12px; font-weight: 500; color: var(--ds-ink-soft); }\n.ds-graphite .ds-principle-n { color: var(--ds-ink-faint); font-weight: 500; }\n.ds-graphite .ds-comp, .ds-graphite .ds-motif, .ds-graphite .ds-note, .ds-graphite .ds-voice, .ds-graphite .ds-hand-panel, .ds-graphite .ds-tpl, .ds-graphite .ds-tpl-kpi, .ds-graphite .ds-tpl-tile, .ds-graphite .ds-tpl-step, .ds-graphite .ds-tpl-wire, .ds-graphite .ds-tpl-flow, .ds-graphite .ds-tpl-stage { border-color: var(--ds-hairline); box-shadow: none; }\n.ds-graphite .ds-tpl-kicker, .ds-graphite .ds-tpl-plan-sub { font-size: 12px; font-weight: 500; color: var(--ds-ink-soft); }\n.ds-graphite .ds-tpl-stage-top, .ds-graphite .ds-tpl-stage-foot { text-transform: none; letter-spacing: 0; }\n.ds-graphite .ds-tpl-tag { text-transform: none; letter-spacing: 0; font-weight: 500; padding-left: 8px; } .ds-graphite .ds-tpl-tag::before { content: \"\"; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }\n.ds-graphite .ds-tpl-ledger th { text-transform: none; letter-spacing: 0; font-weight: 600; font-size: 12px; background: var(--ds-sunk); padding-left: 10px; border-bottom: 1px solid var(--ds-hairline); } .ds-graphite .ds-tpl-ledger td { padding-left: 10px; }\n.ds-graphite .ds-tpl-decision { border-left-width: 2px; border-left-color: var(--ds-ink); border-top: 1px solid var(--ds-hairline); border-right: 1px solid var(--ds-hairline); border-bottom: 1px solid var(--ds-hairline); }\n.ds-graphite .ds-tpl-pull { border-top-width: 1px; border-top-color: var(--ds-hairline-strong); }\n.ds-graphite .ds-tpl-dropcap { color: var(--ds-ink); }\n.ds-graphite .ds-tpl-split-b { border: 1px solid var(--ds-hairline); }\n.ds-graphite .h-num { font-family: var(--font-sans); font-weight: 600; letter-spacing: -.03em; fill: var(--ds-ink); }\n.ds-graphite .h-text { fill: var(--ds-ink-soft); }\n.ds-graphite .h-fill.h-outline-fill { fill: var(--ds-turquoise); fill-opacity: .82; stroke: none; }\n.ds-graphite .h-fill2.h-outline-fill { fill: var(--ds-river); fill-opacity: .38; stroke: var(--ds-river); stroke-width: 1.5; }\n.ds-graphite .gr-ground { fill: var(--ds-canvas); }\n.ds-graphite .gr-frame { fill: var(--ds-surface); stroke: var(--ds-hairline); stroke-width: 1; }\n.ds-graphite .gr-railbg { fill: var(--ds-sunk); } .ds-graphite .gr-railbg-s { fill: var(--ds-sunk); stroke: var(--ds-hairline); stroke-width: 1; }\n.ds-graphite .gr-card { fill: var(--ds-surface); stroke: var(--ds-hairline); stroke-width: 1; } .ds-graphite .gr-field { fill: var(--ds-surface); stroke: var(--ds-hairline-strong); stroke-width: 1; }\n.ds-graphite .gr-hair { stroke: var(--ds-hairline); stroke-width: 1; } .ds-graphite .gr-hair-dash { stroke: var(--ds-hairline-strong); stroke-width: 1; stroke-dasharray: 2 4; }\n.ds-graphite .gr-grid { stroke: var(--ds-hairline); stroke-width: 1; stroke-dasharray: 2 4; } .ds-graphite .gr-zero { stroke: var(--ds-hairline-strong); stroke-width: 1; }\n.ds-graphite .gr-line-h { fill: var(--ds-tint); } .ds-graphite .gr-line-on { fill: var(--ds-ink); opacity: .78; } .ds-graphite .gr-line-f { fill: var(--ds-hairline-strong); } .ds-graphite .gr-line-inv { fill: var(--ds-on-ink); }\n.ds-graphite .gr-active { fill: var(--ds-tint); } .ds-graphite .gr-ink-sq, .ds-graphite .gr-k-ink { fill: var(--ds-ink); } .ds-graphite .gr-btn-ink { fill: var(--ds-ink); }\n.ds-graphite .gr-pill-r { fill: var(--ds-canvas); stroke: var(--ds-hairline); stroke-width: 1; } .ds-graphite .gr-mini-r { fill: var(--ds-tint); } .ds-graphite .gr-add-r { fill: none; stroke: var(--ds-hairline-strong); stroke-width: 1; stroke-dasharray: 3 3; }\n.ds-graphite .gr-k-date, .ds-graphite .gr-s1 { fill: var(--ds-turquoise); } .ds-graphite .gr-k-num, .ds-graphite .gr-k-num-c, .ds-graphite .gr-s2 { fill: var(--ds-river); } .ds-graphite .gr-k-red, .ds-graphite .gr-s3 { fill: var(--ds-alizarin); } .ds-graphite .gr-k-text { fill: var(--ds-carrot); }\n.ds-graphite .gr-s1, .ds-graphite .gr-s2, .ds-graphite .gr-s3 { fill-opacity: .82; stroke: var(--ds-surface); stroke-width: 1; }\n.ds-graphite .gr-k-date-o { fill: none; stroke: var(--ds-turquoise); stroke-width: 1.6; } .ds-graphite .gr-k-date-h { fill: none; stroke: var(--ds-turquoise); stroke-width: 1.6; stroke-linecap: round; }\n.ds-graphite .gr-k-num-t { font-family: var(--font-sans); font-size: 16px; font-weight: 600; fill: var(--ds-river); } .ds-graphite .gr-k-text-t { font-family: var(--font-sans); font-size: 16px; font-weight: 600; fill: var(--ds-carrot); }\n.ds-graphite .gr-qbar-r { fill: var(--ds-turquoise); fill-opacity: .3; }\n.ds-graphite .gr-svg-label { font-family: var(--font-sans); font-size: 13px; fill: var(--ds-ink-soft); } .ds-graphite .gr-svg-on { font-family: var(--font-sans); font-size: 13px; font-weight: 500; fill: var(--ds-ink); } .ds-graphite .gr-svg-inv { font-family: var(--font-sans); font-size: 13px; font-weight: 500; fill: var(--ds-on-ink); }\n.ds-graphite .gr-svg-cap { font-family: var(--font-sans); font-size: 11px; fill: var(--ds-ink-soft); } .ds-graphite .gr-svg-cap-on { font-family: var(--font-sans); font-size: 11px; font-weight: 600; fill: var(--ds-ink); }\n.ds-graphite .gr-svg-num { font-family: var(--font-sans); font-size: 13px; font-weight: 500; fill: var(--ds-ink); font-variant-numeric: tabular-nums; }\n.ds-graphite .gr-dot-live { fill: var(--ds-mark); } .ds-graphite .gr-dot-ok { fill: var(--ds-positive); } .ds-graphite .gr-dot-warn { fill: var(--ds-caution); } .ds-graphite .gr-dot-bad { fill: var(--ds-negative); } .ds-graphite .gr-dot-idle { fill: var(--ds-hairline-strong); } .ds-graphite .gr-dot-ring { opacity: .25; }\n.ds-graphite .gr-btn { display: inline-flex; align-items: center; gap: 8px; font-family: var(--font-sans); font-size: 14px; font-weight: 500; line-height: 20px; padding: 7px 12px; border: 1px solid var(--ds-hairline-strong); border-radius: 8px; background: var(--ds-surface); color: var(--ds-ink); cursor: pointer; transition: border-color 120ms ease-out, background 120ms ease-out; }\n.ds-graphite .gr-btn:hover { border-color: var(--ds-ink-faint); background: var(--ds-tint); } .ds-graphite .gr-btn:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }\n.ds-graphite .gr-btn-primary { background: var(--ds-ink); border-color: var(--ds-ink); color: var(--ds-on-ink); } .ds-graphite .gr-btn-primary:hover { background: var(--ds-ink); border-color: var(--ds-ink); opacity: .88; }\n.ds-graphite .gr-btn-ghost { border-color: transparent; background: transparent; } .ds-graphite .gr-btn-ghost:hover { border-color: transparent; background: var(--ds-tint); }\n.ds-graphite .gr-btn-danger { color: var(--ds-negative); } .ds-graphite .gr-btn-danger:hover { background: var(--ds-negative-soft); border-color: var(--ds-negative); }\n.ds-graphite .gr-kbd { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 5px; border: 1px solid var(--ds-hairline); border-radius: 5px; background: var(--ds-sunk); box-shadow: var(--ds-shadow-key); font-family: var(--font-mono); font-size: 11px; color: var(--ds-ink-soft); }\n.ds-graphite .gr-kbd-on { border-color: rgba(255,255,255,.25); background: rgba(255,255,255,.12); box-shadow: none; color: var(--ds-on-ink); }\n.ds-graphite .gr-tag { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 500; line-height: 18px; background: var(--ds-tint); color: var(--ds-ink-soft); }\n.ds-graphite .gr-tag i { position: relative; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }\n.ds-graphite .gr-tag-ok { background: var(--ds-positive-soft); color: var(--ds-positive); } .ds-graphite .gr-tag-warn { background: var(--ds-caution-soft); color: var(--ds-caution); } .ds-graphite .gr-tag-bad { background: var(--ds-negative-soft); color: var(--ds-negative); }\n.ds-graphite .gr-tag-live { color: var(--ds-ink); } .ds-graphite .gr-tag-live i, .ds-graphite .gr-live i { background: var(--ds-mark); animation: gr-pulse 1.2s ease-in-out infinite; }\n@keyframes gr-pulse { 50% { opacity: .35; } }\n@media (prefers-reduced-motion: reduce) { .ds-graphite .gr-tag-live i, .ds-graphite .gr-live i, .ds-graphite .gr-act-live { animation: none; } }\n.ds-graphite .gr-stat { display: grid; gap: 4px; padding: 16px 20px; min-width: 0; }\n.ds-graphite .gr-stat-card { display: grid; margin-top: 24px; border: 1px solid var(--ds-hairline); border-radius: 12px; background: var(--ds-surface); } .ds-graphite .gr-stat-card .gr-stat { border-top: 1px solid var(--ds-hairline); } .ds-graphite .gr-stat-card .gr-stat:first-child { border-top: 0; }\n.ds-graphite .ds-stats-card { margin-top: 0; width: 100%; }\n.ds-graphite .gr-delta { font-size: 13px; color: var(--ds-ink-soft); } .ds-graphite .gr-up { color: var(--ds-positive); } .ds-graphite .gr-down { color: var(--ds-negative); }\n.ds-graphite .gr-callout { padding: 12px 14px; border: 1px solid var(--ds-hairline); border-radius: 8px; font-size: 14px; line-height: 1.5; background: var(--ds-sunk); }\n.ds-graphite .gr-callout strong { font-weight: 600; } .ds-graphite .gr-callout-ok { background: var(--ds-positive-soft); border-color: transparent; } .ds-graphite .gr-callout-bad { background: var(--ds-negative-soft); border-color: transparent; color: var(--ds-ink); }\n.ds-graphite .gr-card-x { border: 1px solid var(--ds-hairline); border-radius: 12px; background: var(--ds-surface); padding: 16px 18px; min-width: 0; }\n.ds-graphite .gr-card-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }\n.ds-graphite .gr-qrow { display: grid; grid-template-columns: 90px 1fr; gap: 12px; align-items: center; padding: 6px 0; border-top: 1px solid var(--ds-hairline); font-size: 13px; }\n.ds-graphite .gr-qbar { position: relative; display: block; height: 24px; } .ds-graphite .gr-qbar > span { position: absolute; right: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--ds-turquoise) 30%, transparent); } .ds-graphite .gr-qbar > b { position: absolute; right: 8px; top: 3px; font-weight: 500; font-variant-numeric: tabular-nums; }\n.ds-graphite .gr-card-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--ds-hairline); }\n.ds-graphite .gr-faint { color: var(--ds-ink-faint); }\n.ds-graphite .gr-sample { background: var(--ds-canvas); border-top: 1px solid var(--ds-hairline); border-bottom: 1px solid var(--ds-hairline); }\n.ds-graphite .gr-shell { display: grid; grid-template-columns: minmax(0, 1fr); max-width: 1320px; margin: 0 auto; min-width: 0; }\n.ds-graphite .gr-rail { display: flex; flex-direction: row; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--ds-hairline); background: var(--ds-sunk); overflow-x: auto; }\n.ds-graphite .gr-ws { display: inline-flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; letter-spacing: -.02em; white-space: nowrap; }\n.ds-graphite .gr-ws-sq { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 6px; background: var(--ds-ink); color: var(--ds-on-ink); font-size: 12px; font-weight: 600; }\n.ds-graphite .gr-pick { display: none; gap: 4px; } .ds-graphite .gr-pick-box { display: inline-flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 10px; border: 1px solid var(--ds-hairline-strong); border-radius: 8px; background: var(--ds-surface); font-size: 13px; white-space: nowrap; }\n.ds-graphite .gr-nav { display: flex; gap: 2px; align-items: center; } .ds-graphite .gr-nav-h { display: none; margin: 12px 8px 4px; color: var(--ds-ink-soft); }\n.ds-graphite .gr-nav-item { padding: 6px 10px; border-radius: 8px; font-size: 14px; color: var(--ds-ink); white-space: nowrap; } .ds-graphite .gr-nav-on { background: var(--ds-tint); font-weight: 600; }\n.ds-graphite .gr-rail-foot { display: none; align-items: center; gap: 8px; margin-top: auto; padding: 8px; border: 1px solid var(--ds-hairline); border-radius: 10px; background: var(--ds-surface); font-size: 13px; }\n.ds-graphite .gr-rail-user { display: grid; line-height: 1.25; } .ds-graphite .gr-rail-user small { font-size: 11px; color: var(--ds-ink-soft); }\n.ds-graphite .gr-avatar { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 50%; background: var(--ds-ink); color: var(--ds-on-ink); font-size: 12px; font-weight: 600; }\n.ds-graphite .gr-main { min-width: 0; padding: 0 20px 40px; }\n.ds-graphite .gr-topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 12px 0; border-bottom: 1px solid var(--ds-hairline); font-size: 13px; }\n.ds-graphite .gr-sample-head { display: flex; justify-content: space-between; align-items: end; gap: 16px; flex-wrap: wrap; margin-top: 24px; } .ds-graphite .gr-sample-head h2 { margin: 0; }\n.ds-graphite .gr-head-sub { margin: 6px 0 0; font-size: 13px; color: var(--ds-ink-soft); } .ds-graphite .gr-live { display: inline-flex; align-items: center; gap: 6px; color: var(--ds-ink); font-weight: 500; } .ds-graphite .gr-live i { width: 6px; height: 6px; border-radius: 50%; }\n.ds-graphite .gr-shelves { display: grid; grid-template-columns: minmax(0, 1fr); margin-top: 16px; border: 1px solid var(--ds-hairline); border-radius: 12px; background: var(--ds-surface); overflow: hidden; }\n.ds-graphite .gr-shelf { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 46px; padding: 7px 10px 7px 14px; border-bottom: 1px solid var(--ds-hairline); } .ds-graphite .gr-shelf:last-child { border-bottom: 0; } .ds-graphite .gr-shelf > .t-label { width: 52px; color: var(--ds-ink-soft); }\n.ds-graphite .gr-pill { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 6px 0 10px; border: 1px solid var(--ds-hairline); border-radius: 8px; background: var(--ds-canvas); font-size: 13px; font-weight: 500; }\n.ds-graphite .gr-kind { font-style: normal; font-weight: 600; } .ds-graphite [data-kind=date] > .gr-kind { color: var(--ds-turquoise); } .ds-graphite [data-kind=number] > .gr-kind { color: var(--ds-river); } .ds-graphite [data-kind=text] > .gr-kind { color: var(--ds-carrot); }\n.ds-graphite .gr-mini { padding: 2px 8px; border-radius: 6px; background: var(--ds-tint); font-size: 12px; font-weight: 400; color: var(--ds-ink-soft); } .ds-graphite .gr-x { padding: 0 4px; color: var(--ds-ink-faint); font-weight: 400; }\n.ds-graphite .gr-add { display: inline-flex; align-items: center; height: 32px; padding: 0 10px; border: 1px dashed var(--ds-hairline-strong); border-radius: 8px; font-size: 13px; color: var(--ds-ink-soft); }\n.ds-graphite .gr-sample-grid { display: grid; gap: 16px; margin-top: 16px; }\n.ds-graphite .gr-card-table { padding: 0; overflow: hidden; } .ds-graphite .gr-card-table .gr-card-head { padding: 14px 18px 0; }\n.ds-graphite .gr-table { width: 100%; border-collapse: collapse; font-size: 13px; border: 0; }\n.ds-graphite .gr-table th, .ds-graphite .gr-table td { border-left: 0; border-right: 0; border-top: 0; background: transparent; text-align: left; padding: 8px 14px; border-bottom: 1px solid var(--ds-hairline); white-space: nowrap; }\n.ds-graphite .gr-table th { font-size: 12px; font-weight: 600; color: var(--ds-ink-soft); background: var(--ds-sunk); }\n.ds-graphite .gr-table tbody tr:hover td { background: var(--ds-sunk); } .ds-graphite .gr-table tbody tr:last-child td { border-bottom: 0; }\n.ds-graphite .gr-table .gr-r { text-align: right; font-variant-numeric: tabular-nums; }\n.ds-graphite .gr-table .gr-num { background-image: linear-gradient(to left, color-mix(in srgb, var(--ds-turquoise) 30%, transparent) var(--w, 0%), transparent var(--w, 0%)); }\n.ds-graphite .gr-activity { padding: 16px 20px 28px; border-top: 1px solid var(--ds-hairline); background: var(--ds-surface); }\n.ds-graphite .gr-act-h { margin: 0 0 8px; }\n.ds-graphite .gr-act { display: grid; grid-template-columns: 14px 1fr; gap: 10px; padding: 10px 0; border-top: 1px solid var(--ds-hairline); font-size: 13px; } .ds-graphite .gr-act div { display: grid; gap: 2px; } .ds-graphite .gr-act-t { font-size: 12px; color: var(--ds-ink-soft); }\n.ds-graphite .gr-act-dot { width: 8px; height: 8px; margin-top: 5px; border-radius: 50%; background: var(--ds-hairline-strong); } .ds-graphite .gr-act-ok { background: var(--ds-positive); } .ds-graphite .gr-act-bad { background: var(--ds-negative); } .ds-graphite .gr-act-live { background: var(--ds-mark); animation: gr-pulse 1.2s ease-in-out infinite; }\n@container (min-width: 760px) {\n  .ds-graphite .gr-shell { grid-template-columns: 210px minmax(0, 1fr); }\n  .ds-graphite .gr-rail { flex-direction: column; align-items: stretch; gap: 0; padding: 16px 12px; border-bottom: 0; border-right: 1px solid var(--ds-hairline); overflow: visible; min-height: 100%; }\n  .ds-graphite .gr-ws { padding: 4px 8px 16px; } .ds-graphite .gr-pick { display: grid; padding: 0 4px 8px; } .ds-graphite .gr-nav { flex-direction: column; align-items: stretch; } .ds-graphite .gr-nav-h { display: block; } .ds-graphite .gr-rail-foot { display: flex; margin-top: 24px; }\n  .ds-graphite .gr-main { padding: 0 24px 40px; }\n  .ds-graphite .gr-stat-card { grid-template-columns: 1fr 1fr 1fr; } .ds-graphite .gr-stat-card .gr-stat { border-top: 0; border-left: 1px solid var(--ds-hairline); } .ds-graphite .gr-stat-card .gr-stat:first-child { border-left: 0; }\n  .ds-graphite .gr-shelves { grid-template-columns: repeat(6, minmax(0, 1fr)); } .ds-graphite .gr-shelf { grid-column: span 3; border-left: 1px solid var(--ds-hairline); } .ds-graphite .gr-shelf:first-child { grid-column: span 2; border-left: 0; } .ds-graphite .gr-shelf-wide { grid-column: span 4; } .ds-graphite .gr-shelf:nth-child(3) { border-left: 0; } .ds-graphite .gr-shelf-full { grid-column: 1 / -1; border-left: 0; }\n  .ds-graphite .gr-sample-grid { grid-template-columns: 1fr 1fr; }\n  .ds-graphite .gr-activity { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 0 32px; padding: 16px 24px 24px; } .ds-graphite .gr-act-h { grid-column: 1 / -1; }\n}\n@container (min-width: 1100px) {\n  .ds-graphite .gr-shell { grid-template-columns: 210px minmax(0, 1fr) 240px; }\n  .ds-graphite .gr-activity { grid-column: auto; display: block; border-top: 0; border-left: 1px solid var(--ds-hairline); padding: 16px 20px 28px; }\n  .ds-graphite .gr-sample-grid { grid-template-columns: 3fr 2fr; }\n}"
+}

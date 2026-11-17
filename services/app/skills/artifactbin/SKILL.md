@@ -107,6 +107,7 @@ comments (every page you may see): `node scripts/events.mjs watch --help`.
   | `phosphor` | Technical | Dev tools, CI, logs, status pages |
   | `drafting` | Technical | Plans, specs, explainers, process stories |
   | `meridian` | Sleek, Professional | Product dashboards, docs, SaaS marketing |
+  | `graphite` | Quiet, Analytical | Analytics apps, internal apps and tools |
   | `dossier` | Evidential | Plans, reports, post-mortems, long features |
   | `riso` | Printed | Scrolly stories, picture-book explainers, posters, zines |
   | `almanac` | Warm | Scrolly explainers, landing pages, long reads, annual reports |

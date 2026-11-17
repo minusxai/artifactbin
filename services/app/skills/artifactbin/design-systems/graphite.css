@@ -1,0 +1,200 @@
+/*
+ * Graphite: Ink on white. Colour only where the data is.
+ * Analytics apps, internal apps and tools. Mood: Quiet, Analytical. Opens light. Generated from
+ * design-systems/specs/graphite.json.
+ *
+ * Use: name it once in <head>: <meta name="artifactbin:design-system" content="graphite">. The platform serves
+ * this stylesheet, sets data-af-design-system and data-af-dark on <html>, and hosts the fonts: copy, link and read
+ * nothing to use it. Only this header is worth reading, for the shared tokens and type roles below.
+ *
+ * Shared contract: every system defines these, so build your CSS on them with var(--name):
+ *   --background --foreground --card --card-foreground --popover --popover-foreground --primary
+ *   --primary-foreground --secondary --secondary-foreground --muted --muted-foreground --accent
+ *   --accent-foreground --destructive --destructive-foreground --border --input --ring --chart-1 --chart-2
+ *   --chart-3 --chart-4 --chart-5 --radius --font-display --font-body --font-mono
+ * Type-role classes (same names in every system, sizes differ), used as class="t-title" etc.:
+ *   t-display-xl t-display-l t-display-m t-title t-body-l t-body t-body-s t-label t-eyebrow t-numeral t-mono
+ * Each --ds-* below is this system's own palette; its comment says what the token is for (for example a "fill
+ * only" colour is never body text). Keep the system's colour and type choices.
+ *
+ * Idea: Graphite is the look of an analytics tool that keeps its own voice down: a white page, a light grey rail,
+ * hairline borders and near-black ink. The filled button is ink, not a brand colour; selection is a grey pill.
+ * Colour appears in exactly two places, the data (flat, vivid series on a dashed grid) and small marks (a kind
+ * icon, a status dot, the focus ring), so the first coloured thing anyone sees is an answer.
+ * Fits: Analytics and BI apps, data exploration and query tools, internal admin tools, run and job monitors,
+ * settings and access screens, and any product where charts and tables are the content.
+ * Avoid when: Editorial or narrative subjects, consumer brands with a colour to show, warm or textured subjects,
+ * or a marketing page that needs a loud brand moment.
+ */
+/* Light values; --ds-* are this system's own palette, each annotated with its use. */
+:root[data-af-design-system="graphite"] {
+  --ds-canvas: #FFFFFF; /* Page ground: plain white by day, near-black by night. Content sits directly on it. */
+  --ds-surface: #FFFFFF; /* Cards, fields, menus, dialogs. The same white as the page by day, so a card is drawn by its hairline alone. */
+  --ds-sunk: #F8F8F7; /* The side rail, table headers, code wells, a tip at the foot of a page: the one ground a step off white. */
+  --ds-tint: #F2F2F2; /* Hover, the selected nav item, secondary buttons and the small selects inside a pill. */
+  --ds-hairline: #E7E7E5; /* Every border and divider, and chart gridlines (dashed). One weight, everywhere. */
+  --ds-hairline-strong: #D9D9D6; /* Field borders, the zero line of a chart, borders on hover. */
+  --ds-ink: #171717; /* Text, icons and the primary fill: the filled button is ink, not a colour. */
+  --ds-ink-soft: #6B6B6B; /* Secondary text: labels, timestamps, helper text, axis labels, group headings in the rail. */
+  --ds-ink-faint: #767674; /* Tertiary text and the drawing line: placeholders, disabled labels, hints. */
+  --ds-on-ink: #FFFFFF; /* Text and icons on an ink fill. */
+  --ds-mark: #0F7A64; /* A mark, never a fill: the focus ring, the running dot, a selected chart-type icon, one glyph of a logo. Never a button, surface or body text. */
+  --ds-positive: #1A7F45; /* Success text and dots, the up-delta. Always beside a word. */
+  --ds-positive-soft: #E9F4EE; /* Ground for success tags. */
+  --ds-caution: #8A5A00; /* Warnings and pending states. */
+  --ds-caution-soft: #FFF6DF; /* Ground for warning tags and notes. */
+  --ds-negative: #C0392B; /* Errors, destructive actions, the down-delta. */
+  --ds-negative-soft: #FBEBE9; /* Ground for error tags and callouts. */
+  --ds-turquoise: #1ABC9C; /* First chart series; the date-column mark. Data only. */
+  --ds-river: #3498DB; /* Second chart series; the number-column mark. Data only. */
+  --ds-alizarin: #E74C3C; /* Third chart series. Data only; status red is negative. */
+  --ds-amethyst: #9B59B6; /* Fourth chart series. Data only. */
+  --ds-carrot: #E67E22; /* Fifth chart series; the mark of a string column. Data only. */
+  --ds-asphalt: #34495E; /* Sixth chart series, for "other": wet asphalt by day, concrete by night. */
+  --ds-sunflower: #F1C40F; /* Seventh chart series. Data only; never text on white. */
+  --ds-emerald: #2ECC71; /* Eighth chart series, kept last: beside turquoise the two blur. */
+  --background: var(--ds-canvas);
+  --foreground: var(--ds-ink);
+  --card: var(--ds-surface);
+  --card-foreground: var(--ds-ink);
+  --popover: var(--ds-surface);
+  --popover-foreground: var(--ds-ink);
+  --primary: var(--ds-ink);
+  --primary-foreground: var(--ds-on-ink);
+  --secondary: var(--ds-tint);
+  --secondary-foreground: var(--ds-ink);
+  --muted: var(--ds-sunk);
+  --muted-foreground: var(--ds-ink-soft);
+  --accent: var(--ds-tint);
+  --accent-foreground: var(--ds-ink);
+  --destructive: var(--ds-negative);
+  --destructive-foreground: var(--ds-on-ink);
+  --border: var(--ds-hairline);
+  --input: var(--ds-hairline-strong);
+  --ring: var(--ds-mark);
+  --chart-1: var(--ds-turquoise);
+  --chart-2: var(--ds-river);
+  --chart-3: var(--ds-alizarin);
+  --chart-4: var(--ds-amethyst);
+  --chart-5: var(--ds-carrot);
+  --radius: 8px;
+  --font-display: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-body: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --ds-shadow-tile: none;
+  --ds-shadow-float: 0 1px 2px rgba(0,0,0,.06), 0 12px 32px -12px rgba(0,0,0,.18);
+  --ds-shadow-key: inset 0 -1px 0 #E7E7E5;
+  --ds-shadow-pressed: 0 1px 2px rgba(0,0,0,.06);
+  --ds-focus-ring: 0 0 0 2px #FFFFFF, 0 0 0 4px #0F7A64;
+  --ds-grid-dash: 2 4;
+  --ds-fill-bar: .82;
+  --ds-fill-area: .38;
+  --ds-chip-radius: 8px;
+}
+/* Dark values: the same tokens, under data-af-dark="true". */
+:root[data-af-design-system="graphite"][data-af-dark="true"] {
+  --ds-canvas: #161616;
+  --ds-surface: #1D1D1D;
+  --ds-sunk: #1B1B1B;
+  --ds-tint: #262626;
+  --ds-hairline: #2C2C2C;
+  --ds-hairline-strong: #3A3A3A;
+  --ds-ink: #EDEDEC;
+  --ds-ink-soft: #A1A1A0;
+  --ds-ink-faint: #8A8A88;
+  --ds-on-ink: #161616;
+  --ds-mark: #1ABC9C;
+  --ds-positive: #2ECC71;
+  --ds-positive-soft: #14271C;
+  --ds-caution: #F2C66D;
+  --ds-caution-soft: #2D2513;
+  --ds-negative: #E5604F;
+  --ds-negative-soft: #301B18;
+  --ds-turquoise: #1ABC9C;
+  --ds-river: #3498DB;
+  --ds-alizarin: #E74C3C;
+  --ds-amethyst: #9B59B6;
+  --ds-carrot: #E67E22;
+  --ds-asphalt: #95A5A6;
+  --ds-sunflower: #F1C40F;
+  --ds-emerald: #2ECC71;
+  --background: var(--ds-canvas);
+  --foreground: var(--ds-ink);
+  --card: var(--ds-surface);
+  --card-foreground: var(--ds-ink);
+  --popover: var(--ds-surface);
+  --popover-foreground: var(--ds-ink);
+  --primary: var(--ds-ink);
+  --primary-foreground: var(--ds-on-ink);
+  --secondary: var(--ds-tint);
+  --secondary-foreground: var(--ds-ink);
+  --muted: var(--ds-sunk);
+  --muted-foreground: var(--ds-ink-soft);
+  --accent: var(--ds-tint);
+  --accent-foreground: var(--ds-ink);
+  --destructive: var(--ds-negative);
+  --destructive-foreground: var(--ds-on-ink);
+  --border: var(--ds-hairline);
+  --input: var(--ds-hairline-strong);
+  --ring: var(--ds-mark);
+  --chart-1: var(--ds-turquoise);
+  --chart-2: var(--ds-river);
+  --chart-3: var(--ds-alizarin);
+  --chart-4: var(--ds-amethyst);
+  --chart-5: var(--ds-carrot);
+  --ds-shadow-tile: none;
+  --ds-shadow-float: 0 1px 2px rgba(0,0,0,.5), 0 16px 40px -16px rgba(0,0,0,.7);
+  --ds-shadow-key: inset 0 -1px 0 #2C2C2C;
+  --ds-shadow-pressed: 0 1px 2px rgba(0,0,0,.4);
+  --ds-focus-ring: 0 0 0 2px #161616, 0 0 0 4px #1ABC9C;
+  --ds-grid-dash: 2 4;
+  --ds-fill-bar: .82;
+  --ds-fill-area: .38;
+  --ds-chip-radius: 8px;
+}
+:root[data-af-design-system="graphite"] body { margin:0; background:var(--background); color:var(--foreground); font-family:var(--font-body); }
+/* Type roles: font family, size / line height, then when to use it. */
+/* display, clamp(40px, 6vw, 72px) / 1.02: One per page, for a landing hero. Semibold with tight tracking; Graphite never goes bold. */
+:root[data-af-design-system="graphite"] .t-display-xl { font-family: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif; font-size: clamp(40px, 6vw, 72px); line-height: 1.02; font-weight: 600; letter-spacing: -0.035em; }
+/* display, clamp(28px, 3.6vw, 40px) / 1.1: Section openers and slide titles. */
+:root[data-af-design-system="graphite"] .t-display-l { font-family: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif; font-size: clamp(28px, 3.6vw, 40px); line-height: 1.1; font-weight: 600; letter-spacing: -0.03em; }
+/* display, 34px / 39px: The one greeting or page heading that opens a screen. */
+:root[data-af-design-system="graphite"] .t-display-m { font-family: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 34px; line-height: 39px; font-weight: 600; letter-spacing: -0.025em; }
+/* display, 16px / 22px: Card titles, dialog titles, list heads. The page name in a top bar. */
+:root[data-af-design-system="graphite"] .t-title { font-family: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 16px; line-height: 22px; font-weight: 600; letter-spacing: -0.01em; }
+/* sans, 16px / 26px: Lead paragraphs and the question box. */
+:root[data-af-design-system="graphite"] .t-body-l { font-family: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 16px; line-height: 26px; font-weight: 400; }
+/* sans, 14px / 21px: Default UI and reading text: 14px at 1.5. */
+:root[data-af-design-system="graphite"] .t-body { font-family: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 14px; line-height: 21px; font-weight: 400; }
+/* sans, 13px / 18px: Captions, helper text, dense cells, timestamps. */
+:root[data-af-design-system="graphite"] .t-body-s { font-family: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 13px; line-height: 18px; font-weight: 400; }
+/* sans, 13px / 18px: Field labels, shelf labels, column heads. Medium weight, sentence case, no tracking. */
+:root[data-af-design-system="graphite"] .t-label { font-family: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 13px; line-height: 18px; font-weight: 500; }
+/* sans, 12px / 16px: Group headings in a rail or above a list: the soft ink at 12px, sentence case. Graphite has no caps and no letter-spacing. */
+:root[data-af-design-system="graphite"] .t-eyebrow { font-family: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 12px; line-height: 16px; font-weight: 500; }
+/* display, 32px / 36px: KPI figures, tabular, in the sans. */
+:root[data-af-design-system="graphite"] .t-numeral { font-family: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 32px; line-height: 36px; font-weight: 600; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+/* mono, 13px / 20px: SQL, code, IDs, paths. Nowhere else. */
+:root[data-af-design-system="graphite"] .t-mono { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; line-height: 20px; font-weight: 400; }
+/* Code highlighting token colours (for @afbin/highlight). */
+:root[data-af-design-system="graphite"] .tok-comment, :root[data-af-design-system="graphite"] .tok-quote, :root[data-af-design-system="graphite"] .tok-meta { color:color-mix(in oklab, var(--muted-foreground) 75%, var(--foreground));font-style:italic; }
+:root[data-af-design-system="graphite"] .tok-keyword, :root[data-af-design-system="graphite"] .tok-selector-tag, :root[data-af-design-system="graphite"] .tok-doctag, :root[data-af-design-system="graphite"] .tok-name { color:color-mix(in oklab, var(--primary) 66%, var(--foreground)); }
+:root[data-af-design-system="graphite"] .tok-string, :root[data-af-design-system="graphite"] .tok-regexp, :root[data-af-design-system="graphite"] .tok-template-variable, :root[data-af-design-system="graphite"] .tok-addition { color:color-mix(in oklab, var(--chart-2) 59%, var(--foreground)); }
+:root[data-af-design-system="graphite"] .tok-number, :root[data-af-design-system="graphite"] .tok-literal, :root[data-af-design-system="graphite"] .tok-symbol, :root[data-af-design-system="graphite"] .tok-bullet { color:color-mix(in oklab, var(--chart-3) 35%, var(--foreground)); }
+:root[data-af-design-system="graphite"] .tok-title, :root[data-af-design-system="graphite"] .tok-section, :root[data-af-design-system="graphite"] .tok-selector-id, :root[data-af-design-system="graphite"] .tok-selector-class { color:var(--foreground);font-weight:600; }
+:root[data-af-design-system="graphite"] .tok-title.class_, :root[data-af-design-system="graphite"] .tok-type, :root[data-af-design-system="graphite"] .tok-built_in, :root[data-af-design-system="graphite"] .tok-class { color:color-mix(in oklab, var(--chart-4) 47%, var(--foreground)); }
+:root[data-af-design-system="graphite"] .tok-attr, :root[data-af-design-system="graphite"] .tok-attribute, :root[data-af-design-system="graphite"] .tok-property, :root[data-af-design-system="graphite"] .tok-variable, :root[data-af-design-system="graphite"] .tok-params { color:color-mix(in oklab, var(--chart-1) 66%, var(--foreground)); }
+:root[data-af-design-system="graphite"] .tok-tag, :root[data-af-design-system="graphite"] .tok-operator, :root[data-af-design-system="graphite"] .tok-punctuation { color:color-mix(in oklab, var(--muted-foreground) 75%, var(--foreground)); }
+:root[data-af-design-system="graphite"] .tok-deletion { color:color-mix(in oklab, var(--destructive) 66%, var(--foreground)); }
+:root[data-af-design-system="graphite"] .tok-emphasis { font-style:italic; }
+:root[data-af-design-system="graphite"] .tok-strong { font-weight:700; }
+
+/* Font faces: the platform hosts these files; they stay here so the sheet is complete on its own. */
+@font-face { font-family: "Instrument Sans"; font-style: normal; font-weight: 400 700; font-stretch: 75% 100%; font-display: swap; src: url("/af/fonts/instrument-sans-latin-ext-standard-normal.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "Instrument Sans"; font-style: normal; font-weight: 400 700; font-stretch: 75% 100%; font-display: swap; src: url("/af/fonts/instrument-sans-latin-standard-normal.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "Instrument Sans"; font-style: italic; font-weight: 400 700; font-stretch: 75% 100%; font-display: swap; src: url("/af/fonts/instrument-sans-latin-ext-standard-italic.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "Instrument Sans"; font-style: italic; font-weight: 400 700; font-stretch: 75% 100%; font-display: swap; src: url("/af/fonts/instrument-sans-latin-standard-italic.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 100 800; font-display: swap; src: url("/af/fonts/jetbrains-mono-latin-ext-wght-normal.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 100 800; font-display: swap; src: url("/af/fonts/jetbrains-mono-latin-wght-normal.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "JetBrains Mono"; font-style: italic; font-weight: 100 800; font-display: swap; src: url("/af/fonts/jetbrains-mono-latin-ext-wght-italic.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "JetBrains Mono"; font-style: italic; font-weight: 100 800; font-display: swap; src: url("/af/fonts/jetbrains-mono-latin-wght-italic.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
