@@ -9,9 +9,10 @@
  *     server asks (cleartext inside TLS, MD5 or SCRAM).
  *  2. Each query, `schema()` and `test()`, on the session's one connection, in this order (postgres.js sends Parse,
  *     Describe and Flush, then Bind, Execute and Sync; a cursor's Execute carries a row count and is followed by Flush):
- *       Q          backend identity, then `BEGIN READ ONLY` and the remaining trusted statement_timeout
+ *       Q          `BEGIN READ ONLY`
  *       P D H B E S  `SELECT set_config('app.viewer_id', $1, true), set_config('app.viewer_email', $2, true), set_config('app.viewer_groups', $3, true)`
  *                    with $1 the account ID, $2 the email, $3 the group IDs as sorted JSON array text (unnamed, untyped)
+ *       Q          `SET LOCAL statement_timeout = '<remaining milliseconds>'` (trusted finite integer)
  *       P D H B E… S the statement, one, its values bound (`$name` → `$1`…), read by a cursor that stops one row past the
  *                    limit
  *       Q          `COMMIT`  (`ROLLBACK` after an error)
@@ -29,6 +30,7 @@ import { connectionSecrets } from './config';
 import { ConnectorFailure, driverFailure } from './errors';
 import { connectTarget, targetOf, type NetworkSeams } from './network';
 import { SessionPool } from './sessions';
+import { trackPostgresOperation } from './postgres-operation';
 import { bindStatement, readOnlyStatement } from './statement';
 import type { ConnectorModule } from './module';
 
@@ -73,12 +75,12 @@ export const postgresConnector: ConnectorModule = {
     const secrets = connectionSecrets(config);
     let firstByte: number | undefined;
     const create = (database:string,context:{signal?:AbortSignal;timeoutMs?:number}={}) => {
-        const session = { closes: 0 } as { sql: Sql; closes: number };
+        const session = { closes: 0, context } as { sql: Sql; closes: number; context: {signal?:AbortSignal;timeoutMs?:number}; operation?: ReturnType<typeof trackPostgresOperation> };
         session.sql = postgres({
           host: target.host, port: target.port, database, username: String(config.user), password: typeof config.password === 'string' ? config.password : undefined,
           ssl: target.tls ? { ...target.tls, host: target.host, ...(isIP(target.host) ? {} : { servername: target.host }) } : false,
           // A server without TLS answers SSLRequest 'N' and postgres.js starts TLS anyway: that byte names the refusal.
-          socket: async () => { const socket = await connectTarget(target, policy, seams,context); socket.once('data', (d: Buffer) => { firstByte = d[0]; }); return socket; },
+          socket: async () => { const socket = await connectTarget(target, policy, seams,session.context); socket.once('data', (d: Buffer) => { firstByte = d[0]; }); return socket; },
           max: 1, connect_timeout: CONNECTOR_LIMITS.connectTimeoutMs / 1000, fetch_types: false, prepare: false,
           onnotice: () => {}, onparameter: () => {}, onclose: () => { session.closes++; }, debug: false,
           connection: { application_name: 'artifactbin', TimeZone: 'UTC', statement_timeout: String(5000), default_transaction_read_only: 'on' },
@@ -86,25 +88,17 @@ export const postgresConnector: ConnectorModule = {
         } as unknown as postgres.Options<Record<string, postgres.PostgresType>>) as Sql;
         return session;
     };
-    const sessions = new SessionPool<{sql:Sql;closes:number;pid?:number;database:string;active?:boolean}>({
-      async open(database,context){return Object.assign(create(database,context),{database});},
+    const sessions = new SessionPool<ReturnType<typeof create>>({
+      async open(database,context){return create(database,context);},
       async close(session){
-        if(session.pid&&session.active){
-          const deadline=performance.now()+4500;
-          const control=create(session.database,{timeoutMs:4500});
-          try{
-            await withinTime(4500,undefined,()=>{void control.sql.end({timeout:0});},async()=>{
-            await control.sql.unsafe('SELECT pg_terminate_backend($1)',[session.pid]);
-            for(;;){
-              if(performance.now()>=deadline)throw new ConnectorFailure('unavailable','database termination unconfirmed');
-              const rows=await control.sql.unsafe('SELECT pid FROM pg_stat_activity WHERE pid=$1',[session.pid]);
-              if(!rows.length)break;
-              await new Promise(resolve=>setTimeout(resolve,10));
-            }
-            });
-          }finally{await control.sql.end({timeout:0});}
-        }
-        await session.sql.end({timeout:0});
+        // A fresh native cancel socket needs its own finite budget, not the aborted caller's signal.
+        session.context={timeoutMs:4500};
+        await withinTime(4500,undefined,()=>{},async()=>{
+          await session.operation?.stop();
+          // Close only after the dispatched operation has confirmed completion. Otherwise keep
+          // this session quarantined: closing a socket alone cannot prove the server stopped work.
+          await session.sql.end({timeout:0});
+        });
       },
     });
     const fail = (error: unknown) => {
@@ -122,35 +116,52 @@ export const postgresConnector: ConnectorModule = {
       const remaining=()=>{const left=Math.floor(deadline-performance.now());if(left<1||query.signal?.aborted)throw new ConnectorFailure('timeout','the query was cancelled or expired');return left;};
       return sessions.use(database, async (session, discard) => {
         const sql = session.sql;
+        session.context={signal:query.signal,timeoutMs:remaining()};
         try {
           return await withinTime(remaining(), query.signal, discard, async () => {
-            session.active=true;
-            const step = async <T>(work: Promise<T>, at: number) => { const out = await work; remaining(); if (session.closes !== at) throw new ConnectorFailure('connect_failed', 'the connection was lost during the query'); return out; };
+            const step = async <T>(work: Promise<T>, at: number) => {
+              remaining();
+              const operation=trackPostgresOperation(work,error=>error instanceof postgres.PostgresError);
+              session.operation=operation;
+              try {
+                const out=await operation.result;
+                remaining();
+                if(session.closes!==at)throw new ConnectorFailure('connect_failed','the connection was lost during the query');
+                return out;
+              } finally {
+                if(operation.confirmed)session.operation=undefined;
+              }
+            };
             const at = session.closes;
-            const identity=await sql.unsafe('SELECT pg_backend_pid() AS pid');
-            session.pid=Number(identity[0]!.pid);remaining();
             await step(sql.unsafe('BEGIN READ ONLY'),at);
-            await step(sql.unsafe("SELECT set_config('statement_timeout',$1,true)",[String(remaining())]),at);
             try {
+              // Governed PostgreSQL endpoints require a transaction viewer before any SELECT, including setup.
               await step(sql.unsafe(VIEWER_STATEMENT, [viewer.id, viewer.email, viewer.groups], { simple: false } as never), at);
-              let collector: Collector | undefined, oids: number[] = [], names: string[] = [];
+              await step(sql.unsafe(`SET LOCAL statement_timeout = '${remaining()}'`),at);
+              let collector: Collector | undefined, oids: number[] = [], names: string[] = [], collectionError: unknown;
               const begin = (columns: Raw, sample?: Record<string, unknown>) => {
                 oids = columns.map((c) => c.type); names = columns.map((c) => c.name);
                 collector = new Collector(limits, uniqueColumns(columns.map((c) => ({ name: c.name, type: columnType(c.type, sample?.[c.name]) }))));
               };
               const result = await step(sql.unsafe(bound.text, bound.values as never[], { simple: false } as never).cursor(Math.min(500, limits.rows + 1), (rows: Record<string, unknown>[]) => {
-                // Only the first batch carries the columns.
-                if (!collector) begin((rows as unknown as { columns?: Raw }).columns ?? [], rows[0]);
-                for (const row of rows) if (!collector!.add(Object.fromEntries(names.map((name, i) => [name, cell(oids[i]!, row[name])])))) return sql.CLOSE;
-                return undefined;
+                try {
+                  // Only the first batch carries the columns.
+                  if (!collector) begin((rows as unknown as { columns?: Raw }).columns ?? [], rows[0]);
+                  for (const row of rows) if (!collector!.add(Object.fromEntries(names.map((name, i) => [name, cell(oids[i]!, row[name])])))) return sql.CLOSE;
+                  return undefined;
+                } catch(error) {
+                  // Finish the cursor protocol before surfacing a local conversion/size refusal.
+                  collectionError=error;
+                  return sql.CLOSE;
+                }
               }), at);
+              if(collectionError)throw collectionError;
               if (!collector) begin((result as unknown as { columns?: Raw }).columns ?? []);
               await step(sql.unsafe('COMMIT'), at);
-              session.active=false;
               return collector!.answer();
             } catch (error) {
               discard();
-              if(performance.now()<deadline&&!query.signal?.aborted){await sql.unsafe('ROLLBACK');session.active=false;}
+              if(!session.operation&&performance.now()<deadline&&!query.signal?.aborted)await step(sql.unsafe('ROLLBACK'),at);
               throw error;
             }
           });

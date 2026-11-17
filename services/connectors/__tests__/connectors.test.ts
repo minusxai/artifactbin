@@ -165,17 +165,15 @@ describe('postgres, end to end', () => {
     expect(await pg.test({ viewer: alice })).toMatchObject({ ok: true });
   });
 
-  it('runs every statement as begin read only, the viewer statement, the statement, commit', async () => {
+  it('establishes the transaction viewer before a finite local timeout and data without catalog controls', async () => {
     wire.messages.length = 0;
     await pg.query({ text: 'select id from sales.orders where id = $id', params: { id: 1 }, viewer: alice });
-    const sent = wire.messages.map((m) => (m.sql ? `${m.type} ${m.sql}` : m.type)).join('\n');
+    const sent = wire.messages.map((m) => (m.sql ? `${m.type} ${m.sql.replace(/SET LOCAL statement_timeout = '[1-9][0-9]*'/, "SET LOCAL statement_timeout = '<remaining>'")}` : m.type)).join('\n');
     expect(sent).toBe([
-      'Q SELECT pg_backend_pid() AS pid',
       'Q BEGIN READ ONLY',
-      "P SELECT set_config('statement_timeout',$1,true)",
-      'D', 'H', 'B', 'E', 'S',
       "P SELECT set_config('app.viewer_id', $1, true), set_config('app.viewer_email', $2, true), set_config('app.viewer_groups', $3, true)",
       'D', 'H', 'B', 'E', 'S',
+      "Q SET LOCAL statement_timeout = '<remaining>'",
       'P select id from sales.orders where id = $1',
       'D', 'H', 'B', 'E', 'H', 'S',
       'Q COMMIT',
