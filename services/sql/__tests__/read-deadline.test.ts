@@ -11,6 +11,31 @@ import { DEFAULT_CAPS } from '../src/caps';
 
 const QUICK: RunInput = { tables: {}, params: {}, queries: [{ name: 'q', sql: 'select 7 as n' }] };
 const ENDLESS: RunInput = { tables: {}, params: {}, queries: [{ name: 'q', sql: 'with recursive c(n) as (select 1 union all select n+1 from c) select count(*) as n from c' }] };
+// The claims below are outcomes and orderings, not a sub-second clock: a cancelled call answers "cancelled", the worker that
+// ran it is replaced and answers the next read, a queued read expires while the busy one still runs. Where elapsed time is
+// the claim (a whole-call budget, a clamped limit) the engine limit a broken path would run to is 3000 ms and the bound
+// 1500, with the phases in the message: a respawned worker under tsx took 772-890 ms on a loaded runner, past 650.
+const columns = [{ name: 'n', type: 'number' as const }];
+/** A keyed catalog read (src/sqlite/prepared.ts): `rows: false` sends the key alone, answered only by a worker that prepared it. */
+const keyed = (rows: boolean): RunInput => ({
+  catalog: { defaultSchema: 'public', tables: [{ schema: 'public', name: 'rows', columns, source: 't', key: 'read-deadline' }] },
+  tables: rows ? { t: { rows: [{ n: 1 }, { n: 2 }], columns } } : {}, queries: [{ name: 'q', sql: 'select sum(n) as total from rows' }], params: {},
+});
+/** Prepares the keyed database on the one worker; until that worker is replaced the key alone answers. */
+async function prepare(svc: ReadService) {
+  expect((await svc.run(keyed(true))).q).toMatchObject({ rows: [{ total: 3 }] });
+  expect((await svc.run(keyed(false))).q, 'the worker kept the prepared database').toMatchObject({ rows: [{ total: 3 }] });
+}
+/**
+ * The worker that ran the cancelled work was terminated and a fresh one answers: it never prepared the key, so it asks for
+ * the rows. A worker still busy with the cancelled statement would hold this read past its 1500 ms wall (`timedOut`).
+ */
+async function expectReplaced(svc: ReadService, phases: string) {
+  const resumed = performance.now();
+  const next = (await svc.run(keyed(false), { wallTimeoutMs: 1500 })).q;
+  expect(next, `${phases}; the next read answered after ${Math.round(performance.now() - resumed)} ms`).toMatchObject({ rowsRequired: true });
+  expect((await svc.run(keyed(true))).q).toMatchObject({ rows: [{ total: 3 }] });
+}
 it('reports the actual engine read policy only through the protected service door',async()=>{
   const engine=createSql({timeoutMs:7000}),server=serveSql(engine,{serviceSecret:'synthetic_policy_secret'});
   const url=server.listen(0).url+'/read-policy';
@@ -37,16 +62,14 @@ it.each([0, -1, 1.5, NaN, Infinity, 120_001])('rejects invalid operator read tim
 });
 
 describe.each(['local', 'http'] as const)('%s SQL read lifecycle', transport => {
-  // The claim is "cancellation, not the execution limit": the bounds sit well under timeoutMs, never near the 70 ms abort,
-  // so a loaded runner cannot fail it (a 650 ms bound under a 1200 ms limit did, at 772 ms, on main).
-  it('cancels actual work before the execution limit and makes the one-worker service usable again', async () => {
+  it('cancels actual work before the execution limit and replaces the one worker, which answers the next read', async () => {
     const engine = createSql({ timeoutMs: 3000 }, { workers: 1 });
     const server = transport === 'http' ? serveSql(engine) : undefined;
     const service: ReadService = server ? sqlClient(server.listen(0).url, { deadlineMs: 6000 }) : engine;
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      expect(await service.run(QUICK)).toMatchObject({ q: { rows: [{ n: 7 }] } });
+      await prepare(service);
       const start = performance.now();
       let aborted = 0;
       timer = setTimeout(() => { aborted = performance.now(); controller.abort(); }, 70);
@@ -54,37 +77,40 @@ describe.each(['local', 'http'] as const)('%s SQL read lifecycle', transport => 
       const answered = performance.now();
       // Each phase in the message: a slow run names its step (the abort timer firing late, or the answer after it).
       const phases = `abort timer fired at +${Math.round(aborted - start)} ms (set for 70), answer at +${Math.round(answered - start)} ms`;
-      expect(answer.q).toHaveProperty('error');
+      expect(answer.q, phases).toEqual({ error: 'SQL call cancelled' });
       expect(answered - start, phases).toBeLessThan(1500);
-      const resumed = performance.now();
-      expect(await service.run(QUICK)).toMatchObject({ q: { rows: [{ n: 7 }] } });
-      expect(performance.now() - resumed, `${phases}; the next read took ${Math.round(performance.now() - resumed)} ms`).toBeLessThan(1500);
+      await expectReplaced(service, phases);
     } finally { clearTimeout(timer); await server?.close(); await engine.close(); }
   });
 
   it('expires a queued read without waiting for the busy worker or dispatching the expired work', async () => {
-    const engine = createSql({ timeoutMs: 1200 }, { workers: 1 });
+    const engine = createSql({ timeoutMs: 3000 }, { workers: 1 });
     const server = transport === 'http' ? serveSql(engine) : undefined;
-    const service: ReadService = server ? sqlClient(server.listen(0).url, { deadlineMs: 3000 }) : engine;
-    let busy: ReturnType<SqlService['run']> | undefined;
+    const service: ReadService = server ? sqlClient(server.listen(0).url, { deadlineMs: 6000 }) : engine;
+    const busyController = new AbortController();
+    let busy: Promise<unknown> | undefined, busySettled = false;
     try {
       await service.run(QUICK);
-      busy = service.run(ENDLESS);
+      busy = service.run(ENDLESS, { signal: busyController.signal }).finally(() => { busySettled = true; });
       // Warmed single worker is occupied before this second request reaches the service.
-      await new Promise(resolve => setTimeout(resolve, 60));
+      await new Promise(resolve => setTimeout(resolve, 150));
       const start = performance.now();
       const answer = await service.run(QUICK, { wallTimeoutMs: 100 });
-      expect(answer.q).toMatchObject({ timedOut: true });
-      expect(performance.now() - start).toBeLessThan(650);
-    } finally { await busy; await server?.close(); await engine.close(); }
+      const phases = `the queued read answered after ${Math.round(performance.now() - start)} ms`;
+      // A queued read that waited for the worker would also answer timed out (the pool expires a late answer), so the
+      // claim is the order: it answers while the busy read still holds the worker, which runs to 3000 ms unless aborted.
+      expect(busySettled, `${phases}, after the busy read: it waited for the worker`).toBe(false);
+      expect(answer.q, phases).toMatchObject({ timedOut: true });
+      expect(performance.now() - start, phases).toBeLessThan(1500);
+    } finally { busyController.abort(); await busy; await server?.close(); await engine.close(); }
   });
 });
 
 describe.each(['local', 'http'] as const)('%s batch and admission regressions', transport => {
   async function fixture(test: (svc: SqlService, engine: ReturnType<typeof createSql>) => Promise<void>) {
-    const engine = createSql({timeoutMs: 1000}, {workers:1});
+    const engine = createSql({timeoutMs: 3000}, {workers:1});
     const server = transport === 'http' ? serveSql(engine) : undefined;
-    const svc = server ? sqlClient(server.listen(0).url) : engine;
+    const svc = server ? sqlClient(server.listen(0).url, {deadlineMs: 6000}) : engine;
     try { await svc.run(QUICK); await test(svc, engine); }
     finally { await server?.close(); await engine.close(); }
   }
@@ -95,23 +121,26 @@ describe.each(['local', 'http'] as const)('%s batch and admission regressions', 
     expect(await svc.run(QUICK)).toMatchObject({q:{rows:[{n:7}]}});
   }));
   it('cancels a running batch and does not retry individual statements', () => fixture(async svc => {
+    await prepare(svc);
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 50);
+    let aborted = 0;
+    const start = performance.now();
+    const timer = setTimeout(() => { aborted = performance.now(); controller.abort(); }, 50);
     try {
-      const start = performance.now();
       const result = await svc.runMany({shared:QUICK,runs:[ENDLESS,ENDLESS]}, {signal:controller.signal});
-      expect(result).toMatchObject([{q:{error:'SQL call cancelled'}},{q:{error:'SQL call cancelled'}}]);
-      expect(performance.now()-start).toBeLessThan(650);
-      const resumed = performance.now();
-      expect(await svc.run(QUICK)).toMatchObject({q:{rows:[{n:7}]}});
-      expect(performance.now()-resumed).toBeLessThan(650);
+      const phases = `abort timer fired at +${Math.round(aborted - start)} ms (set for 50), answer at +${Math.round(performance.now() - start)} ms`;
+      expect(result, phases).toEqual([{q:{error:'SQL call cancelled'}},{q:{error:'SQL call cancelled'}}]);
+      expect(performance.now()-start, phases).toBeLessThan(1500);
+      await expectReplaced(svc, phases);
     } finally { clearTimeout(timer); }
   }));
   it('bounds the whole batch rather than renewing each statement deadline', () => fixture(async svc => {
+    // Renewed per statement, the two would run to their 3000 ms limits one after the other: 6000 ms.
     const start = performance.now();
     const result = await svc.runMany({runs:[ENDLESS,ENDLESS]}, {wallTimeoutMs:80});
-    expect(result).toMatchObject([{q:{timedOut:true}},{q:{timedOut:true}}]);
-    expect(performance.now()-start).toBeLessThan(650);
+    const phases = `the 80 ms batch answered after ${Math.round(performance.now() - start)} ms`;
+    expect(result, phases).toMatchObject([{q:{timedOut:true}},{q:{timedOut:true}}]);
+    expect(performance.now()-start, phases).toBeLessThan(1500);
   }));
   it('removes an aborted queued batch while the active call remains usable', () => fixture(async svc => {
     const busyController = new AbortController();
@@ -141,14 +170,16 @@ it('preserves default and explicitly configured mutation caps separately from re
   expect(DEFAULT_CAPS.mutationTimeoutMs).toBe(5000);
   expect(sqlCaps({})).toMatchObject({timeoutMs:30000, mutationTimeoutMs:5000});
   expect(sqlCaps({timeoutMs:7000})).toMatchObject({timeoutMs:7000, mutationTimeoutMs:7000});
-  const engine = createSql({timeoutMs:1000, mutationTimeoutMs:60}, {workers:1});
+  const engine = createSql({timeoutMs:3000, mutationTimeoutMs:60}, {workers:1});
   try {
     await engine.run(QUICK);
     const start = performance.now();
     const result = await engine.mutate({table:{name:'t',rows:[{n:1}],columns:[{name:'n',type:'number'}]}, params:{},
       sql:'update t set n = (with recursive c(n) as (select 1 union all select n+1 from c) select count(*) from c)'});
-    expect(result).toMatchObject({timedOut:true});
-    expect(performance.now()-start).toBeLessThan(650);
+    const phases = `the mutation answered after ${Math.round(performance.now() - start)} ms`;
+    // Under the 3000 ms read cap it would run 3000 ms: the 60 ms mutation cap is the one named and the one enforced.
+    expect(result, phases).toMatchObject({timedOut:true, error:expect.stringContaining('(limit 60ms)')});
+    expect(performance.now()-start, phases).toBeLessThan(1500);
   } finally { await engine.close(); }
 });
 
@@ -163,9 +194,12 @@ describe.each(['local','http'] as const)('%s request budgets', transport => {
         expect(await svc.run({...QUICK,timeoutMs:value})).toHaveProperty('q.error');
         expect(await svc.runMany({runs:[QUICK]}, {wallTimeoutMs:value})).toMatchObject([{q:{error:expect.any(String)}}]);
       }
+      // Unclamped, the read would run for 1000 s: it is clamped to the engine's 80 ms, which its answer names.
       const start = performance.now();
-      expect(await svc.run({...ENDLESS,timeoutMs:1000000}, {wallTimeoutMs:1000000})).toMatchObject({q:{timedOut:true}});
-      expect(performance.now()-start).toBeLessThan(650);
+      const clamped = await svc.run({...ENDLESS,timeoutMs:1000000}, {wallTimeoutMs:1000000});
+      const phases = `the clamped read answered after ${Math.round(performance.now() - start)} ms`;
+      expect(clamped, phases).toMatchObject({q:{timedOut:true, error:expect.stringContaining('(limit 80ms)')}});
+      expect(performance.now()-start, phases).toBeLessThan(1500);
       expect(await svc.run({...QUICK,limit:Infinity})).toMatchObject({q:{rows:[{n:7}]}});
     } finally { await server?.close(); await engine.close(); }
   });
@@ -209,12 +243,15 @@ it('accounts for HTTP body admission before dispatching SQL', async () => {
 });
 
 it('bounds synchronous batches at statement boundaries and honors pre-abort without claiming mid-call abort', async () => {
-  const engine = createSqliteSql({timeoutMs:1000});
+  const engine = createSqliteSql({timeoutMs:3000});
   await engine.run(QUICK);
   expect(await engine.run(ENDLESS,{signal:AbortSignal.abort()})).toMatchObject({q:{error:'SQL call cancelled'}});
+  // Each statement under its own 3000 ms limit would take 6000 ms; the batch's 70 ms wall bounds both.
   const start = performance.now();
-  expect(await engine.runMany({runs:[ENDLESS,ENDLESS]}, {wallTimeoutMs:70})).toMatchObject([{q:{timedOut:true}},{q:{timedOut:true}}]);
-  expect(performance.now()-start).toBeLessThan(650);
+  const answer = await engine.runMany({runs:[ENDLESS,ENDLESS]}, {wallTimeoutMs:70});
+  const phases = `the 70 ms batch answered after ${Math.round(performance.now() - start)} ms`;
+  expect(answer, phases).toMatchObject([{q:{timedOut:true}},{q:{timedOut:true}}]);
+  expect(performance.now()-start, phases).toBeLessThan(1500);
 });
 
 it('expires an unfinished SQL upload at its admission deadline without dispatching work', async () => {
@@ -231,7 +268,8 @@ it('expires an unfinished SQL upload at its admission deadline without dispatchi
       });
       request.on('error', reject);
       request.write(' ');
-      guard = setTimeout(() => reject(new Error('unfinished upload exceeded its deadline')), 600);
+      // Never finished, the upload would hang: the guard only names that, far past the 30 ms admission deadline.
+      guard = setTimeout(() => reject(new Error('unfinished upload exceeded its deadline')), 1500);
     });
     expect(status).toBe(408);
     expect(dispatched).toBe(0);

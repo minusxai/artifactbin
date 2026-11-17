@@ -17,19 +17,21 @@ const ENDLESS = { tables: {}, params: {}, queries: [{ name: 'slow', sql: 'with r
 
 /**
  * When GET /health, sent 200 ms after ENDLESS, is answered — measured from the
- * moment ENDLESS was sent. The test shares its thread with the server, so an
- * engine running on that thread holds the test's own timer too: the answer
- * then lands only once the query has been stopped.
+ * moment ENDLESS was sent — and whether ENDLESS was still running then. The
+ * test shares its thread with the server, so an engine running on that thread
+ * holds the test's own timer too: the answer then lands only once the query
+ * has been stopped.
  */
 async function healthDuringQuery(svc: ReturnType<typeof createSqliteSql>) {
   const http = serveSql(svc);
   const { url } = http.listen(0);
   try {
     const sent = performance.now();
-    const running = fetch(`${url}/run`, { method: 'POST', body: JSON.stringify(ENDLESS) }).then((r) => r.json());
+    let settled = false;
+    const running = fetch(`${url}/run`, { method: 'POST', body: JSON.stringify(ENDLESS) }).then((r) => r.json()).finally(() => { settled = true; });
     await new Promise((resolve) => setTimeout(resolve, 200));
     const health = await fetch(`${url}/health`);
-    return { status: health.status, answeredAt: performance.now() - sent, answer: await running };
+    return { status: health.status, answeredAt: performance.now() - sent, queryRunning: !settled, answer: await running };
   } finally { await http.close(); }
 }
 
@@ -37,9 +39,11 @@ describe('a server keeps answering while a query runs', () => {
   it('on the worker threads, /health answers at once and the query stops at its deadline', async () => {
     const svc = createSql({ timeoutMs: 1500 }, { workers: 1 });
     try {
-      const { status, answeredAt, answer } = await healthDuringQuery(svc);
+      const { status, answeredAt, queryRunning, answer } = await healthDuringQuery(svc);
       expect(status).toBe(200);
-      expect(answeredAt).toBeLessThan(700);
+      // The claim is the order, not a clock: /health answers while the query still holds its thread (to its 1500 ms
+      // deadline). On the calling thread it cannot (below); a cold worker's start on a loaded runner cannot fail it.
+      expect(queryRunning, `/health answered at +${Math.round(answeredAt)} ms, after the query`).toBe(true);
       expect(answer.results.slow).toMatchObject({ timedOut: true });
     } finally { await svc.close(); }
   });

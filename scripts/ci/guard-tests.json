@@ -27,6 +27,7 @@
   "scripts/__tests__/stored-shape-pins.test.mjs",
   "scripts/__tests__/system-debs.test.mjs",
   "scripts/__tests__/v3-ci.test.mjs",
+  "scripts/__tests__/wall-clock-bounds.test.mjs",
   "scripts/__tests__/workflows.test.mjs",
   "services/app/lib/__tests__/author-code-stays-off-the-server.test.ts",
   "services/app/lib/__tests__/native-author-skill.test.ts",

@@ -13,45 +13,74 @@ const catalog: DatasetCatalog = {kind:'stored',defaultSchema:'public',refreshSec
 ]};
 const quick = {tables:{},params:{},queries:[{name:'warm',sql:'select 1'}]};
 
-it.each(['local','http'])('%s passes cancellation through dataset execution and frees the single worker promptly', async transport => {
-  const engine = createSql({timeoutMs:1200},{workers:1});
+/** What one engine answer was: a cache miss that asks for rows, rows, or the failure's own words. */
+const kind = (answer: unknown) => {
+  const q = answer as {rowsRequired?: boolean; timedOut?: boolean; error?: string};
+  return q.rowsRequired ? 'rowsRequired' : q.timedOut ? 'timedOut' : q.error ?? 'rows';
+};
+
+// The claims are outcomes, not a sub-second clock: the engine answers "cancelled" (never its execution limit), and the
+// one worker is replaced (its prepared database is gone, so the next read asks for rows) and answers. The only clocks
+// sit far under the 3000 ms limit a missed cancellation would run to: respawning the worker under tsx took ~130 ms
+// locally and 890 ms on a loaded runner, which failed a 650 ms bound on main.
+it.each(['local','http'])('%s passes cancellation through dataset execution to the engine and replaces the single worker', async transport => {
+  const engine = createSql({timeoutMs:3000},{workers:1});
   const server=transport==='http'?serveSql(engine):undefined;
-  const service=server?sqlClient(server.listen(0).url):engine;
+  const service=server?sqlClient(server.listen(0).url,{deadlineMs:6000}):engine;
+  const answers: string[] = [];
+  const execute: SqlService['run'] = async (input, context) => { const answer = await service.run(input, context); answers.push(kind(answer.result)); return answer; };
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const objects={get:async()=>Buffer.from('[{"n":1}]')};
+  const read = (opts: {signal?: AbortSignal; wallTimeoutMs?: number} = {}, sql = 'select n from public.rows') =>
+    executeCatalog(catalog,sql,{}, {view:null,execute,objects,timeoutMs:3000,...opts});
   try {
     await engine.run(quick);
-    await executeCatalog(catalog,'select n from public.rows',{}, {view:null,execute:service.run,objects,timeoutMs:1200});
+    await read();
+    expect(answers, 'a cold read asks for rows, then answers').toEqual(['rowsRequired','rows']);
+    answers.length = 0;
+    await read();
+    expect(answers, 'the worker kept the prepared database: the key alone answers').toEqual(['rows']);
+    answers.length = 0;
     const started = performance.now();
-    timer = setTimeout(() => controller.abort(),70);
-    await expect(executeCatalog(catalog,
-      'with recursive c(n) as (select 1 union all select n+1 from c) select count(*) from c', {},
-      {view:null,execute:service.run,objects,timeoutMs:1200,signal:controller.signal},
-    )).rejects.toBeDefined();
+    let aborted = 0;
+    timer = setTimeout(() => { aborted = performance.now(); controller.abort(); },70);
+    await expect(read({signal:controller.signal},'with recursive c(n) as (select 1 union all select n+1 from c) select count(*) from c')).rejects.toBeDefined();
+    const answered = performance.now();
+    const phases = `abort timer fired at +${Math.round(aborted - started)} ms (set for 70), rejected at +${Math.round(answered - started)} ms`;
     expect(controller.signal.aborted).toBe(true);
-    expect(performance.now()-started).toBeLessThan(650);
+    expect(answers, `${phases}: the engine answered`).toEqual(['SQL call cancelled']);
+    expect(answered - started, phases).toBeLessThan(1500);
+    answers.length = 0;
     const resumed = performance.now();
-    expect(await engine.run(quick)).toMatchObject({warm:{rows:[{'1':1}]}});
-    expect(performance.now()-resumed).toBeLessThan(650);
+    // A worker still running the cancelled statement holds the next read past its 1500 ms wall: it fails, never hangs.
+    expect((await read({wallTimeoutMs:1500})).rows).toEqual([{n:1}]);
+    expect(answers, `${phases}; the next read took ${Math.round(performance.now() - resumed)} ms on a fresh worker`).toEqual(['rowsRequired','rows']);
   } finally { clearTimeout(timer); await server?.close(); await engine.close(); }
 });
 
 it('expires during hydration and never retries SQL after the shared wall budget has expired', async () => {
-  const engine = createSql({timeoutMs:1200},{workers:1});
+  const engine = createSql({timeoutMs:3000},{workers:1});
   let executions=0;
   const execute: SqlService['run'] = (...args) => { executions++; return engine.run(...args); };
-  const objects = {get:async () => {await new Promise(resolve=>setTimeout(resolve,250));return Buffer.from('[{"n":1}]');}};
-  const options: Parameters<typeof executeCatalog>[3] & {wallTimeoutMs:number} = {view:null,execute,objects,timeoutMs:1200,wallTimeoutMs:80};
+  // The object store answers only when the test releases it, after the read has expired: expiry during hydration is
+  // an ordering, not a race between a sleep and the wall budget.
+  let hydrating=false, release!: () => void;
+  const stored = new Promise<void>(resolve => { release = resolve; });
+  const objects = {get:async () => {hydrating=true;await stored;return Buffer.from('[{"n":1}]');}};
+  const options: Parameters<typeof executeCatalog>[3] & {wallTimeoutMs:number} = {view:null,execute,objects,timeoutMs:3000,wallTimeoutMs:500};
+  let guard: ReturnType<typeof setTimeout> | undefined;
   try {
     await engine.run(quick);
-    const started = performance.now();
-    await expect(executeCatalog(catalog,'select n from public.rows',{},options)).rejects.toBeDefined();
-    expect(performance.now()-started).toBeLessThan(200);
+    const expired = executeCatalog(catalog,'select n from public.rows',{},options).then(() => 'answered', () => 'rejected');
+    const hung = new Promise(resolve => { guard = setTimeout(() => resolve('still waiting for hydration 5 s past its 500 ms wall budget'), 5000); });
+    expect(await Promise.race([expired, hung])).toBe('rejected');
+    expect(hydrating, 'the read expired while the object store was still answering').toBe(true);
     // A late object-store completion must not revive the expired SQL attempt.
-    await new Promise(resolve=>setTimeout(resolve,300));
+    release();
+    await new Promise(resolve => setImmediate(resolve));
     expect(executions).toBe(1);
-  } finally { await engine.close(); }
+  } finally { clearTimeout(guard); release(); await engine.close(); }
 });
 
 it('uses configured read defaults and integer remaining wall budgets on both cold attempts',async()=>{
