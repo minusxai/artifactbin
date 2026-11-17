@@ -18,7 +18,6 @@ import { buildQuickSheet, QUICK_SHEET_MAX_BYTES } from '@/test/helpers/skill-doc
 import { createUser } from '@/lib/accounts';
 import { request, useAppHarness } from '@/__tests__/harness';
 
-useAppHarness();
 
 const BASE = 'http://localhost:3000';
 /** The retired vocabulary. Each of these, in an agent's hands, is a wrong turn. */
@@ -29,13 +28,14 @@ const httpDiscovery=(name:string)=>name==='the 401 hint'||name==='skills/artifac
 /** The single sanctioned mention: a prohibition the skill is allowed to spell out, once. */
 const ALLOWED_SENTENCE = 'never mint or print tokens';
 
-let seq = 0;
-const surfaces = async (): Promise<Array<[name: string, text: string]>> => {
-
-
-  // A fresh account per call: the harness wipes between TESTS, not between
-  // calls inside one.
-  const email = `starter-consistency-${seq++}@example.com`;
+/**
+ * Every surface's text, gathered once for the file: the three tests that read them only read text, so one account,
+ * one owned page and one call to each route serve them all (each call was a third of this file's time).
+ */
+let gathered: Promise<Array<[name: string, text: string]>> | undefined;
+const surfaces = () => gathered ??= gather();
+const gather = async (): Promise<Array<[name: string, text: string]>> => {
+  const email = 'starter-consistency@example.com';
   const user = await createUser({ email });
   const owned = await createArtifact('', user.id, { format: 'markup', source: '<h1>Owned</h1>', content: '<h1>Owned</h1>', meta: {} } as never);
   const actor = { credential: 'session' as const, userId: user.id, email, emailVerified: true };
@@ -63,6 +63,8 @@ const surfaces = async (): Promise<Array<[name: string, text: string]>> => {
 const withoutTheException = (text: string): string => text.replace(ALLOWED_SENTENCE, '');
 
 describe('every agent-facing starter says the same thing', () => {
+  // Only these tests write rows (an account, its page, the two prompt routes): the database and its per-test wipe are theirs.
+  useAppHarness();
   it('links the author skill and HTTP guide without CLI setup',async()=>{
     for(const [name,text] of await surfaces()){
       expect(text,name).toContain(name==='the 401 hint'||name.startsWith('skills/')?`${BASE}/llms/http-auth`:`${BASE}/llms.txt`);
