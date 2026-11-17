@@ -16,8 +16,8 @@
  *    that runs SQL text gets past any such check). A gateway built for this reads them as the statement starts.
  *  - Addresses and TLS: ./network.
  */
-import type { ConnectionConfig, ConnectorId, ConnectorNetworkPolicy, ConnectorSpec } from '@artifactbin/contracts';
-import { CONNECTORS } from '@artifactbin/contracts';
+import type { ConnectorReadPolicy, ConnectionConfig, ConnectorId, ConnectorNetworkPolicy, ConnectorSpec } from '@artifactbin/contracts';
+import { CONNECTORS,sqlTimeout,SQL_QUERY_DEFAULT_MS,SQL_QUERY_MAX_MS } from '@artifactbin/contracts';
 import { connectorSpec, parseConnectionConfig } from './config';
 import { ConnectorFailure } from './errors';
 import type { ConnectorModule, OpenConnection } from './module';
@@ -29,11 +29,12 @@ import { postgresConnector } from './postgres';
 const MODULES: Partial<Record<ConnectorId, ConnectorModule>> = { postgres: postgresConnector, mysql: mysqlConnector };
 
 /** Opens a connection from its configuration (JSON text, an object, or one already checked). Sockets open on first use. */
-export function openConnection(config: unknown, policy: ConnectorNetworkPolicy, seams?: NetworkSeams): OpenConnection {
+export function openConnection(config: unknown, policy: ConnectorNetworkPolicy, seams?: NetworkSeams, readPolicy?:ConnectorReadPolicy): OpenConnection {
+  const trusted={queryTimeoutMs:sqlTimeout(readPolicy?.queryTimeoutMs,SQL_QUERY_DEFAULT_MS,SQL_QUERY_MAX_MS)};
   const checked: ConnectionConfig = parseConnectionConfig(config);
   const module = MODULES[checked.connector];
   if (!module) throw new ConnectorFailure('unavailable', `${connectorSpec(checked.connector)!.label} is listed but this install cannot connect to it yet`);
-  return module.open(checked, policy, seams);
+  return module.open(checked, policy, seams, trusted);
 }
 
 /** The registry as people and agents see it (the generated connector list): every connector, and whether it runs here. */

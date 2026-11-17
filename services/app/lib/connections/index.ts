@@ -20,11 +20,12 @@
  * AN AGENT reads it at `/api/default-connection/{schema,sql}` as its signed-in account (`agentConnectionSql`), its
  * statement passed through unchanged with an optional namespace.
  */
+import {readLifetime} from '@/lib/datasets';
 import { CONNECTORS, SQL_READ_LIMITS, type ConnectionSummary, type ConnectorDialect, type ConnectorError, type ConnectorSchema, type ConnectorTestResult, type ConnectorViewer, type HtmlPageLink, type Scalar } from '@artifactbin/contracts';
 import { ConnectorFailure, checkedNamespace, connectionSummary, connectorError, leadingWords, mapQualifiers, openConnection, parseConnectionConfig, qualifierNames, type OpenConnection } from '@artifactbin/connectors';
 import { getUserById, type AccessActor } from '@/lib/accounts';
 import { listGroups } from '@/lib/groups';
-import { datasetsAllowPrivateNetwork, defaultConnectionSetting } from '@/lib/platform';
+import { QUERY_TIMEOUT_MS,datasetsAllowPrivateNetwork, defaultConnectionSetting } from '@/lib/platform';
 
 const SETTING = 'DATASETS__DEFAULT_CONNECTION';
 interface ConfiguredConnection { connection: OpenConnection; summary: ConnectionSummary; dialect: ConnectorDialect }
@@ -50,7 +51,7 @@ function configured(): typeof current {
     const open = (value: unknown): ConfiguredConnection => {
       const config = parseConnectionConfig(value);
       const item = {
-        connection: openConnection(config, { allowPrivateNetwork: datasetsAllowPrivateNetwork() }),
+        connection: openConnection(config, { allowPrivateNetwork: datasetsAllowPrivateNetwork() },undefined,{queryTimeoutMs:QUERY_TIMEOUT_MS}),
         summary: connectionSummary(config), dialect: CONNECTORS.find(c => c.id === config.connector)!.dialect,
       };
       opened.push(item);
@@ -128,15 +129,17 @@ function refused(e: ConnectorError): ConnectionSqlReply {
 }
 
 async function run(actor: AccessActor, text: string, params: Readonly<Record<string, Scalar>>, namespace: string | undefined, signal: AbortSignal): Promise<ConnectionSqlReply> {
+  const life=readLifetime(signal);
   try {
     const c = selected(namespace);
     if (!c) return reply(404, 'dataset_not_found', 'this install has no default connection');
-    const answer = await c.connection.query({ text, params, viewer: await viewerOf(actor), ...(c.namespace ? { namespace: c.namespace } : {}), limits: { rows: SQL_READ_LIMITS.rows }, signal });
+    const answer = await c.connection.query({ text, params, viewer: await life.step(viewerOf(actor)), ...(c.namespace ? { namespace: c.namespace } : {}), limits: { rows: SQL_READ_LIMITS.rows }, signal:life.signal });
+    life.check();
     return { status: 200, body: { columns: answer.columns, rows: answer.rows, ...(answer.truncated ? { truncated: true } : {}) } };
   } catch (e) {
     if (e instanceof ConnectorFailure) return refused(connectorError(e));
     throw e;
-  }
+  }finally{life.close();}
 }
 
 function checkedCall(raw: { sql?: unknown; params?: unknown }): { sql: string; params: Record<string, Scalar> } | ConnectionSqlReply {
@@ -150,7 +153,7 @@ function checkedCall(raw: { sql?: unknown; params?: unknown }): { sql: string; p
  * A page statement that names one of the page's default-connection links, answered here; null when it names none
  * (the stored-dataset door answers it). `actor` is the reader the page door already admitted to the page.
  */
-export async function pageConnectionSql(actor: AccessActor, links: readonly HtmlPageLink[], raw: { sql?: unknown; params?: unknown }, signal: AbortSignal): Promise<ConnectionSqlReply | null> {
+export async function pageConnectionSql(actor: AccessActor, links: readonly HtmlPageLink[], raw: { sql?: unknown; params?: unknown }, signal: AbortSignal, admission?:{step<T>(pending:Promise<T>):Promise<T>;dispatch(read:boolean):AbortSignal}): Promise<ConnectionSqlReply | null> {
   const defaults = links.filter((l): l is Extract<HtmlPageLink, { kind: 'default-connection' }> => l.kind === 'default-connection');
   if (!defaults.length || typeof raw.sql !== 'string') return null;
   let dialect: ConnectorDialect = configured()?.fallback.dialect ?? 'postgres';
@@ -179,6 +182,7 @@ export async function pageConnectionSql(actor: AccessActor, links: readonly Html
   } catch (e) { return refused(connectorError(e)); }
   let text: string;
   try { text = mapQualifiers(dialect, call.sql, new Map(used.map((l) => [l.name.toLowerCase(), '']))); } catch (e) { return refused(connectorError(e)); }
+  signal=admission?.dispatch(true)??signal;
   return run(actor, text, call.params, databases[0] || undefined, signal);
 }
 

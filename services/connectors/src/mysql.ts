@@ -6,8 +6,8 @@
  *     HandshakeResponse41 with `user` (the configured account) and `database` (what followed `default:`, as written,
  *     else the configured database), LOCAL INFILE and multiple statements off, connection attribute
  *     `program_name=artifactbin`; the password as the server asks (caching_sha2_password full authentication inside
- *     TLS). Then, best effort (a server that refuses them still serves): `SET time_zone = '+00:00'` and
- *     `SET SESSION max_execution_time = <CONNECTOR_LIMITS.timeoutMs>`.
+ *     TLS). Session timezone, native timeout and viewer installation are required before dispatch.
+ *     The native timeout uses the remaining trusted read budget (Doris rounds positive seconds up).
  *  2. Each query, `schema()` and `test()`, on one session, each a COM_QUERY of its own unless it binds values:
  *       `START TRANSACTION READ ONLY`
  *       `SET @app.viewer_id='<id>', @app.viewer_email='<email>', @app.viewer_groups='<groups>'` (text, literals:
@@ -26,7 +26,7 @@
 import mysql from 'mysql2';
 import type { Connection as MysqlConnection, FieldPacket } from 'mysql2';
 import type { ConnectionConfig, ConnectorAnswer, ConnectorJson, ConnectorNetworkPolicy, ConnectorQuery, ConnectorSchema, ConnectorValueType } from '@artifactbin/contracts';
-import { CONNECTOR_LIMITS } from '@artifactbin/contracts';
+import { CONNECTOR_LIMITS,SQL_QUERY_DEFAULT_MS } from '@artifactbin/contracts';
 import { Collector, checkedNamespace, limitsOf, numberValue, plainValue, timestampValue, uniqueColumns, viewerValues, withinTime } from './answer';
 import { connectionSecrets } from './config';
 import { ConnectorFailure, driverFailure } from './errors';
@@ -66,15 +66,14 @@ const call = <T = unknown>(c: MysqlConnection, text: string, values?: unknown[])
 });
 
 export const mysqlConnector: ConnectorModule = {
-  open(config: ConnectionConfig, policy: ConnectorNetworkPolicy, seams: NetworkSeams = {}) {
+  open(config: ConnectionConfig, policy: ConnectorNetworkPolicy, seams: NetworkSeams = {}, readPolicy={queryTimeoutMs:SQL_QUERY_DEFAULT_MS}) {
     const target = targetOf(config, policy);
     const secrets = connectionSecrets(config);
-    // Positive detection only: unsupported metadata reads keep the transaction-protected native path.
-    // Gateways may refuse metadata before a viewer is installed; they retain their own viewer transaction scope.
+    // Positive detection selects the Doris autocommit dialect; session setup fails closed.
     const autocommit = new WeakSet<MysqlConnection>();
-    const sessions = new SessionPool<MysqlConnection>({
-      async open(database) {
-        const socket = await connectTarget(target, policy, seams);
+    const create=async(database:string,context:{signal?:AbortSignal;timeoutMs?:number}={})=>{
+        const deadline=performance.now()+Math.min(context.timeoutMs??10000,10000);
+        const socket = await connectTarget(target, policy, seams,context);
         const connection = mysql.createConnection({
           host: target.host, port: target.port, database, user: String(config.user), password: typeof config.password === 'string' ? config.password : undefined,
           ssl: target.tls ? { ...target.tls, verifyIdentity: true } as never : undefined,
@@ -85,35 +84,50 @@ export const mysqlConnector: ConnectorModule = {
           connectAttributes: { program_name: 'artifactbin' },
         } as never);
         connection.on('error', () => {});
-        await new Promise<void>((resolve, reject) => connection.connect((error) => (error ? (connection.destroy(), reject(error)) : resolve())));
-        const version = await call<Array<{engine: string}>>(connection, 'SELECT @@version_comment AS engine').catch(() => []);
-        if (/\bdoris\b/i.test(String(version[0]?.engine))) autocommit.add(connection);
-        for (const setting of ['SET time_zone = \'+00:00\'', `SET SESSION max_execution_time = ${CONNECTOR_LIMITS.timeoutMs}`]) await call(connection, setting).catch(() => undefined);
+        await withinTime(Math.max(1,deadline-performance.now()),context.signal,()=>connection.destroy(),()=>new Promise<void>((resolve, reject) => connection.connect((error) => (error ? (connection.destroy(), reject(error)) : resolve()))));
         return connection;
-      },
-      async close(connection) {
-        await new Promise<void>((resolve) => {
-          const timer = setTimeout(() => { connection.destroy(); resolve(); }, 1000);
-          connection.end(() => { clearTimeout(timer); resolve(); });
-        });
+    };
+    const databases=new WeakMap<MysqlConnection,string>();
+    const sessions = new SessionPool<MysqlConnection>({
+      async open(database,context){const c=await create(database,context);databases.set(c,database);return c;},
+      async close(connection){
+        const deadline=performance.now()+4500;
+        const control=await create(databases.get(connection)!,{timeoutMs:4500});
+        try{
+          // Same-account KILL is followed by server-side absence, never inferred from socket close.
+          await withinTime(Math.max(1,deadline-performance.now()),undefined,()=>control.destroy(),async()=>{
+          try{await call(control,`KILL CONNECTION ${Number(connection.threadId)}`);}
+          catch(error){if((error as {errno?:number}).errno!==1094)throw error;}
+          const rows=await call<Array<{Id:number|string}>>(control,'SHOW PROCESSLIST');
+          if(rows.some(row=>Number(row.Id)===Number(connection.threadId)))throw new ConnectorFailure('unavailable','database termination unconfirmed');
+          connection.destroy();
+          });
+        }finally{control.destroy();}
       },
     });
 
     async function run(query: ConnectorQuery, guarded: boolean): Promise<ConnectorAnswer> {
       if (guarded) readOnlyStatement('mysql', query.text);
       const bound = guarded ? bindStatement('mysql', query.text, query.params) : { text: query.text, values: Object.values(query.params) };
-      const limits = limitsOf(query), viewer = viewerValues(query);
+      const limits = limitsOf(query,guarded?readPolicy.queryTimeoutMs:CONNECTOR_LIMITS.connectTimeoutMs), viewer = viewerValues(query);
       const database = checkedNamespace('mysql', query.namespace) ?? String(config.database);
       let open = false;
+      const deadline=performance.now()+limits.timeoutMs;
+      const remaining=()=>{const left=Math.floor(deadline-performance.now());if(left<1||query.signal?.aborted)throw new ConnectorFailure('timeout','the query was cancelled or expired');return left;};
       // A session that fails to open (sign-in, database, network) fails before the query's own mapping below.
       return sessions.use(database, async (c, dropSession) => {
+        const step=async<T=unknown>(text:string,values?:unknown[])=>{remaining();const result=await call<T>(c,text,values);remaining();return result;};
         let gone = false;
         const discard = () => { gone = true; dropSession(); };
         try {
-          return await withinTime(limits.timeoutMs + 1000, query.signal, () => { discard(); c.destroy(); }, async () => {
+          return await withinTime(remaining(), query.signal, discard, async () => {
+            const version=await step<Array<{engine:string}>>('SELECT @@version_comment AS engine');
+            if(/\bdoris\b/i.test(String(version[0]?.engine)))autocommit.add(c);
+            await step("SET time_zone = '+00:00'");
+            await step(autocommit.has(c)?`SET query_timeout = ${Math.ceil(remaining()/1000)}`:`SET SESSION max_execution_time = ${remaining()}`);
             if (guarded && autocommit.has(c)) readOnlyStatement('mysql', query.text, true);
-            if (!autocommit.has(c)) { await call(c, 'START TRANSACTION READ ONLY'); open = true; }
-            await call(c, viewerStatement(viewer, autocommit.has(c)));
+            if (!autocommit.has(c)) { await step('START TRANSACTION READ ONLY'); open = true; }
+            await step(viewerStatement(viewer, autocommit.has(c)));
             const answer = await new Promise<ConnectorAnswer>((resolve, reject) => {
               let collector: Collector | undefined, fields: FieldPacket[] = [], types: ConnectorValueType[] = [], stopped = false;
               const start = (f: FieldPacket[]) => { fields = f ?? []; types = fields.map(typeOf); collector = new Collector(limits, uniqueColumns(fields.map((x, i) => ({ name: x.name, type: types[i]! })))); };
@@ -125,30 +139,24 @@ export const mysqlConnector: ConnectorModule = {
                 try {
                   if (!collector!.add(Object.fromEntries(fields.map((f, i) => [f.name, cell(f, types[i]!, row[f.name])])))) {
                     // Full: stop reading. mysql2 cannot cancel a result set, so the session is closed, never reused.
-                    stopped = true; discard(); c.destroy(); resolve(collector!.answer());
+                    stopped = true; discard(); resolve(collector!.answer());
                   }
-                } catch (error) { stopped = true; discard(); c.destroy(); reject(error); }
+                } catch (error) { stopped = true; discard(); reject(error); }
               });
               command.on('error', (error: unknown) => { if (!stopped) reject(error); });
               command.on('end', () => { if (stopped) return; if (!collector) start([]); resolve(collector!.answer()); });
             });
-            if (open) await call(c, 'COMMIT');
+            if (open&&!gone) await step('COMMIT');
             open = false;
-            return answer;
+            if(!gone)await step(viewerStatement({id:'',email:'',groups:''},autocommit.has(c)));
+            remaining();return answer;
           });
         } catch (error) {
           if (!(error instanceof ConnectorFailure) || error.code === 'timeout') discard();
           throw driverFailure(error, secrets);
-        } finally {
-          // Back to the session's own state before anyone else's query: no transaction, no viewer, its database.
-          if (!gone) {
-            try {
-              if (open) await call(c, 'ROLLBACK');
-              await call(c, viewerStatement({ id: '', email: '', groups: '' }, autocommit.has(c)));
-            } catch { discard(); }
-          }
         }
-      }).catch((error) => { throw error instanceof ConnectorFailure ? error : driverFailure(error, secrets); });
+
+      },{signal:query.signal,timeoutMs:remaining()}).catch((error) => { throw error instanceof ConnectorFailure ? error : driverFailure(error, secrets); });
     }
 
     return {

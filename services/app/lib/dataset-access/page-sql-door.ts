@@ -48,6 +48,7 @@ import { jsonBytes, runPageSql } from './page-sql';
 /** One statement and its bound values (`$name`), as the page runtime's `sql` tag sends them. */
 interface PageSqlDoorCall { sql: string; params: Readonly<Record<string, Scalar>> }
 export interface PageSqlDoorScope {
+  admission?:{step<T>(pending:Promise<T>):Promise<T>;dispatch(read:boolean):AbortSignal};
   pageId: string;
   /** Trusted admission clock, never read from a public payload. */
   readStartedAt?:number;
@@ -264,11 +265,12 @@ export async function executePageSql(actor: AccessActor, links: readonly HtmlDat
   try {
     const call = checked(raw);
     const load = (fenced: boolean) => loadLinked(actor, links, { pageId: scope.pageId, fenced, retainReadFence:scope.retainReadFence }, signal).catch((e) => { if (e instanceof DatasetAccessError) refuse('validation_failed', e.message); throw e; });
-    const first = await load(true);
+    const first = await (scope.admission?scope.admission.step(load(true)):load(true));
     if (!first.length) refuse('dataset_not_found', 'no linked dataset is readable');
     const mounts = mountsOf(first, call.sql);
-    const analysis = await analyzed(mounts, call.sql);
+    const analysis = await (scope.admission?scope.admission.step(analyzed(mounts, call.sql)):analyzed(mounts, call.sql));
     if (analysis.kind === 'select') {
+      signal=scope.admission?.dispatch(true)??signal;
       scope.retainReadDeadline?.(started+SQL_READ_WALL_TIMEOUT_MS);
       const remaining=Math.floor(SQL_READ_WALL_TIMEOUT_MS-(performance.now()-started));
       if(remaining<1)refuse('timeout','SQL read deadline exceeded');
@@ -282,6 +284,7 @@ export async function executePageSql(actor: AccessActor, links: readonly HtmlDat
       }finally{life.close();}
     }
     if (scope.readOnly) refuse('permission_denied', 'this page is read-only here: it reads, it never writes');
+    scope.admission?.dispatch(false);
     return await write(actor, call, scope, mounts, analysis.writes[0]!, () => load(false), signal);
   } catch (e) {
     if (e instanceof Refusal) return fail(e.code, e.message);

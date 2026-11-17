@@ -71,7 +71,35 @@ describe.skipIf(!has('postgres:17-alpine'))('postgres 17 over TLS', () => {
   it('opens with the startup parameters, read-only, TLS on', async () => {
     const pg = open();
     const row = (await pg.query({ text: "select current_setting('application_name') as app, current_setting('TimeZone') as tz, current_setting('statement_timeout') as st, current_setting('default_transaction_read_only') as ro, current_setting('transaction_read_only') as tro, (select ssl from pg_stat_ssl where pid = pg_backend_pid()) as ssl, current_user as who", params: {}, viewer: alice })).rows[0];
-    expect(row).toEqual({ app: 'artifactbin', tz: 'UTC', st: '5s', ro: 'on', tro: 'on', ssl: true, who: 'reader' });
+    expect(row).toEqual({ app: 'artifactbin', tz: 'UTC', st: expect.stringMatching(/^(29|30)/), ro: 'on', tro: 'on', ssl: true, who: 'reader' });
+  });
+
+  it('honors configured native budgets and confirms cancelled backend disappearance', async()=>{
+    const pg=openConnection({connector:'postgres',host:'db.example.com',port,database:'shop',user:'reader',password:PASSWORD,ca},DEV,{lookup:async()=>[{address:'127.0.0.1',family:4}]},{queryTimeoutMs:12000});opened.push(pg);
+    const row=(await pg.query({text:"select current_setting('statement_timeout') as budget",params:{},viewer:alice})).rows[0]!;
+    const value=String(row.budget);
+    expect(parseFloat(value)*(value.endsWith('ms')?1:1000)).toBeGreaterThan(5000);
+    const controller=new AbortController();
+    const pending=failure(pg.query({text:'select pg_sleep(30) /* cancellation_probe */',params:{},viewer:alice,signal:controller.signal}));
+    await new Promise(resolve=>setTimeout(resolve,150));controller.abort();
+    expect(await pending).toMatchObject({code:'timeout'});
+    const active=execFileSync('docker',['exec',container,'psql','-U','postgres','-d','shop','-Atc',"select count(*) from pg_stat_activity where usename='reader' and query like '%cancellation_probe%'"],{encoding:'utf8'}).trim();
+    expect(active).toBe('0');
+    expect((await pg.query({text:'select 1 as n',params:{},viewer:alice})).rows).toEqual([{n:1}]);
+  });
+
+  it.runIf(process.env.CONNECTOR_LONG_READ_PROOF==='1')('completes a configured read beyond the former five-second cap',async()=>{
+    const pg=open();
+    const started=performance.now();
+    expect((await pg.query({text:'select 1 as n from pg_sleep(5.2)',params:{},viewer:alice})).rows).toEqual([{n:1}]);
+    expect(performance.now()-started).toBeGreaterThan(5000);
+  });
+
+  it('fails closed when the server refuses trusted session setup',async()=>{
+    const admin=(sql:string)=>execFileSync('docker',['exec',container,'psql','-U','postgres','-d','shop','-c',sql],{stdio:'pipe'});
+    admin('REVOKE EXECUTE ON FUNCTION set_config(text,text,boolean) FROM PUBLIC');
+    try{expect(await failure(open().query({text:'select 1 as forbidden_result',params:{},viewer:alice}))).toMatchObject({code:'permission_denied'});}
+    finally{admin('GRANT EXECUTE ON FUNCTION set_config(text,text,boolean) TO PUBLIC');}
   });
 
   it('opens the database default: names, and says when there is none', async () => {
@@ -133,6 +161,18 @@ describe.skipIf(!has('mysql:8'))('mysql 8', () => {
     // Hostile values arrive as written, one literal each.
     expect((await my.query({ text: 'select @app.viewer_id as id, @app.viewer_email as email, @app.viewer_groups as g', params: {}, viewer: bob })).rows).toEqual([{ id: 'u_bob', email: "b'o\\b@example.com", g: '[]' }]);
     expect(my.sessions()).toBe(1);
+  });
+
+  it('installs the configured read cap and confirms cancellation on the server',async()=>{
+    const row=(await my.query({text:'select @@max_execution_time as budget',params:{},viewer:alice})).rows[0]!;
+    expect(Number(row.budget)).toBeGreaterThan(5000);
+    const controller=new AbortController();
+    const pending=failure(my.query({text:'select sleep(30) /* cancellation_probe */',params:{},viewer:alice,signal:controller.signal}));
+    await new Promise(resolve=>setTimeout(resolve,150));controller.abort();
+    expect(await pending).toMatchObject({code:'timeout'});
+    const active=execFileSync('docker',['exec',container,'mysql','-uroot','-powner-pass','-Nse',"select count(*) from information_schema.processlist where user='reader' and info like '%cancellation_probe%'"],{encoding:'utf8'}).trim();
+    expect(active).toBe('0');
+    expect((await my.query({text:'select 1 as n',params:{},viewer:alice})).rows).toEqual([{n:1}]);
   });
 
   it('maps types, binds values, refuses writes, INTO and :=, and stops at the time limit', async () => {

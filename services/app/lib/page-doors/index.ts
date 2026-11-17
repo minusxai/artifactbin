@@ -13,7 +13,8 @@ import {pageConnectionSql} from '@/lib/connections';
 import {pageLiveDatasetSql} from '@/lib/live-datasets';
 import {transactionAccessFacts} from '@/lib/artifact-access';
 import {DatasetError} from '@/lib/datasets';
-import {runWithRequest} from '@/lib/platform';
+import {runWithRequest,SQL_READ_WALL_TIMEOUT_MS} from '@/lib/platform';
+import {readLifetime} from '@/lib/datasets';
 import {exportKeyReader} from '@/lib/export';
 import {json,readBody,readJson,PayloadTooLarge} from '@/lib/http';
 import { requestOrSessionActor, refusesCrossSite } from '@/lib/authentication';
@@ -54,9 +55,23 @@ function pageCommitGuard(pageId:string,actor:AccessActor,admitted:ArtifactHeader
  * whose dataset moved while it ran re-runs, a bounded number of times, and leaves only if the page still holds.
  * An opaque origin reads here only as an export capture's requester (opaqueSqlRead); otherwise it has no SQL door.
  */
+/** Admission is raced step by step, never across a dispatched mutation. */
+function admission(request:Request){
+ const started=performance.now(),life=readLifetime(request.signal,20000);
+ let reading:ReturnType<typeof readLifetime>|undefined,dispatched=false;
+ return {
+  started,
+  step:<T>(pending:Promise<T>)=>reading?reading.step(pending):dispatched?pending:life.step(pending),
+  dispatch:(read:boolean)=>{if(!dispatched){life.check();life.close();dispatched=true;if(read)reading=readLifetime(request.signal,Math.max(1,Math.floor(started+SQL_READ_WALL_TIMEOUT_MS-performance.now())));}return reading?.signal??request.signal;},
+  check:()=>reading?.check(),close:()=>{life.close();reading?.close();},
+ };
+}
+type Admission=ReturnType<typeof admission>;
 export async function pageSqlDoor(request:Request,pageId:string):Promise<Response>{
- if(request.headers.get('origin')==='null')return opaqueSqlRead(request,pageId);
- return answerSql(request,pageId);
+ const admitted=admission(request);
+ try{return await (request.headers.get('origin')==='null'?opaqueSqlRead(request,pageId,admitted):answerSql(request,pageId,admitted));}
+ catch{return json({error:'not_found'},404,SQL_HEADERS);}
+ finally{admitted.close();}
 }
 const SQL_HEADERS={'Cache-Control':'no-store',[REVALIDATE_ACTOR_HEADER]:'1'};
 /**
@@ -68,17 +83,17 @@ const SQL_HEADERS={'Cache-Control':'no-store',[REVALIDATE_ACTOR_HEADER]:'1'};
  * The `*` CORS exposes the answer to that capture page alone: the key is seconds-long, scoped to this page and never
  * shown to a reader.
  */
-async function opaqueSqlRead(request:Request,pageId:string):Promise<Response>{
+async function opaqueSqlRead(request:Request,pageId:string,admission:Admission):Promise<Response>{
  const cors={'access-control-allow-origin':'*'};
  let body:string;
- try{body=await readBody(request,{as:'text'});}catch(error){if(error instanceof PayloadTooLarge)return error.response();throw error;}
+ try{body=await admission.step(readBody(request,{as:'text'}));}catch(error){if(error instanceof PayloadTooLarge)return error.response();throw error;}
  let key:unknown;try{key=(JSON.parse(body) as {key?:unknown}|null)?.key;}catch{/* refused below */}
  const reader=typeof key==='string'?exportKeyReader(pageId,key):null;
  if(!reader)return json({error:'permission_denied',message:'This page request is not permitted'},403,{...SQL_HEADERS,...cors});
  const headers=new Headers(request.headers);
  for(const name of [...CREDENTIAL_HEADERS,'idempotency-key'])headers.delete(name);
  const guest=new Request(request.url,{method:'POST',headers,body,signal:request.signal});
- const answered=await runWithRequest(guest,()=>answerSql(guest,pageId,reader));
+ const answered=await runWithRequest(guest,()=>answerSql(guest,pageId,admission,reader));
  const out=new Headers(answered.headers);
  out.set('access-control-allow-origin','*');out.delete('access-control-allow-credentials');
  return new Response(answered.body,{status:answered.status,statusText:answered.statusText,headers:out});
@@ -89,52 +104,55 @@ async function opaqueSqlRead(request:Request,pageId:string):Promise<Response>{
  * This is separate from pageSqlDoor: canonical opaque requests still require an export capture key.
  */
 export async function ownerHostSqlRead(request:Request,pageId:string,hostHolds:()=>Promise<boolean>):Promise<Response>{
- if(!await hostHolds())return json({error:'not_found'},404,SQL_HEADERS);
+ const admitted=admission(request);
+ try{
+ if(!await admitted.step(hostHolds()))return json({error:'not_found'},404,SQL_HEADERS);
  const headers=new Headers(request.headers);
  for(const name of [...CREDENTIAL_HEADERS,'idempotency-key'])headers.delete(name);
- const guest=new Request(request.url,{method:'POST',headers,body:await readBody(request),signal:request.signal});
- const answered=await runWithRequest(guest,()=>answerSql(guest,pageId,ANONYMOUS_ACTOR,hostHolds));
+ const guest=new Request(request.url,{method:'POST',headers,body:await admitted.step(readBody(request)),signal:request.signal});
+ const answered=await runWithRequest(guest,()=>answerSql(guest,pageId,admitted,ANONYMOUS_ACTOR,hostHolds));
  const out=new Headers(answered.headers);
  out.set('access-control-allow-origin','*');out.delete('access-control-allow-credentials');
  return new Response(answered.body,{status:answered.status,statusText:answered.statusText,headers:out});
+ }catch{return json({error:'not_found'},404,SQL_HEADERS);}finally{admitted.close();}
 }
 /** `reader`: a host-selected anonymous reader or capture requester, always read-only; otherwise the request's own. */
-async function answerSql(request:Request,pageId:string,reader?:AccessActor,hostHolds?:()=>Promise<boolean>):Promise<Response>{
- const readStartedAt=performance.now();
+async function answerSql(request:Request,pageId:string,admission:Admission,reader?:AccessActor,hostHolds?:()=>Promise<boolean>):Promise<Response>{
+ const readStartedAt=admission.started;
  let readDeadline:number|undefined;
  let readSignal:AbortSignal|undefined;
  const checkRead=()=>{if(readDeadline!==undefined){request.signal.throwIfAborted();if(performance.now()>=readDeadline)throw Error('sql_deadline');}};
  const headers=SQL_HEADERS;
- const requested=reader?null:await requestOrSessionActor(request);
+ const requested=reader?null:await admission.step(requestOrSessionActor(request));
  // An export reader carries no cookie, so no same-site guard applies; it never writes (readOnly below).
  if(requested&&refusesCrossSite(request,requested))return json({error:'forbidden'},403);
  const actor:AccessActor=reader??requested!;
  try{
-  if(hostHolds&&!await hostHolds())throw Error('page_unavailable');
-  const admitted=await getArtifactHeaderById(pageId);if(!admitted)throw Error('page_unavailable');
+  if(hostHolds&&!await admission.step(hostHolds()))throw Error('page_unavailable');
+  const admitted=await admission.step(getArtifactHeaderById(pageId));if(!admitted)throw Error('page_unavailable');
   // Readership first: a page this reader cannot read answers exactly as a missing one (the uniform 404), whatever
   // the body or Idempotency-Key; only then is the request itself judged.
-  const head=await readHtmlPage(actor,pageId);
-  const body=await readJson(request);
+  const head=await admission.step(readHtmlPage(actor,pageId));
+  const body=await admission.step(readJson(request));
   if(!body||typeof body.revision!=='string'||(body.readOnly!==undefined&&typeof body.readOnly!=='boolean'))return json({error:'validation_failed',message:'send {sql, params?, revision}'},400,headers);
   const idempotencyKey=request.headers.get('idempotency-key')??undefined;
   if(idempotencyKey!==undefined&&!IDEMPOTENCY_KEY.test(idempotencyKey))return json({error:'invalid_idempotency_key'},400,headers);
-  const page=body.revision===head.revision?head:await readHtmlPage(actor,pageId,body.revision);
-  const scope={pageId,readStartedAt,retainReadDeadline:(deadline:number)=>{readDeadline=deadline;readSignal=AbortSignal.any([request.signal,AbortSignal.timeout(Math.max(0,Math.floor(deadline-performance.now())))]);},...(idempotencyKey?{idempotencyKey}:{}),readOnly:!!reader||body.readOnly===true||page.revision!==head.revision,commitGuard:pageCommitGuard(pageId,actor,admitted)};
+  const page=body.revision===head.revision?head:await admission.step(readHtmlPage(actor,pageId,body.revision));
+  const scope={admission,pageId,readStartedAt,retainReadDeadline:(deadline:number)=>{readDeadline=deadline;readSignal=AbortSignal.any([request.signal,AbortSignal.timeout(Math.max(0,Math.floor(deadline-performance.now())))]);},...(idempotencyKey?{idempotencyKey}:{}),readOnly:!!reader||body.readOnly===true||page.revision!==head.revision,commitGuard:pageCommitGuard(pageId,actor,admitted)};
   const verifyPage=pageVerifier(request,pageId,actor,reader,admitted);
   for(let attempt=1;;attempt++){
    try{
     // A declared query, or a statement naming a live dataset link, runs on that dataset's connection (lib/live-datasets);
     // one naming a default-connection link wholly on the install's connection (lib/connections).
-    const reply=await pageLiveDatasetSql(actor,page,{sql:body.sql,params:body.params,query:body.query},request.signal)??await pageConnectionSql(actor,page.links,{sql:body.sql,params:body.params},request.signal)??await executePageSql(actor,datasetLinks(page),{sql:body.sql,params:body.params},scope,request.signal);
+    const reply=await pageLiveDatasetSql(actor,page,{sql:body.sql,params:body.params,query:body.query},request.signal,admission)??await pageConnectionSql(actor,page.links,{sql:body.sql,params:body.params},request.signal,admission)??await executePageSql(actor,datasetLinks(page),{sql:body.sql,params:body.params},scope,request.signal);
     // Every reply (rows, a write's reply, a replayed receipt, a refusal) leaves only while the page still holds.
-    checkRead();
-    await (readSignal?pageEvidenceStep(readSignal,verifyPage(page.revision)):verifyPage(page.revision));
-    if(hostHolds&&!await (readSignal?pageEvidenceStep(readSignal,hostHolds()):hostHolds()))throw Error('page_unavailable');
+    admission.check();checkRead();
+    await admission.step(readSignal?pageEvidenceStep(readSignal,verifyPage(page.revision)):verifyPage(page.revision));
+    if(hostHolds&&!await admission.step(readSignal?pageEvidenceStep(readSignal,hostHolds()):hostHolds()))throw Error('page_unavailable');
     // The last guard: nothing past the SQL output budget leaves, however it was produced.
     const text=JSON.stringify(reply.body);
     if(new TextEncoder().encode(text).length>SQL_READ_LIMITS.outputBytes)return json({error:'result_too_large',message:`an answer is at most ${SQL_READ_LIMITS.outputBytes} bytes; select fewer rows or columns`},413,headers);
-    checkRead();
+    admission.check();checkRead();
     return new Response(text,{status:reply.status,headers:{'content-type':'application/json',...headers}});
    }catch(error){
     if(attempt<RACED_READ_ATTEMPTS&&error instanceof Error&&error.message==='dataset_changed'&&!request.signal.aborted)continue;

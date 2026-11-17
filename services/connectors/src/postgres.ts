@@ -5,11 +5,11 @@
  *     judged; SSLRequest and TLS (verify-full, TLS 1.2+, `ca` if configured) unless the install allows
  *     `tls: 'disable'`; StartupMessage 3.0 with `user` (the configured account), `database` (what followed `default:`,
  *     as written, else the configured database), `application_name=artifactbin`, `TimeZone=UTC`,
- *     `statement_timeout=<CONNECTOR_LIMITS.timeoutMs>` and `default_transaction_read_only=on`; the password as the
+ *     `statement_timeout=5000 (setup only)` and `default_transaction_read_only=on`; the password as the
  *     server asks (cleartext inside TLS, MD5 or SCRAM).
  *  2. Each query, `schema()` and `test()`, on the session's one connection, in this order (postgres.js sends Parse,
  *     Describe and Flush, then Bind, Execute and Sync; a cursor's Execute carries a row count and is followed by Flush):
- *       Q          `BEGIN READ ONLY`
+ *       Q          backend identity, then `BEGIN READ ONLY` and the remaining trusted statement_timeout
  *       P D H B E S  `SELECT set_config('app.viewer_id', $1, true), set_config('app.viewer_email', $2, true), set_config('app.viewer_groups', $3, true)`
  *                    with $1 the account ID, $2 the email, $3 the group IDs as sorted JSON array text (unnamed, untyped)
  *       P D H B E… S the statement, one, its values bound (`$name` → `$1`…), read by a cursor that stops one row past the
@@ -23,7 +23,7 @@
 import { isIP } from 'node:net';
 import postgres from 'postgres';
 import type { ConnectionConfig, ConnectorAnswer, ConnectorColumn, ConnectorJson, ConnectorNetworkPolicy, ConnectorQuery, ConnectorSchema, ConnectorValueType } from '@artifactbin/contracts';
-import { CONNECTOR_LIMITS } from '@artifactbin/contracts';
+import { CONNECTOR_LIMITS,SQL_QUERY_DEFAULT_MS } from '@artifactbin/contracts';
 import { Collector, checkedNamespace, limitsOf, numberValue, plainValue, timestampValue, uniqueColumns, viewerValues, withinTime } from './answer';
 import { connectionSecrets } from './config';
 import { ConnectorFailure, driverFailure } from './errors';
@@ -68,26 +68,39 @@ type Raw = { name: string; type: number }[];
 const VIEWER_STATEMENT = "SELECT set_config('app.viewer_id', $1, true), set_config('app.viewer_email', $2, true), set_config('app.viewer_groups', $3, true)";
 
 export const postgresConnector: ConnectorModule = {
-  open(config: ConnectionConfig, policy: ConnectorNetworkPolicy, seams: NetworkSeams = {}) {
+  open(config: ConnectionConfig, policy: ConnectorNetworkPolicy, seams: NetworkSeams = {}, readPolicy={queryTimeoutMs:SQL_QUERY_DEFAULT_MS}) {
     const target = targetOf(config, policy);
     const secrets = connectionSecrets(config);
     let firstByte: number | undefined;
-    const sessions = new SessionPool<{ sql: Sql; closes: number }>({
-      async open(database) {
+    const create = (database:string,context:{signal?:AbortSignal;timeoutMs?:number}={}) => {
         const session = { closes: 0 } as { sql: Sql; closes: number };
         session.sql = postgres({
           host: target.host, port: target.port, database, username: String(config.user), password: typeof config.password === 'string' ? config.password : undefined,
           ssl: target.tls ? { ...target.tls, host: target.host, ...(isIP(target.host) ? {} : { servername: target.host }) } : false,
           // A server without TLS answers SSLRequest 'N' and postgres.js starts TLS anyway: that byte names the refusal.
-          socket: async () => { const socket = await connectTarget(target, policy, seams); socket.once('data', (d: Buffer) => { firstByte = d[0]; }); return socket; },
+          socket: async () => { const socket = await connectTarget(target, policy, seams,context); socket.once('data', (d: Buffer) => { firstByte = d[0]; }); return socket; },
           max: 1, connect_timeout: CONNECTOR_LIMITS.connectTimeoutMs / 1000, fetch_types: false, prepare: false,
           onnotice: () => {}, onparameter: () => {}, onclose: () => { session.closes++; }, debug: false,
-          connection: { application_name: 'artifactbin', TimeZone: 'UTC', statement_timeout: String(CONNECTOR_LIMITS.timeoutMs), default_transaction_read_only: 'on' },
+          connection: { application_name: 'artifactbin', TimeZone: 'UTC', statement_timeout: String(5000), default_transaction_read_only: 'on' },
           types: { rawTime: { to: 1082, from: [1082, 1083, 1114, 1184, 1266], serialize: String, parse: (text: string) => text } },
         } as unknown as postgres.Options<Record<string, postgres.PostgresType>>) as Sql;
         return session;
+    };
+    const sessions = new SessionPool<{sql:Sql;closes:number;pid?:number;database:string;active?:boolean}>({
+      async open(database,context){return Object.assign(create(database,context),{database});},
+      async close(session){
+        if(session.pid&&session.active){
+          const control=create(session.database,{timeoutMs:4500});
+          try{
+            await withinTime(4500,undefined,()=>{void control.sql.end({timeout:0});},async()=>{
+            await control.sql.unsafe('SELECT pg_terminate_backend($1)',[session.pid]);
+            const rows=await control.sql.unsafe('SELECT pid FROM pg_stat_activity WHERE pid=$1',[session.pid]);
+            if(rows.length)throw new ConnectorFailure('unavailable','database termination unconfirmed');
+            });
+          }finally{await control.sql.end({timeout:0});}
+        }
+        await session.sql.end({timeout:0});
       },
-      close: (session) => session.sql.end({ timeout: 1 }),
     });
     const fail = (error: unknown) => {
       if (target.tls && firstByte === 78 && !(error instanceof ConnectorFailure)) return new ConnectorFailure('tls_unsupported', 'the database server does not offer TLS; enable TLS on the server');
@@ -98,15 +111,21 @@ export const postgresConnector: ConnectorModule = {
     async function run(query: ConnectorQuery, guarded: boolean): Promise<ConnectorAnswer> {
       if (guarded) readOnlyStatement('postgres', query.text);
       const bound = guarded ? bindStatement('postgres', query.text, query.params) : { text: query.text, values: Object.values(query.params) };
-      const limits = limitsOf(query), viewer = viewerValues(query);
+      const limits = limitsOf(query,guarded?readPolicy.queryTimeoutMs:CONNECTOR_LIMITS.connectTimeoutMs), viewer = viewerValues(query);
       const database = checkedNamespace('postgres', query.namespace) ?? String(config.database);
+      const deadline=performance.now()+limits.timeoutMs;
+      const remaining=()=>{const left=Math.floor(deadline-performance.now());if(left<1||query.signal?.aborted)throw new ConnectorFailure('timeout','the query was cancelled or expired');return left;};
       return sessions.use(database, async (session, discard) => {
         const sql = session.sql;
         try {
-          return await withinTime(limits.timeoutMs + 1000, query.signal, () => { discard(); void sql.end({ timeout: 0 }); }, async () => {
-            const step = async <T>(work: Promise<T>, at: number) => { const out = await work; if (session.closes !== at) throw new ConnectorFailure('connect_failed', 'the connection was lost during the query'); return out; };
+          return await withinTime(remaining(), query.signal, discard, async () => {
+            session.active=true;
+            const step = async <T>(work: Promise<T>, at: number) => { const out = await work; remaining(); if (session.closes !== at) throw new ConnectorFailure('connect_failed', 'the connection was lost during the query'); return out; };
             const at = session.closes;
-            await sql.unsafe('BEGIN READ ONLY');
+            const identity=await sql.unsafe('SELECT pg_backend_pid() AS pid');
+            session.pid=Number(identity[0]!.pid);remaining();
+            await step(sql.unsafe('BEGIN READ ONLY'),at);
+            await step(sql.unsafe("SELECT set_config('statement_timeout',$1,true)",[String(remaining())]),at);
             try {
               await step(sql.unsafe(VIEWER_STATEMENT, [viewer.id, viewer.email, viewer.groups], { simple: false } as never), at);
               let collector: Collector | undefined, oids: number[] = [], names: string[] = [];
@@ -122,9 +141,11 @@ export const postgresConnector: ConnectorModule = {
               }), at);
               if (!collector) begin((result as unknown as { columns?: Raw }).columns ?? []);
               await step(sql.unsafe('COMMIT'), at);
+              session.active=false;
               return collector!.answer();
             } catch (error) {
-              await sql.unsafe('ROLLBACK').catch(() => discard());
+              discard();
+              if(performance.now()<deadline&&!query.signal?.aborted){await sql.unsafe('ROLLBACK');session.active=false;}
               throw error;
             }
           });
@@ -132,7 +153,7 @@ export const postgresConnector: ConnectorModule = {
           if (!(error instanceof ConnectorFailure) || error.code === 'timeout') discard();
           throw fail(error);
         }
-      });
+      },{signal:query.signal,timeoutMs:remaining()});
     }
 
     return {

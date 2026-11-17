@@ -12,6 +12,7 @@ import type { ConnectionConfig, ConnectorNetworkPolicy } from '@artifactbin/cont
 import { CONNECTOR_LIMITS } from '@artifactbin/contracts';
 import { hostNameSyntax, isAllowedAddress, parseIPv4, parseIPv6 } from '@artifactbin/utils/public-address';
 import { ConnectorFailure } from './errors';
+import {withinTime} from './answer';
 
 interface LookupAddress { address: string; family: number }
 export interface NetworkSeams {
@@ -34,22 +35,23 @@ export function targetOf(config: ConnectionConfig, policy: ConnectorNetworkPolic
 }
 
 /** Resolves and judges the host, then opens one TCP socket to an address judged. */
-export async function connectTarget(target: Target, policy: ConnectorNetworkPolicy, seams: NetworkSeams = {}): Promise<net.Socket> {
+export async function connectTarget(target: Target, policy: ConnectorNetworkPolicy, seams: NetworkSeams = {},context:{signal?:AbortSignal;timeoutMs?:number}={}): Promise<net.Socket> {
+  const deadline=performance.now()+Math.min(CONNECTOR_LIMITS.connectTimeoutMs,context.timeoutMs??CONNECTOR_LIMITS.connectTimeoutMs);
+  const left=()=>{if(context.signal?.aborted||performance.now()>=deadline)throw new ConnectorFailure('timeout','connection deadline exceeded');return Math.max(1,Math.floor(deadline-performance.now()));};
   const lookup = seams.lookup ?? (async (h: string) => dns.lookup(h, { all: true, verbatim: true }));
   let addresses: LookupAddress[];
   if (isIp(target.host)) addresses = [{ address: target.host, family: parseIPv4(target.host) ? 4 : 6 }];
   else {
-    try { addresses = await lookup(target.host); } catch { throw new ConnectorFailure('connect_failed', 'the host name did not resolve'); }
+    try { addresses = await withinTime(left(),context.signal,()=>{},()=>lookup(target.host)); } catch { throw new ConnectorFailure('connect_failed', 'the host name did not resolve'); }
   }
   if (!addresses.length) throw new ConnectorFailure('connect_failed', 'the host name did not resolve');
   if (!addresses.every((a) => typeof a?.address === 'string' && isAllowedAddress(a.address, policyOf(policy)))) throw new ConnectorFailure('forbidden_address', 'the host resolves to an address that is not public');
   for (const { address, family } of addresses) {
+    left();
     const socket = net.connect({ host: address, port: target.port, family: family === 6 ? 6 : 4 });
-    const ok = await new Promise<boolean>((resolve) => {
-      const timer = setTimeout(() => resolve(false), CONNECTOR_LIMITS.connectTimeoutMs);
-      socket.once('connect', () => { clearTimeout(timer); resolve(true); });
-      socket.once('error', () => { clearTimeout(timer); resolve(false); });
-    });
+    const ok = await withinTime(left(),context.signal,()=>socket.destroy(),()=>new Promise<boolean>(resolve=>{
+      socket.once('connect',()=>resolve(true));socket.once('error',()=>resolve(false));
+    }));
     if (ok) return socket;
     socket.destroy();
   }
