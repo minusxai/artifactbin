@@ -40,6 +40,9 @@ export default {
         'vega-scenegraph',
         // The Solid transform the island build and Vitest apply (scripts/lib/cached-solid.mjs).
         'babel-preset-solid',
+        // The JavaScript parser scripts/lib/gate-pages.mjs reads the gates with: the services/app workspace's own pinned
+        // dependency, hoisted; listing it here too would change the lock, and every pr fast runner would miss its install.
+        'acorn',
       ],
       // The CI runner's own package database, read by scripts/ci/system-debs.mjs.
       ignoreBinaries: ['dpkg-query'],
