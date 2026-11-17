@@ -31,11 +31,12 @@
  * and the cap would be bypassed by delete-and-reimport. Stated in the docs
  * beside the row cap, which counts the same way for the same reason.
  */
-import { getDb, ASSETS_MAX_BYTES_PER_TOKEN } from '@/lib/platform';
+import { getDb, ASSETS_MAX_BYTES_PER_TOKEN, registerTestOverride } from '@/lib/platform';
 
 let override: number | null | undefined;
 /** Test hook, mirroring setArtifactQuotaForTests — config freezes at import. */
 export function setAssetByteQuotaForTests(cap: number | null): void { override = cap; }
+registerTestOverride(() => { override = undefined; });
 
 /** The account a token belongs to, or null when it is anonymous. */
 async function accountFor(tokenId: string): Promise<string | null> {

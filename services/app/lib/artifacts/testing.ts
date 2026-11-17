@@ -5,9 +5,9 @@
  */
 export { ARTIFACT_HEADER_COLUMNS } from './rows';
 export { listArtifactsFor } from './store';
-export { assetBytesForToken, setAssetByteQuotaForTests } from './asset-quota';
+export { assetBytesForToken, assetByteQuotaLimit, setAssetByteQuotaForTests } from './asset-quota';
 export { onDatasetCommitted, onHeadCommitted } from './after-commit';
 
-export {setArtifactQuotaForTests} from './quota-policy';
+export {artifactQuotaLimit,setArtifactQuotaForTests} from './quota-policy';
 
 export {claimPublicationIntent,chargePublication} from './workload-publication';

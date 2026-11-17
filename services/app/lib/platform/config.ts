@@ -425,7 +425,13 @@ export function overrideConfig(settings: ConfigOverrides, environment: Record<st
   if ('trustedProxyHops' in settings) TRUSTED_PROXY_HOPS = settings.trustedProxyHops!;
   for (const [key, value] of Object.entries(environment)) envOverrides.set(key, value);
 }
+/** Module-level test overrides elsewhere (quota caps, fetch policies) register their reset here, so the reset that ends
+ * every test file clears them too: the api project shares one module graph per worker, and an override one file
+ * leaves set would otherwise hold for whichever file runs next on that worker. */
+const testOverrideResets = new Set<() => void>();
+export function registerTestOverride(reset: () => void): void { testOverrideResets.add(reset); }
 export function resetConfigOverrides(): void {
+  for (const reset of testOverrideResets) reset();
   PUBLIC_BASE_URL = SETTING_DEFAULTS.publicBaseUrl; ASSETS_ORIGIN = SETTING_DEFAULTS.assetsOrigin; ALIAS_ORIGINS = SETTING_DEFAULTS.aliasOrigins;
   USER_PAGES_HOST = SETTING_DEFAULTS.userPagesHost; OUTBOUND_IPS = SETTING_DEFAULTS.outboundIps; BROWSER_SERVICE_URL = SETTING_DEFAULTS.browserServiceUrl;
   INTERNAL_SERVICE_SECRET = SETTING_DEFAULTS.internalServiceSecret; SQL_SERVICE_URL = SETTING_DEFAULTS.sqlServiceUrl; EVENTS_SERVICE_URL = SETTING_DEFAULTS.eventsServiceUrl;
