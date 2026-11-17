@@ -3,10 +3,14 @@ export const DESCRIPTION = `Print a page's or dataset's tables, or run one SQL s
 Page tables use link names (data-af-name) and _id; dataset IDs read their rows; default:DB
 reads the install's database. All reads use your current dataset rules.
 Usage: node scripts/sql.mjs schema ID|URL|default:DB [--revision N]
-       node scripts/sql.mjs query ID|URL|default:DB 'SQL' [--params FILE] [--limit N]
-         [--revision N] [--idempotency-key KEY] [--chart FILE --chart-output FILE.png
-         [--chart-width N] [--chart-height N] [--chart-theme light|dark]]
-Flags: --params FILE a JSON object of the $name values the SQL binds; --limit N the most rows a
+       node scripts/sql.mjs query ID|URL|default:DB 'SQL'|--sql-file FILE [--params FILE]
+         [--limit N] [--revision N] [--idempotency-key KEY] [--output FILE.csv|FILE.json]
+         [--chart FILE --chart-output FILE.png [--chart-width N] [--chart-height N]
+         [--chart-theme light|dark]]
+Flags: --sql-file FILE reads the statement from FILE instead; --output FILE saves every row
+  of a read into a new .csv or .json file and prints {columns, rowCount, sample, output} (a few
+  rows, long values cut) in place of the rows: put rows in files this way, never by retyping
+  them. --params FILE a JSON object of the $name values the SQL binds; --limit N the most rows a
   read prints (default 1000, at most 10000); --revision N a saved page revision (default:
   current; pages only; it reads only); --idempotency-key KEY replays a page write (default: a
   new key, printed as idempotencyKey); --chart FILE a chart description (the JSON <af-chart>
@@ -15,6 +19,7 @@ Flags: --params FILE a JSON object of the $name values the SQL binds; --limit N 
 Examples:
   node scripts/sql.mjs schema ID
   node scripts/sql.mjs query ID 'select grp, count(*) as n from entries group by grp'
+  node scripts/sql.mjs query default:DB --sql-file monthly.sql --output outputs/monthly.csv
   node scripts/sql.mjs query ID 'update entries set note = $note where _id = $id' --params p.json
 Gotchas: quote the SQL in single quotes, so the shell leaves $name alone. schema prints one
   CREATE TABLE per table, columns and types as your role sees them (hidden columns are absent).
@@ -45,6 +50,7 @@ import {
 } from './toolbox-client.mjs';
 import {datasetLinks} from './toolbox-check-reply.mjs';
 import {chartRequest, drawChart} from './toolbox-chart.mjs';
+import {outputRequest, statementOf, writeRows} from './toolbox-rows-file.mjs';
 
 const WRITE = /^\s*(?:insert|update|delete)\b/i;
 const ROWS = {default: 1000, max: 10000}, PAGE = 100;
@@ -84,14 +90,18 @@ async function linkTables(client, id, revision, link) {
 }
 
 export async function sqlCommand({sub, values, positionals}, options = {}) {
-  const [target, statement, ...extra] = positionals;
+  const [target, given, ...extra] = positionals;
+  const statement = await statementOf(values, sub, given);
   if (!target || extra.length || (sub === 'schema') !== (statement === undefined))
     throw new ToolError('invalid_arguments', sub === 'schema' ? 'schema takes one ID.' :
       'query takes an ID and one SQL statement.', 2, 'Read --help.');
   const chart = await chartRequest(values, sub, WRITE.test(statement ?? ''));
-  /** The read, and its chart when --chart asks for one. */
-  const drawn = async (client, read) => chart ? {...read, chart: await drawChart(client, chart,
-    read)} : read;
+  const saved = await outputRequest(values, sub, WRITE.test(statement ?? ''));
+  /** The read, its chart when --chart asks for one, and its rows in a file for --output. */
+  const drawn = async (client, read) => {
+    const done = chart ? {...read, chart: await drawChart(client, chart, read)} : read;
+    return saved ? writeRows(saved, done) : done;
+  };
   if (target.startsWith('default:')) {
     const client = makeClient(selectedServer(values, options.env), options);
     return drawn(client, await client.request('/api/default-connection/sql', {method: 'POST',
