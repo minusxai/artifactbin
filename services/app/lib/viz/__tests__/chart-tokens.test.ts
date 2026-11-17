@@ -53,8 +53,10 @@ describe('the image tokens', () => {
     for (const name of DESIGN_SYSTEM_VARIABLES.names) for (const mode of ['light', 'dark'] as const) {
       const variables = DESIGN_SYSTEM_VARIABLES.variables(name, mode)!;
       const tokens = imageTokens(variables, mode), label = `${name} ${mode}`;
-      expect(tokens.category, label).toHaveLength(5);
-      for (const color of [...tokens.category, tokens.foreground, tokens.muted, tokens.border, tokens.surface]) expect(color, label).toMatch(/^#[0-9a-f]{6}$/);
+      // Five design-system colours, then the same five toward the text and toward the surface.
+      expect(tokens.category, label).toHaveLength(15);
+      for (const color of tokens.category.slice(5)) expect(color, label).toMatch(/^rgb\(\d+,\d+,\d+\)$/);
+      for (const color of [...tokens.category.slice(0, 5), tokens.foreground, tokens.muted, tokens.border, tokens.surface]) expect(color, label).toMatch(/^#[0-9a-f]{6}$/);
       for (const color of [tokens.subtle, tokens.grid]) expect(color, label).toMatch(/^rgb\(\d+,\d+,\d+\)$/);
       // The system's own values, not the house fallback: its surface is its --background.
       expect(tokens.surface, label).toBe(resolveCssColor('var(--background)', n => variables[n]));

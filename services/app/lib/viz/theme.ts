@@ -53,9 +53,14 @@ export function tokensFromThemeVariables(
   const muted = color('--muted-foreground') ?? house.muted;
   const border = color('--border') ?? house.border;
   const category = [1, 2, 3, 4, 5].map(i => color(`--chart-${i}`)).filter((c): c is string => !!c);
+  const ink = color('--foreground') ?? house.foreground;
+  // A design system names five chart colours; more series take them again toward the text colour,
+  // then toward the surface, so no two of fifteen series share one.
   return {
-    category: category.length ? category : house.category, foreground: color('--foreground') ?? house.foreground,
-    muted, subtle: mixColor(muted, surface, 0.35), border, grid: mixColor(border, surface, 0.45), surface, font,
+    category: category.length ? [...category, ...category.map(c => mixColor(c, ink, 0.4)),
+      ...category.map(c => mixColor(c, surface, 0.45))] : house.category,
+    foreground: ink, muted, subtle: mixColor(muted, surface, 0.35), border, grid: mixColor(surface, border, 0.6),
+    surface, font,
   };
 }
 
@@ -73,7 +78,7 @@ const channels = (color: string): [number, number, number] | null => {
   return rgb ? [Number(rgb[1]), Number(rgb[2]), Number(rgb[3])] : null;
 };
 /** `t` of the way from `a` to `b` in sRGB; `b` when either is not hex/rgb(). */
-export function mixColor(a: string, b: string, t: number): string {
+function mixColor(a: string, b: string, t: number): string {
   const x = channels(a), y = channels(b);
   if (!x || !y) return b;
   return `rgb(${x.map((v, i) => Math.round(v + (y[i]! - v) * t)).join(',')})`;

@@ -43,9 +43,10 @@ import {archiveFor} from '@/lib/skills';
 // starter), the default connection and the group address approvals joined it, leaving 1,608,368 bytes.
 // 1.562 MiB: af-markdown-editor (a rich text field whose value is Markdown; its readable contract, schema, typing
 // rules and styles, ~23 KB stored) gives pages a Markdown field to write in, leaving 1,634,061 bytes.
-// 1.597 MiB: af-chart (one analytical chart over SQL, a linked dataset or rows; its readable contract, data sources,
-// frame, model, renderer and styles, ~36 KB stored) is how every page draws a chart, leaving 1,671,757 bytes.
-const SKILL_ARCHIVE_MAX_BYTES=1.597*1024*1024;
+// 1.598 MiB: af-chart (one analytical chart over SQL, a linked dataset or rows; its readable contract, data sources,
+// frame, model, renderer and styles, ~36 KB stored) is how every page draws a chart, and sql.mjs --chart
+// (toolbox-chart.mjs) shows an agent that chart before publishing, leaving 1,675,360 bytes.
+const SKILL_ARCHIVE_MAX_BYTES=1.598*1024*1024;
 
 describe('the downloadable author skill archive',()=>{
  it('fits its size budget',async()=>{

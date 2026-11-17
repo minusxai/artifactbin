@@ -6,7 +6,7 @@
  * Used by: chart.ts, chart-render.ts.
  */
 import type { ResolvedChartSpec } from '@/lib/viz/chart-plan';
-import { houseTokens, mixColor, type ChartTokens } from '@/lib/viz/theme';
+import { houseTokens, tokensFromThemeVariables, type ChartTokens } from '@/lib/viz/theme';
 
 export type ChartRows = Record<string, unknown>[];
 /** At most this many rows in the values table; a note says how many more were drawn. */
@@ -80,21 +80,10 @@ export function readTokens(host: Element): ChartTokens {
   const dark = prefersDark(doc), house = houseTokens(dark ? 'dark' : 'light');
   const token = (name: string) => style.getPropertyValue(name).trim();
   const surface = paint(doc, surfaceBehind(host, style), dark ? '#000' : '#fff') ?? house.surface;
-  const color = (name: string, fallback: string) => paint(doc, token(name), surface) ?? fallback;
-  const category = [1, 2, 3, 4, 5].map(n => paint(doc, token(`--chart-${n}`), surface))
-    .filter((value): value is string => value !== null);
-  const muted = color('--muted-foreground', house.muted), border = color('--border', house.border);
-  // A design system names five chart colours; more series take them again toward the text colour,
-  // then toward the surface, so no two of fifteen series share one.
-  const base = category.length ? category : house.category;
-  const ink = color('--foreground', house.foreground);
-  return {
-    category: category.length ? [...base, ...base.map(c => mixColor(c, ink, 0.4)),
-      ...base.map(c => mixColor(c, surface, 0.45))] : house.category,
-    foreground: ink, muted,
-    subtle: mixColor(muted, surface, 0.35), border, grid: mixColor(surface, border, 0.6), surface,
-    font: token('--font-body') || style.fontFamily || house.font,
-  };
+  // The one page-token mapping the query image uses too (lib/viz/theme tokensFromThemeVariables).
+  const color = (name: string) => name === '--background' ? surface : paint(doc, token(name), surface);
+  return tokensFromThemeVariables(color,
+    token('--font-body') || style.fontFamily || house.font, dark ? 'dark' : 'light');
 }
 
 const COMPOSED = ['hconcat', 'vconcat', 'concat', 'repeat', 'facet'];
