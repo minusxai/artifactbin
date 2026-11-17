@@ -417,9 +417,17 @@ jobs:
       # (the `types` runner's), the @fontsource packages (copy-assets reads them at install; the fonts they make are kept),
       # lucide-static's icon font. About 29 MB of the 166 MB compressed entry. Exact key only: on a miss the whole install
       # is restored as before, so a lock main has not slimmed yet (this entry's first merge included) costs nothing.
+      # EVERY FIRST CACHE DOWNLOAD IS BOUNDED (SEGMENT_DOWNLOAD_TIMEOUT_MINS, minutes a 128 MB segment, fractions allowed):
+      # over 575 install restores the download took 1.4s median and 6.2s p99, then 35.5s once (run 44141023943's node-2,
+      # stuck at 70.8% and again at 92.7%). Past the bound actions/cache abandons the download, extracts nothing and reports a
+      # miss, so the next tier of this chain runs: the slim install falls back to the whole one, which (bounded only where it
+      # is a runner's first tier) falls back to the nearest. That last tier keeps the default, so a network slow everywhere
+      # costs time, never a cold `npm ci`. scripts/__tests__/ci-budget.test.mjs pins each bound.
       - if: matrix.suite || matrix.shard || matrix.batch
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         id: slim
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: '0.1'
         with:
           path: |
             node_modules
@@ -434,6 +442,8 @@ jobs:
       - if: ${{ !matrix.install && steps.slim.outputs.cache-hit != 'true' }}
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         id: install
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: ${{ steps.slim.outcome == 'skipped' && '0.1' || '' }}
         with:
           path: |
             node_modules
@@ -520,9 +530,30 @@ jobs:
       - if: matrix.suite || matrix.shard || matrix.batch
         id: test-builds-key
         run: node scripts/ci/ci.mjs test-builds-key
+      # Bounded too: over 538 restores the download took 0.8s median and 1.9s p99, then 20.4s, and once a 16.9s "server is
+      # busy" that ended in no entry at all (run 44150141230's ui-5). An abandoned download extracts nothing; one more restore
+      # of the same entries follows, and without either the global setup builds them (~10s), exactly as on any miss.
       - if: matrix.suite || matrix.shard || matrix.batch
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         id: test-builds
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: '0.05'
+        with:
+          path: |
+            services/app/lib/build-assets
+            services/app/public/libraries
+            tmp/test-schema-image
+            tmp/vitest-module-cache
+          key: test-builds-v3-${{ runner.os }}-${{ env.TEST_BUILDS_KIND }}-${{ steps.test-builds-key.outputs.key }}-${{ steps.test-builds-key.outputs.modules }}
+          restore-keys: |
+            test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}
+            test-builds-v3-${{ runner.os }}-${{ env.TEST_BUILDS_KIND }}-
+            test-builds-v2-${{ runner.os }}-
+      - if: (matrix.suite || matrix.shard || matrix.batch) && steps.test-builds.outputs.cache-matched-key == ''
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: test-builds-retry
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: '0.25'
         with:
           path: |
             services/app/lib/build-assets
@@ -548,7 +579,7 @@ jobs:
         run: node node_modules/vitest/vitest.mjs run --config vitest.node-batch.config.ts --shard=${{ matrix.batch }}
       # The last runner of each kind saves that kind's entry on an exact miss, after its tests, so its transforms are in it:
       # packing puts the longest files first, often one to a runner, so the last runner holds the most files.
-      - if: contains(fromJSON('["api-32","ui-7","guards-3","node-3"]'), matrix.part) && steps.test-builds.outputs.cache-hit != 'true'
+      - if: contains(fromJSON('["api-32","ui-7","guards-3","node-3"]'), matrix.part) && steps.test-builds.outputs.cache-hit != 'true' && steps.test-builds-retry.outputs.cache-hit != 'true'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: |
