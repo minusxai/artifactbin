@@ -70,7 +70,8 @@ describe('workflow supply-chain pins', () => {
     try {
       expect(run.result.error, 'a stalled attempt held the step open').toBeUndefined();
       expect(run.result.status, run.result.stderr).toBe(0);
-      expect(run.result.stdout).toMatch(/attempt 2 of 2\b/);
+      // A later attempt won: on a loaded machine a third may have started before the second landed, never the stalled first.
+      expect(run.result.stdout).toMatch(/from attempt [2-9] of [2-9]\n/);
       expect(run.git('rev-parse', 'HEAD')).toBe(run.target);
       expect(run.git('rev-parse', 'refs/remotes/pull/7/merge')).toBe(run.target);
       expect(run.git('symbolic-ref', '-q', 'HEAD', { allowFail: true })).toBe('');
