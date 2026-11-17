@@ -183,9 +183,10 @@ describe('a shard\'s wall time', () => {
   // The api files' times are warm ones (test-timings.mjs `steadyTimings`): a worker's start is the packer's to add, not a
   // first file's. Replayed over 10 pr fast runs (320 shards, 44142985506-44157005924) with those times, the walls fit 8-9s
   // per worker when three start together and a third of it for a worker alone; those runs compiled the page runtime in
-  // every worker (~4s of it), which the suite now builds once per run (services/app/test/setup/html-assets-file.ts).
-  it('charges the api projects what their runners measure: 5s per worker\'s first api file when three start, 2s per api-isolated file', () => {
-    expect(SHARED_FIRST_FILE_MS.api).toBe(5000);
+  // every worker, which the suite now builds once per run (services/app/test/setup/html-assets-file.ts): 7.5s fits the
+  // runs since (44166185767, 44168708400).
+  it('charges the api projects what their runners measure: 7.5s per worker\'s first api file when three start, 2s per api-isolated file', () => {
+    expect(SHARED_FIRST_FILE_MS.api).toBe(7500);
     expect(ISOLATED_FILE_MS['api-isolated']).toBe(2000);
     expect(CONTENDED_START).toEqual(['api']);
   });

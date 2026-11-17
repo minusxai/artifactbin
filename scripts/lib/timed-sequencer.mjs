@@ -94,15 +94,16 @@ export const WORKERS = 3;
  * 0.6-1.4s over theirs. The node batch's ~1.4s locally per worker (the full suite's setup file and its graph) makes
  * ~4s on a runner, an ESTIMATE. Isolated projects pay theirs on every file (`ISOLATED_FILE_MS`, in the file's weight).
  * The api projects' is what each of three workers starting together pays (`CONTENDED_START`), against warm file times
- * (scripts/ci/test-timings.mjs `steadyTimings`): fitted at 8-9s over 10 pr fast runs whose workers each compiled the page
- * runtime on their first page (~4s of it); the suite now builds it once per run (services/app/test/setup/html-assets-file.ts),
- * so 5s until runs without it are measured.
+ * (scripts/ci/test-timings.mjs `steadyTimings`): its graph's import and, inside its first file, its first database and
+ * first pages. Fitted at 8-9s over 10 pr fast runs whose workers each compiled the page runtime on their first page; with
+ * one build per run (services/app/test/setup/html-assets-file.ts), 7.5s fits pr fast runs 44166185767 and 44168708400
+ * (their 37 multi-file api shards within 0.4s at the median; the one-file shards 1.2s over, the safe side).
  * The guard runners' two shared-graph projects (vitest.guard.config.ts) pay theirs too: without it their packing predicted
  * 12.2s for shards that ran 21-25s beside one holding only the longest file that ran 10.5s (pr fast run 44140374300).
  * Replaying each guard shard's own file times from 8 runs (24 shards), 4s per worker's first file fits their walls within
  * 1.4s on average; with none they ran 6.1s over the prediction.
  */
-export const SHARED_FIRST_FILE_MS = Object.freeze({ api: 5000, islands: 1000, 'node-batch': 4000, 'pr-guards': 4000, 'pr-contracts': 4000 });
+export const SHARED_FIRST_FILE_MS = Object.freeze({ api: 7500, islands: 1000, 'node-batch': 4000, 'pr-guards': 4000, 'pr-contracts': 4000 });
 
 /**
  * THE PROJECTS WHOSE WORKERS' STARTS SHARE THE RUNNER: a shard's workers start together and import their graphs on the
