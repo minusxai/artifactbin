@@ -203,6 +203,10 @@ jobs:
             batch: 3/3
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        # Nothing here fetches or pushes after checkout: no token in the git config, so no auth setup and no post step
+        # removing it after the tests.
+        with:
+          persist-credentials: false
         # Abort an idle HTTP transfer so checkout can retry before it consumes the CI budget.
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: '1024'

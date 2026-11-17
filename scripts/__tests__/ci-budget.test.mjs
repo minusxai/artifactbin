@@ -243,6 +243,14 @@ it('uses Node 22 in every pr fast job: the runner\'s own, else the hosted tool c
  expect(setup).toBeLessThan(steps.findIndex(step=>step.id==='install'));
  expect(steps.find(step=>step.id==='install').with.key).toContain('-node22-');
 });
+// No step of pr fast fetches or pushes after checkout, so its token is never written into the checkout's git config: that
+// saves the auth setup (~0.3s, run 44114175470's api-14) and the post step that removed it again after the tests, and no
+// test can reach a credential through git.
+it('checks out without persisting the token',()=>{
+ const [checkout]=workflow('pr-fast.yml').jobs.fast.steps;
+ expect(checkout.uses).toMatch(/^actions\/checkout@/);
+ expect(checkout.with).toEqual({'persist-credentials':false});
+});
 // Runs the probe step's shell with `node` answering only --version: any JavaScript evaluation fails the probe.
 // The default `gh` answers at once; the probe returns only once its background fetch has landed, so nothing still writes
 // into the directory the test removes.
