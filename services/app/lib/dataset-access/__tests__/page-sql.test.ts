@@ -1,3 +1,4 @@
+import {QUERY_TIMEOUT_MS} from '@/lib/platform';
 import { expect, it, vi } from 'vitest';
 import { runPageSql, type SqlLinkedDataset } from '../page-sql';
 import { tableIdentity } from '../model';
@@ -33,4 +34,12 @@ it('preserves whole-selected-link permission, including unreferenced stored tabl
 });
 it.each(['DELETE FROM tasks', 'SELECT * FROM tasks; SELECT * FROM id', 'SELECT hidden FROM id'])('refuses %s without mounting rows or revealing metadata', async (sql) => {
   await expect(runPageSql([linked('tasks', true), linked('id', false)], { sql, params: {} }, new AbortController().signal)).rejects.toMatchObject({ extensions: { code: 'validation_failed' }, message: 'SQL statement could not be prepared' });
+});
+
+it('passes the configured query allowance and a lowering wall remainder to mounted reads',async()=>{
+ await runPageSql([linked('tasks',true)],{sql:'select id from tasks',params:{}},new AbortController().signal,{wallTimeoutMs:1000});
+ const options=vi.mocked(executeMounted).mock.lastCall![3];
+ expect(options.timeoutMs).toBe(QUERY_TIMEOUT_MS);
+ expect(options.wallTimeoutMs).toBeLessThanOrEqual(1000);
+ expect(Number.isSafeInteger(options.wallTimeoutMs)).toBe(true);
 });

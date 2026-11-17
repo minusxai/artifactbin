@@ -1,11 +1,6 @@
-/**
- * Internal: shared runtime of the installed commands: ToolError, argument and file helpers, the
- * origin-bound HTTP client (makeClient) and runTool, which parses flags, runs a command and prints
- * its JSON envelope. Journals live in toolbox-journal.mjs, the check digest in
- * toolbox-check-digest.mjs; both are re-exported here.
- * Used by: every command script (auth serve autofix publish read export check sql comment),
- *   toolbox-*.mjs, author-toolbox/author-check tests.
- */
+/** Internal: origin-bound auth/HTTP, arguments, file helpers and command JSON envelopes.
+ * Journals and check digests are re-exported from their toolbox modules.
+ * Used by: command scripts, toolbox-*.mjs and author-toolbox/author-check tests. */
 import {ToolError,serverOrigin,requestUrl,originRequest} from './toolbox-transport.mjs';
 export {ToolError,serverOrigin,originRequest} from './toolbox-transport.mjs';
 import {beforeCommand} from './toolbox-update.mjs';import {createHash} from 'node:crypto';
@@ -58,9 +53,11 @@ export async function safeParent(file){const parent=await realpath(path.dirname(
   file)));return path.join(parent,path.basename(file));}
 export function within(root,file){const relative=path.relative(root,file);return relative===''||
   relative!=='..'&&!relative.startsWith('..'+path.sep)&&!path.isAbsolute(relative);}
+const retryHint=unsafe=>unsafe?'Resume only the saved supported journal; reconcile arbitrary '+
+  'mutations before another write.':'Retry this read later.';
 export function makeClient(server,{env=process.env,fetcher=fetch,retryDelays,identity}={}){
  server=serverOrigin(server);const root=credentialRoot(env);let who=identity;
- async function grant(){
+ async function grant(signal){
 if(env.ARTIFACTBIN_TOKEN){if(env.ARTIFACTBIN_URL!==server)throw new ToolError(
     'credential_origin_mismatch','Environment grant belongs to another origin.',3);return {server,
     token:env.ARTIFACTBIN_TOKEN};}
@@ -68,7 +65,7 @@ if(env.ARTIFACTBIN_TOKEN){if(env.ARTIFACTBIN_URL!==server)throw new ToolError(
 if(!saved)throw new ToolError('auth_required','No saved grant for this origin.',3,
     `Run ${LOGIN}. ${SIGN_IN}`);
 if(saved.expiresAt&&saved.expiresAt<Date.now()+30000){try{saved=await shared.refreshCredentials(
-    saved,root,{fetch:fetcher});}catch(error){throw new ToolError(error.code??'auth_required',
+   saved,root,{fetch:fetcher,signal});}catch(error){throw new ToolError(error.code??'auth_required',
     'Saved grant could not be refreshed; credentials retained.',
     error.code==='refresh_unavailable'?1:3,'Retry later or complete sign-in.');}}
   return saved;
@@ -77,15 +74,14 @@ if(saved.expiresAt&&saved.expiresAt<Date.now()+30000){try{saved=await shared.ref
 async function request(route,{method='GET',body,headers={},unsafe=false,safeToRepeat=false,raw=
    false,timeoutMs=30000,authenticated=true,signal}={}){
 requestUrl(server,route);
-  let connection=authenticated?await grant():null;
+  // One deadline covers credential refresh and retries; no attempt renews it.
+  signal=AbortSignal.any([...(signal?[signal]:[]),AbortSignal.timeout(timeoutMs)]);
+  let connection=authenticated?await grant(signal):null;
   for(let attempt=0;attempt<2;attempt++){
    let response;
-   // Transient outage (a deploy restart): the shared policy (lib/http/retry) retries network errors
-   // and 502/503/504 — reads, declared-safe requests and keyed writes only, the same
-   // Idempotency-Key every time; never 4xx.
+   // Shared retry policy: transient reads/safe requests/keyed writes, same key; never 4xx.
 try{response=(await (await platform()).retryFetch(()=>originRequest(server,route,{method,body,
-     signal:signal?AbortSignal.any([signal,AbortSignal.timeout(timeoutMs)]):
-      AbortSignal.timeout(timeoutMs),
+     signal,
      headers:{'X-Artifactbin-Protocol':'native-author-v1',Origin:server,...agentHeaders(who??=
      agentIdentity({env,root})),...(connection?{
      Authorization:'Bearer '+connection.token}:{}),...headers}},fetcher),{
@@ -93,16 +89,15 @@ try{response=(await (await platform()).retryFetch(()=>originRequest(server,route
      delaysMs:retryDelays}:undefined})).response;}
 catch{throw new ToolError(unsafe?'outcome_unknown':'network_unavailable',
      unsafe?'Write outcome is unknown.':'Server request failed.',unsafe?5:1,
-     unsafe?'Resume only the saved supported journal; reconcile arbitrary mutations before '+
-     'another write.':'Retry this read later.');}
+     retryHint(unsafe));}
 if(response.status===401&&attempt===0&&connection?.refreshToken){const shared=await platform();
-     connection=await shared.refreshCredentials(connection,root,{fetch:fetcher});continue;}
-if(response.ok){if(raw)return response;try{return await response.json();}catch{throw new ToolError(
+     connection=await shared.refreshCredentials(connection,root,{fetch:fetcher,signal});continue;}
+if(response.ok){if(raw)return response;try{const data=await response.json();
+     signal.throwIfAborted();return data;}catch{throw new ToolError(
      unsafe?'outcome_unknown':'invalid_response',
      unsafe?'Write response could not be read; outcome is unknown.':
      'Server response was not valid JSON.',unsafe?5:1,
-     unsafe?'Resume only the saved supported journal; reconcile arbitrary mutations before '+
-     'another write.':'Retry this read later.');}}
+     retryHint(unsafe));}}
    const refusal=await response.json().catch(()=>({error:'http_'+response.status}));
 const code=typeof refusal.error==='string'?refusal.error:refusal.error?.code??
      'http_'+response.status;
@@ -122,8 +117,7 @@ const conflictHint=refusal=>refusal.error!=='version_conflict'?'The request conf
      'current page; see the refusal details.':`${CHANGED[refusal.changed]??'The page changed'} `+
      'since your read. Run read.mjs ID --output page.html, reapply your edits to that file and '+
      'publish it; do not resume this journal.';
-/** Unexpected errors keep a generic message (raw text can carry URLs or paths); a network/server
- * blip says so and suggests one retry. */
+/** Unexpected errors stay generic; network faults suggest one retry. */
 const transient=error=>!(error instanceof ToolError)&&
   /fetch failed|ECONN|ETIMEDOUT|EAI_AGAIN|socket|network|timed? ?out|\b5\d\d\b/i.test(String(
   error?.message)+' '+String(error?.cause?.code??''));

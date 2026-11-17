@@ -1,5 +1,5 @@
 /** What one connector module is: `open` a checked configuration into a `Connection` (contracts). */
-import type { Connection, ConnectionConfig, ConnectorNetworkPolicy } from '@artifactbin/contracts';
+import type { Connection, ConnectorReadPolicy, ConnectionConfig, ConnectorNetworkPolicy } from '@artifactbin/contracts';
 import type { NetworkSeams } from './network';
 
 export interface OpenConnection extends Connection {
@@ -7,5 +7,5 @@ export interface OpenConnection extends Connection {
   sessions(): number;
 }
 export interface ConnectorModule {
-  open(config: ConnectionConfig, policy: ConnectorNetworkPolicy, seams?: NetworkSeams): OpenConnection;
+  open(config: ConnectionConfig, policy: ConnectorNetworkPolicy, seams?: NetworkSeams, readPolicy?:ConnectorReadPolicy): OpenConnection;
 }

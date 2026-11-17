@@ -1,3 +1,6 @@
+import {readLifetime} from './read-lifetime';
+import {QUERY_TIMEOUT_MS} from '@/lib/platform';
+import {sqlTimeout} from '@artifactbin/contracts';
 import {createHash} from 'node:crypto';
 import type {ContentObjects} from '@/lib/object-store';
 import {runMutation,runQueries,isQueryFailure} from '@/lib/sql';
@@ -10,7 +13,7 @@ import {loadDatasetRows} from './dataset-store';
 import {createSharedReads} from './shared-reads';
 import type {CatalogRowView,DatasetCatalog,DatasetTable} from './types';
 import type {MutationInput,MutationOutcome,Row} from '@artifactbin/contracts';
-interface CatalogQueryOptions {/** The caller's role view (lib/dataset-permissions), or null: decided at every door, never defaulted. */view:CatalogRowView|null;/** Trusted host-owned SQL execution; never a request parameter. */execute?:typeof runQueries;timeoutMs?:number;objects?:Pick<ContentObjects,'get'>;limit?:number;offset?:number;refresh?:boolean;sort?:{col:string;dir:'asc'|'desc'};paramTypes?:Record<string,import('@/lib/dataflow').DatasetColumn['type']>;datasetId?:string;actor?:AccessActor;signal?:AbortSignal;authorize?:()=>Promise<void>;/** A door's row IDs for one stored table (`table`: its catalog index), by position in its stored object, added as `column` before the role view filters: the generated GraphQL's `_id`. */rowIds?:{table:number;column:string;ids:readonly string[]}}
+interface CatalogQueryOptions {/** The caller's role view (lib/dataset-permissions), or null: decided at every door, never defaulted. */view:CatalogRowView|null;/** Trusted host-owned SQL execution; never a request parameter. */execute?:typeof runQueries;timeoutMs?:number;wallTimeoutMs?:number;objects?:Pick<ContentObjects,'get'>;limit?:number;offset?:number;refresh?:boolean;sort?:{col:string;dir:'asc'|'desc'};paramTypes?:Record<string,import('@/lib/dataflow').DatasetColumn['type']>;datasetId?:string;actor?:AccessActor;signal?:AbortSignal;authorize?:()=>Promise<void>;/** A door's row IDs for one stored table (`table`: its catalog index), by position in its stored object, added as `column` before the role view filters: the generated GraphQL's `_id`. */rowIds?:{table:number;column:string;ids:readonly string[]}}
 type CatalogResult=TableResult&{refreshedAt:string};
 const sha=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('base64url');
 /** A row-ID list's digest, once per list: a snapshot hands the same list to every statement. */
@@ -32,10 +35,11 @@ interface KeyedRead {catalog:ReadCatalog;sql:string;params:Record<string,Scalar>
  * ONE KEYED CATALOG READ: every stored source names its content (`key`), so the SQL engine answers from the database it
  * prepared for these keys; only a miss loads, filters and sends the rows (`load`) and asks again (services/sql/src/sqlite/prepared.ts).
  */
-async function keyedRead(read:KeyedRead,load:()=>Promise<ReadTables>):Promise<CatalogResult>{
- const run=(tables:ReadTables)=>(read.execute??runQueries)({tables,catalog:read.catalog,queries:[{name:'result',sql:read.sql}],params:read.params,limit:read.limit,timeoutMs:read.timeoutMs,...(read.outputBytes!==undefined?{outputBytes:read.outputBytes}:{}),...(read.page?{page:read.page}:{})});
+async function keyedRead(read:KeyedRead,load:()=>Promise<ReadTables>,life:ReturnType<typeof readLifetime>):Promise<CatalogResult>{
+ const run=(tables:ReadTables)=>{life.check();return (read.execute??runQueries)({tables,catalog:read.catalog,queries:[{name:'result',sql:read.sql}],params:read.params,limit:read.limit,timeoutMs:Math.min(sqlTimeout(read.timeoutMs,QUERY_TIMEOUT_MS,QUERY_TIMEOUT_MS,'SQL timeout',true),life.remaining()),...(read.outputBytes!==undefined?{outputBytes:read.outputBytes}:{}),...(read.page?{page:read.page}:{})},{signal:life.signal,wallTimeoutMs:life.remaining()});};
  let out=await run({});
- if(out.result&&isQueryFailure(out.result)&&out.result.rowsRequired)out=await run(await load());
+ if(out.result&&isQueryFailure(out.result)&&out.result.rowsRequired)out=await run(await life.step(load()));
+ life.check();
  const table=out.result;
  if(!table)throw new DatasetError('Query failed');
  if(isQueryFailure(table))throw new CatalogQueryFailure(table.error,table.timedOut===true,table.tooLarge===true);
@@ -52,14 +56,17 @@ function requireParams(sql:string,params:Record<string,Scalar>):void{
 }
 /** Callers authorize dataset access before entering this execution/cache boundary. */
 async function executeCatalogDirect(saved:DatasetCatalog,sql:string,params:Record<string,Scalar>,opts:CatalogQueryOptions):Promise<CatalogResult> {
+ const life=readLifetime(opts.signal,opts.wallTimeoutMs);
+ try{
  // The role view first: hidden columns leave the catalog every statement is checked against.
  const catalog=opts.view?opts.view.catalog(saved):saved;
  const limit=Math.min(10000,Math.max(1,Math.floor(opts.limit??1000)));const offset=Math.max(0,Math.floor(opts.offset??0));
  if(!Number.isFinite(limit)||!Number.isSafeInteger(offset))throw new DatasetError('Invalid query window');
  if(catalog.kind!=='stored')throw new DatasetError('Only stored datasets can be queried');
  const authorize=async()=>{
-  opts.signal?.throwIfAborted();
-  await opts.authorize?.();
+  life.check();
+  await life.step(Promise.resolve().then(()=>opts.authorize?.()));
+  life.check();
  };
  await authorize();
  requireParams(sql,params);
@@ -69,8 +76,9 @@ async function executeCatalogDirect(saved:DatasetCatalog,sql:string,params:Recor
   if(opts.rowIds){const loaded=stored[`dataset_table_${opts.rowIds.table}`],{column,ids}=opts.rowIds;if(loaded)loaded.rows=loaded.rows.map((row,k)=>({...row,[column]:ids[k]}));}
   if(opts.view)for(const i of catalog.tables.keys()){const loaded=stored[`dataset_table_${i}`];if(loaded)loaded.rows=opts.view.rows(saved.tables[i]!,loaded.rows);}
   return stored;
- });
+ },life);
  await authorize();return response;
+ }finally{life.close();}
 }
 
 /**
@@ -83,7 +91,7 @@ export interface CatalogMount {
  stored:DatasetTable;view:CatalogRowView|null;
  rowIds?:{column:string;ids:readonly string[];as?:string};
 }
-interface MountedQueryOptions {limit:number;timeoutMs:number;outputBytes?:number;signal?:AbortSignal;objects?:Pick<ContentObjects,'get'>;execute?:typeof runQueries}
+interface MountedQueryOptions {limit:number;timeoutMs:number;wallTimeoutMs?:number;outputBytes?:number;signal?:AbortSignal;objects?:Pick<ContentObjects,'get'>;execute?:typeof runQueries}
 /** A mount's rows as its key names them: the stored object, the door's row IDs, the role view, the `as` rename. */
 async function loadMount(m:CatalogMount,objects?:Pick<ContentObjects,'get'>):Promise<Row[]>{
  let rows:Record<string,unknown>[]=m.stored.objectKey?(objects?JSON.parse((await objects.get(m.stored.objectKey)).toString('utf8')):await loadDatasetRows({meta:{objectKey:m.stored.objectKey}})):[];
@@ -104,17 +112,20 @@ const mountKey=(m:CatalogMount)=>sha([m.stored.objectKey??null,m.stored.columns,
  * authorized every mount (and checks its fences after); the answer is at most `limit` rows (`truncated` past it).
  */
 export async function executeMounted(mounts:readonly CatalogMount[],sql:string,params:Record<string,Scalar>,opts:MountedQueryOptions):Promise<CatalogResult>{
- opts.signal?.throwIfAborted();
+ const life=readLifetime(opts.signal,opts.wallTimeoutMs);
+ try{
+ life.check();
  requireParams(sql,params);
  const keys=mounts.map(mountKey);
  const catalog:ReadCatalog={defaultSchema:'main',tables:mounts.map((m,i)=>({schema:m.schema,name:m.name,columns:m.columns,source:`mount_${i}`,key:keys[i]!}))};
- const signal=opts.signal??new AbortController().signal;
+ const signal=life.signal;
  const result=await keyedRead({catalog,sql,params,limit:opts.limit,timeoutMs:opts.timeoutMs,...(opts.outputBytes!==undefined?{outputBytes:opts.outputBytes}:{}),...(opts.execute?{execute:opts.execute}:{})},async()=>Object.fromEntries(await Promise.all(mounts.map(async(m,i)=>
   // Readers missing the same mount at once (a live refetch after a write) load, filter and send its rows once.
   [`mount_${i}`,{rows:await mountRows(keys[i]!,signal,()=>loadMount(m,opts.objects)),columns:m.columns}] as const,
- ))));
- opts.signal?.throwIfAborted();
+ ))),life);
+ life.check();
  return result;
+ }finally{life.close();}
 }
 
 /**

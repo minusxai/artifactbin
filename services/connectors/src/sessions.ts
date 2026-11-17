@@ -1,78 +1,58 @@
-/**
- * A CONNECTION'S SESSIONS: at most CONNECTOR_LIMITS.poolSize database sessions in all, each opened on one database
- * (the key: what followed `default:`) and shared by every viewer (each query names its own viewer inside its own
- * transaction), used by one query at a time and closed after `idleMs` unused. A full pool closes the least recently
- * used idle session to make room; when all are busy a query waits up to `connectTimeoutMs`. A session a query left in an unknown state (a
- * timeout, an abort, a lost socket, a stopped read, a failed statement) is closed, never reused.
- */
+/** Bounded sessions: retiring or unconfirmed sessions still own capacity. Queue cancellation
+ * removes the waiter before it can dispatch; close failure quarantines rather than frees a slot. */
 import { CONNECTOR_LIMITS } from '@artifactbin/contracts';
 import { ConnectorFailure } from './errors';
-
-export interface SessionDriver<S> {
-  open(key: string): Promise<S>;
-  close(session: S): Promise<void>;
-}
-interface Entry<S> { key: string; session: Promise<S>; busy: boolean; used: number; timer?: ReturnType<typeof setTimeout> }
-
+export interface SessionDriver<S> { open(key:string,context?:{signal?:AbortSignal;timeoutMs?:number}):Promise<S>; close(session:S):Promise<void> }
+interface Entry<S> { key:string; session:Promise<S>; busy:boolean; used:number; timer?:ReturnType<typeof setTimeout>; retiring?:Promise<void> }
 export class SessionPool<S> {
-  private readonly entries = new Set<Entry<S>>();
-  private readonly waiting: (() => void)[] = [];
-  private closed = false;
-  constructor(private readonly driver: SessionDriver<S>, private readonly bounds = { size: CONNECTOR_LIMITS.poolSize, idleMs: CONNECTOR_LIMITS.idleMs, waitMs: CONNECTOR_LIMITS.connectTimeoutMs }) {}
+ private readonly entries=new Set<Entry<S>>();
+ private readonly waiting=new Set<()=>void>();
+ private closed=false;
+ constructor(private readonly driver:SessionDriver<S>,private readonly bounds:{size:number;idleMs:number;waitMs:number}={size:CONNECTOR_LIMITS.poolSize,idleMs:CONNECTOR_LIMITS.idleMs,waitMs:CONNECTOR_LIMITS.connectTimeoutMs}){}
+ count(){return this.entries.size;}
+ async use<T>(key:string,work:(session:S,discard:()=>void)=>Promise<T>,context:{signal?:AbortSignal;timeoutMs?:number}={}):Promise<T>{
+  const deadline=performance.now()+(context.timeoutMs??this.bounds.waitMs);
+  const check=()=>{if(context.signal?.aborted||performance.now()>=deadline)throw new ConnectorFailure('timeout','the query was cancelled or expired');};
+  const entry=await this.acquire(key,deadline,context.signal);
+  let keep=true;
+  try{const session=await entry.session;check();return await work(session,()=>{keep=false;});}
+  catch(error){keep=false;throw error;}
+  finally{if(keep&&!this.closed)this.release(entry);else await this.drop(entry);}
+ }
+ private async acquire(key:string,deadline:number,signal?:AbortSignal):Promise<Entry<S>>{
+  for(;;){
+   if(signal?.aborted||performance.now()>=deadline)throw new ConnectorFailure('timeout','the query was cancelled or expired');
+   if(this.closed)throw new ConnectorFailure('unavailable','the connection is closed');
+   const idle=[...this.entries].find(e=>e.key===key&&!e.busy);
+   if(idle){clearTimeout(idle.timer);idle.busy=true;return idle;}
+   if(this.entries.size>=this.bounds.size){const evict=[...this.entries].filter(e=>!e.busy).sort((a,b)=>a.used-b.used)[0];if(evict){await this.drop(evict);continue;}}
+   if(this.entries.size<this.bounds.size){
+    const entry:Entry<S>={key,busy:true,used:performance.now(),session:this.driver.open(key,{signal,timeoutMs:Math.max(1,Math.floor(deadline-performance.now()))})};
+    this.entries.add(entry);entry.session.catch(()=>{this.entries.delete(entry);this.wake();});return entry;
+   }
+   await new Promise<void>(resolve=>{
+    const done=()=>{clearTimeout(timer);signal?.removeEventListener('abort',done);this.waiting.delete(done);resolve();};
+    const timer=setTimeout(done,Math.max(1,deadline-performance.now()));
+    this.waiting.add(done);signal?.addEventListener('abort',done,{once:true});if(signal?.aborted)done();
+   });
+  }
+ }
+ private release(entry:Entry<S>){entry.busy=false;entry.used=performance.now();entry.timer=setTimeout(()=>{void this.drop(entry).catch(()=>{});},this.bounds.idleMs);entry.timer.unref?.();this.wake();}
+ private async drop(entry:Entry<S>):Promise<void>{
+  if(!this.entries.has(entry))return;
+  entry.busy=true;clearTimeout(entry.timer);
+  // Keep one cleanup attempt per slot even after a caller's cleanup wait expires.
+  if(!entry.retiring){
+   entry.retiring=entry.session.then(s=>this.driver.close(s),()=>undefined)
+    .then(()=>{this.entries.delete(entry);this.wake();})
+    .catch(()=>{throw new ConnectorFailure('unavailable','database termination unconfirmed');})
+    .finally(()=>{entry.retiring=undefined;});
+  }
+  let timer:ReturnType<typeof setTimeout>;
+  try{await Promise.race([entry.retiring,new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new ConnectorFailure('unavailable','database termination unconfirmed')),5000);})]);}
+  finally{clearTimeout(timer!);}
+ }
 
-  /** Sessions open now. */
-  count(): number { return this.entries.size; }
-
-  /** Runs `work` on a session of `key`'s; `work` calls `discard()` when the session must not be reused. */
-  async use<T>(key: string, work: (session: S, discard: () => void) => Promise<T>): Promise<T> {
-    const entry = await this.acquire(key);
-    let keep = true;
-    try {
-      return await work(await entry.session, () => { keep = false; });
-    } finally {
-      if (keep && !this.closed) this.release(entry);
-      else void this.drop(entry);
-    }
-  }
-
-  private async acquire(key: string): Promise<Entry<S>> {
-    const deadline = Date.now() + this.bounds.waitMs;
-    for (;;) {
-      if (this.closed) throw new ConnectorFailure('unavailable', 'the connection is closed');
-      const idle = [...this.entries].find((e) => e.key === key && !e.busy);
-      if (idle) { clearTimeout(idle.timer); idle.busy = true; return idle; }
-      if (this.entries.size >= this.bounds.size) {
-        const evict = [...this.entries].filter((e) => !e.busy).sort((a, b) => a.used - b.used)[0];
-        if (evict) await this.drop(evict);
-      }
-      if (this.entries.size < this.bounds.size) {
-        const entry: Entry<S> = { key, busy: true, used: Date.now(), session: this.driver.open(key) };
-        this.entries.add(entry);
-        entry.session.catch(() => { this.entries.delete(entry); this.wake(); });
-        return entry;
-      }
-      const left = deadline - Date.now();
-      if (left <= 0) throw new ConnectorFailure('unavailable', 'every session of this connection is busy; try again');
-      await new Promise<void>((resolve) => { const t = setTimeout(resolve, left); this.waiting.push(() => { clearTimeout(t); resolve(); }); });
-    }
-  }
-  private release(entry: Entry<S>) {
-    entry.busy = false; entry.used = Date.now();
-    entry.timer = setTimeout(() => void this.drop(entry), this.bounds.idleMs);
-    entry.timer.unref?.();
-    this.wake();
-  }
-  private async drop(entry: Entry<S>) {
-    if (!this.entries.delete(entry)) return;
-    clearTimeout(entry.timer);
-    this.wake();
-    await entry.session.then((s) => this.driver.close(s), () => undefined).catch(() => undefined);
-  }
-  private wake() { this.waiting.splice(0).forEach((w) => w()); }
-
-  async close(): Promise<void> {
-    this.closed = true;
-    await Promise.all([...this.entries].map((e) => this.drop(e)));
-    this.wake();
-  }
+ private wake(){for(const done of [...this.waiting])done();}
+ async close(){this.closed=true;this.wake();await Promise.all([...this.entries].map(e=>this.drop(e)));}
 }

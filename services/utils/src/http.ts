@@ -1,24 +1,35 @@
 import http from 'node:http';
-import { SERVICE_AUTH_HEADER } from '@artifactbin/contracts';
+import { SERVICE_AUTH_HEADER, SQL_QUERY_MAX_MS, SQL_WALL_OVERHEAD_MS, SQL_WALL_HEADER, sqlTimeout, type SqlCallContext } from '@artifactbin/contracts';
 import { collectNodeBody } from './body';
 
 /** JSON with a Set on the wire as an array — a Set stringifies to `{}` and binds nothing, which is a bug this was found by. */
 const replacer = (_k: string, v: unknown) => (v instanceof Set ? [...v] : v);
 
-export interface HttpClient { post<T>(path: string, body: unknown): Promise<T> }
+export interface HttpClient { post<T>(path: string, body: unknown, context?: SqlCallContext): Promise<T> }
 
 /** A deadline on EVERY call: a hung service is a failure the caller sees, never a render that waits forever. */
 export function httpClient(url: string, opts: { deadlineMs: number; headers?: Record<string, string> }): HttpClient {
   return {
-    async post<T>(path: string, body: unknown): Promise<T> {
-      const res = await fetch(`${url}${path}`, { method: 'POST', headers: { 'content-type': 'application/json', ...opts.headers }, body: JSON.stringify(body, replacer), signal: AbortSignal.timeout(opts.deadlineMs) });
+    async post<T>(path: string, body: unknown, context?: SqlCallContext): Promise<T> {
+      const started = performance.now();
+      const budget = sqlTimeout(context?.wallTimeoutMs, opts.deadlineMs, opts.deadlineMs, 'wallTimeoutMs', true);
+      const bodyText = JSON.stringify(body, replacer);
+      const remaining = Math.floor(budget - (performance.now() - started));
+      if (remaining <= 0) throw new DOMException('SQL deadline exceeded', 'TimeoutError');
+      const timeout = AbortSignal.timeout(remaining);
+      const signal = context?.signal ? AbortSignal.any([context.signal, timeout]) : timeout;
+      const res = await fetch(`${url}${path}`, { method: 'POST', headers: { 'content-type': 'application/json', ...opts.headers, ...(context ? { [SQL_WALL_HEADER]: String(remaining) } : {}) }, body: bodyText, signal });
+      if (res.status === 408) throw new DOMException('SQL deadline exceeded', 'TimeoutError');
       if (!res.ok) throw new Error(`${path}: ${res.status} ${(await res.text().catch(() => '')).slice(0, 200)}`);
-      return (await res.json()) as T;
+      const result = (await res.json()) as T;
+      signal.throwIfAborted();
+      if (performance.now() - started >= budget) throw new DOMException('SQL deadline exceeded', 'TimeoutError');
+      return result;
     },
   };
 }
 
-export type JsonRoutes = Record<string, (body: unknown) => Promise<unknown>>;
+export type JsonRoutes = Record<string, (body: unknown, context: SqlCallContext) => Promise<unknown>>;
 export interface JsonServer { listen(port: number, host?: string): { port: number; url: string }; close(): Promise<void> }
 
 /** How a service shell is served: the body cap, and what a service process adds to the bare transport. */
@@ -44,10 +55,10 @@ interface JsonServerOptions extends PostServerOptions {
  */
 export function jsonServer(routes: JsonRoutes, opts: JsonServerOptions): JsonServer {
   const failed = `[${opts.label ?? 'json-server'}] %s failed:`;
-  return postServer(path => Boolean(routes[path]), async (req, res, raw) => {
+  return postServer(path => Boolean(routes[path]), async (req, res, raw, context) => {
     const json = (status: number, body: unknown) => { res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(body, replacer)); };
     try {
-      return json(200, await routes[req.url ?? '']!(JSON.parse(raw.toString('utf8'))));
+      return json(200, await routes[req.url ?? '']!(JSON.parse(raw.toString('utf8')), context));
     } catch (error) {
       // Caller-controlled URLs travel as arguments, never as the format string.
       console.error(failed, req.url, opts.redactErrors ? 'request_failed' : error);
@@ -59,7 +70,7 @@ export function jsonServer(routes: JsonRoutes, opts: JsonServerOptions): JsonSer
 /** Shared request admission and socket lifecycle; each shell owns parsing, route errors and response bytes. */
 export function postServer(
   accepts: (path: string) => boolean,
-  handle: (req: http.IncomingMessage, res: http.ServerResponse, raw: Buffer) => Promise<unknown>,
+  handle: (req: http.IncomingMessage, res: http.ServerResponse, raw: Buffer, context: SqlCallContext) => Promise<unknown>,
   opts: PostServerOptions,
 ): JsonServer {
   const server = http.createServer(async (req, res) => {
@@ -68,9 +79,40 @@ export function postServer(
     if (opts.serviceSecret && req.headers[SERVICE_AUTH_HEADER] !== opts.serviceSecret) return json(401, { error: 'unauthorized' });
     if (req.method !== 'POST') return json(405, { error: 'method_not_allowed' });
     if (!accepts(req.url ?? '')) return json(404, { error: 'not_found' });
+    const controller = new AbortController();
+    const started = performance.now();
+    const abort = () => { if (!res.writableFinished) controller.abort(); };
+    res.once('close', abort);
+    const header = req.headers[SQL_WALL_HEADER];
+    let wallTimeoutMs: number | undefined;
+    let admissionTimer: ReturnType<typeof setTimeout> | undefined;
+    let expired = false;
+    try {
+    if (header !== undefined) {
+      try { wallTimeoutMs = sqlTimeout(header, 1, SQL_QUERY_MAX_MS + SQL_WALL_OVERHEAD_MS, 'wallTimeoutMs', true); }
+      catch { json(400, {error:'bad_request'}); return; }
+      // An unfinished upload must expire too, rather than checking only after its body finally arrives.
+      admissionTimer = setTimeout(() => {
+        expired = true;
+        controller.abort();
+        res.setHeader('connection', 'close');
+        res.once('finish', () => req.destroy());
+        json(408, {error:'deadline_exceeded'});
+      }, wallTimeoutMs);
+    }
     const raw = await collectNodeBody(req, opts.maxBody);
+    clearTimeout(admissionTimer);
+    if (expired || controller.signal.aborted) return;
     if (!raw) { json(413, { error: 'too_large' }); req.destroy(); return; }
-    return handle(req, res, raw);
+    // Body buffering consumes the transported allowance, without refreshing the execution deadline.
+    if (wallTimeoutMs !== undefined) {
+      wallTimeoutMs = Math.floor(wallTimeoutMs - (performance.now() - started));
+      if (wallTimeoutMs <= 0) { json(408, {error:'deadline_exceeded'}); return; }
+    }
+    return await handle(req, res, raw, { signal: controller.signal, ...(wallTimeoutMs !== undefined ? {wallTimeoutMs} : {}) });
+    } catch {
+      if (!expired && !res.headersSent && !res.destroyed) json(400, {error:'bad_request'});
+    } finally { clearTimeout(admissionTimer); res.off('close', abort); }
   });
   return {
     // No host → Node binds synchronously; a hostname bind resolves asynchronously.

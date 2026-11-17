@@ -13,6 +13,8 @@
  * Mounts are keyed by content (object, columns, row IDs, role view), so repeated reads of unchanged rows under one
  * view answer from the engine's prepared database: a live refetch after an unrelated write costs one query.
  */
+import {QUERY_TIMEOUT_MS} from '@/lib/platform';
+import {readLifetime} from '@/lib/datasets';
 import { DatasetAccessError } from './errors';
 import { SQL_READ_LIMITS, type ColumnType, type DatasetColumn, type Scalar } from '@artifactbin/contracts';
 import { CatalogQueryFailure, executeMounted, selectSqlLinks, type CatalogMount } from '@/lib/datasets';
@@ -53,9 +55,12 @@ export function pageSqlMounts(loaded: readonly SqlLinkedDataset[], selected: Rea
  * `aggregates: 'visible'` (the page SQL door, ./page-sql-door): no `allow_aggregations` gate; the reader aggregates
  * over the rows its role view shows, which is all a mount ever holds.
  */
-export async function runPageSql(loaded: readonly SqlLinkedDataset[], call: PageSqlCall, signal: AbortSignal, options: { aggregates?: 'gated' | 'visible';retainSelected?:(links:ReadonlySet<string>)=>void } = {}): Promise<PageSqlAnswer> {
+export async function runPageSql(loaded: readonly SqlLinkedDataset[], call: PageSqlCall, signal: AbortSignal, options: { wallTimeoutMs?:number;aggregates?: 'gated' | 'visible';retainSelected?:(links:ReadonlySet<string>)=>void } = {}): Promise<PageSqlAnswer> {
   let result;
-  const deadline = performance.now() + SQL_READ_LIMITS.timeoutMs;
+  const life=readLifetime(signal,options.wallTimeoutMs);
+  signal=life.signal;
+  const deadline=life.deadline;
+  try{
   try {
     const relations = loaded.flatMap((l) => pageSqlMounts([l], new Set([l.link]), false).map((m) => ({ link: l.link, schema: m.schema, table: m.name, columns: m.columns })));
     let selected: Set<string>;
@@ -66,16 +71,16 @@ export async function runPageSql(loaded: readonly SqlLinkedDataset[], call: Page
     catch (e) {
       if (e instanceof CatalogQueryFailure) throw e;
       signal.throwIfAborted();
-      if (performance.now() >= deadline) return refuse('timeout', `a statement runs at most ${SQL_READ_LIMITS.timeoutMs} ms`);
+      if (performance.now() >= deadline) return refuse('timeout', `a statement runs at most ${QUERY_TIMEOUT_MS} ms`);
       return refuse('validation_failed', 'SQL statement could not be prepared');
     }
     signal.throwIfAborted();
     options.retainSelected?.(selected);
     const mounts = pageSqlMounts(loaded, selected, options.aggregates !== 'visible');
-    result = await executeMounted(mounts, call.sql, { ...call.params }, { limit: SQL_READ_LIMITS.rows, timeoutMs: Math.max(1, deadline - performance.now()), outputBytes: SQL_READ_LIMITS.outputBytes, signal });
+    result = await executeMounted(mounts, call.sql, { ...call.params }, { limit: SQL_READ_LIMITS.rows, timeoutMs: QUERY_TIMEOUT_MS, wallTimeoutMs:life.remaining(), outputBytes: SQL_READ_LIMITS.outputBytes, signal });
   } catch (e) {
     if (e instanceof CatalogQueryFailure && e.tooLarge) return refuse('result_too_large', TOO_LARGE);
-    if (e instanceof CatalogQueryFailure) return refuse(e.timedOut ? 'timeout' : 'validation_failed', e.timedOut ? `a statement runs at most ${SQL_READ_LIMITS.timeoutMs} ms` : e.message);
+    if (e instanceof CatalogQueryFailure) return refuse(e.timedOut ? 'timeout' : 'validation_failed', e.timedOut ? `a statement runs at most ${QUERY_TIMEOUT_MS} ms` : e.message);
     if (e instanceof Error && e.message.startsWith('Dataset SQL: ')) return refuse('validation_failed', e.message);
     throw e;
   }
@@ -83,7 +88,9 @@ export async function runPageSql(loaded: readonly SqlLinkedDataset[], call: Page
   const answer = { columns: result.columns.map((c) => ({ name: c.name, type: c.type })), rows: result.rows as Array<Record<string, unknown>> };
   // The engine's count is a lower bound of the JSON (text by length); the answer as it will travel is measured exactly.
   if (jsonBytes(answer) > SQL_READ_LIMITS.outputBytes) refuse('result_too_large', TOO_LARGE);
+  life.check();
   return answer;
+  }finally{life.close();}
 }
 const TOO_LARGE = `a result is at most ${SQL_READ_LIMITS.outputBytes} bytes; select fewer rows or columns`;
 /** A value's serialized size in UTF-8 bytes. */

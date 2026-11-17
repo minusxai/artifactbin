@@ -100,7 +100,7 @@ describe('settings', () => {
       ['TRUSTED_PROXY_HOPS', 1],
       ['MAX_ROWS_LIMIT', 10_000],
       ['MAX_QUERY_ROWS', 10_000],
-      ['QUERY_TIMEOUT_MS', 5000],
+      ['QUERY_TIMEOUT_MS', 30000],
       ['LOCAL_OBJECT_DIR', '.artifact-objects'],
       ['WEB_INGEST_ALLOW_PRIVATE', false],
       ['WEB_INGEST_TIMEOUT_MS', 10_000],

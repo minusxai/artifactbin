@@ -170,7 +170,10 @@ describe('postgres, end to end', () => {
     await pg.query({ text: 'select id from sales.orders where id = $id', params: { id: 1 }, viewer: alice });
     const sent = wire.messages.map((m) => (m.sql ? `${m.type} ${m.sql}` : m.type)).join('\n');
     expect(sent).toBe([
+      'Q SELECT pg_backend_pid() AS pid',
       'Q BEGIN READ ONLY',
+      "P SELECT set_config('statement_timeout',$1,true)",
+      'D', 'H', 'B', 'E', 'S',
       "P SELECT set_config('app.viewer_id', $1, true), set_config('app.viewer_email', $2, true), set_config('app.viewer_groups', $3, true)",
       'D', 'H', 'B', 'E', 'S',
       'P select id from sales.orders where id = $1',

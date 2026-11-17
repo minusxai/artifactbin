@@ -14,32 +14,27 @@ import type {
   SqlService,
   SvgHarvestResult,
 } from '@artifactbin/contracts';
-import { BROWSER_ROUTES, ELEMENT_CAPTURE_HEADER, EVENTS_ROUTES, SERVICE_AUTH_HEADER, SQL_ROUTES } from '@artifactbin/contracts';
+import { sqlTimeout, SQL_QUERY_DEFAULT_MS, SQL_WALL_OVERHEAD_MS, BROWSER_ROUTES, ELEMENT_CAPTURE_HEADER, EVENTS_ROUTES, SERVICE_AUTH_HEADER, SQL_ROUTES } from '@artifactbin/contracts';
 import { httpClient } from './http';
 
-const SQL_DEFAULT_TIMEOUT_MS = 5_000;
+const SQL_DEFAULT_TIMEOUT_MS = SQL_QUERY_DEFAULT_MS + SQL_WALL_OVERHEAD_MS;
 /** A deadline on every emit POST: a hung log service costs the caller a line, never a request. */
 const EVENTS_DEFAULT_TIMEOUT_MS = 5_000;
 /** The one retry's pause — long enough for a restart's socket to come back, short enough that `close` still returns. */
 const EVENTS_RETRY_MS = 100;
-const failure = (e: unknown): QueryFailure => ({ error: (e as Error)?.message ?? 'sql service unavailable' });
+const failure = (e: unknown): QueryFailure => ({ error: (e as Error)?.name === 'AbortError' ? 'SQL call cancelled' : (e as Error)?.message ?? 'sql service unavailable', ...((e as Error)?.name === 'TimeoutError' ? { timedOut: true } : {}) });
 
 /** An HTTP client for the SQL service, with a deadline on every call. */
 export function sqlClient(url: string, opts: { deadlineMs?: number; serviceSecret?: string } = {}): SqlService {
-  const client = httpClient(url, { deadlineMs: opts.deadlineMs ?? SQL_DEFAULT_TIMEOUT_MS * 4, ...(opts.serviceSecret ? { headers: { [SERVICE_AUTH_HEADER]: opts.serviceSecret } } : {}) });
+  const client = httpClient(url, { deadlineMs: opts.deadlineMs ?? SQL_DEFAULT_TIMEOUT_MS, ...(opts.serviceSecret ? { headers: { [SERVICE_AUTH_HEADER]: opts.serviceSecret } } : {}) });
   return {
-    async run(input) {
-      try { return (await client.post<{ results: Record<string, QueryOutcome> }>(SQL_ROUTES.run, input)).results; }
-      catch (e) { return Object.fromEntries(input.queries.map((q) => [q.name, failure(e)])); }
+    async run(input, context) {
+      try { return (await client.post<{ results: Record<string, QueryOutcome> }>(SQL_ROUTES.run, input, context ?? {})).results; }
+      catch (e) { return Object.fromEntries(input.queries.map((q) => [q.name, context?.signal?.aborted ? {error: 'SQL call cancelled'} : failure(e)])); }
     },
-    async runMany(input) {
-      try { return (await client.post<{ results: Array<Record<string, QueryOutcome>> }>(SQL_ROUTES.runMany, input)).results; }
-      // A service without the route (an older one, mid-rollout) or a failed call: the same runs one at a
-      // time, each answering for itself (a down service fails every query, as `run` does).
-      catch {
-        return Promise.all(input.runs.map((run) => this.run({ ...run, ...(input.imports ? { imports: input.imports } : {}),
-          ...(input.shared ? { tables: { ...input.shared.tables, ...run.tables }, queries: [...input.shared.queries, ...run.queries], params: { ...input.shared.params, ...run.params }, paramTypes: { ...input.shared.paramTypes, ...run.paramTypes } } : {}) })));
-      }
+    async runMany(input, context) {
+      try { return (await client.post<{ results: Array<Record<string, QueryOutcome>> }>(SQL_ROUTES.runMany, input, context ?? {})).results; }
+      catch (e) { return input.runs.map(run => Object.fromEntries([...(input.shared?.queries ?? []), ...run.queries].map(q => [q.name, context?.signal?.aborted ? {error: 'SQL call cancelled'} : failure(e)]))); }
     },
     async mutate(input) {
       try { return (await client.post<{ result: MutationOutcome }>(SQL_ROUTES.mutate, input)).result; }
@@ -115,7 +110,7 @@ export function queryBounds(
   };
   return {
     limit: page ? bound(page.limit, caps.maxRows) : bound(input.limit, caps.maxRows),
-    timeoutMs: bound(input.timeoutMs, caps.timeoutMs),
+    timeoutMs: sqlTimeout(input.timeoutMs, caps.timeoutMs, caps.timeoutMs, 'timeoutMs', true),
   };
 }
 

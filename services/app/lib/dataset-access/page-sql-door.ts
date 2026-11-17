@@ -36,9 +36,9 @@ import { loadSqlite } from '@artifactbin/sql/core';
 import type { AccessActor } from '@/lib/accounts';
 import { artifactState, completeMutationReceipt, durableMutation, getArtifactById, type ArtifactRow } from '@/lib/artifacts';
 import { isMutationRefused, mutateDataset, type MutationStep } from '@/lib/document-data';
-import { MAX_QUERY_ROWS } from '@/lib/platform';
+import { MAX_QUERY_ROWS, SQL_READ_WALL_TIMEOUT_MS } from '@/lib/platform';
 import { isQueryFailure, sqlExtensions } from '@/lib/sql';
-import { mutateMounted, type CatalogMount } from '@/lib/datasets';
+import { readLifetime, mutateMounted, type CatalogMount } from '@/lib/datasets';
 import { loadLinked, sqlRefusal, type LoadedDataset, type PageCommitGuard } from './linked';
 import { authorityShape, readAuthorityIn, rowsNow, shownRows, type ReadAuthority } from './write-reply';
 import { readIdentityIn } from './retained';
@@ -48,7 +48,11 @@ import { jsonBytes, runPageSql } from './page-sql';
 /** One statement and its bound values (`$name`), as the page runtime's `sql` tag sends them. */
 interface PageSqlDoorCall { sql: string; params: Readonly<Record<string, Scalar>> }
 export interface PageSqlDoorScope {
+  admission?:{step<T>(pending:Promise<T>):Promise<T>;dispatch(read:boolean):AbortSignal};
   pageId: string;
+  /** Trusted admission clock, never read from a public payload. */
+  readStartedAt?:number;
+  retainReadDeadline?:(deadline:number)=>void;
   retainReadFence?:(verify:()=>Promise<void>)=>void;
   retainMountedLinks?:(links:ReadonlySet<string>)=>void;
   /** Writes: the client's Idempotency-Key (one per `sql` write); absent, a fresh one. */
@@ -257,20 +261,30 @@ const outcomeBody = (affected: number, op: Effect['op'], step: MutationStep | un
 
 /** One page SQL call. Throws `dataset_changed` when a read's fence fails (the page door re-runs reads). */
 export async function executePageSql(actor: AccessActor, links: readonly HtmlDatasetLink[], raw: { sql?: unknown; params?: unknown }, scope: PageSqlDoorScope, signal: AbortSignal): Promise<PageSqlDoorReply> {
+  const started=scope.readStartedAt??performance.now();
   try {
     const call = checked(raw);
     const load = (fenced: boolean) => loadLinked(actor, links, { pageId: scope.pageId, fenced, retainReadFence:scope.retainReadFence }, signal).catch((e) => { if (e instanceof DatasetAccessError) refuse('validation_failed', e.message); throw e; });
-    const first = await load(true);
+    const first = await (scope.admission?scope.admission.step(load(true)):load(true));
     if (!first.length) refuse('dataset_not_found', 'no linked dataset is readable');
     const mounts = mountsOf(first, call.sql);
-    const analysis = await analyzed(mounts, call.sql);
+    const analysis = await (scope.admission?scope.admission.step(analyzed(mounts, call.sql)):analyzed(mounts, call.sql));
     if (analysis.kind === 'select') {
-      const answer = await runPageSql(first.map((l) => ({ link: l.link!.name, snapshot: l.snapshot, tables: l.tables.map((t) => ({ tableId: t.tableId, selectable: t.model.select !== false })) })), call, signal, { aggregates: 'visible',retainSelected:scope.retainMountedLinks })
+      signal=scope.admission?.dispatch(true)??signal;
+      scope.retainReadDeadline?.(started+SQL_READ_WALL_TIMEOUT_MS);
+      const remaining=Math.floor(SQL_READ_WALL_TIMEOUT_MS-(performance.now()-started));
+      if(remaining<1)refuse('timeout','SQL read deadline exceeded');
+      const life=readLifetime(signal,remaining);
+      try{
+      const answer = await runPageSql(first.map((l) => ({ link: l.link!.name, snapshot: l.snapshot, tables: l.tables.map((t) => ({ tableId: t.tableId, selectable: t.model.select !== false })) })), call, life.signal, { wallTimeoutMs:life.remaining(),aggregates: 'visible',retainSelected:scope.retainMountedLinks })
         .catch((e) => { if (e instanceof DatasetAccessError) refuse(String(e.extensions?.code ?? 'validation_failed'), e.message); throw e; });
-      for (const l of first) for (const verify of l.fences) await verify();
+      for (const l of first) for (const verify of l.fences) await life.step(verify());
+      life.check();
       return { status: 200, body: { ...answer } };
+      }finally{life.close();}
     }
     if (scope.readOnly) refuse('permission_denied', 'this page is read-only here: it reads, it never writes');
+    scope.admission?.dispatch(false);
     return await write(actor, call, scope, mounts, analysis.writes[0]!, () => load(false), signal);
   } catch (e) {
     if (e instanceof Refusal) return fail(e.code, e.message);

@@ -16,7 +16,7 @@ import type { Sqlite3 } from './wasm';
 
 /** The bounds of one call, already clamped by the caller to its caps. */
 /** `outputBytes`: the caller's cap on each result's serialized size (RunInput.outputBytes), checked as rows are collected. */
-export interface ReadBounds { limit: number; pageLimit: number; timeoutMs: number; outputBytes?: number }
+export interface ReadBounds { deadline?: number; limit: number; pageLimit: number; timeoutMs: number; outputBytes?: number }
 
 const message = (e: unknown): string => (e instanceof Error ? e.message : String(e)).split('\n').slice(0, 3).join(' ').trim();
 
@@ -140,7 +140,7 @@ function readAll(db: SqliteDatabase, input: RunInput, bounds: ReadBounds, loadIm
       // A query a later one may read is materialised WHOLE: the cap is what
       // travels, never what a downstream query sees. The last cannot be read.
       const whole = !page && !input.catalog && (keepAll || i < input.queries.length - 1);
-      const read = readOne(db, query.name, query.sql, input.params, types, page, page ? bounds.pageLimit : bounds.limit, bounds.timeoutMs, whole, bounds.outputBytes);
+      const read = readOne(db, query.name, query.sql, input.params, types, page, page ? bounds.pageLimit : bounds.limit, Math.min(bounds.timeoutMs, Math.max(0, (bounds.deadline ?? Infinity) - performance.now())), whole, bounds.outputBytes);
       if (isQueryFailure(read)) { out[query.name] = read; continue; }
       const { all, ...result } = read;
       out[query.name] = result;
@@ -241,6 +241,7 @@ export function mountCatalog(db: SqliteDatabase, input: RunInput): void {
  * names the offending column. Each (empty) result is loaded for later queries.
  */
 export function dryRunQueries(sqlite3: Sqlite3, input: DryRunInput): DryRunResult {
+  const deadline = performance.now() + DEFAULT_CAPS.timeoutMs;
   const errors: DryRunResult['errors'] = [];
   const columns: Record<string, DatasetColumn[]> = {};
   const db = new SqliteDatabase(sqlite3);
@@ -252,7 +253,7 @@ export function dryRunQueries(sqlite3: Sqlite3, input: DryRunInput): DryRunResul
       let prepared: Prepared | null = null;
       try {
         prepared = db.prepare(query.sql, 'read');
-        columns[query.name] = prepared.bind(params, input.paramTypes).rows(DEFAULT_CAPS.maxRows, DEFAULT_CAPS.timeoutMs).columns;
+        columns[query.name] = prepared.bind(params, input.paramTypes).rows(DEFAULT_CAPS.maxRows, Math.max(0, Math.min(5_000, deadline - performance.now()))).columns;
         db.load({ schema: 'main', table: query.name, columns: columns[query.name]!, rows: [] });
       } catch (e) {
         delete columns[query.name];

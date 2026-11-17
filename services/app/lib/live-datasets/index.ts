@@ -26,6 +26,7 @@
  * DECLARED QUERIES are recorded per page version by publish (`livePageDeclarations`), which refuses one on a live
  * dataset the publisher cannot edit; a reader names the query of the version it has open (the page door's revision).
  */
+import {readLifetime} from '@/lib/datasets';
 import { CONNECTORS, SQL_READ_LIMITS, type ConnectionConfig, type ConnectorDialect, type ConnectorError, type ConnectorScalar, type ConnectorTestResult, type ConnectorViewer, type DatasetRole, type HtmlDatasetLink, type HtmlDeclaredQuery, type HtmlLiveDatasetLink, type HtmlPageVersion, type Queryable } from '@artifactbin/contracts';
 import { ConnectorFailure, colonParameters, connectionSummary, connectorError, connectorList, leadingWords, mapQualifiers, openConnection, parseConnectionConfig, qualifierNames, type NetworkSeams, type OpenConnection } from '@artifactbin/connectors';
 import type { AccessActor } from '@/lib/accounts';
@@ -34,7 +35,7 @@ import { lockAuthorization, transactionAccessFacts, type ArtifactRow } from '@/l
 import { connectorViewer } from '@/lib/connections';
 import { liveConnectionOf, liveQueryRoles } from '@/lib/datasets';
 import { datasetReadAccess, datasetRole, storedPolicy } from '@/lib/dataset-permissions';
-import { datasetConnectionCipher, datasetsAllowPrivateNetwork, getDb } from '@/lib/platform';
+import { QUERY_TIMEOUT_MS,datasetConnectionCipher, datasetsAllowPrivateNetwork, getDb } from '@/lib/platform';
 
 const PURPOSE = 'dataset-connection';
 const VIEWER_PARAMS = ['viewer_id', 'viewer_email', 'viewer_groups'] as const;
@@ -69,7 +70,7 @@ function checkedConfig(input: unknown): ConnectionConfig {
   try {
     config = parseConnectionConfig(input);
     if (!connectorList().find((c) => c.id === config.connector)?.available) throw new ConnectorFailure('unavailable', `${specOf(config.connector).label} is not available yet`);
-    void openConnection(config, network(), seams).close();
+    void openConnection(config, network(), seams,{queryTimeoutMs:QUERY_TIMEOUT_MS}).close();
   } catch (e) {
     const error = connectorError(e);
     throw new LiveDatasetRefusal(400, error.code === 'unavailable' ? 'connector_unavailable' : 'invalid_connection', error.message);
@@ -125,7 +126,7 @@ async function connectionOf(id: string): Promise<{ revision: number; connection:
   let entry: { revision: number; connection: OpenConnection; dialect: ConnectorDialect };
   try {
     const config = parseConnectionConfig({ ...row.config, ...secretsOf(id, row) });
-    entry = { revision: row.revision, connection: openConnection(config, network(), seams), dialect: specOf(config.connector).dialect };
+    entry = { revision: row.revision, connection: openConnection(config, network(), seams,{queryTimeoutMs:QUERY_TIMEOUT_MS}), dialect: specOf(config.connector).dialect };
   } catch (e) {
     const error = e instanceof ConnectorFailure ? connectorError(e) : { code: 'unavailable', message: 'the stored connection could not be opened' };
     throw new LiveDatasetRefusal(503, 'dataset_not_found', `the live dataset is unavailable (${error.code}): ${error.message}`);
@@ -186,16 +187,18 @@ function refused(name: string, e: ConnectorError): LiveSqlReply {
 
 /** Runs one statement on the dataset's connection as `viewer`. */
 async function run(id: string, name: string, text: string, params: unknown, viewer: ConnectorViewer | null, signal?: AbortSignal): Promise<LiveSqlReply> {
+  const life=readLifetime(signal);
   try {
-    const { connection, dialect } = await connectionOf(id);
+    const { connection, dialect } = await life.step(connectionOf(id));
     const bound = boundStatement(dialect, text, params, viewer);
-    const answer = await connection.query({ text: bound.text, params: bound.params, viewer, limits: { rows: SQL_READ_LIMITS.rows }, ...(signal ? { signal } : {}) });
+    const answer = await connection.query({ text: bound.text, params: bound.params, viewer, limits: { rows: SQL_READ_LIMITS.rows }, signal:life.signal });
+    life.check();
     return { status: 200, body: { columns: answer.columns, rows: answer.rows, ...(answer.truncated ? { truncated: true } : {}) } };
   } catch (e) {
     if (e instanceof LiveDatasetRefusal) return { status: e.status, body: e.body };
     if (e instanceof ConnectorFailure) return refused(name, connectorError(e));
     throw e;
-  }
+  }finally{life.close();}
 }
 const refusal = (e: unknown): LiveSqlReply => { if (e instanceof LiveDatasetRefusal) return { status: e.status, body: e.body }; throw e; };
 
@@ -297,7 +300,7 @@ export async function testLiveConnection(actor: AccessActor, id: string): Promis
 export async function testConnectionConfig(actor: AccessActor, input: unknown): Promise<LiveSqlReply> {
   let config: ConnectionConfig;
   try { config = checkedConfig(input); } catch (e) { const r = refusal(e); return { status: 200, body: { ok: false, error: { code: 'invalid_config', message: String(r.body.message) } } }; }
-  const connection = openConnection(config, network(), seams);
+  const connection = openConnection(config, network(), seams,{queryTimeoutMs:QUERY_TIMEOUT_MS});
   try { return { status: 200, body: { ...await connection.test({ viewer: await connectorViewer(actor) }) } satisfies ConnectorTestResult & Record<string, unknown> }; }
   finally { void connection.close(); }
 }
@@ -371,7 +374,8 @@ const LIVE_HINT = 'readers run the queries the page declares: sql.query(name, pa
  * runs wholly on that dataset's connection, for its owner and editors only. Null: the statement names no live link
  * (the default connection's and the stored datasets' doors answer it).
  */
-export async function pageLiveDatasetSql(actor: AccessActor, page: HtmlPageVersion, raw: { sql?: unknown; params?: unknown; query?: unknown }, signal?: AbortSignal): Promise<LiveSqlReply | null> {
+export async function pageLiveDatasetSql(actor: AccessActor, page: HtmlPageVersion, raw: { sql?: unknown; params?: unknown; query?: unknown }, signal?: AbortSignal, admission?:{step<T>(pending:Promise<T>):Promise<T>;dispatch(read:boolean):AbortSignal}): Promise<LiveSqlReply | null> {
+  const step=<T>(pending:Promise<T>)=>admission?admission.step(pending):pending;
   const lives = page.links.filter((l): l is HtmlLiveDatasetLink => l.kind === 'live-dataset');
   try {
     if (raw.query !== undefined) {
@@ -379,20 +383,21 @@ export async function pageLiveDatasetSql(actor: AccessActor, page: HtmlPageVersi
       const query = page.queries.find((q) => q.name === raw.query);
       const link = query && lives.find((l) => l.name === query.link);
       if (!query || !link) throw new LiveDatasetRefusal(404, 'unknown_query', `this version of the page declares no query named ${JSON.stringify(raw.query.slice(0, 64))}`);
-      const row = await liveRow(link.datasetId);
+      const row = await step(liveRow(link.datasetId));
       if (!row) throw new LiveDatasetRefusal(404, 'dataset_not_found', `${link.name} names a live dataset that is gone`);
-      const decision = await datasetReadAccess(row, actor, { pageId: page.pageId });
+      const decision = await step(datasetReadAccess(row, actor, { pageId: page.pageId }));
       if (!decision.allowed) throw new LiveDatasetRefusal(403, 'permission_denied', `${link.name}'s rules do not let your role run its declared queries${actor.userId ? '' : '; sign in, or ask its owner to allow anonymous readers'}`);
-      const reply = await run(row.id, link.name, query.sql, raw.params, await connectorViewer(actor), signal);
+      signal=admission?.dispatch(true)??signal;
+      const reply = await run(row.id, link.name, query.sql, raw.params, await step(connectorViewer(actor)), signal);
       // A connector may outlive a permission change. Fence its answer just as stored SQL does;
       // the page door retries under current policy and never returns rows from a revoked decision.
-      const current = await liveRow(row.id);
-      const after = current && await datasetReadAccess(current, actor, { pageId: page.pageId });
+      const current = await step(liveRow(row.id));
+      const after = current && await step(datasetReadAccess(current, actor, { pageId: page.pageId }));
       if (!after?.allowed || after.identity !== decision.identity) throw new Error('dataset_changed');
       return reply;
     }
     if (typeof raw.sql !== 'string' || !lives.length) return null;
-    const rows = await Promise.all(lives.map(async (link) => ({ link, row: await liveRow(link.datasetId) })));
+    const rows = await Promise.all(lives.map(async (link) => ({ link, row: await step(liveRow(link.datasetId)) })));
     const used: typeof rows = [];
     let words = new Set<string>();
     for (const entry of rows) {
@@ -409,11 +414,12 @@ export async function pageLiveDatasetSql(actor: AccessActor, page: HtmlPageVersi
     if (!first.row) throw new LiveDatasetRefusal(404, 'dataset_not_found', `${first.link.name} names a live dataset that is gone`);
     const dialect = specOf(liveConnectionOf(first.row.meta)!.connector).dialect;
     if (!qualifierNames(dialect, raw.sql).has(first.link.name.toLowerCase())) throw new LiveDatasetRefusal(400, 'validation_failed', `${first.link.name} is a live dataset: name its tables as ${first.link.name}.table (or ${first.link.name}.schema.table)`);
-    const decision = await datasetReadAccess(first.row, actor, { pageId: page.pageId });
+    const decision = await step(datasetReadAccess(first.row, actor, { pageId: page.pageId }));
     if (!decision.allowed || !decision.admin) throw new LiveDatasetRefusal(403, 'permission_denied', `only ${first.link.name}'s owner and editors write SQL on it; ${LIVE_HINT}`);
     let text: string;
     try { text = mapQualifiers(dialect, raw.sql, new Map([[first.link.name.toLowerCase(), '']])); } catch (e) { throw new LiveDatasetRefusal(400, 'validation_failed', connectorError(e).message); }
-    return await run(first.row.id, first.link.name, text, raw.params, await connectorViewer(actor), signal);
+    signal=admission?.dispatch(true)??signal;
+    return await run(first.row.id, first.link.name, text, raw.params, await step(connectorViewer(actor)), signal);
   } catch (e) { return refusal(e); }
 }
 

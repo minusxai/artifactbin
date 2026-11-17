@@ -279,6 +279,7 @@ function mutateIn(db: SqliteDatabase, input: MutationInput, bounds: WriteBounds,
  * click sees, so "no such table" here is the message a click would produce.
  */
 export function dryRunMutations(sqlite3: Sqlite3, input: DryRunMutationsInput, extensions: SqlExtensions = {}): DryRunMutationsResult {
+  const deadline = performance.now() + DEFAULT_CAPS.mutationTimeoutMs;
   const errors: DryRunMutationsResult['errors'] = [];
   const params = Object.fromEntries(input.paramNames.map((p) => [p, null]));
   for (const m of input.mutations) {
@@ -290,7 +291,7 @@ export function dryRunMutations(sqlite3: Sqlite3, input: DryRunMutationsInput, e
       const target = input.tables[table];
       if (target) db.createTable({ schema: 'main', table, columns: target.columns }, undefined, true);
       statement = db.prepare(m.sql, 'write', { schema: 'main', table });
-      statement.bind(params, { ...input.paramTypes, ...m.paramTypes } as Record<string, ColumnType>).run(DEFAULT_CAPS.timeoutMs);
+      statement.bind(params, { ...input.paramTypes, ...m.paramTypes } as Record<string, ColumnType>).run(Math.max(0, deadline - performance.now()));
     } catch (e) {
       errors.push({ name: m.name, error: message(e) });
     } finally {

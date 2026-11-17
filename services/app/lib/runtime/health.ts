@@ -3,14 +3,16 @@
  * process answers for that process alone (that is what Docker restarts on);
  * this module answers "can a user be served right now?" by asking each
  * service the app depends on for ITS `/health`, one hop, in parallel, with a
- * short timeout. A service with no URL runs in-process and is trivially fine.
+ * short timeout. SQL also reports its engine read cap over its private policy door: a different or unreported
+ * cap fails readiness instead of silently shortening reads. A service with no URL runs in-process.
  *
  * The database is probed with `SELECT 1` inside the same deadline: a stack that cannot reach its database cannot
  * serve a user, so it reads as degraded. The object store is not probed. `app/health/route.ts` (the process's own
  * liveness) stays shallow on purpose.
  * Never throws — a probe that explodes is a probe that failed.
  */
-import { getDb, BROWSER_SERVICE_URL, EVENTS_SERVICE_URL, SQL_SERVICE_URL } from '@/lib/platform';
+import { getDb, BROWSER_SERVICE_URL, EVENTS_SERVICE_URL, SQL_SERVICE_URL, QUERY_TIMEOUT_MS, INTERNAL_SERVICE_SECRET } from '@/lib/platform';
+import {SQL_ROUTES,SERVICE_AUTH_HEADER} from '@artifactbin/contracts';
 
 type ServiceName = 'sql' | 'browser' | 'events' | 'db';
 
@@ -37,16 +39,23 @@ const SERVICE_NAMES: readonly Exclude<ServiceName, 'db'>[] = ['sql', 'browser', 
 /**
  * One service's own `/health`. Healthy is a 2xx inside the deadline and
  * nothing else: a refused connection, a timeout, a 500 and a 404 are the same
- * answer to "can a user be served" — no. The probe carries no credential;
- * every service answers `/health` before its secret check.
+ * answer to "can a user be served" — no. `/health` carries no credential; SQL's subsequent policy request uses
+ * the configured internal credential and shares the same deadline, including body consumption.
  */
-async function probe(base: string): Promise<boolean> {
+async function probe(base: string, sql=false): Promise<boolean> {
   try {
-    const response = await fetch(`${base.replace(/\/+$/, '')}/health`, {
-      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+    const signal=AbortSignal.timeout(PROBE_TIMEOUT_MS),origin=base.replace(/\/+$/, '');
+    const response = await fetch(`${origin}/health`, {
+      signal,
       redirect: 'manual',
     });
-    return response.ok;
+    if(!response.ok||!sql)return response.ok;
+    // Same probe deadline; no silent lower-cap SQL server behind an otherwise healthy app.
+    const policy=await fetch(origin+SQL_ROUTES.readPolicy,{method:'POST',body:'{}',signal,redirect:'manual',
+      headers:{'Content-Type':'application/json',...(INTERNAL_SERVICE_SECRET?{[SERVICE_AUTH_HEADER]:INTERNAL_SERVICE_SECRET}:{})}});
+    if(!policy.ok)return false;
+    const data=await policy.json();
+    return !signal.aborted&&data?.version===1&&data.queryTimeoutMs===QUERY_TIMEOUT_MS;
   } catch {
     return false;
   }
@@ -72,7 +81,7 @@ export async function stackHealth(urls: ServiceUrls = configuredServiceUrls(), d
     databaseProbe().catch(() => false),
     ...SERVICE_NAMES.map((name) => {
       const base = urls[name];
-      return base ? probe(base) : Promise.resolve(true);
+      return base ? probe(base,name==='sql') : Promise.resolve(true);
     }),
   ]);
   const failing: ServiceName[] = SERVICE_NAMES.filter((_, index) => !healthy[index]);

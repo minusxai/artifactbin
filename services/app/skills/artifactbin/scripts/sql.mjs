@@ -41,8 +41,9 @@ import {
 import {datasetLinks} from './toolbox-check-reply.mjs';
 
 const WRITE = /^\s*(?:insert|update|delete)\b/i;
-/** Read limits and dataset request page size. */
 const ROWS = {default: 1000, max: 10000}, PAGE = 100;
+// Transport only; server execution maxima are page 120s, warehouse 900s.
+const READ = {safeToRepeat: true, timeoutMs: 140000}, WAREHOUSE_MS = 920000;
 const TYPES = {number: 'REAL', boolean: 'BOOLEAN', string: 'TEXT', date: 'DATE',
   timestamp: 'TIMESTAMP', user: 'TEXT'};
 const quote = name => '"' + String(name).replaceAll('"', '""') + '"';
@@ -51,7 +52,7 @@ const createTable = (name, columns) => `CREATE TABLE ${name.split('.').map(quote
   columns.map(c => `  ${quote(c.name)} ${TYPES[c.type] ?? 'TEXT'}${c.type === 'user' ?
     ' -- account ID' : ''}`).join(',\n')}\n);`;
 
-/** Non-explicit schema discovers head links from page source. */
+/** Discover head links. */
 async function pageOf(client, id, revision) {
   const html = await (await client.request(`/a/${id}/raw${revision ? '?version=' + revision :
     ''}`, {raw: true})).text();
@@ -61,7 +62,8 @@ async function pageOf(client, id, revision) {
 /** Page SQL as the reader. */
 function pageSql(client, id, body, key) {
   return client.request(`/api/artifacts/${id}/sql`, {method: 'POST', body,
-    ...(key ? {headers: {'Idempotency-Key': key}, unsafe: true} : {safeToRepeat: true})});
+    ...(key ? {headers: {'Idempotency-Key': key}, unsafe: true} :
+      READ)});
 }
 /** Link table names and visible columns. */
 async function linkTables(client, id, revision, link) {
@@ -81,7 +83,8 @@ export async function sqlCommand({sub, values, positionals}, options = {}) {
     throw new ToolError('invalid_arguments', sub === 'schema' ? 'schema takes one ID.' :
       'query takes an ID and one SQL statement.', 2, 'Read --help.');
   if (target.startsWith('default:')) return makeClient(selectedServer(values, options.env),
-    options).request('/api/default-connection/sql', {method: 'POST', safeToRepeat: true, body:
+    options).request('/api/default-connection/sql', {method: 'POST', safeToRepeat: true,
+    timeoutMs: WAREHOUSE_MS, body:
     {sql: statement, namespace: target.slice(8), params: values.params &&
     await jsonFile(values.params)}});
   const {server, id} = resolveTarget(target, selectedServer(values, options.env)),
@@ -94,7 +97,8 @@ export async function sqlCommand({sub, values, positionals}, options = {}) {
       'only page writes take a key.', 2, 'Drop --revision and --idempotency-key for a dataset ID.');
   if (sub === 'schema') {
     if (page && revision) {
-      const read = await client.request(`/api/artifacts/${id}/sql/schema?revision=${revision}`);
+      const read = await client.request(`/api/artifacts/${id}/sql/schema?revision=${revision}`,
+        READ);
       const tables = read.tables.map(t => ({name: t.schema === 'main' ? t.name :
         `${t.schema}.${t.name}`, columns: t.columns}));
       return {target: 'page', revision: read.revision, tables,
@@ -104,7 +108,7 @@ export async function sqlCommand({sub, values, positionals}, options = {}) {
       `/api/artifacts/${id}/connection/schema`)};
     if (!page) {
       const read = await client.request(`/api/artifacts/${id}/query`, {method: 'POST',
-        body: {sql: 'select * from rows limit 0'}, safeToRepeat: true});
+        body: {sql: 'select * from rows limit 0'}, ...READ});
       const columns = read.results?.[0]?.columns ?? [];
       return {target: 'dataset', tables: [{name: 'rows', columns}],
         schema: createTable('rows', columns)};
@@ -152,7 +156,8 @@ async function datasetRead(client, id, sql, values, limit) {
   let columns = [], cursor;
   do {
     const read = await client.request(`/api/artifacts/${id}/query`, {method: 'POST',
-      safeToRepeat: true, body: {sql, values, limit: PAGE, ...cursor ? {cursor} : {}}});
+      ...READ,
+      body: {sql, values, limit: PAGE, ...cursor ? {cursor} : {}}});
     var table = read.results?.[0] ?? {};
     columns = table.columns ?? columns;
     rows.push(...table.rows ?? []);

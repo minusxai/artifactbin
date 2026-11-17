@@ -73,6 +73,8 @@ matching across them; keep that network private).
   (`BROWSER__UPLOAD_*`).
 
 `/health` answers liveness; `/api/health` readiness, probing every configured remote service.
+With a separate SQL service, set `SQL__QUERY_TIMEOUT_MS` equally on the app and SQL service (both default to
+30 seconds). Readiness refuses an older service that cannot report its read policy, or a mismatched cap.
 
 **Upgrading an old auth schema.** If startup refuses with "requires the Better Auth 1.7.3 upgrade", follow the
 message: stop every writer, back up, then run `npm run migrate:account -w services/auth -- --writes-paused-backup-verified`
