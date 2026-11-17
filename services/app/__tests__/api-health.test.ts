@@ -14,10 +14,12 @@ import { overrideConfig, resetConfigOverrides } from '@/lib/platform/config';
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 import { GET as apiHealth } from '@/app/api/health/route';
 import { stackHealth } from '@/lib/runtime';
+import { QUERY_TIMEOUT_MS } from '@/lib/platform';
+import { SERVICE_AUTH_HEADER, SQL_ROUTES } from '@artifactbin/contracts';
 
 
 const servers: RunningServer[] = [];
-const seen: Array<Record<string, string | string[] | undefined>> = [];
+const seen: Array<{path:string|undefined;method:string|undefined;headers:Record<string, string | string[] | undefined>}> = [];
 afterEach(async () => {
   for (const s of servers.splice(0)) await s.close();
   seen.length = 0;
@@ -31,10 +33,15 @@ afterEach(async () => {
  * is abandoned mid-flight by the probe's deadline, and only that fixture's
  * close tears the live connection down instead of waiting on it.
  */
-async function serve(status: number, delayMs = 0): Promise<string> {
+async function serve(status: number, delayMs = 0, policy:unknown={version:1,queryTimeoutMs:QUERY_TIMEOUT_MS}): Promise<string> {
   const running = await withHttpServer((req, res) => {
-    seen.push(req.headers);
-    setTimeout(() => { res.statusCode = req.url === '/health' ? status : 404; res.setHeader('content-type', 'application/json'); res.end('{"ok":true}'); }, delayMs);
+    seen.push({path:req.url,method:req.method,headers:req.headers});
+    setTimeout(() => {
+      const policyRequest=req.url===SQL_ROUTES.readPolicy&&req.method==='POST'&&policy!==null;
+      res.statusCode=req.url==='/health'||policyRequest?status:404;
+      res.setHeader('content-type','application/json');
+      res.end(JSON.stringify(policyRequest?policy:{ok:true}));
+    }, delayMs);
   });
   servers.push(running);
   return running.base;
@@ -57,11 +64,17 @@ describe('stackHealth', () => {
     expect(await stackHealth({ sql: slow, browser: slow, events: slow })).toEqual({ ok: false, failing: ['sql', 'browser', 'events'] });
     expect(Date.now() - started).toBeLessThan(3500);
   });
-  it('carries no credential on the probe: every service answers /health before its secret check', async () => {
+  it('keeps liveness credential-free and authenticates only the private SQL policy probe', async () => {
     const good = await serve(200);
+    overrideConfig({internalServiceSecret:'synthetic_health_probe'});
     await stackHealth({ sql: good, browser: null, events: null });
-    expect(seen).toHaveLength(1);
-    for (const name of Object.keys(seen[0]!)) expect(name.toLowerCase()).not.toMatch(/secret|authorization|cookie/);
+    expect(seen.map(({path,method})=>[method,path])).toEqual([['GET','/health'],['POST',SQL_ROUTES.readPolicy]]);
+    for (const name of Object.keys(seen[0]!.headers)) expect(name.toLowerCase()).not.toMatch(/secret|authorization|cookie/);
+    expect(seen[1]!.headers[SERVICE_AUTH_HEADER]).toBe('synthetic_health_probe');
+  });
+  it.each([null,{version:1,queryTimeoutMs:QUERY_TIMEOUT_MS+1}])('refuses a healthy SQL process without the matching engine policy',async policy=>{
+    const good=await serve(200,0,policy);
+    expect(await stackHealth({sql:good,browser:null,events:null})).toEqual({ok:false,failing:['sql']});
   });
 });
 

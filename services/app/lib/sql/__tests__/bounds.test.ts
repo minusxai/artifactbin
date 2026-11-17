@@ -31,11 +31,14 @@ describe('queryBounds', () => {
       .toEqual({ limit: MAX_QUERY_ROWS, timeoutMs: QUERY_TIMEOUT_MS });
   });
 
-  it('refuses nonsense: zero, negative, fractional and NaN all land on something usable', () => {
-    expect(queryBounds({ limit: 0, timeoutMs: 0 })).toEqual({ limit: 1, timeoutMs: 1 });
-    expect(queryBounds({ limit: -3, timeoutMs: -1 })).toEqual({ limit: 1, timeoutMs: 1 });
-    expect(queryBounds({ limit: 2.7, timeoutMs: 2.7 })).toEqual({ limit: 2, timeoutMs: 2 });
-    expect(queryBounds({ limit: Number.NaN, timeoutMs: Number.NaN }))
+  it('preserves existing row-limit normalization separately from strict deadlines', () => {
+    expect(queryBounds({ limit: 0 })).toEqual({ limit: 1, timeoutMs: QUERY_TIMEOUT_MS });
+    expect(queryBounds({ limit: -3 })).toEqual({ limit: 1, timeoutMs: QUERY_TIMEOUT_MS });
+    expect(queryBounds({ limit: 2.7 })).toEqual({ limit: 2, timeoutMs: QUERY_TIMEOUT_MS });
+    expect(queryBounds({ limit: Number.NaN }))
       .toEqual({ limit: MAX_QUERY_ROWS, timeoutMs: QUERY_TIMEOUT_MS });
+  });
+  it.each([0,-1,2.7,NaN,Infinity,Number.MAX_SAFE_INTEGER+1])('rejects malformed timeout %s rather than silently repairing it',timeoutMs=>{
+    expect(()=>queryBounds({timeoutMs})).toThrow(/timeoutMs/);
   });
 });
