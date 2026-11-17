@@ -187,6 +187,7 @@ jobs:
           # recorded under 200ms that no other list here runs, plus the post-merge failures it guards, one shared module
           # graph per worker; ci.yml's node job still runs every one of them. 236 files: ~4.3s per runner locally on two
           # runners (3 workers each), so three runners, predicted ~10s each on CI (an estimate: none has run there yet).
+          # Their table is the committed one with main's measured node times laid over it (the steps after checkout).
           # THE PULL REQUEST'S OWN INSTALL: a lock this branch changed misses main's install on every push, and every runner
           # reconciles main's tree to it (~2.7s: the miss probe and `npm install`, run 43039126177). This runner, only on
           # that miss, runs a clean `npm ci` (never a reconciled tree: nothing stale is saved) and saves it under this
@@ -206,6 +207,17 @@ jobs:
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: '1024'
           GIT_HTTP_LOW_SPEED_TIME: '10'
+      # MAIN'S MEASURED NODE TIMES (scripts/lib/node-batch.mjs, `.github/workflows/node-timings.yml`): the node batch's
+      # files and packing come from the committed table with the newest times main measured before this run laid over it,
+      # add-only, so a file the full suite has timed under the cut joins without a hand refresh. Fetched IN THE BACKGROUND
+      # (builtin-only, the runner's own Node) beside the install restore, and awaited before the batch. Every stream is
+      # redirected, or the runner would hold this step open until the fetch closed the step's output pipe.
+      - if: matrix.batch
+        name: Fetch main's measured node times in the background
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ( node scripts/ci/ci.mjs node-timings > "$RUNNER_TEMP/node-timings.log" 2>&1; echo $? > "$RUNNER_TEMP/node-timings.part"; mv "$RUNNER_TEMP/node-timings.part" "$RUNNER_TEMP/node-timings.status" ) < /dev/null > /dev/null 2>&1 &
       # Node 22, the install cache's (its key says node22; its native modules are compiled for that major's ABI). The runner's
       # own Node serves when it is a 22 already, skipping setup-node's ~0.5s step and ~0.2s post step (run 42812079087,
       # job api-3); any other major gets setup-node exactly as before. The step prints the version it found.
@@ -409,6 +421,12 @@ jobs:
         run: node node_modules/vitest/vitest.mjs run --config vitest.guard.config.ts --shard=${{ matrix.shard }}
       - if: matrix.suite
         run: node node_modules/vitest/vitest.mjs run ${{ matrix.projects }} --shard=${{ matrix.suite }}
+      - if: matrix.batch
+        name: Wait for main's measured node times
+        run: |
+          until [ -f "$RUNNER_TEMP/node-timings.status" ]; do sleep 0.1; done
+          cat "$RUNNER_TEMP/node-timings.log"
+          exit "$(cat "$RUNNER_TEMP/node-timings.status")"
       - if: matrix.batch
         run: node node_modules/vitest/vitest.mjs run --config vitest.node-batch.config.ts --shard=${{ matrix.batch }}
       - if: matrix.part == 'api-1' && steps.test-builds.outputs.cache-hit != 'true'

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CI_RUNNER, ISOLATED_FILE_MS, SHARED_FIRST_FILE_MS, WORKERS, pack, readTimings, runOrder, shardWall, weigher } from '../lib/timed-sequencer.mjs';
-import { JOBS, LENSES, RECORDED, medianTimings, mergeTimings, parseTimings, shardLoads } from '../ci/test-timings.mjs';
+import { JOBS, LENSES, RECORDED, medianTimings, mergeTimings, nodeMeasurements, parseTimings, shardLoads } from '../ci/test-timings.mjs';
 
 const items = (weights) => Object.entries(weights).map(([key, weight]) => ({ key, weight }));
 const load = (shard, weights) => shard.reduce((sum, key) => sum + weights[key], 0);
@@ -104,6 +104,17 @@ describe('timed shard packing', () => {
       { api: { 'a.test.ts': 6790 } },
       { api: { 'a.test.ts': 8948, 'b.test.ts': 301 }, ui: { 'u.test.ts': 5 } },
     ])).toEqual({ api: { 'a.test.ts': 8948, 'b.test.ts': 201 }, ui: { 'u.test.ts': 5 } });
+  });
+
+  it('hands main\'s automatic refresh the node medians alone, of files that still exist', () => {
+    const measured = medianTimings([
+      { node: { 'b.test.ts': 30, 'gone.test.ts': 5, 'a.test.ts': 10 }, api: { 'c.test.ts': 900 } },
+      { node: { 'b.test.ts': 50, 'a.test.ts': 12 }, 'node-batch': { 'a.test.ts': 400 } },
+    ]);
+    const exists = (file) => file !== 'gone.test.ts';
+    expect(nodeMeasurements(measured, exists, ['11', '12'])).toEqual({ runs: ['11', '12'], files: { node: { 'a.test.ts': 11, 'b.test.ts': 40 } } });
+    expect(Object.keys(nodeMeasurements(measured, exists).files.node)).toEqual(['a.test.ts', 'b.test.ts']);
+    expect(nodeMeasurements({}, exists)).toEqual({ runs: [], files: { node: {} } });
   });
 
   it('reports each job\'s shard loads, every file counted once', () => {
