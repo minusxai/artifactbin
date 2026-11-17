@@ -1,7 +1,8 @@
 import {mkdtempSync,readFileSync,writeFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
-import {execFileSync} from 'node:child_process';
+import {execFile,execFileSync} from 'node:child_process';
+import {promisify} from 'node:util';
 import {pathToFileURL} from 'node:url';
 import {describe,it,expect} from 'vitest';
 import {skillTree, renderSkill, SKILL_FILE_MAX_BYTES, isPublicSkillTopic, skillPackageFiles} from '@/lib/skills';
@@ -12,6 +13,10 @@ import {GET as skillArchive} from '@/app/skills/artifactbin.zip/route';
 import {planPublicationBundle} from '@/lib/html-publication-bundle/plan';
 import {parseHtmlNodeAnchor} from '@artifactbin/contracts';
 const BASE='https://example.test';
+/** The served skill ZIP, built once for the file: two tests read the same archive. */
+let served:Promise<Buffer>|undefined;
+const archiveBytes=()=>served??=skillArchive(new Request(BASE+'/skills/artifactbin.zip')).then(async response=>Buffer.from(await response.arrayBuffer()));
+const run=promisify(execFile);
 describe('one installable native HTML author skill',()=>{
  it('runs the installed PWA and portable-image snippets against native contracts',async()=>{
   const files=skillPackageFiles(skillTree(),BASE);
@@ -61,7 +66,7 @@ describe('one installable native HTML author skill',()=>{
   for(const gone of ['html-components','html-examples','html-uploads','html-sharing','comment-reactions','publication-bundles','html-preview','local-files'])expect(files[`references/${gone}.md`],gone).toBeUndefined();
  });
  it('ships only what agents read and run: no compiled components or platform bundles',async()=>{
-  const archive=Buffer.from(await (await skillArchive(new Request(BASE+'/skills/artifactbin.zip'))).arrayBuffer());
+  const archive=await archiveBytes();
   const members:string[]=[];let offset=0;
   while(archive.readUInt32LE(offset)===0x04034b50){const size=archive.readUInt32LE(offset+18),name=archive.readUInt16LE(offset+26);members.push(archive.subarray(offset+30,offset+30+name).toString().replace(/^artifactbin\//,''));offset+=30+name+size;}
   for(const name of members)expect(name).toMatch(/^(?:SKILL\.md|release\.json|references\/[a-z0-9-]+\.md|examples\/[a-z0-9-]+\.(?:html|csv|ts|mjs)|design-systems\/[a-z0-9-]+\.css|components\/[a-z0-9-]+\.ts|scripts\/[a-z0-9-]+\.mjs)$/);
@@ -93,23 +98,33 @@ describe('one installable native HTML author skill',()=>{
  it('prepares the documented samples from the actual installed ZIP with bounded local font graphs',async()=>{
   const dir=mkdtempSync(path.join(tmpdir(),'native-skill-install-'));
   try{
-   const zip=path.join(dir,'skill.zip');writeFileSync(zip,new Uint8Array(await (await skillArchive(new Request(BASE+'/skills/artifactbin.zip'))).arrayBuffer()));
+   const zip=path.join(dir,'skill.zip');writeFileSync(zip,new Uint8Array(await archiveBytes()));
    execFileSync('unzip',['-q',zip,'-d',dir]);
    const installed=path.join(dir,'artifactbin');
    expect(readFileSync(path.join(installed,'SKILL.md'),'utf8')).toContain('normal HTML');
-   for(const script of ['auth','serve','publish','read','export','check','sql','comment','autofix','groups','policy','new-app','new-page','new-codebase-report'])expect(execFileSync(process.execPath,[path.join(installed,'scripts',script+'.mjs'),'--help'],{cwd:dir,encoding:'utf8'}),script).toContain('Usage:');
-   // The installed autofix runs standalone and edits only the selected file.
+   // Every command below at once, a child process apiece, as an agent runs them: none reads what another writes.
+   const node=(args:string[],cwd=dir)=>run(process.execPath,args,{cwd,encoding:'utf8'}).then(({stdout})=>({status:0,stdout}),(error:{code:number;stdout:string})=>({status:error.code,stdout:error.stdout}));
+   const commands=['auth','serve','publish','read','export','check','sql','comment','autofix','groups','policy','new-app','new-page','new-codebase-report'];
    const page=path.join(dir,'page.html');writeFileSync(page,'<!doctype html><html><head><title>T</title></head><body><p>x</p></body></html>');
-   expect(execFileSync(process.execPath,[path.join(installed,'scripts/autofix.mjs'),page],{cwd:dir,encoding:'utf8'})).toMatch(/^autofix: 2 fixed — written to page\.html/);
-   expect(readFileSync(page,'utf8')).toContain('<meta charset="utf-8">');
    const occupied=path.join(dir,'occupied.json');writeFileSync(occupied,'retained');
-   try{execFileSync(process.execPath,[path.join(installed,'scripts/publish.mjs'),'missing.html','--output',occupied,'--json'],{cwd:dir});throw Error('Expected output refusal');}catch(error){const failure=error as {status:number;stdout:Buffer};expect(failure.status).toBe(2);expect(JSON.parse(String(failure.stdout))).toMatchObject({ok:false,code:'output_exists'});}
+   const [helps,fixed,outputRefusal,prepareRefusal,deliveries]=await Promise.all([
+    Promise.all(commands.map(script=>node([path.join(installed,'scripts',script+'.mjs'),'--help']))),
+    node([path.join(installed,'scripts/autofix.mjs'),page]),
+    node([path.join(installed,'scripts/publish.mjs'),'missing.html','--output',occupied,'--json']),
+    node([path.join(installed,'scripts/publish.mjs'),'--prepare','report','--server',BASE,'--output',path.join(dir,'report.json')],installed),
+    node([path.join(installed,'examples/gen-deliveries.mjs')]),
+   ]);
+   commands.forEach((script,index)=>{expect(helps[index]!.status,script).toBe(0);expect(helps[index]!.stdout,script).toContain('Usage:');});
+   // The installed autofix runs standalone and edits only the selected file.
+   expect(fixed.status).toBe(0);expect(fixed.stdout).toMatch(/^autofix: 2 fixed — written to page\.html/);
+   expect(readFileSync(page,'utf8')).toContain('<meta charset="utf-8">');
+   expect(outputRefusal.status).toBe(2);expect(JSON.parse(outputRefusal.stdout)).toMatchObject({ok:false,code:'output_exists'});
    expect(readFileSync(occupied,'utf8')).toBe('retained');
    // The removed sample flags are refused as invocation errors.
-   try{execFileSync(process.execPath,[path.join(installed,'scripts/publish.mjs'),'--prepare','report','--server',BASE,'--output',path.join(dir,'report.json')],{cwd:installed,stdio:'pipe'});throw Error('Expected --prepare refusal');}catch(error){expect((error as {status:number}).status).toBe(2);}
+   expect(prepareRefusal.status).toBe(2);
    const {prepareBundle}=await import(pathToFileURL(path.join(installed,'scripts/toolbox-publication-bundle.mjs')).href);
    // The dashboard links its CSV by path, as new-page writes it: the sample rows beside it.
-   writeFileSync(path.join(installed,'examples/deliveries.csv'),execFileSync(process.execPath,[path.join(installed,'examples/gen-deliveries.mjs')]));
+   expect(deliveries.status).toBe(0);writeFileSync(path.join(installed,'examples/deliveries.csv'),deliveries.stdout);
    for(const sample of ['report','csv-dashboard','tracker']){
     const source=readFileSync(path.join(installed,'examples',sample+'.html'),'utf8');
     const saved=await prepareBundle({root:installed,entry:`examples/${sample}.html`,server:BASE,entryHtml:source.replaceAll('ref:DATASET_ID','ref:REALDATA123').replaceAll('ref:TARGETS_ID','ref:REALDATA123')});
