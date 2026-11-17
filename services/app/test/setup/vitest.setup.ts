@@ -52,13 +52,25 @@ const { setEventProjection } = await import('@/lib/platform/event-outbox');
 await import('./database');
 
 // The run's page runtime build, compiled by the first worker to need it and read by the rest (./html-assets-file).
-// Supplied before the file's first test, not here: the runtime's graph reaches the platform config, which a file that
-// mocks it or rewrites the environment (api-isolated) must reach first.
 const htmlAssetsFile = inject('htmlAssetsFile');
-if (htmlAssetsFile) beforeAll(async () => {
+const shareHtmlAssets = async () => {
   const [{ supplyHtmlAssets }, { htmlAssetsSupply }] = await Promise.all([import('@/lib/html-runtime/server'), import('./html-assets-file')]);
-  supplyHtmlAssets(htmlAssetsSupply(htmlAssetsFile));
-});
+  supplyHtmlAssets(htmlAssetsSupply(htmlAssetsFile!));
+  return import('@/lib/html-runtime/server');
+};
+// In the shared api graph (its files mock nothing), the build starts now, beside this worker's first import, rather than
+// at its first page: started at the first page it was that test's cost on nearly every pr fast api runner (2.9-3.8s in
+// run 44166185767). Never awaited here; a page waits for it. Elsewhere it is supplied before the file's first test, not
+// here: the runtime's graph reaches the platform config, which a file that mocks it or rewrites the environment
+// (api-isolated) must reach first.
+if (htmlAssetsFile && inject('harnessReusesDatabase') === true) {
+  globalThis.__artifact_bin_html_assets_started__ ??= shareHtmlAssets().then(({ buildHtmlAssets }) => buildHtmlAssets()).then(() => undefined, () => undefined);
+} else if (htmlAssetsFile) beforeAll(async () => { await shareHtmlAssets(); });
+
+declare global {
+  // eslint-disable-next-line no-var
+  var __artifact_bin_html_assets_started__: Promise<void> | undefined;
+}
 
 let localBrowser: import('@artifactbin/contracts').BrowserService | undefined;
 const browser = async () => (localBrowser ??= (await import('@artifactbin/browser/local')).createBrowser());

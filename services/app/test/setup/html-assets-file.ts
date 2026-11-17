@@ -31,8 +31,9 @@ type HtmlRuntimeAssets = Parameters<HtmlAssetsSupply['built']>[0];
 const lockFile = (file: string) => `${file}.lock`;
 const failedMarker = (file: string) => `${file}.failed`;
 
-/** The build kept as `file`, once it lands; undefined when its compile failed or nothing lands within `timeoutMs`. */
-export async function readHtmlAssets(file: string, { timeoutMs = 60_000, pollMs = 20 } = {}): Promise<HtmlRuntimeAssets | undefined> {
+/** The build kept as `file`, once it lands; undefined when its compile failed or nothing lands within `timeoutMs` (well inside a
+ * test's 45s, so the test that waits still compiles its own and passes). */
+export async function readHtmlAssets(file: string, { timeoutMs = 30_000, pollMs = 20 } = {}): Promise<HtmlRuntimeAssets | undefined> {
   // Counted in polls, not read off a clock: a test's fake timers stop Date and performance too.
   for (let polls = Math.ceil(timeoutMs / pollMs); ; polls--) {
     if (existsSync(file)) return JSON.parse(readFileSync(file, 'utf8')) as HtmlRuntimeAssets;
