@@ -9,7 +9,11 @@
  * import map a fixture reads library URLs from) is answered by the same handlers. A value known only while a gate runs
  * reads as a real dataset this account owns; a body field that is wholly such a value is left out (a parent is this
  * account's folder), and a replace carries the target's current head, as the gates' fixture client sends it.
- * scripts/__tests__/gate-pages.test.mjs checks the same pages' scripts and imports.
+ * scripts/__tests__/gate-pages.test.mjs checks the same pages' scripts and imports, in pr fast.
+ *
+ * NOT IN PR FAST: a node-project file the full suite runs after merge (ci.yml's node job), before the gates finish. In
+ * pr fast's api lane it took 9.6 s on one runner (run 44139942068; about 2 s locally), past the lane's per-file budget,
+ * and made that runner the run's slowest (56 s, against 41-50 s for the five runs before it).
  */
 import { expect, it } from 'vitest';
 import path from 'node:path';
@@ -18,10 +22,10 @@ import { mintAccountToken, request, useAppHarness } from '@/__tests__/harness';
 import { POST as create } from '@/app/api/artifacts/route';
 import { PUT as replace } from '@/app/api/artifacts/[id]/route';
 import { GET as importMap } from '@/app/af/import-map.json/route';
-import { gateInputs, isPlaceholder } from '../../../scripts/lib/gate-pages.mjs';
+import { gateInputs, isPlaceholder } from '../../../../../scripts/lib/gate-pages.mjs';
 
 useAppHarness();
-const ROOT = path.resolve(import.meta.dirname, '..', '..', '..');
+const ROOT = path.resolve(import.meta.dirname, '..', '..', '..', '..', '..');
 const STARTED = '<!doctype html><html><head><title>Gate target</title></head><body><h1>Gate target</h1></body></html>';
 
 it('accepts every body a gate publishes', async () => {

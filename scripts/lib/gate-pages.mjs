@@ -4,8 +4,9 @@
  * Gates run only on main, so a product change a gate depends on reached main untested more than once: #1200 left two
  * gates publishing a GraphQL mutation the publish check then refused, and #1263 left a fixture page with a script
  * syntax error and a fixture importing a retired hosted component. This module lets pr fast check those inputs with no
- * browser and no server: scripts/__tests__/gate-pages.test.mjs parses each page's scripts and checks what they import,
- * and services/app/__tests__/gate-publish.test.ts sends each body through the real publish handlers.
+ * browser and no server: scripts/__tests__/gate-pages.test.mjs (pr fast) parses each page's scripts and checks what
+ * they import, and services/app/lib/publish/__tests__/gate-publish.test.ts (the full suite, after merge) sends each
+ * body through the real publish handlers.
  *
  * Starting from the manifest's gates (scripts/gates.manifest.mjs), it follows their relative imports to every module a
  * gate runs and parses each with acorn (none is imported to be read: a gate runs on import). It finds
@@ -21,7 +22,7 @@
  * to the caller's `serve` (the replay answers publishes in process), never to a network; nothing evaluated may start a
  * browser, a server or a process, and `process` is the module's own argv with an empty environment.
  * Used by: scripts/__tests__/gate-pages.test.mjs, scripts/__tests__/gate-labels.test.mjs (`gateModules`),
- * services/app/__tests__/gate-publish.test.ts.
+ * services/app/lib/publish/__tests__/gate-publish.test.ts.
  */
 import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';

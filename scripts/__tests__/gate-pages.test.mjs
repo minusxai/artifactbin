@@ -8,7 +8,8 @@
  * none run) and checks, in pr fast, that each inline script parses and that each `@afbin/` and hosted-component import
  * names something the build ships: the runtime modules (lib/html-runtime/build.server.ts's import map), the hosted
  * libraries (lib/libraries/registry.json) and the hosted components (lib/html-components/hosted.json).
- * Each publish body is sent through the real publish handlers by services/app/__tests__/gate-publish.test.ts.
+ * Each publish body is sent through the real publish handlers, after merge, by
+ * services/app/lib/publish/__tests__/gate-publish.test.ts.
  */
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
