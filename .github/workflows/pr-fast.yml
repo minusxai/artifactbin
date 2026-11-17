@@ -22,10 +22,11 @@ name: pr fast
 # not run on pull requests. page-speed.yml is informational.
 #
 # THE RUN TAKES AS LONG AS ITS SLOWEST JOB, so one stalled transfer on one of ~49 runners sets it (a 62.5s fetch made run
-# 44148017273 93s). Every network step on a runner's path is therefore hedged or bounded, with a fallback that may cost
-# time but never changes what that runner tests: the checkout starts a second fetch of the same sha beside one that has not
-# landed, and each first cache download gives up on a stalled segment for the next tier of its own chain, whose last tier
-# stays unbounded. A new network step joins them the same way (scripts/__tests__/workflows.test.mjs, ci-budget.test.mjs).
+# 44148017273 93s). The transfers seen stalling are hedged or bounded, each with a fallback that may cost time but never
+# changes what that runner tests: the checkout starts a second fetch of the same sha beside one that has not landed, and
+# each chain's first cache download gives up on a stalled segment for the chain's next tier, whose last tier stays
+# unbounded (scripts/__tests__/workflows.test.mjs, ci-budget.test.mjs). Not yet bounded: the cache lookups and saves, the
+# type-info and node-timings fetches, the artifact upload and the clock's fallback `gh api`; one seen stalling joins them.
 #
 # No workflow-level `concurrency` group: cancel-in-progress holds a new run pending until the old one
 # stops (ci.yml's header has the measurements), which alone would cost more than this lane's budget.
