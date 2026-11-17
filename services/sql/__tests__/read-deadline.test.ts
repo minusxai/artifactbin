@@ -48,13 +48,17 @@ describe.each(['local', 'http'] as const)('%s SQL read lifecycle', transport => 
     try {
       expect(await service.run(QUICK)).toMatchObject({ q: { rows: [{ n: 7 }] } });
       const start = performance.now();
-      timer = setTimeout(() => controller.abort(), 70);
+      let aborted = 0;
+      timer = setTimeout(() => { aborted = performance.now(); controller.abort(); }, 70);
       const answer = await service.run(ENDLESS, { signal: controller.signal });
+      const answered = performance.now();
+      // Each phase in the message: a slow run names its step (the abort timer firing late, or the answer after it).
+      const phases = `abort timer fired at +${Math.round(aborted - start)} ms (set for 70), answer at +${Math.round(answered - start)} ms`;
       expect(answer.q).toHaveProperty('error');
-      expect(performance.now() - start).toBeLessThan(1500);
+      expect(answered - start, phases).toBeLessThan(1500);
       const resumed = performance.now();
       expect(await service.run(QUICK)).toMatchObject({ q: { rows: [{ n: 7 }] } });
-      expect(performance.now() - resumed).toBeLessThan(1500);
+      expect(performance.now() - resumed, `${phases}; the next read took ${Math.round(performance.now() - resumed)} ms`).toBeLessThan(1500);
     } finally { clearTimeout(timer); await server?.close(); await engine.close(); }
   });
 
