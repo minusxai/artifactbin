@@ -9,6 +9,15 @@
   stamping; the auth owner buffers at most 200 KiB and rechecks parent/account and current artifact access
   before delivery. Absent and inaccessible artifacts both answer 404.
 
+- Chart drawing for a relay is `/api/internal/identity/chart-image` (contracts `CHART_IMAGE_PATH`), with the same
+  `artifact_reads` opt-in and per-service introspection secret, and no grant: it reads no data, so a scheduled run
+  with no personal grant may use it. The body is exactly a subset of `{chart, rows, width, height, theme,
+  designSystem}` holding `chart` and `rows`, at most 512 KiB. Identity forwards it to the fixed app seam
+  `/api/internal/chart-image` as the anonymous actor; the seam refuses any other caller, draws it with the
+  renderer `render_chart_image` uses (lib/viz chart-image.server: 5,000 rows, 160-1600 x 120-1200 px, a PNG of at
+  most 140,000 bytes, one worker thread with a 5 s deadline) and answers `{mime, width, height, bytes, data}` or
+  `{error, message, hint?}`. Identity passes the status and JSON through, buffered to at most 200 KiB.
+
 - Saved-page evidence adds exact operations `{kind:'page-evidence-schema',pageId,revision}` and
   `{kind:'page-evidence-sql',pageId,revision,sql,params}` (digest fields in that order). Both callbacks must
   supply a viewer/private/null-root scope, page readership AND `pageDatasetSelect:{pageId,revision,

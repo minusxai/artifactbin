@@ -18,9 +18,12 @@ import {ARTIFACT_WORKLOAD_PATH,APP_ARTIFACT_WORKLOAD_PATH,ARTIFACT_WORKLOAD_LIMI
  *    identity store (`./identity-store`) on `identityDb` (which must offer
  *    transactions: `identityDbOf(pool)`) against the app's tables (`appSchema`). `{method, input}` in; `{result}` or
  *    `{refused: {code, status, retry_after?, detail?}}` out, both 200; anything else (no transactional database, a
- *    failure) is 503 and the caller's call throws.
+ *    failure) is 503 and the caller's call throws;
+ *  - a relay's chart drawing (contracts `CHART_IMAGE_PATH`, a service opted in with `artifact_reads`): no person, no
+ *    grant, exact keys, forwarded to the app's fixed seam and answered as it answers.
  */
 import {createHash,timingSafeEqual} from 'node:crypto';
+import {CHART_IMAGE_PATH,CANONICAL_CHART_IMAGE_PATH,CHART_IMAGE_BODY_LIMIT,CHART_IMAGE_KEYS,ANONYMOUS} from '@artifactbin/contracts';
 import {ARTIFACT_READ_GRANT_PATH,ARTIFACT_READ_PATH,CANONICAL_ARTIFACT_READ_PATH,ARTIFACT_READ_LIMIT,API_RESOURCE_PATH,HUMAN_SESSION_LIVE_PATH,IDENTITY_CALL_PATH,IDENTITY_SCHEMA,IDENTITY_INTROSPECT_PATH,IDENTITY_METHODS,IdentityError,SERVICE_AUTH_HEADER,parseAliasOrigins,parseServiceAudiences,type IssuedArtifactReadGrant,type IdentityIntrospectResponse,type IdentityMethod,type IdentityService,type Part,type ServiceAudience,type ServiceTokenParent,type TokenRecord,type TransactionalQueryable} from '@artifactbin/contracts';
 import {BodyTooLargeError,readBody,serviceSecretMatches} from '@artifactbin/utils';
 import type {Context} from 'hono';
@@ -163,6 +166,24 @@ export function sessionAuthority(o:AuthOptions):Part<AuthEnv>{return {name:'sess
    if(!await liveClaims())return answer({error:'unauthorized'},401);
    return new Response(body,{headers:{'content-type':'application/json','cache-control':'no-store'}});
   }catch(error){return answer({error:error instanceof BodyTooLargeError?'too_large':'read_unavailable'},error instanceof BodyTooLargeError?413:503);}
+ });
+ /**
+  * A relay's chart drawing (contracts CHART_IMAGE_PATH): admitted like artifact-read (the service's own introspection
+  * secret, `artifact_reads` opt-in), exact keys, no grant (drawing reads no data). The body goes to the fixed app seam as
+  * the anonymous actor; its status and JSON come back buffered to at most ARTIFACT_READ_LIMIT.
+  */
+ app.all(CHART_IMAGE_PATH,async c=>{
+  let service:ServiceAudience|undefined;
+  const input=await admit(c,presented=>!!(service=serviceOf(audiences,presented))&&service.artifactReads===true,CHART_IMAGE_BODY_LIMIT);
+  if(input instanceof Response)return input;
+  const keys=Object.keys(input);
+  if(!keys.includes('chart')||!keys.includes('rows')||keys.some(key=>!(CHART_IMAGE_KEYS as readonly string[]).includes(key)))return answer({error:'bad_request'},400);
+  try{
+   const signal=AbortSignal.any([c.req.raw.signal,AbortSignal.timeout(60000)]);
+   const response=await o.upstream(new Request(new URL(CANONICAL_CHART_IMAGE_PATH,c.req.url),{method:'POST',body:JSON.stringify(input),signal}),ANONYMOUS);
+   const body=await readBody(response,{limit:ARTIFACT_READ_LIMIT,as:'text'});
+   return new Response(body,{status:response.status,headers:{'content-type':'application/json','cache-control':'no-store'}});
+  }catch(error){return answer({error:error instanceof BodyTooLargeError?'too_large':'render_unavailable'},error instanceof BodyTooLargeError?413:503);}
  });
  const transactional=(db:unknown):db is TransactionalQueryable=>typeof (db as TransactionalQueryable|undefined)?.transaction==='function';
  let identity:Promise<IdentityService>|null=null;

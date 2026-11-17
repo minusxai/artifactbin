@@ -1,7 +1,8 @@
 import {personalPageEvidence} from './page-evidence';
 import {CANONICAL_PAGE_EVIDENCE_PATH} from '@artifactbin/contracts';
 import {artifactWorkload} from './artifact-workload';
-import {APP_ARTIFACT_WORKLOAD_PATH} from '@artifactbin/contracts';
+import {APP_ARTIFACT_WORKLOAD_PATH,CANONICAL_CHART_IMAGE_PATH} from '@artifactbin/contracts';
+import {chartImageSeam} from './chart-image-seam';
 import {getDeploymentState} from '@/lib/deployment';
 import { ID_RE, measureQueries, runWithRequest, ASSETS_ORIGIN, setEventProjection, embedTrustedOrigins, shellFile } from '@/lib/platform';
 import { type ArtifactRow, canReadArtifact, type PageRead, readPageRow, slugAddress, slugAddressTarget, UnservableDocument } from '@/lib/artifacts';
@@ -624,6 +625,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   })));
   app.post(APP_ARTIFACT_WORKLOAD_PATH,c=>runWithRequest(c.req.raw,()=>artifactWorkload(c.req.raw,actorOf(c.req.raw))));
   app.post(CANONICAL_PAGE_EVIDENCE_PATH,c=>runWithRequest(c.req.raw,()=>personalPageEvidence(c.req.raw,actorOf(c.req.raw))));
+  app.post(CANONICAL_CHART_IMAGE_PATH,c=>runWithRequest(c.req.raw,()=>chartImageSeam(c.req.raw,actorOf(c.req.raw))));
   mountRoutes(app);
 
   app.all('/api', apiNotFound);

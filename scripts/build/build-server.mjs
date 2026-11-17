@@ -56,6 +56,18 @@ await esbuild.build({
   banner: { js: "import { createRequire as __mxCreateRequire } from 'node:module'; const require = __mxCreateRequire(import.meta.url);" },
   logLevel: 'warning',
 });
+/*
+ * THE QUERY IMAGE'S THREAD: services/app/lib/viz/chart-image.server.ts starts
+ * `chart-image-worker.mjs` from beside the bundle that holds it, so it is emitted here too.
+ */
+await esbuild.build({
+  entryPoints: [fileURLToPath(new URL('../../services/app/lib/viz/chart-image-worker.ts', import.meta.url))],
+  bundle: true, platform: 'node', format: 'esm', target: 'node22',
+  outfile: join(dirname(out), 'chart-image-worker.mjs'),
+  external: EXTERNALS,
+  banner: { js: "import { createRequire as __mxCreateRequire } from 'node:module'; const require = __mxCreateRequire(import.meta.url);" },
+  logLevel: 'warning',
+});
 if (!existsSync(out)) { console.error(`build-server: ${out} missing`); process.exit(1); }
 console.log(`build-server: ${entry} → ${out}`);
 

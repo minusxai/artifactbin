@@ -55,7 +55,9 @@ const commands = {
   sql: {
     sub: {
       schema: {revision: flag()},
-      query: {params: flag(), limit: flag(), revision: flag(), 'idempotency-key': flag()}
+      query: {params: flag(), limit: flag(), revision: flag(), 'idempotency-key': flag(),
+        chart: flag(), 'chart-output': flag(), 'chart-width': flag(), 'chart-height': flag(),
+        'chart-theme': flag()}
     }
   },
   groups: {sub: {
