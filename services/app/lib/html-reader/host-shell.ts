@@ -217,12 +217,20 @@ export interface MountDraftOptions {
   files: DraftFileInput[];
   /** The frame's accessible name. */
   title?: string;
+  /**
+   * The host's explicit choice for this mount: the page's `default:` links read the install's default connection
+   * live, as the signed-in reader (the person this page is shown to). Off by default: they are refused in the frame.
+   */
+  liveSql?: boolean;
 }
 export interface MountedDraft {
   readonly frame: HTMLIFrameElement;
   /** The draft's own origin: the only one its messages count from. */
   readonly origin: string;
   readonly bridge: FrameBridgeParent;
+  /** The page's `default:` link names (live data it reads), and whether this mount allowed them. */
+  readonly connections: readonly string[];
+  readonly liveSql: boolean;
   setMode(mode: Mode): void;
   setDesignSystem(name: string, mode: Mode): void;
   setInset(px: number): void;
@@ -230,7 +238,7 @@ export interface MountedDraft {
   reload(): void;
   destroy(): void;
 }
-interface DraftAnswer { src: string; origin: string; appOrigin: string }
+interface DraftAnswer { src: string; origin: string; appOrigin: string; connections: string[]; liveSql: boolean }
 const DRAFT_CODES = new Set<string>(['invalid_draft', 'unresolved_draft_files', 'invalid_draft_csv', 'draft_too_large', 'draft_limit']);
 
 function base64Of(bytes: Uint8Array): string {
@@ -250,12 +258,12 @@ async function freshDraft(win: Window, body: string): Promise<DraftAnswer> {
     const code = typeof answer?.error === 'string' && DRAFT_CODES.has(answer.error) ? answer.error as HostShellErrorCode : 'unavailable';
     throw new HostShellError(code, typeof answer?.message === 'string' ? answer.message : 'The draft could not be shown.');
   }
-  return { src: answer.src, origin: answer.origin, appOrigin: answer.appOrigin };
+  return { src: answer.src, origin: answer.origin, appOrigin: answer.appOrigin, connections: Array.isArray(answer.connections) ? answer.connections.filter((name): name is string => typeof name === 'string') : [], liveSql: answer.liveSql === true };
 }
 
 /** Mount the reader's own draft into `container`. Rejects with a HostShellError (a draft's refusal keeps its code). */
 export async function mountDraft(container: HTMLElement, options: MountDraftOptions, win: Window = window): Promise<MountedDraft> {
-  const body = JSON.stringify({ html: options.html, ...(options.entryPath ? { entryPath: options.entryPath } : {}), ...(options.title ? { title: options.title } : {}),
+  const body = JSON.stringify({ html: options.html, ...(options.entryPath ? { entryPath: options.entryPath } : {}), ...(options.title ? { title: options.title } : {}), ...(options.liveSql ? { liveSql: true } : {}),
     files: options.files.map((file) => ({ path: file.path, base64: base64Of(file.bytes), ...(file.contentType ? { contentType: file.contentType } : {}) })) });
   const first = await freshDraft(win, body);
   if (first.appOrigin !== win.location.origin) throw new HostShellError('wrong_origin', `This draft trusts only ${first.appOrigin} as its parent; a host page must be served there, not at ${win.location.origin}.`);
@@ -269,11 +277,18 @@ export async function mountDraft(container: HTMLElement, options: MountDraftOpti
   frame.title = options.title ?? 'Draft';
   frame.src = first.src;
   container.append(frame);
-  // Nothing a draft asks of its parent reaches the app: no document, no session, no upload, no write.
+  // Nothing a draft asks of its parent reaches the app (no document, no session, no upload, no write) except, when this
+  // mount allowed it, a read of its `default:` links: the bridge's pinned SQL relay, sent on to the draft's own door.
+  const id = `draft:${label}`;
   const refuse = async () => new Response(JSON.stringify({ error: 'unavailable', message: 'a draft reads only its own files' }), { status: 403, headers: { 'content-type': 'application/json' } });
+  const relay = async (path: string, init: RequestInit): Promise<Response> => {
+    if (!first.liveSql || path !== `/api/artifacts/${encodeURIComponent(id)}/sql` || typeof init.body !== 'string') return refuse();
+    const sent = JSON.parse(init.body) as { sql?: unknown; params?: unknown };
+    return win.fetch('/api/page/drafts/sql', { method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ draft: label, sql: sent.sql, params: sent.params ?? {} }) });
+  };
   const bridge = createFrameBridgeParent({
-    win, frame, frameOrigin: origin, id: label,
-    editId: () => '', source: () => null, appFetch: refuse,
+    win, frame, frameOrigin: origin, id,
+    editId: () => '', source: () => null, appFetch: relay,
     htmlContext: () => ({ revision: 'draft', readOnly: true }),
     onReady: (nonce) => { if (nonce) emit('af-document-ready', { nonce }); },
     onScroll: (scroll) => emit('af-document-scroll', scroll),
@@ -286,10 +301,10 @@ export async function mountDraft(container: HTMLElement, options: MountDraftOpti
     try { const next = await freshDraft(win, body); if (next.origin === origin) return next.src; emit('af-draft-moved', { origin: next.origin }); return null; }
     catch (error) { emit('af-draft-unavailable', { code: error instanceof HostShellError ? error.code : 'unavailable', message: error instanceof Error ? error.message : '' }); return null; }
   };
-  const stopSession = keepFrameSession({ win, frame, origin, id: label, remint });
+  const stopSession = keepFrameSession({ win, frame, origin, id, remint });
   const stopNavigation = answerFrameNavigation({ win, frame, frameOrigin: origin, navigate: (path) => emit('af-document-navigate', { path }) });
   return {
-    frame, origin, bridge,
+    frame, origin, bridge, connections: first.connections, liveSql: first.liveSql,
     setMode: (mode) => bridge.send({ type: STORY_READER_MODE_MESSAGE, mode }),
     setDesignSystem: (name, mode) => bridge.send({ type: 'mx:design-system', name, mode }),
     setInset: (px) => bridge.setTopInset(px),

@@ -17,7 +17,7 @@ import { inferColumns } from '@artifactbin/utils/shape';
 import { planPublicationBundle } from '@/lib/html-publication-bundle';
 import { coerceRows, parseCsv } from '@/lib/data-ingest';
 import { nativeDraftDocument, type NativeDraftRender } from '@/lib/document-serving';
-import { DRAFT_LIMITS, type DraftInput, type DraftRefusalCode } from './contracts';
+import { DRAFT_LIMITS, type DraftConnection, type DraftInput, type DraftRefusalCode } from './contracts';
 
 export class DraftRefusal extends Error {
   constructor(readonly code: DraftRefusalCode, message: string, readonly status = code === 'draft_limit' ? 429 : 400) { super(message); this.name = 'DraftRefusal'; }
@@ -29,6 +29,9 @@ interface Draft {
   html: string;
   files: Map<string, { bytes: Buffer; contentType: string }>;
   entryPath: string;
+  /** Its `default:` links, and whether the embedding app allowed them to read live. */
+  connections: DraftConnection[];
+  liveSql: boolean;
   bytes: number;
   expires: number;
   tickets: Map<string, number>;
@@ -56,12 +59,13 @@ const decoded = (base64: unknown, name: string): Buffer => {
 };
 
 /** Checks the shape and every limit before anything is planned or parsed. */
-function admitted(input: unknown): { html: string; entryPath: string; files: Array<{ path: string; bytes: Buffer; contentType: string }> } {
+function admitted(input: unknown): { html: string; entryPath: string; liveSql: boolean; files: Array<{ path: string; bytes: Buffer; contentType: string }> } {
   const body = input as Partial<DraftInput> | null;
   if (!body || typeof body.html !== 'string' || !Array.isArray(body.files)) throw new DraftRefusal('invalid_draft', 'a draft is {html, files: [{path, base64}]}');
   const entryPath = body.entryPath ?? 'index.html';
   if (typeof entryPath !== 'string' || !/\.html?$/i.test(entryPath)) throw new DraftRefusal('invalid_draft', 'entryPath names the page\'s own .html path');
   if (Buffer.byteLength(body.html) > DRAFT_LIMITS.htmlBytes) throw new DraftRefusal('draft_too_large', `the page is over ${DRAFT_LIMITS.htmlBytes} bytes`);
+  if (body.liveSql !== undefined && typeof body.liveSql !== 'boolean') throw new DraftRefusal('invalid_draft', 'liveSql is true or false');
   if (body.files.length > DRAFT_LIMITS.files) throw new DraftRefusal('draft_too_large', `a draft links at most ${DRAFT_LIMITS.files} files`);
   let total = Buffer.byteLength(body.html);
   const files = body.files.map((file) => {
@@ -73,24 +77,32 @@ function admitted(input: unknown): { html: string; entryPath: string; files: Arr
     return { path: file.path, bytes, contentType };
   });
   if (total > DRAFT_LIMITS.totalBytes) throw new DraftRefusal('draft_too_large', `the page and its files are over ${DRAFT_LIMITS.totalBytes} bytes`);
-  return { html: body.html, entryPath, files };
+  return { html: body.html, entryPath, liveSql: body.liveSql === true, files };
 }
 
-/** `<link rel="af-dataset" data-af-name=NAME href=PATH>`: each linked file's dataset name, by its resolved path. */
-function datasetNames(html: string, entryPath: string): Map<string, string> {
-  const names = new Map<string, string>();
+const DEFAULT_NAMESPACE = /^(?:[A-Za-z0-9_][A-Za-z0-9_$.:/-]{0,127})?$/;
+/**
+ * `<link rel="af-dataset" data-af-name=NAME href=PATH>`: each linked file's dataset name, by its resolved path; and
+ * each `href="default:DB"` link, the install's default connection, checked as publish checks it.
+ */
+function datasetNames(html: string, entryPath: string): { names: Map<string, string>; connections: DraftConnection[] } {
+  const names = new Map<string, string>(), connections: DraftConnection[] = [];
   const visit = (node: DefaultTreeAdapterMap['node']) => {
     if ('tagName' in node && node.tagName === 'link') {
       const attr = (name: string) => node.attrs.find((a) => a.name === name)?.value;
       const href = attr('href'), name = attr('data-af-name');
-      if ((attr('rel') ?? '').split(/\s+/).includes('af-dataset') && href && name && !/^(?:[a-z][a-z\d+.-]*:|\/|#)/i.test(href)) {
+      const fallback = /^default:(.*)$/s.exec(href ?? '');
+      if ((attr('rel') ?? '').split(/\s+/).includes('af-dataset') && name && fallback) {
+        if (!/^[_A-Za-z][_0-9A-Za-z]*$/.test(name) || !DEFAULT_NAMESPACE.test(fallback[1]!)) throw new DraftRefusal('invalid_draft', `the link ${name} is href="default:DB": a name of letters, digits and _, and a database of letters, digits and _ $ . : / -`);
+        if (connections.length < 20) connections.push({ kind: 'default-connection', name, namespace: fallback[1]! });
+      } else if ((attr('rel') ?? '').split(/\s+/).includes('af-dataset') && href && name && !/^(?:[a-z][a-z\d+.-]*:|\/|#)/i.test(href)) {
         try { names.set(path.posix.normalize(path.posix.join(path.posix.dirname(entryPath), decodeURIComponent(href.split(/[?#]/)[0]!))), name); } catch { /* the plan refuses it */ }
       }
     }
     if ('childNodes' in node) for (const child of node.childNodes) visit(child);
   };
   visit(parse(html));
-  return names;
+  return { names, connections };
 }
 
 /** A linked CSV or JSON file as the read-only table `name` (schema `main`, a stable `_id` first, as a dataset's). */
@@ -114,17 +126,17 @@ function tableOf(name: string, file: string, bytes: Buffer): NativeDraftRender['
 }
 
 /** The draft of `reader`'s page and files, made or found, with a fresh ticket for its document. */
-export async function createDraft(reader: string, input: unknown, appOrigin: string, now = Date.now()): Promise<{ label: string; ticket: string; entryPath: string }> {
+export async function createDraft(reader: string, input: unknown, appOrigin: string, now = Date.now()): Promise<{ label: string; ticket: string; entryPath: string; connections: string[]; liveSql: boolean }> {
   sweep(now);
   const draft = admitted(input);
-  const digest = createHash('sha256').update(JSON.stringify([draft.entryPath, draft.html, draft.files.map((file) => [file.path, file.contentType, createHash('sha256').update(file.bytes).digest('hex')]).sort()])).digest();
+  const digest = createHash('sha256').update(JSON.stringify([draft.liveSql, draft.entryPath, draft.html, draft.files.map((file) => [file.path, file.contentType, createHash('sha256').update(file.bytes).digest('hex')]).sort()])).digest();
   const label = `draft-${base32(createHmac('sha256', KEY).update(reader).update('\0').update(digest).digest()).slice(0, 26)}`;
   const held = drafts.get(label);
-  if (held && held.reader === reader) { held.expires = now + DRAFT_LIMITS.ttlSeconds * 1000; return { label, ticket: ticketFor(held, now), entryPath: held.entryPath }; }
+  if (held && held.reader === reader) { held.expires = now + DRAFT_LIMITS.ttlSeconds * 1000; return { label, ticket: ticketFor(held, now), entryPath: held.entryPath, connections: held.connections.map((c) => c.name), liveSql: held.liveSql }; }
   let plan;
   try { plan = planPublicationBundle(draft.html, { entryPath: draft.entryPath, files: draft.files.map((file) => ({ path: file.path, contentType: file.contentType, base64: file.bytes.toString('base64') })) }); }
   catch (cause) { throw new DraftRefusal('unresolved_draft_files', cause instanceof Error ? cause.message : 'the page links files the draft does not carry'); }
-  const names = datasetNames(draft.html, plan.entryPath);
+  const { names, connections } = datasetNames(draft.html, plan.entryPath);
   const files = new Map<string, { bytes: Buffer; contentType: string }>();
   const tables: NativeDraftRender['tables'][number][] = [];
   let bytes = Buffer.byteLength(draft.html);
@@ -135,7 +147,7 @@ export async function createDraft(reader: string, input: unknown, appOrigin: str
     const name = names.get(dependency.path);
     if (dependency.kind === 'dataset' && name) tables.push(tableOf(name, dependency.path, content));
   }
-  const html = await nativeDraftDocument({ label, html: draft.html, appOrigin, datasets: tables.map((table) => table.name), tables });
+  const html = await nativeDraftDocument({ label, html: draft.html, appOrigin, datasets: tables.map((table) => table.name), tables, connections: connections.map((c) => c.name), liveSql: draft.liveSql });
   // What is held is the assembled page (its tables inside) and the files: that is what the reader's caps count.
   const size = bytes + Buffer.byteLength(html);
   if (size > DRAFT_LIMITS.readerBytes) throw new DraftRefusal('draft_limit', `this draft holds ${size} bytes once assembled; a reader's drafts hold at most ${DRAFT_LIMITS.readerBytes}`);
@@ -143,9 +155,9 @@ export async function createDraft(reader: string, input: unknown, appOrigin: str
   const mine = [...drafts.values()].filter((other) => other.reader === reader).sort((a, b) => a.expires - b.expires);
   let total = mine.reduce((sum, other) => sum + other.bytes, 0);
   while (mine.length && (mine.length >= DRAFT_LIMITS.perReader || total + size > DRAFT_LIMITS.readerBytes)) { const oldest = mine.shift()!; total -= oldest.bytes; drafts.delete(oldest.label); }
-  const made: Draft = { label, reader, html, files, entryPath: plan.entryPath, bytes: size, expires: now + DRAFT_LIMITS.ttlSeconds * 1000, tickets: new Map() };
+  const made: Draft = { label, reader, html, files, entryPath: plan.entryPath, connections, liveSql: draft.liveSql, bytes: size, expires: now + DRAFT_LIMITS.ttlSeconds * 1000, tickets: new Map() };
   drafts.set(label, made);
-  return { label, ticket: ticketFor(made, now), entryPath: made.entryPath };
+  return { label, ticket: ticketFor(made, now), entryPath: made.entryPath, connections: connections.map((c) => c.name), liveSql: draft.liveSql };
 }
 
 /** The draft's document for a ticket minted for it, spent here; null for any other ticket, a spent one or a gone draft. */
@@ -169,4 +181,16 @@ export function draftFile(label: string, pathname: string, now = Date.now()): { 
   // A page still reading its files keeps its draft.
   if (file) draft.expires = now + DRAFT_LIMITS.ttlSeconds * 1000;
   return file ?? null;
+}
+
+/**
+ * The default-connection links `reader`'s own draft `label` may read live, or null: no such draft, another reader's,
+ * or one whose embedding app did not allow live reads. Asking keeps the draft.
+ */
+export function draftConnections(reader: string, label: string, now = Date.now()): DraftConnection[] | null {
+  sweep(now);
+  const draft = drafts.get(label);
+  if (!draft || draft.reader !== reader || !draft.liveSql) return null;
+  draft.expires = now + DRAFT_LIMITS.ttlSeconds * 1000;
+  return draft.connections;
 }

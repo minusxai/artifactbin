@@ -26,6 +26,9 @@ export const DRAFT_LIMITS = {
 /** A draft's refusal codes (each with a message naming what to fix). */
 export type DraftRefusalCode = 'invalid_draft' | 'unresolved_draft_files' | 'invalid_draft_csv' | 'draft_too_large' | 'draft_limit';
 
+/** A draft's link to the install's default connection (`href="default:DB"`), read live only when the embedding app allows it. */
+export interface DraftConnection { kind: 'default-connection'; name: string; namespace: string }
+
 /** What the embedding app sends: the page, where it sits in its folder, and the files beside it. */
 export interface DraftInput {
   html: string;
@@ -33,5 +36,10 @@ export interface DraftInput {
   entryPath?: string;
   title?: string;
   files: Array<{ path: string; base64: string; contentType?: string }>;
+  /**
+   * The embedding app's explicit choice, per mount: the page's `default:` links read the install's default connection
+   * live, as the signed-in reader, through the parent (POST /api/page/drafts/sql). Absent, they are refused in the frame.
+   */
+  liveSql?: boolean;
 }
 
