@@ -23,8 +23,8 @@
  * mirror DNS outage left apt retrying for up to 13 minutes per shard (runs 43055731174, 43061010909: 370s in one
  * bubblewrap step); on 2026-11-16 a mixed mirror broke `playwright install-deps` (run 43846415190), its cause buried in
  * 2,000 lines of dpkg output. An attempt past the bound is stopped as a whole process group: SIGTERM first, which sudo
- * relays to the apt it runs, then SIGKILL; dpkg is then told to finish whatever it was interrupted in, so the retry
- * does not fail on a half-configured package. The summary (`::error::`) names each attempt's outcome and apt's last
+ * relays to the apt it runs, then SIGKILL; the retry then waits for a dpkg that outlived it and has dpkg finish what
+ * was interrupted (`recoverDpkg`), so it neither fails on the lock nor on a half-configured package. The summary (`::error::`) names each attempt's outcome and apt's last
  * error lines, so the cause is the first thing the log shows.
  */
 import { spawn, spawnSync } from 'node:child_process';
@@ -175,7 +175,7 @@ const outcome = ({ status, timedOut }, boundMs) => (timedOut ? `timed out after 
  * @param {string[]} online the command and its arguments
  * @param {{ boundMs?: number, graceMs?: number, recover?: () => unknown, log?: (line: string) => void }} [options]
  */
-export async function installOnline(online, { boundMs = ONLINE_BOUND_MS, graceMs = GRACE_MS, recover = recoverDpkg, log = console.log } = {}) {
+export async function installOnline(online, { boundMs = ONLINE_BOUND_MS, graceMs = GRACE_MS, recover = () => recoverDpkg(), log = console.log } = {}) {
   const attempts = [];
   for (let attempt = 1; attempt <= 2; attempt++) {
     const result = await runBounded(online[0], online.slice(1), { boundMs, graceMs });
@@ -203,9 +203,21 @@ export function failureSummary(online, attempts, boundMs = ONLINE_BOUND_MS) {
   return `::error::system-debs: \`${online.join(' ')}\` failed twice (${attempts.map((result, i) => `${i + 1}: ${outcome(result, boundMs)}`).join(', ')})${said}`;
 }
 
-/** After a stopped attempt: let dpkg finish a package it was interrupted in (bounded too; its outcome is not ours). */
-function recoverDpkg() {
-  return runBounded(...asRoot('dpkg', ['--configure', '-a']), { boundMs: ONLINE_BOUND_MS, graceMs: GRACE_MS });
+/**
+ * AFTER A STOPPED ATTEMPT, BEFORE THE RETRY: the dpkg it started may outlive it (apt runs it in sudo's own session, out of
+ * reach of the group's signals: an ubuntu:24.04 probe stopped mid-unpack saw the retry refused at once with `Could not
+ * get lock /var/lib/dpkg/lock. It is held by process 3409 (dpkg)`). Stopping dpkg mid-unpack is what breaks packages, so
+ * it is left to finish: `dpkg --configure -a` is retried while the lock is held, then completes whatever was
+ * interrupted. Bounded like an attempt; a failure for any other reason is left to the retry to report.
+ * @param {(command: string, args: string[]) => Promise<{ status: number | null, errors: string[] }>} [run]
+ */
+export async function recoverDpkg(run = (command, args) => runBounded(command, args), { boundMs = ONLINE_BOUND_MS, pauseMs = 1_000 } = {}) {
+  const deadline = Date.now() + boundMs;
+  for (;;) {
+    const result = await run(...asRoot('dpkg', ['--configure', '-a']));
+    if (result.status === 0 || !result.errors.some((line) => /lock/i.test(line)) || Date.now() + pauseMs > deadline) return result;
+    await new Promise((resolve) => setTimeout(resolve, pauseMs));
+  }
 }
 
 async function main() {

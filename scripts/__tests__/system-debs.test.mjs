@@ -9,7 +9,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import yaml from 'yaml';
-import { ONLINE_BOUND_MS, debsToInstall, failureSummary, installedFrom, packageOfDeb, parseArgs } from '../ci/system-debs.mjs';
+import { ONLINE_BOUND_MS, debsToInstall, failureSummary, installedFrom, packageOfDeb, parseArgs, recoverDpkg } from '../ci/system-debs.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const workflows = readdirSync(path.join(root, '.github/workflows')).filter((file) => /\.ya?ml$/.test(file))
@@ -50,6 +50,22 @@ describe('the planner', () => {
 describe('the online install', () => {
   it('allows each attempt a minute', () => {
     expect(ONLINE_BOUND_MS).toBe(60_000);
+  });
+
+  // A dpkg that outlived its stopped attempt holds the lock: the retry waits for it, then has dpkg finish what it began.
+  it('waits for a dpkg that outlived the stopped attempt before the retry, and for nothing else', async () => {
+    const locked = { status: 2, errors: ['dpkg: error: dpkg frontend lock was locked by another process with pid 3409'] };
+    const answers = (...results) => { const calls = []; return { calls, run: async (command, args) => { calls.push([command, ...args].join(' ')); return results[Math.min(calls.length - 1, results.length - 1)]; } }; };
+    const freed = answers(locked, locked, { status: 0, errors: [] });
+    expect((await recoverDpkg(freed.run, { boundMs: 5_000, pauseMs: 0 })).status).toBe(0);
+    expect(freed.calls).toHaveLength(3);
+    expect(freed.calls[0]).toMatch(/(^|sudo )dpkg --configure -a$/);
+    const broken = answers({ status: 1, errors: ['dpkg: error processing package x (--configure)'] });
+    expect((await recoverDpkg(broken.run, { boundMs: 5_000, pauseMs: 0 })).status).toBe(1);
+    expect(broken.calls).toHaveLength(1);
+    const held = answers(locked);
+    expect((await recoverDpkg(held.run, { boundMs: 30, pauseMs: 10 })).status).toBe(2);
+    expect(held.calls.length).toBeLessThanOrEqual(4);
   });
 
   it('sums a failure up in one line: each attempt, then apt\'s last errors, else its last output', () => {
