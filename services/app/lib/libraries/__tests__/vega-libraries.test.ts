@@ -1,12 +1,13 @@
 import {readFile} from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {createRequire} from 'node:module';
 import {build} from 'esbuild';
 import {expect,it,vi} from 'vitest';
 const directory=fileURLToPath(new URL('../',import.meta.url));
-const require=createRequire(import.meta.url);
-async function bundled(name:string) {
+// Each library is bundled once per file and every case reads that one build (a build is most of this file's time).
+const builds=new Map<string,ReturnType<typeof bundle>>();
+const bundled=(name:string)=>{let built=builds.get(name);if(!built)builds.set(name,built=bundle(name));return built;};
+async function bundle(name:string) {
  const registry=JSON.parse(await readFile(path.join(directory,'registry.json'),'utf8'));
  const entry=registry[name]; expect(entry).toBeDefined();
  const alias=Object.fromEntries(Object.entries(entry.aliases ?? {}).map(([source,target])=>[source,(target as {package:string}).package]));
@@ -17,13 +18,8 @@ async function bundled(name:string) {
  const module=await import(/* @vite-ignore */`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
  return {module,result};
 }
-it('keeps the pinned compiler Vega import boundary to four direct utility reexports without a second runtime',async()=>{
- const source=await readFile(require.resolve('vega-lite'),'utf8');
- const imports=[...source.matchAll(/import\s*\{([^}]+)\}\s*from\s*['"]vega['"]/g)].flatMap(match=>match[1]!.split(',').map(binding=>binding.trim().split(/\s+as\s+/)[0]));
- expect(imports.sort()).toEqual(['hasOwnProperty','isObject','isString','stringValue']);
- const registry=JSON.parse(await readFile(path.join(directory,'registry.json'),'utf8'));
- const utility=registry['vega-lite'].aliases.vega;
- const utilFile=path.resolve(path.dirname(require.resolve(utility.package)),'../package.json'); expect(JSON.parse(await readFile(utilFile,'utf8')).version).toBe(utility.version);
+// Its source boundary (four utilities from the pinned vega-util) is vega-lite-boundary.test.ts.
+it('bundles the pinned compiler without a second Vega runtime',async()=>{
  const {result}=await bundled('vega-lite'); expect(Object.keys(result.metafile!.inputs).some(p=>/node_modules\/(?:vega|vega-view|vega-scenegraph|vega-dataflow)\//.test(p))).toBe(false);
 });
 it('renders a native Vega spec from the shipped browser ESM using the CSP-safe interpreter',async()=>{

@@ -1,18 +1,22 @@
 import {describe,expect,it} from 'vitest';
 import {JSDOM} from 'jsdom';
-import {transformSync} from 'esbuild';
+import {transform} from 'esbuild';
 import {richBaselineRevision,richBrowserParityFixtures,richBaselineReadiness} from '../rich.mjs';
 import {htmlBodyPadding} from '../publication.mjs';
 import {stateExpectationIssues} from '../../../lib/component-browser-baseline.mjs';
+// One window parses every fixture (its DOMParser is the same HTML parser a fresh JSDOM runs); only the readiness
+// case below needs windows of its own, to run scripts.
+const parser=new new JSDOM('').window.DOMParser();
+const parse=html=>parser.parseFromString(html,'text/html');
 describe('actual original/new rich reader fixture inputs',()=>{
  it('names all nine public families and pins evidence sources without pretending captures exist',()=>{
   expect(richBrowserParityFixtures.map(f=>f.family)).toEqual(['Markdown','Isometric','SlideDeck','User','Avatar','Icon','Progress','DatePicker','Tooltip']);
   expect(new Set(richBrowserParityFixtures.map(f=>f.id)).size).toBe(richBrowserParityFixtures.length);
   for(const fixture of richBrowserParityFixtures){expect(fixture.provenance.revision).toBe(richBaselineRevision);expect(fixture.provenance.sources.length).toBeGreaterThan(1);expect(fixture.limitations.length).toBeGreaterThan(0);expect(fixture.states[0]).toMatchObject({id:'initial',actions:[]});for(const state of fixture.states)expect(Object.keys(state.expected).length).toBeGreaterThan(0);}
  });
- for(const fixture of richBrowserParityFixtures)it(`${fixture.id} parses and validates as actual old JSX and has syntactically valid native setup`,()=>{
-  const doc=new JSDOM(fixture.newHtml).window.document;expect(doc.querySelector(`af-${fixture.modules[0]}`)).not.toBeNull();
-  expect(()=>transformSync(fixture.setup||'',{loader:'js',format:'esm'})).not.toThrow();
+ for(const fixture of richBrowserParityFixtures)it(`${fixture.id} parses and validates as actual old JSX and has syntactically valid native setup`,async()=>{
+  const doc=parse(fixture.newHtml);expect(doc.querySelector(`af-${fixture.modules[0]}`)).not.toBeNull();
+  await expect(transform(fixture.setup||'',{loader:'js',format:'esm'})).resolves.toBeDefined();
  });
  it('keeps real isometric readiness mandatory and fixtures network free',()=>{
   expect(Object.keys(richBaselineReadiness)).toEqual(['isometric-assembly']);
@@ -33,7 +37,7 @@ describe('actual original/new rich reader fixture inputs',()=>{
  });
  it('publishes the native Icon paragraph inside the same bare-story typography root as the source reader',()=>{
   const icon=richBrowserParityFixtures.find(fixture=>fixture.id==='icon-glyphs');
-  const document=new JSDOM(icon.newHtml).window.document;
+  const document=parse(icon.newHtml);
   const story=document.querySelector('[data-mx-story-root][data-mx-inline-story]:not([data-mx-styled])');
   expect(story).not.toBeNull();
   expect(story.querySelector(':scope > .mx-doc > p')?.textContent).toContain('Completed');
@@ -43,7 +47,7 @@ describe('actual original/new rich reader fixture inputs',()=>{
  it('pairs slide navigation through the shared pager and records rail viewport applicability',()=>{
   const slides=richBrowserParityFixtures.find(f=>f.id==='slides-two');
   expect(slides.bareRoot).toBe(true);
-  const document=new JSDOM(slides.newHtml).window.document;
+  const document=parse(slides.newHtml);
   const column=document.querySelector('af-slide-deck > div');
   expect(column).not.toBeNull();
   expect(column.style.padding).toBe('24px');
