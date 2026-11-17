@@ -3,7 +3,7 @@ export { serve } from './serve';
 export { attachActor, actorOf, inProcess, overHttp, actorReceiver, UPSTREAM_TIMEOUTS } from './upstream';
 export { signActor, verifyActor } from './actor-sign';
 export { createEnv } from './env';
-export { httpClient, jsonServer, postServer, type JsonServer } from './http';
+export { httpClient, jsonServer, postServer, type JsonServer, type JsonRoutes } from './http';
 export { log } from './log';
 export { BodyTooLargeError, readBody } from './body';
 export { noopSql, noopBrowser, noopEvents, fakeSql, fakeBrowser, fakeEvents, type FakeEvents } from './fakes';

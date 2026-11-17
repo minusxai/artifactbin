@@ -21,6 +21,7 @@
  * `AUTH__SERVICE_URL` it is the auth host over HTTP; otherwise the identity store runs here, on this process's own
  * database (a single-process install and the tests), plain SQL that every image can load.
  */
+import { SQL_WALL_OVERHEAD_MS } from '@artifactbin/contracts';
 import type { HumanSessionAuthority, BrowserService, EventsService, IdentityService, SqlService, TransactionalQueryable } from '@artifactbin/contracts';
 import { createIdentityStore } from '@artifactbin/auth/identity-store';
 import { humanSessionClient, identityClient, browserClient, eventsClient, noopBrowser, noopEvents, noopSql, sqlClient } from '@artifactbin/utils';
@@ -38,7 +39,7 @@ const registry = (): Registry => (globalThis.__artifact_bin_services__ ??= {});
 
 const remote: Registry = {
   ...(AUTH_SERVICE_URL ? {humanSessions:humanSessionClient(AUTH_SERVICE_URL,{serviceSecret:INTERNAL_SERVICE_SECRET??''}),identity:identityClient(AUTH_SERVICE_URL,{serviceSecret:INTERNAL_SERVICE_SECRET??''})} : {}),
-  ...(SQL_SERVICE_URL ? { sql: sqlClient(SQL_SERVICE_URL, { deadlineMs: QUERY_TIMEOUT_MS * 4, ...(INTERNAL_SERVICE_SECRET ? { serviceSecret: INTERNAL_SERVICE_SECRET } : {}) }) } : {}),
+  ...(SQL_SERVICE_URL ? { sql: sqlClient(SQL_SERVICE_URL, { deadlineMs: QUERY_TIMEOUT_MS + SQL_WALL_OVERHEAD_MS, ...(INTERNAL_SERVICE_SECRET ? { serviceSecret: INTERNAL_SERVICE_SECRET } : {}) }) } : {}),
   ...(BROWSER_SERVICE_URL ? { browser: browserClient(BROWSER_SERVICE_URL, { ...(INTERNAL_SERVICE_SECRET ? { serviceSecret: INTERNAL_SERVICE_SECRET } : {}) }) } : {}),
   ...(EVENTS_SERVICE_URL ? { events: eventsClient(EVENTS_SERVICE_URL, { ...(INTERNAL_SERVICE_SECRET ? { serviceSecret: INTERNAL_SERVICE_SECRET } : {}) }) } : {}),
 };

@@ -206,9 +206,22 @@ export interface DryRunMutationsInput {
 }
 export interface DryRunMutationsResult { errors: Array<{ name: string; error: string }> }
 
+/** Process-local cancellation; only the lowering wall budget may cross the private wire. */
+export interface SqlCallContext { signal?: AbortSignal; wallTimeoutMs?: number }
+export const SQL_QUERY_DEFAULT_MS = 30_000;
+export const SQL_QUERY_MAX_MS = 120_000;
+export const SQL_WALL_OVERHEAD_MS = 15_000;
+export const SQL_WALL_HEADER = 'x-sql-wall-timeout-ms';
+/** Canonical validation for operator caps and optional lowering request budgets. */
+export function sqlTimeout(value: unknown, fallback: number, maximum: number, label = 'SQL timeout', clamp = false): number {
+  if (value === undefined) return fallback;
+  const n = typeof value === 'string' && value.trim() !== '' ? Number(value) : value;
+  if (typeof n !== 'number' || !Number.isSafeInteger(n) || n <= 0 || (!clamp && n > maximum)) throw new Error(`${label} must be a positive safe integer no greater than ${maximum}`);
+  return Math.min(n, maximum);
+}
 export interface SqlService {
-  run(input: RunInput): Promise<Record<string, QueryOutcome>>;
-  runMany(input: RunManyInput): Promise<Array<Record<string, QueryOutcome>>>;
+  run(input: RunInput, context?: SqlCallContext): Promise<Record<string, QueryOutcome>>;
+  runMany(input: RunManyInput, context?: SqlCallContext): Promise<Array<Record<string, QueryOutcome>>>;
   mutate(input: MutationInput): Promise<MutationOutcome>;
   dryRun(input: DryRunInput): Promise<DryRunResult>;
   dryRunMutations(input: DryRunMutationsInput): Promise<DryRunMutationsResult>;
@@ -231,8 +244,8 @@ export const SQL_READ_LIMITS = Object.freeze({
   /** Serialized returned table-name/outcome record, after the requested projection.
    * Four MiB admits bounded stored-data responses; the independent input/work ceiling remains eight MiB. */
   outputBytes: 4 * 1024 * 1024,
-  timeoutMs: 5000,
-  wallMs: 20000,
+  timeoutMs: SQL_QUERY_DEFAULT_MS,
+  wallMs: SQL_QUERY_DEFAULT_MS + SQL_WALL_OVERHEAD_MS,
 });
 
 /** The wire: one POST per method. `serveSql`/`sqlClient` (the sql package) implement exactly this. */

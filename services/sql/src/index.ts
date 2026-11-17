@@ -7,7 +7,7 @@
  */
 import type { SqlService } from '@artifactbin/contracts';
 import { SQL_ROUTES } from '@artifactbin/contracts';
-import { jsonServer, type JsonServer } from '@artifactbin/utils';
+import { jsonServer, type JsonServer, type JsonRoutes } from '@artifactbin/utils';
 
 export type * from '@artifactbin/contracts';
 export { SQL_ROUTES } from '@artifactbin/contracts';
@@ -24,9 +24,9 @@ const HEALTH = '/health';
  * put it on a private network. The plumbing is utils' `jsonServer`, with this shell's health probe and secret.
  */
 export function serveSql(svc: SqlService, opts: { maxBody?: number; serviceSecret?: string } = {}): JsonServer {
-  const routes: Record<string, (body: unknown) => Promise<unknown>> = {
-    [SQL_ROUTES.run]: async (b) => ({ results: await svc.run(b as Parameters<SqlService['run']>[0]) }),
-    [SQL_ROUTES.runMany]: async (b) => ({ results: await svc.runMany(b as Parameters<SqlService['runMany']>[0]) }),
+  const routes: JsonRoutes = {
+    [SQL_ROUTES.run]: async (b, context) => ({ results: await svc.run(b as Parameters<SqlService['run']>[0], context) }),
+    [SQL_ROUTES.runMany]: async (b, context) => ({ results: await svc.runMany(b as Parameters<SqlService['runMany']>[0], context) }),
     [SQL_ROUTES.mutate]: async (b) => ({ result: await svc.mutate(b as Parameters<SqlService['mutate']>[0]) }),
     [SQL_ROUTES.dryRun]: (b) => svc.dryRun(b as Parameters<SqlService['dryRun']>[0]),
     [SQL_ROUTES.dryRunMutations]: (b) => svc.dryRunMutations(b as Parameters<SqlService['dryRunMutations']>[0]),

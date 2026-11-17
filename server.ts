@@ -76,7 +76,7 @@ async function main(): Promise<void> {
   // An image built without an engine or a browser needs to be told where they
   // went — before a boot canary passes and the first export answers 503.
   const {
-    BROWSER_SERVICE_URL, EVENTS_SCHEMA, EVENTS_SERVICE_URL, MAX_QUERY_ROWS, QUERY_TIMEOUT_MS, SQL_SERVICE_URL,
+    BROWSER_SERVICE_URL, EVENTS_SCHEMA, EVENTS_SERVICE_URL, MAX_QUERY_ROWS, QUERY_TIMEOUT_MS, SQL_MUTATION_TIMEOUT_MS, SQL_SERVICE_URL,
   } = await import('@/lib/platform');
 
   /*
@@ -102,7 +102,7 @@ async function main(): Promise<void> {
   const sessionEnvNames = new Set<string>();
   if (!SQL_SERVICE_URL) {
     const { createSql } = await import('@artifactbin/sql/local');
-    setServices({ sql: createSql({ maxRows: MAX_QUERY_ROWS, timeoutMs: QUERY_TIMEOUT_MS }) });
+    setServices({ sql: createSql({ maxRows: MAX_QUERY_ROWS, timeoutMs: QUERY_TIMEOUT_MS, mutationTimeoutMs: SQL_MUTATION_TIMEOUT_MS }) });
   }
   // Dev only: Vite's HMR socket port, derived from our own port (see the Vite server below). The session browser
   // is told it too, so a hosted check's app page may reach that one loopback socket.
