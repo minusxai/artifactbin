@@ -81,7 +81,8 @@ export function readTokens(host: Element): ChartTokens {
   const token = (name: string) => style.getPropertyValue(name).trim();
   const surface = paint(doc, surfaceBehind(host, style), dark ? '#000' : '#fff') ?? house.surface;
   // The one page-token mapping the query image uses too (lib/viz/theme tokensFromThemeVariables).
-  const color = (name: string) => name === '--background' ? surface : paint(doc, token(name), surface);
+  const color = (name: string) =>
+    name === '--background' ? surface : paint(doc, token(name), surface);
   return tokensFromThemeVariables(color,
     token('--font-body') || style.fontFamily || house.font, dark ? 'dark' : 'light');
 }
