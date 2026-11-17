@@ -47,8 +47,8 @@ describe('render pipeline seams',()=>{
   expect(resolveEnvelopeSpec(envelope({kind:'recipe',recipe:'team/bars',spec:{marks:[]},grammar:'vega@6'}))).toEqual({ok:true,spec:{marks:[]},engine:'vega'});
   expect(resolveEnvelopeSpec(envelope({kind:'recipe',recipe:'team/bars',spec:{mark:'bar'}}))).toMatchObject({engine:'vega-lite'});
   expect(resolveEnvelopeSpec(envelope({kind:'recipe',recipe:'team/bars',unresolved:'deleted'}))).toEqual({ok:false,error:'viz recipe "team/bars" is not resolved (deleted)'});
-  expect(resolveEnvelopeSpec(envelope({kind:'recipe',recipe:'minusx/funnel@1',bindings:{stage:'s',value:'v'}}))).toMatchObject({ok:true,engine:'vega-lite'});
-  expect(resolveEnvelopeSpec(envelope({kind:'recipe',recipe:'minusx/nope@1',bindings:{}}))).toMatchObject({ok:false});
+  expect(resolveEnvelopeSpec(envelope({kind:'recipe',recipe:'funnel',bindings:{stage:'s',value:'v'}}))).toMatchObject({ok:true,engine:'vega-lite'});
+  expect(resolveEnvelopeSpec(envelope({kind:'recipe',recipe:'nope',bindings:{}}))).toMatchObject({ok:false});
  });
  it('binds every named asset as cloned features beside main, and nothing without assets',async()=>{
   const shared={type:'Feature',properties:{name:'A'},geometry:null} as never;

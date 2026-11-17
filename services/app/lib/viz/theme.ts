@@ -7,28 +7,74 @@
  * Passed as external compiler config — spec-internal `config` wins natively.
  */
 import type { Config as VegaLiteConfig } from 'vega-lite';
-import { scale } from 'vega';
 import { COLOR_PALETTE, LIGHT_THEME, DARK_THEME, getChartFontFamily } from '@/lib/chart/chart-theme';
+
+/**
+ * The resolved colours and font one chart is drawn with, as concrete sRGB strings (hex or rgb()).
+ * The product's own surfaces use the house set (`houseTokens`); a page's `<af-chart>` and the
+ * query image resolve the page's design-system tokens into the same shape (`--chart-1..5`,
+ * `--foreground`, `--muted-foreground`, `--border`, the surface and `--font-body`). Engine-free:
+ * nothing here imports vega, so the hosted component can bundle it.
+ */
+export interface ChartTokens {
+  category: string[];
+  foreground: string;
+  muted: string;
+  subtle: string;
+  border: string;
+  grid: string;
+  surface: string;
+  font: string;
+}
+
+/** The house tokens for a mode, optionally with another categorical palette. */
+export function houseTokens(mode: 'light' | 'dark', palette?: string[] | null): ChartTokens {
+  const c = mode === 'light' ? LIGHT_THEME : DARK_THEME;
+  return {
+    category: palette?.length ? palette : COLOR_PALETTE, foreground: c.fgDefault, muted: c.fgMuted,
+    subtle: c.fgSubtle, border: c.borderDefault, grid: c.borderMuted, surface: c.bgSurface,
+    font: getChartFontFamily(),
+  };
+}
+
+/** A mode name means the house tokens; tokens pass through. */
+export const resolveTokens = (theme: 'light' | 'dark' | ChartTokens, palette?: string[] | null): ChartTokens =>
+  typeof theme === 'string' ? houseTokens(theme, palette) : palette?.length ? { ...theme, category: palette } : theme;
+
+const channels = (color: string): [number, number, number] | null => {
+  const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(color.trim());
+  if (hex) {
+    const h = hex[1]!.length === 3 ? [...hex[1]!].map(x => x + x).join('') : hex[1]!;
+    return [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16)) as [number, number, number];
+  }
+  const rgb = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)/i.exec(color.trim());
+  return rgb ? [Number(rgb[1]), Number(rgb[2]), Number(rgb[3])] : null;
+};
+/** `t` of the way from `a` to `b` in sRGB; `b` when either is not hex/rgb(). */
+export function mixColor(a: string, b: string, t: number): string {
+  const x = channels(a), y = channels(b);
+  if (!x || !y) return b;
+  return `rgb(${x.map((v, i) => Math.round(v + (y[i]! - v) * t)).join(',')})`;
+}
 
 /**
  * The card-surface color per mode. Used by render-time enrichments that need an OPAQUE
  * surface-colored fill (the reference-line badge backing) — VL bakes mark fills at
  * compile, so named style configs can't supply this; the renderer resolves it instead.
  */
-export function getSurfaceColor(mode: 'light' | 'dark'): string {
-  return (mode === 'light' ? LIGHT_THEME : DARK_THEME).bgSurface;
+export function getSurfaceColor(theme: 'light' | 'dark' | ChartTokens): string {
+  return resolveTokens(theme).surface;
 }
 
 /** All color scale defaults share the same palette, in both grammar engines.
  * Ordered values use a lightness ramp, not a sequence of unrelated category hues.
  * Explicit spec ranges/schemes still win in Vega's normal config precedence.
  */
-function chartRanges(mode: 'light' | 'dark', palette?: string[] | null) {
-  const category = palette?.length ? palette : COLOR_PALETTE;
-  const primary = category[0];
-  const surface = getSurfaceColor(mode);
-  const tint = scale('linear')().domain([0, 1]).range([surface, primary]);
-  const ramp = [tint(0.2) as string, primary];
+function chartRanges(t: ChartTokens) {
+  const category = t.category;
+  const primary = category[0]!;
+  const surface = t.surface;
+  const ramp = [mixColor(surface, primary, 0.2), primary];
   return {
     category,
     ordinal: category,
@@ -38,20 +84,21 @@ function chartRanges(mode: 'light' | 'dark', palette?: string[] | null) {
   };
 }
 
-export function getVegaLiteConfig(mode: 'light' | 'dark', palette?: string[] | null): VegaLiteConfig {
-  const colors = mode === 'light' ? LIGHT_THEME : DARK_THEME;
+export function getVegaLiteConfig(theme: 'light' | 'dark' | ChartTokens, palette?: string[] | null): VegaLiteConfig {
+  const t = resolveTokens(theme, palette);
+  const colors = { fgDefault: t.foreground, fgMuted: t.muted, fgSubtle: t.subtle, borderDefault: t.border, borderMuted: t.grid, bgSurface: t.surface };
   return {
     // getChartFontFamily resolves the ACTUAL loaded font family (the document's
     // --font-jetbrains-mono override when one is set, else the shipped stack). Using a
     // literal name makes canvas measureText and SVG rendering fall back to DIFFERENT
     // fonts — vega then under-reserves every label and titles overlap ticks.
-    font: getChartFontFamily(),
+    font: t.font,
     // Default number format for quantitative axis/legend/tooltip labels without an
     // explicit format: SI units ('.3~s' → 20k, 1.5M, 431k). Specs override per-encoding.
     numberFormat: '.3~s',
     // The card owns the surface; charts inherit it.
     background: 'transparent',
-    range: chartRanges(mode, palette),
+    range: chartRanges(t),
     axis: {
       labelColor: colors.fgMuted,
       titleColor: colors.fgDefault,
@@ -79,7 +126,7 @@ export function getVegaLiteConfig(mode: 'light' | 'dark', palette?: string[] | n
     // Automatic tooltips everywhere: hovering any mark shows its encoded fields
     // (with their titles/formats). A spec-level `tooltip` encoding overrides this
     // with a custom field list; `mark: {tooltip: null}` opts a spec out.
-    mark: { color: (palette?.length ? palette : COLOR_PALETTE)[0], tooltip: { content: 'encoding' } },
+    mark: { color: t.category[0], tooltip: { content: 'encoding' } },
     // Text marks default to BLACK in vega-lite — unreadable in dark mode. Theme them
     // like axis titles; specs/recipes override per-layer where they need contrast.
     text: { color: colors.fgDefault, fontSize: 11 },
@@ -130,16 +177,17 @@ export function getVegaLiteConfig(mode: 'light' | 'dark', palette?: string[] | n
 }
 
 /**
- * Parser config for NATIVE Vega specs (the `vega` engine — e.g. minusx/radar@1).
+ * Parser config for NATIVE Vega specs (the `vega` engine — e.g. radar).
  * Same token source as the VL config so the tiers can't drift. Applied at
  * vega.parse; spec-level properties win natively.
  */
-export function getVegaParserConfig(mode: 'light' | 'dark', palette?: string[] | null): Record<string, unknown> {
-  const colors = mode === 'light' ? LIGHT_THEME : DARK_THEME;
-  const font = getChartFontFamily();
+export function getVegaParserConfig(theme: 'light' | 'dark' | ChartTokens, palette?: string[] | null): Record<string, unknown> {
+  const t = resolveTokens(theme, palette);
+  const colors = { fgDefault: t.foreground, fgMuted: t.muted };
+  const font = t.font;
   return {
     background: 'transparent',
-    range: chartRanges(mode, palette),
+    range: chartRanges(t),
     text: { fill: colors.fgDefault, font, fontSize: 11 },
     legend: {
       orient: 'top',

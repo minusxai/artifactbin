@@ -26,34 +26,34 @@ const WATERFALL_ROWS = [
 
 describe('registry', () => {
   it('ships the eight recipes in registry order, with typed bindings', () => {
-    expect(Object.keys(VIZ_TEMPLATES)).toEqual(['minusx/funnel@1', 'minusx/waterfall@1', 'minusx/radar@1', 'minusx/trend@1', 'minusx/single-value@1', 'minusx/combo@1', 'minusx/choropleth@1', 'minusx/point-map@1']);
-    expect(getTemplate('minusx/funnel@1')!.bindings.map(b => b.name)).toEqual(['stage', 'value']);
+    expect(Object.keys(VIZ_TEMPLATES)).toEqual(['funnel', 'waterfall', 'radar', 'trend', 'single-value', 'combo', 'choropleth', 'point-map']);
+    expect(getTemplate('funnel')!.bindings.map(b => b.name)).toEqual(['stage', 'value']);
   });
 });
 
 describe('materializeRecipe', () => {
   it('materializes a funnel spec from the reference', () => {
-    const result = materializeRecipe({ recipe: 'minusx/funnel@1', bindings: { stage: 'stage', value: 'users' } });
+    const result = materializeRecipe({ recipe: 'funnel', bindings: { stage: 'stage', value: 'users' } });
     expect(result.ok).toBe(true);
     if (result.ok) expect(Array.isArray(result.spec.layer)).toBe(true);
   });
 
   it('reports unknown recipe ids with the available list', () => {
-    const result = materializeRecipe({ recipe: 'minusx/sankey@1', bindings: {} });
+    const result = materializeRecipe({ recipe: 'sankey', bindings: {} });
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error).toContain('minusx/funnel@1');
+    if (!result.ok) expect(result.error).toContain('funnel');
   });
 
   it('reports missing bindings by name', () => {
-    const result = materializeRecipe({ recipe: 'minusx/waterfall@1', bindings: { category: 'stage' } });
+    const result = materializeRecipe({ recipe: 'waterfall', bindings: { category: 'stage' } });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toContain('value');
   });
 });
 
-describe('minusx/trend@1 color params', () => {
+describe('trend color params', () => {
   const trend = (params: Record<string, unknown> | null) =>
-    materializeRecipe({ recipe: 'minusx/trend@1', bindings: { date: 'week', value: ['revenue', 'orders'] }, params });
+    materializeRecipe({ recipe: 'trend', bindings: { date: 'week', value: ['revenue', 'orders'] }, params });
 
   it('defaults to the themed category range (colors follow --chart tokens)', () => {
     const result = trend(null);
@@ -96,7 +96,7 @@ describe('recipe tooltips — no internal __mx field leaks', () => {
   };
 
   it('funnel: the area shows Stage + Value; text labels have tooltips OFF', () => {
-    const layers = layersOf('minusx/funnel@1', { stage: 'stage', value: 'users' });
+    const layers = layersOf('funnel', { stage: 'stage', value: 'users' });
     const area = layers.find(l => l.mark?.type === 'area')!;
     const fields = (area.encoding.tooltip as Array<{ field: string }>).map(t => t.field);
     expect(fields).toContain('stage');
@@ -106,7 +106,7 @@ describe('recipe tooltips — no internal __mx field leaks', () => {
   });
 
   it('waterfall: the bars show Step + Value; text labels have tooltips OFF', () => {
-    const layers = layersOf('minusx/waterfall@1', { category: 'step', value: 'delta' });
+    const layers = layersOf('waterfall', { category: 'step', value: 'delta' });
     const bar = layers.find(l => l.mark?.type === 'bar')!;
     const fields = (bar.encoding.tooltip as Array<{ field: string }>).map(t => t.field);
     expect(fields).toContain('step');
@@ -117,7 +117,7 @@ describe('recipe tooltips — no internal __mx field leaks', () => {
 
 describe('headless rendering of materialized recipes', () => {
   it('funnel renders a tapered area with stage labels and first-stage percentages', async () => {
-    const m = materializeRecipe({ recipe: 'minusx/funnel@1', bindings: { stage: 'stage', value: 'users' } });
+    const m = materializeRecipe({ recipe: 'funnel', bindings: { stage: 'stage', value: 'users' } });
     if (!m.ok) throw new Error(m.error);
     const svg = await renderVegaLiteToSvg(m.spec, FUNNEL_ROWS, 'dark', { width: 480, height: 300 });
     expect(svg).toContain('mark-area');
@@ -128,7 +128,7 @@ describe('headless rendering of materialized recipes', () => {
   });
 
   it('funnel draws per-stage ZEBRA bands: one area per stage, alternating opacity', () => {
-    const m = materializeRecipe({ recipe: 'minusx/funnel@1', bindings: { stage: 'stage', value: 'users' } });
+    const m = materializeRecipe({ recipe: 'funnel', bindings: { stage: 'stage', value: 'users' } });
     if (!m.ok) throw new Error(m.error);
     const layers = (m.spec as { layer: Array<Record<string, any>> }).layer;
     const area = layers.find(l => l.mark?.type === 'area')!;
@@ -142,7 +142,7 @@ describe('headless rendering of materialized recipes', () => {
 
   it('funnel orientation param flips the taper axis (horizontal → stages run left to right)', () => {
     const horizontal = materializeRecipe({
-      recipe: 'minusx/funnel@1', bindings: { stage: 'stage', value: 'users' },
+      recipe: 'funnel', bindings: { stage: 'stage', value: 'users' },
       params: { orientation: 'horizontal' },
     });
     if (!horizontal.ok) throw new Error(horizontal.error);
@@ -152,7 +152,7 @@ describe('headless rendering of materialized recipes', () => {
     expect(area.encoding.y.field).toBe('__mx_x0');
     expect(area.encoding.y2.field).toBe('__mx_x1');
 
-    const vertical = materializeRecipe({ recipe: 'minusx/funnel@1', bindings: { stage: 'stage', value: 'users' } });
+    const vertical = materializeRecipe({ recipe: 'funnel', bindings: { stage: 'stage', value: 'users' } });
     if (!vertical.ok) throw new Error(vertical.error);
     const vArea = (vertical.spec as { layer: Array<Record<string, any>> }).layer.find(l => l.mark?.type === 'area')!;
     expect(vArea.encoding.y.field).toBe('__mx_pos'); // default stays top-to-bottom
@@ -162,7 +162,7 @@ describe('headless rendering of materialized recipes', () => {
 
   it('horizontal funnel renders headlessly with stage labels', async () => {
     const m = materializeRecipe({
-      recipe: 'minusx/funnel@1', bindings: { stage: 'stage', value: 'users' },
+      recipe: 'funnel', bindings: { stage: 'stage', value: 'users' },
       params: { orientation: 'horizontal' },
     });
     if (!m.ok) throw new Error(m.error);
@@ -173,7 +173,7 @@ describe('headless rendering of materialized recipes', () => {
   });
 
   it('waterfall renders floating bars in data order with signed labels', async () => {
-    const m = materializeRecipe({ recipe: 'minusx/waterfall@1', bindings: { category: 'stage', value: 'users' } });
+    const m = materializeRecipe({ recipe: 'waterfall', bindings: { category: 'stage', value: 'users' } });
     if (!m.ok) throw new Error(m.error);
     const svg = await renderVegaLiteToSvg(m.spec, WATERFALL_ROWS, 'dark', { width: 480, height: 300 });
     expect(svg).toContain('mark-rect');
