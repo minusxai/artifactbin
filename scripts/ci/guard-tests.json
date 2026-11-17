@@ -4,6 +4,7 @@
   "scripts/__tests__/ci-cache-contracts.test.mjs",
   "scripts/__tests__/gate-chunk-paths.test.mjs",
   "scripts/__tests__/gate-labels.test.mjs",
+  "scripts/__tests__/gate-pages.test.mjs",
   "scripts/__tests__/gate-starters.test.mjs",
   "scripts/__tests__/gate-waits.test.mjs",
   "scripts/__tests__/html-author-skill.test.mjs",
