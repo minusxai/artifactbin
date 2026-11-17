@@ -184,7 +184,7 @@ it('lays main\'s measured node times over the table on every node runner, fetche
  const batch=at(step=>step.if==='matrix.batch'&&(step.run??'').includes('vitest.node-batch.config.ts'));
  for(const index of [fetch,wait])expect(steps[index].if).toBe('matrix.batch');
  // Started right after checkout (ci.mjs is builtin-only, so any Node runs it), in the background.
- expect(fetch).toBe(steps.findIndex(step=>step.uses?.startsWith('actions/checkout@'))+1);
+ expect(fetch).toBe(steps.findIndex(step=>step.id==='checkout')+1);
  expect(steps[fetch].run.trim()).toMatch(/&$/);
  expect(steps[fetch].run).toContain('< /dev/null > /dev/null 2>&1 &');
  expect(steps[fetch].env.GH_TOKEN).toBe('${{ github.token }}');
@@ -250,7 +250,7 @@ it('uses Node 22 in every pr fast job: the tool cache\'s, else the runner\'s own
  const steps=workflow('pr-fast.yml').jobs.fast.steps;
  const probe=steps.findIndex(step=>step.id==='runner-node'),setup=steps.findIndex(step=>step.uses?.startsWith('actions/setup-node@'));
  expect(probe).toBe(0);
- expect(steps[1].uses).toMatch(/^actions\/checkout@/);
+ expect(steps[1].id).toBe('checkout');
  expect(steps[probe].run).toContain('node --version');
  expect(steps[probe].run).toContain('$GITHUB_OUTPUT');
  expect(steps[probe].run).toContain('$GITHUB_PATH');
@@ -259,12 +259,16 @@ it('uses Node 22 in every pr fast job: the tool cache\'s, else the runner\'s own
  expect(setup).toBeLessThan(steps.findIndex(step=>step.id==='install'));
  expect(steps.find(step=>step.id==='install').with.key).toContain('-node22-');
 });
-// No step of pr fast fetches or pushes after checkout, so its token is never written into the checkout's git config: that
-// saves the auth setup (~0.3s, run 44114175470's api-14) and the post step that removed it again after the tests, and no
-// test can reach a credential through git.
-it('checks out without persisting the token',()=>{
- const checkout=workflow('pr-fast.yml').jobs.fast.steps.find(step=>step.uses?.startsWith('actions/checkout@'));
- expect(checkout.with).toEqual({'persist-credentials':false});
+// No step of pr fast fetches or pushes after checkout, so its token is never written into the checkout's git config: no auth
+// setup (~0.3s, run 44114175470's api-14), no post step removing it again after the tests, and no test can reach a credential
+// through git. The hedged checkout hands it to git in the environment alone (scripts/__tests__/workflows.test.mjs runs it
+// and reads the checkout's config); here, that no step runs anything after the tests but the clock.
+it('checks out without persisting the token, and leaves no post step',()=>{
+ const steps=workflow('pr-fast.yml').jobs.fast.steps,checkout=steps.find(step=>step.id==='checkout');
+ expect(checkout.uses).toBeUndefined();
+ expect(checkout.run).toContain('export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=');
+ expect(checkout.run).not.toMatch(/git config|extraheader=|credential/);
+ expect(steps.filter(step=>step.uses&&!/^actions\/(cache\/(restore|save)|setup-node|upload-artifact)@/.test(step.uses))).toEqual([]);
 });
 // Runs the probe step's shell with `node` answering only --version: any JavaScript evaluation fails the probe.
 // The default `gh` and `cat` answer at once; the probe returns only once its background fetch has landed, so nothing still

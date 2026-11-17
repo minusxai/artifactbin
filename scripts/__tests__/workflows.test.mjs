@@ -1,6 +1,7 @@
 /** CI job-ownership contracts and immutable maintenance action pins. */
-import { existsSync, readFileSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import yaml from 'yaml';
 import { describe, expect, it } from 'vitest';
@@ -24,14 +25,86 @@ describe('the public repository boundary', () => {
   });
 });
 
+const checkoutStep = () => yaml.parse(readFileSync(path.join(root, '.github/workflows/pr-fast.yml'), 'utf8')).jobs.fast.steps.find((step) => step.id === 'checkout');
+
+/** Runs pr fast's checkout step in an empty workspace against a local origin whose HEAD is one commit past the target. */
+function runCheckout({ stallFirst = false, failAll = false, attempts = checkoutStep().env.CHECKOUT_ATTEMPTS } = {}) {
+  const base = mkdtempSync(path.join(tmpdir(), 'afbin-checkout-'));
+  const origin = path.join(base, 'server', 'o', 'r'), work = path.join(base, 'work'), temp = path.join(base, 'temp');
+  const release = path.join(base, 'release'), calls = path.join(base, 'fetches');
+  for (const dir of [origin, work, temp]) mkdirSync(dir, { recursive: true });
+  const env = { PATH: process.env.PATH, HOME: base, GIT_CONFIG_NOSYSTEM: '1', GIT_TERMINAL_PROMPT: '0' };
+  const inOrigin = (...args) => execFileSync('git', ['-C', origin, '-c', 'user.name=t', '-c', 'user.email=t@example.invalid', ...args], { env, encoding: 'utf8' }).trim();
+  const commit = (file) => { writeFileSync(path.join(origin, file), `${file[0]}\n`); inOrigin('add', file); inOrigin('commit', '-qm', file); return inOrigin('rev-parse', 'HEAD'); };
+  let target = '0'.repeat(40);
+  if (!failAll) { inOrigin('init', '-q'); commit('root.txt'); target = commit('a.txt'); commit('b.txt'); }
+  const token = 'test-token-not-a-credential';
+  // The stalled attempt blocks, and leaves a detached grandchild holding whatever streams it was given: had the step not
+  // redirected them, that grandchild would hold this spawn open to its timeout, as the runner holds a step open.
+  const hold = `while [ -d '${base}' ] && [ ! -e '${release}' ]; do sleep 0.05; done`;
+  const shim = `git(){ case "$*" in *" fetch "*) printf 'x\\n' >> '${calls}';; esac
+  case "$*" in *checkout-1" "*" fetch "*) if ${stallFirst}; then ( ( ${hold} ) & ); ${hold}; return 1; fi;; esac
+  case "$*" in *" fetch "*) if ${failAll}; then echo 'fatal: unable to access' >&2; return 128; fi;; esac
+  command git "$@"; }`;
+  const result = spawnSync('bash', ['-e', '-o', 'pipefail', '-c', `${shim}\n${checkoutStep().run}`], {
+    cwd: work, encoding: 'utf8', timeout: 20000,
+    env: { ...env, GH_TOKEN: token, GITHUB_SERVER_URL: `file://${path.join(base, 'server')}`, GITHUB_REPOSITORY: 'o/r', GITHUB_SHA: target, GITHUB_REF: 'refs/pull/7/merge', RUNNER_TEMP: temp, CHECKOUT_HEDGE_TICKS: '1', CHECKOUT_ATTEMPTS: String(attempts) },
+  });
+  const git = (...args) => {
+    const options = typeof args.at(-1) === 'object' ? args.pop() : {};
+    const out = spawnSync('git', ['-C', work, ...args], { env, encoding: 'utf8' });
+    if (out.status !== 0 && !options.allowFail) throw new Error(`git ${args.join(' ')}: ${out.stderr}`);
+    return out.stdout.trim();
+  };
+  const fetches = () => (existsSync(calls) ? readFileSync(calls, 'utf8').split('\n').filter(Boolean).length : 0);
+  return { result, target, token, work, git, fetches, cleanup: () => { writeFileSync(release, ''); rmSync(base, { recursive: true, force: true }); } };
+}
+
 describe('workflow supply-chain pins', () => {
-  it('bounds stalled PR checkout transfers without changing the tested revision', () => {
+  // One `git fetch --depth=1` took 0.9s median and 1.8s p99 over 587 pr fast jobs, and 15-63s three times (runs
+  // 44141023943-44148017273), with the low-speed abort never firing. The checkout hedges it: a second attempt starts
+  // beside one that has not landed, and the first to land is checked out. These run the step's own shell (bash -e, as
+  // Actions runs it) against a local origin, with `git fetch` stubbed only where an attempt must stall or fail.
+  it('checks out this exact revision from the attempt that lands while a stalled one still holds its streams open', () => {
+    const run = runCheckout({ stallFirst: true });
+    try {
+      expect(run.result.error, 'a stalled attempt held the step open').toBeUndefined();
+      expect(run.result.status, run.result.stderr).toBe(0);
+      expect(run.result.stdout).toMatch(/attempt 2 of 2\b/);
+      expect(run.git('rev-parse', 'HEAD')).toBe(run.target);
+      expect(run.git('rev-parse', 'refs/remotes/pull/7/merge')).toBe(run.target);
+      expect(run.git('symbolic-ref', '-q', 'HEAD', { allowFail: true })).toBe('');
+      expect(run.git('rev-list', '--count', 'HEAD')).toBe('1');
+      expect(run.git('status', '--porcelain')).toBe('');
+      expect(readFileSync(path.join(run.work, 'a.txt'), 'utf8')).toBe('a\n');
+      expect(existsSync(path.join(run.work, 'b.txt'))).toBe(false);
+      // The token reached git through its environment alone: nothing of it, or of an auth header, is left in the checkout.
+      const config = readFileSync(path.join(run.work, '.git', 'config'), 'utf8');
+      for (const secret of [run.token, Buffer.from(`x-access-token:${run.token}`).toString('base64'), 'extraheader']) expect(config).not.toContain(secret);
+    } finally { run.cleanup(); }
+  });
+  it('starts the next attempt at once when one fails, and fails the step only when every attempt has failed', () => {
+    const run = runCheckout({ failAll: true, attempts: 2 });
+    try {
+      expect(run.result.error).toBeUndefined();
+      expect(run.result.status).not.toBe(0);
+      expect(run.result.stdout).toContain('::error::');
+      expect(run.fetches()).toBe(2);
+      expect(existsSync(path.join(run.work, '.git'))).toBe(false);
+    } finally { run.cleanup(); }
+  });
+  it('replaces actions/checkout as the step after the Node probe, bounding idle transfers and fetching the run\'s own sha', () => {
     const fast = yaml.parse(readFileSync(path.join(root, '.github/workflows/pr-fast.yml'), 'utf8'));
-    const checkout = fast.jobs.fast.steps.find(step => step.uses?.startsWith('actions/checkout@'));
-    expect(checkout.env?.GIT_HTTP_LOW_SPEED_LIMIT).toBe('1024');
-    expect(checkout.env?.GIT_HTTP_LOW_SPEED_TIME).toBe('10');
-    expect(checkout.with?.ref).toBeUndefined();
+    const steps = fast.jobs.fast.steps;
+    expect(steps.filter((step) => step.uses?.startsWith('actions/checkout@'))).toEqual([]);
+    const checkout = steps[1];
+    expect(checkout.id).toBe('checkout');
+    expect(checkout.env).toMatchObject({ GH_TOKEN: '${{ github.token }}', GIT_HTTP_LOW_SPEED_LIMIT: '1024', GIT_HTTP_LOW_SPEED_TIME: '10' });
+    // Hedged after 3s: past every one of the 587 fetches measured but the three stalls (p99 1.8s, then 2.0s).
+    expect(checkout.env.CHECKOUT_HEDGE_TICKS).toBe('30');
+    expect(Number(checkout.env.CHECKOUT_ATTEMPTS)).toBeGreaterThanOrEqual(3);
     expect(checkout['continue-on-error']).not.toBe(true);
+    expect(checkout.run).toContain('--depth=1 "$url" "+$GITHUB_SHA:$ref"');
   });
   it('uses immutable full commit SHAs for every third-party action', () => {
     for (const file of ['ci.yml', 'pr-fast.yml', 'v3-codeql.yml', 'page-speed.yml']) {

@@ -242,15 +242,93 @@ jobs:
             printf 'major=%s\n' "$runner_major" >> "$GITHUB_OUTPUT"
             printf 'Runner Node: %s\n' "$runner_version"
           fi
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        # Nothing here fetches or pushes after checkout: no token in the git config, so no auth setup and no post step
-        # removing it after the tests.
-        with:
-          persist-credentials: false
-        # Abort an idle HTTP transfer so checkout can retry before it consumes the CI budget.
+      # THE CHECKOUT, HEDGED. actions/checkout's one `git fetch --depth=1` took 0.9s median and 1.8s p99 over 587 jobs (runs
+      # 44138698759-44150141230), and 15-63s three times (44148017273's node-3 62.5s and api-30 15.3s, 44141023943's api-20
+      # 18.8s): one connection stalled while bytes still trickled, so the low-speed abort below never fired, and the whole
+      # run waited on that one runner (93s). This step fetches the same revision the same way (this run's exact
+      # $GITHUB_SHA, depth 1, into the ref actions/checkout used) and, when an attempt has neither landed nor failed after
+      # CHECKOUT_HEDGE_TICKS tenths of a second, or fails, starts another beside it, up to CHECKOUT_ATTEMPTS; the first to
+      # land is checked out and the rest are stopped. Each attempt fetches into its own git directory under RUNNER_TEMP
+      # with every stream redirected to its own log, since a stalled one left holding the step's output would hold the
+      # step open; so which attempt won never changes what is checked out. The token reaches git only through its
+      # environment (GIT_CONFIG_*), never argv or .git/config: nothing after this fetches or pushes, no test can read a
+      # credential through git, and no post step has to remove one. Behaviour: scripts/__tests__/workflows.test.mjs.
+      - id: checkout
+        name: Check out this revision, hedging a stalled fetch
         env:
+          GH_TOKEN: ${{ github.token }}
           GIT_HTTP_LOW_SPEED_LIMIT: '1024'
           GIT_HTTP_LOW_SPEED_TIME: '10'
+          CHECKOUT_HEDGE_TICKS: '30'
+          CHECKOUT_ATTEMPTS: '4'
+        run: |
+          url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY"
+          case "$GITHUB_REF" in
+            refs/pull/*) ref="refs/remotes/pull/${GITHUB_REF#refs/pull/}" ;;
+            refs/heads/*) ref="refs/remotes/origin/${GITHUB_REF#refs/heads/}" ;;
+            *) ref=refs/remotes/origin/checkout ;;
+          esac
+          if [ -n "$GH_TOKEN" ]; then
+            GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
+            export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0="http.$GITHUB_SERVER_URL/.extraheader" GIT_CONFIG_VALUE_0
+          fi
+          attempts=0
+          pids=()
+          launch() {
+            attempts=$((attempts + 1))
+            dir="$RUNNER_TEMP/checkout-$attempts"
+            rm -rf "$dir"
+            git init -q "$dir"
+            git -C "$dir" -c protocol.version=2 fetch --no-tags --no-recurse-submodules --depth=1 "$url" "+$GITHUB_SHA:$ref" < /dev/null > "$dir.log" 2>&1 &
+            pids[attempts]=$!
+            ticks=0
+          }
+          launch
+          winner=
+          while [ -z "$winner" ]; do
+            sleep 0.1
+            ticks=$((ticks + 1))
+            live=0
+            i=1
+            while [ "$i" -le "$attempts" ]; do
+              pid=${pids[i]}
+              if [ -z "$pid" ]; then
+                :
+              elif kill -0 "$pid" 2> /dev/null; then
+                live=$((live + 1))
+              elif wait "$pid"; then
+                winner=$i
+                break
+              else
+                pids[i]=
+                echo "::warning::Checkout attempt $i of $attempts failed:"
+                cat "$RUNNER_TEMP/checkout-$i.log"
+              fi
+              i=$((i + 1))
+            done
+            if [ -n "$winner" ]; then
+              break
+            elif [ "$attempts" -lt "$CHECKOUT_ATTEMPTS" ] && { [ "$live" -eq 0 ] || [ "$ticks" -ge "$CHECKOUT_HEDGE_TICKS" ]; }; then
+              launch
+            elif [ "$live" -eq 0 ]; then
+              echo "::error::Every one of $attempts checkout attempts failed"
+              exit 1
+            fi
+          done
+          i=1
+          while [ "$i" -le "$attempts" ]; do
+            pid=${pids[i]}
+            if [ "$i" != "$winner" ] && [ -n "$pid" ]; then
+              pkill -P "$pid" 2> /dev/null || true
+              kill "$pid" 2> /dev/null || true
+            fi
+            i=$((i + 1))
+          done
+          cat "$RUNNER_TEMP/checkout-$winner.log"
+          rm -rf .git
+          mv "$RUNNER_TEMP/checkout-$winner/.git" .git
+          git checkout -q --force --detach "$GITHUB_SHA"
+          printf 'Checked out %s (%s) from attempt %s of %s\n' "$(git rev-parse HEAD)" "$ref" "$winner" "$attempts"
       # MAIN'S MEASURED NODE TIMES (scripts/lib/node-batch.mjs, `.github/workflows/node-timings.yml`): the node batch's
       # files and packing come from the committed table with the newest times main measured before this run laid over it,
       # add-only, so a file the full suite has timed under the cut joins without a hand refresh. Fetched IN THE BACKGROUND
