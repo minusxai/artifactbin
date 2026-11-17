@@ -9,7 +9,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import yaml from 'yaml';
-import { debsToInstall, installedFrom, packageOfDeb, parseArgs } from '../ci/system-debs.mjs';
+import { ONLINE_BOUND_MS, debsToInstall, failureSummary, installedFrom, packageOfDeb, parseArgs } from '../ci/system-debs.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const workflows = readdirSync(path.join(root, '.github/workflows')).filter((file) => /\.ya?ml$/.test(file))
@@ -42,6 +42,24 @@ describe('the planner', () => {
     expect(parseArgs(['/c', '--', 'npx', 'playwright', 'install-deps', 'webkit']).online).toEqual(['npx', 'playwright', 'install-deps', 'webkit']);
     expect(() => parseArgs(['/c'])).toThrow(/usage/);
     expect(() => parseArgs(['/c', '--provides', '--', 'x'])).toThrow(/usage/);
+  });
+});
+
+// THE ONLINE COMMAND IS BOUNDED (its process behaviour, timers and real child processes, is system-debs-online.test.mjs,
+// kept out of this guard file's pr fast runner): one minute an attempt, and one line that says why it failed.
+describe('the online install', () => {
+  it('allows each attempt a minute', () => {
+    expect(ONLINE_BOUND_MS).toBe(60_000);
+  });
+
+  it('sums a failure up in one line: each attempt, then apt\'s last errors, else its last output', () => {
+    const hung = { status: null, timedOut: true, errors: [], last: '0% [Connecting to azure.archive.ubuntu.com (52.252.75.106)]' };
+    expect(failureSummary(['sh', '-c', 'sudo apt-get update'], [hung, { ...hung, status: 100, timedOut: false }])).toBe(
+      '::error::system-debs: `sh -c sudo apt-get update` failed twice (1: timed out after 60s, 2: exit 100); last output: 0% [Connecting to azure.archive.ubuntu.com (52.252.75.106)]');
+    const broken = { status: 100, timedOut: false, errors: ['E: Failed to fetch a', 'E: Unable to fetch some archives'], last: 'E: Unable to fetch some archives' };
+    expect(failureSummary(['npx', 'playwright', 'install-deps', 'webkit'], [broken, { ...broken, errors: ['E: Unable to fetch some archives', 'W: mixed mirror'] }])).toBe(
+      '::error::system-debs: `npx playwright install-deps webkit` failed twice (1: exit 100, 2: exit 100); apt said: E: Failed to fetch a | E: Unable to fetch some archives | W: mixed mirror');
+    expect(failureSummary(['x'], [{ status: null, timedOut: false, errors: [] }, { status: 3, timedOut: false, errors: [] }])).toBe('::error::system-debs: `x` failed twice (1: did not start, 2: exit 3)');
   });
 });
 

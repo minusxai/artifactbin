@@ -18,8 +18,16 @@
  * cache key). Its exit status is this program's; the .debs it newly downloads into apt's archive are copied into the
  * cache dir, so the job's cache step saves a closure the next run installs offline. `--provides` names a file the
  * install must leave (bubblewrap's /usr/bin/bwrap): missing after the offline path, the online one runs.
+ *
+ * THE ONLINE COMMAND IS BOUNDED: `ONLINE_BOUND_MS` per attempt, one retry, then a one-line summary. On 2026-11-11 a
+ * mirror DNS outage left apt retrying for up to 13 minutes per shard (runs 43055731174, 43061010909: 370s in one
+ * bubblewrap step); on 2026-11-16 a mixed mirror broke `playwright install-deps` (run 43846415190), its cause buried in
+ * 2,000 lines of dpkg output. An attempt past the bound is stopped as a whole process group: SIGTERM first, which sudo
+ * relays to the apt it runs, then SIGKILL; dpkg is then told to finish whatever it was interrupted in, so the retry
+ * does not fail on a half-configured package. The summary (`::error::`) names each attempt's outcome and apt's last
+ * error lines, so the cause is the first thing the log shows.
  */
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -103,12 +111,109 @@ function offline({ cacheDir, provides }) {
   return true;
 }
 
-function main() {
+/** One online attempt's bound (ms): a healthy mirror installs a closure in seconds; an outage retries for minutes. */
+export const ONLINE_BOUND_MS = 60_000;
+/** How long a stopped attempt gets between SIGTERM and SIGKILL (ms). */
+const GRACE_MS = 5_000;
+/** apt and dpkg's own failure lines: `E: …`, `Err:N …`, `W: …`, `dpkg: error …`. */
+const APT_ERROR = /^(?:E:|Err:\d*|W:|dpkg: error)/;
+
+/**
+ * Run `command` with this process's output, stopped after `boundMs` as a whole process group (SIGTERM, then SIGKILL
+ * `graceMs` later). Resolves its outcome, the apt error lines it printed (the last few) and its last line of output.
+ * @returns {Promise<{ status: number | null, timedOut: boolean, errors: string[], last: string }>}
+ */
+export function runBounded(command, args, { boundMs = ONLINE_BOUND_MS, graceMs = GRACE_MS } = {}) {
+  return new Promise((resolve) => {
+    const child = spawn(command, args, { detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    const errors = [];
+    let last = '';
+    const note = (line) => {
+      const text = line.trim();
+      if (text) last = text;
+      if (APT_ERROR.test(text)) errors.push(text);
+      if (errors.length > 3) errors.shift();
+    };
+    const partial = { stdout: '', stderr: '' };
+    for (const stream of ['stdout', 'stderr']) child[stream].on('data', (chunk) => {
+      process[stream].write(chunk);
+      const lines = (partial[stream] + chunk.toString('utf8')).split('\n');
+      partial[stream] = lines.pop() ?? '';
+      lines.forEach(note);
+    });
+    const signal = (name) => { try { process.kill(-child.pid, name); } catch { /* the group is gone */ } };
+    let timedOut = false;
+    let kill;
+    let exited = null;
+    const bound = setTimeout(() => {
+      timedOut = true;
+      signal('SIGTERM');
+      // A process that left the group (a new session) and kept the output pipe open must not hold this one open too.
+      kill = setTimeout(() => { signal('SIGKILL'); kill = setTimeout(() => settle(exited), 2_000); }, graceMs);
+    }, boundMs);
+    let settled = false;
+    const settle = (status) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(bound);
+      clearTimeout(kill);
+      if (timedOut) signal('SIGKILL');
+      Object.values(partial).forEach(note);
+      resolve({ status, timedOut, errors: [...errors], last });
+    };
+    child.on('error', (error) => { errors.push(error.message); settle(null); });
+    child.on('exit', (status) => { exited = status; });
+    child.on('close', (status) => settle(status));
+  });
+}
+
+const outcome = ({ status, timedOut }, boundMs) => (timedOut ? `timed out after ${Math.round(boundMs / 1000)}s` : status === null ? 'did not start' : `exit ${status}`);
+
+/**
+ * The online command, bounded, retried once. Resolves 0 or the last attempt's status, and on failure prints one
+ * `::error::` line naming both attempts and apt's last error lines.
+ * @param {string[]} online the command and its arguments
+ * @param {{ boundMs?: number, graceMs?: number, recover?: () => unknown, log?: (line: string) => void }} [options]
+ */
+export async function installOnline(online, { boundMs = ONLINE_BOUND_MS, graceMs = GRACE_MS, recover = recoverDpkg, log = console.log } = {}) {
+  const attempts = [];
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const result = await runBounded(online[0], online.slice(1), { boundMs, graceMs });
+    attempts.push(result);
+    if (result.status === 0 && !result.timedOut) return 0;
+    if (attempt === 1) {
+      log(`system-debs: attempt 1 of \`${online.join(' ')}\` ${outcome(result, boundMs)}; retrying once`);
+      if (result.timedOut) await recover();
+    }
+  }
+  log(failureSummary(online, attempts, boundMs));
+  return attempts.at(-1).status || 1;
+}
+
+/**
+ * The one line a failed online install prints: each attempt's outcome and apt's last error lines. A hung mirror prints
+ * no error before apt's own timeouts, so then its last line (`0% [Connecting to …]`) names what it waited on.
+ * @param {string[]} online
+ * @param {{ status: number | null, timedOut: boolean, errors: string[], last?: string }[]} attempts
+ */
+export function failureSummary(online, attempts, boundMs = ONLINE_BOUND_MS) {
+  const errors = [...new Set(attempts.flatMap((result) => result.errors))].slice(-3);
+  const last = attempts.at(-1)?.last;
+  const said = errors.length ? `; apt said: ${errors.join(' | ')}` : last ? `; last output: ${last}` : '';
+  return `::error::system-debs: \`${online.join(' ')}\` failed twice (${attempts.map((result, i) => `${i + 1}: ${outcome(result, boundMs)}`).join(', ')})${said}`;
+}
+
+/** After a stopped attempt: let dpkg finish a package it was interrupted in (bounded too; its outcome is not ours). */
+function recoverDpkg() {
+  return runBounded(...asRoot('dpkg', ['--configure', '-a']), { boundMs: ONLINE_BOUND_MS, graceMs: GRACE_MS });
+}
+
+async function main() {
   const options = parseArgs(process.argv.slice(2));
   if (offline(options)) return 0;
   const before = new Set(debsIn(ARCHIVES));
-  const status = run(options.online[0], options.online.slice(1));
-  if (status !== 0) return status ?? 1;
+  const status = await installOnline(options.online);
+  if (status !== 0) return status;
   if (options.provides && !existsSync(options.provides)) {
     console.error(`system-debs: \`${options.online.join(' ')}\` succeeded but left no ${options.provides}`);
     return 1;
@@ -120,4 +225,4 @@ function main() {
   return 0;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) process.exitCode = main();
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) process.exitCode = await main();
