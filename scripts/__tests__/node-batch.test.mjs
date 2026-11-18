@@ -158,6 +158,13 @@ describe('pr fast\'s node files beyond the batch', () => {
     expect(NODE_AFFECTED_BUDGET_MS).toBeGreaterThan(0);
   });
 
+  it('adds none of the files a rerun trigger reaches, every one equally: the change\'s own files still run', () => {
+    // A vitest.config.ts or package.json change reaches every file at distance Infinity (scripts/lib/test-graph.mjs); a
+    // budget's worth of the shortest was an arbitrary subset, on a cold module cache: #1339's node runners took 27-36s.
+    const everything = [...candidates].map((file) => ({ file, distance: Infinity }));
+    expect(choose(['b.test.ts', 'vitest.config.ts'], everything, 60_000)).toEqual({ must: ['b.test.ts'], affected: [], deferred: ['a.test.ts', 'c.test.ts', 'd.test.ts', 'e.test.ts', 'f.test.ts', 'g.test.ts', 'new.test.ts'] });
+  });
+
   it('gives the batch config the chosen files as an isolated project only when a runner wrote them', () => {
     const dir = tempDirSync('node-affected-', onTestFinished);
     expect(readNodeAffected(dir)).toEqual([]);
