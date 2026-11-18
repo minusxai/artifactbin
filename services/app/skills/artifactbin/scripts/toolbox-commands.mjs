@@ -14,9 +14,10 @@ function flag(type = 'string', multiple = false) {
 
 const commands = {
   auth: {sub: {
-    login: {email: flag(), challenge: flag(), 'code-file': flag(), audience: flag()},
-    status: {audience: flag()},
-    logout: {local: flag('boolean'), audience: flag()}
+    login: {email: flag(), challenge: flag(), 'code-file': flag(), audience: flag(),
+      'as-group': flag(), level: flag()},
+    status: {audience: flag(), 'as-group': flag()},
+    logout: {local: flag('boolean'), audience: flag(), 'as-group': flag()}
   }},
   serve: {flags: {port: flag(), autofix: flag('boolean')}},
   autofix: {listed: false, flags: {'dry-run': flag('boolean'), root: flag()}},

@@ -5,7 +5,8 @@ import {canUseDeploymentIdentity} from './deployment-identity';
  * unknown and revoked are indistinguishable to callers.
  *
  * A token may be anonymous (user_id NULL) or bound to a user; artifacts it
- * creates inherit that owner at publish time.
+ * creates inherit that owner at publish time. A GROUP's sign-in (`group_id` set, user_id NULL too: contracts
+ * identity-service `GROUP_SIGN_IN_RULE`) is neither: no read here ever takes it for an anonymous token.
  */
 import crypto from 'crypto';
 import { getDb, emit, currentRequest, services } from '../platform';
@@ -188,6 +189,8 @@ export async function resolveToken(presented: string): Promise<ResolvedToken | n
 /** The hash is a secret column only the identity module reads: it answers the live row, this decides admission. */
 async function lookUpToken(hash: string): Promise<ResolvedToken | null> {
   const row = await services().identity.findToken({ hash });
+  // A group's sign-in is never a bare token here: the identity host's actor carries it (refused at the app's edge).
+  if (row?.groupId) return null;
   const db = await getDb();
   return row && await canUseDeploymentIdentity(row.userId,db) && await canAuthenticateUser(row.userId, db) ? { id: row.id, userId: row.userId, clientHarness: row.clientHarness as Harness | null, ...(row.audience?{audience:row.audience}:{}) } : null;
 }
@@ -213,7 +216,7 @@ export async function rememberTokenClient(id: string, harness: Harness): Promise
 export async function resolveTokenById(id: string): Promise<ResolvedToken | null> {
   const db = await getDb();
   const r = await db.query<{ id: string; user_id: string | null; client_harness: Harness | null }>(
-    `SELECT id, user_id, client_harness FROM tokens WHERE id = $1 AND ${LIVE_TOKEN_SQL}`,
+    `SELECT id, user_id, client_harness FROM tokens WHERE id = $1 AND tokens.group_id IS NULL AND ${LIVE_TOKEN_SQL}`,
     [id],
   );
   const row = r.rows[0];
@@ -269,13 +272,23 @@ export interface TokenRow {
   issued_by: string | null;
   /** The `tokens` view's rule: a run sign-in whose parent credential ended is no longer live. */
   live: boolean;
+  /** A group's sign-in this account authorised (`issued_by` is then this account): its group, that group's name and the level. */
+  group_id: string | null;
+  group_name: string | null;
+  group_role: 'member' | 'editor' | null;
 }
 
-/** The account's LIVE tokens, most recently used first, then newest minted — the list GET /api/my/tokens serves. */
+/**
+ * The account's LIVE tokens, most recently used first, then newest minted — the list GET /api/my/tokens serves: its own,
+ * and every group's sign-in it authorised (an agent acting as a group, not as this account), with the group named.
+ */
 export async function listTokensByUser(userId: string): Promise<TokenRow[]> {
   const db = await getDb();
   return (await db.query<TokenRow>(
-    'SELECT id, name, user_id, created_at, deleted_at, expires_at, last_used_at, issued_by, live FROM tokens WHERE user_id = $1 AND deleted_at IS NULL ORDER BY last_used_at DESC NULLS LAST, created_at DESC',
+    `SELECT t.id, t.name, t.user_id, t.created_at, t.deleted_at, t.expires_at, t.last_used_at, t.issued_by, t.live, t.group_id, g.name AS group_name, t.group_role
+       FROM tokens t LEFT JOIN groups g ON g.id = t.group_id
+      WHERE (t.user_id = $1 OR (t.group_id IS NOT NULL AND t.user_id IS NULL AND t.grant_id IS NULL AND t.issued_by = $1)) AND t.deleted_at IS NULL
+      ORDER BY t.last_used_at DESC NULLS LAST, t.created_at DESC`,
     [userId],
   )).rows;
 }

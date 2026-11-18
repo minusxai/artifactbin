@@ -5,8 +5,9 @@ import {ARTIFACT_WORKLOAD_PATH,APP_ARTIFACT_WORKLOAD_PATH,SERVICE_PAYLOAD_LIMIT,
  * is service-authenticated (SERVICE_AUTH_HEADER) and refused without it:
  *  - session-live (INTERNAL__SERVICE_SECRET): is a human session still live (the pages sessions' revalidation);
  *  - identity introspection (contracts `IDENTITY_INTROSPECT_PATH`): a presented token, answered with its principal
- *    (always a person, `principal_kind: 'user'`), user, id, scopes, audience, expiry and, for an exchanged token, the
- *    credential it was issued for. An
+ *    (a person, `principal_kind: 'user'`, or for a group's sign-in the group at its level with `user_id` null:
+ *    contracts identity-service `GROUP_SIGN_IN_RULE`, which the bearer read decides), user, id, scopes, audience,
+ *    expiry and, for an exchanged token, the credential it was issued for. An
  *    access token is read by the one bearer read every API request is admitted by (token, OAuth family fence,
  *    identity) and must be bound to this deployment's API or to a configured service (IDENTITY__SERVICE_AUDIENCES); a
  *    exchanged token is verified by its signature (./identity/service-tokens) and by its
@@ -42,7 +43,7 @@ import {testDomainSignInOf} from './config';
 import {IdentityNotReady,createIdentityStore,ensureIdentitySchema} from './identity-store';
 import {isServiceToken,verifyServiceToken,serviceTokenKey} from './identity/service-tokens';
 import {artifactReadKey,signArtifactReadGrant,verifyArtifactReadGrant} from './identity/artifact-read-grants';
-/** A person's token: no group principal (every active introspection answer, until group sign-ins exist). */
+/** A person's token: no group principal. */
 const PERSON={group_id:null,group_role:null,issued_by:null} as const;
 /** The lifetime a run sign-in asks for (`expires_in`, seconds; absent: the default), clamped to the token bounds; null when malformed. */
 const runLifetime=(asked:unknown):number|null=>asked===undefined?DEFAULT_TOKEN_TTL_MS
@@ -79,12 +80,13 @@ export function sessionAuthority(o:AuthOptions):Part<AuthEnv>{return {name:'sess
   * database. The record, or null.
   */
  const activeUser=async(userId:string)=>!!o.identityDb&&(await o.identityDb.query<{active:boolean}>(`SELECT active FROM ${readSchema}.users WHERE id=$1`,[userId])).rows[0]?.active===true;
- const live=async(c:Context<AuthEnv>,token:TokenRecord|null):Promise<(TokenRecord&{userId:string})|null>=>{
-  const userId=token?.userId;
-  if(!token||!userId||!o.identityDb)return null;
+ const live=async(c:Context<AuthEnv>,token:TokenRecord|null):Promise<TokenRecord|null>=>{
+  if(!token||!o.identityDb||(!token.userId&&!token.groupId))return null;
   const origins=acceptedOriginsOf(c.req.raw,o.trustedHops??0,readEnv(o.env,'APP__PUBLIC_BASE_URL'),parseAliasOrigins(readEnv(o.env,'APP__ALIAS_ORIGINS')));
   if(token.audience&&!origins.some(origin=>token.audience===`${origin}${API_RESOURCE_PATH}`)&&!audiences.some(service=>service.origin===token.audience))return null;
-  return await activeUser(userId)?{...token,userId}:null;
+  // A group's sign-in: the bearer read applied its whole rule (the authorising person's `active` included).
+  if(token.groupId)return token.userId===null&&token.issuedBy&&token.groupRole?token:null;
+  return await activeUser(token.userId!)?token:null;
  };
  /** An exchanged token's parent, still live for that same user: its row in the `tokens` or `sessions` view, as a service re-checks it. */
  const parentLive=async(parent:ServiceTokenParent,userId:string)=>!!o.identityDb&&(await o.identityDb.query<{live:boolean}>(parent.kind==='token'
@@ -104,7 +106,8 @@ export function sessionAuthority(o:AuthOptions):Part<AuthEnv>{return {name:'sess
    }
    const token=await live(c,await o.tokens.byToken(input.token));
    if(!token||(only&&token.audience!==only.origin))return inactive;
-   return answer({active:true,principal_kind:'user',user_id:token.userId,token_id:token.id,scopes:token.scope?.split(/\s+/).filter(Boolean)??[],audience:token.audience??null,expires_at:token.expiresAt??null,parent:null,...PERSON,issued_by:token.issuedBy??null} satisfies IdentityIntrospectResponse);
+   if(token.groupId&&token.groupRole&&token.issuedBy)return answer({active:true,principal_kind:'group',user_id:null,token_id:token.id,scopes:token.scope?.split(/\s+/).filter(Boolean)??[],audience:token.audience??null,expires_at:token.expiresAt??null,parent:null,group_id:token.groupId,group_role:token.groupRole,issued_by:token.issuedBy} satisfies IdentityIntrospectResponse);
+   return answer({active:true,principal_kind:'user',user_id:token.userId!,token_id:token.id,scopes:token.scope?.split(/\s+/).filter(Boolean)??[],audience:token.audience??null,expires_at:token.expiresAt??null,parent:null,...PERSON,issued_by:token.issuedBy??null} satisfies IdentityIntrospectResponse);
   }catch{return answer({error:'session_unavailable'},503);}
  });
  app.all(RUN_SIGN_IN_PATH,async(c,next)=>{

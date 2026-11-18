@@ -61,10 +61,10 @@ const retryHint=unsafe=>unsafe?'Resume only the saved supported journal; reconci
 export function makeClient(server,{env=process.env,fetcher=fetch,retryDelays,identity}={}){
  server=serverOrigin(server);const root=credentialRoot(env);let who=identity;
  async function grant(signal){
-if(env.ARTIFACTBIN_TOKEN){if(envServer(env)!==server)throw new ToolError(
-    'credential_origin_mismatch','Environment grant belongs to another origin.',3);return {server,
-    token:env.ARTIFACTBIN_TOKEN};}
-  const shared=await platform();let saved=await shared.readCredentials(server,root);
+const group=env.ARTIFACTBIN_AS_GROUP||undefined;if(env.ARTIFACTBIN_TOKEN&&!group){if(envServer(env)
+    !==server)throw new ToolError('credential_origin_mismatch','Environment grant belongs to '+
+    'another origin.',3);return {server,token:env.ARTIFACTBIN_TOKEN};}const shared=await platform(
+    );let saved=await shared.readCredentials(server,root,undefined,group);
 if(!saved)throw new ToolError('auth_required','No saved grant for this origin.',3,
     `Run ${LOGIN}. ${SIGN_IN}`);
 if(saved.expiresAt&&saved.expiresAt<Date.now()+30000){try{saved=await shared.refreshCredentials(

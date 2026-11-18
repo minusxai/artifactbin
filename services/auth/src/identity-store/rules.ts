@@ -45,3 +45,27 @@ export const groupAdminsSql = (names: GroupNames): string => `SELECT g.id AS gro
     WITH RECURSIVE up(id, depth) AS (SELECT g.id, 0 UNION ALL SELECT p.id, up.depth+1 FROM up JOIN ${names.groups} c ON c.id=up.id JOIN ${names.groups} p ON p.id=c.parent_id WHERE p.deleted_at IS NULL AND up.depth<10000)
     SELECT DISTINCT ON (m.user_id) m.user_id, up.id AS via_group_id FROM up JOIN ${names.group_members} m ON m.group_id=up.id AND m.role='admin' ORDER BY m.user_id, up.depth) a
   WHERE g.deleted_at IS NULL`;
+
+/**
+ * HOLDING AT LEAST A LEVEL on a group (contracts identity-service `GROUP_SIGN_IN_RULE`), one spelling: does the person
+ * whose id is the SQL expression `user` hold at least `level` (an SQL expression, `'member'` or `'editor'`; anything
+ * else holds nothing) on the live group `group`. An admin (a direct `admin` row, or an effective admin through an
+ * ancestor: `groupAdminsSql`) holds editor and member; a direct `editor` row holds editor and member; a direct
+ * `member` row holds member. Editor and Member never flow down the tree. The mint's guard and the `tokens` view's
+ * `live` both run it (./accounts `mintGroupSignIn`, ./views).
+ */
+export const groupLevelHeldSql = (names: GroupNames, user: string, group: string, level: string): string => `(${level} IN ('member','editor') AND (EXISTS (
+    SELECT 1 FROM ${names.group_members} held JOIN ${names.groups} held_group ON held_group.id=held.group_id AND held_group.deleted_at IS NULL
+    WHERE held.group_id=${group} AND held.user_id=${user} AND (held.role='admin' OR held.role=${level} OR (held.role='editor' AND ${level}='member')))
+  OR EXISTS (SELECT 1 FROM (${groupAdminsSql(names)}) held_admin WHERE held_admin.group_id=${group} AND held_admin.user_id=${user})))`;
+
+/**
+ * A GROUP'S SIGN-IN, LIVE BY ITS AUTHORISATION (contracts identity-service `GROUP_SIGN_IN_RULE`), over the `tokens`
+ * row aliased `t` whose `group_id` is set: no person on the row, a level that is never `admin`, the group live, and the
+ * person who authorised it (`issued_by`) active (`active(id)`: their `users.active`, an SQL boolean) and still holding
+ * at least that level there. A row issued under an approval (`grant_id`) is not live by this rule. The token's own
+ * row, expiry and refresh-family fence are the bearer read's (../identity/bearer `bearerLiveSql`).
+ */
+export const groupSignInLiveSql = (t: string, names: GroupNames, active: (id: string) => string): string => `(${t}.user_id IS NULL AND ${t}.grant_id IS NULL AND ${t}.issued_by IS NOT NULL
+      AND ${t}.group_role IN ('member','editor') AND EXISTS (SELECT 1 FROM ${names.groups} signed_group WHERE signed_group.id=${t}.group_id AND signed_group.deleted_at IS NULL)
+      AND ${active(`${t}.issued_by`)} AND ${groupLevelHeldSql(names, `${t}.issued_by`, `${t}.group_id`, `${t}.group_role`)})`;

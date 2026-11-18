@@ -1,15 +1,19 @@
 /** What this command does and how to use it; also printed by --help. */
 export const DESCRIPTION = `Sign in, inspect or remove this origin's private grant.
 It uses an email one-time code.
-Usage: node scripts/auth.mjs status [--audience SERVICE]
+Usage: node scripts/auth.mjs status [--audience SERVICE|--as-group ID]
        node scripts/auth.mjs login --email ADDRESS
        node scripts/auth.mjs login --challenge HANDLE --code-file FILE [--audience SERVICE]
-       node scripts/auth.mjs logout [--local] [--audience SERVICE]
+         [--as-group ID --level member|editor]
+       node scripts/auth.mjs logout [--local] [--audience SERVICE|--as-group ID]
 Flags: --email ADDRESS starts sign-in and prints a challenge HANDLE; --challenge HANDLE plus
   --code-file FILE (a file holding the code the user received by email; never pass codes on argv)
   completes it. The one grant reaches a service this server issues tokens for: scripts exchange
   it for short-lived tokens (toolbox-service-token.mjs). --audience SERVICE there also saves a
   separate long grant for that service, rarely needed; status and logout take it.
+  --as-group ID --level L signs this agent in AS that group at that level (not as the user, who
+  must hold it there), saved beside the user's grant; ARTIFACTBIN_AS_GROUP=ID makes scripts use it
+  over any environment grant.
   Common: --server ORIGIN (default: the archive origin), --json, --output FILE (never
   overwrites), --help.
 Examples:
@@ -27,166 +31,33 @@ Gotchas: status refreshes the saved grant, so authenticated:false means log in a
 Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write outcome.
   Results never contain credentials.`;
 
-import path from 'node:path';
 import {logoutGrant} from './auth-logout.mjs';
-import {mkdir, readFile, unlink} from 'node:fs/promises';
-import {randomUUID} from 'node:crypto';
-import {
-  runTool,
-  ToolError,
-  serverOrigin,
-  selectedServer,
-  envServer,
-  credentialRoot,
-  platform,
-  jsonFile,
-  exclusive,
-  requireFlags,
-  positional,
-  makeClient
-} from './toolbox-client.mjs';
+import {loginGrant, statusGrant} from './auth-grants.mjs';
+import {runTool, ToolError, serverOrigin, selectedServer, credentialRoot, platform, positional}
+  from './toolbox-client.mjs';
 // Subcommands: status (refreshes the saved grant to prove it works), logout (revokes, then
 // removes the saved grant; --local only removes it), login (two steps: send the code, then
 // exchange it).
+/** @returns {Promise<any>} */
 export async function authCommand({sub, values, positionals}, {env = process.env, fetcher = fetch} =
   {}) {
   positional(positionals, 0);
-  const server = serverOrigin(selectedServer(values, env)),
-    root = credentialRoot(env),
+  const server = serverOrigin(selectedServer(values, env)), root = credentialRoot(env),
     shared = await platform();
-  // status: where the grant comes from (environment or the private store) and whether it has
-  // expired.
-  const audience = values.audience;
+  const audience = values.audience, level = values.level, group = values['as-group'] ??
+    (sub === 'login' ? undefined : env.ARTIFACTBIN_AS_GROUP || undefined);
   if (audience !== undefined && !/^[a-z][a-z0-9-]{0,62}$/.test(audience))
     throw new ToolError('invalid_audience', 'Use the service id the server is configured for.', 2);
-  if (sub === 'status') {
-    let saved = await shared.readCredentials(server, root, audience),
-      refresh = null;
-    const stored = !!saved;
-    const environment = !audience && !!(envServer(env) === server && env.ARTIFACTBIN_TOKEN);
-    // A saved grant is always refreshed, exactly as any other script would when its token is due,
-    // so status proves the grant with the server: one revoked or ended elsewhere reads as signed
-    // out, never as a still-unexpired local token. A refused refresh means log in again.
-    if (!environment && saved) {
-      try {
-        saved = await shared.refreshCredentials(saved, root, {fetch: fetcher});
-      } catch (error) {
-        refresh = error.code === 'refresh_unavailable' ? 'unavailable' : 'refused';
-        if (refresh === 'refused') saved = null;
-      }
-    }
-    return {
-      server,
-      ...(audience ? {audience} : {}),
-      authenticated: environment || !!saved,
-      ...(refresh ? {refresh} : {}),
-      source: environment ? 'environment' : stored ? 'private-store' : 'none',
-      expired: saved?.expiresAt ? Date.now() >= saved.expiresAt : null
-    };
-  }
+  if (group && (!/^[\w-]{1,64}$/.test(group) || audience) || (group || level) && sub === 'login' &&
+    !values.email && !(group && /^(member|editor)$/.test(level)))
+    throw new ToolError('invalid_group', 'Use --as-group ID with --level member|editor.', 2);
+  // Who a sign-in acts as: a group at its level, or the user.
+  const actsAs = saved => group ? {group, level: saved?.groupRole ?? level} : 'user';
+  if (sub === 'status')
+    return statusGrant({server, root, shared, env, fetcher, audience, group, actsAs});
   if (sub === 'logout')
-    return {...await logoutGrant({values, server, root, shared, env, fetcher, audience})};
+    return {...await logoutGrant({values, server, root, shared, env, fetcher, audience, group})};
 
-  const client = makeClient(server, {env, fetcher});
-  // login step 1: email a one-time code and save a private challenge file bound to this origin.
-  if (values.email) {
-    if (values.challenge || values['code-file'] || !/^\S+@\S+\.\S+$/.test(values.email))
-      throw new ToolError('invalid_login', 'Use --email ADDRESS alone to initiate sign-in.', 2);
-    await client.request('/api/auth/email-otp/send-verification-otp', {
-      method: 'POST',
-      body: {email: values.email, type: 'sign-in'},
-      authenticated: false
-    });
-    const handle = randomUUID(),
-      directory = path.join(root, 'challenges');
-    await mkdir(directory, {recursive: true, mode: 0o700});
-    await exclusive(
-      path.join(directory, handle + '.json'),
-      JSON.stringify({server, email: values.email, createdAt: Date.now()})
-    );
-    return {
-      server,
-      challenge: handle,
-      next: 'Wait for the user-provided OTP, ' +
-        'then auth.mjs login --challenge HANDLE --code-file FILE.'
-    };
-  }
-  // login step 2: read the code from a file (never argv), exchange it for a session, then for a
-  // bearer grant.
-  requireFlags(values, ['challenge', 'code-file']);
-  if (!/^[a-f0-9-]{36}$/.test(values.challenge))
-    throw new ToolError('invalid_challenge', 'Use the private handle returned by login.', 2);
-  const file = path.join(root, 'challenges', values.challenge + '.json'),
-    challenge = await jsonFile(file);
-  if (challenge.server !== server || Date.now() - challenge.createdAt > 30 * 60 * 1000)
-    throw new ToolError(
-      'challenge_expired',
-      'Challenge origin or lifetime does not match.',
-      3,
-      'Start sign-in again.'
-    );
-  const code = (await readFile(values['code-file'], 'utf8')).trim();
-  if (!/^[A-Za-z0-9_-]{4,128}$/.test(code))
-    throw new ToolError('invalid_code', 'OTP file must hold only the code the user provided.', 2);
-  const response = await client.request('/api/auth/sign-in/email-otp', {
-    method: 'POST',
-    body: {email: challenge.email, otp: code},
-    authenticated: false,
-    raw: true
-  });
-  const cookies = response.headers
-    .getSetCookie()
-    .map(value => value.split(';')[0])
-    .join('; ');
-  if (!cookies) throw new ToolError('session_missing', 'Sign-in returned no session cookie.', 1);
-  const tokenResponse = await client.request('/api/authentication/token', {
-    method: 'POST',
-    body: {},
-    headers: {Cookie: cookies},
-    authenticated: false
-  });
-  // The service grant, from the same sign-in: its own token, bound to that service's origin.
-  const serviceResponse = audience ? await client.request('/api/authentication/token', {
-    method: 'POST',
-    body: {audience},
-    headers: {Cookie: cookies},
-    authenticated: false
-  }) : null;
-  if (
-    typeof tokenResponse.access_token !== 'string' ||
-    typeof tokenResponse.refresh_token !== 'string' ||
-    typeof tokenResponse.client_id !== 'string' ||
-    !Number.isFinite(tokenResponse.expires_in)
-  )
-    throw new ToolError('invalid_grant_response', 'Sign-in grant was incomplete.', 1);
-  await shared.saveCredentials(
-    {
-      server,
-      token: tokenResponse.access_token,
-      refreshToken: tokenResponse.refresh_token,
-      clientId: tokenResponse.client_id,
-      expiresAt: Date.now() + tokenResponse.expires_in * 1000
-    },
-    root
-  );
-  if (serviceResponse) {
-    const grant = serviceResponse;
-    if (typeof grant.access_token !== 'string' || typeof grant.refresh_token !== 'string' ||
-      typeof grant.client_id !== 'string' || typeof grant.resource !== 'string' ||
-      !Number.isFinite(grant.expires_in))
-      throw new ToolError('invalid_grant_response', 'The service grant was incomplete.', 1);
-    await shared.saveCredentials({
-      server,
-      audience,
-      resource: serviceResponse.resource,
-      token: serviceResponse.access_token,
-      refreshToken: serviceResponse.refresh_token,
-      clientId: serviceResponse.client_id,
-      expiresAt: Date.now() + serviceResponse.expires_in * 1000
-    }, root);
-  }
-  // The challenge is single-use.
-  await unlink(file);
-  return {server, authenticated: true, ...(audience ? {audience} : {})};
+  return loginGrant({values, server, root, shared, env, fetcher, audience, group, level, actsAs});
 }
 await runTool('auth', import.meta.url, authCommand);

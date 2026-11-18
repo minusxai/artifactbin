@@ -104,11 +104,21 @@ export interface IdentityService {
   ensureWebToken(input: {userId: string}): Promise<{id: string; minted: boolean}>;
   /**
    * The live token whose sha256 is `hash` (never the plaintext): the one read of a secret column a reader needs, so it
-   * is the module's. Null when unknown, revoked or expired.
+   * is the module's. Null when unknown, revoked or expired. `groupId`: set on a group's sign-in (./identity-service
+   * `GROUP_SIGN_IN_RULE`), whose `userId` is then null.
    */
-  findToken(input: {hash: string}): Promise<{id: string; userId: string | null; clientHarness: string | null; audience: string | null} | null>;
-  /** Soft revoke a live token (only the owner's, with `userId`); its name, or null when nothing live matched. */
+  findToken(input: {hash: string}): Promise<{id: string; userId: string | null; clientHarness: string | null; audience: string | null; groupId: string | null} | null>;
+  /**
+   * Soft revoke a live token (with `userId`, only that person's own or a group's sign-in they authorised); its name, or
+   * null when nothing live matched.
+   */
   revokeToken(input: {id: string; userId?: string}): Promise<{name: string | null} | null>;
+  /**
+   * A group Admin (direct, or through an ancestor) ends one of the group's sign-ins (./identity-service
+   * `GROUP_SIGN_IN_RULE`): its name, or null when no live sign-in of that group has the id. Not an Admin there:
+   * `forbidden` (403), or `not_found` (404) for someone with no role on the group.
+   */
+  revokeGroupSignIn(input: {actorId: string; groupId: string; id: string}): Promise<{name: string | null} | null>;
   /** Stamp last use, at most once a minute. */
   touchToken(input: {id: string}): Promise<void>;
   setTokenHarness(input: {id: string; harness: string}): Promise<void>;
@@ -142,7 +152,7 @@ export interface IdentityService {
 export type IdentityMethod = keyof IdentityService;
 export const IDENTITY_METHODS: readonly IdentityMethod[] = [
   'syncProfile', 'createUser', 'ensureUsername', 'setUsername', 'setImageKey', 'confirmWelcome', 'setAutoAcceptMentions', 'createTestUser', 'eraseTestUser',
-  'mintToken', 'ensureWebToken', 'findToken', 'revokeToken', 'touchToken', 'setTokenHarness', 'markRequestAuthority',
+  'mintToken', 'ensureWebToken', 'findToken', 'revokeToken', 'revokeGroupSignIn', 'touchToken', 'setTokenHarness', 'markRequestAuthority',
   'createGroup', 'updateGroup', 'setGroupParent', 'deleteGroup', 'setGroupMember', 'removeGroupMember', 'inviteGroupMember', 'removeGroupInvitation', 'acceptGroupInvitations', 'admitToGroup',
   'enqueueGroupMail', 'claimGroupMail', 'settleGroupMail',
 ];

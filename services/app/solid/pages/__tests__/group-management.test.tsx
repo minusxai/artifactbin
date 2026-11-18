@@ -50,15 +50,15 @@ it('finds a server search result outside the initially loaded people',async()=>{
 });
 
 it('loads group settings without requesting the artifact shelf',async()=>{
- const fetcher=stubFetch({'*/session*':{kind:'account',user:{id:'u1',email:'viewer@example.com'},onboarded:true},'*/allowed-addresses':{addresses:[]}},{fallback:()=>Response.json(detail)});
+ const fetcher=stubFetch({'*/session*':{kind:'account',user:{id:'u1',email:'viewer@example.com'},onboarded:true},'*/allowed-addresses':{addresses:[]},'*/sign-ins':{sign_ins:[]}},{fallback:()=>Response.json(detail)});
  render(()=> <MemoryRouter><Route path="*" component={()=> <SessionProvider><GroupSettingsPage identity="team"/></SessionProvider>}/></MemoryRouter>);
  expect(await screen.findByRole('heading',{name:'Group settings'})).toBeInTheDocument();
  expect(screen.getByRole('link',{name:'Back to Team'})).toHaveAttribute('href','/@team');
  expect(screen.getByRole('searchbox',{name:'Search people'})).toBeInTheDocument();
  expect(screen.getByRole('button',{name:'Invite person'})).toBeInTheDocument();
  expect(screen.getByRole('button',{name:'Link group'})).toBeInTheDocument();
- // The group itself and its allowed addresses: never the artifact shelf.
- expect(fetcher.mock.calls.map(([url])=>url).filter(url=>!url.includes('/session')).sort()).toEqual(['/api/groups/g1/allowed-addresses','/api/groups/team']);
+ // The group itself, its allowed addresses and (for an Admin) the agents signed in as it: never the artifact shelf.
+ expect(fetcher.mock.calls.map(([url])=>url).filter(url=>!url.includes('/session')).sort()).toEqual(['/api/groups/g1/allowed-addresses','/api/groups/g1/sign-ins','/api/groups/team']);
  expect(fetcher).toHaveBeenCalledWith('/api/groups/team',expect.anything());
 });
 
@@ -82,4 +82,28 @@ it('lists the group\'s allowed addresses, lets an editor remove one, and draws n
  await waitFor(()=>expect(disabled).toHaveBeenCalledWith('/api/groups/g8/allowed-addresses',expect.anything()));
  await new Promise(resolve=>setTimeout(resolve,0));
  expect(off.queryByRole('region',{name:'Allowed addresses'})).toBeNull();
+});
+
+it('shows an Admin the agents signed in as the group, with level and who signed each in, and revokes one after confirming; nothing for others',async()=>{
+ const signIn={id:'tok_g1',name:'group-editor',role:'editor',issued_by:{id:'u2',username:'eve',name:'Eve'},created_at:'2026-11-11T10:00:00.000Z',expires_at:null,last_used_at:null,live:true};
+ let held=[signIn];
+ const fetcher=stubFetch({'DELETE *':()=>{held=[];return new Response(null,{status:204});}},{fallback:()=>Response.json({sign_ins:held})});
+ const {GroupSignIns}=await import('../GroupSignIns');
+ const view=render(()=> <GroupSignIns group={{id:'g1',name:'Team',role:'admin'}}/>);
+ const panel=await screen.findByRole('region',{name:'Agents signed in as this group'});
+ await waitFor(()=>expect(panel).toHaveTextContent('Signed in by Eve'));
+ expect(panel).toHaveTextContent('editor');expect(panel).toHaveTextContent('Live');
+ fireEvent.click(screen.getByRole('button',{name:'Revoke the sign-in by Eve (editor)'}));
+ fireEvent.click(await screen.findByRole('button',{name:'Confirm revoke'}));
+ await waitFor(()=>expect(panel).toHaveTextContent('No agent is signed in as this group.'));
+ expect(fetcher).toHaveBeenCalledWith('/api/groups/g1/sign-ins/tok_g1',expect.objectContaining({method:'DELETE'}));
+ view.unmount();
+ const quiet=vi.fn(async()=>Response.json({sign_ins:[]}));
+ vi.stubGlobal('fetch',quiet);
+ for(const role of ['member','editor'] as const){
+  const other=render(()=> <GroupSignIns group={{id:'g1',name:'Team',role}}/>);
+  expect(other.queryByRole('region',{name:'Agents signed in as this group'})).toBeNull();
+  other.unmount();
+ }
+ expect(quiet).not.toHaveBeenCalled();
 });

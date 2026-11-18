@@ -43,7 +43,8 @@ interface MovedPayload { from_parent_id: string | null; to_parent_id: string | n
 interface ArtifactDeletedPayload extends ArtifactActorPayload { format?: string; subtree?: number }
 /** Whether the row came back where it was, or at the root because an ancestor was not there to hold it. */
 interface RestoredPayload { landed_at_root: boolean }
-interface TokenPayload { name?: string | null }
+/** `group_id`: a group's sign-in (identity-service `GROUP_SIGN_IN_RULE`): the group it acts as, when its Admin ended it. */
+interface TokenPayload { name?: string | null; group_id?: string }
 
 /**
  * THE CATALOGUE — every verb an object kind takes, with the payload it

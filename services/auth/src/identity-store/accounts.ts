@@ -9,6 +9,7 @@
 import crypto from 'node:crypto';
 import {IdentityError,MAX_TOKEN_TTL_MS,MIN_TOKEN_TTL_MS,isValidHandle,type IdentityService,type IdentityUserRow,type MintedIdentityToken,type Queryable,type TransactionalQueryable} from '@artifactbin/contracts';
 import {internalId,isUniqueViolation,tokenId,type IdentityTables} from './tables';
+import {groupLevelHeldSql} from './rules';
 
 const USER_COLS = 'id, email, kind, parent_user_id, expires_at, name, username, image_key, welcome_pending, created_at';
 const TOKEN_PREFIX = 'mx_';
@@ -73,6 +74,32 @@ export async function mintRunSignIn(t: IdentityTables, q: Queryable, authSchema:
     SELECT credential_hash AS id FROM credential`,
     [id, name, sha256(token), input.userId, expiresAt, input.audience, input.scope, input.service, input.parent.kind, input.parent.id, RUN_SIGN_INS_PER_SERVICE]);
   if (!minted.rows.length) throw new IdentityError('rate_limited', 429, 3600);
+  return {id, name, token, expiresAt};
+}
+
+/**
+ * A GROUP'S SIGN-IN (contracts identity-service `GROUP_SIGN_IN_RULE`): an access token whose principal is the group
+ * `groupId` itself at `role` (`member` or `editor`), with NO person on the row (`user_id` NULL), `issued_by` the person
+ * who authorised it, at this installation's API (`audience`, `scope`); the caller pairs it with a refresh family. ONE
+ * statement: it is written only while that person is an `active` ordinary account (the read view `<read>.users`; never a
+ * test account or test user, which could otherwise reach through it what they may not themselves) and holds at least that
+ * level on the live group (./rules `groupLevelHeldSql`), so a refresh re-checks the rule by minting through here.
+ * Otherwise nothing is written and `group_level_not_held` (403) answers, whatever the reason (an unknown group too).
+ */
+export async function mintGroupSignIn(t: IdentityTables, q: Queryable, readSchema: string, input: {issuedBy: string; groupId: string; role: 'member' | 'editor'; expiresInMs: number; audience: string; scope: string}): Promise<MintedIdentityToken> {
+  const ms = input.expiresInMs;
+  if (!Number.isFinite(ms) || ms < MIN_TOKEN_TTL_MS || ms > MAX_TOKEN_TTL_MS) throw new IdentityError('invalid_expiry', 400);
+  if (input.role !== 'member' && input.role !== 'editor') throw new IdentityError('invalid_group_role', 400);
+  if (!/^[a-z_][a-z0-9_]*$/.test(readSchema)) throw new Error('identity: the read schema is not a plain identifier');
+  const id = tokenId(), token = TOKEN_PREFIX + crypto.randomBytes(32).toString('base64url');
+  const expiresAt = new Date(Date.now() + ms).toISOString(), name = `group-${input.role}`;
+  const minted = await q.query<{id: string}>(`INSERT INTO ${t.tokens} (id, name, token_hash, user_id, expires_at, audience, scope, issued_by, group_id, group_role)
+    SELECT $1, $2, $3, NULL, $4, $5, $6, $7::text, $8::text, $9::text
+     WHERE COALESCE((SELECT issuer.active AND issuer.kind = 'account' AND NOT issuer.test_account FROM ${readSchema}.users issuer WHERE issuer.id = $7::text), false)
+       AND EXISTS (SELECT 1 FROM ${t.groups} g WHERE g.id = $8::text AND g.deleted_at IS NULL)
+       AND ${groupLevelHeldSql(t, '$7::text', '$8::text', '$9::text')}
+    RETURNING id`, [id, name, sha256(token), expiresAt, input.audience, input.scope, input.issuedBy, input.groupId, input.role]);
+  if (!minted.rows.length) throw new IdentityError('group_level_not_held', 403);
   return {id, name, token, expiresAt};
 }
 
@@ -183,12 +210,13 @@ export function accountMethods(db: TransactionalQueryable, t: IdentityTables): A
     },
     async findToken({hash}) {
       if (!/^[0-9a-f]{64}$/.test(hash)) return null;
-      const row = (await db.query<{id: string; user_id: string | null; client_harness: string | null; audience: string | null}>(
-        `SELECT id, user_id, client_harness, audience FROM ${t.tokens} WHERE token_hash = $1 AND deleted_at IS NULL AND (expires_at IS NULL OR expires_at > now())`, [hash])).rows[0];
-      return row ? {id: row.id, userId: row.user_id, clientHarness: row.client_harness, audience: row.audience} : null;
+      const row = (await db.query<{id: string; user_id: string | null; client_harness: string | null; audience: string | null; group_id: string | null}>(
+        `SELECT id, user_id, client_harness, audience, group_id FROM ${t.tokens} WHERE token_hash = $1 AND deleted_at IS NULL AND (expires_at IS NULL OR expires_at > now())`, [hash])).rows[0];
+      return row ? {id: row.id, userId: row.user_id, clientHarness: row.client_harness, audience: row.audience, groupId: row.group_id} : null;
     },
     async revokeToken({id, userId}) {
-      const row = (await db.query<{name: string | null}>(`UPDATE ${t.tokens} SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL${userId === undefined ? '' : ' AND user_id = $2'} RETURNING name`,
+      // A person's own token, or a group's sign-in they authorised (contracts identity-service `GROUP_SIGN_IN_RULE`).
+      const row = (await db.query<{name: string | null}>(`UPDATE ${t.tokens} SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL${userId === undefined ? '' : ' AND (user_id = $2 OR (group_id IS NOT NULL AND grant_id IS NULL AND issued_by = $2))'} RETURNING name`,
         userId === undefined ? [id] : [id, userId])).rows[0];
       return row ? {name: row.name} : null;
     },

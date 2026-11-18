@@ -22,6 +22,12 @@
  * credential named there is: a live browser session of the same person, or a live token of theirs that is not itself a
  * run sign-in. A second lateral (`run`) reads it by primary key. Every other token has `issued_by` null and keeps the
  * rule above unchanged.
+ *
+ * A GROUP'S SIGN-IN (`group_id` set, `user_id` NULL: contracts identity-service `GROUP_SIGN_IN_RULE`) is decided
+ * before either: its row, an audience and the family fence here (it is always an OAuth grant's token), and then its
+ * authorisation, which needs the groups, the tree and the authorising person's `active`: a second statement, only for
+ * such a row, reads its `live` in the identity read view (`readSchema`), the one spelling of that rule. A row with
+ * `group_id` set is never read as a person's, and never as an unowned token.
  */
 import type { Queryable, TokenReader, TokenRecord } from '@artifactbin/contracts';
 import { TOKEN_RE, hashToken, plainIdentifier } from '@artifactbin/utils';
@@ -30,11 +36,13 @@ export interface BearerReaderOptions {
   db: Queryable;
   /** AUTH__SCHEMA: where `tokens`, `credentials` and Better Auth's `user` live. Interpolated — a plain identifier. */
   authSchema?: string;
-  /** The owning service's own bearer admission policy (the app's account kinds), applied after the read. */
+  /** The owning service's own bearer admission policy (the app's account kinds), applied after the read to a person's token. */
   admitBearer?: (token: TokenRecord) => Promise<boolean>;
+  /** IDENTITY__SCHEMA: the identity read views, whose `tokens.live` decides a group's sign-in. Interpolated — a plain identifier. */
+  readSchema?: string;
 }
 
-interface BearerRow { id: string; user_id: string | null; audience: string | null; scope: string | null; expires_at: string | Date | null; issued_by: string | null; email: string | null; email_verified: boolean | null }
+interface BearerRow { id: string; user_id: string | null; audience: string | null; scope: string | null; expires_at: string | Date | null; issued_by: string | null; group_id: string | null; group_role: string | null; email: string | null; email_verified: boolean | null }
 
 /**
  * A FAMILY BOUND TO A BROWSER SESSION: a first-party client's grant (IDENTITY__OAUTH_CLIENTS `first_party`) records
@@ -69,6 +77,7 @@ export function bearerLiveSql(o: { auth: string; tokens: string; sessions?: bool
             AND (${sibling}.deleted_at IS NOT NULL OR ${access}.id IS NULL OR ${access}.deleted_at IS NOT NULL))`;
   const rowLiveOf = (a: string) => `${a}.deleted_at IS NULL AND (${a}.expires_at IS NULL OR ${a}.expires_at>now())`;
   const rowLive = rowLiveOf('t');
+  const group = `t.user_id IS NULL AND t.grant_id IS NULL AND COALESCE(t.audience,'')<>''`;
   // A run sign-in's credential row, live while its parent is: the person's session, or a token of theirs that is not
   // itself a run sign-in, by that token's own rule (row and family).
   const run = `FROM ${auth}.credentials run WHERE run.kind='run_sign_in' AND run.credential_hash=t.id AND run.deleted_at IS NULL AND run.subject_id=t.user_id
@@ -77,19 +86,23 @@ export function bearerLiveSql(o: { auth: string; tokens: string; sessions?: bool
           AND (COALESCE(p.audience,'')='' OR EXISTS (SELECT 1 ${family('p', 'pmember', 'pfamily', 'psibling', 'paccess')})))))`;
   return {
     fence: `LEFT JOIN LATERAL (SELECT 1 AS live ${family('t')} LIMIT 1) fence ON true
-    LEFT JOIN LATERAL (SELECT 1 AS live ${run} LIMIT 1) run ON t.issued_by IS NOT NULL`,
+    LEFT JOIN LATERAL (SELECT 1 AS live ${run} LIMIT 1) run ON t.issued_by IS NOT NULL AND t.group_id IS NULL`,
+    // A group's sign-in first (never a person's, never unowned): no person on the row, no approval, an audience and a live family.
     live: `${rowLive}
-      AND (CASE WHEN t.issued_by IS NULL THEN (COALESCE(t.audience,'')='' OR fence.live IS NOT NULL) ELSE run.live IS NOT NULL END)`,
+      AND (CASE WHEN t.group_id IS NOT NULL THEN (${group} AND fence.live IS NOT NULL)
+        WHEN t.issued_by IS NULL THEN (COALESCE(t.audience,'')='' OR fence.live IS NOT NULL) ELSE run.live IS NOT NULL END)`,
     // The same predicate with the fences as subqueries, for a reader whose FROM must stay the one table (a view).
-    exists: `(${rowLive} AND (CASE WHEN t.issued_by IS NULL THEN (COALESCE(t.audience,'')='' OR EXISTS (SELECT 1 ${family('t')})) ELSE EXISTS (SELECT 1 ${run}) END))`,
+    exists: `(${rowLive} AND (CASE WHEN t.group_id IS NOT NULL THEN (${group} AND EXISTS (SELECT 1 ${family('t')}))
+      WHEN t.issued_by IS NULL THEN (COALESCE(t.audience,'')='' OR EXISTS (SELECT 1 ${family('t')})) ELSE EXISTS (SELECT 1 ${run}) END))`,
   };
 }
 
 export function createBearerReader(o: BearerReaderOptions): TokenReader {
   const auth = plainIdentifier(o.authSchema ?? 'auth', 'auth schema');
   const tokens = `${auth}.tokens`;
+  const views = plainIdentifier(o.readSchema ?? 'identity', 'read schema');
   const { fence, live } = bearerLiveSql({ auth, tokens });
-  const byHash = `SELECT t.id, t.user_id, t.audience, t.scope, t.expires_at, t.issued_by, u.email, u."emailVerified" AS email_verified
+  const byHash = `SELECT t.id, t.user_id, t.audience, t.scope, t.expires_at, t.issued_by, t.group_id, t.group_role, u.email, u."emailVerified" AS email_verified
     FROM ${tokens} t
     ${fence}
     LEFT JOIN ${auth}."user" u ON u.id=t.user_id
@@ -97,6 +110,13 @@ export function createBearerReader(o: BearerReaderOptions): TokenReader {
   const read = async (statement: string, key: string): Promise<TokenRecord | null> => {
       const row = (await o.db.query<BearerRow>(statement, [key])).rows[0];
       if (!row) return null;
+      if (row.group_id !== null && row.group_id !== undefined) {
+        // A group's sign-in: its authorisation, by the read view's one rule. No account, so no account policy.
+        if (row.user_id || !row.issued_by || (row.group_role !== 'member' && row.group_role !== 'editor')) return null;
+        if ((await o.db.query<{ live: boolean }>(`SELECT live FROM ${views}.tokens WHERE id=$1`, [row.id])).rows[0]?.live !== true) return null;
+        return { id: row.id, userId: null, groupId: row.group_id, groupRole: row.group_role, issuedBy: row.issued_by,
+          ...(row.audience ? { audience: row.audience } : {}), ...(row.scope ? { scope: row.scope } : {}), ...(row.expires_at ? { expiresAt: new Date(row.expires_at).toISOString() } : {}) };
+      }
       const token: TokenRecord = {
         id: row.id,
         userId: row.user_id ?? null,

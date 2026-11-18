@@ -96,11 +96,12 @@ const TOKENS: Table = {
     { name: 'expires_at', type: 'TIMESTAMPTZ' },
     // Nullable so the same additive migration preserves "never used".
     { name: 'last_used_at', type: 'TIMESTAMPTZ' },
-    // THE PRINCIPAL. NULL on every row today: the token's principal is its person (`user_id`). A later group
-    // sign-in sets `group_id` and its level `group_role` ('member' or 'editor') to make the group itself the
-    // principal, `issued_by` to the person who issued it and `grant_id` to the approval it was issued under.
-    // Nothing writes them yet, except `issued_by` on a person's RUN SIGN-IN (contracts `RUN_SIGN_IN_PATH`): the id of
-    // the configured service it was issued to, which the `live` rule reads (its parent credential decides it).
+    // THE PRINCIPAL. NULL on a person's token: its principal is its person (`user_id`). A GROUP's sign-in (contracts
+    // identity-service `GROUP_SIGN_IN_RULE`, ./accounts `mintGroupSignIn`) sets `group_id` and its level `group_role`
+    // ('member' or 'editor') to make the group itself the principal, with `user_id` NULL and `issued_by` the person
+    // who authorised it; `grant_id` is for the approval a later kind is issued under (none is written yet). A person's
+    // RUN SIGN-IN (contracts `RUN_SIGN_IN_PATH`) sets only `issued_by`: the id of the configured service it was
+    // issued to, which the `live` rule reads (its parent credential decides it).
     { name: 'group_id', type: 'TEXT' },
     { name: 'group_role', type: 'TEXT' },
     { name: 'issued_by', type: 'TEXT' },
@@ -111,6 +112,9 @@ const TOKENS: Table = {
     { name: 'idx_tokens_hash', columns: ['token_hash'], unique: true },
     // An account's live tokens (lib/accounts/tokens: the web token, the token list).
     { name: 'idx_tokens_user', columns: ['user_id'], where: 'deleted_at IS NULL' },
+    // A group's sign-ins: by group (its Admins' list) and by the person who authorised them (their token list).
+    { name: 'idx_tokens_group', columns: ['group_id'], where: 'group_id IS NOT NULL' },
+    { name: 'idx_tokens_group_issuer', columns: ['issued_by'], where: 'group_id IS NOT NULL' },
   ],
 };
 

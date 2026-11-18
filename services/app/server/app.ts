@@ -38,7 +38,7 @@ import { projectNotifications } from '@/lib/notifications';
 /** Every static address solid/App.tsx routes: a direct load or a reload of one missing here is a 404. */
 import { ANONYMOUS_ACTOR, ownerUsername, AGENT_COOKIE } from '@/lib/accounts';
 import { sessionActor } from '@/lib/authentication';
-import { canEdit, CANONICAL_ARTIFACT_READ_PATH } from '@artifactbin/contracts';
+import { canEdit, CANONICAL_ARTIFACT_READ_PATH, GROUP_PRINCIPAL_REFUSED, isGroupActor } from '@artifactbin/contracts';
 import {actorOf} from '@artifactbin/utils';
 import {identityForUser} from '@/lib/accounts';
 import {readArtifactSnapshot} from '@/lib/annotations';
@@ -352,6 +352,11 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   // Transport identity must be attached before any app middleware or route
   // asks viewer.ts who is calling.
   if (opts.actorSecret) actorReceiver(opts.actorSecret).mount(app);
+  // AN AGENT SIGNED IN AS A GROUP (contracts `GroupActor`) reaches no app route: one refusal, before any door, page or
+  // asset, in-process and across the signed hop alike. Signing in, refreshing and revoking are the identity host's.
+  app.use('*', async (c, next) => isGroupActor(actorOf(c.req.raw))
+    ? new Response(JSON.stringify({ error: GROUP_PRINCIPAL_REFUSED, message: 'This route does not accept a sign-in acting as a group.' }), { status: 403, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } })
+    : next());
   /*
    * Every document on its own origin (server/pages-host): a pages hostname, a pages Origin and the
    * pages cookie are decided there, before any other host boundary.

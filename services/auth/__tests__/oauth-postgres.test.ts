@@ -22,7 +22,7 @@ describe.skipIf(!dockerImage('postgres:17-alpine'))('READ COMMITTED auth with se
   owner=new Pool({connectionString:server.url});
   await ensureAuthSchema(queryable(owner),authSchema);
   await ensureHumanAuthSchema({pool:owner,schema:authSchema});
-  await owner.query(`CREATE SCHEMA ${appSchema}; CREATE TABLE ${authSchema}.tokens(id text primary key, name text, token_hash text, user_id text,audience text,scope text,expires_at timestamptz,deleted_at timestamptz,issued_by text); CREATE ROLE ${role}; GRANT USAGE ON SCHEMA ${appSchema},${authSchema} TO ${role}; GRANT ALL ON ALL TABLES IN SCHEMA ${authSchema} TO ${role}`);
+  await owner.query(`CREATE SCHEMA ${appSchema}; CREATE TABLE ${authSchema}.tokens(id text primary key, name text, token_hash text, user_id text,audience text,scope text,expires_at timestamptz,deleted_at timestamptz,issued_by text,group_id text,group_role text,grant_id text); CREATE ROLE ${role}; GRANT USAGE ON SCHEMA ${appSchema},${authSchema} TO ${role}; GRANT ALL ON ALL TABLES IN SCHEMA ${authSchema} TO ${role}`);
   auth=new Pool({connectionString:server.url,options:`-c role=${role}`});
  },120_000);
  afterAll(async()=>{try{await auth?.end();await owner?.end();}finally{server?.stop();}});

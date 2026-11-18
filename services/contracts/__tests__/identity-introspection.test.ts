@@ -1,24 +1,32 @@
 /**
  * THE INTROSPECTION ANSWER'S PRINCIPAL (./src/identity-service `IdentityIntrospectResponse`): every active answer names
- * what the token acts as, and a reader can already branch on a group principal while `user_id` stays a string.
+ * what the token acts as. A person's answer has `user_id` set and no group; a group's (`GROUP_SIGN_IN_RULE`) has the
+ * group and its level, `issued_by` the person who authorised it, and `user_id` null, the only answer where it is.
  */
 import {expect,expectTypeOf,it} from 'vitest';
 import {IDENTITY_VIEWS,type IdentityIntrospectResponse,type IdentityPrincipalGroupRole,type IdentityPrincipalKind} from '@artifactbin/contracts';
 
 type Active = Extract<IdentityIntrospectResponse, {active: true}>;
+type Person = Extract<Active, {principal_kind: 'user'}>;
+type Group = Extract<Active, {principal_kind: 'group'}>;
 
-it('an active answer carries the principal: its kind, the person, and the group fields', () => {
+it('an active answer carries the principal: a person with a user id, or a group at a level with none', () => {
   expectTypeOf<Active['principal_kind']>().toEqualTypeOf<IdentityPrincipalKind>();
   expectTypeOf<IdentityPrincipalKind>().toEqualTypeOf<'user' | 'group'>();
-  expectTypeOf<Active['user_id']>().toEqualTypeOf<string>();
-  expectTypeOf<Active['group_id']>().toEqualTypeOf<string | null>();
-  expectTypeOf<Active['group_role']>().toEqualTypeOf<IdentityPrincipalGroupRole | null>();
+  expectTypeOf<Active['user_id']>().toEqualTypeOf<string | null>();
+  expectTypeOf<Person['user_id']>().toEqualTypeOf<string>();
+  expectTypeOf<Person['group_id']>().toEqualTypeOf<null>();
+  expectTypeOf<Person['issued_by']>().toEqualTypeOf<string | null>();
+  expectTypeOf<Group['user_id']>().toEqualTypeOf<null>();
+  expectTypeOf<Group['group_id']>().toEqualTypeOf<string>();
+  expectTypeOf<Group['group_role']>().toEqualTypeOf<IdentityPrincipalGroupRole>();
+  expectTypeOf<Group['issued_by']>().toEqualTypeOf<string>();
+  expectTypeOf<Group['parent']>().toEqualTypeOf<null>();
   expectTypeOf<IdentityPrincipalGroupRole>().toEqualTypeOf<'member' | 'editor'>();
-  expectTypeOf<Active['issued_by']>().toEqualTypeOf<string | null>();
   expectTypeOf<Extract<IdentityIntrospectResponse, {active: false}>>().toEqualTypeOf<{active: false}>();
-  // A reader's check for a group principal compiles today.
-  const actsAsGroup = (answer: IdentityIntrospectResponse) => answer.active && answer.principal_kind === 'group';
-  expect(actsAsGroup({active: false})).toBe(false);
+  // Branching on the kind narrows `user_id` to the person.
+  const personOf = (answer: IdentityIntrospectResponse) => answer.active && answer.principal_kind === 'user' ? answer.user_id : null;
+  expect(personOf({active: false})).toBe(null);
 });
 
 it('the tokens view keeps every column readers know in place and appends the principal columns after its rule columns', () => {
