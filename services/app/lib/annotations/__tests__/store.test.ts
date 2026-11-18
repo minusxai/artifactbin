@@ -36,9 +36,17 @@ describe('createAnnotationFor', () => {
     expect(wire.id).toMatch(/^ann_/);
   });
 
-  it('refuses a stale revision, an unknown node, a malformed anchor or view state, and answers null without access', async () => {
+  it('takes a comment made on an earlier version while its node remains, and refuses it as stale only once an edit removed the node', async () => {
     const f = await fixture();
-    expect(await createAnnotationFor(f.owner, f.doc.id, { anchor: anchor('intro', '9'), body: 'x' }, human)).toMatchObject({ refused: 'stale', head: { version: 1 } });
+    const page = (body: string) => ({ format: 'html' as const, source: `<!doctype html><html><head></head><body>${body}</body></html>`, meta: {} });
+    await replaceArtifactFor(f.owner, f.doc.id, page('<p data-af-id="intro">Read this, edited</p>'), { expectedVersion: 1 });
+    expect(await createAnnotationFor(f.owner, f.doc.id, { anchor: anchor('intro', '1'), body: 'kept' }, human)).toMatchObject({ status: 'open', orphaned: false, anchor_version: 1 });
+    expect(await createAnnotationFor(f.owner, f.doc.id, { anchor: anchor('next', '1'), body: 'gone' }, human)).toMatchObject({ refused: 'stale', head: { version: 2 } });
+  });
+
+  it('refuses a revision the page never had, an unknown node, a malformed anchor or view state, and answers null without access', async () => {
+    const f = await fixture();
+    expect(await createAnnotationFor(f.owner, f.doc.id, { anchor: anchor('intro', '9'), body: 'x' }, human)).toEqual({ refused: 'invalid_annotation_revision' });
     expect(await createAnnotationFor(f.owner, f.doc.id, { anchor: anchor('missing'), body: 'x' }, human)).toEqual({ refused: 'bad_path' });
     expect(await createAnnotationFor(f.owner, f.doc.id, { anchor: anchor('intro', 'one'), body: 'x' }, human)).toEqual({ refused: 'invalid_annotation_revision' });
     expect(await createAnnotationFor(f.owner, f.doc.id, { body: 'x' }, human)).toEqual({ refused: 'bad_path' });
