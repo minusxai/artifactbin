@@ -108,7 +108,6 @@ describe('editors through every door', () => {
       const id = w.doc.id;
       expect((await getMineRoute(await jreq(`/api/my/artifacts/${id}`, 'GET'), params({ id }))).status).toBe(404);
       expect((await putMineRoute(await jreq(`/api/my/artifacts/${id}`, 'PUT', {html:nativeHtml(PROSE2)}), params({ id }))).status).toBe(404);
-      expect((await putMineRoute(await jreq(`/api/my/artifacts/${id}`, 'PUT', { html:nativeHtml(PROSE2) }), params({ id }))).status).toBe(404);
       expect((await versionsMineRoute(await jreq(`/api/my/artifacts/${id}/versions`, 'GET'), params({ id }))).status).toBe(404);
       // …and the same through B's claimed bearer token.
       expect((await getArtifactRoute(await jreq(`/api/artifacts/${id}`, 'GET', undefined, w.tb.token), params({ id }))).status).toBe(200);

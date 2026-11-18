@@ -52,6 +52,15 @@ const create = async (token: string, body: Record<string, unknown>, expected = 2
   return res.json() as Promise<Record<string, unknown> & { id: string }>;
 };
 
+/** An owner signed in on the browser session, with one small document of theirs. */
+async function signedInOwnerWithDoc() {
+  const { owner, token } = await ownerFixture();
+  const doc = await create(token, { title: 'x', html: '<h1>x</h1>' });
+  sessionUser.id = owner.id;
+  sessionUser.email = owner.email;
+  return { owner, token, doc };
+}
+
 beforeEach(async () => {
   sessionUser.id = '';
   sessionUser.email = '';
@@ -77,10 +86,7 @@ describe('share rows survive their artifact\'s delete, and the id is never recyc
   };
 
   it('the bearer DELETE keeps the share list', async () => {
-    const { owner, token } = await ownerFixture();
-    const doc = await create(token, { title: 'x', html: '<h1>x</h1>' });
-    sessionUser.id = owner.id;
-    sessionUser.email = owner.email;
+    const { token, doc } = await signedInOwnerWithDoc();
     await putSharingRoute(request(`/api/my/artifacts/${doc.id}/sharing`, { method: 'PUT', json: { shares: [{email:'a@b.com',role:'viewer'}] } }), params({ id: doc.id }));
     expect(await sharesFor(doc.id)).toBe(1);
 
@@ -94,10 +100,7 @@ describe('share rows survive their artifact\'s delete, and the id is never recyc
   });
 
   it('the session DELETE does too', async () => {
-    const { owner, token } = await ownerFixture();
-    const doc = await create(token, { title: 'x', html: '<h1>x</h1>' });
-    sessionUser.id = owner.id;
-    sessionUser.email = owner.email;
+    const { doc } = await signedInOwnerWithDoc();
     await putSharingRoute(request(`/api/my/artifacts/${doc.id}/sharing`, { method: 'PUT', json: { shares: [{email:'a@b.com',role:'viewer'}] } }), params({ id: doc.id }));
     expect((await deleteMineRoute(request(`/api/my/artifacts/${doc.id}`, { method: 'DELETE' }), params({ id: doc.id }))).status).toBe(200);
     await age(doc.id);
@@ -107,10 +110,7 @@ describe('share rows survive their artifact\'s delete, and the id is never recyc
 
 describe('share-list bounds', () => {
   it('refuses an unbounded list rather than storing it', async () => {
-    const { owner, token } = await ownerFixture();
-    const doc = await create(token, { title: 'x', html: '<h1>x</h1>' });
-    sessionUser.id = owner.id;
-    sessionUser.email = owner.email;
+    const { doc } = await signedInOwnerWithDoc();
     const tooMany = Array.from({ length: 101 }, (_, i) => ({email:`u${i}@example.com`,role:'viewer'}));
     const res = await putSharingRoute(request(`/api/my/artifacts/${doc.id}/sharing`, { method: 'PUT', json: { shares: tooMany } }), params({ id: doc.id }));
     expect(res.status).toBe(400);
@@ -118,10 +118,7 @@ describe('share-list bounds', () => {
   });
 
   it('takes a list right at the bound, deduped case-insensitively', async () => {
-    const { owner, token } = await ownerFixture();
-    const doc = await create(token, { title: 'x', html: '<h1>x</h1>' });
-    sessionUser.id = owner.id;
-    sessionUser.email = owner.email;
+    const { doc } = await signedInOwnerWithDoc();
     const hundred = Array.from({ length: 100 }, (_, i) => ({email:`U${i}@Example.com`,role:'viewer'}));
     const res = await putSharingRoute(request(`/api/my/artifacts/${doc.id}/sharing`, { method: 'PUT', json: { shares: hundred } }), params({ id: doc.id }));
     expect(res.status).toBe(200);

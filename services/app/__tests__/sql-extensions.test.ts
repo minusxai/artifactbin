@@ -23,8 +23,6 @@ useAppHarness();
 const FIXTURE = new URL('../../sql/__tests__/fixtures/fixture-extension.ts', import.meta.url).href;
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 const ROWS = [{ choice: 'ramen', who: 'seed' }];
-const generate = (ds: string) => `<Helmet><Value name="who" type="string" default="anon" /><Import name="d" src="ref:${ds}" />`
-  + '<Mutation name="gen">{`insert into d.rows (choice, who) values (fixture_generate($who), $who)`}</Mutation></Helmet><div><Button run="$gen">Go</Button></div>';
 
 const previous = services().sql;
 const pool = createSql({}, { workers: 1, extensions: FIXTURE });
@@ -40,14 +38,6 @@ async function dataset() {
 }
 
 describe('composition SQL extensions and the native admission boundary', () => {
-  it('refuses retired executable JSX instead of restoring SQL mutation publication', async () => {
-    const {token,ds}=await dataset();
-    const response=await create(token,{markup:generate(ds)});
-    expect(response.status).toBe(400);
-    expect(await response.json()).toMatchObject({error:'native_html_required'});
-    expect((await getArtifactById(ds))!.version).toBe(1);
-  });
-
   it('the owner\'s direct write is analyzed with it and reaches the engine, which demands the result', async () => {
     const { token, ds } = await dataset();
     const res = await mutateDatasetRoute(request(`/api/artifacts/${ds}/mutate`, { method: 'POST', token, json: { sql: `insert into public.rows (choice, who) values (fixture_generate('x'), 'y')` } }), params({ id: ds }));

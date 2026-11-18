@@ -420,12 +420,10 @@ describe('the commenter role, through the routes', () => {
       expect(await actOnAnnotationFor(identityForUser(w.commenter.id, w.tc.id), w.doc.id, id, { resolve: true }, human)).toMatchObject({ id, status: 'resolved' });
     });
 
-    it('may NOT edit, replace, or delete — every write door is the uniform 404', async () => {
+    it('may NOT edit or replace — the write door is the uniform 404', async () => {
       const w = await world();
       const edit = await putArtifactRoute(jreq(`/api/artifacts/${w.doc.id}`, 'PUT', {html:nativeHtml('<div><p>changed</p></div>')}, w.tc.token), params({ id: w.doc.id }));
       expect(edit.status).toBe(404);
-      const put = await putArtifactRoute(jreq(`/api/artifacts/${w.doc.id}`, 'PUT', {html:nativeHtml('<div><p>changed</p></div>')}, w.tc.token), params({ id: w.doc.id }));
-      expect(put.status).toBe(404);
       expect((await getArtifactById(w.doc.id))!.version).toBe(1);
     });
   });
