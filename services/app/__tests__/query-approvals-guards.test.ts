@@ -1,7 +1,8 @@
 /**
  * WHAT AN APPROVED QUERY NEVER REACHES BEYOND (lib/query-approvals): the audience the Admin approved it for. While one
- * is live only an Admin of the owning group changes who can open the page, by any door; new people brought into a group
- * that reads the page by someone who is not that Admin end it; only a signed-in ordinary account that can open the page
+ * is live only an Admin of the owning group changes the page's sharing, by any door, sharing it with another group
+ * included; group membership is not the page's sharing, so whoever joins a group that can open the page reads as the
+ * group and the approval stays; only a signed-in ordinary account that can open the page
  * reads as the group, and only it is told the owner's name; a stored export image never outlives the approval; a
  * deleted page's approvals never come back, nor does an approval whose approver's Admin membership was taken away and
  * given back. The setting and the database are ./query-approvals-fixture's.
@@ -73,37 +74,46 @@ it('lets only an Admin of the owning group change who can open a page while an a
  expect((await patch(eve,{visibility:'private'})).status).toBe(200);
 });
 
-it('ends the approval when someone who is not an Admin of the owning group brings new people into a group that reads the page, and keeps it when that Admin does',async()=>{
- const host=await composed(),{ada,mia,olga,team,squad,page,read,approve}=await setting(host);
+it('lets only an Admin of the owning group share the page with another group while an approved query is live',async()=>{
+ const host=await composed(),{ada,eve,root,page,approve}=await setting(host);
+ const approved=await approve(ada);
+ expect(approved.status).toBe(201);
+ const share=(who:{token:string},group:string)=>host.call('PUT',`/api/artifacts/${page}/group-shares/${group}`,who.token,{role:'viewer'});
+ // Eve, an Editor of Team, may not share it with a group of her own: a group page's group shares are its Admins' alone.
+ const eves=await createGroup(eve.userId,{handle:'qa_eves',name:'Eves'});
+ const refused=await share(eve,eves.id);
+ expect([refused.status,refused.body?.error],JSON.stringify(refused.body)).toEqual([404,'not_found']);
+ expect(await sql('SELECT group_id FROM artifact_group_shares WHERE artifact_id=$1',[page])).toEqual([]);
+ // Ada, an Admin of Team, may; the approval stays live.
+ expect((await share(ada,root.id)).status).toBe(200);
+ expect(await sql('SELECT group_id FROM artifact_group_shares WHERE artifact_id=$1',[page])).toEqual([{group_id:root.id}]);
+ expect(await sql('SELECT ended_at IS NULL AS live FROM page_query_approvals WHERE id=$1',[String(approved.body!.id)])).toEqual([{live:true}]);
+});
+
+it('lets whoever joins a group that can open the page read the approved query as the group from the next request, and keeps the approval',async()=>{
+ const host=await composed(),{ada,rob,mia,team,squad,page,read,approve}=await setting(host);
  // Mia administers Squad, Team's subgroup, and nothing above it.
  await admitGroupMember(ada.userId,squad.id,mia.userId,'admin');
- const first=await approve(ada);
- expect(first.status).toBe(201);
- // Ada, an Admin of Team, brings Pia into Team: the approval holds.
+ const approved=await approve(ada);
+ expect(approved.status).toBe(201);
+ // Rob, another Admin of Team, brings Pia into Team: she reads as Team at once.
  const pia=await host.signIn('mxmx_test_qa_pia@example.test');
- await admitGroupMember(ada.userId,team.id,pia.userId,'member');
+ await admitGroupMember(rob.userId,team.id,pia.userId,'member');
  expect(rows(await read(pia))).toEqual([{region:'EU',total:15,...asGroup(team.id)}]);
- // Mia creating an empty group under Squad brings nobody new: it holds.
- await createGroup(mia.userId,{handle:'qa_empty',name:'Empty',parent_id:squad.id});
- expect((await read(olga)).status).toBe(200);
- // Mia puts her own group, with its member, under Squad: the approval ends, audited as hers.
+ // Mia, no Admin of Team, brings Nia into Squad, and puts her own group with Kim in it under Squad: both read as Team.
+ const nia=await host.signIn('mxmx_test_qa_nia@example.test');
+ await admitGroupMember(mia.userId,squad.id,nia.userId,'member');
+ expect(rows(await read(nia))).toEqual([{region:'EU',total:15,...asGroup(team.id)}]);
  const mine=await createGroup(mia.userId,{handle:'qa_mine',name:'Mine'});
  const kim=await host.signIn('mxmx_test_qa_kim@example.test');
  await admitGroupMember(mia.userId,mine.id,kim.userId,'member');
- expect((await read(olga)).status).toBe(200);
  await setGroupParent(mia.userId,mine.id,squad.id);
- refusedNamingOwner(await read(olga));
- expect(await sql('SELECT ended_reason,ended_by FROM page_query_approvals WHERE id=$1',[String(first.body!.id)])).toEqual([{ended_reason:'audience_changed',ended_by:mia.userId}]);
- // Mia brings Nia into Squad, whose members read Team's pages: a fresh approval ends too, and nobody reads as Team.
- const second=await approve(ada);
- expect((await read(olga)).status).toBe(200);
- const nia=await host.signIn('mxmx_test_qa_nia@example.test');
- await admitGroupMember(mia.userId,squad.id,nia.userId,'member');
- expect((await read(nia)).status).toBe(403);
- refusedNamingOwner(await read(olga));
- expect(await sql('SELECT ended_reason,ended_by FROM page_query_approvals WHERE id=$1',[String(second.body!.id)])).toEqual([{ended_reason:'audience_changed',ended_by:nia.userId}]);
- await expect.poll(async()=>sql("SELECT payload->>'reason' AS reason,subject_id FROM events.events WHERE verb='query_approval_ended' AND object_id=$1 ORDER BY subject_id",[page]))
-  .toEqual([{reason:'audience_changed',subject_id:mia.userId},{reason:'audience_changed',subject_id:nia.userId}].sort((a,b)=>a.subject_id<b.subject_id?-1:1));
+ expect(rows(await read(kim))).toEqual([{region:'EU',total:15,...asGroup(team.id)}]);
+ // The approval is the one Ada made, live, and no end of it is audited.
+ expect(await sql('SELECT id,ended_at IS NULL AS live FROM page_query_approvals WHERE page_id=$1',[page])).toEqual([{id:String(approved.body!.id),live:true}]);
+ await expect.poll(async()=>(await sql<{subject_id:string}>("SELECT subject_id FROM events.events WHERE verb='approved_query_read' AND object_id=$1",[page])).map(row=>row.subject_id).sort())
+  .toEqual([pia.userId,nia.userId,kim.userId].sort());
+ expect(await sql("SELECT verb FROM events.events WHERE verb='query_approval_ended' AND object_id=$1",[page])).toEqual([]);
 });
 
 it('runs an approved query as the group only for a signed-in ordinary account that can open the page, and names the owner only to one',async()=>{

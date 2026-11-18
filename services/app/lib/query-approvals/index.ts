@@ -22,11 +22,11 @@
  * WHO CAN OPEN THE PAGE stays as the Admin approved it: while one is live, only an Admin of the owning group changes the
  * page's visibility, link role, named shares, group shares, an invitation that gives access, or its folder
  * (`assertAudienceChange`, asked by every writer of those in lib/artifacts, inside its transaction holding the page row);
- * anyone else is refused `approved_query_live`. The page's other readers are the members of groups (the owning group's
- * subtree, and of each group it is shared with): when someone who is not the owning group's Admin brings new people into
- * one of those (`endApprovalsForNewReaders`, from lib/groups after every group change), its approvals end. A folder
- * gives nobody access to what it holds (lib/artifact-access decides a page from its own row alone), so nothing flows down
- * from one.
+ * anyone else is refused `approved_query_live`. Group membership is not the page's sharing: whoever joins a group that
+ * can open the page (the owning group's subtree, or a group it is shared with) is in the audience the Admin approved and
+ * reads as the group from their next request, as they gain every other access of that group; joining, leaving,
+ * attaching or creating groups never ends an approval. A folder gives nobody access to what it holds (lib/artifact-access
+ * decides a page from its own row alone), so nothing flows down from one.
  *
  * WHEN IT HOLDS, asked at every read (`approvedRun`, again after the read: lib/page-doors): the approval is not ended;
  * the version read and the page's head both declare that hash; the page is still that group's; the approver is still
@@ -34,7 +34,7 @@
  * in, the owning group or an ancestor; `approver_since`: that row's creation). Every way it stops ENDS it for good, until
  * a fresh approval: a write of the page that no longer declares an approved hash (`endQueryApprovals`, from lib/artifacts'
  * head write: reverting the text does not bring it back), moving the page to another owner, deleting it (restoring it
- * brings none back), a revoke, new people brought in as above; and the approver losing that membership or the group being
+ * brings none back), a revoke; and the approver losing that membership or the group being
  * deleted (`endStaleApprovals`: from lib/groups after every group change the app makes, and at the first read that finds
  * one no longer holding, whoever changed it). A membership row taken away and put back, or a group deleted (its members'
  * rows go with it) and put back, is a new row: it revives nothing even with no read between. The one change the identity
@@ -186,15 +186,15 @@ async function adminPage(db:Queryable,actor:AccessActor,pageId:string,lock=false
 
 /**
  * What approving `declared` means, in plain words, for the Admin's confirmation (the sharing dialog shows it, and an
- * agent says it before approving): who sees what, what they may change, who may change the page's audience, and every
- * way the approval ends.
+ * agent says it before approving), in at most four short sentences: who sees what, what they may change, who may change
+ * the page's sharing, and which edits end it. Every way it ends is the header's and `approve_query`'s to list.
  */
 function statementOf(declared:Declared,group:string):string{
  const allowed=Object.entries(declared.query.params??{}).map(([name,rule])=>'values' in rule?`${name} (one of ${rule.values.map(value=>String(value)).join(', ')})`:`${name} (any ${rule.type})`);
- return `Everyone signed in with their own account who can open this page will see what ${declared.query.name} returns when ${group} reads it as a member, whatever their own access to this data; guests, test users and visitors who are not signed in still read it as themselves. `+
+ return `Everyone signed in with their own account who can open this page, including people who later join a group that can open it, will see what ${declared.query.name} returns as ${group} sees it. `+
   (allowed.length?`They may choose ${allowed.join(' and ')}; any other value is refused. `:'They cannot change anything in it. ')+
-  `While it is approved, only an Admin of ${group} may change who can open this page. `+
-  `The approval ends when its text, its connection or what readers may vary changes, when it is revoked, when the page is deleted or moves to another owner, when the Admin membership you approve it with ends (being made Admin again does not restore it) or ${group} is deleted, or when someone who is not an Admin of ${group} brings new people into a group that can open this page.`;
+  `While it is approved, only an Admin of ${group} may change this page's sharing. `+
+  `Editing the query, its connection or what readers may vary ends the approval.`;
 }
 
 export interface QueryApprovalView {
@@ -215,7 +215,7 @@ export async function pageQueryApprovals(actor:AccessActor,pageId:string):Promis
  })};
 }
 
-type EndReason='revoked'|'edited'|'moved'|'replaced'|'deleted'|'approver_not_admin'|'group_deleted'|'audience_changed';
+type EndReason='revoked'|'edited'|'moved'|'replaced'|'deleted'|'approver_not_admin'|'group_deleted';
 const payload=(row:Pick<ApprovalRow,'id'|'query_name'|'query_hash'|'connection'|'group_id'>,reason?:EndReason)=>
  ({approval_id:row.id,query:row.query_name,query_hash:row.query_hash,connection:row.connection,group_id:row.group_id,...(reason?{reason}:{})});
 
@@ -298,32 +298,6 @@ export async function endStaleApprovals(tx:Queryable,subject:string|null,pageId?
     AND ${APPROVER_HOLDS}))
   UPDATE page_query_approvals a SET ended_at=now(),ended_by=$2,ended_reason=stale.reason FROM stale WHERE a.id=stale.id AND a.ended_at IS NULL RETURNING a.*`,[pageId??null,subject])).rows;
  for(const row of ended)await recordEvent(tx,subject?{kind:'user',id:subject}:null,'query_approval_ended',{kind:'artifact',id:row.page_id},payload(row,row.ended_reason));
-}
-
-/**
- * NEW READERS BROUGHT IN BY A GROUP CHANGE (lib/groups, after every change the app makes): a page's readers include the
- * members of the owning group's subtree and of each group it is shared with (and their subtrees). A change that adds
- * people to one of those, `joined` (someone joined group X) or `subgroup_attached` (a group, with its members, was put
- * under X; never a group created there in the same change, whose one member is its creator, already an Admin of X), ends
- * each live approval of such a page (`audience_changed`, audited as the change's actor: for a join, the person who
- * joined), unless an Admin of the owning group made it: for an attachment, its actor; for a join, which follows an
- * invitation by an Admin of X (or the install admitting its members to its default group), when every Admin of X is an
- * Admin of the owning group. So a join into a group the page is shared with ends it unless all that group's Admins are
- * the owning group's.
- */
-export async function endApprovalsForNewReaders(tx:Queryable,changes:readonly {groupId:string;actorId:string;action:string;details?:Record<string,unknown>}[]):Promise<void>{
- const created=new Set(changes.filter(change=>change.action==='created').map(change=>change.groupId));
- const widening=changes.filter(change=>change.action==='joined'||(change.action==='subgroup_attached'&&!created.has(String(change.details?.group_id))));
- if(!widening.length||!(await tx.query('SELECT 1 FROM page_query_approvals WHERE ended_at IS NULL LIMIT 1')).rows.length)return;
- for(const change of widening){
-  const ended=(await tx.query<ApprovalRow>(`WITH RECURSIVE up(id,depth) AS (SELECT $1::text,0 UNION ALL SELECT g.parent_id,up.depth+1 FROM up JOIN groups g ON g.id=up.id WHERE g.parent_id IS NOT NULL AND up.depth<10000),
-    reached AS (SELECT a.id FROM page_query_approvals a WHERE a.ended_at IS NULL
-     AND (a.group_id IN (SELECT id FROM up) OR EXISTS (SELECT 1 FROM artifact_group_shares s WHERE s.artifact_id=a.page_id AND s.group_id IN (SELECT id FROM up)))
-     AND NOT (CASE WHEN $3::text='joined' THEN NOT EXISTS (SELECT 1 FROM group_admins x WHERE x.group_id=$1 AND NOT EXISTS (SELECT 1 FROM group_admins y WHERE y.group_id=a.group_id AND y.user_id=x.user_id))
-       ELSE EXISTS (SELECT 1 FROM group_admins y WHERE y.group_id=a.group_id AND y.user_id=$2) END))
-   UPDATE page_query_approvals a SET ended_at=now(),ended_by=$2,ended_reason='audience_changed' FROM reached WHERE a.id=reached.id AND a.ended_at IS NULL RETURNING a.*`,[change.groupId,change.actorId,change.action])).rows;
-  for(const row of ended)await recordEvent(tx,{kind:'user',id:change.actorId},'query_approval_ended',{kind:'artifact',id:row.page_id},payload(row,'audience_changed'));
- }
 }
 
 /** The page fields an audience change is judged against: its row as the writer locked it. */

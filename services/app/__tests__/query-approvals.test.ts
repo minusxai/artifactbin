@@ -27,10 +27,9 @@ it('runs a declared query as each reader until an Admin approves it; then as the
  const listed=await approvals(ada);
  expect(listed.status,JSON.stringify(listed.body)).toBe(200);
  expect(listed.body).toEqual({group:{id:team.id,name:'Team'},queries:[{name:'totals',connection:'default:',sql:TOTALS,params:{region:{values:['EU','US']}},hash:expect.stringMatching(/^[0-9a-f]{64}$/),approval:null,
-  statement:'Everyone signed in with their own account who can open this page will see what totals returns when Team reads it as a member, whatever their own access to this data; guests, test users and visitors who are not signed in still read it as themselves. '+
-   'They may choose region (one of EU, US); any other value is refused. While it is approved, only an Admin of Team may change who can open this page. '+
-   'The approval ends when its text, its connection or what readers may vary changes, when it is revoked, when the page is deleted or moves to another owner, when the Admin membership you approve it with ends (being made Admin again does not restore it) or Team is deleted, '+
-   'or when someone who is not an Admin of Team brings new people into a group that can open this page.'}]});
+  statement:'Everyone signed in with their own account who can open this page, including people who later join a group that can open it, will see what totals returns as Team sees it. '+
+   'They may choose region (one of EU, US); any other value is refused. While it is approved, only an Admin of Team may change this page\'s sharing. '+
+   'Editing the query, its connection or what readers may vary ends the approval.'}]});
  // An Editor of the group may neither see nor approve it.
  expect((await approvals(eve)).status).toBe(403);
  expect(await approve(eve)).toMatchObject({status:403,body:{error:'forbidden'}});

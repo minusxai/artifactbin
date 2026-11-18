@@ -244,7 +244,7 @@ it('shows a structured server refusal without marking the unsaved visibility sel
 it('shows an Admin each query of the page on live data, approves one after saying what readers will see, and revokes it', async () => {
   const state = { visibility: 'private', linkRole: 'viewer', shares: [], canPrivate: true };
   const query = { name: 'totals', connection: 'default:', sql: 'select region, sum(amount) from wh.sales group by region', params: {}, hash: 'a'.repeat(64),
-    statement: 'Everyone who can open this page will see what totals returns when Team reads it as a member, whatever their own access to this data.' };
+    statement: 'Everyone signed in with their own account who can open this page, including people who later join a group that can open it, will see what totals returns as Team sees it. They cannot change anything in it. While it is approved, only an Admin of Team may change this page\'s sharing. Editing the query, its connection or what readers may vary ends the approval.' };
   let approval: null | { id: string; approved_by: { name: string; username: null }; approved_at: string } = null;
   const fetcher = stubFetch({
     'GET /api/artifacts/abc123/query-approvals': () => Response.json({ group: { id: 'grp_1', name: 'Team' }, queries: [{ ...query, approval }] }),
