@@ -22,7 +22,6 @@ import { trackEvent } from '@/lib/analytics';
 import { forkCountByUser, likeSummaryByUser, viewSeriesByUser, VIEW_SERIES_DAYS, listArtifactsByUser } from '@/lib/workspace';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { identityForUser, createUser } from '@/lib/accounts';
-import { renderSparklineSvg } from '@/lib/viz';
 import { sessionUser, requestHeaders, params, create, eventRows, expectEvent, settle } from './analytics-fixture';
 
 const harness = useAppHarness();
@@ -233,13 +232,4 @@ describe('per-artifact totals', () => {
 
     expect(await forkCountByUser(user.id)).toBe(2);
   });
-});
-
-describe('sparkline rendering', () => {
-  it('renders a series to inline SVG through the headless vega pipeline', async () => {
-    const svg = await renderSparklineSvg([0, 1, 4, 2, 7, 3, 0, 0, 5, 9]);
-    expect(svg.startsWith('<svg')).toBe(true);
-  });
-
-
 });

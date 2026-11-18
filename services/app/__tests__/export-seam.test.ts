@@ -146,7 +146,7 @@ describe('the export route through the browser seam', () => {
     const id = await doc();
     const res = await exportImage(new Request(`${BASE}/a/${id}/export`), params(id));
     expect(res.status).toBe(503);
-    expect(await res.json()).toMatchObject({ error: 'render_unavailable' });
+    expect(await res.json()).toEqual({ error: 'render_unavailable' });
   });
 
   it('a missing slide is a client error naming how many slides exist', async () => {
@@ -155,7 +155,7 @@ describe('the export route through the browser seam', () => {
     const res = await exportImage(new Request(`${BASE}/a/${id}/export?slide=9`), params(id));
     expect(res.status).toBeGreaterThanOrEqual(400);
     expect(res.status).toBeLessThan(500);
-    expect(JSON.stringify(await res.json())).toContain('2');
+    expect(await res.json()).toEqual({ error: 'slide_not_found', slides: 2 });
   });
 
   it('a failed navigation is a server-side error, and the fake was asked exactly once', async () => {

@@ -57,8 +57,11 @@ async function person(name:string){
  return {id:user.id,email:user.email!,tokenId:token.id,token:token.token,actor:identityForUser(user.id,token.id,user.email)};
 }
 
+/** How the page door says no: its reply carries an error, which the work below throws as one of these. */
+class Refusal extends Error {}
+
 async function opens(work:()=>Promise<unknown>):Promise<boolean> {
- try{const out=await work();return out!==false;}catch{return false;}
+ try{const out=await work();return out!==false;}catch(error){if(error instanceof Refusal)return false;throw error;}
 }
 
 it('decides every policy shape × caller × read door as the stored rules say',async()=>{
@@ -77,7 +80,7 @@ it('decides every policy shape × caller × read door as the stored rules say',a
    const actor=actors[caller],key=`${shape.name}|${caller}|${door}`;
    const row=(await getArtifactById(id))!;
    const sql=()=>tables(request(`/a/${id}/tables`,{method:'POST',json:{sql:'select 1 as one'},...(tokens[caller]?{token:tokens[caller]}:{})}),{params:Promise.resolve({id})}).then(r=>r.status===200);
-   actual[key]=await opens(door==='direct'?()=>canReadArtifact(row,actor):door==='page'?async()=>{const reply=await linkedSql(actor,binding,'select _id from data limit 1');if(reply.error)throw Error(errorCode(reply)??'refused');}:sql);
+   actual[key]=await opens(door==='direct'?()=>canReadArtifact(row,actor):door==='page'?async()=>{const reply=await linkedSql(actor,binding,'select _id from data limit 1');if(reply.error)throw new Refusal(errorCode(reply)??'refused');}:sql);
    want[key]=expected(shape,caller,door);
   }
  }

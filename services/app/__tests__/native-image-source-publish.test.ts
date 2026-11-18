@@ -1,6 +1,6 @@
 import {nativeHtml} from './native-html-fixture';
 /**
- * THE PUBLISH DOOR AND A BOUND IMAGE SOURCE.
+ * THE PUBLISH DOOR AND A COMPUTED IMAGE SOURCE (a name or placeholder literal, never fetched).
  *
  * A URL written literally is fetched at publish. A source the
  * browser only computes cannot be — so the door's job here is to stop calling

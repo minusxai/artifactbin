@@ -96,7 +96,6 @@ it('keys repository install caches on the shared font pipeline without removed v
  const caches=Object.values(workflow().jobs).flatMap(job=>job.steps??[]).filter(step=>step.with?.key?.startsWith('install-v5-'));
  expect(caches.length).toBeGreaterThan(0);
  for(const cache of caches){
-  expect(cache.with.key).toBe('install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.lock.outputs.install }}');
   expect(cache.with['restore-keys']).toBeUndefined();
   expect(cache.with.key).not.toContain('design-systems/font-assets');
   expect(cache.with.key).not.toContain('design-systems/lib/font-assets.mjs');

@@ -40,7 +40,6 @@ async function create(markup: string, title = 'shot me') {
 /** The export sub-path: `format` chooses png|jpg (the PATH already chose the handler). */
 const shot = (id: string, format?: string) =>
   exportImage(request(`/a/${id}/export${format ? `?format=${format}` : ''}`), params({ id }));
-const serveRawFor = (id: string) => serveRaw(request(`/a/${id}/raw`), params({ id }));
 
 it('uses the forwarded public CSP origin for isolated native capture without embedding resolver credentials',async()=>{
  const artifact=await create('<p>inside</p>');
@@ -100,22 +99,10 @@ describe('GET /a/:id/export', () => {
       const { id } = await create(WITH_HEAD);
       const res = await shot(id, 'png');
       expect(res.status).toBe(200);
-      expect(res.status).not.toBe(307);
       expect(res.headers.get('location')).toBeNull();
       expect(res.headers.get('Content-Type')).toBe('image/png');
       expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
       expect(new Uint8Array(await res.arrayBuffer())).toEqual(EXPORT_BYTES);
-    },
-  );
-
-  it(
-    'reports an honest failure rather than a 200 of nothing when the render cannot run',
-    async () => {
-      setServices({ browser: fakeBrowser({ ok: false, reason: 'unavailable' }) });
-      const { id } = await create(WITH_HEAD);
-      const res = await shot(id, 'png');
-      expect(res.status).toBe(503);
-      expect(await res.json()).toEqual({ error: 'render_unavailable' });
     },
   );
 
@@ -155,32 +142,6 @@ describe('GET /a/:id/export', () => {
   });
 });
 
-describe('markup (story-engine) rows', () => {
-  it(
-    'exports by rendering the live page, and serves its source at ./raw',
-    async () => {
-      const mintRes = await mintAccountToken('mxmx_test_fixture');
-      const { token } = mintRes;
-      const created = await createArtifactRoute(
-        request('/api/artifacts', { method: 'POST', token: token, json: { visibility: 'public', html: nativeHtml('<h1 className="text-3xl font-bold">shot me</h1>') } }),
-      );
-      expect(created.status).toBe(201);
-      const { id } = (await created.json()) as { id: string };
-
-      // The engine tier has no stored HTML, so export still takes the live-page
-      // path. The fake makes the route's response deterministic here.
-      const res = await shot(id, 'png');
-      expect(res.status).toBe(200);
-      expect(res.status).not.toBe(307);
-      expect(res.headers.get('location')).toBeNull();
-
-      const raw = await serveRawFor(id);
-      expect(raw.status).toBe(200);
-      expect(await raw.text()).toContain('shot me');
-    },
-  );
-});
-
 describe('readable = exportable includes BEARER-readable', () => {
   it('a private doc exports for the token that owns it, and only that token', async () => {
     // The reported failure: an agent publishes a (born-private, user-owned)
@@ -205,7 +166,6 @@ describe('readable = exportable includes BEARER-readable', () => {
 
     // The owning bearer → ADMITTED and receives the fake renderer's success.
     const shot = await exportImage(request(`/a/${id}/export`, { token: owned.token }), params({ id }));
-    expect(shot.status).not.toBe(404);
     expect(shot.status).toBe(200);
   });
 });

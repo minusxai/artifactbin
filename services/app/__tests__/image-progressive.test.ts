@@ -76,13 +76,6 @@ describe('a stored blur reaches the reader', () => {
     const doc=await(await create(t.token,{html:nativeHtml(`<img src="ref:${img.id}" alt="x" width="48" height="32" style="${css}">`)})).json();
     const html=await(await serveArtifact(request(`/a/${doc.id}/raw`),params(doc.id))).text();expect(html).toContain(css);expect(html).toContain(`src="/a/${img.id}/raw?v=1"`);expect(html).toContain('width="48" height="32"');
   });
-
-  // The author meant what they wrote; cloneElement would replace it outright.
-  it("stays out of the way of an author's own style", async () => {
-    const { doc } = await documentWithImage((id) => `<div class="p-4"><img src="ref:${id}" alt="x" style="opacity:0.5" /></div>`);
-    const html = await serveArtifact(request(`/a/${doc}/raw`), params(doc)).then((r) => r.text());
-    expect(html).not.toMatch(/background-image:\s*url\(data:/);
-  });
 });
 
 

@@ -18,7 +18,4 @@ describe('reader tooling contracts', () => {
     expect(read('services/app/scripts/build-server-reader.mjs')).toContain('build-html-components.mjs');
     expect(agents).toContain('gate-container.mjs kit-and-fonts');
   });
-  it('the page-speed lab enforces size targets', () => {
-    expect(read('.github/workflows/page-speed.yml')).toContain('node scripts/build/size-targets.mjs page-speed/head.json --markdown --strict');
-  });
 });

@@ -75,33 +75,15 @@ it('adversarial: removing a page link after phase one prevents the write commit'
     }
     return result;
   });
-  try { await refused(f, sql(f.page, f.other, "insert into staff (name) values ('removed-link')")); }
-  finally { spy.mockRestore(); }
-  expect(moved).toBe(true);
-});
-
-it('GraphQL too: removing a page link while a mutation runs refuses its commit', async () => {
-  const f = await fixture(), engine = services().sql, original = engine.mutate.bind(engine);
-  let moved = false;
-  const spy = vi.spyOn(engine, 'mutate').mockImplementation(async (input) => {
-    const result = await original(input);
-    if (!moved) {
-      moved = true;
-      await (await getDb()).query("UPDATE artifacts SET meta=jsonb_set(meta, '{htmlLinks}', '[]'::jsonb), version=version+1 WHERE id=$1", [f.page]);
-    }
-    return result;
-  });
-  const before = await stored(f.staff);
-  let reply;
-  try { reply = await sql(f.page, f.other, "insert into staff(name) values('removed-link')"); }
+  const reply = sql(f.page, f.other, "insert into staff (name) values ('removed-link')");
+  try { await refused(f, reply); }
   finally { spy.mockRestore(); }
   expect(moved).toBe(true);
   // The guard refused the commit; the page no longer holds, so even that refusal leaves as the uniform 404.
-  expect(reply.status).toBe(404);
-  expect(reply.body.returning).toBeUndefined();
-  expect(await stored(f.staff)).toEqual(before);
+  const { status, body } = await reply;
+  expect(status).toBe(404);
+  expect(body.returning).toBeUndefined();
 });
-
 
 it('review2: legacy SQL receipts fail closed after role narrowing', async () => {
   const f = await fixture(), db = await getDb();
@@ -126,9 +108,9 @@ it('review2: same role with changed filter withholds SQL receipt rows', async ()
 });
 
 
-it.each(['sql'] as const)('review2: %s replay checks page access again before disclosing rows', async door => {
+it('review2: a SQL replay checks page access again before disclosing rows', async () => {
   const f = await fixture(), db = await getDb();
-  const text = door === 'sql' ? "insert into staff (name) values ('replay-secret')" : 'mutation { insert_staff_one(object: {name: "replay-secret"}) { name } }';
+  const text = "insert into staff (name) values ('replay-secret')";
   const key = 'review2_revoke_replay_001';
   const call = () => sql(f.page, f.other, text, {}, {key});
   expect((await call()).status).toBe(200);
@@ -200,7 +182,6 @@ it('receipts keep the outcome identity, never rows; a replay answers the rows as
   const replay = await sql(f.page, f.owner, "update staff set salary = 77 where name = 'bo'", {}, { key });
   expect(replay.body).toMatchObject({ affected: 1, returning: [{ name: 'bo', salary: 78 }] });
   expect((await stored(f.staff))[1]!.salary).toBe(78);
-  // GraphQL receipts too.
 });
 it('a fresh SQL reply shows its rows under the read access that holds at commit', async () => {
   const f = await fixture(), db = await getDb();

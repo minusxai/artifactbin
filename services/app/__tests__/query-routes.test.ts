@@ -36,7 +36,7 @@ describe('native saved-page dataset queries',()=>{
   const f=await fixture('private');expect(await f.call('select region from sales')).toEqual({error:'not_found'});
   expect((await f.call('select region from sales',{},f.owner.token)).rows).toHaveLength(3);
  });
- it('rejects undeclared roots and invalid page bounds before returning rows',async()=>{
+ it('refuses an undeclared root, and answers an oversized limit with the rows there are',async()=>{
   const f=await fixture();expect((await f.call('select region from guessed')).error).toBeDefined();
   expect((await f.call('select _id from sales limit 5000')).rows).toHaveLength(3);
  });

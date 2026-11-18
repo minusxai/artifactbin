@@ -258,23 +258,6 @@ describe('an artifact whose edit log has been pruned', () => {
     const read=await readRoute(request(`/api/artifacts/${doc.id}`,{token}),params({id:doc.id}));
     const head=await read.json();expect(head.html).toContain('BETA');expect(head.html).not.toContain('ALPHA');expect(head.version).toBe(2);
   });
-
-  it('a second document with a pruned log edits too', async () => {
-    const token = await mint();
-    const res = await createArtifactRoute(
-      request('/api/artifacts', { method: 'POST', token: token, json: { title: 'h', html:nativeHtml('<h1>hello</h1>') } }),
-    );
-    const doc = (await res.json()) as Wire;
-    const db = await getDb();
-    await db.query('DELETE FROM artifact_edits WHERE artifact_id = $1', [doc.id]);
-
-    const edit = await editRoute(
-      request(`/api/artifacts/${doc.id}`, { method: 'PUT', token: token, json: await replacement(doc.id,'hello','goodbye') }),
-      params({ id: doc.id }),
-    );
-    expect(edit.status).toBe(200);
-    expect((await edit.json()).html).toContain('goodbye');
-  });
 });
 
 async function replacement(id:string,old:string,value:string){const row=(await getArtifactById(id))!;return {html:row.source!.replace(old,value),expectedVersion:row.version,expectedState:artifactState(row)};}

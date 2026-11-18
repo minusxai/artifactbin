@@ -81,7 +81,7 @@ describe('percent-encoded route params (what the router really sends)', () => {
     });
   });
 
-  it('the unfurl metadata resolves the encoded form as well', async () => {
+  it('the unfurl metadata is read by the plain artifact id', async () => {
     const { doc } = await fixtures();
     const meta = await artifactMetadata(doc.id);
     expect(meta.title).toBe('Eating Healthy');
@@ -92,11 +92,8 @@ describe('percent-encoded route params (what the router really sends)', () => {
     expect((await outcome(UserPage('%E0%A4%A', ['x']))).kind).toBe('notFound');
   });
 
-  it('username matching is case-insensitive in the URL', async () => {
+  it('a username in the wrong case heals to the canonical address', async () => {
     const { doc } = await fixtures();
-    expect(await outcome(UserPage('@PPSreejith', [doc.id]))).toEqual({
-      kind: 'redirect',
-      to: `/@mxmx_owner/${doc.id}-eating-healthy`,
-    });
+    expect(await outcome(UserPage('@MXMX_OWNER', [doc.id]))).toEqual({ kind: 'redirect', to: `/@mxmx_owner/${doc.id}-eating-healthy` });
   });
 });

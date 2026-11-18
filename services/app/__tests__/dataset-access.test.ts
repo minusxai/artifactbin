@@ -25,6 +25,8 @@ const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.re
 const create = (token: string, body: Record<string, unknown>) =>
   createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: body }));
 const ROWS = [{ choice: 'ramen', who: 'seed' }];
+/** The signed-in browser session of a minted account. */
+const session = (who: { userId?: string | null; email?: string | null }) => ({ credential: 'session' as const, userId: who.userId!, email: who.email!, emailVerified: true });
 
 describe('access on the bearer API', () => {
   // Dataset permissions v3: a new dataset is born with the read-only template and `readwrite` access (its owner and
@@ -81,7 +83,7 @@ describe('access on the browser surfaces', () => {
   it('PATCH /api/my/artifacts/<id> { access } flips it with no version bump; a document answers access_datasets_only', async () => {
     const t = await mintToken('t');
     const id = ((await (await create(t.token, { dataset: ROWS })).json()) as { id: string }).id;
-    const res = await sessionPatchRoute(await observedRequest(`/api/my/artifacts/${id}`, { method: 'PATCH', actor: { credential: 'session', userId: t.userId!, email: t.email!, emailVerified: true }, json: { access: 'readwrite' } }), params({ id }));
+    const res = await sessionPatchRoute(await observedRequest(`/api/my/artifacts/${id}`, { method: 'PATCH', actor: session(t), json: { access: 'readwrite' } }), params({ id }));
     expect(res.status).toBe(200);
     expect((await res.json()) as object).toMatchObject({ id, access: 'readwrite' });
     const row = (await getArtifactById(id))!;
@@ -89,7 +91,7 @@ describe('access on the browser surfaces', () => {
     expect(row.version).toBe(1);
 
     const doc = ((await (await create(t.token, { html: '<!doctype html><html><head><title>Page</title></head><body><p>hi</p></body></html>' })).json()) as { id: string }).id;
-    const nope = await sessionPatchRoute(await observedRequest(`/api/my/artifacts/${doc}`, { method: 'PATCH', actor: { credential: 'session', userId: t.userId!, email: t.email!, emailVerified: true }, json: { access: 'readwrite' } }), params({ id: doc }));
+    const nope = await sessionPatchRoute(await observedRequest(`/api/my/artifacts/${doc}`, { method: 'PATCH', actor: session(t), json: { access: 'readwrite' } }), params({ id: doc }));
     expect(nope.status).toBe(400);
   });
 
@@ -98,12 +100,12 @@ describe('access on the browser surfaces', () => {
     const t = await mintToken('t', user.id);
     const ds = ((await (await create(t.token, { dataset: ROWS, access: 'readwrite' })).json()) as { id: string }).id;
     // JSX-declared writer discovery retired with the compiler; retain the dataset sharing ACL contract.
-    const got = await sharingGet(request(`/api/my/artifacts/${ds}/sharing`, { actor: { credential: 'session', userId: t.userId!, email: t.email!, emailVerified: true } }), params({ id: ds }));
+    const got = await sharingGet(request(`/api/my/artifacts/${ds}/sharing`, { actor: session(t) }), params({ id: ds }));
     expect(got.status).toBe(200);
     const state = (await got.json()) as { visibility: string; access: string; writtenBy: Array<{ id: string; title: string | null; mutations: string[] }> };
     expect(state.access).toBe('readwrite');
 
-    const put = await sharingPut(request(`/api/my/artifacts/${ds}/sharing`, { method: 'PUT', actor: { credential: 'session', userId: t.userId!, email: t.email!, emailVerified: true }, json: { access: 'read' } }), params({ id: ds }));
+    const put = await sharingPut(request(`/api/my/artifacts/${ds}/sharing`, { method: 'PUT', actor: session(t), json: { access: 'read' } }), params({ id: ds }));
     expect(put.status).toBe(200);
     expect(((await put.json()) as { access: string }).access).toBe('read');
     expect((await getArtifactById(ds))!.access).toBe('read');
@@ -118,11 +120,11 @@ describe('access on the browser surfaces', () => {
     const doc = ((await (await create(t.token, { html: '<!doctype html><html><head><title>Page</title></head><body><p>not a dataset</p></body></html>' })).json()) as { id: string }).id;
 
     const viaSharing = await sharingPut(
-      request(`/api/my/artifacts/${doc}/sharing`, { method: 'PUT', actor: { credential: 'session', userId: t.userId!, email: t.email!, emailVerified: true }, json: { access: 'readwrite' } }),
+      request(`/api/my/artifacts/${doc}/sharing`, { method: 'PUT', actor: session(t), json: { access: 'readwrite' } }),
       params({ id: doc }),
     );
     const viaPatch = await sessionPatchRoute(
-      await observedRequest(`/api/my/artifacts/${doc}`, { method: 'PATCH', actor: { credential: 'session', userId: t.userId!, email: t.email!, emailVerified: true }, json: { access: 'readwrite' } }),
+      await observedRequest(`/api/my/artifacts/${doc}`, { method: 'PATCH', actor: session(t), json: { access: 'readwrite' } }),
       params({ id: doc }),
     );
     expect([viaSharing.status, viaPatch.status]).toEqual([400, 400]);
@@ -133,11 +135,11 @@ describe('access on the browser surfaces', () => {
   it('opens a dataset for writes through every browser door without a preview flag', async () => {
     const t = await mintToken('t');
     const ds = ((await (await create(t.token, { dataset: ROWS })).json()) as { id: string }).id;
-    const sharing = await sharingPut(request(`/api/my/artifacts/${ds}/sharing`, { method: 'PUT', actor: { credential: 'session', userId: t.userId!, email: t.email!, emailVerified: true }, json: { access: 'readwrite' } }), params({ id: ds }));
+    const sharing = await sharingPut(request(`/api/my/artifacts/${ds}/sharing`, { method: 'PUT', actor: session(t), json: { access: 'readwrite' } }), params({ id: ds }));
     expect(sharing.status).toBe(200);
     expect((await sharing.json()) as object).toMatchObject({ access: 'readwrite' });
-    await sharingPut(request(`/api/my/artifacts/${ds}/sharing`, { method: 'PUT', actor: { credential: 'session', userId: t.userId!, email: t.email!, emailVerified: true }, json: { access: 'read' } }), params({ id: ds }));
-    const patch = await sessionPatchRoute(await observedRequest(`/api/my/artifacts/${ds}`, { method: 'PATCH', actor: { credential: 'session', userId: t.userId!, email: t.email!, emailVerified: true }, json: { access: 'readwrite' } }), params({ id: ds }));
+    await sharingPut(request(`/api/my/artifacts/${ds}/sharing`, { method: 'PUT', actor: session(t), json: { access: 'read' } }), params({ id: ds }));
+    const patch = await sessionPatchRoute(await observedRequest(`/api/my/artifacts/${ds}`, { method: 'PATCH', actor: session(t), json: { access: 'readwrite' } }), params({ id: ds }));
     expect(patch.status).toBe(200);
     expect((await patch.json()) as object).toMatchObject({ access: 'readwrite' });
   });
@@ -145,18 +147,18 @@ describe('access on the browser surfaces', () => {
   it('an email account owner manages sharing and private visibility; strangers are denied', async () => {
     const t = await mintToken('t');
     const ds = ((await (await create(t.token, { dataset: ROWS, visibility: 'public' })).json()) as { id: string }).id;
-    const got = await sharingGet(request(`/api/my/artifacts/${ds}/sharing`, { actor: { credential: 'session', userId: t.userId!, email: t.email!, emailVerified: true } }), params({ id: ds }));
+    const got = await sharingGet(request(`/api/my/artifacts/${ds}/sharing`, { actor: session(t) }), params({ id: ds }));
     expect(got.status).toBe(200);
     // Born readwrite under the read-only template (v3 default).
     expect((await got.json()) as object).toMatchObject({ visibility: 'public', access: 'readwrite', shares: [] });
-    const rw = await sharingPut(request(`/api/my/artifacts/${ds}/sharing`, { method: 'PUT', actor: { credential: 'session', userId: t.userId!, email: t.email!, emailVerified: true }, json: { access: 'readwrite', visibility: 'unlisted' } }), params({ id: ds }));
+    const rw = await sharingPut(request(`/api/my/artifacts/${ds}/sharing`, { method: 'PUT', actor: session(t), json: { access: 'readwrite', visibility: 'unlisted' } }), params({ id: ds }));
     expect(rw.status).toBe(200);
     expect((await getArtifactById(ds))!).toMatchObject({ access: 'readwrite', visibility: 'unlisted' });
-    const priv = await sharingPut(request(`/api/my/artifacts/${ds}/sharing`, { method: 'PUT', actor: { credential: 'session', userId: t.userId!, email: t.email!, emailVerified: true }, json: { visibility: 'private' } }), params({ id: ds }));
+    const priv = await sharingPut(request(`/api/my/artifacts/${ds}/sharing`, { method: 'PUT', actor: session(t), json: { visibility: 'private' } }), params({ id: ds }));
     expect(priv.status).toBe(200);
     expect((await getArtifactById(ds))!).toMatchObject({ visibility: 'private' });
     // A stranger's verified email session is the uniform 404.
     const other = await mintToken('o');
-    expect((await sharingGet(request(`/api/my/artifacts/${ds}/sharing`, { actor: { credential: 'session', userId: other.userId!, email: other.email!, emailVerified: true } }), params({ id: ds }))).status).toBe(404);
+    expect((await sharingGet(request(`/api/my/artifacts/${ds}/sharing`, { actor: session(other) }), params({ id: ds }))).status).toBe(404);
   });
 });

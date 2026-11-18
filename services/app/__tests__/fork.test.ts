@@ -81,7 +81,7 @@ describe('POST /api/my/artifacts/:id/fork', () => {
     expect(((await response.json()) as { error: string }).error).toBe('unservable_document');
   });
 
-  it('native node identities and author prose travel while comments remain scoped to the new page', async () => {
+  it('native node identities and author prose travel with the copy', async () => {
     const w=await world();const source=await head(w.doc.id);asSession(w.bob);
     const res=await fork(w.doc.id);expect(res.status).toBe(201);
     const copy=await head((await res.json()).id);
@@ -96,7 +96,7 @@ describe('POST /api/my/artifacts/:id/fork', () => {
     expect(res.status).toBe(200);
     const versions = (await res.json()) as { versions?: unknown[] } | unknown[];
     const list = Array.isArray(versions) ? versions : versions.versions ?? [];
-    expect(list.length).toBeLessThanOrEqual(1);
+    expect(list).toHaveLength(0);
   });
 
   it('the owner wire carries forked_from on the copy and null on the source', async () => {

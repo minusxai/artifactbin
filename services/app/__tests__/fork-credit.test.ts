@@ -291,7 +291,7 @@ describe('POST /api/artifacts/:id/fork (bearer)', () => {
     expect(await listArtifactsFor(identityForUser(w.bob.id, w.tb.id))).toHaveLength(0);
   });
 
-  it('every format forks; a dataset copy shares the object key', async () => {
+  it('a dataset copy shares the object key', async () => {
     const w = await world();
     const ds = await create(w.ta.token, { dataset: [{ month: '2026-01', revenue: 120 }], visibility: 'public' });
     const res = await bearerFork(ds.id, w.tb.token);

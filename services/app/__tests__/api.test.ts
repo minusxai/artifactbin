@@ -10,7 +10,6 @@ import {observedRequest} from '@/__tests__/conditional-request';
  */
 import { describe, expect, it } from 'vitest';
 import { useAppHarness, request } from '@/__tests__/harness';
-import { GET as serveArtifact } from '@/app/a/[id]/raw/route';
 import { GET as getArtifactRoute, PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
 import { GET as listArtifactsRoute, POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import {GET as getLlmsTxt} from '@/app/llms.txt/route';
@@ -144,17 +143,12 @@ describe('artifact CRUD', () => {
     const created = await create(a.token);
     const readable=await getArtifactRoute(request(`/api/artifacts/${created.id}`, {token:b.token}),params({id:created.id}));
     expect(readable.status).toBe(200);expect((await readable.json()).capabilities.edit).toBe(false);
-    for (const handler of [
-      async () =>
-        putArtifact(
-          await observedRequest(`/api/artifacts/${created.id}`, { method: 'PUT', token: b.token, json: { html:nativeHtml('<p>x</p>') } }),
-          params({ id: created.id }),
-        ),
-    ]) {
-      const res = await handler();
-      expect(res.status).toBe(404);
-      expect(await res.json()).toEqual({ error: 'not_found' });
-    }
+    const res = await putArtifact(
+      await observedRequest(`/api/artifacts/${created.id}`, { method: 'PUT', token: b.token, json: { html:nativeHtml('<p>x</p>') } }),
+      params({ id: created.id }),
+    );
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: 'not_found' });
   });
 
   it('lists only own artifacts, newest first, without content', async () => {
@@ -176,32 +170,7 @@ describe('artifact CRUD', () => {
   });
 });
 
-describe('public serving', () => {
-  it('serves the document with the strict CSP headers', async () => {
-    const { token } = await mint();
-    const created = await create(token, '<h1>public</h1>');
-    const res = await serveArtifact(request(`/a/${created.id}/raw`), params({ id: created.id }));
-    expect(res.status).toBe(200);
-    // The SSR'd document, not the source (elements carry their AST stamps) —
-    // see __tests__/raw-document.test.ts for the document's shape.
-    expect(await res.text()).toMatch(/<h1[^>]*>public<\/h1>/);
-    expect(res.headers.get('Content-Type')).toContain('text/html');
-    const csp = res.headers.get('Content-Security-Policy') ?? '';
-    expect(csp).toContain("default-src 'none'");
-    expect(csp).toContain('sandbox allow-scripts');
-    expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
-  });
-
-  it('404s unknown and malformed ids', async () => {
-    // Both arms, indistinguishable: 'zzzzzz' is VALID id syntax that names no
-    // row; the rest fail the syntax gate (too short, underscore, hyphen, too
-    // long, bad charset). Uppercase alone is valid now, so it is not a fixture.
-    for (const id of ['zzzzzz', 'abc12', 'art_abc123', 'abc-12', 'zzzzzzzzzzzzzzzzzzz', 'UPPER-not_valid!']) {
-      const res = await serveArtifact(request(`/a/${id}/raw`), params({ id }));
-      expect(res.status).toBe(404);
-    }
-  });
-});
+// The `/a/<id>/raw` serving headers and its uniform 404 are artifact-urls.test.ts's.
 
 describe('CLI and HTTP discovery',()=>{
  it('serves the shared skill root within its budget and links the HTTP task references',async()=>{

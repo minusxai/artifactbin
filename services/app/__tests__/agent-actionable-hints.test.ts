@@ -71,7 +71,6 @@ describe('native HTTP actionable refusals', () => {
     expect(refusal.error).toBe('invalid_annotation_body');
     expect(refusal.hint).toContain('body');
     expect(refusal.hint).toContain('anchor');
-    expect(refusal.hint).toContain('anchor');
   });
 
   it('an unresolved HTML anchor is refused', async () => {
@@ -80,7 +79,7 @@ describe('native HTTP actionable refusals', () => {
     const res = await createAnnotation(request(`/api/artifacts/${id}/annotations`, { method: 'POST', token: t.token, json: { body: 'hi', anchor: {kind:'html-node',v:1,revision:'1',nodeId:'missing',quote:'absent'} } }), params({ id }));
     expect(res.status).toBe(400);
     const refusal = await body(res);
-    expect(refusal.error).toBeTruthy();
+    expect(refusal.error).toBe('bad_path');
   });
 
   it('a folder refuses content without suggesting placement changes', async () => {

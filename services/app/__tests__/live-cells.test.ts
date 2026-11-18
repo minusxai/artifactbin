@@ -248,7 +248,7 @@ describe('typing together', () => {
     expect((await b.push()).status).toBe(200);
     a.text.insert(0, 'Please: ');
     expect((await a.push()).status).toBe(200);
-    const frames = await framesUntil(watching.frames!, (frame) => frame.type === 'updates' && JSON.stringify(frame).length > 0 && (frame.to as number) >= a.reply.seq + 3);
+    const frames = await framesUntil(watching.frames!, (frame) => frame.type === 'updates' && (frame.to as number) >= a.reply.seq + 3);
     for (const frame of frames) if (frame.type === 'updates') a.receive(frame.updates as string[]);
     const bStream = await stream(editor, `${key(red)}:${b.reply.seq}`);
     const bFrames = await framesUntil(bStream.frames!, (frame) => frame.type === 'updates' && (frame.to as number) >= a.reply.seq + 3);

@@ -151,7 +151,7 @@ describe('nobody else may', () => {
     const made = await comment(w.commenter, w.id, 'Written before signing out');
     await (await getDb()).query("UPDATE users SET kind = 'guest' WHERE id = $1", [w.commenter.user.id]);
     const res = await edit(w.commenter, w.id, made.id, { body: 'Guest rewrite' });
-    expect(res.status).not.toBe(200);
+    expect(res.status).toBe(404);
     expect((await bodies(w.id))[made.id]).toBe('Written before signing out');
   });
 

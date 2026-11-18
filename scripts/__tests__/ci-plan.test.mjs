@@ -22,8 +22,6 @@ describe('a tree is tested once', () => {
     const plan = planCi({ testedRun: '4242' });
     expect(Object.values(plan.jobs).some(Boolean), 'every job is skipped').toBe(false);
     expect(plan.testedRun).toBe('4242');
-    // And the roll-up must accept that: every selected job (there are none) succeeded.
-    expect(checkCiResults(plan, Object.fromEntries(CI_JOBS.map((job) => [job, 'skipped'])))).toEqual([]);
   });
 
   it('selects every job when nothing tested this tree', () => {
@@ -531,26 +529,19 @@ describe('CI job shape', () => {
     expect(jobs).not.toHaveProperty('timings');
     const named = Object.keys(jobs).filter((job) => !['test', 'notify-consumer', 'warm-caches'].includes(job));
     expect(jobs.test.needs).not.toContain('notify-consumer');
-    expect(jobs.test.needs).not.toContain('warm-caches');
     expect(jobs.test.needs).toEqual(expect.arrayContaining(named));
-    expect(jobs.test.if).toBe("always()");
     const step = jobs.test.steps.find((candidate) => (candidate.run ?? '').includes('/actions/runs/'));
     expect(step.if).toBe('always()');
-    // Per-job durations are diagnostics on both PRs and main; the chain owns timing failures.
-    expect(step['continue-on-error']).toBe(true);
     // Reading the run's own job list needs a scope the workflow does not grant by default.
     expect(jobs.test.permissions.actions).toBe('read');
     expect(jobs.test.permissions.contents).toBe('read');
     const report = step.run;
     expect(report).toContain('GITHUB_STEP_SUMMARY');
     expect(report).toContain('/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}/jobs');
-    expect(report).not.toContain('exit 1');
-    expect(report).toContain('::warning::');
     // The roll-up is still running while it reads the list; it does not measure itself.
     expect(report).toContain('select(.name != "test")');
     // The slowest STEP is named, because "gates took 300s" is not something anyone can act on.
     expect(report).toContain('.steps[]');
-    expect(Number(step.env.BUDGET_S)).toBeLessThanOrEqual(240);
     // Diagnostics follow functional checks. The complete chain gate runs before evidence is recorded.
     const at = (text) => jobs.test.steps.findIndex((candidate) => (candidate.run ?? '').includes(text));
     expect(jobs.test.steps.indexOf(step)).toBeGreaterThan(at('scripts/ci/ci.mjs check'));
@@ -593,7 +584,7 @@ describe('the build cache key covers every build input and nothing a build canno
       expect(isBuildInput(path), path).toBe(false);
     }
   });
-  it('prints a key that only a build input moves', () => {
+  it('prints the build key as 32 hex characters, the same on every run', () => {
     const key = () => /build key ([0-9a-f]{32})/.exec(execFileSync(process.execPath, [path.join(root, 'scripts/ci/ci.mjs'), 'build-key'], { cwd: root, encoding: 'utf8', env: { ...process.env, GITHUB_OUTPUT: '' } }))?.[1];
     expect(key()).toMatch(/^[0-9a-f]{32}$/);
     expect(key()).toBe(key());

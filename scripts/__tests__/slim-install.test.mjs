@@ -58,10 +58,12 @@ it('is restored only by the Vitest runners, exact key only, and on a miss they r
   for (const step of after) expect(step.if).toContain("steps.slim.outputs.cache-hit != 'true'");
 });
 
+/** Every way a module names a package: an import, a dynamic import, a require, or a node_modules path. */
+const specifier = /(?:\bfrom\s*|\bimport\s*\(\s*|\brequire(?:\.resolve)?\s*\(\s*|\bimport\s+)['"]([^'"]+)['"]|node_modules\/((?:@[^/'"\s]+\/)?[^/'"\s]+(?:\/[^'"\s]*)?)/g;
+
 it('is never imported, required or resolved outside the scripts that own it', () => {
   const files = execFileSync('git', ['ls-files', '-z'], { cwd: root, encoding: 'utf8' }).split('\0')
     .filter((file) => /\.(?:[cm]?[jt]sx?)$/.test(file) && !OWNERS.has(file) && !file.endsWith('slim-install.test.mjs'));
-  const specifier = /(?:\bfrom\s*|\bimport\s*\(\s*|\brequire(?:\.resolve)?\s*\(\s*|\bimport\s+)['"]([^'"]+)['"]|node_modules\/((?:@[^/'"\s]+\/)?[^/'"\s]+(?:\/[^'"\s]*)?)/g;
   const offenders = [];
   for (const file of files) {
     const text = read(file);
@@ -75,7 +77,6 @@ it('is never imported, required or resolved outside the scripts that own it', ()
 });
 
 it('refuses a new use: an import of an excluded package is found', () => {
-  const specifier = /(?:\bfrom\s*|\bimport\s*\(\s*|\brequire(?:\.resolve)?\s*\(\s*|\bimport\s+)['"]([^'"]+)['"]/g;
-  const names = [...`import x from '@fontsource/inter';\nconst y = require.resolve("lucide-static/font/lucide.woff");`.matchAll(specifier)].map((match) => match[1]);
+  const names = [...`import x from '@fontsource/inter';\nconst y = require.resolve("lucide-static/font/lucide.woff");`.matchAll(specifier)].map((match) => match[1] ?? match[2]);
   expect(names.map((name) => EXCLUDED.some(({ pkg }) => pkg.test(name)))).toEqual([true, true]);
 });

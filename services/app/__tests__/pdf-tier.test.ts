@@ -186,7 +186,7 @@ describe('a PDF by URL', () => {
     expect(await res.json()).toMatchObject({ error: 'pdf_fetch_failed', code: 'unsupported_type' });
   });
 
-  it('refuses a URL over the cap without reading it whole', async () => {
+  it('refuses a URL over the cap as pdf_fetch_failed', async () => {
     const t = await mintToken('t');
     const res = await create(t.token, { pdfUrl: `${base}/huge.pdf` });
     expect(res.status).toBe(400);

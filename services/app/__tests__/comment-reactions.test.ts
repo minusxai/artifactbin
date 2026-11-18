@@ -81,7 +81,7 @@ describe('account comment reactions',()=>{
   expect(res.status,await res.clone().text()).toBe(200);
   expect(summary(await res.json())).toEqual([{kind:'thumbs_up',count:1,viewer_reacted:true}]);
   expect((await react(request(`/api/my/artifacts/${w.id}/annotations/${w.thread.id}/reactions`,{method:'PUT',actor:w.owner.session,json:{kind:'heart',active:true}}),ctx(w.id,w.thread.id))).status).toBe(400);
-  expect((await react(request(`/api/my/artifacts/${w.id}/annotations/${w.thread.id}/reactions`,{method:'PUT',json:{kind:'thumbs_up',active:true}}),ctx(w.id,w.thread.id))).status).not.toBe(200);
+  expect((await react(request(`/api/my/artifacts/${w.id}/annotations/${w.thread.id}/reactions`,{method:'PUT',json:{kind:'thumbs_up',active:true}}),ctx(w.id,w.thread.id))).status).toBe(401);
  });
  it('lists reactors by the author rule: people with their account, agents by label without one',async()=>{
   const w=await world();

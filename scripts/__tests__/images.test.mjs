@@ -94,26 +94,24 @@ describe('runtime dependency closure', () => {
   });
 
   describe('every env name a service reads is documented, and retired names are not read', () => {
-    const intentionallyOmitted = new Set();
     const readNames = (file)=> {
       const src = read(file);
       const names = new Set();
       for (const m of src.matchAll(/env\(\s*'([A-Z_]+)'\s*,\s*'([A-Z_]+)'\s*\)/g)) names.add(`${m[1]}__${m[2]}`);
       return names;
     };
+    // The auth config reads through `readEnv(source, 'NAME')` and a table of names, not `env('A','B')`.
+    const readAuthNames = (file) => new Set([...read(file).matchAll(/'((?:[A-Z][A-Z0-9]*__[A-Z0-9_]+)|TEST_DOMAIN(?:_OTP)?)'/g)].map((m) => m[1]));
     const documented = read('.env.example');
+    const undocumentedIn = (names) => [...names].filter((n) => !new RegExp(`^#?\\s*${n}=`, 'm').test(documented) && !documented.includes(n));
     it('the app config', () => {
-      const undocumented = [...readNames('services/app/lib/platform/config.ts')]
-        .filter((n) => !intentionallyOmitted.has(n))
-        .filter((n) => !new RegExp(`^#?\\s*${n}=`, 'm').test(documented) && !documented.includes(n));
-      expect(undocumented).toEqual([]);
-      for (const name of intentionallyOmitted) expect(documented).not.toContain(name);
+      expect(undocumentedIn(readNames('services/app/lib/platform/config.ts'))).toEqual([]);
     });
     it('the standalone authentication config', () => {
-      const undocumented = [...readNames('services/auth/src/config.ts')].filter((n) => !documented.includes(n));
-      expect(undocumented).toEqual([]);
+      const names = readAuthNames('services/auth/src/config.ts');
+      expect(names.size).toBeGreaterThan(10);
+      expect(undocumentedIn(names)).toEqual([]);
     });
-
   });
 });
 
@@ -173,12 +171,6 @@ describe('lean-imports', () => {
       expect(packages.filter(([name]) => /(^|\/)node_modules\/@duckdb\//.test(name)).map(([name]) => name)).toEqual([]);
       const declared = packages.filter(([, p]) => Object.keys({ ...p.dependencies, ...p.optionalDependencies, ...p.devDependencies }).some((d) => d.startsWith('@duckdb/')));
       expect(declared.map(([name]) => name || '(root)')).toEqual([]);
-    });
-  });
-
-  describe('the old contract package', () => {
-    it('is gone: packages/contract does not exist and nothing imports it', () => {
-      expect(existsSync(path.join(ROOT, 'packages/contract'))).toBe(false);
     });
   });
 });

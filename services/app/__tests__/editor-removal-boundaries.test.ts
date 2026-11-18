@@ -68,7 +68,9 @@ it('HTTP fork converts historical heads, refuses unsupported copies atomically, 
  expect((await call(other.token)).status).toBe(404);
  const copied=await call();expect(copied.status).toBe(201);
  const db=await harness.db();
- expect((await db.query<{source:string}>('SELECT source FROM artifacts WHERE forked_from=$1',[source.id])).rows.every(row=>editableRegions(row.source)[0]!.kind==='rich-native-v1')).toBe(true);
+ const copies=(await db.query<{source:string}>('SELECT source FROM artifacts WHERE forked_from=$1',[source.id])).rows;
+ expect(copies).toHaveLength(1);
+ expect(copies.every(row=>editableRegions(row.source)[0]!.kind==='rich-native-v1')).toBe(true);
  await db.query('UPDATE artifacts SET source=$2 WHERE id=$1',[source.id,unsupported]);
  const before=(await db.query('SELECT id,source,version FROM artifacts')).rows;
  const refused=await call();expect(refused.status).toBe(409);expect(await refused.json()).toMatchObject({error:'unsupported_content'});

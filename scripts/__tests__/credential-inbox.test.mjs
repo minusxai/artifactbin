@@ -8,6 +8,15 @@ const received = 'https://api.resend.com/emails/receiving';
 
 afterEach(() => vi.useRealTimers());
 
+/** The inbox login run on fake timers, its sleeps advancing the clock. */
+const acquireInbox = (fetch, { email = 'eval@example.test', key = 'test-inbox-key' } = {}) => acquireCredential('inbox-oauth', {
+  base: 'https://product.example.test',
+  email,
+  env: { EVAL_LOGIN_EMAIL: email, RESEND_EVAL_API_KEY: key },
+  fetch,
+  sleep: async (ms) => { await vi.advanceTimersByTimeAsync(ms); },
+});
+
 it('acquires a credential through the normal local outbox login path', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'artifactbin-otp-inbox-'));
   const outbox = join(directory, 'outbox.jsonl');
@@ -107,13 +116,7 @@ it('reports safe mailbox status counts on timeout without echoing response or cr
     throw new Error('unexpected request');
   });
 
-  const pending = acquireCredential('inbox-oauth', {
-    base: 'https://product.example.test',
-    email: 'private-person@example.test',
-    env: { EVAL_LOGIN_EMAIL: 'private-person@example.test', RESEND_EVAL_API_KEY: 'private-inbox-key-xyz' },
-    fetch,
-    sleep: async (ms) => { await vi.advanceTimersByTimeAsync(ms); },
-  });
+  const pending = acquireInbox(fetch, { email: 'private-person@example.test', key: 'private-inbox-key-xyz' });
 
   await expect(pending).rejects.toThrow(/mailbox diagnostics: polls=\d+, list_statuses=503=\d+, detail_statuses=none, pages=0, matching_messages=0, page_limit_reached=false, invalid_responses=0, request_errors=1/);
   const error = await pending.catch((value) => value);
@@ -138,13 +141,7 @@ it('distinguishes an exhausted pagination cap from an empty mailbox page', async
     }
     throw new Error('unexpected request');
   });
-  const pending = acquireCredential('inbox-oauth', {
-    base: 'https://product.example.test',
-    email: 'eval@example.test',
-    env: { EVAL_LOGIN_EMAIL: 'eval@example.test', RESEND_EVAL_API_KEY: 'test-inbox-key' },
-    fetch,
-    sleep: async (ms) => { await vi.advanceTimersByTimeAsync(ms); },
-  });
+  const pending = acquireInbox(fetch);
   await expect(pending).rejects.toThrow(/pages=610, matching_messages=0, page_limit_reached=true/);
 
   vi.setSystemTime(new Date('2026-10-14T00:00:00Z'));
@@ -154,12 +151,6 @@ it('distinguishes an exhausted pagination cap from an empty mailbox page', async
     if (url.startsWith(`${received}?`)) return Response.json({ data: [], has_more: false });
     throw new Error('unexpected request');
   });
-  const empty = acquireCredential('inbox-oauth', {
-    base: 'https://product.example.test',
-    email: 'eval@example.test',
-    env: { EVAL_LOGIN_EMAIL: 'eval@example.test', RESEND_EVAL_API_KEY: 'test-inbox-key' },
-    fetch: emptyFetch,
-    sleep: async (ms) => { await vi.advanceTimersByTimeAsync(ms); },
-  });
+  const empty = acquireInbox(emptyFetch);
   await expect(empty).rejects.toThrow(/pages=61, matching_messages=0, page_limit_reached=false/);
 });

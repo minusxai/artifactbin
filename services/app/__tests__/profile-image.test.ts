@@ -123,7 +123,7 @@ describe('DELETE /api/my/profile/image', () => {
 });
 
 describe('GET /api/users/<id>/avatar', () => {
-  it('serves the WebP to anyone, immutable only at the address the row names', async () => {
+  it('serves the WebP to anyone, whatever ?v it carries', async () => {
     const user = await signedIn('mxmx_test_serve@example.com');
     await putImage(await png(300, 300));
     const version = avatarVersion((await getUserById(user.id))!.image_key!);
