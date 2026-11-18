@@ -8,8 +8,11 @@
 import { it } from 'vitest';
 import { checkConvergence, runScenario } from './property';
 
+/** A fixed set of interleavings in pr fast: the same cost and verdict every run (convergence.soak.test.ts explores fresh ones). */
+const FAST_SEED = 20261118;
+
 it('converges and keeps text under 15 random interleavings of up to 30 operations', () => {
-  checkConvergence(15, 30);
+  checkConvergence(15, 30, { seed: FAST_SEED });
 });
 
 // Shrunk counterexamples from the soak, replayed exactly on every run.
