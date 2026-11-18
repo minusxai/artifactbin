@@ -63,11 +63,16 @@ export const ISOLATED_FILE_MS = Object.freeze({ 'api-isolated': 2000, ui: 2000, 
 
 /**
  * WHAT EVERY FILE OF A SHARED-GRAPH PROJECT STILL PAYS: its setup files, environment and collection run per file even when
- * the module graph is shared. Only pr fast's node batch (scripts/lib/node-batch.mjs) has files cheap enough for it to
- * matter: their recorded times are tens of milliseconds. Measured locally (3 workers, 236 files): ~58ms per file beyond
- * the file's tests; ~175ms on a CI runner is an ESTIMATE (the local-to-CI factor of ~3 seen on the api shards).
+ * the module graph is shared. The node batch (scripts/lib/node-batch.mjs): measured locally (3 workers, 236 files) ~58ms
+ * per file beyond the file's tests; ~175ms on a CI runner is an ESTIMATE (the local-to-CI factor of ~3 seen on the api
+ * shards). The api project: ~0.4s a file on a pr fast runner beyond the file's recorded time. Without it the packer
+ * filled the many-file api runners past their predicted walls: replayed over 455 api runners' own files and Vitest
+ * times (pr fast runs 44362521013-44390108737), runners given 17 or more files ran 3.7s past their predicted wall and
+ * those given 9-16 3.0s past it, while one- and two-file runners ran 0.9s under, and the slowest api runner of a run was
+ * usually a many-file one. With 0.4s a file those groups come within 0.4s and 1.1s on average (a larger cost fits them
+ * more tightly only by over-predicting the 3-8 file runners further).
  */
-const SHARED_FILE_MS = Object.freeze({ 'node-batch': 175 });
+export const SHARED_FILE_MS = Object.freeze({ 'node-batch': 175, api: 400 });
 
 /**
  * Weight of one file of `project` (ms): its recorded time plus its project's per-file isolation cost. A file measured
@@ -110,7 +115,8 @@ export const WORKERS = 3;
  * (scripts/ci/test-timings.mjs `steadyTimings`): its graph's import and, inside its first file, its first database and
  * first pages. Fitted at 8-9s over 10 pr fast runs whose workers each compiled the page runtime on their first page; with
  * one build per run (services/app/test/setup/html-assets-file.ts), 7.5s fits pr fast runs 44166185767 and 44168708400
- * (their 37 multi-file api shards within 0.4s at the median; the one-file shards 1.2s over, the safe side).
+ * (their 37 multi-file api shards within 0.4s at the median; the one-file shards 1.2s over, the safe side), and still
+ * fits beside the api files' per-file cost (`SHARED_FILE_MS`).
  * The guard runners' two shared-graph projects (vitest.guard.config.ts) pay theirs too: without it their packing predicted
  * 12.2s for shards that ran 21-25s beside one holding only the longest file that ran 10.5s (pr fast run 44140374300).
  * Replaying each guard shard's own file times from 8 runs (24 shards), 4s per worker's first file fits their walls within
