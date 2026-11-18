@@ -129,6 +129,7 @@ export function summarizeCheck(checks) {
           check.text.length > 0 &&
           !check.contrast?.unreadable &&
           !check.ids?.duplicates &&
+          !check.components?.some?.(c => c.code === 'invalid_chart') &&
           ['pageErrors', 'consoleErrors', 'failedRequests', 'httpErrors'].every(
             key => check[key]?.length === 0
           )

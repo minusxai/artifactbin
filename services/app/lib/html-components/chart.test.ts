@@ -217,6 +217,36 @@ it('shows each failed read\'s sentence and code in place of the drawing, never "
   expect((status(whole) as HTMLElement).hidden).toBe(true);
 });
 
+it('says an invalid spec is not valid and where, as invalid_chart, never the engine\'s raw exception', async () => {
+  const failures: Array<{ code: string; message: string; detail: string }> = [];
+  const listen = (el: Chart) => el.addEventListener('af-chart-error', e => failures.push((e as CustomEvent).detail));
+  // As an agent wrote it: a filter inside data, which Vega-Lite would dereference as data.format and throw.
+  const filtered = mount({}, { chart: { layer: [
+    { data: { filter: "datum.k == 'a'" }, mark: 'bar' }, { data: { values: [{ x: 'a' }] }, mark: 'rule' }],
+  encoding: BAR.encoding }, rows: ROWS });
+  listen(filtered);
+  await until(() => filtered.hasAttribute('data-af-error'), 'shape refusal');
+  expect(filtered.getAttribute('data-af-error')).toBe('invalid_chart');
+  expect(status(filtered).textContent).toMatch(/^Chart not drawn: layer\[0\]\.data: a data object needs/);
+  expect(status(filtered).textContent).toMatch(/transform: \[\{filter: …\}\]/);
+  // An engine failure the shape check cannot see: the spec is not valid, at the child that fails alone, the engine's
+  // own words kept as detail.
+  const engine = mount({}, { chart: { layer: [{ mark: 'bar' }, { mark: 'bogus' }], encoding: BAR.encoding }, rows: ROWS });
+  listen(engine);
+  await until(() => engine.hasAttribute('data-af-error'), 'engine refusal');
+  expect(engine.getAttribute('data-af-error')).toBe('invalid_chart');
+  expect(status(engine).textContent).toMatch(/^Chart not drawn: the Vega-Lite spec is not valid at layer\[1\]/);
+  expect(status(engine).textContent).toMatch(/Cannot read properties of undefined/);
+  // The url refusal and a bad recipe are the description's fault too.
+  const url = mount({}, { chart: { ...BAR, data: { url: 'https://example.com/x.csv' } } });
+  const recipe = mount({}, { chart: { recipe: 'trend', bindings: {} }, rows: ROWS });
+  await until(() => url.hasAttribute('data-af-error') && recipe.hasAttribute('data-af-error'), 'refusals');
+  expect([url.getAttribute('data-af-error'), recipe.getAttribute('data-af-error')]).toEqual(['invalid_chart', 'invalid_chart']);
+  expect(failures.map(f => f.code)).toEqual(['invalid_chart', 'invalid_chart']);
+  for (const failure of failures) expect(failure.message).toBe(`Chart not drawn: ${failure.detail}`);
+  expect(built).toBe(finalized);
+});
+
 it('rebuilds on a theme change, resizes in place when the layout plan holds and finalizes on disconnect', async () => {
   const el = mount({}, { chart: BAR, rows: ROWS });
   el.style.setProperty('--chart-1', '#112233');

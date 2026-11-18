@@ -7,7 +7,7 @@
  */
 import {ready, reloadIds} from './toolbox-check-reload.mjs';
 import {runSteps} from './toolbox-check-steps.mjs';
-import {layout, overflow, ids} from './toolbox-check-probes.mjs';
+import {layout, overflow, ids, components} from './toolbox-check-probes.mjs';
 import {contrast} from './toolbox-check-contrast.mjs';
 import {slides} from './toolbox-check-slides.mjs';
 import {calls, callKind} from './toolbox-check-calls.mjs';
@@ -15,7 +15,8 @@ import {capture} from './toolbox-check-capture.mjs';
 
 /** The self-contained parts inspectPage calls; the hosted script defines each from its source. */
 export const PARTS = {
-  ready, reloadIds, runSteps, layout, overflow, ids, contrast, slides, calls, callKind, capture
+  ready, reloadIds, runSteps, layout, overflow, ids, components, contrast, slides, calls, callKind,
+  capture
 };
 
 /** Runs in either the server session or a fresh local browser context. No credentials. */
@@ -160,6 +161,7 @@ export async function inspectPage(page, options, task, parts = PARTS) {
     // Duplicate data-af-id values in the live DOM (after any steps): comments and edits address
     // elements by this ID.
     evidence.ids = await html.evaluate(parts.ids, undefined, {timeout: 1000});
+    evidence.components = await html.evaluate(parts.components, undefined, {timeout: 1000});
     evidence.contrast = await html.evaluate(parts.contrast, undefined, {timeout: 1500});
     evidence.slides = await html.evaluate(parts.slides, undefined, {timeout: 1500});
   } catch (error) {
