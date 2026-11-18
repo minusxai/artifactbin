@@ -6,7 +6,7 @@ import { promisify } from 'node:util';
 import { crc32 } from 'node:zlib';
 import path from 'node:path';
 import { describe, expect, it, onTestFinished } from 'vitest';
-import { LANE_LISTS, NODE_AFFECTED_BUDGET_MS, NODE_AFFECTED_FILE, NODE_BATCH_EXCLUDED, NODE_BATCH_GUARDED, NODE_BATCH_MAX_MS, NODE_TIMINGS_ARTIFACT, laneFiles, measuredArtifact, nodeAffectedFiles, nodeBatchFiles, readNodeAffected, withMeasuredTimes } from '../lib/node-batch.mjs';
+import { LANE_LISTS, NODE_AFFECTED_BUDGET_MS, NODE_AFFECTED_FILE, NODE_ISOLATED_FILE_MS, NODE_BATCH_EXCLUDED, NODE_BATCH_GUARDED, NODE_BATCH_MAX_MS, NODE_TIMINGS_ARTIFACT, laneFiles, measuredArtifact, nodeAffectedFiles, nodeBatchFiles, readNodeAffected, withMeasuredTimes } from '../lib/node-batch.mjs';
 import { LEAKS_PAST_ITS_FILE } from '../lib/test-isolation.mjs';
 import full from '../../vitest.config.ts';
 import batch from '../../vitest.node-batch.config.ts';
@@ -149,12 +149,14 @@ describe('pr fast\'s node files beyond the batch', () => {
   it('adds the files the change reaches, nearest first and shortest first, until the budget, and names the rest', () => {
     const reached = [{ file: 'a.test.ts', distance: 2 }, { file: 'c.test.ts', distance: 3 }, { file: 'd.test.ts', distance: 1 }, { file: 'e.test.ts', distance: 3 }, { file: 'f.test.ts', distance: 2 },
       { file: 'b.test.ts', distance: 1 }, { file: 'cheap.test.ts', distance: 1 }, { file: 'listed.test.ts', distance: 1 }, { file: 'g.test.ts', distance: 4 }];
-    // d (1, 2.0s), then a (2, 3.0s): 5.0s. f (2, 4.0s) does not fit 6.0s; e (3, 0.5s) does; c (3, 1.0s) would pass it.
-    // g has no record: it weighs the node median (3.0s) and does not fit either. b is the change's own file, cheap and listed run elsewhere.
-    const chosen = choose(['b.test.ts', 'services/app/lib/x/index.ts'], reached, 6000);
+    // Each weighs its recorded time and the import an isolated file pays (NODE_ISOLATED_FILE_MS, 2s): d (1, 4.0s), then
+    // a (2, 5.0s): 9.0s. f (2, 6.0s) does not fit 12.0s; e (3, 2.5s) does; c (3, 3.0s) would pass it. g has no record: it
+    // weighs the node median (3.0s) and its import, and does not fit either. b is the change's own, cheap and listed run elsewhere.
+    expect(NODE_ISOLATED_FILE_MS).toBe(2000);
+    const chosen = choose(['b.test.ts', 'services/app/lib/x/index.ts'], reached, 12_000);
     expect(chosen).toEqual({ must: ['b.test.ts'], affected: ['d.test.ts', 'a.test.ts', 'e.test.ts'], deferred: ['c.test.ts', 'f.test.ts', 'g.test.ts'] });
     // The changed file's own time never spends the reached files' budget.
-    expect(choose([], reached, 6000).affected).toEqual(chosen.affected);
+    expect(choose([], reached, 12_000).affected).toEqual(chosen.affected);
     expect(NODE_AFFECTED_BUDGET_MS).toBeGreaterThan(0);
   });
 

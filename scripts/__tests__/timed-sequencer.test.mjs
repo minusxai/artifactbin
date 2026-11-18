@@ -57,7 +57,8 @@ describe('timed shard packing', () => {
     expect(weigh('islands', 'i.test.tsx')).toBe(300);
     expect(weigh('api-isolated', 'm.test.ts')).toBe(3000 + ISOLATED_FILE_MS['api-isolated']);
     expect(weigh('ui', 'u.test.ts')).toBe(300 + ISOLATED_FILE_MS.ui);
-    expect(Object.keys(ISOLATED_FILE_MS).sort()).toEqual(['api-isolated', 'ui']);
+    expect(Object.keys(ISOLATED_FILE_MS).sort()).toEqual(['api-isolated', 'node-batch-isolated', 'ui']);
+    expect(weigh('node-batch-isolated', 'm.test.ts')).toBe(3000 + ISOLATED_FILE_MS['node-batch-isolated']);
     // The table's loads are what the sequencer packs: the same weights.
     const loads = shardLoads({ files: { 'api-isolated': { 'm.test.ts': 3000 }, api: { 'a.test.ts': 3000 } } });
     expect(loads.api.reduce((sum, shard) => sum + shard.ms, 0)).toBe(6000 + ISOLATED_FILE_MS['api-isolated']);

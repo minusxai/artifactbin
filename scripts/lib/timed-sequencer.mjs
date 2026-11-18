@@ -20,6 +20,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { BaseSequencer } from 'vitest/node';
+import { NODE_ISOLATED_FILE_MS } from './node-batch.mjs';
 
 const TIMINGS = path.resolve(import.meta.dirname, '../ci/test-timings.json');
 
@@ -44,9 +45,10 @@ function median(values) {
  * none at the same recorded load (~4s of import and transform per file), and the jsdom runners' environment time came
  * to ~2s per `ui` file. Replayed later against each api runner's own file times over 8 pr fast runs (224 shards,
  * 44027030734-44141931756), an api-isolated file's import came to 2s (with 3s per worker's first api file, below):
- * 4s and 5s over-predicted those walls by 2.0s on average, and most for a runner given one long file.
+ * 4s and 5s over-predicted those walls by 2.0s on average, and most for a runner given one long file. pr fast's node
+ * runners' isolated files (the change's own and reached, scripts/lib/node-batch.mjs `NODE_ISOLATED_FILE_MS`) pay the same.
  */
-export const ISOLATED_FILE_MS = Object.freeze({ 'api-isolated': 2000, ui: 2000 });
+export const ISOLATED_FILE_MS = Object.freeze({ 'api-isolated': 2000, ui: 2000, 'node-batch-isolated': NODE_ISOLATED_FILE_MS });
 
 /**
  * WHAT EVERY FILE OF A SHARED-GRAPH PROJECT STILL PAYS: its setup files, environment and collection run per file even when
