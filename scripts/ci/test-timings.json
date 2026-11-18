@@ -63,7 +63,6 @@
    "services/app/__tests__/default-connection.test.ts": 9175,
    "services/app/__tests__/default-visibility.test.ts": 494,
    "services/app/__tests__/delete-protection.test.ts": 410,
-   "services/app/__tests__/device-login-journey.test.ts": 573,
    "services/app/__tests__/doc-assets-route.test.ts": 1532,
    "services/app/__tests__/document-policy-http.test.ts": 508,
    "services/app/__tests__/document-policy.test.ts": 563,

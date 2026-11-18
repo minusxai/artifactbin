@@ -54,9 +54,19 @@ it('guest issuance acceptance refuses a minted credential and requires no-store 
  await checkGuestHttpIssuance({base,guestCookie:'guest=session',fetch:async()=>json({error:'email_auth_required'},401,{'Cache-Control':'no-store'})});
  await expect(checkGuestHttpIssuance({base,guestCookie:'guest=session',fetch:async()=>json({access_token:'mx_test_guest'},201)})).rejects.toThrow();
 });
-it.each([{cache:'public'},{mutatesOnStale:true},{mutatesUnauthorized:true},{acceptsUnauthorized:true},{wrongReceipt:true},{wrongConflictVersion:true},{wrongConflictState:true},{filename:'Report.txt'},{refreshFails:true}])('acceptance catches a broken release contract %j',async options=>{
+it.each([
+ [{cache:'public'},/'public'[\s\S]*'no-store'/],
+ [{mutatesOnStale:true},/Refused HTTP writes cannot change stored CSV/],
+ [{mutatesUnauthorized:true},/Refused HTTP writes cannot change stored CSV/],
+ [{acceptsUnauthorized:true},/A write requires an authenticated bearer/],
+ [{wrongReceipt:true},/3 !== 2/],
+ [{wrongConflictVersion:true},/3 !== 2/],
+ [{wrongConflictState:true},/'wrong' !== 'head2'/],
+ [{filename:'Report.txt'},/filename="Report\.txt"/],
+ [{refreshFails:true},/HTTP credentials refresh without login cookies/],
+])('acceptance catches a broken release contract %j',async(options,refusal)=>{
  const fake=host(options);
- await expect(checkDirectHttp({base,fetch:fake.fetch,accountCookie:'email=session',artifactId:'doc123',stamp:'unit',onArtifact:()=>{}})).rejects.toThrow();
+ await expect(checkDirectHttp({base,fetch:fake.fetch,accountCookie:'email=session',artifactId:'doc123',stamp:'unit',onArtifact:()=>{}})).rejects.toThrow(refusal);
 });
 
 it('acceptance runs against real composed email, artifact and download handlers',async()=>{
@@ -74,6 +84,10 @@ it('acceptance runs against real composed email, artifact and download handlers'
   const accountCookie=login.headers.getSetCookie().map(value=>value.split(';')[0]).join('; ');
   const issued=await post('/api/authentication/token',{}, {cookie:accountCookie});expect(issued.status).toBe(201);
   const token=await issued.json();
+  expect(token).toMatchObject({access_token:expect.stringMatching(/^mx_/),refresh_token:expect.stringMatching(/^mxr_/),client_id:expect.any(String)});
+  // The refresh token is a working, rotating credential.
+  const renewed=await post('/oauth/token',{grant_type:'refresh_token',refresh_token:token.refresh_token,client_id:token.client_id,resource:origin+'/api'});
+  expect(renewed.status).toBe(200);expect((await renewed.json()).refresh_token).not.toBe(token.refresh_token);
   const created=await post('/api/artifacts',{html:nativeHtml('<h1>Release acceptance</h1>'),title:'Release acceptance',visibility:'private'},{authorization:'Bearer '+token.access_token});expect(created.status).toBe(201);
   const ids:string[]=[];
   await checkDirectHttp({base:origin,fetch,accountCookie,artifactId:(await created.json()).id,stamp:'real',onArtifact:(id:string)=>ids.push(id)});
