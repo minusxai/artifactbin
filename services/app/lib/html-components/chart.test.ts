@@ -290,3 +290,28 @@ it('lists the first 50 drawn rows with a note, and table="false" hides the list'
   expect((hidden.querySelector('.af-chart-values') as HTMLElement).hidden).toBe(false);
   expect(marks(el)).toBeGreaterThan(0);
 });
+
+it('labels where its rows came from in its own chrome: Live, Snapshot, paused, and nothing for rows it was given', async () => {
+  const sourced = (rows: object[], source: object) => Object.defineProperty([...rows], 'source', { value: source, enumerable: false });
+  const read = mount({ sql: 'select k, v from t' }, { chart: BAR });
+  await until(() => watches.length === 1, 'watch');
+  watches[0]!.next(sourced(ROWS, { kind: 'live', at: '2026-11-18T14:32:00.000Z' }));
+  await ready(read);
+  const label = () => read.querySelector('.af-data-source button');
+  expect(label()!.textContent).toBe('Live');
+  expect(label()!.getAttribute('aria-label')).toBe('Data source: Live');
+  expect(read.querySelector('.af-data-source af-tooltip-content')!.textContent).toMatch(/^Read live as you at /);
+  // Beside the values disclosure, in the chart's own parts.
+  expect(read.querySelector('.af-data-source')!.nextElementSibling).toBe(read.querySelector('details.af-chart-values'));
+  watches[0]!.next(sourced(ROWS, { kind: 'snapshot', at: '2026-11-02T09:05:00.000Z', names: ['t'] }));
+  await until(() => label()?.textContent?.startsWith('Snapshot · '), 'snapshot label');
+  // Live data the reader has not allowed yet: the failure, and the label says paused.
+  watches[0]!.error(Object.assign(new Error(SQL_FAILURES.consent_required.notice), { code: 'consent_required', detail: 'wh reads live data' }));
+  await until(() => label()?.textContent === 'Live · paused', 'paused label');
+  expect(read.getAttribute('data-af-error')).toBe('consent_required');
+  expect(status(read).textContent).toBe(SQL_FAILURES.consent_required.notice);
+  // Rows the page wrote into the chart itself carry no source: no label.
+  const given = mount({}, { chart: BAR, rows: ROWS });
+  await ready(given);
+  expect(given.querySelector('.af-data-source')).toBeNull();
+});

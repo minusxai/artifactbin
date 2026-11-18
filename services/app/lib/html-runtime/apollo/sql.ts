@@ -9,7 +9,8 @@
  * Every `${…}` is a bound parameter (`$p0`, `$p1`…), never SQL text: a string, finite number, boolean, null or Date
  * (its ISO instant); anything else throws before anything is sent. A statement is lazy and re-runnable: each await
  * runs it once, under its own Idempotency-Key. A read answers its rows (the array carries `columns`, and
- * `truncated: true` when a connection cut the rows at the row limit), a write `{affected, returning}`.
+ * `truncated: true` when a connection cut the rows at the row limit, and `source`, where they came from: contracts
+ * sql-source), a write `{affected, returning}`.
  *
  * A FAILURE rejects with SqlError: `code` from contracts `SQL_FAILURES` (the one list), `message` one sentence for the
  * reader when the read's failure has one (else the reason), `detail` the server's own reason for the author. No reply
@@ -30,12 +31,13 @@
  */
 import type { HtmlJsonObject as AfJsonObject } from '@artifactbin/contracts';
 import { SQL_FAILURES } from '@artifactbin/contracts/sql-failures';
+import type { SqlAnswerSource } from '@artifactbin/contracts/sql-source';
 
 type SqlValue = string | number | boolean | null | Date;
 interface SqlColumn { name: string; type: string }
-type SqlRows = AfJsonObject[] & { columns: SqlColumn[]; truncated?: true };
+type SqlRows = AfJsonObject[] & { columns: SqlColumn[]; truncated?: true; source?: SqlAnswerSource };
 interface SqlWrite { affected: number; returning: AfJsonObject[] }
-type Reply = { columns: SqlColumn[]; rows: AfJsonObject[]; truncated?: boolean } | SqlWrite | { error: string; message?: string; notice?: string };
+type Reply = { columns: SqlColumn[]; rows: AfJsonObject[]; truncated?: boolean; source?: SqlAnswerSource } | SqlWrite | { error: string; message?: string; notice?: string };
 
 /** The transport: the frame relay in a hosted page (lib/html-runtime/browser-reader). */
 export interface SqlPort {
@@ -90,7 +92,10 @@ export function createSql(port: SqlPort): SqlTag {
     // the rows may rewrite or delete it (Vega's data ingestion deletes an array's `columns`, d3-dsv style).
     if ('rows' in reply) {
       const rows = Object.defineProperty([...reply.rows], 'columns', { value: reply.columns, enumerable: false, writable: true, configurable: true }) as SqlRows;
-      return reply.truncated ? Object.defineProperty(rows, 'truncated', { value: true, enumerable: false, writable: true, configurable: true }) : rows;
+      const mark = (name: 'truncated' | 'source', value: unknown) => Object.defineProperty(rows, name, { value, enumerable: false, writable: true, configurable: true });
+      if (reply.truncated) mark('truncated', true);
+      if (reply.source && typeof reply.source === 'object') mark('source', reply.source);
+      return rows;
     }
     return { affected: reply.affected, returning: reply.returning ?? [] };
   };

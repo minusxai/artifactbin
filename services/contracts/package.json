@@ -14,6 +14,7 @@
     "./domain-footer": "./src/domain-footer.ts",
     "./sign-in-required": "./src/sign-in-required.ts",
     "./sql-failures": "./src/sql-failures.ts",
+    "./sql-source": "./src/sql-source.ts",
     "./loopback-names": "./src/loopback-names.ts",
     "./url-space": "./src/url-space.ts"
   },

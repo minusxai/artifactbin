@@ -8,7 +8,8 @@
  *   [{col,template}]; columnIdentities {col: {afId,id?}}; resolveSrc(url) for image columns;
  *   source.read({offset,limit,sort,signal}) returns {rows,columns,totalRows?,truncated?}; error
  *   (a SqlError; data clears it): a failed read shows its message (an alert), never "no rows",
- *   its code as data-af-error. A truncated answer draws with its row count.
+ *   its code as data-af-error. A truncated answer draws with its row count. Rows straight
+ *   from `sql` (or data.source) get a Live / Snapshot label (lib/html-component-specs data-source).
  * Events: af-sort-change (detail: sort) and af-edit-intent (detail: {row,key,column,value}).
  *   The table draws no editor and never fires af-edit-intent itself: it fires only when a cell
  *   renderer calls context.edit(value) (e.g. from an Edit button it returns).
@@ -27,6 +28,8 @@ import {
   createTableState, dataTableStyles, emptyTable, loadTableRows, renderTable,
 } from "./data-table-frame";
 import { cancelResizeRender, failTable, invalidateMeasurements } from "./data-table-measure";
+import { sourceLabel, sourceOf } from "@/lib/html-component-specs/data-source";
+import { DataSourceSlot, dataSourceStyles } from "./data-source-label";
 import {
   freezeColumnIdentities, type TableColumnIdentity, type TableData, type TableSource,
   type TableCellRenderer, type TableTemplate,
@@ -181,12 +184,17 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
   loadMore(replace = false): Promise<void> {
     return loadTableRows(this, this.s, replace);
   }
+  private readonly sourceSlot = new DataSourceSlot(this);
   private render() {
     renderTable(this, this.s);
+    if (!this.isConnected) return;
+    const from = sourceOf(this.s.value.rows) ?? sourceOf(this.s.value);
+    this.sourceSlot.show(sourceLabel([from], this.getAttribute("data-af-error")));
   }
 }
 registerComponent({
   styleKey: 'af-data-table-styles',
-  styles: dataTableStyles,
+  styles: dataTableStyles + dataSourceStyles +
+    "af-data-table>.af-data-source{align-self:flex-start;padding:.375rem .75rem}",
   elements: { 'af-data-table': AfDataTable },
 });

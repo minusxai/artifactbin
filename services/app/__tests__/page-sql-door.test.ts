@@ -22,7 +22,8 @@ it('reads as the reader: the role view, aggregates without allow_aggregations, v
   const f = await fixture();
   const all = await sql(f.page, f.owner, 'select name, salary from staff order by name');
   expect(all.status, JSON.stringify(all.body)).toBe(200);
-  expect(all.body).toEqual({ columns: [{ name: 'name', type: 'string' }, { name: 'salary', type: 'number' }], rows: [{ name: 'ada', salary: 10 }, { name: 'bo', salary: 20 }] });
+  // The answer names where its rows came from: the stored dataset it read, and when that was stored.
+  expect(all.body).toEqual({ columns: [{ name: 'name', type: 'string' }, { name: 'salary', type: 'number' }], rows: [{ name: 'ada', salary: 10 }, { name: 'bo', salary: 20 }], source: { kind: 'snapshot', at: expect.stringMatching(/^\d{4}-\d\d-\d\dT/), names: ['staff'] } });
   // The viewer's select rule has allow_aggregations: false; this door aggregates over the rows the reader sees anyway.
   expect((await sql(f.page, f.viewer, 'select count(*) as n from staff')).body.rows).toEqual([{ n: 1 }]);
   expect((await sql(f.page, null, 'select group_concat(name) as names from staff')).body.rows).toEqual([{ names: 'ada,bo' }]);

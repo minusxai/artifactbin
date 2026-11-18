@@ -4,6 +4,7 @@
  * Used by: data-table.ts, data-table-frame.ts, data-table-grid.ts, data-table-cells.ts,
  *   data-table-compare.ts.
  */
+import type { SqlAnswerSource } from '@artifactbin/contracts/sql-source';
 import type { DatasetColumn, Row } from "@/lib/dataflow";
 import { keyedRowsError } from "@/lib/html-components/row-identity";
 import type { SortSpec } from "@/lib/html-components/table-values";
@@ -12,6 +13,8 @@ export interface TableData {
   columns: DatasetColumn[];
   totalRows?: number;
   truncated?: boolean;
+  /** Where the rows came from (contracts sql-source); `sql` answers carry it as `rows.source`. */
+  source?: SqlAnswerSource;
 }
 export interface TableRequest {
   offset: number;

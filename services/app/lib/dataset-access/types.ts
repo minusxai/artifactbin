@@ -18,6 +18,8 @@ export interface DatasetSnapshot {
  head?:ArtifactRow;
  /** Per table: the persisted Hasura-style table and column identifiers (lib/datasets/graphql-names), for every declared table. */
  names?:Readonly<Record<string,HasuraTableNames>>;
+ /** When the rows this snapshot reads were stored (the read revision's row `updated_at`, ISO). */
+ storedAt?:string;
 }
 interface DatasetStatement { sql:string; params:Record<string,Scalar> }
 /** Narrow port to the retained dataset executor, ACL and object storage; writes go through hasura.ts's mutation door. */

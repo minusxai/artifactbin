@@ -1,6 +1,7 @@
 /**
  * Internal: what af-chart owns inside itself and the states it shows. The plot (role=img, named
- * by the label), the status line (role=status, aria-live) and the values table (a <details>);
+ * by the label), the status line (role=status, aria-live), the data-source label
+ * (./data-source-label) and the values table (a <details>);
  * the drawing on show and its teardown. Loading keeps the current drawing in place; empty,
  * waiting and failed take it down. Only a drawing sets data-af-chart="ready".
  * Used by: chart.ts.
@@ -8,6 +9,8 @@
 import { failureOf, markFailure, type ReadFailure } from '@/lib/html-component-specs/read-failure';
 import { heightOf, labelOf, valuesTable, type ChartRows } from './chart-model';
 import type { BuiltChart, ChartDrawing } from './chart-render';
+import { sourceLabel, sourceOf } from '@/lib/html-component-specs/data-source';
+import { DataSourceSlot } from './data-source-label';
 
 const THEME_ATTRIBUTES = ['data-af-dark', 'data-af-design-system', 'class', 'style'];
 /**
@@ -42,6 +45,7 @@ export class ChartFrame {
   readonly plot: HTMLDivElement;
   private readonly status: HTMLParagraphElement;
   private readonly values: HTMLDetailsElement;
+  private readonly source: DataSourceSlot;
   built: BuiltChart | null = null;
   private drawing: ChartDrawn | null = null;
   private hasRows = false;
@@ -59,6 +63,7 @@ export class ChartFrame {
     const summary = doc.createElement('summary');
     summary.textContent = 'Values in this chart';
     this.values.append(summary);
+    this.source = new DataSourceSlot(host);
   }
 
   /** Put the parts in the element (after any author children, such as the JSON script). */
@@ -100,6 +105,7 @@ export class ChartFrame {
     this.values.replaceChildren(this.values.firstElementChild!,
       ...valuesTable(this.host.ownerDocument, rows, columns));
     this.hasRows = rows.length > 0;
+    this.source.show(sourceLabel([sourceOf(rows)]), this.values);
     this.table();
     this.host.dispatchEvent(new CustomEvent('af-chart-ready', { bubbles: true,
       detail: { view: this.built?.view ?? null, rows } }));
@@ -132,6 +138,7 @@ export class ChartFrame {
     const failure = failureOf(problem);
     this.state(failure.message, 'error');
     markFailure(this.host, failure, 'af-chart-error');
+    this.source.show(sourceLabel([], failure.code), this.values);
   }
 
   /** Finalize the current drawing (its view, or a draw function's result) and empty the plot. */

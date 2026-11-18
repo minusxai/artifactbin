@@ -68,7 +68,7 @@ it('names its live links and reads none of them unless the embedding app allowed
 it('reads as the signed-in reader who is shown the draft, read-only, and only that reader\'s own draft', async () => {
   const { alice, bob } = await readers();
   const mine = await draft(alice, true), theirs = await draft(bob, true);
-  expect(await live(alice, mine.label, 'select item from wh.sales.mine order by id')).toMatchObject({ status: 200, body: { rows: [{ item: 'tea' }, { item: 'pie' }] } });
+  expect(await live(alice, mine.label, 'select item from wh.sales.mine order by id')).toMatchObject({ status: 200, body: { rows: [{ item: 'tea' }, { item: 'pie' }], source: { kind: 'live', at: expect.stringMatching(/^\d{4}-\d\d-\d\dT/) } } });
   expect(await live(bob, theirs.label, 'select item from wh.sales.mine order by id')).toMatchObject({ status: 200, body: { rows: [{ item: 'cake' }] } });
   // Another reader's draft answers as a missing one; a signed-out caller, another origin and the draft's own origin are refused.
   expect((await live(bob, mine.label, 'select item from wh.sales.mine')).status).toBe(404);

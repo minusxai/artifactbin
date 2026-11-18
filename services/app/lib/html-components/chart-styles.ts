@@ -1,8 +1,10 @@
 /**
  * Internal: light-DOM stylesheet for af-chart: the plot slot (drawings stack in one grid cell, so
- * a rebuilt chart replaces the old one without a gap), the status line and the values table.
+ * a rebuilt chart replaces the old one without a gap), the status line, the data-source label
+ * and the values table.
  * Used by: chart.ts.
  */
+import { dataSourceStyles } from './data-source-label';
 const C = 'af-chart';
 export const chartStyles = `
 ${C}{display:block;min-width:0;color:var(--foreground,CanvasText);` +
@@ -24,4 +26,5 @@ ${C} .af-chart-values th,${C} .af-chart-values td{padding:4px 8px;text-align:lef
   `border-bottom:1px solid var(--border,#e5e7eb)}
 ${C} .af-chart-values td.af-chart-number{text-align:right}
 ${C} .af-chart-values p{margin:.5rem 0 0;color:var(--muted-foreground,GrayText)}
-`;
+${C}>.af-data-source{margin-top:.5rem}
+` + dataSourceStyles;
