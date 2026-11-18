@@ -75,9 +75,9 @@ function dataProblem(view: unknown, path: string): string | null {
   if (!isRecord(view)) return null;
   const { data } = view;
   if (isRecord(data) && Object.keys(data).length && !DATA_SOURCES.some(key => key in data)) {
-    return `${at(path, 'data')}: a data object needs values, name, sequence, sphere or graticule, and this one has ` +
-      `${Object.keys(data).join(', ')}; filter or derive rows with transform: [{filter: …}] on the view, and give ` +
-      'rows from sql, a dataset or rows no data at all (they bind as main)';
+    return `${at(path, 'data')}: a data object needs values, name, sequence, sphere or graticule, not ` +
+      `${Object.keys(data).join(', ')}; filter rows with transform: [{filter: …}] on the view, and give rows from ` +
+      'sql, a dataset or rows no data (they bind as main)';
   }
   const transforms = Array.isArray(view.transform) ? view.transform : [];
   for (const [i, step] of transforms.entries()) {

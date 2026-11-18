@@ -15,9 +15,9 @@ it('refuses a Vega-Lite data object with no source, naming where and how to filt
   const error = refused({ layer: [{ ...BAR, data: { filter: "datum.kind == 'actual'" } }] });
   expect(error).toMatch(/^layer\[0\]\.data: /);
   expect(error).toMatch(/values, name, sequence, sphere or graticule/);
-  expect(error).toMatch(/has filter/);
+  expect(error).toMatch(/, not filter;/);
   expect(error).toMatch(/transform: \[\{filter: …\}\]/);
-  expect(refused({ ...BAR, data: { format: { type: 'json' } } })).toMatch(/^data: .*has format/);
+  expect(refused({ ...BAR, data: { format: { type: 'json' } } })).toMatch(/^data: .*, not format;/);
   expect(refused({ hconcat: [BAR, { vconcat: [{ ...BAR, data: { filter: 'x' } }] }] })).toMatch(/^hconcat\[1\]\.vconcat\[0\]\.data: /);
   expect(refused({ facet: { field: 'g' }, spec: { ...BAR, data: { calculate: 'x' } } })).toMatch(/^spec\.data: /);
   expect(refused({ ...BAR, transform: [{ lookup: 'k', from: { data: { filter: 'x' }, key: 'k' } }] }))
