@@ -300,6 +300,8 @@ it('labels where its rows came from in its own chrome: Live, Snapshot, paused, a
   const label = () => read.querySelector('.af-data-source button');
   expect(label()!.textContent).toBe('Live');
   expect(label()!.getAttribute('aria-label')).toBe('Data source: Live');
+  // Its own attribute: af-tooltip owns data-state (open/closed).
+  expect(read.querySelector('.af-data-source')!.getAttribute('data-af-source')).toBe('live');
   expect(read.querySelector('.af-data-source af-tooltip-content')!.textContent).toMatch(/^Read live as you at /);
   // Beside the values disclosure, in the chart's own parts.
   expect(read.querySelector('.af-data-source')!.nextElementSibling).toBe(read.querySelector('details.af-chart-values'));

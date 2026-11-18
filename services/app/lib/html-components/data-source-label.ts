@@ -16,10 +16,10 @@ export const dataSourceStyles =
   'border:0;background:none;font:inherit;color:var(--muted-foreground,GrayText);cursor:default}' +
   '.af-data-source button:focus-visible{outline:2px solid var(--ring,Highlight);' +
   'outline-offset:2px;border-radius:var(--radius-sm,2px)}' +
-  '.af-data-source[data-state=live] button::before,.af-data-source[data-state=paused] ' +
+  '.af-data-source[data-af-source=live] button::before,.af-data-source[data-af-source=paused] ' +
   'button::before{content:"";width:.5rem;height:.5rem;border-radius:50%;' +
   'background:var(--af-data-source-live,var(--primary,currentColor))}' +
-  '.af-data-source[data-state=paused] button::before{background:none;' +
+  '.af-data-source[data-af-source=paused] button::before{background:none;' +
   'box-shadow:inset 0 0 0 1.5px currentColor}';
 
 /** One host's label: shown before `before` (or at the end), replaced only when its words change. */
@@ -42,7 +42,7 @@ export class DataSourceSlot {
     const doc = this.host.ownerDocument;
     const tip = doc.createElement('af-tooltip');
     tip.className = 'af-data-source';
-    tip.dataset.state = label.state;
+    tip.dataset.afSource = label.state;
     const trigger = doc.createElement('af-tooltip-trigger');
     const button = doc.createElement('button');
     button.type = 'button';
