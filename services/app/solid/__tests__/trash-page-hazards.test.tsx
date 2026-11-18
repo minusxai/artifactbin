@@ -9,6 +9,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-li
 import { createMemoryHistory, MemoryRouter, Route } from '@solidjs/router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TrashPage } from '@/solid/pages/Trash';
+import { stubFetch } from '@/test/helpers/fetch-stub';
 
 const auth = vi.hoisted(() => ({ user: { id: 'usr_1', email: 'owner@example.com' } as { id: string; email: string } | null }));
 vi.mock('@/solid/lib/session', () => ({ useSession: () => ({ session: () => ({ user: auth.user, kind: auth.user ? 'account' : 'none', onboarded: true }) }) }));
@@ -17,9 +18,7 @@ const many = Array.from({ length: 12 }, (_, i) => ({ id: `doc_${i + 1}`, title: 
 
 beforeEach(() => {
   auth.user = { id: 'usr_1', email: 'owner@example.com' };
-  vi.stubGlobal('fetch', vi.fn(async (url: string) => String(url) === '/api/page/trash'
-    ? new Response(JSON.stringify({ files: many }), { status: 200 })
-    : new Response('{}', { status: 404 })));
+  stubFetch({ '/api/page/trash': () => new Response(JSON.stringify({ files: many }), { status: 200 }) }, { fallback: () => new Response('{}', { status: 404 }) });
 });
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });

@@ -14,6 +14,7 @@ import { fireEvent } from '../../__tests__/helpers';
 import { fetchCalls, flush, installAnnotationFetch, knobs, layer } from './annotation-rig';
 import { preloadCommentField } from '../LazyCommentField';
 import { COMMENT_TARGET_UNSAVED } from '@artifactbin/contracts';
+import { stubFetch } from '@/test/helpers/fetch-stub';
 
 beforeEach(() => {
   installAnnotationFetch();
@@ -439,13 +440,13 @@ describe('the annotation composer', () => {
     const keys: Array<string | null> = [];
     let fail = true;
     const fallback = globalThis.fetch;
-    vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
-      if (init?.method === 'POST' && url.endsWith('/annotations')) {
-        keys.push(new Headers(init.headers).get('Idempotency-Key'));
+    stubFetch({
+      'POST */annotations': (url, init) => {
+        keys.push(new Headers(init!.headers).get('Idempotency-Key'));
         if (fail) return Promise.reject(new TypeError('network down'));
-      }
-      return fallback(url, init);
-    });
+        return fallback(url, init);
+      },
+    }, { fallback: (url, init) => fallback(url, init) });
     RETRY_TUNING.policy = { delaysMs: [0, 0] };
     layer({ initialSelection: TEXT() });
     await flush();

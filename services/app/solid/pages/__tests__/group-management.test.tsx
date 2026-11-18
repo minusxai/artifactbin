@@ -5,6 +5,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route } from '@solidjs/router';
 import { SessionProvider } from '../../lib/session';
 import { GroupManagement, GroupSettingsPage } from '../Group';
+import { stubFetch } from '@/test/helpers/fetch-stub';
 const detail = {group:{id:'g1',handle:'team',name:'Team',description:'',role:'admin' as const},members:[{user_id:'u1',username:'alice',name:'Alice',role:'admin' as const}],linked_groups:[],invitations:[],parent:null,subgroups:[],subgroup_audience:[]};
 afterEach(()=>{cleanup();vi.unstubAllGlobals();});
 it.each(['member','editor'] as const)('%s can search people without management controls',(role)=>{
@@ -35,7 +36,7 @@ it('finds a server search result outside the initially loaded people',async()=>{
 });
 
 it('loads group settings without requesting the artifact shelf',async()=>{
- const fetcher=vi.fn(async(url:string)=>Response.json(url.includes('/session')?{kind:'account',user:{id:'u1',email:'viewer@example.com'},onboarded:true}:url.endsWith('/allowed-addresses')?{addresses:[]}:detail));vi.stubGlobal('fetch',fetcher);
+ const fetcher=stubFetch({'*/session*':{kind:'account',user:{id:'u1',email:'viewer@example.com'},onboarded:true},'*/allowed-addresses':{addresses:[]}},{fallback:()=>Response.json(detail)});
  render(()=> <MemoryRouter><Route path="*" component={()=> <SessionProvider><GroupSettingsPage identity="team"/></SessionProvider>}/></MemoryRouter>);
  expect(await screen.findByRole('heading',{name:'Group settings'})).toBeInTheDocument();
  expect(screen.getByRole('link',{name:'Back to Team'})).toHaveAttribute('href','/@team');

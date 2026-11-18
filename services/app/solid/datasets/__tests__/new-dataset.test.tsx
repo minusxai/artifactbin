@@ -12,6 +12,7 @@ import { CONNECTORS as SPECS } from '@artifactbin/contracts';
 import { NewDatasetPage } from '../NewDataset';
 import { LiveDatasetForm } from '../LiveDatasetForm';
 import { LiveDatasetView } from '../LiveDatasetView';
+import { stubFetch } from '@/test/helpers/fetch-stub';
 
 vi.mock('@/solid/lib/session', () => ({ useSession: () => ({ session: () => ({ kind: 'account', user: { id: 'u1' } }) }) }));
 vi.mock('@/solid/pages/DatasetEditor', () => ({ DatasetEditorPage: (props: { initialSource?: string }) => <p>Stored editor: {props.initialSource}</p> }));
@@ -22,15 +23,14 @@ const postgres = CONNECTORS.find((c) => c.id === 'postgres')!;
 type Call = { url: string; method: string; body: any };
 function serve(answers: Record<string, unknown> = {}) {
   const calls: Call[] = [];
-  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-    const method = init?.method ?? 'GET', body = init?.body ? JSON.parse(String(init.body)) : undefined;
-    calls.push({ url, method, body });
-    const key = `${method} ${url}`;
-    if (key in answers) return Response.json(answers[key]);
-    if (url === '/api/connections') return Response.json({ connectors: CONNECTORS });
-    if (url === '/api/groups') return Response.json({ groups: [{ id: 'g1', name: 'Finance', role: 'editor' }, { id: 'g2', name: 'Readers', role: 'member' }] });
-    return Response.json({ error: 'unexpected' }, { status: 500 });
-  }));
+  stubFetch({
+    ...Object.fromEntries(Object.entries(answers).map(([key, answer]) => [key, () => Response.json(answer)])),
+    '/api/connections': { connectors: CONNECTORS },
+    '/api/groups': { groups: [{ id: 'g1', name: 'Finance', role: 'editor' }, { id: 'g2', name: 'Readers', role: 'member' }] },
+  }, {
+    fallback: () => Response.json({ error: 'unexpected' }, { status: 500 }),
+    onCall: (url, init) => { calls.push({ url, method: init?.method ?? 'GET', body: init?.body ? JSON.parse(String(init.body)) : undefined }); },
+  });
   return calls;
 }
 const type = (label: RegExp, value: string) => fireEvent.input(screen.getByLabelText(label), { target: { value } });

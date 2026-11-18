@@ -4,12 +4,12 @@ import { screen, waitFor } from '@testing-library/dom';
 import { fireEvent, render } from '../../__tests__/helpers';
 import { DocumentPeople } from '../DocumentPeople';
 import { resetShared } from '@/lib/http/shared-request';
+import { stubFetch } from '@/test/helpers/fetch-stub';
 afterEach(() => { vi.unstubAllGlobals(); resetShared(); });
 
 it('shows a pending request without suggesting comment access is blocked', async () => {
   const state = { members: [], pending: [], self: null, canManage: false, canInvite: true };
-  const fetcher = vi.fn(async (_url: unknown, init?: RequestInit) => Response.json(init?.method === 'POST' ? { ...state, self: { status: 'pending', direction: 'request', user_id: 'reader' } } : state));
-  vi.stubGlobal('fetch', fetcher);
+  const fetcher = stubFetch({ 'POST *': { ...state, self: { status: 'pending', direction: 'request', user_id: 'reader' } } }, { fallback: () => Response.json(state) });
   const view = render(() => <DocumentPeople id="abc123" />);
   fireEvent.click(view.getByRole('button', { name: 'People' }));
   fireEvent.click(await waitFor(() => screen.getByRole('button', { name: 'Request to join' })));
@@ -20,8 +20,7 @@ it('shows a pending request without suggesting comment access is blocked', async
 
 it('offers explicit access sharing and unrestricted invitation lookup', async () => {
   const state = { members: [], pending: [], self: null, canManage: true, canInvite: true };
-  const fetcher = vi.fn(async (url: string, _init?: RequestInit) => Response.json(url.includes('?') ? { people: [{ user_id: 'u1', username: 'alex', name: 'Alex' }] } : state));
-  vi.stubGlobal('fetch', fetcher);
+  const fetcher = stubFetch({ '*?*': { people: [{ user_id: 'u1', username: 'alex', name: 'Alex' }] } }, { fallback: () => Response.json(state) });
   const view = render(() => <DocumentPeople id="abc123" />);
   fireEvent.click(view.getByRole('button', { name: 'People' }));
   const finder = await waitFor(() => screen.getByRole('combobox', { name: 'Find people by username' }));
@@ -57,8 +56,7 @@ it('opens a pending invitation and permits an accepted member to explicitly join
 
 it('suggests people in the shared combobox: Escape closes the list, the keyboard picks, and nothing is sent until Invite', async () => {
   const state = { members: [], pending: [], self: null, canManage: false, canInvite: true };
-  const fetcher = vi.fn(async (url: string, _init?: RequestInit) => Response.json(url.includes('?') ? { people: [{ user_id: 'u1', username: 'alex', name: 'Alex' }, { user_id: 'u2', username: 'bo', name: 'Bo' }] } : state));
-  vi.stubGlobal('fetch', fetcher);
+  const fetcher = stubFetch({ '*?*': { people: [{ user_id: 'u1', username: 'alex', name: 'Alex' }, { user_id: 'u2', username: 'bo', name: 'Bo' }] } }, { fallback: () => Response.json(state) });
   render(() => <DocumentPeople id="abc123" initialOpen />);
   const finder = await waitFor(() => screen.getByRole('combobox', { name: 'Find people by username' }));
   // Nothing is looked up until the field is reached.

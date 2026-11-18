@@ -7,6 +7,7 @@ import { replaceDocument } from '../lib/document-navigation';
 // from the module registry; left to the first render, its cold transform raced findByRole's one second and lost on loaded
 // ui runners (pr fast runs 44147179117, 44141023943: an empty <div />).
 import '../pages/AgentSetup';
+import { stubFetch } from '@/test/helpers/fetch-stub';
 vi.mock('../lib/document-navigation', () => ({ replaceDocument: vi.fn() }));
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.clearAllMocks(); window.history.replaceState(null, '', '/'); });
 it('returns a signed-out creator to this exact start entry after email login', async () => {
@@ -39,13 +40,11 @@ it('opens shared skill setup without creating, then copies the request for the s
   window.history.replaceState(null, '', '/start?setup=1&group=grp_selected');
   const writeText = vi.fn(async () => {});
   vi.stubGlobal('navigator', { clipboard: { writeText } });
-  const fetcher = vi.fn(async (url: string) => {
-    if (url === '/api/groups/grp_selected') return Response.json({group:{id:'grp_selected',handle:'research',name:'Research',role:'editor'}});
-    if (url === '/api/deployment') return Response.json({mode:'public'});
-    if (url === '/api/start') return Response.json({id:'doc123',prompt:'Canonical server handoff',url:'/a/doc123'});
-    throw new Error(`Unexpected request ${url}`);
-  });
-  vi.stubGlobal('fetch', fetcher);
+  const fetcher = stubFetch({
+    '/api/groups/grp_selected': {group:{id:'grp_selected',handle:'research',name:'Research',role:'editor'}},
+    '/api/deployment': {mode:'public'},
+    '/api/start': {id:'doc123',prompt:'Canonical server handoff',url:'/a/doc123'},
+  }, { fallback: url => { throw new Error(`Unexpected request ${url}`); } });
   render(() => <StartPage />);
   await screen.findByRole('heading', {name:'Create with your agent'});
   expect(screen.getByRole('link', {name:'Download author skill'}).getAttribute('href')).toBe('/skills/artifactbin.zip');

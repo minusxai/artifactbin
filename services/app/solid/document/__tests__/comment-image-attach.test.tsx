@@ -15,6 +15,7 @@ import { fireEvent } from '../../__tests__/helpers';
 import { preloadCommentField } from '../LazyCommentField';
 import { ANN, fetchCalls, flush, httpBackend, installAnnotationFetch, knobs, layer, emitLayout } from './annotation-rig';
 import { replaceComment } from './comment-input';
+import { stubFetch } from '@/test/helpers/fetch-stub';
 
 const TEXT: StoryEditSelection = { kind: 'text', path: '1', tag: 'p', rect: { x: 5, y: 6, width: 200, height: 40 }, className: '', style: '', ancestors: [] } as StoryEditSelection;
 const png = (name = 'shot.png', type = 'image/png') => new File([new Uint8Array([137, 80, 78, 71])], name, { type });
@@ -235,14 +236,14 @@ describe('attaching an image to a reply', () => {
     const reply = await openThread();
     const real = globalThis.fetch;
     let refuse = true;
-    vi.stubGlobal('fetch', (async (url: string, init?: RequestInit) => {
-      if (refuse && init?.method === 'POST' && String(url).endsWith(`/annotations/${ANN.id}`)) {
+    stubFetch({
+      [`POST */annotations/${ANN.id}`]: (url, init) => {
+        if (!refuse) return real(url, init);
         refuse = false;
-        fetchCalls.push({ url: String(url), init });
+        fetchCalls.push({ url, init });
         return new Response(JSON.stringify({ error: code, message }), { status });
-      }
-      return real(url, init);
-    }) as unknown as typeof fetch);
+      },
+    }, { fallback: (url, init) => real(url, init) });
     replaceComment(reply, 'with a picture');
     fireEvent.paste(reply, { clipboardData: clipboard([png()]) });
     await waitFor(() => expect(editorCanvas()).toHaveAttribute('aria-busy', 'false'));
@@ -306,14 +307,14 @@ describe('an attached image when the document moved', () => {
   const refuse = (matches: (url: string) => boolean, times: number, status: number, body: unknown) => {
     const real = globalThis.fetch;
     let left = times;
-    vi.stubGlobal('fetch', (async (url: string, init?: RequestInit) => {
-      if (left > 0 && init?.method === 'POST' && matches(String(url))) {
+    stubFetch({
+      'POST *': (url, init) => {
+        if (!(left > 0 && matches(url))) return real(url, init);
         left -= 1;
-        fetchCalls.push({ url: String(url), init });
+        fetchCalls.push({ url, init });
         return new Response(JSON.stringify(body), { status });
-      }
-      return real(url, init);
-    }) as unknown as typeof fetch);
+      },
+    }, { fallback: (url, init) => real(url, init) });
   };
 
   it('restages a dropped image against the head the stage refusal names, and saves', async () => {

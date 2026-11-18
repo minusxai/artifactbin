@@ -13,6 +13,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ArtifactAddressRoute } from '@/solid/pages/ArtifactAddress';
 import { replaceDocument } from '@/solid/lib/document-navigation';
 import { claimServedPath } from '@/solid/lib/served-frame';
+import { stubFetch } from '@/test/helpers/fetch-stub';
 
 vi.mock('@/solid/lib/document-navigation', () => ({ replaceDocument: vi.fn(), openDocument: vi.fn() }));
 vi.mock('@/solid/lib/served-frame', async (original) => ({ ...(await original<typeof import('@/solid/lib/served-frame')>()), claimServedPath: vi.fn(() => false) }));
@@ -25,17 +26,16 @@ const DOCUMENT = { role: 'viewer', surface: { id: 'doc001', format: 'html' } };
 let requests: string[];
 const serve = (kinds: Record<string, string | number>, pages: Record<string, unknown>) => {
   requests = [];
-  vi.stubGlobal('fetch', vi.fn(async (input: unknown) => {
-    const url = String(input);
-    requests.push(url);
-    const id = /\/api\/page\/artifact\/([^/?]+)/.exec(url)?.[1] ?? '';
-    if (url.includes('part=kind')) {
-      const kind = kinds[id];
+  const idOf = (url: string) => /\/api\/page\/artifact\/([^/?]+)/.exec(url)?.[1] ?? '';
+  stubFetch({
+    '*part=kind*': url => {
+      const kind = kinds[idOf(url)];
       return typeof kind === 'number' ? Response.json({ error: 'not_found' }, { status: kind }) : Response.json({ format: kind });
-    }
-    const page = pages[id];
-    return page === undefined ? Response.json({ error: 'not_found' }, { status: 404 }) : Response.json(page);
-  }));
+    },
+  }, {
+    fallback: url => { const page = pages[idOf(url)]; return page === undefined ? Response.json({ error: 'not_found' }, { status: 404 }) : Response.json(page); },
+    onCall: url => { requests.push(url); },
+  });
 };
 const kindRequests = () => requests.filter((url) => url.includes('part=kind'));
 const pageRequests = () => requests.filter((url) => url.startsWith('/api/page/artifact/') && !url.includes('part='));
@@ -97,10 +97,7 @@ it('shows the not-found page, with no retry and no crossing, when the kind door 
 
 it('keeps the unservable state: a page answer of 410 is a load failure with a retry, not a crossing or a not-found', async () => {
   requests = [];
-  vi.stubGlobal('fetch', vi.fn(async (input: unknown) => {
-    requests.push(String(input));
-    return String(input).includes('part=kind') ? Response.json({ format: 'folder' }) : Response.json({ error: 'unservable_document', message: 'retired' }, { status: 410 });
-  }));
+  stubFetch({ '*part=kind*': { format: 'folder' } }, { fallback: () => Response.json({ error: 'unservable_document', message: 'retired' }, { status: 410 }), onCall: url => { requests.push(url); } });
   await navigate('/a/old001');
   await waitFor(() => expect(screen.getByRole('button', { name: 'Retry artifact' })).toBeInTheDocument());
   expect(screen.queryByLabelText('Not found')).toBeNull();

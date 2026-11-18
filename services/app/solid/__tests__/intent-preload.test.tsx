@@ -5,18 +5,17 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '@/solid/App';
 import { preloadKeyFor } from '@/solid/lib/use-page-data';
+import { stubFetch } from '@/test/helpers/fetch-stub';
 
 let calls: string[];
 beforeEach(() => {
   calls = [];
   window.history.replaceState(null, '', '/trash');
-  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-    calls.push(String(url));
-    if (String(url) === '/api/page/session') return new Response(JSON.stringify({ user: { id: 'usr_1', email: 'o@example.com', username: 'owner', image: null }, kind: 'account', onboarded: true }), { status: 200 });
-    if (String(url).startsWith('/api/page/home?part=bootstrap')) return new Response(JSON.stringify({ signedIn: true, accountId: 'usr_1', deployment: { mode: 'public', setup_complete: true, is_owner: false, default_group: null }, preferences: { default_destination: { type: 'group', id: 'g1' } }, destination: { kind: 'group', groupId: 'g1', detail: { group: { id: 'g1', handle: 'team', name: 'Team', description: '', role: 'editor' }, members: [], linked_groups: [], parent: null, subgroups: [], subgroup_audience: [] }, core: { artifacts: [], shared: [] } } }), { status: 200 });
-    if (String(url).startsWith('/api/page/profile/')) return new Response(JSON.stringify({ kind: 'public-profile', handle: 'sam', files: [] }), { status: 200 });
-    return new Response(JSON.stringify({ files: [] }), { status: 200 });
-  }));
+  stubFetch({
+    '/api/page/session': () => new Response(JSON.stringify({ user: { id: 'usr_1', email: 'o@example.com', username: 'owner', image: null }, kind: 'account', onboarded: true }), { status: 200 }),
+    '/api/page/home?part=bootstrap*': () => new Response(JSON.stringify({ signedIn: true, accountId: 'usr_1', deployment: { mode: 'public', setup_complete: true, is_owner: false, default_group: null }, preferences: { default_destination: { type: 'group', id: 'g1' } }, destination: { kind: 'group', groupId: 'g1', detail: { group: { id: 'g1', handle: 'team', name: 'Team', description: '', role: 'editor' }, members: [], linked_groups: [], parent: null, subgroups: [], subgroup_audience: [] }, core: { artifacts: [], shared: [] } } }), { status: 200 }),
+    '/api/page/profile/*': () => new Response(JSON.stringify({ kind: 'public-profile', handle: 'sam', files: [] }), { status: 200 }),
+  }, { fallback: () => new Response(JSON.stringify({ files: [] }), { status: 200 }), onCall: url => { calls.push(String(url)); } });
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.history.replaceState(null, '', '/'); });
 

@@ -3,6 +3,7 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@solidjs/testing-library';
 import { afterEach, expect, it, vi } from 'vitest';
 import { App } from '@/solid/App';
+import { stubFetch } from '@/test/helpers/fetch-stub';
 
 const SESSION = { user: { id: 'usr_1', email: 'a@example.com', username: 'owner', image: null }, kind: 'account', onboarded: true };
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); window.history.replaceState(null, '', '/'); });
@@ -10,18 +11,16 @@ it.each([false, true])('marks all notifications read from the inbox (compact: %s
   let read = false;
   let finish: (() => void) | undefined;
   const writes: unknown[] = [];
-  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-    if (url === '/api/page/session') return Response.json(SESSION);
-    if (url === '/api/my/people') {
+  stubFetch({
+    '/api/my/people': async (_url, init) => {
       if (init?.method === 'PATCH') {
         writes.push(JSON.parse(String(init.body)));
         await new Promise<void>(resolve => { finish = resolve; });
         read = true;
       }
       return Response.json({ autoAccept: false, unread: read ? 0 : 70, next: null, blocks: [], notifications: [{ id: 'n1', artifact_id: 'doc1', user_id: 'usr_1', sender_id: 'usr_2', username: 'alice', kind: 'reply', title: 'Notes', read_at: read ? new Date().toISOString() : null, revision: 1 }] });
-    }
-    return Response.json({}, { status: 404 });
-  }));
+    },
+  }, { session: SESSION });
   window.history.replaceState(null, '', '/notifications');
   render(() => <App />);
   const bell = await screen.findByRole('button', { name: 'Notifications, unread updates' });
@@ -38,14 +37,12 @@ it.each([false, true])('marks all notifications read from the inbox (compact: %s
   expect(screen.queryByRole('button', { name: 'Mark all as read' })).not.toBeInTheDocument();
 });
 it('keeps unread notifications and allows another attempt when marking all fails', async () => {
-  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-    if (url === '/api/page/session') return Response.json(SESSION);
-    if (url === '/api/my/people') {
+  stubFetch({
+    '/api/my/people': (_url, init) => {
       if (init?.method === 'PATCH') return Response.json({}, { status: 500 });
       return Response.json({ autoAccept: false, unread: 1, next: null, blocks: [], notifications: [{ id: 'n1', artifact_id: 'doc1', sender_id: 'usr_2', username: 'alice', kind: 'reply', title: 'Notes', read_at: null, revision: 1 }] });
-    }
-    return Response.json({}, { status: 404 });
-  }));
+    },
+  }, { session: SESSION });
   window.history.replaceState(null, '', '/notifications');
   render(() => <App />);
   const button = await screen.findByRole('button', { name: 'Mark all as read' });
@@ -57,13 +54,10 @@ it('keeps unread notifications and allows another attempt when marking all fails
 
 it('opens the bell and shows an invitation with a working approval action', async () => {
   const calls: Array<{ url: string; method: string }> = [];
-  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-    calls.push({ url: String(url), method: init?.method ?? 'GET' });
-    if (url === '/api/page/session') return Response.json(SESSION);
-    if (url === '/api/my/people') return Response.json({ autoAccept: false, unread: 1, next: null, blocks: [], notifications: [{ id: 'n1', artifact_id: 'doc1', user_id: 'usr_1', status: 'pending', direction: 'request', sender_id: 'usr_2', username: 'alice', kind: 'request', source: null, title: 'Notes', read_at: null, revision: 1 }] });
-    if (url === '/api/my/artifacts/doc1/members') return Response.json({});
-    return Response.json({}, { status: 404 });
-  }));
+  stubFetch({
+    '/api/my/people': { autoAccept: false, unread: 1, next: null, blocks: [], notifications: [{ id: 'n1', artifact_id: 'doc1', user_id: 'usr_1', status: 'pending', direction: 'request', sender_id: 'usr_2', username: 'alice', kind: 'request', source: null, title: 'Notes', read_at: null, revision: 1 }] },
+    '/api/my/artifacts/doc1/members': {},
+  }, { session: SESSION, onCall: (url, init) => { calls.push({ url: String(url), method: init?.method ?? 'GET' }); } });
   window.history.replaceState(null, '', '/notifications');
   render(() => <App />);
   const bell = await screen.findByRole('button', { name: 'Notifications, unread updates' });
@@ -75,14 +69,12 @@ it('opens the bell and shows an invitation with a working approval action', asyn
 });
 
 it('labels an agent reply without showing an unrelated accepted invitation status', async () => {
- vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-  if(url==='/api/page/session')return Response.json({user:{id:'usr_1',email:'a@example.com',username:'owner',image:null},kind:'account',onboarded:true});
-  if(url==='/api/my/people')return Response.json({autoAccept:false,unread:1,next:null,blocks:[],notifications:[
+ stubFetch({
+  '/api/my/people':{autoAccept:false,unread:1,next:null,blocks:[],notifications:[
    {id:'reply',artifact_id:'doc1',user_id:'usr_1',status:'accepted',direction:'owner',sender_id:'usr_1',username:'owner',agent_label:'afbin',kind:'reply',source:'comment:thread',title:'Notes',read_at:null,revision:1},
    {id:'invite',artifact_id:'doc2',user_id:'usr_1',status:'accepted',direction:'invitation',sender_id:'usr_2',username:'alice',kind:'invitation',source:null,title:'Shared',read_at:null,revision:1}
-  ]});
-  return Response.json({}, {status:404});
- }));
+  ]},
+ },{session:{user:{id:'usr_1',email:'a@example.com',username:'owner',image:null},kind:'account',onboarded:true}});
  window.history.replaceState(null,'','/notifications');render(()=><App/>);
  const link=await screen.findByRole('link',{name:'@afbin replied in Notes'});
  expect(link.closest('li')).not.toHaveTextContent('Invitation accepted');
@@ -96,16 +88,14 @@ it('retries a failed load visibly, keeps a failed retry dated and clears the err
   vi.spyOn(Date, 'now').mockImplementation(() => (clock += 60_000));
   const outcomes: Array<'fail' | 'hold'> = ['fail', 'fail', 'hold'];
   let release: (() => void) | undefined;
-  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-    if (url === '/api/page/session') return Response.json(SESSION);
-    if (url === '/api/my/people') {
+  stubFetch({
+    '/api/my/people': async () => {
       const outcome = outcomes.shift();
       if (outcome === 'fail') return Response.json({ error: 'timeout' }, { status: 504 });
       if (outcome === 'hold') await new Promise<void>((resolve) => { release = resolve; });
       return Response.json(INBOX);
-    }
-    return Response.json({}, { status: 404 });
-  }));
+    },
+  }, { session: SESSION });
   window.history.replaceState(null, '', '/notifications');
   render(() => <App />);
   const alert = await screen.findByRole('alert');
@@ -136,11 +126,9 @@ it('keeps loaded notifications when a refresh fails and treats a dropped live st
     close() {}
   });
   let fail = false;
-  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-    if (url === '/api/page/session') return Response.json(SESSION);
-    if (url === '/api/my/people') return fail ? Response.json({}, { status: 500 }) : Response.json(INBOX);
-    return Response.json({}, { status: 404 });
-  }));
+  stubFetch({
+    '/api/my/people': () => fail ? Response.json({}, { status: 500 }) : Response.json(INBOX),
+  }, { session: SESSION });
   window.history.replaceState(null, '', '/notifications');
   render(() => <App />);
   const link = await screen.findByRole('link', { name: '@alice replied in Notes' });

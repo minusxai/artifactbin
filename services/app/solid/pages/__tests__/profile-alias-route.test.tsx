@@ -13,15 +13,14 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { ProfileAliasRoute } from '@/solid/pages/ProfileAlias';
 import { replaceDocument } from '@/solid/lib/document-navigation';
 import { InboxProvider } from '@/solid/lib/notifications';
+import { fetchRoutes } from '@/test/helpers/fetch-stub';
 
 vi.mock('@/solid/lib/document-navigation', () => ({ replaceDocument: vi.fn() }));
 
 /** The kind door answers the format of the artifact the page door answers `page` for; every other URL is the page door. */
-const answering = (page: { surface?: { format?: string } & Record<string, unknown>; folder?: unknown } & Record<string, unknown>, status = 200) => vi.fn(async (input: unknown) => {
-  const url = String(input);
-  if (status !== 200) return Response.json({ error: 'not_found' }, { status });
-  return url.includes('part=kind') ? Response.json({ format: page.folder ? 'folder' : page.surface?.format }) : Response.json(page);
-});
+const answering = (page: { surface?: { format?: string } & Record<string, unknown>; folder?: unknown } & Record<string, unknown>, status = 200) => vi.fn(fetchRoutes(
+  status !== 200 ? { '*': () => Response.json({ error: 'not_found' }, { status }) } : { '*part=kind*': { format: page.folder ? 'folder' : page.surface?.format } },
+  { fallback: () => Response.json(page) }));
 
 const at = async (path: string) => {
   window.history.replaceState(null, '', path);

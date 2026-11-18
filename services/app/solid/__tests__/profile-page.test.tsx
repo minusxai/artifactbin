@@ -3,24 +3,22 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
 import { afterEach, expect, it, vi } from 'vitest';
 import { App } from '@/solid/App';
+import { stubFetch } from '@/test/helpers/fetch-stub';
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.history.replaceState(null, '', '/'); });
 
 it.each(['/@cee', '/@cee/'])('renders the public profile at %s, filters its shelf, and follows with the server answer', async path => {
   const calls: string[] = [];
-  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-    calls.push(`${init?.method ?? 'GET'} ${url}`);
-    if (url === '/api/page/session') return Response.json({ user: { id: 'reader', email: 'r@example.com', username: 'reader', image: null }, kind: 'account', onboarded: true });
-    if (url === '/api/my/people') return Response.json({ autoAccept: false, unread: 0, next: null, blocks: [], notifications: [] });
-    if (url === '/api/page/profile/%40cee') return Response.json({ kind: 'public-profile', handle: 'cee', owner: { id: 'owner', image: null }, social: { following: 2, followers: 3, relation: { youFollow: false, followsYou: true, known: [], knownTotal: 0 } }, authed: true, anon: false, files: [
+  stubFetch({
+    '/api/my/people': { autoAccept: false, unread: 0, next: null, blocks: [], notifications: [] },
+    '/api/page/profile/%40cee': { kind: 'public-profile', handle: 'cee', owner: { id: 'owner', image: null }, social: { following: 2, followers: 3, relation: { youFollow: false, followsYou: true, known: [], knownTotal: 0 } }, authed: true, anon: false, files: [
       { id: 'a', title: 'First note', description: 'hello', format: 'html', version: 1, updated_at: '2026-09-28T12:00:00Z' },
       { id: 'b', title: 'Second note', format: 'html', version: 1, updated_at: '2026-09-27T12:00:00Z' },
       { id: 'asset', title: 'Asset', format: 'image', version: 1, updated_at: '2026-09-27T12:00:00Z' },
       { id: 'folder', title: 'Reports', format: 'folder', version: 1, updated_at: '2026-09-27T12:00:00Z' },
-    ] });
-    if (url === '/api/users/owner/follow') return Response.json({ following: true, count: 4 });
-    return Response.json({});
-  }));
+    ] },
+    '/api/users/owner/follow': { following: true, count: 4 },
+  }, { session: { user: { id: 'reader', email: 'r@example.com', username: 'reader', image: null }, kind: 'account', onboarded: true }, fallback: () => Response.json({}), onCall: (url, init) => { calls.push(`${init?.method ?? 'GET'} ${url}`); } });
   window.history.replaceState(null, '', path);
   render(() => <App />);
   await vi.dynamicImportSettled();

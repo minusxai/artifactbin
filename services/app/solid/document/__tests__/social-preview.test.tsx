@@ -20,7 +20,7 @@ const response = (status: number, body: unknown) => ({
 });
 
 /** Model the actual authoring transport, including the read snapshot and the
- * JSONB commit, so geometry assertions inspect the resulting document. */
+ * JSONB commit, so geometry assertions inspect the resulting document; stubs `fetch` with it. */
 function documentFetch(source: string, imageId = 'image1') {
   let saved: string | undefined;
   const mock=vi.fn(async(input:RequestInfo|URL,init?:RequestInit)=>{
@@ -32,13 +32,13 @@ function documentFetch(source: string, imageId = 'image1') {
     }
     return response(200,{edit_id:'e1',version:1,state:'a'.repeat(64),format:'html',html:source});
   });
+  vi.stubGlobal('fetch', mock);
   return Object.assign(mock, { savedSource: () => saved });
 }
 
 describe('social preview editor', () => {
   it('loads the versioned, editor-only overview and resets by removing the directive', async () => {
     const fetchMock = documentFetch('<head><meta name="artifactbin:og-crop" content="x=300;y=900;width=800" /></head><p>x</p>', 'image1');
-    vi.stubGlobal('fetch', fetchMock);
     const close = vi.fn();
     render(() => <SocialPreviewEditor id="story1" source={'<head><meta name="artifactbin:og-crop" content="x=300;y=900;width=800" /></head><p>x</p>'} editId="e1" version={4} onClose={close} />);
     expect(screen.getByAltText('Artifact preview')).toHaveAttribute('src', '/a/story1/export?mode=preview&format=jpg&v=4&pv=2');
@@ -57,7 +57,6 @@ describe('social preview editor', () => {
 
   it('moves and resizes with the keyboard while preserving the locked-ratio model', async () => {
     const fetchMock = documentFetch('<p>x</p>', 'image1');
-    vi.stubGlobal('fetch', fetchMock);
     render(() => <SocialPreviewEditor id="story1" source="<p>x</p>" editId="e1" version={1} onClose={() => {}} />);
     loadOverview();
     const frame = screen.getByLabelText('Move social preview crop');
@@ -135,7 +134,6 @@ describe('social preview editor', () => {
 
 it('uploads an asset before saving its head reference and retains the crop', async () => {
   const fetchMock = documentFetch('<head><meta name="artifactbin:og-crop" content="x=20;y=30;width=600" /></head><p>x</p>', 'image1');
-  vi.stubGlobal('fetch', fetchMock);
   const close = vi.fn();
   const source = '<head><meta name="artifactbin:og-crop" content="x=20;y=30;width=600" /></head><p>x</p>';
   render(() => <SocialPreviewEditor id="story1" source={source} editId="e1" version={1} onClose={close} />);
@@ -156,7 +154,6 @@ it('uploads an asset before saving its head reference and retains the crop', asy
 it('removing an uploaded image restores the existing crop', async () => {
   const source = '<head><meta name="artifactbin:og-crop" content="x=20;y=30;width=600" /><meta name="artifactbin:og-image" content="ref:image1" /></head><p>x</p>';
   const fetchMock = documentFetch(source, 'image1');
-  vi.stubGlobal('fetch', fetchMock);
   render(() => <SocialPreviewEditor id="story1" source={source} editId="e1" version={1} onClose={() => {}} />);
   fireEvent.click(screen.getByText('use document framing'));
   loadOverview();
@@ -179,7 +176,6 @@ it('keeps the current choice and allows retry after upload failure', async () =>
 it('pans and resizes an uploaded image, saving independent bounds and reopening them', async () => {
   const source = '<head><meta name="artifactbin:og-image" content="ref:image1" /><meta name="artifactbin:og-crop" content="x=0;y=900;width=800" /><meta name="artifactbin:og-image-crop" content="x=400;y=200;width=800" /></head><p>x</p>';
   const fetchMock = documentFetch(source, 'image1');
-  vi.stubGlobal('fetch', fetchMock);
   render(() => <SocialPreviewEditor id="story1" source={source} editId="e1" version={1} onClose={() => {}} />);
   const image = screen.getByAltText('Uploaded social preview');
   expect(image).toHaveAttribute('src', '/a/story1/export?mode=preview&image=1&v=1&attempt=0');
@@ -202,7 +198,6 @@ it('pans and resizes an uploaded image, saving independent bounds and reopening 
 it('resets an image to its centered crop without clearing document framing', async () => {
   const source = '<head><meta name="artifactbin:og-image" content="ref:image1" /><meta name="artifactbin:og-image-crop" content="x=400;y=200;width=800" /><meta name="artifactbin:og-crop" content="x=0;y=900;width=800" /></head><p>x</p>';
   const fetchMock = documentFetch(source, 'image1');
-  vi.stubGlobal('fetch', fetchMock);
   render(() => <SocialPreviewEditor id="story1" source={source} editId="e1" version={1} onClose={() => {}} />);
   const image = screen.getByAltText('Uploaded social preview');
   Object.defineProperty(image, 'naturalWidth', { value: 1600 });
@@ -220,7 +215,6 @@ it('resets an image to its centered crop without clearing document framing', asy
 it('starts a replacement image with fresh centered framing', async () => {
   const source = '<head><meta name="artifactbin:og-image" content="ref:image1" /><meta name="artifactbin:og-image-crop" content="x=400;y=200;width=800" /></head><p>x</p>';
   const fetchMock = documentFetch(source, 'image2');
-  vi.stubGlobal('fetch', fetchMock);
   render(() => <SocialPreviewEditor id="story1" source={source} editId="e1" version={1} onClose={() => {}} />);
   fireEvent.change(screen.getByLabelText('Upload social preview image'), { target: { files: [new File(['x'], 'replacement.png', { type: 'image/png' })] } });
   await waitFor(() => expect(screen.getByAltText('Uploaded social preview')).toHaveAttribute('src', '/a/image2/raw?attempt=0'));

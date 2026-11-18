@@ -18,15 +18,11 @@ vi.mock('@/solid/lib/served-frame', () => ({ adoptServedFrame: () => { const fra
 
 import { answerFrameNavigation, appNavigationTarget } from '@/lib/html-reader/frame-navigation';
 import { DocumentPage } from '../../pages/Document';
+import { stubFetch } from '@/test/helpers/fetch-stub';
 
 let fetcher: ReturnType<typeof vi.fn>;
 beforeEach(() => {
-  fetcher = vi.fn(async (input: unknown) => {
-    const url = String(input);
-    if (url.includes('/annotations')) return Response.json({ annotations: [], next_cursor: null });
-    return Response.json({});
-  });
-  vi.stubGlobal('fetch', fetcher);
+  fetcher = stubFetch({ '*/annotations*': { annotations: [], next_cursor: null } }, { fallback: () => Response.json({}) });
 });
 afterEach(() => {
   cleanup();

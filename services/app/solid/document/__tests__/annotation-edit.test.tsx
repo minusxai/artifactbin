@@ -12,6 +12,7 @@ import { SessionProvider } from '../../lib/session';
 import { preloadCommentField } from '../LazyCommentField';
 import { ANN, RESOLVED, fetchCalls, flush, installAnnotationFetch, knobs, layer, showResolved, emitPin } from './annotation-rig';
 import { replaceComment } from './comment-input';
+import { stubFetch } from '@/test/helpers/fetch-stub';
 
 const THREAD = { ...ANN, revision: 3 };
 let patchAnswer: (body: { body: string; expected_revision?: number }) => Response;
@@ -23,13 +24,10 @@ beforeEach(async () => {
     ...THREAD, revision: 4, thread: [{ ...THREAD.thread[0]!, body: body.body, edited_at: '2026-10-14T10:00:00Z' }, THREAD.thread[1]!],
   }), { status: 200 });
   const rig = globalThis.fetch;
-  vi.stubGlobal('fetch', (async (url: string, init?: RequestInit) => {
-    if (String(url) === '/api/page/session') {
-      return new Response(JSON.stringify({ user: { id: 'usr_vivek', email: null, username: 'vivek', image: null }, kind: 'account', onboarded: true }), { status: 200 });
-    }
-    if (init?.method === 'PATCH') { fetchCalls.push({ url: String(url), init }); return patchAnswer(JSON.parse(String(init.body))); }
-    return rig(url, init);
-  }) as unknown as typeof fetch);
+  stubFetch({
+    '/api/page/session': () => new Response(JSON.stringify({ user: { id: 'usr_vivek', email: null, username: 'vivek', image: null }, kind: 'account', onboarded: true }), { status: 200 }),
+    'PATCH *': (url, init) => { fetchCalls.push({ url, init }); return patchAnswer(JSON.parse(String(init!.body))); },
+  }, { fallback: (url, init) => rig(url, init) });
   await preloadCommentField();
 });
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });

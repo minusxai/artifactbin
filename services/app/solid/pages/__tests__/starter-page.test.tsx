@@ -14,6 +14,7 @@ import { existingPaste } from '@/lib/agent-copy/agent-copy';
 import { reloadKeepingPlace } from '@/lib/html-reader/reload';
 import { replaceDocument } from '@/solid/lib/document-navigation';
 import { StarterPage, type StarterAnswer } from '@/solid/pages/Starter';
+import { stubFetch } from '@/test/helpers/fetch-stub';
 
 vi.mock('@/lib/html-reader/reload', () => ({ reloadKeepingPlace: vi.fn() }));
 vi.mock('@/solid/lib/document-navigation', () => ({ replaceDocument: vi.fn() }));
@@ -30,12 +31,10 @@ beforeEach(() => {
   vi.mocked(reloadKeepingPlace).mockClear(); vi.mocked(replaceDocument).mockClear();
   document.body.removeAttribute('data-mx-view-reported');
   vi.stubGlobal('EventSource', FakeEventSource);
-  vi.stubGlobal('fetch', vi.fn(async (input: unknown) => {
-    const url = String(input);
-    if (url.endsWith('/events/frame')) return Response.json({ editId: 'e2', version: 2, by: null, format: 'html', title: null, source: frameSource, dataPreview: null });
-    if (url.includes('/members')) return Response.json({ members: [], pending: [], self: null, canManage: false, canInvite: false });
-    return Response.json({});
-  }));
+  stubFetch({
+    '*/events/frame': () => Response.json({ editId: 'e2', version: 2, by: null, format: 'html', title: null, source: frameSource, dataPreview: null }),
+    '*/members*': { members: [], pending: [], self: null, canManage: false, canInvite: false },
+  }, { fallback: () => Response.json({}) });
 });
 afterEach(() => { cleanup(); document.body.replaceChildren(); window.history.replaceState(null, '', '/'); vi.unstubAllGlobals(); });
 
