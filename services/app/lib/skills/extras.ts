@@ -2,7 +2,7 @@
  * DEPLOYMENT EXTRAS (`SKILLS__EXTRA_DIR`, off by default): files an operator adds to the author skill this origin
  * serves, for a deployment whose co-hosted services need their own guide and script beside the product's.
  *
- * They ship under `extras/` and nowhere else, so they never shadow or replace a product file, and the release
+ * They ship under `extras/` and nowhere else in the archive, so they never shadow or replace a product file, and the release
  * version covers them (package.ts `skillRelease` hashes every member), so installed skills update when they change.
  * The directory is flat and holds only lowercase kebab-case `.md` guides, `.mjs` scripts and `.json` data: no
  * hidden files, subdirectories or symlinks, UTF-8 text, at most EXTRAS_MAX_FILES files, EXTRA_FILE_MAX_BYTES each
@@ -12,6 +12,10 @@
  * TRUST: extras are operator-supplied instructions and code delivered to agents, and public (anyone may download
  * the archive): no secrets. An origin may enable them only once its installs run an updater that accepts
  * `extras/` (scripts/toolbox-update-archive.mjs); an older one refuses the release and keeps its current skill.
+ *
+ * INTRODUCTION: an optional guide named `intro.md` says what this server is beyond the product, for an agent
+ * arriving with nothing installed: `/llms.txt` opens with it, verbatim, before the product guide (so it should end by
+ * pointing below for publishing pages), and it ships as an extra like any other guide. Keep it short and general.
  *
  * Discovery: the generated `extras/README.md` lists each guide by its first `# ` heading (required) and its
  * `Read when …` line (optional, the first line starting so), and SKILL.md points at it only when extras exist.
@@ -34,7 +38,8 @@ export const EXTRA_ENTRY_POINTS={
 const SOURCE_NAME=/^[a-z0-9-]+\.(?:md|mjs|json)$/;
 /** An archive member the extras may occupy: an operator file, or the generated index. */
 export const skillExtraName=(name:string):boolean=>/^extras\/(?:(?!readme\.)[a-z0-9-]+\.(?:md|mjs|json)|README\.md)$/.test(name);
-export interface SkillExtras {readonly dir:string;readonly files:Readonly<Record<string,string>>}
+/** `files` are the archive members; `intro` is the optional `intro.md`, which /llms.txt opens with. */
+export interface SkillExtras {readonly dir:string;readonly files:Readonly<Record<string,string>>;readonly intro:string|null}
 
 /** Read and validate the directory now; throws naming SKILLS__EXTRA_DIR on anything it would not ship. */
 export function readSkillExtras(dir:string):SkillExtras{
@@ -67,7 +72,7 @@ export function readSkillExtras(dir:string):SkillExtras{
  files['extras/README.md']=['# Extras from this server','',
   'Guides and scripts this server\'s operator added to the skill; they are not Artifactbin\'s own. A script runs',
   'only when you run it (`node extras/<name>.mjs`).','',...guides,...(others.length?['',`Scripts and data: ${others.join(', ')}.`]:[]),''].join('\n');
- return {dir,files};
+ return {dir,files,intro:files['extras/intro.md']??null};
 }
 
 let cached:{dir:string;extras:SkillExtras}|null=null;
