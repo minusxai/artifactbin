@@ -193,7 +193,8 @@ async function requireGroupAdmin(userId:string,groupId:string,db:ContractQueryab
 }
 /**
  * A group's unexpired, unrevoked sign-ins, for one of its Admins: people's in full, newest first, `limit` at a time
- * after `after` (the previous page's `next`); and a service's as one row per live approval with its count.
+ * after `after` (the previous page's `next`); and a service's as one row per live approval, counting only the sign-ins
+ * that would be accepted (none: no row).
  */
 export async function listGroupSignIns(userId:string,groupId:string,page:{limit:number;after?:{created:string;id:string}}={limit:50}):Promise<GroupSignInPage>{
  const db=await getDb();await requireGroupAdmin(userId,groupId,db);
@@ -206,11 +207,14 @@ export async function listGroupSignIns(userId:string,groupId:string,page:{limit:
  const shown=rows.slice(0,page.limit).map(({issuer_id,issuer_username,issuer_name,position:_position,...row})=>({...row,issued_by:{id:issuer_id,username:issuer_username,name:issuer_name}}));
  // The position is the database's own text of the time (microseconds), so a page never repeats or skips a row.
  const last=rows[page.limit-1];
- // Counted by approval from the token rows (unexpired, unrevoked), never by evaluating each one's `live`.
- const services=(await db.query<Omit<GroupServiceSignIns,'count'>&{count:string|number}>(`SELECT g.id AS grant_id,g.service_id,g.role,count(t.id) AS count,max(t.created_at) AS last_issued_at,g.created_at AS approved_at
-   FROM group_sign_in_grants g JOIN tokens t ON t.grant_id=g.id AND t.group_id=g.group_id AND t.deleted_at IS NULL AND (t.expires_at IS NULL OR t.expires_at>now())
-  WHERE g.group_id=$1 AND g.deleted_at IS NULL GROUP BY g.id,g.service_id,g.role,g.created_at ORDER BY max(t.created_at) DESC,g.id`,[groupId])).rows
-  .map(row=>({...row,count:Number(row.count),last_issued_at:new Date(row.last_issued_at).toISOString(),approved_at:new Date(row.approved_at).toISOString()}));
+ // Counted by approval: only the sign-ins a request would accept, by the rules that decide it on use (lib/accounts
+ // `liveGroupSignIn`): the `tokens` view's `live`, and the service still configured as it was approved.
+ const configured=serviceAudiences();
+ const services=(await db.query<Omit<GroupServiceSignIns,'count'>&{count:string|number;service_origin:string|null}>(`SELECT g.id AS grant_id,g.service_id,g.role,count(t.id) AS count,max(t.created_at) AS last_issued_at,g.created_at AS approved_at,g.service_origin
+   FROM group_sign_in_grants g JOIN tokens t ON t.grant_id=g.id AND t.group_id=g.group_id AND t.deleted_at IS NULL AND (t.expires_at IS NULL OR t.expires_at>now()) AND t.live
+  WHERE g.group_id=$1 AND g.deleted_at IS NULL GROUP BY g.id,g.service_id,g.role,g.created_at,g.service_origin ORDER BY max(t.created_at) DESC,g.id`,[groupId])).rows
+  .filter(row=>groupSignInServiceConfigured(configured,row.service_id,row.service_origin))
+  .map(({service_origin:_origin,...row})=>({...row,count:Number(row.count),last_issued_at:new Date(row.last_issued_at).toISOString(),approved_at:new Date(row.approved_at).toISOString()}));
  return {sign_ins:shown,next:rows.length>page.limit&&last?{created:last.position,id:last.id}:null,services};
 }
 /** An Admin of the group ends one of its sign-ins, through the identity module (which checks the Admin again); false when none matched. */
