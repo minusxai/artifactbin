@@ -12,6 +12,9 @@ import { createRegionState, LiveRegionRefusal, openRegionDoc, regionHtml, region
 import { Room } from './harness';
 import { checkConvergence } from './property';
 
+/** A fixed set of interleavings in pr fast: the same cost and verdict every run (convergence.soak.test.ts explores fresh ones). */
+const FAST_SEED = 20261118;
+
 const CLIENT = 7;
 
 /** A client of a region that started from the server's bytes, recording each update it makes. */
@@ -208,7 +211,7 @@ describe('validateRegionUpdate never refuses an honest editor', () => {
         send.call(this, from, 1);
       }
     });
-    checkConvergence(15, 30);
+    checkConvergence(15, 30, { seed: FAST_SEED });
     expect(checked).toBeGreaterThan(50);
   });
 });

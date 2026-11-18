@@ -210,15 +210,17 @@ function mulberry(seed: number) {
  * Runs `runs` random interleavings of up to `maxOps` operations. fast-check prints the seed, path and shrunk
  * counterexample of a failure: `replay` (the seed and path, at the failing run's `maxOps`) re-runs exactly that case,
  * and the shrunk counterexample becomes a fixed `runScenario` case in convergence.property.test.ts, so pr fast keeps it.
+ * `{ seed }` alone fixes the interleavings: pr fast's callers pass one so their cost and verdict never vary run to run;
+ * the soak explores fresh ones.
  */
-export function checkConvergence(runs: number, maxOps: number, replay?: { seed: number; path: string }): { typed: number; lost: number } {
+export function checkConvergence(runs: number, maxOps: number, replay?: { seed: number; path?: string }): { typed: number; lost: number } {
   const totals = { typed: 0, lost: 0, silent: 0 };
   fc.assert(fc.property(scenario(maxOps), (run) => {
     const result = runScenario(run);
     totals.typed += result.typed;
     totals.lost += result.lost;
     if (!result.typed) totals.silent++;
-  }), replay ? { ...replay, endOnFailure: true } : { numRuns: runs });
+  }), replay?.path !== undefined ? { ...replay, endOnFailure: true } : { numRuns: runs, ...(replay ? { seed: replay.seed } : {}) });
   // Each run's first operation types: a run that typed nothing exercised no I4 and means the generator broke.
   expect(totals.silent, 'runs that typed nothing').toBe(0);
   return { typed: totals.typed, lost: totals.lost };
