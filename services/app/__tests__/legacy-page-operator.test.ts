@@ -17,7 +17,7 @@ const legacyPage=async(email:string,source:string)=>{
  return {user,row:await createHistoricalPage(null,user.id,{format:'html',source,meta:{},visibility:'private'})};
 };
 it('defaults to dry run, retains exact old head and repeats without publication',async()=>{
- const {user,row}=await legacyPage('mxmx_test_migration@example.com','<article data-af-editable="rich"><p>Hello</p></article>');
+ const {row}=await legacyPage('mxmx_test_migration@example.com','<article data-af-editable="rich"><p>Hello</p></article>');
  const db=await harness.db();
  await db.query(`INSERT INTO annotations(id,artifact_id,body,author_kind,quote,anchor_version,html_anchor) VALUES('ann_migration',$1,'Retain comment','human','Hello',$2,$3::jsonb)`,[row.id,row.version,JSON.stringify({nodeId:editableRegions(row.source!)[0]!.id})]);
  const comments=(await annotationRows(db,row.id));
@@ -32,7 +32,7 @@ it('defaults to dry run, retains exact old head and repeats without publication'
 });
 
 it('refuses an unrepresentable empty mark without changing any rows',async()=>{
- const {user,row}=await legacyPage('mxmx_test_migration_refuse@example.com','<article data-af-editable="rich"><p>Hello<strong data-af-id="af-98"></strong></p></article>');
+ const {row}=await legacyPage('mxmx_test_migration_refuse@example.com','<article data-af-editable="rich"><p>Hello<strong data-af-id="af-98"></strong></p></article>');
  const db=await harness.db();
  const before=(await artifactRows(db,row.id));
  await expect(migrateLegacyPage(row.id,{apply:true})).rejects.toThrow();
@@ -41,7 +41,7 @@ it('refuses an unrepresentable empty mark without changing any rows',async()=>{
 });
 
 it('preserves trash timestamp',async()=>{
- const {user,row}=await legacyPage('mxmx_test_migration_trash@example.com','<article data-af-editable="rich"><p>Trashed</p></article>');
+ const {row}=await legacyPage('mxmx_test_migration_trash@example.com','<article data-af-editable="rich"><p>Trashed</p></article>');
  const db=await harness.db();
  await db.query("UPDATE artifacts SET deleted_at='2025-01-01T00:00:00Z' WHERE id=$1",[row.id]);
  const before=(await db.query('SELECT deleted_at FROM artifacts WHERE id=$1',[row.id])).rows;
@@ -108,7 +108,7 @@ it.each(['true','false'])('migrates legacy checkbox %s through the real operator
  expect((await annotationRows(db,row.id))).toEqual(comments);
 });
 it.each(['aria-checked="mixed"','aria-checked="true" aria-disabled="yes"','aria-checked="true" aria-label="unmodelled"','aria-checked="true" data-checked="true"'])('refuses invalid checkbox attributes atomically: %s',async attrs=>{
- const {user,row}=await legacyPage('mxmx_test_checkbox_invalid@example.com',`<article data-af-editable="rich"><ul><li role="checkbox" ${attrs}><p>Invalid</p></li></ul></article>`);
+ const {row}=await legacyPage('mxmx_test_checkbox_invalid@example.com',`<article data-af-editable="rich"><ul><li role="checkbox" ${attrs}><p>Invalid</p></li></ul></article>`);
  const db=await harness.db();
  const before=(await artifactRows(db,row.id));
  await expect(migrateLegacyPage(row.id,{apply:true})).rejects.toThrow();
@@ -160,7 +160,7 @@ it.each([false,true])('uses the saved heading/title projection for a dirty docum
 });
 
 it('rolls back saved dirty state, archives and publication if the final receipt cannot be stored',async()=>{
- const {user,row}=await legacyPage('mxmx_test_migration_atomic@example.com','<article data-af-editable="rich"><p>Before</p></article>');
+ const {row}=await legacyPage('mxmx_test_migration_atomic@example.com','<article data-af-editable="rich"><p>Before</p></article>');
  const db=await harness.db(),region=editableRegions(row.source!)[0]!;
  const initial=createRegionState('rich',region.inner),doc=openRegionDoc(initial.state);
  regionText(doc).insert(0,'Pending ');
