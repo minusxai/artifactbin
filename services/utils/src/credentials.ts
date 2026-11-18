@@ -65,7 +65,7 @@ export async function readCredentials(server:string,root:string,audience?:string
  if(audience&&!saved.ARTIFACTBIN_RESOURCE)return null;
  const expiresAt=Number(saved.ARTIFACTBIN_EXPIRES_AT),refresh=saved.ARTIFACTBIN_REFRESH_TOKEN,client=saved.ARTIFACTBIN_CLIENT_ID;
  // A sign-in without refresh lines (a service's run sign-in) is nothing once its expiry passes: sign in again.
- if(!refresh&&expiresAt<=Date.now())return null;
+ if(!refresh&&Number.isSafeInteger(expiresAt)&&expiresAt>0&&expiresAt<=Date.now())return null;
  return {server:paths.origin,token:saved.ARTIFACTBIN_TOKEN,...(audience?{audience,resource:saved.ARTIFACTBIN_RESOURCE!}:{}),...(refresh&&client?{refreshToken:refresh,clientId:client,...(Number.isSafeInteger(expiresAt)&&expiresAt>0?{expiresAt}:{})}:{})};
 }
 /**
