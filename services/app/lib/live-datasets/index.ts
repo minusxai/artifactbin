@@ -183,7 +183,8 @@ function boundStatement(dialect: ConnectorDialect, text: string, params: unknown
   try { rewritten = colonParameters(dialect, text).text; } catch (e) { throw new LiveDatasetRefusal(400, 'validation_failed', connectorError(e).message); }
   return {
     text: rewritten,
-    params: { ...sent, viewer_id: viewer?.id || null, viewer_email: viewer?.email || null, viewer_groups: viewer ? JSON.stringify([...viewer.groups].sort()) : null,
+    // A person's values exactly as ever (`??`: an empty address stays empty); a group's sign-in (a level) is no person.
+    params: { ...sent, viewer_id: viewer?.groupRole ? null : viewer?.id ?? null, viewer_email: viewer?.groupRole ? null : viewer?.email ?? null, viewer_groups: viewer ? JSON.stringify([...viewer.groups].sort()) : null,
       viewer_group_role: viewer ? viewer.groupRole ?? '' : null },
   };
 }

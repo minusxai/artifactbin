@@ -163,6 +163,10 @@ it('answers free SQL for owners and editors only, through the page and the agent
   expect(ok(await sql(page, bob, 'select n from shop.loose')).rows).toEqual([{ n: 7 }]);
   // The viewer's values are bound for free SQL too.
   expect(ok(await sql(page, alice, 'select :viewer_email as me, :viewer_id as id from shop.loose')).rows).toEqual([{ me: alice.email, id: alice.userId }]);
+  // A person whose stored address is the empty string is bound exactly that, never null (a group's sign-in alone is no one).
+  await (await getDb()).query("UPDATE auth.users SET email='' WHERE id=$1", [alice.userId]);
+  try { expect(ok(await sql(page, alice, 'select :viewer_email as me, :viewer_id as id from shop.loose')).rows).toEqual([{ me: '', id: alice.userId }]); }
+  finally { await (await getDb()).query('UPDATE auth.users SET email=$2 WHERE id=$1', [alice.userId, alice.email]); }
   // A reader, even one a rule admits to declared queries, never sends SQL text.
   for (const who of [carol, null]) {
     const refused = await sql(page, who, 'select * from shop.sales.orders');

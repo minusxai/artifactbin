@@ -6,13 +6,13 @@
  */
 import {it,expect} from 'vitest';
 import {useAppHarness,admitGroupMember} from '@/__tests__/harness';
-import {account,mine,head,sql,type Account} from '@/__tests__/artifact-fixtures';
+import {account,dataset,mine,head,readAllPolicy,sql,type Account} from '@/__tests__/artifact-fixtures';
 import {createGroup} from '@/lib/groups';
-import {setArtifactGroupShare,getArtifactFor} from '@/lib/artifacts';
+import {setArtifactGroupShare,getArtifactFor,changeMembership} from '@/lib/artifacts';
 import {getDb} from '@/lib/platform';
 import {shareRolesAtLeast,type ArtifactRole} from '@artifactbin/contracts';
 import type {AccessActor} from '@/lib/accounts';
-import {effectiveRole,liveAccessFacts,preloadAccessFacts,transactionAccessFacts,readThrough,reactionScope,annotationScope,editorScope,ownerScope,commentMonitorScope,type Scope} from '..';
+import {attestSavedHtmlUpload,uploadGrantContext,effectiveRole,liveAccessFacts,preloadAccessFacts,transactionAccessFacts,readThrough,reactionScope,annotationScope,editorScope,ownerScope,commentMonitorScope,type Scope} from '..';
 useAppHarness();
 
 const admitted=async(scope:Scope,id:string)=>(await sql(`SELECT id FROM artifacts WHERE id=$1 AND ${scope.where('$2')}`,[id,scope.val])).length===1;
@@ -49,11 +49,13 @@ async function tree(){
   toTeam:await doc('To Team',{}),toRoot:await doc('To Root',{}),toSquad:await doc('To Squad',{}),
   linkCommenter:await doc('Link commenter',{visibility:'unlisted'}),
   linkViewer:await doc('Link viewer',{visibility:'unlisted'}),
+  linkEditor:await doc('Link editor',{visibility:'unlisted'}),
  };
  await setArtifactGroupShare(admin,pages.toTeam!,team.id,'commenter');
  await setArtifactGroupShare(admin,pages.toRoot!,root.id,'editor');
  await setArtifactGroupShare(admin,pages.toSquad!,squad.id,'editor');
  await sql("UPDATE artifacts SET link_role='commenter' WHERE id=$1",[pages.linkCommenter]);
+ await sql("UPDATE artifacts SET link_role='editor' WHERE id=$1",[pages.linkEditor]);
  return {admin,root,team,squad,pages};
 }
 const principal=(group:string,role:'member'|'editor'):AccessActor=>({userId:null,tokenId:null,email:null,documentEditor:false,principalGroup:{id:group,role,tokenId:'tok_group_sign_in',issuedBy:'usr_someone'}});
@@ -89,4 +91,29 @@ it('a deleted group grants its sign-in nothing, and another group\'s principal r
  await sql('UPDATE auth.groups SET deleted_at=now() WHERE id=$1',[t.squad.id]);
  expect(await principalRole(t.pages.squad!,principal(t.squad.id,'editor'))).toBe('none');
  expect(await principalRole(t.pages.team!,principal(t.squad.id,'editor'))).toBe('none');
+});
+
+it('uses a page\'s actions exactly when its twin may: the twin asks to join, and only a join accepted at once counts',async()=>{
+ const t=await tree();
+ const data=await dataset(t.admin,readAllPolicy());
+ /** May `who` act through page `id` (the saved-page context an upload or action carries)? */
+ const mayAct=async(who:AccessActor,id:string)=>{
+  const doc=await head(id),authority={id:doc.id,editId:doc.edit_id,version:doc.version,datasetId:data.id};
+  return uploadGrantContext(data,who,{...authority,uploadProof:attestSavedHtmlUpload(authority,async()=>{})}).then(()=>true,()=>false);
+ };
+ const outcomes:Record<string,boolean>={};
+ for(const role of ['member','editor'] as const){
+  const twin:Account=await account(`mxmx_test_gp_act_${role}@example.com`);
+  await admitGroupMember(t.admin.userId,t.team.id,twin.userId,role);
+  const actor=principal(t.team.id,role);
+  for(const [name,id] of Object.entries(t.pages)){
+   // The twin's own way in: it asks to join; whether that is accepted without an owner or editor is what it may do.
+   await changeMembership(twin,id,{action:'join'}).catch(()=>null);
+   const twinMay=await mayAct(twin,id);
+   expect(await mayAct(actor,id),`${role} ${name}`).toBe(twinMay);
+   outcomes[`${role} ${name}`]=twinMay;
+  }
+ }
+ // Spelled out: a member's join of its group's page, or of a page shared with it to comment, waits for approval.
+ expect(outcomes).toMatchObject({'member team':false,'editor team':true,'member toTeam':false,'editor toTeam':false,'member toRoot':true,'member linkEditor':true,'member linkCommenter':false,'editor root':false});
 });

@@ -1110,6 +1110,7 @@ CREATE TABLE IF NOT EXISTS app.annotations (
   author_remote JSONB,
   edited_at TIMESTAMPTZ,
   author_group_id TEXT,
+  author_group_role TEXT,
   PRIMARY KEY (id)
 );
 
@@ -1162,6 +1163,8 @@ ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS author_remote JSONB;
 ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ;
 
 ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS author_group_id TEXT;
+
+ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS author_group_role TEXT;
 
 ALTER TABLE app.annotations DROP COLUMN IF EXISTS change_seq;
 

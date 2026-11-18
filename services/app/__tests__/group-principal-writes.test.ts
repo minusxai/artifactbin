@@ -1,11 +1,12 @@
 /**
  * WHAT AN AGENT SIGNED IN AS A GROUP WRITES, and who the author is: at editor level it creates in its group only and
- * edits its group's pages (never personal, never another group, never sharing or placement); it comments where its role
- * reaches, as the group (shown under the group's name, as an agent), and edits only the group's own comments.
+ * edits its group's pages (never personal, never another group, never named shares or placement), setting there exactly
+ * the visibility, link role and dataset access its twin (a direct Editor) may; it comments where its role reaches, as
+ * the group (shown under the group's name, as an agent), and edits only its own comments (the group's, at its level).
  */
 import {GROUP_PRINCIPAL_REFUSED} from '@artifactbin/contracts';
 import {expect,it} from 'vitest';
-import {useAppHarness} from './harness';
+import {admitGroupMember,useAppHarness} from './harness';
 import {composed,page,sql,useGroupPrincipalHost,world} from './group-principal-fixture';
 useAppHarness();
 useGroupPrincipalHost();
@@ -40,8 +41,8 @@ it('at editor level creates in its group only and edits its group\'s pages; a me
  expect((await host.call('GET',`/api/artifacts/${pages.team}/versions/1`,editor.token)).status).toBe(200);
  expect((await replace(editor.token,pages.root,'Not ours')).status).toBe(404);
  expect((await replace(member.token,pages.team,'Member edit')).status).toBe(404);
- // Content only: who may read it stays with people.
- expect(await replace(editor.token,pages.team,'Opened',{visibility:'public'})).toMatchObject({status:403,body:{error:GROUP_PRINCIPAL_REFUSED}});
+ // What its twin, a direct Editor, may set on a replace it sets too (visibility: the last test); named shares stay with people.
+ expect(await replace(editor.token,pages.team,'Shared',{shares:[{email:'someone@example.test',role:'viewer'}]})).toMatchObject({status:403,body:{error:GROUP_PRINCIPAL_REFUSED}});
  // Owner and Admin acts are refused outright.
  for(const [method,path,body] of [['DELETE',`/api/artifacts/${pages.team}`,undefined],['PUT',`/api/artifacts/${pages.team}/group-shares/${root.id}`,{role:'viewer'}],['POST',`/api/artifacts/${pages.team}/transfer`,{}],['GET','/api/artifacts',undefined],['POST','/api/groups',{handle:'x',name:'x'}]] as const)
   expect(await host.call(method,path,editor.token,body),path).toMatchObject({status:403,body:{error:GROUP_PRINCIPAL_REFUSED}});
@@ -78,10 +79,72 @@ it('comments where its role reaches, as the group, and edits only the group\'s o
  expect(all.status,JSON.stringify(all.body)).toBe(200);
  expect((all.body!.events as Array<{resource:{id:string}}>).map(event=>event.resource.id)).not.toContain(quiet);
  expect((all.body!.events as Array<{resource:{id:string}}>).map(event=>event.resource.id)).toContain(pages.sharedTeam);
- // Its own comment it edits (any sign-in of the group); a person's it does not.
+ // Its own comment it edits: any sign-in of the group AT THE SAME LEVEL (its principal), never one at the other level.
  const ownId=String((made.body as {id?:string}).id ?? (made.body as {annotation?:{id:string}}).annotation?.id);
- const edit=await host.call('PATCH',`/api/artifacts/${pages.sharedTeam}/annotations/${ownId}`,editor.token,{body:'Edited by the team agent'});
+ const sibling=await eve.asGroup(team.id,'member');
+ const edit=await host.call('PATCH',`/api/artifacts/${pages.sharedTeam}/annotations/${ownId}`,sibling.token,{body:'Edited by the team agent'});
  expect(edit.status,JSON.stringify(edit.body)).toBe(200);
+ expect((await host.call('PATCH',`/api/artifacts/${pages.sharedTeam}/annotations/${ownId}`,editor.token,{body:'Not the editor\'s'})).status).toBe(404);
+ const editors=await comment(editor.token,pages.sharedTeam,'From the team editor');
+ expect(editors.status,JSON.stringify(editors.body)).toBe(201);
+ const editorsId=String(editors.body!.id);
+ expect((await host.call('PATCH',`/api/artifacts/${pages.sharedTeam}/annotations/${editorsId}`,member.token,{body:'Not the member\'s'})).status).toBe(404);
+ expect((await host.call('PATCH',`/api/artifacts/${pages.sharedTeam}/annotations/${editorsId}`,editor.token,{body:'Edited by the team editor'})).status).toBe(200);
+ expect(await sql("SELECT body,author_group_role FROM annotations WHERE id=ANY($1::text[]) ORDER BY body",[[ownId,editorsId]])).toEqual([
+  {body:'Edited by the team agent',author_group_role:'member'},{body:'Edited by the team editor',author_group_role:'editor'}]);
+ // A comment stored before its level was (no level on the row) is editable by no sign-in of the group, at either level.
+ await sql('UPDATE annotations SET author_group_role=NULL WHERE id=$1',[editorsId]);
+ for(const token of [editor.token,member.token])expect((await host.call('PATCH',`/api/artifacts/${pages.sharedTeam}/annotations/${editorsId}`,token,{body:'Unowned now'})).status).toBe(404);
+ // A person's it does not.
  const eves=await host.call('POST',`/api/artifacts/${pages.sharedTeam}/annotations`,eve.token,{body:'Eve here',anchor:await anchorOf(pages.sharedTeam)});
  expect((await host.call('PATCH',`/api/artifacts/${pages.sharedTeam}/annotations/${String(eves.body!.id)}`,editor.token,{body:'Not yours'})).status).toBe(404);
+});
+
+it('sets at creation and on a replace exactly the visibility, link role and dataset access its twin may, at both levels',async()=>{
+ const host=await composed(),{ada,eve,team}=await world(host,false);
+ /** The twin: a person whose only relationship is a direct membership of Team at that level. */
+ const twins={editor:await host.signIn('mxmx_test_ga_tim@example.test'),member:await host.signIn('mxmx_test_ga_mia@example.test')};
+ await admitGroupMember(ada.userId,team.id,twins.editor.userId,'editor');
+ await admitGroupMember(ada.userId,team.id,twins.member.userId,'member');
+ const stored=async(id:string)=>(await sql<{visibility:string;link_role:string|null;access:string|null}>('SELECT visibility,link_role,access FROM artifacts WHERE id=$1',[id]))[0];
+ const html=(title:string)=>({title,html:page(title)});
+ const data=(title:string)=>({title,dataset:[{n:1}]});
+ const CASES:Array<[string,(title:string)=>Record<string,unknown>,Record<string,unknown>]>=[
+  ['public page',html,{visibility:'public'}],['unlisted page',html,{visibility:'unlisted'}],
+  ['commenter link',html,{visibility:'unlisted',linkRole:'commenter'}],['editor link',html,{visibility:'unlisted',linkRole:'editor'}],
+  ['read-write dataset',data,{access:'readwrite'}],['read-only dataset',data,{access:'read'}],
+ ];
+ const outcomes:Record<string,boolean>={};
+ /** Did the write that succeeded store what it was sent? */
+ const holds=(row:{visibility:string;link_role:string|null;access:string|null}|null|undefined,fields:Record<string,unknown>)=>!!row
+  &&(fields.visibility===undefined||row.visibility===fields.visibility)&&(fields.linkRole===undefined||row.link_role===fields.linkRole)&&(fields.access===undefined||row.access===fields.access);
+ for(const role of ['editor','member'] as const){
+  const twin=twins[role],agent=await eve.asGroup(team.id,role);
+  for(const [name,content,fields] of CASES){
+   // Creation in Team.
+   const made=async(token:string)=>{const r=await host.call('POST','/api/artifacts',token,{...content(name),destination:{type:'group',id:team.id},...fields});return {ok:r.status===201,row:r.status===201?await stored(String(r.body!.id)):null,body:r.body};};
+   const byTwin=await made(twin.token),byAgent=await made(agent.token);
+   expect({ok:byAgent.ok,row:byAgent.row},`create ${role} ${name}: ${JSON.stringify(byAgent.body)} vs ${JSON.stringify(byTwin.body)}`).toEqual({ok:byTwin.ok,row:byTwin.row});
+   if(byTwin.ok)expect(holds(byTwin.row,fields),`create ${role} ${name} stored`).toBe(true);
+   outcomes[`create ${role} ${name}`]=byTwin.ok;
+   // A replace of a private Team page (or dataset) Ada made, sending the field.
+   const replaced=async(token:string)=>{
+    const id=String((await host.call('POST','/api/artifacts',ada.token,{...content(name),destination:{type:'group',id:team.id},visibility:'private'})).body!.id);
+    // A dataset under a write policy is its owner's to replace, for a person and a group alike (`policy_locked`); one
+    // without a policy is what an editor may replace, so `access` is set where it can be.
+    if(fields.access)await sql('UPDATE artifacts SET dataset_policy=NULL WHERE id=$1',[id]);
+    const current=await host.call('GET',`/api/artifacts/${id}`,ada.token);
+    const body:Record<string,unknown>={...content(name),expectedVersion:current.body?.version,expectedState:current.body?.state,...fields};
+    delete body.title;
+    const r=await host.call('PUT',`/api/artifacts/${id}`,token,body);
+    return {ok:r.status===200,row:await stored(id),body:r.body};
+   };
+   const twinPut=await replaced(twin.token),agentPut=await replaced(agent.token);
+   expect({ok:agentPut.ok,row:agentPut.row},`replace ${role} ${name}: ${JSON.stringify(agentPut.body)} vs ${JSON.stringify(twinPut.body)}`).toEqual({ok:twinPut.ok,row:twinPut.row});
+   if(twinPut.ok)expect(holds(twinPut.row,fields),`replace ${role} ${name} stored`).toBe(true);
+   outcomes[`replace ${role} ${name}`]=twinPut.ok;
+  }
+ }
+ // Spelled out: a direct Editor sets all three at creation and on a replace; a direct Member creates and replaces nothing.
+ expect(outcomes).toEqual(Object.fromEntries(['create','replace'].flatMap(path=>(['editor','member'] as const).flatMap(role=>CASES.map(([name])=>[`${path} ${role} ${name}`,role==='editor'])))));
 });

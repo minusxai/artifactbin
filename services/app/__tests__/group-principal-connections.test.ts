@@ -28,6 +28,15 @@ it('the default connection names a group agent with no person, exactly its group
  expect(await who(eve.token)).toEqual({id:eve.userId,email:'mxmx_test_ga_eve@example.test',groups:JSON.stringify([team.id]),level:''});
 });
 
+it('says plainly, where database row policies are written from, that the empty id is no match and the level is reserved',async()=>{
+ const {readFile}=await import('node:fs/promises');
+ const env=(await readFile(new URL('../../../.env.example',import.meta.url),'utf8')).replace(/\n# /g,' ');
+ expect(env).toContain('A row policy comparing a column to app.viewer_id must never treat the empty id as a match: decide a group\'s agent by app.viewer_groups and app.viewer_group_role.');
+ const contract=(await readFile(new URL('../../contracts/src/connectors.ts',import.meta.url),'utf8')).replace(/\n \* /g,' ');
+ expect(contract).toContain('A policy comparing a column to `viewer_id` must never treat the empty id as a match');
+ expect(contract).toContain('a page that sends a parameter of that name is refused (400 `validation_failed`)');
+});
+
 it('a dataset-owned connection binds the same reader values: no person, exactly its group, and its level',async()=>{
  const host=await composed(),{eve,team}=await world(host,false);
  overrideConfig({internalServiceSecret:SECRET,publicBaseUrl:origin},{DATASETS__ALLOW_PRIVATE_NETWORK:'1'});

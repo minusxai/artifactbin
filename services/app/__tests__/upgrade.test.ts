@@ -153,6 +153,8 @@ describe('the additive DDL is replay-safe', () => {
       'edited_at',
       // A group's sign-in as the author (an agent acting as a group), appended on upgrade like the rest.
       'author_group_id',
+      // That sign-in's level, appended after it.
+      'author_group_role',
     ]);
     // Provenance is APPENDED, never inserted: a fork's parent is a column the
     // additive DDL adds on the next boot, with nothing to backfill (NULL is

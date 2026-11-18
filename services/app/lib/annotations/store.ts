@@ -156,6 +156,8 @@ interface AnnotationRowDb {
   author_image_key: string | null;
   /** A group's sign-in as the author: the group, and its current name (joined), shown as an agent's comment. */
   author_group_id?: string | null;
+  /** That sign-in's level: with the group, the comment's author (lib/accounts `principalKey`). */
+  author_group_role?: string | null;
   author_group_name?: string | null;
   status: 'open' | 'resolved';
   resolved_at: string | null;
@@ -313,11 +315,11 @@ export async function createAnnotationFor(
     await tx.query(
     `INSERT INTO annotations
        (id, artifact_id, root_id, body, author_kind, author_token_id, author_user_id, author_label, author_transport,
-        status, anchor_key, anchor_version, snippet, quote, range, view_state, html_anchor, author_group_id)
-     VALUES ($1, $2, NULL, $3, $4, $5, $6, $7, $8, 'open', $9, $10, $11, $12, $13, $14, $15, $16)`,
+        status, anchor_key, anchor_version, snippet, quote, range, view_state, html_anchor, author_group_id, author_group_role)
+     VALUES ($1, $2, NULL, $3, $4, $5, $6, $7, $8, 'open', $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
     [id, artifactId, input.body, ...authorOf(actor, author), author.transport,
       anchorKey, anchorVersion, snippet,
-      input.anchor?.quote ?? quote, input.range ? JSON.stringify(input.range) : null, viewState ? JSON.stringify(viewState) : null, input.anchor ? JSON.stringify(input.anchor) : null, actor.principalGroup?.id ?? null],
+      input.anchor?.quote ?? quote, input.range ? JSON.stringify(input.range) : null, viewState ? JSON.stringify(viewState) : null, input.anchor ? JSON.stringify(input.anchor) : null, actor.principalGroup?.id ?? null, actor.principalGroup?.role ?? null],
     );
     // Read back through the join, not RETURNING: the echo draws the author's face too.
     const inserted = await tx.query<AnnotationRowDb>(`SELECT * FROM ${ANNOTATIONS_READ} WHERE id = $1`, [id]);
@@ -549,9 +551,9 @@ export async function actOnAnnotationFor(
       }
       await tx.query(
         `INSERT INTO annotations
-           (id, artifact_id, root_id, body, author_kind, author_token_id, author_user_id, author_label, author_transport, status, snippet, author_remote, author_group_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'open', '', $10, $11)`,
-        [replyId, artifactId, root.id, action.reply, ...authorOf(actor, author), author.transport,null,actor.principalGroup?.id ?? null],
+           (id, artifact_id, root_id, body, author_kind, author_token_id, author_user_id, author_label, author_transport, status, snippet, author_remote, author_group_id, author_group_role)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'open', '', $10, $11, $12)`,
+        [replyId, artifactId, root.id, action.reply, ...authorOf(actor, author), author.transport,null,actor.principalGroup?.id ?? null,actor.principalGroup?.role ?? null],
       );
     }
     if(replied&&!actor.principalGroup)await commentMentions(tx,row,actor,action.reply!,replyId);
@@ -633,8 +635,9 @@ export async function editAnnotationCommentFor(
         [commentId, artifactId, rootId],
       )).rows[0]
       : root;
-    // Its author: the person, or for a group's sign-in the group (any of its sign-ins), never a person's words.
-    if (!comment || (actor.principalGroup ? comment.author_group_id !== actor.principalGroup.id || !!comment.author_user_id : comment.author_user_id !== actor.userId)) return null;
+    // Its author: the person, or for a group's sign-in its principal, the group AT its level (any sign-in of both); never
+    // a person's words, never the other level's, and never a group comment stored without its level.
+    if (!comment || (actor.principalGroup ? comment.author_group_id !== actor.principalGroup.id || comment.author_group_role !== actor.principalGroup.role || !!comment.author_user_id : comment.author_user_id !== actor.userId)) return null;
     if (edit.expectedRevision !== undefined && root.revision !== edit.expectedRevision) throw new AnnotationRevisionError(root.revision);
 
     const changed = comment.body !== edit.body;

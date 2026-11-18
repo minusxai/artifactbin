@@ -345,6 +345,9 @@ const ANNOTATIONS: Table = {
     { name: 'edited_at', type: 'TIMESTAMPTZ' },
     // A GROUP's sign-in as the author (lib/accounts `GroupPrincipal`): the group, shown by its name as an agent's comment.
     { name: 'author_group_id', type: 'TEXT' },
+    // That sign-in's level (`member` or `editor`): the principal is the group AT a level, so only a sign-in of the same
+    // group and level is the comment's author; NULL (written before this column) is no group sign-in's to edit.
+    { name: 'author_group_role', type: 'TEXT' },
   ],
   primaryKey: ['id'],
   // The retired comment feed's edit positions and writer credential/session (the events feed carries its own origin).

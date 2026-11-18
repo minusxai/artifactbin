@@ -29,6 +29,11 @@
  *             @app.viewer_groups='…', @app.viewer_group_role='…'` (escaped literals) · the statement · `COMMIT`
  *             (`ROLLBACK` after an error) · `SET @app.viewer_id='', @app.viewer_email='', @app.viewer_groups='',
  *             @app.viewer_group_role=''`
+ * FOR WHOEVER WRITES THE DATABASE'S ROW POLICIES: a group's agent is the first reader with an EMPTY `viewer_id` (and
+ * `viewer_email`) that is not nobody. A policy comparing a column to `viewer_id` must never treat the empty id as a
+ * match (`col = current_setting('app.viewer_id')` matches every row whose column is ''); decide a group's agent by
+ * `viewer_groups` and `viewer_group_role`. On a live dataset's declared queries `:viewer_group_role` is, like the other
+ * three, the server's: a page that sends a parameter of that name is refused (400 `validation_failed`).
  * Nobody: empty strings and `[]`. A database that relies on them must read them as the statement starts and ignore
  * changes a statement makes itself, which a gateway built for this does; a plain database cannot guarantee that, so
  * there they are ADVISORY whenever the reader writes the SQL (other databases, maybe in future).

@@ -106,11 +106,11 @@ export async function replaceArtifactWithBody(
   // they could never own. Unreachable is the uniform 404, before any parse.
   const current = await getArtifactFor(actor, id);
   if (!current) return json({ error: 'not_found' }, 404);
-  // A group's sign-in edits a page's content only: who may read it, where it is filed and its policy stay with people.
-  if (actor.principalGroup && (['parent_id','destination','shares','connection','policy','expectedPolicyRevision'].some(key=>Object.hasOwn(body!,key))
-    || (body.visibility !== undefined && body.visibility !== current.visibility) || (body.linkRole !== undefined && body.linkRole !== (current.link_role ?? 'viewer'))
-    || (body.access !== undefined && body.access !== current.access)))
-    return json({ error: 'group_principal_refused', details: ['A sign-in acting as a group changes a page\'s content, never its sharing, placement or policy.'] }, 403);
+  // A group's sign-in sets what its twin (a direct editor of the group) may on a replace: content, `visibility`, `linkRole`
+  // and `access`, as the editor this read reached it as. Named shares, placement, the connection and the policy stay with
+  // people (server/group-admission).
+  if (actor.principalGroup && ['parent_id','destination','shares','connection','policy','expectedPolicyRevision'].some(key=>Object.hasOwn(body!,key)))
+    return json({ error: 'group_principal_refused', details: ['A sign-in acting as a group changes a page\'s content, visibility, link role and access, never its named shares, placement or policy.'] }, 403);
   if (liveConnectionOf(current.meta) && (CONTENT_FIELDS.some((f) => body![f] !== undefined) || body!.connection !== undefined)) {
     return json({ error: 'live_dataset_connection', message: 'A live dataset\'s content is its connection: change it with PATCH /api/artifacts/ID/connection (owner and editors); its rows stay in its database.' }, 400);
   }
@@ -191,7 +191,7 @@ export async function replaceArtifactWithBody(
   if (prepared instanceof Response) return prepared;
   let parsed = prepared.content;
 
-  const visibility = parseVisibility(body, !!actor.userId||!!actor.workload);
+  const visibility = parseVisibility(body, !!actor.userId||!!actor.workload||!!actor.principalGroup);
   if (visibility instanceof Response) return visibility;
   const parent = parseParentField(body);
   if (parent instanceof Response) return parent;
