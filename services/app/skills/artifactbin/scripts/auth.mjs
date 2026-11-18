@@ -36,6 +36,7 @@ import {
   ToolError,
   serverOrigin,
   selectedServer,
+  envServer,
   credentialRoot,
   platform,
   jsonFile,
@@ -62,7 +63,7 @@ export async function authCommand({sub, values, positionals}, {env = process.env
     let saved = await shared.readCredentials(server, root, audience),
       refresh = null;
     const stored = !!saved;
-    const environment = !audience && !!(env.ARTIFACTBIN_URL === server && env.ARTIFACTBIN_TOKEN);
+    const environment = !audience && !!(envServer(env) === server && env.ARTIFACTBIN_TOKEN);
     // A saved grant is always refreshed, exactly as any other script would when its token is due,
     // so status proves the grant with the server: one revoked or ended elsewhere reads as signed
     // out, never as a still-unexpired local token. A refused refresh means log in again.

@@ -4,7 +4,7 @@
  * removes it locally. An unconfirmed revocation keeps the saved grant and fails.
  */
 import {unlink} from 'node:fs/promises';
-import {ToolError} from './toolbox-client.mjs';
+import {ToolError, envServer} from './toolbox-client.mjs';
 
 // Refusals meaning the server grant is already ended.
 const ALREADY_ENDED = new Set(['invalid_grant', 'revoked_token']);
@@ -60,7 +60,7 @@ export async function logoutGrant({values, server, root, shared, env, fetcher, a
     : !saved ? 'No saved grant for this origin; nothing to revoke.' : null;
   return {
     server, localGrantRemoved: true, serverRevoked,
-    environmentGrantStillActive: !!(env.ARTIFACTBIN_URL === server && env.ARTIFACTBIN_TOKEN),
+    environmentGrantStillActive: !!(envServer(env) === server && env.ARTIFACTBIN_TOKEN),
     ...(note ? {note} : {})
   };
 }

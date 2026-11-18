@@ -31,7 +31,10 @@ export const hash=value=>createHash('sha256').update(value).digest('hex');
 export const platform=()=>import('./toolbox-platform.mjs');
 export const credentialRoot=(env=process.env)=>path.resolve(env.ARTIFACTBIN_HOME||path.join(homedir(
   ),'.artifactbin'));
-export const selectedServer=(values={},env=process.env)=>values.server??env.ARTIFACTBIN_URL??
+/** ARTIFACTBIN_URL as an origin; a value naming none is kept, to fail where it is used. */
+export const envServer=(env=process.env)=>{const value=env.ARTIFACTBIN_URL;try{return value&&
+  serverOrigin(value);}catch{return value;}};
+export const selectedServer=(values={},env=process.env)=>values.server??envServer(env)??
   configuredServer;
 export async function jsonFile(file){try{return JSON.parse(await readFile(file,'utf8'));}catch{
   throw new ToolError('invalid_json_file','Cannot read the selected JSON input.',2,
@@ -58,7 +61,7 @@ const retryHint=unsafe=>unsafe?'Resume only the saved supported journal; reconci
 export function makeClient(server,{env=process.env,fetcher=fetch,retryDelays,identity}={}){
  server=serverOrigin(server);const root=credentialRoot(env);let who=identity;
  async function grant(signal){
-if(env.ARTIFACTBIN_TOKEN){if(env.ARTIFACTBIN_URL!==server)throw new ToolError(
+if(env.ARTIFACTBIN_TOKEN){if(envServer(env)!==server)throw new ToolError(
     'credential_origin_mismatch','Environment grant belongs to another origin.',3);return {server,
     token:env.ARTIFACTBIN_TOKEN};}
   const shared=await platform();let saved=await shared.readCredentials(server,root);
