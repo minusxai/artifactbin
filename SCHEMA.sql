@@ -1849,6 +1849,8 @@ CREATE TABLE IF NOT EXISTS auth.groups (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   deleted_at TIMESTAMPTZ,
   parent_id TEXT,
+  trusted_issuer TEXT,
+  tenancy_id TEXT,
   PRIMARY KEY (id)
 );
 
@@ -1867,6 +1869,10 @@ ALTER TABLE auth.groups ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL
 ALTER TABLE auth.groups ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 
 ALTER TABLE auth.groups ADD COLUMN IF NOT EXISTS parent_id TEXT;
+
+ALTER TABLE auth.groups ADD COLUMN IF NOT EXISTS trusted_issuer TEXT;
+
+ALTER TABLE auth.groups ADD COLUMN IF NOT EXISTS tenancy_id TEXT;
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_groups_handle ON auth.groups (handle);
 

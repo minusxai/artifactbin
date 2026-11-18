@@ -77,7 +77,7 @@ CREATE OR REPLACE VIEW identity.handle_reservations AS
   SELECT x.handle, x.kind, x.subject_id FROM auth.handle_reservations x;
 
 CREATE OR REPLACE VIEW identity.groups AS
-  SELECT x.id, x.handle, x.name, x.description, x.created_by, x.created_at, x.deleted_at, x.parent_id FROM auth.groups x;
+  SELECT x.id, x.handle, x.name, x.description, x.created_by, x.created_at, x.deleted_at, x.parent_id, x.trusted_issuer, x.tenancy_id FROM auth.groups x;
 
 CREATE OR REPLACE VIEW identity.group_hierarchy AS
   SELECT x.id, x.revision, x.role_model_version FROM auth.group_hierarchy x;

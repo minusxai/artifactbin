@@ -14,5 +14,6 @@ export const sessionStoreOf = (h: HumanAuth): SessionStore => ({
   resolve: (request) => h.sessions.resolve(request),
   ...(h.sessions.identity ? {identity: h.sessions.identity.bind(h.sessions)} : {}),
   handler: (request) => h.handler(request),
+  start: (userId) => h.sessions.start(userId),
 });
 export {IdentityNotReady,ensureIdentitySchema,identityDbOf,identityMoveStatements} from './identity-store';

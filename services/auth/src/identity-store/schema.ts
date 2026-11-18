@@ -131,6 +131,9 @@ const GROUPS:Table={name:'groups',columns:[
  // THE TREE (lib/groups hierarchy): one parent at most, in this installation (this database), never a cycle.
  // NULL is a root. Written only by the topology changes, under the hierarchy revision's row.
  {name:'parent_id',type:'TEXT'},
+ // A group a trusted issuer's sign-in created (./trusted-sign-in): that issuer, and the tenancy it named, both set at
+ // creation and never changed. NULL for every other group.
+ {name:'trusted_issuer',type:'TEXT'},{name:'tenancy_id',type:'TEXT'},
 ],primaryKey:['id'],indexes:[{name:'idx_groups_handle',columns:['handle'],unique:true},{name:'idx_groups_parent',columns:['parent_id'],where:'parent_id IS NOT NULL'}]};
 
 /**

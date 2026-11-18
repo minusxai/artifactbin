@@ -454,7 +454,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     // The head slot carries the agent pointer the app page's head carries, then the document's own head where it names one.
     const head = !customShell.headed ? '' : agentDiscoveryHead(help) + (namesDocument(url) ? await runWithRequest(c.req.raw, () => anonymousHead(c.req.raw, url.pathname)) : '');
     // The policy the app page at this address carries (a document address admits its trusted embedders), and its agent pointer.
-    return customShellResponse(customShell, c.req.method, framedPolicy(url, pageCsp(c.req.raw)),
+    return customShellResponse(customShell, c.req.method, shellFramedPolicy(url, framedPolicy(url, pageCsp(c.req.raw))),
       { ...APP_SECURITY_HEADERS, Link: `<${help.url}>; rel="help"` }, head);
   };
   /** The head a link-preview bot sees for a document address: only for a document an ANONYMOUS reader may read. */
@@ -476,6 +476,16 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const embedders = embedTrustedOrigins();
     if (url.searchParams.get('embed') === '1') return csp.replace("frame-ancestors 'self'", `frame-ancestors ${embedders.length ? embedders.join(' ') : "'none'"}`);
     return embedders.length ? csp.replace("frame-ancestors 'self'", `frame-ancestors 'self' ${embedders.join(' ')}`) : csp;
+  };
+  /**
+   * A custom shell's EMBEDDED view of any of its screens (`?embed=1`: the shell draws itself without its chrome there)
+   * may also be framed by the deployment's trusted embedders (EMBED__TRUSTED_ORIGINS), beside the app itself; with
+   * none configured it is the app page's policy unchanged. A document address keeps its own rule above.
+   */
+  const shellFramedPolicy = (url: URL, csp: string): string => {
+    const embedders = embedTrustedOrigins();
+    if (url.searchParams.get('embed') !== '1' || !embedders.length || /^\/a\/[^/]+(?:\/app)?\/?$/.test(url.pathname)) return csp;
+    return csp.replace("frame-ancestors 'self'", `frame-ancestors 'self' ${embedders.join(' ')}`);
   };
   const pageData = (dir: string) => ROUTES.find((r) => r.dir === dir)?.module.GET as ((request: Request, ctx: { params: Promise<Record<string, string>> }) => Promise<Response>) | undefined;
   const profileData = pageData('/api/page/profile/[user]/[[...path]]');

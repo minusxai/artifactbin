@@ -110,7 +110,7 @@ export const IDENTITY_VIEWS = {
   users: ['id', 'email', 'kind', 'parent_user_id', 'expires_at', 'merged_into_user_id', 'name', 'username', 'image_key', 'auto_accept_mentions', 'welcome_pending', 'test_account', 'created_at', 'active'],
   tokens: ['id', 'name', 'user_id', 'client_harness', 'audience', 'scope', 'request_authority', 'created_at', 'deleted_at', 'expires_at', 'last_used_at', 'scopes', 'live', 'group_id', 'group_role', 'issued_by', 'grant_id'],
   handle_reservations: ['handle', 'kind', 'subject_id'],
-  groups: ['id', 'handle', 'name', 'description', 'created_by', 'created_at', 'deleted_at', 'parent_id'],
+  groups: ['id', 'handle', 'name', 'description', 'created_by', 'created_at', 'deleted_at', 'parent_id', 'trusted_issuer', 'tenancy_id'],
   group_hierarchy: ['id', 'revision', 'role_model_version'],
   group_members: ['group_id', 'user_id', 'role', 'created_at'],
   group_invitations: ['id', 'group_id', 'email', 'role', 'invited_by', 'created_at'],
