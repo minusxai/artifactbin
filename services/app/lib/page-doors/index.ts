@@ -5,6 +5,7 @@
 import {pageEvidenceStep} from './deadline';
 import {pageVerifier} from './verify';
 import {ACTOR_HEADER,REVALIDATE_ACTOR_HEADER,SQL_READ_LIMITS,type HtmlDatasetLink,type HtmlPageVersion} from '@artifactbin/contracts';
+import {sqlReadFailure,type SqlFailureCode} from '@artifactbin/contracts';
 import { ANONYMOUS_ACTOR, type AccessActor } from '@/lib/accounts';
 import { canReadArtifact, getArtifactHeaderById, accessMoved, type ArtifactRow } from '@/lib/artifacts';
 import {readHtmlPage} from '@/lib/html-publication';
@@ -64,16 +65,22 @@ function admission(request:Request){
   step:<T>(pending:Promise<T>)=>reading?reading.step(pending):dispatched?pending:life.step(pending),
   dispatch:(read:boolean)=>{if(!dispatched){life.check();life.close();dispatched=true;if(read)reading=readLifetime(request.signal,Math.max(1,Math.floor(started+SQL_READ_WALL_TIMEOUT_MS-performance.now())));}return reading?.signal??request.signal;},
   check:()=>reading?.check(),close:()=>{life.close();reading?.close();},
+  /** Dispatched as a read: past admission, the statement's read itself is running. */
+  reads:()=>!!reading,
  };
 }
 type Admission=ReturnType<typeof admission>;
 export async function pageSqlDoor(request:Request,pageId:string):Promise<Response>{
  const admitted=admission(request);
  try{return await (request.headers.get('origin')==='null'?opaqueSqlRead(request,pageId,admitted):answerSql(request,pageId,admitted));}
- catch{return json({error:'not_found'},404,SQL_HEADERS);}
+ catch{return unreadable();}
  finally{admitted.close();}
 }
 const SQL_HEADERS={'Cache-Control':'no-store',[REVALIDATE_ACTOR_HEADER]:'1'};
+/** A refusal the door itself answers (contracts sql-failures), with the reader's sentence. */
+const refusal=(code:SqlFailureCode,message:string,headers:Record<string,string>=SQL_HEADERS)=>{const r=sqlReadFailure(code,message);return json(r.body,r.status,headers);};
+/** The uniform answer for a page this reader cannot read (or a door that failed): exactly this body, nothing more. */
+const unreadable=(headers:Record<string,string>=SQL_HEADERS)=>json({error:'not_found'},404,headers);
 /**
  * AN EXPORT CAPTURE'S SQL READ: the exporter photographs the page as a top-level opaque-origin document with no app
  * frame (document-serving/raw), so its `sql` comes here directly (html-runtime/domain-reads), carrying the capture's
@@ -106,7 +113,7 @@ async function opaqueSqlRead(request:Request,pageId:string,admission:Admission):
 export async function ownerHostSqlRead(request:Request,pageId:string,hostHolds:()=>Promise<boolean>):Promise<Response>{
  const admitted=admission(request);
  try{
- if(!await admitted.step(hostHolds()))return json({error:'not_found'},404,SQL_HEADERS);
+ if(!await admitted.step(hostHolds()))return unreadable();
  const headers=new Headers(request.headers);
  for(const name of [...CREDENTIAL_HEADERS,'idempotency-key'])headers.delete(name);
  const guest=new Request(request.url,{method:'POST',headers,body:await admitted.step(readBody(request)),signal:request.signal});
@@ -114,11 +121,14 @@ export async function ownerHostSqlRead(request:Request,pageId:string,hostHolds:(
  const out=new Headers(answered.headers);
  out.set('access-control-allow-origin','*');out.delete('access-control-allow-credentials');
  return new Response(answered.body,{status:answered.status,statusText:answered.statusText,headers:out});
- }catch{return json({error:'not_found'},404,SQL_HEADERS);}finally{admitted.close();}
+ }catch{return unreadable();}finally{admitted.close();}
 }
 /** `reader`: a host-selected anonymous reader or capture requester, always read-only; otherwise the request's own. */
 async function answerSql(request:Request,pageId:string,admission:Admission,reader?:AccessActor,hostHolds?:()=>Promise<boolean>):Promise<Response>{
  const readStartedAt=admission.started;
+ // A dispatched read of a page this reader may read that ran out of time, or kept racing a write, says so. Anything
+ // else (admission, a write, the page's or host's own checks after the read) keeps the uniform answer.
+ let readable=false,executing=false;
  let readDeadline:number|undefined;
  let readSignal:AbortSignal|undefined;
  const checkRead=()=>{if(readDeadline!==undefined){request.signal.throwIfAborted();if(performance.now()>=readDeadline)throw Error('sql_deadline');}};
@@ -133,6 +143,7 @@ async function answerSql(request:Request,pageId:string,admission:Admission,reade
   // Readership first: a page this reader cannot read answers exactly as a missing one (the uniform 404), whatever
   // the body or Idempotency-Key; only then is the request itself judged.
   const head=await admission.step(readHtmlPage(actor,pageId));
+  readable=true;
   const body=await admission.step(readJson(request));
   if(!body||typeof body.revision!=='string'||(body.readOnly!==undefined&&typeof body.readOnly!=='boolean'))return json({error:'validation_failed',message:'send {sql, params?, revision}'},400,headers);
   const idempotencyKey=request.headers.get('idempotency-key')??undefined;
@@ -144,9 +155,10 @@ async function answerSql(request:Request,pageId:string,admission:Admission,reade
    try{
     // A declared query, or a statement naming a live dataset link, runs on that dataset's connection (lib/live-datasets);
     // one naming a default-connection link wholly on the install's connection (lib/connections).
+    executing=true;
     const reply=await pageLiveDatasetSql(actor,page,{sql:body.sql,params:body.params,query:body.query},request.signal,admission)??await pageConnectionSql(actor,page.links,{sql:body.sql,params:body.params},request.signal,admission)??await executePageSql(actor,datasetLinks(page),{sql:body.sql,params:body.params},scope,request.signal);
     // Every reply (rows, a write's reply, a replayed receipt, a refusal) leaves only while the page still holds.
-    admission.check();checkRead();
+    admission.check();checkRead();executing=false;
     await admission.step(readSignal?pageEvidenceStep(readSignal,verifyPage(page.revision)):verifyPage(page.revision));
     if(hostHolds&&!await admission.step(readSignal?pageEvidenceStep(readSignal,hostHolds()):hostHolds()))throw Error('page_unavailable');
     // The last guard: nothing past the SQL output budget leaves, however it was produced.
@@ -159,7 +171,13 @@ async function answerSql(request:Request,pageId:string,admission:Admission,reade
     throw error;
    }
   }
- }catch{return json({error:'not_found'},404,headers);}
+ }catch(error){
+  const reason=error instanceof Error?error.message:'';
+  const read=readable&&executing&&admission.reads()&&!request.signal.aborted;
+  if(read&&reason==='sql_deadline')return refusal('timeout',`a read runs at most ${SQL_READ_WALL_TIMEOUT_MS} ms`,headers);
+  if(read&&reason==='dataset_changed')return refusal('dataset_changed','the linked data kept changing while it was read; read it again',headers);
+  return unreadable(headers);
+ }
 }
 
 export {preparePageEvidence,pageEvidenceSchemaDoor} from './evidence';

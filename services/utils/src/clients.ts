@@ -22,7 +22,11 @@ const SQL_DEFAULT_TIMEOUT_MS = SQL_QUERY_DEFAULT_MS + SQL_WALL_OVERHEAD_MS;
 const EVENTS_DEFAULT_TIMEOUT_MS = 5_000;
 /** The one retry's pause — long enough for a restart's socket to come back, short enough that `close` still returns. */
 const EVENTS_RETRY_MS = 100;
-const failure = (e: unknown): QueryFailure => ({ error: (e as Error)?.name === 'AbortError' ? 'SQL call cancelled' : (e as Error)?.message ?? 'sql service unavailable', ...((e as Error)?.name === 'TimeoutError' ? { timedOut: true } : {}) });
+/** A call that got no answer: cancelled, past its deadline (`timedOut`), or the service unreachable or failing (`unavailable`). */
+const failure = (e: unknown): QueryFailure => {
+  const name = (e as Error)?.name;
+  return { error: name === 'AbortError' ? 'SQL call cancelled' : (e as Error)?.message ?? 'sql service unavailable', ...(name === 'TimeoutError' ? { timedOut: true } : name === 'AbortError' ? {} : { unavailable: true }) };
+};
 
 /** An HTTP client for the SQL service, with a deadline on every call. */
 export function sqlClient(url: string, opts: { deadlineMs?: number; serviceSecret?: string } = {}): SqlService {

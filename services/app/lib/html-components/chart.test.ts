@@ -8,6 +8,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import * as vega from 'vega';
 import { compile } from 'vega-lite';
 import { expressionInterpreter } from 'vega-interpreter';
+import { SQL_FAILURES } from '@artifactbin/contracts';
 import { chartModules } from './chart-render';
 import './chart';
 
@@ -173,6 +174,47 @@ it('shows loading, empty, waiting and failed states, says what to fix and refuse
   const many = mount({}, { chart: BAR, rows: Array.from({ length: 10_001 }, (_, i) => ({ k: String(i), v: i })) });
   await until(() => /10,000 rows/.test(status(many).textContent!), 'row cap');
   expect(built).toBe(0);
+});
+
+it('shows each failed read\'s sentence and code in place of the drawing, never "No rows", and draws a cut-off answer with a note', async () => {
+  const kinds = ['permission_denied', 'sign_in_required', 'unavailable', 'validation_failed', 'timeout', 'result_too_large', 'dataset_not_found', 'unknown_query'] as const;
+  for (const code of kinds) {
+    const notice = SQL_FAILURES[code].notice;
+    // As the page runtime's SqlError carries it: the reader's sentence, the code and the server's reason.
+    const failure = Object.assign(new Error(notice), { name: 'SqlError', code, detail: `the reason for ${code}` });
+    const details: unknown[] = [];
+    const el = mount({ sql: `select * from sales -- ${code}` }, { chart: BAR });
+    el.addEventListener('af-chart-error', e => details.push((e as CustomEvent).detail));
+    await until(() => watches.some(w => w.text.endsWith(code)));
+    watches.find(w => w.text.endsWith(code))!.error(failure);
+    await until(() => details.length === 1, `${code} event`);
+    expect(details[0]).toEqual({ code, message: notice, detail: `the reason for ${code}` });
+    expect(status(el).textContent, code).toBe(notice);
+    expect(status(el).getAttribute('role')).toBe('status');
+    expect(el.getAttribute('data-af-error')).toBe(code);
+    expect(el.hasAttribute('data-af-chart')).toBe(false);
+    expect(el.querySelector('.af-chart-plot svg')).toBeNull();
+  }
+  expect(built).toBe(0);
+  // The chart's own refusals carry a code from the same list.
+  const many = mount({}, { chart: BAR, rows: Array.from({ length: 10_001 }, (_, i) => ({ k: String(i), v: i })) });
+  await until(() => many.getAttribute('data-af-error') === 'validation_failed', 'row cap code');
+  const bad = mount({ sql: 'select 1' }, { chart: BAR, rows: ROWS });
+  await until(() => bad.getAttribute('data-af-error') === 'validation_failed', 'bad source code');
+  // A truncated answer still draws, with a note; a whole one has none, and a draw clears a failure's code.
+  const cut = mount({ sql: 'select k, v from sales' }, { chart: BAR });
+  await until(() => watches.some(w => w.text === 'select k, v from sales'));
+  const watch = watches.find(w => w.text === 'select k, v from sales')!;
+  watch.error(Object.assign(new Error(SQL_FAILURES.timeout.notice), { code: 'timeout', detail: 'slow' }));
+  await until(() => cut.getAttribute('data-af-error') === 'timeout', 'timeout first');
+  watch.next(Object.defineProperty([...ROWS], 'truncated', { value: true, enumerable: false }));
+  await ready(cut);
+  expect(cut.hasAttribute('data-af-error')).toBe(false);
+  expect((status(cut) as HTMLElement).hidden).toBe(false);
+  expect(status(cut).textContent).toBe(`First ${ROWS.length} rows; the rest was cut off.`);
+  const whole = mount({}, { chart: BAR, rows: ROWS });
+  await ready(whole);
+  expect((status(whole) as HTMLElement).hidden).toBe(true);
 });
 
 it('rebuilds on a theme change, resizes in place when the layout plan holds and finalizes on disconnect', async () => {

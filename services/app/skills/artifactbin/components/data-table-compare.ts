@@ -103,7 +103,7 @@ export function renderComparison(
     }
   for (const row of Array.from(body.rows))
     if (!Array.from(s.comparisonRows.values()).includes(row)) row.remove();
-  if (!model.items.length) {
+  if (!model.items.length && !s.error) {
     const td = body.insertRow().insertCell();
     td.className = DATA_TABLE_CLASSES.cell;
     td.colSpan = Math.max(1, headerTitles.length);

@@ -32,6 +32,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { DatasetAccessError } from './errors';
 import { DATASET_SQL_WRITE_LIMITS, SQL_READ_LIMITS, type DatasetColumn, type DatasetMutationPolicy, type HtmlDatasetLink, type Row, type Scalar } from '@artifactbin/contracts';
+import { SQL_FAILURES, sqlReadFailure, type SqlFailureCode } from '@artifactbin/contracts';
 import { loadSqlite } from '@artifactbin/sql/core';
 import type { AccessActor } from '@/lib/accounts';
 import { artifactState, completeMutationReceipt, durableMutation, getArtifactById, type ArtifactRow } from '@/lib/artifacts';
@@ -75,12 +76,14 @@ const WRITE_ATTEMPTS = 8;
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9_-]{16,128}$/;
 const PARAM = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/;
 
-const STATUS: Record<string, number> = { validation_failed: 400, input_too_large: 413, result_too_large: 413, too_many_rows: 413, permission_denied: 403, check_violation: 403, timeout: 408, dataset_changed: 409, outcome_unknown: 409, dataset_not_found: 404 };
-const fail = (code: string, message: string): PageSqlDoorReply => ({ status: STATUS[code] ?? 400, body: { error: code, message } });
-class Refusal extends Error { constructor(readonly code: string, message: string) { super(message); } }
-const refuse = (code: string, message: string): never => { throw new Refusal(code, message); };
+/** A refusal (contracts sql-failures); a failed read also carries the reader's sentence (`notice`). */
+const fail = (code: SqlFailureCode, message: string, read = false): PageSqlDoorReply => (read ? sqlReadFailure(code, message) : { status: SQL_FAILURES[code].status, body: { error: code, message } });
+class Refusal extends Error { constructor(readonly code: SqlFailureCode, message: string) { super(message); } }
+const refuse = (code: SqlFailureCode, message: string): never => { throw new Refusal(code, message); };
 const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('base64url');
 const mentions = (sql: string, link: string) => sql.toLowerCase().includes(link.toLowerCase());
+/** The statement names `link` as a whole identifier (bare or quoted), not inside a longer one. */
+const names = (sql: string, link: string) => new RegExp(`(^|[^\\w$])"?${link.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"?(?![\\w$])`, 'i').test(sql);
 
 /** Arguments, checked for every caller alike: one statement of at most SQL_READ_LIMITS.sqlBytes, scalar params. */
 function checked(call: { sql?: unknown; params?: unknown }): PageSqlDoorCall {
@@ -262,11 +265,16 @@ const outcomeBody = (affected: number, op: Effect['op'], step: MutationStep | un
 /** One page SQL call. Throws `dataset_changed` when a read's fence fails (the page door re-runs reads). */
 export async function executePageSql(actor: AccessActor, links: readonly HtmlDatasetLink[], raw: { sql?: unknown; params?: unknown }, scope: PageSqlDoorScope, signal: AbortSignal): Promise<PageSqlDoorReply> {
   const started=scope.readStartedAt??performance.now();
+  // Links this reader could not load: gone, or not theirs to read, never told apart (lib/dataset-access linked).
+  const skipped = new Set<string>();
+  const unreadable = () => (actor.userId ? 'dataset_not_found' : 'sign_in_required') as SqlFailureCode;
+  // Until analysis says the statement writes, a refusal is a read's (with the reader's sentence); a write's never is.
+  let read = true;
   try {
     const call = checked(raw);
-    const load = (fenced: boolean) => loadLinked(actor, links, { pageId: scope.pageId, fenced, retainReadFence:scope.retainReadFence }, signal).catch((e) => { if (e instanceof DatasetAccessError) refuse('validation_failed', e.message); throw e; });
+    const load = (fenced: boolean) => loadLinked(actor, links, { pageId: scope.pageId, fenced, retainReadFence:scope.retainReadFence, skipped: (link) => skipped.add(link.name) }, signal).catch((e) => { if (e instanceof DatasetAccessError) refuse('validation_failed', e.message); throw e; });
     const first = await (scope.admission?scope.admission.step(load(true)):load(true));
-    if (!first.length) refuse('dataset_not_found', 'no linked dataset is readable');
+    if (!first.length) refuse(skipped.size ? unreadable() : 'dataset_not_found', 'no linked dataset is readable');
     const mounts = mountsOf(first, call.sql);
     const analysis = await (scope.admission?scope.admission.step(analyzed(mounts, call.sql)):analyzed(mounts, call.sql));
     if (analysis.kind === 'select') {
@@ -277,18 +285,22 @@ export async function executePageSql(actor: AccessActor, links: readonly HtmlDat
       const life=readLifetime(signal,remaining);
       try{
       const answer = await runPageSql(first.map((l) => ({ link: l.link!.name, snapshot: l.snapshot, tables: l.tables.map((t) => ({ tableId: t.tableId, selectable: t.model.select !== false })) })), call, life.signal, { wallTimeoutMs:life.remaining(),aggregates: 'visible',retainSelected:scope.retainMountedLinks })
-        .catch((e) => { if (e instanceof DatasetAccessError) refuse(String(e.extensions?.code ?? 'validation_failed'), e.message); throw e; });
+        .catch((e) => { if (e instanceof DatasetAccessError) refuse(e.extensions.code as SqlFailureCode, e.message); throw e; });
       for (const l of first) for (const verify of l.fences) await life.step(verify());
       life.check();
       return { status: 200, body: { ...answer } };
       }finally{life.close();}
     }
+    read = false;
     if (scope.readOnly) refuse('permission_denied', 'this page is read-only here: it reads, it never writes');
     scope.admission?.dispatch(false);
     return await write(actor, call, scope, mounts, analysis.writes[0]!, () => load(false), signal);
   } catch (e) {
-    if (e instanceof Refusal) return fail(e.code, e.message);
-    throw e;
+    if (!(e instanceof Refusal)) throw e;
+    // A statement that failed while naming a link this reader could not load failed for that link, not its SQL. Judged
+    // only after the failure: a statement that runs on the links it can read is never refused for another.
+    const missing = e.code === 'validation_failed' && typeof raw.sql === 'string' && [...skipped].some((name) => names(raw.sql as string, name));
+    return fail(missing ? unreadable() : e.code, e.message, read);
   }
 }
 

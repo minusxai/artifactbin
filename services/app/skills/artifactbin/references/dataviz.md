@@ -38,7 +38,7 @@ Use bars for categories, lines for time, histograms/boxplots for distribution, s
 
 Declare nominal categories, ordinal order, quantitative magnitudes and temporal timestamps. Keep order/color stable across filters. Bars/areas start at zero; disclose narrowed line/scatter domains. Log scales require positive data. Match panel scales.
 
-Missing is not zero. Null observations can create line gaps; absent rows cannot. Vega-Lite filtering connects valid points; choose break-path modes deliberately. Vega line marks support `defined`. Distinguish empty, loading and error states.
+Missing is not zero. Null observations can create line gaps; absent rows cannot. Vega-Lite filtering connects valid points; choose break-path modes deliberately. Vega line marks support `defined`. A failed read shows its message, never an empty chart.
 
 Aggregate once at the stated grain, in SQL for a dataset (`sql` GROUP BY, [datasets](datasets.md#read)). Ratios need the right denominator/weighting. Unaggregated Vega-Lite tooltip fields can change grouping. Preserve calculation precision; format labels with units. `.1%` expects a fraction. `.3~s` compacts large numbers; offer exact values too.
 

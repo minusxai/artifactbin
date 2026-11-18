@@ -63,6 +63,8 @@ export interface QueryFailure {
   tooLarge?: boolean;
   /** Set when the failure was our timeout rather than the author's SQL. */
   timedOut?: boolean;
+  /** Set when the SQL service did not answer (unreachable, or an error of its own): nothing about the SQL is known. */
+  unavailable?: boolean;
   /** Set when a WRITE would have taken the table past the row cap (nothing was stored). */
   full?: boolean;
   /** Set when a keyed catalog read left its rows out and the engine has no database prepared for its keys: resend with the rows. */

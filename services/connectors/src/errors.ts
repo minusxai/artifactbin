@@ -22,6 +22,10 @@ const NETWORK_CODES = new Set(['ECONNREFUSED', 'ECONNRESET', 'ENOTFOUND', 'EAI_A
 const AUTH_STATES = new Set(['28P01', '28000']);
 /** Postgres 25006 and MySQL 25006 (ER_CANT_EXECUTE_IN_READ_ONLY_TRANSACTION): the session refused a write. */
 const READ_ONLY_STATES = new Set(['25006']);
+/** How MySQL names an account in its messages: 'user'@'host'. */
+const MYSQL_ACCOUNT = /'[^'\n]*'@'[^'\n]*'/g;
+/** MySQL's refusals of this account: database, table, column, privilege and routine access denied. */
+const DENIED_ERRNOS = new Set([1044, 1142, 1143, 1227, 1370]);
 /** Postgres 57014 (statement_timeout) and MySQL 3024 (max_execution_time, HY000). */
 const isTimeout = (state: string | undefined, errno: unknown) => state === '57014' || errno === 3024;
 
@@ -44,12 +48,17 @@ export function driverFailure(raw: unknown, secrets: readonly string[]): Connect
   // postgres.js: a server error is a PostgresError whose code is the SQLSTATE.
   const state = e.name === 'PostgresError' ? code : typeof e.sqlState === 'string' ? e.sqlState : undefined;
   if (state) {
-    const text = `${state} ${e.name === 'PostgresError' ? message : String(e.sqlMessage ?? message)}`;
+    // MySQL's own text names the account and the address it connected from ('user'@'host'): neither is shown.
+    const own = e.name === 'PostgresError' ? message : String(e.sqlMessage ?? message).replace(MYSQL_ACCOUNT, 'this connection\'s account');
+    const text = `${state} ${own}`;
     if (AUTH_STATES.has(state) || e.errno === 1045) return fail('auth_failed', `the database refused the sign-in (${state})`);
     // No such database (Postgres 3D000, MySQL 1049): what followed default: names nothing there.
-    if (state === '3D000' || e.errno === 1049) return fail('invalid_config', `the database does not exist (${state}): ${e.name === 'PostgresError' ? message : String(e.sqlMessage ?? message)}`);
-    // The database refused this person (Postgres 42501, MySQL 1227/1142/1044): its own message says why.
-    if (state === '42501' || e.errno === 1227 || e.errno === 1142 || e.errno === 1044) return fail('permission_denied', e.name === 'PostgresError' ? message : String(e.sqlMessage ?? message));
+    if (state === '3D000' || e.errno === 1049) return fail('invalid_config', `the database does not exist (${state}): ${own}`);
+    // The database refused this person (Postgres 42501; MySQL 1044 database, 1142 table, 1143 column, 1227 privilege,
+    // 1370 routine): its own message says why.
+    if (state === '42501' || DENIED_ERRNOS.has(e.errno as number)) return fail('permission_denied', own);
+    // No such table or view (Postgres 42P01) or schema (3F000), MySQL 1146 (ER_NO_SUCH_TABLE).
+    if (state === '42P01' || state === '3F000' || e.errno === 1146) return fail('not_found', text);
     if (READ_ONLY_STATES.has(state)) return fail('read_only', `this connection is read-only: ${text}`);
     if (isTimeout(state, e.errno)) return fail('timeout', 'the query ran past its time limit');
     return fail('database_error', text);
@@ -58,5 +67,6 @@ export function driverFailure(raw: unknown, secrets: readonly string[]): Connect
   if ((code && UNTRUSTED_CODES.has(code)) || (code === 'HANDSHAKE_SSL_ERROR' && UNTRUSTED_REASON.test(message))) return fail('tls_untrusted_certificate', 'the server\'s certificate is not trusted: add your provider\'s CA certificate to the connection');
   if (code && NETWORK_CODES.has(code)) return fail('connect_failed', `the database could not be reached (${code})`);
   if (code === 'ER_ACCESS_DENIED_ERROR') return fail('auth_failed', 'the database refused the sign-in');
-  return fail('database_error', code ?? (message || 'failed'));
+  // A driver error with neither a SQLSTATE nor a known code: its own text may name an address, so only its code leaves.
+  return fail('database_error', code ?? 'the database driver failed');
 }

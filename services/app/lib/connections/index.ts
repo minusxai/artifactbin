@@ -21,6 +21,7 @@
  * statement passed through unchanged with an optional namespace.
  */
 import {readLifetime} from '@/lib/datasets';
+import { SQL_FAILURE_FOR_CONNECTOR, sqlReadFailure, type SqlFailureCode } from '@artifactbin/contracts';
 import { CONNECTORS, SQL_READ_LIMITS, type ConnectionSummary, type ConnectorDialect, type ConnectorError, type ConnectorSchema, type ConnectorTestResult, type ConnectorViewer, type HtmlPageLink, type Scalar } from '@artifactbin/contracts';
 import { ConnectorFailure, checkedNamespace, connectionSummary, connectorError, leadingWords, mapQualifiers, openConnection, parseConnectionConfig, qualifierNames, type OpenConnection } from '@artifactbin/connectors';
 import { getUserById, type AccessActor } from '@/lib/accounts';
@@ -113,26 +114,27 @@ async function viewerOf(actor: AccessActor): Promise<ConnectorViewer> {
 }
 
 export interface ConnectionSqlReply { status: number; body: Record<string, unknown> }
-const reply = (status: number, error: string, message: string): ConnectionSqlReply => ({ status, body: { error, message } });
+/** An agent door's anonymous caller, as these doors have always answered it. */
+const AGENT_SIGN_IN: ConnectionSqlReply = { status: 403, body: { error: 'permission_denied', message: 'sign in to read the default connection' } };
+/** Every refusal here is of a read (contracts sql-failures): its code, reason and the reader's sentence. */
+const reply = (error: SqlFailureCode, message: string): ConnectionSqlReply => sqlReadFailure(error, message);
 
-/** A connector error as the page SQL door's codes (the page's `SqlError`): the same codes stored datasets answer. */
+/**
+ * A connector error as the page SQL door's codes (contracts `SQL_FAILURE_FOR_CONNECTOR`): the same codes stored
+ * datasets answer. The database's own refusal of this person is `permission_denied`, its message saying why (for one,
+ * which database to name instead); a refused write is the write's refusal, with no sentence for a reader.
+ */
 function refused(e: ConnectorError): ConnectionSqlReply {
-  switch (e.code) {
-    case 'invalid_query': case 'database_error': return reply(400, 'validation_failed', e.message);
-    case 'read_only': return reply(403, 'permission_denied', `the default connection is read-only: ${e.message}`);
-    // The database refused this person: its own message (which says, for one, which database to name instead).
-    case 'permission_denied': return reply(403, 'permission_denied', e.message);
-    case 'timeout': return reply(408, 'timeout', e.message);
-    case 'result_too_large': return reply(413, 'result_too_large', e.message);
-    default: return reply(503, 'dataset_not_found', `the default connection is unavailable (${e.code}): ${e.message}`);
-  }
+  const code = SQL_FAILURE_FOR_CONNECTOR[e.code];
+  if (e.code === 'read_only') return { status: 403, body: { error: code, message: `the default connection is read-only: ${e.message}` } };
+  return reply(code, code === 'unavailable' || e.code === 'invalid_config' ? `the default connection is unavailable (${e.code}): ${e.message}` : e.message);
 }
 
 async function run(actor: AccessActor, text: string, params: Readonly<Record<string, Scalar>>, namespace: string | undefined, signal: AbortSignal): Promise<ConnectionSqlReply> {
   const life=readLifetime(signal);
   try {
     const c = selected(namespace);
-    if (!c) return reply(404, 'dataset_not_found', 'this install has no default connection');
+    if (!c) return reply('dataset_not_found', 'this install has no default connection');
     const answer = await c.connection.query({ text, params, viewer: await life.step(viewerOf(actor)), ...(c.namespace ? { namespace: c.namespace } : {}), limits: { rows: SQL_READ_LIMITS.rows }, signal:life.signal });
     life.check();
     return { status: 200, body: { columns: answer.columns, rows: answer.rows, ...(answer.truncated ? { truncated: true } : {}) } };
@@ -144,8 +146,8 @@ async function run(actor: AccessActor, text: string, params: Readonly<Record<str
 
 function checkedCall(raw: { sql?: unknown; params?: unknown }): { sql: string; params: Record<string, Scalar> } | ConnectionSqlReply {
   const { sql, params = {} } = raw;
-  if (typeof sql !== 'string' || !sql.trim()) return reply(400, 'validation_failed', 'sql takes one SQL statement');
-  if (!params || typeof params !== 'object' || Array.isArray(params)) return reply(400, 'validation_failed', 'params must be an object of scalars');
+  if (typeof sql !== 'string' || !sql.trim()) return reply('validation_failed', 'sql takes one SQL statement');
+  if (!params || typeof params !== 'object' || Array.isArray(params)) return reply('validation_failed', 'params must be an object of scalars');
   return { sql, params: params as Record<string, Scalar> };
 }
 
@@ -168,13 +170,13 @@ export async function pageConnectionSql(actor: AccessActor, links: readonly Html
   if (!used.length) return null;
   try { words = leadingWords(selected(used[0]!.namespace)?.dialect ?? dialect, raw.sql); } catch { /* selection errors are returned after access checks below */ }
   const stored = links.find((l) => (l.kind === 'dataset' || l.kind === 'live-dataset') && words.has(l.name.toLowerCase()));
-  if (stored) return reply(400, 'validation_failed', `a statement reads one source: ${used[0]!.name} is the install's default connection and ${stored.name} ${stored.kind === 'dataset' ? 'a stored dataset' : 'a live dataset'}; query them separately`);
-  if (!actor.userId) return reply(403, 'permission_denied', `sign in to read ${used[0]!.name}: the default connection answers signed-in people only`);
+  if (stored) return reply('validation_failed', `a statement reads one source: ${used[0]!.name} is the install's default connection and ${stored.name} ${stored.kind === 'dataset' ? 'a stored dataset' : 'a live dataset'}; query them separately`);
+  if (!actor.userId) return reply('sign_in_required', `sign in to read ${used[0]!.name}: the default connection answers signed-in people only`);
   const call = checkedCall(raw);
   if ('status' in call) return call;
-  if (!configured()) return reply(404, 'dataset_not_found', `${used[0]!.name} reads the install's default connection, and this install has none`);
+  if (!configured()) return reply('dataset_not_found', `${used[0]!.name} reads the install's default connection, and this install has none`);
   const databases = [...new Set(used.map((l) => l.namespace))];
-  if (databases.length > 1) return reply(400, 'validation_failed', `a statement reads one database: ${used.map((l) => `${l.name} is default:${l.namespace}`).join(', ')}; query them separately`);
+  if (databases.length > 1) return reply('validation_failed', `a statement reads one database: ${used.map((l) => `${l.name} is default:${l.namespace}`).join(', ')}; query them separately`);
   try {
     const target = selected(databases[0]);
     dialect = target?.dialect ?? dialect;
@@ -188,19 +190,19 @@ export async function pageConnectionSql(actor: AccessActor, links: readonly Html
 
 /** An agent's statement, as its signed-in account, passed through; `namespace` (what follows `default:`) the database. */
 export async function agentConnectionSql(actor: AccessActor, raw: { sql?: unknown; params?: unknown; namespace?: unknown }, signal: AbortSignal): Promise<ConnectionSqlReply> {
-  if (!actor.userId) return reply(403, 'permission_denied', 'sign in to read the default connection');
+  if (!actor.userId) return AGENT_SIGN_IN;
   const call = checkedCall(raw);
   if ('status' in call) return call;
-  if (raw.namespace !== undefined && typeof raw.namespace !== 'string') return reply(400, 'validation_failed', 'namespace is what follows default:, a database name');
+  if (raw.namespace !== undefined && typeof raw.namespace !== 'string') return reply('validation_failed', 'namespace is what follows default:, a database name');
   return run(actor, call.sql, call.params, (raw.namespace as string | undefined) || undefined, signal);
 }
 
 /** The tables and columns a signed-in person can read in `namespace`'s database (absent: the configured one). */
 export async function defaultConnectionSchema(actor: AccessActor, namespace: string | undefined, signal: AbortSignal): Promise<ConnectionSqlReply> {
-  if (!actor.userId) return reply(403, 'permission_denied', 'sign in to read the default connection');
+  if (!actor.userId) return AGENT_SIGN_IN;
   try {
     const c = selected(namespace);
-    if (!c) return reply(404, 'dataset_not_found', 'this install has no default connection');
+    if (!c) return reply('dataset_not_found', 'this install has no default connection');
     const schema: ConnectorSchema = await c.connection.schema({ viewer: await viewerOf(actor), ...(c.namespace ? { namespace: c.namespace } : {}), signal });
     return { status: 200, body: { connector: c.summary.connector, ...schema } };
   } catch (e) {

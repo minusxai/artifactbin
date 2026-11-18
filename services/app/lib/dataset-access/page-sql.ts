@@ -16,7 +16,7 @@
 import {QUERY_TIMEOUT_MS} from '@/lib/platform';
 import {readLifetime} from '@/lib/datasets';
 import { DatasetAccessError } from './errors';
-import { SQL_READ_LIMITS, type ColumnType, type DatasetColumn, type Scalar } from '@artifactbin/contracts';
+import { SQL_READ_LIMITS, type ColumnType, type DatasetColumn, type Scalar, type SqlFailureCode } from '@artifactbin/contracts';
 import { CatalogQueryFailure, executeMounted, selectSqlLinks, type CatalogMount } from '@/lib/datasets';
 import { sqlRefusalMessage } from '@/lib/dataset-permissions';
 import { ID_COLUMN, tableIdentity } from './model';
@@ -27,7 +27,7 @@ export interface SqlLinkedDataset { link: string; snapshot: DatasetSnapshot | nu
 export interface PageSqlCall { sql: string; params: Readonly<Record<string, Scalar>> }
 export interface PageSqlAnswer { columns: Array<{ name: string; type: ColumnType }>; rows: Array<Record<string, unknown>> }
 
-const refuse = (code: string, message: string): never => { throw new DatasetAccessError(message, { extensions: { code } }); };
+const refuse = (code: SqlFailureCode, message: string): never => { throw new DatasetAccessError(message, { extensions: { code } }); };
 
 /** The reader's tables of the links the statement names, refused whole when one may not run SQL. */
 export function pageSqlMounts(loaded: readonly SqlLinkedDataset[], selected: ReadonlySet<string>, authorize = true): CatalogMount[] {
@@ -80,6 +80,8 @@ export async function runPageSql(loaded: readonly SqlLinkedDataset[], call: Page
     result = await executeMounted(mounts, call.sql, { ...call.params }, { limit: SQL_READ_LIMITS.rows, timeoutMs: QUERY_TIMEOUT_MS, wallTimeoutMs:life.remaining(), outputBytes: SQL_READ_LIMITS.outputBytes, signal });
   } catch (e) {
     if (e instanceof CatalogQueryFailure && e.tooLarge) return refuse('result_too_large', TOO_LARGE);
+    // The engine never answered: its text (a transport error) is not the reader's to see.
+    if (e instanceof CatalogQueryFailure && e.unavailable) return refuse('unavailable', 'the SQL engine could not be reached');
     if (e instanceof CatalogQueryFailure) return refuse(e.timedOut ? 'timeout' : 'validation_failed', e.timedOut ? `a statement runs at most ${QUERY_TIMEOUT_MS} ms` : e.message);
     if (e instanceof Error && e.message.startsWith('Dataset SQL: ')) return refuse('validation_failed', e.message);
     throw e;

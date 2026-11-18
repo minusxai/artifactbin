@@ -5,6 +5,7 @@
  * waiting and failed take it down. Only a drawing sets data-af-chart="ready".
  * Used by: chart.ts.
  */
+import { failureOf, markFailure, type ReadFailure } from '@/lib/html-component-specs/read-failure';
 import { heightOf, labelOf, valuesTable, type ChartRows } from './chart-model';
 import type { BuiltChart, ChartDrawing } from './chart-render';
 
@@ -85,14 +86,15 @@ export class ChartFrame {
 
   /** Show a finished drawing: its rows in the table, the ready marker and event. */
   show(rows: ChartRows, columns: string[], spec: Record<string, unknown> | null,
-    drawing: BuiltChart | ChartDrawn, box: HTMLElement): void {
+    drawing: BuiltChart | ChartDrawn, box: HTMLElement, truncated = false): void {
     this.clear();
     this.plot.replaceChildren(box);
     if ('view' in drawing) this.built = drawing;
     else this.drawing = drawing;
     this.label(spec);
-    this.status.hidden = true;
-    this.status.textContent = '';
+    markFailure(this.host, null);
+    this.status.hidden = !truncated;
+    this.status.textContent = truncated ? `First ${rows.length} rows; the rest was cut off.` : '';
     this.busy = false;
     this.host.setAttribute('data-af-chart', 'ready');
     this.values.replaceChildren(this.values.firstElementChild!,
@@ -112,6 +114,7 @@ export class ChartFrame {
   /** Loading, empty, waiting or failed: the status says which. */
   state(text: string, kind: ChartState): void {
     this.host.removeAttribute('data-af-chart');
+    markFailure(this.host, null);
     this.busy = kind === 'loading';
     if (kind === 'loading' && (this.built || this.drawing)) return;
     if (kind === 'loading') this.size(heightOf(this.host));
@@ -123,6 +126,12 @@ export class ChartFrame {
     this.status.hidden = false;
     this.status.dataset.kind = kind;
     this.status.textContent = text;
+  }
+
+  fail(problem: ReadFailure | string): void {
+    const failure = failureOf(problem);
+    this.state(failure.message, 'error');
+    markFailure(this.host, failure, 'af-chart-error');
   }
 
   /** Finalize the current drawing (its view, or a draw function's result) and empty the plot. */

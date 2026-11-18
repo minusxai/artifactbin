@@ -12,8 +12,10 @@
  *   fill when the spec has no `main`); draw (replaces the renderer: gets {host, rows, columns,
  *   tokens, width, height, signal}, may return {finalize()}); view (read only: the Vega View).
  * Events: af-chart-ready (detail {view, rows}) after every drawing; af-chart-error (detail
- *   {message}: what to fix). data-af-chart="ready" marks a drawn chart (absent while loading,
- *   empty or failed); aria-busy="true" a read or drawing in flight.
+ *   {code, message, detail}): message (for the reader) replaces the drawing, code is also
+ *   data-af-error, detail is what to fix; cut-off rows draw with a note. data-af-chart="ready"
+ *   marks a drawn chart (absent while loading, empty or failed); aria-busy="true" a read or
+ *   drawing in flight.
  * Examples:
  *   <af-chart label="Revenue by region" sql="select region, sum(amount) as total from orders
  *     group by region order by total desc"><script type="application/json">{"mark":"bar",
@@ -45,7 +47,7 @@ import { buildChart, chartModules, resizeChart, resolveSpec, type ChartDraw } fr
 export type { ChartDrawContext } from './chart-render';
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
-type Loaded = { rows: ChartRows; columns: string[]; sourced: boolean };
+type Loaded = { rows: ChartRows; columns: string[]; sourced: boolean; truncated: boolean };
 
 export class AfChart extends HTMLElement {
   static observedAttributes = ['sql', 'dataset', 'height', 'label', 'table', 'data-name'];
@@ -55,8 +57,7 @@ export class AfChart extends HTMLElement {
   private drawValue: ChartDraw | null = null;
   private data: Loaded | null = null;
   private frame = new ChartFrame(this);
-  private close = () => {};
-  private cleanups: Array<() => void> = [];
+  private close = () => {}; private cleanups: Array<() => void> = [];
   /** Bumped by every new source, drawing and failure: older async work then drops its result. */
   private epoch = 0;
   private queued = false;
@@ -131,8 +132,8 @@ export class AfChart extends HTMLElement {
     const source = chooseSource(this.getAttribute('sql'), this.getAttribute('dataset'),
       this.queryValue, this.rowsValue);
     if ('error' in source) return this.fail(source.error);
-    this.close = openSource(source, chartModules, (rows, columns) => {
-      this.data = { rows, columns, sourced: source.kind !== 'none' };
+    this.close = openSource(source, chartModules, (rows, columns, truncated) => {
+      this.data = { rows, columns, sourced: source.kind !== 'none', truncated };
       this.schedule();
     }, problem => this.fail(problem));
   }
@@ -167,7 +168,7 @@ export class AfChart extends HTMLElement {
         sourced: data.sourced, dataName: this.getAttribute('data-name') });
       if (epoch !== this.epoch) return void (built?.view.finalize(), box.remove());
       if (!built) return void (box.remove(), this.frame.state('No rows', 'empty'));
-      this.frame.show(data.rows, data.columns, resolved.spec, built, box);
+      this.frame.show(data.rows, data.columns, resolved.spec, built, box, data.truncated);
       this.frame.size(slotOf(resolved, width, height).height);
     } catch (error) {
       box.remove();
@@ -184,15 +185,13 @@ export class AfChart extends HTMLElement {
     const result = await draw({ host: box, rows: data.rows, columns: data.columns,
       tokens: JSON.parse(this.theme), width: this.width, height, signal: abort.signal });
     if (epoch !== this.epoch) return void (abort.abort(), endDrawing(result));
-    this.frame.show(data.rows, data.columns, this.spec(), { result, abort }, box);
+    this.frame.show(data.rows, data.columns, this.spec(), { result, abort }, box, data.truncated);
     this.frame.size(height);
   }
 
-  private fail(problem: string): void {
+  private fail(problem: Parameters<ChartFrame['fail']>[0]): void {
     this.epoch++;
-    this.frame.state(problem.charAt(0).toUpperCase() + problem.slice(1), 'error');
-    this.dispatchEvent(new CustomEvent('af-chart-error', { bubbles: true,
-      detail: { message: problem } }));
+    this.frame.fail(problem);
   }
 }
 

@@ -6,7 +6,9 @@
  *   height (default 420); sticky (default true, "false" turns it off); transpose (comparison
  *   layout with header, metrics, edge); label (aria-label); cellRenderers {col: fn}; templates
  *   [{col,template}]; columnIdentities {col: {afId,id?}}; resolveSrc(url) for image columns;
- *   source.read({offset,limit,sort,signal}) returns {rows,columns,totalRows?,truncated?}.
+ *   source.read({offset,limit,sort,signal}) returns {rows,columns,totalRows?,truncated?}; error
+ *   (a SqlError; data clears it): a failed read shows its message (an alert), never "no rows",
+ *   its code as data-af-error. A truncated answer draws with its row count.
  * Events: af-sort-change (detail: sort) and af-edit-intent (detail: {row,key,column,value}).
  *   The table draws no editor and never fires af-edit-intent itself: it fires only when a cell
  *   renderer calls context.edit(value) (e.g. from an Edit button it returns).
@@ -24,16 +26,15 @@ import { parseSortSpec, type SortSpec } from "@/lib/html-components/table-values
 import {
   createTableState, dataTableStyles, emptyTable, loadTableRows, renderTable,
 } from "./data-table-frame";
-import { cancelResizeRender, invalidateMeasurements } from "./data-table-measure";
+import { cancelResizeRender, failTable, invalidateMeasurements } from "./data-table-measure";
 import {
   freezeColumnIdentities, type TableColumnIdentity, type TableData, type TableSource,
   type TableCellRenderer, type TableTemplate,
 } from "./table-model";
 export type { TableColumnIdentity } from "./table-model";
 interface DataTableContract {
-  /** Replacing data retains keyed DOM, but invalidates and remeasures its geometry
-   * even when the observed rows have not resized. Column measurement waits for a connected
-   * table and repeats when its data changes. Header line height follows its font scale. */
+  /** Column measurement waits for a connected table and repeats when its data changes. Header
+   * line height follows its font scale. */
   data: TableData;
   columns: unknown;
   columnIdentities: Readonly<Record<string, TableColumnIdentity>>;
@@ -51,9 +52,6 @@ interface DataTableContract {
   templates: TableTemplate[];
 }
 export class AfDataTable extends HTMLElement implements DataTableContract {
-  /** Custom renderers receive a stable identity and own drafts/capabilities. A returned
-   * Node replaces the content; returning void updates the existing cell in place.
-   * Offscreen rows are unmounted, so durable editing sessions belong to the caller. */
   static observedAttributes = [
     "label", "height", "sticky", "transpose", "header", "edge", "row-key", "columns", "sort",
     "metrics",
@@ -73,10 +71,11 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
     invalidateMeasurements(s, true);
     s.columnsNeedMeasurement = true;
     s.showRowCount = Boolean(s.value.truncated || (s.value.totalRows ?? 0) > s.value.rows.length);
-    s.error = "";
+    failTable(this, s, null);
     s.pending = false;
     this.render();
   }
+  set error(v: unknown) { failTable(this, this.s, v ?? null); this.render(); }
   get columns() { return this.s.specs; }
   set columns(v: unknown) { this.s.specs = v; this.render(); }
   get columnIdentities() { return this.s.headerIdentities; }
@@ -104,7 +103,7 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
     s.transport = v;
     s.showRowCount = false;
     s.pending = false;
-    s.error = "";
+    failTable(this, s, null);
     if (v) {
       s.value = emptyTable();
       if (s.viewport) s.viewport.scrollTop = 0;
@@ -140,7 +139,7 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
     // Properties set before the element upgraded shadow the accessors; re-apply them.
     for (const key of [
       "data", "columns", "columnIdentities", "sort", "source", "cellRenderers", "templates",
-      "metrics", "rowKey", "height", "sticky", "transpose", "header", "edge",
+      "metrics", "rowKey", "height", "sticky", "transpose", "header", "edge", "error",
     ] as const) {
       if (Object.hasOwn(this, key)) {
         const v = this[key];

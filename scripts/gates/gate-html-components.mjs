@@ -442,6 +442,24 @@ try {
   check.note(`Table refresh geometry: ${JSON.stringify(tableMeasurement)}`);
   check(tableMeasurement.rowIndex>52&&tableMeasurement.immediate&&tableMeasurement.retained,'table refresh preserves the focused control and scroll position beyond the initial sample');
 
+  // A failed read shows its sentence (an alert), never "no rows", with its code on the element; a cut-off answer draws with its row count.
+  await mount('<div data-mx-story-root style="width:600px"><af-data-table></af-data-table></div>');
+  const tableFailure = await page.evaluate(async () => {
+    const table = document.querySelector('af-data-table');
+    const settle = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const columns = [{name:'id',type:'number'}];
+    table.source = {read: async () => { throw Object.assign(new Error("You don't have access to this data. Ask the page's owner for access."),{code:'permission_denied',detail:'42501 refused'}); }};
+    await settle();await settle();
+    const alert = table.querySelector('[role=alert]');
+    const failed = {code:table.getAttribute('data-af-error'),text:alert?.textContent,visible:!!alert&&alert.getBoundingClientRect().height>0,alerts:table.querySelectorAll('[role=alert]').length,noRows:table.textContent.includes('no rows')};
+    table.source = undefined;
+    table.data = {columns,rows:[{id:1},{id:2}],truncated:true};
+    await settle();
+    return {failed,cut:{code:table.getAttribute('data-af-error'),rows:table.querySelectorAll('tbody tr[data-row-key]').length,count:table.querySelector('[data-slot=row-count]')?.textContent}};
+  });
+  check(tableFailure.failed.code==='permission_denied'&&tableFailure.failed.visible&&tableFailure.failed.alerts===1&&!tableFailure.failed.noRows&&/^You don't have access/.test(tableFailure.failed.text??''),`table shows a failed read's sentence, never "no rows" (${JSON.stringify(tableFailure.failed)})`);
+  check(tableFailure.cut.code===null&&tableFailure.cut.rows===2&&tableFailure.cut.count==='2 of 2 rows',`table draws a cut-off answer with its row count (${JSON.stringify(tableFailure.cut)})`);
+
   check(errors.length===0,`candidate has no page errors (${errors.join('; ') || 'none'})`);
   const evidence=JSON.stringify({candidateBundleSha256:createHash('sha256').update(bundle).digest('hex'),reference:{kind:'recorded-react-ssr',sha256:oracleHash,fixtures:tabsParityFixtures().map(fixture=>({id:fixture.id,oldJsx:fixture.oldJsx,newHtml:fixture.newHtml}))},families:componentBrowserFixtures.map(fixture=>({family:fixture.family,evidence:fixture.evidence})),viewports:[800,390],screenshots:'candidate-only; old-browser visual comparison not yet captured',themes:'fixture token pairs, not every product design system'},null,2);
   await writeFile(path.join(screenshots,'evidence.json'),evidence);

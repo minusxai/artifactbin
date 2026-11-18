@@ -207,7 +207,7 @@ export const CONNECTOR_ERROR_CODES = [
   'connect_failed',
   /** The server refused the sign-in. */
   'auth_failed',
-  /** The database refused this person (Postgres 42501, MySQL 1227 and 1142): its message says why. */
+  /** The database refused this person (Postgres 42501, MySQL 1044, 1142, 1143, 1227 and 1370): its message says why. */
   'permission_denied',
   /** The statement tried to write: sessions are read-only. */
   'read_only',
@@ -215,6 +215,8 @@ export const CONNECTOR_ERROR_CODES = [
   'result_too_large',
   /** The database refused the statement (its SQLSTATE and message, the secret removed). */
   'database_error',
+  /** The statement names a table, view or schema the database does not have (Postgres 42P01 and 3F000, MySQL 1146). */
+  'not_found',
   /** The connector is registered but this install cannot run it. */
   'unavailable',
 ] as const;

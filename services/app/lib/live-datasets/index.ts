@@ -34,6 +34,7 @@
  */
 import {readLifetime} from '@/lib/datasets';
 import { CONNECTORS, OWN_CONNECTIONS_OFF, SQL_READ_LIMITS, type ConnectionConfig, type ConnectorDialect, type ConnectorError, type ConnectorScalar, type ConnectorTestResult, type ConnectorViewer, type DatasetRole, type HtmlDatasetLink, type HtmlDeclaredQuery, type HtmlLiveDatasetLink, type HtmlPageVersion, type Queryable } from '@artifactbin/contracts';
+import { SQL_FAILURE_FOR_CONNECTOR, isSqlFailureCode, sqlReadFailure } from '@artifactbin/contracts';
 import { ConnectorFailure, colonParameters, connectionSummary, connectorError, connectorList, leadingWords, mapQualifiers, openConnection, parseConnectionConfig, qualifierNames, type NetworkSeams, type OpenConnection } from '@artifactbin/connectors';
 import type { AccessActor } from '@/lib/accounts';
 import { canReadArtifact, getArtifactById, setLiveDatasetSummary, type LiveConnectionInsert } from '@/lib/artifacts';
@@ -133,14 +134,14 @@ async function connectionOf(id: string): Promise<{ revision: number; connection:
   const cached = open.get(id);
   if (cached?.revision === row.revision) return cached;
   if (cached) { open.delete(id); void cached.connection.close(); }
-  if (!sealedSecrets(id, row)) throw new LiveDatasetRefusal(503, 'dataset_not_found', `the live dataset is unavailable: ${UNSEALED}`);
+  if (!sealedSecrets(id, row)) throw new LiveDatasetRefusal(503, 'unavailable', `the live dataset is unavailable: ${UNSEALED}`);
   let entry: { revision: number; connection: OpenConnection; dialect: ConnectorDialect };
   try {
     const config = parseConnectionConfig({ ...row.config, ...secretsOf(id, row) });
     entry = { revision: row.revision, connection: openConnection(config, network(), seams,{queryTimeoutMs:QUERY_TIMEOUT_MS}), dialect: specOf(config.connector).dialect };
   } catch (e) {
     const error = e instanceof ConnectorFailure ? connectorError(e) : { code: 'unavailable', message: 'the stored connection could not be opened' };
-    throw new LiveDatasetRefusal(503, 'dataset_not_found', `the live dataset is unavailable (${error.code}): ${error.message}`);
+    throw new LiveDatasetRefusal(503, 'unavailable', `the live dataset is unavailable (${error.code}): ${error.message}`);
   }
   open.set(id, entry);
   return entry;
@@ -184,18 +185,14 @@ function boundStatement(dialect: ConnectorDialect, text: string, params: unknown
   };
 }
 
-/** A connector error as the page SQL door's codes (the page's `SqlError`). */
+/** A connector error as the page SQL door's codes (contracts `SQL_FAILURE_FOR_CONNECTOR`); a refused write has no reader's sentence. */
 function refused(name: string, e: ConnectorError): LiveSqlReply {
-  const reply = (status: number, error: string, message: string) => ({ status, body: { error, message } });
-  switch (e.code) {
-    case 'invalid_query': case 'database_error': return reply(400, 'validation_failed', e.message);
-    case 'read_only': return reply(403, 'permission_denied', `${name} is a live dataset, read-only: ${e.message}`);
-    case 'permission_denied': return reply(403, 'permission_denied', e.message);
-    case 'timeout': return reply(408, 'timeout', e.message);
-    case 'result_too_large': return reply(413, 'result_too_large', e.message);
-    default: return reply(503, 'dataset_not_found', `${name} is unavailable (${e.code}): ${e.message}`);
-  }
+  const code = SQL_FAILURE_FOR_CONNECTOR[e.code];
+  if (e.code === 'read_only') return { status: 403, body: { error: code, message: `${name} is a live dataset, read-only: ${e.message}` } };
+  return sqlReadFailure(code, code === 'unavailable' || e.code === 'invalid_config' ? `${name} is unavailable (${e.code}): ${e.message}` : e.message);
 }
+/** A page read's refusal, with the reader's sentence when its code is a page code (contracts sql-failures). */
+const readRefusal = (e: unknown): LiveSqlReply => (e instanceof LiveDatasetRefusal && isSqlFailureCode(e.code) ? sqlReadFailure(e.code, e.message) : refusal(e));
 
 /** Runs one statement on the dataset's connection as `viewer`. */
 async function run(id: string, name: string, text: string, params: unknown, viewer: ConnectorViewer | null, signal?: AbortSignal): Promise<LiveSqlReply> {
@@ -402,7 +399,7 @@ export async function pageLiveDatasetSql(actor: AccessActor, page: HtmlPageVersi
       if (!row) throw new LiveDatasetRefusal(404, 'dataset_not_found', `${link.name} names a live dataset that is gone`);
       ownConnectionsAllowed();
       const decision = await step(datasetReadAccess(row, actor, { pageId: page.pageId }));
-      if (!decision.allowed) throw new LiveDatasetRefusal(403, 'permission_denied', `${link.name}'s rules do not let your role run its declared queries${actor.userId ? '' : '; sign in, or ask its owner to allow anonymous readers'}`);
+      if (!decision.allowed) throw new LiveDatasetRefusal(403, actor.userId ? 'permission_denied' : 'sign_in_required', `${link.name}'s rules do not let your role run its declared queries${actor.userId ? '' : '; sign in, or ask its owner to allow anonymous readers'}`);
       signal=admission?.dispatch(true)??signal;
       const reply = await run(row.id, link.name, query.sql, raw.params, await step(connectorViewer(actor)), signal);
       // A connector may outlive a permission change. Fence its answer just as stored SQL does;
@@ -437,6 +434,6 @@ export async function pageLiveDatasetSql(actor: AccessActor, page: HtmlPageVersi
     try { text = mapQualifiers(dialect, raw.sql, new Map([[first.link.name.toLowerCase(), '']])); } catch (e) { throw new LiveDatasetRefusal(400, 'validation_failed', connectorError(e).message); }
     signal=admission?.dispatch(true)??signal;
     return await run(first.row.id, first.link.name, text, raw.params, await step(connectorViewer(actor)), signal);
-  } catch (e) { return refusal(e); }
+  } catch (e) { return readRefusal(e); }
 }
 

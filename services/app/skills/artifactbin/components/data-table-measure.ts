@@ -5,6 +5,12 @@
  */
 import type { AfDataTable } from "./data-table";
 import type { TableState } from "./data-table-frame";
+import { markFailure, readFailure } from "@/lib/html-component-specs/read-failure";
+export function failTable(el: HTMLElement, s: TableState, e: unknown) {
+  const failure = e == null ? null : readFailure(e);
+  markFailure(el, failure);
+  s.error = failure?.message ?? "";
+}
 export function invalidateMeasurements(s: TableState, retainRowEstimates = false) {
   if (!retainRowEstimates) s.rowHeights.clear();
   // Observers do not redeliver unchanged retained nodes after a cache reset.

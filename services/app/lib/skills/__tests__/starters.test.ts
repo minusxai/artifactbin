@@ -603,6 +603,8 @@ it('clears the tracker\'s rows and every control when access is refused, and say
   allowed = false;await rerun(page);
   expect(doc.querySelector('#status')?.textContent).toBe('This page is no longer shared with you');
   expect(doc.querySelectorAll('[data-af-id^="entry-"]')).toHaveLength(0);
+  // A failure is never drawn as empty groups.
+  expect(doc.querySelector('#lists')?.textContent).not.toContain('Nothing yet.');
   expect((doc.querySelector('#add') as HTMLFormElement).hidden).toBe(true);
   expect(doc.querySelectorAll('[data-af-id$="-edit"],[data-af-id$="-remove"]')).toHaveLength(0);
 });

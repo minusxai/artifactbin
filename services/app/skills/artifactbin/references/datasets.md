@@ -48,17 +48,18 @@ or Date. A read answers its rows (an array; `rows.columns` lists `{name, type}`)
 
 ```js
 import {sql} from '@afbin/apollo';
-const region='West';
-const recent=await sql`select _id, date, amount from orders where region = ${region}
+const recent=await sql`select _id, date, amount from orders where region = ${'West'}
   order by date desc limit 50`;
 const months=await sql`select substr(date, 1, 7) as month, count(*) as n, sum(amount) as total
   from orders group by month order by month`;
 ```
 
-Compute every count, total, group by and join in SQL, never by summing rows in script; join
-linked datasets freely. A reader sees only the rows and columns their rule shows. A refusal
-rejects with `SqlError` (`code`, `message`): `validation_failed`, `permission_denied`,
-`timeout`, `result_too_large`, `unavailable` (local preview; a copy without rows or for a declared query).
+Compute every count, total, group by and join in SQL, never by summing rows in script. A reader
+sees only the rows and columns their rule shows. Failures reject with `SqlError` (`code`, reader
+`message`, `detail`). Read codes: `permission_denied`, `sign_in_required`, `unavailable` (down;
+a preview or copy without data), `validation_failed`, `timeout`, `result_too_large`,
+`dataset_not_found`, `unknown_query`. Components show `message`; by hand, show it in place of
+rows. Cut off: `rows.truncated`.
 At most 10,000 input rows, 5 s and 4 MiB per answer; column and table names cannot be bound.
 
 ## Write
@@ -83,8 +84,8 @@ runs (`random()`, `current_timestamp`) are refused: pass the value. Each write s
 ## Live views
 
 `sql.watch(statement, rows=>…, error=>…)` runs it now and again whenever a dataset it names
-changes (another reader's write), one request at a time; it returns the stop
-function. The statement must name its tables in its text. Never poll.
+changes, one request at a time; it returns the stop function. The statement must name its
+tables in its text. Never poll.
 
 ```js
 const stop=sql.watch(sql`select count(*) as open from tasks where not done`,
@@ -93,8 +94,8 @@ const stop=sql.watch(sql`select count(*) as open from tasks where not done`,
 ```
 
 `onResolverChange(names=>…)` from `@afbin/apollo` names changed links (and `viewer` on sign-in
-or out). `examples/csv-dashboard.html` watches its SQL group-bys; `examples/tracker.html` writes
-rows directly and counts with SQL.
+or out). `examples/csv-dashboard.html` watches SQL group-bys; `examples/tracker.html` writes rows
+and counts with SQL.
 
 ## Type together (`@afbin/collab`)
 
@@ -127,7 +128,7 @@ unquoted empty field is null; a quoted `""` is an empty string; literal `null` s
 A live page binding may upload files to its dataset when the caller may insert rows. Signed-in
 browser images: `POST /a/PAGE_ID/datasets/DATASET_ID/images` (bytes, image Content-Type). Other
 files: `POST /api/artifacts/PAGE_ID/datasets/DATASET_ID/files` (bytes, Content-Type, percent-encoded
-`X-Filename`). Both need `X-Edit-Id` from the page head and a unique `Idempotency-Key`. The response returns the stored ref and a read URL
+`X-Filename`). Both need `X-Edit-Id` from the page head and a unique `Idempotency-Key`. The reply has the stored ref and a read URL
 under the same permissions. Pinned bindings cannot upload.
 
 ## The default connection

@@ -9,6 +9,7 @@ import net from 'node:net';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { colonParameters, connectionSummary, connectorError, connectorList, mapQualifiers, mysqlLiteral, openConnection, parseConnectionConfig, qualifierNames, type OpenConnection } from '@artifactbin/connectors';
 import { numberValue } from '../src/answer';
+import { driverFailure } from '../src/errors';
 import { readOnlyStatement } from '../src/statement';
 import { startPgliteWire, type PgliteWire } from '@artifactbin/test-support/pglite-wire';
 
@@ -73,6 +74,23 @@ describe('configuration', () => {
   });
 });
 
+describe('driver errors', () => {
+  const as = (raw: unknown) => connectorError(driverFailure(raw, ['hunter2-secret']));
+  it('maps the database\'s own refusal and missing-object codes, never its text, and names no account or address', () => {
+    for (const errno of [1044, 1142, 1143, 1227, 1370]) {
+      const e = as({ sqlState: '42000', errno, sqlMessage: "SELECT command denied to user 'reader'@'10.1.2.3' for table 'orders'" });
+      expect(e, String(errno)).toEqual({ code: 'permission_denied', message: "SELECT command denied to user this connection's account for table 'orders'" });
+    }
+    expect(as({ sqlState: '42S02', errno: 1146, sqlMessage: "Table 'shop.nope' doesn't exist" })).toEqual({ code: 'not_found', message: "42S02 Table 'shop.nope' doesn't exist" });
+    expect(as({ name: 'PostgresError', code: '3F000', message: 'schema "nowhere" does not exist' })).toMatchObject({ code: 'not_found' });
+    // The same words without the code are no refusal: only the protocol's code classifies.
+    expect(as({ name: 'PostgresError', code: '42601', message: 'permission denied for table orders' })).toMatchObject({ code: 'database_error' });
+    // No SQLSTATE and no known code: the driver's own text (an address, a secret) never leaves.
+    expect(as({ message: 'socket to 10.9.8.7:5432 failed with hunter2-secret' })).toEqual({ code: 'database_error', message: 'the database driver failed' });
+    expect(as({ code: 'EPIPE', message: 'write EPIPE 10.9.8.7:5432' })).toEqual({ code: 'database_error', message: 'EPIPE' });
+  });
+});
+
 describe('the network rule', () => {
   const config = (host: string, extra = {}) => ({ connector: 'postgres', host, database: 'd', user: 'u', ...extra });
   const opened = (c: unknown, policy = PUBLIC, lookup?: (h: string) => Promise<{ address: string; family: number }[]>) => {
@@ -106,6 +124,15 @@ describe('postgres, end to end', () => {
       insert into sales.orders values (1,'u_alice','tea',4.5,9007199254740993,'2026-11-01','2026-11-01 10:00:00+00','{"a":1}',true),
         (2,'u_bob','cake',12,7,'2026-11-02','2026-11-02 11:30:00+00',null,false), (3,'u_alice','pie',30,8,null,null,'[1,2]',null);
       create view sales.my_orders as select id, item from sales.orders where owner = current_setting('app.viewer_id', true);
+      create schema guarded;
+      create function guarded.shared_rows() returns table(id int, item text) language plpgsql stable as $$
+      begin
+        if coalesce(current_setting('app.viewer_id', true), '') not in ('u_alice', 'u_bob', 'u_dave') then
+          raise exception 'orders are not shared with this reader' using errcode = 'insufficient_privilege';
+        end if;
+        return query select o.id, o.item from sales.orders o where o.owner = current_setting('app.viewer_id', true) order by o.id;
+      end $$;
+      create view guarded.shared as select * from guarded.shared_rows();
       create table public.notes(n text);`);
     pg = openConnection({ connector: 'postgres', host: '127.0.0.1', port: wire.port, database: 'postgres', user: 'postgres', password: 'hunter2-secret', tls: 'disable' }, DEV);
   });
@@ -195,8 +222,22 @@ describe('postgres, end to end', () => {
 
   it('never puts the password in an error', async () => {
     const e = await failure(pg.query({ text: "select * from \"hunter2-secret\"", params: {}, viewer: null }));
-    expect(e.code).toBe('database_error');
+    expect(e.code).toBe('not_found');
     expect(e.message).not.toContain('hunter2-secret');
+  });
+
+  it('tells a reader the database refused apart from one it answered with no rows, and a missing table apart from bad SQL', async () => {
+    const shared = (viewer: typeof alice | null) => pg.query({ text: 'select id, item from guarded.shared', params: {}, viewer });
+    expect((await shared(alice)).rows).toEqual([{ id: 1, item: 'tea' }, { id: 3, item: 'pie' }]);
+    // Named and allowed, owning nothing: an answer with no rows, not a refusal.
+    expect((await shared({ id: 'u_dave', email: 'dave@example.com', groups: [] })).rows).toEqual([]);
+    const carol = { id: 'u_carol', email: 'carol@example.com', groups: [] };
+    expect(await failure(shared(carol))).toEqual({ code: 'permission_denied', message: 'orders are not shared with this reader' });
+    expect(await failure(shared(null))).toMatchObject({ code: 'permission_denied' });
+    expect(await failure(pg.query({ text: 'select * from sales.nowhere', params: {}, viewer: alice }))).toMatchObject({ code: 'not_found', message: expect.stringMatching(/^42P01 /) });
+    expect(await failure(pg.query({ text: 'select * from nowhere.orders', params: {}, viewer: alice }))).toMatchObject({ code: 'not_found' });
+    expect(await failure(pg.query({ text: 'select * from sales.orders where', params: {}, viewer: alice }))).toMatchObject({ code: 'database_error', message: expect.stringMatching(/^42601 /) });
+    expect(await failure(shared(alice).then(() => pg.query({ text: 'select 1/0', params: {}, viewer: alice })))).toMatchObject({ code: 'database_error' });
   });
 });
 

@@ -29,7 +29,8 @@ it('keeps an explicitly pinned public dataset readable after its head advances a
  expect((await f.read(anonymous,f.live))[0]!.amount).toBe(2);
  expect(await getVersionFor(anonymous,f.id,1)).toBeNull();
  await setVisibility(f.id, 'private');
- await expect(f.read(anonymous,f.pinned)).rejects.toThrow('dataset_not_found');
+ // Not signed in: told to sign in, never whether the dataset is gone or only not theirs.
+ await expect(f.read(anonymous,f.pinned)).rejects.toThrow('sign_in_required');
 });
 it('keeps a private viewer pin readable after a head update without granting editor history access',async()=>{
  const f=await fixture('private'),user=await createUser({email:'dataset-viewer@example.test'}),viewer=identityForUser(user.id);

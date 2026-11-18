@@ -151,7 +151,8 @@ describe.skipIf(!has('mysql:8'))('mysql 8', () => {
       create function app_viewer_id() returns varchar(255) deterministic return @app.viewer_id;
       create sql security definer view mine as select id, item from orders where owner = app_viewer_id();
       create user 'reader'@'%' identified by '${PASSWORD}';
-      grant select, insert, delete on shop.* to 'reader'@'%'; grant execute on shop.* to 'reader'@'%'; create database analytics; grant select on analytics.* to 'reader'@'%';`);
+      grant select, insert, delete on shop.* to 'reader'@'%'; grant execute on shop.* to 'reader'@'%'; create database analytics; grant select on analytics.* to 'reader'@'%';
+      create function analytics.secret_total() returns int deterministic return 42;`);
     expect(done.status, done.stderr).toBe(0);
     my = openConnection({ connector: 'mysql', host: '127.0.0.1', port, database: 'shop', user: 'reader', password: PASSWORD, tls: 'disable' }, DEV);
   }, 180_000);
@@ -165,6 +166,18 @@ describe.skipIf(!has('mysql:8'))('mysql 8', () => {
     // Hostile values arrive as written, one literal each.
     expect((await my.query({ text: 'select @app.viewer_id as id, @app.viewer_email as email, @app.viewer_groups as g', params: {}, viewer: bob })).rows).toEqual([{ id: 'u_bob', email: "b'o\\b@example.com", g: '[]' }]);
     expect(my.sessions()).toBe(1);
+  });
+
+  it('maps the server\'s refusals of the account by error number, without naming it, and a missing table apart from bad SQL', async () => {
+    // 1142: a table the account has no grant on; 1370: a routine it may not execute.
+    for (const text of ['select * from mysql.user', 'select analytics.secret_total() as n']) {
+      const e = await failure(my.query({ text, params: {}, viewer: alice }));
+      expect(e.code, text).toBe('permission_denied');
+      expect(e.message, text).not.toMatch(/'reader'@|reader@|127\.0\.0\.1|172\./);
+      expect(e.message, text).not.toContain(PASSWORD);
+    }
+    expect(await failure(my.query({ text: 'select * from shop.nope', params: {}, viewer: alice }))).toMatchObject({ code: 'not_found', message: expect.stringMatching(/^42S02 /) });
+    expect(await failure(my.query({ text: 'select * from orders where', params: {}, viewer: alice }))).toMatchObject({ code: 'database_error' });
   });
 
   it('installs the configured read cap and confirms cancellation on the server',async()=>{

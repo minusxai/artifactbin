@@ -84,3 +84,61 @@ it('sends a declared query by name with its values, never SQL text, and watches 
   stop();
   expect(sent.slice(1).map((r) => r.query)).toEqual(['mine', 'mine']);
 });
+
+it('rejects a failed read with the reader\'s sentence and the reason apart, and keeps a cut-off answer\'s rows and its mark', async () => {
+  const notice = 'You don\'t have access to this data. Ask the page\'s owner for access.';
+  const { p } = port((r) => r.sql === 'select 1' ? { error: 'permission_denied', message: '42501 orders is not yours to read', notice }
+    : r.sql === 'select 2' ? { columns: [{ name: 'n', type: 'number' }], rows: [{ n: 1 }, { n: 2 }], truncated: true }
+    : { columns: [{ name: 'n', type: 'number' }], rows: [{ n: 1 }] });
+  const sql = createSql(p);
+  const denied = await sql`select 1`.then(() => null, (e: unknown) => e);
+  expect(denied).toBeInstanceOf(SqlError);
+  expect(denied).toMatchObject({ code: 'permission_denied', message: notice, detail: '42501 orders is not yours to read' });
+  const cut = await sql`select 2` as unknown as Array<unknown> & { truncated?: boolean };
+  expect(cut).toEqual([{ n: 1 }, { n: 2 }]);
+  expect(cut.truncated).toBe(true);
+  // Out of iteration and JSON, like columns; a whole answer has no mark at all.
+  expect(Object.keys(cut)).toEqual(['0', '1']);
+  expect(((await sql`select 3`) as unknown as { truncated?: boolean }).truncated).toBeUndefined();
+});
+
+it('names a reply that never came unavailable and one it cannot read unexpected, each with the list\'s sentence', async () => {
+  const { p } = port();
+  p.run = async () => { throw new Error('Remote request outcome unknown'); };
+  const sql = createSql(p);
+  const lost = await sql`select 1`.then(() => null, (e: unknown) => e);
+  expect(lost).toBeInstanceOf(SqlError);
+  expect(lost).toMatchObject({ code: 'unavailable', message: 'The data can\'t be reached right now.', detail: 'Remote request outcome unknown' });
+  // A SqlError the transport already named (a local preview, an offline copy) keeps its code and words.
+  p.run = async () => { throw new SqlError('unavailable', 'sql runs in a page the app frames'); };
+  expect(await sql`select 1`.then(() => null, (e: unknown) => e)).toMatchObject({ code: 'unavailable', message: 'sql runs in a page the app frames' });
+  p.run = async () => 'nonsense' as never;
+  expect(await sql`select 1`.then(() => null, (e: unknown) => e)).toMatchObject({ code: 'unexpected', message: 'This data could not be read.' });
+});
+
+it('watch: a read that starts failing reaches its error callback, and without one is reported, never dropped', async () => {
+  let failing = false;
+  const { p, invalidate } = port(() => failing ? { error: 'unavailable', message: 'the database could not be reached', notice: 'The data can\'t be reached right now.' } : { columns: [], rows: [{ n: 1 }] });
+  const sql = createSql(p);
+  const seen: unknown[] = [], errors: SqlError[] = [];
+  const stop = sql.watch(sql`select n from tasks`, (rows) => seen.push(rows[0]), (e) => errors.push(e));
+  await vi.waitFor(() => expect(seen).toEqual([{ n: 1 }]));
+  failing = true; invalidate(['tasks']);
+  await vi.waitFor(() => expect(errors.map((e) => e.code)).toEqual(['unavailable']));
+  expect(seen).toEqual([{ n: 1 }]);
+  stop();
+  const reported: unknown[] = [];
+  const original = globalThis.reportError;
+  globalThis.reportError = (e: unknown) => { reported.push(e); };
+  try {
+    const silent = sql.watch(sql`select n from tasks`, (rows) => seen.push(rows[0]));
+    await vi.waitFor(() => expect(reported).toHaveLength(1));
+    expect(reported[0]).toMatchObject({ code: 'unavailable', detail: 'the database could not be reached' });
+    silent();
+  } finally { globalThis.reportError = original; }
+});
+
+it('gives the uniform not_found, which carries no words, the list\'s sentence for the reader', async () => {
+  const { p } = port(() => ({ error: 'not_found' }));
+  expect(await createSql(p)`select 1`.then(() => null, (e: unknown) => e)).toMatchObject({ code: 'not_found', message: 'This page\'s data can\'t be read: the page is gone, or you no longer have access to it.', detail: 'not_found' });
+});

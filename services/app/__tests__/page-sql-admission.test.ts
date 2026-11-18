@@ -6,6 +6,7 @@ import { POST } from '@/app/api/artifacts/[id]/sql/route';
 import * as authentication from '@/lib/authentication';
 import {services,getDb} from '@/lib/platform';
 import {ownerHostSqlRead} from '@/lib/page-doors';
+import {SQL_FAILURES} from '@artifactbin/contracts';
 /** A condition wait's bound (vi.waitFor's own default is 1 s): the condition decides; this only names one that never came. */
 const WAIT_MS = 20_000;
 useAppHarness();
@@ -131,4 +132,15 @@ it('bounds linked metadata admission and cannot dispatch after its late completi
   expect(mutate).not.toHaveBeenCalled();
   expect((await stored(f.staff)).some(row=>row.name==='late metadata')).toBe(false);
  }finally{release();dbSpy.mockRestore();mutate.mockRestore();timers.restore();}
+});
+it('answers a dispatched read that runs out of time while it runs as timeout, with the reader\'s sentence',async()=>{
+ const f=await fixture(),engine=services().sql,run=engine.run.bind(engine);
+ // The read lifetime (SQL_READ_WALL_TIMEOUT_MS) runs out while the engine answers the read.
+ const timers=heldTimers(ms=>ms>40000&&ms<=45000);
+ const spy=vi.spyOn(engine,'run').mockImplementation(async(input,context)=>{timers.expire();return run(input,context);});
+ try{
+  const reply=await POST(request(`/api/artifacts/${f.page}/sql`,{method:'POST',token:f.owner.token,json:{revision:'1',sql:'select name from staff'}}),params(f.page));
+  expect(spy).toHaveBeenCalled();
+  expect([reply.status,await reply.json()]).toEqual([408,{error:'timeout',message:expect.any(String),notice:SQL_FAILURES.timeout.notice}]);
+ }finally{spy.mockRestore();timers.restore();}
 });

@@ -5,7 +5,7 @@
  * (`write`) and change (`can`). The SQL door and collaborative cells share these authority decisions.
  * Persisted Hasura-style field identifiers remain separate from the source names SQL reads.
  */
-import { DATASET_SQL_WRITE_LIMITS, type DatasetBoolExp, type DatasetColumn, type HtmlDatasetLink, type Queryable } from '@artifactbin/contracts';
+import { DATASET_SQL_WRITE_LIMITS, type DatasetBoolExp, type DatasetColumn, type HtmlDatasetLink, type Queryable, type SqlFailureCode } from '@artifactbin/contracts';
 import type { AccessActor } from '@/lib/accounts';
 import { liveAccessFacts, memoAccessFacts, type AccessFacts } from '@/lib/artifact-access';
 import { getArtifactById } from '@/lib/artifacts';
@@ -19,7 +19,7 @@ import { datasetBindingCatalog, DatasetBindingUnsupportedError } from './authori
 import { collaborativeColumns } from './cells';
 import type { DatasetSnapshot } from './types';
 
-const error = (message: string, code: string): {message: string; extensions: {code: string}} => ({ message, extensions: { code } });
+const error = (message: string, code: SqlFailureCode): {message: string; extensions: {code: SqlFailureCode}} => ({ message, extensions: { code } });
 
 const scalarOf = (type: DatasetColumn['type']): HasuraScalar => (type === 'number' ? 'Float' : type === 'boolean' ? 'Boolean' : 'String');
 
@@ -148,6 +148,8 @@ const writeOptions = (mode: LoadMode) => (mode.direct ? { throughPage: false } :
 export interface PageScope {
   pageId?: string;
   retainReadFence?: (verify: () => Promise<void>) => void;
+  /** Each link left out because the caller may neither read nor write it, or it is gone (never told apart). */
+  skipped?: (link: HtmlDatasetLink) => void;
 }
 
 /** Linked datasets loaded once for the caller through the page's audience and request fences. */
@@ -158,7 +160,7 @@ export async function loadLinked(actor: AccessActor, links: readonly HtmlDataset
   for (const link of links) {
     let one: Loaded;
     try { one = await load(actor, link, signal, { direct: false, ...scope, facts }); } catch (e) {
-      if (e instanceof Error && (e.message === 'dataset_not_found' || e instanceof DatasetBindingUnsupportedError)) continue;
+      if (e instanceof Error && (e.message === 'dataset_not_found' || e instanceof DatasetBindingUnsupportedError)) { scope.skipped?.(link); continue; }
       throw e;
     }
     loaded.push({ ...one, link, tables: one.tables.map((t) => ({ ...t, model: { ...t.model, root: linkedRoot(link.name, one.tables.length, t.model.root) } })) });
@@ -174,7 +176,7 @@ const linkedRoot = (name: string, tables: number, root: string) => (tables === 1
  */
 export type PageCommitGuard = (tx: Queryable) => Promise<void>;
 /** One refused write as a structured dataset error: the code says what happened, the message never carries row data. */
-function refusal(result: { reason: string; detail: string }): {message: string; extensions: {code: string}} {
+function refusal(result: { reason: string; detail: string }): {message: string; extensions: {code: SqlFailureCode}} {
   switch (result.reason) {
     case 'too_many_rows': return error(`a mutation changes at most ${DATASET_SQL_WRITE_LIMITS.rows} rows; nothing was written`, 'too_many_rows');
     case 'policy_denied': return /failed its check/.test(result.detail) ? error('check constraint of an insert/update permission has failed; nothing was written', 'check_violation') : error(result.detail, 'permission_denied');
@@ -187,7 +189,7 @@ function refusal(result: { reason: string; detail: string }): {message: string; 
 }
 
 /** A refused write as the page SQL door answers it: without row data. */
-export function sqlRefusal(result: { reason: string; detail: string }): { code: string; message: string } {
+export function sqlRefusal(result: { reason: string; detail: string }): { code: SqlFailureCode; message: string } {
   const e = refusal(result);
   return { code: e.extensions.code, message: e.message };
 }
