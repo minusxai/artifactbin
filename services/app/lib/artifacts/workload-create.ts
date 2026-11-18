@@ -2,7 +2,7 @@
 import type {AccessActor} from '@/lib/accounts';
 import {DatasetError} from '@/lib/datasets';
 import {publicationNamespace,claimPublicationIntent,validatePublicationParent} from './workload-publication';
-import {ARTIFACT_WORKLOAD_LIMIT,type ArtifactWorkloadScope} from '@artifactbin/contracts';
+import {SERVICE_PAYLOAD_LIMIT,type ArtifactWorkloadScope} from '@artifactbin/contracts';
 import {getDb,retryOnConflict,PUBLIC_BASE_URL} from '@/lib/platform';
 import {createArtifact,afterCreated,type ArtifactInput} from './store';
 import {artifactState} from './state';
@@ -14,7 +14,7 @@ export async function createWorkloadArtifact(scope:ArtifactWorkloadScope,input:A
  const actor:AccessActor={userId:null,tokenId:null,email:null,documentEditor:false,workload:{...scope,writeArtifactIds:[],publication:{...scope.publication!,slot:key}}};
  const operation:CreationOperation={scope:publicationNamespace(actor),key:'primary',fingerprint:digest,reply:row=>{
   const body={url:new URL('/a/'+row.id,PUBLIC_BASE_URL).href,state:artifactState(row),edit_id:row.edit_id,sharing_revision:row.sharing_revision??0,id:row.id,title:row.title,format:row.format,version:row.version,html:row.source,visibility:'private',parent_id:scope.rootFolderId};
-  if(Buffer.byteLength(JSON.stringify(body))>ARTIFACT_WORKLOAD_LIMIT)throw new WorkloadCreationRefusal('Workload output too large',413);
+  if(Buffer.byteLength(JSON.stringify(body))>SERVICE_PAYLOAD_LIMIT)throw new WorkloadCreationRefusal(`Workload output is past the ${SERVICE_PAYLOAD_LIMIT}-byte service payload limit`,413);
   return {status:201,body};
  }};
  try{

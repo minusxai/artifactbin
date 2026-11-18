@@ -22,6 +22,8 @@ export * from './artifact-reference';
 export * from './sharing';
 export type { TokenRecord, TokenReader, ClaimResult, CodeStore } from './identity';
 export * from './identity-service';
+export * from './payload-limit';
+export * from './page-limits';
 export * from './identity-module';
 export * from './handles';
 export type { Column, Table } from './schema';
@@ -77,5 +79,5 @@ export * from './connectors';
 
 export type {WorkloadBinding, WorkloadOperation, WorkloadReadOperation, WorkloadAuthorization, WorkloadAuthority} from './workload';
 
-export {isPageEvidenceOperation,isPageDatasetSelect,artifactWorkloadOperationJson,ARTIFACT_WORKLOAD_PATH,APP_ARTIFACT_WORKLOAD_PATH,ARTIFACT_WORKLOAD_LIMIT,isWorkloadBinding,isArtifactWorkloadOperation} from './artifact-workload';
+export {isPageEvidenceOperation,isPageDatasetSelect,artifactWorkloadOperationJson,ARTIFACT_WORKLOAD_PATH,APP_ARTIFACT_WORKLOAD_PATH,isWorkloadBinding,isArtifactWorkloadOperation} from './artifact-workload';
 export type {PageEvidenceSchema,PageEvidenceSql,PageEvidenceOperation,PageDatasetSelect,ArtifactWorkloadOperation,ArtifactWorkloadScope,ArtifactWorkloadOutputPage} from './artifact-workload';

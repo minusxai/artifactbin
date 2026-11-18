@@ -2,7 +2,7 @@
  * no retries. A prepared result retains canonical dataset and page fences through caller buffering.
  */
 import {createHash} from 'node:crypto';
-import {ARTIFACT_WORKLOAD_LIMIT,type PageEvidenceSql,type HtmlDatasetLink,type PageEvidenceOperation,type PageDatasetSelect} from '@artifactbin/contracts';
+import {SERVICE_PAYLOAD_LIMIT,type PageEvidenceSql,type HtmlDatasetLink,type PageEvidenceOperation,type PageDatasetSelect} from '@artifactbin/contracts';
 import type {AccessActor} from '@/lib/accounts';
 import {getArtifactHeaderById,getArtifactById} from '@/lib/artifacts';
 import {SQL_READ_WALL_TIMEOUT_MS,getDb} from '@/lib/platform';
@@ -54,7 +54,7 @@ export async function preparePageEvidence(request:Request,actor:AccessActor,oper
  const identity:Pick<PageEvidenceSql,'pageId'|'revision'|'bindings'>={pageId:page.pageId,revision:page.revision,bindings};
  const body=answer.status===200?{...identity,...answer.body}:answer.body;
  const encoded=JSON.stringify(body);
- if(Buffer.byteLength(encoded)>ARTIFACT_WORKLOAD_LIMIT)return {status:413,encoded:JSON.stringify({error:'too_large'}),verify,fingerprint};
+ if(Buffer.byteLength(encoded)>SERVICE_PAYLOAD_LIMIT)return {status:413,encoded:JSON.stringify({error:'too_large',max:SERVICE_PAYLOAD_LIMIT}),verify,fingerprint};
  await verify();
  return {status:answer.status,encoded,verify,fingerprint};
 }

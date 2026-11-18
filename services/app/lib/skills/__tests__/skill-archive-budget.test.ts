@@ -48,7 +48,9 @@ import {archiveFor} from '@/lib/skills';
 // (toolbox-chart.mjs) shows an agent that chart before publishing, leaving 1,675,360 bytes.
 // 1.618 MiB: Graphite (design-systems/graphite.css, ~17 KB stored), a quiet analytical system of grey and ink chrome
 // with flat colour only for data, gives analytics apps and internal tools a fitting look, leaving 1,693,053 bytes.
-const SKILL_ARCHIVE_MAX_BYTES=1.618*1024*1024;
+// 1.619 MiB: scripts/toolbox-limits.mjs ships the server's size limits (the service payload and what a page may
+// bundle), so commands and sandboxes refuse what the server would, leaving 1,696,984 bytes.
+const SKILL_ARCHIVE_MAX_BYTES=1.619*1024*1024;
 
 describe('the downloadable author skill archive',()=>{
  it('fits its size budget',async()=>{

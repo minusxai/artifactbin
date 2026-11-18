@@ -5,6 +5,9 @@ import {createGroup,deleteGroup} from '@/lib/groups';
 import {SQL_READ_WALL_TIMEOUT_MS,getDb} from '@/lib/platform';
 import {APP_ARTIFACT_WORKLOAD_PATH} from '@artifactbin/contracts';
 import {mintAccountToken,useAppHarness} from '../../__tests__/harness';
+// The evidence budget is the service payload limit; this file holds it at 200 KiB so a wide table passes it without
+// building megabytes of metadata.
+vi.mock('@artifactbin/contracts',async original=>({...await original<object>(),SERVICE_PAYLOAD_LIMIT:200*1024}));
 useAppHarness();
 it('reads only explicitly approved pinned page evidence under current viewer policy and final admission',async()=>{
  const owner=await mintAccountToken('mxmx_test_evidence_seed'),group=await createGroup(owner.userId!,{handle:'evidence_seed',name:'Evidence'});
@@ -83,7 +86,7 @@ it('reads only explicitly approved pinned page evidence under current viewer pol
   const nativeTimeout=AbortSignal.timeout.bind(AbortSignal),timeout=vi.spyOn(AbortSignal,'timeout').mockImplementation(ms=>nativeTimeout(ms>20000&&ms<=SQL_READ_WALL_TIMEOUT_MS?25:ms));
   vi.mocked(globalThis.fetch).mockImplementationOnce(async()=>new Promise(()=>{}));
   const timed=await call();expect(timed.status).toBeGreaterThanOrEqual(400);expect(await timed.text()).not.toContain('visible');expect(timeout.mock.calls.some(([ms])=>ms>20000&&ms<=SQL_READ_WALL_TIMEOUT_MS)).toBe(true);expect(timeout.mock.calls.map(([ms])=>ms)).toContain(10000);timeout.mockRestore();
-  // Schema discovery cannot open row objects, and the full metadata JSON has the same 200 KiB budget.
+  // Schema discovery cannot open row objects, and the full metadata JSON has the same SERVICE_PAYLOAD_LIMIT budget (held at 200 KiB above).
   const datasets=await import('@/lib/datasets'),loadRows=vi.spyOn(datasets,'loadDatasetRows').mockRejectedValue(Error('schema opened rows'));
   expect((await call({kind:'page-evidence-schema',pageId:page.id,revision:'1'})).status).toBe(200);expect(loadRows).not.toHaveBeenCalled();loadRows.mockRestore();
   const wide=await create({title:'Wide metadata',dataset:[Object.fromEntries(Array.from({length:2800},(_,i)=>['column_'+i+'_'+'x'.repeat(64),i]))],visibility:'private',destination:{type:'group',id:group.id}});

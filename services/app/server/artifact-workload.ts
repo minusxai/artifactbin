@@ -6,26 +6,26 @@
   `{grant, artifact_id}`. Grants last one hour, remain bound to the original person/service/parent, and are
   never general API bearers. Keep them in trusted encrypted service storage, never agent sandboxes.
   The fixed app read seam returns allowlisted current canonical source without checkpoints or invitation
-  stamping; the auth owner buffers at most 200 KiB and rechecks parent/account and current artifact access
+  stamping; the auth owner buffers at most SERVICE_PAYLOAD_LIMIT (4 MiB) and rechecks parent/account and current artifact access
   before delivery. Absent and inaccessible artifacts both answer 404.
 - Delegated images: `/api/internal/identity/artifact-image` accepts exactly `{grant, artifact_id, format?,
   element?, slide?}` (png default or jpg; element the export door's CSS selector; slide 1-based) under the same
   opt-in, secret, grant and before/after fences as artifact-read, bounded whole to 25 s. Its fixed app seam POST
   `/api/internal/artifact-image` makes the read seam's decision, renders through the export path as that person
-  (their data, their stored render) and fits the image under 140,000 bytes in the asked format, never narrower
+  (their data, their stored render) and fits the image under ARTIFACT_IMAGE_BYTES in the asked format, never narrower
   than 320 px; identity then rechecks CURRENT ACL on the read seam. It answers `{id, version, format, mime, width,
-  height, bytes, data}` (data base64) under 200 KiB; refusals keep the export door's codes and details (404
+  height, bytes, data}` (data base64) under SERVICE_PAYLOAD_LIMIT; refusals keep the export door's codes and details (404
   `not_found`, `element_not_found`, `slide_not_found`; 422 `element_too_large`; 413 `too_large`; 503
   `render_unavailable`), anything else is 503 `image_unavailable`.
 
 - Chart drawing for a relay is `/api/internal/identity/chart-image` (contracts `CHART_IMAGE_PATH`), with the same
   `artifact_reads` opt-in and per-service introspection secret, and no grant: it reads no data, so a scheduled run
   with no personal grant may use it. The body is exactly a subset of `{chart, rows, width, height, theme,
-  designSystem}` holding `chart` and `rows`, at most 512 KiB. Identity forwards it to the fixed app seam
+  designSystem}` holding `chart` and `rows`, at most SERVICE_PAYLOAD_LIMIT. Identity forwards it to the fixed app seam
   `/api/internal/chart-image` as the anonymous actor; the seam refuses any other caller, draws it with the
   renderer `render_chart_image` uses (lib/viz chart-image.server: 5,000 rows, 160-1600 x 120-1200 px, a PNG of at
-  most 140,000 bytes, one worker thread with a 5 s deadline) and answers `{mime, width, height, bytes, data}` or
-  `{error, message, hint?}`. Identity passes the status and JSON through, buffered to at most 200 KiB.
+  most ARTIFACT_IMAGE_BYTES, one worker thread with a 5 s deadline) and answers `{mime, width, height, bytes, data}` or
+  `{error, message, hint?}`. Identity passes the status and JSON through, buffered to at most SERVICE_PAYLOAD_LIMIT.
 
 - Saved-page evidence adds exact operations `{kind:'page-evidence-schema',pageId,revision}` and
   `{kind:'page-evidence-sql',pageId,revision,sql,params}` (digest fields in that order). Both callbacks must
@@ -33,7 +33,7 @@
   links:[{name,datasetId,revision}],role:'viewer'}`. Only approved canonical pinned stored links mount;
   the page must still be at that exact current revision and every dataset in its exact live owning group.
   The invocation-only dataset viewer decision uses current select policies, never a human or editor bypass.
-  Final callback, buffered-result cap (200 KiB), fresh dataset/archive/policy fences and canonical page fence
+  Final callback, buffered-result cap (SERVICE_PAYLOAD_LIMIT), fresh dataset/archive/policy fences and canonical page fence
   precede delivery. No connection, default/live binding, author code or generic dataset authority is added.
 - Personal evidence: `/api/internal/identity/page-evidence` accepts exactly `{grant,operation}` using the
   existing artifact_reads opt-in, per-service introspection secret and purpose-only arg_ grant. Identity
@@ -51,7 +51,7 @@
   scopes and human impersonation are refused. Native host workload authority retains its independently admitted publication capabilities.
   The request is exactly `{principal,operation}`. Operations are canonical group HTML read
   `{kind:'artifact-read',artifactId,source:'canonical'}` or new private static HTML
-  `{kind:'artifact-create',title,html}`. HTML/output are bounded at 200 KiB, title at 500 characters.
+  `{kind:'artifact-create',title,html}`. HTML/output are bounded at SERVICE_PAYLOAD_LIMIT, title at 500 characters.
   Each callback receives `{principal,operation,digest,nonce,phase}` (`admission` then `final`); digest is SHA-256
   of JSON with operation fields in the order shown. It must echo digest/nonce and a fresh scope containing
   `allowed:true`, exact `principal`, `role`, `readArtifactIds`, `rootFolderId`, `visibility:'private'`, and for
@@ -77,7 +77,7 @@ import {pageEvidenceStep,preparePageEvidence} from '@/lib/page-doors';
 import {isPageDatasetSelect} from '@artifactbin/contracts';
 import {createHash,randomUUID} from 'node:crypto';
 import {isDeepStrictEqual} from 'node:util';
-import {artifactWorkloadOperationJson,ARTIFACT_WORKLOAD_LIMIT,isArtifactWorkloadOperation,isWorkloadBinding,type Actor,type ArtifactWorkloadScope,type ArtifactWorkloadOperation} from '@artifactbin/contracts';
+import {artifactWorkloadOperationJson,SERVICE_PAYLOAD_LIMIT,isArtifactWorkloadOperation,isWorkloadBinding,type Actor,type ArtifactWorkloadScope,type ArtifactWorkloadOperation} from '@artifactbin/contracts';
 import {readBody,BodyTooLargeError} from '@artifactbin/utils';
 import {SQL_READ_WALL_TIMEOUT_MS,serviceAudiences,getDb,PUBLIC_BASE_URL} from '@/lib/platform';
 import {readWorkloadOutputPage,createWorkloadArtifact,getArtifactById,WorkloadCreationRefusal} from '@/lib/artifacts';
@@ -94,7 +94,7 @@ export async function artifactWorkload(request:Request,actor:Actor|null|undefine
  const principal=actor.workload,config=serviceAudiences().find(service=>service.id===principal.issuerId)?.artifactWorkloads;
  if(!config)return denied();
  try{
-  const body=JSON.parse(await pageEvidenceStep(request.signal,readBody(request,{limit:ARTIFACT_WORKLOAD_LIMIT+8192,as:'text'})));
+  const body=JSON.parse(await pageEvidenceStep(request.signal,readBody(request,{limit:SERVICE_PAYLOAD_LIMIT+8192,as:'text'})));
   if(!body||Object.keys(body).length!==1||!isArtifactWorkloadOperation(body.operation))return reply({error:'bad_request'},400);
   const operation:ArtifactWorkloadOperation=body.operation;
   if(operation.kind==='page-evidence-schema'||operation.kind==='page-evidence-sql'){
@@ -141,7 +141,7 @@ export async function artifactWorkload(request:Request,actor:Actor|null|undefine
     return snapshot?{id:snapshot.id,title:snapshot.title,format:snapshot.format,version:snapshot.version,html:snapshot.html}:null;
    };
    const source=await read();if(!source)return reply({error:'not_found'},404);
-   const encoded=JSON.stringify(source);if(Buffer.byteLength(encoded)>ARTIFACT_WORKLOAD_LIMIT)return reply({error:'too_large'},413);
+   const encoded=JSON.stringify(source);if(Buffer.byteLength(encoded)>SERVICE_PAYLOAD_LIMIT)return reply({error:'too_large',max:SERVICE_PAYLOAD_LIMIT},413);
    if(!await authorize('final')||!isDeepStrictEqual(source,await read()))return denied();
    return new Response(encoded,{headers:{'content-type':'application/json','cache-control':'no-store'}});
   }
@@ -155,5 +155,5 @@ export async function artifactWorkload(request:Request,actor:Actor|null|undefine
   if(!final||final.rootFolderId!==scope.rootFolderId||final.creationKey!==scope.creationKey||request.signal.aborted)return denied();
   const result=await createWorkloadArtifact(final,{...prepared,title:operation.title},digest);
   return reply(result.body,result.status);
- }catch(error){if(error instanceof WorkloadCreationRefusal)return reply({error:error.status===413?'too_large':'forbidden'},error.status);return reply({error:error instanceof BodyTooLargeError?'too_large':'workload_unavailable'},error instanceof BodyTooLargeError?413:503);}
+ }catch(error){if(error instanceof WorkloadCreationRefusal)return reply(error.status===413?{error:'too_large',max:SERVICE_PAYLOAD_LIMIT}:{error:'forbidden'},error.status);return error instanceof BodyTooLargeError?reply({error:'too_large',max:SERVICE_PAYLOAD_LIMIT},413):reply({error:'workload_unavailable'},503);}
 }

@@ -100,8 +100,9 @@ if(response.ok){if(raw)return response;try{const data=await response.json();
      retryHint(unsafe));}}
    const refusal=await response.json().catch(()=>({error:'http_'+response.status}));
 const code=typeof refusal.error==='string'?refusal.error:refusal.error?.code??
-     'http_'+response.status;
-throw new ToolError(code,`Request refused (HTTP ${response.status}).`,[401,403,404].includes(
+     'http_'+response.status,said=refusal.message??refusal.error?.message;
+throw new ToolError(code,`Request refused (HTTP ${response.status})`+(typeof said==='string'&&
+     said?': '+said.slice(0,500):'.'),[401,403,404].includes(
      response.status)?3:response.status===409?4:unsafe&&response.status>=500?5:1,refusal.hint??(
      response.status===409?conflictHint(refusal):
      unsafe?'Retain the journal; retry the exact supported intent after recovery.':

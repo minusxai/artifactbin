@@ -6,8 +6,8 @@
  *
  * Bounds: the description per CHART_LIMITS (parseChartDescription, which refuses every `url`), at
  * most CHART_IMAGE_LIMITS.rows rows of plain objects, a box of 160–1600 × 120–1200 pixels (default
- * 640 × 400), and a PNG of at most 140,000 bytes, so its base64 in a JSON answer fits a 200 KiB
- * relay. Request bodies are capped by their routes (contracts CHART_IMAGE_BODY_LIMIT).
+ * 640 × 400), and a PNG of at most contracts ARTIFACT_IMAGE_BYTES, so its base64 in a JSON answer
+ * fits SERVICE_PAYLOAD_LIMIT, the bound its routes also put on request bodies.
  *
  * Drawing runs in ONE worker thread (./chart-image-worker.ts → ./chart-draw.server.ts), never on
  * the event loop: one job at a time, a few more waiting (past that 503 `render_busy`), each with a
@@ -20,12 +20,12 @@ import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { Worker } from 'node:worker_threads';
 import { parseChartDescription } from '@/lib/html-component-specs/chart-spec';
-import type { ChartImageWire } from '@artifactbin/contracts';
+import { ARTIFACT_IMAGE_BYTES, type ChartImageWire } from '@artifactbin/contracts';
 import type { ChartDrawJob, ChartDrawResult } from './chart-draw.server';
 
 export const CHART_IMAGE_LIMITS = {
   rows: 5_000, width: { min: 160, max: 1600, default: 640 }, height: { min: 120, max: 1200, default: 400 },
-  pngBytes: 140_000,
+  pngBytes: ARTIFACT_IMAGE_BYTES,
 } as const;
 
 /** The design systems a caller can draw in (lib/html-systems server entry `DESIGN_SYSTEM_VARIABLES`). */

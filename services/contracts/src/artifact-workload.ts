@@ -8,9 +8,9 @@
  * Reread metadata after final admission and refuse changed pages; never refresh creation authority.
  */
 import type {WorkloadBinding} from './workload';
+import {SERVICE_PAYLOAD_LIMIT} from './payload-limit';
 export const ARTIFACT_WORKLOAD_PATH='/api/internal/identity/artifact-workload';
 export const APP_ARTIFACT_WORKLOAD_PATH='/api/internal/artifact-workload';
-export const ARTIFACT_WORKLOAD_LIMIT=200*1024;
 export type PageEvidenceOperation={kind:'page-evidence-schema';pageId:string;revision:string}|{kind:'page-evidence-sql';pageId:string;revision:string;sql:string;params:Record<string,import('./sql').Scalar>};
 export interface PageEvidenceSchema {pageId:string;revision:string;bindings:{name:string;datasetId:string;revision:string}[];tables:{schema:string;name:string;columns:{name:string;type:import('./sql').ColumnType}[]}[]}
 export interface PageEvidenceSql {pageId:string;revision:string;bindings:PageEvidenceSchema['bindings'];columns:{name:string;type:import('./sql').ColumnType}[];rows:Record<string,import('./sql').Scalar>[]}
@@ -46,7 +46,7 @@ export function isArtifactWorkloadOperation(value:unknown):value is ArtifactWork
  if(isPageEvidenceOperation(value))return true;
  if(row.kind==='artifact-outputs')return Object.keys(row).length===3&&typeof row.credential==='string'&&/^[A-Za-z0-9_-]{32,128}$/.test(row.credential)&&(row.after===null||(typeof row.after==='string'&&/^[A-Za-z0-9_-]{1,128}$/.test(row.after)));
  if(row.kind==='artifact-read')return Object.keys(row).length===3&&typeof row.artifactId==='string'&&/^[A-Za-z0-9_-]{1,128}$/.test(row.artifactId)&&row.source==='canonical';
- return row.kind==='artifact-create'&&Object.keys(row).length===3&&typeof row.title==='string'&&row.title.trim().length>0&&row.title.length<=500&&typeof row.html==='string'&&row.html.trim().length>0&&row.html.length<=ARTIFACT_WORKLOAD_LIMIT;
+ return row.kind==='artifact-create'&&Object.keys(row).length===3&&typeof row.title==='string'&&row.title.trim().length>0&&row.title.length<=500&&typeof row.html==='string'&&row.html.trim().length>0&&row.html.length<=SERVICE_PAYLOAD_LIMIT;
 }
 
 /** SHA-256 this UTF-8 string for callback digest binding; the field order is part of the wire contract. */

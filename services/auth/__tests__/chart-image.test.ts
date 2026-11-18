@@ -1,7 +1,7 @@
 /** A relay's chart drawing: the real auth handler admits it like artifact-read and forwards only the exact body. */
 import {createHash} from 'node:crypto';
 import {describe,it,expect} from 'vitest';
-import {ANONYMOUS,ARTIFACT_READ_LIMIT,CANONICAL_CHART_IMAGE_PATH,CHART_IMAGE_BODY_LIMIT,CHART_IMAGE_PATH,SERVICE_AUTH_HEADER,type Actor} from '@artifactbin/contracts';
+import {ANONYMOUS,SERVICE_PAYLOAD_LIMIT,CANONICAL_CHART_IMAGE_PATH,CHART_IMAGE_PATH,SERVICE_AUTH_HEADER,type Actor} from '@artifactbin/contracts';
 import {createAuthHost} from '../src/parts';
 
 const digest=(secret:string)=>createHash('sha256').update(secret).digest('hex');
@@ -24,7 +24,7 @@ describe('delegated chart drawing',()=>{
   expect((await call({chart,rows},'service-secret','GET')).status).toBe(405);
   // Exact keys: chart and rows required, nothing beyond the six.
   for(const body of [{chart},{rows},{chart,rows,grant:'arg_x'},{chart,rows,userId:'usr_1'},[chart,rows],'not json'])expect((await call(body)).status).toBe(400);
-  expect((await call({chart,rows:'x'.repeat(CHART_IMAGE_BODY_LIMIT)})).status).toBe(413);
+  expect((await call({chart,rows:'x'.repeat(SERVICE_PAYLOAD_LIMIT)})).status).toBe(413);
   expect(forwarded).toHaveLength(0);
 
   const ok=await call({chart,rows,width:320,height:200,theme:'dark',designSystem:'volta'});
@@ -43,9 +43,9 @@ describe('delegated chart drawing',()=>{
   const refused=await call({chart,rows});
   expect(refused.status).toBe(422);expect(await refused.json()).toMatchObject({error:'image_too_large',hint:expect.any(String)});
   // An answer past the relay budget is cut off, never streamed whole.
-  answer=()=>Response.json({data:'x'.repeat(ARTIFACT_READ_LIMIT)});
+  answer=()=>Response.json({data:'x'.repeat(SERVICE_PAYLOAD_LIMIT)});
   const oversized=await call({chart,rows});
-  expect(oversized.status).toBe(413);expect(await oversized.json()).toEqual({error:'too_large'});
+  expect(oversized.status).toBe(413);expect(await oversized.json()).toEqual({error:'too_large',max:SERVICE_PAYLOAD_LIMIT});
   answer=()=>{throw Error('app down');};
   expect((await call({chart,rows})).status).toBe(503);
  });

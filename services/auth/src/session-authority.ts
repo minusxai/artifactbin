@@ -1,5 +1,5 @@
 import {PAGE_EVIDENCE_PATH,CANONICAL_PAGE_EVIDENCE_PATH,isPageEvidenceOperation} from '@artifactbin/contracts';
-import {ARTIFACT_WORKLOAD_PATH,APP_ARTIFACT_WORKLOAD_PATH,ARTIFACT_WORKLOAD_LIMIT,isWorkloadBinding,isArtifactWorkloadOperation} from '@artifactbin/contracts';
+import {ARTIFACT_WORKLOAD_PATH,APP_ARTIFACT_WORKLOAD_PATH,SERVICE_PAYLOAD_LIMIT,isWorkloadBinding,isArtifactWorkloadOperation} from '@artifactbin/contracts';
 /**
  * Auth-owned RPC, mounted before browser/session resolution and the public internal-path refusal. Every route here
  * is service-authenticated (SERVICE_AUTH_HEADER) and refused without it:
@@ -23,8 +23,8 @@ import {ARTIFACT_WORKLOAD_PATH,APP_ARTIFACT_WORKLOAD_PATH,ARTIFACT_WORKLOAD_LIMI
  *    grant, exact keys, forwarded to the app's fixed seam and answered as it answers.
  */
 import {createHash,timingSafeEqual} from 'node:crypto';
-import {CHART_IMAGE_PATH,CANONICAL_CHART_IMAGE_PATH,CHART_IMAGE_BODY_LIMIT,CHART_IMAGE_KEYS,ANONYMOUS} from '@artifactbin/contracts';
-import {ARTIFACT_IMAGE_DEADLINE_MS,ARTIFACT_IMAGE_ERRORS,ARTIFACT_IMAGE_ERROR_FIELDS,ARTIFACT_IMAGE_PATH,CANONICAL_ARTIFACT_IMAGE_PATH,ELEMENT_CAPTURE,ARTIFACT_READ_GRANT_PATH,ARTIFACT_READ_PATH,CANONICAL_ARTIFACT_READ_PATH,ARTIFACT_READ_LIMIT,API_RESOURCE_PATH,HUMAN_SESSION_LIVE_PATH,IDENTITY_CALL_PATH,IDENTITY_SCHEMA,IDENTITY_INTROSPECT_PATH,IDENTITY_METHODS,IdentityError,SERVICE_AUTH_HEADER,parseAliasOrigins,parseServiceAudiences,type IssuedArtifactReadGrant,type IdentityIntrospectResponse,type IdentityMethod,type IdentityService,type Part,type ServiceAudience,type ServiceTokenParent,type TokenRecord,type TransactionalQueryable} from '@artifactbin/contracts';
+import {CHART_IMAGE_PATH,CANONICAL_CHART_IMAGE_PATH,CHART_IMAGE_KEYS,ANONYMOUS} from '@artifactbin/contracts';
+import {ARTIFACT_IMAGE_DEADLINE_MS,ARTIFACT_IMAGE_ERRORS,ARTIFACT_IMAGE_ERROR_FIELDS,ARTIFACT_IMAGE_PATH,CANONICAL_ARTIFACT_IMAGE_PATH,ELEMENT_CAPTURE,ARTIFACT_READ_GRANT_PATH,ARTIFACT_READ_PATH,CANONICAL_ARTIFACT_READ_PATH,API_RESOURCE_PATH,HUMAN_SESSION_LIVE_PATH,IDENTITY_CALL_PATH,IDENTITY_SCHEMA,IDENTITY_INTROSPECT_PATH,IDENTITY_METHODS,IdentityError,SERVICE_AUTH_HEADER,parseAliasOrigins,parseServiceAudiences,type IssuedArtifactReadGrant,type IdentityIntrospectResponse,type IdentityMethod,type IdentityService,type Part,type ServiceAudience,type ServiceTokenParent,type TokenRecord,type TransactionalQueryable} from '@artifactbin/contracts';
 import {BodyTooLargeError,readBody,serviceSecretMatches} from '@artifactbin/utils';
 import type {Context} from 'hono';
 import type {AuthEnv,AuthOptions} from './parts';
@@ -51,7 +51,7 @@ export function sessionAuthority(o:AuthOptions):Part<AuthEnv>{return {name:'sess
   if(c.req.method!=='POST')return answer({error:'method_not_allowed'},405);
   if(!admitted(c.req.header(SERVICE_AUTH_HEADER)))return answer({error:'unauthorized'},401);
   let body:unknown;
-  try{body=JSON.parse(await readBody(c.req.raw,{limit,as:'text'}));}catch(e){return answer({error:e instanceof BodyTooLargeError?'too_large':'bad_request'},e instanceof BodyTooLargeError?413:400);}
+  try{body=JSON.parse(await readBody(c.req.raw,{limit,as:'text'}));}catch(e){return e instanceof BodyTooLargeError?answer({error:'too_large',max:limit},413):answer({error:'bad_request'},400);}
   return body&&typeof body==='object'&&!Array.isArray(body)?body as Record<string,unknown>:answer({error:'bad_request'},400);
  };
  app.all(HUMAN_SESSION_LIVE_PATH,async c=>{
@@ -96,7 +96,7 @@ export function sessionAuthority(o:AuthOptions):Part<AuthEnv>{return {name:'sess
  });
  app.all(ARTIFACT_WORKLOAD_PATH,async c=>{
   let service:ServiceAudience|undefined;
-  const input=await admit(c,presented=>!!(service=serviceOf(audiences,presented))&&!!service.artifactWorkloads,ARTIFACT_WORKLOAD_LIMIT+8192);
+  const input=await admit(c,presented=>!!(service=serviceOf(audiences,presented))&&!!service.artifactWorkloads,SERVICE_PAYLOAD_LIMIT+8192);
   if(input instanceof Response)return input;
   if(Object.keys(input).length!==2||!isWorkloadBinding(input.principal)||!isArtifactWorkloadOperation(input.operation))return answer({error:'bad_request'},400);
   if(input.principal.issuerId!==service!.id)return answer({error:'forbidden'},403);
@@ -104,9 +104,9 @@ export function sessionAuthority(o:AuthOptions):Part<AuthEnv>{return {name:'sess
   try{
    const request=new Request(new URL(APP_ARTIFACT_WORKLOAD_PATH,c.req.url),{method:'POST',body:JSON.stringify({operation:input.operation}),signal:c.req.raw.signal});
    const response=await o.upstream(request,{credential:'workload',serviceWorkload:true,workload:input.principal});
-   const body=await readBody(response,{limit:ARTIFACT_WORKLOAD_LIMIT,as:'text'});
+   const body=await readBody(response,{limit:SERVICE_PAYLOAD_LIMIT,as:'text'});
    return new Response(body,{status:response.status,headers:{'content-type':'application/json','cache-control':'no-store'}});
-  }catch(error){return answer({error:error instanceof BodyTooLargeError?'too_large':'workload_unavailable'},error instanceof BodyTooLargeError?413:503);}
+  }catch(error){return error instanceof BodyTooLargeError?answer({error:'too_large',max:SERVICE_PAYLOAD_LIMIT},413):answer({error:'workload_unavailable'},503);}
  });
  const grantKey=artifactReadKey(o.cookieSecret);
  // Identity owns its deadline boundary too, including stalled upstream/body readers after app buffering.
@@ -119,7 +119,7 @@ export function sessionAuthority(o:AuthOptions):Part<AuthEnv>{return {name:'sess
   let service:ServiceAudience|undefined;
   const signal=AbortSignal.any([c.req.raw.signal,AbortSignal.timeout(20000)]);
   let input:Response|Record<string,unknown>;
-  try{input=await evidenceStep(signal,admit(c,presented=>!!(service=serviceOf(audiences,presented))&&service.artifactReads===true,ARTIFACT_WORKLOAD_LIMIT+8192));}catch{return answer({error:'evidence_unavailable'},503);}
+  try{input=await evidenceStep(signal,admit(c,presented=>!!(service=serviceOf(audiences,presented))&&service.artifactReads===true,SERVICE_PAYLOAD_LIMIT+8192));}catch{return answer({error:'evidence_unavailable'},503);}
   if(input instanceof Response)return input;
   if(Object.keys(input).length!==2||typeof input.grant!=='string'||!isPageEvidenceOperation(input.operation))return answer({error:'bad_request'},400);
   try{
@@ -128,10 +128,10 @@ export function sessionAuthority(o:AuthOptions):Part<AuthEnv>{return {name:'sess
    if(!await evidenceStep(signal,liveClaims())||!claims)return answer({error:'unauthorized'},401);
    const invoke=(fingerprint?:string)=>o.upstream(new Request(new URL(CANONICAL_PAGE_EVIDENCE_PATH,c.req.url),{method:'POST',body:JSON.stringify({operation:input.operation,...(fingerprint?{fingerprint}:{})}),signal}),{credential:'session',userId:claims.sub});
    const response=await evidenceStep(signal,invoke());
-   const buffered=await evidenceStep(signal,readBody(response,{limit:2*ARTIFACT_READ_LIMIT+2048,as:'text'}));
+   const buffered=await evidenceStep(signal,readBody(response,{limit:2*SERVICE_PAYLOAD_LIMIT+2048,as:'text'}));
    if(response.status!==200)return answer({error:'evidence_unavailable'},response.status);
    const envelope=JSON.parse(buffered);
-   if(typeof envelope.body!=='string'||Buffer.byteLength(envelope.body)>ARTIFACT_READ_LIMIT||typeof envelope.fingerprint!=='string')return answer({error:'too_large'},413);
+   if(typeof envelope.body!=='string'||Buffer.byteLength(envelope.body)>SERVICE_PAYLOAD_LIMIT||typeof envelope.fingerprint!=='string')return answer({error:'too_large',max:SERVICE_PAYLOAD_LIMIT},413);
    if(!await evidenceStep(signal,liveClaims()))return answer({error:'unauthorized'},401);
    const checked=await evidenceStep(signal,invoke(envelope.fingerprint));
    void checked.body?.cancel().catch(()=>{});
@@ -139,7 +139,7 @@ export function sessionAuthority(o:AuthOptions):Part<AuthEnv>{return {name:'sess
    if(!await evidenceStep(signal,liveClaims()))return answer({error:'unauthorized'},401);
    signal.throwIfAborted();
    return new Response(envelope.body,{headers:{'content-type':'application/json','cache-control':'no-store'}});
-  }catch(error){return answer({error:error instanceof BodyTooLargeError?'too_large':'evidence_unavailable'},error instanceof BodyTooLargeError?413:503);}
+  }catch(error){return error instanceof BodyTooLargeError?answer({error:'too_large',max:SERVICE_PAYLOAD_LIMIT},413):answer({error:'evidence_unavailable'},503);}
  });
  /** A passed-through image refusal: one of the export door's codes at its own status, with only its detail fields. */
  const imageRefusal=async(response:Response):Promise<Response>=>{
@@ -155,7 +155,7 @@ export function sessionAuthority(o:AuthOptions):Part<AuthEnv>{return {name:'sess
  /**
   * Delegated canonical reads by an arg_ grant: issue (`{token}`), read (`{grant, artifact_id}`) and image (read's keys
   * plus `format?`, `element?`, `slide?`). One sequence for read and image: the grant and its live claims, the fixed app
-  * seam as the grant's person, the answer buffered under ARTIFACT_READ_LIMIT, the claims again, the canonical READ
+  * seam as the grant's person, the answer buffered under SERVICE_PAYLOAD_LIMIT, the claims again, the canonical READ
   * seam's decision again (CURRENT ACL, after the answer was made), the claims again, then delivery. The image call is
   * bounded whole by ARTIFACT_IMAGE_DEADLINE_MS, a relay's request cut being above it.
   */
@@ -182,7 +182,7 @@ export function sessionAuthority(o:AuthOptions):Part<AuthEnv>{return {name:'sess
     body:JSON.stringify({artifact_id:id,...Object.fromEntries(optional.filter(key=>input[key]!==undefined).map(key=>[key,input[key]]))})}):read;
    const response=await step(o.upstream(first,{credential:'session',userId:claims.sub}));
    if(response.status!==200){if(image)return await step(imageRefusal(response));await response.body?.cancel();return answer({error:'not_found'},404);}
-   const body=await step(readBody(response,{limit:ARTIFACT_READ_LIMIT,as:'text'}));
+   const body=await step(readBody(response,{limit:SERVICE_PAYLOAD_LIMIT,as:'text'}));
    if(image&&typeof JSON.parse(body)?.data!=='string')return answer({error:unavailable},503);
    if(!await step(liveClaims()))return answer({error:'unauthorized'},401);
    // The app's second decision rechecks CURRENT ACL after the buffered answer.
@@ -192,25 +192,25 @@ export function sessionAuthority(o:AuthOptions):Part<AuthEnv>{return {name:'sess
    if(!await step(liveClaims()))return answer({error:'unauthorized'},401);
    signal?.throwIfAborted();
    return new Response(body,{headers:{'content-type':'application/json','cache-control':'no-store'}});
-  }catch(error){return answer({error:error instanceof BodyTooLargeError?'too_large':unavailable},error instanceof BodyTooLargeError?413:503);}
+  }catch(error){return error instanceof BodyTooLargeError?answer({error:'too_large',max:SERVICE_PAYLOAD_LIMIT},413):answer({error:unavailable},503);}
  });
  /**
   * A relay's chart drawing (contracts CHART_IMAGE_PATH): admitted like artifact-read (the service's own introspection
   * secret, `artifact_reads` opt-in), exact keys, no grant (drawing reads no data). The body goes to the fixed app seam as
-  * the anonymous actor; its status and JSON come back buffered to at most ARTIFACT_READ_LIMIT.
+  * the anonymous actor; its status and JSON come back buffered to at most SERVICE_PAYLOAD_LIMIT.
   */
  app.all(CHART_IMAGE_PATH,async c=>{
   let service:ServiceAudience|undefined;
-  const input=await admit(c,presented=>!!(service=serviceOf(audiences,presented))&&service.artifactReads===true,CHART_IMAGE_BODY_LIMIT);
+  const input=await admit(c,presented=>!!(service=serviceOf(audiences,presented))&&service.artifactReads===true,SERVICE_PAYLOAD_LIMIT);
   if(input instanceof Response)return input;
   const keys=Object.keys(input);
   if(!keys.includes('chart')||!keys.includes('rows')||keys.some(key=>!(CHART_IMAGE_KEYS as readonly string[]).includes(key)))return answer({error:'bad_request'},400);
   try{
    const signal=AbortSignal.any([c.req.raw.signal,AbortSignal.timeout(60000)]);
    const response=await o.upstream(new Request(new URL(CANONICAL_CHART_IMAGE_PATH,c.req.url),{method:'POST',body:JSON.stringify(input),signal}),ANONYMOUS);
-   const body=await readBody(response,{limit:ARTIFACT_READ_LIMIT,as:'text'});
+   const body=await readBody(response,{limit:SERVICE_PAYLOAD_LIMIT,as:'text'});
    return new Response(body,{status:response.status,headers:{'content-type':'application/json','cache-control':'no-store'}});
-  }catch(error){return answer({error:error instanceof BodyTooLargeError?'too_large':'render_unavailable'},error instanceof BodyTooLargeError?413:503);}
+  }catch(error){return error instanceof BodyTooLargeError?answer({error:'too_large',max:SERVICE_PAYLOAD_LIMIT},413):answer({error:'render_unavailable'},503);}
  });
  const transactional=(db:unknown):db is TransactionalQueryable=>typeof (db as TransactionalQueryable|undefined)?.transaction==='function';
  let identity:Promise<IdentityService>|null=null;

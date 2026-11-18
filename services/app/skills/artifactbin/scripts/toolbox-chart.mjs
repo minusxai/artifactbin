@@ -1,13 +1,13 @@
 /**
  * Internal: sql.mjs query --chart. chartRequest checks the flags and chart file before any query
  * (reads only; --chart-output must be new); drawChart posts {chart, rows, …} to /api/charts/image
- * (the server draws it), at most 120 KiB as relays cap bodies at 128 KiB, and writes the PNG
+ * (the server draws it), at most PAYLOAD_BYTES (toolbox-limits.mjs), and writes the PNG
  * exclusively. Used by: sql.mjs.
  */
 import {lstat} from 'node:fs/promises';
 import {ToolError, enumValue, exclusive, integer, jsonFile, safeParent} from './toolbox-client.mjs';
+import {PAYLOAD_BYTES} from './toolbox-limits.mjs';
 
-const LIMIT = 120 * 1024;
 const fail = (code, message, exit, recovery) => new ToolError(code, message, exit, recovery);
 
 /** The checked --chart request, or null without one. */
@@ -34,8 +34,9 @@ export async function chartRequest(values, sub, write) {
 /** Draw the read's rows into the request's new PNG. */
 export async function drawChart(client, {chart, output, shown, ...size}, {rows}) {
   const body = {chart, rows, ...size}, bytes = Buffer.byteLength(JSON.stringify(body));
-  if (bytes > LIMIT) throw fail('chart_rows_too_large', `The chart request is ${bytes} bytes,` +
-    ` past ${LIMIT}.`, 1, 'Aggregate in SQL to fewer rows or columns, then draw again.');
+  if (bytes > PAYLOAD_BYTES) throw fail('chart_rows_too_large',
+    `The chart request is ${bytes} bytes, past ${PAYLOAD_BYTES}.`, 1,
+    'Aggregate in SQL to fewer rows or columns, then draw again.');
   const image = await client.request('/api/charts/image', {method: 'POST', body,
     safeToRepeat: true, timeoutMs: 60000}).catch(error => {
     // The server's reason says what to fix; the transport's names only the status.
