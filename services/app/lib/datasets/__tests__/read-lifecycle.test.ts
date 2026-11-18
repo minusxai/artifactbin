@@ -2,7 +2,7 @@
 import {serveSql} from '@artifactbin/sql';
 import {sqlClient} from '@artifactbin/utils';
 import {QUERY_TIMEOUT_MS,SQL_READ_WALL_TIMEOUT_MS} from '@/lib/platform';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { createSql } from '@artifactbin/sql/local';
 import type { SqlService } from '@artifactbin/contracts';
 import { executeCatalog } from '../execute';
@@ -97,9 +97,14 @@ it('rejects pre-aborted hydration without dispatching SQL',async()=>{
  expect(executions).toBe(0);
 });
 it('checks the deadline after final authorization before releasing rows',async()=>{
+ // The final authorization is where the wall budget runs out: the clock jumps past it there, and nowhere sooner.
+ const now=performance.now.bind(performance);let skew=0;
+ const clock=vi.spyOn(performance,'now').mockImplementation(()=>now()+skew);
  let checks=0;
- await expect(executeCatalog(catalog,'select 1',{}, {view:null,wallTimeoutMs:40,execute:async()=>({result:{columns:[],rows:[]}}),authorize:async()=>{if(++checks===2)await new Promise(resolve=>setTimeout(resolve,80));}})).rejects.toBeDefined();
- expect(checks).toBe(2);
+ try{
+  await expect(executeCatalog(catalog,'select 1',{}, {view:null,wallTimeoutMs:10_000,execute:async()=>({result:{columns:[],rows:[]}}),authorize:async()=>{if(++checks===2)skew=60_000;}})).rejects.toBeDefined();
+  expect(checks).toBe(2);
+ }finally{clock.mockRestore();}
 });
 it.each([0,-1,1.5,NaN,Infinity])('rejects malformed wall budget %s without dispatch',async wallTimeoutMs=>{
  let executions=0;

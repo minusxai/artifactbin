@@ -560,8 +560,9 @@ describe('a thread resolved elsewhere counts down on its marker', () => {
 
 describe('comment timestamps', () => {
   it('shows the year for older comments and exposes the full local timestamp on keyboard focus', async () => {
-    const iso = '2020-09-10T14:35:27Z';
-    const date = new Date(iso);
+    // 10 September 2020 at 14:35 on this machine's own clock, so the shown day is the 10th in every time zone.
+    const date = new Date(2020, 8, 10, 14, 35, 27);
+    const iso = date.toISOString();
     render(() => <CommentTimestamp iso={iso} />);
     const time = screen.getByLabelText(/2020/);
     expect(time).toHaveAttribute('datetime', iso);

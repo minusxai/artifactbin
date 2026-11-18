@@ -22,7 +22,6 @@ const until = async (cond: () => Promise<boolean>, ms = 4000): Promise<void> => 
     await new Promise((r) => setTimeout(r, 20));
   }
 };
-const settle = () => new Promise((r) => setTimeout(r, 150));
 const envelope = (over: Partial<EventEnvelope> = {}): EventEnvelope => ({
   id: randomUUID(),
   at: new Date().toISOString(),
@@ -66,9 +65,10 @@ describe.each<[string, () => EventsService]>([['in-process', () => local], ['ove
     const batch = [envelope(), envelope()];
     await svc().emit(batch);
     await svc().emit(batch);
-    await until(async () => (await count()) === 2);
-    await settle();
-    expect(await count()).toBe(2);
+    // A new event after the replay is the sentinel: batches are stored in order, so once it is stored the replay was too.
+    await svc().emit([envelope()]);
+    await until(async () => (await count()) >= 3);
+    expect(await count()).toBe(3);
   });
 
   it('every sink receives the stored batch; a throwing sink neither fails emit nor loses the row', async () => {

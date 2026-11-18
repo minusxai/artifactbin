@@ -271,12 +271,14 @@ it('forwards complete SSE segments verbatim and releases the live subscription',
 });
 
 it('waits for a split SSE frame instead of flushing a partial event',async()=>{
- let controller!:ReadableStreamDefaultController<Uint8Array>;let cancelled=0;
+ let cancelled=0,pulls=0;
  const encoder=new TextEncoder();
- const options={baseURL:'http://app',async request(){return new Response(new ReadableStream<Uint8Array>({start(value){controller=value;controller.enqueue(encoder.encode('id: 2\nevent: update\ndata: par'));},cancel(){cancelled++;}}),{headers:{'content-type':'text/event-stream'}});}};
+ // The rest of the frame is sent only when the forwarder asks for more after the partial one: had it flushed the
+ // partial event, it would never ask.
+ const parts=['id: 2\nevent: update\ndata: par','tial\n\n'];
+ const options={baseURL:'http://app',async request(){return new Response(new ReadableStream<Uint8Array>({pull(controller){const part=parts[pulls++];if(part!==undefined)controller.enqueue(encoder.encode(part));},cancel(){cancelled++;}},{highWaterMark:0}),{headers:{'content-type':'text/event-stream'}});}};
  const pending=forwardSessionFetch({url:'http://app/a/abc123/events',method:'GET',headers:{}},ANONYMOUS,options);
- const timer=setTimeout(()=>controller.enqueue(encoder.encode('tial\n\n')),300);
- try{expect(Buffer.from((await pending).body,'base64').toString()).toBe('id: 2\nevent: update\ndata: partial\n\n');expect(cancelled).toBe(1);}finally{clearTimeout(timer);}
+ expect(Buffer.from((await pending).body,'base64').toString()).toBe('id: 2\nevent: update\ndata: partial\n\n');expect(cancelled).toBe(1);expect(pulls).toBeGreaterThanOrEqual(2);
 });
 
 it('bounds silent and incomplete SSE responses and cancels them without empty success',async()=>{

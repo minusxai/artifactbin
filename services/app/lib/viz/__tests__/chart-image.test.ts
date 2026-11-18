@@ -26,20 +26,15 @@ afterAll(() => configureChartRenderer(null));
 
 describe('renderChartImage', () => {
   it('draws a bar chart to a PNG in the house theme, then a dark design-system one on its own surface', async () => {
-    const started = performance.now();
     const first = await renderChartImage({ chart: bar, rows });
-    const cold = performance.now() - started;
     expect(first).toMatchObject({ ok: true, width: 640, height: 400 });
     if (!first.ok) return;
     expect(first.png.subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
     expect(first.png.length).toBeLessThanOrEqual(CHART_IMAGE_LIMITS.pngBytes);
     expect(await pixel(first.png, 1, 1)).toBe('#ffffff');
-    const warmStart = performance.now();
     const dark = await renderChartImage({ chart: { vegaLite: bar }, rows, width: 320, height: 200, theme: 'dark', designSystem: 'volta' }, DESIGN_SYSTEM_VARIABLES);
-    const warm = performance.now() - warmStart;
     expect(dark).toMatchObject({ ok: true, width: 320, height: 200 });
     if (dark.ok) expect(await pixel(dark.png, 1, 1)).toBe(imageTokens(DESIGN_SYSTEM_VARIABLES.variables('volta', 'dark'), 'dark').surface);
-    console.info(`chart image: cold ${cold.toFixed(0)} ms, warm ${warm.toFixed(0)} ms, ${first.png.length} B`);
   });
 
   it('draws a recipe and a raw Vega spec, keeping a native spec its own size within the box', async () => {

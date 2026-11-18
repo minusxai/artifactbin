@@ -119,8 +119,10 @@ it('publishes the frame\'s region caret and paints collaborators\' region carets
  const prefs={visible:true,shareCursor:true,shareSelection:true,showCursors:true,showSelections:true};
  const engine=startReaderPresence({revision:'1',nonce:'n',active:true,controller,backend:{publishPresence:async input=>{published.push(input as unknown as Record<string,unknown>);return 'own';}},preferences:()=>prefs,changed:()=>{}});
  await waitFor(()=>expect(published).toHaveLength(1));
- regionListener({kind:'region-caret',regionId:'af-6',anchor:'AQID',head:'BAUG',marks:[],block:'paragraph'});
- await waitFor(()=>expect(published.at(-1)?.region).toEqual({regionId:'af-6',anchor:'AQID',head:'BAUG'}),{timeout:1000});
+ // The caret's publish is debounced on the session clock: faked here, and its pending timer run, so no real wait decides it.
+ const debounced=async(report:()=>void)=>{vi.useFakeTimers({toFake:['setTimeout','clearTimeout']});try{report();await vi.runOnlyPendingTimersAsync();}finally{vi.useRealTimers();}};
+ await debounced(()=>regionListener({kind:'region-caret',regionId:'af-6',anchor:'AQID',head:'BAUG',marks:[],block:'paragraph'}));
+ await waitFor(()=>expect(published.at(-1)?.region).toEqual({regionId:'af-6',anchor:'AQID',head:'BAUG'}));
  const peer={id:'peer',colorId:'a'.repeat(64),label:'Ada',revision:'1',seen:Date.now(),cursor:null,selection:null,region:{regionId:'af-6',anchor:'AQID',head:'AQID'}};
  engine.receive({viewers:[peer],total:2});
  expect(sentRegion).toEqual([]);
@@ -130,8 +132,8 @@ it('publishes the frame\'s region caret and paints collaborators\' region carets
  expect(sentRegion.at(-1)).toEqual({kind:'region-paint',carets:[{regionId:'af-6',anchor:'AQID',head:'AQID',id:'peer',colorId:'a'.repeat(64),label:'Ada'}]});
  prefs.showCursors=false;engine.update();
  expect(sentRegion.at(-1)).toEqual({kind:'region-paint',carets:[]});
- regionListener({kind:'region-blur'});
- await waitFor(()=>expect(published.at(-1)).not.toHaveProperty('region'),{timeout:1000});
+ await debounced(()=>regionListener({kind:'region-blur'}));
+ await waitFor(()=>expect(published.at(-1)).not.toHaveProperty('region'));
  engine.dispose();
 });
 

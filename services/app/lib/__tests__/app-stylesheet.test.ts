@@ -23,8 +23,10 @@ import { describe, expect, it } from 'vitest';
 
 const ROOT = path.resolve(__dirname, '../..');
 
-/** The app's own entry, compiled the way the SPA build compiles it. */
-async function appStylesheet(): Promise<string> {
+/** The app's own entry, compiled the way the SPA build compiles it: once per file, as every test reads the same sheet. */
+let compiled: Promise<string> | undefined;
+const appStylesheet = () => (compiled ??= compileAppStylesheet());
+async function compileAppStylesheet(): Promise<string> {
   const input = readFileSync(path.join(ROOT, 'app/globals.css'), 'utf8');
   const compiler = await compile(input, { base: path.join(ROOT, 'web'), onDependency: () => {} });
   const scanner = new Scanner({ sources: compiler.sources });

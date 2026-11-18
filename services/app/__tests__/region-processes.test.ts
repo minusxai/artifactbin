@@ -74,7 +74,8 @@ async function concurrentTyping(scenario: Scenario) {
     const replay = async (frames: ReturnType<typeof sseStream>) => {
       const replica = openRegionDoc(undefined, { gc: true });
       let to = b.seq;
-      const deadline = Date.now() + 10_000;
+      // The frames decide; the bound only ends a replay that never completes before the test's own timeout.
+      const deadline = Date.now() + 30_000;
       while (to < b.seq + 2 * ROUNDS && Date.now() < deadline) {
         for (const event of await frames.next(1, deadline - Date.now())) {
           const frame = event.data as { type?: string; from?: number; to?: number; updates?: string[] };

@@ -7,6 +7,7 @@ import { observedRequest } from '@/__tests__/conditional-request';
 import { nativeHtml } from '@/__tests__/native-html-fixture';
 import { request, useAppHarness, mintAccountToken, params } from '@/__tests__/harness';
 import { sseStream } from '@/__tests__/sse';
+import { getDb } from '@/lib/platform';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 import { POST as mutate } from '@/app/api/artifacts/[id]/mutate/route';
 import { PUT } from '@/app/api/artifacts/[id]/route';
@@ -178,9 +179,12 @@ it('whole-dataset replacement invalidates aliases while unrelated pages hear not
       ).status,
     ).toBe(200);
     expect((await a.named('data'))[0]?.data.datasets).toEqual(['choices']);
-    expect(await b.named('data', 1, 300)).toEqual(
-      [],
-    );
+    // Its own page's next version reaches b after that: any data frame b was sent in between is held in front of it.
+    const db = await getDb();
+    await db.query('UPDATE artifacts SET version = version + 1 WHERE id = $1', [other.id]);
+    await db.query("SELECT pg_notify($1, '')", [artifactChannel(other.id)]);
+    expect(await b.named('message')).toHaveLength(1);
+    expect(await b.named('data', 1, 0)).toEqual([]);
   } finally {
     a.close();
     b.close();

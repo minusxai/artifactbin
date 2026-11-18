@@ -31,11 +31,20 @@ async function twoAgents() {
  const anchor = async (nodeId: string) => { const file = path.join(dir, `${nodeId}.json`);await writeFile(file, JSON.stringify({ kind: 'html-node', v: 1, nodeId, quote: '' }));return file; };
  const session = (env: Record<string, string>, extra: { as?: string; ps?: () => never } = {}) => {
   const printed: unknown[] = [];
-  const options = { env: { ...shared, ...env }, fetcher, retryDelays: [], ps: extra.ps, deliver: async (line: unknown) => { printed.push(line); } };
+  // `polling()` resolves when this session's watch sends its first long poll (`/api/events?…wait=N`, N > 0): it holds its
+  // watch lock and is waiting on the server.
+  let polled: (() => void) | undefined;
+  const polling = () => new Promise<void>(resolve => { polled = resolve; });
+  const sessionFetcher = (async (input: string | URL | Request, init?: RequestInit) => {
+   const url = new URL(input instanceof Request ? input.url : String(input));
+   if (polled && url.pathname === '/api/events' && Number(url.searchParams.get('wait')) > 0) { polled(); polled = undefined; }
+   return fetcher(input, init);
+  }) as typeof fetch;
+  const options = { env: { ...shared, ...env }, fetcher: sessionFetcher, retryDelays: [], ps: extra.ps, deliver: async (line: unknown) => { printed.push(line); } };
   const run = (sub: string, values: Record<string, unknown>) => commentCommand({ sub, values: extra.as ? { as: extra.as, ...values } : values, positionals: [doc.id] }, options);
   /** One watch --next call; what it printed: others' comments as their words (read for the event), then its own lines. */
   const watch = async (values: Record<string, unknown> = {}) => { printed.length = 0;await run('watch', { next: true, ...values });return printed.map(v => typeof v === 'string' ? v : (({ event, comment }) => event.type === 'artifact.annotation_reaction_changed' ? `${event.type}:${event.payload.active ? 'added' : 'removed'}` : comment?.body ?? event.type)(v as { event: { type: string; payload: { active?: boolean } }; comment?: { body: string } })); };
-  return { run, watch };
+  return { run, watch, polling };
  };
  return { doc, anchor, session, a: session({ CLAUDECODE: '1', CLAUDE_CODE_SESSION_ID: 'claude-session-a' }), b: session({ CODEX_THREAD_ID: 'codex-thread-b' }) };
 }
@@ -83,8 +92,9 @@ it('one agent starting its watch never stops the other agent\'s watch on the sam
  // A's first watch after its own comment returns at once (the reply checkpoint: nobody else has commented, so the reply
  // to the user goes out first); the one that says the reply was sent waits for the next comment.
  expect((await a.watch()).filter(line => !line.startsWith('next:')).join('\n')).toMatch(/^not watching: nobody has commented yet/);
+ const polling = a.polling();
  const waiting = a.watch({ replied: true });
- await new Promise(resolve => setTimeout(resolve, 300));
+ await polling;
  // B's first watch replays the page (A's question) and returns; A's watch keeps waiting.
  expect((await b.watch()).filter(line => !line.startsWith('next:'))).toEqual(['A asks first']);
  await b.run('reply', { thread: thread.id, body: 'B answers A' });

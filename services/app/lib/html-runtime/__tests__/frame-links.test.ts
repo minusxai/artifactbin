@@ -5,13 +5,14 @@
  * a real jsdom window (another iframe) whose postMessage records what the frame sent; the frame's `top` and `open`
  * are recorders, since jsdom navigates neither.
  */
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { appLinkPath, followAppLinks } from '@/lib/html-runtime/frame-links';
 import { STORY_NAVIGATE_MESSAGE, STORY_NAVIGATING_MESSAGE } from '@/lib/html-reader/contract';
 
 const APP = 'https://app.test';
 const DOC = window.location.origin;
-const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+/** The answer window (40 ms) passes on the faked clock: past it, an unanswered link takes the top. */
+const wait = (ms: number) => { vi.advanceTimersByTime(ms); };
 
 /** The window's own value, its methods bound to it (jsdom's timers refuse a proxy as `this`). */
 const bound = (target: Window, key: string | symbol) => {
@@ -78,20 +79,22 @@ describe('appLinkPath', () => {
 });
 
 describe('followAppLinks', () => {
+  beforeEach(() => { vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }); });
+  afterEach(() => { vi.useRealTimers(); });
   it('asks the app page to follow a link to an app path, and stands down when it answers', async () => {
     const frame = framed('<a id="next" href="/a/B">Next</a>');
     const event = frame.click('#next');
     expect(event.defaultPrevented).toBe(true);
     expect(frame.navigations()).toEqual([[{ type: STORY_NAVIGATE_MESSAGE, href: '/a/B' }, APP]]);
     frame.answer('/a/B');
-    await wait(80);
+    wait(80);
     expect(frame.top.location.href, 'the app page took it: the frame does not').toBe('');
   });
 
   it('takes the top to the app\'s address itself when no app page answers', async () => {
     const frame = framed('<a id="home" href="/">Home</a>');
     frame.click('#home');
-    await wait(80);
+    wait(80);
     expect(frame.top.location.href).toBe(`${APP}/`);
   });
 
@@ -101,7 +104,7 @@ describe('followAppLinks', () => {
     frame.answer('/a/B?x=1#h', { origin: 'https://evil.test' });
     frame.answer('/a/B?x=1#h', { source: window });
     frame.answer('/a/C');
-    await wait(80);
+    wait(80);
     expect(frame.top.location.href).toBe(`${APP}/a/B?x=1#h`);
   });
 
@@ -115,7 +118,7 @@ describe('followAppLinks', () => {
     ].join(''));
     frame.story.querySelector('#author')!.addEventListener('click', (event) => event.preventDefault());
     for (const id of ['#hash', '#away', '#file', '#editing', '#author']) frame.click(id);
-    await wait(80);
+    wait(80);
     expect(frame.navigations()).toEqual([]);
     expect(frame.top.location.href).toBe('');
     expect(frame.opened).toEqual([]);

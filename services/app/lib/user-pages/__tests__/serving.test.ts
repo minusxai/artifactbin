@@ -26,7 +26,7 @@ it('keeps embedded bytes and copied web images owner-scoped with 200 eligible po
  expect(await servesWebAsset(group,urlHash('https://images.example.test/last.png'))).toBe(false);
  expect(await publicHomeFiles(user)).toHaveLength(199);
  // A regression bound, not a claimed production latency: measured in this real DB fixture.
- expect(performance.now()-started).toBeLessThan(2000);
+ expect(performance.now()-started).toBeLessThan(2000); // wall-clock-ok: the stated regression bound for 200 rows of one owner
  await db.query("UPDATE artifacts SET group_id=$1 WHERE id='post0200'",[group.id]);
  expect(await servesEmbeddedArtifact(user,row)).toBe(false);expect(await servesEmbeddedArtifact(group,row)).toBe(true);
  await db.query("UPDATE artifacts SET visibility='private' WHERE id='post0200'");

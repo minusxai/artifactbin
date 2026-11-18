@@ -448,6 +448,7 @@ describe('the annotation composer', () => {
       },
     }, { fallback: (url, init) => fallback(url, init) });
     RETRY_TUNING.policy = { delaysMs: [0, 0] };
+    try {
     layer({ initialSelection: TEXT() });
     await flush();
     replaceComment(screen.getByLabelText('Annotation comment'), 'Retry me');
@@ -462,7 +463,7 @@ describe('the annotation composer', () => {
     expect(keys).toHaveLength(4);
     expect(keys[0]).toBeTruthy();
     expect(new Set(keys).size).toBe(1);
-    delete RETRY_TUNING.policy;
+    } finally { delete RETRY_TUNING.policy; }
   });
 });
 

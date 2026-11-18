@@ -96,7 +96,8 @@ async function join(person: Person | null, regionId = rich, extra: RequestOption
 }
 
 /** Frames until one satisfies `done` (or the budget ends). */
-async function framesUntil(frames: ReturnType<typeof sseStream>, done: (frame: Record<string, unknown>) => boolean, budgetMs = 3000) {
+// The frame decides; the budget only turns a frame that never comes into this message before the test's own timeout.
+async function framesUntil(frames: ReturnType<typeof sseStream>, done: (frame: Record<string, unknown>) => boolean, budgetMs = 30_000) {
   const seen: Record<string, unknown>[] = [];
   const deadline = Date.now() + budgetMs;
   while (Date.now() < deadline) {

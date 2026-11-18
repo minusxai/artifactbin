@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { internalAssetResponse } from '../src/internal-assets';
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 
@@ -55,6 +55,7 @@ describe.each([
 for(const behavior of ['redirect','external-redirect','oversize','stream-size','slow'])it(`refuses ${behavior} and cancels the upstream`,async()=>{
  mode=behavior;const before=reads, beforeClosed=closed;
  await expect(read(origin+path,'GET',AbortSignal.timeout(behavior==='slow'?50:3000))).rejects.toThrow();
- await new Promise(resolve=>setTimeout(resolve,20));
- expect(reads).toBe(before+1);expect(closed).toBeGreaterThan(beforeClosed);
+ // The upstream's own close event, however late it arrives after the refusal.
+ await vi.waitFor(()=>expect(closed).toBeGreaterThan(beforeClosed));
+ expect(reads).toBe(before+1);
 });

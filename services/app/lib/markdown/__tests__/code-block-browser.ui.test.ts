@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import '../../html-components/markdown';
 import type { AfMarkdown } from '../../html-components/markdown';
 
@@ -6,8 +6,13 @@ it('keeps the Prism core manual on browser load and renders only through the exp
   document.body.innerHTML = '<pre><code class="language-javascript">const saved = 1;</code></pre>';
   const existing = document.body.innerHTML;
 
-  const { renderCodeBlock } = await import('../code-block');
-  await new Promise(resolve => setTimeout(resolve, 25));
+  // Whatever Prism would schedule on load (an automatic highlight is a timer or a frame away) runs now, on a faked clock.
+  vi.useFakeTimers({ toFake: ['setTimeout', 'requestAnimationFrame'] });
+  let renderCodeBlock!: typeof import('../code-block').renderCodeBlock;
+  try {
+    ({ renderCodeBlock } = await import('../code-block'));
+    vi.runAllTimers();
+  } finally { vi.useRealTimers(); }
 
   expect((window as Window & { Prism?: { manual?: boolean } }).Prism?.manual).toBe(true);
   expect(document.body.innerHTML).toBe(existing);

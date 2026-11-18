@@ -26,8 +26,10 @@ import { getSharingFor } from '@/lib/artifacts';
 import { EVENTS_SCHEMA, getDb } from '@/lib/platform';
 import { identityForUser } from '@/lib/accounts';
 import { BASE, sessionUser, params, jreq, create, asSession, noSession, fork, head, PROSE, world } from './fork-fixture';
+import { holdTelemetry, settle } from './analytics-fixture';
 
 useAppHarness();
+holdTelemetry();
 beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null)));
 beforeEach(() => { noSession(); });
 
@@ -176,15 +178,12 @@ describe('POST /api/my/artifacts/:id/fork — what does not travel', () => {
     expect(res.status, await res.clone().text()).toBe(201);
     const copyId = ((await res.json()) as { id: string }).id;
 
-    // trackEvent is fire-and-forget (never awaited by a route), so poll.
+    // trackEvent is fire-and-forget (never awaited by a route): settle() awaits the write it started (analytics-fixture).
+    await settle();
     const db = await getDb();
-    let rows: Array<{ object_id: string; subject_id: string | null; payload: { fork_id: string; user_id: string } }> = [];
-    for (let i = 0; i < 40 && rows.length === 0; i++) {
-      rows = (await db.query<{ object_id: string; subject_id: string | null; payload: { fork_id: string; user_id: string } }>(
-        `SELECT object_id, subject_id, payload FROM ${EVENTS_SCHEMA}.events WHERE object_kind='artifact' AND verb='forked'`,
-      )).rows;
-      if (rows.length === 0) await new Promise((r) => setTimeout(r, 25));
-    }
+    const rows = (await db.query<{ object_id: string; subject_id: string | null; payload: { fork_id: string; user_id: string } }>(
+      `SELECT object_id, subject_id, payload FROM ${EVENTS_SCHEMA}.events WHERE object_kind='artifact' AND verb='forked'`,
+    )).rows;
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ object_id: w.doc.id, subject_id: w.bob.id, payload: { fork_id: copyId, user_id: w.bob.id } });
     expect(rows[0].object_id).not.toBe(copyId);

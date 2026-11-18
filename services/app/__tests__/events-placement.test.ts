@@ -26,8 +26,11 @@ import { PUT as replaceOneRoute } from '@/app/api/artifacts/[id]/route';
 import { setServices } from '@/lib/platform';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
+import { holdTelemetry, settle } from './analytics-fixture';
 
 useAppHarness();
+// trackEvent is fire-and-forget; settle() awaits every write it started (analytics-fixture).
+holdTelemetry();
 
 let fake: FakeEvents;
 /** A fresh log per assertion, so a fixture's own moments never count against the one under test. */
@@ -57,12 +60,11 @@ describe('a create says where it landed', () => {
   it('a root create names no parent, and a filed one names the folder', async () => {
     const w = await world();
     const folder = await w.mk({ format: 'folder', title: 'F' });
-    // trackEvent is fire-and-forget; the emit is the last thing it does.
-    await new Promise((r) => setTimeout(r, 50));
+    await settle();
     expect((await said('created')).at(-1)?.payload).toMatchObject({ parent_id: null });
     await listen();
     const doc = await w.mk({ html: nativeHtml('<h1>x</h1>'), title: 'D', parent_id: folder.id });
-    await new Promise((r) => setTimeout(r, 50));
+    await settle();
     const created = (await said('created')).at(-1);
     expect(created?.object_id).toBe(doc.id);
     expect(created?.payload).toMatchObject({ parent_id: folder.id });
@@ -113,7 +115,7 @@ describe('a delete is said once, at the door, and never twice', () => {
     await listen();
     const r = await deleteRoute(request(`/api/my/artifacts/${doc.id}`, { method: 'DELETE', cookie: w.cookie }), params(doc.id));
     expect(r.status).toBe(200);
-    await new Promise((res) => setTimeout(res, 80));
+    await settle();
     expect((await said('deleted'))).toHaveLength(1);
     expect((await said('deleted'))[0]).toMatchObject({ object_id: doc.id, subject_kind: 'user', subject_id: w.userId, payload: { format: 'html', subtree: 0 } });
     // The verb `trashed` does not exist: there is one deletion, and this is it.
@@ -127,7 +129,7 @@ describe('a delete is said once, at the door, and never twice', () => {
     await w.mk({ html: nativeHtml('<h1>b</h1>'), title: 'B', parent_id: folder.id });
     await listen();
     await deleteRoute(request(`/api/my/artifacts/${folder.id}`, { method: 'DELETE', cookie: w.cookie }), params(folder.id));
-    await new Promise((res) => setTimeout(res, 80));
+    await settle();
     expect((await said('deleted'))[0]).toMatchObject({ object_id: folder.id, payload: { format: 'folder', subtree: 2 } });
   });
 

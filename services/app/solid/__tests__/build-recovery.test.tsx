@@ -44,6 +44,9 @@ const failingPage = (error: () => unknown) => {
 beforeEach(() => { storage = new Map(); });
 afterEach(() => { cleanup(); stop?.(); document.head.querySelector(`meta[name="${APP_BUILD_META}"]`)?.remove(); });
 
+/** Drains what the page started (lazy chunks, answered fetches, zero-delay timers): no time window. */
+const settle = async () => { for (let turn = 0; turn < 3; turn++) { await vi.dynamicImportSettled(); await new Promise((resolve) => setTimeout(resolve, 0)); } };
+
 describe('a missing chunk', () => {
   it('is recognised in every engine\'s wording, and nothing else is', () => {
     expect(isChunkLoadError(CHUNK_404())).toBe(true);
@@ -82,7 +85,7 @@ describe('a missing chunk', () => {
     load('aaaaaaaaaaaa');
     host.dispatchEvent(new Event('beforeunload')); // the reader (or a test) navigates away; in-flight imports fail as it goes
     failingPage(CHUNK_404);
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await settle();
     expect(host.location.reload, 'a reload here would cancel the navigation the reader asked for').not.toHaveBeenCalled();
     expect(storage.size, 'and spends no automatic reload').toBe(0);
     cleanup();
@@ -102,7 +105,7 @@ describe('a missing chunk', () => {
     const unregister = registerBeforeReload(() => flushed);
     failingPage(CHUNK_404);
     await screen.findByRole('status', { name: 'Loading the latest version' });
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await settle();
     expect(host.location.reload, 'not while a save is in flight').not.toHaveBeenCalled();
     release();
     await waitFor(() => expect(host.location.reload).toHaveBeenCalledTimes(1));

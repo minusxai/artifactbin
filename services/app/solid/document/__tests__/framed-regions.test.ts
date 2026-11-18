@@ -12,7 +12,7 @@ import { stubFetch } from '@/test/helpers/fetch-stub';
 const PAGES = 'https://6869.pages.test';
 const PAGE = '<html><body><article data-af-id="notes" data-af-editable="rich"><p data-af-id="n1">x</p></article><p data-af-id="out">y</p></body></html>';
 const cleanups: Array<() => void> = [];
-afterEach(() => { for (const cleanup of cleanups.splice(0).reverse()) cleanup(); document.body.innerHTML = ''; vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+afterEach(() => { for (const cleanup of cleanups.splice(0).reverse()) cleanup(); document.body.innerHTML = ''; vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.useRealTimers(); });
 
 function framedPage(enabled: () => boolean, load?: RegionEditingLoader, autoOpen?: boolean, autoFocus?: boolean) {
   const frame = document.createElement('iframe');
@@ -63,10 +63,11 @@ describe('region editing on the page', () => {
   });
 
   it('a doc\'s viewer opens nothing and keeps the focus where it is', async () => {
+    vi.useFakeTimers();
     const page = framedPage(() => false, undefined, true);
     const focus = vi.spyOn(page.frame, 'focus');
     page.say({ kind: 'ready', nonce: 'n1' });
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await vi.advanceTimersByTimeAsync(60_000); // a minute on the faked clock: "nothing" holds however long it waits
     expect(page.regionKinds()).toEqual([]);
     expect(page.fetch).not.toHaveBeenCalled();
     expect(focus).not.toHaveBeenCalled();
@@ -93,24 +94,26 @@ describe('region editing on the page', () => {
   });
 
   it('a doc opened at a comment opens its region but leaves the focus to the comment', async () => {
+    vi.useFakeTimers();
     for (const search of ['?comment=c1', '?thread=t1', '?intent=comment', '?x=1&comment=c2']) expect(opensComment(search)).toBe(true);
     for (const search of ['', '?intent=like', '?version=3']) expect(opensComment(search)).toBe(false);
     const page = framedPage(() => true, undefined, true, false);
     const focus = vi.spyOn(page.frame, 'focus');
     page.say({ kind: 'ready', nonce: 'n1' });
     await vi.waitFor(() => expect(page.regionKinds()).toEqual(['regions-enabled', 'region-session']));
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await vi.advanceTimersByTimeAsync(60_000); // a minute on the faked clock: "nothing" holds however long it waits
     expect(page.regionKinds()).toEqual(['regions-enabled', 'region-session']);
     expect(focus).not.toHaveBeenCalled();
   });
 
   it('a viewer\'s page never loads region editing, never tells its frame of a region and opens nothing', async () => {
+    vi.useFakeTimers();
     const load = vi.fn<RegionEditingLoader>();
     const page = framedPage(() => false, load);
     page.say({ kind: 'ready', nonce: 'n1' });
     page.say({ kind: 'region-open', regionId: 'notes' });
     page.say({ kind: 'region-update', regionId: 'notes', update: new Uint8Array([1]) });
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await vi.advanceTimersByTimeAsync(60_000); // a minute on the faked clock: "nothing" holds however long it waits
     expect(load).not.toHaveBeenCalled();
     expect(page.regionKinds()).toEqual([]);
     expect(page.fetch).not.toHaveBeenCalled();

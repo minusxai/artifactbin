@@ -87,7 +87,7 @@ it('updates isolated installs once, preserves data and symlinks, and returns pro
   expect((await update(root)).status).toBe('activated');
   expect((await run(['--no-update'])).code).toBe(0);
   stalled=true;const start=performance.now();expect((await run(['foreground'])).code).toBe(0);
-  const duration=performance.now()-start;console.log('stalled endpoint foreground ms:',duration);expect(duration).toBeLessThan(1500);
+  const duration=performance.now()-start;expect(duration).toBeLessThan(1500); // wall-clock-ok: the foreground must not wait on the stalled update check; awaiting it would hang to its 15 s fetch timeout
   await server.close();
   await expect(update(root)).rejects.toThrow();
   expect((await run(['offline'])).code).toBe(0);
@@ -116,7 +116,7 @@ it('does not wait for the background updater lock before running a command',asyn
  await symlink(String(process.pid),path.join(base,'.artifactbin-releases','lock'));
   const start=performance.now();
   const result=await new Promise<{code:number|null,out:string}>(resolve=>{const child=spawn(process.execPath,[path.join(root,'scripts/probe.mjs')]);let out='';child.stdout.on('data',b=>out+=b);child.on('exit',code=>resolve({code,out}));});
-  expect(result).toEqual({code:0,out:'ran\n'});expect(performance.now()-start).toBeLessThan(1000);
+  expect(result).toEqual({code:0,out:'ran\n'});expect(performance.now()-start).toBeLessThan(1000); // wall-clock-ok: a busy update lock is skipped, not waited for: the command's own budget
 },20000);
 
 /** A stored release built without the server packager, whose member list is step 2's switch (it still refuses resolvers/). */

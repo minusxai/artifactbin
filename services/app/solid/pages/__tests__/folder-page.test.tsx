@@ -77,12 +77,18 @@ it('re-reads the listing when its live stream comes back after a cut: what chang
   vi.stubGlobal('EventSource', class { onopen = null; onmessage = null; onerror = null; closed = false; constructor() { sources.push(this); } addEventListener() {} removeEventListener() {} close() { this.closed = true; } });
   const fetches = vi.fn(async () => Response.json({ folder: folder({ title: 'Filed while away' }) }));
   vi.stubGlobal('fetch', fetches);
-  open('owner');
-  expect(sources).toHaveLength(1);
-  sources[0]!.onmessage?.(new MessageEvent('message', { data: '{"editId":"e1"}' }));
-  expect(fetches, 'the first connection is the page it already has').not.toHaveBeenCalled();
-  sources[0]!.onerror?.(new Event('error')); // an idle proxy cut it, or the server restarted
-  await waitFor(() => expect(sources).toHaveLength(2), { timeout: 3000 });
+  // The reconnect waits out its backoff on a faked clock: the next timer due after the cut is the retry.
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  try {
+    open('owner');
+    expect(sources).toHaveLength(1);
+    sources[0]!.onmessage?.(new MessageEvent('message', { data: '{"editId":"e1"}' }));
+    expect(fetches, 'the first connection is the page it already has').not.toHaveBeenCalled();
+    sources[0]!.onerror?.(new Event('error')); // an idle proxy cut it, or the server restarted
+    expect(sources).toHaveLength(1);
+    await vi.advanceTimersToNextTimerAsync();
+  } finally { vi.useRealTimers(); }
+  expect(sources).toHaveLength(2);
   expect(sources[0]!.closed).toBe(true);
   sources[1]!.onmessage?.(new MessageEvent('message', { data: '{"editId":"e1"}' }));
   await screen.findByRole('heading', { name: 'Filed while away' });

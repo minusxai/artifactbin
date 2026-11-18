@@ -181,7 +181,7 @@ describe('what the re-encode costs', () => {
     const encoded = await store.get(key);
     // Recorded for the report; the assertion is the ceiling, not the measurement.
     console.log(`[avatar] 12 MP JPEG (${photo.length} bytes) -> 256px WebP (${encoded.length} bytes) in ${ms.toFixed(0)}ms`);
-    expect(ms).toBeLessThan(5000);
+    expect(ms).toBeLessThan(5000); // wall-clock-ok: the request budget is this test's claim
     expect(encoded.length).toBeLessThan(40 * 1024);
     expect(photo.length).toBeGreaterThan(1024 * 1024);
   });

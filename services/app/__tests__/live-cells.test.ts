@@ -100,7 +100,8 @@ async function stream(person: Person, after: string) {
   streams.push(handle);
   return { response, frames, close: handle.close };
 }
-async function framesUntil(frames: ReturnType<typeof sseStream>, done: (frame: Record<string, unknown>) => boolean, budgetMs = 4000) {
+// The frame decides; the budget only turns a frame that never comes into this message before the test's own timeout.
+async function framesUntil(frames: ReturnType<typeof sseStream>, done: (frame: Record<string, unknown>) => boolean, budgetMs = 30_000) {
   const seen: Record<string, unknown>[] = [];
   const deadline = Date.now() + budgetMs;
   while (Date.now() < deadline) {
@@ -406,8 +407,11 @@ describe('saving through the dataset', () => {
   });
 
   it('a reader leaving saves the cells they may write, after the grace', async () => {
+    // The grace is a held timeout: it ends when the test runs it, not after a real 20 ms.
+    const graces: Array<() => void> = [];
+    const clock = { now: () => Date.now(), setInterval: () => 0, clearInterval: () => {}, setTimeout: (work: () => void) => graces.push(work), clearTimeout: () => {} };
     const sessions = createRegionSessions({
-      db: getDb, keepaliveFrame: () => ': keepalive\n\n', leaveGraceMs: 20,
+      db: getDb, keepaliveFrame: () => ': keepalive\n\n', leaveGraceMs: 20, clock,
       subscribe: async (channel, handler, onLost) => (await getDb()).listen(channel, handler, onLost),
     });
     try {
@@ -424,7 +428,10 @@ describe('saving through the dataset', () => {
       if (watching.status === 'open') void watching.stream.pipeTo(new WritableStream()).catch(() => {});
       const version = await datasetVersion();
       abort.abort();
-      await new Promise((resolve) => setTimeout(resolve, 80));
+      await vi.waitFor(() => expect(graces).toHaveLength(1));
+      await sessions.settle();
+      expect(await datasetVersion()).toBe(version);
+      graces.shift()!();
       await sessions.settle();
       expect(await datasetVersion()).toBe(version + 1);
       expect((await stored())[0]!.description).toBe('Left: Fix the login bug');

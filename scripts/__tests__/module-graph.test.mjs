@@ -386,7 +386,7 @@ describe('module graph', () => {
     const result = spawnSync(process.execPath, [SCRIPT], { cwd: ROOT, encoding: 'utf8' });
     expect(result.stderr + result.stdout).toMatch(/module graph/);
     expect(result.status).toBe(0);
-    expect(Date.now() - started).toBeLessThan(10_000);
+    expect(Date.now() - started).toBeLessThan(10_000); // wall-clock-ok: the whole-repo check's budget inside validate is this test's claim
   });
 });
 

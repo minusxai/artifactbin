@@ -17,9 +17,11 @@ afterEach(() => { cleanup(); setSession(null); navigate = undefined; view.embedd
 
 it('defers welcome inside a trusted embedder\'s frame: the embedded page stays the page', async () => {
   view.embedded = true;
+  vi.useFakeTimers();
   setSession({ user: { id: 'new' }, onboarded: false });
   at('/a/Ab3xK9?embed=1');
-  await new Promise((done) => setTimeout(done, 20));
+  // A minute on the faked clock: the embedded page stays however long it waits.
+  try { await vi.advanceTimersByTimeAsync(60_000); } finally { vi.useRealTimers(); }
   expect(screen.getByTestId('where')).toHaveTextContent('/a/Ab3xK9?embed=1');
 });
 

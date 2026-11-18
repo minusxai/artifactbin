@@ -52,7 +52,8 @@ describe('native start flow',()=>{
   const actor={credential:'session' as const,userId:account.userId!,email:'watcher@example.test'};
   const stream=await eventsRoute(request(`/a/${doc.id}/events`,{actor}),params(doc.id));expect(stream.status).toBe(200);
   const reader=stream.body!.getReader(),frames:Record<string,unknown>[]=[],decoder=new TextDecoder();
-  const pump=(async()=>{const deadline=Date.now()+3000;while(frames.length<2&&Date.now()<deadline){const part=await Promise.race([reader.read(),new Promise<{done:true,value:undefined}>(resolve=>setTimeout(()=>resolve({done:true,value:undefined}),Math.max(1,deadline-Date.now())))]);if(part.done||!part.value)break;for(const line of decoder.decode(part.value).split('\n\n'))if(line.startsWith('data: '))frames.push(JSON.parse(line.slice(6)));}})();
+  // Frames until the version-2 one (a missing one fails at the test's timeout, or below when the stream ends first).
+  const pump=(async()=>{let text='';while(!frames.some(frame=>frame.version===2)){const part=await reader.read();if(part.done)break;text+=decoder.decode(part.value,{stream:true});const blocks=text.split('\n\n');text=blocks.pop()!;for(const block of blocks)for(const line of block.split('\n'))if(line.startsWith('data: '))frames.push(JSON.parse(line.slice(6)));}})();
   const body={html:native('Q3 revenue is up 12%.'),expectedVersion:head.version,expectedState:head.state};
   const send=()=>replace(request(`/api/artifacts/${doc.id}`,{method:'PUT',token:account.token,json:body}),params(doc.id));
   expect((await send()).status).toBe(200);await pump;void reader.cancel().catch(()=>{});

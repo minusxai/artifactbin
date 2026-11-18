@@ -8,6 +8,26 @@ import {services,getDb} from '@/lib/platform';
 import {ownerHostSqlRead} from '@/lib/page-doors';
 useAppHarness();
 
+/**
+ * The door's lifetime timers, held by the test: each `setTimeout` whose delay `matches` still runs for real (it is
+ * far off), and `expire()` fires every one not yet cleared, now, as if its time had passed. A timer the door cleared
+ * never fires, as in production. No test here races a shortened real timer against the work.
+ */
+function heldTimers(matches:(ms:number)=>boolean){
+ const set=setTimeout,clear=clearTimeout,held=new Map<unknown,()=>void>();
+ const setSpy=vi.spyOn(globalThis,'setTimeout').mockImplementation(((handler:(...args:unknown[])=>void,ms?:number,...args:unknown[])=>{
+  const handle=set(handler,ms,...args);if(ms!==undefined&&matches(ms))held.set(handle,()=>handler(...args));return handle;
+ }) as typeof setTimeout);
+ const clearSpy=vi.spyOn(globalThis,'clearTimeout').mockImplementation(((handle?:Parameters<typeof clearTimeout>[0])=>{held.delete(handle);clear(handle);}) as typeof clearTimeout);
+ return {
+  count:()=>held.size,
+  expire:()=>{const due=[...held.values()];held.clear();for(const fire of due)fire();},
+  restore:()=>{setSpy.mockRestore();clearSpy.mockRestore();},
+ };
+}
+/** The 20 s admission lifetime (lib/page-doors `admission`). */
+const ADMISSION=(ms:number)=>ms===20000;
+
 it('refuses stalled mixed-operation admission and never writes after the late body arrives', async () => {
   const f=await fixture();
   const before=await stored(f.staff);
@@ -15,87 +35,98 @@ it('refuses stalled mixed-operation admission and never writes after the late bo
   const body=new ReadableStream<Uint8Array>({start(c){stream=c;c.enqueue(new TextEncoder().encode('{'));}});
   const base=request(`/api/artifacts/${f.page}/sql`,{method:'POST',token:f.owner.token});
   const req=new Request(base,{body,duplex:'half'} as RequestInit & {duplex:'half'});
-  const originalTimeout=AbortSignal.timeout.bind(AbortSignal);
-  const originalTimer=setTimeout;
-  const signalSpy=vi.spyOn(AbortSignal,'timeout').mockImplementation(ms=>originalTimeout(ms===20000?40:ms));
-  const timerSpy=vi.spyOn(globalThis,'setTimeout').mockImplementation(((handler:Parameters<typeof setTimeout>[0],ms?:number,...args:unknown[])=>originalTimer(handler,ms===20000?40:ms,...args)) as typeof setTimeout);
-  let guard:ReturnType<typeof setTimeout>|undefined;
+  const timers=heldTimers(ADMISSION);
+  const engine=services().sql,mutate=vi.spyOn(engine,'mutate');
   const pending=POST(req,params(f.page));
   const finish=()=>{try{stream.enqueue(new TextEncoder().encode('"revision":"1","sql":"insert into staff(name) values (\'late\')"}'));stream.close();}catch{/* admission may cancel the input stream */}};
   try {
-    const result=await Promise.race([pending,new Promise<'waiting'>(resolve=>{guard=originalTimer(()=>resolve('waiting'),250);})]);
-    expect(result).toBeInstanceOf(Response);
-    if(result==='waiting')return;
+    await vi.waitFor(()=>expect(timers.count()).toBe(1));
+    timers.expire();
+    const result=await pending;
     expect([404,408]).toContain(result.status);
     finish();
-    await new Promise(resolve=>originalTimer(resolve,80));
+    // The late body is now readable; anything still chained on it has run once the event loop drains.
+    await new Promise(resolve=>setImmediate(resolve));
+    expect(mutate).not.toHaveBeenCalled();
     expect(await stored(f.staff)).toEqual(before);
-  } finally {clearTimeout(guard);finish();await pending;timerSpy.mockRestore();signalSpy.mockRestore();}
+  } finally {finish();await pending;mutate.mockRestore();timers.restore();}
 });
 
 it('keeps an already dispatched write on the original signal past admission expiry',async()=>{
  const f=await fixture(),engine=services().sql,mutate=engine.mutate.bind(engine);
- const timer=setTimeout;
- const timerSpy=vi.spyOn(globalThis,'setTimeout').mockImplementation(((handler:Parameters<typeof setTimeout>[0],ms?:number,...args:unknown[])=>timer(handler,ms===20000?100:ms,...args)) as typeof setTimeout);
+ const timers=heldTimers(ADMISSION);
  let dispatched=0;
- const spy=vi.spyOn(engine,'mutate').mockImplementation(async input=>{dispatched++;await new Promise(resolve=>timer(resolve,150));return mutate(input);});
+ // The admission lifetime runs out the moment the write is dispatched: the write must not hear it.
+ const spy=vi.spyOn(engine,'mutate').mockImplementation(async input=>{dispatched++;timers.expire();return mutate(input);});
  try{
   const reply=await POST(request(`/api/artifacts/${f.page}/sql`,{method:'POST',token:f.owner.token,json:{revision:'1',sql:"insert into staff(name) values ('admitted')"}}),params(f.page));
   expect(dispatched).toBeGreaterThan(0);expect(reply.status).toBe(200);
   expect((await stored(f.staff)).some(row=>row.name==='admitted')).toBe(true);
- }finally{spy.mockRestore();timerSpy.mockRestore();}
+ }finally{spy.mockRestore();timers.restore();}
 });
 
 it.each(['opaque','owner'])('bounds %s wrapper admission before any dispatch',async mode=>{
  const f=await fixture();
  let release!:()=>void;
  const stalled=new Promise<void>(resolve=>{release=resolve;});
- const timer=setTimeout;
- const spy=vi.spyOn(globalThis,'setTimeout').mockImplementation(((handler:Parameters<typeof setTimeout>[0],ms?:number,...args:unknown[])=>timer(handler,ms===20000?30:ms,...args)) as typeof setTimeout);
+ const timers=heldTimers(ADMISSION);
  let stream!:ReadableStreamDefaultController<Uint8Array>;
  const body=new ReadableStream<Uint8Array>({start(c){stream=c;}});
  const req=new Request(request(`/api/artifacts/${f.page}/sql`,{method:'POST',headers:{origin:'null'}}),{body,duplex:'half'} as RequestInit);
  try{
-  const response=await (mode==='opaque'?POST(req,params(f.page)):ownerHostSqlRead(req,f.page,async()=>{await stalled;return true;}));
-  expect(response.status).toBe(404);
- }finally{release();stream.close();spy.mockRestore();}
+  const answer=mode==='opaque'?POST(req,params(f.page)):ownerHostSqlRead(req,f.page,async()=>{await stalled;return true;});
+  await vi.waitFor(()=>expect(timers.count()).toBe(1));
+  timers.expire();
+  expect((await answer).status).toBe(404);
+ }finally{release();stream.close();timers.restore();}
 });
 
 it('expires stalled actor admission without continuing into SQL',async()=>{
  const f=await fixture();let release!:()=>void;
  const stalled=new Promise<void>(resolve=>{release=resolve;});
+ let actorAsked!:()=>void,actorReturned!:()=>void;
+ const asked=new Promise<void>(resolve=>{actorAsked=resolve;}),returned=new Promise<void>(resolve=>{actorReturned=resolve;});
  const original=authentication.requestOrSessionActor;
- const actorSpy=vi.spyOn(authentication,'requestOrSessionActor').mockImplementation(async req=>{await stalled;return original(req);});
- const timer=setTimeout;
- const timerSpy=vi.spyOn(globalThis,'setTimeout').mockImplementation(((handler:Parameters<typeof setTimeout>[0],ms?:number,...args:unknown[])=>timer(handler,ms===20000?30:ms,...args)) as typeof setTimeout);
+ const actorSpy=vi.spyOn(authentication,'requestOrSessionActor').mockImplementation(async req=>{actorAsked();await stalled;try{return await original(req);}finally{actorReturned();}});
+ const timers=heldTimers(ADMISSION);
+ const engine=services().sql,mutate=vi.spyOn(engine,'mutate');
  try{
-  const response=await POST(request(`/api/artifacts/${f.page}/sql`,{method:'POST',token:f.owner.token,json:{revision:'1',sql:"insert into staff(name) values ('late actor')"}}),params(f.page));
-  expect(response.status).toBe(404);release();await new Promise(resolve=>timer(resolve,60));
+  const answer=POST(request(`/api/artifacts/${f.page}/sql`,{method:'POST',token:f.owner.token,json:{revision:'1',sql:"insert into staff(name) values ('late actor')"}}),params(f.page));
+  await asked;timers.expire();
+  expect((await answer).status).toBe(404);
+  // The late actor arrives after the refusal: nothing chained on it may reach SQL.
+  release();await returned;await new Promise(resolve=>setImmediate(resolve));
+  expect(mutate).not.toHaveBeenCalled();
   expect((await stored(f.staff)).some(row=>row.name==='late actor')).toBe(false);
- }finally{release();actorSpy.mockRestore();timerSpy.mockRestore();}
+ }finally{release();actorSpy.mockRestore();mutate.mockRestore();timers.restore();}
 });
 
 it('includes the final owner-host fence in the read lifetime',async()=>{
- const f=await fixture(),timer=setTimeout;
- // The shortened lifetime must outlast the first two fences on a loaded runner and expire inside the stalled third.
- const timerSpy=vi.spyOn(globalThis,'setTimeout').mockImplementation(((handler:Parameters<typeof setTimeout>[0],ms?:number,...args:unknown[])=>timer(handler,ms!==undefined&&ms>40000&&ms<=45000?400:ms,...args)) as typeof setTimeout);
+ const f=await fixture();
+ // The read lifetime (what is left of SQL_READ_WALL_TIMEOUT_MS once dispatched) runs out during the third fence.
+ const timers=heldTimers(ms=>ms>40000&&ms<=45000);
  let checks=0;
  try{
-  const response=await ownerHostSqlRead(request(`/api/artifacts/${f.page}/sql`,{method:'POST',json:{revision:'1',sql:'select name from staff'}}),f.page,async()=>{if(++checks===3)await new Promise(resolve=>timer(resolve,1000));return true;});
+  const response=await ownerHostSqlRead(request(`/api/artifacts/${f.page}/sql`,{method:'POST',json:{revision:'1',sql:'select name from staff'}}),f.page,async()=>{if(++checks===3){expect(timers.count()).toBe(1);timers.expire();await new Promise(()=>{});}return true;});
   expect(checks).toBe(3);expect(response.status).toBe(404);
- }finally{timerSpy.mockRestore();}
+ }finally{timers.restore();}
 });
 
 it('bounds linked metadata admission and cannot dispatch after its late completion',async()=>{
- const f=await fixture(),db=await getDb(),query=db.query.bind(db),timer=setTimeout;
- let release!:()=>void,blocked=0;
+ const f=await fixture(),db=await getDb(),query=db.query.bind(db);
+ let release!:()=>void,blocked=0,metadataAsked!:()=>void,metadataAnswered!:()=>void;
  const stalled=new Promise<void>(resolve=>{release=resolve;});
- const dbSpy=vi.spyOn(db,'query').mockImplementation((async(text:string,values?:unknown[])=>{if(values?.includes(f.staff)&&/^\s*select/i.test(text)){blocked++;await stalled;}return query(text,values);}) as typeof db.query);
- const timerSpy=vi.spyOn(globalThis,'setTimeout').mockImplementation(((handler:Parameters<typeof setTimeout>[0],ms?:number,...args:unknown[])=>timer(handler,ms===20000?40:ms,...args)) as typeof setTimeout);
+ const asked=new Promise<void>(resolve=>{metadataAsked=resolve;}),answered=new Promise<void>(resolve=>{metadataAnswered=resolve;});
+ const dbSpy=vi.spyOn(db,'query').mockImplementation((async(text:string,values?:unknown[])=>{if(values?.includes(f.staff)&&/^\s*select/i.test(text)){blocked++;metadataAsked();await stalled;try{return await query(text,values);}finally{metadataAnswered();}}return query(text,values);}) as typeof db.query);
+ const timers=heldTimers(ADMISSION);
+ const engine=services().sql,mutate=vi.spyOn(engine,'mutate');
  try{
-  const response=await POST(request(`/api/artifacts/${f.page}/sql`,{method:'POST',token:f.owner.token,json:{revision:'1',sql:"insert into staff(name) values ('late metadata')"}}),params(f.page));
+  const answer=POST(request(`/api/artifacts/${f.page}/sql`,{method:'POST',token:f.owner.token,json:{revision:'1',sql:"insert into staff(name) values ('late metadata')"}}),params(f.page));
+  await asked;timers.expire();
+  const response=await answer;
   expect(blocked).toBeGreaterThan(0);expect(response.status).toBe(404);
-  release();await new Promise(resolve=>timer(resolve,100));
+  release();await answered;await new Promise(resolve=>setImmediate(resolve));
+  expect(mutate).not.toHaveBeenCalled();
   expect((await stored(f.staff)).some(row=>row.name==='late metadata')).toBe(false);
- }finally{release();dbSpy.mockRestore();timerSpy.mockRestore();}
+ }finally{release();dbSpy.mockRestore();mutate.mockRestore();timers.restore();}
 });

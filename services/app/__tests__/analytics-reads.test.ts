@@ -12,7 +12,9 @@ import { GET as exportRoute } from '@/app/a/[id]/export/route';
 import { mintExportKey } from '@/lib/export';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
-import { BASE, sessionUser, requestHeaders, params, outcome, create, eventRows, expectEvent, settle } from './analytics-fixture';
+import { BASE, sessionUser, requestHeaders, params, outcome, create, eventRows, expectEvent, settle, holdTelemetry } from './analytics-fixture';
+
+holdTelemetry();
 
 useAppHarness();
 beforeEach(() => setSession(() => sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null));

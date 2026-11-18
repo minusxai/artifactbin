@@ -1,11 +1,25 @@
 // @vitest-environment jsdom
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { STORY_TABLE_CSS } from "@/lib/page-styles";
 import { AfDataTable } from "./data-table";
 import './data-table';
 import { measuredTableWindow } from "./table-model";
-/** Resize notifications re-render on the next animation frame, never inside the observer callback. */
-const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+/**
+ * Resize notifications re-render on the next animation frame, never inside the observer callback. Frames are held:
+ * `nextFrame()` runs every callback queued so far, as one frame, instead of waiting on the environment's frame timer.
+ */
+let frames = new Map<number, FrameRequestCallback>(), frameIds = 0;
+beforeEach(() => {
+  frames = new Map();
+  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => { frames.set(++frameIds, callback); return frameIds; });
+  vi.stubGlobal("cancelAnimationFrame", (id: number) => { frames.delete(id); });
+});
+const nextFrame = async () => {
+  await Promise.resolve();
+  const due = [...frames.values()];
+  frames.clear();
+  for (const callback of due) callback(performance.now());
+};
 it("preserves caller column header identities through sorting and removes stale mappings", () => {
   const el = document.createElement("af-data-table") as AfDataTable;
   el.columnIdentities = { value: { afId: "source-column", id: "authored-column" } };
@@ -369,7 +383,7 @@ it("keeps the grouped row count after the final page without more requests", asy
   expect(getComputedStyle(initialButton).cursor).toBe("pointer");
   expect(initialButton.style.getPropertyValue("font-weight")).toBe("500");
   initialButton.click();
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await vi.waitFor(() => expect(el.data.rows.at(-1)?.id).toBe(1001));
 
   const footer = el.querySelector<HTMLDivElement>("[data-slot=table-footer]")!;
   const rowCount = footer.querySelector('[aria-label="Row count"]');

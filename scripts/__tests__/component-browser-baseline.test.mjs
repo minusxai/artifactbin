@@ -407,11 +407,13 @@ describe('used font evidence',()=>{
       expect(evidence.used).toMatchObject([{family:'Missing Theme Typeface',generic:false,declared:false,sources:[]}]);
     }finally{globalThis.document=original;dom.window.close();}
   });
+  // The step bound is 40 ms only where the reader's stylesheet never answers; elsewhere it is far off, so a slow runner
+  // cannot trip it and only waiting on the parent frame's stale stylesheet would hold the capture.
   it.each([false,true])('binds stylesheet body waits to the inspected frame (blocked reader=%s)',async blockedReader=>{
     const output=await setup(),body=Buffer.from('font bytes'),fontSha256=createHash('sha256').update(body).digest('hex');
     const parentFrame={},handlers=new Map();let targetFrame,inspectedStylesheets;
     const emit=(type,response)=>{for(const handler of handlers.get(type)||[])handler(response);};
-    const response=(type,url,frame,content)=>({request:()=>({resourceType:()=>type}),url:()=>url,status:()=>200,frame:()=>frame,headers:()=>({'content-type':type==='stylesheet'?'text/css':'font/woff2'}),text:async()=>content,body:async()=>{await new Promise(resolve=>setTimeout(resolve,10));return body;}});
+    const response=(type,url,frame,content)=>({request:()=>({resourceType:()=>type}),url:()=>url,status:()=>200,frame:()=>frame,headers:()=>({'content-type':type==='stylesheet'?'text/css':'font/woff2'}),text:async()=>content,body:async()=>{await new Promise(resolve=>setImmediate(resolve));return body;}});
     const frame={url:()=> 'http://localhost/reader',evaluate:async(fn,...args)=>{
       if(fn.name==='settleFiniteFrameAnimations')return noAnimations();
       if(fn.name==='fontLoadingEvidence'){
@@ -432,7 +434,7 @@ describe('used font evidence',()=>{
       const stale=response('stylesheet','http://localhost/parent.css',parentFrame,'');stale.text=()=>new Promise(()=>{});emit('response',stale);
       const actual=response('stylesheet','http://localhost/frame.css',targetFrame,stylesheet);if(blockedReader)actual.text=()=>new Promise(()=>{});emit('response',actual);
       return {frame};
-    },implementation:'html',sourceRevision:'a'.repeat(40),output,captureStepTimeoutMs:40,fixtures:[{id:'frame-font',states:[{id:'initial',actions:[]}]}],themes:['light'],viewports:[{width:800,height:600}]});
+    },implementation:'html',sourceRevision:'a'.repeat(40),output,captureStepTimeoutMs:blockedReader?40:60_000,fixtures:[{id:'frame-font',states:[{id:'initial',actions:[]}]}],themes:['light'],viewports:[{width:800,height:600}]});
     if(blockedReader){await expect(task).rejects.toThrow(/stylesheet-responses exceeded.*frame.css.*capturedFrame.*true/);return;}
     const captures=await task;
     expect(inspectedStylesheets).toEqual([{url:'http://localhost/frame.css',status:200,css:stylesheet}]);

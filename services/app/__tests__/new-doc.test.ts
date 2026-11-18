@@ -5,7 +5,7 @@
  * and leaves it, that its name follows its first heading on a region save until it is renamed, that an agent's whole-page
  * write keeps it a doc, and that the agent handoff (`/api/start`) still makes the placeholder starter exactly as before.
  */
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as Y from 'yjs';
 import { POST as createBrowserArtifact } from '@/app/api/my/artifacts/route';
 import { POST as startRoute } from '@/app/api/start/route';
@@ -24,17 +24,21 @@ import { PLATFORM_STYLES_PATH, htmlSystemsCss } from '@/lib/html-systems';
 import { mintAccountToken, request, useAppHarness, params } from './harness';
 
 useAppHarness();
+/** The sessions' clock, its timeouts held: the only one here is a leave's grace, run by `runLeaves()` when the test says. */
+const leaves = new Map<number, () => void>();
+let timers = 0;
 const clock = {
   now: () => Date.now(), setInterval: () => 0, clearInterval: () => {},
-  setTimeout: (work: () => void, ms: number) => setTimeout(work, ms),
-  clearTimeout: (timer: unknown) => clearTimeout(timer as ReturnType<typeof setTimeout>),
+  setTimeout: (work: () => void) => { leaves.set(++timers, work); return timers; },
+  clearTimeout: (timer: unknown) => { leaves.delete(timer as number); },
 };
+const runLeaves = () => { const due = [...leaves.values()]; leaves.clear(); for (const work of due) work(); };
 let sessions: RegionSessions | null = null;
 const aborts: AbortController[] = [];
 afterEach(async () => {
   for (const abort of aborts.splice(0)) abort.abort();
-  await new Promise((resolve) => setTimeout(resolve, 30));
   await sessions?.settle();
+  leaves.clear();
   sessions?.dispose();
   sessions = null;
 });
@@ -129,7 +133,9 @@ describe('a new doc', () => {
     if (stream.status === 'open') void stream.stream.pipeTo(new WritableStream()).catch(() => {});
     expect((await live.open(owner, id, regionId)).status).toBe(200);
     abort.abort();
-    await new Promise((resolve) => setTimeout(resolve, 30));
+    // The reader's leave starts its grace; the grace ends now.
+    await vi.waitFor(() => expect(leaves.size).toBe(1));
+    runLeaves();
     await live.settle();
     expect(await flush(live, owner, id)).toBe(1);
     const after = (await getArtifactById(id))!;

@@ -1,5 +1,5 @@
 /** One line per request: method, path WITHOUT the query string, status, duration. Never headers, bodies or queries. */
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 import { requestPath, withRequestLog } from '../request-log';
 
@@ -10,7 +10,6 @@ const serve = async (lines: Array<Record<string, unknown>>) => {
   server = await withHttpServer(withRequestLog((req, res) => { res.statusCode = req.url?.startsWith('/missing') ? 404 : 201; res.end('ok'); }, (fields) => lines.push(fields)));
   return server.base;
 };
-const settled = () => new Promise((resolve) => setTimeout(resolve, 20));
 
 describe('request log', () => {
   it('records method, path, status and duration, and nothing from the query string, headers or body', async () => {
@@ -18,8 +17,8 @@ describe('request log', () => {
     const base = await serve(lines);
     await fetch(`${base}/api/artifacts/abc?token=mxmx_secret&code=123#frag`, { method: 'POST', headers: { authorization: 'Bearer mxmx_secret', cookie: 'a=b' }, body: 'secret-body' });
     await fetch(`${base}/missing`);
-    await settled();
-    expect(lines).toHaveLength(2);
+    // A line is written when its response finishes, which can be just after the client has it.
+    await vi.waitFor(() => expect(lines).toHaveLength(2));
     expect(lines[0]).toMatchObject({ method: 'POST', path: '/api/artifacts/abc', status: 201 });
     expect(typeof lines[0]!.ms).toBe('number');
     expect(lines[1]).toMatchObject({ method: 'GET', path: '/missing', status: 404 });
@@ -30,8 +29,10 @@ describe('request log', () => {
     const base = await serve(lines);
     await fetch(`${base}/health`);
     await fetch(`${base}/api/health?x=1`);
-    await settled();
-    expect(lines).toEqual([]);
+    // A logged request after them is the sentinel: lines are written in the order the responses finish.
+    await fetch(`${base}/after`);
+    await vi.waitFor(() => expect(lines).toHaveLength(1));
+    expect(lines).toMatchObject([{ path: '/after' }]);
   });
   it('cuts the path at the first ? or #', () => {
     expect(requestPath('/a/b?c=d')).toBe('/a/b');

@@ -59,10 +59,15 @@ describe('stackHealth', () => {
     expect(await stackHealth({ sql: good, browser: good, events: good })).toEqual({ ok: true, failing: [] });
   });
   it('a service that does not answer within the deadline is down, not a hang — and the probes run in parallel', async () => {
-    const slow = await serve(200, 4000);
-    const started = Date.now();
-    expect(await stackHealth({ sql: slow, browser: slow, events: slow })).toEqual({ ok: false, failing: ['sql', 'browser', 'events'] });
-    expect(Date.now() - started).toBeLessThan(3500);
+    // The probe deadline is the test's to end: all three probes are in flight together before it does, so they run in
+    // parallel; when it ends, every unanswered one is down.
+    const deadline = new AbortController();
+    vi.spyOn(AbortSignal, 'timeout').mockReturnValue(deadline.signal);
+    const silent = await serve(200, 60_000);
+    const health = stackHealth({ sql: silent, browser: silent, events: silent });
+    await vi.waitFor(() => expect(seen).toHaveLength(3));
+    deadline.abort();
+    expect(await health).toEqual({ ok: false, failing: ['sql', 'browser', 'events'] });
   });
   it('keeps liveness credential-free and authenticates only the private SQL policy probe', async () => {
     const good = await serve(200);

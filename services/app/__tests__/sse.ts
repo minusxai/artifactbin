@@ -30,6 +30,8 @@ interface SseStream {
   frames(count: number, budgetMs?: number): Promise<Record<string, unknown>[]>;
   /** Release the reader. Idempotent; safe to skip, since each call stops at its budget. */
   close(): void;
+  /** Whether the server ended the stream (a read reported done). */
+  ended(): boolean;
 }
 
 const DEFAULT_BUDGET_MS = 3000;
@@ -38,7 +40,7 @@ export function sseStream(body: ReadableStream<Uint8Array>): SseStream {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
-  let closed = false;
+  let closed = false, ended = false;
   let namedPending:SseEvent[]=[];
 
   const next = async (count: number, budgetMs = DEFAULT_BUDGET_MS): Promise<SseEvent[]> => {
@@ -63,12 +65,16 @@ export function sseStream(body: ReadableStream<Uint8Array>): SseStream {
       }
     };
     drain();
-    while (out.length < count && Date.now() < deadline && !closed) {
+    while (out.length < count && Date.now() < deadline && !closed && !ended) {
+      let timedOut = false, timer: ReturnType<typeof setTimeout> | undefined;
       const chunk = await Promise.race([
         reader.read(),
-        new Promise<{ done: true; value: undefined }>((resolve) =>
-          setTimeout(() => resolve({ done: true, value: undefined }), Math.max(1, deadline - Date.now()))),
+        new Promise<{ done: true; value: undefined }>((resolve) => {
+          timer = setTimeout(() => { timedOut = true; resolve({ done: true, value: undefined }); }, Math.max(1, deadline - Date.now()));
+        }),
       ]);
+      clearTimeout(timer);
+      if (chunk.done && chunk.value === undefined && !timedOut) ended = true;
       if (chunk.done || !chunk.value) break;
       buffer += decoder.decode(chunk.value, { stream: true });
       drain();
@@ -81,7 +87,7 @@ export function sseStream(body: ReadableStream<Uint8Array>): SseStream {
     named:async(event,count=1,budgetMs=DEFAULT_BUDGET_MS)=>{
       const out=namedPending.filter(frame=>frame.event===event),deadline=Date.now()+budgetMs;
       namedPending=namedPending.filter(frame=>frame.event!==event);
-      while(out.length<count&&Date.now()<deadline&&!closed){
+      while(out.length<count&&Date.now()<deadline&&!closed&&!ended){
         for(const frame of await next(1,deadline-Date.now())){
           if(frame.event===event)out.push(frame);else namedPending.push(frame);
         }
@@ -90,6 +96,7 @@ export function sseStream(body: ReadableStream<Uint8Array>): SseStream {
     },
     frames: async (count, budgetMs) => (await next(count, budgetMs)).map((event) => event.data),
     close: () => { closed = true; void reader.cancel().catch(() => {}); },
+    ended: () => ended,
   };
 }
 

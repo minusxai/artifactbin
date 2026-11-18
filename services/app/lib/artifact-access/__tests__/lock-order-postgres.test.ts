@@ -18,7 +18,7 @@ import {claimPublicationIntent,chargePublication,setArtifactQuotaForTests} from 
  * without the image.
  */
 import { execFileSync, spawnSync } from 'node:child_process';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import pg from 'pg';
 import type { Queryable } from '@artifactbin/contracts';
 import { retryOnConflict } from '@/lib/platform';
@@ -33,10 +33,22 @@ const ACTOR = { userId: 'u1', tokenId: null, email: null, documentEditor: false 
 describe.skipIf(!dockerAvailable)('authorization locks on PostgreSQL', () => {
   let container = '', port = 0;
   const clients: pg.Client[] = [];
-  const connect = async () => { const c = new pg.Client({ host: '127.0.0.1', port, user: 'postgres', password: 'pw', database: 'postgres' }); await c.connect(); clients.push(c); return c; };
+  const pids = new WeakMap<pg.Client, number>();
+  const connect = async () => { const c = new pg.Client({ host: '127.0.0.1', port, user: 'postgres', password: 'pw', database: 'postgres' }); await c.connect(); clients.push(c); pids.set(c, Number((await c.query('SELECT pg_backend_pid() AS pid')).rows[0].pid)); return c; };
   const tx = (c: pg.Client, before?: (sql: string) => Promise<void>): Queryable => ({ query: async (sql: string, args?: unknown[]) => { await before?.(sql); const r = await c.query(sql, args as never[]); return { rows: r.rows, rowCount: r.rowCount ?? r.rows.length }; } } as unknown as Queryable);
-  /** Whether `p` settles within `ms`. */
-  const settles = (p: Promise<unknown>, ms: number) => Promise.race([p.then(() => true, () => true), new Promise<boolean>((r) => setTimeout(() => r(false), ms))]);
+  /** Whether `c`'s backend is blocked on a lock, read from pg_stat_activity on a connection of its own. */
+  let monitor: pg.Client | undefined;
+  const blocked = async (c: pg.Client) => (await (monitor ??= await connect()).query('SELECT wait_event_type FROM pg_stat_activity WHERE pid=$1', [pids.get(c)])).rows[0]?.wait_event_type === 'Lock';
+  /**
+   * What the database shows first for `p`, the work in flight on `c`: it settles (it did not wait), or `c` blocks on a
+   * lock (it waits). Decided by the database's own lock state, never by how long the work takes.
+   */
+  const settles = async (p: Promise<unknown>, c: pg.Client): Promise<boolean> => {
+    let done = false;
+    const settled = p.then(() => { done = true; return true; }, () => { done = true; return true; });
+    const waiting = (async () => { while (!done) { if (await blocked(c)) return false; await new Promise((r) => setImmediate(r)); } return true; })();
+    return Promise.race([settled, waiting]);
+  };
   /** One whole transaction on `c`: BEGIN, the work, COMMIT; ROLLBACK and rethrow on any failure. */
   const transaction = async <T,>(c: pg.Client, work: () => Promise<T>): Promise<T> => {
     await c.query('BEGIN');
@@ -71,6 +83,12 @@ describe.skipIf(!dockerAvailable)('authorization locks on PostgreSQL', () => {
       CREATE TABLE artifact_shares (artifact_id text REFERENCES artifacts(id), user_id text, email text, role text, PRIMARY KEY (artifact_id, email));
       CREATE TABLE artifact_group_shares (artifact_id text REFERENCES artifacts(id), group_id text REFERENCES groups(id), role text, PRIMARY KEY (artifact_id, group_id));`);
   }, 120_000);
+  // Each case's connections end with it: a case that fails with a transaction open releases its locks here, so the
+  // next case's seed (a TRUNCATE) fails or passes on its own instead of waiting on them for ever.
+  afterEach(async () => {
+    for (const c of clients.splice(1)) await c.end().catch(() => {});
+    monitor = undefined;
+  });
   afterAll(async () => {
     for (const c of clients) await c.end().catch(() => {});
     if (container) spawnSync('docker', ['rm', '-f', container], { stdio: 'ignore' });
@@ -107,7 +125,7 @@ describe.skipIf(!dockerAvailable)('authorization locks on PostgreSQL', () => {
       expect(before).toMatchObject({ allowed: true, role: 'signed_in' });
       const grant = transaction(grantor, async () => { for (const statement of grantSql) await grantor.query(statement); }).then(() => 'ok', code);
       // A grant that waits (or fails fast, NOWAIT) has not slipped in; one that commits now would have.
-      const settled = await settles(grant, 150);
+      const settled = await settles(grant, grantor);
       const slipped = settled && (await grant) === 'ok';
       const after = slipped ? await datasetWriteAccess(row, ACTOR, { tx: tx(writer) }) : before;
       await writer.query('COMMIT');
@@ -123,7 +141,7 @@ describe.skipIf(!dockerAvailable)('authorization locks on PostgreSQL', () => {
     await lockAuthorization(tx(writer), { page: 'page', write: 'data' });
     expect(await transactionAccessFacts(ACTOR, tx(writer)).groupShareRole('data')).toBe('editor');
     const revoke = revoker.query("DELETE FROM artifact_group_shares WHERE artifact_id='data' AND group_id='g1'");
-    expect(await settles(revoke, 300)).toBe(false);
+    expect(await settles(revoke, revoker)).toBe(false);
     await writer.query('COMMIT');
     await revoke;
     expect((await revoker.query("SELECT 1 FROM artifact_group_shares WHERE artifact_id='data'")).rowCount).toBe(0);
@@ -138,7 +156,7 @@ describe.skipIf(!dockerAvailable)('authorization locks on PostgreSQL', () => {
       expect(await transactionAccessFacts(ACTOR, tx(writer)).groupShareRole('data')).toBe('editor');
       // The identity module's write: its group row, then the membership (services/auth identity-store groups).
       const revoke = transaction(revoker, async () => { await revoker.query("SELECT id FROM groups WHERE id='g1' FOR UPDATE"); await revoker.query("DELETE FROM group_members WHERE group_id='g1' AND user_id='u1'"); });
-      expect(await settles(revoke, 300)).toBe(true);
+      expect(await settles(revoke, revoker)).toBe(true);
       await revoke;
       await writer.query('COMMIT');
     } finally { await writer.query('ROLLBACK'); }
@@ -163,8 +181,10 @@ describe.skipIf(!dockerAvailable)('authorization locks on PostgreSQL', () => {
     {
       const writer = await connect(), editor = await connect();
       await writer.query('BEGIN'); await editor.query('BEGIN');
-      const written = lockAuthorization(tx(writer), { page: 'page', write: 'data' }).then(() => transactionAccessFacts(ACTOR, tx(writer)).namedRole('page')).then(() => writer.query('COMMIT')).then(() => 'ok', code);
-      await new Promise((r) => setTimeout(r, 20));
+      const locked = lockAuthorization(tx(writer), { page: 'page', write: 'data' });
+      const written = locked.then(() => transactionAccessFacts(ACTOR, tx(writer)).namedRole('page')).then(() => writer.query('COMMIT')).then(() => 'ok', code);
+      // The editor starts once the writer holds its page locks (no fixed delay deciding who goes first).
+      await locked.catch(() => {});
       const edited = editor.query("SELECT id FROM artifacts WHERE id='page' FOR UPDATE").then(() => editor.query("DELETE FROM artifact_shares WHERE artifact_id='page'")).then(() => editor.query('COMMIT')).then(() => 'ok', code);
       const codes = await Promise.all([written, edited]);
       for (const [c, result] of [[writer, codes[0]], [editor, codes[1]]] as const) if (result !== 'ok') await c.query('ROLLBACK');
@@ -209,7 +229,8 @@ describe.skipIf(!dockerAvailable)('authorization locks on PostgreSQL', () => {
     await reached;
     let competitorAttempts = 0;
     const competing = retryOnConflict(() => transaction(other, async () => { competitorAttempts++; await other.query(first); await other.query(second); }));
-    await new Promise((r) => setTimeout(r, 50));
+    // The competitor has gone as far as it can: blocked on the guarded write's lock, or through without waiting.
+    await settles(competing, other);
     release();
     const [{ role, share }] = await Promise.all([guarded, competing]);
     // Both committed (whichever Postgres aborted was retried whole), and the decision matches the state it read.
@@ -225,7 +246,7 @@ describe.skipIf(!dockerAvailable)('authorization locks on PostgreSQL', () => {
     // A direct dataset mutation whose user column names the page in memberOf: the commit's plan names it.
     await lockAuthorization(tx(writer), { write: 'data', documents: ['page'] });
     const published = publisher.query("SELECT id FROM artifacts WHERE id='page' FOR UPDATE").then(() => publisher.query("SELECT id FROM artifacts WHERE id='data' FOR UPDATE")).then(() => 'ok', code);
-    expect(await settles(published, 100)).toBe(false);
+    expect(await settles(published, publisher)).toBe(false);
     // The validation's own lock (lib/datasets memberIds) re-takes what the plan holds.
     const validated = writer.query('SELECT id FROM artifacts WHERE id=ANY($1::text[]) ORDER BY id COLLATE "C" FOR SHARE', [['page']]).then(() => writer.query('COMMIT')).then(() => 'ok', code);
     expect(await Promise.all([validated, published])).toEqual(['ok', 'ok']);
@@ -264,7 +285,8 @@ describe.skipIf(!dockerAvailable)('authorization locks on PostgreSQL', () => {
       for (const id of [...ids].sort(lockOrder)) await publisher.query('SELECT id FROM artifacts WHERE id=$1 FOR UPDATE', [id]);
       await publisher.query('COMMIT');
     })().then(() => 'ok', code);
-    await new Promise((r) => setTimeout(r, 100));
+    // The publisher has gone as far as it can (blocked on a dataset the paused write holds) before the write resumes.
+    await settles(published, publisher);
     release();
     const codes = await Promise.all([guarded, published]);
     for (const [c, result] of [[writer, codes[0]], [publisher, codes[1]]] as const) if (result !== 'ok') await c.query('ROLLBACK');
@@ -302,7 +324,7 @@ describe.skipIf(!dockerAvailable)('authorization locks on PostgreSQL', () => {
       await lockAuthorization(tx(writer), { page: 'page', write: 'data' });
       expect(await transactionAccessFacts(ACTOR, tx(writer)).groupShareRole('data')).toBe('editor');
       const competing = transaction(other, () => identityCompetitors[name](other)).then(() => 'ok', code);
-      expect(await settles(competing, 300)).toBe(true);
+      expect(await settles(competing, other)).toBe(true);
       expect(await competing).toBe('ok');
       await writer.query('COMMIT');
     } finally { await writer.query('ROLLBACK'); }
@@ -324,7 +346,7 @@ describe.skipIf(!dockerAvailable)('authorization locks on PostgreSQL', () => {
       await lockAuthorization(tx(writer), { page: 'page', write: 'data' });
       expect(await transactionAccessFacts(ACTOR, tx(writer)).groupShareRole('data')).toBe('editor');
       const competing = transaction(other, () => shareDeletion(other)).then(() => 'ok', code);
-      expect(await settles(competing, 300)).toBe(false);
+      expect(await settles(competing, other)).toBe(false);
       await writer.query('COMMIT');
       expect(await competing).toBe('ok');
     } finally { await writer.query('ROLLBACK'); }
@@ -347,7 +369,7 @@ describe.skipIf(!dockerAvailable)('authorization locks on PostgreSQL', () => {
       await lockAuthorization(tx(writer), { write: 'data' });
       expect(await datasetWriteAccess(row, ACTOR, { tx: tx(writer) })).toMatchObject({ allowed: true, role: 'signed_in' });
       const grant = transaction(grantor, async () => { await grantor.query("SELECT id FROM groups WHERE id='ret' FOR UPDATE"); await grantor.query("INSERT INTO group_members VALUES ('ret', 'u1', 'member')"); }).then(() => 'ok', code);
-      expect(await settles(grant, 300)).toBe(true);
+      expect(await settles(grant, grantor)).toBe(true);
       expect(await grant).toBe('ok');
       await writer.query('COMMIT');
     } finally { await writer.query('ROLLBACK'); }

@@ -522,7 +522,7 @@ it('keeps the author\'s mode for a reader who never picked, even on a dark devic
   try {
     await mountReady();
     expect(screen.getByLabelText('Artifact viewport').style.background).toBe(groundOf('light'));
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await settle();
     expect(toldModes()).toEqual([]);
   } finally { delete document.documentElement.dataset.theme; }
 });
@@ -567,7 +567,8 @@ const doorOpens = (frame: HTMLIFrameElement) => window.dispatchEvent(new Message
 }));
 /** A press inside the frame: focus moves into it and the page's window loses it (all a page sees of a frame on another origin). */
 const pressIntoDocument = (frame: HTMLIFrameElement) => { frame.focus(); window.dispatchEvent(new FocusEvent('blur')); };
-const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
+/** Drains what the page started (lazy chunks, answered fetches, jsdom's zero-delay message delivery): no time window. */
+const settle = async () => { for (let turn = 0; turn < 3; turn++) { await vi.dynamicImportSettled(); await new Promise((resolve) => setTimeout(resolve, 0)); } };
 
 it.each([['a guest', 'anon'], ['a signed-in viewer', 'account']])('%s reads, navigates and follows live versions without the node tree', async (_who, kind) => {
   mockKind = kind; mockRole = 'viewer'; servingTree();

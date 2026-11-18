@@ -14,6 +14,8 @@ import {getDb} from '@/lib/platform/db';
 overridePresenceFrameInterval(50);
 const harness=useAppHarness();let owner:Awaited<ReturnType<typeof createUser>>;
 beforeEach(async()=>{owner=await createUser({email:'mxmx_test_presence@example.com'});await(await harness.db()).query("INSERT INTO artifacts(id,token_id,user_id,format,visibility,version) VALUES ('prespublic','tok_presence',$1,'html','public',1),('presprivate','tok_presence',$1,'html','private',1),('presMixed','tok_presence',$1,'html','public',1)",[owner.id]);});
+/** Presence frames read until one passes `test` (frames come every 50 ms; a frame that never comes fails at the test timeout). */
+const presenceUntil=async(stream:ReturnType<typeof sseStream>,test:(frame:{data:Record<string,unknown>})=>boolean)=>{const seen=[];for(;;){const [frame]=await stream.named('presence',1);if(!frame)continue;seen.push(frame);if(test(frame))return seen;}};
 const session='00000000-0000-4000-8000-000000000001';
 const actor=()=>({credential:'session' as const,userId:owner.id,email:owner.email,emailVerified:true});
 const publish=(id:string,body:unknown,options:Parameters<typeof request>[1]={})=>{const req=request(`/api/artifacts/${id}/presence`,{method:'POST',origin:'same',json:body,...options});return runWithRequest(req,()=>POST(req,params(id)));};
@@ -38,7 +40,7 @@ it('fans a guest\'s native cursor out to simultaneous signed-in readers on their
  try{
   await Promise.all(connections.map(({reader})=>readPresence(reader)));
   await publish('presMixed',{session,revision:'1',cursor:{nodeId:'p',x:.4,y:.5},visible:true});
-  const received=await Promise.race([Promise.all(connections.map(({reader})=>readPresence(reader))),new Promise<never>((_resolve,reject)=>setTimeout(()=>reject(new Error('Presence fanout timed out')),2000))]);
+  const received=await Promise.all(connections.map(({reader})=>readPresence(reader)));
   for(const text of received){expect(text).toContain('"nodeId":"p"');expect(text).not.toContain(session);}
  }finally{for(const {abort} of connections)abort.abort();await Promise.all(connections.map(({reader})=>reader.cancel()));}
 });
@@ -56,13 +58,18 @@ it('rebinds presence to a published source revision without closing document upd
   // A page that still shows the version before (it is drawing the new one) is answered, and nothing is broadcast.
   expect((await publish('presMixed',{session,revision:'1',cursor:{nodeId:'stale',x:.4,y:.5},visible:true})).status).toBe(200);
   expect((await publish('presMixed',{session,revision:'2',cursor:{nodeId:'p',x:.4,y:.5},visible:true})).status).toBe(200);
-  const deadline=Date.now()+2000;let present=false;
-  while(Date.now()<deadline&&!present)present=JSON.stringify(await stream.named('presence',1,deadline-Date.now())).includes('"nodeId":"p"');
-  expect(present).toBe(true);
-  expect(JSON.stringify(await stream.named('presence',1,300))).not.toContain('"nodeId":"stale"');
+  // Every frame up to the current cursor's, and the one after it, leaves the stale cursor out.
+  const seen=await presenceUntil(stream,frame=>JSON.stringify(frame).includes('"nodeId":"p"'));
+  seen.push(...await stream.named('presence',1));
+  expect(JSON.stringify(seen)).not.toContain('"nodeId":"stale"');
+  // A signed-out reader of the public page loses access when it turns private: the server ends that reader's stream.
+  const guestRequest=new Request(request('/a/presMixed/events'),{signal:abort.signal});
+  const guest=sseStream((await runWithRequest(guestRequest,()=>GET(guestRequest,params('presMixed')))).body!);
+  expect((await guest.named('message'))[0]?.data.version).toBe(2);
   await db.query("UPDATE artifacts SET visibility='private' WHERE id='presMixed'");
   await db.query("SELECT pg_notify($1,'')",[artifactChannel('presMixed')]);
-  expect(await stream.named('message',1,200)).toEqual([]);
+  expect(await guest.named('message',1)).toEqual([]);
+  expect(guest.ended()).toBe(true);
  }finally{abort.abort();stream.close();}
 });
 
@@ -110,10 +117,12 @@ it('sends a signed-out reader no presence while a signed-in reader on the same p
   expect((await member.stream.named('message'))[0]?.data.version).toBe(1);
   expect((await guest.stream.named('message'))[0]?.data.version).toBe(1);
   await publish('presMixed',{session,revision:'1',cursor:{nodeId:'p',x:.4,y:.5},visible:true});
-  const deadline=Date.now()+2000;let seen=false;
-  while(Date.now()<deadline&&!seen)seen=JSON.stringify(await member.stream.named('presence',1,deadline-Date.now())).includes('"nodeId":"p"');
-  expect(seen).toBe(true);
-  expect(await guest.stream.named('presence',1,500)).toEqual([]);
+  await presenceUntil(member.stream,frame=>JSON.stringify(frame).includes('"nodeId":"p"'));
+  // A document update after the member saw the cursor reaches the guest too: whatever presence the guest was sent in
+  // between is held in front of it, and there is none.
+  await(await harness.db()).query("SELECT pg_notify($1,'')",[artifactChannel('presMixed')]);
+  expect((await guest.stream.named('message')).length).toBe(1);
+  expect(await guest.stream.named('presence',1,0)).toEqual([]);
  }finally{for(const c of [guest,member]){c.abort.abort();c.stream.close();}}
 });
 it('personalizes unique other-reader counts across hidden self tabs and same-label peer tabs',async()=>{
@@ -121,7 +130,7 @@ it('personalizes unique other-reader counts across hidden self tabs and same-lab
  const peerActor={credential:'session' as const,userId:peer.id,email:peer.email,emailVerified:true};
  const abort=new AbortController(),req=attachActor(new Request(request('/a/presMixed/events'),{signal:abort.signal}),actor());
  const response=await runWithRequest(req,()=>GET(req,params('presMixed'))),stream=sseStream(response.body!);
- const count=async(wanted:number)=>{const deadline=Date.now()+3000;while(Date.now()<deadline){const frames=await stream.named('presence',1,deadline-Date.now());if(frames.some(frame=>(frame.data.readers as {total?:number}|undefined)?.total===wanted))return true;}return false;};
+ const count=async(wanted:number)=>(await presenceUntil(stream,frame=>(frame.data.readers as {total?:number}|undefined)?.total===wanted)).length>0;
  try{
   await stream.named('presence');
   for(let i=1;i<=3;i++)await publish('presMixed',{session:session.replace(/1$/,String(i)),revision:'1',visible:true},{actor:actor()});

@@ -23,6 +23,8 @@ import { createUser } from '@/lib/accounts';
 
 useAppHarness();
 const sessionUser = useSessionUser();
+/** An events answer's status, with its stream released (an open SSE body would keep its listeners alive past the test). */
+const streamStatus = async (response: Response) => { await response.body?.cancel(); return response.status; };
 
 // Owns the session mock for this file: id + email, settable per test.
 
@@ -118,7 +120,7 @@ describe('read enforcement — uniform 404, decided before serving', () => {
 
     // No session.
     expect((await rawRoute(request(`/a/${doc.id}/raw`), params({ id: doc.id }))).status).toBe(404);
-    expect((await eventsRoute(request(`/a/${doc.id}/events`), params({ id: doc.id }))).status).toBe(404);
+    expect(await streamStatus(await eventsRoute(request(`/a/${doc.id}/events`), params({ id: doc.id })))).toBe(404);
     expect((await exportRoute(request(`/a/${doc.id}/export`), params({ id: doc.id }))).status).toBe(404);
 
     // A different account.
@@ -145,7 +147,7 @@ describe('read enforcement — uniform 404, decided before serving', () => {
     sessionUser.id = invitee.id;
     sessionUser.email = invitee.email;
     expect((await rawRoute(request(`/a/${doc.id}/raw`), params({ id: doc.id }))).status).toBe(200);
-    expect((await eventsRoute(request(`/a/${doc.id}/events`), params({ id: doc.id }))).status).toBe(200);
+    expect(await streamStatus(await eventsRoute(request(`/a/${doc.id}/events`), params({ id: doc.id })))).toBe(200);
 
     // An uninvited email still 404s.
     const outsider = await createUser({ email: 'outsider@example.com' });
@@ -158,7 +160,7 @@ describe('read enforcement — uniform 404, decided before serving', () => {
     const { anonToken } = await fixtures();
     const doc = await create(anonToken, { title: 'open', html: '<h1>open</h1>', visibility: 'public' });
     expect((await rawRoute(request(`/a/${doc.id}/raw`), params({ id: doc.id }))).status).toBe(200);
-    expect((await eventsRoute(request(`/a/${doc.id}/events`), params({ id: doc.id }))).status).toBe(200);
+    expect(await streamStatus(await eventsRoute(request(`/a/${doc.id}/events`), params({ id: doc.id })))).toBe(200);
   });
 });
 

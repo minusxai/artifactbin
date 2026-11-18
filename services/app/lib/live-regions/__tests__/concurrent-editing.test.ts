@@ -296,7 +296,7 @@ describe('text', () => {
     A.select(A.blockStart(0)).type('Start ');
     B.select(B.blockStart(0, true)).type(' end');
     const html = room.invariants();
-    expect(performance.now() - started).toBeLessThan(5_000);
+    expect(performance.now() - started).toBeLessThan(5_000); // wall-clock-ok: "stays fast" on a 50,000-character paragraph is this test's claim
     expect(bare(html)).toBe(`<p>Start ${long} end</p>`);
   });
 });
