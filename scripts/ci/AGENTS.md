@@ -9,7 +9,7 @@ The workflows themselves are `.github/workflows/*.yml`; job, runner and shard co
 - The required check for PRs into `main` is `pr fast` (`.github/workflows/pr-fast.yml`). Aim under 40 s, warn at
   40 s, fail above 60 s, measured from `run_started_at` to the last workload job; `pr-fast-timing.yml` runs
   `observe-fast.mjs`, which publishes the required `pr fast timing` status from the last workload job's
-  completion; its scheduling and publication overhead is separate and its own teardown is not measured.
+  completion; its own scheduling, publication and teardown are not measured.
   Each job's last step (`scripts/lib/ci-elapsed.mjs --pr`) is an early diagnostic.
 - The full post-merge chain (`ci.yml` on main, or run by hand on a branch) is measured from `run_started_at`
   through the final rollup, setup, dependency waits and uploads included: aim under 3 minutes, normal maximum under 4, fail above
@@ -20,7 +20,7 @@ The workflows themselves are `.github/workflows/*.yml`; job, runner and shard co
   and never move a file out of the lane: investigate the critical path and repetition.
 - `ci.yml`, page-speed, credential-platform and node-timings run on main or by hand, never on automatic PRs.
   Never add an unbounded PR workflow or wait for full release checks before merging; a green `pr fast` is
-  never tested-release evidence. The 40/60 policy holds in the application, proxy, evaluator and deployment
+  never tested-release evidence. The 40/60 policy holds in the app, proxy, evaluator and deployment
   repositories alike.
 - A test's white-box import of another module is recorded in `module-graph.allowed-test-imports.json`, which
   only shrinks: shared resets and test seams belong in the harness.
@@ -38,7 +38,7 @@ The workflows themselves are `.github/workflows/*.yml`; job, runner and shard co
 - The timing observer reads main's workflow: a PR may add `fast (…)` jobs, but one that drops or renames a job
   main expects is refused (`completedFastAttempt`).
 - Merge a PR into `main` only with `node scripts/ci/merge-fast.mjs owner/repo PR`: it checks the completed fast
-  attempt, its timing status and the exact head, then squash-merges.
+  attempt, its timing, the exact head and that it contains current main (else rebase), then squash-merges.
 
 ## Checks
 - `npm test -- --files scripts/__tests__/ci-budget.test.mjs scripts/__tests__/workflows.test.mjs scripts/__tests__/ci-plan.test.mjs scripts/__tests__/fast-test-policy.test.mjs scripts/__tests__/merge-admission.test.mjs`

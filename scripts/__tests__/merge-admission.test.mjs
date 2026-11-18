@@ -34,17 +34,20 @@ it('derives all matrix contexts and uses a trusted bounded completed-workflow ob
  expect(read('AGENTS.md')).toContain('node scripts/ci/merge-fast.mjs owner/repo PR');
 });
 import {mergeFast} from '../ci/merge-fast.mjs';
-it('integrates exact-head squash admission and emits no merge for invalid evidence or a moving head',()=>{
- for(const mode of ['green','red','missing','moving']){
-  const commands=[];let reads=0;
+it('integrates exact-head squash admission and emits no merge for invalid evidence, a moving head, a stale base or a moving main',()=>{
+ // stale: the green check ran on a main the head does not contain (two PRs, each green alone, broke main together).
+ for(const mode of ['green','red','missing','moving','stale','main-moving']){
+  const commands=[];let reads=0,mains=0;
   const read=path=>{
+   if(path.endsWith('/git/ref/heads/main'))return {object:{sha:mode==='main-moving'&&mains++?'d'.repeat(40):'c'.repeat(40)}};
+   if(path.includes('/compare/')){expect(path).toBe(`repos/${repo}/compare/${'c'.repeat(40)}...${sha}`);return {status:mode==='stale'?'diverged':'ahead',behind_by:mode==='stale'?1:0};}
    if(path.includes('/pulls/'))return {state:'open',base:{ref:'main',repo:{full_name:repo}},head:{sha:mode==='moving'&&reads++?'b'.repeat(40):sha}};
    if(path.includes('/status?'))return {statuses:mode==='missing'?[]:[{context:'pr fast timing',state:'success'}]};
    return {total_count:1,workflow_runs:[{id:1,head_sha:sha}]};
   };
   const invoke=()=>mergeFast(repo,'1',{read,execute:args=>commands.push(args),inspect:()=>({result:{...check(fixture()),status:mode==='red'?'failed':'slow'}})});
   if(mode==='green'){invoke();expect(commands).toEqual([['pr','merge','1','--repo',repo,'--squash','--admin','--match-head-commit',sha]]);}
-  else{expect(invoke).toThrow();expect(commands).toEqual([]);}
+  else{expect(invoke).toThrow(mode==='stale'?/does not contain main/:mode==='main-moving'?/main moved/:/./);expect(commands).toEqual([]);}
  }
 });
 it('admits the complete workload and refuses a missing matrix job',()=>{
