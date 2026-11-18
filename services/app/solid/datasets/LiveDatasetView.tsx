@@ -2,15 +2,16 @@
 /**
  * A LIVE DATASET'S PAGE (lib/live-datasets `GET /api/artifacts/ID/connection`): its connector, host and database
  * (never a secret), who may use it (owner and editors run any SQL; the roles its rules admit run the queries pages
- * declare), the pages that declare queries on it and, for owners and editors, the tables its account reads.
+ * declare), the pages that declare queries on it and, for owners and editors, the tables its account reads (none,
+ * and why, on an install whose datasets may not have their own connection: `ownConnections: false`).
  */
 import { createResource, createSignal, For, Show, type JSX } from 'solid-js';
-import type { ConnectorSchema } from '@artifactbin/contracts';
+import { OWN_CONNECTIONS_OFF, type ConnectorSchema } from '@artifactbin/contracts';
 import { apiRequest } from '../lib/api';
 import { Checkbox } from '../ui/Checkbox';
 import { Panel } from '../ui/Panel';
 import { StatusMessage } from '../ui/StatusMessage';
-import { VIEWER_NOTE } from './LiveDatasetForm';
+import { VIEWER_NOTE, type ConnectorList } from './LiveDatasetForm';
 
 type Details = {
   role: string; declaredQueryRoles: string[];
@@ -39,7 +40,8 @@ export function LiveDatasetView(props: { id: string }): JSX.Element {
     finally { setSaving(false); }
   };
   const admin = () => details()?.role === 'owner' || details()?.role === 'editor';
-  const [schema] = createResource(() => (admin() ? props.id : null), (id) => apiRequest<ConnectorSchema>(`/api/artifacts/${encodeURIComponent(id)}/connection/schema`));
+  const [own] = createResource(async () => (await apiRequest<ConnectorList>('/api/connections')).ownConnections !== false);
+  const [schema] = createResource(() => (admin() && own() ? props.id : null), (id) => apiRequest<ConnectorSchema>(`/api/artifacts/${encodeURIComponent(id)}/connection/schema`));
   return <div class="mt-4 space-y-4 font-sans">
     <Show when={details()} fallback={<Show when={details.error} fallback={<StatusMessage kind="loading">Loading the connection…</StatusMessage>}><StatusMessage kind="error">Could not load the connection.</StatusMessage></Show>}>{(d) => <>
       <Panel label="Connection" title="Live connection">
@@ -68,8 +70,10 @@ export function LiveDatasetView(props: { id: string }): JSX.Element {
       </Panel>
       <Show when={admin()}>
         <Panel label="Tables" title="Tables">
+          <Show when={own() !== false} fallback={<p class="text-sm text-muted">{OWN_CONNECTIONS_OFF.message}</p>}>
           <Show when={schema()} fallback={<Show when={schema.error} fallback={<StatusMessage kind="loading">Reading the tables…</StatusMessage>}><StatusMessage kind="error">{schema.error instanceof Error ? schema.error.message : 'Could not read the tables.'}</StatusMessage></Show>}>{(s) =>
             <ul class="space-y-2 text-sm"><For each={s().tables}>{(t) => <li><span class="font-mono">{t.namespace}.{t.name}</span><span class="text-xs text-muted"> {t.kind} · {t.columns.map((c) => `${c.name} ${c.type}`).join(', ')}</span></li>}</For></ul>}</Show>
+          </Show>
         </Panel>
       </Show>
     </>}</Show>

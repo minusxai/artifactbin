@@ -7,7 +7,8 @@
  * socket (test-support pglite-wire); its tables key rows on the reader's email, so what each reader gets back is what
  * the bound `:viewer_email` selected.
  */
-import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, expect, it, onTestFinished, vi } from 'vitest';
+import { validateDeploymentConfiguration } from '@/lib/deployment';
 import { trashRow } from '@/__tests__/artifact-fixtures';
 import * as connectors from '@artifactbin/connectors';
 import { setUsername } from '@/lib/accounts';
@@ -370,6 +371,68 @@ it('lets a group own a live dataset (its editors change and query it), and keeps
   const again = await createArtifactFromBody({ connection: config({ password: 'another-one' }), title: 'Team DB', destination: { type: 'group', id: group.id } }, alice.actor, 'http://localhost:3000', request('/api/artifacts', { method: 'POST', headers: { 'Idempotency-Key': 'live-dataset-key-0001' } }));
   expect([again.status, ((await again.json()) as { id: string }).id]).toEqual([201, id]);
   expect(await everyStoredRow()).not.toContain(PASSWORD);
+});
+
+it('DATASETS__OWN_CONNECTIONS=off: every door of a dataset with its own connection answers one refusal, nothing stored changes, the default connection and stored datasets still answer; on again, it answers', async () => {
+  onTestFinished(() => overrideConfig({}, { DATASETS__OWN_CONNECTIONS: undefined, DATASETS__DEFAULT_CONNECTION: undefined }));
+  const { alice, bob } = await people();
+  overrideConfig({}, { DATASETS__DEFAULT_CONNECTION: JSON.stringify(config()) });
+  const id = (await createLive(alice)).body.id;
+  await updateSharingFor(alice.actor, id, { shares: [{ email: bob.email!, role: 'editor' }] });
+  await setRule(alice, id, 'signed_in');
+  const page = (await publish(alice, { html: PAGE(id, `${MINE}<link rel="af-dataset" data-af-name="wh" href="default:">`) })).body.id;
+  const rowsBefore = (await publish(alice, { dataset: [{ n: 1 }, { n: 2 }], title: 'Kept' })).body.id;
+  const hidden = (await createLive(alice, { title: 'Hidden', visibility: 'private' })).body.id;
+  const before = { row: (await getArtifactById(id))!.meta, stored: (await (await getDb()).query('SELECT * FROM dataset_connections WHERE dataset_id=$1', [id])).rows };
+  const agent = (who: Person, json: unknown) => call(queryPost as never, `/api/artifacts/${id}/query`, id, who, { method: 'POST', json });
+  const doors = (who: Person) => ({
+    create: () => call(((r: Request) => import('@/app/api/artifacts/route').then((m) => m.POST(r))) as never, '/api/artifacts', '', who, { method: 'POST', json: { connection: config(), title: 'Another' } }),
+    change: () => call(connectionPatch as never, `/api/artifacts/${id}/connection`, id, who, { method: 'PATCH', json: { host: 'elsewhere.example.test' } }),
+    test: () => call(connectionTest as never, `/api/artifacts/${id}/connection/test`, id, who, { method: 'POST' }),
+    testConfig: () => call(configTest as never, '/api/connections/test', '', who, { method: 'POST', json: { connection: config() } }),
+    schema: () => call(schemaGet as never, `/api/artifacts/${id}/connection/schema`, id, who),
+    agentQuery: () => agent(who, { sql: 'select n from public.loose' }),
+    pageSql: () => sql(page, who, 'select n from shop.loose'),
+    declaredQuery: () => door(page, who, { query: 'mine', params: { min: 0 } }),
+  });
+  overrideConfig({}, { DATASETS__OWN_CONNECTIONS: 'off' });
+  await closeLiveDatasetConnections();
+  const opened = vi.spyOn(connectors, 'openConnection');
+  const REFUSAL = [403, 'own_connections_off', 'This install reads live data only through its default connection.'];
+  for (const who of [alice, bob]) for (const [name, run] of Object.entries(doors(who))) {
+    const reply = await run();
+    expect([reply.status, reply.body.error, reply.body.message], `${who.email} ${name}`).toEqual(REFUSAL);
+  }
+  expect(opened).not.toHaveBeenCalled();
+  opened.mockRestore();
+  // A caller who cannot see a dataset still learns nothing of it.
+  const stranger = await person('dora');
+  expect((await call(schemaGet as never, `/api/artifacts/${hidden}/connection/schema`, hidden, stranger)).status).toBe(404);
+  expect((await call(queryPost as never, `/api/artifacts/${hidden}/query`, hidden, stranger, { method: 'POST', json: { sql: 'select 1' } })).status).toBe(404);
+  expect((await call(connectionPatch as never, `/api/artifacts/${hidden}/connection`, hidden, stranger, { method: 'PATCH', json: { tls: 'disable' } })).status).toBe(404);
+  // The default connection, on the same page, and a stored dataset still answer; the connection's details still read.
+  expect(ok(await sql(page, alice, 'select n from wh.loose')).rows).toEqual([{ n: 7 }]);
+  expect((await call(queryPost as never, `/api/artifacts/${rowsBefore}/query`, rowsBefore, alice, { method: 'POST', json: { sql: 'select count(*) as n from rows' } })).status).toBe(200);
+  expect((await call(connectionGet as never, `/api/artifacts/${id}/connection`, id, alice)).status).toBe(200);
+  expect((await (await connectorsGet()).json()).ownConnections).toBe(false);
+  // Nothing about the dataset changed.
+  expect({ row: (await getArtifactById(id))!.meta, stored: (await (await getDb()).query('SELECT * FROM dataset_connections WHERE dataset_id=$1', [id])).rows }).toEqual(before);
+  // On again (or unset): the same doors answer as before.
+  for (const value of ['on', undefined]) {
+    overrideConfig({}, { DATASETS__OWN_CONNECTIONS: value });
+    expect(ok(await door(page, alice, { query: 'mine', params: { min: 0 } })).rows, String(value)).toEqual([{ id: 1, item: 'tea' }, { id: 3, item: 'pie' }]);
+    expect((await agent(bob, { sql: 'select n from public.loose' })).body.results[0].rows).toEqual([{ n: 7 }]);
+    expect((await (await connectorsGet()).json()).ownConnections).toBe(true);
+  }
+});
+
+it('refuses to boot on a DATASETS__OWN_CONNECTIONS that is neither on nor off, naming the setting', () => {
+  onTestFinished(() => overrideConfig({}, { DATASETS__OWN_CONNECTIONS: undefined }));
+  for (const value of ['on', 'off', undefined]) { overrideConfig({}, { DATASETS__OWN_CONNECTIONS: value }); expect(() => validateDeploymentConfiguration()).not.toThrow(); }
+  for (const value of ['0', 'yes', 'OFF']) {
+    overrideConfig({}, { DATASETS__OWN_CONNECTIONS: value });
+    expect(() => validateDeploymentConfiguration(), value).toThrow('DATASETS__OWN_CONNECTIONS must be on (the default) or off.');
+  }
 });
 
 // Hold a real connector answer until a concurrent access change has committed. Neither

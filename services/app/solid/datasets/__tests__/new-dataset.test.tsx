@@ -8,7 +8,7 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
 import { afterEach, expect, it, vi } from 'vitest';
-import { CONNECTORS as SPECS } from '@artifactbin/contracts';
+import { CONNECTORS as SPECS, OWN_CONNECTIONS_OFF } from '@artifactbin/contracts';
 import { NewDatasetPage } from '../NewDataset';
 import { LiveDatasetForm } from '../LiveDatasetForm';
 import { LiveDatasetView } from '../LiveDatasetView';
@@ -98,4 +98,34 @@ it('lets an owner choose who runs declared queries, saved as the dataset\'s rule
   await waitFor(() => expect(calls.find((c) => c.method === 'PUT')).toBeDefined());
   expect(calls.find((c) => c.method === 'PUT')!.body).toEqual({ expectedPolicyRevision: 3, policy: { version: 3, tables: [{ table: { schema: 'public', name: 'queries' }, select_permissions: [{ role: 'signed_in', permission: { columns: '*', filter: {} } }] }] } });
   expect(screen.getByRole('region', { name: 'Connection' })).toHaveTextContent('db.example.com');
+});
+
+/** The routes of an install whose datasets may not have their own connection, and every call made. */
+function serveOff(answers: Record<string, unknown> = {}) {
+  const calls: Call[] = [];
+  stubFetch({ ...answers, '/api/connections': { connectors: CONNECTORS, ownConnections: false } }, {
+    fallback: () => Response.json({ error: 'unexpected' }, { status: 500 }),
+    onCall: (url, init) => { calls.push({ url, method: init?.method ?? 'GET', body: init?.body ? JSON.parse(String(init.body)) : undefined }); },
+  });
+  return calls;
+}
+
+it('offers no live source, and opens no connector form, on an install whose datasets have no connection of their own', async () => {
+  const calls = serveOff();
+  vi.stubGlobal('location', { ...window.location, search: '?source=postgres' });
+  render(() => <NewDatasetPage />);
+  const live = await screen.findByRole('region', { name: 'Live sources' });
+  await waitFor(() => expect(live).toHaveTextContent(OWN_CONNECTIONS_OFF.message));
+  expect(screen.queryByRole('button', { name: 'PostgreSQL' })).toBeNull();
+  expect(screen.queryByRole('region', { name: 'PostgreSQL connection' })).toBeNull();
+  expect(screen.getByRole('button', { name: 'CSV' })).toBeEnabled();
+  expect(calls.filter((c) => c.method !== 'GET')).toEqual([]);
+});
+
+it('reads no tables of a live dataset on such an install, saying why', async () => {
+  const calls = serveOff({ 'GET /api/artifacts/ds1/connection': { role: 'owner', declaredQueryRoles: [], pages: [], connection: { connector: 'postgres', label: 'PostgreSQL', fields: { host: 'db.example.com' } } } });
+  render(() => <LiveDatasetView id="ds1" />);
+  const tables = await screen.findByRole('region', { name: 'Tables' });
+  await waitFor(() => expect(tables).toHaveTextContent(OWN_CONNECTIONS_OFF.message));
+  expect(calls.some((c) => c.url.includes('/connection/schema'))).toBe(false);
 });

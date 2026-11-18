@@ -16,7 +16,7 @@ import {ACCOUNT_OPERATIONS} from './account';
 import { BROWSER_SESSION_OPERATIONS } from './browser-sessions';
 import { TESTUSER_OPERATIONS } from './testusers';
 import { identityForUser, resolveTestUser, withAccountToken, type AccessActor, type TokenHoldingActor } from '@/lib/accounts';
-import { canEdit, CSV_URL_FIELD_GUIDANCE, DATASET_FIELD_GUIDANCE, IMAGE_URL_FIELD_GUIDANCE, PDF_FIELD_GUIDANCE, PDF_URL_FIELD_GUIDANCE, SHEET_URL_FIELD_GUIDANCE, TESTUSER_ERRORS } from '@artifactbin/contracts';
+import { canEdit, CSV_URL_FIELD_GUIDANCE, OWN_CONNECTIONS_OFF, DATASET_FIELD_GUIDANCE, IMAGE_URL_FIELD_GUIDANCE, PDF_FIELD_GUIDANCE, PDF_URL_FIELD_GUIDANCE, SHEET_URL_FIELD_GUIDANCE, TESTUSER_ERRORS } from '@artifactbin/contracts';
 /** Shared HTTP operations and schemas.
  * Routes translate HTTP; each operation receives an actor and delegates domain behavior.
  */
@@ -195,6 +195,8 @@ const VERSION_CONFLICT: OperationError = { status: 409, code: 'version_conflict'
 const POLICY_LOCKED: OperationError = { status: 409, code: 'policy_locked', fix: "this dataset has a write policy — only its OWNER may replace its content, and nobody may revert it (viewers' rows are in it). Fork it, or ask the owner" };
 const POLICY_MISMATCH: OperationError = { status: 400, code: 'policy_mismatch', fix: 'the replacement no longer has a table or column the dataset policy grants — detail names it. Keep that column, or change the policy first with set_dataset_policy' };
 
+/** Every door of a dataset with its own connection, on an install that reads live data only through its default connection. */
+const OWN_CONNECTIONS: OperationError = { status: OWN_CONNECTIONS_OFF.status, code: OWN_CONNECTIONS_OFF.error, fix: 'this install reads live data only through its default connection (default:DB in a page, /api/default-connection/sql for an agent): use that, or a stored dataset' };
 const createArtifactOp: Operation = {
   name: 'create_artifact',
   title: 'Create an artifact',
@@ -209,6 +211,7 @@ const createArtifactOp: Operation = {
   errors: [
     { status: 403, code: 'quota_exceeded', fix: 'a cap was reached — either the artifact COUNT for this token, or the stored BYTES for its account (an upload or an imported url); the message names which. Delete what you no longer need' },
     ...CONTENT_ERRORS,
+    OWN_CONNECTIONS,
   ],
   async run(ctx, input) {
     const creator = ctx.actor.workload?{...ctx.actor,workload:ctx.actor.workload}:await withAccountToken(ctx.actor);
@@ -532,21 +535,21 @@ const updateLiveConnectionOp: Operation = {
   http:{method:'PATCH',path:'/api/artifacts/{id}/connection'},
   description:'Owners and editors: change a live dataset\'s connection fields (the connector stays). A secret field left out is kept only while every other field stays as stored; changing host, port, database, user, tls or ca needs the secret again.',
   input:{id:z.string(),connection:z.record(z.string(),z.union([z.string(),z.number(),z.boolean(),z.null()]))},annotations:{idempotent:true},example:{input:{id:'aB3xK9',connection:{database:'sales',password:'…'}}},
-  errors:[NOT_FOUND,LIVE_SECRET_REQUIRED,{status:403,code:'permission_denied',fix:'ask the dataset\'s owner or an editor'}],
+  errors:[NOT_FOUND,LIVE_SECRET_REQUIRED,{status:403,code:'permission_denied',fix:'ask the dataset\'s owner or an editor'},OWN_CONNECTIONS],
   async run(ctx,input){const r=await updateLiveConnection(ctx.actor,String(input.id),input.connection);return reply(r.body,r.status);},
 };
 const testLiveConnectionOp: Operation = {
   name:'test_live_connection',title:'Test a live dataset\'s connection',
   http:{method:'POST',path:'/api/artifacts/{id}/connection/test'},
   description:'Owners and editors: open a session on the live dataset\'s database and run SELECT 1 as you: {ok, latencyMs} or {ok:false, error:{code,message}}. Counts against your hourly connection-test allowance.',
-  input:{id:z.string()},annotations:{readOnly:true},example:{input:{id:'aB3xK9'}},errors:[NOT_FOUND,{status:429,code:'rate_limited',fix:'wait for the hourly allowance'}],
+  input:{id:z.string()},annotations:{readOnly:true},example:{input:{id:'aB3xK9'}},errors:[NOT_FOUND,{status:429,code:'rate_limited',fix:'wait for the hourly allowance'},OWN_CONNECTIONS],
   async run(ctx,input){if(!ctx.actor.userId)return reply({error:'unauthorized',message:'sign in to test a connection'},401);if(connectionTestRateLimited(ctx.actor.userId))return reply({error:'rate_limited',message:'Too many connection tests this hour; try again later.'},429);const r=await testLiveConnection(ctx.actor,String(input.id));return reply(r.body,r.status);},
 };
 const getLiveSchemaOp: Operation = {
   name:'get_live_schema',title:'List a live dataset\'s tables',
   http:{method:'GET',path:'/api/artifacts/{id}/connection/schema'},
   description:'Owners and editors: the tables and views (namespace, name, kind, columns with name and type) the live dataset\'s account can read, from the database itself.',
-  input:{id:z.string()},annotations:{readOnly:true},example:{input:{id:'aB3xK9'}},errors:[NOT_FOUND],
+  input:{id:z.string()},annotations:{readOnly:true},example:{input:{id:'aB3xK9'}},errors:[NOT_FOUND,OWN_CONNECTIONS],
   async run(ctx,input){const r=await liveSchema(ctx.actor,String(input.id));return reply(r.body,r.status);},
 };
 
@@ -818,7 +821,7 @@ const queryResourceOp:Operation={
  description:'Read bounded dataset SQL or named tables, with scalar parameters and state-bound pagination. Never mutates rows. SQL needs your role\'s SQL permission (allow_aggregations in its select rule) for every table you can read (owner and editors always have it); without it, read rows by table name.',
  input:{id:z.string(),sql:z.string().optional(),name:z.string().optional(),values:z.record(z.string(),z.union([z.string(),z.number(),z.boolean(),z.null()])).optional(),limit:z.number().int().min(1).max(100).optional(),cursor:z.string().optional(),refresh:z.boolean().optional()},
  annotations:{readOnly:true},example:{input:{id:'aB3xK9',limit:20}},
- errors:[NOT_FOUND,{status:400,code:'invalid_sql',fix:'the statement was refused — the message names the reason (an undeclared $parameter, a disallowed function, unsupported syntax); fix the SQL or pass the parameter in values'},{status:403,code:'permission_denied',fix:'your role\'s select rule does not allow aggregations, so SQL is refused; omit sql and pass name to read the table\'s rows, or ask the owner to allow aggregations'}],
+ errors:[NOT_FOUND,OWN_CONNECTIONS,{status:400,code:'invalid_sql',fix:'the statement was refused — the message names the reason (an undeclared $parameter, a disallowed function, unsupported syntax); fix the SQL or pass the parameter in values'},{status:403,code:'permission_denied',fix:'your role\'s select rule does not allow aggregations, so SQL is refused; omit sql and pass name to read the table\'s rows, or ask the owner to allow aggregations'}],
  async run(ctx,input){const {id,...body}=input;return fromResponse(await queryResourceForRequest(ctx.actor,String(id),body,ctx.request));},
 };
 

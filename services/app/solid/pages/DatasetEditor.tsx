@@ -6,7 +6,8 @@ import WorkspaceShell from '../components/WorkspaceShell';
 import StepHeader from "../datasets/StepHeader";
 import { DocumentSharing } from '../document/DocumentSharing';
 import { DatasetImport } from '../datasets/DatasetImport';
-import { LiveDatasetForm, type ListedConnector } from '../datasets/LiveDatasetForm';
+import { LiveDatasetForm, type ConnectorList, type ListedConnector } from '../datasets/LiveDatasetForm';
+import { OWN_CONNECTIONS_OFF } from '@artifactbin/contracts';
 import { DatasetPolicies } from "../datasets/DatasetPolicies";
 import { createEffect, createMemo, createSignal, onCleanup, Show } from "solid-js";
 import { Navigate, useParams } from "@solidjs/router";
@@ -125,7 +126,9 @@ export function DatasetEditorPage({
       if (!alive) return;
       const catalog = data.meta.catalog;
       const connection = data.meta.connection;
-      if (connection) return apiRequest<{ connectors: ListedConnector[] }>('/api/connections').then(list => {
+      if (connection) return apiRequest<ConnectorList>('/api/connections').then(list => {
+        // An install whose datasets may not have their own connection offers no form to change one.
+        if (list.ownConnections === false) throw new Error(OWN_CONNECTIONS_OFF.message);
         const found = list.connectors.find(c => c.id === connection.connector);
         if (!found) throw new Error("This live dataset's connector is not available here.");
         if (alive) setLiveConnector(found);

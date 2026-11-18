@@ -17,6 +17,8 @@ import { Select } from '../ui/Select';
 import { StatusMessage } from '../ui/StatusMessage';
 
 export type ListedConnector = ConnectorSpec & { available: boolean };
+/** `GET /api/connections`: the connectors, and whether a dataset may have its own connection on this install. */
+export interface ConnectorList { connectors: ListedConnector[]; ownConnections?: boolean }
 type Details = { config?: Record<string, string | number>; secrets?: string[]; connection: { connector: string; label: string } };
 const PERSONAL = 'personal';
 export const VIEWER_NOTE = 'Queries may use :viewer_id, :viewer_email and :viewer_groups: the server fills them for the person reading.';
