@@ -1,26 +1,18 @@
 /**
  * Internal: where af-chart's rows come from: its one source (chart.ts). The SQL sources run
- * through `@afbin/apollo`'s `sql.watch` as the reader and rerun when a dataset they name changes.
- * Every opening is its own generation: once it is closed, a late answer or error is dropped, so
- * an older statement never overwrites a newer one.
+ * through the page SQL plumbing af-data-table shares (page-sql.ts): `@afbin/apollo`'s `sql.watch`
+ * as the reader, rerun when a dataset they name changes, a closed opening's late answer dropped.
  * Used by: chart.ts.
  */
 import { CHART_LIMITS } from '@/lib/html-component-specs/chart-spec';
-import { readFailure, type ReadFailure } from '@/lib/html-component-specs/read-failure';
+import type { ReadFailure } from '@/lib/html-component-specs/read-failure';
 import type { ChartRows } from './chart-model';
+import { watchPageSql, type PageSqlRuntime, type PageStatement } from './page-sql';
 
 /** A statement as the `sql` tag of `@afbin/apollo` builds it. */
-export interface ChartStatement extends PromiseLike<unknown> {
-  readonly text: string;
-  readonly params: Readonly<Record<string, unknown>>;
-}
-interface SqlTag {
-  (strings: TemplateStringsArray, ...values: unknown[]): ChartStatement;
-  watch(statement: ChartStatement, next: (rows: unknown) => void,
-    error?: (e: Error) => void): () => void;
-}
+export type ChartStatement = PageStatement;
 /** The page runtime the SQL sources need; chart-render.ts supplies the hosted module. */
-export interface ChartRuntime { apollo(): Promise<{ sql: SqlTag }> }
+export type ChartRuntime = PageSqlRuntime;
 
 export type ChartSource =
   | { kind: 'sql'; text: string }
@@ -59,8 +51,6 @@ export function chooseSource(sql: string | null, dataset: string | null,
 }
 
 const quoted = (name: string) => `"${name.replaceAll('"', '""')}"`;
-const statementOf = (sql: SqlTag, text: string) =>
-  sql(Object.assign([text], { raw: [text] }) as unknown as TemplateStringsArray);
 
 /** Column names: the answer's own, else every key the rows use, in first-seen order. */
 export function columnsOf(rows: ChartRows): string[] {
@@ -94,17 +84,10 @@ export function openSource(source: ChartSource, runtime: ChartRuntime,
   if (source.kind === 'rows') accept(source.rows);
   else if (source.kind === 'none') deliver([], [], false);
   else {
-    runtime.apollo().then(({ sql }) => {
-      if (!open) return;
-      const statement = source.kind === 'query' ? source.statement
-        : statementOf(sql, source.kind === 'sql' ? source.text
-          : `select * from ${quoted(source.name)} limit ${CHART_LIMITS.rows + 1}`);
-      stop = sql.watch(statement, accept, error => {
-        if (open) fail(readFailure(error, 'Could not read the rows: '));
-      });
-    }, () => {
-      if (open) fail('this page has no @afbin/apollo to read sql, query or dataset: give rows');
-    });
+    stop = watchPageSql(runtime, source.kind === 'query' ? source.statement
+      : source.kind === 'sql' ? source.text
+        : `select * from ${quoted(source.name)} limit ${CHART_LIMITS.rows + 1}`,
+    accept, fail, 'this page has no @afbin/apollo to read sql, query or dataset: give rows');
   }
   return () => { open = false; stop(); };
 }

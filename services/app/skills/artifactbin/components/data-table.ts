@@ -1,7 +1,10 @@
 /**
  * <af-data-table>: sortable, virtualized table; the app owns edits, drafts and transport.
  * Usage: import '@afbin/data-table';  (registers the tags; this .ts is the readable contract)
- * Props: data={rows,columns,totalRows?,truncated?} (columns are schema {name,type});
+ * Props: sql="SELECT …" (SQLite over the page's linked datasets, as the reader, through
+ *   @afbin/apollo's sql.watch as af-chart: read on connect and when it changes, reread when a
+ *   dataset it names changes; sorted client-side over the answer, cut at the read's row limit);
+ *   data={rows,columns,totalRows?,truncated?} (columns are schema {name,type});
  *   columns=[{col,title,fmt}] (display); rowKey / row-key (stable, unique); sort={col,dir};
  *   height (default 420); sticky (default true, "false" turns it off); transpose (comparison
  *   layout with header, metrics, edge); label (aria-label); cellRenderers {col: fn}; templates
@@ -17,6 +20,8 @@
  *   table.data={rows:[{id:1,name:"Ada"}],columns:[{name:"id",type:"number"},
  *     {name:"name",type:"string"}]};
  *   table.rowKey="id";
+ *   <af-data-table label="Open tasks" sql="select title, due from tasks where not done"
+ *     columns='[{"col":"due","title":"Due"}]'></af-data-table>
  * Gotchas: keep state and record identity outside virtualized cells: offscreen rows are
  *   unmounted, so durable editing sessions belong to the caller. A renderer gets a stable
  *   identity; returning a Node replaces the content, returning void updates the cell in place.
@@ -30,6 +35,7 @@ import {
 import { cancelResizeRender, failTable, invalidateMeasurements } from "./data-table-measure";
 import { sourceLabel, sourceOf } from "@/lib/html-component-specs/data-source";
 import { DataSourceSlot, dataSourceStyles } from "./data-source-label";
+import { TableSqlRead } from "./data-table-sql";
 import {
   freezeColumnIdentities, type TableColumnIdentity, type TableData, type TableSource,
   type TableCellRenderer, type TableTemplate,
@@ -57,7 +63,7 @@ interface DataTableContract {
 export class AfDataTable extends HTMLElement implements DataTableContract {
   static observedAttributes = [
     "label", "height", "sticky", "transpose", "header", "edge", "row-key", "columns", "sort",
-    "metrics",
+    "metrics", "sql",
   ];
   // All mutable state lives in one record shared with the render modules (data-table-*.ts).
   private s = createTableState(() => this.render());
@@ -127,14 +133,11 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
   get height() { return this.getAttribute("height") ?? 420; }
   set height(v: number | string) { this.setAttribute("height", String(v)); }
   get header() { return this.getAttribute("header") ?? undefined; }
-  set header(v: string | undefined) {
-    if (v === undefined) this.removeAttribute("header");
-    else this.setAttribute("header", v);
-  }
+  set header(v: string | undefined) { this.optional("header", v); }
   get rowKey() { return this.getAttribute("row-key") ?? undefined; }
-  set rowKey(v: string | undefined) {
-    if (v === undefined) this.removeAttribute("row-key");
-    else this.setAttribute("row-key", v);
+  set rowKey(v: string | undefined) { this.optional("row-key", v); }
+  private optional(name: string, v: string | undefined) {
+    if (v === undefined) this.removeAttribute(name); else this.setAttribute(name, v);
   }
   get metrics() { return this.s.metricSpecs; }
   set metrics(v: unknown) { this.s.metricSpecs = v; this.render(); }
@@ -144,17 +147,18 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
       "data", "columns", "columnIdentities", "sort", "source", "cellRenderers", "templates",
       "metrics", "rowKey", "height", "sticky", "transpose", "header", "edge", "error",
     ] as const) {
-      if (Object.hasOwn(this, key)) {
-        const v = this[key];
-        delete (this as unknown as Record<string, unknown>)[key];
-        (this as unknown as Record<string, unknown>)[key] = v;
-      }
+      if (!Object.hasOwn(this, key)) continue;
+      const own = this as unknown as Record<string, unknown>, v = own[key];
+      delete own[key];
+      own[key] = v;
     }
+    this.sqlRead.open(this.getAttribute("sql"));
     if (this.source && !this.s.pending && !this.data.rows.length) void this.loadMore(true);
     else this.render();
   }
   disconnectedCallback() {
     const s = this.s;
+    this.sqlRead.stop();
     s.loader.cancel();
     ++s.requestEpoch;
     s.pending = false;
@@ -165,18 +169,12 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
     cancelResizeRender(s);
   }
   attributeChangedCallback(name: string, _old: string | null, value: string | null) {
+    if (name === "sql") return void (this.isConnected && this.sqlRead.open(value));
     if (["columns", "sort", "metrics"].includes(name)) {
       let v: unknown;
-      try {
-        v = JSON.parse(value ?? "null");
-      } catch {
-        v = value;
-      }
-      if (name === "columns") this.s.specs = v;
-      else if (name === "sort") {
-        this.sort = parseSortSpec(v);
-        return;
-      } else this.s.metricSpecs = v;
+      try { v = JSON.parse(value ?? "null"); } catch { v = value; }
+      if (name === "sort") return void (this.sort = parseSortSpec(v));
+      if (name === "columns") this.s.specs = v; else this.s.metricSpecs = v;
     }
     this.render();
   }
@@ -185,6 +183,7 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
     return loadTableRows(this, this.s, replace);
   }
   private readonly sourceSlot = new DataSourceSlot(this);
+  private readonly sqlRead = new TableSqlRead(this);
   private render() {
     renderTable(this, this.s);
     if (!this.isConnected) return;

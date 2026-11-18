@@ -4,7 +4,7 @@ description: "Read before drawing any chart: chart choice, truthful encodings an
 ---
 ## Read first
 
-Draw every analytical chart with **`<af-chart>`** (`import '@afbin/chart'`; contract: `head -40 components/chart.ts`): it runs the chart's SQL, draws Vega-Lite or Vega, sizes to its width, takes the page's design tokens in light and dark, wraps legends, shows loading, empty and error states, lists the drawn values and tears down. Raw Vega stays for custom work. Maps and regions: deck.gl ([maps](maps.md)); diagrams: Pele ([diagrams](diagrams.md)).
+Draw every analytical chart with **`<af-chart>`** (`import '@afbin/chart'`; contract: `head -40 components/chart.ts`): it runs its SQL, draws Vega-Lite or Vega, sizes, themes light and dark, wraps legends, shows loading, empty and error states and lists its values. Maps and regions: deck.gl ([maps](maps.md)); diagrams: Pele ([diagrams](diagrams.md)).
 
 Name question, unit, grain, source, period, timezone and missing data. See [runtime](runtime.md) and [datasets](datasets.md).
 
@@ -19,10 +19,11 @@ Name question, unit, grain, source, period, timezone and missing data. See [runt
   "tooltip":[{"field":"category","title":"Category"},
     {"field":"n","type":"quantitative","title":"Completed tasks","format":","}]}}</script>
 </af-chart>
-<script type="module">import '@afbin/chart';</script>
+<af-data-table label="Open tasks" sql="select title, due from tasks where not done"></af-data-table>
+<script type="module">import '@afbin/chart'; import '@afbin/data-table';</script>
 ```
 
-Rows bind as the dataset `main`: write no `data` (a spec's own `values` draw instead). Data is one of `sql`, `dataset="NAME"` (a link's `data-af-name`), `rows` (objects) or `query`, a statement from `` sql`…` `` with bound values: set it again to filter (`chart.query = sql`… where city = ${city}``). A recipe names columns: `{"recipe":"trend","bindings":{"date":"week","value":"n"}}` (also funnel, waterfall, radar, single-value, combo). `url` data is refused; `data-af-chart="ready"` marks a drawn chart. `node scripts/sql.mjs query ID 'SQL' --chart chart.json --chart-output chart.png` draws the same description as an image before you publish (`--chart-width N --chart-height N --chart-theme light|dark`).
+Rows bind as the dataset `main`: write no `data` (a spec's own `values` draw instead). Data is one of `sql`, `dataset="NAME"` (a link's `data-af-name`), `rows` (objects) or `query`, a statement from `` sql`…` `` with bound values: set it again to filter (`chart.query = sql`… where city = ${city}``). A recipe names columns: `{"recipe":"trend","bindings":{"date":"week","value":"n"}}` (also funnel, waterfall, radar, single-value, combo). `url` data is refused; `data-af-chart="ready"` marks a drawn chart. `node scripts/sql.mjs query ID 'SQL' --chart chart.json --chart-output chart.png` draws it as an image before you publish (`--chart-width N --chart-height N --chart-theme light|dark`).
 
 Custom work keeps the element: `chart.view` (and the `af-chart-ready` event's `{view, rows}`) is the live Vega View for signals and listeners; `draw` replaces the renderer while af-chart keeps data, states, size and teardown. Or import `@afbin/vega` (`parse(spec, config, {ast:true})`, `new View(runtime, {expr: expressionInterpreter, container})`; themed tooltip built in) and `@afbin/vega-lite` (`compile`), which suit the no-eval CSP. Never bare `vega` or globals.
 

@@ -5,6 +5,7 @@ import { STORY_TABLE_CSS } from "@/lib/page-styles";
 import { AfDataTable } from "./data-table";
 import './data-table';
 import { measuredTableWindow } from "./table-model";
+import { pageSqlRuntime } from "./page-sql";
 /** A condition wait's bound (vi.waitFor's own default is 1 s): the condition decides; this only names one that never came. */
 const WAIT_MS = 20_000;
 /**
@@ -755,5 +756,102 @@ it("labels where its rows came from from the answer it was handed, and nothing f
   await el.loadMore();
   expect(el.data.rows).toHaveLength(2);
   expect(label()!.textContent).toBe("Live");
+  el.remove();
+});
+/**
+ * The declarative read: `sql="…"` runs through the page's `@afbin/apollo` (stood in for by a `sql` whose watches the
+ * test answers by hand, as chart.test.ts does), so superseded and invalidated answers can be staged.
+ */
+type Watch = { text: string; next: (rows: unknown) => void; error: (e: Error) => void; stopped: boolean };
+let watches: Watch[] = [];
+const fakeSql = Object.assign((strings: TemplateStringsArray) => ({ text: strings.raw.join(""), params: {}, then: () => {} }), {
+  watch(s: { text: string }, next: (rows: unknown) => void, error: (e: Error) => void) {
+    const watch = { text: s.text, next, error, stopped: false };
+    watches.push(watch);
+    return () => { watch.stopped = true; };
+  },
+});
+const answer = (rows: Record<string, unknown>[], extra: Record<string, unknown> = {}) => {
+  const names = Object.keys(rows[0] ?? {});
+  const props = { columns: names.map((name) => ({ name, type: typeof rows[0]![name] === "number" ? "number" : "string" })), ...extra };
+  for (const [key, value] of Object.entries(props)) Object.defineProperty(rows, key, { value, enumerable: false });
+  return rows;
+};
+const live = { kind: "live", at: "2026-11-18T14:32:00.000Z" };
+const watchFor = async (text: string) => {
+  await vi.waitFor(() => expect(watches.filter((w) => w.text === text && !w.stopped)).toHaveLength(1), { timeout: WAIT_MS });
+  return watches.find((w) => w.text === text && !w.stopped)!;
+};
+const cells = (el: Element) => [...el.querySelectorAll("tbody tr[data-row-key]")].map((tr) => tr.textContent);
+const fakeApollo = () => { watches = []; vi.spyOn(pageSqlRuntime, "apollo").mockResolvedValue({ sql: fakeSql } as never); };
+it("reads its sql attribute on connect as one live watch: rows, Live label, client-side sort, rereads on invalidation", async () => {
+  fakeApollo();
+  // As the parser makes it: the attribute is there before the element connects.
+  document.body.innerHTML = '<af-data-table label="Orders" sql="select city, n from orders"></af-data-table>';
+  const el = document.querySelector("af-data-table") as AfDataTable;
+  const watch = await watchFor("select city, n from orders");
+  expect(watches).toHaveLength(1);
+  expect(el.getAttribute("aria-busy")).toBe("true");
+  watch.next(answer([{ city: "Oslo", n: 3 }, { city: "Lima", n: 9 }], { source: live }));
+  expect(el.hasAttribute("aria-busy")).toBe(false);
+  expect(el.data.columns).toEqual([{ name: "city", type: "string" }, { name: "n", type: "number" }]);
+  expect(cells(el)).toEqual(["Oslo3", "Lima9"]);
+  expect(el.querySelector(".af-data-source button")!.textContent).toBe("Live");
+  (el.querySelector('th[aria-label="Sort by n"]') as HTMLElement).click();
+  (el.querySelector('th[aria-label="Sort by n"]') as HTMLElement).click();
+  expect(el.sort).toEqual({ col: "n", dir: "desc" });
+  expect(cells(el)).toEqual(["Lima9", "Oslo3"]);
+  // A dataset it names changed: the same watch answers again; the sort the reader chose holds.
+  watch.next(answer([{ city: "Oslo", n: 3 }, { city: "Lima", n: 9 }, { city: "Pune", n: 12 }], { source: live }));
+  expect(cells(el)).toEqual(["Pune12", "Lima9", "Oslo3"]);
+  // A cut-off answer draws with its row count.
+  watch.next(answer([{ city: "Oslo", n: 3 }], { truncated: true, source: live }));
+  await nextFrame();
+  expect(el.querySelector("[data-slot=row-count]")!.textContent).toBe("1 of 1 rows");
+  el.remove();
+  expect(watch.stopped).toBe(true);
+});
+it("rereads when its sql attribute changes and drops the superseded statement's late answer", async () => {
+  fakeApollo();
+  const el = document.createElement("af-data-table") as AfDataTable;
+  el.setAttribute("sql", "select 1 as a");
+  document.body.append(el);
+  const first = await watchFor("select 1 as a");
+  el.setAttribute("sql", "select 2 as a");
+  const second = await watchFor("select 2 as a");
+  expect(first.stopped).toBe(true);
+  first.next(answer([{ a: 1 }]));
+  expect(el.data.rows).toEqual([]);
+  second.next(answer([{ a: 2 }]));
+  expect(cells(el)).toEqual(["2"]);
+  el.remove();
+});
+it("shows a failed sql read's sentence and code, never \"no rows\", and refuses an empty sql attribute", async () => {
+  fakeApollo();
+  const el = document.createElement("af-data-table") as AfDataTable;
+  el.setAttribute("sql", "select * from orders");
+  document.body.append(el);
+  const watch = await watchFor("select * from orders");
+  const notice = SQL_FAILURES.permission_denied.notice;
+  watch.error(Object.assign(new Error(notice), { code: "permission_denied", detail: "42501 orders is not yours" }));
+  expect(el.getAttribute("data-af-error")).toBe("permission_denied");
+  expect(el.querySelector("[role=alert]")!.textContent).toBe(notice);
+  expect(el.hasAttribute("aria-busy")).toBe(false);
+  expect(el.textContent).not.toContain("no rows");
+  // The next answer clears the failure.
+  watch.next(answer([{ id: 1 }]));
+  expect(el.hasAttribute("data-af-error")).toBe(false);
+  el.setAttribute("sql", "  ");
+  expect(el.getAttribute("data-af-error")).toBe("validation_failed");
+  expect(el.querySelector("[role=alert]")!.textContent).toBe("The sql attribute is empty");
+  expect(watch.stopped).toBe(true);
+  el.remove();
+});
+it("takes column titles from its columns attribute over sql rows", async () => {
+  fakeApollo();
+  document.body.innerHTML = `<af-data-table sql="select city from orders" columns='[{"col":"city","title":"Town"}]'></af-data-table>`;
+  const el = document.querySelector("af-data-table") as AfDataTable;
+  (await watchFor("select city from orders")).next(answer([{ city: "Oslo" }]));
+  expect(el.querySelector("thead th")!.textContent).toContain("Town");
   el.remove();
 });
