@@ -12,6 +12,9 @@ export { artifactQuery } from './document';
  */
 export const notifyArtifactSql = (id: string, payload: string): string => `pg_notify('artifact_' || lower(${id}), ${payload})`;
 
-/** What every new head stamps: the next version, its fresh edit id, who made it and when (placeholders are the caller's). */
-export const headBumpSql = (editId: string, user: string, token: string): string =>
-  `version = version + 1, edit_id = ${editId}, actor_user_id = ${user}, actor_token_id = ${token}, updated_at = now()`;
+/**
+ * What every new head stamps: the next version, its fresh edit id, who made it and when (placeholders are the caller's).
+ * `group`: a group's sign-in as the writer (lib/accounts `GroupPrincipal`); absent, the column is cleared.
+ */
+export const headBumpSql = (editId: string, user: string, token: string, group?: string): string =>
+  `version = version + 1, edit_id = ${editId}, actor_user_id = ${user}, actor_token_id = ${token}, actor_group_id = ${group ?? 'NULL'}::text, updated_at = now()`;

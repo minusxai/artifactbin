@@ -95,7 +95,7 @@ export function withFreshNonce(template: string): string {
   return template.replaceAll(NONCE_PLACEHOLDER, randomUUID().replaceAll('-', ''));
 }
 
-/** Who may be served from the cache: a reader with no account, no token and no carried grants. */
-export function anonymousReader(actor: {userId?: string | null; tokenId?: string | null}, carried?: Record<string, unknown> | null): boolean {
-  return !actor.userId && !actor.tokenId && !(carried && Object.keys(carried).length);
+/** Who may be served from the cache: a reader with no account, no token, no group sign-in and no carried grants. */
+export function anonymousReader(actor: {userId?: string | null; tokenId?: string | null; principalGroup?: unknown}, carried?: Record<string, unknown> | null): boolean {
+  return !actor.userId && !actor.tokenId && !actor.principalGroup && !(carried && Object.keys(carried).length);
 }

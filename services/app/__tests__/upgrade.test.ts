@@ -151,6 +151,8 @@ describe('the additive DDL is replay-safe', () => {
       'deleted_at', 'author_remote',
       // When the author last rewrote the body; appended on upgrade like the rest.
       'edited_at',
+      // A group's sign-in as the author (an agent acting as a group), appended on upgrade like the rest.
+      'author_group_id',
     ]);
     // Provenance is APPENDED, never inserted: a fork's parent is a column the
     // additive DDL adds on the next boot, with nothing to backfill (NULL is
@@ -161,11 +163,10 @@ describe('the additive DDL is replay-safe', () => {
        ORDER BY ordinal_position`,
     );
     expect(artifactColumns.rows.map((row) => row.column_name)).toEqual(expect.arrayContaining(['forked_from', 'deleted_at']));
-    // The LAST column is whatever was appended most recently — the trash stamp
-    // now, provenance before it. What the assertion is really about is that
-    // new columns go on the END, so an existing database grows them by ALTER
-    // rather than needing its rows rewritten.
-    expect(artifactColumns.rows.slice(-2).map((row) => row.column_name)).toEqual(['forked_from', 'deleted_at']);
+    // The LAST column is whatever was appended most recently — a group's sign-in as the head's writer now, the trash
+    // stamp before it, provenance before that. What the assertion is really about is that new columns go on the END,
+    // so an existing database grows them by ALTER rather than needing its rows rewritten.
+    expect(artifactColumns.rows.slice(-3).map((row) => row.column_name)).toEqual(['forked_from', 'deleted_at', 'actor_group_id']);
     // Identity's tables are not the app's to declare.
     expect((await fresh.query("SELECT 1 FROM information_schema.tables WHERE table_schema = current_schema() AND table_name IN ('tokens','users','groups')")).rows).toEqual([]);
     await fresh.close();

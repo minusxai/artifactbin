@@ -23,7 +23,8 @@ export interface DatasetRoleOptions {
 export async function datasetRole(row: DatasetRoleRow, actor: AccessActor, options: DatasetRoleOptions = {}): Promise<DatasetRole | null> {
   const facts = options.facts ?? liveAccessFacts(actor);
   const held = await roleWithoutLink(row, actor, facts);
-  const account = held !== 'owner' && !!actor.userId && await reachesAsAccount(row, actor, facts);
+  // A group's sign-in is a member of its group, as an account is (lib/artifact-access `groupPrincipalFacts`).
+  const account = held !== 'owner' && (!!actor.userId || !!actor.principalGroup) && await reachesAsAccount(row, actor, facts);
   // The host's document-editor grant reaches html pages only (never a dataset): it is the page's editor role.
   const granted = account && documentEditorReaches(row, actor) ? maxRole(held, 'editor') : held;
   return datasetRoleFrom({ held: granted, account, linkRole: linkRoleOf(row), visibility: row.visibility, throughPage: !!options.throughPage });

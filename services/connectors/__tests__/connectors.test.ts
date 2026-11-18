@@ -181,6 +181,12 @@ describe('postgres, end to end', () => {
     expect(await mine(null)).toEqual([]);
     const seen = await pg.query({ text: "select current_setting('app.viewer_id') as id, current_setting('app.viewer_email') as email, current_setting('app.viewer_groups') as groups", params: {}, viewer: alice });
     expect(seen.rows).toEqual([{ id: 'u_alice', email: 'alice@example.com', groups: '["g1","g2"]' }]);
+    // A person's level is empty; an agent signed in as a group is no one, exactly its group, and its level.
+    const level = (viewer: Parameters<typeof pg.query>[0]['viewer']) => pg.query({ text: "select current_setting('app.viewer_id') as id, current_setting('app.viewer_email') as email, current_setting('app.viewer_groups') as groups, current_setting('app.viewer_group_role') as level", params: {}, viewer }).then((a) => a.rows[0]);
+    expect(await level(alice)).toEqual({ id: 'u_alice', email: 'alice@example.com', groups: '["g1","g2"]', level: '' });
+    expect(await level({ id: '', email: null, groups: ['g1'], groupRole: 'editor' })).toEqual({ id: '', email: '', groups: '["g1"]', level: 'editor' });
+    expect(await level(null)).toEqual({ id: '', email: '', groups: '[]', level: '' });
+    expect(await failure(pg.query({ text: 'select 1', params: {}, viewer: { id: '', email: null, groups: ['g1'], groupRole: 'admin' as never } }))).toMatchObject({ code: 'invalid_query' });
     expect(pg.sessions()).toBe(1);
   });
 
@@ -209,7 +215,7 @@ describe('postgres, end to end', () => {
     const sent = wire.messages.map((m) => (m.sql ? `${m.type} ${m.sql.replace(/SET LOCAL statement_timeout = '[1-9][0-9]*'/, "SET LOCAL statement_timeout = '<remaining>'")}` : m.type)).join('\n');
     expect(sent).toBe([
       'Q BEGIN READ ONLY',
-      "P SELECT set_config('app.viewer_id', $1, true), set_config('app.viewer_email', $2, true), set_config('app.viewer_groups', $3, true)",
+      "P SELECT set_config('app.viewer_id', $1, true), set_config('app.viewer_email', $2, true), set_config('app.viewer_groups', $3, true), set_config('app.viewer_group_role', $4, true)",
       'D', 'H', 'B', 'E', 'S',
       "Q SET LOCAL statement_timeout = '<remaining>'",
       'P select id from sales.orders where id = $1',

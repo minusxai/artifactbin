@@ -76,6 +76,19 @@ export async function assetBytesForToken(tokenId: string | null, ownerUserId?: s
   return Number(r.rows[0]?.n ?? 0);
 }
 
+/**
+ * THE BYTE QUOTA FOR A GROUP'S SIGN-INS (lib/accounts `GroupPrincipal`): charged to the GROUP, never a sign-in's
+ * rotating token: the stored bytes every one of the group's sign-ins created, against the same cap. (They import no
+ * URL and upload no comment image: those doors refuse a group's sign-in.)
+ */
+export async function groupAssetByteQuotaExceeded(groupId: string): Promise<boolean> {
+  const cap = override !== undefined ? override : ASSETS_MAX_BYTES_PER_TOKEN;
+  if (!cap) return false;
+  const r = await (await getDb()).query<{ n: number }>(`SELECT COALESCE(SUM((meta->>'bytes')::bigint), 0) AS n FROM artifacts
+    WHERE token_id IN (SELECT id FROM tokens WHERE group_id = $1) AND meta ? 'bytes'`, [groupId]);
+  return Number(r.rows[0]?.n ?? 0) >= cap;
+}
+
 /** True when the next import must be refused with `quota_exceeded`. */
 export async function assetByteQuotaExceeded(tokenId: string | null, ownerUserId?: string | null): Promise<boolean> {
   const cap = override !== undefined ? override : ASSETS_MAX_BYTES_PER_TOKEN;

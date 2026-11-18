@@ -11,7 +11,8 @@ import { ANONYMOUS_CEILING, capRole, maxRole, type ArtifactRole } from '@artifac
 
 /** Does this actor OWN the row — pure, the account by user_id, a bare token by token_id. */
 export function ownsArtifact(row: Pick<ArtifactRow, 'user_id' | 'token_id'> & Partial<Pick<ArtifactRow,'group_id'>>, actor: AccessActor): boolean {
-  if(actor.workload)return false;
+  // A group's sign-in owns nothing: ownership of a group's page is its Admins', and it is never one.
+  if(actor.workload||actor.principalGroup)return false;
   if (row.group_id) return !!actor.groupId && actor.groupId===row.group_id;
   if (row.user_id) return !!actor.userId && row.user_id === actor.userId;
   return holdsCreatingToken(row, actor);
@@ -19,8 +20,8 @@ export function ownsArtifact(row: Pick<ArtifactRow, 'user_id' | 'token_id'> & Pa
 
 /** Does this actor hold the token that created the row? A null token never matches: anonymous and browser
  * actors carry `tokenId: null`, and so can rows (imported or account-anchored), so a bare equality admits them. */
-export function holdsCreatingToken(row: Pick<ArtifactRow, 'token_id'>, actor: Pick<AccessActor, 'tokenId'>): boolean {
-  return !!actor.tokenId && row.token_id === actor.tokenId;
+export function holdsCreatingToken(row: Pick<ArtifactRow, 'token_id'>, actor: Pick<AccessActor, 'tokenId' | 'principalGroup'>): boolean {
+  return !actor.principalGroup && !!actor.tokenId && row.token_id === actor.tokenId;
 }
 
 
@@ -89,8 +90,9 @@ export async function effectiveRole(
   if (held === 'owner') return 'owner';
   // THE ANONYMOUS CEILING applies to the LINK only, never to a named share:
   // being invited by address is itself an account-shaped act, while holding a
-  // URL is not. Without an account there is nothing to attribute a write to.
-  const account = !!actor.userId && await reachesAsAccount(row, actor, facts);
+  // URL is not. Without an account there is nothing to attribute a write to. A group's sign-in is a member of its
+  // group, as an account is: the link reaches it in full, its acts are attributed to the group.
+  const account = (!!actor.userId || !!actor.principalGroup) && await reachesAsAccount(row, actor, facts);
   const byLink = account ? linkRoleOf(row) : capRole(linkRoleOf(row), ANONYMOUS_CEILING);
   return maxRole(byLink, account && documentEditorReaches(row, actor) ? 'editor' : 'none', held);
 }

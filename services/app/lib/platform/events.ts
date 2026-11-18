@@ -55,7 +55,9 @@ export async function emit<K extends ObjectKind, V extends EventVerb<K>>(
  * It takes the two fields rather than `AccessActor` so the emitter keeps no
  * dependency on `lib/artifacts`; every caller already holds both.
  */
-export function actorSubject(actor: { tokenId: string | null; userId: string | null }): EventSubject | null {
+export function actorSubject(actor: { tokenId: string | null; userId: string | null; principalGroup?: { id: string } | null }): EventSubject | null {
+  // A group's sign-in: the group did it (lib/accounts `GroupPrincipal`), never its rotating token.
+  if (actor.principalGroup) return { kind: 'group', id: actor.principalGroup.id };
   if (actor.userId) return { kind: 'user', id: actor.userId };
   return actor.tokenId ? { kind: 'token', id: actor.tokenId } : null;
 }

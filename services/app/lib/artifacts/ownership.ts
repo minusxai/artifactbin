@@ -2,7 +2,7 @@ import {canEditGroupContent} from '@artifactbin/contracts';
 /** Artifact ownership is distinct from attribution and request credentials. */
 import type {ArtifactDestination} from '@artifactbin/contracts';
 import type { AccessActor } from '@/lib/accounts';
-import {getAccountPreferences, getGroupRole, selectNewArtifactDestination} from '../groups';
+import {actorGroupRole, getAccountPreferences, selectNewArtifactDestination} from '../groups';
 import {DeploymentError,getDeploymentDefaultDestination} from '../deployment';
 import { getDb, type Queryable } from '../platform';
 import {DatasetError} from '../datasets';
@@ -17,6 +17,13 @@ export function parseArtifactDestination(value:unknown):ArtifactDestination|unde
  throw new DatasetError('Invalid destination',400);
 }
 const destinationOf=(row:Pick<ArtifactRow,'user_id'> & Partial<Pick<ArtifactRow,'group_id'>>):ArtifactDestination=>row.group_id?{type:'group',id:row.group_id}:{type:'personal'};
+/**
+ * A GROUP'S SIGN-IN (lib/accounts `GroupPrincipal`) creates only in its own group: a personal destination would make a
+ * row owned by a rotating token and no person, so it is refused with this, answered `group_principal_personal_refused`.
+ */
+export class GroupPersonalDestination extends DatasetError {
+ constructor(){super('A sign-in acting as a group creates only in its group',403);}
+}
 /** Preserve the uniform placement refusal when resolving a parent's destination first. */
 export class ArtifactParentRefusal extends DatasetError {
  constructor(){super('Invalid parent',400);}
@@ -27,9 +34,18 @@ export async function newArtifactDestination(actor:AccessActor,explicit?:Artifac
   const g=actor.workload;if(!g.publication||g.role!=='editor'||explicit?.type!=='group'||explicit.id!==g.principal.groupId)throw new DatasetError('Publication destination refused',403);
   return explicit;
  }
+ if(actor.principalGroup){
+  // Its group, unless told otherwise; never personal. At editor level only, as a direct Member may not publish.
+  if(explicit?.type==='personal')throw new GroupPersonalDestination();
+  const destination=explicit??{type:'group' as const,id:actor.principalGroup.id};
+  const parent=parentId?(await db.query<ArtifactRow>('SELECT * FROM artifacts WHERE id=$1 AND deleted_at IS NULL',[parentId])).rows[0]:undefined;
+  if(parentId&&(!parent||parent.format!=='folder'||parent.group_id!==destination.id))throw new ArtifactParentRefusal();
+  if(!canEditGroupContent(await actorGroupRole(actor,destination.id,db)))throw new DatasetError('Destination requires group Editor or Admin membership',403);
+  return destination;
+ }
  const parent=parentId?(await db.query<ArtifactRow>('SELECT * FROM artifacts WHERE id=$1 AND deleted_at IS NULL',[parentId])).rows[0]:undefined;
  if(parentId&&(!parent||parent.format!=='folder'))throw new ArtifactParentRefusal();
- if(parent&&(parent.group_id?!canEditGroupContent(await getGroupRole(actor.userId,parent.group_id)):(parent.user_id?parent.user_id!==actor.userId:parent.token_id!==actor.tokenId)))throw new ArtifactParentRefusal();
+ if(parent&&(parent.group_id?!canEditGroupContent(await actorGroupRole(actor,parent.group_id)):(parent.user_id?parent.user_id!==actor.userId:parent.token_id!==actor.tokenId)))throw new ArtifactParentRefusal();
  const preference=actor.userId?(await getAccountPreferences(actor.userId)).default_destination:undefined;
  let deployment_default:ArtifactDestination|undefined;
  if(!explicit&&!parent&&(!preference||preference.type==='inherit')){
@@ -39,10 +55,11 @@ export async function newArtifactDestination(actor:AccessActor,explicit?:Artifac
  let destination:ArtifactDestination;
  try{destination=selectNewArtifactDestination({explicit,parent:parent?destinationOf(parent):undefined,preference,deployment_default});}
  catch{throw new DatasetError('Destination conflicts with parent owner',400);}
- if(destination.type==='group'&&!canEditGroupContent(await getGroupRole(actor.userId,destination.id)))throw new DatasetError('Destination requires group Editor or Admin membership',403);
+ if(destination.type==='group'&&!canEditGroupContent(await actorGroupRole(actor,destination.id)))throw new DatasetError('Destination requires group Editor or Admin membership',403);
  return destination;
 }
 export async function assertDestination(tx:Queryable,actor:AccessActor,destination:ArtifactDestination):Promise<void>{
+ if(actor.principalGroup&&destination.type!=='group')throw new GroupPersonalDestination();
  if(actor.workload){
   if(destination.type!=='group'||destination.id!==actor.workload.principal.groupId||!actor.workload.publication||actor.workload.role!=='editor'||!(await tx.query('SELECT 1 FROM groups WHERE id=$1 AND deleted_at IS NULL',[destination.id])).rows.length)throw new DatasetError('Publication destination refused',403);
   return;
@@ -50,7 +67,7 @@ export async function assertDestination(tx:Queryable,actor:AccessActor,destinati
  if(destination.type==='group'){
   // Read at decision time, unlocked: a membership revoked after this commit refuses the next request
   // (a deleted group's pages grant nobody anything).
-  if(!canEditGroupContent(await getGroupRole(actor.userId,destination.id,tx)))throw new DatasetError('Destination requires group Editor or Admin membership',403);
+  if(!canEditGroupContent(await actorGroupRole(actor,destination.id,tx)))throw new DatasetError('Destination requires group Editor or Admin membership',403);
  }
 }
 

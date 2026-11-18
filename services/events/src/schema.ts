@@ -29,7 +29,7 @@ const EVENTS_TABLE: Table = {
     { name: 'at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
     /** 'app' | 'auth' | 'proxy' */
     { name: 'source', type: 'TEXT', notNull: true },
-    /** 'user' | 'token' | 'visitor' (the daily hash); NULL when nobody did it. */
+    /** 'user' | 'token' | 'visitor' (the daily hash) | 'group' (an agent signed in as it); NULL when nobody did it. */
     { name: 'subject_kind', type: 'TEXT' },
     { name: 'subject_id', type: 'TEXT' },
     /** Past tense, a closed union per object_kind (contracts EVENT_VERBS). */

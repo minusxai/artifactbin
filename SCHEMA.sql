@@ -685,6 +685,7 @@ CREATE TABLE IF NOT EXISTS app.dataset_policy_audit (
   actor_user_id TEXT,
   actor_token_id TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  actor_group_id TEXT,
   PRIMARY KEY (dataset_id, revision)
 );
 
@@ -699,6 +700,8 @@ ALTER TABLE app.dataset_policy_audit ADD COLUMN IF NOT EXISTS actor_user_id TEXT
 ALTER TABLE app.dataset_policy_audit ADD COLUMN IF NOT EXISTS actor_token_id TEXT;
 
 ALTER TABLE app.dataset_policy_audit ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+ALTER TABLE app.dataset_policy_audit ADD COLUMN IF NOT EXISTS actor_group_id TEXT;
 
 CREATE TABLE IF NOT EXISTS app.dataset_connections (
   dataset_id TEXT NOT NULL,
@@ -758,6 +761,7 @@ CREATE TABLE IF NOT EXISTS app.artifacts (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   forked_from TEXT,
   deleted_at TIMESTAMPTZ,
+  actor_group_id TEXT,
   PRIMARY KEY (id)
 );
 
@@ -817,6 +821,8 @@ ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS forked_from TEXT;
 
 ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 
+ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS actor_group_id TEXT;
+
 DO $$
 BEGIN
   IF EXISTS (
@@ -865,6 +871,7 @@ CREATE TABLE IF NOT EXISTS app.artifact_versions (
   actor_token_id TEXT,
   content_publisher_user_id TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  actor_group_id TEXT,
   PRIMARY KEY (artifact_id, version)
 );
 
@@ -892,6 +899,8 @@ ALTER TABLE app.artifact_versions ADD COLUMN IF NOT EXISTS content_publisher_use
 
 ALTER TABLE app.artifact_versions ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
+ALTER TABLE app.artifact_versions ADD COLUMN IF NOT EXISTS actor_group_id TEXT;
+
 ALTER TABLE app.artifact_versions DROP COLUMN IF EXISTS content;
 
 CREATE TABLE IF NOT EXISTS app.artifact_edits (
@@ -910,6 +919,7 @@ CREATE TABLE IF NOT EXISTS app.artifact_edits (
   actor_token_id TEXT,
   content_publisher_user_id TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  actor_group_id TEXT,
   PRIMARY KEY (seq),
   UNIQUE (edit_id)
 );
@@ -943,6 +953,8 @@ ALTER TABLE app.artifact_edits ADD COLUMN IF NOT EXISTS actor_token_id TEXT;
 ALTER TABLE app.artifact_edits ADD COLUMN IF NOT EXISTS content_publisher_user_id TEXT;
 
 ALTER TABLE app.artifact_edits ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+ALTER TABLE app.artifact_edits ADD COLUMN IF NOT EXISTS actor_group_id TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_artifact_edits_artifact_seq ON app.artifact_edits (artifact_id, seq);
 
@@ -1097,6 +1109,7 @@ CREATE TABLE IF NOT EXISTS app.annotations (
   deleted_at TIMESTAMPTZ,
   author_remote JSONB,
   edited_at TIMESTAMPTZ,
+  author_group_id TEXT,
   PRIMARY KEY (id)
 );
 
@@ -1147,6 +1160,8 @@ ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS author_remote JSONB;
 
 ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ;
+
+ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS author_group_id TEXT;
 
 ALTER TABLE app.annotations DROP COLUMN IF EXISTS change_seq;
 

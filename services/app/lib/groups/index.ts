@@ -29,6 +29,15 @@ export const effectiveRoleSql=(user:string)=>`CASE WHEN ${groupAdminSql(user,'g.
  * membership listings, mail and the last-admin guard read the direct rows.
  */
 export async function getGroupRole(userId:string|null,groupId:string,query?:ContractQueryable):Promise<GroupRole|null>{if(!userId)return null;return (await (query??await getDb()).query<{role:GroupRole|null}>(`SELECT ${effectiveRoleSql('$2')} AS role FROM groups g WHERE g.id=$1 AND g.deleted_at IS NULL`,[groupId,userId])).rows[0]?.role??null;}
+/**
+ * The role an actor holds on a live group for a CONTENT decision (where it may publish, what it may edit): a person's
+ * `getGroupRole`; a group's sign-in (lib/accounts `GroupPrincipal`) holds its level on its own group and nothing on any
+ * other, as a direct member of that group alone would.
+ */
+export async function actorGroupRole(actor:{userId:string|null;principalGroup?:{id:string;role:'member'|'editor'}|null},groupId:string,query?:ContractQueryable):Promise<GroupRole|null>{
+ if(actor.principalGroup)return actor.principalGroup.id===groupId&&await getGroupById(groupId,query)?actor.principalGroup.role:null;
+ return getGroupRole(actor.userId,groupId,query);
+}
 /** The ancestor the reader administers live `groupId` through when they hold no direct `admin` row on it (an inherited admin), or null. */
 async function inheritedAdminVia(userId:string,groupId:string,query:ContractQueryable):Promise<{id:string;handle:string;name:string}|null>{
  // `via_group_id` is the nearest group with a direct admin row: the group itself for a direct admin.
@@ -160,7 +169,7 @@ export async function deleteGroup(actorId:string,id:string,handle:string,actor?:
 
 export {recordGroupMutation,recordGroupChanges,groupQuota,mailGroupChanges} from './mutations';
 import {recordGroupMutation} from './mutations';
-export {groupAdminSql,reachedGroupsSql,subtreeSql,subtreeMemberIds,groupChain} from './hierarchy';
+export {groupAdminSql,groupReachSql,reachedGroupsSql,subtreeSql,subtreeMemberIds,groupChain} from './hierarchy';
 
 /**
  * A GROUP'S SIGN-IN as the group's Admins see it (contracts identity-service `GROUP_SIGN_IN_RULE`): an agent acting as

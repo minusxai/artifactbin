@@ -19,9 +19,11 @@
  * `sql` naming the link, `POST /api/artifacts/ID/query`). Every other role runs ONLY the queries a published page
  * declares on it (`sql.query(name, params)`), and only when the rules document admits that role (a select entry on
  * `public.queries`, lib/datasets live-rules). SQL is the database's dialect; parameters are bound, written `:name`
- * (or `$name`); `:viewer_id`, `:viewer_email` and `:viewer_groups` (JSON array text of group IDs) are filled by the
- * server for every query and a caller may not send them; anonymous: null. The connector also sets them on the
- * session (contracts connectors header).
+ * (or `$name`); `:viewer_id`, `:viewer_email`, `:viewer_groups` (JSON array text of group IDs) and `:viewer_group_role`
+ * are filled by the server for every query and a caller may not send them; anonymous: null. An agent signed in as a
+ * group is no person (`:viewer_id` and `:viewer_email` null), `:viewer_groups` exactly its group and
+ * `:viewer_group_role` its level; a person's level is empty. The connector also sets them on the session (contracts
+ * connectors header).
  *
  * DECLARED QUERIES are recorded per page version by publish (`livePageDeclarations`), which refuses one on a live
  * dataset the publisher cannot edit; a reader names the query of the version it has open (the page door's revision).
@@ -45,7 +47,7 @@ import { datasetReadAccess, datasetRole, storedPolicy } from '@/lib/dataset-perm
 import { QUERY_TIMEOUT_MS,datasetConnectionCipher, datasetsAllowPrivateNetwork, datasetsOwnConnections, getDb } from '@/lib/platform';
 
 const PURPOSE = 'dataset-connection';
-const VIEWER_PARAMS = ['viewer_id', 'viewer_email', 'viewer_groups'] as const;
+const VIEWER_PARAMS = ['viewer_id', 'viewer_email', 'viewer_groups', 'viewer_group_role'] as const;
 
 /** A refusal with its HTTP status and code, answered as `{error: code, message}`. */
 export class LiveDatasetRefusal extends Error {
@@ -181,7 +183,8 @@ function boundStatement(dialect: ConnectorDialect, text: string, params: unknown
   try { rewritten = colonParameters(dialect, text).text; } catch (e) { throw new LiveDatasetRefusal(400, 'validation_failed', connectorError(e).message); }
   return {
     text: rewritten,
-    params: { ...sent, viewer_id: viewer?.id ?? null, viewer_email: viewer?.email ?? null, viewer_groups: viewer ? JSON.stringify([...viewer.groups].sort()) : null },
+    params: { ...sent, viewer_id: viewer?.id || null, viewer_email: viewer?.email || null, viewer_groups: viewer ? JSON.stringify([...viewer.groups].sort()) : null,
+      viewer_group_role: viewer ? viewer.groupRole ?? '' : null },
   };
 }
 
@@ -399,7 +402,7 @@ export async function pageLiveDatasetSql(actor: AccessActor, page: HtmlPageVersi
       if (!row) throw new LiveDatasetRefusal(404, 'dataset_not_found', `${link.name} names a live dataset that is gone`);
       ownConnectionsAllowed();
       const decision = await step(datasetReadAccess(row, actor, { pageId: page.pageId }));
-      if (!decision.allowed) throw new LiveDatasetRefusal(403, actor.userId ? 'permission_denied' : 'sign_in_required', `${link.name}'s rules do not let your role run its declared queries${actor.userId ? '' : '; sign in, or ask its owner to allow anonymous readers'}`);
+      if (!decision.allowed) throw new LiveDatasetRefusal(403, actor.userId || actor.principalGroup ? 'permission_denied' : 'sign_in_required', `${link.name}'s rules do not let your role run its declared queries${actor.userId ? '' : '; sign in, or ask its owner to allow anonymous readers'}`);
       signal=admission?.dispatch(true)??signal;
       const reply = await run(row.id, link.name, query.sql, raw.params, await step(connectorViewer(actor)), signal);
       // A connector may outlive a permission change. Fence its answer just as stored SQL does;

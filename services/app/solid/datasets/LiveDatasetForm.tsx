@@ -21,7 +21,7 @@ export type ListedConnector = ConnectorSpec & { available: boolean };
 export interface ConnectorList { connectors: ListedConnector[]; ownConnections?: boolean }
 type Details = { config?: Record<string, string | number>; secrets?: string[]; connection: { connector: string; label: string } };
 const PERSONAL = 'personal';
-export const VIEWER_NOTE = 'Queries may use :viewer_id, :viewer_email and :viewer_groups: the server fills them for the person reading.';
+export const VIEWER_NOTE = 'Queries may use :viewer_id, :viewer_email, :viewer_groups and :viewer_group_role (an agent acting as a group: its level): the server fills them for the person reading.';
 
 /** The typed fields as the connector's configuration: whole numbers as numbers, blanks left out. */
 function configOf(spec: ConnectorSpec, values: Record<string, string>, keep: (field: ConnectorField) => boolean = () => true): Record<string, string | number> {

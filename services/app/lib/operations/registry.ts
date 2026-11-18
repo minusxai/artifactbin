@@ -214,7 +214,8 @@ const createArtifactOp: Operation = {
     OWN_CONNECTIONS,
   ],
   async run(ctx, input) {
-    const creator = ctx.actor.workload?{...ctx.actor,workload:ctx.actor.workload}:await withAccountToken(ctx.actor);
+    // A group's sign-in creates as its principal (lib/accounts `GroupPrincipal`), charged to its group, with no token of its own.
+    const creator = ctx.actor.workload?{...ctx.actor,workload:ctx.actor.workload}:ctx.actor.principalGroup?{...ctx.actor,principalGroup:ctx.actor.principalGroup}:await withAccountToken(ctx.actor);
     if (!creator) return reply({ error: 'unauthorized' }, 401);
     const authored = authoredHtml(input);
     if (authored instanceof Response) return fromResponse(authored);
@@ -304,7 +305,8 @@ const editCommentOp: Operation = {
     { status: 409, code: 'annotation_conflict', fix: 'read the current conversation and retry with its revision; the comment was not changed' },
   ],
   async run(ctx, input) {
-    if (!ctx.actor.userId) return reply({ error: 'account_required', hint: 'Follow /llms/http-auth and sign in with an account; an anonymous credential wrote no comments to edit.' }, 403);
+    // A group's sign-in edits the group's own comments (lib/annotations `editAnnotationCommentFor`).
+    if (!ctx.actor.userId && !ctx.actor.principalGroup) return reply({ error: 'account_required', hint: 'Follow /llms/http-auth and sign in with an account; an anonymous credential wrote no comments to edit.' }, 403);
     const refusal = await capabilityGuard(ctx.actor, 'comment', String(input.id));
     if (refusal) return fromResponse(refusal);
     return fromResponse(await respondToAnnotationEdit(input, ctx.actor, String(input.id), String(input.comment_id), ctx.mutationReceipt, ctx.author?.writerSession));

@@ -125,8 +125,8 @@ export async function archivedVersionForActor(
 ): Promise<ArchivedRender | 'not_found'> {
   if (row.format !== 'html' || !Number.isInteger(asked) || asked < 1) return 'not_found';
   const head = row.version;
-  // History is an editor's: nobody (no account, no token) reads it.
-  if (!actor.userId && !actor.tokenId) return 'not_found';
+  // History is an editor's: nobody (no account, no token, no group sign-in) reads it.
+  if (!actor.userId && !actor.tokenId && !actor.principalGroup) return 'not_found';
   /*
    * THE HEAD IS USUALLY NOT IN THE ARCHIVE. Save-less editing bumps `version`
    * on every accepted edit while snapshots coalesce, so the current version

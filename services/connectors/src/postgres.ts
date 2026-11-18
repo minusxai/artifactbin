@@ -10,8 +10,9 @@
  *  2. Each query, `schema()` and `test()`, on the session's one connection, in this order (postgres.js sends Parse,
  *     Describe and Flush, then Bind, Execute and Sync; a cursor's Execute carries a row count and is followed by Flush):
  *       Q          `BEGIN READ ONLY`
- *       P D H B E S  `SELECT set_config('app.viewer_id', $1, true), set_config('app.viewer_email', $2, true), set_config('app.viewer_groups', $3, true)`
- *                    with $1 the account ID, $2 the email, $3 the group IDs as sorted JSON array text (unnamed, untyped)
+ *       P D H B E S  `SELECT set_config('app.viewer_id', $1, true), set_config('app.viewer_email', $2, true), set_config('app.viewer_groups', $3, true), set_config('app.viewer_group_role', $4, true)`
+ *                    with $1 the account ID, $2 the email, $3 the group IDs as sorted JSON array text, $4 an agent
+ *                    group sign-in's level, empty for a person (unnamed, untyped)
  *       Q          `SET LOCAL statement_timeout = '<remaining milliseconds>'` (trusted finite integer)
  *       P D H B E… S the statement, one, its values bound (`$name` → `$1`…), read by a cursor that stops one row past the
  *                    limit
@@ -67,7 +68,7 @@ const columnType = (oid: number, sample: unknown): ConnectorValueType => Array.i
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Sql = postgres.Sql<any>;
 type Raw = { name: string; type: number }[];
-const VIEWER_STATEMENT = "SELECT set_config('app.viewer_id', $1, true), set_config('app.viewer_email', $2, true), set_config('app.viewer_groups', $3, true)";
+const VIEWER_STATEMENT = "SELECT set_config('app.viewer_id', $1, true), set_config('app.viewer_email', $2, true), set_config('app.viewer_groups', $3, true), set_config('app.viewer_group_role', $4, true)";
 
 export const postgresConnector: ConnectorModule = {
   open(config: ConnectionConfig, policy: ConnectorNetworkPolicy, seams: NetworkSeams = {}, readPolicy={queryTimeoutMs:SQL_QUERY_DEFAULT_MS}) {
@@ -136,7 +137,7 @@ export const postgresConnector: ConnectorModule = {
             await step(sql.unsafe('BEGIN READ ONLY'),at);
             try {
               // Governed PostgreSQL endpoints require a transaction viewer before any SELECT, including setup.
-              await step(sql.unsafe(VIEWER_STATEMENT, [viewer.id, viewer.email, viewer.groups], { simple: false } as never), at);
+              await step(sql.unsafe(VIEWER_STATEMENT, [viewer.id, viewer.email, viewer.groups, viewer.group_role], { simple: false } as never), at);
               await step(sql.unsafe(`SET LOCAL statement_timeout = '${remaining()}'`),at);
               let collector: Collector | undefined, oids: number[] = [], names: string[] = [], collectionError: unknown;
               const begin = (columns: Raw, sample?: Record<string, unknown>) => {

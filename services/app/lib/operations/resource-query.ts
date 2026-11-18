@@ -75,6 +75,8 @@ export async function queryResourceForRequest(actor:AccessActor,id:string,body:R
   // A long query re-asks an explicit bearer whether it still stands (no memo, no side effects).
   if(!request.headers.has('authorization'))return;
   const current=await requestOrSessionActor(request,{revalidate:true});
-  if(!current.tokenId||current.tokenId!==actor.tokenId||current.userId!==actor.userId)throw new DatasetError('Query access revoked',403);
+  // A group's sign-in stands while the same sign-in still acts as the same group at the same level (lib/accounts `GroupPrincipal`).
+  const was=actor.principalGroup,now=current.principalGroup;
+  if(was?!now||now.tokenId!==was.tokenId||now.id!==was.id||now.role!==was.role:!current.tokenId||current.tokenId!==actor.tokenId||current.userId!==actor.userId)throw new DatasetError('Query access revoked',403);
  });}catch(error){if(error instanceof DatasetError)return json({error:'query_access_revoked'},error.status);throw error;}
 }

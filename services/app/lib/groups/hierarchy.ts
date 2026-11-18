@@ -19,9 +19,20 @@ import type {Queryable} from '@artifactbin/contracts';
 
 const REVISION = "group_hierarchy WHERE id='installation'";
 
+/** SQL: ids of the live groups a seed (an SQL query of live group ids) reaches: the seed and all their live ancestors. */
+const reachFromSql = (seed: string): string =>
+  `WITH RECURSIVE reach(id) AS (${seed} UNION SELECT p.id FROM reach r JOIN groups c ON c.id=r.id JOIN groups p ON p.id=c.parent_id WHERE p.deleted_at IS NULL) SELECT id FROM reach`;
+
 /** SQL: ids of the live groups `user` reaches — its direct memberships and all their ancestors. */
 export const reachedGroupsSql = (user: string): string =>
-  `WITH RECURSIVE reach(id) AS (SELECT gm.group_id FROM group_members gm JOIN groups g ON g.id=gm.group_id WHERE gm.user_id=${user} AND g.deleted_at IS NULL UNION SELECT p.id FROM reach r JOIN groups c ON c.id=r.id JOIN groups p ON p.id=c.parent_id WHERE p.deleted_at IS NULL) SELECT id FROM reach`;
+  reachFromSql(`SELECT gm.group_id FROM group_members gm JOIN groups g ON g.id=gm.group_id WHERE gm.user_id=${user} AND g.deleted_at IS NULL`);
+
+/**
+ * SQL: what a GROUP'S SIGN-IN reaches (lib/accounts `GroupPrincipal`): exactly what `reachedGroupsSql` gives a person
+ * whose only membership is the live group `group` itself, that group and its live ancestors.
+ */
+export const groupReachSql = (group: string): string =>
+  reachFromSql(`SELECT g.id FROM groups g WHERE g.id=${group} AND g.deleted_at IS NULL`);
 
 /**
  * SQL: does `user` administer the live group `group` (each an SQL expression), directly or through an ancestor? Read

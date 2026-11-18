@@ -16,7 +16,7 @@ import type { AccessActor } from '@/lib/accounts';
 import type { Queryable } from '@artifactbin/contracts';
 import { newEditId } from '../document';
 import { artifactQuery } from './document';
-import { LIVE_ARTIFACT_SQL, editorScope, policyReaderSql, type ArtifactRow } from '@/lib/artifact-access';
+import { LIVE_ARTIFACT_SQL, editorScope, policyReaderSql, reactionScope, type ArtifactRow } from '@/lib/artifact-access';
 import { headBumpSql, notifyArtifactSql } from './table';
 
 /** How long after the last archived version a write reuses that snapshot (matches the edit protocol). */
@@ -38,14 +38,17 @@ export interface DatasetCommit {
 export async function commitDatasetWrite(q: Queryable, commit: DatasetCommit): Promise<ArtifactRow | undefined> {
   const { current, actor, meta } = commit;
   const scope = editorScope(actor);
+  // The policy reader's fence: a person's (or token's) read access, or for a group's sign-in its group's (lib/artifact-access).
+  // $19 is the group's id (the head's `actor_group_id`), which is also what a group principal's scope binds.
+  const reader = actor.principalGroup ? reactionScope(actor).where('$19') : policyReaderSql('$12', '$13');
   const result = await artifactQuery<ArtifactRow>(q,
     `WITH updated AS (
        UPDATE artifacts
-          SET meta = $3::jsonb, ${headBumpSql('$4', '$12', '$13')}
+          SET meta = $3::jsonb, ${headBumpSql('$4', '$12', '$13', '$19')}
         WHERE id = $1 AND edit_id = $2 AND ($18::boolean OR access = 'readwrite') AND ${LIVE_ARTIFACT_SQL}
           AND policy_revision=$15 AND ($18::boolean OR (
             ($17::text IS NULL AND (${scope.where('$14')})) OR
-            ($17='viewer' AND (${policyReaderSql('$12', '$13')}) AND ($16::boolean OR (${scope.where('$14')})))
+            ($17='viewer' AND (${reader}) AND ($16::boolean OR (${scope.where('$14')})))
           ))
         RETURNING *
      ), archived AS (
@@ -63,7 +66,8 @@ export async function commitDatasetWrite(q: Queryable, commit: DatasetCommit): P
       current.id, current.edit_id, JSON.stringify(meta), newEditId(),
       current.version, current.title, current.description, current.format, current.source,
       JSON.stringify(current.meta), WRITE_SNAPSHOT_WINDOW_MS,
-      actor.userId, actor.tokenId, scope.val, current.policy_revision??0, commit.policyDeclared, commit.policyRole, commit.granted,
+      actor.userId, actor.tokenId ?? actor.principalGroup?.tokenId ?? null, scope.val, current.policy_revision??0, commit.policyDeclared, commit.policyRole, commit.granted,
+      actor.principalGroup?.id ?? null,
     ],
   );
   return result.rows[0];

@@ -13,6 +13,10 @@ import {ownedArtifactState} from '@/lib/workspace';
  * pipeline).
  */
 import { json, baseUrl } from '@/lib/http';
+import { GROUP_PRINCIPAL_REFUSED } from '@artifactbin/contracts';
+
+/** The operations a group's sign-in may run: reading, creating in and editing its group's pages, comments, page actions. */
+const GROUP_OPERATIONS = ['get_artifact', 'list_versions', 'get_version', 'create_artifact', 'update_artifact', 'annotate', 'edit_comment', 'mutate_dataset', 'query_resource'];
 import type { AccessActor } from '@/lib/accounts';
 import { OPERATIONS, type OpContext, type Operation, type OpReply } from './registry';
 
@@ -81,6 +85,8 @@ export async function runOperation(
   author: AnnotationAuthor = { kind: 'agent', label: null, transport: 'http' },
 ): Promise<Response> {
   if(actor.workload&&!['get_artifact','list_versions','get_version','create_artifact','update_artifact'].includes(name))return json({error:'forbidden'},403);
+  // A group's sign-in runs only the operations its admitted routes run (server/group-admission), whatever the route.
+  if(actor.principalGroup&&!GROUP_OPERATIONS.includes(name))return json({error:GROUP_PRINCIPAL_REFUSED,message:'This operation does not accept a sign-in acting as a group.'},403);
   const scope=await hostedAuthorization(actor.userId,actor.tokenId,name,input);
   const refusal=hostedRefusal(scope);if(refusal)return refusal;
   const complete=async(response:Response)=>{if(scope.kind==='allowed')await hostedOperationCompleted(actor.userId,actor.tokenId,name,input,response);return response;};

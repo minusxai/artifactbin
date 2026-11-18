@@ -15,15 +15,20 @@
  *
  * THE VIEWER. Every query, `schema()` and `test()` carries the person it runs for (`viewer`) as metadata, apart from the
  * SQL and from the connection's one credential: `viewer_id`, `viewer_email` and `viewer_groups` (the IDs of the groups
- * they belong to directly, as JSON array text, sorted: `["g1","g2"]`). The database protocols have no per-query
+ * they belong to directly, as JSON array text, sorted: `["g1","g2"]`), and `viewer_group_role`: empty for a person;
+ * for an AGENT SIGNED IN AS A GROUP (no person: `viewer_id` and `viewer_email` empty, `viewer_groups` exactly that one
+ * group) the level it acts at there, `member` or `editor`, so a database that names its reader can tell an agent
+ * acting as a group from a person. The database protocols have no per-query
  * metadata, so the connector names the viewer on the session immediately before each statement, inside that
  * statement's own read-only transaction, every time (a pooled session never carries another person's values):
  *   Postgres  Q `BEGIN READ ONLY` · extended `SELECT set_config('app.viewer_id', $1, true),
- *             set_config('app.viewer_email', $2, true), set_config('app.viewer_groups', $3, true)` · extended: the
- *             statement · Q `COMMIT` (`ROLLBACK` after an error)
+ *             set_config('app.viewer_email', $2, true), set_config('app.viewer_groups', $3, true),
+ *             set_config('app.viewer_group_role', $4, true)` · extended: the statement · Q `COMMIT` (`ROLLBACK` after
+ *             an error)
  *   MySQL     `START TRANSACTION READ ONLY` · text `SET @app.viewer_id='…', @app.viewer_email='…',
- *             @app.viewer_groups='…'` (escaped literals) · the statement · `COMMIT` (`ROLLBACK` after an error) ·
- *             `SET @app.viewer_id='', @app.viewer_email='', @app.viewer_groups=''`
+ *             @app.viewer_groups='…', @app.viewer_group_role='…'` (escaped literals) · the statement · `COMMIT`
+ *             (`ROLLBACK` after an error) · `SET @app.viewer_id='', @app.viewer_email='', @app.viewer_groups='',
+ *             @app.viewer_group_role=''`
  * Nobody: empty strings and `[]`. A database that relies on them must read them as the statement starts and ignore
  * changes a statement makes itself, which a gateway built for this does; a plain database cannot guarantee that, so
  * there they are ADVISORY whenever the reader writes the SQL (other databases, maybe in future).
@@ -146,8 +151,12 @@ export const CONNECTOR_LIMITS = Object.freeze({
   schemaTables: 2000,
 });
 
-/** The person a query runs for. `email` is null for an account without one; `groups` their group IDs. */
-export interface ConnectorViewer { readonly id: string; readonly email: string | null; readonly groups: readonly string[] }
+/**
+ * Who a query runs for. A person: `id`, `email` (null for an account without one), `groups` their group IDs, `groupRole`
+ * empty or absent. An agent signed in as a group: `id` and `email` empty, `groups` exactly that group, `groupRole` its
+ * level (`member` or `editor`).
+ */
+export interface ConnectorViewer { readonly id: string; readonly email: string | null; readonly groups: readonly string[]; readonly groupRole?: '' | 'member' | 'editor' }
 
 export interface ConnectorQuery {
   /** One statement in the connector's dialect; `$name` marks a bound parameter. */

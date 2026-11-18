@@ -12,7 +12,17 @@ import crypto from 'crypto';
 import { getDb, emit, currentRequest, services } from '../platform';
 import type { Harness } from './client-identity';
 import { canAuthenticateUser } from '../user-kinds';
-import type { AccessActor } from './actors';
+import type { AccessActor, GroupPrincipal } from './actors';
+
+/**
+ * A GROUP'S SIGN-IN, live by the identity views' one rule (contracts identity-service `GROUP_SIGN_IN_RULE`: the `tokens`
+ * view's `live`), read by its id on every resolution and re-check: its group, level and authorising person, or null.
+ */
+export async function liveGroupSignIn(id: string): Promise<Omit<GroupPrincipal, 'tokenId'> | null> {
+  const row = (await (await getDb()).query<{ group_id: string; group_role: string; issued_by: string }>(
+    'SELECT group_id, group_role, issued_by FROM tokens WHERE id = $1 AND group_id IS NOT NULL AND user_id IS NULL AND live', [id])).rows[0];
+  return row && (row.group_role === 'member' || row.group_role === 'editor') ? { id: row.group_id, role: row.group_role, issuedBy: row.issued_by } : null;
+}
 
 
 /**
@@ -175,6 +185,8 @@ export async function withAccountToken<T extends AccessActor>(actor: T): Promise
 interface ResolvedToken {
   /** OAuth bearers require admission by the identity owner, beyond row liveness. */
   audience?: string;
+  /** A group's sign-in: the group it acts as, at its level (`userId` is then null). */
+  group?: Omit<GroupPrincipal, 'tokenId'>;
   id: string;
   userId: string | null;
   clientHarness: Harness | null;
@@ -189,8 +201,8 @@ export async function resolveToken(presented: string): Promise<ResolvedToken | n
 /** The hash is a secret column only the identity module reads: it answers the live row, this decides admission. */
 async function lookUpToken(hash: string): Promise<ResolvedToken | null> {
   const row = await services().identity.findToken({ hash });
-  // A group's sign-in is never a bare token here: the identity host's actor carries it (refused at the app's edge).
-  if (row?.groupId) return null;
+  // A group's sign-in is never a bare token here: it resolves as its group principal (`liveGroupSignIn`), or not at all.
+  if (row?.groupId) { const group = await liveGroupSignIn(row.id); return group ? { id: row.id, userId: null, clientHarness: null, group, ...(row.audience ? { audience: row.audience } : {}) } : null; }
   const db = await getDb();
   return row && await canUseDeploymentIdentity(row.userId,db) && await canAuthenticateUser(row.userId, db) ? { id: row.id, userId: row.userId, clientHarness: row.clientHarness as Harness | null, ...(row.audience?{audience:row.audience}:{}) } : null;
 }

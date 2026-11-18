@@ -10,7 +10,8 @@ import { json, readJson, unauthorized } from '@/lib/http';
 export async function POST(request: Request) {
   const actor = await requestOrSessionActor(request);
   if (refusesCrossSite(request, actor)) return json({ error: 'forbidden' }, 403);
-  if (!actor.userId) return unauthorized(request);
+  // A person, or an agent signed in as a group (it reads as its group: lib/connections `connectorViewer`).
+  if (!actor.userId && !actor.principalGroup) return unauthorized(request);
   const body = await readJson(request).catch(() => null);
   if (!body || typeof body !== 'object') return json({ error: 'validation_failed', message: 'send {sql, params?, namespace?}' }, 400);
   const call = body as { sql?: unknown; params?: unknown; namespace?: unknown };

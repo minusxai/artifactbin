@@ -8,7 +8,7 @@
  */
 import { isCrossSiteRequest, json, unauthorized } from '../http';
 import type { Harness } from '@/lib/accounts';
-import { matchesWorkspaceAccount, type RequestIdentity, type TokenHoldingActor } from '@/lib/accounts';
+import { accountOf, matchesWorkspaceAccount, type RequestIdentity, type TokenHoldingActor } from '@/lib/accounts';
 import { isCookieCredential, resolveRequestIdentity, requestOrSessionActor, sessionActor } from './request-identity';
 
 /** The identity a token door admits: always a token, the presented bearer or the browser's agent cookie. */
@@ -25,6 +25,12 @@ interface TokenContext {
 type TokenHandler = (request: Request, ctx: TokenContext) => Promise<Response>;
 
 const holdsToken = (actor: RequestIdentity): actor is TokenIdentity => !!actor.tokenId;
+/**
+ * A GROUP's sign-in (lib/accounts `GroupPrincipal`) passes the token door with `tokenId` null: it reaches only the
+ * routes server/group-admission lists, each of which reads `principalGroup` before any token id, so the type's
+ * promise of a token holds for every other caller.
+ */
+const holdsGroupSignIn = (actor: RequestIdentity): actor is TokenIdentity => !!actor.principalGroup && !actor.userId && !actor.tokenId;
 
 /**
  * THE TOKEN DOOR. Two ways to present the same capability: an AGENT sends the token as a bearer header; a
@@ -51,10 +57,11 @@ export function withTokenAuth(handler: TokenHandler, options: {readOnly?:boolean
     if(resolved.kind==='bearer-invalid')return unauthorized(request);
     if(resolved.kind==='refused')return resolved.response;
     const actor=resolved.identity;
-    if (!holdsToken(actor)) return unauthorized(request);
+    if (!holdsToken(actor) && !holdsGroupSignIn(actor)) return unauthorized(request);
     // A cookie authorizes a mutation only from our own site.
     if (refusesCrossSite(request, actor)) return json({ error: 'forbidden' }, 403);
-    const account=actor.userId??actor.tokenId;
+    // The workspace account: the person, the bare token, or a group's sign-in's principal (never its rotating token).
+    const account=accountOf(actor);
     const expectedAccount=request.headers.get('X-Artifactbin-Account');
     if(expectedAccount&&!await matchesWorkspaceAccount(expectedAccount,account))return json({error:'account_mismatch',expected_account:expectedAccount,actual_account:account,hint:'Use the credentials for this workspace account.'},409);
     const params = routeCtx ? await routeCtx.params : {};
@@ -90,7 +97,7 @@ export function withAgentOrBrowserAuth(handler: AgentOrBrowserHandler) {
 export async function requestActor(request: Request): Promise<RequestIdentity | Response> {
   const actor = await requestOrSessionActor(request);
   if (refusesCrossSite(request, actor)) return json({ error: 'forbidden' }, 403);
-  return actor.userId || actor.tokenId ? actor : unauthorized(request);
+  return actor.userId || actor.tokenId || actor.principalGroup ? actor : unauthorized(request);
 }
 
 const isMutation=(request:Request):boolean=>!['GET','HEAD','OPTIONS'].includes(request.method.toUpperCase());

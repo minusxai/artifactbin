@@ -73,6 +73,16 @@ async function isSandboxArtifact(row: ArtifactRow): Promise<boolean> {
  * asked a question this table can answer.
  */
 export async function can(actor: AccessActor, capability: Capability, target?: CapabilityTarget): Promise<boolean> {
+  // A GROUP's sign-in (lib/accounts `GroupPrincipal`) is no kind of person: it creates (the destination rule then
+  // holds it to its group), reads and edits by its role, and comments where its role reaches (the caller's scope
+  // decides); it never follows, likes, forks or does any other person's act.
+  if (actor.principalGroup) {
+    if (capability === 'create') return true;
+    if (!target || !isArtifact(target)) return false;
+    if (capability === 'read') return canRead(await effectiveRole(target, actor));
+    if (capability === 'edit') return canEdit(await effectiveRole(target, actor));
+    return capability === 'comment';
+  }
   const kind = await kindOfActor(actor);
 
   // An anonymous browser creates drafts and claims them at login; a guest is

@@ -197,7 +197,7 @@ it('runs a page\'s declared query for each reader its rules admit, with the serv
   expect(ok(await door(page, carol, { query: 'mine', params: { min: 0 } })).rows).toEqual([]);
   expect(ok(await door(page, alice, { query: 'mine', params: { min: 10 } })).rows).toEqual([{ id: 3, item: 'pie' }]);
   // The caller cannot name another person, send SQL with a name, or leave a parameter out.
-  for (const name of ['viewer_email', 'viewer_id', 'viewer_groups']) {
+  for (const name of ['viewer_email', 'viewer_id', 'viewer_groups', 'viewer_group_role']) {
     const forged = await door(page, bob, { query: 'mine', params: { min: 0, [name]: alice.email } });
     expect([forged.status, forged.body.error], name).toEqual([400, 'validation_failed']);
   }

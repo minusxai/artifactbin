@@ -105,12 +105,19 @@ export async function testDefaultConnection(actor: AccessActor & { userId: strin
 /** Closes the connection's sessions (process shutdown, tests). */
 export async function closeDefaultConnection(): Promise<void> { const c = current; current = null; await closeConfigured(c); }
 
-/** The person a query runs for: the account, its email and its groups' IDs, read now; nobody (null) without an account. */
-export async function connectorViewer(actor: AccessActor): Promise<ConnectorViewer | null> { return actor.userId ? viewerOf(actor) : null; }
+/**
+ * Who a query runs for: the account, its email and its groups' IDs, read now; for a group's sign-in (lib/accounts
+ * `GroupPrincipal`) no person, exactly its group and its level (contracts connectors `ConnectorViewer`); nobody
+ * (null) otherwise.
+ */
+export async function connectorViewer(actor: AccessActor): Promise<ConnectorViewer | null> { return actor.userId || actor.principalGroup ? viewerOf(actor) : null; }
+/** Whom the default connection answers: a signed-in person, or a group's sign-in. */
+const reader = (actor: AccessActor): boolean => !!actor.userId || !!actor.principalGroup;
 async function viewerOf(actor: AccessActor): Promise<ConnectorViewer> {
+  if (actor.principalGroup) return { id: '', email: null, groups: [actor.principalGroup.id], groupRole: actor.principalGroup.role };
   const user = await getUserById(actor.userId!);
   const groups = (await listGroups(actor.userId!)).map((g) => g.id);
-  return { id: actor.userId!, email: (user as { email?: string | null } | null)?.email ?? actor.email ?? null, groups };
+  return { id: actor.userId!, email: (user as { email?: string | null } | null)?.email ?? actor.email ?? null, groups, groupRole: '' };
 }
 
 export interface ConnectionSqlReply { status: number; body: Record<string, unknown> }
@@ -171,7 +178,7 @@ export async function pageConnectionSql(actor: AccessActor, links: readonly Html
   try { words = leadingWords(selected(used[0]!.namespace)?.dialect ?? dialect, raw.sql); } catch { /* selection errors are returned after access checks below */ }
   const stored = links.find((l) => (l.kind === 'dataset' || l.kind === 'live-dataset') && words.has(l.name.toLowerCase()));
   if (stored) return reply('validation_failed', `a statement reads one source: ${used[0]!.name} is the install's default connection and ${stored.name} ${stored.kind === 'dataset' ? 'a stored dataset' : 'a live dataset'}; query them separately`);
-  if (!actor.userId) return reply('sign_in_required', `sign in to read ${used[0]!.name}: the default connection answers signed-in people only`);
+  if (!reader(actor)) return reply('sign_in_required', `sign in to read ${used[0]!.name}: the default connection answers signed-in people only`);
   const call = checkedCall(raw);
   if ('status' in call) return call;
   if (!configured()) return reply('dataset_not_found', `${used[0]!.name} reads the install's default connection, and this install has none`);
@@ -190,7 +197,7 @@ export async function pageConnectionSql(actor: AccessActor, links: readonly Html
 
 /** An agent's statement, as its signed-in account, passed through; `namespace` (what follows `default:`) the database. */
 export async function agentConnectionSql(actor: AccessActor, raw: { sql?: unknown; params?: unknown; namespace?: unknown }, signal: AbortSignal): Promise<ConnectionSqlReply> {
-  if (!actor.userId) return AGENT_SIGN_IN;
+  if (!reader(actor)) return AGENT_SIGN_IN;
   const call = checkedCall(raw);
   if ('status' in call) return call;
   if (raw.namespace !== undefined && typeof raw.namespace !== 'string') return reply('validation_failed', 'namespace is what follows default:, a database name');
@@ -199,7 +206,7 @@ export async function agentConnectionSql(actor: AccessActor, raw: { sql?: unknow
 
 /** The tables and columns a signed-in person can read in `namespace`'s database (absent: the configured one). */
 export async function defaultConnectionSchema(actor: AccessActor, namespace: string | undefined, signal: AbortSignal): Promise<ConnectionSqlReply> {
-  if (!actor.userId) return AGENT_SIGN_IN;
+  if (!reader(actor)) return AGENT_SIGN_IN;
   try {
     const c = selected(namespace);
     if (!c) return reply('dataset_not_found', 'this install has no default connection');

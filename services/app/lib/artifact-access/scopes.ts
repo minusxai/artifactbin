@@ -10,7 +10,7 @@
  */
 import { ACCOUNT_REACH_SQL } from '@/lib/user-kinds';
 import { identityForUser, type AccessActor } from '@/lib/accounts';
-import { groupAdminSql, reachedGroupsSql } from '@/lib/groups';
+import { groupAdminSql, groupReachSql, reachedGroupsSql } from '@/lib/groups';
 import type {DocumentGraph} from '@artifactbin/contracts';
 import { shareRolesAtLeast, type ArtifactFormat, type ArtifactRole, type DatasetAccess, type ShareEntry, type ShareRole, type Visibility } from '@artifactbin/contracts';
 
@@ -54,6 +54,8 @@ export interface ArtifactRow {
   /** Who made the head: the last accepted writer (an editor may differ from the owner). */
   actor_user_id: string | null;
   actor_token_id: string | null;
+  /** A group's sign-in as that writer (lib/accounts `GroupPrincipal`): the group; null for a person or a token. */
+  actor_group_id?: string | null;
   /** Who published the head's content, for the removed page schedules: no longer written or read. */
   content_publisher_user_id: string | null;
   created_at: string;
@@ -152,8 +154,9 @@ export const groupMemberPredicate = (user:string, role?:'admin'|'editor', alias=
     ? `(EXISTS (SELECT 1 FROM group_members gm JOIN groups g ON g.id=gm.group_id WHERE gm.group_id=${alias}.group_id AND gm.user_id=${user} AND gm.role='editor' AND g.deleted_at IS NULL) OR ${groupAdminSql(user,`${alias}.group_id`)})`
     : `(${alias}.group_id IN (${reachedGroupsSql(user)}) OR ${groupAdminSql(user,`${alias}.group_id`)})`;
 
-export const ownerPredicate = ({ tokenId, userId, groupId, workload }: AccessActor): Scope =>
-  workload ? {where:p=> `(${p}::text IS NULL AND FALSE)`,val:''} : groupId ? {where:p=>`group_id = ${p}`,val:groupId} : userId ? { where: (p) => `((group_id IS NULL AND user_id = ${p}) OR ${groupMemberPredicate(p,'admin')})`, val: userId } : { where: (p) => `group_id IS NULL AND user_id IS NULL AND token_id = ${p}`, val: tokenId ?? '' };
+export const ownerPredicate = ({ tokenId, userId, groupId, workload, principalGroup }: AccessActor): Scope =>
+  // A group's sign-in owns nothing (./access `ownsArtifact`), so no owner-only statement ever matches for it.
+  workload || principalGroup ? {where:p=> `(${p}::text IS NULL AND FALSE)`,val:''} : groupId ? {where:p=>`group_id = ${p}`,val:groupId} : userId ? { where: (p) => `((group_id IS NULL AND user_id = ${p}) OR ${groupMemberPredicate(p,'admin')})`, val: userId } : { where: (p) => `group_id IS NULL AND user_id IS NULL AND token_id = ${p}`, val: tokenId ?? '' };
 
 export const ownerScope = (actor: AccessActor): Scope => live(ownerPredicate(actor));
 
@@ -192,8 +195,22 @@ const DOCUMENT_EDITOR_PREDICATE = "(artifacts.format = 'html' AND artifacts.visi
  * An anonymous token has no account to be named through, so it narrows to
  * bare ownership.
  */
+/**
+ * A GROUP'S SIGN-IN (lib/accounts `GroupPrincipal`), the mirror of ./access-facts `groupPrincipalFacts`: what a person
+ * holds whose only relationship is a direct membership of the group `p` at its level. At editor level the group's own
+ * pages to edit; its audience (pages the group or an ancestor owns) to read; group shares to it or an ancestor; the
+ * link in full. No ownership, no named share, no document-editor grant, no other group.
+ */
+const groupPrincipalScope = (principal: NonNullable<AccessActor['principalGroup']>, min: ArtifactRole): Scope => live({
+  val: principal.id,
+  where: (p) => `(${principal.role === 'editor' ? `(artifacts.group_id = ${p} AND EXISTS (SELECT 1 FROM groups pg WHERE pg.id = ${p} AND pg.deleted_at IS NULL))` : 'FALSE'}
+    OR ${min === 'viewer' ? `artifacts.group_id IN (${groupReachSql(p)})` : 'FALSE'}
+    OR EXISTS (SELECT 1 FROM artifact_group_shares gs WHERE gs.artifact_id = artifacts.id AND gs.role IN (${shareRolesAtLeast(min).map((r) => `'${r}'`).join(', ')}) AND gs.group_id IN (${groupReachSql(p)}))
+    OR ${LINK_PREDICATE(min)})`,
+});
+
 const scopeAtLeast = (actor: AccessActor, min: ArtifactRole): Scope =>
-  actor.workload ? live({val:JSON.stringify({group:actor.workload.principal.groupId,ids:actor.workload.readArtifactIds,writes:actor.workload.publication&&actor.workload.role==='editor'?actor.workload.writeArtifactIds.filter(id=>actor.workload!.readArtifactIds.includes(id)):[]}),where:p=>(min==='viewer'||min==='commenter'||min==='editor')?`(group_id=(${p}::jsonb->>'group') AND id IN (SELECT jsonb_array_elements_text(${p}::jsonb->'${min==='viewer'?'ids':'writes'}')) AND EXISTS (SELECT 1 FROM groups wg WHERE wg.id=artifacts.group_id AND wg.deleted_at IS NULL))`:`(${p}::text IS NULL AND FALSE)`}) : actor.userId
+  actor.principalGroup ? groupPrincipalScope(actor.principalGroup, min) : actor.workload ? live({val:JSON.stringify({group:actor.workload.principal.groupId,ids:actor.workload.readArtifactIds,writes:actor.workload.publication&&actor.workload.role==='editor'?actor.workload.writeArtifactIds.filter(id=>actor.workload!.readArtifactIds.includes(id)):[]}),where:p=>(min==='viewer'||min==='commenter'||min==='editor')?`(group_id=(${p}::jsonb->>'group') AND id IN (SELECT jsonb_array_elements_text(${p}::jsonb->'${min==='viewer'?'ids':'writes'}')) AND EXISTS (SELECT 1 FROM groups wg WHERE wg.id=artifacts.group_id AND wg.deleted_at IS NULL))`:`(${p}::text IS NULL AND FALSE)`}) : actor.userId
     ? live({ where: (p) => `(${ownerPredicate(actor).where(p)} OR (${ACCOUNT_REACH_SQL(p)} AND (${groupMemberPredicate(p, 'editor')} OR ${min==='viewer'?groupMemberPredicate(p):'FALSE'} OR ${SHARE_PREDICATE(shareRolesAtLeast(min), p)} OR ${LINK_PREDICATE(min)}${actor.documentEditor ? ` OR ${DOCUMENT_EDITOR_PREDICATE}` : ''})))`, val: actor.userId })
     : ownerScope(actor);
 
@@ -217,6 +234,9 @@ export const annotationScope = (actor: AccessActor): Scope => scopeAtLeast(actor
 /** Group viewers may observe comment feeds without gaining annotation writes. */
 export const commentMonitorScope = (actor:AccessActor):Scope => {
  const scope=annotationScope(actor);
+ // A group's sign-in observes as its twin does (a direct member of its group alone): its commenter reach, and the
+ // audience and group shares of its group and ancestors; holding a link at viewer level observes nothing.
+ if(actor.principalGroup)return {where:p=>`(${scope.where(p)} OR (${LIVE_ARTIFACT_SQL} AND (artifacts.group_id IN (${groupReachSql(p)}) OR EXISTS (SELECT 1 FROM artifact_group_shares gs WHERE gs.artifact_id=artifacts.id AND gs.group_id IN (${groupReachSql(p)})))))`,val:scope.val};
  return actor.userId?{where:p=>`(${scope.where(p)} OR (${LIVE_ARTIFACT_SQL} AND (${groupMemberPredicate(p)} OR ${GROUP_SHARE_PREDICATE(['viewer','commenter','editor'],p)})))`,val:scope.val}:scope;
 };
 

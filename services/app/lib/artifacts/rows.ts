@@ -20,6 +20,7 @@ export const ARTIFACT_HEADER_COLUMNS = [
   'id', 'token_id', 'user_id', 'group_id', 'creator_user_id', 'visibility', 'dataset_policy', 'sharing_revision', 'policy_revision',
   'link_role', 'access', 'ancestor_ids', 'title', 'description', 'format', 'document_archived_at', 'meta', 'version', 'edit_id',
   'actor_user_id', 'actor_token_id', 'content_publisher_user_id', 'created_at', 'updated_at', 'forked_from', 'deleted_at',
+  'actor_group_id',
 ] as const;
 const HEADER_SELECT = ARTIFACT_HEADER_COLUMNS.join(', ');
 

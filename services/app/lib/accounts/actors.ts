@@ -34,7 +34,19 @@ export interface AccessActor {
   documentEditor: boolean;
   /** Server-only saved artifact owner, for author reference resolution. Never request input. */
   groupId?: string | null;
+  /**
+   * AN AGENT SIGNED IN AS A GROUP (contracts `GroupActor`, identity-service `GROUP_SIGN_IN_RULE`): set only then, and
+   * then `userId`, `tokenId` and `email` are null, so no reading of the actor as a person or as an unowned token
+   * applies. Its access is lib/artifact-access's one rule for it (`groupPrincipalOf`); every other door refuses it.
+   */
+  principalGroup?: GroupPrincipal | null;
 }
+
+/**
+ * The group a sign-in acts as, at its level, with the sign-in's own token row (attribution, never ownership) and the
+ * person who authorised it (`issuedBy`, never the principal).
+ */
+export interface GroupPrincipal { id: string; role: 'member' | 'editor'; tokenId: string; issuedBy: string }
 
 /**
  * One request's resolved identity: the actor, plus how it proved itself. `credential` keys the same-site
@@ -53,12 +65,16 @@ export interface RequestIdentity extends AccessActor {
  * The same actor, holding a token: what creating, the per-token quotas and web imports are charged to. Every
  * token-door identity is one (`withTokenAuth`), and an account session becomes one by minting its own token.
  */
-export type PublicationActor = AccessActor & ({tokenId:string}|{workload:Extract<WorkloadAuthorization,{allowed:true}>});
+export type PublicationActor = AccessActor & ({tokenId:string}|{workload:Extract<WorkloadAuthorization,{allowed:true}>}|{principalGroup:GroupPrincipal});
 
 export type TokenHoldingActor = AccessActor & { tokenId: string };
 
-/** The account a write is scoped to: the user, else the bare token. Nobody owns nothing, so nobody is refused. */
-export function accountOf(actor: Pick<AccessActor, 'userId' | 'tokenId'>): string {
+/**
+ * The account a write is scoped to: the user, else the bare token, else for a group's sign-in the group principal
+ * (`group:<id>:<level>`, never its rotating token). Nobody owns nothing, so nobody is refused.
+ */
+export function accountOf(actor: Pick<AccessActor, 'userId' | 'tokenId' | 'principalGroup'>): string {
+  if (actor.principalGroup) return principalKey(actor.principalGroup);
   const account = actor.userId ?? actor.tokenId;
   if (!account) throw new Error('an actor with neither an account nor a token owns nothing');
   return account;
@@ -80,3 +96,6 @@ export function identityForUser(userId: string | null, tokenId?: string | null, 
 export function identityForUser(userId: string | null, tokenId: string | null = null, email: string | null = null): AccessActor {
   return { userId, tokenId, email, documentEditor: false };
 }
+
+/** The stable key a group principal is counted, charged and remembered under: its group and level, never a token id. */
+export const principalKey = (principal: Pick<GroupPrincipal, 'id' | 'role'>): string => `group:${principal.id}:${principal.role}`;
