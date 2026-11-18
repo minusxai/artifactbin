@@ -348,8 +348,9 @@ it('puts the tool cache\'s newest Node 22 on PATH, starts no Node, and warms tha
  const cache=toolCacheWith(['20.19.5','22.9.0','22.23.4','24.11.0']);
  const release=join(cache,'release'),read=join(cache,'read');
  // Any node at all fails the probe; cat records what it reads and then blocks until the test releases it: had the step
- // waited for it, the 5s spawn timeout would fail the probe.
- const cat=`cat(){ printf '%s\\n' "$*" >> '${read}'; while [ ! -e '${release}' ]; do sleep 0.01; done; : > '${read}.done'; }`;
+ // waited for it, the 5s spawn timeout would fail the probe. `>>` creates the record before it is written, so the test
+ // reads it only once cat has marked it `.ready`.
+ const cat=`cat(){ printf '%s\\n' "$*" >> '${read}'; : > '${read}.ready'; while [ ! -e '${release}' ]; do sleep 0.01; done; : > '${read}.done'; }`;
  const {directory,result,output,path}=probeRun('v24.11.0',{toolCache:cache,cat,node:'node(){ return 91; }'});
  try {
   expect(result.error).toBeUndefined();
@@ -357,7 +358,7 @@ it('puts the tool cache\'s newest Node 22 on PATH, starts no Node, and warms tha
   expect(output).toBe('major=22\n');
   const bin=join(cache,'node','22.23.4','x64','bin');
   expect(path).toBe(`${bin}\n`);
-  waitFor(read);
+  waitFor(`${read}.ready`);
   expect(readFileSync(read,'utf8')).toBe(`${bin}/node\n`);
  } finally {writeFileSync(release,'');waitFor(`${read}.done`);}
 });
