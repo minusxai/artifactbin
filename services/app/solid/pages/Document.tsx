@@ -393,7 +393,7 @@ export function DocumentPage(): JSX.Element {
         topOffset={barHeight} documentTopInset={regionUi()?.toolbar() ? REGION_TOOLBAR_H : 0} />
     </Show>
     <Show when={sharingOpen() && id}>
-      <Suspense fallback={<PendingReaderDialog title="Share artifact" onClose={() => setSharingOpen(false)} />}><DocumentSharing refs={page?.surface?.refs} id={id!} title={shownTitle()} owner={isOwner()} editable={editable()} variant="dialog" version={currentVersion()}
+      <Suspense fallback={<PendingReaderDialog title="Share artifact" onClose={() => setSharingOpen(false)} />}><DocumentSharing refs={page?.surface?.refs} id={id!} title={shownTitle()} owner={isOwner()} editable={editable()} queryApprovals={page?.surface?.format === 'html'} variant="dialog" version={currentVersion()}
         onClose={() => setSharingOpen(false)} onSocialPreview={editable() ? () => void openSocialPreview() : undefined} /></Suspense>
     </Show>
     <Show when={metadataError()}><p role="alert">{metadataError()}</p></Show>

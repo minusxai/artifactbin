@@ -4,6 +4,7 @@ import { notifyArtifactSql } from './table';
 import type { AccessActor } from '@/lib/accounts';
 import { getArtifactFor } from './rows';
 import { writeShares } from './store';
+import { assertAudienceChange } from '@/lib/query-approvals';
 import { artifactQuery } from './document';
 import { ALLOW_PUBLIC_VISIBILITY, getDb, actorSubject, emit } from '../platform';
 import { type DatasetAccess, type GroupShare, type GroupShareRole, type ShareEntry, type ShareRole, type SharingPatch, type Visibility } from '@artifactbin/contracts';
@@ -67,6 +68,8 @@ export async function updateSharingFor(actor: AccessActor, id: string, patch: Sh
   const done = await db.transaction(async (tx) => {
     const owned = await artifactQuery<ArtifactRow>(tx,`SELECT * FROM artifacts WHERE id = $1 AND ${scope.where('$2')} FOR UPDATE`, [id, scope.val]);
     if (owned.rows.length === 0) return false;
+    // A page with a live approved query: only an Admin of its group changes who can open it (lib/query-approvals).
+    await assertAudienceChange(tx, actor, owned.rows[0], { visibility: patch.visibility, link_role: patch.linkRole, shares: patch.shares });
     if (patch.visibility) {
       await tx.query(`UPDATE artifacts SET visibility = $2 WHERE id = $1 `, [id, patch.visibility]);
     }
@@ -129,6 +132,7 @@ export async function setArtifactGroupShare(actor:AccessActor,id:string,groupId:
   const row=(await tx.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id=$1 AND ${scope.where('$2')}`,[id,scope.val])).rows[0];
   if(!row)return null;
   if(previous===role)return {changed:false};
+  await assertAudienceChange(tx,actor,row,{grant:true});
   await groupQuota(tx,actor.userId!,'share');
   if(role===null)await tx.query('DELETE FROM artifact_group_shares WHERE artifact_id=$1 AND group_id=$2',[id,groupId]);
   else await tx.query('INSERT INTO artifact_group_shares(artifact_id,group_id,role,created_by) VALUES($1,$2,$3,$4) ON CONFLICT(artifact_id,group_id) DO UPDATE SET role=EXCLUDED.role',[id,groupId,role,actor.userId]);

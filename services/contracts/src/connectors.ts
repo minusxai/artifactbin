@@ -18,9 +18,11 @@
  * they belong to directly, as JSON array text, sorted: `["g1","g2"]`), and `viewer_group_role`: empty for a person;
  * for an AGENT SIGNED IN AS A GROUP (no person: `viewer_id` and `viewer_email` empty, `viewer_groups` exactly that one
  * group) the level it acts at there, `member` or `editor`, so a database that names its reader can tell an agent
- * acting as a group from a person. The database protocols have no per-query
- * metadata, so the connector names the viewer on the session immediately before each statement, inside that
- * statement's own read-only transaction, every time (a pooled session never carries another person's values):
+ * acting as a group from a person. A page's declared query an Admin of the page's group approved runs, for each
+ * signed-in account that can open the page, with exactly a member-level group agent's values for that group (no
+ * person). The database protocols have no per-query metadata, so the connector names the viewer on the session
+ * immediately before each statement, inside that statement's own read-only transaction, every time (a pooled session
+ * never carries another person's values):
  *   Postgres  Q `BEGIN READ ONLY` · extended `SELECT set_config('app.viewer_id', $1, true),
  *             set_config('app.viewer_email', $2, true), set_config('app.viewer_groups', $3, true),
  *             set_config('app.viewer_group_role', $4, true)` · extended: the statement · Q `COMMIT` (`ROLLBACK` after

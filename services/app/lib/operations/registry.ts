@@ -8,6 +8,7 @@ import { respondToMutate } from '@/lib/document-data';
 import {GROUP_OPERATIONS} from './groups';
 import { REGION_OPERATIONS } from './regions';
 import { MEMBERSHIP_OPERATIONS } from './membership';
+import { QUERY_APPROVAL_OPERATIONS } from './query-approvals';
 import {createHash} from 'node:crypto';
 import {queryResourceForRequest} from './resource-query';
 import {artifactWireFor,readArtifactSnapshot,respondToAnnotationAction,respondToAnnotationEdit,respondToCommentReaction} from '@/lib/annotations';
@@ -828,7 +829,7 @@ const queryResourceOp:Operation={
 };
 
 export const OPERATIONS: Operation[] = [
-  ...GROUP_OPERATIONS,...MEMBERSHIP_OPERATIONS,...ACCOUNT_OPERATIONS,...BROWSER_SESSION_OPERATIONS,...TESTUSER_OPERATIONS,queryResourceOp,
+  ...GROUP_OPERATIONS,...MEMBERSHIP_OPERATIONS,...QUERY_APPROVAL_OPERATIONS,...ACCOUNT_OPERATIONS,...BROWSER_SESSION_OPERATIONS,...TESTUSER_OPERATIONS,queryResourceOp,
   createArtifactOp, updateArtifactOp, forkArtifactOp, getArtifactOp, listArtifactsOp,
   listVersionsOp, getVersionOp, updateMetadataOp, transferArtifactOp, revertArtifactOp, deleteArtifactOp, restoreArtifactOp, annotateOp, editCommentOp, reactCommentOp, getDatasetPolicyOp, setDatasetPolicyOp, getDatasetPolicyTemplatesOp, getLiveConnectionOp, updateLiveConnectionOp, testLiveConnectionOp, getLiveSchemaOp, mutateDatasetOp,
   exportArtifactOp, refreshAssetOp, renderChartImageOp, ...REGION_OPERATIONS,

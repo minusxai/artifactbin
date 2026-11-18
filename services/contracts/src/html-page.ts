@@ -21,9 +21,17 @@ export type HtmlPageLink = HtmlDatasetLink | HtmlDefaultConnectionLink | HtmlLiv
 /**
  * A DECLARED QUERY: `<script type="application/sql" data-af-query="NAME" data-af-dataset="LINK">SQL</script>` in the
  * published source, recorded by publish per page version (meta `htmlQueries`) after checking the publisher may edit
- * the live dataset `link` names. Readers run it by `name` (`sql.query(name, params)`), never by its text.
+ * the live dataset `link` names, or on a default-connection link (where a group's Admin may approve it to run as the
+ * group: lib/query-approvals). Readers run it by `name` (`sql.query(name, params)`), never by its text.
  */
-export interface HtmlDeclaredQuery { name: string; link: string; sql: string }
+export interface HtmlDeclaredQuery { name: string; link: string; sql: string; params?: HtmlQueryParams }
+/**
+ * WHAT A READER MAY VARY in a declared query on a default-connection link (`data-af-params`, a JSON object): each
+ * parameter's name and either the type any value of which it takes (`"text"`, `"number"`, `"boolean"`, `"date"`) or
+ * the fixed list of values it takes. Part of what an approval covers (lib/query-approvals): none declared, none allowed.
+ */
+export type HtmlQueryParam = { type: 'text' | 'number' | 'boolean' | 'date' } | { values: readonly (string | number | boolean)[] };
+export type HtmlQueryParams = Readonly<Record<string, HtmlQueryParam>>;
 export interface HtmlPageVersion {
   pageId: string; version: number; revision: string; html: string;
   nextNodeId: number; links: readonly HtmlPageLink[];

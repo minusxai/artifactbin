@@ -11,6 +11,7 @@ import { createArtifactFromBody } from '@/lib/publish';
 import { createArtifact, replaceArtifactFor, setArtifactGroupShare, updateSharingFor } from '@/lib/artifacts';
 import { lockOrder } from '@/lib/artifact-access';
 import { updateLiveConnection } from '@/lib/live-datasets';
+import { approvePageQuery } from '@/lib/query-approvals';
 import { overrideConfig } from '@/lib/platform/config';
 import { createGroup, deleteGroup } from '@/lib/groups';
 import { POST as sqlPost } from '@/app/api/artifacts/[id]/sql/route';
@@ -152,7 +153,8 @@ it('every writer locks its artifacts by tier and lockOrder, before its facts', a
     path = 'live connection edit'; expect((await updateLiveConnection(f.owner.actor, live, { password: 'q' })).status).toBe(200);
     path = 'sharing'; await updateSharingFor(f.owner.actor, f.page, { shares: [] });
     path = 'group share'; await setArtifactGroupShare(f.owner.actor, f.page, group.id, 'viewer');
-    path = 'group-owned publish'; await createArtifact(null, f.owner.userId, { format: 'html', source: '<p>group page</p>', meta: {}, title: 'Group page', destination: { type: 'group', id: group.id } });
+    path = 'group-owned publish'; const groupPage = await createArtifact(null, f.owner.userId, { format: 'html', source: '<p>group page</p>', meta: {}, title: 'Group page', destination: { type: 'group', id: group.id } });
+    path = 'query approval'; await expect(approvePageQuery(f.owner.actor, groupPage.id, { query: 'none', hash: '0'.repeat(64) })).rejects.toMatchObject({ code: 'unknown_query' });
     const workloadActor={userId:null,tokenId:null,email:null,documentEditor:false,finalWorkloadAdmission:async()=>true,workload:{allowed:true as const,principal:{issuerId:'fixture',subjectId:'fixture',groupId:group.id,grantId:'occurrence',executionId:'attempt',environmentId:'fixture',intentHash:'fixture',epoch:1},role:'editor' as const,readArtifactIds:[] as string[],writeArtifactIds:[] as string[],rootFolderId:null,visibility:'private' as const,publication:{slot:'report',maxArtifacts:10,maxBytes:100000}}};
     path='workload publish';const output=await createArtifact(null,null,{format:'html',source:'<p>Workload</p>',meta:{},visibility:'private',destination:{type:'group',id:group.id}},{workloadActor});
     formats.set(output.id,'html');workloadActor.workload.readArtifactIds.push(output.id);workloadActor.workload.writeArtifactIds.push(output.id);
@@ -163,7 +165,7 @@ it('every writer locks its artifacts by tier and lockOrder, before its facts', a
   expect(bad, JSON.stringify(bad)).toEqual([]);
   // Each path locked something it is pinned for; the guarded ones locked their page before the dataset.
   // (A test user's erasure, the third competing writer, is pinned in lib/operations' own test: testusers-erase.test.ts.)
-  for (const p of ['sql door', 'sql door, cross-link read', 'live connection edit', 'sharing', 'group share','workload replace'])
+  for (const p of ['sql door', 'sql door, cross-link read', 'live connection edit', 'sharing', 'group share','workload replace', 'query approval'])
     expect(traces.some((t) => t.path === p && (t.artifacts.length || t.facts)), p).toBe(true);
   for (const p of ['sql door']) expect(traces.find((t) => t.path === p && t.artifacts.length)?.artifacts.slice(0, 2), p).toEqual([f.page, f.staff]);
   expect(traces.find((t) => t.path === 'sql door, cross-link read' && t.artifacts.length)?.artifacts.slice(0, 3)).toEqual([f.page, ...[f.staff, f.notes].sort(lockOrder)]);

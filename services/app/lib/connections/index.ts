@@ -17,13 +17,16 @@
  * links of different DBs, or a stored dataset link too, are refused (one source per statement). Anonymous readers
  * are refused, as is a statement when the install has no default connection.
  *
+ * A DECLARED QUERY on a default-connection link (`runDeclaredConnectionQuery`) runs as whom the page door chose: the
+ * reader, or the page's group where an approval holds (lib/query-approvals).
+ *
  * AN AGENT reads it at `/api/default-connection/{schema,sql}` as its signed-in account (`agentConnectionSql`), its
  * statement passed through unchanged with an optional namespace.
  */
 import {readLifetime} from '@/lib/datasets';
 import { SQL_FAILURE_FOR_CONNECTOR, liveSource, sqlReadFailure, type SqlFailureCode } from '@artifactbin/contracts';
-import { CONNECTORS, SQL_READ_LIMITS, type ConnectionSummary, type ConnectorDialect, type ConnectorError, type ConnectorSchema, type ConnectorTestResult, type ConnectorViewer, type HtmlPageLink, type Scalar } from '@artifactbin/contracts';
-import { ConnectorFailure, checkedNamespace, connectionSummary, connectorError, leadingWords, mapQualifiers, openConnection, parseConnectionConfig, qualifierNames, type OpenConnection } from '@artifactbin/connectors';
+import { CONNECTORS, SQL_READ_LIMITS, type ConnectionSummary, type ConnectorDialect, type ConnectorError, type ConnectorSchema, type ConnectorTestResult, type ConnectorViewer, type HtmlDeclaredQuery, type HtmlDefaultConnectionLink, type HtmlPageLink, type HtmlPageVersion, type Scalar } from '@artifactbin/contracts';
+import { ConnectorFailure, checkedNamespace, colonParameters, connectionSummary, connectorError, leadingWords, mapQualifiers, openConnection, parseConnectionConfig, qualifierNames, type OpenConnection } from '@artifactbin/connectors';
 import { getUserById, type AccessActor } from '@/lib/accounts';
 import { listGroups } from '@/lib/groups';
 import { QUERY_TIMEOUT_MS,datasetsAllowPrivateNetwork, defaultConnectionSetting } from '@/lib/platform';
@@ -113,11 +116,24 @@ export async function closeDefaultConnection(): Promise<void> { const c = curren
 export async function connectorViewer(actor: AccessActor): Promise<ConnectorViewer | null> { return actor.userId || actor.principalGroup ? viewerOf(actor) : null; }
 /** Whom the default connection answers: a signed-in person, or a group's sign-in. */
 const reader = (actor: AccessActor): boolean => !!actor.userId || !!actor.principalGroup;
+/** An agent signed in as `groupId` at `role` as a database sees it: no person, exactly that group, its level. */
+export const groupViewer = (groupId: string, role: 'member' | 'editor'): ConnectorViewer => ({ id: '', email: null, groups: [groupId], groupRole: role });
 async function viewerOf(actor: AccessActor): Promise<ConnectorViewer> {
-  if (actor.principalGroup) return { id: '', email: null, groups: [actor.principalGroup.id], groupRole: actor.principalGroup.role };
+  if (actor.principalGroup) return groupViewer(actor.principalGroup.id, actor.principalGroup.role);
   const user = await getUserById(actor.userId!);
   const groups = (await listGroups(actor.userId!)).map((g) => g.id);
   return { id: actor.userId!, email: (user as { email?: string | null } | null)?.email ?? actor.email ?? null, groups, groupRole: '' };
+}
+
+/** The reader values a declared query binds, filled by the server for every run; a caller never sends one. */
+export const VIEWER_PARAMS = ['viewer_id', 'viewer_email', 'viewer_groups', 'viewer_group_role'] as const;
+/**
+ * Those values for `viewer`: a person's exactly as ever (`??`: an empty address stays empty); a group's sign-in (a
+ * level) is no person; nobody (null) all null.
+ */
+export function viewerParams(viewer: ConnectorViewer | null): Record<(typeof VIEWER_PARAMS)[number], string | null> {
+  return { viewer_id: viewer?.groupRole ? null : viewer?.id ?? null, viewer_email: viewer?.groupRole ? null : viewer?.email ?? null,
+    viewer_groups: viewer ? JSON.stringify([...viewer.groups].sort()) : null, viewer_group_role: viewer ? viewer.groupRole ?? '' : null };
 }
 
 export interface ConnectionSqlReply { status: number; body: Record<string, unknown> }
@@ -137,12 +153,12 @@ function refused(e: ConnectorError): ConnectionSqlReply {
   return reply(code, code === 'unavailable' || e.code === 'invalid_config' ? `the default connection is unavailable (${e.code}): ${e.message}` : e.message);
 }
 
-async function run(actor: AccessActor, text: string, params: Readonly<Record<string, Scalar>>, namespace: string | undefined, signal: AbortSignal): Promise<ConnectionSqlReply> {
+async function run(reader: AccessActor | ConnectorViewer, text: string, params: Readonly<Record<string, Scalar>>, namespace: string | undefined, signal: AbortSignal): Promise<ConnectionSqlReply> {
   const life=readLifetime(signal);
   try {
     const c = selected(namespace);
     if (!c) return reply('dataset_not_found', 'this install has no default connection');
-    const answer = await c.connection.query({ text, params, viewer: await life.step(viewerOf(actor)), ...(c.namespace ? { namespace: c.namespace } : {}), limits: { rows: SQL_READ_LIMITS.rows }, signal:life.signal });
+    const answer = await c.connection.query({ text, params, viewer: 'groups' in reader ? reader : await life.step(viewerOf(reader)), ...(c.namespace ? { namespace: c.namespace } : {}), limits: { rows: SQL_READ_LIMITS.rows }, signal:life.signal });
     life.check();
     return { status: 200, body: { columns: answer.columns, rows: answer.rows, ...(answer.truncated ? { truncated: true } : {}), source: liveSource() } };
   } catch (e) {
@@ -193,6 +209,36 @@ export async function pageConnectionSql(actor: AccessActor, links: readonly Html
   try { text = mapQualifiers(dialect, call.sql, new Map(used.map((l) => [l.name.toLowerCase(), '']))); } catch (e) { return refused(connectorError(e)); }
   signal=admission?.dispatch(true)??signal;
   return run(actor, text, call.params, databases[0] || undefined, signal);
+}
+
+/** A version's declared query `name` on one of its default-connection links, with that link; null when it names none. */
+export function declaredConnectionQuery(page: Pick<HtmlPageVersion, 'links' | 'queries'>, name: unknown): { query: HtmlDeclaredQuery; link: HtmlDefaultConnectionLink } | null {
+  const query = typeof name === 'string' ? page.queries.find((q) => q.name === name) : undefined;
+  const link = query && page.links.find((l): l is HtmlDefaultConnectionLink => l.kind === 'default-connection' && l.name === query.link);
+  return query && link ? { query, link } : null;
+}
+
+/**
+ * A DECLARED QUERY ON THE DEFAULT CONNECTION (`{query, params}` at the page SQL door), run as `viewer`, which the door
+ * decided (lib/page-doors): the reader's own, unless an approval (lib/query-approvals) holds. The text is the version's
+ * own, never the caller's: written like any statement on the link (`NAME.table` or plain), `:name` binding `params`
+ * and the server's `:viewer_*` values, which a caller may not send.
+ */
+export async function runDeclaredConnectionQuery(viewer: ConnectorViewer, declared: { query: HtmlDeclaredQuery; link: HtmlDefaultConnectionLink }, params: unknown, signal: AbortSignal, admission?: { dispatch(read: boolean): AbortSignal }): Promise<ConnectionSqlReply> {
+  if (params !== undefined && (!params || typeof params !== 'object' || Array.isArray(params))) return reply('validation_failed', 'params must be an object of scalars');
+  const sent = (params ?? {}) as Record<string, Scalar>;
+  const filled = Object.keys(sent).find((name) => (VIEWER_PARAMS as readonly string[]).includes(name));
+  if (filled) return reply('validation_failed', `${filled} is filled in by the server for the person reading; never send it`);
+  if (!configured()) return reply('dataset_not_found', `${declared.link.name} reads the install's default connection, and this install has none`);
+  let text: string;
+  try {
+    const target = selected(declared.link.namespace || undefined);
+    const dialect = target?.dialect ?? configured()!.fallback.dialect;
+    checkedNamespace(dialect, target?.namespace);
+    text = mapQualifiers(dialect, colonParameters(dialect, declared.query.sql).text, new Map([[declared.link.name.toLowerCase(), '']]));
+  } catch (e) { return refused(connectorError(e)); }
+  signal = admission?.dispatch(true) ?? signal;
+  return run(viewer, text, { ...sent, ...viewerParams(viewer) }, declared.link.namespace || undefined, signal);
 }
 
 /** An agent's statement, as its signed-in account, passed through; `namespace` (what follows `default:`) the database. */

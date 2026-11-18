@@ -26,6 +26,8 @@ import { apiFetch } from '../lib/api';
  * (the page-speed prose budget). Each use sits in its own <Suspense> so loading never suspends the page.
  */
 const Select = lazy(() => import('../ui/Select').then((m) => ({ default: m.Select })));
+/** Lazy for the same reason: only a page's open sharing dialog asks for its approved queries. */
+const QueryApprovals = lazy(() => import('./QueryApprovals').then((m) => ({ default: m.QueryApprovals })));
 
 const ROLE_OPTIONS = SHARE_ROLES.map((role) => ({ value: role, label: SHARE_ROLE_LABEL[role] }));
 /** What the sharing surface is for: the Share dialog's description and the editor's Sharing tab say the same. */
@@ -68,6 +70,8 @@ export function DocumentSharing(props: {
   format?: string;
   /** Validated document dependencies; access remains independent of document sharing. */
   refs?: ReadonlyArray<{ id: string; kind: string }>;
+  /** A page: its queries on live data an Admin of its group may approve (./QueryApprovals, drawn only for them). */
+  queryApprovals?: boolean;
 }): JSX.Element {
   const canManage = () => props.owner || Boolean(props.editable);
   const [open, setOpen] = createSignal(props.variant === 'dialog');
@@ -206,6 +210,7 @@ export function DocumentSharing(props: {
           <Button type="submit" variant="secondary" size="sm" aria-label="Add email">Add</Button>
         </form>
       </div>
+      <Show when={props.queryApprovals}><Suspense fallback={null}><QueryApprovals id={props.id} /></Suspense></Show>
       <Show when={props.format === 'dataset'}><Button variant="secondary" size="sm" aria-label="Manage access policies" onClick={(event: MouseEvent) => { close(); if (props.onDataActions) { event.preventDefault(); props.onDataActions(); } }} href={artifactEditPath(props.id)} class="mt-4 w-full justify-start">manage data actions ↗</Button></Show>
     </>}</Show>
   </>;

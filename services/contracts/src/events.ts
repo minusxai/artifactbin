@@ -44,6 +44,14 @@ interface MovedPayload { from_parent_id: string | null; to_parent_id: string | n
 interface ArtifactDeletedPayload extends ArtifactActorPayload { format?: string; subtree?: number }
 /** Whether the row came back where it was, or at the root because an ancestor was not there to hold it. */
 interface RestoredPayload { landed_at_root: boolean }
+/**
+ * A page's declared query approved to run as the page's owning group (`query_approved`), or that approval ended
+ * (`query_approval_ended`: `reason` revoked by an Admin, the query edited, the page moved to another owner or deleted,
+ * replaced by a newer approval, its approver no longer the group's Admin, or the group deleted), or a read it answered
+ * (`approved_query_read`: the subject is the real reader). The subject is who did it (none when a read found the
+ * approval ended); the query's text and a reader's values never travel, only its name and hash.
+ */
+interface QueryApprovalPayload { approval_id: string; query: string; query_hash: string; connection: string; group_id: string; reason?: 'revoked' | 'edited' | 'moved' | 'deleted' | 'replaced' | 'approver_not_admin' | 'group_deleted' }
 /** `group_id`: a group's sign-in (identity-service `GROUP_SIGN_IN_RULE`): the group it acts as, when its Admin ended it. */
 interface TokenPayload { name?: string | null; group_id?: string; grant_id?: string; service?: string }
 
@@ -95,6 +103,9 @@ interface EventVerbs {
     left: MembershipEventPayload;
     liked: EmptyPayload;
     unliked: EmptyPayload;
+    query_approved: QueryApprovalPayload;
+    query_approval_ended: QueryApprovalPayload;
+    approved_query_read: QueryApprovalPayload;
   };
   user: {
     notification_changed: {notification_id:string;revision:number;change:"updated"|"read"|"removed"};
@@ -126,7 +137,7 @@ export type EventPayload<K extends ObjectKind, V extends EventVerb<K>> = EventVe
 /** The catalogue at runtime. Complete by construction: a verb missing from a list fails to type-check. */
 export const EVENT_VERBS = {
   group:['changed'],
-  artifact: ['created', 'updated', 'edited', 'reverted', 'deleted', 'moved', 'restored', 'exported', 'mutated', 'viewed', 'forked', 'annotated', 'annotation_resolved', 'annotation_deleted', 'sharing_changed', 'liked', 'unliked', 'joined', 'left', 'join_requested', 'invited', 'mentioned', 'invitation_dismissed', 'annotation_reopened', 'annotation_edited', 'annotation_replied', 'annotation_reaction_changed'],
+  artifact: ['created', 'updated', 'edited', 'reverted', 'deleted', 'moved', 'restored', 'exported', 'mutated', 'viewed', 'forked', 'annotated', 'annotation_resolved', 'annotation_deleted', 'sharing_changed', 'liked', 'unliked', 'joined', 'left', 'join_requested', 'invited', 'mentioned', 'invitation_dismissed', 'annotation_reopened', 'annotation_edited', 'annotation_replied', 'annotation_reaction_changed', 'query_approved', 'query_approval_ended', 'approved_query_read'],
   user: ['notification_changed', 'signed_up', 'login_sent', 'login_verified', 'oauth_linked', 'followed', 'unfollowed'],
   token: ['minted', 'claimed', 'revoked'],
   door: ['denied'],

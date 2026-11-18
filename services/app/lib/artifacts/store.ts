@@ -22,6 +22,7 @@ import {
 import { artifactQuery, loadArtifactDocument, sourceStorage } from './document';
 import {normalizeNewHtmlPage} from './new-page';
 import { seedOwnerJoin } from '@/lib/social';
+import { QueryApprovalError, assertAudienceChange, endQueryApprovals } from '@/lib/query-approvals';
 import { claimArtifactId } from './identities';
 import { resolveDefinitionScope, validateUserContent, retainUserScope, resolveUserColumnScope, catalogOf, DatasetError, liveConnectionOf, loadDatasetRows } from '@/lib/datasets';
 import { userKindOf } from '@/lib/user-kinds';
@@ -450,6 +451,8 @@ async function lockArtifactWrite(tx: Queryable, actor: AccessActor, id: string, 
         const swap = ancestorsForMove(current, content.ancestor_ids);
         await tx.query(swap.sql, swap.params);
       }
+      // A query approval covers exactly the query it was given: a head that no longer declares it ends it for good.
+      if (current.format === 'html') await endQueryApprovals(tx, actor, id, 'edited', updated);
       return updated;
     },
   };
@@ -750,6 +753,9 @@ async function replaceArtifactInTx(
   const fromLive = opts.expectedLive !== undefined && current.format === 'html' && input.format === 'html';
   if (fromLive && (await liveRevisionOf(tx, id)).live !== opts.expectedLive) return conflictOf(current, 'content');
   if (opts.expectedSharingRevision !== undefined && (current.sharing_revision ?? 0) !== opts.expectedSharingRevision) return conflictOf(current, 'sharing');
+  // A page with a live approved query: only an Admin of its group changes who can open it (lib/query-approvals).
+  try { await assertAudienceChange(tx, actor, current, { visibility: input.visibility, link_role: input.link_role, ancestor_ids: input.ancestor_ids, shares: opts.shares }); }
+  catch (error) { if (error instanceof QueryApprovalError) return error.response(); throw error; }
   // A page leaving HTML takes its live regions with it: their unsaved typing is saved as its own version first.
   const leavingHtml = current.format === 'html' && input.format !== 'html';
   if (leavingHtml && (await saveRegionsLocked(tx, actor, write)).published) {
@@ -991,6 +997,8 @@ export async function setMetadataFor(actor: AccessActor, id: string, patch: Meta
     if(opts.expectedSharingRevision!==undefined&&(current.sharing_revision??0)!==opts.expectedSharingRevision)return conflictOf(current,'sharing');
     const policy=patch.policy===undefined?undefined:validateDatasetPolicyForRow(current,patch.policy);
     if (patch.access && current.format !== 'dataset') return null;
+    // A page with a live approved query: only an Admin of its group changes who can open it (lib/query-approvals).
+    await assertAudienceChange(tx, actor, current, { visibility: patch.visibility, link_role: patch.link_role, ancestor_ids: patch.ancestor_ids, shares: patch.shares });
     const meta = {...current.meta};
     for (const key of ['theme','template','colorMode'] as const) if (patch[key] !== undefined) meta[key] = patch[key];
     if(opts.dryRun)return {...current,...patch,meta};

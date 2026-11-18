@@ -55,7 +55,10 @@ import {archiveFor} from '@/lib/skills';
 // 1.628 MiB: af-data-table reads a declarative sql attribute through the page SQL plumbing it shares with af-chart
 // (the readable page-sql.ts and data-table-sql.ts, ~3 KB stored), and the codebase report lists its chart values with
 // it instead of hand-built tables, leaving 1,705,609 bytes.
-const SKILL_ARCHIVE_MAX_BYTES=1.628*1024*1024;
+// 1.629 MiB: main sat 118 bytes under 1.628 (1,706,963); approved queries (groups.mjs queries, approve and unapprove,
+// and the data guide's pointer to them, ~0.9 KB stored) let a group's Admin show a page's default-connection query to
+// every reader, leaving 1,707,861 bytes.
+const SKILL_ARCHIVE_MAX_BYTES=1.629*1024*1024;
 
 describe('the downloadable author skill archive',()=>{
  it('fits its size budget',async()=>{

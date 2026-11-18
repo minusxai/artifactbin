@@ -4,6 +4,7 @@ import {artifactQuery} from '../document';
 import {recordEvent, getDb, lockSubjects} from '@/lib/platform';
 import {DatasetError} from '@/lib/datasets';
 import { readThrough } from '@/lib/artifact-access';
+import { assertAudienceChange } from '@/lib/query-approvals';
 import type { ArtifactMember, MembershipInput, MembershipState, MembershipDirection, MembershipStatus, Queryable } from '@artifactbin/contracts';
 import { PENDING_MEMBERSHIP_LIMIT } from '@artifactbin/contracts';
 import { effectiveRole } from '@/lib/artifact-access';
@@ -95,6 +96,8 @@ export async function changeMembership(actor: AccessActor, id: string, input: Me
     for(const target of targets) {
       if(input.action==='invite'){
         if(input.includeAccess&&!(await readThrough(tx,current,identityForUser(target)))){
+          // A page with a live approved query: only an Admin of its group gives a person access (lib/query-approvals).
+          await assertAudienceChange(tx,actor,current,{grant:true});
           const recipient=(await tx.query<{email:string|null}>("SELECT email FROM users WHERE id=$1 AND kind='account'",[target])).rows[0];
           if(!recipient?.email)fail('This person cannot receive shared access');
           await tx.query("INSERT INTO artifact_shares(artifact_id,user_id,email,role) VALUES($1,$2,$3,'viewer') ON CONFLICT(artifact_id,email) DO NOTHING",[id,target,recipient.email]);

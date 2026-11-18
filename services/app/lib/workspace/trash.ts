@@ -26,6 +26,7 @@ import type { AccessActor } from '@/lib/accounts';
 import { getDb, actorSubject, emit } from '@/lib/platform';
 import { rerootArtifact, restoreTrashedSubtree, servableDocument, trashSubtree } from '@/lib/artifacts';
 import { notifyParent, parentOf } from '@/lib/artifacts';
+import { endQueryApprovals } from '@/lib/query-approvals';
 
 /**
  * The pre-read that authorizes a delete or a restore BEFORE an idempotency
@@ -59,7 +60,13 @@ export async function ownedArtifactState(actor: AccessActor, id: string): Promis
  */
 export async function trashArtifactFor(actor: AccessActor, id: string): Promise<string[] | null> {
   const db = await getDb();
-  const rows = await trashSubtree(db, actor, id);
+  // A page's approved queries end with its deletion, in the same act: restoring it brings none back (lib/query-approvals).
+  const rows = await db.transaction(async (tx) => {
+    const trashed = await trashSubtree(tx, actor, id);
+    const pages = trashed.filter((row) => row.newly_deleted && row.format === 'html').map((row) => row.id);
+    if (pages.length) await endQueryApprovals(tx, actor, pages, 'deleted');
+    return trashed;
+  });
   const named = rows.find((row) => row.id === id);
   if (!named) return null;
   /*

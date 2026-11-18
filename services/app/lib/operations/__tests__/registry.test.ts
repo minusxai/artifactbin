@@ -38,6 +38,8 @@ describe('the registry is curated, not generated', () => {
       'read_region', 'save_regions', 'write_region',
       // Drawing the caller's own rows (lib/viz chart-image.server): no artifact is read.
       'render_chart_image',
+      // A page's queries on the default connection an Admin of its group approves (lib/query-approvals).
+      'list_query_approvals', 'approve_query', 'revoke_query_approval',
     ].sort());
   });
 
@@ -58,7 +60,7 @@ describe('the registry is curated, not generated', () => {
 
   it('read/write/destructive is annotated, and the reads are the reads', () => {
     const readOnly = OPERATIONS.filter((o) => o.annotations.readOnly).map((o) => o.name).sort();
-    expect(readOnly).toEqual(['get_group','list_group_artifacts','list_group_collection','list_group_invitations','list_group_members','list_groups', 'export_artifact', 'get_artifact', 'get_artifact_members', 'get_dataset_policy', 'get_dataset_policy_templates', 'get_live_connection', 'get_live_schema', 'test_live_connection', 'get_version', 'list_artifacts', 'list_versions', 'query_resource', 'read_region', 'render_chart_image', 'testuser_list'].sort());
+    expect(readOnly).toEqual(['get_group','list_group_artifacts','list_group_collection','list_group_invitations','list_group_members','list_groups', 'export_artifact', 'get_artifact', 'get_artifact_members', 'get_dataset_policy', 'get_dataset_policy_templates', 'get_live_connection', 'get_live_schema', 'test_live_connection', 'get_version', 'list_artifacts', 'list_versions', 'query_resource', 'read_region', 'render_chart_image', 'testuser_list', 'list_query_approvals'].sort());
     expect(OPERATIONS.find((o) => o.name === 'delete_artifact')!.annotations.destructive).toBe(true);
   });
 

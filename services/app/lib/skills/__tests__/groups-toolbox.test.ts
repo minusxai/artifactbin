@@ -21,6 +21,7 @@ const ALL={group:'design_crit',role:'editor',handle:'design_crit'};
 it.each([
  ['remove',['design_crit','teammate'],ALL],['leave',['PAGE12'],ALL],['move',['PAGE12'],ALL],['delete',['PAGE12'],ALL],['invite',['design_crit','a@example.test'],ALL],['role',['design_crit','teammate'],ALL],['share',['PAGE12'],ALL],
  ['uninvite',['design_crit','other'],{group:'design_crit'}],['unshare',['design_crit','other'],{group:'design_crit'}],['unlink',['design_crit','other'],{group:'design_crit'}],
+ ['approve',['PAGE12','totals'],{hash:'h'}],['unapprove',['PAGE12','pqa_1'],{}],
 ])('%s refuses before any HTTP without --yes',async(sub,positionals,values)=>{
  const {groupsCommand}=await import('../../../skills/artifactbin/scripts/groups.mjs');let calls=0;
  await expect(groupsCommand({sub,positionals,values},{fetcher:async()=>{calls++;throw Error('unexpected');}})).rejects.toMatchObject({exit:2,code:'confirmation_required'});expect(calls).toBe(0);
@@ -41,9 +42,12 @@ it.each([
  ['link',['design_crit','other'],{},'/api/groups/grp_stable/links/grp_other','PUT',undefined],
  ['unlink',['design_crit','other'],{yes:true},'/api/groups/grp_stable/links/grp_other','DELETE',undefined],
  ['delete',['design_crit'],{yes:true,handle:'design_crit'},'/api/groups/grp_stable','DELETE',{handle:'design_crit'}],
+ ['queries',['PAGE12'],{},'/api/artifacts/PAGE12/query-approvals','GET',undefined],
+ ['approve',['PAGE12','totals'],{hash:'h',yes:true},'/api/artifacts/PAGE12/query-approvals','POST',{query:'totals',hash:'h'}],
+ ['unapprove',['PAGE12','pqa_1'],{yes:true},'/api/artifacts/PAGE12/query-approvals/pqa_1','DELETE',undefined],
 ] as const)('%s sends its documented stable-ID protocol',async(sub,args,values,path,method,body)=>{
  const {calls}=await harness(sub,[...args],values);expect(calls.at(-1)).toEqual({path,method,body});
- if(!['list','create','show','link','unlink'].includes(sub))expect(calls.filter(c=>c.path==='/api/groups/design_crit')).toHaveLength(1);
+ if(!['list','create','show','link','unlink','queries','approve','unapprove'].includes(sub))expect(calls.filter(c=>c.path==='/api/groups/design_crit')).toHaveLength(1);
 });
 it('create --parent resolves the parent once and sends its stable ID',async()=>{
  const {calls}=await harness('create',['retail'],{name:'Retail',parent:'other'});

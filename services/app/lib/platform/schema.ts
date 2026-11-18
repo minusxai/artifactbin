@@ -804,6 +804,34 @@ const DATASET_CONNECTIONS: Table = {
     {name:'updated_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
   ], primaryKey:['dataset_id'],
 };
+/**
+ * A PAGE'S DECLARED QUERY APPROVED TO RUN AS THE PAGE'S OWNING GROUP (lib/query-approvals): an Admin of that group
+ * approved exactly the query whose normalised text, connection and allowed parameters hash to `query_hash`, for
+ * readers who can open the page. Live while `ended_at` is null and, at every read, the page is still that group's, the
+ * approver still holds the Admin membership row they approved under (`approver_via`, `approver_since`: a row put back
+ * is another row) and the version read and the head both declare that hash. At most one live approval per page and
+ * query name; a new one ends the last (`replaced`). Ending one never deletes it (`ended_reason`, `ended_by`).
+ */
+const PAGE_QUERY_APPROVALS: Table = {
+  name: 'page_query_approvals',
+  columns: [
+    {name:'id',type:'TEXT',notNull:true},
+    {name:'page_id',type:'TEXT',notNull:true},
+    {name:'query_name',type:'TEXT',notNull:true},
+    {name:'query_hash',type:'TEXT',notNull:true},
+    {name:'connection',type:'TEXT',notNull:true},
+    {name:'group_id',type:'TEXT',notNull:true},
+    {name:'approved_by',type:'TEXT',notNull:true},
+    {name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
+    {name:'ended_at',type:'TIMESTAMPTZ'},
+    {name:'ended_by',type:'TEXT'},
+    {name:'ended_reason',type:'TEXT'},
+    // The approver's Admin membership row it holds under: its group and its creation (null never holds).
+    {name:'approver_via',type:'TEXT'},
+    {name:'approver_since',type:'TIMESTAMPTZ'},
+  ], primaryKey:['id'],
+  indexes:[{name:'idx_page_query_approvals_live',columns:['page_id','query_name'],unique:true,where:'ended_at IS NULL'}],
+};
 const DATASET_USAGE: Table = {
   name:'dataset_usage',
   columns:[{name:'bucket',type:'TEXT',notNull:true},{name:'calls',type:'INTEGER',notNull:true,default:'0'}],
@@ -1006,7 +1034,7 @@ const NATIVE_IDENTITY_IMPORTS:Table={name:'native_identity_imports',columns:[
  {name:'original_state',type:'JSONB',notNull:true},{name:'created_at',type:'TIMESTAMPTZ',notNull:true},
 ],primaryKey:['source_namespace','kind','source_id'],indexes:[{name:'idx_native_identity_imports_target',columns:['kind','target_id']}]};
 
-export const TABLES: Table[] = [WORKLOAD_PUBLICATION_INTENTS,WORKLOAD_PUBLICATION_AUDIT,WORKLOAD_PUBLICATION_OUTPUTS,LEGACY_PAGE_MIGRATIONS,IDENTITY_SETTINGS,GROUP_QUOTAS,GROUP_AUDIT,ARTIFACT_GROUP_SHARES,NATIVE_IDENTITY_IMPORTS,GROUP_LINKS,ACCOUNT_PREFERENCES,DEPLOYMENT_STATE,DEPLOYMENT_MEMBERS,OWNERSHIP_TRANSFERS,PAGES_SESSIONS, DOCUMENT_TRUST, GROUP_TRUST, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, DATASET_IMAGES, OBJECT_WRITES, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_CONNECTIONS, DATASET_USAGE, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, REGION_STATES, REGION_UPDATES, REGION_SNAPSHOTS, ARTIFACT_SOURCE_IDS, ARTIFACT_SHARES, ANNOTATIONS, COMMENT_REACTIONS, CODES, ANALYTICS_EVENTS, ARTIFACT_VIEW_TOTALS, CANONICAL_VIEW_TOTALS, CANONICAL_VIEW_VISITORS, RELATIONS, WEB_ASSETS, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY];
+export const TABLES: Table[] = [WORKLOAD_PUBLICATION_INTENTS,WORKLOAD_PUBLICATION_AUDIT,WORKLOAD_PUBLICATION_OUTPUTS,LEGACY_PAGE_MIGRATIONS,IDENTITY_SETTINGS,GROUP_QUOTAS,GROUP_AUDIT,ARTIFACT_GROUP_SHARES,NATIVE_IDENTITY_IMPORTS,GROUP_LINKS,ACCOUNT_PREFERENCES,DEPLOYMENT_STATE,DEPLOYMENT_MEMBERS,OWNERSHIP_TRANSFERS,PAGES_SESSIONS, DOCUMENT_TRUST, GROUP_TRUST, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, DATASET_IMAGES, OBJECT_WRITES, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_CONNECTIONS, PAGE_QUERY_APPROVALS, DATASET_USAGE, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, REGION_STATES, REGION_UPDATES, REGION_SNAPSHOTS, ARTIFACT_SOURCE_IDS, ARTIFACT_SHARES, ANNOTATIONS, COMMENT_REACTIONS, CODES, ANALYTICS_EVENTS, ARTIFACT_VIEW_TOTALS, CANONICAL_VIEW_TOTALS, CANONICAL_VIEW_VISITORS, RELATIONS, WEB_ASSETS, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY];
 
 /**
  * Tables no code reads or writes, dropped on every boot (their rows were backed up): retired custom domains,
