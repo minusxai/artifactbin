@@ -78,3 +78,32 @@ it('runs every real-database proof where CI provides its image: no opt-in variab
   const docker = readFileSync(path.join(root, 'services/test-support/src/docker.ts'), 'utf8');
   expect(docker).toMatch(/if \(process\.env\.CI\) throw/);
 });
+
+// The S3 suites never ran: gated on TEST_S3_URL, which no job set. Now the databases part starts a real S3-compatible
+// server for them, and under CI a missing URL fails the file instead of skipping it.
+it('runs the S3 object-store suites in the databases part against a digest-pinned server, and fails them in CI without one', async () => {
+  const file = 'services/app/lib/object-store/__tests__/store-s3.test.ts';
+  const { default: config } = await import('../../vitest.config.ts');
+  const project = (name) => config.test.projects.find(entry => entry.test?.name === name).test;
+  expect(project('integration-databases').include).toContain(file);
+  expect(project('node').exclude).toContain(file);
+  expect(project('integration').include).not.toContain(file);
+  const { jobs } = (await import('yaml')).default.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
+  const steps = jobs.integration.steps;
+  const start = steps.findIndex(step => step.name === 'Start the S3-compatible server and its bucket');
+  const run = steps.findIndex(step => /vitest\.mjs run --project=/.test(step.run ?? ''));
+  expect(start).toBeGreaterThan(steps.findIndex(step => step.name === 'Wait for the images'));
+  expect(start).toBeLessThan(run);
+  expect(steps[start].if).toBe('matrix.images');
+  for (const step of [steps[0], steps[start]]) expect(step.env.S3_IMAGE).toMatch(/^[\w./-]+:[\w.-]+@sha256:[0-9a-f]{64}$/);
+  expect(steps[0].run).toContain('docker pull "$S3_IMAGE"');
+  expect(steps[start].run).toContain('curl -fsS -X PUT -o /dev/null http://127.0.0.1:8333/artifactbin-test');
+  expect(steps[start].run).toContain(`echo 'TEST_S3_URL=http://test:test@127.0.0.1:8333/artifactbin-test/ci' >> "$GITHUB_ENV"`);
+  // Under CI, without the URL, the file fails rather than skips.
+  const vitest = (env) => spawnSync(process.execPath, [path.join(root, 'node_modules/vitest/vitest.mjs'), 'run', '--project=integration-databases', file], { cwd: root, encoding: 'utf8', timeout: 60_000, env: { ...env, PATH: process.env.PATH, HOME: process.env.HOME } });
+  const ci = vitest({ CI: 'true' });
+  expect(ci.status, ci.stdout + ci.stderr).toBe(1);
+  expect(ci.stdout + ci.stderr).toContain('TEST_S3_URL is not set');
+  const local = vitest({});
+  expect(local.status, local.stdout + local.stderr).toBe(0);
+});

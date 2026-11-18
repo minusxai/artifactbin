@@ -2,15 +2,16 @@
  * The store itself, exercised through its real interface.
  *
  * The local backend is tested against a real temp directory (publication fault injection
- * still uses real filesystem operations), and the S3 backend against a real MinIO
- * when one is running, skipped otherwise so CI stays dependency-free. Both
- * satisfy the SAME contract, which is the point of the abstraction: if the two
- * ever diverge, the app behaves differently on a laptop than in production.
+ * still uses real filesystem operations). The S3 backend is held to the SAME contract
+ * (store-contract.ts) against a real S3-compatible server in store-s3.test.ts, which CI's
+ * integration job runs; that is the point of the abstraction: if the two ever diverge, the
+ * app behaves differently on a laptop than in production.
  */
-import { describe, it, expect, beforeEach, vi, onTestFinished } from 'vitest';
+import { describe, it, expect, vi, onTestFinished } from 'vitest';
 import { readdir } from 'fs/promises';
 import path from 'path';
-import { ObjectUnavailable, cachedReads, objectKey, resetReadCache, uniqueObjectKey, createLocalStore, createS3Store, parseS3Url, storageKeyFor, type ObjectStore } from '../index';
+import { ObjectUnavailable, cachedReads, objectKey, resetReadCache, uniqueObjectKey, createLocalStore, parseS3Url, storageKeyFor, type ObjectStore } from '../index';
+import { contractSuite, streamSuite } from './store-contract';
 import {tempDir} from '@artifactbin/test-support/temp-dir';
 
 // Fault injection still writes/truncates real files. Pause before bytes finish so a reader deterministically
@@ -78,82 +79,11 @@ describe('object keys', () => {
   });
 });
 
-/** The contract both backends must satisfy identically. */
-function contractSuite(name: string, make: () => Promise<ObjectStore>) {
-  describe(`${name} backend`, () => {
-    let store: ObjectStore;
-    beforeEach(async () => { store = await make(); });
-
-    it('round-trips bytes', async () => {
-      await store.put('dataset/one', 'month,revenue\n2026-01,120');
-      expect((await store.get('dataset/one')).toString()).toBe('month,revenue\n2026-01,120');
-    });
-
-    it('round-trips BINARY content without corruption', async () => {
-      const bytes = Buffer.from([0x00, 0xff, 0x10, 0x80, 0x00]);
-      await store.put('blob/bin', bytes);
-      expect(Buffer.compare(await store.get('blob/bin'), bytes)).toBe(0);
-    });
-
-    it('preserves UTF-8 beyond ASCII', async () => {
-      await store.put('dataset/utf', 'naïve,café,日本\n1,2,3');
-      expect((await store.get('dataset/utf')).toString()).toBe('naïve,café,日本\n1,2,3');
-    });
-
-    it('raises ObjectUnavailable for a missing key — an ERROR, never an empty answer', async () => {
-      // The DB is the only index: a key the app asks for is one a row recorded,
-      // so "missing" and "denied" are the same failure to a consumer. Which is
-      // why no backend needs to tell them apart (no s3:ListBucket, ever).
-      await expect(store.get('dataset/nope')).rejects.toBeInstanceOf(ObjectUnavailable);
-    });
-
-    it('overwrites an existing key', async () => {
-      await store.put('dataset/k', 'first');
-      await store.put('dataset/k', 'second');
-      expect((await store.get('dataset/k')).toString()).toBe('second');
-    });
-
-    it('deletes, and deleting twice is not an error', async () => {
-      await store.put('dataset/gone', 'x');
-      await store.delete('dataset/gone');
-      await expect(store.get('dataset/gone')).rejects.toBeInstanceOf(ObjectUnavailable);
-      await expect(store.delete('dataset/gone')).resolves.toBeUndefined();
-    });
-
-    it('handles an empty body', async () => {
-      await store.put('dataset/empty', '');
-      expect((await store.get('dataset/empty')).length).toBe(0);
-    });
-
-    it('nests keys with slashes', async () => {
-      await store.put('dataset/deep/er/key', 'v');
-      expect((await store.get('dataset/deep/er/key')).toString()).toBe('v');
-    });
-  });
-}
-
 // ── local filesystem backend ────────────────────────────────────────────────
 contractSuite('local', async () => {
   const dir = await tempDir('ab-objects-',onTestFinished);
   return createLocalStore(dir);
 });
-
-// The S3 backend against a REAL server when one is running. Skipped otherwise,
-// so CI needs no external service — but when it does run, both backends are
-// held to the identical contract above, which is the point of the abstraction.
-//
-// `raises ObjectUnavailable for a missing key` needs the IAM user to hold
-// s3:ListBucket: without it S3 answers an absent key with 403 AccessDenied
-// instead of 404 NoSuchKey, which is what turns a read of an unknown key into a 500.
-// A failure there is a defect in the deployment rather than in the assertion —
-// the contract stays as written and the fix is the ListBucket grant.
-const MINIO = process.env.TEST_S3_URL;
-if (MINIO) {
-  contractSuite('s3', async () => {
-    const store = createS3Store(parseS3Url(MINIO));
-    return store;
-  });
-}
 
 describe('local backend refuses to escape its root', () => {
   it('rejects a traversing key rather than writing outside the store', async () => {
@@ -168,12 +98,10 @@ describe('the prefix is actually applied to stored keys', () => {
   /**
    * The prefix is the ONLY thing stopping a dev machine writing over
    * production objects — both point at the same bucket — and an assertion that
-   * needs a live server skips on every run where TEST_S3_URL is unset, which is
-   * locally and in CI.
+   * needs a live server runs only where one is (store-s3.test.ts, in CI's integration job).
    *
    * The rule is a pure function (storageKeyFor), so THIS runs always and
-   * deleting the prefix logic fails it. The round trip below still needs a
-   * server and still earns its skip.
+   * deleting the prefix logic fails it. The round trip against a server is in store-s3.test.ts.
    */
   it('composes <prefix>/<key> from the configured URL — always, no server needed', () => {
     const prod = parseS3Url('s3://key:secret@s3.example.com/shared-bucket/artifacts');
@@ -192,26 +120,6 @@ describe('the prefix is actually applied to stored keys', () => {
     expect(storageKeyFor(bare, 'dataset/abc123')).toBe('dataset/abc123');
   });
 
-  const url = process.env.TEST_S3_URL;
-  it.skipIf(!url)('writes under <prefix>/<key>, not at the bucket root', async () => {
-    const cfg = parseS3Url(url!);
-    expect(cfg.prefix).toBeTruthy(); // the fixture must exercise a prefix
-    const store = createS3Store(cfg);
-    const key = `dataset/prefix-probe-${Date.now()}`;
-    await store.put(key, 'x');
-
-    const { S3Client, HeadObjectCommand } = await import('@aws-sdk/client-s3');
-    const raw = new S3Client({
-      region: cfg.region, endpoint: cfg.endpoint, forcePathStyle: cfg.forcePathStyle,
-      credentials: { accessKeyId: cfg.accessKeyId, secretAccessKey: cfg.secretAccessKey },
-    });
-    // Present at the prefixed path…
-    await expect(raw.send(new HeadObjectCommand({ Bucket: cfg.bucket, Key: `${cfg.prefix}/${key}` }))).resolves.toBeTruthy();
-    // …and absent at the unprefixed one, which is where a dropped prefix would
-    // land it — on top of another environment's objects.
-    await expect(raw.send(new HeadObjectCommand({ Bucket: cfg.bucket, Key: key }))).rejects.toBeTruthy();
-    await store.delete(key);
-  });
 });
 
 /*
@@ -225,40 +133,11 @@ describe('the prefix is actually applied to stored keys', () => {
  * cache's own budget never has to move.
  */
 describe('getStream', () => {
-  const streamed = async (store: ObjectStore, key: string, range?: { start: number; end: number }): Promise<Buffer> => {
-    const chunks: Buffer[] = [];
-    for await (const chunk of await store.getStream(key, range)) chunks.push(Buffer.from(chunk as Uint8Array));
-    return Buffer.concat(chunks);
-  };
-
-  const streamSuite = (name: string, make: () => Promise<ObjectStore>) => {
-    describe(`${name} backend`, () => {
-      let store: ObjectStore;
-      beforeEach(async () => { store = await make(); });
-
-      it('streams the whole object', async () => {
-        await store.put('pdf/whole', Buffer.from('%PDF-1.7 hello'));
-        expect((await streamed(store, 'pdf/whole')).toString()).toBe('%PDF-1.7 hello');
-      });
-
-      it('streams ONE inclusive byte range — what a PDF viewer seeking asks for', async () => {
-        await store.put('pdf/ranged', Buffer.from('0123456789'));
-        expect((await streamed(store, 'pdf/ranged', { start: 2, end: 5 })).toString()).toBe('2345');
-        expect((await streamed(store, 'pdf/ranged', { start: 9, end: 9 })).toString()).toBe('9');
-      });
-
-      it('raises ObjectUnavailable for a missing key, like get — never an empty stream', async () => {
-        await expect(store.getStream('pdf/nope')).rejects.toBeInstanceOf(ObjectUnavailable);
-      });
-    });
-  };
-
   streamSuite('local', async () => {
     const dir = await tempDir('ab-stream-',onTestFinished);
     return createLocalStore(dir);
   });
 
-  if (MINIO) streamSuite('s3', async () => createS3Store(parseS3Url(MINIO)));
 
   it('never enters the read cache, so a big object cannot evict what the cache is for', async () => {
     resetReadCache();
