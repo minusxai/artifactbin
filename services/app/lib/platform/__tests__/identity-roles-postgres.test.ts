@@ -10,9 +10,10 @@
  * And the production upgrade: a database whose app role still owns the identity tables (and the former identity views)
  * refuses the identity boot with the one-time move named; after `identityMoveStatements`, run by a superuser, it boots,
  * every row is kept, and the app role reads them only through the views.
- * Runs in the `integration` project; skipped without the image.
+ * Runs in the `integration` project; skipped without the image, except in CI, which provides it (test-support/docker).
  */
 import {execFileSync,spawnSync} from 'node:child_process';
+import { dockerImage } from '@artifactbin/test-support/docker';
 import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import pg from 'pg';
@@ -26,10 +27,9 @@ import {SCHEMA_STATEMENTS} from '@/lib/platform';
 import {reachedGroupsSql,subtreeSql} from '@/lib/groups';
 import {transactionAccessFacts} from '@/lib/artifact-access';
 
-const dockerAvailable=spawnSync('docker',['image','inspect','postgres:17-alpine'],{stdio:'ignore'}).status===0;
 const ROOT=join(__dirname,'../../../../..');
 
-describe.skipIf(!dockerAvailable)('identity tables in a split-role database',()=>{
+describe.skipIf(!dockerImage('postgres:17-alpine'))('identity tables in a split-role database',()=>{
  let container='',port=0;
  const pools:pg.Pool[]=[];
  const pool=(user:string,searchPath:string,database='postgres')=>{const p=new pg.Pool({host:'127.0.0.1',port,user,password:'pw',database,options:`-c search_path=${searchPath}`,max:2});pools.push(p);return p;};

@@ -15,9 +15,10 @@ import {claimPublicationIntent,chargePublication,setArtifactQuotaForTests} from 
  *    it finally read gives.
  *
  * Only the tables and columns these statements touch are created. Runs in the `integration` project; skipped
- * without the image.
+ * without the image, except in CI, which provides it (test-support/docker).
  */
 import { execFileSync, spawnSync } from 'node:child_process';
+import { dockerImage } from '@artifactbin/test-support/docker';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import pg from 'pg';
 import type { Queryable } from '@artifactbin/contracts';
@@ -27,10 +28,9 @@ import type { ArtifactRow } from '../scopes';
 import { transactionAccessFacts } from '../access-facts';
 import { lockAuthorization, lockOrder } from '../locks';
 
-const dockerAvailable = spawnSync('docker', ['image', 'inspect', 'postgres:17-alpine'], { stdio: 'ignore' }).status === 0;
 const ACTOR = { userId: 'u1', tokenId: null, email: null, documentEditor: false };
 
-describe.skipIf(!dockerAvailable)('authorization locks on PostgreSQL', () => {
+describe.skipIf(!dockerImage('postgres:17-alpine'))('authorization locks on PostgreSQL', () => {
   let container = '', port = 0;
   const clients: pg.Client[] = [];
   const pids = new WeakMap<pg.Client, number>();

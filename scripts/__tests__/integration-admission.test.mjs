@@ -55,3 +55,19 @@ it('runs the canonical overlap proof in the provisioned real-database lane witho
   const ci = readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8');
   expect(ci).toMatch(/integration:[\s\S]*?docker pull postgres:17-alpine[\s\S]*?npm run test:integration/);
 });
+
+it('runs every real-database proof where CI provides its image: no opt-in variable, and a missing image fails there', () => {
+  const config = readFileSync(path.join(root, 'vitest.config.ts'), 'utf8');
+  const files = [...(config.match(/const REAL_DATABASE_TESTS = \[([\s\S]*?)\];/)?.[1] ?? '').matchAll(/'([^']+)'/g)].map(match => match[1]);
+  expect(files).toEqual(expect.arrayContaining(['services/events/__tests__/feed-position-postgres.test.ts', 'services/auth/__tests__/oauth-postgres.test.ts', 'services/app/__tests__/region-processes-postgres.test.ts']));
+  for (const file of [...files, 'scripts/__tests__/reserved-ids-proof.test.mjs']) {
+    const source = readFileSync(path.join(root, file), 'utf8');
+    // A variable no workflow sets kept three of these suites from ever running.
+    expect(source, file).not.toMatch(/process\.env\.[A-Z_]+/);
+    // Skipping is test-support/docker's decision: false locally without the image, a failure under CI.
+    expect(source, file).not.toMatch(/['"]image['"],\s*['"]inspect['"]/);
+    if (/\b(describe|it)\.(skipIf|runIf)\(/.test(source)) expect(source, file).toContain('dockerImage(');
+  }
+  const docker = readFileSync(path.join(root, 'services/test-support/src/docker.ts'), 'utf8');
+  expect(docker).toMatch(/if \(process\.env\.CI\) throw/);
+});

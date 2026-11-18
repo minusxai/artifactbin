@@ -1,22 +1,22 @@
 /**
- * Optional real-PostgreSQL proof of the feed position (CONTRACT §6): concurrent appends on separate pool connections
- * under READ COMMITTED never commit a position a reader has already passed. This test owns EVENTS_TEST_DATABASE_URL;
- * use a disposable database, never a deployment's. Skipped without it (PGLite has one connection and proves nothing
- * about concurrency).
+ * Real-PostgreSQL proof of the feed position (CONTRACT §6): concurrent appends on separate pool connections under READ
+ * COMMITTED never commit a position a reader has already passed. On a test-owned disposable PostgreSQL 17 container
+ * (@artifactbin/test-support/docker), in the `integration` project; PGLite has one connection and proves nothing about
+ * concurrency.
  */
 import { randomBytes, randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Pool } from 'pg';
 import type { EventEnvelope, Queryable } from '@artifactbin/contracts';
 import { createEvents, ensureEventsSchema } from '@artifactbin/events/local';
+import { dockerImage, startPostgres, type DisposablePostgres } from '@artifactbin/test-support/docker';
 
-const database = process.env.EVENTS_TEST_DATABASE_URL;
-describe.skipIf(!database)('feed positions over concurrent PostgreSQL connections', () => {
+describe.skipIf(!dockerImage('postgres:17-alpine'))('feed positions over concurrent PostgreSQL connections', () => {
   const schema = `feed_${randomBytes(6).toString('hex')}`;
-  let pool: Pool;
+  let pool: Pool, server: DisposablePostgres | undefined;
   const queryable = (p: Pool): Queryable => ({ query: async <T>(sql: string, params: unknown[] = []) => ({ rows: (await p.query(sql, params)).rows as T[] }) });
-  beforeAll(async () => { pool = new Pool({ connectionString: database, max: 12 }); await ensureEventsSchema(queryable(pool), schema); });
-  afterAll(async () => { if (pool) { await pool.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`); await pool.end(); } });
+  beforeAll(async () => { server = await startPostgres(); pool = new Pool({ connectionString: server.url, max: 12 }); await ensureEventsSchema(queryable(pool), schema); }, 120_000);
+  afterAll(async () => { try { await pool?.end(); } finally { server?.stop(); } });
 
   it('a reader resuming after the highest position it saw never later finds a lower one committed', async () => {
     const writer = createEvents({ db: queryable(pool), schema });

@@ -4,7 +4,7 @@
  * giving two viewers different rows through a non-superuser account, the startup parameters, the database a
  * `default:` namespace opens (and 3D000 for one that does not exist), statement timeouts, TLS refusals, a refused
  * sign-in without the password in the error, and MySQL's viewer variables (read through a function, reset after each
- * query, hostile values kept literal). Runs in the `integration` project; skipped without the images.
+ * query, hostile values kept literal). Runs in the `integration` project; skipped without the images, except in CI.
  */
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -12,8 +12,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { connectorError, openConnection, type OpenConnection } from '@artifactbin/connectors';
+import { dockerImage } from '@artifactbin/test-support/docker';
 
-const has = (image: string) => spawnSync('docker', ['image', 'inspect', image], { stdio: 'ignore' }).status === 0;
+/** CI's integration job pulls all three images: a missing one fails there instead of skipping (test-support/docker). */
+const has = (image: string) => dockerImage(image);
 const DEV = { allowPrivateNetwork: true };
 const PASSWORD = 'reader-pa55-f0r-connector-tests';
 const portOf = (id: string, port: number) => Number(execFileSync('docker', ['port', id, `${port}/tcp`], { encoding: 'utf8' }).trim().split('\n')[0]!.split(':').at(-1));
@@ -89,7 +91,8 @@ describe.skipIf(!has('postgres:17-alpine'))('postgres 17 over TLS', () => {
     expect((await pg.query({text:'select 1 as n',params:{},viewer:alice})).rows).toEqual([{n:1}]);
   });
 
-  it.runIf(process.env.CONNECTOR_LONG_READ_PROOF==='1')('completes a configured read beyond the former five-second cap',async()=>{
+  // About five seconds of real time on purpose: a read past the startup's 5 s statement_timeout must complete.
+  it('completes a configured read beyond the former five-second cap',async()=>{
     const pg=open();
     const started=performance.now();
     expect((await pg.query({text:'select 1 as n from pg_sleep(5.2)',params:{},viewer:alice})).rows).toEqual([{n:1}]);
