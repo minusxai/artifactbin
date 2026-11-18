@@ -13,7 +13,7 @@ import { attachActor } from '@artifactbin/utils';
 import { withTokenAuth } from '@/lib/authentication';
 import { profileWrites } from '@/lib/accounts/profiles';
 import { syncProfile } from '@/lib/accounts';
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
+import { mintAccountToken as mintToken, params as routeParams } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
 import { sessionActor } from '@/lib/authentication';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
@@ -205,7 +205,7 @@ describe('a bearer-only invitee whose first call is not a withTokenAuth route', 
     const response = await tablesRoute(attachActor(
       request(`/a/${id}/tables`, { method: 'POST', token: invitee.token, json: { sql: 'SELECT id FROM rows' } }),
       { credential: 'bearer', tokenId: invitee.id, userId: 'usr_cli0000000005', email: 'firstcall@invited.example', emailVerified: true },
-    ), { params: Promise.resolve({ id }) });
+    ), routeParams(id));
     expect(response.status, await response.clone().text()).toBe(200);
     expect((await db.query<{ email: string }>('SELECT email FROM users WHERE id = $1', ['usr_cli0000000005'])).rows[0]?.email).toBe('firstcall@invited.example');
   });
@@ -224,7 +224,7 @@ describe('a bearer-only invitee whose first call is not a withTokenAuth route', 
     const response = await tablesRoute(attachActor(
       request(`/a/${id}/tables`, { method: 'POST', token: stranger.token, json: { sql: 'SELECT id FROM rows' } }),
       { credential: 'bearer', tokenId: stranger.id, userId: 'usr_cli0000000006', email: 'stranger@invited.example', emailVerified: true },
-    ), { params: Promise.resolve({ id }) });
+    ), routeParams(id));
     expect(response.status).toBe(404);
   });
 });

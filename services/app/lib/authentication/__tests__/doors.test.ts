@@ -6,7 +6,7 @@
  */
 import { BROWSER_SESSION_HEADER } from '@artifactbin/contracts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { mintAccountToken, request, setSession, useAppHarness } from '@/__tests__/harness';
+import { mintAccountToken, request, setSession, useAppHarness, params } from '@/__tests__/harness';
 import { NO_IDENTITY, revokeToken } from '@/lib/accounts';
 import {
   auth, browserActor, browserSessionKind, hostedAuthorization, hostedOperationCompleted, hostedRefusal, isBrowserSessionRequest,
@@ -59,7 +59,7 @@ describe('withTokenAuth (token holders only)', () => {
 
   it('runs the handler for a live token with its route params and stamps the account it acted as', async () => {
     const t = await mintAccountToken('cli');
-    const response = await door(request('/x', { token: t.token }), { params: Promise.resolve({ id: 'doc1' }) });
+    const response = await door(request('/x', { token: t.token }), params('doc1'));
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ who: t.userId, params: { id: 'doc1' } });
     expect(response.headers.get('X-Artifactbin-Account')).toBe(t.userId);

@@ -12,13 +12,12 @@ import { GET as profileData } from '@/app/api/page/profile/[user]/[[...path]]/ro
 import { mintToken, createUser, ensureUsername } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
 import { createAppServer } from '../app';
-import { useAppHarness } from '@/__tests__/harness';
+import { useAppHarness, request } from '@/__tests__/harness';
 import { setArtifact } from '@/__tests__/rows';
 
 useAppHarness();
 
 const SECRET = 'vitest-actor-secret-0000000000000000';
-const BASE = 'http://localhost:3000';
 const app = createAppServer({ actorSecret: SECRET, indexHtml: async () => '<!doctype html><html><head><title>SPA</title></head><body><div id="root">SPA</div></body></html>' });
 const as = (actor: Actor) => ({ [ACTOR_HEADER]: signActor(actor, SECRET) });
 const html = { accept: 'text/html' };
@@ -55,7 +54,7 @@ describe('a title-slug address', () => {
       expect(payload.path).toBe(`/@${w.owner.username}/quarterly-report`);
       expect(JSON.stringify(payload.artifact)).toContain(id);
     }
-    const api = await profileData(new Request(`${BASE}/api/page/profile/@${w.owner.username}/quarterly-report`), { params: Promise.resolve({ user: `@${w.owner.username}`, path: 'quarterly-report' }) });
+    const api = await profileData(request(`/api/page/profile/@${w.owner.username}/quarterly-report`), { params: Promise.resolve({ user: `@${w.owner.username}`, path: 'quarterly-report' }) });
     expect(await api.json()).toEqual({ kind: 'artifact', id });
   });
 

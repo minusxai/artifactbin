@@ -10,7 +10,7 @@ import { screen, waitFor, within } from '@testing-library/dom';
 import { fireEvent } from '../../__tests__/helpers';
 import { SessionProvider } from '../../lib/session';
 import { preloadCommentField } from '../LazyCommentField';
-import { ANN, RESOLVED, fetchCalls, flush, installAnnotationFetch, knobs, layer, showResolved, emitPin } from './annotation-rig';
+import { ANN, RESOLVED, fetchCalls, flush, installAnnotationFetch, knobs, showResolved, openPinnedThread } from './annotation-rig';
 import { replaceComment } from './comment-input';
 import { stubFetch } from '@/test/helpers/fetch-stub';
 
@@ -34,9 +34,7 @@ afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 /** The rail, open on the first thread, as the signed-in author vivek sees it. */
 async function openThread() {
-  const view = layer({ railOpen: true, canDeleteAny: false }, undefined, { wrap: (ui) => <SessionProvider>{ui()}</SessionProvider> });
-  await flush();
-  emitPin(view.runtime, THREAD.id);
+  await openPinnedThread(THREAD.id, { railOpen: true, canDeleteAny: false }, undefined, { wrap: (ui) => <SessionProvider>{ui()}</SessionProvider> });
   const thread = await screen.findByLabelText('Annotation thread');
   await waitFor(() => expect(within(thread).getByLabelText('Annotation actions')).toBeTruthy());
   return thread;

@@ -18,7 +18,7 @@ import {getDb} from '@/lib/platform';
 import { objectStore } from '@/lib/object-store';
 import { resetExportRenderer, renderArtifactImage } from '@/lib/export';
 import { setServices } from '@/lib/platform';
-import { mintAccountToken as mintToken, params } from '@/__tests__/harness';
+import { mintAccountToken as mintToken, params, request } from '@/__tests__/harness';
 import { DEFAULT_SOCIAL_PREVIEW_CROP } from '@/lib/document/social-preview';
 import { useAppHarness } from '@/__tests__/harness';
 
@@ -46,7 +46,7 @@ describe('the export route through the browser seam', () => {
   it('a full-page png: the route asks for the document URL, body, png, full capture, and returns the bytes', async () => {
     browser();
     const id = await doc();
-    const res = await exportImage(new Request(`${BASE}/a/${id}/export`), params(id));
+    const res = await exportImage(request(`/a/${id}/export`), params(id));
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toContain('image/png');
     expect(new Uint8Array(await res.arrayBuffer()).slice(0, 4)).toEqual(PNG.slice(0, 4));
@@ -62,7 +62,7 @@ describe('the export route through the browser seam', () => {
   it('a card capture forwards capture=card; jpg forwards format=jpg and answers image/jpeg', async () => {
     browser({ ok: true, mime: 'image/jpeg', bytes: PNG });
     const id = await doc();
-    const res = await exportImage(new Request(`${BASE}/a/${id}/export?mode=card&format=jpg`), params(id));
+    const res = await exportImage(request(`/a/${id}/export?mode=card&format=jpg`), params(id));
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toContain('image/jpeg');
     expect(lastRequest().capture).toEqual({ card: DEFAULT_SOCIAL_PREVIEW_CROP });
@@ -70,7 +70,7 @@ describe('the export route through the browser seam', () => {
   });
 
   it('does not forward retired declared-value query parameters into a native social capture',async()=>{
-    browser();const id=await doc();await exportImage(new Request(`${BASE}/a/${id}/export?mode=card&$region=EU&$junk=1`),params(id));
+    browser();const id=await doc();await exportImage(request(`/a/${id}/export?mode=card&$region=EU&$junk=1`),params(id));
     expect(lastRequest().url).not.toContain('$region');expect(lastRequest().url).not.toContain('$junk');
   });
 
@@ -81,7 +81,7 @@ describe('the export route through the browser seam', () => {
       format: 'html', source: '<!doctype html><html><head><meta name="artifactbin:og-crop" content="x=300;y=900;width=800"></head><body><div>hi</div></body></html>',
       meta: {}, title: 'hi', description: null, visibility: 'public',
     });
-    await exportImage(new Request(`${BASE}/a/${row.id}/export?mode=card`), params(row.id));
+    await exportImage(request(`/a/${row.id}/export?mode=card`), params(row.id));
     expect(lastRequest().capture).toEqual({ card: { x: 300, y: 900, width: 800 } });
   });
 
@@ -91,9 +91,9 @@ describe('the export route through the browser seam', () => {
     const row = await createArtifact(t.id, t.userId, {
       format: 'html', source: nativeHtml('<div>hi</div>'), meta: {}, title: 'hi', description: null,
     });
-    const anonymous = await exportImage(new Request(`${BASE}/a/${row.id}/export?mode=preview`), params(row.id));
+    const anonymous = await exportImage(request(`/a/${row.id}/export?mode=preview`), params(row.id));
     expect(anonymous.status).toBe(404);
-    const owner = await exportImage(new Request(`${BASE}/a/${row.id}/export?mode=preview`, {
+    const owner = await exportImage(request(`/a/${row.id}/export?mode=preview`, {
       headers: { authorization: `Bearer ${t.token}` },
     }), params(row.id));
     expect(owner.status).toBe(200);
@@ -103,7 +103,7 @@ describe('the export route through the browser seam', () => {
     const dataset = await createArtifact(t.id, t.userId, {
       format: 'dataset', source: null, meta: {}, title: 'data', description: null,
     });
-    const unsupported = await exportImage(new Request(`${BASE}/a/${dataset.id}/export?mode=preview`, {
+    const unsupported = await exportImage(request(`/a/${dataset.id}/export?mode=preview`, {
       headers: { authorization: `Bearer ${t.token}` },
     }), params(dataset.id));
     expect(unsupported.status).toBe(404);
@@ -115,10 +115,7 @@ describe('the export route through the browser seam', () => {
     const row = await createArtifact(t.id, t.userId, {
       format: 'html', source: nativeHtml('<div>hi</div>'), meta: {}, title: 'hi', description: null,
     });
-    const res = await exportImage(new Request(
-      `${BASE}/a/${row.id}/export?mode=preview&format=png&crop=x%3D120%3By%3D640%3Bwidth%3D600`,
-      { headers: { authorization: `Bearer ${t.token}` } },
-    ), params(row.id));
+    const res = await exportImage(request(`/a/${row.id}/export?mode=preview&format=png&crop=x%3D120%3By%3D640%3Bwidth%3D600`, { headers: { authorization: `Bearer ${t.token}` } }), params(row.id));
     expect(res.status).toBe(200);
     expect(res.headers.get('cache-control')).toBe('private, no-store');
     expect(lastRequest()).toMatchObject({
@@ -126,24 +123,21 @@ describe('the export route through the browser seam', () => {
       viewport: { width: 1600, height: 840 },
     });
 
-    const invalid = await exportImage(new Request(
-      `${BASE}/a/${row.id}/export?mode=preview&crop=nope`,
-      { headers: { authorization: `Bearer ${t.token}` } },
-    ), params(row.id));
+    const invalid = await exportImage(request(`/a/${row.id}/export?mode=preview&crop=nope`, { headers: { authorization: `Bearer ${t.token}` } }), params(row.id));
     expect(invalid.status).toBe(400);
   });
 
   it('a slide capture forwards { slide: n }', async () => {
     browser();
     const id = await doc();
-    await exportImage(new Request(`${BASE}/a/${id}/export?slide=2`), params(id));
+    await exportImage(request(`/a/${id}/export?slide=2`), params(id));
     expect(lastRequest().capture).toEqual({ slide: 2 });
   });
 
   it('an unavailable browser is 503 render_unavailable — the verdict, not a crash', async () => {
     browser({ ok: false, reason: 'unavailable' });
     const id = await doc();
-    const res = await exportImage(new Request(`${BASE}/a/${id}/export`), params(id));
+    const res = await exportImage(request(`/a/${id}/export`), params(id));
     expect(res.status).toBe(503);
     expect(await res.json()).toEqual({ error: 'render_unavailable' });
   });
@@ -151,7 +145,7 @@ describe('the export route through the browser seam', () => {
   it('a missing slide is a client error naming how many slides exist', async () => {
     browser({ ok: false, reason: 'no_slide', slides: 2 });
     const id = await doc();
-    const res = await exportImage(new Request(`${BASE}/a/${id}/export?slide=9`), params(id));
+    const res = await exportImage(request(`/a/${id}/export?slide=9`), params(id));
     expect(res.status).toBeGreaterThanOrEqual(400);
     expect(res.status).toBeLessThan(500);
     expect(await res.json()).toEqual({ error: 'slide_not_found', slides: 2 });
@@ -160,7 +154,7 @@ describe('the export route through the browser seam', () => {
   it('a failed navigation is a server-side error, and the fake was asked exactly once', async () => {
     browser({ ok: false, reason: 'navigation', detail: 'boom' });
     const id = await doc();
-    const res = await exportImage(new Request(`${BASE}/a/${id}/export`), params(id));
+    const res = await exportImage(request(`/a/${id}/export`), params(id));
     expect(res.status).toBeGreaterThanOrEqual(500);
     expect(fake.calls).toHaveLength(1);
   });

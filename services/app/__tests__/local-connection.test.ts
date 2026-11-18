@@ -4,7 +4,7 @@ import {createHash} from 'node:crypto';
 import {POST as publish} from '@/app/api/artifacts/route';
 import {POST as grant} from '@/app/api/local-connection/route';
 import {readHtmlPage} from '@/lib/html-publication';
-import {request,useAppHarness,mintAccountToken,setSession} from './harness';
+import {request,useAppHarness,mintAccountToken,setSession,params} from './harness';
 import { setArtifact } from '@/__tests__/rows';
 const harness=useAppHarness();
 it('keeps local grants anonymous read-only and refuses account upgrades',async()=>{
@@ -55,7 +55,7 @@ it('validates idle grants against current source and original account without ex
  const owner=await mintAccountToken('idle-owner'),stranger=await mintAccountToken('idle-stranger');const made=await publish(request('/api/artifacts',{method:'POST',token:owner.token,json:{visibility:'public',html:'<html><body>Idle</body></html>'}}));const {id}=await made.json();
  const page=await readHtmlPage({userId:owner.userId,tokenId:null,email:owner.email,documentEditor:false},id);const identity={platformOrigin:'http://localhost:3000',artifactId:id,baseRevision:page.revision,sourceDigest:createHash('sha256').update(page.html).digest('hex')};
  const open=async(account:boolean)=>{const res=await grant(request('/api/local-connection',{method:'POST',token:owner.token,json:{identity,authorizePrivate:account}}));expect(res.status).toBe(200);return (await res.json()).capability;};
- const inspect=(cap:string,token=owner.token)=>{const req=request(`/api/local-connection/${id}/status`,{token});req.headers.set('X-Af-Local-Capability',cap);return status(req,{params:Promise.resolve({id})});};
+ const inspect=(cap:string,token=owner.token)=>{const req=request(`/api/local-connection/${id}/status`,{token});req.headers.set('X-Af-Local-Capability',cap);return status(req,params(id));};
  const guest=await open(false);const switched=await inspect(guest,stranger.token);expect(switched.status).toBe(200);
  await setArtifact((await harness.db()), id, { version: { sql: 'version+1' } });
  const changed=await inspect(guest);expect(changed.status).toBe(200);expect(await changed.json()).toMatchObject({compatible:false,remoteRevision:'2'});expect((await inspect(guest)).status).toBe(410);
@@ -64,9 +64,9 @@ it('validates idle grants against current source and original account without ex
 it('never accepts the local capability as authentication at comment or source write doors',async()=>{
  const owner=await mintAccountToken('local-other-doors');const made=await publish(request('/api/artifacts',{method:'POST',token:owner.token,json:{visibility:'public',html:'<html><body>Original</body></html>'}}));const {id}=await made.json();const page=await readHtmlPage({userId:owner.userId,tokenId:null,email:owner.email,documentEditor:false},id);const identity={platformOrigin:'http://localhost:3000',artifactId:id,baseRevision:page.revision,sourceDigest:createHash('sha256').update(page.html).digest('hex')};const cap=(await(await grant(request('/api/local-connection',{method:'POST',json:{identity}}))).json()).capability;
  const {POST:comment}=await import('@/app/api/my/artifacts/[id]/annotations/route');const {PUT:replace}=await import('@/app/api/artifacts/[id]/route');
- for(const [path,method,handler] of [[`/api/my/artifacts/${id}/annotations`,'POST',comment],[`/api/artifacts/${id}`,'PUT',replace]] as const){const req=request(path,{method,json:{body:'No write',html:'<html><body>Changed</body></html>'}});req.headers.set('X-Af-Local-Capability',cap);const response=await handler(req,{params:Promise.resolve({id})});expect([401,403]).toContain(response.status);}
+ for(const [path,method,handler] of [[`/api/my/artifacts/${id}/annotations`,'POST',comment],[`/api/artifacts/${id}`,'PUT',replace]] as const){const req=request(path,{method,json:{body:'No write',html:'<html><body>Changed</body></html>'}});req.headers.set('X-Af-Local-Capability',cap);const response=await handler(req,params(id));expect([401,403]).toContain(response.status);}
  expect((await readHtmlPage({userId:owner.userId,tokenId:null,email:owner.email,documentEditor:false},id)).html).toBe(page.html);
 });
 it('never borrows an ambient account for the anonymous local event stream',async()=>{
- const {GET:events}=await import('@/app/a/[id]/events/route');const owner=await mintAccountToken('local-live-guest');const made=await publish(request('/api/artifacts',{method:'POST',token:owner.token,json:{visibility:'private',html:'<html><body>Private</body></html>'}}));const {id}=await made.json();setSession({user:{id:owner.userId!,email:owner.email??''}});const response=await events(request(`/a/${id}/events?anonymous=1`,{token:owner.token}),{params:Promise.resolve({id})});expect(response.status).toBe(404);await response.body?.cancel();
+ const {GET:events}=await import('@/app/a/[id]/events/route');const owner=await mintAccountToken('local-live-guest');const made=await publish(request('/api/artifacts',{method:'POST',token:owner.token,json:{visibility:'private',html:'<html><body>Private</body></html>'}}));const {id}=await made.json();setSession({user:{id:owner.userId!,email:owner.email??''}});const response=await events(request(`/a/${id}/events?anonymous=1`,{token:owner.token}),params(id));expect(response.status).toBe(404);await response.body?.cancel();
 });

@@ -18,7 +18,7 @@ import { GET as flatComponent } from '@/app/af/components/[file]/route';
 import { retainedPublicAssets } from '@/lib/html-runtime/server';
 import { HTML_SYSTEM_NAMES, THEME_TOKENS } from '@/lib/html-systems';
 import hosted from '../../html-components/hosted.json';
-import { useAppHarness } from '@/__tests__/harness';
+import { useAppHarness, params } from '@/__tests__/harness';
 
 useAppHarness();
 const APP = 'https://app.example.test';
@@ -123,7 +123,7 @@ it('answers a digest only as the kind it was stored as', async () => {
 });
 
 it('leaves the flat addresses pages load as they were', async () => {
-  const entry = await flatComponent(new Request(`${APP}/af/components/button.js`), { params: Promise.resolve({ file: 'button.js' }) });
+  const entry = await flatComponent(new Request(`${APP}/af/components/button.js`), params({ file: 'button.js' }));
   expect(entry.status).toBe(200);
   expect(entry.headers.get('cache-control')).toBe('no-cache');
   const hostModule = await flatHost(new Request(`${APP}/af/host.js`));

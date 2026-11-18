@@ -1,5 +1,5 @@
 import { beforeEach, expect, it } from 'vitest';
-import { useAppHarness, request, setSession, mintAccountToken } from '@/__tests__/harness';
+import { useAppHarness, request, setSession, mintAccountToken, params as routeParams } from '@/__tests__/harness';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { GET as listAnnotations, POST as browserComment } from '@/app/api/my/artifacts/[id]/annotations/route';
 import { POST as apiComment } from '@/app/api/artifacts/[id]/annotations/route';
@@ -18,7 +18,7 @@ async function page() {
   expect(made.status).toBe(201);
   const { id } = await made.json() as { id: string };
   const db = await harness.db();
-  return { id, db, token: token.token, params: { params: Promise.resolve({ id }) } };
+  return { id, db, token: token.token, params: routeParams(id) };
 }
 const anchor = { kind: 'html-node', v: 1, revision: '1', nodeId: 'n1', quote: 'same words', range: { start: 0, end: 10, length: 10, fingerprint: htmlTextFingerprint('same words') } };
 it('persists the explicit HTML discriminator and original selection, and never retargets a removed node', async () => {

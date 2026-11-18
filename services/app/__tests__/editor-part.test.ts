@@ -1,6 +1,6 @@
 import {nativeHtml} from '@/__tests__/native-html-fixture';
 import { beforeEach, expect, it } from 'vitest';
-import { useAppHarness, request, setSession, mintAccountToken } from '@/__tests__/harness';
+import { useAppHarness, request, setSession, mintAccountToken, params as routeParams } from '@/__tests__/harness';
 import { GET as artifactPage } from '@/app/api/page/artifact/[id]/route';
 import { GET as headRead } from '@/app/api/my/artifacts/[id]/route';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
@@ -16,7 +16,7 @@ it('retires the browser editor door while preserving authorized API source readb
   const made = await createArtifact(request('/api/artifacts', { method: 'POST', token: token.token, json: { html:nativeHtml('<p id="body">Readable</p>'), visibility: 'public' } }));
   expect(made.status).toBe(201);
   const { id } = await made.json() as { id: string };
-  const params = { params: Promise.resolve({ id }) };
+  const params = routeParams(id);
   for (const suffix of ['?part=editor', '?part=editor&probe=1']) {
     expect((await artifactPage(request(`/api/page/artifact/${id}${suffix}`), params)).status).toBe(404);
   }

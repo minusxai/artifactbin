@@ -1,6 +1,6 @@
 import { identityForUser } from '@/lib/accounts';
 import {expect,it} from 'vitest';
-import {request,useAppHarness,mintAccountToken} from './harness';
+import {request,useAppHarness,mintAccountToken,params} from './harness';
 import {POST as create} from '@/app/api/artifacts/route';
 import {PUT as replace} from '@/app/api/artifacts/[id]/route';
 import {artifactState,getArtifactFor,setMetadataFor,isVersionConflict} from '@/lib/artifacts';
@@ -20,7 +20,7 @@ it('serializes native metadata writes against the same observed state without ch
 it('rejects an HTML replacement prepared before a metadata change and preserves the accepted title',async()=>{
  const {actor,row,token}=await fixture();
  await setMetadataFor(actor,row.id,{title:'Concurrent title'},{expectedState:artifactState(row)});
- const response=await replace(request(`/api/artifacts/${row.id}`,{method:'PUT',token:token.token,json:{html:row.source!.replace('Original','Changed'),title:'Stale title',expectedVersion:row.version,expectedState:artifactState(row)}}),{params:Promise.resolve({id:row.id})});
+ const response=await replace(request(`/api/artifacts/${row.id}`,{method:'PUT',token:token.token,json:{html:row.source!.replace('Original','Changed'),title:'Stale title',expectedVersion:row.version,expectedState:artifactState(row)}}),params(row.id));
  expect(response.status).toBe(409);expect(await getArtifactFor(actor,row.id)).toMatchObject({title:'Concurrent title',source:row.source,version:row.version});
 });
 it('does not partially rename when another metadata field is refused',async()=>{

@@ -137,7 +137,7 @@ it('bypasses composition authentication before it can resolve or refresh a sessi
 });
 it('serves referenced public/unlisted image bytes on raw and native resolve, and revokes them with the post',async()=>{
  const user=await owner(),png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==','base64');
- const uploaded=await publish(new Request('http://localhost:3000/api/artifacts?visibility=unlisted',{method:'POST',headers:{'content-type':'image/png',authorization:`Bearer ${user.token}`},body:new Uint8Array(png)}));
+ const uploaded=await publish(request('/api/artifacts?visibility=unlisted', {method:'POST',headers:{'content-type':'image/png',authorization:`Bearer ${user.token}`},body:new Uint8Array(png)}));
  expect(uploaded.status,await uploaded.clone().text()).toBe(201);const image=await uploaded.json();
  const unrelated=await page(user.token),server=app();expect((await server.request(`${base}/a/${image.id}/raw`)).status).toBe(404);
  expect((await server.request(`${base}/a/${unrelated.id}/resolve?ref=ref:${image.id}`)).status).toBe(404);

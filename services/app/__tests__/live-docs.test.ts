@@ -33,7 +33,7 @@ const as = (person: Person): Actor => ({ credential: 'session', userId: person.i
 /** An editor's replica, typing through the real doors under the client id its open was given. */
 async function join(person: Person) {
   const req = request(`/api/artifacts/${pageId}/regions/${regionId}/open`, { method: 'POST', actor: as(person), origin: 'same' });
-  const response = await runWithRequest(req, () => openRoute(req, { params: Promise.resolve({ id: pageId, regionId }) }));
+  const response = await runWithRequest(req, () => openRoute(req, params({ id: pageId, regionId })));
   expect(response.status).toBe(200);
   const reply = await response.json() as { clientId: number; state: string;kind: 'rich-native-v1'|'rich' };
   const doc = openRegionDoc(Buffer.from(reply.state, 'base64'), {kind:reply.kind, clientId: reply.clientId });
@@ -44,7 +44,7 @@ async function join(person: Person) {
     async push() {
       const update = Buffer.from(Y.mergeUpdates(pending.splice(0))).toString('base64');
       const sent = request(`/api/artifacts/${pageId}/regions/${regionId}/updates`, { method: 'POST', json: { clientId: reply.clientId, update }, actor: as(person), origin: 'same' });
-      expect((await runWithRequest(sent, () => updatesRoute(sent, { params: Promise.resolve({ id: pageId, regionId }) }))).status).toBe(200);
+      expect((await runWithRequest(sent, () => updatesRoute(sent, params({ id: pageId, regionId })))).status).toBe(200);
     },
   };
 }

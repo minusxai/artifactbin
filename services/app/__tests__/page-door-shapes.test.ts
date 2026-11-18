@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { useAppHarness, request, mintAccountToken } from './harness';
+import { useAppHarness, request, mintAccountToken, params } from './harness';
 import { createUser } from '@/lib/accounts';
 import { POST as publish } from '@/app/api/artifacts/route';
 import { POST as createBrowserArtifact } from '@/app/api/my/artifacts/route';
@@ -27,7 +27,7 @@ async function world() {
   const actor = { credential: 'session' as const, userId: owner.id, email: owner.email!, emailVerified: true };
   const make = async (json: Record<string, unknown>) => (await (await publish(request('/api/artifacts', { method: 'POST', token: token.token, json: { visibility: 'private', destination: { type: 'personal' }, ...json } }))).json() as { id: string }).id;
   const answer = async (id: string) => {
-    const res = await pageRoute(request(`/api/page/artifact/${id}`, { actor }), { params: Promise.resolve({ id }) });
+    const res = await pageRoute(request(`/api/page/artifact/${id}`, { actor }), params(id));
     expect(res.status).toBe(200);
     return await res.json() as Record<string, any>;
   };

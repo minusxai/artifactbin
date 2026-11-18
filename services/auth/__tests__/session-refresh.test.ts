@@ -2,8 +2,8 @@ import {afterAll,beforeAll,describe,expect,it} from 'vitest';
 import {humanSessionClient} from '@artifactbin/utils';
 import {PGlite} from '@electric-sql/pglite';
 import {createHumanAuth,type HumanAuth} from '../src/auth/human';
-import {createAuthHost,type AuthApp} from '../src/parts';
-import {noTokens,signInByOtp} from './helpers';
+import {type AuthApp} from '../src/parts';
+import {signInByOtp,serviceAuthHost} from './helpers';
 
 /** A browser session rolls forward: Better Auth refreshes once expiresAt is 5 of the 7 days away (updateAge 1 day). */
 const baseURL = 'http://localhost:9402';
@@ -13,10 +13,9 @@ let upstreamSetCookie: string | null = null;
 beforeAll(async () => {
   db = new PGlite();
   auth = await createHumanAuth({pglite: db, baseURL, secret: 'session-refresh-secret'.padEnd(32, '0'), mail: {send: async m => { otp = m.otp ?? ''; }}});
-  app = createAuthHost({
-    env: {}, cookieSecret: 'test', tokens: noTokens, sessions: auth.sessions,
-    upstream: async () => new Response('{"ok":true}', {headers: upstreamSetCookie ? {'set-cookie': upstreamSetCookie} : {}}),
-  });
+  app = serviceAuthHost({
+    env: {}, sessions: auth.sessions,
+    upstream: async () => new Response('{"ok":true}', {headers: upstreamSetCookie ? {'set-cookie': upstreamSetCookie} : {}})});
   cookie = await signInByOtp(auth, baseURL, 'mxmx_test_refresh@example.com', () => otp);
 });
 afterAll(async () => { await db.close(); });
@@ -54,7 +53,7 @@ describe('session refresh', () => {
 
   it('answers 503 no-store, not anonymous, when session resolution throws', async () => {
     let reached = false;
-    const broken = createAuthHost({env: {}, cookieSecret: 'test', tokens: noTokens,
+    const broken = serviceAuthHost({env: {},
       sessions: {resolve: async () => { throw new Error('db down'); }},
       upstream: async () => { reached = true; return new Response('ok'); }});
     const res = await broken.request(`${baseURL}/api/artifacts`, {headers: {cookie}});
@@ -71,7 +70,7 @@ it('the owning session authority follows direct signout and refuses another acco
   return {held,identity:identity!};
  };
  const {held,identity}=await login();
- const authority=createAuthHost({env:{INTERNAL__SERVICE_SECRET:'test-rpc'},cookieSecret:'test',tokens:noTokens,sessions:auth.sessions,upstream:async()=>new Response('app')});
+ const authority=serviceAuthHost({env:{INTERNAL__SERVICE_SECRET:'test-rpc'},sessions:auth.sessions,upstream:async()=>new Response('app')});
  const remote=humanSessionClient(baseURL,{serviceSecret:'test-rpc',fetch:r=>Promise.resolve(authority.fetch(r))});
  expect(await remote.live(identity.sessionId,identity.userId)).toBe(true);
  expect(await auth.sessions.live(identity.sessionId,identity.userId)).toBe(true);

@@ -46,8 +46,8 @@ async function world(){
   const pageActor:Session={credential:'session',userId:reporter.id,email:reporter.email!,emailVerified:true};
   const ownerSession:Session={credential:'session',userId:owner.id,email:owner.email!,emailVerified:true};
   const reporterToken=await mintToken('dataset-file-reporter',reporter.id);
-  const post=(body:Buffer,key='upload-operation-123')=>uploadImage(request(`/a/${document.id}/datasets/${dataset.id}/images`,{method:'POST',actor:pageActor,headers:{'Content-Type':'image/png','X-Edit-Id':document.edit_id,'Idempotency-Key':key},body:new Uint8Array(body)}),{params:Promise.resolve({id:document.id,datasetId:dataset.id})});
-  const filePost=(filename='note.txt',body:BodyInit='hello',key='generic-upload-123',editId=document.edit_id,datasetId=dataset.id)=>uploadFile(request(`/api/artifacts/${document.id}/datasets/${datasetId}/files`,{method:'POST',token:reporterToken.token,headers:{'Content-Type':'application/octet-stream','X-Filename':encodeURIComponent(filename),'X-Edit-Id':editId,'Idempotency-Key':key},body}),{params:Promise.resolve({id:document.id,datasetId})});
+  const post=(body:Buffer,key='upload-operation-123')=>uploadImage(request(`/a/${document.id}/datasets/${dataset.id}/images`,{method:'POST',actor:pageActor,headers:{'Content-Type':'image/png','X-Edit-Id':document.edit_id,'Idempotency-Key':key},body:new Uint8Array(body)}),params({ id:document.id,datasetId:dataset.id }));
+  const filePost=(filename='note.txt',body:BodyInit='hello',key='generic-upload-123',editId=document.edit_id,datasetId=dataset.id)=>uploadFile(request(`/api/artifacts/${document.id}/datasets/${datasetId}/files`,{method:'POST',token:reporterToken.token,headers:{'Content-Type':'application/octet-stream','X-Filename':encodeURIComponent(filename),'X-Edit-Id':editId,'Idempotency-Key':key},body}),params({ id:document.id,datasetId }));
   return {owner,reporter,ownerActor,make,dataset,document,pageActor,ownerSession,reporterToken,post,filePost};
 }
 
@@ -61,7 +61,7 @@ it('uploads through a real pages actor, replays safely, and rechecks the current
   const imageId=uploaded.ref.slice('dimg:'.length),read=(who:Session)=>readImage(request(uploaded.url,{actor:who}),params({id:document.id,datasetId:dataset.id,imageId:imageId}));
   const visible=await read(pageActor);expect(visible.status).toBe(200);
   expect((await read(ownerSession)).status).toBe(200);
-  expect((await uploadFile(request(`/api/artifacts/${document.id}/datasets/${dataset.id}/files`,{method:'POST',body:'hello'}),{params:Promise.resolve({id:document.id,datasetId:dataset.id})})).status).toBe(403);
+  expect((await uploadFile(request(`/api/artifacts/${document.id}/datasets/${dataset.id}/files`,{method:'POST',body:'hello'}),params({ id:document.id,datasetId:dataset.id }))).status).toBe(403);
   const simultaneous=await Promise.all([filePost(),filePost()]);
   for(const response of simultaneous)expect(response.status,await response.clone().text()).toBe(201);
   const files=await Promise.all(simultaneous.map(response=>response.json()));
@@ -84,7 +84,7 @@ it('uploads through a real pages actor, replays safely, and rechecks the current
     expect(put).not.toHaveBeenCalled();
   } finally { put.mockRestore(); }
   expect((await filePost('note.txt','hello','stale-operation-123','old-edit')).status).toBe(404);
-  const oversized=await uploadFile(request(`/api/artifacts/${document.id}/datasets/${dataset.id}/files`,{method:'POST',token:reporterToken.token,headers:{'Content-Length':'1000000000000','X-Filename':'note.txt','X-Edit-Id':document.edit_id,'Idempotency-Key':'oversized-operation-123'},body:'hello'}),{params:Promise.resolve({id:document.id,datasetId:dataset.id})});
+  const oversized=await uploadFile(request(`/api/artifacts/${document.id}/datasets/${dataset.id}/files`,{method:'POST',token:reporterToken.token,headers:{'Content-Length':'1000000000000','X-Filename':'note.txt','X-Edit-Id':document.edit_id,'Idempotency-Key':'oversized-operation-123'},body:'hello'}),params({ id:document.id,datasetId:dataset.id }));
   expect(oversized.status).toBe(413);
   const fileRead=(who=pageActor)=>readFile(request(files[0].url,{actor:who}),{params:Promise.resolve({id:document.id,datasetId:dataset.id,fileId:files[0].ref.slice(6)})});
   expect((await readFile(request(files[0].url),{params:Promise.resolve({id:document.id,datasetId:dataset.id,fileId:files[0].ref.slice(6)})})).status).toBe(404);
@@ -149,7 +149,7 @@ it('requires an insert rule (here: backend_only, through the page\'s upload proo
   const member=await filePost();expect(member.status,await member.clone().text()).toBe(201);const stored=await member.json();
   expect((await (await filePost()).json()).ref).toBe(stored.ref);expect(await imageCount(dataset.id)).toBe(1);
   const bytes=await sharp({create:{width:40,height:24,channels:3,background:'#c0392b'}}).png().toBuffer();
-  const ownerPost=()=>uploadImage(request(`/a/${document.id}/datasets/${dataset.id}/images`,{method:'POST',actor:ownerSession,headers:{'Content-Type':'image/png','X-Edit-Id':document.edit_id,'Idempotency-Key':'owner-normal-upload'},body:new Uint8Array(bytes)}),{params:Promise.resolve({id:document.id,datasetId:dataset.id})});
+  const ownerPost=()=>uploadImage(request(`/a/${document.id}/datasets/${dataset.id}/images`,{method:'POST',actor:ownerSession,headers:{'Content-Type':'image/png','X-Edit-Id':document.edit_id,'Idempotency-Key':'owner-normal-upload'},body:new Uint8Array(bytes)}),params({ id:document.id,datasetId:dataset.id }));
   expect((await ownerPost()).status).toBe(201);expect(await imageCount(dataset.id)).toBe(2);
   await changeMembership(identityForUser(reporter.id,null),document.id,{action:'leave'});put.mockClear();
   expect((await filePost()).status).toBe(403);expect(put).not.toHaveBeenCalled();

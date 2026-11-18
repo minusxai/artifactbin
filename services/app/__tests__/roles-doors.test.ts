@@ -641,7 +641,7 @@ describe('artifact membership', () => {
 
   it('the browser handler keeps comment access independent and refuses cross-site membership changes', async () => {
     const w=await world();
-    const ctx={params:Promise.resolve({id:'a1B2c3'})};
+    const ctx=params('a1B2c3');
     const actor={credential:'session' as const,userId:w.bob.id,email:w.bob.email!,emailVerified:true};
     const response=await POST(request('/api/my/artifacts/a1B2c3/members',{method:'POST',origin:'same',actor,json:{action:'join'}}),ctx);
     expect(response.status).toBe(200);

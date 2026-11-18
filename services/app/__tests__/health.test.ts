@@ -39,7 +39,7 @@ describe('GET /health', () => {
    * endpoint that reports unhealthy for the wrong reason.
    */
   it('needs no credential of any kind', async () => {
-    const bare = new Request('http://localhost:3000/health');
+    const bare = request('/health');
     expect((await health(bare)).status).toBe(200);
   });
 });

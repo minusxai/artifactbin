@@ -4,17 +4,17 @@ import {objectStore} from '@/lib/object-store';
 import {afterEach} from 'vitest';
 const sourceRead={hold:null as null|(()=>Promise<{rows:Array<{n:number}>,columns:Array<{name:string,type:'number'}>}>) };
 let restore:(()=>void)|undefined;afterEach(()=>{restore?.();restore=undefined;sourceRead.hold=null;});
-import {bearerIdentity,useAppHarness,request,agentCookie} from './harness';
+import {bearerIdentity,useAppHarness,request,agentCookie,params} from './harness';
 import {POST as create} from '@/app/api/artifacts/route';
 import {POST as queryPrivateDocument} from '@/app/api/artifacts/[id]/sql/route';
 import {attachActor} from '@artifactbin/utils';
 import {BROWSER_SESSION_HEADER} from '@artifactbin/contracts';
 import {AUTH_SECRET} from '@/lib/platform';
-import {createAuthHost} from '@artifactbin/auth';
 
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
 import { setArtifact } from '@/__tests__/rows';
+import { serviceAuthHost } from '../../auth/__tests__/helpers';
 const harness=useAppHarness();
 const queries=new Map<string,string>();
 const queryDocument=(req:Request,ctx:{params:Promise<{id:string}>})=>ctx.params.then(({id})=>queryPrivateDocument(new Request(req.url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({revision:"1",sql:queries.get(id)})}),ctx));
@@ -35,7 +35,7 @@ async function fixture(twoQueries=false){
 }
 it('reads a public dataset through an explicitly linked native namespace',async()=>{
   const {id}=await fixture();
-  const response=await queryDocument(request(`/api/artifacts/${id}/sql`),{params:Promise.resolve({id})});
+  const response=await queryDocument(request(`/api/artifacts/${id}/sql`),params(id));
   expect(response.status).toBe(200);expect(await response.text()).toContain('314159265');
 });
 
@@ -43,7 +43,7 @@ it.each(['document','catalog'] as const)('withholds the whole response when %s a
   const {id,dataset}=await fixture(true);const db=await harness.db();
   const started=deferred<void>(),release=deferred<{rows:Array<{n:number}>,columns:Array<{name:string,type:'number'}>}>();let calls=0;
   sourceRead.hold=async()=>{if(++calls===1)return {rows:[{n:314159265}],columns:[{name:'n',type:'number'}]};started.resolve();return release.promise;};
-  const pending=queryDocument(request(`/api/artifacts/${id}/sql`),{params:Promise.resolve({id})});
+  const pending=queryDocument(request(`/api/artifacts/${id}/sql`),params(id));
   await started.promise;
   expect(calls).toBeGreaterThanOrEqual(2);
   if(change==='document')await setVisibility(id, 'private');
@@ -55,7 +55,7 @@ it.each(['private','deleted'] as const)('does not return source rows when a publ
   const {id}=await fixture();const db=await harness.db();
   const started=deferred<void>(),release=deferred<{rows:Array<{n:number}>,columns:Array<{name:string,type:'number'}>}>();
   sourceRead.hold=()=>{started.resolve();return release.promise;};
-  const pending=queryDocument(request(`/api/artifacts/${id}/sql`),{params:Promise.resolve({id})});
+  const pending=queryDocument(request(`/api/artifacts/${id}/sql`),params(id));
   await started.promise;
   await setArtifact(db, id, change==='private'?{ visibility: 'private' }:{ deleted_at: { sql: 'now()' } });
   release.resolve({rows:[{n:314159265}],columns:[{name:'n',type:'number'}]});
@@ -72,7 +72,7 @@ it.each([
   const started=deferred<void>(),release=deferred<{rows:Array<{n:number}>,columns:Array<{name:string,type:'number'}>}>();
   sourceRead.hold=()=>{started.resolve();return release.promise;};
   const bearers=await bearerIdentity();await bearers.account({userId:user.id,email:user.email!,emailVerified:true});
-  const proxy=createAuthHost({env:{},cookieSecret:AUTH_SECRET,tokens:bearers.reader,sessions:{resolve:async()=>null},upstream:(incoming,actor)=>queryPrivateDocument(attachActor(incoming,actor),{params:Promise.resolve({id})})});
+  const proxy=serviceAuthHost({env:{},cookieSecret:AUTH_SECRET,tokens:bearers.reader,upstream:(incoming,actor)=>queryPrivateDocument(attachActor(incoming,actor),params(id))});
   const req=request(`/api/artifacts/${id}/sql`,{method:'POST',json:{revision:"1",sql:queries.get(id)},token:token.token,...(credential==='scripted-browser'?{headers:{[BROWSER_SESSION_HEADER]:'1'}}:{})});
   const pending=Promise.resolve(proxy.fetch(req));
   await Promise.race([started.promise,pending.then(response=>{throw new Error(`Query was denied before upstream object loading: ${response.status}`);})]);
@@ -88,7 +88,7 @@ it('keeps a plain legacy cookie unauthenticated before querying a private source
   const {id,token}=await fixture();
   await setVisibility(id, 'private');
   const source=vi.fn(async()=>({rows:[{n:314159265}],columns:[{name:'n',type:'number' as const}]}));sourceRead.hold=source;
-  const proxy=createAuthHost({env:{},cookieSecret:AUTH_SECRET,tokens:(await bearerIdentity()).reader,sessions:{resolve:async()=>null},upstream:(incoming,actor)=>queryPrivateDocument(attachActor(incoming,actor),{params:Promise.resolve({id})})});
+  const proxy=serviceAuthHost({env:{},cookieSecret:AUTH_SECRET,tokens:(await bearerIdentity()).reader,upstream:(incoming,actor)=>queryPrivateDocument(attachActor(incoming,actor),params(id))});
   const response=await proxy.fetch(request(`/api/artifacts/${id}/sql`,{method:'POST',json:{revision:"1",sql:queries.get(id)},cookie:await agentCookie([token.id])}));
   expect(response.status).toBe(404);expect(await response.text()).not.toContain('314159265');expect(source).not.toHaveBeenCalled();sourceRead.hold=null;
 });

@@ -11,7 +11,7 @@ import { PUT as replace } from '@/app/api/artifacts/[id]/route';
 import { getArtifactById, artifactState } from '@/lib/artifacts';
 import { catalogOf } from '@/lib/datasets';
 import { executeCatalog } from '@/lib/datasets/execute';
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
+import { mintAccountToken as mintToken, params } from '@/__tests__/harness';
 import { request, useAppHarness } from '@/__tests__/harness';
 useAppHarness();
 
@@ -22,7 +22,7 @@ async function fixture() {
   const id = await publishedId(author.token, { dataset: { kind: 'stored', tables: [{ schema: 'public', name: 'rows', columns: [{ name: 'id', type: 'number' }, { name: 'task', type: 'string' }], rows: [{ id: 1, task: 'a' }, { id: 2, task: 'b' }] }] } });
   const put = async (dataset: string) => {
     const row = (await getArtifactById(id))!;
-    return replace(request(`/api/artifacts/${id}`, { method: 'PUT', token: author.token, json: { dataset, expectedVersion: row.version, expectedState: artifactState(row) } }), { params: Promise.resolve({ id }) });
+    return replace(request(`/api/artifacts/${id}`, { method: 'PUT', token: author.token, json: { dataset, expectedVersion: row.version, expectedState: artifactState(row) } }), params(id));
   };
   const select = async (sql: string) => (await executeCatalog(catalogOf((await getArtifactById(id))!)!, sql, {}, { view: null })).rows;
   return { put, select };

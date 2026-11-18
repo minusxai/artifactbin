@@ -1,7 +1,7 @@
 import {afterEach,expect,it,vi} from 'vitest';
 import {GET as documentEvents} from '@/app/a/[id]/events/route';
 import {GET as peopleEvents} from '@/app/api/my/people/events/route';
-import {request,useAppHarness} from './harness';
+import {request,useAppHarness,params} from './harness';
 import { createUser } from '@/lib/accounts';
 import {runWithRequest} from '@/lib/platform';
 import {LIVE_KEEPALIVE_EVENT} from '@/lib/http';
@@ -22,7 +22,7 @@ const heartbeatWithin=async(response:Response,ms:number)=>{
  finally{await reader.cancel().catch(()=>{});}
 };
 it.each([
- ['/a/<id>/events', async(actor:{credential:'session';userId:string;email:string;emailVerified:true})=>{const req=request('/a/beatdoc/events',{actor});return runWithRequest(req,()=>documentEvents(req,{params:Promise.resolve({id:'beatdoc'})}));}],
+ ['/a/<id>/events', async(actor:{credential:'session';userId:string;email:string;emailVerified:true})=>{const req=request('/a/beatdoc/events',{actor});return runWithRequest(req,()=>documentEvents(req,params('beatdoc')));}],
  ['/api/my/people/events', async(actor:{credential:'session';userId:string;email:string;emailVerified:true})=>{const req=request('/api/my/people/events',{actor});return runWithRequest(req,()=>peopleEvents(req));}],
 ])('%s sends a heartbeat frame within 25 seconds of silence',async(_name,open)=>{
  const owner=await createUser({email:'mxmx_test_heartbeat@example.com'});

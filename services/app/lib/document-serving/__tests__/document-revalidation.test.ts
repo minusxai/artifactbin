@@ -4,7 +4,7 @@ import {nativeResponseIdentity} from '@/__tests__/native-response-identity';
 import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest';
 import {attachActor} from '@artifactbin/utils';
 import type {Actor} from '@artifactbin/contracts';
-import {useAppHarness,request,setSession,mintAccountToken,testPagesSite as pagesSiteFor} from '@/__tests__/harness';
+import {useAppHarness,request,setSession,mintAccountToken,testPagesSite as pagesSiteFor,params as routeParams} from '@/__tests__/harness';
 import {observedRequest} from '@/__tests__/conditional-request';
 import {POST as createRoute} from '@/app/api/artifacts/route';
 import {PUT as putRoute} from '@/app/api/artifacts/[id]/route';
@@ -32,13 +32,13 @@ async function world(visibility='public'){
  const user=await createUser({email:`mxmx_test_reval_${Math.random().toString(36).slice(2,8)}@example.com`});const token=await mintAccountToken('reval',user.id);
  const actor=humanActor(user);
  const result=await createRoute(request('/api/artifacts',{method:'POST',token:token.token,json:{html:BODY,visibility}}));expect(result.status,await result.clone().text()).toBe(201);const {id}=await result.json();
- const edit=async(html:string)=>{const result=await putRoute(await observedRequest(`/api/artifacts/${id}`,{method:'PUT',token:token.token,json:{html}}),{params:Promise.resolve({id})});expect(result.status,await result.clone().text()).toBe(200);};
+ const edit=async(html:string)=>{const result=await putRoute(await observedRequest(`/api/artifacts/${id}`,{method:'PUT',token:token.token,json:{html}}),routeParams(id));expect(result.status,await result.clone().text()).toBe(200);};
  return {id:id as string,user,token,actor,edit};
 }
 const as=(url:string,actor:Actor)=>attachActor(new Request(url,{headers:{accept:'text/html'}}),actor);
 async function frameSrc(id:string,actor:Actor){const page=await app.request(as(`${APP}/a/${id}`,actor));return /<iframe data-mx-document-frame="" src="([^"]+)"/.exec(await page.text())![1]!.replaceAll('&amp;','&');}
 async function pagesCookie(id:string,actor:Actor){const exchanged=await app.request(await frameSrc(id,actor));return /(__Host-afbin_pages=[^;]+)/.exec(exchanged.headers.get('set-cookie')??'')?.[1]??'';}
-const nodes=(id:string,user:{id:string;email:string|null}|null,headers:Record<string,string>={},part='nodes')=>{setSession(user?{user:{id:user.id,email:user.email!}}:null);return artifactPage(request(`/api/page/artifact/${id}?part=${part}`,{headers}),{params:Promise.resolve({id})});};
+const nodes=(id:string,user:{id:string;email:string|null}|null,headers:Record<string,string>={},part='nodes')=>{setSession(user?{user:{id:user.id,email:user.email!}}:null);return artifactPage(request(`/api/page/artifact/${id}?part=${part}`,{headers}),routeParams(id));};
 describe('native document conditional reads',()=>{
  it('returns a weak private validator and an empty 304 without assembling the document',async()=>{
   const w=await world(),first=await read(w.id),tag=tagOf(first);expect(first.status).toBe(200);expect(tag).toMatch(/^W\/"[A-Za-z0-9_-]{22}"$/);expect(first.headers.get('cache-control')).toBe('private, no-cache');expect(await first.text()).toContain('A plan');

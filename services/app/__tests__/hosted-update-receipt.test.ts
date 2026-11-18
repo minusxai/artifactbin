@@ -1,6 +1,6 @@
 import {expect,it,vi} from 'vitest';
 import {nativeSource} from './native-publication-fixture';
-import {request,useAppHarness,mintAccountToken} from './harness';
+import {request,useAppHarness,mintAccountToken,params} from './harness';
 import {POST as create} from '@/app/api/artifacts/route';
 import {PUT as replace} from '@/app/api/artifacts/[id]/route';
 vi.mock('@/lib/platform/config',async importOriginal=>({...await importOriginal<typeof import('@/lib/platform/config')>(),USER_PAGES_HOST:'u.example.test'}));
@@ -14,7 +14,7 @@ it.each(['public','unlisted'])('commits and replays changed and unchanged %s HTM
  let head=await made.json();
  for(const changed of [true,false]){
   const body={html:changed?nativeSource('<p>After</p>'):head.html,expectedVersion:head.version,expectedState:head.state};
-  const send=()=>replace(request(`/api/artifacts/${head.id}`,{method:'PUT',token:owner.token,json:body,headers:{'Idempotency-Key':`mxmx_test_host_receipt_${changed}`}}),{params:Promise.resolve({id:head.id})});
+  const send=()=>replace(request(`/api/artifacts/${head.id}`,{method:'PUT',token:owner.token,json:body,headers:{'Idempotency-Key':`mxmx_test_host_receipt_${changed}`}}),params(head.id));
   const saved=await send();
   expect(saved.status).toBe(200);
   const next=await saved.json();

@@ -11,7 +11,7 @@ import {readFileSync} from 'node:fs';
 import { storyFontManifest as manifest } from '@/lib/html-systems';
 import {pagesHost} from '../server/pages-host';
 import {pagesOriginFor} from '@/lib/http';
-import {useAppHarness,testPagesSite as pagesSiteFor} from './harness';
+import {useAppHarness,testPagesSite as pagesSiteFor,params} from './harness';
 useAppHarness();
 it('serves the documented public core with credential-free conditional GET and HEAD',async()=>{
  const request=new Request('https://app.example.test/af/core.js',{headers:{authorization:'Bearer ignored-test-value',cookie:'ignored=test'}});const get=await GET(request);expect(get.status).toBe(200);expect(get.headers.get('content-type')).toContain('javascript');expect(get.headers.get('set-cookie')).toBeNull();expect(get.headers.get('cache-control')).toBe('no-cache');const source=await get.text();expect(source).toContain('@afbin/apollo');expect(()=>new Function(source)).not.toThrow();const tag=get.headers.get('etag')!;expect(tag).toBeTruthy();
@@ -41,11 +41,11 @@ it('serves the flat runtime modules at stable addresses, revalidated by ETag, ea
 it('serves registered platform fonts by plain name, immutable, and nothing else',async()=>{
  const face=manifest.systems['DM Sans'][0]!,name=face.url.split('/').at(-1)!.replace(/\.[a-f0-9]{8}\.woff2$/,'.woff2');
  const request=new Request('https://app.example.test/af/fonts/'+name);
- const response=await font(request,{params:Promise.resolve({name})});expect(response.status).toBe(200);
+ const response=await font(request,params({ name }));expect(response.status).toBe(200);
  expect(response.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');expect(response.headers.get('content-type')).toBe('font/woff2');
  expect(Buffer.from(await response.arrayBuffer())).toEqual(readFileSync('public/fonts/'+face.url.split('/').at(-1)!));
- const head=await fontHead(new Request(request,{method:'HEAD'}),{params:Promise.resolve({name})});expect(await head.text()).toBe('');
- for(const bad of ['../secret.woff2',face.url.split('/').at(-1)!,'unknown-font.woff2'])expect((await font(request,{params:Promise.resolve({name:bad})})).status).toBe(404);
+ const head=await fontHead(new Request(request,{method:'HEAD'}),params({ name }));expect(await head.text()).toBe('');
+ for(const bad of ['../secret.woff2',face.url.split('/').at(-1)!,'unknown-font.woff2'])expect((await font(request,params({ name:bad }))).status).toBe(404);
  const site=pagesSiteFor('pages.example.test','https://app.example.test')!,origin=pagesOriginFor('ABC123',site),app=new Hono();app.use('*',pagesHost(site));app.get('/af/fonts/:name',c=>font(c.req.raw,{params:Promise.resolve({name:c.req.param('name')})}));
  expect((await app.request(origin+'/af/fonts/'+name)).status).toBe(200);
 });

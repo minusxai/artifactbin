@@ -10,8 +10,9 @@ export { mintTestToken, testDb } from '@artifactbin/test-support/db';
 
 /** The token reader that knows no bearer token. */
 export const noTokens = { byToken: async () => null };
-/** The auth host for a test of service or anonymous doors: cookie secret `test`, no bearer tokens, no sessions; `options` gives the rest. */
-export const serviceAuthHost = (options: Omit<AuthOptions, 'cookieSecret' | 'tokens' | 'sessions'>) =>
+/** The auth host a test builds directly: cookie secret `test`, no bearer tokens and no sessions unless `options` names
+ * its own (a session store, a bearer reader, another secret); `options` gives the rest. */
+export const serviceAuthHost = (options: Omit<AuthOptions, 'cookieSecret' | 'tokens' | 'sessions'> & Partial<Pick<AuthOptions, 'cookieSecret' | 'tokens' | 'sessions'>>) =>
   createAuthHost({ cookieSecret: 'test', tokens: noTokens, sessions: { resolve: async () => null }, ...options });
 
 /** A delegated service as tests name it: its id, origin and the digest of the secret it presents. */

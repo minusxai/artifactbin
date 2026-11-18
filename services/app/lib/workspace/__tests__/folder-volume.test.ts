@@ -8,7 +8,7 @@ import { getDb, measureQueries, EVENTS_SCHEMA } from '@/lib/platform';
 import { trackEvent } from '@/lib/analytics';
 import { ensureEventsSchema } from '@artifactbin/events/local';
 import { folderPageFor } from '@/lib/workspace';
-import { mintAccountToken, request, useAppHarness } from '@/__tests__/harness';
+import { mintAccountToken, request, useAppHarness, params } from '@/__tests__/harness';
 import { seedArtifacts } from '@/__tests__/rows';
 
 useAppHarness();
@@ -123,7 +123,7 @@ describe('the folder page at volume', () => {
 
   it('answers the page endpoint without a per-child picture in its payload', async () => {
     const { user } = await seed(100);
-    const response = await pageRoute(request('/api/page/artifact/fvfolder', { actor: { userId: user.id, email: user.email, emailVerified: true, credential: 'session' } }), { params: Promise.resolve({ id: 'fvfolder' }) });
+    const response = await pageRoute(request('/api/page/artifact/fvfolder', { actor: { userId: user.id, email: user.email, emailVerified: true, credential: 'session' } }), params('fvfolder'));
     const text = await response.text();
     expect(response.status).toBe(200);
     expect(text).not.toContain('<svg');

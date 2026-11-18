@@ -3,7 +3,6 @@ import {nativeHtml} from './native-html-fixture';
 import {artifactState, getArtifactById} from '@/lib/artifacts';
 import { setDocumentEditorPolicy } from '@/lib/authentication';
 import {Hono} from 'hono';
-import {createAuthHost} from '@artifactbin/auth';
 import {inProcess} from '@artifactbin/utils';
 import {GET,PUT} from '@/app/api/artifacts/[id]/route';
 import {GET as content} from '@/app/api/artifacts/[id]/content/route';
@@ -15,6 +14,7 @@ import { revokeToken, createUser } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {bearerIdentity,request,useAppHarness} from './harness';
 import { seedArtifacts } from '@/__tests__/rows';
+import { serviceAuthHost } from '../../auth/__tests__/helpers';
 
 const harness=useAppHarness();
 it('HTTP native publication grants never reach private pages and end on verification loss, policy removal or token revocation',async()=>{
@@ -33,7 +33,7 @@ it('HTTP native publication grants never reach private pages and end on verifica
  app.get('/api/artifacts/:id/content',c=>content(c.req.raw,{params:Promise.resolve({id:c.req.param('id')})}));
  app.get('/api/artifacts/:id/versions',c=>versions(c.req.raw,{params:Promise.resolve({id:c.req.param('id')})}));
  app.get('/api/artifacts/:id/versions/:version',c=>version(c.req.raw,{params:Promise.resolve({id:c.req.param('id'),version:c.req.param('version')})}));
- const proxy=createAuthHost({upstream:inProcess(app),tokens:bearers.reader,sessions:{resolve:async()=>null},cookieSecret:'mxmx_test_cookie_secret_0123456789',env:{}});
+ const proxy=serviceAuthHost({upstream:inProcess(app),tokens:bearers.reader,cookieSecret:'mxmx_test_cookie_secret_0123456789',env:{}});
  const read=(id:string)=>proxy.fetch(request(`/api/artifacts/${id}`,{token:token.token}));
  const save=async(text:string)=>{
   const row=(await getArtifactById('abc123'))!;

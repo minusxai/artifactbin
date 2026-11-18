@@ -4,7 +4,7 @@ import { nativeSource } from './native-publication-fixture';
  * definitions, governance policy, and the durable recovery that makes a lost reply finishable.
  */
 
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
+import { mintAccountToken as mintToken, params as routeParams } from '@/__tests__/harness';
 import { POST as mutate } from '@/app/api/artifacts/[id]/mutate/route';
 import { POST as queryRead } from '@/app/api/artifacts/[id]/query/route';
 import { PATCH as patch,GET as read,PUT as replace } from '@/app/api/artifacts/[id]/route';
@@ -23,7 +23,7 @@ describe('cli-mutation-recovery', () => {
   it('retrying one mutation identity returns its durable response without applying the SQL twice',async()=>{
    const token=await mintToken('mxmx_test_mutation_recovery');
    const initial=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:[{n:1}],access:'readwrite'}}));expect(initial.status).toBe(201);const doc=await initial.json();
-   const params={params:Promise.resolve({id:doc.id})},path=`/api/artifacts/${doc.id}/mutate`;
+   const params=routeParams(doc.id),path=`/api/artifacts/${doc.id}/mutate`;
    const send=async(sql='insert into public.rows (n) values (2)')=>{
     const req=request(path,{method:'POST',token:token.token,json:{sql}});req.headers.set('Idempotency-Key','mxmx_test_mutation_once');return mutate(req,params);
    };
@@ -40,7 +40,7 @@ describe('cli-mutation-recovery', () => {
    try{
     const token=await mintToken('mxmx_test_invocation_receipt');
     const initial=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:[{result:'seed'}],access:'readwrite'}}));expect(initial.status).toBe(201);const doc=await initial.json();
-    const params={params:Promise.resolve({id:doc.id})},path=`/api/artifacts/${doc.id}/mutate`;
+    const params=routeParams(doc.id),path=`/api/artifacts/${doc.id}/mutate`;
     const send=()=>{const req=request(path,{method:'POST',token:token.token,json:{sql:"insert into public.rows (result) values ('next')"}});req.headers.set('Idempotency-Key','mxmx_test_invocation_once');return mutate(req,params);};
     const first=send();await Promise.race([started,first.then(()=>{throw new Error('Mutation invocation did not begin');})]);
     const busy=await send();expect(busy.status).toBe(409);expect((await busy.json()).error).toBe('operation_pending');expect(run).toHaveBeenCalledTimes(1);
@@ -53,7 +53,7 @@ describe('cli-mutation-recovery', () => {
    const token=await mintToken('mxmx_test_atomic_receipt');const db=await getDb();
    const initial=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:[{n:1}],access:'readwrite'}}));const doc=await initial.json();
    await db.query('ALTER TABLE mutation_receipts ADD CONSTRAINT mxmx_test_refuse_receipt CHECK (response IS NULL)');
-   const params={params:Promise.resolve({id:doc.id})},path=`/api/artifacts/${doc.id}/mutate`;
+   const params=routeParams(doc.id),path=`/api/artifacts/${doc.id}/mutate`;
    const send=()=>{const req=request(path,{method:'POST',token:token.token,json:{sql:'insert into public.rows (n) values (2)'}});req.headers.set('Idempotency-Key','mxmx_test_atomic_receipt');return mutate(req,params);};
    try{await send();}catch{/* The injected database failure may propagate through the direct handler. */}
    const current=await read(request(`/api/artifacts/${doc.id}`,{token:token.token}),params);expect((await current.json()).rows).toEqual([{n:1}]);
@@ -65,8 +65,8 @@ describe('cli-mutation-recovery', () => {
    const token=await mintToken('mxmx_test_observed_mutation');
    const initial=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:[{n:1}],access:'readwrite'}}));const doc=await initial.json();
    const req=request(`/api/artifacts/${doc.id}/mutate`,{method:'POST',token:token.token,json:{sql:'insert into public.rows (n) values (2)',expectedState:'0'.repeat(64)}});req.headers.set('Idempotency-Key','mxmx_test_stale_mutation');
-   const result=await mutate(req,{params:Promise.resolve({id:doc.id})});expect(result.status).toBe(409);expect((await result.json()).error).toBe('row_changed');
-   const state=await read(request(`/api/artifacts/${doc.id}`,{token:token.token}),{params:Promise.resolve({id:doc.id})});expect((await state.json()).rows).toEqual([{n:1}]);
+   const result=await mutate(req,routeParams(doc.id));expect(result.status).toBe(409);expect((await result.json()).error).toBe('row_changed');
+   const state=await read(request(`/api/artifacts/${doc.id}`,{token:token.token}),routeParams(doc.id));expect((await state.json()).rows).toEqual([{n:1}]);
   });
 
   it('a policy change during mutation execution prevents the prepared write from committing; a sharing change re-decides access instead',async()=>{
@@ -76,8 +76,8 @@ describe('cli-mutation-recovery', () => {
     const run=vi.fn(async(...[input,engine]:Parameters<MutationInvocation['run']>)=>{await setArtifact(db, doc.id, { [column]: { sql: `${column}+1` } });return engine.mutate(input);});setMutationInvocation(()=>({run}));
     try{
      const req=request(`/api/artifacts/${doc.id}/mutate`,{method:'POST',token:token.token,json:{sql:"insert into public.rows (result) values ('next')",expectedState:doc.state,expectedPolicyRevision:0}});req.headers.set('Idempotency-Key',key);
-     const result=await mutate(req,{params:Promise.resolve({id:doc.id})});
-     const state=await read(request(`/api/artifacts/${doc.id}`,{token:token.token}),{params:Promise.resolve({id:doc.id})});
+     const result=await mutate(req,routeParams(doc.id));
+     const state=await read(request(`/api/artifacts/${doc.id}`,{token:token.token}),routeParams(doc.id));
      return {status:result.status,error:(await result.json()).error,runs:run.mock.calls.length,rows:(await state.json()).rows};
     }finally{setMutationInvocation(undefined);}
    };
@@ -87,7 +87,7 @@ describe('cli-mutation-recovery', () => {
 });
 
 describe('cli-declared-mutations', () => {
-  const ctx=(id:string)=>({params:Promise.resolve({id})});
+  const ctx=(id:string)=>(routeParams(id));
   it('filters version history by author and time interval',async()=>{
    const owner=await mintToken('mxmx_test_history');
    const r=await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{html:nativeSource('<p>v1</p>')}}));expect(r.status).toBe(201);const id=(await r.json()).id as string;
@@ -102,7 +102,7 @@ describe('cli-query-integration', () => {
   it('a dataset query naming an undeclared $parameter is refused as a 400 the agent can read, never a 500 (local eval leg: pi lost four calls to it)',async()=>{
    const token=await mintToken('mxmx_test_cli_undeclared_param');
    const made=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:[{n:1},{n:2}],access:'readwrite'}}));expect(made.status).toBe(201);const doc=await made.json();
-   const response=await queryRead(request(`/api/artifacts/${doc.id}/query`,{method:'POST',token:token.token,json:{sql:'select sum(n) as total from public.rows where ($team = \'all\' or n = $team)'}}),{params:Promise.resolve({id:doc.id})});
+   const response=await queryRead(request(`/api/artifacts/${doc.id}/query`,{method:'POST',token:token.token,json:{sql:'select sum(n) as total from public.rows where ($team = \'all\' or n = $team)'}}),routeParams(doc.id));
    expect(response.status).toBe(400);
    const body=await response.json();
    expect(body.error).toBe('invalid_sql');
@@ -113,7 +113,7 @@ describe('cli-query-integration', () => {
 describe('cli-policy-metadata', () => {
   it('metadata and dataset policy commit together with both state and policy revision checks',async()=>{
    const token=await mintToken('mxmx_test_policy_metadata');
-   const initial=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:[{n:1}],access:'readwrite',title:'Before'}}));const doc=await initial.json(),path=`/api/artifacts/${doc.id}`,context={params:Promise.resolve({id:doc.id})};
+   const initial=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:[{n:1}],access:'readwrite',title:'Before'}}));const doc=await initial.json(),path=`/api/artifacts/${doc.id}`,context=routeParams(doc.id);
    // Policies are set as version 3 (version 1 and 2 bodies are refused).
    const policy={version:3,tables:[{table:{schema:'public',name:'rows'},insert_permissions:[{role:'viewer',permission:{columns:['n'],check:{}}}]}]};
    const send=(body:object)=>patch(request(path,{method:'PATCH',token:token.token,json:body}),context);
@@ -133,7 +133,7 @@ describe('cli-policy-metadata', () => {
    const refused=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:[{n:1}],policy}}));expect(refused.status).toBe(400);
    expect((await (await getDb()).query('SELECT id FROM artifacts WHERE token_id=$1',[token.id])).rows).toEqual([]);
    const initial=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:[{n:1}]}}));const doc=await initial.json();
-   const context={params:Promise.resolve({id:doc.id})},path=`/api/artifacts/${doc.id}`;
+   const context=routeParams(doc.id),path=`/api/artifacts/${doc.id}`;
    const replacement=await replace(request(path,{method:'PUT',token:token.token,json:{dataset:[{n:2}],policy,expectedState:doc.state,expectedVersion:doc.version}}),context);expect(replacement.status).toBe(400);
    const current=await (await read(request(path,{token:token.token}),context)).json();expect(current.rows).toEqual([{n:1}]);expect(current.policy_revision).toBe(0);
   });

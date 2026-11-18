@@ -1,7 +1,7 @@
 import {expect,it} from 'vitest';
 import { setVisibility } from '@/__tests__/artifact-fixtures';
 import {artifactChannel} from '@artifactbin/contracts';
-import {useAppHarness,request,mintAccountToken} from '@/__tests__/harness';
+import {useAppHarness,request,mintAccountToken,params as routeParams} from '@/__tests__/harness';
 import {POST as createArtifact} from '@/app/api/artifacts/route';
 import {GET as eventsRoute} from '@/app/a/[id]/events/route';
 import {sseStream} from '@/__tests__/sse';
@@ -24,8 +24,8 @@ it('two connected viewers hear a linked dataset change; reconnect refetches writ
  const db=await harness.db();
  await setArtifact(db, id, { format: 'html', document: null, source: '<p>Shared</p>', meta: JSON.stringify({htmlLinks:[{kind:'dataset',name:'rows',datasetId:dataset,mode:'live'}]}) });
  const {POST:mutate}=await import('@/app/api/artifacts/[id]/mutate/route');
- const write=async(item:string)=>expect((await mutate(request(`/api/artifacts/${dataset}/mutate`,{method:'POST',token:token.token,json:{sql:`insert into public.rows (item) values ('${item}')`}}),{params:Promise.resolve({id:dataset})})).status).toBe(200);
- const params={params:Promise.resolve({id})};
+ const write=async(item:string)=>expect((await mutate(request(`/api/artifacts/${dataset}/mutate`,{method:'POST',token:token.token,json:{sql:`insert into public.rows (item) values ('${item}')`}}),routeParams(dataset))).status).toBe(200);
+ const params=routeParams(id);
  const connect=async()=>{const response=await eventsRoute(request(`/a/${id}/events`),params);expect(response.status).toBe(200);return sseStream(response.body!);};
  const rows=(data:Record<string,unknown>|undefined)=>(data?.revisions as Record<string,string>|undefined)?.rows;
  const a=await connect(),b=await connect();
@@ -53,12 +53,12 @@ it('native live dataset links hear mutations and pinned aliases stay out of inva
  const id=await create({html:'<!doctype html><html><body><p>Rows</p></body></html>'});
  const db=await harness.db();
  await setArtifact(db, id, { format: 'html', document: null, source: '<p>Rows</p>', meta: JSON.stringify({htmlLinks:[{kind:'dataset',name:'live',datasetId:dataset,mode:'live'},{kind:'dataset',name:'archive',datasetId:dataset,mode:'pinned',revision:'1'}]}) });
- const response=await eventsRoute(request(`/a/${id}/events`),{params:Promise.resolve({id})});
+ const response=await eventsRoute(request(`/a/${id}/events`),routeParams(id));
  const stream=sseStream(response.body!);
  try{
   expect((await stream.next(2)).find(e=>e.event==='data')?.data.datasets).toEqual(['live']);
   const {POST:mutate}=await import('@/app/api/artifacts/[id]/mutate/route');
-  const write=await mutate(request(`/api/artifacts/${dataset}/mutate`,{method:'POST',token:token.token,json:{sql:"insert into public.rows (item) values ('two')"}}),{params:Promise.resolve({id:dataset})});
+  const write=await mutate(request(`/api/artifacts/${dataset}/mutate`,{method:'POST',token:token.token,json:{sql:"insert into public.rows (item) values ('two')"}}),routeParams(dataset));
   expect(write.status).toBe(200);
   const event=await nextData(stream);
   expect(event?.data.datasets).toEqual(['live']);
@@ -73,11 +73,11 @@ it('public page readers never receive private dataset activity, including after 
  const id=await create({html:'<!doctype html><html><body>Public page</body></html>',visibility:'public'});
  const db=await harness.db();
  await setArtifact(db, id, { meta: JSON.stringify({htmlLinks:[{kind:'dataset',name:'rows',datasetId:dataset,mode:'live'}]}) });
- const opening=async()=>{const res=await eventsRoute(request(`/a/${id}/events`),{params:Promise.resolve({id})});const stream=sseStream(res.body!);try{return await stream.next(2);}finally{stream.close();}};
+ const opening=async()=>{const res=await eventsRoute(request(`/a/${id}/events`),routeParams(id));const stream=sseStream(res.body!);try{return await stream.next(2);}finally{stream.close();}};
  const hidden=await opening();expect(hidden.find(e=>e.event==='data')?.data.revisions).toEqual({rows:'unavailable'});expect(hidden.every(e=>!e.id)).toBe(true);
  await setVisibility(dataset, 'public');
  const allowed=await opening();expect(allowed.find(e=>e.event==='data')?.data.revisions).toMatchObject({rows:expect.stringContaining(`dataset:${dataset}:1:`)});
- const liveResponse=await eventsRoute(request(`/a/${id}/events`),{params:Promise.resolve({id})});
+ const liveResponse=await eventsRoute(request(`/a/${id}/events`),routeParams(id));
  const connected=sseStream(liveResponse.body!);
  try{
   await connected.next(2);

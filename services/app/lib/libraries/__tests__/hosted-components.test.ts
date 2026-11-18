@@ -9,8 +9,9 @@ import {packOfflineDependencies} from '../../offline-dependencies';
 import {markupCsp} from '../../page-styles';
 import hosted from '../../html-components/hosted.json';
 import {tempDirSync} from '@artifactbin/test-support/temp-dir';
+import { params } from '@/__tests__/harness';
 
-const servedFile=(file:string,headers:Record<string,string>={})=>component(new Request('https://app.example/af/components/'+file,{headers}),{params:Promise.resolve({file})});
+const servedFile=(file:string,headers:Record<string,string>={})=>component(new Request('https://app.example/af/components/'+file,{headers}),params({ file }));
 const built=(file:string)=>readFileSync(path.resolve('lib/build-assets/components',file));
 const chunks=(source:string)=>[...source.matchAll(/["']\.\/(chunk-[a-z0-9]+\.js)["']/g)].map(match=>match[1]!);
 

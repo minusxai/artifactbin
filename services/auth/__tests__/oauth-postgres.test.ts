@@ -9,8 +9,8 @@ import {createOAuthStore} from '../src/identity/oauth';
 import {ensureAuthSchema} from '../src/schema';
 import {ensureHumanAuthSchema} from '../src/auth/human';
 import {createBearerReader} from '../src/identity/bearer';
-import {createAuthHost} from '../src/parts';
 import {dockerImage,startPostgres,type DisposablePostgres} from '@artifactbin/test-support/docker';
+import { serviceAuthHost } from './helpers';
 
 describe.skipIf(!dockerImage('postgres:17-alpine'))('READ COMMITTED auth with separate connections, the identity role owning tokens beside its credentials',()=>{
  const suffix=randomBytes(6).toString('hex'),authSchema=`auth_${suffix}`,appSchema=`app_${suffix}`,role=`reader_${suffix}`;
@@ -32,7 +32,7 @@ describe.skipIf(!dockerImage('postgres:17-alpine'))('READ COMMITTED auth with se
  };
  const store=()=>createOAuthStore(queryable(auth),authSchema);
  const issue=async()=>{const access=await mint(),refresh=await store().issueRefresh({clientId:'client',userId:'user',resource:'http://test/api',scope:'artifacts',accessTokenId:access.id});return {access,refresh};};
- const host=()=>createAuthHost({identityDb:queryable(auth),appSchema,env:{AUTH__SCHEMA:authSchema,APP__PUBLIC_BASE_URL:'http://test'},sessions:{resolve:async()=>null},cookieSecret:'test',tokens:createBearerReader({db:queryable(auth),authSchema}),upstream:async(_r,actor)=>Response.json(actor)});
+ const host=()=>serviceAuthHost({identityDb:queryable(auth),appSchema,env:{AUTH__SCHEMA:authSchema,APP__PUBLIC_BASE_URL:'http://test'},tokens:createBearerReader({db:queryable(auth),authSchema}),upstream:async(_r,actor)=>Response.json(actor)});
  const admitted=async(token:string)=>(await(await host().request('http://test/api',{headers:{authorization:`Bearer ${token}`}})).json()).credential;
  it('revoke waits on rotation but its old statement snapshot cannot leave either bearer usable',async()=>{
   const first=await issue(),client=await owner.connect(),ready=gate(),resume=gate();

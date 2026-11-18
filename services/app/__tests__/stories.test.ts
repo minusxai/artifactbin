@@ -19,7 +19,7 @@ describe('native page lifecycle',()=>{
  it('keeps source and earlier versions through replacement and restoration on the same identity',async()=>{
   const owner=await mintAccountToken('history'),created=await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{html:nativeSource('<h1>Original</h1>'),visibility:'public'}}));expect(created.status).toBe(201);const first=await created.json();
   const edited=await replace(request(`/api/artifacts/${first.id}`,{method:'PUT',token:owner.token,json:{html:first.html.replace('Original','Changed'),expectedVersion:first.version,expectedState:first.state}}),params(first.id));expect(edited.status).toBe(200);
-  const historical=await version(request(`/api/artifacts/${first.id}/versions/1`,{token:owner.token}),{params:Promise.resolve({id:first.id,version:'1'})});expect(historical.status).toBe(200);expect((await historical.json()).html).toBe(first.html);
+  const historical=await version(request(`/api/artifacts/${first.id}/versions/1`,{token:owner.token}),params({ id:first.id,version:'1' }));expect(historical.status).toBe(200);expect((await historical.json()).html).toBe(first.html);
   const restored=await restoreDocument(owner.token,first.id,1);expect(restored.status).toBe(200);const head=await restored.json();expect(head.id).toBe(first.id);expect(head.version).toBe(3);expect(head.html).toContain('Original');
   expect((await read(request(`/api/artifacts/${first.id}`,{token:owner.token}),params(first.id))).status).toBe(200);
  });

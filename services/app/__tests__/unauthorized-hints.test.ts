@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { GET as listArtifacts } from '@/app/api/artifacts/route';
 import { GET as listMine } from '@/app/api/my/tokens/route';
+import { request } from '@/__tests__/harness';
 
 const BASE = 'http://localhost:3000';
 const HELP = expect.stringContaining(`${BASE}/llms/http-auth`);
@@ -12,14 +13,14 @@ describe('401 bodies', () => {
    * constant three times, differing only in which route produced the refusal.
    */
   it('every refusal links HTTP credential recovery without forcing a CLI install or exposing credentials', async () => {
-    const anonymous = await listArtifacts(new Request(`${BASE}/api/artifacts`));
+    const anonymous = await listArtifacts(request(`/api/artifacts`));
     expect(anonymous.status).toBe(401);
     expect(await anonymous.json()).toEqual({ error: 'unauthorized', help: HELP, guide: `${BASE}/llms.txt` });
 
     const doors: Array<[string, Response]> = [
       // A session-only route, and a bearer that is well-formed but is nobody's.
-      ['GET /api/my/tokens', await listMine(new Request(`${BASE}/api/my/tokens`))],
-      ['a bad bearer', await listArtifacts(new Request(`${BASE}/api/artifacts`, { headers: { authorization: 'Bearer mx_' + 'x'.repeat(43) } }))],
+      ['GET /api/my/tokens', await listMine(request(`/api/my/tokens`))],
+      ['a bad bearer', await listArtifacts(request(`/api/artifacts`, { headers: { authorization: 'Bearer mx_' + 'x'.repeat(43) } }))],
     ];
     for (const [name, res] of doors) {
       expect(res.status, name).toBe(401);

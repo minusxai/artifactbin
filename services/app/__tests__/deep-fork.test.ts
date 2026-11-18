@@ -2,7 +2,7 @@
  * the page quota refuses the whole copy. */
 import {afterEach,expect,it} from 'vitest';
 import { setVisibility } from '@/__tests__/artifact-fixtures';
-import {request,useAppHarness,mintAccountToken} from './harness';
+import {request,useAppHarness,mintAccountToken,params} from './harness';
 import {POST as create} from '@/app/api/artifacts/route';
 import {POST as fork} from '@/app/api/artifacts/[id]/fork/route';
 import {getArtifactById} from '@/lib/artifacts';
@@ -14,7 +14,7 @@ async function world(){
  const dataset=await post({dataset:[{amount:7}],visibility:'public'});
  const page=await post({html:`<html><head><link rel="af-dataset" data-af-name="live" href="ref:${dataset.id}"><link rel="af-dataset" data-af-name="fixed" href="ref:${dataset.id}" data-af-mode="pinned" data-af-revision="1"></head><body><h1>Shared app</h1></body></html>`,visibility:'public'});
  const row=(await getArtifactById(page.id))!,links=row.meta.htmlLinks as Array<{kind:string;name:string}>;
- const send=()=>fork(request(`/api/artifacts/${page.id}/fork`,{method:'POST',token:reader.token,json:{}}),{params:Promise.resolve({id:page.id})});
+ const send=()=>fork(request(`/api/artifacts/${page.id}/fork`,{method:'POST',token:reader.token,json:{}}),params(page.id));
  const owned=async()=>Number((await(await harness.db()).query<{n:number}>('SELECT count(*)::int n FROM artifacts WHERE user_id=$1',[reader.userId])).rows[0]!.n);
  return {owner,reader,dataset,page,row,links,send,owned};
 }

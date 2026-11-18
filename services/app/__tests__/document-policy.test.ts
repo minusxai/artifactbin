@@ -6,7 +6,7 @@ import { setDocumentEditorPolicy, sessionActor } from '@/lib/authentication';
 import type {Actor} from '@artifactbin/contracts';
 import {GET,PUT,DELETE} from '@/app/api/my/artifacts/[id]/route';
 import {GET as page} from '@/app/api/page/artifact/[id]/route';
-import {request,useAppHarness} from './harness';
+import {request,useAppHarness,params} from './harness';
 import {observedRequest} from './conditional-request';
 import { seedArtifacts, setArtifact } from '@/__tests__/rows';
 
@@ -18,7 +18,7 @@ const harness=useAppHarness();
 const admin:Actor={credential:'session',userId:'usr_admin',email:'Admin@Example.com',emailVerified:true};
 const options={actor:admin,origin:'same'};
 const path='/api/my/artifacts/abc123',privatePath='/api/my/artifacts/prv123';
-const context={params:Promise.resolve({id:'abc123'})},privateContext={params:Promise.resolve({id:'prv123'})};
+const context=params('abc123'),privateContext=params('prv123');
 beforeEach(async()=>{
  // Session claims name persisted accounts; profile sync may already have cached them.
  await (await harness.db()).query("INSERT INTO users(id,email,kind) VALUES ('usr_admin','admin@example.com','account'),('usr_other','other@example.com','account'),('usr_owner','owner@example.com','account')");

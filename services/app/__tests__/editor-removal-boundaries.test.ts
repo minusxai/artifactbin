@@ -7,7 +7,7 @@ import {expect,it} from 'vitest';
 import {createUser,identityForUser} from '@/lib/accounts';
 import {artifactState,createArtifact,getArtifactById,revertArtifactFor} from '@/lib/artifacts';
 import {editableRegions} from '@/lib/live-regions';
-import {mintAccountToken,request,setSession,useAppHarness} from './harness';
+import {mintAccountToken,request,setSession,useAppHarness,params as routeParams} from './harness';
 import { setArtifact } from '@/__tests__/rows';
 const harness=useAppHarness();
 
@@ -65,7 +65,7 @@ it.each([false,true])('HTTP create/import converts supplied anchors and exposes 
 it('HTTP fork converts historical heads, refuses unsupported copies atomically, and preserves read access',async()=>{
  const token=await mintAccountToken('mxmx_test_removal_fork'),other=await mintAccountToken('mxmx_test_removal_other');
  const source=await createHistoricalPage(null,token.userId!,{format:'html',source:imported,meta:{},visibility:'private'});
- const call=(credential=token.token)=>fork(request(`/api/artifacts/${source.id}/fork`,{method:'POST',token:credential,json:{}}),{params:Promise.resolve({id:source.id})});
+ const call=(credential=token.token)=>fork(request(`/api/artifacts/${source.id}/fork`,{method:'POST',token:credential,json:{}}),routeParams(source.id));
  expect((await call(other.token)).status).toBe(404);
  const copied=await call();expect(copied.status).toBe(201);
  const db=await harness.db();
@@ -81,7 +81,7 @@ it('conditional HTTP replacement guards auth and stale version/state before conv
  const token=await mintAccountToken('mxmx_test_removal_replace'),other=await mintAccountToken('mxmx_test_removal_foreign');
  const row=await createArtifact(null,token.userId!,{format:'html',source:imported,meta:{},visibility:'private'});
  const before=await getArtifactById(row.id);
- const params={params:Promise.resolve({id:row.id})},path=`/api/artifacts/${row.id}`;
+ const params=routeParams(row.id),path=`/api/artifacts/${row.id}`;
  const send=(extra:Record<string,unknown>={},credential=token.token)=>replace(request(path,{method:'PUT',token:credential,json:{html:unsupported,expectedVersion:row.version,expectedState:artifactState(row),...extra}}),params);
  expect((await send({},other.token)).status).toBe(404);
  for(const extra of [{expectedVersion:row.version+1},{expectedState:'0'.repeat(64)}]){

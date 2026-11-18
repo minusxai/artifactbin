@@ -1,7 +1,7 @@
 import {getArtifactById, artifactState} from '@/lib/artifacts';
 import {nativeHtml} from './native-html-fixture';
 import {expect,it,vi} from 'vitest';
-import {request,useAppHarness} from './harness';
+import {request,useAppHarness,params} from './harness';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {objectStore} from '@/lib/object-store';
 import {POST as create} from '@/app/api/artifacts/route';
@@ -24,7 +24,7 @@ it('preflights native replacement without writes and rejects a stale observed he
  const run=()=>preflight(request('/api/artifacts/preflight',{method:'POST',token:token.token,json:{id:row.id,mode:'replace',input}}));
  const response=await run();expect(response.status).toBe(200);expect(await response.json()).toMatchObject({valid:true,dry_run:true});
  expect((await getArtifactById(row.id))?.version).toBe(1);
- const saved=await replace(request(`/api/artifacts/${row.id}`,{method:'PUT',token:token.token,json:{...input,html:nativeHtml('<p data-af-id="intro">Theirs</p>')}}),{params:Promise.resolve({id:row.id})});
+ const saved=await replace(request(`/api/artifacts/${row.id}`,{method:'PUT',token:token.token,json:{...input,html:nativeHtml('<p data-af-id="intro">Theirs</p>')}}),params(row.id));
  expect(saved.status).toBe(200);
  const conflict=await run();expect(conflict.status).toBe(409);
  expect((await getArtifactById(row.id))?.source).toContain('Theirs');

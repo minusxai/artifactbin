@@ -1,6 +1,5 @@
 import {afterEach,beforeEach,expect,it} from 'vitest';
 import {Hono} from 'hono';
-import {createAuthHost} from '@artifactbin/auth';
 import {inProcess} from '@artifactbin/utils';
 import { getArtifactById, artifactState, selectChildren } from '@/lib/artifacts';
 import { readThrough } from '@/lib/artifact-access';
@@ -28,6 +27,8 @@ import sharp from 'sharp';
 import type {Actor} from '@artifactbin/contracts';
 import {bearerIdentity,request,useAppHarness} from './harness';
 import { seedArtifacts, setArtifact } from '@/__tests__/rows';
+import { serviceAuthHost } from '../../auth/__tests__/helpers';
+import {createAuthHost} from '@artifactbin/auth';
 
 /**
  * The host's document editor grant (ADMIN__EMAILS in production) through the REAL production shape:
@@ -69,7 +70,7 @@ beforeEach(async()=>{
  app.get('/api/events',c=>feed(c.req.raw));
  app.get('/api/artifacts/:id/comment-images/:imageId',routed(commentImage));
  app.get('/a/:id/raw',routed(raw));
- proxy=createAuthHost({upstream:inProcess(app),tokens:bearers.reader,sessions:{resolve:async()=>null},cookieSecret:'mxmx_test_cookie_secret_0123456789',env:{}});
+ proxy=serviceAuthHost({upstream:inProcess(app),tokens:bearers.reader,cookieSecret:'mxmx_test_cookie_secret_0123456789',env:{}});
 });
 afterEach(()=>setDocumentEditorPolicy());
 

@@ -1,6 +1,6 @@
 /** Native SVG replaces the retired platform Icon resolver and its alias vocabulary. */
 import {describe,expect,it} from 'vitest';
-import {request,useAppHarness,mintAccountToken} from './harness';
+import {request,useAppHarness,mintAccountToken,params} from './harness';
 import {nativeHtml} from './native-html-fixture';
 import {observedRequest} from './conditional-request';
 import {POST as create} from '@/app/api/artifacts/route';
@@ -18,7 +18,7 @@ describe('native icon publication',()=>{
  it('refuses retired JSX icon publication without replacing native source',async()=>{
   const token=await mintAccountToken('svg');
   const response=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{html:nativeHtml('<p>Keep</p>')}}));
-  expect(response.status).toBe(201);const original=await response.json(),ctx={params:Promise.resolve({id:original.id})};
+  expect(response.status).toBe(201);const original=await response.json(),ctx=params(original.id);
   const refused=await replace(await observedRequest(`/api/artifacts/${original.id}`,{method:'PUT',token:token.token,json:{markup:'<Icon name="calendar" />'}}),ctx);
   expect(refused.status).toBe(400);expect(await refused.json()).toMatchObject({error:'native_html_required'});
   const current=await read(request(`/api/artifacts/${original.id}`,{token:token.token}),ctx);

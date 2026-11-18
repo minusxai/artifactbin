@@ -110,12 +110,12 @@ describe('cli-preconditions', () => {
   it('browser metadata uses the same state condition as the bearer API',async()=>{
    const {PATCH}=await import('@/app/api/my/artifacts/[id]/route');
    const token=await mintToken('browser-condition');const row=await(await create(request('/api/artifacts',{method:'POST',token:token.token,json:{html:nativeSource('<p>One</p>')}}))).json();
-   const response=await PATCH(request(`/api/my/artifacts/${row.id}`,{method:'PATCH',actor:{credential:'session',userId:token.userId!,email:token.email!,emailVerified:true},json:{title:'Changed'}}),{params:Promise.resolve({id:row.id})});
+   const response=await PATCH(request(`/api/my/artifacts/${row.id}`,{method:'PATCH',actor:{credential:'session',userId:token.userId!,email:token.email!,emailVerified:true},json:{title:'Changed'}}),params(row.id));
    expect(response.status).toBe(400);expect((await response.json()).error).toBe('state_required');
   });
   it('requires observed conditions when reverting a retained version',async()=>{
    const {POST:revert}=await import('@/app/api/artifacts/[id]/revert/route');const token=await mintToken('revert-conditions');
-   const row=await(await create(request('/api/artifacts',{method:'POST',token:token.token,json:{html:nativeSource('<p>One</p>')}}))).json();const ctx={params:Promise.resolve({id:row.id})};
+   const row=await(await create(request('/api/artifacts',{method:'POST',token:token.token,json:{html:nativeSource('<p>One</p>')}}))).json();const ctx=params(row.id);
    const head=(await getArtifactById(row.id))!;
    expect((await replace(request(`/api/artifacts/${row.id}`,{method:'PUT',token:token.token,json:documentPublicationBody(head,{html:nativeSource('<p>Two</p>')},true)}),ctx)).status).toBe(200);
    const denied=await revert(request(`/api/artifacts/${row.id}/revert`,{method:'POST',token:token.token,json:{version:1}}),ctx);expect(denied.status).toBe(400);
@@ -137,7 +137,7 @@ describe('cli-pages', () => {
   it('lists the current head in version history and refuses foreign or malformed cursors', async()=>{
    const token=await mintToken('history');
    const artifact=await createArtifact(token.id, token.userId,{title:'head',format:'html',source:nativeSource('<p />'),meta:{}});
-   const response=await versions(request(`/api/artifacts/${artifact.id}/versions?limit=1`,{token:token.token}),{params:Promise.resolve({id:artifact.id})});
+   const response=await versions(request(`/api/artifacts/${artifact.id}/versions?limit=1`,{token:token.token}),params(artifact.id));
    expect(response.status).toBe(200);const page=await response.json();expect(page.versions.map((v:{version:number})=>v.version)).toEqual([1]);expect(page.next_cursor).toBeNull();
    const bad=await list(request('/api/artifacts?cursor=garbage',{token:token.token}));expect(bad.status).toBe(400);
   });
@@ -145,10 +145,10 @@ describe('cli-pages', () => {
   it('version history can begin at a selected historical version',async()=>{
    const token=await mintToken('selected-history');
    const artifact=await createArtifact(token.id, token.userId,{title:'one',format:'html',source:nativeSource('<p />'),meta:{}});
-   for(const title of ['two','three'])expect((await replace(request(`/api/artifacts/${artifact.id}`,{method:'PUT',token:token.token,json:documentPublicationBody((await getArtifactById(artifact.id))!,{title,source:nativeSource(`<p>${title}</p>`)},true)}),{params:Promise.resolve({id:artifact.id})})).status).toBe(200);
-   const response=await versions(request(`/api/artifacts/${artifact.id}/versions?version=2&limit=1`,{token:token.token}),{params:Promise.resolve({id:artifact.id})});
+   for(const title of ['two','three'])expect((await replace(request(`/api/artifacts/${artifact.id}`,{method:'PUT',token:token.token,json:documentPublicationBody((await getArtifactById(artifact.id))!,{title,source:nativeSource(`<p>${title}</p>`)},true)}),params(artifact.id))).status).toBe(200);
+   const response=await versions(request(`/api/artifacts/${artifact.id}/versions?version=2&limit=1`,{token:token.token}),params(artifact.id));
    expect(response.status).toBe(200);const page=await response.json();expect(page.versions.map((v:{version:number})=>v.version)).toEqual([2]);expect(page.next_cursor).toBeTruthy();
-   const next=await versions(request(`/api/artifacts/${artifact.id}/versions?version=2&cursor=${encodeURIComponent(page.next_cursor)}`,{token:token.token}),{params:Promise.resolve({id:artifact.id})});expect((await next.json()).versions.map((v:{version:number})=>v.version)).toEqual([1]);
+   const next=await versions(request(`/api/artifacts/${artifact.id}/versions?version=2&cursor=${encodeURIComponent(page.next_cursor)}`,{token:token.token}),params(artifact.id));expect((await next.json()).versions.map((v:{version:number})=>v.version)).toEqual([1]);
   });
 });
 
@@ -156,7 +156,7 @@ describe('native HTTP replacement conditions',()=>{
  it('requires observed version and state, rejects stale source, and ignores retired client-install headers',async()=>{
   const token=await mintToken('native-conditions');const created=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{html:nativeSource('<p>First</p>')},headers:{'User-Agent':'afbin/0.2.5','X-Artifactbin-Protocol':'obsolete'}}));
   expect(created.status).toBe(201);expect(created.headers.get('X-Artifactbin-CLI-Version')).toBeNull();expect(created.headers.get('X-Artifactbin-Protocol')).toBeNull();
-  const first=await created.json(),ctx={params:Promise.resolve({id:first.id})},path=`/api/artifacts/${first.id}`;
+  const first=await created.json(),ctx=params(first.id),path=`/api/artifacts/${first.id}`;
   expect((await replace(request(path,{method:'PUT',token:token.token,json:{html:nativeSource('<p>No conditions</p>')}}),ctx)).status).toBe(400);
   const body={html:first.html.replace('First','Second'),expectedVersion:first.version,expectedState:first.state};
   const written=await replace(request(path,{method:'PUT',token:token.token,json:body}),ctx);expect(written.status).toBe(200);

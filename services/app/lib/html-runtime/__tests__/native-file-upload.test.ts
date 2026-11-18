@@ -3,7 +3,7 @@ import { storePolicy } from '@/__tests__/artifact-fixtures';
 import {expect,it,vi} from 'vitest';
 import { createUser, identityForUser } from '@/lib/accounts';
 import {changeMembership,membershipState} from '@/lib/artifacts';
-import {mintAccountToken,request,useAppHarness} from '@/__tests__/harness';
+import {mintAccountToken,request,useAppHarness,params} from '@/__tests__/harness';
 import {POST as createArtifact} from '@/app/api/artifacts/route';
 import {POST as uploadFile} from '@/app/a/[id]/datasets/[datasetId]/files/route';
 import {GET as readFile} from '@/app/a/[id]/datasets/[datasetId]/files/[fileId]/route';
@@ -29,7 +29,7 @@ it.each(['legacy','grants','direct'])('the native upload port composes with real
  let actor:Actor={credential:'session',userId:owner.id,email:owner.email??undefined,emailVerified:true},loseResponse=true;
  const uploader=createFileUploader({readOnly:()=>false,datasetId:name=>name==='attachments'?dataset.id:undefined,async send(payload){
   const admitted=uploadRequest(document.id,document.edit_id,payload);
-  const response=await uploadFile(request(admitted.path,{method:'POST',actor,headers:Object.fromEntries(new Headers(admitted.init.headers)),body:admitted.init.body??undefined}),{params:Promise.resolve({id:document.id,datasetId:dataset.id})});const body=await response.json();
+  const response=await uploadFile(request(admitted.path,{method:'POST',actor,headers:Object.fromEntries(new Headers(admitted.init.headers)),body:admitted.init.body??undefined}),params({ id:document.id,datasetId:dataset.id }));const body=await response.json();
   if(!response.ok)throw Error(`Upload ${response.status}: ${body.detail??body.error}`);
   if(loseResponse){loseResponse=false;throw Error('successful response lost');}return fileUploadResult(body);
  }});
@@ -62,7 +62,7 @@ it.each(['source','policy','membership'])('rechecks saved HTML upload authority 
  });
  try{
   const payload={datasetId:dataset.id,filename:'fence.txt',contentType:'text/plain',requestId:'upload-fence-request',bytes:new TextEncoder().encode('fenced')},admitted=uploadRequest(document.id,document.edit_id,payload);
-  const response=await uploadFile(request(admitted.path,{method:'POST',actor,headers:Object.fromEntries(new Headers(admitted.init.headers)),body:admitted.init.body??undefined}),{params:Promise.resolve({id:document.id,datasetId:dataset.id})});
+  const response=await uploadFile(request(admitted.path,{method:'POST',actor,headers:Object.fromEntries(new Headers(admitted.init.headers)),body:admitted.init.body??undefined}),params({ id:document.id,datasetId:dataset.id }));
   expect(hook).toHaveBeenCalledOnce();expect(response.status).toBe(revoke==='source'?404:403);
   expect((await db.query<{count:number}>('SELECT count(*)::int AS count FROM dataset_images WHERE dataset_id=$1',[dataset.id])).rows[0]?.count).toBe(0);
  }finally{hook.mockRestore();}

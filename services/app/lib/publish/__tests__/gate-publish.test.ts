@@ -18,7 +18,7 @@
 import { expect, it } from 'vitest';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { mintAccountToken, request, useAppHarness } from '@/__tests__/harness';
+import { mintAccountToken, request, useAppHarness, params } from '@/__tests__/harness';
 import { POST as create } from '@/app/api/artifacts/route';
 import { PUT as replace } from '@/app/api/artifacts/[id]/route';
 import { GET as importMap } from '@/app/af/import-map.json/route';
@@ -34,7 +34,7 @@ it('accepts every body a gate publishes', async () => {
     // A create carries an idempotency key, as the gates' publish helpers send (a publication bundle requires one).
     const response = method === 'POST'
       ? await create(request('/api/artifacts', { method, token, json, headers: { 'idempotency-key': `gate_publish_${randomUUID().replaceAll('-', '')}` } }))
-      : await replace(request(`/api/artifacts/${id}`, { method, token, json }), { params: Promise.resolve({ id: id! }) });
+      : await replace(request(`/api/artifacts/${id}`, { method, token, json }), params(id!));
     return { status: response.status, body: await response.json().catch(() => null) as Record<string, unknown> | null };
   };
   const created = async (json: Record<string, unknown>) => {

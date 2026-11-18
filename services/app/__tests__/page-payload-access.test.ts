@@ -1,4 +1,4 @@
-import {admitGroupMember} from '@/__tests__/harness';
+import {admitGroupMember,params} from '@/__tests__/harness';
 import {nativeHtml} from './native-html-fixture';
 import { describe, expect, it } from 'vitest';
 import { useAppHarness, request, setSession, mintAccountToken } from './harness';
@@ -56,16 +56,16 @@ async function world() {
 type World = Awaited<ReturnType<typeof world>>;
 
 const as = (who: { id: string } | null, email: string | null) => setSession(who ? { user: { id: who.id, email, emailVerified: true } } as never : null);
-const page = (id: string) => pageRoute(request(`/api/page/artifact/${id}`), { params: Promise.resolve({ id }) });
-const nodesPart = (id: string) => pageRoute(request(`/api/page/artifact/${id}?part=nodes`), { params: Promise.resolve({ id }) });
+const page = (id: string) => pageRoute(request(`/api/page/artifact/${id}`), params(id));
+const nodesPart = (id: string) => pageRoute(request(`/api/page/artifact/${id}?part=nodes`), params(id));
 const pageInFrame = (id: string) => artifactPageAnswer(request(`/api/page/artifact/${id}`), id, { pages: pagesSite() });
-const members = (id: string) => membersRoute(request(`/api/my/artifacts/${id}/members`), { params: Promise.resolve({ id }) });
+const members = (id: string) => membersRoute(request(`/api/my/artifacts/${id}/members`), params(id));
 const comment = async (id: string) => {
   const row = (await getArtifactById(id))!;
-  return createCommentRoute(request(`/api/my/artifacts/${id}/annotations`, { method: 'POST', json: { anchor: { kind: 'html-node', v: 1, revision: String(row.version), nodeId: 'p', quote: '' }, edit_id: row.edit_id, body: 'A reader may not post' } }), { params: Promise.resolve({ id }) });
+  return createCommentRoute(request(`/api/my/artifacts/${id}/annotations`, { method: 'POST', json: { anchor: { kind: 'html-node', v: 1, revision: String(row.version), nodeId: 'p', quote: '' }, edit_id: row.edit_id, body: 'A reader may not post' } }), params(id));
 };
 const READABLE_COMMENTS = { status: 200, body: { annotations: [], next_cursor: null } };
-const annotations = (id: string) => annotationsRoute(request(`/api/my/artifacts/${id}/annotations`), { params: Promise.resolve({ id }) });
+const annotations = (id: string) => annotationsRoute(request(`/api/my/artifacts/${id}/annotations`), params(id));
 
 /** The three doors, as the status and (for a refusal) body each answers. */
 async function doors(id: string) {

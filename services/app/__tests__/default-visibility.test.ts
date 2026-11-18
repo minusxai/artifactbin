@@ -12,13 +12,12 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
 import { getArtifactById } from '@/lib/artifacts';
 
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
+import { mintAccountToken as mintToken, request } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
 import { useAppHarness, createGuestOwner } from '@/__tests__/harness';
 
 useAppHarness();
 
-const BASE = 'http://localhost:3000';
 
 const ROWS = [{ month: 'Jan', mrr: 100 }, { month: 'Feb', mrr: 140 }];
 
@@ -33,7 +32,7 @@ const RECIPE = {
 const PNG_BYTES = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
 
 async function create(token: string, body: Record<string, unknown>) {
-  const res = await createArtifactRoute(new Request(`${BASE}/api/artifacts`, {
+  const res = await createArtifactRoute(request(`/api/artifacts`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify(body),
@@ -42,7 +41,7 @@ async function create(token: string, body: Record<string, unknown>) {
 }
 
 async function createImage(token: string) {
-  const res = await createArtifactRoute(new Request(`${BASE}/api/artifacts`, {
+  const res = await createArtifactRoute(request(`/api/artifacts`, {
     method: 'POST',
     headers: { 'Content-Type': 'image/png', Authorization: `Bearer ${token}` },
     body: new Uint8Array(PNG_BYTES),

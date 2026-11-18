@@ -1,6 +1,6 @@
 import {expect,it,vi} from 'vitest';
 import { publishedWithActor, setVisibility } from '@/__tests__/artifact-fixtures';
-import {useAppHarness,request,mintAccountToken} from '@/__tests__/harness';
+import {useAppHarness,request,mintAccountToken,params} from '@/__tests__/harness';
 import {POST as create} from '@/app/api/artifacts/route';
 import {GET as readPage,PUT as replacePage} from '@/app/api/artifacts/[id]/route';
 import { createUser, identityForUser, type AccessActor } from '@/lib/accounts';
@@ -75,7 +75,7 @@ it.each(['postgres','sql'])('rejects an authorized unsupported %s binding at pub
 
 it('refuses an unsupported live binding on replacement without advancing the saved page',async()=>{
  const f=await fixture('public'),html=`<html><head><link rel="af-dataset" data-af-name="data" href="ref:${f.id}"></head><body>Stored rows</body></html>`;
- const created=await create(request('/api/artifacts',{method:'POST',token:f.owner.token,json:{html}}));expect(created.status).toBe(201);const {id}=await created.json(),context={params:Promise.resolve({id})};
+ const created=await create(request('/api/artifacts',{method:'POST',token:f.owner.token,json:{html}}));expect(created.status).toBe(201);const {id}=await created.json(),context=params(id);
  const head=await(await readPage(request(`/api/artifacts/${id}`,{token:f.owner.token}),context)).json();
  await setArtifact((await getDb()), f.id, { meta: { sql: `jsonb_set(meta,'{catalog,kind}','"postgres"'::jsonb)` } });
  const response=await replacePage(request(`/api/artifacts/${id}`,{method:'PUT',token:f.owner.token,json:{html,expectedVersion:head.version,expectedState:head.state}}),context);

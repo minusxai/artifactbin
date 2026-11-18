@@ -1,6 +1,6 @@
 import {describe,it,expect,vi} from 'vitest';
 import * as assetDelivery from '../assets';
-import {useAppHarness} from '@/__tests__/harness';
+import {useAppHarness,params} from '@/__tests__/harness';
 import { getDb, setServices } from '@/lib/platform';
 import { mintExportKey, resetExportRenderer } from '..';
 import {objectStore,createS3Store, cachedReads} from '@/lib/object-store';
@@ -23,7 +23,7 @@ describe('persistent export delivery',()=>{
   const spy=vi.spyOn(assetDelivery,'exportAssetUrl').mockReturnValue(location);
   setServices({browser:{render:async()=>({ok:true,mime:'image/png',bytes:png})}});
   try {
-   const response=await exportImage(new Request(`http://localhost:3030/a/${row.id}/export`,{headers:{'X-Artifactbin-Export-Delivery':'redirect'}}),{params:Promise.resolve({id:row.id})});
+   const response=await exportImage(new Request(`http://localhost:3030/a/${row.id}/export`,{headers:{'X-Artifactbin-Export-Delivery':'redirect'}}),params(row.id));
    expect(response.status).toBe(status);
    if(status===200){expect(response.headers.get('location')).toBeNull();expect(Buffer.from(await response.arrayBuffer())).toEqual(png);}
    else expect(response.headers.get('location')).toBe(location);
@@ -37,14 +37,14 @@ describe('persistent export delivery',()=>{
   setServices({browser:{render:async()=>{calls++;return {ok:true,mime:'image/png',bytes:png};}}});
   try {
    for(let i=0;i<2;i++){
-    const response=await exportImage(new Request(`http://localhost:3030/a/${row.id}/export`),{params:Promise.resolve({id:row.id})});
+    const response=await exportImage(new Request(`http://localhost:3030/a/${row.id}/export`),params(row.id));
     expect(response.status).toBe(302);expect(response.headers.get('cache-control')).toBe('no-store');
     const asset=new URL(response.headers.get('location')!);
     const bytes=await exportAssetResponse(new Request(asset),asset.pathname.split('/').at(-1)!);
     expect(Buffer.from(await bytes.arrayBuffer())).toEqual(png);await resetExportRenderer();
    }
    expect(calls).toBe(1);
-   const legacy=await exportImage(new Request(`http://localhost:3030/a/${row.id}/export`,{headers:{'X-Artifactbin-Protocol':'1'}}),{params:Promise.resolve({id:row.id})});
+   const legacy=await exportImage(new Request(`http://localhost:3030/a/${row.id}/export`,{headers:{'X-Artifactbin-Protocol':'1'}}),params(row.id));
    expect(legacy.status).toBe(200);expect(Buffer.from(await legacy.arrayBuffer())).toEqual(png);
    expect(calls).toBe(1);
   }finally{await resetExportRenderer();setServices({});}
@@ -55,7 +55,7 @@ describe('persistent export delivery',()=>{
   store.signedUpload=async()=>({url:'https://storage.example/exports/objects/test.png',contentType:'image/png'});
   setServices({browser:{render:async()=>{renders++;return {ok:true,mime:'image/png',bytes:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADUlEQVQImWP4////fwAJ+wP9CNHoHgAAAABJRU5ErkJggg==','base64')};},renderAndUpload:async()=>{uploads++;return {ok:false,reason:'upload_unavailable'};}}});
   try{
-   const response=await exportImage(new Request(`http://localhost:3030/a/${row.id}/export`),{params:Promise.resolve({id:row.id})});
+   const response=await exportImage(new Request(`http://localhost:3030/a/${row.id}/export`),params(row.id));
    expect(response.status).toBe(302);expect(uploads).toBe(1);expect(renders).toBe(1);
   }finally{await resetExportRenderer();setServices({});if(original)store.signedUpload=original;else delete store.signedUpload;}
  });

@@ -1,7 +1,7 @@
 /** Normal publication, saved reader and dependency delivery without migration staging. */
 import {it,expect,vi} from 'vitest';
 import {createHash} from 'node:crypto';
-import {useAppHarness,mintAccountToken,request} from './harness';
+import {useAppHarness,mintAccountToken,request,params} from './harness';
 import {POST} from '@/app/api/artifacts/route';
 import {GET as raw} from '@/app/a/[id]/raw/route';
 import {GET as asset} from '@/app/a/[id]/assets/route';
@@ -24,7 +24,7 @@ it('publishes a transitive component/resource closure idempotently and serves on
  expect(saved.dependencyReceipts).toHaveLength(5);
  const before=(await (await getDb()).query('SELECT id FROM artifacts ORDER BY id')).rows;
  const replay=await publish();expect((await replay.json()).id).toBe(saved.id);expect((await (await getDb()).query('SELECT id FROM artifacts ORDER BY id')).rows).toEqual(before);
- const context={params:Promise.resolve({id:saved.id})};
+ const context=params(saved.id);
  expect((await raw(request(`/a/${saved.id}/raw`),context)).status).toBe(404);
  const reader=await raw(request(`/a/${saved.id}/raw`,{token:owner.token}),context);expect(reader.status).toBe(200);expect(await reader.text()).toContain('data-af-id="button"');
  const page=await readHtmlPage(identityForUser(owner.userId,owner.id),saved.id);expect(page?.html).toContain('data-af-id="button"');
@@ -53,7 +53,7 @@ it('publishes a large PDF through its native tier and serves its exact bytes und
  const pdfResponse=await POST(request('/api/artifacts',{method:'POST',token:owner.token,headers:{'Idempotency-Key':'html_bundle_pdf_asset_0001'},json:{pdf:'data:application/pdf;base64,'+bytes.toString('base64'),visibility:'private'}}));
  expect(pdfResponse.status).toBe(201);const pdf=await pdfResponse.json();
  const response=await POST(request('/api/artifacts',{method:'POST',token:owner.token,headers:{'Idempotency-Key':'html_bundle_pdf_page_0001'},json:{visibility:'private',html:'<html><body><a href="./doc.pdf">PDF</a></body></html>',publicationBundle:{entryPath:'index.html',files:[],mappings:{'doc.pdf':{kind:'asset',id:pdf.id,revision:'1',sha256:sha(bytes)}}}}}));
- expect(response.status).toBe(201);const page=await response.json(),context={params:Promise.resolve({id:page.id})};
+ expect(response.status).toBe(201);const page=await response.json(),context=params(page.id);
  const url=`/a/${page.id}/assets?dependency=${pdf.id}&revision=1&version=1`;
  expect((await asset(request(url,{token:other.token}),context)).status).toBe(404);
  const served=await asset(request(url,{token:owner.token}),context);expect(served.status).toBe(200);expect(served.headers.get('content-type')).toContain('application/pdf');expect(sha(new Uint8Array(await served.arrayBuffer()))).toBe(sha(bytes));

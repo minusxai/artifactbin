@@ -56,7 +56,7 @@ describe('annotation actions are relations, not edits', () => {
     for (const action of [{ reply: 'Moved successfully' }, { resolve: true }, { reopen: true }]) {
       const response = await commentActionRoute(
         request(`/api/my/artifacts/${doc.id}/annotations/${annotation.id}`, { method: 'POST', actor, json: action }),
-        { params: Promise.resolve({ id: doc.id, annId: annotation.id }) },
+        params({ id: doc.id, annId: annotation.id }),
       );
       expect(response.status, `${Object.keys(action)[0]}: ${await response.clone().text()}`).toBeLessThan(300);
       const head = await read();

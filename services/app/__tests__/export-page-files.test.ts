@@ -6,7 +6,7 @@
  * each address it names is asked of the real asset door, with the key and without it.
  */
 import { expect, it } from 'vitest';
-import { mintAccountToken, useAppHarness, params } from './harness';
+import { mintAccountToken, useAppHarness, params, request } from './harness';
 import { identityForUser, type AccessActor } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
 import { createArtifactFromBody } from '@/lib/publish';
@@ -33,7 +33,7 @@ async function filesPage(visibility: 'private' | 'unlisted') {
   const minted = await mintAccountToken(`export_files_${visibility}_${++pages}`);
   const owner = identityForUser(minted.userId, minted.id, minted.email) as AccessActor & { tokenId: string };
   const response = await createArtifactFromBody({ visibility, html: HTML, publicationBundle: { entryPath: 'index.html', files: FILES } }, owner, BASE,
-    new Request(`${BASE}/api/artifacts`, { method: 'POST', headers: { 'Idempotency-Key': `export_page_files_${visibility}_${pages}` } }));
+    request(`/api/artifacts`, { method: 'POST', headers: { 'Idempotency-Key': `export_page_files_${visibility}_${pages}` } }));
   const saved = await response.json() as { id: string; dependencyReceipts: Array<{ path: string; id: string }> };
   expect(response.status, JSON.stringify(saved)).toBe(201);
   const receipt = (path: string) => saved.dependencyReceipts.find(entry => entry.path === path)!.id;
@@ -42,7 +42,7 @@ async function filesPage(visibility: 'private' | 'unlisted') {
 
 /** The raw page as the capture (or a reader without a key) is served it. */
 async function served(id: string, key: string | null) {
-  const response = await serveRaw(new Request(`${BASE}/a/${id}/raw?chrome=0${key ? `&key=${encodeURIComponent(key)}` : ''}`), params(id));
+  const response = await serveRaw(request(`/a/${id}/raw?chrome=0${key ? `&key=${encodeURIComponent(key)}` : ''}`), params(id));
   expect(response.status).toBe(200);
   return response.text();
 }
@@ -122,7 +122,7 @@ it("admits the files of the archived version a capture shows, on the capture's k
   await db.query("INSERT INTO artifact_versions (artifact_id, version, title, description, format, source, meta) SELECT id, 1, title, description, format, source, meta FROM artifacts WHERE id=$1", [id]);
   await setArtifact(db, id, { version: 2 });
   const key = mintExportKey(id, undefined, undefined, owner);
-  const response = await serveRaw(new Request(`${BASE}/a/${id}/raw?chrome=0&key=${encodeURIComponent(key)}&version=1`), params(id));
+  const response = await serveRaw(request(`/a/${id}/raw?chrome=0&key=${encodeURIComponent(key)}&version=1`), params(id));
   expect(response.status).toBe(200);
   const found = addresses(await response.text(), id, receipts.logo);
   expect(found.length).toBeGreaterThan(0);

@@ -1,7 +1,7 @@
 /** The retired named-mutation _row/_value controls now send explicit dataset SQL parameters.
  * Canonical API/browser receipt adaptation is covered by lib/document-data/__tests__/mutation-operation.test.ts. */
 import { expect, it } from 'vitest';
-import { request, useAppHarness, mintAccountToken } from './harness';
+import { request, useAppHarness, mintAccountToken, params } from './harness';
 import { POST as create } from '@/app/api/artifacts/route';
 import { POST as mutate } from '@/app/api/artifacts/[id]/mutate/route';
 import { getArtifactById } from '@/lib/artifacts';
@@ -27,7 +27,7 @@ it.each(['rowId', 'value'] as const)(
     expect(made.status).toBe(201);
     const { id } = await made.json();
     const key = 'mxmx_test_row_replay_once',
-      context = { params: Promise.resolve({ id }) };
+      context = params(id);
     const body = {
       sql: 'update public.rows set note=$value where id=$rowId',
       values: { rowId: 'one', value: 'new' },

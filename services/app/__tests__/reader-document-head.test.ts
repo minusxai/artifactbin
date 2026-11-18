@@ -14,7 +14,7 @@ import { describe, expect, it } from 'vitest';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { createArtifact } from '@/lib/artifacts';
 
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
+import { mintAccountToken as mintToken, params, request } from '@/__tests__/harness';
 import { mintExportKey } from '@/lib/export';
 import { PUBLIC_BASE_URL } from '@/lib/platform';
 import { useAppHarness } from '@/__tests__/harness';
@@ -30,10 +30,9 @@ const views = async (id: string): Promise<number> => {
   return Number(r.rows[0].n);
 };
 
-const BASE = 'http://localhost:3000';
 
 const serve = async (id: string, query = '') => {
-  const res = await rawRoute(new Request(`${BASE}/a/${id}/raw${query}`), { params: Promise.resolve({ id }) });
+  const res = await rawRoute(request(`/a/${id}/raw${query}`), params(id));
   return res.text();
 };
 

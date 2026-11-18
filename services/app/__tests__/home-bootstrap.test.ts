@@ -18,7 +18,7 @@ import { overrideConfig, resetConfigOverrides } from '@/lib/platform/config';
 import { getDb, measureQueries } from '@/lib/platform';
 import { createGroup } from '@/lib/groups';
 import { admitDeploymentIdentity, setupDeployment } from '@/lib/deployment';
-import { mintAccountToken, request, setSession, useAppHarness } from './harness';
+import { mintAccountToken, request, setSession, useAppHarness, params } from './harness';
 
 useAppHarness();
 const signedIn = { id: '', email: '' };
@@ -69,7 +69,7 @@ describe('GET /api/page/home?part=bootstrap', () => {
     const waterfall = {
       deployment: await measureQueries(() => deploymentState(request('/api/deployment'))),
       preferences: await measureQueries(() => preferences(request('/api/me/preferences', { token }))),
-      detail: await measureQueries(() => groupDetail(request(`/api/groups/${w.group.id}`, { token }), { params: Promise.resolve({ id: w.group.id }) })),
+      detail: await measureQueries(() => groupDetail(request(`/api/groups/${w.group.id}`, { token }), params(w.group.id))),
       groupShelf: await measureQueries(() => homePage(request(`/api/page/home?part=core&groupId=${w.group.id}`))),
       personalShelf: await measureQueries(() => homePage(request('/api/page/home?part=core'))),
     };

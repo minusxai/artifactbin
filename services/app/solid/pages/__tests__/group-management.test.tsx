@@ -51,7 +51,7 @@ it('loads group settings without requesting the artifact shelf',async()=>{
 it('lists the group\'s allowed addresses, lets an editor remove one, and draws nothing when approvals are off',async()=>{
  const address={directive:'connect',host:'https://api.example.com',approved_by:{id:'u1',username:'alice',name:'Alice'},approved_at:'2026-11-11T10:00:00.000Z'};
  let held=[address];
- const fetcher=vi.fn(async(_url:string,init?:RequestInit)=>{if(init?.method==='DELETE'){held=[];return Response.json({changed:{connect:['https://api.example.com']},addresses:[]});}return Response.json({addresses:held});});vi.stubGlobal('fetch',fetcher);
+ const fetcher=stubFetch({'DELETE *':()=>{held=[];return Response.json({changed:{connect:['https://api.example.com']},addresses:[]});}},{fallback:()=>Response.json({addresses:held})});
  const {GroupAddresses}=await import('../GroupAddresses');
  const view=render(()=> <GroupAddresses group={{id:'g1',name:'Team',role:'admin'}}/>);
  const panel=await screen.findByRole('region',{name:'Allowed addresses'});

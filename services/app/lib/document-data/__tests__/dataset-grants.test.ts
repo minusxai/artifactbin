@@ -1,6 +1,6 @@
 import {POST as mutateDirect} from '@/app/api/artifacts/[id]/mutate/route';
 import { expect, it } from 'vitest';
-import { useAppHarness, request } from '@/__tests__/harness';
+import { useAppHarness, request, params } from '@/__tests__/harness';
 import { identityForUser, createUser } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { POST as create } from '@/app/api/artifacts/route';
@@ -20,7 +20,7 @@ it('enforces read grants independently of link visibility and keeps owner admini
  // New datasets get the read-only template (v3) and readwrite access: everyone who reaches it reads, owner and editors write.
  expect((await getArtifactById(id))).toMatchObject({access:'readwrite',dataset_policy:{version:3,tables:[{table:{schema:'public',name:'rows'},select_permissions:['viewer','signed_in','anonymous'].map(role=>({role,permission:{columns:'*',filter:{},allow_aggregations:true}}))}]}});
  for(const key of [undefined,'policy-hint-receipt-0001']){
-  const mutate=(bearer?:string)=>mutateDirect(request(`/api/artifacts/${id}/mutate`,{method:'POST',...(bearer?{token:bearer}:{}),headers:key?{'Idempotency-Key':key}:{},json:{sql:'insert into public.rows values (2)'}}),{params:Promise.resolve({id})});
+  const mutate=(bearer?:string)=>mutateDirect(request(`/api/artifacts/${id}/mutate`,{method:'POST',...(bearer?{token:bearer}:{}),headers:key?{'Idempotency-Key':key}:{},json:{sql:'insert into public.rows values (2)'}}),params(id));
   // The owner is admin-equivalent: the default grants no longer refuse the owner's own direct write.
   expect((await mutate(token.token)).status).toBe(200);
   // A link reader has no write rule (the read-only template has none): refused, and nothing lands.
@@ -40,7 +40,7 @@ it('enforces read grants independently of link visibility and keeps owner admini
 it('does not disclose private grant-controlled datasets through direct mutation refusals',async()=>{
  const owner=await mintToken('private grant owner'),stranger=await mintToken('private grant stranger');
  const made=await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{dataset:[{n:1}],visibility:'private'}}));const {id}=await made.json();
- const denied=await mutateDirect(request(`/api/artifacts/${id}/mutate`,{method:'POST',token:stranger.token,json:{sql:'insert into public.rows values (2)'}}),{params:Promise.resolve({id})});
+ const denied=await mutateDirect(request(`/api/artifacts/${id}/mutate`,{method:'POST',token:stranger.token,json:{sql:'insert into public.rows values (2)'}}),params(id));
  expect(denied.status).toBe(404);
 });
 

@@ -1,6 +1,6 @@
 /** Native pages use one isolated frame; retired source-editor addresses never open it. */
 import {beforeEach,describe,expect,it} from 'vitest';
-import {useAppHarness,request,setSession,mintAccountToken} from '@/__tests__/harness';
+import {useAppHarness,request,setSession,mintAccountToken,params} from '@/__tests__/harness';
 import {POST as createArtifactRoute} from '@/app/api/artifacts/route';
 import {GET as rawRoute} from '@/app/a/[id]/raw/route';
 import { artifactPageAnswer } from '@/lib/document-serving';
@@ -9,7 +9,7 @@ import { mintExportKey } from '@/lib/export';
 import {artifactStarter} from '@/lib/workspace/artifact-starters';
 useAppHarness();beforeEach(()=>setSession(null));
 const PAGES={pages:pagesSite()};
-const raw=(id:string,search='')=>rawRoute(request(`/a/${id}/raw${search}`),{params:Promise.resolve({id})});
+const raw=(id:string,search='')=>rawRoute(request(`/a/${id}/raw${search}`),params(id));
 async function publish(body:Record<string,unknown>){const {token}=await mintAccountToken('address');const made=await createArtifactRoute(request('/api/artifacts',{method:'POST',token,json:{visibility:'public',...body}}));expect(made.status,await made.clone().text()).toBe(201);return {id:(await made.json()).id as string,token};}
 describe('native artifact addresses',()=>{
  it('frames a native starter through read aliases without exposing a source editor',async()=>{

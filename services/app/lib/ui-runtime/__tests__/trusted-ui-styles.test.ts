@@ -6,6 +6,7 @@
  * this file out of the islands project's shared module graph.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { stubFetch } from '@/test/helpers/fetch-stub';
 
 const fresh = async () => { vi.resetModules(); return import('../../ui-runtime/trusted-ui-styles'); };
 beforeEach(() => { document.head.replaceChildren(); });
@@ -50,8 +51,7 @@ describe('configureTrustedUiStyles', () => {
 
 describe('configureTrustedUiFromShell', () => {
   it('takes only same-origin stylesheets, and the exact bytes once a root first asks', async () => {
-    const fetch = vi.fn(async (href: string) => new Response(href.endsWith('app.css') ? '.exact { color: red }' : '', { headers: { 'content-type': 'text/css' } }));
-    vi.stubGlobal('fetch', fetch);
+    const fetch = stubFetch({ '*app.css': () => new Response('.exact { color: red }', { headers: { 'content-type': 'text/css' } }) }, { fallback: () => new Response('', { headers: { 'content-type': 'text/css' } }) });
     document.head.innerHTML = `<link rel="stylesheet" href="${location.origin}/app.css"><link rel="stylesheet" href="https://cdn.other.test/x.css"><link rel="icon" href="/f.ico">`;
     const { configureTrustedUiFromShell, currentTrustedCss } = await fresh();
     configureTrustedUiFromShell(document);
