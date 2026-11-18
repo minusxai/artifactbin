@@ -1,4 +1,5 @@
 import {admitGroupMember} from '@/__tests__/harness';
+import { revokeShares, trashRow } from '@/__tests__/artifact-fixtures';
 import {createHash} from 'node:crypto';
 import {describe,it,expect} from 'vitest';
 import {request,useAppHarness,mintAccountToken} from '@/__tests__/harness';
@@ -90,7 +91,7 @@ it('serves private nested CSS/JS/image dependencies through the page session and
  const readerTicket=await issuePagesTicket(sessionIdentity(reader),{},Date.now(),{artifactId:saved.id,origin:self});
  const readerPage=await app.request(self+'/?_pt='+readerTicket);expect(readerPage.status).toBe(200);const readerCookie=/__Host-afbin_pages=([^;]+)/.exec(readerPage.headers.get('set-cookie')??'')?.[1];
  expect((await app.request(url,{headers:{cookie:'__Host-afbin_pages='+readerCookie}})).status).toBe(200);
- const db=await harness.db();await db.query('DELETE FROM artifact_shares WHERE artifact_id=$1',[dependency.id]);
+ await revokeShares(dependency.id);
  expect((await app.request(url,{headers:{cookie:'__Host-afbin_pages='+readerCookie}})).status).toBe(200);
  expect((await app.request(url,{headers:{cookie:'__Host-afbin_pages='+cookie}})).status).toBe(200);
  liveSessions.delete(`bundle-${reader.id}`);
@@ -98,7 +99,7 @@ it('serves private nested CSS/JS/image dependencies through the page session and
  const refusedTicket=await issuePagesTicket(sessionIdentity(reader),{},Date.now(),{artifactId:saved.id,origin:self});
  expect((await app.request(self+'/?_pt='+refusedTicket)).status).toBe(404);
 
- await db.query('UPDATE artifacts SET deleted_at=now() WHERE id=$1',[saved.id]);
+ await trashRow(saved.id);
  expect((await app.request(url,{headers:{cookie:'__Host-afbin_pages='+cookie}})).status).toBe(404);
 });
 it('publishes and conditionally retries through browser account routes without a bearer token',async()=>{
@@ -166,7 +167,7 @@ it('delegates private dependencies when the page is shared later and revokes wit
  await updateSharingFor(ownerIdentity,saved.id,{shares:[]});expect((await read(readerActor)).status).toBe(404);expect((await read(ownerActor)).status).toBe(200);
  const group=await createGroup(user.id,{handle:'bundle_new_owner',name:'New owner'});await transferArtifact(ownerIdentity,saved.id,{type:'group',id:group.id});expect((await read(ownerActor)).status).toBe(404);
  await transferArtifact(ownerIdentity,child.id,{type:'group',id:group.id});expect((await read(ownerActor)).status).toBe(200);
- const db=await harness.db();await db.query('UPDATE artifacts SET deleted_at=now() WHERE id=$1',[child.id]);expect((await read(ownerActor)).status).toBe(404);
+ await trashRow(child.id);expect((await read(ownerActor)).status).toBe(404);
 });
 it('supports group membership granted after private bundle publication without broadening direct child URLs',async()=>{
  const {createUser}=await import('@/lib/accounts');const {createGroup,removeGroupMember}=await import('@/lib/groups');const {GET:assetGet}=await import('@/app/a/[id]/assets/route');
@@ -269,7 +270,7 @@ describe('editor bundle saves',()=>{
    return {status:response.status,body:await response.json()};
   };
   const db=await harness.db();
-  const revoke=(id:string)=>db.query('DELETE FROM artifact_shares WHERE artifact_id=$1',[id]);
+  const revoke=(id:string)=>revokeShares(id);
   const version=async(id:string)=>(await db.query<{version:number}>('SELECT version FROM artifacts WHERE id=$1',[id])).rows[0]?.version;
   const count=async()=>(await db.query<{n:number}>('SELECT count(*)::int n FROM artifacts')).rows[0]?.n;
   return {owner,editor,saved,receipt,save,revoke,version,count,db};

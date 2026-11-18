@@ -24,7 +24,7 @@ import { setArtifactQuotaForTests } from '@/lib/artifacts/testing';
 import { eraseTestUser, sweepTestUsers } from '../testuser-erase';
 import { identityForUser, noteTestUserSession, testUserSessionCount, createTestUser, listTestUsers, resolveTokenById, createUser, getUserById } from '@/lib/accounts';
 import { loadDatasetRows } from '@/lib/datasets';
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
+import { mintAccountToken as mintToken, params } from '@/__tests__/harness';
 import { count, has, link } from '@/lib/social';
 import { setAvatar } from '@/lib/avatars';
 import { objectStore, ObjectUnavailable } from '@/lib/object-store';
@@ -32,7 +32,6 @@ import sharp from 'sharp';
 import { request, useAppHarness } from '@/__tests__/harness';
 
 const harness = useAppHarness();
-const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
 async function account(name: string) {
   const user = await createUser({ email: `mxmx_test_${name}@example.com`, name });

@@ -19,7 +19,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { BrowserService, RenderRequest, RenderResult } from '@artifactbin/contracts';
 import { exportCacheKey, resetExportRenderer } from '@/lib/export';
 import { setServices } from '@/lib/platform';
-import { useAppHarness, request } from '@/__tests__/harness';
+import { useAppHarness, request, params } from '@/__tests__/harness';
 import { EXPORT_PNG } from '@/__tests__/export-helpers';
 import { GET as exportRoute } from '@/app/a/[id]/export/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
@@ -28,7 +28,6 @@ import {artifactState, getArtifactById} from '@/lib/artifacts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 
 useAppHarness();
-const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
 /** A browser that always answers this PNG, and keeps every request it was sent. */
 function scripted(answer: RenderResult): BrowserService & { seen: RenderRequest[] } {

@@ -6,7 +6,7 @@
  * settings may name their own revisions (expectedSharingRevision, expectedPolicyRevision) and are refused when stale.
  */
 import {describe,expect,it} from 'vitest';
-import {mintAccountToken,request,useAppHarness} from '@/__tests__/harness';
+import {mintAccountToken,request,useAppHarness, params } from '@/__tests__/harness';
 import {identityForUser} from '@/lib/accounts';
 import {updateSharingFor} from '@/lib/artifacts';
 import {POST as create} from '@/app/api/artifacts/route';
@@ -16,7 +16,6 @@ import {POST as mutate} from '@/app/api/artifacts/[id]/mutate/route';
 import {PUT as writePolicy} from '@/app/api/artifacts/[id]/policy/route';
 
 useAppHarness();
-const params=(id:string)=>({params:Promise.resolve({id})});
 const page=(text:string)=>`<!doctype html><html><head><title>Fence</title></head><body><p>${text}</p></body></html>`;
 type Head={version:number;state:string;sharing_revision:number;policy_revision:number;title:string|null};
 type Owner=Awaited<ReturnType<typeof mintAccountToken>>;

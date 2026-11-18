@@ -1,4 +1,5 @@
 import {expect,it} from 'vitest';
+import { setVisibility } from '@/__tests__/artifact-fixtures';
 import { setDatasetPolicy } from '@/__tests__/harness';
 import {getDb} from '@/lib/platform';
 import {useAppHarness,request,mintAccountToken} from '@/__tests__/harness';
@@ -36,7 +37,7 @@ it('gives duplicate rows stable distinct identities, commits a mixed edit and st
 });
 it('requires dataset permission separately from page readability and enforces the insert check',async()=>{
  const f=await fixture();
- await (await getDb()).query("UPDATE artifacts SET visibility='public' WHERE id=$1",[f.id]);
+ await setVisibility(f.id, 'public');
  const viewer={userId:null,tokenId:null,email:null,documentEditor:false};
  expect((await f.sql(viewer,'select amount from data')).rows!).toHaveLength(3);
  const add=(amount:number)=>f.sql(viewer,'insert into data(amount) values($a)',{a:amount});
@@ -46,7 +47,7 @@ it('requires dataset permission separately from page readability and enforces th
  expect((await add(2)).error).toBeUndefined();
  expect((await add(-1)).error).toBeTruthy();
  expect((await getArtifactById(f.id))!.version).toBe(2);
- await (await getDb()).query("UPDATE artifacts SET visibility='private' WHERE id=$1",[f.id]);
+ await setVisibility(f.id, 'private');
  expect(errorCode(await f.sql(viewer,'select amount from data'))).toBe('dataset_not_found');
 });
 it('keeps native CSV precision, BOM, duplicate headers, date strings and distinct empty/missing-cell semantics',async()=>{

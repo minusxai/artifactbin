@@ -8,7 +8,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { screen } from '@testing-library/dom';
 import type { StoryEditSelection } from '@/lib/html-bridge/selection-contract';
 import { cleanup, fireEvent } from '../../__tests__/helpers';
-import { flush, installAnnotationFetch, layer } from './annotation-rig';
+import { flush, installAnnotationFetch, layer, emitPin } from './annotation-rig';
 import { preloadCommentField } from '../LazyCommentField';
 import { replaceComment } from './comment-input';
 
@@ -20,7 +20,7 @@ const TEXT = { kind: 'text', path: '1', tag: 'p', rect: { x: 5, y: 6, width: 200
 /** The open thread's rail, in a page loaded afresh. */
 async function openThread() {
   const view = layer({ railOpen: true }); await flush();
-  view.runtime.emit({ type: 'mx:annotation-pin', id: 'ann_1', rect: { x: 10, y: 20, width: 300, height: 50 } });
+  emitPin(view.runtime, 'ann_1');
   await screen.findByLabelText('Annotation thread');
   return view;
 }
@@ -33,7 +33,7 @@ describe('a reload keeps what the reader has not sent', () => {
 
     const onDraftingChange = vi.fn();
     const again = layer({ railOpen: true, onDraftingChange }); await flush();
-    again.runtime.emit({ type: 'mx:annotation-pin', id: 'ann_1', rect: { x: 10, y: 20, width: 300, height: 50 } });
+    emitPin(again.runtime, 'ann_1');
     await screen.findByLabelText('Annotation thread');
     expect(screen.getByLabelText('Reply to annotation')).toHaveTextContent('half a thought');
     expect(onDraftingChange, 'the page knows it holds unsent words again').toHaveBeenLastCalledWith(true);

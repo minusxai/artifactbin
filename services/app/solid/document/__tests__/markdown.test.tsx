@@ -15,7 +15,7 @@ import { fireEvent, render } from '../../__tests__/helpers';
 import { CommentMarkdown } from '../CommentMarkdown';
 import { PersonMentionProvider } from '../PersonMention';
 import type { ArtifactBackend } from '@/lib/artifact-backend';
-import { ANN as BASE, fetchCalls, flush, installAnnotationFetch, knobs, layer } from './annotation-rig';
+import { ANN as BASE, fetchCalls, flush, installAnnotationFetch, knobs, layer, emitLayout } from './annotation-rig';
 
 const AGENT_BODY = ['Fixed in `lib/config.ts` — the cap was **10**:', '', '```ts', 'const MAX = 10;', '```', '', '- bumped the cap', '- added a test'].join('\n');
 const ANN: AnnotationWire = {
@@ -123,7 +123,7 @@ describe('the compact surfaces show the plain text', () => {
     knobs.open = [MARKDOWN_ROOT];
     const view = layer({ showViewComments: true });
     await flush();
-    view.runtime.emit({ type: 'mx:annotation-layout', positions: [{ id: ANN.id, rect: { x: 10, y: 220, width: 300, height: 40 } }] });
+    emitLayout(view.runtime, 220);
     const card = screen.getByLabelText('Open annotation comments');
     fireEvent.mouseEnter(card.querySelector('[data-annotation-id]')!);
     expect(card.querySelector('pre')).toBeNull();

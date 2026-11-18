@@ -216,5 +216,11 @@ export function layer(over: Over = {}, runtime = makeRuntime(), options: { trust
   return { ...view, runtime, set };
 }
 
+/** The runtime reports one annotation's position, 300 by 40 at x 10 and `y` (the annotation `id`, by default ANN's). */
+export const emitLayout = (runtime: { emit(data: Record<string, unknown>): void }, y: number, id: string = ANN.id) => runtime.emit({ type: 'mx:annotation-layout', positions: [{ id, rect: { x: 10, y, width: 300, height: 40 } }] });
+
+/** The runtime reports a click on annotation `id`'s pin: a 300 by 50 box at x 10, y 20. */
+export const emitPin = (runtime: { emit(data: Record<string, unknown>): void }, id: string) => runtime.emit({ type: 'mx:annotation-pin', id, rect: { x: 10, y: 20, width: 300, height: 50 } });
+
 /** The shadow root a `trusted` mount renders into. */
 export const trustedRoot = () => document.querySelector('[data-trusted-ui]')!.shadowRoot!;

@@ -1,5 +1,6 @@
 /** Parent acceptance seed: receipt metadata requires exact execution and fresh read admission. */
 import {it,expect,vi} from 'vitest';
+import { trashRow } from '@/__tests__/artifact-fixtures';
 import {createAppHost} from '@/server/host';
 import {createGroup} from '@/lib/groups';
 import {getDb} from '@/lib/platform';
@@ -34,7 +35,7 @@ it('recovers only committed outputs from this exact execution with no source or 
   expect((await db.query('SELECT * FROM workload_publication_audit')).rows).toEqual(audit);expect((await db.query('SELECT * FROM workload_publication_outputs')).rows).toEqual(outputs);
   denyFinal=true;expect((await list()).status).toBe(403);denyFinal=false;
   expect((await call({kind:'artifact-outputs',credential:'x'.repeat(43),after:null})).status).toBe(403);
-  await db.query('UPDATE artifacts SET deleted_at=now() WHERE id=$1',[id]);expect((await(await list()).json()).items).toEqual([]);
+  await trashRow(id);expect((await(await list()).json()).items).toEqual([]);
   await db.query('UPDATE artifacts SET deleted_at=NULL,group_id=NULL WHERE id=$1',[id]);expect((await(await list()).json()).items).toEqual([]);
   revoke=true;expect((await list()).status).toBe(403);
  }finally{fetch.mockRestore();vi.restoreAllMocks();}

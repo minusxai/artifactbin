@@ -1,4 +1,5 @@
 import {createAuthHost} from '../src/parts';
+import {noTokens} from './helpers';
 import {sessionStoreOf} from '../src/index';
 import {PGlite} from '@electric-sql/pglite';
 import {afterAll,beforeAll,beforeEach,describe,expect,it,vi} from 'vitest';
@@ -149,7 +150,7 @@ describe('email OTP', () => {
 describe('OIDC', () => {
   it('denies a verified OIDC callback before returning its session cookie or redirect',async()=>{
     nextProfile={id:'denied-oidc',email:'mxmx_test_denied_oidc@example.com',emailVerified:true};
-    const host=createAuthHost({upstream:async()=>new Response('{}'),env:{},tokens:{byToken:async()=>null},sessions:sessionStoreOf(auth),cookieSecret:'human-auth-secret'.padEnd(32,'0'),admitIdentity:async()=>false});
+    const host=createAuthHost({upstream:async()=>new Response('{}'),env:{},tokens:noTokens,sessions:sessionStoreOf(auth),cookieSecret:'human-auth-secret'.padEnd(32,'0'),admitIdentity:async()=>false});
     const start=await host.request('http://localhost:4794/api/auth/sign-in/social',{method:'POST',headers:{'content-type':'application/json',origin:'http://localhost:4794'},body:JSON.stringify({provider:'acme',callbackURL:'/'})});
     const {url}=await start.json() as {url:string};
     const stateCookie=cookieOf(start);

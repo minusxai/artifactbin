@@ -10,7 +10,7 @@ import { brotliDecompressSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { ACTOR_HEADER } from '@artifactbin/contracts';
 import { signActor } from '@artifactbin/utils';
-import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
+import { postArtifact } from '@/__tests__/artifact-fixtures';
 import { mintToken } from '@/lib/accounts';
 import { createUser, ensureUsername } from '@/lib/accounts';
 import { useAppHarness } from '@/__tests__/harness';
@@ -20,7 +20,6 @@ import { compressDynamic, negotiateEncoding } from '../content-encoding';
 useAppHarness();
 
 const SECRET = 'vitest-actor-secret-0000000000000000';
-const BASE = 'http://localhost:3000';
 const BROWSER = 'gzip, deflate, br, zstd';
 const stranger = { [ACTOR_HEADER]: signActor({ credential: 'none' }, SECRET) };
 const app = createAppServer({ actorSecret: SECRET, indexHtml: async () => '<!doctype html><html><head><title>SPA</title></head><body><div id="root">SPA</div></body></html>' });
@@ -28,7 +27,7 @@ const app = createAppServer({ actorSecret: SECRET, indexHtml: async () => '<!doc
 async function publicDocument() {
   const owner = await ensureUsername(await createUser({ email: 'mxmx_test_encoding@example.com' }));
   const t = await mintToken('o', owner.id);
-  const res = await createArtifactRoute(new Request(`${BASE}/api/artifacts`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${t.token}` }, body: JSON.stringify({ title: 'Pub', html:nativeHtml('<div><p>' + 'public words that repeat. '.repeat(100) + '</p></div>'), visibility: 'public' }) }));
+  const res = await postArtifact(t.token, { title: 'Pub', html:nativeHtml('<div><p>' + 'public words that repeat. '.repeat(100) + '</p></div>'), visibility: 'public' });
   const { id } = await res.json() as { id: string };
   return { id, canonical: `/@${owner.username}/${id}-pub` };
 }

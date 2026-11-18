@@ -1,9 +1,10 @@
 import {it,expect} from 'vitest';
+import {syntheticEnv} from './toolbox-env';
 const server='https://example.test';
 async function harness(sub:string,positionals:string[],values:Record<string,unknown>={},fail?:string){
  const {groupsCommand}=await import('../../../skills/artifactbin/scripts/groups.mjs');
  const calls:{path:string;method:string;body:any}[]=[];
- const result=await groupsCommand({sub,positionals,values},{env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic'},fetcher:async(url:any,init:any)=>{
+ const result=await groupsCommand({sub,positionals,values},{env:syntheticEnv(server),fetcher:async(url:any,init:any)=>{
   const path=new URL(String(url)).pathname;const method=init.method;const body=init.body?JSON.parse(init.body):undefined;calls.push({path,method,body});
   if(fail&&path.includes(fail))return Response.json({error:'forbidden'},{status:403});
   if(path==='/a/PAGE12/raw')return new Response('<link rel="af-dataset" data-af-name="entries" href="ref:DATA01"><link rel="af-dataset" href="ref:DATA02">',{headers:{'Content-Type':'text/html'}});
@@ -51,8 +52,8 @@ it('reparent sends the parent it read, refuses before HTTP without --yes or with
  expect((await harness('reparent',['design_crit'],{root:true,yes:true})).calls.at(-1)).toEqual({path:'/api/groups/grp_stable/parent',method:'PUT',body:{parent_id:null,from_parent_id:null}});
  const {groupsCommand}=await import('../../../skills/artifactbin/scripts/groups.mjs');let sent=0;
  const fetcher=async()=>{sent++;throw Error('unexpected');};
- await expect(groupsCommand({sub:'reparent',positionals:['design_crit'],values:{parent:'other'}},{env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic'},fetcher})).rejects.toMatchObject({code:'confirmation_required',exit:2});
- await expect(groupsCommand({sub:'reparent',positionals:['design_crit'],values:{parent:'other',root:true,yes:true}},{env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic'},fetcher})).rejects.toMatchObject({code:'invalid_parent',exit:2});
+ await expect(groupsCommand({sub:'reparent',positionals:['design_crit'],values:{parent:'other'}},{env:syntheticEnv(server),fetcher})).rejects.toMatchObject({code:'confirmation_required',exit:2});
+ await expect(groupsCommand({sub:'reparent',positionals:['design_crit'],values:{parent:'other',root:true,yes:true}},{env:syntheticEnv(server),fetcher})).rejects.toMatchObject({code:'invalid_parent',exit:2});
  expect(sent).toBe(0);
 });
 it('share --datasets reads the page first, then shares it at its role and each linked dataset at viewer',async()=>{
@@ -75,13 +76,13 @@ it('share --datasets reports a dataset refusal without hiding the shares that su
 });
 it('reports multiple invitations individually, including partial failure',async()=>{
  const {groupsCommand}=await import('../../../skills/artifactbin/scripts/groups.mjs');let n=0;
- const result=await groupsCommand({sub:'invite',positionals:['design_crit','a@example.test','b@example.test'],values:{}},{env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic'},fetcher:async(_url:any,init:any)=>init.method==='GET'?Response.json({group:{id:'grp_stable',handle:'design_crit'}}):++n===1?Response.json({changed:true}):Response.json({error:'rate_limited',retry_after:60},{status:429})});
+ const result=await groupsCommand({sub:'invite',positionals:['design_crit','a@example.test','b@example.test'],values:{}},{env:syntheticEnv(server),fetcher:async(_url:any,init:any)=>init.method==='GET'?Response.json({group:{id:'grp_stable',handle:'design_crit'}}):++n===1?Response.json({changed:true}):Response.json({error:'rate_limited',retry_after:60},{status:429})});
  expect(result.ok).toBe(false);expect(result.results.map((r:any)=>r.ok)).toEqual([true,false]);expect(result.results[1].code).toBe('rate_limited');
 });
 it('show ends on how to change its members and invitations: proposed to the user by handle, role and email, made after they agree',async()=>{
  const {groupsCommand}=await import('../../../skills/artifactbin/scripts/groups.mjs');
  const detail={group:{id:'grp_stable',handle:'design_crit'},members:[{user_id:'usr_a',username:'teammate',role:'editor'}],invitations:[{id:'gin_a',email:'pending@example.test',role:'member'}]};
- const options=(body:any)=>({env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic'},fetcher:async()=>Response.json(body)});
+ const options=(body:any)=>({env:syntheticEnv(server),fetcher:async()=>Response.json(body)});
  const shown=await groupsCommand({sub:'show',positionals:['design_crit'],values:{}},options(detail));
  expect(shown).toMatchObject(detail);
  expect(shown.next).toBe('Next: members show handles, not email addresses. A change to these members or invitations is proposed to the user before it is made: name each member by handle and role (for a person the user named by address, the member you take them to be, or the members you cannot tell apart; an address missing here does not mean they are not a member) and each invitation by its email, with the action for each (remove, change role, cancel the invitation); make it only after they agree.');
@@ -91,18 +92,18 @@ it('show ends on how to change its members and invitations: proposed to the user
 it('show --pages binds the stable group ID and cursor while retaining the server page envelope',async()=>{
  const {groupsCommand}=await import('../../../skills/artifactbin/scripts/groups.mjs');const seen:string[]=[];
  const pages={artifacts:[{id:'PAGE12',owner:{type:'personal',id:'usr_owner'}}],next_cursor:'next'};
- const result=await groupsCommand({sub:'show',positionals:['@design_crit'],values:{pages:true,cursor:'opaque+/='}},{env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic'},fetcher:async(url:any)=>{seen.push(String(url));return Response.json(seen.length===1?{group:{id:'grp_stable',handle:'design_crit'}}:pages);}});
+ const result=await groupsCommand({sub:'show',positionals:['@design_crit'],values:{pages:true,cursor:'opaque+/='}},{env:syntheticEnv(server),fetcher:async(url:any)=>{seen.push(String(url));return Response.json(seen.length===1?{group:{id:'grp_stable',handle:'design_crit'}}:pages);}});
  expect(new URL(seen[1]!).searchParams.get('group_id')).toBe('grp_stable');expect(new URL(seen[1]!).searchParams.get('cursor')).toBe('opaque+/=');expect(result.pages).toEqual(pages);
 });
 it.each(['not_member','ambiguous_member'])('refuses %s without a member mutation or global account search',async expected=>{
  const {groupsCommand}=await import('../../../skills/artifactbin/scripts/groups.mjs');const seen:string[]=[];
- await expect(groupsCommand({sub:'role',positionals:['design_crit','same'],values:{role:'member'}},{env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic'},fetcher:async(url:any)=>{
+ await expect(groupsCommand({sub:'role',positionals:['design_crit','same'],values:{role:'member'}},{env:syntheticEnv(server),fetcher:async(url:any)=>{
   const path=new URL(String(url)).pathname;seen.push(path);return Response.json(path.endsWith('/members')?{members:expected==='not_member'?[]:[{user_id:'usr_a',name:'same'},{user_id:'usr_b',name:'same'}]}:{group:{id:'grp_stable',handle:'design_crit'}});
  }})).rejects.toMatchObject({code:expected,exit:3});expect(seen).toEqual(['/api/groups/design_crit','/api/groups/grp_stable/members']);
 });
 it('delete mismatched handle refuses after one read and before any mutation',async()=>{
  const {groupsCommand}=await import('../../../skills/artifactbin/scripts/groups.mjs');let calls=0;
- await expect(groupsCommand({sub:'delete',positionals:['design_crit'],values:{yes:true,handle:'other'}},{env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic'},fetcher:async(_url:any,init:any)=>{calls++;expect(init.method).toBe('GET');return Response.json({group:{id:'grp_stable',handle:'design_crit'}});}})).rejects.toMatchObject({code:'handle_mismatch',exit:2});expect(calls).toBe(1);
+ await expect(groupsCommand({sub:'delete',positionals:['design_crit'],values:{yes:true,handle:'other'}},{env:syntheticEnv(server),fetcher:async(_url:any,init:any)=>{calls++;expect(init.method).toBe('GET');return Response.json({group:{id:'grp_stable',handle:'design_crit'}});}})).rejects.toMatchObject({code:'handle_mismatch',exit:2});expect(calls).toBe(1);
 });
 it('uses explicit personal move and rejects ambiguous destinations before HTTP',async()=>{
  expect((await harness('move',['PAGE12'],{personal:true,yes:true})).calls).toEqual([{path:'/api/artifacts/PAGE12/transfer',method:'POST',body:{destination:{type:'personal'}}}]);
@@ -110,7 +111,7 @@ it('uses explicit personal move and rejects ambiguous destinations before HTTP',
  await expect(groupsCommand({sub:'move',positionals:['PAGE12'],values:{personal:true,group:'design_crit',yes:true}})).rejects.toMatchObject({code:'invalid_destination',exit:2});
 });
 it('rejects credential and artifact origin mismatches before HTTP',async()=>{
- const {groupsCommand}=await import('../../../skills/artifactbin/scripts/groups.mjs');let calls=0;const options={env:{ARTIFACTBIN_URL:'https://other.test',ARTIFACTBIN_TOKEN:'synthetic'},fetcher:async()=>{calls++;throw Error('unexpected');}};
+ const {groupsCommand}=await import('../../../skills/artifactbin/scripts/groups.mjs');let calls=0;const options={env:syntheticEnv('https://other.test'),fetcher:async()=>{calls++;throw Error('unexpected');}};
  await expect(groupsCommand({sub:'list',positionals:[],values:{server}},options)).rejects.toMatchObject({code:'credential_origin_mismatch',exit:3});
  await expect(groupsCommand({sub:'share',positionals:['https://other.test/a/PAGE12'],values:{server,group:'design_crit'}},options)).rejects.toMatchObject({code:'origin_mismatch',exit:2});expect(calls).toBe(0);
 });
@@ -118,11 +119,11 @@ it.each(['list','show','create','update','invite','uninvite','role','remove','le
  const args=sub==='list'?[]:sub==='invite'?['design_crit','a@example.test']:['role','remove','link','unlink'].includes(sub)?['design_crit','teammate']:sub==='uninvite'?['design_crit','pending@example.test']:['share','unshare','move'].includes(sub)?['PAGE12']:['design_crit'];
  // Refuse the first request: a failed identity resolution must never fall through to writes.
  const {groupsCommand}=await import('../../../skills/artifactbin/scripts/groups.mjs');let calls=0;
- await expect(groupsCommand({sub,positionals:args,values:{yes:true,role:sub==='share'?'viewer':'member',group:'design_crit',name:'Name',handle:'design_crit'}},{env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic'},fetcher:async()=>{calls++;return Response.json({error:'forbidden'},{status:403});}})).rejects.toMatchObject({code:'forbidden',exit:3});expect(calls).toBe(1);
+ await expect(groupsCommand({sub,positionals:args,values:{yes:true,role:sub==='share'?'viewer':'member',group:'design_crit',name:'Name',handle:'design_crit'}},{env:syntheticEnv(server),fetcher:async()=>{calls++;return Response.json({error:'forbidden'},{status:403});}})).rejects.toMatchObject({code:'forbidden',exit:3});expect(calls).toBe(1);
 });
 it('does not retry an uncertain mutation and reports exit 5',async()=>{
  const {groupsCommand}=await import('../../../skills/artifactbin/scripts/groups.mjs');let writes=0;
- await expect(groupsCommand({sub:'leave',positionals:['design_crit'],values:{yes:true}},{env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic'},fetcher:async(_url:any,init:any)=>{if(init.method==='GET')return Response.json({group:{id:'grp_stable',handle:'design_crit'}});writes++;throw Error('network failed');}})).rejects.toMatchObject({code:'outcome_unknown',exit:5});expect(writes).toBe(1);
+ await expect(groupsCommand({sub:'leave',positionals:['design_crit'],values:{yes:true}},{env:syntheticEnv(server),fetcher:async(_url:any,init:any)=>{if(init.method==='GET')return Response.json({group:{id:'grp_stable',handle:'design_crit'}});writes++;throw Error('network failed');}})).rejects.toMatchObject({code:'outcome_unknown',exit:5});expect(writes).toBe(1);
 });
 it('runs every verb through the installed CLI JSON envelope and refuses output overwrite before HTTP',async()=>{
  const {createServer}=await import('node:http'),{execFile}=await import('node:child_process'),{promisify}=await import('node:util'),{mkdtemp,mkdir,writeFile,readFile,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
@@ -155,7 +156,7 @@ it.each(['list','show','create','update','invite','uninvite','role','remove','le
 it.each(['create','update','invite','uninvite','role','remove','leave','share','unshare','move','link','unlink','delete'])('%s preserves a mutation refusal after successful identity resolution',async sub=>{
  const {groupsCommand}=await import('../../../skills/artifactbin/scripts/groups.mjs');let writes=0;
  const args=sub==='invite'?['design_crit','a@example.test']:['role','remove','link','unlink'].includes(sub)?['design_crit','teammate']:sub==='uninvite'?['design_crit','pending@example.test']:['share','unshare','move'].includes(sub)?['PAGE12']:['design_crit'];
- const pending=groupsCommand({sub,positionals:args,values:{yes:true,role:sub==='share'?'viewer':'member',group:'design_crit',name:'Name',handle:'design_crit'}},{env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic'},fetcher:async(url:any,init:any)=>{
+ const pending=groupsCommand({sub,positionals:args,values:{yes:true,role:sub==='share'?'viewer':'member',group:'design_crit',name:'Name',handle:'design_crit'}},{env:syntheticEnv(server),fetcher:async(url:any,init:any)=>{
   if(init.method!=='GET'){writes++;return Response.json({error:'forbidden'},{status:403});}
   const path=new URL(String(url)).pathname;
   return Response.json(path.endsWith('/members')?{members:[{user_id:'usr_member',username:'teammate'}]}:path.endsWith('/invitations')?{invitations:[{id:'gin_pending',email:'pending@example.test'}]}:{group:{id:'grp_stable',handle:'design_crit'}});

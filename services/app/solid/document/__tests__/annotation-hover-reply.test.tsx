@@ -11,7 +11,7 @@ import type { AnnotationWire } from '@/lib/annotations';
 import { fireEvent, render } from '../../__tests__/helpers';
 import { AnnotationPreview } from '../AnnotationPreview';
 import { preloadCommentField } from '../LazyCommentField';
-import { ANN, flush, httpBackend, installAnnotationFetch, knobs, layer, makeRuntime, trustedRoot } from './annotation-rig';
+import { ANN, flush, httpBackend, installAnnotationFetch, knobs, layer, makeRuntime, trustedRoot, emitLayout } from './annotation-rig';
 import { replaceComment } from './comment-input';
 
 const SECOND: AnnotationWire = { ...ANN, id: 'ann_9', anchor: { key: 'k9', path: '2', spanStart: 0, spanEnd: 5 },
@@ -43,7 +43,7 @@ describe('the marker layer', () => {
     knobs.open = [ANN];
     const view = layer({ showViewComments: true });
     await flush(); await flush();
-    view.runtime.emit({ type: 'mx:annotation-layout', positions: [{ id: ANN.id, rect: { x: 10, y: 120, width: 300, height: 40 } }] });
+    emitLayout(view.runtime, 120);
     const carrier = screen.getByLabelText('Open annotation comments');
     expect(carrier).toHaveClass('pointer-events-none');
     expect(carrier).not.toHaveClass('inset-0');
@@ -62,7 +62,7 @@ describe('the expanded hover card ends in a reply box', () => {
     knobs.open = [ANN];
     const view = layer({ showViewComments: true });
     await flush(); await flush();
-    view.runtime.emit({ type: 'mx:annotation-layout', positions: [{ id: ANN.id, rect: { x: 10, y: 120, width: 300, height: 40 } }] });
+    emitLayout(view.runtime, 120);
     const card = markerCard(/Open annotation conversation by/);
     fireEvent.mouseEnter(card);
     expect(screen.queryByRole('textbox', { name: 'Reply to annotation' })).toBeNull();
@@ -191,7 +191,7 @@ describe('focus or content pins the card', () => {
     knobs.open = [ANN];
     const view = layer({ showViewComments: true }, makeRuntime(), { trusted: true });
     await flush(); await flush();
-    view.runtime.emit({ type: 'mx:annotation-layout', positions: [{ id: ANN.id, rect: { x: 10, y: 120, width: 300, height: 40 } }] });
+    emitLayout(view.runtime, 120);
     const root = trustedRoot();
     const card = root.querySelector<HTMLElement>('[data-annotation-id]')!;
     fireEvent.mouseEnter(card);
@@ -233,7 +233,7 @@ describe('focus or content pins the card', () => {
     const onRailOpenChange = vi.fn();
     const view = layer({ showViewComments: true, onRailOpenChange });
     await flush(); await flush();
-    view.runtime.emit({ type: 'mx:annotation-layout', positions: [{ id: ANN.id, rect: { x: 10, y: 120, width: 300, height: 40 } }] });
+    emitLayout(view.runtime, 120);
     const marker = screen.getByLabelText(/Open annotation conversation by/);
     const card = markerCard(/Open annotation conversation by/);
     fireEvent.pointerDown(marker, { pointerType: 'touch' });
@@ -331,7 +331,7 @@ describe('who gets a box', () => {
     knobs.open = [ANN];
     const view = layer({ showViewComments: true });
     await flush(); await flush();
-    view.runtime.emit({ type: 'mx:annotation-layout', positions: [{ id: ANN.id, rect: { x: 10, y: 120, width: 300, height: 40 } }] });
+    emitLayout(view.runtime, 120);
     knobs.resolved = [{ ...ANN, status: 'resolved', revision: 2, resolved_at: '2026-09-23T00:00:00Z' }];
     view.set({ showViewComments: true, liveAnnotations: [] });
     await flush(); await flush();

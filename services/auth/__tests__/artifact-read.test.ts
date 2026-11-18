@@ -1,6 +1,6 @@
 /** Purpose-only delegated reads exercise the real auth handler and parent fence. */
-import {createHash} from 'node:crypto';
 import {describe,it,expect,vi} from 'vitest';
+import {delegatedService,audiencesOf,noTokens} from './helpers';
 import {ARTIFACT_READ_GRANT_PATH,ARTIFACT_READ_PATH,SERVICE_AUTH_HEADER,SERVICE_PAYLOAD_LIMIT} from '@artifactbin/contracts';
 import {createAuthHost} from '../src/parts';
 import {artifactReadKey,signArtifactReadGrant} from '../src/identity/artifact-read-grants';
@@ -9,8 +9,8 @@ import {serviceTokenKey,signServiceToken} from '../src/identity/service-tokens';
 describe('delegated artifact reads',()=>{
  it('binds a grant to the service/person/parent and exposes only a fixed read operation',async()=>{
   let active=true,live=true,accessible=true,revokeDuringRead=false,oversized=false;const requests:Request[]=[];
-  const service={id:'warehouse',origin:'https://warehouse.example',introspectionSecretSha256:createHash('sha256').update('service-secret').digest('hex')};
-  const app=createAuthHost({env:{IDENTITY__SERVICE_AUDIENCES:JSON.stringify([{id:service.id,origin:service.origin,introspection_secret_sha256:service.introspectionSecretSha256,artifact_reads:true}])},cookieSecret:'test',tokens:{byToken:async()=>null},sessions:{resolve:async()=>null},identityDb:{query:async<T>(sql:string)=>({rows:[sql.includes('users')?{active}:{live}] as T[]})},upstream:async(request,actor)=>{requests.push(request);if(revokeDuringRead)live=false;expect(actor.userId).toBe('usr_1');return Response.json(accessible?{id:'abc',html:oversized?'x'.repeat(SERVICE_PAYLOAD_LIMIT):'<p>Hi</p>'}:{error:'not_found'},{status:accessible?200:404});}});
+  const service=delegatedService('warehouse','https://warehouse.example','service-secret');
+  const app=createAuthHost({env:{IDENTITY__SERVICE_AUDIENCES:audiencesOf(service)},cookieSecret:'test',tokens:noTokens,sessions:{resolve:async()=>null},identityDb:{query:async<T>(sql:string)=>({rows:[sql.includes('users')?{active}:{live}] as T[]})},upstream:async(request,actor)=>{requests.push(request);if(revokeDuringRead)live=false;expect(actor.userId).toBe('usr_1');return Response.json(accessible?{id:'abc',html:oversized?'x'.repeat(SERVICE_PAYLOAD_LIMIT):'<p>Hi</p>'}:{error:'not_found'},{status:accessible?200:404});}});
   const call=(path:string,body:unknown,secret='service-secret')=>app.request(path,{method:'POST',headers:{[SERVICE_AUTH_HEADER]:secret},body:JSON.stringify(body)});
   const token=signServiceToken(serviceTokenKey('test'),service,{userId:'usr_1',parent:{kind:'session',id:'ses_1'}}).token;
   expect((await call(ARTIFACT_READ_GRANT_PATH,{token},'wrong')).status).toBe(401);

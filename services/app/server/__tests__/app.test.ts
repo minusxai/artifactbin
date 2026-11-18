@@ -11,7 +11,7 @@ import { pagesSite } from '@/lib/http';
 import { ACTOR_HEADER, type Actor } from '@artifactbin/contracts';
 import { signActor } from '@artifactbin/utils';
 import { describe, expect, it } from 'vitest';
-import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
+import { postArtifact } from '@/__tests__/artifact-fixtures';
 
 
 import { mintToken, createUser, ensureUsername } from '@/lib/accounts';
@@ -32,7 +32,7 @@ const as = (actor: Parameters<typeof actorHeaders>[0]) => actorHeaders(actor, SE
 async function world() {
   const owner = await ensureUsername(await createUser({ email: 'mxmx_test_owner@example.com' }));
   const t = await mintToken('o', owner.id);
-  const mk = async (body: Record<string, unknown>) => (await (await createArtifactRoute(new Request(`${BASE}/api/artifacts`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${t.token}` }, body: JSON.stringify(body) }))).json()) as { id: string };
+  const mk = async (body: Record<string, unknown>) => (await (await postArtifact(t.token, body)).json()) as { id: string };
   return { owner, t, pub: await mk({ title: 'Pub', html:nativeHtml('<div><p>public words</p></div>'), visibility: 'public' }), priv: await mk({ title: 'Priv', html:nativeHtml('<div><p>secret words</p></div>'), visibility: 'private' }) };
 }
 
@@ -165,7 +165,7 @@ describe('the address heals after checking read access', () => {
   it('keeps dataset edit addresses restricted to editors',async()=>{
     const w=await world();
     const token=await mintToken('dataset-editor', w.owner.id);
-    const made=await createArtifactRoute(new Request(`${BASE}/api/artifacts`,{method:'POST',headers:{'content-type':'application/json',authorization:`Bearer ${token.token}`},body:JSON.stringify({title:'Data',dataset:[{value:1}],visibility:'public'})}));
+    const made=await postArtifact(token.token,{title:'Data',dataset:[{value:1}],visibility:'public'});
     expect(made.status).toBe(201);const {id}=await made.json();
     expect((await app.request(`/a/${id}/edit`,{headers:as({credential:'none'})})).status).toBe(404);
     const response=await app.request(`/a/${id}/edit`,{headers:as({credential:'session',userId:w.owner.id,email:w.owner.email})});
@@ -283,7 +283,7 @@ describe('readable startup discovery', () => {
 
   it.each(['Untitled', '<Project & "status">'])('keeps the real unlisted title %s and a readable link', async title => {
     const w = await world();
-    const created = await createArtifactRoute(new Request(`${BASE}/api/artifacts`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${w.t.token}` }, body: JSON.stringify({ title, visibility: 'unlisted', html:nativeHtml('<h1 id="heading">Project status</h1><p id="status">The launch is scheduled for Monday.</p>') }) }));
+    const created = await postArtifact(w.t.token, { title, visibility: 'unlisted', html:nativeHtml('<h1 id="heading">Project status</h1><p id="status">The launch is scheduled for Monday.</p>') });
     const { id } = await created.json() as { id: string };
     const res = await app.request(`${BASE}/a/${id}`, { headers: as({ credential: 'none' }) });
     expect(res.status).toBe(200);

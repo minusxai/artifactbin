@@ -1,5 +1,6 @@
 /** Workloads create only new private static pages under the callback's current group folder. */
 import {it,expect,vi} from 'vitest';
+import { setVisibility, trashRow } from '@/__tests__/artifact-fixtures';
 import {createAppHost} from '@/server/host';
 import {createGroup} from '@/lib/groups';
 import {getDb} from '@/lib/platform';
@@ -30,7 +31,7 @@ it('creates group-owned private HTML atomically, replays, conflicts and never re
   reads.push(id);
   const read=()=>host.request(req(APP_ARTIFACT_WORKLOAD_PATH,{operation:{kind:'artifact-read',artifactId:id,source:'canonical'}}),{credential:'workload',workload:principal});
   expect(await(await read()).json()).toMatchObject({id,html:expect.stringContaining('Static result')});
-  await db.query("UPDATE artifacts SET visibility='unlisted' WHERE id=$1",[id]);expect((await read()).status).toBe(200);
+  await setVisibility(id, 'unlisted');expect((await read()).status).toBe(200);
   denyFinal=true;expect((await read()).status).toBe(403);expect((await create()).status).toBe(403);denyFinal=false;
   expect((await create({...operation,html:nativeHtml('<link rel="af-dataset" data-af-name="data" href="default:db">')})).status).toBe(400);
   expect((await create({...operation,html:nativeHtml('<img src="ref:abcdef">')})).status).toBe(400);
@@ -45,7 +46,7 @@ it('creates group-owned private HTML atomically, replays, conflicts and never re
   expect((await host.request(new Request(cancelled,{signal:controller.signal}),{credential:'workload',workload:principal})).status).toBe(403);
   expect((await(await create()).json()).id).toBe(id);
   expect((await create({...operation,title:'Different'})).status).toBe(409);
-  await db.query('UPDATE artifacts SET deleted_at=now() WHERE id=$1',[id]);expect((await create()).status).toBe(410);
+  await trashRow(id);expect((await create()).status).toBe(410);
   allowed=false;expect((await create()).status).toBe(403);
  }finally{fetch.mockRestore();vi.restoreAllMocks();}
 });

@@ -11,7 +11,7 @@ import { createGroup, } from '@/lib/groups';
 import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, groupMemberPredicate, linkRoleOf, ownerPredicate, ownerScope, policyReaderSql, roleWithoutLink, annotationScope, commentMonitorScope, documentEditorReaches, editorScope, effectiveRole, holdsCreatingToken, liveAccessFacts, ownsArtifact, preloadAccessFacts, reactionScope, writerFor, type Scope } from '@/lib/artifact-access';
 import { canReadArtifact } from '@/lib/artifacts';
 import { createArtifact, updateSharingFor } from '@/lib/artifacts';
-import { account, head, mine, page, personOfKind, sql } from '@/__tests__/artifact-fixtures';
+import { account, head, mine, page, personOfKind, sql, trashRow } from '@/__tests__/artifact-fixtures';
 
 const harness = useAppHarness();
 const reaches = async (scope: Scope, id: string) => (await sql('SELECT id FROM artifacts WHERE id=$1 AND ' + scope.where('$2'), [id, scope.val])).length === 1;
@@ -116,7 +116,7 @@ describe('the role lattice', () => {
     expect(await reaches(editorScope(identityForUser(null, loose.id)), tokenRow.id)).toBe(true);
     expect(await reaches(editorScope(identityForUser(null, null)), tokenRow.id)).toBe(false);
     // The trash gate is composed into every scope.
-    await sql('UPDATE artifacts SET deleted_at=now() WHERE id=$1', [row.id]);
+    await trashRow(row.id);
     expect(await reaches(reactionScope(owner), row.id)).toBe(false);
   });
 });
@@ -139,7 +139,7 @@ describe('the rule\'s parts', () => {
     expect(await where(SHARE_PREDICATE(['editor'], '$2'), [viewer.userId])).toBe(false);
     const owned = ownerPredicate(owner);
     expect(await where(owned.where('$2'), [owned.val])).toBe(true);
-    await sql('UPDATE artifacts SET deleted_at=now() WHERE id=$1', [row.id]);
+    await trashRow(row.id);
     // The bare owner predicate reads past the trash gate (the trash's own reads); the scope does not.
     expect(await where(owned.where('$2'), [owned.val])).toBe(true);
     expect(await where(LIVE_ARTIFACT_SQL, [])).toBe(false);

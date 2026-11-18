@@ -16,23 +16,21 @@ import {writerFor} from '@/lib/artifact-access';
 import { storeImageContent } from '@/lib/datasets';
 
 
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
+import { mintAccountToken as mintToken, params } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
 import type { StoredContent } from '@/lib/document';
-import { useAppHarness, request, setSession } from '@/__tests__/harness';
+import { useAppHarness, request, useSessionUser } from '@/__tests__/harness';
 import { POST as previewRoute } from '@/app/api/preview/route';
 import { objectKey, objectStore, ObjectUnavailable } from '@/lib/object-store';
 import { optimiseImage } from '@/lib/images';
 
 const harness = useAppHarness();
-beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id } } : null)));
+const sessionUser = useSessionUser('id');
 
 const BASE = 'http://localhost:3000';
 
 // The session routes read auth(); this file owns the mock (mutable id).
-const sessionUser = { id: '' };
 
-const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
 // A real 1×1 PNG.
 const PNG_BYTES = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');

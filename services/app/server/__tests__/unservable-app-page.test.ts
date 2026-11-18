@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import {retiredGraph} from '@/__tests__/retired-document-fixture';
 import { createAppServer } from '../app';
-import { useAppHarness, mintAccountToken as mintToken, request } from '@/__tests__/harness';
+import { useAppHarness, mintAccountToken as mintToken, request, params } from '@/__tests__/harness';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as serveRaw } from '@/app/a/[id]/raw/route';
 import { GET as pageData } from '@/app/api/page/artifact/[id]/route';
@@ -14,7 +14,6 @@ import { createUser, ensureUsername } from '@/lib/accounts';
 
 const harness = useAppHarness();
 const app = createAppServer({ indexHtml: async () => '<html><head><title>artifactbin</title></head><body><div id="root"></div></body></html>' });
-const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
 type Stored = { nodes: Record<string, { children: string[]; parts: string[]; ast?: unknown }> };
 const BROKEN: Record<string, (graph: Stored) => unknown> = {

@@ -1,4 +1,5 @@
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { setVisibility } from '@/__tests__/artifact-fixtures';
 import os from 'node:os';
 import path from 'node:path';
 import { inProcess, overHttp } from '@artifactbin/utils';
@@ -56,7 +57,7 @@ it('reuses public ref bytes anonymously but never exposes a private ref, even wi
  const second=await app.request(`${host}/assets/ref/${publicId}`);
  expect(first.status).toBe(200);expect([...new Uint8Array(await first.arrayBuffer())]).toEqual([...bytes]);
  expect(second.status).toBe(200);expect(second.headers.get('cache-control')).toBe('no-store');
- await(await getDb()).query("UPDATE artifacts SET visibility = 'private' WHERE id = $1",[publicId]);
+ await setVisibility(publicId, 'private');
  expect((await app.request(`${host}/assets/ref/${publicId}`)).status).toBe(404);
  expect((await app.request(`${host}/assets/ref/${privateId}`,{headers:{authorization:`Bearer ${token.token}`,cookie:'session=secret'}})).status).toBe(404);
 });
@@ -75,14 +76,14 @@ it('internal export transport reaches the real public-byte middleware, not the a
  for(const fetch of [app.fetch,proxy.fetch]){
  const server=await withHttpServer(getRequestListener(fetch));
  const read=(path:string)=>internalAssetResponse('https://assets.example.test'+path,'GET','https://assets.example.test',server.base,AbortSignal.timeout(3000));
- await(await getDb()).query("UPDATE artifacts SET visibility='public' WHERE id=$1",[publicRow.id]);
+ await setVisibility(publicRow.id, 'public');
  try{
   for(const path of ['/assets/'+hash,'/assets/ref/'+publicRow.id]){
    const response=await read(path);expect(response.status).toBe(200);expect([...new Uint8Array(await response.arrayBuffer())]).toEqual([...bytes]);
    expect(response.headers.get('access-control-allow-origin')).toBe('*');expect(response.headers.get('content-security-policy')).toContain('sandbox');
   }
   expect((await read('/assets/ref/'+privateRow.id)).status).toBe(404);
-  await(await getDb()).query("UPDATE artifacts SET visibility='private' WHERE id=$1",[publicRow.id]);
+  await setVisibility(publicRow.id, 'private');
   expect((await read('/assets/ref/'+publicRow.id)).status).toBe(404);
  }finally{await server.close();}
  }

@@ -3,10 +3,10 @@ import {humanSessionClient} from '@artifactbin/utils';
 import {PGlite} from '@electric-sql/pglite';
 import {createHumanAuth,type HumanAuth} from '../src/auth/human';
 import {createAuthHost,type AuthApp} from '../src/parts';
+import {noTokens,signInByOtp} from './helpers';
 
 /** A browser session rolls forward: Better Auth refreshes once expiresAt is 5 of the 7 days away (updateAge 1 day). */
 const baseURL = 'http://localhost:9402';
-const noTokens = {byToken: async () => null};
 let db: PGlite; let auth: HumanAuth; let app: AuthApp; let cookie = ''; let otp = '';
 let upstreamSetCookie: string | null = null;
 
@@ -17,11 +17,7 @@ beforeAll(async () => {
     env: {}, cookieSecret: 'test', tokens: noTokens, sessions: auth.sessions,
     upstream: async () => new Response('{"ok":true}', {headers: upstreamSetCookie ? {'set-cookie': upstreamSetCookie} : {}}),
   });
-  const call = (path: string, body: unknown) => auth.handler(new Request(`${baseURL}/api/auth${path}`, {method: 'POST', headers: {'content-type': 'application/json', origin: baseURL}, body: JSON.stringify(body)}));
-  const email = 'mxmx_test_refresh@example.com';
-  await call('/email-otp/send-verification-otp', {email, type: 'sign-in'});
-  const login = await call('/sign-in/email-otp', {email, otp});
-  cookie = login.headers.getSetCookie().map(c => c.split(';')[0]).join('; ');
+  cookie = await signInByOtp(auth, baseURL, 'mxmx_test_refresh@example.com', () => otp);
 });
 afterAll(async () => { await db.close(); });
 
@@ -70,10 +66,7 @@ describe('session refresh', () => {
 
 it('the owning session authority follows direct signout and refuses another account',async()=>{
  const login=async()=>{
-  const call=(path:string,body:unknown)=>auth.handler(new Request(`${baseURL}/api/auth${path}`,{method:'POST',headers:{'content-type':'application/json',origin:baseURL},body:JSON.stringify(body)}));
-  const email='mxmx_test_authority@example.com';await call('/email-otp/send-verification-otp',{email,type:'sign-in'});
-  const response=await call('/sign-in/email-otp',{email,otp});
-  const held=response.headers.getSetCookie().map(c=>c.split(';')[0]).join('; ');
+  const held=await signInByOtp(auth,baseURL,'mxmx_test_authority@example.com',()=>otp);
   const identity=await auth.sessions.resolve(new Request(baseURL,{headers:{cookie:held}}));
   return {held,identity:identity!};
  };

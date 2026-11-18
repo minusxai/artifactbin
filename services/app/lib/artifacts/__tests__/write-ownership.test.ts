@@ -6,8 +6,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import { artifactChannel } from '@artifactbin/contracts';
-import { createGuestOwner, mintAccountToken, request, setDatasetPolicy, useAppHarness } from '@/__tests__/harness';
-import { POST as create } from '@/app/api/artifacts/route';
+import { createGuestOwner, mintAccountToken, setDatasetPolicy, useAppHarness } from '@/__tests__/harness';
+import { publishedId } from '@/__tests__/artifact-fixtures';
 import { createUser, identityForUser } from '@/lib/accounts';
 import { getArtifactById } from '@/lib/artifacts';
 import { isMutationRefused, mutateDataset } from '@/lib/document-data';
@@ -17,9 +17,7 @@ const harness = useAppHarness();
 
 async function dataset(access: 'read' | 'readwrite' = 'readwrite') {
   const owner = await mintAccountToken('write_ownership_owner');
-  const reply = await create(request('/api/artifacts', { method: 'POST', token: owner.token, json: { dataset: [{ n: 1 }], access } }));
-  expect(reply.status).toBe(201);
-  const { id } = await reply.json() as { id: string };
+  const id = await publishedId(owner.token, { dataset: [{ n: 1 }], access });
   return { owner, actor: identityForUser(owner.userId, owner.id), row: (await getArtifactById(id))! };
 }
 const archived = async (id: string) => (await (await harness.db()).query<{ version: number }>('SELECT version FROM artifact_versions WHERE artifact_id=$1 ORDER BY version', [id])).rows.map(r => r.version);

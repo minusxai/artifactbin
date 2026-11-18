@@ -4,6 +4,7 @@
  * the native runtime's public code doors, a document's title, component modules, and which shells may be cached.
  */
 import { describe, expect, it } from 'vitest';
+import { trashRow } from '@/__tests__/artifact-fixtures';
 import { mintAccountToken, request, useAppHarness } from '@/__tests__/harness';
 import { POST } from '@/app/api/artifacts/route';
 import { markPagesRequest, pagesSite } from '@/lib/http';
@@ -61,7 +62,7 @@ describe('the raw document door', () => {
     const marked = markPagesRequest(request(`/a/${pub.id}/raw`), { id: 'otherdoc', self: 'https://x', site: pagesSite() } as never);
     expect((await serveRawDocument(marked, { id: pub.id })).status).toBe(404);
     expect((await serveRawDocument(request(`/a/${pub.id}/raw`), { id: pub.id, fragment: { surface: 'reader' } as never })).status).toBe(404);
-    await (await getDb()).query('UPDATE artifacts SET deleted_at = now() WHERE id = $1', [pub.id]);
+    await trashRow(pub.id);
     expect((await serveRawDocument(request(`/a/${pub.id}/raw`), { id: pub.id })).status).toBe(404);
   });
 });

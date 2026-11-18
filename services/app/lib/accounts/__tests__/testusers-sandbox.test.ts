@@ -12,7 +12,7 @@ import {nativeHtml} from '@/__tests__/native-html-fixture';
  *    apart on screen.
  */
 import { expect, it } from 'vitest';
-import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
+import { postArtifact } from '@/__tests__/artifact-fixtures';
 import { POST as forkOperation } from '@/app/api/artifacts/[id]/fork/route';
 import { POST as annotateWeb } from '@/app/api/my/artifacts/[id]/annotations/route';
 import { POST as likeRoute } from '@/app/api/my/artifacts/[id]/like/route';
@@ -20,13 +20,12 @@ import { POST as followRoute } from '@/app/api/users/[id]/follow/route';
 import { getArtifactById } from '@/lib/artifacts';
 import { getUserById, identityForUser, createTestUser, createUser, getUserByUsername } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
-import { request, useAppHarness } from '@/__tests__/harness';
+import { request, useAppHarness, params } from '@/__tests__/harness';
 import { userOptions } from '@/lib/datasets';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { listPublicArtifactsByUser } from '@/lib/workspace';
 
 useAppHarness();
-const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
 async function account(name: string) {
   const user = await createUser({ email: `mxmx_test_${name}@example.com`, name });
@@ -40,8 +39,8 @@ async function testUserOf(owner: { tokenId: string; userId: string }) {
   return minted;
 }
 
-const publish = async (token: string, body: object) => {
-  const response = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token, json: body }));
+const publish = async (token: string, body: Record<string, unknown>) => {
+  const response = await postArtifact(token, body);
   expect(response.status, await response.clone().text()).toBe(201);
   return (await response.json()) as { id: string; visibility: string };
 };

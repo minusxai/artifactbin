@@ -3,7 +3,7 @@ import {observedRequest} from '@/__tests__/conditional-request';
  * Folders are artifacts: the doors, over the real routes in-process.
  */
 import { describe, expect, it } from 'vitest';
-import { request, useAppHarness } from '@/__tests__/harness';
+import { request, useAppHarness, params } from '@/__tests__/harness';
 import { POST as createRoute, GET as listRoute } from '@/app/api/artifacts/route';
 import { GET as getRoute, DELETE as deleteRoute } from '@/app/api/artifacts/[id]/route';
 import { POST as forkOpRoute } from '@/app/api/artifacts/[id]/fork/route';
@@ -17,7 +17,6 @@ import { createUser, identityForUser } from '@/lib/accounts';
 import { buildShelf } from '@/lib/workspace';
 
 useAppHarness();
-const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const j = async (r: Response) => ({ status: r.status, body: (await r.json()) as Record<string, any> });
 
 async function owner(name = 'owner') {

@@ -6,7 +6,7 @@
  * column without restating the rows is refused by name.
  */
 import { expect, it } from 'vitest';
-import { POST as create } from '@/app/api/artifacts/route';
+import { publishedId } from '@/__tests__/artifact-fixtures';
 import { PUT as replace } from '@/app/api/artifacts/[id]/route';
 import { getArtifactById, artifactState } from '@/lib/artifacts';
 import { catalogOf } from '@/lib/datasets';
@@ -19,9 +19,7 @@ const table = (columns: string) => JSON.stringify({ kind: 'stored', tables: [{ s
 
 async function fixture() {
   const author = await mintToken('stored-columns-author');
-  const created = await create(request('/api/artifacts', { method: 'POST', token: author.token, json: { dataset: { kind: 'stored', tables: [{ schema: 'public', name: 'rows', columns: [{ name: 'id', type: 'number' }, { name: 'task', type: 'string' }], rows: [{ id: 1, task: 'a' }, { id: 2, task: 'b' }] }] } } }));
-  expect(created.status, await created.clone().text()).toBe(201);
-  const id = (await created.json()).id as string;
+  const id = await publishedId(author.token, { dataset: { kind: 'stored', tables: [{ schema: 'public', name: 'rows', columns: [{ name: 'id', type: 'number' }, { name: 'task', type: 'string' }], rows: [{ id: 1, task: 'a' }, { id: 2, task: 'b' }] }] } });
   const put = async (dataset: string) => {
     const row = (await getArtifactById(id))!;
     return replace(request(`/api/artifacts/${id}`, { method: 'PUT', token: author.token, json: { dataset, expectedVersion: row.version, expectedState: artifactState(row) } }), { params: Promise.resolve({ id }) });

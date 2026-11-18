@@ -15,7 +15,7 @@ import type { AnnotationWire } from '@/lib/annotations';
 import { FOLD_STORAGE_KEY } from '@/lib/annotations/comment-folds';
 import { fireEvent, render } from '../../__tests__/helpers';
 import { CommentTimestamp } from '../AnnotationPreview';
-import { ANN, RESOLVED, fetchCalls, flush, httpBackend, showResolved, installAnnotationFetch, knobs, layer } from './annotation-rig';
+import { ANN, RESOLVED, fetchCalls, flush, httpBackend, showResolved, installAnnotationFetch, knobs, layer, emitLayout } from './annotation-rig';
 
 const LONG_BODY = Array.from({ length: 40 }, (_, i) => `line ${i + 1} of the agent's answer`).join('\n');
 const SHORT_REPLY = 'thanks — shipping it';
@@ -301,7 +301,7 @@ describe('a thread resolved elsewhere counts down on its marker', () => {
   it('resolves from the ambient preview without opening the sidebar', async () => {
     const view = layer({ railOpen: false, showViewComments: true });
     await flush(); await flush();
-    view.runtime.emit({ type: 'mx:annotation-layout', positions: [{ id: ANN.id, rect: { x: 10, y: 220, width: 300, height: 40 } }] });
+    emitLayout(view.runtime, 220);
     const marker = screen.getByLabelText(/Open annotation conversation by/);
     fireEvent.mouseEnter(marker.closest<HTMLElement>('[data-annotation-id]')!);
     const resolve = screen.getByLabelText('Resolve thread');
@@ -322,7 +322,7 @@ describe('a thread resolved elsewhere counts down on its marker', () => {
     const backend = { ...httpBackend('doc1'), actOnAnnotation };
     const view = layer({ showViewComments: true, backend });
     await flush(); await flush();
-    view.runtime.emit({ type: 'mx:annotation-layout', positions: [{ id: ANN.id, rect: { x: 10, y: 220, width: 300, height: 40 } }] });
+    emitLayout(view.runtime, 220);
     const marker = screen.getByLabelText(/Open annotation conversation by/);
     fireEvent.mouseEnter(marker.closest<HTMLElement>('[data-annotation-id]')!);
     const resolve = screen.getByLabelText('Resolve thread');
@@ -342,7 +342,7 @@ describe('a thread resolved elsewhere counts down on its marker', () => {
     const backend = { ...httpBackend('doc1'), actOnAnnotation: vi.fn(async () => { throw new Error('offline'); }) };
     const view = layer({ showViewComments: true, backend });
     await flush(); await flush();
-    view.runtime.emit({ type: 'mx:annotation-layout', positions: [{ id: ANN.id, rect: { x: 10, y: 220, width: 300, height: 40 } }] });
+    emitLayout(view.runtime, 220);
     const marker = screen.getByLabelText(/Open annotation conversation by/);
     fireEvent.mouseEnter(marker.closest<HTMLElement>('[data-annotation-id]')!);
     fireEvent.click(screen.getByLabelText('Resolve thread'));
@@ -381,7 +381,7 @@ describe('a thread resolved elsewhere counts down on its marker', () => {
     const view = layer({ railOpen: true, pickOnOpen: false, showViewComments: true, backend });
     await screen.findByText('is this right?');
     await flush();
-    view.runtime.emit({ type: 'mx:annotation-layout', positions: [{ id: ANN.id, rect: { x: 10, y: 220, width: 300, height: 40 } }] });
+    emitLayout(view.runtime, 220);
 
     remotelyResolved = true;
     view.set({ railOpen: true, pickOnOpen: false, showViewComments: true, backend, liveAnnotations: [] });
@@ -435,7 +435,7 @@ describe('a thread resolved elsewhere counts down on its marker', () => {
     const backend = { ...httpBackend('doc1'), actOnAnnotation: vi.fn(() => new Promise<AnnotationWire>((done) => { finish = done; })) };
     const view = layer({ railOpen: true, pickOnOpen: false, showViewComments: true, backend });
     await flush(); await flush();
-    view.runtime.emit({ type: 'mx:annotation-layout', positions: [{ id: ANN.id, rect: { x: 10, y: 220, width: 300, height: 40 } }] });
+    emitLayout(view.runtime, 220);
     fireEvent.click(screen.getByLabelText('Resolve annotation'));
     knobs.open = [];
     knobs.resolved = [resolved];
@@ -468,7 +468,7 @@ describe('a thread resolved elsewhere counts down on its marker', () => {
     const backend = { ...httpBackend('doc1'), actOnAnnotation: vi.fn(async () => resolved) };
     const view = layer({ railOpen: true, pickOnOpen: false, showViewComments: true, backend });
     await flush(); await flush();
-    view.runtime.emit({ type: 'mx:annotation-layout', positions: [{ id: ANN.id, rect: { x: 10, y: 220, width: 300, height: 40 } }] });
+    emitLayout(view.runtime, 220);
     knobs.resolved = [resolved];
     fireEvent.click(screen.getByLabelText('Resolve annotation'));
     await flush(); await flush();
@@ -490,7 +490,7 @@ describe('a thread resolved elsewhere counts down on its marker', () => {
     const backend = { ...httpBackend('doc1'), actOnAnnotation: vi.fn(async () => { throw new Error('save failed'); }) };
     const view = layer({ railOpen: true, pickOnOpen: false, showViewComments: true, backend });
     await flush(); await flush();
-    view.runtime.emit({ type: 'mx:annotation-layout', positions: [{ id: ANN.id, rect: { x: 10, y: 220, width: 300, height: 40 } }] });
+    emitLayout(view.runtime, 220);
     fireEvent.click(screen.getByLabelText('Resolve annotation'));
     await flush();
     expect(screen.getByLabelText('Resolve annotation')).toBeEnabled();
@@ -506,7 +506,7 @@ describe('a thread resolved elsewhere counts down on its marker', () => {
     const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
     const view = layer({ showViewComments: true });
     await flush(); await flush();
-    const position = (y: number) => view.runtime.emit({ type: 'mx:annotation-layout', positions: [{ id: ANN.id, rect: { x: 10, y, width: 300, height: 40 } }] });
+    const position = (y: number) => emitLayout(view.runtime, y);
     position(220);
     knobs.resolved = [{ ...ANN, status: 'resolved', revision: 2, resolved_at: '2026-09-23T00:00:00Z' }];
     view.set({ showViewComments: true, liveAnnotations: [] });
@@ -537,7 +537,7 @@ describe('a thread resolved elsewhere counts down on its marker', () => {
     vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
     const view = layer({ showViewComments: true });
     await flush(); await flush();
-    view.runtime.emit({ type: 'mx:annotation-layout', positions: [{ id: ANN.id, rect: { x: 10, y: 220, width: 300, height: 40 } }] });
+    emitLayout(view.runtime, 220);
     knobs.resolved = [{ ...ANN, status: 'resolved', revision: 2 }];
     view.set({ showViewComments: true, liveAnnotations: [] });
     await flush(); await flush();

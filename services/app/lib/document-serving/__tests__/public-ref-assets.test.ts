@@ -4,6 +4,7 @@
  * of another type. The refusal is one shape: 404, open to any origin, never stored.
  */
 import { describe, expect, it } from 'vitest';
+import { setVisibility } from '@/__tests__/artifact-fixtures';
 import { setSession, useAppHarness } from '@/__tests__/harness';
 import { createArtifact } from '@/lib/artifacts';
 import { createUser } from '@/lib/accounts';
@@ -60,7 +61,7 @@ describe('publicRefAsset', () => {
     const row = await stored(me, 'png', 'public', 'image');
     expect(await publicRefAsset(row.id)).not.toBeNull();
     const db = await getDb();
-    await db.query("UPDATE artifacts SET visibility = 'private' WHERE id = $1", [row.id]);
+    await setVisibility(row.id, 'private');
     expect(await publicRefAsset(row.id)).toBeNull();
     await db.query("UPDATE artifacts SET visibility = 'public', deleted_at = now() WHERE id = $1", [row.id]);
     expect(await publicRefAsset(row.id)).toBeNull();

@@ -5,7 +5,7 @@ import { ACTOR_HEADER } from '@artifactbin/contracts';
 import { signActor } from '@artifactbin/utils';
 import { createAppServer } from '../app';
 import { useAppHarness } from '@/__tests__/harness';
-import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
+import { postArtifact } from '@/__tests__/artifact-fixtures';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser, ensureUsername } from '@/lib/accounts';
 import { mintExportKey } from '@/lib/export';
@@ -16,7 +16,7 @@ const app = createAppServer({ actorSecret: secret, indexHtml: async () => '<html
 async function world(enabled = true) {
   const owner = await ensureUsername(await createUser({ email: `mxmx_test_pwa_${enabled ? 'on' : 'off'}@example.com` }));
   const token = await mintToken('pwa', owner.id);
-  const make = async (visibility: 'public' | 'private') => (await (await createArtifactRoute(new Request('http://localhost/api/artifacts', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${token.token}` }, body: JSON.stringify({ html: `<!doctype html><html><head>${enabled ? '<meta name="artifactbin:pwa-enabled" content="true">' : ''}</head><body><h1>Live app</h1></body></html>`, title: 'My app <&>', visibility }) }))).json()) as { id: string };
+  const make = async (visibility: 'public' | 'private') => (await (await postArtifact(token.token, { html: `<!doctype html><html><head>${enabled ? '<meta name="artifactbin:pwa-enabled" content="true">' : ''}</head><body><h1>Live app</h1></body></html>`, title: 'My app <&>', visibility })).json()) as { id: string };
   return { public: await make('public'), private: await make('private'), headers: { [ACTOR_HEADER]: signActor({ credential: 'session', userId: owner.id, email: owner.email, emailVerified: true }, secret) } };
 }
 
@@ -54,7 +54,7 @@ it('publishes a separate admitted icon and settings, while refusing foreign priv
   const w = await world();
   const owner = await ensureUsername(await createUser({ email: 'mxmx_test_icons@example.com' }));
   const ownerToken = await mintToken('icons', owner.id);
-  const create = (body: Record<string, unknown>, token = ownerToken.token) => createArtifactRoute(new Request('http://localhost/api/artifacts', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` }, body: JSON.stringify(body) }));
+  const create = (body: Record<string, unknown>, token = ownerToken.token) => postArtifact(token, body);
   const image = await sharp({ create: { width: 64, height: 32, channels: 3, background: '#ff0000' } }).png().toBuffer();
   const upload = await create({ image: `data:image/png;base64,${image.toString('base64')}`, visibility: 'private' });
   expect(upload.status).toBe(201);

@@ -1,4 +1,5 @@
 import {createHash} from 'node:crypto';
+import { setVisibility } from '@/__tests__/artifact-fixtures';
 import {expect,it} from 'vitest';
 import {mintAccountToken,request,useAppHarness} from '@/__tests__/harness';
 import {identityForUser} from '@/lib/accounts';
@@ -56,7 +57,7 @@ it('observes the current head of a readable page without granting anything',asyn
  expect((await observe({identity:{}})).status).toBe(400);
  expect((await observe({identity:stale,checkSession:true})).status).toBe(403);
  expect((await observe({identity:stale},{origin:'https://evil.example'})).status).toBe(403);
- await (await harness.db()).query("UPDATE artifacts SET visibility='private' WHERE id=$1",[id]);
+ await setVisibility(id, 'private');
  const hidden=await observe({identity:stale});expect(hidden.status).toBe(404);expect(await hidden.json()).toEqual({error:'unavailable'});
 });
 it('reports an idle grant compatible until the head moves, then revokes it',async()=>{

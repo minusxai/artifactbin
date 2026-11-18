@@ -10,7 +10,7 @@ import { screen, waitFor, within } from '@testing-library/dom';
 import { fireEvent } from '../../__tests__/helpers';
 import { SessionProvider } from '../../lib/session';
 import { preloadCommentField } from '../LazyCommentField';
-import { ANN, RESOLVED, fetchCalls, flush, installAnnotationFetch, knobs, layer, showResolved } from './annotation-rig';
+import { ANN, RESOLVED, fetchCalls, flush, installAnnotationFetch, knobs, layer, showResolved, emitPin } from './annotation-rig';
 import { replaceComment } from './comment-input';
 
 const THREAD = { ...ANN, revision: 3 };
@@ -38,7 +38,7 @@ afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 async function openThread() {
   const view = layer({ railOpen: true, canDeleteAny: false }, undefined, { wrap: (ui) => <SessionProvider>{ui()}</SessionProvider> });
   await flush();
-  view.runtime.emit({ type: 'mx:annotation-pin', id: THREAD.id, rect: { x: 10, y: 20, width: 300, height: 50 } });
+  emitPin(view.runtime, THREAD.id);
   const thread = await screen.findByLabelText('Annotation thread');
   await waitFor(() => expect(within(thread).getByLabelText('Annotation actions')).toBeTruthy());
   return thread;

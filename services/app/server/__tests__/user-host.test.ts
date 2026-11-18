@@ -1,4 +1,5 @@
 import {Hono} from 'hono';
+import { storePolicy, setVisibility, trashRow } from '@/__tests__/artifact-fixtures';
 import {userHostIngress,userHostStaticPath} from '../user-host';
 import {beforeEach,expect,it,vi} from 'vitest';
 import {useAppHarness,request} from '@/__tests__/harness';
@@ -50,7 +51,7 @@ it('serves the earliest page titled index (any case) in place at the root, and t
  // Its own reads still work from the root, as from its post address.
  expect((await server.request(`${base}/a/${first.id}/events/frame`)).status).toBe(200);
  // Deleted, the next earliest takes the root.
- await db.query('UPDATE artifacts SET deleted_at=now() WHERE id=$1',[first.id]);expect(await (await server.request(`${base}/`)).text()).toContain('Later index');
+ await trashRow(first.id);expect(await (await server.request(`${base}/`)).text()).toContain('Later index');
  // The earliest decides: a private or unlisted earliest "index" leaves the listing, never a later public one.
  for(const visibility of ['private','unlisted']){
   await db.query("UPDATE artifacts SET deleted_at=NULL,visibility=$2 WHERE id=$1",[first.id,visibility]);
@@ -144,7 +145,7 @@ it('serves referenced public/unlisted image bytes on raw and native resolve, and
   const response=await server.request(base+path);expect(response.status,path).toBe(200);expect(response.headers.get('content-type')).toContain('image/');expect(response.headers.get('x-robots-tag')).toContain('noindex');await response.body?.cancel();
   const head=await server.request(base+path,{method:'HEAD'});expect(head.status,path).toBe(200);expect(await head.text()).toBe('');
  }
- await (await getDb()).query("UPDATE artifacts SET visibility='private' WHERE id=$1",[linked.id]);
+ await setVisibility(linked.id, 'private');
  expect((await server.request(`${base}/a/${image.id}/raw`,{headers:{authorization:`Bearer ${user.token}`}})).status).toBe(404);
 });
 it('exposes the same eligible public-view URL on reads, replacements and the app bootstrap',async()=>{
@@ -191,31 +192,31 @@ it('owner-host SQL is the canonical anonymous read, always read-only and credent
   await db.query(`UPDATE artifacts SET ${change} WHERE id=$1`,[f.page]);expect((await read()).status).toBe(404);
   await db.query("UPDATE artifacts SET visibility='unlisted',deleted_at=NULL,user_id=$2 WHERE id=$1",[f.page,f.owner.userId]);
  }
- await db.query("UPDATE artifacts SET visibility='private' WHERE id=$1",[f.staff]);expect((await read()).status).toBeGreaterThanOrEqual(400);
+ await setVisibility(f.staff, 'private');expect((await read()).status).toBeGreaterThanOrEqual(400);
  await db.query("UPDATE artifacts SET visibility='unlisted',dataset_policy=$2::jsonb,policy_revision=policy_revision+1 WHERE id=$1",[f.staff,JSON.stringify({version:3,tables:[]})]);expect((await read()).status).toBeGreaterThanOrEqual(400);
 });
 
 it('owner-host SQL ignores valid capture authority, while canonical opaque capture reads keep working',async()=>{
- const f=await fixture();await setUsername(f.owner.userId!,'alice');const server=app(),db=await getDb();
- await db.query("UPDATE artifacts SET visibility='private' WHERE id=$1",[f.page]);
+ const f=await fixture();await setUsername(f.owner.userId!,'alice');const server=app();
+ await setVisibility(f.page, 'private');
  const key=mintExportKey(f.page,60_000,Date.now(),f.owner.actor);
  const send=(host:string,key?:string)=>server.request(`${host}/api/artifacts/${f.page}/sql`,{method:'POST',headers:{origin:'null','content-type':'text/plain',authorization:`Bearer ${f.owner.token}`},body:JSON.stringify({sql:'select salary from staff',revision:'1',readOnly:false,key})});
  expect((await send(base,key)).status).toBe(404);
  expect((await send('https://app.example.test')).status).toBe(403);
  const capture=await send('https://app.example.test',key);expect(capture.status).toBe(200);expect((await capture.json()).rows).toEqual([{salary:10},{salary:20}]);
- await db.query("UPDATE artifacts SET visibility='public' WHERE id=$1",[f.page]);
+ await setVisibility(f.page, 'public');
  expect((await send(base,key)).status).toBeGreaterThanOrEqual(400);
 });
 
 it('owner-host SQL withholds results when page, owner identity or dataset access changes during execution',async()=>{
  const f=await fixture();await setUsername(f.owner.userId!,'alice');const server=app(),db=await getDb(),engine=services().sql,run=engine.run.bind(engine);
  for(const change of [
-  ()=>db.query("UPDATE artifacts SET visibility='private' WHERE id=$1",[f.page]),
-  ()=>db.query('UPDATE artifacts SET deleted_at=now() WHERE id=$1',[f.page]),
+  ()=>setVisibility(f.page, 'private'),
+  ()=>trashRow(f.page),
   ()=>db.query('UPDATE artifacts SET user_id=$2 WHERE id=$1',[f.page,f.other.userId]),
   ()=>setUsername(f.owner.userId!,'renamed'),
   ()=>db.query('UPDATE artifacts SET version=version+1 WHERE id=$1',[f.page]),
-  ()=>db.query('UPDATE artifacts SET dataset_policy=$2::jsonb,policy_revision=policy_revision+1 WHERE id=$1',[f.staff,JSON.stringify({version:3,tables:[]})]),
+  ()=>storePolicy(f.staff, {version:3,tables:[]}),
  ]){
   let changed=false;
   const spy=vi.spyOn(engine,'run').mockImplementation(async input=>{const result=await run(input);if(!changed){changed=true;await change();}return result;});

@@ -7,7 +7,7 @@ import {nativeHtml} from '@/__tests__/native-html-fixture';
 import { ACTOR_HEADER, type Actor } from '@artifactbin/contracts';
 import { signActor } from '@artifactbin/utils';
 import { describe, expect, it } from 'vitest';
-import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
+import { postArtifact } from '@/__tests__/artifact-fixtures';
 import { GET as profileData } from '@/app/api/page/profile/[user]/[[...path]]/route';
 import { mintToken, createUser, ensureUsername } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
@@ -28,7 +28,7 @@ async function world() {
   const t = await mintToken('o', owner.id);
   let minute = 0;
   const mk = async (title: string, visibility: string) => {
-    const { id } = (await (await createArtifactRoute(new Request(`${BASE}/api/artifacts`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${t.token}` }, body: JSON.stringify({ title, html: nativeHtml(`<div><p>${title} words</p></div>`), visibility }) }))).json()) as { id: string };
+    const { id } = (await (await postArtifact(t.token, { title, html: nativeHtml(`<div><p>${title} words</p></div>`), visibility })).json()) as { id: string };
     // Creation order made explicit: earliest first.
     await (await getDb()).query(`UPDATE artifacts SET created_at = now() - interval '1 day' + ($2 || ' minutes')::interval WHERE id = $1`, [id, String(minute++)]);
     return id;

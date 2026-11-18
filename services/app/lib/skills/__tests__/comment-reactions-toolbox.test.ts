@@ -1,4 +1,5 @@
 import {it,expect} from 'vitest';
+import {syntheticEnv} from './toolbox-env';
 /** The installed comment command shows who reacted and carries comment events (the events feed's comments category) through
  * watch logs and checkpoints. */
 /** An events-feed event on a thread: a new comment by default, someone else's unless `you`. */
@@ -16,7 +17,7 @@ it('renders reactions as names in text output and passes the structure through w
  const {reactionText}=await import('../../../skills/artifactbin/scripts/toolbox-comments.mjs');
  expect(page.annotations[0]!.thread.map(comment=>comment.reactions.map(reactionText))).toEqual([['👍 ppsreejith, alice'],['👍 Claude Code +2']]);
  const {commentCommand}=await import('../../../skills/artifactbin/scripts/comment.mjs');
- const options={env:{ARTIFACTBIN_URL:'https://example.test',ARTIFACTBIN_TOKEN:'synthetic'},fetcher:async()=>Response.json(page)};
+ const options={env:syntheticEnv('https://example.test'),fetcher:async()=>Response.json(page)};
  const text=await commentCommand({sub:'list',values:{},positionals:['PAGE12']},options);
  expect(text.annotations[0].thread[0].reactions).toEqual(['👍 ppsreejith, alice']);
  expect(text.annotations[0].thread[0].body).toBe('Shall I tighten the intro?');
@@ -129,7 +130,7 @@ it('watch --next --output LOG resumes that log on the next call',async()=>{
  const afters:string[]=[];let n=0;
  const fetcher=async(url:any)=>{if(isListing(String(url)))return Response.json({annotations:[{id:'A'}],next_cursor:null});
   afters.push(afterOf(String(url)));n++;return Response.json({events:n===2?[ev('e1','A')]:[],next:'c'+n});};
- const options={env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic',ARTIFACTBIN_HOME:root},fetcher,replyFirst:false,deliver:async()=>{}};
+ const options={env:syntheticEnv(server,root),fetcher,replyFirst:false,deliver:async()=>{}};
  try{
   await commentCommand({sub:'watch',values:{next:true,output},positionals:['PAGE12']},options);
   // The second call continues from the log's checkpoint (thread A still waits on an answer, so it stops there).
@@ -551,7 +552,7 @@ it('reply, resolve, reopen and edit read the thread revision themselves, and --b
  const sent:any[]=[];
  const fetcher=async(url:any,init:any)=>{const u=new URL(String(url));if((init?.method??'GET')==='GET'){expect(u.searchParams.get('status')).toBe('all');return Response.json(listing);}
   sent.push({method:init.method,path:u.pathname,body:JSON.parse(String(init.body))});return Response.json({id:'T1',revision:8,status:'resolved'});};
- const options={env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic',ARTIFACTBIN_HOME:root},fetcher};
+ const options={env:syntheticEnv(server,root),fetcher};
  try{
   const replied=await commentCommand({sub:'reply',values:{thread:'T1',body:'Done: shorter intro.',resolve:true},positionals:['PAGE12']},options);
   expect(sent.at(-1)).toEqual({method:'POST',path:'/api/artifacts/PAGE12/annotations/T1',body:{reply:'Done: shorter intro.',resolve:true,expected_revision:7}});
