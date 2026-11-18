@@ -1111,17 +1111,27 @@
    "services/app/web/__tests__/restore-reader.ui.test.ts": 27
   },
   "integration": {
-   "scripts/__tests__/app-only-auth.test.mjs": 9284,
-   "scripts/__tests__/reserved-ids-proof.test.mjs": 8600,
-   "services/app/__tests__/boot-env.test.ts": 13839,
-   "services/app/__tests__/dev-app.test.ts": 28099,
-   "services/app/lib/artifact-access/__tests__/lock-order-postgres.test.ts": 4653,
-   "services/app/lib/live-regions/__tests__/cells.soak.test.ts": 3981,
-   "services/app/lib/live-regions/__tests__/convergence.soak.test.ts": 42650,
-   "services/browser/__tests__/contract.test.ts": 28121,
-   "services/browser/__tests__/internal-assets.test.ts": 2542,
-   "services/browser/__tests__/render-lifecycle.test.ts": 6161,
-   "services/browser/__tests__/session-pages.test.ts": 37842
+   "scripts/__tests__/app-only-auth.test.mjs": 12045,
+   "services/app/__tests__/boot-env.test.ts": 22798,
+   "services/app/__tests__/dev-app.test.ts": 19294,
+   "services/app/lib/document-serving/__tests__/host-page-csp.test.ts": 5652,
+   "services/app/lib/live-regions/__tests__/cells.soak.test.ts": 3085,
+   "services/app/lib/live-regions/__tests__/convergence.soak.test.ts": 48604,
+   "services/browser/__tests__/contract.test.ts": 81097,
+   "services/browser/__tests__/internal-assets.test.ts": 1528,
+   "services/browser/__tests__/render-lifecycle.test.ts": 4294,
+   "services/browser/__tests__/session-pages.test.ts": 34499
+  },
+  "integration-databases": {
+   "scripts/__tests__/reserved-ids-proof.test.mjs": 4832,
+   "services/app/__tests__/region-processes-postgres.test.ts": 4974,
+   "services/app/lib/analytics/__tests__/canonical-totals-postgres.test.ts": 2422,
+   "services/app/lib/artifact-access/__tests__/lock-order-postgres.test.ts": 4108,
+   "services/app/lib/artifacts/__tests__/workload-create-postgres.test.ts": 3123,
+   "services/app/lib/platform/__tests__/identity-roles-postgres.test.ts": 6471,
+   "services/auth/__tests__/oauth-postgres.test.ts": 2824,
+   "services/connectors/__tests__/connectors-docker.test.ts": 37793,
+   "services/events/__tests__/feed-position-postgres.test.ts": 3101
   },
   "pr-guards-isolated": {
    "services/app/lib/html-runtime/__tests__/built-watch.test.ts": 573

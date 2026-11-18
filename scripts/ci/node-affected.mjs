@@ -51,11 +51,11 @@ function changedFiles() {
   return { base, files: git('diff', '--name-only', '--no-renames', '--diff-filter=d', base, 'HEAD').split('\n').filter(Boolean) };
 }
 
-/** The checkout's own Vitest, over the full suite's `node` project and the `integration` project, whose edited files it names. */
+/** The checkout's own Vitest, over the full suite's `node` project and the integration projects, whose edited files it names. */
 async function nodeVitest() {
   const { createVitest } = await import(pathToFileURL(createRequire(path.join(root, 'package.json')).resolve('vitest/node')).href);
   process.env.TEST = 'true'; process.env.VITEST = 'true'; process.env.NODE_ENV ??= 'test';
-  return createVitest('test', { root, project: ['node', 'integration'], run: true, watch: false });
+  return createVitest('test', { root, project: ['node', 'integration', 'integration-databases'], run: true, watch: false });
 }
 
 const relative = (file) => path.relative(root, file).split(path.sep).join('/');
@@ -73,7 +73,7 @@ if (process.argv[2] === '--warm') {
     const inProject = (name) => new Set(specs.filter((spec) => spec.project.name === name).map((spec) => relative(spec.moduleId)));
     candidates = inProject('node');
     // Edited tests no pr fast part can run: the integration project's (Docker and Chromium), which run after merge.
-    integration = [...inProject('integration')].filter((file) => files.includes(file)).sort();
+    integration = [...inProject('integration'), ...inProject('integration-databases')].filter((file) => files.includes(file)).sort();
     reached = (await affectedSpecifications(vitest, files.map((file) => path.join(root, file))))
       .filter(({ spec }) => spec.project.name === 'node').map(({ spec, distance }) => ({ file: relative(spec.moduleId), distance }));
   } finally { await vitest.close(); }

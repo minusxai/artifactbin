@@ -151,16 +151,49 @@ jobs:
           restore-keys: test-builds-v2-${{ runner.os }}-
       - run: node scripts/ci/ci.mjs node ${{ matrix.shard }}/6
 
-  # The heavy tests that `npm test` leaves out — a disposable Dockerised Postgres and real Chromium — live in
-  # the `integration` project, selected wherever the node project is. Run once; no --passWithNoTests, so a
-  # rename that empties the include fails loudly instead of passing vacuously.
+  # The heavy tests that `npm test` leaves out — real Chromium, whole server processes and disposable Dockerised
+  # databases — live in the `integration` and `integration-databases` projects, selected wherever the node project is.
+  # Each file runs once; no --passWithNoTests, so a rename that empties an include fails loudly instead of passing.
+  # TWO PARTS, ONE PER PROJECT, after it set the run's path as one job: its Vitest step took 110-176s and the job ended a
+  # median 192s into the run, against 158s for the slowest gate shard and 136s for the slowest node shard (24 ci runs on
+  # main, 44242612221-44290909666). Split by what each needs, not by time: Chromium for the browser tests and the server
+  # boots (which export through the local browser), images for the databases. Packed by time instead (runs
+  # 44302940303, 44303974813), the Doris suite started beside the soak, the Chromium sessions and the server boots, ran
+  # 75-87s against 33s, and a session-pages timing assertion failed beside it.
   integration:
     needs: [ plan ]
     if: needs.plan.outputs.integration == 'true'
-    name: integration tests
+    name: integration tests (${{ matrix.part }})
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - part: browser
+            project: integration
+          - part: databases
+            project: integration-databases
+            images: true
     steps:
+      # THE IMAGES, PULLED IN THE BACKGROUND FROM THE FIRST STEP: pulled one after another after the install they took
+      # 30-33s of every run (Doris alone ~20s). Together, and beside the checkout and the install restore, they overlap
+      # the job's setup; the wait before the tests fails the job if any pull failed. Every stream is redirected, or the
+      # runner would hold this step open until the pulls end. A missing image fails its suite under CI
+      # (services/test-support/src/docker.ts), never skips it.
+      - if: matrix.images
+        name: Pull the real-database images in the background
+        run: |
+          (
+            rc=0
+            docker pull postgres:17-alpine > "$RUNNER_TEMP/pull-postgres.log" 2>&1 & postgres=$!
+            # The connectors' real-database test starts its own TLS MySQL from this image.
+            docker pull mysql:8 > "$RUNNER_TEMP/pull-mysql.log" 2>&1 & mysql=$!
+            # Protocol compatibility must run against the engine, not a native MySQL with a compatibility flag.
+            docker pull apache/doris:all-in-one-4.1.3 > "$RUNNER_TEMP/pull-doris.log" 2>&1 & doris=$!
+            for pid in "$postgres" "$mysql" "$doris"; do wait "$pid" || rc=1; done
+            echo "$rc" > "$RUNNER_TEMP/docker-pull.part"; mv "$RUNNER_TEMP/docker-pull.part" "$RUNNER_TEMP/docker-pull.status"
+          ) < /dev/null > /dev/null 2>&1 &
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
@@ -180,7 +213,8 @@ jobs:
           key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.lock.outputs.install }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+      - if: ${{ !matrix.images }}
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: playwright
         with:
           path: |
@@ -190,12 +224,8 @@ jobs:
           key: playwright-v2-chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
       # No `--with-deps`: ubuntu-latest already ships Chromium's system libraries, so a cache miss costs the
       # download alone, not an apt pass (~30s).
-      - run: npx playwright install chromium
-      - run: docker pull postgres:17-alpine
-      # The connectors' real-database test starts its own TLS MySQL from this image (and skips without it).
-      - run: docker pull mysql:8
-      # Protocol compatibility must run against the engine, not a native MySQL with a compatibility flag.
-      - run: docker pull apache/doris:all-in-one-4.1.3
+      - if: ${{ !matrix.images }}
+        run: npx playwright install chromium
       # The test global setup builds the server reader and the hosted libraries behind one content marker
       # (services/app/scripts/server-reader-cache.mjs): ~10s of every shard that restores neither. The entry is keyed by
       # what they are built from (scripts/ci/ci.mjs `test-builds-key`), else the newest; a marker that no longer
@@ -213,7 +243,13 @@ jobs:
             tmp/vitest-module-cache
           key: test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}
           restore-keys: test-builds-v2-${{ runner.os }}-
-      - run: npm run test:integration
+      - if: matrix.images
+        name: Wait for the images
+        run: |
+          until [ -f "$RUNNER_TEMP/docker-pull.status" ]; do sleep 0.2; done
+          cat "$RUNNER_TEMP"/pull-*.log
+          exit "$(cat "$RUNNER_TEMP/docker-pull.status")"
+      - run: node node_modules/vitest/vitest.mjs run --project=${{ matrix.project }}
 
   # jsdom setup dominates the ui project (~110s serial on a 4-vCPU runner —
   # the environment boots per test file), so it shards like api does. Two shards ran 186s and 119s

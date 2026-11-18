@@ -16,7 +16,7 @@
     "validate": "node scripts/ci/check-local.mjs validate",
     "test": "node scripts/ci/check-local.mjs test",
     "test:all": "npm run test:api && npm run test:node && npm run test:ui && npm run test:islands",
-    "test:integration": "vitest run --project=integration",
+    "test:integration": "vitest run --project=integration --project=integration-databases",
     "test:api": "npm run test:api -w services/app",
     "test:node": "npm run test:node -w services/app",
     "test:ui": "npm run test:ui -w services/app",

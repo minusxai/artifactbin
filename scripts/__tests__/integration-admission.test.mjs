@@ -32,6 +32,13 @@ afterAll(() => expect(finished).toBe(7));
     expect(run.status, run.stdout + run.stderr).toBe(0);
 });
 
+it('admits one case per worker in both integration projects', async () => {
+  const { default: config } = await import('../../vitest.config.ts');
+  const projects = config.test.projects.filter(project => /^integration/.test(project.test?.name ?? ''));
+  expect(projects.map(project => project.test.name)).toEqual(['integration', 'integration-databases']);
+  for (const project of projects) expect(project.test.maxConcurrency, project.test.name).toBe(1);
+});
+
 it('keeps both secret precedence cases and fresh-database bearer coverage in integration', () => {
   const config = readFileSync(path.join(root, 'vitest.config.ts'), 'utf8');
   expect(config).toContain("'scripts/__tests__/app-only-auth.test.mjs'");
@@ -47,13 +54,13 @@ it('runs the canonical overlap proof in the provisioned real-database lane witho
   const realDatabases = config.match(/const REAL_DATABASE_TESTS = \[([\s\S]*?)\];/)?.[1];
   expect(realDatabases).toContain(`'${file}'`);
   expect(config).toMatch(/exclude: \[[\s\S]*?\.\.\.REAL_DATABASE_TESTS/);
-  expect(config).toMatch(/name: 'integration'[\s\S]*?include: \[[\s\S]*?\.\.\.REAL_DATABASE_TESTS/);
+  expect(config).toMatch(/name: 'integration-databases',[^}]*?include: \[[^\]]*?\.\.\.REAL_DATABASE_TESTS/);
   const source = readFileSync(path.join(root, file), 'utf8');
   expect(source).not.toMatch(/ANALYTICS_TEST_DATABASE_URL|describe\.skip|describe\.skipIf/);
   expect(source).toContain("'127.0.0.1::5432'");
   expect(source).toContain("'postgres:17-alpine'");
   const ci = readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8');
-  expect(ci).toMatch(/integration:[\s\S]*?docker pull postgres:17-alpine[\s\S]*?npm run test:integration/);
+  expect(ci).toMatch(/integration:[\s\S]*?project: integration-databases[\s\S]*?docker pull postgres:17-alpine[\s\S]*?vitest\.mjs run --project=\$\{\{ matrix\.project \}\}/);
 });
 
 it('runs every real-database proof where CI provides its image: no opt-in variable, and a missing image fails there', () => {
