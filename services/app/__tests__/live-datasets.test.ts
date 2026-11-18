@@ -8,6 +8,7 @@
  * the bound `:viewer_email` selected.
  */
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
+import { trashRow } from '@/__tests__/artifact-fixtures';
 import * as connectors from '@artifactbin/connectors';
 import { setUsername } from '@/lib/accounts';
 import { createAppServer } from '@/server/app';
@@ -400,7 +401,7 @@ it.each(['canonical', 'owner-host'] as const)('withholds live declared-query row
         expect(result.rows).toEqual([{ n: 7 }]);
         if (change === 'policy') await setRule(alice, id);
         else if (change === 'private') await updateSharingFor(alice.actor, id, { visibility: 'private' });
-        else await (await getDb()).query('UPDATE artifacts SET deleted_at=now() WHERE id=$1', [id]);
+        else await trashRow(id);
         return result;
       } };
     });

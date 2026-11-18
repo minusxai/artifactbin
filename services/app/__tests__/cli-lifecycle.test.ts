@@ -5,7 +5,7 @@ import { restoreDocument } from './prepared-document';
  * atomic replacement beside a concurrent edit, and paged listing.
  */
 
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
+import { mintAccountToken as mintToken, params } from '@/__tests__/harness';
 import { POST as restore } from '@/app/api/artifacts/[id]/restore/route';
 import { GET as read,DELETE as remove,PUT as replace } from '@/app/api/artifacts/[id]/route';
 import { GET as versions } from '@/app/api/artifacts/[id]/versions/route';
@@ -20,7 +20,6 @@ import { request,useAppHarness } from './harness';
 useAppHarness();
 
 describe('cli-restore', () => {
-  const params=(id:string)=>({params:Promise.resolve({id})});
 
   it('a retried restore or delete under the same operation identity commits once and replays its receipt',async()=>{
    const token=await mintToken('mxmx_test_restore_retry');const actor=identityForUser(token.userId, token.id);

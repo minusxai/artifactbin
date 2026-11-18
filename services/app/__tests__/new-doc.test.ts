@@ -21,10 +21,9 @@ import { artifactStarter } from '@/lib/workspace/artifact-starters';
 import { assembleHtmlPage } from '@/lib/html-runtime';
 import { MARKDOWN_CSS, MARKDOWN_ROOT } from '@/lib/html-components/markdown-styles';
 import { PLATFORM_STYLES_PATH, htmlSystemsCss } from '@/lib/html-systems';
-import { mintAccountToken, request, useAppHarness } from './harness';
+import { mintAccountToken, request, useAppHarness, params } from './harness';
 
 useAppHarness();
-const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const clock = {
   now: () => Date.now(), setInterval: () => 0, clearInterval: () => {},
   setTimeout: (work: () => void, ms: number) => setTimeout(work, ms),

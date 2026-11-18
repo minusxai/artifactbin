@@ -16,7 +16,7 @@ import {observedRequest} from '@/__tests__/conditional-request';
  * refuses content on a row that has none.
  */
 import { describe, expect, it } from 'vitest';
-import { request, useAppHarness } from './harness';
+import { request, useAppHarness, params } from './harness';
 import { POST as createRoute } from '@/app/api/artifacts/route';
 import { GET as pageRoute } from '@/app/api/page/artifact/[id]/route';
 import { PUT as putMineRoute } from '@/app/api/my/artifacts/[id]/route';
@@ -28,7 +28,6 @@ import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser, identityForUser, setUsername } from '@/lib/accounts';
 
 useAppHarness();
-const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const j = async (r: Response) => ({ status: r.status, body: (await r.json()) as Record<string, any> });
 
 async function owner(name: string) {

@@ -1,4 +1,5 @@
 import {nativeHtml} from './native-html-fixture';
+import { setVisibility } from '@/__tests__/artifact-fixtures';
 import {nativeAnchor} from './native-annotation-fixture';
 import type {HtmlNodeAnchor} from '@artifactbin/contracts';
 import { artifactQuery } from '@/lib/artifacts/table';
@@ -18,7 +19,7 @@ import { getDb } from '@/lib/platform';
  * (revision, stable node id, quote) the frame reported; a `path` body is refused.
  */
 import { describe, expect, it, vi } from 'vitest';
-import { useAppHarness, request } from '@/__tests__/harness';
+import { useAppHarness, request, params } from '@/__tests__/harness';
 import { POST as actOnAnnotationRoute } from '@/app/api/artifacts/[id]/annotations/[annId]/route';
 import { GET as listAnnotationsRoute } from '@/app/api/artifacts/[id]/annotations/route';
 import { DELETE as deleteArtifactRoute, GET as getArtifactRoute, PUT as putArtifactRoute } from '@/app/api/artifacts/[id]/route';
@@ -31,7 +32,6 @@ import { countOpenAnnotations } from '@/lib/annotations';
 import { avatarUrl } from '@/lib/avatars';
 
 const harness = useAppHarness();
-const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
 // Two anchorable nodes, by stable id: `intro` (the <p>) and `findings` (the <div>).
 const DOC =
@@ -89,7 +89,7 @@ describe('creating (browser door, owner only)', () => {
       const guestWrite = await myCreateAnnotationRoute(request(`/api/my/artifacts/${doc.id}/annotations`, { method: 'POST', json: { anchor: nativeAnchor('intro'), edit_id: doc.edit_id, body: 'Denied' } }), params({ id: doc.id }));
       expect(guestWrite.status).toBe(401);
     }
-    await (await getDb()).query("UPDATE artifacts SET visibility='private' WHERE id=$1", [doc.id]);
+    await setVisibility(doc.id, 'private');
     expect((await list()).status).toBe(404);
   });
 

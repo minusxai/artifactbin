@@ -1,6 +1,6 @@
 import {nativeHtml} from '@/__tests__/native-html-fixture';
 import { describe, expect, it } from 'vitest';
-import { request, setSession, useAppHarness } from './harness';
+import { request, setSession, useAppHarness, params } from './harness';
 import { POST as createRoute } from '@/app/api/artifacts/route';
 import { GET as pageRoute } from '@/app/api/page/artifact/[id]/route';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
@@ -15,7 +15,6 @@ useAppHarness();
  * fetched just to learn it is a document. Admitted exactly as the full door is (the same uniform 404 for a missing
  * and a private artifact), answered from the row's header: no document is read, no social counts, no runtime.
  */
-const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const door = async (id: string, query = 'part=kind', options: Parameters<typeof request>[1] = {}) => {
   const response = await pageRoute(request(`/api/page/artifact/${id}?${query}`, options), params(id));
   return { status: response.status, cache: response.headers.get('cache-control'), body: await response.json() as Record<string, unknown> };

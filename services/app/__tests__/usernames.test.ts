@@ -10,13 +10,12 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { GET as getProfileRoute, PATCH as patchProfileRoute } from '@/app/api/my/profile/route';
 
 import { createUser, ensureUsername } from '@/lib/accounts';
-import { useAppHarness, request, setSession } from '@/__tests__/harness';
+import { useAppHarness, request, useSessionUser } from '@/__tests__/harness';
 
 useAppHarness();
-beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id } } : null)));
+const sessionUser = useSessionUser('id');
 
 
-const sessionUser = { id: '' };
 
 beforeEach(async () => {
   sessionUser.id = '';

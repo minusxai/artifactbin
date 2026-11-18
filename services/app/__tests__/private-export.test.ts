@@ -13,13 +13,12 @@ import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { createArtifact } from '@/lib/artifacts';
 
 import { mintExportKey } from '@/lib/export';
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
+import { mintAccountToken as mintToken, params } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
 import { useAppHarness, request } from '@/__tests__/harness';
 
 useAppHarness();
 
-const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const rawResponse = (path: string) => rawRoute(request(path), params(path.split('/')[2]));
 
 let privateId: string;

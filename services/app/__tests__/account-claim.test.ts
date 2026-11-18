@@ -1,6 +1,6 @@
 /** Account-owned publication survives login; unrelated accounts retain private access boundaries. */
 import { beforeEach, expect, it } from 'vitest';
-import { useAppHarness, request, setSession, mintAccountToken } from '@/__tests__/harness';
+import { useAppHarness, request, setSession, mintAccountToken, params } from '@/__tests__/harness';
 import { observedRequest } from '@/__tests__/conditional-request';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { PUT as putArtifactRoute } from '@/app/api/artifacts/[id]/route';
@@ -10,7 +10,6 @@ import { GET as getMineRoute } from '@/app/api/my/artifacts/[id]/route';
 useAppHarness();
 beforeEach(() => setSession(null));
 
-const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
 async function publish(token: string, title: string, visibility?: string) {
   const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token, json: { title, html: `<h1>${title}</h1>`, ...(visibility ? { visibility } : {}) } }));

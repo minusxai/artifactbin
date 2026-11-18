@@ -4,6 +4,7 @@
  * transaction retry on deadlock and serialization failure.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { setVisibility } from '@/__tests__/artifact-fixtures';
 import { admitGroupMember, request, setSession, useAppHarness } from './harness';
 import { getDb, TransactionConflict } from '@/lib/platform';
 import { createArtifactFromBody } from '@/lib/publish';
@@ -71,7 +72,7 @@ it('review3: sharing edits and the write guard agree on page/share lock order', 
   const f = await fixture(), db = await getDb();
   await db.query("INSERT INTO artifact_shares(artifact_id,user_id,email,role) VALUES($1,$2,$3,'viewer')", [f.page, f.other.userId, f.other.email]);
   // Review 4 (lock only what the decision reads): the page is private, so the reader's access IS its page share.
-  await db.query("UPDATE artifacts SET visibility='private' WHERE id=$1", [f.page]);
+  await setVisibility(f.page, 'private');
   const traces: string[][] = [];
   const spy = spyOnStatements(db, () => {
     const trace: string[] = []; traces.push(trace);
@@ -93,8 +94,8 @@ it('review3: sharing edits and the write guard agree on page/share lock order', 
 });
 
 it('a private page answers malformed requests and bad Idempotency-Keys exactly as a missing one', async () => {
-  const f = await fixture(), db = await getDb();
-  await db.query("UPDATE artifacts SET visibility='private' WHERE id=$1", [f.page]);
+  const f = await fixture();
+  await setVisibility(f.page, 'private');
   const route = sqlPost;
   const call = async (id: string, json: unknown, headers: Record<string, string> = {}) => {
     const response = await route(request(`/api/artifacts/${id}/sql`, { method: 'POST', json, token: f.other.token, headers }), params(id));

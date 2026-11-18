@@ -5,7 +5,7 @@
  * the attribute is inert, and the version reads and renders.
  */
 import { describe, expect, it } from 'vitest';
-import { request, useAppHarness, mintAccountToken as mintToken } from '@/__tests__/harness';
+import { request, useAppHarness, mintAccountToken as mintToken, params } from '@/__tests__/harness';
 import { GET as serveArtifact } from '@/app/a/[id]/raw/route';
 import { GET as pageData } from '@/app/api/page/artifact/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
@@ -20,7 +20,6 @@ import { servableDocument, UnservableDocument } from '@/lib/artifacts';
 import {retiredGraph} from './retired-document-fixture';
 
 const harness = useAppHarness();
-const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 const MARKED = { dataSyntax: 2 };
 const graph = (_source:string) => structuredClone(retiredGraph);
 

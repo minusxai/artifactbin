@@ -1,9 +1,10 @@
 import {nativeHtml} from './native-html-fixture';
+import { trashRow } from '@/__tests__/artifact-fixtures';
 import {nativeAnchor} from './native-annotation-fixture';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { identityForUser } from '@/lib/accounts';
 import { expect, it } from 'vitest';
-import { request, useAppHarness, mintAccountToken as mintToken } from '@/__tests__/harness';
+import { request, useAppHarness, mintAccountToken as mintToken, params } from '@/__tests__/harness';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as getArtifactRoute } from '@/app/api/artifacts/[id]/route';
 import { POST as myCreateAnnotationRoute } from '@/app/api/my/artifacts/[id]/annotations/route';
@@ -14,7 +15,6 @@ import { getDb, measureQueries } from '@/lib/platform';
 import { artifactQuery } from '@/lib/artifacts/table';
 
 useAppHarness();
-const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
 const DOC = '<p data-af-id="intro">An introduction paragraph.</p><div data-af-id="findings">Revenue grew 40% in Q3.</div>';
 
@@ -171,8 +171,7 @@ it('answers a stranger, and a trashed or missing document, with the same null an
   expect(await viaSession.json()).toEqual({ error: 'not_found' });
   const missing = await listAnnotationsRoute(request('/api/artifacts/nope/annotations', { token: stranger.token }), params({ id: 'nope' }));
   expect([missing.status, await missing.json()]).toEqual([404, { error: 'not_found' }]);
-  const db = await getDb();
-  await db.query('UPDATE artifacts SET deleted_at = now() WHERE id = $1', [f.doc.id]);
+  await trashRow(f.doc.id);
   expect(await listAnnotationPageFor(f.tokenActor, f.doc.id, { status: 'open', limit: 10 })).toBeNull();
   expect(await listAnnotationsFor(f.tokenActor, f.doc.id)).toBeNull();
 });

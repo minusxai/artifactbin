@@ -21,7 +21,7 @@ import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { PUT as putBrowser } from '@/app/api/my/artifacts/[id]/route';
 
 
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
+import { mintAccountToken as mintToken, params } from '@/__tests__/harness';
 import { agentCookie, useAppHarness, request, setSession } from '@/__tests__/harness';
 
 useAppHarness();
@@ -31,7 +31,6 @@ beforeEach(() => setSession(null));
 // Browser routes receive the verified session actor the proxy attaches.
 // The handlers are the real ones.
 
-const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
 /** One email-owned document, reachable by bearer and verified session. */
 async function subject() {

@@ -3,6 +3,7 @@
  * policies, a page linking both, and the request helpers. Each suite calls useAppHarness itself.
  */
 import { expect } from 'vitest';
+import { storePolicy } from '@/__tests__/artifact-fixtures';
 import { mintAccountToken, request } from './harness';
 import { identityForUser, type AccessActor } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
@@ -64,7 +65,7 @@ export async function fixture() {
   const db = await getDb();
   await db.query("INSERT INTO artifact_shares(artifact_id,user_id,email,role) VALUES($1,$2,$3,'viewer')", [staff.body.id, viewer.userId, viewer.email]);
   for (const [id, policy] of [[staff.body.id, POLICY], [notes.body.id, NOTES_POLICY]] as const)
-    await db.query('UPDATE artifacts SET dataset_policy=$2::jsonb, policy_revision=policy_revision+1 WHERE id=$1', [id, JSON.stringify(policy)]);
+    await storePolicy(id, policy);
   const page = await publish(owner, { html: `<html><head><link rel="af-dataset" data-af-name="staff" href="ref:${staff.body.id}"><link rel="af-dataset" data-af-name="notes" href="ref:${notes.body.id}"></head><body>Staff</body></html>` });
   expect(page.status, JSON.stringify(page.body)).toBe(201);
   return { owner, viewer, other, staff: staff.body.id, notes: notes.body.id, page: page.body.id };

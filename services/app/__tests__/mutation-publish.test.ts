@@ -1,5 +1,6 @@
 /** Native publication grants read bindings; dataset write authority stays with the dataset. */
 import {expect,it} from 'vitest';
+import { setVisibility } from '@/__tests__/artifact-fixtures';
 import {POST as create} from '@/app/api/artifacts/route';
 import {PUT as replace} from '@/app/api/artifacts/[id]/route';
 import {observedRequest} from '@/__tests__/conditional-request';
@@ -7,7 +8,6 @@ import {getArtifactById} from '@/lib/artifacts';
 import { requestOrSessionActor } from '@/lib/authentication';
 import {linkedSql,liveLink} from './linked-datasets';
 import {firstSaveLinks} from './stored-links';
-import {getDb} from '@/lib/platform';
 import {loadDatasetRows} from '@/lib/datasets';
 import {mintAccountToken,request,useAppHarness} from './harness';
 useAppHarness();
@@ -42,7 +42,7 @@ it('refuses ambiguous duplicate namespace declarations',async()=>{
 });
 it('refuses publication that references a private dataset the publisher cannot read',async()=>{
  const f=await fixture(),other=await mintAccountToken('native-private-link');
- await (await getDb()).query("UPDATE artifacts SET visibility='private' WHERE id=$1",[f.id]);
+ await setVisibility(f.id, 'private');
  expect((await f.publish(html(f.id),other.token)).status).toBe(400);
 });
 it('an authorized native dataset write commits its stable row update',async()=>{

@@ -5,6 +5,7 @@
  * both survive, a deleted row closing its cell, and the stream's saves when a reader leaves.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { setVisibility } from '@/__tests__/artifact-fixtures';
 import * as Y from 'yjs';
 import { BROWSER_SESSION_HEADER, cellKey, type Actor } from '@artifactbin/contracts';
 import { createUser, identityForUser, type AccessActor } from '@/lib/accounts';
@@ -218,7 +219,7 @@ describe('who may open a cell', () => {
 
   it('gives signed_in nothing on a private dataset (its rules never apply there)', async () => {
     expect((await open(reader, key(red))).status).toBe(200);
-    await (await getDb()).query("UPDATE artifacts SET visibility = 'private' WHERE id = $1", [datasetId]);
+    await setVisibility(datasetId, 'private');
     expect((await open(reader, key(red))).status).toBe(404);
     expect((await open(viewer, key(red))).status).toBe(200);
   });

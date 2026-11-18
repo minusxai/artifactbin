@@ -9,7 +9,7 @@ import {nativeHtml} from './native-html-fixture';
  * own asset endpoint, and its CSP is unchanged by any of it.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { useAppHarness, request } from '@/__tests__/harness';
+import { useAppHarness, request, params } from '@/__tests__/harness';
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
@@ -43,7 +43,6 @@ afterAll(async () => {
   await server.close();
 });
 
-const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
 const publish = async (markup: string) => {
   const t = await mintToken('t');

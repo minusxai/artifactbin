@@ -190,6 +190,11 @@ export function request(path: string, opts: RequestOptions = {}): Request {
   return opts.actor ? attachActor(built, opts.actor) : built;
 }
 
+/** The `{ params }` argument a route handler is called with: one id, or the dynamic segments by name. */
+export function params(id: string): { params: Promise<{ id: string }> };
+export function params<T extends Record<string, string>>(segments: T): { params: Promise<T> };
+export function params(segments: string | Record<string, string>) { return { params: Promise.resolve(typeof segments === 'string' ? { id: segments } : segments) }; }
+
 /** A resolved request identity as a door hands it to a handler (lib/authentication request-identity). It grants nothing. */
 export function testIdentity(credential: Credential, ids: { userId?: string | null; tokenId?: string | null; email?: string | null; emailVerified?: boolean | null } = {}): RequestIdentity {
   return { ...identityForUser(ids.userId ?? null, ids.tokenId ?? null, ids.email ?? null), credential, emailVerified: ids.emailVerified ?? null };
@@ -230,6 +235,16 @@ export function cookieValue(response: Response, name: string = AGENT_COOKIE): { 
  */
 export function setSession(session: Session | (() => Session | null) | null): void {
   overrideSession(typeof session === 'function' ? session : () => session);
+}
+
+/**
+ * A file's mutable signed-in user for direct handler calls: set `.id` (and `.email`) inside a test, '' for nobody. Call it
+ * where the file's session `beforeEach` goes. 'email' also reports the address, 'verified' a verified one, 'id' only the id.
+ */
+export function useSessionUser(shape: 'email' | 'verified' | 'id' = 'email'): { id: string; email: string } {
+  const user = { id: '', email: '' };
+  beforeEach(() => setSession(() => (user.id ? { user: shape === 'id' ? { id: user.id } : { id: user.id, email: user.email || null, ...(shape === 'verified' ? { emailVerified: true } : {}) } } : null)));
+  return user;
 }
 
 interface AppHarness {

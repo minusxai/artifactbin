@@ -4,7 +4,7 @@
 import { nativeAnchor } from './native-annotation-fixture';
 import { nativeHtml } from '@/__tests__/native-html-fixture';
 import { describe, expect, it, beforeEach } from 'vitest';
-import { useAppHarness, mintAccountToken as mintToken, setSession, request } from '@/__tests__/harness';
+import { useAppHarness, mintAccountToken as mintToken, request, useSessionUser, params } from '@/__tests__/harness';
 import { replaceArtifactFor, artifactState, type ArtifactRow, canReadArtifact, createArtifact, getArtifactById, getSharingFor, updateSharingFor } from '@/lib/artifacts';
 import { effectiveRole } from '@/lib/artifact-access';
 import { parseShareEntries } from '@/lib/artifact-wire';
@@ -343,11 +343,9 @@ describe('the SQL scopes admit the link — the doors, not just the predicate', 
  * meant "anyone may write on it".
  */
 describe('the commenter role, through the routes', () => {
-  beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null)));
+  const sessionUser = useSessionUser();
 
   const BASE = 'http://localhost:3000';
-  const sessionUser = { id: '', email: '' };
-  const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
   const jreq = (path: string, method: string, body?: unknown, token?: string) =>
     new Request(`${BASE}${path}`, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
   const asSession = (u: { id: string; email: string }) => { sessionUser.id = u.id; sessionUser.email = u.email; };
@@ -430,7 +428,6 @@ describe('the commenter role, through the routes', () => {
 });
 
 describe('what an editor may do with sharing', () => {
-  const params=(id:string)=>({params:Promise.resolve({id})});
   async function person(name:string){
    const user=await createUser({email:`mxmx_test_${name}@example.com`}),token=await mintToken(name,user.id);
    return {user,token,actor:identityForUser(user.id, token.id),session:{userId:user.id,email:user.email,emailVerified:true,credential:'session' as const}};

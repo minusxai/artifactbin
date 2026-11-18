@@ -8,7 +8,7 @@ import type {BrowserService, RenderRequest, RenderResult} from '@artifactbin/con
 import {resetExportRenderer} from '@/lib/export';
 import {setServices} from '@/lib/platform';
 import {EXPORT_PNG} from './export-helpers';
-import {mintAccountToken, request, useAppHarness} from './harness';
+import {mintAccountToken, request, useAppHarness, params } from './harness';
 import {POST} from '@/app/api/artifacts/route';
 import {GET as exportRoute} from '@/app/a/[id]/export/route';
 import {GET as read, PUT} from '@/app/api/artifacts/[id]/route';
@@ -19,7 +19,6 @@ function scripted(): BrowserService & {seen: RenderRequest[]} {
   const seen: RenderRequest[] = [];
   return {seen, async render(r) { seen.push(r); return PNG; }};
 }
-const params = (id: string) => ({params: Promise.resolve({id})});
 let browser: ReturnType<typeof scripted>;
 beforeEach(async () => { await resetExportRenderer(); browser = scripted(); setServices({browser}); });
 afterEach(async () => { await resetExportRenderer(); setServices({browser: undefined}); });

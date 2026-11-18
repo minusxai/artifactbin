@@ -1,7 +1,7 @@
 /** HTTP refusals identify native fields and live recovery guides. */
 import {nativeSource} from './native-publication-fixture';
 import { describe, expect, it } from 'vitest';
-import { useAppHarness, request } from '@/__tests__/harness';
+import { useAppHarness, request, params } from '@/__tests__/harness';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { PUT as putArtifactRoute } from '@/app/api/artifacts/[id]/route';
 import { POST as preflightRoute } from '@/app/api/artifacts/preflight/route';
@@ -13,7 +13,6 @@ import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { identityForUser, createUser } from '@/lib/accounts';
 
 useAppHarness();
-const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 const body = async (r: Response) => (await r.json()) as Record<string, any>;
 
 const create = async (token: string, input: Record<string, unknown>) => {

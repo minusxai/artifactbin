@@ -1,12 +1,11 @@
 /** The in-app JSX Question editor is retired. Native chart source now travels through
  * conditional HTML replacement; spec fidelity, repeated edits, IDs and history remain covered. */
 import {expect,it} from 'vitest';
-import {request,useAppHarness,mintAccountToken} from './harness';
+import {request,useAppHarness,mintAccountToken, params } from './harness';
 import {POST} from '@/app/api/artifacts/route';
 import {GET,PUT} from '@/app/api/artifacts/[id]/route';
 import {GET as versionGET} from '@/app/api/artifacts/[id]/versions/[version]/route';
 useAppHarness();
-const params=(id:string)=>({params:Promise.resolve({id})});
 it('preserves nested native chart data and node identities across two conditional replacements and immutable history',async()=>{
  const actor=await mintAccountToken('native-chart'),spec={mark:'bar',encoding:{x:{field:'region',type:'nominal'},y:{field:'revenue',type:'quantitative'}}};
  const html=`<html><head><title>Revenue</title></head><body><h1 data-af-id="heading">Revenue</h1><div data-af-id="chart"></div><script type="application/json" data-af-id="spec" id="chart-spec">${JSON.stringify(spec)}</script></body></html>`;

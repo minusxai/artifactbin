@@ -1,12 +1,11 @@
 import {expect,it} from 'vitest';
-import {request,useAppHarness,mintAccountToken} from './harness';
+import {request,useAppHarness,mintAccountToken, params } from './harness';
 import {firstSaveLinks} from './stored-links';
 import {POST} from '@/app/api/artifacts/route';
 import {GET,PUT,DELETE} from '@/app/api/artifacts/[id]/route';
 import {GET as versionGET} from '@/app/api/artifacts/[id]/versions/[version]/route';
 const harness=useAppHarness();
 const html='<html><head><script>window.ready=true</script></head><body><p data-af-id="text">Hello</p></body></html>';
-const params=(id:string)=>({params:Promise.resolve({id})});
 const publish=(token:string,source=html)=>POST(request('/api/artifacts',{method:'POST',token,json:{html:source},headers:{'Idempotency-Key':'html-create-0123456789'}}));
 it('publishes canonical HTML through the original artifact API and preserves source in immutable history',async()=>{
  const actor=await mintAccountToken('html');const created=await publish(actor.token);expect(created.status).toBe(201);const first=await created.json();

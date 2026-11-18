@@ -6,7 +6,7 @@
  * each address it names is asked of the real asset door, with the key and without it.
  */
 import { expect, it } from 'vitest';
-import { mintAccountToken, useAppHarness } from './harness';
+import { mintAccountToken, useAppHarness, params } from './harness';
 import { identityForUser, type AccessActor } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
 import { createArtifactFromBody } from '@/lib/publish';
@@ -17,7 +17,6 @@ import { GET as serveAsset } from '@/app/a/[id]/assets/route';
 useAppHarness();
 
 const BASE = 'http://localhost:3000';
-const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const file = (path: string, text: string, contentType: string) => ({ path, contentType, base64: Buffer.from(text).toString('base64') });
 const HTML = '<html><head><link rel="stylesheet" href="./main.css"></head><body><img src="./logo.svg" alt="logo"><p id="out"></p>'
   + '<script type="module" src="./app.mjs"></script></body></html>';

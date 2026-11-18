@@ -13,7 +13,7 @@ import {nativeAnchor} from './native-annotation-fixture';
  * would move the head every reader and every agent is editing against.
  */
 import { describe, expect, it } from 'vitest';
-import { useAppHarness, request } from './harness';
+import { useAppHarness, request, params } from './harness';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { getDb } from '@/lib/platform';
 import { POST as createRoute } from '@/app/api/artifacts/route';
@@ -23,7 +23,6 @@ import { POST as commentActionRoute } from '@/app/api/my/artifacts/[id]/annotati
 
 useAppHarness();
 
-const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
 async function history(id: string) {
   const db = await getDb();

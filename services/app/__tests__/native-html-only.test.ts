@@ -1,5 +1,5 @@
 import {expect,it} from 'vitest';
-import {request,useAppHarness,mintAccountToken} from './harness';
+import {request,useAppHarness,mintAccountToken, params } from './harness';
 import {POST} from '@/app/api/artifacts/route';
 import {POST as start} from '@/app/api/start/route';
 import {GET,PUT} from '@/app/api/artifacts/[id]/route';
@@ -8,7 +8,6 @@ import {artifactStarter,ARTIFACT_STARTERS} from '@/lib/workspace/artifact-starte
 import { createUser } from '@/lib/accounts';
 const harness=useAppHarness();
 const html='<!doctype html><html><head><title>Native &amp; clear</title><meta name="description" content="Page description"></head><body><h1>Native</h1></body></html>';
-const params=(id:string)=>({params:Promise.resolve({id})});
 it('refuses every former JSX publication envelope before creating or replacing a page',async()=>{
  const actor=await mintAccountToken('native-only');
  for(const field of ['markup','jsx','markdown','document_update']){

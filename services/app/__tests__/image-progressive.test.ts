@@ -14,7 +14,7 @@ import {nativeHtml} from './native-html-fixture';
  */
 import { describe, expect, it } from 'vitest';
 import sharp from 'sharp';
-import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
+import { postArtifact } from '@/__tests__/artifact-fixtures';
 import { GET as serveArtifact } from '@/app/a/[id]/raw/route';
 import { getArtifactById } from '@/lib/artifacts';
 import {resolveImageReference} from '@/lib/artifact-wire';
@@ -22,7 +22,7 @@ import {writerFor} from '@/lib/artifact-access';
 import { objectStore } from '@/lib/object-store';
 
 
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
+import { mintAccountToken as mintToken, params } from '@/__tests__/harness';
 import { useAppHarness, request } from '@/__tests__/harness';
 
 useAppHarness();
@@ -36,8 +36,7 @@ useAppHarness();
  * does not touch by design.
  */
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAgCAIAAADbtmxLAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAASUlEQVRYhe2WAQkAQAwCF8dMpruoH2PPOFgAET03KV/drCuIgtChmqHYMtbxE8GIDtUMxZaxDqH4oKFDNUOxZcghBGOdjhwe1weeF8xbShDdKgAAAABJRU5ErkJggg==';
-const params = (id: string) => ({ params: Promise.resolve({ id }) });
-const create = (token: string, body: Record<string, unknown>) => createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: { visibility: 'public', ...body } }));
+const create = (token: string, body: Record<string, unknown>) => postArtifact(token, { visibility: 'public', ...body });
 
 /**
  * A WIDE image, small enough for the suite's 5 KB import cap

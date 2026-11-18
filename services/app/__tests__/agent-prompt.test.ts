@@ -9,17 +9,15 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { existingPaste } from '@/lib/agent-copy';
 
 
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
+import { mintAccountToken as mintToken, params } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
-import { useAppHarness, request, setSession } from '@/__tests__/harness';
+import { useAppHarness, request, useSessionUser } from '@/__tests__/harness';
 
 const harness = useAppHarness();
-beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id } } : null)));
+const sessionUser = useSessionUser('id');
 
 const BASE = 'http://localhost:3000';
-const sessionUser = { id: '' };
 
-const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
 beforeEach(async () => {
   sessionUser.id = '';

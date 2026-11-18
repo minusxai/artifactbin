@@ -20,7 +20,7 @@
  * endpoint.
  */
 import { describe, expect, it } from 'vitest';
-import { agentCookie, request, useAppHarness } from './harness';
+import { agentCookie, request, useAppHarness, params } from './harness';
 import { POST as createRoute } from '@/app/api/artifacts/route';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 import { STORY_DATA_EVENT } from '@/lib/html-reader/contract';
@@ -31,7 +31,6 @@ import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { identityForUser, createUser, type AccessActor } from '@/lib/accounts';
 
 useAppHarness();
-const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const j = async (r: Response) => ({ status: r.status, body: (await r.json()) as Record<string, any> });
 async function owner(name = 'owner') {
   const u = await createUser({ email: `${name}@example.com` });

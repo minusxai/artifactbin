@@ -8,7 +8,7 @@ import {nativeHtml} from './native-html-fixture';
  * browser contract suite and export gates.
  */
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { useAppHarness, request } from '@/__tests__/harness';
+import { useAppHarness, request, params } from '@/__tests__/harness';
 import { fakeBrowser } from '@artifactbin/utils';
 import type { RenderRequest } from '@artifactbin/contracts';
 import {exportImage,EXPORT_PNG} from './export-helpers';
@@ -25,7 +25,6 @@ import { CARD_HEIGHT, CARD_WIDTH } from '@artifactbin/contracts';
 const EXPORT_BYTES = EXPORT_PNG;
 useAppHarness();
 
-const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
 async function create(markup: string, title = 'shot me') {
   const mintRes = await mintAccountToken('mxmx_test_fixture');

@@ -23,7 +23,7 @@ import { artifactPage } from '@/test/helpers/pages';
 import { PUT as editRoute } from '@/app/api/artifacts/[id]/route';
 import { GET as readRoute } from '@/app/api/artifacts/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
-import { mintAccountToken } from '@/__tests__/harness';
+import { mintAccountToken, params } from '@/__tests__/harness';
 import { resetAllowances } from '@/lib/allowances';
 import { getDb, resetDb } from '@/lib/platform';
 import { SCHEMA_STATEMENTS } from '@/lib/platform';
@@ -35,7 +35,6 @@ import { request } from '@/__tests__/harness';
 // harness-exempt: wipe clears the deliberately hand-built schema between upgrade scenarios
 
 
-const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
 /**
  * A database nothing has touched: its own copy of one empty cluster, initialised once for the file. initdb is most of a

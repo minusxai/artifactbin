@@ -10,32 +10,20 @@
  * The picture it returns encodes what that read saw: width = 1 + rows, height = 1 + (the `team` column was readable).
  */
 import { afterEach, beforeEach, expect, it } from 'vitest';
+import { revokeShares, setVisibility } from '@/__tests__/artifact-fixtures';
 import sharp from 'sharp';
 import type { RenderRequest } from '@artifactbin/contracts';
-import { mintAccountToken, request, setSession, useAppHarness } from './harness';
-import { exportImage } from './export-helpers';
+import { mintAccountToken, request, setSession, useAppHarness, params } from './harness';
+import { exportImage, ROWS, STAFF, staffDeck, runtime } from './export-helpers';
 import { identityForUser, type AccessActor } from '@/lib/accounts';
 import { getDb, setServices } from '@/lib/platform';
-import { createArtifactFromBody } from '@/lib/publish';
 import { exportCacheKey, exportKeyReader, mintExportKey, resetExportRenderer } from '@/lib/export';
 import { GET as serveRaw } from '@/app/a/[id]/raw/route';
 import { POST as sqlDoor } from '@/app/api/artifacts/[id]/sql/route';
 
 useAppHarness();
 
-const params = (id: string) => ({ params: Promise.resolve({ id }) });
 type Reply = {rows?:Array<Record<string,unknown>>;error?:string};
-const STAFF = [{ name: 'ada', team: 'red' }, { name: 'bo', team: 'blue' }];
-const ROWS = { schema: 'public', name: 'rows' };
-/** Signed-in readers see every column; anonymous readers see names only. */
-const POLICY = { version: 3, tables: [{
-  table: ROWS,
-  select_permissions: [
-    { role: 'signed_in', permission: { columns: '*', filter: {}, allow_aggregations: true } },
-    { role: 'anonymous', permission: { columns: ['name'], filter: {} } },
-  ],
-  insert_permissions: [{ role: 'signed_in', permission: { columns: ['name', 'team'], check: {} } }],
-}] };
 const QUERY = 'select name, team from staff order by name';
 const NAMES = 'select name from staff order by name';
 
@@ -45,18 +33,8 @@ async function account(name: string) {
 }
 
 /** A deck page and the dataset it reads, both at `visibility`. */
-async function deck(owner: Awaited<ReturnType<typeof account>>, visibility: 'private' | 'unlisted') {
-  const dataset = await createArtifactFromBody({ dataset: STAFF, title: 'Staff', access: 'readwrite', visibility }, owner.actor, 'http://localhost:3000');
-  expect(dataset.status).toBe(201);
-  const staff = (await dataset.json() as { id: string }).id;
-  await (await getDb()).query('UPDATE artifacts SET dataset_policy=$2::jsonb, policy_revision=policy_revision+1 WHERE id=$1', [staff, JSON.stringify(POLICY)]);
-  const html = `<html><head><link rel="af-dataset" data-af-name="staff" href="ref:${staff}"></head><body><main id="deck"></main></body></html>`;
-  const page = await createArtifactFromBody({ html, visibility }, owner.actor, 'http://localhost:3000');
-  expect(page.status).toBe(201);
-  return { page: (await page.json() as { id: string }).id, staff };
-}
+const deck = (owner: Awaited<ReturnType<typeof account>>, visibility: 'private' | 'unlisted') => staffDeck(owner.actor, visibility);
 
-const runtime = (html: string) => JSON.parse(/<script type="application\/json" data-af="runtime">([^<]*)<\/script>/.exec(html)![1]!) as { domainReads?: true; revision: string };
 /** One read as the capture page sends it: an opaque origin, no credentials, a text/plain body naming the key on its address. */
 const captureRead = (page: string, revision: string, key: string | null, query: string) => sqlDoor(request(`/api/artifacts/${page}/sql`, {
   method: 'POST',
@@ -131,7 +109,7 @@ it('re-renders a requester\'s stored image when their access to its data changes
   const { page, staff } = await deck(owner, 'unlisted');
   expect(await exported(page, reader.token)).toEqual({ status: 200, size: [3, 2] });
   // The dataset goes private: the page is still readable, its data no longer is (for the reader, and for nobody).
-  await (await getDb()).query("UPDATE artifacts SET visibility='private' WHERE id=$1", [staff]);
+  await setVisibility(staff, 'private');
   expect(await exported(page, reader.token)).toEqual({ status: 200, size: [1, 1] });
   expect(await exported(page)).toEqual({ status: 200, size: [1, 1] });
   expect(await exported(page, owner.token)).toEqual({ status: 200, size: [3, 2] });
@@ -186,7 +164,7 @@ it('unresolved account-email share matches capture and cache, then revocation in
   expect((await f.ordinary()).rows).toEqual(STAFF);
   expect(await exported(f.page)).toEqual({ status: 200, size: [3, 2] });
   expect(renders).toHaveLength(1);
-  await f.db.query('DELETE FROM artifact_shares WHERE artifact_id=$1', [f.staff]);
+  await revokeShares(f.staff);
   expect((await f.ordinary()).rows).toBeUndefined();
   expect(await exported(f.page)).toEqual({ status: 200, size: [1, 1] });
   expect(renders).toHaveLength(2);
@@ -200,7 +178,7 @@ it('credential-only email share survives capture and revocation invalidates cach
   expect(renders).toHaveLength(1);
   expect(await exported(f.page)).toEqual({ status: 200, size: [3, 2] });
   expect(renders).toHaveLength(1);
-  await f.db.query('DELETE FROM artifact_shares WHERE artifact_id=$1', [f.staff]);
+  await revokeShares(f.staff);
   expect((await f.ordinary()).rows).toBeUndefined();
   expect(await exported(f.page)).toEqual({ status: 200, size: [1, 1] });
   expect(renders).toHaveLength(2);
@@ -221,7 +199,7 @@ for (const mode of ['session', 'bearer'] as const) {
     expect(await capture()).toEqual([3, 2]);
     expect((await f.db.query<{ email: string }>('SELECT email FROM users WHERE id=$1', [f.reader.actor.userId])).rows[0]?.email).toBe(f.email);
     expect((await read()).rows).toEqual(STAFF);
-    await f.db.query('DELETE FROM artifact_shares WHERE artifact_id=$1', [f.staff]);
+    await revokeShares(f.staff);
     expect((await read()).rows).toBeUndefined();
     expect(await capture()).toEqual([1, 1]);
     expect(renders).toHaveLength(2);
@@ -242,7 +220,7 @@ it('explicit bearer duplicate-profile fallback preserves ordinary claim in expor
   expect([meta.width, meta.height]).toEqual([3, 2]);
   const key = new URL(renders[0]!.url).searchParams.get('key')!;
   expect(exportKeyReader(f.page, key)).toMatchObject({ userId: f.reader.actor.userId, email: f.email, documentEditor: false });
-  await f.db.query('DELETE FROM artifact_shares WHERE artifact_id=$1', [f.staff]);
+  await revokeShares(f.staff);
   expect((await (await captureRead(f.page, '1', key, QUERY)).json() as Reply).rows).toBeUndefined();
   const revoked = await exportImage(request(`/a/${f.page}/export`, auth), params(f.page));
   expect(revoked.status).toBe(200);
@@ -269,7 +247,7 @@ it('isolates same-account claim audiences and never stores or transports an expo
     expect(value).not.toContain(Buffer.from(f.email).toString('base64url'));
   }
   // A key minted before revocation rechecks access, and the old cached pixels are no longer served.
-  await f.db.query('DELETE FROM artifact_shares WHERE artifact_id=$1', [f.staff]);
+  await revokeShares(f.staff);
   expect((await (await captureRead(f.page, '1', key, QUERY)).json() as Reply).rows).toBeUndefined();
   expect(await exported(f.page)).toEqual({ status: 200, size: [1, 1] });
   expect(renders).toHaveLength(3);

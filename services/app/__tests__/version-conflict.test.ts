@@ -7,13 +7,12 @@ import { GET as listVersionsRoute } from '@/app/api/artifacts/[id]/versions/rout
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
 
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
+import { mintAccountToken as mintToken, params } from '@/__tests__/harness';
 import { useAppHarness, request } from '@/__tests__/harness';
 
 useAppHarness();
 
 
-const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
 async function createDoc(token: string) {
   const res = await createArtifactRoute(

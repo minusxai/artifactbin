@@ -5,7 +5,7 @@
  * validation, dependents warnings on refresh.
  */
 import { describe, expect, it } from 'vitest';
-import { useAppHarness, request } from '@/__tests__/harness';
+import { useAppHarness, request, params } from '@/__tests__/harness';
 import { GET as serveArtifact } from '@/app/a/[id]/raw/route';
 import { GET as getArtifactRoute } from '@/app/api/artifacts/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
@@ -15,7 +15,6 @@ import { firstSaveLinks } from '@/__tests__/stored-links';
 
 const harness = useAppHarness();
 
-const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
 const ROWS = [
   { month: 'Jan', mrr: 100, region: 'NA' },

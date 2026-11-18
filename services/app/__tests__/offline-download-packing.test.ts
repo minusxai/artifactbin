@@ -3,12 +3,12 @@
  * DNS provenance, the active design system, and the live-cell library only when imported.
  */
 import { readPortableDocument } from '@/lib/html-runtime/portable';
+import { trashRow } from '@/__tests__/artifact-fixtures';
 import { expect, it } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { useAppHarness, request, mintAccountToken } from '@/__tests__/harness';
 import sharp from 'sharp';
 import { getArtifactById } from '@/lib/artifacts';
-import { getDb } from '@/lib/platform';
 import { POST } from '@/app/api/artifacts/route';
 import { GET as download } from '@/app/a/[id]/download/route';
 import { params, source, publish } from './offline-download-fixture';
@@ -25,7 +25,7 @@ it('packs admitted private raster image bytes only for an authorized current rea
  expect(imageNode.getAttribute('data-af-id')).toBe('picture');expect(imageNode.getAttribute('src')).toMatch(/^data:image\/webp;base64,/);expect(html).not.toContain(actor.token);expect(imageNode.getAttribute('src')).not.toContain('ref:');
  const packed=Buffer.from(imageNode.getAttribute('src')!.split(',')[1]!,'base64');expect(await sharp(packed).metadata()).toMatchObject({width:48,height:32});
  expect((await download(request(`/a/${page.id}/download`),params(page.id))).status).toBe(404);
- await (await getDb()).query("UPDATE artifacts SET deleted_at=now() WHERE id=$1",[image.id]);
+ await trashRow(image.id);
  expect((await download(request(`/a/${page.id}/download`,{token:actor.token}),params(page.id))).status).toBe(404);
 });
 it('packs authorized bundle CSS and module bytes while retaining original canonical publication source',async()=>{
@@ -39,7 +39,7 @@ it('packs authorized bundle CSS and module bytes while retaining original canoni
  expect(doc.querySelector('script[type="module"][src]')?.getAttribute('src')).toMatch(/^data:text\/javascript;base64,/);
  expect(readPortableDocument(bytes).source).toBe((await getArtifactById(saved.id))!.source);
  expect(bytes).not.toContain(actor.token);
- await (await getDb()).query('UPDATE artifacts SET deleted_at=now() WHERE id=$1',[saved.dependencyReceipts[0].id]);
+ await trashRow(saved.dependencyReceipts[0].id);
  // A fresh export never embeds bytes from a dependency whose current ACL/readability was revoked.
  expect((await download(request(`/a/${saved.id}/download`,{token:actor.token}),params(saved.id))).status).toBe(404);
 });

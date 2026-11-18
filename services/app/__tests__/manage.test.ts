@@ -5,7 +5,7 @@ import {observedRequest} from '@/__tests__/conditional-request';
  * version listing, and revert-to-version.
  */
 import { describe, expect, it } from 'vitest';
-import { useAppHarness, request } from '@/__tests__/harness';
+import { useAppHarness, request, params } from '@/__tests__/harness';
 import { GET as serveArtifact } from '@/app/a/[id]/raw/route';
 import {
   DELETE as deleteArtifactRoute,
@@ -22,7 +22,6 @@ import { listAccountTokenRows } from '@/lib/workspace';
 
 const harness = useAppHarness();
 
-const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
 async function create(token: string, html: string, title = 'x') {
   const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: { title, html: nativeHtml(html) } }));

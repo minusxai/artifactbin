@@ -2,7 +2,7 @@
 import { beforeEach, expect, it } from 'vitest';
 import { POST } from '@/app/api/artifacts/route';
 import { GET, PUT, PATCH } from '@/app/api/artifacts/[id]/route';
-import { mintAccountToken, request, useAppHarness } from './harness';
+import { mintAccountToken, request, useAppHarness, params } from './harness';
 import { observedRequest } from './conditional-request';
 import { nativeHtml } from './native-html-fixture';
 useAppHarness();
@@ -10,7 +10,6 @@ let token: string;
 beforeEach(async () => {
   token = (await mintAccountToken('echo')).token;
 });
-const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const source = nativeHtml(
   '<h1 data-af-id="heading">Title</h1><p data-af-id="body">Body copy.</p>',
 );

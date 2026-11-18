@@ -1,6 +1,7 @@
 /** Native replacement for retired JSX deep-copy behavior: explicit live/pinned dataset links retain their ACLs, and
  * the page quota refuses the whole copy. */
 import {afterEach,expect,it} from 'vitest';
+import { setVisibility } from '@/__tests__/artifact-fixtures';
 import {request,useAppHarness,mintAccountToken} from './harness';
 import {POST as create} from '@/app/api/artifacts/route';
 import {POST as fork} from '@/app/api/artifacts/[id]/fork/route';
@@ -25,7 +26,7 @@ it('preserves live/pinned dataset links',async()=>{
  expect(await w.owned()).toBe(1);
 });
 it('revoked dataset readership refuses a copy without granting access through the public page',async()=>{
- const w=await world();await(await harness.db()).query("UPDATE artifacts SET visibility='private' WHERE id=$1",[w.dataset.id]);const response=await w.send();expect(response.status).toBe(400);expect(await w.owned()).toBe(0);
+ const w=await world();await setVisibility(w.dataset.id, 'private');const response=await w.send();expect(response.status).toBe(400);expect(await w.owned()).toBe(0);
 });
 it('the native page quota refuses the entire clone',async()=>{
  const w=await world();const seed=await create(request('/api/artifacts',{method:'POST',token:w.reader.token,json:{html:'<p>Existing page</p>'}}));expect(seed.status).toBe(201);setArtifactQuotaForTests(1);const response=await w.send();expect(response.status).toBe(403);expect((await response.json()).error).toBe('quota_exceeded');expect(await w.owned()).toBe(1);

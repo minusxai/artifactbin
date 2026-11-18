@@ -5,7 +5,7 @@
  * once for the session, always for this document, or never. Revoke forgets; the door keeps its checks.
  */
 import { describe, expect, it } from 'vitest';
-import { cookieValue, request, useAppHarness } from './harness';
+import { cookieValue, request, useAppHarness, params } from './harness';
 import { observedRequest } from './conditional-request';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { PUT as putArtifactRoute } from '@/app/api/artifacts/[id]/route';
@@ -22,7 +22,6 @@ import type { Actor } from '@artifactbin/contracts';
 const harness = useAppHarness();
 /** The session cookie's name, as the trust module sets it. */
 const TRUST_SESSION_COOKIE = sessionTrustCookie(new Request('http://localhost/'), null, 'any', { decision: null }).split('=')[0]!;
-const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const METEO = 'https://api.open-meteo.com';
 const escaped = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const PLOTLY = 'https://cdn.plot.ly';

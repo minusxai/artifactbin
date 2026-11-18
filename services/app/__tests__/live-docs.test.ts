@@ -19,7 +19,7 @@ import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 import { GET as apiGet, PATCH as apiPatch, PUT as apiPut } from '@/app/api/artifacts/[id]/route';
 import { GET as myGet, PUT as myPut } from '@/app/api/my/artifacts/[id]/route';
-import { mintAccountToken, request, useAppHarness } from './harness';
+import { mintAccountToken, request, useAppHarness, params } from './harness';
 import { sseStream } from './sse';
 
 const harness = useAppHarness();
@@ -28,7 +28,6 @@ const DOC = '<!doctype html><html><head><title>Untitled document</title></head><
 type Person = { id: string; email: string };
 let owner: Person, editor: Person, readerToken: string, ownerToken: string, pageId: string, regionId: string;
 const as = (person: Person): Actor => ({ credential: 'session', userId: person.id, email: person.email, emailVerified: true });
-const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
 /** An editor's replica, typing through the real doors under the client id its open was given. */
 async function join(person: Person) {

@@ -18,14 +18,13 @@ import {getDb} from '@/lib/platform';
 import { objectStore } from '@/lib/object-store';
 import { resetExportRenderer, renderArtifactImage } from '@/lib/export';
 import { setServices } from '@/lib/platform';
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
+import { mintAccountToken as mintToken, params } from '@/__tests__/harness';
 import { DEFAULT_SOCIAL_PREVIEW_CROP } from '@/lib/document/social-preview';
 import { useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();
 
 const BASE = 'http://localhost:3000';
-const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const PNG = EXPORT_PNG;
 type Fake = ReturnType<typeof fakeBrowser> & { calls: unknown[] };
 let fake: Fake;

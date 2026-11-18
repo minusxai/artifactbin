@@ -6,6 +6,7 @@
  * any source, hand-written or carried. The new page reads its datasets live, under its own readers.
  */
 import { beforeEach, expect, it } from 'vitest';
+import { storePolicy } from '@/__tests__/artifact-fixtures';
 import { request, setSession, useAppHarness } from './harness';
 import { getDb } from '@/lib/platform';
 import { getArtifactById } from '@/lib/artifacts';
@@ -27,7 +28,7 @@ const GENERATED = /data-af\s*=\s*["']?(?:offline-data|offline-sql|portable)\b/;
 async function exportedPage() {
   const f = await fixture();
   const secret = await publish(f.owner, { dataset: [{ code: SECRET }], title: 'Secret' });
-  await (await getDb()).query('UPDATE artifacts SET dataset_policy=$2::jsonb, policy_revision=policy_revision+1 WHERE id=$1', [secret.body.id, JSON.stringify({ version: 3, tables: [{ table: ROWS, select_permissions: [{ role: 'signed_in', permission: { columns: '*', filter: {} } }] }] })]);
+  await storePolicy(secret.body.id, { version: 3, tables: [{ table: ROWS, select_permissions: [{ role: 'signed_in', permission: { columns: '*', filter: {} } }] }] });
   const page = await publish(f.owner, { html: `<!doctype html><html><head><title>Staff report</title>
 <link rel="af-dataset" data-af-name="staff" href="ref:${f.staff}"><link rel="af-dataset" data-af-name="secret" href="ref:${secret.body.id}">
 <script src="/af/core.js"></script></head><body><table id="staff"><tbody></tbody></table>

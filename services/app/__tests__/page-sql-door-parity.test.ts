@@ -4,6 +4,7 @@
  * review cases on pinned links, cross-link reads, the output budget, SQLite expressions and the mutation quota.
  */
 import { beforeEach, expect, it, vi } from 'vitest';
+import { storePolicy } from '@/__tests__/artifact-fixtures';
 import { setSession, useAppHarness } from './harness';
 import { getDb, services } from '@/lib/platform';
 import { person, publish, sql, ROWS, fixture, stored, refused } from './page-sql-door-fixture';
@@ -26,15 +27,14 @@ it('names a multi-table link <link>.<table>, and a role that only inserts writes
     { schema: 'public', name: 'budgets', rows: [{ team: 'red', budget: 100 }] },
   ] }, title: 'Teams' });
   const signups = await publish(owner, { dataset: [{ email: 'first@example.com' }], title: 'Signups' });
-  const db = await getDb();
   // Teams: signed_in reads both tables and may add budgets. Signups: anyone may add an email; nobody below editor reads one.
-  await db.query('UPDATE artifacts SET dataset_policy=$2::jsonb, policy_revision=policy_revision+1 WHERE id=$1', [teams.body.id, JSON.stringify({ version: 3, tables: [
+  await storePolicy(teams.body.id, { version: 3, tables: [
     { table: { schema: 'public', name: 'leads' }, select_permissions: [{ role: 'signed_in', permission: { columns: '*', filter: {} } }] },
     { table: { schema: 'public', name: 'budgets' }, select_permissions: [{ role: 'signed_in', permission: { columns: '*', filter: {} } }], insert_permissions: [{ role: 'signed_in', permission: { columns: ['team', 'budget'], check: {} } }] },
-  ] })]);
-  await db.query('UPDATE artifacts SET dataset_policy=$2::jsonb, policy_revision=policy_revision+1 WHERE id=$1', [signups.body.id, JSON.stringify({ version: 3, tables: [
+  ] });
+  await storePolicy(signups.body.id, { version: 3, tables: [
     { table: ROWS, insert_permissions: [{ role: 'anonymous', permission: { columns: ['email'], check: {} } }, { role: 'signed_in', permission: { columns: ['email'], check: {} } }] },
-  ] })]);
+  ] });
   const page = (await publish(owner, { html: `<html><head><link rel="af-dataset" data-af-name="teams" href="ref:${teams.body.id}"><link rel="af-dataset" data-af-name="signups" href="ref:${signups.body.id}"></head><body>x</body></html>` })).body.id;
   const f = { staff: teams.body.id, notes: signups.body.id };
   expect((await sql(page, other, 'select l.lead, b.budget from teams.leads l join teams.budgets b using (team)')).body.rows).toEqual([{ lead: 'ada', budget: 100 }]);
@@ -67,7 +67,7 @@ it('review: revoking a cross-link read after phase one prevents copying its data
     const result = await original(input);
     if (!revoked && input.policy?.role === 'reader') {
       revoked = true;
-      await (await getDb()).query('UPDATE artifacts SET dataset_policy=$2::jsonb, policy_revision=policy_revision+1 WHERE id=$1', [f.notes, JSON.stringify({ version: 3, tables: [] })]);
+      await storePolicy(f.notes, { version: 3, tables: [] });
     }
     return result;
   });

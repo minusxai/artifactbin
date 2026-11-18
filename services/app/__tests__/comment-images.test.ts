@@ -6,7 +6,7 @@ import {POST as stageRoute} from '@/app/api/my/artifacts/[id]/comment-images/rou
 import {getDb} from '@/lib/platform';
 import {describe,expect,it} from 'vitest';
 import sharp from 'sharp';
-import {useAppHarness,request} from './harness';
+import {useAppHarness,request, params } from './harness';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {POST as createArtifact} from '@/app/api/artifacts/route';
 import {POST as createComment} from '@/app/api/my/artifacts/[id]/annotations/route';
@@ -14,7 +14,6 @@ import {stageCommentImage,readCommentImage} from '@/lib/annotations';
 import { assetBytesForToken, setAssetByteQuotaForTests } from '@/lib/artifacts/testing';
 import type {CommentImageMetadata} from '../../contracts/src/comment-image';
 useAppHarness();
-const params=(id:string)=>({params:Promise.resolve({id})});
 async function setup(){
  const token=await mintToken('agent');
  const response=await createArtifact(request('/api/artifacts',{method:'POST',token:token.token,json:{html:nativeHtml('<p data-af-id="capture">Capture me</p>')}}));

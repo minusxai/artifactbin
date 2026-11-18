@@ -1,4 +1,5 @@
 import {expect,it} from 'vitest';
+import { setVisibility } from '@/__tests__/artifact-fixtures';
 import {artifactChannel} from '@artifactbin/contracts';
 import {useAppHarness,request,mintAccountToken} from '@/__tests__/harness';
 import {POST as createArtifact} from '@/app/api/artifacts/route';
@@ -73,7 +74,7 @@ it('public page readers never receive private dataset activity, including after 
  await db.query('UPDATE artifacts SET meta=$2::jsonb WHERE id=$1',[id,JSON.stringify({htmlLinks:[{kind:'dataset',name:'rows',datasetId:dataset,mode:'live'}]})]);
  const opening=async()=>{const res=await eventsRoute(request(`/a/${id}/events`),{params:Promise.resolve({id})});const stream=sseStream(res.body!);try{return await stream.next(2);}finally{stream.close();}};
  const hidden=await opening();expect(hidden.find(e=>e.event==='data')?.data.revisions).toEqual({rows:'unavailable'});expect(hidden.every(e=>!e.id)).toBe(true);
- await db.query("UPDATE artifacts SET visibility='public' WHERE id=$1",[dataset]);
+ await setVisibility(dataset, 'public');
  const allowed=await opening();expect(allowed.find(e=>e.event==='data')?.data.revisions).toMatchObject({rows:expect.stringContaining(`dataset:${dataset}:1:`)});
  const liveResponse=await eventsRoute(request(`/a/${id}/events`),{params:Promise.resolve({id})});
  const connected=sseStream(liveResponse.body!);

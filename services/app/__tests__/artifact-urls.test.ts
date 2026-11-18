@@ -21,12 +21,11 @@ import { getArtifactById } from '@/lib/artifacts';
 import { GET as raw } from '@/app/a/[id]/raw/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
+import { mintAccountToken as mintToken, params } from '@/__tests__/harness';
 import { useAppHarness, request } from '@/__tests__/harness';
 
 useAppHarness();
 
-const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 const MARKUP = '<div data-design="tw" className="p-8"><h1 className="text-3xl">Raw tier</h1></div>';

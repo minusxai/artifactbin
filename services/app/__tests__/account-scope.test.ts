@@ -24,14 +24,13 @@ import { GET as listVersionsRoute } from '@/app/api/artifacts/[id]/versions/rout
 import { GET as listArtifactsRoute, POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
 
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
+import { mintAccountToken as mintToken, params } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
 import { useAppHarness, request } from '@/__tests__/harness';
 
 useAppHarness();
 
 
-const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
 const MARKUP = '<section className="wrap"><p>alpha text</p><p>beta text</p></section>';
 

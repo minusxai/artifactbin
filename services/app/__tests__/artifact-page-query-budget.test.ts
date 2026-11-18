@@ -1,4 +1,5 @@
 import {nativeHtml} from '@/__tests__/native-html-fixture';
+import { setVisibility } from '@/__tests__/artifact-fixtures';
 /**
  * WHAT A PAGE VIEW COSTS THE DATABASE: the app page for a document (`GET /a/<id>`, the HTML door: documentPreparation
  * admits the row, artifactPageAnswer draws its chrome). Production is Postgres behind a small pool, so a view asks each
@@ -151,7 +152,7 @@ for (const door of ['json', 'html'] as const) describe(`a page view through the 
   it('still refuses a private page to a signed-in stranger with the uniform 404, and admits a named share', async () => {
     const w = await world();
     const db = await getDb();
-    await db.query("UPDATE artifacts SET visibility = 'private' WHERE id = $1", [w.doc]);
+    await setVisibility(w.doc, 'private');
     expect((await view(door, w.doc, session(w.viewer))).status).toBe(404);
     expect((await view(door, w.doc, null)).status).toBe(404);
     expect((await view(door, w.doc, session(w.author))).status).toBe(200);
