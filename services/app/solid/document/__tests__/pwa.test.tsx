@@ -45,13 +45,22 @@ it('edits separate PWA metadata through the editor source callback', () => {
   expect(screen.getByLabelText('Upload app icon')).toBeTruthy();
 });
 
-it('waits for editor saves and stays put if saving fails', async () => {
-  const save = vi.fn().mockResolvedValue(false);
-  render(() => <InstallArtifactLink id="Abc123" beforeNavigate={save} />);
-  fireEvent.click(screen.getByRole('link', { name: 'Install app' }));
-  expect(save).toHaveBeenCalledTimes(1);
-  await Promise.resolve();
-  expect(window.location.pathname).toBe('/');
+it('waits for editor saves, navigates once they succeed, and stays put if saving fails', async () => {
+  const assign = vi.fn();
+  vi.stubGlobal('location', { ...window.location, assign });
+  try {
+    for (const saved of [false, true]) {
+      const save = vi.fn().mockResolvedValue(saved);
+      const view = render(() => <InstallArtifactLink id="Abc123" beforeNavigate={save} />);
+      const proceeded = fireEvent.click(screen.getByRole('link', { name: 'Install app' }));
+      expect(proceeded, 'the click is held until the save answers').toBe(false);
+      expect(save).toHaveBeenCalledTimes(1);
+      expect(assign).not.toHaveBeenCalled();
+      await new Promise(resolve => setTimeout(resolve, 0));
+      if (saved) expect(assign).toHaveBeenCalledOnce(); else expect(assign).not.toHaveBeenCalled();
+      view.unmount();
+    }
+  } finally { vi.unstubAllGlobals(); }
 });
 
 it('captures a regular artifact prompt without suppressing the browser promotion', () => {

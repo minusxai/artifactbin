@@ -60,8 +60,11 @@ it('lists the group\'s allowed addresses, lets an editor remove one, and draws n
  await waitFor(()=>expect(panel).toHaveTextContent('No addresses approved yet'));
  expect(fetcher).toHaveBeenCalledWith('/api/groups/g1/allowed-addresses',expect.objectContaining({method:'DELETE',body:JSON.stringify({connect:['https://api.example.com']})}));
  view.unmount();
- render(()=> <GroupAddresses group={{id:'g9',name:'Viewers',role:'member'}}/>);
- vi.stubGlobal('fetch',vi.fn(async()=>Response.json({error:'group_approvals_disabled'},{status:403})));
+ const disabled=vi.fn(async(_url:string,_init?:RequestInit)=>Response.json({error:'group_approvals_disabled'},{status:403}));
+ vi.stubGlobal('fetch',disabled);
  const off=render(()=> <GroupAddresses group={{id:'g8',name:'Off',role:'admin'}}/>);
- await waitFor(()=>expect(off.queryByRole('region',{name:'Allowed addresses'})).toBeNull());
+ // Wait for the refusal to be answered and handled before saying nothing was drawn.
+ await waitFor(()=>expect(disabled).toHaveBeenCalledWith('/api/groups/g8/allowed-addresses',expect.anything()));
+ await new Promise(resolve=>setTimeout(resolve,0));
+ expect(off.queryByRole('region',{name:'Allowed addresses'})).toBeNull();
 });

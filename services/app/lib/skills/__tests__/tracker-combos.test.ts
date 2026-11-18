@@ -1,7 +1,7 @@
 /**
  * The tracker starter is one marked template trimmed by features (examples/tracker*.*, scripts/toolbox-tracker.mjs):
- * every combination of its five features either generates files with no leftover marker, no dropped feature's code,
- * no name used but not defined and no syntax error, or is refused for a missing requirement (32 = 20 clean + 12
+ * every combination of its four features either generates files with no leftover marker, no dropped feature's code,
+ * no name used but not defined and no syntax error, or is refused for a missing requirement (16 = 12 clean + 4
  * refused). A planted mistake (a feature's call left outside its block) fails exactly the combinations without that
  * feature, naming the identifier, so the check cannot pass vacuously.
  */

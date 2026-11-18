@@ -111,7 +111,7 @@ describe('the folder page at volume', () => {
   });
 
   it('pays for no view counts when the viewer is told none', async () => {
-    const { user } = await seed(30);
+    await seed(30);
     const db = await getDb();
     await db.query("UPDATE artifacts SET visibility = 'public' WHERE id = 'fvfolder' OR ancestor_ids @> ARRAY['fvfolder']");
     const query = vi.spyOn(db, 'query');
@@ -121,17 +121,15 @@ describe('the folder page at volume', () => {
       for (const row of page.rows) expect(row).not.toHaveProperty('views');
       expect(query.mock.calls.map(([sql]) => String(sql)).filter((sql) => sql.includes(`FROM ${EVENTS_SCHEMA}.events`))).toEqual([]);
     } finally { query.mockRestore(); }
-    expect(user.id).toBeTruthy();
   });
 
   it('answers the page endpoint without a per-child picture in its payload', async () => {
-    const { user, token } = await seed(100);
+    const { user } = await seed(100);
     const response = await pageRoute(request('/api/page/artifact/fvfolder', { actor: { userId: user.id, email: user.email, emailVerified: true, credential: 'session' } }), { params: Promise.resolve({ id: 'fvfolder' }) });
     const text = await response.text();
     expect(response.status).toBe(200);
     expect(text).not.toContain('<svg');
     expect(text).not.toContain('"sparkline"');
-    expect(token.id).toBeTruthy();
   });
 });
 

@@ -558,7 +558,7 @@ it('shows a signed-in reader the add form and Edit and Remove on every entry, an
   expect(doc.querySelectorAll('[data-af-id$="-edit"],[data-af-id$="-remove"]')).toHaveLength(0);
 });
 
-it('team and own-rows trackers are the same page: only the dataset rules differ', async () => {
+it('a tracker stripped of its team and own-rows rules keeps the plain signed-in controls, and no preset calls server code', async () => {
   const strip = (html: string) => html.replace(/^.*@only (?:team|own-rows).*$\n?/gm, '');
   expect(strip(await tracker('tasks'))).toContain('const canAdd=()=>signedIn,canChange=()=>signedIn;');
   for (const preset of ['tasks', 'list'] as const) expect(await tracker(preset)).not.toMatch(/fetch\(|\/fn\/|tracker\.ts|APP\.limit/);

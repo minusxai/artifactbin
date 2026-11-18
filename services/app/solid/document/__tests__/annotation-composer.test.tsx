@@ -32,6 +32,8 @@ beforeEach(() => {
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 const creates = () => fetchCalls.filter((c) => c.url.endsWith('/api/my/artifacts/doc1/annotations') && c.init?.method === 'POST');
+/** The JSON body of the first annotation create. */
+const createdBody = () => JSON.parse(String(creates()[0]!.init!.body));
 const selects = (send: ReturnType<typeof vi.fn>) => send.mock.calls.map((c) => c[0]).filter((m) => m?.type === 'mx:select');
 const TEXT = (over: Partial<StoryEditSelection> = {}): StoryEditSelection => ({ kind: 'text', path: '1', tag: 'p', rect: { x: 5, y: 6, width: 200, height: 40 }, className: '', style: '', ancestors: [], ...over } as StoryEditSelection);
 
@@ -67,7 +69,7 @@ describe('the annotation composer', () => {
     expect({ left: dialog.style.left, top: dialog.style.top }).not.toEqual(start);
     expect(field).toHaveTextContent('keep this draft while moving');
     fireEvent.click(screen.getByLabelText('Save annotation')); await flush();
-    expect(JSON.parse(String(creates()[0]!.init!.body))).toMatchObject({ node_id: 'node-1', body: 'keep this draft while moving' });
+    expect(createdBody()).toMatchObject({ node_id: 'node-1', body: 'keep this draft while moving' });
   });
 
   it('moves from the keyboard and clamps the box after viewport resize and selection reports', async () => {
@@ -211,7 +213,7 @@ describe('the annotation composer', () => {
     expect(screen.queryByRole('group', {name:'Tag agent'})).toBeNull();
     expect(fetchCalls.some(call=>call.url==='/api/remote/sessions')).toBe(false);
     fireEvent.click(screen.getByLabelText('Save annotation')); await flush();
-    expect(JSON.parse(String(creates()[0]?.init?.body)).body).toBe('Please review this');
+    expect(createdBody().body).toBe('Please review this');
   });
 
   it('keeps the original view context across geometry updates and sends it with the native comment', async () => {
@@ -221,7 +223,7 @@ describe('the annotation composer', () => {
     view.runtime.emit({ type: 'mx:selection', selection: TEXT({ nodeId: 'node-1', rect: { x: 9, y: 10, width: 200, height: 40 } }) });
     replaceComment(await screen.findByLabelText('Annotation comment'), 'Review this view');
     fireEvent.click(screen.getByLabelText('Save annotation')); await flush();
-    expect(JSON.parse(String(creates()[0]?.init?.body)).view_state).toEqual(viewState);
+    expect(createdBody().view_state).toEqual(viewState);
   });
 
   it('waits for beforeComment (an editor saving region text) and sends the anchor it answers', async () => {
@@ -243,7 +245,7 @@ describe('the annotation composer', () => {
     release();
     await flush();
     expect(creates()).toHaveLength(1);
-    expect(JSON.parse(String(creates()[0]!.init!.body))).toMatchObject({ anchor: { ...anchor, revision: '9' }, body: 'about these words' });
+    expect(createdBody()).toMatchObject({ anchor: { ...anchor, revision: '9' }, body: 'about these words' });
   });
 
   it('a failed beforeComment keeps the draft and sends nothing', async () => {
@@ -264,7 +266,7 @@ describe('the annotation composer', () => {
     replaceComment(await screen.findByLabelText('Annotation comment'), 'which quarter?');
     fireEvent.click(screen.getByLabelText('Save annotation'));
     await flush();
-    expect(JSON.parse(String(creates()[0]!.init!.body))).toEqual({ node_id: 'node-1', body: 'which quarter?', quote: 'grew 40% in Q3,', range });
+    expect(createdBody()).toEqual({ node_id: 'node-1', body: 'which quarter?', quote: 'grew 40% in Q3,', range });
   });
 
   it('keeps the captured words when the document re-reports the SAME node', async () => {
@@ -275,7 +277,7 @@ describe('the annotation composer', () => {
     replaceComment(await screen.findByLabelText('Annotation comment'), 'still about those words');
     fireEvent.click(screen.getByLabelText('Save annotation'));
     await flush();
-    expect(JSON.parse(String(creates()[0]!.init!.body))).toMatchObject({ quote: quoted.quote, range: quoted.range });
+    expect(createdBody()).toMatchObject({ quote: quoted.quote, range: quoted.range });
   });
 
   it('does not inherit a removed target identity into an id-less successor at the same path', async () => {
@@ -312,7 +314,7 @@ describe('the annotation composer', () => {
     replaceComment(await screen.findByLabelText('Annotation comment'), 'draft follows explicit target');
     fireEvent.click(screen.getByLabelText('Save annotation'));
     await flush();
-    expect(JSON.parse(String(creates()[0]!.init!.body))).toEqual({ node_id: 'new-node', body: 'draft follows explicit target' });
+    expect(createdBody()).toEqual({ node_id: 'new-node', body: 'draft follows explicit target' });
   });
 
   it('drops them when the composer is widened to a DIFFERENT node — they no longer describe it', async () => {
@@ -322,7 +324,7 @@ describe('the annotation composer', () => {
     replaceComment(await screen.findByLabelText('Annotation comment'), 'about the whole section');
     fireEvent.click(screen.getByLabelText('Save annotation'));
     await flush();
-    expect(JSON.parse(String(creates()[0]!.init!.body))).toEqual({ node_id: 'node-0', body: 'about the whole section' });
+    expect(createdBody()).toEqual({ node_id: 'node-0', body: 'about the whole section' });
   });
 
   it('sends no quote for a selection that has none — a caret comment is still a comment', async () => {
@@ -331,7 +333,7 @@ describe('the annotation composer', () => {
     replaceComment(await screen.findByLabelText('Annotation comment'), 'no words');
     fireEvent.click(screen.getByLabelText('Save annotation'));
     await flush();
-    expect(JSON.parse(String(creates()[0]!.init!.body))).toEqual({ node_id: 'node-1', body: 'no words' });
+    expect(createdBody()).toEqual({ node_id: 'node-1', body: 'no words' });
   });
 
   it('a handed-in selection opens an anchored page composer; save moves the comment to the rail', async () => {
@@ -356,7 +358,7 @@ describe('the annotation composer', () => {
     replaceComment(composer, 'fresh note');
     fireEvent.click(screen.getByLabelText('Save annotation'));
     await flush();
-    expect(JSON.parse(String(creates()[0]!.init!.body))).toMatchObject({ node_id: 'node-2-1', body: 'fresh note' });
+    expect(createdBody()).toMatchObject({ node_id: 'node-2-1', body: 'fresh note' });
     expect(selects(view.runtime.send).at(-1)).toMatchObject({ path: null });
     expect(screen.queryByRole('dialog', { name: 'Annotation composer' })).toBeNull();
     expect(screen.getAllByLabelText('Annotation thread').some((thread) => thread.textContent?.includes('fresh note'))).toBe(true);
@@ -375,7 +377,7 @@ describe('the annotation composer', () => {
     replaceComment(composer, 'from the keyboard');
     fireEvent.keyDown(composer, { key: 'Enter', metaKey: true });
     await flush();
-    expect(JSON.parse(String(creates()[0]!.init!.body))).toMatchObject({ body: 'from the keyboard' });
+    expect(createdBody()).toMatchObject({ body: 'from the keyboard' });
   });
 
   it('opens the composer on a text selection handed in from view mode', async () => {
@@ -385,7 +387,7 @@ describe('the annotation composer', () => {
     expect(view.runtime.posts().at(-1)).toMatchObject({ mode: 'on', selectedPath: '2.1' });
   });
 
-  it('shows the anchor edit refusal instead of silently swallowing it', async () => {
+  it('shows a refused create instead of silently swallowing it, and keeps the draft', async () => {
     knobs.refuseCreate = true;
     layer({ railOpen: true, initialSelection: { kind: 'element', path: '0', tag: 'p', rect: { x: 0, y: 0, width: 100, height: 20 }, className: '', style: '', ancestors: [] } as StoryEditSelection });
     await flush();
@@ -469,7 +471,7 @@ it('preserves native HTML selection identity without sending fabricated compiler
   await flush();
   replaceComment(screen.getByLabelText('Annotation comment'), 'Native selection');
   fireEvent.click(screen.getByLabelText('Save annotation')); await flush();
-  const body = JSON.parse(String(creates()[0]!.init!.body));
+  const body = createdBody();
   expect(body).toMatchObject({ anchor, body: 'Native selection' });
   expect(body).not.toHaveProperty('node_id');
   expect(body).not.toHaveProperty('range');
@@ -482,6 +484,6 @@ it('persists native area geometry separately from native text offsets',async()=>
  layer({initialSelection:TEXT({nodeId:'af-node-7',path:'af-node-7',anchor,range})});
  await flush();replaceComment(screen.getByLabelText('Annotation comment'),'Area comment');
  fireEvent.click(screen.getByLabelText('Save annotation'));await flush();
- const body=JSON.parse(String(creates()[0]!.init!.body));
+ const body=createdBody();
  expect(body).toMatchObject({anchor,range});expect(body).not.toHaveProperty('node_id');
 });

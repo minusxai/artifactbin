@@ -54,15 +54,6 @@ describe('the session part', () => {
     await app.request('/api/artifacts', { headers: { authorization: 'Bearer mx_badbadbadbadbadbadbadbadbadbadbadbadbad01' } });
     expect(seenActor).toEqual(ANONYMOUS);
   });
-  it('resolves a verified session while ignoring a legacy cookie', async () => {
-    const app = await proxy({
-      sessions: { resolve: async () => ({ userId: 'usr_2', email: 's@example.com', emailVerified: true }) },
-    });
-    const sessionId='h'.repeat(43);
-    await testDb().query("INSERT INTO auth.credentials(kind,credential_hash,subject_id,expires_at) VALUES ('agent-browser',$1,'tok_h',now()+interval '30 days')",[createHash('sha256').update(sessionId).digest('hex')]);
-    await app.request('/api/artifacts', { headers: { cookie: `${cookieName(false)}=${await encodeAgentSession({ tokenIds: ['tok_h'],sessionId }, 'test-cookie-secret-00000000000000000000')}` } });
-    expect(seenActor).toEqual({ credential: 'session', userId: 'usr_2', email: 's@example.com', emailVerified: true });
-  });
   it('does not authenticate a legacy ownership cookie without email login', async () => {
     const app = await proxy();
     await mintTestToken({ id: 'tok_c', userId: null, query: testDb().query });

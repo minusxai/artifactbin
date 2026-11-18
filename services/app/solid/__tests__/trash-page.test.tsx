@@ -1,16 +1,9 @@
 /* @jsxImportSource solid-js */
 /**
- * The Solid port of web/__tests__/trash-page.ui.test.tsx: the same fixtures and the same assertions,
- * by accessible name. Three differences in how the test drives the page, none an assertion:
- * - the router is an explicit <MemoryRouter> whose one route renders the page — the analogue of the
- *   React test's <MemoryRouter><TrashPage /></MemoryRouter>. (testing-library's `location` option
- *   passes the page as a CHILD of MemoryRouter; @solidjs/router 1.x reads children as route
- *   definitions, so that renders nothing — observed, see .agent/REPORT.md.)
- * - the first assertion on the table waits for the rows: React's findBy* runs inside act(), which
- *   also flushes the stubbed fetch; Solid has no act(), so the data arrives after the table does.
- * - typing is `fireEvent.input`: React's `onChange` IS the native `input` event, while Solid's
- *   `onChange` is the native `change` event (fires on blur). The page filters on every keystroke,
- *   so it listens to `input`, and the test dispatches what a keystroke dispatches.
+ * The trash page, by accessible name. The router is an explicit <MemoryRouter> whose one route renders the
+ * page (testing-library's `location` option passes the page as a child, which @solidjs/router reads as route
+ * definitions and renders nothing). The first table assertion waits for the rows, which arrive after the table.
+ * Typing is `fireEvent.input`: the page filters on every keystroke, and Solid's `onChange` fires on blur.
  */
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
@@ -46,7 +39,6 @@ describe('trash table', () => {
 
     const table = await screen.findByRole('table');
     await waitFor(() => expect(table).toHaveTextContent('Quarterly Review'));
-    expect(table).toHaveTextContent('Quarterly Review');
     expect(table).toHaveTextContent('Revenue.csv');
     expect(screen.getByText('type')).toBeInTheDocument();
     expect(screen.getByText('ver')).toBeInTheDocument();

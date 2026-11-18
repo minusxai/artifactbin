@@ -14,12 +14,14 @@ const options=():AuthOptions=>({
   tokens:{byToken:async()=>null},
   upstream:async(_request:Request,actor:unknown)=>Response.json(actor),
 });
+/** A browser-session row for the test's token, expiring `seconds` from now (negative: already expired); `revoked` stamps deleted_at. */
+const seedAgentBrowser=(seconds:number,revoked=false)=>testDb().query(`INSERT INTO auth.credentials(kind,credential_hash,subject_id,expires_at${revoked?',deleted_at':''}) VALUES ('agent-browser',$1,$2,now()+make_interval(secs=>$3)${revoked?',now()':''})`,[createHash('sha256').update(sessionId).digest('hex'),token.id,seconds]);
 const cookie=async()=>setCookieHeader(encodeAgentSession({tokenIds:[token.id],sessionId},secret),false).split(';')[0]!;
 
 describe('the agent browser cookie',()=>{
   beforeEach(async()=>{await ensureAuthSchema(testDb(),'auth');await testDb().query("DELETE FROM auth.credentials");});
   it('rejects a live token-only cookie before and after browser-session revocation',async()=>{
-    await testDb().query("INSERT INTO auth.credentials(kind,credential_hash,subject_id,expires_at) VALUES ('agent-browser',$1,$2,now()+interval '30 days')",[createHash('sha256').update(sessionId).digest('hex'),token.id]);
+    await seedAgentBrowser(30*86400);
     const proxy=createAuthHost(options());
     expect(await (await proxy.request('http://app.test/a/x',{headers:{cookie:await cookie()}})).json()).toEqual({credential:'none'});
     await testDb().query("UPDATE auth.credentials SET deleted_at=now() WHERE kind='agent-browser'");
@@ -30,18 +32,18 @@ describe('the agent browser cookie',()=>{
     expect(await (await createAuthHost(options()).request('http://app.test/a/x',{headers:{cookie:legacy}})).json()).toEqual({credential:'none'});
   });
   it('rejects an expired browser nonce',async()=>{
-    await testDb().query("INSERT INTO auth.credentials(kind,credential_hash,subject_id,expires_at) VALUES ('agent-browser',$1,$2,now()-interval '1 second')",[createHash('sha256').update(sessionId).digest('hex'),token.id]);
+    await seedAgentBrowser(-1);
     expect(await (await createAuthHost(options()).request('http://app.test/a/x',{headers:{cookie:await cookie()}})).json()).toEqual({credential:'none'});
   });
   it('ignores live legacy ownership proofs during verified email login',async()=>{
-    await testDb().query("INSERT INTO auth.credentials(kind,credential_hash,subject_id,expires_at) VALUES ('agent-browser',$1,$2,now()+interval '30 days')",[createHash('sha256').update(sessionId).digest('hex'),token.id]);
+    await seedAgentBrowser(30*86400);
     const configured=options();configured.sessions={resolve:async()=>({userId:'usr_other',email:'other@example.test',emailVerified:true})};
     expect(await (await createAuthHost(configured).request('http://app.test/a/x',{headers:{cookie:await cookie()}})).json()).toEqual({credential:'session',userId:'usr_other',email:'other@example.test',emailVerified:true});
     configured.sessions={resolve:async()=>({userId:'usr_other',email:'other@example.test',emailVerified:false})};
     expect(await (await createAuthHost(configured).request('http://app.test/a/x',{headers:{cookie:await cookie()}})).json()).toEqual({credential:'none'});
   });
   it('keeps the account session but drops held token authority from a revoked browser cookie',async()=>{
-    await testDb().query("INSERT INTO auth.credentials(kind,credential_hash,subject_id,expires_at,deleted_at) VALUES ('agent-browser',$1,$2,now()+interval '30 days',now())",[createHash('sha256').update(sessionId).digest('hex'),token.id]);
+    await seedAgentBrowser(30*86400,true);
     const configured=options();configured.sessions={resolve:async()=>({userId:'usr_other',email:'other@example.test',emailVerified:true})};
     expect(await (await createAuthHost(configured).request('http://app.test/a/x',{headers:{cookie:await cookie()}})).json()).toEqual({credential:'session',userId:'usr_other',email:'other@example.test',emailVerified:true});
   });

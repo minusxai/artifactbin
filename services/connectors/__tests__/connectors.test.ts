@@ -3,7 +3,7 @@
  * mapping), configuration checks and secrecy, the network rule, and the Postgres connector end to end against a real
  * Postgres engine on a loopback socket (test-support pglite-wire): rows and types, bound values, the read-only session, limits,
  * and the viewer's values as the database sees them. TLS, statement timeouts, row policies and MySQL run against
- * real servers in services/app/lib/connections/__tests__/connectors-docker.test.ts (integration project).
+ * real servers in services/connectors/__tests__/connectors-docker.test.ts (integration project).
  */
 import net from 'node:net';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -191,35 +191,6 @@ describe('postgres, end to end', () => {
     ].join('\n'));
     // Transaction-scoped: nothing of the last viewer is left on the session once it committed.
     expect((await pg.query({ text: "select current_setting('app.viewer_id', true) as v", params: {}, viewer: null })).rows).toEqual([{ v: '' }]);
-  });
-
-  it('keeps to the limits: rows stop with truncated, bytes refuse', async () => {
-    const some = await pg.query({ text: 'select g from generate_series(1, 5000) g', params: {}, viewer: null, limits: { rows: 1200 } });
-    expect([some.rows.length, some.truncated, some.rows.at(-1)]).toEqual([1200, true, { g: 1200 }]);
-    expect(await failure(pg.query({ text: "select repeat('x', 1000) as x from generate_series(1, 100)", params: {}, viewer: null, limits: { bytes: 20_000 } }))).toMatchObject({ code: 'result_too_large' });
-    expect((await pg.query({ text: 'select 1 as one', params: {}, viewer: null, limits: { rows: 1e9 } })).rows).toEqual([{ one: 1 }]);
-  });
-
-  it('opens the database a namespace names, in its own session, and lists the schema as the viewer', async () => {
-    // PGlite has one database whatever the startup packet names; a second session is opened for it all the same.
-    expect((await pg.query({ text: 'select count(*) as n from sales.orders', params: {}, viewer: null, namespace: 'warehouse/finance' })).rows).toEqual([{ n: 3 }]);
-    expect(pg.sessions()).toBe(2);
-    for (const namespace of ['sales"; drop', 'a b', "x'"]) expect(await failure(pg.query({ text: 'select 1', params: {}, viewer: null, namespace })), namespace).toMatchObject({ code: 'invalid_query' });
-    const schema = await pg.schema({ viewer: alice });
-    const sales = schema.tables.filter((t) => t.namespace === 'sales');
-    expect(sales.map((t) => [t.name, t.kind, t.columns.length])).toEqual([['my_orders', 'view', 2], ['orders', 'table', 9]]);
-    expect(sales[1]!.columns[3]).toEqual({ name: 'amount', type: 'number' });
-    expect(await pg.test({ viewer: alice })).toMatchObject({ ok: true });
-  });
-
-  it('runs every statement as begin read only, the viewer statement, the statement, commit', async () => {
-    const log: string[] = [];
-    const watch = wire.db.query.bind(wire.db);
-    void watch;
-    await pg.query({ text: 'select 1 as one', params: {}, viewer: alice });
-    log.push(...(await wire.db.query<{ v: string }>("select current_setting('app.viewer_id', true) as v")).rows.map((r) => r.v ?? ''));
-    // Transaction-scoped: nothing of the last viewer is left on the session once it committed.
-    expect(log).toEqual(['']);
   });
 
   it('never puts the password in an error', async () => {

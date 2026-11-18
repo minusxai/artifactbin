@@ -13,9 +13,13 @@ async function harness(sub:string,positionals:string[],values:Record<string,unkn
   return Response.json({changed:true});
  }});return {result,calls};
 }
-it.each(['remove','leave','move','delete','invite','role','share'])('%s refuses before any HTTP without --yes',async sub=>{
+const ALL={group:'design_crit',role:'editor',handle:'design_crit'};
+it.each([
+ ['remove',['design_crit','teammate'],ALL],['leave',['PAGE12'],ALL],['move',['PAGE12'],ALL],['delete',['PAGE12'],ALL],['invite',['design_crit','a@example.test'],ALL],['role',['design_crit','teammate'],ALL],['share',['PAGE12'],ALL],
+ ['uninvite',['design_crit','other'],{group:'design_crit'}],['unshare',['design_crit','other'],{group:'design_crit'}],['unlink',['design_crit','other'],{group:'design_crit'}],
+])('%s refuses before any HTTP without --yes',async(sub,positionals,values)=>{
  const {groupsCommand}=await import('../../../skills/artifactbin/scripts/groups.mjs');let calls=0;
- await expect(groupsCommand({sub,positionals:sub==='invite'?['design_crit','a@example.test']:sub==='role'||sub==='remove'?['design_crit','teammate']:['PAGE12'],values:{group:'design_crit',role:'editor',handle:'design_crit'}},{fetcher:async()=>{calls++;throw Error('unexpected');}})).rejects.toMatchObject({exit:2,code:'confirmation_required'});expect(calls).toBe(0);
+ await expect(groupsCommand({sub,positionals,values},{fetcher:async()=>{calls++;throw Error('unexpected');}})).rejects.toMatchObject({exit:2,code:'confirmation_required'});expect(calls).toBe(0);
 });
 it.each([
  ['list',[],{},'/api/groups','GET',undefined],
@@ -73,13 +77,6 @@ it('reports multiple invitations individually, including partial failure',async(
  const {groupsCommand}=await import('../../../skills/artifactbin/scripts/groups.mjs');let n=0;
  const result=await groupsCommand({sub:'invite',positionals:['design_crit','a@example.test','b@example.test'],values:{}},{env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic'},fetcher:async(_url:any,init:any)=>init.method==='GET'?Response.json({group:{id:'grp_stable',handle:'design_crit'}}):++n===1?Response.json({changed:true}):Response.json({error:'rate_limited',retry_after:60},{status:429})});
  expect(result.ok).toBe(false);expect(result.results.map((r:any)=>r.ok)).toEqual([true,false]);expect(result.results[1].code).toBe('rate_limited');
-});
-it('propagates server refusal instead of claiming a mutation succeeded',async()=>{
- await expect(harness('leave',['design_crit'],{yes:true},'/members/me')).rejects.toMatchObject({code:'forbidden',exit:3});
-});
-it.each(['uninvite','unshare','unlink'])('%s also refuses before HTTP without destructive consent',async sub=>{
- const {groupsCommand}=await import('../../../skills/artifactbin/scripts/groups.mjs');let calls=0;
- await expect(groupsCommand({sub,positionals:['design_crit','other'],values:{group:'design_crit'}},{fetcher:async()=>{calls++;throw Error('unexpected');}})).rejects.toMatchObject({exit:2,code:'confirmation_required'});expect(calls).toBe(0);
 });
 it('show ends on how to change its members and invitations: proposed to the user by handle, role and email, made after they agree',async()=>{
  const {groupsCommand}=await import('../../../skills/artifactbin/scripts/groups.mjs');

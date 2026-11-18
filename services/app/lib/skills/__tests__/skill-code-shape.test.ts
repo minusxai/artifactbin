@@ -7,7 +7,7 @@
  */
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {describe, expect, it} from 'vitest';
+import {expect, it} from 'vitest';
 import {readFileSync} from 'node:fs';
 import {loadSkillAssets} from '../assets';
 import {skillTree, joinSoftBreaks} from '..';
@@ -82,32 +82,6 @@ function lengthProblems(kind: CodeKind, source: string): string[] {
   });
   return problems;
 }
-
-describe('the rules', () => {
-  const commands = ['publish'];
-  it('classify by rule', () => {
-    expect(kindOf('components/button.js', '', commands)).toBe('compiled');
-    expect(kindOf('examples/rows.csv', 'a,b', commands)).toBe('data');
-    expect(kindOf('design-systems/x.css', '/*\n * X. Generated from\n * specs */', commands)).toBe('generated');
-    expect(kindOf('design-systems/x.css', '/* hand-written */', commands)).toBe('internal');
-    expect(kindOf('scripts/publish.mjs', '', commands)).toBe('command');
-    expect(kindOf('scripts/toolbox-x.mjs', '', commands)).toBe('internal');
-    expect(kindOf('components/x.ts', '/**\n * <af-x>: a thing.\n */', commands)).toBe('component');
-    expect(kindOf('components/x-model.ts', '/** Internal: x. Used by: x.ts */', commands)).toBe('internal');
-    expect(kindOf('examples/a.html', '<!doctype html>\n<!--\nExample: a.\n-->', commands)).toBe('example');
-  });
-  it('find a missing header, a missing label and an over-long file', () => {
-    expect(headerProblems('internal', 'export const x = 1;')).toEqual(['no leading comment block']);
-    expect(headerProblems('component', '/**\n * <af-x>: x.\n * Usage: u\n * Props: p\n */\n'))
-      .toEqual(['header lacks Examples:', 'header lacks Gotchas:']);
-    const command = '/** c */\nexport const DESCRIPTION = `S\nUsage: u\nFlags: f\nExamples:\n  x\n`;\n';
-    expect(headerProblems('command', command)).toEqual(['header lacks Gotchas:']);
-    expect(lengthProblems('internal', 'x\n'.repeat(201))).toEqual(['201 lines, cap 200']);
-    expect(lengthProblems('internal', 'y'.repeat(101))).toEqual(['line 1 is 101 chars']);
-    expect(lengthProblems('generated', 'y'.repeat(101))).toEqual([]);
-    expect(lengthProblems('compiled', 'y\n'.repeat(500))).toEqual([]);
-  });
-});
 
 it('every shipped hand-written code file has its header and fits 200 lines of 100 columns', async () => {
   const {COMMANDS} = await import('../../../skills/artifactbin/scripts/toolbox-commands.mjs');

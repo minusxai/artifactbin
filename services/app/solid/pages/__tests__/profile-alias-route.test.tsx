@@ -80,7 +80,9 @@ it('crosses a document to the server, whose page for it is the compiled one, wit
 it('sends the /edit alias to the dataset editor, not the folder view', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => Response.json({ error: 'not_found' }, { status: 404 })));
   await at('/@bob/data01-set/edit');
-  await waitFor(() => expect(screen.queryByLabelText('Not found')).toBeNull());
+  // The editor's own words for a dataset it cannot load (the stub answers 404 to everything).
+  expect(await screen.findByText('The dataset could not be opened for editing.')).toBeInTheDocument();
+  expect(screen.queryByLabelText('Not found')).toBeNull();
   expect(screen.queryByLabelText('Loading folder')).toBeNull();
 });
 

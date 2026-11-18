@@ -139,7 +139,7 @@ describe.each<[string, BrowserService]>([['in-process', local], ['over HTTP', re
     const at = (50 * info.width + 50) * info.channels;
     expect([...data.subarray(at, at + 3)]).toEqual([51, 204, 51]);
   });
-  it('shoots the selected element as png, with the cross-origin request aborted', async () => {
+  it('shoots the selected element as a png of its own size', async () => {
     const r = await svc.render(base());
     if (!r.ok) throw new Error(JSON.stringify(r));
     expect(r.mime).toBe('image/png');

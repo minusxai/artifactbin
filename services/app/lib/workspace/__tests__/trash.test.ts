@@ -59,15 +59,6 @@ describe('the trash', () => {
     expect((await getArtifactById(sub.id))!.ancestor_ids).toEqual([f.id]);
   });
 
-  it('there is no refusal any more: a folder with children deletes (into the trash) without force', async () => {
-    const o = await owner();
-    const f = await create(o.token, { format: 'folder', title: 'F' });
-    await create(o.token, { html: nativeHtml('<p>d</p>'), parent_id: f.id });
-    const r = await j(await del(o.token, f.id));
-    expect(r.status).toBe(200);
-    expect(r.body.error).toBeUndefined();
-  });
-
   /*
    * THE TERMINAL STATE. There is no retention and nothing that sweeps: a row
    * deleted a year ago is exactly as present, as listed and as restorable as

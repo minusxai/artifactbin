@@ -114,7 +114,7 @@ it('opens above a dialog it sits in', () => {
   expect(screen.getByRole('dialog', { name: 'Pick' })).toBeInTheDocument();
 });
 
-it('takes an id so a separate <label for> names it, and works inside a Field', () => {
+it('takes an id so a separate <label for> names it', () => {
   render(() => <>
     <label for="link-role">Link role</label>
     <Select id="link-role" value="region" options={OPTIONS} onChange={vi.fn()} />

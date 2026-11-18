@@ -130,12 +130,9 @@ describe('fetchWebResource', () => {
     })).rejects.toMatchObject({ code: 'forbidden_host' });
   });
 
-  it('refuses a redirect into the private network EVEN under a public-only policy', async () => {
-    // allowHttp so the first (loopback) hop is reachable in the test, but
-    // private addresses stay forbidden: the second hop must die on the guard.
+  it('under a public-only policy refuses a loopback first hop before any redirect is followed', async () => {
+    // The second hop is reached only by the lax case below, which needs a first hop the policy admits.
     setWebIngestPolicyForTests({ allowPrivate: false, allowHttp: true });
-    // First hop is loopback too, so this refuses immediately — which is the
-    // point; the dedicated second-hop case needs the lax first hop:
     expect(await code(fetchWebResource(`${base}/redirect-private`, { maxBytes: 1000 }))).toBe('forbidden_address');
   });
 

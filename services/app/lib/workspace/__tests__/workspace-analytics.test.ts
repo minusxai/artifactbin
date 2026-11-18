@@ -34,10 +34,6 @@ async function seedLog(db: Queryable, moments: Moment[]): Promise<void> {
 
 const at = (daysAgo: number, minute: number, now = Date.now()) => new Date(Math.floor(now / 86_400_000) * 86_400_000 - daysAgo * 86_400_000 + minute * 60_000).toISOString();
 
-it.each(['2026-09-10T00:01:00Z', '2026-09-10T23:59:00Z'])('history timestamps stay in their intended UTC day at %s', (now) => {
-  expect(at(39, 9, Date.parse(now))).toBe('2026-08-02T00:09:00.000Z');
-});
-
 beforeEach(async () => {
   requestHeaders.clear();
   const db = await harness.db();

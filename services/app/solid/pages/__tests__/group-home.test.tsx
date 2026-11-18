@@ -12,7 +12,7 @@ import { SessionProvider } from '../../lib/session';
 const session={kind:'account',user:{id:'u1',email:'viewer@example.com'},onboarded:true};
 const group={id:'g1',handle:'team',name:'Team',description:'',role:'member'};
 afterEach(()=>{cleanup();vi.unstubAllGlobals();});
-function open(){render(()=> <MemoryRouter><Route path="*" component={()=> <SessionProvider><HomePage/></SessionProvider>}/></MemoryRouter>);}
+function open(history?:ReturnType<typeof createMemoryHistory>){return render(()=> <MemoryRouter history={history}><Route path="*" component={()=> <SessionProvider><HomePage/></SessionProvider>}/></MemoryRouter>);}
 const publicDeployment={mode:'public',setup_complete:true,is_owner:false,default_group:null};
 const emptyShelf={artifacts:[],shared:[]};
 const insights={signedIn:true,accountId:'u1',stats:{assets:0},views:{},viewsOverTime:[],likes:0,likesOverTime:[],followers:0,forks:0};
@@ -61,7 +61,7 @@ it('shows explicit Personal recovery for an inaccessible default and recovers wh
 });
 it('recovers Personal with ?personal=1 in one request even though the saved group is unavailable',async()=>{
  const fetcher=stub(true);const history=createMemoryHistory();history.set({value:'/?personal=1',replace:true});
- render(()=> <MemoryRouter history={history}><Route path="*" component={()=> <SessionProvider><HomePage/></SessionProvider>}/></MemoryRouter>);
+ open(history);
  expect(await screen.findByRole('heading',{name:/create your first artifact/i})).toBeInTheDocument();
  expect(screen.queryByText(/group is unavailable/i)).toBeNull();
  const choose=await screen.findByRole('button',{name:'Set Personal as default'});expect(choose).toBeEnabled();
@@ -136,7 +136,7 @@ it('retains explicit Personal recovery for an admitted account when the company 
  const company={mode:'company',setup_complete:false,is_owner:false,default_group:null};
  vi.stubGlobal('fetch',vi.fn(async(url:string)=>url.includes('/session')?Response.json(session):url.includes('part=insights')?Response.json(insights):Response.json({signedIn:true,accountId:'u1',deployment:company,preferences:{default_destination:{type:'inherit'}},destination:url.includes('personal=1')?personalDestination:{kind:'setup'}})));
  const history=createMemoryHistory();history.set({value:'/?personal=1',replace:true});
- render(()=> <MemoryRouter history={history}><Route path="*" component={()=> <SessionProvider><HomePage/></SessionProvider>}/></MemoryRouter>);
+ open(history);
  expect(await screen.findByRole('heading',{name:/create your first artifact/i})).toBeInTheDocument();
  expect(screen.queryByText('Your deployment owner needs to finish setup before you can continue.')).toBeNull();
  expect(screen.getByRole('link',{name:'Personal'})).toHaveAttribute('aria-current','page');
@@ -145,7 +145,7 @@ it('retains explicit Personal recovery for an admitted account when the company 
 it('keeps company setup for the owner and the recovery message for everyone else without a shelf',async()=>{
  for(const owner of [true,false]){
   const fetcher=vi.fn(async(url:string)=>url.includes('/session')?Response.json(session):Response.json({signedIn:true,accountId:'u1',deployment:{mode:'company',setup_complete:false,is_owner:owner,default_group:null},preferences:{default_destination:{type:'inherit'}},destination:{kind:'setup'}}));vi.stubGlobal('fetch',fetcher);
-  const view=render(()=> <MemoryRouter><Route path="*" component={()=> <SessionProvider><HomePage/></SessionProvider>}/></MemoryRouter>);
+  const view=open();
   if(owner)expect(await screen.findByRole('button',{name:'Company group'})).toBeInTheDocument();
   else{expect(await screen.findByRole('alert')).toHaveTextContent('The company default group is unavailable');expect(screen.getByRole('link',{name:'Open Personal'})).toHaveAttribute('href','/?personal=1');}
   expect(fetcher.mock.calls.map(([url])=>String(url)).some(url=>url.includes('part=core'))).toBe(false);
@@ -256,7 +256,7 @@ it('explains group settings and the compact default toggle on focus',async()=>{
 it.each([false,true])('keeps the Personal default control inside its header and beside the sidebar (populated: %s)',async(populated)=>{
  vi.stubGlobal('fetch',vi.fn(async(url:string)=>url.includes('/session')?Response.json(session):url.includes('part=insights')?Response.json({...insights,stats:{assets:populated?1:0}}):bootstrapOf(personalDestination)));
  const history=createMemoryHistory();history.set({value:'/?personal=1',replace:true});
- render(()=> <MemoryRouter history={history}><Route path="*" component={()=> <SessionProvider><HomePage/></SessionProvider>}/></MemoryRouter>);
+ open(history);
  const toggle=await screen.findByRole('button',{name:'Set Personal as default'});
  expect(toggle.closest('header')).not.toBeNull();
  expect(toggle.closest('.workspace-shell')).toContainElement(screen.getByRole('navigation',{name:'Workspace'}));
