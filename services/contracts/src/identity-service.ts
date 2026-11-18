@@ -26,10 +26,24 @@ export const IDENTITY_INTROSPECT_PATH = '/api/internal/identity/introspect';
  * own credential it was issued for, `token` (a `tokens` row) or `session` (a `sessions` row), which a service re-checks
  * by that id in the matching view (`live`). On an exchanged token `token_id` is the token's own id (`vtk_…`), never a
  * row of `tokens`.
+ *
+ * THE PRINCIPAL: who the token acts as. `principal_kind` is `'user'` on every active answer today, with `group_id`,
+ * `group_role` and `issued_by` null: the principal is the person `user_id`. Once group sign-ins exist, a `'group'`
+ * answer's principal is the group `group_id` itself at the level `group_role` (`'member'` or `'editor'`), with no
+ * person behind it; `issued_by` is then the person who issued the credential, never the principal. A reader checks
+ * `principal_kind` before relying on `user_id` as the person acting, and refuses a kind it does not handle. The
+ * `tokens` view carries the same facts (`group_id`, `group_role`, `issued_by`, `grant_id`), all null on every row today.
  */
 export type IdentityIntrospectResponse =
-  | { active: true; user_id: string; token_id: string; scopes: string[]; audience: string | null; expires_at: string | null; parent: ServiceTokenParent | null }
+  | {
+      active: true; principal_kind: IdentityPrincipalKind; user_id: string; token_id: string; scopes: string[]; audience: string | null;
+      expires_at: string | null; parent: ServiceTokenParent | null; group_id: string | null; group_role: IdentityPrincipalGroupRole | null; issued_by: string | null;
+    }
   | { active: false };
+/** What an introspected token acts as: a person, or (once group sign-ins exist) a group at a level. */
+export type IdentityPrincipalKind = 'user' | 'group';
+/** The level a group principal acts at: never `admin`. */
+export type IdentityPrincipalGroupRole = 'member' | 'editor';
 
 /** The default read schema (IDENTITY__SCHEMA): where the identity views live. */
 export const IDENTITY_SCHEMA = 'identity';
@@ -37,12 +51,14 @@ export const IDENTITY_SCHEMA = 'identity';
 /**
  * Every identity view and its columns, in order: the cross-repository read contract (generated from the identity
  * module's table declarations minus its secret columns, @artifactbin/auth identity-store/views, which a test pins to
- * this literal). A column added at the end of a table is added at the end of its view; anything else is a contract
- * change on both sides.
+ * this literal). A column added at the end of a table is added at the end of its view, after its rule columns, so no
+ * column a reader knows ever moves; anything else is a contract change on both sides.
  *  - users: every account row; `active` is "may sign in and act on this deployment" (Artifactbin's one rule).
  *  - tokens: access tokens, never their hash; `scopes` is the granted scope list; `live` is the bearer read's rule (row,
  *    expiry, OAuth family fence), an audience of this deployment's API or of a configured service
  *    (IDENTITY__SERVICE_AUDIENCES), and an active account. A reader accepting a token checks its `audience` itself.
+ *    `group_id`, `group_role`, `issued_by`, `grant_id`: the principal columns (see `IdentityIntrospectResponse`), null
+ *    on every row today; a row with a group principal will name its group, level, issuing person and approval.
  *  - groups (`parent_id` null at a root; `deleted_at` set once deleted), group_members (DIRECT rows only),
  *    group_hierarchy (one row, id 'installation': the revision moves on every group create, delete and reparent),
  *    group_invitations, handle_reservations, group_mail_outbox: the tables as they are.
@@ -50,7 +66,7 @@ export const IDENTITY_SCHEMA = 'identity';
  */
 export const IDENTITY_VIEWS = {
   users: ['id', 'email', 'kind', 'parent_user_id', 'expires_at', 'merged_into_user_id', 'name', 'username', 'image_key', 'auto_accept_mentions', 'welcome_pending', 'test_account', 'created_at', 'active'],
-  tokens: ['id', 'name', 'user_id', 'client_harness', 'audience', 'scope', 'request_authority', 'created_at', 'deleted_at', 'expires_at', 'last_used_at', 'scopes', 'live'],
+  tokens: ['id', 'name', 'user_id', 'client_harness', 'audience', 'scope', 'request_authority', 'created_at', 'deleted_at', 'expires_at', 'last_used_at', 'scopes', 'live', 'group_id', 'group_role', 'issued_by', 'grant_id'],
   handle_reservations: ['handle', 'kind', 'subject_id'],
   groups: ['id', 'handle', 'name', 'description', 'created_by', 'created_at', 'deleted_at', 'parent_id'],
   group_hierarchy: ['id', 'revision', 'role_model_version'],

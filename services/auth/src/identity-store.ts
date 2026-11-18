@@ -86,8 +86,10 @@ const relationKind = async (db: Queryable, schema: string, name: string) =>
  * CREATE on AUTH__SCHEMA, as in a single-role install. In a split-role database the operator runs those statements
  * once (`identityMoveStatements`) and this refuses to boot (`IdentityNotReady`) until then. The app's tables the views
  * read (`deployment_members`, `deployment_state`, `identity_settings`) and the columns the views read from them are the app's boot's: without them this
- * answers `IdentityNotReady` too, for the host to retry. A view whose columns changed (or a view a former contract
- * named) is dropped and created again, once; readers keep their SELECT through the schema's default privileges.
+ * answers `IdentityNotReady` too, for the host to retry. A view whose columns only grew at the end is replaced in
+ * place, so a reader's own views on it survive; a view whose columns changed otherwise (or a view a former contract
+ * named) is dropped with CASCADE and created again, once; readers keep their SELECT through the schema's default
+ * privileges.
  */
 export async function ensureIdentitySchema(db: TransactionalQueryable, schemas: IdentitySchemas): Promise<void> {
   const auth = plainIdentifier(schemas.auth, 'auth schema'), app = plainIdentifier(schemas.app, 'app schema'), read = plainIdentifier(schemas.read, 'read schema');
@@ -121,7 +123,10 @@ export async function ensureIdentitySchema(db: TransactionalQueryable, schemas: 
     for (const row of (await tx.query<{table_name: string; column_name: string}>(
       `SELECT c.table_name, c.column_name FROM information_schema.columns c JOIN information_schema.views v ON v.table_schema=c.table_schema AND v.table_name=c.table_name
        WHERE c.table_schema=$1 ORDER BY c.table_name, c.ordinal_position`, [read])).rows) current.set(row.table_name, [...current.get(row.table_name) ?? [], row.column_name]);
-    const stale = [...current].filter(([name, columns]) => JSON.stringify(columns) !== JSON.stringify(wanted[name]));
+    // A view that only grows at the end is replaced in place (CREATE OR REPLACE appends), which keeps every view a
+    // reader built on it; any other change drops it, with whatever was built on it.
+    const grows = (columns: string[], want: readonly string[] | undefined) => !!want && columns.length <= want.length && columns.every((column, i) => column === want[i]);
+    const stale = [...current].filter(([name, columns]) => !grows(columns, wanted[name]));
     for (const [name] of stale) await tx.query(`DROP VIEW IF EXISTS ${read}.${name} CASCADE`);
     for (const statement of identityViewStatements({auth, app, read}, {sessions})) await tx.query(statement);
   });

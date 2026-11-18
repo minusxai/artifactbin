@@ -75,14 +75,23 @@ describe('identity introspection (contracts IDENTITY_INTROSPECT_PATH)',()=>{
  });
  it('with the installation\'s secret: user, token id, scopes, audience and expiry of an access token for this API or a configured service, or inactive',async()=>{
   const app=host();
-  expect(await introspect(app,'mx_live')).toEqual({active:true,user_id:'usr_1',token_id:'tok_live',scopes:['artifacts'],audience:`${origin}/api`,expires_at:'2030-01-01T00:00:00.000Z',parent:null});
-  expect(await introspect(app,'mx_plain')).toEqual({active:true,user_id:'usr_1',token_id:'tok_plain',scopes:[],audience:null,expires_at:null,parent:null});
-  expect(await introspect(app,'mx_warehouse')).toEqual({active:true,user_id:'usr_1',token_id:'tok_warehouse',scopes:[],audience:WAREHOUSE.origin,expires_at:null,parent:null});
+  expect(await introspect(app,'mx_live')).toEqual({active:true,principal_kind:'user',user_id:'usr_1',token_id:'tok_live',scopes:['artifacts'],audience:`${origin}/api`,expires_at:'2030-01-01T00:00:00.000Z',parent:null,group_id:null,group_role:null,issued_by:null});
+  expect(await introspect(app,'mx_plain')).toEqual({active:true,principal_kind:'user',user_id:'usr_1',token_id:'tok_plain',scopes:[],audience:null,expires_at:null,parent:null,group_id:null,group_role:null,issued_by:null});
+  expect(await introspect(app,'mx_warehouse')).toEqual({active:true,principal_kind:'user',user_id:'usr_1',token_id:'tok_warehouse',scopes:[],audience:WAREHOUSE.origin,expires_at:null,parent:null,group_id:null,group_role:null,issued_by:null});
   for(const token of ['mx_unknown','mx_elsewhere','mx_refused'])expect(await introspect(app,token),token).toEqual({active:false});
   // A service no longer configured: its tokens are nobody's.
   expect(await introspect(host(undefined,'[]'),'mx_warehouse')).toEqual({active:false});
   expect((await call(app,IDENTITY_INTROSPECT_PATH,{})).status).toBe(400);
   expect((await call(host({byToken:async()=>{throw Error('down');}}),IDENTITY_INTROSPECT_PATH,{token:'mx_live'})).status).toBe(503);
+ });
+ it('every active answer names its principal: a person, user_id never null, no group; the inactive answer carries nothing more',async()=>{
+  const app=host();dead.clear();
+  for(const [token,auth] of [['mx_live',secret],['mx_plain',secret],['mx_warehouse',warehouseSecret],[exchanged(),warehouseSecret],[exchanged({kind:'token',id:'tok_plain'}),secret]] as const){
+   const body=await introspect(app,token,auth);
+   expect(body,token).toMatchObject({active:true,principal_kind:'user',user_id:'usr_1',group_id:null,group_role:null,issued_by:null});
+   expect(Object.keys(body).sort(),token).toEqual(['active','audience','expires_at','group_id','group_role','issued_by','parent','principal_kind','scopes','token_id','user_id']);
+  }
+  for(const token of ['mx_unknown','mx_refused'])expect(await introspect(app,token),token).toEqual({active:false});
  });
  it('with a service\'s own secret: only tokens bound to that service\'s origin, every other one inactive',async()=>{
   const app=host();
@@ -93,8 +102,8 @@ describe('identity introspection (contracts IDENTITY_INTROSPECT_PATH)',()=>{
  });
  it('an exchanged token: the person, the audience and the parent credential, answered only while that parent is live',async()=>{
   const app=host(),now=Date.now();dead.clear();
-  expect(await introspect(app,exchanged({kind:'session',id:'ses_1'}),warehouseSecret)).toEqual({active:true,user_id:'usr_1',token_id:expect.stringMatching(/^vtk_/),scopes:[],
-   audience:WAREHOUSE.origin,expires_at:new Date((Math.floor(now/1000)+300)*1000).toISOString(),parent:{kind:'session',id:'ses_1'}});
+  expect(await introspect(app,exchanged({kind:'session',id:'ses_1'}),warehouseSecret)).toEqual({active:true,principal_kind:'user',user_id:'usr_1',token_id:expect.stringMatching(/^vtk_/),scopes:[],
+   audience:WAREHOUSE.origin,expires_at:new Date((Math.floor(now/1000)+300)*1000).toISOString(),parent:{kind:'session',id:'ses_1'},group_id:null,group_role:null,issued_by:null});
   expect(await introspect(app,exchanged({kind:'token',id:'tok_plain'}))).toMatchObject({active:true,parent:{kind:'token',id:'tok_plain'}});
   // Another service's secret, another user's parent, an unknown parent, an inactive account: inactive.
   expect(await introspect(app,exchanged({kind:'session',id:'ses_1'},CRM),warehouseSecret)).toEqual({active:false});

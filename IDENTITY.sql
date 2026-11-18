@@ -39,7 +39,7 @@ CREATE OR REPLACE VIEW identity.tokens AS
           WHERE sibling.kind='refresh_token' AND sibling.group_id=member.group_id
             AND (sibling.deleted_at IS NOT NULL OR access.id IS NULL OR access.deleted_at IS NOT NULL))))) AND t.user_id IS NOT NULL
       AND EXISTS (SELECT 1 FROM app.identity_settings s WHERE s.id = 'installation' AND (COALESCE(t.audience, '') = '' OR t.audience = ANY(s.api_audiences) OR t.audience = ANY(s.service_audiences)))
-      AND COALESCE((SELECT u.active FROM identity.users u WHERE u.id = t.user_id), false)) AS live
+      AND COALESCE((SELECT u.active FROM identity.users u WHERE u.id = t.user_id), false)) AS live, t.group_id, t.group_role, t.issued_by, t.grant_id
   FROM auth.tokens t;
 
 CREATE OR REPLACE VIEW identity.handle_reservations AS

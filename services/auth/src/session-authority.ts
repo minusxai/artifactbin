@@ -4,8 +4,9 @@ import {ARTIFACT_WORKLOAD_PATH,APP_ARTIFACT_WORKLOAD_PATH,SERVICE_PAYLOAD_LIMIT,
  * Auth-owned RPC, mounted before browser/session resolution and the public internal-path refusal. Every route here
  * is service-authenticated (SERVICE_AUTH_HEADER) and refused without it:
  *  - session-live (INTERNAL__SERVICE_SECRET): is a human session still live (the pages sessions' revalidation);
- *  - identity introspection (contracts `IDENTITY_INTROSPECT_PATH`): a presented token, answered with its user, id,
- *    scopes, audience, expiry and, for an exchanged token, the credential it was issued for. An
+ *  - identity introspection (contracts `IDENTITY_INTROSPECT_PATH`): a presented token, answered with its principal
+ *    (always a person, `principal_kind: 'user'`), user, id, scopes, audience, expiry and, for an exchanged token, the
+ *    credential it was issued for. An
  *    access token is read by the one bearer read every API request is admitted by (token, OAuth family fence,
  *    identity) and must be bound to this deployment's API or to a configured service (IDENTITY__SERVICE_AUDIENCES); a
  *    exchanged token is verified by its signature (./identity/service-tokens) and by its
@@ -34,6 +35,8 @@ import {testDomainSignInOf} from './config';
 import {IdentityNotReady,createIdentityStore,ensureIdentitySchema} from './identity-store';
 import {isServiceToken,verifyServiceToken,serviceTokenKey} from './identity/service-tokens';
 import {artifactReadKey,signArtifactReadGrant,verifyArtifactReadGrant} from './identity/artifact-read-grants';
+/** A person's token: no group principal (every active introspection answer, until group sign-ins exist). */
+const PERSON={group_id:null,group_role:null,issued_by:null} as const;
 const answer=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json','cache-control':'no-store'}});
 const sha256=(value:string)=>createHash('sha256').update(value).digest('hex');
 /** The configured service whose introspection secret `presented` is, compared in constant time; undefined when none. */
@@ -87,11 +90,11 @@ export function sessionAuthority(o:AuthOptions):Part<AuthEnv>{return {name:'sess
    if(isServiceToken(input.token)){
     const claims=tokenKey?verifyServiceToken(tokenKey,audiences,input.token):null;
     if(!claims||(only&&claims.aud!==only.origin)||!await activeUser(claims.sub)||!await parentLive(claims.par,claims.sub))return inactive;
-    return answer({active:true,user_id:claims.sub,token_id:claims.jti,scopes:[],audience:claims.aud,expires_at:new Date(claims.exp*1000).toISOString(),parent:claims.par} satisfies IdentityIntrospectResponse);
+    return answer({active:true,principal_kind:'user',user_id:claims.sub,token_id:claims.jti,scopes:[],audience:claims.aud,expires_at:new Date(claims.exp*1000).toISOString(),parent:claims.par,...PERSON} satisfies IdentityIntrospectResponse);
    }
    const token=await live(c,await o.tokens.byToken(input.token));
    if(!token||(only&&token.audience!==only.origin))return inactive;
-   return answer({active:true,user_id:token.userId,token_id:token.id,scopes:token.scope?.split(/\s+/).filter(Boolean)??[],audience:token.audience??null,expires_at:token.expiresAt??null,parent:null} satisfies IdentityIntrospectResponse);
+   return answer({active:true,principal_kind:'user',user_id:token.userId,token_id:token.id,scopes:token.scope?.split(/\s+/).filter(Boolean)??[],audience:token.audience??null,expires_at:token.expiresAt??null,parent:null,...PERSON} satisfies IdentityIntrospectResponse);
   }catch{return answer({error:'session_unavailable'},503);}
  });
  app.all(ARTIFACT_WORKLOAD_PATH,async c=>{
