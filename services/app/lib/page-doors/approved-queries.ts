@@ -5,12 +5,15 @@
  * reader's own identity never sent as the reader; a parameter outside what the approval allows is refused, never run as
  * the reader instead. Only a declared query, read by name from the version, ever runs as the group: a reader's own
  * `sql` always runs as the reader. The approval is asked again after the read, so one revoked meanwhile never answers.
- * Anonymous readers are refused, as everywhere on the default connection.
+ * Anonymous readers are refused, as everywhere on the default connection. Every read run as the group is recorded
+ * (contracts events `approved_query_read`): the real reader as its subject, the approval, query, hash, connection and
+ * group in its payload, never the reader's values; best-effort, as every observational event (lib/platform `emit`).
  */
 import {sqlReadFailure,type HtmlPageVersion} from '@artifactbin/contracts';
 import type {AccessActor} from '@/lib/accounts';
 import {VIEWER_PARAMS,connectorViewer,declaredConnectionQuery,groupViewer,runDeclaredConnectionQuery,type ConnectionSqlReply} from '@/lib/connections';
 import {approvedRun,pageOwnerName,paramsOutside} from '@/lib/query-approvals';
+import {actorSubject,emit} from '@/lib/platform';
 
 type Admission={step<T>(pending:Promise<T>):Promise<T>;dispatch(read:boolean):AbortSignal};
 
@@ -26,6 +29,7 @@ export async function pageDeclaredConnectionSql(actor:AccessActor,page:HtmlPageV
  const reply=await runDeclaredConnectionQuery(groupViewer(approval.groupId,'member'),declared,raw.params,signal,admission);
  // Revoked, edited or no longer the group's while it ran: the door reads again, as the reader.
  if((await admission.step(approvedRun(page.pageId,head,declared)))?.id!==approval.id)throw new Error('dataset_changed');
+ void emit(actorSubject(actor),'approved_query_read',{kind:'artifact',id:page.pageId},{approval_id:approval.id,query:declared.query.name,query_hash:approval.hash,connection:approval.connection,group_id:approval.groupId});
  return reply;
 }
 

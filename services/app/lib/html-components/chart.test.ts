@@ -176,6 +176,18 @@ it('shows loading, empty, waiting and failed states, says what to fix and refuse
   expect(built).toBe(0);
 });
 
+it('shows a declared query\'s refusal naming whom to ask, never an empty chart', async () => {
+  // As the page SQL door answers a reader a page's group has not approved its query for (lib/page-doors approved-queries).
+  const named = 'You don\'t have access to this data. Ask Team, who owns this page, for access.';
+  const el = mount({}, { chart: BAR, query: { ...statement('', { region: 'EU' }), query: 'totals' } });
+  await until(() => watches.length === 1, 'watch');
+  watches[0]!.error(Object.assign(new Error(named), { name: 'SqlError', code: 'permission_denied', detail: '42501 sales are not shared with this reader' }));
+  await until(() => status(el).textContent === named, 'named refusal');
+  expect(el.getAttribute('data-af-error')).toBe('permission_denied');
+  expect(el.querySelector('.af-chart-plot svg')).toBeNull();
+  expect(built).toBe(0);
+});
+
 it('shows each failed read\'s sentence and code in place of the drawing, never "No rows", and draws a cut-off answer with a note', async () => {
   const kinds = ['permission_denied', 'sign_in_required', 'unavailable', 'validation_failed', 'timeout', 'result_too_large', 'dataset_not_found', 'unknown_query'] as const;
   for (const code of kinds) {

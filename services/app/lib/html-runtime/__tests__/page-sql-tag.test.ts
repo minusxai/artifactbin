@@ -128,6 +128,15 @@ it('names a reply that never came unavailable and one it cannot read unexpected,
   expect(await sql`select 1`.then(() => null, (e: unknown) => e)).toMatchObject({ code: 'unexpected', message: 'This data could not be read.' });
 });
 
+it('rejects a declared query a reader may not run with the sentence the server named, whom to ask included', async () => {
+  const named = 'You don\'t have access to this data. Ask Team, who owns this page, for access.';
+  const { p, sent } = port(() => ({ error: 'permission_denied', message: '42501 sales are not shared with this reader', notice: named }));
+  const denied = await createSql(p).query('totals', { region: 'EU' }).then(() => null, (e: unknown) => e);
+  expect(sent[0]).toMatchObject({ query: 'totals', params: { region: 'EU' } });
+  expect(denied).toBeInstanceOf(SqlError);
+  expect(denied).toMatchObject({ code: 'permission_denied', message: named, detail: '42501 sales are not shared with this reader' });
+});
+
 it('watch: a read that starts failing reaches its error callback, and without one is reported, never dropped', async () => {
   let failing = false;
   const { p, invalidate } = port(() => failing ? { error: 'unavailable', message: 'the database could not be reached', notice: 'The data can\'t be reached right now.' } : { columns: [], rows: [{ n: 1 }] });

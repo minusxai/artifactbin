@@ -46,6 +46,7 @@ const FIXTURES: Fixtures = {
     unliked: {},
     query_approved: { approval_id: 'pqa_1', query: 'totals', query_hash: 'a'.repeat(64), connection: 'default:', group_id: 'grp_1' },
     query_approval_ended: { approval_id: 'pqa_1', query: 'totals', query_hash: 'a'.repeat(64), connection: 'default:', group_id: 'grp_1', reason: 'edited' },
+    approved_query_read: { approval_id: 'pqa_1', query: 'totals', query_hash: 'a'.repeat(64), connection: 'default:', group_id: 'grp_1' },
   },
   user: {
     notification_changed: {notification_id:"n",revision:1,change:"updated"},

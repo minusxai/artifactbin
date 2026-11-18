@@ -4,14 +4,15 @@
  * reader, so a reader without access to the data is refused with a message naming whom to ask. An Admin of the group
  * approves exactly that query (its text, connection and allowed parameters): it then runs as the group's agent at member
  * level for every reader of the page, until it is edited, revoked, the page moves, the approver is no longer Admin or
- * the group is deleted. The database is a real Postgres engine on a loopback socket (test-support pglite-wire) whose
+ * the group is deleted, each of which ends it for good. The database is a real Postgres engine on a loopback socket (test-support pglite-wire) whose
  * guarded view refuses (42501) any reader whose groups are not allowed, and shows the reader values it was sent.
  */
 import {afterAll,beforeAll,beforeEach,expect,it} from 'vitest';
 import {startPgliteWire,type PgliteWire} from '@artifactbin/test-support/pglite-wire';
 import {closeDefaultConnection} from '@/lib/connections';
 import {overrideConfig} from '@/lib/platform/config';
-import {setGroupMember} from '@/lib/groups';
+import {deleteGroup,recordGroupChanges,setGroupMember} from '@/lib/groups';
+import {services} from '@/lib/platform';
 import {approvePageQuery} from '@/lib/query-approvals';
 import {useAppHarness,admitGroupMember} from './harness';
 import {SECRET,composed,origin,sql,useGroupPrincipalHost,world} from './group-principal-fixture';
@@ -96,6 +97,9 @@ it('runs a declared query as each reader until an Admin approves it; then as the
  expect(rows(await read(olga,{region:'US'}))).toEqual([{region:'US',total:7,...asGroup(team.id)}]);
  // Mia, who has her own access, still reads.
  expect(rows(await read(mia))).toEqual([{region:'EU',total:15,...asGroup(team.id)}]);
+ // Each read as the group is recorded naming the real reader and the approval, never the reader's values.
+ await expect.poll(async()=>sql("SELECT subject_kind,subject_id,payload FROM events.events WHERE verb='approved_query_read' AND object_id=$1 ORDER BY at,id",[page])).toEqual([olga,olga,mia].map(who=>({subject_kind:'user',subject_id:who.userId,
+  payload:{approval_id:approved.body!.id,query:'totals',query_hash:approved.body!.hash,connection:'default:',group_id:team.id}})));
  expect(((await approvals(ada)).body!.queries as Array<{approval:unknown}>)[0]!.approval).toEqual({id:approved.body!.id,approved_by:{id:ada.userId,name:null,username:expect.any(String)},approved_at:expect.any(String)});
  // Audited: who, the page, the query's hash, the connection and the group; the event's time is when.
  await expect.poll(async()=>sql("SELECT subject_id,verb,object_id,payload FROM events.events WHERE verb='query_approved' AND object_id=$1",[page])).toEqual([{subject_id:ada.userId,verb:'query_approved',object_id:page,
@@ -175,35 +179,58 @@ it('ends at once when revoked, when the approver is no longer Admin, when the pa
  const first=await approve(rob);
  expect(first.status).toBe(201);
  expect((await read(olga)).status).toBe(200);
- expect((await host.call('DELETE',`/api/artifacts/${page}/query-approvals/${String(first.body!.id)}`,ada.token)).status).toBe(204);
+ expect((await host.call('DELETE',`/api/artifacts/${page}/query-approvals/${String(first.body!.id)}`,ada.token))).toMatchObject({status:200,body:{ok:true}});
  refusedNamingOwner(await read(olga));
  expect((await host.call('DELETE',`/api/artifacts/${page}/query-approvals/${String(first.body!.id)}`,ada.token)).status).toBe(404);
  await expect.poll(async()=>sql("SELECT subject_id,payload->>'reason' AS reason,payload->>'query_hash' AS hash,payload->>'connection' AS connection FROM events.events WHERE verb='query_approval_ended' AND object_id=$1",[page]))
   .toEqual([{subject_id:ada.userId,reason:'revoked',hash:first.body!.hash,connection:'default:'}]);
- // Rob approves again, then is made a Member: his approval stops at once.
- expect((await approve(rob)).status).toBe(201);
+ // Rob approves again, then is made a Member: his approval ends at once, audited as Ada's change.
+ const second=await approve(rob);
+ expect(second.status).toBe(201);
  expect((await read(olga)).status).toBe(200);
  await setGroupMember(ada.userId,team.id,rob.userId,'member');
  refusedNamingOwner(await read(olga));
  expect(((await approvals(ada)).body!.queries as Array<{approval:unknown}>)[0]!.approval).toBeNull();
- // Decided at each read, not stamped: made Admin again, his approval holds again.
+ // Ended for good, not paused: made Admin again, his old approval stays ended until a fresh one.
  await setGroupMember(ada.userId,team.id,rob.userId,'admin');
- expect((await read(olga)).status).toBe(200);
+ refusedNamingOwner(await read(olga));
+ expect(((await approvals(ada)).body!.queries as Array<{approval:unknown}>)[0]!.approval).toBeNull();
+ expect(await sql('SELECT ended_reason,ended_by FROM page_query_approvals WHERE id=$1',[String(second.body!.id)])).toEqual([{ended_reason:'approver_not_admin',ended_by:ada.userId}]);
  await setGroupMember(ada.userId,team.id,rob.userId,'member');
  // An Admin through an ancestor approves too.
  await admitGroupMember(ada.userId,root.id,rob.userId,'admin');
- expect((await approve(rob)).status).toBe(201);
+ const third=await approve(rob);
+ expect(third.status).toBe(201);
  expect((await read(olga)).status).toBe(200);
- // The group is deleted (the identity module's own deletion; the app refuses one that still owns pages): it stops.
- await sql('UPDATE auth.groups SET deleted_at=now() WHERE id=$1',[team.id]);
- expect((await read(olga)).status).not.toBe(200);
- await sql('UPDATE auth.groups SET deleted_at=NULL WHERE id=$1',[team.id]);
+ // His Admin taken away outside the app (the identity module's own rows): the next read finds the approval no longer
+ // holding and ends it, so his Admin coming back the same way revives nothing.
+ await sql("UPDATE auth.group_members SET role='member' WHERE group_id=$1 AND user_id=$2",[root.id,rob.userId]);
+ refusedNamingOwner(await read(olga));
+ await sql("UPDATE auth.group_members SET role='admin' WHERE group_id=$1 AND user_id=$2",[root.id,rob.userId]);
+ refusedNamingOwner(await read(olga));
+ expect(await sql('SELECT ended_reason,ended_by FROM page_query_approvals WHERE id=$1',[String(third.body!.id)])).toEqual([{ended_reason:'approver_not_admin',ended_by:null}]);
  // The page moves to Ada herself: it ends for good, and a person's page approves nothing.
+ const fourth=await approve(rob);
+ expect(fourth.status).toBe(201);
+ expect((await read(olga)).status).toBe(200);
  expect((await host.call('POST',`/api/artifacts/${page}/transfer`,ada.token,{destination:{type:'personal'}})).status).toBe(200);
  expect((await read(olga)).status).toBe(403);
+ expect(await sql('SELECT ended_reason FROM page_query_approvals WHERE id=$1',[String(fourth.body!.id)])).toEqual([{ended_reason:'moved'}]);
  expect(await approvals(ada)).toMatchObject({status:400,body:{error:'not_group_owned'}});
  expect((await host.call('POST',`/api/artifacts/${page}/transfer`,ada.token,{destination:{type:'group',id:team.id}})).status).toBe(200);
  refusedNamingOwner(await read(olga));
+ // The group is deleted, as the identity module deletes one (the app's own door refuses a group that still owns pages)
+ // and the app records it: the approval ends, audited as the deleter's.
+ const fifth=await approve(rob);
+ expect(fifth.status).toBe(201);
+ expect((await read(olga)).status).toBe(200);
+ const handleOf=async(id:string)=>String((await sql('SELECT handle FROM auth.groups WHERE id=$1',[id]))[0]!.handle);
+ // Its subgroup first: a group with subgroups is never deleted.
+ for(const child of await sql('SELECT id FROM auth.groups WHERE parent_id=$1 AND deleted_at IS NULL',[team.id]))await deleteGroup(ada.userId,String(child.id),await handleOf(String(child.id)));
+ const handle=await handleOf(team.id);
+ await recordGroupChanges((await services().identity.deleteGroup({actorId:ada.userId,groupId:team.id,handle})).changes);
+ expect(await sql('SELECT ended_reason,ended_by FROM page_query_approvals WHERE id=$1',[String(fifth.body!.id)])).toEqual([{ended_reason:'group_deleted',ended_by:ada.userId}]);
+ expect((await read(olga)).status).not.toBe(200);
 });
 
 it('a page owned by a person has no approved queries, and an agent signed in as the group never approves',async()=>{

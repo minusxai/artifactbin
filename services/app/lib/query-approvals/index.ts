@@ -13,14 +13,17 @@
  * The Admin approves the hash they were shown; another one is refused (`query_changed`), so an edit made meanwhile is
  * never approved unseen.
  *
- * WHEN IT HOLDS, decided at every read (`approvedRun`, again after the read: lib/page-doors): the approval is not ended;
+ * WHEN IT HOLDS, asked at every read (`approvedRun`, again after the read: lib/page-doors): the approval is not ended;
  * the version read and the page's head both declare that hash; the page is still that group's; the approver is still
- * its Admin and an active account. A write of the page that no longer declares an approved hash ends that approval for
- * good (`endQueryApprovals`, from lib/artifacts' head write: reverting the text does not bring it back), and so does
- * moving the page to another owner. The approver losing Admin, or the group being deleted, stops it at the next read.
+ * its Admin and an active account. Every way it stops ENDS it for good, until a fresh approval: a write of the page that
+ * no longer declares an approved hash (`endQueryApprovals`, from lib/artifacts' head write: reverting the text does not
+ * bring it back), moving the page to another owner, a revoke; and the approver losing Admin or the group being deleted
+ * (`endStaleApprovals`: from lib/groups after every group change the app makes, and at the first read that finds one
+ * no longer holding, whoever changed it), so being made Admin again, or the group's row coming back, revives nothing.
  *
  * Every approval and every end is audited (contracts events `query_approved`, `query_approval_ended`: who, the page, the
- * query's name and hash, the connection, the group; `at` is when).
+ * query's name and hash, the connection, the group; `at` is when), and so is every read it answered
+ * (`approved_query_read`, lib/page-doors: the real reader as subject, the approval in the payload).
  */
 import {createHash} from 'node:crypto';
 import type {HtmlDeclaredQuery,HtmlDefaultConnectionLink,HtmlPageLink,HtmlQueryParams,Queryable} from '@artifactbin/contracts';
@@ -72,11 +75,16 @@ async function holding(db:Queryable,page:string,hash?:string):Promise<ApprovalRo
  * THE READ'S QUESTION (lib/page-doors): does an approval hold for `declared`, the query of the version read, with the
  * page's `head`? The approval's id and group, or null (the read runs as the reader).
  */
-export async function approvedRun(pageId:string,head:{links:readonly HtmlPageLink[];queries:readonly HtmlDeclaredQuery[]},declared:{query:HtmlDeclaredQuery;link:HtmlDefaultConnectionLink}):Promise<{id:string;groupId:string}|null>{
+export async function approvedRun(pageId:string,head:{links:readonly HtmlPageLink[];queries:readonly HtmlDeclaredQuery[]},declared:{query:HtmlDeclaredQuery;link:HtmlDefaultConnectionLink}):Promise<{id:string;groupId:string;hash:string;connection:string}|null>{
  const hash=queryApprovalHash(declared.query,declared.link);
  if(!declaredOn(head).some(entry=>entry.hash===hash))return null;
- const row=(await holding(await getDb(),pageId,hash))[0];
- return row?{id:row.id,groupId:row.group_id}:null;
+ const db=await getDb();
+ const row=(await holding(db,pageId,hash))[0];
+ if(row)return {id:row.id,groupId:row.group_id,hash,connection:row.connection};
+ // A live approval that no longer holds (its approver is no Admin, its group is gone): ended now, so nothing revives it.
+ if((await db.query('SELECT 1 FROM page_query_approvals WHERE page_id=$1 AND query_hash=$2 AND ended_at IS NULL LIMIT 1',[pageId,hash])).rows.length)
+  await db.transaction(async tx=>{await tx.query('SELECT id FROM artifacts WHERE id=$1 FOR SHARE',[pageId]);await endStaleApprovals(tx,null,pageId);});
+ return null;
 }
 
 const DATE=/^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/;
@@ -155,7 +163,8 @@ export async function pageQueryApprovals(actor:AccessActor,pageId:string):Promis
  })};
 }
 
-const payload=(row:Pick<ApprovalRow,'id'|'query_name'|'query_hash'|'connection'|'group_id'>,reason?:'revoked'|'edited'|'moved'|'replaced')=>
+type EndReason='revoked'|'edited'|'moved'|'replaced'|'approver_not_admin'|'group_deleted';
+const payload=(row:Pick<ApprovalRow,'id'|'query_name'|'query_hash'|'connection'|'group_id'>,reason?:EndReason)=>
  ({approval_id:row.id,query:row.query_name,query_hash:row.query_hash,connection:row.connection,group_id:row.group_id,...(reason?{reason}:{})});
 
 /** An Admin of the owning group approves the head's declared query `query` whose hash they were shown (`hash`). Audited. */
@@ -197,4 +206,23 @@ export async function endQueryApprovals(tx:Queryable,actor:Pick<AccessActor,'use
  const kept=reason==='edited'&&head?.format==='html'?ofMeta(head.meta).map(entry=>entry.hash):[];
  const ended=(await tx.query<ApprovalRow>(`UPDATE page_query_approvals SET ended_at=now(),ended_by=$3,ended_reason=$4 WHERE page_id=ANY($1::text[]) AND ended_at IS NULL AND NOT (query_hash=ANY($2::text[])) RETURNING *`,[typeof pageId==='string'?[pageId]:[...pageId],kept,actor.userId,reason])).rows;
  for(const row of ended)await recordEvent(tx,actorSubject(actor),'query_approval_ended',{kind:'artifact',id:row.page_id},payload(row,reason));
+}
+
+/**
+ * Ends, audited (`subject`: who made the change, or null when a read found it), every live approval (of `pageId`, or of
+ * every page) whose group is deleted (`group_deleted`), whose page is no longer that group's (`moved`), or whose
+ * approver is no longer its Admin or no longer an active account (`approver_not_admin`). A page in the trash keeps its
+ * approvals, as it keeps everything else, until it is restored or purged.
+ */
+export async function endStaleApprovals(tx:Queryable,subject:string|null,pageId?:string):Promise<void>{
+ const ended=(await tx.query<ApprovalRow&{ended_reason:EndReason}>(`WITH stale AS (
+   SELECT a.id,CASE WHEN NOT EXISTS (SELECT 1 FROM groups g WHERE g.id=a.group_id AND g.deleted_at IS NULL) THEN 'group_deleted'
+     WHEN NOT EXISTS (SELECT 1 FROM artifacts p WHERE p.id=a.page_id AND p.group_id=a.group_id) THEN 'moved' ELSE 'approver_not_admin' END AS reason
+   FROM page_query_approvals a WHERE a.ended_at IS NULL AND ($1::text IS NULL OR a.page_id=$1) AND NOT (
+    EXISTS (SELECT 1 FROM groups g WHERE g.id=a.group_id AND g.deleted_at IS NULL)
+    AND EXISTS (SELECT 1 FROM artifacts p WHERE p.id=a.page_id AND p.group_id=a.group_id)
+    AND EXISTS (SELECT 1 FROM group_admins ga WHERE ga.group_id=a.group_id AND ga.user_id=a.approved_by)
+    AND EXISTS (SELECT 1 FROM users u WHERE u.id=a.approved_by AND u.active AND NOT u.test_account)))
+  UPDATE page_query_approvals a SET ended_at=now(),ended_by=$2,ended_reason=stale.reason FROM stale WHERE a.id=stale.id AND a.ended_at IS NULL RETURNING a.*`,[pageId??null,subject])).rows;
+ for(const row of ended)await recordEvent(tx,subject?{kind:'user',id:subject}:null,'query_approval_ended',{kind:'artifact',id:row.page_id},payload(row,row.ended_reason));
 }
