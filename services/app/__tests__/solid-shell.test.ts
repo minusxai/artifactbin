@@ -1,21 +1,18 @@
 import {nativeHtml} from '@/__tests__/native-html-fixture';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { afterEach, expect, it } from 'vitest';
+import { expect, it, onTestFinished } from 'vitest';
 import { createAppServer } from '@/server/app';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { START_PLACEHOLDER_MARKUP } from '@artifactbin/contracts';
 import { request, useAppHarness } from './harness';
+import {tempDirSync} from '@artifactbin/test-support/temp-dir';
 
 useAppHarness();
-const dirs: string[] = [];
-afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
 
 it('serves the one Solid entry for every address the app answers, whatever the format', async () => {
-  const dir = mkdtempSync(path.join(tmpdir(), 'afbin-shell-'));
-  dirs.push(dir);
+  const dir = tempDirSync('afbin-shell-',onTestFinished);
   writeFileSync(path.join(dir, 'solid-app.html'), '<html><head></head><body><script src="/solid-entry.tsx"></script></body></html>');
   const app = createAppServer({ webDir: dir });
   const accept = { Accept: 'text/html' };

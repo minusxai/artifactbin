@@ -3,15 +3,14 @@
  * first runtime to ask compiles it and keeps it whole, every other reads that instead of compiling, a failed compile
  * sends them to compile their own, and this suite's api workers share it.
  */
-import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { afterAll, expect, inject, it } from 'vitest';
 import { buildHtmlAssets } from '@/lib/html-runtime/server';
 import { htmlAssetsSupply, readHtmlAssets, removeHtmlAssets } from '@/test/setup/html-assets-file';
+import {tempDirSync} from '@artifactbin/test-support/temp-dir';
 
-const scratch = mkdtempSync(path.join(tmpdir(), 'html-assets-'));
-afterAll(() => rmSync(scratch, { recursive: true, force: true }));
+const scratch = tempDirSync('html-assets-',afterAll);
 const assets = { core: 'core', apollo: 'apollo', apolloPath: '/af/apollo.js', reader: 'reader', readerPath: '/af/reader.js' };
 const quick = { pollMs: 5 };
 

@@ -8,11 +8,11 @@ import dns from 'node:dns';
 import http from 'node:http';
 import { isIP } from 'node:net';
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished } from 'vitest';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { hostsFileNames, loopbackLookup, useLoopbackLookup } from '../loopback-lookup';
+import {tempDirSync} from '@artifactbin/test-support/temp-dir';
 
 type Answer = { error: NodeJS.ErrnoException | null; address?: unknown; family?: number };
 /** Call a lookup the way `net` does and collect what it answers. */
@@ -124,7 +124,7 @@ describe('a loopback name the hosts file maps', () => {
   });
 
   it('reads the names a hosts file maps away from loopback, ignoring comments and case, and none from a missing file', () => {
-    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'hosts-')), 'hosts');
+    const file = path.join(tempDirSync('hosts-',onTestFinished), 'hosts');
     fs.writeFileSync(file, '# comment 10.0.0.9 app.lvh.me\n127.0.0.1\tlocalhost\n::1 localhost ip6-localhost\n127.0.1.1 box.lvh.me\n172.17.0.1 App.LVH.me other.test # trailing\n\n');
     expect([...hostsFileNames(file)].sort()).toEqual(['app.lvh.me', 'other.test']);
     expect(hostsFileNames(path.join(file, 'missing')).size).toBe(0);

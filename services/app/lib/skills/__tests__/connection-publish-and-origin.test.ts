@@ -3,18 +3,17 @@
  * do not apply to a connection are refused by name before any request. And ARTIFACTBIN_URL names its origin however
  * it is spelled: a trailing slash or capital letters select the same server and keep the environment grant.
  */
-import {it,expect} from 'vitest';
-import {mkdtemp,writeFile,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {it,expect,onTestFinished} from 'vitest';
+import {writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import {publishCommand} from '../../../skills/artifactbin/scripts/toolbox-publish.mjs';
 import {makeClient,selectedServer} from '../../../skills/artifactbin/scripts/toolbox-client.mjs';
+import {tempDir} from '@artifactbin/test-support/temp-dir';
 
 const server='https://example.test';
 async function connectionFile(work:(file:string)=>Promise<void>){
- const root=await mkdtemp(path.join(tmpdir(),'connection-publish-'));
- try{const file=path.join(root,'db.json');await writeFile(file,JSON.stringify({connector:'postgres',host:'db.example.test',port:5432,database:'shop',user:'reader'}));await work(file);}
- finally{await rm(root,{recursive:true,force:true});}
+ const root=await tempDir('connection-publish-',onTestFinished);
+ const file=path.join(root,'db.json');await writeFile(file,JSON.stringify({connector:'postgres',host:'db.example.test',port:5432,database:'shop',user:'reader'}));await work(file);
 }
 const recording=()=>{const calls:{method:string;url:string}[]=[];return {calls,fetcher:async(url:any,init:any)=>{
  calls.push({method:init?.method??'GET',url:String(url)});

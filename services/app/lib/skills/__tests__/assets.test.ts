@@ -1,15 +1,13 @@
-import {mkdtempSync,mkdirSync,writeFileSync,rmSync,symlinkSync} from 'node:fs';
-import {tmpdir} from 'node:os';
+import {mkdirSync,writeFileSync,symlinkSync} from 'node:fs';
 import path from 'node:path';
-import {afterEach,expect,it} from 'vitest';
+import {expect,it,onTestFinished} from 'vitest';
 import {loadSkillAssets,skillAssetName} from '../assets';
-const roots:string[]=[];
+import {tempDirSync} from '@artifactbin/test-support/temp-dir';
 function fixture(files:Record<string,string>){
- const root=mkdtempSync(path.join(tmpdir(),'skill-assets-'));roots.push(root);
+ const root=tempDirSync('skill-assets-',onTestFinished);
  for(const [name,source] of Object.entries(files)){const file=path.join(root,name);mkdirSync(path.dirname(file),{recursive:true});writeFileSync(file,source);}
  return root;
 }
-afterEach(()=>{for(const root of roots.splice(0))rmSync(root,{recursive:true,force:true});});
 it('packages readable component sources alongside existing assets; compiled modules are hosted, never packaged',()=>{
  const files={'components/button.ts':'export interface ButtonProps {}','scripts/preview-server.mjs':'export {};','examples/page.html':'<p>Example</p>','design-systems/plain.css':':root{}'};
  expect(loadSkillAssets(fixture(files))).toEqual(files);

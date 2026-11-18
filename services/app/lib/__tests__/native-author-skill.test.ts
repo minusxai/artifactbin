@@ -1,10 +1,9 @@
-import {mkdtempSync,readFileSync,writeFileSync,rmSync} from 'node:fs';
-import {tmpdir} from 'node:os';
+import {readFileSync,writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {execFile,execFileSync} from 'node:child_process';
 import {promisify} from 'node:util';
 import {pathToFileURL} from 'node:url';
-import {describe,it,expect} from 'vitest';
+import {describe,it,expect,onTestFinished} from 'vitest';
 import {skillTree, renderSkill, SKILL_FILE_MAX_BYTES, isPublicSkillTopic, skillPackageFiles} from '@/lib/skills';
 import {publicGuideText,llmsText} from '@/lib/agent-copy';
 import {htmlPwaSettings} from '@/lib/html-page';
@@ -12,6 +11,7 @@ import {packOfflineHtmlImages} from '@/lib/export';
 import {GET as skillArchive} from '@/app/skills/artifactbin.zip/route';
 import {planPublicationBundle} from '@/lib/html-publication-bundle/plan';
 import {parseHtmlNodeAnchor} from '@artifactbin/contracts';
+import {tempDirSync} from '@artifactbin/test-support/temp-dir';
 const BASE='https://example.test';
 /** The served skill ZIP, built once for the file: two tests read the same archive. */
 let served:Promise<Buffer>|undefined;
@@ -96,8 +96,7 @@ describe('one installable native HTML author skill',()=>{
   expect(Object.hasOwn(files,'scripts/publish.mjs')).toBe(true);
  });
  it('prepares the documented samples from the actual installed ZIP with bounded local font graphs',async()=>{
-  const dir=mkdtempSync(path.join(tmpdir(),'native-skill-install-'));
-  try{
+  const dir=tempDirSync('native-skill-install-',onTestFinished);
    const zip=path.join(dir,'skill.zip');writeFileSync(zip,new Uint8Array(await archiveBytes()));
    execFileSync('unzip',['-q',zip,'-d',dir]);
    const installed=path.join(dir,'artifactbin');
@@ -138,7 +137,6 @@ describe('one installable native HTML author skill',()=>{
     if(sample==='csv-dashboard'){expect(plan.dependencies.find(dep=>dep.path==='examples/deliveries.csv')).toMatchObject({kind:'dataset'});expect(saved.body.html).not.toContain('DATASET_ID');}
     if(sample==='tracker'){expect(saved.body.html).not.toContain('af-resolver');expect(Object.keys(plan)).not.toContain('resolverSources');expect(saved.body.html).toContain('ref:REALDATA123');}
    }
-  }finally{rmSync(dir,{recursive:true,force:true});}
  });
 });
 

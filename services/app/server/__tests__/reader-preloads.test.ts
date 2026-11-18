@@ -1,15 +1,13 @@
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
-import os from 'node:os';
+import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
-import { afterEach, expect, it } from 'vitest';
+import { expect, it, onTestFinished } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { createReaderPreloader, createEntryPreloader, createListingPreloader, listingPage } from '../reader-preloads';
+import {tempDirSync} from '@artifactbin/test-support/temp-dir';
 
-const dirs: string[] = [];
 const shell = '<html><head><link rel="modulepreload" href="/assets/shared-abc.js"></head><body></body></html>';
 function fixture(overrides: Record<string, unknown> = {}) {
-  const dir = mkdtempSync(path.join(os.tmpdir(), 'reader-preloads-'));
-  dirs.push(dir);
+  const dir = tempDirSync('reader-preloads-',onTestFinished);
   mkdirSync(path.join(dir, '.vite'));
   writeFileSync(path.join(dir, '.vite/manifest.json'), JSON.stringify({
     'pages/Profile.tsx': { file: 'assets/Profile-abc.js', imports: ['shared'] },
@@ -22,7 +20,6 @@ function fixture(overrides: Record<string, unknown> = {}) {
   }));
   return dir;
 }
-afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
 
 it('discovers all reader stages and static dependencies in the head without loading lazy descendants', () => {
   const html = createReaderPreloader(fixture())(shell);

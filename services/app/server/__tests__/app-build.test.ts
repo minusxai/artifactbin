@@ -3,27 +3,28 @@
  * app page it serves (the build the page IS) and on every response (the build the server is NOW) — so a tab left
  * open across a deploy knows to load the new build at its next navigation instead of asking for a chunk that is gone.
  */
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it, onTestFinished } from 'vitest';
 import { useAppHarness } from '@/__tests__/harness';
 import { overrideConfig } from '@/lib/platform/config';
 import { APP_BUILD_HEADER, APP_BUILD_META, appBuild, setAppBuild } from '@/lib/http';
 import { createAppServer } from '../app';
 import { appBuildId } from '../build-assets';
+import {tempDirSync} from '@artifactbin/test-support/temp-dir';
 
 useAppHarness();
 let dir = '';
 const tree = (manifest: Record<string, unknown>) => {
-  dir = mkdtempSync(path.join(os.tmpdir(), 'app-build-id-'));
+  dir = tempDirSync('app-build-id-',onTestFinished);
   mkdirSync(path.join(dir, '.vite')); mkdirSync(path.join(dir, 'assets'));
   writeFileSync(path.join(dir, '.vite/manifest.json'), JSON.stringify(manifest));
   writeFileSync(path.join(dir, 'solid-app.html'), '<html><head><title>app</title></head><body><div id="root"></div></body></html>');
   return dir;
 };
 beforeEach(() => overrideConfig({ publicBaseUrl: 'https://example.test' }));
-afterEach(() => { setAppBuild(null); if (dir) rmSync(dir, { recursive: true, force: true }); dir = ''; });
+afterEach(() => { setAppBuild(null); dir = ''; });
 
 it('is the manifest\'s hash: a rebuild that renames any chunk is a new build, the same bytes the same one', () => {
   const a = appBuildId(tree({ main: { file: 'assets/main-AAAA.js', dynamicImports: ['x'] }, x: { file: 'assets/CommentMarkdownField-Cp4XxIWn.js' } }));

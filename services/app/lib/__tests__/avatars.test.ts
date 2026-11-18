@@ -1,19 +1,17 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFinished } from 'vitest';
 import { PUBLIC_BASE_URL } from '@/lib/platform/config';
 import { randomBytes } from 'node:crypto';
-import { mkdtemp } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
 import sharp from 'sharp';
 import { AVATAR_MAX_BYTES, AvatarError, avatarPath, avatarUrl, avatarVersion, clearAvatar, setAvatar } from '@/lib/avatars';
 import { createLocalStore, ObjectUnavailable, type ObjectStore } from '@/lib/object-store';
 import { createUser, getUserById } from '@/lib/accounts';
 import { useAppHarness } from '@/__tests__/harness';
+import {tempDir} from '@artifactbin/test-support/temp-dir';
 
 useAppHarness();
 
 /** A store of this file's own, so a re-encode in a test never lands in the app's object directory. */
-const scratchStore = async (): Promise<ObjectStore> => createLocalStore(await mkdtemp(path.join(tmpdir(), 'avatars-')));
+const scratchStore = async (): Promise<ObjectStore> => createLocalStore(await tempDir('avatars-',onTestFinished));
 
 const png = (w: number, h: number) =>
   sharp({ create: { width: w, height: h, channels: 3, background: { r: 200, g: 30, b: 90 } } }).png().toBuffer();

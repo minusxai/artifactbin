@@ -4,17 +4,17 @@
  * later updates its one dataset), its renderer and its steps file, and writes a DATA block that reads only this
  * CSV's columns; a rerun keeps edits and brings the copied CSV up to date.
  */
-import {it,expect} from 'vitest';
-import {mkdtemp,mkdir,readFile,writeFile,rm,readdir} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {it,expect,onTestFinished} from 'vitest';
+import {mkdir,readFile,writeFile,rm,readdir} from 'node:fs/promises';
 import path from 'node:path';
+import {tempDir} from '@artifactbin/test-support/temp-dir';
 
 const server='https://example.test';
 const CSV='month,region,revenue,orders\n2026-01,North,48200,310\n2026-01,South,31150,204\n2026-02,North,51300,322\n';
 
 async function project(){
  const {newPageCommand}=await import('../../../skills/artifactbin/scripts/new-page.mjs');
- const root=await mkdtemp(path.join(tmpdir(),'new-page-')),dir=path.join(root,'page');await mkdir(dir);
+ const root=await tempDir('new-page-',onTestFinished),dir=path.join(root,'page');await mkdir(dir);
  await writeFile(path.join(root,'sales.csv'),CSV);
  const calls:any[]=[];let made=0;
  const fetcher=async(url:any,init:any)=>{const {pathname}=new URL(String(url)),method=init?.method??'GET';

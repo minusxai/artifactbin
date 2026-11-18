@@ -8,18 +8,18 @@
  * Every case below uses real `mkdir`s in a temporary directory; nothing is mocked
  * except, where named, whether a pid is alive.
  */
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, onTestFinished } from 'vitest';
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, utimesSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { acquireSlot, parseMemory, slotCount } from '../lib/gate-slots.mjs';
+import {tempDirSync} from '../../services/test-support/src/temp-dir.ts';
 
 const LIB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../lib/gate-slots.mjs');
 let dir;
-beforeEach(() => { dir = mkdtempSync(path.join(os.tmpdir(), 'gate-slots-')); });
-afterEach(() => { rmSync(dir, { recursive: true, force: true }); });
+beforeEach(() => { dir = tempDirSync('gate-slots-',onTestFinished); });
 
 const held = () => readdirSync(dir).filter((name) => /^\d+$/.test(name)).sort();
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

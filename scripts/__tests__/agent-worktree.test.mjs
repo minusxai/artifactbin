@@ -13,9 +13,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
-import { afterAll, describe, expect, it } from 'vitest';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { afterAll, describe, expect, it, onTestFinished } from 'vitest';
 import { ensureDependencies } from '../lib/worktree-install.mjs';
+import {tempDirSync} from '../../services/test-support/src/temp-dir.ts';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SCRIPT = path.join(ROOT, 'scripts', 'agent-worktree.mjs');
@@ -101,12 +102,12 @@ describe('agent-worktree', () => {
 });
 
 function installFixture(test) {
-  const root = mkdtempSync(path.join(os.tmpdir(), 'worktree-install-'));
+  const root = tempDirSync('worktree-install-',onTestFinished);
   const calls = [];
   const put = (name, text) => { mkdirSync(path.dirname(path.join(root, name)), { recursive: true }); writeFileSync(path.join(root, name), text); };
   put('package.json', JSON.stringify({ workspaces: [] })); put('package-lock.json', '{}'); put('.npmrc', 'audit=false');
   const run = (cmd, args) => { calls.push([cmd, ...args]); put('node_modules/.package-lock.json', '{}'); return { status: 0 }; };
-  try { test({ root, calls, put, run }); } finally { rmSync(root, { recursive: true, force: true }); }
+  test({ root, calls, put, run });
 }
 
 describe('worktree dependencies', () => {

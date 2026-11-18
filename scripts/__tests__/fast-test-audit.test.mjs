@@ -1,14 +1,13 @@
-import { it, expect } from 'vitest';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { it, expect, onTestFinished } from 'vitest';
+import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { auditFastTests } from '../lib/fast-test-audit.mjs';
+import {tempDirSync} from '../../services/test-support/src/temp-dir.ts';
 
 it('audits shared dependencies once and rejects capabilities from every entry and transitive source', async () => {
-  const directory = mkdtempSync(path.join(tmpdir(), 'fast-audit-'));
+  const directory = tempDirSync('fast-audit-',onTestFinished);
   const write = (file, source) => writeFileSync(path.join(directory, file), source);
   const entries = ['first.ts', 'second.ts'].map(file => path.join(directory, file));
-  try {
     write('shared.ts', 'export const value = 1;');
     write('first.ts', 'export { value } from "./shared";');
     write('second.ts', 'export { value } from "./shared";');
@@ -22,5 +21,4 @@ it('audits shared dependencies once and rejects capabilities from every entry an
     await expect(auditFastTests(entries)).rejects.toThrow(/ambient fetch/);
     write('shared.ts', 'export const value = import("./missing");');
     await expect(auditFastTests(entries)).rejects.toThrow();
-  } finally { rmSync(directory, { recursive: true, force: true }); }
 });

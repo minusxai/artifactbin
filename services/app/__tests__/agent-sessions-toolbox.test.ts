@@ -4,14 +4,14 @@
  * session's name, a watch prints the other agent's comments and never its own, and one agent starting a watch never
  * stops the other's. The server keeps a declared full name ("Claude Code Red"), and the events feed marks `you` per session.
  */
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { afterAll, expect, it } from 'vitest';
+import { expect, it, onTestFinished } from 'vitest';
 import { mintAccountToken, request, useAppHarness } from './harness';
 import { nativeHtml } from './native-html-fixture';
 import { createAppServer } from '@/server/app';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
+import {tempDir} from '@artifactbin/test-support/temp-dir';
 
 useAppHarness();
 const SERVER = 'http://localhost:3000';
@@ -19,15 +19,13 @@ const app = createAppServer({ webDir: 'dist/web' });
 const fetcher = (async (input: string | URL | Request, init?: RequestInit) => app.fetch(new Request(String(input), init))) as typeof fetch;
 const { commentCommand } = await import('../skills/artifactbin/scripts/comment.mjs');
 const REPLACED = /took over/;
-const dirs: string[] = [];
-afterAll(async () => { await Promise.all(dirs.map(dir => rm(dir, { recursive: true, force: true }))); });
 
 async function twoAgents() {
  const t = await mintAccountToken('two-agents');
  const made = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { html: nativeHtml('<p data-af-id="intro">Read this</p><p data-af-id="outro">Bye</p>') } }));
  expect(made.status).toBe(201);
  const doc = await made.json() as { id: string };
- const dir = await mkdtemp(path.join(tmpdir(), 'two-agents-'));dirs.push(dir);
+ const dir = await tempDir('two-agents-',onTestFinished);
  const home = path.join(dir, 'home');await mkdir(home);
  const shared = { ARTIFACTBIN_URL: SERVER, ARTIFACTBIN_TOKEN: t.token, ARTIFACTBIN_HOME: home };
  const anchor = async (nodeId: string) => { const file = path.join(dir, `${nodeId}.json`);await writeFile(file, JSON.stringify({ kind: 'html-node', v: 1, nodeId, quote: '' }));return file; };

@@ -1,7 +1,6 @@
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
-import os from 'node:os';
+import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
-import { afterEach, expect, it, vi } from 'vitest';
+import { expect, it, vi, onTestFinished } from 'vitest';
 import { Hono } from 'hono';
 import { getRequestListener } from '@hono/node-server';
 import { withHttpServer } from '@artifactbin/test-support/net';
@@ -9,12 +8,11 @@ import { inProcess, overHttp, actorReceiver, actorOf } from '@artifactbin/utils'
 import { createAuthHost } from '@artifactbin/auth';
 import { testAuthOptions } from '../../../auth/__tests__/helpers';
 import { mountBuildAssets } from '../build-assets';
+import {tempDirSync} from '@artifactbin/test-support/temp-dir';
 
 const prefix = '/api/internal/build-assets';
-const dirs: string[] = [];
 function fixture() {
-  const dir = mkdtempSync(path.join(os.tmpdir(), 'public-build-'));
-  dirs.push(dir);
+  const dir = tempDirSync('public-build-',onTestFinished);
   mkdirSync(path.join(dir, '.vite')); mkdirSync(path.join(dir, 'af/app'), { recursive: true });
   writeFileSync(path.join(dir, '.vite/manifest.json'), JSON.stringify({
     main: { file: 'af/app/app-abc.js', css: ['af/app/app-abc.css'], assets: ['af/app/font-abc.woff2'] },
@@ -25,7 +23,6 @@ function fixture() {
   const app = new Hono(); mountBuildAssets(app, dir);
   return { app, dir };
 }
-afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
 
 it('serves only manifest-listed build bytes, with HEAD and immutable caching', async () => {
   const { app } = fixture();

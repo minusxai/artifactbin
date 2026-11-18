@@ -1,13 +1,11 @@
-import {it,expect} from 'vitest';
+import {it,expect,onTestFinished} from 'vitest';
 import {spawn} from 'node:child_process';
 import {once} from 'node:events';
-import {mkdtemp,rm} from 'node:fs/promises';
-import {join} from 'node:path';
-import {tmpdir} from 'node:os';
 import {withStateLock} from '../src/state-lock';
+import {tempDir} from '@artifactbin/test-support/temp-dir';
 
 it('retains an active native lock through GC and releases it when its owner exits',async()=>{
- const root=await mkdtemp(join(tmpdir(),'state-lock-gc-'));
+ const root=await tempDir('state-lock-gc-',onTestFinished);
  const module=new URL('../src/state-lock.ts',import.meta.url).href;
  const script=`import {withStateLock} from ${JSON.stringify(module)};
  process.stdin.on('data',async()=>{for(let n=0;n<8;n++){global.gc();await new Promise(r=>setImmediate(r));}process.stdout.write('collected');});
@@ -20,5 +18,5 @@ it('retains an active native lock through GC and releases it when its owner exit
   await expect(withStateLock(root,'scope',async()=>{throw new Error('entered owned lock');},{waitMs:0})).rejects.toThrow('workspace_busy');
   const exited=once(child,'exit');child.kill('SIGKILL');await exited;
   expect(await withStateLock(root,'scope',()=>withStateLock(root,'scope',async()=> 'released'))).toBe('released');
- }finally{child.kill('SIGKILL');await rm(root,{recursive:true,force:true});}
+ }finally{child.kill('SIGKILL');}
 },15000);

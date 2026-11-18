@@ -1,14 +1,14 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, onTestFinished } from 'vitest';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, utimesSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, writeFileSync, readFileSync, utimesSync } from 'node:fs';
 import path from 'node:path';
 import { runCheck } from '../lib/check-evidence.mjs';
 import { NATIVE_ROOT_BUILD_INFO, typeCheckCommands } from '../lib/type-check.mjs';
+import {tempDirSync} from '../../services/test-support/src/temp-dir.ts';
 const minimumCompilerGo = 'go1.27.3';
 
 async function fixture(test) {
-  const root = mkdtempSync(path.join(tmpdir(), 'check-evidence-'));
+  const root = tempDirSync('check-evidence-',onTestFinished);
   const put = (name, text) => { mkdirSync(path.dirname(path.join(root, name)), { recursive: true }); writeFileSync(path.join(root, name), text); };
   put('.gitignore', 'node_modules/\n.artifactbin/\n.env\n'); put('source.ts', 'one'); put('package-lock.json', '{}');
   put('node_modules/.package-lock.json', '{}');
@@ -16,7 +16,7 @@ async function fixture(test) {
   const command = [process.execPath, '-e', "require('fs').appendFileSync('.artifactbin/runs','x')"];
   const opts = { root, label: 'fixture', commands: [command], env: { PATH: process.env.PATH }, reuse: true };
   const runs = () => { try { return readFileSync(path.join(root, '.artifactbin/runs'), 'utf8').length; } catch { return 0; } };
-  try { await test({ root, put, opts, runs }); } finally { rmSync(root, { recursive: true, force: true }); }
+  await test({ root, put, opts, runs });
 }
 describe('successful local check evidence', () => {
   it('invalidates the default --changed command when its Git baseline changes', () => fixture(async ({ root, put, opts, runs }) => {
@@ -94,8 +94,7 @@ describe('validate type-checker', () => {
     return { status: run.status, errors: (run.stdout + run.stderr).split('\n').filter(line => /error TS\d+/.test(line)).map(line => line.trim()) };
   };
   it('uses the platform binary with its own build info, and tsc 5 when the binary is missing', () => {
-    const root = mkdtempSync(path.join(tmpdir(), 'type-check-'));
-    try {
+    const root = tempDirSync('type-check-',onTestFinished);
       const options = { root, node: 'node', platform: 'plan9', arch: 'mips' };
       expect(typeCheckCommands(options)).toEqual([
         ['node', 'node_modules/typescript/bin/tsc', '--noEmit', '-p', 'tsconfig.json'],
@@ -113,7 +112,6 @@ describe('validate type-checker', () => {
       // tsc 5 and the native compiler write incompatible build info; the root one is what CI uploads.
       expect(commands.map(command => command[command.indexOf('--tsBuildInfoFile') + 1]))
         .toEqual([NATIVE_ROOT_BUILD_INFO, 'node_modules/.cache/tsgo/utils-strict.tsbuildinfo']);
-    } finally { rmSync(root, { recursive: true, force: true }); }
   });
   it('pins every platform package to one exact version', () => {
     const { optionalDependencies } = JSON.parse(readFileSync(path.join(repo, 'package.json'), 'utf8'));
@@ -141,10 +139,9 @@ describe('validate type-checker', () => {
   // CI installs the binary (linux-x64): there a missing one fails here instead of silently checking with tsc 5.
   it.skipIf(!process.env.CI && native === process.execPath)('reports the same errors at the same file:line as tsc 5, including after an incremental edit', () => {
     expect(native).not.toBe(process.execPath);
-    const root = mkdtempSync(path.join(tmpdir(), 'type-check-parity-'));
+    const root = tempDirSync('type-check-parity-',onTestFinished);
     const put = (name, text) => { mkdirSync(path.dirname(path.join(root, name)), { recursive: true }); writeFileSync(path.join(root, name), text); };
     const nativeRun = () => compile(root, [native], ['--tsBuildInfoFile', 'native.tsbuildinfo']);
-    try {
       put('tsconfig.json', JSON.stringify({ compilerOptions: { strict: true, noEmit: true, incremental: true, noUnusedLocals: true,
         noUnusedParameters: true, noUncheckedSideEffectImports: true, module: 'esnext', moduleResolution: 'bundler', target: 'ES2022',
         types: [], tsBuildInfoFile: 'tsc.tsbuildinfo' }, include: ['src/**/*.ts'] }));
@@ -170,12 +167,10 @@ describe('validate type-checker', () => {
       expect(fromNative.errors.slice(1)).toEqual(fromTsc.errors.slice(1));
       put('src/broken.ts', 'export {};\n');
       expect(nativeRun()).toEqual({ status: 0, errors: [] });
-    } finally { rmSync(root, { recursive: true, force: true }); }
   }, 60_000);
   it('reports unresolved imports, unused locals and type errors after incremental edits, then clears repaired diagnostics', () => {
-    const root = mkdtempSync(path.join(tmpdir(), 'type-check-incremental-'));
+    const root = tempDirSync('type-check-incremental-',onTestFinished);
     const put = (name,text) => {mkdirSync(path.dirname(path.join(root,name)),{recursive:true});writeFileSync(path.join(root,name),text);};
-    try {
       put('tsconfig.json', JSON.stringify({compilerOptions:{strict:true,noEmit:true,incremental:true,noUnusedLocals:true,
         noUncheckedSideEffectImports:true,module:'esnext',moduleResolution:'bundler',target:'ES2022',types:[],
         tsBuildInfoFile:'tsc.tsbuildinfo'},include:['src/**/*.ts']}));
@@ -186,6 +181,5 @@ describe('validate type-checker', () => {
       const broken=compile(root);expect(broken.status).not.toBe(0);
       expect(broken.errors.map(line=>line.slice(0,line.indexOf(':')))).toEqual(['src/broken.ts(1,8)','src/broken.ts(2,7)','src/broken.ts(4,7)']);
       put('src/broken.ts','export {};\n');expect(compile(root)).toEqual({status:0,errors:[]});
-    } finally {rmSync(root,{recursive:true,force:true});}
   },60_000);
 });

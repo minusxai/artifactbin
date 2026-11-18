@@ -1,19 +1,17 @@
-import {expect,it} from 'vitest';
-import {mkdtempSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
-import {tmpdir} from 'node:os';
+import {expect,it,onTestFinished} from 'vitest';
+import {readFileSync,writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {GET} from '@/app/skills/artifactbin.zip/route';
 import {overrideConfig} from '@/lib/platform/config';
+import {tempDirSync} from '@artifactbin/test-support/temp-dir';
 
 async function installedServer(url:string):Promise<{config:string;skill:string}>{
  const response=await GET(new Request(url));
- const root=mkdtempSync(path.join(tmpdir(),'skill-origin-'));
- try{
+ const root=tempDirSync('skill-origin-',onTestFinished);
   const zip=path.join(root,'skill.zip');writeFileSync(zip,new Uint8Array(await response.arrayBuffer()));
   execFileSync('unzip',['-q',zip,'-d',root]);
   return {config:readFileSync(path.join(root,'artifactbin/scripts/toolbox-config.mjs'),'utf8'),skill:readFileSync(path.join(root,'artifactbin/SKILL.md'),'utf8')};
- }finally{rmSync(root,{recursive:true,force:true});}
 }
 
 it('names the canonical origin when the archive is fetched through an alias',async()=>{

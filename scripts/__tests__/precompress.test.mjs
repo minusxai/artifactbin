@@ -3,16 +3,15 @@
  * so a served variant is always the same content-addressed file, never a stale
  * copy beside a rebuilt one.
  */
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { brotliDecompressSync, gunzipSync } from 'node:zlib';
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFinished } from 'vitest';
 import { precompressTree } from '../../services/app/scripts/precompress.mjs';
+import {tempDirSync} from '../../services/test-support/src/temp-dir.ts';
 
-const dirs = [];
-const tree = () => { const dir = mkdtempSync(path.join(os.tmpdir(), 'precompress-')); dirs.push(dir); return dir; };
-afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
+const tree = () => { const dir = tempDirSync('precompress-',onTestFinished); return dir; };
 const text = (words) => ('const value = "' + words + '";\n').repeat(200);
 
 describe('precompressTree', () => {

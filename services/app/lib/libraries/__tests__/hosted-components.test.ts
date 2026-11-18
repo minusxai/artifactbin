@@ -1,5 +1,5 @@
-import {expect,it} from 'vitest';
-import {readFileSync} from 'node:fs';
+import {expect,it,onTestFinished} from 'vitest';
+import {readFileSync,writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {brotliDecompressSync} from 'node:zlib';
 import {GET as component} from '@/app/af/components/[file]/route';
@@ -8,6 +8,7 @@ import {referencedLibraryResources} from '../assets.server';
 import {packOfflineDependencies} from '../../offline-dependencies';
 import {markupCsp} from '../../page-styles';
 import hosted from '../../html-components/hosted.json';
+import {tempDirSync} from '@artifactbin/test-support/temp-dir';
 
 const servedFile=(file:string,headers:Record<string,string>={})=>component(new Request('https://app.example/af/components/'+file,{headers}),{params:Promise.resolve({file})});
 const built=(file:string)=>readFileSync(path.resolve('lib/build-assets/components',file));
@@ -69,14 +70,11 @@ it('embeds a page’s components and the chunks they import in the offline copy'
 });
 
 it('tells a publish naming a missing local component copy to import the hosted module',async()=>{
- const {mkdtempSync,writeFileSync,rmSync}=await import('node:fs');const {tmpdir}=await import('node:os');
  const {prepareBundle}=await import('../../../skills/artifactbin/scripts/toolbox-publication-bundle.mjs');
- const root=mkdtempSync(path.join(tmpdir(),'missing-component-'));
- try{
+ const root=tempDirSync('missing-component-',onTestFinished);
   writeFileSync(path.join(root,'index.html'),'<script type="module">import {registerTabs} from "./components/tabs.js";registerTabs();</script>');
   await expect(prepareBundle({root,entry:'index.html',server:'https://app.example'})).rejects.toThrow("components are hosted; import '@afbin/tabs' instead of a local copy");
   // Hosted imports upload nothing.
   writeFileSync(path.join(root,'index.html'),'<af-tabs></af-tabs><script type="module">import "@afbin/tabs";</script>');
   expect((await prepareBundle({root,entry:'index.html',server:'https://app.example'})).body.publicationBundle.files).toEqual([]);
- }finally{rmSync(root,{recursive:true,force:true});}
 });

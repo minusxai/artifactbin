@@ -6,14 +6,14 @@
  * imports that cross areas, resolved through relative paths, tsconfig paths, workspace packages and
  * Python modules.
  */
-import {afterAll, beforeAll, expect, it} from 'vitest';
+import {afterAll, beforeAll, expect, it, onTestFinished} from 'vitest';
 import {execFileSync} from 'node:child_process';
-import {mkdtemp, mkdir, rm, writeFile} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {mkdir, writeFile} from 'node:fs/promises';
 import path from 'node:path';
+import {tempDir} from '@artifactbin/test-support/temp-dir';
 
 const TOOLBOX = '../../../skills/artifactbin/scripts/toolbox-codebase.mjs';
-let repo = '';
+let repo = await tempDir('codebase-', afterAll);
 const at = (date: string) => `${date}T12:00:00Z`;
 function git(args: string[], who = 'Ada', date = '2026-01-05') {
   return execFileSync('git', args, {cwd: repo, encoding: 'utf8', env: {...process.env,
@@ -34,7 +34,6 @@ async function commit(who: string, date: string, files: Record<string, string | 
 const lines = (n: number, word = 'line') => Array.from({length: n}, (_, i) => `${word} ${i}\n`).join('');
 
 beforeAll(async () => {
-  repo = await mkdtemp(path.join(tmpdir(), 'codebase-'));
   git(['init', '-q', '-b', 'main']);
   await commit('Ada', '2026-01-05', {
     'README.md': lines(30), 'tsconfig.json': '{"compilerOptions":{"paths":{"@/*":["./web/*"]}}}\n',
@@ -61,7 +60,6 @@ beforeAll(async () => {
   git(['checkout', '-q', 'main'], 'Ada', '2026-01-21');
   git(['merge', '-q', '--no-ff', 'side', '-m', 'merge'], 'Cy', '2026-01-21');
 });
-afterAll(() => rm(repo, {recursive: true, force: true}));
 
 it('splits the largest areas into their biggest subdirectories, within the area budget', async () => {
   const {areasOf} = await import(TOOLBOX);
@@ -127,13 +125,13 @@ it('keeps the window, caps every table and says what it cut', async () => {
   // between areas still gets one row, which SQL's source_area <> target_area leaves out.
   expect(gatherCodebase(repo, {since: '2027-01-01'}).tables.commits).toBe('');
   const saved = repo;
-  repo = await mkdtemp(path.join(tmpdir(), 'codebase-flat-'));
+  repo = await tempDir('codebase-flat-',onTestFinished);
   try {
     git(['init', '-q', '-b', 'main']);
     await commit('Ada', '2026-01-05', {'a.ts': "import './b';\n", 'b.ts': 'export {};\n'});
     expect(gatherCodebase(repo).tables.imports)
       .toBe('source,target,source_area,target_area\n(root),(root),(root),(root)\n');
-  } finally { await rm(repo, {recursive: true, force: true}); repo = saved; }
+  } finally {repo = saved;}
 });
 
 it('writes CSV a dataset reads back: quotes commas, quotes and line breaks', async () => {

@@ -6,20 +6,18 @@
  * 51,232 bytes against 51,200 and failed main's page speed report.
  */
 import { execFile } from 'node:child_process';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { gzipSync } from 'node:zlib';
-import { afterAll, describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFinished } from 'vitest';
 import { evaluateSizeTargets, SIZE_TARGETS } from '../build/size-targets.mjs';
 import { GATEWAY_CHUNK_FRAMING, shellWireBytes } from '../lib/shell-graph.mjs';
+import {tempDirSync} from '../../services/test-support/src/temp-dir.ts';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
 const SHELL_TARGET = SIZE_TARGETS.find((target) => target.id === 4);
-const temporary = [];
-const scratch = () => { const dir = mkdtempSync(path.join(tmpdir(), 'shell-size-')); temporary.push(dir); return dir; };
-afterAll(() => { for (const dir of temporary) rmSync(dir, { recursive: true, force: true }); });
+const scratch = () => { const dir = tempDirSync('shell-size-',onTestFinished); return dir; };
 
 /** Target 4 judged for a shell of `gzip` bytes: the shell is the same on every page kind the target lists. */
 const judge = (gzip) => evaluateSizeTargets(Object.fromEntries([...SHELL_TARGET.fixtures, ...SHELL_TARGET.optional]

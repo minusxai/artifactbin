@@ -7,27 +7,28 @@
  * routes' own Origin rule; Better Auth's is off under NODE_ENV=test).
  */
 import {request} from '@/__tests__/harness';
-import {mkdtemp,rm,writeFile} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {afterAll,beforeAll,expect,it} from 'vitest';
 import {createAuthComposedHost} from '@/test/helpers/auth-host';
 import {AUTH_SECRET} from '@/lib/platform';
 import {overrideConfig} from '@/lib/platform/config';
 import {useAppHarness} from '@/__tests__/harness';
+import {tempDir} from '@artifactbin/test-support/temp-dir';
 useAppHarness();
 
 const ORIGIN='http://localhost:3000',DOMAIN='shell-sign-in.test',CODE='c'.repeat(40);
 const SHELL='<!doctype html><html><head><script nonce="__CSP_NONCE__">window.signIn=1</script></head><body data-shell></body></html>';
-let dir='',application:Awaited<ReturnType<typeof createAuthComposedHost>>;
+const dir=await tempDir('shell-sign-in-',afterAll);
+let application:Awaited<ReturnType<typeof createAuthComposedHost>>;
 // One composed host for the file: closing it closes the harness database.
 beforeAll(async()=>{
- dir=await mkdtemp(join(tmpdir(),'shell-sign-in-'));const file=join(dir,'shell.html');await writeFile(file,SHELL);
+ const file=join(dir,'shell.html');await writeFile(file,SHELL);
  overrideConfig({},{APP__DEPLOYMENT_MODE:'public',APP__SHELL_FILE:file});
  application=await createAuthComposedHost({APP__PUBLIC_BASE_URL:ORIGIN,AUTH__SECRET:AUTH_SECRET,TEST_DOMAIN:DOMAIN,TEST_DOMAIN_OTP:CODE,
   EMAIL__DEV_OUTBOX_PATH:join(dir,'outbox.jsonl')});
 });
-afterAll(async()=>{await application?.close().catch(()=>{});await rm(dir,{recursive:true,force:true});});
+afterAll(async()=>{await application?.close().catch(()=>{});});
 const get=(path:string,cookie='')=>application.fetch(request(path,{headers:{accept:'text/html'},...(cookie?{cookie}:{})}));
 const post=(path:string,body:unknown,headers:Record<string,string>={})=>application.fetch(request(path,{method:'POST',
  headers:{origin:ORIGIN,...headers},json:body}));

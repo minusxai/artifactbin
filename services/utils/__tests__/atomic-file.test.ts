@@ -1,9 +1,9 @@
-import {afterEach,beforeEach,expect,it,vi} from 'vitest';
-import {mkdtemp,readFile,readdir,rename,rm,writeFile} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {afterEach,beforeEach,expect,it,vi,onTestFinished} from 'vitest';
+import {readFile,readdir,rename,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {atomicWrite} from '../src/atomic-file';
+import {tempDir} from '@artifactbin/test-support/temp-dir';
 
 vi.mock('node:fs/promises',async original=>{
  const actual=await original<typeof import('node:fs/promises')>();
@@ -14,12 +14,12 @@ const actual=await vi.importActual<typeof import('node:fs/promises')>('node:fs/p
 const platform=Object.getOwnPropertyDescriptor(process,'platform')!;
 let root:string,path:string;
 beforeEach(async()=>{
- root=await mkdtemp(join(tmpdir(),'atomic-file-'));path=join(root,'report.jsx');
+ root=await tempDir('atomic-file-',onTestFinished);path=join(root,'report.jsx');
  await writeFile(path,'old complete bytes');
  Object.defineProperty(process,'platform',{...platform,value:'win32'});
  vi.mocked(rename).mockReset().mockImplementation(actual.rename);vi.mocked(delay).mockClear();
 });
-afterEach(async()=>{Object.defineProperty(process,'platform',platform);await rm(root,{recursive:true,force:true});});
+afterEach(async()=>{Object.defineProperty(process,'platform',platform);});
 const failure=(code:string)=>Object.assign(new Error(code),{code});
 
 it.each(['EPERM','EBUSY'])('replaces a temporarily locked Windows file atomically after %s releases',async code=>{

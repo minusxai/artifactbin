@@ -28,6 +28,7 @@ import { allowLocalWebIngest, restoreWebIngestPolicy } from '@/test/helpers/web-
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 import { useLoopbackLookup } from '@artifactbin/utils/node/loopback-lookup';
 import { request, useAppHarness } from '@/__tests__/harness';
+import {readdir} from 'node:fs/promises';
 
 useAppHarness();
 
@@ -71,7 +72,6 @@ const create = (token: string, body: Record<string, unknown>) =>
 
 /** How many objects the local store holds — the disk, counted, since the DB is the only index. */
 async function storedObjectCount(): Promise<number> {
-  const { readdir } = await import('node:fs/promises');
   const files = await readdir(LOCAL_OBJECT_DIR, { recursive: true, withFileTypes: true }).catch(() => []);
   return files.filter((f) => f.isFile()).length;
 }

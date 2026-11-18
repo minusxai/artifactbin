@@ -1,5 +1,8 @@
-import {it,expect} from 'vitest';
+import {it,expect,onTestFinished} from 'vitest';
 import {syntheticEnv} from './toolbox-env';
+import {mkdir,readFile,writeFile} from 'node:fs/promises';
+import path from 'node:path';
+import {tempDir} from '@artifactbin/test-support/temp-dir';
 const server='https://example.test';
 async function harness(sub:string,positionals:string[],values:Record<string,unknown>={},fail?:string){
  const {groupsCommand}=await import('../../../skills/artifactbin/scripts/groups.mjs');
@@ -126,8 +129,8 @@ it('does not retry an uncertain mutation and reports exit 5',async()=>{
  await expect(groupsCommand({sub:'leave',positionals:['design_crit'],values:{yes:true}},{env:syntheticEnv(server),fetcher:async(_url:any,init:any)=>{if(init.method==='GET')return Response.json({group:{id:'grp_stable',handle:'design_crit'}});writes++;throw Error('network failed');}})).rejects.toMatchObject({code:'outcome_unknown',exit:5});expect(writes).toBe(1);
 });
 it('runs every verb through the installed CLI JSON envelope and refuses output overwrite before HTTP',async()=>{
- const {createServer}=await import('node:http'),{execFile}=await import('node:child_process'),{promisify}=await import('node:util'),{mkdtemp,mkdir,writeFile,readFile,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
- const root=await mkdtemp(path.join(tmpdir(),'groups-cli-'));let requests=0;
+ const {createServer}=await import('node:http'),{execFile}=await import('node:child_process'),{promisify}=await import('node:util');
+ const root=await tempDir('groups-cli-',onTestFinished);let requests=0;
  const http=createServer((req,res)=>{requests++;res.setHeader('Content-Type','application/json');const route=new URL(req.url!,'http://local').pathname;
   res.end(JSON.stringify(route.endsWith('/members')?{members:[{user_id:'usr_member',username:'teammate'}]}:route.endsWith('/invitations')&&req.method==='GET'?{invitations:[{id:'gin_pending',email:'pending@example.test'}]}:req.method==='GET'&&route.startsWith('/api/groups/')?{group:{id:route.endsWith('/other')?'grp_other':'grp_stable',handle:'design_crit'}}:{changed:true}));});
  await new Promise<void>(resolve=>http.listen(0,'127.0.0.1',resolve));const address=http.address();if(!address||typeof address==='string')throw Error('no address');
@@ -147,7 +150,7 @@ it('runs every verb through the installed CLI JSON envelope and refuses output o
   await writeFile(output,'keep');const before=requests;
   await expect(run(['leave','design_crit','--yes','--output',output])).rejects.toMatchObject({code:2,stdout:expect.stringContaining('output_exists')});expect(requests).toBe(before);expect(await readFile(output,'utf8')).toBe('keep');
   await expect(run(['leave','design_crit'])).rejects.toMatchObject({code:2,stdout:expect.stringContaining('confirmation_required')});expect(requests).toBe(before);
- }finally{await new Promise<void>((resolve,reject)=>http.close(error=>error?reject(error):resolve()));await rm(root,{recursive:true,force:true});}
+ }finally{await new Promise<void>((resolve,reject)=>http.close(error=>error?reject(error):resolve()));}
 },20000);
 it.each(['list','show','create','update','invite','uninvite','role','remove','leave','share','unshare','move','link','unlink','delete'])('%s rejects missing/extra positional arguments before HTTP',async sub=>{
  const {groupsCommand}=await import('../../../skills/artifactbin/scripts/groups.mjs');let calls=0;

@@ -2,15 +2,15 @@
  * Three file workers must not multiply into five simultaneous server boots each. No server, DB or browser starts.
  */
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { expect, it } from 'vitest';
+import { expect, it, onTestFinished } from 'vitest';
+import {tempDirSync} from '../../services/test-support/src/temp-dir.ts';
 
 const root = path.resolve(import.meta.dirname, '../..');
 it('admits one concurrent integration case per worker without losing cases', () => {
   mkdirSync(path.join(root, 'tmp'), { recursive: true });
-  const dir = mkdtempSync(path.join(root, 'tmp/integration-admission-'));
-  try {
+  const dir = tempDirSync('integration-admission-', onTestFinished, path.join(root, 'tmp'));
     writeFileSync(path.join(dir, 'vitest.config.mjs'), `
 import source from '../../vitest.config.ts';
 const integration = source.test.projects.find(project => project.test.name === 'integration');
@@ -30,7 +30,6 @@ afterAll(() => expect(finished).toBe(7));
     const run = spawnSync(process.execPath, [path.join(root, 'node_modules/vitest/vitest.mjs'), 'run', '--config', path.join(dir, 'vitest.config.mjs')], { cwd: root, encoding: 'utf8', timeout: 20_000 });
     expect(run.error).toBeUndefined();
     expect(run.status, run.stdout + run.stderr).toBe(0);
-  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 it('keeps both secret precedence cases and fresh-database bearer coverage in integration', () => {

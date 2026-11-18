@@ -3,18 +3,17 @@
  * of everything that decides its bytes, so an image built from another schema or engine never loads, written whole or
  * not at all when workers race, and restored by a fresh database instead of the boot DDL.
  */
-import { existsSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterAll, describe, expect, inject, it } from 'vitest';
 import { getDb, resetDb, schemaImageInputs, schemaImageKey } from '@/lib/platform';
 import { readSchemaImage, schemaImageFile, schemaImageWrites, writeSchemaImage } from '@/test/setup/schema-image-file';
+import {tempDirSync} from '@artifactbin/test-support/temp-dir';
 
 // harness-exempt: reset the last test forgets the worker's database to prove a fresh one restores the on-disk schema image
 
-const scratch = mkdtempSync(path.join(tmpdir(), 'schema-image-'));
+const scratch = tempDirSync('schema-image-',afterAll);
 afterAll(async () => {
-  rmSync(scratch, { recursive: true, force: true });
   await resetDb();
 });
 

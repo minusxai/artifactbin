@@ -1,11 +1,11 @@
 /** sql.mjs query --sql-file and --output: rows go from the read into a new file and only a summary is printed. */
-import {mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
+import {readFile, writeFile, realpath} from 'node:fs/promises';
 import {syntheticEnv} from './toolbox-env';
-import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
-import {afterEach, beforeEach, expect, it} from 'vitest';
+import {beforeEach, expect, it, onTestFinished} from 'vitest';
 import {sqlCommand} from '../../../skills/artifactbin/scripts/sql.mjs';
+import {tempDir} from '@artifactbin/test-support/temp-dir';
 
 const columns = [{name: 'month'}, {name: 'region'}, {name: 'note'}, {name: 'revenue'}];
 const rows = Array.from({length: 8}, (_, i) => ({month: `2026-0${i + 1}`, region: i % 2 ? 'east' : 'west',
@@ -24,8 +24,7 @@ const options = () => ({env: syntheticEnv('https://example.test',root),
   }});
 const query = (target: string, sql: string | undefined, values: Record<string, unknown>): Promise<any> =>
   sqlCommand({sub: 'query', values, positionals: sql === undefined ? [target] : [target, sql]}, options());
-beforeEach(async () => { root = await mkdtemp(path.join(tmpdir(), 'sql-output-')); sent = []; });
-afterEach(() => rm(root, {recursive: true, force: true}));
+beforeEach(async () => { root = await tempDir('sql-output-',onTestFinished); sent = []; });
 
 it('writes every row of a read to a new CSV and prints the count, columns and a cut sample instead', async () => {
   const out = path.join(root, 'monthly.csv');
@@ -78,7 +77,6 @@ it('refuses what it cannot save before querying', async () => {
 
 it('through runTool, the rows file stays the command\'s own and the summary is printed', async () => {
   const {runTool} = await import('../../../skills/artifactbin/scripts/toolbox-client.mjs');
-  const {realpath} = await import('node:fs/promises');
   const out = path.join(root, 'rows.csv'), argv = process.argv[1];
   await writeFile(path.join(root, 'sql.mjs'), '');
   const entry = await realpath(path.join(root, 'sql.mjs'));

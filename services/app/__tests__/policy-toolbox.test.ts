@@ -3,16 +3,16 @@
  * get/explain/template/set (dry run, revision from the file, conflict exit 4, invalid exit 2 with every error by
  * path, access exit 3).
  */
-import { mkdtemp, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { expect, it } from 'vitest';
+import { expect, it, onTestFinished } from 'vitest';
 import { mintAccountToken, useAppHarness } from './harness';
 import { identityForUser, type AccessActor } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
 import { createArtifactFromBody } from '@/lib/publish';
 import { getArtifactById } from '@/lib/artifacts';
 import { createAppServer } from '@/server/app';
+import {tempDir} from '@artifactbin/test-support/temp-dir';
 
 useAppHarness();
 
@@ -31,7 +31,7 @@ async function fixture() {
   expect(created.status, await created.clone().text()).toBe(201);
   const id = (await created.json()).id as string;
   await (await getDb()).query("INSERT INTO artifact_shares(artifact_id,user_id,email,role) VALUES($1,$2,$3,'viewer')", [id, viewer.userId, viewer.email]);
-  const dir = await mkdtemp(path.join(tmpdir(), 'policy-cli-'));
+  const dir = await tempDir('policy-cli-',onTestFinished);
   const file = async (name: string, value: unknown) => { const at = path.join(dir, name); await writeFile(at, typeof value === 'string' ? value : JSON.stringify(value)); return at; };
   return { owner, viewer, id, file };
 }

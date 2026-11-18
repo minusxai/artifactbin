@@ -1,15 +1,14 @@
 import { afterAll, describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import yaml from 'yaml';
+import {tempDirSync} from '../../services/test-support/src/temp-dir.ts';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const workflow = name => yaml.parse(readFileSync(path.join(root, '.github/workflows', name), 'utf8'));
-const directory = mkdtempSync(path.join(tmpdir(), 'v3-ci-policy-'));
-afterAll(() => rmSync(directory, {recursive:true,force:true}));
+const directory = tempDirSync('v3-ci-policy-',afterAll);
 const git = (...args) => execFileSync('git', args, {cwd:directory,encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();
 
 function admitted(expression, event, base, ref = 'refs/heads/main') {

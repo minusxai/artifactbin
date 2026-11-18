@@ -5,14 +5,14 @@
  * refused). A planted mistake (a feature's call left outside its block) fails exactly the combinations without that
  * feature, naming the identifier, so the check cannot pass vacuously.
  */
-import {cp, mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {cp, readFile, writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import ts from 'typescript';
-import {afterAll, expect, it} from 'vitest';
+import {expect, it, onTestFinished} from 'vitest';
 import {FEATURES, PRESETS, columns, rules} from '../../../skills/artifactbin/examples/tracker-features.mjs';
 import {markers, trackerFeatures, trackerFiles, trim} from '../../../skills/artifactbin/scripts/toolbox-tracker.mjs';
+import {tempDir} from '@artifactbin/test-support/temp-dir';
 
 const EXAMPLES = new URL('../../../skills/artifactbin/examples/', import.meta.url);
 const NAMES = Object.keys(FEATURES);
@@ -80,9 +80,6 @@ async function generateAll(from = EXAMPLES) {
   return {clean, refused};
 }
 
-const temps: string[] = [];
-afterAll(() => Promise.all(temps.map(dir => rm(dir, {recursive: true, force: true}))));
-
 it('generates every valid feature combination clean and refuses the 4 that miss a requirement', async () => {
   const {clean, refused} = await generateAll();
   expect(clean).toHaveLength(12);
@@ -94,7 +91,7 @@ it('generates every valid feature combination clean and refuses the 4 that miss 
 }, 60_000);
 
 it('fails exactly the combinations without a feature whose call was planted outside its lines', async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), 'tracker-planted-'));temps.push(dir);
+  const dir = await tempDir('tracker-planted-',onTestFinished);
   await cp(EXAMPLES, dir, {recursive: true});
   const page = path.join(dir, 'tracker.html'), source = await readFile(page, 'utf8');
   // Two planted mistakes: the table's render call and the collab close lose their line markers.

@@ -6,16 +6,15 @@
  */
 import { spawn } from 'node:child_process';
 import net from 'node:net';
-import { mkdtempSync, rmSync } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
+import {tempDirSync} from '@artifactbin/test-support/temp-dir';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const APP_ROOT = path.join(ROOT, 'services', 'app');
 const SERVER_TS = path.join(ROOT, 'server.ts');
-const scratch = mkdtempSync(path.join(os.tmpdir(), 'boot-env-'));
+const scratch = tempDirSync('boot-env-',afterAll);
 
 type BootOutcome = {
   kind: 'exited' | 'listened' | 'timed-out';
@@ -119,7 +118,6 @@ async function runBoot(port: number, overrides: Record<string, string>): Promise
   return outcome;
 }
 
-afterAll(() => rmSync(scratch, { recursive: true, force: true }));
 
 // Each case boots its own server with its own environment and port, so they boot side by side.
 describe.concurrent('production boot environment', () => {

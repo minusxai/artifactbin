@@ -3,6 +3,9 @@ import {
   admitRuntimeModuleImports,
   runtimeModuleArgument,
 } from "../runtime-module-imports";
+import {readFile,writeFile} from 'node:fs/promises';
+import {join} from 'node:path';
+import {tempDir} from '@artifactbin/test-support/temp-dir';
 const body = `const dyn=(u)=>import(/* @vite-ignore */ u);dyn(['data:text/javascript','export default 1'].join(','));dyn(URL.createObjectURL(new Blob(['export default 1'],{type:'text/javascript'})));`;
 it("admits only a closed adapter whose calls construct nonlocal runtime URLs and guards the actual argument", () => {
   const result = admitRuntimeModuleImports(body);
@@ -68,13 +71,9 @@ it("publication planning preserves data/blob adapter execution and still refuses
 });
 
 it("uses the same closed-adapter proof in the Node-only snapshot helper", async () => {
-  const { mkdtemp, writeFile, rm } = await import("node:fs/promises");
-  const { tmpdir } = await import("node:os");
-  const { join } = await import("node:path");
   const { prepareBundle } =
     await import("../../../skills/artifactbin/scripts/toolbox-publication-bundle.mjs");
-  const root = await mkdtemp(join(tmpdir(), "runtime-module-urls-"));
-  try {
+  const root = await tempDir("runtime-module-urls-",onTestFinished);
     await writeFile(
       join(root, "index.html"),
       '<script type="module">' + body + "</script>",
@@ -97,9 +96,6 @@ it("uses the same closed-adapter proof in the Node-only snapshot helper", async 
         server: "https://example.test",
       }),
     ).rejects.toThrow(/Computed module imports/);
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
 });
 it("rewrites a module asset argument without changing or dropping its literal local dependencies", async () => {
   const { planPublicationBundle } = await import("../plan");
@@ -137,16 +133,10 @@ it("rewrites a module asset argument without changing or dropping its literal lo
 });
 
 it("ships a self-contained installed parser that admits the same runtime adapter outside the repository", async () => {
-  const { readFile, writeFile, mkdtemp, rm } = await import("node:fs/promises");
-  const { tmpdir } = await import("node:os");
-  const { join } = await import("node:path");
   const { execFileSync } = await import("node:child_process");
   const { buildPreviewParser } =
     await import("../../skills");
-  const directory = await mkdtemp(
-    join(tmpdir(), "installed-runtime-module-parser-"),
-  );
-  try {
+  const directory = await tempDir("installed-runtime-module-parser-",onTestFinished);
     const parser = await buildPreviewParser(
       await readFile(
         new URL(
@@ -167,9 +157,6 @@ it("ships a self-contained installed parser that admits the same runtime adapter
         encoding: "utf8",
       }).trim(),
     ).toBe("installed-parser-passed");
-  } finally {
-    await rm(directory, { recursive: true, force: true });
-  }
 });
 it("guards computed module URLs with per-character data:/blob: prefix checks", () => {
   const guard = runtimeModuleArgument("value");

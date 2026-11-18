@@ -4,15 +4,14 @@
  * page's library off the critical path without the year-long `immutable` only content-addressed trees may claim.
  */
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFinished } from 'vitest';
 import { createAppServer } from '@/server/app';
+import {tempDirSync} from '@artifactbin/test-support/temp-dir';
 
 describe('/af/lib/*', () => {
   it('is cached publicly for a day and revalidated in the background, never immutable; a miss is not cached', async () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'libraries-cache-'));
-    try {
+    const dir = tempDirSync('libraries-cache-',onTestFinished);
       fs.mkdirSync(path.join(dir, 'libraries/vega-5.30.0'), { recursive: true });
       fs.writeFileSync(path.join(dir, 'libraries/vega-5.30.0/index.js'), 'export const vega = 1;');
       const app = createAppServer({ indexHtml: async () => '<div>SPA</div>', publicDir: dir });
@@ -24,6 +23,5 @@ describe('/af/lib/*', () => {
       const missing = await app.request('/af/lib/vega-9.9.9/index.js');
       expect(missing.status).toBe(404);
       expect(missing.headers.get('cache-control') ?? '').not.toContain('max-age=86400');
-    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
   });
 });

@@ -1,10 +1,10 @@
-import { describe, expect, it, vi } from 'vitest';
-import { mkdtempSync, readFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { describe, expect, it, vi, onTestFinished } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DEV_OUTBOX_DEFAULT_PATH, MailNotConfigured, MailSendFailed, devOutboxMailer, mailerForRuntime, resendMailer, resolveDevOutboxPath, usesDevOutbox } from '../src/mail';
 import { mailSettingsOf } from '../src/config';
 import { authEnvNamesRead } from '../src/env';
+import {tempDirSync} from '@artifactbin/test-support/temp-dir';
 
 describe('resendMailer', () => {
   it('posts the Resend shape — the login code in the subject and the text, never logged', async () => {
@@ -17,7 +17,7 @@ describe('resendMailer', () => {
     expect(String(calls[0].body.text)).toContain('123456');
   });
   it('writes local OTPs to a protected development outbox', async () => {
-    const file = join(mkdtempSync(join(tmpdir(), 'artifactbin-mail-')), 'outbox.jsonl');
+    const file = join(tempDirSync('artifactbin-mail-',onTestFinished), 'outbox.jsonl');
     const log = vi.fn();
     const m = devOutboxMailer({ path: file, log });
     await m.send({ to: 'dev@example.com', kind: 'otp', subject: 'x', text: 'x', otp: '123456' });
@@ -32,7 +32,7 @@ describe('resendMailer', () => {
     // Both return a bare `{ send }`, so which one was chosen is only visible in what a send DOES.
     // That is the point of the check: a hosted origin that got the outbox would write every login
     // code to a file, which is an auth bypass, and `not.toThrow()` could not tell the difference.
-    const file = join(mkdtempSync(join(tmpdir(), 'artifactbin-mail-runtime-')), 'outbox.jsonl');
+    const file = join(tempDirSync('artifactbin-mail-runtime-',onTestFinished), 'outbox.jsonl');
     const message = { to: 'dev@example.com', kind: 'otp', subject: 'x', text: 'x' } as const;
 
     const local = mailerForRuntime({ publicBaseUrl: 'http://localhost:3030', from: 'x', devOutboxPath: file, smtp: { host: 'smtp.invalid', port: 587, secure: false } });

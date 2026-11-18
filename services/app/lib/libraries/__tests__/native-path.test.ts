@@ -1,14 +1,13 @@
 import {build} from 'esbuild';
 import {initSync,parse as parseModuleImports} from 'es-module-lexer';
-import {mkdtemp,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
-import {expect,it,vi} from 'vitest';
+import {expect,it,vi,onTestFinished} from 'vitest';
 import {parse,type DefaultTreeAdapterMap} from 'parse5';
 import {registeredLibrarySources,referencedLibraryResources} from '../assets.server';
 import {packOfflineDependencies} from '../../offline-dependencies';
 import {assembleHtmlPage,downloadableHtml} from '../../html-runtime';
+import {tempDir} from '@artifactbin/test-support/temp-dir';
 const baseUrl='https://page.example/a/PAGE12/download';
 const authored=`<html><head><script src="/af/core.js"></script></head><body><div data-af-id="chart"></div><script type="module" data-af-id="chart-script">
 import * as vega from "/af/lib/vega-6.3.1/index.js";
@@ -39,8 +38,7 @@ it('keeps hosted literal imports and renders native plus compiled specs from the
 });
 
 it('reads the deployed public directory after bundling relocates import.meta.url',async()=>{
- const directory=await mkdtemp(path.join(tmpdir(),'library-server-bundle-'));
- try{
+ const directory=await tempDir('library-server-bundle-',onTestFinished);
   const outfile=path.join(directory,'server.mjs');
   await build({entryPoints:[path.resolve('lib/libraries/assets.server.ts')],outfile,bundle:true,platform:'node',format:'esm',target:'node22'});
   const bundled=await import(/* @vite-ignore */pathToFileURL(outfile).href);
@@ -49,7 +47,6 @@ it('reads the deployed public directory after bundling relocates import.meta.url
   const resources=await bundled.referencedLibraryResources(authored,[],baseUrl);
   expect(resources.map((resource:{url:string})=>resource.url)).toEqual(['/af/lib/vega-6.3.1/index.js','/af/lib/vega-lite-6.4.3/index.js']);
   expect(new TextDecoder().decode(resources[0].bytes)).toBe(expected[resources[0].url]);
- }finally{await rm(directory,{recursive:true,force:true});}
 });
 
 it('packs direct Mermaid and deck.gl imports from admitted project modules without network dependencies',async()=>{

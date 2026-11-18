@@ -9,10 +9,9 @@
  * reviewed edit here and in every reader that applies a byte-for-byte copy of IDENTITY.sql.
  */
 import {createHash} from 'node:crypto';
-import {mkdtemp,readFile,rm} from 'node:fs/promises';
+import {readFile} from 'node:fs/promises';
 import {join} from 'node:path';
-import {tmpdir} from 'node:os';
-import {afterEach,beforeEach,expect,it} from 'vitest';
+import {beforeEach,expect,it,onTestFinished} from 'vitest';
 import {IDENTITY_INTROSPECT_PATH,IDENTITY_OWNED_TABLES,IDENTITY_VIEWS,SERVICE_AUTH_HEADER} from '@artifactbin/contracts';
 import {identityViewColumns} from '@artifactbin/auth/identity-store/views';
 import {createAuthComposedHost} from '@/test/helpers/auth-host';
@@ -22,14 +21,14 @@ import {createGroup,deleteGroup,setGroupParent} from '@/lib/groups';
 import {canUseDeploymentIdentity,createUser} from '@/lib/accounts';
 import {canAuthenticateUser} from '@/lib/user-kinds';
 import {admitGroupMember,useAppHarness} from './harness';
+import {tempDir} from '@artifactbin/test-support/temp-dir';
 useAppHarness();
 const SECRET='identity-test-service-secret',origin='http://localhost:3000',WAREHOUSE='http://warehouse.localhost:7444';
 const WAREHOUSE_SECRET='warehouse-introspection-secret',LEDGER_SECRET='ledger-introspection-secret';
 const sha256=(value:string)=>createHash('sha256').update(value).digest('hex');
 const AUDIENCES=JSON.stringify([{id:'warehouse',origin:WAREHOUSE,introspection_secret_sha256:sha256(WAREHOUSE_SECRET)},{id:'ledger',origin:'http://ledger.localhost:7445',introspection_secret_sha256:sha256(LEDGER_SECRET)}]);
 let directory='';
-beforeEach(async()=>{overrideConfig({internalServiceSecret:SECRET,publicBaseUrl:origin},{IDENTITY__SERVICE_AUDIENCES:AUDIENCES});await syncIdentitySettings(await getDb());directory=await mkdtemp(join(tmpdir(),'identity-'));});
-afterEach(async()=>{await rm(directory,{recursive:true,force:true});});
+beforeEach(async()=>{overrideConfig({internalServiceSecret:SECRET,publicBaseUrl:origin},{IDENTITY__SERVICE_AUDIENCES:AUDIENCES});await syncIdentitySettings(await getDb());directory=await tempDir('identity-',onTestFinished);});
 
 /** The composed host, whose boot (its database open, then Better Auth's tables) made the views. */
 async function composed(){

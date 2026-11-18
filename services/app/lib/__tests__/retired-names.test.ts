@@ -10,7 +10,7 @@
  * A row is a lint over source text. What the retired thing is REPLACED BY is asserted separately,
  * at the bottom — a dead name and a live vocabulary are two different claims.
  */
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -162,7 +162,6 @@ describe('the surviving vocabulary', () => {
   it('is exactly six themes, and no theme guide teaches them any more', async () => {
     const { STORY_THEME_NAMES } = await import('@/lib/validation/story-theme-names');
     expect([...STORY_THEME_NAMES]).toEqual(['modernist', 'organic', 'industry', 'terminal', 'manuscript', 'pop']);
-    const { readdirSync } = await import('node:fs');
     const documented = readdirSync(path.join(APP_ROOT, 'skills/artifactbin/references'))
       .filter((f) => f.startsWith('themes-'))
       .map((f) => f.replace(/^themes-/, '').replace(/\.md$/, ''))

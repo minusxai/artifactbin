@@ -1,14 +1,13 @@
-import {it,expect} from 'vitest';
-import {readFileSync,mkdirSync,mkdtempSync,writeFileSync,rmSync} from 'node:fs';
-import {tmpdir} from 'node:os';
+import {it,expect,onTestFinished} from 'vitest';
+import {readFileSync,mkdirSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {installFingerprint} from '../lib/lock-fingerprint.mjs';
 import yaml from 'yaml';
+import {tempDirSync} from '../../services/test-support/src/temp-dir.ts';
 const workflow=()=>yaml.parse(readFileSync(new URL('../../.github/workflows/ci.yml',import.meta.url),'utf8'));
 
 it('keeps auth release compatibility metadata out of the install key while retaining dependency and hook changes',()=>{
- const root=mkdtempSync(join(tmpdir(),'role-install-key-'));
- try{
+ const root=tempDirSync('role-install-key-',onTestFinished);
   mkdirSync(join(root,'services/auth'),{recursive:true});
   writeFileSync(join(root,'package-lock.json'),JSON.stringify({packages:{'':{},'services/auth':{}}}));
   writeFileSync(join(root,'package.json'),'{}');
@@ -18,7 +17,6 @@ it('keeps auth release compatibility metadata out of the install key while retai
   put({...original,groupRoleModelVersion:2});expect(installFingerprint(root)).toBe(key);
   put({...original,dependencies:{pg:'8.24.0'}});expect(installFingerprint(root)).not.toBe(key);
   put({...original,scripts:{postinstall:'different'}});expect(installFingerprint(root)).not.toBe(key);
- }finally{rmSync(root,{recursive:true,force:true});}
 });
 
 it('gives every browser a disjoint immutable cache that the main warmer also populates',()=>{
