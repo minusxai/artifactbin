@@ -47,9 +47,9 @@ it('integrates exact-head squash admission and emits no merge for invalid eviden
   else{expect(invoke).toThrow();expect(commands).toEqual([]);}
  }
 });
-it('admits the complete 49-context workload and refuses a missing matrix job',()=>{
+it('admits the complete workload and refuses a missing matrix job',()=>{
  const expected=fastContexts(readFileSync(new URL('../../.github/workflows/pr-fast.yml',import.meta.url),'utf8'));
- const f=fixture();f.jobs={total_count:49,jobs:expected.map((name,i)=>({...f.jobs.jobs[0],id:i+1,name}))};
+ const f=fixture();f.jobs={total_count:expected.length,jobs:expected.map((name,i)=>({...f.jobs.jobs[0],id:i+1,name}))};
  const invoke=()=>completedFastAttempt({...f,repository:repo,head:sha,workflowId:2,attempt:1,expected});
  expect(invoke().seconds).toBe(60);f.jobs.jobs.pop();expect(invoke).toThrow();
 });

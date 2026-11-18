@@ -14,7 +14,7 @@ describe('actual original/new rich reader fixture inputs',()=>{
   expect(new Set(richBrowserParityFixtures.map(f=>f.id)).size).toBe(richBrowserParityFixtures.length);
   for(const fixture of richBrowserParityFixtures){expect(fixture.provenance.revision).toBe(richBaselineRevision);expect(fixture.provenance.sources.length).toBeGreaterThan(1);expect(fixture.limitations.length).toBeGreaterThan(0);expect(fixture.states[0]).toMatchObject({id:'initial',actions:[]});for(const state of fixture.states)expect(Object.keys(state.expected).length).toBeGreaterThan(0);}
  });
- for(const fixture of richBrowserParityFixtures)it(`${fixture.id} parses and validates as actual old JSX and has syntactically valid native setup`,async()=>{
+ for(const fixture of richBrowserParityFixtures)it(`${fixture.id} parses its native html around its module element and has syntactically valid native setup`,async()=>{
   const doc=parse(fixture.newHtml);expect(doc.querySelector(`af-${fixture.modules[0]}`)).not.toBeNull();
   await expect(transform(fixture.setup||'',{loader:'js',format:'esm'})).resolves.toBeDefined();
  });

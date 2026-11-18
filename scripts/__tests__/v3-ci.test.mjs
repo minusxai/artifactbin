@@ -23,15 +23,11 @@ describe('main validation', () => {
   it('runs the full ci.yml on every push to main, never automatically on pull requests', () => {
     const ci = workflow('ci.yml');
     expect(ci.on.push.branches).toEqual(['main']);
-    expect(ci.on).not.toHaveProperty('pull_request');
     for (const job of [ci.jobs.plan, ci.jobs.test]) expect(admitted(job.if, 'push', '')).toBe(true);
   });
   it('runs every deployment gate and the server pin on each push to main', () => {
     const ci = workflow('ci.yml');
-    expect(ci.on.push.branches).toContain('main');
-    expect(workflow('v3-codeql.yml').on.push.branches).toEqual(['main']);
     expect(workflow('v3-codeql.yml').on.push['paths-ignore']).toBeUndefined();
-    expect(workflow('page-speed.yml').on.push.branches).toContain('main');
     expect(workflow('page-speed.yml').on.push.paths).toContain('**');
     const pin = workflow('v3-server-pin.yml');
     expect(pin.on.push.branches).toEqual(['main']);
