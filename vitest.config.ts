@@ -48,6 +48,9 @@ const NODE_INCLUDE = ['services/app/lib/html-components/**/*.test.ts', 'services
  * as the Docker proofs are.
  */
 const REAL_DATABASE_TESTS = ['services/app/lib/artifacts/__tests__/workload-create-postgres.test.ts', 'services/app/lib/analytics/__tests__/canonical-totals-postgres.test.ts', 'services/connectors/__tests__/connectors-docker.test.ts', 'services/app/lib/artifact-access/__tests__/lock-order-postgres.test.ts', 'services/app/lib/platform/__tests__/identity-roles-postgres.test.ts', 'services/events/__tests__/feed-position-postgres.test.ts', 'services/auth/__tests__/oauth-postgres.test.ts', 'services/app/__tests__/region-processes-postgres.test.ts'];
+/** The S3 object store against a real S3-compatible server, which only `integration-databases`' CI part starts: it reads the
+ * server's URL from TEST_S3_URL, and fails under CI without one. */
+const S3_TESTS = ['services/app/lib/object-store/__tests__/store-s3.test.ts'];
 /** Real Chromium (the browser contract, internal asset rendering, render lifecycle, session pages): `integration` only. */
 const CHROMIUM_TESTS = chromiumTests(import.meta.dirname, NODE_INCLUDE);
 
@@ -137,6 +140,7 @@ export default defineConfig({
             ...CHROMIUM_TESTS,
             'scripts/__tests__/reserved-ids-proof.test.mjs',
             ...REAL_DATABASE_TESTS,
+            ...S3_TESTS,
             ...SERVER_BOOT_TESTS.filter((file) => file.startsWith('scripts/')),
             ...PROPERTY_SOAK_TESTS,
           ],
@@ -182,6 +186,7 @@ export default defineConfig({
             'scripts/__tests__/reserved-ids-proof.test.mjs',
             // The connectors against a disposable TLS Postgres and MySQL, and the lock order on real Postgres (a `skipIf` on each image).
             ...REAL_DATABASE_TESTS,
+            ...S3_TESTS,
           ],
           exclude: ['**/node_modules/**'],
           setupFiles: ['./services/app/test/setup/vitest.setup.ts'],
