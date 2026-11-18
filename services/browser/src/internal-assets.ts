@@ -25,12 +25,32 @@ export async function internalAssetResponse(target: string, method: string, asse
     || !isPublicAssetRequest(new Request(url, { method }), assetOrigin)) {
     throw new Error('asset request refused');
   }
+  return publicAssetResponse(await fetchInternal(url, method, asset.host, internal, signal));
+}
+
+/**
+ * A page's own request, for an inspection with `internalOrigin` (contracts PageInspectRequest): a GET or HEAD to
+ * `target` fetched from the internal origin with the target's own Host, no browser header or credential, no redirect,
+ * bounded like an asset; any cookie the app sets is dropped.
+ */
+export async function internalPageResponse(target: string, method: string, internalOrigin: string, signal: AbortSignal): Promise<Response> {
+  const url = new URL(target), internal = new URL(internalOrigin);
+  if (!['GET', 'HEAD'].includes(method) || !['http:', 'https:'].includes(url.protocol) || url.username || url.password
+    || !['http:', 'https:'].includes(internal.protocol) || internal.username || internal.password) throw new Error('page request refused');
+  const response = await fetchInternal(url, method, url.host, internal, signal);
+  const headers = new Headers(response.headers);
+  headers.delete('set-cookie');
+  return new Response(response.body, { status: response.status, headers });
+}
+
+/** GET or HEAD `url`'s path from `internal` with a fixed `Host`; decoded, bounded, never redirected. */
+async function fetchInternal(url: URL, method: string, host: string, internal: URL, signal: AbortSignal): Promise<Response> {
   // Node fetch owns/ignores Host. A fixed Host through node:http selects the
   // identical asset boundary both directly in the app and through a cohost proxy.
   // No browser headers, credentials, redirects or environment proxy are used.
   const response = await new Promise<Response>((resolve, reject) => {
     const request = (internal.protocol === 'https:' ? httpsRequest : httpRequest)(internal.origin + url.pathname + url.search, {
-      method, signal, headers: { host: asset.host, 'accept-encoding': 'identity' },
+      method, signal, headers: { host, 'accept-encoding': 'identity' },
     }, incoming => {
       const headers = new Headers();
       for (const [key,value] of Object.entries(incoming.headers)) if(value !== undefined) headers.set(key, Array.isArray(value) ? value.join(', ') : value);
@@ -39,7 +59,7 @@ export async function internalAssetResponse(target: string, method: string, asse
       if(noBody) { incoming.resume();resolve(new Response(null,{status,headers}));return; }
       const encoding = headers.get('content-encoding');
       const decoder = encoding === 'gzip' ? createGunzip() : encoding === 'br' ? createBrotliDecompress() : encoding === 'deflate' ? createInflate() : null;
-      if (encoding && encoding !== 'identity' && !decoder) { incoming.destroy();reject(new Error('asset encoding refused'));return; }
+      if (encoding && encoding !== 'identity' && !decoder) { incoming.destroy();reject(new Error('encoding refused'));return; }
       const source = decoder ? incoming.pipe(decoder) : incoming;
       if (decoder) { incoming.on('error', error => decoder.destroy(error)); decoder.on('close', () => incoming.destroy()); }
       resolve(new Response(Readable.toWeb(source) as ReadableStream<Uint8Array>, {status,headers}));
@@ -48,9 +68,9 @@ export async function internalAssetResponse(target: string, method: string, asse
   });
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
   try {
-    if (response.status >= 300 && response.status < 400) throw new Error('asset redirect refused');
+    if (response.status >= 300 && response.status < 400) throw new Error('redirect refused');
     const length = Number(response.headers.get('content-length') ?? 0);
-    if (length > MAX_BYTES) throw new Error('asset too large');
+    if (length > MAX_BYTES) throw new Error('response too large');
     reader = response.body?.getReader();
     const chunks: Uint8Array[] = [];
     let size = 0;
@@ -58,7 +78,7 @@ export async function internalAssetResponse(target: string, method: string, asse
       const { done, value } = await reader.read();
       if (done) break;
       size += value.byteLength;
-      if (size > MAX_BYTES) throw new Error('asset too large');
+      if (size > MAX_BYTES) throw new Error('response too large');
       chunks.push(value);
     }
     const headers = new Headers(response.headers);
@@ -66,7 +86,7 @@ export async function internalAssetResponse(target: string, method: string, asse
     // Fulfill receives decoded bytes, so wire length/encoding must not survive.
     for (const name of ['content-encoding', 'content-length', 'transfer-encoding', 'connection']) headers.delete(name);
     const body = method === 'HEAD' || [204, 205, 304].includes(response.status) ? null : Buffer.concat(chunks, size);
-    return publicAssetResponse(new Response(body, { status: response.status, headers }));
+    return new Response(body, { status: response.status, headers });
   } finally {
     if (reader) { await reader.cancel().catch(() => {}); reader.releaseLock(); }
     else await response.body?.cancel().catch(() => {});

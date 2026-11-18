@@ -1,7 +1,7 @@
 # The browser service
 
 A Chromium that renders a URL to an image (`/render`, `/render-upload`), hands back the SVG a page drew
-(`/harvest`) and runs persistent isolated scripted sessions (`/sessions`). `BrowserService` and the session types
+(`/harvest`), says what went wrong in a page (`/inspect`: failed components, exceptions, failed requests) and runs persistent isolated scripted sessions (`/sessions`). `BrowserService` and the session types
 in `services/contracts/src` are the wire; `src/index.ts` is the client and the server shell, `src/local.ts`
 Chromium, `src/sessions.ts` and the `session-*` files the sessions, `src/upload-gateway-server.ts` the S3 gateway.
 
@@ -17,6 +17,8 @@ Chromium, `src/sessions.ts` and the `session-*` files the sessions, `src/upload-
 - A new operation must survive mixed-version rollouts: a service without it answers 503 `<op>_unavailable`,
   `browserClient` maps an older service's 404 to that same verdict, and the app falls back
   (`upload_unavailable` to the byte transport, `harvest_unavailable` to drawing with the engine).
+- `/inspect`'s `internalOrigin` forwards only GET and HEAD of the page's own and allowed origins, by their own Host,
+  with no browser header, credential, cookie or redirect: never widen it into a proxy.
 - Sessions keep credentials in the parent broker: the worker never holds the pages cookie
   (`session-origins.ts`), the broker admits only the app's origin and document origins, strips supplied
   credential headers, revalidates the actor on every app request and bounds bodies. Google Fonts is the one

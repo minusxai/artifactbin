@@ -183,6 +183,9 @@ export function draftFile(label: string, pathname: string, now = Date.now()): { 
   return file ?? null;
 }
 
+/** Forget draft `label` now (a check's own draft, once it was looked at). */
+export function forgetDraft(label: string): void { drafts.delete(label); }
+
 /** Whether `reader`'s own draft `label` exists and its embedding app has not allowed live reads (yet). */
 export function draftAwaitsConsent(reader: string, label: string, now = Date.now()): boolean {
   sweep(now);

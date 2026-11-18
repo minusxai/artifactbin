@@ -144,6 +144,20 @@ export const PAGE_EVIDENCE_PATH='/api/internal/identity/page-evidence';
 export const CANONICAL_PAGE_EVIDENCE_PATH='/api/internal/page-evidence';
 
 /**
+ * A trusted relay's draft check (the same `artifact_reads` opt-in and per-service introspection secret as chart-image,
+ * no grant: the check reads no data). POST exactly DRAFT_CHECK_KEYS, `html` and `files` required (the draft's own
+ * `{path, base64, contentType?}` files, entryPath its page's path among them), at most SERVICE_PAYLOAD_LIMIT bytes. The
+ * identity owner forwards it to the fixed app seam as the anonymous actor and passes its status and JSON through:
+ * `{problems: PageProblem[], truncated, image?: PageImage}` (contracts browser), a draft's refusal `{error: DraftRefusalCode, message}`,
+ * 413 `too_large` or 503 `check_unavailable`.
+ */
+export const DRAFT_CHECK_PATH = '/api/internal/identity/draft-check';
+/** Fixed app upstream route; only the identity owner calls it. */
+export const CANONICAL_DRAFT_CHECK_PATH = '/api/internal/draft-check';
+/** What a draft check carries; `html` and `files` are required. */
+export const DRAFT_CHECK_KEYS = ['html', 'entryPath', 'files'] as const;
+
+/**
  * Purpose-only chart drawing for a trusted relay (the same `artifact_reads` opt-in and per-service introspection
  * secret as artifact-read, no grant: drawing reads no data, so a run with no personal grant may use it too). POST
  * exactly a subset of CHART_IMAGE_KEYS with `chart` and `rows`, at most SERVICE_PAYLOAD_LIMIT bytes. The identity
