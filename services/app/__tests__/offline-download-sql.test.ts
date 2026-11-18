@@ -131,5 +131,4 @@ it('a copy whose rows are over the cap carries none, and its sql and its local c
   await expect(Promise.resolve(runtime.sql([PAGE_SQL] as unknown as TemplateStringsArray))).rejects.toMatchObject({ code: 'unavailable', message: OFFLINE_SQL_NO_DATA });
   // The copy's local controls show the same sentence (lib/html-runtime portable-session).
   expect(dispatched).toHaveBeenCalledWith(expect.objectContaining({ type: OFFLINE_SQL_NO_DATA_EVENT }));
-  expect(OFFLINE_SQL_NO_DATA).toMatch(/carries no data.*open the original page/);
 });

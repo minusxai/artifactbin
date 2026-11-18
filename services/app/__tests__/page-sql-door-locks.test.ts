@@ -18,6 +18,20 @@ import { person, params, publish, sql, fixture, stored } from './page-sql-door-f
 useAppHarness();
 beforeEach(() => setSession(null));
 
+type Db = Awaited<ReturnType<typeof getDb>>;
+type Run = (statement: string, values?: unknown[]) => Promise<unknown>;
+/**
+ * Wraps every transaction on `db`: each statement it runs goes through the hook `perTransaction()` made for that
+ * transaction, which decides when (and whether) `next` runs it; `run` is the transaction's own query.
+ */
+const spyOnStatements = (db: Db, perTransaction: () => (statement: string, values: unknown[] | undefined, next: () => Promise<unknown>, run: Run) => Promise<unknown>) => {
+  const transaction = db.transaction.bind(db);
+  return vi.spyOn(db, 'transaction').mockImplementation((callback) => transaction(async (tx) => {
+    const run = tx.query.bind(tx) as Run, hook = perTransaction();
+    return callback({ ...tx, query: (statement: string, values?: unknown[]) => hook(statement, values, () => run(statement, values), run) } as never);
+  }));
+};
+
 it('review3: hidden rows do not contribute to a narrowed replay count', async () => {
   const f = await fixture(), db = await getDb();
   await db.query("UPDATE artifact_shares SET role='editor' WHERE artifact_id=$1 AND user_id=$2", [f.staff, f.viewer.userId]);
@@ -29,35 +43,22 @@ it('review3: hidden rows do not contribute to a narrowed replay count', async ()
   expect(reply.body.affected).toBe(0);
 });
 
-it('review3: malformed requests do not distinguish an unreadable page from a missing page', async () => {
-  const f = await fixture(), db = await getDb();
-  await db.query("UPDATE artifacts SET visibility='private' WHERE id=$1", [f.page]);
-  const call = async (id: string) => {
-    const response = await sqlPost(request(`/api/artifacts/${id}/sql`, {method:'POST', json:{}, token:f.other.token}), params(id));
-    return {status:response.status, body:await response.json()};
-  };
-  expect(await call(f.page)).toEqual(await call('missing_review3_page'));
-});
-
 it('review3: a group revoke between dataset authorization and page locks prevents a SQL commit', async () => {
   const f = await fixture(), db = await getDb();
   const group = await createGroup(f.owner.userId!, {handle:'review3_group', name:'Review group'});
   await admitGroupMember(f.owner.userId!, group.id, f.other.userId!, 'member');
   await db.query("INSERT INTO artifact_group_shares(artifact_id,group_id,role,created_by) VALUES($1,$2,'editor',$3)", [f.staff, group.id, f.owner.userId]);
-  const before = await stored(f.staff), transaction = db.transaction.bind(db);
+  const before = await stored(f.staff);
   let revoked = false;
   // Simulate the READ COMMITTED interleaving: membership disappears after assertWriteCommit's
   // decision, immediately before the newly added page locks. No snapshot/lock was held over it yet.
-  const spy = vi.spyOn(db, 'transaction').mockImplementation(callback => transaction(async tx => {
-    const query = tx.query.bind(tx);
-    return callback({...tx, query: async (statement, values) => {
-      if (!revoked && statement.includes('FROM artifact_group_shares s JOIN group_members m') /* review 4: the decision's own group fact, locked as it is read */) {
-        revoked = true;
-        await query('DELETE FROM group_members WHERE group_id=$1 AND user_id=$2', [group.id, f.other.userId]);
-      }
-      return query(statement, values);
-    }});
-  }));
+  const spy = spyOnStatements(db, () => async (statement, _values, next, run) => {
+    if (!revoked && statement.includes('FROM artifact_group_shares s JOIN group_members m') /* review 4: the decision's own group fact, locked as it is read */) {
+      revoked = true;
+      await run('DELETE FROM group_members WHERE group_id=$1 AND user_id=$2', [group.id, f.other.userId]);
+    }
+    return next();
+  });
   try {
     await sql(f.page, f.other, "update staff set team = 'black'");
   } finally { spy.mockRestore(); }
@@ -67,22 +68,21 @@ it('review3: a group revoke between dataset authorization and page locks prevent
 
 
 it('review3: sharing edits and the write guard agree on page/share lock order', async () => {
-  const f = await fixture(), db = await getDb(), transaction = db.transaction.bind(db);
+  const f = await fixture(), db = await getDb();
   await db.query("INSERT INTO artifact_shares(artifact_id,user_id,email,role) VALUES($1,$2,$3,'viewer')", [f.page, f.other.userId, f.other.email]);
   // Review 4 (lock only what the decision reads): the page is private, so the reader's access IS its page share.
   await db.query("UPDATE artifacts SET visibility='private' WHERE id=$1", [f.page]);
   const traces: string[][] = [];
-  const spy = vi.spyOn(db, 'transaction').mockImplementation(callback => transaction(async tx => {
+  const spy = spyOnStatements(db, () => {
     const trace: string[] = []; traces.push(trace);
-    const query = tx.query.bind(tx);
-    return callback({...tx, query: async (statement, values) => {
+    return async (statement, values, next) => {
       if (values?.[0] === f.page) {
         if (statement.includes('FROM artifacts') && /FOR (UPDATE|SHARE)/.test(statement)) trace.push('page');
         if ((statement.includes('FROM artifact_shares') && statement.includes('FOR SHARE')) || statement.startsWith('DELETE FROM artifact_shares')) trace.push('shares');
       }
-      return query(statement, values);
-    }});
-  }));
+      return next();
+    };
+  });
   try {
     expect((await sql(f.page, f.other, "insert into staff (name) values ('through-share')")).status).toBe(200);
     await updateSharingFor(f.owner.actor, f.page, {shares:[]});
@@ -92,35 +92,12 @@ it('review3: sharing edits and the write guard agree on page/share lock order', 
   expect(orders[0]).toEqual(orders[1]);
 });
 
-it('review3 (SQL door too): a group revoke between dataset authorization and page locks prevents the commit', async () => {
-  const f = await fixture(), db = await getDb();
-  const group = await createGroup(f.owner.userId!, {handle:'review3_sql_group', name:'Review group'});
-  await admitGroupMember(f.owner.userId!, group.id, f.other.userId!, 'member');
-  await db.query("INSERT INTO artifact_group_shares(artifact_id,group_id,role,created_by) VALUES($1,$2,'editor',$3)", [f.staff, group.id, f.owner.userId]);
-  const before = await stored(f.staff), transaction = db.transaction.bind(db);
-  let revoked = false;
-  const spy = vi.spyOn(db, 'transaction').mockImplementation(callback => transaction(async tx => {
-    const query = tx.query.bind(tx);
-    return callback({...tx, query: async (statement, values) => {
-      if (!revoked && statement.includes('FROM artifact_group_shares s JOIN group_members m') /* review 4: the decision's own group fact, locked as it is read */) {
-        revoked = true;
-        await query('DELETE FROM group_members WHERE group_id=$1 AND user_id=$2', [group.id, f.other.userId]);
-      }
-      return query(statement, values);
-    }});
-  }));
-  try { await sql(f.page, f.other, "update staff set team = 'black'"); }
-  finally { spy.mockRestore(); }
-  expect(revoked).toBe(true);
-  expect(await stored(f.staff)).toEqual(before);
-});
-
-it.each(['sql'] as const)('a private page answers malformed requests and bad Idempotency-Keys exactly as a missing one (%s)', async (door) => {
+it('a private page answers malformed requests and bad Idempotency-Keys exactly as a missing one', async () => {
   const f = await fixture(), db = await getDb();
   await db.query("UPDATE artifacts SET visibility='private' WHERE id=$1", [f.page]);
   const route = sqlPost;
   const call = async (id: string, json: unknown, headers: Record<string, string> = {}) => {
-    const response = await route(request(`/api/artifacts/${id}/${door}`, { method: 'POST', json, token: f.other.token, headers }), params(id));
+    const response = await route(request(`/api/artifacts/${id}/sql`, { method: 'POST', json, token: f.other.token, headers }), params(id));
     return { status: response.status, body: await response.json() };
   };
   const valid = { sql: 'select 1', revision: '1' };
@@ -139,7 +116,7 @@ it.each(['sql'] as const)('a private page answers malformed requests and bad Ide
  * hold up a decision. A group-owned publish is traced for its artifact order only.
  */
 it('every writer locks its artifacts by tier and lockOrder, before its facts', async () => {
-  const f = await fixture(), db = await getDb(), transaction = db.transaction.bind(db);
+  const f = await fixture(), db = await getDb();
   const group = await createGroup(f.owner.userId!, { handle: 'lock_order_group', name: 'Lock order' });
   await admitGroupMember(f.owner.userId!, group.id, f.other.userId!, 'member');
   overrideConfig({}, { DATASETS__ALLOW_PRIVATE_NETWORK: '1' });
@@ -150,11 +127,11 @@ it('every writer locks its artifacts by tier and lockOrder, before its facts', a
     || /^(DELETE FROM|UPDATE) (artifact_shares|artifact_group_shares)\b/.test(s);
   const traces: Array<{ path: string; problems: string[]; artifacts: string[]; facts: number }> = [];
   let path = '';
-  const spy = vi.spyOn(db, 'transaction').mockImplementation((callback) => transaction(async (tx) => {
-    const trace = { path, problems: [] as string[], artifacts: [] as string[], facts: 0 }, seen = new Set<string>(), query = tx.query.bind(tx);
+  const spy = spyOnStatements(db, () => {
+    const trace = { path, problems: [] as string[], artifacts: [] as string[], facts: 0 }, seen = new Set<string>();
     traces.push(trace);
     let last: [number, string] | null = null;
-    return callback({ ...tx, query: async (statement: string, values?: unknown[]) => {
+    return async (statement, values, next) => {
       const s = statement.replace(/\s+/g, ' ').trim();
       if (isArtifactLock(s) && typeof values?.[0] === 'string' && !seen.has(values[0])) {
         const id = values[0];
@@ -164,9 +141,9 @@ it('every writer locks its artifacts by tier and lockOrder, before its facts', a
         if (last && (key[0] < last[0] || (key[0] === last[0] && lockOrder(key[1], last[1]) < 0))) trace.problems.push(`artifact ${id} out of tier/lockOrder after ${last[1]}`);
         last = key;
       } else if (isFact(s)) trace.facts++;
-      return query(statement, values as never);
-    } } as never);
-  }));
+      return next();
+    };
+  });
   try {
     path = 'sql door'; await sql(f.page, f.other, "insert into staff (name) values ('o1')");
     path = 'sql door, cross-link read'; await sql(f.page, f.other, 'insert into staff (name) select note from notes');
@@ -204,15 +181,11 @@ describe('retry on deadlock and serialization failure', () => {
       return transaction(callback);
     });
   };
-  it.each(['40P01', '40001'])('guarded writes (SQL door, page GraphQL) retry whole and apply once (%s)', async (code) => {
+  it.each(['40P01', '40001'])('guarded SQL door writes retry whole and apply once (%s)', async (code) => {
     const f = await fixture(), db = await getDb();
-    for (const [door, write] of [
-      ['sql', () => sql(f.page, f.other, "insert into staff (name) values ('retried-sql')")],
-    ] as const) {
-      const spy = failing(db, 1, code);
-      try { await write(); } finally { spy.mockRestore(); }
-      expect([door, (await stored(f.staff)).filter((r) => String(r.name).startsWith(`retried-${door}`)).length]).toEqual([door, 1]);
-    }
+    const spy = failing(db, 1, code);
+    try { await sql(f.page, f.other, "insert into staff (name) values ('retried-sql')"); } finally { spy.mockRestore(); }
+    expect((await stored(f.staff)).filter((r) => String(r.name).startsWith('retried-sql'))).toHaveLength(1);
   });
   it('an exhausted retry is a clean retryable conflict, nothing is written, and its key replays the refusal', async () => {
     const f = await fixture(), db = await getDb();
@@ -268,14 +241,14 @@ it('a write whose user column names a document in memberOf locks that document i
   const team = await createArtifactFromBody({ dataset: [{ id: 1, assignee: null }], columns: [{ name: 'id', type: 'number' }, { name: 'assignee', type: 'user', constraints: { memberOf: [`ref:${report.body.id}`] } }], access: 'readwrite', visibility: 'unlisted', title: 'Team' }, owner.actor, 'http://localhost:3000');
   const teamId = (await team.json() as { id: string }).id;
   const page = (await publish(owner, { html: `<html><head><link rel="af-dataset" data-af-name="team" href="ref:${teamId}"></head><body>x</body></html>` })).body.id;
-  const db = await getDb(), transaction = db.transaction.bind(db), locked: string[][] = [];
-  const spy = vi.spyOn(db, 'transaction').mockImplementation((callback) => transaction(async (tx) => {
-    const order: string[] = []; locked.push(order); const query = tx.query.bind(tx);
-    return callback({ ...tx, query: async (statement: string, values?: unknown[]) => {
+  const db = await getDb(), locked: string[][] = [];
+  const spy = spyOnStatements(db, () => {
+    const order: string[] = []; locked.push(order);
+    return async (statement, values, next) => {
       if (/FROM artifacts\b/.test(statement) && / FOR (UPDATE|SHARE)/.test(statement) && !/JOIN/.test(statement) && typeof values?.[0] === 'string' && !order.includes(values[0])) order.push(values[0]);
-      return query(statement, values as never);
-    } } as never);
-  }));
+      return next();
+    };
+  });
   let reply;
   try { reply = await sql(page, owner, 'update team set assignee = $p0 where id = 1', { p0: owner.userId }); } finally { spy.mockRestore(); }
   expect(reply.status, JSON.stringify(reply.body)).toBe(200);

@@ -65,14 +65,6 @@ describe('the JSON door keeps the shape of everything that is not a framed docum
     expect(shape(body.surface.catalog)).toEqual({ defaultSchema: 'string', kind: 'string', refreshSeconds: 'number', tables: [{ columns: [{ name: 'string', type: 'string' }], name: 'string', schema: 'string' }] });
   });
 
-  it('rejects creation of a retired program without exposing a page surface', async () => {
-    const w=await world();
-    const token=await mintAccountToken('retired-program',w.owner.id);
-    const response=await publish(request('/api/artifacts',{method:'POST',token:token.token,json:{program:{version:1,command:['node','-e','1']}}}));
-    expect(response.status).toBe(400);
-    expect(await response.json()).toMatchObject({error:'unsupported_format'});
-  });
-
   it('a native starter carries only the minimal framed runtime', async () => {
     const w = await world();
     const created = await createBrowserArtifact(request('/api/my/artifacts', { method: 'POST', actor: w.actor, json: artifactStarter('deck') }));

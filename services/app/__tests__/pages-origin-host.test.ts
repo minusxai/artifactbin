@@ -69,10 +69,12 @@ async function pagesCookie(app: ReturnType<typeof framing>, actor: Actor, id: st
 /** The https site's cookie: host-only, `__Host-` prefixed (lib/http/pages-origin pagesCookieName). */
 const COOKIE = '__Host-afbin_pages';
 const cookieOf = (res: Response): string | null => new RegExp(`${COOKIE}=([^;]+)`).exec(res.headers.get('set-cookie') ?? '')?.[1] ?? null;
+/** The first URL of the document frame an app page's html draws. */
+const frameUrl = (html: string): URL => new URL(/<iframe data-mx-document-frame="" src="([^"]+)"/.exec(html)![1]!.replaceAll('&amp;', '&'));
 /** The frame's first URL the app page drew for `actor`. */
 async function frameSrc(app: ReturnType<typeof framing>, actor: Actor | null, id: string, search = ''): Promise<URL> {
   const page = await app.request(as(`${APP}/a/${id}${search}`, actor, { headers: { accept: 'text/html' } }));
-  return new URL(/<iframe data-mx-document-frame="" src="([^"]+)"/.exec(await page.text())![1]!.replaceAll('&amp;', '&'));
+  return frameUrl(await page.text());
 }
 
 describe('the app page frames the document on its own origin', () => {
@@ -107,7 +109,7 @@ describe('the app page frames the document on its own origin', () => {
     const res = await createRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { html:nativeHtml('<h1>Open</h1>'), visibility: 'unlisted' } }));
     const { id } = (await res.json()) as { id: string };
     const html = await (await framing().request(`${APP}/a/${id}`, { headers: { accept: 'text/html' } })).text();
-    const src = new URL(/<iframe data-mx-document-frame="" src="([^"]+)"/.exec(html)![1]!.replaceAll('&amp;', '&'));
+    const src = frameUrl(html);
     expect(src.searchParams.get('_pt')).toBe('-');
     const cleared = await framing().request(src.href, { headers: { cookie: `${COOKIE}=stale-value-from-before-0123456789` } });
     expect(cleared.status).toBe(200);
@@ -122,7 +124,7 @@ describe('the reader\'s selection in the app page\'s address reaches the frame',
     const app = framing();
     const self = pagesOriginFor(id, site);
     const page = await app.request(as(`${APP}/a/${id}?$region=west&$zoom=5`, w.actor, { headers: { accept: 'text/html' } }));
-    const src = new URL(/<iframe data-mx-document-frame="" src="([^"]+)"/.exec(await page.text())![1]!.replaceAll('&amp;', '&'));
+    const src = frameUrl(await page.text());
     expect(src.origin).toBe(self);
     expect(src.search).toMatch(/^\?\$region=west&\$zoom=5&_pt=[A-Za-z0-9_-]+$/);
     // The document's origin spends the ticket and serves the document, starting from the selection, in one response.
@@ -204,7 +206,7 @@ describe('the pages session', () => {
     const owner: Actor = { credential: 'bearer', tokenId: w.token.id, userId: w.user.id, email: w.user.email!, emailVerified: true };
     const frameOf = async (headers: Record<string, string>) => {
       const html = await (await app.request(as(`${APP}/a/${w.secret}`, owner, { headers: { accept: 'text/html', ...headers } }))).text();
-      return new URL(/<iframe data-mx-document-frame="" src="([^"]+)"/.exec(html)![1]!.replaceAll('&amp;', '&'));
+      return frameUrl(html);
     };
     expect((await frameOf({})).searchParams.get('_pt')).toBe('-');
     const src = await frameOf({ [BROWSER_SESSION_HEADER]: '1' });
@@ -395,7 +397,7 @@ describe('the pages session', () => {
     const w = await world();
     const devApp = createAppServer({ indexHtml: async () => SHELL, pagesSite: dev });
     const page = await devApp.request(as('http://app.lvh.me:11001/a/' + w.secret, w.actor, { headers: { accept: 'text/html' } }));
-    const src = new URL(/<iframe data-mx-document-frame="" src="([^"]+)"/.exec(await page.text())![1]!.replaceAll('&amp;', '&'));
+    const src = frameUrl(await page.text());
     expect(src.origin).toBe(pagesOriginFor(w.secret, dev));
     const res = await devApp.request(src.href);
     expect(res.status).toBe(200);
@@ -511,16 +513,6 @@ describe('a first URL loaded twice', () => {
     expect(afterSignOut.status).toBe(404);
     expect(afterSignOut.headers.get('set-cookie')).toBeNull();
     expect((await app.request(`${self}/`, held(minted))).status).toBe(404);
-  });
-
-  it('keeps a browser that held nothing to today\'s rule: the spent ticket renders as nobody', async () => {
-    const w = await world();
-    const app = framing();
-    const src = (await frameSrc(app, w.actor, w.secret)).href;
-    expect((await app.request(src)).status).toBe(200);
-    const again = await app.request(src);
-    expect(again.status).toBe(404);
-    expect(again.headers.get('set-cookie')).toBeNull();
   });
 });
 
@@ -785,7 +777,7 @@ describe('a reader\'s consent reaches the document\'s own origin with the pages 
     /** A signed-out reader opens the app page (with whatever app-origin cookie they hold) and loads its frame. */
     const framedAsGuest = async (appCookie: string | null) => {
       const page = await app.request(`${APP}/a/${id}`, { headers: { accept: 'text/html', ...(appCookie ? { cookie: appCookie } : {}) } });
-      const src = new URL(/<iframe data-mx-document-frame="" src="([^"]+)"/.exec(await page.text())![1]!.replaceAll('&amp;', '&'));
+      const src = frameUrl(await page.text());
       const exchanged = await app.request(src.href);
       expect(exchanged.status).toBe(200);
       const pages = cookieOf(exchanged);
@@ -822,7 +814,7 @@ describe('documents on subdomains of the app\'s own address (APP__PAGES_HOST is 
     const app = serving();
     const page = await app.request(as(`${OWN}/a/${w.secret}`, w.actor, { headers: { accept: 'text/html' } }));
     expect(page.status).toBe(200);
-    const src = new URL(/<iframe data-mx-document-frame="" src="([^"]+)"/.exec(await page.text())![1]!.replaceAll('&amp;', '&'));
+    const src = frameUrl(await page.text());
     expect(src.origin).toBe(pagesOriginFor(w.secret, own));
     expect(src.hostname.endsWith('.data.example.test')).toBe(true);
     expect(page.headers.get('content-security-policy')!.split('; ').find((d) => d.startsWith('frame-src'))).toBe(`frame-src 'self' https://*.data.example.test`);

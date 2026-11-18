@@ -186,7 +186,6 @@
    "services/app/__tests__/quota.test.ts": 328,
    "services/app/__tests__/reader-document-head.test.ts": 312,
    "services/app/__tests__/reader-proxy.test.ts": 676,
-   "services/app/__tests__/reading-chrome.test.ts": 269,
    "services/app/__tests__/refresh-asset.test.ts": 894,
    "services/app/__tests__/refs-readable.test.ts": 648,
    "services/app/__tests__/region-agent-writes.test.ts": 2047,
