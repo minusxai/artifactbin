@@ -77,27 +77,22 @@ export function written(element: Element): boolean {
  * normal case) build the output once, in source order; overlapping ones splice in turn from the end, as before.
  */
 export function applyEdits(source: string, edits: readonly Edit[]): string {
-  const forward = edits
-    .map((edit, index) => ({ edit, index }))
-    .sort((a, b) => a.edit.start - b.edit.start || a.edit.end - b.edit.end || a.index - b.index);
-  const parts: string[] = [];
-  let cursor = 0;
-  for (const { edit } of forward) {
-    if (edit.start < cursor || edit.end < edit.start) return spliceInTurn(source, edits);
-    parts.push(source.slice(cursor, edit.start), edit.text);
-    cursor = edit.end;
-  }
-  parts.push(source.slice(cursor));
-  return parts.join("");
-}
-
-function spliceInTurn(source: string, edits: readonly Edit[]): string {
   const ordered = edits
     .map((edit, index) => ({ edit, index }))
-    .sort((a, b) => b.edit.start - a.edit.start || b.edit.end - a.edit.end || b.index - a.index);
-  let output = source;
-  for (const { edit } of ordered) output = output.slice(0, edit.start) + edit.text + output.slice(edit.end);
-  return output;
+    .sort((a, b) => a.edit.start - b.edit.start || a.edit.end - b.edit.end || a.index - b.index)
+    .map(({ edit }) => edit);
+  let output = "", cursor = 0;
+  for (const edit of ordered) {
+    if (edit.start < cursor || edit.end < edit.start) {
+      // Overlapping: splice each in turn from the end (the reverse of this order).
+      output = source;
+      for (const last of ordered.reverse()) output = output.slice(0, last.start) + last.text + output.slice(last.end);
+      return output;
+    }
+    output += source.slice(cursor, edit.start) + edit.text;
+    cursor = edit.end;
+  }
+  return output + source.slice(cursor);
 }
 
 /** Where a new attribute goes: after the last written attribute, else after the tag name. */

@@ -8,16 +8,14 @@ import {ToolError} from './toolbox-client.mjs';
 /** --type connection: a live dataset from FILE (its connector JSON, no secret) and the secret from
  * --secret-file (- reads stdin). Sent once: never journaled, printed or kept. */
 export async function publishConnection(client,file,values){
- const unfit=['visibility','personal','create','template','owner-column','artifact','root','strict',
-  'request'].find(flag=>values[flag]!==undefined);
- if(unfit)throw new ToolError('flag_not_supported',
-  `Connection publishing does not support --${unfit}.`,2);
+ const unfit=['visibility','personal','create','template','owner-column','artifact'].find(flag=>
+  values[flag]!==undefined);
+ if(unfit)throw new ToolError('flag_not_supported',`A connection takes no --${unfit}.`,2);
  const connection=JSON.parse(readFileSync(file,'utf8'));
  let destination;if(values.group!==undefined){const g=(await client.request('/api/groups/'+
   encodeURIComponent(values.group.replace(/^@/,'')))).group;destination={type:'group',id:g.id};}
  if(values['dry-run'])return {dryRun:true,server:client.server,type:'connection',method:'POST',
-  artifact:null,...destination?{destination}:{},
-  note:'Local planning only; nothing created.'};
+  ...destination?{destination}:{}};
  const secret=(await client.request('/api/connections')).connectors.find(c=>c.id===connection
   .connector)?.fields.find(f=>f.secret);
  if(values['secret-file']!==undefined&&secret)connection[secret.name]=readFileSync(values[

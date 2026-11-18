@@ -28,7 +28,7 @@ it('dry-runs a connection without creating it or reading its secret',async()=>co
  const options={env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic-fixture'},fetcher,log:()=>{}};
  // The secret path does not exist: reading it would throw.
  const planned=await publishCommand({positionals:[file],values:{type:'connection','dry-run':true,group:'team','secret-file':path.join(file,'missing')}},options);
- expect(planned).toMatchObject({dryRun:true,server,type:'connection',method:'POST',artifact:null,destination:{type:'group',id:'grp_team'}});
+ expect(planned).toMatchObject({dryRun:true,server,type:'connection',method:'POST',destination:{type:'group',id:'grp_team'}});
  expect(calls.filter(call=>call.method!=='GET')).toEqual([]);
  const made=await publishCommand({positionals:[file],values:{type:'connection'}},options);
  expect(made).toMatchObject({id:'CONN12'});
