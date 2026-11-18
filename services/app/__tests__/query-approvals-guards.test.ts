@@ -74,7 +74,7 @@ it('lets only an Admin of the owning group change who can open a page while an a
  expect((await patch(eve,{visibility:'private'})).status).toBe(200);
 });
 
-it('lets only an Admin of the owning group share the page with another group while an approved query is live',async()=>{
+it('keeps a group page\'s group shares its Admins\' alone while an approved query is live, and an Admin\'s share leaves the approval live',async()=>{
  const host=await composed(),{ada,eve,root,page,approve}=await setting(host);
  const approved=await approve(ada);
  expect(approved.status).toBe(201);
@@ -91,7 +91,7 @@ it('lets only an Admin of the owning group share the page with another group whi
 });
 
 it('lets whoever joins a group that can open the page read the approved query as the group from the next request, and keeps the approval',async()=>{
- const host=await composed(),{ada,rob,mia,team,squad,page,read,approve}=await setting(host);
+ const host=await composed(),{ada,rob,mia,olga,team,squad,page,read,approve}=await setting(host);
  // Mia administers Squad, Team's subgroup, and nothing above it.
  await admitGroupMember(ada.userId,squad.id,mia.userId,'admin');
  const approved=await approve(ada);
@@ -104,15 +104,20 @@ it('lets whoever joins a group that can open the page read the approved query as
  const nia=await host.signIn('mxmx_test_qa_nia@example.test');
  await admitGroupMember(mia.userId,squad.id,nia.userId,'member');
  expect(rows(await read(nia))).toEqual([{region:'EU',total:15,...asGroup(team.id)}]);
+ expect(rows(await read(olga))).toEqual([{region:'EU',total:15,...asGroup(team.id)}]);
+ // Mia creating an empty group under Squad changes nothing either.
+ await createGroup(mia.userId,{handle:'qa_empty',name:'Empty',parent_id:squad.id});
+ expect(rows(await read(olga))).toEqual([{region:'EU',total:15,...asGroup(team.id)}]);
  const mine=await createGroup(mia.userId,{handle:'qa_mine',name:'Mine'});
  const kim=await host.signIn('mxmx_test_qa_kim@example.test');
  await admitGroupMember(mia.userId,mine.id,kim.userId,'member');
  await setGroupParent(mia.userId,mine.id,squad.id);
  expect(rows(await read(kim))).toEqual([{region:'EU',total:15,...asGroup(team.id)}]);
+ expect(rows(await read(olga))).toEqual([{region:'EU',total:15,...asGroup(team.id)}]);
  // The approval is the one Ada made, live, and no end of it is audited.
  expect(await sql('SELECT id,ended_at IS NULL AS live FROM page_query_approvals WHERE page_id=$1',[page])).toEqual([{id:String(approved.body!.id),live:true}]);
- await expect.poll(async()=>(await sql<{subject_id:string}>("SELECT subject_id FROM events.events WHERE verb='approved_query_read' AND object_id=$1",[page])).map(row=>row.subject_id).sort())
-  .toEqual([pia.userId,nia.userId,kim.userId].sort());
+ await expect.poll(async()=>(await sql<{subject_id:string}>("SELECT DISTINCT subject_id FROM events.events WHERE verb='approved_query_read' AND object_id=$1",[page])).map(row=>row.subject_id).sort())
+  .toEqual([pia.userId,nia.userId,olga.userId,kim.userId].sort());
  expect(await sql("SELECT verb FROM events.events WHERE verb='query_approval_ended' AND object_id=$1",[page])).toEqual([]);
 });
 
