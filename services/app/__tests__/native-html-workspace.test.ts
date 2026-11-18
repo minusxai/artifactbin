@@ -6,6 +6,7 @@ import { createUser, ensureUsername } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
 import { mintAccountToken } from './harness';
 import { request, useAppHarness } from './harness';
+import { setArtifact } from '@/__tests__/rows';
 
 useAppHarness();
 const params = <T,>(p: T) => ({ params: Promise.resolve(p) });
@@ -31,7 +32,7 @@ it('lists only live public HTML pages, keeping private, deleted, and legacy mark
 
   // Simulate a stored pre-migration row to pin the page-format gate.
   const db = await getDb();
-  await db.query("UPDATE artifacts SET format = 'markup' WHERE id = $1", [legacy.id]);
+  await setArtifact(db, legacy.id, { format: 'markup' });
 
   const h = owner.username!;
   const profile = await (await profilePage(request(`/api/page/profile/@${h}`), params({ user: `@${h}` }))).json();

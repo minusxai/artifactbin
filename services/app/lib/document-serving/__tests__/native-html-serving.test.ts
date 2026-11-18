@@ -94,6 +94,7 @@ import { setServices } from '@/lib/platform';
 import { GET as exportImage } from '@/app/a/[id]/export/route';
 import { EXPORT_PNG } from '@/__tests__/export-helpers';
 import type { RenderRequest } from '@artifactbin/contracts';
+import { setArtifact } from '@/__tests__/rows';
 afterEach(()=>setServices({}));
 it('captures native HTML body through its signed raw URL and keeps private previews private',async()=>{
  const {actor,id}=await publish();const browser=fakeBrowser({ok:true,mime:'image/png',bytes:EXPORT_PNG});setServices({browser});
@@ -106,7 +107,7 @@ it('captures native HTML body through its signed raw URL and keeps private previ
 
 it('does not render or package retired JSX rows through a document door', async () => {
  const {actor,id}=await publish();
- await (await getDb()).query("UPDATE artifacts SET format = 'markup' WHERE id = $1", [id]);
+ await setArtifact((await getDb()), id, { format: 'markup' });
  expect((await raw(request(`/a/${id}/raw`,{token:actor.token}),params(id))).status).toBe(404);
  expect((await download(request(`/a/${id}/download`,{token:actor.token}),params(id))).status).toBe(404);
  const answer=await artifactPageAnswer(request(`/a/${id}`,{actor:{credential:'session',userId:actor.userId!,email:actor.email??undefined}}),id,{pages:site});

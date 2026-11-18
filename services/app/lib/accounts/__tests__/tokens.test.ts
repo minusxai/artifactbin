@@ -4,6 +4,7 @@ import { createGuestOwner, useAppHarness } from '@/__tests__/harness';
 import { DEFAULT_TOKEN_TTL_MS, MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS, createUser, ensureUserToken, identityForUser, listTokensByUser, mintToken, resolveToken, resolveTokenById, revokeToken, sourcedTokenName, tokenStatus, touchToken, withAccountToken } from '@/lib/accounts';
 import { LIVE_TOKEN_SQL, TOUCH_INTERVAL_MS } from '@/lib/accounts/tokens';
 import { getDb } from '@/lib/platform';
+import { seedArtifacts } from '@/__tests__/rows';
 
 const harness = useAppHarness();
 afterEach(() => { vi.useRealTimers(); });
@@ -140,7 +141,7 @@ describe('LIVE_TOKEN_SQL', () => {
     const ids = (await db.query<{ id: string }>(`SELECT id FROM tokens WHERE ${LIVE_TOKEN_SQL}`)).rows.map((r) => r.id).sort();
     expect(ids).toEqual([live.id, forever.id].sort());
     expect(ids).not.toContain(stale.id);
-    await db.query('INSERT INTO artifacts (id, token_id, user_id) VALUES ($1, $2, $3), ($4, $5, $3)', ['art_live', live.id, user.id, 'art_revoked', revoked.id]);
+    await seedArtifacts(db, { id: 'art_live', token_id: live.id, user_id: user.id }, { id: 'art_revoked', token_id: revoked.id, user_id: user.id });
     const joined = await db.query<{ id: string }>(`SELECT artifacts.id FROM artifacts JOIN tokens ON tokens.id = artifacts.token_id WHERE ${LIVE_TOKEN_SQL}`);
     expect(joined.rows.map((r) => r.id)).toEqual(['art_live']);
   });

@@ -17,6 +17,7 @@ import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser, identityForUser } from '@/lib/accounts';
 import { listTrashFor, restoreArtifactFor } from '@/lib/workspace';
 import { createAppServer } from '@/server/app';
+import { setArtifact } from '@/__tests__/rows';
 
 useAppHarness();
 const j = async (r: Response) => ({ status: r.status, body: (await r.json()) as Record<string, any> });
@@ -70,7 +71,7 @@ describe('the trash', () => {
     const fresh = await create(o.token, { html: nativeHtml('<p>fresh</p>'), title: 'Fresh' });
     await del(o.token, ancient.id); await del(o.token, fresh.id);
     const db = await getDb();
-    await db.query(`UPDATE artifacts SET deleted_at = now() - interval '400 days' WHERE id = $1`, [ancient.id]);
+    await setArtifact(db, ancient.id, { deleted_at: { sql: "now() - interval '400 days'" } });
     /*
      * Through the REAL app server, not a route handler: the erasure this
      * replaces hung off an `/api/*` middleware, so a test that calls handlers

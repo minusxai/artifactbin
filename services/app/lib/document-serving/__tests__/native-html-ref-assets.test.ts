@@ -8,6 +8,7 @@ import { useAppHarness } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
 import { getDb, measureQueries } from '@/lib/platform';
 import { nativeHtmlAssets } from '@/lib/document-serving/native-html-assets.server';
+import { seedArtifacts, setArtifact } from '@/__tests__/rows';
 
 useAppHarness();
 
@@ -22,12 +23,8 @@ async function seed() {
      SELECT 'refimg' || lpad(i::text, 3, '0'), $1, 'image', 'Image ' || i, '{}', i % 4 + 1, 'public' FROM generate_series(1, $2::int) i`,
     [user.id, IMAGES],
   );
-  await db.query(`INSERT INTO artifacts (id, user_id, format, title, meta, version, visibility) VALUES
-    ('refpdf001', $1, 'pdf', 'Paper', '{}', 7, 'public'),
-    ('refgone01', $1, 'image', 'Trashed', '{}', 1, 'public'),
-    ('refpage01', $1, 'html', 'A page', '{}', 1, 'public'),
-    ('refloose1', $1, 'image', 'Not admitted', '{}', 1, 'public')`, [user.id]);
-  await db.query("UPDATE artifacts SET deleted_at = now() WHERE id = 'refgone01'");
+  await seedArtifacts(db, { id: 'refpdf001', user_id: user.id, format: 'pdf', title: 'Paper', meta: '{}', version: 7, visibility: 'public' }, { id: 'refgone01', user_id: user.id, format: 'image', title: 'Trashed', meta: '{}', version: 1, visibility: 'public' }, { id: 'refpage01', user_id: user.id, format: 'html', title: 'A page', meta: '{}', version: 1, visibility: 'public' }, { id: 'refloose1', user_id: user.id, format: 'image', title: 'Not admitted', meta: '{}', version: 1, visibility: 'public' });
+  await setArtifact(db, 'refgone01', { deleted_at: { sql: 'now()' } });
   const named = [...Array.from({ length: IMAGES }, (_, k) => imageId(k + 1)), 'refpdf001', 'refgone01', 'refpage01', 'refloose1'];
   const source = `<!doctype html><html><body>${named.map((id) => `<img src="ref:${id}">`).join('')}</body></html>`;
   const refs = named.filter((id) => id !== 'refloose1').map((id) => ({ id, kind: 'image' }));

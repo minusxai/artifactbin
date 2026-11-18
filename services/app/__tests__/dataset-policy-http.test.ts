@@ -13,6 +13,7 @@ import { createArtifactFromBody } from '@/lib/publish';
 import { getArtifactById } from '@/lib/artifacts';
 import { GET, PUT } from '@/app/api/artifacts/[id]/policy/route';
 import { GET as TEMPLATES } from '@/app/api/artifacts/[id]/policy/templates/route';
+import { seedShares, setArtifact } from '@/__tests__/rows';
 
 useAppHarness();
 
@@ -39,7 +40,7 @@ async function fixture() {
   const id = (await created.json()).id as string;
   const db = await getDb();
   for (const [who, role] of [[editor, 'editor'], [viewer, 'viewer']] as const)
-    await db.query('INSERT INTO artifact_shares(artifact_id,user_id,email,role) VALUES($1,$2,$3,$4)', [id, who.userId, who.email, role]);
+    await seedShares(db, { artifact_id: id, user_id: who.userId, email: who.email, role });
   return { owner, editor, viewer, stranger, id, db };
 }
 const read = async (id: string, who: Person) => { const r = await GET(request(`/api/artifacts/${id}/policy`, { token: who.token }), params(id)); return { status: r.status, body: await r.json() }; };
@@ -71,7 +72,7 @@ it('reads a dataset with no stored policy as v3, with its GraphQL names, roles, 
 
 it('answers a stored policy that is not version 3 as unreadable, naming it, and lets the owner save a version 3 policy over it', async () => {
   const f = await fixture();
-  await f.db.query('UPDATE artifacts SET dataset_policy=$2::jsonb WHERE id=$1', [f.id, JSON.stringify({ version: 1, enforcement: 'enabled', tables: [{ table: ROWS, insert_permissions: [{ role: 'viewer', permission: { columns: '*', check: {} } }] }] })]);
+  await setArtifact(f.db, f.id, { dataset_policy: JSON.stringify({ version: 1, enforcement: 'enabled', tables: [{ table: ROWS, insert_permissions: [{ role: 'viewer', permission: { columns: '*', check: {} } }] }] }) });
   const { status, body } = await read(f.id, f.owner);
   expect(status).toBe(200);
   expect(body).toMatchObject({ source: 'unreadable', policy: null, revision: 0, readBack: '' });
@@ -133,7 +134,7 @@ it('saves only at the current revision, answers the read-back, and refuses a sta
 it('keeps the server-owned configuration: omitted carries the stored one forward, a changed one is refused', async () => {
   const f = await fixture();
   const configured = { ...OWN_ROWS, tables: [{ ...OWN_ROWS.tables[0], configuration: { custom_name: 'people', custom_column_names: { name: 'full_name' } } }] };
-  await f.db.query('UPDATE artifacts SET dataset_policy=$2::jsonb WHERE id=$1', [f.id, JSON.stringify(configured)]);
+  await setArtifact(f.db, f.id, { dataset_policy: JSON.stringify(configured) });
   expect((await read(f.id, f.owner)).body.tables[0]).toMatchObject({ root: 'people', columns: [{ name: 'name', field: 'full_name' }, { name: 'created_by', field: 'created_by' }] });
   const renamed = { ...OWN_ROWS, tables: [{ ...OWN_ROWS.tables[0], configuration: { custom_name: 'renamed' } }] };
   const refused = await put(f.id, f.owner, { policy: renamed, expectedPolicyRevision: 0 });

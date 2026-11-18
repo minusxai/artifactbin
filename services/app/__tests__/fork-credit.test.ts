@@ -15,6 +15,7 @@ import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { firstSaveLinks } from '@/__tests__/stored-links';
 import { identityForUser } from '@/lib/accounts';
 import { BASE, sessionUser, params, jreq, create, asSession, noSession, fork, head, PROSE, world, createFolder, bearerFork } from './fork-fixture';
+import { setArtifact } from '@/__tests__/rows';
 
 useAppHarness();
 beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null)));
@@ -47,12 +48,12 @@ describe('the fork credit line', () => {
     asSession({ id: w.bob.id, email: w.bob.email });
     const copy = (await (await fork(w.doc.id)).json()) as { id: string };
     const db = await getDb();
-    await db.query('UPDATE artifacts SET user_id = NULL, visibility = $2 WHERE id = $1', [copy.id, 'public']);
+    await setArtifact(db, copy.id, { user_id: null, visibility: 'public' });
     noSession();
     const author = async () => (await (await pageRoute(new Request(`${BASE}/api/page/artifact/${copy.id}`), params(copy.id))).json()).surface.author;
     expect(await author()).toMatchObject({ username: null, forkedFrom: { href: expect.stringContaining(w.doc.id) } });
     for (const visibility of ['unlisted', 'private']) {
-      await db.query('UPDATE artifacts SET visibility = $2 WHERE id = $1', [w.doc.id, visibility]);
+      await setArtifact(db, w.doc.id, { visibility });
       expect(await author()).toEqual({ username: null, id: null, image: null, forkedFrom: { label: 'a document that is not public', href: null } });
     }
     await db.query('DELETE FROM artifacts WHERE id = $1', [w.doc.id]);
@@ -88,7 +89,7 @@ describe('the fork credit line', () => {
     // credits must stop naming it, because `unlisted` means listed nowhere and
     // the forker is not the person who chose that.
     const db = await getDb();
-    await db.query('UPDATE artifacts SET visibility = $2 WHERE id = $1', [w.doc.id, 'unlisted']);
+    await setArtifact(db, w.doc.id, { visibility: 'unlisted' });
     noSession();
     expect(await credit(copy.id)).toEqual({ label: 'a document that is not public', href: null });
     expect(await served(copy.id)).not.toContain(w.doc.id);
@@ -101,7 +102,7 @@ describe('the fork credit line', () => {
     const copy = (await (await fork(w.doc.id)).json()) as { id: string };
     // …and the copy, made public, must not become a way to learn the id exists.
     const db = await getDb();
-    await db.query('UPDATE artifacts SET visibility = $2 WHERE id = $1', [copy.id, 'public']);
+    await setArtifact(db, copy.id, { visibility: 'public' });
     noSession();
     const said = await credit(copy.id);
     expect(said).toEqual({ label: 'a document that is not public', href: null });

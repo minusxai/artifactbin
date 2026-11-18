@@ -13,6 +13,7 @@ import {createArtifactFromBody} from '@/lib/publish';
 import {loadDatasetRows} from '@/lib/datasets';
 import {account,datasetFixture,type Db} from './dataset-fixture';
 import {canWriteDataset,respondToMutate,writeDatasetPolicy} from '@/lib/document-data';
+import { setArtifact } from '@/__tests__/rows';
 
 useAppHarness();
 let db:Db;
@@ -77,7 +78,7 @@ it('answers the direct write door with the refusal shapes its callers read',asyn
  const doc=await createArtifactFromBody({html:'<!doctype html><html><body><p>Doc</p></body></html>'},{...f.owner.actor,tokenId:f.owner.tokenId},'http://localhost:3000');
  const docId=(await doc.json()).id as string;
  expect((await write({sql:'insert into public.rows values (5)'},f.owner.actor,docId))).toEqual([400,expect.objectContaining({error:'not_a_dataset'})]);
- await db.query("UPDATE artifacts SET access='read' WHERE id=$1",[f.id]);
+ await setArtifact(db, f.id, { access: 'read' });
  const [readOnly,hint]=await write({sql:'insert into public.rows values (6)'});
  expect([readOnly,hint.error]).toEqual([403,'dataset_read_only']);expect(hint.details[0]).toContain('"access": "readwrite"');
 });

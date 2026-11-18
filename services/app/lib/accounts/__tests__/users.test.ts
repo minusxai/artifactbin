@@ -5,14 +5,12 @@ import { USERNAME_RE } from '@/lib/accounts/users';
 import { usernameFromEmail } from '@artifactbin/auth/identity-store/accounts';
 import { authorHandle, createUser, ensureUsername, getUserByEmail, getUserById, getUserByUsername, hasCreatedDocument, isAccountRow, mintToken, revokeUserToken, ownerUsername, setUsername } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
+import { seedArtifacts } from '@/__tests__/rows';
 
 const harness = useAppHarness();
 
 const artifact = async (id: string, columns: { token_id?: string; user_id?: string | null; group_id?: string | null; title?: string; creator_user_id?: string; format?: string }) =>
-  (await getDb()).query(
-    'INSERT INTO artifacts (id, token_id, user_id, group_id, title, creator_user_id, format) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-    [id, columns.token_id ?? null, columns.user_id ?? null, columns.group_id ?? null, columns.title ?? null, columns.creator_user_id ?? null, columns.format ?? 'markup'],
-  );
+  seedArtifacts((await getDb()), { id, token_id: columns.token_id ?? null, user_id: columns.user_id ?? null, group_id: columns.group_id ?? null, title: columns.title ?? null, creator_user_id: columns.creator_user_id ?? null, format: columns.format ?? 'markup' });
 
 describe('username rules', () => {
   // Pure: no rows, so the describe skips the per-test wipe.

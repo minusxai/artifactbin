@@ -14,6 +14,7 @@ import { htmlAssetLinks } from '@/lib/html-page';
 import { getDb } from '@/lib/platform';
 import { servesWebAsset, type UserPagesOwner } from '@/lib/user-pages';
 import { webAssetHashes, withWebAssets } from '../web-assets';
+import { seedArtifacts } from '@/__tests__/rows';
 
 useAppHarness();
 
@@ -65,8 +66,7 @@ describe('meta.webAssets', () => {
 describe('a page without meta.webAssets', () => {
   it('serves no web image, whatever its source names: a missing stored set is a plain not-found', async () => {
     const { host } = await owner();
-    await (await getDb()).query(`INSERT INTO artifacts (id, user_id, creator_user_id, format, visibility, source, meta, edit_id)
-      VALUES ('Legacy01', $1, $1, 'html', 'public', $2, '{"htmlIdentity":{}}'::jsonb, 'edit_Legacy01')`, [host.id, nativeHtml(`<img src="${A}">`)]);
+    await seedArtifacts((await getDb()), { id: 'Legacy01', user_id: host.id, creator_user_id: host.id, format: 'html', visibility: 'public', source: nativeHtml(`<img src="${A}">`), meta: '{"htmlIdentity":{}}', edit_id: 'edit_Legacy01' });
     expect(await served(host)).toEqual({ a: false, b: false });
   });
 });

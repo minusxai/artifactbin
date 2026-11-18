@@ -5,6 +5,7 @@ import { GET as listAnnotations, POST as browserComment } from '@/app/api/my/art
 import { POST as apiComment } from '@/app/api/artifacts/[id]/annotations/route';
 import { createUser, ensureUsername } from '@/lib/accounts';
 import { htmlTextFingerprint } from '@artifactbin/contracts';
+import { setArtifact } from '@/__tests__/rows';
 const harness = useAppHarness();
 let account: { id: string; email: string } | null = null;
 beforeEach(() => setSession(() => account ? { user: account } : null));
@@ -27,7 +28,7 @@ it('persists the explicit HTML discriminator and original selection, and never r
   expect(await made.json()).toMatchObject({ anchor, orphaned: false, quote_found: true });
   const saved = await db.query('SELECT html_anchor,anchor_key FROM annotations WHERE artifact_id=$1', [id]);
   expect(saved.rows[0]).toMatchObject({ html_anchor: anchor, anchor_key: 'n1' });
-  await db.query('UPDATE artifacts SET source=$2,version=2 WHERE id=$1', [id, '<p data-af-id="n2">same words</p>']);
+  await setArtifact(db, id, { source: '<p data-af-id="n2">same words</p>', version: 2 });
   const listing = await listAnnotations(request(`/api/my/artifacts/${id}/annotations`), params);
   expect(await listing.json()).toMatchObject({ annotations: [{ anchor, orphaned: true, quote_found: false, quote: 'same words', anchor_version: 1 }] });
 });
@@ -71,7 +72,7 @@ it('preserves a native fractional area beside its stable HTML identity',async()=
 });
 it('accepts bounded rendered text under a saved stable parent without claiming source verification',async()=>{
  const {id,db,params}=await page();
- await db.query("UPDATE artifacts SET source='<div data-af-id=\"n1\"></div>' WHERE id=$1",[id]);
+ await setArtifact(db, id, { source: '<div data-af-id="n1"></div>' });
  const rendered='Runtime job label';
  const captured={...anchor,quote:rendered,range:{start:0,end:rendered.length,length:rendered.length,fingerprint:htmlTextFingerprint(rendered)}};
  const made=await browserComment(request(`/api/my/artifacts/${id}/annotations`,{method:'POST',json:{anchor:captured,body:'Dynamic label'}}),params);
@@ -84,14 +85,14 @@ it('accepts bounded rendered text under a saved stable parent without claiming s
 });
 it('stores dynamic targets only beneath a persisted ancestor, without claiming the target exists in source',async()=>{
  const {id,db,params}=await page();
- await db.query("UPDATE artifacts SET source='<ul data-af-id=\"tasks\"></ul>' WHERE id=$1",[id]);
+ await setArtifact(db, id, { source: '<ul data-af-id="tasks"></ul>' });
  const dynamic={kind:'html-node',v:1,revision:'1',nodeId:'task:123',ancestorId:'tasks',quote:'Finish review'};
  const post=(anchor:unknown)=>browserComment(request(`/api/my/artifacts/${id}/annotations`,{method:'POST',json:{anchor,body:'Dynamic task'}}),params);
  const made=await post(dynamic);expect(made.status).toBe(201);
  expect(await made.json()).toMatchObject({anchor:dynamic,orphaned:false,quote_found:false});
  expect((await post({...dynamic,ancestorId:'missing'})).status).toBe(400);
  expect((await post({...dynamic,ancestorId:undefined})).status).toBe(400);
- await db.query("UPDATE artifacts SET source='<ul data-af-id=\"other\"></ul>',version=2 WHERE id=$1",[id]);
+ await setArtifact(db, id, { source: '<ul data-af-id="other"></ul>', version: 2 });
  const listing=await listAnnotations(request(`/api/my/artifacts/${id}/annotations`),params);
  expect(await listing.json()).toMatchObject({annotations:[{anchor:dynamic,orphaned:true}]});
 });

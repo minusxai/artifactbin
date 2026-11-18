@@ -15,6 +15,7 @@ import type { MutationInvocation } from '@/lib/artifacts/mutation-invocation';
 import { getDb } from '@/lib/platform';
 import { expect,it,vi } from 'vitest';
 import { request,useAppHarness } from './harness';
+import { setArtifact } from '@/__tests__/rows';
 
 useAppHarness();
 
@@ -72,7 +73,7 @@ describe('cli-mutation-recovery', () => {
    const db=await getDb();const token=await mintToken('mxmx_test_invocation_race');
    const attempt=async(column:'policy_revision'|'sharing_revision',key:string)=>{
     const initial=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:[{result:'seed'}],access:'readwrite'}}));const doc=await initial.json();
-    const run=vi.fn(async(...[input,engine]:Parameters<MutationInvocation['run']>)=>{await db.query(`UPDATE artifacts SET ${column}=${column}+1 WHERE id=$1`,[doc.id]);return engine.mutate(input);});setMutationInvocation(()=>({run}));
+    const run=vi.fn(async(...[input,engine]:Parameters<MutationInvocation['run']>)=>{await setArtifact(db, doc.id, { [column]: { sql: `${column}+1` } });return engine.mutate(input);});setMutationInvocation(()=>({run}));
     try{
      const req=request(`/api/artifacts/${doc.id}/mutate`,{method:'POST',token:token.token,json:{sql:"insert into public.rows (result) values ('next')",expectedState:doc.state,expectedPolicyRevision:0}});req.headers.set('Idempotency-Key',key);
      const result=await mutate(req,{params:Promise.resolve({id:doc.id})});

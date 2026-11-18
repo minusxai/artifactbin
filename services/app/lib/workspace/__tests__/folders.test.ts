@@ -15,6 +15,7 @@ import { getDb } from '@/lib/platform';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser, identityForUser } from '@/lib/accounts';
 import { buildShelf } from '@/lib/workspace';
+import { setArtifact } from '@/__tests__/rows';
 
 useAppHarness();
 const j = async (r: Response) => ({ status: r.status, body: (await r.json()) as Record<string, any> });
@@ -161,7 +162,7 @@ describe('deleting and forking a folder', () => {
     const mine = (await create(o.token, { html: '<p>mine</p>', parent_id: f.id })).body;
     const theirs = (await create(stranger.token, { html: '<p>theirs</p>' })).body;
     const db = await getDb();
-    await db.query('UPDATE artifacts SET ancestor_ids = $2::text[] WHERE id = $1', [theirs.id, [f.id]]);
+    await setArtifact(db, theirs.id, { ancestor_ids: [f.id] });
 
     const gone = await deleteRoute(request(`/api/artifacts/${f.id}`, { method: 'DELETE', token: o.token }), params(f.id));
     expect(gone.status).toBe(200);

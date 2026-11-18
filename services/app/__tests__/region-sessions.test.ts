@@ -27,6 +27,7 @@ import { GET as myReadRoute } from '@/app/api/my/artifacts/[id]/route';
 import { POST as commentRoute } from '@/app/api/my/artifacts/[id]/annotations/route';
 import { mintAccountToken, request, useAppHarness, type RequestOptions } from './harness';
 import { sseStream } from './sse';
+import { dropShares, seedShares, setArtifact } from '@/__tests__/rows';
 
 const harness = useAppHarness();
 const nativeText=(doc:Y.Doc)=>(doc.getXmlFragment('native-v1').get(0) as Y.XmlElement).get(0) as Y.XmlText;
@@ -123,7 +124,7 @@ beforeEach(async () => {
   rich = regions.find((region) => region.kind === 'rich-native-v1')!.id;
   plain = regions.find((region) => region.id === 'plain')!.id;
   const q = await db();
-  for (const [who, role] of [[editor, 'editor'], [viewer, 'viewer'], [commenter, 'commenter']] as const) await q.query('INSERT INTO artifact_shares (artifact_id, email, role) VALUES ($1, $2, $3)', [pageId, who.email, role]);
+  for (const [who, role] of [[editor, 'editor'], [viewer, 'viewer'], [commenter, 'commenter']] as const) await seedShares(q, { artifact_id: pageId, email: who.email, role });
 });
 afterEach(async () => {
   for (const handle of streams.splice(0)) handle.close();
@@ -314,7 +315,7 @@ describe('the stream', () => {
   it('closes every region with reason access when the editor loses edit access, and ends', async () => {
     const b = await join(editor);
     const { frames } = await stream(editor, `${rich}:${b.reply.seq}`);
-    await (await db()).query('DELETE FROM artifact_shares WHERE artifact_id = $1 AND email = $2', [pageId, editor.email]);
+    await dropShares(await db(), pageId, { email: editor.email });
     await (await db()).query("SELECT pg_notify($1, '')", [`artifact_${pageId.toLowerCase()}`]);
     expect((await framesUntil(frames!, (frame) => frame.type === 'closed'))[0]).toEqual({ type: 'closed', regionId: rich, reason: 'access' });
   });
@@ -409,7 +410,7 @@ describe('a whole-page PUT while editors type', () => {
   });
 
   it('closes a region the PUT removes (removed) or re-declares as another kind (kind_changed), deleting its rows', async () => {
-    await (await db()).query("UPDATE artifacts SET source=replace(source,'data-af-id=\"plain\" data-af-editable=\"rich-native-v1\"','data-af-id=\"plain\" data-af-editable=\"rich\"') WHERE id=$1",[pageId]);
+    await setArtifact((await db()), pageId, { source: { sql: `replace(source,'data-af-id="plain" data-af-editable="rich-native-v1"','data-af-id="plain" data-af-editable="rich"')` } });
     const a = await join(owner), t = await join(owner, plain);
     const { frames } = await stream(owner, `${rich}:${a.reply.seq},${plain}:${t.reply.seq}`);
     const saved = (await getArtifactById(pageId))!.source!;
@@ -493,7 +494,7 @@ it('document multiplex delivers ordinary pings and authorized region catchup, th
   expect(nativeText(follower).toString()).toContain('Before stream ');follower.destroy();
   expect((await opened.frames!.named('message',1,1000))[0]?.data).toHaveProperty('version');
   // Current ACL, not the original admission, controls every catch-up.
-  await (await harness.db()).query('DELETE FROM artifact_shares WHERE artifact_id=$1 AND email=$2',[pageId,editor.email]);
+  await dropShares(await harness.db(), pageId, { email: editor.email });
   writer.text.insert(0,'After revoke ');expect((await writer.push()).status).toBe(200);
   expect((await opened.frames!.named('regions',1,1000))[0]?.data).toMatchObject({type:'closed',regionId:rich,reason:'access'});
 });

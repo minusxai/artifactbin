@@ -6,6 +6,7 @@ import {identityForUser} from '@/lib/accounts';
 import {readHtmlPage} from '@/lib/html-publication';
 import {createArtifactFromBody} from '@/lib/publish';
 import {grantLocalConnection,localConnectionStatus,observeLocalSource,revokeLocalConnection} from '..';
+import { setArtifact } from '@/__tests__/rows';
 const harness=useAppHarness();
 const ORIGIN='http://localhost:3000';
 const sha=(text:string)=>createHash('sha256').update(text).digest('hex');
@@ -67,7 +68,7 @@ it('reports an idle grant compatible until the head moves, then revokes it',asyn
  expect(await live.json()).toEqual({compatible:true,role:'viewer',remoteDigest:identity.sourceDigest,remoteRevision:identity.baseRevision});
  expect((await status(capability,id,{origin:'https://evil.example'})).status).toBe(403);
  expect((await status('unknown')).status).toBe(410);
- await (await harness.db()).query('UPDATE artifacts SET version=version+1 WHERE id=$1',[id]);
+ await setArtifact((await harness.db()), id, { version: { sql: 'version+1' } });
  const moved=await status();expect(moved.status).toBe(200);expect(await moved.json()).toMatchObject({compatible:false,remoteRevision:String(Number(identity.baseRevision)+1)});
  expect((await status()).status).toBe(410);
 });

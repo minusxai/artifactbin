@@ -23,6 +23,7 @@ import { forkCountByUser, likeSummaryByUser, viewSeriesByUser, VIEW_SERIES_DAYS,
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { identityForUser, createUser } from '@/lib/accounts';
 import { sessionUser, requestHeaders, params, create, eventRows, expectEvent, settle, holdTelemetry } from './analytics-fixture';
+import { setArtifact } from '@/__tests__/rows';
 
 holdTelemetry();
 
@@ -204,7 +205,7 @@ describe('per-artifact totals', () => {
     const document = await create(t.token, { html: nativeHtml('<p>a</p>'), title: 'a' });
     const dataFile = await create(t.token, { html: nativeHtml('<p>b</p>'), title: 'b' });
     const db = await harness.db();
-    await db.query(`UPDATE artifacts SET format = 'dataset' WHERE id = $1`, [dataFile.id]);
+    await setArtifact(db, dataFile.id, { format: 'dataset' });
     await db.query(
       `INSERT INTO relations (subject_kind, subject_id, verb, object_kind, object_id, created_at) VALUES
        ('user', 'reader-1', 'like', 'artifact', $1, now()),
@@ -227,7 +228,7 @@ describe('per-artifact totals', () => {
     const document = await create(t.token, { html: nativeHtml('<p>a</p>'), title: 'a' });
     const dataFile = await create(t.token, { html: nativeHtml('<p>b</p>'), title: 'b' });
     const db = await harness.db();
-    await db.query(`UPDATE artifacts SET format = 'dataset' WHERE id = $1`, [dataFile.id]);
+    await setArtifact(db, dataFile.id, { format: 'dataset' });
     await trackEvent('fork', document.id, { forkId: 'copy-1' });
     await trackEvent('fork', document.id, { forkId: 'copy-2' });
     await trackEvent('fork', dataFile.id, { forkId: 'copy-3' });

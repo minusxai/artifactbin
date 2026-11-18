@@ -12,6 +12,7 @@ import {notifyThread,recordNotification} from '@/lib/notifications';
 import {POST as delivery} from '@/app/api/internal/notifications/route';
 import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts';
 import {overrideConfig} from '@/lib/platform/config';
+import { seedShares } from '@/__tests__/rows';
 useAppHarness();
 beforeEach(()=>overrideConfig({internalServiceSecret:'notification-test-service'}));
 async function fixture(){
@@ -41,7 +42,7 @@ it('marks every notification read across pages, preserves history and isolates t
 });
 it('preserves the latest agent attribution while the unread conversation still targets its first update', async () => {
  const f=await fixture();
- await f.db.query("INSERT INTO artifact_shares(artifact_id,user_id,email,role) VALUES($1,$2,$3,'commenter')",[f.doc.id,f.recipient.id,f.recipient.email]);
+ await seedShares(f.db, { artifact_id: f.doc.id, user_id: f.recipient.id, email: f.recipient.email, role: 'commenter' });
  await f.db.query(`INSERT INTO annotations(id,artifact_id,root_id,body,author_kind,author_user_id,author_label) VALUES
  ('root',$1,NULL,'Question','human',$2,'Reader'),
  ('human-reply',$1,'root','First answer','human',$3,'Sender'),

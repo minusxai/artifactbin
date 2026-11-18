@@ -11,6 +11,7 @@ import { useAppHarness } from '@/__tests__/harness';
 import { trackEvent } from '@/lib/analytics';
 import { dailyViewsByUser, eventsTablePresent, forkCountByUser, viewSeriesByUser, VIEW_SERIES_DAYS } from '@/lib/workspace';
 import { forgetEventsTable } from '@/lib/workspace/analytics';
+import { seedArtifacts } from '@/__tests__/rows';
 
 const harness = useAppHarness();
 
@@ -45,7 +46,7 @@ beforeEach(async () => {
 describe('the dashboard reads the log', () => {
   it('counts distinct subjects per UTC day, a null subject once each, other owners and non-views never', async () => {
     const db = await harness.db();
-    await db.query(`INSERT INTO artifacts (id, token_id, user_id) VALUES ('art0a1', 'tok_a', 'usr_a'), ('art0b1', 'tok_b', 'usr_b')`);
+    await seedArtifacts(db, { id: 'art0a1', token_id: 'tok_a', user_id: 'usr_a' }, { id: 'art0b1', token_id: 'tok_b', user_id: 'usr_b' });
     await seedLog(db, [
       ['viewed', 'art0a1', 'v1', at(0, 1)], ['viewed', 'art0a1', 'v1', at(0, 2)], ['viewed', 'art0a1', 'v2', at(0, 3)],
       ['viewed', 'art0a1', null, at(0, 4)], ['viewed', 'art0a1', null, at(0, 5)],
@@ -69,7 +70,7 @@ describe('the dashboard reads the log', () => {
 
   it('with no events table the answers are empty, never an error', async () => {
     const db = await harness.db();
-    await db.query(`INSERT INTO artifacts (id, token_id, user_id) VALUES ('art0a1', 'tok_a', 'usr_a')`);
+    await seedArtifacts(db, { id: 'art0a1', token_id: 'tok_a', user_id: 'usr_a' });
     await db.query(`INSERT INTO analytics_events (event, artifact_id, visitor) VALUES ('view', 'art0a1', 'v1')`);
     expect(await eventsTablePresent()).toBe(false);
     expect((await viewSeriesByUser('usr_a')).size).toBe(0);
@@ -80,7 +81,7 @@ describe('the dashboard reads the log', () => {
     const db = await harness.db();
     const queryable: Queryable = { query: async <T = Record<string, unknown>>(sql: string, params: unknown[] = []) => ({ rows: (await db.query<T>(sql, params)).rows }) };
     setServices({ events: createEvents({ db: queryable, schema: EVENTS_SCHEMA }) });
-    await db.query(`INSERT INTO artifacts (id, token_id, user_id) VALUES ('art0a1', 'tok_a', 'usr_a')`);
+    await seedArtifacts(db, { id: 'art0a1', token_id: 'tok_a', user_id: 'usr_a' });
     requestHeaders.set('user-agent', 'Mozilla/5.0 (visitor one)');
     await trackEvent('view', 'art0a1');
     await trackEvent('view', 'art0a1');
@@ -99,7 +100,7 @@ describe('the dashboard reads the log', () => {
 describe('the aggregates, over the log', () => {
   it('viewSeriesByUser zero-fills daily buckets, oldest first', async () => {
     const db = await harness.db();
-    await db.query(`INSERT INTO artifacts (id, token_id, user_id) VALUES ('art0a1', 'tok_a', 'usr_a')`);
+    await seedArtifacts(db, { id: 'art0a1', token_id: 'tok_a', user_id: 'usr_a' });
     await seedLog(db, [['viewed', 'art0a1', 'a', at(0, 1)], ['viewed', 'art0a1', 'b', at(0, 2)], ['viewed', 'art0a1', 'a', at(2, 1)], ['exported', 'art0a1', 'a', at(0, 3)]]);
     const series = (await viewSeriesByUser('usr_a')).get('art0a1');
     expect(series).toHaveLength(VIEW_SERIES_DAYS);
@@ -110,7 +111,7 @@ describe('the aggregates, over the log', () => {
 
   it('dailyViewsByUser buckets all owned artifacts per day, zero-filled to today', async () => {
     const db = await harness.db();
-    await db.query(`INSERT INTO artifacts (id, token_id, user_id) VALUES ('art0a1', 'tok_a', 'usr_a'), ('art0a2', 'tok_a', 'usr_a')`);
+    await seedArtifacts(db, { id: 'art0a1', token_id: 'tok_a', user_id: 'usr_a' }, { id: 'art0a2', token_id: 'tok_a', user_id: 'usr_a' });
     await seedLog(db, [['viewed', 'art0a1', 'a', at(0, 1)], ['viewed', 'art0a1', 'b', at(0, 2)], ['viewed', 'art0a2', 'c', at(0, 3)], ['viewed', 'art0a1', 'a', at(2, 1)], ['exported', 'art0a1', 'a', at(0, 4)]]);
     // Both artifacts pool into one series; the gap day is present as zero.
     const daily = await dailyViewsByUser('usr_a');

@@ -12,6 +12,7 @@ import { createGroup, GroupError, inviteGroupMember, setGroupMember } from '@/li
 import { recordNotification } from '@/lib/notifications';
 import { overrideConfig } from '@/lib/platform/config';
 import { getDb } from '@/lib/platform';
+import { setArtifact } from '@/__tests__/rows';
 
 useAppHarness();
 
@@ -84,8 +85,8 @@ it('keeps a test account to test accounts\' artifacts: read and fork elsewhere, 
   const own = await createGroup(test.userId, { handle: `tdo${n}${Date.now().toString(36)}`.slice(0, 30), name: 'Own' });
   const theirs = await createGroup(real.userId, { handle: `tdr${n}${Date.now().toString(36)}`.slice(0, 30), name: 'Theirs' });
   const [inGroup, outGroup] = [await page(test), await page(real)];
-  await db.query('UPDATE artifacts SET user_id=NULL, group_id=$2 WHERE id=$1', [inGroup.id, own.id]);
-  await db.query('UPDATE artifacts SET user_id=NULL, group_id=$2 WHERE id=$1', [outGroup.id, theirs.id]);
+  await setArtifact(db, inGroup.id, { user_id: null, group_id: own.id });
+  await setArtifact(db, outGroup.id, { user_id: null, group_id: theirs.id });
   const row = async (id: string) => (await db.query('SELECT * FROM artifacts WHERE id=$1', [id])).rows[0] as unknown as typeof realPage;
   expect(await can(test, 'comment', await row(inGroup.id))).toBe(true);
   expect(await can(test, 'comment', await row(outGroup.id))).toBe(false);

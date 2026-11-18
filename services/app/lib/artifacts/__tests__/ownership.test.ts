@@ -7,6 +7,8 @@ import { identityForUser } from '@/lib/accounts';
 import { createGroup } from '@/lib/groups';
 import { createArtifact, newArtifactDestination, parseArtifactDestination, transferArtifact } from '@/lib/artifacts';
 import { account, dataset, head, mine, sql } from '@/__tests__/artifact-fixtures';
+import { setArtifact } from '@/__tests__/rows';
+import { getDb } from '@/lib/platform';
 
 useAppHarness();
 const folder = (actor: { userId: string }, title = 'Folder', ancestor_ids: string[] = [], extra: Record<string, unknown> = {}) =>
@@ -48,11 +50,11 @@ describe('destinations and transfer', () => {
     expect((await transferArtifact(owner, box.id, { type: 'group', id: group.id }))!.sharing_revision).toBe(1);
     const data = await dataset(owner);
     await mine(owner, 'Reader', { meta: { refs: [{ id: data.id }] } });
-    await sql('UPDATE artifacts SET meta=$2 WHERE id=$1', [(await mine(owner, 'Uses')).id, JSON.stringify({ refs: [{ id: data.id }] })]);
+    await setArtifact(await getDb(), (await mine(owner, 'Uses')).id, { meta: JSON.stringify({ refs: [{ id: data.id }] }) });
     await expect(transferArtifact(owner, data.id, { type: 'group', id: group.id })).rejects.toThrow('dependencies outside');
     const mixed = await folder(owner, 'Mixed');
     const foreign = await mine(stranger, 'Foreign');
-    await sql('UPDATE artifacts SET ancestor_ids=$2 WHERE id=$1', [foreign.id, [mixed.id]]);
+    await setArtifact(await getDb(), foreign.id, { ancestor_ids: [mixed.id] });
     await expect(transferArtifact(owner, mixed.id, { type: 'group', id: group.id })).rejects.toThrow('different owner');
   });
 });

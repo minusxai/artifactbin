@@ -27,6 +27,7 @@ import {stageCommentImage} from '@/lib/annotations';
 import sharp from 'sharp';
 import type {Actor} from '@artifactbin/contracts';
 import {bearerIdentity,request,useAppHarness} from './harness';
+import { seedArtifacts, setArtifact } from '@/__tests__/rows';
 
 /**
  * The host's document editor grant (ADMIN__EMAILS in production) through the REAL production shape:
@@ -49,7 +50,7 @@ beforeEach(async()=>{
  setDocumentEditorPolicy(actor=>actor.userId===user.id && actor.emailVerified===true);
  const db=await harness.db();
  await db.query("INSERT INTO users(id,email,kind) VALUES ('usr_owner','owner@example.com','account') ON CONFLICT DO NOTHING");
- for(const doc of [UNLISTED,PRIVATE])await db.query(`INSERT INTO artifacts(id,token_id,user_id,title,source,meta,format,visibility,edit_id) VALUES ($1,'tok_owner','usr_owner',$2,$3,'{}','html',$4,'base-edit')`,[doc.id,`${doc.visibility} document`,SOURCE,doc.visibility]);
+ for(const doc of [UNLISTED,PRIVATE])await seedArtifacts(db, { id: doc.id, token_id: 'tok_owner', user_id: 'usr_owner', title: `${doc.visibility} document`, source: SOURCE, meta: '{}', format: 'html', visibility: doc.visibility, edit_id: 'base-edit' });
  identity={userId:user.id,email:user.email!,emailVerified:true};
  const bearers=await bearerIdentity();await bearers.account(identity);
  const app=new Hono();
@@ -163,8 +164,8 @@ it('refuses an admin a private document at every browser door, its live stream a
  expect(await statuses(PRIVATE)).toEqual({head:404,page:404,raw:404,stream:404});
  // A folder the admin may read lists no private child it holds, and no unlisted one: the grant lists nothing.
  const db=await harness.db();
- await db.query(`INSERT INTO artifacts(id,token_id,user_id,title,source,meta,format,visibility,edit_id) VALUES ('fld123','tok_owner','usr_owner','Shelf','','{}','folder','public','folder-edit')`);
- await db.query("UPDATE artifacts SET ancestor_ids=ARRAY['fld123'] WHERE id IN ($1,$2)",[UNLISTED.id,PRIVATE.id]);
+ await seedArtifacts(db, { id: 'fld123', token_id: 'tok_owner', user_id: 'usr_owner', title: 'Shelf', source: '', meta: '{}', format: 'folder', visibility: 'public', edit_id: 'folder-edit' });
+ await setArtifact(db, [UNLISTED.id, PRIVATE.id], { ancestor_ids: { sql: "ARRAY['fld123']" } });
  const admin=await sessionActor(at('/api/page/artifact/fld123'));expect(admin.documentEditor).toBe(true);
  // The dataset-grant read (a document a grant names) reads the same rule: no private document for the grant.
  expect(await readThrough(db,(await getArtifactById(PRIVATE.id))!,admin)).toBe(false);
@@ -181,7 +182,7 @@ it('does not turn an ordinary verified account into an editor of native HTML',as
 });
 it('applies the same link-bounded grant to group HTML without granting group ownership or private access',async()=>{
  const db=await harness.db();await db.query("INSERT INTO groups(id,handle,name,created_by) VALUES('admin_group','admin_group','Group','usr_owner')");
- await db.query("UPDATE artifacts SET group_id='admin_group',user_id=NULL WHERE id=ANY($1::text[])",[[UNLISTED.id,PRIVATE.id]]);
+ await setArtifact(db, [UNLISTED.id,PRIVATE.id], { group_id: 'admin_group', user_id: null });
  const page=(await getArtifactById(UNLISTED.id))!;
  const write=await bearer(`/api/artifacts/${UNLISTED.id}`,{method:'PUT',json:{html:SOURCE.replace('Before','Group repair'),expectedVersion:page.version,expectedState:artifactState(page)}});expect(write.status,await write.clone().text()).toBe(200);
  expect((await getArtifactById(UNLISTED.id))?.group_id).toBe('admin_group');

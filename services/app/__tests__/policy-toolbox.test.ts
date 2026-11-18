@@ -13,6 +13,7 @@ import { createArtifactFromBody } from '@/lib/publish';
 import { getArtifactById } from '@/lib/artifacts';
 import { createAppServer } from '@/server/app';
 import {tempDir} from '@artifactbin/test-support/temp-dir';
+import { seedShares } from '@/__tests__/rows';
 
 useAppHarness();
 
@@ -30,7 +31,7 @@ async function fixture() {
   const created = await createArtifactFromBody({ dataset: [{ name: 'seed', created_by: 'nobody' }], title: 'Signups', access: 'readwrite', visibility: 'unlisted' }, identityForUser(owner.userId, owner.id) as AccessActor & { tokenId: string }, SERVER);
   expect(created.status, await created.clone().text()).toBe(201);
   const id = (await created.json()).id as string;
-  await (await getDb()).query("INSERT INTO artifact_shares(artifact_id,user_id,email,role) VALUES($1,$2,$3,'viewer')", [id, viewer.userId, viewer.email]);
+  await seedShares((await getDb()), { artifact_id: id, user_id: viewer.userId, email: viewer.email, role: 'viewer' });
   const dir = await tempDir('policy-cli-',onTestFinished);
   const file = async (name: string, value: unknown) => { const at = path.join(dir, name); await writeFile(at, typeof value === 'string' ? value : JSON.stringify(value)); return at; };
   return { owner, viewer, id, file };

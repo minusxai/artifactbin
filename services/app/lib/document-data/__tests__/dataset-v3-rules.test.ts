@@ -8,6 +8,7 @@ import {useAppHarness} from '@/__tests__/harness';
 import {ANONYMOUS_ACTOR} from '@/lib/accounts';
 import {datasetPermissionsTemplate} from '@artifactbin/utils/dataset-permissions';
 import {account,datasetFixture,refusal,write} from './dataset-fixture';
+import { setArtifact } from '@/__tests__/rows';
 
 useAppHarness();
 
@@ -15,7 +16,7 @@ it('enforces a stored own-rows policy: presets the writer, scopes update and del
  const f=await datasetFixture({dataset:[{name:'seed',created_by:'someone'}]}),alice=await account('alice'),bob=await account('bob');
  const template=datasetPermissionsTemplate('own-rows',{tables:[{table:{schema:'public',name:'rows'},columns:['name','created_by']}]},{ownerColumn:'created_by'});
  if(!template.ok)throw new Error(JSON.stringify(template.errors));
- await f.db.query('UPDATE artifacts SET dataset_policy=$2::jsonb WHERE id=$1',[f.id,JSON.stringify(template.policy)]);
+ await setArtifact(f.db, f.id, { dataset_policy: JSON.stringify(template.policy) });
  const generic={nativePolicy:true};
  expect(refusal(await write(await f.row(),alice.actor,"insert into public.rows (name) values ('alice')",generic))).toBeNull();
  expect(refusal(await write(await f.row(),bob.actor,"insert into public.rows (name) values ('bob')",generic))).toBeNull();
@@ -35,7 +36,7 @@ it('enforces a stored own-rows policy: presets the writer, scopes update and del
 it('rate-limits rule-admitted signed-out writes to 30 a minute per dataset',async()=>{
  const f=await datasetFixture(),roles=['viewer','signed_in','anonymous'];
  const everyoneWrites={version:3,tables:[{table:{schema:'public',name:'rows'},select_permissions:roles.map(role=>({role,permission:{columns:'*',filter:{},allow_aggregations:true}})),insert_permissions:roles.map(role=>({role,permission:{columns:'*',check:{}}}))}]};
- await f.db.query('UPDATE artifacts SET dataset_policy=$2::jsonb WHERE id=$1',[f.id,JSON.stringify(everyoneWrites)]);
+ await setArtifact(f.db, f.id, { dataset_policy: JSON.stringify(everyoneWrites) });
  // The limiter counts per wall-clock minute: hold the clock mid-minute so the 31 writes share one bucket.
  vi.useFakeTimers({toFake:['Date']});vi.setSystemTime(new Date('2026-11-03T12:00:30Z'));
  try{

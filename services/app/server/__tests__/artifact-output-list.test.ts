@@ -7,6 +7,7 @@ import {getDb} from '@/lib/platform';
 import {APP_ARTIFACT_WORKLOAD_PATH} from '@artifactbin/contracts';
 import {mintAccountToken,useAppHarness} from '../../__tests__/harness';
 import {nativeHtml} from '../../__tests__/native-html-fixture';
+import { seedArtifacts, setArtifact } from '@/__tests__/rows';
 useAppHarness();
 it('recovers only committed outputs from this exact execution with no source or write authority',async()=>{
  const owner=await mintAccountToken('mxmx_test_receipt_reader'),group=await createGroup(owner.userId!,{handle:'receipt_reader',name:'Receipt group'});
@@ -36,7 +37,7 @@ it('recovers only committed outputs from this exact execution with no source or 
   denyFinal=true;expect((await list()).status).toBe(403);denyFinal=false;
   expect((await call({kind:'artifact-outputs',credential:'x'.repeat(43),after:null})).status).toBe(403);
   await trashRow(id);expect((await(await list()).json()).items).toEqual([]);
-  await db.query('UPDATE artifacts SET deleted_at=NULL,group_id=NULL WHERE id=$1',[id]);expect((await(await list()).json()).items).toEqual([]);
+  await setArtifact(db, id, { deleted_at: null, group_id: null });expect((await(await list()).json()).items).toEqual([]);
   revoke=true;expect((await list()).status).toBe(403);
  }finally{fetch.mockRestore();vi.restoreAllMocks();}
 });
@@ -57,7 +58,7 @@ it('paginates distinct receipts, refuses writer scopes and rereads after the fin
  try{
   for(let n=0;n<52;n++){
    const id='output_'+String(n).padStart(3,'0');
-   await db.query("INSERT INTO artifacts(id,title,format,group_id,visibility) VALUES($1,$1,'html',$2,'private')",[id,group.id]);
+   await seedArtifacts(db, { id, title: id, format: 'html', group_id: group.id, visibility: 'private' });
    await db.query('INSERT INTO workload_publication_outputs(namespace,artifact_id) VALUES($1,$2)',['slot',id]);
    await db.query('INSERT INTO workload_publication_audit(namespace,grant_namespace,group_id,artifact_id,bytes,binding) VALUES($1,$1,$2,$3,1,$4::jsonb),($1,$1,$2,$3,1,$4::jsonb)',['slot',group.id,id,JSON.stringify(principal)]);
   }
@@ -69,7 +70,7 @@ it('paginates distinct receipts, refuses writer scopes and rereads after the fin
   expect((await host.request(req(),{credential:'bearer',userId:owner.userId!,tokenId:owner.id})).status).toBe(403);
   expect((await host.request(req(),{credential:'workload',workload:{...principal,issuerId:'other'}})).status).toBe(403);
   for(const invalid of [{...operation,after:'a/b'},{...operation,credential:'short'},{...operation,extra:true}])expect((await call(invalid)).status).toBe(400);
-  for(const sql of ["UPDATE artifacts SET title='Changed' WHERE id='output_000'","UPDATE artifacts SET group_id=NULL WHERE id='output_001'","UPDATE artifacts SET deleted_at=now() WHERE id='output_002'"]){change=()=>db.query(sql);expect((await call()).status).toBe(403);change=null;}
+  for(const mutate of [()=>setArtifact(db,'output_000',{title:'Changed'}),()=>setArtifact(db,'output_001',{group_id:null}),()=>setArtifact(db,'output_002',{deleted_at:{sql:'now()'}})]){change=mutate;expect((await call()).status).toBe(403);change=null;}
   change=()=>db.query('UPDATE groups SET deleted_at=now() WHERE id=$1',[group.id]);expect((await call()).status).toBe(403);change=null;
   expect((await(await call()).json()).items).toEqual([]);
  }finally{vi.restoreAllMocks();}

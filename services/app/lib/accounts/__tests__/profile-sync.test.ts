@@ -19,6 +19,7 @@ import { sessionActor } from '@/lib/authentication';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { POST as tablesRoute } from '@/app/a/[id]/tables/route';
 import { request, useAppHarness } from '@/__tests__/harness';
+import { seedShares } from '@/__tests__/rows';
 
 const harness = useAppHarness();
 
@@ -195,7 +196,7 @@ describe('a bearer-only invitee whose first call is not a withTokenAuth route', 
     const { id } = (await published.json()) as { id: string };
 
     const db = await harness.db();
-    await db.query("INSERT INTO artifact_shares(artifact_id,email,role) VALUES($1,$2,'editor')", [id, 'firstcall@invited.example']);
+    await seedShares(db, { artifact_id: id, email: 'firstcall@invited.example', role: 'editor' });
 
     // An email account's first bearer request synchronizes the verified invitation address.
     const invitee = await mintToken('invitee', 'usr_cli0000000005');

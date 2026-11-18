@@ -8,6 +8,7 @@ import {createUser,identityForUser} from '@/lib/accounts';
 import {artifactState,createArtifact,getArtifactById,revertArtifactFor} from '@/lib/artifacts';
 import {editableRegions} from '@/lib/live-regions';
 import {mintAccountToken,request,setSession,useAppHarness} from './harness';
+import { setArtifact } from '@/__tests__/rows';
 const harness=useAppHarness();
 
 it.each([true,false])('restores a legacy archive as native with unchanged bytes (receipt=%s)',async receipt=>{
@@ -71,7 +72,7 @@ it('HTTP fork converts historical heads, refuses unsupported copies atomically, 
  const copies=(await db.query<{source:string}>('SELECT source FROM artifacts WHERE forked_from=$1',[source.id])).rows;
  expect(copies).toHaveLength(1);
  expect(copies.every(row=>editableRegions(row.source)[0]!.kind==='rich-native-v1')).toBe(true);
- await db.query('UPDATE artifacts SET source=$2 WHERE id=$1',[source.id,unsupported]);
+ await setArtifact(db, source.id, { source: unsupported });
  const before=(await db.query('SELECT id,source,version FROM artifacts')).rows;
  const refused=await call();expect(refused.status).toBe(409);expect(await refused.json()).toMatchObject({error:'unsupported_content'});
  expect((await db.query('SELECT id,source,version FROM artifacts')).rows).toEqual(before);

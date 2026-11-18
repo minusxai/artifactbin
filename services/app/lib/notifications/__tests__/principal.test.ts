@@ -7,6 +7,7 @@ import { useAppHarness } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
 import { notificationDelivery, projectNotifications, setNotificationDelivery } from '@/lib/notifications';
 import { envelope, getDb } from '@/lib/platform';
+import { seedArtifacts } from '@/__tests__/rows';
 
 useAppHarness();
 afterEach(() => setNotificationDelivery(undefined));
@@ -15,7 +16,7 @@ describe('record-side hooks', () => {
   it('projects a like and a follow into one notification for the other person, never for oneself or nobody', async () => {
     const db = await getDb();
     const owner = await createUser({ email: 'owner@example.test' }), fan = await createUser({ email: 'fan@example.test' });
-    await db.query('INSERT INTO artifacts (id, user_id, token_id) VALUES ($1, $2, $3)', ['art_liked', owner.id, 'tok_x']);
+    await seedArtifacts(db, { id: 'art_liked', user_id: owner.id, token_id: 'tok_x' });
     const fact = (subject: string | null, verb: string, kind: 'artifact' | 'user', id: string) =>
       envelope(subject ? { kind: 'user', id: subject } as never : null, verb as never, { kind, id } as never, {} as never);
     await db.transaction(async tx => {

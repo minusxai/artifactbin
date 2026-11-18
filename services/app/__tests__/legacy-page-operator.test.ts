@@ -6,6 +6,7 @@ import {migrateLegacyPage} from '@/lib/artifacts';
 import {createRegionSessions} from '@/lib/region-sessions';
 import {identityForUser,createUser} from '@/lib/accounts';
 import {useAppHarness} from './harness';
+import { setArtifact } from '@/__tests__/rows';
 const harness=useAppHarness();
 type Db=Awaited<ReturnType<typeof harness.db>>;
 const artifactRows=async(db:Db,id:string)=>(await db.query('SELECT to_jsonb(a) AS value FROM artifacts a WHERE id=$1',[id])).rows;
@@ -43,7 +44,7 @@ it('refuses an unrepresentable empty mark without changing any rows',async()=>{
 it('preserves trash timestamp',async()=>{
  const {row}=await legacyPage('mxmx_test_migration_trash@example.com','<article data-af-editable="rich"><p>Trashed</p></article>');
  const db=await harness.db();
- await db.query("UPDATE artifacts SET deleted_at='2025-01-01T00:00:00Z' WHERE id=$1",[row.id]);
+ await setArtifact(db, row.id, { deleted_at: '2025-01-01T00:00:00Z' });
  const before=(await db.query('SELECT deleted_at FROM artifacts WHERE id=$1',[row.id])).rows;
  expect(await migrateLegacyPage(row.id,{apply:true})).toBe('migrated');
  expect((await db.query('SELECT deleted_at FROM artifacts WHERE id=$1',[row.id])).rows).toEqual(before);
@@ -130,7 +131,7 @@ it.each([false,true])('uses the saved heading/title projection for a dirty docum
  await db.query('INSERT INTO region_updates(artifact_id,region_id,seq,client_id,"update",actor_user_id) VALUES($1,$2,1,$3,$4,$5)',[row.id,region.id,doc.clientID,Buffer.from(update),user.id]);
  await db.query('INSERT INTO region_snapshots(artifact_id,region_id,version,snapshot) VALUES($1,$2,$3,$4)',[row.id,region.id,row.version,Buffer.from(initial.snapshot)]);
  await db.query(`INSERT INTO annotations(id,artifact_id,body,author_kind,quote,anchor_version,html_anchor) VALUES('ann_title',$1,'Keep comment','human','Keep',$2,$3::jsonb)`,[row.id,row.version,JSON.stringify({nodeId:region.id})]);
- if(trashed)await db.query("UPDATE artifacts SET deleted_at='2025-01-01T00:00:00Z' WHERE id=$1",[row.id]);
+ if(trashed)await setArtifact(db, row.id, { deleted_at: '2025-01-01T00:00:00Z' });
  const snapshot=async()=>{
   const result:Record<string,unknown>={};
   for(const table of ['artifacts','region_states','region_updates','region_snapshots','artifact_source_ids','annotations']){

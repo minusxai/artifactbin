@@ -12,6 +12,7 @@ import { createUser, identityForUser } from '@/lib/accounts';
 import { getArtifactById } from '@/lib/artifacts';
 import { isMutationRefused, mutateDataset } from '@/lib/document-data';
 import { membershipInbox, updateMembershipInbox } from '@/lib/notifications';
+import { setArtifact } from '@/__tests__/rows';
 
 const harness = useAppHarness();
 
@@ -48,7 +49,7 @@ describe('a dataset write', () => {
 
   it('the commit statement itself refuses a dataset made read-only after the caller read it', async () => {
     const { row, actor } = await dataset();
-    await (await harness.db()).query("UPDATE artifacts SET access='read' WHERE id=$1", [row.id]);
+    await setArtifact((await harness.db()), row.id, { access: 'read' });
     const refused = await mutateDataset(row, actor, 'insert into rows (n) values (2)');
     expect(isMutationRefused(refused) && refused.reason).toBe('dataset_read_only');
     expect((await getArtifactById(row.id))!.version).toBe(row.version);

@@ -11,6 +11,7 @@ import { mintToken } from '@/lib/accounts/tokens';
 import { artifactState, createArtifact, getArtifactById, getArtifactFor, getArtifactsFor, getLinkReadableArtifact, getOwnedArtifactFor, isVersionConflict, listArtifactPageFor, listVersionsFor, replaceArtifactFor, revertArtifactFor, trashSubtree, updateSharingFor } from '@/lib/artifacts';
 import { canReadArtifact } from '../read-access';
 import { effectiveRole, ownsArtifact, type ArtifactRow } from '@/lib/artifact-access';
+import { setArtifact } from '@/__tests__/rows';
 
 const harness = useAppHarness();
 const replace = (actor: AccessActor, row: ArtifactRow, title: string, opts: Parameters<typeof replaceArtifactFor>[3] = {}) =>
@@ -147,13 +148,13 @@ describe('the collection page', () => {
     for (let i = 0; i < 5; i++) {
       const row = await mine(owner, `Doc ${i}`);
       ids.push(row.id);
-      await db.query("UPDATE artifacts SET created_at = timestamptz '2026-01-01' + $2 * interval '1 minute' WHERE id = $1", [row.id, i]);
+      await setArtifact(db, row.id, { created_at: { sql: `timestamptz '2026-01-01' + ${i} * interval '1 minute'` } });
     }
     // Two rows on the same instant: the id breaks the tie, so the cursor never skips or repeats one.
     await db.query('UPDATE artifacts SET created_at = (SELECT created_at FROM artifacts WHERE id = $2) WHERE id = $1', [ids[1], ids[2]]);
     const theirs = await mine(friend, 'Shared with owner');
     await updateSharingFor(friend, theirs.id, { shares: [{ email: 'owner@example.test', role: 'viewer' }] });
-    await db.query("UPDATE artifacts SET created_at = timestamptz '2025-01-01' WHERE id = $1", [theirs.id]);
+    await setArtifact(db, theirs.id, { created_at: { sql: "timestamptz '2025-01-01'" } });
 
     const seen: string[] = [];
     let cursor: { created: string; id: string } | undefined;

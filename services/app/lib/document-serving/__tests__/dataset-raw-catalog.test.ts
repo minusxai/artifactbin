@@ -7,6 +7,7 @@ import { getDb } from '@/lib/platform';
 import { getArtifactById } from '@/lib/artifacts';
 import { serveRawDocument } from '@/lib/document-serving';
 import { loadDatasetRows } from '@/lib/datasets';
+import { seedShares, setArtifact } from '@/__tests__/rows';
 
 useAppHarness();
 
@@ -17,8 +18,8 @@ it('describes old single-table storage and preserves owner, viewer and denied-ro
   expect(created.status).toBe(201);
   const { id } = await created.json();
   const db = await getDb();
-  await db.query("INSERT INTO artifact_shares(artifact_id,user_id,email,role) VALUES($1,$2,$3,'viewer')", [id, viewer.userId, viewer.email]);
-  await db.query('UPDATE artifacts SET dataset_policy=$2::jsonb WHERE id=$1', [id, JSON.stringify({ version: 3, tables: [{ table: { schema: 'public', name: 'rows' }, select_permissions: [{ role: 'viewer', permission: { columns: ['name'], filter: {} } }] }] })]);
+  await seedShares(db, { artifact_id: id, user_id: viewer.userId, email: viewer.email, role: 'viewer' });
+  await setArtifact(db, id, { dataset_policy: JSON.stringify({ version: 3, tables: [{ table: { schema: 'public', name: 'rows' }, select_permissions: [{ role: 'viewer', permission: { columns: ['name'], filter: {} } }] }] }) });
   const read = (token?: string) => serveRawDocument(request(`/a/${id}/raw`, token ? { token } : {}), { id });
   const own = await read(owner.token);
   expect(own.status).toBe(200);
@@ -41,7 +42,7 @@ it('keeps a live connection summary and the artifact access boundary', async () 
   expect(created.status).toBe(201);
   const { id } = await created.json();
   const connection = { connector: 'postgres', name: 'Example connection' };
-  await (await getDb()).query('UPDATE artifacts SET meta=$2::jsonb WHERE id=$1', [id, JSON.stringify({ connection })]);
+  await setArtifact((await getDb()), id, { meta: JSON.stringify({ connection }) });
   const response = await serveRawDocument(request(`/a/${id}/raw`, { token: owner.token }), { id });
   expect(response.status).toBe(200);
   expect(response.headers.get('cache-control')).toBe('no-store');

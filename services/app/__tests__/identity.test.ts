@@ -24,6 +24,7 @@ import { mintAccountToken, params } from '@/__tests__/harness';
 import { ID_RE } from '@/lib/platform';
 import { useAppHarness, request } from '@/__tests__/harness';
 import { sseStream } from '@/__tests__/sse';
+import { setArtifact } from '@/__tests__/rows';
 
 const harness = useAppHarness();
 
@@ -35,7 +36,7 @@ async function mint(): Promise<string> {
 }
 
 async function create(token: string, body: Record<string, unknown>) {
-  const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: { visibility: 'public', ...body } }));
+  const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token, json: { visibility: 'public', ...body } }));
   expect(res.status).toBe(201);
   return res.json() as Promise<Record<string, unknown> & { id: string; url: string; edit_id: string }>;
 }
@@ -44,7 +45,7 @@ async function create(token: string, body: Record<string, unknown>) {
 async function renameArtifact(oldId: string, newId: string): Promise<void> {
   const db = await harness.db();
   await db.query('UPDATE artifact_edits SET artifact_id = $2 WHERE artifact_id = $1', [oldId, newId]);
-  await db.query('UPDATE artifacts SET id = $2 WHERE id = $1', [oldId, newId]);
+  await setArtifact(db, oldId, { id: newId });
 }
 
 /** Read SSE data frames until `count` arrive or the budget runs out. */
@@ -63,11 +64,11 @@ describe('the one identifier', () => {
     const token = await mint();
     const created = await create(token, { title: 'x', html:nativeHtml('<h1>hi</h1>') });
 
-    const single = await (await getArtifactRoute(request(`/api/artifacts/${created.id}`, { token: token }), params({ id: created.id }))).json();
+    const single = await (await getArtifactRoute(request(`/api/artifacts/${created.id}`, { token }), params({ id: created.id }))).json();
     expect(single.url).toBe(`${BASE}/a/${created.id}`);
     expect('slug' in single).toBe(false);
 
-    const list = await (await listArtifactsRoute(request('/api/artifacts', { token: token }))).json();
+    const list = await (await listArtifactsRoute(request('/api/artifacts', { token }))).json();
     expect(list.artifacts).toHaveLength(1);
     expect(list.artifacts[0].url).toBe(`${BASE}/a/${created.id}`);
     expect('slug' in list.artifacts[0]).toBe(false);
@@ -82,11 +83,11 @@ describe('the one identifier', () => {
     const chart=(dsId:string)=>`<!doctype html><html><head><link rel="af-dataset" data-af-name="rows_data" href="ref:${dsId}" data-af-mode="live"></head><body><h1>Sales</h1></body></html>`;
 
     const ok = await create(token, { title: 'doc', html: chart(ds.id) });
-    const wire = await (await getArtifactRoute(request(`/api/artifacts/${ok.id}`, { token: token }), params({ id: ok.id }))).json();
+    const wire = await (await getArtifactRoute(request(`/api/artifacts/${ok.id}`, { token }), params({ id: ok.id }))).json();
     expect(wire.html).toContain(`href="ref:${ds.id}"`);
 
     const bad = await createArtifactRoute(
-      request('/api/artifacts', { method: 'POST', token: token, json: { title: 'doc', html: chart('zzzzzzzz') } }),
+      request('/api/artifacts', { method: 'POST', token, json: { title: 'doc', html: chart('zzzzzzzz') } }),
     );
     expect(bad.status).toBe(400);
     const err = await bad.json();
@@ -123,7 +124,7 @@ describe('/a/<id> namespace', () => {
     expect((await reader.named('message'))[0]?.data.version).toBe(1);
     // Comment wakeups may interleave with version pings; only message events carry versions.
     const put = await putArtifact(
-      await observedRequest('/api/artifacts/AbC123', { method: 'PUT', token: token, json: { visibility: 'public', html:nativeHtml('<section><p>beta</p></section>') } }),
+      await observedRequest('/api/artifacts/AbC123', { method: 'PUT', token, json: { visibility: 'public', html:nativeHtml('<section><p>beta</p></section>') } }),
       params({ id: 'AbC123' }),
     );
     expect(put.status).toBe(200);

@@ -22,6 +22,7 @@ import { assetByteQuotaExceeded } from '@/lib/artifacts';
 import { assetBytesForToken, setAssetByteQuotaForTests } from '@/lib/artifacts/testing';
 import { POST as bearerCreate } from '@/app/api/artifacts/route';
 import { request } from '@/__tests__/harness';
+import { seedArtifacts } from '@/__tests__/rows';
 
 useAppHarness();
 
@@ -43,11 +44,7 @@ describe('asset byte quota', () => {
     const user = await createUser({ email: 'mxmx_test_quota_del@example.com' });
     const { id } = await mintToken('t', user.id);
     const db = await getDb();
-    await db.query(
-      `insert into artifacts (id, token_id, user_id, format, meta, deleted_at)
-       values ('qdel01', $1, $2, 'image', '{"bytes":4000000}'::jsonb, now())`,
-      [id, user.id],
-    );
+    await seedArtifacts(db, { id: 'qdel01', token_id: id, user_id: user.id, format: 'image', meta: '{"bytes":4000000}', deleted_at: { sql: 'now()' } });
     expect(await assetBytesForToken(id)).toBe(4_000_000);
   });
 
@@ -159,7 +156,7 @@ describe('the image doors ask the byte quota', () => {
 
 it('tokenless human-owned pages keep the account byte quota and never charge another account',async()=>{
  const owner=await mintToken('tokenless_owner'),other=await mintToken('tokenless_other'),db=await getDb();
- await db.query("INSERT INTO artifacts(id,token_id,user_id,format,meta) VALUES('noTokenBytes',NULL,$1,'image',$2::jsonb)",[owner.userId,JSON.stringify({bytes:100})]);
+ await seedArtifacts(db, { id: 'noTokenBytes', token_id: null, user_id: owner.userId, format: 'image', meta: JSON.stringify({bytes:100}) });
  expect(await assetBytesForToken(null,owner.userId)).toBe(100);
  expect(await assetBytesForToken(null,other.userId)).toBe(0);
  setAssetByteQuotaForTests(100);

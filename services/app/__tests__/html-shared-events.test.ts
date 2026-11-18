@@ -5,6 +5,7 @@ import {useAppHarness,request,mintAccountToken} from '@/__tests__/harness';
 import {POST as createArtifact} from '@/app/api/artifacts/route';
 import {GET as eventsRoute} from '@/app/a/[id]/events/route';
 import {sseStream} from '@/__tests__/sse';
+import { setArtifact } from '@/__tests__/rows';
 const harness=useAppHarness();
 // Presence shares this stream; dataset assertions wait for their named frame.
 async function nextData(stream:ReturnType<typeof sseStream>){
@@ -21,7 +22,7 @@ it('two connected viewers hear a linked dataset change; reconnect refetches writ
  const dataset=await create({dataset:[{item:'one'}],access:'readwrite'});
  const id=await create({html:'<!doctype html><html><body><p>Shared</p></body></html>'});
  const db=await harness.db();
- await db.query("UPDATE artifacts SET format='html',document=NULL,source='<p>Shared</p>',meta=$2::jsonb WHERE id=$1",[id,JSON.stringify({htmlLinks:[{kind:'dataset',name:'rows',datasetId:dataset,mode:'live'}]})]);
+ await setArtifact(db, id, { format: 'html', document: null, source: '<p>Shared</p>', meta: JSON.stringify({htmlLinks:[{kind:'dataset',name:'rows',datasetId:dataset,mode:'live'}]}) });
  const {POST:mutate}=await import('@/app/api/artifacts/[id]/mutate/route');
  const write=async(item:string)=>expect((await mutate(request(`/api/artifacts/${dataset}/mutate`,{method:'POST',token:token.token,json:{sql:`insert into public.rows (item) values ('${item}')`}}),{params:Promise.resolve({id:dataset})})).status).toBe(200);
  const params={params:Promise.resolve({id})};
@@ -51,7 +52,7 @@ it('native live dataset links hear mutations and pinned aliases stay out of inva
  const dataset=await create({dataset:[{item:'one'}],access:'readwrite'});
  const id=await create({html:'<!doctype html><html><body><p>Rows</p></body></html>'});
  const db=await harness.db();
- await db.query("UPDATE artifacts SET format='html',document=NULL,source='<p>Rows</p>',meta=$2::jsonb WHERE id=$1",[id,JSON.stringify({htmlLinks:[{kind:'dataset',name:'live',datasetId:dataset,mode:'live'},{kind:'dataset',name:'archive',datasetId:dataset,mode:'pinned',revision:'1'}]})]);
+ await setArtifact(db, id, { format: 'html', document: null, source: '<p>Rows</p>', meta: JSON.stringify({htmlLinks:[{kind:'dataset',name:'live',datasetId:dataset,mode:'live'},{kind:'dataset',name:'archive',datasetId:dataset,mode:'pinned',revision:'1'}]}) });
  const response=await eventsRoute(request(`/a/${id}/events`),{params:Promise.resolve({id})});
  const stream=sseStream(response.body!);
  try{
@@ -71,7 +72,7 @@ it('public page readers never receive private dataset activity, including after 
  const dataset=await create({dataset:[{item:'secret'}],visibility:'private'});
  const id=await create({html:'<!doctype html><html><body>Public page</body></html>',visibility:'public'});
  const db=await harness.db();
- await db.query('UPDATE artifacts SET meta=$2::jsonb WHERE id=$1',[id,JSON.stringify({htmlLinks:[{kind:'dataset',name:'rows',datasetId:dataset,mode:'live'}]})]);
+ await setArtifact(db, id, { meta: JSON.stringify({htmlLinks:[{kind:'dataset',name:'rows',datasetId:dataset,mode:'live'}]}) });
  const opening=async()=>{const res=await eventsRoute(request(`/a/${id}/events`),{params:Promise.resolve({id})});const stream=sseStream(res.body!);try{return await stream.next(2);}finally{stream.close();}};
  const hidden=await opening();expect(hidden.find(e=>e.event==='data')?.data.revisions).toEqual({rows:'unavailable'});expect(hidden.every(e=>!e.id)).toBe(true);
  await setVisibility(dataset, 'public');
@@ -80,10 +81,10 @@ it('public page readers never receive private dataset activity, including after 
  const connected=sseStream(liveResponse.body!);
  try{
   await connected.next(2);
-  await db.query("UPDATE artifacts SET visibility='private',version=version+1 WHERE id=$1",[dataset]);
+  await setArtifact(db, dataset, { visibility: 'private', version: { sql: 'version+1' } });
   await db.query("SELECT pg_notify($1,'')",[artifactChannel(id)]);
   expect((await nextData(connected)).data.revisions).toEqual({rows:'unavailable'});
-  await db.query('UPDATE artifacts SET version=version+1 WHERE id=$1',[dataset]);
+  await setArtifact(db, dataset, { version: { sql: 'version+1' } });
   await db.query("SELECT pg_notify($1,'')",[artifactChannel(dataset)]);
   // A page update after it reaches this reader: whatever the dataset's activity sent arrives before it, and it sent nothing.
   await db.query('UPDATE artifacts SET version=version+1 WHERE id=$1',[id]);
@@ -93,6 +94,6 @@ it('public page readers never receive private dataset activity, including after 
   expect(before.filter(e=>e.event==='data')).toEqual([]);
  }finally{connected.close();}
  const revoked=await opening();expect(revoked.find(e=>e.event==='data')?.data.revisions).toEqual({rows:'unavailable'});expect(revoked.every(e=>!e.id)).toBe(true);
- await db.query('UPDATE artifacts SET version=version+1,deleted_at=now() WHERE id=$1',[dataset]);
+ await setArtifact(db, dataset, { version: { sql: 'version+1' }, deleted_at: { sql: 'now()' } });
  expect((await opening()).find(e=>e.event==='data')?.data.revisions).toEqual({rows:'unavailable'});
 });

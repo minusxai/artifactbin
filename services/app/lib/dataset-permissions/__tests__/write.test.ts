@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { useAppHarness } from '@/__tests__/harness';
-import { account, dataset, head, mine, sql, type Account } from '@/__tests__/artifact-fixtures';
+import { account, dataset, head, mine, type Account } from '@/__tests__/artifact-fixtures';
 import { attestSavedHtmlUpload, uploadGrantContext, type ArtifactRow } from '@/lib/artifact-access';
 import type { Queryable } from '@artifactbin/contracts';
 import type { AccessActor } from '@/lib/accounts';
@@ -14,6 +14,7 @@ import { getDb } from '@/lib/platform';
 import { ANONYMOUS_ACTOR } from '@/lib/accounts';
 import { datasetReadAccess } from '../read';
 import { assertWriteCommit, canInsert, datasetWriteAccess, tableMutationPolicy } from '../write';
+import { setArtifact } from '@/__tests__/rows';
 
 const harness = useAppHarness();
 const ROWS = { schema: 'public', name: 'rows' };
@@ -81,7 +82,7 @@ describe('datasetWriteAccess', () => {
     const owner = await account('owner@example.test');
     const data = await dataset(owner);
     expect(await datasetWriteAccess(await head(data.id), owner)).toMatchObject({ allowed: true, admin: true });
-    await sql("UPDATE artifacts SET access='read' WHERE id=$1", [data.id]);
+    await setArtifact(await getDb(), data.id, { access: 'read' });
     expect(await datasetWriteAccess(await head(data.id), owner)).toMatchObject({ allowed: false, reason: 'dataset_read_only' });
   });
 
@@ -95,7 +96,7 @@ describe('datasetWriteAccess', () => {
       update_permissions: [{ role: 'signed_in', permission: { columns: '*', filter: {}, backend_only: true } }],
     }] };
     const f = await fixture(policy);
-    await sql("UPDATE artifacts SET access='readwrite' WHERE id=$1", [f.data.id]);
+    await setArtifact(await getDb(), f.data.id, { access: 'readwrite' });
     f.data = await head(f.data.id);
     expect(await datasetWriteAccess(f.data, f.stranger, { throughPage: true })).toMatchObject({ allowed: true, role: 'signed_in' });
     expect(await datasetReadAccess(f.data, f.stranger, { throughPage: true })).toMatchObject({ allowed: true, role: 'signed_in' });
@@ -120,7 +121,7 @@ describe('datasetWriteAccess', () => {
     const f = await fixture();
     await updateSharingFor(f.owner, f.data.id, { shares: [{ email: f.stranger.email!, role: 'editor' }, { email: f.member.email!, role: 'viewer' }] });
     for (const retired of [{ version: 2, allow: [{ actions: ['read', 'insert'], from: { user: '*' } }] }, { version: 1, enforcement: 'enabled', tables: [] }]) {
-      await sql('UPDATE artifacts SET dataset_policy=$2 WHERE id=$1', [f.data.id, JSON.stringify(retired)]);
+      await setArtifact(await getDb(), f.data.id, { dataset_policy: JSON.stringify(retired) });
       const data = await head(f.data.id);
       const loud = new RegExp(`^The stored dataset policy is version ${retired.version}: only version 3 is read\\.`);
       await expect(datasetReadAccess(data, f.member)).rejects.toThrow(loud);
@@ -159,7 +160,7 @@ describe('assertWriteCommit', () => {
     await expect(commit(f.data, f.stranger, editor)).rejects.toThrow('Mutation permission changed');
 
     const owner = await datasetWriteAccess(await head(f.data.id), f.owner);
-    await harness.db().then((db) => db.query('UPDATE artifacts SET policy_revision=policy_revision+1 WHERE id=$1', [f.data.id]));
+    await setArtifact(await harness.db(), f.data.id, { policy_revision: { sql: 'policy_revision+1' } });
     await expect(commit(f.data, f.owner, owner)).rejects.toThrow('Mutation permission changed');
   });
 });

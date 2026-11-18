@@ -12,6 +12,7 @@ import {createAppServer} from '../app';
 import {fixture,sql,stored} from '@/__tests__/page-sql-door-fixture';
 import {ACTOR_HEADER} from '@artifactbin/contracts';
 import {DOMAIN_HOME_CSP} from '@/lib/user-pages';
+import { setArtifact } from '@/__tests__/rows';
 useAppHarness();
 const app=()=>createAppServer({indexHtml:async()=>'<html><head><link rel="stylesheet" href="/shell.css"></head><body>APP</body></html>'});
 const base='https://alice.u.example.test';
@@ -43,7 +44,7 @@ it('serves the earliest page titled index (any case) in place at the root, and t
  const other=await page(user.token,'public',{title:'Index of things'});
  let res=await server.request(`${base}/`);expect(res.status).toBe(200);expect(res.headers.get('content-security-policy')).toBe(DOMAIN_HOME_CSP);expect(await res.text()).toContain(other.id);
  await page(user.token,'public',{title:'index',html:'<h1>Later index</h1>'});const first=await page(user.token,'public',{title:'INDEX.',html:'<h1>First index</h1>'});
- await db.query("UPDATE artifacts SET created_at=now()-interval '1 day' WHERE id=$1",[first.id]);
+ await setArtifact(db, first.id, { created_at: { sql: "now()-interval '1 day'" } });
  res=await server.request(`${base}/`,{headers:{authorization:`Bearer ${user.token}`,cookie:'session=secret'}});expect(res.status).toBe(200);
  const html=await res.text();expect(html).toContain('First index');expect(html).not.toContain('Later index');expect(html).toContain('https://app.example.test/@alice/');
  expect(res.headers.get('content-security-policy')).toContain('sandbox allow-scripts');expect(res.headers.has('set-cookie')).toBe(false);expect(res.headers.has('x-robots-tag')).toBe(false);
@@ -54,7 +55,7 @@ it('serves the earliest page titled index (any case) in place at the root, and t
  await trashRow(first.id);expect(await (await server.request(`${base}/`)).text()).toContain('Later index');
  // The earliest decides: a private or unlisted earliest "index" leaves the listing, never a later public one.
  for(const visibility of ['private','unlisted']){
-  await db.query("UPDATE artifacts SET deleted_at=NULL,visibility=$2 WHERE id=$1",[first.id,visibility]);
+  await setArtifact(db, first.id, { deleted_at: null, visibility });
   res=await server.request(`${base}/`);expect(res.headers.get('content-security-policy'),visibility).toBe(DOMAIN_HOME_CSP);const listing=await res.text();expect(listing).not.toContain('Later index');expect(listing).not.toContain('First index');
  }
 });
@@ -62,7 +63,7 @@ it('serves a group host its own index page',async()=>{
  const user=await owner(),post=await page(user.token,'public',{title:'Index',html:'<h1>Team index</h1>'}),db=await getDb();
  await db.query("INSERT INTO groups(id,handle,name,description,created_by) VALUES('grp_idx','team_idx','Team','',$1)",[user.id]);
  const server=app();expect(await (await server.request(`${base}/`)).text()).toContain('Team index');
- await db.query("UPDATE artifacts SET group_id='grp_idx' WHERE id=$1",[post.id]);
+ await setArtifact(db, post.id, { group_id: 'grp_idx' });
  expect(await (await server.request('https://team-idx.u.example.test/')).text()).toContain('Team index');
  expect(await (await server.request(`${base}/`)).text()).not.toContain('Team index');
 });
@@ -70,13 +71,13 @@ it('redirects directly to the live true owner after rename, reclaim and transfer
  const user=await owner(),post=await page(user.token),server=app();
  await setUsername(user.id,'renamed');await owner('alice');
  let res=await server.request(`${base}/${post.id}-old?q=1`);expect(res.status).toBe(301);expect(res.headers.get('location')).toBe(`https://renamed.u.example.test/${post.id}-hello-world?q=1`);
- const other=await owner('other');await (await getDb()).query('UPDATE artifacts SET user_id=$1 WHERE id=$2',[other.id,post.id]);
+ const other=await owner('other');await setArtifact((await getDb()), post.id, { user_id: other.id });
  res=await server.request(`https://renamed.u.example.test/${post.id}`);expect(res.status).toBe(301);expect(res.headers.get('location')).toBe(`https://other.u.example.test/${post.id}-hello-world`);
 });
 it('serves groups by actual ownership and refuses deleted groups or creator hosts',async()=>{
  const user=await owner(),post=await page(user.token,'unlisted'),db=await getDb();
  await db.query("INSERT INTO groups(id,handle,name,description,created_by) VALUES('grp_host','team_one','Team','',$1)",[user.id]);
- await db.query("UPDATE artifacts SET group_id='grp_host' WHERE id=$1",[post.id]);
+ await setArtifact(db, post.id, { group_id: 'grp_host' });
  const server=app();expect((await server.request(`https://team-one.u.example.test/${post.id}`)).status).toBe(200);
  expect((await server.request(`${base}/${post.id}`)).status).toBe(301);
  await db.query("UPDATE groups SET deleted_at=now() WHERE id='grp_host'");expect((await server.request(`https://team-one.u.example.test/${post.id}`)).status).toBe(404);
@@ -177,7 +178,7 @@ it('owner-host SQL is the canonical anonymous read, always read-only and credent
  const canonical=await sql(f.page,null,'select name from staff order by name');
  expect(canonical.body.rows).toEqual([{name:'ada'}]);
  for(const visibility of ['public','unlisted']){
-  await (await getDb()).query('UPDATE artifacts SET visibility=$2 WHERE id=$1',[f.page,visibility]);
+  await setArtifact((await getDb()), f.page, { visibility });
   const response=await read();expect(response.status,await response.clone().text()).toBe(200);expect(await response.json()).toEqual(canonical.body);
   expect(response.headers.get('access-control-allow-origin')).toBe('*');expect(response.headers.has('access-control-allow-credentials')).toBe(false);expect(response.headers.has('set-cookie')).toBe(false);
   const html=await server.request(`${base}/${f.page}`);expect(html.headers.get('content-security-policy')).toContain(`${base}/api/artifacts/${f.page}/sql`);
@@ -190,10 +191,10 @@ it('owner-host SQL is the canonical anonymous read, always read-only and credent
  const db=await getDb();
  for(const change of ["visibility='private'","deleted_at=now()",'user_id=NULL']){
   await db.query(`UPDATE artifacts SET ${change} WHERE id=$1`,[f.page]);expect((await read()).status).toBe(404);
-  await db.query("UPDATE artifacts SET visibility='unlisted',deleted_at=NULL,user_id=$2 WHERE id=$1",[f.page,f.owner.userId]);
+  await setArtifact(db, f.page, { visibility: 'unlisted', deleted_at: null, user_id: f.owner.userId });
  }
  await setVisibility(f.staff, 'private');expect((await read()).status).toBeGreaterThanOrEqual(400);
- await db.query("UPDATE artifacts SET visibility='unlisted',dataset_policy=$2::jsonb,policy_revision=policy_revision+1 WHERE id=$1",[f.staff,JSON.stringify({version:3,tables:[]})]);expect((await read()).status).toBeGreaterThanOrEqual(400);
+ await setArtifact(db, f.staff, { visibility: 'unlisted', dataset_policy: JSON.stringify({version:3,tables:[]}), policy_revision: { sql: 'policy_revision+1' } });expect((await read()).status).toBeGreaterThanOrEqual(400);
 });
 
 it('owner-host SQL ignores valid capture authority, while canonical opaque capture reads keep working',async()=>{
@@ -213,9 +214,9 @@ it('owner-host SQL withholds results when page, owner identity or dataset access
  for(const change of [
   ()=>setVisibility(f.page, 'private'),
   ()=>trashRow(f.page),
-  ()=>db.query('UPDATE artifacts SET user_id=$2 WHERE id=$1',[f.page,f.other.userId]),
+  ()=>setArtifact(db,f.page,{user_id:f.other.userId}),
   ()=>setUsername(f.owner.userId!,'renamed'),
-  ()=>db.query('UPDATE artifacts SET version=version+1 WHERE id=$1',[f.page]),
+  ()=>setArtifact(db,f.page,{version:{sql:'version+1'}}),
   ()=>storePolicy(f.staff, {version:3,tables:[]}),
  ]){
   let changed=false;
@@ -224,20 +225,20 @@ it('owner-host SQL withholds results when page, owner identity or dataset access
    const res=await server.request(`${base}/api/artifacts/${f.page}/sql`,{method:'POST',headers:{origin:'null','content-type':'text/plain'},body:JSON.stringify({sql:'select name from staff',revision:'1'})});
    expect(changed).toBe(true);expect(res.status).toBeGreaterThanOrEqual(400);expect(await res.text()).not.toContain('ada');
   }finally{spy.mockRestore();}
-  await db.query("UPDATE artifacts SET visibility='unlisted',deleted_at=NULL,user_id=$2,version=1 WHERE id=$1",[f.page,f.owner.userId]);await setUsername(f.owner.userId!,'alice');
+  await setArtifact(db, f.page, { visibility: 'unlisted', deleted_at: null, user_id: f.owner.userId, version: 1 });await setUsername(f.owner.userId!,'alice');
  }
 });
 
 it('owner-host SQL follows current group ownership and hides dead or reclaimed identities',async()=>{
  const f=await fixture();await setUsername(f.owner.userId!,'alice');const server=app(),db=await getDb();
  await db.query("INSERT INTO groups(id,handle,name,description,created_by) VALUES('grp_sql','sql_team','Team','',$1)",[f.owner.userId]);
- await db.query("UPDATE artifacts SET group_id='grp_sql' WHERE id=$1",[f.page]);
+ await setArtifact(db, f.page, { group_id: 'grp_sql' });
  const read=(host:string,method='POST')=>server.request(`${host}/api/artifacts/${f.page}/sql`,{method,...(method==='POST'?{headers:{origin:'null','content-type':'text/plain'},body:JSON.stringify({sql:'select name from staff',revision:'1'})}:{})});
  expect((await read(base)).status).toBe(404);
  const groupHost='https://sql-team.u.example.test';expect((await read(groupHost)).status).toBe(200);
  for(const method of ['GET','HEAD','PUT','OPTIONS'])expect((await read(groupHost,method)).status).toBe(404);
  await db.query("UPDATE groups SET deleted_at=now() WHERE id='grp_sql'");expect((await read(groupHost)).status).toBe(404);
- await db.query('UPDATE artifacts SET group_id=NULL WHERE id=$1',[f.page]);
+ await setArtifact(db, f.page, { group_id: null });
  await setUsername(f.owner.userId!,'renamed');await owner('alice');expect((await read(base)).status).toBe(404);
  expect((await read('https://renamed.u.example.test')).status).toBe(200);
 });

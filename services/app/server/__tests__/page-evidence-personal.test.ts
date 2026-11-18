@@ -9,6 +9,7 @@ import {createAppHost} from '@/server/host';
 import {createGroup,removeGroupMember} from '@/lib/groups';
 import {getDb} from '@/lib/platform';
 import {admitGroupMember,mintAccountToken,useAppHarness} from '../../__tests__/harness';
+import { dropShares, seedShares } from '@/__tests__/rows';
 useAppHarness();
 it('buffers human evidence and rechecks current app policy and identity parent without repeating row SQL',async()=>{
  const owner=await mintAccountToken('mxmx_test_evidence_owner'),viewer=await mintAccountToken('mxmx_test_evidence_reader');
@@ -19,7 +20,7 @@ it('buffers human evidence and rechecks current app policy and identity parent w
  const policy={version:3,tables:[{table:{schema:'public',name:'rows'},select_permissions:[{role:'viewer',permission:{columns:['name','team'],filter:{team:{_eq:'red'}}}}]}]};
  await storePolicy(dataset.id, policy);
  const page=await create({title:'Evidence',html:`<html><head><link rel="af-dataset" data-af-name="metrics" href="ref:${dataset.id}" data-af-mode="pinned" data-af-revision="1"></head><body>Evidence</body></html>`,visibility:'private',destination:{type:'group',id:group.id}});
- for(const id of [page.id,dataset.id])await db.query("INSERT INTO artifact_shares(artifact_id,user_id,email,role) VALUES($1,$2,$3,'viewer')",[id,null,viewer.email]);
+ for(const id of [page.id,dataset.id])await seedShares(db, { artifact_id: id, user_id: null, email: viewer.email, role: 'viewer' });
  const service=delegatedService('reader','https://reader.example','synthetic-secret');
  let afterBuffer:(()=>Promise<unknown>)|undefined;const operations:unknown[]=[];
  const auth=createAuthHost({env:{IDENTITY__SERVICE_AUDIENCES:audiencesOf(service)},cookieSecret:'synthetic-cookie',tokens:noTokens,sessions:{resolve:async()=>null},identityDb:db,upstream:async(request,actor)=>{
@@ -44,17 +45,17 @@ it('buffers human evidence and rechecks current app policy and identity parent w
  const direct=await auth.request(CANONICAL_PAGE_EVIDENCE_PATH,{method:'POST',body:JSON.stringify({operation})});expect(direct.status).toBe(404);
  // Only page readership remains: neither the arg_ grant nor the page link supplies dataset viewer authority.
  await revokeShares(dataset.id);expect((await call()).status).toBeGreaterThanOrEqual(400);
- await db.query("INSERT INTO artifact_shares(artifact_id,user_id,email,role) VALUES($1,$2,$3,'viewer')",[dataset.id,viewer.userId,viewer.email]);
+ await seedShares(db, { artifact_id: dataset.id, user_id: viewer.userId, email: viewer.email, role: 'viewer' });
  afterBuffer=()=>storePolicy(dataset.id, {version:3,tables:[]});
  const revoked=await call();expect(revoked.status).toBeGreaterThanOrEqual(400);expect(await revoked.text()).not.toContain('red');
  afterBuffer=undefined;await storePolicy(dataset.id, policy);
  afterBuffer=async()=>{await revokeShares(page.id);};expect((await call()).status).toBeGreaterThanOrEqual(400);
- afterBuffer=undefined;await db.query("INSERT INTO artifact_shares(artifact_id,user_id,email,role) VALUES($1,$2,$3,'viewer')",[page.id,viewer.userId,viewer.email]);
+ afterBuffer=undefined;await seedShares(db, { artifact_id: page.id, user_id: viewer.userId, email: viewer.email, role: 'viewer' });
  const aborted=new AbortController();afterBuffer=async()=>{aborted.abort();await new Promise(()=>{});};
  const cancelled=await auth.request(PAGE_EVIDENCE_PATH,{method:'POST',signal:aborted.signal,headers:{[SERVICE_AUTH_HEADER]:'synthetic-secret'},body:JSON.stringify({grant,operation})});
  expect(cancelled.status).toBeGreaterThanOrEqual(400);expect(await cancelled.text()).not.toContain('red');afterBuffer=undefined;
  // Membership is re-decided during the metadata-only second admission too.
- await db.query('DELETE FROM artifact_shares WHERE artifact_id=ANY($1::text[])',[[page.id,dataset.id]]);
+ await dropShares(db, [page.id, dataset.id]);
  await admitGroupMember(owner.userId!,group.id,viewer.userId!,'member');
  afterBuffer=async()=>{await removeGroupMember(owner.userId!,group.id,viewer.userId!);};
  expect((await call()).status).toBeGreaterThanOrEqual(400);

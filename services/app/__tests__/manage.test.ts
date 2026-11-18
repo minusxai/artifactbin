@@ -19,19 +19,20 @@ import { getArtifactById,listVersionsFor,revertArtifactFor } from '@/lib/artifac
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { identityForUser, createUser, revokeUserToken } from '@/lib/accounts';
 import { listAccountTokenRows } from '@/lib/workspace';
+import { setArtifact } from '@/__tests__/rows';
 
 const harness = useAppHarness();
 
 
 async function create(token: string, html: string, title = 'x') {
-  const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: { title, html: nativeHtml(html) } }));
+  const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token, json: { title, html: nativeHtml(html) } }));
   expect(res.status).toBe(201);
   return res.json() as Promise<{ id: string; url: string }>;
 }
 
 async function put(token: string, id: string, html: string) {
   const res = await putArtifact(
-    await observedRequest(`/api/artifacts/${id}`, { method: 'PUT', token: token, json: { html: nativeHtml(html) } }),
+    await observedRequest(`/api/artifacts/${id}`, { method: 'PUT', token, json: { html: nativeHtml(html) } }),
     params({ id }),
   );
   expect(res.status).toBe(200);
@@ -98,7 +99,7 @@ describe('artifact deletion', () => {
      * Ageing the stamp past any retention there has ever been changes nothing.
      */
     expect((await db.query('SELECT 1 FROM artifact_versions WHERE artifact_id = $1', [art.id])).rows).toHaveLength(1);
-    await db.query(`UPDATE artifacts SET deleted_at = now() - interval '400 days' WHERE id = $1`, [art.id]);
+    await setArtifact(db, art.id, { deleted_at: { sql: "now() - interval '400 days'" } });
     expect((await db.query('SELECT 1 FROM artifact_versions WHERE artifact_id = $1', [art.id])).rows).toHaveLength(1);
     expect((await db.query('SELECT 1 FROM artifacts WHERE id = $1', [art.id])).rows).toHaveLength(1);
   });

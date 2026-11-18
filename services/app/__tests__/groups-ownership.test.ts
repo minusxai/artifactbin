@@ -16,6 +16,7 @@ import {accountWorkspaceCoreFor, trashArtifactFor, restoreArtifactFor} from '@/l
 import {subscribeChannel} from '@/lib/publish';
 import {artifactChannel} from '@artifactbin/contracts';
 import {POST as fork} from '@/app/api/artifacts/[id]/fork/route';
+import { seedShares, setArtifact } from '@/__tests__/rows';
 useAppHarness();
 afterEach(()=>resetConfigOverrides());
 async function fixture(){
@@ -66,7 +67,7 @@ it('transfers ownership, revokes creator and token fallback, and reflects live m
  const copied=await fork(request(`/api/artifacts/${id}/fork`,{method:'POST',token:f.a.token,json:{}}),{params:Promise.resolve({id})});expect(copied.status).toBe(404);
  expect(await effectiveRole(row,identityForUser(f.editor.id, f.b.id))).toBe('owner');
  expect(await effectiveRole(row,identityForUser(f.viewer.id, f.c.id))).toBe('viewer');
- await f.db.query("INSERT INTO artifact_shares(artifact_id,email,user_id,role) VALUES($1,$2,$3,'editor')",[id,f.viewer.email,f.viewer.id]);
+ await seedShares(f.db, { artifact_id: id, email: f.viewer.email, user_id: f.viewer.id, role: 'editor' });
  expect(await effectiveRole(row,identityForUser(f.viewer.id, f.c.id))).toBe('editor');
  await revokeShares(id);
  expect((await accountWorkspaceCoreFor(f.viewer.id,null,'grp_ownership'))?.artifacts.map(r=>r.id)).toContain(id);
@@ -94,7 +95,7 @@ it('explicit creation destination beats preferences and group viewers cannot wri
  const made=await create(request('/api/artifacts',{method:'POST',token:f.b.token,json:{dataset:[{n:1}],destination:{type:'group',id:'grp_ownership'}}}));expect(made.status,await made.clone().text()).toBe(201);
  const row=(await getArtifactById((await made.json()).id))!;expect(row.group_id).toBe('grp_ownership');
  expect(await canWriteDataset(row,identityForUser(f.viewer.id, f.c.id))).toBe('dataset_read_only');
- await f.db.query("UPDATE artifacts SET dataset_policy=$2::jsonb WHERE id=$1",[row.id,JSON.stringify({version:3,tables:[{table:{schema:'public',name:'rows'},select_permissions:['viewer','signed_in','anonymous'].map(role=>({role,permission:{columns:'*',filter:{},allow_aggregations:true}}))}]})]);
+ await setArtifact(f.db, row.id, { dataset_policy: JSON.stringify({version:3,tables:[{table:{schema:'public',name:'rows'},select_permissions:['viewer','signed_in','anonymous'].map(role=>({role,permission:{columns:'*',filter:{},allow_aggregations:true}}))}]}) });
  const writable=(await getArtifactById(row.id))!;
  expect(await canWriteDataset(writable,identityForUser(f.editor.id, f.b.id))).toBeNull();
  expect(await canWriteDataset(writable,identityForUser(f.viewer.id, f.c.id))).toBe('dataset_read_only');
@@ -185,7 +186,7 @@ it('uses nonblocking transfer locks and rolls back a busy ownership change; the 
 it('refuses inbound dependency representations without materializing unrelated artifact content',async()=>{
  const f=await fixture(),id=await f.make({format:'folder',title:'Transfer target'});
  const foreign=await f.make({html:nativeHtml('<p>Unrelated</p>')});
- await f.db.query("UPDATE artifacts SET meta='{\"refs\":{}}' WHERE id=$1",[foreign]);
+ await setArtifact(f.db, foreign, { meta: '{"refs":{}}' });
  const original=f.db.transaction.bind(f.db),queries:string[]=[];
  const spy=vi.spyOn(f.db,'transaction').mockImplementation(fn=>original(tx=>fn({query:async(sql,values)=>{queries.push(sql);return tx.query(sql,values);}})));
  try{expect((await f.move(id,{type:'group',id:'grp_ownership'})).status).toBe(200);}finally{spy.mockRestore();}
@@ -200,20 +201,20 @@ it('refuses inbound dependency representations without materializing unrelated a
   {dataset_policy:{nested:`ref:${id}`}},
  ];
  for(const fields of cases){
-  await f.db.query('UPDATE artifacts SET source=$2,document=$3::jsonb,meta=$4::jsonb,dataset_policy=$5::jsonb WHERE id=$1',[foreign,fields.source??null,null,JSON.stringify(fields.meta??{}),fields.dataset_policy?JSON.stringify(fields.dataset_policy):null]);
+  await setArtifact(f.db, foreign, { source: fields.source??null, document: null, meta: JSON.stringify(fields.meta??{}), dataset_policy: fields.dataset_policy?JSON.stringify(fields.dataset_policy):null });
   const response=await f.move(id,{type:'group',id:'grp_ownership'});expect(response.status,JSON.stringify(fields)).toBe(409);
   expect((await getArtifactById(id))?.user_id).toBe(f.creator.id);
  }
  // Greedy legacy tokenizer takes six through twelve characters, not a short prefix.
- await f.db.query("UPDATE artifacts SET source=$2,document=NULL,meta='{}',dataset_policy=NULL WHERE id=$1",[foreign,`ref:${id}X`]);
+ await setArtifact(f.db, foreign, { source: `ref:${id}X`, document: null, meta: '{}', dataset_policy: null });
  expect((await f.move(id,{type:'group',id:'grp_ownership'})).status).toBe(200);
 });
 
 it('preserves the twelve-character truncation of legacy ref tokens',async()=>{
  const f=await fixture(),generated=await f.make({format:'folder',title:'Twelve character target'}),id='Abcdef123456';
- await f.db.query('UPDATE artifacts SET id=$2 WHERE id=$1',[generated,id]);
+ await setArtifact(f.db, generated, { id });
  const foreign=await f.make({html:nativeHtml('<p>Legacy reference</p>')});
- await f.db.query('UPDATE artifacts SET source=$2,document=NULL WHERE id=$1',[foreign,`ref:${id}Z`]);
+ await setArtifact(f.db, foreign, { source: `ref:${id}Z`, document: null });
  expect((await f.move(id,{type:'group',id:'grp_ownership'})).status).toBe(409);
  expect((await getArtifactById(id))?.user_id).toBe(f.creator.id);
 });

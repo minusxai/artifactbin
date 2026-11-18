@@ -9,6 +9,7 @@ import { request, useAppHarness } from '@/__tests__/harness';
 import { DELETE as unlike, GET as likeState, POST as like } from '@/app/api/my/artifacts/[id]/like/route';
 import { DELETE as unfollow, GET as followState, POST as follow } from '@/app/api/users/[id]/follow/route';
 import { createUser } from '@/lib/accounts';
+import { seedArtifacts } from '@/__tests__/rows';
 
 const harness = useAppHarness();
 
@@ -20,7 +21,7 @@ describe('POST/DELETE/GET /api/my/artifacts/[id]/like', () => {
     const owner = await createUser({ email: 'mxmx_test_rel_owner@example.com' });
     const fan = await createUser({ email: 'mxmx_test_rel_fan@example.com' });
     const db = await harness.db();
-    await db.query(`INSERT INTO artifacts (id, token_id, user_id, visibility) VALUES ('art0pu', 'tok_o', $1, 'public'), ('art0pr', 'tok_o', $1, 'private')`, [owner.id]);
+    await seedArtifacts(db, { id: 'art0pu', token_id: 'tok_o', user_id: owner.id, visibility: 'public' }, { id: 'art0pr', token_id: 'tok_o', user_id: owner.id, visibility: 'private' });
 
     expect((await like(request('/api/my/artifacts/art0pu/like', { method: 'POST', origin: 'same' }), ctx('art0pu'))).status).toBe(401);
 

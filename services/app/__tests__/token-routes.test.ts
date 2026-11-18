@@ -24,6 +24,7 @@ import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { GET as listArtifacts } from '@/app/api/artifacts/route';
 import { cookieValue, request } from './harness';
 import { useAppHarness } from '@/__tests__/harness';
+import { setArtifact } from '@/__tests__/rows';
 
 const harness = useAppHarness();
 
@@ -49,11 +50,11 @@ describe('token routes served by the app', () => {
     const document = await createArtifact(request('/api/artifacts', { method: 'POST', token: String(first.token), json: { html:nativeHtml('<p id="intro">Hello</p>') } }));
     expect(document.status).toBe(201);
     const { id } = await document.json();
-    await (await harness.db()).query('UPDATE artifacts SET user_id=$2, deleted_at=now() WHERE id=$1', [id, recipient.id]);
+    await setArtifact((await harness.db()), id, { user_id: recipient.id, deleted_at: { sql: 'now()' } });
     expect((await json(await issue())).has_created_document).toBe(true);
     const received = await mintInternal(request('/api/internal/tokens', { method: 'POST', actor: { ...actor, userId: recipient.id, email: recipient.email } }));
     expect((await json(received)).has_created_document).toBe(false);
-    await (await harness.db()).query('UPDATE artifacts SET user_id=NULL, group_id=$2 WHERE id=$1', [id, 'test_group']);
+    await setArtifact((await harness.db()), id, { user_id: null, group_id: 'test_group' });
     expect((await json(await issue())).has_created_document).toBe(true);
   });
   it('POST /api/tokens mints with the admin secret and 404s without it', async () => {

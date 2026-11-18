@@ -13,6 +13,7 @@ import {getDb} from '@/lib/platform';
 import {canReadArtifact,getArtifactById} from '@/lib/artifacts';
 import {createArtifactFromBody} from '@/lib/publish';
 import {linkedSql,errorCode} from './linked-datasets';
+import { seedShares, setArtifact } from '@/__tests__/rows';
 
 useAppHarness();
 
@@ -73,8 +74,8 @@ it('decides every policy shape × caller × read door as the stored rules say',a
   const created=await createArtifactFromBody({dataset:[{n:1}],access:'readwrite',visibility:shape.visibility},{...owner.actor,tokenId:owner.tokenId},'http://localhost:3000');
   expect(created.status,await created.clone().text()).toBe(201);
   const id=(await created.json()).id as string;
-  await db.query("INSERT INTO artifact_shares(artifact_id,user_id,email,role) VALUES($1,$2,$3,'editor'),($1,$4,$5,'viewer')",[id,editor.id,editor.email,viewer.id,viewer.email]);
-  await db.query('UPDATE artifacts SET dataset_policy=$2::jsonb WHERE id=$1',[id,JSON.stringify(shape.policy)]);
+  await seedShares(db, { artifact_id: id, user_id: editor.id, email: editor.email, role: 'editor' }, { artifact_id: id, user_id: viewer.id, email: viewer.email, role: 'viewer' });
+  await setArtifact(db, id, { dataset_policy: JSON.stringify(shape.policy) });
   const binding={kind:'dataset' as const,name:'data',datasetId:id,mode:'live' as const};
   for(const caller of CALLERS)for(const door of DOORS){
    const actor=actors[caller],key=`${shape.name}|${caller}|${door}`;

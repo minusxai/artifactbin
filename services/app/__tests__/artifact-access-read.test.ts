@@ -4,12 +4,13 @@ import { createUser } from '@/lib/accounts';
 import { ANONYMOUS_ACTOR } from '@/lib/accounts';
 import {canReadArtifact,getArtifactAccessById,getArtifactById} from '@/lib/artifacts';
 import {getDb} from '@/lib/platform';
+import { seedArtifacts, setArtifact } from '@/__tests__/rows';
 const harness=useAppHarness();
 /** THE ACCESS ROW — only the columns a read decision consults, so a hot path (presence, a stream's re-authorization) never ships a document. */
 it('reads the access columns of the same live row, and decides read access exactly as the whole row does',async()=>{
  const owner=await createUser({email:'mxmx_test_access_read@example.com'}),stranger=await createUser({email:'mxmx_test_access_read_other@example.com'});
  const db=await harness.db();
- await db.query("INSERT INTO artifacts(id,token_id,user_id,format,visibility,version,link_role) VALUES ('accpub','tok_acc',$1,'html','public',3,'viewer'),('accpriv','tok_acc',$1,'html','private',1,NULL),('accunl','tok_acc',$1,'html','unlisted',2,'editor')",[owner.id]);
+ await seedArtifacts(db, { id: 'accpub', token_id: 'tok_acc', user_id: owner.id, format: 'html', visibility: 'public', version: 3, link_role: 'viewer' }, { id: 'accpriv', token_id: 'tok_acc', user_id: owner.id, format: 'html', visibility: 'private', version: 1, link_role: null }, { id: 'accunl', token_id: 'tok_acc', user_id: owner.id, format: 'html', visibility: 'unlisted', version: 2, link_role: 'editor' });
  const actors=[ANONYMOUS_ACTOR,{credential:'session' as const,userId:owner.id,tokenId:null,email:owner.email,emailVerified:true},{credential:'session' as const,userId:stranger.id,tokenId:null,email:stranger.email,emailVerified:true}];
  for(const id of ['accpub','accpriv','accunl']){
   const access=await getArtifactAccessById(id),whole=await getArtifactById(id);
@@ -18,7 +19,7 @@ it('reads the access columns of the same live row, and decides read access exact
   for(const key of Object.keys(access!) as (keyof typeof access & string)[])expect(access![key as keyof typeof access]).toEqual(whole![key as keyof typeof whole]);
   for(const actor of actors)expect(await canReadArtifact(access!,actor as never)).toBe(await canReadArtifact(whole!,actor as never));
  }
- await (await getDb()).query("UPDATE artifacts SET deleted_at=now() WHERE id='accpub'");
+ await setArtifact((await getDb()), 'accpub', { deleted_at: { sql: 'now()' } });
  expect(await getArtifactAccessById('accpub')).toBeNull();
  expect(await getArtifactAccessById('missing')).toBeNull();
 });

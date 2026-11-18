@@ -23,6 +23,7 @@ import { getDb, PostgresDb, SCHEMA_STATEMENTS, type Db } from '@/lib/platform';
 import { nativeHtml } from './native-html-fixture';
 import { useAppHarness } from './harness';
 import { sseStream } from './sse';
+import { seedArtifacts, seedShares } from '@/__tests__/rows';
 
 useAppHarness();
 
@@ -119,7 +120,7 @@ describe('two instances over the harness database', () => {
   it('serialize concurrent updates from both into one order that both streams deliver whole', async () => {
     const [alice, bob] = await Promise.all(['alice', 'bob'].map((name) => createUser({ email: `mxmx_test_region_two_${name}@example.com` })));
     const row = await createHistoricalPage(null, alice!.id, { format: 'html', source: nativeHtml(BODY), meta: {}, visibility: 'private' });
-    await (await getDb()).query("INSERT INTO artifact_shares (artifact_id, email, role) VALUES ($1, $2, 'editor')", [row.id, bob!.email]);
+    await seedShares((await getDb()), { artifact_id: row.id, email: bob!.email, role: 'editor' });
     await concurrentTyping({
       pageId: row.id, regionId: editableRegions(row.source!)[0]!.id,
       alice: identityForUser(alice!.id, null), bob: identityForUser(bob!.id, null), dbs: [getDb, getDb],
@@ -152,8 +153,8 @@ describe.skipIf(!postgres)('two connection pools over one PostgreSQL database', 
     const [first] = pools;
     const page = canonicalizeHtmlPage(nativeHtml(BODY));
     await first!.query("INSERT INTO users (id, email, kind) VALUES ('alice', 'mxmx_test_pg_alice@example.com', 'account'), ('bob', 'mxmx_test_pg_bob@example.com', 'account')");
-    await first!.query("INSERT INTO artifacts (id, token_id, user_id, format, visibility, version, source, meta) VALUES ('pgpage', 'tok_pg', 'alice', 'html', 'private', 1, $1, $2)", [page.html, JSON.stringify({ htmlIdentity: page.ledger })]);
-    await first!.query("INSERT INTO artifact_shares (artifact_id, email, role) VALUES ('pgpage', 'mxmx_test_pg_bob@example.com', 'editor')");
+    await seedArtifacts(first!, { id: 'pgpage', token_id: 'tok_pg', user_id: 'alice', format: 'html', visibility: 'private', version: 1, source: page.html, meta: JSON.stringify({ htmlIdentity: page.ledger }) });
+    await seedShares(first!, { artifact_id: 'pgpage', email: 'mxmx_test_pg_bob@example.com', role: 'editor' });
     await concurrentTyping({
       pageId: 'pgpage', regionId: editableRegions(page.html)[0]!.id,
       alice: identityForUser('alice', null), bob: identityForUser('bob', null),

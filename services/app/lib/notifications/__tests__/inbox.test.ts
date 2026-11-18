@@ -13,6 +13,7 @@ import { link } from '@/lib/social';
 import {changeMembership,getArtifactById,invitePeople} from '@/lib/artifacts';
 import {recordEvent} from '@/lib/platform';
 import {membershipInbox,recordNotification,updateMembershipInbox} from '@/lib/notifications';
+import { seedArtifacts, seedShares, setArtifact } from '@/__tests__/rows';
 
 useAppHarness();
 type Db=Awaited<ReturnType<typeof getDb>>;
@@ -22,7 +23,7 @@ beforeEach(async()=>{
  db=await getDb();
  await db.query(`INSERT INTO users(id,email,username,kind) VALUES('alice','alice@example.test','alice','account'),('bob','bob@example.test','bob','account'),
   ('carol','carol@example.test','carol','account'),('guest','guest@example.test',NULL,'guest')`);
- await db.query("INSERT INTO artifacts(id,token_id,user_id,format,visibility,link_role) VALUES('doc','t','alice','html','public','commenter'),('secret','t','alice','html','private',NULL)");
+ await seedArtifacts(db, { id: 'doc', token_id: 't', user_id: 'alice', format: 'html', visibility: 'public', link_role: 'commenter' }, { id: 'secret', token_id: 't', user_id: 'alice', format: 'html', visibility: 'private', link_role: null });
 });
 const notify=(n:Partial<Parameters<typeof recordNotification>[1]>&{id:string})=>db.transaction(tx=>recordNotification(tx,{artifactId:'doc',recipientId:'bob',senderId:'alice',kind:'like',...n}));
 const ids=async(actor=bob)=>(await membershipInbox(actor)).notifications.map(n=>n.id);
@@ -40,9 +41,9 @@ it('shows only what the recipient may still read: live artifacts, readable ones,
  await notify({id:'followed',artifactId:null,kind:'follow'});
  await notify({id:'orphan-like',artifactId:null,kind:'like'});
  expect((await ids()).sort()).toEqual(['followed','on-doc']);
- await db.query("INSERT INTO artifact_shares(artifact_id,user_id,email,role) VALUES('secret','bob','bob@example.test','viewer')");
+ await seedShares(db, { artifact_id: 'secret', user_id: 'bob', email: 'bob@example.test', role: 'viewer' });
  expect((await ids()).sort()).toEqual(['followed','on-doc','on-secret']);
- await db.query("UPDATE artifacts SET deleted_at=now() WHERE id='doc'");
+ await setArtifact(db, 'doc', { deleted_at: { sql: 'now()' } });
  expect((await ids()).sort()).toEqual(['followed','on-secret']);
 });
 
@@ -50,9 +51,9 @@ it('shows a conversation only while the recipient may comment and its thread sti
  await db.query("INSERT INTO annotations(id,artifact_id,body,author_kind,author_user_id) VALUES('ann_1','doc','Hi','human','alice')");
  await notify({id:'thread:ann_1:bob',kind:'reply',source:'comment:ann_1'});
  expect(await ids()).toEqual(['thread:ann_1:bob']);
- await db.query("UPDATE artifacts SET link_role='viewer' WHERE id='doc'");
+ await setArtifact(db, 'doc', { link_role: 'viewer' });
  expect(await ids()).toEqual([]);
- await db.query("UPDATE artifacts SET link_role='commenter' WHERE id='doc'");
+ await setArtifact(db, 'doc', { link_role: 'commenter' });
  await db.query("UPDATE annotations SET deleted_at=now() WHERE id='ann_1'");
  expect(await ids()).toEqual([]);
 });
@@ -78,7 +79,7 @@ it('acknowledges a rendered revision without hiding a newer one, and read-all cl
 it('blocking hides the other person in both directions, dismisses invitations either initiated for the other, and unblocking restores',async()=>{
  await notify({id:'from-alice'});
  await db.transaction(tx=>recordEvent(tx,{kind:'user',id:'bob'},'join_requested',{kind:'artifact',id:'doc'},{user_id:'bob',revision:1}));
- await db.query("INSERT INTO artifacts(id,token_id,user_id,format,visibility) VALUES('carols','t','carol','html','public')");
+ await seedArtifacts(db, { id: 'carols', token_id: 't', user_id: 'carol', format: 'html', visibility: 'public' });
  await db.query(`INSERT INTO relations(subject_kind,subject_id,verb,object_kind,object_id,status,direction,initiated_by) VALUES
   ('user','bob','join','artifact','doc','pending','request','bob'),('user','bob','join','artifact','carols','pending','invitation','alice')`);
  const blocked=await updateMembershipInbox(bob,{block:'alice'});

@@ -17,6 +17,7 @@ import {
   storeDatasetRows, storeFileContent, storeImageContent, storePdfContent, storedMediaReferences, throttlePublicMutation, uploadedSha256,
   userOptions, validateDatasetPolicyForRow, validateStoredDatasetPolicy, validateUserContent, validateUserWrites, type DatasetCatalog,
 } from '@/lib/datasets';
+import { seedArtifacts } from '@/__tests__/rows';
 
 useAppHarness();
 
@@ -69,7 +70,7 @@ describe('user columns', () => {
   it('accepts known users, and refuses non-ids, unknown users, someone else for a self field, and non-members', async () => {
     const db = await getDb();
     const alice = await person('alice'), bob = await person('bob'), carol = await person('carol');
-    await db.query('INSERT INTO artifacts (id, user_id, token_id) VALUES ($1, $2, $3)', ['doc_m', alice, 'tok_x']);
+    await seedArtifacts(db, { id: 'doc_m', user_id: alice, token_id: 'tok_x' });
     await seedOwnerJoin(db, 'doc_m', bob);
     await validateUserWrites(db, [column()], [{ who: alice }, { who: null }, { other: 1 }], null);
     await expect(validateUserWrites(db, [column()], [{ who: 7 }], null)).rejects.toThrow('requires a user ID');

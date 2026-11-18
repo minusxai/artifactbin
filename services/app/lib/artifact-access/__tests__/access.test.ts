@@ -12,6 +12,8 @@ import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, groupMemberPredicate, linkRoleOf, o
 import { canReadArtifact } from '@/lib/artifacts';
 import { createArtifact, updateSharingFor } from '@/lib/artifacts';
 import { account, head, mine, page, personOfKind, sql, trashRow } from '@/__tests__/artifact-fixtures';
+import { setArtifact } from '@/__tests__/rows';
+import { getDb } from '@/lib/platform';
 
 const harness = useAppHarness();
 const reaches = async (scope: Scope, id: string) => (await sql('SELECT id FROM artifacts WHERE id=$1 AND ' + scope.where('$2'), [id, scope.val])).length === 1;
@@ -144,7 +146,7 @@ describe('the rule\'s parts', () => {
     expect(await where(owned.where('$2'), [owned.val])).toBe(true);
     expect(await where(LIVE_ARTIFACT_SQL, [])).toBe(false);
     expect(await reaches(ownerScope(owner), row.id)).toBe(false);
-    await sql('UPDATE artifacts SET deleted_at=NULL, visibility=$2 WHERE id=$1', [row.id, 'private']);
+    await setArtifact(await getDb(), row.id, { deleted_at: null, visibility: 'private' });
     expect(await where(policyReaderSql('$2', '$3'), [viewer.userId, null])).toBe(true);
     expect(await where(policyReaderSql('$2', '$3'), [stranger.userId, null])).toBe(false);
     const group = await createGroup(owner.userId, { handle: 'parts_team', name: 'Parts' });

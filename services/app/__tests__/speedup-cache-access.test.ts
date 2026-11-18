@@ -14,6 +14,7 @@ import {createAuthHost} from '@artifactbin/auth';
 
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
+import { setArtifact } from '@/__tests__/rows';
 const harness=useAppHarness();
 const queries=new Map<string,string>();
 const queryDocument=(req:Request,ctx:{params:Promise<{id:string}>})=>ctx.params.then(({id})=>queryPrivateDocument(new Request(req.url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({revision:"1",sql:queries.get(id)})}),ctx));
@@ -46,7 +47,7 @@ it.each(['document','catalog'] as const)('withholds the whole response when %s a
   await started.promise;
   expect(calls).toBeGreaterThanOrEqual(2);
   if(change==='document')await setVisibility(id, 'private');
-  else await db.query("UPDATE artifacts SET meta=jsonb_set(meta,'{catalog,tables}','[]'::jsonb) WHERE id=$1",[dataset]);
+  else await setArtifact(db, dataset, { meta: { sql: "jsonb_set(meta,'{catalog,tables}','[]'::jsonb)" } });
   release.resolve({rows:[{n:314159265}],columns:[{name:'n',type:'number'}]});
   expect(await (await pending).text()).not.toContain('314159265');sourceRead.hold=null;
 });
@@ -56,7 +57,7 @@ it.each(['private','deleted'] as const)('does not return source rows when a publ
   sourceRead.hold=()=>{started.resolve();return release.promise;};
   const pending=queryDocument(request(`/api/artifacts/${id}/sql`),{params:Promise.resolve({id})});
   await started.promise;
-  await db.query(change==='private'?"UPDATE artifacts SET visibility='private' WHERE id=$1":"UPDATE artifacts SET deleted_at=now() WHERE id=$1",[id]);
+  await setArtifact(db, id, change==='private'?{ visibility: 'private' }:{ deleted_at: { sql: 'now()' } });
   release.resolve({rows:[{n:314159265}],columns:[{name:'n',type:'number'}]});
   const response=await pending;
   expect(await response.text()).not.toContain('314159265');sourceRead.hold=null;

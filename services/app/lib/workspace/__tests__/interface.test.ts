@@ -16,15 +16,13 @@ import {
 import { ARTIFACT_STARTERS } from '@/lib/workspace/artifact-starters';
 import { parentOfRow } from '@/lib/shelf';
 import { VISIBILITY_ICON_NODES, sharingIconFor } from '@/lib/workspace/visibility-icons';
+import { seedArtifacts, seedShares } from '@/__tests__/rows';
 
 useAppHarness();
 
 type Row = { id: string; user: string; token: string; format?: string; title?: string; visibility?: string; deleted?: boolean; group?: string; at?: string };
 async function artifact({ id, user, token, format = 'html', title = id, visibility = 'private', deleted = false, group, at = '2026-10-01T00:00:00Z' }: Row) {
-  await (await getDb()).query(
-    'INSERT INTO artifacts (id, user_id, token_id, format, title, visibility, group_id, updated_at, deleted_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
-    [id, user, token, format, title, visibility, group ?? null, at, deleted ? at : null],
-  );
+  await seedArtifacts((await getDb()), { id, user_id: user, token_id: token, format, title, visibility, group_id: group ?? null, updated_at: at, deleted_at: deleted ? at : null });
 }
 async function owner(name: string) {
   const user = await createUser({ email: `${name}@example.test` });
@@ -42,7 +40,7 @@ describe('the dashboard core', () => {
     await artifact({ id: 'bob_doc', user: bob.id, token: bob.token, title: 'For Alice' });
     await artifact({ id: 'bob_gone', user: bob.id, token: bob.token, deleted: true });
     const db = await getDb();
-    for (const id of ['bob_doc', 'bob_gone', 'doc_new']) await db.query("INSERT INTO artifact_shares (artifact_id, email, role) VALUES ($1, 'alice@example.test', 'editor')", [id]);
+    for (const id of ['bob_doc', 'bob_gone', 'doc_new']) await seedShares(db, { artifact_id: id, email: 'alice@example.test', role: 'editor' });
     const core = (await accountWorkspaceCoreFor(alice.id, ' Alice@Example.test '))!;
     expect(core.artifacts.map(a => a.id).sort()).toEqual(['doc_new', 'doc_old', 'fold_1']);
     expect(core.artifacts.find(a => a.id === 'doc_new')).toMatchObject({ url: '/a/doc_new' });
@@ -54,15 +52,15 @@ describe('the dashboard core', () => {
     const alice = await owner('alice'), bob = await owner('bob');
     await artifact({ id: 'older_document', user: bob.id, token: bob.token, at: '2026-09-01T00:00:00Z' });
     const db = await getDb();
-    await db.query("INSERT INTO artifact_shares (artifact_id, email, role) VALUES ('older_document', 'alice@example.test', 'viewer')");
+    await seedShares(db, { artifact_id: 'older_document', email: 'alice@example.test', role: 'viewer' });
     for (let i = 0; i < 205; i++) {
       const id = `shared_asset_${i}`;
       await artifact({ id, user: bob.id, token: bob.token, format: i % 4 === 3 ? 'dataset' : 'file', title: `resource_${i}.${['css', 'js', 'woff2', 'csv'][i % 4]}` });
-      await db.query("INSERT INTO artifact_shares (artifact_id, email, role) VALUES ($1, 'alice@example.test', 'editor')", [id]);
+      await seedShares(db, { artifact_id: id, email: 'alice@example.test', role: 'editor' });
     }
     await artifact({ id: 'not_shared', user: bob.id, token: bob.token });
     await artifact({ id: 'deleted_shared', user: bob.id, token: bob.token, deleted: true });
-    await db.query("INSERT INTO artifact_shares (artifact_id, email, role) VALUES ('deleted_shared', 'alice@example.test', 'viewer')");
+    await seedShares(db, { artifact_id: 'deleted_shared', email: 'alice@example.test', role: 'viewer' });
     const core = (await accountWorkspaceCoreFor(alice.id, 'alice@example.test'))!;
     expect(core.shared).toHaveLength(206);
     expect(core.shared.some(row => row.id === 'older_document')).toBe(true);

@@ -20,6 +20,7 @@ import { getDb, setServices } from '@/lib/platform';
 import { exportCacheKey, exportKeyReader, mintExportKey, resetExportRenderer } from '@/lib/export';
 import { GET as serveRaw } from '@/app/a/[id]/raw/route';
 import { POST as sqlDoor } from '@/app/api/artifacts/[id]/sql/route';
+import { seedShares, setArtifact } from '@/__tests__/rows';
 
 useAppHarness();
 
@@ -151,8 +152,8 @@ async function emailFixture(suffix: string, claimOnly: boolean) {
   const db = await getDb();
   const current = (await db.query<{ email: string }>('SELECT email FROM users WHERE id=$1', [reader.actor.userId])).rows[0]!.email;
   const email = claimOnly ? 'scope_claim_' + suffix + '@example.test' : current;
-  await db.query("UPDATE artifacts SET visibility='private',dataset_policy=$2::jsonb,policy_revision=policy_revision+1 WHERE id=$1", [staff, JSON.stringify({ version: 3, tables: [{ table: ROWS, select_permissions: [{ role: 'viewer', permission: { columns: '*', filter: {} } }] }] })]);
-  await db.query("INSERT INTO artifact_shares(artifact_id,email,role) VALUES($1,$2,'viewer')", [staff, email]);
+  await setArtifact(db, staff, { visibility: 'private', dataset_policy: JSON.stringify({ version: 3, tables: [{ table: ROWS, select_permissions: [{ role: 'viewer', permission: { columns: '*', filter: {} } }] }] }), policy_revision: { sql: 'policy_revision+1' } });
+  await seedShares(db, { artifact_id: staff, email, role: 'viewer' });
   setSession({ user: { id: reader.actor.userId!, email } });
   const ordinary = async () => await (await sqlDoor(request(`/api/artifacts/${page}/sql`, { method: 'POST', json: { sql: QUERY, revision: '1' } }), params(page))).json() as Reply;
   return { page, staff, reader, email, current, db, ordinary };

@@ -15,6 +15,7 @@ import { getDb, measureQueries, setServices } from '@/lib/platform';
 import { mintExportKey } from '@/lib/export';
 import * as native from '@/lib/document-serving/native-html.server';
 import {createAppServer} from '@/server/app';
+import { setArtifact } from '@/__tests__/rows';
 useAppHarness();afterEach(()=>{setSession(null);vi.restoreAllMocks();});
 const liveSessions=new Map<string,string>();
 beforeEach(()=>{liveSessions.clear();setServices({humanSessions:{live:async(id,userId)=>liveSessions.get(id)===userId}});});
@@ -61,7 +62,7 @@ describe('native document conditional reads',()=>{
   liveSessions.delete(w.actor.sessionId!);
   const revoked=await read(w.id,{cookie,'if-none-match':tagOf(owner)});expect(revoked.status).toBe(404);expect(tagOf(revoked)).toBeNull();
  });
- it('rechecks current read access before accepting an old public validator',async()=>{const w=await world(),tag=tagOf(await read(w.id));await (await getDb()).query("UPDATE artifacts SET visibility='private',sharing_revision=sharing_revision+1 WHERE id=$1",[w.id]);expect((await read(w.id,{'if-none-match':tag})).status).toBe(404);});
+ it('rechecks current read access before accepting an old public validator',async()=>{const w=await world(),tag=tagOf(await read(w.id));await setArtifact((await getDb()), w.id, { visibility: 'private', sharing_revision: { sql: 'sharing_revision+1' } });expect((await read(w.id,{'if-none-match':tag})).status).toBe(404);});
  it('does not cache exporter captures under a normal reader validator',async()=>{const w=await world(),capture=await app.request(`${pagesOriginFor(w.id,site)}/?chrome=0&key=${encodeURIComponent(mintExportKey(w.id))}`);expect(capture.status).toBe(200);expect(capture.headers.get('etag')).toBeNull();expect(capture.headers.get('cache-control')).toBe('no-store');});
  it('compresses native HTML while preserving its weak semantic validator',async()=>{const w=await world(),plain=await read(w.id),identity=await plain.text(),br=await read(w.id,{'accept-encoding':'gzip, br'});expect(br.headers.get('content-encoding')).toBe('br');expect(br.headers.get('vary')).toMatch(/Accept-Encoding/i);const wire=Buffer.from(await br.arrayBuffer());expect(wire.byteLength).toBeLessThan(identity.length/3);const compressed=nativeResponseIdentity(zlib.brotliDecompressSync(wire).toString()),uncompressed=nativeResponseIdentity(identity);expect(compressed.nonce).not.toBe(uncompressed.nonce);expect(compressed.html).toBe(uncompressed.html);expect(tagOf(br)).toBe(tagOf(plain));for(const tag of [tagOf(br),tagOf(plain)]){const again=await read(w.id,{'accept-encoding':'br','if-none-match':tag});expect(again.status).toBe(304);expect(again.headers.get('content-encoding')).toBeNull();expect(tagOf(again)).toBe(tag);}});
  it('uses identity when Brotli is refused or only gzip is accepted',async()=>{const w=await world();for(const accept of ['gzip','br;q=0, gzip','identity'])expect((await read(w.id,{'accept-encoding':accept})).headers.get('content-encoding')).toBeNull();});

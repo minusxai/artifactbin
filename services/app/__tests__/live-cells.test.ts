@@ -26,6 +26,7 @@ import { patchMetadata } from './conditional-request';
 import { nativeDatasetClient } from './native-dataset-http';
 import { mintAccountToken, request, useAppHarness, type RequestOptions } from './harness';
 import { sseStream } from './sse';
+import { dropShares, seedShares } from '@/__tests__/rows';
 
 useAppHarness();
 
@@ -151,7 +152,7 @@ beforeEach(async () => {
   datasetId = await publish({ dataset: ROWS, title: 'Tasks', access: 'readwrite', visibility: 'unlisted' });
   pageId = await publish({ visibility: 'public', html: `<!doctype html><html><head><link rel="af-dataset" data-af-name="tasks" href="ref:${datasetId}" data-af-mode="live"><link rel="af-dataset" data-af-name="pinned" href="ref:${datasetId}" data-af-mode="pinned" data-af-revision="1"></head><body><h1>Tracker</h1></body></html>` });
   const db = await getDb();
-  for (const [who, role] of [[editor, 'editor'], [viewer, 'viewer']] as const) await db.query('INSERT INTO artifact_shares (artifact_id, user_id, email, role) VALUES ($1, $2, $3, $4)', [datasetId, who.id, who.email, role]);
+  for (const [who, role] of [[editor, 'editor'], [viewer, 'viewer']] as const) await seedShares(db, { artifact_id: datasetId, user_id: who.id, email: who.email, role });
   const head = (await getArtifactById(datasetId))!;
   const saved = await patchMetadata(ownerToken, datasetId, { policy: POLICY(), expectedPolicyRevision: head.policy_revision ?? 0 });
   expect(saved.status, await saved.clone().text()).toBe(200);
@@ -230,7 +231,7 @@ describe('who may open a cell', () => {
     a.text.insert(0, '!');
     const stolen = await send(reader, key(red), { clientId: a.reply.clientId, update: 'AAA=' });
     expect(stolen.status).toBe(422);
-    await (await getDb()).query('DELETE FROM artifact_shares WHERE artifact_id = $1 AND user_id = $2', [datasetId, viewer.id]);
+    await dropShares(await getDb(), datasetId, { user_id: viewer.id });
     // Without the share the viewer is signed_in, whose rule still admits this cell: revoke the rule too.
     const head = (await getArtifactById(datasetId))!;
     const narrowed = POLICY();

@@ -19,6 +19,7 @@ import { GET as raw } from '@/app/a/[id]/raw/route';
 import { GET as frame } from '@/app/a/[id]/events/frame/route';
 import { GET as content } from '@/app/api/artifacts/[id]/content/route';
 import { POST as queryRead } from '@/app/api/artifacts/[id]/query/route';
+import { seedShares } from '@/__tests__/rows';
 
 useAppHarness();
 beforeEach(() => setSession(null));
@@ -40,7 +41,7 @@ async function setup() {
   expect(created.status, await created.clone().text()).toBe(201);
   const id = (await created.json()).id as string;
   const db = await getDb();
-  await db.query("INSERT INTO artifact_shares(artifact_id,user_id,email,role) VALUES($1,$2,$3,'viewer')", [id, viewer.userId, viewer.email]);
+  await seedShares(db, { artifact_id: id, user_id: viewer.userId, email: viewer.email, role: 'viewer' });
   await storePolicy(id, POLICY);
   return { owner, viewer, other, id };
 }
@@ -85,7 +86,7 @@ it('query_resource SQL needs allow_aggregations: a flagless role reads rows by t
   const { owner, viewer, other, id } = await setup();
   const db = await getDb();
   const editor = await person('editor');
-  await db.query("INSERT INTO artifact_shares(artifact_id,user_id,email,role) VALUES($1,$2,$3,'editor')", [id, editor.userId, editor.email]);
+  await seedShares(db, { artifact_id: id, user_id: editor.userId, email: editor.email, role: 'editor' });
   // signed_in (the link holder) gets a flagless rule too; viewer keeps POLICY's.
   const flagless = { columns: ['name', 'team'], filter: { team: { _eq: 'red' } } };
   await storePolicy(id, { ...POLICY, tables: [{ ...POLICY.tables[0], select_permissions: [...POLICY.tables[0]!.select_permissions, { role: 'signed_in', permission: flagless }] }] });
