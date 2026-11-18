@@ -52,3 +52,51 @@ describe('ensureIdentitySchema readiness',()=>{
   expect(views).toEqual(expect.arrayContaining(['users','tokens','groups']));
  });
 });
+
+/**
+ * A database from before the principal columns (`tokens.group_id`, `group_role`, `issued_by`, `grant_id`): its base
+ * table lacks them, its `tokens` view has the thirteen columns readers know, and a reader built a view on top of it.
+ * The boot adds the columns (every row NULL) and appends them to the view in place, so the reader's view survives and
+ * every column it knew keeps its position.
+ */
+describe('ensureIdentitySchema on a database from before the principal columns',()=>{
+ const PRINCIPAL=['group_id','group_role','issued_by','grant_id'];
+ const BEFORE=['id','name','user_id','client_harness','audience','scope','request_authority','created_at','deleted_at','expires_at','last_used_at','scopes','live'];
+ const viewColumns=async(pg:PGlite,view:string)=>(await pg.query<{column_name:string}>("SELECT column_name FROM information_schema.columns WHERE table_schema='identity' AND table_name=$1 ORDER BY ordinal_position",[view])).rows.map(row=>row.column_name);
+ /** Boot, then rewind `tokens` to the earlier shape: the columns gone, the old view, a reader's view over it, one live token. */
+ const before=async()=>{
+  const {pg,db}=open();
+  await pg.exec(APP_TABLES(",service_audiences TEXT[] NOT NULL DEFAULT '{}'"));
+  await pg.exec("INSERT INTO identity_settings(id) VALUES('installation')");
+  await ensureIdentitySchema(db,schemas);
+  await pg.exec(`DROP VIEW identity.tokens CASCADE;
+   ${PRINCIPAL.map(column=>`ALTER TABLE auth.tokens DROP COLUMN ${column};`).join('\n')}
+   CREATE VIEW identity.tokens AS SELECT ${BEFORE.slice(0,-2).map(column=>`t.${column}`).join(', ')},
+    array_remove(regexp_split_to_array(coalesce(t.scope, ''), '\\s+'), '') AS scopes, (t.deleted_at IS NULL) AS live FROM auth.tokens t;
+   CREATE SCHEMA reader;
+   CREATE VIEW reader.live_tokens AS SELECT id, user_id, scope, live FROM identity.tokens WHERE live;
+   INSERT INTO auth.users(id,email) VALUES('usr_kept','kept@example.com');
+   INSERT INTO auth.tokens(id,name,token_hash,user_id,scope) VALUES('tok_kept','laptop','hash_kept','usr_kept','artifacts');`);
+  expect(await viewColumns(pg,'tokens')).toEqual(BEFORE);
+  return {pg,db};
+ };
+ it('adds the columns with every row NULL and appends them to the view in place, keeping a reader\'s view on top of it',async()=>{
+  const {pg,db}=await before();
+  await ensureIdentitySchema(db,schemas);
+  expect(await viewColumns(pg,'tokens')).toEqual([...BEFORE,...PRINCIPAL]);
+  expect((await pg.query(`SELECT id,user_id,${PRINCIPAL.join(',')} FROM auth.tokens`)).rows).toEqual([{id:'tok_kept',user_id:'usr_kept',group_id:null,group_role:null,issued_by:null,grant_id:null}]);
+  expect((await pg.query(`SELECT id,live,${PRINCIPAL.join(',')} FROM identity.tokens`)).rows).toEqual([{id:'tok_kept',live:true,group_id:null,group_role:null,issued_by:null,grant_id:null}]);
+  // The reader's view was not dropped, and reads as before.
+  expect((await pg.query('SELECT id,user_id,scope FROM reader.live_tokens')).rows).toEqual([{id:'tok_kept',user_id:'usr_kept',scope:'artifacts'}]);
+  // A second boot changes nothing.
+  await ensureIdentitySchema(db,schemas);
+  expect(await viewColumns(pg,'tokens')).toEqual([...BEFORE,...PRINCIPAL]);
+  expect((await pg.query("SELECT 1 FROM information_schema.views WHERE table_schema='reader' AND table_name='live_tokens'")).rows).toHaveLength(1);
+ });
+ it('still drops and recreates a view whose columns changed in any other way than growing at the end',async()=>{
+  const {pg,db}=await before();
+  await pg.exec('DROP VIEW reader.live_tokens; DROP VIEW identity.tokens; CREATE VIEW identity.tokens AS SELECT t.name, t.id FROM auth.tokens t');
+  await ensureIdentitySchema(db,schemas);
+  expect(await viewColumns(pg,'tokens')).toEqual([...BEFORE,...PRINCIPAL]);
+ });
+});

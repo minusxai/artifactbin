@@ -41,12 +41,26 @@ export const plainIdentifier = (value: string, what: string): string => {
   return value;
 };
 
+/**
+ * Where each view's rule columns sit: after the table column that was last when they were added. A table column
+ * declared later follows them, at the end of the view, so a column already in a view never moves and the boot (and a
+ * reader applying IDENTITY.sql) replaces the view in place, appending, rather than dropping it.
+ */
+const RULE_COLUMNS: Readonly<Record<string, {after: string; rules: readonly string[]}>> = {
+  users: {after: 'created_at', rules: ['active']},
+  tokens: {after: 'last_used_at', rules: ['scopes', 'live']},
+};
+
 /** Each view's name and columns, in order: the cross-repository read contract (contracts `IDENTITY_VIEWS` pins it). */
 export function identityViewColumns(): Record<string, string[]> {
   const views: Record<string, string[]> = {};
-  for (const table of IDENTITY_TABLES) views[table.name] = exposed(table.name, columnsOf(table));
-  views.users!.push('active');
-  views.tokens!.push('scopes', 'live');
+  for (const table of IDENTITY_TABLES) {
+    const columns = exposed(table.name, columnsOf(table)), placed = RULE_COLUMNS[table.name];
+    if (!placed) { views[table.name] = columns; continue; }
+    const at = columns.indexOf(placed.after) + 1;
+    if (at === 0) throw new Error(`identity: the ${table.name} view's rule columns follow "${placed.after}", which the table no longer declares`);
+    views[table.name] = [...columns.slice(0, at), ...placed.rules, ...columns.slice(at)];
+  }
   views.sessions = [...exposed('session', SESSION_COLUMNS), 'live'];
   return views;
 }
@@ -57,32 +71,33 @@ export function identityViewStatements(schemas: IdentitySchemas, options: {sessi
   const names: RuleNames = {users: `${auth}.users`, deploymentMembers: `${app}.deployment_members`, deploymentState: `${app}.deployment_state`};
   const settings = `${app}.identity_settings`;
   const views = identityViewColumns();
-  const plain = (table: string, alias: string, extra: string[] = []) =>
-    [...views[table]!.filter(column => !extra.includes(column)).map(column => `${alias}.${quoted(column)}`)];
+  /** The view's SELECT list in its column order: a table column as `alias.column`, a rule column as its expression. */
+  const plain = (table: string, alias: string, rules: Record<string, string> = {}) =>
+    views[table]!.map(column => rules[column] ?? `${alias}.${quoted(column)}`).map((item, i) => i === 0 ? item : item.startsWith('\n') ? `,${item}` : `, ${item}`).join('');
   const statements: string[] = [];
   for (const table of IDENTITY_TABLES.map(t => t.name)) {
     if (table === 'users') {
       statements.push(`CREATE OR REPLACE VIEW ${read}.users AS
-  SELECT ${plain('users', 'u', ['active']).join(', ')},
+  SELECT ${plain('users', 'u', {active: `
     COALESCE((SELECT ${authenticatingUserSql('u', names)} AND (s.deployment_mode = 'public' OR ${deploymentMemberSql('u.id', names)})
-      FROM ${settings} s WHERE s.id = 'installation'), false) AS active
+      FROM ${settings} s WHERE s.id = 'installation'), false) AS active`})}
   FROM ${auth}.users u`);
     } else if (table === 'tokens') {
       const {exists} = bearerLiveSql({auth, tokens: `${auth}.tokens`, sessions: options.sessions !== false});
       statements.push(`CREATE OR REPLACE VIEW ${read}.tokens AS
-  SELECT ${plain('tokens', 't', ['scopes', 'live']).join(', ')},
-    array_remove(regexp_split_to_array(coalesce(t.scope, ''), '\\s+'), '') AS scopes,
+  SELECT ${plain('tokens', 't', {scopes: `
+    array_remove(regexp_split_to_array(coalesce(t.scope, ''), '\\s+'), '') AS scopes`, live: `
     (${exists} AND t.user_id IS NOT NULL
       AND EXISTS (SELECT 1 FROM ${settings} s WHERE s.id = 'installation' AND (COALESCE(t.audience, '') = '' OR t.audience = ANY(s.api_audiences) OR t.audience = ANY(s.service_audiences)))
-      AND COALESCE((SELECT u.active FROM ${read}.users u WHERE u.id = t.user_id), false)) AS live
+      AND COALESCE((SELECT u.active FROM ${read}.users u WHERE u.id = t.user_id), false)) AS live`})}
   FROM ${auth}.tokens t`);
     } else {
       statements.push(`CREATE OR REPLACE VIEW ${read}.${table} AS
-  SELECT ${plain(table, 'x').join(', ')} FROM ${auth}.${table} x`);
+  SELECT ${plain(table, 'x')} FROM ${auth}.${table} x`);
     }
   }
   if (options.sessions !== false) statements.push(`CREATE OR REPLACE VIEW ${read}.sessions AS
-  SELECT ${plain('sessions', 's', ['live']).join(', ')}, (s."expiresAt" > now()) AS live FROM ${auth}.session s`);
+  SELECT ${plain('sessions', 's', {live: '(s."expiresAt" > now()) AS live'})} FROM ${auth}.session s`);
   return statements;
 }
 

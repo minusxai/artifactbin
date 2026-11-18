@@ -14,7 +14,7 @@ import {beforeEach,expect,it,onTestFinished} from 'vitest';
 import {IDENTITY_INTROSPECT_PATH,IDENTITY_OWNED_TABLES,IDENTITY_VIEWS,SERVICE_AUTH_HEADER} from '@artifactbin/contracts';
 import {identityViewColumns} from '@artifactbin/auth/identity-store/views';
 import {createAuthComposedHost} from '@/test/helpers/auth-host';
-import {AUTH_SECRET,ensureLocalIdentity,getDb,syncIdentitySettings} from '@/lib/platform';
+import {AUTH_SECRET,ensureLocalIdentity,getDb,services,syncIdentitySettings} from '@/lib/platform';
 import {overrideConfig} from '@/lib/platform/config';
 import {createGroup,deleteGroup,setGroupParent} from '@/lib/groups';
 import {canUseDeploymentIdentity,createUser} from '@/lib/accounts';
@@ -109,7 +109,7 @@ it('tokens: a service grant and an API grant are live until revoked; introspect 
  const service=await host.signIn(email,'warehouse');
  expect(service.status).toBe(201);expect(service.grant).toMatchObject({scope:'',resource:WAREHOUSE});
  const user=await userIdOf(email);
- expect(await host.service(IDENTITY_INTROSPECT_PATH,{token:service.grant.access_token})).toEqual({status:200,body:{active:true,user_id:user,token_id:service.grant.id,scopes:[],audience:WAREHOUSE,expires_at:expect.any(String),parent:null}});
+ expect(await host.service(IDENTITY_INTROSPECT_PATH,{token:service.grant.access_token})).toEqual({status:200,body:{active:true,principal_kind:'user',user_id:user,token_id:service.grant.id,scopes:[],audience:WAREHOUSE,expires_at:expect.any(String),parent:null,group_id:null,group_role:null,issued_by:null}});
  expect(await token(service.grant.id)).toEqual({user_id:user,scopes:[],live:true});
  const plain=await host.signIn(email);
  expect(plain.grant.scope).toBe('artifacts');
@@ -160,8 +160,8 @@ it('the exchange: a signed-in page and an agent\'s one API bearer each get a fiv
   expect(await introspect(issued.body.access_token,LEDGER_SECRET),label).toEqual({active:false});
  }
  expect((await host.get('/api/artifacts',{authorization:`Bearer ${signed.grant.access_token}`})).status).toBe(200);
- expect(await introspect(page.body.access_token)).toEqual({active:true,user_id:user,token_id:expect.stringMatching(/^vtk_/),scopes:[],audience:WAREHOUSE,
-  expires_at:page.body.expires_at,parent:{kind:'session',id:session!.id}});
+ expect(await introspect(page.body.access_token)).toEqual({active:true,principal_kind:'user',user_id:user,token_id:expect.stringMatching(/^vtk_/),scopes:[],audience:WAREHOUSE,
+  expires_at:page.body.expires_at,parent:{kind:'session',id:session!.id},group_id:null,group_role:null,issued_by:null});
  expect(await introspect(agent.body.access_token)).toMatchObject({active:true,user_id:user,parent:{kind:'token',id:signed.grant.id}});
  // What the service re-checks by the parent's id is the view's `live`: the bearer read's own rule.
  expect(await token(signed.grant.id)).toMatchObject({live:true});
@@ -183,6 +183,30 @@ it('the exchange: a signed-in page and an agent\'s one API bearer each get a fiv
  expect(await sql('SELECT live FROM identity.sessions WHERE id=$1',[session!.id])).toEqual([]);
  expect(await introspect(page.body.access_token)).toEqual({active:false});
  expect((await exchange({cookie:signed.cookie})).status).toBe(401);
+});
+
+it('the principal columns: no door sets them, whatever a caller sends; every token stays a person\'s and introspects as one',async()=>{
+ const host=await composed();
+ const email='mxmx_test_principal_owner@example.test';
+ const PRINCIPAL={group_id:'grp_x',group_role:'editor',issued_by:'usr_x',grant_id:'gnt_x',groupId:'grp_x',groupRole:'editor',issuedBy:'usr_x',grantId:'gnt_x',principal_kind:'group'};
+ const signed=await host.signIn(email);
+ const user=await userIdOf(email);
+ // Every door that issues a token, each sent the principal fields beside its own.
+ const api=await host.post('/api/authentication/token',PRINCIPAL,{cookie:signed.cookie});
+ const scoped=await host.post('/api/authentication/token',{audience:'warehouse',...PRINCIPAL},{cookie:signed.cookie});
+ const grant=await api.json() as {access_token:string;refresh_token:string;client_id:string};
+ const refreshed=await host.post('/oauth/token',{grant_type:'refresh_token',client_id:grant.client_id,refresh_token:grant.refresh_token,resource:`${origin}/api`,...PRINCIPAL});
+ const exchanged=await host.post('/api/authentication/service-token',{audience:'warehouse',...PRINCIPAL},{authorization:`Bearer ${signed.grant.access_token}`});
+ // The identity module's own mint (what IDENTITY_CALL_PATH runs), handed the fields beside its input.
+ const minted=await services().identity.mintToken({userId:user,expiresInMs:null,name:'principal',...PRINCIPAL} as Parameters<ReturnType<typeof services>['identity']['mintToken']>[0]);
+ for(const [label,response] of [['api',api],['scoped',scoped],['refreshed',refreshed],['exchanged',exchanged]] as const)expect(response.status,label).toBeLessThan(300);
+ const rows=await sql<{user_id:string|null;group_id:null;group_role:null;issued_by:null;grant_id:null}>('SELECT user_id,group_id,group_role,issued_by,grant_id FROM auth.tokens');
+ expect(rows.length).toBeGreaterThanOrEqual(4);
+ for(const row of rows)expect(row).toEqual({user_id:user,group_id:null,group_role:null,issued_by:null,grant_id:null});
+ expect(await sql('SELECT 1 FROM identity.tokens WHERE group_id IS NOT NULL OR group_role IS NOT NULL OR issued_by IS NOT NULL OR grant_id IS NOT NULL')).toEqual([]);
+ const person={active:true,principal_kind:'user',user_id:user,group_id:null,group_role:null,issued_by:null};
+ for(const presented of [(await refreshed.json() as {access_token:string}).access_token,(await scoped.json() as {access_token:string}).access_token,(await exchanged.json() as {access_token:string}).access_token,minted.token])
+  expect((await host.service(IDENTITY_INTROSPECT_PATH,{token:presented})).body).toMatchObject(person);
 });
 
 it('sessions: a browser session is live by id for its user until it expires',async()=>{

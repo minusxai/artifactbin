@@ -96,6 +96,14 @@ const TOKENS: Table = {
     { name: 'expires_at', type: 'TIMESTAMPTZ' },
     // Nullable so the same additive migration preserves "never used".
     { name: 'last_used_at', type: 'TIMESTAMPTZ' },
+    // THE PRINCIPAL. NULL on every row today: the token's principal is its person (`user_id`). A later group
+    // sign-in sets `group_id` and its level `group_role` ('member' or 'editor') to make the group itself the
+    // principal, `issued_by` to the person who issued it and `grant_id` to the approval it was issued under.
+    // Nothing writes them yet, and the `live` rule does not read them.
+    { name: 'group_id', type: 'TEXT' },
+    { name: 'group_role', type: 'TEXT' },
+    { name: 'issued_by', type: 'TEXT' },
+    { name: 'grant_id', type: 'TEXT' },
   ],
   primaryKey: ['id'],
   indexes: [
