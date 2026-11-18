@@ -10,8 +10,9 @@ Link CSV or JSON rows to read/write with SQL:
 <link rel="af-dataset" data-af-name="orders" href="./orders.csv">
 ```
 
-Publishing the page makes a CSV linked by path a dataset named by the file, updated as it
-changes; link a published one as `ref:ID`. `data-af-name` is unique per page. A link follows the
+Publishing the page makes a CSV linked by path a dataset named by the file; link a published one as
+`ref:ID`. An unchanged CSV is never re-imported; a changed one replaces the dataset only if no rows
+were written since, else the publish is refused. It adds `data-af-id` to your local HTML. `data-af-name` is unique per page. A link follows the
 latest rows; `data-af-mode="pinned" data-af-revision="2"` freezes one saved version, read-only.
 `node scripts/publish.mjs rows.csv` alone prints the `--artifact ID` that updates it; HTTP:
 `POST [[ base ]]/api/artifacts` with a durable `Idempotency-Key` and an origin-bound bearer, never
@@ -33,10 +34,11 @@ set rules: [permissions](permissions.md). The install's own database: [default](
 
 `node scripts/sql.mjs schema PAGE_ID` (or `DATASET_ID`) prints each table as a `CREATE TABLE` with
 its column types, as your role sees it. In a page, a dataset is the table named by its
-link's `data-af-name` (`orders`; a multi-table one is `orders.<table>`). Columns keep the file's
+link's `data-af-name` (`orders`; a multi-table one is `orders.<table>`). A dataset queried by its own ID has
+one table, `rows`; others are HTTP 400. Columns keep the file's
 names: quote one that is not a plain name (`"Created By"`). Every table has `_id`, the stable row
 ID (a CSV `id` column stays ordinary). Types: number, boolean, text; dates are ISO text and user
-columns hold account IDs. `node scripts/sql.mjs query ID 'select …'` runs one statement.
+columns hold account IDs.
 
 ## Read
 
@@ -76,9 +78,7 @@ so, never "saved". A write changes at most 100 rows atomically; `_id` is generat
 There is no upsert: read the row, then update or insert. Functions whose result changes between
 runs (`random()`, `current_timestamp`) are refused: pass the value. Each write sends its own
 `Idempotency-Key`, so a retry applies once. Refusals: `permission_denied`, `check_violation`,
-`too_many_rows`, `validation_failed`, `outcome_unknown` (read before writing again). Only the
-owner and editors write until [permissions](permissions.md) allow more; a page link never
-grants writes. Pinned links and archived page versions read only.
+`too_many_rows`, `validation_failed`, `outcome_unknown` (read before writing again). A page link never grants writes. Pinned links and archived page versions read only.
 
 ## Live views
 
@@ -111,9 +111,7 @@ binding.destroy(); text.destroy();
 ```
 
 The owner opts each text column in with the policy's table key `"collaborative_columns":["description"]`
-([permissions](permissions.md)). Who may type is the update rule for that row and column (a check.mjs browser as its
-viewer); anyone else gets `readonly`: set the field to the value you read before `bind`. Keys typed
-before the session starts are merged in.
+([permissions](permissions.md)). Who may type is the update rule for that row and column; anyone else gets `readonly`: set the field to the value you read before `bind`.
 Typing is saved as one dataset version when someone leaves or after a quiet spell; a `sql` write
 meanwhile is merged with the typing. A deleted row, or text the update rule's `check` refuses, ends
 editing: the field turns read-only and `error` says why (`removed`, `check_violation`, `rejected`).
@@ -129,8 +127,7 @@ unquoted empty field is null; a quoted `""` is an empty string; literal `null` s
 A live page binding may upload files to its dataset when the caller may insert rows. Signed-in
 browser images: `POST /a/PAGE_ID/datasets/DATASET_ID/images` (bytes, image Content-Type). Other
 files: `POST /api/artifacts/PAGE_ID/datasets/DATASET_ID/files` (bytes, Content-Type, percent-encoded
-`X-Filename`). Both need `X-Edit-Id` from the page head and a unique `Idempotency-Key` (replay the
-same bytes and key after an uncertain response). The response returns the stored ref and a read URL
+`X-Filename`). Both need `X-Edit-Id` from the page head and a unique `Idempotency-Key`. The response returns the stored ref and a read URL
 under the same permissions. Pinned bindings cannot upload.
 
 ## The default connection

@@ -45,7 +45,9 @@ comment, history nowhere. Keep links plain, never `@` imports.
 - Design modules first (Ousterhout): cohesive boundaries/contracts, narrow interfaces; routes translate to HTTP.
 - Layers: entry points `server.ts`, `scripts`, `services/app/{app,server,scripts}`; UI `services/app/{solid,web}`;
   libraries `services/app/lib/*`; packages the other `services/*`, importing only contracts, utils and themselves.
-  No cycles; enter a lib module through its index; `npm run validate` enforces it.
+  No cycles. A lib module is entered through its index, unless its `DEEP_MODULES` row in
+  `scripts/ci/module-graph.mjs` lists more (`server` entries; browser leaves that bundled code imports for values,
+  never the index): the cards state their module's row; `npm run validate` enforces it.
 - TDD for features and refactors: contracts, behavioral tests, observe the failure, implement. Refactors go
   Blue → Red → Blue: tests pass, prove the assertion catches broken behavior, restore. Report only observed runs.
 - Probe assumptions; record evidence/unknowns. Order milestones by risk; end with runnable checks.
@@ -81,7 +83,7 @@ comment, history nowhere. Keep links plain, never `@` imports.
 ## Commands (from the repo root)
 
 - `npm ci` — install pinned dependencies. `npm run setup` — create or repair local settings.
-- `npm run dev` — full local composition, default http://localhost:3030; `dev:app` the app alone, without login/OAuth.
+- `npm run dev` — full local composition, default http://app.lvh.me:3030 (`localhost` breaks sign-in, SETUP.md); `dev:app` the app alone, without login/OAuth.
 - `npm run dev:otp -- <email>` — a local login code from the protected outbox.
 - `npm run eval -- --tasks <name>` — the agent eval against that server (setup: the `lib/skills` row).
 - `npm run validate` — FAST: UI primitives, module graph, table ownership, knip (unused files, exports,

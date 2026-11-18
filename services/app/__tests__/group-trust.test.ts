@@ -1,6 +1,6 @@
 /**
  * A GROUP'S approval of the addresses a page may call (lib/trust/group-trust), through the real
- * /api/groups/<id>/allowed-addresses handler, the consent answer and the served /raw header: a group editor approves an
+ * /api/groups/<id>/allowed-addresses handler, the consent answer and the served /raw header: a group admin approves an
  * exact connect/img/media origin, and every member of the group and its subgroups is then not asked about it on any page;
  * nobody else is. Script/frame and wildcards stay per page, a personal Never wins, and TRUST__GROUP_APPROVALS=off
  * ignores the rows and refuses the API.

@@ -1,13 +1,13 @@
 /**
  * WHAT A GROUP HAS APPROVED for its members: the second level of document trust (./document-trust has the first, one
- * reader on one page). A group's editor approves an exact origin under a directive that calls or loads data
+ * reader on one page). A group's admin approves an exact origin under a directive that calls or loads data
  * (lib/document `GROUP_CSP_DIRECTIVES`: connect, img, media), and from the next response every member of the group, and
  * of each of its subgroups (lib/groups `reachedGroupsSql`: a reader reaches their direct groups and every ancestor), is
  * not asked about it on ANY page that declares it. Nobody outside the group is, whoever owns the page.
  *
  *  - Script, style and frame run or embed code: never a group's to grant. A wildcard declaration is never approvable,
  *    and an approval is the canonical exact origin a declaration normalises to (lib/document `parseCspOrigin`).
- *  - Who: a direct admin of the group (`GroupRole` has editor and viewer; editors administer). Any direct member reads
+ *  - Who: a direct admin of the group (`GroupRole` is member, editor or admin; an editor cannot change approvals). Any direct member reads
  *    the list. Every change is audited on the group (lib/groups `recordGroupMutation`) in its own transaction.
  *  - A reader's own Never on a document still wins there (./document-trust `standingOf`).
  *  - TRUST__GROUP_APPROVALS=off: nothing is offered, the API refuses, and stored rows are ignored (never deleted).
@@ -127,7 +127,7 @@ export async function groupApprovedFor(userId: string | null | undefined, wanted
   return out;
 }
 
-/** The live groups this reader may approve for (those they directly edit), when approvals are on. */
+/** The live groups this reader may approve for (those they directly administer), when approvals are on. */
 export async function approvableGroupsFor(userId: string | null | undefined): Promise<CspApprovalGroup[]> {
   if (!userId || !groupTrustApprovalsEnabled()) return [];
   return (await (await getDb()).query<CspApprovalGroup>(

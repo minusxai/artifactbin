@@ -4,8 +4,10 @@ Every setting is named and explained in `.env.example`; this file covers only wh
 
 ## On your machine
 
-Requires Node.js 22+ and npm. Nothing else: the defaults are embedded PGLite (`data/pglite`), objects on local
-disk, email-code login without a mail provider, SQLite queries and local exports.
+Requires Node.js 22+ and npm. Nothing else for the app itself: the defaults are embedded PGLite (`data/pglite`),
+objects on local disk, email-code login without a mail provider and SQLite queries. Exports and live sessions
+render in Chromium through Playwright, which `npm ci` does not download: run `npx playwright install chromium`
+once (the command CI runs; a Linux machine may also need `npx playwright install-deps chromium`).
 
 ```sh
 npm ci

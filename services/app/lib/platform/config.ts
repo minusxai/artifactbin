@@ -491,7 +491,7 @@ env('SKILLS', 'EXTRA_DIR');
 export const skillExtrasDir = (): string | null => env('SKILLS', 'EXTRA_DIR')?.trim() || null;
 
 /**
- * TRUST__GROUP_APPROVALS: `on` (unset, the default) lets a group's editors approve, for every member of the group and
+ * TRUST__GROUP_APPROVALS: `on` (unset, the default) lets a group's admins approve, for every member of the group and
  * its subgroups, the exact addresses a page may call or load data from (lib/trust/group-trust); `off` offers no such
  * choice, refuses the group addresses API (`group_approvals_disabled`) and ignores the stored approvals, which are kept.
  * Read at each use, so a test's `overrideConfig` environment applies. Any other value refuses the boot.
