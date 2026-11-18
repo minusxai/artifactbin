@@ -122,11 +122,14 @@ export interface IdentityService {
   /**
    * A group Admin (direct, or through an ancestor) approves the configured service `serviceId` to sign an agent in as
    * the group at `role` (`member` or `editor`) with nobody present (./service-audiences `GROUP_SIGN_IN_PATH`). The
-   * caller (the app) checked the service opted in. Not an Admin: `forbidden` (403) or `not_found` (404).
+   * caller (the app) checked the service opted in and names its configured origin (`serviceOrigin`, recorded: the
+   * approval is that service's only while it is still configured there). Not an Admin: `forbidden` (403) or
+   * `not_found` (404); a test account: `test_account_restricted` (403). A new approval answers its audited change
+   * (`service_sign_in_approved`); the same approval again answers the one there with none.
    */
-  approveServiceGroupSignIn(input: {actorId: string; groupId: string; serviceId: string; role: 'member' | 'editor'}): Promise<GroupSignInGrant>;
-  /** A group Admin ends an approval: every sign-in issued under it ends on its next check. Null when none was live. */
-  revokeServiceGroupSignIn(input: {actorId: string; groupId: string; id: string}): Promise<GroupSignInGrant | null>;
+  approveServiceGroupSignIn(input: {actorId: string; groupId: string; serviceId: string; serviceOrigin: string; role: 'member' | 'editor'}): Promise<{grant: GroupSignInGrant; changes: GroupChange[]}>;
+  /** A group Admin ends an approval: every sign-in issued under it ends on its next check, audited (`service_sign_in_revoked`). Null when none was live. */
+  revokeServiceGroupSignIn(input: {actorId: string; groupId: string; id: string}): Promise<{grant: GroupSignInGrant; changes: GroupChange[]} | null>;
   /** Stamp last use, at most once a minute. */
   touchToken(input: {id: string}): Promise<void>;
   setTokenHarness(input: {id: string; harness: string}): Promise<void>;
@@ -158,7 +161,7 @@ export interface IdentityService {
 }
 
 /** A group's approval of a service (`group_sign_in_grants`), as the identity module answers it. */
-export interface GroupSignInGrant {id: string; group_id: string; role: 'member' | 'editor'; service_id: string; approved_by: string; created_at: string; deleted_at: string | null}
+export interface GroupSignInGrant {id: string; group_id: string; role: 'member' | 'editor'; service_id: string; approved_by: string; created_at: string; deleted_at: string | null; service_origin: string | null}
 
 export type IdentityMethod = keyof IdentityService;
 export const IDENTITY_METHODS: readonly IdentityMethod[] = [

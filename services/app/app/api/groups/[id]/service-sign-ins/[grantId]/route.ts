@@ -12,6 +12,6 @@ export async function DELETE(request: Request, ctx: { params: Promise<Record<str
   if (actor.credential !== 'session' || !actor.userId) return unauthorized(request);
   if (refusesCrossSite(request, actor)) return json({ error: 'forbidden' }, 403);
   const { id, grantId } = await ctx.params;
-  try { return await revokeServiceGroupSignIn(actor.userId, String(id), String(grantId)) ? new Response(null, { status: 204 }) : json({ error: 'not_found' }, 404); }
+  try { return await revokeServiceGroupSignIn(actor.userId, String(id), String(grantId), { tokenId: actor.tokenId ?? null }) ? new Response(null, { status: 204 }) : json({ error: 'not_found' }, 404); }
   catch (error) { if (error instanceof GroupError) return json({ error: error.code }, error.status); throw error; }
 }

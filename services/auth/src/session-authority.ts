@@ -31,16 +31,17 @@ import {ARTIFACT_WORKLOAD_PATH,APP_ARTIFACT_WORKLOAD_PATH,SERVICE_PAYLOAD_LIMIT,
  *  - a GROUP SIGN-IN for a service (contracts `GROUP_SIGN_IN_PATH`, a service opted in with `group_sign_ins`, its own
  *    secret): an approval a group's Admin gave THAT service becomes an ordinary API access token acting as the group at
  *    the approval's level, with no refresh token (./identity-store/accounts `mintServiceGroupSignIn`), audited as a
- *    mint by the group. Without the opt-in, or with another credential in the header, an unknown path.
+ *    mint by the group, for at most a day. Without the opt-in, or with another credential in the header, an unknown
+ *    path; so is the service's list of its own approvals (contracts `GROUP_SIGN_IN_GRANTS_PATH`), behind the same door.
  */
 import {createHash,timingSafeEqual} from 'node:crypto';
-import {CHART_IMAGE_PATH,CANONICAL_CHART_IMAGE_PATH,CHART_IMAGE_KEYS,DRAFT_CHECK_PATH,CANONICAL_DRAFT_CHECK_PATH,DRAFT_CHECK_KEYS,ANONYMOUS,ARTIFACT_SCOPE,DEFAULT_TOKEN_TTL_MS,MAX_TOKEN_TTL_MS,MIN_TOKEN_TTL_MS,RUN_SIGN_IN_PATH,GROUP_SIGN_IN_PATH,type GroupSignIn,type RunSignIn} from '@artifactbin/contracts';
+import {CHART_IMAGE_PATH,CANONICAL_CHART_IMAGE_PATH,CHART_IMAGE_KEYS,DRAFT_CHECK_PATH,CANONICAL_DRAFT_CHECK_PATH,DRAFT_CHECK_KEYS,ANONYMOUS,ARTIFACT_SCOPE,DEFAULT_TOKEN_TTL_MS,MAX_TOKEN_TTL_MS,MIN_TOKEN_TTL_MS,RUN_SIGN_IN_PATH,GROUP_SIGN_IN_PATH,GROUP_SIGN_IN_GRANTS_PATH,SERVICE_GROUP_SIGN_IN_MAX_TTL_MS,type GroupSignIn,type RunSignIn} from '@artifactbin/contracts';
 import {ARTIFACT_IMAGE_DEADLINE_MS,ARTIFACT_IMAGE_ERRORS,ARTIFACT_IMAGE_ERROR_FIELDS,ARTIFACT_IMAGE_PATH,CANONICAL_ARTIFACT_IMAGE_PATH,ELEMENT_CAPTURE,ARTIFACT_READ_GRANT_PATH,ARTIFACT_READ_PATH,CANONICAL_ARTIFACT_READ_PATH,API_RESOURCE_PATH,HUMAN_SESSION_LIVE_PATH,IDENTITY_CALL_PATH,IDENTITY_SCHEMA,IDENTITY_INTROSPECT_PATH,IDENTITY_METHODS,IdentityError,SERVICE_AUTH_HEADER,parseAliasOrigins,parseServiceAudiences,type IssuedArtifactReadGrant,type IdentityIntrospectResponse,type IdentityMethod,type IdentityService,type Part,type ServiceAudience,type ServiceTokenParent,type TokenRecord,type TransactionalQueryable} from '@artifactbin/contracts';
 import {BodyTooLargeError,readBody,serviceSecretMatches} from '@artifactbin/utils';
 import type {Context} from 'hono';
 import type {AuthEnv,AuthOptions} from './parts';
 import {acceptedOriginsOf,baseUrlOf} from './routes/oauth';
-import {mintRunSignIn,mintServiceGroupSignIn} from './identity-store/accounts';
+import {listServiceGroupSignInGrants,mintRunSignIn,mintServiceGroupSignIn} from './identity-store/accounts';
 import {identityTables} from './identity-store/tables';
 import {say} from './events';
 import {readEnv} from './env';
@@ -148,12 +149,14 @@ export function sessionAuthority(o:AuthOptions):Part<AuthEnv>{return {name:'sess
   if(!service?.groupSignIns)return next();
   const input=await admit(c,()=>true);if(input instanceof Response)return input;
   if(Object.keys(input).some(key=>key!=='grant_id'&&key!=='expires_in')||typeof input.grant_id!=='string'||!/^sgg_[a-z0-9]{1,40}$/.test(input.grant_id))return answer({error:'bad_request'},400);
-  const lifetime=runLifetime(input.expires_in);
-  if(lifetime===null)return answer({error:'invalid_expiry'},400);
+  // A run sign-in's lifetime (default six hours), clamped to a day: the service asks again, under a live approval.
+  const asked=runLifetime(input.expires_in);
+  if(asked===null)return answer({error:'invalid_expiry'},400);
+  const lifetime=Math.min(asked,SERVICE_GROUP_SIGN_IN_MAX_TTL_MS);
   if(!o.identityDb)return answer({error:'session_unavailable'},503);
   try{
    const server=baseUrlOf(c.req.raw,o.trustedHops??0,readEnv(o.env,'APP__PUBLIC_BASE_URL'));
-   const minted=await mintServiceGroupSignIn(identityTables(authSchema),o.identityDb,{grantId:input.grant_id,service:service.id,expiresInMs:lifetime,audience:`${server}${API_RESOURCE_PATH}`,scope:ARTIFACT_SCOPE});
+   const minted=await mintServiceGroupSignIn(identityTables(authSchema),o.identityDb,{grantId:input.grant_id,service:service.id,origin:service.origin,expiresInMs:lifetime,audience:`${server}${API_RESOURCE_PATH}`,scope:ARTIFACT_SCOPE});
    void say(o.events,{kind:'group',id:minted.groupId},'minted',{kind:'token',id:minted.id},{name:minted.name,group_id:minted.groupId,grant_id:input.grant_id,service:service.id});
    const expiresAt=minted.expiresAt!;
    return answer({access_token:minted.token,token_type:'Bearer',token_id:minted.id,expires_at:expiresAt,expires_at_ms:Date.parse(expiresAt),server,group_id:minted.groupId,group_role:minted.role,grant_id:input.grant_id} satisfies GroupSignIn);
@@ -161,6 +164,17 @@ export function sessionAuthority(o:AuthOptions):Part<AuthEnv>{return {name:'sess
    if(error instanceof IdentityError)return answer({error:error.code,...(error.retryAfter!==undefined?{retry_after:error.retryAfter}:{})},error.status);
    return answer({error:'session_unavailable'},503);
   }
+ });
+ app.all(GROUP_SIGN_IN_GRANTS_PATH,async(c,next)=>{
+  // The same door as the sign-in route: only a service that opted in, with its own secret; anyone else, an unknown path.
+  const service=serviceOf(audiences,c.req.header(SERVICE_AUTH_HEADER));
+  if(!service?.groupSignIns)return next();
+  const input=await admit(c,()=>true);if(input instanceof Response)return input;
+  // It takes no question: what it lists is the caller's own, never another service's or a chosen group's.
+  if(Object.keys(input).length)return answer({error:'bad_request'},400);
+  if(!o.identityDb)return answer({error:'session_unavailable'},503);
+  try{return answer({approvals:await listServiceGroupSignInGrants(identityTables(authSchema),o.identityDb,{service:service.id,origin:service.origin})});}
+  catch{return answer({error:'session_unavailable'},503);}
  });
  app.all(ARTIFACT_WORKLOAD_PATH,async c=>{
   let service:ServiceAudience|undefined;

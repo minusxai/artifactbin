@@ -28,9 +28,11 @@
  * (`grant_id`: contracts service-audiences `GROUP_SIGN_IN_PATH`) has no family and no refresh. Then its
  * authorisation, which needs the groups, the tree and the authorising person's `active`: a second statement, only for
  * such a row, reads its `live` in the identity read view (`readSchema`), the one spelling of that rule. A row with
- * `group_id` set is never read as a person's, and never as an unowned token.
+ * `group_id` set is never read as a person's, and never as an unowned token. A service's is live, besides, only while
+ * that service is still configured here with the opt-in at the origin its approval recorded (`serviceAudiences`,
+ * contracts `groupSignInServiceConfigured`): configuration the views cannot see, so this read decides it, every use.
  */
-import type { Queryable, TokenReader, TokenRecord } from '@artifactbin/contracts';
+import { groupSignInServiceConfigured, type Queryable, type ServiceAudience, type TokenReader, type TokenRecord } from '@artifactbin/contracts';
 import { TOKEN_RE, hashToken, plainIdentifier } from '@artifactbin/utils';
 
 export interface BearerReaderOptions {
@@ -41,9 +43,11 @@ export interface BearerReaderOptions {
   admitBearer?: (token: TokenRecord) => Promise<boolean>;
   /** IDENTITY__SCHEMA: the identity read views, whose `tokens.live` decides a group's sign-in. Interpolated — a plain identifier. */
   readSchema?: string;
+  /** IDENTITY__SERVICE_AUDIENCES, parsed: a service's group sign-in is live only while its service is here, opted in. None: never. */
+  serviceAudiences?: readonly ServiceAudience[];
 }
 
-interface BearerRow { id: string; user_id: string | null; audience: string | null; scope: string | null; expires_at: string | Date | null; issued_by: string | null; group_id: string | null; group_role: string | null; email: string | null; email_verified: boolean | null }
+interface BearerRow { id: string; user_id: string | null; audience: string | null; scope: string | null; expires_at: string | Date | null; issued_by: string | null; group_id: string | null; group_role: string | null; grant_id: string | null; email: string | null; email_verified: boolean | null }
 
 /**
  * A FAMILY BOUND TO A BROWSER SESSION: a first-party client's grant (IDENTITY__OAUTH_CLIENTS `first_party`) records
@@ -103,7 +107,7 @@ export function createBearerReader(o: BearerReaderOptions): TokenReader {
   const tokens = `${auth}.tokens`;
   const views = plainIdentifier(o.readSchema ?? 'identity', 'read schema');
   const { fence, live } = bearerLiveSql({ auth, tokens });
-  const byHash = `SELECT t.id, t.user_id, t.audience, t.scope, t.expires_at, t.issued_by, t.group_id, t.group_role, u.email, u."emailVerified" AS email_verified
+  const byHash = `SELECT t.id, t.user_id, t.audience, t.scope, t.expires_at, t.issued_by, t.group_id, t.group_role, t.grant_id, u.email, u."emailVerified" AS email_verified
     FROM ${tokens} t
     ${fence}
     LEFT JOIN ${auth}."user" u ON u.id=t.user_id
@@ -114,7 +118,14 @@ export function createBearerReader(o: BearerReaderOptions): TokenReader {
       if (row.group_id !== null && row.group_id !== undefined) {
         // A group's sign-in: its authorisation, by the read view's one rule. No account, so no account policy.
         if (row.user_id || !row.issued_by || (row.group_role !== 'member' && row.group_role !== 'editor')) return null;
-        if ((await o.db.query<{ live: boolean }>(`SELECT live FROM ${views}.tokens WHERE id=$1`, [row.id])).rows[0]?.live !== true) return null;
+        if (!row.grant_id) {
+          if ((await o.db.query<{ live: boolean }>(`SELECT live FROM ${views}.tokens WHERE id=$1`, [row.id])).rows[0]?.live !== true) return null;
+        } else {
+          // A service's: live by the rule, and still that configured service, opted in, at the origin it was approved at.
+          const authorised = (await o.db.query<{ live: boolean; service_origin: string | null }>(`SELECT t.live, g.service_origin FROM ${views}.tokens t
+            LEFT JOIN ${views}.group_sign_in_grants g ON g.id=t.grant_id WHERE t.id=$1`, [row.id])).rows[0];
+          if (authorised?.live !== true || !groupSignInServiceConfigured(o.serviceAudiences ?? [], row.issued_by, authorised.service_origin)) return null;
+        }
         return { id: row.id, userId: null, groupId: row.group_id, groupRole: row.group_role, issuedBy: row.issued_by,
           ...(row.audience ? { audience: row.audience } : {}), ...(row.scope ? { scope: row.scope } : {}), ...(row.expires_at ? { expiresAt: new Date(row.expires_at).toISOString() } : {}) };
       }

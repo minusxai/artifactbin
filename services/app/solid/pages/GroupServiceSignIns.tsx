@@ -19,7 +19,8 @@ import { StatusMessage } from '../ui/StatusMessage';
 import { Badge } from '../ui/ui';
 
 type Level = 'member' | 'editor';
-interface Approval { id: string; service_id: string; role: Level; approved_by: { id: string; username: string | null; name: string | null }; created_at: string }
+/** `configured`: false once the service is no longer configured as approved (entry, opt-in or origin gone): it acts no more. */
+interface Approval { id: string; service_id: string; role: Level; approved_by: { id: string; username: string | null; name: string | null }; created_at: string; configured?: boolean }
 interface Approvals { approvals: Approval[]; services: { id: string; origin: string }[] }
 const LEVELS = [{ value: 'member', label: 'Member' }, { value: 'editor', label: 'Editor' }];
 /** What a service approved at `level` may do, in plain words. */
@@ -68,6 +69,7 @@ export function GroupServiceSignIns(props: { group: Pick<GroupSummary, 'id' | 'n
             <ul class="mt-2"><For each={value().approvals}>{(approval) => <ListRow>
               <span class="min-w-0 flex-1 break-words font-medium">{approval.service_id}</span>
               <Badge tone="dim">{approval.role}</Badge>
+              <Show when={approval.configured === false}><Badge tone="caution">Not configured</Badge></Show>
               <span class="text-xs text-muted">Approved by {who(approval)} · {dateTime(approval.created_at)}</span>
               <Button variant="secondary" type="button" disabled={busy()} aria-label={`Revoke ${approval.service_id} (${approval.role})`} onClick={() => setAsking(approval)}>Revoke</Button>
             </ListRow>}</For></ul>

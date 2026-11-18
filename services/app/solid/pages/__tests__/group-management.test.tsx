@@ -108,6 +108,31 @@ it('shows an Admin the agents signed in as the group, with level and who signed 
  expect(quiet).not.toHaveBeenCalled();
 });
 
+it('shows a service\'s sign-ins as one row per approval with their count, revoking the approval, and people\'s a page at a time',async()=>{
+ const person=(id:string,name:string)=>({id,name:'group-editor',role:'editor',issued_by:{id:'u_'+id,username:name.toLowerCase(),name},created_at:'2026-11-11T10:00:00.000Z',expires_at:null,last_used_at:null,live:true});
+ let services=[{grant_id:'sgg_1',service_id:'warehouse',role:'member',count:40,last_issued_at:'2026-11-12T10:00:00.000Z',approved_at:'2026-11-01T10:00:00.000Z'}];
+ const fetcher=stubFetch({'DELETE *':()=>{services=[];return new Response(null,{status:204});},
+  '*/sign-ins?cursor=c2':{sign_ins:[person('tok_3','Cy')],next_cursor:null,services}},
+  {fallback:()=>Response.json({sign_ins:[person('tok_1','Ann'),person('tok_2','Bo')],next_cursor:'c2',services})});
+ const {GroupSignIns}=await import('../GroupSignIns');
+ const view=render(()=> <GroupSignIns group={{id:'g1',name:'Team',role:'admin'}}/>);
+ const panel=await screen.findByRole('region',{name:'Agents signed in as this group'});
+ await waitFor(()=>expect(panel).toHaveTextContent('Signed in by service warehouse'));
+ expect(panel).toHaveTextContent('40 sign-ins');expect(panel).toHaveTextContent('Signed in by Bo');
+ expect(panel).not.toHaveTextContent('Signed in by Cy');
+ fireEvent.click(screen.getByRole('button',{name:'Show more sign-ins'}));
+ await waitFor(()=>expect(panel).toHaveTextContent('Signed in by Cy'));
+ expect(fetcher).toHaveBeenCalledWith('/api/groups/g1/sign-ins?cursor=c2',expect.anything());
+ expect(screen.queryByRole('button',{name:'Show more sign-ins'})).toBeNull();
+ // Revoking the service's row revokes its approval, which ends all of them.
+ fireEvent.click(screen.getByRole('button',{name:'Revoke the approval of warehouse (member)'}));
+ expect(await screen.findByRole('dialog')).toHaveTextContent('all 40 of its sign-ins (member) stop on their next request');
+ fireEvent.click(screen.getByRole('button',{name:'Confirm revoke'}));
+ await waitFor(()=>expect(fetcher).toHaveBeenCalledWith('/api/groups/g1/service-sign-ins/sgg_1',expect.objectContaining({method:'DELETE'})));
+ await waitFor(()=>expect(panel).not.toHaveTextContent('Signed in by service warehouse'));
+ view.unmount();
+});
+
 it('shows an Admin the services approved to act as the group, says plainly what approving one allows, and revokes',async()=>{
  let approvals=[{id:'sgg_1',service_id:'warehouse',role:'member',approved_by:{id:'u1',username:'ada',name:'Ada'},created_at:'2026-11-11T10:00:00.000Z'}];
  const fetcher=stubFetch({'POST *':()=>{approvals=[...approvals,{id:'sgg_2',service_id:'crm',role:'editor',approved_by:{id:'u1',username:'ada',name:'Ada'},created_at:'2026-11-12T10:00:00.000Z'}];return Response.json({id:'sgg_2'},{status:201});},

@@ -5,7 +5,7 @@ export function encodeCursor(kind: string, position: Record<string, unknown>): s
 }
 
 /** Cursor shapes are owned here so malformed input never reaches SQL casts. */
-export function decodePage(input: Record<string, unknown>, kind: 'artifacts' | 'versions' | 'comments'):
+export function decodePage(input: Record<string, unknown>, kind: 'artifacts' | 'versions' | 'comments' | 'sign-ins'):
   {limit: number; cursor?: Record<string, unknown>} | Response {
   const limit = input.limit === undefined ? 20 : Number(input.limit);
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) return json({error: 'invalid_limit', hint: 'limit must be an integer from 1 to 100'}, 400);

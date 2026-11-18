@@ -174,11 +174,15 @@ const GROUP_MAIL_OUTBOX:Table={name:'group_mail_outbox',columns:[
  * `editor`) with nobody present. Written only through the identity module (./groups `approveServiceGroupSignIn`);
  * `approved_by` is history, never authority: the approval belongs to the group and lives until an Admin revokes it
  * (`deleted_at`) or the group is deleted, and every sign-in issued under it ends with it (`tokens.grant_id`).
+ * `service_origin` is the service's configured origin when it was approved: the approval is that service's only while
+ * the id is still configured, with the opt-in, at that origin, so a different service given the old id later inherits
+ * nothing (NULL matches no configuration). Appended, nullable: replay-safe on a live database.
  */
 const GROUP_SIGN_IN_GRANTS:Table={name:'group_sign_in_grants',columns:[
  {name:'id',type:'TEXT',notNull:true},{name:'group_id',type:'TEXT',notNull:true},{name:'role',type:'TEXT',notNull:true},
  {name:'service_id',type:'TEXT',notNull:true},{name:'approved_by',type:'TEXT',notNull:true},
  {name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},{name:'deleted_at',type:'TIMESTAMPTZ'},
+ {name:'service_origin',type:'TEXT'},
 ],primaryKey:['id'],indexes:[{name:'idx_group_sign_in_grants_group',columns:['group_id'],where:'deleted_at IS NULL'}]};
 
 /** @public Read by scripts/render-schema.mjs, which finds Table data among this module's exports. */

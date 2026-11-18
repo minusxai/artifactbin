@@ -101,7 +101,8 @@ export const IDENTITY_SCHEMA = 'identity';
  *    group" reads this view rather than re-deriving the rule.
  *  - sessions: Better Auth's browser sessions, never their token; `live` while unexpired.
  *  - group_sign_in_grants: a group's approvals of configured services (./service-audiences `GROUP_SIGN_IN_PATH`): the
- *    service, the level, who approved it (history, never authority) and `deleted_at` once revoked. No secret.
+ *    service, the level, who approved it (history, never authority), `deleted_at` once revoked and the service's origin
+ *    when approved (`service_origin`). No secret.
  */
 export const IDENTITY_VIEWS = {
   users: ['id', 'email', 'kind', 'parent_user_id', 'expires_at', 'merged_into_user_id', 'name', 'username', 'image_key', 'auto_accept_mentions', 'welcome_pending', 'test_account', 'created_at', 'active'],
@@ -114,7 +115,7 @@ export const IDENTITY_VIEWS = {
   group_mail_outbox: ['id', 'email', 'recipient_id', 'group_id', 'group_name', 'handle', 'action', 'sender_id', 'lease_until', 'claim_token', 'attempts', 'next_attempt_at', 'quarantined_at', 'sent_at', 'created_at'],
   group_admins: ['group_id', 'user_id', 'via_group_id'],
   sessions: ['id', 'expiresAt', 'createdAt', 'updatedAt', 'ipAddress', 'userAgent', 'userId', 'live'],
-  group_sign_in_grants: ['id', 'group_id', 'role', 'service_id', 'approved_by', 'created_at', 'deleted_at'],
+  group_sign_in_grants: ['id', 'group_id', 'role', 'service_id', 'approved_by', 'created_at', 'deleted_at', 'service_origin'],
 } as const;
 
 /** Purpose-only delegation, service-secret authenticated; never a public API bearer. */

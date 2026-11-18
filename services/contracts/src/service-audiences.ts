@@ -44,15 +44,22 @@
  * agent the service runs with nobody present (scheduled or team work) acts as a GROUP. An Admin of the group (direct,
  * or of an ancestor) first approves the service at `member` or `editor` on the group's settings page (the identity
  * module's `group_sign_in_grants`, readable in the identity views); the service then presents its own secret
- * (SERVICE_AUTH_HEADER) and `{"grant_id": "<sgg_…>", "expires_in"?: <seconds, clamped as a run sign-in's>}` and
+ * (SERVICE_AUTH_HEADER) and `{"grant_id": "<sgg_…>", "expires_in"?: <seconds: default 6 h, clamped to 1 h–24 h>}` and
  * receives an ordinary API access token whose principal is that group at that level (./identity-service
  * `GROUP_SIGN_IN_RULE`: no person; `issued_by` the service's id; `grant_id` the approval), with NO refresh token
  * (`GroupSignIn`, which names `token_id` so the service can record which run used it). Only an approval naming THIS
  * service, not revoked, of a live group; never another group or level, never `admin`. The token is live only while
  * its approval is: revoking it or deleting the group ends every token issued under it on the next check. The approval
- * belongs to the group: it does not end when the Admin who approved it stops being one (`approved_by` is history).
- * Each issue is audited (`minted`, subject the group, with the approval and the service). Without the opt-in the path
- * answers as an unknown route.
+ * belongs to the group: it does not end when the Admin who approved it stops being one (`approved_by` is history),
+ * but one a test account made never issues or keeps a token. It is also the service's only while the service is
+ * configured as it was approved (`groupSignInServiceConfigured`): its entry here, with the opt-in, at the origin the
+ * approval recorded. Removing the entry or the opt-in stops every such token on its next use (the bearer read and the
+ * app re-check it each request), and a different service later given the old id, at another origin, inherits
+ * nothing; the same id configured again at the same origin is, unavoidably, the same service. Each issue is audited
+ * (`minted`, subject the group, with the approval and the service), and so are each approval and revocation (the
+ * group's audit). The service learns the approvals it may present at `GROUP_SIGN_IN_GRANTS_PATH`: the same secret,
+ * an empty `{}`, and back `{"approvals": [ServiceGroupSignInGrant…]}`, its own that still stand, oldest first. Without
+ * the opt-in both paths answer as an unknown route.
  */
 import { normalizeOrigin } from './server-identity';
 
@@ -91,6 +98,20 @@ export interface RunSignIn {
 }
 /** A group sign-in for a service (header above): its own secret and an approval's id in, an ordinary access token out. */
 export const GROUP_SIGN_IN_PATH = '/api/internal/identity/group-sign-in';
+/** A service's own approvals that still stand (header above): its own secret and `{}` in, `{approvals}` out. */
+export const GROUP_SIGN_IN_GRANTS_PATH = '/api/internal/identity/group-sign-in-grants';
+/** The longest a service's group sign-in lives: a day, whatever it asks; unasked, DEFAULT_TOKEN_TTL_MS. */
+export const SERVICE_GROUP_SIGN_IN_MAX_TTL_MS = 24 * 60 * 60 * 1000;
+/** One approval a service may present (`GROUP_SIGN_IN_GRANTS_PATH`): the group, its handle and name, the level. */
+export interface ServiceGroupSignInGrant { id: string; group_id: string; group_handle: string; group_name: string; role: 'member' | 'editor'; approved_at: string }
+/**
+ * Is a service's group sign-in or approval still that configured service's: `serviceId` is configured here, opted in
+ * to group sign-ins, at `origin` (what the approval recorded; null matches nothing). Asked on every use, where the
+ * configuration is known (the bearer read, the app's re-check, the mint and the service's list).
+ */
+export function groupSignInServiceConfigured(audiences: readonly ServiceAudience[], serviceId: string | null | undefined, origin: string | null | undefined): boolean {
+  return !!serviceId && !!origin && audiences.some((service) => service.id === serviceId && service.groupSignIns === true && service.origin === origin);
+}
 /** A group sign-in's answer: a run sign-in's fields, and the group and level the token acts as. */
 export interface GroupSignIn extends RunSignIn {
   group_id: string;

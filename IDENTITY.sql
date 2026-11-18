@@ -67,7 +67,9 @@ CREATE OR REPLACE VIEW identity.tokens AS
     WITH RECURSIVE up(id, depth) AS (SELECT g.id, 0 UNION ALL SELECT p.id, up.depth+1 FROM up JOIN auth.groups c ON c.id=up.id JOIN auth.groups p ON p.id=c.parent_id WHERE p.deleted_at IS NULL AND up.depth<10000)
     SELECT DISTINCT ON (m.user_id) m.user_id, up.id AS via_group_id FROM up JOIN auth.group_members m ON m.group_id=up.id AND m.role='admin' ORDER BY m.user_id, up.depth) a
   WHERE g.deleted_at IS NULL) held_admin WHERE held_admin.group_id=t.group_id AND held_admin.user_id=t.issued_by)))
-        ELSE EXISTS (SELECT 1 FROM auth.group_sign_in_grants signed_grant WHERE signed_grant.id=t.grant_id AND signed_grant.deleted_at IS NULL
+        ELSE EXISTS (SELECT 1 FROM auth.group_sign_in_grants signed_grant WHERE signed_grant.id=t.grant_id AND (signed_grant.deleted_at IS NULL AND signed_grant.role IN ('member','editor')
+      AND EXISTS (SELECT 1 FROM auth.groups granted_group WHERE granted_group.id=signed_grant.group_id AND granted_group.deleted_at IS NULL)
+      AND NOT EXISTS (SELECT 1 FROM auth.users approver WHERE approver.id=signed_grant.approved_by AND approver.test_account))
           AND signed_grant.group_id=t.group_id AND signed_grant.role=t.group_role AND signed_grant.service_id=t.issued_by) END) END) AS live, t.group_id, t.group_role, t.issued_by, t.grant_id
   FROM auth.tokens t;
 
@@ -90,7 +92,7 @@ CREATE OR REPLACE VIEW identity.group_mail_outbox AS
   SELECT x.id, x.email, x.recipient_id, x.group_id, x.group_name, x.handle, x.action, x.sender_id, x.lease_until, x.claim_token, x.attempts, x.next_attempt_at, x.quarantined_at, x.sent_at, x.created_at FROM auth.group_mail_outbox x;
 
 CREATE OR REPLACE VIEW identity.group_sign_in_grants AS
-  SELECT x.id, x.group_id, x.role, x.service_id, x.approved_by, x.created_at, x.deleted_at FROM auth.group_sign_in_grants x;
+  SELECT x.id, x.group_id, x.role, x.service_id, x.approved_by, x.created_at, x.deleted_at, x.service_origin FROM auth.group_sign_in_grants x;
 
 CREATE OR REPLACE VIEW identity.group_admins AS
   SELECT g.id AS group_id, a.user_id, a.via_group_id FROM auth.groups g CROSS JOIN LATERAL (
