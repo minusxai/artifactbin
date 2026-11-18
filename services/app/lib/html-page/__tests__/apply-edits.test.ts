@@ -46,20 +46,19 @@ describe('applyEdits', () => {
     }
   });
 
-  it('builds a 1 MB page with 20,000 edits in well under the time a rebuild per edit takes', () => {
+  it('builds a 1 MB page with 40,000 edits in well under the time a rebuild per edit takes', () => {
     const cell = '<p data-x="1">some text here</p>\n';
     const source = cell.repeat(Math.ceil(1_000_000 / cell.length));
-    const edits = Array.from({ length: 20_000 }, (_, i) => {
-      const at = Math.floor((i * source.length) / 20_000);
+    const edits = Array.from({ length: 40_000 }, (_, i) => {
+      const at = Math.floor((i * source.length) / 40_000);
       return { start: at, end: at, text: ' a="b"' };
     });
     applyEdits(source.slice(0, 1000), edits.slice(0, 10));
     const started = performance.now();
     const output = applyEdits(source, edits);
     const elapsed = performance.now() - started;
-    expect(output.length).toBe(source.length + 20_000 * 6);
+    expect(output.length).toBe(source.length + 40_000 * 6);
     expect(output.startsWith(' a="b"<p data-x="1">')).toBe(true);
-    // One pass takes a few milliseconds here; rebuilding the page per edit took over two seconds.
-    expect(elapsed).toBeLessThan(200);
+    expect(elapsed).toBeLessThan(400); // wall-clock-ok: one pass takes ~10 ms; a rebuild per edit took over 5 s
   });
 });
