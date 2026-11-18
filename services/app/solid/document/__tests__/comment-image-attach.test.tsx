@@ -341,6 +341,17 @@ describe('an attached image when the document moved', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Annotation composer' })).toBeNull());
   });
 
+  it('a comment refused because an edit removed its element says so in words and keeps the draft', async () => {
+    layer({ initialSelection: TEXT, editId: 'edit-loaded' }); await flush();
+    const sentence = 'An edit removed the part of the page you picked while you were writing. Your draft is still here: pick the part again and send.';
+    refuse((url) => url.endsWith('/api/my/artifacts/doc1/annotations'), 1, 409, { error: 'stale', message: sentence, edit_id: 'edit-newer', version: 3 });
+    replaceComment(field(), 'words only');
+    fireEvent.click(screen.getByLabelText('Save annotation')); await flush(); await flush();
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(sentence));
+    expect(screen.getByRole('alert')).not.toHaveTextContent(/^stale$/);
+    expect(field()).toHaveTextContent('words only');
+  });
+
   it('a reply with a pasted image follows a moved head without asking', async () => {
     layer({ railOpen: true, pickOnOpen: false, editId: 'edit-loaded' }); await flush();
     fireEvent.click(screen.getByRole('button', { name: 'Open annotation thread' })); await flush();

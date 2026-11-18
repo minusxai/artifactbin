@@ -40,7 +40,9 @@ export function artifactRequests(id: string) {
 function annotationFailure(status: number, body: unknown): string {
   const fallback = `Could not save comment (${status})`;
   if (!body || typeof body !== 'object') return fallback;
-  const { error, detail, details } = body as { error?: unknown; detail?: unknown; details?: unknown };
+  const { error, detail, details, message } = body as { error?: unknown; detail?: unknown; details?: unknown; message?: unknown };
+  // A refusal that carries a sentence for the person is shown as that sentence, never as its code.
+  if (typeof message === 'string' && message) return message;
   const named = typeof error === 'string' ? error : fallback;
   const described = typeof detail === 'string'
     ? detail

@@ -267,17 +267,31 @@ export async function createAnnotationFor(
     const row = (await artifactQuery<ArtifactRow>(tx,`SELECT * FROM artifacts WHERE id=$1 AND ${scope.where('$2')} FOR UPDATE`, [artifactId, scope.val])).rows[0];
     if (!row) return null;
     if (row.format !== 'html') return { refused: 'not_markup' };
-    if (input.baseEditId && input.baseEditId !== row.edit_id) return stale({ editId: row.edit_id, version: row.version });
+    // Only a staged image is a picture of one revision: it alone is refused when the head moved, so the
+    // composer restages it against the head named here. Words and view state carry across an edit.
+    if (input.attachmentId && input.baseEditId && input.baseEditId !== row.edit_id) return stale({ editId: row.edit_id, version: row.version });
     const source = row.source ?? '';
     let anchorKey: string | null = null;
+    let anchorVersion = row.version;
     let snippet = '';
     if (row.format === 'html') {
       const anchor = parseHtmlNodeAnchor(input.anchor);
       if (!anchor) return { refused: 'bad_path' };
       if (!/^[0-9]{1,15}$/.test(anchor.revision)) return { refused: 'invalid_annotation_revision' };
-      if (anchor.revision !== String(row.version)) return stale({ editId: row.edit_id, version: row.version });
-      const resolved = resolveHtmlCommentAnchor(htmlCommentNodes(source), anchor);
-      if (!anchor.nodeId || !resolved.node) return { refused: 'bad_path' };
+      const nodes = htmlCommentNodes(source);
+      let captured = nodes;
+      // A page edited while the reader wrote: the comment is the one they would have made a moment earlier,
+      // kept against the version they saw (read-time resolution replays it like any older comment). It is
+      // refused only when the element they picked is no longer on the page.
+      if (anchor.revision !== String(row.version)) {
+        const seen = (await artifactQuery<Pick<ArtifactRow, 'source'> & { version: number }>(tx,
+          'SELECT version, document, source FROM artifact_versions WHERE artifact_id=$1 AND version=$2', [artifactId, Number(anchor.revision)])).rows[0];
+        if (!seen) return { refused: 'invalid_annotation_revision' };
+        captured = htmlCommentNodes(seen.source ?? '');
+        anchorVersion = seen.version;
+      }
+      const resolved = resolveHtmlCommentAnchor(nodes, anchor, captured);
+      if (!anchor.nodeId || !resolved.node) return captured === nodes ? { refused: 'bad_path' } : stale({ editId: row.edit_id, version: row.version });
       // Text may be rendered by the page beneath this saved parent. Capture is
       // viewer-supplied evidence, never a claim about authoritative source text.
       if (input.range && (!isAreaRange(input.range) || anchor.quote || anchor.range)) return { refused: 'bad_path' };
@@ -291,7 +305,7 @@ export async function createAnnotationFor(
         status, anchor_key, anchor_version, snippet, quote, range, view_state, html_anchor)
      VALUES ($1, $2, NULL, $3, $4, $5, $6, $7, $8, 'open', $9, $10, $11, $12, $13, $14, $15)`,
     [id, artifactId, input.body, author.kind, actor.tokenId, actor.userId, author.label, author.transport,
-      anchorKey, row.version, snippet,
+      anchorKey, anchorVersion, snippet,
       input.anchor?.quote ?? quote, input.range ? JSON.stringify(input.range) : null, viewState ? JSON.stringify(viewState) : null, input.anchor ? JSON.stringify(input.anchor) : null],
     );
     // Read back through the join, not RETURNING: the echo draws the author's face too.

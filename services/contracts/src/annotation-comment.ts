@@ -84,4 +84,6 @@ export interface AnnotationCommentWire {
  * thing: the composer before it sends, hosted's `bad_path` refusal, the offline file and the local preview.
  * "Your draft" is the comment being written, which the composer keeps.
  */
+/** The element a comment was pinned to was removed by an edit made while the reader wrote. */
+export const COMMENT_TARGET_REMOVED = "An edit removed the part of the page you picked while you were writing. Your draft is still here: pick the part again and send.";
 export const COMMENT_TARGET_UNSAVED = "This element isn't in the saved document yet, so a comment can't attach to it. If you just added it, comment once your edit saves. Your draft is still here.";

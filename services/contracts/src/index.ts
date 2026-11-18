@@ -63,7 +63,7 @@ export * from './agent-guidance';
 export { CARD_HEIGHT, CARD_RENDER_GENERATION, CARD_WIDTH } from './og-card';
 export { isStartPlaceholder, START_PLACEHOLDER_MARKUP } from './start-placeholder';
 export type { AnnotationAuthor, AnnotationCommentWire, CommentReactionSummary, CommentReactionInput, CommentReactor } from './annotation-comment';
-export { COMMENT_TARGET_UNSAVED, COMMENT_REACTORS_MAX } from './annotation-comment';
+export { COMMENT_TARGET_UNSAVED, COMMENT_TARGET_REMOVED, COMMENT_REACTORS_MAX } from './annotation-comment';
 
 export * from "./groups";
 

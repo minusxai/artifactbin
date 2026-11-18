@@ -5,9 +5,9 @@ import {durableMutation,type MutationReceipt} from '@/lib/artifacts';
  * The BROWSER's annotation door — where a person's selection becomes a thread
  * (the bearer twin creates from a node id or a quote instead).
  * POST { node_id, edit_id, body }: `node_id` is the stored JSX ID the frame
- * reported for the selected node, `edit_id` the head the page believed in (staleness
- * is resolved server-side; an uncarryable base answers 409 with head so the
- * live page retries with fresh coordinates). GET lists like the bearer twin.
+ * reported for the selected node, `edit_id` the head the page believed in. A page
+ * edited while the reader wrote still takes the comment; 409 `stale` (with head)
+ * only when the picked element left the page, or a staged image predates the head. GET lists like the bearer twin.
  *
  * GET follows document read admission, including anonymous link readers.
  * Either browser credential authorizes writes (account session or the agent-session
@@ -22,6 +22,7 @@ import { sessionActor, browserActor } from '@/lib/authentication';
 import { capabilityGuard } from '@/lib/artifacts';
 import { json, readJson } from '@/lib/http';
 import { ownerUsername } from '@/lib/accounts';
+import { COMMENT_TARGET_REMOVED } from '@artifactbin/contracts';
 
 
 /**
@@ -94,7 +95,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   if (made instanceof Response) return made; // the anchor edit's named publish refusal
   if (!made) return json({ error: 'not_found' }, 404);
   if ('refused' in made) {
-    if (made.refused === 'stale') return json({ error: 'stale', edit_id: made.head.editId, version: made.head.version }, 409);
+    if (made.refused === 'stale') return json({ error: 'stale', message: COMMENT_TARGET_REMOVED, edit_id: made.head.editId, version: made.head.version }, 409);
     return json({ error: made.refused }, 400);
   }
   return json(made, 201);
