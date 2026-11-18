@@ -4,12 +4,12 @@ import { POST as create } from '@/app/api/artifacts/route';
 import { POST as like } from '@/app/api/my/artifacts/[id]/like/route';
 import { nativeHtml } from './native-html-fixture';
 import { accountProfile } from '@/lib/artifacts';
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
+import { mintAccountToken as mintToken, params } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
 import { count, has, link } from '@/lib/social';
 import { request, useAppHarness } from './harness';
 useAppHarness();
-const ctx = (id: string) => ({ params: Promise.resolve({ id }) });
+
 async function account(label: string) {
   const user = await createUser({
     email: `mxmx_test_likes_${label}@example.com`,
@@ -47,7 +47,7 @@ it('does not provide an implicit likes query table or membership scope', async (
       token: a.token.token,
       json: { sql: 'select * from _likes' },
     }),
-    ctx(dataset),
+    params(dataset),
   );
   expect(hidden.status).toBe(400);
   for (const scope of ['_likes', 'likes:abc123']) {
@@ -78,7 +78,7 @@ it('requires a signed-in session for likes and never accepts a chosen actor from
       method: 'POST',
       json: { userId: owner.user.id },
     }),
-    ctx(id),
+    params(id),
   );
   expect(anonymous.status).toBe(401);
   expect(await anonymous.json()).toMatchObject({ error: 'sign_in_required' });
@@ -94,7 +94,7 @@ it('requires a signed-in session for likes and never accepts a chosen actor from
       },
       json: { userId: owner.user.id, likes: [owner.user.id] },
     }),
-    ctx(id),
+    params(id),
   );
   expect(signed.status).toBe(200);
   expect(await signed.json()).toEqual({ liked: true, count: 1 });

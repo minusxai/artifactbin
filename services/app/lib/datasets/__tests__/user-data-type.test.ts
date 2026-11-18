@@ -10,14 +10,14 @@ import {POST as mutateRoute} from '@/app/api/artifacts/[id]/mutate/route';
 import {getDb} from '@/lib/platform';
 import { getArtifactById, changeMembership } from '@/lib/artifacts';
 import {loadDatasetRows, people, userOptions} from '@/lib/datasets';
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
+import { mintAccountToken as mintToken, params } from '@/__tests__/harness';
 import { identityForUser, createUser } from '@/lib/accounts';
 import { avatarUrl } from '@/lib/avatars';
 import {useAppHarness, request} from '@/__tests__/harness';
 import {GET as rawRoute} from '@/app/a/[id]/raw/route';
 
 useAppHarness();
-const ctx = (id:string)=>({params:Promise.resolve({id})});
+
 async function account(name:string) {
  const user=await createUser({email:`mxmx_test_${name}@example.com`,name});
  const token = await mintToken(name, user.id);
@@ -29,7 +29,7 @@ async function create(token:string,body:Record<string,unknown>) {
  return response.json() as Promise<{id:string}>;
 }
 async function mutate(token:string,id:string,sql:string,values:Record<string,unknown>={}) {
- return mutateRoute(request(`/api/artifacts/${id}/mutate`,{method:'POST',token,json:{sql,values}}),ctx(id));
+ return mutateRoute(request(`/api/artifacts/${id}/mutate`,{method:'POST',token,json:{sql,values}}),params(id));
 }
 describe('native user fields',()=>{
  it('validates real assigned values, binds $_me, and leaves historical self fields alone',async()=>{
@@ -63,7 +63,7 @@ describe('native user fields',()=>{
   expect(column[1].constraints?.memberOf).toEqual([`ref:${report.id}`]);
   const options=await userOptions(await getDb(),column[1],a.user.id);
   expect(options.map(option=>option.value).sort()).toEqual([a.user.id,b.user.id].sort());
-  const replacement=await replaceRoute(await observedRequest(`/api/artifacts/${dataset.id}`,{method:'PUT',token:a.token,json:{dataset:{kind:'stored',tables:[{schema:'public',name:'rows',columns:[{name:'id',type:'number'},{name:'assignee',type:'user',constraints:{memberOf:['current']}}],rows:[{id:1,assignee:null}]}]}}}),ctx(dataset.id));
+  const replacement=await replaceRoute(await observedRequest(`/api/artifacts/${dataset.id}`,{method:'PUT',token:a.token,json:{dataset:{kind:'stored',tables:[{schema:'public',name:'rows',columns:[{name:'id',type:'number'},{name:'assignee',type:'user',constraints:{memberOf:['current']}}],rows:[{id:1,assignee:null}]}]}}}),params(dataset.id));
   expect(replacement.status,await replacement.clone().text()).toBe(200);
   expect((await getArtifactById(dataset.id))!.source).toContain(`ref:${report.id}`);
   expect((await getArtifactById(dataset.id))!.source).not.toContain('current');
@@ -90,7 +90,7 @@ describe('native user fields',()=>{
   const dataset=await create(a.token,{dataset:[{id:1,done_by:a.user.id,title:'First'}],columns,access:'readwrite',shares:[{email:b.user.email,role:'editor'}]});
   expect((await mutate(b.token,dataset.id,"update public.rows set title='Edited'")).status).toBe(200);
   expect((await mutate(b.token,dataset.id,'update public.rows set done_by=done_by')).status).toBe(403);
-  const response=await replaceRoute(await observedRequest(`/api/artifacts/${dataset.id}`,{method:'PUT',token:b.token,json:{dataset:[{id:1,done_by:a.user.id,title:'Replaced'}],columns}}),ctx(dataset.id));
+  const response=await replaceRoute(await observedRequest(`/api/artifacts/${dataset.id}`,{method:'PUT',token:b.token,json:{dataset:[{id:1,done_by:a.user.id,title:'Replaced'}],columns}}),params(dataset.id));
   expect(response.status).toBe(403);
  });
  it('rechecks membership after shares change and accepts membership in either scope',async()=>{
@@ -120,7 +120,7 @@ describe('native user fields',()=>{
  it('serves authored HTML without injecting the reader identity or account credentials',async()=>{
   const owner=await account('host'),reader=await account('reader');
   const report=await create(owner.token,{html:nativeHtml('<p data-af-id="reader-label">Authored label</p>'),visibility:'public'});
-  const response=await rawRoute(request(`/a/${report.id}/raw`,{token:reader.token}),ctx(report.id));expect(response.status).toBe(200);
+  const response=await rawRoute(request(`/a/${report.id}/raw`,{token:reader.token}),params(report.id));expect(response.status).toBe(200);
   const html=await response.text();expect(html).toContain('Authored label');
   for(const secret of [reader.token,reader.user.id,reader.user.email!])expect(html).not.toContain(secret);
  });

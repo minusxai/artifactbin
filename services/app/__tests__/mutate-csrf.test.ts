@@ -12,17 +12,16 @@ import { getArtifactById } from '@/lib/artifacts';
 
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser, getUserById } from '@/lib/accounts';
-import { agentCookie, request, useAppHarness, setSession } from '@/__tests__/harness';
+import { agentCookie, request, useAppHarness, useSessionUser } from '@/__tests__/harness';
 
 useAppHarness();
+const sessionUser = useSessionUser('verified');
 beforeEach(() => {
   sessionUser.id = '';
   sessionUser.email = '';
-  setSession(() => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null, emailVerified: true } } : null));
 });
 
 const BASE = 'http://localhost:3000';
-const sessionUser = { id: '', email: '' };
 
 const mutationRequest = (path: string, init: { token?: string; cookie?: string; origin?: string; body?: unknown } = {}) =>
   request(path, { method: 'POST', token: init.token, cookie: init.cookie, origin: init.origin, headers: { 'Content-Type': 'text/plain' }, json: init.body ?? {} });

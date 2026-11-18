@@ -10,8 +10,9 @@ import {publishCommand} from '../../../skills/artifactbin/scripts/toolbox-publis
 import {groupsCommand} from '../../../skills/artifactbin/scripts/groups.mjs';
 import {journalIntent} from '../../../skills/artifactbin/scripts/toolbox-journal.mjs';
 import {tempDir} from '@artifactbin/test-support/temp-dir';
+import {syntheticEnv} from '@/test/helpers/toolbox-env';
 const server='https://example.test';
-const env={ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic-fixture'};
+const env=syntheticEnv(server, undefined, { token: 'synthetic-fixture' });
 const html='<!doctype html><html><head><title>Notes</title></head><body><h1>Notes</h1><p>Weekly notes for the shared collection.</p></body></html>';
 const run=promisify(execFile);
 async function workspace(work:(root:string)=>Promise<void>){
@@ -127,8 +128,7 @@ it('fresh candidate archive executes the real folder-create parser and helper',a
   const archive=await archiveFor(origin);const zip=path.join(root,'candidate.zip');
   await writeFile(zip,archive.bytes);await run('unzip',['-q',zip,'-d',root]);
   const cwd=path.join(root,'artifactbin'),journal=path.join(root,'request.json');
-  const commandEnv={...process.env,ARTIFACTBIN_URL:origin,ARTIFACTBIN_TOKEN:'synthetic',
-   ARTIFACTBIN_HOME:path.join(root,'home')};
+  const commandEnv={ ...process.env, ...syntheticEnv(origin, path.join(root,'home')) };
   const {stdout}=await run(process.execPath,['scripts/groups.mjs','folder-create','team',
    '--title','Notes','--request',journal,'--json'],{cwd,env:commandEnv});
   expect(JSON.parse(stdout)).toMatchObject({id:'FOLD12',format:'folder'});

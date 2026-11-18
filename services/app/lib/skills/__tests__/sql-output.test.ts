@@ -1,6 +1,6 @@
 /** sql.mjs query --sql-file and --output: rows go from the read into a new file and only a summary is printed. */
 import {readFile, writeFile, realpath} from 'node:fs/promises';
-import {syntheticEnv} from './toolbox-env';
+import {syntheticEnv} from '@/test/helpers/toolbox-env';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {beforeEach, expect, it, onTestFinished} from 'vitest';

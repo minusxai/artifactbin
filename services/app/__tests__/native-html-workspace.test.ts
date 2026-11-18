@@ -4,12 +4,11 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as profilePage } from '@/app/api/page/profile/[user]/[[...path]]/route';
 import { createUser, ensureUsername } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
-import { mintAccountToken } from './harness';
+import { mintAccountToken, params } from './harness';
 import { request, useAppHarness } from './harness';
 import { setArtifact } from '@/__tests__/rows';
 
 useAppHarness();
-const params = <T,>(p: T) => ({ params: Promise.resolve(p) });
 
 it('lists only live public HTML pages, keeping private, deleted, and legacy markup rows out', async () => {
   const owner = await ensureUsername(await createUser({ email: 'mxmx_test_native_profile@example.com' }));

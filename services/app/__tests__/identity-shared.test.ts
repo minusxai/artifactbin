@@ -8,7 +8,6 @@
  * The view names and columns are a cross-repository contract: the literal below pins them, so changing one is a
  * reviewed edit here and in every reader that applies a byte-for-byte copy of IDENTITY.sql.
  */
-import {createHash} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {beforeEach,expect,it,onTestFinished} from 'vitest';
@@ -22,11 +21,11 @@ import {canUseDeploymentIdentity,createUser} from '@/lib/accounts';
 import {canAuthenticateUser} from '@/lib/user-kinds';
 import {admitGroupMember,useAppHarness} from './harness';
 import {tempDir} from '@artifactbin/test-support/temp-dir';
+import {delegatedService,otpSignIn,serviceAudiences} from '../../auth/__tests__/helpers';
 useAppHarness();
 const SECRET='identity-test-service-secret',origin='http://localhost:3000',WAREHOUSE='http://warehouse.localhost:7444';
 const WAREHOUSE_SECRET='warehouse-introspection-secret',LEDGER_SECRET='ledger-introspection-secret';
-const sha256=(value:string)=>createHash('sha256').update(value).digest('hex');
-const AUDIENCES=JSON.stringify([{id:'warehouse',origin:WAREHOUSE,introspection_secret_sha256:sha256(WAREHOUSE_SECRET)},{id:'ledger',origin:'http://ledger.localhost:7445',introspection_secret_sha256:sha256(LEDGER_SECRET)}]);
+const AUDIENCES=serviceAudiences(delegatedService('warehouse',WAREHOUSE,WAREHOUSE_SECRET),delegatedService('ledger','http://ledger.localhost:7445',LEDGER_SECRET));
 let directory='';
 beforeEach(async()=>{overrideConfig({internalServiceSecret:SECRET,publicBaseUrl:origin},{IDENTITY__SERVICE_AUDIENCES:AUDIENCES});await syncIdentitySettings(await getDb());directory=await tempDir('identity-',onTestFinished);});
 
@@ -37,10 +36,8 @@ async function composed(){
  const service=async(path:string,body:unknown,secret=SECRET)=>{const response=await post(path,body,{[SERVICE_AUTH_HEADER]:secret});return {status:response.status,body:await response.json()};};
  /** Email sign-in, then the bearer grant for `audience`, a configured service id (absent: this API). */
  const signIn=async(email:string,audience?:string)=>{
-  expect((await post('/api/auth/email-otp/send-verification-otp',{email,type:'sign-in'})).status).toBe(200);
-  const sent=(await readFile(join(directory,'outbox.jsonl'),'utf8')).trim().split('\n').map(line=>JSON.parse(line)).filter(message=>message.to===email);
-  const login=await post('/api/auth/sign-in/email-otp',{email,otp:sent.at(-1).otp});expect(login.status).toBe(200);
-  const cookie=login.headers.getSetCookie().map(value=>value.split(';')[0]).join('; ');
+  const {sent,login,cookie}=await otpSignIn(post,email,async()=>(await readFile(join(directory,'outbox.jsonl'),'utf8')).trim().split('\n').map(line=>JSON.parse(line)).filter(message=>message.to===email).at(-1).otp,{prefix:'/api/auth'});
+  expect(sent.status).toBe(200);expect(login.status).toBe(200);
   const minted=await post('/api/authentication/token',audience===undefined?{}:{audience},{cookie});
   return {status:minted.status,grant:await minted.json(),cookie};
  };

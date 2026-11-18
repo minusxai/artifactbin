@@ -135,11 +135,7 @@ describe('the image doors ask the byte quota', () => {
     const t = await mintToken('t');
     await seedWebAsset(t.id, 'https://a.example/already2.png', 4_000_000, t.userId);
     setAssetByteQuotaForTests(1_000_000);
-    const res = await bearerCreate(new Request('http://localhost:3000/api/artifacts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'image/png', Authorization: `Bearer ${t.token}` },
-      body: new Uint8Array(PNG),
-    }));
+    const res = await bearerCreate(request('/api/artifacts', { method: 'POST', token: t.token, headers: { 'Content-Type': 'image/png' }, body: new Uint8Array(PNG) }));
     expect(res.status).toBe(403);
     expect((await res.json()).error).toBe('quota_exceeded');
   });

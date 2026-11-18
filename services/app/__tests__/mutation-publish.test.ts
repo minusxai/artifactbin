@@ -9,9 +9,9 @@ import { requestOrSessionActor } from '@/lib/authentication';
 import {linkedSql,liveLink} from './linked-datasets';
 import {firstSaveLinks} from './stored-links';
 import {loadDatasetRows} from '@/lib/datasets';
-import {mintAccountToken,request,useAppHarness} from './harness';
+import {mintAccountToken,request,useAppHarness,params} from './harness';
 useAppHarness();
-const ctx=(id:string)=>({params:Promise.resolve({id})});
+
 const html=(id:string,extra='')=>`<!doctype html><html><head><link rel="af-dataset" data-af-name="votes" href="ref:${id}">${extra}</head><body>Votes</body></html>`;
 async function fixture(access='readwrite'){
  const token=await mintAccountToken('native-mutation-publication'),actor=await requestOrSessionActor(request('/',{token:token.token}));
@@ -50,6 +50,6 @@ it('an authorized native dataset write commits its stable row update',async()=>{
 });
 it('rechecks dataset writability after the native page was published',async()=>{
  const f=await fixture();expect((await f.publish()).status).toBe(201);
- const ro=await replace(await observedRequest(`/api/artifacts/${f.id}`,{method:'PUT',token:f.token.token,json:{dataset:[{choice:'ramen',who:'seed'}],access:'read'}}),ctx(f.id));expect(ro.status).toBe(200);
+ const ro=await replace(await observedRequest(`/api/artifacts/${f.id}`,{method:'PUT',token:f.token.token,json:{dataset:[{choice:'ramen',who:'seed'}],access:'read'}}),params(f.id));expect(ro.status).toBe(200);
  expect((await f.update()).outcome).toBe('rejected');
 });

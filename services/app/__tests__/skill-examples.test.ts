@@ -12,6 +12,7 @@ import {GET as listComments,POST as addComment} from '@/app/api/artifacts/[id]/a
 import {POST as replyComment,PATCH as editComment} from '@/app/api/artifacts/[id]/annotations/[annId]/route';
 import {request,useAppHarness,mintAccountToken} from './harness';
 import {tempDir} from '@artifactbin/test-support/temp-dir';
+import {syntheticEnv} from '@/test/helpers/toolbox-env';
 // The suite caps a file at 10 KB (suite-env) so size tests trip cheaply; the dashboard's renderer
 // (examples/csv-dashboard.mjs) is a real-sized bundle dependency, so these publish under the product default.
 vi.mock('@/lib/platform/config',async importOriginal=>({...await importOriginal<typeof import('@/lib/platform/config')>(),MAX_FILE_BYTES:50_000_000}));
@@ -35,7 +36,7 @@ describe('installed native author examples',()=>{
    const installed=path.join(dir,'artifactbin'),project=path.join(dir,'project');await mkdir(project);
    const {publishCommand}=await import(pathToFileURL(path.join(installed,'scripts/toolbox-publish.mjs')).href);
    const owner=await mintAccountToken('sample-dashboard'),server='http://localhost:3000';
-   const options={log:()=>{},env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:owner.token,ARTIFACTBIN_HOME:path.join(dir,'private')},fetcher:async(input:any,init:any)=>{
+   const options={log:()=>{},env:syntheticEnv(server, path.join(dir,'private'), { token: owner.token }),fetcher:async(input:any,init:any)=>{
     const url=new URL(String(input)),id=url.pathname.split('/').at(-1)!,method=init?.method??'GET';
     const req=request(url.pathname,{method,token:owner.token,headers:{'Idempotency-Key':new Headers(init?.headers).get('Idempotency-Key')??''},...(init?.body?{json:JSON.parse(String(init.body))}:{})});
     return method==='GET'?await read(req,{params:Promise.resolve({id})}):method==='PUT'?await update(req,{params:Promise.resolve({id})}):await publish(req);
@@ -108,7 +109,7 @@ describe('installed native author examples',()=>{
    const {sourceIdentity,stripMarker}=await import(pathToFileURL(path.join(installed,'scripts/toolbox-source.mjs')).href);
    const {publishCommand}=await import(pathToFileURL(path.join(installed,'scripts/toolbox-publish.mjs')).href),{readCommand}=await import(pathToFileURL(path.join(installed,'scripts/read.mjs')).href),{commentCommand}=await import(pathToFileURL(path.join(installed,'scripts/comment.mjs')).href);
    const owner=await mintAccountToken('toolbox-canonical'),server='http://localhost:3000';let loseResponse=false;
-   const options={env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:owner.token,ARTIFACTBIN_HOME:path.join(dir,'private')},fetcher:async(input:any,init:any)=>{
+   const options={env:syntheticEnv(server, path.join(dir,'private'), { token: owner.token }),fetcher:async(input:any,init:any)=>{
     const url=new URL(String(input)),id=url.pathname.split('/').at(-1)!,method=init?.method??'GET';
     const req=request(url.pathname,{method,token:owner.token,headers:{'Idempotency-Key':new Headers(init?.headers).get('Idempotency-Key')??''},...(init?.body?{json:JSON.parse(String(init.body))}:{})});
     const segments=url.pathname.split('/'),pageId=segments[3];
@@ -180,7 +181,7 @@ describe('installed native author examples',()=>{
    const installed=path.join(dir,'artifactbin'),project=path.join(dir,'project');await mkdir(project);
    const {publishCommand}=await import(pathToFileURL(path.join(installed,'scripts/toolbox-publish.mjs')).href);
    const owner=await mintAccountToken('toolbox-autofix'),server='http://localhost:3000',logs:string[]=[];
-   const options={log:(text:string)=>{logs.push(text);},env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:owner.token,ARTIFACTBIN_HOME:path.join(dir,'private')},fetcher:async(input:any,init:any)=>{
+   const options={log:(text:string)=>{logs.push(text);},env:syntheticEnv(server, path.join(dir,'private'), { token: owner.token }),fetcher:async(input:any,init:any)=>{
     const url=new URL(String(input)),id=url.pathname.split('/').at(-1)!,method=init?.method??'GET';
     const req=request(url.pathname,{method,token:owner.token,headers:{'Idempotency-Key':new Headers(init?.headers).get('Idempotency-Key')??''},...(init?.body?{json:JSON.parse(String(init.body))}:{})});
     return method==='GET'?await read(req,{params:Promise.resolve({id})}):method==='PUT'?await update(req,{params:Promise.resolve({id})}):await publish(req);

@@ -1,5 +1,5 @@
 import {it,expect,onTestFinished} from 'vitest';
-import {syntheticEnv} from './toolbox-env';
+import {syntheticEnv} from '@/test/helpers/toolbox-env';
 import {copyFile,mkdir,readFile,readdir,writeFile} from 'node:fs/promises';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
@@ -15,7 +15,7 @@ it('retains exact journal snapshots after unknown writes and refuses cross-origi
  const {makeClient,createJournal,journalIntent,resumeJournal}=await import('../../../skills/artifactbin/scripts/toolbox-client.mjs');
  const root=await tempDir('author-journal-',onTestFinished);const server='https://example.test';
   let fail=true;const calls:any[]=[];const fetcher=async(url:any,init:any)=>{calls.push({url:String(url),...init});if(fail)throw Error('lost');return Response.json({id:'PAGE12',version:1});};
-  const client=makeClient(server,{env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'private-fixture',ARTIFACTBIN_HOME:root},fetcher});
+  const client=makeClient(server,{env:syntheticEnv(server, root, { token: 'private-fixture' }),fetcher});
   const journal=await createJournal(journalIntent({server,method:'POST',path:'/api/artifacts',body:{html:'<h1>One</h1>'},operation:'publish'}),{root});
   await expect(resumeJournal(journal,client,'publish')).rejects.toMatchObject({code:'outcome_unknown',exit:5,details:{journal}});
   fail=false;expect((await resumeJournal(journal,client,'publish')).receipt.id).toBe('PAGE12');
@@ -128,7 +128,7 @@ it('answers every sql.mjs statement in the documented shape, through a page or a
 it('uses private origin-bound login challenges and saves grants without exposing secrets',async()=>{
  const {authCommand}=await import('../../../skills/artifactbin/scripts/auth.mjs');
  const root=await tempDir('author-auth-',onTestFinished),codeFile=path.join(root,'code.txt'),server='https://example.test';
-  const options={env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_HOME:root},fetcher:async(url:any,init:any)=>{const pathname=new URL(url).pathname;if(pathname==='/oauth/revoke')return Response.json({});if(pathname.endsWith('send-verification-otp'))return Response.json({success:true});if(pathname.endsWith('sign-in/email-otp'))return Response.json({user:{id:'fixture'}},{headers:{'set-cookie':'session=synthetic; HttpOnly'}});expect(new Headers(init.headers).get('Cookie')).toBe('session=synthetic');return Response.json({access_token:'synthetic_access',refresh_token:'synthetic_refresh',client_id:'fixture_client',expires_in:3600});}};
+  const options={env:syntheticEnv(server, root, { token: null }),fetcher:async(url:any,init:any)=>{const pathname=new URL(url).pathname;if(pathname==='/oauth/revoke')return Response.json({});if(pathname.endsWith('send-verification-otp'))return Response.json({success:true});if(pathname.endsWith('sign-in/email-otp'))return Response.json({user:{id:'fixture'}},{headers:{'set-cookie':'session=synthetic; HttpOnly'}});expect(new Headers(init.headers).get('Cookie')).toBe('session=synthetic');return Response.json({access_token:'synthetic_access',refresh_token:'synthetic_refresh',client_id:'fixture_client',expires_in:3600});}};
   const challenge=await authCommand({sub:'login',values:{email:'author@example.test'},positionals:[]},options);expect(challenge.challenge).toBeTruthy();await writeFile(codeFile,'123456');
   const result=await authCommand({sub:'login',values:{challenge:challenge.challenge,'code-file':codeFile},positionals:[]},options);expect(JSON.stringify(result)).not.toContain('synthetic_access');
   expect(await authCommand({sub:'status',values:{},positionals:[]},options)).toMatchObject({authenticated:true,source:'private-store'});
@@ -139,7 +139,7 @@ it('login --audience saves a second grant for that service beside the API grant;
  const {authCommand}=await import('../../../skills/artifactbin/scripts/auth.mjs'),{platform}=await import('../../../skills/artifactbin/scripts/toolbox-client.mjs');
  const root=await tempDir('author-auth-audience-',onTestFinished),codeFile=path.join(root,'code.txt'),server='https://example.test';
  const asked:unknown[]=[];
-  const options={env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_HOME:root},fetcher:async(url:any,init:any)=>{const pathname=new URL(url).pathname;if(pathname.endsWith('send-verification-otp'))return Response.json({success:true});if(pathname.endsWith('sign-in/email-otp'))return Response.json({user:{id:'fixture'}},{headers:{'set-cookie':'session=synthetic; HttpOnly'}});
+  const options={env:syntheticEnv(server, root, { token: null }),fetcher:async(url:any,init:any)=>{const pathname=new URL(url).pathname;if(pathname.endsWith('send-verification-otp'))return Response.json({success:true});if(pathname.endsWith('sign-in/email-otp'))return Response.json({user:{id:'fixture'}},{headers:{'set-cookie':'session=synthetic; HttpOnly'}});
    const body=JSON.parse(init.body);if(pathname==='/api/authentication/token')asked.push(body);
    return Response.json(body.audience?{access_token:'service_access',refresh_token:'service_refresh',client_id:'service_client',expires_in:3600,resource:'https://warehouse.example'}:{access_token:'synthetic_access',refresh_token:'synthetic_refresh',client_id:'fixture_client',expires_in:3600});}};
   await writeFile(codeFile,'123456');
@@ -161,7 +161,7 @@ it('serviceToken exchanges the one saved grant for a short-lived service token, 
  const fetcher=async(url:any,init:any)=>{const request=new Request(url,init);expect(new URL(request.url).pathname).toBe('/api/authentication/service-token');
   seen.push({auth:request.headers.get('authorization'),body:await request.json()});
   return Response.json({access_token:`svc_${seen.length}`,token_type:'Bearer',expires_in:life/1000,expires_at:new Date(Date.now()+life).toISOString(),audience:'warehouse'});};
- const client=makeClient(server,{env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'the_one_grant'},fetcher:fetcher as typeof fetch,identity:{name:'test'} as never});
+ const client=makeClient(server,{env:syntheticEnv(server, undefined, { token: 'the_one_grant' }),fetcher:fetcher as typeof fetch,identity:{name:'test'} as never});
  expect(await serviceToken(client,'warehouse')).toBe('svc_1');
  expect(await serviceToken(client,'warehouse')).toBe('svc_1');
  expect(seen).toEqual([{auth:'Bearer the_one_grant',body:{audience:'warehouse'}}]);
@@ -175,7 +175,7 @@ it('status proves an unexpired saved grant with the server, so a grant revoked e
   const shared=await platform();
   await shared.saveCredentials({server,token:'synthetic_access',refreshToken:'synthetic_refresh',clientId:'fixture_client',expiresAt:Date.now()+3600_000},root);
   let revoked=false;const refreshes:string[]=[];
-  const options={env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_HOME:root},fetcher:async(url:any)=>{refreshes.push(new URL(url).pathname);return revoked?Response.json({error:'invalid_grant'},{status:400}):Response.json({access_token:'synthetic_access_2',refresh_token:'synthetic_refresh_2',client_id:'fixture_client',expires_in:3600});}};
+  const options={env:syntheticEnv(server, root, { token: null }),fetcher:async(url:any)=>{refreshes.push(new URL(url).pathname);return revoked?Response.json({error:'invalid_grant'},{status:400}):Response.json({access_token:'synthetic_access_2',refresh_token:'synthetic_refresh_2',client_id:'fixture_client',expires_in:3600});}};
   expect(await authCommand({sub:'status',values:{},positionals:[]},options)).toMatchObject({authenticated:true,source:'private-store',expired:false});
   expect(refreshes.length).toBe(1);
   revoked=true;
@@ -288,7 +288,7 @@ it('checks a published file by the page its marker names and refuses an unpublis
   await writeFile(file,stampSource('<p>Hi</p>',{server:'https://pages.example',id:'PAGE12',version:1,state:'a'.repeat(64),sha256:'b'.repeat(64),entryPath:'index.html'}));
   // The marker supplies id and server, so the hosted request goes to that server for /a/PAGE12.
   const seen:string[]=[];
-  await checkCommand({values:{},positionals:[file]},{env:{ARTIFACTBIN_URL:'https://pages.example',ARTIFACTBIN_TOKEN:'t'},retryDelays:[],fetcher:async(input:any,init:any)=>{seen.push(String(input)+' '+(init?.body??''));throw Error('stop');}}).catch(error=>seen.push('error '+error.message));
+  await checkCommand({values:{},positionals:[file]},{env:syntheticEnv('https://pages.example', undefined, { token: 't' }),retryDelays:[],fetcher:async(input:any,init:any)=>{seen.push(String(input)+' '+(init?.body??''));throw Error('stop');}}).catch(error=>seen.push('error '+error.message));
   expect(seen.some(entry=>entry.startsWith('https://pages.example/api/browser-sessions')&&entry.includes('/a/PAGE12'))).toBe(true);
 });
 it('replies with text alone, and a resolve without --expected-revision reads the thread revision first',async()=>{
@@ -397,7 +397,7 @@ it('publish --group resolves the group first and sends an explicit destination o
   const file=path.join(root,'index.html');await writeFile(file,'<!doctype html><html><head><meta charset="utf-8"><title>T</title></head><body><h1>Hi</h1></body></html>');
   const seen:string[]=[];let role='editor';
   const fetcher=async(url:any)=>{seen.push(new URL(String(url)).pathname);return Response.json({group:{id:'grp_team',handle:'team',role}});};
-  const options={env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'private-fixture',ARTIFACTBIN_HOME:root},fetcher,log:()=>{}};
+  const options={env:syntheticEnv(server, root, { token: 'private-fixture' }),fetcher,log:()=>{}};
   const planned=await publishCommand({values:{server,'dry-run':true,group:'@team',create:true},positionals:[file]},options);
   expect(seen).toEqual(['/api/groups/team']);expect(planned).toMatchObject({dryRun:true,method:'POST',destination:{type:'group',id:'grp_team'}});
   expect(await publishCommand({values:{server,'dry-run':true,create:true},positionals:[file]},options)).not.toHaveProperty('destination');
@@ -480,7 +480,7 @@ it('logout revokes the saved grant by default without refreshing or revoking env
  const saved={server,token:'synthetic-saved',refreshToken:'synthetic-refresh',clientId:'synthetic-client',expiresAt:1};
   await shared.saveCredentials(saved,root);
   let calls=0,offline=false,reply=()=>new Response('',{status:503});
-  const options={env:{ARTIFACTBIN_HOME:root,ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic-environment'},fetcher:async(url:string|URL|Request,init:RequestInit={})=>{
+  const options={env:syntheticEnv(server, root, { token: 'synthetic-environment' }),fetcher:async(url:string|URL|Request,init:RequestInit={})=>{
    calls++;expect(String(url)).toBe(server+'/oauth/revoke');expect(JSON.parse(init.body as string)).toEqual({client_id:saved.clientId,token:saved.refreshToken});
    expect(JSON.stringify(init)).not.toContain('synthetic-environment');if(offline)throw new TypeError('fetch failed');return reply();
   }};
@@ -528,7 +528,7 @@ it('publish --template applies a new dataset\'s starting permissions after the c
    if(pathname==='/api/artifacts/DATA12/policy'&&method==='PUT')return Response.json({saved:true,revision:2,readBack:'Table public.rows\n- Owner, editors: see and change everything.'});
    return Response.json({error:'unexpected'},{status:500});
   };
-  const options={env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'private-fixture',ARTIFACTBIN_HOME:path.join(root,'home')},fetcher,log:()=>{}};
+  const options={env:syntheticEnv(server, path.join(root,'home'), { token: 'private-fixture' }),fetcher,log:()=>{}};
   await expect(publishCommand({values:{server,template:'own-rows'},positionals:[page]},options)).rejects.toMatchObject({code:'template_requires_dataset'});
   await expect(publishCommand({values:{server,template:'everyone'},positionals:[csv]},options)).rejects.toMatchObject({exit:2});
   expect(seen).toEqual([]);
@@ -569,7 +569,7 @@ it('checks a deck at deck viewports without --viewport and attaches the reply fa
    ...(slides?{slides:[1,2].map(n=>({base64:Buffer.from('slide '+n).toString('base64'),width:1200,height:630}))}:{})};
   return Response.json({session_id:body.session_id,execution_id:body.execution_id,status:'completed',result:{viewport:{width:Number(size[1]),height:Number(size[2])},pageErrors:[],consoleErrors:[],failedRequests:[],httpErrors:[],telemetry:[],text:'Ready',overflow:{viewport:1,content:1,fits:true},slides:{count:2},screenshot}});};
  const sliced:string[]=[];
-  const result=await checkCommand({values:{},positionals:['PAGE12']},{env:{ARTIFACTBIN_URL:'https://h.test',ARTIFACTBIN_TOKEN:'t',ARTIFACTBIN_HOME:root},fetcher});
+  const result=await checkCommand({values:{},positionals:['PAGE12']},{env:syntheticEnv('https://h.test', root, { token: 't' }),fetcher});
   expect(sizes.sort()).toEqual(['1200x630','1280x800']);expect(sliced).toEqual(['1200x630']);
   // Each slide is saved beside the viewport screenshots; the result names the files, never their bytes.
   const shot=(result.checks.find((check:any)=>check.viewport.width===1200) as any).screenshot;
@@ -579,7 +579,7 @@ it('checks a deck at deck viewports without --viewport and attaches the reply fa
   expect(result.slideLinks).toEqual(['https://h.test/a/PAGE12/export?format=png&slide=1','https://h.test/a/PAGE12/export?format=png&slide=2']);
   expect(result.reply).toEqual({id:'PAGE12',link:'https://h.test/a/PAGE12',builtWith:'one HTML page from a SLIDES data block',permissions:[{id:'DATA12',name:'sales',lines:['Table public.sales','- Signed-out link holders: see rows.']}]});
   // An explicit --viewport wins.
-  sizes.length=0;await checkCommand({values:{viewport:['390x844']},positionals:['PAGE12']},{env:{ARTIFACTBIN_URL:'https://h.test',ARTIFACTBIN_TOKEN:'t',ARTIFACTBIN_HOME:root},fetcher});
+  sizes.length=0;await checkCommand({values:{viewport:['390x844']},positionals:['PAGE12']},{env:syntheticEnv('https://h.test', root, { token: 't' }),fetcher});
   expect(sizes).toEqual(['390x844']);expect(sliced).toEqual(['1200x630','390x844']);
 });
 it('fails a published page that links a dataset but never reads it, and passes one read in any viewport',async()=>{
@@ -595,7 +595,7 @@ it('fails a published page that links a dataset but never reads it, and passes o
   const body=JSON.parse(String(init.body));if(body.op==='close')return Response.json({session_id:body.session_id,status:'closed'});
   const [,w,h]=/"width":(\d+),"height":(\d+)/.exec(body.code)!;
   return Response.json({session_id:body.session_id,execution_id:body.execution_id,status:'completed',result:{viewport:{width:Number(w),height:Number(h)},pageErrors:[],consoleErrors:[],failedRequests:[],httpErrors:[],telemetry:[],text:'Total $1,240',overflow:{viewport:1,content:1,fits:true},steps:{ran:true,passed:true},verified:['total shows'],datasetReads:reads[w!]??0}});};
- const env={ARTIFACTBIN_URL:'https://h.test',ARTIFACTBIN_TOKEN:'t',ARTIFACTBIN_HOME:root};
+ const env=syntheticEnv('https://h.test', root, { token: 't' });
   const error=await checkCommand({values:{},positionals:['PAGE12']},{env,fetcher}).catch((e:any)=>e);
   expect(error).toMatchObject({code:'check_failed',details:{smokePassed:false,unreadDatasets:[{id:'DATA12',name:'sales'}]}});
   expect(error.details.reply).toBeUndefined();
@@ -621,7 +621,7 @@ it('names every failed sql call with its detail, and asks a guest\'s failed read
   const body=JSON.parse(String(init.body));if(body.op==='close')return Response.json({session_id:body.session_id,status:'closed'});
   const [,w,h]=/"width":(\d+),"height":(\d+)/.exec(body.code)!,found=results[(body.viewer??'self')+w]??base;
   return Response.json({session_id:body.session_id,execution_id:body.execution_id,status:'completed',result:{...found,viewport:{width:Number(w),height:Number(h)}}});};
- const env={ARTIFACTBIN_URL:'https://h.test',ARTIFACTBIN_TOKEN:'t',ARTIFACTBIN_HOME:root};
+ const env=syntheticEnv('https://h.test', root, { token: 't' });
  const check=(values:Record<string,unknown>)=>checkCommand({values:{steps,...values},positionals:['PAGE12']},{env,fetcher});
   // A call that failed for the owner fails the check even when every step passed, and names its detail.
   results={self1280:{...base,callErrors:[notOnPage]},self390:base};
@@ -651,7 +651,7 @@ it('repeats a status read through a transient network failure but never resubmit
   if(body.op==='status'&&blips-->0)throw Error('connection reset');
   if(body.op==='close')return Response.json({session_id:body.session_id,status:'closed'});
   return Response.json({session_id:body.session_id,execution_id:body.execution_id,status:'completed',result:{viewport:{width:390,height:844},pageErrors:[],consoleErrors:[],failedRequests:[],httpErrors:[],telemetry:[],text:'Ready',overflow:{viewport:390,content:390,fits:true}}});};
-  const result=await checkCommand({values:{viewport:['390x844']},positionals:['PAGE12']},{env:{ARTIFACTBIN_URL:'https://h.test',ARTIFACTBIN_TOKEN:'t',ARTIFACTBIN_HOME:root},fetcher,retryDelays:[0,0]});
+  const result=await checkCommand({values:{viewport:['390x844']},positionals:['PAGE12']},{env:syntheticEnv('https://h.test', root, { token: 't' }),fetcher,retryDelays:[0,0]});
   expect(result.smokePassed).toBe(true);expect(ops).toEqual(['script','status','status','close']);
 });
 /** A fake server for publish/read: GET a page head (with its recorded receipts), POST/PUT a page that then becomes
@@ -673,7 +673,7 @@ it('publish refuses an empty page and starter placeholders by line, and drops ha
  const {publishCommand}=await import('../../../skills/artifactbin/scripts/toolbox-publish.mjs');
  const {sourceIdentity}=await import('../../../skills/artifactbin/scripts/toolbox-source.mjs');
  const home=await tempDir('publish-guard-',onTestFinished),dir=path.join(home,'project');await mkdir(dir);const {sent,fetcher}=fakePages({id:'PAGE12',version:3,state:'a'.repeat(64),html:''});
- const options={env:{ARTIFACTBIN_URL:'https://h.test',ARTIFACTBIN_TOKEN:'t',ARTIFACTBIN_HOME:path.join(home,'home')},fetcher,log:()=>{}};
+ const options={env:syntheticEnv('https://h.test', path.join(home,'home'), { token: 't' }),fetcher,log:()=>{}};
   const file=path.join(dir,'index.html');
   for(const empty of ['','\n  \n','<!doctype html><html><head><title>x</title></head><body>\n</body></html>']){
    await writeFile(file,empty);
@@ -720,7 +720,7 @@ it('publish FILE --artifact ID replaces that page over its current head when the
  const {sourceIdentity}=await import('../../../skills/artifactbin/scripts/toolbox-source.mjs');
  const receipts=[{path:'sales.csv',kind:'dataset',id:'DATA12',revision:'2',sha256:'e'.repeat(64)}];
  const home=await tempDir('publish-artifact-',onTestFinished),dir=path.join(home,'project');await mkdir(dir);const {sent,fetcher}=fakePages({id:'PAGE12',version:3,state:'a'.repeat(64),html:'<h1 data-af-id="af-1">Old</h1>',sharing_revision:4,dependencyReceipts:receipts});
- const options={env:{ARTIFACTBIN_URL:'https://h.test',ARTIFACTBIN_TOKEN:'t',ARTIFACTBIN_HOME:path.join(home,'home')},fetcher,log:()=>{}};
+ const options={env:syntheticEnv('https://h.test', path.join(home,'home'), { token: 't' }),fetcher,log:()=>{}};
   const file=path.join(dir,'index.html');await writeFile(file,'<!doctype html>\n<h1 data-af-id="af-1">New</h1>');
   const done=await publishCommand({values:{artifact:'PAGE12',visibility:'public'},positionals:[file]},options);
   expect(sent.map(r=>r.method+' '+r.path)).toEqual(['GET /api/artifacts/PAGE12','PUT /api/artifacts/PAGE12']);
@@ -753,7 +753,7 @@ it('never overwrites a newer version, and refuses an exported page, a saved vers
  const {stampSource}=await import('../../../skills/artifactbin/scripts/toolbox-source.mjs');
  const home=await tempDir('publish-refusals-',onTestFinished),dir=path.join(home,'project');await mkdir(dir);
  const {sent,fetcher}=fakePages({id:'PAGE12',version:5,state:'f'.repeat(64),html:'<h1>Newer</h1>'});
- const options={env:{ARTIFACTBIN_URL:'https://h.test',ARTIFACTBIN_TOKEN:'t',ARTIFACTBIN_HOME:path.join(home,'home')},fetcher,log:()=>{}};
+ const options={env:syntheticEnv('https://h.test', path.join(home,'home'), { token: 't' }),fetcher,log:()=>{}};
  const marker={server:'https://h.test',id:'PAGE12',version:3,state:'a'.repeat(64),sha256:'b'.repeat(64),entryPath:'index.html'};
  const publish=(values:Record<string,unknown>={})=>publishCommand({values,positionals:[file]},options).catch((error:any)=>error);
  const file=path.join(dir,'index.html');
@@ -784,7 +784,7 @@ it('publishing an exported page sends its page, never the rows or runtime it car
  const {portableScript}=await import('../../html-runtime/portable');
  const home=await tempDir('publish-export-',onTestFinished),dir=path.join(home,'project');await mkdir(dir);
  const {sent,fetcher}=fakePages({id:'PAGE12',version:3,state:'a'.repeat(64),html:'<h1>Old</h1>'});
- const options={env:{ARTIFACTBIN_URL:'https://h.test',ARTIFACTBIN_TOKEN:'t',ARTIFACTBIN_HOME:path.join(home,'home')},fetcher,log:()=>{}};
+ const options={env:syntheticEnv('https://h.test', path.join(home,'home'), { token: 't' }),fetcher,log:()=>{}};
  const source='<!doctype html><html><head><title>Report</title><script src="/af/core.js"></script></head><body><h1>Report</h1></body></html>';
  const exported=source.replace('<head>','<head>'+portableScript({version:1,source})+'<script type="application/json" data-af="offline-data">{"tables":[{"schema":"main","name":"staff","columns":[],"rows":[{"salary":"zebra-7731"}]}]}</script><script type="application/json" data-af="offline-sql">"engine"</script>');
   const file=path.join(dir,'report.html');
@@ -801,7 +801,7 @@ it('a file copied into another folder still updates its own page',async()=>{
  const {publishCommand}=await import('../../../skills/artifactbin/scripts/toolbox-publish.mjs');
  const home=await tempDir('publish-copy-',onTestFinished),a=path.join(home,'a'),b=path.join(home,'b');await mkdir(a);await mkdir(b);
  const {sent,fetcher}=fakePages({id:'PAGE12',version:1,state:'a'.repeat(64),html:''});
- const options={env:{ARTIFACTBIN_URL:'https://h.test',ARTIFACTBIN_TOKEN:'t',ARTIFACTBIN_HOME:path.join(home,'home')},fetcher,log:()=>{}};
+ const options={env:syntheticEnv('https://h.test', path.join(home,'home'), { token: 't' }),fetcher,log:()=>{}};
   await writeFile(path.join(a,'index.html'),'<!doctype html>\n<h1>First</h1>');
   expect(await publishCommand({values:{create:true},positionals:[path.join(a,'index.html')]},options)).toMatchObject({id:'NEW123',version:1});
   await copyFile(path.join(a,'index.html'),path.join(b,'page.html'));
@@ -816,7 +816,7 @@ it('read --output refreshes an unchanged file in place and saves beside a file w
  const {readCommand}=await import('../../../skills/artifactbin/scripts/read.mjs');
  const {sourceIdentity}=await import('../../../skills/artifactbin/scripts/toolbox-source.mjs');
  const dir=await tempDir('read-refresh-',onTestFinished);let version=3;
- const options={env:{ARTIFACTBIN_URL:'https://h.test',ARTIFACTBIN_TOKEN:'t'},fetcher:async()=>Response.json({id:'PAGE12',format:'html',version,state:'a'.repeat(64),html:`<h1 data-af-id="h">v${version}</h1>`})};
+ const options={env:syntheticEnv('https://h.test', undefined, { token: 't' }),fetcher:async()=>Response.json({id:'PAGE12',format:'html',version,state:'a'.repeat(64),html:`<h1 data-af-id="h">v${version}</h1>`})};
   const file=path.join(dir,'page.html');
   expect((await readCommand({values:{output:file},positionals:['PAGE12']},options)).source).toBe(file);
   version=4;const again=await readCommand({values:{output:file},positionals:['PAGE12']},options);
@@ -841,7 +841,7 @@ it('names new file datasets from CSV and JSON basenames while preserving explici
    seen.push(JSON.parse(String(init.body)));
    return Response.json({id:'DATA12',url:server+'/a/DATA12',version:2,state:'b'.repeat(64),format:'dataset'},{status:201});
   };
-  const options={env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic',ARTIFACTBIN_HOME:path.join(root,'home')},fetcher,log:()=>{}};
+  const options={env:syntheticEnv(server, path.join(root,'home')),fetcher,log:()=>{}};
   for(const [name,source] of [['Query Results.csv','n\n1\n'],['query-results.json','[{"n":1}]']]){
    const file=path.join(project,name!);await writeFile(file,source!);
    await publishCommand({values:{create:true},positionals:[file]},options);

@@ -1,5 +1,5 @@
 import {createAuthHost} from '../src/parts';
-import {noTokens} from './helpers';
+import {noTokens, otpSignIn} from './helpers';
 import {sessionStoreOf} from '../src/index';
 import {PGlite} from '@electric-sql/pglite';
 import {afterAll,beforeAll,beforeEach,describe,expect,it,vi} from 'vitest';
@@ -59,19 +59,13 @@ const call = (path: string, body?: unknown, cookie?: string) => auth.handler(new
   ...(body === undefined ? {} : { body: JSON.stringify(body) }),
 }));
 const cookieOf = (res: Response) => (res.headers.getSetCookie?.() ?? [res.headers.get('set-cookie') ?? '']).filter(Boolean).map((c) => c.split(';')[0]).join('; ');
-const signInByOtp = async (email: string) => {
-  await call('/email-otp/send-verification-otp', { email, type: 'sign-in' });
-  const otp = sent.find((m) => m.to === email && m.otp)!.otp!;
-  const res = await call('/sign-in/email-otp', { email, otp });
-  return cookieOf(res);
-};
+const signInByOtp = async (email: string) => cookieOf((await otpSignIn(call, email, () => sent.find((m) => m.to === email && m.otp)!.otp!)).login);
 
 describe('session cookie', () => {
   it('on https is __Host- prefixed: Secure, Path=/, no Domain, so no sibling host can plant or shadow it', async () => {
     const secure = await createHumanAuth({ pglite: pg, secret: 'human-auth-secret'.padEnd(32, '0'), baseURL: 'https://localhost:4794', secure: true, mail: { send: async (m) => { sent.push(m); } } });
     const post = (path: string, body: unknown) => secure.handler(new Request(`https://localhost:4794/api/auth${path}`, { method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://localhost:4794' }, body: JSON.stringify(body) }));
-    await post('/email-otp/send-verification-otp', { email: 'host@example.com', type: 'sign-in' });
-    const res = await post('/sign-in/email-otp', { email: 'host@example.com', otp: sent.find((m) => m.to === 'host@example.com' && m.otp)!.otp! });
+    const { login: res } = await otpSignIn(post, 'host@example.com', () => sent.find((m) => m.to === 'host@example.com' && m.otp)!.otp!);
     const line = (res.headers.getSetCookie?.() ?? []).find((c) => c.includes('session_token='))!;
     expect(line).toMatch(/^__Host-better-auth\.session_token=/);
     expect(line).toMatch(/; Secure/i);

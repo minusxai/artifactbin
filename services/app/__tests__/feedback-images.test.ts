@@ -5,7 +5,7 @@
  * The image, file and picture headers are media-headers.test.ts's rows.
  */
 import { identityForUser, createUser } from '@/lib/accounts';
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
+import { mintAccountToken as mintToken, params } from '@/__tests__/harness';
 import { updateSharingFor, changeMembership } from '@/lib/artifacts';
 import { setDatasetPolicy } from '@/__tests__/harness';
 import { postArtifact, trashRow } from '@/__tests__/artifact-fixtures';
@@ -21,7 +21,6 @@ import { request,useAppHarness } from './harness';
 
 useAppHarness();
 type Session={credential:'session';userId:string;email:string;emailVerified:boolean};
-const imageParams=(id:string,datasetId:string,imageId:string)=>({params:Promise.resolve({id,datasetId,imageId})});
 const imageCount=async(datasetId:string)=>(await (await getDb()).query<{count:number}>('SELECT count(*)::int AS count FROM dataset_images WHERE dataset_id=$1',[datasetId])).rows[0]?.count;
 
 const ROWS={schema:'public',name:'rows'};
@@ -59,7 +58,7 @@ it('uploads through a real pages actor, replays safely, and rechecks the current
   expect(uploaded.ref).toMatch(/^dimg:/);expect(uploaded.url).toContain(`/a/${document.id}/datasets/${dataset.id}/images/`);
   const repeated=await post(bytes);expect(repeated.status).toBe(201);expect((await repeated.json()).ref).toBe(uploaded.ref);
   const conflict=await post(Buffer.from('different'),'upload-operation-123');expect(conflict.status).toBe(409);
-  const imageId=uploaded.ref.slice('dimg:'.length),read=(who:Session)=>readImage(request(uploaded.url,{actor:who}),imageParams(document.id,dataset.id,imageId));
+  const imageId=uploaded.ref.slice('dimg:'.length),read=(who:Session)=>readImage(request(uploaded.url,{actor:who}),params({id:document.id,datasetId:dataset.id,imageId:imageId}));
   const visible=await read(pageActor);expect(visible.status).toBe(200);
   expect((await read(ownerSession)).status).toBe(200);
   expect((await uploadFile(request(`/api/artifacts/${document.id}/datasets/${dataset.id}/files`,{method:'POST',body:'hello'}),{params:Promise.resolve({id:document.id,datasetId:dataset.id})})).status).toBe(403);
@@ -174,7 +173,7 @@ it('decides inside the transaction and loads the bytes after it commits, so a st
  const get=vi.spyOn(store,'get').mockImplementation(async(...args:Parameters<typeof store.get>)=>{await (await getDb()).query('SELECT 1');return original(...args);});
  const settled=<T,>(work:Promise<T>)=>Promise.race([work,new Promise<'deadlocked'>(resolve=>setTimeout(()=>resolve('deadlocked'),2000))]);
  try {
-  const shown=await settled(readImage(request(image.url,{actor:pageActor}),imageParams(document.id,dataset.id,image.ref.slice('dimg:'.length))));
+  const shown=await settled(readImage(request(image.url,{actor:pageActor}),params({id:document.id,datasetId:dataset.id,imageId:image.ref.slice('dimg:'.length)})));
   expect(shown).not.toBe('deadlocked');
   expect((shown as Response).status).toBe(200);
   expect(Buffer.from(await (shown as Response).arrayBuffer()).length).toBeGreaterThan(0);

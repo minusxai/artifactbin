@@ -1,11 +1,10 @@
 import {expect,it} from 'vitest';
-import { setVisibility } from '@/__tests__/artifact-fixtures';
+import { publishedWithActor, setVisibility } from '@/__tests__/artifact-fixtures';
 import { setDatasetPolicy } from '@/__tests__/harness';
 import {getDb} from '@/lib/platform';
 import {useAppHarness,request,mintAccountToken} from '@/__tests__/harness';
 import {POST as create} from '@/app/api/artifacts/route';
 import {getArtifactById} from '@/lib/artifacts';
-import { requestOrSessionActor } from '@/lib/authentication';
 import type { AccessActor } from '@/lib/accounts';
 import {loadDatasetRows} from '@/lib/datasets';
 import {linkedSql,errorCode,liveLink} from '@/__tests__/linked-datasets';
@@ -14,9 +13,7 @@ useAppHarness();
 /** The retained storage, executor and grants under the generated API, as a page reader with the link named data. */
 async function fixture(dataset:Record<string,unknown>[]|string=[{amount:1,label:'same'},{amount:1,label:'same'},{amount:3,label:null}]){
  const owner=await mintAccountToken('dataset_sql_fixture');
- const req=request('/api/artifacts',{method:'POST',token:owner.token,json:{dataset,access:'readwrite'}});
- const actor=await requestOrSessionActor(req),response=await create(req);expect(response.status,await response.clone().text()).toBe(201);
- const {id}=await response.json(),link=liveLink(id);
+ const {id,actor}=await publishedWithActor(owner.token,{dataset,access:'readwrite'}),link=liveLink(id);
  return {actor,link,id,sql:(who:AccessActor,query:string,variables?:Record<string,unknown>)=>linkedSql(who,link,query,variables?{variables}:{})};
 }
 type Row={_id:string;amount:number|null;label?:string|null};

@@ -1,8 +1,7 @@
 /** Delegated artifact images exercise the real auth handler: the artifact-read fences, a fixed image seam, pass-through refusals. */
 import {describe,it,expect} from 'vitest';
-import {delegatedService,audiencesOf,noTokens} from './helpers';
+import {delegatedService,audiencesOf,serviceAuthHost} from './helpers';
 import {ARTIFACT_IMAGE_PATH,SERVICE_PAYLOAD_LIMIT,CANONICAL_ARTIFACT_IMAGE_PATH,CANONICAL_ARTIFACT_READ_PATH,SERVICE_AUTH_HEADER} from '@artifactbin/contracts';
-import {createAuthHost} from '../src/parts';
 import {artifactReadKey,signArtifactReadGrant} from '../src/identity/artifact-read-grants';
 
 const service=delegatedService('warehouse','https://warehouse.example','service-secret');
@@ -10,15 +9,15 @@ const envelope={id:'abc',version:3,format:'png',mime:'image/png',width:640,heigh
 type Answer=(request:Request)=>Response|Promise<Response>;
 function host({optIn=true,image=(()=>Response.json(envelope)) as Answer,read=(()=>Response.json({id:'abc'})) as Answer}={}){
  const state={active:true,live:true,requests:[] as Array<{path:string;body:unknown;userId:string|null|undefined}>};
- const app=createAuthHost({
+ const app=serviceAuthHost({
   env:{IDENTITY__SERVICE_AUDIENCES:audiencesOf(service,optIn)},
-  cookieSecret:'test',tokens:noTokens,sessions:{resolve:async()=>null},
+  
   identityDb:{query:async<T>(sql:string)=>({rows:[sql.includes('users')?{active:state.active}:{live:state.live}] as T[]})},
   upstream:async(request,actor)=>{
    const path=new URL(request.url).pathname;
    state.requests.push({path,body:request.method==='POST'?await request.clone().json():null,userId:actor.userId});
    return path===CANONICAL_ARTIFACT_IMAGE_PATH?image(request):read(request);
-  },
+  }
  });
  const call=(body:unknown,secret='service-secret',signal?:AbortSignal)=>app.request(ARTIFACT_IMAGE_PATH,{method:'POST',headers:{[SERVICE_AUTH_HEADER]:secret},body:JSON.stringify(body),...(signal?{signal}:{})});
  return {app,call,state};

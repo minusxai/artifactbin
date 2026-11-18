@@ -87,7 +87,7 @@ it('public page readers never receive private dataset activity, including after 
   await setArtifact(db, dataset, { version: { sql: 'version+1' } });
   await db.query("SELECT pg_notify($1,'')",[artifactChannel(dataset)]);
   // A page update after it reaches this reader: whatever the dataset's activity sent arrives before it, and it sent nothing.
-  await db.query('UPDATE artifacts SET version=version+1 WHERE id=$1',[id]);
+  await setArtifact(db, id, { version: { sql: 'version+1' } });
   await db.query("SELECT pg_notify($1,'')",[artifactChannel(id)]);
   const before:Awaited<ReturnType<typeof connected.next>>=[];
   for(let frame=await connected.next(1);frame[0]&&frame[0].event!=='message';frame=await connected.next(1))before.push(...frame);

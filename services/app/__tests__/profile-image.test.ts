@@ -15,11 +15,10 @@ import { GET as getProfile, PATCH as patchProfile } from '@/app/api/my/profile/r
 import { AVATAR_MAX_BYTES, avatarVersion } from '@/lib/avatars';
 import { getDb } from '@/lib/platform';
 import { createUser, ensureUsername, getUserById } from '@/lib/accounts';
-import { request, useAppHarness, useSessionUser } from '@/__tests__/harness';
+import { request, useAppHarness, useSessionUser, params } from '@/__tests__/harness';
 
 useAppHarness();
 const sessionUser = useSessionUser('id');
-
 
 beforeEach(() => { sessionUser.id = ''; });
 
@@ -38,7 +37,6 @@ const putImage = (bytes: Uint8Array, opts: { contentType?: string | null; origin
 const deleteImage = (opts: { origin?: string } = {}) =>
   deleteImageRoute(request('/api/my/profile/image', { method: 'DELETE', ...(opts.origin ? { origin: opts.origin } : {}) }));
 
-const avatarCtx = (id: string) => ({ params: Promise.resolve({ id }) });
 
 const signedIn = async (email: string) => {
   const user = await ensureUsername(await createUser({ email }));
@@ -128,14 +126,14 @@ describe('GET /api/users/<id>/avatar', () => {
     const version = avatarVersion((await getUserById(user.id))!.image_key!);
     sessionUser.id = ''; // a stranger; the picture is public like the handle
 
-    const matching = await getAvatar(request(`/api/users/${user.id}/avatar?v=${version}`), avatarCtx(user.id));
+    const matching = await getAvatar(request(`/api/users/${user.id}/avatar?v=${version}`), params(user.id));
     expect(matching.status).toBe(200);
     // Its headers (type, nosniff, inline, immutable here and no-cache elsewhere) are media-headers.test.ts's rows.
     const served = Buffer.from(await matching.arrayBuffer());
     expect((await sharp(served).metadata()).format).toBe('webp');
 
     for (const query of ['', '?v=stale', `?v=${version}x`]) {
-      const stale = await getAvatar(request(`/api/users/${user.id}/avatar${query}`), avatarCtx(user.id));
+      const stale = await getAvatar(request(`/api/users/${user.id}/avatar${query}`), params(user.id));
       expect(stale.status).toBe(200);
     }
   });
@@ -153,15 +151,15 @@ describe('GET /api/users/<id>/avatar', () => {
     expect((await deleteImage()).status).toBe(200);
 
     const version = avatarVersion((await getUserById(two.id))!.image_key!);
-    const served = await getAvatar(request(`/api/users/${two.id}/avatar?v=${version}`), avatarCtx(two.id));
+    const served = await getAvatar(request(`/api/users/${two.id}/avatar?v=${version}`), params(two.id));
     expect(served.status).toBe(200);
-    expect((await getAvatar(request(`/api/users/${one.id}/avatar`), avatarCtx(one.id))).status).toBe(404);
+    expect((await getAvatar(request(`/api/users/${one.id}/avatar`), params(one.id))).status).toBe(404);
   });
 
   it('404s for an unknown id and for a person who has no picture', async () => {
     const user = await signedIn('mxmx_test_nopic@example.com');
-    expect((await getAvatar(request('/api/users/usr_nobody/avatar'), avatarCtx('usr_nobody'))).status).toBe(404);
-    expect((await getAvatar(request(`/api/users/${user.id}/avatar`), avatarCtx(user.id))).status).toBe(404);
+    expect((await getAvatar(request('/api/users/usr_nobody/avatar'), params('usr_nobody'))).status).toBe(404);
+    expect((await getAvatar(request(`/api/users/${user.id}/avatar`), params(user.id))).status).toBe(404);
   });
 });
 

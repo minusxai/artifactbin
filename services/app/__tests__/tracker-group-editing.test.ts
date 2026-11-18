@@ -14,6 +14,7 @@ import { createGroup } from '@/lib/groups';
 import { createArtifactFromBody } from '@/lib/publish';
 import { createAppServer } from '@/server/app';
 import {tempDir} from '@artifactbin/test-support/temp-dir';
+import {syntheticEnv} from '@/test/helpers/toolbox-env';
 
 useAppHarness();
 
@@ -38,8 +39,7 @@ const changed = async (page: string, who: { token: string } | null, id: string, 
 async function teamTracker(dir: string) {
   const owner = await mintAccountToken('tracker_owner'), first = await mintAccountToken('tracker_first');
   const second = await mintAccountToken('tracker_second'), stranger = await mintAccountToken('tracker_stranger');
-  const options = (token: string) => ({ env: { ARTIFACTBIN_URL: SERVER, ARTIFACTBIN_TOKEN: token,
-    ARTIFACTBIN_HOME: path.join(dir, 'home') }, fetcher, retryDelays: [], cwd: dir, log: () => {} });
+  const options = (token: string) => ({ env: syntheticEnv(SERVER, path.join(dir, 'home'), { token }), fetcher, retryDelays: [], cwd: dir, log: () => {} });
   const made = await newAppCommand({ values: { server: SERVER, title: 'Launch tasks', dir: 'app', without: 'collab' },
     positionals: [] }, options(owner.token));
   const entries = (made.datasets as { entries: { id: string } }).entries.id;

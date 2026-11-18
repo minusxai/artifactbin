@@ -11,6 +11,7 @@ import path from 'node:path';
 import {newAppCommand} from '../../../skills/artifactbin/scripts/new-app.mjs';
 import {stampSource} from '../../../skills/artifactbin/scripts/toolbox-source.mjs';
 import {tempDir} from '@artifactbin/test-support/temp-dir';
+import {syntheticEnv} from '@/test/helpers/toolbox-env';
 
 const server='https://example.test';
 type Call={method:string;path:string;body?:any};
@@ -48,7 +49,7 @@ function fakeServer(){
 async function project(){
  const root=await tempDir('new-app-',onTestFinished),dir=path.join(root,'app');await mkdir(dir);
  const fake=fakeServer();
- const options={env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'private-fixture',ARTIFACTBIN_HOME:path.join(root,'home')},fetcher:fake.fetcher,cwd:root,log:()=>{}};
+ const options={env:syntheticEnv(server, path.join(root,'home'), { token: 'private-fixture' }),fetcher:fake.fetcher,cwd:root,log:()=>{}};
  const run=(values:Record<string,unknown>,positionals:string[]=[])=>newAppCommand({values:{server,...values},positionals},options);
  // Every file the starter writes; never a companion beside one.
  const files=async()=>{const names=(await readdir(dir)).sort();expect(names.filter(name=>name.endsWith('.af.json'))).toEqual([]);return names;};

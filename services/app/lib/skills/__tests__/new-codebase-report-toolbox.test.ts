@@ -12,6 +12,7 @@ import {mkdir, readFile, readdir, rm, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {tempDir} from '@artifactbin/test-support/temp-dir';
+import {syntheticEnv} from '@/test/helpers/toolbox-env';
 
 const server = 'https://example.test';
 const root = await tempDir('codebase-command-', afterAll);
@@ -51,8 +52,7 @@ function fake() {
     return Response.json({id, url: `${server}/a/${id}`, version: method === 'PUT' ? 2 : 1,
       state: (method === 'PUT' ? 'b' : 'a').repeat(64), format: 'dataset'}, {status: method === 'PUT' ? 200 : 201});
   };
-  return {calls, options: {env: {ARTIFACTBIN_URL: server, ARTIFACTBIN_TOKEN: 'private-fixture',
-    ARTIFACTBIN_HOME: path.join(root, 'home')}, fetcher, cwd: path.join(repo, 'web'), log: () => {}}};
+  return {calls, options: {env: syntheticEnv(server, path.join(root, 'home'), { token: 'private-fixture' }), fetcher, cwd: path.join(repo, 'web'), log: () => {}}};
 }
 const run = async (values: Record<string, unknown>, options: object) => {
   const {newCodebaseReportCommand} = await import('../../../skills/artifactbin/scripts/new-codebase-report.mjs');

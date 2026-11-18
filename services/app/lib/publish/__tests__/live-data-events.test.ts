@@ -16,6 +16,7 @@ import {
   liveSubscriptionSnapshot,
 } from '../realtime/live';
 import { artifactChannel, annotationsChannel, regionsChannel } from '@artifactbin/contracts';
+import { setArtifact } from '@/__tests__/rows';
 const subscriptions = () => Object.fromEntries(liveSubscriptionSnapshot().map(({ channel, subscribers }) => [channel, subscribers]));
 /** An HTML page's stream also follows its live text (lib/publish/realtime live-pings): one regions channel per page. */
 // These streams are signed out: they get no presence, so no presence channel and no presence ACL subscriber.
@@ -181,7 +182,7 @@ it('whole-dataset replacement invalidates aliases while unrelated pages hear not
     expect((await a.named('data'))[0]?.data.datasets).toEqual(['choices']);
     // Its own page's next version reaches b after that: any data frame b was sent in between is held in front of it.
     const db = await getDb();
-    await db.query('UPDATE artifacts SET version = version + 1 WHERE id = $1', [other.id]);
+    await setArtifact(db, other.id, { version: { sql: 'version + 1' } });
     await db.query("SELECT pg_notify($1, '')", [artifactChannel(other.id)]);
     expect(await b.named('message')).toHaveLength(1);
     expect(await b.named('data', 1, 0)).toEqual([]);

@@ -4,26 +4,43 @@ import { ensureTokensTable, resetTables, testDb } from '@artifactbin/test-suppor
 import { ensureAuthSchema } from '../src/schema';
 import { ensureHumanAuthSchema, type HumanAuth } from '../src/auth/human';
 import { createBearerReader } from '../src/identity/bearer';
-import type { AuthOptions } from '../src/parts';
+import { createAuthHost, type AuthOptions } from '../src/parts';
 
 export { mintTestToken, testDb } from '@artifactbin/test-support/db';
 
 /** The token reader that knows no bearer token. */
 export const noTokens = { byToken: async () => null };
+/** The auth host for a test of service or anonymous doors: cookie secret `test`, no bearer tokens, no sessions; `options` gives the rest. */
+export const serviceAuthHost = (options: Omit<AuthOptions, 'cookieSecret' | 'tokens' | 'sessions'>) =>
+  createAuthHost({ cookieSecret: 'test', tokens: noTokens, sessions: { resolve: async () => null }, ...options });
 
 /** A delegated service as tests name it: its id, origin and the digest of the secret it presents. */
 export const delegatedService = (id: string, origin: string, secret: string) => ({ id, origin, introspectionSecretSha256: createHash('sha256').update(secret).digest('hex') });
-/** The `IDENTITY__SERVICE_AUDIENCES` value that admits one such service, with or without artifact reads. */
-export const audiencesOf = (service: ReturnType<typeof delegatedService>, artifactReads = true) =>
-  JSON.stringify([{ id: service.id, origin: service.origin, introspection_secret_sha256: service.introspectionSecretSha256, artifact_reads: artifactReads }]);
+type DelegatedService = ReturnType<typeof delegatedService>;
+/** The `IDENTITY__SERVICE_AUDIENCES` value that admits `services`, each with any other settings it carries (`artifact_reads`, `artifact_workloads`). */
+export const serviceAudiences = (...services: Array<DelegatedService & Record<string, unknown>>) =>
+  JSON.stringify(services.map(({ id, origin, introspectionSecretSha256, ...settings }) => ({ id, origin, introspection_secret_sha256: introspectionSecretSha256, ...settings })));
+/** `serviceAudiences` for one service, with or without artifact reads. */
+export const audiencesOf = (service: DelegatedService, artifactReads = true) => serviceAudiences({ ...service, artifact_reads: artifactReads });
+
+/**
+ * One-time-code sign-in through the caller's own `post` (path and JSON body in, the handler's Response out): ask for a
+ * code for `email`, then sign in with what `code()` reads from the captured mail. `prefix` goes before both paths
+ * (`/api/auth` when `post` takes the full path). The two responses and the session cookie, for the caller to assert on.
+ */
+export async function otpSignIn(post: (path: string, body: unknown) => Response | Promise<Response>, email: string, code: () => string | Promise<string>, { prefix = '' } = {}) {
+  const sent = await post(`${prefix}/email-otp/send-verification-otp`, { email, type: 'sign-in' });
+  const login = await post(`${prefix}/sign-in/email-otp`, { email, otp: await code() });
+  return { sent, login, cookie: login.headers.getSetCookie().map(c => c.split(';')[0]).join('; ') };
+}
 
 /** Sign `email` in on a human auth by one-time code (`latestOtp` reads what its mail sender last captured): the session cookie header. */
 export async function signInByOtp(auth: HumanAuth, baseURL: string, email: string, latestOtp: () => string): Promise<string> {
   const call = (path: string, body: unknown) => auth.handler(new Request(`${baseURL}/api/auth${path}`, { method: 'POST', headers: { 'content-type': 'application/json', origin: baseURL }, body: JSON.stringify(body) }));
-  expect((await call('/email-otp/send-verification-otp', { email, type: 'sign-in' })).status).toBe(200);
-  const login = await call('/sign-in/email-otp', { email, otp: latestOtp() });
+  const { sent, login, cookie } = await otpSignIn(call, email, latestOtp);
+  expect(sent.status).toBe(200);
   expect(login.status).toBe(200);
-  return login.headers.getSetCookie().map(c => c.split(';')[0]).join('; ');
+  return cookie;
 }
 
 /** Both sides' tables, idempotent — safe to call before anything exists. */

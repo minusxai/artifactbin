@@ -7,15 +7,14 @@
 import { ACTOR_HEADER, type Actor } from '@artifactbin/contracts';
 import { signActor } from '@artifactbin/utils';
 import { describe, expect, it } from 'vitest';
-import { POST as createRoute } from '@/app/api/artifacts/route';
 import { createUser, mintToken } from '@/lib/accounts';
 import { useAppHarness } from '@/__tests__/harness';
 import { createAppServer } from '@/server/app';
+import { postArtifact } from '@/__tests__/artifact-fixtures';
 
 useAppHarness();
 
 const SECRET = 'vitest-actor-secret-0000000000000000';
-const BASE = 'http://localhost:3000';
 const app = createAppServer({ actorSecret: SECRET, indexHtml: async () => '<!doctype html><html><head><title>SPA</title></head><body><div id="root">SPA</div></body></html>' });
 const as = (actor: Actor) => ({ accept: 'text/html', [ACTOR_HEADER]: signActor(actor, SECRET) });
 const STRANGER: Actor = { credential: 'none' };
@@ -24,7 +23,7 @@ async function world() {
   const user = await createUser({ email: 'mxmx_test_workspace_owner@example.com' });
   const t = await mintToken('owner', user.id);
   const publish = async (body: Record<string, unknown>) => {
-    const res = await createRoute(new Request(`${BASE}/api/artifacts`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${t.token}` }, body: JSON.stringify(body) }));
+    const res = await postArtifact(t.token, body);
     expect(res.status, await res.clone().text()).toBe(201);
     return (await res.json()) as { id: string } & Record<string, unknown>;
   };

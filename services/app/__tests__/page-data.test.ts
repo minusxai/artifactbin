@@ -17,15 +17,15 @@ import { identityForUser } from '@/lib/accounts';
 import { link, unlink } from '@/lib/social';
 
 
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
+import { mintAccountToken as mintToken, params } from '@/__tests__/harness';
 import { createUser, ensureUsername } from '@/lib/accounts';
 import { useAppHarness, request, useSessionUser } from '@/__tests__/harness';
+import { postArtifact } from '@/__tests__/artifact-fixtures';
 
 useAppHarness();
 const sessionUser = useSessionUser();
 
 const BASE = 'http://localhost:3000';
-const params = <T,>(p: T) => ({ params: Promise.resolve(p) });
 const asSession = (u: { id: string; email: string }) => { sessionUser.id = u.id; sessionUser.email = u.email; };
 
 beforeEach(async () => {
@@ -35,7 +35,7 @@ beforeEach(async () => {
 async function world() {
   const owner = await ensureUsername(await createUser({ email: 'mxmx_test_owner@example.com' }));
   const t = await mintToken('o', owner.id);
-  const mk = async (body: Record<string, unknown>) => (await (await createArtifactRoute(new Request(`${BASE}/api/artifacts`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${t.token}` }, body: JSON.stringify(body) }))).json()) as { id: string; edit_id: string };
+  const mk = async (body: Record<string, unknown>) => (await (await postArtifact(t.token, body)).json()) as { id: string; edit_id: string };
   const pub = await mk({ title: 'Public one', html: '<!doctype html><html><body><div><p>hello</p></div></body></html>', visibility: 'public' });
   const box = await mk({ format: 'folder', title: 'August' });
   const priv = await mk({ title: 'Secret', html: '<!doctype html><html><body><div><p>secret</p></div></body></html>', visibility: 'private', parent_id: box.id });

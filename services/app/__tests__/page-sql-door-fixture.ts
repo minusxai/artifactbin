@@ -4,7 +4,7 @@
  */
 import { expect } from 'vitest';
 import { storePolicy } from '@/__tests__/artifact-fixtures';
-import { mintAccountToken, request } from './harness';
+import { mintAccountToken, request, params } from './harness';
 import { identityForUser, type AccessActor } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
 import { createArtifactFromBody } from '@/lib/publish';
@@ -19,7 +19,7 @@ export async function person(name: string) {
   const token = await mintAccountToken(`psd_${name}`);
   return { ...token, actor: identityForUser(token.userId, token.id, token.email) as AccessActor & { tokenId: string } };
 }
-export const params = (id: string) => ({ params: Promise.resolve({ id }) });
+export { params };
 export async function publish(owner: Person, body: Record<string, unknown>) {
   const created = await createArtifactFromBody({ ...('dataset' in body ? { access: 'readwrite' } : {}), visibility: 'unlisted', ...body }, owner.actor, 'http://localhost:3000');
   return { status: created.status, body: await created.json() as { id: string } };

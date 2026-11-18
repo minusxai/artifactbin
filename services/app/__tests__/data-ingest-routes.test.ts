@@ -14,7 +14,7 @@ import { mintAccountToken as mintToken } from '@/__tests__/harness';
 
 import { loadDatasetRows } from '@/lib/datasets';
 import { MAX_ROWS_LIMIT } from '@/lib/platform';
-import { useAppHarness } from '@/__tests__/harness';
+import { request, useAppHarness } from '@/__tests__/harness';
 
 const harness = useAppHarness();
 
@@ -209,7 +209,7 @@ describe('the read-back API carries dataset ROWS', () => {
     const { body } = await create({ title: 'ds', dataset: 'month,revenue\n2026-01,120' });
     const { GET } = await import('@/app/api/artifacts/[id]/route');
     const res = await GET(
-      new Request(`http://localhost:3000/api/artifacts/${body.id}`, { headers: { Authorization: `Bearer ${token}` } }),
+      request(`/api/artifacts/${body.id}`, { token }),
       { params: Promise.resolve({ id: body.id }) },
     );
     const wire = await res.json();

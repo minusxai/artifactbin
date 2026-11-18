@@ -17,6 +17,7 @@ import {GET as getLlmsTxt} from '@/app/llms.txt/route';
 // handlers, driven in-process exactly as the proxy forwards them.
 import { DELETE as revokeTokenRoute } from '@/app/api/tokens/[id]/route';
 import { POST as mintTokenRoute } from '@/app/api/tokens/route';
+import { setArtifact } from '@/__tests__/rows';
 
 const BASE = 'http://localhost:3000';
 const SECRET = 'test-secret';
@@ -155,7 +156,7 @@ describe('artifact CRUD', () => {
     const b = await mint('b');
     const first = await create(a.token, '<p>1</p>', 'first');
     // Two creates can share a timestamp, which leaves "newest first" ambiguous: the first is dated a minute back.
-    await (await harness.db()).query("UPDATE artifacts SET created_at = created_at - interval '1 minute' WHERE id = $1", [first.id]);
+    await setArtifact(await harness.db(), first.id, { created_at: { sql: "created_at - interval '1 minute'" } });
     await create(a.token, '<p>2</p>', 'second');
     await create(b.token, '<p>3</p>', 'other');
 
