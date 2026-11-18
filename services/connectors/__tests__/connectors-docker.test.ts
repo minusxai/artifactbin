@@ -10,7 +10,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { connectorError, openConnection, type OpenConnection } from '@artifactbin/connectors';
 
 const has = (image: string) => spawnSync('docker', ['image', 'inspect', image], { stdio: 'ignore' }).status === 0;
@@ -81,10 +81,11 @@ describe.skipIf(!has('postgres:17-alpine'))('postgres 17 over TLS', () => {
     expect(parseFloat(value)*(value.endsWith('ms')?1:1000)).toBeGreaterThan(5000);
     const controller=new AbortController();
     const pending=failure(pg.query({text:'select pg_sleep(30) /* cancellation_probe */',params:{},viewer:alice,signal:controller.signal}));
-    await new Promise(resolve=>setTimeout(resolve,150));controller.abort();
+    const running=()=>execFileSync('docker',['exec',container,'psql','-U','postgres','-d','shop','-Atc',"select count(*) from pg_stat_activity where usename='reader' and query like '%cancellation_probe%' and query not like '%pg_stat_activity%'"],{encoding:'utf8'}).trim();
+    // Cancelled once the server is running it (seen in pg_stat_activity), as the Doris case below does.
+    await vi.waitFor(()=>expect(running()).toBe('1'),{timeout:20_000,interval:25});controller.abort();
     expect(await pending).toMatchObject({code:'timeout'});
-    const active=execFileSync('docker',['exec',container,'psql','-U','postgres','-d','shop','-Atc',"select count(*) from pg_stat_activity where usename='reader' and query like '%cancellation_probe%'"],{encoding:'utf8'}).trim();
-    expect(active).toBe('0');
+    expect(running()).toBe('0');
     expect((await pg.query({text:'select 1 as n',params:{},viewer:alice})).rows).toEqual([{n:1}]);
   });
 
@@ -168,10 +169,11 @@ describe.skipIf(!has('mysql:8'))('mysql 8', () => {
     expect(Number(row.budget)).toBeGreaterThan(5000);
     const controller=new AbortController();
     const pending=failure(my.query({text:'select sleep(30) /* cancellation_probe */',params:{},viewer:alice,signal:controller.signal}));
-    await new Promise(resolve=>setTimeout(resolve,150));controller.abort();
+    const running=()=>execFileSync('docker',['exec',container,'mysql','-uroot','-powner-pass','-Nse',"select count(*) from information_schema.processlist where user='reader' and info like '%cancellation_probe%' and info not like '%processlist%'"],{encoding:'utf8'}).trim();
+    // Cancelled once the server is running it (seen in its processlist).
+    await vi.waitFor(()=>expect(running()).toBe('1'),{timeout:20_000,interval:25});controller.abort();
     expect(await pending).toMatchObject({code:'timeout'});
-    const active=execFileSync('docker',['exec',container,'mysql','-uroot','-powner-pass','-Nse',"select count(*) from information_schema.processlist where user='reader' and info like '%cancellation_probe%'"],{encoding:'utf8'}).trim();
-    expect(active).toBe('0');
+    expect(running()).toBe('0');
     expect((await my.query({text:'select 1 as n',params:{},viewer:alice})).rows).toEqual([{n:1}]);
   });
 

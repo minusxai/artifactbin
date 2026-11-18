@@ -15,7 +15,7 @@ import { stubFetch } from '@/test/helpers/fetch-stub';
 const PAGES = 'https://6869.pages.test';
 const KEY = cellKey({ dataset: 'tasks', rowId: 'r_abc', column: 'description' });
 const cleanups: Array<() => void> = [];
-afterEach(() => { for (const cleanup of cleanups.splice(0).reverse()) cleanup(); document.body.innerHTML = ''; vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+afterEach(() => { for (const cleanup of cleanups.splice(0).reverse()) cleanup(); document.body.innerHTML = ''; vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.useRealTimers(); });
 
 /** `signed-in`: a person; `scripted`: a browser session's scripted browser (session payload: no account, `liveEditor`). */
 function framedPage(state: 'signed-in' | 'signed-out' | 'scripted', options: { refuse?: boolean; load?: CellEditingLoader } = {}) {
@@ -77,10 +77,11 @@ describe('cells on the page', () => {
   });
 
   it('a region id that is not a page region or a cell is never opened', async () => {
+    vi.useFakeTimers();
     const page = framedPage('signed-in');
     page.say({ kind: 'ready', nonce: 'n1' });
     page.say({ kind: 'region-open', regionId: 'cell:tasks:nope' });
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await vi.advanceTimersByTimeAsync(60_000); // a minute on the faked clock: "nothing" holds however long it waits
     expect(page.fetch).not.toHaveBeenCalled();
     expect(page.regionMessages()).toEqual([]);
   });

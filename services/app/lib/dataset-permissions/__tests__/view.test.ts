@@ -85,20 +85,15 @@ describe('viewRows', () => {
     expect(viewRows(ROWS, COLUMNS, permission, SESSION, 'obj-1').map((r) => r.name)).toEqual(['ada', 'cy']);
   });
 
-  it('materialises the 10,000-row dataset cap quickly, and a cached view faster', () => {
+  it('materialises the 10,000-row dataset cap within a request budget, and a cached view is the same rows', () => {
     const rows = Array.from({ length: 10_000 }, (_, i) => ({ name: `n${i}`, team: i % 3 ? 'red' : 'blue', salary: i, owner: `usr_${i % 50}`, note: `note ${i}` }));
     const permission = rule({ _or: [{ owner: { _eq: 'X-Hasura-User-Id' } }, { _and: [{ team: { _eq: 'blue' } }, { salary: { _gt: 5000 } }] }] }, { columns: ['name', 'team'] });
-    let started = performance.now();
+    const started = performance.now();
     const cold = viewRows(rows, COLUMNS, permission, { 'x-hasura-user-id': 'usr_7' }, 'obj-10k');
     const coldMs = performance.now() - started;
-    started = performance.now();
     const warm = viewRows(rows, COLUMNS, permission, { 'x-hasura-user-id': 'usr_7' }, 'obj-10k');
-    const warmMs = performance.now() - started;
     expect(warm).toEqual(cold);
     expect(cold.length).toBe(rows.filter((r) => r.owner === 'usr_7' || (r.team === 'blue' && r.salary > 5000)).length);
-    // Measured cost (logged for the PR): cold evaluation of 10k rows, then a cached projection.
-    console.info(`role view 10k rows: cold ${coldMs.toFixed(1)}ms, cached ${warmMs.toFixed(1)}ms`);
-    // A generous bound for shared CI runners; the logged numbers are the measurement.
-    expect(coldMs).toBeLessThan(3000);
+    expect(coldMs).toBeLessThan(3000); // wall-clock-ok: the request budget for the 10k-row cap; the cache itself is the test above
   });
 });

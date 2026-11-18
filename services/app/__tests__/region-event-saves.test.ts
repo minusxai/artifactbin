@@ -25,9 +25,12 @@ const clock = {
   now: () => now,
   setInterval: (work: () => void, ms: number) => { const timer = { work, ms }; intervals.push(timer); return timer; },
   clearInterval: (timer: unknown) => { intervals = intervals.filter((candidate) => candidate !== timer); },
-  setTimeout: (work: () => void, ms: number) => setTimeout(work, ms),
-  clearTimeout: (timer: unknown) => clearTimeout(timer as ReturnType<typeof setTimeout>),
+  // A leave's grace, held on the same clock: `runDue()` runs every grace whose time `now` has reached.
+  setTimeout: (work: () => void, ms: number) => { const timer = { work, at: now + ms }; timeouts.push(timer); return timer; },
+  clearTimeout: (timer: unknown) => { timeouts = timeouts.filter((candidate) => candidate !== timer); },
 };
+let timeouts: { work: () => void; at: number }[] = [];
+const runDue = () => { const due = timeouts.filter((timer) => timer.at <= now); timeouts = timeouts.filter((timer) => timer.at > now); for (const timer of due) timer.work(); };
 const fireIdleChecks = () => { for (const timer of intervals.filter((candidate) => candidate.ms === IDLE_CHECK_MS)) timer.work(); };
 
 let sessions: RegionSessions, owner: AccessActor, pageId: string, regionId: string;
@@ -48,19 +51,20 @@ async function type(text: string) {
   const sent = await sessions.update(owner, pageId, regionId, { clientId: opened.body.clientId, update: Y.encodeStateAsUpdate(doc, before) });
   expect(sent.status).toBe(200);
 }
+/** An editor stream; `leave()` closes it and resolves once the sessions have let it go (its stream has ended). */
 async function watch() {
   const abort = new AbortController();
   aborts.push(abort);
   const opened = await sessions.stream(owner, pageId, `${regionId}:0`, abort.signal);
   expect(opened.status).toBe('open');
-  if (opened.status === 'open') void opened.stream.pipeTo(new WritableStream()).catch(() => {});
-  return abort;
+  const ended = opened.status === 'open' ? opened.stream.pipeTo(new WritableStream()).catch(() => {}) : Promise.resolve();
+  return { leave: async () => { abort.abort(); await ended; } };
 }
 const version = async () => (await getArtifactById(pageId))!.version;
-const waitTimers = () => new Promise((resolve) => setTimeout(resolve, 30));
 
 beforeEach(async () => {
   intervals = [];
+  timeouts = [];
   const user = await createUser({ email: 'mxmx_test_region_saves@example.com' });
   owner = identityForUser(user.id, null);
   const row = await createHistoricalPage(null, user.id, { format: 'html', source: nativeHtml('<article data-af-editable="rich"><p>Hello</p></article>'), meta: {}, visibility: 'private' });
@@ -69,7 +73,6 @@ beforeEach(async () => {
 });
 afterEach(async () => {
   for (const abort of aborts.splice(0)) abort.abort();
-  await waitTimers();
   await sessions?.settle();
   sessions?.dispose();
 });
@@ -78,11 +81,11 @@ it('saves when the last editor stream of the page closes, not while another is o
   sessions = instance(0);
   const first = await watch(), second = await watch();
   await type('left behind ');
-  first.abort();
-  await waitTimers(); await sessions.settle();
+  await first.leave();
+  runDue(); await sessions.settle();
   expect(await version()).toBe(1);
-  second.abort();
-  await waitTimers(); await sessions.settle();
+  await second.leave();
+  runDue(); await sessions.settle();
   expect(await version()).toBe(2);
   expect((await getArtifactById(pageId))!.source).toContain('left behind Hello');
 });
@@ -91,10 +94,10 @@ it('a reconnect within the grace is not a leave', async () => {
   sessions = instance(200);
   const first = await watch();
   await type('still here ');
-  first.abort();
-  await new Promise((resolve) => setTimeout(resolve, 20));
+  await first.leave();
+  now += 20; runDue();
   await watch();
-  await new Promise((resolve) => setTimeout(resolve, 260));
+  now += 260; runDue();
   await sessions.settle();
   expect(await version()).toBe(1);
 });
@@ -127,9 +130,10 @@ it('the idle backstop saves a region dirty and quiet for REGION_IDLE_SAVE_MS, an
 it('typing that never pauses is never cut into versions, however long it goes on; its first pause is', async () => {
   sessions = instance(60_000);
   await watch();
-  // A keystroke burst every 20 s for half an hour: never quiet for REGION_IDLE_SAVE_MS.
-  const step = 20_000;
-  for (let typed = 0; typed * step < 30 * 60_000; typed++) {
+  // A keystroke burst every 100 s for half an hour: never quiet for REGION_IDLE_SAVE_MS (120 s).
+  const step = REGION_IDLE_SAVE_MS - 20_000;
+  let typed = 0;
+  for (; typed * step < 30 * 60_000; typed++) {
     await type(`w${typed} `);
     now += step;
     fireIdleChecks(); await sessions.settle();
@@ -138,5 +142,5 @@ it('typing that never pauses is never cut into versions, however long it goes on
   now += REGION_IDLE_SAVE_MS;
   fireIdleChecks(); await sessions.settle();
   expect(await version()).toBe(2);
-  expect((await getArtifactById(pageId))!.source).toContain('w89 w88');
+  expect((await getArtifactById(pageId))!.source).toContain(`w${typed - 1} w${typed - 2}`);
 });

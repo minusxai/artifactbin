@@ -60,22 +60,23 @@ describe('shared export refresh leases',()=>{
   expect((await a.read(cacheRequest,async()=>image)).id).toBe(winner.id);
  });
  it('a caller\'s own shorter wait gives up on another\'s render before the cache default',async()=>{
-  const db=await getDb(),a=createExportCache(db,options),b=createExportCache(db,options);
+  // This cache's own default would wait a minute: only the caller's 40 ms bound ends the wait inside the test.
+  const db=await getDb(),a=createExportCache(db,options),b=createExportCache(db,{...options,waitMs:60_000});
   const entered=gate(),release=gate();
   const first=a.read(cacheRequest,async()=>{entered.resolve();await release.promise;return image;});void first.catch(()=>{});await Promise.race([entered.promise,first]);
-  const started=performance.now();
   await expect(b.read({...cacheRequest,waitMs:40},async()=>image)).rejects.toThrow('Export refresh did not complete');
-  expect(performance.now()-started).toBeLessThan(options.waitMs-100);
   release.resolve();await first;
  });
  it('an explicit refresh waits for a new result and concurrent refresh callers share it',async()=>{
-  const db=await getDb(),a=createExportCache(db,options),b=createExportCache(db,options);
+  const db=await getDb(),a=createExportCache(db,options);
   const old=await a.read(cacheRequest,async()=>image),entered=gate(),release=gate();let calls=0;
   const produce:ExportProducer=async()=>{calls++;entered.resolve();await release.promise;return image;};
   const first=a.read({...cacheRequest,refresh:true},produce);await Promise.race([entered.promise,first]);
-  const second=b.read({...cacheRequest,refresh:true},produce);
-  // Ensure both requests observed the old result before releasing the worker.
-  await db.query('SELECT 1');await new Promise(r=>setTimeout(r,10));release.resolve();
+  // The second caller has observed the old result once its own claim finds the first's lease held.
+  let lost!:()=>void;const observed=new Promise<void>(resolve=>{lost=resolve;});
+  const watched=Object.assign(Object.create(db),{query:async(sql:string,args?:unknown[])=>{const result=await db.query(sql,args);if(/SET claim_token/.test(sql)&&!result.rows.length)lost();return result;}}) as typeof db;
+  const second=createExportCache(watched,options).read({...cacheRequest,refresh:true},produce);
+  await observed;release.resolve();
   const [one,two]=await Promise.all([first,second]);expect(one.id).not.toBe(old.id);expect(one.id).toBe(two.id);expect(calls).toBe(1);
  });
 });

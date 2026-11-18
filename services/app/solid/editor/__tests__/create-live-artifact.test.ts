@@ -24,6 +24,8 @@ function liveBackend(liveFrame: ArtifactBackend['liveFrame']) {
 }
 
 afterEach(() => { vi.useRealTimers(); });
+/** On the faked clock, a minute passes (and every promise it frees settles): "not yet" holds however long it waits. */
+const aWhile = () => vi.advanceTimersByTimeAsync(60_000);
 
 it('fetches and surfaces a genuinely newer frame', async () => {
   const { backend, ping } = liveBackend(vi.fn(async () => frame(3)));
@@ -56,6 +58,7 @@ it('drops a ping the caller identifies as its own accepted write', async () => {
 });
 
 it('holds a ping the caller cannot place yet (its save is on the wire) and fetches nothing when it was its own', async () => {
+  vi.useFakeTimers();
   const liveFrame = vi.fn(async () => frame(4));
   const { backend, ping } = liveBackend(liveFrame);
   let settle!: (own: boolean) => void;
@@ -63,15 +66,16 @@ it('holds a ping the caller cannot place yet (its save is on the wire) and fetch
     backend, id: 'a1', initialEditId: 'e0', initialVersion: 1, isOwnFrame: () => new Promise<boolean>((r) => { settle = r; }),
   }));
   ping({ version: 4, editId: 'mine' });
-  await new Promise((r) => setTimeout(r, 0));
+  await aWhile();
   expect(liveFrame, 'nothing fetched while undecided').not.toHaveBeenCalled();
   settle(true);
-  await new Promise((r) => setTimeout(r, 0));
+  await aWhile();
   expect(liveFrame).not.toHaveBeenCalled();
   expect(live()).toBeNull();
 });
 
 it('fetches a held ping once the caller places it as someone else\'s write', async () => {
+  vi.useFakeTimers();
   const liveFrame = vi.fn(async () => frame(4, 'theirs'));
   const { backend, ping } = liveBackend(liveFrame);
   let settle!: (own: boolean) => void;
@@ -79,7 +83,7 @@ it('fetches a held ping once the caller places it as someone else\'s write', asy
     backend, id: 'a1', initialEditId: 'e0', initialVersion: 1, isOwnFrame: () => new Promise<boolean>((r) => { settle = r; }),
   }));
   ping({ version: 4, editId: 'theirs' });
-  await new Promise((r) => setTimeout(r, 0));
+  await aWhile();
   expect(liveFrame).not.toHaveBeenCalled();
   settle(false);
   await vi.waitFor(() => expect(live()?.version).toBe(4));
@@ -87,6 +91,7 @@ it('fetches a held ping once the caller places it as someone else\'s write', asy
 });
 
 it('a remote ping during typing is fetched only after typing goes quiet', async () => {
+  vi.useFakeTimers();
   const liveFrame = vi.fn(async () => frame(4, 'theirs'));
   const { backend, ping } = liveBackend(liveFrame);
   let quiet!: () => void;
@@ -94,7 +99,7 @@ it('a remote ping during typing is fetched only after typing goes quiet', async 
     backend, id: 'a1', initialEditId: 'e0', initialVersion: 1, whenIdle: () => new Promise<void>((r) => { quiet = r; }),
   }));
   ping({ version: 4, editId: 'theirs' });
-  await new Promise((r) => setTimeout(r, 0));
+  await aWhile();
   expect(liveFrame, 'not fetched while the user types').not.toHaveBeenCalled();
   quiet();
   await vi.waitFor(() => expect(live()?.version).toBe(4));
@@ -113,6 +118,7 @@ it('a remote ping after typing stops is fetched at once', async () => {
 });
 
 it('a ping that arrives while a held fetch waits is folded into it: one fetch, the newest head', async () => {
+  vi.useFakeTimers();
   const liveFrame = vi.fn(async () => frame(5, 'theirs-2'));
   const { backend, ping } = liveBackend(liveFrame);
   let quiet!: () => void;
@@ -120,12 +126,12 @@ it('a ping that arrives while a held fetch waits is folded into it: one fetch, t
     backend, id: 'a1', initialEditId: 'e0', initialVersion: 1, whenIdle: () => new Promise<void>((r) => { quiet = r; }),
   }));
   ping({ version: 4, editId: 'theirs' });
-  await new Promise((r) => setTimeout(r, 0));
+  await aWhile();
   ping({ version: 5, editId: 'theirs-2' });
-  await new Promise((r) => setTimeout(r, 0));
+  await aWhile();
   quiet();
   await vi.waitFor(() => expect(live()?.version).toBe(5));
-  await new Promise((r) => setTimeout(r, 0));
+  await aWhile();
   expect(liveFrame).toHaveBeenCalledOnce();
 });
 

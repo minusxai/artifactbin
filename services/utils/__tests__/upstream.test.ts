@@ -4,7 +4,7 @@
  * a receiver part verifies. The app code is identical, and a forged header
  * reaching the app directly is worth nothing either way.
  */
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
 import { brotliCompressSync, brotliDecompressSync } from 'node:zlib';
 import { Hono } from 'hono';
 import { readRawResponse, withHttpServer } from '@artifactbin/test-support/net';
@@ -67,8 +67,7 @@ describe('inProcess', () => {
   it('streams a response body and propagates cancel', async () => {
     const reader = await readPings(await proxy.request('/events'), 3);
     await reader.cancel();
-    await new Promise((r) => setTimeout(r, 30));
-    expect(cancelled).toContain('events');
+    await vi.waitFor(() => expect(cancelled).toContain('events'));
   });
 });
 
@@ -92,8 +91,8 @@ describe('overHttp', () => {
     const res = await fetch(`http://127.0.0.1:${proxyServer.port}/events`, { signal: ac.signal });
     await readPings(res, 3);
     ac.abort();
-    await new Promise((r) => setTimeout(r, 200));
-    expect(cancelled).toContain('events');
+    // The app's stream hears the cancel over the hop's socket, however late.
+    await vi.waitFor(() => expect(cancelled).toContain('events'));
   });
   /*
    * THE HOP CARRIES BYTES, NOT MEANINGS. A body the app already encoded (a

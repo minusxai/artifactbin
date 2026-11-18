@@ -11,22 +11,26 @@ const fakeProcess = () => {
   const exit = vi.fn();
   return { emitter, process: { once: emitter.once.bind(emitter) as NodeJS.Process['once'], exit: exit as unknown as NodeJS.Process['exit'] }, exit };
 };
-const tick = () => new Promise((r) => setTimeout(r, 30));
 
 describe('installShutdown', () => {
   it('runs the steps in order on SIGTERM, then exits 0 exactly once — even under a second signal', async () => {
     const { emitter, process, exit } = fakeProcess();
     const order: string[] = [];
-    installShutdown({
+    // The first step's own work is held until both signals have arrived; the returned close is the run they started.
+    let finish!: () => void;
+    const work = new Promise<void>((resolve) => { finish = resolve; });
+    const close = installShutdown({
       process,
       steps: [
-        async () => { await tick(); order.push('flush events'); },
+        async () => { await work; order.push('flush events'); },
         async () => { order.push('close listener'); },
       ],
     });
     emitter.emit('SIGTERM');
     emitter.emit('SIGINT');
-    await tick(); await tick();
+    expect(order).toEqual([]);
+    finish();
+    await close();
     expect(order).toEqual(['flush events', 'close listener']);
     expect(exit).toHaveBeenCalledTimes(1);
     expect(exit).toHaveBeenCalledWith(0);

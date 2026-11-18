@@ -328,9 +328,10 @@ function probeRun(version,{toolCache,gh=`gh(){ printf '{}'; }`,cat='cat(){ :; }'
  if(settle)waitFor(join(directory,'pr-attempt.json'));
  return {directory,result,output:read(output),path:read(pathFile)};
 }
+/** Waits for a file the probe's background work writes, without starting a process per look; fails, naming it, if it never lands. */
 function waitFor(file){
- const until=Date.now()+3000;
- while(!existsSync(file)&&Date.now()<until)spawnSync('sleep',['0.02']);
+ const until=Date.now()+20_000,nap=new Int32Array(new SharedArrayBuffer(4));
+ while(!existsSync(file)){if(Date.now()>until)throw Error(`${file} never appeared`);Atomics.wait(nap,0,0,10);}
 }
 function toolCacheWith(versions){
  const cache=tempDirSync('afbin-tool-cache-',onTestFinished);
@@ -348,7 +349,7 @@ it('puts the tool cache\'s newest Node 22 on PATH, starts no Node, and warms tha
  const release=join(cache,'release'),read=join(cache,'read');
  // Any node at all fails the probe; cat records what it reads and then blocks until the test releases it: had the step
  // waited for it, the 5s spawn timeout would fail the probe.
- const cat=`cat(){ printf '%s\\n' "$*" >> '${read}'; while [ ! -e '${release}' ]; do sleep 0.01; done; }`;
+ const cat=`cat(){ printf '%s\\n' "$*" >> '${read}'; while [ ! -e '${release}' ]; do sleep 0.01; done; : > '${read}.done'; }`;
  const {directory,result,output,path}=probeRun('v24.11.0',{toolCache:cache,cat,node:'node(){ return 91; }'});
  try {
   expect(result.error).toBeUndefined();
@@ -358,7 +359,7 @@ it('puts the tool cache\'s newest Node 22 on PATH, starts no Node, and warms tha
   expect(path).toBe(`${bin}\n`);
   waitFor(read);
   expect(readFileSync(read,'utf8')).toBe(`${bin}/node\n`);
- } finally {writeFileSync(release,'');spawnSync('sleep',['0.05']);}
+ } finally {writeFileSync(release,'');waitFor(`${read}.done`);}
 });
 // THE CLOCK'S ATTEMPT, FETCHED OFF THE CRITICAL PATH. The clock reads only the attempt's run_started_at, fixed for the
 // attempt, so the first step fetches it in the background; the clock's own `gh api` took 0.6s median, 2.0s p90 and 4.1s at

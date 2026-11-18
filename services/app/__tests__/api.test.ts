@@ -153,10 +153,9 @@ describe('artifact CRUD', () => {
   it('lists only own artifacts, newest first, without content', async () => {
     const a = await mint('a');
     const b = await mint('b');
-    await create(a.token, '<p>1</p>', 'first');
-    // One tick between creates: same-microsecond CURRENT_TIMESTAMPs make the
-    // "newest first" ORDER BY ambiguous (observed flake under a busy suite).
-    await new Promise((r) => setTimeout(r, 2));
+    const first = await create(a.token, '<p>1</p>', 'first');
+    // Two creates can share a timestamp, which leaves "newest first" ambiguous: the first is dated a minute back.
+    await (await harness.db()).query("UPDATE artifacts SET created_at = created_at - interval '1 minute' WHERE id = $1", [first.id]);
     await create(a.token, '<p>2</p>', 'second');
     await create(b.token, '<p>3</p>', 'other');
 

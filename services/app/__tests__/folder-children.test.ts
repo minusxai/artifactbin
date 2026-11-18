@@ -172,8 +172,8 @@ describe('the children table', () => {
     await reader.read();
     await create(o.token, { html: '<p>new</p>', title: 'New', parent_id: f.id });
     let seen = '';
-    const until = Date.now() + 5000;
-    while (!seen.includes(`event: ${STORY_DATA_EVENT}`) && Date.now() < until) {
+    // Read until the data frame (a missing one fails at the test's own timeout, or here when the stream ends).
+    while (!seen.includes(`event: ${STORY_DATA_EVENT}`)) {
       const chunk = await reader.read();
       if (chunk.done) break;
       seen += decoder.decode(chunk.value as Uint8Array);
@@ -186,12 +186,12 @@ describe('the children table', () => {
   it('a child created under an open folder wakes the folder\'s own channel', async () => {
     const o = await owner();
     const f = await create(o.token, { format: 'folder', title: 'Live' });
-    let woke = 0;
-    const unsubscribe = await subscribeChannel(artifactChannel(f.id), () => { woke += 1; });
+    let woke = 0, wake!: () => void;
+    const woken = new Promise<void>((resolve) => { wake = resolve; });
+    const unsubscribe = await subscribeChannel(artifactChannel(f.id), () => { woke += 1; wake(); });
     try {
       await create(o.token, { html: '<p>new</p>', parent_id: f.id });
-      const until = Date.now() + 5000;
-      while (woke === 0 && Date.now() < until) await new Promise((r) => setTimeout(r, 50));
+      await woken;
       expect(woke).toBeGreaterThan(0);
     } finally { await unsubscribe(); }
   });

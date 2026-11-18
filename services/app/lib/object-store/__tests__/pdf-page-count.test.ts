@@ -9,7 +9,7 @@
  * collection). Both numbers sit badly beside the tier's own thesis that a
  * 25 MB PDF is never held whole.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { samplePdf } from '../../../../../scripts/lib/sample-pdf.mjs';
 import { pdfPageCount } from '../pdf-store';
 
@@ -65,20 +65,15 @@ describe('pdfPageCount', () => {
       Buffer.from(token.repeat(Math.floor(25_000_000 / token.length))),
     ]);
 
-    const before = process.memoryUsage();
-    const started = process.hrtime.bigint();
+    // Counted, not timed: every look is one `indexOf`, so a scan that stops after ten thousand hits makes about that
+    // many (the old shape looked at all two million); and it never turns the bytes into a string.
+    const looks = vi.spyOn(worst, 'indexOf'), asText = vi.spyOn(worst, 'toString');
     const pages = pdfPageCount(worst);
-    const ms = Number(process.hrtime.bigint() - started) / 1e6;
-    const heapDelta = process.memoryUsage().heapUsed - before.heapUsed;
 
     // A number it stopped counting is not a number.
     expect(pages).toBeUndefined();
-    // The old shape took 109 ms here and 1.5 s in review; this stops after ten
-    // thousand hits. A wide bound, because a loaded machine is the normal case.
-    expect(ms).toBeLessThan(200);
-    // And allocates essentially nothing: no 25 MB string, no array of matches.
-    // The old shape held ~105 MB of matched strings at its peak.
-    expect(heapDelta).toBeLessThan(10 * 1024 * 1024);
+    expect(looks.mock.calls.length).toBeLessThanOrEqual(10_002);
+    expect(asText).not.toHaveBeenCalled();
   });
 
   it('scans a big file with ordinary contents without holding it as a string', () => {
@@ -90,8 +85,8 @@ describe('pdfPageCount', () => {
     const big = Buffer.concat(parts);
     expect(big.byteLength).toBeGreaterThan(19_000_000);
 
-    const before = process.memoryUsage().heapUsed;
+    const asText = vi.spyOn(big, 'toString');
     expect(pdfPageCount(big)).toBe(300);
-    expect(process.memoryUsage().heapUsed - before).toBeLessThan(10 * 1024 * 1024);
+    expect(asText).not.toHaveBeenCalled();
   });
 });

@@ -22,7 +22,6 @@ let dir;
 beforeEach(() => { dir = tempDirSync('gate-slots-',onTestFinished); });
 
 const held = () => readdirSync(dir).filter((name) => /^\d+$/.test(name)).sort();
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 describe('acquireSlot', () => {
   it('fills every slot with a distinct index, and the next runner waits until one is released', async () => {
@@ -31,9 +30,13 @@ describe('acquireSlot', () => {
     expect(new Set([a.index, b.index])).toEqual(new Set([1, 2]));
     expect(held()).toEqual(['1', '2']);
 
-    let third;
-    const waiting = acquireSlot({ dir, slots: 2, pollMs: 10 }).then((slot) => { third = slot; return slot; });
-    await sleep(80);
+    // The third runner judges both held slots on every look; once it has looked twice it has found the semaphore full
+    // and gone back to waiting at least once.
+    let third, looks = 0, lookedTwice;
+    const twice = new Promise((resolve) => { lookedTwice = resolve; });
+    const isAlive = () => { if (++looks === 4) lookedTwice(); return true; };
+    const waiting = acquireSlot({ dir, slots: 2, pollMs: 10, isAlive }).then((slot) => { third = slot; return slot; });
+    await Promise.race([twice, waiting]);
     expect(third, 'a full semaphore must make the third runner wait').toBeUndefined();
 
     await b.release();
@@ -47,13 +50,17 @@ describe('acquireSlot', () => {
   it('never lets two concurrent holders share a slot, and never holds more than the slot count', async () => {
     const slots = 3;
     const inUse = new Set();
-    let peak = 0;
+    let peak = 0, taken = 0, looks = 0, fill;
+    const contended = new Promise((resolve) => { fill = resolve; });
+    // Every waiter judges each held slot on each look: the first holders keep their slots until the other nine have
+    // between them looked at a held slot (12 - 3) * 3 times, so all of them contend for a full semaphore.
+    const isAlive = () => { if (++looks === (12 - slots) * slots) fill(); return true; };
     const worker = async () => {
-      const slot = await acquireSlot({ dir, slots, pollMs: 5 });
+      const slot = await acquireSlot({ dir, slots, pollMs: 5, isAlive });
       expect(inUse.has(slot.index), `slot ${slot.index} handed out twice`).toBe(false);
       inUse.add(slot.index);
       peak = Math.max(peak, inUse.size);
-      await sleep(15);
+      if (++taken <= slots) await contended; else await new Promise((resolve) => setImmediate(resolve));
       inUse.delete(slot.index);
       await slot.release();
     };

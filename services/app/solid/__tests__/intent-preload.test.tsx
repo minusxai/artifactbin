@@ -33,10 +33,14 @@ describe('preloadKeyFor', () => {
   ])('%s -> %s', (href, key) => expect(preloadKeyFor(href, 'http://localhost:3000')).toBe(key));
 });
 
+// These waits are on cold lazy chunks: the condition decides, and the bound is the test's own time, not a guess at a
+// runner's speed.
+const COLD_LAZY_MS = 20_000;
+
 describe('link intent', () => {
   it('hovering a profile link fetches it once; the page then adopts it without a second request', async () => {
     render(() => <App />);
-    await screen.findByRole('region', { name: 'Trash' }, { timeout: 3000 });
+    await screen.findByRole('region', { name: 'Trash' }, { timeout: COLD_LAZY_MS });
     const link = document.createElement('a');
     link.href = '/@sam'; link.textContent = 'sam'; document.body.append(link);
     fireEvent.pointerOver(link, { pointerType: 'mouse' });
@@ -44,7 +48,7 @@ describe('link intent', () => {
     fireEvent.pointerDown(link);
     fireEvent.focusIn(link);
     window.history.pushState(null, '', '/@sam'); window.dispatchEvent(new PopStateEvent('popstate'));
-    await waitFor(() => expect(screen.getByText('0 public artifacts', { exact: true })).toBeInTheDocument(), { timeout: 4000 });
+    await waitFor(() => expect(screen.getByText('0 public artifacts', { exact: true })).toBeInTheDocument(), { timeout: COLD_LAZY_MS });
     expect(calls.filter((u) => u === '/api/page/profile/%40sam')).toHaveLength(1);
   });
 });
@@ -52,13 +56,13 @@ describe('link intent', () => {
 describe('Home link intent', () => {
   it('preloads the destination bootstrap, never the personal shelf, and the page adopts it without a second request', async () => {
     render(() => <App />);
-    await screen.findByRole('region', { name: 'Trash' }, { timeout: 3000 });
+    await screen.findByRole('region', { name: 'Trash' }, { timeout: COLD_LAZY_MS });
     const link = document.createElement('a');
     link.href = '/'; link.textContent = 'home'; document.body.append(link);
     fireEvent.pointerOver(link, { pointerType: 'mouse' });
     await waitFor(() => expect(calls.filter((u) => u === '/api/page/home?part=bootstrap')).toHaveLength(1));
     window.history.pushState(null, '', '/'); window.dispatchEvent(new PopStateEvent('popstate'));
-    await screen.findByRole('heading', { name: 'Team' }, { timeout: 4000 });
+    await screen.findByRole('heading', { name: 'Team' }, { timeout: COLD_LAZY_MS });
     expect(calls.filter((u) => u === '/api/page/home?part=bootstrap')).toHaveLength(1);
     expect(calls.filter((u) => u.includes('part=core') || u.startsWith('/api/me/preferences') || u.startsWith('/api/groups/'))).toEqual([]);
   });

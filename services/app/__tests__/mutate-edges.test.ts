@@ -73,13 +73,14 @@ describe('contention', () => {
     const t = await mintToken('t');
     const ds = (await create(t.token, { dataset: ROWS, columns: [{ name: 'choice', type: 'string' }], access: 'readwrite' })).id;
     await alwaysContended(ds);
-    const res = await mutateDatasetRoute(
-      request(`/api/artifacts/${ds}/mutate`, { method: 'POST', token: t.token, json: { sql: `insert into public.rows (choice) values ('y')` } }),
-      params({ id: ds }),
-    );
-    expect(res.status).toBe(503);
-    expect(((await res.json()) as { error: string }).error).toBe('dataset_busy');
-    vi.restoreAllMocks();
+    try {
+      const res = await mutateDatasetRoute(
+        request(`/api/artifacts/${ds}/mutate`, { method: 'POST', token: t.token, json: { sql: `insert into public.rows (choice) values ('y')` } }),
+        params({ id: ds }),
+      );
+      expect(res.status).toBe(503);
+      expect(((await res.json()) as { error: string }).error).toBe('dataset_busy');
+    } finally { vi.restoreAllMocks(); }
   });
 });
 

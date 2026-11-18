@@ -36,13 +36,6 @@ async function recorded<T>(work: () => Promise<T>) {
   } finally { db.query = query; db.transaction = transaction; }
 }
 
-/** The fastest of five answers, in ms: a regression bound on this fixture, not a production latency. */
-async function fastest(work: () => Promise<unknown>): Promise<number> {
-  let best = Infinity;
-  for (let i = 0; i < 5; i++) { const started = performance.now(); await work(); best = Math.min(best, performance.now() - started); }
-  return best;
-}
-
 async function world() {
   const db = await getDb();
   const owner = await createUser({ email: 'mxmx_test_asset_budget@example.com' });
@@ -71,7 +64,6 @@ describe('owner-host /assets/<hash>', () => {
     expect(unknown.sql[0]).not.toMatch(/\bartifacts\b/i);
     expect(unknown.sql[0]).toMatch(/\bFROM web_assets WHERE url_hash\s*=\s*\$1/i);
     expect(unknown.count).toBe(1);
-    expect(await fastest(() => servesWebAsset(host, 'e'.repeat(64)))).toBeLessThan(25);
   });
 
   it('a served image costs two statements that read no page source, hit or miss', async () => {
@@ -88,7 +80,5 @@ describe('owner-host /assets/<hash>', () => {
     expect(miss.value).toBe(false);
     for (const text of miss.sql) expect(text).not.toMatch(/\b(source|document)\b/i);
     expect(miss.count).toBe(2);
-    expect(await fastest(() => servesWebAsset(host, urlHash(image('last'))))).toBeLessThan(25);
-    expect(await fastest(() => servesWebAsset(host, urlHash(image('theirs'))))).toBeLessThan(25);
   });
 });

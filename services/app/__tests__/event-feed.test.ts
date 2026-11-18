@@ -5,7 +5,7 @@
  * services/events/__tests__/feed-position-postgres.test.ts.
  */
 import { randomUUID } from 'node:crypto';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import type { EventFeedEvent, EventFeedPage } from '@artifactbin/contracts';
 import { AGENT_SESSION_HEADER } from '@artifactbin/contracts';
 import { EVENTS_SCHEMA, getDb } from '@/lib/platform';
@@ -186,26 +186,43 @@ it('stops delivering an artifact\'s events on the next poll after access is lost
   expect(await theirs.json()).toEqual({ error: { code: 'invalid_cursor' } });
 });
 
+/** The waiting requests asleep in the feed's wait loop: each sleep listens for its own request's abort (lib/event-feed). */
+function feedSleepers() {
+  const listen = AbortSignal.prototype.addEventListener;
+  const asleep = new Set<AbortSignal>();
+  const spy = vi.spyOn(AbortSignal.prototype, 'addEventListener').mockImplementation(function (this: AbortSignal, ...args: Parameters<AbortSignal['addEventListener']>) {
+    if (args[0] === 'abort' && /lib\/event-feed\//.test(new Error().stack ?? '')) asleep.add(this);
+    return listen.apply(this, args);
+  });
+  return { count: () => asleep.size, forget: () => asleep.clear(), restore: () => spy.mockRestore() };
+}
+
 it('holds a waiting request until an event arrives, and caps concurrent waits per account', async () => {
   const owner = await mintAccountToken('wait-owner');
   const { doc, say } = await publish(owner);
   const start = await page(owner, { artifact_id: doc.id, after: 'now' });
+  const sleeps = feedSleepers();
+  try {
   const began = Date.now();
   const waiting = page(owner, { artifact_id: doc.id, after: start.next, wait: '20' });
-  await new Promise(resolve => setTimeout(resolve, 300));
+  // The request is held: it found nothing and went to sleep in the wait loop before the event is written.
+  await vi.waitFor(() => expect(sleeps.count()).toBe(1));
   await say(owner, 'Wake up');
   expect(types((await waiting).events)).toEqual(['artifact.annotated']);
   expect(Date.now() - began).toBeLessThan(10_000);
 
   const cursor = (await page(owner, { artifact_id: doc.id, after: 'now' })).next;
   const controllers = Array.from({ length: 4 }, () => new AbortController());
+  sleeps.forget();
   const waits = controllers.map(c => feed(new Request(request(`/api/events?artifact_id=${doc.id}&after=${cursor}&wait=30`, { token: owner.token }), { signal: c.signal })));
-  await new Promise(resolve => setTimeout(resolve, 200));
+  // All four hold their lease and sleep before the fifth asks.
+  await vi.waitFor(() => expect(sleeps.count()).toBe(4));
   const refused = await read(owner, { artifact_id: doc.id, after: cursor, wait: '30' });
   expect(refused.status).toBe(429);
   expect(await refused.json()).toEqual({ error: { code: 'too_many_event_waits' } });
   controllers.forEach(c => c.abort(new Error('done')));
   expect((await Promise.all(waits)).map(r => r.status)).toEqual([499, 499, 499, 499]);
+  } finally { sleeps.restore(); }
 }, 30_000);
 
 it('serves no category but comments: an unknown category or a job type is refused, as any type outside the catalogue', async () => {

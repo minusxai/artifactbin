@@ -8,7 +8,7 @@
  * The upstream is a stand-in for the app (server/pages-host and the app page), answering by the host the
  * request addressed exactly as the app does; the worker, its routing and its browser are the shipped ones.
  */
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import {build} from 'esbuild';
 import {inspectPage,inspectSource} from '../../app/skills/artifactbin/scripts/check.mjs';
 import {fileURLToPath} from 'node:url';
@@ -134,11 +134,12 @@ it('delivers successive real SSE segments through the isolated worker, catches u
  expect(smoke.error).toBeUndefined();
  const evidence=smoke.result as {failedRequests:unknown[];consoleErrors:string[];pageErrors:string[];httpErrors:unknown[]};
  expect(evidence.failedRequests).toEqual([]);expect(evidence.consoleErrors).toEqual([]);expect(evidence.pageErrors).toEqual([]);expect(evidence.httpErrors).toEqual([]);
- await new Promise(resolve=>setTimeout(resolve,300));expect(active).toBeLessThanOrEqual(2);
+ // The check page's streams end with it (its cancels arrive over the wire, however late).
+ await vi.waitFor(()=>expect(active).toBeLessThanOrEqual(2));
  }
  expect(peak).toBeLessThanOrEqual(6);expect(seen.length).toBeLessThan(50);
  await worker.close();worker=undefined;
- await new Promise(resolve=>setTimeout(resolve,100));expect(active).toBe(0);expect(cancelled).toBe(seen.length);
+ await vi.waitFor(()=>expect(active).toBe(0));expect(cancelled).toBe(seen.length);
  const total=seen.length;await new Promise(resolve=>setTimeout(resolve,350));expect(seen).toHaveLength(total);
  // The same stream endpoint keeps the guest permission refusal; no owner grant enters the worker.
  const guest:Actor={credential:'none'};

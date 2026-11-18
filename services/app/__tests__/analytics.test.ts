@@ -22,7 +22,9 @@ import { trackEvent } from '@/lib/analytics';
 import { forkCountByUser, likeSummaryByUser, viewSeriesByUser, VIEW_SERIES_DAYS, listArtifactsByUser } from '@/lib/workspace';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { identityForUser, createUser } from '@/lib/accounts';
-import { sessionUser, requestHeaders, params, create, eventRows, expectEvent, settle } from './analytics-fixture';
+import { sessionUser, requestHeaders, params, create, eventRows, expectEvent, settle, holdTelemetry } from './analytics-fixture';
+
+holdTelemetry();
 
 const harness = useAppHarness();
 beforeEach(() => setSession(() => sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null));

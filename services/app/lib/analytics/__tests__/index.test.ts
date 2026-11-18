@@ -20,6 +20,10 @@ afterAll(() => setServices({ events: previous }));
 const retired = async () => (await (await harness.db()).query('SELECT * FROM analytics_events')).rows;
 const log = async () => (await (await harness.db()).query<{ verb: string; subject_kind: string | null; subject_id: string | null; payload: { user_id: string | null } }>(`SELECT * FROM ${EVENTS_SCHEMA}.events ORDER BY position`)).rows;
 
+/** A view is queued once recordView has read its request metadata (no I/O: lib/analytics events): one event-loop turn,
+ * however many awaits that read takes. */
+const queued = () => new Promise<void>((resolve) => setImmediate(resolve));
+
 describe('canonical writers', () => {
   it('writes only the log, preserves signed-in payload and daily visitor identity', async () => {
     await trackEvent('view', 'art1', { userId: 'usr1' });
@@ -37,8 +41,7 @@ describe('canonical writers', () => {
 
   it('batches served views and resolves all callers without retired writes', async () => {
     const pending = [recordView('art1'), recordView('art1'), recordView('art2', { userId: 'usr2' })];
-    await Promise.resolve();
-    await Promise.resolve();
+    await queued();
     await flushViews();
     await Promise.all(pending);
     expect(await log()).toHaveLength(3);
@@ -53,12 +56,10 @@ describe('canonical writers', () => {
     try {
       vi.setSystemTime(new Date('2026-11-11T23:59:00Z'));
       const first = recordView('art1');
-      await Promise.resolve();
-      await Promise.resolve();
+      await queued();
       vi.setSystemTime(new Date('2026-11-12T00:01:00Z'));
       const second = recordView('art1');
-      await Promise.resolve();
-      await Promise.resolve();
+      await queued();
       await flushViews();
       await Promise.all([first, second]);
       expect(new Set((await log()).map(r => r.subject_id)).size).toBe(2);
@@ -87,8 +88,7 @@ describe('canonical writers', () => {
     try {
       await expect(trackEvent('edit', 'art1')).resolves.toBeUndefined();
       const pending = recordView('art1');
-      await Promise.resolve();
-      await Promise.resolve();
+      await queued();
       await expect(flushViews()).resolves.toBeUndefined();
       await expect(pending).resolves.toBeUndefined();
     } finally { error.mockRestore(); }

@@ -10,7 +10,7 @@ import * as Y from 'yjs';
 import { createUser, identityForUser } from '@/lib/accounts';
 import { artifactState, currentPage, getArtifactById } from '@/lib/artifacts';
 import { editableRegions, openRegionDoc, regionText } from '@/lib/live-regions';
-import { runWithRequest } from '@/lib/platform';
+import { getDb, runWithRequest, type Queryable } from '@/lib/platform';
 import type { Actor } from '@artifactbin/contracts';
 import { POST as openRoute } from '@/app/api/artifacts/[id]/regions/[regionId]/open/route';
 import { POST as updatesRoute } from '@/app/api/artifacts/[id]/regions/[regionId]/updates/route';
@@ -192,11 +192,19 @@ describe('every read path serves it', () => {
       // A burst of typing inside one throttle window comes out as at most two pings (leading and trailing).
       const startedAt = Date.now();
       for (const word of [' one', ' two', ' three', ' four']) await typeAtEnd(typist, word);
-      const burst = await frames.named('message', 3, 1200);
+      // Read pings until one carries the burst's final live revision (the trailing ping), however late it comes.
+      const final = (await currentPage(await saved())).live;
+      const burst: Awaited<ReturnType<typeof frames.named>> = [];
+      while (burst.at(-1)?.data.live !== final && burst.length < 8) {
+        const [ping] = await frames.named('message', 1);
+        if (!ping) break;
+        burst.push(ping);
+      }
+      // The throttle's bound grows with the time taken, so a slow runner only loosens it.
       const within = Date.now() - startedAt;
       expect(burst.length).toBeGreaterThanOrEqual(1);
       expect(burst.length).toBeLessThanOrEqual(Math.ceil(within / 300) + 1);
-      expect(burst.at(-1)!.data.live as number).toBe((await currentPage(await saved())).live);
+      expect(burst.at(-1)!.data.live as number).toBe(final);
       expect((await saved()).version).toBe(1);
       // A new version starts its live revisions afresh: a whole-page write closing the region sums to less than the
       // live text before it, and the live text typed after it still reaches the reader.
@@ -271,15 +279,17 @@ describe('cost', () => {
     await typist.push();
     expect(typist.text.length).toBeGreaterThan(50_000);
     const row = await saved();
-    let started = performance.now();
-    const uncached = await currentPage(row);
-    const uncachedMs = performance.now() - started;
-    started = performance.now();
-    const cached = await currentPage(row);
-    const cachedMs = performance.now() - started;
+    // What each read costs, counted in database reads rather than milliseconds: the cached one composes nothing.
+    const db = await getDb(), reads: string[] = [];
+    const counted: Queryable = { query: (sql, params) => { reads.push(sql); return db.query(sql, params); } };
+    const uncached = await currentPage(row, { q: counted });
+    const uncachedReads = reads.splice(0);
+    const cached = await currentPage(row, { q: counted });
     expect(cached.row.source).toBe(uncached.row.source);
     expect(uncached.row.source!.length).toBeGreaterThan(50_000);
-    process.stderr.write(`[live-docs cost] 50k-char region: uncached ${uncachedMs.toFixed(1)} ms, cached ${cachedMs.toFixed(2)} ms\n`);
-    expect(cachedMs).toBeLessThan(uncachedMs);
+    // Both read the live revision; only the uncached one goes on to read the regions and compose them.
+    const revisionRead = expect.stringMatching(/^SELECT region_id, last_seq::int AS last_seq, dirty_since IS NOT NULL AS dirty FROM region_states/);
+    expect(uncachedReads.length).toBeGreaterThan(1);
+    expect(reads).toEqual([revisionRead]);
   });
 });

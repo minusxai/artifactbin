@@ -1,9 +1,10 @@
 /**
  * The analytics suites' shared fixture (analytics*.test.ts): the session and request stand-ins, event rows and polls.
  */
-import { expect, vi } from 'vitest';
+import { afterEach, beforeEach, expect, vi, type MockInstance } from 'vitest';
 import { request } from '@/__tests__/harness';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
+import * as analytics from '@/lib/analytics';
 import { flushViews } from '@/lib/analytics';
 import { EVENTS_SCHEMA, getDb } from '@/lib/platform';
 
@@ -70,6 +71,18 @@ export async function expectEvent(artifactId: string, event: string): Promise<{ 
   return match!;
 }
 
-/** Give any stray unawaited insert time to land before asserting absence, then write any buffered view: a view the
- * 2s batch has not written yet would otherwise pass an absence check. */
-export const settle = async () => { await new Promise((r) => setTimeout(r, 150)); await flushViews(); };
+/** The writes of every `trackEvent` the code under test fired (it is fire-and-forget), held for `settle`. Call once per file. */
+const tracked: Promise<unknown>[] = [];
+export function holdTelemetry() {
+  let spy: MockInstance<typeof analytics.trackEvent> | undefined;
+  beforeEach(() => {
+    const real = analytics.trackEvent;
+    spy = vi.spyOn(analytics, 'trackEvent').mockImplementation((...args) => { const write = real(...args); tracked.push(write); return write; });
+  });
+  afterEach(() => { spy?.mockRestore(); tracked.length = 0; });
+}
+
+/** Before an absence check: every telemetry write already fired has landed, and every buffered view is written (a view
+ * the 2s batch has not written yet would otherwise pass). recordView and trackEvent read only request metadata
+ * (no I/O) before they queue, so one event-loop turn has queued every view and started every event. */
+export const settle = async () => { await new Promise((r) => setImmediate(r)); await Promise.all(tracked.splice(0)); await flushViews(); };

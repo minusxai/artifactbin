@@ -7,7 +7,7 @@
  */
 import type { RegionFrameMessage, RegionParentMessage } from '@artifactbin/contracts';
 import { TextSelection } from 'prosemirror-state';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as Y from 'yjs';
 import { installEditorGeometry } from '../../../test/setup/editor-geometry';
 import { createRegionState, openRegionDoc, regionHtml } from '../../live-regions';
@@ -21,8 +21,12 @@ beforeAll(() => { restoreGeometry = installEditorGeometry(); });
 afterAll(() => restoreGeometry());
 
 const CLIENT = 4242;
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-const settle = async () => { for (let i = 0; i < 5; i++) await Promise.resolve(); await sleep(0); };
+// The editor's 50 ms batch (and its other timers) run on a faked clock: `sleep(ms)` moves it, so a batch is sent exactly
+// when its time has passed, however slow the runner.
+beforeEach(() => { vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }); });
+afterEach(() => { vi.useRealTimers(); });
+const sleep = (ms: number) => vi.advanceTimersByTimeAsync(ms);
+const settle = async () => { for (let i = 0; i < 5; i++) await Promise.resolve(); await new Promise((resolve) => setImmediate(resolve)); await sleep(0); };
 
 /** The region as saved (what readers see) and the live text the server's state holds (unsaved typing included). */
 const SAVED = '<p data-af-id="a1">Saved text.</p>';

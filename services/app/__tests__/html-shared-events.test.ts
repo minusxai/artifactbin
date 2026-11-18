@@ -85,7 +85,12 @@ it('public page readers never receive private dataset activity, including after 
   expect((await nextData(connected)).data.revisions).toEqual({rows:'unavailable'});
   await db.query('UPDATE artifacts SET version=version+1 WHERE id=$1',[dataset]);
   await db.query("SELECT pg_notify($1,'')",[artifactChannel(dataset)]);
-  expect((await connected.next(1,100)).filter(e=>e.event==='data')).toEqual([]);
+  // A page update after it reaches this reader: whatever the dataset's activity sent arrives before it, and it sent nothing.
+  await db.query('UPDATE artifacts SET version=version+1 WHERE id=$1',[id]);
+  await db.query("SELECT pg_notify($1,'')",[artifactChannel(id)]);
+  const before:Awaited<ReturnType<typeof connected.next>>=[];
+  for(let frame=await connected.next(1);frame[0]&&frame[0].event!=='message';frame=await connected.next(1))before.push(...frame);
+  expect(before.filter(e=>e.event==='data')).toEqual([]);
  }finally{connected.close();}
  const revoked=await opening();expect(revoked.find(e=>e.event==='data')?.data.revisions).toEqual({rows:'unavailable'});expect(revoked.every(e=>!e.id)).toBe(true);
  await db.query('UPDATE artifacts SET version=version+1,deleted_at=now() WHERE id=$1',[dataset]);

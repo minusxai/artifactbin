@@ -24,12 +24,14 @@ describe('closing the embedded database', () => {
     const db = await getDb();
     // Unawaited, exactly as `void trackEvent(...)` fires it, and slow enough
     // that the close below is asked for while it is still running.
-    const pending = db.query<{ n: number }>('SELECT pg_sleep(0.3), 1 AS n');
-    const started = Date.now();
+    const order: string[] = [];
+    const pending = db.query<{ n: number }>('SELECT pg_sleep(0.1), 1 AS n');
+    void pending.then(() => order.push('query'), () => order.push('query failed'));
     await db.close();
+    order.push('closed');
     // The close was ASKED FOR mid-statement and waited for it: a close that
-    // returned at once would be back well inside the sleep.
-    expect(Date.now() - started).toBeGreaterThanOrEqual(250);
+    // returned at once would be back before the statement settled.
+    expect(order).toEqual(['query', 'closed']);
     expect((await pending).rows[0]!.n).toBe(1);
   });
 });

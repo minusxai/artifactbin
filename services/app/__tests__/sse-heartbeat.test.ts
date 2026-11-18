@@ -9,11 +9,16 @@ const harness=useAppHarness();
 afterEach(()=>{vi.useRealTimers();});
 /** Every long-lived stream the app serves speaks within 25s, under the 60s idle timeout of the proxies in front of it. */
 const heartbeatWithin=async(response:Response,ms:number)=>{
- const reader=response.body!.getReader(),decoder=new TextDecoder();let text='';
- // One read stays outstanding across drains, so a chunk is never dropped with an abandoned read.
- let pending:Promise<ReadableStreamReadResult<Uint8Array>>|undefined;
- const drain=async()=>{const deadline=Date.now()+500;while(Date.now()<deadline){pending??=reader.read();const chunk=await Promise.race([pending,new Promise<null>(r=>setTimeout(()=>r(null),50))]);if(!chunk)continue;pending=undefined;if(chunk.done)return;text+=decoder.decode(chunk.value);}};
- try{await drain();const before=text.length;vi.advanceTimersByTime(ms);await drain();return text.slice(before).includes(`event: ${LIVE_KEEPALIVE_EVENT}\n`);}
+ const reader=response.body!.getReader(),decoder=new TextDecoder(),keepalive=`event: ${LIVE_KEEPALIVE_EVENT}\n`;
+ try{
+  // The stream's opening chunk first: it is no heartbeat, and only an interval (faked) can send one.
+  const opening=await reader.read();
+  if(opening.done||decoder.decode(opening.value).includes(keepalive))return false;
+  vi.advanceTimersByTime(ms);
+  // Then the chunks the elapsed interval wrote, until the heartbeat: one that never comes fails at the test's timeout.
+  for(let text='';!text.includes(keepalive);){const chunk=await reader.read();if(chunk.done)return false;text+=decoder.decode(chunk.value);}
+  return true;
+ }
  finally{await reader.cancel().catch(()=>{});}
 };
 it.each([

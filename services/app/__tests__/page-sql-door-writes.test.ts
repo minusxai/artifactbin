@@ -115,7 +115,9 @@ it('a capped insert holds under concurrency: the count and the insert commit tog
   expect(red.length).toBeLessThanOrEqual(LIMIT);
   expect(red.length).toBe(1 + added);
   // Once full, a further add changes nothing.
-  while ((await stored(f.staff)).filter((row) => row.team === 'red').length < LIMIT) expect((await capped('fill')).status).toBe(200);
+  // At most LIMIT adds fill it: a write that answers 200 and adds nothing cannot loop for ever (the length check below fails).
+  for (let i = 0; i < LIMIT && (await stored(f.staff)).filter((row) => row.team === 'red').length < LIMIT; i++) expect((await capped('fill')).status).toBe(200);
+  expect((await stored(f.staff)).filter((row) => row.team === 'red')).toHaveLength(LIMIT);
   expect((await capped('one more')).body.affected).toBe(0);
   expect((await stored(f.staff)).filter((row) => row.team === 'red')).toHaveLength(LIMIT);
 });
@@ -134,7 +136,8 @@ it('a capped move holds under concurrency, as the rule-bound caller: never past 
   expect((await red()).length).toBeLessThanOrEqual(LIMIT);
   expect(await red()).toHaveLength(1 + moved);
   // Once full, a further move changes nothing; a row already there still saves in place.
-  while ((await red()).length < LIMIT) expect((await move((await stored(f.staff)).find((row) => row.team === 'green')!.name as string)).status).toBe(200);
+  for (let i = 0; i < LIMIT && (await red()).length < LIMIT; i++) expect((await move((await stored(f.staff)).find((row) => row.team === 'green')!.name as string)).status).toBe(200);
+  expect(await red()).toHaveLength(LIMIT);
   expect((await move((await stored(f.staff)).find((row) => row.team === 'green')!.name as string)).body.affected).toBe(0);
   const inRed = (await red()).find((row) => row.by === f.other.userId)!.name as string;
   expect((await move(inRed)).body.affected).toBe(1);

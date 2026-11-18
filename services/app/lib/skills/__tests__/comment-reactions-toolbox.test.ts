@@ -70,7 +70,7 @@ it('watch --next baselines once, resumes from its default checkpoint, skips own 
  const batches:any[]=[{events:[]},{events:[mine]},{events:[theirs]},{events:[later]}];
  const calls:{after:string,wait:string}[]=[];let inflight=0,maxInflight=0,n=0;
  const fetcher=async(url:any)=>{if(isListing(String(url)))return Response.json({annotations:[],next_cursor:null});inflight++;maxInflight=Math.max(maxInflight,inflight);const q=new URL(String(url)).searchParams;calls.push({after:q.get('after')??'start',wait:q.get('wait')!});
-  await new Promise(r=>setTimeout(r,1));const batch=batches[n]??{events:[]};n++;inflight--;return Response.json({...batch,next:'c'+n});};
+  await new Promise(r=>setImmediate(r));const batch=batches[n]??{events:[]};n++;inflight--;return Response.json({...batch,next:'c'+n});};
  const printed:any[]=[];const options={env,fetcher,cwd:path.join(root,'elsewhere'),replyFirst:false,deliver:async(v:any)=>{printed.push(v);}};
   await commentCommand({sub:'watch',values:{next:true},positionals:['PAGE12']},options);
   // One after=now baseline, then long polls from each checkpoint; the own event is logged but not printed.

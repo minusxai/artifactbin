@@ -58,9 +58,9 @@ function mount(attributes: Record<string, string> = {}, props: Partial<Chart> = 
   document.body.append(el);
   return el;
 }
+/** Waits on the condition itself; the bound only names what never came, far above any healthy draw. */
 async function until(test: () => unknown, what = 'condition') {
-  for (let i = 0; i < 400; i++) { if (test()) return; await new Promise(resolve => setTimeout(resolve, 5)); }
-  throw Error('timed out waiting for ' + what);
+  await vi.waitFor(() => { if (!test()) throw Error('timed out waiting for ' + what); }, { timeout: 20_000, interval: 5 });
 }
 const ready = (el: Chart) => until(() => el.getAttribute('data-af-chart') === 'ready', 'ready');
 const status = (el: Chart) => el.querySelector('.af-chart-status')!;
@@ -135,8 +135,12 @@ it('reads sql, a linked dataset and a query through sql.watch, redraws on a reru
   expect(watches[2]!.stopped).toBe(true);
   watches[3]!.next([{ k: 'b', v: 5 }]);
   await ready(filtered);
+  // A taken answer starts a draw at once (a microtask marks the chart busy): once the event loop has turned, the stale
+  // answer has started none and the table is the live statement's.
+  expect(filtered.getAttribute('aria-busy')).not.toBe('true');
   watches[2]!.next([{ k: 'a', v: 3 }, { k: 'a2', v: 1 }]);
-  await new Promise(resolve => setTimeout(resolve, 30));
+  await new Promise(resolve => setImmediate(resolve));
+  expect(filtered.getAttribute('aria-busy')).not.toBe('true');
   expect([...filtered.querySelectorAll('td')].map(td => td.textContent)).toEqual(['b', '5']);
   expect(watches[3]!.params).toEqual({ p0: 'b' });
 });

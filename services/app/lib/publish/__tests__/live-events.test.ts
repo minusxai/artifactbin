@@ -1,5 +1,5 @@
 /** Native publication wakeups and retained annotation/subscription lifecycle. */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { nativeHtml } from '@/__tests__/native-html-fixture';
 import { observedRequest } from '@/__tests__/conditional-request';
 import {
@@ -172,17 +172,19 @@ describe('subscription lifecycle', () => {
 
     const edit = await replace(token, doc.id, source('A2'));
     const updated = (await edit.json()) as Wire;
-    await new Promise((r) => setTimeout(r, 150));
-    expect(seenA).toEqual([updated.edit_id]);
-    expect(seenB).toEqual([updated.edit_id]);
+    await vi.waitFor(() => expect([seenA, seenB]).toEqual([[updated.edit_id], [updated.edit_id]]));
 
     // After both leave, further writes reach nobody.
     await offA();
     expect(liveChannelCount()).toBe(1); // still one watcher left
     await offB();
     expect(liveChannelCount()).toBe(0); // the LISTEN itself is released, not just the handler
+    // A new watcher hears the next write; A and B, had they still been subscribed, would have heard it in the same delivery.
+    const seenC: string[] = [];
+    const offC = await subscribeToArtifact(doc.id, (id) => seenC.push(id));
     await replace(token, doc.id, source('A3'));
-    await new Promise((r) => setTimeout(r, 150));
+    await vi.waitFor(() => expect(seenC).toHaveLength(1));
+    await offC();
     expect(seenA).toHaveLength(1);
     expect(seenB).toHaveLength(1);
   });
@@ -196,8 +198,7 @@ describe('subscription lifecycle', () => {
     const offGood = await subscribeToArtifact(doc.id, (id) => seen.push(id));
 
     await replace(token, doc.id, doc.html.replace('beta text', 'B2'));
-    await new Promise((r) => setTimeout(r, 150));
-    expect(seen).toHaveLength(1);
+    await vi.waitFor(() => expect(seen).toHaveLength(1));
     await offBad();
     await offGood();
   });
@@ -327,9 +328,7 @@ describe('GET /a/<id>/events — the annotations frame', () => {
 
     await annotate(doc.id, actor, doc.edit_id);
     // Public conversation reads and wakeups share document admission.
-    const seen = await reader.next(3, 1200);
-    expect(seen.some((e) => e.event === STORY_ANNOTATIONS_EVENT)).toBe(true);
-    expect(seen.length).toBeGreaterThan(0); // the stream itself is alive (opening document frame)
+    expect(await reader.named(STORY_ANNOTATIONS_EVENT)).toHaveLength(1);
     reader.close();
   });
 });

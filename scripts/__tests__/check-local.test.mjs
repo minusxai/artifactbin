@@ -70,13 +70,15 @@ describe('successful local check evidence', () => {
   it('runs several commands concurrently, prints their output in order and returns the first failure', () => fixture(async ({ opts }) => {
     const printed = [];
     const spy = vi.spyOn(process.stdout, 'write').mockImplementation(chunk => { printed.push(String(chunk)); return true; });
-    const step = (text, status, delay) => [process.execPath, '-e', `setTimeout(() => { console.log(process.argv[1]); process.exit(${status}); }, ${delay})`, text];
+    // Each command marks that it started, then waits until all three have: run one after another, the first would wait
+    // for the others for ever and exit 9 (after 20 s), never 3.
+    const meeting = tempDirSync('check-concurrent-', onTestFinished);
+    const meet = `const fs=require('fs'),[name,dir,status]=process.argv.slice(1);fs.writeFileSync(dir+'/'+name,'');const met=setInterval(()=>{if(fs.readdirSync(dir).length<3)return;clearInterval(met);console.log(name);process.exit(Number(status));},5);setTimeout(()=>process.exit(9),20000).unref();`;
+    const step = (text, status) => [process.execPath, '-e', meet, text, meeting, String(status)];
     let status;
-    const started = Date.now();
-    try { status = await runCheck({ ...opts, reuse: false, commands: [step('first', 0, 1000), step('second', 3, 1000), step('third', 0, 1000)] }); }
+    try { status = await runCheck({ ...opts, reuse: false, commands: [step('first', 0), step('second', 3), step('third', 0)] }); }
     finally { spy.mockRestore(); }
     expect(status).toBe(3);
-    expect(Date.now() - started).toBeLessThan(2600);
     const out = printed.join('');
     expect(out.indexOf('first')).toBeLessThan(out.indexOf('second'));
     expect(out.indexOf('second')).toBeLessThan(out.indexOf('third'));

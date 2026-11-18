@@ -13,7 +13,7 @@ import {readFileSync} from 'node:fs';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {JSDOM} from 'jsdom';
-import {afterEach, expect, it} from 'vitest';
+import {afterEach, expect, it, vi} from 'vitest';
 import * as vega from 'vega';
 import {compile} from 'vega-lite';
 import {expressionInterpreter} from 'vega-interpreter';
@@ -190,8 +190,8 @@ async function steps(dom: JSDOM, source: string): Promise<{labels: string[]; fai
     url: () => 'http://127.0.0.1:4100/index.html', viewportSize: () => ({width: 1280, height: 800}),
     // Polls like Playwright's, for a few ticks: a click's answer arrives on a later task.
     waitForFunction: async (fn: (arg: unknown) => unknown, arg: unknown) => {
-      for (let tick = 0; tick < 50; tick++) { if (fn(arg)) return; await new Promise(resolve => setTimeout(resolve, 2)); }
-      throw Error('timed out');
+      // On the condition, as Playwright's does; the bound only names a condition that never came.
+      await vi.waitFor(() => { if (!fn(arg)) throw Error('timed out'); }, { timeout: 10_000, interval: 2 });
     }};
   const step = async (label: string, fn: () => Promise<void>) => { await fn(); labels.push(label); };
   try {
@@ -416,13 +416,18 @@ it('names a map place only where its name fits: no name covers another or comes 
 
 it('drops a superseded answer: the last pick wins even when an earlier pick answers later', async () => {
   const answer = sqlAnswer();
+  // The Meals answer is held until the Groceries pick has been answered and drawn: it answers strictly later.
+  let releaseMeals!: () => void;
+  const mealsHeld = new Promise<void>(resolve => { releaseMeals = resolve; });
   const page = await load(fill(read('csv-dashboard.html')), async (text, params) => {
-    if (Object.values(params).includes('Meals')) await new Promise(resolve => setTimeout(resolve, 30));
+    if (Object.values(params).includes('Meals')) await mealsHeld;
     return answer(text, params);
   });
   const doc = page.dom.window.document;
   (doc.querySelector('[data-af-id="chart-categories-table-row-Meals-pick"]') as HTMLButtonElement).click();
   (doc.querySelector('[data-af-id="chart-categories-table-row-Groceries-pick"]') as HTMLButtonElement).click();
+  await vi.waitFor(() => expect(text(page, 'stat-orders-value')).toBe(fmt(ROWS.filter(row => row.category === 'Groceries').length)));
+  releaseMeals();
   await settle(page);
   expect(text(page, 'stat-orders-value')).toBe(fmt(ROWS.filter(row => row.category === 'Groceries').length));
   expect(text(page, 'filter-category')).toBe('Category: Groceries ✕');
@@ -569,7 +574,7 @@ it('writes with sql, every value bound, and says so when the rules let a write c
   let affected = 1;
   const answer = trackerAnswer(entries);
   const page = await load(await tracker('list'), (text, params) => /^\s*(?:update|delete|insert)/i.test(text) ? {affected, returning: []} : answer(text, params), 'signed-in');
-  const doc = page.dom.window.document, wait = () => new Promise(resolve => setTimeout(resolve, 5));
+  const doc = page.dom.window.document, wait = () => settle(page);
   (doc.querySelector('#add-name') as HTMLInputElement).value = 'Bea';
   doc.querySelector('#add')!.dispatchEvent(new page.dom.window.Event('submit', {cancelable: true}));
   await wait();
@@ -620,7 +625,7 @@ it('saves an edit, a move into another group included, with one bound sql update
   (doc.querySelector('[data-af-id="entry-a1-edit"]') as HTMLButtonElement).click();
   (doc.querySelector('[data-af-id="entry-a1-group-input"]') as HTMLSelectElement).value = 'Second choice';
   doc.querySelector('[data-af-id="entry-a1-form"]')!.dispatchEvent(new page.dom.window.Event('submit', {cancelable: true}));
-  await new Promise(resolve => setTimeout(resolve, 5));
+  await settle(page);
   expect(page.writes).toEqual([{text: 'update entries set name = $p0, grp = $p1, note = $p2\n  where _id = $p3',
     params: {p0: 'Ada', p1: 'Second choice', p2: 'gloves', p3: 'a1'}}]);
 });
