@@ -41,11 +41,13 @@ export function createExportCache(db:Db,options:ExportCacheOptions={}) {
         unnamed=details.object_key;throw new Error('Invalid export image');
       }
       const accepted=await db.transaction(async tx=>{
+        const previous=(await tx.query<{image_id:string|null}>('SELECT image_id FROM export_image_cache WHERE cache_key=$1 FOR UPDATE',[request.cacheKey])).rows[0]?.image_id;
         const accepted=await tx.query(`UPDATE export_image_cache SET image_id=$3,source_revision=$4,
           expires_at=clock_timestamp()+$5::int*interval '1 millisecond',claim_token=NULL,lease_until=NULL,retry_after=NULL
           WHERE cache_key=$1 AND claim_token=$2 AND lease_until>clock_timestamp() RETURNING cache_key`,
           [request.cacheKey,token,image.id,request.revision,freshMs]);
         if(!accepted.rows.length)return null;
+        if(previous)await tx.query('UPDATE export_images SET replaced_at=clock_timestamp() WHERE id=$1',[previous]);
         await tx.query('INSERT INTO export_images(id,artifact_id,object_key,mime,bytes,width,height) VALUES($1,$2,$3,$4,$5,$6,$7)',
           [image.id,image.artifact_id,image.object_key,image.mime,image.bytes,image.width,image.height]);
         return image;
@@ -106,20 +108,22 @@ export function createExportCache(db:Db,options:ExportCacheOptions={}) {
   };
 }
 
-/** An export image nothing points at any more is kept this long: far past any asset grant (5 minutes) naming it. */
+/** An export image is kept this long after a refresh replaced it: far past any asset grant (5 minutes) naming it. */
 const EXPORT_IMAGE_RETENTION_MS=24*60*60*1000;
 /**
- * Expires export images by age: those no cache row points at (a refresh replaced them) and older than `retentionMs`,
- * at most `batch` per run, oldest first. A cache row only ever points at the image its own refresh just inserted, so
- * an image no row points at is never pointed at again. Each object is deleted before its row, in one transaction
+ * Expires export images by age: those no cache row points at, replaced more than `retentionMs` ago (an image with no
+ * `replaced_at`, from before it existed or never published, counts from its creation), at most `batch` per run,
+ * oldest first. A cache row only ever points at the image its own refresh just inserted, so an image no row points at
+ * is never pointed at again; counting from the replacement keeps one served until the moment it was replaced, for as
+ * long as any grant issued then lives. Each object is deleted before its row, in one transaction
  * holding those rows, so a crash leaves rows for the next run, never an object nothing names.
  */
 export async function expireExportImages(db:Db,objects:Pick<ObjectStore,'delete'>=objectStore(),{retentionMs=EXPORT_IMAGE_RETENTION_MS,batch=200}:{retentionMs?:number;batch?:number}={}):Promise<string[]>{
   return db.transaction(async tx=>{
     const old=(await tx.query<{id:string;object_key:string}>(`SELECT i.id,i.object_key FROM export_images i
-      WHERE i.created_at<clock_timestamp()-$1::bigint*interval '1 millisecond'
+      WHERE COALESCE(i.replaced_at,i.created_at)<clock_timestamp()-$1::bigint*interval '1 millisecond'
         AND NOT EXISTS (SELECT 1 FROM export_image_cache c WHERE c.image_id=i.id)
-      ORDER BY i.created_at LIMIT $2 FOR UPDATE SKIP LOCKED`,[retentionMs,batch])).rows;
+      ORDER BY COALESCE(i.replaced_at,i.created_at) LIMIT $2 FOR UPDATE OF i SKIP LOCKED`,[retentionMs,batch])).rows;
     for(const image of old)await objects.delete(image.object_key);
     if(old.length)await tx.query('DELETE FROM export_images WHERE id=ANY($1::text[])',[old.map(image=>image.id)]);
     return old.map(image=>image.id);

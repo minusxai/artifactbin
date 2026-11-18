@@ -655,6 +655,8 @@ const EXPORT_IMAGES: Table = {
   {name:'width',type:'INTEGER',notNull:true},
   {name:'height',type:'INTEGER',notNull:true},
   {name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
+  // When a refresh moved its cache row to a newer image; expiry counts from here (lib/export expireExportImages).
+  {name:'replaced_at',type:'TIMESTAMPTZ'},
  ],
  primaryKey:['id'],
  indexes:[{name:'idx_export_images_artifact',columns:['artifact_id']}],

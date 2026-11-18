@@ -543,6 +543,7 @@ CREATE TABLE IF NOT EXISTS app.export_images (
   width INTEGER NOT NULL,
   height INTEGER NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  replaced_at TIMESTAMPTZ,
   PRIMARY KEY (id)
 );
 
@@ -561,6 +562,8 @@ ALTER TABLE app.export_images ADD COLUMN IF NOT EXISTS width INTEGER NOT NULL;
 ALTER TABLE app.export_images ADD COLUMN IF NOT EXISTS height INTEGER NOT NULL;
 
 ALTER TABLE app.export_images ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+ALTER TABLE app.export_images ADD COLUMN IF NOT EXISTS replaced_at TIMESTAMPTZ;
 
 CREATE INDEX IF NOT EXISTS idx_export_images_artifact ON app.export_images (artifact_id);
 

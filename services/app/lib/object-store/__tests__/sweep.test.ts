@@ -1,8 +1,8 @@
 /**
  * THE OBJECT SWEEP and the publish path that feeds it (./sweep header): an object written and referenced survives the
  * margin, an orphan older than the margin is deleted (on the filesystem store, and on S3 when TEST_S3_URL names a
- * MinIO), an old orphan written again with the same bytes just before a sweep survives, and a refused publish stores
- * nothing. Export images expire in lib/export (export-expiry.test.ts).
+ * MinIO), an old orphan written again with the same bytes before a sweep, or between its scan and its delete,
+ * survives, and a refused publish stores nothing. Export images expire in lib/export (export-expiry.test.ts).
  */
 import {describe,expect,it,onTestFinished} from 'vitest';
 import {mintAccountToken,request,useAppHarness,params} from '@/__tests__/harness';
@@ -10,7 +10,7 @@ import {getDb} from '@/lib/platform';
 import {POST as create} from '@/app/api/artifacts/route';
 import {PUT as replace} from '@/app/api/artifacts/[id]/route';
 import {tempDir} from '@artifactbin/test-support/temp-dir';
-import {ObjectUnavailable,createLocalStore,createS3Store,objectKey,objectStore,parseS3Url,sweepObjects,type ObjectStore} from '..';
+import {ObjectUnavailable,createLocalStore,createS3Store,objectKey,objectStore,parseS3Url,recordObjectWrites,sweepObjects,type ObjectStore} from '..';
 import {forgetRecordedWrites,recordedWrites} from '../sweep';
 
 useAppHarness();
@@ -34,6 +34,23 @@ describe.each(stores)('on the %s store',(_,open)=>{
   expect(await dueAt(old)).toBeUndefined();expect(await dueAt(young)).toBeDefined();
   // Restartable: a second run finds nothing due and deletes nothing.
   expect(await sweepObjects(db,raw)).toEqual({deleted:[],kept:0});
+ });
+ it('keeps an orphan written again between its reference scan and its delete (the recheck under the row lock)',async()=>{
+  const raw=await open(),store=recordedWrites(raw),key=objectKey('file',unique()),db=await getDb();
+  await store.put(key,'bytes');await age(key);
+  // The write lands after the sweep found no reference and before it locks the row to delete.
+  let raced=false;
+  const racing=new Proxy(db,{get(target,name){
+   if(name==='transaction')return async(work:Parameters<typeof db.transaction>[0])=>{if(!raced){raced=true;forgetRecordedWrites();await store.put(key,'bytes');}return target.transaction(work);};
+   const value=Reflect.get(target,name);return typeof value==='function'?value.bind(target):value;}});
+  expect(await sweepObjects(racing,raw)).toEqual({deleted:[],kept:0});
+  expect(raced).toBe(true);expect((await raw.get(key)).toString()).toBe('bytes');
+ });
+ it('drops the row of a recorded key whose object was never stored, as a failed write leaves it',async()=>{
+  const raw=await open(),key=objectKey('pdf',unique());
+  await recordObjectWrites([key]);await age(key);
+  expect(await sweepObjects(await getDb(),raw)).toEqual({deleted:[key],kept:0});
+  expect(await dueAt(key)).toBeUndefined();
  });
  it('keeps an old orphan that is written again, identical bytes and all, just before the sweep',async()=>{
   const raw=await open(),store=recordedWrites(raw),key=objectKey('image',unique());

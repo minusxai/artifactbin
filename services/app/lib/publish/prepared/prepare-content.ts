@@ -23,7 +23,8 @@ export async function prepareContentInput(body: Record<string, unknown>, ctx: Pr
 /** The only persistent half of a prepared publication. */
 export async function applyPreparedContent(prepared: PreparedContent): Promise<StoredContent> {
   const {content} = prepared;
-  for (const object of prepared.objects) await objectStore().put(object.key, object.bytes, object.contentType);
+  // Together: inside a transaction these puts are its idle time (the pool's idle_in_transaction_session_timeout).
+  await Promise.all(prepared.objects.map(object => objectStore().put(object.key, object.bytes, object.contentType)));
   return content;
 }
 
