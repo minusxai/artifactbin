@@ -71,6 +71,8 @@ interface AnnotationThreadProps {
   busy: boolean;
   /** This viewer folded the whole conversation away. */
   folded: boolean;
+  /** Another thread is open: this one steps aside, drawn as its folded summary and dimmed, and opens on a click. */
+  receded?: boolean;
   /** This viewer just asked for this thread, so its NEWEST comment is shown whole however long. */
   justOpened: boolean;
   isCommentFolded: (commentId: string) => boolean;
@@ -173,12 +175,12 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
       // `[role="button"]`: the author line is a toggle, and collapsing a comment in a closed thread must not open it.
       if (!props.open && !props.folded && !target.closest('a, button, textarea, input, [role="button"]')) props.onOpen();
     }}
-    class={`${threadClass} shrink-0 overflow-hidden transition-[border-color,background-color,opacity] duration-150 ${props.open || props.folded ? '' : 'cursor-pointer'} ${props.open || props.hovered ? 'border-edge-bright bg-comment-hover' : ''} ${props.resolved ? 'opacity-55 hover:opacity-100 focus-within:opacity-100' : ''}`}>
-    {/* Folded, the card IS its summary: what it is about, how it opens, and how much is underneath. */}
-    <Show when={props.folded}>
+    class={`${threadClass} shrink-0 overflow-hidden transition-[border-color,background-color,opacity] duration-150 ${props.open || props.folded ? '' : 'cursor-pointer'} ${props.open || props.hovered ? 'border-edge-bright bg-comment-hover' : ''} ${props.resolved ? 'opacity-55 hover:opacity-100 focus-within:opacity-100' : props.receded ? 'opacity-60 hover:opacity-100 focus-within:opacity-100' : ''}`}>
+    {/* Folded, the card IS its summary: what it is about, how it opens, and how much is underneath. Receded, its expand opens it. */}
+    <Show when={props.folded || props.receded}>
       <div class="px-3 py-2">
         <div class="flex min-w-0 items-center gap-1.5">
-          <ThreadFoldControl folded onToggle={props.onToggleFold} />
+          <ThreadFoldControl folded onToggle={props.folded ? props.onToggleFold : props.onOpen} />
           <span class="truncate font-mono text-micro text-faint">{props.a.snippet || 'this document'}</span>
         </div>
         <Show when={first()}>{(comment) => <>
@@ -187,7 +189,7 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
         </>}</Show>
       </div>
     </Show>
-    <Show when={!props.folded}>
+    <Show when={!props.folded && !props.receded}>
       <For each={agents()}>{(work) => (
         <p role="status" class="comment-agent-status border-b border-edge px-3 py-1.5 text-2xs text-muted">
           <a class="comment-agent-status-name" href={`/chat?session=${work.sessionId}`} target="_blank" rel="noopener noreferrer" style={{ color: agentNameColor(work.name) }}>@{work.name}</a>

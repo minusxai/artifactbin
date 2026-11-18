@@ -25,6 +25,19 @@ describe('configureTrustedUiStyles', () => {
     expect(css.endsWith(before)).toBe(true);
   });
 
+  it('gives every element the initial value an @property declares, since a shadow root ignores @property', async () => {
+    const { configureTrustedUiStyles, currentTrustedCss } = await fresh();
+    configureTrustedUiStyles('@property --tw-border-style {\n  syntax: "*";\n  inherits: false;\n  initial-value: solid;\n}\n'
+      + '@property --tw-shadow { syntax: "*"; inherits: false; initial-value: 0 0 #0000; }\n@property --tw-ring-color { syntax: "*"; inherits: false; }\n'
+      + '.border { border-style: var(--tw-border-style); border-width: 1px; }');
+    const css = currentTrustedCss();
+    const defaults = css.match(/@layer trusted-ui-reset \{[^@]*\}/)![0];
+    expect(defaults).toContain('[data-trusted-ui-root] *, [data-trusted-ui-root] ::before, [data-trusted-ui-root] ::after { --tw-border-style: solid;--tw-shadow: 0 0 #0000; }');
+    // No initial value: the property stays reset (guaranteed-invalid), as it is where @property registers it.
+    expect(defaults.slice(defaults.indexOf('::after'))).not.toContain('--tw-ring-color');
+    expect(defaults.indexOf('all: initial')).toBeLessThan(defaults.indexOf('--tw-border-style: solid'));
+  });
+
   it('rewrites every installed style element in place', async () => {
     const { configureTrustedUiStyles, currentTrustedCss, installedStyles } = await fresh();
     const style = document.createElement('style');

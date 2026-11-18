@@ -1059,7 +1059,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
             <For each={openIds()}>{(id) => (
               <Show when={openRow(id)}>{(row) => (
                 <AnnotationThread artifactId={props.id} backend={backend} a={row()} canDeleteAny={props.canDeleteAny} open={openId() === id} hovered={hoverId() === id} busy={busy()}
-                  viewStateError={viewStateError()?.id === id ? viewStateError()?.message : undefined} targetMissing={missingTargets().has(id)} folded={isFolded(folds(), 'threads', id)} justOpened={justOpenedId() === id}
+                  viewStateError={viewStateError()?.id === id ? viewStateError()?.message : undefined} targetMissing={missingTargets().has(id)} folded={isFolded(folds(), 'threads', id)} receded={openId() !== null && openId() !== id} justOpened={justOpenedId() === id}
                   isCommentFolded={(commentId) => isFolded(folds(), 'comments', commentId)} {...threadHandlers(id, false)} />
               )}</Show>
             )}</For>
@@ -1082,7 +1082,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
                 <For each={resolvedIds()}>{(id) => (
                   <Show when={resolvedRow(id)}>{(row) => (
                     <AnnotationThread artifactId={props.id} backend={backend} a={row()} canDeleteAny={props.canDeleteAny} open={openId() === id} resolved hovered={hoverId() === id} busy={busy()}
-                      viewStateError={viewStateError()?.id === id ? viewStateError()?.message : undefined} targetMissing={missingTargets().has(id)} folded={isFolded(folds(), 'threads', id)} justOpened={justOpenedId() === id}
+                      viewStateError={viewStateError()?.id === id ? viewStateError()?.message : undefined} targetMissing={missingTargets().has(id)} folded={isFolded(folds(), 'threads', id)} receded={openId() !== null && openId() !== id} justOpened={justOpenedId() === id}
                       isCommentFolded={(commentId) => isFolded(folds(), 'comments', commentId)} {...threadHandlers(id, true)} />
                   )}</Show>
                 )}</For>
