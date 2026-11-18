@@ -291,3 +291,40 @@ it('shows an Admin a service\'s sign-ins as one row per approval with their coun
  expect((await host.revoke(ada,team.id,grant)).status).toBe(204);
  expect((await host.signIns(ada,team.id)).body!.services).toEqual([]);
 });
+
+it('counts in an Admin\'s list only a service\'s sign-ins that would be accepted, by the same rules that refuse them on use',async()=>{
+ const host=await composed(),{ada,rob,team,page}=await tree(host);
+ const grant=String((await host.approve(rob,team.id,'warehouse','editor')).body!.id);
+ const token=String((await host.groupSignIn(WAREHOUSE_SECRET,{grant_id:grant})).body!.access_token);
+ const listed=async(on=host)=>(await on.signIns(ada,team.id)).body!.services;
+ const counted=[expect.objectContaining({grant_id:grant,count:1})];
+ expect(await listed()).toEqual(counted);
+ /** What the token gets on use, and whether the list counts it, must agree. */
+ const agrees=async(change:string,accepted:boolean,on=host)=>{
+  expect((await on.api(token,'GET',`/api/artifacts/${page}`)).status===200,change).toBe(accepted);
+  expect(await listed(on),change).toEqual(accepted?counted:[]);
+ };
+ // The approver became a test account: refused on use, so not counted.
+ await sql('UPDATE auth.users SET test_account=true WHERE id=$1',[rob.userId]);
+ await agrees('approver a test account',false);
+ await sql('UPDATE auth.users SET test_account=false WHERE id=$1',[rob.userId]);
+ await agrees('approver an account again',true);
+ // The approval has no recorded service origin.
+ const recorded=(await sql<{service_origin:string}>('SELECT service_origin FROM auth.group_sign_in_grants WHERE id=$1',[grant]))[0]!.service_origin;
+ await sql('UPDATE auth.group_sign_in_grants SET service_origin=NULL WHERE id=$1',[grant]);
+ await agrees('no recorded origin',false);
+ await sql('UPDATE auth.group_sign_in_grants SET service_origin=$2 WHERE id=$1',[grant,recorded]);
+ await agrees('origin recorded again',true);
+ // The service removed, its opt-in lost, or configured at another origin.
+ const ledger=delegatedService('ledger','http://ledger.localhost:7445',LEDGER_SECRET);
+ const CHANGES:Record<string,string>={
+  'the opt-in removed':serviceAudiences(delegatedService('warehouse','http://warehouse.localhost:7444',WAREHOUSE_SECRET),ledger),
+  'the entry removed':serviceAudiences(ledger),
+  'another origin':serviceAudiences({...delegatedService('warehouse','http://warehouse-two.localhost:7447',WAREHOUSE_SECRET),group_sign_ins:true},ledger),
+  'configured as approved':AUDIENCES,
+ };
+ for(const [change,audiences] of Object.entries(CHANGES)){
+  overrideConfig({internalServiceSecret:SECRET,publicBaseUrl:origin},{IDENTITY__SERVICE_AUDIENCES:audiences});await syncIdentitySettings(await getDb());
+  await agrees(change,audiences===AUDIENCES,await composed(audiences));
+ }
+});
