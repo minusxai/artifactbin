@@ -70,7 +70,7 @@ describe('the one list of sql failure codes', () => {
   });
 
   it('gives every failed read a sentence for the reader, and the skill names only listed codes, every read code among them', () => {
-    const reads = ['permission_denied', 'sign_in_required', 'unavailable', 'validation_failed', 'timeout', 'result_too_large', 'dataset_not_found', 'unknown_query'] as const;
+    const reads = ['permission_denied', 'sign_in_required', 'unavailable', 'validation_failed', 'timeout', 'result_too_large', 'dataset_not_found', 'unknown_query', 'consent_required'] as const;
     for (const code of reads) expect(SQL_FAILURES[code].notice, code).toMatch(/^[A-Z].*\.$/);
     const doc = read('services/app/skills/artifactbin/references/datasets.md');
     const listed = /Read codes: ([^.]*)\./.exec(doc.replace(/\s+/g, ' '))?.[1] ?? '';

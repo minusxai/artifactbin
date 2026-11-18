@@ -39,6 +39,9 @@ export const NODE_BATCH_EXCLUDED = Object.freeze({
   'services/app/lib/viz/__tests__/single-series-legend.test.ts': 'vega-lite installs Set.prototype.toJSON',
   'services/app/lib/viz/__tests__/viz-legend-wrap.test.ts': 'vega-lite installs Set.prototype.toJSON',
   'services/app/lib/viz/__tests__/viz-templates.test.ts': 'vega-lite installs Set.prototype.toJSON',
+  // It counts a fresh document's <style> elements; in one graph the component file before it (input.test.ts on
+  // #1359's pr fast) has already injected its own into the shared document.
+  'services/app/lib/html-components/__tests__/host-styles.test.ts': 'needs a document no other component file wrote',
 });
 
 /**

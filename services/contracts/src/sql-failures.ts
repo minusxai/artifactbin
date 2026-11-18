@@ -23,6 +23,11 @@ export const SQL_FAILURES = /* @__PURE__ */ Object.freeze({
   sign_in_required: { status: 403, notice: 'Sign in to see this data.' },
   /** The database, the connection or the SQL engine could not be reached; or `sql` cannot run where the page is. */
   unavailable: { status: 503, notice: 'The data can\'t be reached right now.' },
+  /**
+   * Live data the reader has not allowed yet: a draft whose embedding app has not turned live reads on for this mount.
+   * Not an access failure; the same read answers once the reader allows live data and the app shows the draft again.
+   */
+  consent_required: { status: 403, notice: 'Live data is paused until you allow it.' },
   /** The statement is not valid, or a guard refused it before it ran (the reason is in `message`). */
   validation_failed: { status: 400, notice: 'This data\'s query could not run; the page\'s owner needs to fix it.' },
   input_too_large: { status: 413, notice: 'This data\'s query is too large to run; the page\'s owner needs to shorten it.' },

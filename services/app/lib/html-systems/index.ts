@@ -1,6 +1,6 @@
 /**
  * THE PLATFORM STYLESHEET for HTML pages (D3): the one Markdown stylesheet docs use (lib/html-components
- * markdown-styles), base styles, type roles, highlight-token colours and every design system's variables, each keyed by `:root[data-af-design-system="NAME"]` (dark values under `[data-af-dark="true"]`),
+ * markdown-styles), base styles, type roles, highlight-token colours and every design system's variables, each keyed by `:root[data-af-design-system="NAME"]` (dark values under `[data-af-dark="true"]`) with the variable blocks inside `:where()`, so a page's own `:root` variables always win,
  * plus every family's @font-face rules on the platform's /af/fonts/ files (a face downloads only when text uses it).
  * Hosted pages link the whole sheet at one stable address (PLATFORM_STYLES_PATH, revalidated by ETag); exports, offline copies and the
  * local preview carry only the active system. Data: lib/html-systems/html-systems (generated from design-systems/specs).

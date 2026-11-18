@@ -15,4 +15,4 @@
  * own-origin-script gate.
  */
 export { DRAFT_LIMITS } from './contracts';
-export { createDraft, draftConnections, draftDocument, draftFile, DraftRefusal, resetDrafts } from './drafts';
+export { createDraft, draftAwaitsConsent, draftConnections, draftDocument, draftFile, DraftRefusal, resetDrafts } from './drafts';

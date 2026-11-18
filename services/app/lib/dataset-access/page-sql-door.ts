@@ -32,7 +32,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { DatasetAccessError } from './errors';
 import { DATASET_SQL_WRITE_LIMITS, SQL_READ_LIMITS, type DatasetColumn, type DatasetMutationPolicy, type HtmlDatasetLink, type Row, type Scalar } from '@artifactbin/contracts';
-import { SQL_FAILURES, sqlReadFailure, type SqlFailureCode } from '@artifactbin/contracts';
+import { SQL_FAILURES, sqlReadFailure, type SqlAnswerSource, type SqlFailureCode } from '@artifactbin/contracts';
 import { loadSqlite } from '@artifactbin/sql/core';
 import type { AccessActor } from '@/lib/accounts';
 import { artifactState, completeMutationReceipt, durableMutation, getArtifactById, type ArtifactRow } from '@/lib/artifacts';
@@ -86,6 +86,13 @@ const mentions = (sql: string, link: string) => sql.toLowerCase().includes(link.
 const names = (sql: string, link: string) => new RegExp(`(^|[^\\w$])"?${link.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"?(?![\\w$])`, 'i').test(sql);
 
 /** Arguments, checked for every caller alike: one statement of at most SQL_READ_LIMITS.sqlBytes, scalar params. */
+/** A stored read's source (contracts sql-source): the links it read and when the newest of their rows was stored. */
+function storedSource(loaded: readonly LoadedDataset[], read: ReadonlySet<string>): { source?: SqlAnswerSource } {
+  const used = loaded.filter((l) => read.has(l.link!.name));
+  const at = used.map((l) => l.snapshot?.storedAt).filter((t): t is string => !!t).sort().at(-1);
+  return at ? { source: { kind: 'snapshot', at, names: used.map((l) => l.link!.name) } } : {};
+}
+
 function checked(call: { sql?: unknown; params?: unknown }): PageSqlDoorCall {
   const { sql, params = {} } = call;
   if (typeof sql !== 'string' || !sql.trim()) refuse('validation_failed', 'sql takes one SQL statement');
@@ -284,11 +291,12 @@ export async function executePageSql(actor: AccessActor, links: readonly HtmlDat
       if(remaining<1)refuse('timeout','SQL read deadline exceeded');
       const life=readLifetime(signal,remaining);
       try{
-      const answer = await runPageSql(first.map((l) => ({ link: l.link!.name, snapshot: l.snapshot, tables: l.tables.map((t) => ({ tableId: t.tableId, selectable: t.model.select !== false })) })), call, life.signal, { wallTimeoutMs:life.remaining(),aggregates: 'visible',retainSelected:scope.retainMountedLinks })
+      let read: ReadonlySet<string> = new Set();
+      const answer = await runPageSql(first.map((l) => ({ link: l.link!.name, snapshot: l.snapshot, tables: l.tables.map((t) => ({ tableId: t.tableId, selectable: t.model.select !== false })) })), call, life.signal, { wallTimeoutMs:life.remaining(),aggregates: 'visible',retainSelected:(links) => { read = links; scope.retainMountedLinks?.(links); } })
         .catch((e) => { if (e instanceof DatasetAccessError) refuse(e.extensions.code as SqlFailureCode, e.message); throw e; });
       for (const l of first) for (const verify of l.fences) await life.step(verify());
       life.check();
-      return { status: 200, body: { ...answer } };
+      return { status: 200, body: { ...answer, ...storedSource(first, read) } };
       }finally{life.close();}
     }
     read = false;

@@ -34,7 +34,7 @@
  */
 import {readLifetime} from '@/lib/datasets';
 import { CONNECTORS, OWN_CONNECTIONS_OFF, SQL_READ_LIMITS, type ConnectionConfig, type ConnectorDialect, type ConnectorError, type ConnectorScalar, type ConnectorTestResult, type ConnectorViewer, type DatasetRole, type HtmlDatasetLink, type HtmlDeclaredQuery, type HtmlLiveDatasetLink, type HtmlPageVersion, type Queryable } from '@artifactbin/contracts';
-import { SQL_FAILURE_FOR_CONNECTOR, isSqlFailureCode, sqlReadFailure } from '@artifactbin/contracts';
+import { SQL_FAILURE_FOR_CONNECTOR, isSqlFailureCode, liveSource, sqlReadFailure } from '@artifactbin/contracts';
 import { ConnectorFailure, colonParameters, connectionSummary, connectorError, connectorList, leadingWords, mapQualifiers, openConnection, parseConnectionConfig, qualifierNames, type NetworkSeams, type OpenConnection } from '@artifactbin/connectors';
 import type { AccessActor } from '@/lib/accounts';
 import { canReadArtifact, getArtifactById, setLiveDatasetSummary, type LiveConnectionInsert } from '@/lib/artifacts';
@@ -202,7 +202,7 @@ async function run(id: string, name: string, text: string, params: unknown, view
     const bound = boundStatement(dialect, text, params, viewer);
     const answer = await connection.query({ text: bound.text, params: bound.params, viewer, limits: { rows: SQL_READ_LIMITS.rows }, signal:life.signal });
     life.check();
-    return { status: 200, body: { columns: answer.columns, rows: answer.rows, ...(answer.truncated ? { truncated: true } : {}) } };
+    return { status: 200, body: { columns: answer.columns, rows: answer.rows, ...(answer.truncated ? { truncated: true } : {}), source: liveSource() } };
   } catch (e) {
     if (e instanceof LiveDatasetRefusal) return { status: e.status, body: e.body };
     if (e instanceof ConnectorFailure) return refused(name, connectorError(e));

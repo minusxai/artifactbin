@@ -7,8 +7,14 @@ import {packagedFontFaces} from './packaged-fonts.mjs';
 const ROOT=path.join(REPO,'services/app/skills/artifactbin');
 import {TOKEN_RULES,tokenRuleCss} from './token-colors.mjs';
 const tokenCss=selector=>TOKEN_RULES.map(rule=>`${rule.names.map(name=>`${selector} .tok-${name}`).join(', ')} { ${tokenRuleCss(rule)}; }`).join('\n');
+
 /**
  * A system's rules without its font faces: variables (light, dark), base body, type roles, highlight tokens.
+ * The variable blocks sit in `:where()`: the system's tokens are defaults, so a page's own `:root{--muted:…}` always
+ * overrides them; dark follows light in source order, so it still wins over light. The base body, type roles and
+ * highlight tokens keep their specificity, so a page's own `body{…}` keeps its old precedence.
+ * The skill's readable copy (`comments`) keeps the plain selectors: only the served platform stylesheet needs the
+ * cascade, and the archive's bytes stay as they were.
  * `comments` adds the skill copy's documentation beside each value; the platform stylesheet is built without it.
  */
 export function nativeSystemRules(slug,{comments=false}={}){
@@ -21,7 +27,8 @@ export function nativeSystemRules(slug,{comments=false}={}){
   return comments&&role?`/* ${role.family}, ${note(role.size)} / ${note(role.lh)}: ${note(role.usage)} */\n${rule}`:rule;
  }).join('\n');
  const lead=text=>comments?`/* ${text} */\n`:'';
- return `${lead('Light values; --ds-* are this system\'s own palette, each annotated with its use.')}${selector} {\n${vars('light',true)}\n}\n${lead('Dark values: the same tokens, under data-af-dark="true".')}${selector}[data-af-dark="true"] {\n${vars('dark',false)}\n}\n${selector} body { margin:0; background:var(--background); color:var(--foreground); font-family:var(--font-body); }\n${lead('Type roles: font family, size / line height, then when to use it.')}${roles}\n${lead('Code highlighting token colours (for @afbin/highlight).')}${tokenCss(selector)}\n`;
+ const zero=sel=>comments?sel:`:where(${sel})`;
+ return `${lead('Light values; --ds-* are this system\'s own palette, each annotated with its use.')}${zero(selector)} {\n${vars('light',true)}\n}\n${lead('Dark values: the same tokens, under data-af-dark="true".')}${zero(`${selector}[data-af-dark="true"]`)} {\n${vars('dark',false)}\n}\n${selector} body { margin:0; background:var(--background); color:var(--foreground); font-family:var(--font-body); }\n${lead('Type roles: font family, size / line height, then when to use it.')}${roles}\n${lead('Code highlighting token colours (for @afbin/highlight).')}${tokenCss(selector)}\n`;
 }
 /** The comment that opens every shipped stylesheet: how a page uses it, the contract all systems share, this system's brief. */
 function cssHeader(slug){

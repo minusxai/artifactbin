@@ -102,6 +102,18 @@ it('rejects a failed read with the reader\'s sentence and the reason apart, and 
   expect(((await sql`select 3`) as unknown as { truncated?: boolean }).truncated).toBeUndefined();
 });
 
+it('keeps where an answer\'s rows came from on the rows, out of iteration and JSON', async () => {
+  const source = { kind: 'snapshot', at: '2026-11-02T09:05:00.000Z', names: ['orders'] };
+  const { p } = port((r) => r.sql === 'select 1' ? { columns: [{ name: 'n', type: 'number' }], rows: [{ n: 1 }], source }
+    : { columns: [{ name: 'n', type: 'number' }], rows: [{ n: 1 }] });
+  const sql = createSql(p);
+  const rows = await sql`select 1` as unknown as Array<unknown> & { source?: unknown };
+  expect(rows.source).toEqual(source);
+  expect(Object.keys(rows)).toEqual(['0']);
+  expect(JSON.stringify(rows)).toBe('[{"n":1}]');
+  expect(((await sql`select 2`) as unknown as { source?: unknown }).source).toBeUndefined();
+});
+
 it('names a reply that never came unavailable and one it cannot read unexpected, each with the list\'s sentence', async () => {
   const { p } = port();
   p.run = async () => { throw new Error('Remote request outcome unknown'); };

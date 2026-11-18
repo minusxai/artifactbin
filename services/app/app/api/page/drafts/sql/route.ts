@@ -6,11 +6,11 @@
  * time and output limits. Same-origin only: it is the parent's relay, never the draft's own origin, which is refused
  * before it gets here (server/pages-host). Never cached.
  */
-import { SQL_READ_LIMITS } from '@artifactbin/contracts';
+import { SQL_READ_LIMITS, sqlReadFailure } from '@artifactbin/contracts';
 import { browserActor } from '@/lib/authentication';
 import { pageConnectionSql } from '@/lib/connections';
 import { json, pagesSite, readJson } from '@/lib/http';
-import { draftConnections } from '@/lib/page-drafts';
+import { draftAwaitsConsent, draftConnections } from '@/lib/page-drafts';
 import { SQL_READ_WALL_TIMEOUT_MS } from '@/lib/platform';
 
 const NO_STORE = { 'Cache-Control': 'no-store' };
@@ -22,8 +22,13 @@ export async function POST(request: Request): Promise<Response> {
   if (request.headers.get('origin') !== pagesSite().app) return json({ error: 'forbidden', message: 'live data is read only through the app showing the draft' }, 403, NO_STORE);
   const body = await readJson(request);
   if (!body || typeof body.draft !== 'string' || typeof body.sql !== 'string') return json({ error: 'validation_failed', message: 'send {draft, sql, params?}' }, 400, NO_STORE);
-  // Another reader's draft, a forgotten one, and one not allowed to read live answer alike.
+  // The reader's own draft not yet allowed to read live is paused (consent_required); another reader's draft and a
+  // forgotten one answer alike.
   const connections = draftConnections(actor.userId, body.draft);
+  if (!connections && draftAwaitsConsent(actor.userId, body.draft)) {
+    const paused = sqlReadFailure('consent_required', 'this draft reads live data only once the reader allows it: show it again with live data allowed');
+    return json(paused.body, paused.status, NO_STORE);
+  }
   if (!connections) return json({ error: 'unavailable', message: 'this draft may not read live data: show it again with live data allowed' }, 404, NO_STORE);
   const signal = AbortSignal.any([request.signal, AbortSignal.timeout(SQL_READ_WALL_TIMEOUT_MS)]);
   const reply = await pageConnectionSql(actor, connections, { sql: body.sql, params: body.params }, signal);

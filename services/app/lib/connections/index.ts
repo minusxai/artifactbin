@@ -21,7 +21,7 @@
  * statement passed through unchanged with an optional namespace.
  */
 import {readLifetime} from '@/lib/datasets';
-import { SQL_FAILURE_FOR_CONNECTOR, sqlReadFailure, type SqlFailureCode } from '@artifactbin/contracts';
+import { SQL_FAILURE_FOR_CONNECTOR, liveSource, sqlReadFailure, type SqlFailureCode } from '@artifactbin/contracts';
 import { CONNECTORS, SQL_READ_LIMITS, type ConnectionSummary, type ConnectorDialect, type ConnectorError, type ConnectorSchema, type ConnectorTestResult, type ConnectorViewer, type HtmlPageLink, type Scalar } from '@artifactbin/contracts';
 import { ConnectorFailure, checkedNamespace, connectionSummary, connectorError, leadingWords, mapQualifiers, openConnection, parseConnectionConfig, qualifierNames, type OpenConnection } from '@artifactbin/connectors';
 import { getUserById, type AccessActor } from '@/lib/accounts';
@@ -137,7 +137,7 @@ async function run(actor: AccessActor, text: string, params: Readonly<Record<str
     if (!c) return reply('dataset_not_found', 'this install has no default connection');
     const answer = await c.connection.query({ text, params, viewer: await life.step(viewerOf(actor)), ...(c.namespace ? { namespace: c.namespace } : {}), limits: { rows: SQL_READ_LIMITS.rows }, signal:life.signal });
     life.check();
-    return { status: 200, body: { columns: answer.columns, rows: answer.rows, ...(answer.truncated ? { truncated: true } : {}) } };
+    return { status: 200, body: { columns: answer.columns, rows: answer.rows, ...(answer.truncated ? { truncated: true } : {}), source: liveSource() } };
   } catch (e) {
     if (e instanceof ConnectorFailure) return refused(connectorError(e));
     throw e;

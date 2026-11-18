@@ -49,7 +49,7 @@ const allowPrivate = (on: boolean) => overrideConfig({}, { DATASETS__ALLOW_PRIVA
 beforeEach(() => { setSession(null); allowPrivate(true); setLiveDatasetNetworkSeams(undefined); });
 
 const config = (extra: Record<string, unknown> = {}) => ({ connector: 'postgres', host: '127.0.0.1', port: wire.port, database: 'postgres', user: 'postgres', password: PASSWORD, tls: 'disable', ...extra });
-const ok = (reply: { status: number; body: unknown }) => { expect(reply.status, JSON.stringify(reply.body)).toBe(200); return reply.body as { rows: Record<string, unknown>[]; columns: unknown[]; truncated?: boolean }; };
+const ok = (reply: { status: number; body: unknown }) => { expect(reply.status, JSON.stringify(reply.body)).toBe(200); return reply.body as { rows: Record<string, unknown>[]; columns: unknown[]; truncated?: boolean; source?: unknown }; };
 const answer = async (response: Response) => ({ status: response.status, body: await response.json() as Record<string, any>, text: '' });
 async function call(handler: (r: Request, c: { params: Promise<Record<string, string>> }) => Promise<Response>, path: string, id: string, who: Person | null, init: { method?: string; json?: unknown } = {}) {
   const response = await handler(request(path, { ...init, ...(who ? { token: who.token } : {}) }), params(id));
@@ -188,6 +188,8 @@ it('runs a page\'s declared query for each reader its rules admit, with the serv
   expect((await getArtifactById(page))!.meta.htmlQueries).toEqual([{ name: 'mine', link: 'shop', sql: 'select id, item from sales.orders where owner_email = :viewer_email and amount >= :min order by id' }]);
   // No rule yet: only the owner (and editors) run it.
   expect(ok(await door(page, alice, { query: 'mine', params: { min: 0 } })).rows).toEqual([{ id: 1, item: 'tea' }, { id: 3, item: 'pie' }]);
+  // The answer says it was read live, and when.
+  expect(ok(await door(page, alice, { query: 'mine', params: { min: 0 } })).source).toEqual({ kind: 'live', at: expect.stringMatching(/^\d{4}-\d\d-\d\dT/) });
   expect((await door(page, bob, { query: 'mine', params: { min: 0 } })).status).toBe(403);
   await setRule(alice, id, 'signed_in');
   // Two readers, one query, each their own rows: the server bound :viewer_email.

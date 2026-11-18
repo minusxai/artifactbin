@@ -18,7 +18,7 @@ it('every design system defines every token, and keys its dark values by the dar
   expect(HTML_SYSTEM_NAMES.length).toBeGreaterThan(5);
   for (const name of HTML_SYSTEM_NAMES) {
     const rules = HTML_SYSTEMS[name as keyof typeof HTML_SYSTEMS].rules;
-    const root = new RegExp(`:root\\[data-af-design-system="${name}"\\] \\{([^}]*)\\}`).exec(rules)?.[1] ?? '';
+    const root = new RegExp(`:where\\(:root\\[data-af-design-system="${name}"\\]\\) \\{([^}]*)\\}`).exec(rules)?.[1] ?? '';
     for (const token of THEME_TOKENS) expect(root, `${name} ${token}`).toMatch(new RegExp(`(?:^|[;\\s])${token}:`));
     expect(rules, name).toContain(`:root[data-af-design-system="${name}"][data-af-dark="true"]`);
   }

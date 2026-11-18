@@ -50,7 +50,9 @@ import {archiveFor} from '@/lib/skills';
 // with flat colour only for data, gives analytics apps and internal tools a fitting look, leaving 1,693,053 bytes.
 // 1.619 MiB: scripts/toolbox-limits.mjs ships the server's size limits (the service payload and what a page may
 // bundle), so commands and sandboxes refuse what the server would, leaving 1,696,984 bytes.
-const SKILL_ARCHIVE_MAX_BYTES=1.619*1024*1024;
+// 1.624 MiB: af-chart and af-data-table label where their rows came from (Live, Live · paused, Snapshot; the readable
+// data-source-label.ts and its wiring, ~4 KB stored), leaving 1,701,843 bytes.
+const SKILL_ARCHIVE_MAX_BYTES=1.624*1024*1024;
 
 describe('the downloadable author skill archive',()=>{
  it('fits its size budget',async()=>{

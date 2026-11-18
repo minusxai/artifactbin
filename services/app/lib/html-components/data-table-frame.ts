@@ -90,7 +90,7 @@ export async function loadTableRows(
     s.showRowCount = Boolean(
       s.showRowCount || result.truncated || (result.totalRows ?? 0) > rows.length,
     );
-    s.value = { ...result, rows };
+    s.value = { source: (result.rows as { source?: TableData['source'] }).source, ...result, rows };
   } catch (e) {
     if (epoch === s.requestEpoch) failTable(el, s, e);
   } finally {

@@ -729,3 +729,31 @@ it("shows a failed read's sentence and code instead of \"no rows\", and draws a 
   expect(hand.querySelectorAll("tbody tr[data-row-key]")).toHaveLength(2);
   el.remove(); hand.remove();
 });
+it("labels where its rows came from from the answer it was handed, and nothing for rows the page made", async () => {
+  const columns = [{ name: "id", type: "number" as const }];
+  const el = document.createElement("af-data-table") as AfDataTable;
+  document.body.append(el);
+  const rows = Object.defineProperty([{ id: 1 }], "source", { value: { kind: "snapshot", at: "2026-11-02T09:05:00.000Z", names: ["orders"] }, enumerable: false });
+  el.data = { columns, rows };
+  const label = () => el.querySelector(".af-data-source button");
+  expect(label()!.textContent).toMatch(/^Snapshot · /);
+  expect(label()!.getAttribute("aria-label")).toMatch(/^Data source: Snapshot · /);
+  expect(el.querySelector(".af-data-source af-tooltip-content")!.textContent).toMatch(/^Stored data \(orders\), captured /);
+  // The label stays put while the table rerenders.
+  const before = el.querySelector(".af-data-source");
+  el.columns = [{ col: "id", title: "ID" }];
+  await nextFrame();
+  expect(el.querySelector(".af-data-source")).toBe(before);
+  el.error = Object.assign(new Error(SQL_FAILURES.consent_required.notice), { code: "consent_required", detail: "wh" });
+  expect(label()!.textContent).toBe("Live · paused");
+  el.data = { columns, rows: [{ id: 2 }] };
+  expect(el.querySelector(".af-data-source")).toBeNull();
+  // A source whose reads answer `sql` rows keeps the label through its pages.
+  const page = (n: number) => Object.defineProperty([{ id: n }], "source", { value: { kind: "live", at: "2026-11-18T14:32:00.000Z" }, enumerable: false });
+  el.source = { read: async ({ offset }) => ({ rows: page(offset), columns, truncated: offset === 0 }) };
+  await vi.waitFor(() => expect(label()?.textContent).toBe("Live"), { timeout: WAIT_MS });
+  await el.loadMore();
+  expect(el.data.rows).toHaveLength(2);
+  expect(label()!.textContent).toBe("Live");
+  el.remove();
+});

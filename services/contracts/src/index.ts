@@ -3,6 +3,7 @@ export { HUMAN_SESSION_LIVE_PATH, ACTOR_HEADER, REVALIDATE_ACTOR_HEADER, ACTOR_T
 export type { Queryable } from './db';
 export * from './sql';
 export * from './sql-failures';
+export * from './sql-source';
 export * from './sql-analysis';
 export * from './sql-functions';
 export * from './browser';

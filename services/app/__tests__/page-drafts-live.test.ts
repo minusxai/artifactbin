@@ -56,7 +56,10 @@ it('names its live links and reads none of them unless the embedding app allowed
   expect(closed).toMatchObject({ connections: ['wh'], liveSql: false });
   const page = await (await app.request(closed.src)).text();
   expect(JSON.parse(/data-af="runtime">([^<]*)</.exec(page)![1]!)).toMatchObject({ draftConnections: ['wh'], draftLive: false });
-  expect(await live(alice, closed.label, 'select item from wh.sales.mine')).toMatchObject({ status: 404, body: { error: 'unavailable' } });
+  // The reader's own draft, not yet allowed: paused, with its own code; anyone else's answers as a missing one.
+  expect(await live(alice, closed.label, 'select item from wh.sales.mine')).toMatchObject({ status: 403, body: { error: 'consent_required', notice: expect.stringMatching(/paused until you allow it/) } });
+  const { bob } = await readers();
+  expect(await live(bob, closed.label, 'select item from wh.sales.mine')).toMatchObject({ status: 404, body: { error: 'unavailable' } });
   const open = await draft(alice, true);
   expect(open.origin).not.toBe(closed.origin);
   expect(JSON.parse(/data-af="runtime">([^<]*)</.exec(await (await app.request(open.src)).text())![1]!)).toMatchObject({ draftConnections: ['wh'], draftLive: true });
@@ -65,7 +68,7 @@ it('names its live links and reads none of them unless the embedding app allowed
 it('reads as the signed-in reader who is shown the draft, read-only, and only that reader\'s own draft', async () => {
   const { alice, bob } = await readers();
   const mine = await draft(alice, true), theirs = await draft(bob, true);
-  expect(await live(alice, mine.label, 'select item from wh.sales.mine order by id')).toMatchObject({ status: 200, body: { rows: [{ item: 'tea' }, { item: 'pie' }] } });
+  expect(await live(alice, mine.label, 'select item from wh.sales.mine order by id')).toMatchObject({ status: 200, body: { rows: [{ item: 'tea' }, { item: 'pie' }], source: { kind: 'live', at: expect.stringMatching(/^\d{4}-\d\d-\d\dT/) } } });
   expect(await live(bob, theirs.label, 'select item from wh.sales.mine order by id')).toMatchObject({ status: 200, body: { rows: [{ item: 'cake' }] } });
   // Another reader's draft answers as a missing one; a signed-out caller, another origin and the draft's own origin are refused.
   expect((await live(bob, mine.label, 'select item from wh.sales.mine')).status).toBe(404);

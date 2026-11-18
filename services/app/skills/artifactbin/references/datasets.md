@@ -54,12 +54,12 @@ const months=await sql`select substr(date, 1, 7) as month, count(*) as n, sum(am
   from orders group by month order by month`;
 ```
 
-Compute every count, total, group by and join in SQL, never by summing rows in script. A reader
-sees only the rows and columns their rule shows. Failures reject with `SqlError` (`code`, reader
-`message`, `detail`). Read codes: `permission_denied`, `sign_in_required`, `unavailable` (down;
-a preview or copy without data), `validation_failed`, `timeout`, `result_too_large`,
-`dataset_not_found`, `unknown_query`. Components show `message`; by hand, show it in place of
-rows. Cut off: `rows.truncated`.
+Count, total, group and join in SQL, never in script. A reader sees only the rows and columns
+their rule shows. Failures reject with `SqlError` (`code`, reader `message`, `detail`). Read
+codes: `permission_denied`, `sign_in_required`, `unavailable` (down, or no data here),
+`validation_failed`, `timeout`, `result_too_large`, `dataset_not_found`, `unknown_query`,
+`consent_required` (live data not yet allowed). Show `message` in place of rows (components do).
+Cut off: `rows.truncated`.
 At most 10,000 input rows, 5 s and 4 MiB per answer; column and table names cannot be bound.
 
 ## Write

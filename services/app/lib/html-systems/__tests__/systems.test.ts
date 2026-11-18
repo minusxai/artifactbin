@@ -9,7 +9,7 @@ it('carries every system keyed by its root attribute, with dark values, type rol
  expect(HTML_SYSTEM_NAMES).toHaveLength(14);
  for(const name of HTML_SYSTEM_NAMES){
   const selector=`:root[data-af-design-system="${name}"]`;
-  for(const rule of [`${selector} {`,`${selector}[data-af-dark="true"] {`,`${selector} .t-`,`${selector} .tok-keyword`])expect(css,`${name}: ${rule}`).toContain(rule);
+  for(const rule of [`:where(${selector}) {`,`:where(${selector}[data-af-dark="true"]) {`,`${selector} .t-`,`${selector} .tok-keyword`])expect(css,`${name}: ${rule}`).toContain(rule);
  }
  expect(isHtmlSystem('redline')).toBe(true);expect(isHtmlSystem('constructor')).toBe(false);
 });

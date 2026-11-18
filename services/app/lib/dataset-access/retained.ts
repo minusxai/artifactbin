@@ -79,7 +79,7 @@ export function retainedDatasetPort(options:RetainedReadOptions={}):DatasetRowPo
    const runsSql=Object.fromEntries(catalog.tables.map(table=>[tableIdentity(table),canRunSql(decision,table)]));
    // Generated names come from every declared table and column, so they never depend on the role.
    const names=hasuraNames(declared.tables,{title:row.title,configuration:storedConfiguration(row.dataset_policy)});
-   const snapshot:DatasetSnapshot={id:row.id,revision:String(row.version),policyIdentity,catalog,rowIds,view,runsSql,role:decision.role,head,names:Object.fromEntries(declared.tables.map((table,i)=>[tableIdentity(table),names[i]!]))};
+   const snapshot:DatasetSnapshot={id:row.id,revision:String(row.version),policyIdentity,catalog,rowIds,view,runsSql,role:decision.role,head,...(row.updated_at?{storedAt:new Date(row.updated_at).toISOString()}:{}),names:Object.fromEntries(declared.tables.map((table,i)=>[tableIdentity(table),names[i]!]))};
    if(options.deferRowIds){let pending:Promise<void>|undefined;hydrate.set(snapshot,(readSignal)=>pending??=loadIds(readSignal));}
    return snapshot;
   },
