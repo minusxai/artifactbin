@@ -215,6 +215,8 @@ export async function endQueryApprovals(tx:Queryable,actor:Pick<AccessActor,'use
  * approvals, as it keeps everything else, until it is restored or purged.
  */
 export async function endStaleApprovals(tx:Queryable,subject:string|null,pageId?:string):Promise<void>{
+ // Most installs and most group changes have no live approval at all: then nothing is asked of the group tree.
+ if(!(await tx.query('SELECT 1 FROM page_query_approvals WHERE ended_at IS NULL AND ($1::text IS NULL OR page_id=$1) LIMIT 1',[pageId??null])).rows.length)return;
  const ended=(await tx.query<ApprovalRow&{ended_reason:EndReason}>(`WITH stale AS (
    SELECT a.id,CASE WHEN NOT EXISTS (SELECT 1 FROM groups g WHERE g.id=a.group_id AND g.deleted_at IS NULL) THEN 'group_deleted'
      WHEN NOT EXISTS (SELECT 1 FROM artifacts p WHERE p.id=a.page_id AND p.group_id=a.group_id) THEN 'moved' ELSE 'approver_not_admin' END AS reason

@@ -14,7 +14,9 @@ import {overrideConfig} from '@/lib/platform/config';
 import {deleteGroup,recordGroupChanges,setGroupMember} from '@/lib/groups';
 import {services} from '@/lib/platform';
 import {approvePageQuery} from '@/lib/query-approvals';
-import {useAppHarness,admitGroupMember} from './harness';
+import {useAppHarness,admitGroupMember,request,params} from './harness';
+import {GET as listRoute,POST as approveRoute} from '@/app/api/artifacts/[id]/query-approvals/route';
+import {DELETE as revokeRoute} from '@/app/api/artifacts/[id]/query-approvals/[approvalId]/route';
 import {SECRET,composed,origin,sql,useGroupPrincipalHost,world} from './group-principal-fixture';
 useAppHarness();
 useGroupPrincipalHost();
@@ -98,7 +100,7 @@ it('runs a declared query as each reader until an Admin approves it; then as the
  // Mia, who has her own access, still reads.
  expect(rows(await read(mia))).toEqual([{region:'EU',total:15,...asGroup(team.id)}]);
  // Each read as the group is recorded naming the real reader and the approval, never the reader's values.
- await expect.poll(async()=>sql("SELECT subject_kind,subject_id,payload FROM events.events WHERE verb='approved_query_read' AND object_id=$1 ORDER BY at,id",[page])).toEqual([olga,olga,mia].map(who=>({subject_kind:'user',subject_id:who.userId,
+ await expect.poll(async()=>sql("SELECT subject_kind,subject_id,payload FROM events.events WHERE verb='approved_query_read' AND object_id=$1 ORDER BY subject_id",[page])).toEqual([olga,olga,mia].sort((a,b)=>a.userId<b.userId?-1:1).map(who=>({subject_kind:'user',subject_id:who.userId,
   payload:{approval_id:approved.body!.id,query:'totals',query_hash:approved.body!.hash,connection:'default:',group_id:team.id}})));
  expect(((await approvals(ada)).body!.queries as Array<{approval:unknown}>)[0]!.approval).toEqual({id:approved.body!.id,approved_by:{id:ada.userId,name:null,username:expect.any(String)},approved_at:expect.any(String)});
  // Audited: who, the page, the query's hash, the connection and the group; the event's time is when.
@@ -127,8 +129,12 @@ it('ends the approval when the approved query is edited to select a more sensiti
  const now=((await approvals(ada)).body!.queries as Array<{hash:string;sql:string;approval:unknown}>)[0]!;
  expect(now).toMatchObject({sql:SENSITIVE,approval:null});
  expect(await approve(ada,String(first.body!.hash))).toMatchObject({status:409,body:{error:'query_changed'}});
- // Putting the old text back does not bring the approval back.
+ // Putting the old text back, by an edit or by reverting to the approved version, does not bring the approval back.
  await edit(eve,html());
+ refusedNamingOwner(await read(olga));
+ const head=await host.call('GET',`/api/artifacts/${page}`,eve.token);
+ const reverted=await host.call('POST',`/api/artifacts/${page}/revert`,eve.token,{version:Number(approvedAt),expectedVersion:head.body?.version,expectedState:head.body?.state});
+ expect(reverted.status,JSON.stringify(reverted.body)).toBe(200);
  refusedNamingOwner(await read(olga));
  await edit(eve,html(SENSITIVE));
  // Ada approves the new text: Olga then reads it as the group.
@@ -246,4 +252,20 @@ it('a page owned by a person has no approved queries, and an agent signed in as 
   await expect(approvePageQuery({userId:null,tokenId:null,email:null,documentEditor:false,principalGroup:{id:team.id,role:level,issuedBy:eve.userId,tokenId:agent.tokenId}},page,{query:'totals',hash:'0'.repeat(64)})).rejects.toMatchObject({status:403,code:'forbidden'});
  }
  expect(await sql('SELECT count(*)::int AS n FROM page_query_approvals')).toEqual([{n:0}]);
+});
+
+it('serves the sharing dialog\'s browser session the same routes, and refuses a cross-site approval',async()=>{
+ const host=await composed(),{ada,olga,page,read}=await setting(host);
+ const actor={credential:'session' as const,userId:ada.userId,email:'mxmx_test_ga_ada@example.test',emailVerified:true};
+ const path=`/api/artifacts/${page}/query-approvals`;
+ const listed=await listRoute(request(path,{actor}),params(page));
+ expect(listed.status).toBe(200);
+ const hash=((await listed.json()) as {queries:Array<{hash:string}>}).queries[0]!.hash;
+ expect((await approveRoute(request(path,{actor,method:'POST',origin:'https://other.test',json:{query:'totals',hash}}),params(page))).status).toBe(403);
+ const approved=await approveRoute(request(path,{actor,method:'POST',origin:'same',json:{query:'totals',hash}}),params(page));
+ expect(approved.status).toBe(201);
+ expect((await read(olga)).status).toBe(200);
+ const id=String(((await approved.json()) as {id:string}).id);
+ expect((await revokeRoute(request(`${path}/${id}`,{actor,method:'DELETE',origin:'same'}),params({id:page,approvalId:id}))).status).toBe(200);
+ expect((await read(olga)).status).toBe(403);
 });
