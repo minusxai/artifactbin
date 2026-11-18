@@ -25,7 +25,7 @@ import { recordedWrites } from './sweep';
 import { stagedObject } from './prepared-objects';
 
 export * from './url';
-export { recordObjectWrites, sweepObjects } from './sweep';
+export { deleteHeldObjects, failedDeletes, recordObjectWrites, sweepObjects } from './sweep';
 
 /**
  * A read the store could not satisfy — missing object OR broken credentials,

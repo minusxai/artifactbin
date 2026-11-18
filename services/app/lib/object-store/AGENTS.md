@@ -14,7 +14,7 @@ store is never listed (the S3 user has no ListBucket). `sweep.ts` deletes what n
 - The sweep never deletes an object a concurrent write is about to reference. Keys are content-addressed (a write
   may reuse an old orphan's key) and the local store keeps an identical file's old mtime, so object timestamps prove
   nothing; the argument is the row. A write commits its `object_writes` upsert before its put; the sweep scans for
-  references to due keys, then deletes the unreferenced ones in one transaction holding their rows FOR UPDATE and
+  references to due keys, then deletes the unreferenced ones in transactions holding their rows FOR UPDATE and
   rechecking `due_at` there, object before row. So the write's upsert either commits before that recheck (the key
   is young and skipped) or waits for the sweep and then inserts a fresh row before its put re-creates the object. A
   write references its object within seconds of recording it, far inside the margin, so a key due when the scan
@@ -25,11 +25,17 @@ store is never listed (the S3 user has no ListBucket). `sweep.ts` deletes what n
   key from an app-table row; never sweep runtime assets, avatars, comment images, web assets or exports here.
 - Export images expire in lib/export (`expireExportImages`): unpointed by any cache row and replaced a day ago; a
   produced image whose publish certainly wrote no row is deleted at once. lib/runtime runs both, bounded, every 6 h,
-  and deletes nothing while its `STORAGE_SWEEP_DELETES` is off (the ledger is still written).
+  each on its own, and logs a failure.
+- A delete runs only while its guarding rows are locked (`deleteHeldObjects`): a few per transaction, all settled
+  before it ends, with the transaction's idle timeout lifted (awaiting S3 is idle time to the database, and a session
+  it ends releases the locks while deletes still run). A failed delete keeps its row for the next run; a failed
+  reference scan deletes nothing.
 - One database per store root: two installations sharing a bucket prefix would share keys, and each sweeps alone.
 - Limits: objects written before `object_writes` existed are never candidates (finding them needs listing the store);
   a fork copies keys without a put, so a fork racing a test-user erase of its source could lose that source's bytes.
 
 ## Checks
-- `npm test -- --files services/app/lib/object-store/__tests__/sweep.test.ts services/app/lib/object-store/__tests__/store.test.ts services/app/lib/export/__tests__/export-cache.test.ts services/app/lib/publish/__tests__/content-preparation.test.ts`
-  (S3 cases run when `TEST_S3_URL` names a MinIO.)
+- `npm test -- --files services/app/lib/object-store/__tests__/sweep.test.ts services/app/lib/object-store/__tests__/store.test.ts services/app/lib/export/__tests__/export-cache.test.ts services/app/lib/export/__tests__/export-expiry.test.ts services/app/lib/publish/__tests__/content-preparation.test.ts`
+- On S3 (with the sweep's lock proof on a disposable Postgres): `TEST_S3_URL` naming an S3-compatible server (CI's
+  SeaweedFS), `vitest run --project=integration-databases` on `store-s3`, `sweep-s3` and lib/export `export-expiry-s3`,
+  which share their cases with the filesystem files (`sweep-contract.ts`, `export-expiry-contract.ts`).

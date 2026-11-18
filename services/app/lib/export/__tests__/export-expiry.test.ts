@@ -1,46 +1,7 @@
-/**
- * EXPORT IMAGES EXPIRE (./cache expireExportImages): an image no cache row points at any more is deleted with its row
- * a day after the refresh that replaced it, however old it is, and the pointed one stays; a produced image whose refresh lost its lease is deleted at
- * once, since no row will ever name it.
- */
-import {describe,expect,it} from 'vitest';
+/** Export image expiry (export-expiry-contract.ts) on the app's filesystem store; export-expiry-s3.test.ts runs it on S3. */
 import {useAppHarness} from '@/__tests__/harness';
-import {getDb} from '@/lib/platform';
-import {ObjectUnavailable,objectStore} from '@/lib/object-store';
-import {createExportCache,expireExportImages} from '../cache';
+import {objectStore} from '@/lib/object-store';
+import {exportExpirySuite} from './export-expiry-contract';
 
 useAppHarness();
-const absent=(key:string)=>expect(objectStore().get(key)).rejects.toBeInstanceOf(ObjectUnavailable);
-describe('export images',()=>{
- const options={leaseMs:1000,waitMs:500,pollMs:[1,2],retryMs:100};
- const producer=(written:string[],delayMs=0)=>async(id:string)=>{
-  const object_key=`exports/objects/${id}.png`;await new Promise(r=>setTimeout(r,delayMs));
-  await objectStore().put(object_key,Buffer.from('png'),'image/png');written.push(object_key);
-  return {object_key,mime:'image/png' as const,bytes:3,width:10,height:10};
- };
- it('expire a day after a refresh replaced them, however old; the pointed one stays',async()=>{
-  const db=await getDb(),cache=createExportCache(db,options),written:string[]=[];
-  const request={cacheKey:'full:sweep',artifactId:'abc123',revision:'r1'};
-  const first=await cache.read(request,producer(written));
-  // Two days old and replaced just now (served until then, perhaps under a fresh grant): kept.
-  await db.query("UPDATE export_images SET created_at=now()-interval '2 days'");
-  const second=await cache.read({...request,revision:'r2',current:true},producer(written));
-  expect(await expireExportImages(db)).toEqual([]);
-  await db.query("UPDATE export_images SET replaced_at=now()-interval '2 days' WHERE id=$1",[first.id]);
-  expect(await expireExportImages(db)).toEqual([first.id]);
-  await absent(first.object_key);
-  expect((await objectStore().get(second.object_key)).toString()).toBe('png');
-  expect((await db.query('SELECT id FROM export_images')).rows).toEqual([{id:second.id}]);
-  // The pointed image never expires, however old.
-  await db.query("UPDATE export_images SET created_at=now()-interval '9 days'");
-  expect(await expireExportImages(db)).toEqual([]);
- });
- it('delete a produced image at once when its refresh lost the lease',async()=>{
-  const db=await getDb(),cache=createExportCache(db,{...options,leaseMs:5,waitMs:200}),written:string[]=[];
-  await expect(cache.read({cacheKey:'full:lost',artifactId:'abc123',revision:'r1'},producer(written,30))).rejects.toThrow();
-  await cache.drain();
-  expect(written.length).toBeGreaterThan(0);
-  for(const key of written)await absent(key);
-  expect((await db.query('SELECT id FROM export_images')).rows).toEqual([]);
- });
-});
+exportExpirySuite('filesystem',async()=>objectStore());

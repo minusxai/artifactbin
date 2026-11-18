@@ -1,6 +1,6 @@
 import {randomUUID} from 'node:crypto';
 import type { Db } from '@/lib/platform';
-import { objectStore, type ObjectStore } from '@/lib/object-store';
+import { deleteHeldObjects, failedDeletes, objectStore, type ObjectStore } from '@/lib/object-store';
 
 export interface ExportImage {
   id:string; artifact_id:string; object_key:string; mime:'image/png'|'image/jpeg';
@@ -110,22 +110,34 @@ export function createExportCache(db:Db,options:ExportCacheOptions={}) {
 
 /** An export image is kept this long after a refresh replaced it: far past any asset grant (5 minutes) naming it. */
 const EXPORT_IMAGE_RETENTION_MS=24*60*60*1000;
+/** How many images one expiry transaction locks. */
+const EXPIRY_CHUNK=25;
 /**
  * Expires export images by age: those no cache row points at, replaced more than `retentionMs` ago (an image with no
  * `replaced_at`, from before it existed or never published, counts from its creation), at most `batch` per run,
  * oldest first. A cache row only ever points at the image its own refresh just inserted, so an image no row points at
  * is never pointed at again; counting from the replacement keeps one served until the moment it was replaced, for as
- * long as any grant issued then lives. Each object is deleted before its row, in one transaction
- * holding those rows, so a crash leaves rows for the next run, never an object nothing names.
+ * long as any grant issued then lives. A few at a time, each object is deleted before its row, in a transaction
+ * holding those rows until every delete settled (lib/object-store `deleteHeldObjects`), so a failed delete or a crash
+ * leaves rows for the next run, never an object nothing names. Throws, after committing the rest, when a delete failed.
  */
 export async function expireExportImages(db:Db,objects:Pick<ObjectStore,'delete'>=objectStore(),{retentionMs=EXPORT_IMAGE_RETENTION_MS,batch=200}:{retentionMs?:number;batch?:number}={}):Promise<string[]>{
-  return db.transaction(async tx=>{
-    const old=(await tx.query<{id:string;object_key:string}>(`SELECT i.id,i.object_key FROM export_images i
-      WHERE COALESCE(i.replaced_at,i.created_at)<clock_timestamp()-$1::bigint*interval '1 millisecond'
-        AND NOT EXISTS (SELECT 1 FROM export_image_cache c WHERE c.image_id=i.id)
-      ORDER BY COALESCE(i.replaced_at,i.created_at) LIMIT $2 FOR UPDATE OF i SKIP LOCKED`,[retentionMs,batch])).rows;
-    for(const image of old)await objects.delete(image.object_key);
-    if(old.length)await tx.query('DELETE FROM export_images WHERE id=ANY($1::text[])',[old.map(image=>image.id)]);
-    return old.map(image=>image.id);
-  });
+  const expired:string[]=[],kept:string[]=[],failed:unknown[]=[];
+  for(;;){
+    const limit=Math.min(EXPIRY_CHUNK,batch-expired.length-kept.length);if(limit<=0)break;
+    const done=await db.transaction(async tx=>{
+      const old=(await tx.query<{id:string;object_key:string}>(`SELECT i.id,i.object_key FROM export_images i
+        WHERE COALESCE(i.replaced_at,i.created_at)<clock_timestamp()-$1::bigint*interval '1 millisecond'
+          AND NOT EXISTS (SELECT 1 FROM export_image_cache c WHERE c.image_id=i.id) AND NOT (i.id=ANY($3::text[]))
+        ORDER BY COALESCE(i.replaced_at,i.created_at) LIMIT $2 FOR UPDATE OF i SKIP LOCKED`,[retentionMs,limit,kept])).rows;
+      const out=await deleteHeldObjects(tx,objects,old.map(image=>image.object_key));
+      const gone=old.filter(image=>out.deleted.includes(image.object_key)).map(image=>image.id);
+      if(gone.length)await tx.query('DELETE FROM export_images WHERE id=ANY($1::text[])',[gone]);
+      return {old,gone,failed:out.failed};
+    });
+    expired.push(...done.gone);failed.push(...done.failed);kept.push(...done.old.filter(image=>!done.gone.includes(image.id)).map(image=>image.id));
+    if(done.old.length<limit)break;
+  }
+  if(failed.length)throw failedDeletes('the export image deletes',failed);
+  return expired;
 }
