@@ -25,6 +25,7 @@ import { HOME_WORKSPACE_COLUMN, WorkspaceSkeleton } from '../components/Workspac
 import { GroupTreePanel, GroupTreeSummary, SubgroupAudience } from './GroupTree';
 import { GroupAddresses } from './GroupAddresses';
 import { GroupSignIns } from './GroupSignIns';
+import { GroupServiceSignIns } from './GroupServiceSignIns';
 
 /** A group's page at its own address: details first, then its shelf. Home hands `GroupWorkspace` both at once. */
 export function GroupPage(props: { identity: string }): JSX.Element {
@@ -83,6 +84,7 @@ function GroupSettings(props:{detail:GroupDetail;refresh:()=>void}):JSX.Element 
  <div class="mt-6"><GroupTreePanel detail={props.detail} refresh={props.refresh}/></div>
  <div class="mt-6"><GroupAddresses group={props.detail.group}/></div>
  <div class="mt-6 empty:hidden"><GroupSignIns group={props.detail.group}/></div>
+ <div class="mt-6 empty:hidden"><GroupServiceSignIns group={props.detail.group}/></div>
  </div>;
 }
 

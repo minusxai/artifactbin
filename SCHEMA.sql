@@ -1981,6 +1981,36 @@ ALTER TABLE auth.group_mail_outbox ADD COLUMN IF NOT EXISTS created_at TIMESTAMP
 
 CREATE INDEX IF NOT EXISTS idx_group_mail_pending ON auth.group_mail_outbox (created_at) WHERE sent_at IS NULL;
 
+CREATE TABLE IF NOT EXISTS auth.group_sign_in_grants (
+  id TEXT NOT NULL,
+  group_id TEXT NOT NULL,
+  role TEXT NOT NULL,
+  service_id TEXT NOT NULL,
+  approved_by TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at TIMESTAMPTZ,
+  service_origin TEXT,
+  PRIMARY KEY (id)
+);
+
+ALTER TABLE auth.group_sign_in_grants ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
+
+ALTER TABLE auth.group_sign_in_grants ADD COLUMN IF NOT EXISTS group_id TEXT NOT NULL;
+
+ALTER TABLE auth.group_sign_in_grants ADD COLUMN IF NOT EXISTS role TEXT NOT NULL;
+
+ALTER TABLE auth.group_sign_in_grants ADD COLUMN IF NOT EXISTS service_id TEXT NOT NULL;
+
+ALTER TABLE auth.group_sign_in_grants ADD COLUMN IF NOT EXISTS approved_by TEXT NOT NULL;
+
+ALTER TABLE auth.group_sign_in_grants ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+ALTER TABLE auth.group_sign_in_grants ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+
+ALTER TABLE auth.group_sign_in_grants ADD COLUMN IF NOT EXISTS service_origin TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_group_sign_in_grants_group ON auth.group_sign_in_grants (group_id) WHERE deleted_at IS NULL;
+
 -- schema "events" — owned by the events role; tables declared by services/events/src/schema.ts
 
 CREATE TABLE IF NOT EXISTS events.events (

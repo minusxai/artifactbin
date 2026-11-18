@@ -95,7 +95,7 @@ export function identityViewStatements(schemas: IdentitySchemas, options: {sessi
     (${exists}
       AND EXISTS (SELECT 1 FROM ${settings} s WHERE s.id = 'installation' AND (COALESCE(t.audience, '') = '' OR t.audience = ANY(s.api_audiences) OR t.audience = ANY(s.service_audiences)))
       AND CASE WHEN t.group_id IS NULL THEN t.user_id IS NOT NULL AND COALESCE((SELECT u.active FROM ${read}.users u WHERE u.id = t.user_id), false)
-        ELSE ${groupSignInLiveSql('t', {groups: `${auth}.groups`, group_members: `${auth}.group_members`}, id => `COALESCE((SELECT issuer.active AND issuer.kind = 'account' AND NOT issuer.test_account FROM ${read}.users issuer WHERE issuer.id = ${id}), false)`)} END) AS live`})}
+        ELSE ${groupSignInLiveSql('t', {groups: `${auth}.groups`, group_members: `${auth}.group_members`, group_sign_in_grants: `${auth}.group_sign_in_grants`, users: `${auth}.users`}, id => `COALESCE((SELECT issuer.active AND issuer.kind = 'account' AND NOT issuer.test_account FROM ${read}.users issuer WHERE issuer.id = ${id}), false)`)} END) AS live`})}
   FROM ${auth}.tokens t`);
     } else {
       statements.push(`CREATE OR REPLACE VIEW ${read}.${table} AS

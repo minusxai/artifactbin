@@ -50,15 +50,15 @@ it('finds a server search result outside the initially loaded people',async()=>{
 });
 
 it('loads group settings without requesting the artifact shelf',async()=>{
- const fetcher=stubFetch({'*/session*':{kind:'account',user:{id:'u1',email:'viewer@example.com'},onboarded:true},'*/allowed-addresses':{addresses:[]},'*/sign-ins':{sign_ins:[]}},{fallback:()=>Response.json(detail)});
+ const fetcher=stubFetch({'*/session*':{kind:'account',user:{id:'u1',email:'viewer@example.com'},onboarded:true},'*/allowed-addresses':{addresses:[]},'*/service-sign-ins':{approvals:[],services:[]},'*/sign-ins':{sign_ins:[]}},{fallback:()=>Response.json(detail)});
  render(()=> <MemoryRouter><Route path="*" component={()=> <SessionProvider><GroupSettingsPage identity="team"/></SessionProvider>}/></MemoryRouter>);
  expect(await screen.findByRole('heading',{name:'Group settings'})).toBeInTheDocument();
  expect(screen.getByRole('link',{name:'Back to Team'})).toHaveAttribute('href','/@team');
  expect(screen.getByRole('searchbox',{name:'Search people'})).toBeInTheDocument();
  expect(screen.getByRole('button',{name:'Invite person'})).toBeInTheDocument();
  expect(screen.getByRole('button',{name:'Link group'})).toBeInTheDocument();
- // The group itself, its allowed addresses and (for an Admin) the agents signed in as it: never the artifact shelf.
- expect(fetcher.mock.calls.map(([url])=>url).filter(url=>!url.includes('/session')).sort()).toEqual(['/api/groups/g1/allowed-addresses','/api/groups/g1/sign-ins','/api/groups/team']);
+ // The group itself, its allowed addresses and (for an Admin) the agents and services signed in as it: never the shelf.
+ expect(fetcher.mock.calls.map(([url])=>url).filter(url=>!url.includes('/session')).sort()).toEqual(['/api/groups/g1/allowed-addresses','/api/groups/g1/service-sign-ins','/api/groups/g1/sign-ins','/api/groups/team']);
  expect(fetcher).toHaveBeenCalledWith('/api/groups/team',expect.anything());
 });
 
@@ -105,5 +105,60 @@ it('shows an Admin the agents signed in as the group, with level and who signed 
   expect(other.queryByRole('region',{name:'Agents signed in as this group'})).toBeNull();
   other.unmount();
  }
+ expect(quiet).not.toHaveBeenCalled();
+});
+
+it('shows a service\'s sign-ins as one row per approval with their count, revoking the approval, and people\'s a page at a time',async()=>{
+ const person=(id:string,name:string)=>({id,name:'group-editor',role:'editor',issued_by:{id:'u_'+id,username:name.toLowerCase(),name},created_at:'2026-11-11T10:00:00.000Z',expires_at:null,last_used_at:null,live:true});
+ let services=[{grant_id:'sgg_1',service_id:'warehouse',role:'member',count:40,last_issued_at:'2026-11-12T10:00:00.000Z',approved_at:'2026-11-01T10:00:00.000Z'}];
+ const fetcher=stubFetch({'DELETE *':()=>{services=[];return new Response(null,{status:204});},
+  '*/sign-ins?cursor=c2':{sign_ins:[person('tok_3','Cy')],next_cursor:null,services}},
+  {fallback:()=>Response.json({sign_ins:[person('tok_1','Ann'),person('tok_2','Bo')],next_cursor:'c2',services})});
+ const {GroupSignIns}=await import('../GroupSignIns');
+ const view=render(()=> <GroupSignIns group={{id:'g1',name:'Team',role:'admin'}}/>);
+ const panel=await screen.findByRole('region',{name:'Agents signed in as this group'});
+ await waitFor(()=>expect(panel).toHaveTextContent('Signed in by service warehouse'));
+ expect(panel).toHaveTextContent('40 sign-ins');expect(panel).toHaveTextContent('Signed in by Bo');
+ expect(panel).not.toHaveTextContent('Signed in by Cy');
+ fireEvent.click(screen.getByRole('button',{name:'Show more sign-ins'}));
+ await waitFor(()=>expect(panel).toHaveTextContent('Signed in by Cy'));
+ expect(fetcher).toHaveBeenCalledWith('/api/groups/g1/sign-ins?cursor=c2',expect.anything());
+ expect(screen.queryByRole('button',{name:'Show more sign-ins'})).toBeNull();
+ // Revoking the service's row revokes its approval, which ends all of them.
+ fireEvent.click(screen.getByRole('button',{name:'Revoke the approval of warehouse (member)'}));
+ expect(await screen.findByRole('dialog')).toHaveTextContent('all 40 of its sign-ins (member) stop on their next request');
+ fireEvent.click(screen.getByRole('button',{name:'Confirm revoke'}));
+ await waitFor(()=>expect(fetcher).toHaveBeenCalledWith('/api/groups/g1/service-sign-ins/sgg_1',expect.objectContaining({method:'DELETE'})));
+ await waitFor(()=>expect(panel).not.toHaveTextContent('Signed in by service warehouse'));
+ view.unmount();
+});
+
+it('shows an Admin the services approved to act as the group, says plainly what approving one allows, and revokes',async()=>{
+ let approvals=[{id:'sgg_1',service_id:'warehouse',role:'member',approved_by:{id:'u1',username:'ada',name:'Ada'},created_at:'2026-11-11T10:00:00.000Z'}];
+ const fetcher=stubFetch({'POST *':()=>{approvals=[...approvals,{id:'sgg_2',service_id:'crm',role:'editor',approved_by:{id:'u1',username:'ada',name:'Ada'},created_at:'2026-11-12T10:00:00.000Z'}];return Response.json({id:'sgg_2'},{status:201});},
+  'DELETE *':()=>{approvals=approvals.filter(a=>a.id!=='sgg_1');return new Response(null,{status:204});}},
+  {fallback:()=>Response.json({approvals,services:[{id:'crm',origin:'https://crm.example.com'},{id:'warehouse',origin:'https://warehouse.example.com'}]})});
+ const {GroupServiceSignIns}=await import('../GroupServiceSignIns');
+ const view=render(()=> <GroupServiceSignIns group={{id:'g1',name:'Team',role:'admin'}}/>);
+ const panel=await screen.findByRole('region',{name:'Services that may act as this group'});
+ await waitFor(()=>expect(panel).toHaveTextContent('warehouse'));
+ expect(panel).toHaveTextContent('Approved by Ada');
+ // Approving says what the service will be able to do, before anything is sent.
+ fireEvent.click(screen.getByRole('button',{name:'Approve service'}));
+ const dialog=await screen.findByRole('dialog');
+ expect(dialog).toHaveTextContent('crm will be able to sign an agent in as Team at member level, with nobody present');
+ expect(dialog).toHaveTextContent("cannot reach anyone's personal pages");
+ fireEvent.click(screen.getByRole('button',{name:'Confirm approve'}));
+ await waitFor(()=>expect(fetcher).toHaveBeenCalledWith('/api/groups/g1/service-sign-ins',expect.objectContaining({method:'POST',body:JSON.stringify({service_id:'crm',role:'member'})})));
+ await waitFor(()=>expect(screen.queryByRole('dialog')).toBeNull());
+ await waitFor(()=>expect(screen.getByRole('button',{name:'Revoke warehouse (member)'})).not.toBeDisabled());
+ fireEvent.click(screen.getByRole('button',{name:'Revoke warehouse (member)'}));
+ fireEvent.click(await screen.findByRole('button',{name:'Confirm revoke'}));
+ await waitFor(()=>expect(fetcher).toHaveBeenCalledWith('/api/groups/g1/service-sign-ins/sgg_1',expect.objectContaining({method:'DELETE'})));
+ view.unmount();
+ const quiet=vi.fn(async()=>Response.json({approvals:[],services:[]}));
+ vi.stubGlobal('fetch',quiet);
+ const other=render(()=> <GroupServiceSignIns group={{id:'g1',name:'Team',role:'editor'}}/>);
+ expect(other.queryByRole('region',{name:'Services that may act as this group'})).toBeNull();
  expect(quiet).not.toHaveBeenCalled();
 });

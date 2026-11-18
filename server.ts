@@ -19,6 +19,7 @@ import { getRequestListener } from '@hono/node-server';
 import { assemble, inProcess } from '@artifactbin/utils';
 import { bearerAdmission, createBearerReader, ensureAuthSchema, ensureHumanAuthSchema, authEnvNamesRead, authParts, readEnv, mailerForRuntime, mailSettingsOf, createHumanAuth, loginProvidersOf, sessionStoreOf, testDomainSignInOf } from '@artifactbin/auth';
 import { useLoopbackLookup } from '@artifactbin/utils/node/loopback-lookup';
+import { parseServiceAudiences } from '@artifactbin/contracts';
 
 // The server's own outbound calls (the exporter, a session's cookie jar, its public URL) may name a loopback
 // host (`app.lvh.me`, `<hex id>.lvh.me`, `*.localhost`): resolved here, never asked of DNS.
@@ -168,7 +169,7 @@ async function main(): Promise<void> {
   const authSchema = readEnv(env, 'AUTH__SCHEMA') ?? 'auth';
   await ensureAuthSchema(queryable, authSchema);
   if (appOnly) await ensureHumanAuthSchema({ schema: authSchema, ...(raw.kind === 'pglite' ? { pglite: raw.instance } : { pool: raw.pool as import('pg').Pool }) });
-  const reader = createBearerReader({ db: queryable, authSchema, readSchema: readEnv(env, 'IDENTITY__SCHEMA'), admitBearer: token => canAuthenticateUser(token.userId) });
+  const reader = createBearerReader({ db: queryable, authSchema, readSchema: readEnv(env, 'IDENTITY__SCHEMA'), serviceAudiences: parseServiceAudiences(readEnv(env, 'IDENTITY__SERVICE_AUDIENCES')), admitBearer: token => canAuthenticateUser(token.userId) });
   // DATASETS__DEFAULT_CONNECTION: a bad value stops the start here, naming the setting (never its value).
   validateDefaultConnection();
   if (!appOnly) {

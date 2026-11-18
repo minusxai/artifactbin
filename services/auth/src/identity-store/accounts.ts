@@ -7,9 +7,9 @@
  * else silently. Tokens are prefix + 256 random bits, only the sha256 stored, soft revoked (`deleted_at`).
  */
 import crypto from 'node:crypto';
-import {IdentityError,MAX_TOKEN_TTL_MS,MIN_TOKEN_TTL_MS,isValidHandle,type IdentityService,type IdentityUserRow,type MintedIdentityToken,type Queryable,type TransactionalQueryable} from '@artifactbin/contracts';
+import {IdentityError,MAX_TOKEN_TTL_MS,MIN_TOKEN_TTL_MS,SERVICE_GROUP_SIGN_IN_MAX_TTL_MS,isValidHandle,type ServiceGroupSignInGrant,type IdentityService,type IdentityUserRow,type MintedIdentityToken,type Queryable,type TransactionalQueryable} from '@artifactbin/contracts';
 import {internalId,isUniqueViolation,tokenId,type IdentityTables} from './tables';
-import {groupLevelHeldSql} from './rules';
+import {groupLevelHeldSql,serviceGrantStandsSql} from './rules';
 
 const USER_COLS = 'id, email, kind, parent_user_id, expires_at, name, username, image_key, welcome_pending, created_at';
 const TOKEN_PREFIX = 'mx_';
@@ -101,6 +101,41 @@ export async function mintGroupSignIn(t: IdentityTables, q: Queryable, readSchem
     RETURNING id`, [id, name, sha256(token), expiresAt, input.audience, input.scope, input.issuedBy, input.groupId, input.role]);
   if (!minted.rows.length) throw new IdentityError('group_level_not_held', 403);
   return {id, name, token, expiresAt};
+}
+
+/**
+ * A SERVICE'S SIGN-IN AS A GROUP (contracts service-audiences `GROUP_SIGN_IN_PATH`): an access token whose principal is
+ * the group an approval names, at the approval's level, with no person on the row, `issued_by` the service and
+ * `grant_id` the approval, at this installation's API, with no refresh token, for at most a day
+ * (SERVICE_GROUP_SIGN_IN_MAX_TTL_MS). ONE statement: written only while the approval `grantId` names `service` at the
+ * origin it is configured at now (`origin`) and still stands (./rules `serviceGrantStandsSql`); otherwise nothing is
+ * written and `grant_refused` (403) answers, whatever the reason. Its liveness after that is the approval's
+ * (./rules `groupSignInLiveSql`) and its service's configuration (../identity/bearer).
+ */
+export async function mintServiceGroupSignIn(t: IdentityTables, q: Queryable, input: {grantId: string; service: string; origin: string; expiresInMs: number; audience: string; scope: string}): Promise<MintedIdentityToken & {groupId: string; role: 'member' | 'editor'}> {
+  const ms = input.expiresInMs;
+  if (!Number.isFinite(ms) || ms < MIN_TOKEN_TTL_MS || ms > SERVICE_GROUP_SIGN_IN_MAX_TTL_MS) throw new IdentityError('invalid_expiry', 400);
+  const id = tokenId(), token = TOKEN_PREFIX + crypto.randomBytes(32).toString('base64url');
+  const expiresAt = new Date(Date.now() + ms).toISOString(), name = `service-${input.service}`;
+  const minted = await q.query<{group_id: string; group_role: 'member' | 'editor'}>(`INSERT INTO ${t.tokens} (id, name, token_hash, user_id, expires_at, audience, scope, issued_by, group_id, group_role, grant_id)
+    SELECT $1, $2, $3, NULL, $4, $5, $6, g.service_id, g.group_id, g.role, g.id FROM ${t.group_sign_in_grants} g
+     WHERE g.id = $7 AND g.service_id = $8 AND g.service_origin = $9 AND ${serviceGrantStandsSql('g', t)}
+    RETURNING group_id, group_role`, [id, name, sha256(token), expiresAt, input.audience, input.scope, input.grantId, input.service, input.origin]);
+  const row = minted.rows[0];
+  if (!row) throw new IdentityError('grant_refused', 403);
+  return {id, name, token, expiresAt, groupId: row.group_id, role: row.group_role};
+}
+
+/**
+ * A SERVICE'S OWN APPROVALS (contracts service-audiences `GROUP_SIGN_IN_GRANTS_PATH`): every approval naming `service`
+ * at the origin it is configured at now that still stands (./rules `serviceGrantStandsSql`), oldest first, with its
+ * group's handle and name: exactly the approvals `mintServiceGroupSignIn` would issue under. Never another service's.
+ */
+export async function listServiceGroupSignInGrants(t: IdentityTables, q: Queryable, input: {service: string; origin: string}): Promise<ServiceGroupSignInGrant[]> {
+  return (await q.query<ServiceGroupSignInGrant>(`SELECT g.id, g.group_id, gg.handle AS group_handle, gg.name AS group_name, g.role, g.created_at AS approved_at
+    FROM ${t.group_sign_in_grants} g JOIN ${t.groups} gg ON gg.id = g.group_id
+    WHERE g.service_id = $1 AND g.service_origin = $2 AND ${serviceGrantStandsSql('g', t)} ORDER BY g.created_at, g.id`, [input.service, input.origin])).rows
+    .map(row => ({...row, approved_at: new Date(row.approved_at).toISOString()}));
 }
 
 type AccountMethods = Pick<IdentityService, 'syncProfile' | 'createUser' | 'ensureUsername' | 'setUsername' | 'setImageKey' | 'confirmWelcome' | 'setAutoAcceptMentions'

@@ -30,14 +30,14 @@ CREATE OR REPLACE VIEW identity.users AS
 CREATE OR REPLACE VIEW identity.tokens AS
   SELECT t.id, t.name, t.user_id, t.client_harness, t.audience, t.scope, t.request_authority, t.created_at, t.deleted_at, t.expires_at, t.last_used_at,
     array_remove(regexp_split_to_array(coalesce(t.scope, ''), '\s+'), '') AS scopes,
-    ((t.deleted_at IS NULL AND (t.expires_at IS NULL OR t.expires_at>now()) AND (CASE WHEN t.group_id IS NOT NULL THEN (t.user_id IS NULL AND t.grant_id IS NULL AND COALESCE(t.audience,'')<>'' AND EXISTS (SELECT 1 FROM auth.credentials member
+    ((t.deleted_at IS NULL AND (t.expires_at IS NULL OR t.expires_at>now()) AND (CASE WHEN t.group_id IS NOT NULL THEN (t.user_id IS NULL AND COALESCE(t.audience,'')<>'' AND (t.grant_id IS NOT NULL OR EXISTS (SELECT 1 FROM auth.credentials member
       JOIN auth.credentials family ON family.kind='refresh_family' AND family.credential_hash=member.group_id AND family.deleted_at IS NULL
       WHERE COALESCE(t.audience,'')<>'' AND member.kind='refresh_token' AND member.payload->>'access_token_id'=t.id
         AND (family.payload->>'session_id' IS NULL OR EXISTS (SELECT 1 FROM auth.session bound WHERE bound.id=family.payload->>'session_id' AND bound."expiresAt">now()))
         AND NOT EXISTS (
           SELECT 1 FROM auth.credentials sibling LEFT JOIN auth.tokens access ON access.id=sibling.payload->>'access_token_id'
           WHERE sibling.kind='refresh_token' AND sibling.group_id=member.group_id
-            AND (sibling.deleted_at IS NOT NULL OR access.id IS NULL OR access.deleted_at IS NOT NULL))))
+            AND (sibling.deleted_at IS NOT NULL OR access.id IS NULL OR access.deleted_at IS NOT NULL)))))
       WHEN t.issued_by IS NULL THEN (COALESCE(t.audience,'')='' OR EXISTS (SELECT 1 FROM auth.credentials member
       JOIN auth.credentials family ON family.kind='refresh_family' AND family.credential_hash=member.group_id AND family.deleted_at IS NULL
       WHERE COALESCE(t.audience,'')<>'' AND member.kind='refresh_token' AND member.payload->>'access_token_id'=t.id
@@ -58,15 +58,19 @@ CREATE OR REPLACE VIEW identity.tokens AS
             AND (psibling.deleted_at IS NOT NULL OR paccess.id IS NULL OR paccess.deleted_at IS NOT NULL)))))))) END))
       AND EXISTS (SELECT 1 FROM app.identity_settings s WHERE s.id = 'installation' AND (COALESCE(t.audience, '') = '' OR t.audience = ANY(s.api_audiences) OR t.audience = ANY(s.service_audiences)))
       AND CASE WHEN t.group_id IS NULL THEN t.user_id IS NOT NULL AND COALESCE((SELECT u.active FROM identity.users u WHERE u.id = t.user_id), false)
-        ELSE (t.user_id IS NULL AND t.grant_id IS NULL AND t.issued_by IS NOT NULL
+        ELSE (t.user_id IS NULL AND t.issued_by IS NOT NULL
       AND t.group_role IN ('member','editor') AND EXISTS (SELECT 1 FROM auth.groups signed_group WHERE signed_group.id=t.group_id AND signed_group.deleted_at IS NULL)
-      AND COALESCE((SELECT issuer.active AND issuer.kind = 'account' AND NOT issuer.test_account FROM identity.users issuer WHERE issuer.id = t.issued_by), false) AND (t.group_role IN ('member','editor') AND (EXISTS (
+      AND CASE WHEN t.grant_id IS NULL THEN COALESCE((SELECT issuer.active AND issuer.kind = 'account' AND NOT issuer.test_account FROM identity.users issuer WHERE issuer.id = t.issued_by), false) AND (t.group_role IN ('member','editor') AND (EXISTS (
     SELECT 1 FROM auth.group_members held JOIN auth.groups held_group ON held_group.id=held.group_id AND held_group.deleted_at IS NULL
     WHERE held.group_id=t.group_id AND held.user_id=t.issued_by AND (held.role='admin' OR held.role=t.group_role OR (held.role='editor' AND t.group_role='member')))
   OR EXISTS (SELECT 1 FROM (SELECT g.id AS group_id, a.user_id, a.via_group_id FROM auth.groups g CROSS JOIN LATERAL (
     WITH RECURSIVE up(id, depth) AS (SELECT g.id, 0 UNION ALL SELECT p.id, up.depth+1 FROM up JOIN auth.groups c ON c.id=up.id JOIN auth.groups p ON p.id=c.parent_id WHERE p.deleted_at IS NULL AND up.depth<10000)
     SELECT DISTINCT ON (m.user_id) m.user_id, up.id AS via_group_id FROM up JOIN auth.group_members m ON m.group_id=up.id AND m.role='admin' ORDER BY m.user_id, up.depth) a
-  WHERE g.deleted_at IS NULL) held_admin WHERE held_admin.group_id=t.group_id AND held_admin.user_id=t.issued_by)))) END) AS live, t.group_id, t.group_role, t.issued_by, t.grant_id
+  WHERE g.deleted_at IS NULL) held_admin WHERE held_admin.group_id=t.group_id AND held_admin.user_id=t.issued_by)))
+        ELSE EXISTS (SELECT 1 FROM auth.group_sign_in_grants signed_grant WHERE signed_grant.id=t.grant_id AND (signed_grant.deleted_at IS NULL AND signed_grant.role IN ('member','editor')
+      AND EXISTS (SELECT 1 FROM auth.groups granted_group WHERE granted_group.id=signed_grant.group_id AND granted_group.deleted_at IS NULL)
+      AND NOT EXISTS (SELECT 1 FROM auth.users approver WHERE approver.id=signed_grant.approved_by AND approver.test_account))
+          AND signed_grant.group_id=t.group_id AND signed_grant.role=t.group_role AND signed_grant.service_id=t.issued_by) END) END) AS live, t.group_id, t.group_role, t.issued_by, t.grant_id
   FROM auth.tokens t;
 
 CREATE OR REPLACE VIEW identity.handle_reservations AS
@@ -86,6 +90,9 @@ CREATE OR REPLACE VIEW identity.group_invitations AS
 
 CREATE OR REPLACE VIEW identity.group_mail_outbox AS
   SELECT x.id, x.email, x.recipient_id, x.group_id, x.group_name, x.handle, x.action, x.sender_id, x.lease_until, x.claim_token, x.attempts, x.next_attempt_at, x.quarantined_at, x.sent_at, x.created_at FROM auth.group_mail_outbox x;
+
+CREATE OR REPLACE VIEW identity.group_sign_in_grants AS
+  SELECT x.id, x.group_id, x.role, x.service_id, x.approved_by, x.created_at, x.deleted_at, x.service_origin FROM auth.group_sign_in_grants x;
 
 CREATE OR REPLACE VIEW identity.group_admins AS
   SELECT g.id AS group_id, a.user_id, a.via_group_id FROM auth.groups g CROSS JOIN LATERAL (

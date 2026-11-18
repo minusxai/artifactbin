@@ -12,7 +12,8 @@ import {groupAdminSql,subtreeSql} from './hierarchy';
  */
 import {normalizeCreateGroup} from '@artifactbin/contracts';
 import type {UpdateGroupInput,AccountPreferences,CreateGroupInput,DefaultDestination,GroupAudienceMember,GroupDetail,GroupInvitation,GroupMember,GroupRelative,GroupRole,GroupSummary,Queryable as ContractQueryable} from '@artifactbin/contracts';
-import { getDb, services, deploymentConfig, env, emit } from '../platform';
+import { getDb, services, deploymentConfig, env, emit, serviceAudiences } from '../platform';
+import {groupSignInServiceConfigured} from '@artifactbin/contracts';
 export interface GroupRecord {id:string;handle:string;name:string;description:string;created_by:string;deleted_at:string|null;parent_id:string|null;}
 export {GroupError} from './errors';
 const summary=(group:GroupRecord,role:GroupRole|null):GroupSummary=>({id:group.id,handle:group.handle,name:group.name,description:group.description,role,parent_id:group.parent_id??null});
@@ -172,27 +173,86 @@ import {recordGroupMutation} from './mutations';
 export {groupAdminSql,groupReachSql,reachedGroupsSql,subtreeSql,subtreeMemberIds,groupChain} from './hierarchy';
 
 /**
- * A GROUP'S SIGN-IN as the group's Admins see it (contracts identity-service `GROUP_SIGN_IN_RULE`): an agent acting as
- * the group at `role`, authorised by `issued_by` (the person), and whether it is still `live`. Never its secret.
+ * A PERSON'S SIGN-IN OF AN AGENT AS THE GROUP, as the group's Admins see it (contracts identity-service
+ * `GROUP_SIGN_IN_RULE`): an agent acting as the group at `role`, authorised by `issued_by` (the person), and whether
+ * it is still `live`. Never its secret.
  */
-export interface GroupSignIn {id:string;name:string|null;role:'member'|'editor';issued_by:{id:string;username:string|null;name:string|null};created_at:string;expires_at:string|null;last_used_at:string|null;live:boolean;}
+interface GroupSignIn {id:string;name:string|null;role:'member'|'editor';issued_by:{id:string;username:string|null;name:string|null};created_at:string;expires_at:string|null;last_used_at:string|null;live:boolean;}
+/**
+ * A SERVICE'S SIGN-INS UNDER ONE APPROVAL, as one row (contracts service-audiences `GROUP_SIGN_IN_PATH`): how many
+ * unexpired ones it holds and when it last obtained one. Revoking the approval ends them all, so they are not listed
+ * one by one (a service that signs in often would bury people's).
+ */
+interface GroupServiceSignIns {grant_id:string;service_id:string;role:'member'|'editor';count:number;last_issued_at:string;approved_at:string;}
+/** One page of a group's sign-ins: people's newest first (`next` positions the following page), and every approval's row. */
+export interface GroupSignInPage {sign_ins:GroupSignIn[];next:{created:string;id:string}|null;services:GroupServiceSignIns[];}
 /** Refuse anyone but an Admin of the group (direct, or through an ancestor): `forbidden` for its other people, `not_found` otherwise. */
 async function requireGroupAdmin(userId:string,groupId:string,db:ContractQueryable):Promise<void>{
  if((await db.query('SELECT 1 FROM group_admins WHERE group_id=$1 AND user_id=$2',[groupId,userId])).rows.length)return;
  throw await getGroupRole(userId,groupId,db)?new GroupError('forbidden',403):new GroupError('not_found',404);
 }
-/** Every unexpired, unrevoked sign-in acting as the group, newest first (at most 200), for one of its Admins. */
-export async function listGroupSignIns(userId:string,groupId:string):Promise<GroupSignIn[]>{
+/**
+ * A group's unexpired, unrevoked sign-ins, for one of its Admins: people's in full, newest first, `limit` at a time
+ * after `after` (the previous page's `next`); and a service's as one row per live approval with its count.
+ */
+export async function listGroupSignIns(userId:string,groupId:string,page:{limit:number;after?:{created:string;id:string}}={limit:50}):Promise<GroupSignInPage>{
  const db=await getDb();await requireGroupAdmin(userId,groupId,db);
- return (await db.query<GroupSignIn&{issuer_username:string|null;issuer_name:string|null;issuer_id:string}>(`SELECT t.id,t.name,t.group_role AS role,t.issued_by AS issuer_id,u.username AS issuer_username,u.name AS issuer_name,t.created_at,t.expires_at,t.last_used_at,t.live
+ const rows=(await db.query<GroupSignIn&{issuer_username:string|null;issuer_name:string|null;issuer_id:string;position:string}>(`SELECT t.id,t.name,t.group_role AS role,t.issued_by AS issuer_id,u.username AS issuer_username,u.name AS issuer_name,t.created_at,t.expires_at,t.last_used_at,t.live,
+    t.created_at::text AS position
    FROM tokens t LEFT JOIN users u ON u.id=t.issued_by
   WHERE t.group_id=$1 AND t.user_id IS NULL AND t.grant_id IS NULL AND t.deleted_at IS NULL AND (t.expires_at IS NULL OR t.expires_at>now())
-  ORDER BY t.created_at DESC,t.id LIMIT 200`,[groupId])).rows.map(({issuer_id,issuer_username,issuer_name,...row})=>({...row,issued_by:{id:issuer_id,username:issuer_username,name:issuer_name}}));
+    AND ($3::timestamptz IS NULL OR (t.created_at,t.id) < ($3::timestamptz,$4::text))
+  ORDER BY t.created_at DESC,t.id DESC LIMIT $2`,[groupId,page.limit+1,page.after?.created??null,page.after?.id??null])).rows;
+ const shown=rows.slice(0,page.limit).map(({issuer_id,issuer_username,issuer_name,position:_position,...row})=>({...row,issued_by:{id:issuer_id,username:issuer_username,name:issuer_name}}));
+ // The position is the database's own text of the time (microseconds), so a page never repeats or skips a row.
+ const last=rows[page.limit-1];
+ // Counted by approval from the token rows (unexpired, unrevoked), never by evaluating each one's `live`.
+ const services=(await db.query<Omit<GroupServiceSignIns,'count'>&{count:string|number}>(`SELECT g.id AS grant_id,g.service_id,g.role,count(t.id) AS count,max(t.created_at) AS last_issued_at,g.created_at AS approved_at
+   FROM group_sign_in_grants g JOIN tokens t ON t.grant_id=g.id AND t.group_id=g.group_id AND t.deleted_at IS NULL AND (t.expires_at IS NULL OR t.expires_at>now())
+  WHERE g.group_id=$1 AND g.deleted_at IS NULL GROUP BY g.id,g.service_id,g.role,g.created_at ORDER BY max(t.created_at) DESC,g.id`,[groupId])).rows
+  .map(row=>({...row,count:Number(row.count),last_issued_at:new Date(row.last_issued_at).toISOString(),approved_at:new Date(row.approved_at).toISOString()}));
+ return {sign_ins:shown,next:rows.length>page.limit&&last?{created:last.position,id:last.id}:null,services};
 }
 /** An Admin of the group ends one of its sign-ins, through the identity module (which checks the Admin again); false when none matched. */
 export async function revokeGroupSignIn(userId:string,groupId:string,id:string):Promise<boolean>{
  const row=await services().identity.revokeGroupSignIn({actorId:userId,groupId,id});
  if(!row)return false;
  void emit({kind:'user',id:userId},'revoked',{kind:'token',id},{name:row.name,group_id:groupId});
+ return true;
+}
+
+/**
+ * A GROUP'S APPROVALS OF SERVICES (contracts service-audiences `GROUP_SIGN_IN_PATH`), as its Admins see and change them
+ * on the group's settings page: each live approval with who approved it (history only), and the configured services
+ * that may be approved (those that opted in with `group_sign_ins`). The identity module writes and re-checks the Admin.
+ */
+export interface ServiceGroupSignIn {id:string;service_id:string;role:'member'|'editor';approved_by:{id:string;username:string|null;name:string|null};created_at:string;
+ /** Whether the service is still configured as it was approved (with the opt-in, at the same origin): only then does it act. */
+ configured:boolean;}
+export async function listServiceGroupSignIns(userId:string,groupId:string):Promise<{approvals:ServiceGroupSignIn[];services:{id:string;origin:string}[]}>{
+ const db=await getDb();await requireGroupAdmin(userId,groupId,db);
+ const configured=serviceAudiences();
+ const approvals=(await db.query<Omit<ServiceGroupSignIn,'configured'>&{service_origin:string|null;approver_id:string;approver_username:string|null;approver_name:string|null}>(`SELECT g.id,g.service_id,g.role,g.created_at,g.service_origin,g.approved_by AS approver_id,u.username AS approver_username,u.name AS approver_name
+   FROM group_sign_in_grants g LEFT JOIN users u ON u.id=g.approved_by WHERE g.group_id=$1 AND g.deleted_at IS NULL ORDER BY g.created_at,g.id`,[groupId])).rows
+  .map(({approver_id,approver_username,approver_name,service_origin,...row})=>({...row,approved_by:{id:approver_id,username:approver_username,name:approver_name},configured:groupSignInServiceConfigured(configured,row.service_id,service_origin)}));
+ return {approvals,services:serviceAudiences().filter(service=>service.groupSignIns).map(service=>({id:service.id,origin:service.origin}))};
+}
+/**
+ * An Admin approves a configured service that opted in, at its configured origin; anything else is `unknown_service`
+ * (400). A new approval is audited as the group's change (`service_sign_in_approved`: who, the service, the level).
+ */
+export async function approveServiceGroupSignIn(userId:string,groupId:string,serviceId:unknown,role:unknown,actor?:GroupMutationActor):Promise<{id:string}>{
+ const service=typeof serviceId==='string'?serviceAudiences().find(entry=>entry.groupSignIns&&entry.id===serviceId):undefined;
+ if(!service)throw new GroupError('unknown_service',400);
+ if(role!=='member'&&role!=='editor')throw new GroupError('invalid_role',400);
+ const {grant,changes}=await services().identity.approveServiceGroupSignIn({actorId:userId,groupId,serviceId:service.id,serviceOrigin:service.origin,role});
+ await recordGroupChanges(changes,actor);
+ return {id:grant.id};
+}
+/** An Admin ends an approval, audited (`service_sign_in_revoked`): false when none was live. */
+export async function revokeServiceGroupSignIn(userId:string,groupId:string,id:string,actor?:GroupMutationActor):Promise<boolean>{
+ const revoked=await services().identity.revokeServiceGroupSignIn({actorId:userId,groupId,id});
+ if(!revoked)return false;
+ await recordGroupChanges(revoked.changes,actor);
  return true;
 }
