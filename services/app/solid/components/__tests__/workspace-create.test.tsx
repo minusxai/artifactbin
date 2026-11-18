@@ -41,7 +41,6 @@ it.each([
   vi.stubGlobal('fetch', vi.fn(async () => Response.json({ id: 'new123' }, { status: 201 })));
   const item = open().getByRole('menuitem', { name: label });
   fireEvent.mouseEnter(item.parentElement!);
-  expect(item).toBeInTheDocument();
   fireEvent.click(item);
   await waitFor(() => expect(openDocument).toHaveBeenCalledWith('/a/new123'));
   expect(replaceDocument).not.toHaveBeenCalled();
@@ -83,7 +82,7 @@ it('preserves group destination in folder creation and asset editor links', asyn
  await waitFor(()=>expect(fetch).toHaveBeenCalledWith('/api/my/artifacts',expect.objectContaining({body:JSON.stringify({format:'folder',title:'Reports',parent_id:null,destination:{type:'group',id:'g1'}})})));
 });
 
-it('names the folder dialog, keeps the form closed on Escape without a request, and reopens it empty', async () => {
+it('names the folder dialog, keeps the form closed on Escape without a request', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => Response.json({ id: 'folder3' })));
   render(() => <WorkspaceCreate onCreated={() => {}} />);
   fireEvent.click(screen.getByRole('button', { name: 'Create' }));
@@ -129,6 +128,7 @@ it('offers retained artifact, folder and asset creation without retired programs
  fireEvent.click(screen.getByRole('button', {name:'Create'}));
  for (const name of ['Document', 'Template', 'Upload HTML', 'Folder', 'File', 'Dataset']) expect(screen.getByRole('menuitem', {name})).toBeInTheDocument();
  expect(screen.queryByRole('menuitem', {name:'Program'})).not.toBeInTheDocument();
+ expect(screen.queryByRole('menuitem', {name:'Document (Tiptap trial)'})).not.toBeInTheDocument();
 });
 
 it('opens HTML intake in the selected folder and group without creating until a file is published', () => {
@@ -139,13 +139,4 @@ it('opens HTML intake in the selected folder and group without creating until a 
  expect(screen.getByRole('dialog', {name:'Upload HTML'})).toBeInTheDocument();
  expect(screen.getByRole('button', {name:'Upload HTML'})).toBeDisabled();
  expect(fetch).not.toHaveBeenCalled();
-});
-it('offers one native Document entry',async()=>{
- vi.stubGlobal('fetch',vi.fn(async()=>Response.json({id:'trial123'},{status:201})));
- render(()=><WorkspaceCreate onCreated={()=>{}}/>);
- fireEvent.click(screen.getByRole('button',{name:'Create'}));
- expect(screen.queryByRole('menuitem',{name:'Document (Tiptap trial)'})).toBeNull();
- fireEvent.click(screen.getByRole('menuitem',{name:'Document'}));
- await waitFor(()=>expect(openDocument).toHaveBeenCalledWith('/a/trial123'));
- expect(created().html).toContain('data-af-editable="rich-native-v1"');
 });

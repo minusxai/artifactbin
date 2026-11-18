@@ -12,7 +12,7 @@
  * `dist/sql-server.mjs`) and runs THAT.
  */
 import { spawn, execFileSync } from 'node:child_process';
-import { rmSync, existsSync } from 'node:fs';
+import { rmSync } from 'node:fs';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { freePort } from '@artifactbin/test-support/net';
@@ -48,10 +48,6 @@ const input = {
 };
 
 describe('the bundled SQL service', () => {
-  it('builds to one file', () => {
-    expect(existsSync(bundle)).toBe(true);
-  });
-
   it('runs a query, with the engine loaded from beside the bundle rather than inlined', async () => {
     const res = await fetch(`${serviceUrl}/run`, {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input),

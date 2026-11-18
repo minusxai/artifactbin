@@ -4,16 +4,24 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-li
 import { afterEach, expect, it, vi } from 'vitest';
 import { App } from '@/solid/App';
 
+const SESSION = { user: { id: 'usr_1', email: 'a@example.com', username: 'owner', image: null }, kind: 'account', onboarded: true };
+/** Stubs the account page's reads: the session, the account (default: no photo), an empty inbox and the given tokens. */
+function stubAccountFetch({ account = () => Response.json({ username: 'owner', image: null }), tokens = [], calls }: {
+  account?: () => Response | Promise<Response>; tokens?: unknown[]; calls?: string[] } = {}) {
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    calls?.push(`${init?.method ?? 'GET'} ${url}`);
+    if (url === '/api/page/session') return Response.json(SESSION);
+    if (url === '/api/page/account') return account();
+    if (url === '/api/my/people') return Response.json({ autoAccept: false, unread: 0, next: null, blocks: [], notifications: [] });
+    if (url === '/api/my/tokens') return Response.json({ tokens });
+    return Response.json({});
+  }));
+}
+
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.history.replaceState(null, '', '/'); });
 
 it('loads the account handle late while keeping profile controls without the retired data uploader', async () => {
-  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-    if (url === '/api/page/session') return Response.json({ user: { id: 'usr_1', email: 'a@example.com', username: 'owner', image: null }, kind: 'account', onboarded: true });
-    if (url === '/api/page/account') { await new Promise(resolve => setTimeout(resolve, 5)); return Response.json({ username: 'owner', image: '/api/users/usr_1/avatar?v=1', user_page_url:'https://owner.u.example.test' }); }
-    if (url === '/api/my/people') return Response.json({ autoAccept: false, unread: 0, next: null, blocks: [], notifications: [] });
-    if (url === '/api/my/tokens') return Response.json({ tokens: [] });
-    return Response.json({});
-  }));
+  stubAccountFetch({ account: async () => { await new Promise(resolve => setTimeout(resolve, 5)); return Response.json({ username: 'owner', image: '/api/users/usr_1/avatar?v=1', user_page_url:'https://owner.u.example.test' }); } });
   window.history.replaceState(null, '', '/account');
   const view = render(() => <App />);
   await vi.dynamicImportSettled();
@@ -32,13 +40,7 @@ it('loads the account handle late while keeping profile controls without the ret
 // The accounts gate's claim leg, moved here: a verified account's page lists CLI connections to revoke, and nothing
 // anywhere asks a person to paste a token.
 it('asks a person for no pasted token anywhere on the account page', async () => {
-  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-    if (url === '/api/page/session') return Response.json({ user: { id: 'usr_1', email: 'a@example.com', username: 'owner', image: null }, kind: 'account', onboarded: true });
-    if (url === '/api/page/account') return Response.json({ username: 'owner', image: null });
-    if (url === '/api/my/people') return Response.json({ autoAccept: false, unread: 0, next: null, blocks: [], notifications: [] });
-    if (url === '/api/my/tokens') return Response.json({ tokens: [] });
-    return Response.json({});
-  }));
+  stubAccountFetch();
   window.history.replaceState(null, '', '/account');
   const view = render(() => <App />);
   await vi.dynamicImportSettled();
@@ -49,14 +51,7 @@ it('asks a person for no pasted token anywhere on the account page', async () =>
 
 it('requires confirmation before revoking a connection', async () => {
   const calls: string[] = [];
-  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-    calls.push(`${init?.method ?? 'GET'} ${url}`);
-    if (url === '/api/page/session') return Response.json({ user: { id: 'usr_1', email: 'a@example.com', username: 'owner', image: null }, kind: 'account', onboarded: true });
-    if (url === '/api/page/account') return Response.json({ username: 'owner', image: null });
-    if (url === '/api/my/people') return Response.json({ autoAccept: false, unread: 0, next: null, blocks: [], notifications: [] });
-    if (url === '/api/my/tokens') return Response.json({ tokens: [{ id: 'tok_1', name: 'Laptop', status: 'active', created_at: '2026-01-01', deleted_at: null, expires_at: null, last_used_at: null }] });
-    return Response.json({});
-  }));
+  stubAccountFetch({ calls, tokens: [{ id: 'tok_1', name: 'Laptop', status: 'active', created_at: '2026-01-01', deleted_at: null, expires_at: null, last_used_at: null }] });
   window.history.replaceState(null, '', '/account');
   render(() => <App />);
   fireEvent.click(await screen.findByRole('button', { name: 'Revoke token Laptop' }));
@@ -68,13 +63,7 @@ it('requires confirmation before revoking a connection', async () => {
 
 it('bounds connections to five rows and separates inactive history', async () => {
   const tokens = Array.from({ length: 12 }, (_, index) => ({ id: `tok_${index}`, name: `Connection ${index}`, status: index < 7 ? 'active' : 'expired', created_at: '2026-01-01', deleted_at: null, expires_at: null, last_used_at: null }));
-  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-    if (url === '/api/page/session') return Response.json({ user: { id: 'usr_1', email: 'a@example.com', username: 'owner', image: null }, kind: 'account', onboarded: true });
-    if (url === '/api/page/account') return Response.json({ username: 'owner', image: null });
-    if (url === '/api/my/people') return Response.json({ autoAccept: false, unread: 0, next: null, blocks: [], notifications: [] });
-    if (url === '/api/my/tokens') return Response.json({ tokens });
-    return Response.json({});
-  }));
+  stubAccountFetch({ tokens });
   window.history.replaceState(null, '', '/account');
   render(() => <App />);
   expect(await screen.findByRole('button', { name: 'Active (7)' })).toHaveAttribute('aria-pressed', 'true');

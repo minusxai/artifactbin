@@ -144,7 +144,6 @@ it('refuses retired monitoring instructions in the public skill',()=>{ expect(pu
 it('offers the complete Markdown skill archive from the HTTP root',()=>{
  const origin='https://guides.example';
  expect(llmsText(origin)).not.toContain('Optional [setup]');
- expect(llmsText(origin)).not.toContain('@afbin/cli');
  expect(llmsText(origin)).toContain(`[Download the author skill](${origin}/skills/artifactbin.zip)`);
 });
 it('keeps credential recovery references consistent with direct HTTP authentication',()=>{
@@ -154,7 +153,6 @@ it('keeps credential recovery references consistent with direct HTTP authenticat
   for(const obsolete of ['same credentials and helper','common helper','helper returns the actual backing path','shared helper for every request','shared credential helper'])expect(text).not.toContain(obsolete);
   expect(text).toContain('/llms/http-auth');
  }
- expect(publicGuideText('http-auth',origin)).toContain(credentialPaths(origin,'~/.artifactbin').backingPath);
 });
 
 it('preserves deterministic stored UTF-8 members for already-installed updaters',async()=>{

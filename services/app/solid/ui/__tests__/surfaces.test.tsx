@@ -31,7 +31,6 @@ it('opens a Select listbox, a Menu and a Tooltip in the dark appearance of an ed
   </div>);
   fireEvent.click(screen.getByRole('button', { name: 'Role' }));
   const list = screen.getByRole('listbox');
-  expect(list.closest('[data-app-appearance="dark"] [data-app-appearance]') ?? list).toBeTruthy();
   expect(appearance(list)).toBe('dark');
   expect(list.closest('[data-mx-theme-host]')).toHaveAttribute('data-app-appearance', 'dark');
   fireEvent.click(screen.getByRole('button', { name: 'Actions' }));

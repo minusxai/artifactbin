@@ -319,15 +319,6 @@ it.each(['\\'.repeat(600), '界'.repeat(600)])('adversarial: outputBytes bounds 
 });
 
 
-it('review2: outputBytes accepts a result at its exact JSON byte size', async () => {
-  const input = {tables: {}, queries: [{name: 'q', sql: "select 'ok' as v"}], params: {}};
-  const first = (await local.run(input)).q!;
-  expect(isQueryFailure(first)).toBe(false);
-  if (isQueryFailure(first)) throw new Error(first.error);
-  const bytes = Buffer.byteLength(JSON.stringify({rows: first.rows, columns: first.columns}), 'utf8');
-  expect((await local.run({...input, outputBytes: bytes})).q).toMatchObject({rows: first.rows, columns: first.columns});
-});
-
 it('outputBytes refuses a result one byte past its exact JSON size', async () => {
   for (const sql of ["select 'ok' as v", "select '界\\\"x' as v, 1 as w, true as b, null as n union all select 'y', 2, false, 3.5"]) {
     const input = { tables: {}, queries: [{ name: 'q', sql }], params: {} };

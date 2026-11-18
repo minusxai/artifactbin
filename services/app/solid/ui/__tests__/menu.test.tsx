@@ -60,7 +60,7 @@ it('closes on Escape and returns focus to the trigger', () => {
   expect(selected).not.toHaveBeenCalled();
 });
 
-it('selects with Enter or a click, closing first and returning focus to the trigger', () => {
+it('selects with a click, closing first and returning focus to the trigger', () => {
   const { trigger, selected } = open();
   fireEvent.click(trigger);
   fireEvent.click(screen.getByRole('menuitem', { name: 'Move Report' }));

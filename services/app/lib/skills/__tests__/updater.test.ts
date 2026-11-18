@@ -19,11 +19,17 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {withHttpServer} from '@artifactbin/test-support/net';
 import {spawn} from 'node:child_process';
+/** The first installed release under `base`, with the `artifactbin` symlink an install keeps pointing at it. */
+const installedRoot=async(base:string)=>{
+ const root=path.join(base,'.artifactbin-releases','initial','artifactbin');
+ await mkdir(root,{recursive:true});await symlink(root,path.join(base,'artifactbin'));
+ return root;
+};
 it('updates isolated installs once, preserves data and symlinks, and returns promptly with a stalled endpoint',async()=>{
  const {update,disabled}=await import(require.resolve('../../../skills/artifactbin/scripts/toolbox-update.mjs'));
  const base=await mkdtemp(path.join(tmpdir(),'skill-update-'));
  expect(disabled([])).toBe(false);
- const root=path.join(base,'.artifactbin-releases','initial','artifactbin');await mkdir(root,{recursive:true});await symlink(root,path.join(base,'artifactbin'));
+ const root=await installedRoot(base);
  let stalled=false;
  let release:ReturnType<typeof skillRelease>;
  const server=await withHttpServer((req,res)=>{if(stalled)return;res.end(req.url?.endsWith('latest.json')?JSON.stringify(release.manifest):Buffer.from(release.bytes));});
@@ -103,8 +109,7 @@ it('keeps standalone help offline, rejects unknown flags, and parses boolean opt
 
 it('does not wait for the background updater lock before running a command',async()=>{
  const base=await mkdtemp(path.join(tmpdir(),'skill-busy-'));
- const root=path.join(base,'.artifactbin-releases','initial','artifactbin');
- await mkdir(path.join(root,'scripts'),{recursive:true});await symlink(root,path.join(base,'artifactbin'));
+ const root=await installedRoot(base);await mkdir(path.join(root,'scripts'),{recursive:true});
  await writeFile(path.join(root,'release.json'),JSON.stringify({schemaVersion:1,origin:'http://127.0.0.1:1',version:'0'.repeat(64)}));
  await cp(path.dirname(require.resolve('../../../skills/artifactbin/scripts/toolbox-update.mjs')),path.join(root,'scripts'),{recursive:true});
  await writeFile(path.join(root,'scripts/probe.mjs'),`import {beforeCommand} from './toolbox-update.mjs';if(!await beforeCommand(import.meta.url,[]))console.log('ran');`);
@@ -144,7 +149,7 @@ it('verifies and installs the resolvers/ library folder and still refuses unknow
   expect(()=>decodeRelease(bad.bytes,bad.manifest)).toThrow('Unsafe archive member');
  }
  const base=await mkdtemp(path.join(tmpdir(),'skill-resolvers-'));
- const root=path.join(base,'.artifactbin-releases','initial','artifactbin');await mkdir(root,{recursive:true});await symlink(root,path.join(base,'artifactbin'));
+ const root=await installedRoot(base);
  let release:ReturnType<typeof storedRelease>;
  const server=await withHttpServer((req,res)=>{res.end(req.url?.endsWith('latest.json')?JSON.stringify(release.manifest):release.bytes);});
  try{
@@ -168,7 +173,7 @@ it('installs, updates and rolls back deployment extras, and refuses any other ex
   expect(()=>decodeRelease(bad.bytes,bad.manifest),name).toThrow('Unsafe archive member');
  }
  const base=await mkdtemp(path.join(tmpdir(),'skill-extras-update-'));
- const root=path.join(base,'.artifactbin-releases','initial','artifactbin');await mkdir(root,{recursive:true});await symlink(root,path.join(base,'artifactbin'));
+ const root=await installedRoot(base);
  let release:ReturnType<typeof skillRelease>;
  const server=await withHttpServer((req,res)=>{res.end(req.url?.endsWith('latest.json')?JSON.stringify(release.manifest):Buffer.from(release.bytes));});
  try{

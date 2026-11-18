@@ -850,7 +850,6 @@
    "services/auth/__tests__/bearer-admission.test.ts": 3467,
    "services/auth/__tests__/bearer-query-budget.test.ts": 3769,
    "services/auth/__tests__/bearer.test.ts": 4048,
-   "services/auth/__tests__/device-pairing.test.ts": 3438,
    "services/auth/__tests__/downstream-exports.test.ts": 6,
    "services/auth/__tests__/group-role-migration.test.ts": 10546,
    "services/auth/__tests__/human-auth.test.ts": 6564,

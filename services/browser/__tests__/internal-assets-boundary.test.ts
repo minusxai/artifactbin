@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { internalAssetResponse } from '../src/internal-assets';
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 
@@ -8,11 +8,16 @@ let app: RunningServer;
 let reads = 0;
 let closed = 0;
 let mode = 'ok';
+// What the upstream saw of each request, recorded by its handler and asserted after each test: an expectation
+// thrown inside the server callback would surface as a dropped request, not as a failure of the test.
+let seen: { host: string | undefined; leaked: string[] }[] = [];
+const FORBIDDEN = ['cookie','authorization','origin','referer','x-mx-actor','x-forwarded-host','x-forwarded-proto'];
+beforeEach(() => { seen = []; });
+afterEach(() => { expect(seen.filter(request => request.host !== 'assets.invalid' || request.leaked.length)).toEqual([]); });
 beforeAll(async () => {
   app = await withHttpServer((req,res) => {
     reads++;
-    expect(req.headers.host).toBe('assets.invalid');
-    for (const name of ['cookie','authorization','origin','referer','x-mx-actor','x-forwarded-host','x-forwarded-proto']) expect(req.headers[name]).toBeUndefined();
+    seen.push({ host: req.headers.host, leaked: FORBIDDEN.filter(name => req.headers[name] !== undefined) });
     req.on('close', () => closed++);
     if (mode === 'gzip-head') { res.writeHead(200,{'content-encoding':'gzip','content-length':'42'});res.end();return; }
     if (mode === 'redirect') { res.writeHead(302,{location:app.base+'/private'});res.end();return; }

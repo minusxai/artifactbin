@@ -49,9 +49,6 @@ function mounted<T>(primitive: () => T): { value: T; dispose: () => void } {
 }
 
 {
-}
-
-{
   let src: string | null = null;
   describeRetryingRead('the backend\'s documentFrame', () => ({
     start: () => { src = null; void createHttpBackend('Doc1').documentFrame('Doc2').then((value) => { src = value; }); },

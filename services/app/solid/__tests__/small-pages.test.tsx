@@ -81,7 +81,7 @@ it('shows an uncertain start failure and never retries it', async () => {
   expect(replaceDocument).not.toHaveBeenCalled();
 });
 
-it('keeps the welcome form on a refused handle and saves the confirmation with the handle', async () => {
+it('saves the chosen handle with the confirmation', async () => {
   session = { user: { id: 'new_1', email: 'mxmx_test_new@example.com', username: null, image: null }, kind: 'account', onboarded: false };
   window.history.replaceState(null, '', '/welcome?callbackUrl=%2Ftrash');
   render(() => <App />);

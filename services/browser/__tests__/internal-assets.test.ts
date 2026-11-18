@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import sharp from 'sharp';
 import type { BrowserService } from '@artifactbin/contracts';
 import { browserClient, serveBrowser } from '@artifactbin/browser';
@@ -18,21 +18,23 @@ let body = '';
 let image: Buffer;
 let external: RunningServer;
 let externalReads = 0;
+// What the upstream saw of each asset request, recorded by its handler and asserted after each test: an expectation
+// thrown inside the server callback would surface as a dropped request, not as a failure of the test.
+let seen: { url: string | undefined; host: string | undefined; leaked: string[] }[] = [];
+beforeEach(() => { seen = []; });
+afterEach(() => { expect(seen.filter(request => request.host !== 'cached-assets.invalid' || request.leaked.length), 'asset requests that carried a wrong Host or credentials').toEqual([]); });
 beforeAll(async () => {
   external = await withHttpServer((_req,res) => { externalReads++;res.writeHead(200,{'access-control-allow-origin':'*'});res.end('external'); });
   image = await sharp({ create: { width: 20, height: 20, channels: 3, background: '#33cc33' } }).png().toBuffer();
   app = await withHttpServer((req, res) => {
     if (req.url === '/assets/' + 'b'.repeat(64)) {
       assetReads++;
-      expect(req.headers.host).toBe('cached-assets.invalid');
+      seen.push({ url: req.url, host: req.headers.host, leaked: [] });
       res.writeHead(200, { 'content-type': 'image/png' }); res.end(image); return;
     }
     if (req.url === path) {
       assetReads++;
-      expect(req.headers.cookie).toBeUndefined();
-      expect(req.headers.authorization).toBeUndefined();
-      expect(req.headers.origin).toBeUndefined();
-      expect(req.headers.host).toBe('cached-assets.invalid');
+      seen.push({ url: req.url, host: req.headers.host, leaked: ['cookie', 'authorization', 'origin'].filter(name => req.headers[name] !== undefined) });
       res.writeHead(200, { 'content-type': 'text/javascript', 'content-encoding': 'gzip', 'set-cookie': 'asset=secret', 'location': '/evil' });
       res.end(gzipSync("if(import.meta.url.startsWith('https://cached-assets.invalid/assets/'))document.querySelector('main').style.background='#33cc33'"));
       return;

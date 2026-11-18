@@ -18,7 +18,7 @@ it.each([
  ['SELECT count(*) FROM id',['id']],
  ['SELECT * FROM tasks WHERE EXISTS (SELECT 1 FROM id)',['id','tasks']],
 ] as const)('uses SQLite relations: %s',(sql,want)=>expect(selected(sql)).toEqual(want));
-it('does not authorize writes merely because analyze accepts their shape',()=>{
+it('analyze labels a write by its kind and refuses a second statement',()=>{
  expect(engine.analyze('DELETE FROM id',schema).kind).toBe('delete');
  expect(()=>selected('SELECT * FROM tasks; SELECT * FROM id')).toThrow();
 });

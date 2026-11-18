@@ -87,6 +87,7 @@ describe('a document address', () => {
     const w = await world();
     const res = await app.request(`/a/${w.priv.id}`, { headers: as({ credential: 'none' }) });
     expect(res.status, 'the STATUS is the answer a crawler and a curl read').toBe(404);
+    expect(res.headers.get('location'), 'a redirect target would name the owner').toBeNull();
     expect(await res.text()).not.toContain('secret words');
     expect((await app.request(`/api/page/artifact/${w.priv.id}`, { headers: as({ credential: 'none' }) })).status).toBe(404);
     // The tree the page relays to its frame is refused exactly like the page.
@@ -178,12 +179,6 @@ describe('the address heals after checking read access', () => {
     const keyed = await app.request(`/a/${w.priv.id}?key=${mintExportKey(w.priv.id)}`, { headers: as({ credential: 'none' }) });
     expect(keyed.status).toBe(200);
     expect(payloadOf(await keyed.text()).address).toBeUndefined();
-  });
-  it('never redirects an unreadable document — that target would name its owner', async () => {
-    const w = await world();
-    const res = await app.request(`/a/${w.priv.id}`, { headers: as({ credential: 'none' }) });
-    expect(res.status).toBe(404);
-    expect(res.headers.get('location')).toBeNull();
   });
   it('never names the owner of an unreadable document in its body either', async () => {
     const w = await world();

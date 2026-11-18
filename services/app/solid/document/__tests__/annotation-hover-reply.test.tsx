@@ -54,7 +54,6 @@ describe('the marker layer', () => {
     // The card clips what falls outside it, so the focus ring is drawn inside.
     expect(hit).toHaveClass('focus-visible:ring-inset');
     expect(hit).toBeEnabled();
-    expect(view.container).toBeTruthy();
   });
 });
 

@@ -4,13 +4,14 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@solidjs/te
 import { afterEach, expect, it, vi } from 'vitest';
 import { App } from '@/solid/App';
 
+const SESSION = { user: { id: 'usr_1', email: 'a@example.com', username: 'owner', image: null }, kind: 'account', onboarded: true };
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); window.history.replaceState(null, '', '/'); });
 it.each([false, true])('marks all notifications read from the inbox (compact: %s)', async compact => {
   let read = false;
   let finish: (() => void) | undefined;
   const writes: unknown[] = [];
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-    if (url === '/api/page/session') return Response.json({ user: { id: 'usr_1', email: 'a@example.com', username: 'owner', image: null }, kind: 'account', onboarded: true });
+    if (url === '/api/page/session') return Response.json(SESSION);
     if (url === '/api/my/people') {
       if (init?.method === 'PATCH') {
         writes.push(JSON.parse(String(init.body)));
@@ -38,7 +39,7 @@ it.each([false, true])('marks all notifications read from the inbox (compact: %s
 });
 it('keeps unread notifications and allows another attempt when marking all fails', async () => {
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-    if (url === '/api/page/session') return Response.json({ user: { id: 'usr_1', email: 'a@example.com', username: 'owner', image: null }, kind: 'account', onboarded: true });
+    if (url === '/api/page/session') return Response.json(SESSION);
     if (url === '/api/my/people') {
       if (init?.method === 'PATCH') return Response.json({}, { status: 500 });
       return Response.json({ autoAccept: false, unread: 1, next: null, blocks: [], notifications: [{ id: 'n1', artifact_id: 'doc1', sender_id: 'usr_2', username: 'alice', kind: 'reply', title: 'Notes', read_at: null, revision: 1 }] });
@@ -58,7 +59,7 @@ it('opens the bell and shows an invitation with a working approval action', asyn
   const calls: Array<{ url: string; method: string }> = [];
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
     calls.push({ url: String(url), method: init?.method ?? 'GET' });
-    if (url === '/api/page/session') return Response.json({ user: { id: 'usr_1', email: 'a@example.com', username: 'owner', image: null }, kind: 'account', onboarded: true });
+    if (url === '/api/page/session') return Response.json(SESSION);
     if (url === '/api/my/people') return Response.json({ autoAccept: false, unread: 1, next: null, blocks: [], notifications: [{ id: 'n1', artifact_id: 'doc1', user_id: 'usr_1', status: 'pending', direction: 'request', sender_id: 'usr_2', username: 'alice', kind: 'request', source: null, title: 'Notes', read_at: null, revision: 1 }] });
     if (url === '/api/my/artifacts/doc1/members') return Response.json({});
     return Response.json({}, { status: 404 });
@@ -88,7 +89,6 @@ it('labels an agent reply without showing an unrelated accepted invitation statu
  expect(screen.getByRole('link',{name:'@alice invited you to Shared'}).closest('li')).toHaveTextContent('Invitation accepted');
 });
 
-const SESSION = { user: { id: 'usr_1', email: 'a@example.com', username: 'owner', image: null }, kind: 'account', onboarded: true };
 const INBOX = { autoAccept: false, unread: 1, next: null, blocks: [], notifications: [{ id: 'n1', artifact_id: 'doc1', user_id: 'usr_1', sender_id: 'usr_2', username: 'alice', kind: 'reply', source: null, title: 'Notes', read_at: null, revision: 1 }] };
 
 it('retries a failed load visibly, keeps a failed retry dated and clears the error once a retry succeeds', async () => {

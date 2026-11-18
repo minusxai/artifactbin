@@ -51,7 +51,6 @@ describe('renderChartImage', () => {
       axes: [{ orient: 'bottom', scale: 'x' }],
       marks: [{ type: 'text', from: { data: 'main' }, encode: { enter: { x: { scale: 'x', field: 'k' }, y: { value: 50 }, text: { field: 'k' } } } }] }, rows });
     expect(vega).toMatchObject({ ok: true });
-    if (vega.ok) expect([vega.width, vega.height]).toEqual([expect.any(Number), expect.any(Number)]);
     if (vega.ok) expect(vega.width).toBeLessThan(400);
   });
 
@@ -136,7 +135,7 @@ describe('nothing a chart names is fetched', () => {
         expect(view.data('remote')).toEqual([]);
         expect(await view.toSVG()).not.toContain('TOP-SECRET');
         view.finalize();
-        expect(await drawChart(job(spec))).toMatchObject({ ok: expect.any(Boolean) });
+        await drawChart(job(spec)); // whatever it answers, the fetch spy below proves it made no request
       }
       const image = { width: 100, height: 100, marks: [{ type: 'image', encode: { enter: { url: { value: `file://${secret}` }, width: { value: 50 }, height: { value: 50 } } } },
         { type: 'image', encode: { enter: { url: { value: 'https://example.test/a.png' }, width: { value: 50 }, height: { value: 50 } } } }] };
