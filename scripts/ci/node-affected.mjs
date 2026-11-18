@@ -75,7 +75,8 @@ if (process.argv[2] === '--warm') {
     // Edited tests no pr fast part can run: the integration project's (Docker and Chromium), which run after merge.
     integration = [...inProject('integration'), ...inProject('integration-databases')].filter((file) => files.includes(file)).sort();
     reached = (await affectedSpecifications(vitest, files.map((file) => path.join(root, file))))
-      .filter(({ spec }) => spec.project.name === 'node').map(({ spec, distance }) => ({ file: relative(spec.moduleId), distance }));
+      .filter(({ spec }) => spec.project.name === 'node')
+      .map(({ spec, distance, nearest }) => ({ file: relative(spec.moduleId), distance, nearest: Object.fromEntries(Object.entries(nearest).map(([changed, steps]) => [relative(changed), steps])) }));
   } finally { await vitest.close(); }
   const timings = readTimings();
   const lane = laneFiles(root);

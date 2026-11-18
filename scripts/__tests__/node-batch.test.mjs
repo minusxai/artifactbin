@@ -147,8 +147,8 @@ describe('pr fast\'s node files beyond the batch', () => {
   });
 
   it('adds the files the change reaches, nearest first and shortest first, until the budget, and names the rest', () => {
-    const reached = [{ file: 'a.test.ts', distance: 2 }, { file: 'c.test.ts', distance: 3 }, { file: 'd.test.ts', distance: 1 }, { file: 'e.test.ts', distance: 3 }, { file: 'f.test.ts', distance: 2 },
-      { file: 'b.test.ts', distance: 1 }, { file: 'cheap.test.ts', distance: 1 }, { file: 'listed.test.ts', distance: 1 }, { file: 'g.test.ts', distance: 4 }];
+    const reached = [['a', 2], ['c', 3], ['d', 1], ['e', 3], ['f', 2], ['b', 1], ['cheap', 1], ['listed', 1], ['g', 4]]
+      .map(([name, distance]) => ({ file: `${name}.test.ts`, distance, nearest: { 'services/app/lib/x/index.ts': distance } }));
     // Each weighs its recorded time and the import an isolated file pays (NODE_ISOLATED_FILE_MS, 2s): d (1, 4.0s), then
     // a (2, 5.0s): 9.0s. f (2, 6.0s) does not fit 12.0s; e (3, 2.5s) does; c (3, 3.0s) would pass it. g has no record: it
     // weighs the node median (3.0s) and its import, and does not fit either. b is the change's own, cheap and listed run elsewhere.
@@ -160,10 +160,26 @@ describe('pr fast\'s node files beyond the batch', () => {
     expect(NODE_AFFECTED_BUDGET_MS).toBeGreaterThan(0);
   });
 
+  it('puts a narrow change\'s own tests before the many one import from a file most tests import', () => {
+    // #1345 changed lib/annotations/store.ts and the contracts index. The index is one import from dozens of files, its
+    // store test two imports from store.ts: nearest-first spent the budget on the index's files and deferred the store
+    // test, which then failed on main. Ranked by the files within its distance of a changed file, the store test (one of
+    // two files within 2 of store.ts) comes before the index's six at distance 1; ties still go nearest, then shortest.
+    const hub = 'services/contracts/src/index.ts', store = 'services/app/lib/annotations/store.ts';
+    const reached = [
+      ...['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].map((name) => ({ file: `${name}.test.ts`, distance: 1, nearest: { [hub]: 1, ...(name === 'h1' ? { [store]: 2 } : {}) } })),
+      { file: 'store.test.ts', distance: 2, nearest: { [hub]: 3, [store]: 2 } },
+    ];
+    const times = { files: { node: Object.fromEntries(reached.map(({ file }) => [file, file === 'store.test.ts' ? 3000 : 500])) } };
+    const chosen = nodeAffectedFiles({ timings: times, changed: [hub, store], affected: reached, candidates: new Set(reached.map(({ file }) => file)), batch: new Set(), lane: new Set(), budgetMs: 9_000 });
+    // h1 (rank 2, distance 1, 2.5s), then store.test.ts (rank 2, distance 2, 5.0s): 7.5s; the index's others (rank 6, 2.5s each) do not fit 9s.
+    expect(chosen).toEqual({ must: [], affected: ['h1.test.ts', 'store.test.ts'], deferred: ['h2.test.ts', 'h3.test.ts', 'h4.test.ts', 'h5.test.ts', 'h6.test.ts'] });
+  });
+
   it('adds none of the files a rerun trigger reaches, every one equally: the change\'s own files still run', () => {
     // A vitest.config.ts or package.json change reaches every file at distance Infinity (scripts/lib/test-graph.mjs); a
     // budget's worth of the shortest was an arbitrary subset, on a cold module cache: #1339's node runners took 27-36s.
-    const everything = [...candidates].map((file) => ({ file, distance: Infinity }));
+    const everything = [...candidates].map((file) => ({ file, distance: Infinity, nearest: {} }));
     expect(choose(['b.test.ts', 'vitest.config.ts'], everything, 60_000)).toEqual({ must: ['b.test.ts'], affected: [], deferred: ['a.test.ts', 'c.test.ts', 'd.test.ts', 'e.test.ts', 'f.test.ts', 'g.test.ts', 'new.test.ts'] });
   });
 
