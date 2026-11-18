@@ -72,7 +72,7 @@ describe('POST /api/page/drafts', () => {
     // The hosted library and component import map stays, as on a published page.
     expect(config.libraries).toBeTypeOf('object');
     const data = JSON.parse(/<script type="application\/json" data-af="offline-data">([^<]*)<\/script>/.exec(html)![1]!);
-    expect(data.tables).toEqual([{ schema: 'main', name: 'orders', columns: [{ name: '_id', type: 'string' }, { name: 'region', type: 'string' }, { name: 'amount', type: 'number' }, { name: 'day', type: 'date' }],
+    expect(data.tables).toEqual([{ schema: 'main', name: 'orders', file: 'orders.csv', columns: [{ name: '_id', type: 'string' }, { name: 'region', type: 'string' }, { name: 'amount', type: 'number' }, { name: 'day', type: 'date' }],
       rows: [{ _id: '1', region: 'West', amount: 10, day: '2026-01-02' }, { _id: '2', region: 'East', amount: 2.5, day: '2026-01-03' }, { _id: '3', region: 'West', amount: 4, day: '2026-01-04' }] }]);
     // The engine is the shared hosted module, never embedded in a draft.
     expect(html).not.toMatch(/<script[^>]*data-af="offline-sql"/);

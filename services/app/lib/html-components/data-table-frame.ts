@@ -7,7 +7,7 @@ import { parseTableHeight, type SortSpec } from "@/lib/html-components/table-val
 import type { AfDataTable } from "./data-table";
 import { renderComparison } from "./data-table-compare";
 import { renderGrid } from "./data-table-grid";
-import { failTable, renderAfterResize } from "./data-table-measure";
+import { failTable, watchLayout } from "./data-table-measure";
 import {
   DATA_TABLE_CLASSES,
   TableLoader,
@@ -36,11 +36,11 @@ export interface TableState {
   error: string;
   table?: HTMLTableElement;
   viewport?: HTMLDivElement;
-  viewportObserver?: ResizeObserver;
+  viewportObserver?: { disconnect(): void };
   rowObserver?: ResizeObserver;
   resizeFrame?: number;
   rowHeights: Map<string, number>;
-  measuredHeaderWidths: number[] | null;
+  measuredHeaderWidths: number[] | null; measuredHeads?: string;
   columnSignature: string;
   virtualized: boolean;
   columnsNeedMeasurement: boolean;
@@ -135,8 +135,7 @@ export function renderTable(el: AfDataTable, s: TableState) {
     });
   }
   if (!s.viewportObserver && typeof ResizeObserver !== "undefined") {
-    s.viewportObserver = new ResizeObserver(() => renderAfterResize(s));
-    s.viewportObserver.observe(s.viewport!);
+    s.viewportObserver = watchLayout(s);
   }
   const table = s.table, body = table.tBodies[0]!, head = table.tHead!.rows[0]!;
   table.setAttribute(

@@ -2,12 +2,13 @@
  * A DRAFT, CHECKED: the page and its files made a draft for no reader (a fresh name each time, so no reader's caps
  * count it), loaded once in the app's own browser under its draft origin, fetched from this process
  * (EXPORT_INTERNAL_ORIGIN, contracts PageInspectRequest), then forgotten. The answer is the page's own problems
- * (failed components, exceptions, console errors, failed requests) and a JPEG of it, for an author who can look.
+ * (failed components, exceptions, console errors, failed requests, text too faint to read) and a JPEG of its top
+ * within PAGE_IMAGE_LIMITS, for an author who can look.
  * Nothing is read as anyone: a `default:` link is never allowed here, so its consent refusal, in a component or a
  * script, is no problem. A page that did not finish in time is not checked (a busy browser is not the page's fault).
  */
 import { randomUUID } from 'node:crypto';
-import { SQL_FAILURES, type PageImage, type PageProblem } from '@artifactbin/contracts';
+import { PAGE_IMAGE_LIMITS, SQL_FAILURES, type PageImage, type PageProblem } from '@artifactbin/contracts';
 import { ASSETS_ORIGIN, EXPORT_INTERNAL_ORIGIN, services } from '@/lib/platform';
 import { draftOriginFor, pagesFrameUrl, pagesSite } from '@/lib/http';
 import { createDraft, forgetDraft } from './drafts';
@@ -38,7 +39,9 @@ export async function checkDraft(input: unknown): Promise<DraftCheck> {
     const problems = looked.problems.filter((problem) => problem.code !== 'consent_required' && !problem.message.includes(paused));
     const timedOut = problems.some((problem) => problem.kind === 'timeout'), found = problems.filter((problem) => problem.kind !== 'timeout');
     if (timedOut && !found.length) return { ok: false, error: 'check_unavailable' };
-    return { ok: true, problems: found, truncated: looked.truncated, ...(looked.image ? { image: looked.image } : {}) };
+    // An older browser service pictured more of the page than an image reader takes: no picture rather than a refused one.
+    const image = looked.image && looked.image.width <= PAGE_IMAGE_LIMITS.width && looked.image.height <= PAGE_IMAGE_LIMITS.height ? looked.image : undefined;
+    return { ok: true, problems: found, truncated: looked.truncated, ...(image ? { image } : {}) };
   } finally {
     forgetDraft(label);
   }

@@ -105,7 +105,8 @@ function datasetNames(html: string, entryPath: string): { names: Map<string, str
   return { names, connections };
 }
 
-/** A linked CSV or JSON file as the read-only table `name` (schema `main`, a stable `_id` first, as a dataset's). */
+/** A linked CSV or JSON file as the read-only table `name` (schema `main`, a stable `_id` first, as a dataset's), naming
+ * its file so a read of it says where its rows came from (contracts sql-source `file`). */
 function tableOf(name: string, file: string, bytes: Buffer): NativeDraftRender['tables'][number] {
   let records: Record<string, unknown>[];
   if (/\.json$/i.test(file)) {
@@ -122,7 +123,7 @@ function tableOf(name: string, file: string, bytes: Buffer): NativeDraftRender['
   if (records.length > DRAFT_LIMITS.rows) throw new DraftRefusal('draft_too_large', `${file} has ${records.length} rows; a draft's table holds at most ${DRAFT_LIMITS.rows}`);
   const columns = inferColumns(records).filter((column) => column.name !== '_id').map((column) => ({ name: column.name, type: column.type }));
   if (columns.length > DRAFT_LIMITS.columns) throw new DraftRefusal('draft_too_large', `${file} has ${columns.length} columns; a draft's table holds at most ${DRAFT_LIMITS.columns}`);
-  return { schema: 'main', name, columns: [{ name: '_id', type: 'string' }, ...columns], rows: records.map((row, i) => ({ _id: String(i + 1), ...row })) };
+  return { schema: 'main', name, file, columns: [{ name: '_id', type: 'string' }, ...columns], rows: records.map((row, i) => ({ _id: String(i + 1), ...row })) };
 }
 
 /** The draft of `reader`'s page and files, made or found, with a fresh ticket for its document. */

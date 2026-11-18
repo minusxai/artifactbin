@@ -74,6 +74,48 @@ it("measures columns after detached initialization and remeasures changed row co
   expect(header.style.gridTemplateColumns).toBe("minmax(230px, 1fr) minmax(105px, 1fr)");
   expect(row.style.gridTemplateColumns).toBe(header.style.gridTemplateColumns);
 });
+it("remeasures its columns once shown after a hidden first draw, when a sort mark widens a header and when a font swaps in", async () => {
+  const resized: ResizeObserverCallback[] = [];
+  vi.stubGlobal("ResizeObserver", class implements ResizeObserver {
+    constructor(callback: ResizeObserverCallback) { resized.push(callback); }
+    observe() {} unobserve() {} disconnect() {}
+  });
+  const fonts = new EventTarget();
+  Object.defineProperty(document, "fonts", { configurable: true, value: fonts });
+  // Hidden (a closed tab, a collapsed section): every header measures 0 wide.
+  let widths = [0, 0];
+  vi.spyOn(HTMLTableCellElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLTableCellElement) {
+    const width = widths[this.cellIndex] ?? 0;
+    return { width, height: 20, x: 0, y: 0, top: 0, left: 0, right: width, bottom: 20, toJSON() {} };
+  });
+  const el = document.createElement("af-data-table") as AfDataTable;
+  document.body.append(el);
+  el.data = { columns: [{ name: "Churn rate (monthly)", type: "number" }, { name: "n", type: "number" }], rows: [{ "Churn rate (monthly)": 0.03, n: 1 }] };
+  await Promise.resolve();
+  const header = el.querySelector<HTMLElement>("thead tr")!;
+  expect(header.style.gridTemplateColumns).toBe("minmax(0, 1fr) minmax(0, 1fr)");
+  // Shown: its scroll box resizes, and the columns are measured at their natural widths.
+  widths = [174, 40];
+  for (const callback of resized) callback([], {} as ResizeObserver);
+  await nextFrame();
+  expect(header.style.gridTemplateColumns).toBe("minmax(174px, 1fr) minmax(40px, 1fr)");
+  // Sorting adds a mark to the header after it was measured: measured again, with the mark.
+  widths = [190, 40];
+  el.querySelector<HTMLElement>("th")!.click();
+  expect(header.style.gridTemplateColumns).toBe("minmax(190px, 1fr) minmax(40px, 1fr)");
+  expect(el.querySelector<HTMLElement>("tbody tr[data-row-key]")!.style.gridTemplateColumns).toBe(header.style.gridTemplateColumns);
+  // A web font swapping in widens every header: measured again on the next frame.
+  widths = [230, 52];
+  fonts.dispatchEvent(new Event("loadingdone"));
+  await nextFrame();
+  expect(header.style.gridTemplateColumns).toBe("minmax(230px, 1fr) minmax(52px, 1fr)");
+  el.remove();
+  widths = [300, 60];
+  fonts.dispatchEvent(new Event("loadingdone"));
+  await nextFrame();
+  expect(header.style.gridTemplateColumns).toBe("minmax(230px, 1fr) minmax(52px, 1fr)");
+  delete (document as { fonts?: unknown }).fonts;
+});
 it("retains a focused row beyond the initial sample while refreshing column measurements", async () => {
   const observers: MeasuredRows[] = [];
   class MeasuredRows implements ResizeObserver {
@@ -669,6 +711,9 @@ it("re-renders after resize notifications on the next frame, once, never inside 
     disconnect() {}
   }
   vi.stubGlobal("ResizeObserver", DeferredResizeObserver);
+  // Shown, as in a browser: its headers measure (a table first drawn hidden measures again once shown).
+  vi.spyOn(HTMLTableCellElement.prototype, "getBoundingClientRect").mockImplementation(() =>
+    ({ width: 80, height: 20, x: 0, y: 0, top: 0, left: 0, right: 80, bottom: 20, toJSON() {} }));
   const el = document.createElement("af-data-table") as AfDataTable;
   el.height = 420;
   el.cellRenderers = { edit: () => Object.assign(document.createElement("button"), { textContent: "Edit" }) };
@@ -756,6 +801,10 @@ it("labels where its rows came from from the answer it was handed, and nothing f
   await el.loadMore();
   expect(el.data.rows).toHaveLength(2);
   expect(label()!.textContent).toBe("Live");
+  // Rows a draft's CSV answered in the frame: Snapshot, the file named, no time.
+  el.data = { columns, rows: Object.defineProperty([{ id: 3 }], "source", { value: { kind: "file", names: ["churn.csv"] }, enumerable: false }) };
+  expect(label()!.textContent).toBe("Snapshot");
+  expect(el.querySelector(".af-data-source af-tooltip-content")!.textContent).toBe("Rows from churn.csv, a file beside the page.");
   el.remove();
 });
 /**
