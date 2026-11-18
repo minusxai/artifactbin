@@ -164,6 +164,7 @@ describe.skipIf(!has('mysql:8'))('mysql 8', () => {
     expect(await ids(bob)).toEqual([2]);
     expect(await ids(null)).toEqual([]);
     // Hostile values arrive as written, one literal each.
+    expect((await my.query({ text: 'select @app.viewer_group_role as level', params: {}, viewer: { id: '', email: null, groups: ['g1'], groupRole: 'member' } })).rows).toEqual([{ level: 'member' }]);
     expect((await my.query({ text: 'select @app.viewer_id as id, @app.viewer_email as email, @app.viewer_groups as g', params: {}, viewer: bob })).rows).toEqual([{ id: 'u_bob', email: "b'o\\b@example.com", g: '[]' }]);
     expect(my.sessions()).toBe(1);
   });

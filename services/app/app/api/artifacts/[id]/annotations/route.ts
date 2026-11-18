@@ -14,7 +14,7 @@ import { canAnnotate, parseHtmlNodeAnchor } from '@artifactbin/contracts';
  */
 import { createAnnotationFor, listAnnotationPageFor } from '@/lib/annotations';
 import {decodePage, encodeCursor} from '@/lib/http';
-import { type AccessActor } from '@/lib/accounts';
+import { accountOf, type AccessActor } from '@/lib/accounts';
 import { withTokenAuth } from '@/lib/authentication';
 import { capabilityGuard } from '@/lib/artifacts';
 import { annotationAuthorForRequest } from '@/lib/annotations';
@@ -29,7 +29,7 @@ export async function respondToAnnotationList(request: Request, actor: AccessAct
   if (!STATUSES.has(raw)) return json({ error: 'invalid_status' }, 400);
   const author=new URL(request.url).searchParams.get('author')??undefined;
   if(author!==undefined&&!/^[A-Za-z0-9_-]{1,128}$/.test(author))return json({error:'invalid_author'},400);
-  const scope=createHash('sha256').update(JSON.stringify([id,actor.userId??actor.tokenId,raw,author])).digest('hex');
+  const scope=createHash('sha256').update(JSON.stringify([id,actor.principalGroup?accountOf(actor):actor.userId??actor.tokenId,raw,author])).digest('hex');
   const page = decodePage(Object.fromEntries(new URL(request.url).searchParams), 'comments');
   if (page instanceof Response) return page;
   if(page.cursor&&page.cursor.scope!==scope)return json({error:'invalid_cursor',hint:'Restart the listing without --cursor; its target or filters changed.'},400);

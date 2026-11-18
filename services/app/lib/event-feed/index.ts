@@ -19,7 +19,7 @@ import {
   EVENT_CATEGORIES, EVENT_FEED_DEFAULT_LIMIT, EVENT_FEED_MAX_LIMIT, EVENT_FEED_MAX_WAIT_SECONDS, EVENT_FEED_RETENTION_DAYS,
   EVENT_FEED_SCHEMA_VERSION, EVENT_FEED_TYPES, type EventFeedEvent, type EventFeedPage, type EventFeedType, type EventOrigin,
 } from '@artifactbin/contracts';
-import type { AccessActor } from '@/lib/accounts';
+import { accountOf, type AccessActor } from '@/lib/accounts';
 import { commentMonitorScope } from '@/lib/artifact-access';
 import { EVENTS_SCHEMA, getDb, publishEventOutbox } from '@/lib/platform';
 
@@ -71,7 +71,8 @@ const MAX_PROCESS_WAITS = 128;
 const accountWaits = new Map<string, number>();
 let activeWaits = 0;
 function acquireWait(actor: AccessActor): () => void {
-  const key = actor.userId ? `account:${actor.userId}` : `token:${actor.tokenId}`;
+  // A group's sign-in waits under its group principal, never a rotating (or null) token id.
+  const key = actor.principalGroup ? accountOf(actor) : actor.userId ? `account:${actor.userId}` : `token:${actor.tokenId}`;
   const count = accountWaits.get(key) ?? 0;
   // No await between checking and reserving: concurrent requests cannot overbook.
   if (count >= MAX_ACCOUNT_WAITS || activeWaits >= MAX_PROCESS_WAITS) throw new EventFeedRefusal('too_many_event_waits', 429);
@@ -96,7 +97,7 @@ const EVENTS = `${EVENTS_SCHEMA}.events`;
 
 /** A cursor is bound to the caller and the filter: `{v, s: scope, p: position}`, base64url JSON. */
 const scopeOf = (actor: AccessActor, query: EventFeedQuery) => createHash('sha256')
-  .update(JSON.stringify([actor.userId ?? actor.tokenId, query.artifactId, [...query.types].sort()])).digest('hex').slice(0, 32);
+  .update(JSON.stringify([actor.principalGroup ? accountOf(actor) : actor.userId ?? actor.tokenId, query.artifactId, [...query.types].sort()])).digest('hex').slice(0, 32);
 const encode = (scope: string, position: bigint) => Buffer.from(JSON.stringify({ v: 1, s: scope, p: String(position) })).toString('base64url');
 const POSITION = /^(0|[1-9]\d{0,17})$/;
 function decode(raw: string, scope: string): bigint {
@@ -129,7 +130,9 @@ function toWire(row: Row, actor: AccessActor, session: string | null): EventFeed
     at: new Date(row.at).toISOString(), schema_version: EVENT_FEED_SCHEMA_VERSION,
     resource: { kind: 'artifact', id: row.object_id },
     actor: row.subject_id && (kind === 'user' || kind === 'token')
-      ? { kind, id: row.subject_id, you: isYou(actor, session, row, via) } : null,
+      ? { kind, id: row.subject_id, you: isYou(actor, session, row, via) }
+      // An agent signed in as a group: the group did it (never the reader's own: no feed admits a group's sign-in).
+      : row.subject_id && kind === 'group' ? { kind, id: row.subject_id, you: false } : null,
     payload,
   };
 }

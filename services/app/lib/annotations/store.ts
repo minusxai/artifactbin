@@ -154,6 +154,11 @@ interface AnnotationRowDb {
   author_remote: {sessionId?:string;color?:RemoteColor;harness?:string;avatar_seed?:string}|null;
   /** The author account's picture key, JOINED in the read (`ANNOTATIONS_READ`) — never stored here. */
   author_image_key: string | null;
+  /** A group's sign-in as the author: the group, and its current name (joined), shown as an agent's comment. */
+  author_group_id?: string | null;
+  /** That sign-in's level: with the group, the comment's author (lib/accounts `principalKey`). */
+  author_group_role?: string | null;
+  author_group_name?: string | null;
   status: 'open' | 'resolved';
   resolved_at: string | null;
   anchor_key: string | null;
@@ -188,10 +193,18 @@ const notify = (q: Queryable, artifactId: string, annotationId: string) =>
  * back to `annotations`, so each reader's WHERE/ORDER stays as written.
  */
 /** The credential and agent session a comment change was made with: the events feed marks the reader's own `you`. */
-const origin = (actor: AccessActor, session?: string | null): EventOrigin => ({ token_id: actor.tokenId, session: session ?? null });
+const origin = (actor: AccessActor, session?: string | null): EventOrigin => ({ token_id: actor.tokenId ?? actor.principalGroup?.tokenId ?? null, session: session ?? null });
 
+/**
+ * The author columns a comment stores, in order (`author_kind`, `author_token_id`, `author_user_id`, `author_label`):
+ * a group's sign-in is always an agent, with its sign-in's token row and no person; the group goes in `author_group_id`.
+ */
+const authorOf = (actor: AccessActor, author: AnnotationAuthor): [AnnotationAuthor['kind'], string | null, string | null, string | null] =>
+  actor.principalGroup ? ['agent', actor.principalGroup.tokenId, null, author.label] : [author.kind, actor.tokenId, actor.userId, author.label];
+
+/** A GROUP-authored comment (an agent signed in as the group, `author_group_id`) is labelled with the group's CURRENT name. */
 const ANNOTATIONS_READ =
-  '(SELECT a.*, u.image_key AS author_image_key FROM annotations a LEFT JOIN users u ON u.id = a.author_user_id) annotations';
+  '(SELECT a.*, u.image_key AS author_image_key, ag.name AS author_group_name FROM annotations a LEFT JOIN users u ON u.id = a.author_user_id LEFT JOIN groups ag ON ag.id = a.author_group_id) annotations';
 
 const commentWire = (row: AnnotationRowDb, images: Map<string, CommentImageWire>): AnnotationCommentWire => {
   const kind = row.author_kind === 'agent' ? 'agent' : 'human';
@@ -202,7 +215,7 @@ const commentWire = (row: AnnotationRowDb, images: Map<string, CommentImageWire>
     body: row.body,
     author: {
       kind,
-      label: row.author_label,
+      label: row.author_group_id ? row.author_group_name ?? row.author_label : row.author_label,
       ...(row.author_remote??{}),
       transport: row.author_transport,
       user_id: userId,
@@ -302,16 +315,17 @@ export async function createAnnotationFor(
     await tx.query(
     `INSERT INTO annotations
        (id, artifact_id, root_id, body, author_kind, author_token_id, author_user_id, author_label, author_transport,
-        status, anchor_key, anchor_version, snippet, quote, range, view_state, html_anchor)
-     VALUES ($1, $2, NULL, $3, $4, $5, $6, $7, $8, 'open', $9, $10, $11, $12, $13, $14, $15)`,
-    [id, artifactId, input.body, author.kind, actor.tokenId, actor.userId, author.label, author.transport,
+        status, anchor_key, anchor_version, snippet, quote, range, view_state, html_anchor, author_group_id, author_group_role)
+     VALUES ($1, $2, NULL, $3, $4, $5, $6, $7, $8, 'open', $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
+    [id, artifactId, input.body, ...authorOf(actor, author), author.transport,
       anchorKey, anchorVersion, snippet,
-      input.anchor?.quote ?? quote, input.range ? JSON.stringify(input.range) : null, viewState ? JSON.stringify(viewState) : null, input.anchor ? JSON.stringify(input.anchor) : null],
+      input.anchor?.quote ?? quote, input.range ? JSON.stringify(input.range) : null, viewState ? JSON.stringify(viewState) : null, input.anchor ? JSON.stringify(input.anchor) : null, actor.principalGroup?.id ?? null, actor.principalGroup?.role ?? null],
     );
     // Read back through the join, not RETURNING: the echo draws the author's face too.
     const inserted = await tx.query<AnnotationRowDb>(`SELECT * FROM ${ANNOTATIONS_READ} WHERE id = $1`, [id]);
-    await recordEvent(tx,actorSubject(actor),'annotated',{kind:'artifact',id:artifactId},{annotation_id:id,agent:author.kind==='agent',via:origin(actor,author.writerSession)});
-    await commentMentions(tx,row,actor,input.body,id);
+    await recordEvent(tx,actorSubject(actor),'annotated',{kind:'artifact',id:artifactId},{annotation_id:id,agent:author.kind==='agent'||!!actor.principalGroup,via:origin(actor,author.writerSession)});
+    // A group's sign-in mentions nobody: a mention invites, and inviting is a person's act (lib/annotations mentions).
+    if (!actor.principalGroup) await commentMentions(tx,row,actor,input.body,id);
     await notify(tx, artifactId, id);
     const [wire] = await wireFor(tx, row, inserted.rows, actor.userId);
     if(wire&&receipt)await completeMutationReceipt(tx,receipt,{status:201,body:wire as unknown as Record<string,unknown>});
@@ -537,12 +551,12 @@ export async function actOnAnnotationFor(
       }
       await tx.query(
         `INSERT INTO annotations
-           (id, artifact_id, root_id, body, author_kind, author_token_id, author_user_id, author_label, author_transport, status, snippet, author_remote)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'open', '', $10)`,
-        [replyId, artifactId, root.id, action.reply, author.kind, actor.tokenId, actor.userId, author.label, author.transport,null],
+           (id, artifact_id, root_id, body, author_kind, author_token_id, author_user_id, author_label, author_transport, status, snippet, author_remote, author_group_id, author_group_role)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'open', '', $10, $11, $12)`,
+        [replyId, artifactId, root.id, action.reply, ...authorOf(actor, author), author.transport,null,actor.principalGroup?.id ?? null,actor.principalGroup?.role ?? null],
       );
     }
-    if(replied)await commentMentions(tx,row,actor,action.reply!,replyId);
+    if(replied&&!actor.principalGroup)await commentMentions(tx,row,actor,action.reply!,replyId);
     let resolved = false;
     if (statusConflict) {
       // The thread moved since the caller read it: the reply stands, the state change does not.
@@ -597,7 +611,7 @@ export async function editAnnotationCommentFor(
   edit: AnnotationEdit,
   receipt?: MutationReceipt,
 ): Promise<AnnotationEditResult | null> {
-  if (!actor.userId) return null;
+  if (!actor.userId && !actor.principalGroup) return null;
   const db = await getDb();
   const scope = annotationScope(actor);
   return db.transaction(async (tx): Promise<AnnotationEditResult | null> => {
@@ -621,7 +635,9 @@ export async function editAnnotationCommentFor(
         [commentId, artifactId, rootId],
       )).rows[0]
       : root;
-    if (!comment || comment.author_user_id !== actor.userId) return null;
+    // Its author: the person, or for a group's sign-in its principal, the group AT its level (any sign-in of both); never
+    // a person's words, never the other level's, and never a group comment stored without its level.
+    if (!comment || (actor.principalGroup ? comment.author_group_id !== actor.principalGroup.id || comment.author_group_role !== actor.principalGroup.role || !!comment.author_user_id : comment.author_user_id !== actor.userId)) return null;
     if (edit.expectedRevision !== undefined && root.revision !== edit.expectedRevision) throw new AnnotationRevisionError(root.revision);
 
     const changed = comment.body !== edit.body;
@@ -632,7 +648,7 @@ export async function editAnnotationCommentFor(
         annotation_id: root.id, ...(comment.id !== root.id ? { reply_id: comment.id } : {}), agent: comment.author_kind === 'agent',
         via: origin(actor, edit.writerSession),
       });
-      await commentMentions(tx, row, actor, edit.body, comment.id, comment.body);
+      if (!actor.principalGroup) await commentMentions(tx, row, actor, edit.body, comment.id, comment.body);
       await notify(tx, artifactId, root.id);
     }
     const fresh = await tx.query<AnnotationRowDb>(`SELECT * FROM ${ANNOTATIONS_READ} WHERE id = $1`, [root.id]);

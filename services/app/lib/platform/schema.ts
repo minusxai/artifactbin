@@ -94,6 +94,8 @@ const ARTIFACTS: Table = {
     // clears it; nothing erases the row (there is no purge or retention sweep —
     // lib/trash). NULL is exactly "live".
     { name: 'deleted_at', type: 'TIMESTAMPTZ' },
+    // A GROUP's sign-in as the head's writer (lib/accounts `GroupPrincipal`): the group; the token id beside it, no person.
+    { name: 'actor_group_id', type: 'TEXT' },
   ],
   primaryKey: ['id'],
   indexes: [
@@ -144,6 +146,8 @@ const ARTIFACT_VERSIONS: Table = {
     // Who published the head's content, for the removed page schedules: no longer written or read, kept with its data.
     { name: 'content_publisher_user_id', type: 'TEXT' },
     { name: 'created_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
+    // A GROUP's sign-in as this version's writer (lib/accounts `GroupPrincipal`): the group, with the token id beside it.
+    { name: 'actor_group_id', type: 'TEXT' },
   ],
   primaryKey: ['artifact_id', 'version'],
   dropped: ['content'],
@@ -175,6 +179,8 @@ const ARTIFACT_EDITS: Table = {
     // Who published the head's content, for the removed page schedules: no longer written or read, kept with its data.
     { name: 'content_publisher_user_id', type: 'TEXT' },
     { name: 'created_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
+    // A GROUP's sign-in as this edit's writer (lib/accounts `GroupPrincipal`): the group, with the token id beside it.
+    { name: 'actor_group_id', type: 'TEXT' },
   ],
   primaryKey: ['seq'],
   uniques: [['edit_id']],
@@ -337,6 +343,11 @@ const ANNOTATIONS: Table = {
     { name: 'author_remote', type: 'JSONB' }, // managed session attribution, appended on upgrade
     // When the author last rewrote `body` (lib/annotations editAnnotationCommentFor); NULL = never edited. No history is kept.
     { name: 'edited_at', type: 'TIMESTAMPTZ' },
+    // A GROUP's sign-in as the author (lib/accounts `GroupPrincipal`): the group, shown by its name as an agent's comment.
+    { name: 'author_group_id', type: 'TEXT' },
+    // That sign-in's level (`member` or `editor`): the principal is the group AT a level, so only a sign-in of the same
+    // group and level is the comment's author; NULL (written before this column) is no group sign-in's to edit.
+    { name: 'author_group_role', type: 'TEXT' },
   ],
   primaryKey: ['id'],
   // The retired comment feed's edit positions and writer credential/session (the events feed carries its own origin).
@@ -774,6 +785,8 @@ const DATASET_POLICY_AUDIT: Table = {
     {name:'actor_user_id',type:'TEXT'},
     {name:'actor_token_id',type:'TEXT'},
     {name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
+    // A GROUP's sign-in as the policy's writer (lib/accounts `GroupPrincipal`): a dataset it creates gets its default policy.
+    {name:'actor_group_id',type:'TEXT'},
   ], primaryKey:['dataset_id','revision'],
 };
 /**

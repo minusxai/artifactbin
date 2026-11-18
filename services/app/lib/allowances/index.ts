@@ -100,7 +100,9 @@ let docFetchCap: number | null = null;
  * Who a document's fetch quota is charged to: the account or token, else the anonymous reader's client IP
  * (the address our trusted proxy saw), so one busy stranger cannot spend every other stranger's allowance.
  */
-export function documentFetchReader(actor: { userId?: string | null; tokenId?: string | null }, request: Request): string {
+export function documentFetchReader(actor: { userId?: string | null; tokenId?: string | null; principalGroup?: { id: string; role: string } | null }, request: Request): string {
+  // A group's sign-in: its group principal, never its rotating token (lib/accounts `principalKey`).
+  if (actor.principalGroup) return `group:${actor.principalGroup.id}:${actor.principalGroup.role}`;
   if (actor.userId ?? actor.tokenId) return (actor.userId ?? actor.tokenId)!;
   const ip = forwardedFor(request.headers, TRUSTED_PROXY_HOPS);
   return ip ? `guest:${ip}` : 'guest';

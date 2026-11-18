@@ -1,4 +1,5 @@
 import {publicationNamespace} from './workload-publication';
+import {principalKey} from '@/lib/accounts';
 import {createHash} from 'node:crypto';
 import type {Queryable} from '@artifactbin/contracts';
 import {MUTATION_REPLY_TIMEOUT_MS} from '@artifactbin/contracts';
@@ -13,7 +14,7 @@ const hash=(value:unknown)=>createHash('sha256').update(JSON.stringify(ordered(v
 /** The caller authorizes before lookup. A claimed operation never expires into permission to execute again. */
 export async function durableMutation(actor:AccessActor,origin:string,key:string,payload:unknown,work:(receipt:MutationReceipt)=>Promise<MutationReply>):Promise<MutationReply>{
  if(!/^[A-Za-z0-9_-]{16,128}$/.test(key))return {status:400,body:{error:'invalid_idempotency_key'}};
- const scope=hash([new URL(origin).origin,actor.workload?publicationNamespace(actor):actor.userId??actor.tokenId]);
+ const scope=hash([new URL(origin).origin,actor.workload?publicationNamespace(actor):actor.principalGroup?principalKey(actor.principalGroup):actor.userId??actor.tokenId]);
  const receipt:MutationReceipt={scope,key,fingerprint:hash(payload)};
  const db=await getDb();
  const inserted=await db.query(`INSERT INTO mutation_receipts(scope,operation_key,request_hash) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING RETURNING operation_key`,[receipt.scope,key,receipt.fingerprint]);

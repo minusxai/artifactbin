@@ -14,6 +14,12 @@
  *    the app's own internal re-entries (runner, hosted comments).
  *  - DIRECT MODE (no proxy): the account session `auth()` names (the test seam `overrideSession`).
  *
+ * AN AGENT SIGNED IN AS A GROUP (contracts `GroupActor`) resolves here, at either door, to an identity with no person
+ * and no token of its own (`principalGroup`: lib/accounts actors), and only while its sign-in is live by the identity
+ * views' rule (`liveGroupSignIn`, read again on every resolution and re-check). No profile, invitation, deployment
+ * admission or hosted authority is a person's to apply to it; the sign-in's row is touched for attribution. Only the
+ * routes server/group-admission admits ever see it.
+ *
  * The host's document-editor policy is evaluated here, ONCE, from verified claims only (a session or a
  * bearer, never under the browser-session header, never for an agent cookie or a direct session), and
  * recorded as `documentEditor`; nothing downstream sees a claim.
@@ -24,14 +30,14 @@
  * forgotten with the request's other credential answers whenever it writes a token row. A route that
  * re-checks access mid-run (a long query) asks with `revalidate`: no memo, no side effects.
  */
-import { BROWSER_SESSION_HEADER, type Credential } from '@artifactbin/contracts';
+import { BROWSER_SESSION_HEADER, isGroupActor, type Credential } from '@artifactbin/contracts';
 import { actorOf } from '@artifactbin/utils';
 import { admitDeploymentIdentity } from '../deployment';
 import { acceptGroupInvitations } from '../groups';
 import { pagesRequestOf } from '../http';
 import { identifyClient, ARTIFACTBIN_AGENT_HEADER, type Harness } from '../accounts';
 import { currentRequest } from '../platform';
-import { DuplicateProfileEmail, NO_IDENTITY, answeredOnce, rememberTokenClient, resolveToken, resolveTokenById, syncProfile, touchToken, type RequestIdentity } from '@/lib/accounts';
+import { DuplicateProfileEmail, NO_IDENTITY, answeredOnce, liveGroupSignIn, rememberTokenClient, resolveToken, resolveTokenById, syncProfile, touchToken, type GroupPrincipal, type RequestIdentity } from '@/lib/accounts';
 import { canAuthenticateUser } from '../user-kinds';
 import { hasDocumentEditorAccess } from './document-editor';
 import { hostedRequestRefusal } from './request-authority';
@@ -103,12 +109,31 @@ function identityOf(claims: { userId: string | null; tokenId: string | null; ema
 
 // ── The explicit bearer ──────────────────────────────────────────────────────
 
+/** A group's sign-in as an identity: no person, no token of its own, the principal its access rule reads. */
+function groupIdentity(principal: GroupPrincipal): RequestIdentity {
+  return { userId: null, tokenId: null, email: null, emailVerified: null, documentEditor: false, credential: 'bearer', principalGroup: principal };
+}
+
+/** A group's sign-in, re-read live by its token id; its touch is the only side effect. */
+async function groupResolution(tokenId: string, expected: { id: string; role: string } | null, effects: boolean): Promise<IdentityResolution | null> {
+  const live = await liveGroupSignIn(tokenId);
+  if (!live || (expected && (live.id !== expected.id || live.role !== expected.role))) return null;
+  if (effects) await touchToken(tokenId);
+  return { kind: 'identity', identity: groupIdentity({ ...live, tokenId }), clientHarness: null };
+}
+
 async function bearerIdentity(request: Request, presented: string, door: 'token' | 'request', options: ResolveOptions & { effects: boolean }): Promise<IdentityResolution> {
   // A trusted identity owner refusal must survive app-owned token resolution.
   const claims = actorOf(request);
   if(claims?.credential==='none')return door==='token'?{kind:'bearer-invalid'}:nobody();
   const token = await resolveToken(presented);
   if (!token) return door === 'token' ? { kind: 'bearer-invalid' } : nobody();
+  if (token.group) {
+    // Only with the identity host's own actor for this very sign-in: a raw group bearer on a direct app listener is no one.
+    const matchedGroup = isGroupActor(claims) && claims.tokenId === token.id && !request.headers.has(BROWSER_SESSION_HEADER);
+    const resolved = matchedGroup ? await groupResolution(token.id, { id: claims.principalGroupId, role: claims.principalGroupRole }, options.effects) : null;
+    return resolved ?? (door === 'token' ? { kind: 'bearer-invalid' } : nobody());
+  }
   // The proxy's claims belong to this credential only when they name this very token and account, and never
   // for a browser session's scripted browser (which holds a token, not a verified login).
   const matched = !request.headers.has(BROWSER_SESSION_HEADER) && claims?.credential === 'bearer' && !!token.userId
@@ -194,6 +219,8 @@ async function sessionIdentity(carrying: Request | undefined, headerOnly: boolea
 async function attachedIdentity(request: Request, effects: boolean): Promise<IdentityResolution> {
   const wire = actorOf(request)!;
   if(wire.credential==='workload')return nobody();
+  // A group's sign-in reaches no browser door: no session, agent cookie or scripted browser is ever one.
+  if (isGroupActor(wire)) return request.headers.has(BROWSER_SESSION_HEADER) ? nobody() : await groupResolution(wire.tokenId, { id: wire.principalGroupId, role: wire.principalGroupRole }, effects) ?? nobody();
   const userId = wire.userId ?? null, tokenId = wire.tokenId ?? null, browserSession = request.headers.get(BROWSER_SESSION_HEADER) === '1';
   const verifiable = (wire.credential === 'session' || wire.credential === 'bearer') && !request.headers.has(BROWSER_SESSION_HEADER);
   const identity = identityOf({

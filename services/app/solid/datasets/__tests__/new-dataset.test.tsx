@@ -41,7 +41,7 @@ it('offers the live connectors and the stored sources, a connector this install 
   expect(await screen.findByRole('button', { name: 'PostgreSQL' })).toBeEnabled();
   expect(screen.getByRole('button', { name: 'MySQL' })).toBeEnabled();
   expect(screen.getByRole('button', { name: 'BigQuery, not yet available' })).toBeDisabled();
-  expect(screen.getByRole('region', { name: 'Live sources' })).toHaveTextContent(':viewer_id, :viewer_email and :viewer_groups');
+  expect(screen.getByRole('region', { name: 'Live sources' })).toHaveTextContent(':viewer_id, :viewer_email, :viewer_groups and :viewer_group_role');
   fireEvent.click(screen.getByRole('button', { name: 'CSV' }));
   expect(await screen.findByText('Stored editor: csv')).toBeInTheDocument();
 });

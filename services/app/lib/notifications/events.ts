@@ -12,6 +12,8 @@ import {notificationChanged,notifyThread,recordNotification,removeThreadNotifica
 
 /** The platform's event projection: recipient state commits with the source action's fact. */
 export async function projectNotifications(tx:Queryable,event:EventEnvelope):Promise<void>{
+ // A person sends. An agent signed in as a group (subject 'group') sends no inbox notice, deliberately: an inbox notice
+ // names a person as its sender; its comments reach people through the comment feed (lib/event-feed).
  const sender=event.subject_kind==='user'?event.subject_id:null;
  const objectId=event.object_id;
  const payload=event.payload;

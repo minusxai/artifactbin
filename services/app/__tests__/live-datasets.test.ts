@@ -163,6 +163,10 @@ it('answers free SQL for owners and editors only, through the page and the agent
   expect(ok(await sql(page, bob, 'select n from shop.loose')).rows).toEqual([{ n: 7 }]);
   // The viewer's values are bound for free SQL too.
   expect(ok(await sql(page, alice, 'select :viewer_email as me, :viewer_id as id from shop.loose')).rows).toEqual([{ me: alice.email, id: alice.userId }]);
+  // A person whose stored address is the empty string is bound exactly that, never null (a group's sign-in alone is no one).
+  await (await getDb()).query("UPDATE auth.users SET email='' WHERE id=$1", [alice.userId]);
+  try { expect(ok(await sql(page, alice, 'select :viewer_email as me, :viewer_id as id from shop.loose')).rows).toEqual([{ me: '', id: alice.userId }]); }
+  finally { await (await getDb()).query('UPDATE auth.users SET email=$2 WHERE id=$1', [alice.userId, alice.email]); }
   // A reader, even one a rule admits to declared queries, never sends SQL text.
   for (const who of [carol, null]) {
     const refused = await sql(page, who, 'select * from shop.sales.orders');
@@ -197,7 +201,7 @@ it('runs a page\'s declared query for each reader its rules admit, with the serv
   expect(ok(await door(page, carol, { query: 'mine', params: { min: 0 } })).rows).toEqual([]);
   expect(ok(await door(page, alice, { query: 'mine', params: { min: 10 } })).rows).toEqual([{ id: 3, item: 'pie' }]);
   // The caller cannot name another person, send SQL with a name, or leave a parameter out.
-  for (const name of ['viewer_email', 'viewer_id', 'viewer_groups']) {
+  for (const name of ['viewer_email', 'viewer_id', 'viewer_groups', 'viewer_group_role']) {
     const forged = await door(page, bob, { query: 'mine', params: { min: 0, [name]: alice.email } });
     expect([forged.status, forged.body.error], name).toEqual([400, 'validation_failed']);
   }

@@ -41,7 +41,8 @@ export const EVENT_FEED_MAX_LIMIT = 200;
 /** A cursor whose next event was accepted longer ago than this is expired (410 `cursor_expired`): resynchronize. */
 export const EVENT_FEED_RETENTION_DAYS = 30;
 
-interface EventFeedActor { kind: 'user' | 'token'; id: string; you: boolean }
+/** `group`: an agent signed in as that group (./identity-service `GROUP_SIGN_IN_RULE`), no person behind it. */
+interface EventFeedActor { kind: 'user' | 'token' | 'group'; id: string; you: boolean }
 export interface EventFeedEvent {
   /** Stable across redeliveries: the dedupe key. */
   id: string;

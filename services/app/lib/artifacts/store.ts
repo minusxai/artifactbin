@@ -29,7 +29,7 @@ import { reserveCreation, completeCreation, type CreationOperation } from './cre
 import { artifactState, observedChange, versionConflict, type ConflictChange } from './state';
 import { trackEvent } from '../analytics';
 import { ALLOW_PUBLIC_VISIBILITY, getDb, retryOnConflict, type Queryable, actorSubject, emit, generateFileId } from '../platform';
-import { assetByteQuotaExceeded } from './asset-quota';
+import { assetByteQuotaExceeded, groupAssetByteQuotaExceeded } from './asset-quota';
 import { closeLiveRegions, liveRevisionOf, pageLedger, planRegionMerge, planRegionSave, type RegionPlan, type SaveDue } from './regions';
 import { docTitleAfterSave } from './doc-title';
 import { withWebAssets } from './web-assets';
@@ -46,7 +46,7 @@ const openAnnotationsSql=(artifactId:string)=>`(SELECT count(*)::int FROM annota
 // `link_role` is deliberately absent: SUMMARY_COLS does not select it, and a
 // listing is an index rather than a bulk read. The general-access role is read
 // through the sharing surface, where it is edited.
-export type ArtifactSummary = Omit<ArtifactRow, 'source' | 'token_id' | 'actor_user_id' | 'actor_token_id' | 'content_publisher_user_id' | 'link_role' | 'forked_from' | 'deleted_at'>;
+export type ArtifactSummary = Omit<ArtifactRow, 'source' | 'token_id' | 'actor_user_id' | 'actor_token_id' | 'actor_group_id' | 'content_publisher_user_id' | 'link_role' | 'forked_from' | 'deleted_at'>;
 
 /** The stored representation of one artifact state (built by parseContentInput). */
 /** A new live dataset's connection (lib/live-datasets): its fields without secrets, and the secrets sealed to the new ID. */
@@ -99,6 +99,17 @@ const SUMMARY_COLS = 'id, user_id, group_id, title, description, format, meta, v
  * of an app creates the page PLUS a copy of each dataset it writes, and a cap
  * that only saw the page would let the quota be walked past a dataset at a time.
  */
+/**
+ * THE COUNT QUOTA FOR A GROUP'S SIGN-INS (lib/accounts `GroupPrincipal`): charged to the GROUP, never the sign-in's
+ * rotating token: every row any of the group's sign-ins created, deleted or not, against the same cap.
+ */
+export async function groupArtifactQuotaExceeded(groupId: string, creating = 1): Promise<boolean> {
+  const cap = artifactQuotaLimit();
+  if (!cap) return false;
+  const r = await (await getDb()).query<{ n: number }>('SELECT COUNT(*)::int AS n FROM artifacts WHERE token_id IN (SELECT id FROM tokens WHERE group_id = $1)', [groupId]);
+  return (r.rows[0]?.n ?? 0) + creating > cap;
+}
+
 export async function artifactQuotaExceeded(tokenId: string, creating = 1): Promise<boolean> {
   const cap = artifactQuotaLimit();
   if (!cap) return false;
@@ -165,10 +176,12 @@ export async function createArtifact(
    *                inside a transaction would enqueue a query behind the
    *                transaction that holds PGLite's one connection.
    */
-  atCreation: { liveConnection?: LiveConnectionInsert; seedOwnerParticipation?:boolean; reservedId?:string; forkedFrom?: string; linkRole?: ShareRole | null; operation?: CreationOperation | null; shares?:ShareEntry[]; datasetPolicy?: { policy: unknown; revision: number }; tx?: Queryable; workloadActor?:AccessActor; resource?:string; persistPrepared?:()=>Promise<unknown> } = {},
+  atCreation: { liveConnection?: LiveConnectionInsert; seedOwnerParticipation?:boolean; reservedId?:string; forkedFrom?: string; linkRole?: ShareRole | null; operation?: CreationOperation | null; shares?:ShareEntry[]; datasetPolicy?: { policy: unknown; revision: number }; tx?: Queryable; workloadActor?:AccessActor; resource?:string; persistPrepared?:()=>Promise<unknown>;
+    /** A GROUP's sign-in creating (lib/accounts `GroupPrincipal`): `tokenId` is its sign-in's row, `userId` null. */
+    principalActor?: AccessActor } = {},
 ): Promise<ArtifactRow> {
   if (!userId && !tokenId && !atCreation.workloadActor?.workload) throw new Error("Artifact creation requires a user or token");
-  const destination=atCreation.tx ? (input.destination??{type:'personal'} as const) : await newArtifactDestination(atCreation.workloadActor??identityForUser(userId,tokenId),input.destination,input.ancestor_ids?.at(-1));
+  const destination=atCreation.tx ? (input.destination??{type:'personal'} as const) : await newArtifactDestination(atCreation.workloadActor??atCreation.principalActor??identityForUser(userId,tokenId),input.destination,input.ancestor_ids?.at(-1));
   input={...input,destination};
   if(input.format==='html'&&input.source){
     const page=normalizeNewHtmlPage(input.source);
@@ -228,7 +241,9 @@ async function insertArtifact(
   // The creator as the row records it: ownership, placement and reservations read its ids, never a grant.
   const creatorId = userId ?? tokenId;
   if (!creatorId&&!atCreation.workloadActor?.workload) throw new Error("Artifact creation requires a user or token");
-  const creator = atCreation.workloadActor??identityForUser(userId, tokenId);
+  // A group's sign-in creates as its principal: never as the bare token its row id names.
+  const creator = atCreation.workloadActor??atCreation.principalActor??identityForUser(userId, tokenId);
+  const actorGroupId = creator.principalGroup?.id ?? null;
   await assertOwnerPlacement(tx,{...creator,groupId:input.destination?.type==='group'?input.destination.id:null},input.ancestor_ids??[]);
   await assertDestination(tx,creator,input.destination??{type:'personal'});
   if (atCreation.operation) await reserveCreation(tx,atCreation.operation);
@@ -251,7 +266,7 @@ async function insertArtifact(
   const visibility = ownerKind === 'testuser'
     ? (input.visibility === 'public' || input.visibility === undefined ? 'unlisted' : input.visibility)
     : input.visibility ??
-      (!userId ? (ALLOW_PUBLIC_VISIBILITY ? 'public' : 'unlisted')
+      (!userId && !actorGroupId ? (ALLOW_PUBLIC_VISIBILITY ? 'public' : 'unlisted')
         : input.format === 'image' || input.format === 'dataset' || input.format === 'pdf' || input.format === 'file' ? 'unlisted' : 'private');
   // A new stored dataset that names no access gets the read-only template (v3) and `readwrite` access: every
   // reader of the dataset reads, and only the owner and editors write (no rule admits anyone else).
@@ -266,17 +281,17 @@ async function insertArtifact(
   // ordinary (if empty) base, not an unknown one. Data-modifying CTEs
   // always execute, so the log row lands even though nothing reads it.
   `WITH created AS (
-     INSERT INTO artifacts (id, token_id, user_id, group_id, creator_user_id, title, description, format, source, meta, visibility, link_role, ancestor_ids, edit_id, access, forked_from, actor_user_id, actor_token_id, dataset_policy, policy_revision, document)
-     VALUES ($1, $2, CASE WHEN $19::text IS NULL THEN $3 ELSE NULL END, $19, $3, $4, $5, $6, CASE WHEN $18::jsonb IS NULL THEN $7::text ELSE NULL END, $8, $9, $10, $11, $12, $13, $14, $3, $2, $16::jsonb, $17::int, $18::jsonb) RETURNING *
+     INSERT INTO artifacts (id, token_id, user_id, group_id, creator_user_id, title, description, format, source, meta, visibility, link_role, ancestor_ids, edit_id, access, forked_from, actor_user_id, actor_token_id, actor_group_id, dataset_policy, policy_revision, document)
+     VALUES ($1, $2, CASE WHEN $19::text IS NULL THEN $3 ELSE NULL END, $19, $3, $4, $5, $6, CASE WHEN $18::jsonb IS NULL THEN $7::text ELSE NULL END, $8, $9, $10, $11, $12, $13, $14, $3, $2, $20::text, $16::jsonb, $17::int, $18::jsonb) RETURNING *
    ), genesis AS (
-     INSERT INTO artifact_edits (artifact_id, edit_id, splice_start, removed, inserted, span_start, span_end, actor_user_id, actor_token_id, document_state)
-     SELECT id, edit_id, 0, '', COALESCE($7::text, ''), 0, 0, $3, $2, jsonb_build_object('epoch',COALESCE(document->>'epoch',document#>>'{prose,epoch}'),'version',version) FROM created
+     INSERT INTO artifact_edits (artifact_id, edit_id, splice_start, removed, inserted, span_start, span_end, actor_user_id, actor_token_id, actor_group_id, document_state)
+     SELECT id, edit_id, 0, '', COALESCE($7::text, ''), 0, 0, $3, $2, $20::text, jsonb_build_object('epoch',COALESCE(document->>'epoch',document#>>'{prose,epoch}'),'version',version) FROM created
    ), reserved AS (
      INSERT INTO artifact_source_ids (artifact_id, source_id, provenance, first_version)
      SELECT $1, value #>> '{}', 'authored', 1 FROM jsonb_array_elements($15::jsonb)
    ), policy_audit AS (
-     INSERT INTO dataset_policy_audit (dataset_id, revision, policy, actor_user_id, actor_token_id)
-     SELECT $1, $17::int, $16::jsonb, $3, $2 WHERE $16::jsonb IS NOT NULL
+     INSERT INTO dataset_policy_audit (dataset_id, revision, policy, actor_user_id, actor_token_id, actor_group_id)
+     SELECT $1, $17::int, $16::jsonb, $3, $2, $20::text WHERE $16::jsonb IS NOT NULL
    )
    SELECT * FROM created`,
   [
@@ -311,6 +326,7 @@ async function insertArtifact(
     atCreation.datasetPolicy?.revision ?? 0,
     sourceStorage(input.format,input.source,!atCreation.forkedFrom).document,
     input.destination?.type==='group'?input.destination.id:null,
+    actorGroupId,
   ],
   );
   Object.assign(created.rows[0],await writeShares(tx,id,atCreation.shares??[],created.rows[0].sharing_revision??0));
@@ -338,22 +354,29 @@ interface VersionSummary {
   title: string | null;
   description: string | null;
   format: string;
-  /** The handle of the account that produced this state; null for a token or an unnamed account. */
+  /**
+   * The handle of the account that produced this state, or of the GROUP when an agent signed in as it did (handles are
+   * one namespace); null for a token or an unnamed account.
+   */
   by: string | null;
   created_at: string;
 }
 
 async function archiveVersion(tx: Queryable, current: ArtifactRow): Promise<void> {
   await tx.query(
-    `INSERT INTO artifact_versions (artifact_id, version, title, description, format, source, meta, actor_user_id, actor_token_id, document)
-     VALUES ($1, $2, $3, $4, $5, CASE WHEN $10::jsonb IS NULL THEN $6::text ELSE NULL END, $7, $8, $9, $10::jsonb) ON CONFLICT DO NOTHING`,
-    [current.id, current.version, current.title, current.description, current.format, current.source, JSON.stringify(current.meta), current.actor_user_id, current.actor_token_id,sourceStorage(current.format,current.source,false,current.version).document],
+    `INSERT INTO artifact_versions (artifact_id, version, title, description, format, source, meta, actor_user_id, actor_token_id, actor_group_id, document)
+     VALUES ($1, $2, $3, $4, $5, CASE WHEN $10::jsonb IS NULL THEN $6::text ELSE NULL END, $7, $8, $9, $11::text, $10::jsonb) ON CONFLICT DO NOTHING`,
+    [current.id, current.version, current.title, current.description, current.format, current.source, JSON.stringify(current.meta), current.actor_user_id, current.actor_token_id,sourceStorage(current.format,current.source,false,current.version).document,current.actor_group_id ?? null],
   );
   await tx.query('UPDATE artifacts SET document_archived_at=now() WHERE id=$1',[current.id]);
 }
 
-/** The two actor columns a write stamps, in the order every statement binds them. */
-const actorStamp = (actor: AccessActor): [string | null, string | null] => [actor.userId, actor.tokenId || null];
+/**
+ * The two actor columns a write stamps, in the order every statement binds them. A group's sign-in stamps no person and
+ * its sign-in's token row; the group itself goes in `actor_group_id` (`groupStamp`).
+ */
+const actorStamp = (actor: AccessActor): [string | null, string | null] => [actor.userId, actor.tokenId || actor.principalGroup?.tokenId || null];
+const groupStamp = (actor: AccessActor): string | null => actor.principalGroup?.id ?? null;
 
 /** Full-replace of the share list. A change moves the sharing revision to `base`+1 — the head this write observed — so
  * one write moves it once however many access settings it changes. */
@@ -383,9 +406,9 @@ async function logWholeDocumentWrite(tx: Queryable, before: ArtifactRow, after: 
   const oldText = before.source ?? '';
   const newText = after.source ?? '';
   await tx.query(
-    `INSERT INTO artifact_edits (artifact_id, edit_id, splice_start, removed, inserted, span_start, span_end, actor_user_id, actor_token_id, changes)
-     VALUES ($1, $2, 0, $3, $4, 0, $5, $6, $7, $8::jsonb)`,
-    [after.id, after.edit_id, oldText, newText, oldText.length, after.actor_user_id, after.actor_token_id, null],
+    `INSERT INTO artifact_edits (artifact_id, edit_id, splice_start, removed, inserted, span_start, span_end, actor_user_id, actor_token_id, actor_group_id, changes)
+     VALUES ($1, $2, 0, $3, $4, 0, $5, $6, $7, $9::text, $8::jsonb)`,
+    [after.id, after.edit_id, oldText, newText, oldText.length, after.actor_user_id, after.actor_token_id, null, after.actor_group_id ?? null],
   );
   await tx.query('SELECT pg_notify($1, $2)', [artifactChannel(after.id), after.edit_id]);
 }
@@ -415,13 +438,13 @@ async function lockArtifactWrite(tx: Queryable, actor: AccessActor, id: string, 
              meta=$5, title=$6, description=$7, visibility=COALESCE($9,visibility),
              ancestor_ids=COALESCE($10::text[],ancestor_ids), access=COALESCE($11,access), link_role=COALESCE($14,link_role),
              sharing_revision=sharing_revision+CASE WHEN (COALESCE($9,visibility),COALESCE($11,access),COALESCE($14,link_role)) IS DISTINCT FROM (visibility,access,link_role) THEN 1 ELSE 0 END,
-             ${headBumpSql('$8', '$12', '$13')}
+             ${headBumpSql('$8', '$12', '$13', '$16')}
          WHERE id=$1 AND ${scope.where('$2')} RETURNING *`,
         [id, scope.val, content.format, content.source, JSON.stringify(withWebAssets(content.format, content.source, content.meta)),
           content.title !== undefined ? content.title : current.title,
           content.description !== undefined ? content.description : current.description,
           newEditId(), content.visibility ?? null, content.ancestor_ids ?? null, content.access ?? null,
-          ...actorStamp(actor), content.link_role ?? null, sourceStorage(content.format, content.source).document],
+          ...actorStamp(actor), content.link_role ?? null, sourceStorage(content.format, content.source).document, groupStamp(actor)],
       )).rows[0];
       if (content.ancestor_ids && current.format === 'folder') {
         const swap = ancestorsForMove(current, content.ancestor_ids);
@@ -510,8 +533,8 @@ async function listVersionsScoped(scope: Scope, id: string): Promise<VersionSumm
   const owned = await db.query(`SELECT 1 FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val]);
   if (owned.rows.length === 0) return null;
   const r = await db.query<VersionSummary>(
-    `SELECT v.version, v.title, v.description, v.format, u.username AS by, v.created_at
-     FROM artifact_versions v LEFT JOIN users u ON u.id = v.actor_user_id
+    `SELECT v.version, v.title, v.description, v.format, COALESCE(u.username, vg.handle) AS by, v.created_at
+     FROM artifact_versions v LEFT JOIN users u ON u.id = v.actor_user_id LEFT JOIN groups vg ON vg.id = v.actor_group_id
      WHERE v.artifact_id = $1 ORDER BY v.version DESC`,
     [id],
   );
@@ -534,8 +557,8 @@ async function getVersionScoped(scope: Scope, id: string, version: number): Prom
   const owned = await db.query(`SELECT 1 FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val]);
   if (owned.rows.length === 0) return null;
   const row = await loadArtifactDocument<VersionContent>(db,
-    `SELECT v.artifact_id, v.document, v.version, v.title, v.description, v.format, v.source, v.meta, u.username AS by, v.created_at
-     FROM artifact_versions v LEFT JOIN users u ON u.id = v.actor_user_id
+    `SELECT v.artifact_id, v.document, v.version, v.title, v.description, v.format, v.source, v.meta, COALESCE(u.username, vg.handle) AS by, v.created_at
+     FROM artifact_versions v LEFT JOIN users u ON u.id = v.actor_user_id LEFT JOIN groups vg ON vg.id = v.actor_group_id
      WHERE v.artifact_id = $1 AND v.version = $2`,
     [id, version],
   );
@@ -847,6 +870,10 @@ function sayMoved(actor: AccessActor, id: string, moved: { from: string | null; 
 export function byteQuotaFor(tokenId: string | null, ownerUserId?: string | null): () => Promise<boolean> {
   return () => assetByteQuotaExceeded(tokenId, ownerUserId);
 }
+/** The byte quota a publication is charged to: a group's sign-in's GROUP (lib/accounts `GroupPrincipal`), else its token or account. */
+export function publisherByteQuota(actor: AccessActor, ownerUserId?: string | null): () => Promise<boolean> {
+  return actor.principalGroup ? () => groupAssetByteQuotaExceeded(actor.principalGroup!.id) : byteQuotaFor(actor.tokenId, ownerUserId);
+}
 
 /** Stable keyset pagination; creation timestamps never move when content is edited. */
 interface ArtifactCollectionFilters {group_id?:string;type?:'artifact'|'folder'|'dataset'|'file';visibility?:'private'|'unlisted'|'public';relationship?:'all'|'owned'|'shared';search?:string;parent_id?:string}
@@ -884,15 +911,15 @@ export async function listVersionPageFor(actor: AccessActor, id: string, limit: 
   const result = await db.query<VersionSummary & {visible: boolean}>(`
     WITH head AS (SELECT * FROM artifacts WHERE id=$1 AND ${scope.where('$2')}),
     history AS (
-      SELECT version,title,description,format,actor_user_id,updated_at AS created_at FROM head
+      SELECT version,title,description,format,actor_user_id,actor_group_id,updated_at AS created_at FROM head
       UNION ALL
-      SELECT v.version,v.title,v.description,v.format,v.actor_user_id,v.created_at
+      SELECT v.version,v.title,v.description,v.format,v.actor_user_id,v.actor_group_id,v.created_at
       FROM artifact_versions v WHERE v.artifact_id=$1 AND EXISTS (SELECT 1 FROM head)
     )
-    SELECT h.version,h.title,h.description,h.format,u.username AS by,h.created_at,true AS visible
-    FROM history h LEFT JOIN users u ON u.id=h.actor_user_id
+    SELECT h.version,h.title,h.description,h.format,COALESCE(u.username,hg.handle) AS by,h.created_at,true AS visible
+    FROM history h LEFT JOIN users u ON u.id=h.actor_user_id LEFT JOIN groups hg ON hg.id=h.actor_group_id
     WHERE ($4::bigint IS NULL OR h.version < $4) AND ($5::bigint IS NULL OR h.version <= $5)
-      AND ($6::text IS NULL OR u.username = $6) AND ($7::timestamptz IS NULL OR h.created_at >= $7) AND ($8::timestamptz IS NULL OR h.created_at <= $8)
+      AND ($6::text IS NULL OR COALESCE(u.username,hg.handle) = $6) AND ($7::timestamptz IS NULL OR h.created_at >= $7) AND ($8::timestamptz IS NULL OR h.created_at <= $8)
     ORDER BY h.version DESC LIMIT $3`,
     [id, scope.val, limit + 1, before ?? null,through??null,filters.author??null,filters.since??null,filters.until??null]);
   if (!result.rows.length) {
@@ -968,13 +995,13 @@ export async function setMetadataFor(actor: AccessActor, id: string, patch: Meta
     for (const key of ['theme','template','colorMode'] as const) if (patch[key] !== undefined) meta[key] = patch[key];
     if(opts.dryRun)return {...current,...patch,meta};
     const updated = (await artifactQuery<ArtifactRow>(tx,`UPDATE artifacts SET title=$3,description=$4,meta=$5::jsonb,
-      visibility=$6,access=$7,ancestor_ids=$8::text[],link_role=$9,updated_at=now(),actor_user_id=$10,actor_token_id=$11,
+      visibility=$6,access=$7,ancestor_ids=$8::text[],link_role=$9,updated_at=now(),actor_user_id=$10,actor_token_id=$11,actor_group_id=$12::text,
       sharing_revision=sharing_revision+CASE WHEN ($6,$7,$9) IS DISTINCT FROM (visibility,access,link_role) THEN 1 ELSE 0 END
       WHERE id=$1 AND ${scope.where('$2')} RETURNING *,${openAnnotationsSql('artifacts.id')} AS open_annotations`, [id,scope.val,
       patch.title === undefined ? current.title : patch.title?.trim() ?? null,
       patch.description === undefined ? current.description : patch.description,
       JSON.stringify(meta),patch.visibility ?? current.visibility,patch.access ?? current.access,
-      patch.ancestor_ids ?? current.ancestor_ids,patch.link_role ?? current.link_role,...actorStamp(actor),
+      patch.ancestor_ids ?? current.ancestor_ids,patch.link_role ?? current.link_role,...actorStamp(actor),groupStamp(actor),
     ])).rows[0];
     if(patch.shares!==undefined)Object.assign(updated,await writeShares(tx,id,patch.shares,current.sharing_revision??0));
     else updated.shares=(await tx.query<ShareEntry>('SELECT email,role FROM artifact_shares WHERE artifact_id=$1 ORDER BY email',[id])).rows;
@@ -982,9 +1009,9 @@ export async function setMetadataFor(actor: AccessActor, id: string, patch: Meta
      const changed=await tx.query<{dataset_policy:DatasetPermissions|null;policy_revision:number}>(`WITH changed AS (
       UPDATE artifacts SET dataset_policy=$2::jsonb,policy_revision=policy_revision+1 WHERE id=$1 RETURNING *
      ), audit AS (
-      INSERT INTO dataset_policy_audit(dataset_id,revision,policy,actor_user_id,actor_token_id)
-      SELECT id,policy_revision,dataset_policy,$3,$4 FROM changed
-     ) SELECT dataset_policy,policy_revision FROM changed`,[id,JSON.stringify(policy),actor.userId,actor.tokenId]);
+      INSERT INTO dataset_policy_audit(dataset_id,revision,policy,actor_user_id,actor_token_id,actor_group_id)
+      SELECT id,policy_revision,dataset_policy,$3,$4,$5::text FROM changed
+     ) SELECT dataset_policy,policy_revision FROM changed`,[id,JSON.stringify(policy),actor.userId,actorStamp(actor)[1],groupStamp(actor)]);
      Object.assign(updated,changed.rows[0]);
     }
     if (patch.ancestor_ids && current.format === 'folder') {

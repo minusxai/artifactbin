@@ -32,12 +32,16 @@ export function checkedNamespace(_dialect: ConnectorDialect, namespace: string |
   return namespace;
 }
 
-/** The viewer's three values as the session gets them (empty and `[]` for nobody; groups sorted JSON), bounded. */
-export function viewerValues(query: Pick<ConnectorQuery, 'viewer'>): { id: string; email: string; groups: string } {
-  const id = query.viewer?.id ?? '', email = query.viewer?.email ?? '', list = [...(query.viewer?.groups ?? [])].sort();
+/**
+ * The viewer's four values as the session gets them (empty and `[]` for nobody; groups sorted JSON; the group level
+ * empty for a person), bounded.
+ */
+export function viewerValues(query: Pick<ConnectorQuery, 'viewer'>): { id: string; email: string; groups: string; group_role: string } {
+  const id = query.viewer?.id ?? '', email = query.viewer?.email ?? '', list = [...(query.viewer?.groups ?? [])].sort(), group_role = query.viewer?.groupRole ?? '';
   const groups = JSON.stringify(list);
-  if (id.length > 256 || email.length > 320 || list.some((g) => typeof g !== 'string') || groups.length > 64 * 1024 || /[\0\r\n]/.test(id + email + groups)) throw new ConnectorFailure('invalid_query', 'the viewer\'s values are malformed');
-  return { id, email, groups };
+  if (id.length > 256 || email.length > 320 || list.some((g) => typeof g !== 'string') || groups.length > 64 * 1024 || /[\0\r\n]/.test(id + email + groups)
+    || !['', 'member', 'editor'].includes(group_role)) throw new ConnectorFailure('invalid_query', 'the viewer\'s values are malformed');
+  return { id, email, groups, group_role };
 }
 
 const SAFE = /^-?\d{1,15}$/;

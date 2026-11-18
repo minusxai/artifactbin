@@ -274,7 +274,7 @@ export async function executePageSql(actor: AccessActor, links: readonly HtmlDat
   const started=scope.readStartedAt??performance.now();
   // Links this reader could not load: gone, or not theirs to read, never told apart (lib/dataset-access linked).
   const skipped = new Set<string>();
-  const unreadable = () => (actor.userId ? 'dataset_not_found' : 'sign_in_required') as SqlFailureCode;
+  const unreadable = () => (actor.userId || actor.principalGroup ? 'dataset_not_found' : 'sign_in_required') as SqlFailureCode;
   // Until analysis says the statement writes, a refusal is a read's (with the reader's sentence); a write's never is.
   let read = true;
   try {

@@ -124,16 +124,16 @@ it('acts as the group, not the person: introspection, the lists, and one refusal
  expect(await host.introspect(issued.access_token)).toEqual({active:true,principal_kind:'group',user_id:null,token_id:issued.id,scopes:['artifacts'],audience:`${origin}/api`,expires_at:expect.any(String),parent:null,group_id:team.id,group_role:'editor',issued_by:eve.userId});
  // The person's own sign-in still introspects as the person.
  expect(await host.introspect(eve.grant.access_token)).toMatchObject({principal_kind:'user',user_id:eve.userId,group_id:null});
- // Every app route answers the one refusal: the API, a page read, a download, the account's lists.
+ // Every route the app does not admit for a group's sign-in (server/group-admission) answers the one refusal: the
+ // listing, a download, the account's lists, the group's own administration. What it admits is group-principal-access's.
  const page=(await (await host.post('/api/artifacts',{title:'Public',html:'<div><h1>Public</h1></div>',visibility:'public'},{authorization:`Bearer ${eve.grant.access_token}`})).json() as {id:string}).id;
- for(const path of ['/api/artifacts','/api/me',`/api/artifacts/${page}`,`/a/${page}/download`,'/api/my/tokens',`/api/groups/${team.id}`]){
+ for(const path of ['/api/artifacts','/api/me',`/a/${page}/download`,'/api/my/tokens',`/api/groups/${team.id}`]){
   const refused=await host.api(issued.access_token,path);
   expect(refused.status,path).toBe(403);
   expect(await refused.json(),path).toMatchObject({error:GROUP_PRINCIPAL_REFUSED});
  }
- const write=await host.post('/api/artifacts',{title:'As group',html:'<div><h1>No</h1></div>'},{authorization:`Bearer ${issued.access_token}`});
- expect(write.status).toBe(403);
- expect(await sql("SELECT count(*)::int AS n FROM artifacts WHERE title='As group'")).toEqual([{n:0}]);
+ // A public page reads as it would for a member of the group.
+ expect((await host.api(issued.access_token,`/api/artifacts/${page}`)).status).toBe(200);
  // Never exchanged for a service: there is no person to act as there.
  expect((await host.json(await host.post(SERVICE_TOKEN_PATH,{audience:'warehouse'},{authorization:`Bearer ${issued.access_token}`}))).body).toMatchObject({error:GROUP_PRINCIPAL_REFUSED});
  // The person sees it among their tokens, labelled with the group and level; the group's Admin sees it on the group.

@@ -14,10 +14,37 @@ const readOnlyDecisions=new AsyncLocalStorage<boolean>();
 /** Canonical read-only doors match invitations without stamping them. */
 export const withReadOnlyAccessFacts=<T>(read:()=>T):T=>readOnlyDecisions.run(true,read);
 import { maxRole, type ArtifactRole, type GroupRole, type Queryable, type UserKind } from '@artifactbin/contracts';
-import { getGroupRole, reachedGroupsSql, subtreeSql } from '@/lib/groups';
+import { getGroupRole, groupReachSql, reachedGroupsSql, subtreeSql } from '@/lib/groups';
 import { userKindOf } from '@/lib/user-kinds';
 import { getDb } from '@/lib/platform';
-import type { AccessActor } from '@/lib/accounts';
+import type { AccessActor, GroupPrincipal } from '@/lib/accounts';
+
+/**
+ * THE FACTS FOR A GROUP'S SIGN-IN (lib/accounts `GroupPrincipal`), the one rule for it: exactly a person whose ONLY
+ * relationship to anything is a direct membership of the principal's group at its level. Its role is that level on
+ * that group alone (Editor and Member never flow down, and it administers nothing); its audience and its group shares
+ * reach that group and its ancestors (lib/groups `groupReachSql`, the person rule's `reachedGroupsSql` seeded with the
+ * one group); it has no account, address, named share or user kind. `lock`: inside a write's transaction, the group
+ * shares it reads are locked FOR SHARE, as `transactionAccessFacts` locks a person's.
+ */
+function groupPrincipalFacts(principal: GroupPrincipal, db: () => Promise<Queryable>, lock = false): AccessFacts {
+  const live = async (groupId: string) => !!(await (await db()).query('SELECT 1 FROM groups WHERE id=$1 AND deleted_at IS NULL', [groupId])).rows.length;
+  return {
+    groupLive: live,
+    async groupShareRole(artifactId) {
+      const rows = await (await db()).query<{ role: ArtifactRole }>(`SELECT s.role FROM artifact_group_shares s WHERE s.artifact_id=$1 AND s.group_id IN (${groupReachSql('$2')})${lock ? ' FOR SHARE OF s' : ''}`, [artifactId, principal.id]);
+      return maxRole(...rows.rows.map((row) => row.role));
+    },
+    async groupRole(groupId) { return groupId === principal.id && await live(groupId) ? principal.role : null; },
+    async groupAudience(groupId) {
+      return (await (await db()).query<{ reached: boolean }>(`SELECT EXISTS (SELECT 1 FROM (${groupReachSql('$2')}) reached WHERE reached.id=$1) AS reached`, [groupId, principal.id])).rows[0]?.reached === true;
+    },
+    userKind: async (userId) => userId ? userKindOf(userId, await db()) : null,
+    sharedWith: async () => false,
+    namedRole: async () => 'none',
+    async editorGroupIds() { return principal.role === 'editor' && await live(principal.id) ? [principal.id] : []; },
+  };
+}
 
 export interface AccessFacts {
   groupLive(groupId:string):Promise<boolean>;
@@ -58,6 +85,7 @@ const sessionEmail = (actor: AccessActor) => actor.email?.toLowerCase().trim() ?
 /** One statement per fact asked, on `query` (or the shared database when omitted). */
 export function liveAccessFacts(actor: AccessActor, query?: Queryable): AccessFacts {
   const db = async () => query ?? await getDb();
+  if (actor.principalGroup) return groupPrincipalFacts(actor.principalGroup, db);
   return {
     async groupLive(groupId){return !!(await (await db()).query('SELECT 1 FROM groups WHERE id=$1 AND deleted_at IS NULL',[groupId])).rows.length;},
     async groupShareRole(artifactId){
@@ -109,6 +137,7 @@ export function liveAccessFacts(actor: AccessActor, query?: Queryable): AccessFa
  *    only), so a membership change neither waits for nor blocks this decision, and takes effect from the next one.
  */
 export function transactionAccessFacts(actor: AccessActor, tx: Queryable): AccessFacts {
+  if (actor.principalGroup) return groupPrincipalFacts(actor.principalGroup, async () => tx, true);
   const account = async () => actor.userId ? (await tx.query<{ email: string | null; kind: string | null }>('SELECT email, kind FROM users WHERE id=$1', [actor.userId])).rows[0] ?? null : null;
   // As liveAccessFacts: `sharedWith` matches the account's id or (unresolved) its email; `namedRole` the session's too.
   const shares = async (artifactId: string, session: boolean) => {
@@ -159,8 +188,8 @@ export function transactionAccessFacts(actor: AccessActor, tx: Queryable): Acces
  */
 const pageViewFacts = new WeakMap<Request, Map<string, AccessFacts>>();
 export function requestAccessFacts(request: Request, actor: AccessActor): AccessFacts {
-  // Every fact reads the actor's account id and session address, and nothing else of it.
-  const key = `${actor.userId ?? ''}\u0000${sessionEmail(actor)}`;
+  // Every fact reads the actor's account id and session address (or its group principal), and nothing else of it.
+  const key = `${actor.userId ?? ''}\u0000${sessionEmail(actor)}\u0000${actor.principalGroup ? `${actor.principalGroup.id}:${actor.principalGroup.role}` : ''}`;
   let byActor = pageViewFacts.get(request);
   if (!byActor) pageViewFacts.set(request, byActor = new Map());
   let facts = byActor.get(key);
@@ -210,6 +239,8 @@ interface ShareFact { artifact_id: string; user_id: string | null; email: string
  * answered from a partial preload.
  */
 export async function preloadAccessFacts(db: Queryable, actor: AccessActor, rows: ReadonlyArray<{ id: string; user_id: string | null }>): Promise<PreloadedAccessFacts> {
+  // A group's sign-in has one membership to read and no share to resolve: its live facts are already few.
+  if (actor.principalGroup) return { ...groupPrincipalFacts(actor.principalGroup, async () => db), settle: async () => {} };
   const live = liveAccessFacts(actor, db);
   const ids = [...new Set(rows.map((row) => row.id))], preloaded = new Set(ids);
   const userIds = new Set([actor.userId, ...rows.map((row) => row.user_id)].filter((id): id is string => !!id));

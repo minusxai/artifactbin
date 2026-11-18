@@ -10,12 +10,13 @@
  *     The native timeout uses the remaining trusted read budget (Doris rounds positive seconds up).
  *  2. Each query, `schema()` and `test()`, on one session, each a COM_QUERY of its own unless it binds values:
  *       `START TRANSACTION READ ONLY`
- *       `SET @app.viewer_id='<id>', @app.viewer_email='<email>', @app.viewer_groups='<groups>'` (text, literals:
+ *       `SET @app.viewer_id='<id>', @app.viewer_email='<email>', @app.viewer_groups='<groups>',
+ *          @app.viewer_group_role='<level>'` (text, literals:
  *          each `\` doubled and each `'` doubled, so the value stays one literal with or without NO_BACKSLASH_ESCAPES)
  *       the statement, one (prepared with `?` when it binds values, COM_QUERY otherwise; never escaped into the
  *          text), read row by row up to one past the limit (a stopped read closes the session)
  *       `COMMIT` (`ROLLBACK` after an error)
- *       `SET @app.viewer_id='', @app.viewer_email='', @app.viewer_groups=''`
+ *       `SET @app.viewer_id='', @app.viewer_email='', @app.viewer_groups='', @app.viewer_group_role=''`
  *
  * Doris is detected from version_comment and uses autocommit SELECTs instead of transaction statements.
  * It still receives the viewer, bound values, read-only admission, limits and cleanup; use a SELECT-only account.
@@ -57,8 +58,8 @@ function cell(field: FieldPacket, type: ConnectorValueType, value: unknown): Con
 /** A MySQL string literal for any value: `\\` and `'` doubled, so it stays one literal whether or not
  * NO_BACKSLASH_ESCAPES is on (with it, a backslash in the value arrives doubled: changed, never escaping). */
 export const mysqlLiteral = (value: string) => `'${value.replaceAll('\\', '\\\\').replaceAll("'", "''")}'`;
-const viewerStatement = (v: { id: string; email: string; groups: string }, quoted = false) =>
-  'SET ' + (['id', 'email', 'groups'] as const).map(key => `@${quoted ? '`app.viewer_' + key + '`' : 'app.viewer_' + key}=${mysqlLiteral(v[key])}`).join(', ');
+const viewerStatement = (v: { id: string; email: string; groups: string; group_role: string }, quoted = false) =>
+  'SET ' + (['id', 'email', 'groups', 'group_role'] as const).map(key => `@${quoted ? '`app.viewer_' + key + '`' : 'app.viewer_' + key}=${mysqlLiteral(v[key])}`).join(', ');
 
 const call = <T = unknown>(c: MysqlConnection, text: string, values?: unknown[]) => new Promise<T>((resolve, reject) => {
   const done = (error: unknown, result: unknown) => (error ? reject(error) : resolve(result as T));
@@ -148,7 +149,7 @@ export const mysqlConnector: ConnectorModule = {
             });
             if (open&&!gone) await step('COMMIT');
             open = false;
-            if(!gone)await step(viewerStatement({id:'',email:'',groups:''},autocommit.has(c)));
+            if(!gone)await step(viewerStatement({id:'',email:'',groups:'',group_role:''},autocommit.has(c)));
             remaining();return answer;
           });
         } catch (error) {

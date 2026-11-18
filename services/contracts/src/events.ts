@@ -17,7 +17,8 @@
  */
 import type { CommentReactionKind } from './annotation-comment';
 
-export type SubjectKind = 'user' | 'token' | 'visitor';
+/** `group`: an agent signed in as that group (./identity-service `GROUP_SIGN_IN_RULE`): no person did it. */
+export type SubjectKind = 'user' | 'token' | 'visitor' | 'group';
 export type ObjectKind = 'group' | 'artifact' | 'user' | 'token' | 'door' | 'route';
 export type EventSource = 'app' | 'auth' | 'proxy';
 

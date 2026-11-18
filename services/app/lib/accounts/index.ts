@@ -9,7 +9,7 @@
 
 /** Actors: the identity every access decision reads. */
 export { ARTIFACTBIN_AGENT_HEADER, describeClient, forwardedFor, identifyClient, logClientIdentity, type Harness } from './client-identity';
-export { ANONYMOUS_ACTOR, NO_IDENTITY, accountOf, identityForUser, type AccessActor, type RequestIdentity, type PublicationActor, type TokenHoldingActor } from './actors';
+export { ANONYMOUS_ACTOR, NO_IDENTITY, accountOf, identityForUser, principalKey, type GroupPrincipal, type AccessActor, type RequestIdentity, type PublicationActor, type TokenHoldingActor } from './actors';
 
 /** Users and handles. */
 export { authorHandle, createUser, ensureUsername, getUserByEmail, getUserById, getUserByUsername, hasCreatedDocument, isAccountRow, ownerUsername, replaceUserImageKey, setUsername } from './users';
@@ -20,7 +20,7 @@ export { DuplicateProfileEmail, confirmWelcome, syncProfile, welcomePending } fr
 export { canUseDeploymentIdentity, deploymentMemberSql } from './deployment-identity';
 
 /** Tokens: minting, lookup and the per-request credential memo. */
-export { DEFAULT_TOKEN_TTL_MS, MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS, answeredOnce, ensureUserToken, hostedCredentialDescriptor, listTokensByUser, liveTokenSql, mintToken, rememberTokenClient, resolveToken, resolveTokenById, revokeToken, sourcedTokenName, tokenStatus, touchToken, withAccountToken } from './tokens';
+export { DEFAULT_TOKEN_TTL_MS, MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS, answeredOnce, ensureUserToken, hostedCredentialDescriptor, listTokensByUser, liveGroupSignIn, liveTokenSql, mintToken, rememberTokenClient, resolveToken, resolveTokenById, revokeToken, sourcedTokenName, tokenStatus, touchToken, withAccountToken } from './tokens';
 export { revokeUserToken } from './users';
 export { hasAdminCredential } from './admin-auth';
 

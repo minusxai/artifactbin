@@ -31,6 +31,7 @@ export async function notifyThread(tx:Queryable,artifactId:string,threadId:strin
  if(!senderId)return;
  const revision=(await tx.query<{revision:number}>('SELECT revision FROM annotations WHERE id=$1',[threadId])).rows[0]?.revision??1;
  const agentLabel=agent?(await tx.query<{author_label:string|null}>("SELECT author_label FROM annotations WHERE id=$1 AND artifact_id=$2 AND author_kind='agent' AND deleted_at IS NULL",[updateId,artifactId])).rows[0]?.author_label??'Agent':null;
+ // A group's sign-in (`author_group_id`, no `author_user_id`) is never a recipient: notices to it go nowhere, deliberately.
  const recipients=(await tx.query<{id:string}>(`SELECT DISTINCT author_user_id AS id FROM annotations WHERE artifact_id=$1 AND (id=$2 OR root_id=$2) AND deleted_at IS NULL AND author_user_id IS NOT NULL
  UNION SELECT recipient_id AS id FROM member_notifications WHERE artifact_id=$1 AND source=$3`,[artifactId,threadId,`comment:${threadId}`])).rows;
  for(const {id} of recipients){
