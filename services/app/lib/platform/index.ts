@@ -20,6 +20,7 @@ export type { Db, Queryable, SchemaImageInputs } from './db';
 export { actorSubject, emit, envelope } from './events';
 export type { EventSubject } from './events';
 export { groupTrustApprovalsEnabled } from './config';
+export { datasetsOwnConnections } from './config';
 export { enqueueEvent, enqueueEvents, publishEventOutbox, recordEvent, setEventProjection, startEventPublisher } from './event-outbox';
 export { FILE_ID_LENGTH, ID_RE, generateFileId, generateInternalId, generateTokenId } from './ids';
 export { currentHeaders, currentRequest, overrideRequestHeaders, runWithRequest } from './request-context';

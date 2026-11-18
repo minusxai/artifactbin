@@ -25,9 +25,15 @@
  *
  * DECLARED QUERIES are recorded per page version by publish (`livePageDeclarations`), which refuses one on a live
  * dataset the publisher cannot edit; a reader names the query of the version it has open (the page door's revision).
+ *
+ * OFF (lib/platform DATASETS__OWN_CONNECTIONS=off): every door that creates, changes, tests, lists the tables of or
+ * queries a connection here answers contracts `OWN_CONNECTIONS_OFF` (`ownConnectionsAllowed`), once the caller is
+ * known to see the dataset (a stranger still gets not_found) and before anything else is decided; no connection opens
+ * and nothing stored changes. Its details (`liveConnectionDetails`) still read, and publishing a page that links one
+ * is unchanged: the page's reads of it answer the refusal.
  */
 import {readLifetime} from '@/lib/datasets';
-import { CONNECTORS, SQL_READ_LIMITS, type ConnectionConfig, type ConnectorDialect, type ConnectorError, type ConnectorScalar, type ConnectorTestResult, type ConnectorViewer, type DatasetRole, type HtmlDatasetLink, type HtmlDeclaredQuery, type HtmlLiveDatasetLink, type HtmlPageVersion, type Queryable } from '@artifactbin/contracts';
+import { CONNECTORS, OWN_CONNECTIONS_OFF, SQL_READ_LIMITS, type ConnectionConfig, type ConnectorDialect, type ConnectorError, type ConnectorScalar, type ConnectorTestResult, type ConnectorViewer, type DatasetRole, type HtmlDatasetLink, type HtmlDeclaredQuery, type HtmlLiveDatasetLink, type HtmlPageVersion, type Queryable } from '@artifactbin/contracts';
 import { ConnectorFailure, colonParameters, connectionSummary, connectorError, connectorList, leadingWords, mapQualifiers, openConnection, parseConnectionConfig, qualifierNames, type NetworkSeams, type OpenConnection } from '@artifactbin/connectors';
 import type { AccessActor } from '@/lib/accounts';
 import { canReadArtifact, getArtifactById, setLiveDatasetSummary, type LiveConnectionInsert } from '@/lib/artifacts';
@@ -35,7 +41,7 @@ import { lockAuthorization, transactionAccessFacts, type ArtifactRow } from '@/l
 import { connectorViewer } from '@/lib/connections';
 import { liveConnectionOf, liveQueryRoles } from '@/lib/datasets';
 import { datasetReadAccess, datasetRole, storedPolicy } from '@/lib/dataset-permissions';
-import { QUERY_TIMEOUT_MS,datasetConnectionCipher, datasetsAllowPrivateNetwork, getDb } from '@/lib/platform';
+import { QUERY_TIMEOUT_MS,datasetConnectionCipher, datasetsAllowPrivateNetwork, datasetsOwnConnections, getDb } from '@/lib/platform';
 
 const PURPOSE = 'dataset-connection';
 const VIEWER_PARAMS = ['viewer_id', 'viewer_email', 'viewer_groups'] as const;
@@ -46,6 +52,10 @@ export class LiveDatasetRefusal extends Error {
   get body() { return { error: this.code, message: this.message }; }
 }
 export interface LiveSqlReply { status: number; body: Record<string, unknown> }
+/** Throws the install's refusal when datasets may not carry their own connection (DATASETS__OWN_CONNECTIONS=off). */
+function ownConnectionsAllowed(): void {
+  if (!datasetsOwnConnections()) throw new LiveDatasetRefusal(OWN_CONNECTIONS_OFF.status, OWN_CONNECTIONS_OFF.error, OWN_CONNECTIONS_OFF.message);
+}
 
 const specOf = (id: string) => CONNECTORS.find((c) => c.id === id)!;
 const network = () => ({ allowPrivateNetwork: datasetsAllowPrivateNetwork() });
@@ -90,6 +100,7 @@ export function withoutSecrets(input: unknown): unknown {
  * connection the creation stores with it. Throws LiveDatasetRefusal.
  */
 export function prepareLiveDataset(input: unknown): { content: { format: 'dataset'; source: null; meta: Record<string, unknown>; derivedTitle: null }; connection: LiveConnectionInsert } {
+  ownConnectionsAllowed();
   const config = checkedConfig(input);
   const { open, secrets } = split(config);
   return {
@@ -154,6 +165,7 @@ async function editableLive(actor: AccessActor, id: string): Promise<ArtifactRow
   if (!row) throw NOT_FOUND();
   const role = await datasetRole(row, actor);
   if (!role) throw NOT_FOUND();
+  ownConnectionsAllowed();
   if (!isAdmin(role)) throw new LiveDatasetRefusal(403, 'permission_denied', 'only the live dataset\'s owner and editors may do this');
   return row;
 }
@@ -255,6 +267,7 @@ export async function updateLiveConnection(actor: AccessActor, id: string, input
       if (!row || row.format !== 'dataset' || !liveConnectionOf(row.meta)) throw NOT_FOUND();
       const role = await datasetRole(row, actor, { facts: transactionAccessFacts(actor, tx) });
       if (!role) throw NOT_FOUND();
+      ownConnectionsAllowed();
       if (!isAdmin(role)) throw new LiveDatasetRefusal(403, 'permission_denied', 'only the live dataset\'s owner and editors may change its connection');
       const current = await stored(id, tx, true);
       if (!current) throw NOT_FOUND();
@@ -298,6 +311,7 @@ export async function testLiveConnection(actor: AccessActor, id: string): Promis
 
 /** "Test connection" on the new-dataset form: a configuration not saved yet, opened, tested and closed. */
 export async function testConnectionConfig(actor: AccessActor, input: unknown): Promise<LiveSqlReply> {
+  try { ownConnectionsAllowed(); } catch (e) { return refusal(e); }
   let config: ConnectionConfig;
   try { config = checkedConfig(input); } catch (e) { const r = refusal(e); return { status: 200, body: { ok: false, error: { code: 'invalid_config', message: String(r.body.message) } } }; }
   const connection = openConnection(config, network(), seams,{queryTimeoutMs:QUERY_TIMEOUT_MS});
@@ -323,6 +337,7 @@ export async function liveDatasetSql(actor: AccessActor, id: string, raw: { sql?
     const row = await liveRow(id);
     const role = row ? await datasetRole(row, actor) : null;
     if (!row || !role) throw NOT_FOUND();
+    ownConnectionsAllowed();
     if (!isAdmin(role)) throw new LiveDatasetRefusal(403, 'permission_denied', 'only a live dataset\'s owner and editors write SQL on it; everyone else runs the queries its pages declare');
     if (typeof raw.sql !== 'string' || !raw.sql.trim()) throw new LiveDatasetRefusal(400, 'validation_failed', 'sql takes one SQL statement');
     return run(id, row.title ?? id, raw.sql, raw.params, await connectorViewer(actor), signal);
@@ -385,6 +400,7 @@ export async function pageLiveDatasetSql(actor: AccessActor, page: HtmlPageVersi
       if (!query || !link) throw new LiveDatasetRefusal(404, 'unknown_query', `this version of the page declares no query named ${JSON.stringify(raw.query.slice(0, 64))}`);
       const row = await step(liveRow(link.datasetId));
       if (!row) throw new LiveDatasetRefusal(404, 'dataset_not_found', `${link.name} names a live dataset that is gone`);
+      ownConnectionsAllowed();
       const decision = await step(datasetReadAccess(row, actor, { pageId: page.pageId }));
       if (!decision.allowed) throw new LiveDatasetRefusal(403, 'permission_denied', `${link.name}'s rules do not let your role run its declared queries${actor.userId ? '' : '; sign in, or ask its owner to allow anonymous readers'}`);
       signal=admission?.dispatch(true)??signal;
@@ -412,6 +428,7 @@ export async function pageLiveDatasetSql(actor: AccessActor, page: HtmlPageVersi
     const other = page.links.find((l) => l.name !== first.link.name && words.has(l.name.toLowerCase()));
     if (other) throw new LiveDatasetRefusal(400, 'validation_failed', `a statement reads one source: ${first.link.name} is a live dataset and ${other.name} another source; query them separately`);
     if (!first.row) throw new LiveDatasetRefusal(404, 'dataset_not_found', `${first.link.name} names a live dataset that is gone`);
+    ownConnectionsAllowed();
     const dialect = specOf(liveConnectionOf(first.row.meta)!.connector).dialect;
     if (!qualifierNames(dialect, raw.sql).has(first.link.name.toLowerCase())) throw new LiveDatasetRefusal(400, 'validation_failed', `${first.link.name} is a live dataset: name its tables as ${first.link.name}.table (or ${first.link.name}.schema.table)`);
     const decision = await step(datasetReadAccess(first.row, actor, { pageId: page.pageId }));

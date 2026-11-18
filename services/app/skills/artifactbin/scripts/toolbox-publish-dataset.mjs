@@ -6,7 +6,9 @@
 import {readFileSync} from 'node:fs';
 import {ToolError} from './toolbox-client.mjs';
 /** --type connection: a live dataset from FILE (its connector JSON, no secret) and the secret from
- * --secret-file (- reads stdin). Sent once: never journaled, printed or kept. */
+ * --secret-file (- reads stdin). Sent once: never journaled, printed or kept. An install that
+ * lets no dataset have its own connection (ownConnections: false) gets no secret: its refusal
+ * of the create is printed as it answers. */
 export async function publishConnection(client,file,values){
  const unfit=['visibility','personal','create','template','owner-column','artifact'].find(flag=>
   values[flag]!==undefined);
@@ -16,8 +18,8 @@ export async function publishConnection(client,file,values){
   encodeURIComponent(values.group.replace(/^@/,'')))).group;destination={type:'group',id:g.id};}
  if(values['dry-run'])return {dryRun:true,server:client.server,type:'connection',method:'POST',
   ...destination?{destination}:{}};
- const secret=(await client.request('/api/connections')).connectors.find(c=>c.id===connection
-  .connector)?.fields.find(f=>f.secret);
+ const listed=await client.request('/api/connections'),secret=listed.ownConnections!==false&&
+  listed.connectors.find(c=>c.id===connection.connector)?.fields.find(f=>f.secret);
  if(values['secret-file']!==undefined&&secret)connection[secret.name]=readFileSync(values[
   'secret-file']==='-'?0:values['secret-file'],'utf8').trim();
  const made=await client.request('/api/artifacts',{method:'POST',body:{connection,title:values.

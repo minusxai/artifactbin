@@ -474,6 +474,20 @@ export function datasetsAllowPrivateNetwork(): boolean {
 }
 
 /**
+ * DATASETS__OWN_CONNECTIONS: `on` (unset, the default) lets a dataset carry its own database connection (a live
+ * dataset, lib/live-datasets); `off` leaves the default connection (DATASETS__DEFAULT_CONNECTION) as the only way to
+ * live data: creating, changing, testing, listing the tables of and querying a dataset with its own connection are
+ * refused (`own_connections_off`), and the datasets that have one are kept as they are, answering that refusal until
+ * it is on again. Read at each use, so a test's `overrideConfig` environment applies. Any other value refuses the boot.
+ */
+env('DATASETS', 'OWN_CONNECTIONS');
+export function datasetsOwnConnections(): boolean {
+  const value = env('DATASETS', 'OWN_CONNECTIONS')?.trim() || 'on';
+  if (value !== 'on' && value !== 'off') throw new Error('DATASETS__OWN_CONNECTIONS must be on (the default) or off.');
+  return value === 'on';
+}
+
+/**
  * APP__SHELL_FILE: the path of one HTML file this process can read, served in place of the app's own screens
  * (server/custom-shell says which addresses, and what stays the app's). Unset, the default: the app's screens.
  */

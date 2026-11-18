@@ -8,6 +8,7 @@ import {writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import {publishCommand} from '../../../skills/artifactbin/scripts/toolbox-publish.mjs';
 import {makeClient,selectedServer} from '../../../skills/artifactbin/scripts/toolbox-client.mjs';
+import {sqlCommand} from '../../../skills/artifactbin/scripts/sql.mjs';
 import {tempDir} from '@artifactbin/test-support/temp-dir';
 import {syntheticEnv} from '@/test/helpers/toolbox-env';
 
@@ -33,6 +34,28 @@ it('dry-runs a connection without creating it or reading its secret',async()=>co
  const made=await publishCommand({positionals:[file],values:{type:'connection'}},options);
  expect(made).toMatchObject({id:'CONN12'});
  expect(calls.filter(call=>call.method==='POST')).toHaveLength(1);
+}));
+
+it('on an install whose datasets have no connection of their own: reads no secret, and prints the server\'s own refusal of every connection command',async()=>connectionFile(async file=>{
+ const refusal={error:'own_connections_off',message:'This install reads live data only through its default connection.'};
+ const sent:unknown[]=[];
+ const fetcher=async(url:any,init:any)=>{
+  const route=new URL(String(url)).pathname;
+  if(init?.body)sent.push(JSON.parse(String(init.body)));
+  if(route==='/api/connections')return Response.json({connectors:[{id:'postgres',fields:[{name:'password',secret:true}]}],ownConnections:false});
+  if(route==='/api/artifacts/LIVE12')return Response.json({format:'dataset',version:1,meta:{connection:{connector:'postgres'}}});
+  return Response.json(refusal,{status:403});
+ };
+ const options={env:syntheticEnv(server, undefined, { token: 'synthetic-fixture' }),fetcher,log:()=>{}};
+ // The secret path does not exist: reading it would throw.
+ const created=await publishCommand({positionals:[file],values:{type:'connection','secret-file':path.join(file,'missing')}},options).catch((error:any)=>error);
+ expect(created).toMatchObject({code:'own_connections_off',exit:3});
+ expect(created.message).toBe(`Request refused (HTTP 403): ${refusal.message}`);
+ expect(sent).toEqual([{connection:{connector:'postgres',host:'db.example.test',port:5432,database:'shop',user:'reader'},title:'db'}]);
+ for(const [sub,positionals] of [['schema',['LIVE12']],['query',['LIVE12','select 1']]] as const){
+  const refused=await sqlCommand({sub,values:{},positionals:[...positionals]},options).catch((error:any)=>error);
+  expect(refused,sub).toMatchObject({code:'own_connections_off',message:`Request refused (HTTP 403): ${refusal.message}`});
+ }
 }));
 
 it.each([['visibility','public'],['personal',true],['create',true],['template','read-only']])(

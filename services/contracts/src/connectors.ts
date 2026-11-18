@@ -183,6 +183,13 @@ export interface ConnectorSchema {
   readonly truncated?: true;
 }
 
+/**
+ * The one refusal of every door of a dataset with its own connection (create, change, test, tables, query) on an
+ * install whose DATASETS__OWN_CONNECTIONS is off, answered 403 as `{error, message}`; `GET /api/connections` then
+ * says `ownConnections: false`, so screens and tools offer none of those doors.
+ */
+export const OWN_CONNECTIONS_OFF = { status: 403, error: 'own_connections_off', message: 'This install reads live data only through its default connection.' } as const;
+
 /** Every reason a connector refuses or fails, the same for every connector. */
 export const CONNECTOR_ERROR_CODES = [
   /** The configuration is not this connector's (unknown connector or field, a missing or malformed value). */
