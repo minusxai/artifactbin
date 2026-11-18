@@ -72,7 +72,7 @@ export const POST = withTokenAuth(async (request, { actor, params, clientHarness
   if (made instanceof Response) return made;
   if (!made) return json({error: 'not_found'}, 404);
   if ('refused' in made && made.refused === 'invalid_annotation_revision') return json({error: made.refused, field: 'anchor.revision', hint: 'anchor.revision is the page version number as a string (read.mjs shows it as version), not the state hash or an edit ID.'}, 400);
-  if ('refused' in made && made.refused === 'stale') return json({error: 'stale', current_revision: String(made.head.version), hint: 'The page changed since this anchor was taken: read it again and use anchor.revision = its current version.'}, 409);
+  if ('refused' in made && made.refused === 'stale') return json({error: 'stale', current_revision: String(made.head.version), hint: 'The element this anchor names is no longer on the page: read it again and anchor to a node in its current version.'}, 409);
   if ('refused' in made) return json({error: made.refused, hint: 'Read the current page again, then supply an HTML anchor with its revision, stable nodeId and quote.'}, 400);
   // A script-less agent that comments is told to watch for the answers, as a publish tells it.
   return json({...made, ...monitoringGuidance(baseUrl(request), params.id, 'html', 'comment')}, 201);

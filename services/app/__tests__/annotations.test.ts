@@ -2,6 +2,7 @@ import {nativeHtml} from './native-html-fixture';
 import { setVisibility } from '@/__tests__/artifact-fixtures';
 import {nativeAnchor} from './native-annotation-fixture';
 import type {HtmlNodeAnchor} from '@artifactbin/contracts';
+import { COMMENT_TARGET_REMOVED } from '@artifactbin/contracts';
 import { artifactQuery } from '@/lib/artifacts/table';
 import {observedRequest,patchMetadata} from '@/__tests__/conditional-request';
 import { getDb } from '@/lib/platform';
@@ -122,13 +123,40 @@ describe('creating (browser door, owner only)', () => {
 
   });
 
-  it('a stale base the log cannot carry answers 409 with head', async () => {
-    const { doc, actor } = await publish();
-    const res = await annotate(doc.id, actor, { anchor:nativeAnchor('findings'), edit_id: 'not-a-real-edit-id', body: 'x' });
+  it('a page edited while the reader writes still takes the comment, pinned to the version they saw', async () => {
+    const { t, doc, actor } = await publish();
+    const edit = await putArtifactRoute(
+      await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: t.token, json: { html: nativeHtml(DOC + '<p data-af-id="later">Added while writing.</p>') } }),
+      params({ id: doc.id }),
+    );
+    expect(edit.status, await edit.clone().text()).toBe(200);
+    const res = await annotate(doc.id, actor, { anchor: nativeAnchor('findings', doc.version), edit_id: doc.edit_id, body: 'written before the edit landed' });
+    expect(res.status, await res.clone().text()).toBe(201);
+    const made = (await res.json()) as AnnotationWire & { anchor_version: number };
+    expect(made.orphaned).toBe(false);
+    expect(made.anchor).toEqual(nativeAnchor('findings', doc.version));
+    expect(made.anchor_version).toBe(doc.version);
+    expect(made.snippet).toContain('Revenue grew 40%');
+  });
+
+  it('refuses in words, with the head, only when an edit removed the picked element', async () => {
+    const { t, doc, actor } = await publish();
+    const edit = await putArtifactRoute(
+      await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: t.token, json: { html: nativeHtml('<p data-af-id="intro">An introduction paragraph.</p>') } }),
+      params({ id: doc.id }),
+    );
+    expect(edit.status).toBe(200);
+    const head = await headEditId(t.token, doc.id);
+    const res = await annotate(doc.id, actor, { anchor: nativeAnchor('findings', doc.version), edit_id: doc.edit_id, body: 'x' });
     expect(res.status).toBe(409);
-    const body = (await res.json()) as { error: string; edit_id: string };
-    expect(body.error).toBe('stale');
-    expect(body.edit_id).toBe(doc.edit_id);
+    expect(await res.json()).toMatchObject({ error: 'stale', edit_id: head, message: COMMENT_TARGET_REMOVED });
+  });
+
+  it('a revision the page never had is refused, not guessed', async () => {
+    const { doc, actor } = await publish();
+    const res = await annotate(doc.id, actor, { anchor: nativeAnchor('findings', doc.version + 5), edit_id: doc.edit_id, body: 'x' });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toBe('invalid_annotation_revision');
   });
 
   it('the retired body-path door is a 400: a node id is the only address', async () => {

@@ -3,6 +3,8 @@ import { useAppHarness, request, setSession, mintAccountToken, params as routePa
 import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { GET as listAnnotations, POST as browserComment } from '@/app/api/my/artifacts/[id]/annotations/route';
 import { POST as apiComment } from '@/app/api/artifacts/[id]/annotations/route';
+import { PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
+import { observedRequest } from '@/__tests__/conditional-request';
 import { createUser, ensureUsername } from '@/lib/accounts';
 import { htmlTextFingerprint } from '@artifactbin/contracts';
 import { setArtifact } from '@/__tests__/rows';
@@ -35,7 +37,7 @@ it('persists the explicit HTML discriminator and original selection, and never r
 it('rejects stale revisions and conflicting compiler coordinates; API comments use the same anchor contract', async () => {
   const { id, params, token } = await page();
   const post = (body: unknown) => browserComment(request(`/api/my/artifacts/${id}/annotations`, { method: 'POST', json: body }), params);
-  expect((await post({ anchor: { ...anchor, revision: '0' }, body: 'stale' })).status).toBe(409);
+  expect((await post({ anchor: { ...anchor, revision: '0' }, body: 'never a version' })).status).toBe(400);
   expect((await post({ anchor, node_id: 'n1', body: 'ambiguous protocol' })).status).toBe(400);
   const unverified=await post({ anchor: { ...anchor, range: { ...anchor.range, fingerprint: 'invalid' } }, body: 'Unverified capture' });
   expect(unverified.status).toBe(201);
@@ -54,9 +56,14 @@ it('answers 400 naming anchor.revision when the revision is not a version number
     expect(refused.status).toBe(400);
     expect(await refused.json()).toMatchObject({ error: 'invalid_annotation_revision', field: 'anchor.revision' });
   }
-  const stale = await api('0');
+  expect((await api('0')).status).toBe(400);
+  // An edit that keeps the element takes a comment made on the version before it; one that removed it answers 409.
+  const edit = await putArtifact(await observedRequest(`/api/artifacts/${id}`, { method: 'PUT', token, json: { html: html.replace('<p data-af-id="n1">same words</p>', '') } }), params);
+  expect(edit.status, await edit.clone().text()).toBe(200);
+  expect((await apiComment(request(`/api/artifacts/${id}/annotations`, { method: 'POST', token, json: { anchor: { ...anchor, nodeId: 'n2' }, body: 'still there' } }), params)).status).toBe(201);
+  const stale = await api('1');
   expect(stale.status).toBe(409);
-  expect(await stale.json()).toMatchObject({ error: 'stale', current_revision: '1' });
+  expect(await stale.json()).toMatchObject({ error: 'stale', current_revision: '2' });
 });
 it('preserves a native fractional area beside its stable HTML identity',async()=>{
  const {id,params,token}=await page();
