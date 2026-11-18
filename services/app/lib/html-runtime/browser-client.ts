@@ -1,5 +1,6 @@
 import {config,remote,onResolverChange} from './browser-reader';
 import {createSql,SqlError} from './apollo/sql';
+import {SQL_FAILURES} from '@artifactbin/contracts/sql-failures';
 import {RemoteUnreachable} from './apollo/apollo-contracts';
 import {offlineSqlNoData} from './portable-chrome-contract';
 import {createDomainSql} from './domain-reads';
@@ -30,7 +31,7 @@ const namesLink=(text:string,name:string)=>new RegExp(`(^|[^\\w$."])${name}\\s*\
 const draftSql=(request:{sql?:string;query?:string;params:Record<string,string|number|boolean|null>})=>{
   const live=(config.draftConnections??[]).find((name)=>namesLink(request.sql??'',name));
   if(!live)return offlineSql(request);
-  if(!config.draftLive)return Promise.reject(new SqlError('unavailable',`${live} reads live data, which this draft may read only when the app showing it allows it`));
+  if(!config.draftLive)return Promise.reject(new SqlError('consent_required',SQL_FAILURES.consent_required.notice,`${live} reads live data, which this draft may read only once the reader allows it in the app showing it`));
   return remote.execute(request).then((reply)=>reply as never,(error:unknown)=>{throw error instanceof RemoteUnreachable?new SqlError('unavailable','live data is read through the app showing this draft'):error;});
 };
 export const sql=createSql({

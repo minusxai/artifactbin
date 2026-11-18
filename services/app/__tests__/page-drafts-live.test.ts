@@ -56,7 +56,10 @@ it('names its live links and reads none of them unless the embedding app allowed
   expect(closed).toMatchObject({ connections: ['wh'], liveSql: false });
   const page = await (await app.request(closed.src)).text();
   expect(JSON.parse(/data-af="runtime">([^<]*)</.exec(page)![1]!)).toMatchObject({ draftConnections: ['wh'], draftLive: false });
-  expect(await live(alice, closed.label, 'select item from wh.sales.mine')).toMatchObject({ status: 404, body: { error: 'unavailable' } });
+  // The reader's own draft, not yet allowed: paused, with its own code; anyone else's answers as a missing one.
+  expect(await live(alice, closed.label, 'select item from wh.sales.mine')).toMatchObject({ status: 403, body: { error: 'consent_required', notice: expect.stringMatching(/paused until you allow it/) } });
+  const { bob } = await readers();
+  expect(await live(bob, closed.label, 'select item from wh.sales.mine')).toMatchObject({ status: 404, body: { error: 'unavailable' } });
   const open = await draft(alice, true);
   expect(open.origin).not.toBe(closed.origin);
   expect(JSON.parse(/data-af="runtime">([^<]*)</.exec(await (await app.request(open.src)).text())![1]!)).toMatchObject({ draftConnections: ['wh'], draftLive: true });

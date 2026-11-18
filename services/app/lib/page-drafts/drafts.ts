@@ -183,6 +183,13 @@ export function draftFile(label: string, pathname: string, now = Date.now()): { 
   return file ?? null;
 }
 
+/** Whether `reader`'s own draft `label` exists and its embedding app has not allowed live reads (yet). */
+export function draftAwaitsConsent(reader: string, label: string, now = Date.now()): boolean {
+  sweep(now);
+  const draft = drafts.get(label);
+  return !!draft && draft.reader === reader && !draft.liveSql;
+}
+
 /**
  * The default-connection links `reader`'s own draft `label` may read live, or null: no such draft, another reader's,
  * or one whose embedding app did not allow live reads. Asking keeps the draft.
