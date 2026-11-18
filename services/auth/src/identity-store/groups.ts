@@ -3,19 +3,25 @@
  * `group_invitations` and `group_hierarchy`, and the mail each change sends (`./mail`).
  *
  * The tree is `groups.parent_id` (one parent at most, never a cycle). Membership is DIRECT rows only; what the tree
- * adds (a group's audience reaching its descendants' members) is the app's read, never stored here.
+ * adds (a group's audience reaching its descendants' members) is the app's read, never stored here. ADMINISTRATION
+ * flows down it: an admin of a group is an EFFECTIVE ADMIN of every live group below it (./rules `groupAdminsSql`,
+ * `effectiveAdminVia` here, the `group_admins` read view), and may do there whatever a direct admin may. Editor and
+ * Member never flow down. An inherited admin is not a member: never listed, mailed or counted as a group's last admin.
  *
  * LOCKING IS THIS MODULE'S OWN, for its own invariants, and nothing outside it waits on it (readers lock nothing):
  *  - a topology change (create, delete, reparent) moves the hierarchy revision as its FIRST statement, so topology
  *    changes run one at a time (no cycle can be built by two concurrent reparents) and each moves the revision;
  *  - a change to who belongs locks the group row FOR UPDATE (concurrent admin removals cannot remove the last
- *    admin); a change touching several groups locks them in one statement ordered `id COLLATE "C"`;
+ *    admin); a change touching several groups locks them in one statement ordered `id COLLATE "C"`. An inherited
+ *    admin's authority is read from the ancestors' rows at decision time, unlocked, as every reader reads it: a
+ *    removed ancestor role refuses the very next change;
  *  - an invitation is consumed with its row locked, so acceptance happens exactly once.
  * A refusal is an IdentityError; every change answers the `GroupChange`s it committed, for the app to act on after.
  */
 import {IdentityError,isGroupRole,groupRoleRank,isTestDomainEmail,normalizeCreateGroup,type GroupChange,type GroupInvitation,type GroupRole,type GroupSummary,type IdentityService,type Queryable,type TransactionalQueryable} from '@artifactbin/contracts';
 import {reserveHandle} from './accounts';
 import {enqueueGroupMail} from './mail';
+import {groupAdminsSql} from './rules';
 import {internalId,isUniqueViolation,type IdentityTables} from './tables';
 
 interface GroupRow {id: string; handle: string; name: string; description: string; created_by: string; deleted_at: string | null; parent_id: string | null}
@@ -23,6 +29,15 @@ const roleValid = isGroupRole;
 const summary = (group: GroupRow, role: GroupRole | null): GroupSummary => ({id: group.id, handle: group.handle, name: group.name, description: group.description, role, parent_id: group.parent_id ?? null});
 /** No edge moved: rolled back, so the revision does not move either. */
 class Unchanged extends Error { constructor(public parentId: string | null) { super('unchanged'); } }
+
+/** The group `userId` effectively administers live `groupId` through (itself, or its nearest ancestor with a direct `admin` row), or null. */
+export async function effectiveAdminVia(q: Queryable, t: IdentityTables, userId: string, groupId: string): Promise<string | null> {
+  return (await q.query<{via_group_id: string}>(`SELECT ga.via_group_id FROM (${groupAdminsSql(t)}) ga WHERE ga.group_id=$1 AND ga.user_id=$2`, [groupId, userId])).rows[0]?.via_group_id ?? null;
+}
+/** Every live group `userId` effectively administers, directly or through an ancestor, ordered by id. */
+export async function effectiveAdminGroupIds(q: Queryable, t: IdentityTables, userId: string): Promise<string[]> {
+  return (await q.query<{group_id: string}>(`SELECT ga.group_id FROM (${groupAdminsSql(t)}) ga WHERE ga.user_id=$1 ORDER BY ga.group_id COLLATE "C"`, [userId])).rows.map(row => row.group_id);
+}
 
 type GroupMethods = Pick<IdentityService, 'createGroup' | 'updateGroup' | 'setGroupParent' | 'deleteGroup' | 'setGroupMember' | 'removeGroupMember' | 'inviteGroupMember'
   | 'removeGroupInvitation' | 'acceptGroupInvitations' | 'admitToGroup'>;
@@ -39,13 +54,17 @@ export function groupMethods(db: TransactionalQueryable, t: IdentityTables, opti
     if (!ids.length) return new Set();
     return new Set((await q.query<{id: string}>(`SELECT id FROM ${t.groups} WHERE id=ANY($1::text[]) AND deleted_at IS NULL ORDER BY id COLLATE "C" FOR UPDATE`, [[...new Set(ids)]])).rows.map(row => row.id));
   };
-  /** The actor directly administers this live group, which is now locked. */
+  /**
+   * The actor administers this live group, which is now locked: directly, or through an ancestor (`effectiveAdminVia`).
+   * Neither a member nor an admin: `missing` (404); a member without admin anywhere above: forbidden.
+   */
   const requireAdmin = async (q: Queryable, actorId: string, id: string, missing = 'not_found') => {
     if (!(await lockGroups(q, [id])).has(id)) throw new IdentityError(missing, 404);
-    const held = await role(q, actorId, id);
-    if (!held) throw new IdentityError(missing, 404);
-    if (held !== 'admin') throw new IdentityError('forbidden', 403);
+    if (await effectiveAdminVia(q, t, actorId, id)) return;
+    if (!await role(q, actorId, id)) throw new IdentityError(missing, 404);
+    throw new IdentityError('forbidden', 403);
   };
+  /** A change may not leave a group without a DIRECT admin: an inherited admin is never counted. */
   const protectLastAdmin = async (q: Queryable, id: string, userId: string) => {
     if (await role(q, userId, id) === 'admin' && Number((await q.query<{count: string}>(`SELECT count(*) FROM ${t.group_members} WHERE group_id=$1 AND role='admin'`, [id])).rows[0]!.count) <= 1)
       throw new IdentityError('last_admin', 409);
@@ -70,7 +89,8 @@ export function groupMethods(db: TransactionalQueryable, t: IdentityTables, opti
       return db.transaction(async tx => {
         const hierarchyRevision = await bumpHierarchy(tx);
         if (!(await tx.query(`SELECT id FROM ${t.users} WHERE id=$1 AND kind='account'`, [actorId])).rows.length) throw new IdentityError('account_required', 403);
-        // Only a direct admin of the parent creates beneath it: the new subtree's members receive the parent's shares.
+        // Only an admin of the parent (directly or through an ancestor) creates beneath it: the new subtree's members
+        // receive the parent's shares. The creator becomes the new group's first direct admin.
         if (parentId) await requireAdmin(tx, actorId, parentId, 'parent_not_found');
         const id = 'grp_' + internalId();
         try { await reserveHandle(t, tx, handle, 'group', id); } catch (error) { if (isUniqueViolation(error)) throw new IdentityError('handle_taken', 409); throw error; }
@@ -100,8 +120,9 @@ export function groupMethods(db: TransactionalQueryable, t: IdentityTables, opti
     },
 
     /**
-     * REPARENT (or detach, `parentId` null). The actor directly administers the moved group, its current parent and its new
-     * one. `fromParentId` is the parent the caller saw: a group with a parent is never given another without it
+     * REPARENT (or detach, `parentId` null). The actor administers (directly or through an ancestor) the moved group, its
+     * current parent and its new one. Every group keeps its own direct admin (`protectLastAdmin`), so a detached group
+     * is never left without one. `fromParentId` is the parent the caller saw: a group with a parent is never given another without it
      * (`already_has_parent`), a stale one is `parent_changed`, and a parent inside the moved subtree is a cycle.
      */
     async setGroupParent({actorId, groupId: id, parentId, fromParentId}) {

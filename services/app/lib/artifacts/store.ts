@@ -10,6 +10,7 @@ import { canonicalizeHtmlPage, type HtmlIdentityLedger } from '../html-page';
 import {scriptFingerprint} from '../html-autofix';
 import {assertOwnerPlacement,assertDestination,newArtifactDestination} from './ownership';
 import { identityForUser, type AccessActor } from '@/lib/accounts';
+import { groupAdminSql } from '@/lib/groups';
 import type {ArtifactDestination} from '@artifactbin/contracts';
 import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, groupMemberPredicate, reactionScope, editorScope, lockOrder, ownerPredicate, ownerScope, writerFor, type ArtifactRow, type Scope } from '@/lib/artifact-access';
 import { headBumpSql } from './table';
@@ -857,7 +858,7 @@ export async function listArtifactPageFor(actor: AccessActor, limit: number, cur
   const reach=relationship==='owned'?owner.where('$1'):relationship==='shared'?`(${shared} AND NOT (${owner.where('$1')}))`:`(${owner.where('$1')} OR ${shared})`;
   const predicates=[LIVE_ARTIFACT_SQL,`(${reach})`];
   const bind=(value:unknown)=>{values.push(value);return '$'+values.length;};
-  if(filters.group_id){const group=bind(filters.group_id);const user=bind(actor.userId);predicates.push(`EXISTS (SELECT 1 FROM group_members gm JOIN groups g ON g.id=gm.group_id WHERE gm.group_id=${group} AND gm.user_id=${user} AND g.deleted_at IS NULL)`);predicates.push(`(artifacts.group_id=${group} OR EXISTS (SELECT 1 FROM artifact_group_shares gs WHERE gs.artifact_id=artifacts.id AND gs.group_id=${group}))`);}
+  if(filters.group_id){const group=bind(filters.group_id);const user=bind(actor.userId);predicates.push(`(EXISTS (SELECT 1 FROM group_members gm JOIN groups g ON g.id=gm.group_id WHERE gm.group_id=${group} AND gm.user_id=${user} AND g.deleted_at IS NULL) OR ${groupAdminSql(user,group)})`);predicates.push(`(artifacts.group_id=${group} OR EXISTS (SELECT 1 FROM artifact_group_shares gs WHERE gs.artifact_id=artifacts.id AND gs.group_id=${group}))`);}
   if(cursor)predicates.push(`(created_at,id)<(${bind(cursor.created)}::timestamptz,${bind(cursor.id)})`);
   if(filters.type)predicates.push(`format=ANY(${bind(filters.type==='file'?['image','pdf','file']:[filters.type==='artifact'?'html':filters.type])}::text[])`);
   if(filters.visibility)predicates.push(`visibility=${bind(filters.visibility)}`);

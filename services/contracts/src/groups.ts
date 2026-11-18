@@ -27,15 +27,17 @@ export interface GroupArtifact {
   comments:number;
 }
 export interface GroupInvitation {id:string;email:string;role:GroupRole;created_at:string;invited_by:string;changed?:boolean;}
-/** A group beside the one being read (its parent, a subgroup): `role` is the reader's own DIRECT membership of it, null for none. */
+/** A group beside the one being read (its parent, a subgroup): `role` is the reader's role there (`admin` when they administer it, directly or through an ancestor; else their direct membership's), null for none. */
 export interface GroupRelative {id:string;handle:string;name:string;role:GroupRole|null;}
 /** Someone who is NOT a member of the group but receives what is shared with it, through a subgroup (`via`) they are a direct member of. */
 export interface GroupAudienceMember {user_id:string;username:string|null;name:string|null;via:{id:string;handle:string;name:string};}
 /**
- * `members` are DIRECT members only. `parent` and `subgroups` place the group in the installation's tree;
- * `subgroup_audience` (at most 100) lists the people its shares also reach through its subgroups.
+ * `members` are DIRECT members only. `group.role` is the reader's role: `admin` also for an INHERITED admin, someone
+ * holding `admin` on an ancestor, who may do here whatever a direct admin may but is not a member; `admin_via` then
+ * names the ancestor that authority comes from (absent otherwise). `parent` and `subgroups` place the group in the
+ * installation's tree; `subgroup_audience` (at most 100) lists the people its shares also reach through its subgroups.
  */
-export interface GroupDetail {group:GroupSummary;members:GroupMember[];linked_groups:GroupSummary[];invitations?:GroupInvitation[];parent:GroupRelative|null;subgroups:GroupRelative[];subgroup_audience:GroupAudienceMember[];}
+export interface GroupDetail {group:GroupSummary;members:GroupMember[];linked_groups:GroupSummary[];invitations?:GroupInvitation[];parent:GroupRelative|null;subgroups:GroupRelative[];subgroup_audience:GroupAudienceMember[];admin_via?:{id:string;handle:string;name:string}|null;}
 export interface DeploymentState {mode:'public'|'company';setup_complete:boolean;is_owner:boolean;default_group:GroupSummary|null;}
 export interface CreateGroupInput {handle:string;name:string;description?:string;parent_id?:string|null;}
 export interface NewArtifactDestinationContext {

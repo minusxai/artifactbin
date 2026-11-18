@@ -50,7 +50,8 @@ export async function roleWithoutLink(
   if (ownsArtifact(row, actor)) return 'owner';
   let groupRole:ArtifactRole='none';
   if (row.group_id) {
-    // Ownership is a DIRECT admin of the owning group; its audience (a member of it or of a subgroup) reads.
+    // Ownership is an admin of the owning group, directly or through an ancestor (`groupRole`); its audience (a member
+    // of it or of a subgroup) reads.
     const role = await facts.groupRole(row.group_id);
     if(role==='admin')return 'owner';
     if(role==='editor')groupRole='editor';

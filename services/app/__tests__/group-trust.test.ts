@@ -107,7 +107,8 @@ describe('a group approval', () => {
     const { admin, editor, viewer, top, team } = await company();
     const mixed = await publish(page(API, `<meta name="csp-script" content="${PLOTLY}"><meta name="csp-img" content="https://*.tiles.example.com">`));
     const scriptOnly = await publish(`<!doctype html><html><head><meta name="csp-script" content="${PLOTLY}"><title>t</title></head><body><p>x</p></body></html>`);
-    expect((await standing(mixed, editor.actor)).group).toEqual({ eligible: expect.objectContaining({ connect: [API], img: [], script: [] }), groups: [expect.objectContaining({ id: top.id })] });
+    // An admin of Company administers its subgroup Team too, so may approve for either.
+    expect((await standing(mixed, editor.actor)).group).toEqual({ eligible: expect.objectContaining({ connect: [API], img: [], script: [] }), groups: [expect.objectContaining({ id: top.id }), expect.objectContaining({ id: team.id })] });
     expect((await standing(mixed, admin.actor)).group?.groups.map((g) => g.id).sort()).toEqual([top.id, team.id].sort());
     expect((await standing(mixed, viewer.actor)).group, 'a viewer edits no group').toBeUndefined();
     expect((await standing(scriptOnly, editor.actor)).group, 'nothing a group may approve').toBeUndefined();

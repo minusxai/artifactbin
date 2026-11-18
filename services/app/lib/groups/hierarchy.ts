@@ -5,8 +5,10 @@
  *
  * Membership is DIRECT rows only. What the tree adds is an AUDIENCE: a group reaches the direct members of
  * itself and of every descendant, so a share to Finance reaches a Retail-only member and a share to Retail
- * never reaches a Finance-only member or a sibling. Nothing here grants administration, ownership or an
- * editor role: those stay on the direct membership row (`getGroupRole`).
+ * never reaches a Finance-only member or a sibling. The audience never grants administration, ownership or an
+ * editor role. ADMINISTRATION alone flows DOWN the tree: an admin of a group administers every live group below it
+ * (identity's `group_admins` view, the one spelling of that rule: `groupAdminSql`), without becoming a member of them,
+ * so the audience above is unchanged by it. Editor and Member stay on the direct membership row.
  *
  * NO LOCKS. A decision reads membership and edges at decision time, inside its own transaction, and neither waits on
  * nor holds up an identity write: a revocation (a removed member, a detached subtree, a deleted group) takes effect
@@ -20,6 +22,13 @@ const REVISION = "group_hierarchy WHERE id='installation'";
 /** SQL: ids of the live groups `user` reaches — its direct memberships and all their ancestors. */
 export const reachedGroupsSql = (user: string): string =>
   `WITH RECURSIVE reach(id) AS (SELECT gm.group_id FROM group_members gm JOIN groups g ON g.id=gm.group_id WHERE gm.user_id=${user} AND g.deleted_at IS NULL UNION SELECT p.id FROM reach r JOIN groups c ON c.id=r.id JOIN groups p ON p.id=c.parent_id WHERE p.deleted_at IS NULL) SELECT id FROM reach`;
+
+/**
+ * SQL: does `user` administer the live group `group` (each an SQL expression), directly or through an ancestor? Read
+ * from identity's `group_admins` view, never re-derived; correlated on `group`, so it climbs that one group's chain.
+ */
+export const groupAdminSql = (user: string, group: string): string =>
+  `EXISTS (SELECT 1 FROM group_admins ga WHERE ga.group_id=${group} AND ga.user_id=${user})`;
 
 /** SQL: ids of `group` (when live) and every live descendant. */
 export const subtreeSql = (group: string): string =>

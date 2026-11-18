@@ -7,7 +7,7 @@
  *
  *  - Script, style and frame run or embed code: never a group's to grant. A wildcard declaration is never approvable,
  *    and an approval is the canonical exact origin a declaration normalises to (lib/document `parseCspOrigin`).
- *  - Who: a direct admin of the group (`GroupRole` is member, editor or admin; an editor cannot change approvals). Any direct member reads
+ *  - Who: an admin of the group, directly or through a parent group (`GroupRole` is member, editor or admin; an editor cannot change approvals). Any direct member reads
  *    the list. Every change is audited on the group (lib/groups `recordGroupMutation`) in its own transaction.
  *  - A reader's own Never on a document still wins there (./document-trust `standingOf`).
  *  - TRUST__GROUP_APPROVALS=off: nothing is offered, the API refuses, and stored rows are ignored (never deleted).
@@ -86,7 +86,7 @@ export async function listGroupAddresses(userId: string, groupId: string): Promi
   }));
 }
 
-/** Approve (`present`) or remove addresses for a whole group: its direct admins only, audited on the group. */
+/** Approve (`present`) or remove addresses for a whole group: its admins only (directly or through an ancestor, lib/groups `getGroupRole`), audited on the group. */
 export async function setGroupAddresses(userId: string, groupId: string, addresses: CspExtensions, present: boolean, actor?: { tokenId: string | null }): Promise<{ changed: CspExtensions }> {
   requireEnabled();
   const pairs = pairsOf(groupEligibleCspExtensions(addresses));
@@ -127,10 +127,10 @@ export async function groupApprovedFor(userId: string | null | undefined, wanted
   return out;
 }
 
-/** The live groups this reader may approve for (those they directly administer), when approvals are on. */
+/** The live groups this reader may approve for (those they administer, directly or through an ancestor), when approvals are on. */
 export async function approvableGroupsFor(userId: string | null | undefined): Promise<CspApprovalGroup[]> {
   if (!userId || !groupTrustApprovalsEnabled()) return [];
   return (await (await getDb()).query<CspApprovalGroup>(
-    "SELECT g.id, g.handle, g.name FROM group_members m JOIN groups g ON g.id = m.group_id WHERE m.user_id = $1 AND m.role = 'admin' AND g.deleted_at IS NULL ORDER BY g.name, g.id LIMIT 20",
+    'SELECT g.id, g.handle, g.name FROM group_admins ga JOIN groups g ON g.id = ga.group_id WHERE ga.user_id = $1 AND g.deleted_at IS NULL ORDER BY g.name, g.id LIMIT 20',
     [userId])).rows;
 }

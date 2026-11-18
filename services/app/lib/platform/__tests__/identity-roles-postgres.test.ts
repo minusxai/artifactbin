@@ -130,8 +130,11 @@ describe.skipIf(!dockerImage('postgres:17-alpine'))('identity tables in a split-
     expect(await code(reader.query(`SELECT 1 FROM auth."${table}" LIMIT 1`)),`${role} SELECT auth.${table}`).toBe('42501');
    for(const [view,columns] of Object.entries(IDENTITY_VIEWS)){
     const column=`"${columns[0]}"`;
-    expect(await code(reader.query(`DELETE FROM identity.${view}`)),`${role} DELETE identity.${view}`).toBe('42501');
-    expect(await code(reader.query(`UPDATE identity.${view} SET ${column}=${column}`)),`${role} UPDATE identity.${view}`).toBe('42501');
+    // The computed group_admins view is writable by nobody: a write is refused as not updatable (55000) before any
+    // privilege is consulted. Every other view refuses it as a privilege (42501).
+    const refused=view==='group_admins'?'55000':'42501';
+    expect(await code(reader.query(`DELETE FROM identity.${view}`)),`${role} DELETE identity.${view}`).toBe(refused);
+    expect(await code(reader.query(`UPDATE identity.${view} SET ${column}=${column}`)),`${role} UPDATE identity.${view}`).toBe(refused);
    }
    expect(await code(reader.query("INSERT INTO identity.users(id,email) VALUES ('usr_x','x@example.com')")),`${role} INSERT`).toBe('42501');
    expect(await code(reader.query("INSERT INTO identity.groups(id,handle,name,created_by) VALUES ('g','g','g','u')")),`${role} INSERT`).toBe('42501');

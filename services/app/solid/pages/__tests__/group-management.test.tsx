@@ -26,6 +26,20 @@ it('keeps last-admin refusal visible and preserves member role',async()=>{
  expect(fetch).toHaveBeenCalledWith('/api/groups/g1/members/u1',expect.objectContaining({method:'PUT',body:JSON.stringify({role:'member'})}));
 });
 
+it('an admin through a parent group manages people and is told where the authority comes from, without being listed',()=>{
+ vi.stubGlobal('fetch',vi.fn(async()=>Response.json({members:[]})));
+ render(()=> <GroupManagement detail={{...detail,admin_via:{id:'g0',handle:'company',name:'Company'}}} refresh={()=>{}} />);
+ expect(screen.getByText(/You are an admin here through/)).toHaveTextContent('You are an admin here through Company, a parent group. You are not a member of Team.');
+ expect(screen.getByRole('link',{name:'Company'})).toHaveAttribute('href','/@company');
+ expect(screen.getByRole('button',{name:'Invite person'})).toBeInTheDocument();
+ expect(screen.getByRole('button',{name:'Role for Alice'})).toBeInTheDocument();
+});
+it('says nothing about a parent group to a direct admin',()=>{
+ vi.stubGlobal('fetch',vi.fn(async()=>Response.json({members:[]})));
+ render(()=> <GroupManagement detail={detail} refresh={()=>{}} />);
+ expect(screen.queryByText(/through/)).not.toBeInTheDocument();
+});
+
 it('finds a server search result outside the initially loaded people',async()=>{
  vi.stubGlobal('fetch',vi.fn(async()=>Response.json({members:[{user_id:'u200',username:'zoe',name:'Zoe',role:'member'}]})));
  render(()=> <GroupManagement detail={detail} refresh={()=>{}}/>);
