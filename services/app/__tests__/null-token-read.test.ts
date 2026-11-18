@@ -4,7 +4,7 @@
  * let a guest and any signed-in stranger read a private document. Every serving door refuses them.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { request, setSession, useAppHarness } from '@/__tests__/harness';
+import { request, setSession, useAppHarness, params } from '@/__tests__/harness';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { GET as exportRoute } from '@/app/a/[id]/export/route';
 import { GET as downloadRoute } from '@/app/a/[id]/download/route';
@@ -14,7 +14,6 @@ import { holdsCreatingToken } from '@/lib/artifact-access';
 import { artifactPageResponse, readableApp } from '@/lib/document-serving';
 
 useAppHarness();
-const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 let session: string | null = null;
 beforeEach(() => { session = null; setSession(() => (session ? { user: { id: session } } : null)); });
 

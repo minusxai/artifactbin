@@ -1,4 +1,5 @@
 import {nativeHtml} from './native-html-fixture';
+import { trashRow } from '@/__tests__/artifact-fixtures';
 import { expect, it } from 'vitest';
 import { useAppHarness, request, mintAccountToken } from './harness';
 import { POST as publish } from '@/app/api/artifacts/route';
@@ -27,7 +28,7 @@ it('reads the same row as the whole-row read, less its document and source, and 
   expect(header).not.toHaveProperty('source');
   const { document: _document, source: _source, ...rest } = whole!;
   expect(header).toEqual(rest);
-  await (await getDb()).query('UPDATE artifacts SET deleted_at = now() WHERE id = $1', [id]);
+  await trashRow(id);
   expect(await getArtifactHeaderById(id)).toBeNull();
   expect(await getArtifactById(id)).toBeNull();
 });

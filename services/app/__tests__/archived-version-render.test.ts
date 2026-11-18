@@ -10,7 +10,7 @@ import {POST as pageMutation} from '@/app/api/artifacts/[id]/sql/route';
  * carries no chrome. So the numbers are asserted on the page answer and the bytes on `/raw`.
  */
 import { describe, expect, it } from 'vitest';
-import { useAppHarness, request } from '@/__tests__/harness';
+import { useAppHarness, request, params } from '@/__tests__/harness';
 import { GET as serveArtifact } from '@/app/a/[id]/raw/route';
 import { GET as pageData } from '@/app/api/page/artifact/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
@@ -22,7 +22,6 @@ import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { identityForUser, createUser } from '@/lib/accounts';
 
 useAppHarness();
-const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
 /** What the page answer tells the app bar about the version it is showing (null for the head). */
 async function archivedOf(id: string, token: string, query = '') {

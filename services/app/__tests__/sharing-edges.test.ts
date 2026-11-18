@@ -6,11 +6,12 @@ import {observedRequest} from '@/__tests__/conditional-request';
  * validation, and what the list/metadata surfaces disclose.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { useAppHarness, request, setSession } from '@/__tests__/harness';
+import { useAppHarness, request, useSessionUser, params } from '@/__tests__/harness';
 import { artifactMetadata, profilePage as UserPage } from '@/test/helpers/pages';
 import {operationHttp} from './operation-http';
 import { DELETE as deleteArtifactRoute, PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
-import { GET as listArtifactsRoute, POST as createArtifactRoute } from '@/app/api/artifacts/route';
+import { GET as listArtifactsRoute } from '@/app/api/artifacts/route';
+import { postArtifact } from '@/__tests__/artifact-fixtures';
 import { GET as listMineRoute } from '@/app/api/my/artifacts/route';
 import { DELETE as deleteMineRoute } from '@/app/api/my/artifacts/[id]/route';
 import { PUT as putSharingRoute } from '@/app/api/my/artifacts/[id]/sharing/route';
@@ -20,9 +21,7 @@ import { people } from '@/lib/datasets';
 import { getDb } from '@/lib/platform';
 
 const harness = useAppHarness();
-beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null)));
-const sessionUser = { id: '', email: '' };
-const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
+const sessionUser = useSessionUser();
 
 
 async function outcome(p: Promise<unknown>): Promise<'render' | 'redirect' | 'notFound'> {
@@ -47,7 +46,7 @@ async function ownerFixture() {
 }
 
 const create = async (token: string, body: Record<string, unknown>, expected = 201) => {
-  const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: body }));
+  const res = await postArtifact(token, body);
   expect(res.status).toBe(expected);
   return res.json() as Promise<Record<string, unknown> & { id: string }>;
 };

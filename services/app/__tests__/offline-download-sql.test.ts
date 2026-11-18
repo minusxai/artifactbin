@@ -5,9 +5,9 @@
  * as its import map links them, with every fetch refused; the real-browser check is the offline-file gate.
  */
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { storePolicy } from '@/__tests__/artifact-fixtures';
 import { JSDOM } from 'jsdom';
 import { request, setSession, useAppHarness } from './harness';
-import { getDb } from '@/lib/platform';
 import { GET as download } from '@/app/a/[id]/download/route';
 import { fixture, params, publish, ROWS, type Person } from './page-sql-door-fixture';
 import { OFFLINE_SQL_NO_DATA, OFFLINE_SQL_NO_DATA_EVENT } from '@/lib/html-runtime/portable-chrome-contract';
@@ -30,7 +30,7 @@ const PAGE_SQL = 'select name, salary from staff order by name';
 async function exportedPage() {
   const f = await fixture();
   const secret = await publish(f.owner, { dataset: [{ code: SECRET }], title: 'Secret' });
-  await (await getDb()).query('UPDATE artifacts SET dataset_policy=$2::jsonb, policy_revision=policy_revision+1 WHERE id=$1', [secret.body.id, JSON.stringify({ version: 3, tables: [{ table: ROWS, select_permissions: [{ role: 'signed_in', permission: { columns: '*', filter: {} } }] }] })]);
+  await storePolicy(secret.body.id, { version: 3, tables: [{ table: ROWS, select_permissions: [{ role: 'signed_in', permission: { columns: '*', filter: {} } }] }] });
   const page = await publish(f.owner, { html: `<!doctype html><html><head><title>Staff report</title>
 <link rel="af-dataset" data-af-name="staff" href="ref:${f.staff}"><link rel="af-dataset" data-af-name="notes" href="ref:${f.notes}"><link rel="af-dataset" data-af-name="secret" href="ref:${secret.body.id}">
 <script src="/af/core.js"></script></head><body><table id="staff"><tbody></tbody></table>

@@ -5,7 +5,8 @@
  * hidden column ("salary"); the owner sees both. v3 cannot be PUT yet (PR 7), so the policy is written directly.
  */
 import { beforeEach, expect, it } from 'vitest';
-import { mintAccountToken, request, setSession, useAppHarness } from './harness';
+import { storePolicy } from '@/__tests__/artifact-fixtures';
+import { mintAccountToken, request, setSession, useAppHarness, params } from './harness';
 import { ANONYMOUS_ACTOR, identityForUser, type AccessActor } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
 import { getArtifactById, canReadArtifact } from '@/lib/artifacts';
@@ -26,10 +27,9 @@ const ROWS = [{ name: 'ada', team: 'red', salary: 10 }, { name: 'bo', team: 'blu
 const POLICY = { version: 3, tables: [{ table: { schema: 'public', name: 'rows' }, select_permissions: [
   { role: 'viewer', permission: { columns: ['name', 'team'], filter: { team: { _eq: 'red' } }, allow_aggregations: false } },
 ] }] };
-const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const SQL_POLICY = { ...POLICY, tables: [{ ...POLICY.tables[0], select_permissions: [{ role: 'viewer', permission: { ...POLICY.tables[0]!.select_permissions[0]!.permission, allow_aggregations: true } }] }] };
 /** Stores a dataset policy, bumping its revision as a policy write does. */
-const applyPolicy = async (id: string, policy: unknown) => { await (await getDb()).query('UPDATE artifacts SET dataset_policy=$2::jsonb, policy_revision=policy_revision+1 WHERE id=$1', [id, JSON.stringify(policy)]); };
+const applyPolicy = storePolicy;
 
 async function person(name: string) {
   const token = await mintAccountToken(`doors_${name}`);

@@ -6,7 +6,7 @@ import { getArtifactById, artifactState, selectChildren } from '@/lib/artifacts'
 import { readThrough } from '@/lib/artifact-access';
 import { createUser, identityForUser } from '@/lib/accounts';
 import { setDocumentEditorPolicy, sessionActor } from '@/lib/authentication';
-import {mintAccountToken as mintToken} from '@/__tests__/harness';
+import {mintAccountToken as mintToken, params } from '@/__tests__/harness';
 import {GET,PUT,PATCH} from '@/app/api/artifacts/[id]/route';
 import {GET as content} from '@/app/api/artifacts/[id]/content/route';
 import {GET as annotations,POST as annotate} from '@/app/api/artifacts/[id]/annotations/route';
@@ -112,7 +112,6 @@ it('answers the read of a non-private document with the edit capability and no u
  expect(body).not.toHaveProperty('access');
 });
 
-const params=(id:string)=>({params:Promise.resolve({id})});
 /** The owner comments with an image on a document, so the image door has something real to refuse. */
 async function ownerImage(doc:Doc):Promise<string>{
  const owner=identityForUser('usr_owner','tok_owner'),row=(await getArtifactById(doc.id))!;

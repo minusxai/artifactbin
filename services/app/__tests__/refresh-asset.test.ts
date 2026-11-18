@@ -14,7 +14,7 @@ import {nativeHtml} from './native-html-fixture';
  * and that is how every case below comes to hold one.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { useAppHarness, request } from '@/__tests__/harness';
+import { useAppHarness, request, params } from '@/__tests__/harness';
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 import { POST as refreshRoute } from '@/app/api/artifacts/assets/refresh/route';
 import { POST as myRefreshRoute } from '@/app/api/my/artifacts/[id]/assets/refresh/route';
@@ -52,7 +52,6 @@ afterAll(async () => {
   await server.close();
 });
 
-const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
 const publishWithImage = async (token: string) => {
   const res = await createArtifact(request('/api/artifacts', { method: 'POST', token, json: {

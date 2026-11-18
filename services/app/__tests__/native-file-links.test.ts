@@ -7,7 +7,7 @@ import {nativeHtml} from './native-html-fixture';
 import {DELETE as remove} from '@/app/api/artifacts/[id]/route';
 import { getDb } from '@/lib/platform';
 import { assetUrlFor } from '@/lib/document';
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
+import { mintAccountToken as mintToken, params } from '@/__tests__/harness';
 import { allowLocalWebIngest, restoreWebIngestPolicy } from '@/test/helpers/web-ingest';
 import { request, useAppHarness } from '@/__tests__/harness';
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
@@ -38,7 +38,6 @@ afterAll(async () => {
   await server.close();
 });
 
-const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
 const create = (token: string, body: Record<string, unknown>) =>
   createArtifact(request('/api/artifacts', { method: 'POST', token, json: body }));

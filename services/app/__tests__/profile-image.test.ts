@@ -15,12 +15,11 @@ import { GET as getProfile, PATCH as patchProfile } from '@/app/api/my/profile/r
 import { AVATAR_MAX_BYTES, avatarVersion } from '@/lib/avatars';
 import { getDb } from '@/lib/platform';
 import { createUser, ensureUsername, getUserById } from '@/lib/accounts';
-import { request, useAppHarness, setSession } from '@/__tests__/harness';
+import { request, useAppHarness, useSessionUser } from '@/__tests__/harness';
 
 useAppHarness();
-beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id } } : null)));
+const sessionUser = useSessionUser('id');
 
-const sessionUser = { id: '' };
 
 beforeEach(() => { sessionUser.id = ''; });
 

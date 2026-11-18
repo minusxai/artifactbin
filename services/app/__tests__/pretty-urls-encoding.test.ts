@@ -12,13 +12,12 @@ import { artifactMetadata, profilePage as UserPage } from '@/test/helpers/pages'
 
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser, ensureUsername, setUsername } from '@/lib/accounts';
-import { useAppHarness, setSession } from '@/__tests__/harness';
+import { useAppHarness, useSessionUser } from '@/__tests__/harness';
 
 useAppHarness();
-beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null)));
+const sessionUser = useSessionUser();
 
 const BASE = 'http://localhost:3000';
-const sessionUser = { id: '', email: '' };
 
 
 async function outcome(p: Promise<unknown>): Promise<{ kind: 'render' | 'redirect' | 'notFound'; to?: string }> {

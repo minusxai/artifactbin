@@ -11,7 +11,7 @@ import {observedRequest} from '@/__tests__/conditional-request';
  * indistinguishable from a missing one.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { useAppHarness, request, setSession } from '@/__tests__/harness';
+import { useAppHarness, request, useSessionUser, params } from '@/__tests__/harness';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 import { GET as exportRoute } from '@/app/a/[id]/export/route';
@@ -22,12 +22,10 @@ import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
 
 useAppHarness();
-beforeEach(() => setSession(() => sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null));
+const sessionUser = useSessionUser();
 
 // Owns the session mock for this file: id + email, settable per test.
-const sessionUser = { id: '', email: '' };
 
-const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
 async function create(token: string, body: Record<string, unknown>, expected = 201) {
   const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: body }));

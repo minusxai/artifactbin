@@ -2,7 +2,7 @@ import {afterEach,expect,it} from 'vitest';
 import { identityForUser } from '@/lib/accounts';
 import {z} from 'zod';
 import {OPERATIONS,type OpContext} from '@/lib/operations/registry';
-import {useAppHarness,request,mintAccountToken} from '@/__tests__/harness';
+import {useAppHarness,request,mintAccountToken, params } from '@/__tests__/harness';
 import {createArtifact,replaceArtifactFor,artifactState,getArtifactById} from '@/lib/artifacts';
 import {fakeBrowser} from '@artifactbin/utils';
 import type {RenderRequest} from '@artifactbin/contracts';
@@ -14,7 +14,6 @@ import {EXPORT_PNG} from './export-helpers';
 useAppHarness();
 
 const BASE='http://localhost:3000';
-const params=(id:string)=>({params:Promise.resolve({id})});
 const SOURCE=(footer:string)=>`<table id="budget-table"><tbody><tr id="budget-row"><td>Actual</td><td>12</td></tr></tbody><tfoot><tr id="budget-footer"><td>Total</td><td>${footer}</td></tr></tfoot></table>`;
 let browser:ReturnType<typeof fakeBrowser>;
 afterEach(async()=>{setServices({});await resetExportRenderer();});

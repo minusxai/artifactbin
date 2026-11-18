@@ -5,7 +5,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { samplePdfDataUrl } from '../../../scripts/lib/sample-pdf.mjs';
-import { mintAccountToken as mintToken, request, useAppHarness } from '@/__tests__/harness';
+import { mintAccountToken as mintToken, request, useAppHarness, params } from '@/__tests__/harness';
 import { GET as rawRoute, HEAD as rawHead } from '@/app/a/[id]/raw/route';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
@@ -17,7 +17,6 @@ import { nativeHtml } from './native-html-fixture';
 useAppHarness();
 afterEach(() => { vi.restoreAllMocks(); });
 
-const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 const SVG = 'data:image/svg+xml;base64,' + Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="red"/></svg>').toString('base64');
 

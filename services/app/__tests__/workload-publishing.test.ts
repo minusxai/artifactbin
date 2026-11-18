@@ -1,5 +1,6 @@
 /** Host-authorized publication belongs to a group and one durable occurrence, never a human token. */
 import {expect,it,vi} from 'vitest';
+import { trashRow } from '@/__tests__/artifact-fixtures';
 import type {Actor,WorkloadBinding,WorkloadOperation} from '@artifactbin/contracts';
 import {createAppHost} from '@/server/host';
 import {createGroup} from '@/lib/groups';
@@ -214,7 +215,7 @@ it('stops between dependency admissions and preserves truthful partial receipts'
  expect((await (await getDb()).query('SELECT * FROM workload_publication_outputs')).rows).toHaveLength(1);
 });
 it('denies a trashed root without claiming a slot or storing output',async()=>{
- const f=await fixture(),db=await getDb();await db.query('UPDATE artifacts SET deleted_at=now() WHERE id=$1',[f.folder]);
+ const f=await fixture(),db=await getDb();await trashRow(f.folder);
  expect((await f.call('/api/artifacts','POST',f.payload,keyA)).status).toBe(403);
  expect((await db.query('SELECT * FROM workload_publication_outputs')).rows).toEqual([]);
  expect((await db.query('SELECT * FROM workload_publication_intents')).rows).toEqual([]);

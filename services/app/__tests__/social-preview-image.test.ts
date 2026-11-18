@@ -1,19 +1,18 @@
 import { describe, expect, it } from 'vitest';
+import { trashRow } from '@/__tests__/artifact-fixtures';
 import sharp from 'sharp';
-import { useAppHarness, request } from './harness';
+import { useAppHarness, request, params } from './harness';
 import {PUT as replace} from '@/app/api/artifacts/[id]/route';
 import { POST as create } from '@/app/api/artifacts/route';
 import {exportImage,EXPORT_PNG} from './export-helpers';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
-import { getDb } from '@/lib/platform';
 import { getArtifactById,artifactState } from '@/lib/artifacts';
 import { setServices } from '@/lib/platform';
 import { fakeBrowser } from '@artifactbin/utils';
 import { resetExportRenderer } from '@/lib/export';
 
 useAppHarness();
-const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const markup = (id: string) => `<!doctype html><html><head><meta name="artifactbin:og-image" content="ref:${id}" /><meta name="artifactbin:og-crop" content="x=0;y=20;width=800" /></head><body><p>Document</p></body></html>`;
 const publish = (token: string, body: unknown) => create(request('/api/artifacts', { method: 'POST', token, json: body }));
 
@@ -53,7 +52,7 @@ describe('uploaded social preview cards', () => {
     const { token, image } = await fixture();
     const doc = await (await publish(token, { html: markup(image.id), visibility: 'private' })).json();
     expect((await exportImage(request(`/a/${doc.id}/export?mode=card`), params(doc.id))).status).toBe(404);
-    await (await getDb()).query('UPDATE artifacts SET deleted_at = now() WHERE id = $1', [image.id]);
+    await trashRow(image.id);
     const bytes = EXPORT_PNG;
     setServices({ browser: fakeBrowser({ ok: true, mime: 'image/png', bytes }) });
     try {

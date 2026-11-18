@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { setVisibility } from '@/__tests__/artifact-fixtures';
 import { POST } from '@/app/api/artifacts/route';
 import { GET as raw } from '@/app/a/[id]/raw/route';
 import { GET as resolve, HEAD } from '@/app/a/[id]/resolve/route';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { getArtifactById } from '@/lib/artifacts';
 import { assetBytesForToken } from '@/lib/artifacts/testing';
-import { getDb } from '@/lib/platform';
 import { useAppHarness } from './harness';
 
 useAppHarness();
@@ -76,7 +76,7 @@ describe('generic file artifacts', () => {
     const publicFile = await publicResponse.json();
     const url = `${base}/a/Doc123/resolve?ref=ref:${publicFile.id}`;
     expect((await HEAD(new Request(url, { method: 'HEAD' }), ctx('Doc123'))).status).toBe(200);
-    await (await getDb()).query("UPDATE artifacts SET visibility = 'private' WHERE id = $1", [publicFile.id]);
+    await setVisibility(publicFile.id, 'private');
     for (const ref of [`ref:${publicFile.id}`, 'ref:Miss12', 'https://example.com/a.glb', 'ref:../raw']) {
       const res = await resolve(new Request(`${base}/a/Doc123/resolve?ref=${encodeURIComponent(ref)}`, { headers: { Authorization: `Bearer ${token.token}` } }), ctx('Doc123'));
       expect(res.status).toBe(404);

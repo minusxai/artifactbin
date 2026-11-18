@@ -9,7 +9,7 @@ import {observedRequest} from '@/__tests__/conditional-request';
  * wiped between tests (fresh WASM boot per test would be needlessly slow).
  */
 import { describe, expect, it } from 'vitest';
-import { useAppHarness, request } from '@/__tests__/harness';
+import { useAppHarness, request, params } from '@/__tests__/harness';
 import { GET as getArtifactRoute, PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
 import { GET as listArtifactsRoute, POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import {GET as getLlmsTxt} from '@/app/llms.txt/route';
@@ -22,7 +22,6 @@ const BASE = 'http://localhost:3000';
 const SECRET = 'test-secret';
 const harness = useAppHarness();
 
-const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
 async function mint(name?: string): Promise<{ id: string; token: string }> {
   const email = `mxmx_test_api_${crypto.randomUUID()}@example.com`;

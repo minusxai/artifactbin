@@ -18,7 +18,7 @@ import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 import { GET as frameRoute } from '@/app/a/[id]/events/frame/route';
 import { GET as getArtifactRoute, PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
 import { GET as listArtifactsRoute, POST as createArtifactRoute } from '@/app/api/artifacts/route';
-import { mintAccountToken } from '@/__tests__/harness';
+import { mintAccountToken, params } from '@/__tests__/harness';
 
 
 import { ID_RE } from '@/lib/platform';
@@ -29,7 +29,6 @@ const harness = useAppHarness();
 
 const BASE = 'http://localhost:3000';
 
-const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
 async function mint(): Promise<string> {
   return (await mintAccountToken('mxmx_test_fixture')).token;

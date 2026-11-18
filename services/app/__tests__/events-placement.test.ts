@@ -1,5 +1,5 @@
 import {nativeHtml} from './native-html-fixture';
-import { setSession } from './harness';
+import { setSession, params } from './harness';
 import {getDb} from '@/lib/platform';
 import type {EventEnvelope} from '@artifactbin/contracts';
 import {observedRequest} from '@/__tests__/conditional-request';
@@ -28,7 +28,6 @@ import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
 
 useAppHarness();
-const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
 let fake: FakeEvents;
 /** A fresh log per assertion, so a fixture's own moments never count against the one under test. */

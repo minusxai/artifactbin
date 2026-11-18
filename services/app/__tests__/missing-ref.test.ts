@@ -4,9 +4,8 @@ import {DELETE as remove,GET as read} from '@/app/api/artifacts/[id]/route';
 import {POST as publish} from '@/app/api/artifacts/route';
 import {POST as sqlDoor} from '@/app/api/artifacts/[id]/sql/route';
 import {getArtifactById} from '@/lib/artifacts';
-import {mintAccountToken,request,useAppHarness} from './harness';
+import {mintAccountToken,request,useAppHarness, params } from './harness';
 useAppHarness();
-const params=(id:string)=>({params:Promise.resolve({id})});
 it('a deleted dataset is unavailable while its page and immutable source remain readable',async()=>{
  const token=await mintAccountToken('missing-dataset');
  const made=await publish(request('/api/artifacts',{method:'POST',token:token.token,json:{visibility:'public',dataset:[{region:'EU',revenue:837}]}}));

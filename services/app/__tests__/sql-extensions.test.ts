@@ -14,14 +14,13 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { getArtifactById } from '@/lib/artifacts';
 import { services, setServices } from '@/lib/platform';
 import { useSqlExtensions } from '@/lib/sql';
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
+import { mintAccountToken as mintToken, params } from '@/__tests__/harness';
 import { createAppHost } from '@/server/host';
 import { request, useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();
 
 const FIXTURE = new URL('../../sql/__tests__/fixtures/fixture-extension.ts', import.meta.url).href;
-const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 const ROWS = [{ choice: 'ramen', who: 'seed' }];
 
 const previous = services().sql;

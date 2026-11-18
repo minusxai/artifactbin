@@ -6,7 +6,7 @@
  * nothing. `configuration` is server-owned. Everyone else gets the uniform 404.
  */
 import { expect, it } from 'vitest';
-import { mintAccountToken, request, useAppHarness } from './harness';
+import { mintAccountToken, request, useAppHarness, params } from './harness';
 import { identityForUser, type AccessActor } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
 import { createArtifactFromBody } from '@/lib/publish';
@@ -16,7 +16,6 @@ import { GET as TEMPLATES } from '@/app/api/artifacts/[id]/policy/templates/rout
 
 useAppHarness();
 
-const params = (id: string) => ({ params: Promise.resolve({ id }) });
 type Person = Awaited<ReturnType<typeof person>>;
 async function person(name: string) {
   const token = await mintAccountToken(`policy_${name}`);

@@ -19,13 +19,12 @@ import { link, unlink } from '@/lib/social';
 
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser, ensureUsername } from '@/lib/accounts';
-import { useAppHarness, request, setSession } from '@/__tests__/harness';
+import { useAppHarness, request, useSessionUser } from '@/__tests__/harness';
 
 useAppHarness();
-beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null)));
+const sessionUser = useSessionUser();
 
 const BASE = 'http://localhost:3000';
-const sessionUser = { id: '', email: '' };
 const params = <T,>(p: T) => ({ params: Promise.resolve(p) });
 const asSession = (u: { id: string; email: string }) => { sessionUser.id = u.id; sessionUser.email = u.email; };
 

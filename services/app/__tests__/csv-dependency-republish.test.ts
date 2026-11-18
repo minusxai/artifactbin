@@ -12,13 +12,12 @@ import {loadDatasetRows} from '@/lib/datasets';
 import {POST as create} from '@/app/api/artifacts/route';
 import {PUT as update} from '@/app/api/artifacts/[id]/route';
 import {POST as sqlPost} from '@/app/api/artifacts/[id]/sql/route';
-import {mintAccountToken,request,useAppHarness} from './harness';
+import {mintAccountToken,request,useAppHarness, params } from './harness';
 
 useAppHarness();
 const CSV='title,source\nseed,manual\n';
 const html=(body:string)=>`<html><head><link rel="af-dataset" data-af-name="items" href="./items.csv"></head><body>${body}</body></html>`;
 const bundle=(csv:string,mappings?:Record<string,unknown>)=>({entryPath:'index.html',files:[{path:'items.csv',contentType:'text/csv',base64:Buffer.from(csv).toString('base64')}],...(mappings?{mappings}:{})});
-const params=(id:string)=>({params:Promise.resolve({id})});
 let keys=0;const key=()=>`csv_republish_${String(++keys).padStart(8,'0')}_key`;
 
 async function published(){

@@ -7,22 +7,20 @@ import {observedRequest} from '@/__tests__/conditional-request';
  * probe never learns the owner's username from a private doc.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { useAppHarness, request, setSession } from '@/__tests__/harness';
+import { useAppHarness, useSessionUser, params } from '@/__tests__/harness';
 
 import { artifactPage as ArtifactPage } from '@/test/helpers/pages';
 import { GET as profileData } from '@/app/api/page/profile/[user]/[[...path]]/route';
-import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
+import { postArtifact } from '@/__tests__/artifact-fixtures';
 import { PATCH as patchArtifactRoute } from '@/app/api/my/artifacts/[id]/route';
 import { mintExportKey } from '@/lib/export';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser, ensureUsername, setUsername } from '@/lib/accounts';
 
 const harness = useAppHarness();
-beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null)));
+const sessionUser = useSessionUser();
 
-const sessionUser = { id: '', email: '' };
 
-const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
 /**
  * The pretty URL's RESOLUTION is now an endpoint (/api/page/profile): the same
@@ -64,7 +62,7 @@ async function fixtures() {
 }
 
 async function create(token: string, body: Record<string, unknown>) {
-  const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: body }));
+  const res = await postArtifact(token, body);
   expect(res.status).toBe(201);
   return res.json() as Promise<{ id: string }>;
 }

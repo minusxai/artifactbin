@@ -1,5 +1,6 @@
 /** A group's folder browser uses the same caller-visible hierarchy for sessions and bearer callers. */
 import {Hono} from 'hono';
+import { trashRow } from '@/__tests__/artifact-fixtures';
 import {expect,it,beforeEach} from 'vitest';
 import {bearerAdmission} from '@artifactbin/auth';
 import {createOAuthStore} from '@artifactbin/auth/identity/oauth';
@@ -124,7 +125,7 @@ it('pages past excluded batches without a global cap, preserves tied ordering an
  expect(found).toEqual(Array.from({length:229},(_,i)=>`collection_volume_${String(i+121).padStart(4,'0')}`));
  expect([...formats].sort()).toEqual(['html','markup','dataset','viz','image','pdf','file','program'].sort());
  expect((await db.query<{format:string}>('SELECT format FROM artifacts WHERE id=$1',[folder])).rows[0].format).toBe('folder');
- await db.query('UPDATE artifacts SET deleted_at=now() WHERE id=$1',[folder]);
+ await trashRow(folder);
  expect((await app.request(`/api/groups/${group.id}/collection?parent_id=${folder}`,{headers:{authorization:`Bearer ${member.token}`}})).status).toBe(404);
  const deleted=await app.request(`/api/groups/${group.id}`,{method:'DELETE',headers:{authorization:`Bearer ${owner.token}`,'content-type':'application/json'},body:JSON.stringify({handle:'collection_volume'})});expect(deleted.status).toBe(200);
  expect((await app.request(`/api/groups/${group.id}/collection`,{headers:{authorization:`Bearer ${member.token}`}})).status).toBe(404);

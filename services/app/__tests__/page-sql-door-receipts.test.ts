@@ -4,6 +4,7 @@
  * may show as the reader's access changes between the call and its commit.
  */
 import { beforeEach, expect, it, vi } from 'vitest';
+import { storePolicy, setVisibility } from '@/__tests__/artifact-fixtures';
 import { admitGroupMember, setSession, useAppHarness } from './harness';
 import { getDb, services } from '@/lib/platform';
 import { createGroup, removeGroupMember } from '@/lib/groups';
@@ -98,12 +99,12 @@ it('review2: legacy SQL receipts fail closed after role narrowing', async () => 
 });
 
 it('review2: same role with changed filter withholds SQL receipt rows', async () => {
-  const f = await fixture(), db = await getDb();
+  const f = await fixture();
   const text = "update staff set team = 'red' where name = 'ada'", key = 'review2_same_role_0001';
   expect((await sql(f.page, f.viewer, text, {}, {key})).body.returning).toHaveLength(1);
   const policy = structuredClone(POLICY);
   policy.tables[0]!.select_permissions[0]!.permission.filter = { team: { _eq: 'blue' } };
-  await db.query('UPDATE artifacts SET dataset_policy=$2::jsonb, policy_revision=policy_revision+1 WHERE id=$1', [f.staff, JSON.stringify(policy)]);
+  await storePolicy(f.staff, policy);
   expect((await sql(f.page, f.viewer, text, {}, {key})).body).toEqual({affected: 0, returning: []});
 });
 
@@ -152,7 +153,7 @@ it('review2: page group membership revoked before the transaction prevents commi
   const f = await fixture(), db = await getDb();
   const group = await createGroup(f.owner.userId!, {handle: 'review2_group', name: 'Review group'});
   await admitGroupMember(f.owner.userId!, group.id, f.other.userId!, 'member');
-  await db.query("UPDATE artifacts SET visibility='private' WHERE id=$1", [f.page]);
+  await setVisibility(f.page, 'private');
   await db.query("INSERT INTO artifact_group_shares(artifact_id,group_id,role,created_by) VALUES($1,$2,'viewer',$3)", [f.page, group.id, f.owner.userId]);
   const engine = services().sql, original = engine.mutate.bind(engine);
   let revoked = false;

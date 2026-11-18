@@ -8,12 +8,11 @@ import { findDependentsFor, getArtifactById } from '@/lib/artifacts';
 import {POST as sqlDoor} from '@/app/api/artifacts/[id]/sql/route';
 import {artifactState} from '@/lib/artifacts';
 import { mintExportKey } from '@/lib/export';
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
+import { mintAccountToken as mintToken, params } from '@/__tests__/harness';
 import { identityForUser } from '@/lib/accounts';
 import {useAppHarness,request} from './harness';
 
 useAppHarness();
-const params=(id:string)=>({params:Promise.resolve({id})});
 const create=async(token:string,body:Record<string,unknown>)=>{
  const response=await publish(request('/api/artifacts',{method:'POST',token,json:{visibility:'public',...body}}));
  const result=await response.json();expect(response.status,JSON.stringify(result)).toBe(201);return result as {id:string};

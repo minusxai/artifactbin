@@ -4,7 +4,7 @@
 import { nativeAnchor } from './native-annotation-fixture';
 import { nativeHtml } from '@/__tests__/native-html-fixture';
 import { describe, expect, it, beforeEach } from 'vitest';
-import { useAppHarness, mintAccountToken as mintToken, setSession, request } from '@/__tests__/harness';
+import { useAppHarness, mintAccountToken as mintToken, request, useSessionUser, params } from '@/__tests__/harness';
 import { canReadArtifact, changeMembership, getArtifactById, invitePeople, membershipState, mentionCandidates } from '@/lib/artifacts';
 import { effectiveRole, effectiveRole as roleFor } from '@/lib/artifact-access';
 import { ANONYMOUS_ACTOR, NO_IDENTITY, identityForUser, type RequestIdentity, createUser, ensureUsername } from '@/lib/accounts';
@@ -50,10 +50,8 @@ const harness = useAppHarness();
  * scope the reached ones are.
  */
 describe('editors through every door', () => {
-  beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null, emailVerified: true } } : null)));
-  const sessionUser = { id: '', email: '' };
+  const sessionUser = useSessionUser('verified');
 
-  const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
   const jreq = (path:string,method:string,body?:unknown,token?:string)=>observedRequest(path,{method,json:body,token});
   const create = async (token: string, body: Record<string, unknown>) => {
     const res = await createArtifactRoute(await jreq('/api/artifacts', 'POST', body, token));

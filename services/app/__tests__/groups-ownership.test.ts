@@ -1,4 +1,5 @@
 import {nativeHtml} from './native-html-fixture';
+import { revokeShares } from '@/__tests__/artifact-fixtures';
 import {afterEach,expect,it,vi} from 'vitest';
 import {observedRequest} from './conditional-request';
 import {useAppHarness,request,mintAccountToken} from './harness';
@@ -67,7 +68,7 @@ it('transfers ownership, revokes creator and token fallback, and reflects live m
  expect(await effectiveRole(row,identityForUser(f.viewer.id, f.c.id))).toBe('viewer');
  await f.db.query("INSERT INTO artifact_shares(artifact_id,email,user_id,role) VALUES($1,$2,$3,'editor')",[id,f.viewer.email,f.viewer.id]);
  expect(await effectiveRole(row,identityForUser(f.viewer.id, f.c.id))).toBe('editor');
- await f.db.query('DELETE FROM artifact_shares WHERE artifact_id=$1',[id]);
+ await revokeShares(id);
  expect((await accountWorkspaceCoreFor(f.viewer.id,null,'grp_ownership'))?.artifacts.map(r=>r.id)).toContain(id);
  await f.db.query('DELETE FROM group_members WHERE user_id=$1',[f.viewer.id]);
  expect(await effectiveRole(row,identityForUser(f.viewer.id, f.c.id))).toBe('none');

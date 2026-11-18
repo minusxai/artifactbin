@@ -9,21 +9,21 @@ import {observedRequest} from '@/__tests__/conditional-request';
  */
 import { describe, expect, it } from 'vitest';
 import { GET as getArtifactRoute, PUT as putArtifactRoute } from '@/app/api/artifacts/[id]/route';
-import { GET as listRoute, POST as createArtifactRoute } from '@/app/api/artifacts/route';
+import { GET as listRoute } from '@/app/api/artifacts/route';
+import { postArtifact } from '@/__tests__/artifact-fixtures';
 import { PATCH as sessionPatchRoute } from '@/app/api/my/artifacts/[id]/route';
 import { GET as sharingGet, PUT as sharingPut } from '@/app/api/my/artifacts/[id]/sharing/route';
 import { getArtifactById } from '@/lib/artifacts';
 
 
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
+import { mintAccountToken as mintToken, params } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
 import { useAppHarness, request } from '@/__tests__/harness';
 
 useAppHarness();
 
-const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 const create = (token: string, body: Record<string, unknown>) =>
-  createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: body }));
+  postArtifact(token, body);
 const ROWS = [{ choice: 'ramen', who: 'seed' }];
 /** The signed-in browser session of a minted account. */
 const session = (who: { userId?: string | null; email?: string | null }) => ({ credential: 'session' as const, userId: who.userId!, email: who.email!, emailVerified: true });

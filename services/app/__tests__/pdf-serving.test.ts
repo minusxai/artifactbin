@@ -24,13 +24,12 @@ import { samplePdf, samplePdfDataUrl } from '../../../scripts/lib/sample-pdf.mjs
 import { GET as serveRaw, HEAD as headRaw } from '@/app/a/[id]/raw/route';
 import { POST as bearerCreate } from '@/app/api/artifacts/route';
 import { pdfFilename } from '@/lib/object-store';
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
+import { mintAccountToken as mintToken, params } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
 import { request, useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();
 
-const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
 // A token per call: the harness wipes every table between tests, so one minted
 // in a beforeAll would be a 401 by the time a test used it.

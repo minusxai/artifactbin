@@ -22,7 +22,7 @@ import {observedRequest} from '@/__tests__/conditional-request';
  * merely opens a page — possibly an anonymous stranger — spends no storage.
  */
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { useAppHarness, request } from '@/__tests__/harness';
+import { useAppHarness, request, params } from '@/__tests__/harness';
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 import { useLoopbackLookup } from '@artifactbin/utils/node/loopback-lookup';
 import { GET as docAssets } from '@/app/a/[id]/assets/route';
@@ -67,7 +67,6 @@ afterAll(async () => {
 
 afterEach(() => { setDocAssetImportCapForTests(null); });
 
-const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
 /** `GET /a/<id>/assets?u=<url>` as whoever the options say (nobody, by default). */
 const ask = (id: string, url: string, opts: Parameters<typeof request>[1] = {}) =>

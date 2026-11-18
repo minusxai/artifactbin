@@ -6,7 +6,7 @@
  * ignores the rows and refuses the API.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { request, useAppHarness } from './harness';
+import { request, useAppHarness, params } from './harness';
 import { observedRequest } from './conditional-request';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { PUT as putArtifactRoute } from '@/app/api/artifacts/[id]/route';
@@ -24,7 +24,6 @@ useAppHarness();
 afterEach(() => resetConfigOverrides());
 const API = 'https://api.example.com', IMG = 'https://img.example.com', PLOTLY = 'https://cdn.plot.ly', NEW = 'https://new.example.com';
 const page = (connect: string, extra = '') => `<!doctype html><html><head><meta name="csp-connect" content="${connect}">${extra}<title>t</title></head><body><p>x</p></body></html>`;
-const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
 async function person(name: string) {
   const email = `mxmx_test_${name}@example.com`;

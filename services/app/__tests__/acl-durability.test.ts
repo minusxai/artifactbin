@@ -17,15 +17,13 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
 import { getArtifactById } from '@/lib/artifacts';
 
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
+import { mintAccountToken as mintToken, params } from '@/__tests__/harness';
 import { createUser, ensureUsername, setUsername } from '@/lib/accounts';
-import { useAppHarness, request, setSession } from '@/__tests__/harness';
+import { useAppHarness, request, useSessionUser } from '@/__tests__/harness';
 
 useAppHarness();
-beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null)));
+const sessionUser = useSessionUser();
 
-const sessionUser = { id: '', email: '' };
-const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
 async function fixtures() {
   const owner = await ensureUsername(await createUser({ email: 'acl@example.com' }));

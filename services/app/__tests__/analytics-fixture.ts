@@ -17,7 +17,7 @@ export const sessionUser = { id: '', email: '' };
 // a request carrying these headers (lib/request-context).
 export const requestHeaders = new Map<string, string>();
 
-export const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
+export { params } from '@/__tests__/harness';
 
 
 /** Run a page function, mapping notFound/redirect throws to outcomes. */

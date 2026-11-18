@@ -42,12 +42,11 @@ import { PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
 
-import { useAppHarness, request, mintAccountToken } from '@/__tests__/harness';
+import { useAppHarness, request, mintAccountToken, params } from '@/__tests__/harness';
 import { readNamed } from '@/__tests__/sse';
 
 useAppHarness();
 
-const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
 /** Read SSE `data:` frames until `count` arrive or the budget runs out. */
 

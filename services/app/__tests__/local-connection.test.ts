@@ -1,4 +1,5 @@
 import {it,expect} from 'vitest';
+import { setVisibility } from '@/__tests__/artifact-fixtures';
 import {createHash} from 'node:crypto';
 import {POST as publish} from '@/app/api/artifacts/route';
 import {POST as grant} from '@/app/api/local-connection/route';
@@ -41,7 +42,7 @@ it('observes stale source metadata without granting operations or leaking privat
  await(await harness.db()).query('UPDATE artifacts SET version=version+1 WHERE id=$1',[id]);
  const observedNew=await read();expect((await observedNew.json()).remoteRevision).toBe('2');
  const admission=await grant(request('/api/local-connection',{method:'POST',token:owner.token,json:{identity}}));expect(admission.status).toBe(409);
- await(await harness.db()).query("UPDATE artifacts SET visibility='private' WHERE id=$1",[id]);
+ await setVisibility(id, 'private');
  const denied=await read();expect(denied.status).toBe(404);expect(await denied.json()).not.toHaveProperty('remoteDigest');
  expect((await read({checkSession:true})).status).toBe(403);
  const allowed=await read({authorizePrivate:true});expect(allowed.status).toBe(403);

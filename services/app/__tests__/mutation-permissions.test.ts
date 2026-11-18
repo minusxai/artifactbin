@@ -1,9 +1,9 @@
 /** Native dataset writes through a page's generated API retain dataset authority and typed-column validation.
  * Retired JSX Value/row-action compiler tests are removed; authored controls use these HTTP operations. */
 import type {Actor} from '@artifactbin/contracts';
+import { revokeShares } from '@/__tests__/artifact-fixtures';
 import {expect,it,vi} from 'vitest';
 import {objectStore} from '@/lib/object-store';
-import {getDb} from '@/lib/platform';
 import {POST as publishRoute} from '@/app/api/artifacts/route';
 import {getArtifactById,updateSharingFor} from '@/lib/artifacts';
 import {loadDatasetRows} from '@/lib/datasets';
@@ -52,7 +52,7 @@ it('permits a dataset editor who only views the page and refuses once dataset ac
 it('refuses a commit when dataset sharing is revoked while preparing the pending write',async()=>{
  const f=await fixture();await f.share(f.dataset,'editor');const store=objectStore(),original=store.get.bind(store);let revoked=false;
  const spy=vi.spyOn(store,'get').mockImplementation(async key=>{
-  if(!revoked){revoked=true;await (await getDb()).query('DELETE FROM artifact_shares WHERE artifact_id=$1',[f.dataset]);}
+  if(!revoked){revoked=true;await revokeShares(f.dataset);}
   return original(key);
  });
  try{const result=await f.insert(f.actor);expect(revoked).toBe(true);expect(outcome(result),JSON.stringify(result.body)).toBe('rejected');expect((await getArtifactById(f.dataset))?.version).toBe(1);}finally{spy.mockRestore();}

@@ -1,4 +1,5 @@
 import { expect, it, vi } from 'vitest';
+import { setVisibility } from '@/__tests__/artifact-fixtures';
 import {objectStore} from '@/lib/object-store';
 import {afterEach} from 'vitest';
 const sourceRead={hold:null as null|(()=>Promise<{rows:Array<{n:number}>,columns:Array<{name:string,type:'number'}>}>) };
@@ -44,7 +45,7 @@ it.each(['document','catalog'] as const)('withholds the whole response when %s a
   const pending=queryDocument(request(`/api/artifacts/${id}/sql`),{params:Promise.resolve({id})});
   await started.promise;
   expect(calls).toBeGreaterThanOrEqual(2);
-  if(change==='document')await db.query("UPDATE artifacts SET visibility='private' WHERE id=$1",[id]);
+  if(change==='document')await setVisibility(id, 'private');
   else await db.query("UPDATE artifacts SET meta=jsonb_set(meta,'{catalog,tables}','[]'::jsonb) WHERE id=$1",[dataset]);
   release.resolve({rows:[{n:314159265}],columns:[{name:'n',type:'number'}]});
   expect(await (await pending).text()).not.toContain('314159265');sourceRead.hold=null;
@@ -66,7 +67,7 @@ it.each([
   ['bearer','unchanged'],['scripted-browser','unchanged'],
 ] as const)('revalidates a forwarded %s token (%s) through the real proxy after upstream object loading',async(credential,change)=>{
   const {id,token,user}=await fixture();const db=await harness.db();
-  await db.query("UPDATE artifacts SET visibility='private' WHERE id=$1",[id]);
+  await setVisibility(id, 'private');
   const started=deferred<void>(),release=deferred<{rows:Array<{n:number}>,columns:Array<{name:string,type:'number'}>}>();
   sourceRead.hold=()=>{started.resolve();return release.promise;};
   const bearers=await bearerIdentity();await bearers.account({userId:user.id,email:user.email!,emailVerified:true});
@@ -83,8 +84,8 @@ it.each([
 });
 
 it('keeps a plain legacy cookie unauthenticated before querying a private source',async()=>{
-  const {id,token}=await fixture();const db=await harness.db();
-  await db.query("UPDATE artifacts SET visibility='private' WHERE id=$1",[id]);
+  const {id,token}=await fixture();
+  await setVisibility(id, 'private');
   const source=vi.fn(async()=>({rows:[{n:314159265}],columns:[{name:'n',type:'number' as const}]}));sourceRead.hold=source;
   const proxy=createAuthHost({env:{},cookieSecret:AUTH_SECRET,tokens:(await bearerIdentity()).reader,sessions:{resolve:async()=>null},upstream:(incoming,actor)=>queryPrivateDocument(attachActor(incoming,actor),{params:Promise.resolve({id})})});
   const response=await proxy.fetch(request(`/api/artifacts/${id}/sql`,{method:'POST',json:{revision:"1",sql:queries.get(id)},cookie:await agentCookie([token.id])}));

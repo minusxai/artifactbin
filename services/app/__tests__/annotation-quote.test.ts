@@ -1,7 +1,7 @@
 /** Native captures keep selected words and raw text offsets under a stable HTML identity. */
 import {expect,it} from 'vitest';
 import {htmlTextFingerprint,type HtmlNodeAnchor} from '@artifactbin/contracts';
-import {useAppHarness,request,mintAccountToken} from './harness';
+import {useAppHarness,request,mintAccountToken, params } from './harness';
 import {nativeHtml} from './native-html-fixture';
 import {nativeAnchor} from './native-annotation-fixture';
 import {observedRequest} from './conditional-request';
@@ -10,7 +10,6 @@ import {PUT as updatePage} from '@/app/api/artifacts/[id]/route';
 import {POST as createComment} from '@/app/api/my/artifacts/[id]/annotations/route';
 import {GET as listComments} from '@/app/api/artifacts/[id]/annotations/route';
 const harness=useAppHarness();
-const params=(id:string)=>({params:Promise.resolve({id})});
 const text='Revenue grew 40% in Q3, ahead of plan.';
 const body='<p data-af-id="intro">An intro paragraph.</p><p data-af-id="rev"><strong>Revenue grew</strong> 40% in Q3, ahead of plan.</p><p data-af-id="costs">Costs fell too.</p>';
 async function fixture(source=body){const t=await mintAccountToken('quote');const made=await createPage(request('/api/artifacts',{method:'POST',token:t.token,json:{html:nativeHtml(source)}}));expect(made.status).toBe(201);const doc=await made.json();const actor={credential:'session' as const,userId:t.userId!,email:t.email!,emailVerified:true};return{t,doc,actor};}

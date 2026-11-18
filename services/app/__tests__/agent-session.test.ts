@@ -8,10 +8,9 @@ import { GET as events } from '@/app/a/[id]/events/route';
 import { AGENT_COOKIE, createUser, mintToken } from '@/lib/accounts';
 import { sessionActor } from '@/lib/authentication';
 import { createArtifact } from '@/lib/artifacts';
-import { agentCookie, request, setSession, useAppHarness, createGuestOwner } from './harness';
+import { agentCookie, request, setSession, useAppHarness, createGuestOwner, params } from './harness';
 
 useAppHarness();
-const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
 describe('retired token-to-browser login', () => {
   it.each(['unknown', 'guest', 'account'])('refuses a %s bearer without setting a cookie', async kind => {

@@ -8,7 +8,7 @@ import { identityForUser, createUser } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { updateSharingFor, changeMembership } from '@/lib/artifacts';
 import { setDatasetPolicy } from '@/__tests__/harness';
-import { POST as createArtifact } from '@/app/api/artifacts/route';
+import { postArtifact, trashRow } from '@/__tests__/artifact-fixtures';
 import { POST as uploadImage } from '@/app/a/[id]/datasets/[datasetId]/images/route';
 import { GET as readImage } from '@/app/a/[id]/datasets/[datasetId]/images/[imageId]/route';
 import { POST as uploadFile } from '@/app/api/artifacts/[id]/datasets/[datasetId]/files/route';
@@ -37,7 +37,7 @@ async function world(){
   const owner=await createUser({email:'mxmx_test_image_owner@example.test'}),reporter=await createUser({email:'mxmx_test_image_reporter@example.test'});
   const token=await mintToken('feedback-images-owner', owner.id);
   const ownerActor=identityForUser(owner.id, token.id);
-  const make=async(body:object)=>{const response=await createArtifact(request('/api/artifacts',{method:'POST',token:token.token,json:body}));expect(response.status,await response.clone().text()).toBe(201);return response.json();};
+  const make=async(body:Record<string,unknown>)=>{const response=await postArtifact(token.token,body);expect(response.status,await response.clone().text()).toBe(201);return response.json();};
   const dataset=await make({dataset:[{message:'initial',image_ref:''}],visibility:'private',access:'readwrite'});
   const document=await make({visibility:'public',html:`<!doctype html><html><head><link rel="af-dataset" data-af-name="feedback" href="ref:${dataset.id}"></head><body><p>Feedback</p></body></html>`});
   await updateSharingFor(ownerActor,dataset.id,{shares:[{email:reporter.email!,role:'viewer'}]});
@@ -120,7 +120,7 @@ it('uploads through a real pages actor, replays safely, and rechecks the current
   expect((await read(ownerSession)).status).toBe(200);
   await setDatasetPolicy(ownerActor,dataset.id,viewerRead(),2);
   expect((await filePost()).status).toBe(403);
-  await db.query('UPDATE artifacts SET deleted_at=now() WHERE id=$1',[dataset.id]);
+  await trashRow(dataset.id);
   expect((await read(ownerSession)).status).toBe(404);
   expect(await imageCount(dataset.id)).toBe(6);
 });

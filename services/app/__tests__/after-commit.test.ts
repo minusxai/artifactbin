@@ -4,20 +4,19 @@
  * can fail, and the write it follows has still happened and still answers so.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
+import { postArtifact } from '@/__tests__/artifact-fixtures';
 import { POST as mutateDatasetRoute } from '@/app/api/artifacts/[id]/mutate/route';
 import { emitDatasetCommitted, emitHeadCommitted } from '@/lib/artifacts';
 import { onDatasetCommitted, onHeadCommitted } from '@/lib/artifacts/testing';
-import { mintAccountToken as mintToken, request, useAppHarness } from '@/__tests__/harness';
+import { mintAccountToken as mintToken, request, useAppHarness, params } from '@/__tests__/harness';
 
 useAppHarness();
 
-const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const disposers: Array<() => void> = [];
 afterEach(() => { while (disposers.length) disposers.pop()!(); vi.restoreAllMocks(); });
 
 async function create(token: string, body: Record<string, unknown>) {
-  return createArtifactRoute(request('/api/artifacts', { method: 'POST', token, json: { visibility: 'public', ...body } }));
+  return postArtifact(token, { visibility: 'public', ...body });
 }
 
 describe('after-commit hooks', () => {

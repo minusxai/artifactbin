@@ -13,7 +13,7 @@ import { describe, expect, it } from 'vitest';
 import { artifactMetadata } from '@/test/helpers/pages';
 import { POST as startRoute } from '@/app/api/start/route';
 import { PUT as editRoute } from '@/app/api/artifacts/[id]/route';
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
+import { mintAccountToken as mintToken, params } from '@/__tests__/harness';
 import { useAppHarness, request } from '@/__tests__/harness';
 
 useAppHarness();
@@ -21,7 +21,6 @@ useAppHarness();
 
 
 
-const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
 interface Start { id: string; token: string; edit_id: string }
 

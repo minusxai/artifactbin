@@ -9,10 +9,9 @@
  * with a key: as the key's requester, read-only (lib/page-doors `opaqueSqlRead`).
  */
 import { beforeEach, expect, it } from 'vitest';
-import { mintAccountToken, request, setSession, useAppHarness } from './harness';
+import { mintAccountToken, request, setSession, useAppHarness, params } from './harness';
+import { STAFF, staffDeck, runtime } from './export-helpers';
 import { identityForUser, type AccessActor } from '@/lib/accounts';
-import { getDb } from '@/lib/platform';
-import { createArtifactFromBody } from '@/lib/publish';
 import { mintExportKey } from '@/lib/export';
 import { GET as serveRaw } from '@/app/a/[id]/raw/route';
 import { POST as sqlDoor } from '@/app/api/artifacts/[id]/sql/route';
@@ -20,32 +19,11 @@ import { POST as sqlDoor } from '@/app/api/artifacts/[id]/sql/route';
 useAppHarness();
 beforeEach(() => setSession(null));
 
-const params = (id: string) => ({ params: Promise.resolve({ id }) });
-const STAFF = [{ name: 'ada', team: 'red' }, { name: 'bo', team: 'blue' }];
-const ROWS = { schema: 'public', name: 'rows' };
-/** Signed-in readers see every column; anonymous readers see names only. */
-const POLICY = { version: 3, tables: [{
-  table: ROWS,
-  select_permissions: [
-    { role: 'signed_in', permission: { columns: '*', filter: {}, allow_aggregations: true } },
-    { role: 'anonymous', permission: { columns: ['name'], filter: {} } },
-  ],
-  insert_permissions: [{ role: 'signed_in', permission: { columns: ['name', 'team'], check: {} } }],
-}] };
-
 async function deck() {
   const minted = await mintAccountToken('ecd_owner');
   const actor = identityForUser(minted.userId, minted.id, minted.email) as AccessActor & { tokenId: string };
-  const dataset = await createArtifactFromBody({ dataset: STAFF, title: 'Staff', access: 'readwrite', visibility: 'unlisted' }, actor, 'http://localhost:3000');
-  expect(dataset.status).toBe(201);
-  const staff = (await dataset.json() as { id: string }).id;
-  await (await getDb()).query('UPDATE artifacts SET dataset_policy=$2::jsonb, policy_revision=policy_revision+1 WHERE id=$1', [staff, JSON.stringify(POLICY)]);
-  const html = `<html><head><link rel="af-dataset" data-af-name="staff" href="ref:${staff}"></head><body><main id="deck"></main></body></html>`;
-  const page = await createArtifactFromBody({ html, visibility: 'unlisted' }, actor, 'http://localhost:3000');
-  expect(page.status).toBe(201);
-  return { token: minted.token, actor, page: (await page.json() as { id: string }).id };
+  return { token: minted.token, actor, page: (await staffDeck(actor, 'unlisted')).page };
 }
-const runtime = (html: string) => JSON.parse(/<script type="application\/json" data-af="runtime">([^<]*)<\/script>/.exec(html)![1]!) as { domainReads?: true };
 const connectSrc = (policy: string | null) => /connect-src ([^;]+)/.exec(policy ?? '')?.[1] ?? '';
 
 it('serves the export capture with direct data reads, and an ordinary raw page without them', async () => {
