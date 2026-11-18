@@ -217,3 +217,16 @@ it('shows a live selection when the parent grants actions after the selection ev
   actions!.update(true);
   expect(document.querySelector<HTMLElement>('[role="toolbar"]')?.hidden).toBe(false);
 });
+it("offers only Comment when the host turns Select off, and Select again when it turns it back on", () => {
+  const chosen = setup();
+  actions!.update(true, { select: false });
+  const open = () => {
+    document.querySelector("p")!.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 20, clientY: 30 }));
+    return [...document.querySelectorAll("[data-mx-selection-action]")].map((button) => button.getAttribute("data-mx-selection-action"));
+  };
+  expect(open()).toEqual(["annotate"]);
+  (document.querySelector('[data-mx-selection-action="annotate"]') as HTMLElement).click();
+  expect(chosen).toEqual(["annotate"]);
+  actions!.update(true, { select: true });
+  expect(open()).toEqual(["annotate", "select"]);
+});

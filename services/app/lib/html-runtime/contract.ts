@@ -22,6 +22,8 @@ export interface HtmlRuntimeConfig {
   live?: number;
   /** Source-owned identities, supplied by assembly before author code runs. */
   savedNodeIds?: readonly string[];
+  /** A draft's: each identity -> its start tag's [line, column] (1-based) in the source its host sent (a selection's `source`). */
+  sourcePositions?: Readonly<Record<string, readonly [number, number]>>;
   /** Every linked name the page declares (its dataset and default-connection links), in source order. */
   backends: readonly string[];
   /** Stored dataset links: their generated roots are flat remote fields (apollo `datasets`). */

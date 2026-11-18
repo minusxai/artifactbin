@@ -39,3 +39,17 @@ it('anchors an actual cross-paragraph selection to its shared source ancestor',(
  const [first,second]=document.querySelectorAll('p');const range=document.createRange();range.setStart(first!.firstChild!,6);range.setEnd(second!.firstChild!,6);window.getSelection()!.addRange(range);
  expect(htmlSelection(window,first!,'1',['section','first','second'])?.anchor).toMatchObject({nodeId:'section',quote:'words Second',range:{start:6,end:18,length:24}});
 });
+it('names the node as a reader would: its own name, a heading or caption it opens with, else its first words, never script text',()=>{
+ document.body.innerHTML='<af-chart data-af-id="c" label="Weekly revenue (USD)"><script type="application/json">{"mark":"bar"}</script></af-chart>'
+  +'<section data-af-id="s"><h2>Pipeline</h2><p>Body text</p></section>'
+  +'<figure data-af-id="f"><img alt=""><figcaption>Churn by plan</figcaption></figure>'
+  +'<div data-af-id="d"><script>var x = 1</script><style>p{}</style>  Long   words '+'x'.repeat(200)+'</div>'
+  +'<img data-af-id="i" alt="Logo"><span data-af-id="e"></span>';
+ const label=(id:string)=>htmlSelection(window,document.querySelector(`[data-af-id="${id}"]`),'1')?.label;
+ expect(label('c')).toBe('Weekly revenue (USD)');
+ expect(label('s')).toBe('Pipeline');
+ expect(label('f')).toBe('Churn by plan');
+ expect(label('d')).toMatch(/^Long words x+…$/);expect(label('d')).toHaveLength(120);
+ expect(label('i')).toBe('Logo');
+ expect(htmlSelection(window,document.querySelector('[data-af-id="e"]'),'1')).not.toHaveProperty('label');
+});

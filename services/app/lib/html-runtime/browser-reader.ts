@@ -117,7 +117,7 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
     if(changed)for(const listener of invalidationListeners)try{listener([...config.backends,PAGE_VIEWER_ROOT],'authority');}catch{/* Independent subscriptions. */}
   };
   updateUploadContext(attach?.uploadContext??{state:'unavailable',scope:nonce});
-  let canAnnotate = false;
+  let canAnnotate = false, canSelect = true;
   let annotations: HtmlAnnotationPaint = { pins: [], mode: 'off', openId: null, hoverId: null };
   const sourceObservation=config.annotationObservation==='imported-source-v1';
   const painter = createHtmlAnnotationPainter(win.document,{coordinateSpace:sourceObservation?'document':'viewport',blockPresentation:sourceObservation?'source-node':'overlay'});
@@ -133,7 +133,9 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
   let drag: { x: number; y: number; target: Node } | null = null;
   let sourceReady=!sourceObservation;
   const layout = (report=true) => {const positions=painter.paint(annotations);if(report&&sourceReady)post({ kind: 'event', event: { type: 'mx:annotation-layout', nonce, positions, viewStateError: commentView.error } });};
-  const actions = createHtmlSelectionActions({ win, capture: target => htmlSelection(win, target, config.revision, config.savedNodeIds), onAction: (action, selected) => post({ kind: 'event', event: { type: 'mx:selection-action', nonce, action, selection: selected } }) });
+  // A draft's node also says where its start tag is in the source its host sent (config `sourcePositions`).
+  const located = <T extends { path: string } | null>(selected: T): T => { const at = selected && config.sourcePositions?.[selected.path]; return at ? { ...selected, source: { line: at[0], column: at[1] } } : selected; };
+  const actions = createHtmlSelectionActions({ win, capture: target => located(htmlSelection(win, target, config.revision, config.savedNodeIds)), onAction: (action, selected) => post({ kind: 'event', event: { type: 'mx:selection-action', nonce, action, selection: selected } }) });
   const readiness=sourceObservation?startSourceAnnotationReadiness(win,()=>{sourceReady=true;if(annotations.pins.length)layout();}):null;
   const ownsOverlay=(node:Node)=>painter.ownsOverlay(node)||presence.ownsOverlay(node)||actions.ownsOverlay(node)||regions.ownsOverlay(node);
   const observation=observeHtmlDom(win,ownsOverlay,()=>{if(annotations.pins.length)layout(!sourceObservation);presence.paint();},painter.ownsMutation);
@@ -210,16 +212,16 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
       }
       if (payload.kind === 'send') {
         applyHtmlReaderAppearance(win.document, payload.command);
-        const command = payload.command as Partial<HtmlAnnotationPaint> & HtmlCommentViewCommand & { type?: string; annotate?: boolean; canComment?: boolean; pick?: typeof pick; path?: string | null; reveal?: boolean; datasets?: string[] };
+        const command = payload.command as Partial<HtmlAnnotationPaint> & HtmlCommentViewCommand & { type?: string; annotate?: boolean; select?: boolean; canComment?: boolean; pick?: typeof pick; path?: string | null; reveal?: boolean; datasets?: string[] };
         if (command?.type === 'mx:presence') presence.receive(payload.command as PresencePaint);
         // A new published version (solid/document/follow-html-version): drawn in place when safe, else this document is rebuilt
         // from it (told first, so the parent follows instead of reloading); the parent reloads only when no version was read.
         if (command?.type === HTML_VERSION_MESSAGE) { const version = Number((payload.command as { version?: unknown }).version), live = Number((payload.command as { live?: unknown }).live ?? 0); if (Number.isInteger(version) && Number.isSafeInteger(live)) { win.addEventListener('pagehide', keepReadingPlace); post({ kind: 'event', event: { type: HTML_VERSION_RECEIVED, nonce } }); void loadLiveMorph().then((morph) => morph.applyHtmlVersion(win, config, version, undefined, regions.editing, live)).then((applied) => { if (applied.rebuild) { regions.keepForRebuild(); post({ kind: 'event', event: { type: HTML_VERSION_REBUILT, nonce, revision: applied.revision, ...(applied.reason ? { reason: applied.reason } : {}) } }); win.location.replace(applied.rebuild); return; } win.removeEventListener('pagehide', keepReadingPlace); config.revision = applied.revision; config.live = applied.live ?? 0; config.savedNodeIds = applied.savedNodeIds; if (annotations.pins.length) layout(); presence.paint(); post({ kind: 'event', event: { type: HTML_VERSION_APPLIED, nonce, revision: applied.revision } }); }, (error: unknown) => post({ kind: 'event', event: { type: HTML_VERSION_REFUSED, nonce, reason: String(error instanceof Error ? error.message : error).slice(0, 300) } })); } }
         if (command?.type === 'mx:data' && Array.isArray(command.datasets)) { const ids = new Set(command.datasets); const names = config.backends.filter((name) => ids.has(name) || ids.has(config.bindings?.[name] ?? '')); if (names.length) for (const listener of invalidationListeners) try { listener(names,"data"); } catch { /* One subscriber cannot stop the others. */ } }
-        if (command?.type === 'mx:selection-actions') canAnnotate = command.annotate === true;
+        if (command?.type === 'mx:selection-actions') { canAnnotate = command.annotate === true; canSelect = command.select !== false; }
         if (command?.type === 'mx:annotations') { annotations = { pins: command.pins ?? [], mode: command.mode ?? 'off', openId: command.openId ?? null, hoverId: command.hoverId ?? null }; canAnnotate = command.canComment ?? canAnnotate; pick = command.pick ?? null; win.document.documentElement.style.cursor = pick ? 'crosshair' : cursor; }
         if (command?.type === 'mx:select') { const matches = [...win.document.querySelectorAll('[data-af-id]')].filter((node) => node.getAttribute('data-af-id') === command.path); const target = matches.length===1 ? matches[0] : null; const selected = target ? htmlSelection(win, target, config.revision, config.savedNodeIds) : null; if (command.reveal) target?.scrollIntoView?.(); post({ kind: 'event', event: { type: 'mx:selection', nonce, selection: selected } }); }
-        if (command?.type === 'mx:annotations' || command?.type === 'mx:selection-actions') actions.update(canAnnotate && !pick);
+        if (command?.type === 'mx:annotations' || command?.type === 'mx:selection-actions') actions.update(canAnnotate && !pick, { select: canSelect });
         if (command?.type === 'mx:annotations') void commentView.receive(command).then(changed => { const pin = annotations.pins.find(pin => pin.id === annotations.openId); // The thread the reader had open in the document this one replaced (a version rebuilt it, or the page reloaded around it, ./reading-place) is already open: their carried place wins over revealing it again.
  const carried = changed && takeCarriedThread(win) === pin?.id; if(changed && pin && !carried) revealHtmlAnnotation(win.document,pin); layout(); });
       }
