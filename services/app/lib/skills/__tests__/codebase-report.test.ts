@@ -124,7 +124,7 @@ it('imports only hosted @afbin modules and names its design system, nothing the 
   expect(read('codebase-report.html')).toContain('<meta name="artifactbin:design-system" content="drafting">');
   expect(read('codebase-report.html')).not.toContain('core.js');
   const names = [...read('codebase-report.html').matchAll(/(?:from|import)\s*['"]@afbin\/([a-z0-9-]+)['"]/g)].map(m => m[1]!);
-  expect(names).toEqual(['apollo', 'vega', 'vega-lite', 'pele-flowchart']);
+  expect(names).toEqual(['apollo', 'vega', 'vega-lite', 'pele-flowchart', 'data-table']);
   for (const name of names) expect(HOSTED.has(name), name).toBe(true);
 });
 
@@ -157,9 +157,11 @@ it('computes every number with sql over the three linked tables, one watched sta
   // The diagram: one node per area, one arrow per imports row, labelled with its count.
   expect(page.diagrams).toEqual(['flowchart LR\n  a0["web"]\n  a1["lib"]\n  a2["shared"]\n  a0 -->|2| a1\n  a1 -->|1| a2']);
   expect(page.dom.window.document.querySelector('[data-af-id="chart-modules-plot"]')!.getAttribute('data-drawn')).toBe('2');
-  // Each chart lists its values; the hotspot table is open with the top rows.
-  expect([...page.dom.window.document.querySelectorAll('[data-af-id="chart-hotspots-table"] td')].slice(0, 5).map(td => td.textContent))
-    .toEqual(['web/app.ts', 'web', '120', '3', '2']);
+  // Each chart lists its values in an af-data-table over its own query, never hand-built rows; the hotspot one is open.
+  const tables = [...page.dom.window.document.querySelectorAll('af-data-table')];
+  expect(tables.map(t => [t.getAttribute('data-af-id'), t.getAttribute('sql')]))
+    .toEqual(data.charts.map((c: {id: string; query: string}) => [`chart-${c.id}-table`, data.queries[c.query]]));
+  expect(page.dom.window.document.querySelector('main table')).toBeNull();
   expect(page.dom.window.document.querySelector<HTMLDetailsElement>('[data-af-id="chart-hotspots-table-box"]')!.open).toBe(true);
   const ids = [...page.dom.window.document.querySelectorAll('[data-af-id]')].map(node => node.getAttribute('data-af-id'));
   expect(new Set(ids).size).toBe(ids.length);
@@ -215,14 +217,13 @@ it('ramps a count in one hue, from the background tinted toward the first series
   }
 });
 
-it('aligns a numeric column header with its numbers and sizes the diagram to its drawing', async () => {
+it('titles a value table\'s columns from DATA labels and sizes the diagram to its drawing', async () => {
   const page = await load(fill(read('codebase-report.html')));
   const document = page.dom.window.document;
-  expect([...document.querySelectorAll('[data-af-id="chart-hotspots-table"] th')].map(th => [th.textContent, th.className]))
-    .toEqual([['File', ''], ['Area', ''], ['Lines', 'n'], ['Commits that changed it', 'n'], ['Authors', 'n']]);
+  expect(JSON.parse(document.querySelector('[data-af-id="chart-hotspots-table"]')!.getAttribute('columns')!)).toEqual([
+    {col: 'path', title: 'File'}, {col: 'area', title: 'Area'}, {col: 'lines', title: 'Lines'},
+    {col: 'changes', title: 'Commits that changed it'}, {col: 'authors', title: 'Authors'}]);
   const style = (id: string) => page.dom.window.getComputedStyle(document.querySelector(`[data-af-id="${id}"]`)!);
-  expect([style('chart-hotspots-table-0-lines').textAlign, style('chart-hotspots-table-lines').textAlign,
-    style('chart-hotspots-table-path').textAlign]).toEqual(['right', 'right', 'left']);
   // A chart keeps room for its plot while it draws; the diagram is as tall as its flowchart, no taller.
   expect(style('chart-hotspots-plot').minHeight).toBe('280px');
   expect(style('chart-modules-plot').minHeight).toBe('0px');

@@ -22,7 +22,7 @@ number computed by SQL (sql). Usage: and Gotchas: are above DATA; keep this line
 //   draws its rows as a Pele flowchart (from, to, weight). changes counts the window's commits
 //   that touched a file; an import counts file pairs between two areas.
 // Built with: one HTML page; three datasets gathered from git; watched sql queries; Vega-Lite
-//   charts and a Pele flowchart, each with a table of its values.
+//   charts and a Pele flowchart, each with an af-data-table of its values over its query.
 window.DATA = {
   source: {repo: '[repo name]', head: '[commit id]', since: '[1 year ago]'},
   queries: {
@@ -66,7 +66,7 @@ window.DATA = {
   ],
   charts: [
     {id:'hotspots', title:'[Hotspots: files changed often that are also large]',
-      query:'hotspots', rows:10, open:true, spec:{mark:{type:'point', filled:true, opacity:.6},
+      query:'hotspots', open:true, spec:{mark:{type:'point', filled:true, opacity:.6},
         encoding:{x:{field:'lines', type:'quantitative', scale:{type:'log'}},
           y:{field:'changes', type:'quantitative'}}}},
     {id:'grid', title:'[Who works where]', query:'grid', spec:{mark:'rect', encoding:{
@@ -91,12 +91,10 @@ window.DATA = {
 main{max-width:1080px;margin:auto;padding:clamp(20px,5vw,72px)}p,li{max-width:70ch}
 .muted{opacity:.72}.lead{font-size:clamp(19px,3vw,26px);line-height:1.5}
 [role=status]{min-height:1.6em}summary{cursor:pointer}a{color:var(--primary)}
-.number,.n{font-variant-numeric:tabular-nums}.n{text-align:right}td.n{white-space:nowrap}
+.number{font-variant-numeric:tabular-nums}details{margin-top:12px}
 .rule{border-top:1px solid var(--border);padding-top:24px;margin-top:32px;min-width:0}
 .chart{width:100%;min-height:280px;overflow:auto}.chart svg{max-width:100%;height:auto}
-table{border-collapse:collapse;width:100%;margin-top:12px}details{overflow-x:auto}
-td:first-child{overflow-wrap:anywhere;min-width:14ch}.chart[data-drawn]{min-height:0}
-td,th{padding:6px 8px;border-bottom:1px solid var(--border);text-align:left}
+.chart[data-drawn]{min-height:0}
 .chart{--pele-bg:var(--background);--pele-fg:var(--foreground);--pele-line:var(--foreground);
   --pele-muted:var(--muted-foreground);--pele-surface:var(--card);--pele-border:var(--border);
   --pele-surface-alt:var(--muted);--pele-accent:var(--primary);--pele-font:var(--font-body)}
@@ -116,6 +114,7 @@ import {sql} from '@afbin/apollo';
 import * as vega from '@afbin/vega';
 import {compile} from '@afbin/vega-lite';
 import {mount} from '@afbin/pele-flowchart';
+import '@afbin/data-table';
 const D=window.DATA,$=s=>document.querySelector(s),status=$('#status'),names=Object.keys(D.queries);
 const label=col=>D.labels[col]??col,fmt=n=>Number.isFinite(n)?n.toLocaleString():'–';
 // Each DATA query is SQL text with no values in it: the sql tag runs it as written.
@@ -123,17 +122,14 @@ const statement=text=>sql(Object.assign([text],{raw:[text]}));
 let answers={},views=[],diagrams=[],stops=[];
 const h={rows:name=>answers[name]??[],one:name=>answers[name]?.[0]??{},fmt};
 // Script-made nodes take data-af-ids from DATA ids and row positions, stable on every render.
-const node=(tag,id,text,cls)=>{const n=document.createElement(tag);n.dataset.afId=id;
-  if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;};
-function table(c){const id=`chart-${c.id}-table`,rows=h.rows(c.query).slice(0,c.rows??50);
-  const box=node('details',id+'-box'),t=node('table',id),cols=Object.keys(rows[0]??{}),
-    head=node('tr',id+'-head'),num=col=>rows.some(row=>typeof row[col]==='number')?'n':'';
-  box.append(node('summary',id+'-summary',c.rows?`Top ${rows.length}`:'Values'),t);
-  box.open=!!c.open;head.append(...cols.map(col=>node('th',`${id}-${col}`,label(col),num(col))));
-  t.append(head,...rows.map((row,i)=>{const tr=node('tr',`${id}-${i}`);
-    tr.append(...cols.map(col=>{const n=typeof row[col]==='number';return node('td',
-      `${id}-${i}-${col}`,n?fmt(row[col]):row[col],n?'n':'');}));return tr;}));
-  return box;}
+const node=(tag,id,text)=>{const n=document.createElement(tag);n.dataset.afId=id;
+  if(text!==undefined)n.textContent=text;return n;};
+// A chart's values: an af-data-table over its query (sortable, live), its columns titled.
+function table(c){const id=`chart-${c.id}-table`,box=node('details',id+'-box'),
+  t=node('af-data-table',id);box.open=!!c.open;t.setAttribute('label',c.title);
+  t.setAttribute('columns',JSON.stringify(Object.keys(h.one(c.query)).map(col=>({col,
+    title:label(col)}))));t.setAttribute('sql',D.queries[c.query]);
+  box.append(node('summary',id+'-summary','Values'),t);return box;}
 const token=name=>getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 function spec(c,rows){const ink=token('--foreground'),line=token('--border'),
   colors=[1,2,3,4,5].map(n=>token('--chart-'+n)).filter(Boolean),
