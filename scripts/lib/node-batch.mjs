@@ -49,6 +49,9 @@ export const NODE_BATCH_GUARDED = Object.freeze([
   // Creation's parent refusal: failed on main after the preflight refused a non-folder parent as the uniform
   // `Invalid parent`, and no pr fast list ran the write path's own file (4.8s recorded, past the batch's cut).
   'services/app/lib/artifacts/__tests__/writes.test.ts',
+  // Comment creation's store: failed on main after merge when a comment on an earlier version stopped being refused,
+  // and pr fast deferred it past the reached-files budget (2.8s recorded; lib/annotations/store.ts reaches widely).
+  'services/app/lib/annotations/__tests__/store.test.ts',
   // The SQL worker pool behind its HTTP shell: a malformed body crashed the service process on main after merge; its
   // process test (services/app/lib/sql/__tests__/service.test.ts) stubs the environment and cannot share a graph.
   'services/sql/__tests__/malformed-requests.test.ts',
