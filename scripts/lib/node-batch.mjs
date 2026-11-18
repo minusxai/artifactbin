@@ -98,7 +98,8 @@ export function nodeBatchFiles({ timings, candidates, lane, read }) {
  *  - `must`: every `node` file the change adds or edits that no pr fast part already runs, whatever its time or record;
  *  - `affected`: the slower files whose import graph reaches a changed file (scripts/lib/test-graph.mjs, the same
  *    selection `npm test` makes), nearest the change first (fewest imports away), then shortest, while their recorded
- *    times (a file without one weighs the `node` median) fit `budgetMs`; `must` never spends it. A rerun trigger
+ *    times (a file without one weighs the `node` median), each with its import (`NODE_ISOLATED_FILE_MS`), fit
+ *    `budgetMs`; `must` never spends it. A rerun trigger
  *    (vitest.config.ts, a package.json) reaches every file at distance Infinity, none nearer: it adds none of them,
  *    since a budget's worth of the shortest is an arbitrary subset on a cold module cache (#1339's runners: 27-36s);
  *  - `deferred`: the reached files over the budget, named on the run. The full suite still runs every one after merge.
@@ -111,7 +112,7 @@ export function nodeAffectedFiles({ timings, changed, affected, candidates, batc
   const node = timings.files.node ?? {};
   const values = Object.values(node).sort((a, b) => a - b);
   const median = values.length ? values[Math.floor(values.length / 2)] : NODE_BATCH_MAX_MS;
-  const weight = (file) => node[file] ?? median;
+  const weight = (file) => (node[file] ?? median) + NODE_ISOLATED_FILE_MS;
   const reached = [...affected].filter(({ file }) => !runsElsewhere(file) && !must.includes(file))
     .sort((a, b) => a.distance - b.distance || weight(a.file) - weight(b.file) || (a.file < b.file ? -1 : a.file > b.file ? 1 : 0));
   const chosen = [], deferred = [];
@@ -124,9 +125,17 @@ export function nodeAffectedFiles({ timings, changed, affected, candidates, batc
 }
 
 /**
- * Recorded time (ms) the reached files may add to pr fast's node runners, summed over all of them. The runners' Vitest
- * step took ~10s of the 60s limit (pr fast run 44299731859, finished 21-33s into the run); 90s over three runners of
- * three workers is ~10s more on each, inside the 40s aim. A pull request's own files are not counted against it.
+ * What a file of `node-batch-isolated` costs beyond its recorded time: the table holds a file's tests alone, and each of
+ * these imports a fresh module graph first, as an api-isolated file does (timed-sequencer.mjs `ISOLATED_FILE_MS`, 2s
+ * measured there). Weighed by recorded time alone, a full budget of reached files (60, ~90s recorded) took the node
+ * runners' Vitest step to 19-33s against ~18s predicted, and the run to 53s (pr fast run 44310861237, 17.9s of import).
+ */
+export const NODE_ISOLATED_FILE_MS = 2000;
+
+/**
+ * Time (ms) the reached files may add to pr fast's node runners, summed over all of them, each weighed with its import.
+ * The runners' Vitest step took 10-12s with the batch alone (pr fast runs 44299731859, 44308003107); 90s over four
+ * runners of three workers is ~7.5s more on each, inside the 40s aim. A pull request's own files are not counted against it.
  */
 export const NODE_AFFECTED_BUDGET_MS = 90_000;
 
