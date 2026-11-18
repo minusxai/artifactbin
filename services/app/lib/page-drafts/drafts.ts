@@ -134,7 +134,7 @@ export async function createDraft(reader: string, input: unknown, appOrigin: str
   const held = drafts.get(label);
   if (held && held.reader === reader) { held.expires = now + DRAFT_LIMITS.ttlSeconds * 1000; return { label, ticket: ticketFor(held, now), entryPath: held.entryPath, connections: held.connections.map((c) => c.name), liveSql: held.liveSql }; }
   let plan;
-  try { plan = planPublicationBundle(draft.html, { entryPath: draft.entryPath, files: draft.files.map((file) => ({ path: file.path, contentType: file.contentType, base64: file.bytes.toString('base64') })) }); }
+  try { plan = planPublicationBundle(draft.html, { entryPath: draft.entryPath, files: draft.files.map((file) => ({ path: file.path, contentType: file.contentType, base64: file.bytes.toString('base64') })) }, { filesServedByPath: true }); }
   catch (cause) { throw new DraftRefusal('unresolved_draft_files', cause instanceof Error ? cause.message : 'the page links files the draft does not carry'); }
   const { names, connections } = datasetNames(draft.html, plan.entryPath);
   const files = new Map<string, { bytes: Buffer; contentType: string }>();

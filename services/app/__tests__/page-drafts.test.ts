@@ -97,6 +97,22 @@ describe('POST /api/page/drafts', () => {
     expect(await artifacts()).toBe(before);
   });
 
+  it('reads a CSV both as a dataset and as a file the page links, whichever reference comes first', async () => {
+    const owner = await mintAccountToken('draft_owner');
+    const download = '<a href="./orders.csv" download>Download the rows</a>', dataset = '<link rel="af-dataset" data-af-name="orders" href="./orders.csv">';
+    for (const [html, files] of [[PAGE.replace('<h1>Orders</h1>', `<h1>Orders</h1>${download}`), FILES], [`<!doctype html><html><body>${download}${dataset}<p>Orders</p></body></html>`, [FILES[1]!]]] as const) {
+      const response = await post(session(owner), { html, files });
+      const answer = await response.json() as { src: string; origin: string };
+      expect(response.status, JSON.stringify(answer)).toBe(200);
+      const page = await (await get(answer.src)).text();
+      expect(JSON.parse(/<script type="application\/json" data-af="runtime">([^<]*)<\/script>/.exec(page)![1]!)).toMatchObject({ datasets: ['orders'] });
+      expect(JSON.parse(/<script type="application\/json" data-af="offline-data">([^<]*)<\/script>/.exec(page)![1]!).tables.map((t: { name: string }) => t.name)).toEqual(['orders']);
+      const file = await get(`${answer.origin}/orders.csv`);
+      expect(file.status).toBe(200);
+      expect(await file.text()).toBe(Buffer.from(FILES[1]!.base64, 'base64').toString());
+    }
+  });
+
   it('refuses every call from a draft origin to the app, and to a document\'s doors', async () => {
     const owner = await mintAccountToken('draft_owner');
     const { origin } = await (await post(session(owner), { html: PAGE, files: FILES })).json() as { origin: string };

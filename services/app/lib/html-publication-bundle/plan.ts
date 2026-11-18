@@ -12,7 +12,7 @@ import type {PublicationBundle,BundlePlan,BundleDependency,BundleResolutionConte
 export type {PublicationBundle,BundlePlan} from './contracts';
 const {files:MAX_FILES,totalBytes:MAX_BYTES,fileBytes:MAX_FILE}=PAGE_FILE_LIMITS;
 /** `hyperlink`: an `<a>`/`<area>` href. It names a project file only when it has a path; one that names none is navigation. */
-interface Link {start:number;end:number;value:string;kind:'asset'|'dataset';htmlAttribute?:true;runtimeModule?:true;hyperlink?:true}
+interface Link {start:number;end:number;value:string;kind:'asset'|'dataset';htmlAttribute?:true;runtimeModule?:true;hyperlink?:true;use?:string}
 /** A hyperlink to the page itself or nowhere: an empty href, a query or hash alone, `.`, `./`. */
 const SELF_LINK=/^\s*(?:\.\/?)?\s*(?:[?#]|$)/;
 function normalized(value:string):string{
@@ -35,13 +35,13 @@ function rootedPath(value:string):string|null{
  try{return normalized(path.posix.normalize(decoded));}catch{return null;}
 }
 function links(source:string,css:boolean,js=false):Link[]{
- if(js){const imports=parseImports(source)[0],runtime=imports.some(item=>item.n===undefined&&item.d!==-2)?admitRuntimeModuleImports(source):[];return imports.flatMap(item=>{
+ if(js){const imports=parseImports(source)[0],runtime=imports.some(item=>item.n===undefined&&item.d!==-2)?admitRuntimeModuleImports(source):[];return imports.flatMap((item):Link[]=>{
   if(item.d===-2)return [];
   if(item.n==='@afbin/apollo'||item.n==='@afbin/reader'||item.n==='@afbin/chrome'||item.n==='@afbin/portable'||item.n==='@afbin/collab'||item.n==='@afbin/state')return [];
   if(item.n!==undefined&&libraryPathForSpecifier(item.n))return [];
   if(item.n===undefined){const admitted=runtime.find(entry=>entry.importStart===item.ss);if(!admitted)throw Error('Computed module imports require an explicit absolute remote URL');return [{start:admitted.argumentStart,end:admitted.argumentEnd,value:admitted.replacement,kind:'asset' as const,runtimeModule:true as const}];}
   if(!item.n.startsWith('.')&&!item.n.startsWith('/')&&!/^[a-z][a-z\d+.-]*:/i.test(item.n))throw Error('Bare module imports require an import map or absolute remote URL');
-  return [{start:item.s+(item.d>=0?1:0),end:item.e-(item.d>=0?1:0),value:item.n,kind:'asset' as const}];
+  return [{start:item.s+(item.d>=0?1:0),end:item.e-(item.d>=0?1:0),value:item.n,kind:'asset' as const,use:'import'}];
  });}
  if(css){
   const result:Link[]=[];
@@ -53,8 +53,8 @@ function links(source:string,css:boolean,js=false):Link[]{
     const prefix=/^url\(\s*["']?/i.exec(raw);if(!prefix)throw Error('Unsupported CSS URL');
     const start=node.loc.start.offset+prefix[0].length;
     const end=node.loc.end.offset-(raw.match(/["']?\s*\)$/)?.[0].length??1);
-    result.push({start,end,value:node.value,kind:'asset'});
-   }else if(node.type==='String'&&this.atrule?.name.toLowerCase()==='import')result.push({start:node.loc.start.offset+1,end:node.loc.end.offset-1,value:node.value,kind:'asset'});
+    result.push({start,end,value:node.value,kind:'asset',use:'url()'});
+   }else if(node.type==='String'&&this.atrule?.name.toLowerCase()==='import')result.push({start:node.loc.start.offset+1,end:node.loc.end.offset-1,value:node.value,kind:'asset',use:'@import'});
   });return result;
  }
  const result:Link[]=[];const doc=parse(source,{sourceCodeLocationInfo:true});
@@ -81,18 +81,18 @@ function links(source:string,css:boolean,js=false):Link[]{
     const raw=written.slice(equals+1),leading=raw.search(/\S/),quote=raw[leading];const start=loc.startOffset+equals+1+leading+(quote==='"'||quote==="'"?1:0);
     const end=quote==='"'||quote==="'"?source.indexOf(quote,start):loc.endOffset;
     if(attr.name==='style'){
-     for(const link of links(source.slice(start,end),true))result.push({...link,start:start+link.start,end:start+link.end,htmlAttribute:true});
+     for(const link of links(source.slice(start,end),true))result.push({...link,start:start+link.start,end:start+link.end,htmlAttribute:true,use:`<${node.tagName} style> url()`});
     }else if(attr.name==='srcset'){
      const value=source.slice(start,end);let cursor=0;
      while(cursor<value.length){
       while(/[\s,]/.test(value[cursor]??'')&&cursor<value.length)cursor++;
       const begin=cursor;while(cursor<value.length&&!/\s/.test(value[cursor]!))cursor++;
       let stop=cursor;while(value[stop-1]===',')stop--;
-      if(stop>begin)result.push({start:start+begin,end:start+stop,value:value.slice(begin,stop),kind:'asset',htmlAttribute:true});
+      if(stop>begin)result.push({start:start+begin,end:start+stop,value:value.slice(begin,stop),kind:'asset',htmlAttribute:true,use:`<${node.tagName} srcset>`});
       if(stop<cursor)continue;
       while(cursor<value.length&&value[cursor]!==',')cursor++;
      }
-    }else result.push({start,end,value:attr.value,kind:dataset?'dataset':'asset',htmlAttribute:true,...(hyperlink?{hyperlink:true as const}:{})});
+    }else result.push({start,end,value:attr.value,kind:dataset?'dataset':'asset',htmlAttribute:true,use:dataset?'<link rel="af-dataset">':`<${node.tagName} ${attr.name}>`,...(hyperlink?{hyperlink:true as const}:{})});
    }
    if(node.tagName==='template'&&'content'in node)for(const child of node.content.childNodes)visit(child);
   }
@@ -126,7 +126,8 @@ export function planPublicationBundle(html:string,bundle:PublicationBundle,conte
   const bytes=Buffer.from(file.base64,'base64');if(bytes.toString('base64')!==file.base64||bytes.length>MAX_FILE||(total+=bytes.length)>MAX_BYTES)throw Error('Bundle byte limit exceeded');
   if(typeof file.contentType!=='string'||file.contentType.length>128)throw Error('Invalid bundle content type');files.set(name,{bytes,contentType:fileContentType(name)??file.contentType});
  }
- const ordered:BundleDependency[]=[],visiting=new Set<string>(),visited=new Map<string,'asset'|'dataset'>(),missing=new Set<string>();
+ const ordered:BundleDependency[]=[],visiting=new Set<string>(),missing=new Set<string>();
+ const visited=new Map<string,{kind:'asset'|'dataset';use:string;owner:string}>();
  const dependencies=(source:string,owner:string,css=false)=>links(source,css,/^(?:text|application)\/javascript$/.test(files.get(owner)?.contentType??'')).flatMap(link=>{
   if(link.runtimeModule)return [];
   // A root-relative reference (`/assets/fonts/x.woff2`) to a file published with the page is that file; one to none is
@@ -143,23 +144,30 @@ export function planPublicationBundle(html:string,bundle:PublicationBundle,conte
   try{name=resolve(link.value,owner);}catch(error){if(link.hyperlink&&context.linksAsWritten)return [];throw error;}
   return name?[{...link,path:name}]:[];
  });
- const visit=(name:string,kind:'asset'|'dataset',hyperlink=false)=>{
+ // A dataset also used as a file: a draft keeps both (contracts filesServedByPath); a publication refuses, naming both uses.
+ const visit=(name:string,kind:'asset'|'dataset',hyperlink=false,use='a reference',owner=entryPath)=>{
   if(visiting.has(name))throw Error('Dependency cycle: '+name);
-  if(visited.has(name)){if(visited.get(name)!==kind)throw Error('Conflicting dependency kind: '+name);return;}
+  const seen=visited.get(name);
+  if(seen){
+   if(seen.kind===kind)return;
+   if(context.filesServedByPath){if(kind==='dataset'){visited.set(name,{kind,use,owner});const listed=ordered.find(d=>d.path===name);if(listed)listed.kind='dataset';}return;}
+   const [data,other]=kind==='dataset'?[{use,owner},seen]:[seen,{use,owner}];
+   throw Error(`${name} is linked as a dataset (${data.use} in ${data.owner}) and as a file (${other.use} in ${other.owner}): a published page reads a dataset only through sql; remove the file reference or use a copy under another name`);
+  }
   const file=files.get(name);if(!file){if(!bundle.mappings?.[name]&&!(hyperlink&&context.linksAsWritten))missing.add(name);return;}
   visiting.add(name);const nested=/^(?:text\/css|(?:text|application)\/javascript)$/.test(file.contentType)?dependencies(file.bytes.toString('utf8'),name,file.contentType==='text/css'):[];
   if(/^(?:text|application)\/javascript$/.test(file.contentType))fetched.push(...fetchedPaths(file.bytes.toString('utf8'),false));
-  for(const dep of nested)visit(dep.path,dep.kind);
-  visiting.delete(name);visited.set(name,kind);ordered.push({path:name,kind,contentType:file.contentType,bytes:file.bytes,dependencies:nested.map(d=>d.path)});
+  for(const dep of nested)visit(dep.path,dep.kind,false,dep.use,name);
+  visiting.delete(name);visited.set(name,{kind,use,owner});ordered.push({path:name,kind,contentType:file.contentType,bytes:file.bytes,dependencies:nested.map(d=>d.path)});
  };
  // A literal fetch is never rewritten: the page's core maps the path it names to the published file wherever the page
  // is read (html-runtime page-fetch, the runtime config's `files`). It resolves against the page, from any file; a path
  // the project does not hold, or that leaves it, names no file of it and stays the script's own.
  const fetched:string[]=fetchedPaths(html,true);
- for(const dep of dependencies(html,entryPath))visit(dep.path,dep.kind,dep.hyperlink);
+ for(const dep of dependencies(html,entryPath))visit(dep.path,dep.kind,dep.hyperlink,dep.use);
  for(let at=0;at<fetched.length;at++){
   let name:string|null;try{name=resolve(fetched[at]!,entryPath);}catch{continue;}
-  if(name&&name!==entryPath&&!visited.has(name)&&(files.has(name)||bundle.mappings?.[name]))visit(name,'asset');
+  if(name&&name!==entryPath&&!visited.has(name)&&(files.has(name)||bundle.mappings?.[name]))visit(name,'asset',false,'fetch()');
  }
  if(missing.size)throw Error('Unresolved local dependencies: '+[...missing].sort().join(', '));
  // Every published file is one the page links or a script fetches by its path: nothing else reaches it.
