@@ -73,11 +73,17 @@ try{
  await third.close();for(const tab of peerTabs)await tab.close();
  await owner.bringToFront();await ownFrame.locator('[data-af-id="words"]').click();const beforeAck=ownerCursorAcks;await move(owner);
  check(await until(()=>Promise.resolve(ownerCursorAcks),n=>n>beforeAck)>beforeAck,'two tabs leave HTTP connections available for fresh cursor publication');
- check(await until(()=>sameFrame.locator('[data-af-presence-cursor]').count(),n=>n>0)>0,'another window of the same account sees the live cursor');
+ // A person never sees themselves: no window of the same account draws the owner's cursor or selection.
+ await setPreference(other,'Show other cursors');await select(ownFrame);
+ check(await until(()=>peerReload.locator('[data-af-presence-cursor]').count(),n=>n>0)>0,'second account sees the live cursor');
+ check(await peerReload.locator('[data-af-presence-cursor]').count()===1,'one reader draws one cursor');
+ check(await until(()=>peerReload.locator('[data-af-presence-selection]').count(),n=>n>0)>0,'second account sees the live text selection');
+ check(await sameFrame.locator('[data-af-presence-cursor],[data-af-presence-selection]').count()===0,'another window of the same account never draws its own cursor or selection');
  await setPreference(owner,'Show me to other readers');
- check(await until(()=>sameFrame.locator('[data-af-presence-cursor]').count(),n=>n===0)===0,'hidden reader clears their live cursor');
- check(await until(()=>sameFrame.locator('[data-af-presence-selection]').count(),n=>n===0)===0,'hidden reader clears their live text selection');
+ check(await until(()=>peerReload.locator('[data-af-presence-cursor]').count(),n=>n===0)===0,'hidden reader clears their live cursor');
+ check(await until(()=>peerReload.locator('[data-af-presence-selection]').count(),n=>n===0)===0,'hidden reader clears their live text selection');
  await readers(owner,2,'hidden self still excludes its other visible tabs');
+ await setPreference(other,'Show other cursors');
  await move(guest);
  check(await peerReload.locator('[data-af-presence-cursor]').count()===0,'receiver cursor preference stays hidden for anonymous senders');
  check(await until(()=>sameFrame.locator('[data-af-presence-cursor]').count(),n=>n>0)>0,'anonymous reader can share a cursor without account credentials');

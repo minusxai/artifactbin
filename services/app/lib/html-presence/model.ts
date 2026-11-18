@@ -50,6 +50,25 @@ export function presenceGeometry(input: unknown): PresenceGeometry {
 export function presenceRoster(entries: readonly PresenceViewer[], revision: string, now: number): PresenceViewer[] {
   return entries.filter(entry => entry.revision === revision && entry.seen <= now && now - entry.seen < PRESENCE_TTL_MS).map(entry => ({...entry,...presenceGeometry(entry)}));
 }
+/** Who a roster entry is: an account's sessions (its tabs, an earlier load whose departure never arrived) share one colorId; an anonymous session is its own reader. */
+export const presenceReader = (viewer: Pick<PresenceViewer, 'id' | 'colorId'>): string => viewer.colorId ?? viewer.id;
+/**
+ * One entry per reader, so a person is drawn and listed at most once. The session that speaks for them is the one
+ * seen last among those showing something (a cursor, selection or region caret), so an idle sibling tab's heartbeat
+ * never hides the active one and a lingering earlier session loses to the live one; with none showing anything, the
+ * one seen last. The larger id breaks a tie; first-appearance order is kept.
+ */
+type Reader = Pick<PresenceViewer, 'id' | 'colorId' | 'seen'> & Partial<PresenceGeometry>;
+const shows = (viewer: Reader) => !!(viewer.cursor || viewer.selection || viewer.region);
+export function presenceReaders<T extends Reader>(viewers: readonly T[]): T[] {
+  const chosen = new Map<string, T>();
+  const before = (a: T, b: T) => Number(shows(a)) - Number(shows(b)) || a.seen - b.seen || (a.id > b.id ? 1 : a.id < b.id ? -1 : 0);
+  for (const viewer of viewers) {
+    const key = presenceReader(viewer), kept = chosen.get(key);
+    if (!kept || before(viewer, kept) > 0) chosen.set(key, viewer);
+  }
+  return [...chosen.values()];
+}
 /** The frame a room sends: named readers first, then the most recently active, capped; `total` preserves legacy session counts; `readers` counts unique other identities. */
 export function presenceFrame(entries: readonly PresenceViewer[], revision: string, now: number, readerIdentity?: string): PresenceFrame {
   const live = presenceRoster(entries, revision, now);
