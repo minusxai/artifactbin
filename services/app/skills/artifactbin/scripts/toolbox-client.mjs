@@ -32,8 +32,8 @@ export const platform=()=>import('./toolbox-platform.mjs');
 export const credentialRoot=(env=process.env)=>path.resolve(env.ARTIFACTBIN_HOME||path.join(homedir(
   ),'.artifactbin'));
 /** ARTIFACTBIN_URL as an origin; a value naming none is kept, to fail where it is used. */
-export const envServer=(env=process.env)=>{const value=env.ARTIFACTBIN_URL;try{return value&&
-  serverOrigin(value);}catch{return value;}};
+export const envServer=({ARTIFACTBIN_URL:url}=process.env)=>{try{return url&&serverOrigin(url);}
+  catch{return url;}};
 export const selectedServer=(values={},env=process.env)=>values.server??envServer(env)??
   configuredServer;
 export async function jsonFile(file){try{return JSON.parse(await readFile(file,'utf8'));}catch{
