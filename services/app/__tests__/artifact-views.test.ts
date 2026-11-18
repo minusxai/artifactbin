@@ -1,7 +1,7 @@
 import { beforeEach, expect, it } from 'vitest';
 import { createEvents } from '@artifactbin/events/local';
 import { POST } from '@/app/api/page/artifact/[id]/view/route';
-import { request, useAppHarness } from '@/__tests__/harness';
+import { request, useAppHarness, params } from '@/__tests__/harness';
 import { EVENTS_SCHEMA } from '@/lib/platform';
 import { viewSeriesByUser } from '@/lib/workspace';
 import { runWithRequest } from '@/lib/platform';
@@ -19,7 +19,7 @@ beforeEach(async () => {
 });
 const open = (id: string, options: Parameters<typeof request>[1] = {}, query = '') => {
   const req = request(`/api/page/artifact/${id}/view${query}`, { method: 'POST', origin: 'same', headers: { 'user-agent': 'Mozilla/5.0 view-test' }, ...options });
-  return runWithRequest(req, () => POST(req, { params: Promise.resolve({ id }) }));
+  return runWithRequest(req, () => POST(req, params(id)));
 };
 
 it('records real inline opens only in canonical storage and deduplicates dashboard visitors', async () => {

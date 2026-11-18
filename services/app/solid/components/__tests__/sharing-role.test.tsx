@@ -3,6 +3,7 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
 import { afterEach, expect, it, vi } from 'vitest';
 import ShareLink from '../ShareLink';
+import { stubFetch } from '@/test/helpers/fetch-stub';
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
@@ -19,7 +20,7 @@ const sharing = (extra: object = {}) => ({ visibility: 'private', linkRole: 'vie
 const putBodies = () => vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === 'PUT').map(([, init]) => JSON.parse(String(init!.body)));
 
 it('opens a modal named Sharing over the artifact title and sends a recipient role change as one PUT', async () => {
-  vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => Response.json(init?.method === 'PUT' ? sharing({ shares: [{ email: 'one@example.com', role: 'editor' }] }) : sharing())));
+  stubFetch({ 'PUT *': sharing({ shares: [{ email: 'one@example.com', role: 'editor' }] }) }, { fallback: () => Response.json(sharing()) });
   render(() => <ShareLink artifactId="doc1" title="Quarterly plan" format="markup" editable startOpen />);
   const dialog = await screen.findByRole('dialog', { name: 'Sharing' });
   expect(dialog).toHaveAccessibleDescription('Quarterly plan');
@@ -30,7 +31,7 @@ it('opens a modal named Sharing over the artifact title and sends a recipient ro
 });
 
 it('pins the chosen visibility and only sends a change for another one', async () => {
-  vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => Response.json(sharing({ visibility: init?.method === 'PUT' ? 'public' : 'private' }))));
+  stubFetch({ 'PUT *': sharing({ visibility: 'public' }) }, { fallback: () => Response.json(sharing({ visibility: 'private' })) });
   render(() => <ShareLink artifactId="doc1" title="Plan" format="markup" editable startOpen />);
   const priv = await screen.findByRole('button', { name: 'Make private' });
   await waitFor(() => expect(priv).toHaveAttribute('aria-pressed', 'true'));
@@ -41,7 +42,7 @@ it('pins the chosen visibility and only sends a change for another one', async (
 });
 
 it('asks before making a dataset that documents write to read-only, and keeps writes when the owner backs out', async () => {
-  vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => Response.json(sharing({ access: init?.method === 'PUT' ? 'read' : 'readwrite', writtenBy: [{ id: 'doc9', title: 'Ledger', mutations: ['add'] }] }))));
+  stubFetch({ 'PUT *': sharing({ access: 'read', writtenBy: [{ id: 'doc9', title: 'Ledger', mutations: ['add'] }] }) }, { fallback: () => Response.json(sharing({ access: 'readwrite', writtenBy: [{ id: 'doc9', title: 'Ledger', mutations: ['add'] }] })) });
   render(() => <ShareLink artifactId="data1" title="Ledger rows" format="dataset" editable startOpen />);
   fireEvent.click(await screen.findByRole('button', { name: 'Make read-only' }));
   const confirm = await screen.findByRole('dialog', { name: 'Make this dataset read-only?' });
@@ -66,7 +67,7 @@ it('closes through its Close button and reports it to the opener', async () => {
 it('copies the server public-view URL separately and hides it after making the page private',async()=>{
  const copied:string[]=[];
  Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async(text:string)=>{copied.push(text);}}});
- vi.stubGlobal('fetch',vi.fn(async(_url:string,init?:RequestInit)=>Response.json(sharing({visibility:init?.method==='PUT'?'private':'unlisted',user_page_url:init?.method==='PUT'?null:'https://alice.u.example.test/PAGE12-plan'}))));
+ stubFetch({'PUT *':sharing({visibility:'private',user_page_url:null})},{fallback:()=>Response.json(sharing({visibility:'unlisted',user_page_url:'https://alice.u.example.test/PAGE12-plan'}))});
  render(()=><ShareLink artifactId="PAGE12" title="Plan" format="html" editable startOpen />);
  fireEvent.click(await screen.findByRole('button',{name:'Copy public view'}));
  await waitFor(()=>expect(copied).toEqual(['https://alice.u.example.test/PAGE12-plan']));

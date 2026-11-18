@@ -11,7 +11,7 @@ import { DEFAULT_SOCIAL_PREVIEW_CROP } from '@/lib/document/social-preview';
 import { fakeBrowser } from '@artifactbin/utils';
 import { setServices } from '@/lib/platform';
 import { resetExportRenderer } from '@/lib/export';
-import { request, useAppHarness } from './harness';
+import { request, useAppHarness, params as routeParams } from './harness';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { POST as create } from '@/app/api/artifacts/route';
 import { PUT as replace, GET as read } from '@/app/api/artifacts/[id]/route';
@@ -24,7 +24,7 @@ describe('cli-advanced-http', () => {
   afterEach(()=>setServices({}));
   it('revert returns the complete canonical head so the next write needs no read-back',async()=>{
    const token=await mintToken('cli-revert');const original=await(await create(request('/api/artifacts',{method:'POST',token:token.token,json:{html:nativeSource('<p>Original</p>'),title:'Doc'}}))).json();
-   const params={params:Promise.resolve({id:original.id})},path=`/api/artifacts/${original.id}`;
+   const params=routeParams(original.id),path=`/api/artifacts/${original.id}`;
    const updated=await(await replace(await observedRequest(path,{method:'PUT',token:token.token,json:{html:nativeSource('<p>Changed</p>'),expectedVersion:original.version,expectedState:original.state}}),params)).json();
    expect(updated.version).toBe(original.version+1);
    const restored=await restoreDocument(token.token,original.id,original.version);
@@ -36,7 +36,7 @@ describe('cli-advanced-http', () => {
   it('authenticated export forwards card mode and refuses an unknown mode',async()=>{
    await resetExportRenderer();const browser=fakeBrowser();setServices({browser});
    const token=await mintToken('cli-export');const doc=await(await create(request('/api/artifacts',{method:'POST',token:token.token,json:{html:nativeSource('<h1>Card</h1>')}}))).json();
-   const params={params:Promise.resolve({id:doc.id})};
+   const params=routeParams(doc.id);
    const invalid=await exportImage(request(`/api/artifacts/${doc.id}/export?mode=wrong`,{token:token.token}),params);expect(invalid.status).toBe(400);
    const result=await exportImage(request(`/api/artifacts/${doc.id}/export?mode=card`,{token:token.token}),params);expect(result.status).toBe(200);
    expect((browser as unknown as {calls:Array<{capture:string}>}).calls.at(-1)?.capture).toEqual({card:DEFAULT_SOCIAL_PREVIEW_CROP});

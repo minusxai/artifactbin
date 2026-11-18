@@ -12,7 +12,7 @@ it('publishes canonical HTML through the original artifact API and preserves sou
  const read=await GET(request(`/api/artifacts/${first.id}`,{token:actor.token}),params(first.id));const head=await read.json();expect(head.format).toBe('html');expect(head.html).toContain('data-af-id="text"');
  const source=head.html.replace('Hello','Updated');
  const updated=await PUT(request(`/api/artifacts/${first.id}`,{method:'PUT',token:actor.token,json:{html:source,expectedVersion:head.version,expectedState:head.state},headers:{'Idempotency-Key':'html-update-0123456789'}}),params(first.id));expect(updated.status).toBe(200);
- const archived=await versionGET(request(`/api/artifacts/${first.id}/versions/1`,{token:actor.token}),{params:Promise.resolve({id:first.id,version:'1'})});expect(archived.status).toBe(200);expect((await archived.json()).html).toBe(head.html);
+ const archived=await versionGET(request(`/api/artifacts/${first.id}/versions/1`,{token:actor.token}),params({ id:first.id,version:'1' }));expect(archived.status).toBe(200);expect((await archived.json()).html).toBe(head.html);
 });
 it('replays the committed update exactly and refuses a stale writer without changing history',async()=>{
  const actor=await mintAccountToken('html');const first=await (await publish(actor.token)).json();

@@ -10,14 +10,13 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
 import { artifactMetadata, profilePage as UserPage } from '@/test/helpers/pages';
 
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
+import { mintAccountToken as mintToken, request } from '@/__tests__/harness';
 import { createUser, ensureUsername, setUsername } from '@/lib/accounts';
 import { useAppHarness, useSessionUser } from '@/__tests__/harness';
 
 useAppHarness();
 const sessionUser = useSessionUser();
 
-const BASE = 'http://localhost:3000';
 
 
 async function outcome(p: Promise<unknown>): Promise<{ kind: 'render' | 'redirect' | 'notFound'; to?: string }> {
@@ -39,7 +38,7 @@ async function fixtures() {
   await setUsername(owner.id, 'mxmx_owner');
   const t = await mintToken('enc', owner.id);
   const res = await createArtifactRoute(
-    new Request(`${BASE}/api/artifacts`, {
+    request(`/api/artifacts`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${t.token}` },
       body: JSON.stringify({ title: 'Eating Healthy', html: '<h1>x</h1>', visibility: 'public' }),

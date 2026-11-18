@@ -1,8 +1,7 @@
 /** Real identity host, app handlers and storage: delegation keeps the actual human's current policy view. */
 import {it,expect} from 'vitest';
 import { storePolicy, revokeShares } from '@/__tests__/artifact-fixtures';
-import {delegatedService,audiencesOf,noTokens} from '../../../auth/__tests__/helpers';
-import {createAuthHost} from '@artifactbin/auth';
+import {delegatedService,audiencesOf,serviceAuthHost} from '../../../auth/__tests__/helpers';
 import {artifactReadKey,signArtifactReadGrant} from '@artifactbin/auth/identity/artifact-read-grants';
 import {PAGE_EVIDENCE_PATH,CANONICAL_PAGE_EVIDENCE_PATH,SERVICE_AUTH_HEADER} from '@artifactbin/contracts';
 import {createAppHost} from '@/server/host';
@@ -23,7 +22,7 @@ it('buffers human evidence and rechecks current app policy and identity parent w
  for(const id of [page.id,dataset.id])await seedShares(db, { artifact_id: id, user_id: null, email: viewer.email, role: 'viewer' });
  const service=delegatedService('reader','https://reader.example','synthetic-secret');
  let afterBuffer:(()=>Promise<unknown>)|undefined;const operations:unknown[]=[];
- const auth=createAuthHost({env:{IDENTITY__SERVICE_AUDIENCES:audiencesOf(service)},cookieSecret:'synthetic-cookie',tokens:noTokens,sessions:{resolve:async()=>null},identityDb:db,upstream:async(request,actor)=>{
+ const auth=serviceAuthHost({env:{IDENTITY__SERVICE_AUDIENCES:audiencesOf(service)},cookieSecret:'synthetic-cookie',identityDb:db,upstream:async(request,actor)=>{
   const input=await request.clone().json();operations.push(input);
   const response=await host.request(request,actor);
   if(!input.fingerprint&&afterBuffer){const body=await response.text();await afterBuffer();return new Response(body,{status:response.status});}

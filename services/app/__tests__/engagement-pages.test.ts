@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { ensureTable, noopEvents } from '@artifactbin/utils';
 import { EVENTS_TABLES } from '@artifactbin/events';
-import { request, useAppHarness } from '@/__tests__/harness';
+import { request, useAppHarness, params } from '@/__tests__/harness';
 import { GET as artifactPage } from '@/app/api/page/artifact/[id]/route';
 import { GET as profilePage } from '@/app/api/page/profile/[user]/[[...path]]/route';
 import { createArtifact } from '@/lib/artifacts';
@@ -39,7 +39,7 @@ describe('GET /api/page/artifact/[id]', () => {
   it('carries the viewer\'s like state and the count', async () => {
     await link(bob.id, 'like', pubA);
     await link(carol.id, 'like', pubA);
-    const ctx = { params: Promise.resolve({ id: pubA }) };
+    const ctx = params(pubA);
     const asBob = await (await artifactPage(request(`/api/page/artifact/${pubA}`, { actor: session(bob) }), ctx)).json();
     expect(asBob.like).toEqual({ liked: true, count: 2 });
     const asAlice = await (await artifactPage(request(`/api/page/artifact/${pubA}`, { actor: session(alice) }), ctx)).json();
@@ -52,7 +52,7 @@ describe('GET /api/page/artifact/[id]', () => {
 describe('GET /api/page/profile/@handle', () => {
   it('every viewer gets the public profile; strangers also get how they relate', async () => {
     await link(carol.id, 'follow', alice.id);
-    const ctx = { params: Promise.resolve({ user: '@alice' }) };
+    const ctx = params({ user: '@alice' });
     const asCarol = await (await profilePage(request('/api/page/profile/@alice', { actor: session(carol) }), ctx)).json();
     expect(asCarol.kind).toBe('public-profile');
     // `owner` is EVERYONE's half now — it carries the picture the hero draws

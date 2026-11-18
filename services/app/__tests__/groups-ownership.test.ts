@@ -2,7 +2,7 @@ import {nativeHtml} from './native-html-fixture';
 import { revokeShares } from '@/__tests__/artifact-fixtures';
 import {afterEach,expect,it,vi} from 'vitest';
 import {observedRequest} from './conditional-request';
-import {useAppHarness,request,mintAccountToken} from './harness';
+import {useAppHarness,request,mintAccountToken,params} from './harness';
 import { ANONYMOUS_ACTOR, identityForUser, createUser } from '@/lib/accounts';
 import {overrideConfig,resetConfigOverrides} from '@/lib/platform/config';
 import {getDb} from '@/lib/platform/db';
@@ -25,7 +25,7 @@ async function fixture(){
  const db=await getDb();await db.query("INSERT INTO groups(id,handle,name,description,created_by) VALUES('grp_ownership','ownership','Ownership','',$1)",[creator.id]);
  for(const [user,role] of [[creator,'admin'],[editor,'admin'],[viewer,'member']] as const)await db.query('INSERT INTO group_members(group_id,user_id,role) VALUES($1,$2,$3)',['grp_ownership',user.id,role]);
  const make=async(body:object)=>{const response=await create(request('/api/artifacts',{method:'POST',token:a.token,json:body}));expect(response.status,await response.clone().text()).toBe(201);return (await response.json()).id as string;};
- const move=(id:string,destination:object,bearer=a.token)=>transfer(request(`/api/artifacts/${id}/transfer`,{method:'POST',token:bearer,json:{destination}}),{params:Promise.resolve({id})});
+ const move=(id:string,destination:object,bearer=a.token)=>transfer(request(`/api/artifacts/${id}/transfer`,{method:'POST',token:bearer,json:{destination}}),params(id));
  return {creator,editor,viewer,a,b,c,db,make,move};
 }
 it('lists group viewer documents as shared without granting ownership and revokes discovery on removal',async()=>{
@@ -42,7 +42,7 @@ it('lists group viewer documents as shared without granting ownership and revoke
  const next=await page(`?relationship=shared&search=review&limit=1&cursor=${encodeURIComponent(filtered.next_cursor)}`);
  expect([...filtered.artifacts,...next.artifacts].map((r:{id:string})=>r.id).sort()).toEqual([first,second].sort());
  expect((await page('?relationship=owned',f.b.token)).artifacts).toHaveLength(2);
- expect((await replace(await observedRequest(`/api/artifacts/${first}`,{method:'PUT',token:f.c.token,json:{html:nativeHtml('<p>Denied viewer edit</p>')}}),{params:Promise.resolve({id:first})})).status).toBe(404);
+ expect((await replace(await observedRequest(`/api/artifacts/${first}`,{method:'PUT',token:f.c.token,json:{html:nativeHtml('<p>Denied viewer edit</p>')}}),params(first))).status).toBe(404);
  await f.db.query('DELETE FROM group_members WHERE user_id=$1',[f.viewer.id]);
  expect((await page('')).artifacts).toEqual([]);
 });
@@ -64,7 +64,7 @@ it('transfers ownership, revokes creator and token fallback, and reflects live m
  expect(ownsArtifact(row,identityForUser(f.creator.id, f.a.id))).toBe(false);
  expect(await getOwnedArtifactFor(identityForUser(f.creator.id, f.a.id),id)).toBeNull();
  expect(await canReadArtifact(row,identityForUser(f.creator.id, null, f.creator.email!))).toBe(false);
- const copied=await fork(request(`/api/artifacts/${id}/fork`,{method:'POST',token:f.a.token,json:{}}),{params:Promise.resolve({id})});expect(copied.status).toBe(404);
+ const copied=await fork(request(`/api/artifacts/${id}/fork`,{method:'POST',token:f.a.token,json:{}}),params(id));expect(copied.status).toBe(404);
  expect(await effectiveRole(row,identityForUser(f.editor.id, f.b.id))).toBe('owner');
  expect(await effectiveRole(row,identityForUser(f.viewer.id, f.c.id))).toBe('viewer');
  await seedShares(f.db, { artifact_id: id, email: f.viewer.email, user_id: f.viewer.id, role: 'editor' });
@@ -146,8 +146,8 @@ it('supports a verified browser account transfer without a bearer or token ID an
  const f=await fixture(),id=await f.make({html:nativeHtml('<p>Browser</p>')});
  const actor={credential:'session' as const,userId:f.creator.id,email:f.creator.email!,emailVerified:true};
  const body={destination:{type:'group',id:'grp_ownership'}};
- const response=await transfer(request(`/api/artifacts/${id}/transfer`,{method:'POST',actor,origin:'same',json:body}),{params:Promise.resolve({id})});expect(response.status,await response.clone().text()).toBe(200);
- const denied=await transfer(request(`/api/artifacts/${id}/transfer`,{method:'POST',actor,origin:'https://other.example',json:{destination:{type:'personal'}}}),{params:Promise.resolve({id})});expect(denied.status).toBe(403);
+ const response=await transfer(request(`/api/artifacts/${id}/transfer`,{method:'POST',actor,origin:'same',json:body}),params(id));expect(response.status,await response.clone().text()).toBe(200);
+ const denied=await transfer(request(`/api/artifacts/${id}/transfer`,{method:'POST',actor,origin:'https://other.example',json:{destination:{type:'personal'}}}),params(id));expect(denied.status).toBe(403);
  expect((await getArtifactById(id))?.group_id).toBe('grp_ownership');
 });
 

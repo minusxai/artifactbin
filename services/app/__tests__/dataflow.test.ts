@@ -10,6 +10,7 @@ import { POST as sqlDoor } from "@/app/api/artifacts/[id]/sql/route";
 import { GET as get, PUT as replace } from "@/app/api/artifacts/[id]/route";
 import { getDb } from "@/lib/platform";
 import { setArtifact } from '@/__tests__/rows';
+import { params } from '@/__tests__/harness';
 useAppHarness();
 const SOURCE_ONLY_SENTINEL =
   "dataset-source-only-7e34d9a1-not-authored-page-state";
@@ -37,7 +38,7 @@ function pagePayloads(content: string) {
   visit(parse(content));
   return payloads;
 }
-const ctx = (id: string) => ({ params: Promise.resolve({ id }) });
+const ctx = (id: string) => (params(id));
 async function fixture() {
   const owner = await mintAccountToken("native dataflow");
   const publish = async (

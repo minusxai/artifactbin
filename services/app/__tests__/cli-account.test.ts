@@ -4,7 +4,7 @@ import { nativePublicationBody as documentPublicationBody,nativeSource } from '.
  * workspace, remote sessions, dataset governance and what a reader may address.
  */
 
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
+import { mintAccountToken as mintToken, params as routeParams } from '@/__tests__/harness';
 import { GET,PATCH } from '@/app/api/account/profile/route';
 import { GET as content } from '@/app/api/artifacts/[id]/content/route';
 import { GET as read,PUT as replace } from '@/app/api/artifacts/[id]/route';
@@ -40,7 +40,7 @@ describe('cli-governance', () => {
    expect(response.status).toBe(201);const created=await response.json();
    expect((await getSharingFor(identityForUser(token.userId, token.id),created.id))?.shares).toEqual(shares);
    expect(created.shares).toEqual(shares);
-   const snapshot=await read(request(`/api/artifacts/${created.id}`,{token:token.token}),{params:Promise.resolve({id:created.id})});
+   const snapshot=await read(request(`/api/artifacts/${created.id}`,{token:token.token}),routeParams(created.id));
    expect((await snapshot.json()).shares).toEqual(shares);
   });
 
@@ -56,7 +56,7 @@ describe('cli-governance', () => {
    const {id}=await response.json();const base=(await getArtifactById(id))!;
    const shares=[{email:'mxmx_test_reader@example.com',role:'viewer' as const}];
    await updateSharingFor(actor,id,{shares});
-   const result=await replace(request(`/api/artifacts/${id}`,{method:'PUT',token:token.token,json:documentPublicationBody(base,{html:nativeSource('<p>Stale write</p>'),shares:[]},true)}),{params:Promise.resolve({id})});
+   const result=await replace(request(`/api/artifacts/${id}`,{method:'PUT',token:token.token,json:documentPublicationBody(base,{html:nativeSource('<p>Stale write</p>'),shares:[]},true)}),routeParams(id));
    expect(result.status).toBe(409);expect((await result.json()).changed).toBe('sharing');
    expect((await getArtifactById(id))?.source).toContain('Original');expect((await getSharingFor(actor,id))?.shares).toEqual(shares);
   });
@@ -66,7 +66,7 @@ describe('cli-governance', () => {
    const response=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{html:nativeSource('<p>Original</p>')}}));const {id}=await response.json();
    await updateSharingFor(actor,id,{shares:[{email:'mxmx_test_reader@example.com',role:'viewer'}]});
    const base=(await getArtifactById(id))!;
-   const result=await replace(request(`/api/artifacts/${id}`,{method:'PUT',token:token.token,json:documentPublicationBody(base,{html:nativeSource('<p>Updated</p>'),shares:[]},true)}),{params:Promise.resolve({id})});
+   const result=await replace(request(`/api/artifacts/${id}`,{method:'PUT',token:token.token,json:documentPublicationBody(base,{html:nativeSource('<p>Updated</p>'),shares:[]},true)}),routeParams(id));
    expect(result.status).toBe(200);expect((await result.json()).shares).toEqual([]);
    expect((await getArtifactById(id))?.source).toContain('Updated');expect((await getSharingFor(actor,id))?.shares).toEqual([]);
   });
@@ -77,7 +77,7 @@ describe('cli-readable', () => {
    const ownerUser=await createUser({email:'mxmx_test_owner@example.com'}),readerUser=await createUser({email:'mxmx_test_reader@example.com'});
    const owner = await mintToken('mxmx_test_owner',ownerUser.id),reader=await mintToken('mxmx_test_reader',readerUser.id),stranger=await mintToken('mxmx_test_stranger');
    const created=await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{html:nativeSource('<p>Private content</p>'),visibility:'private',shares:[{email:readerUser.email,role:'viewer'}]}}));
-   expect(created.status).toBe(201);const doc=await created.json();const path=`/api/artifacts/${doc.id}`,params={params:Promise.resolve({id:doc.id})};
+   expect(created.status).toBe(201);const doc=await created.json();const path=`/api/artifacts/${doc.id}`,params=routeParams(doc.id);
    const response=await read(request(path,{token:reader.token}),params);expect(response.status).toBe(200);
    const snapshot=await response.json();expect(snapshot.html).toContain('Private content');expect(snapshot).not.toHaveProperty('shares');expect(snapshot.capabilities).toMatchObject({read:true,edit:false,sharing:false});
    expect((await read(request(path,{token:stranger.token}),params)).status).toBe(404);
@@ -90,14 +90,14 @@ describe('cli-readable', () => {
    const owner=await mintToken('mxmx_test_owner'),reader=await mintToken('mxmx_test_reader');
    const created=await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{dataset:[{score:42}],visibility:'public'}}));
    expect(created.status).toBe(201);const doc=await created.json();
-   const response=await read(request(`/api/artifacts/${doc.id}`,{token:reader.token}),{params:Promise.resolve({id:doc.id})});expect(response.status).toBe(200);
+   const response=await read(request(`/api/artifacts/${doc.id}`,{token:reader.token}),routeParams(doc.id));expect(response.status).toBe(200);
    const snapshot=await response.json();expect(snapshot.rows).toEqual([{score:42}]);expect(snapshot).not.toHaveProperty('html');expect(snapshot).not.toHaveProperty('dataset_policy');expect(snapshot).not.toHaveProperty('shares');expect(JSON.stringify(snapshot.meta)).not.toContain('objectKey');
   });
 
   it('editing another invitation preserves an existing grant bound to an account after its email changes',async()=>{
    const ownerUser=await createUser({email:'mxmx_test_sticky_owner@example.com'}),readerUser=await createUser({email:'mxmx_test_old_address@example.com'});
    const owner = await mintToken('mxmx_test_sticky_owner',ownerUser.id),reader=await mintToken('mxmx_test_sticky_reader',readerUser.id);
-   const initial=await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{html:nativeSource('<p>Account bound</p>'),visibility:'private',shares:[{email:readerUser.email,role:'viewer'}]}}));const doc=await initial.json();const context={params:Promise.resolve({id:doc.id})},path=`/api/artifacts/${doc.id}`;
+   const initial=await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{html:nativeSource('<p>Account bound</p>'),visibility:'private',shares:[{email:readerUser.email,role:'viewer'}]}}));const doc=await initial.json();const context=routeParams(doc.id),path=`/api/artifacts/${doc.id}`;
    expect((await read(request(path,{token:reader.token}),context)).status).toBe(200);
    await (await getDb()).query('UPDATE users SET email=$2 WHERE id=$1',[readerUser.id,'mxmx_test_new_address@example.com']);
    const head=await (await read(request(path,{token:owner.token}),context)).json();

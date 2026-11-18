@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mintAccountToken, request, useAppHarness } from '@/__tests__/harness';
+import { mintAccountToken, request, useAppHarness, params } from '@/__tests__/harness';
 import { ANONYMOUS_ACTOR, identityForUser, type AccessActor } from '@/lib/accounts';
 import { artifactState, getArtifactById } from '@/lib/artifacts';
 import { getDb } from '@/lib/platform';
@@ -29,7 +29,7 @@ async function publish(token: string, html: string): Promise<string> {
 }
 async function republish(token: string, id: string, html: string) {
   const row = (await getArtifactById(id))!;
-  const saved = await replace(request(`/api/artifacts/${id}`, { method: 'PUT', token, json: { html, expectedVersion: row.version, expectedState: artifactState(row) } }), { params: Promise.resolve({ id }) });
+  const saved = await replace(request(`/api/artifacts/${id}`, { method: 'PUT', token, json: { html, expectedVersion: row.version, expectedState: artifactState(row) } }), params(id));
   expect(saved.status).toBe(200);
 }
 const served = async (id: string) => { const row = (await getArtifactById(id))!; return { id, version: row.version, source: row.source }; };

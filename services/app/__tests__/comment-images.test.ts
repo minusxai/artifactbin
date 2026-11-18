@@ -41,8 +41,8 @@ describe('comment image attachment ownership',()=>{
   const wire=await response.json();expect(wire.image).toMatchObject({id:stage.id,width:100,height:50,capturedEditId:s.doc.edit_id});
   expect(JSON.stringify(wire)).not.toContain('objectKey');
   expect(await readCommentImage(s.actor,s.doc.id,stage.id,'thumbnail')).not.toBeNull();
-  const privateRead=await readImageRoute(request(`/api/my/artifacts/${s.doc.id}/comment-images/${stage.id}`),{params:Promise.resolve({id:s.doc.id,imageId:stage.id})});expect(privateRead.status).toBe(404);
-  const ownerRead=await readImageRoute(request(`/api/my/artifacts/${s.doc.id}/comment-images/${stage.id}`,{actor:s.browserActor}),{params:Promise.resolve({id:s.doc.id,imageId:stage.id})});expect(ownerRead.status).toBe(200);expect(ownerRead.headers.get('cache-control')).toBe('private, no-store');
+  const privateRead=await readImageRoute(request(`/api/my/artifacts/${s.doc.id}/comment-images/${stage.id}`),params({ id:s.doc.id,imageId:stage.id }));expect(privateRead.status).toBe(404);
+  const ownerRead=await readImageRoute(request(`/api/my/artifacts/${s.doc.id}/comment-images/${stage.id}`,{actor:s.browserActor}),params({ id:s.doc.id,imageId:stage.id }));expect(ownerRead.status).toBe(200);expect(ownerRead.headers.get('cache-control')).toBe('private, no-store');
   const stranger=await mintToken('agent');expect(await readCommentImage(identityForUser(stranger.userId, stranger.id),s.doc.id,stage.id,'original')).toBeNull();
  });
  it('refuses invalid raster and metadata before reserving bytes',async()=>{
@@ -87,7 +87,7 @@ import {GET as readAgentImage} from '@/app/api/artifacts/[id]/comment-images/[im
 it('serves annotated pixels through bearer auth and preserves attachment access and deletion rules',async()=>{
  const s=await setup();const preview=await sharp({create:{width:100,height:50,channels:3,background:'blue'}}).png().toBuffer();
  const stage=await stageCommentImage(s.actor,s.doc.id,s.image,preview,s.metadata);if(stage instanceof Response)throw new Error(await stage.text());
- const read=(token:string|undefined,id=s.doc.id,variant='')=>readAgentImage(request(`/api/artifacts/${id}/comment-images/${stage.id}${variant?`?variant=${variant}`:''}`,{token}),{params:Promise.resolve({id,imageId:stage.id})});
+ const read=(token:string|undefined,id=s.doc.id,variant='')=>readAgentImage(request(`/api/artifacts/${id}/comment-images/${stage.id}${variant?`?variant=${variant}`:''}`,{token}),params({ id,imageId:stage.id }));
  expect((await read(undefined)).status).toBe(401);
  expect((await read(s.token.token)).status).toBe(404); // Unconsumed stages stay private.
  const created=await createComment(request(`/api/my/artifacts/${s.doc.id}/annotations`,{method:'POST',actor:s.browserActor,json:{anchor:nativeAnchor('capture'),edit_id:s.doc.edit_id,body:'Look at the blue marks',attachment_id:stage.id}}),params(s.doc.id));
@@ -110,7 +110,7 @@ import {POST as answerComment} from '@/app/api/my/artifacts/[id]/annotations/[an
 import { setArtifact } from '@/__tests__/rows';
 describe('a reply carries its own image',()=>{
  const reply=(s:Awaited<ReturnType<typeof setup>>,root:string,json:Record<string,unknown>,actor:typeof s.browserActor=s.browserActor)=>
-  answerComment(request(`/api/my/artifacts/${s.doc.id}/annotations/${root}`,{method:'POST',actor,json}),{params:Promise.resolve({id:s.doc.id,annId:root})});
+  answerComment(request(`/api/my/artifacts/${s.doc.id}/annotations/${root}`,{method:'POST',actor,json}),params({ id:s.doc.id,annId:root }));
  const thread=async(s:Awaited<ReturnType<typeof setup>>)=>{
   const created=await createComment(request(`/api/my/artifacts/${s.doc.id}/annotations`,{method:'POST',actor:s.browserActor,json:{anchor:nativeAnchor('capture'),body:'Root without an image'}}),params(s.doc.id));
   expect(created.status,await created.clone().text()).toBe(201);return (await created.json()).id as string;

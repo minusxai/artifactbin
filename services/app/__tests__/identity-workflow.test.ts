@@ -1,6 +1,6 @@
 /** Durable HTTP identity allocation, replay and account namespace isolation. Historical merged-user aliases remain readable. */
 import {it,expect,vi} from 'vitest';
-import { useAppHarness, request, createGuestOwner, mintAccountToken as mintToken } from './harness';
+import { useAppHarness, request, createGuestOwner, mintAccountToken as mintToken, params } from './harness';
 import {nativeHtml} from './native-html-fixture';
 import { identityForUser, createUser } from '@/lib/accounts';
 import {POST as create} from '@/app/api/artifacts/route';
@@ -21,7 +21,7 @@ it('reserves an invisible batch and publishes the exact identity with durable re
  const token=await mintToken('mxmx_test_reservations');const actor=identityForUser(token.userId, token.id);
  const ids=await reserveIds(actor,'batch_000000000001');expect(ids).toHaveLength(100);expect(new Set(ids).size).toBe(100);
  expect(await reserveIds(actor,'batch_000000000001')).toEqual(ids);
- const id=ids[0];const ctx={params:Promise.resolve({id})};expect((await read(request('/api/artifacts/'+id,{token:token.token}),ctx)).status).toBe(404);
+ const id=ids[0];const ctx=params(id);expect((await read(request('/api/artifacts/'+id,{token:token.token}),ctx)).status).toBe(404);
  const req=()=>request('/api/artifacts',{method:'POST',token:token.token,headers:{'Idempotency-Key':'create_000000000001'},json:{reserved_id:id,html:nativeHtml('<p>Reserved document</p>')}});
  const first=await create(req());expect(first.status).toBe(201);const published=await first.json();expect(published.id).toBe(id);expect(published.version).toBe(1);
  const replay=await create(req());expect(replay.status).toBe(201);expect((await replay.json()).id).toBe(id);

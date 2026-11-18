@@ -1,6 +1,6 @@
 import {retiredUpdate} from './retired-document-fixture';
 import {expect,it} from 'vitest';
-import {request,useAppHarness,mintAccountToken} from './harness';
+import {request,useAppHarness,mintAccountToken,params} from './harness';
 import {POST as create} from '@/app/api/artifacts/route';
 import {PATCH as patch} from '@/app/api/artifacts/[id]/route';
 import {PATCH as sessionPatch} from '@/app/api/my/artifacts/[id]/route';
@@ -9,7 +9,7 @@ useAppHarness();
 async function fixture(){
  const owner=await mintAccountToken('native-metadata');
  const response=await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{html:'<html><body><p>Keep native source</p></body></html>',title:'Before'}}));expect(response.status).toBe(201);const page=await response.json();
- return {owner,page,context:{params:Promise.resolve({id:page.id})}};
+ return {owner,page,context:params(page.id)};
 }
 it.each(['bearer','session'] as const)('rejects an otherwise valid graph replacement through the %s metadata admission',async credential=>{
  const f=await fixture(),head=(await getArtifactById(f.page.id))!;

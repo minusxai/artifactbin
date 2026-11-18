@@ -10,7 +10,7 @@ import {GET as read,PUT as update} from '@/app/api/artifacts/[id]/route';
 import {POST as pageSql} from '@/app/api/artifacts/[id]/sql/route';
 import {GET as listComments,POST as addComment} from '@/app/api/artifacts/[id]/annotations/route';
 import {POST as replyComment,PATCH as editComment} from '@/app/api/artifacts/[id]/annotations/[annId]/route';
-import {request,useAppHarness,mintAccountToken} from './harness';
+import {request,useAppHarness,mintAccountToken,params} from './harness';
 import {tempDir} from '@artifactbin/test-support/temp-dir';
 import {syntheticEnv} from '@/test/helpers/toolbox-env';
 // The suite caps a file at 10 KB (suite-env) so size tests trip cheaply; the dashboard's renderer
@@ -39,9 +39,9 @@ describe('installed native author examples',()=>{
    const options={log:()=>{},env:syntheticEnv(server, path.join(dir,'private'), { token: owner.token }),fetcher:async(input:any,init:any)=>{
     const url=new URL(String(input)),id=url.pathname.split('/').at(-1)!,method=init?.method??'GET';
     const req=request(url.pathname,{method,token:owner.token,headers:{'Idempotency-Key':new Headers(init?.headers).get('Idempotency-Key')??''},...(init?.body?{json:JSON.parse(String(init.body))}:{})});
-    return method==='GET'?await read(req,{params:Promise.resolve({id})}):method==='PUT'?await update(req,{params:Promise.resolve({id})}):await publish(req);
+    return method==='GET'?await read(req,params(id)):method==='PUT'?await update(req,params(id)):await publish(req);
    }};
-   const get=async(id:string)=>(await read(request('/api/artifacts/'+id,{token:owner.token}),{params:Promise.resolve({id})})).json();
+   const get=async(id:string)=>(await read(request('/api/artifacts/'+id,{token:owner.token}),params(id))).json();
    // The starter as new-page writes it: the CSV beside it, linked by its path; a header-only CSV is an empty table.
    const source=path.join(project,'index.html'),csv=execFileSync(process.execPath,[path.join(installed,'examples/gen-deliveries.mjs')],{stdio:['ignore','pipe','ignore']}).toString();
    await writeFile(path.join(project,'deliveries.csv'),csv);await writeFile(path.join(project,'notes.csv'),'note,created_by\n');
@@ -59,7 +59,7 @@ describe('installed native author examples',()=>{
    for(const [file,name] of [['deliveries.csv','deliveries'],['notes.csv','notes']]){
     const id=byPath[file].id,dataset=await get(id);expect(dataset.title).toBe(file);
     expect(page.html).toContain(`data-af-name="${name}" href="ref:${id}"`);
-    const result=await pageSql(request(`/api/artifacts/${first.id}/sql`,{method:'POST',token:owner.token,json:{revision:'1',sql:`select count(*) as n from ${name}`}}),{params:Promise.resolve({id:first.id})});
+    const result=await pageSql(request(`/api/artifacts/${first.id}/sql`,{method:'POST',token:owner.token,json:{revision:'1',sql:`select count(*) as n from ${name}`}}),params(first.id));
     expect(result.status,await result.clone().text()).toBe(200);
     expect((await result.json()).rows).toEqual([{n:dataset.rowCount}]);
    }
@@ -85,7 +85,7 @@ describe('installed native author examples',()=>{
    // A prepared request sent as is, with its own idempotency key.
    const send=async(saved:{method:string;artifactId?:string;idempotencyKey:string;body:unknown})=>{
     const req=request('/api/artifacts'+(saved.method==='PUT'?'/'+saved.artifactId:''),{method:saved.method,token:owner.token,headers:{'Idempotency-Key':saved.idempotencyKey},json:saved.body});
-    const response=saved.method==='PUT'?await update(req,{params:Promise.resolve({id:saved.artifactId!})}):await publish(req);
+    const response=saved.method==='PUT'?await update(req,params(saved.artifactId!)):await publish(req);
     expect(response.ok,await response.clone().text()).toBe(true);return response.json();
    };
    const mappingsOf=(receipt:{dependencyReceipts?:{path:string}[]})=>Object.fromEntries((receipt.dependencyReceipts??[]).map(({path,...mapping})=>[path,mapping]));
@@ -93,7 +93,7 @@ describe('installed native author examples',()=>{
    await writeFile(path.join(installed,'index.html'),source);await writeFile(path.join(installed,'theme.css'),'body{color:red}');
    const first=await prepareBundle({root:installed,entry:'index.html',server});const created=await send(first);
    expect((await send(first)).id).toBe(created.id);
-   const baseline=await (await read(request('/api/artifacts/'+created.id,{token:owner.token}),{params:Promise.resolve({id:created.id})})).json();
+   const baseline=await (await read(request('/api/artifacts/'+created.id,{token:owner.token}),params(created.id))).json();
    const previous={mappings:mappingsOf(created)};
    await writeFile(path.join(installed,'index.html'),source.replace('One','Two'));await writeFile(path.join(installed,'theme.css'),'body{color:blue}');
    const next=await prepareBundleUpdate({root:installed,entry:'index.html',server,head:baseline,mappings:previous.mappings});const changed=await send(next);
@@ -113,14 +113,14 @@ describe('installed native author examples',()=>{
     const url=new URL(String(input)),id=url.pathname.split('/').at(-1)!,method=init?.method??'GET';
     const req=request(url.pathname,{method,token:owner.token,headers:{'Idempotency-Key':new Headers(init?.headers).get('Idempotency-Key')??''},...(init?.body?{json:JSON.parse(String(init.body))}:{})});
     const segments=url.pathname.split('/'),pageId=segments[3];
-    const response=segments[4]==='annotations'?(segments[5]?await (method==='PATCH'?editComment:replyComment)(req,{params:Promise.resolve({id:pageId,annId:segments[5]})}):await (method==='GET'?listComments:addComment)(req,{params:Promise.resolve({id:pageId})})):method==='GET'?await read(req,{params:Promise.resolve({id})}):method==='PUT'?await update(req,{params:Promise.resolve({id})}):await publish(req);
+    const response=segments[4]==='annotations'?(segments[5]?await (method==='PATCH'?editComment:replyComment)(req,{params:Promise.resolve({id:pageId,annId:segments[5]})}):await (method==='GET'?listComments:addComment)(req,params(pageId))):method==='GET'?await read(req,params(id)):method==='PUT'?await update(req,params(id)):await publish(req);
     if(loseResponse&&method==='PUT'){loseResponse=false;throw Error('connection lost after commit');}return response;
    }};
    const source=path.join(project,'index.html');await writeFile(source,'<link rel="stylesheet" href="./theme.css"><h1>One</h1>');await writeFile(path.join(project,'theme.css'),'body{color:red}');
    const first=await publishCommand({values:{server,create:true},positionals:[source]},options);expect(first.version).toBe(1);
    // An unchanged input becomes the canonical source in place, carrying its marker; nothing beside it.
    expect(first.updatedInPlace).toBe(true);expect(first.source).toBe(await realpath(source));expect(first).not.toHaveProperty('baseline');
-   const receiptsOf=async(id:string)=>(await (await read(request('/api/artifacts/'+id,{token:owner.token}),{params:Promise.resolve({id})})).json()).dependencyReceipts;
+   const receiptsOf=async(id:string)=>(await (await read(request('/api/artifacts/'+id,{token:owner.token}),params(id))).json()).dependencyReceipts;
    // The ids publish added are announced, so exact-text edits against the old text are not attempted blind.
    expect(first.rewritten).toMatch(/^index\.html was rewritten with \d+ data-af-id attributes: re-read it before editing; match on short anchors, not whole lines\.$/);
    // A page publish ends on the next step: reply to the user and keep the comment watch running.
@@ -173,7 +173,7 @@ describe('installed native author examples',()=>{
   const installed=path.join(dir,'artifactbin'),{prepareBundle}=await import(pathToFileURL(path.join(installed,'scripts/toolbox-publication-bundle.mjs')).href),owner=await mintAccountToken('sample-app');
   const dataset=await publish(request('/api/artifacts',{method:'POST',token:owner.token,json:{dataset:execFileSync(process.execPath,[path.join(installed,'examples/gen-transactions.mjs')]).toString()}}));expect(dataset.status).toBe(201);const datasetId=(await dataset.json()).id;
   const source=await readFile(path.join(installed,'examples/tracker.html'),'utf8'),saved=await prepareBundle({root:installed,entry:'examples/tracker.html',entryHtml:source.replaceAll('DATASET_ID',datasetId).replaceAll('TARGETS_ID',datasetId).replace(/<link[^>]*data-af="design-system"[^>]*>/,'<link data-af="design-system" rel="stylesheet" href="https://styles.example/theme.css">'),server:'http://localhost:3000'});const response=await publish(request('/api/artifacts',{method:'POST',token:owner.token,headers:{'Idempotency-Key':saved.idempotencyKey},json:saved.body}));expect(response.status,await response.clone().text()).toBe(201);const page=await response.json();
-  const head=await read(request(`/api/artifacts/${page.id}`,{token:owner.token}),{params:Promise.resolve({id:page.id})});expect(head.status).toBe(200);const html=(await head.json()).html;expect(html).toContain('data-af-name="entries"');expect(html).not.toMatch(/af-resolver|\/fn\//);
+  const head=await read(request(`/api/artifacts/${page.id}`,{token:owner.token}),params(page.id));expect(head.status).toBe(200);const html=(await head.json()).html;expect(html).toContain('data-af-name="entries"');expect(html).not.toMatch(/af-resolver|\/fn\//);
  });
  it('runs autofix on publish: writes fixes, refuses problems, --strict refuses fixes, and carries IDs forward on regeneration',async()=>{
   const dir=await tempDir('author-autofix-publish-',onTestFinished);
@@ -184,7 +184,7 @@ describe('installed native author examples',()=>{
    const options={log:(text:string)=>{logs.push(text);},env:syntheticEnv(server, path.join(dir,'private'), { token: owner.token }),fetcher:async(input:any,init:any)=>{
     const url=new URL(String(input)),id=url.pathname.split('/').at(-1)!,method=init?.method??'GET';
     const req=request(url.pathname,{method,token:owner.token,headers:{'Idempotency-Key':new Headers(init?.headers).get('Idempotency-Key')??''},...(init?.body?{json:JSON.parse(String(init.body))}:{})});
-    return method==='GET'?await read(req,{params:Promise.resolve({id})}):method==='PUT'?await update(req,{params:Promise.resolve({id})}):await publish(req);
+    return method==='GET'?await read(req,params(id)):method==='PUT'?await update(req,params(id)):await publish(req);
    }};
    const source=path.join(project,'index.html');
    const body='<h1>Quarterly plan</h1>\n<p>Three bets for the next quarter.</p>\n<ul><li>Ship the importer</li><li>Halve time to first chart</li></ul>\n';

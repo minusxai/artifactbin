@@ -221,6 +221,13 @@ export const emitLayout = (runtime: { emit(data: Record<string, unknown>): void 
 
 /** The runtime reports a click on annotation `id`'s pin: a 300 by 50 box at x 10, y 20. */
 export const emitPin = (runtime: { emit(data: Record<string, unknown>): void }, id: string) => runtime.emit({ type: 'mx:annotation-pin', id, rect: { x: 10, y: 20, width: 300, height: 50 } });
+/** Mount the layer (`layer`'s own arguments), let it settle, and open `id`'s thread from its pin: the view. */
+export async function openPinnedThread(id: string, ...args: Parameters<typeof layer>) {
+  const view = layer(...args);
+  await flush();
+  emitPin(view.runtime, id);
+  return view;
+}
 
 /** The shadow root a `trusted` mount renders into. */
 export const trustedRoot = () => document.querySelector('[data-trusted-ui]')!.shadowRoot!;

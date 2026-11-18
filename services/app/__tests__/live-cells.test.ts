@@ -24,7 +24,7 @@ import { GET as streamRoute } from '@/app/api/artifacts/[id]/regions/stream/rout
 import { regionSessions } from '@/app/api/artifacts/[id]/regions/doors';
 import { patchMetadata } from './conditional-request';
 import { nativeDatasetClient } from './native-dataset-http';
-import { mintAccountToken, request, useAppHarness, type RequestOptions } from './harness';
+import { mintAccountToken, request, useAppHarness, type RequestOptions, params } from './harness';
 import { sseStream } from './sse';
 import { dropShares, seedShares } from '@/__tests__/rows';
 /** A condition wait's bound (vi.waitFor's own default is 1 s): the condition decides; this only names one that never came. */
@@ -82,21 +82,21 @@ const key = (rowId: string, column = 'description', dataset = 'tasks') => cellKe
 
 async function open(person: Person | null, regionId: string, id = pageId, extra: RequestOptions = {}) {
   const req = request(`/api/artifacts/${id}/regions/${encodeURIComponent(regionId)}/open`, { method: 'POST', origin: 'same', ...(person ? { actor: as(person) } : {}), ...extra });
-  return call(req, () => openRoute(req, { params: Promise.resolve({ id, regionId }) }));
+  return call(req, () => openRoute(req, params({ id, regionId })));
 }
 async function send(person: Person | null, regionId: string, body: unknown, extra: RequestOptions = {}) {
   const req = request(`/api/artifacts/${pageId}/regions/${encodeURIComponent(regionId)}/updates`, { method: 'POST', json: body, origin: 'same', ...(person ? { actor: as(person) } : {}), ...extra });
-  return call(req, () => updatesRoute(req, { params: Promise.resolve({ id: pageId, regionId }) }));
+  return call(req, () => updatesRoute(req, params({ id: pageId, regionId })));
 }
 async function flushCells(person: Person) {
   const req = request(`/api/artifacts/${pageId}/regions/flush?scope=cells`, { method: 'POST', origin: 'same', actor: as(person) });
-  return call(req, () => flushRoute(req, { params: Promise.resolve({ id: pageId }) }));
+  return call(req, () => flushRoute(req, params(pageId)));
 }
 async function stream(person: Person, after: string) {
   const abort = new AbortController();
   const unsigned = request(`/api/artifacts/${pageId}/regions/stream?after=${encodeURIComponent(after)}`, {});
   const req = attachActor(new Request(unsigned, { signal: abort.signal }), as(person));
-  const response = await call(req, () => streamRoute(req, { params: Promise.resolve({ id: pageId }) }));
+  const response = await call(req, () => streamRoute(req, params(pageId)));
   if (response.status !== 200) return { response, frames: null, close: () => {} };
   const frames = sseStream(response.body!);
   const handle = { close: () => { abort.abort(); frames.close(); } };

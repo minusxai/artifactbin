@@ -8,7 +8,7 @@
 import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
 import type { Actor } from '@artifactbin/contracts';
-import { request, setSession, useAppHarness, mintAccountToken } from '@/__tests__/harness';
+import { request, setSession, useAppHarness, mintAccountToken, params as routeParams } from '@/__tests__/harness';
 import { identityForUser, createUser, getUserById } from '@/lib/accounts';
 import { avatarVersion } from '@/lib/avatars';
 import { getArtifactById, updateSharingFor, changeMembership } from '@/lib/artifacts';
@@ -27,7 +27,7 @@ import { GET as readDatasetFile } from '@/app/a/[id]/datasets/[datasetId]/files/
 useAppHarness();
 
 const BASE = 'http://localhost:3000';
-const ctx = (id: string) => ({ params: Promise.resolve({ id }) });
+const ctx = (id: string) => (routeParams(id));
 const GLB = new Uint8Array([0x67, 0x6c, 0x54, 0x46, 0, 255, 42]);
 const PNG_1x1 = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
 const png = (w: number, h: number) => sharp({ create: { width: w, height: h, channels: 3, background: { r: 180, g: 40, b: 60 } } }).png().toBuffer();
@@ -39,7 +39,7 @@ interface Door { name: string; serve: () => Promise<Response>; owes: Owed }
 /** A generic file artifact uploaded with `contentType`, and its token. */
 async function fileArtifact(contentType = 'model/gltf-binary', body: Uint8Array<ArrayBuffer> = GLB) {
   const token = await mintAccountToken('files');
-  const response = await createArtifact(new Request(`${BASE}/api/artifacts?format=file&filename=scene.glb`, {
+  const response = await createArtifact(request(`/api/artifacts?format=file&filename=scene.glb`, {
     method: 'POST', headers: { Authorization: `Bearer ${token.token}`, 'Content-Type': contentType }, body,
   }));
   expect(response.status).toBe(201);
@@ -81,12 +81,12 @@ async function datasetUploads() {
   const pageActor: Actor = { credential: 'session', userId: reporter.id, email: reporter.email!, emailVerified: true };
   // A declared link and accepted membership alone never grant dataset writes.
   const deniedBytes=new Uint8Array(await png(40,24));
-  const denied=await uploadDatasetImage(request(`/a/${document.id}/datasets/${dataset.id}/images`,{method:'POST',actor:pageActor,headers:{'Content-Type':'image/png','X-Edit-Id':document.edit_id,'Idempotency-Key':'membership-not-authority'},body:deniedBytes}),{params:Promise.resolve({id:document.id,datasetId:dataset.id})});
+  const denied=await uploadDatasetImage(request(`/a/${document.id}/datasets/${dataset.id}/images`,{method:'POST',actor:pageActor,headers:{'Content-Type':'image/png','X-Edit-Id':document.edit_id,'Idempotency-Key':'membership-not-authority'},body:deniedBytes}),routeParams({ id:document.id,datasetId:dataset.id }));
   expect(denied.status).toBe(403);
   const policy=(await getArtifactById(dataset.id))!;
   await setDatasetPolicy(ownerActor,dataset.id,viewerInsert(),policy.policy_revision??0);
   const reporterToken = await mintAccountToken('media-headers-reporter', reporter.id);
-  const params = { params: Promise.resolve({ id: document.id, datasetId: dataset.id }) };
+  const params = routeParams({ id: document.id, datasetId: dataset.id });
   const bytes = await sharp({ create: { width: 40, height: 24, channels: 3, background: '#c0392b' } }).png().toBuffer();
   const file = async (filename: string, body: BodyInit, key: string) => {
     const made = await uploadDatasetFile(request(`/api/artifacts/${document.id}/datasets/${dataset.id}/files`, { method: 'POST', token: reporterToken.token, headers: { 'Content-Type': 'application/octet-stream', 'X-Filename': encodeURIComponent(filename), 'X-Edit-Id': document.edit_id, 'Idempotency-Key': key }, body }), params);
@@ -120,11 +120,11 @@ const DOORS: Door[] = [
   { name: 'a dataset picture filed as a file, converted at the door', owes: { 'content-disposition': /inline; filename="proof\.webp"/ },
     serve: async () => (await datasetUploads()).picture() },
   { name: 'a generic file artifact\'s raw bytes', owes: { 'content-disposition': /^attachment;/, 'content-security-policy': /sandbox/ },
-    serve: async () => { const f = await fileArtifact(); return raw(new Request(`${BASE}/a/${f.id}/raw`), ctx(f.id)); } },
+    serve: async () => { const f = await fileArtifact(); return raw(request(`/a/${f.id}/raw`), ctx(f.id)); } },
   { name: 'a file uploaded claiming text/html: the extension\'s type, inert', owes: { 'content-type': 'model/gltf-binary', 'content-disposition': /^attachment;/, 'x-content-type-options': 'nosniff' },
-    serve: async () => { const f = await fileArtifact('text/html', new TextEncoder().encode('<script>alert(1)</script>')); return raw(new Request(`${BASE}/a/${f.id}/raw`), ctx(f.id)); } },
+    serve: async () => { const f = await fileArtifact('text/html', new TextEncoder().encode('<script>alert(1)</script>')); return raw(request(`/a/${f.id}/raw`), ctx(f.id)); } },
   { name: 'a public file resolved by ref from a document', owes: { 'access-control-allow-origin': '*', 'cache-control': 'no-store' },
-    serve: async () => { const f = await fileArtifact(); return resolve(new Request(`${BASE}/a/Doc123/resolve?ref=ref:${f.id}`), ctx('Doc123')); } },
+    serve: async () => { const f = await fileArtifact(); return resolve(request(`/a/Doc123/resolve?ref=ref:${f.id}`), ctx('Doc123')); } },
 ];
 
 describe('every media door answers with the headers it owes', () => {
@@ -156,7 +156,7 @@ describe('every media door answers with the headers it owes', () => {
     const made = await (door === 'bearer' ? createArtifact(upload) : sessionCreate(upload));
     expect(made.status, await made.clone().text()).toBe(201);
     const { id } = (await made.json()) as { id: string };
-    const served = await raw(new Request(`${BASE}/a/${id}/raw`), ctx(id));
+    const served = await raw(request(`/a/${id}/raw`), ctx(id));
     expect(served.headers.get('Content-Type')).toBe(((await getArtifactById(id))!.meta as { contentType?: string }).contentType);
   });
 });

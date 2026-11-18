@@ -4,7 +4,7 @@
  * (where its script runs) and on the app's (where a reader's click on a link lands).
  */
 import {describe,expect,it} from 'vitest';
-import { mintAccountToken, request, useAppHarness } from '@/__tests__/harness';
+import { mintAccountToken, request, useAppHarness, params } from '@/__tests__/harness';
 import {POST} from '@/app/api/artifacts/route';
 import {publishBundleAndOpen} from './bundle-fixture';
 import {GET as assetGet,HEAD as assetHead} from '@/app/a/[id]/assets/route';
@@ -24,7 +24,7 @@ function addressOf(html:string,tag:string,saved:{dependencyReceipts:{path:string
  return href!.replaceAll('&amp;','&');
 }
 const ASSET=/^\/a\/[A-Za-z0-9]+\/assets\?dependency=[A-Za-z0-9]+&revision=1&version=1$/;
-const appRead=(path:string,token?:string)=>{const id=path.split('/')[2]!;return assetGet(request(path,token?{token}:{}),{params:Promise.resolve({id})});};
+const appRead=(path:string,token?:string)=>{const id=path.split('/')[2]!;return assetGet(request(path,token?{token}:{}),params(id));};
 
 describe('a file published beside its page',()=>{
  it('is reached by its link and by a declared fetch: owner and signed-out reader of an unlisted page',async()=>{

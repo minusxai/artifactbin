@@ -25,7 +25,7 @@ import { nativeHtml } from './native-html-fixture';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { GET as myReadRoute } from '@/app/api/my/artifacts/[id]/route';
 import { POST as commentRoute } from '@/app/api/my/artifacts/[id]/annotations/route';
-import { mintAccountToken, request, useAppHarness, type RequestOptions } from './harness';
+import { mintAccountToken, request, useAppHarness, type RequestOptions, params } from './harness';
 import { sseStream } from './sse';
 import { dropShares, seedShares, setArtifact } from '@/__tests__/rows';
 
@@ -43,15 +43,15 @@ const sessionOpts = (person: Person | null, extra: RequestOptions = {}): Request
 
 async function open(person: Person | null, id = pageId, regionId = rich, extra: RequestOptions = {}) {
   const req = request(`/api/artifacts/${id}/regions/${regionId}/open`, { method: 'POST', ...sessionOpts(person, extra) });
-  return call(req, () => openRoute(req, { params: Promise.resolve({ id, regionId }) }));
+  return call(req, () => openRoute(req, params({ id, regionId })));
 }
 async function send(person: Person | null, body: unknown, id = pageId, regionId = rich, extra: RequestOptions = {}) {
   const req = request(`/api/artifacts/${id}/regions/${regionId}/updates`, { method: 'POST', json: body, ...sessionOpts(person, extra) });
-  return call(req, () => updatesRoute(req, { params: Promise.resolve({ id, regionId }) }));
+  return call(req, () => updatesRoute(req, params({ id, regionId })));
 }
 async function flush(person: Person | null, id = pageId, extra: RequestOptions = {}) {
   const req = request(`/api/artifacts/${id}/regions/flush`, { method: 'POST', ...sessionOpts(person, extra) });
-  return call(req, () => flushRoute(req, { params: Promise.resolve({ id }) }));
+  return call(req, () => flushRoute(req, params(id)));
 }
 const streams: { abort: AbortController; close(): void }[] = [];
 async function stream(person: Person | null, after: string, id = pageId, extra: RequestOptions = {}) {
@@ -61,7 +61,7 @@ async function stream(person: Person | null, after: string, id = pageId, extra: 
   const signalled = new Request(unsigned, { signal: abort.signal });
   const actor = person ? as(person) : extra.actor;
   const req = actor ? attachActor(signalled, actor) : signalled;
-  const response = await call(req, () => streamRoute(req, { params: Promise.resolve({ id }) }));
+  const response = await call(req, () => streamRoute(req, params(id)));
   if (response.status !== 200) return { response, frames: null };
   const reader = sseStream(response.body!);
   const handle = { abort, close: () => { abort.abort(); reader.close(); } };
@@ -72,7 +72,7 @@ async function put(body: string, expectedVersion?: number) {
   const token = await mintAccountToken('regions-put', owner.id);
   const row = (await getArtifactById(pageId))!;
   const req = request(`/api/artifacts/${pageId}`, { method: 'PUT', token: token.token, json: { html: nativeHtml(body), expectedVersion: expectedVersion ?? row.version, expectedState: artifactState(row) } });
-  return call(req, () => putRoute(req, { params: Promise.resolve({ id: pageId }) }));
+  return call(req, () => putRoute(req, params(pageId)));
 }
 
 /** An editor's replica: the server's bytes, writing under the client id its open was given. */
@@ -340,11 +340,11 @@ describe('saving as page versions', () => {
     other.text.insert(0, 'Atomic peer ');
     expect((await a.push()).status).toBe(200);expect((await other.push()).status).toBe(200);
     const req = request(`/api/my/artifacts/${pageId}`, sessionOpts(owner));
-    const read = await call(req, () => myReadRoute(req, { params: Promise.resolve({ id: pageId }) }));
+    const read = await call(req, () => myReadRoute(req, params(pageId)));
     expect(read.status).toBe(200);
     expect(await read.text()).toContain('https://example.com/qa');
     const rawReq = request(`/a/${pageId}/raw`, sessionOpts(owner));
-    const raw = await call(rawReq, () => rawRoute(rawReq, { params: Promise.resolve({ id: pageId }) }));
+    const raw = await call(rawReq, () => rawRoute(rawReq, params(pageId)));
     expect(raw.status).toBe(200);expect(await raw.text()).toContain('https://example.com/qa');
     const flushed = await flush(owner);
     expect(flushed.status, await flushed.clone().text()).toBe(200);
@@ -356,7 +356,7 @@ describe('saving as page versions', () => {
     expect(reopened.html()).toContain('target="_blank"');expect(reopened.html()).toContain('rel="noopener noreferrer nofollow"');
     if(marked){expect(reopened.html()).toContain('<strong');expect(reopened.html()).toContain('<em');}
     const comment = request(`/api/my/artifacts/${pageId}/annotations`, { method: 'POST', ...sessionOpts(owner), json: { anchor: { kind: 'html-node', v: 1, nodeId: paragraphId, revision: String(row.version), quote: 'Hello' }, edit_id: row.edit_id, body: 'mxmx_test link persists' } });
-    const posted = await call(comment, () => commentRoute(comment, { params: Promise.resolve({ id: pageId }) }));
+    const posted = await call(comment, () => commentRoute(comment, params(pageId)));
     expect(posted.status, await posted.clone().text()).toBe(201);
     const versions = await rows('region_snapshots');
     expect(new Set(versions.map(snapshot => snapshot.version))).toEqual(new Set([1, 2]));
@@ -471,7 +471,7 @@ async function multiplex(person: Person | null, after: string, anonymous=false, 
   const base=request(`/a/${pageId}/events?regions=${encodeURIComponent(after)}${anonymous?'&anonymous=1':''}`,sessionOpts(null,extra));
   const signalled=new Request(base,{signal:abort.signal});
   const req=person?attachActor(signalled,as(person)):signalled;
-  const response=await call(req,()=>documentStreamRoute(req,{params:Promise.resolve({id:pageId})}));
+  const response=await call(req,()=>documentStreamRoute(req,params(pageId)));
   if(response.status!==200)return {response,frames:null};
   const frames=sseStream(response.body!);streams.push({abort,close(){abort.abort();frames.close();}});
   return {response,frames};

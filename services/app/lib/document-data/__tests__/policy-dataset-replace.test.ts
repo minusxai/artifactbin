@@ -11,7 +11,7 @@ import { PUT as replace } from '@/app/api/artifacts/[id]/route';
 import { getArtifactById, artifactState } from '@/lib/artifacts';
 import { publishDataset } from '@/lib/datasets';
 import type { StoredContent } from '@/lib/document';
-import { mintAccountToken as mintToken, setDatasetPolicy } from '@/__tests__/harness';
+import { mintAccountToken as mintToken, setDatasetPolicy, params } from '@/__tests__/harness';
 import { request, useAppHarness } from '@/__tests__/harness';
 useAppHarness();
 
@@ -32,7 +32,7 @@ async function fixture() {
   // Every replace names the base it was made from: that is what keeps a stale push from discarding rows.
   const base = { expectedVersion: 1, expectedState: artifactState((await getArtifactById(ds))!) };
   const put = (token: string, dataset: object[], from = base) =>
-    replace(request(`/api/artifacts/${ds}`, { method: 'PUT', token, json: { dataset, ...from } }), { params: Promise.resolve({ id: ds }) });
+    replace(request(`/api/artifacts/${ds}`, { method: 'PUT', token, json: { dataset, ...from } }), params(ds));
   return { owner, ds, put };
 }
 

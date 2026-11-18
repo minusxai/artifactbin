@@ -10,7 +10,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
 
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
+import { mintAccountToken as mintToken, params } from '@/__tests__/harness';
 
 import { loadDatasetRows } from '@/lib/datasets';
 import { MAX_ROWS_LIMIT } from '@/lib/platform';
@@ -18,7 +18,6 @@ import { request, useAppHarness } from '@/__tests__/harness';
 
 const harness = useAppHarness();
 
-const BASE = 'http://localhost:3000';
 let token: string;
 
 beforeEach(async () => {
@@ -28,7 +27,7 @@ beforeEach(async () => {
 afterEach(() => vi.unstubAllGlobals());
 
 const create = async (body: Record<string, unknown>) => {
-  const res = await createArtifact(new Request(`${BASE}/api/artifacts`, {
+  const res = await createArtifact(request(`/api/artifacts`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify(body),
@@ -210,7 +209,7 @@ describe('the read-back API carries dataset ROWS', () => {
     const { GET } = await import('@/app/api/artifacts/[id]/route');
     const res = await GET(
       request(`/api/artifacts/${body.id}`, { token }),
-      { params: Promise.resolve({ id: body.id }) },
+      params(body.id),
     );
     const wire = await res.json();
     expect(wire.rows).toEqual([{ month: '2026-01', revenue: 120 }]);

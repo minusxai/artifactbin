@@ -17,7 +17,7 @@ import { Avatar } from '../../ui/Avatar';
 import { fireEvent, render } from '../../__tests__/helpers';
 import { AuthorIdentity, positionedComments } from '../AnnotationPreview';
 import {
-  ADA_IMAGE, ANN, FACES, RESOLVED, GENERIC_AGENT, MCP_AGENT, NONCE, fetchCalls, flush, httpBackend, installAnnotationFetch, knobs, layer, makeRuntime, showResolved, trustedRoot, emitLayout, emitPin } from './annotation-rig';
+  ADA_IMAGE, ANN, FACES, RESOLVED, GENERIC_AGENT, MCP_AGENT, NONCE, fetchCalls, flush, httpBackend, installAnnotationFetch, knobs, layer, makeRuntime, showResolved, trustedRoot, emitLayout, emitPin, openPinnedThread } from './annotation-rig';
 import { stubFetch } from '@/test/helpers/fetch-stub';
 
 beforeEach(installAnnotationFetch);
@@ -176,9 +176,7 @@ describe('AnnotationLayer', () => {
 
   it('a pin click opens the rail on that thread and changes no hash', async () => {
     const onRailOpenChange = vi.fn();
-    const view = layer({ onRailOpenChange });
-    await flush();
-    emitPin(view.runtime, 'ann_1');
+    const view = await openPinnedThread('ann_1', { onRailOpenChange });
     expect(onRailOpenChange).toHaveBeenCalledWith(true);
     expect(window.location.hash).toBe('');
     view.set({ onRailOpenChange, railOpen: true });
@@ -276,9 +274,7 @@ describe('AnnotationLayer', () => {
   });
 
   it('the sidebar resolves and replies; resolving drops the pin', async () => {
-    const view = layer({ railOpen: true });
-    await flush();
-    emitPin(view.runtime, 'ann_1');
+    const view = await openPinnedThread('ann_1', { railOpen: true });
     await screen.findByLabelText('Annotation thread');
     replaceComment(screen.getByLabelText('Reply to annotation'), 'never mind');
     fireEvent.click(screen.getByLabelText('Send reply'));
@@ -448,9 +444,7 @@ describe('AnnotationLayer', () => {
   });
 
   it('delete asks first, then erases the thread and its pin', async () => {
-    const view = layer({ railOpen: true });
-    await flush();
-    emitPin(view.runtime, 'ann_1');
+    const view = await openPinnedThread('ann_1', { railOpen: true });
     const thread = await screen.findByLabelText('Annotation thread');
     fireEvent.click(within(thread).getByLabelText('Annotation actions'));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Delete thread' }));
@@ -464,9 +458,7 @@ describe('AnnotationLayer', () => {
   });
 
   it('deletes only the chosen reply and keeps the rest of the thread visible', async () => {
-    const view = layer({ railOpen: true });
-    await flush();
-    emitPin(view.runtime, 'ann_1');
+    const view = await openPinnedThread('ann_1', { railOpen: true });
     const thread = await screen.findByLabelText('Annotation thread');
     const reply = thread.querySelector<HTMLElement>('[data-comment-id="ann_2"]')!;
     fireEvent.click(within(reply).getByLabelText('Comment actions 1'));
@@ -484,9 +476,7 @@ describe('AnnotationLayer', () => {
   it('keeps a reply and its thread when reply deletion fails', async () => {
     const priorFetch = globalThis.fetch;
     stubFetch({ 'DELETE *': () => new Response('{}', { status: 500 }) }, { fallback: (url, init) => priorFetch(url, init) });
-    const view = layer({ railOpen: true });
-    await flush();
-    emitPin(view.runtime, 'ann_1');
+    await openPinnedThread('ann_1', { railOpen: true });
     const thread = await screen.findByLabelText('Annotation thread');
     const reply = thread.querySelector<HTMLElement>('[data-comment-id="ann_2"]')!;
     fireEvent.click(within(reply).getByLabelText('Comment actions 1'));
@@ -625,9 +615,7 @@ it('sends a plain reply without a revision and shows both replies when the threa
   stubFetch({
     [`POST */annotations/${ANN.id}`]: (url, init) => { fetchCalls.push({ url, init }); return new Response(JSON.stringify(advanced), { status: 200 }); },
   }, { fallback: (url, init) => rig(url, init) });
-  const view = layer({ railOpen: true });
-  await flush();
-  emitPin(view.runtime, ANN.id);
+  await openPinnedThread(ANN.id, { railOpen: true });
   const field = await screen.findByLabelText('Reply to annotation');
   replaceComment(field, 'my reply');
   fireEvent.click(screen.getByLabelText('Send reply'));
@@ -652,9 +640,7 @@ it('a reply that meets a 502 retries under one key, posts once and clears the dr
     },
   }, { fallback: (url, init) => rig(url, init) });
   try {
-    const view = layer({ railOpen: true });
-    await flush();
-    emitPin(view.runtime, ANN.id);
+    await openPinnedThread(ANN.id, { railOpen: true });
     replaceComment(await screen.findByLabelText('Reply to annotation'), 'through the restart');
     fireEvent.click(screen.getByLabelText('Send reply'));
     await flush(); await flush();
@@ -675,9 +661,7 @@ it('a reply refused with 409 is not retried and keeps the draft', async () => {
     [`POST */annotations/${ANN.id}`]: () => { posts++; return new Response(JSON.stringify({ error: 'annotation_conflict' }), { status: 409 }); },
   }, { fallback: (url, init) => rig(url, init) });
   try {
-    const view = layer({ railOpen: true });
-    await flush();
-    emitPin(view.runtime, ANN.id);
+    await openPinnedThread(ANN.id, { railOpen: true });
     replaceComment(await screen.findByLabelText('Reply to annotation'), 'keep me');
     fireEvent.click(screen.getByLabelText('Send reply'));
     await flush(); await flush();

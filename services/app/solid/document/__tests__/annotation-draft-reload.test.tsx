@@ -8,7 +8,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { screen } from '@testing-library/dom';
 import type { StoryEditSelection } from '@/lib/html-bridge/selection-contract';
 import { cleanup, fireEvent } from '../../__tests__/helpers';
-import { flush, installAnnotationFetch, layer, emitPin } from './annotation-rig';
+import { flush, installAnnotationFetch, layer, emitPin, openPinnedThread } from './annotation-rig';
 import { preloadCommentField } from '../LazyCommentField';
 import { replaceComment } from './comment-input';
 
@@ -19,8 +19,7 @@ const TEXT = { kind: 'text', path: '1', tag: 'p', rect: { x: 5, y: 6, width: 200
 
 /** The open thread's rail, in a page loaded afresh. */
 async function openThread() {
-  const view = layer({ railOpen: true }); await flush();
-  emitPin(view.runtime, 'ann_1');
+  const view = await openPinnedThread('ann_1', { railOpen: true });
   await screen.findByLabelText('Annotation thread');
   return view;
 }

@@ -9,7 +9,7 @@ import {linkedSql,liveLink} from '@/__tests__/linked-datasets';
 // The policy API serves the app's editor and the read-only view since the old app policy route was retired.
 import { GET as readPolicy, PUT as writePolicy } from '@/app/api/artifacts/[id]/policy/route';
 import { setDatasetPolicy } from '@/lib/document-data/dataset-policy';
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
+import { mintAccountToken as mintToken, params } from '@/__tests__/harness';
 import { request, useAppHarness } from '@/__tests__/harness';
 useAppHarness();
 async function fixture() {
@@ -130,7 +130,7 @@ it('refuses an owner re-push from a stale base, so rows written by viewers survi
         token: f.owner.token,
         json: { dataset, ...from },
       }),
-      { params: Promise.resolve({ id: f.ds }) },
+      params(f.ds),
     );
   expect((await f.write()).outcome).toBe('committed');
   const written = (await getArtifactById(f.ds))!;
@@ -189,7 +189,7 @@ it('lets editors open the visual policy editor', async () => {
   await setDatasetPolicy(f.actor, f.ds, f.policy, 0);
   const response = await readPolicy(
     request(`/api/artifacts/${f.ds}/policy`, { actor: f.session, origin: 'same' }),
-    { params: Promise.resolve({ id: f.ds }) },
+    params(f.ds),
   );
   expect(response.status).toBe(200);
   expect(await response.json()).toMatchObject({
@@ -206,7 +206,7 @@ it.each(['viewer', 'commenter', 'editor'] as const)(
     const save = (policy: unknown, revision: number) => writePolicy(
       request(`/api/artifacts/${f.ds}/policy`, {method:'PUT', actor:f.session, origin:'same',
         json:{policy,expectedPolicyRevision:revision}}),
-      {params:Promise.resolve({id:f.ds})},
+      params(f.ds),
     );
     const created = await save(f.policy, 0);
     expect(created.status).toBe(role === 'editor' ? 200 : 404);

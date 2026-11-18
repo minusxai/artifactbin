@@ -1,5 +1,6 @@
 import {afterEach,expect,it,vi} from 'vitest';
 import {createReaderHttpBackend} from '../reader-http';
+import {stubFetch} from '@/test/helpers/fetch-stub';
 afterEach(()=>vi.unstubAllGlobals());
 it('keeps reader head, frame and presence HTTP requests and refusal behavior',async()=>{
  const fetch=vi.fn(async()=>Response.json({id:'Page123',version:2}));vi.stubGlobal('fetch',fetch);
@@ -32,7 +33,7 @@ it('reads every annotation page with the same status and cancellation signal',as
  expect(fetch).toHaveBeenNthCalledWith(2,'/api/my/artifacts/Page123/annotations?status=open&cursor=next',{credentials:'same-origin',signal});
 });
 it('keeps local live reads and ephemeral presence anonymous even with ambient account cookies',async()=>{
- const fetch=vi.fn().mockImplementation(async(url)=>Response.json(String(url).includes('annotations')?{annotations:[]}:{id:'Guest'}));vi.stubGlobal('fetch',fetch);const urls:string[]=[];vi.stubGlobal('EventSource',class{onmessage=null;onopen=null;onerror=null;constructor(url:string){urls.push(url);}addEventListener(){}close(){}});
+ const fetch=stubFetch({'*annotations*':{annotations:[]}},{fallback:()=>Response.json({id:'Guest'})});const urls:string[]=[];vi.stubGlobal('EventSource',class{onmessage=null;onopen=null;onerror=null;constructor(url:string){urls.push(url);}addEventListener(){}close(){}});
  const backend=createReaderHttpBackend('Page123',{anonymous:true});await backend.load();await backend.liveFrame();await backend.listAnnotations();await backend.publishPresence({session:'s',revision:'1',visible:true,cursor:null,selection:null});for(const call of fetch.mock.calls)expect(call[1]).toMatchObject({credentials:'omit'});const stop=backend.live({onPing:vi.fn(),onData:vi.fn(),onAnnotations:vi.fn()},{since:'cursor/1'});expect(urls).toEqual(['/a/Page123/events?anonymous=1&since=cursor%2F1']);stop();
 });
 it('retains the trusted publication identity, including a hidden account',async()=>{

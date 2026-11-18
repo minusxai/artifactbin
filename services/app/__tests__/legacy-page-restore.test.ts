@@ -5,7 +5,7 @@ import {expect,it} from 'vitest';
 import {migrateLegacyPage,revertArtifactFor} from '@/lib/artifacts';
 import {createUser,identityForUser} from '@/lib/accounts';
 import {editableRegions} from '@/lib/live-regions';
-import {useAppHarness,mintAccountToken,request} from './harness';
+import {useAppHarness,mintAccountToken,request,params as routeParams} from './harness';
 import {GET as read,PUT as replace} from '@/app/api/artifacts/[id]/route';
 const harness=useAppHarness();
 it('restores a legacy archive into native editing without rewriting the archive',async()=>{
@@ -70,7 +70,7 @@ it.each([true,false])('refuses an incompatible archived restore without modifyin
 it('guards authenticated HTTP agent writes with both version and state conditions',async()=>{
  const account=await mintAccountToken('mxmx_test_migration_http');
  const row=await createHistoricalPage(null,account.userId!,{format:'html',source:'<article data-af-editable="rich"><p>Original</p></article>',meta:{},visibility:'private'});
- const path=`/api/artifacts/${row.id}`,params={params:Promise.resolve({id:row.id})};
+ const path=`/api/artifacts/${row.id}`,params=routeParams(row.id);
  const before=await (await read(request(path,{token:account.token}),params)).json();
  await migrateLegacyPage(row.id,{apply:true});
  const head=await (await read(request(path,{token:account.token}),params)).json();

@@ -14,5 +14,5 @@ it('preserves nested native chart data and node identities across two conditiona
  let head=await read();const canonical=head.html;const next=canonical.replace('"mark":"bar"','"mark":"line"');
  const save=async(source:string)=>{const response=await PUT(request(`/api/artifacts/${first.id}`,{method:'PUT',token:actor.token,json:{html:source,expectedVersion:head.version,expectedState:head.state}}),params(first.id));expect(response.status).toBe(200);head=await read();};
  await save(next);expect(head.html).toBe(next);await save(head.html.replace('"field":"revenue"','"field":"profit"'));expect(head.html).toContain('"field":"profit"');expect(head.html).toContain('data-af-id="chart"');expect(head.html).toContain('<h1 data-af-id="heading">Revenue</h1>');expect(head.version).toBe(3);
- const archived=await versionGET(request(`/api/artifacts/${first.id}/versions/1`,{token:actor.token}),{params:Promise.resolve({id:first.id,version:'1'})});expect(archived.status).toBe(200);expect((await archived.json()).html).toBe(canonical);
+ const archived=await versionGET(request(`/api/artifacts/${first.id}/versions/1`,{token:actor.token}),params({ id:first.id,version:'1' }));expect(archived.status).toBe(200);expect((await archived.json()).html).toBe(canonical);
 });

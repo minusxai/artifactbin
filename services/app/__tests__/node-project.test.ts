@@ -53,7 +53,7 @@ it('creating and deleting a comment does not change source identities or version
  const s=await setup();const actor={credential:'session' as const,userId:s.token.userId!,email:s.token.email!,emailVerified:true};
  const made=await comment(request(`/api/my/artifacts/${s.id}/annotations`,{method:'POST',actor,json:{anchor:nativeAnchor('text'),body:'Review'}}),params(s.id));
  expect(made.status).toBe(201);const annotation=await made.json();
- const removed=await deleteComment(request(`/api/my/artifacts/${s.id}/annotations/${annotation.id}`,{method:'DELETE',actor}),{params:Promise.resolve({id:s.id,annId:annotation.id})});
+ const removed=await deleteComment(request(`/api/my/artifacts/${s.id}/annotations/${annotation.id}`,{method:'DELETE',actor}),params({ id:s.id,annId:annotation.id }));
  expect(removed.status).toBe(200);expect(await s.head()).toMatchObject({html:s.first.html,version:s.first.version});
 });
 it('never reuses a removed identity for a new element',async()=>{

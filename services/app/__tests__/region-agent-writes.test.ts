@@ -22,7 +22,7 @@ import { GET as streamRoute } from '@/app/api/artifacts/[id]/regions/stream/rout
 import { GET as readRoute, PUT as writeRoute } from '@/app/api/artifacts/[id]/regions/[regionId]/route';
 import { regionSessions } from '@/app/api/artifacts/[id]/regions/doors';
 import { nativeHtml } from './native-html-fixture';
-import { mintAccountToken, request, useAppHarness, type RequestOptions } from './harness';
+import { mintAccountToken, request, useAppHarness, type RequestOptions, params } from './harness';
 import { sseStream } from './sse';
 import { seedShares } from '@/__tests__/rows';
 
@@ -40,24 +40,24 @@ const credentials = (who: Who): RequestOptions => (who === null ? {} : 'token' i
 
 async function read(who: Who, regionId = '_doc', query = '', id = pageId) {
   const req = request(`/api/artifacts/${id}/regions/${regionId}${query}`, credentials(who));
-  const response = await call(req, () => readRoute(req, { params: Promise.resolve({ id, regionId }) }));
+  const response = await call(req, () => readRoute(req, params({ id, regionId })));
   return { status: response.status, body: await response.json() as Record<string, unknown> };
 }
 async function write(who: Who, body: unknown, regionId = '_doc', headers: Record<string, string> = {}, id = pageId) {
   const req = request(`/api/artifacts/${id}/regions/${regionId}`, { method: 'PUT', json: body, headers, ...credentials(who) });
-  const response = await call(req, () => writeRoute(req, { params: Promise.resolve({ id, regionId }) }));
+  const response = await call(req, () => writeRoute(req, params({ id, regionId })));
   return { status: response.status, body: await response.json() as Record<string, unknown> };
 }
 async function flush(who: Who) {
   const req = request(`/api/artifacts/${pageId}/regions/flush`, { method: 'POST', ...credentials(who) });
-  const response = await call(req, () => flushRoute(req, { params: Promise.resolve({ id: pageId }) }));
+  const response = await call(req, () => flushRoute(req, params(pageId)));
   return { status: response.status, body: await response.json() as Record<string, unknown> };
 }
 
 /** An editor's replica in the browser: the server's bytes, typing under the client id its open was given. */
 async function join(person: Person, regionId = rich) {
   const req = request(`/api/artifacts/${pageId}/regions/${regionId}/open`, { method: 'POST', actor: as(person), origin: 'same' });
-  const response = await call(req, () => openRoute(req, { params: Promise.resolve({ id: pageId, regionId }) }));
+  const response = await call(req, () => openRoute(req, params({ id: pageId, regionId })));
   expect(response.status).toBe(200);
   const reply = await response.json() as { clientId: number; seq: number; state: string };
   const doc = openRegionDoc(Buffer.from(reply.state, 'base64'), { clientId: reply.clientId });
@@ -68,7 +68,7 @@ async function join(person: Person, regionId = rich) {
     async push() {
       const update = Buffer.from(Y.mergeUpdates(pending.splice(0))).toString('base64');
       const sent = request(`/api/artifacts/${pageId}/regions/${regionId}/updates`, { method: 'POST', json: { clientId: reply.clientId, update }, actor: as(person), origin: 'same' });
-      return (await call(sent, () => updatesRoute(sent, { params: Promise.resolve({ id: pageId, regionId }) }))).status;
+      return (await call(sent, () => updatesRoute(sent, params({ id: pageId, regionId })))).status;
     },
     receive(updates: string[]) { for (const update of updates) Y.applyUpdate(doc, Buffer.from(update, 'base64'), 'server'); },
     html: () => regionHtml('rich', Y.encodeStateAsUpdate(doc)),
@@ -79,7 +79,7 @@ const streams: (() => void)[] = [];
 async function stream(person: Person, after: string) {
   const abort = new AbortController();
   const req = attachActor(new Request(request(`/api/artifacts/${pageId}/regions/stream?after=${encodeURIComponent(after)}`), { signal: abort.signal }), as(person));
-  const response = await call(req, () => streamRoute(req, { params: Promise.resolve({ id: pageId }) }));
+  const response = await call(req, () => streamRoute(req, params(pageId)));
   expect(response.status).toBe(200);
   const frames = sseStream(response.body!);
   streams.push(() => { abort.abort(); frames.close(); });
@@ -290,7 +290,7 @@ it('native agent revisions keep the versioned XML root and remain editable throu
  expect(written.status).toBe(200);
  const regionId=String(written.body.regionId);
  const req=request(`/api/artifacts/${row.id}/regions/${regionId}/open`,{method:'POST',actor:as(owner),origin:'same'});
- const response=await call(req,()=>openRoute(req,{params:Promise.resolve({id:row.id,regionId})}));
+ const response=await call(req,()=>openRoute(req,params({ id:row.id,regionId })));
  expect(response.status).toBe(200);
  const reply=await response.json() as {state:string;clientId:number};
  const doc=openRegionDoc(Buffer.from(reply.state,'base64'),{kind:'rich-native-v1',clientId:reply.clientId});
@@ -298,5 +298,5 @@ it('native agent revisions keep the versioned XML root and remain editable throu
  const vector=Y.encodeStateVector(doc);
  ((doc.getXmlFragment('native-v1').get(0) as Y.XmlElement).get(0) as Y.XmlText).insert(0,'Live ');
  const sent=request(`/api/artifacts/${row.id}/regions/${regionId}/updates`,{method:'POST',actor:as(owner),origin:'same',json:{clientId:reply.clientId,update:Buffer.from(Y.encodeStateAsUpdate(doc,vector)).toString('base64')}});
- expect((await call(sent,()=>updatesRoute(sent,{params:Promise.resolve({id:row.id,regionId})}))).status).toBe(200);
+ expect((await call(sent,()=>updatesRoute(sent,params({ id:row.id,regionId })))).status).toBe(200);
 });

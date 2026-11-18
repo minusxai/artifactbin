@@ -4,6 +4,7 @@ import { screen, waitFor } from '@testing-library/dom';
 import { fireEvent, render } from '../../__tests__/helpers';
 import { DocumentSharing } from '../DocumentSharing';
 import { createSignal } from 'solid-js';
+import { stubFetch } from '@/test/helpers/fetch-stub';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -30,7 +31,7 @@ it('copies a clean reader link without loading ACLs', async () => {
 
 it('keeps the owner verdict current and closes with Escape', async () => {
   const state = { visibility: 'private', linkRole: 'viewer', shares: [], canPrivate: true };
-  vi.stubGlobal('fetch', vi.fn(async (_url: unknown, init?: RequestInit) => Response.json(init?.method === 'PUT' ? { ...state, visibility: 'public' } : state)));
+  stubFetch({ 'PUT *': { ...state, visibility: 'public' } }, { fallback: () => Response.json(state) });
   const view = render(() => <DocumentSharing id="abc123" title="Report" owner />);
   await waitFor(() => expect(view.getByRole('button', { name: 'Share' })).toHaveTextContent('private'));
   fireEvent.click(view.getByRole('button', { name: 'Share' }));
@@ -42,13 +43,13 @@ it('keeps the owner verdict current and closes with Escape', async () => {
 
 it('invites an email, changes its role, and removes it under public visibility', async () => {
   const state = { visibility: 'public', linkRole: 'viewer', shares: [] as Array<{ email: string; role: string }>, canPrivate: true };
-  vi.stubGlobal('fetch', vi.fn(async (_url: unknown, init?: RequestInit) => {
-    if (init?.method === 'PUT') {
-      const patch = JSON.parse(String(init.body)) as { shares?: typeof state.shares };
+  stubFetch({
+    'PUT *': (_url, init) => {
+      const patch = JSON.parse(String(init!.body)) as { shares?: typeof state.shares };
       if (patch.shares) state.shares = patch.shares.map(person => ({ ...person, email: person.email.toLowerCase() }));
-    }
-    return Response.json(state);
-  }));
+      return Response.json(state);
+    },
+  }, { fallback: () => Response.json(state) });
   const view = render(() => <DocumentSharing id="abc123" title="Report" owner />);
   fireEvent.click(view.getByRole('button', { name: 'Share' }));
   await waitFor(() => expect(screen.getByText('people')).toBeTruthy());
@@ -70,13 +71,13 @@ it('invites an email, changes its role, and removes it under public visibility',
 // A named COMMENTER from the row (the collab-roles gate's step 6b, moved here): the same role menu, the other role.
 it('invites an email and makes them a commenter from the row', async () => {
   const state = { visibility: 'public', linkRole: 'viewer', shares: [] as Array<{ email: string; role: string }>, canPrivate: true };
-  vi.stubGlobal('fetch', vi.fn(async (_url: unknown, init?: RequestInit) => {
-    if (init?.method === 'PUT') {
-      const patch = JSON.parse(String(init.body)) as { shares?: typeof state.shares };
+  stubFetch({
+    'PUT *': (_url, init) => {
+      const patch = JSON.parse(String(init!.body)) as { shares?: typeof state.shares };
       if (patch.shares) state.shares = patch.shares;
-    }
-    return Response.json(state);
-  }));
+      return Response.json(state);
+    },
+  }, { fallback: () => Response.json(state) });
   const view = render(() => <DocumentSharing id="abc123" title="Report" owner />);
   fireEvent.click(view.getByRole('button', { name: 'Share' }));
   await waitFor(() => expect(screen.getByText('people')).toBeTruthy());
@@ -92,14 +93,14 @@ it('invites an email and makes them a commenter from the row', async () => {
 it('offers view, comment and edit link roles and sends only the changed link role', async () => {
   const state = { visibility: 'unlisted', linkRole: 'viewer', shares: [] };
   const writes: unknown[] = [];
-  vi.stubGlobal('fetch', vi.fn(async (_url: unknown, init?: RequestInit) => {
-    if (init?.method === 'PUT') {
-      const patch = JSON.parse(String(init.body));
+  stubFetch({
+    'PUT *': (_url, init) => {
+      const patch = JSON.parse(String(init!.body));
       writes.push(patch);
       Object.assign(state, patch);
-    }
-    return Response.json(state);
-  }));
+      return Response.json(state);
+    },
+  }, { fallback: () => Response.json(state) });
   const view = render(() => <DocumentSharing id="abc123" title="Report" owner />);
   fireEvent.click(view.getByRole('button', { name: 'Share' }));
   const trigger = await waitFor(() => screen.getByRole('button', { name: 'Link role' }));
@@ -113,10 +114,7 @@ it('offers view, comment and edit link roles and sends only the changed link rol
 
 it('hides the link role while private and restores the saved choice on return', async () => {
   const state = { visibility: 'private', linkRole: 'commenter', shares: [] };
-  vi.stubGlobal('fetch', vi.fn(async (_url: unknown, init?: RequestInit) => {
-    if (init?.method === 'PUT') Object.assign(state, JSON.parse(String(init.body)));
-    return Response.json(state);
-  }));
+  stubFetch({ 'PUT *': (_url, init) => { Object.assign(state, JSON.parse(String(init!.body))); return Response.json(state); } }, { fallback: () => Response.json(state) });
   const view = render(() => <DocumentSharing id="abc123" title="Report" owner />);
   fireEvent.click(view.getByRole('button', { name: 'Share' }));
   await waitFor(() => expect(screen.getByRole('button', { name: 'Make unlisted' })).toBeTruthy());
@@ -204,10 +202,7 @@ it('does not disclose dependency guidance or request ACLs to ordinary readers', 
 it('chooses a dataset\'s writes from a pressed-state group, and re-pressing the current choice sends nothing', async () => {
   const state = { visibility: 'public', linkRole: 'viewer', shares: [], access: 'read', writtenBy: [] as Array<{ id: string; title: string | null; mutations: string[] }> };
   const puts: unknown[] = [];
-  vi.stubGlobal('fetch', vi.fn(async (_url: unknown, init?: RequestInit) => {
-    if (init?.method === 'PUT') { const patch = JSON.parse(String(init.body)); puts.push(patch); Object.assign(state, patch); }
-    return Response.json(state);
-  }));
+  stubFetch({ 'PUT *': (_url, init) => { const patch = JSON.parse(String(init!.body)); puts.push(patch); Object.assign(state, patch); return Response.json(state); } }, { fallback: () => Response.json(state) });
   const view = render(() => <DocumentSharing id="abc123" title="Data" owner format="dataset" />);
   fireEvent.click(view.getByRole('button', { name: 'Share' }));
   const group = await waitFor(() => screen.getByRole('group', { name: 'Dataset writes' }));
@@ -236,9 +231,8 @@ it('disables public visibility when deployment policy forbids it while keeping l
 });
 
 it('shows a structured server refusal without marking the unsaved visibility selected', async () => {
-  vi.stubGlobal('fetch', vi.fn(async (_url: unknown, init?: RequestInit) => init?.method === 'PUT'
-    ? Response.json({ error: 'public_not_enabled', hint: 'Public documents are disabled. Use unlisted to share a link.' }, { status: 400 })
-    : Response.json({ visibility: 'private', linkRole: 'viewer', shares: [], canPublic: true, canPrivate: true })));
+  stubFetch({ 'PUT *': () => Response.json({ error: 'public_not_enabled', hint: 'Public documents are disabled. Use unlisted to share a link.' }, { status: 400 }) },
+    { fallback: () => Response.json({ visibility: 'private', linkRole: 'viewer', shares: [], canPublic: true, canPrivate: true }) });
   render(() => <DocumentSharing id="abc123" title="Report" owner variant="dialog" />);
   await waitFor(() => expect(screen.getByRole('button', { name: 'Make public' })).toBeTruthy());
   fireEvent.click(screen.getByRole('button', { name: 'Make public' }));

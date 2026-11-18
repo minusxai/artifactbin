@@ -16,7 +16,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { samplePdfDataUrl } from '../../../scripts/lib/sample-pdf.mjs';
 import { POST as bearerCreate } from '@/app/api/artifacts/route';
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
+import { mintAccountToken as mintToken, params as routeParams } from '@/__tests__/harness';
 import { request, useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();
@@ -50,7 +50,7 @@ describe('a PDF is read as a stream, at the route', () => {
     // The spy goes up AFTER the upload, so `put` is not what is being watched.
     const calls = await watchedStore();
     const { GET } = await import('@/app/a/[id]/raw/route');
-    const params = { params: Promise.resolve({ id }) };
+    const params = routeParams(id);
 
     const whole = await GET(request(`/a/${id}/raw`), params);
     expect(whole.status).toBe(200);
@@ -75,7 +75,7 @@ describe('a PDF is read as a stream, at the route', () => {
 
     const calls = await watchedStore();
     const { HEAD } = await import('@/app/a/[id]/raw/route');
-    const res = await HEAD(request(`/a/${id}/raw`, { method: 'HEAD' }), { params: Promise.resolve({ id }) });
+    const res = await HEAD(request(`/a/${id}/raw`, { method: 'HEAD' }), routeParams(id));
     expect(res.status).toBe(200);
     expect(calls).toEqual([]);
   });

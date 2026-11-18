@@ -4,10 +4,9 @@
  * fit, and, composed behind the real identity host, the recheck after rendering.
  */
 import sharp from 'sharp';
-import {delegatedService,audiencesOf,noTokens} from '../../../auth/__tests__/helpers';
+import {delegatedService,audiencesOf,serviceAuthHost} from '../../../auth/__tests__/helpers';
 import {afterEach,beforeAll,describe,expect,it,vi} from 'vitest';
 import {attachActor} from '@artifactbin/utils';
-import {createAuthHost} from '@artifactbin/auth';
 import {artifactReadKey,signArtifactReadGrant} from '@artifactbin/auth/identity/artifact-read-grants';
 import {ARTIFACT_IMAGE_BYTES,SERVICE_PAYLOAD_LIMIT,ARTIFACT_IMAGE_PATH,CANONICAL_ARTIFACT_IMAGE_PATH,SERVICE_AUTH_HEADER,type RenderRequest} from '@artifactbin/contracts';
 import {mintAccountToken,useAppHarness} from '@/__tests__/harness';
@@ -131,8 +130,8 @@ describe('behind the identity host',()=>{
   const requests=browser(()=>({ok:true,mime:'image/png',bytes:PNG}));
   const service=delegatedService('relay','https://relay.example','synthetic-secret');
   let afterImage:(()=>Promise<unknown>)|undefined;
-  const auth=createAuthHost({env:{IDENTITY__SERVICE_AUDIENCES:audiencesOf(service)},
-   cookieSecret:'synthetic-cookie',tokens:noTokens,sessions:{resolve:async()=>null},identityDb:db,upstream:async(request,actor)=>{
+  const auth=serviceAuthHost({env:{IDENTITY__SERVICE_AUDIENCES:audiencesOf(service)},
+   cookieSecret:'synthetic-cookie',identityDb:db,upstream:async(request,actor)=>{
     const response=await host.request(request,actor);
     if(new URL(request.url).pathname===CANONICAL_ARTIFACT_IMAGE_PATH&&afterImage){const body=await response.text();await afterImage();return new Response(body,{status:response.status,headers:response.headers});}
     return response;

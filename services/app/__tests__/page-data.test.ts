@@ -25,7 +25,6 @@ import { postArtifact } from '@/__tests__/artifact-fixtures';
 useAppHarness();
 const sessionUser = useSessionUser();
 
-const BASE = 'http://localhost:3000';
 const asSession = (u: { id: string; email: string }) => { sessionUser.id = u.id; sessionUser.email = u.email; };
 
 beforeEach(async () => {
@@ -102,7 +101,7 @@ describe('GET /api/page/assets', () => {
   it('returns only supporting files plus folder destinations for an account', async () => {
     expect((await assetsPage(request('/api/page/assets'))).status).toBe(401);
     const w = await world();
-    const created = await (await createArtifactRoute(new Request(`${BASE}/api/artifacts`, {
+    const created = await (await createArtifactRoute(request(`/api/artifacts`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${w.t.token}` },
       body: JSON.stringify({ title: 'Rows', dataset: [{ value: 1 }] }),
@@ -212,7 +211,7 @@ describe('GET /api/page/profile/@user/...', () => {
   it('keeps placement out of the public profile projection', async () => {
     const w = await world();
     const h = w.owner.username!;
-    await createArtifactRoute(new Request(`${BASE}/api/artifacts`, {
+    await createArtifactRoute(request(`/api/artifacts`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${w.t.token}` },
       body: JSON.stringify({ title: 'Filed', html: '<!doctype html><html><body><div><p>filed</p></div></body></html>', visibility: 'public', parent_id: w.box.id }),

@@ -1,14 +1,15 @@
 import {afterEach,expect,it,vi} from 'vitest';
 import {stackHealth} from '..';
+import {stubFetch} from '@/test/helpers/fetch-stub';
 afterEach(()=>{vi.unstubAllGlobals();vi.restoreAllMocks();});
 const up=async()=>true;
 it.each([5000,undefined])('refuses remote SQL with an incompatible or absent read policy (%s)',async queryTimeoutMs=>{
- vi.stubGlobal('fetch',vi.fn(async(url:string)=>url.endsWith('/read-policy')?Response.json({version:1,queryTimeoutMs}):new Response('ok')));
+ stubFetch({'*/read-policy':{version:1,queryTimeoutMs}},{fallback:()=>new Response('ok')});
  expect(await stackHealth({sql:'http://sql.internal',browser:null,events:null},up)).toEqual({ok:false,failing:['sql']});
 });
 it('probes liveness without credentials and verifies SQL policy under the same deadline',async()=>{
  const calls:Array<{url:string;init:RequestInit}>=[];
- vi.stubGlobal('fetch',vi.fn(async(url:string,init:RequestInit)=>{calls.push({url,init});return url.endsWith('/read-policy')?Response.json({version:1,queryTimeoutMs:30000}):new Response('ok');}));
+ stubFetch({'*/read-policy':{version:1,queryTimeoutMs:30000}},{fallback:()=>new Response('ok'),onCall:(url,init)=>{calls.push({url,init:init!});}});
  expect(await stackHealth({sql:'http://sql.internal/',browser:'http://browser.internal//',events:null},up)).toEqual({ok:true,failing:[]});
  expect(calls.map(c=>c.url).sort()).toEqual(['http://browser.internal/health','http://sql.internal/health','http://sql.internal/read-policy']);
  for(const {url,init} of calls){expect(init.redirect).toBe('manual');expect(init.signal).toBeInstanceOf(AbortSignal);if(url.endsWith('/health'))expect(init).not.toHaveProperty('headers');}
@@ -17,11 +18,10 @@ it('probes liveness without credentials and verifies SQL policy under the same d
 it('names every service that answers non-2xx, a redirect, refuses or times out, then the database, in order',async()=>{
  const deadline=new AbortController(),timeouts:number[]=[];
  vi.spyOn(AbortSignal,'timeout').mockImplementation(ms=>{timeouts.push(ms);return deadline.signal;});
- vi.stubGlobal('fetch',vi.fn((url:string,init:RequestInit)=>{
-  if(url.startsWith('http://sql'))return Promise.resolve(new Response('',{status:302,headers:{location:'/login'}}));
-  if(url.startsWith('http://browser'))return Promise.reject(new TypeError('connect ECONNREFUSED'));
-  return new Promise((_,reject)=>init.signal!.addEventListener('abort',()=>reject(init.signal!.reason)));
- }));
+ stubFetch({
+  'http://sql*':()=>new Response('',{status:302,headers:{location:'/login'}}),
+  'http://browser*':()=>Promise.reject(new TypeError('connect ECONNREFUSED')),
+ },{fallback:(_url,init)=>new Promise((_,reject)=>init!.signal!.addEventListener('abort',()=>reject(init!.signal!.reason)))});
  const health=stackHealth({sql:'http://sql',browser:'http://browser',events:'http://events'},async()=>false);
  await Promise.resolve();deadline.abort(new DOMException('timed out','TimeoutError'));
  expect(await health).toEqual({ok:false,failing:['sql','browser','events','db']});

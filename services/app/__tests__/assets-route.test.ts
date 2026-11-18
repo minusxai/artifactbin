@@ -12,7 +12,7 @@
  * what the browser gate proves and this file pins on the wire.
  */
 import { describe, expect, it } from 'vitest';
-import { useAppHarness, request } from '@/__tests__/harness';
+import { useAppHarness, request, params } from '@/__tests__/harness';
 import { GET } from '@/app/assets/[hash]/route';
 import { getDb } from '@/lib/platform';
 import { objectKey, objectStore } from '@/lib/object-store';
@@ -36,7 +36,7 @@ const seed = async (contentType = 'image/svg+xml', bytes: Buffer = BYTES, url: s
 };
 
 const asset = (hash: string, search = '') =>
-  GET(request(`/assets/${hash}${search}`), { params: Promise.resolve({ hash }) });
+  GET(request(`/assets/${hash}${search}`), params({ hash }));
 
 describe('GET /assets/<hash>', () => {
   it('serves the stored bytes with all five headers', async () => {

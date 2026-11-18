@@ -10,9 +10,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TILE_UPSTREAM_ORIGIN, tileUpstreamUrl, tileUrlTemplate } from '@/lib/viz/tiles';
 import { POINT_MAP_DARK_TILE_URL, POINT_MAP_DEFAULT_TILE_URL, themeTileUrl } from '@/lib/viz/viz-templates';
 import { GET as serveTile } from '@/app/tiles/[...tile]/route';
+import { request } from '@/__tests__/harness';
 
 const routeCtx = (tile: string[]) => ({ params: Promise.resolve({ tile }) });
-const REQ = new Request('http://localhost:3000/tiles/dark_all/3/2/3.png');
+const REQ = request('/tiles/dark_all/3/2/3.png');
 
 afterEach(() => vi.unstubAllGlobals());
 

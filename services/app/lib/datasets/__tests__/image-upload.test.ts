@@ -144,7 +144,7 @@ describe('session raw-body image upload', () => {
     const user = await createUser({ email: 'd@example.com' });
     sessionUser.id = user.id;
     const created = await (await sessionCreate(imgReq('/api/my/artifacts', {}))).json();
-    const list = await (await sessionList(new Request(`${BASE}/api/my/artifacts`))).json();
+    const list = await (await sessionList(request(`/api/my/artifacts`))).json();
     expect(list.artifacts.map((a: { id: string }) => a.id)).toContain(created.id);
   });
 

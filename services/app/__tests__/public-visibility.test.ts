@@ -4,11 +4,10 @@
  * links remain available; anonymous API creation remains unauthorized.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { useAppHarness, request } from '@/__tests__/harness';
+import { useAppHarness, request, params } from '@/__tests__/harness';
 
 useAppHarness();
 
-const BASE = 'http://localhost:3000';
 
 /** Re-import the world with the flag in a given state — config reads env at module load. */
 async function withPublic(enabled: boolean) {
@@ -34,11 +33,11 @@ async function withPublic(enabled: boolean) {
       await db.query("INSERT INTO groups(id,handle,name,created_by) VALUES('grp_visibility','visibility_team','Team',$1)", [user.id]);
       await db.query("INSERT INTO group_members(group_id,user_id,role) VALUES('grp_visibility',$1,'admin')", [user.id]);
     },
-    sharing: (id: string, patch?: Record<string, unknown>) => sharingRoute[patch ? 'PUT' : 'GET'](request(`/api/my/artifacts/${id}/sharing`, { method: patch ? 'PUT' : 'GET', json: patch }), { params: Promise.resolve({ id }) }),
-    anonymousCreate: (body: Record<string, unknown>) => createArtifact(new Request(`${BASE}/api/artifacts`, {
+    sharing: (id: string, patch?: Record<string, unknown>) => sharingRoute[patch ? 'PUT' : 'GET'](request(`/api/my/artifacts/${id}/sharing`, { method: patch ? 'PUT' : 'GET', json: patch }), params(id)),
+    anonymousCreate: (body: Record<string, unknown>) => createArtifact(request(`/api/artifacts`, {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
     })),
-    create: (body: Record<string, unknown>) => createArtifact(new Request(`${BASE}/api/artifacts`, {
+    create: (body: Record<string, unknown>) => createArtifact(request(`/api/artifacts`, {
       method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` }, body: JSON.stringify(body),
     })),
   };

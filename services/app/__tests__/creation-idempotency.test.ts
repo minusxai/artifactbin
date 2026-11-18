@@ -1,6 +1,6 @@
 import {nativeHtml} from '@/__tests__/native-html-fixture';
 import {expect,it} from 'vitest';
-import {request,useAppHarness} from './harness';
+import {request,useAppHarness,params} from './harness';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {POST as create} from '@/app/api/artifacts/route';
 import {DELETE as remove} from '@/app/api/artifacts/[id]/route';
@@ -20,7 +20,7 @@ it('refuses payload mismatch and never recreates a deleted result',async()=>{
  const first=await createRequest(token.token,body);const id=(await first.json()).id;
  const mismatch=await createRequest(token.token,{html:nativeHtml('<p>Changed</p>')});
  expect(mismatch.status).toBe(409);expect((await mismatch.json()).error).toBe('idempotency_mismatch');
- const removed=await remove(request(`/api/artifacts/${id}`,{method:'DELETE',token:token.token}),{params:Promise.resolve({id})});expect(removed.status).toBe(200);
+ const removed=await remove(request(`/api/artifacts/${id}`,{method:'DELETE',token:token.token}),params(id));expect(removed.status).toBe(200);
  const replay=await createRequest(token.token,body);expect(replay.status).toBe(410);expect((await replay.json()).error).toBe('result_deleted');
  const db=await harness.db();expect((await db.query<{n:number}>('SELECT count(*)::int n FROM artifacts WHERE token_id=$1',[token.id])).rows[0].n).toBe(1);
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { trashRow } from '@/__tests__/artifact-fixtures';
-import { mintAccountToken, request, useAppHarness } from '@/__tests__/harness';
+import { mintAccountToken, request, useAppHarness, params } from '@/__tests__/harness';
 import { ANONYMOUS_ACTOR, identityForUser } from '@/lib/accounts';
 import { artifactState, getArtifactById } from '@/lib/artifacts';
 import { POST as create } from '@/app/api/artifacts/route';
@@ -14,7 +14,7 @@ async function page(visibility = 'private') {
   const made = await create(request('/api/artifacts', { method: 'POST', token: owner.token, json: { html: html('<p>First</p>'), visibility } }));
   expect(made.status).toBe(201);
   const doc = await made.json() as { id: string };
-  const saved = await replace(request(`/api/artifacts/${doc.id}`, { method: 'PUT', token: owner.token, json: { html: html('<p>Second ü</p>'), expectedVersion: 1, expectedState: artifactState((await getArtifactById(doc.id))!) } }), { params: Promise.resolve({ id: doc.id }) });
+  const saved = await replace(request(`/api/artifacts/${doc.id}`, { method: 'PUT', token: owner.token, json: { html: html('<p>Second ü</p>'), expectedVersion: 1, expectedState: artifactState((await getArtifactById(doc.id))!) } }), params(doc.id));
   expect(saved.status, await saved.clone().text()).toBe(200);
   return { owner, id: doc.id, actor: identityForUser(owner.userId!, owner.id) };
 }

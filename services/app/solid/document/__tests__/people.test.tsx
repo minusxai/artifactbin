@@ -43,11 +43,8 @@ it('reports malformed membership responses', async () => {
 
 it('opens a pending invitation and permits an accepted member to explicitly join', async () => {
   let explicit = false;
-  const fetcher = vi.fn(async (_url: unknown, init?: RequestInit) => {
-    if (init?.method === 'POST') explicit = true;
-    return Response.json({ members: [], pending: [], self: { status: 'accepted', direction: 'invitation', explicit_join: explicit }, canManage: false, canInvite: false });
-  });
-  vi.stubGlobal('fetch', fetcher);
+  const members = () => Response.json({ members: [], pending: [], self: { status: 'accepted', direction: 'invitation', explicit_join: explicit }, canManage: false, canInvite: false });
+  stubFetch({ 'POST *': () => { explicit = true; return members(); } }, { fallback: members });
   render(() => <DocumentPeople id="abc123" initialOpen />);
   fireEvent.click(await waitFor(() => screen.getByRole('button', { name: 'Join artifact' })));
   await waitFor(() => expect(screen.getByText('You’re a member')).toBeTruthy());

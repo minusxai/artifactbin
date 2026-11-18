@@ -2,11 +2,11 @@
 import {expect,it} from 'vitest';
 import {POST as create} from '@/app/api/artifacts/route';
 import {GET as members,POST as change} from '@/app/api/artifacts/[id]/members/route';
-import {request,useAppHarness,mintAccountToken} from './harness';
+import {request,useAppHarness,mintAccountToken,params} from './harness';
 useAppHarness();
 it('exposes accepted members separately from pending requests through the retained native membership API',async()=>{
  const owner=await mintAccountToken('example-owner'),reader=await mintAccountToken('example-reader');
- const created=await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{html:'<html><head><title>Shared task app</title></head><body><h1>Tasks</h1></body></html>',visibility:'public'}}));expect(created.status).toBe(201);const {id}=await created.json(),context={params:Promise.resolve({id})};
+ const created=await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{html:'<html><head><title>Shared task app</title></head><body><h1>Tasks</h1></body></html>',visibility:'public'}}));expect(created.status).toBe(201);const {id}=await created.json(),context=params(id);
  const read=async()=>{const r=await members(request(`/api/artifacts/${id}/members`,{token:owner.token}),context);expect(r.status).toBe(200);return r.json();};
  const write=async(token:string,body:unknown)=>{const r=await change(request(`/api/artifacts/${id}/members`,{method:'POST',token,json:body}),context);expect(r.status).toBe(200);};
  expect((await read()).members.map((m:{user_id:string})=>m.user_id)).toEqual([owner.userId]);

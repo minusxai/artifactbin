@@ -17,6 +17,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { isCrossSiteRequest, parseCookie } from '@/lib/http';
+import { request } from '@/__tests__/harness';
 
 // harness-exempt: request constructs arbitrary absolute origins because request classification is the subject under test
 
@@ -56,7 +57,7 @@ describe('isCrossSiteRequest', () => {
     // Sec-Fetch-Site (older Safari). The Host header is what the client asked
     // for, and is what nginx forwards.
     const proxied = (headers: Record<string, string>) =>
-      new Request('http://localhost:3000/api/x', { headers });
+      request('/api/x', { headers });
     expect(isCrossSiteRequest(proxied({ host: 'app.test', origin: 'https://app.test' }))).toBe(false);
     expect(isCrossSiteRequest(proxied({ host: 'app.test', origin: 'https://evil.test' }))).toBe(true);
     // X-Forwarded-Host wins where the proxy rewrites Host as well.

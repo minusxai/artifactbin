@@ -6,8 +6,9 @@ import { POST as create } from "@/app/api/artifacts/route";
 import { POST as sqlDoor } from "@/app/api/artifacts/[id]/sql/route";
 import { POST as tableQuery } from "@/app/a/[id]/tables/route";
 import { POST as mutateRows } from "@/app/api/artifacts/[id]/mutate/route";
+import { params } from '@/__tests__/harness';
 useAppHarness();
-const ctx = (id: string) => ({ params: Promise.resolve({ id }) });
+const ctx = (id: string) => (params(id));
 async function fixture(dataset: unknown) {
   const owner = await mintAccountToken("dataset source");
   const publish = async (json: Record<string, unknown>) => {

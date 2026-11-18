@@ -16,7 +16,7 @@ import { createArtifact } from '@/lib/artifacts';
 import { MARKDOWN_CONTENT_TYPE, unauthorized } from '@/lib/http';
 import { buildQuickSheet, QUICK_SHEET_MAX_BYTES } from '@/test/helpers/skill-docs';
 import { createUser } from '@/lib/accounts';
-import { request, useAppHarness } from '@/__tests__/harness';
+import { request, useAppHarness, params } from '@/__tests__/harness';
 
 
 const BASE = 'http://localhost:3000';
@@ -42,10 +42,10 @@ const gather = async (): Promise<Array<[name: string, text: string]>> => {
   const started = await (await startRoute(request('/api/start', { method: 'POST', actor }))).json() as { prompt: string };
   const handed = await (await agentPromptRoute(
     request(`/api/my/artifacts/${owned.id}/agent-prompt`, { method: 'POST', actor }),
-    { params: Promise.resolve({ id: owned.id }) },
+    params(owned.id),
   )).json() as { prompt: string };
 
-  const refused = await (await unauthorized(new Request(`${BASE}/api/artifacts`))).json() as { help: string };
+  const refused = await (await unauthorized(request(`/api/artifacts`))).json() as { help: string };
 
   return [
     ['lib/agent-copy existingPaste', existingPaste(BASE, 'ab3cd9')],
@@ -165,14 +165,14 @@ describe('public HTTP authoring references', () => {
   });
 
   it('serves a public guide, substitutes the origin and refuses unknown or unsafe topics', async () => {
-    const response = await guideRoute(new Request(BASE + '/llms/runtime'), {params:Promise.resolve({topic:'runtime'})});
+    const response = await guideRoute(new Request(BASE + '/llms/runtime'), params({ topic:'runtime' }));
     expect(response.status).toBe(200);
     expect(response.headers.get('Content-Type')).toBe(MARKDOWN_CONTENT_TYPE);
     expect(publicGuideText('runtime', BASE + '/')).toBe(publicGuideText('runtime', BASE));
     expect(await response.text()).toBe(publicGuideText('runtime', BASE));
     for (const topic of ['not-a-guide','../markup','Markup','markup.md','%2e%2e','../SKILL','']) {
       expect(publicGuideText(topic, BASE), topic).toBeNull();
-      expect((await guideRoute(new Request(BASE + '/llms/unknown'), {params:Promise.resolve({topic})})).status, topic).toBe(404);
+      expect((await guideRoute(new Request(BASE + '/llms/unknown'), params({ topic }))).status, topic).toBe(404);
     }
   });
 
