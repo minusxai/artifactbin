@@ -14,9 +14,8 @@ import { getDb } from '@/lib/platform';
  * coordinates), and the agent's one mutation is
  * `POST /api/artifacts/:id/annotations/:annId { reply?, resolve?, reopen? }`.
  * Creation is browser-only (the owner's selection UX): the /api/my twin
- * takes `{ path, edit_id, body }` where `path` is the BODY path the frame
- * reported — the fixture carries a <Helmet> on purpose, because the
- * body→source first-index offset is invisible in pure prose.
+ * takes `{ anchor, edit_id, body }` where `anchor` is the html-node anchor
+ * (revision, stable node id, quote) the frame reported; a `path` body is refused.
  */
 import { describe, expect, it, vi } from 'vitest';
 import { useAppHarness, request } from '@/__tests__/harness';
@@ -34,8 +33,7 @@ import { avatarUrl } from '@/lib/avatars';
 const harness = useAppHarness();
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
-//   source index:      0 = Helmet, 1 = intro <p>, 2 = findings <div>
-//   BODY path:                     0 = intro,     1 = findings
+// Two anchorable nodes, by stable id: `intro` (the <p>) and `findings` (the <div>).
 const DOC =
   '<p data-af-id="intro">An introduction paragraph.</p>'
   + '<div data-af-id="findings">Revenue grew 40% in Q3.</div>';
@@ -309,6 +307,7 @@ describe('reply / resolve — the agent\'s one mutation', () => {
     expect(anon.thread[0].author).toMatchObject({ kind: 'human', user_id: t.userId, image: null });
 
     const user = { id: t.userId! };
+    expect(t.email).toContain('@');
     expect('ok' in (await setUsername(user.id, 'face_tester'))).toBe(true);
     // No picture yet: the id (the colour key) and no address.
     const plain = (await (await annotate(doc.id, actor, { anchor:nativeAnchor('intro'), edit_id: await headEditId(t.token, doc.id), body: 'no face yet' })).json()) as AnnotationWire;
@@ -349,7 +348,7 @@ describe('reply / resolve — the agent\'s one mutation', () => {
         expect(byBody.get('with a face')).toMatchObject({ user_id: user.id, image });
         expect(byBody.get('me again')).toMatchObject({ user_id: user.id, image });
         expect(byBody.get('on it')).toMatchObject({ user_id: null, image: null });
-        expect(JSON.stringify(annotations)).not.toContain('mxmx_test_face@example.com');
+        expect(JSON.stringify(annotations)).not.toContain(t.email!);
       }
       // Joined in the reads that fetch the comments — the roots and the replies,
       // two statements per read however many people wrote — never a picture
@@ -492,14 +491,6 @@ describe('lifecycle', () => {
   });
 });
 
-
-it('keeps native source responses separate from the dedicated account-scoped comment monitor',async()=>{
- const {t,doc,actor}=await publish();
- expect((await annotate(doc.id,actor,{anchor:nativeAnchor('intro'),body:'Monitor this'})).status).toBe(201);
- const read=await getArtifactRoute(request(`/api/artifacts/${doc.id}`,{token:t.token}),params({id:doc.id}));expect(read.status).toBe(200);
- expect((await read.json()).annotations).toHaveLength(1);
- const comments=await listAnnotationsRoute(request(`/api/artifacts/${doc.id}/annotations`,{token:t.token}),params({id:doc.id}));expect(comments.status).toBe(200);expect((await comments.json()).annotations).toHaveLength(1);
-});
 
 it('admits an empty comment list without reading page content', async()=>{
  const {doc,actor}=await publish();

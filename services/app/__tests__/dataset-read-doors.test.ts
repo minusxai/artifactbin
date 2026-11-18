@@ -27,6 +27,9 @@ const POLICY = { version: 3, tables: [{ table: { schema: 'public', name: 'rows' 
   { role: 'viewer', permission: { columns: ['name', 'team'], filter: { team: { _eq: 'red' } }, allow_aggregations: false } },
 ] }] };
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
+const SQL_POLICY = { ...POLICY, tables: [{ ...POLICY.tables[0], select_permissions: [{ role: 'viewer', permission: { ...POLICY.tables[0]!.select_permissions[0]!.permission, allow_aggregations: true } }] }] };
+/** Stores a dataset policy, bumping its revision as a policy write does. */
+const applyPolicy = async (id: string, policy: unknown) => { await (await getDb()).query('UPDATE artifacts SET dataset_policy=$2::jsonb, policy_revision=policy_revision+1 WHERE id=$1', [id, JSON.stringify(policy)]); };
 
 async function person(name: string) {
   const token = await mintAccountToken(`doors_${name}`);
@@ -40,7 +43,7 @@ async function setup() {
   const id = (await created.json()).id as string;
   const db = await getDb();
   await db.query("INSERT INTO artifact_shares(artifact_id,user_id,email,role) VALUES($1,$2,$3,'viewer')", [id, viewer.userId, viewer.email]);
-  await db.query('UPDATE artifacts SET dataset_policy=$2::jsonb, policy_revision=policy_revision+1 WHERE id=$1', [id, JSON.stringify(POLICY)]);
+  await applyPolicy(id, POLICY);
   return { owner, viewer, other, id };
 }
 
@@ -67,14 +70,13 @@ it('admits only roles with a select rule: shared viewer yes, signed-in link hold
 it('SQL doors (/a/:id/tables, query_resource) run over the role view: hidden columns cannot be named', async () => {
   const { owner, viewer, id } = await setup();
   // The viewer may run SQL here: POLICY's rule with allow_aggregations.
-  const sqlRule = { ...POLICY, tables: [{ ...POLICY.tables[0], select_permissions: [{ role: 'viewer', permission: { ...POLICY.tables[0]!.select_permissions[0]!.permission, allow_aggregations: true } }] }] };
-  await (await getDb()).query('UPDATE artifacts SET dataset_policy=$2::jsonb, policy_revision=policy_revision+1 WHERE id=$1', [id, JSON.stringify(sqlRule)]);
+  await applyPolicy(id, SQL_POLICY);
   const sql = (token: string, statement: string) => tables(request(`/a/${id}/tables`, { method: 'POST', json: { sql: statement }, token }), params(id));
   sees(await (await sql(owner.token, 'select * from rows')).text(), true);
   sees(await (await sql(viewer.token, 'select * from rows')).text(), false);
   // A count covers only visible rows; a hidden column is not in the viewer's catalog.
   expect((await (await sql(viewer.token, 'select count(*) as n from rows')).json()).rows).toEqual([{ n: 2 }]);
-  expect((await sql(viewer.token, 'select salary from rows')).status).not.toBe(200);
+  expect((await sql(viewer.token, 'select salary from rows')).status).toBe(400);
   const op = OPERATIONS.find((o) => o.name === 'query_resource')!;
   const run = async (actor: AccessActor) => (await op.run({ actor, base: 'http://localhost:3000', request: request(`/api/artifacts/${id}/query`) } as unknown as OpContext, { id })).body;
   sees(JSON.stringify(await run(owner.actor)), true);
@@ -88,7 +90,7 @@ it('query_resource SQL needs allow_aggregations: a flagless role reads rows by t
   await db.query("INSERT INTO artifact_shares(artifact_id,user_id,email,role) VALUES($1,$2,$3,'editor')", [id, editor.userId, editor.email]);
   // signed_in (the link holder) gets a flagless rule too; viewer keeps POLICY's.
   const flagless = { columns: ['name', 'team'], filter: { team: { _eq: 'red' } } };
-  await db.query('UPDATE artifacts SET dataset_policy=$2::jsonb, policy_revision=policy_revision+1 WHERE id=$1', [id, JSON.stringify({ ...POLICY, tables: [{ ...POLICY.tables[0], select_permissions: [...POLICY.tables[0]!.select_permissions, { role: 'signed_in', permission: flagless }] }] })]);
+  await applyPolicy(id, { ...POLICY, tables: [{ ...POLICY.tables[0], select_permissions: [...POLICY.tables[0]!.select_permissions, { role: 'signed_in', permission: flagless }] }] });
   const query = (token: string, body: Record<string, unknown>) => queryRead(request(`/api/artifacts/${id}/query`, { method: 'POST', token, json: body }), params(id));
   for (const who of [viewer, other]) {
     for (const sql of ['select count(*) as n from rows', 'select team, count(*) from rows group by team', 'select sum(length(name)) from rows', 'select * from rows']) {
@@ -190,8 +192,7 @@ it('page GraphQL: generated columns and rows read the view; no role has an aggre
 
 it('markup imports read the reader\'s view', async () => {
   const { owner, viewer, id } = await setup();
-  const sqlRule = { ...POLICY, tables: [{ ...POLICY.tables[0], select_permissions: [{ role: 'viewer', permission: { ...POLICY.tables[0]!.select_permissions[0]!.permission, allow_aggregations: true } }] }] };
-  await (await getDb()).query('UPDATE artifacts SET dataset_policy=$2::jsonb, policy_revision=policy_revision+1 WHERE id=$1', [id, JSON.stringify(sqlRule)]);
+  await applyPolicy(id, SQL_POLICY);
   const imported = async (actor: AccessActor) => JSON.stringify((await datasetResolverForActor(actor)(id, 'import'))?.tables ?? null);
   sees(await imported(owner.actor), true);
   sees(await imported(viewer.actor), false);

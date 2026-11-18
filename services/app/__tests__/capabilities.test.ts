@@ -14,6 +14,7 @@ import { identityForUser, createTestUser } from '@/lib/accounts';
 import { createArtifact } from '@/lib/artifacts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
+import { nativeHtml } from './native-html-fixture';
 
 useAppHarness();
 
@@ -22,8 +23,8 @@ async function world() {
   const guest = await createGuestOwner();
   const minted = await createTestUser(identityForUser(acct.id, t.id));
   if (!minted.ok) throw new Error(minted.error);
-  const real = await createArtifact(t.id, acct.id, { format: 'markup', source: '<p>real</p>', meta: {}, visibility: 'unlisted' });
-  const sandbox = await createArtifact(minted.tokenId, minted.userId, { format: 'markup', source: '<p>sandbox</p>', meta: {}, visibility: 'unlisted' });
+  const real = await createArtifact(t.id, acct.id, { format: 'html', source: nativeHtml('<p>real</p>'), meta: {}, visibility: 'unlisted' });
+  const sandbox = await createArtifact(minted.tokenId, minted.userId, { format: 'html', source: nativeHtml('<p>sandbox</p>'), meta: {}, visibility: 'unlisted' });
   return {
     account: { ...identityForUser(acct.id, t.id), userId: acct.id },
     guest: { ...identityForUser(guest.userId, guest.tokenId), userId: guest.userId },

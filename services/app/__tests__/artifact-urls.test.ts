@@ -16,21 +16,16 @@
  * before the query is read, and a page (React) can neither
  * return bytes nor set the per-row CSP that the html tier's sandbox depends on.
  */
-import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { fakeBrowser } from '@artifactbin/utils';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { getArtifactById } from '@/lib/artifacts';
 import { GET as raw } from '@/app/a/[id]/raw/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
-
-import { resetExportRenderer } from '@/lib/export';
-import { setServices } from '@/lib/platform';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { useAppHarness, request } from '@/__tests__/harness';
 
 useAppHarness();
 
-const EXPORT_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x55, 0x52, 0x4c]);
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
@@ -45,15 +40,7 @@ async function publish(body: Record<string, unknown>): Promise<{ id: string; url
 }
 
 beforeEach(async () => {
-  await resetExportRenderer();
-  setServices({ browser: fakeBrowser({ ok: true, mime: 'image/png', bytes: EXPORT_BYTES }) });
   token = (await mintToken('urls')).token;
-});
-
-afterEach(() => setServices({}));
-
-afterAll(async () => {
-  await resetExportRenderer();
 });
 
 describe('/a/<id>/raw', () => {
@@ -67,6 +54,7 @@ describe('/a/<id>/raw', () => {
     expect(csp).toContain("default-src 'none'");
     expect(csp).toContain('sandbox allow-scripts');
     expect(csp).toContain("img-src 'self' data: blob:");
+    expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
     expect(await res.text()).toContain('Stored html');
   });
 
