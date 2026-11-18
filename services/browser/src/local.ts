@@ -80,8 +80,9 @@ export function requestOriginAllowed(target:string,pageOrigin:string,allowedOrig
 /** Serialized into Chromium: keep this predicate synchronous and self-contained. */
 function chartsSettled(selector:string):boolean {
  const root=document.querySelector(selector);
- // A hosted <af-chart> is aria-busy while it loads its engine, rows or draws.
- return !!root&&!root.matches('[data-mx-chart-state="pending"],af-chart[aria-busy="true"]')&&!root.querySelector('[data-mx-chart-state="pending"],af-chart[aria-busy="true"]');
+ // A hosted <af-chart> is aria-busy while it loads its engine, rows or draws; an <af-data-table sql> until its read answers.
+ const busy='[data-mx-chart-state="pending"],af-chart[aria-busy="true"],af-data-table[aria-busy="true"]';
+ return !!root&&!root.matches(busy)&&!root.querySelector(busy);
 }
 
 /**

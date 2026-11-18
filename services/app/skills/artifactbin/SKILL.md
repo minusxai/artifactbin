@@ -157,8 +157,9 @@ comments (every page you may see): `node scripts/events.mjs watch --help`.
   A page that shows a dataset links it (`<link rel="af-dataset">`), reads and writes its rows
   with `` sql`…` `` from `@afbin/apollo` (each table named by its link, every `${…}` a bound
   value; `sql.watch` for live updates) and computes every number (counts, totals, group by,
-  joins) in SQL, never by summing rows in script; charts are `<af-chart>` over that SQL
-  ([dataviz](references/dataviz.md)). For sample data copy
+  joins) in SQL, never by summing rows in script; it shows data with the platform's data
+  components over that SQL, charts as `<af-chart sql=…>` and rows as `<af-data-table sql=…>`,
+  never hand-built markup ([dataviz](references/dataviz.md)). For sample data copy
   `examples/gen-transactions.mjs`, change only its names (payers, categories, merchants) and run it
   once; label the data as sample. Who may see and change rows:
   [permissions](references/permissions.md) (read it before modeling identity or writes): the

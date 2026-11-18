@@ -12,10 +12,15 @@ import { withHttpServer, type RunningServer } from '@artifactbin/test-support/ne
 
 const READY = '<html><body style="margin:0"><main style="width:100px;height:100px;background:#3c3"></main></body></html>';
 const STUCK = '<html><body><main data-mx-chart-state="pending" style="width:100px;height:100px">Loading chart</main></body></html>';
+// An <af-data-table sql> is aria-busy until its read answers: never photographed before its rows.
+const table = (answersAfterMs: number | null) => '<html><body><main style="width:100px;height:100px">' +
+  '<af-data-table aria-busy="true"></af-data-table></main>' + (answersAfterMs === null ? '' : `<script>setTimeout(() =>
+  document.querySelector('af-data-table').removeAttribute('aria-busy'), ${answersAfterMs})</script>`) + '</body></html>';
+const PAGES: Record<string, string> = { '/stuck': STUCK, '/table-reading': table(null), '/table-answers': table(300) };
 
 let pages: RunningServer;
 beforeAll(async () => {
-  pages = await withHttpServer((q, s) => { s.writeHead(200, { 'content-type': 'text/html' }); s.end(q.url === '/stuck' ? STUCK : READY); });
+  pages = await withHttpServer((q, s) => { s.writeHead(200, { 'content-type': 'text/html' }); s.end(PAGES[q.url ?? ''] ?? READY); });
 });
 afterAll(async () => { await pages.close(); });
 
@@ -61,6 +66,13 @@ it('closes only the page that passed its deadline, never another page on the sam
   expect(await other.evaluate(() => document.body.textContent)).toBe('another render');
   expect((await service.render(request('/ready'))).ok).toBe(true);
   expect(state.launches).toBe(1);
+});
+
+it('waits for a busy af-data-table like a busy af-chart: a read that never answers is a failure, one that answers renders', async () => {
+  const { service } = counted();
+  const reading = await service.render(request('/table-reading', { timeoutMs: 600 }));
+  expect(!reading.ok && reading.reason).toBe('failed');
+  expect(await service.render(request('/table-answers'))).toMatchObject({ ok: true });
 });
 
 it('never shuts the browser down for idleness while a render is using it', async () => {
