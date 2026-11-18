@@ -12,14 +12,16 @@ import {admitGroupMember,bearerIdentity,mintAccountToken,useAppHarness} from './
 useAppHarness();
 const app=new Hono();mountRoutes(app);
 beforeEach(()=>setServices({humanSessions:{live:async(id,user)=>id===`sess_${user}`}}));
+/** POST /api/artifacts as `token`'s account, private unless the body says otherwise; the new id. */
+const createAs=async(token:string,body:object)=>{
+ const r=await app.request('/api/artifacts',{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify({visibility:'private',...body})});
+ expect(r.status,await r.clone().text()).toBe(201);return (await r.json() as {id:string}).id;
+};
 it('lists a group folder at root, pages files without duplicates, and admits the member session',async()=>{
  const owner=await mintAccountToken('collection_owner'),member=await mintAccountToken('collection_member'),stranger=await mintAccountToken('collection_stranger');
  const group=await createGroup(owner.userId!,{handle:'collection_team',name:'Collection team'});
  await admitGroupMember(owner.userId!,group.id,member.userId!,'member');
- const create=async(body:object)=>{
-  const r=await app.request('/api/artifacts',{method:'POST',headers:{authorization:`Bearer ${owner.token}`,'content-type':'application/json'},body:JSON.stringify({visibility:'private',destination:{type:'group',id:group.id},...body})});
-  expect(r.status,await r.clone().text()).toBe(201);return (await r.json() as {id:string}).id;
- };
+ const create=(body:object)=>createAs(owner.token,{destination:{type:'group',id:group.id},...body});
  const folder=await create({format:'folder',title:'Reports'});
  const nested=await create({format:'folder',title:'Archive',parent_id:folder});
  const files=[];for(let i=0;i<3;i++)files.push(await create({html:`<!doctype html><html><head><title>Result ${i}</title></head><body><h1>Result ${i}</h1></body></html>`,title:`Result ${i}`,parent_id:folder}));
@@ -51,10 +53,7 @@ it('keeps inherited reach directional, redacts hidden parents, browses shared sh
  await admitGroupMember(owner.userId!,child.id,member.userId!,'member');
  await admitGroupMember(owner.userId!,child.id,peer.userId!,'member');
  const call=async(who:typeof member,g=child.id,q='')=>app.request(`/api/groups/${g}/collection${q}`,{headers:{authorization:`Bearer ${who.token}`}});
- const create=async(body:object)=>{
-  const r=await app.request('/api/artifacts',{method:'POST',headers:{authorization:`Bearer ${owner.token}`,'content-type':'application/json'},body:JSON.stringify({visibility:'private',...body})});
-  expect(r.status,await r.clone().text()).toBe(201);return (await r.json() as {id:string}).id;
- };
+ const create=(body:object)=>createAs(owner.token,body);
  const page=(title:string,extra:object={})=>create({title,html:`<!doctype html><html><head><title>${title}</title></head><body><p>${title}</p></body></html>`,...extra});
  const folder=await create({format:'folder',title:'Shared shelf'});
  const nested=await create({format:'folder',title:'Nested',parent_id:folder});
@@ -103,9 +102,7 @@ it('pages past excluded batches without a global cap, preserves tied ordering an
  const owner=await mintAccountToken('collection_volume_owner'),member=await mintAccountToken('collection_volume_member');
  const group=await createGroup(owner.userId!,{handle:'collection_volume',name:'Volume'});
  await admitGroupMember(owner.userId!,group.id,member.userId!,'member');
- const create=async(body:object)=>{
-  const r=await app.request('/api/artifacts',{method:'POST',headers:{authorization:`Bearer ${owner.token}`,'content-type':'application/json'},body:JSON.stringify({visibility:'private',...body})});expect(r.status,await r.clone().text()).toBe(201);return (await r.json() as {id:string}).id;
- };
+ const create=(body:object)=>createAs(owner.token,body);
  const folder=await create({format:'folder',title:'Volume'});
  const base=await create({parent_id:folder,html:'<!doctype html><html><head><title>Volume</title></head><body><p>Volume</p></body></html>'});
  const share=await app.request(`/api/artifacts/${folder}/group-shares/${group.id}`,{method:'PUT',headers:{authorization:`Bearer ${owner.token}`,'content-type':'application/json'},body:JSON.stringify({role:'viewer'})});expect(share.status).toBe(200);

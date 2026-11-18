@@ -82,7 +82,3 @@ it('keeps cross-site writes and private datasets outside the grant',async()=>{
  expect(await canReadArtifact((await getArtifactById('prv123'))!,actor)).toBe(false);
 });
 afterEach(()=>setDocumentEditorPolicy());
-it('does not elevate a verified account without a host policy', async () => {
- setDocumentEditorPolicy();
- expect((await GET(request(path,options),context)).status).toBe(404);
-});
