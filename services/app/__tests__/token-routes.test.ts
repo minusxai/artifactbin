@@ -172,6 +172,17 @@ describe('token routes served by the app', () => {
     const cleared = await clearSession();
     expect(cookieValue(cleared).cleared).toBe(true);
   });
+  it('no token route sets the principal columns, whatever the body carries', async () => {
+    const principal = { group_id: 'grp_x', group_role: 'editor', issued_by: 'usr_x', grant_id: 'gnt_x', groupId: 'grp_x', groupRole: 'editor', issuedBy: 'usr_x', grantId: 'gnt_x', principal_kind: 'group' };
+    const user = await createUser({ email: 'mxmx_test_principal@example.com' });
+    const actor = { credential: 'session' as const, userId: user.id, email: user.email ?? '', emailVerified: true };
+    expect((await mintAdmin(request('/api/tokens', { method: 'POST', token: ADMIN, json: { email: ADMIN_EMAIL, ...principal } }))).status).toBe(201);
+    expect((await mintInternal(request('/api/internal/tokens', { method: 'POST', actor, json: principal }))).status).toBe(201);
+    expect((await adoptSession(request('/api/session/token', { method: 'POST', json: principal }))).status).toBe(401);
+    const { rows } = await (await harness.db()).query('SELECT group_id, group_role, issued_by, grant_id FROM tokens');
+    expect(rows.length).toBeGreaterThanOrEqual(2);
+    for (const row of rows) expect(row).toEqual({ group_id: null, group_role: null, issued_by: null, grant_id: null });
+  });
   it('a token revoked here stops authorizing on the very next request', async () => {
     const user = await createUser({ email: 'mxmx_test_revocation@example.com' });
     const { id, token } = await mintToken('account', user.id);

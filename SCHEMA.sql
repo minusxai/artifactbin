@@ -1750,6 +1750,10 @@ CREATE TABLE IF NOT EXISTS auth.tokens (
   deleted_at TIMESTAMPTZ,
   expires_at TIMESTAMPTZ,
   last_used_at TIMESTAMPTZ,
+  group_id TEXT,
+  group_role TEXT,
+  issued_by TEXT,
+  grant_id TEXT,
   PRIMARY KEY (id)
 );
 
@@ -1776,6 +1780,14 @@ ALTER TABLE auth.tokens ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 ALTER TABLE auth.tokens ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
 
 ALTER TABLE auth.tokens ADD COLUMN IF NOT EXISTS last_used_at TIMESTAMPTZ;
+
+ALTER TABLE auth.tokens ADD COLUMN IF NOT EXISTS group_id TEXT;
+
+ALTER TABLE auth.tokens ADD COLUMN IF NOT EXISTS group_role TEXT;
+
+ALTER TABLE auth.tokens ADD COLUMN IF NOT EXISTS issued_by TEXT;
+
+ALTER TABLE auth.tokens ADD COLUMN IF NOT EXISTS grant_id TEXT;
 
 DO $$
 BEGIN
