@@ -1,6 +1,6 @@
 /**
  * A design system's custom properties as plain declarations, for code that draws with them outside
- * a browser (the query image, lib/viz chart-image): the system's `:root[data-af-design-system]`
+ * a browser (the query image, lib/viz chart-image): the system's `:where(:root[data-af-design-system])`
  * block, with its `[data-af-dark="true"]` block layered over it in dark. Values stay as written
  * (`var()`, `color-mix()` …); the caller resolves them. Server-only: kept out of the index that
  * browser and skill bundles import.
@@ -29,7 +29,7 @@ function designSystemVariables(name: string, mode: Mode): Readonly<Record<string
   if (!found) {
     const rules = HTML_SYSTEMS[name as keyof typeof HTML_SYSTEMS].rules;
     const root = `:root[data-af-design-system="${name}"]`;
-    found = Object.freeze({ ...block(rules, root), ...(mode === 'dark' ? block(rules, `${root}[data-af-dark="true"]`) : {}) });
+    found = Object.freeze({ ...block(rules, `:where(${root})`), ...(mode === 'dark' ? block(rules, `:where(${root}[data-af-dark="true"])`) : {}) });
     cache.set(key, found);
   }
   return found;
