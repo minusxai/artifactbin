@@ -30,7 +30,7 @@ const SERVER_BOOT_TESTS = [
 const PROPERTY_SOAK_TESTS = ['services/app/lib/live-regions/__tests__/convergence.soak.test.ts', 'services/app/lib/live-regions/__tests__/cells.soak.test.ts'];
 
 const API_INCLUDE = ['services/app/__tests__/**/*.test.{ts,tsx}', 'services/app/server/**/__tests__/**/*.test.ts'];
-const API_EXCLUDE = ['services/app/__tests__/**/*.ui.test.{ts,tsx}', ...SERVER_BOOT_TESTS.filter((file) => file.startsWith('services/app/__tests__/'))];
+const API_EXCLUDE = ['services/app/__tests__/**/*.ui.test.{ts,tsx}', ...SERVER_BOOT_TESTS.filter((file) => file.startsWith('services/app/__tests__/')), 'services/app/__tests__/region-processes-postgres.test.ts'];
 /**
  * The api files that replace modules or rewrite the process environment (scripts/lib/test-isolation.mjs) would leak
  * into every later file on their worker; these run in `api-isolated`, one fresh graph per file. Every other api file
@@ -43,10 +43,11 @@ const API_MOCKING = leaking(API_INCLUDE, API_EXCLUDE);
 
 const NODE_INCLUDE = ['services/app/lib/html-components/**/*.test.ts', 'services/app/lib/**/__tests__/**/*.test.{ts,tsx}', 'services/app/components/**/__tests__/**/*.test.{ts,tsx}', 'evals/**/__tests__/**/*.test.{ts,tsx}', 'services/{contracts,utils,sql,browser,auth,events,connectors}/**/__tests__/**/*.test.{ts,tsx}', 'scripts/**/__tests__/**/*.test.mjs'];
 /**
- * Canonical analytics folds, authorization lock order across independent Postgres connections and split-role grants: `integration` only,
+ * Canonical analytics folds, authorization lock order across independent Postgres connections, split-role grants, feed
+ * positions, OAuth rotation and the two-process region scenario on real connections: `integration` only,
  * as the Docker proofs are.
  */
-const REAL_DATABASE_TESTS = ['services/app/lib/artifacts/__tests__/workload-create-postgres.test.ts', 'services/app/lib/analytics/__tests__/canonical-totals-postgres.test.ts', 'services/connectors/__tests__/connectors-docker.test.ts', 'services/app/lib/artifact-access/__tests__/lock-order-postgres.test.ts', 'services/app/lib/platform/__tests__/identity-roles-postgres.test.ts'];
+const REAL_DATABASE_TESTS = ['services/app/lib/artifacts/__tests__/workload-create-postgres.test.ts', 'services/app/lib/analytics/__tests__/canonical-totals-postgres.test.ts', 'services/connectors/__tests__/connectors-docker.test.ts', 'services/app/lib/artifact-access/__tests__/lock-order-postgres.test.ts', 'services/app/lib/platform/__tests__/identity-roles-postgres.test.ts', 'services/events/__tests__/feed-position-postgres.test.ts', 'services/auth/__tests__/oauth-postgres.test.ts', 'services/app/__tests__/region-processes-postgres.test.ts'];
 /** Real Chromium (the browser contract, internal asset rendering, render lifecycle, session pages): `integration` only. */
 const CHROMIUM_TESTS = chromiumTests(import.meta.dirname, NODE_INCLUDE);
 

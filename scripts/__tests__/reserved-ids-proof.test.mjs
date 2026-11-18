@@ -5,6 +5,7 @@
  * child processes the workflow ran; every assertion still lives in the proof scripts themselves.
  */
 import { execFile, execFileSync, spawnSync } from 'node:child_process';
+import { dockerImage } from '@artifactbin/test-support/docker';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -18,8 +19,8 @@ const proof = (args, env = {}) => run(process.execPath, ['--import', 'tsx', ...a
   cwd: root, env: { ...baseEnv, ...env }, maxBuffer: 16 * 1024 * 1024, timeout: 120_000,
 });
 
-const dockerAvailable = spawnSync('docker', ['image', 'inspect', 'postgres:17-alpine'], { stdio: 'ignore' }).status === 0;
-describe.skipIf(!dockerAvailable)('reserved ids on pooled PostgreSQL (disposable real server)', () => {
+// CI's integration job pulls the image: a missing one fails there instead of skipping (test-support/docker).
+describe.skipIf(!dockerImage('postgres:17-alpine'))('reserved ids on pooled PostgreSQL (disposable real server)', () => {
   let container = '';
   let url = '';
   beforeAll(async () => {

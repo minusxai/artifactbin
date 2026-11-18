@@ -1,5 +1,5 @@
-/** Optional selected database regression. This test owns AUTH_TEST_DATABASE_URL;
- * use a disposable PostgreSQL database with CREATEROLE, never a deployment DB. */
+/** READ COMMITTED regression on separate connections, on a test-owned disposable PostgreSQL 17 container
+ * (@artifactbin/test-support/docker, a superuser, so CREATE ROLE works), in the `integration` project. */
 import {afterAll,beforeAll,describe,expect,it} from 'vitest';
 import {Pool,type PoolClient} from 'pg';
 import {randomBytes} from 'node:crypto';
@@ -10,21 +10,22 @@ import {ensureAuthSchema} from '../src/schema';
 import {ensureHumanAuthSchema} from '../src/auth/human';
 import {createBearerReader} from '../src/identity/bearer';
 import {createAuthHost} from '../src/parts';
+import {dockerImage,startPostgres,type DisposablePostgres} from '@artifactbin/test-support/docker';
 
-const database=process.env.AUTH_TEST_DATABASE_URL;
-describe.skipIf(!database)('READ COMMITTED auth with separate connections, the identity role owning tokens beside its credentials',()=>{
+describe.skipIf(!dockerImage('postgres:17-alpine'))('READ COMMITTED auth with separate connections, the identity role owning tokens beside its credentials',()=>{
  const suffix=randomBytes(6).toString('hex'),authSchema=`auth_${suffix}`,appSchema=`app_${suffix}`,role=`reader_${suffix}`;
- let owner:Pool,auth:Pool;
+ let owner:Pool,auth:Pool,server:DisposablePostgres|undefined;
  const queryable=(pool:Pool|PoolClient):Queryable=>({query:async<T>(sql:string,params:unknown[]=[])=>({rows:(await pool.query(sql,params)).rows as T[]})});
  const gate=()=>{let release!:()=>void;const promise=new Promise<void>(r=>{release=r;});return {promise,release};};
  beforeAll(async()=>{
-  owner=new Pool({connectionString:database});
+  server=await startPostgres();
+  owner=new Pool({connectionString:server.url});
   await ensureAuthSchema(queryable(owner),authSchema);
   await ensureHumanAuthSchema({pool:owner,schema:authSchema});
   await owner.query(`CREATE SCHEMA ${appSchema}; CREATE TABLE ${authSchema}.tokens(id text primary key, name text, token_hash text, user_id text,audience text,scope text,expires_at timestamptz,deleted_at timestamptz); CREATE ROLE ${role}; GRANT USAGE ON SCHEMA ${appSchema},${authSchema} TO ${role}; GRANT ALL ON ALL TABLES IN SCHEMA ${authSchema} TO ${role}`);
-  auth=new Pool({connectionString:database,options:`-c role=${role}`});
- });
- afterAll(async()=>{await auth?.end();if(owner){await owner.query(`DROP SCHEMA IF EXISTS ${appSchema} CASCADE; DROP SCHEMA IF EXISTS ${authSchema} CASCADE; DROP ROLE IF EXISTS ${role}`);await owner.end();}});
+  auth=new Pool({connectionString:server.url,options:`-c role=${role}`});
+ },120_000);
+ afterAll(async()=>{try{await auth?.end();await owner?.end();}finally{server?.stop();}});
  const mint=async()=>{
   const id=`tok_${randomBytes(8).toString('hex')}`,token=`mx_${randomBytes(24).toString('hex')}`;
   await owner.query(`INSERT INTO ${authSchema}.tokens(id,name,token_hash,user_id,audience,scope) VALUES($1,'oauth',$2,'user','http://test/api','artifacts')`,[id,hashToken(token)]);return {id,token};
