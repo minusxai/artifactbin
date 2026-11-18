@@ -1,5 +1,5 @@
 import {canUseDeploymentIdentity} from '../accounts';
-import {recordGroupChanges} from '../groups';
+import {effectiveRoleSql,recordGroupChanges} from '../groups';
 import {validateDefaultConnection} from '../connections';
 /** Durable company bootstrap and admission. All state transitions hold the singleton row lock. */
 import type {ArtifactDestination,DeploymentState,GroupSummary} from '@artifactbin/contracts';
@@ -22,10 +22,10 @@ async function state(db:Queryable,lock=false):Promise<State> {
  await db.query('INSERT INTO deployment_state(id) VALUES ($1) ON CONFLICT DO NOTHING',[ID]);
  return (await db.query<State>('SELECT owner_user_id,default_group_id,setup_complete FROM deployment_state WHERE id=$1'+(lock?' FOR UPDATE':''),[ID])).rows[0]!;
 }
-/** The live group and the reader's direct role in it, read at decision time (identity rows are never locked here). */
+/** The live group and the reader's role in it (lib/groups `effectiveRoleSql`: admin through an ancestor counts), read at decision time (identity rows are never locked here). */
 async function group(db:Queryable,id:string|null,userId:string|null):Promise<GroupSummary|null> {
  if(!id)return null;
- return (await db.query<GroupSummary>('SELECT g.id,g.handle,g.name,g.description,m.role FROM groups g LEFT JOIN group_members m ON m.group_id=g.id AND m.user_id=$2 WHERE g.id=$1 AND g.deleted_at IS NULL',[id,userId])).rows[0]??null;
+ return (await db.query<GroupSummary>(`SELECT g.id,g.handle,g.name,g.description,${effectiveRoleSql('$2')} AS role FROM groups g WHERE g.id=$1 AND g.deleted_at IS NULL`,[id,userId])).rows[0]??null;
 }
 export async function getDeploymentState(userId:string|null):Promise<DeploymentState> {
  const {mode}=deploymentConfig();if(mode==='public')return {mode,setup_complete:true,is_owner:false,default_group:null};

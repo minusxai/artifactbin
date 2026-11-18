@@ -8,9 +8,11 @@
  *    run sign-in, parent-credential
  *    fence), an audience of this deployment's API or of a configured service (`identity_settings.service_audiences`,
  *    IDENTITY__SERVICE_AUDIENCES) and an active account; a reader accepting a token checks its `audience` itself;
- *  - `sessions` (Better Auth's `session`, minus its token) and `sessions.live`: unexpired.
+ *  - `sessions` (Better Auth's `session`, minus its token) and `sessions.live`: unexpired;
+ *  - `group_admins`, the one computed view: each live group's effective admins and the group their direct `admin`
+ *    row is on (./rules `groupAdminsSql`, the rule the identity module's own checks run), so no reader re-derives it.
  * The app reads these exactly as any other reader does: its search_path is `<app>, <read schema>`, so `FROM users` is this
- * view. Each view's FROM is its one table (rule columns are scalar subqueries), so a view stays auto-updatable for a
+ * view. Each table's view's FROM is its one table (rule columns are scalar subqueries), so it stays auto-updatable for a
  * single-role install's fixtures and inlines into the reader's plan.
  *
  * Views read with their owner's (the identity role's) privileges: in a split-role database readers hold SELECT on
@@ -19,7 +21,7 @@
  */
 import type {Table} from '@artifactbin/contracts';
 import {bearerLiveSql} from '../identity/bearer';
-import {authenticatingUserSql,deploymentMemberSql,type RuleNames} from './rules';
+import {authenticatingUserSql,deploymentMemberSql,groupAdminsSql,type RuleNames} from './rules';
 import {IDENTITY_TABLES,SECRET_COLUMNS} from './schema';
 
 export interface IdentitySchemas {
@@ -62,6 +64,7 @@ export function identityViewColumns(): Record<string, string[]> {
     if (at === 0) throw new Error(`identity: the ${table.name} view's rule columns follow "${placed.after}", which the table no longer declares`);
     views[table.name] = [...columns.slice(0, at), ...placed.rules, ...columns.slice(at)];
   }
+  views.group_admins = ['group_id', 'user_id', 'via_group_id'];
   views.sessions = [...exposed('session', SESSION_COLUMNS), 'live'];
   return views;
 }
@@ -97,6 +100,8 @@ export function identityViewStatements(schemas: IdentitySchemas, options: {sessi
   SELECT ${plain(table, 'x')} FROM ${auth}.${table} x`);
     }
   }
+  statements.push(`CREATE OR REPLACE VIEW ${read}.group_admins AS
+  ${groupAdminsSql({groups: `${auth}.groups`, group_members: `${auth}.group_members`})}`);
   if (options.sessions !== false) statements.push(`CREATE OR REPLACE VIEW ${read}.sessions AS
   SELECT ${plain('sessions', 's', {live: '(s."expiresAt" > now()) AS live'})} FROM ${auth}.session s`);
   return statements;

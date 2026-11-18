@@ -12,6 +12,7 @@ import { identityForUser } from '@/lib/accounts';
 import { canonicalizeHtmlPage } from '@/lib/html-page';
 import { editableRegions } from '@/lib/live-regions';
 import { PostgresDb, SCHEMA_STATEMENTS } from '@/lib/platform';
+import { identityViewStatements } from '@artifactbin/auth/identity-store/views';
 import { dockerImage, startPostgres, type DisposablePostgres } from '@artifactbin/test-support/docker';
 import { nativeHtml } from './native-html-fixture';
 import { useAppHarness } from './harness';
@@ -35,6 +36,7 @@ describe.skipIf(!dockerImage('postgres:17-alpine'))('two connection pools over o
     await boot.query(`CREATE TABLE users (id text PRIMARY KEY, email text, kind text);
       CREATE TABLE groups (id text PRIMARY KEY, deleted_at timestamptz, parent_id text);
       CREATE TABLE group_members (group_id text, user_id text, role text, PRIMARY KEY (group_id, user_id))`);
+    await boot.query(identityViewStatements({ auth: schema, app: schema, read: schema }, { sessions: false }).find((sql) => sql.includes(`VIEW ${schema}.group_admins`))!);
     await boot.end();
     pools = [0, 1].map(() => new PostgresDb(new pg.Pool({ connectionString: postgres, options: `-c search_path=${schema}`, max: 4 }) as never));
   }, 120_000);

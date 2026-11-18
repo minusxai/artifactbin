@@ -2,7 +2,7 @@ import {admissionPolicyOf} from '@artifactbin/auth';
 import {isGroupRole} from '@artifactbin/contracts';
 import {GroupError} from './errors';
 import {groupAttempt,recordGroupChanges,type GroupMutationActor} from './mutations';
-import {subtreeSql} from './hierarchy';
+import {groupAdminSql,subtreeSql} from './hierarchy';
 /**
  * GROUPS, AS THE APP SEES THEM. Every write (create, rename, delete, reparent, membership, invitations) is the
  * identity module's (lib/platform `services().identity`, contracts `IdentityService`): these functions translate a
@@ -17,10 +17,27 @@ export interface GroupRecord {id:string;handle:string;name:string;description:st
 export {GroupError} from './errors';
 const summary=(group:GroupRecord,role:GroupRole|null):GroupSummary=>({id:group.id,handle:group.handle,name:group.name,description:group.description,role,parent_id:group.parent_id??null});
 export async function getGroupById(id:string,query?:ContractQueryable):Promise<GroupRecord|null>{return (await (query??await getDb()).query<GroupRecord>('SELECT * FROM groups WHERE id=$1 AND deleted_at IS NULL',[id])).rows[0]??null;}
-export async function getGroupRole(userId:string|null,groupId:string,query?:ContractQueryable):Promise<GroupRole|null>{if(!userId)return null;return (await (query??await getDb()).query<{role:GroupRole}>('SELECT m.role FROM group_members m JOIN groups g ON g.id=m.group_id WHERE m.group_id=$1 AND m.user_id=$2 AND g.deleted_at IS NULL',[groupId,userId])).rows[0]?.role??null;}
 /**
- * A new group, a root or (`parent_id`) a subgroup: a topology change, which moves the hierarchy revision. Only a
- * direct admin of the parent creates beneath it, because the new subtree's members receive the parent's shares.
+ * SQL over a live `groups` row aliased `g` and the reader `user`: the reader's EFFECTIVE role there, `admin` when they
+ * administer it directly or through an ancestor (./hierarchy `groupAdminSql`), else their direct membership's role, else
+ * null. Editor and Member never come from the tree.
+ */
+export const effectiveRoleSql=(user:string)=>`CASE WHEN ${groupAdminSql(user,'g.id')} THEN 'admin' ELSE (SELECT m.role FROM group_members m WHERE m.group_id=g.id AND m.user_id=${user}) END`;
+/**
+ * The reader's role in a live group, the one every access decision asks (lib/artifact-access facts): `admin` for an
+ * admin of it or of any ancestor, else the direct membership's role, else null. An inherited admin is not a member:
+ * membership listings, mail and the last-admin guard read the direct rows.
+ */
+export async function getGroupRole(userId:string|null,groupId:string,query?:ContractQueryable):Promise<GroupRole|null>{if(!userId)return null;return (await (query??await getDb()).query<{role:GroupRole|null}>(`SELECT ${effectiveRoleSql('$2')} AS role FROM groups g WHERE g.id=$1 AND g.deleted_at IS NULL`,[groupId,userId])).rows[0]?.role??null;}
+/** The ancestor the reader administers live `groupId` through when they hold no direct `admin` row on it (an inherited admin), or null. */
+async function inheritedAdminVia(userId:string,groupId:string,query:ContractQueryable):Promise<{id:string;handle:string;name:string}|null>{
+ // `via_group_id` is the nearest group with a direct admin row: the group itself for a direct admin.
+ return (await query.query<{id:string;handle:string;name:string}>('SELECT g.id,g.handle,g.name FROM group_admins ga JOIN groups g ON g.id=ga.via_group_id WHERE ga.group_id=$1 AND ga.user_id=$2 AND ga.via_group_id<>ga.group_id',[groupId,userId])).rows[0]??null;
+}
+/**
+ * A new group, a root or (`parent_id`) a subgroup: a topology change, which moves the hierarchy revision. Only an
+ * admin of the parent (directly or through an ancestor) creates beneath it, because the new subtree's members receive
+ * the parent's shares.
  */
 export async function createGroup(userId:string,input:CreateGroupInput,actor?:GroupMutationActor):Promise<GroupSummary>{
  if(!normalizeCreateGroup(input))throw new GroupError('invalid_group');
@@ -38,28 +55,32 @@ export async function setGroupParent(actorId:string,id:string,parentId:string|nu
  await recordGroupChanges(moved.changes,actor,moved.changed&&moved.previous_parent_id?[moved.previous_parent_id]:[]);
  return {changed:moved.changed,parent_id:moved.parent_id,...(moved.hierarchy_revision!==undefined?{hierarchy_revision:moved.hierarchy_revision}:{})};
 }
+/** The reader's DIRECT memberships. An inherited admin reaches a subgroup from its parent's page (`subgroups`), and is no member of it. */
 export async function listGroups(userId:string):Promise<GroupSummary[]>{return (await (await getDb()).query<GroupSummary>('SELECT g.id,g.handle,g.name,g.description,m.role,g.parent_id FROM groups g JOIN group_members m ON m.group_id=g.id WHERE m.user_id=$1 AND g.deleted_at IS NULL ORDER BY g.name,g.id',[userId])).rows;}
-const RELATIVE_SQL='SELECT g.id,g.handle,g.name,m.role FROM groups g LEFT JOIN group_members m ON m.group_id=g.id AND m.user_id=$2 WHERE g.deleted_at IS NULL AND ';
+const RELATIVE_SQL=`SELECT g.id,g.handle,g.name,${effectiveRoleSql('$2')} AS role FROM groups g WHERE g.deleted_at IS NULL AND `;
 /** The people a group's shares reach through its subgroups who are not its own direct members, each with one subgroup that brings them in. */
 const SUBGROUP_AUDIENCE_SQL=`SELECT * FROM (SELECT DISTINCT ON (m.user_id) m.user_id,u.username,u.name,g.id AS via_id,g.handle AS via_handle,g.name AS via_name
  FROM group_members m JOIN users u ON u.id=m.user_id JOIN groups g ON g.id=m.group_id
  WHERE m.group_id IN (${subtreeSql('$1')}) AND m.group_id<>$1 AND NOT EXISTS (SELECT 1 FROM group_members d WHERE d.group_id=$1 AND d.user_id=m.user_id)
  ORDER BY m.user_id,g.name,g.id) audience ORDER BY lower(coalesce(name,username,'')),user_id LIMIT 100`;
 /**
- * A group's page, for a direct member. `members` are the direct rows; `parent` and `subgroups` place it in the tree
- * (each with the reader's own direct role there, never an inherited one); `subgroup_audience` is who else its shares
- * reach (./hierarchy: the direct members of every descendant), who are NOT members of this group.
+ * A group's page, for a member or an admin of it (directly or through an ancestor). `members` are the direct rows, so an
+ * inherited admin is never listed: `admin_via` names the ancestor their authority comes from (absent for everyone else).
+ * `parent` and `subgroups` place it in the tree, each with the reader's role there (`getGroupRole`'s, so a subgroup of a
+ * group they administer reads `admin`); `subgroup_audience` is who else its shares reach (./hierarchy: the direct
+ * members of every descendant), who are NOT members of this group.
  */
 export async function getGroupDetail(userId:string|null,idOrHandle:string):Promise<GroupDetail|null>{
  const db=await getDb();const group=(await db.query<GroupRecord>('SELECT * FROM groups WHERE (id=$1 OR handle=$2) AND deleted_at IS NULL',[idOrHandle,idOrHandle.replace(/^@/,'').toLowerCase()])).rows[0];
  if(!group)return null;const role=await getGroupRole(userId,group.id,db);if(!role)return null;
+ const admin_via=role==='admin'?await inheritedAdminVia(userId!,group.id,db):null;
  const members=await searchGroupMembers(userId!,group.id,'');
  const linked_groups=(await db.query<GroupSummary>('SELECT g.id,g.handle,g.name,g.description,m.role,g.parent_id FROM group_links l JOIN groups g ON g.id=l.linked_group_id LEFT JOIN group_members m ON m.group_id=g.id AND m.user_id=$2 WHERE l.group_id=$1 AND g.deleted_at IS NULL ORDER BY g.name',[group.id,userId])).rows;
  const invitations=role==='admin'?(await db.query<GroupInvitation>('SELECT id,email,role,created_at,invited_by FROM group_invitations WHERE group_id=$1 ORDER BY created_at',[group.id])).rows:undefined;
  const parent=group.parent_id?(await db.query<GroupRelative>(RELATIVE_SQL+'g.id=$1',[group.parent_id,userId])).rows[0]??null:null;
  const subgroups=(await db.query<GroupRelative>(RELATIVE_SQL+'g.parent_id=$1 ORDER BY g.name,g.id',[group.id,userId])).rows;
  const subgroup_audience=subgroups.length?(await db.query<{user_id:string;username:string|null;name:string|null;via_id:string;via_handle:string;via_name:string}>(SUBGROUP_AUDIENCE_SQL,[group.id])).rows.map(({via_id,via_handle,via_name,...person}):GroupAudienceMember=>({...person,via:{id:via_id,handle:via_handle,name:via_name}})):[];
- return {group:summary(group,role),members,linked_groups,...(invitations?{invitations}:{}),parent,subgroups,subgroup_audience};
+ return {group:summary(group,role),members,linked_groups,...(invitations?{invitations}:{}),parent,subgroups,subgroup_audience,...(admin_via?{admin_via}:{})};
 }
 export async function searchGroupMembers(userId:string,groupId:string,query:string):Promise<GroupMember[]>{const db=await getDb();if(!await getGroupRole(userId,groupId,db))throw new GroupError('not_found',404);return (await db.query<GroupMember>("SELECT m.user_id,u.username,u.name,m.role FROM group_members m JOIN users u ON u.id=m.user_id WHERE m.group_id=$1 AND ($2='' OR lower(m.user_id)=lower($2) OR strpos(lower(coalesce(u.username,'')||' '||coalesce(u.name,'')),lower($2))>0) ORDER BY (lower(m.user_id)=lower($2)) DESC,u.username,m.user_id LIMIT 100",[groupId,query.trim().replace(/^@/,'')])).rows;}
 export async function setGroupMember(actorId:string,groupId:string,userId:string,role:GroupRole,actor?:GroupMutationActor):Promise<void>{
@@ -103,7 +124,7 @@ export async function acceptGroupInvitations(userId:string,verifiedEmail:string)
  await recordGroupChanges(accepted.changes);
  return accepted.groupIds;
 }
-/** Links are the app's (`group_links`): a direct admin of the group links another group they belong to. No recipients, so no mail. */
+/** Links are the app's (`group_links`): an admin of the group (directly or through an ancestor) links another group they belong to or administer. No recipients, so no mail. */
 export async function setGroupLink(actorId:string,groupId:string,linkedId:string,present:boolean,actor?:GroupMutationActor):Promise<void>{await (await getDb()).transaction(async tx=>{
  const role=await getGroupRole(actorId,groupId,tx);if(!role)throw new GroupError('not_found',404);if(role!=='admin')throw new GroupError('forbidden',403);
  if(present){if(groupId===linkedId||!await getGroupRole(actorId,linkedId,tx))throw new GroupError('invalid_link');const changed=await tx.query('INSERT INTO group_links(group_id,linked_group_id) VALUES($1,$2) ON CONFLICT DO NOTHING RETURNING group_id',[groupId,linkedId]);if(changed.rows.length)await recordGroupMutation(tx,actorId,groupId,'linked',{linked_group_id:linkedId},[],actor);}
@@ -139,4 +160,4 @@ export async function deleteGroup(actorId:string,id:string,handle:string,actor?:
 
 export {recordGroupMutation,recordGroupChanges,groupQuota,mailGroupChanges} from './mutations';
 import {recordGroupMutation} from './mutations';
-export {reachedGroupsSql,subtreeSql,subtreeMemberIds,groupChain} from './hierarchy';
+export {groupAdminSql,reachedGroupsSql,subtreeSql,subtreeMemberIds,groupChain} from './hierarchy';

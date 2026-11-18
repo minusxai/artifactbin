@@ -70,5 +70,11 @@ CREATE OR REPLACE VIEW identity.group_invitations AS
 CREATE OR REPLACE VIEW identity.group_mail_outbox AS
   SELECT x.id, x.email, x.recipient_id, x.group_id, x.group_name, x.handle, x.action, x.sender_id, x.lease_until, x.claim_token, x.attempts, x.next_attempt_at, x.quarantined_at, x.sent_at, x.created_at FROM auth.group_mail_outbox x;
 
+CREATE OR REPLACE VIEW identity.group_admins AS
+  SELECT g.id AS group_id, a.user_id, a.via_group_id FROM auth.groups g CROSS JOIN LATERAL (
+    WITH RECURSIVE up(id, depth) AS (SELECT g.id, 0 UNION ALL SELECT p.id, up.depth+1 FROM up JOIN auth.groups c ON c.id=up.id JOIN auth.groups p ON p.id=c.parent_id WHERE p.deleted_at IS NULL AND up.depth<10000)
+    SELECT DISTINCT ON (m.user_id) m.user_id, up.id AS via_group_id FROM up JOIN auth.group_members m ON m.group_id=up.id AND m.role='admin' ORDER BY m.user_id, up.depth) a
+  WHERE g.deleted_at IS NULL;
+
 CREATE OR REPLACE VIEW identity.sessions AS
   SELECT s.id, s."expiresAt", s."createdAt", s."updatedAt", s."ipAddress", s."userAgent", s."userId", (s."expiresAt" > now()) AS live FROM auth.session s;

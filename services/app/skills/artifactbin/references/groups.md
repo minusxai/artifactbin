@@ -32,8 +32,8 @@ is not an owner and cannot govern ownership or further sharing. “Put it in tea
 explicit ownership move, which also transfers a folder's descendants and can refuse dependency
 conflicts. `publish.mjs page.html --create --group design_crit` creates new group-owned work; it does not
 share an existing page. Use `publish.mjs page.html --create --personal` for personal ownership even when
-your default is a group; omitting both flags uses your default destination. Group Members read group-owned pages. Editors also publish and edit them. Admins additionally
-manage members, group settings, ownership and sharing. Roles apply only to direct membership. Membership,
+your default is a group; omitting both flags uses your default destination. Group Members read group-owned pages. Editors also publish and edit them. Admins also
+manage members, group settings, ownership and sharing, in subgroups too. Other roles are direct. Membership,
 page readability and navigation links never grant dataset writes: members of a group a page is
 shared with change only the rows its datasets' rules give any signed-in reader. When the group
 should change the page's rows (a team tracker), add `--datasets`: it also shares each dataset the

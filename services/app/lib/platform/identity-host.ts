@@ -7,7 +7,8 @@
  *    identity schema itself (@artifactbin/auth `ensureIdentitySchema`: base tables in AUTH__SCHEMA, the read views in
  *    IDENTITY__SCHEMA);
  *  - either way it then insists that `users` on its own connection IS the read view, so a database whose base tables
- *    were never moved out of the app's schema fails at boot, named, instead of serving stale rows. With an auth host,
+ *    were never moved out of the app's schema fails at boot, named, instead of serving stale rows, and that the
+ *    `group_admins` view the access rule reads exists too (an older identity host has none). With an auth host,
  *    whose boot creates the views after this one's tables, it waits for them (bounded), then refuses.
  * A test that changes the mode with `overrideConfig` calls `syncIdentitySettings` again: the row does not follow
  * config on its own.
@@ -32,10 +33,14 @@ export async function ensureLocalIdentity(db: TransactionalQueryable): Promise<v
   await ensureIdentitySchema(db, {auth: AUTH_SCHEMA, app, read: IDENTITY_READ_SCHEMA});
 }
 
-const readsView = async (db: Queryable): Promise<{ok: boolean; found: string}> => {
-  const row = (await db.query<{relkind: string; schema: string}>(
-    "SELECT c.relkind, n.nspname AS schema FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE c.oid=to_regclass('users')")).rows[0];
-  return {ok: row?.relkind === 'v' && row.schema === IDENTITY_READ_SCHEMA, found: row ? `${row.schema}.users (${row.relkind === 'v' ? 'a view' : 'a table'})` : 'nothing'};
+/** `users`, then `group_admins` (the access rule's admin view): the first that does not resolve to the read view, or none. */
+const readsView = async (db: Queryable): Promise<{ok: boolean; name: string; found: string}> => {
+  for (const name of ['users', 'group_admins']) {
+    const row = (await db.query<{relkind: string; schema: string}>(
+      'SELECT c.relkind, n.nspname AS schema FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE c.oid=to_regclass($1)', [name])).rows[0];
+    if (!(row?.relkind === 'v' && row.schema === IDENTITY_READ_SCHEMA)) return {ok: false, name, found: row ? `${row.schema}.${name} (${row.relkind === 'v' ? 'a view' : 'a table'})` : 'nothing'};
+  }
+  return {ok: true, name: 'users', found: ''};
 };
 
 /** Boot: settings, identity (when local), then `users` must resolve to the read view on this connection. */
@@ -46,7 +51,7 @@ export async function openIdentity(db: TransactionalQueryable, waitMs = 120_000)
   for (let logged = false; ; ) {
     const seen = await readsView(db);
     if (seen.ok) { await assertGroupRoleModel(db, IDENTITY_READ_SCHEMA); return; }
-    if (Date.now() >= deadline) throw new Error(`identity: \`users\` resolves to ${seen.found}, not the read view ${IDENTITY_READ_SCHEMA}.users. `
+    if (Date.now() >= deadline) throw new Error(`identity: \`${seen.name}\` resolves to ${seen.found}, not the read view ${IDENTITY_READ_SCHEMA}.${seen.name}. `
       + (AUTH_SERVICE_URL ? 'Boot the auth host (it creates the identity schema once this app\'s tables exist), and move any identity table still in the app\'s schema into AUTH__SCHEMA (@artifactbin/auth identityMoveStatements).'
         : 'The identity tables could not be moved into AUTH__SCHEMA on this database; see the error above.'));
     if (!logged) { console.warn(`[identity] waiting for the auth host to create ${IDENTITY_READ_SCHEMA} (up to ${Math.round(waitMs / 1000)} s)`); logged = true; }

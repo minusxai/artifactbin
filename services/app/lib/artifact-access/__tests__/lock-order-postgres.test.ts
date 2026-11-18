@@ -19,6 +19,7 @@ import {claimPublicationIntent,chargePublication,setArtifactQuotaForTests} from 
  */
 import { execFileSync, spawnSync } from 'node:child_process';
 import { dockerImage } from '@artifactbin/test-support/docker';
+import { identityViewStatements } from '@artifactbin/auth/identity-store/views';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import pg from 'pg';
 import type { Queryable } from '@artifactbin/contracts';
@@ -82,6 +83,8 @@ describe.skipIf(!dockerImage('postgres:17-alpine'))('authorization locks on Post
       CREATE TABLE group_members (group_id text REFERENCES groups(id), user_id text REFERENCES users(id), role text, PRIMARY KEY (group_id, user_id));
       CREATE TABLE artifact_shares (artifact_id text REFERENCES artifacts(id), user_id text, email text, role text, PRIMARY KEY (artifact_id, email));
       CREATE TABLE artifact_group_shares (artifact_id text REFERENCES artifacts(id), group_id text REFERENCES groups(id), role text, PRIMARY KEY (artifact_id, group_id));`);
+    // The identity read view the access rule reads for administration, over these same tables.
+    await clients[0]!.query(identityViewStatements({ auth: 'public', app: 'public', read: 'public' }, { sessions: false }).find((sql) => sql.includes('VIEW public.group_admins'))!);
   }, 120_000);
   // Each case's connections end with it: a case that fails with a transaction open releases its locks here, so the
   // next case's seed (a TRUNCATE) fails or passes on its own instead of waiting on them for ever.

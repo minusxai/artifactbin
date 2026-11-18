@@ -10,7 +10,7 @@
  */
 import { ACCOUNT_REACH_SQL } from '@/lib/user-kinds';
 import { identityForUser, type AccessActor } from '@/lib/accounts';
-import { reachedGroupsSql } from '@/lib/groups';
+import { groupAdminSql, reachedGroupsSql } from '@/lib/groups';
 import type {DocumentGraph} from '@artifactbin/contracts';
 import { shareRolesAtLeast, type ArtifactFormat, type ArtifactRole, type DatasetAccess, type ShareEntry, type ShareRole, type Visibility } from '@artifactbin/contracts';
 
@@ -141,13 +141,16 @@ export const SHARE_PREDICATE = (roles: readonly string[], param: string) =>
  * caller wants `ownerScope`, which is this with the gate composed in.
  */
 /**
- * A group-owned row's members. `'admin'`: a DIRECT admin of the owning group, its owner (never inherited from the
- * tree). Without a role: the owning group's AUDIENCE, a direct member of it or of any descendant (./access-facts
- * `groupAudience`), the same subtree a share to that group reaches.
+ * A group-owned row's members. `'admin'`: an admin of the owning group, directly or through an ancestor (identity's
+ * `group_admins`, lib/groups `groupAdminSql`), its owner. `'editor'`: that, or a direct editor row (Editor never
+ * flows down). Without a role: the owning group's AUDIENCE, a direct member of it or of any descendant (./access-facts
+ * `groupAudience`), the same subtree a share to that group reaches, and its admins, who read what they own.
  */
-export const groupMemberPredicate = (user:string, role?:'admin'|'editor', alias='artifacts') => role
-  ? `EXISTS (SELECT 1 FROM group_members gm JOIN groups g ON g.id=gm.group_id WHERE gm.group_id=${alias}.group_id AND gm.user_id=${user} AND gm.role IN (${role==='admin'?"'admin'":"'admin','editor'"}) AND g.deleted_at IS NULL)`
-  : `(${alias}.group_id IN (${reachedGroupsSql(user)}))`;
+export const groupMemberPredicate = (user:string, role?:'admin'|'editor', alias='artifacts') => role==='admin'
+  ? groupAdminSql(user,`${alias}.group_id`)
+  : role==='editor'
+    ? `(EXISTS (SELECT 1 FROM group_members gm JOIN groups g ON g.id=gm.group_id WHERE gm.group_id=${alias}.group_id AND gm.user_id=${user} AND gm.role='editor' AND g.deleted_at IS NULL) OR ${groupAdminSql(user,`${alias}.group_id`)})`
+    : `(${alias}.group_id IN (${reachedGroupsSql(user)}) OR ${groupAdminSql(user,`${alias}.group_id`)})`;
 
 export const ownerPredicate = ({ tokenId, userId, groupId, workload }: AccessActor): Scope =>
   workload ? {where:p=> `(${p}::text IS NULL AND FALSE)`,val:''} : groupId ? {where:p=>`group_id = ${p}`,val:groupId} : userId ? { where: (p) => `((group_id IS NULL AND user_id = ${p}) OR ${groupMemberPredicate(p,'admin')})`, val: userId } : { where: (p) => `group_id IS NULL AND user_id IS NULL AND token_id = ${p}`, val: tokenId ?? '' };

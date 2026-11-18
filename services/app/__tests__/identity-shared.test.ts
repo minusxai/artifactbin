@@ -55,7 +55,7 @@ it('pins the contract: schema identity holds exactly these views, these columns 
  await composed();
  // Generated from the identity module's declarations minus its secret columns, and equal to the contract literal.
  expect(identityViewColumns()).toEqual(IDENTITY_VIEWS);
- expect(Object.keys(IDENTITY_VIEWS).sort()).toEqual([...IDENTITY_OWNED_TABLES,'sessions'].sort());
+ expect(Object.keys(IDENTITY_VIEWS).sort()).toEqual([...IDENTITY_OWNED_TABLES,'sessions','group_admins'].sort());
  // The app's own connection reads the views by the tables' names.
  expect(await sql("SELECT n.nspname AS schema,c.relkind::text AS kind FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE c.oid=to_regclass('users')")).toEqual([{schema:'identity',kind:'v'}]);
  const relations=await sql<{name:string;kind:string}>("SELECT c.relname AS name,c.relkind::text AS kind FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='identity' ORDER BY c.relname");

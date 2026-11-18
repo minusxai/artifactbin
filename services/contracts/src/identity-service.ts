@@ -3,7 +3,8 @@
  *
  *  - IDENTITY FACTS as SHARED READS: one thin view per identity table in the read schema (`IDENTITY_SCHEMA` by
  *    default, IDENTITY__SCHEMA), named as the table: the table as it is minus its secret columns, plus the rule columns
- *    (`users.active`, `tokens.scopes` and `tokens.live`, `sessions.live`). No filtering: a reader keeps
+ *    (`users.active`, `tokens.scopes` and `tokens.live`, `sessions.live`), and one computed view, `group_admins` (who
+ *    administers each group, directly or through an ancestor). No filtering: a reader keeps
  *    `deleted_at IS NULL` itself. Every reader (this app, and any service granted the views) reads these and only
  *    these (the app's search_path resolves `users` to the view); in a split-role database each reader role holds USAGE
  *    on the schema and SELECT on its views, and nothing on the identity module's base tables (@artifactbin/auth
@@ -73,6 +74,11 @@ export const IDENTITY_SCHEMA = 'identity';
  *  - groups (`parent_id` null at a root; `deleted_at` set once deleted), group_members (DIRECT rows only),
  *    group_hierarchy (one row, id 'installation': the revision moves on every group create, delete and reparent),
  *    group_invitations, handle_reservations, group_mail_outbox: the tables as they are.
+ *  - group_admins: computed, one row per live group and EFFECTIVE ADMIN: a person holding `admin` directly on the group
+ *    or on any ancestor, climbing through live groups only; `via_group_id` is the group the direct `admin` row is on,
+ *    the nearest when several qualify (the group itself for a direct admin). Editor and Member never flow down, and an
+ *    inherited admin is not a member (`group_members` stays direct). A reader deciding "may this person administer this
+ *    group" reads this view rather than re-deriving the rule.
  *  - sessions: Better Auth's browser sessions, never their token; `live` while unexpired.
  */
 export const IDENTITY_VIEWS = {
@@ -84,6 +90,7 @@ export const IDENTITY_VIEWS = {
   group_members: ['group_id', 'user_id', 'role', 'created_at'],
   group_invitations: ['id', 'group_id', 'email', 'role', 'invited_by', 'created_at'],
   group_mail_outbox: ['id', 'email', 'recipient_id', 'group_id', 'group_name', 'handle', 'action', 'sender_id', 'lease_until', 'claim_token', 'attempts', 'next_attempt_at', 'quarantined_at', 'sent_at', 'created_at'],
+  group_admins: ['group_id', 'user_id', 'via_group_id'],
   sessions: ['id', 'expiresAt', 'createdAt', 'updatedAt', 'ipAddress', 'userAgent', 'userId', 'live'],
 } as const;
 
