@@ -6,7 +6,7 @@
  * is shared with this group. The page says both, and lists those people apart from the members (`SubgroupAudience`).
  *
  * An admin creates a subgroup (`POST /api/groups` with `parent_id`) and moves this group (`PUT /api/groups/{id}/parent`),
- * which the server allows only to someone who directly edits the group, its current parent and the new one: moving a
+ * which the server allows only to someone who directly administers the group, its current parent and the new one: moving a
  * group hands its members the new parent's shares. A move always names the parent this page loaded
  * (`from_parent_id`), so the server refuses a stale one (`parent_changed`) instead of silently re-rooting. Every
  * refusal is shown in plain words (`groupTreeMessage`).

@@ -57,7 +57,7 @@ export interface CspRequest {
   group?: { eligible: CspExtensions; groups: CspApprovalGroup[] };
 }
 
-/** A group the reader may approve addresses for (one they directly edit). */
+/** A group the reader may approve addresses for (one they directly administer). */
 export interface CspApprovalGroup { id: string; handle: string; name: string }
 
 export const CSP_DIRECTIVES: readonly CspDirective[] = ['connect', 'script', 'style', 'img', 'frame', 'media'];

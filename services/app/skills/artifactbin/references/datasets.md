@@ -10,8 +10,10 @@ Link CSV or JSON rows to read/write with SQL:
 <link rel="af-dataset" data-af-name="orders" href="./orders.csv">
 ```
 
-Publishing the page makes a CSV linked by path a dataset named by the file, updated as it
-changes; link a published one as `ref:ID`. `data-af-name` is unique per page. A link follows the
+Publishing the page makes a CSV linked by path a dataset named by the file; link a published one as
+`ref:ID`. An unchanged CSV is never re-imported. A changed CSV replaces the dataset only if no rows
+were written since this page last published it, else the publish is refused. Publishing rewrites your
+local HTML in place (adds `data-af-id`): re-read it before editing. `data-af-name` is unique per page. A link follows the
 latest rows; `data-af-mode="pinned" data-af-revision="2"` freezes one saved version, read-only.
 `node scripts/publish.mjs rows.csv` alone prints the `--artifact ID` that updates it; HTTP:
 `POST [[ base ]]/api/artifacts` with a durable `Idempotency-Key` and an origin-bound bearer, never
@@ -33,7 +35,8 @@ set rules: [permissions](permissions.md). The install's own database: [default](
 
 `node scripts/sql.mjs schema PAGE_ID` (or `DATASET_ID`) prints each table as a `CREATE TABLE` with
 its column types, as your role sees it. In a page, a dataset is the table named by its
-link's `data-af-name` (`orders`; a multi-table one is `orders.<table>`). Columns keep the file's
+link's `data-af-name` (`orders`; a multi-table one is `orders.<table>`). A stored dataset queried by its own
+ID (no page) has one table, `rows`; any other name is HTTP 400. Columns keep the file's
 names: quote one that is not a plain name (`"Created By"`). Every table has `_id`, the stable row
 ID (a CSV `id` column stays ordinary). Types: number, boolean, text; dates are ISO text and user
 columns hold account IDs. `node scripts/sql.mjs query ID 'select …'` runs one statement.

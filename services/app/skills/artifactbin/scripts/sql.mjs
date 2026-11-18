@@ -1,6 +1,7 @@
 /** What this command does and how to use it; also printed by --help. */
 export const DESCRIPTION = `Print a page's or dataset's tables, or run one SQL statement over them.
-Page tables use link names (data-af-name) and _id; dataset IDs read their rows; default:DB
+Page tables use link names (data-af-name) and _id; a stored dataset ID's one table is named rows
+(not its title; another name is HTTP 400); default:DB
 reads the install's database. All reads use your current dataset rules.
 Usage: node scripts/sql.mjs schema ID|URL|default:DB [--revision N]
        node scripts/sql.mjs query ID|URL|default:DB 'SQL'|--sql-file FILE [--params FILE]

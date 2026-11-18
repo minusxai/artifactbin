@@ -6,7 +6,7 @@
  *   POST   { connect?: [...], img?: [...], media?: [...] }  approve these exact https origins → { changed, addresses }
  *   DELETE { connect?: [...], img?: [...], media?: [...] }  remove them                       → { changed, addresses }
  *
- * Any direct member reads; a direct editor writes. Script, style and frame addresses (`directive_not_allowed`) and
+ * Any direct member reads; a direct admin writes. Script, style and frame addresses (`directive_not_allowed`) and
  * wildcards (`wildcard_not_allowed`) are refused. With TRUST__GROUP_APPROVALS=off every call is
  * `group_approvals_disabled`. Auth is the group routes' (bearer or browser session); writes keep the trust doors'
  * origin rule and are JSON only (lib/trust write-guard).
