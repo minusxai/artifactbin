@@ -72,8 +72,26 @@ export function written(element: Element): boolean {
   return Boolean(element.sourceCodeLocation?.startTag);
 }
 
-/** Apply edits to the source. Edits at the same offset keep their list order. */
+/**
+ * Apply edits to the source. Edits at the same offset keep their list order. Edits that do not overlap (the
+ * normal case) build the output once, in source order; overlapping ones splice in turn from the end, as before.
+ */
 export function applyEdits(source: string, edits: readonly Edit[]): string {
+  const forward = edits
+    .map((edit, index) => ({ edit, index }))
+    .sort((a, b) => a.edit.start - b.edit.start || a.edit.end - b.edit.end || a.index - b.index);
+  const parts: string[] = [];
+  let cursor = 0;
+  for (const { edit } of forward) {
+    if (edit.start < cursor || edit.end < edit.start) return spliceInTurn(source, edits);
+    parts.push(source.slice(cursor, edit.start), edit.text);
+    cursor = edit.end;
+  }
+  parts.push(source.slice(cursor));
+  return parts.join("");
+}
+
+function spliceInTurn(source: string, edits: readonly Edit[]): string {
   const ordered = edits
     .map((edit, index) => ({ edit, index }))
     .sort((a, b) => b.edit.start - a.edit.start || b.edit.end - a.edit.end || b.index - a.index);
