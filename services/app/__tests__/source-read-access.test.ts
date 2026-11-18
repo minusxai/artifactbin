@@ -22,7 +22,7 @@ const deferred=<T,>()=>{let resolve!:(x:T)=>void;const promise=new Promise<T>(r=
 
 async function fixture(twoQueries=false){
   sourceRead.hold=null;
-  const user=await createUser({email:'mxmx_test_speedup_access@example.com'}),token=await mintToken('source-owner',user.id);
+  const user=await createUser({email:'mxmx_test_source_access@example.com'}),token=await mintToken('source-owner',user.id);
   const ds=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{visibility:'public',dataset:[{n:314159265}]}}));
   expect(ds.status,await ds.clone().text()).toBe(201);const dataset=(await ds.json()).id;
   const extra=twoQueries?(await (await create(request('/api/artifacts',{method:'POST',token:token.token,json:{visibility:'public',dataset:[{n:271828182}]}}))).json()).id:undefined;
@@ -51,7 +51,7 @@ it.each(['document','catalog'] as const)('withholds the whole response when %s a
   release.resolve({rows:[{n:314159265}],columns:[{name:'n',type:'number'}]});
   expect(await (await pending).text()).not.toContain('314159265');sourceRead.hold=null;
 });
-it.each(['private','deleted'] as const)('does not return source rows when a public document becomes %s during a fill',async(change)=>{
+it.each(['private','deleted'] as const)('does not return source rows when a public document becomes %s while its source read is in flight',async(change)=>{
   const {id}=await fixture();const db=await harness.db();
   const started=deferred<void>(),release=deferred<{rows:Array<{n:number}>,columns:Array<{name:string,type:'number'}>}>();
   sourceRead.hold=()=>{started.resolve();return release.promise;};

@@ -84,7 +84,8 @@ it('marks overflowing tables in the native HTML core and updates the fade at the
  tables.push(wide,fits);
  mutationCallback?.([] as unknown as MutationRecord[],{} as MutationObserver);
  const initialInsert=[...timers.entries()].find(([id])=>id!==1);
- if(initialInsert){timers.delete(initialInsert[0]);initialInsert[1]();}
+ expect(initialInsert,'the first table inserted after startup schedules its sweep').toBeDefined();
+ timers.delete(initialInsert![0]);initialInsert![1]();
  expect(wide.attributes.get('data-mx-scrollable')).toBe('');
  expect(fits.attributes.has('data-mx-scrollable')).toBe(false);
  wide.scrollLeft=560;wide.listeners.get('scroll')?.({currentTarget:wide} as unknown as Event);
@@ -96,7 +97,8 @@ it('marks overflowing tables in the native HTML core and updates the fade at the
  tables.push(late);
  mutationCallback?.([] as unknown as MutationRecord[],{} as MutationObserver);
  const queued=[...timers.entries()].find(([id])=>id!==1);
- if(queued){timers.delete(queued[0]);queued[1]();}
+ expect(queued,'a later table schedules its sweep').toBeDefined();
+ timers.delete(queued![0]);queued![1]();
  expect(late.attributes.get('data-mx-scrollable')).toBe('');
  // Re-running the core replaces its document owner and tears down the prior
  // observer/listeners before the replacement starts.
