@@ -1,8 +1,8 @@
-import { afterEach, expect, it, vi } from 'vitest';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { afterEach, expect, it, vi, onTestFinished } from 'vitest';
+import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { acquireCredential } from '../lib/credential.ts';
+import {tempDir} from '../../services/test-support/src/temp-dir.ts';
 
 const received = 'https://api.resend.com/emails/receiving';
 
@@ -18,7 +18,7 @@ const acquireInbox = (fetch, { email = 'eval@example.test', key = 'test-inbox-ke
 });
 
 it('acquires a credential through the normal local outbox login path', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'artifactbin-otp-inbox-'));
+  const directory = await tempDir('artifactbin-otp-inbox-',onTestFinished);
   const outbox = join(directory, 'outbox.jsonl');
   const email = 'mxmx_eval_disposable@example.test';
   await writeFile(outbox, [
@@ -35,7 +35,6 @@ it('acquires a credential through the normal local outbox login path', async () 
     if (url.endsWith('/api/authentication/token')) return Response.json({ access_token: 'test-access-token' });
     throw new Error('unexpected request');
   });
-  try {
     const credential = await acquireCredential('outbox-oauth', {
       base: 'http://localhost:3030',
       origin: 'http://localhost:3030',
@@ -48,9 +47,6 @@ it('acquires a credential through the normal local outbox login path', async () 
     });
     expect(credential.token).toBe('test-access-token');
     expect(fetch).toHaveBeenCalledTimes(3);
-  } finally {
-    await rm(directory, { recursive: true, force: true });
-  }
 });
 
 it('finds a matching login mail beyond the first ten concurrent unrelated arrivals', async () => {

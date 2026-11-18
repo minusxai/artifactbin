@@ -8,12 +8,14 @@
 import {afterAll, beforeAll, expect, it} from 'vitest';
 import {execFileSync} from 'node:child_process';
 import {realpathSync} from 'node:fs';
-import {mkdtemp, mkdir, readFile, readdir, rm, writeFile} from 'node:fs/promises';
+import {mkdir, readFile, readdir, rm, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
+import {tempDir} from '@artifactbin/test-support/temp-dir';
 
 const server = 'https://example.test';
-let root = '', repo = '', name = '';
+const root = await tempDir('codebase-command-', afterAll);
+let repo = '', name = '';
 function git(args: string[], date = '2026-03-02') {
   return execFileSync('git', args, {cwd: repo, encoding: 'utf8', env: {...process.env,
     GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', GIT_AUTHOR_NAME: 'Ada',
@@ -29,14 +31,12 @@ async function commit(date: string, files: Record<string, string>) {
   git(['commit', '-q', '-m', 'change'], date);
 }
 beforeAll(async () => {
-  root = await mkdtemp(path.join(tmpdir(), 'codebase-command-'));
   name = path.basename(root);
   repo = path.join(root, name);
   await mkdir(repo);
   git(['init', '-q', '-b', 'main']);
   await commit('2026-03-02', {'web/app.ts': "import {total} from '../lib/cart';\n", 'lib/cart.ts': 'export const total = 1;\n'});
 });
-afterAll(() => rm(root, {recursive: true, force: true}));
 
 function fake() {
   const calls: Array<{method: string; path: string; body: any}> = [];

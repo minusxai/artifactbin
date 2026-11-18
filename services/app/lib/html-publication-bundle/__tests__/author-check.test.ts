@@ -1,18 +1,17 @@
 import {expect,it,onTestFinished,vi} from 'vitest';
-import {mkdtemp,writeFile,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import type {BrowserSessionResult} from '@artifactbin/contracts';
 import {checkHosted,checkScript,checkTarget,inspectPage,loadChromium,summarizeCheck} from '../../../skills/artifactbin/scripts/check.mjs';
 import {ToolError,checkDigest,toolFailure} from '../../../skills/artifactbin/scripts/toolbox-client.mjs';
 import {prepareBundleUpdate} from '../../../skills/artifactbin/scripts/toolbox-publication-bundle.mjs';
+import {tempDir} from '@artifactbin/test-support/temp-dir';
 
 /** The check's waits (busy pauses, a slow fake browser) on a virtual clock that jumps to each timer as it comes due. */
 const virtualClock=()=>{vi.useFakeTimers({toFake:['setTimeout','clearTimeout']});vi.setTimerTickMode('nextTimerAsync');onTestFinished(()=>{vi.useRealTimers();});};
 
 it('prepares a conditional project update with retained mappings and a fresh immutable write key',async()=>{
- const root=await mkdtemp(join(tmpdir(),'author-update-'));
- try{
+ const root=await tempDir('author-update-',onTestFinished);
   await writeFile(join(root,'index.html'),'<link rel="stylesheet" href="./theme.css"><h1>Changed</h1>');
   await writeFile(join(root,'theme.css'),'body{color:red}');
   const mappings={'theme.css':{kind:'asset' as const,id:'ASSET1',revision:'3',state:'resource-state',sha256:'old-digest'}};
@@ -22,7 +21,6 @@ it('prepares a conditional project update with retained mappings and a fresh imm
   expect(saved.idempotencyKey).not.toBe(next.idempotencyKey);expect(saved.body).not.toHaveProperty('visibility');
   expect(saved.body.publicationBundle.files[0].path).toBe('theme.css');
   await expect(prepareBundleUpdate({...options,head:{id:'PAGE12',version:0,state:''}})).rejects.toThrow();
- }finally{await rm(root,{recursive:true,force:true});}
 });
 
 it('builds bounded smoke checks and refuses remote URLs in the private preview mode',async()=>{
@@ -195,8 +193,7 @@ it('counts the page\'s dataset reads (SQL and dataset cells) on load and in its 
 });
 
 it('loads named ESM and CommonJS Playwright exports and distinguishes invalid modules',async()=>{
- const root=await mkdtemp(join(tmpdir(),'author-browser-module-'));
- try{
+ const root=await tempDir('author-browser-module-',onTestFinished);
   for(const extension of ['mjs','cjs']){
    const file=join(root,'browser.'+extension);
    await writeFile(file,extension==='mjs'?'export const chromium={launch(){return "esm"}}':'module.exports={chromium:{launch(){return "cjs"}}}');
@@ -204,7 +201,6 @@ it('loads named ESM and CommonJS Playwright exports and distinguishes invalid mo
   }
   const invalid=join(root,'invalid.mjs');await writeFile(invalid,'export const chromium={}');
   await expect(loadChromium(invalid)).rejects.toMatchObject({code:'browser_module_invalid'});
- }finally{await rm(root,{recursive:true,force:true});}
 });
 it('keeps check diagnostics top-level on failure, without a details copy',async()=>{
  const diagnostics={smokePassed:false,checks:[{error:'fixture'}],unverified:['visual appearance'],note:'Smoke only'};

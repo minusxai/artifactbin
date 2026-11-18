@@ -1,7 +1,7 @@
-import {afterEach, expect, it} from 'vitest';
-import {mkdtemp, rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {expect, it, onTestFinished} from 'vitest';
+import {writeFile} from 'node:fs/promises';
 import path from 'node:path';
+import {tempDir} from '@artifactbin/test-support/temp-dir';
 /**
  * EVERY AGENT SESSION HAS A NAME. The installed scripts name the harness and its session on every request
  * (Artifactbin-Agent, Artifactbin-Session), derive "<product> <colour>" deterministically from the session, keep a name
@@ -9,9 +9,7 @@ import path from 'node:path';
  */
 const agent = await import('../../../skills/artifactbin/scripts/toolbox-agent.mjs');
 const {commentCommand} = await import('../../../skills/artifactbin/scripts/comment.mjs');
-const roots: string[] = [];
-const home = async () => { const root = await mkdtemp(path.join(tmpdir(), 'agent-identity-')); roots.push(root); return root; };
-afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, {recursive: true, force: true}))); });
+const home = async () => { const root = await tempDir('agent-identity-',onTestFinished); return root; };
 const noPs = () => { throw new Error('no ps for a harness with its own session ID'); };
 
 it('detects each harness and the session key it exposes', () => {
@@ -108,7 +106,6 @@ it('names the session on every request, and every comment write prints the name 
   return String(url).endsWith('/PAGE12') ? Response.json({id: 'PAGE12', version: 3}) : Response.json({id: 'ann_root', revision: 2, thread: []});
  };
  const env = {ARTIFACTBIN_URL: 'https://example.test', ARTIFACTBIN_TOKEN: 'synthetic', ARTIFACTBIN_HOME: root, CODEX_THREAD_ID: 'thread-1'};
- const {writeFile} = await import('node:fs/promises');
  const anchor = path.join(root, 'anchor.json');
  await writeFile(anchor, JSON.stringify({kind: 'html-node', v: 1, nodeId: 'intro', quote: ''}));
  const watchLine = '\n  node scripts/comment.mjs watch PAGE12 --next';

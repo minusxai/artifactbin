@@ -1,13 +1,13 @@
-import {it,expect} from 'vitest';
-import {readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync} from 'node:fs';
-import {tmpdir} from 'node:os';
-import {dirname, join} from 'node:path';
+import {it,expect,onTestFinished} from 'vitest';
+import {readFileSync, mkdirSync, writeFileSync, rmSync, existsSync} from 'node:fs';
+import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
 import yaml from 'yaml';
 import {CI_BUDGETS, describeCiElapsed, measureCiElapsed} from '../lib/ci-elapsed.mjs';
 import {JOBS, shardLoads} from '../ci/test-timings.mjs';
 import {NODE_TIMINGS_ARTIFACT} from '../lib/node-batch.mjs';
+import {tempDirSync} from '../../services/test-support/src/temp-dir.ts';
 const workflow=(name='ci.yml')=>yaml.parse(readFileSync(new URL(`../../.github/workflows/${name}`,import.meta.url),'utf8'));
 
 it('reports four-minute per-job diagnostics while the complete chain owns the hard limit',()=>{
@@ -45,30 +45,26 @@ it('enforces chained time on main and pull requests before receipts and at the f
 });
 
 it('exits nonzero for an over-limit attempt and missing start, but accepts a fresh rerun',()=>{
- const directory=mkdtempSync(join(tmpdir(),'afbin-ci-elapsed-'));
+ const directory=tempDirSync('afbin-ci-elapsed-',onTestFinished);
  const attempt=join(directory,'attempt.json'),summary=join(directory,'summary.md');
  const run=(payload)=>{
   writeFileSync(attempt,JSON.stringify(payload));
   return spawnSync(process.execPath,[fileURLToPath(new URL('../lib/ci-elapsed.mjs',import.meta.url)),attempt,summary],{encoding:'utf8'});
  };
- try {
   const old=run({run_started_at:new Date(Date.now()-481000).toISOString()});
   expect(old.status).toBe(1); expect(old.stdout).toContain('::error::');
   const fresh=run({run_started_at:new Date(Date.now()-1000).toISOString()});
   expect(fresh.status).toBe(0); expect(fresh.stdout).toContain('(target)');
   expect(readFileSync(summary,'utf8')).toContain('hard failure >480s');
   expect(run({created_at:'2020-01-01T00:00:00Z'}).status).toBe(1);
- } finally {rmSync(directory,{recursive:true,force:true});}
 });
 it('warns rather than fails when a PR consumer includes a long prerequisite wait',()=>{
- const step=workflow().jobs.test.steps.find(step=>step.env?.BUDGET_S),directory=mkdtempSync(join(tmpdir(),'afbin-job-time-warning-'));
+ const step=workflow().jobs.test.steps.find(step=>step.env?.BUDGET_S),directory=tempDirSync('afbin-job-time-warning-',onTestFinished);
  const summary=join(directory,'summary.md');
  writeFileSync(join(directory,'gh'),"#!/bin/sh\nprintf '%s\\n' '259\tapi (1/4)\tsuccess\tWait for current attempt 65s'\n",{mode:0o755});
- try{
   const result=spawnSync('bash',['-c',step.run],{cwd:directory,encoding:'utf8',env:{PATH:directory+':'+process.env.PATH,BUDGET_S:'240',GITHUB_REPOSITORY:'test/repo',GITHUB_RUN_ID:'1',GITHUB_RUN_ATTEMPT:'1',GITHUB_EVENT_NAME:'pull_request',GITHUB_STEP_SUMMARY:summary}});
   expect(result.status,result.stderr).toBe(0);expect(result.stdout).toContain('::warning::');expect(result.stdout).toContain('259s');
   expect(readFileSync(summary,'utf8')).toContain('259');
- }finally{rmSync(directory,{recursive:true,force:true});}
 });
 
 // No step's preparation hashes files on the runner: the install keys come from the fingerprint step's output
@@ -245,15 +241,13 @@ it('lays main\'s measured node times over the table on every node runner, fetche
  // Run as Actions runs them (bash -e), a fetch that fails hands its status and log to the wait, which fails with it,
  // instead of leaving the wait spinning to the job's timeout; one that succeeds lets the batch run.
  for(const [fetcher,status] of [['sh -c "echo answered 503, twice >&2; exit 7"',7],['echo chosen',0]]){
-  const temp=mkdtempSync(join(tmpdir(),'node-timings-step-'));
-  try{
+  const temp=tempDirSync('node-timings-step-',onTestFinished);
    const env={PATH:process.env.PATH,RUNNER_TEMP:temp};
    const started=spawnSync('bash',['-e','-c',`${steps[fetch].run.replace('node scripts/ci/ci.mjs node-timings',fetcher)}\nwait`],{env,encoding:'utf8'});
    expect(started.status).toBe(0);
    const waited=spawnSync('bash',['-e','-c',steps[wait].run],{env,encoding:'utf8',timeout:5000});
    expect(waited.status).toBe(status);
    expect(waited.stdout).toContain(status?'answered 503, twice':'chosen');
-  }finally{rmSync(temp,{recursive:true,force:true});}
  }
  expect(fetch).toBeLessThan(at(step=>step.id==='slim'));
  expect(wait).toBe(batch-1);
@@ -326,7 +320,7 @@ it('checks out without persisting the token, and leaves no post step',()=>{
 // The default `gh` and `cat` answer at once; the probe returns only once its background fetch has landed, so nothing still
 // writes into the directory the test removes.
 function probeRun(version,{toolCache,gh=`gh(){ printf '{}'; }`,cat='cat(){ :; }',node,settle=true}={}){
- const directory=mkdtempSync(join(tmpdir(),'afbin-node-probe-')),output=join(directory,'output'),pathFile=join(directory,'path');
+ const directory=tempDirSync('afbin-node-probe-',onTestFinished),output=join(directory,'output'),pathFile=join(directory,'path');
  const probe=workflow('pr-fast.yml').jobs.fast.steps.find(step=>step.id==='runner-node').run;
  const shell=`${node??`node(){ [ "$#" = 1 ] && [ "$1" = --version ] || return 91; printf '%s\\n' '${version}'; }`};\n${gh};\n${cat};\n${probe}`;
  const result=spawnSync('bash',['-e','-c',shell],{env:{...process.env,GITHUB_OUTPUT:output,GITHUB_PATH:pathFile,RUNNER_TEMP:directory,GITHUB_REPOSITORY:'o/r',GITHUB_RUN_ID:'7',GITHUB_RUN_ATTEMPT:'1',RUNNER_TOOL_CACHE:toolCache??join(directory,'no-tool-cache')},encoding:'utf8',timeout:5000});
@@ -339,17 +333,15 @@ function waitFor(file){
  while(!existsSync(file)&&Date.now()<until)spawnSync('sleep',['0.02']);
 }
 function toolCacheWith(versions){
- const cache=mkdtempSync(join(tmpdir(),'afbin-tool-cache-'));
+ const cache=tempDirSync('afbin-tool-cache-',onTestFinished);
  for(const version of versions){const bin=join(cache,'node',version,'x64','bin');mkdirSync(bin,{recursive:true});writeFileSync(join(bin,'node'),'#!/bin/sh\nexit 92\n',{mode:0o755});}
  return cache;
 }
 it.each([['v22.23.4','22'],['v24.11.0','24']])('probes the runner\'s %s, with no cached 22, without starting a JavaScript evaluation', (version,major)=>{
  const {directory,result,output,path}=probeRun(version);
- try {
   expect(result.status,result.stderr).toBe(0);
   expect(output).toBe(`major=${major}\n`);
   expect(path).toBe('');
- } finally {rmSync(directory,{recursive:true,force:true});}
 });
 it('puts the tool cache\'s newest Node 22 on PATH, starts no Node, and warms that one\'s binary in the background',()=>{
  const cache=toolCacheWith(['20.19.5','22.9.0','22.23.4','24.11.0']);
@@ -366,7 +358,7 @@ it('puts the tool cache\'s newest Node 22 on PATH, starts no Node, and warms tha
   expect(path).toBe(`${bin}\n`);
   waitFor(read);
   expect(readFileSync(read,'utf8')).toBe(`${bin}/node\n`);
- } finally {writeFileSync(release,'');rmSync(directory,{recursive:true,force:true});spawnSync('sleep',['0.05']);rmSync(cache,{recursive:true,force:true});}
+ } finally {writeFileSync(release,'');spawnSync('sleep',['0.05']);}
 });
 // THE CLOCK'S ATTEMPT, FETCHED OFF THE CRITICAL PATH. The clock reads only the attempt's run_started_at, fixed for the
 // attempt, so the first step fetches it in the background; the clock's own `gh api` took 0.6s median, 2.0s p90 and 4.1s at
@@ -375,24 +367,22 @@ it('puts the tool cache\'s newest Node 22 on PATH, starts no Node, and warms tha
 it('prefetches the clock\'s attempt in the background, returning before the fetch ends, and lands it whole',()=>{
  const steps=workflow('pr-fast.yml').jobs.fast.steps,probe=steps.find(step=>step.id==='runner-node');
  expect(probe.env).toEqual({GH_TOKEN:'${{ github.token }}'});
- const release=join(mkdtempSync(join(tmpdir(),'afbin-attempt-release-')),'release');
+ const release=join(tempDirSync('afbin-attempt-release-',onTestFinished),'release');
  // gh blocks until the test releases it: had the step waited for it, the 5s spawn timeout would fail the probe.
  const gh=`gh(){ [ "$1" = api ] && [ "$2" = /repos/o/r/actions/runs/7/attempts/1 ] || return 93; while [ ! -e '${release}' ]; do sleep 0.01; done; printf '{"run_started_at":"2026-11-17T00:00:00Z"}'; }`;
  const {directory,result}=probeRun('v22.23.4',{gh,settle:false});
- try {
   expect(result.error).toBeUndefined();
   expect(result.status,result.stderr).toBe(0);
   expect(existsSync(join(directory,'pr-attempt.json'))).toBe(false);
   writeFileSync(release,'');
   waitFor(join(directory,'pr-attempt.json'));
   expect(JSON.parse(readFileSync(join(directory,'pr-attempt.json'),'utf8'))).toEqual({run_started_at:'2026-11-17T00:00:00Z'});
- } finally {rmSync(directory,{recursive:true,force:true});rmSync(dirname(release),{recursive:true,force:true});}
 });
 it('clocks from the prefetched attempt without fetching it again, and fetches it itself when the prefetch never landed',()=>{
  const clock=workflow('pr-fast.yml').jobs.fast.steps.at(-1);
  const started=new Date(Date.now()-5000).toISOString();
  const run=(prefetched)=>{
-  const directory=mkdtempSync(join(tmpdir(),'afbin-pr-clock-')),calls=join(directory,'calls');
+  const directory=tempDirSync('afbin-pr-clock-',onTestFinished),calls=join(directory,'calls');
   if(prefetched)writeFileSync(join(directory,'pr-attempt.json'),JSON.stringify({run_started_at:started}));
   const gh=`gh(){ printf '%s\\n' "$*" >> '${calls}'; printf '{"run_started_at":"${started}"}'; }`;
   const result=spawnSync('bash',['-e','-c',`${gh};\n${clock.run}`],{cwd:fileURLToPath(new URL('../..',import.meta.url)),env:{...process.env,GH_TOKEN:'test',GITHUB_REPOSITORY:'o/r',GITHUB_RUN_ID:'7',GITHUB_RUN_ATTEMPT:'1',RUNNER_TEMP:directory,GITHUB_STEP_SUMMARY:join(directory,'summary.md')},encoding:'utf8',timeout:10000});
@@ -439,13 +429,12 @@ it('reconciles the nearest install on a lock miss, restore only, and falls back 
  expect(workflow('pr-fast.yml').jobs.fast.strategy.matrix.include.filter(entry=>entry.install)).toEqual([{part:'install',install:true}]);
 });
 it('fails the pull request lane past 60 seconds with the plain budget message',()=>{
- const directory=mkdtempSync(join(tmpdir(),'afbin-pr-elapsed-'));
+ const directory=tempDirSync('afbin-pr-elapsed-',onTestFinished);
  const attempt=join(directory,'attempt.json'),summary=join(directory,'summary.md');
  const run=(seconds)=>{
   writeFileSync(attempt,JSON.stringify({run_started_at:new Date(Date.now()-seconds*1000).toISOString()}));
   return spawnSync(process.execPath,[fileURLToPath(new URL('../lib/ci-elapsed.mjs',import.meta.url)),'--pr',attempt,summary],{encoding:'utf8'});
  };
- try {
   const slow=run(75);
   expect(slow.status).toBe(1);
   expect(slow.stdout).toMatch(/::error::PR CI took 7\d\.\ds: the limit is 60s \(aim for 40s\)\. Fix the critical path; do not raise the budget\./);
@@ -453,7 +442,6 @@ it('fails the pull request lane past 60 seconds with the plain budget message',(
   expect(warning.status).toBe(0); expect(warning.stdout).toContain('::warning::PR CI took');
   const fast=run(5);
   expect(fast.status).toBe(0); expect(fast.stdout).toContain('(target): aim for 40s; the limit is 60s');
- } finally {rmSync(directory,{recursive:true,force:true});}
 });
 
 // THE PULL REQUEST CI BUDGET IS A HARD RULE: aim for 40s; the limit is 60s. These fail when anyone

@@ -1,25 +1,24 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { SMTPServer } from 'smtp-server';
 import type { AddressInfo } from 'node:net';
 import { mailSettingsOf, completeLoginMethods } from '../src/config';
 import { smtpMailer, mailerForRuntime } from '../src/mail';
 import { authEnvNamesRead } from '../src/env';
+import {tempDirSync} from '@artifactbin/test-support/temp-dir';
 import { PGlite } from '@electric-sql/pglite';
 import { createHumanAuth } from '../src/auth/human';
 
 const env = { EMAIL__SMTP_HOST: 'localhost', EMAIL__FROM: 'Company <login@example.test>' };
 const otp = { to: 'member@example.test', kind: 'otp', subject: 'unused', text: 'unused', otp: '428163' } as const;
-let directory: string, cert: Buffer, key: Buffer;
+const directory = tempDirSync('afbin-smtp-tls-', afterAll);
+let cert: Buffer, key: Buffer;
 beforeAll(() => {
-  directory = mkdtempSync(join(tmpdir(), 'afbin-smtp-tls-'));
   execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', join(directory, 'key.pem'), '-out', join(directory, 'cert.pem'), '-days', '1', '-subj', '/CN=localhost', '-addext', 'subjectAltName=DNS:localhost'], { stdio: 'ignore' });
   cert = readFileSync(join(directory, 'cert.pem')); key = readFileSync(join(directory, 'key.pem'));
 });
-afterAll(() => rmSync(directory, { recursive: true, force: true }));
 
 async function fixture(options: { secure?: boolean; reject?: boolean; rejectAuth?: boolean; starttls?: boolean } = {}) {
   const messages: string[] = [], sessions: boolean[] = [];

@@ -1,16 +1,16 @@
-import {afterEach,beforeEach,expect,it,vi} from 'vitest';
-import {chmod,lstat,mkdir,mkdtemp,rename,rm,stat,symlink} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {afterEach,beforeEach,expect,it,vi,onTestFinished} from 'vitest';
+import {chmod,lstat,mkdir,rename,rm,stat,symlink} from 'node:fs/promises';
 import {join} from 'node:path';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {credentialPaths,readCredentials,refreshCredentials,saveCredentials} from '../src/credentials';
 import {withStateLock} from '../src/state-lock';
+import {tempDir} from '@artifactbin/test-support/temp-dir';
 let root:string;
 const grant={server:'https://example.test',token:'old_access',refreshToken:'old_refresh',clientId:'client_one'};
 const originalHome={HOME:process.env.HOME,USERPROFILE:process.env.USERPROFILE};
-beforeEach(async()=>{root=await mkdtemp(join(tmpdir(),'credential-storage-'));const home=join(root,'synthetic-profile');await mkdir(home);process.env.HOME=home;process.env.USERPROFILE=home;});
-afterEach(async()=>{for(const [key,value] of Object.entries(originalHome))if(value===undefined)delete process.env[key];else process.env[key]=value;await rm(root,{recursive:true,force:true});});
+beforeEach(async()=>{root=await tempDir('credential-storage-',onTestFinished);const home=join(root,'synthetic-profile');await mkdir(home);process.env.HOME=home;process.env.USERPROFILE=home;});
+afterEach(async()=>{for(const [key,value] of Object.entries(originalHome))if(value===undefined)delete process.env[key];else process.env[key]=value;});
 const rotated=()=>Response.json({access_token:'new_access',refresh_token:'new_refresh',expires_in:3600});
 it('does not recreate a grant removed by logout before stale refresh acquires the home lock',async()=>{
  await saveCredentials(grant,root);const stale=(await readCredentials(grant.server,root))!;

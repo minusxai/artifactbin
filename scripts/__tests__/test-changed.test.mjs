@@ -9,16 +9,15 @@
  * affected" must be unverified rather than green. The argument parser had three unit cases of its own;
  * every case below drives it through the real command line instead.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFinished } from 'vitest';
 import { DEFAULT_CAP } from '../ci/test-changed.mjs';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import {tempDirSync} from '../../services/test-support/src/temp-dir.ts';
 const script = new URL('../ci/test-changed.mjs', import.meta.url).pathname;
 function fixture({ count = 1, discoveryExit = 0, transformExit = 0, appDependency = false, malformed = false, runExit = 0, stray = [], unrelated = 0, triggers = [], runs = 1 } = {}, args = []) {
-  const cwd = mkdtempSync(path.join(tmpdir(), 'local-test-budget-'));
-  try {
+  const cwd = tempDirSync('local-test-budget-',onTestFinished);
     const put = (file, value) => { mkdirSync(path.dirname(path.join(cwd, file)), { recursive: true }); writeFileSync(path.join(cwd, file), value); };
     put('.gitignore', 'node_modules/\ncommands.jsonl\n');
     put('source.ts', 'base');
@@ -71,7 +70,6 @@ function fixture({ count = 1, discoveryExit = 0, transformExit = 0, appDependenc
     for (let i = 0; i < runs; i++) res = spawnSync(process.execPath, [script, ...args], { cwd, encoding: 'utf8' });
     let commands = []; try { commands = readFileSync(path.join(cwd, 'commands.jsonl'), 'utf8').trim().split('\n').map(JSON.parse); } catch {}
     return { ...res, commands: commands.filter(c => !['transform', 'provide'].includes(c[0])), provided: commands.filter(c => c[0] === 'provide'), transforms: commands.filter(c => c[0] === 'transform') };
-  } finally { rmSync(cwd, { recursive: true, force: true }); }
 }
 
 describe('local test command budget', () => {

@@ -1,8 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFinished } from 'vitest';
 import { execFile, execFileSync, spawnSync } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import yaml from 'yaml';
@@ -13,6 +12,7 @@ import { CI_JOBS, checkCiResults, isBuildInput, planCi, testBuildsKey, vitestCon
 import { MODULE_CACHE_DIR, SCHEMA_IMAGE_DIR } from '../lib/suite-env.mjs';
 import { CI_GATE_SHARDS, CI_ISOLATED_GATES, CI_SHARD_OPTIONS, gateNamesOnDisk, shardWeight, specFor } from '../gates.manifest.mjs';
 import { shardOf } from '../gates.shard.mjs';
+import {tempDirSync} from '../../services/test-support/src/temp-dir.ts';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const script = path.join(root, 'scripts/ci/ci.mjs');
@@ -51,7 +51,7 @@ describe('GitHub CI adapter', () => {
   };
 
   it('selects nothing when a green run already tested this tree, and everything when the lookup cannot answer', async () => {
-    const cwd = mkdtempSync(path.join(tmpdir(), 'ci-tested-tree-'));
+    const cwd = tempDirSync('ci-tested-tree-',onTestFinished);
     const asked = [];
     let answer = { status: 200, body: { artifacts: [{ id: 7, expired: false, workflow_run: { id: 4242 } }] } };
     const api = createServer((request, response) => {
@@ -91,15 +91,11 @@ describe('GitHub CI adapter', () => {
       // A manual run never reuses: it was asked for so that it runs.
       answer = { status: 200, body: { artifacts: [{ id: 7, expired: false, workflow_run: { id: 4242 } }] } };
       expect((await planOutputServed(cwd, { ...env, CI__EVENT: 'workflow_dispatch' })).api).toBe('true');
-    } finally {
-      api.close();
-      rmSync(cwd, { recursive: true, force: true });
-    }
+    } finally {api.close();}
   });
 
   it('records the tested tree', () => {
-    const cwd = mkdtempSync(path.join(tmpdir(), 'ci-record-tree-'));
-    try {
+    const cwd = tempDirSync('ci-record-tree-',onTestFinished);
       const git = (...args) => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
       git('init', '-q', '-b', 'main');
       git('config', 'user.name', 'CI fixture');
@@ -124,12 +120,10 @@ describe('GitHub CI adapter', () => {
         env: { ...process.env, GITHUB_OUTPUT: output, GITHUB_STEP_SUMMARY: summary, GITHUB_RUN_ID: '100', CI__SOURCE_RUN: '4242' },
       });
       expect(readFileSync(summary, 'utf8')).toContain(`tree ${tree} tested by run 4242\n`);
-    } finally { rmSync(cwd, { recursive: true, force: true }); }
   });
 
   it('keeps the install cache key blind to the version a release moves', () => {
-    const cwd = mkdtempSync(path.join(tmpdir(), 'ci-fingerprint-'));
-    try {
+    const cwd = tempDirSync('ci-fingerprint-',onTestFinished);
       const fingerprint = (version) => {
         writeFileSync(path.join(cwd, 'package-lock.json'), JSON.stringify({
           name: 'artifactbin',
@@ -147,7 +141,6 @@ describe('GitHub CI adapter', () => {
       }));
       execFileSync(process.execPath, [script, 'lock-fingerprint'], { cwd, encoding: 'utf8' });
       expect(readFileSync(path.join(cwd, '.ci-cache-key/install.json'), 'utf8')).not.toBe(before);
-    } finally { rmSync(cwd, { recursive: true, force: true }); }
   });
 
   // THE INSTALL CACHE KEY IS HANDED OUT, NOT HASHED BY THE RUNNER: a `hashFiles(...)` in a step's key is evaluated while the
@@ -155,8 +148,7 @@ describe('GitHub CI adapter', () => {
   // 80s). The fingerprint step writes the same digest hashFiles gives for its file (a sha256 over each matched file's
   // sha256 digest), so main's warmed entries keep their keys: install-v5-…-3ac830e5… was both the runner's and this one's.
   it('hands the install cache key out as the digest hashFiles gives for the fingerprint file', () => {
-    const cwd = mkdtempSync(path.join(tmpdir(), 'ci-install-key-'));
-    try {
+    const cwd = tempDirSync('ci-install-key-',onTestFinished);
       writeFileSync(path.join(cwd, 'package-lock.json'), JSON.stringify({ packages: { '': { version: '0.1.0' }, 'node_modules/left-pad': { version: '1.3.0' } } }));
       const output = path.join(cwd, 'github-output');
       writeFileSync(output, '');
@@ -165,11 +157,10 @@ describe('GitHub CI adapter', () => {
       const hashFiles = (...files) => { const all = createHash('sha256'); for (const file of files) all.update(createHash('sha256').update(readFileSync(file)).digest()); return all.digest('hex'); };
       expect(readFileSync(output, 'utf8')).toBe(`install=${hashFiles(path.join(cwd, '.ci-cache-key/install.json'))}\n`);
       expect(installCacheHash('abc')).toBe('4f8b42c22dd3729b519ba6f68d2da7cc5b2d606d05daed5ad5128cc03e6c6358');
-    } finally { rmSync(cwd, { recursive: true, force: true }); }
   });
 
   it('invalidates the install fingerprint on installed and generated inputs only', () => {
-    const cwd = mkdtempSync(path.join(tmpdir(), 'ci-install-inputs-'));
+    const cwd = tempDirSync('ci-install-inputs-',onTestFinished);
     const put = (file, text) => {
       mkdirSync(path.dirname(path.join(cwd, file)), { recursive: true });
       writeFileSync(path.join(cwd, file), text);
@@ -178,7 +169,6 @@ describe('GitHub CI adapter', () => {
       execFileSync(process.execPath, [script, 'lock-fingerprint'], { cwd });
       return readFileSync(path.join(cwd, '.ci-cache-key/install.json'), 'utf8');
     };
-    try {
       put('package-lock.json', JSON.stringify({ packages: { '': {}, 'services/app': {} } }));
       for (const file of ['services/app/scripts/copy-assets.mjs', 'services/app/scripts/system-font-packages.mjs',
         'package.json', 'services/app/package.json', '.npmrc']) {
@@ -193,7 +183,6 @@ describe('GitHub CI adapter', () => {
       expect(fingerprint()).toBe(before);
       put('services/app/package.json', '{"version":"2.0.0","scripts":{"postinstall":"second"}}');
       expect(fingerprint()).toBe(before);
-    } finally { rmSync(cwd, { recursive: true, force: true }); }
   });
 
   it('runs the roll-up from GitHub-shaped results and refuses planner failure', () => {

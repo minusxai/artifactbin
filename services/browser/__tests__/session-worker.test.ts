@@ -1,15 +1,14 @@
-import {expect,it} from 'vitest';
+import {expect,it,onTestFinished} from 'vitest';
 import {spawn} from 'node:child_process';
-import {mkdtemp,mkdir,writeFile,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {mkdir,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {SESSION_WORKER_SOURCE} from '../src/session-worker';
 import {sessionSandboxPlan} from '../src/session-process';
+import {tempDir} from '@artifactbin/test-support/temp-dir';
 
 async function initialization(executablePath?:string,args?:string[]){
- const root=await mkdtemp(join(tmpdir(),'afbin-worker-init-'));
+ const root=await tempDir('afbin-worker-init-',onTestFinished);
  const messages:Array<Record<string,unknown>>=[];
- try{
   await mkdir(join(root,'node_modules/playwright'),{recursive:true});
   await writeFile(join(root,'node_modules/playwright/package.json'),JSON.stringify({name:'playwright',type:'module',exports:'./index.js'}));
   await writeFile(join(root,'node_modules/playwright/index.js'),`import {getHeapStatistics} from 'node:v8';
@@ -32,7 +31,6 @@ export const chromium={launch:async options=>{process.stdout.write(JSON.stringif
    });
   }finally{if(child.exitCode===null){child.kill('SIGKILL');await new Promise<void>(resolve=>child.once('exit',()=>resolve()));}}
   return messages;
- }finally{await rm(root,{recursive:true,force:true});}
 }
 it('uses the pinned executable supplied by the parent without browser registry discovery',async()=>{
  const messages=await initialization('/browsers/chrome');
@@ -59,8 +57,7 @@ it('launches with the development switches the parent derives and refuses any ot
 // Author script code runs in the worker process: an error it leaves unhandled — a rejected promise nobody
 // awaits, or a throw from a timer — is that script's failure, never the session's death.
 async function runs(codes:string[]){
- const root=await mkdtemp(join(tmpdir(),'afbin-worker-run-'));
- try{
+ const root=await tempDir('afbin-worker-run-',onTestFinished);
   await mkdir(join(root,'node_modules/playwright'),{recursive:true});
   await writeFile(join(root,'node_modules/playwright/package.json'),JSON.stringify({name:'playwright',type:'module',exports:'./index.js'}));
   await writeFile(join(root,'node_modules/playwright/index.js'),`export const chromium={launch:async()=>({on(){},newContext:async()=>({setDefaultTimeout(){},setDefaultNavigationTimeout(){},route:async()=>{},on(){}})})};`);
@@ -85,7 +82,6 @@ async function runs(codes:string[]){
    });
   }finally{if(child.exitCode===null){child.kill('SIGKILL');await new Promise<void>(resolve=>child.once('exit',()=>resolve()));}}
   return results;
- }finally{await rm(root,{recursive:true,force:true});}
 }
 it('reports an unhandled rejection or uncaught throw as the script\'s failure and keeps the session usable',async()=>{
  const results=await runs([

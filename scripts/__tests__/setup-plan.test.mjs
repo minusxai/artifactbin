@@ -5,15 +5,15 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it, onTestFinished } from 'vitest';
 import { buildEnvFile, defaultAnswers, existingAnswers, mergeEnvFile, parseArgs, questions } from '../lib/setup-plan.mjs';
+import {tempDirSync} from '../../services/test-support/src/temp-dir.ts';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SCRIPT = path.join(ROOT, 'scripts', 'setup.mjs');
 const EXAMPLE = fs.readFileSync(path.join(ROOT, '.env.example'), 'utf8');
 const exampleNames = [...EXAMPLE.matchAll(/^#?\s*([A-Z][A-Z0-9_]+)=/gm)].map((m) => m[1]);
-const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'setup-test-'));
-afterAll(() => fs.rmSync(TMP, { recursive: true, force: true }));
+const TMP = tempDirSync('setup-test-',afterAll);
 const gen = { AUTH__SECRET: 'a'.repeat(43), ADMIN__SECRET: 'b'.repeat(43), CONTRACT__ACTOR_SECRET: 'c'.repeat(43), INTERNAL__SERVICE_SECRET: 'd'.repeat(43) };
 const run = (args, opts = {}) => spawnSync(process.execPath, [SCRIPT, ...args], { cwd: TMP, encoding: 'utf8', ...opts });
 
@@ -213,7 +213,7 @@ describe('scripts/setup.mjs (child process)', () => {
     expect(printed.stdout).toMatch(/^APP__PORT=5299$/m);
   });
   it('--port also updates an existing matching loopback public URL and prints the resolved summary', () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'setup-port-update-'));
+    const dir = tempDirSync('setup-port-update-',onTestFinished);
     const out = path.join(dir, '.env');
     expect(run(['--yes', '--out', out, '--port', '5298']).status).toBe(0);
     const changed = run(['--yes', '--out', out, '--port', '5398']);
@@ -230,7 +230,7 @@ describe('scripts/setup.mjs (child process)', () => {
 
 describe('scripts/setup.mjs --no-next: no dev hint inside the installer', () => {
   it('prints Wrote but not the npm run dev hint with --no-next; keeps the hint without it', () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'setup-nonext-'));
+    const dir = tempDirSync('setup-nonext-',onTestFinished);
     const quiet = run(['--yes', '--out', path.join(dir, '.env'), '--no-next']);
     expect(quiet.status, quiet.stderr).toBe(0);
     expect(quiet.stdout).toMatch(/Wrote /);

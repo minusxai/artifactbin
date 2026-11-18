@@ -2,17 +2,17 @@
  * The query image end to end: the worker draws real PNGs through the page's pipeline; untrusted input is bounded; a
  * slow chart is cut off and the thread replaced; a full queue says busy; and nothing a spec names is ever fetched.
  */
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import sharp from 'sharp';
-import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, describe, expect, it, vi, onTestFinished } from 'vitest';
 import { DESIGN_SYSTEM_VARIABLES } from '@/lib/html-systems/server';
 import { parseChartDescription } from '@/lib/html-component-specs/chart-spec';
 import { CHART_IMAGE_LIMITS, configureChartRenderer, renderChartImage } from '../chart-image.server';
 import { drawChart, imageTokens, inertSvg, type ChartDrawJob } from '../chart-draw.server';
 import { createChartView, planChart } from '../chart-plan';
 import { SERVER_ENGINES } from '../render-vega';
+import {tempDir} from '@artifactbin/test-support/temp-dir';
 
 const bar = { mark: 'bar', encoding: { x: { field: 'k', type: 'nominal' }, y: { field: 'v', type: 'quantitative' } } };
 const rows = [{ k: 'north', v: 3 }, { k: 'south', v: 5 }, { k: 'east', v: 2 }];
@@ -122,8 +122,7 @@ describe('nothing a chart names is fetched', () => {
   });
 
   it('below the parse, the loader reads no file and makes no request, and librsvg is handed no external href', async () => {
-    const root = await mkdtemp(path.join(tmpdir(), 'chart-loader-')), secret = path.join(root, 'secret.json');
-    try {
+    const root = await tempDir('chart-loader-',onTestFinished), secret = path.join(root, 'secret.json');
       await writeFile(secret, JSON.stringify([{ text: 'TOP-SECRET' }]));
       const fetched = vi.spyOn(globalThis, 'fetch');
       for (const data of [[{ name: 'remote', url: `file://${secret}` }], [{ name: 'remote', url: secret }], [signalUrl], [{ name: 'remote', url: 'https://example.test/rows.json' }]]) {
@@ -141,7 +140,6 @@ describe('nothing a chart names is fetched', () => {
         { type: 'image', encode: { enter: { url: { value: 'https://example.test/a.png' }, width: { value: 50 }, height: { value: 50 } } } }] };
       expect(await drawChart(job(image))).toMatchObject({ ok: true });
       expect(fetched).not.toHaveBeenCalled();
-    } finally { await rm(root, { recursive: true, force: true }); }
     expect(inertSvg('<svg><image xlink:href="file:///etc/passwd"/><image href="https://x.test/a.png"/><a href="https://x.test">x</a><rect fill="url(https://x.test/p)"/><rect fill="url(#g)"/><use href="#m"/><image href="data:image/png;base64,AAAA"/></svg>'))
       .toBe('<svg><image xlink:href=""/><image href=""/><a href="">x</a><rect fill="none"/><rect fill="url(#g)"/><use href="#m"/><image href="data:image/png;base64,AAAA"/></svg>');
   });

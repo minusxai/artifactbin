@@ -6,17 +6,15 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFinished } from 'vitest';
 import { checkModuleGraph, DEEP_MODULES, moduleOf, recordAllowedCycles, recordTestImports, scanModuleGraph } from '../ci/module-graph.mjs';
+import {tempDirSync} from '../../services/test-support/src/temp-dir.ts';
 
 const ROOT = path.resolve(import.meta.dirname, '..', '..');
 const SCRIPT = path.join(ROOT, 'scripts', 'ci', 'module-graph.mjs');
-const temporary = [];
-afterEach(() => { for (const dir of temporary.splice(0)) fs.rmSync(dir, { recursive: true, force: true }); });
 
 function tree(files) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'module-graph-'));
-  temporary.push(root);
+  const root = tempDirSync('module-graph-',onTestFinished);
   for (const [file, text] of Object.entries(files)) {
     fs.mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
     fs.writeFileSync(path.join(root, file), text);

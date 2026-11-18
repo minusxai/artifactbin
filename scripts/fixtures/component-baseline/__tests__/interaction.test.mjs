@@ -1,8 +1,9 @@
-import {describe,it,expect} from 'vitest';
+import {describe,it,expect,onTestFinished} from 'vitest';
 import {retainedComponentSource} from '../source-provenance.mjs';
 import path from 'node:path';
 import {interactionBaselineFixtures,interactionPagingSql,settleInteraction} from '../interaction.mjs';
 import {stateExpectationIssues} from '../../../lib/component-browser-baseline.mjs';
+import {tempDir} from '../../../../services/test-support/src/temp-dir.ts';
 const fixture=id=>interactionBaselineFixtures.find(item=>item.id===id);
 const semantic=(text,controls,rows=[])=>({text,controls,rows,overflow:0});
 describe('actual original interaction contracts',()=>{
@@ -49,13 +50,13 @@ it('waits for the shared SlideDeck count to reach the clicked slide with a bound
 });
 
 it('captures native columnheader names and aria-sort while retaining raw header text',async()=>{
-  const {JSDOM}=await import('jsdom'),{mkdtemp,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),sharp=(await import('sharp')).default;
+  const {JSDOM}=await import('jsdom'),sharp=(await import('sharp')).default;
   const {captureBrowserBaseline}=await import('../../../lib/component-browser-baseline.mjs');
   const dom=new JSDOM('<table><thead><tr><th scope="col" aria-label="Sort by score" aria-sort="ascending">score<span aria-hidden="true">▲</span></th><th scope="col" aria-sort="none"><button aria-label="Sort by name">name</button></th></tr></thead><tbody><tr><td>85</td><td>Linus</td></tr></tbody></table>',{url:'http://localhost/reader'});
   const saved=Object.fromEntries(['document','getComputedStyle','innerWidth'].map(key=>[key,Object.getOwnPropertyDescriptor(globalThis,key)]));
   Object.assign(globalThis,{document:dom.window.document,getComputedStyle:dom.window.getComputedStyle.bind(dom.window),innerWidth:800});
   dom.window.HTMLElement.prototype.getClientRects=()=>[{}];dom.window.document.body.innerText='score▲name85Linus';
-  const output=await mkdtemp(path.join(tmpdir(),'interaction-snapshot-'));
+  const output=await tempDir('interaction-snapshot-',onTestFinished);
   try{
     const bytes=await sharp({create:{width:2,height:2,channels:4,background:'white'}}).png().toBuffer();
     const animationEvidence={format:'frame-animation-settlement-v1',policy:'document-and-open-shadow-roots;finite-current-and-chained;two-frame-quiescence',shadowCoverage:'open-shadow-roots-only',shadowRoots:0,reducedMotion:true,startedAtMs:10,completedAtMs:12,elapsedMs:2,observed:0,uniqueAnimations:0,rounds:1,alreadyFinished:0,alreadyIdle:0,paused:0,infinite:0,counts:{finished:0,canceled:0,detached:0},timedOut:[]};
@@ -71,7 +72,7 @@ it('captures native columnheader names and aria-sort while retaining raw header 
     expect(capture.semantics.rows).toEqual([['score▲','name'],['85','Linus']]);
     expect(stateExpectationIssues({bodyRows:[['85','Linus']]},capture.semantics)).toEqual([]);
     expect(stateExpectationIssues({roles:[{role:'columnheader',name:'Sort by score',sort:'descending'}]},capture.semantics)).not.toEqual([]);
-  }finally{for(const [key,descriptor] of Object.entries(saved))if(descriptor)Object.defineProperty(globalThis,key,descriptor);else delete globalThis[key];dom.window.close();await rm(output,{recursive:true,force:true});}
+  }finally{for(const [key,descriptor] of Object.entries(saved))if(descriptor)Object.defineProperty(globalThis,key,descriptor);else delete globalThis[key];dom.window.close();}
 });
 
 

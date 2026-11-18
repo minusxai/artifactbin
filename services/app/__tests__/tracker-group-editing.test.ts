@@ -6,15 +6,14 @@
  * Signed-out visitors and signed-in strangers still change nothing; `unshare --datasets` takes it back. The rules
  * are the only check: the page shows its controls to every signed-in reader.
  */
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { expect, it } from 'vitest';
+import { expect, it, onTestFinished } from 'vitest';
 import { admitGroupMember, mintAccountToken, useAppHarness } from './harness';
 import { identityForUser, type AccessActor } from '@/lib/accounts';
 import { createGroup } from '@/lib/groups';
 import { createArtifactFromBody } from '@/lib/publish';
 import { createAppServer } from '@/server/app';
+import {tempDir} from '@artifactbin/test-support/temp-dir';
 
 useAppHarness();
 
@@ -57,8 +56,7 @@ async function teamTracker(dir: string) {
 }
 
 it('a group a tracker is shared with --datasets edits every entry; the page share alone never grants it', async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), 'tracker-group-'));
-  try {
+  const dir = await tempDir('tracker-group-',onTestFinished);
     const { first, second, stranger, entries, page, groups } = await teamTracker(dir);
 
     // The page alone: the first member adds an entry; the second may not change it (the dataset says signed_in).
@@ -85,5 +83,4 @@ it('a group a tracker is shared with --datasets edits every entry; the page shar
     expect(await groups('unshare', { datasets: true, yes: true })).toMatchObject({ ok: true,
       datasets: [{ id: entries, ok: true }] });
     expect(await changed(page, second, row, 'after unshare')).toBe(0);
-  } finally { await rm(dir, { recursive: true, force: true }); }
 }, 30000);

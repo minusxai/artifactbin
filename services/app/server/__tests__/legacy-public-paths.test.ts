@@ -1,7 +1,6 @@
 /** Current files and short links keep their contracts without retired URL aliases. */
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { classifyPath, emailLinkPath } from '@artifactbin/contracts';
@@ -10,15 +9,15 @@ import { useAppHarness } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
 import { createAppServer } from '../app';
+import {tempDirSync} from '@artifactbin/test-support/temp-dir';
 
 useAppHarness();
 
-const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'legacy-public-'));
+const dir = tempDirSync('legacy-public-',afterAll);
 const put = (file: string, body: string) => { fs.mkdirSync(path.dirname(path.join(dir, file)), { recursive: true }); fs.writeFileSync(path.join(dir, file), body); };
 put('libraries/vega-6.3.1/index.js', 'export const vega = 1;');
 put('geojson/world.json', '{"type":"FeatureCollection","features":[]}');
 put('fonts/inter-latin-standard-normal.2c295d99.woff2', 'wOF2-bytes');
-afterAll(() => fs.rmSync(dir, { recursive: true, force: true }));
 
 const app = () => createAppServer({ indexHtml: async () => '<html><head></head><body><div id="root"></div></body></html>', publicDir: dir });
 describe('supported public paths without aliases', () => {

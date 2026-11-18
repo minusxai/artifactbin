@@ -1,16 +1,16 @@
-import {test} from 'vitest';
+import {test,onTestFinished} from 'vitest';
 import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,writeFile,symlink,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {mkdir,writeFile,symlink,rename,unlink,readFile,open} from 'node:fs/promises';
 import {join} from 'node:path';
 import {request} from 'node:http';
 import {startPreview} from '../../services/app/skills/artifactbin/scripts/preview-server.mjs';
+import {tempDir} from '../../services/test-support/src/temp-dir.ts';
 
 /** Runs `run(dir, start)` in a temporary directory; `start(options)` starts a preview of it, closed (with the directory removed) afterwards. */
 const withDir=async(prefix,run)=>{
- const dir=await mkdtemp(join(tmpdir(),prefix));let session;
+ const dir=await tempDir(prefix,onTestFinished);let session;
  const start=async(options)=>session=await startPreview({root:dir,...options});
- try{return await run(dir,start);}finally{await session?.close();await rm(dir,{recursive:true,force:true});}
+ try{return await run(dir,start);}finally{await session?.close();}
 };
 
 test('private preview serves relative files, refuses writes, escapes and foreign hosts',async()=>{
@@ -41,7 +41,6 @@ test('disk revisions include dependencies, atomic saves and deletions without mo
   const first=await revision();
   const html=await (await fetch(session.url)).text();assert.match(html,/File changed/);assert.match(html,/Reload/);
   await writeFile(join(dir,'data.json'),'[2]');const dependency=await revision();assert.notEqual(dependency,first);
-  const {rename,unlink,readFile}=await import('node:fs/promises');
   await writeFile(join(dir,'next.html'),'<h1>Atomic</h1>');await rename(join(dir,'next.html'),join(dir,'index.html'));
   const atomic=await revision();assert.notEqual(atomic,dependency);
   await Promise.all([writeFile(join(dir,'a.json'),'1'),writeFile(join(dir,'b.json'),'2')]);assert.notEqual(await revision(),atomic);
@@ -55,7 +54,7 @@ test('disk revisions include dependencies, atomic saves and deletions without mo
 
 test('oversized projects and files fail with actionable size errors',async()=>{
  await withDir('preview-limit-',async(dir,start)=>{
-  const {open}=await import('node:fs/promises');const file=await open(join(dir,'large.bin'),'w');await file.truncate(33*1024*1024);await file.close();
+  const file=await open(join(dir,'large.bin'),'w');await file.truncate(33*1024*1024);await file.close();
   const session=await start({revisionIntervalMs:0});
   const response=await fetch(session.url+'__af_preview/revision');assert.equal(response.status,413);assert.match((await response.json()).error,/limit|MiB/);
   const asset=await fetch(session.url+'large.bin');assert.equal(asset.status,413);assert.match(await asset.text(),/exceeds/);
@@ -72,11 +71,10 @@ test('revision scans share concurrent work and obey an injected cache clock',asy
 
 test('revision limits bound file count and aggregate bytes',async()=>{
  const {projectRevision}=await import('../../services/app/skills/artifactbin/scripts/preview-changes.mjs');
- const dir=await mkdtemp(join(tmpdir(),'preview-count-'));
- try {await writeFile(join(dir,'a'),'123');await writeFile(join(dir,'b'),'456');
+ const dir=await tempDir('preview-count-',onTestFinished);
+ await writeFile(join(dir,'a'),'123');await writeFile(join(dir,'b'),'456');
   await assert.rejects(projectRevision(dir,{maxFiles:1,maxFileBytes:10,maxTotalBytes:100}),/files/);
   await assert.rejects(projectRevision(dir,{maxFiles:10,maxFileBytes:10,maxTotalBytes:5}),/limit/);
- }finally{await rm(dir,{recursive:true,force:true});}
 });
 
 test('a linked local data file is served as a file, never as a dataset session: the preview takes no writes',async()=>{
@@ -121,7 +119,6 @@ test('private preview mounts only admitted versioned library bytes without eval 
 });
 
 test('explicit export packs local component graphs and registered libraries without changing source',async()=>{
- const {readFile}=await import('node:fs/promises');
  await withDir('preview-export-',async(dir,start)=>{
   const html='<script type="module">import {lazy} from "./components/main.js";lazy();</script>';
   await mkdir(join(dir,'components'));await writeFile(join(dir,'index.html'),html);

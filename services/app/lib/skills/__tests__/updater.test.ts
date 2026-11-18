@@ -1,7 +1,8 @@
-import {it,expect} from 'vitest';
+import {it,expect,onTestFinished} from 'vitest';
 import {skillRelease} from '../package';
 import {createHash} from 'node:crypto';
 import {createRequire} from 'node:module';
+import {tempDir} from '@artifactbin/test-support/temp-dir';
 const require=createRequire(import.meta.url);
 it('validates release contents without evaluating scripts and rejects corruption',async()=>{
  const {decodeRelease}=await import(require.resolve('../../../skills/artifactbin/scripts/toolbox-update-archive.mjs'));
@@ -14,8 +15,7 @@ it('validates release contents without evaluating scripts and rejects corruption
  expect(()=>decodeRelease(Buffer.alloc(32*1024*1024+1),release.manifest)).toThrow();
 });
 
-import {mkdtemp,writeFile,readFile,access,rm,cp,symlink,mkdir} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {writeFile,readFile,access,cp,symlink,mkdir} from 'node:fs/promises';
 import path from 'node:path';
 import {withHttpServer} from '@artifactbin/test-support/net';
 import {spawn} from 'node:child_process';
@@ -27,7 +27,7 @@ const installedRoot=async(base:string)=>{
 };
 it('updates isolated installs once, preserves data and symlinks, and returns promptly with a stalled endpoint',async()=>{
  const {update,disabled}=await import(require.resolve('../../../skills/artifactbin/scripts/toolbox-update.mjs'));
- const base=await mkdtemp(path.join(tmpdir(),'skill-update-'));
+ const base=await tempDir('skill-update-',onTestFinished);
  expect(disabled([])).toBe(false);
  const root=await installedRoot(base);
  let stalled=false;
@@ -91,7 +91,7 @@ it('updates isolated installs once, preserves data and symlinks, and returns pro
   await server.close();
   await expect(update(root)).rejects.toThrow();
   expect((await run(['offline'])).code).toBe(0);
- }finally{await server.close();await rm(base,{recursive:true,force:true});}
+ }finally{await server.close();}
 });
 
 it('keeps standalone help offline, rejects unknown flags, and parses boolean opt-outs',async()=>{
@@ -108,17 +108,15 @@ it('keeps standalone help offline, rejects unknown flags, and parses boolean opt
 });
 
 it('does not wait for the background updater lock before running a command',async()=>{
- const base=await mkdtemp(path.join(tmpdir(),'skill-busy-'));
+ const base=await tempDir('skill-busy-',onTestFinished);
  const root=await installedRoot(base);await mkdir(path.join(root,'scripts'),{recursive:true});
  await writeFile(path.join(root,'release.json'),JSON.stringify({schemaVersion:1,origin:'http://127.0.0.1:1',version:'0'.repeat(64)}));
  await cp(path.dirname(require.resolve('../../../skills/artifactbin/scripts/toolbox-update.mjs')),path.join(root,'scripts'),{recursive:true});
  await writeFile(path.join(root,'scripts/probe.mjs'),`import {beforeCommand} from './toolbox-update.mjs';if(!await beforeCommand(import.meta.url,[]))console.log('ran');`);
  await symlink(String(process.pid),path.join(base,'.artifactbin-releases','lock'));
- try{
   const start=performance.now();
   const result=await new Promise<{code:number|null,out:string}>(resolve=>{const child=spawn(process.execPath,[path.join(root,'scripts/probe.mjs')]);let out='';child.stdout.on('data',b=>out+=b);child.on('exit',code=>resolve({code,out}));});
   expect(result).toEqual({code:0,out:'ran\n'});expect(performance.now()-start).toBeLessThan(1000);
- }finally{await rm(base,{recursive:true,force:true});}
 },20000);
 
 /** A stored release built without the server packager, whose member list is step 2's switch (it still refuses resolvers/). */
@@ -148,7 +146,7 @@ it('verifies and installs the resolvers/ library folder and still refuses unknow
   const bad=storedRelease({'SKILL.md':'library',[name]:resolver},'https://example.test');
   expect(()=>decodeRelease(bad.bytes,bad.manifest)).toThrow('Unsafe archive member');
  }
- const base=await mkdtemp(path.join(tmpdir(),'skill-resolvers-'));
+ const base=await tempDir('skill-resolvers-',onTestFinished);
  const root=await installedRoot(base);
  let release:ReturnType<typeof storedRelease>;
  const server=await withHttpServer((req,res)=>{res.end(req.url?.endsWith('latest.json')?JSON.stringify(release.manifest):release.bytes);});
@@ -162,7 +160,7 @@ it('verifies and installs the resolvers/ library folder and still refuses unknow
   // Rollback re-verifies the previous release's installed tree, resolvers/ included.
   expect((await update(root,{rollback:true})).status).toBe('rolled-back');
   expect(await readFile(path.join(base,'artifactbin','SKILL.md'),'utf8')).toBe('first');
- }finally{await server.close();await rm(base,{recursive:true,force:true});}
+ }finally{await server.close();}
 });
 
 it('installs, updates and rolls back deployment extras, and refuses any other extras/ shape',async()=>{
@@ -172,7 +170,7 @@ it('installs, updates and rolls back deployment extras, and refuses any other ex
   const bad=storedRelease({'SKILL.md':'s',[name]:'x'},'https://example.test');
   expect(()=>decodeRelease(bad.bytes,bad.manifest),name).toThrow('Unsafe archive member');
  }
- const base=await mkdtemp(path.join(tmpdir(),'skill-extras-update-'));
+ const base=await tempDir('skill-extras-update-',onTestFinished);
  const root=await installedRoot(base);
  let release:ReturnType<typeof skillRelease>;
  const server=await withHttpServer((req,res)=>{res.end(req.url?.endsWith('latest.json')?JSON.stringify(release.manifest):Buffer.from(release.bytes));});
@@ -189,5 +187,5 @@ it('installs, updates and rolls back deployment extras, and refuses any other ex
   // Rollback re-verifies the previous installed tree, extras/ included.
   expect((await update(root,{rollback:true})).status).toBe('rolled-back');
   expect(await readFile(path.join(base,'artifactbin','extras/tool.mjs'),'utf8')).toBe('export {};\n');
- }finally{await server.close();await rm(base,{recursive:true,force:true});}
+ }finally{await server.close();}
 });

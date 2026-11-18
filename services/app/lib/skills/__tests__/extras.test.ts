@@ -2,8 +2,8 @@
  * DEPLOYMENT EXTRAS (SKILLS__EXTRA_DIR, ../extras): what a directory may add to the served skill, that it lands under
  * `extras/` only, that the release identity covers it, and that an origin without the setting serves what it did.
  */
-import {afterEach,describe,expect,it} from 'vitest';
-import {mkdtempSync,mkdirSync,rmSync,symlinkSync,writeFileSync} from 'node:fs';
+import {describe,expect,it,onTestFinished} from 'vitest';
+import {mkdirSync,symlinkSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {createRequire} from 'node:module';
@@ -13,11 +13,10 @@ import {overrideConfig} from '@/lib/platform/config';
 import {EXTRA_ENTRY_POINTS,EXTRA_FILE_MAX_BYTES,EXTRAS_MAX_BYTES,EXTRAS_MAX_FILES,readSkillExtras,skillExtras} from '../extras';
 import {skillPackageFiles,skillRelease} from '../package';
 import {SKILL_MAIN_MAX_BYTES,skillTree} from '..';
+import {tempDirSync} from '@artifactbin/test-support/temp-dir';
 const require=createRequire(import.meta.url);
-const roots:string[]=[];
-afterEach(()=>{for(const root of roots.splice(0))rmSync(root,{recursive:true,force:true});});
 function directory(files:Record<string,string|Buffer>):string{
- const root=mkdtempSync(path.join(tmpdir(),'skill-extras-'));roots.push(root);
+ const root=tempDirSync('skill-extras-',onTestFinished);
  for(const [name,content] of Object.entries(files))writeFileSync(path.join(root,name),content);
  return root;
 }

@@ -1,14 +1,14 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, onTestFinished } from 'vitest';
 import { claimFreePort } from '../lib/free-port.mjs';
+import {tempDirSync} from '../../services/test-support/src/temp-dir.ts';
 
 describe('claimFreePort', () => {
   let dir;
-  beforeEach(() => { dir = mkdtempSync(path.join(os.tmpdir(), 'free-port-')); });
-  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+  beforeEach(() => { dir = tempDirSync('free-port-',onTestFinished); });
 
   it('hands concurrent callers different ports even when the OS would repeat one', async () => {
     const ports = await Promise.all(Array.from({ length: 12 }, () => claimFreePort({ dir })));

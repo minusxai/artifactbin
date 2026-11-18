@@ -8,19 +8,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFinished } from 'vitest';
+import {tempDirSync} from '../../services/test-support/src/temp-dir.ts';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const GUARD = path.join(ROOT, 'scripts', 'ci', 'check-ui-primitives.mjs');
-const temporary = [];
-
-afterEach(() => {
-  for (const directory of temporary.splice(0)) fs.rmSync(directory, { recursive: true, force: true });
-});
-
 function repository(files, allowlist = [], exceptions = []) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'artifactbin-ui-guard-'));
-  temporary.push(root);
+  const root = tempDirSync('artifactbin-ui-guard-',onTestFinished);
   for (const [file, content] of Object.entries(files)) {
     const target = path.join(root, file);
     fs.mkdirSync(path.dirname(target), { recursive: true });

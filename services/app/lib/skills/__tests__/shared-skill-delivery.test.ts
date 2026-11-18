@@ -2,9 +2,10 @@ import {compactSkillScript} from '../preview-assets.server';
 import {pathToFileURL} from 'node:url';
 import {isShippedSkillTopic} from '../public-surface';
 import {credentialPaths} from '@artifactbin/utils/node/credentials';
-import {describe,it,expect} from 'vitest';
+import {describe,it,expect,onTestFinished} from 'vitest';
 import {llmsText, publicGuideText} from '@/lib/agent-copy';
 import {skillTree, renderSkill, skillPackageFiles, skillZip, projectSkillLinks, renderTree, skillFileWithFrontmatter} from '..';
+import {tempDirSync} from '@artifactbin/test-support/temp-dir';
 
 describe('one root for installed and direct HTTP agents',()=>{
  it('gives URL readers complete HTTP operations',()=>{
@@ -27,8 +28,7 @@ describe('one root for installed and direct HTTP agents',()=>{
  });
 });
 
-import {existsSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
-import {tmpdir} from 'node:os';
+import {existsSync,readFileSync,writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {GET as zipRoute} from '@/app/skills/artifactbin.zip/route';
@@ -72,8 +72,7 @@ describe('installable shared skill folder',()=>{
   expect(Object.keys(expected).some(name=>name.startsWith('fragments/'))).toBe(false);
   const response=await zipRoute(new Request(`${origin}/skills/artifactbin.zip`));
   expect(response.headers.get('content-type')).toBe('application/zip');
-  const dir=mkdtempSync(path.join(tmpdir(),'artifactbin-skill-zip-'));
-  try{
+  const dir=tempDirSync('artifactbin-skill-zip-',onTestFinished);
    const zip=path.join(dir,'artifactbin.zip');writeFileSync(zip,new Uint8Array(await response.arrayBuffer()));
    execFileSync('unzip',['-q','-n',zip,'-d',dir]);
    for(const [name,text] of Object.entries(expected).filter(([name])=>!['scripts/preview-html.mjs','scripts/toolbox-config.mjs','scripts/toolbox-platform.mjs'].includes(name)))expect(readFileSync(path.join(dir,'artifactbin',name),'utf8'),name).toBe(name.startsWith('scripts/')?await compactSkillScript(text):text);
@@ -121,7 +120,6 @@ describe('installable shared skill folder',()=>{
    expect(expected['SKILL.md']).toContain(origin);
 
    expect(Object.keys(expected)).not.toContain('.afbin-skill.json');
-  }finally{rmSync(dir,{recursive:true,force:true});}
  });
  it('rejects arbitrary archive members and traversal',()=>{
   for(const name of ['../SKILL.md','scripts/../other.mjs','/root/file','references/../secrets.md'])expect(()=>skillZip({[name]:'bad'})).toThrow('Unsupported skill member');

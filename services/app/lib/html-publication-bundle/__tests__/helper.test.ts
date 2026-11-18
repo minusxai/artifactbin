@@ -1,9 +1,10 @@
-import {it,expect} from 'vitest';
+import {it,expect,onTestFinished} from 'vitest';
+import {mkdir,readFile,rm,symlink,writeFile} from 'node:fs/promises';
+import {join} from 'node:path';
+import {tempDir} from '@artifactbin/test-support/temp-dir';
 it('prepares a bundle with the installed helper module alone and refuses project symlinks',async()=>{
- const {mkdtemp,mkdir,writeFile,symlink,rm}=await import('node:fs/promises');
- const {tmpdir}=await import('node:os');const {join}=await import('node:path');const {execFileSync}=await import('node:child_process');const {pathToFileURL}=await import('node:url');
- const dir=await mkdtemp(join(tmpdir(),'bundle-fresh-'));
- try{
+ const {execFileSync}=await import('node:child_process');const {pathToFileURL}=await import('node:url');
+ const dir=await tempDir('bundle-fresh-',onTestFinished);
   await mkdir(join(dir,'project'));
   const {GET:archive}=await import('../../../app/skills/artifactbin.zip/route');
   const zip=join(dir,'skill.zip');
@@ -15,14 +16,11 @@ it('prepares a bundle with the installed helper module alone and refuses project
   const request=await prepareBundle({root:join(dir,'project'),entry:'index.html',server:'https://example.test'});expect(request.body.publicationBundle.files[0].path).toBe('logo.svg');expect(request).not.toHaveProperty('token');expect(request.body.publicationBundle.files.map((file:{path:string})=>file.path)).toEqual(['logo.svg','main.js','chunk.js']);
   await writeFile(join(dir,'outside.svg'),'<svg/>');await rm(join(dir,'project/logo.svg'));await symlink(join(dir,'outside.svg'),join(dir,'project/logo.svg'));
   await expect(prepareBundle({root:join(dir,'project'),entry:'index.html',server:'https://example.test'})).rejects.toThrow();
- }finally{await rm(dir,{recursive:true,force:true});}
 });
 
 it('snapshots inline, static and lazy module graphs with shared chunks once',async()=>{
- const {mkdtemp,mkdir,writeFile,rm}=await import('node:fs/promises');const {tmpdir}=await import('node:os');const {join}=await import('node:path');
  const {prepareBundle}=await import('../../../skills/artifactbin/scripts/toolbox-publication-bundle.mjs');
- const root=await mkdtemp(join(tmpdir(),'bundle-modules-'));
- try{
+ const root=await tempDir('bundle-modules-',onTestFinished);
   await mkdir(join(root,'components/chunks'),{recursive:true});
   await writeFile(join(root,'index.html'),'<script type="module">import {lazy} from "./components/main.js"; export const answer=await lazy();</script>');
   await writeFile(join(root,'components/main.js'),'import "./shared.js"; export const lazy=()=>import("./chunks/lazy.js?version=1#export");');
@@ -51,14 +49,11 @@ it('snapshots inline, static and lazy module graphs with shared chunks once',asy
   await expect(prepareBundle({root,entry:'index.html',server:'https://example.test'})).rejects.toThrow(/Computed module imports/);
   await writeFile(join(root,'components/main.js'),'import "../../outside.js";');
   await expect(prepareBundle({root,entry:'index.html',server:'https://example.test'})).rejects.toThrow(/escapes/);
- }finally{await rm(root,{recursive:true,force:true});}
 });
 
 it('snapshots a file a script fetches by a literal path, from the page or a module it loads, and skips one the project lacks',async()=>{
- const {mkdtemp,mkdir,writeFile,rm}=await import('node:fs/promises');const {tmpdir}=await import('node:os');const {join}=await import('node:path');
  const {prepareBundle}=await import('../../../skills/artifactbin/scripts/toolbox-publication-bundle.mjs');
- const root=await mkdtemp(join(tmpdir(),'bundle-fetches-'));
- try{
+ const root=await tempDir('bundle-fetches-',onTestFinished);
   await mkdir(join(root,'js'));
   await writeFile(join(root,'index.html'),'<script type="module">const data=await (await fetch(\'./data.json\')).json();</script><script type="module" src="./js/dash.mjs"></script>');
   // fetch() reads against the document, so a module in js/ that fetches ./states.geojson means the file beside the page.
@@ -68,7 +63,6 @@ it('snapshots a file a script fetches by a literal path, from the page or a modu
   expect(bundle.body.publicationBundle.files.map((file:{path:string})=>file.path).sort()).toEqual(['data.json','js/dash.mjs','states.geojson']);
   const {planPublicationBundle}=await import('../plan');
   expect(planPublicationBundle(bundle.body.html,bundle.body.publicationBundle).dependencies.map(dep=>dep.path).sort()).toEqual(['data.json','js/dash.mjs','states.geojson']);
- }finally{await rm(root,{recursive:true,force:true});}
 });
 
 it('preserves URL query identity in inline modules and styles while escaping HTML attributes',async()=>{
@@ -83,8 +77,8 @@ it('preserves URL query identity in inline modules and styles while escaping HTM
 });
 
 it('snapshots every quoted font URL and escaped CSS import without admitting comment or content strings',async()=>{
- const {mkdtemp,mkdir,writeFile,rm}=await import('node:fs/promises');const {tmpdir}=await import('node:os');const {join}=await import('node:path');const {prepareBundle}=await import('../../../skills/artifactbin/scripts/toolbox-publication-bundle.mjs');const {planPublicationBundle}=await import('../plan');
- const root=await mkdtemp(join(tmpdir(),'bundle-fonts-'));try{
+ const {prepareBundle}=await import('../../../skills/artifactbin/scripts/toolbox-publication-bundle.mjs');const {planPublicationBundle}=await import('../plan');
+ const root=await tempDir('bundle-fonts-',onTestFinished);
   await mkdir(join(root,'css'));await mkdir(join(root,'fonts'));await writeFile(join(root,'index.html'),'<link rel="stylesheet" href="./css/main.css">');
   await writeFile(join(root,'css/main.css'),'@font-face{src:url("../fonts/first.woff2")}@font-face{src:url(\'../fonts/second.woff2\')}@import "./nested\\20 theme.css";/*url("../fonts/ignored.woff2")*/.a{content:"url(../fonts/also-ignored.woff2)"}');
   await writeFile(join(root,'css/nested theme.css'),'@font-face{src:url("../fonts/third\\20 face.woff2")}');
@@ -92,12 +86,11 @@ it('snapshots every quoted font URL and escaped CSS import without admitting com
   const prepared=await prepareBundle({root,entry:'index.html',server:'https://example.test'});
   expect(prepared.body.publicationBundle.files.map(file=>file.path).sort()).toEqual(['css/main.css','css/nested theme.css','fonts/first.woff2','fonts/second.woff2','fonts/third face.woff2']);
   expect(planPublicationBundle(prepared.body.html,prepared.body.publicationBundle).dependencies).toHaveLength(5);
- }finally{await rm(root,{recursive:true,force:true});}
 });
 
 it('resolves subfolder stylesheet and font URLs inside the project before enforcing traversal limits',async()=>{
- const {mkdtemp,mkdir,writeFile,rm}=await import('node:fs/promises');const {tmpdir}=await import('node:os');const {join}=await import('node:path');const {prepareBundle}=await import('../../../skills/artifactbin/scripts/toolbox-publication-bundle.mjs');const {planPublicationBundle}=await import('../plan');
- const root=await mkdtemp(join(tmpdir(),'bundle-relative-fonts-'));try{
+ const {prepareBundle}=await import('../../../skills/artifactbin/scripts/toolbox-publication-bundle.mjs');const {planPublicationBundle}=await import('../plan');
+ const root=await tempDir('bundle-relative-fonts-',onTestFinished);
   await mkdir(join(root,'examples'));await mkdir(join(root,'design-systems'));await mkdir(join(root,'fonts'));
   await writeFile(join(root,'examples/page.html'),'<link rel="stylesheet" href="../design-systems/theme.css">');
   await writeFile(join(root,'design-systems/theme.css'),'@font-face{src:url("../fonts/type.woff2")}');
@@ -107,12 +100,11 @@ it('resolves subfolder stylesheet and font URLs inside the project before enforc
   expect(planPublicationBundle(bundle.body.html,bundle.body.publicationBundle).dependencies).toHaveLength(2);
   await writeFile(join(root,'examples/page.html'),'<img src="../../../outside.png">');
   await expect(prepareBundle({root,entry:'examples/page.html',server:'https://example.test'})).rejects.toThrow(/escapes project root/);
- }finally{await rm(root,{recursive:true,force:true});}
 });
 
 it('snapshots an admitted in-memory entry override before discovery without changing disk source',async()=>{
- const {mkdtemp,writeFile,readFile,symlink,rm}=await import('node:fs/promises');const {tmpdir}=await import('node:os');const {join}=await import('node:path');const {prepareBundle}=await import('../../../skills/artifactbin/scripts/toolbox-publication-bundle.mjs');
- const root=await mkdtemp(join(tmpdir(),'bundle-entry-'));try{
+ const {prepareBundle}=await import('../../../skills/artifactbin/scripts/toolbox-publication-bundle.mjs');
+ const root=await tempDir('bundle-entry-',onTestFinished);
   const original='<script type="module" src="./old.js"></script>',html='<script type="module" src="./new.js"></script>';
   await writeFile(join(root,'index.html'),original);for(const name of ['old.js','new.js'])await writeFile(join(root,name),'export const value=42;');
   const prepared=await prepareBundle({root,entry:'index.html',entryHtml:html,server:'https://example.test'});
@@ -120,26 +112,20 @@ it('snapshots an admitted in-memory entry override before discovery without chan
   for(const entry of ['missing.html','../escape.html'])await expect(prepareBundle({root,entry,entryHtml:html,server:'https://example.test'})).rejects.toThrow();
   await symlink(join(root,'index.html'),join(root,'link.html'));await expect(prepareBundle({root,entry:'link.html',entryHtml:html,server:'https://example.test'})).rejects.toThrow(/Symlink/);
   await expect(prepareBundle({root,entry:'index.html',entryHtml:'x'.repeat(4_000_001),server:'https://example.test'})).rejects.toThrow(/limit/);expect(await readFile(join(root,'index.html'),'utf8')).toBe(original);
- }finally{await rm(root,{recursive:true,force:true});}
 });
 
 it('snapshots the files a page links, and none for navigation within or beyond the page',async()=>{
- const {mkdtemp,writeFile,rm}=await import('node:fs/promises');const {tmpdir}=await import('node:os');const {join}=await import('node:path');
  const {prepareBundle}=await import('../../../skills/artifactbin/scripts/toolbox-publication-bundle.mjs');
- const root=await mkdtemp(join(tmpdir(),'bundle-links-'));
- try{
+ const root=await tempDir('bundle-links-',onTestFinished);
   await writeFile(join(root,'index.html'),'<a href="./rota.pdf#page=2">Rota</a><map><area href="plan.png" alt="Plan"></map><a href="#top">Top</a><a href="?tab=2">Tab</a><a href="">Here</a><a href="mailto:x@example.com">Mail</a><a href="/a/OTHER1">Other</a>');
   await writeFile(join(root,'rota.pdf'),'%PDF-1.4');await writeFile(join(root,'plan.png'),'png');
   const bundle=await prepareBundle({root,entry:'index.html',server:'https://example.test'});
   expect(bundle.body.publicationBundle.files.map((entry:{path:string})=>entry.path)).toEqual(['rota.pdf','plan.png']);
- }finally{await rm(root,{recursive:true,force:true});}
 });
 
 it('snapshots a root-relative reference\'s project file, which the plan then carries; a missing one is refused by the plan',async()=>{
- const {mkdtemp,mkdir,writeFile,rm}=await import('node:fs/promises');const {tmpdir}=await import('node:os');const {join}=await import('node:path');
  const {prepareBundle}=await import('../../../skills/artifactbin/scripts/toolbox-publication-bundle.mjs');
- const root=await mkdtemp(join(tmpdir(),'bundle-rooted-'));
- try{
+ const root=await tempDir('bundle-rooted-',onTestFinished);
   await mkdir(join(root,'css'));await mkdir(join(root,'assets/fonts'),{recursive:true});
   await writeFile(join(root,'index.html'),'<link rel="stylesheet" href="/css/site.css"><a href="/a/OTHER1">next</a><style>@font-face{src:url(/af/fonts/inter.woff2)}</style>');
   await writeFile(join(root,'css/site.css'),'@font-face{font-family:X;src:url(/assets/fonts/x.woff2)}');await writeFile(join(root,'assets/fonts/x.woff2'),'font');
@@ -150,5 +136,4 @@ it('snapshots a root-relative reference\'s project file, which the plan then car
   await rm(join(root,'assets/fonts/x.woff2'));
   const missing=await prepareBundle({root,entry:'index.html',server:'https://example.test'});
   expect(()=>planPublicationBundle(missing.body.html,missing.body.publicationBundle)).toThrow(/\/assets\/fonts\/x\.woff2 \(in css\/site\.css\) names no file/);
- }finally{await rm(root,{recursive:true,force:true});}
 });

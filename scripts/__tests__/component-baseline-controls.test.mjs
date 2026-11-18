@@ -1,14 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFinished } from 'vitest';
 import {retainedComponentSource} from '../fixtures/component-baseline/source-provenance.mjs';
 import { createHash } from 'node:crypto';
-import { readFile, mkdtemp, cp, rm } from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import { readFile, cp } from 'node:fs/promises';
 import {pathToFileURL} from 'node:url';
 import path from 'node:path';
 import { build } from 'esbuild';
 import ts from 'typescript';
 import { JSDOM } from 'jsdom';
 import { controlBaselineFixtures } from '../fixtures/component-baseline/controls.mjs';
+import {tempDir} from '../../services/test-support/src/temp-dir.ts';
 
 const repo=path.resolve(import.meta.dirname,'../..');
 
@@ -31,13 +31,11 @@ describe('retained control baseline provenance and authored scenarios',()=>{
     }
   });
   it('verifies exact retained source without any repository history',async()=>{
-    const directory=await mkdtemp(path.join(tmpdir(),'retained-component-source-'));
-    try{
+    const directory=await tempDir('retained-component-source-',onTestFinished);
       for(const entry of ['source-provenance.mjs','retained-source'])await cp(path.join(repo,'scripts/fixtures/component-baseline',entry),path.join(directory,entry),{recursive:true});
       const {retainedComponentSource:readSource}=await import(pathToFileURL(path.join(directory,'source-provenance.mjs')).href);
       const proof=controlBaselineFixtures[0].provenance;
       expect(createHash('sha256').update(readSource(proof)).digest('hex')).toBe(proof.sha256);
-    }finally{await rm(directory,{recursive:true,force:true});}
   });
   it('refuses unknown revisions, source paths and mismatched source commitments',()=>{
     const proof=controlBaselineFixtures[0].provenance;

@@ -1,18 +1,16 @@
-import {mkdtemp, mkdir, writeFile, readFile, readdir, rm, stat} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {mkdir, writeFile, readFile, readdir, stat} from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
-import {afterEach, expect, it} from 'vitest';
+import {expect, it, onTestFinished} from 'vitest';
 import {build} from 'esbuild';
 import {buildComponentAssets,PAGE_MODULE_EXTERNALS} from '../lib/html-components-build.mjs';
+import {tempDir} from '../../services/test-support/src/temp-dir.ts';
 
-const roots=[];
 async function fixture(){
-  const root=await mkdtemp(path.join(tmpdir(),'html-components-')); roots.push(root);
+  const root=await tempDir('html-components-',onTestFinished);
   const sourceDir=path.join(root,'source'), outputDir=path.join(root,'output'), appDir=path.join(root,'app');
   await mkdir(sourceDir); await mkdir(appDir); return {sourceDir,outputDir,appDir};
 }
-afterEach(async()=>{await Promise.all(roots.splice(0).map(root=>rm(root,{recursive:true,force:true})));});
 // Follow emitted static and dynamic import edges, rather than inspecting only the entry.
 async function closure(outputDir, entry){
  const graph=await build({entryPoints:[path.join(outputDir,entry)],bundle:true,write:false,metafile:true,format:'esm',platform:'browser',logLevel:'silent'});
@@ -108,7 +106,7 @@ it('fits supported controls under publication limits',async()=>{
 },30000);
 it('writes the standard build proof with source inputs and every generated module',async()=>{
  const root=path.resolve(import.meta.dirname,'../..');await mkdir(path.join(root,'tmp'),{recursive:true});
- const directory=await mkdtemp(path.join(root,'tmp/component-build-proof-'));roots.push(directory);
+ const directory=await tempDir('component-build-proof-',onTestFinished,path.join(root,'tmp'));
  const sourceDir=path.join(directory,'source'),outputDir=path.join(directory,'output');await mkdir(sourceDir);await writeFile(path.join(sourceDir,'slide.ts'),'export const gutter=24;');
  const receiptPath=path.relative(root,path.join(directory,'receipt.json'));
  await buildComponentAssets({sourceDir,outputDir,receipt:{root,path:receiptPath}});

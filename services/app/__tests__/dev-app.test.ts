@@ -13,13 +13,13 @@
  * spawns, and the shim sees exactly what the spawned server would see.
  */
 import { spawn, spawnSync } from 'node:child_process';
-import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import os from 'node:os';
+import { chmodSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { freePort } from '@artifactbin/test-support/net';
 import { stopServer, waitUntilServing } from '../../../scripts/lib/server-process.mjs';
+import {tempDirSync} from '@artifactbin/test-support/temp-dir';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const APP_ROOT = path.join(ROOT, 'services', 'app');
@@ -41,7 +41,7 @@ describe('server.ts --app-only', () => {
   let child: import('node:child_process').ChildProcess;
   let output = '';
   let token: string;
-  const scratch = mkdtempSync(path.join(os.tmpdir(), 'dev-app-state-'));
+  const scratch = tempDirSync('dev-app-state-',afterAll);
 
   /** Publish the document each local-service assertion consumes, so shuffled tests remain independent. */
   async function publishDocument(): Promise<string> {
@@ -130,7 +130,6 @@ describe('server.ts --app-only', () => {
 
   afterAll(async () => {
     await stopChild();
-    rmSync(scratch, { recursive: true, force: true });
   });
 
   it('boots the app alone: the log names the app-only boot and the proxy\'s routes are gone', async () => {
@@ -194,7 +193,7 @@ describe('scripts/dev-app.mjs', () => {
    * on PATH records argv, cwd and env, then exits — so the test asserts what
    * the spawned server would actually have seen, not the script's text.
    */
-  const shimDir = mkdtempSync(path.join(os.tmpdir(), 'dev-app-shim-'));
+  const shimDir = tempDirSync('dev-app-shim-',afterAll);
   const shimOut = path.join(shimDir, 'spawned.json');
   const manifest = path.join(APP_ROOT, 'lib/build-assets/html-components-receipt.json');
   let manifestModified: number;
@@ -235,7 +234,6 @@ fs.writeFileSync(${JSON.stringify(shimOut)}, JSON.stringify({
     spawned = JSON.parse(readFileSync(shimOut, 'utf8'));
   }, 60_000);
 
-  afterAll(() => { rmSync(shimDir, { recursive: true, force: true }); });
 
   it('leaves the shared test runtime intact', () => {
     expect(statSync(manifest).mtimeMs).toBe(manifestModified);

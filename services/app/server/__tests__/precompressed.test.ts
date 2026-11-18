@@ -8,11 +8,10 @@
  * length and `Vary: Accept-Encoding`. Range, HEAD and cache headers behave as
  * they did; a sibling is never addressable on its own.
  */
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import os from 'node:os';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { brotliCompressSync, gzipSync } from 'node:zlib';
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi, onTestFinished } from 'vitest';
 import { Hono } from 'hono';
 import { getRequestListener } from '@hono/node-server';
 import { readRawResponse, withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
@@ -21,18 +20,15 @@ import { createAuthHost } from '@artifactbin/auth';
 import { testAuthOptions } from '../../../auth/__tests__/helpers';
 import { mountBuildAssets } from '../build-assets';
 import { precompressedStatic } from '../content-encoding';
+import {tempDirSync} from '@artifactbin/test-support/temp-dir';
 
 const BROWSER = 'gzip, deflate, br, zstd';
 const CODE = 'export const words = "' + 'a sentence the build compresses well. '.repeat(300) + '";\n';
-const dirs: string[] = [];
 const servers: RunningServer[] = [];
 afterEach(async () => { for (const s of servers.splice(0)) await s.close(); });
-afterAll(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
 
-/** A tree with one precompressed file, one without siblings, and a build manifest. */
-function fixture() {
-  const dir = mkdtempSync(path.join(os.tmpdir(), 'precompressed-'));
-  dirs.push(dir);
+/** A tree in `dir` with one precompressed file, one without siblings, and a build manifest. */
+function fixture(dir: string) {
   mkdirSync(path.join(dir, 'story')); mkdirSync(path.join(dir, 'af/app'), { recursive: true }); mkdirSync(path.join(dir, '.vite'));
   for (const file of ['story/entry-abc.js', 'af/app/app-abc.js']) {
     writeFileSync(path.join(dir, file), CODE);
@@ -53,8 +49,9 @@ const varyOf = (headers: Record<string, unknown>) => String(headers.vary ?? '').
 describe('precompressedStatic', () => {
   let tree: ReturnType<typeof fixture>;
   let server: RunningServer;
+  const dir = tempDirSync('precompressed-', afterAll);
   beforeAll(async () => {
-    tree = fixture();
+    tree = fixture(dir);
     const app = new Hono();
     app.use('/*', precompressedStatic({ root: path.relative(process.cwd(), tree.dir) }));
     server = await withHttpServer(getRequestListener(app.fetch));
@@ -115,7 +112,7 @@ describe('precompressedStatic', () => {
 
 describe('the build-asset door, direct and through the auth host', () => {
   it('serves the brotli sibling of a manifest-listed asset through the app, in-process and over HTTP', async () => {
-    const tree = fixture();
+    const tree = fixture(tempDirSync('precompressed-', onTestFinished));
     const br = readFileSync(path.join(tree.dir, 'af/app/app-abc.js.br'));
     const app = new Hono(); mountBuildAssets(app, tree.dir);
     app.all('*', c => c.text('protected fallback', 403));

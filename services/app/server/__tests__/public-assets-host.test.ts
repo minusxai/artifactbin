@@ -1,9 +1,8 @@
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { setVisibility } from '@/__tests__/artifact-fixtures';
-import os from 'node:os';
 import path from 'node:path';
 import { inProcess, overHttp } from '@artifactbin/utils';
-import {it,expect,beforeEach,vi} from 'vitest';
+import {it,expect,beforeEach,vi,onTestFinished} from 'vitest';
 import {overrideConfig} from '@/lib/platform/config';
 import {useAppHarness} from '@/__tests__/harness';
 import {exportAssetUrl} from '@/lib/export/assets';
@@ -19,6 +18,7 @@ import {withHttpServer} from '@artifactbin/test-support/net';
 import {getRequestListener} from '@hono/node-server';
 import {createAuthHost} from '@artifactbin/auth';
 import {testAuthOptions} from '../../../auth/__tests__/helpers';
+import {tempDirSync} from '@artifactbin/test-support/temp-dir';
 useAppHarness();
 beforeEach(()=>overrideConfig({publicBaseUrl:'https://example.test',assetsOrigin:'https://assets.example.test'}));
 it('allows the export redirect host in app image policy, including development pages',async()=>{
@@ -90,7 +90,7 @@ it('internal export transport reaches the real public-byte middleware, not the a
 });
 
 it('production composition bypasses identity only for manifest-listed files and still denies private documents', async () => {
- const dir = mkdtempSync(path.join(os.tmpdir(), 'app-build-admission-'));
+ const dir = tempDirSync('app-build-admission-',onTestFinished);
  mkdirSync(path.join(dir, '.vite')); mkdirSync(path.join(dir, 'af/app'), { recursive: true });
  writeFileSync(path.join(dir, '.vite/manifest.json'), JSON.stringify({ main: { file: 'af/app/app-test.js' } }));
  writeFileSync(path.join(dir, 'af/app/app-test.js'), 'public build');
@@ -110,7 +110,7 @@ it('production composition bypasses identity only for manifest-listed files and 
    expect(denied.status).toBe(404); expect(await denied.text()).not.toContain('private content');
    expect(session).toHaveBeenCalledOnce();
   }
- } finally { await server.close(); rmSync(dir, { recursive: true, force: true }); }
+ } finally {await server.close();}
 });
 
 it('serves a scoped exported image through both app and proxy asset-origin boundaries',async()=>{

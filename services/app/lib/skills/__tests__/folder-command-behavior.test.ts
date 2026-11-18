@@ -1,7 +1,6 @@
 /** Placement is part of the prepared write; folder replay accepts only its dedicated shape. */
-import {it,expect} from 'vitest';
-import {mkdtemp,mkdir,writeFile,readFile,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {it,expect,onTestFinished} from 'vitest';
+import {mkdir,writeFile,readFile,rm} from 'node:fs/promises';
 import path from 'node:path';
 import {promisify} from 'node:util';
 import {execFile} from 'node:child_process';
@@ -10,13 +9,14 @@ import {archiveFor} from '..';
 import {publishCommand} from '../../../skills/artifactbin/scripts/toolbox-publish.mjs';
 import {groupsCommand} from '../../../skills/artifactbin/scripts/groups.mjs';
 import {journalIntent} from '../../../skills/artifactbin/scripts/toolbox-journal.mjs';
+import {tempDir} from '@artifactbin/test-support/temp-dir';
 const server='https://example.test';
 const env={ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic-fixture'};
 const html='<!doctype html><html><head><title>Notes</title></head><body><h1>Notes</h1><p>Weekly notes for the shared collection.</p></body></html>';
 const run=promisify(execFile);
 async function workspace(work:(root:string)=>Promise<void>){
- const root=await mkdtemp(path.join(tmpdir(),'folder-behavior-'));
- try{await work(root);}finally{await rm(root,{recursive:true,force:true});}
+ const root=await tempDir('folder-behavior-',onTestFinished);
+ await work(root);
 }
 it.each([['page.html',html],['rows.csv','name,count\nentry,2'],['note.txt','A plain note']])(
  'transmits and dry-runs folder placement for %s',async(name,content)=>workspace(async root=>{

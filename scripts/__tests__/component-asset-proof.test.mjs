@@ -1,12 +1,12 @@
-import {mkdtemp,mkdir,writeFile,readFile,rm,cp} from 'node:fs/promises';
+import {mkdir,writeFile,readFile,cp} from 'node:fs/promises';
 import path from 'node:path';import {tmpdir} from 'node:os';
-import {afterEach,expect,it} from 'vitest';
+import {expect,it,onTestFinished} from 'vitest';
 import {buildComponentAssets} from '../lib/html-components-build.mjs';
 import {writeComponentAssetReceipt,verifyComponentAssetArchive,builtComponentFiles,COMPONENT_RECEIPT} from '../lib/component-asset-proof.mjs';
 import {BUILD_OUTPUTS} from '../lib/gate-container.mjs';
 import {attachVerifiedComponentAssets,writeBaselineComponentAssets} from '../lib/component-baseline-input.mjs';
-const roots=[];afterEach(async()=>Promise.all(roots.splice(0).map(root=>rm(root,{recursive:true,force:true}))));
-async function fixture(){const root=await mkdtemp(path.join(tmpdir(),'component-proof-'));roots.push(root);return root;}
+import {tempDir} from '../../services/test-support/src/temp-dir.ts';
+async function fixture(){const root=await tempDir('component-proof-',onTestFinished);return root;}
 // Same layout as the real build: compiled hosted modules under lib/build-assets, readable sources in the skill.
 const OUTPUT='services/app/lib/build-assets/components',READABLE='services/app/skills/artifactbin/components';
 async function built(root){

@@ -1,6 +1,5 @@
-import {expect,it} from 'vitest';
-import {existsSync,mkdtempSync,readFileSync,writeFileSync,rmSync} from 'node:fs';
-import {tmpdir} from 'node:os';
+import {expect,it,onTestFinished} from 'vitest';
+import {existsSync,readFileSync,writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {execFileSync} from 'node:child_process';
@@ -10,13 +9,14 @@ import {skillZip} from '../package';
 import {planPublicationBundle} from '../../html-publication-bundle/plan';
 import {HTML_SYSTEM_NAMES} from '@/lib/html-systems';
 import { storyFontManifest as manifest } from '@/lib/html-systems';
+import {tempDirSync} from '@artifactbin/test-support/temp-dir';
 
 it('packages no font members: the archive is text only',()=>{
  for(const name of ['fonts/example.12345678.woff2','fonts/../secret.woff2','fonts/dm-sans-latin-standard-normal.woff2'])expect(()=>skillZip({[name]:'x'})).toThrow('Unsupported skill member');
 });
 it('installs every theme on /af/fonts/ names and previews them through the selected server, with no fonts in the archive',async()=>{
  const response=await GET(new Request('https://skill.example/skills/artifactbin.zip'));
- const root=mkdtempSync(path.join(tmpdir(),'skill-fonts-'));
+ const root=tempDirSync('skill-fonts-',onTestFinished);
  // The selected server: its /af/fonts/ and /af/styles.css routes, as the hosted app answers them.
  const origin=await platformOrigin();
  try{
@@ -72,5 +72,5 @@ it('installs every theme on /af/fonts/ names and previews them through the selec
   const plan=planPublicationBundle(html,request.body.publicationBundle);
   // Platform font addresses are absolute: a publication uploads the stylesheet, never font bytes.
   expect(plan.dependencies.map(dep=>dep.path)).toEqual(['design-systems/almanac.css']);
- }finally{await origin.close();rmSync(root,{recursive:true,force:true});}
+ }finally{await origin.close();}
 });

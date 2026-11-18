@@ -11,13 +11,13 @@
  * to fire; then against the real `skills/`, rendered with a fixed base so a
  * hostname cannot move a byte count.
  */
-import { describe, it, expect } from 'vitest';
-import {mkdtempSync,mkdirSync,writeFileSync,rmSync} from 'node:fs';
-import {tmpdir} from 'node:os';
+import { describe, it, expect, onTestFinished } from 'vitest';
+import {mkdirSync,writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {loadSkillSources, skillPackageFiles, skillZip, buildSkillTree, expectedSkillName, readFirstBlock, renderSkill, mentionResolves, renderTree, resolveSkillLink, skillFileMentions, skillLinks, skillTree, validateSkillTree, SKILL_FILE_MAX_BYTES, SKILL_MAIN_MAX_BYTES, SKILL_LISTING_MAX_BYTES} from '..';
 import {loadSkillAssets} from '../assets';
 import { buildQuickSheet, QUICK_SHEET_MAX_BYTES } from '@/test/helpers/skill-docs';
+import {tempDirSync} from '@artifactbin/test-support/temp-dir';
 
 const BASE = 'https://example.test';
 const fm = (name: string, description = 'Third-person description of when to read this.') => `---\nname: ${name}\ndescription: ${description}\n---\n`;
@@ -232,8 +232,7 @@ describe('the real tree (skills/) keeps its shape and its reading budget', () =>
 
 
 it('keeps component sources out of Markdown teaching while including them in the installed package',()=>{
- const root=mkdtempSync(path.join(tmpdir(),'skill-component-package-'));
- try{
+ const root=tempDirSync('skill-component-package-',onTestFinished);
   const skill=path.join(root,'artifactbin');mkdirSync(path.join(skill,'components'),{recursive:true});mkdirSync(path.join(skill,'references'));
   const docs={'artifactbin/SKILL.md':ok('artifactbin'),'artifactbin/references/runtime.md':ok('runtime')};
   for(const [name,text] of Object.entries(docs))writeFileSync(path.join(root,name),text);
@@ -249,7 +248,6 @@ it('keeps component sources out of Markdown teaching while including them in the
   expect(Object.keys(installed).sort()).toEqual(['SKILL.md','components/button.ts','references/runtime.md']);
   expect(skillZip(installed).byteLength).toBeGreaterThan(0);
   expect(()=>skillZip({...installed,'components/button.js':'export {};'})).toThrow('Unsupported skill member: components/button.js');
- }finally{rmSync(root,{recursive:true,force:true});}
 });
 
 it('ships the one Markdown stylesheet beside af-markdown, and the component imports it from the skill itself',()=>{

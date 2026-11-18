@@ -7,11 +7,11 @@
  * satisfy the SAME contract, which is the point of the abstraction: if the two
  * ever diverge, the app behaves differently on a laptop than in production.
  */
-import { describe, it, expect, beforeEach, afterAll, vi } from 'vitest';
-import { mkdtemp, rm, readdir } from 'fs/promises';
-import { tmpdir } from 'os';
+import { describe, it, expect, beforeEach, vi, onTestFinished } from 'vitest';
+import { readdir } from 'fs/promises';
 import path from 'path';
 import { ObjectUnavailable, cachedReads, objectKey, resetReadCache, uniqueObjectKey, createLocalStore, createS3Store, parseS3Url, storageKeyFor, type ObjectStore } from '../index';
+import {tempDir} from '@artifactbin/test-support/temp-dir';
 
 // Fault injection still writes/truncates real files. Pause before bytes finish so a reader deterministically
 // observes the publication boundary; an atomic writer's temporary file is not the reader's destination.
@@ -133,12 +133,8 @@ function contractSuite(name: string, make: () => Promise<ObjectStore>) {
 }
 
 // ── local filesystem backend ────────────────────────────────────────────────
-const tmpDirs: string[] = [];
-afterAll(async () => { for (const d of tmpDirs) await rm(d, { recursive: true, force: true }); });
-
 contractSuite('local', async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), 'ab-objects-'));
-  tmpDirs.push(dir);
+  const dir = await tempDir('ab-objects-',onTestFinished);
   return createLocalStore(dir);
 });
 
@@ -161,8 +157,7 @@ if (MINIO) {
 
 describe('local backend refuses to escape its root', () => {
   it('rejects a traversing key rather than writing outside the store', async () => {
-    const dir = await mkdtemp(path.join(tmpdir(), 'ab-objects-'));
-    tmpDirs.push(dir);
+    const dir = await tempDir('ab-objects-',onTestFinished);
     const store = createLocalStore(dir);
     await expect(store.put('../escaped', 'x')).rejects.toThrow(/outside the object store/);
     await expect(store.get('../../etc/passwd')).rejects.toThrow(/outside the object store/);
@@ -259,8 +254,7 @@ describe('getStream', () => {
   };
 
   streamSuite('local', async () => {
-    const dir = await mkdtemp(path.join(tmpdir(), 'ab-stream-'));
-    tmpDirs.push(dir);
+    const dir = await tempDir('ab-stream-',onTestFinished);
     return createLocalStore(dir);
   });
 
@@ -268,8 +262,7 @@ describe('getStream', () => {
 
   it('never enters the read cache, so a big object cannot evict what the cache is for', async () => {
     resetReadCache();
-    const dir = await mkdtemp(path.join(tmpdir(), 'ab-stream-cache-'));
-    tmpDirs.push(dir);
+    const dir = await tempDir('ab-stream-cache-',onTestFinished);
     const fs = createLocalStore(dir);
     let gets = 0;
     const counted: ObjectStore = { ...fs, get: (key) => { gets += 1; return fs.get(key); } };
@@ -335,7 +328,7 @@ describe('getStream', () => {
 
 describe('local objects publish complete bytes', () => {
   it('keeps old bytes visible to get and getStream until the replacement is published', async () => {
-    const dir=await mkdtemp(path.join(tmpdir(),'ab-publish-'));tmpDirs.push(dir);const store=createLocalStore(dir);
+    const dir=await tempDir('ab-publish-',onTestFinished);const store=createLocalStore(dir);
     await store.put('islands/module','complete old module');
     const pause=pausePublication(),pending=store.put('islands/module','complete new module');await pause.ready;
     try {
@@ -348,7 +341,7 @@ describe('local objects publish complete bytes', () => {
   });
 
   it('keeps a new object absent until its complete bytes are published', async () => {
-    const dir=await mkdtemp(path.join(tmpdir(),'ab-publish-new-'));tmpDirs.push(dir);const store=createLocalStore(dir);
+    const dir=await tempDir('ab-publish-new-',onTestFinished);const store=createLocalStore(dir);
     const pause=pausePublication(),pending=store.put('islands/module','complete module');await pause.ready;
     try {await expect(store.get('islands/module')).rejects.toBeInstanceOf(ObjectUnavailable);}
     finally {pause.release();await pending;}
@@ -356,7 +349,7 @@ describe('local objects publish complete bytes', () => {
   });
 
   it('preserves an existing object and removes temporary bytes when replacement fails', async () => {
-    const dir=await mkdtemp(path.join(tmpdir(),'ab-publish-fail-'));tmpDirs.push(dir);const store=createLocalStore(dir);
+    const dir=await tempDir('ab-publish-fail-',onTestFinished);const store=createLocalStore(dir);
     await store.put('islands/module','complete old module');
     const pause=pausePublication(true),pending=store.put('islands/module','complete new module');await pause.ready;pause.release();
     await expect(pending).rejects.toThrow('simulated disk write failure');
@@ -367,7 +360,7 @@ describe('local objects publish complete bytes', () => {
 
 
 it('publishes the same cache key concurrently without replacing identical existing bytes',async()=>{
-  const dir=await mkdtemp(path.join(tmpdir(),'ab-publish-identical-'));tmpDirs.push(dir);
+  const dir=await tempDir('ab-publish-identical-',onTestFinished);
   const first=createLocalStore(dir),second=createLocalStore(dir),bytes=Buffer.from('complete compiled module');
   await first.put('islands/module',bytes);
   // Deterministic Windows sharing violation: replacing this existing immutable object is denied.
@@ -382,7 +375,7 @@ it('publishes the same cache key concurrently without replacing identical existi
 });
 
 it('publishes concurrent first writers of identical bytes as one complete object',async()=>{
-  const dir=await mkdtemp(path.join(tmpdir(),'ab-publish-race-'));tmpDirs.push(dir);
+  const dir=await tempDir('ab-publish-race-',onTestFinished);
   const stores=[createLocalStore(dir),createLocalStore(dir)],bytes=Buffer.from('complete SSR module');
   await Promise.all(Array.from({length:12},(_,i)=>stores[i%2]!.put('islands-ssr/module',bytes)));
   expect(await stores[0]!.get('islands-ssr/module')).toEqual(bytes);
@@ -390,7 +383,7 @@ it('publishes concurrent first writers of identical bytes as one complete object
 });
 
 it('reports a denied differing-byte replacement and preserves the existing complete object',async()=>{
-  const dir=await mkdtemp(path.join(tmpdir(),'ab-publish-denied-'));tmpDirs.push(dir);
+  const dir=await tempDir('ab-publish-denied-',onTestFinished);
   const store=createLocalStore(dir);
   await store.put('islands/module','old compiled module');
   publication.rejectRename=true;

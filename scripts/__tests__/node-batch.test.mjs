@@ -1,15 +1,16 @@
 import { execFile } from 'node:child_process';
-import { existsSync, globSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, globSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import os from 'node:os';
 import { promisify } from 'node:util';
 import { crc32 } from 'node:zlib';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFinished } from 'vitest';
 import { LANE_LISTS, NODE_BATCH_EXCLUDED, NODE_BATCH_GUARDED, NODE_BATCH_MAX_MS, NODE_TIMINGS_ARTIFACT, laneFiles, measuredArtifact, nodeBatchFiles, withMeasuredTimes } from '../lib/node-batch.mjs';
 import { LEAKS_PAST_ITS_FILE } from '../lib/test-isolation.mjs';
 import full from '../../vitest.config.ts';
 import batch from '../../vitest.node-batch.config.ts';
+import {tempDirSync} from '../../services/test-support/src/temp-dir.ts';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const [guarded] = NODE_BATCH_GUARDED;
@@ -110,7 +111,7 @@ describe('pr fast\'s node batch', () => {
       send(404, '{}');
     });
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-    const cwd = mkdtempSync(path.join(os.tmpdir(), 'node-timings-'));
+    const cwd = tempDirSync('node-timings-',onTestFinished);
     const table = path.join(cwd, 'scripts/ci/test-timings.json');
     mkdirSync(path.dirname(table), { recursive: true });
     const committed = { files: { node: { 'in.test.ts': 40 }, api: { 'a.test.ts': 3000 } } };
@@ -128,10 +129,7 @@ describe('pr fast\'s node batch', () => {
 
       broken = true;
       await expect(run()).rejects.toMatchObject({ stderr: expect.stringContaining('answered 503, twice') });
-    } finally {
-      server.close();
-      rmSync(cwd, { recursive: true, force: true });
-    }
+    } finally {server.close();}
   });
 });
 

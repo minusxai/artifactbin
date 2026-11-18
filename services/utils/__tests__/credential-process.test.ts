@@ -1,22 +1,21 @@
-import {afterEach,beforeEach,expect,it} from 'vitest';
+import {afterEach,beforeEach,expect,it,onTestFinished} from 'vitest';
 import {fork,type ChildProcess} from 'node:child_process';
 import {once} from 'node:events';
-import {chmod,mkdir,mkdtemp,readdir,rm,stat} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {chmod,mkdir,readdir,stat} from 'node:fs/promises';
 import {join} from 'node:path';
 import {credentialPaths,readCredentials,saveCredentials} from '../src/credentials';
+import {tempDir} from '@artifactbin/test-support/temp-dir';
 let root:string,home:string;
 const children:ChildProcess[]=[];
 const original={HOME:process.env.HOME,USERPROFILE:process.env.USERPROFILE};
 const grant={server:'https://example.test',token:'old_access',refreshToken:'old_refresh',clientId:'client_one'};
 beforeEach(async()=>{
- root=await mkdtemp(join(tmpdir(),'credential-process-'));home=join(root,'profile');await mkdir(home);
+ root=await tempDir('credential-process-',onTestFinished);home=join(root,'profile');await mkdir(home);
  process.env.HOME=home;process.env.USERPROFILE=home;
 });
 afterEach(async()=>{
  for(const child of children.splice(0)){if(child.exitCode===null&&child.signalCode===null){const exited=once(child,'exit');child.kill('SIGKILL');await exited;}}
  for(const [key,value] of Object.entries(original))if(value===undefined)delete process.env[key];else process.env[key]=value;
- await rm(root,{recursive:true,force:true});
 });
 /** Queue IPC before awaiting: fast children cannot outrun the assertions. */
 function worker(action:string,store=join(root,'store'),readOnly=false){

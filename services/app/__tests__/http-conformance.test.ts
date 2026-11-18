@@ -1,12 +1,12 @@
 import {nativeHtml} from '@/__tests__/native-html-fixture';
-import {mkdtemp,readFile,rm} from 'node:fs/promises';
+import {readFile} from 'node:fs/promises';
 import {join} from 'node:path';
-import {tmpdir} from 'node:os';
 import {createAuthComposedHost} from '@/test/helpers/auth-host';
 import {AUTH_SECRET} from '@/lib/platform';
 import {useAppHarness} from './harness';
-import {expect,it} from 'vitest';
+import {expect,it,onTestFinished} from 'vitest';
 import {checkDirectHttp,checkGuestHttpIssuance} from '../../../scripts/gates/lib/http-conformance.mjs';
+import {tempDir} from '@artifactbin/test-support/temp-dir';
 useAppHarness();
 const base='https://example.test';
 const json=(body:unknown,status=200,headers:Record<string,string>={})=>Response.json(body,{status,headers});
@@ -70,7 +70,7 @@ it.each([
 });
 
 it('acceptance runs against real composed email, artifact and download handlers',async()=>{
- const directory=await mkdtemp(join(tmpdir(),'http-conformance-')),origin='http://localhost:3000';
+ const directory=await tempDir('http-conformance-',onTestFinished),origin='http://localhost:3000';
  const application=await createAuthComposedHost({APP__PUBLIC_BASE_URL:origin,AUTH__SECRET:AUTH_SECRET,EMAIL__DEV_OUTBOX_PATH:join(directory,'outbox.jsonl')});
  const fetch=(input:string,init:RequestInit={})=>application.fetch(new Request(input,init));
  const post=(path:string,body:unknown,headers:Record<string,string>={})=>fetch(origin+path,{method:'POST',headers:{origin,'content-type':'application/json',...headers},body:JSON.stringify(body)});
@@ -95,5 +95,5 @@ it('acceptance runs against real composed email, artifact and download handlers'
   expect((await fetch(origin+'/api/artifacts')).status).toBe(401);
   expect((await fetch(origin+'/api/my/tokens/'+token.id,{method:'DELETE',headers:{cookie:accountCookie,origin}})).status).toBe(204);
   expect((await fetch(origin+'/api/artifacts',{headers:{authorization:'Bearer '+token.access_token}})).status).toBe(401);
- }finally{await application.close();await rm(directory,{recursive:true,force:true});}
+ }finally{await application.close();}
 });

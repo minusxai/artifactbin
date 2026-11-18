@@ -5,8 +5,7 @@
  * unset, the app answers exactly as before. The sign-in through a shell, end to end: custom-shell-sign-in.test.ts.
  */
 import {nativeHtml} from '@/__tests__/native-html-fixture';
-import {mkdtemp,rm,writeFile} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {afterAll,beforeAll,beforeEach,describe,expect,it} from 'vitest';
 import {postArtifact} from '@/__tests__/artifact-fixtures';
@@ -18,16 +17,17 @@ import {SPA_PATHS} from '@/lib/http/app-pages';
 import {createAppServer} from '../app';
 import {customShellResponse,loadCustomShell} from '../custom-shell';
 import {useAppHarness} from '@/__tests__/harness';
+import {tempDir} from '@artifactbin/test-support/temp-dir';
 useAppHarness();
 
 const INDEX='<html><head></head><body><div id="root"></div></body></html>';
 const SHELL='<!doctype html><html><head><title>Front door</title></head><body data-shell><main id="front"></main></body></html>';
 const NONCED='<!doctype html><html><head><script nonce="__CSP_NONCE__">window.a=1</script></head><body data-shell><script nonce="__CSP_NONCE__" type="module" src="/af/host.js"></script></body></html>';
 const HEADED='<!doctype html><html><head>__HEAD_TAGS__</head><body data-shell></body></html>';
-let dir='',plain='',nonced='',headed='';
-beforeAll(async()=>{dir=await mkdtemp(join(tmpdir(),'shell-'));[plain,nonced,headed]=['shell','nonced','headed'].map(name=>join(dir,`${name}.html`));
+const dir=await tempDir('shell-',afterAll);
+let plain='',nonced='',headed='';
+beforeAll(async()=>{[plain,nonced,headed]=['shell','nonced','headed'].map(name=>join(dir,`${name}.html`));
  await writeFile(plain,SHELL);await writeFile(nonced,NONCED);await writeFile(headed,HEADED);});
-afterAll(async()=>{await rm(dir,{recursive:true,force:true});});
 beforeEach(()=>overrideConfig({},{APP__DEPLOYMENT_MODE:'public'}));
 const server=(file:string|null)=>createAppServer({indexHtml:async()=>INDEX,shellFile:file});
 const html={headers:{accept:'text/html'}};

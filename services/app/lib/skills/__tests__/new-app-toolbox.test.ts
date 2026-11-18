@@ -5,12 +5,12 @@
  * before anything is written; a rerun
  * reuses the dataset the kept index.html links (its ref:) and changes nothing; no file is written beside another.
  */
-import {it,expect} from 'vitest';
-import {mkdtemp,mkdir,readFile,writeFile,rm,readdir} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {it,expect,onTestFinished} from 'vitest';
+import {mkdir,readFile,writeFile,rm,readdir} from 'node:fs/promises';
 import path from 'node:path';
 import {newAppCommand} from '../../../skills/artifactbin/scripts/new-app.mjs';
 import {stampSource} from '../../../skills/artifactbin/scripts/toolbox-source.mjs';
+import {tempDir} from '@artifactbin/test-support/temp-dir';
 
 const server='https://example.test';
 type Call={method:string;path:string;body?:any};
@@ -46,7 +46,7 @@ function fakeServer(){
 }
 
 async function project(){
- const root=await mkdtemp(path.join(tmpdir(),'new-app-')),dir=path.join(root,'app');await mkdir(dir);
+ const root=await tempDir('new-app-',onTestFinished),dir=path.join(root,'app');await mkdir(dir);
  const fake=fakeServer();
  const options={env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'private-fixture',ARTIFACTBIN_HOME:path.join(root,'home')},fetcher:fake.fetcher,cwd:root,log:()=>{}};
  const run=(values:Record<string,unknown>,positionals:string[]=[])=>newAppCommand({values:{server,...values},positionals},options);

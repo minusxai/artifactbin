@@ -1,8 +1,8 @@
 /** Folder workflows use the ordinary installed commands and durable request journal. */
-import {it,expect} from 'vitest';
-import {mkdtemp,readFile,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {it,expect,onTestFinished} from 'vitest';
+import {readFile} from 'node:fs/promises';
 import path from 'node:path';
+import {tempDir} from '@artifactbin/test-support/temp-dir';
 const server='https://example.test';
 const env={ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic-folder-fixture'};
 it('parses folder collection, folder creation/resume and publish placement',async()=>{
@@ -25,7 +25,7 @@ it('lists one exact collection page with an opaque cursor and stable group ID',a
 });
 it('journals a private group folder before POST and resumes the identical request after reply loss',async()=>{
  const {groupsCommand}=await import('../../../skills/artifactbin/scripts/groups.mjs');
- const root=await mkdtemp(path.join(tmpdir(),'folder-cli-')),journal=path.join(root,'request.json');
+ const root=await tempDir('folder-cli-',onTestFinished),journal=path.join(root,'request.json');
  const calls:Array<{body:any;key:string|null}>=[];
  const options={env,fetcher:async(url:any,init:any)=>{
   const route=new URL(String(url)).pathname;
@@ -36,14 +36,12 @@ it('journals a private group folder before POST and resumes the identical reques
   calls.push({body,key});if(calls.length===1)throw Error('synthetic lost reply');
   return Response.json({id:'FOLD12',format:'folder',title:'Reports',version:1,parent_id:'ROOT12',url:server+'/a/FOLD12'},{status:201});
  }};
- try{
   await expect(groupsCommand({sub:'folder-create',positionals:['team'],values:{title:'Reports',parent:'ROOT12',request:journal}},options)).rejects.toMatchObject({exit:5});
   const saved=await readFile(journal,'utf8');expect(saved).not.toContain(env.ARTIFACTBIN_TOKEN);
   const result=await groupsCommand({sub:'folder-create',positionals:[],values:{resume:journal}},options);
   expect(result).toMatchObject({id:'FOLD12'});expect(calls).toHaveLength(2);expect(calls[0]).toEqual(calls[1]);
   expect(calls[0]!.body).toEqual({format:'folder',title:'Reports',visibility:'private',destination:{type:'group',id:'grp_team'},parent_id:'ROOT12'});
   expect(calls[0]!.key).toMatch(/^[A-Za-z0-9_-]{16,128}$/);
- }finally{await rm(root,{recursive:true,force:true});}
 });
 it('refuses changing a resumed folder request before sending anything',async()=>{
  const {groupsCommand}=await import('../../../skills/artifactbin/scripts/groups.mjs');let count=0;

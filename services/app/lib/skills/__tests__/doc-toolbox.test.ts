@@ -4,17 +4,16 @@
  * the version read with an Idempotency-Key, rewrites the file with the merged text, resumes an unknown outcome with the same key (never a second write), and explains its
  * refusals in its own terms.
  */
-import {mkdir, mkdtemp, readFile, readdir, rm, writeFile} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {mkdir, readFile, readdir, writeFile} from 'node:fs/promises';
 import path from 'node:path';
-import {afterEach, beforeEach, expect, it} from 'vitest';
+import {beforeEach, expect, it, onTestFinished} from 'vitest';
+import {tempDir} from '@artifactbin/test-support/temp-dir';
 
 const server = 'https://example.test';
 type Seen = {method: string; path: string; body?: Record<string, unknown>; key?: string};
 let root: string, seen: Seen[], answer: (seen: Seen) => Response | 'lose';
 
-beforeEach(async () => { root = await mkdtemp(path.join(tmpdir(), 'doc-toolbox-')); seen = []; });
-afterEach(async () => { await rm(root, {recursive: true, force: true}); });
+beforeEach(async () => { root = await tempDir('doc-toolbox-',onTestFinished); seen = []; });
 
 /** The first-line marker doc.mjs writes, and the file split into it and the text. */
 const stamp = (marker: Record<string, unknown>, text: string) =>

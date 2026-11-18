@@ -1,12 +1,12 @@
-import {afterEach,beforeEach,expect,it,vi} from 'vitest';
-import {copyFile,mkdir,mkdtemp,readFile,readdir,rm,stat,symlink,writeFile} from 'node:fs/promises';
+import {afterEach,beforeEach,expect,it,vi,onTestFinished} from 'vitest';
+import {copyFile,mkdir,readFile,readdir,rm,stat,symlink,writeFile} from 'node:fs/promises';
 import {execFile} from 'node:child_process';
 import {createHmac} from 'node:crypto';
-import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {privateDirectories,privateDirectory,verifyPrivatePaths} from '../src/private-directory';
 import {lockDirectory,privateStateDirectory,withStateLock} from '../src/state-lock';
 import {credentialPaths,privateCredentialStore,readCredentials,saveCredentials} from '../src/credentials';
+import {tempDir} from '@artifactbin/test-support/temp-dir';
 
 vi.mock('node:child_process',()=>({execFile:vi.fn()}));
 const spawn=vi.mocked(execFile) as unknown as ReturnType<typeof vi.fn>;
@@ -21,7 +21,7 @@ const launches=()=>spawn.mock.calls.filter(call=>call[0]==='powershell.exe'&&Buf
 const protectedPaths=()=>launches().flat();
 let root:string,home:string,keyDirectory:string,keyFile:string;
 beforeEach(async()=>{
- root=await mkdtemp(join(tmpdir(),'private-directory-'));home=join(root,'profile');await mkdir(home);
+ root=await tempDir('private-directory-',onTestFinished);home=join(root,'profile');await mkdir(home);
  process.env.HOME=home;process.env.USERPROFILE=home;
  keyDirectory=join(home,'AppData','Local','artifactbin');keyFile=join(keyDirectory,'private-directory.key');
  spawn.mockReset().mockImplementation((...args:unknown[])=>{(args.at(-1) as (error:Error|null,value:unknown)=>void)(null,{stdout:'',stderr:''});});
@@ -29,7 +29,6 @@ beforeEach(async()=>{
 afterEach(async()=>{
  Object.defineProperty(process,'platform',platform);
  for(const [name,value] of Object.entries(saved))if(value===undefined)delete process.env[name];else process.env[name]=value;
- await rm(root,{recursive:true,force:true});
 });
 
 it('protects a fresh Windows directory exactly once and never respawns for the protected directory',async()=>{

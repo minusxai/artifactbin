@@ -1,12 +1,12 @@
 /** CI job-ownership contracts and immutable maintenance action pins. */
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { tmpdir } from 'node:os';
 import path from 'node:path';
 import yaml from 'yaml';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFinished } from 'vitest';
 import { baseCommit, chooseBaseRun, triggerPaths } from '../ci/page-speed-base.mjs';
 import { isRelevant, touchesLab } from '../ci/page-speed-scope.mjs';
+import {tempDirSync} from '../../services/test-support/src/temp-dir.ts';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const ciPath = path.join(root, '.github', 'workflows', 'ci.yml');
@@ -29,7 +29,7 @@ const checkoutStep = () => yaml.parse(readFileSync(path.join(root, '.github/work
 
 /** Runs pr fast's checkout step in an empty workspace against a local origin whose HEAD is one commit past the target. */
 function runCheckout({ stallFirst = false, failAll = false, attempts = checkoutStep().env.CHECKOUT_ATTEMPTS } = {}) {
-  const base = mkdtempSync(path.join(tmpdir(), 'afbin-checkout-'));
+  const base = tempDirSync('afbin-checkout-',onTestFinished);
   const origin = path.join(base, 'server', 'o', 'r'), work = path.join(base, 'work'), temp = path.join(base, 'temp');
   const release = path.join(base, 'release'), calls = path.join(base, 'fetches');
   for (const dir of [origin, work, temp]) mkdirSync(dir, { recursive: true });
@@ -57,7 +57,7 @@ function runCheckout({ stallFirst = false, failAll = false, attempts = checkoutS
     return out.stdout.trim();
   };
   const fetches = () => (existsSync(calls) ? readFileSync(calls, 'utf8').split('\n').filter(Boolean).length : 0);
-  return { result, target, token, work, git, fetches, cleanup: () => { writeFileSync(release, ''); rmSync(base, { recursive: true, force: true }); } };
+  return { result, target, token, work, git, fetches, cleanup: () => { writeFileSync(release, ''); } };
 }
 
 describe('workflow supply-chain pins', () => {

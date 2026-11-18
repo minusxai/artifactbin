@@ -1,11 +1,11 @@
 /** The Phase 2 size targets read the lab's summary and judge each target on its worst fixture. */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFinished } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { evaluateSizeTargets, SIZE_TARGETS, sizeTargetsMarkdown, sizeTargetsText } from '../build/size-targets.mjs';
 import { summarizeDocumentViews } from '../lib/document-views.mjs';
+import {tempDirSync} from '../../services/test-support/src/temp-dir.ts';
 
 const KB = 1024;
 /**
@@ -88,7 +88,7 @@ describe('the report', () => {
   });
 
   it('exits 0 by default and 1 under --strict when a target is not a pass', () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'size-targets-'));
+    const dir = tempDirSync('size-targets-',onTestFinished);
     const file = path.join(dir, 'lab.json');
     writeFileSync(file, JSON.stringify({ documents: { summary: { prose: cell(5 * KB, 150 * KB), deck: cell(12 * KB, 1), kit: cell(1, 1) } } }));
     const script = path.resolve(import.meta.dirname, '../build/size-targets.mjs');

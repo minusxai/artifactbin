@@ -5,18 +5,18 @@
  * html-core-prebuilt.test.mjs.
  */
 import {FLAT_RUNTIME_ASSET_PATH} from '../lib/runtime-asset-paths.mjs';
-import {afterEach,expect,it} from 'vitest';
+import {afterEach,expect,it,onTestFinished} from 'vitest';
 import {build,transform} from 'esbuild';
-import {mkdtemp,mkdir,writeFile,rm,readdir,copyFile,readFile} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {mkdir,writeFile,rm,readdir,copyFile,readFile} from 'node:fs/promises';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {buildPreviewParser} from '../../services/app/lib/skills/index.ts';
 import {buildHtmlAssets as compileActualRuntime} from '../../services/app/lib/html-runtime/server.ts';
 import {prebuiltHtmlCore,prebuiltPreviewAssets} from '../build/html-core.mjs';
+import {tempDir} from '../../services/test-support/src/temp-dir.ts';
 const cleanup=[];afterEach(async()=>{for(const close of cleanup.splice(0).reverse())await close();});
 it('serves every actual immutable runtime asset after relocating the server bundle',async()=>{
- const assets=await compileActualRuntime(),root=await mkdtemp(path.join(tmpdir(),'af-actual-runtime-'));cleanup.push(()=>rm(root,{recursive:true,force:true}));
+ const assets=await compileActualRuntime(),root=await tempDir('af-actual-runtime-',onTestFinished);
  const source=path.join(root,'services/app/lib/html-runtime/build.server.ts');await mkdir(path.dirname(source),{recursive:true});await writeFile(source,'throw Error("source tree must not execute")');
  const output=path.join(root,'relocated/server.mjs');await build({entryPoints:[source],bundle:true,format:'esm',platform:'node',outfile:output,plugins:[prebuiltHtmlCore(root,()=>assets)]});
  await rm(path.join(root,'services'),{recursive:true,force:true});const {buildHtmlAssets}=await import(pathToFileURL(output).href);const relocated=await buildHtmlAssets();
@@ -35,7 +35,7 @@ it('serves every actual immutable runtime asset after relocating the server bund
 });
 
 it('compiles the installed parser from deployed package cwd after actual server bundling relocates it',async()=>{
- const {createRequire}=await import('node:module');const directory=await mkdtemp(path.join(tmpdir(),'preview-parser-server-bundle-'));cleanup.push(()=>rm(directory,{recursive:true,force:true}));
+ const {createRequire}=await import('node:module');const directory=await tempDir('preview-parser-server-bundle-',onTestFinished);
  const outfile=path.join(directory,'server.mjs'),engine=createRequire(import.meta.url).resolve('esbuild');
  await build({entryPoints:[path.resolve('lib/skills/preview-assets.server.ts')],outfile,bundle:true,platform:'node',format:'esm',target:'node22',plugins:[{name:'external-installed-build-engine',setup(builder){builder.onResolve({filter:/^esbuild$/},()=>({path:engine,external:true}));}}]});
  const relocated=await import(pathToFileURL(outfile).href),source=await readFile(path.resolve('skills/artifactbin/scripts/preview-html.mjs'),'utf8');
@@ -44,7 +44,7 @@ it('compiles the installed parser from deployed package cwd after actual server 
 });
 
 it('prebuilds real shipped script compactions without deploying the source compiler',async()=>{
- const root=path.resolve('../..'),directory=await mkdtemp(path.join(tmpdir(),'af-script-compactions-'));cleanup.push(()=>rm(directory,{recursive:true,force:true}));
+ const root=path.resolve('../..'),directory=await tempDir('af-script-compactions-',onTestFinished);
  const output=path.join(directory,'helpers.mjs'),source=path.join(root,'services/app/lib/skills/preview-assets.server.ts');
  const result=await build({entryPoints:[source],bundle:true,format:'esm',platform:'node',outfile:output,metafile:true,plugins:[prebuiltPreviewAssets(root)]});
  expect(Object.keys(result.metafile.inputs)).toEqual([path.relative(process.cwd(),source)]);

@@ -12,6 +12,8 @@ import {publishBundleAndOpen} from './bundle-fixture';
 import {GET as assetGet} from '@/app/a/[id]/assets/route';
 import {GET as raw} from '@/app/a/[id]/raw/route';
 import {GET as download} from '@/app/a/[id]/download/route';
+import {readFileSync} from 'node:fs';
+import path from 'node:path';
 
 useAppHarness();
 const file=(path:string,source:string,contentType:string)=>({path,contentType,base64:Buffer.from(source).toString('base64')});
@@ -93,7 +95,6 @@ describe('what the table leaves alone',()=>{
 
 describe('a platform boundary file a page fetches by its path',()=>{
  it('is the same line on the page\'s own origin for a signed-out reader of an unlisted page, and carried in an exported copy',async()=>{
-  const {readFileSync}=await import('node:fs');const path=await import('node:path');
   const {pagesOriginFor}=await import('@/lib/http');const {createAppServer}=await import('@/server/app');
   const geo=readFileSync(path.resolve('public/geojson/india-states.json'));
   const html='<!doctype html><html><head><title>States</title></head><body><script type="module">const states=await (await fetch("/af/geojson/india-states.json")).json();document.body.dataset.states=String(states.features.length);</script></body></html>';

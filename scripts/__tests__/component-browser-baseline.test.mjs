@@ -1,5 +1,5 @@
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { copyFile, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { beforeAll, describe, expect, it, vi, onTestFinished } from 'vitest';
+import { copyFile, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -10,12 +10,11 @@ import {browserParityFixtures,parityThemes} from '../fixtures/component-baseline
 import { actionTarget, captureBrowserBaseline, candidateCaptureIssues, comparableBehavior, stateExpectationIssues, fontLoadingEvidence, fontByteProof, settleFiniteFrameAnimations } from '../lib/component-browser-baseline.mjs';
 import {builtComponentFiles,verifyComponentAssetArchive} from '../lib/component-asset-proof.mjs';
 import {installedFiles,componentImport} from '../fixtures/component-baseline/publication.mjs';
+import {tempDir} from '../../services/test-support/src/temp-dir.ts';
 const repo=path.resolve(import.meta.dirname,'../..');
-const directories=[];
-afterEach(async()=>{await Promise.all(directories.splice(0).map(directory=>rm(directory,{recursive:true,force:true})));});
 const whitePng=()=>sharp({create:{width:2,height:2,channels:4,background:'white'}}).png().toBuffer();
 const noAnimations=()=>({format:'frame-animation-settlement-v1',policy:'document-and-open-shadow-roots;finite-current-and-chained;two-frame-quiescence',shadowCoverage:'open-shadow-roots-only',shadowRoots:0,reducedMotion:false,startedAtMs:0,completedAtMs:0,elapsedMs:0,observed:0,uniqueAnimations:0,rounds:1,alreadyFinished:0,alreadyIdle:0,paused:[],infinite:[],counts:{finished:0,canceled:0,detached:0},timedOut:[]});
-async function setup(){const directory=await mkdtemp(path.join(tmpdir(),'component-baseline-'));directories.push(directory);return directory;}
+async function setup(){const directory=await tempDir('component-baseline-',onTestFinished);return directory;}
 describe('default candidate reader gate',()=>{
   it('uses the accessible select name when the theme uppercases its visible label',()=>{
     expect(candidateCaptureIssues([{fixture:'select',state:'initial',errors:[],semantics:{text:'PERSON Ada',controls:[{role:'button',name:'Person'}],rows:[],overflow:0}}])).toEqual([]);
@@ -125,12 +124,11 @@ describe('actual fixture publication payloads',()=>{
     await expect(publishBaselineFixtures({implementation:'html',skillArchive,publish:async()=>{throw Error('must not publish');}})).rejects.toThrow('Unsafe skill ZIP member');
   });
   it('publishes original JSX in an isolated old tree with no candidate helper or packages',async()=>{
-    const {execFileSync}=await import('node:child_process'),root=await mkdtemp(path.join(tmpdir(),'old-component-publisher-'));try{
+    const {execFileSync}=await import('node:child_process'),root=await tempDir('old-component-publisher-',onTestFinished);
       const fixtureDir=path.join(root,'scripts/fixtures/component-baseline');await mkdir(fixtureDir,{recursive:true});
       for(const name of ['publication.mjs','index.mjs','controls.mjs','rich.mjs','interaction.mjs'])await copyFile(new URL('../fixtures/component-baseline/'+name,import.meta.url),path.join(fixtureDir,name));
       await writeFile(path.join(root,'verify.mjs'),'import {publishBaselineFixtures} from "./scripts/fixtures/component-baseline/publication.mjs";let count=0;const entries=await publishBaselineFixtures({implementation:"jsx",publish:async body=>{if(body.publicationBundle)throw Error("candidate payload entered old path");count++;return {id:body.dataset?"Dataset123":"Page123"};}});if(entries.length!==52||count!==53)throw Error("original fixture publication missing");process.stdout.write("original-complete");');
       expect(execFileSync(process.execPath,[path.join(root,'verify.mjs')],{cwd:root,encoding:'utf8'})).toContain('original-complete');
-    }finally{await rm(root,{recursive:true,force:true});}
   });
   it('does not carry dependency receipts from a failed run into another publication',async()=>{
     const {publishBaselineFixtures}=await import('../fixtures/component-baseline/publication.mjs');const skillArchive=await candidateArchive();

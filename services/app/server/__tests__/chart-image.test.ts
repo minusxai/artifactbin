@@ -2,17 +2,17 @@
  * The query image's doors against the real handlers: `POST /api/charts/image` for a signed-in caller, the identity
  * owner's fixed seam, and `sql.mjs query … --chart` drawing a read through the real route.
  */
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import sharp from 'sharp';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFinished } from 'vitest';
 import { attachActor } from '@artifactbin/utils';
 import { ANONYMOUS, CANONICAL_CHART_IMAGE_PATH, SERVICE_PAYLOAD_LIMIT } from '@artifactbin/contracts';
 import { mintAccountToken, request, useAppHarness } from '@/__tests__/harness';
 import { POST as drawRoute } from '@/app/api/charts/image/route';
 import { sqlCommand } from '../../skills/artifactbin/scripts/sql.mjs';
 import { createAppServer } from '../app';
+import {tempDir} from '@artifactbin/test-support/temp-dir';
 
 useAppHarness();
 const chart = { mark: 'bar', encoding: { x: { field: 'k', type: 'nominal' }, y: { field: 'v', type: 'quantitative' } } };
@@ -68,7 +68,7 @@ describe('the identity owner\'s chart seam', () => {
 describe('sql.mjs query --chart', () => {
   it('draws a dataset, page or default read through the route into a new PNG, and refuses what it cannot draw before querying', async () => {
     const { token } = await mintAccountToken('mxmx_test_chart_sql');
-    const root = await mkdtemp(path.join(tmpdir(), 'chart-sql-')), spec = path.join(root, 'bar.json');
+    const root = await tempDir('chart-sql-',onTestFinished), spec = path.join(root, 'bar.json');
     const server = 'https://example.test', sent: string[] = [];
     let readRows: unknown[] = rows;
     const options = { env: { ARTIFACTBIN_URL: server, ARTIFACTBIN_TOKEN: token, ARTIFACTBIN_HOME: root }, fetcher: async (url: string, init: RequestInit) => {
@@ -84,7 +84,6 @@ describe('sql.mjs query --chart', () => {
       return Response.json({ error: 'not_found' }, { status: 404 });
     } };
     const query = (target: string, sql: string, values: Record<string, unknown>): Promise<any> => sqlCommand({ sub: 'query', values, positionals: [target, sql] }, options);
-    try {
       await writeFile(spec, JSON.stringify(chart));
       const out = path.join(root, 'dataset.png');
       const read = await query('DATA12', 'select k, v from rows', { chart: spec, 'chart-output': out, 'chart-width': '320', 'chart-height': '200', 'chart-theme': 'dark' });
@@ -121,6 +120,5 @@ describe('sql.mjs query --chart', () => {
       await expect(query('DATA12', 'select k, v from rows', { chart: spec, 'chart-output': path.join(root, 'big.png'), limit: '10000' }))
         .rejects.toMatchObject({ code: 'chart_rows_too_large', recovery: expect.stringContaining('Aggregate in SQL') });
       expect(sent).not.toContain('/api/charts/image');
-    } finally { await rm(root, { recursive: true, force: true }); }
   });
 });

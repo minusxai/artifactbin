@@ -1,14 +1,15 @@
 import {installGateSkill} from '../lib/installed-gate-skill.mjs';
-import {mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {readFile,writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {JSDOM} from 'jsdom';
 import {beforeAll,afterAll,describe,it,expect} from 'vitest';
 import {GET as skillArchive} from '../../services/app/app/skills/artifactbin.zip/route.ts';
 import {pathToFileURL} from 'node:url';
+import {tempDir} from '../../services/test-support/src/temp-dir.ts';
 const ROOT=path.resolve(import.meta.dirname,'../../services/app/skills/artifactbin'),BASE='https://example.test';
-let installedDir,prepareBundle;
+const installedDir=await tempDir('native-author-installed-',afterAll);
+let prepareBundle;
 /** A documented HTML sample as a saved publication request, its dataset links pointing at `datasetId`. */
 const prepareSample=async(name,datasetId='abc123')=>{
  const root=path.join(installedDir,'artifactbin'),entry=`examples/${name}.html`;
@@ -18,11 +19,9 @@ const prepareSample=async(name,datasetId='abc123')=>{
  return prepareBundle({root,entry,server:BASE,entryHtml:html});
 };
 beforeAll(async()=>{
- installedDir=await mkdtemp(path.join(tmpdir(),'native-author-installed-'));
  const zip=path.join(installedDir,'skill.zip');await writeFile(zip,new Uint8Array(await (await skillArchive(new Request(BASE+'/skills/artifactbin.zip'))).arrayBuffer()));execFileSync('unzip',['-q',zip,'-d',installedDir]);
  ({prepareBundle}=await import(pathToFileURL(path.join(installedDir,'artifactbin/scripts/toolbox-publication-bundle.mjs')).href));
 });
-afterAll(async()=>{if(installedDir)await rm(installedDir,{recursive:true,force:true});});
 describe('native author resources',()=>{
  it('prepares real HTML and paired resolver requests without leaking a credential',async()=>{
   for(const name of ['report','csv-dashboard','tracker']){

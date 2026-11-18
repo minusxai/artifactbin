@@ -1,5 +1,5 @@
 import { PGlite } from '@electric-sql/pglite';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, onTestFinished } from 'vitest';
 import { assemble, hashToken } from '@artifactbin/utils';
 import { INTERNAL_MINT_PATH } from '@artifactbin/contracts';
 import { createHumanAuth } from '../src/auth/human';
@@ -7,11 +7,9 @@ import { consumeAuthCode, createAuthCode, createOAuthStore, isAllowedRedirectUri
 import { authParts, type AuthOptions } from '../src/parts';
 import { createBearerReader } from '../src/identity/bearer';
 import { ensureAuthSchema } from '../src/schema';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { readCredentials, refreshCredentials, saveCredentials } from '@artifactbin/utils/node/credentials';
 import { resetTestDb, testDb, testAuthOptions } from './helpers';
+import {tempDir} from '@artifactbin/test-support/temp-dir';
 
 const BASE = 'http://localhost:4794';
 const RESOURCE = `${BASE}/api`;
@@ -377,15 +375,13 @@ describe('a canonical origin switch keeps the former origin as an alias', () => 
  });
 
  it('the skill client refreshes a credential saved for the former origin, posting to that origin',async()=>{
-  const before=await issueBeforeSwitch();const after=await switched();const root=await mkdtemp(join(tmpdir(),'afbin-alias-'));
-  try{
+  const before=await issueBeforeSwitch();const after=await switched();const root=await tempDir('afbin-alias-',onTestFinished);
    await saveCredentials({server:BASE,token:before.access_token,refreshToken:before.refresh_token,clientId:before.client_id,expiresAt:Date.now()-1000},root);
    const posted:string[]=[];
    const refreshed=await refreshCredentials((await readCredentials(BASE,root))!,root,{fetch:(async(url:string|URL|Request,init?:RequestInit)=>{posted.push(new URL(String(url)).origin);return after.request(String(url),init);}) as typeof fetch});
    expect(posted).toEqual([BASE]);
    expect(refreshed.server).toBe(BASE);expect(refreshed.token).not.toBe(before.access_token);
    expect(await(await after.request(`${BASE}/api/artifacts`,{headers:{authorization:`Bearer ${refreshed.token}`}})).json()).toMatchObject({credential:'bearer'});
-  }finally{await rm(root,{recursive:true,force:true});}
  });
 
  it('without the alias, a grant bound to another origin does not refresh',async()=>{
@@ -553,8 +549,7 @@ describe('a grant for a configured service (IDENTITY__SERVICE_AUDIENCES): the pe
  });
 
  it('the skill client keeps a service grant beside the API grant and refreshes it against the service\'s resource',async()=>{
-  const host=await withService();const root=await mkdtemp(join(tmpdir(),'afbin-audience-'));
-  try{
+  const host=await withService();const root=await tempDir('afbin-audience-',onTestFinished);
    const issue=async(body:unknown)=>await(await issueGrant(host,body)).json() as {access_token:string;refresh_token:string;client_id:string;resource:string};
    const api=await issue({}),service=await issue({audience:'warehouse'});
    await saveCredentials({server:BASE,token:api.access_token,refreshToken:api.refresh_token,clientId:api.client_id,expiresAt:Date.now()+60_000},root);
@@ -568,7 +563,6 @@ describe('a grant for a configured service (IDENTITY__SERVICE_AUDIENCES): the pe
    expect(await createBearerReader({db:{query:testDb().query}}).byToken(refreshed.token)).toMatchObject({audience:SERVICE});
    expect((await readCredentials(BASE,root,'warehouse'))!.token).toBe(refreshed.token);
    expect((await readCredentials(BASE,root))!.token).toBe(api.access_token);
-  }finally{await rm(root,{recursive:true,force:true});}
  });
 });
 
