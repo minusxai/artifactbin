@@ -124,8 +124,8 @@ describe('installed native author examples',()=>{
    // The ids publish added are announced, so exact-text edits against the old text are not attempted blind.
    expect(first.rewritten).toMatch(/^index\.html was rewritten with \d+ data-af-id attributes: re-read it before editing; match on short anchors, not whole lines\.$/);
    // A page publish ends on the next step: reply to the user and keep the comment watch running.
-   const timeout="Nothing may hold back your reply: it is every link the user asked for, in the form they asked for (a page's public view is its receipt's user_page_url), plus what they asked. The watch waits only once that reply is sent: its first call after you publish, edit or comment returns at once, and so does every call until one adds --replied, which you add only after sending the reply. Claude Code: start the watch, one per page, with the Bash tool's run_in_background first, then send your reply as your last message and end your turn; when that first call wakes you, start it again with --replied the same way. Other harnesses: say your reply to the user, then call the watch in the foreground with its default wait and a shell timeout of at least 300000 ms, then once more with --replied; several pages share each call (node scripts/comment.mjs watch A --next --replied & node scripts/comment.mjs watch B --next --replied & wait). Once waiting, it returns as soon as someone comments, and on its own within 4 minutes: handle what it printed and run it again until it says to stop watching. Watching follows every task, however short the reply.";
-   const next=`Next: when the request is done, reply to the user and run the comment watch, even when the reply is only the link. ${timeout}\n  node scripts/comment.mjs watch ${first.id} --next`;
+   const {watchNext}=await import(pathToFileURL(path.join(installed,'scripts/toolbox-watch-state.mjs')).href);
+   const next=watchNext(first.id);expect(next).toMatch(/^Next, once the request is done: Reply to the user first: .*\n  node scripts\/comment\.mjs watch \w+ --next$/s);
    expect(first.next).toBe(next);
    const canonical=await readFile(first.source,'utf8'),receipts=await receiptsOf(first.id);expect(canonical).toContain('href="./theme.css"');expect(receipts).toHaveLength(1);
    const nodeId=/data-af-id="([^"]+)"[^>]*>One/.exec(canonical)?.[1];expect(nodeId).toBeTruthy();
@@ -133,7 +133,7 @@ describe('installed native author examples',()=>{
    const comment=await commentCommand({sub:'add',values:{server,anchor,'body-file':bodyFile},positionals:[first.id]},options);
    const comments=await commentCommand({sub:'list',values:{server,status:'all'},positionals:[first.id]},options);expect(comments.annotations).toHaveLength(1);
    const thread=comments.annotations[0];await writeFile(bodyFile,'Checked the source');
-   const replied=await commentCommand({sub:'reply',values:{server,thread:thread.id,'expected-revision':String(thread.revision),'body-file':bodyFile,resolve:true},positionals:[first.id]},options);expect(replied.thread.status).toBe('resolved');expect(replied.next).toBe(`Next: when the request is done, reply to the user and run the comment watch, even when the reply is only the link. ${timeout}\n  node scripts/comment.mjs watch ${first.id} --next`);expect(comment.next).toBe(replied.next);
+   const replied=await commentCommand({sub:'reply',values:{server,thread:thread.id,'expected-revision':String(thread.revision),'body-file':bodyFile,resolve:true},positionals:[first.id]},options);expect(replied.thread.status).toBe('resolved');expect(replied.next).toBe(next);expect(comment.next).toBe(replied.next);
    expect((await commentCommand({sub:'reply',values:{server,resume:replied.journal},positionals:[]},options)).thread.revision).toBe(replied.thread.revision);
    expect(comment.journal).toBeTruthy();
    await writeFile(first.source,canonical.replace('>One<','>Two<'));await writeFile(path.join(project,'theme.css'),'body{color:blue}');

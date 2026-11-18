@@ -4,6 +4,7 @@ import {copyFile,mkdir,readFile,readdir,writeFile} from 'node:fs/promises';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import {tempDir} from '@artifactbin/test-support/temp-dir';
+import {replyNext,watchNext} from '../../../skills/artifactbin/scripts/toolbox-watch-state.mjs';
 it('binds targets to one origin and rejects target/server mismatches',async()=>{
  const {resolveTarget}=await import('../../../skills/artifactbin/scripts/toolbox-client.mjs');
  expect(resolveTarget('https://example.test/a/PAGE12','https://example.test')).toEqual({server:'https://example.test',id:'PAGE12'});
@@ -247,13 +248,13 @@ it('summarizes a saved check per viewport so the file need not be reopened',asyn
  // A passing run lists exactly the step labels it proved, per viewport, and what it did not, in one facts section (H10/H11).
  const proved=checkDigest({ok:true,code:'completed',smokePassed:true,reply,checks:[{viewport,...clean,overflow:{viewport:390,content:390,fits:true},contrast:{checked:1,belowAA:0,unreadable:0,low:[]},steps:{ran:true,passed:true},verified:['target saves']},{viewport,viewer:'guest',...clean,overflow:{viewport:390,content:390,fits:true},contrast:{checked:1,belowAA:0,unreadable:0,low:[]},steps:{ran:true,passed:true},verified:['guest reads it']}]},'qa.json');
  expect(proved).not.toContain('Verified');
- expect(proved.slice(proved.indexOf('For your reply:'))).toBe(['For your reply:','Link: https://h/a/X','Built with: one HTML page; Vega-Lite charts','Tested: 390x844: target saves | guest 390x844: guest reads it','Not tested: visual appearance; sharing between two signed-in users (the guest is signed out)','Who can do what:','Table public.targets','- Owner, editors: see and change everything.','','Next: when the request is done, reply to the user (use the facts above for testing, build and permissions) and run the comment watch, even when the reply is only the link. Nothing may hold back your reply: it is every link the user asked for, in the form they asked for (a page\'s public view is its receipt\'s user_page_url), plus what they asked. The watch waits only once that reply is sent: its first call after you publish, edit or comment returns at once, and so does every call until one adds --replied, which you add only after sending the reply. Claude Code: start the watch, one per page, with the Bash tool\'s run_in_background first, then send your reply as your last message and end your turn; when that first call wakes you, start it again with --replied the same way. Other harnesses: say your reply to the user, then call the watch in the foreground with its default wait and a shell timeout of at least 300000 ms, then once more with --replied; several pages share each call (node scripts/comment.mjs watch A --next --replied & node scripts/comment.mjs watch B --next --replied & wait). Once waiting, it returns as soon as someone comments, and on its own within 4 minutes: handle what it printed and run it again until it says to stop watching. Watching follows every task, however short the reply.\n  node scripts/comment.mjs watch X --next',''].join('\n'));
+ expect(proved.slice(proved.indexOf('For your reply:'))).toBe(['For your reply:','Link: https://h/a/X','Built with: one HTML page; Vega-Lite charts','Tested: 390x844: target saves | guest 390x844: guest reads it','Not tested: visual appearance; sharing between two signed-in users (the guest is signed out)','Who can do what:','Table public.targets','- Owner, editors: see and change everything.','',replyNext('X'),''].join('\n'));
  // Steps that proved no labelled behaviour still leave a true Tested: line, never an empty one.
  const bare=checkDigest({ok:true,code:'completed',smokePassed:true,reply,checks:[{viewport,...clean,overflow:{viewport:390,content:390,fits:true},contrast:{checked:1,belowAA:0,unreadable:0,low:[]},steps:{ran:true,passed:true}}]},'qa.json');
  expect(bare).toContain('\nTested: 390x844: the page loads without errors\n');expect(bare).not.toMatch(/Tested: \n/);
  // Several linked datasets each name themselves before their read-back lines.
  const two=checkDigest({ok:true,smokePassed:true,reply:{...reply,permissions:[...reply.permissions,{id:'DATA34',name:'rows',lines:['Table public.rows']}]},checks:[{viewport,...clean,overflow:{viewport:390,content:390,fits:true},contrast:{checked:1,belowAA:0,unreadable:0,low:[]},steps:true,verified:['a']}]});
- expect(two).toContain('Who can do what:\ntargets (ref:DATA12):\nTable public.targets\n- Owner, editors: see and change everything.\nrows (ref:DATA34):\nTable public.rows\n\nNext:');expect(two).toContain('check completed: smoke passed\n');
+ expect(two).toContain('Who can do what:\ntargets (ref:DATA12):\nTable public.targets\n- Owner, editors: see and change everything.\nrows (ref:DATA34):\nTable public.rows\n\nNext, ');expect(two).toContain('check completed: smoke passed\n');
  // A failed or flawed run points at the summary itself, as a pass does.
  expect(failed).toContain('fix what is named above, then run the check again.');expect(passed).not.toContain('fix what is named');
  // An overflow names the element that sticks out.
@@ -665,7 +666,6 @@ function fakePages(head:{id:string,version:number,state:string,html:string,forma
   return Response.json({id:page.id,url:'https://h.test/a/X',version:page.version,state:page.state,html:body.html,format:'html'},{status:method==='PUT'?200:201});};
  return {sent,fetcher};
 }
-const WATCH_NEXT='Next: when the request is done, reply to the user and run the comment watch, even when the reply is only the link. Nothing may hold back your reply: it is every link the user asked for, in the form they asked for (a page\'s public view is its receipt\'s user_page_url), plus what they asked. The watch waits only once that reply is sent: its first call after you publish, edit or comment returns at once, and so does every call until one adds --replied, which you add only after sending the reply. Claude Code: start the watch, one per page, with the Bash tool\'s run_in_background first, then send your reply as your last message and end your turn; when that first call wakes you, start it again with --replied the same way. Other harnesses: say your reply to the user, then call the watch in the foreground with its default wait and a shell timeout of at least 300000 ms, then once more with --replied; several pages share each call (node scripts/comment.mjs watch A --next --replied & node scripts/comment.mjs watch B --next --replied & wait). Once waiting, it returns as soon as someone comments, and on its own within 4 minutes: handle what it printed and run it again until it says to stop watching. Watching follows every task, however short the reply.';
 /** No flow ever leaves a file beside the source. */
 async function noCompanions(...dirs:string[]){
  for(const dir of dirs)expect((await readdir(dir)).filter(name=>name.endsWith('.af.json')),dir).toEqual([]);}
@@ -711,7 +711,7 @@ it('publish refuses an empty page and starter placeholders by line, and drops ha
   const done=await publishCommand({values:{create:true},positionals:[file]},options);
   expect(sent.at(-1).method).toBe('POST');expect(sent.at(-1).body.html).not.toContain('data-af-id="hero"');
   expect(done.autofix.routine).toContain('dropped 2 hand-written data-af-id (the platform assigns them)');
-  expect(done.next).toBe(WATCH_NEXT+'\n  node scripts/comment.mjs watch NEW123 --next');
+  expect(done.next).toBe(watchNext('NEW123'));
   expect(sourceIdentity(await readFile(file,'utf8'))).toMatchObject({server:'https://h.test',id:'NEW123',version:1,entryPath:'index.html'});
   await noCompanions(dir);
 });

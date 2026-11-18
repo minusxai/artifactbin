@@ -118,7 +118,7 @@ it('names the session on every request, and every comment write prints the name 
  ];
  for (const [sub, values] of writes) {
   const result = await commentCommand({sub, values, positionals: ['PAGE12']}, {env, fetcher});
-  expect(result.next, sub).toMatch(/^Next: when the request is done, reply to the user/);
+  expect(result.next, sub).toMatch(/^Next, once the request is done: Reply to the user first: /);
   expect(result.next.endsWith(watchLine), sub).toBe(true);
   expect(result.agent, sub).toMatch(/^Codex [A-Z][a-z]+$/);
   expect(result.note, sub).toContain(`Comments show you as "${result.agent}"`);

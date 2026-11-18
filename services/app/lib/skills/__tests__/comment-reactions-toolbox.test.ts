@@ -484,6 +484,7 @@ it('the latest watch holds the lock: an earlier one sees touch() fail and its si
 });
 it('reply, resolve, reopen and edit read the thread revision themselves, and --body takes the text inline',async()=>{
  const {commentCommand}=await import('../../../skills/artifactbin/scripts/comment.mjs');
+ const {watchNext}=await import('../../../skills/artifactbin/scripts/toolbox-watch-state.mjs');
  const root=await tempDir('comment-revision-',onTestFinished),server='https://example.test';
  const listing={annotations:[{id:'T1',revision:7,thread:[{id:'T1'},{id:'R1'}]}],next_cursor:null};
  const sent:any[]=[];
@@ -492,7 +493,7 @@ it('reply, resolve, reopen and edit read the thread revision themselves, and --b
  const options={env:syntheticEnv(server,root),fetcher};
   const replied=await commentCommand({sub:'reply',values:{thread:'T1',body:'Done: shorter intro.',resolve:true},positionals:['PAGE12']},options);
   expect(sent.at(-1)).toEqual({method:'POST',path:'/api/artifacts/PAGE12/annotations/T1',body:{reply:'Done: shorter intro.',resolve:true,expected_revision:7}});
-  expect(replied.next).toBe('Next: when the request is done, reply to the user and run the comment watch, even when the reply is only the link. Nothing may hold back your reply: it is every link the user asked for, in the form they asked for (a page\'s public view is its receipt\'s user_page_url), plus what they asked. The watch waits only once that reply is sent: its first call after you publish, edit or comment returns at once, and so does every call until one adds --replied, which you add only after sending the reply. Claude Code: start the watch, one per page, with the Bash tool\'s run_in_background first, then send your reply as your last message and end your turn; when that first call wakes you, start it again with --replied the same way. Other harnesses: say your reply to the user, then call the watch in the foreground with its default wait and a shell timeout of at least 300000 ms, then once more with --replied; several pages share each call (node scripts/comment.mjs watch A --next --replied & node scripts/comment.mjs watch B --next --replied & wait). Once waiting, it returns as soon as someone comments, and on its own within 4 minutes: handle what it printed and run it again until it says to stop watching. Watching follows every task, however short the reply.\n  node scripts/comment.mjs watch PAGE12 --next');
+  expect(replied.next).toBe(watchNext('PAGE12'));expect(replied.next.endsWith('\n  node scripts/comment.mjs watch PAGE12 --next')).toBe(true);
   for(const sub of ['resolve','reopen'] as const){await commentCommand({sub,values:{thread:'T1'},positionals:['PAGE12']},options);expect(sent.at(-1).body).toEqual({[sub]:true,expected_revision:7});}
   // An edit of a reply finds the thread that holds it.
   await commentCommand({sub:'edit',values:{comment:'R1',body:'Fixed typo'},positionals:['PAGE12']},options);
