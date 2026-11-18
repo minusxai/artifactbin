@@ -163,7 +163,7 @@ it('runs every api, api-isolated, ui and islands test on every pull request, pac
  expect(job.env.TEST_BUILDS_KIND).toBe("${{ matrix.shard && 'guards' || matrix.batch && 'node' || matrix.suite && startsWith(matrix.part, 'ui-') && 'ui' || 'api' }}");
  const save=steps.filter(step=>step.uses?.startsWith('actions/cache/save')&&step.with.key.startsWith('test-builds-'));
  expect(save).toHaveLength(1);
- expect(save[0].if).toBe("contains(fromJSON('[\"api-32\",\"ui-7\",\"guards-3\",\"node-3\"]'), matrix.part) && steps.test-builds.outputs.cache-hit != 'true' && steps.test-builds-retry.outputs.cache-hit != 'true'");
+ expect(save[0].if).toBe("contains(fromJSON('[\"api-32\",\"ui-7\",\"guards-3\",\"node-4\"]'), matrix.part) && steps.test-builds.outputs.cache-hit != 'true' && steps.test-builds-retry.outputs.cache-hit != 'true'");
  expect(save[0].with).toEqual({path:steps[restore].with.path,key:steps[restore].with.key});
  // Saved after every test step, so a saver's own transforms are in its entry.
  expect(steps.indexOf(save[0])).toBeGreaterThan(Math.max(...steps.flatMap((step,i)=>(step.run??'').includes('vitest.mjs run')?[i]:[])));
@@ -200,7 +200,10 @@ it('bounds every first cache download and lets the next tier of the same chain t
  // Every bound is a fraction of a minute that actions/cache parses: Number(value) * 60 * 1000 ms a segment.
  const values=steps.flatMap(step=>bound(step)===undefined?[]:[String(bound(step)).match(/'([\d.]+)'|^([\d.]+)$/)]);
  for(const match of values){const minutes=Number(match[1]??match[2]);expect(minutes).toBeGreaterThan(0);expect(minutes).toBeLessThan(1);}
- expect(values).toHaveLength(4);
+ // The node runners' import graph (scripts/ci/node-affected.mjs's edge cache) is bounded too: without it the choice walks cold.
+ const graph=steps.find(step=>step.with?.path==='node_modules/.cache/test-graph.json');
+ expect(bound(graph)).toBe('0.1');
+ expect(values).toHaveLength(5);
  // A runner whose restore was abandoned builds its test builds itself, as on any miss, and still runs every one of its tests.
  expect(steps.filter(step=>step.if?.includes('steps.test-builds.outputs')).map(step=>step.id??step.uses.split('@')[0])).toEqual(['test-builds-retry','actions/cache/save']);
 });
@@ -250,7 +253,21 @@ it('lays main\'s measured node times over the table on every node runner, fetche
    expect(waited.stdout).toContain(status?'answered 503, twice':'chosen');
  }
  expect(fetch).toBeLessThan(at(step=>step.id==='slim'));
- expect(wait).toBe(batch-1);
+ // The change's own node files are chosen from the same laid-over table, then the batch runs them with its own.
+ const choose=at(step=>step.run==='node scripts/ci/node-affected.mjs');
+ expect(steps[choose].if).toBe('matrix.batch');
+ expect(wait).toBe(choose-1);
+ expect(choose).toBe(batch-1);
+ // From main's import graph, restored after every install tier (an install restore would replace node_modules).
+ const graph=at(step=>step.with?.path==='node_modules/.cache/test-graph.json');
+ expect(steps[graph].if).toBe('matrix.batch');
+ expect(steps[graph].with['restore-keys']).toBe('test-graph-v1-${{ runner.os }}-');
+ for(const tier of steps.filter(step=>/install/.test(step.id??'')||/npm (ci|install)/.test(step.run??'')))expect(steps.indexOf(tier),tier.id??tier.run).toBeLessThan(graph);
+ expect(graph).toBeLessThan(choose);
+ // Main's warm-caches walks every node and integration file's imports and saves the graph the runners restore.
+ const warm=workflow().jobs['warm-caches'].steps,walk=warm.findIndex(step=>step.run==='node scripts/ci/node-affected.mjs --warm');
+ expect(warm[walk+1].with).toEqual({path:'node_modules/.cache/test-graph.json',key:'test-graph-v1-${{ runner.os }}-${{ github.sha }}'});
+ expect(warm[walk+1].uses).toMatch(/^actions\/cache\/save@/);
  // No other runner fetches them: the api, ui and guard runners pack by the committed table alone.
  expect(steps.filter(step=>(step.run??'').includes('node-timings')).map(step=>step.if)).toEqual(['matrix.batch','matrix.batch']);
 });
@@ -485,16 +502,18 @@ it('enrolls existing node-project guard tests that the full suite also runs, onc
  }
 });
 // The contract tier: route-level scenarios another repository runs against its production composition after merge.
-it('enrolls node and API contract tests that the full suite also runs, once each, outside the other lists',()=>{
+// Only `node` project files: pr fast's api parts already run every api and api-isolated file, so an api file listed here
+// ran twice on every pull request (user-host.test.ts: 3.9s in an api part and again 9.1s on a guard runner).
+it('enrolls node contract tests that the full suite also runs, once each, outside the other lists and the api parts',()=>{
  const read=path=>JSON.parse(readFileSync(new URL(`../../${path}`,import.meta.url),'utf8'));
  const contracts=read('scripts/ci/contract-tests.json'),guards=read('scripts/ci/guard-tests.json'),fast=read('scripts/ci/fast-tests.json');
  expect(contracts).toContain('services/app/lib/page-doors/__tests__/native-acceptance.test.ts');
- expect(contracts).toContain('services/app/server/__tests__/user-host.test.ts');
+ expect(contracts).not.toContain('services/app/server/__tests__/user-host.test.ts');
  expect(contracts).toEqual([...new Set(contracts)].sort());
  expect(readFileSync(new URL('../../vitest.guard.config.ts',import.meta.url),'utf8')).toContain("byIsolation('pr-contracts', 'contract-tests.json'");
  for(const file of contracts){
   expect(readFileSync(new URL(`../../${file}`,import.meta.url),'utf8').length,file).toBeGreaterThan(0);
-  expect(file).toMatch(/^services\/app\/(?:lib|server)\/(?:.+\/)?__tests__\/[^/]+(?<!\.ui)\.test\.ts$/);
+  expect(file).toMatch(/^services\/app\/lib\/(?:.+\/)?__tests__\/[^/]+(?<!\.ui)\.test\.ts$/);
   expect(fast).not.toContain(file);expect(guards).not.toContain(file);
  }
 });

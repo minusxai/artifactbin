@@ -1,5 +1,5 @@
 /**
- * `--changed` selection with a persistent import-edge cache.
+ * `--changed` selection with a persistent import-edge cache (`npm test`, and pr fast's node runners: scripts/ci/node-affected.mjs).
  *
  * Vitest's own `--changed` filter transforms every test file's whole import graph on every start
  * (~10 s here), because the edges it walks live only in that process's Vite module graph. This module
@@ -38,14 +38,32 @@ function loadCache(file, key) {
 export async function changedSpecifications(vitest, changedSince) {
   const root = vitest.config.root;
   const related = [...new Set(await vitest.vcs.findChangedFiles({ root, changedSince }))];
+  return (await affectedSpecifications(vitest, related)).map(({ spec }) => spec);
+}
+
+/**
+ * The same selection for a given list of changed files (absolute paths), each chosen specification with `distance`: how
+ * many imports from the test file the nearest changed file is (0 is the test file itself). A changed forceRerunTrigger
+ * selects every specification, each at distance Infinity: none is nearer the change than another.
+ */
+export async function affectedSpecifications(vitest, changed) {
+  const related = [...new Set(changed)];
   const specs = await vitest.globTestSpecifications();
   const triggers = vitest.config.forceRerunTriggers ?? [];
   const matcher = triggers.length ? pm(triggers) : undefined;
-  if (matcher && related.some((file) => matcher(file))) return specs;
+  if (matcher && related.some((file) => matcher(file))) return specs.map((spec) => ({ spec, distance: Infinity }));
   if (!related.length) return [];
 
   const graphs = await specificationGraphs(vitest, specs);
-  return specs.filter((spec, i) => related.some((file) => graphs[i].has(file)));
+  return specs.flatMap((spec, i) => {
+    const distance = Math.min(...related.map((file) => graphs[i].get(file) ?? Infinity));
+    return distance === Infinity ? [] : [{ spec, distance }];
+  });
+}
+
+/** Walks every specification's import graph once, so the edge cache holds them all (main's warm-caches saves it). */
+export async function cacheSpecificationGraphs(vitest) {
+  return (await specificationGraphs(vitest, await vitest.globTestSpecifications())).length;
 }
 
 /** Walk the same Vite import edges for selection and asset provisioning; never guess from test names. */
@@ -82,14 +100,15 @@ async function specificationGraphs(vitest, specs) {
     return deps;
   }
 
+  // Breadth first, so each file is recorded at its depth: how many imports from the test file it first appears.
   async function graph(spec) {
-    const seen = new Set([spec.moduleId]);
-    const queue = [spec.moduleId];
-    while (queue.length) {
-      const batch = queue.splice(0);
-      const results = await Promise.all(batch.map((file) => edges(spec.project, file)));
+    const seen = new Map([[spec.moduleId, 0]]);
+    let queue = [spec.moduleId];
+    for (let depth = 1; queue.length; depth++) {
+      const results = await Promise.all(queue.map((file) => edges(spec.project, file)));
+      queue = [];
       for (const deps of results) for (const dep of deps) {
-        if (!seen.has(dep) && existsSync(dep)) { seen.add(dep); queue.push(dep); }
+        if (!seen.has(dep) && existsSync(dep)) { seen.set(dep, depth); queue.push(dep); }
       }
     }
     return seen;
@@ -113,5 +132,5 @@ async function specificationGraphs(vitest, specs) {
 export async function needsReaderAssets(vitest, specs) {
   const app = path.join(vitest.config.root, 'services/app') + path.sep;
   if (specs.some(spec => spec.moduleId.startsWith(app))) return true;
-  return (await specificationGraphs(vitest, specs)).some(graph => [...graph].some(file => file.startsWith(app)));
+  return (await specificationGraphs(vitest, specs)).some(graph => [...graph.keys()].some(file => file.startsWith(app)));
 }

@@ -18,7 +18,7 @@
  * uploaded before its run began over the committed table (`scripts/ci/ci.mjs node-timings`, `withMeasuredTimes`), so
  * the three runners of one run choose and pack the same batch, and a re-run chooses what the first attempt did.
  */
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { LEAKS_PAST_ITS_FILE } from './test-isolation.mjs';
 
@@ -88,6 +88,56 @@ export function nodeBatchFiles({ timings, candidates, lane, read }) {
   const cheap = (file) => { const ms = recorded(file); return ms !== undefined && ms < NODE_BATCH_MAX_MS; };
   return [...candidates].filter((file) => (cheap(file) || NODE_BATCH_GUARDED.includes(file)) && !lane.has(file)
     && !Object.hasOwn(NODE_BATCH_EXCLUDED, file) && !LEAKS_PAST_ITS_FILE.test(read(file))).sort();
+}
+
+/**
+ * THE PULL REQUEST'S OWN NODE FILES, beyond the batch (scripts/ci/node-affected.mjs chooses them on every pr fast node
+ * runner; vitest.node-batch.config.ts runs them in `node-batch-isolated`, one fresh graph per file, as the `node`
+ * project does). The batch alone left a new file with no recorded time, and every slower file a change reached, to the
+ * post-merge suite. Now:
+ *  - `must`: every `node` file the change adds or edits that no pr fast part already runs, whatever its time or record;
+ *  - `affected`: the slower files whose import graph reaches a changed file (scripts/lib/test-graph.mjs, the same
+ *    selection `npm test` makes), nearest the change first (fewest imports away), then shortest, while their recorded
+ *    times (a file without one weighs the `node` median) fit `budgetMs`; `must` never spends it;
+ *  - `deferred`: the reached files over the budget, named on the run. The full suite still runs every one after merge.
+ * @param {{ timings: { files: Record<string, Record<string, number>> }, changed: Iterable<string>, affected: Iterable<{ file: string, distance: number }>, candidates: Set<string>, batch: Set<string>, lane: Set<string>, budgetMs: number }} input
+ * @returns {{ must: string[], affected: string[], deferred: string[] }}
+ */
+export function nodeAffectedFiles({ timings, changed, affected, candidates, batch, lane, budgetMs }) {
+  const runsElsewhere = (file) => !candidates.has(file) || batch.has(file) || lane.has(file);
+  const must = [...new Set(changed)].filter((file) => !runsElsewhere(file)).sort();
+  const node = timings.files.node ?? {};
+  const values = Object.values(node).sort((a, b) => a - b);
+  const median = values.length ? values[Math.floor(values.length / 2)] : NODE_BATCH_MAX_MS;
+  const weight = (file) => node[file] ?? median;
+  const reached = [...affected].filter(({ file }) => !runsElsewhere(file) && !must.includes(file))
+    .sort((a, b) => a.distance - b.distance || weight(a.file) - weight(b.file) || (a.file < b.file ? -1 : a.file > b.file ? 1 : 0));
+  const chosen = [], deferred = [];
+  let spent = 0;
+  for (const { file } of reached) {
+    if (chosen.includes(file) || deferred.includes(file)) continue;
+    if (spent + weight(file) <= budgetMs) { chosen.push(file); spent += weight(file); } else deferred.push(file);
+  }
+  return { must, affected: chosen, deferred: deferred.sort() };
+}
+
+/**
+ * Recorded time (ms) the reached files may add to pr fast's node runners, summed over all of them. The runners' Vitest
+ * step took ~10s of the 60s limit (pr fast run 44299731859, finished 21-33s into the run); 90s over three runners of
+ * three workers is ~10s more on each, inside the 40s aim. A pull request's own files are not counted against it.
+ */
+export const NODE_AFFECTED_BUDGET_MS = 90_000;
+
+/** Where a node runner writes its choice (repository-relative), for vitest.node-batch.config.ts to read. */
+export const NODE_AFFECTED_FILE = 'tmp/node-affected.json';
+
+/** The files a runner chose (`must` then `affected`); none when it wrote no choice, as in a local run. @param {string} root */
+export function readNodeAffected(root) {
+  const file = path.join(root, NODE_AFFECTED_FILE);
+  if (!existsSync(file)) return [];
+  const { must, affected } = JSON.parse(readFileSync(file, 'utf8'));
+  if (![must, affected].every((list) => Array.isArray(list) && list.every((entry) => typeof entry === 'string'))) throw new Error(`${NODE_AFFECTED_FILE} is not a file list`);
+  return [...must, ...affected];
 }
 
 /** The full suite's projects the timings table records (scripts/ci/test-timings.mjs `RECORDED` adds its lenses). */
