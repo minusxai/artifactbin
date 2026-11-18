@@ -34,14 +34,15 @@ The workflows themselves are `.github/workflows/*.yml`; job, runner and shard co
   A file sits in at most one list; enrollment only narrows the lane and the full suite still runs every file.
 - `test-timings.json` packs shards by measured time; refresh from both workflows' runs:
   `node scripts/ci/test-timings.mjs --projects api,api-isolated --run <id> …`; others keep their time.
-  Node files join the node batch without one: `node-timings.yml` (`scripts/lib/node-batch.mjs` says how).
+  Node files join the batch via `node-timings.yml`; a changed one, and slower ones it reaches, run beside it
+  (`scripts/lib/node-batch.mjs`).
 - The timing observer reads main's workflow: a PR may add `fast (…)` jobs, but one that drops or renames a job
   main expects is refused (`completedFastAttempt`).
 - Merge a PR into `main` only with `node scripts/ci/merge-fast.mjs owner/repo PR`: it checks the completed fast
   attempt, its timing, the exact head and that it contains current main (else rebase), then squash-merges.
 
 ## Checks
-- `npm test -- --files scripts/__tests__/ci-budget.test.mjs scripts/__tests__/workflows.test.mjs scripts/__tests__/ci-plan.test.mjs scripts/__tests__/fast-test-policy.test.mjs scripts/__tests__/merge-admission.test.mjs`
+- `npm test -- --files scripts/__tests__/{ci-budget,workflows,ci-plan,fast-test-policy,merge-admission,node-batch}.test.mjs`
 - A list edit: `node scripts/ci/fast-tests.mjs` runs the capability audit and the fast list.
 - A validate check edit: its test (`scripts/__tests__/module-graph.test.mjs`, `ui-primitives-guard.test.mjs`,
   `table-ownership.test.mjs`) and `npm run validate`.

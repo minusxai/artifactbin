@@ -762,6 +762,13 @@ jobs:
             tmp/test-schema-image
             tmp/vitest-module-cache
           key: test-builds-v3-${{ runner.os }}-node-${{ steps.test-builds-key.outputs.key }}-${{ steps.test-builds-key.outputs.modules }}
+      # PR FAST'S NODE RUNNERS' IMPORT GRAPH: every node and integration file's import edges, which their choice of the
+      # change's node files walks (scripts/ci/node-affected.mjs; pr-fast.yml restores the newest).
+      - run: node scripts/ci/node-affected.mjs --warm
+      - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: node_modules/.cache/test-graph.json
+          key: test-graph-v1-${{ runner.os }}-${{ github.sha }}
 
   # THE ROLL-UP, AND THE RECORD OF WHAT IT PASSED ON.
   #

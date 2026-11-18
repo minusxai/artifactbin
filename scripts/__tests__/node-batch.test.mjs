@@ -6,7 +6,7 @@ import { promisify } from 'node:util';
 import { crc32 } from 'node:zlib';
 import path from 'node:path';
 import { describe, expect, it, onTestFinished } from 'vitest';
-import { LANE_LISTS, NODE_BATCH_EXCLUDED, NODE_BATCH_GUARDED, NODE_BATCH_MAX_MS, NODE_TIMINGS_ARTIFACT, laneFiles, measuredArtifact, nodeBatchFiles, withMeasuredTimes } from '../lib/node-batch.mjs';
+import { LANE_LISTS, NODE_AFFECTED_BUDGET_MS, NODE_AFFECTED_FILE, NODE_BATCH_EXCLUDED, NODE_BATCH_GUARDED, NODE_BATCH_MAX_MS, NODE_TIMINGS_ARTIFACT, laneFiles, measuredArtifact, nodeAffectedFiles, nodeBatchFiles, readNodeAffected, withMeasuredTimes } from '../lib/node-batch.mjs';
 import { LEAKS_PAST_ITS_FILE } from '../lib/test-isolation.mjs';
 import full from '../../vitest.config.ts';
 import batch from '../../vitest.node-batch.config.ts';
@@ -130,6 +130,44 @@ describe('pr fast\'s node batch', () => {
       broken = true;
       await expect(run()).rejects.toMatchObject({ stderr: expect.stringContaining('answered 503, twice') });
     } finally {server.close();}
+  });
+});
+
+// THE PULL REQUEST'S OWN NODE FILES (scripts/ci/node-affected.mjs): a node file the pull request adds or changes runs on it
+// whatever its time; a slower file its change reaches runs too, nearest first, within a recorded-time budget.
+describe('pr fast\'s node files beyond the batch', () => {
+  const timings = { files: { node: { 'a.test.ts': 3000, 'b.test.ts': 20000, 'c.test.ts': 1000, 'd.test.ts': 2000, 'e.test.ts': 500, 'f.test.ts': 4000, 'cheap.test.ts': 40, 'listed.test.ts': 5000 } } };
+  const candidates = new Set(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'cheap', 'listed', 'new'].map((name) => `${name}.test.ts`));
+  const choose = (changed, affected, budgetMs) => nodeAffectedFiles({ timings, changed, affected, candidates, batch: new Set(['cheap.test.ts']), lane: new Set(['listed.test.ts']), budgetMs });
+
+  it('runs every node file the change adds or edits that no other part runs, whatever its time or record', () => {
+    // b is slow, new has no recorded time: both run. cheap runs in the batch, listed in its lane, api.test.ts is no node file.
+    const chosen = choose(['new.test.ts', 'b.test.ts', 'cheap.test.ts', 'listed.test.ts', 'api.test.ts', 'services/app/lib/x/index.ts'], [], 0);
+    expect(chosen).toEqual({ must: ['b.test.ts', 'new.test.ts'], affected: [], deferred: [] });
+  });
+
+  it('adds the files the change reaches, nearest first and shortest first, until the budget, and names the rest', () => {
+    const reached = [{ file: 'a.test.ts', distance: 2 }, { file: 'c.test.ts', distance: 3 }, { file: 'd.test.ts', distance: 1 }, { file: 'e.test.ts', distance: 3 }, { file: 'f.test.ts', distance: 2 },
+      { file: 'b.test.ts', distance: 1 }, { file: 'cheap.test.ts', distance: 1 }, { file: 'listed.test.ts', distance: 1 }, { file: 'g.test.ts', distance: 4 }];
+    // d (1, 2.0s), then a (2, 3.0s): 5.0s. f (2, 4.0s) does not fit 6.0s; e (3, 0.5s) does; c (3, 1.0s) would pass it.
+    // g has no record: it weighs the node median (3.0s) and does not fit either. b is the change's own file, cheap and listed run elsewhere.
+    const chosen = choose(['b.test.ts', 'services/app/lib/x/index.ts'], reached, 6000);
+    expect(chosen).toEqual({ must: ['b.test.ts'], affected: ['d.test.ts', 'a.test.ts', 'e.test.ts'], deferred: ['c.test.ts', 'f.test.ts', 'g.test.ts'] });
+    // The changed file's own time never spends the reached files' budget.
+    expect(choose([], reached, 6000).affected).toEqual(chosen.affected);
+    expect(NODE_AFFECTED_BUDGET_MS).toBeGreaterThan(0);
+  });
+
+  it('gives the batch config the chosen files as an isolated project only when a runner wrote them', () => {
+    const dir = tempDirSync('node-affected-', onTestFinished);
+    expect(readNodeAffected(dir)).toEqual([]);
+    mkdirSync(path.join(dir, path.dirname(NODE_AFFECTED_FILE)), { recursive: true });
+    writeFileSync(path.join(dir, NODE_AFFECTED_FILE), JSON.stringify({ must: ['b.test.ts'], affected: ['d.test.ts'], deferred: ['c.test.ts'] }));
+    expect(readNodeAffected(dir)).toEqual(['b.test.ts', 'd.test.ts']);
+    writeFileSync(path.join(dir, NODE_AFFECTED_FILE), '{"must":"b.test.ts"}');
+    expect(() => readNodeAffected(dir)).toThrow(/not a file list/);
+    // This checkout wrote none: the batch config is the batch alone.
+    expect(batch.test.projects.map((project) => project.test.name)).toEqual(existsSync(path.join(root, NODE_AFFECTED_FILE)) ? ['node-batch', 'node-batch-isolated'] : ['node-batch']);
   });
 });
 

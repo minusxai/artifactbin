@@ -2,7 +2,7 @@ import { globSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { defineConfig, type TestProjectInlineConfiguration } from 'vitest/config';
 import full from './vitest.config';
-import { laneFiles, nodeBatchFiles } from './scripts/lib/node-batch.mjs';
+import { laneFiles, nodeBatchFiles, readNodeAffected } from './scripts/lib/node-batch.mjs';
 import { MODULE_CACHE_DIR, schemaImageDir, suiteEnv } from './scripts/lib/suite-env.mjs';
 import TimedSequencer from './scripts/lib/timed-sequencer.mjs';
 import { readTimings } from './scripts/lib/timed-sequencer.mjs';
@@ -15,6 +15,9 @@ const root = import.meta.dirname;
 const nodeProject = (full.test?.projects as TestProjectInlineConfiguration[]).find((project) => project.test?.name === 'node')!.test!;
 const candidates = globSync(nodeProject.include!, { cwd: root, exclude: nodeProject.exclude }).map((file) => file.split(path.sep).join('/'));
 const files = nodeBatchFiles({ timings: readTimings(), candidates, lane: laneFiles(root), read: (file: string) => readFileSync(path.join(root, file), 'utf8') });
+// The pull request's own node files and the slower ones its change reaches, when a pr fast runner chose them
+// (scripts/ci/node-affected.mjs): one fresh graph per file, as in the `node` project, so none needs the batch's checks.
+const affected = readNodeAffected(root);
 
 export default defineConfig({
   root,
@@ -39,6 +42,9 @@ export default defineConfig({
         // The full suite's setup, then the check that a file left the builtins as it found them.
         setupFiles: ['./services/app/test/setup/vitest.setup.ts', './services/app/test/setup/shared-graph.setup.ts'],
       },
-    }],
+    }, ...(affected.length ? [{
+      extends: true as const,
+      test: { name: 'node-batch-isolated', environment: 'node' as const, include: affected, setupFiles: nodeProject.setupFiles },
+    }] : [])],
   },
 });
