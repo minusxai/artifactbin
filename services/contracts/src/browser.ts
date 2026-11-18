@@ -100,6 +100,34 @@ export type SvgHarvestResult =
 export const SVG_HARVEST_LIMITS = { images: 200, imageBytes: 2 * 1024 * 1024, totalBytes: 24 * 1024 * 1024, loads: 3 } as const;
 
 /**
+ * THE PAGE'S OWN PROBLEMS (`inspect`): the same ready page a render photographs, loaded once, and what went wrong in
+ * it, as its author needs to hear it: a native component that failed (`[data-af-error]`: its tag, code, label and the
+ * sentence it shows), an uncaught exception, a console error, a request that failed, answered 400 or more, or was
+ * refused, and a page that never finished drawing (`timeout`). Repeats are said once; at most
+ * PAGE_PROBLEM_LIMITS.problems, each text cut to its limit, `truncated` when more were seen.
+ *
+ * `internalOrigin`: the page loads under its public origin (its CSP, its relative links and its origin checks hold),
+ * but every GET or HEAD to the page's origin or an `allowedOrigins` origin is fetched from this origin instead, with
+ * the request's own `Host`, no browser header or credential, no redirect, bounded; any other method is refused. So a
+ * page on a public host name the browser's network cannot resolve is still loaded from the app itself.
+ */
+export interface PageInspectRequest extends PageRequest { internalOrigin?: string }
+export interface PageProblem {
+  kind: 'component' | 'script' | 'console' | 'request' | 'timeout';
+  message: string;
+  /** A component's tag name, its `data-af-error` code and its label (`label` or `aria-label`). */
+  element?: string;
+  code?: string;
+  label?: string;
+}
+export const PAGE_PROBLEM_LIMITS = { problems: 20, message: 500, element: 40, code: 64, label: 120 } as const;
+export type PageInspection =
+  | { ok: true; problems: PageProblem[]; truncated: boolean }
+  | { ok: false; reason: 'unavailable' | 'navigation' | 'failed'; detail?: string }
+  /** The service predates this operation (a mixed-version rollout): nothing was inspected. */
+  | { ok: false; reason: 'inspect_unavailable' };
+
+/**
  * `element: true` says an element capture was drawn as one: a service that predates element capture answers the whole
  * surface without it, and the caller must not take that for the element (a mixed-version rollout).
  */
@@ -121,6 +149,8 @@ export interface BrowserService {
   renderAndUpload?(request:RenderUploadRequest):Promise<RenderUploadResult>;
   /** Optional: an older service or a noop answers `harvest_unavailable` (or lacks the method). */
   harvestSvg?(request: SvgHarvestRequest): Promise<SvgHarvestResult>;
+  /** Optional: an older service or a noop answers `inspect_unavailable` (or lacks the method). */
+  inspect?(request: PageInspectRequest): Promise<PageInspection>;
   sessions?: BrowserSessions;
   /** Release the browser (a local implementation holds one); a client has nothing to release. */
   close?(): Promise<void>;
@@ -128,4 +158,4 @@ export interface BrowserService {
 
 /** Over HTTP, the image answer's header carrying RenderResult `element`. */
 export const ELEMENT_CAPTURE_HEADER = 'x-artifactbin-element-capture';
-export const BROWSER_ROUTES = { render: '/render', renderUpload:'/render-upload', harvest: '/harvest', sessions: '/sessions' } as const;
+export const BROWSER_ROUTES = { render: '/render', renderUpload:'/render-upload', harvest: '/harvest', inspect: '/inspect', sessions: '/sessions' } as const;

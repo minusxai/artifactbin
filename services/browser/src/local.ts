@@ -13,9 +13,9 @@ import { chromium, errors, type Browser, type Locator, type Page } from 'playwri
 import sharp from 'sharp';
 import {admittedUploadUrl,uploadImage,type UploadOptions} from './upload';
 import {browserUploadOptions} from './upload-config';
-import type { BrowserService, BrowserSessions, HarvestedSvg, PageRequest, RenderRequest, RenderResult, SvgHarvestRequest, SvgHarvestResult } from '@artifactbin/contracts';
-import { ELEMENT_CAPTURE, SVG_HARVEST_LIMITS, type NoElement } from '@artifactbin/contracts';
-import { internalAssetResponse } from './internal-assets';
+import type { BrowserService, BrowserSessions, HarvestedSvg, PageInspectRequest, PageInspection, PageProblem, PageRequest, RenderRequest, RenderResult, SvgHarvestRequest, SvgHarvestResult } from '@artifactbin/contracts';
+import { ELEMENT_CAPTURE, PAGE_PROBLEM_LIMITS, SVG_HARVEST_LIMITS, type NoElement } from '@artifactbin/contracts';
+import { internalAssetResponse, internalPageResponse } from './internal-assets';
 import { BrowserUnavailable, createBrowserHolder } from './browser-holder';
 
 const DEFAULT_TIMEOUT_MS = 15_000;
@@ -150,6 +150,46 @@ function svgFromDataUrl(src: string): string {
   return head.toLowerCase().endsWith(';base64') ? Buffer.from(body, 'base64').toString('utf8') : decodeURIComponent(body);
 }
 
+/**
+ * Serialized into Chromium: every native component under the surface that failed (`[data-af-error]`, lib/html-component-specs
+ * read-failure), with the sentence its status line shows. Self-contained and synchronous.
+ */
+function collectFailures(input: { selector: string; limit: number }) {
+  const root = document.querySelector(input.selector) ?? document.documentElement;
+  const out: Array<{ kind: 'component'; element: string; code: string; label: string; message: string }> = [];
+  for (const element of root.querySelectorAll('[data-af-error]')) {
+    const status = element.querySelector('[role="status"]');
+    const said = (status?.textContent || element.textContent || '').replace(/\s+/g, ' ').trim();
+    out.push({ kind: 'component', element: element.localName, code: element.getAttribute('data-af-error') ?? '', label: (element.getAttribute('label') || element.getAttribute('aria-label') || '').trim(), message: said || 'failed' });
+    if (out.length >= input.limit) break;
+  }
+  return out;
+}
+
+/** A page's problems, each said once, cut to PAGE_PROBLEM_LIMITS. */
+function problemList() {
+  const L = PAGE_PROBLEM_LIMITS, seen = new Set<string>(), problems: PageProblem[] = [];
+  let truncated = false;
+  const cut = (text: string, max: number) => (text.length > max ? text.slice(0, max - 1) + '…' : text);
+  return {
+    add(problem: PageProblem) {
+      const one: PageProblem = { kind: problem.kind, message: cut(problem.message.trim() || problem.kind, L.message),
+        ...(problem.element ? { element: cut(problem.element, L.element) } : {}), ...(problem.code ? { code: cut(problem.code, L.code) } : {}),
+        ...(problem.label ? { label: cut(problem.label, L.label) } : {}) };
+      const key = JSON.stringify(one);
+      if (seen.has(key)) return;
+      seen.add(key);
+      if (problems.length >= L.problems) truncated = true; else problems.push(one);
+    },
+    result: () => ({ problems, truncated }),
+  };
+}
+
+/** A request's address as its author reads it: the path on the page's own origin, else origin and path; never a query. */
+function said(target: string, pageOrigin: string): string {
+  try { const url = new URL(target); return url.origin === pageOrigin ? url.pathname : url.origin + url.pathname; } catch { return target.slice(0, 200); }
+}
+
 /** `launch` replaces Playwright's own launch (and so ignores `executablePath`); tests count and hold browsers with it. */
 export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: () => Promise<string>; launch?: (timeoutMs: number) => Promise<Browser>; sessions?: BrowserSessionOptions; upload?:UploadOptions } = {}): BrowserService & { close(): Promise<void> } {
   const upload=opts.upload??browserUploadOptions(process.env);
@@ -175,7 +215,7 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
    * readiness wait (diagrams, managed frames, the settle, charts). `use` sees
    * the ready page; the page is closed after, whatever happened.
    */
-  async function withReadyPage<T>(req: PageRequest, deviceScaleFactor: number, use: (ready: { page: Page; surface: Locator; timeout: number; remaining: () => number; waitForCharts: () => Promise<void> }) => Promise<T>): Promise<T> {
+  async function withReadyPage<T>(req: PageRequest & { internalOrigin?: string }, deviceScaleFactor: number, use: (ready: { page: Page; surface: Locator; timeout: number; remaining: () => number; waitForCharts: () => Promise<void> }) => Promise<T>, watch?: { page(page: Page): void; refused(url: string): void }): Promise<T> {
     const deadline=Date.now()+(req.timeoutMs??DEFAULT_TIMEOUT_MS);
     const remaining=()=>{const ms=deadline-Date.now();if(ms<=0)throw new Error('Render deadline');return ms;};
     const lease = await holder.acquire(remaining());
@@ -194,8 +234,9 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
       // reducedMotion: the motion kit never arms scroll reveals under it, so a capture always sees the finished page.
       const page = opened = await lease.browser.newPage({ viewport: req.viewport, reducedMotion: 'reduce', deviceScaleFactor, serviceWorkers: 'block' });
       if (expired) throw new Error('Render deadline');
+      watch?.page(page);
       const timeout = remaining();
-      if (req.sameOriginOnly || req.assetOrigin) {
+      if (req.sameOriginOnly || req.assetOrigin || req.internalOrigin) {
         const origin = new URL(req.url).origin;
         // Context routing also covers popup first requests. Service workers are
         // disabled above so no worker can bypass this admission/forwarding seam.
@@ -207,8 +248,13 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
                 const signal = AbortSignal.any([forwarding.signal, AbortSignal.timeout(Math.min(timeout, DEFAULT_TIMEOUT_MS))]);
                 const response = await internalAssetResponse(request.url(), request.method(), req.assetOrigin, origin, signal);
                 await route.fulfill({ status: response.status, headers: Object.fromEntries(response.headers), body: Buffer.from(await response.arrayBuffer()) });
+              } else if (req.internalOrigin && !/^(?:data|blob):/.test(request.url()) && requestOriginAllowed(request.url(), origin, req.allowedOrigins)) {
+                // Inspection: the page's own and allowed origins are fetched from the app itself (contracts PageInspectRequest).
+                const signal = AbortSignal.any([forwarding.signal, AbortSignal.timeout(Math.min(timeout, DEFAULT_TIMEOUT_MS))]);
+                const response = await internalPageResponse(request.url(), request.method(), req.internalOrigin, signal);
+                await route.fulfill({ status: response.status, headers: Object.fromEntries(response.headers), body: Buffer.from(await response.arrayBuffer()) });
               } else if (!req.sameOriginOnly || requestOriginAllowed(request.url(), origin, req.allowedOrigins)) await route.continue();
-              else await route.abort();
+              else { watch?.refused(request.url()); await route.abort(); }
             } catch { await route.abort().catch(() => {}); }
           })();
           pending.add(run); void run.finally(() => pending.delete(run));
@@ -404,6 +450,32 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
     });
   }
 
+  /** One load's problems (PageInspectRequest): listened for from the first request, components read once it is ready. */
+  async function inspectOnce(req: PageInspectRequest): Promise<{ problems: PageProblem[]; truncated: boolean }> {
+    const found = problemList(), refused = new Set<string>(), pageOrigin = new URL(req.url).origin;
+    try {
+      await withReadyPage(req, 1, async ({ page }) => {
+        for (const failure of await page.evaluate(collectFailures, { selector: req.selector, limit: PAGE_PROBLEM_LIMITS.problems + 1 })) found.add(failure);
+      }, {
+        refused: url => refused.add(url),
+        page: page => {
+          page.on('pageerror', error => found.add({ kind: 'script', message: error.message }));
+          // A failed load is said once, as its request (below), not again as Chromium's console line about it.
+          page.on('console', message => { if (message.type() === 'error' && !message.text().startsWith('Failed to load resource')) found.add({ kind: 'console', message: message.text() }); });
+          page.on('requestfailed', request => found.add({ kind: 'request', message: refused.has(request.url())
+            ? `${said(request.url(), pageOrigin)} was refused: a page loads only its own files and the platform's`
+            : `${request.method()} ${said(request.url(), pageOrigin)} failed: ${request.failure()?.errorText ?? 'no answer'}` }));
+          page.on('response', response => { if (response.status() >= 400) found.add({ kind: 'request', message: `${response.request().method()} ${said(response.url(), pageOrigin)} answered ${response.status()}` }); });
+        },
+      });
+    } catch (error) {
+      if (error instanceof NavigationError || error instanceof BrowserUnavailable) throw error;
+      // What it showed until then is kept: a page that never finishes drawing is itself a problem.
+      found.add({ kind: 'timeout', message: 'the page did not finish loading and drawing in time' });
+    }
+    return found.result();
+  }
+
   const started = createBrowserSessions(actor => {
     if (!opts.sessions) throw new Error('Browser session forwarding is not configured');
     return createSessionProcess(actor, opts.sessions);
@@ -457,6 +529,21 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
       }).then(
         (answers): SvgHarvestResult => Date.now()>deadline ? {ok:false,reason:'failed',detail:'Harvest deadline'} : { ok: true, loads: answers },
         (e): SvgHarvestResult => {
+          if (e instanceof NavigationError) return { ok: false, reason: 'navigation', detail: e.message };
+          if (e instanceof BrowserUnavailable) return { ok: false, reason: 'unavailable', detail: e.message };
+          return { ok: false, reason: 'failed', detail: (e as Error).message };
+        },
+      );
+      chain = run;
+      return run;
+    },
+    /** THE PAGE'S OWN PROBLEMS (PageInspectRequest): the same ready page, on the same serialized chain and deadline. */
+    async inspect(req): Promise<PageInspection> {
+      if(opts.executablePath){try{executablePath=await opts.executablePath();}catch(error){return {ok:false,reason:'unavailable',detail:(error as Error).message};}}
+      const deadline=Date.now()+(req.timeoutMs??DEFAULT_TIMEOUT_MS);
+      const run = chain.then(() => {const remaining=deadline-Date.now();if(remaining<=0)throw new Error('Inspect timed out in queue');return inspectOnce({...req,timeoutMs:remaining});}).then(
+        (found): PageInspection => ({ ok: true, ...found }),
+        (e): PageInspection => {
           if (e instanceof NavigationError) return { ok: false, reason: 'navigation', detail: e.message };
           if (e instanceof BrowserUnavailable) return { ok: false, reason: 'unavailable', detail: e.message };
           return { ok: false, reason: 'failed', detail: (e as Error).message };

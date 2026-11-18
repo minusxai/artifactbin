@@ -9,13 +9,14 @@
  * An element capture drawn as one says so in the `ELEMENT_CAPTURE_HEADER` header (JSON answers carry `element`).
  * `POST /render-upload` is the same render with the bytes PUT to a signed URL,
  * `POST /harvest` answers the SVG drawings a loaded page drew, as JSON text,
+ * `POST /inspect` the page's own problems (failed components, exceptions, failed requests),
  * and `POST /sessions` is the stateful surface: a BrowserSessionRequest against
  * a persistent isolated session, served only when the composition supplied a
  * `sessions` implementation (otherwise 503 `sessions_unavailable`).
  * A service without an operation answers 503 `<op>_unavailable`, and the client (utils `browserClient`) maps an
  * older service's 404 to the same verdict, so a mixed-version rollout degrades instead of failing.
  */
-import type { BrowserService, RenderRequest, RenderUploadRequest, BrowserSessionRequest, SvgHarvestRequest } from '@artifactbin/contracts';
+import type { BrowserService, RenderRequest, RenderUploadRequest, BrowserSessionRequest, SvgHarvestRequest, PageInspectRequest } from '@artifactbin/contracts';
 import { BROWSER_ROUTES, ELEMENT_CAPTURE_HEADER } from '@artifactbin/contracts';
 import type { JsonServer } from '@artifactbin/utils';
 import { postServer } from '@artifactbin/utils';
@@ -45,6 +46,12 @@ export function serveBrowser(svc: BrowserService, opts: { maxBody?: number; serv
         const request = input as unknown as SvgHarvestRequest;
         if (!request || typeof request.url !== 'string' || typeof request.selector !== 'string' || typeof request.collect !== 'string') return json(400, { error: 'bad_request' });
         return json(200, await svc.harvestSvg(request));
+      }
+      if (req.url === BROWSER_ROUTES.inspect) {
+        if (!svc.inspect) return json(503, { ok: false, reason: 'inspect_unavailable' });
+        const request = input as unknown as PageInspectRequest;
+        if (!request || typeof request.url !== 'string' || typeof request.selector !== 'string' || (request.internalOrigin !== undefined && typeof request.internalOrigin !== 'string')) return json(400, { error: 'bad_request' });
+        return json(200, await svc.inspect(request));
       }
       if(req.url===BROWSER_ROUTES.renderUpload){
         if(!svc.renderAndUpload)return json(503,{ok:false,reason:"upload_unavailable"});

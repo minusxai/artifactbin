@@ -21,6 +21,7 @@ import {ARTIFACT_WORKLOAD_PATH,APP_ARTIFACT_WORKLOAD_PATH,SERVICE_PAYLOAD_LIMIT,
  *    transactions: `identityDbOf(pool)`) against the app's tables (`appSchema`). `{method, input}` in; `{result}` or
  *    `{refused: {code, status, retry_after?, detail?}}` out, both 200; anything else (no transactional database, a
  *    failure) is 503 and the caller's call throws;
+ *  - a relay's draft check (contracts `DRAFT_CHECK_PATH`), admitted and forwarded as the chart drawing below is;
  *  - a relay's chart drawing (contracts `CHART_IMAGE_PATH`, a service opted in with `artifact_reads`): no person, no
  *    grant, exact keys, forwarded to the app's fixed seam and answered as it answers;
  *  - a RUN SIGN-IN (contracts `RUN_SIGN_IN_PATH`, a service opted in with `run_sign_ins`, its own secret): the person's
@@ -29,7 +30,7 @@ import {ARTIFACT_WORKLOAD_PATH,APP_ARTIFACT_WORKLOAD_PATH,SERVICE_PAYLOAD_LIMIT,
  *    opt-in, or with another credential in the header, the path is passed on as any unknown one.
  */
 import {createHash,timingSafeEqual} from 'node:crypto';
-import {CHART_IMAGE_PATH,CANONICAL_CHART_IMAGE_PATH,CHART_IMAGE_KEYS,ANONYMOUS,ARTIFACT_SCOPE,DEFAULT_TOKEN_TTL_MS,MAX_TOKEN_TTL_MS,MIN_TOKEN_TTL_MS,RUN_SIGN_IN_PATH,type RunSignIn} from '@artifactbin/contracts';
+import {CHART_IMAGE_PATH,CANONICAL_CHART_IMAGE_PATH,CHART_IMAGE_KEYS,DRAFT_CHECK_PATH,CANONICAL_DRAFT_CHECK_PATH,DRAFT_CHECK_KEYS,ANONYMOUS,ARTIFACT_SCOPE,DEFAULT_TOKEN_TTL_MS,MAX_TOKEN_TTL_MS,MIN_TOKEN_TTL_MS,RUN_SIGN_IN_PATH,type RunSignIn} from '@artifactbin/contracts';
 import {ARTIFACT_IMAGE_DEADLINE_MS,ARTIFACT_IMAGE_ERRORS,ARTIFACT_IMAGE_ERROR_FIELDS,ARTIFACT_IMAGE_PATH,CANONICAL_ARTIFACT_IMAGE_PATH,ELEMENT_CAPTURE,ARTIFACT_READ_GRANT_PATH,ARTIFACT_READ_PATH,CANONICAL_ARTIFACT_READ_PATH,API_RESOURCE_PATH,HUMAN_SESSION_LIVE_PATH,IDENTITY_CALL_PATH,IDENTITY_SCHEMA,IDENTITY_INTROSPECT_PATH,IDENTITY_METHODS,IdentityError,SERVICE_AUTH_HEADER,parseAliasOrigins,parseServiceAudiences,type IssuedArtifactReadGrant,type IdentityIntrospectResponse,type IdentityMethod,type IdentityService,type Part,type ServiceAudience,type ServiceTokenParent,type TokenRecord,type TransactionalQueryable} from '@artifactbin/contracts';
 import {BodyTooLargeError,readBody,serviceSecretMatches} from '@artifactbin/utils';
 import type {Context} from 'hono';
@@ -254,6 +255,24 @@ export function sessionAuthority(o:AuthOptions):Part<AuthEnv>{return {name:'sess
    const body=await readBody(response,{limit:SERVICE_PAYLOAD_LIMIT,as:'text'});
    return new Response(body,{status:response.status,headers:{'content-type':'application/json','cache-control':'no-store'}});
   }catch(error){return error instanceof BodyTooLargeError?answer({error:'too_large',max:SERVICE_PAYLOAD_LIMIT},413):answer({error:'render_unavailable'},503);}
+ });
+ /**
+  * A relay's draft check (contracts DRAFT_CHECK_PATH): admitted like chart-image (the service's own introspection
+  * secret, `artifact_reads` opt-in), exact keys, no grant (the check reads no data). The body goes to the fixed app seam
+  * as the anonymous actor; its status and JSON come back buffered to at most SERVICE_PAYLOAD_LIMIT, within 30 s.
+  */
+ app.all(DRAFT_CHECK_PATH,async c=>{
+  let service:ServiceAudience|undefined;
+  const input=await admit(c,presented=>!!(service=serviceOf(audiences,presented))&&service.artifactReads===true,SERVICE_PAYLOAD_LIMIT);
+  if(input instanceof Response)return input;
+  const keys=Object.keys(input);
+  if(!keys.includes('html')||!keys.includes('files')||keys.some(key=>!(DRAFT_CHECK_KEYS as readonly string[]).includes(key)))return answer({error:'bad_request'},400);
+  try{
+   const signal=AbortSignal.any([c.req.raw.signal,AbortSignal.timeout(30000)]);
+   const response=await o.upstream(new Request(new URL(CANONICAL_DRAFT_CHECK_PATH,c.req.url),{method:'POST',body:JSON.stringify(input),signal}),ANONYMOUS);
+   const body=await readBody(response,{limit:SERVICE_PAYLOAD_LIMIT,as:'text'});
+   return new Response(body,{status:response.status,headers:{'content-type':'application/json','cache-control':'no-store'}});
+  }catch(error){return error instanceof BodyTooLargeError?answer({error:'too_large',max:SERVICE_PAYLOAD_LIMIT},413):answer({error:'check_unavailable'},503);}
  });
  const transactional=(db:unknown):db is TransactionalQueryable=>typeof (db as TransactionalQueryable|undefined)?.transaction==='function';
  let identity:Promise<IdentityService>|null=null;

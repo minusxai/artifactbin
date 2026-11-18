@@ -10,9 +10,15 @@
  * dataset is a read-only table read by `sql` in the frame (`config.draft`, the engine at /af/offline-sql.js); the
  * parent relays nothing of the app for it, except, when the embedding app allowed it for this mount (`liveSql`), a
  * statement naming a `default:` link, which runs on the install's default connection as the signed-in reader
- * (POST /api/page/drafts/sql, lib/connections pageConnectionSql: read-only, the page door's code). Checks: __tests__/page-drafts.test.ts,
+ * (POST /api/page/drafts/sql, lib/connections pageConnectionSql: read-only, the page door's code).
+ *
+ * CHECKED (./check `checkDraft`, for a trusted relay through the identity owner's draft-check seam): the same draft,
+ * made for no reader, loaded once in the app's own browser (contracts PageInspectRequest) and forgotten, answering the
+ * page's own problems. It reads no data: a `default:` link stays unread there, so its consent refusal is no problem.
+ * Checks: __tests__/page-drafts.test.ts,
  * lib/html-reader/__tests__/host-shell-draft.test.ts, lib/html-runtime/__tests__/build.test.ts, and the
  * own-origin-script gate.
  */
 export { DRAFT_LIMITS } from './contracts';
 export { createDraft, draftAwaitsConsent, draftConnections, draftDocument, draftFile, DraftRefusal, resetDrafts } from './drafts';
+export { checkDraft } from './check';
