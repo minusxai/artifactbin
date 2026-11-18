@@ -14,9 +14,9 @@ export function skillServer(request:Request):string{
  return ALIAS_ORIGINS.includes(origin)?new URL(PUBLIC_BASE_URL).origin:origin;
 }
 /** One archive per server origin, for the few origins this server answers as (the request's host names it, so the
- * set is bounded): its inputs are this build's files (development reads them anew on each request). */
+ * set is bounded): its inputs are this build's files and the current extras (development builds anew on each request). */
 const ARCHIVE_ORIGINS=4;
-const archives=new Map<string,Promise<Awaited<ReturnType<typeof buildArchive>>>>();
+const archives=new Map<string,{extras:SkillExtras|null;built:Promise<Awaited<ReturnType<typeof buildArchive>>>}>();
 async function buildArchive(server:string,extras:SkillExtras|null){
  const files=skillPackageFiles(buildSkillTree(loadSkillSources()),server,loadSkillAssets(),extras);
  // Compact raw executable sources before replacing generated bundles below. Guides and examples stay verbatim.
@@ -28,10 +28,15 @@ async function buildArchive(server:string,extras:SkillExtras|null){
  return {bytes,manifest,etag:`"${createHash('sha256').update(bytes).digest('base64url').slice(0,22)}"`};
 }
 export function archiveFor(server:string){
- // Extras (SKILLS__EXTRA_DIR) are read once, at boot; the key names them so a test's other setting builds anew.
- const extras=skillExtras(),key=server+'\n'+(extras?.dir??'');
+ // Extras (SKILLS__EXTRA_DIR) follow their directory: skillExtras() returns a new object only when their files
+ // changed, so one archive per origin is rebuilt exactly then, and every request meanwhile shares one build.
+ const extras=skillExtras();
  if(IS_DEV)return buildArchive(server,extras);
- let built=archives.get(key);
- if(!built){built=buildArchive(server,extras);archives.set(key,built);if(archives.size>ARCHIVE_ORIGINS)archives.delete(archives.keys().next().value!);void built.catch(()=>{if(archives.get(key)===built)archives.delete(key);});}
+ const held=archives.get(server);
+ if(held?.extras===extras)return held.built;
+ const built=buildArchive(server,extras);
+ archives.delete(server);archives.set(server,{extras,built});
+ if(archives.size>ARCHIVE_ORIGINS)archives.delete(archives.keys().next().value!);
+ void built.catch(()=>{if(archives.get(server)?.built===built)archives.delete(server);});
  return built;
 }

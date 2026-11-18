@@ -499,7 +499,8 @@ export const shellFile = (): string | null => env('APP', 'SHELL_FILE')?.trim() |
  * (`/skills/artifactbin.zip`) carries under `extras/`, beside, never in place of, the product's own files
  * (lib/skills/extras says which files, and the limits). Off by default. They are the operator's content, shipped to
  * agents as instructions and code, and public: never put a secret there. An `intro.md` there also opens `/llms.txt`
- * (the deployment's introduction, lib/skills/extras). Read once at boot; an invalid directory refuses the boot.
+ * (the deployment's introduction, lib/skills/extras). Read at boot, where an invalid directory refuses the boot, then
+ * followed without a restart: a change serves at the next request; an invalid state keeps the last valid files.
  */
 env('SKILLS', 'EXTRA_DIR');
 export const skillExtrasDir = (): string | null => env('SKILLS', 'EXTRA_DIR')?.trim() || null;

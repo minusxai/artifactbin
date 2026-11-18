@@ -71,7 +71,8 @@ async function main(): Promise<void> {
   const { getDb } = await import('@/lib/platform');
   const { canAuthenticateUser } = await import('@/lib/user-kinds');
   const { createAppServer } = await import('@/server/app');
-  // The skill's deployment extras (SKILLS__EXTRA_DIR) are read now: an invalid directory refuses the boot.
+  // The skill's deployment extras (SKILLS__EXTRA_DIR) are read now: an invalid directory refuses the boot (later
+  // changes are followed without a restart, lib/skills/extras).
   (await import('@/lib/skills')).skillExtras();
 
   // An image built without an engine or a browser needs to be told where they
