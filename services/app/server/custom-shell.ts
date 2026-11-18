@@ -7,7 +7,9 @@
  * (contracts url-space `isScreenPath`, also published at `/af/url-space.json`), always 200 (the file decides what to
  * show and what is not found):
  *  - `/` and every app screen (home, account, groups, group settings, trash, new-file pages, `/docs-human`,
- *    `/getting-started`, `/local/publish`) and every address nothing else serves;
+ *    `/getting-started`, `/local/publish`) and every address nothing else serves, that last only for a caller that asks
+ *    for HTML (a browser): a fetch that does not (curl, a fetch tool) gets there what the app gives it, the JSON 404
+ *    pointing to `/llms.txt`;
  *  - the page and handle screens: `/a/<id>`, `/a/<id>/edit`, `/@<handle>` and `/@<handle>/<slug…>`. The file shows a
  *    document itself (the hosted host module, `/af/host.js`) from the JSON doors: `GET /api/page/profile/@<handle>/
  *    <path>` resolves a pretty address (`{kind: "artifact", id}`, `{kind: "redirect", to}`, a profile, or 404),
@@ -40,9 +42,11 @@
  *    response's one fresh nonce, admitted by `script-src` (inline style is already allowed). A file without a slot gets
  *    the policy unchanged;
  *  - `__HEAD_TAGS__` is a slot at its FIRST occurrence as markup inside the file's own `<head>` element (after `<head>`,
- *    before `</head>` or `<body>`). It becomes, on a document screen whose document an ANONYMOUS reader may read, that
- *    document's own `<title>`, description, Open Graph card and canonical link (what a link-preview bot fetching it
- *    would see on the app page), and nothing otherwise. A shell without the slot carries no per-document head.
+ *    before `</head>` or `<body>`). It becomes, on every screen, the agent pointer the app page's head carries (its
+ *    `<link rel="help">` and `<meta name="agents">`, lib/agent-copy `agentDiscoveryHead`), followed, on a document
+ *    screen whose document an ANONYMOUS reader may read, by that document's own `<title>`, description, Open Graph card
+ *    and canonical link (what a link-preview bot fetching it would see on the app page). A shell without the slot
+ *    carries neither (the `Link` header still points agents to the guide).
  *  Every other occurrence stays literal: in text or the body, in a comment, in the body of a raw-text element (script,
  *  style, title, textarea and the like), in a tag outside an attribute value, or a second `__HEAD_TAGS__`.
  * Read once at boot: a missing or unreadable file stops the boot, naming the setting.

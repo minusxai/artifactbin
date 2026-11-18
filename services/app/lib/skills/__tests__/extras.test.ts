@@ -9,6 +9,7 @@ import path from 'node:path';
 import {createRequire} from 'node:module';
 import {GET as archive} from '@/app/skills/artifactbin.zip/route';
 import {GET as latest} from '@/app/skills/artifactbin/latest.json/route';
+import {GET as llms} from '@/app/llms.txt/route';
 import {overrideConfig} from '@/lib/platform/config';
 import {EXTRA_ENTRY_POINTS,EXTRA_FILE_MAX_BYTES,EXTRAS_MAX_BYTES,EXTRAS_MAX_FILES,readSkillExtras,skillExtras} from '../extras';
 import {skillPackageFiles,skillRelease} from '../package';
@@ -64,7 +65,7 @@ describe('reading the extras directory',()=>{
  });
  it('refuses a member outside extras/, so an extra never replaces a product file',()=>{
   const files={'scripts/publish.mjs':'replaced'};
-  expect(()=>skillPackageFiles(skillTree(),'https://x.example',{},{dir:'/x',files})).toThrow('Unsupported skill extra: scripts/publish.mjs');
+  expect(()=>skillPackageFiles(skillTree(),'https://x.example',{},{dir:'/x',files,intro:null})).toThrow('Unsupported skill extra: scripts/publish.mjs');
  });
  it('reads the setting once and refuses an invalid value at its first read',()=>{
   overrideConfig({},{SKILLS__EXTRA_DIR:undefined});expect(skillExtras()).toBeNull();
@@ -98,6 +99,26 @@ describe('the served archive',()=>{
  it('changes the release version when only an extra changes',()=>{
   const one=readSkillExtras(directory({'a.md':'# A\n'})).files,two=readSkillExtras(directory({'a.md':'# A\nchanged\n'})).files;
   expect(skillRelease({'SKILL.md':'s',...one},'https://x.example').manifest.version).not.toBe(skillRelease({'SKILL.md':'s',...two},'https://x.example').manifest.version);
+ });
+});
+
+describe('the served guide (/llms.txt)',()=>{
+ const INTRO='# This server\n\nRead when you first reach this address.\n\nIt adds a warehouse; publishing pages: see below.\n';
+ const guide=async()=>(await llms(new Request('https://x.example/llms.txt'))).text();
+ it('opens with the deployment\'s intro.md, then the product guide unchanged; the intro also ships as an extra',async()=>{
+  overrideConfig({},{SKILLS__EXTRA_DIR:undefined});
+  const plain=await guide();
+  overrideConfig({},{SKILLS__EXTRA_DIR:directory({'intro.md':INTRO,'warehouse.md':GUIDE})});
+  expect(await guide()).toBe(`${INTRO.trim()}\n\n${plain}`);
+  expect(skillExtras()!.files['extras/intro.md']).toBe(INTRO);
+  expect(skillExtras()!.files['extras/README.md']).toContain('- [This server](intro.md): Read when you first reach this address.');
+ });
+ it('is the product guide alone without an intro.md or without extras',async()=>{
+  overrideConfig({},{SKILLS__EXTRA_DIR:undefined});
+  const plain=await guide();
+  overrideConfig({},{SKILLS__EXTRA_DIR:valid()});
+  expect(await guide()).toBe(plain);
+  overrideConfig({},{SKILLS__EXTRA_DIR:undefined});
  });
 });
 

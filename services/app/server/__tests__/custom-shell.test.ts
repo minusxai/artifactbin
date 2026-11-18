@@ -15,6 +15,7 @@ import {shellFile} from '@/lib/platform';
 import {URL_SPACE,isScreenPath} from '@artifactbin/contracts';
 import {SPA_PATHS} from '@/lib/http/app-pages';
 import {createAppServer} from '../app';
+import {agentDiscovery,agentDiscoveryHead} from '@/lib/agent-copy';
 import {customShellResponse,loadCustomShell} from '../custom-shell';
 import {useAppHarness} from '@/__tests__/harness';
 import {tempDir} from '@artifactbin/test-support/temp-dir';
@@ -50,8 +51,28 @@ describe('with a custom shell',()=>{
    expect(response.headers.get('content-security-policy'),path).toBe(reference.headers.get('content-security-policy'));
   }
   for(const directive of ["frame-ancestors 'self'","script-src 'self'","connect-src 'self'","style-src 'self'"])expect(reference.headers.get('content-security-policy')).toContain(directive);
-  const head=await app.request('/deep/link',{method:'HEAD'});
+  const head=await app.request('/deep/link',{method:'HEAD',...html});
   expect(head.status).toBe(200);expect(await head.text()).toBe('');
+ });
+ it('answers a fetch that never asked for HTML as the app does: an address the app has no screen for is the JSON pointer to /llms.txt, a screen is the shell with its agent pointer',async()=>{
+  const app=server(headed),reference=server(null);
+  for(const path of ['/skills','/skills/','/no-such-page','/deep/link']){
+   for(const headers of [{},{accept:'*/*'},{accept:'application/json'}] as Record<string,string>[]){
+    const [shell,own]=await Promise.all([app.request(path,{headers}),reference.request(path,{headers})]);
+    expect(shell.status,path).toBe(404);
+    expect(await shell.json(),path).toEqual(await own.json());
+   }
+   // A browser still gets the shell there: it routes client-side.
+   expect(await isShell(await app.request(path,html)),path).toBe(true);
+  }
+  expect(await (await app.request('/skills')).json()).toMatchObject({error:'not_found',help:'/llms.txt'});
+  for(const path of ['/','/login','/account',`/a/${ID}`]){
+   const response=await app.request(path,{headers:{accept:'*/*'}});
+   expect(response.status,path).toBe(200);
+   const body=await response.text();
+   expect(body,path).toContain('data-shell');
+   expect(body,path).toContain(agentDiscoveryHead(agentDiscovery('http://localhost')));
+  }
  });
  it('a document address keeps the framing the app page there allows: its trusted embedders',async()=>{
   overrideConfig({},{APP__DEPLOYMENT_MODE:'public',EMBED__TRUSTED_ORIGINS:'https://portal.example'});
@@ -107,20 +128,25 @@ describe('with a custom shell',()=>{
   }
   expect(nonces.size).toBe(2);
  });
- it('fills __HEAD_TAGS__ with a document\'s own head only where an anonymous reader may read it, and with nothing elsewhere',async()=>{
+ it('fills __HEAD_TAGS__ with the agent pointer on every screen, and a document\'s own head only where an anonymous reader may read it',async()=>{
   const owner=await ensureUsername(await createUser({email:'mxmx_test_shell_owner@example.com'})),t=await mintToken('o',owner.id);
   const create=async(title:string,visibility:string)=>((await (await postArtifact(t.token,{title,description:`${title} summary`,html:nativeHtml(`<div><p>${title}</p></div>`),visibility})).json()) as {id:string}).id;
   const shared=await create('Quarterly $& Report','unlisted'),secret=await create('Private Plans','private');
   const app=server(headed);
   const headOf=async(path:string)=>/<head>([\s\S]*)<\/head>/.exec(await (await app.request(path,html)).text())![1]!;
+  // Every screen carries the agent pointer the app page carries in its head, the same tags from the same source.
+  const pointer=agentDiscoveryHead(agentDiscovery('http://localhost'));
+  expect(pointer).toContain('<link rel="help" href="http://localhost/llms.txt"');
+  expect(pointer).toContain('<meta name="agents" content="');
   const tags=await headOf(`/a/${shared}`);
+  expect(tags.startsWith(pointer)).toBe(true);
   expect(tags).toContain('<title>Quarterly $&amp; Report</title>');
   expect(tags).toContain('<meta property="og:description" content="Quarterly $&amp; Report summary">');
   expect(tags).toMatch(new RegExp(`<meta property="og:image" content="[^"]*/a/${shared}/export\\?mode=card`));
   expect(tags).toContain('<link rel="canonical"');
   expect(await headOf(`/a/${shared}/edit`)).toBe(tags);
   // Never a private document's, even for its owner's own request; never on a screen that names no document.
-  for(const path of [`/a/${secret}`,`/a/${ID}`,'/','/account',`/@${owner.username}`])expect(await headOf(path),path).toBe('');
+  for(const path of [`/a/${secret}`,`/a/${ID}`,'/','/account',`/@${owner.username}`])expect(await headOf(path),path).toBe(pointer);
   const owned=await app.request(`/a/${secret}`,{headers:{accept:'text/html',authorization:`Bearer ${t.token}`}});
   expect(await owned.text()).not.toContain('Private Plans');
  });

@@ -291,6 +291,9 @@ const apiNotFound = (c: { req: { raw: Request } }) => {
   }, 404, { 'Cache-Control': 'no-store' });
 };
 
+// The caller asked for a page: a browser's navigation names `text/html`; curl's `*/*` and a fetch tool's do not.
+const wantsHtml = (request: Request): boolean => (request.headers.get('accept') ?? '').includes('text/html');
+
 /** A document row this request already fetched and admitted (documentPreparation), and its canonical path when it was computed. */
 interface Admitted { row: ArtifactRow; canonicalPath?: string; revision?: PageRead['revision']; /** The title-slug address it was resolved from, served there as is. */ servedPath?: string }
 /** The document page's reader header: which renderer answered. */
@@ -421,7 +424,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     // A dead end is answered in the language the caller asked in: a browser
     // gets the app's own 404 page, anything else (curl's `*/*`, a fetch tool)
     // gets the refusal that names the way on.
-    if (code === 404 && !(c.req.raw.headers.get('accept') ?? '').includes('text/html')) return apiNotFound(c);
+    if (code === 404 && !wantsHtml(c.req.raw)) return apiNotFound(c);
     // The agent pointer is injected here, on the request base, for EVERY shell
     // — the static web/solid-app.html carries none, so there is one source (lib/compiled-page/agent-discovery).
     const discovered = withAgentDiscovery(html, baseUrl(c.req.raw));
@@ -449,10 +452,12 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   const screen = async (c: { req: { raw: Request; url: string; method: string } }): Promise<Response> => {
     if (!customShell) return page(c);
     const url = new URL(c.req.url);
-    const head = customShell.headed && namesDocument(url) ? await runWithRequest(c.req.raw, () => anonymousHead(c.req.raw, url.pathname)) : '';
+    const help = agentDiscovery(baseUrl(c.req.raw));
+    // The head slot carries the agent pointer the app page's head carries, then the document's own head where it names one.
+    const head = !customShell.headed ? '' : agentDiscoveryHead(help) + (namesDocument(url) ? await runWithRequest(c.req.raw, () => anonymousHead(c.req.raw, url.pathname)) : '');
     // The policy the app page at this address carries (a document address admits its trusted embedders), and its agent pointer.
     return customShellResponse(customShell, c.req.method, framedPolicy(url, pageCsp(c.req.raw)),
-      { ...APP_SECURITY_HEADERS, Link: `<${agentDiscovery(baseUrl(c.req.raw)).url}>; rel="help"` }, head);
+      { ...APP_SECURITY_HEADERS, Link: `<${help.url}>; rel="help"` }, head);
   };
   /** The head a link-preview bot sees for a document address: only for a document an ANONYMOUS reader may read. */
   const anonymousHead = async (request: Request, pathname: string): Promise<string> => {
@@ -682,7 +687,9 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   const appPages = spaPaths({ dev: opts.devHmrPort !== undefined });
   app.get('*', async (c) => {
     const pathname = new URL(c.req.url).pathname;
-    if (customShell && shellAnswers(new URL(c.req.url))) return screen(c);
+    // An address the app has no screen for, fetched without asking for HTML, is the app's own answer there (page()'s
+    // 404 for such a caller): the pointer to /llms.txt, never the shell, which tells a fetch tool nothing.
+    if (customShell && shellAnswers(new URL(c.req.url))) return appPages.test(pathname) || wantsHtml(c.req.raw) ? screen(c) : apiNotFound(c);
     return appPages.test(pathname) ? page(c) : page(c, 404);
   });
   return app;
