@@ -18,8 +18,8 @@
  *    so a saved version neither redraws nor rebuilds under someone typing; only the revision and saved ids advance.
  *
  * A version it cannot draw in place is REBUILT by the frame itself (applyHtmlVersion `rebuild`): a fresh document from the
- * new version, so no old listener, timer or chart keeps running, with the reader's place carried over (./reading-place)
- * and viewer state already in browser storage. Only when no valid new version could be read does the parent reload.
+ * new version, so no old listener, timer or chart keeps running, with the reader's place carried over (./reading-place,
+ * kept by the reader as this document goes) and viewer state already in browser storage. Only when no valid new version could be read does the parent reload.
  *
  * What changed is decided SOURCE AGAINST SOURCE: the HTML this document loaded (captured by the core before the page's
  * deferred scripts ran) against the new served HTML, so script-made DOM never reads as an edit. Elements the source
@@ -27,7 +27,6 @@
  */
 import {heldNodes,morphChildren,type MorphContext} from './morph/dom';
 import {LIVE_VERSION_HEADER,LOADED_SOURCE_KEY} from './live-morph-contract';
-import {captureReadingPlace} from './reading-place';
 /** server/pages-host's one-time ticket parameter (lib/http/pages-origin PAGES_TICKET_PARAM), never part of the document's address. */
 const PAGES_TICKET='_pt';
 
@@ -199,13 +198,13 @@ export interface VersionApplied {
 }
 /**
  * Fetch the newest served version the way this frame got its document (its own address, its own session) and draw it in
- * place, or, when that is refused or fails, keep the reader's place and say where to rebuild from. Rejects (VersionRefused
+ * place, or, when that is refused or fails, say where to rebuild from. Rejects (VersionRefused
  * or any error) only when no valid new version was read: then the parent reloads.
  *
  * `live`: the page's live revision announced with `version` (its regions' unsaved text changed, no new version). The
  * served page is the current page, so it must be at least (version, live): a newer version, or this one at least as live.
  */
-export async function applyHtmlVersion(win:Window,config:{revision:string;live?:number;savedNodeIds?:readonly string[];pageId?:string},version:number,fetchFn:typeof fetch=win.fetch.bind(win),editing?:()=>ReadonlyMap<string,Element>,live=0):Promise<VersionApplied>{
+export async function applyHtmlVersion(win:Window,config:{revision:string;live?:number;savedNodeIds?:readonly string[]},version:number,fetchFn:typeof fetch=win.fetch.bind(win),editing?:()=>ReadonlyMap<string,Element>,live=0):Promise<VersionApplied>{
  const holder=win as unknown as Record<symbol,unknown>,loaded=holder[LOADED_SOURCE];
  if(typeof loaded!=='string')throw refuse('this document kept no copy of its source');
  // Live text this document already holds (it was served at, or has drawn, this version at least this live): nothing to fetch.
@@ -224,7 +223,6 @@ export async function applyHtmlVersion(win:Window,config:{revision:string;live?:
  try{const scripts=await pageScripts(win.document,fetchFn);applied=morphHtmlVersion(win.document,loaded,next,scripts,config.savedNodeIds,editing?.());}
  catch(cause){
   // Different scripts, an edit that is not inert, or a morph the DOM refused half way: a fresh document is always right.
-  captureReadingPlace(win,config.pageId??'');
   return {revision:String(revision),live:servedLive,savedNodeIds:[],rebuild:address.href,reason:String(cause instanceof Error?cause.message:cause).slice(0,300)};
  }
  holder[LOADED_SOURCE]=next;

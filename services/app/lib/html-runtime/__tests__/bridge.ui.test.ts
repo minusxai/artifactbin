@@ -1,5 +1,6 @@
 import type {HtmlNodeAnchor} from '@artifactbin/contracts';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { HTML_VERSION_MESSAGE, HTML_VERSION_RECEIVED, HTML_VERSION_REFUSED } from '../../html-reader/contract';
 const bridges: Array<{dispose(): void}> = [];
 afterEach(() => { for (const bridge of bridges.splice(0)) bridge.dispose(); vi.unstubAllGlobals(); window.getSelection()?.removeAllRanges(); document.body.innerHTML = ''; vi.restoreAllMocks(); vi.resetModules(); });
 it('uses original frame RPC with explicit HTML anchors and never exposes credentials', async () => {
@@ -298,4 +299,112 @@ it('prevents unclaimed file navigation for the native frame session and releases
   expect(drag(zone, 'dragover').dataTransfer!.dropEffect).toBe('copy');
   bridge.dispose();
   expect(drag(words, 'drop').defaultPrevented).toBe(false);
+});
+describe('the reader\'s place while a new version replaces the document', () => {
+  /** A laid-out page jsdom does not draw: each source element's page top, and the window's scroll. */
+  const layOut = (tops: Record<string, number>, scroll: { y: number }) => {
+    Object.defineProperty(window, 'scrollY', { configurable: true, get: () => scroll.y });
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 });
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+      const top = (tops[this.getAttribute('data-af-id') ?? ''] ?? 0) - scroll.y;
+      return { top, bottom: top + 1000, height: 1000, left: 0, right: 100, width: 100, x: 0, y: top, toJSON() {} } as DOMRect;
+    });
+  };
+  const pin = (id: string, nodeId: string) => ({ id, path: nodeId, anchor: { kind: 'html-node' as const, v: 1 as const, revision: '3', nodeId, quote: '' } });
+  const settle = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
+  const reveals = () => {
+    const revealed: string[] = [];
+    Element.prototype.scrollIntoView = function (this: Element) { revealed.push(this.getAttribute('data-af-id') ?? ''); };
+    return revealed;
+  };
+  afterEach(() => { sessionStorage.clear(); delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView; });
+
+  it('says at once that it is drawing an announced version, and keeps the reader\'s place and open thread for whatever document replaces this one', async () => {
+    vi.stubGlobal('__AF_RUNTIME_CONFIG__', { pageId: 'p1', revision: '3', backends: [], appOrigin: 'https://platform.example' });
+    const { startFrameBridge } = await import('../browser-client');
+    document.body.innerHTML = '<p data-af-id="n1">One</p><p data-af-id="n2">Two</p>';
+    const scroll = { y: 1100 };
+    layOut({ n1: 0, n2: 1000 }, scroll);
+    reveals();
+    const events: Array<{ kind: string; [key: string]: unknown }> = [];
+    const bridge = startFrameBridge({ win: window, post: (event) => events.push(event), attach: { kind: 'attach', id: 'p1', editId: '3', source: null } });
+    bridges.push(bridge);
+    bridge.receive({ kind: 'send', command: { type: 'mx:annotations', mode: 'on', pins: [pin('c1', 'n1')], openId: 'c1', hoverId: null } });
+    // Nothing announced: a page the reader leaves keeps nothing (their own reload starts where the browser puts it).
+    window.dispatchEvent(new Event('pagehide'));
+    expect(sessionStorage.length).toBe(0);
+    bridge.receive({ kind: 'send', command: { type: HTML_VERSION_MESSAGE, version: 4 } });
+    const answers = () => events.filter((item) => item.kind === 'event').map((item) => (item.event as { type: string }).type).filter((type) => type.startsWith('mx:version'));
+    expect(answers()).toEqual([HTML_VERSION_RECEIVED]);
+    // This test has no morph module: the version is refused, and the parent reloads the page around this frame.
+    await vi.waitFor(() => expect(answers()).toEqual([HTML_VERSION_RECEIVED, HTML_VERSION_REFUSED]));
+    window.dispatchEvent(new Event('pagehide'));
+    expect(JSON.parse(sessionStorage.getItem('afbin:reading-place:p1')!)).toMatchObject({ scrollY: 1100, anchor: { id: 'n2', offset: -100 }, thread: 'c1' });
+    bridge.dispose();
+  });
+
+  it('leaves a document rebuilt under the reader where they were, rather than revealing the thread they already had open', async () => {
+    vi.stubGlobal('__AF_RUNTIME_CONFIG__', { pageId: 'p1', revision: '4', backends: [], appOrigin: 'https://platform.example' });
+    const { startFrameBridge } = await import('../browser-client');
+    const { restoreReadingPlace } = await import('../reading-place');
+    document.body.innerHTML = '<p data-af-id="n1">One</p><p data-af-id="n2">Two</p><p data-af-id="n3">Three</p>';
+    const scroll = { y: 0 };
+    layOut({ n1: 0, n2: 1000, n3: 2000 }, scroll);
+    vi.spyOn(window, 'scrollTo').mockImplementation(((_x: number, y: number) => { scroll.y = y; }) as typeof window.scrollTo);
+    const revealed = reveals();
+    // What the previous document of this page kept as it went, and what this one's core put back.
+    sessionStorage.setItem('afbin:reading-place:p1', JSON.stringify({ at: Date.now(), scrollX: 0, scrollY: 1100, anchor: { id: 'n2', offset: -100 }, focus: null, thread: 'c1' }));
+    const stop = restoreReadingPlace(window, 'p1');
+    expect(scroll.y).toBe(1100);
+    const bridge = startFrameBridge({ win: window, post: () => {}, attach: { kind: 'attach', id: 'p1', editId: '4', source: null } });
+    bridges.push(bridge);
+    const paint = (openId: string | null) => bridge.receive({ kind: 'send', command: { type: 'mx:annotations', mode: 'on', pins: [pin('c1', 'n1'), pin('c2', 'n3')], openId, hoverId: null } });
+    paint('c1');
+    await settle();
+    expect(revealed).toEqual([]);
+    expect(scroll.y).toBe(1100);
+    // A thread the reader opens now is shown to them, as always.
+    paint('c2');
+    await settle();
+    expect(revealed).toEqual(['n3']);
+    stop();
+    bridge.dispose();
+  });
+
+  it('reveals the carried thread once the reader opens it again after the carried place has been let go', async () => {
+    vi.stubGlobal('__AF_RUNTIME_CONFIG__', { pageId: 'p1', revision: '4', backends: [], appOrigin: 'https://platform.example' });
+    const { startFrameBridge } = await import('../browser-client');
+    const { restoreReadingPlace } = await import('../reading-place');
+    document.body.innerHTML = '<p data-af-id="n1">One</p><p data-af-id="n2">Two</p>';
+    const scroll = { y: 0 };
+    layOut({ n1: 0, n2: 1000 }, scroll);
+    vi.spyOn(window, 'scrollTo').mockImplementation(((_x: number, y: number) => { scroll.y = y; }) as typeof window.scrollTo);
+    const revealed = reveals();
+    sessionStorage.setItem('afbin:reading-place:p1', JSON.stringify({ at: Date.now(), scrollX: 0, scrollY: 1100, anchor: { id: 'n2', offset: -100 }, focus: null, thread: 'c1' }));
+    const stop = restoreReadingPlace(window, 'p1');
+    const bridge = startFrameBridge({ win: window, post: () => {}, attach: { kind: 'attach', id: 'p1', editId: '4', source: null } });
+    bridges.push(bridge);
+    const paint = (openId: string | null) => bridge.receive({ kind: 'send', command: { type: 'mx:annotations', mode: 'on', pins: [pin('c1', 'n1')], openId, hoverId: null } });
+    // The reloaded page opened with no thread; the reader then scrolls on (the carried place is let go) and opens it.
+    paint(null);
+    await settle();
+    stop();
+    paint('c1');
+    await settle();
+    expect(revealed).toEqual(['n1']);
+    bridge.dispose();
+  });
+
+  it('reveals the thread a document is opened on when no place was carried into it', async () => {
+    vi.stubGlobal('__AF_RUNTIME_CONFIG__', { pageId: 'p1', revision: '4', backends: [], appOrigin: 'https://platform.example' });
+    const { startFrameBridge } = await import('../browser-client');
+    document.body.innerHTML = '<p data-af-id="n1">One</p><p data-af-id="n2">Two</p>';
+    const revealed = reveals();
+    const bridge = startFrameBridge({ win: window, post: () => {}, attach: { kind: 'attach', id: 'p1', editId: '4', source: null } });
+    bridges.push(bridge);
+    bridge.receive({ kind: 'send', command: { type: 'mx:annotations', mode: 'on', pins: [pin('c1', 'n2')], openId: 'c1', hoverId: null } });
+    await settle();
+    expect(revealed).toEqual(['n2']);
+    bridge.dispose();
+  });
 });

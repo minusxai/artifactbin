@@ -1,7 +1,7 @@
 import {afterEach,describe,expect,it,vi} from 'vitest';
 import {followHtmlVersion} from '@/lib/html-reader/follow-version';
 import {followPublication} from '../follow-html-version';
-import {HTML_VERSION_APPLIED,HTML_VERSION_MESSAGE,HTML_VERSION_REBUILT,HTML_VERSION_REFUSED} from '@/lib/html-reader/contract';
+import {HTML_VERSION_APPLIED,HTML_VERSION_MESSAGE,HTML_VERSION_REBUILT,HTML_VERSION_RECEIVED,HTML_VERSION_REFUSED} from '@/lib/html-reader/contract';
 
 /** A frame controller that answers the version command with `answer` (or stays silent). */
 function frame(answer?:(command:{type:string;version:number})=>unknown){
@@ -39,6 +39,19 @@ describe('followHtmlVersion',()=>{
   await vi.advanceTimersByTimeAsync(2999);expect(reload).not.toHaveBeenCalled();
   await vi.advanceTimersByTimeAsync(1);await expect(pending).resolves.toBe('reloaded');expect(reload).toHaveBeenCalledOnce();
   const none=vi.fn();await expect(followHtmlVersion({version:8,frame:null,refresh:async()=>true,reload:none})).resolves.toBe('reloaded');expect(none).toHaveBeenCalledOnce();
+ });
+ it('waits for a frame that said it is drawing the version (a long page on a slow link) instead of reloading under the reader',async()=>{
+  vi.useFakeTimers();const reload=vi.fn(),refresh=vi.fn(async()=>true);
+  const listeners=new Set<(event:unknown)=>void>(),emit=(event:unknown)=>{for(const listener of [...listeners])listener(event);};
+  const working={send(){queueMicrotask(()=>emit({type:HTML_VERSION_RECEIVED}));},subscribe(listener:(event:unknown)=>void){listeners.add(listener);return()=>{listeners.delete(listener);};}};
+  const pending=followHtmlVersion({version:7,frame:working,refresh,reload,timeoutMs:3000});
+  await vi.advanceTimersByTimeAsync(10_000);expect(reload).not.toHaveBeenCalled();
+  emit({type:HTML_VERSION_APPLIED,revision:'7'});
+  await expect(pending).resolves.toBe('morphed');expect(reload).not.toHaveBeenCalled();
+  // A frame that went quiet after saying so (it was torn down mid-way) still ends in a reload, only later.
+  const stuck=followHtmlVersion({version:8,frame:working,refresh,reload,timeoutMs:3000});
+  await vi.advanceTimersByTimeAsync(29_000);expect(reload).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(1_000);await expect(stuck).resolves.toBe('reloaded');expect(reload).toHaveBeenCalledOnce();
  });
 });
 

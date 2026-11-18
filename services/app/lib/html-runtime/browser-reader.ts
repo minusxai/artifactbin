@@ -13,7 +13,8 @@ import {refuseFileNavigation} from './frame-file-drops';
 import {followAppLinks} from '@/lib/html-runtime/frame-links';
 import {runtimeId} from '@artifactbin/utils/runtime-id';
 import type {HtmlRuntimeConfig} from './contract';
-import {HTML_VERSION_APPLIED,HTML_VERSION_MESSAGE,HTML_VERSION_REBUILT,HTML_VERSION_REFUSED} from './live-morph-contract';
+import {HTML_VERSION_APPLIED,HTML_VERSION_MESSAGE,HTML_VERSION_REBUILT,HTML_VERSION_RECEIVED,HTML_VERSION_REFUSED} from './live-morph-contract';
+import {captureReadingPlace,takeCarriedThread} from './reading-place';
 /** The live morph is its own content-addressed module (build.server `@afbin/morph`), fetched only when a version arrives. */
 const MORPH_MODULE='@afbin/morph';
 const loadLiveMorph=()=>import(/* @vite-ignore */ MORPH_MODULE) as Promise<typeof import('./live-morph')>;
@@ -121,6 +122,8 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
   const sourceObservation=config.annotationObservation==='imported-source-v1';
   const painter = createHtmlAnnotationPainter(win.document,{coordinateSpace:sourceObservation?'document':'viewport',blockPresentation:sourceObservation?'source-node':'overlay'});
   const commentView = createHtmlCommentViewSession(win.document);
+  /** While a new version is pending, the document that replaces this one, whichever, opens where the reader is now. */
+  const keepReadingPlace = () => captureReadingPlace(win, config.pageId, annotations.openId);
   const presence = startHtmlPresence(win, geometry => post({kind:'event',event:{type:'mx:presence',nonce,geometry}}));
   const regions = startFrameRegions({ win, post, load: loadRegionEditor, pageId: config.pageId });
   const cells = cellPort.attach(post);
@@ -211,13 +214,14 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
         if (command?.type === 'mx:presence') presence.receive(payload.command as PresencePaint);
         // A new published version (solid/document/follow-html-version): drawn in place when safe, else this document is rebuilt
         // from it (told first, so the parent follows instead of reloading); the parent reloads only when no version was read.
-        if (command?.type === HTML_VERSION_MESSAGE) { const version = Number((payload.command as { version?: unknown }).version), live = Number((payload.command as { live?: unknown }).live ?? 0); if (Number.isInteger(version) && Number.isSafeInteger(live)) void loadLiveMorph().then((morph) => morph.applyHtmlVersion(win, config, version, undefined, regions.editing, live)).then((applied) => { if (applied.rebuild) { regions.keepForRebuild(); post({ kind: 'event', event: { type: HTML_VERSION_REBUILT, nonce, revision: applied.revision, ...(applied.reason ? { reason: applied.reason } : {}) } }); win.location.replace(applied.rebuild); return; } config.revision = applied.revision; config.live = applied.live ?? 0; config.savedNodeIds = applied.savedNodeIds; if (annotations.pins.length) layout(); presence.paint(); post({ kind: 'event', event: { type: HTML_VERSION_APPLIED, nonce, revision: applied.revision } }); }, (error: unknown) => post({ kind: 'event', event: { type: HTML_VERSION_REFUSED, nonce, reason: String(error instanceof Error ? error.message : error).slice(0, 300) } })); }
+        if (command?.type === HTML_VERSION_MESSAGE) { const version = Number((payload.command as { version?: unknown }).version), live = Number((payload.command as { live?: unknown }).live ?? 0); if (Number.isInteger(version) && Number.isSafeInteger(live)) { win.addEventListener('pagehide', keepReadingPlace); post({ kind: 'event', event: { type: HTML_VERSION_RECEIVED, nonce } }); void loadLiveMorph().then((morph) => morph.applyHtmlVersion(win, config, version, undefined, regions.editing, live)).then((applied) => { if (applied.rebuild) { regions.keepForRebuild(); post({ kind: 'event', event: { type: HTML_VERSION_REBUILT, nonce, revision: applied.revision, ...(applied.reason ? { reason: applied.reason } : {}) } }); win.location.replace(applied.rebuild); return; } win.removeEventListener('pagehide', keepReadingPlace); config.revision = applied.revision; config.live = applied.live ?? 0; config.savedNodeIds = applied.savedNodeIds; if (annotations.pins.length) layout(); presence.paint(); post({ kind: 'event', event: { type: HTML_VERSION_APPLIED, nonce, revision: applied.revision } }); }, (error: unknown) => post({ kind: 'event', event: { type: HTML_VERSION_REFUSED, nonce, reason: String(error instanceof Error ? error.message : error).slice(0, 300) } })); } }
         if (command?.type === 'mx:data' && Array.isArray(command.datasets)) { const ids = new Set(command.datasets); const names = config.backends.filter((name) => ids.has(name) || ids.has(config.bindings?.[name] ?? '')); if (names.length) for (const listener of invalidationListeners) try { listener(names,"data"); } catch { /* One subscriber cannot stop the others. */ } }
         if (command?.type === 'mx:selection-actions') canAnnotate = command.annotate === true;
         if (command?.type === 'mx:annotations') { annotations = { pins: command.pins ?? [], mode: command.mode ?? 'off', openId: command.openId ?? null, hoverId: command.hoverId ?? null }; canAnnotate = command.canComment ?? canAnnotate; pick = command.pick ?? null; win.document.documentElement.style.cursor = pick ? 'crosshair' : cursor; }
         if (command?.type === 'mx:select') { const matches = [...win.document.querySelectorAll('[data-af-id]')].filter((node) => node.getAttribute('data-af-id') === command.path); const target = matches.length===1 ? matches[0] : null; const selected = target ? htmlSelection(win, target, config.revision, config.savedNodeIds) : null; if (command.reveal) target?.scrollIntoView?.(); post({ kind: 'event', event: { type: 'mx:selection', nonce, selection: selected } }); }
         if (command?.type === 'mx:annotations' || command?.type === 'mx:selection-actions') actions.update(canAnnotate && !pick);
-        if (command?.type === 'mx:annotations') void commentView.receive(command).then(changed => { const pin = annotations.pins.find(pin => pin.id === annotations.openId); if(changed && pin) revealHtmlAnnotation(win.document,pin); layout(); });
+        if (command?.type === 'mx:annotations') void commentView.receive(command).then(changed => { const pin = annotations.pins.find(pin => pin.id === annotations.openId); // The thread the reader had open in the document this one replaced (a version rebuilt it, or the page reloaded around it, ./reading-place) is already open: their carried place wins over revealing it again.
+ const carried = changed && takeCarriedThread(win) === pin?.id; if(changed && pin && !carried) revealHtmlAnnotation(win.document,pin); layout(); });
       }
     },
     dispose() {
@@ -243,6 +247,7 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
       win.document.removeEventListener('selectionchange', selection);
       win.removeEventListener('scroll', scroll);
       win.removeEventListener('resize', resize);
+      win.removeEventListener('pagehide', keepReadingPlace);
       sizes?.disconnect();
     },
   };

@@ -1,8 +1,13 @@
 /** Following a new published version in an open frame: shared by the app's document page and the document host module (./host-shell). */
-import {HTML_VERSION_APPLIED,HTML_VERSION_MESSAGE,HTML_VERSION_REBUILT,HTML_VERSION_REFUSED} from './contract';
+import {HTML_VERSION_APPLIED,HTML_VERSION_MESSAGE,HTML_VERSION_REBUILT,HTML_VERSION_RECEIVED,HTML_VERSION_REFUSED} from './contract';
 
-/** How long the frame has to draw a new version in place (or start rebuilding from it) before the page reloads instead. */
+/** How long a frame that never says it received the version (an older reader, a frame gone) has before the page reloads instead. */
 const HTML_VERSION_TIMEOUT_MS=3000;
+/**
+ * How long a frame that said it is drawing the version has to finish (refetching and comparing a long page on a slow
+ * link takes seconds): only a frame torn down mid-way stays silent this long.
+ */
+const HTML_VERSION_WORKING_MS=30_000;
 
 export interface VersionFrame {send(command:unknown):void;subscribe(listener:(event:unknown)=>void):()=>void}
 export interface FollowHtmlVersionOptions {
@@ -22,8 +27,10 @@ export interface FollowHtmlVersionOptions {
  * A NEW PUBLISHED VERSION OF AN OPEN HTML PAGE (D9): the framed document draws it in place (lib/html-runtime/live-morph)
  * when the edit is inert and its scripts are unchanged, or else rebuilds its own document from it, keeping the reader's
  * place ('rebuilt'; the bridge re-attaches to the new document as it opens). Either way this page then refreshes its own
- * trusted revision. A refusal (no valid version was read), an error, a mismatched refresh or a frame silent for
- * `timeoutMs` reloads the whole page. Resolves 'morphed', 'rebuilt' or 'reloaded'.
+ * trusted revision. A refusal (no valid version was read), an error, a mismatched refresh, a frame silent for
+ * `timeoutMs` or one that said it received the version but did not finish it reloads the whole page; once the version
+ * is announced, the frame keeps the reader's place for whichever document replaces it (lib/html-runtime/reading-place).
+ * Resolves 'morphed', 'rebuilt' or 'reloaded'.
  */
 type Outcome='morphed'|'rebuilt'|'reloaded';
 export function followHtmlVersion(options:FollowHtmlVersionOptions):Promise<Outcome>{
@@ -35,6 +42,7 @@ export function followHtmlVersion(options:FollowHtmlVersionOptions):Promise<Outc
   const stop=frame.subscribe(event=>{
    const data=event as {type?:unknown;revision?:unknown}|null;
    if(data?.type===HTML_VERSION_REFUSED){finish('reloaded');return;}
+   if(data?.type===HTML_VERSION_RECEIVED){clearTimeout(timer);timer=setTimeout(()=>finish('reloaded'),HTML_VERSION_WORKING_MS);return;}
    if(data?.type!==HTML_VERSION_APPLIED&&data?.type!==HTML_VERSION_REBUILT)return;
    stop();
    const revision=String(data.revision??''),drawn:Outcome=data.type===HTML_VERSION_REBUILT?'rebuilt':'morphed';
@@ -42,7 +50,7 @@ export function followHtmlVersion(options:FollowHtmlVersionOptions):Promise<Outc
    if(drawn==='rebuilt'&&typeof (data as {reason?:unknown}).reason==='string')console.warn(`[artifactbin] version ${version} rebuilt the page: ${(data as {reason:string}).reason}`);
    void options.refresh(version,revision).then(ok=>finish(ok?drawn:'reloaded'),()=>finish('reloaded'));
   });
-  const timer=setTimeout(()=>finish('reloaded'),options.timeoutMs??HTML_VERSION_TIMEOUT_MS);
+  let timer=setTimeout(()=>finish('reloaded'),options.timeoutMs??HTML_VERSION_TIMEOUT_MS);
   try{frame.send({type:HTML_VERSION_MESSAGE,version,live:options.live??0});}catch{finish('reloaded');}
  });
 }

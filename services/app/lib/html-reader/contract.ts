@@ -118,6 +118,12 @@ export const STORY_FRAME_BRIDGE_MESSAGE = 'mx:frame-bridge';
 
 /** PAGE → FRAME: a newer published version (lib/html-runtime/live-morph draws it); the frame answers with one of the three below. */
 export const HTML_VERSION_MESSAGE = 'mx:version';
+/**
+ * FRAME → PAGE, at once on the version command: the frame is drawing it. A long page on a slow link takes longer than a
+ * silent frame is given (lib/html-reader/follow-version), and reloading the page around it would lose the reader's place
+ * and an open comment composer; a frame older than this answer is still timed out as before.
+ */
+export const HTML_VERSION_RECEIVED = 'mx:version-received';
 export const HTML_VERSION_APPLIED = 'mx:version-applied';
 export const HTML_VERSION_REFUSED = 'mx:version-refused';
 /** The frame could not draw the version in place and is rebuilding its document from it, the reader's place kept. */

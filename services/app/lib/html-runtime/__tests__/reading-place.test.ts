@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest';
-import {captureReadingPlace,readingPlace,restoreReadingPlace} from '../reading-place';
+import {captureReadingPlace,readingPlace,restoreReadingPlace,takeCarriedThread} from '../reading-place';
 
 /**
  * A laid-out page jsdom does not draw: each source element's page top and height, the window's scroll, and a
@@ -26,14 +26,14 @@ afterEach(()=>{vi.restoreAllMocks();vi.unstubAllGlobals();vi.useRealTimers();ses
 describe('the reader\'s place across a rebuild',()=>{
  it('names the innermost source element crossing the top of the viewport, its offset, and the focused element',()=>{
   scroll.y=1050;document.querySelector('input')!.focus();
-  expect(readingPlace(window,5)).toEqual({at:5,scrollX:0,scrollY:1050,anchor:{id:'p2',offset:-50},focus:'i'});
+  expect(readingPlace(window,null,5)).toEqual({at:5,scrollX:0,scrollY:1050,anchor:{id:'p2',offset:-50},focus:'i',thread:null});
   scroll.y=0;(document.activeElement as HTMLElement).blur();
-  expect(readingPlace(window,5)).toMatchObject({anchor:null,focus:null});
+  expect(readingPlace(window,null,5)).toMatchObject({anchor:null,focus:null});
  });
  it('puts the reader back by the anchor once the body is parsed, follows the page as it grows, and stops at the reader\'s own move',()=>{
   vi.useFakeTimers({now:1000});
   scroll.y=1050;document.querySelector('input')!.focus();
-  captureReadingPlace(window,'page-1',1000);
+  captureReadingPlace(window,'page-1',null,1000);
   (document.activeElement as HTMLElement).blur();scroll.y=0;
   // The new version put a taller element above: the same paragraph is now 300px further down.
   for(const id of ['s','p1','p2','i'])layout[id]!.top+=300;
@@ -48,18 +48,28 @@ describe('the reader\'s place across a rebuild',()=>{
  });
  it('stops following once the loaded page has settled',()=>{
   vi.useFakeTimers({now:1000});
-  scroll.y=1050;captureReadingPlace(window,'page-1',1000);scroll.y=0;
+  scroll.y=1050;captureReadingPlace(window,'page-1',null,1000);scroll.y=0;
   restoreReadingPlace(window,'page-1',1000);expect(scroll.y).toBe(1050);
   vi.advanceTimersByTime(3000);
   layout.p2!.top+=200;grow?.();expect(scroll.y).toBe(1050);
  });
  it('falls back to the raw scroll when the anchor is gone, and ignores a stale record or another page\'s',()=>{
-  scroll.y=1050;captureReadingPlace(window,'page-1',1000);scroll.y=0;delete layout.p2;document.querySelector('[data-af-id="p2"]')!.remove();
+  scroll.y=1050;captureReadingPlace(window,'page-1',null,1000);scroll.y=0;delete layout.p2;document.querySelector('[data-af-id="p2"]')!.remove();
   restoreReadingPlace(window,'page-1',1000)();expect(scroll.y).toBe(1050);
-  scroll.y=1050;captureReadingPlace(window,'page-1',1000);scroll.y=0;
+  scroll.y=1050;captureReadingPlace(window,'page-1',null,1000);scroll.y=0;
   restoreReadingPlace(window,'page-2',1000);expect(scroll.y).toBe(0);
   restoreReadingPlace(window,'page-1',1000+60_000);expect(scroll.y).toBe(0);
   expect(sessionStorage.length).toBe(0);
+ });
+ it('hands the open thread it carried to the reader once, and none when nothing was carried',()=>{
+  expect(takeCarriedThread(window)).toBeNull();
+  scroll.y=1050;captureReadingPlace(window,'page-1','c1');scroll.y=0;
+  const stop=restoreReadingPlace(window,'page-1');
+  expect(takeCarriedThread(window)).toBe('c1');expect(takeCarriedThread(window)).toBeNull();
+  stop();
+  // Let go with the place: the reader has moved on, so a thread they open later is theirs to see.
+  scroll.y=1050;captureReadingPlace(window,'page-1','c1');scroll.y=0;
+  restoreReadingPlace(window,'page-1')();expect(takeCarriedThread(window)).toBeNull();
  });
  it('degrades to a plain rebuild when storage is refused',()=>{
   vi.spyOn(Storage.prototype,'setItem').mockImplementation(()=>{throw Error('denied');});

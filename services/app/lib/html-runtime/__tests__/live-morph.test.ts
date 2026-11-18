@@ -166,7 +166,7 @@ describe('applyHtmlVersion (inside the frame)',()=>{
   await expect(applyHtmlVersion(window,{revision:'1'},3,ok as unknown as typeof fetch)).rejects.toThrow(/not the published one/);
   expect(sessionStorage.length).toBe(0);
  });
- it('asks for a rebuild, keeping the reader\'s place, when the scripts changed, the edit is not inert, or the morph throws',async()=>{
+ it('asks for a rebuild when the scripts changed, the edit is not inert, or the morph throws',async()=>{
   for(const [next,broken,reason] of [
    [served(2,V1.replace('Plan','Plans'),{fingerprint:'fp-2'}),false,'the new version runs different scripts'],
    [served(2,V1.replace('Name <input','Full name <input')),false,'an interactive element changed'],
@@ -176,12 +176,13 @@ describe('applyHtmlVersion (inside the frame)',()=>{
    history.replaceState(null,'','/?_pt=ticket&%24tab=2#af-state=abc');
    if(broken)vi.spyOn(Node.prototype,'insertBefore').mockImplementationOnce(()=>{throw Error('DOM refused');});
    const fetchFn=vi.fn(async(url:string)=>url.endsWith('.js')?new Response(''):new Response(next));
-   const applied=await applyHtmlVersion(window,{revision:'1',pageId:'page-1'},2,fetchFn as unknown as typeof fetch);
+   const applied=await applyHtmlVersion(window,{revision:'1'},2,fetchFn as unknown as typeof fetch);
    // Its own address, without the spent ticket or a state fragment that would replace the viewer's own state.
    expect(applied).toMatchObject({revision:'2',savedNodeIds:[],rebuild:new URL('/?%24tab=2',location.href).href});
    // Why, for the parent to report (solid/document/follow-html-version).
    expect(applied.reason).toContain(reason);
-   expect(JSON.parse(sessionStorage.getItem('afbin:reading-place:page-1')!)).toMatchObject({focus:'i'});
+   // The reader's place is kept by the reader as this document goes (./browser-reader), not here.
+   expect(sessionStorage.length).toBe(0);
    // The running document is not the new version's baseline: the rebuilt one loads its own.
    expect((window as unknown as Record<symbol,unknown>)[LOADED_SOURCE]).toBe(html);
    vi.restoreAllMocks();
