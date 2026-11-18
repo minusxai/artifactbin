@@ -7,9 +7,8 @@
  * (contracts url-space `isScreenPath`, also published at `/af/url-space.json`), always 200 (the file decides what to
  * show and what is not found):
  *  - `/` and every app screen (home, account, groups, group settings, trash, new-file pages, `/docs-human`,
- *    `/getting-started`, `/local/publish`) and every address nothing else serves, that last only for a caller that asks
- *    for HTML (a browser): a fetch that does not (curl, a fetch tool) gets there what the app gives it, the JSON 404
- *    pointing to `/llms.txt`;
+ *    `/getting-started`, `/local/publish`) and every address nothing else serves, for every caller (a fetch tool reads
+ *    the agent pointer in the head);
  *  - the page and handle screens: `/a/<id>`, `/a/<id>/edit`, `/@<handle>` and `/@<handle>/<slug…>`. The file shows a
  *    document itself (the hosted host module, `/af/host.js`) from the JSON doors: `GET /api/page/profile/@<handle>/
  *    <path>` resolves a pretty address (`{kind: "artifact", id}`, `{kind: "redirect", to}`, a profile, or 404),
