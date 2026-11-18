@@ -52,7 +52,7 @@ async function prepareHtmlDatasets(body:Record<string,unknown>,actor:AccessActor
   if(publisher.workload&&(connections.length||written.length))return json({error:'forbidden'},403);
   // `default:` reads the install's default connection: refused where the install has none.
   if(connections.length&&!hasDefaultConnection())return json({error:'default_connection_not_configured',details:connections.map(link=>`link "${link.name}" reads the install's default connection (href="default:${link.namespace}"), and this server has none (DATASETS__DEFAULT_CONNECTION)`)},400);
-  const {links,queries}=await livePageDeclarations(actor,publisher,declared,written);
+  const {links,queries}=await livePageDeclarations(actor,publisher,declared,written,connections);
   const datasets=links.filter((link):link is HtmlDatasetLink=>link.kind==='dataset');
   await Promise.all(datasets.map(binding=>authorizeDatasetBinding(actor,binding)));
   return {links:[...links,...connections],queries};

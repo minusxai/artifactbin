@@ -22,6 +22,7 @@ import {
 import { artifactQuery, loadArtifactDocument, sourceStorage } from './document';
 import {normalizeNewHtmlPage} from './new-page';
 import { seedOwnerJoin } from '@/lib/social';
+import { endQueryApprovals } from '@/lib/query-approvals';
 import { claimArtifactId } from './identities';
 import { resolveDefinitionScope, validateUserContent, retainUserScope, resolveUserColumnScope, catalogOf, DatasetError, liveConnectionOf, loadDatasetRows } from '@/lib/datasets';
 import { userKindOf } from '@/lib/user-kinds';
@@ -450,6 +451,8 @@ async function lockArtifactWrite(tx: Queryable, actor: AccessActor, id: string, 
         const swap = ancestorsForMove(current, content.ancestor_ids);
         await tx.query(swap.sql, swap.params);
       }
+      // A query approval covers exactly the query it was given: a head that no longer declares it ends it for good.
+      if (current.format === 'html') await endQueryApprovals(tx, actor, id, 'edited', updated);
       return updated;
     },
   };

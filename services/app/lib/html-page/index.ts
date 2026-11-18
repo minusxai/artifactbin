@@ -1,7 +1,7 @@
 import { escapeSourceAttribute } from '@artifactbin/utils/escape';
 import {isRuntimeCoreSrc,RUNTIME_CORE_PATH} from './core-script.ts';
 // Types only: the skill's scripts run this module's parsers under plain Node, where the contracts index cannot load.
-import type {HtmlDatasetLink,HtmlDeclaredQuery,HtmlDefaultConnectionLink} from '@artifactbin/contracts';
+import type {HtmlDatasetLink,HtmlDeclaredQuery,HtmlDefaultConnectionLink,HtmlQueryParam,HtmlQueryParams} from '@artifactbin/contracts';
 import type {HtmlPageDeclarations} from './links-contracts';
 import { parse, serialize } from 'parse5';
 import { applyEdits, attribute, atHeadStart, insertAttribute, parseSource, removeElement, written } from './html-source.ts';
@@ -166,11 +166,33 @@ function carryForwardIds(previous:Parsed,next:Parsed,taken:ReadonlySet<string>):
 const DECLARED_NAME=/^[_A-Za-z][_0-9A-Za-z]{0,63}$/,DECLARED_QUERIES_MAX=50;
 /** What may follow `default:`: empty, or the database the session opens, as written (`warehouse/finance`); never SQL text. */
 const DEFAULT_NAMESPACE=/^(?:[A-Za-z0-9_][A-Za-z0-9_$.:\/-]{0,127})?$/;
+const PARAM_TYPES=['text','number','boolean','date'] as const,PARAMS_MAX=20,PARAM_VALUES_MAX=100;
+/**
+ * A declared query's `data-af-params`: a JSON object naming each parameter a reader may vary, with the type any value
+ * of which it takes (`"text"`, `"number"`, `"boolean"`, `"date"`) or the list of values it takes (contracts
+ * `HtmlQueryParams`). The server's reader values (`viewer_*`) are never a reader's to vary.
+ */
+function declaredParams(query:string,text:string):HtmlQueryParams{
+ let raw:unknown;
+ try{raw=JSON.parse(text);}catch{throw new Error(`Declared query ${query}: data-af-params is a JSON object`);}
+ if(!raw||typeof raw!=='object'||Array.isArray(raw))throw new Error(`Declared query ${query}: data-af-params is a JSON object`);
+ const entries=Object.entries(raw);
+ if(entries.length>PARAMS_MAX)throw new Error(`Declared query ${query} allows at most ${PARAMS_MAX} parameters`);
+ const out:Record<string,HtmlQueryParam>={};
+ for(const [name,value] of entries){
+  if(!DECLARED_NAME.test(name)||name.startsWith('viewer_'))throw new Error(`Declared query ${query}: parameter ${JSON.stringify(name)} is not one a reader may vary`);
+  if(typeof value==='string'&&(PARAM_TYPES as readonly string[]).includes(value)){out[name]={type:value as (typeof PARAM_TYPES)[number]};continue;}
+  if(Array.isArray(value)&&value.length&&value.length<=PARAM_VALUES_MAX&&value.every(v=>typeof v==='string'||typeof v==='boolean'||(typeof v==='number'&&Number.isFinite(v)))){out[name]={values:[...value] as (string|number|boolean)[]};continue;}
+  throw new Error(`Declared query ${query}: parameter ${name} takes ${PARAM_TYPES.map(type=>`"${type}"`).join(', ')} or a list of at most ${PARAM_VALUES_MAX} values`);
+ }
+ return out;
+}
 /** Namespaces are declarations, never inferred from arbitrary network URLs. */
 export function htmlPageDeclarations(html:string):HtmlPageDeclarations{
  const datasets:HtmlDatasetLink[]=[];const connections:HtmlDefaultConnectionLink[]=[];const queries:HtmlDeclaredQuery[]=[];const names=new Set<string>();
  for(const element of allElements(html).all){
-  // A declared query (a live dataset's, checked at publish): its name, the link it runs on, and its SQL text.
+  // A declared query (a live dataset's or the default connection's, checked at publish): its name, the link it runs on,
+  // its SQL text and, on the default connection, what a reader may vary in it.
   if(element.tagName==='script'&&(attribute(element,'type')??'').trim().toLowerCase()==='application/sql'&&attribute(element,'data-af-query')!==null){
    const name=attribute(element,'data-af-query')!,link=attribute(element,'data-af-dataset');
    if(!DECLARED_NAME.test(name))throw new Error('A declared query is named data-af-query="NAME" (letters, digits and _)');
@@ -180,7 +202,8 @@ export function htmlPageDeclarations(html:string):HtmlPageDeclarations{
    const sql=element.childNodes.map(node=>'value' in node?String(node.value):'').join('').trim();
    // Its size is judged at publish with the SQL limits (lib/live-datasets), where the contracts load.
    if(!sql)throw new Error(`Declared query ${name} is one SQL statement`);
-   queries.push({name,link,sql});
+   const allowed=attribute(element,'data-af-params');
+   queries.push({name,link,sql,...(allowed===null?{}:{params:declaredParams(name,allowed)})});
    if(queries.length>DECLARED_QUERIES_MAX)throw new Error(`A page declares at most ${DECLARED_QUERIES_MAX} queries`);
    continue;
   }

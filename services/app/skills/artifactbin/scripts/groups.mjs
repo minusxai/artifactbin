@@ -22,6 +22,8 @@ Usage: node scripts/groups.mjs list
        node scripts/groups.mjs delete GROUP --handle HANDLE --yes
        node scripts/groups.mjs addresses GROUP
        node scripts/groups.mjs allow|disallow GROUP ORIGIN... [--kind connect|img|media] --yes
+       node scripts/groups.mjs queries PAGE
+       node scripts/groups.mjs approve PAGE QUERY --hash HASH --yes | unapprove PAGE ID --yes
 Flags: --server ORIGIN, --json, --output FILE (exclusive), --help.
 Examples:
   node scripts/groups.mjs folder-create design_crit --title Reports
@@ -34,6 +36,7 @@ Gotchas: GROUP resolves ID/handle/@handle once; USER matches a unique member ID/
   --request is exclusive; resume replays unchanged. Folder --parent accepts same-origin ID/URL;
   create --parent nests groups inheriting parent shares. Delete needs empty/nondefault group,
   no subgroups, exact handle. Reconcile other unknown writes by reading state before retrying.
+  approve (an Admin) runs a group page's default: query as the group: say its statement first.
 Exit: 0 ok; 1 failed or partial failure; 2 invocation/confirmation; 3 auth/access; 4 conflict;
   5 unknown write outcome. Results never contain credentials.`;
 
@@ -61,6 +64,14 @@ async function command({sub,values,positionals},options){
   options);
  // Confirm before HTTP.
  confirmation(sub,values);
+ if(['queries','approve','unapprove'].includes(sub)){
+  positional(positionals,sub==='queries'?1:2);if(sub==='approve')requireFlags(values,['hash']);
+  const {server,id}=resolveTarget(positionals[0],selectedServer(values,options.env)),
+   q='/api/artifacts/'+id+'/query-approvals';
+  return makeClient(server,options).request(sub==='unapprove'?q+'/'+segment(positionals[1]):q,
+   sub==='queries'?undefined:{unsafe:true,method:sub==='approve'?'POST':'DELETE',
+    body:sub==='approve'?{query:positionals[1],hash:values.hash}:undefined});
+ }
  const pageVerb=['share','unshare','move'].includes(sub);
  if(['invite','allow','disallow'].includes(sub)){
   if(positionals.length<2)throw new ToolError('invalid_arguments',

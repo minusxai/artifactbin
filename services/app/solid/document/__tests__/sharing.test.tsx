@@ -240,3 +240,39 @@ it('shows a structured server refusal without marking the unsaved visibility sel
   expect(screen.getByRole('button', { name: 'Make private' })).toHaveAttribute('aria-pressed', 'true');
   expect(screen.getByRole('button', { name: 'Make public' })).toHaveAttribute('aria-pressed', 'false');
 });
+
+it('shows an Admin each query of the page on live data, approves one after saying what readers will see, and revokes it', async () => {
+  const state = { visibility: 'private', linkRole: 'viewer', shares: [], canPrivate: true };
+  const query = { name: 'totals', connection: 'default:', sql: 'select region, sum(amount) from wh.sales group by region', params: {}, hash: 'a'.repeat(64),
+    statement: 'Everyone who can open this page will see what totals returns when Team reads it as a member, whatever their own access to this data.' };
+  let approval: null | { id: string; approved_by: { name: string; username: null }; approved_at: string } = null;
+  const fetcher = stubFetch({
+    'GET /api/artifacts/abc123/query-approvals': () => Response.json({ group: { id: 'grp_1', name: 'Team' }, queries: [{ ...query, approval }] }),
+    'POST /api/artifacts/abc123/query-approvals': () => { approval = { id: 'pqa_1', approved_by: { name: 'Ada', username: null }, approved_at: '2026-11-19T00:00:00.000Z' }; return Response.json({ id: 'pqa_1' }, { status: 201 }); },
+    'DELETE /api/artifacts/abc123/query-approvals/pqa_1': () => { approval = null; return new Response(null, { status: 204 }); },
+  }, { fallback: () => Response.json(state) });
+  const view = render(() => <DocumentSharing id="abc123" title="Report" owner queryApprovals />);
+  fireEvent.click(view.getByRole('button', { name: 'Share' }));
+  const section = await screen.findByRole('group', { name: 'Approved queries' });
+  expect(section).toHaveTextContent('runs as each reader');
+  fireEvent.click(screen.getByRole('button', { name: 'Approve totals' }));
+  const confirm = await screen.findByRole('dialog', { name: 'Show totals to every reader?' });
+  expect(confirm).toHaveTextContent(query.statement);
+  expect(confirm).toHaveTextContent(query.sql);
+  fireEvent.click(screen.getByRole('button', { name: 'Confirm approve totals' }));
+  await waitFor(() => expect(fetcher).toHaveBeenCalledWith('/api/artifacts/abc123/query-approvals', expect.objectContaining({ method: 'POST', body: JSON.stringify({ query: 'totals', hash: query.hash }) })));
+  await waitFor(() => expect(screen.getByRole('group', { name: 'Approved queries' })).toHaveTextContent('runs as Team · approved by Ada'));
+  fireEvent.click(screen.getByRole('button', { name: 'Revoke totals' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Confirm revoke totals' }));
+  await waitFor(() => expect(screen.getByRole('group', { name: 'Approved queries' })).toHaveTextContent('runs as each reader'));
+});
+
+it('draws no approved queries for someone who is not an Admin of the page\'s group', async () => {
+  const state = { visibility: 'private', linkRole: 'viewer', shares: [], canPrivate: true };
+  const fetcher = stubFetch({ 'GET /api/artifacts/abc123/query-approvals': () => Response.json({ error: 'forbidden' }, { status: 403 }) }, { fallback: () => Response.json(state) });
+  const view = render(() => <DocumentSharing id="abc123" title="Report" owner queryApprovals />);
+  fireEvent.click(view.getByRole('button', { name: 'Share' }));
+  await waitFor(() => expect(fetcher).toHaveBeenCalledWith('/api/artifacts/abc123/query-approvals', expect.anything()));
+  await waitFor(() => expect(screen.getByText('people')).toBeTruthy());
+  expect(screen.queryByRole('group', { name: 'Approved queries' })).toBeNull();
+});

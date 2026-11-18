@@ -1,6 +1,8 @@
 # Page data doors
 
-SQL reads and writes are the supported page data contract. The caller is the request reader, never a request variable.
+SQL reads and writes are the supported page data contract. The caller is the request reader, never a request variable;
+the one exception is a page's declared query on the default connection that an Admin of the page's group approved
+(`approved-queries.ts`, lib/query-approvals), which runs as that group at member level, chosen by the server alone.
 A write commits only under `pageCommitGuard`, decided inside the commit from locked rows; a read leaves only after
 `pageVerifier`. Never run author code on the server. Preserve Hasura-style dataset permissions and lock ordering.
 

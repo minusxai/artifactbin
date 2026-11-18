@@ -722,6 +722,45 @@ ALTER TABLE app.dataset_connections ADD COLUMN IF NOT EXISTS revision INTEGER NO
 
 ALTER TABLE app.dataset_connections ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
+CREATE TABLE IF NOT EXISTS app.page_query_approvals (
+  id TEXT NOT NULL,
+  page_id TEXT NOT NULL,
+  query_name TEXT NOT NULL,
+  query_hash TEXT NOT NULL,
+  connection TEXT NOT NULL,
+  group_id TEXT NOT NULL,
+  approved_by TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  ended_at TIMESTAMPTZ,
+  ended_by TEXT,
+  ended_reason TEXT,
+  PRIMARY KEY (id)
+);
+
+ALTER TABLE app.page_query_approvals ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
+
+ALTER TABLE app.page_query_approvals ADD COLUMN IF NOT EXISTS page_id TEXT NOT NULL;
+
+ALTER TABLE app.page_query_approvals ADD COLUMN IF NOT EXISTS query_name TEXT NOT NULL;
+
+ALTER TABLE app.page_query_approvals ADD COLUMN IF NOT EXISTS query_hash TEXT NOT NULL;
+
+ALTER TABLE app.page_query_approvals ADD COLUMN IF NOT EXISTS connection TEXT NOT NULL;
+
+ALTER TABLE app.page_query_approvals ADD COLUMN IF NOT EXISTS group_id TEXT NOT NULL;
+
+ALTER TABLE app.page_query_approvals ADD COLUMN IF NOT EXISTS approved_by TEXT NOT NULL;
+
+ALTER TABLE app.page_query_approvals ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+ALTER TABLE app.page_query_approvals ADD COLUMN IF NOT EXISTS ended_at TIMESTAMPTZ;
+
+ALTER TABLE app.page_query_approvals ADD COLUMN IF NOT EXISTS ended_by TEXT;
+
+ALTER TABLE app.page_query_approvals ADD COLUMN IF NOT EXISTS ended_reason TEXT;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_page_query_approvals_live ON app.page_query_approvals (page_id, query_name) WHERE ended_at IS NULL;
+
 CREATE TABLE IF NOT EXISTS app.dataset_usage (
   bucket TEXT NOT NULL,
   calls INTEGER NOT NULL DEFAULT 0,

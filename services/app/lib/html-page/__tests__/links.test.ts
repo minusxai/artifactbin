@@ -27,6 +27,16 @@ test('a default: link stores the default-connection shape: its page name and the
   .toEqual([{ kind: 'default-connection', name: 'wh', namespace: 'warehouse/finance' }, { kind: 'default-connection', name: 'raw', namespace: '' }]);
 });
 
+it('declares what a reader may vary in a query: each parameter\'s type or list of values, never a server value', () => {
+ const q=(params:string)=>htmlPageDeclarations(`<script type="application/sql" data-af-query="totals" data-af-dataset="wh" data-af-params='${params}'>select 1</script>`).queries;
+ expect(q('{"region":["EU","US",3,true],"since":"date","n":"number","label":"text","on":"boolean"}')).toEqual([{name:'totals',link:'wh',sql:'select 1',
+  params:{region:{values:['EU','US',3,true]},since:{type:'date'},n:{type:'number'},label:{type:'text'},on:{type:'boolean'}}}]);
+ expect(q('{}')).toEqual([{name:'totals',link:'wh',sql:'select 1',params:{}}]);
+ for(const bad of ['not json','[]','"text"','{"viewer_id":"text"}','{"a b":"text"}','{"r":"string"}','{"r":[]}','{"r":[null]}','{"r":[{"x":1}]}',
+  JSON.stringify(Object.fromEntries(Array.from({length:21},(_,i)=>[`p${i}`,'text']))),JSON.stringify({r:Array.from({length:101},(_,i)=>i)})])
+  expect(()=>q(bad),bad).toThrow(/Declared query totals/);
+});
+
 it('declares queries: a named application/sql script on a named link, its text as written, nothing else', () => {
  const q=(attrs:string,text='select 1')=>htmlPageDeclarations(`<head><script type="application/sql" ${attrs}>${text}</script></head>`);
  expect(q('data-af-query="mine" data-af-dataset="shop"',' select id from sales.orders where owner = :viewer_email ').queries).toEqual([{name:'mine',link:'shop',sql:'select id from sales.orders where owner = :viewer_email'}]);

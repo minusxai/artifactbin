@@ -10,6 +10,7 @@ import { ownerPredicate, type ArtifactRow } from '@/lib/artifact-access';
 import {mailGroupChanges,recordGroupMutation,getGroupRole} from '../groups';
 import type {GroupChange} from '@artifactbin/contracts';
 import {assertTransferDependencies} from './transfer-dependencies';
+import {endQueryApprovals} from '@/lib/query-approvals';
 
 export async function transferArtifact(actor:AccessActor,id:string,destination:ArtifactDestination):Promise<ArtifactRow|null>{
  if(!actor.userId)throw new DatasetError('Sign in to transfer ownership',403);
@@ -40,6 +41,8 @@ export async function transferArtifact(actor:AccessActor,id:string,destination:A
     sharing_revision=sharing_revision+1,policy_revision=policy_revision+1
     WHERE id=ANY($1::text[]) RETURNING *`,[[...ids],groupId,userId,target.ancestor_ids.length+1]);
   changed=updated.rows;
+  // An approved query runs as the group that owned the page when it was approved: another owner ends it.
+  await endQueryApprovals(tx,actor,updated.rows.filter(row=>row.format==='html').map(row=>row.id),'moved');
   await tx.query('INSERT INTO ownership_transfers(id,artifact_id,actor_user_id,previous_owner,next_owner) VALUES($1,$2,$3,$4::jsonb,$5::jsonb)',['tr_'+generateInternalId(),id,actor.userId,JSON.stringify(target.group_id?{type:'group',id:target.group_id}:{type:'personal',id:target.user_id}),JSON.stringify(destination)]);
   for(const group of groups){const recipients=(await tx.query<{user_id:string}>('SELECT user_id FROM group_members WHERE group_id=$1',[group])).rows.map(row=>row.user_id);mailed.push(await recordGroupMutation(tx,actor.userId!,group,'transferred',{artifact_id:id,destination},recipients,actor));}
   return updated.rows.find(r=>r.id===id)!;

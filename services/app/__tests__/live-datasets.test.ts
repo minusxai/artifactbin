@@ -267,6 +267,9 @@ it('refuses a declared query from a publisher who cannot edit the live dataset, 
   expect((onStored.body as unknown as { error: string }).error).toBe('invalid_declared_query');
   const huge = await publish(alice, { html: PAGE(id, SCRIPT('big', 'shop', `select '${'x'.repeat(64_001)}'`)) });
   expect((huge.body as unknown as { error: string }).error).toBe('invalid_declared_query');
+  // What a reader may vary is declared for a default-connection query an Admin may approve, never a live dataset's.
+  const varied = await publish(alice, { html: PAGE(id, SCRIPT('mine', 'shop', 'select 1').replace('data-af-dataset="shop"', 'data-af-dataset="shop" data-af-params=\'{"min":"number"}\'')) });
+  expect((varied.body as unknown as { error: string }).error).toBe('invalid_declared_query');
   const pinned = await publish(alice, { html: PAGE(id).replace(`href="ref:${id}"`, `href="ref:${id}" data-af-mode="pinned" data-af-revision="1"`) });
   expect((pinned.body as unknown as { error: string }).error).toBe('live_dataset_not_pinnable');
 });

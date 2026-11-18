@@ -76,7 +76,8 @@ const commands = {
     move: {group: flag(), personal: flag('boolean'), yes: flag('boolean')},
     link: {}, unlink: {yes: flag('boolean')}, delete: {handle: flag(), yes: flag('boolean')},
     addresses: {}, allow: {kind: flag(), yes: flag('boolean')},
-    disallow: {kind: flag(), yes: flag('boolean')}
+    disallow: {kind: flag(), yes: flag('boolean')}, queries: {},
+    approve: {hash: flag(), yes: flag('boolean')}, unapprove: {yes: flag('boolean')}
   }},
   comment: {
     sub: {

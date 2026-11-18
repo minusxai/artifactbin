@@ -35,19 +35,18 @@
  * is unchanged: the page's reads of it answer the refusal.
  */
 import {readLifetime} from '@/lib/datasets';
-import { CONNECTORS, OWN_CONNECTIONS_OFF, SQL_READ_LIMITS, type ConnectionConfig, type ConnectorDialect, type ConnectorError, type ConnectorScalar, type ConnectorTestResult, type ConnectorViewer, type DatasetRole, type HtmlDatasetLink, type HtmlDeclaredQuery, type HtmlLiveDatasetLink, type HtmlPageVersion, type Queryable } from '@artifactbin/contracts';
+import { CONNECTORS, OWN_CONNECTIONS_OFF, SQL_READ_LIMITS, type ConnectionConfig, type ConnectorDialect, type ConnectorError, type ConnectorScalar, type ConnectorTestResult, type ConnectorViewer, type DatasetRole, type HtmlDatasetLink, type HtmlDeclaredQuery, type HtmlDefaultConnectionLink, type HtmlLiveDatasetLink, type HtmlPageLink, type HtmlPageVersion, type Queryable } from '@artifactbin/contracts';
 import { SQL_FAILURE_FOR_CONNECTOR, isSqlFailureCode, liveSource, sqlReadFailure } from '@artifactbin/contracts';
 import { ConnectorFailure, colonParameters, connectionSummary, connectorError, connectorList, leadingWords, mapQualifiers, openConnection, parseConnectionConfig, qualifierNames, type NetworkSeams, type OpenConnection } from '@artifactbin/connectors';
 import type { AccessActor } from '@/lib/accounts';
 import { canReadArtifact, getArtifactById, setLiveDatasetSummary, type LiveConnectionInsert } from '@/lib/artifacts';
 import { lockAuthorization, transactionAccessFacts, type ArtifactRow } from '@/lib/artifact-access';
-import { connectorViewer } from '@/lib/connections';
+import { VIEWER_PARAMS, connectorViewer, viewerParams } from '@/lib/connections';
 import { liveConnectionOf, liveQueryRoles } from '@/lib/datasets';
 import { datasetReadAccess, datasetRole, storedPolicy } from '@/lib/dataset-permissions';
 import { QUERY_TIMEOUT_MS,datasetConnectionCipher, datasetsAllowPrivateNetwork, datasetsOwnConnections, getDb } from '@/lib/platform';
 
 const PURPOSE = 'dataset-connection';
-const VIEWER_PARAMS = ['viewer_id', 'viewer_email', 'viewer_groups', 'viewer_group_role'] as const;
 
 /** A refusal with its HTTP status and code, answered as `{error: code, message}`. */
 export class LiveDatasetRefusal extends Error {
@@ -183,9 +182,7 @@ function boundStatement(dialect: ConnectorDialect, text: string, params: unknown
   try { rewritten = colonParameters(dialect, text).text; } catch (e) { throw new LiveDatasetRefusal(400, 'validation_failed', connectorError(e).message); }
   return {
     text: rewritten,
-    // A person's values exactly as ever (`??`: an empty address stays empty); a group's sign-in (a level) is no person.
-    params: { ...sent, viewer_id: viewer?.groupRole ? null : viewer?.id ?? null, viewer_email: viewer?.groupRole ? null : viewer?.email ?? null, viewer_groups: viewer ? JSON.stringify([...viewer.groups].sort()) : null,
-      viewer_group_role: viewer ? viewer.groupRole ?? '' : null },
+    params: { ...sent, ...viewerParams(viewer) },
   };
 }
 
@@ -353,7 +350,7 @@ export async function liveDatasetSql(actor: AccessActor, id: string, raw: { sql?
  * queries, each on a live link the PUBLISHER (the person saving, never the page's owner) owns or edits. Throws
  * LiveDatasetRefusal; a stored link is left as it was (its own checks follow).
  */
-export async function livePageDeclarations(reader: AccessActor, publisher: AccessActor, links: readonly HtmlDatasetLink[], queries: readonly HtmlDeclaredQuery[]): Promise<{ links: (HtmlDatasetLink | HtmlLiveDatasetLink)[]; queries: HtmlDeclaredQuery[] }> {
+export async function livePageDeclarations(reader: AccessActor, publisher: AccessActor, links: readonly HtmlDatasetLink[], queries: readonly HtmlDeclaredQuery[], connections: readonly HtmlDefaultConnectionLink[] = []): Promise<{ links: (HtmlDatasetLink | HtmlLiveDatasetLink)[]; queries: HtmlDeclaredQuery[] }> {
   const out: (HtmlDatasetLink | HtmlLiveDatasetLink)[] = [], live = new Map<string, ArtifactRow>();
   for (const link of links) {
     const row = await liveRow(link.datasetId);
@@ -365,7 +362,14 @@ export async function livePageDeclarations(reader: AccessActor, publisher: Acces
   }
   for (const query of queries) {
     const row = live.get(query.link);
-    if (!row) throw new LiveDatasetRefusal(400, 'invalid_declared_query', `declared query ${query.name} runs on data-af-dataset="${query.link}", which is not a live dataset link on this page`);
+    // On the install's default connection (open to every signed-in reader, as themselves): anyone publishing the page
+    // may declare it; only an approval (lib/query-approvals) ever runs it as anyone else.
+    if (!row && connections.some((link) => link.name === query.link)) {
+      if (new TextEncoder().encode(query.sql).length > SQL_READ_LIMITS.sqlBytes) throw new LiveDatasetRefusal(400, 'invalid_declared_query', `declared query ${query.name} is at most ${SQL_READ_LIMITS.sqlBytes} bytes`);
+      continue;
+    }
+    if (!row) throw new LiveDatasetRefusal(400, 'invalid_declared_query', `declared query ${query.name} runs on data-af-dataset="${query.link}", which is not a live dataset or default: link on this page`);
+    if (query.params) throw new LiveDatasetRefusal(400, 'invalid_declared_query', `declared query ${query.name}: data-af-params is for a query on a default: link, which a group's Admin may approve`);
     if (!isAdmin(await datasetRole(row, publisher))) throw new LiveDatasetRefusal(403, 'declared_query_not_permitted', `declared query ${query.name} runs on ${query.link}, a live dataset you do not own or edit: only its owner and editors may declare queries on it`);
     if (new TextEncoder().encode(query.sql).length > SQL_READ_LIMITS.sqlBytes) throw new LiveDatasetRefusal(400, 'invalid_declared_query', `declared query ${query.name} is at most ${SQL_READ_LIMITS.sqlBytes} bytes`);
     const dialect = specOf(liveConnectionOf(row.meta)!.connector).dialect;
@@ -376,8 +380,11 @@ export async function livePageDeclarations(reader: AccessActor, publisher: Acces
 
 /** Forking a page carries its declared queries only for someone who may declare them (as publish requires). */
 export async function assertDeclaredQueriesCopyable(actor: AccessActor, page: { meta: Record<string, unknown> }): Promise<void> {
-  const links = ((page.meta.htmlLinks ?? []) as HtmlLiveDatasetLink[]).filter((l) => l.kind === 'live-dataset');
+  const all = (page.meta.htmlLinks ?? []) as HtmlPageLink[];
+  const links = all.filter((l): l is HtmlLiveDatasetLink => l.kind === 'live-dataset');
   for (const query of (page.meta.htmlQueries ?? []) as HtmlDeclaredQuery[]) {
+    // A default-connection query copies as any page text does: a copy has no approval.
+    if (all.some((l) => l.kind === 'default-connection' && l.name === query.link)) continue;
     const link = links.find((l) => l.name === query.link), row = link ? await liveRow(link.datasetId) : null;
     if (!row || !isAdmin(await datasetRole(row, actor))) throw new LiveDatasetRefusal(403, 'declared_query_not_permitted', `this page declares query ${query.name} on a live dataset you do not own or edit, so it cannot be copied by you`);
   }
@@ -397,6 +404,8 @@ export async function pageLiveDatasetSql(actor: AccessActor, page: HtmlPageVersi
     if (raw.query !== undefined) {
       if (typeof raw.query !== 'string' || raw.sql !== undefined) throw new LiveDatasetRefusal(400, 'validation_failed', 'send {query, params} (a declared query\'s name) or {sql, params}, not both');
       const query = page.queries.find((q) => q.name === raw.query);
+      // A declared query on the default connection is the default connection's door's (lib/page-doors).
+      if (query && page.links.some((l) => l.kind === 'default-connection' && l.name === query.link)) return null;
       const link = query && lives.find((l) => l.name === query.link);
       if (!query || !link) throw new LiveDatasetRefusal(404, 'unknown_query', `this version of the page declares no query named ${JSON.stringify(raw.query.slice(0, 64))}`);
       const row = await step(liveRow(link.datasetId));
