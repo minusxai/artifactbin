@@ -12,6 +12,8 @@ export interface TokenRecord {
   scope?: string;
   /** ISO expiry; absent when the token does not expire. */
   expiresAt?: string;
+  /** The configured service a run sign-in was issued to (`tokens.issued_by`); absent on every other token. */
+  issuedBy?: string;
   /** The account's identity, read in the same statement as the token; absent when it has no account row. */
   email?: string;
   emailVerified?: boolean;

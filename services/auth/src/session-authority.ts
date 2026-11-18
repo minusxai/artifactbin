@@ -21,15 +21,22 @@ import {ARTIFACT_WORKLOAD_PATH,APP_ARTIFACT_WORKLOAD_PATH,SERVICE_PAYLOAD_LIMIT,
  *    `{refused: {code, status, retry_after?, detail?}}` out, both 200; anything else (no transactional database, a
  *    failure) is 503 and the caller's call throws;
  *  - a relay's chart drawing (contracts `CHART_IMAGE_PATH`, a service opted in with `artifact_reads`): no person, no
- *    grant, exact keys, forwarded to the app's fixed seam and answered as it answers.
+ *    grant, exact keys, forwarded to the app's fixed seam and answered as it answers;
+ *  - a RUN SIGN-IN (contracts `RUN_SIGN_IN_PATH`, a service opted in with `run_sign_ins`, its own secret): the person's
+ *    exchanged token for that service, verified as introspection verifies it, becomes an ordinary API access token for
+ *    that person with no refresh token (./identity-store/accounts `mintRunSignIn`), audited as a mint. Without the
+ *    opt-in, or with another credential in the header, the path is passed on as any unknown one.
  */
 import {createHash,timingSafeEqual} from 'node:crypto';
-import {CHART_IMAGE_PATH,CANONICAL_CHART_IMAGE_PATH,CHART_IMAGE_KEYS,ANONYMOUS} from '@artifactbin/contracts';
+import {CHART_IMAGE_PATH,CANONICAL_CHART_IMAGE_PATH,CHART_IMAGE_KEYS,ANONYMOUS,ARTIFACT_SCOPE,DEFAULT_TOKEN_TTL_MS,MAX_TOKEN_TTL_MS,MIN_TOKEN_TTL_MS,RUN_SIGN_IN_PATH,type RunSignIn} from '@artifactbin/contracts';
 import {ARTIFACT_IMAGE_DEADLINE_MS,ARTIFACT_IMAGE_ERRORS,ARTIFACT_IMAGE_ERROR_FIELDS,ARTIFACT_IMAGE_PATH,CANONICAL_ARTIFACT_IMAGE_PATH,ELEMENT_CAPTURE,ARTIFACT_READ_GRANT_PATH,ARTIFACT_READ_PATH,CANONICAL_ARTIFACT_READ_PATH,API_RESOURCE_PATH,HUMAN_SESSION_LIVE_PATH,IDENTITY_CALL_PATH,IDENTITY_SCHEMA,IDENTITY_INTROSPECT_PATH,IDENTITY_METHODS,IdentityError,SERVICE_AUTH_HEADER,parseAliasOrigins,parseServiceAudiences,type IssuedArtifactReadGrant,type IdentityIntrospectResponse,type IdentityMethod,type IdentityService,type Part,type ServiceAudience,type ServiceTokenParent,type TokenRecord,type TransactionalQueryable} from '@artifactbin/contracts';
 import {BodyTooLargeError,readBody,serviceSecretMatches} from '@artifactbin/utils';
 import type {Context} from 'hono';
 import type {AuthEnv,AuthOptions} from './parts';
-import {acceptedOriginsOf} from './routes/oauth';
+import {acceptedOriginsOf,baseUrlOf} from './routes/oauth';
+import {mintRunSignIn} from './identity-store/accounts';
+import {identityTables} from './identity-store/tables';
+import {say} from './events';
 import {readEnv} from './env';
 import {testDomainSignInOf} from './config';
 import {IdentityNotReady,createIdentityStore,ensureIdentitySchema} from './identity-store';
@@ -37,6 +44,9 @@ import {isServiceToken,verifyServiceToken,serviceTokenKey} from './identity/serv
 import {artifactReadKey,signArtifactReadGrant,verifyArtifactReadGrant} from './identity/artifact-read-grants';
 /** A person's token: no group principal (every active introspection answer, until group sign-ins exist). */
 const PERSON={group_id:null,group_role:null,issued_by:null} as const;
+/** The lifetime a run sign-in asks for (`expires_in`, seconds; absent: the default), clamped to the token bounds; null when malformed. */
+const runLifetime=(asked:unknown):number|null=>asked===undefined?DEFAULT_TOKEN_TTL_MS
+ :typeof asked==='number'&&Number.isFinite(asked)&&asked>0?Math.min(MAX_TOKEN_TTL_MS,Math.max(MIN_TOKEN_TTL_MS,Math.round(asked*1000))):null;
 const answer=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json','cache-control':'no-store'}});
 const sha256=(value:string)=>createHash('sha256').update(value).digest('hex');
 /** The configured service whose introspection secret `presented` is, compared in constant time; undefined when none. */
@@ -94,8 +104,35 @@ export function sessionAuthority(o:AuthOptions):Part<AuthEnv>{return {name:'sess
    }
    const token=await live(c,await o.tokens.byToken(input.token));
    if(!token||(only&&token.audience!==only.origin))return inactive;
-   return answer({active:true,principal_kind:'user',user_id:token.userId,token_id:token.id,scopes:token.scope?.split(/\s+/).filter(Boolean)??[],audience:token.audience??null,expires_at:token.expiresAt??null,parent:null,...PERSON} satisfies IdentityIntrospectResponse);
+   return answer({active:true,principal_kind:'user',user_id:token.userId,token_id:token.id,scopes:token.scope?.split(/\s+/).filter(Boolean)??[],audience:token.audience??null,expires_at:token.expiresAt??null,parent:null,...PERSON,issued_by:token.issuedBy??null} satisfies IdentityIntrospectResponse);
   }catch{return answer({error:'session_unavailable'},503);}
+ });
+ app.all(RUN_SIGN_IN_PATH,async(c,next)=>{
+  // Only a service that opted in, presenting its own secret, reaches this route; anyone else meets an unknown path.
+  const service=serviceOf(audiences,c.req.header(SERVICE_AUTH_HEADER));
+  if(!service?.runSignIns)return next();
+  const input=await admit(c,()=>true);if(input instanceof Response)return input;
+  if(Object.keys(input).some(key=>key!=='token'&&key!=='expires_in')||typeof input.token!=='string'||!input.token)return answer({error:'bad_request'},400);
+  const lifetime=runLifetime(input.expires_in);
+  if(lifetime===null)return answer({error:'invalid_expiry'},400);
+  const unauthorized=answer({error:'unauthorized'},401);
+  try{
+   // The person's exchanged token for THIS service, exactly as introspection verifies one; never an ordinary bearer.
+   const claims=isServiceToken(input.token)&&tokenKey?verifyServiceToken(tokenKey,audiences,input.token):null;
+   if(!claims||claims.svc!==service.id||claims.aud!==service.origin||!await activeUser(claims.sub)||!await parentLive(claims.par,claims.sub)
+    ||(o.admitIdentity&&!await o.admitIdentity({userId:claims.sub})))return unauthorized;
+   // One level only: a run sign-in is never the parent of another.
+   if(claims.par.kind==='token'&&(await o.identityDb!.query<{issued_by:string|null}>(`SELECT issued_by FROM ${readSchema}.tokens WHERE id=$1`,[claims.par.id])).rows[0]?.issued_by)
+    return answer({error:'parent_not_eligible'},403);
+   const server=baseUrlOf(c.req.raw,o.trustedHops??0,readEnv(o.env,'APP__PUBLIC_BASE_URL'));
+   const minted=await mintRunSignIn(identityTables(authSchema),o.identityDb!,authSchema,{userId:claims.sub,service:service.id,parent:claims.par,expiresInMs:lifetime,audience:`${server}${API_RESOURCE_PATH}`,scope:ARTIFACT_SCOPE});
+   void say(o.events,{kind:'user',id:claims.sub},'minted',{kind:'token',id:minted.id},{name:minted.name});
+   const expiresAt=minted.expiresAt!;
+   return answer({access_token:minted.token,token_type:'Bearer',token_id:minted.id,expires_at:expiresAt,expires_at_ms:Date.parse(expiresAt),server} satisfies RunSignIn);
+  }catch(error){
+   if(error instanceof IdentityError)return answer({error:error.code,...(error.retryAfter!==undefined?{retry_after:error.retryAfter}:{})},error.status);
+   return answer({error:'session_unavailable'},503);
+  }
  });
  app.all(ARTIFACT_WORKLOAD_PATH,async c=>{
   let service:ServiceAudience|undefined;

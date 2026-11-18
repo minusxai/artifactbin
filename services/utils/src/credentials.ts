@@ -63,8 +63,10 @@ export async function readCredentials(server:string,root:string,audience?:string
  }}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
  if(saved.ARTIFACTBIN_URL!==paths.origin||!saved.ARTIFACTBIN_TOKEN||(saved.ARTIFACTBIN_AUDIENCE??undefined)!==audience)return null;
  if(audience&&!saved.ARTIFACTBIN_RESOURCE)return null;
- const expiresAt=Number(saved.ARTIFACTBIN_EXPIRES_AT);
- return {server:paths.origin,token:saved.ARTIFACTBIN_TOKEN,...(audience?{audience,resource:saved.ARTIFACTBIN_RESOURCE!}:{}),...(saved.ARTIFACTBIN_REFRESH_TOKEN&&saved.ARTIFACTBIN_CLIENT_ID?{refreshToken:saved.ARTIFACTBIN_REFRESH_TOKEN,clientId:saved.ARTIFACTBIN_CLIENT_ID,...(Number.isSafeInteger(expiresAt)&&expiresAt>0?{expiresAt}:{})}:{})};
+ const expiresAt=Number(saved.ARTIFACTBIN_EXPIRES_AT),refresh=saved.ARTIFACTBIN_REFRESH_TOKEN,client=saved.ARTIFACTBIN_CLIENT_ID;
+ // A sign-in without refresh lines (a service's run sign-in) is nothing once its expiry passes: sign in again.
+ if(!refresh&&expiresAt<=Date.now())return null;
+ return {server:paths.origin,token:saved.ARTIFACTBIN_TOKEN,...(audience?{audience,resource:saved.ARTIFACTBIN_RESOURCE!}:{}),...(refresh&&client?{refreshToken:refresh,clientId:client,...(Number.isSafeInteger(expiresAt)&&expiresAt>0?{expiresAt}:{})}:{})};
 }
 /**
  * Every private directory a sign-in to `server` writes under `root`: the store, its locks, the credential hosts and

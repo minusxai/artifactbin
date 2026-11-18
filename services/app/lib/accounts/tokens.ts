@@ -265,13 +265,17 @@ export interface TokenRow {
   deleted_at: string | null;
   expires_at: string | null;
   last_used_at: string | null;
+  /** A run sign-in's service (contracts `RUN_SIGN_IN_PATH`), null on every other token. */
+  issued_by: string | null;
+  /** The `tokens` view's rule: a run sign-in whose parent credential ended is no longer live. */
+  live: boolean;
 }
 
 /** The account's LIVE tokens, most recently used first, then newest minted — the list GET /api/my/tokens serves. */
 export async function listTokensByUser(userId: string): Promise<TokenRow[]> {
   const db = await getDb();
   return (await db.query<TokenRow>(
-    'SELECT id, name, user_id, created_at, deleted_at, expires_at, last_used_at FROM tokens WHERE user_id = $1 AND deleted_at IS NULL ORDER BY last_used_at DESC NULLS LAST, created_at DESC',
+    'SELECT id, name, user_id, created_at, deleted_at, expires_at, last_used_at, issued_by, live FROM tokens WHERE user_id = $1 AND deleted_at IS NULL ORDER BY last_used_at DESC NULLS LAST, created_at DESC',
     [userId],
   )).rows;
 }

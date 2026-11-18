@@ -49,6 +49,33 @@ async function insertToken(t: IdentityTables, q: Queryable, input: Parameters<Id
   return {id, name: input.name ?? null, token, expiresAt};
 }
 
+/** The most run sign-ins one person holds live from one service at once (contracts `RUN_SIGN_IN_PATH`). */
+const RUN_SIGN_INS_PER_SERVICE = 50;
+
+/**
+ * A RUN SIGN-IN (contracts `RUN_SIGN_IN_PATH`): an ordinary access token for `userId` at this installation's API
+ * (`audience`, `scope`), issued to the configured service `service` (`tokens.issued_by`), with its parent credential
+ * in an auth `run_sign_in` credential row keyed by the token's id: the bearer read's `run` fence (../identity/bearer)
+ * keeps it live only while that parent is. ONE statement, so it needs no transaction: the row, its credential and
+ * the cap (RUN_SIGN_INS_PER_SERVICE live ones per person and service; past it `rate_limited`) commit together.
+ * The route has already verified the exchanged token, the account and the parent; this writes nothing else.
+ */
+export async function mintRunSignIn(t: IdentityTables, q: Queryable, authSchema: string, input: {userId: string; service: string; parent: {kind: 'token' | 'session'; id: string}; expiresInMs: number; audience: string; scope: string}): Promise<MintedIdentityToken> {
+  const ms = input.expiresInMs;
+  if (!Number.isFinite(ms) || ms < MIN_TOKEN_TTL_MS || ms > MAX_TOKEN_TTL_MS) throw new IdentityError('invalid_expiry', 400);
+  const id = tokenId(), token = TOKEN_PREFIX + crypto.randomBytes(32).toString('base64url');
+  const expiresAt = new Date(Date.now() + ms).toISOString(), name = `run-${input.service}`;
+  const minted = await q.query<{id: string}>(`WITH capped AS (
+      SELECT 1 FROM (SELECT count(*) AS live FROM ${t.tokens} WHERE user_id=$4 AND issued_by=$8 AND deleted_at IS NULL AND expires_at>now()) held WHERE held.live < $11),
+    token AS (INSERT INTO ${t.tokens} (id, name, token_hash, user_id, expires_at, audience, scope, issued_by) SELECT $1, $2, $3, $4, $5, $6, $7, $8 FROM capped RETURNING id),
+    credential AS (INSERT INTO ${authSchema}.credentials (kind, credential_hash, subject_id, payload, expires_at)
+      SELECT 'run_sign_in', token.id, $4, jsonb_build_object('access_token_id', token.id, 'parent_kind', $9::text, 'parent_id', $10::text, 'service', $8::text), $5 FROM token RETURNING credential_hash)
+    SELECT credential_hash AS id FROM credential`,
+    [id, name, sha256(token), input.userId, expiresAt, input.audience, input.scope, input.service, input.parent.kind, input.parent.id, RUN_SIGN_INS_PER_SERVICE]);
+  if (!minted.rows.length) throw new IdentityError('rate_limited', 429, 3600);
+  return {id, name, token, expiresAt};
+}
+
 type AccountMethods = Pick<IdentityService, 'syncProfile' | 'createUser' | 'ensureUsername' | 'setUsername' | 'setImageKey' | 'confirmWelcome' | 'setAutoAcceptMentions'
   | 'createTestUser' | 'eraseTestUser' | 'mintToken' | 'ensureWebToken' | 'findToken' | 'revokeToken' | 'touchToken' | 'setTokenHarness' | 'markRequestAuthority'>;
 

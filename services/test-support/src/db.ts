@@ -43,7 +43,9 @@ const TOKENS_DDL: readonly string[] = [
      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
      deleted_at TIMESTAMPTZ,
      expires_at TIMESTAMPTZ,
-     last_used_at TIMESTAMPTZ
+     last_used_at TIMESTAMPTZ,
+     -- A run sign-in's service (the identity schema's issued_by), which the bearer read's run fence reads.
+     issued_by TEXT
    )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_tokens_hash ON auth.tokens (token_hash)`,
 ];

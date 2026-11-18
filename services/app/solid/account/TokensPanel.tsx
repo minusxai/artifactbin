@@ -9,7 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeaderCell, TableRow } fro
 import { ToggleGroup } from '../ui/ToggleGroup';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 
-interface UserTokenView { id: string; name: string | null; status: 'active' | 'expired' | 'revoked'; created_at: string; deleted_at: string | null; expires_at: string | null; last_used_at: string | null }
+/** `issued_by`: the service a run sign-in was issued to, for work it runs for this account; absent on other tokens. */
+interface UserTokenView { id: string; name: string | null; status: 'active' | 'expired' | 'revoked'; created_at: string; deleted_at: string | null; expires_at: string | null; last_used_at: string | null; issued_by?: string }
 function relativeTime(iso: string | null): string { if (iso === null) return 'never'; const delta = new Date(iso).getTime() - Date.now(); const magnitude = Math.abs(delta); const [amount, unit] = magnitude < 3600000 ? [Math.max(1, Math.floor(magnitude / 60000)), 'm'] : magnitude < 86400000 ? [Math.floor(magnitude / 3600000), 'h'] : [Math.floor(magnitude / 86400000), 'd']; return delta > 0 ? `in ${amount}${unit}` : `${amount}${unit} ago`; }
 
 export function TokensPanel(): JSX.Element {
@@ -51,7 +52,7 @@ export function TokensPanel(): JSX.Element {
         <Table label="Connections" fixed><TableHead>
           <TableHeaderCell>Name</TableHeaderCell><TableHeaderCell class="hidden w-24 lg:table-cell">Status</TableHeaderCell><TableHeaderCell class="hidden w-28 lg:table-cell">Expires</TableHeaderCell><TableHeaderCell class="hidden w-28 lg:table-cell">Last used</TableHeaderCell><TableHeaderCell align="right" class="w-32">Action</TableHeaderCell>
         </TableHead><TableBody><For each={visible()}>{token => <TableRow aria-label={`Token row ${token.name ?? token.id}`}>
-          <TableCell><div class="flex min-w-0 items-center gap-2"><span aria-label={`Token ${token.name ?? token.id} ${token.status} status dot`} class={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${token.status === 'active' ? 'bg-accent' : token.status === 'expired' ? 'bg-danger' : 'bg-faint'}`} /><span class="truncate font-mono text-xs">{token.name ?? '(unnamed)'}</span></div><div class="mt-1 text-xs text-muted lg:hidden">{token.status} · {token.expires_at ? `Expires ${relativeTime(token.expires_at)}` : 'No expiry'} · Last used {relativeTime(token.last_used_at)}</div></TableCell>
+          <TableCell><div class="flex min-w-0 items-center gap-2"><span aria-label={`Token ${token.name ?? token.id} ${token.status} status dot`} class={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${token.status === 'active' ? 'bg-accent' : token.status === 'expired' ? 'bg-danger' : 'bg-faint'}`} /><span class="truncate font-mono text-xs">{token.name ?? '(unnamed)'}</span></div><Show when={token.issued_by}>{service => <div class="mt-1 text-xs text-muted">Signed in for work {service()} runs for you</div>}</Show><div class="mt-1 text-xs text-muted lg:hidden">{token.status} · {token.expires_at ? `Expires ${relativeTime(token.expires_at)}` : 'No expiry'} · Last used {relativeTime(token.last_used_at)}</div></TableCell>
           <TableCell aria-label={`Token ${token.name ?? token.id} status`} class="hidden text-xs text-muted lg:table-cell">{token.status}</TableCell>
           <TableCell aria-label={`Token ${token.name ?? token.id} expires`} class="hidden whitespace-nowrap text-xs text-muted lg:table-cell">{token.expires_at ? relativeTime(token.expires_at) : 'No expiry'}</TableCell>
           <TableCell aria-label={`Token ${token.name ?? token.id} last used`} class="hidden whitespace-nowrap text-xs text-muted lg:table-cell">{relativeTime(token.last_used_at)}</TableCell>
