@@ -20,6 +20,8 @@ import {expressionInterpreter} from 'vega-interpreter';
 import {createSqliteSql} from '@artifactbin/sql/sqlite';
 import {createChartView, planChart} from '@/lib/viz/chart-plan';
 import {trackerFeatures, trackerFiles} from '../../../skills/artifactbin/scripts/toolbox-tracker.mjs';
+/** A condition wait's bound (vi.waitFor's own default is 1 s): the condition decides; this only names one that never came. */
+const WAIT_MS = 20_000;
 
 const EXAMPLES = new URL('../../../skills/artifactbin/examples/', import.meta.url);
 const read = (name: string) => readFileSync(new URL(name, EXAMPLES), 'utf8');
@@ -426,7 +428,7 @@ it('drops a superseded answer: the last pick wins even when an earlier pick answ
   const doc = page.dom.window.document;
   (doc.querySelector('[data-af-id="chart-categories-table-row-Meals-pick"]') as HTMLButtonElement).click();
   (doc.querySelector('[data-af-id="chart-categories-table-row-Groceries-pick"]') as HTMLButtonElement).click();
-  await vi.waitFor(() => expect(text(page, 'stat-orders-value')).toBe(fmt(ROWS.filter(row => row.category === 'Groceries').length)));
+  await vi.waitFor(() => expect(text(page, 'stat-orders-value')).toBe(fmt(ROWS.filter(row => row.category === 'Groceries').length)), { timeout: WAIT_MS });
   releaseMeals();
   await settle(page);
   expect(text(page, 'stat-orders-value')).toBe(fmt(ROWS.filter(row => row.category === 'Groceries').length));

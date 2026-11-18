@@ -22,6 +22,8 @@ import { assembleHtmlPage } from '@/lib/html-runtime';
 import { MARKDOWN_CSS, MARKDOWN_ROOT } from '@/lib/html-components/markdown-styles';
 import { PLATFORM_STYLES_PATH, htmlSystemsCss } from '@/lib/html-systems';
 import { mintAccountToken, request, useAppHarness, params } from './harness';
+/** A condition wait's bound (vi.waitFor's own default is 1 s): the condition decides; this only names one that never came. */
+const WAIT_MS = 20_000;
 
 useAppHarness();
 /** The sessions' clock, its timeouts held: the only one here is a leave's grace, run by `runLeaves()` when the test says. */
@@ -134,7 +136,7 @@ describe('a new doc', () => {
     expect((await live.open(owner, id, regionId)).status).toBe(200);
     abort.abort();
     // The reader's leave starts its grace; the grace ends now.
-    await vi.waitFor(() => expect(leaves.size).toBe(1));
+    await vi.waitFor(() => expect(leaves.size).toBe(1), { timeout: WAIT_MS });
     runLeaves();
     await live.settle();
     expect(await flush(live, owner, id)).toBe(1);

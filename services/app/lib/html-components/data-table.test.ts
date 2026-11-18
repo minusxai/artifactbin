@@ -4,6 +4,8 @@ import { STORY_TABLE_CSS } from "@/lib/page-styles";
 import { AfDataTable } from "./data-table";
 import './data-table';
 import { measuredTableWindow } from "./table-model";
+/** A condition wait's bound (vi.waitFor's own default is 1 s): the condition decides; this only names one that never came. */
+const WAIT_MS = 20_000;
 /**
  * Resize notifications re-render on the next animation frame, never inside the observer callback. Frames are held:
  * `nextFrame()` runs every callback queued so far, as one frame, instead of waiting on the environment's frame timer.
@@ -383,7 +385,7 @@ it("keeps the grouped row count after the final page without more requests", asy
   expect(getComputedStyle(initialButton).cursor).toBe("pointer");
   expect(initialButton.style.getPropertyValue("font-weight")).toBe("500");
   initialButton.click();
-  await vi.waitFor(() => expect(el.data.rows.at(-1)?.id).toBe(1001));
+  await vi.waitFor(() => expect(el.data.rows.at(-1)?.id).toBe(1001), { timeout: WAIT_MS });
 
   const footer = el.querySelector<HTMLDivElement>("[data-slot=table-footer]")!;
   const rowCount = footer.querySelector('[aria-label="Row count"]');

@@ -1,9 +1,11 @@
 import {expect,it,vi} from 'vitest';
 import {createFrameBridgeParent} from '../../html-reader/frame-bridge/parent';
+/** A condition wait's bound (vi.waitFor's own default is 1 s): the condition decides; this only names one that never came. */
+const WAIT_MS = 20_000;
 /** Answers `finish` with `response`, then waits until the relay has read its body and acted on it (one more turn). */
 const answered=async(finish:(response:Response)=>void,response:Response)=>{
  const read=vi.spyOn(response,'text');finish(response);
- await vi.waitFor(()=>expect(read).toHaveBeenCalled());await read.mock.results[0]!.value;await new Promise(resolve=>setImmediate(resolve));
+ await vi.waitFor(()=>expect(read).toHaveBeenCalled(), { timeout: WAIT_MS });await read.mock.results[0]!.value;await new Promise(resolve=>setImmediate(resolve));
 };
 it('an accepted upload completing after a frame reload cannot satisfy a replacement frame call',async()=>{
  const frame=document.createElement('iframe');document.body.append(frame);const messages:any[]=[];

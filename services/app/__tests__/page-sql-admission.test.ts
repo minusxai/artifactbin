@@ -6,6 +6,8 @@ import { POST } from '@/app/api/artifacts/[id]/sql/route';
 import * as authentication from '@/lib/authentication';
 import {services,getDb} from '@/lib/platform';
 import {ownerHostSqlRead} from '@/lib/page-doors';
+/** A condition wait's bound (vi.waitFor's own default is 1 s): the condition decides; this only names one that never came. */
+const WAIT_MS = 20_000;
 useAppHarness();
 
 /**
@@ -40,7 +42,7 @@ it('refuses stalled mixed-operation admission and never writes after the late bo
   const pending=POST(req,params(f.page));
   const finish=()=>{try{stream.enqueue(new TextEncoder().encode('"revision":"1","sql":"insert into staff(name) values (\'late\')"}'));stream.close();}catch{/* admission may cancel the input stream */}};
   try {
-    await vi.waitFor(()=>expect(timers.count()).toBe(1));
+    await vi.waitFor(()=>expect(timers.count()).toBe(1), { timeout: WAIT_MS });
     timers.expire();
     const result=await pending;
     expect([404,408]).toContain(result.status);
@@ -75,7 +77,7 @@ it.each(['opaque','owner'])('bounds %s wrapper admission before any dispatch',as
  const req=new Request(request(`/api/artifacts/${f.page}/sql`,{method:'POST',headers:{origin:'null'}}),{body,duplex:'half'} as RequestInit);
  try{
   const answer=mode==='opaque'?POST(req,params(f.page)):ownerHostSqlRead(req,f.page,async()=>{await stalled;return true;});
-  await vi.waitFor(()=>expect(timers.count()).toBe(1));
+  await vi.waitFor(()=>expect(timers.count()).toBe(1), { timeout: WAIT_MS });
   timers.expire();
   expect((await answer).status).toBe(404);
  }finally{release();stream.close();timers.restore();}

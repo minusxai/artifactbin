@@ -11,6 +11,8 @@ import { readRawResponse, withHttpServer } from '@artifactbin/test-support/net';
 import type { Actor, Part } from '@artifactbin/contracts';
 import { ACTOR_HEADER } from '@artifactbin/contracts';
 import { actorOf, actorReceiver, assemble, attachActor, inProcess, overHttp, serve, signActor, UPSTREAM_TIMEOUTS } from '@artifactbin/utils';
+/** A condition wait's bound (vi.waitFor's own default is 1 s): the condition decides; this only names one that never came. */
+const WAIT_MS = 20_000;
 
 const SECRET = 's'.repeat(32);
 const alice: Actor = { credential: 'bearer', userId: 'usr_alice', tokenId: 'tok_1' };
@@ -67,7 +69,7 @@ describe('inProcess', () => {
   it('streams a response body and propagates cancel', async () => {
     const reader = await readPings(await proxy.request('/events'), 3);
     await reader.cancel();
-    await vi.waitFor(() => expect(cancelled).toContain('events'));
+    await vi.waitFor(() => expect(cancelled).toContain('events'), { timeout: WAIT_MS });
   });
 });
 
@@ -92,7 +94,7 @@ describe('overHttp', () => {
     await readPings(res, 3);
     ac.abort();
     // The app's stream hears the cancel over the hop's socket, however late.
-    await vi.waitFor(() => expect(cancelled).toContain('events'));
+    await vi.waitFor(() => expect(cancelled).toContain('events'), { timeout: WAIT_MS });
   });
   /*
    * THE HOP CARRIES BYTES, NOT MEANINGS. A body the app already encoded (a

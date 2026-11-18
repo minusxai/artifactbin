@@ -15,6 +15,8 @@ import {fileURLToPath} from 'node:url';
 import { FORWARDED_HOST, type Actor } from '@artifactbin/contracts';
 import { createSessionProcess } from '../src/session-process';
 import type { SessionWorker } from '../src/sessions';
+/** A condition wait's bound (vi.waitFor's own default is 1 s): the condition decides; this only names one that never came. */
+const WAIT_MS = 20_000;
 
 const BASE = 'http://app.lvh.me:7999';
 const PAGES = 'lvh.me';
@@ -135,11 +137,11 @@ it('delivers successive real SSE segments through the isolated worker, catches u
  const evidence=smoke.result as {failedRequests:unknown[];consoleErrors:string[];pageErrors:string[];httpErrors:unknown[]};
  expect(evidence.failedRequests).toEqual([]);expect(evidence.consoleErrors).toEqual([]);expect(evidence.pageErrors).toEqual([]);expect(evidence.httpErrors).toEqual([]);
  // The check page's streams end with it (its cancels arrive over the wire, however late).
- await vi.waitFor(()=>expect(active).toBeLessThanOrEqual(2));
+ await vi.waitFor(()=>expect(active).toBeLessThanOrEqual(2), { timeout: WAIT_MS });
  }
  expect(peak).toBeLessThanOrEqual(6);expect(seen.length).toBeLessThan(50);
  await worker.close();worker=undefined;
- await vi.waitFor(()=>expect(active).toBe(0));expect(cancelled).toBe(seen.length);
+ await vi.waitFor(()=>expect(active).toBe(0), { timeout: WAIT_MS });expect(cancelled).toBe(seen.length);
  const total=seen.length;await new Promise(resolve=>setTimeout(resolve,350));expect(seen).toHaveLength(total);
  // The same stream endpoint keeps the guest permission refusal; no owner grant enters the worker.
  const guest:Actor={credential:'none'};

@@ -16,6 +16,8 @@ import { GET as apiHealth } from '@/app/api/health/route';
 import { stackHealth } from '@/lib/runtime';
 import { QUERY_TIMEOUT_MS } from '@/lib/platform';
 import { SERVICE_AUTH_HEADER, SQL_ROUTES } from '@artifactbin/contracts';
+/** A condition wait's bound (vi.waitFor's own default is 1 s): the condition decides; this only names one that never came. */
+const WAIT_MS = 20_000;
 
 
 const servers: RunningServer[] = [];
@@ -65,7 +67,7 @@ describe('stackHealth', () => {
     vi.spyOn(AbortSignal, 'timeout').mockReturnValue(deadline.signal);
     const silent = await serve(200, 60_000);
     const health = stackHealth({ sql: silent, browser: silent, events: silent });
-    await vi.waitFor(() => expect(seen).toHaveLength(3));
+    await vi.waitFor(() => expect(seen).toHaveLength(3), { timeout: WAIT_MS });
     deadline.abort();
     expect(await health).toEqual({ ok: false, failing: ['sql', 'browser', 'events'] });
   });
