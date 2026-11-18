@@ -158,10 +158,10 @@ async function answerSql(request:Request,pageId:string,admission:Admission,reade
     // one naming a default-connection link wholly on the install's connection (lib/connections).
     executing=true;
     // A declared query on a default-connection link runs as the reader, or as the page's group where an approval holds
-    // (./approved-queries); a refusal of this reader on the default connection names whom to ask.
+    // (./approved-queries); a refusal of a signed-in account on the default connection names whom to ask.
     const live=await pageLiveDatasetSql(actor,page,{sql:body.sql,params:body.params,query:body.query},request.signal,admission);
     const connection=live?null:await pageDeclaredConnectionSql(actor,page,head,{query:body.query,params:body.params},request.signal,admission)??await pageConnectionSql(actor,page.links,{sql:body.sql,params:body.params},request.signal,admission);
-    const reply=live??(connection?await admission.step(namingOwner(connection,admitted)):await executePageSql(actor,datasetLinks(page),{sql:body.sql,params:body.params},scope,request.signal));
+    const reply=live??(connection?await admission.step(namingOwner(connection,admitted,actor)):await executePageSql(actor,datasetLinks(page),{sql:body.sql,params:body.params},scope,request.signal));
     // Every reply (rows, a write's reply, a replayed receipt, a refusal) leaves only while the page still holds.
     admission.check();checkRead();executing=false;
     await admission.step(readSignal?pageEvidenceStep(readSignal,verifyPage(page.revision)):verifyPage(page.revision));
@@ -188,3 +188,5 @@ async function answerSql(request:Request,pageId:string,admission:Admission,reade
 export {preparePageEvidence,pageEvidenceSchemaDoor} from './evidence';
 
 export {pageEvidenceStep} from './deadline';
+
+export {namingOwner,pageDeclaredConnectionSql} from './approved-queries';

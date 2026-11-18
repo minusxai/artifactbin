@@ -10,6 +10,7 @@ import { emit, TransactionConflict } from '@/lib/platform';
 import { runWithRequest } from '@/lib/platform';
 import { UnservableDocument } from '@/lib/artifacts';
 import { PayloadTooLarge } from '@/lib/http';
+import { QueryApprovalError } from '@/lib/query-approvals';
 import { ROUTES, type RouteEntry } from './routes.generated';
 
 type Handler = (request: Request, ctx: { params: Promise<Record<string, string>> }) => Promise<Response> | Response;
@@ -26,6 +27,8 @@ export function mountRoutes(app: Hono, routes: RouteEntry[] = ROUTES): void {
           if (error instanceof UnservableDocument) return error.response();
           // A body past its route's cap (lib/http readBody) is the caller's, not an outage.
           if (error instanceof PayloadTooLarge) return error.response();
+          // A change of who can open a page an approved query is live on, by someone who is not its group's Admin.
+          if (error instanceof QueryApprovalError) return error.response();
           // A write that kept meeting concurrent writers (lib/platform retryOnConflict) wrote nothing: retry it.
           if (error instanceof TransactionConflict) return new Response(JSON.stringify({ error: 'conflict', message: error.message }), { status: 503, headers: { 'content-type': 'application/json', 'retry-after': '1' } });
           /*

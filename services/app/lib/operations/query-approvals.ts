@@ -1,6 +1,7 @@
 /**
  * A PAGE'S APPROVED QUERIES as operations (lib/query-approvals): an Admin of the group that owns a page lists its
- * queries on the install's default connection, approves one to run as the group for every reader, or revokes that.
+ * queries on the install's default connection, approves one to run as the group for the signed-in accounts that can open
+ * the page, or revokes that.
  * A person only: a group's sign-in is refused by ./http and the library alike. Refusals keep the library's `message`.
  */
 import {z} from 'zod';
@@ -15,6 +16,7 @@ const errors=[
  {status:404,code:'not_found',fix:'Use a live page owned by a group you administer, and an approval id list_query_approvals shows.'},
  {status:404,code:'unknown_query',fix:'Use a query name list_query_approvals shows for the page\'s current version.'},
  {status:409,code:'query_changed',fix:'The query changed since you read it: list again, show the new text and statement, then approve its new hash.'},
+ {status:409,code:'approval_conflict',fix:'Someone else approved this query at the same moment: list again and show what is approved now.'},
 ];
 async function answer(work:()=>Promise<OpReply>):Promise<OpReply>{
  try{return await work();}catch(error){if(error instanceof QueryApprovalError)return {status:error.status,body:error.body};throw error;}
@@ -27,7 +29,7 @@ export const QUERY_APPROVAL_OPERATIONS:Operation[]=[
   input:{id:page},annotations:{readOnly:true},example:{input:{id:'aB3xK9'}},errors,
   run:(ctx,input)=>answer(async()=>({status:200,body:{...await pageQueryApprovals(ctx.actor,String(input.id))}}))},
  {name:'approve_query',title:'Approve a page\'s query to run as its group',http:{method:'POST',path:'/api/artifacts/{id}/query-approvals'},
-  description:'An Admin of the group that owns the page approves one declared query (by name, with the hash list_query_approvals showed): it then runs as that group at member level for every reader who can open the page, with only the allowed parameter values, until its text, connection or allowed parameters change, it is revoked, the page changes owner, the approver stops being Admin or the group is deleted. Tell the user its statement first. Answers the approval id.',
+  description:'An Admin of the group that owns the page approves one declared query (by name, with the hash list_query_approvals showed): it then runs as that group at member level for every signed-in account (never a guest, a test user or a visitor who is not signed in) that can open the page, with only the allowed parameter values; meanwhile only an Admin of the group may change who can open the page. It ends when its text, connection or allowed parameters change, it is revoked, the page is deleted or changes owner, the Admin membership the approver approved with ends, the group is deleted, or someone who is not its Admin brings new people into a group that can open the page. Tell the user its statement first. Answers the approval id; approving it again as the same Admin answers the same one.',
   input:{id:page,query:z.string().min(1),hash:z.string().min(1)},annotations:{},example:{input:{id:'aB3xK9',query:'totals',hash:'a'.repeat(64)}},errors,
   run:(ctx,input)=>answer(async()=>({status:201,body:{...await approvePageQuery(ctx.actor,String(input.id),{query:input.query,hash:input.hash})}}))},
  {name:'revoke_query_approval',title:'Revoke a page\'s query approval',http:{method:'DELETE',path:'/api/artifacts/{id}/query-approvals/{approvalId}'},

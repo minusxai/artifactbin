@@ -808,8 +808,9 @@ const DATASET_CONNECTIONS: Table = {
  * A PAGE'S DECLARED QUERY APPROVED TO RUN AS THE PAGE'S OWNING GROUP (lib/query-approvals): an Admin of that group
  * approved exactly the query whose normalised text, connection and allowed parameters hash to `query_hash`, for
  * readers who can open the page. Live while `ended_at` is null and, at every read, the page is still that group's, the
- * approver still its Admin and the version read and the head both declare that hash. At most one live approval per
- * page and query name; a new one ends the last (`replaced`). Ending one never deletes it (`ended_reason`, `ended_by`).
+ * approver still holds the Admin membership row they approved under (`approver_via`, `approver_since`: a row put back
+ * is another row) and the version read and the head both declare that hash. At most one live approval per page and
+ * query name; a new one ends the last (`replaced`). Ending one never deletes it (`ended_reason`, `ended_by`).
  */
 const PAGE_QUERY_APPROVALS: Table = {
   name: 'page_query_approvals',
@@ -825,6 +826,9 @@ const PAGE_QUERY_APPROVALS: Table = {
     {name:'ended_at',type:'TIMESTAMPTZ'},
     {name:'ended_by',type:'TEXT'},
     {name:'ended_reason',type:'TEXT'},
+    // The approver's Admin membership row it holds under: its group and its creation (null never holds).
+    {name:'approver_via',type:'TEXT'},
+    {name:'approver_since',type:'TIMESTAMPTZ'},
   ], primaryKey:['id'],
   indexes:[{name:'idx_page_query_approvals_live',columns:['page_id','query_name'],unique:true,where:'ended_at IS NULL'}],
 };

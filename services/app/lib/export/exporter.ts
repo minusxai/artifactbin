@@ -16,6 +16,7 @@ import { ArtifactRow, canReadArtifact, getArtifactById, getArtifactHeaderById, g
 import { writerFor } from '@/lib/artifact-access';
 import { ANONYMOUS_ACTOR, type AccessActor } from '@/lib/accounts';
 import { datasetReadAccess } from '@/lib/dataset-permissions';
+import { approvalRenderState } from '@/lib/query-approvals';
 import type { HtmlPageLink } from '@artifactbin/contracts';
 import {
   SOCIAL_PREVIEW_OVERVIEW_GENERATION, parseSocialPreviewCrop, socialPreviewCrop, socialPreviewImage,
@@ -513,13 +514,16 @@ export async function exportImageResponse(
 
   const version = q.version ?? null;
   const audience = await exportAudience(artifact, q.reader);
-  const access = isDocument ? await datasetAccessRevision(artifact, audience) : '';
+  // Whether the audience reads a query as the page's group (lib/query-approvals) is part of the picture too: an approval
+  // granted, ended or no longer holding moves the revision, and no image of another revision answers for such a page.
+  const approvals = isDocument ? await approvalRenderState(artifact.id, audience ? exportReaderActor(audience) : null) : { revision: '', current: false };
+  const access = (isDocument ? await datasetAccessRevision(artifact, audience) : '') + approvals.revision;
   const options:ImageOptions = {
     ...(q.deadline === undefined ? {} : { deadline: q.deadline }),
     ...(audience ? { audience } : {}),
     ...(access ? { access } : {}),
     refresh,
-    ...(current ? { current } : {}),
+    ...(current || approvals.current ? { current: true } : {}),
     capture,
     ...(version === null ? {} : { version }),
     ...(draftCrop

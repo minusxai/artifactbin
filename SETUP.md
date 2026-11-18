@@ -113,5 +113,5 @@ Open pull requests against `main`.
 Named default connections use the same setting with an envelope: `{"default":{...},"connections":{"analytics":{...}}}`.
 Each value is a connector configuration. A page or agent selects one with `default:analytics:database`; a plain
 `default:database` keeps using the default connector. Each query runs on one connector as the signed-in reader (a page's
-saved query a group Admin approved runs as that group for every reader of the page);
+saved query a group Admin approved runs as that group for each signed-in account that can open the page);
 credentials stay in the install settings. Names are operator-defined, lowercase, and at most 32 characters.

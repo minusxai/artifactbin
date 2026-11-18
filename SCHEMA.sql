@@ -734,6 +734,8 @@ CREATE TABLE IF NOT EXISTS app.page_query_approvals (
   ended_at TIMESTAMPTZ,
   ended_by TEXT,
   ended_reason TEXT,
+  approver_via TEXT,
+  approver_since TIMESTAMPTZ,
   PRIMARY KEY (id)
 );
 
@@ -758,6 +760,10 @@ ALTER TABLE app.page_query_approvals ADD COLUMN IF NOT EXISTS ended_at TIMESTAMP
 ALTER TABLE app.page_query_approvals ADD COLUMN IF NOT EXISTS ended_by TEXT;
 
 ALTER TABLE app.page_query_approvals ADD COLUMN IF NOT EXISTS ended_reason TEXT;
+
+ALTER TABLE app.page_query_approvals ADD COLUMN IF NOT EXISTS approver_via TEXT;
+
+ALTER TABLE app.page_query_approvals ADD COLUMN IF NOT EXISTS approver_since TIMESTAMPTZ;
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_page_query_approvals_live ON app.page_query_approvals (page_id, query_name) WHERE ended_at IS NULL;
 

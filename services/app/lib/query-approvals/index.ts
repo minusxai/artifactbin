@@ -1,25 +1,45 @@
 /**
  * APPROVED QUERIES: a page's declared query on the install's default connection (contracts `HtmlDeclaredQuery` on a
- * `default:` link) that an Admin of the group owning the page approved to run AS THAT GROUP, at member level, for every
- * reader who can open the page. Without one, nothing changes: a page's queries run as the reader, whose own access to
- * the data decides what they get. Server-only.
+ * `default:` link) that an Admin of the group owning the page approved to run AS THAT GROUP, at member level, for the
+ * page's readers who read as the group (below). Without one, nothing changes: a page's queries run as the reader, whose
+ * own access to the data decides what they get. Server-only.
  *
  * WHO APPROVES: a person who is an Admin of the group that owns the page (direct, or through an ancestor: the
  * `group_admins` view), and only that. A person-owned page has no approvals; an Editor or Member, an agent signed in as
  * a group, a workload and a test account never approve.
  *
+ * WHO READS AS THE GROUP (`readsAsGroup`): a signed-in ordinary account (identity `users.kind` `account`, active, not a
+ * test account), as a person (never a group's sign-in or a workload), that can open the page (the door asks only after
+ * admitting the reader; an export capture reads as the requester its key names). A guest, a test user, a visitor with no
+ * session and a capture without such a requester run the query as themselves, as on any page; only an account that reads
+ * as the group is told the owner's name when refused (lib/page-doors approved-queries).
+ *
  * WHAT IS COVERED, exactly: the query's text, the connection it runs on (`default:` and the link's namespace) and what a
  * reader may vary in it (`data-af-params`), normalised and hashed (`queryApprovalHash`). Nothing else about the page.
  * The Admin approves the hash they were shown; another one is refused (`query_changed`), so an edit made meanwhile is
- * never approved unseen.
+ * never approved unseen. Approving it again as the same Admin answers the approval already live.
+ *
+ * WHO CAN OPEN THE PAGE stays as the Admin approved it: while one is live, only an Admin of the owning group changes the
+ * page's visibility, link role, named shares, group shares, an invitation that gives access, or its folder
+ * (`assertAudienceChange`, asked by every writer of those in lib/artifacts, inside its transaction holding the page row);
+ * anyone else is refused `approved_query_live`. The page's other readers are the members of groups (the owning group's
+ * subtree, and of each group it is shared with): when someone who is not the owning group's Admin brings new people into
+ * one of those (`endApprovalsForNewReaders`, from lib/groups after every group change), its approvals end. A folder
+ * gives nobody access to what it holds (lib/artifact-access decides a page from its own row alone), so nothing flows down
+ * from one.
  *
  * WHEN IT HOLDS, asked at every read (`approvedRun`, again after the read: lib/page-doors): the approval is not ended;
  * the version read and the page's head both declare that hash; the page is still that group's; the approver is still
- * its Admin and an active account. Every way it stops ENDS it for good, until a fresh approval: a write of the page that
- * no longer declares an approved hash (`endQueryApprovals`, from lib/artifacts' head write: reverting the text does not
- * bring it back), moving the page to another owner, a revoke; and the approver losing Admin or the group being deleted
- * (`endStaleApprovals`: from lib/groups after every group change the app makes, and at the first read that finds one
- * no longer holding, whoever changed it), so being made Admin again, or the group's row coming back, revives nothing.
+ * an active, non-test account holding the very Admin membership row they approved under (`approver_via`: the group it is
+ * in, the owning group or an ancestor; `approver_since`: that row's creation). Every way it stops ENDS it for good, until
+ * a fresh approval: a write of the page that no longer declares an approved hash (`endQueryApprovals`, from lib/artifacts'
+ * head write: reverting the text does not bring it back), moving the page to another owner, deleting it (restoring it
+ * brings none back), a revoke, new people brought in as above; and the approver losing that membership or the group being
+ * deleted (`endStaleApprovals`: from lib/groups after every group change the app makes, and at the first read that finds
+ * one no longer holding, whoever changed it). A membership row taken away and put back, or a group deleted (its members'
+ * rows go with it) and put back, is a new row: it revives nothing even with no read between. The one change the identity
+ * views cannot tell apart is a role flipped away and back IN PLACE on the same row with no read between; the identity
+ * module makes that flip only in `setGroupMember`, whose change the app records, which ends the approval at once.
  *
  * Every approval and every end is audited (contracts events `query_approved`, `query_approval_ended`: who, the page, the
  * query's name and hash, the connection, the group; `at` is when), and so is every read it answered
@@ -33,13 +53,17 @@ import {actorSubject,generateInternalId,getDb,recordEvent} from '@/lib/platform'
 export class QueryApprovalError extends Error {
  constructor(readonly status:number,readonly code:string,message:string){super(message);this.name='QueryApprovalError';}
  get body(){return {error:this.code,message:this.message};}
+ /** The refusal as a door answers it. */
+ response():Response{return Response.json(this.body,{status:this.status});}
 }
 
 /** The connection a default-connection link reads, as an approval names it. */
 const connectionName=(link:Pick<HtmlDefaultConnectionLink,'namespace'>):string=>`default:${link.namespace}`;
+/** A rule of `params` that is its own, never one an object inherits (`constructor`, `__proto__`). */
+const ownRule=(params:HtmlQueryParams,name:string)=>Object.hasOwn(params,name)?params[name]:undefined;
 /** What a reader may vary, in one order: names sorted; a list's values deduplicated and sorted. */
 function canonicalParams(params:HtmlQueryParams={}):unknown[]{
- return Object.keys(params).sort().map(name=>{const allowed=params[name]!;return 'type' in allowed?[name,allowed.type]:[name,[...new Set(allowed.values.map(value=>JSON.stringify(value)))].sort()];});
+ return Object.keys(params).sort().map(name=>{const allowed=ownRule(params,name)!;return 'type' in allowed?[name,allowed.type]:[name,[...new Set(allowed.values.map(value=>JSON.stringify(value)))].sort()];});
 }
 /**
  * THE APPROVAL'S HASH: sha256 of the normalised triple, the query's text (line endings made `\n`, ends trimmed; never
@@ -60,25 +84,46 @@ function declaredOn(version:{links:readonly HtmlPageLink[];queries:readonly Html
 }
 const ofMeta=(meta:Record<string,unknown>)=>declaredOn({links:(meta.htmlLinks??[]) as HtmlPageLink[],queries:(meta.htmlQueries??[]) as HtmlDeclaredQuery[]});
 
+/**
+ * SQL over approval `a`: its approver still holds the Admin membership row they approved under (in `approver_via`, the
+ * owning group or a live ancestor of it, created at `approver_since`: a row put back is another row), and is an active
+ * account that is no test account.
+ */
+const APPROVER_HOLDS=`EXISTS (WITH RECURSIVE up(id,depth) AS (SELECT a.group_id,0 UNION ALL SELECT g.parent_id,up.depth+1 FROM up JOIN groups g ON g.id=up.id AND g.deleted_at IS NULL WHERE g.parent_id IS NOT NULL AND up.depth<10000)
+   SELECT 1 FROM up JOIN groups vg ON vg.id=up.id AND vg.deleted_at IS NULL JOIN group_members m ON m.group_id=up.id AND m.user_id=a.approved_by AND m.role='admin'
+   WHERE up.id=a.approver_via AND m.created_at=a.approver_since)
+  AND EXISTS (SELECT 1 FROM group_admins ga WHERE ga.group_id=a.group_id AND ga.user_id=a.approved_by)
+  AND EXISTS (SELECT 1 FROM users u WHERE u.id=a.approved_by AND u.active AND NOT u.test_account)`;
+
 interface ApprovalRow {id:string;page_id:string;query_name:string;query_hash:string;connection:string;group_id:string;approved_by:string;created_at:string}
+const APPROVAL_COLUMNS='a.id,a.page_id,a.query_name,a.query_hash,a.connection,a.group_id,a.approved_by,a.created_at';
 /** The live approvals of `page` that hold now (see the header), newest first; `hash` narrows to one triple. */
 async function holding(db:Queryable,page:string,hash?:string):Promise<ApprovalRow[]>{
- return (await db.query<ApprovalRow>(`SELECT a.id,a.page_id,a.query_name,a.query_hash,a.connection,a.group_id,a.approved_by,a.created_at FROM page_query_approvals a
+ return (await db.query<ApprovalRow>(`SELECT ${APPROVAL_COLUMNS} FROM page_query_approvals a
    JOIN artifacts p ON p.id=a.page_id AND p.deleted_at IS NULL AND p.format='html' AND p.group_id=a.group_id
-  WHERE a.page_id=$1 AND a.ended_at IS NULL AND ($2::text IS NULL OR a.query_hash=$2)
-    AND EXISTS (SELECT 1 FROM group_admins ga WHERE ga.group_id=a.group_id AND ga.user_id=a.approved_by)
-    AND EXISTS (SELECT 1 FROM users u WHERE u.id=a.approved_by AND u.active AND NOT u.test_account)
+  WHERE a.page_id=$1 AND a.ended_at IS NULL AND ($2::text IS NULL OR a.query_hash=$2) AND ${APPROVER_HOLDS}
   ORDER BY a.created_at DESC,a.id`,[page,hash??null])).rows;
 }
 
 /**
- * THE READ'S QUESTION (lib/page-doors): does an approval hold for `declared`, the query of the version read, with the
- * page's `head`? The approval's id and group, or null (the read runs as the reader).
+ * WHO READS AS THE GROUP (see the header): a person signed in with an ordinary account, active and no test account.
+ * Whether they can open the page is the caller's to have asked first.
  */
-export async function approvedRun(pageId:string,head:{links:readonly HtmlPageLink[];queries:readonly HtmlDeclaredQuery[]},declared:{query:HtmlDeclaredQuery;link:HtmlDefaultConnectionLink}):Promise<{id:string;groupId:string;hash:string;connection:string}|null>{
+export async function readsAsGroup(actor:AccessActor,db?:Queryable):Promise<boolean>{
+ if(!actor.userId||actor.principalGroup||actor.workload)return false;
+ return !!(await (db??await getDb()).query<{ok:boolean}>("SELECT (kind='account' AND active AND NOT test_account) AS ok FROM users WHERE id=$1",[actor.userId])).rows[0]?.ok;
+}
+
+/**
+ * THE READ'S QUESTION (lib/page-doors): does an approval hold for `declared`, the query of the version read, with the
+ * page's `head`? The approval's id and group, or null (the read runs as the reader). `reader` is who reads: one who does
+ * not read as the group (`readsAsGroup`) is answered null without asking.
+ */
+export async function approvedRun(pageId:string,head:{links:readonly HtmlPageLink[];queries:readonly HtmlDeclaredQuery[]},declared:{query:HtmlDeclaredQuery;link:HtmlDefaultConnectionLink},reader:AccessActor):Promise<{id:string;groupId:string;hash:string;connection:string}|null>{
  const hash=queryApprovalHash(declared.query,declared.link);
  if(!declaredOn(head).some(entry=>entry.hash===hash))return null;
  const db=await getDb();
+ if(!await readsAsGroup(reader,db))return null;
  const row=(await holding(db,pageId,hash))[0];
  if(row)return {id:row.id,groupId:row.group_id,hash,connection:row.connection};
  // A live approval that no longer holds (its approver is no Admin, its group is gone): ended now, so nothing revives it.
@@ -89,19 +134,21 @@ export async function approvedRun(pageId:string,head:{links:readonly HtmlPageLin
 
 const DATE=/^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/;
 /**
- * Why `sent` is not what `allowed` lets a reader vary (one sentence), or null when it is. `server` names the values the
- * server fills itself (lib/connections `VIEWER_PARAMS`), refused by the run, not judged here.
+ * Why `sent` is not what `allowed` lets a reader vary (one sentence, which the reader is shown), or null when it is.
+ * `server` names the values the server fills itself (lib/connections `VIEWER_PARAMS`), refused by the run, not judged
+ * here. Only the approval's own rules count: a name it does not hold itself is no parameter of it.
  */
 export function paramsOutside(allowed:HtmlQueryParams={},sent:unknown,server:readonly string[]):string|null{
  if(sent===undefined)return null;
  if(!sent||typeof sent!=='object'||Array.isArray(sent))return 'params must be an object of scalars';
  for(const [name,value] of Object.entries(sent)){
   if(server.includes(name))continue;
-  const rule=allowed[name];
-  if(!rule)return `this query's approval does not let a reader set ${name}`;
-  const fits='values' in rule?rule.values.some(entry=>entry===value):rule.type==='text'?typeof value==='string':rule.type==='number'?typeof value==='number'&&Number.isFinite(value)
-   :rule.type==='boolean'?typeof value==='boolean':typeof value==='string'&&DATE.test(value)&&!Number.isNaN(Date.parse(value));
-  if(!fits)return `this query's approval does not allow that value of ${name}`;
+  const rule=ownRule(allowed,name);
+  if(!rule||typeof rule!=='object')return `this query's approval does not let a reader set ${name}`;
+  const fits=Object.hasOwn(rule,'values')?Array.isArray((rule as {values?:unknown}).values)&&(rule as {values:readonly unknown[]}).values.some(entry=>entry===value)
+   :(rule as {type?:unknown}).type==='text'?typeof value==='string':(rule as {type?:unknown}).type==='number'?typeof value==='number'&&Number.isFinite(value)
+   :(rule as {type?:unknown}).type==='boolean'?typeof value==='boolean':(rule as {type?:unknown}).type==='date'&&typeof value==='string'&&DATE.test(value)&&!Number.isNaN(Date.parse(value));
+  if(!fits)return `That value of ${name} is not allowed for this query.`;
  }
  return null;
 }
@@ -137,12 +184,17 @@ async function adminPage(db:Queryable,actor:AccessActor,pageId:string,lock=false
  throw role?.member?new QueryApprovalError(403,'forbidden','only an Admin of the group that owns this page approves its queries'):new QueryApprovalError(404,'not_found','not found');
 }
 
-/** What readers will be able to see once `declared` is approved, in one plain statement. */
+/**
+ * What approving `declared` means, in plain words, for the Admin's confirmation (the sharing dialog shows it, and an
+ * agent says it before approving): who sees what, what they may change, who may change the page's audience, and every
+ * way the approval ends.
+ */
 function statementOf(declared:Declared,group:string):string{
  const allowed=Object.entries(declared.query.params??{}).map(([name,rule])=>'values' in rule?`${name} (one of ${rule.values.map(value=>String(value)).join(', ')})`:`${name} (any ${rule.type})`);
- return `Everyone who can open this page will see what ${declared.query.name} returns when ${group} reads it as a member, whatever their own access to this data. `+
+ return `Everyone signed in with their own account who can open this page will see what ${declared.query.name} returns when ${group} reads it as a member, whatever their own access to this data; guests, test users and visitors who are not signed in still read it as themselves. `+
   (allowed.length?`They may choose ${allowed.join(' and ')}; any other value is refused. `:'They cannot change anything in it. ')+
-  `Changing its text, its connection or what readers may vary ends the approval.`;
+  `While it is approved, only an Admin of ${group} may change who can open this page. `+
+  `The approval ends when its text, its connection or what readers may vary changes, when it is revoked, when the page is deleted or moves to another owner, when the Admin membership you approve it with ends (being made Admin again does not restore it) or ${group} is deleted, or when someone who is not an Admin of ${group} brings new people into a group that can open this page.`;
 }
 
 export interface QueryApprovalView {
@@ -163,11 +215,15 @@ export async function pageQueryApprovals(actor:AccessActor,pageId:string):Promis
  })};
 }
 
-type EndReason='revoked'|'edited'|'moved'|'replaced'|'approver_not_admin'|'group_deleted';
+type EndReason='revoked'|'edited'|'moved'|'replaced'|'deleted'|'approver_not_admin'|'group_deleted'|'audience_changed';
 const payload=(row:Pick<ApprovalRow,'id'|'query_name'|'query_hash'|'connection'|'group_id'>,reason?:EndReason)=>
  ({approval_id:row.id,query:row.query_name,query_hash:row.query_hash,connection:row.connection,group_id:row.group_id,...(reason?{reason}:{})});
 
-/** An Admin of the owning group approves the head's declared query `query` whose hash they were shown (`hash`). Audited. */
+/**
+ * An Admin of the owning group approves the head's declared query `query` whose hash they were shown (`hash`). Audited.
+ * The same Admin approving the same hash again is answered the approval already live; another approval made at the same
+ * moment by someone else, or of another hash, is `approval_conflict`.
+ */
 export async function approvePageQuery(actor:AccessActor,pageId:string,input:{query?:unknown;hash?:unknown}):Promise<{id:string;query:string;hash:string;connection:string}>{
  if(typeof input.query!=='string'||typeof input.hash!=='string')throw new QueryApprovalError(400,'validation_failed','send {query, hash}: the declared query\'s name and the hash you were shown');
  const db=await getDb();
@@ -177,12 +233,28 @@ export async function approvePageQuery(actor:AccessActor,pageId:string,input:{qu
   const declared=ofMeta(page.meta).find(entry=>entry.query.name===input.query);
   if(!declared)throw new QueryApprovalError(404,'unknown_query',`this page declares no query on a default: link named ${JSON.stringify(String(input.query).slice(0,64))}`);
   if(declared.hash!==input.hash)throw new QueryApprovalError(409,'query_changed',`${declared.query.name} changed since you looked at it: read it again before approving`);
+  const answer=(row:Pick<ApprovalRow,'id'>)=>({id:row.id,query:declared.query.name,hash:declared.hash,connection:connectionName(declared.link)});
+  // One that no longer holds ends first; the same Admin's live approval of this very hash is the answer.
+  await endStaleApprovals(tx,actor.userId,pageId);
+  const same=async()=>(await tx.query<ApprovalRow>(`SELECT ${APPROVAL_COLUMNS} FROM page_query_approvals a WHERE a.page_id=$1 AND a.query_name=$2 AND a.ended_at IS NULL`,[pageId,declared.query.name])).rows[0];
+  const live=await same();
+  if(live&&live.query_hash===declared.hash&&live.approved_by===actor.userId)return answer(live);
   const replaced=(await tx.query<ApprovalRow>(`UPDATE page_query_approvals SET ended_at=now(),ended_by=$3,ended_reason='replaced' WHERE page_id=$1 AND query_name=$2 AND ended_at IS NULL RETURNING *`,[pageId,declared.query.name,actor.userId])).rows;
   for(const row of replaced)await recordEvent(tx,actorSubject(actor),'query_approval_ended',{kind:'artifact',id:pageId},payload(row,'replaced'));
   const row={id:`pqa_${generateInternalId()}`,query_name:declared.query.name,query_hash:declared.hash,connection:connectionName(declared.link),group_id:page.group_id!};
-  await tx.query('INSERT INTO page_query_approvals (id,page_id,query_name,query_hash,connection,group_id,approved_by) VALUES ($1,$2,$3,$4,$5,$6,$7)',[row.id,pageId,row.query_name,row.query_hash,row.connection,row.group_id,actor.userId]);
+  // The approver's Admin membership row it holds under (the nearest, `group_admins.via_group_id`) is its witness.
+  const inserted=(await tx.query(`INSERT INTO page_query_approvals (id,page_id,query_name,query_hash,connection,group_id,approved_by,approver_via,approver_since)
+    SELECT $1,$2,$3,$4,$5,$6,$7,m.group_id,m.created_at FROM group_admins ga JOIN group_members m ON m.group_id=ga.via_group_id AND m.user_id=ga.user_id AND m.role='admin'
+    WHERE ga.group_id=$6 AND ga.user_id=$7 LIMIT 1
+    ON CONFLICT (page_id,query_name) WHERE ended_at IS NULL DO NOTHING RETURNING id`,[row.id,pageId,row.query_name,row.query_hash,row.connection,row.group_id,actor.userId])).rows;
+  if(!inserted.length){
+   // Another approval of this query committed while this one ran (it waited on the live index).
+   const other=await same();
+   if(other&&other.query_hash===declared.hash&&other.approved_by===actor.userId)return answer(other);
+   throw new QueryApprovalError(409,'approval_conflict',`${declared.query.name} was approved by someone else at the same moment: read the page's queries again`);
+  }
   await recordEvent(tx,actorSubject(actor),'query_approved',{kind:'artifact',id:pageId},payload(row));
-  return {id:row.id,query:row.query_name,hash:row.query_hash,connection:row.connection};
+  return answer(row);
  });
 }
 
@@ -198,11 +270,11 @@ export async function revokePageQuery(actor:AccessActor,pageId:string,id:string)
 }
 
 /**
- * Ends, inside the writer's transaction (which holds the page rows FOR UPDATE), live approvals, audited as that writer's:
- * of `pageId`, every one its new head no longer declares (`edited`: `head` is the written row; one that is not a page
- * declares none); of each of `pageId`, every one (`moved`: the pages went to another owner).
+ * Ends, inside the writer's transaction (which holds the page rows), live approvals, audited as that writer's: of
+ * `pageId`, every one its new head no longer declares (`edited`: `head` is the written row; one that is not a page
+ * declares none); of each of `pageId`, every one (`moved`: the pages went to another owner; `deleted`: to the trash).
  */
-export async function endQueryApprovals(tx:Queryable,actor:Pick<AccessActor,'userId'|'tokenId'|'principalGroup'>,pageId:string|readonly string[],reason:'edited'|'moved',head?:{format:string;meta:Record<string,unknown>}):Promise<void>{
+export async function endQueryApprovals(tx:Queryable,actor:Pick<AccessActor,'userId'|'tokenId'|'principalGroup'>,pageId:string|readonly string[],reason:'edited'|'moved'|'deleted',head?:{format:string;meta:Record<string,unknown>}):Promise<void>{
  const kept=reason==='edited'&&head?.format==='html'?ofMeta(head.meta).map(entry=>entry.hash):[];
  const ended=(await tx.query<ApprovalRow>(`UPDATE page_query_approvals SET ended_at=now(),ended_by=$3,ended_reason=$4 WHERE page_id=ANY($1::text[]) AND ended_at IS NULL AND NOT (query_hash=ANY($2::text[])) RETURNING *`,[typeof pageId==='string'?[pageId]:[...pageId],kept,actor.userId,reason])).rows;
  for(const row of ended)await recordEvent(tx,actorSubject(actor),'query_approval_ended',{kind:'artifact',id:row.page_id},payload(row,reason));
@@ -211,8 +283,8 @@ export async function endQueryApprovals(tx:Queryable,actor:Pick<AccessActor,'use
 /**
  * Ends, audited (`subject`: who made the change, or null when a read found it), every live approval (of `pageId`, or of
  * every page) whose group is deleted (`group_deleted`), whose page is no longer that group's (`moved`), or whose
- * approver is no longer its Admin or no longer an active account (`approver_not_admin`). A page in the trash keeps its
- * approvals, as it keeps everything else, until it is restored or purged.
+ * approver no longer holds the Admin membership row they approved under or is no longer an active account
+ * (`approver_not_admin`).
  */
 export async function endStaleApprovals(tx:Queryable,subject:string|null,pageId?:string):Promise<void>{
  // Most installs and most group changes have no live approval at all: then nothing is asked of the group tree.
@@ -223,8 +295,77 @@ export async function endStaleApprovals(tx:Queryable,subject:string|null,pageId?
    FROM page_query_approvals a WHERE a.ended_at IS NULL AND ($1::text IS NULL OR a.page_id=$1) AND NOT (
     EXISTS (SELECT 1 FROM groups g WHERE g.id=a.group_id AND g.deleted_at IS NULL)
     AND EXISTS (SELECT 1 FROM artifacts p WHERE p.id=a.page_id AND p.group_id=a.group_id)
-    AND EXISTS (SELECT 1 FROM group_admins ga WHERE ga.group_id=a.group_id AND ga.user_id=a.approved_by)
-    AND EXISTS (SELECT 1 FROM users u WHERE u.id=a.approved_by AND u.active AND NOT u.test_account)))
+    AND ${APPROVER_HOLDS}))
   UPDATE page_query_approvals a SET ended_at=now(),ended_by=$2,ended_reason=stale.reason FROM stale WHERE a.id=stale.id AND a.ended_at IS NULL RETURNING a.*`,[pageId??null,subject])).rows;
  for(const row of ended)await recordEvent(tx,subject?{kind:'user',id:subject}:null,'query_approval_ended',{kind:'artifact',id:row.page_id},payload(row,row.ended_reason));
+}
+
+/**
+ * NEW READERS BROUGHT IN BY A GROUP CHANGE (lib/groups, after every change the app makes): a page's readers include the
+ * members of the owning group's subtree and of each group it is shared with (and their subtrees). A change that adds
+ * people to one of those, `joined` (someone joined group X) or `subgroup_attached` (a group, with its members, was put
+ * under X; never a group created there in the same change, whose one member is its creator, already an Admin of X), ends
+ * each live approval of such a page (`audience_changed`, audited as the change's actor: for a join, the person who
+ * joined), unless an Admin of the owning group made it: for an attachment, its actor; for a join, which follows an
+ * invitation by an Admin of X (or the install admitting its members to its default group), when every Admin of X is an
+ * Admin of the owning group. So a join into a group the page is shared with ends it unless all that group's Admins are
+ * the owning group's.
+ */
+export async function endApprovalsForNewReaders(tx:Queryable,changes:readonly {groupId:string;actorId:string;action:string;details?:Record<string,unknown>}[]):Promise<void>{
+ const created=new Set(changes.filter(change=>change.action==='created').map(change=>change.groupId));
+ const widening=changes.filter(change=>change.action==='joined'||(change.action==='subgroup_attached'&&!created.has(String(change.details?.group_id))));
+ if(!widening.length||!(await tx.query('SELECT 1 FROM page_query_approvals WHERE ended_at IS NULL LIMIT 1')).rows.length)return;
+ for(const change of widening){
+  const ended=(await tx.query<ApprovalRow>(`WITH RECURSIVE up(id,depth) AS (SELECT $1::text,0 UNION ALL SELECT g.parent_id,up.depth+1 FROM up JOIN groups g ON g.id=up.id WHERE g.parent_id IS NOT NULL AND up.depth<10000),
+    reached AS (SELECT a.id FROM page_query_approvals a WHERE a.ended_at IS NULL
+     AND (a.group_id IN (SELECT id FROM up) OR EXISTS (SELECT 1 FROM artifact_group_shares s WHERE s.artifact_id=a.page_id AND s.group_id IN (SELECT id FROM up)))
+     AND NOT (CASE WHEN $3::text='joined' THEN NOT EXISTS (SELECT 1 FROM group_admins x WHERE x.group_id=$1 AND NOT EXISTS (SELECT 1 FROM group_admins y WHERE y.group_id=a.group_id AND y.user_id=x.user_id))
+       ELSE EXISTS (SELECT 1 FROM group_admins y WHERE y.group_id=a.group_id AND y.user_id=$2) END))
+   UPDATE page_query_approvals a SET ended_at=now(),ended_by=$2,ended_reason='audience_changed' FROM reached WHERE a.id=reached.id AND a.ended_at IS NULL RETURNING a.*`,[change.groupId,change.actorId,change.action])).rows;
+  for(const row of ended)await recordEvent(tx,{kind:'user',id:change.actorId},'query_approval_ended',{kind:'artifact',id:row.page_id},payload(row,'audience_changed'));
+ }
+}
+
+/** The page fields an audience change is judged against: its row as the writer locked it. */
+interface AudiencePage {id:string;format:string;group_id?:string|null;visibility:string;link_role?:string|null;ancestor_ids?:readonly string[]|null}
+/** What a write asks to change of who can open a page; `grant`: it gives someone access (a group share, an invitation's). */
+export interface AudienceChange {visibility?:string|undefined;link_role?:string|null|undefined;ancestor_ids?:readonly string[]|undefined;shares?:readonly {email:string;role:string}[]|undefined;grant?:boolean}
+/** The share list as `writeShares` (lib/artifacts) stores it: addresses trimmed and lowercased, the last role given wins. */
+const shareMap=(shares:readonly {email:string;role:string}[])=>new Map(shares.map(entry=>[entry.email.trim().toLowerCase(),entry.role]));
+/**
+ * WHO CAN OPEN A PAGE WITH A LIVE APPROVAL (see the header), asked by every writer of its audience inside its
+ * transaction, after locking `page`'s row: refused `approved_query_live` (403) unless nothing changes, the page has no
+ * live approval, or `actor` is a person who is an Admin of the owning group. A page with no approval asks one query.
+ */
+export async function assertAudienceChange(tx:Queryable,actor:AccessActor,page:AudiencePage,next:AudienceChange):Promise<void>{
+ if(page.format!=='html'||!page.group_id)return;
+ const plain=(next.visibility!==undefined&&next.visibility!==page.visibility)||(next.link_role!=null&&next.link_role!==(page.link_role??'viewer'))
+  ||(next.ancestor_ids!==undefined&&JSON.stringify(next.ancestor_ids)!==JSON.stringify(page.ancestor_ids??[]))||next.grant===true;
+ if(!plain&&next.shares===undefined)return;
+ if(!(await tx.query('SELECT 1 FROM page_query_approvals WHERE page_id=$1 AND ended_at IS NULL LIMIT 1',[page.id])).rows.length)return;
+ if(!plain){
+  const now=shareMap((await tx.query<{email:string;role:string}>('SELECT email,role FROM artifact_shares WHERE artifact_id=$1',[page.id])).rows),asked=shareMap(next.shares!);
+  if(now.size===asked.size&&[...asked].every(([email,role])=>now.get(email)===role))return;
+ }
+ if(actor.userId&&!actor.principalGroup&&!actor.workload&&(await tx.query('SELECT 1 FROM group_admins WHERE group_id=$1 AND user_id=$2',[page.group_id,actor.userId])).rows.length)return;
+ // One that no longer holds ends here; only a live one keeps the page's audience its Admins'.
+ await endStaleApprovals(tx,actor.userId,page.id);
+ if(!(await tx.query('SELECT 1 FROM page_query_approvals WHERE page_id=$1 AND ended_at IS NULL LIMIT 1',[page.id])).rows.length)return;
+ const group=(await tx.query<{name:string}>('SELECT name FROM groups WHERE id=$1',[page.group_id])).rows[0]?.name??'the group that owns it';
+ throw new QueryApprovalError(403,'approved_query_live',`This page has an approved query that runs as ${group}: while it is live, only an Admin of ${group} may change who can open the page. Ask an Admin to make this change, or to revoke the approval first.`);
+}
+
+/**
+ * WHAT A STORED RENDER OF THE PAGE FOR `reader` DEPENDS ON (lib/export): every approval the page ever had (each id and
+ * whether it is ended), whether `reader` reads as the group, and the ones holding for them now, hashed into a revision
+ * segment; and `current`, that no image of another revision is ever served for it, not even a card's while it
+ * refreshes. A page that never had an approval: `''` and false, as before approvals.
+ */
+export async function approvalRenderState(pageId:string,reader:AccessActor|null):Promise<{revision:string;current:boolean}>{
+ const db=await getDb();
+ const all=(await db.query<{id:string;ended:boolean}>('SELECT id,ended_at IS NOT NULL AS ended FROM page_query_approvals WHERE page_id=$1 ORDER BY id',[pageId])).rows;
+ if(!all.length)return {revision:'',current:false};
+ const group=!!reader&&await readsAsGroup(reader,db);
+ const held=group?(await holding(db,pageId)).map(row=>row.id).sort():[];
+ return {revision:`-q${createHash('sha256').update(JSON.stringify([all,group,held])).digest('hex').slice(0,16)}`,current:true};
 }

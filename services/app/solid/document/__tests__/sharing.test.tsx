@@ -256,7 +256,7 @@ it('shows an Admin each query of the page on live data, approves one after sayin
   const section = await screen.findByRole('group', { name: 'Approved queries' });
   expect(section).toHaveTextContent('runs as each reader');
   fireEvent.click(screen.getByRole('button', { name: 'Approve totals' }));
-  const confirm = await screen.findByRole('dialog', { name: 'Show totals to every reader?' });
+  const confirm = await screen.findByRole('dialog', { name: 'Show totals as Team sees it?' });
   expect(confirm).toHaveTextContent(query.statement);
   expect(confirm).toHaveTextContent(query.sql);
   fireEvent.click(screen.getByRole('button', { name: 'Confirm approve totals' }));

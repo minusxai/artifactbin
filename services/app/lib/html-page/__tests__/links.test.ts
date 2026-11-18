@@ -35,6 +35,10 @@ it('declares what a reader may vary in a query: each parameter\'s type or list o
  for(const bad of ['not json','[]','"text"','{"viewer_id":"text"}','{"a b":"text"}','{"r":"string"}','{"r":[]}','{"r":[null]}','{"r":[{"x":1}]}',
   JSON.stringify(Object.fromEntries(Array.from({length:21},(_,i)=>[`p${i}`,'text']))),JSON.stringify({r:Array.from({length:101},(_,i)=>i)})])
   expect(()=>q(bad),bad).toThrow(/Declared query totals/);
+ // A built-in object name is no parameter, and never reaches the map as its prototype.
+ for(const builtIn of ['{"__proto__":"text"}','{"constructor":"text"}','{"toString":["a"]}','{"hasOwnProperty":"number"}'])
+  expect(()=>q(builtIn),builtIn).toThrow(/Declared query totals: parameter/);
+ expect(Object.getPrototypeOf(q('{"region":"text"}')[0]!.params)).toBeNull();
 });
 
 it('declares queries: a named application/sql script on a named link, its text as written, nothing else', () => {

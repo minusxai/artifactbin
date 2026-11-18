@@ -11,7 +11,7 @@ import {artifactChannel,annotationsChannel,type GroupChange} from '@artifactbin/
 import type {Queryable} from '@artifactbin/contracts';
 import {getDb,generateInternalId,recordEvent,services} from '../platform';
 import {GroupError} from './errors';
-import {endStaleApprovals} from '@/lib/query-approvals';
+import {endApprovalsForNewReaders,endStaleApprovals} from '@/lib/query-approvals';
 export interface GroupMutationActor {tokenId:string|null}
 export async function groupQuota(tx:Queryable,userId:string,action:'create'|'invite'|'share',now?:Date):Promise<void>{
  const [limit,seconds]=action==='create'?[10,86400]:action==='invite'?[100,3600]:[60,60];
@@ -46,8 +46,9 @@ export async function recordGroupChanges(changes:readonly GroupChange[],actor?:G
  await (await getDb()).transaction(async tx=>{
   for(const id of wake)await notifyAudienceArtifacts(tx,id);
   for(const change of changes)await auditGroupChange(tx,change,actor);
-  // A page query approved by someone this change left without Admin, or of a group it deleted, ends for good.
-  if(changes.length)await endStaleApprovals(tx,changes[0]!.actorId);
+  // A page query approved by someone this change left without Admin, or of a group it deleted, ends for good; so does
+  // one of a page whose readers it grew, unless an Admin of the page's group grew them.
+  if(changes.length){await endStaleApprovals(tx,changes[0]!.actorId);await endApprovalsForNewReaders(tx,changes);}
  });
 }
 /** An app action's change to what a group sees, audited in the action's own transaction; mail it with `mailGroupChanges` after commit. */

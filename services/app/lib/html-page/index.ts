@@ -170,7 +170,8 @@ const PARAM_TYPES=['text','number','boolean','date'] as const,PARAMS_MAX=20,PARA
 /**
  * A declared query's `data-af-params`: a JSON object naming each parameter a reader may vary, with the type any value
  * of which it takes (`"text"`, `"number"`, `"boolean"`, `"date"`) or the list of values it takes (contracts
- * `HtmlQueryParams`). The server's reader values (`viewer_*`) are never a reader's to vary.
+ * `HtmlQueryParams`). The server's reader values (`viewer_*`) are never a reader's to vary, nor is a name every object
+ * carries (`constructor`, `__proto__`); the map has no prototype, so a name is only ever its own entry.
  */
 function declaredParams(query:string,text:string):HtmlQueryParams{
  let raw:unknown;
@@ -178,9 +179,9 @@ function declaredParams(query:string,text:string):HtmlQueryParams{
  if(!raw||typeof raw!=='object'||Array.isArray(raw))throw new Error(`Declared query ${query}: data-af-params is a JSON object`);
  const entries=Object.entries(raw);
  if(entries.length>PARAMS_MAX)throw new Error(`Declared query ${query} allows at most ${PARAMS_MAX} parameters`);
- const out:Record<string,HtmlQueryParam>={};
+ const out:Record<string,HtmlQueryParam>=Object.create(null);
  for(const [name,value] of entries){
-  if(!DECLARED_NAME.test(name)||name.startsWith('viewer_'))throw new Error(`Declared query ${query}: parameter ${JSON.stringify(name)} is not one a reader may vary`);
+  if(!DECLARED_NAME.test(name)||name.startsWith('viewer_')||name in Object.prototype)throw new Error(`Declared query ${query}: parameter ${JSON.stringify(name)} is not one a reader may vary`);
   if(typeof value==='string'&&(PARAM_TYPES as readonly string[]).includes(value)){out[name]={type:value as (typeof PARAM_TYPES)[number]};continue;}
   if(Array.isArray(value)&&value.length&&value.length<=PARAM_VALUES_MAX&&value.every(v=>typeof v==='string'||typeof v==='boolean'||(typeof v==='number'&&Number.isFinite(v)))){out[name]={values:[...value] as (string|number|boolean)[]};continue;}
   throw new Error(`Declared query ${query}: parameter ${name} takes ${PARAM_TYPES.map(type=>`"${type}"`).join(', ')} or a list of at most ${PARAM_VALUES_MAX} values`);

@@ -19,6 +19,7 @@ import { GROUP_PRINCIPAL_REFUSED } from '@artifactbin/contracts';
 const GROUP_OPERATIONS = ['get_artifact', 'list_versions', 'get_version', 'create_artifact', 'update_artifact', 'annotate', 'edit_comment', 'mutate_dataset', 'query_resource'];
 import type { AccessActor } from '@/lib/accounts';
 import { OPERATIONS, type OpContext, type Operation, type OpReply } from './registry';
+import { QueryApprovalError } from '@/lib/query-approvals';
 
 /**
  * The idempotency allowlist, and the authorization that runs BEFORE a receipt
@@ -59,7 +60,9 @@ const AUTHORIZED: Record<string, (actor: AccessActor, input: Record<string, unkn
 function operation(name: string): Operation {
   const op = OPERATIONS.find((o) => o.name === name);
   if (!op) throw new Error(`no operation named ${name}`);
-  return op;
+  // A change of who can open a page an approved query is live on, by someone who is not its group's Admin, is a
+  // terminal refusal whatever the operation (a receipt records it as such): lib/query-approvals.
+  return { ...op, run: async (ctx, input) => { try { return await op.run(ctx, input); } catch (error) { if (error instanceof QueryApprovalError) return { status: error.status, body: error.body }; throw error; } } };
 }
 
 function opResponse(reply: OpReply): Response {

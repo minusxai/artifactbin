@@ -36,7 +36,7 @@ Gotchas: GROUP resolves ID/handle/@handle once; USER matches a unique member ID/
   --request is exclusive; resume replays unchanged. Folder --parent accepts same-origin ID/URL;
   create --parent nests groups inheriting parent shares. Delete needs empty/nondefault group,
   no subgroups, exact handle. Reconcile other unknown writes by reading state before retrying.
-  approve (an Admin) runs a group page's default: query as the group: say its statement first.
+  approve (Admin) runs a default: query as the group for signed-in accounts; say its statement.
 Exit: 0 ok; 1 failed or partial failure; 2 invocation/confirmation; 3 auth/access; 4 conflict;
   5 unknown write outcome. Results never contain credentials.`;
 

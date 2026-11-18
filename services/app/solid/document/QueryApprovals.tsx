@@ -1,7 +1,8 @@
 /* @jsxImportSource solid-js */
 /**
  * A PAGE'S APPROVED QUERIES in its sharing surface, for an Admin of the group that owns it (lib/query-approvals): each
- * query the page declares on the install's default connection, whether it runs as the group for every reader, and an
+ * query the page declares on the install's default connection, whether it runs as the group for the signed-in accounts
+ * that can open the page, and an
  * approve (stating plainly what readers will then see) or a revoke. Nothing is drawn for anyone else, or for a page with
  * no such query: the service answers them with a refusal or an empty list.
  */
@@ -51,7 +52,7 @@ export function QueryApprovals(props: { id: string }): JSX.Element {
   const by = (approval: NonNullable<QueryApproval['approval']>) => approval.approved_by.name ?? approval.approved_by.username ?? 'a former Admin';
   return <Show when={listing()?.queries.length ? listing() : null}>{current => <div class="mt-5 border-t border-edge pt-4" role="group" aria-label="Approved queries">
     <p class="mb-1 uppercase tracking-wider text-faint">queries on live data</p>
-    <p class="mb-2 leading-relaxed text-muted">Each runs as the reader, who sees only data they may read. Approve one to show its results to everyone who can open this page, as {current().group.name} sees them.</p>
+    <p class="mb-2 leading-relaxed text-muted">Each runs as the reader, who sees only data they may read. Approve one to show its results, as {current().group.name} sees them, to everyone signed in with their own account who can open this page.</p>
     <ul>
       <For each={current().queries}>{query => <li class="flex items-center justify-between gap-2 py-1">
         <span class="min-w-0 flex-1"><span class="block truncate font-medium">{query.name}</span>
@@ -62,11 +63,11 @@ export function QueryApprovals(props: { id: string }): JSX.Element {
       </li>}</For>
     </ul>
     <Show when={chosen()}>{pick => pick().approve
-      ? <ConfirmDialog title={`Show ${pick().query.name} to every reader?`} action="Approve" confirmLabel={`Confirm approve ${pick().query.name}`} busy={busy()} error={error()}
+      ? <ConfirmDialog title={`Show ${pick().query.name} as ${current().group.name} sees it?`} action="Approve" confirmLabel={`Confirm approve ${pick().query.name}`} busy={busy()} error={error()}
           description={<><p>{pick().query.statement}</p><pre class="mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded-control border border-edge bg-raised p-2 font-mono text-xs">{pick().query.sql}</pre></>}
           onCancel={() => setChosen(null)} onConfirm={() => void confirm()} />
-      : <ConfirmDialog title={`Stop showing ${pick().query.name} to every reader?`} action="Revoke" confirmLabel={`Confirm revoke ${pick().query.name}`} danger busy={busy()} error={error()}
-          description={`From the next read it runs as each reader again: readers without their own access to this data are refused, until an Admin approves it again.`}
+      : <ConfirmDialog title={`Stop showing ${pick().query.name} as ${current().group.name} sees it?`} action="Revoke" confirmLabel={`Confirm revoke ${pick().query.name}`} danger busy={busy()} error={error()}
+          description={`From the next read it runs as each reader again: readers without their own access to this data are refused, until an Admin approves it again. Its editors may then change who can open this page again.`}
           onCancel={() => setChosen(null)} onConfirm={() => void confirm()} />}
     </Show>
   </div>}</Show>;
