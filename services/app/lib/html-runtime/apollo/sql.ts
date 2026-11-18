@@ -20,7 +20,8 @@
  *   const stop = sql.watch(sql.query('revenue', { year }), rows => …);
  *
  * sends only the name and the values of its `:name` parameters; the server runs the SQL the open version of the page
- * declares, filling `:viewer_id`, `:viewer_email` and `:viewer_groups` itself.
+ * declares, filling `:viewer_id`, `:viewer_email` and `:viewer_groups` itself. Its text is not the page's, so a
+ * watch of one runs again on every invalidation, whichever links it names.
  */
 import type { HtmlJsonObject as AfJsonObject } from '@artifactbin/contracts';
 
@@ -110,7 +111,8 @@ export function createSql(port: SqlPort): SqlTag {
       } finally { running = false; }
     };
     const stopRemote = port.subscribe((names) => {
-      if (!active || (names?.length && !names.some((n) => lower.includes(n.toLowerCase())))) return;
+      // A declared query's SQL is the server's, so the page cannot see which links it reads: any change re-runs it.
+      if (!active || (statement.query === undefined && names?.length && !names.some((n) => lower.includes(n.toLowerCase())))) return;
       dirty = true;
       void pump();
     });
