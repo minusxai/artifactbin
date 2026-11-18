@@ -1,6 +1,7 @@
 /** OAuth 2.1 for `/api`, implemented over the auth domain's clients and credentials. */
 import { createHash, randomBytes } from 'node:crypto';
 import {API_RESOURCE_PATH,ARTIFACT_SCOPE,isLocalDevelopmentHost,type Queryable} from '@artifactbin/contracts';
+import {plainIdentifier} from '@artifactbin/utils';
 import {sessionBoundSql} from './bearer';
 
 const AUTH_CODE_TTL_MS = 5 * 60 * 1000;
@@ -135,11 +136,6 @@ export interface OAuthStore {
   accessLive(tokenId:string):Promise<boolean>;
 }
 
-function identifier(value: string, what: string): string {
-  if (!/^[a-z_][a-z0-9_]*$/.test(value)) throw new Error(`${what} must be a plain lowercase identifier, got "${value}"`);
-  return value;
-}
-
 function registration(body: Record<string, unknown>): { clientName: string; redirectUris: string[] } {
   if (!Array.isArray(body.redirect_uris) || body.redirect_uris.length === 0 || body.redirect_uris.length > 10 || !body.redirect_uris.every((uri) => typeof uri === 'string' && uri.length <= 2048 && isAllowedRedirectUri(uri))) {
     throw new Error('redirect_uris must be a non-empty array of secure HTTPS or HTTP loopback URLs');
@@ -156,7 +152,7 @@ function registration(body: Record<string, unknown>): { clientName: string; redi
 const refreshToken = (): string => `mxr_${randomBytes(32).toString('base64url')}`;
 
 export function createOAuthStore(db: Queryable, schema = 'auth', configured: readonly ConfiguredOAuthClient[] = []): OAuthStore {
-  const s = identifier(schema, 'schema');
+  const s = plainIdentifier(schema, 'schema');
   const clients = `${s}.clients`;
   const credentials = `${s}.credentials`;
   const accessTokens = `${s}.tokens`;

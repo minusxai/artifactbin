@@ -17,7 +17,7 @@
  * every live family); `kind` is a literal so the partial index matches.
  */
 import type { Queryable, TokenReader, TokenRecord } from '@artifactbin/contracts';
-import { TOKEN_RE, hashToken } from '@artifactbin/utils';
+import { TOKEN_RE, hashToken, plainIdentifier } from '@artifactbin/utils';
 
 export interface BearerReaderOptions {
   db: Queryable;
@@ -69,7 +69,7 @@ export function bearerLiveSql(o: { auth: string; tokens: string; sessions?: bool
 }
 
 export function createBearerReader(o: BearerReaderOptions): TokenReader {
-  const auth = identifier(o.authSchema ?? 'auth', 'auth schema');
+  const auth = plainIdentifier(o.authSchema ?? 'auth', 'auth schema');
   const tokens = `${auth}.tokens`;
   const { fence, live } = bearerLiveSql({ auth, tokens });
   const byHash = `SELECT t.id, t.user_id, t.audience, t.scope, t.expires_at, u.email, u."emailVerified" AS email_verified
@@ -97,10 +97,4 @@ export function createBearerReader(o: BearerReaderOptions): TokenReader {
       return read(byHash, hashToken(presented));
     },
   };
-}
-
-/** It goes into the SQL text, so only a plain lowercase identifier is admitted. */
-function identifier(value: string, what: string): string {
-  if (!/^[a-z_][a-z0-9_]*$/.test(value)) throw new Error(`${what} must be a plain lowercase identifier, got "${value}"`);
-  return value;
 }
