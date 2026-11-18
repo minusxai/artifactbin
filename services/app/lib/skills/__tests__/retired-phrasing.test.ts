@@ -74,7 +74,7 @@ interface Retired {
 
 const RETIRED: Retired[] = [
   {pattern: /run_in_background/, scopes: [...AGENT_TEXT, 'monitoring'],
-    allow: "with the Bash tool's run_in_background first",
+    allow: "with the Bash tool's run_in_background,",
     reason: 'H1: the watch mode is stated once, by harness (WATCH_MODE): no other background wording'},
   {pattern: /never end your turn while the watch/i, scopes: [...AGENT_TEXT, 'monitoring'],
     reason: 'H1: the watch is a foreground command that returns; its output says when to stop'},
@@ -139,7 +139,7 @@ const RETIRED: Retired[] = [
   {pattern: /in the same response|AND send|leaves comments unanswered/, scopes: [...AGENT_TEXT, 'monitoring'],
     reason: 'S3: the order of reply and watch is stated once, in WATCH_MODE'},
   {pattern: /do not end your turn/i, scopes: [...AGENT_TEXT, 'monitoring'],
-    reason: 'S3: it contradicts the Claude Code watch mode (reply as the last message and end the turn)'},
+    reason: 'S3: it contradicts the Claude Code watch mode (reply first, start the watch in the background, end the turn)'},
   {pattern: /wrap a script in|write files with heredocs/i, scopes: AGENT_TEXT, reason: 'S4: no harness hacks in the skill'},
   {pattern: /(?:don't|do not) open (?:the )?qa JSON|fetch the slide images/i, scopes: [...AGENT_TEXT, 'monitoring'],
     reason: 'S4: check stops printing what it does not want read (a clean pass names no result file)'},

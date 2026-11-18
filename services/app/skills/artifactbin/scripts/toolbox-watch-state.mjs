@@ -120,26 +120,21 @@ export async function withWatchLock(file,run){
    await unlink(aside).catch(()=>{});}}
 }
 /** How to run watch --next: the one place the order of reply and watch is stated (comment.mjs help
- * prints the same text). Claude Code ends a turn on a reply and wakes on a background command's
- * output. In other harnesses (Pi, Codex, OpenCode) a message without a command ends the session, so
- * the reply comes before the blocking watch. In every harness the watch waits only once a call
- * after the reply line says the reply was sent (replyState). Several pages share one watch call. */
-export const WATCH_MODE="Nothing may hold back your reply: it is every link the user asked "+
- "for, in the form they asked for (a page's public view is its receipt's user_page_url), plus "+
- "what they asked. The watch waits only once that reply is sent: its first call after you "+
- "publish, edit or comment returns at once, and so does every call until one adds --replied, "+
- "which you add only after sending the reply. Claude Code: start the watch, one per page, "+
- "with the Bash tool's run_in_background first, then send your reply as your last message and "+
- "end your turn; when that first call wakes you, start it again with --replied the same way. "+
- "Other harnesses: say your reply to the user, then call the watch in the foreground with its "+
- "default wait and a shell timeout of at least 300000 ms, then once more with --replied; "+
- "several pages share each call (node scripts/comment.mjs watch A --next --replied & node "+
- "scripts/comment.mjs watch B --next --replied & wait). Once waiting, it returns as soon as "+
- "someone comments, and on its own within 4 minutes: handle what it printed and run it again "+
- "until it says to stop watching. Watching follows every task, however short the reply.";
-/** The reply, then the watch as its own last line, a literal command. */
-const next=(id,facts='')=>`Next: when the request is done, reply to the user${facts} and run `+
- 'the comment watch, even when the reply is only the link. '+WATCH_MODE+
+ * prints the same text): the reply first, then the watch. Claude Code wakes on a background
+ * command's output; in other harnesses (Pi, Codex, OpenCode) a message without a command ends the
+ * session, so the watch runs in the foreground. The watch waits only once a call after the reply
+ * line says the reply was sent (replyState). Several pages share one watch call. */
+export const WATCH_MODE="Reply to the user first: every link they asked for, in the form they "+
+ "asked for (a page's public view is its receipt's user_page_url), plus what they asked. Then "+
+ "run the watch, after every task, however short the reply. Its first call returns at once; "+
+ "run it again with --replied, which waits for comments: in Claude Code "+
+ "with the Bash tool's run_in_background, then end your turn (its output wakes you); elsewhere "+
+ "in the foreground with a shell timeout of at least 300000 ms. Several pages share one "+
+ "call (node scripts/comment.mjs watch A --next --replied & node scripts/comment.mjs watch B "+
+ "--next --replied & wait). It returns when someone comments, or within 4 minutes: handle what it "+
+ "printed and run it again until it says to stop watching.";
+/** The watch Next line: WATCH_MODE once the request is done, then the watch command itself. */
+const next=(id,facts='')=>`Next, once the request is done${facts}: ${WATCH_MODE}`+
  `\n  node scripts/comment.mjs watch ${id} --next`;
 /** The step after publishing page content (publish.mjs, doc.mjs write) or answering a comment
  * (comment.mjs reply). */

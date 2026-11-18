@@ -64,7 +64,7 @@ it('read saves typing first, then writes the Markdown under its marker; write se
   seen = [];
   const written = await run('write', [file]);
   expect(JSON.parse((await readFile(log, 'utf8')).trim().split('\n').at(-1)!)).toMatchObject({kind: 'activity', artifact: 'PAGE12', owesReply: true});
-  expect(written).toMatchObject({id: 'PAGE12', regionId: 'body', version: 5, next: expect.stringContaining('reply to the user and run the comment watch')});
+  expect(written).toMatchObject({id: 'PAGE12', regionId: 'body', version: 5, next: expect.stringContaining('Reply to the user first: ')});
   expect(seen).toHaveLength(1);
   expect(seen[0]).toMatchObject({method: 'PUT', path: '/api/artifacts/PAGE12/regions/body', body: {markdown: '# Plan\n\nShip Friday.\n', base_version: 4}, key: expect.stringMatching(/^[A-Za-z0-9_-]{16,128}$/)});
   expect(await saved(file)).toEqual({marker: {...marker, version: 5}, text: '# Plan\n\nShip Friday.\n\nTyped by Ada.\n'});
