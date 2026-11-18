@@ -522,6 +522,18 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_dataset_images_operation ON app.dataset_im
 
 CREATE INDEX IF NOT EXISTS idx_dataset_images_dataset ON app.dataset_images (dataset_id, created_at);
 
+CREATE TABLE IF NOT EXISTS app.object_writes (
+  key TEXT NOT NULL,
+  due_at TIMESTAMPTZ NOT NULL,
+  PRIMARY KEY (key)
+);
+
+ALTER TABLE app.object_writes ADD COLUMN IF NOT EXISTS key TEXT NOT NULL;
+
+ALTER TABLE app.object_writes ADD COLUMN IF NOT EXISTS due_at TIMESTAMPTZ NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_object_writes_due ON app.object_writes (due_at);
+
 CREATE TABLE IF NOT EXISTS app.export_images (
   id TEXT NOT NULL,
   artifact_id TEXT NOT NULL,
@@ -531,6 +543,7 @@ CREATE TABLE IF NOT EXISTS app.export_images (
   width INTEGER NOT NULL,
   height INTEGER NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  replaced_at TIMESTAMPTZ,
   PRIMARY KEY (id)
 );
 
@@ -549,6 +562,8 @@ ALTER TABLE app.export_images ADD COLUMN IF NOT EXISTS width INTEGER NOT NULL;
 ALTER TABLE app.export_images ADD COLUMN IF NOT EXISTS height INTEGER NOT NULL;
 
 ALTER TABLE app.export_images ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+ALTER TABLE app.export_images ADD COLUMN IF NOT EXISTS replaced_at TIMESTAMPTZ;
 
 CREATE INDEX IF NOT EXISTS idx_export_images_artifact ON app.export_images (artifact_id);
 

@@ -15,6 +15,7 @@ comment, history nowhere. Keep links plain, never `@` imports.
 | [lib/page-doors](services/app/lib/page-doors/AGENTS.md) | the page SQL door and access guards |
 | [lib/dataflow](services/app/lib/dataflow/AGENTS.md) | the data language: references, evaluation, browser leaves |
 | [lib/skills](services/app/lib/skills/AGENTS.md) | the author skill (`services/app/skills`), served `/llms` copy, evals |
+| [lib/object-store](services/app/lib/object-store/AGENTS.md) | stored bytes; the sweep |
 | [solid](services/app/solid/AGENTS.md) | any app UI: chrome, controls, overlays, UI tests |
 | [server](services/app/server/AGENTS.md) | serving, origins, CSP, hosts, credentials: the trust boundary |
 | [browser](services/browser/AGENTS.md) | the browser service: renders, uploads, harvest, live sessions |
@@ -59,7 +60,7 @@ comment, history nowhere. Keep links plain, never `@` imports.
 - **Reuse evidence** in the same worktree: `npm run validate -- --reuse`, `npm test -- --reuse` (same arguments).
   One-hour receipts need matching sources, command, environment, runtime, lock and generated inputs; failed,
   deferred or empty runs never count. Label it prior evidence; skip reuse after external-state changes; never copy.
-- **Bound investigation:** scoped `rg -l`/`rg -n`, bounded output; skip irrelevant fixtures, transcripts, assets
+- **Bound investigation:** scoped `rg -l`/`rg -n`, bounded output; skip unrelated fixtures, transcripts, assets
   and dependencies; batch reads, never repeat searches.
 - After a merge: local main to latest origin/main, `git worktree prune`, remove finished worktrees.
 - Top-level imports, except intentional lazy browser chunks and engine-selecting imports; document a

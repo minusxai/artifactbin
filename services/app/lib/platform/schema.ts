@@ -628,6 +628,21 @@ const DATA_SNAPSHOTS: Table = {
   indexes: [{ name: 'idx_data_snapshots_datasets', columns: ['datasets'], using: 'gin' }],
 };
 
+/**
+ * OBJECT WRITES (lib/object-store sweep): every content-addressed object of a swept kind the app writes, and from
+ * when the sweep may consider it (`due_at`): a write sets it a safety margin ahead, before its bytes are put; a sweep
+ * that finds the object still referenced pushes it far ahead; one that finds it unreferenced deletes the object and
+ * then this row. Holds no bytes and names nothing else.
+ */
+const OBJECT_WRITES: Table = {
+ name:'object_writes',
+ columns:[
+  {name:'key',type:'TEXT',notNull:true},
+  {name:'due_at',type:'TIMESTAMPTZ',notNull:true},
+ ],
+ primaryKey:['key'],
+ indexes:[{name:'idx_object_writes_due',columns:['due_at']}],
+};
 /** Immutable export images and the shared, fenced refresh pointer for each variant. */
 const EXPORT_IMAGES: Table = {
  name:'export_images',
@@ -640,6 +655,8 @@ const EXPORT_IMAGES: Table = {
   {name:'width',type:'INTEGER',notNull:true},
   {name:'height',type:'INTEGER',notNull:true},
   {name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
+  // When a refresh moved its cache row to a newer image; expiry counts from here (lib/export expireExportImages).
+  {name:'replaced_at',type:'TIMESTAMPTZ'},
  ],
  primaryKey:['id'],
  indexes:[{name:'idx_export_images_artifact',columns:['artifact_id']}],
@@ -976,7 +993,7 @@ const NATIVE_IDENTITY_IMPORTS:Table={name:'native_identity_imports',columns:[
  {name:'original_state',type:'JSONB',notNull:true},{name:'created_at',type:'TIMESTAMPTZ',notNull:true},
 ],primaryKey:['source_namespace','kind','source_id'],indexes:[{name:'idx_native_identity_imports_target',columns:['kind','target_id']}]};
 
-export const TABLES: Table[] = [WORKLOAD_PUBLICATION_INTENTS,WORKLOAD_PUBLICATION_AUDIT,WORKLOAD_PUBLICATION_OUTPUTS,LEGACY_PAGE_MIGRATIONS,IDENTITY_SETTINGS,GROUP_QUOTAS,GROUP_AUDIT,ARTIFACT_GROUP_SHARES,NATIVE_IDENTITY_IMPORTS,GROUP_LINKS,ACCOUNT_PREFERENCES,DEPLOYMENT_STATE,DEPLOYMENT_MEMBERS,OWNERSHIP_TRANSFERS,PAGES_SESSIONS, DOCUMENT_TRUST, GROUP_TRUST, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, DATASET_IMAGES, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_CONNECTIONS, DATASET_USAGE, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, REGION_STATES, REGION_UPDATES, REGION_SNAPSHOTS, ARTIFACT_SOURCE_IDS, ARTIFACT_SHARES, ANNOTATIONS, COMMENT_REACTIONS, CODES, ANALYTICS_EVENTS, ARTIFACT_VIEW_TOTALS, CANONICAL_VIEW_TOTALS, CANONICAL_VIEW_VISITORS, RELATIONS, WEB_ASSETS, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY];
+export const TABLES: Table[] = [WORKLOAD_PUBLICATION_INTENTS,WORKLOAD_PUBLICATION_AUDIT,WORKLOAD_PUBLICATION_OUTPUTS,LEGACY_PAGE_MIGRATIONS,IDENTITY_SETTINGS,GROUP_QUOTAS,GROUP_AUDIT,ARTIFACT_GROUP_SHARES,NATIVE_IDENTITY_IMPORTS,GROUP_LINKS,ACCOUNT_PREFERENCES,DEPLOYMENT_STATE,DEPLOYMENT_MEMBERS,OWNERSHIP_TRANSFERS,PAGES_SESSIONS, DOCUMENT_TRUST, GROUP_TRUST, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, DATASET_IMAGES, OBJECT_WRITES, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_CONNECTIONS, DATASET_USAGE, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, REGION_STATES, REGION_UPDATES, REGION_SNAPSHOTS, ARTIFACT_SOURCE_IDS, ARTIFACT_SHARES, ANNOTATIONS, COMMENT_REACTIONS, CODES, ANALYTICS_EVENTS, ARTIFACT_VIEW_TOTALS, CANONICAL_VIEW_TOTALS, CANONICAL_VIEW_VISITORS, RELATIONS, WEB_ASSETS, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY];
 
 /**
  * Tables no code reads or writes, dropped on every boot (their rows were backed up): retired custom domains,

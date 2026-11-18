@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import type { ObjectStore } from '@/lib/object-store';
 
 export type ContentObjects = Pick<ObjectStore, 'get' | 'put'>;
@@ -25,3 +26,14 @@ export function prepareObjects(reader: Pick<ObjectStore, 'get'>): {store: Conten
     },
   };
 }
+
+const staged = new AsyncLocalStorage<ReadonlyMap<string, PreparedObject>>();
+/**
+ * Runs `work` with these prepared objects readable through objectStore() before they are stored: a publication's
+ * transaction validates the bytes it puts only as its last step (lib/publish preparedPersistence).
+ */
+export function readingPrepared<T>(objects: readonly PreparedObject[], work: () => Promise<T>): Promise<T> {
+  return staged.run(new Map(objects.map(object => [object.key, object])), work);
+}
+/** The prepared object `key` names in the current `readingPrepared` scope, if any. */
+export const stagedObject = (key: string): PreparedObject | undefined => staged.getStore()?.get(key);
