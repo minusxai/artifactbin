@@ -1030,10 +1030,11 @@ export async function migrateLegacyPage(id:string,options:{apply?:boolean}={}):P
   if(!converted.states.length)return 'ineligible';
   if(!options.apply)return 'eligible';
   // SQL JSON serialization retains BYTEA as exact hex and timestamp precision, unlike JS row decoding.
+  // Rows are ordered by their serialization: unordered they come back in heap order, which every UPDATE reshuffles.
   const backup:Record<string,unknown>={};
   for(const table of ['artifacts','region_states','region_updates','region_snapshots','artifact_source_ids','annotations']){
    const key=table==='artifacts'?'id':'artifact_id';
-   const rows=(await tx.query<{value:unknown}>(`SELECT to_jsonb(t) AS value FROM ${table} t WHERE ${key}=$1`,[id])).rows.map(row=>row.value);
+   const rows=(await tx.query<{value:unknown}>(`SELECT to_jsonb(t) AS value FROM ${table} t WHERE ${key}=$1 ORDER BY to_jsonb(t)::text`,[id])).rows.map(row=>row.value);
    backup[table==='artifacts'?'head':table]=table==='artifacts'?rows[0]:rows;
   }
   const before=write.current;

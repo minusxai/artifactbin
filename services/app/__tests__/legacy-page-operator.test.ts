@@ -130,7 +130,7 @@ it.each([false,true])('uses the saved heading/title projection for a dirty docum
  const snapshot=async()=>{
   const result:Record<string,unknown>={};
   for(const table of ['artifacts','region_states','region_updates','region_snapshots','artifact_source_ids','annotations']){
-   const rows=(await db.query<{value:unknown}>(`SELECT to_jsonb(t) AS value FROM ${table} t WHERE ${table==='artifacts'?'id':'artifact_id'}=$1`,[row.id])).rows.map(r=>r.value);
+   const rows=(await db.query<{value:unknown}>(`SELECT to_jsonb(t) AS value FROM ${table} t WHERE ${table==='artifacts'?'id':'artifact_id'}=$1 ORDER BY to_jsonb(t)::text`,[row.id])).rows.map(r=>r.value);
    result[table==='artifacts'?'head':table]=table==='artifacts'?rows[0]:rows;
   }
   return result;
