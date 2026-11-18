@@ -152,7 +152,8 @@ function svgFromDataUrl(src: string): string {
 
 /**
  * Serialized into Chromium: every native component under the surface that failed (`[data-af-error]`, lib/html-component-specs
- * read-failure), with the sentence its status line shows. Self-contained and synchronous.
+ * read-failure), with the sentence its status line shows: the same contract the author check reads
+ * (skills/artifactbin/scripts/toolbox-check-*.mjs). Self-contained and synchronous.
  */
 function collectFailures(input: { selector: string; limit: number }) {
   const root = document.querySelector(input.selector) ?? document.documentElement;
