@@ -43,21 +43,23 @@ export async function changedSpecifications(vitest, changedSince) {
 
 /**
  * The same selection for a given list of changed files (absolute paths), each chosen specification with `distance`: how
- * many imports from the test file the nearest changed file is (0 is the test file itself). A changed forceRerunTrigger
- * selects every specification, each at distance Infinity: none is nearer the change than another.
+ * many imports from the test file the nearest changed file is (0 is the test file itself), and `nearest`: that count for
+ * each changed file it reaches. A changed forceRerunTrigger selects every specification, each at distance Infinity with
+ * no `nearest` entry: none is nearer the change than another.
  */
 export async function affectedSpecifications(vitest, changed) {
   const related = [...new Set(changed)];
   const specs = await vitest.globTestSpecifications();
   const triggers = vitest.config.forceRerunTriggers ?? [];
   const matcher = triggers.length ? pm(triggers) : undefined;
-  if (matcher && related.some((file) => matcher(file))) return specs.map((spec) => ({ spec, distance: Infinity }));
+  if (matcher && related.some((file) => matcher(file))) return specs.map((spec) => ({ spec, distance: Infinity, nearest: {} }));
   if (!related.length) return [];
 
   const graphs = await specificationGraphs(vitest, specs);
   return specs.flatMap((spec, i) => {
-    const distance = Math.min(...related.map((file) => graphs[i].get(file) ?? Infinity));
-    return distance === Infinity ? [] : [{ spec, distance }];
+    const nearest = Object.fromEntries(related.flatMap((file) => graphs[i].has(file) ? [[file, graphs[i].get(file)]] : []));
+    const distance = Math.min(Infinity, ...Object.values(nearest));
+    return distance === Infinity ? [] : [{ spec, distance, nearest }];
   });
 }
 

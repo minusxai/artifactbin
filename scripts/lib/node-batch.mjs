@@ -100,13 +100,17 @@ export function nodeBatchFiles({ timings, candidates, lane, read }) {
  * post-merge suite. Now:
  *  - `must`: every `node` file the change adds or edits that no pr fast part already runs, whatever its time or record;
  *  - `affected`: the slower files whose import graph reaches a changed file (scripts/lib/test-graph.mjs, the same
- *    selection `npm test` makes), nearest the change first (fewest imports away), then shortest, while their recorded
- *    times (a file without one weighs the `node` median), each with its import (`NODE_ISOLATED_FILE_MS`), fit
- *    `budgetMs`; `must` never spends it. A rerun trigger
+ *    selection `npm test` makes), the change's closest tests first, then shortest, while their recorded times (a file
+ *    without one weighs the `node` median), each with its import (`NODE_ISOLATED_FILE_MS`), fit `budgetMs`; `must`
+ *    never spends it. Closest is not fewest imports from any changed file: a file most tests import (the contracts
+ *    index) is one import from dozens of them, and those outbid the few tests of a module whose code changed, two
+ *    imports from it (#1345 deferred lib/annotations' own store test so, and main went red). A file ranks by the
+ *    fewest reached files within its distance of some changed file it reaches (`nearest`): the files nearer a narrow
+ *    change than it is, and itself. One changed file still orders nearest first. A rerun trigger
  *    (vitest.config.ts, a package.json) reaches every file at distance Infinity, none nearer: it adds none of them,
  *    since a budget's worth of the shortest is an arbitrary subset on a cold module cache (#1339's runners: 27-36s);
  *  - `deferred`: the reached files over the budget, named on the run. The full suite still runs every one after merge.
- * @param {{ timings: { files: Record<string, Record<string, number>> }, changed: Iterable<string>, affected: Iterable<{ file: string, distance: number }>, candidates: Set<string>, batch: Set<string>, lane: Set<string>, budgetMs: number }} input
+ * @param {{ timings: { files: Record<string, Record<string, number>> }, changed: Iterable<string>, affected: Iterable<{ file: string, distance: number, nearest: Record<string, number> }>, candidates: Set<string>, batch: Set<string>, lane: Set<string>, budgetMs: number }} input
  * @returns {{ must: string[], affected: string[], deferred: string[] }}
  */
 export function nodeAffectedFiles({ timings, changed, affected, candidates, batch, lane, budgetMs }) {
@@ -116,8 +120,14 @@ export function nodeAffectedFiles({ timings, changed, affected, candidates, batc
   const values = Object.values(node).sort((a, b) => a - b);
   const median = values.length ? values[Math.floor(values.length / 2)] : NODE_BATCH_MAX_MS;
   const weight = (file) => (node[file] ?? median) + NODE_ISOLATED_FILE_MS;
-  const reached = [...affected].filter(({ file }) => !runsElsewhere(file) && !must.includes(file))
-    .sort((a, b) => a.distance - b.distance || weight(a.file) - weight(b.file) || (a.file < b.file ? -1 : a.file > b.file ? 1 : 0));
+  const competing = [...affected].filter(({ file }) => !runsElsewhere(file) && !must.includes(file));
+  // Each changed file's distances to the files competing for the budget, to count how many lie within a distance.
+  const around = new Map();
+  for (const { nearest } of competing) for (const [changed, steps] of Object.entries(nearest)) around.set(changed, [...(around.get(changed) ?? []), steps]);
+  const within = (changed, steps) => around.get(changed).filter((other) => other <= steps).length;
+  const rank = ({ distance, nearest }) => distance === Infinity ? Infinity : Math.min(...Object.entries(nearest).map(([changed, steps]) => within(changed, steps)));
+  const reached = competing.map((entry) => ({ ...entry, rank: rank(entry) }))
+    .sort((a, b) => a.rank - b.rank || a.distance - b.distance || weight(a.file) - weight(b.file) || (a.file < b.file ? -1 : a.file > b.file ? 1 : 0));
   const chosen = [], deferred = [];
   let spent = 0;
   for (const { file, distance } of reached) {
