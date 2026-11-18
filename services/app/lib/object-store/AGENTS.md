@@ -24,7 +24,8 @@ store is never listed (the S3 user has no ListBucket). `sweep.ts` deletes what n
   A kind joins the swept list only once every put of it goes through `objectStore()` and every reader takes its
   key from an app-table row; never sweep runtime assets, avatars, comment images, web assets or exports here.
 - Export images expire in lib/export (`expireExportImages`): unpointed by any cache row and replaced a day ago; a
-  produced image whose publish certainly wrote no row is deleted at once. lib/runtime runs both, bounded, every 6 h.
+  produced image whose publish certainly wrote no row is deleted at once. lib/runtime runs both, bounded, every 6 h,
+  and deletes nothing while its `STORAGE_SWEEP_DELETES` is off (the ledger is still written).
 - One database per store root: two installations sharing a bucket prefix would share keys, and each sweeps alone.
 - Limits: objects written before `object_writes` existed are never candidates (finding them needs listing the store);
   a fork copies keys without a put, so a fork racing a test-user erase of its source could lose that source's bytes.

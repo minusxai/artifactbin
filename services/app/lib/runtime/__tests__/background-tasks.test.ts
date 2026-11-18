@@ -1,6 +1,7 @@
-import {expect,it} from 'vitest';
+import {expect,it,vi} from 'vitest';
 import {useAppHarness} from '@/__tests__/harness';
 import {getDb} from '@/lib/platform';
+import {objectKey,objectStore} from '@/lib/object-store';
 import {startAppBackgroundTasks} from '..';
 useAppHarness();
 it('stop is idempotent: every call returns the one shutdown promise, which resolves',async()=>{
@@ -10,4 +11,20 @@ it('stop is idempotent: every call returns the one shutdown promise, which resol
  expect(second).toBe(first);
  await expect(first).resolves.toBeUndefined();
  expect(stop()).toBe(first);
+});
+it('the storage sweep\'s six-hourly tick deletes nothing while it is switched off, and keeps the ledger',async()=>{
+ const db=await getDb(),key=objectKey('dataset',JSON.stringify([{n:Math.random()}])),image='exports/objects/old.png';
+ await objectStore().put(key,'[]');await objectStore().put(image,'png');
+ await db.query("UPDATE object_writes SET due_at=now()-interval '1 second' WHERE key=$1",[key]);
+ await db.query("INSERT INTO export_images(id,artifact_id,object_key,mime,bytes,width,height,created_at) VALUES('old','abc123',$1,'image/png',3,1,1,now()-interval '9 days')",[image]);
+ const intervals=vi.spyOn(globalThis,'setInterval');
+ const stop=await startAppBackgroundTasks(db);
+ const tick=intervals.mock.calls.find(([,ms])=>ms===6*60*60*1000)?.[0] as (()=>void)|undefined;
+ intervals.mockRestore();
+ expect(tick).toBeTypeOf('function');
+ tick!();await stop();
+ expect((await objectStore().get(key)).toString()).toBe('[]');
+ expect((await objectStore().get(image)).toString()).toBe('png');
+ expect((await db.query('SELECT key FROM object_writes WHERE key=$1',[key])).rows).toHaveLength(1);
+ expect((await db.query("SELECT id FROM export_images WHERE id='old'")).rows).toHaveLength(1);
 });
