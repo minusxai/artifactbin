@@ -237,6 +237,11 @@ it('says an invalid spec is not valid and where, as invalid_chart, never the eng
   expect(engine.getAttribute('data-af-error')).toBe('invalid_chart');
   expect(status(engine).textContent).toMatch(/^Chart not drawn: the Vega-Lite spec is not valid at layer\[1\]/);
   expect(status(engine).textContent).toMatch(/Cannot read properties of undefined/);
+  // A facet operator beside mark and encoding, with no spec to repeat.
+  const facet = mount({}, { chart: { facet: { row: { field: 'k', type: 'nominal' } }, ...BAR }, rows: ROWS });
+  await until(() => facet.hasAttribute('data-af-error'), 'facet refusal');
+  expect(facet.getAttribute('data-af-error')).toBe('invalid_chart');
+  expect(status(facet).textContent).toMatch(/^Chart not drawn: facet: needs a spec: \{mark, encoding…\} to repeat/);
   // The url refusal and a bad recipe are the description's fault too.
   const url = mount({}, { chart: { ...BAR, data: { url: 'https://example.com/x.csv' } } });
   const recipe = mount({}, { chart: { recipe: 'trend', bindings: {} }, rows: ROWS });

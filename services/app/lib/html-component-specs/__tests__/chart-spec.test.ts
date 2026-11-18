@@ -3,7 +3,7 @@
  * composed spec an engine failed on.
  */
 import { expect, it } from 'vitest';
-import { locateChartFailure, parseChartDescription } from '../chart-spec';
+import { invalidChart, locateChartFailure, parseChartDescription } from '../chart-spec';
 
 const BAR = { mark: 'bar', encoding: { x: { field: 'k', type: 'nominal' } } };
 const refused = (spec: unknown) => {
@@ -22,6 +22,28 @@ it('refuses a Vega-Lite data object with no source, naming where and how to filt
   expect(refused({ facet: { field: 'g' }, spec: { ...BAR, data: { calculate: 'x' } } })).toMatch(/^spec\.data: /);
   expect(refused({ ...BAR, transform: [{ lookup: 'k', from: { data: { filter: 'x' }, key: 'k' } }] }))
     .toMatch(/^transform\[0\]\.from\.data: /);
+});
+
+it('refuses a facet or repeat operator without the spec it repeats, and accepts row and column in encoding', () => {
+  // As an agent wrote it: facet beside mark and encoding, which Vega-Lite destructures as an undefined spec.
+  const error = refused({ facet: { row: { field: 'g', type: 'nominal' } }, ...BAR });
+  expect(error).toMatch(/^facet: needs a spec: \{mark, encoding…\} to repeat/);
+  expect(error).toMatch(/put row\/column inside encoding instead/);
+  expect(refused({ repeat: ['a', 'b'], ...BAR })).toMatch(/^repeat: needs a spec: \{mark, encoding…\} to repeat/);
+  expect(refused({ vconcat: [BAR, { facet: { field: 'g' }, mark: 'bar' }] })).toMatch(/^vconcat\[1\]\.facet: needs a spec/);
+  expect(refused({ facet: { field: 'g' }, spec: { facet: { field: 'h' } } })).toMatch(/^spec\.facet: needs a spec/);
+  expect(refused({ facet: { row: { field: 'g' } }, spec: BAR })).toBeNull();
+  expect(refused({ repeat: { layer: ['a', 'b'] }, spec: { layer: [BAR] } })).toBeNull();
+  expect(refused({ ...BAR, encoding: { ...BAR.encoding, row: { field: 'g', type: 'nominal' } } })).toBeNull();
+});
+
+it('adds a structure hint to an engine TypeError the shape checks missed, and none to other engine errors', () => {
+  const attempt = () => { throw new TypeError('x'); };
+  const typed = invalidChart({ engine: 'vega-lite', spec: BAR }, new TypeError("Cannot destructure property 'transform'"), attempt);
+  expect(typed.message).toMatch(/^the Vega-Lite spec is not valid \(the engine stopped with: Cannot destructure property 'transform'\); check its structure: /);
+  expect(typed.message).toMatch(/facet or repeat with a spec/);
+  const other = invalidChart({ engine: 'vega-lite', spec: BAR }, new Error('Invalid field type'), attempt);
+  expect(other.message).toBe('the Vega-Lite spec is not valid (the engine stopped with: Invalid field type)');
 });
 
 it('accepts every data source Vega-Lite knows, inherited or empty data, and a column named data in the rows', () => {

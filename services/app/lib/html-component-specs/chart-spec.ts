@@ -66,13 +66,24 @@ const DATA_SOURCES = ['values', 'name', 'sequence', 'sphere', 'graticule', 'url'
 const VIEW_LISTS = ['layer', 'hconcat', 'vconcat', 'concat'] as const;
 const at = (path: string, key: string) => (path ? `${path}.${key}` : key);
 
+const REPEATED = {
+  facet: 'for one panel per value put row/column inside encoding instead',
+  repeat: 'name the repeated field in its encoding as {"repeat": "repeat"}',
+} as const;
+
 /**
- * The first Vega-Lite data object, in a view or a lookup's `from`, that names no source: Vega-Lite compiles it and then
- * dereferences its missing source (`data.format`). Only the view structure is walked: inline rows, `datasets` and
- * `usermeta` may hold anything. `data: null` (no parent data) and `{}` (inherit) pass.
+ * The first Vega-Lite shape an engine would throw on unexplained: a data object, in a view or a lookup's `from`, that
+ * names no source (Vega-Lite dereferences `data.format`), or a facet or repeat operator with no `spec` to repeat
+ * (it destructures the missing spec). Only the view structure is walked: inline rows, `datasets` and `usermeta` may
+ * hold anything. `data: null` (no parent data) and `{}` (inherit) pass, as do row/column inside encoding.
  */
 function dataProblem(view: unknown, path: string): string | null {
   if (!isRecord(view)) return null;
+  for (const [key, fix] of Object.entries(REPEATED)) {
+    if (key in view && !isRecord(view.spec)) {
+      return `${at(path, key)}: needs a spec: {mark, encoding…} to repeat; ${fix}`;
+    }
+  }
   const { data } = view;
   if (isRecord(data) && Object.keys(data).length && !DATA_SOURCES.some(key => key in data)) {
     return `${at(path, 'data')}: a data object needs values, name, sequence, sphere or graticule, not ` +
@@ -121,14 +132,19 @@ export function locateChartFailure(spec: Record<string, unknown>,
 /** A description its engine cannot draw: af-chart shows it as invalid_chart, the query image's code for it. */
 export class InvalidChart extends Error {}
 
-/** An engine's exception (an InvalidChart passes through) as what is wrong: the spec is not valid, where (locateChartFailure), the engine's words kept. */
+/**
+ * An engine's exception (an InvalidChart passes through) as what is wrong: the spec is not valid, where
+ * (locateChartFailure), the engine's words kept; a TypeError (a shape the checks above missed) adds a structure hint.
+ */
 export function invalidChart(resolved: { engine: 'vega' | 'vega-lite'; spec: Record<string, unknown> }, error: unknown,
   attempt: (spec: Record<string, unknown>) => void): InvalidChart {
   if (error instanceof InvalidChart) return error;
   const where = resolved.engine === 'vega-lite' ? locateChartFailure(resolved.spec, attempt) : null;
   const said = (error instanceof Error ? error.message : String(error)).slice(0, 300);
   return new InvalidChart(`the ${resolved.engine === 'vega' ? 'Vega' : 'Vega-Lite'} spec is not valid` +
-    `${where ? ` at ${where}` : ''} (the engine stopped with: ${said})`);
+    `${where ? ` at ${where}` : ''} (the engine stopped with: ${said})${error instanceof TypeError
+      ? '; check its structure: each view is {mark, encoding}, a layer or concat list, or facet or repeat with a spec'
+      : ''}`);
 }
 
 /** A failed drawing as af-chart shows it: an InvalidChart as invalid_chart (read-failure's shape), anything else as text. */
