@@ -45,10 +45,8 @@ export function configureTrustedUiStyles(cssText: string): void {
   // A shadow root ignores @property, so a host document that never loaded this sheet (an embedding shell) never
   // registers Tailwind's variables: `border` would read an unset --tw-border-style and draw no border, `shadow-*`
   // no shadow. Give each element the declared initial value instead, as the registration would.
-  const registered = [...cssText.matchAll(/@property\s+(--[\w-]+)\s*\{([^}]*)\}/g)]
-    .flatMap(([, name, body]) => { const value = /initial-value\s*:\s*([^;]+?)\s*(?:;|$)/.exec(body!)?.[1]; return value ? [`${name}: ${value};`] : []; });
-  const defaults = registered.length
-    ? ` ${ROOT} *, ${ROOT} ::before, ${ROOT} ::after, ${ROOT} ::backdrop { ${registered.join('')} }` : '';
+  const registered = [...cssText.matchAll(/@property\s+(--[\w-]+)[^}]*?initial-value:\s*([^;}]+)/g)].map(m => `${m[1]}: ${m[2]};`).join('');
+  const defaults = registered && ` ${ROOT} *, ${ROOT} ::before, ${ROOT} ::after { ${registered} }`;
   // These selectors refer to the app document in its normal stylesheet; in a
   // shadow tree they must target the protected inner root, not the host (whose
   // properties author CSS can override). Only explicit trusted compiled CSS

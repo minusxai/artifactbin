@@ -32,9 +32,9 @@ describe('configureTrustedUiStyles', () => {
       + '.border { border-style: var(--tw-border-style); border-width: 1px; }');
     const css = currentTrustedCss();
     const defaults = css.match(/@layer trusted-ui-reset \{[^@]*\}/)![0];
-    expect(defaults).toContain('[data-trusted-ui-root] *, [data-trusted-ui-root] ::before, [data-trusted-ui-root] ::after, [data-trusted-ui-root] ::backdrop { --tw-border-style: solid;--tw-shadow: 0 0 #0000; }');
+    expect(defaults).toContain('[data-trusted-ui-root] *, [data-trusted-ui-root] ::before, [data-trusted-ui-root] ::after { --tw-border-style: solid;--tw-shadow: 0 0 #0000; }');
     // No initial value: the property stays reset (guaranteed-invalid), as it is where @property registers it.
-    expect(defaults.slice(defaults.indexOf('::backdrop'))).not.toContain('--tw-ring-color');
+    expect(defaults.slice(defaults.indexOf('::after'))).not.toContain('--tw-ring-color');
     expect(defaults.indexOf('all: initial')).toBeLessThan(defaults.indexOf('--tw-border-style: solid'));
   });
 
