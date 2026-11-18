@@ -148,7 +148,7 @@ export const CANONICAL_PAGE_EVIDENCE_PATH='/api/internal/page-evidence';
  * no grant: the check reads no data). POST exactly DRAFT_CHECK_KEYS, `html` and `files` required (the draft's own
  * `{path, base64, contentType?}` files, entryPath its page's path among them), at most SERVICE_PAYLOAD_LIMIT bytes. The
  * identity owner forwards it to the fixed app seam as the anonymous actor and passes its status and JSON through:
- * `{problems: PageProblem[], truncated}` (contracts browser), a draft's refusal `{error: DraftRefusalCode, message}`,
+ * `{problems: PageProblem[], truncated, image?: PageImage}` (contracts browser), a draft's refusal `{error: DraftRefusalCode, message}`,
  * 413 `too_large` or 503 `check_unavailable`.
  */
 export const DRAFT_CHECK_PATH = '/api/internal/identity/draft-check';

@@ -4,7 +4,7 @@
  * name the browser cannot resolve is loaded from the internal origin by its own Host.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { BrowserService, PageInspectRequest } from '@artifactbin/contracts';
+import { PAGE_IMAGE_LIMITS, type BrowserService, type PageInspectRequest } from '@artifactbin/contracts';
 import { browserClient, serveBrowser } from '@artifactbin/browser';
 import { createBrowser } from '@artifactbin/browser/local';
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
@@ -49,7 +49,7 @@ const request = (path: string): PageInspectRequest => ({ url: page(path), viewpo
   sameOriginOnly: true, allowedOrigins: [app()], internalOrigin: pages.base, settleMs: 300, timeoutMs: 10_000 });
 
 describe.each<[string, BrowserService]>([['in-process', local], ['over HTTP', remote]])('%s', (_name, svc) => {
-  it('says each of the page\'s own problems once: the failed component, the exception, the console, the missing and the refused file', async () => {
+  it('says each of the page\'s own problems once: the failed component, the exception, the console, and the missing file, never the request this browser refused', async () => {
     const r = await svc.inspect!(request('/broken'));
     if (!r.ok) throw new Error(JSON.stringify(r));
     expect(r.truncated).toBe(false);
@@ -58,15 +58,25 @@ describe.each<[string, BrowserService]>([['in-process', local], ['over HTTP', re
       { kind: 'script', message: 'total is not defined' },
       { kind: 'console', message: 'the page said so' },
       { kind: 'request', message: 'GET /missing.csv answered 404' },
-      { kind: 'request', message: 'http://elsewhere.invalid/x.png was refused: a page loads only its own files and the platform\'s' },
     ]));
-    expect(r.problems).toHaveLength(5);
+    // The image this browser refused by its own rule may load for a reader: it is not the page's problem.
+    expect(r.problems).toHaveLength(4);
   });
 
   it('loads the page and its allowed origins from the internal origin by their own Host, and answers a clean page with none', async () => {
     hosts.length = 0;
     expect(await svc.inspect!(request('/clean'))).toEqual({ ok: true, problems: [], truncated: false });
     expect(hosts).toEqual([`page.lvh.me:${port}/clean`, `app.lvh.me:${port}/lib.js`]);
+  });
+
+  it('answers a JPEG of the page when asked, within the image bounds', async () => {
+    const r = await svc.inspect!({ ...request('/clean'), screenshot: true });
+    if (!r.ok || !r.image) throw new Error(JSON.stringify(r));
+    const bytes = Buffer.from(r.image.data, 'base64');
+    expect(r.image).toEqual({ mime: 'image/jpeg', width: 800, height: expect.any(Number), bytes: bytes.length, data: expect.any(String) });
+    expect([...bytes.subarray(0, 3)]).toEqual([0xff, 0xd8, 0xff]);
+    expect(bytes.length).toBeLessThanOrEqual(PAGE_IMAGE_LIMITS.bytes);
+    expect((await svc.inspect!(request('/clean'))).ok && 'image' in (await svc.inspect!(request('/clean')))).toBe(false);
   });
 
   it('says a page that never finishes showing timed out', async () => {

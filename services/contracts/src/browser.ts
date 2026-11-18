@@ -102,8 +102,9 @@ export const SVG_HARVEST_LIMITS = { images: 200, imageBytes: 2 * 1024 * 1024, to
 /**
  * THE PAGE'S OWN PROBLEMS (`inspect`): the same ready page a render photographs, loaded once, and what went wrong in
  * it, as its author needs to hear it: a native component that failed (`[data-af-error]`: its tag, code, label and the
- * sentence it shows), an uncaught exception, a console error, a request that failed, answered 400 or more, or was
- * refused, and a page that never finished drawing (`timeout`). Repeats are said once; at most
+ * sentence it shows), an uncaught exception, a console error, a request that failed or answered 400 or more (one this
+ * browser refused by its own `sameOriginOnly` rule is not the page's problem), and a page that never finished drawing
+ * (`timeout`). Repeats are said once; at most
  * PAGE_PROBLEM_LIMITS.problems, each text cut to its limit, `truncated` when more were seen.
  *
  * `internalOrigin`: the page loads under its public origin (its CSP, its relative links and its origin checks hold),
@@ -111,7 +112,15 @@ export const SVG_HARVEST_LIMITS = { images: 200, imageBytes: 2 * 1024 * 1024, to
  * the request's own `Host`, no browser header or credential, no redirect, bounded; any other method is refused. So a
  * page on a public host name the browser's network cannot resolve is still loaded from the app itself.
  */
-export interface PageInspectRequest extends PageRequest { internalOrigin?: string }
+export interface PageInspectRequest extends PageRequest {
+  internalOrigin?: string;
+  /** Also answer a JPEG of the page as it stood once read: the viewport's width, the page's height up to
+   * PAGE_IMAGE_LIMITS.height, at most PAGE_IMAGE_LIMITS.bytes (lowering its quality, else none). */
+  screenshot?: boolean;
+}
+/** A page's picture: `data` the JPEG, base64; `bytes` its decoded length. */
+export interface PageImage { mime: 'image/jpeg'; width: number; height: number; bytes: number; data: string }
+export const PAGE_IMAGE_LIMITS = { bytes: 2_000_000, height: 4_000 } as const;
 export interface PageProblem {
   kind: 'component' | 'script' | 'console' | 'request' | 'timeout';
   message: string;
@@ -122,7 +131,7 @@ export interface PageProblem {
 }
 export const PAGE_PROBLEM_LIMITS = { problems: 20, message: 500, element: 40, code: 64, label: 120 } as const;
 export type PageInspection =
-  | { ok: true; problems: PageProblem[]; truncated: boolean }
+  | { ok: true; problems: PageProblem[]; truncated: boolean; image?: PageImage }
   | { ok: false; reason: 'unavailable' | 'navigation' | 'failed'; detail?: string }
   /** The service predates this operation (a mixed-version rollout): nothing was inspected. */
   | { ok: false; reason: 'inspect_unavailable' };

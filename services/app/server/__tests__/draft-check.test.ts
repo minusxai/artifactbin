@@ -30,24 +30,25 @@ const seam = (body: unknown, actor: Actor | null = ANONYMOUS) => {
 describe('the identity owner\'s draft-check seam', () => {
   it('shows the draft to the browser under its own origin, from this process, and answers the page\'s problems', async () => {
     const asked: PageInspectRequest[] = [], documents: number[] = [];
+    const image = { mime: 'image/jpeg' as const, width: 1280, height: 900, bytes: 3, data: 'AAAA' };
     const chart = { kind: 'component' as const, element: 'af-chart', code: 'invalid_chart', label: 'Monthly revenue', message: 'Chart not drawn: the Vega-Lite spec is not valid' };
     setServices({ browser: { ...original, inspect: async (request): Promise<PageInspection> => {
       asked.push(request);
       // The draft is live while it is looked at: its document once, for the ticket, and its files.
       const url = new URL(request.url), host = { headers: { host: url.host } };
       documents.push((await app.request(url.href, host)).status, (await app.request(url.href, host)).status, (await app.request(`${url.origin}/reports/monthly.csv`, host)).status);
-      return { ok: true, truncated: false, problems: [chart, { kind: 'component', element: 'af-data-table', code: 'consent_required', message: 'Allow live data' }] };
+      return { ok: true, truncated: false, image, problems: [chart, { kind: 'component', element: 'af-data-table', code: 'consent_required', message: 'Allow live data' }] };
     } } });
     const answered = await seam(DRAFT);
     expect(answered.status).toBe(200);
     expect(answered.headers.get('cache-control')).toBe('no-store');
-    expect(await answered.json()).toEqual({ problems: [chart], truncated: false });
+    expect(await answered.json()).toEqual({ problems: [chart], truncated: false, image });
     const [request] = asked as [PageInspectRequest];
     const url = new URL(request.url);
     expect(url.hostname).toMatch(new RegExp(`^draft-[a-z2-7]{26}\\.${site.host.replaceAll('.', '\\.')}$`));
     expect(url.pathname).toBe('/reports/revenue.html');
     expect(url.searchParams.get('_pt')).toEqual(expect.any(String));
-    expect(request).toMatchObject({ internalOrigin: EXPORT_INTERNAL_ORIGIN, sameOriginOnly: true, allowedOrigins: [site.app], selector: 'body' });
+    expect(request).toMatchObject({ internalOrigin: EXPORT_INTERNAL_ORIGIN, sameOriginOnly: true, allowedOrigins: [site.app], selector: 'body', screenshot: true });
     expect(documents).toEqual([200, 404, 200]);
     // Forgotten once looked at.
     expect((await app.request(`${url.origin}/reports/monthly.csv`, { headers: { host: url.host } })).status).toBe(404);
@@ -67,5 +68,16 @@ describe('the identity owner\'s draft-check seam', () => {
     for (const body of [{ html: PAGE }, { files: [] }, { ...DRAFT, liveSql: true }, { ...DRAFT, title: 'x' }, [DRAFT], 'not json']) expect((await seam(body)).status).toBe(400);
     expect((await seam(DRAFT, null)).status).toBe(403);
     expect((await seam(DRAFT, { credential: 'session', sessionId: 's', userId: 'usr_1', email: 'a@b.c', emailVerified: true })).status).toBe(403);
+  });
+});
+
+describe('a check that did not finish', () => {
+  it('is not checked when the page timed out with nothing else to say, and keeps what it did find', async () => {
+    let problems: Array<{ kind: 'timeout' | 'script'; message: string }> = [{ kind: 'timeout', message: 'the page did not finish loading and drawing in time' }];
+    setServices({ browser: { ...original, inspect: async () => ({ ok: true, truncated: false, problems }) } });
+    const draft = { html: '<p>x</p>', files: [] };
+    expect(await (await seam(draft)).json()).toEqual({ error: 'check_unavailable' });
+    problems = [...problems, { kind: 'script', message: 'total is not defined' }];
+    expect(await (await seam(draft)).json()).toEqual({ problems: [{ kind: 'script', message: 'total is not defined' }], truncated: false });
   });
 });

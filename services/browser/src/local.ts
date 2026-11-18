@@ -13,8 +13,8 @@ import { chromium, errors, type Browser, type Locator, type Page } from 'playwri
 import sharp from 'sharp';
 import {admittedUploadUrl,uploadImage,type UploadOptions} from './upload';
 import {browserUploadOptions} from './upload-config';
-import type { BrowserService, BrowserSessions, HarvestedSvg, PageInspectRequest, PageInspection, PageProblem, PageRequest, RenderRequest, RenderResult, SvgHarvestRequest, SvgHarvestResult } from '@artifactbin/contracts';
-import { ELEMENT_CAPTURE, PAGE_PROBLEM_LIMITS, SVG_HARVEST_LIMITS, type NoElement } from '@artifactbin/contracts';
+import type { BrowserService, BrowserSessions, HarvestedSvg, PageImage, PageInspectRequest, PageInspection, PageProblem, PageRequest, RenderRequest, RenderResult, SvgHarvestRequest, SvgHarvestResult } from '@artifactbin/contracts';
+import { ELEMENT_CAPTURE, PAGE_IMAGE_LIMITS, PAGE_PROBLEM_LIMITS, SVG_HARVEST_LIMITS, type NoElement } from '@artifactbin/contracts';
 import { internalAssetResponse, internalPageResponse } from './internal-assets';
 import { BrowserUnavailable, createBrowserHolder } from './browser-holder';
 
@@ -451,20 +451,28 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
   }
 
   /** One load's problems (PageInspectRequest): listened for from the first request, components read once it is ready. */
-  async function inspectOnce(req: PageInspectRequest): Promise<{ problems: PageProblem[]; truncated: boolean }> {
+  async function inspectOnce(req: PageInspectRequest): Promise<{ problems: PageProblem[]; truncated: boolean; image?: PageImage }> {
     const found = problemList(), refused = new Set<string>(), pageOrigin = new URL(req.url).origin;
+    let image: PageImage | undefined;
     try {
-      await withReadyPage(req, 1, async ({ page }) => {
+      await withReadyPage(req, 1, async ({ page, timeout }) => {
         for (const failure of await page.evaluate(collectFailures, { selector: req.selector, limit: PAGE_PROBLEM_LIMITS.problems + 1 })) found.add(failure);
+        if (!req.screenshot) return;
+        // The page as it stood once read, its height capped; a quality that fits the bound, else no picture.
+        const tall = await page.evaluate(() => Math.max(document.documentElement.scrollHeight, document.body?.scrollHeight ?? 0));
+        const height = Math.max(1, Math.min(Math.ceil(tall), PAGE_IMAGE_LIMITS.height)), width = req.viewport.width;
+        for (const quality of [75, 50, 30]) {
+          const bytes = await page.screenshot({ type: 'jpeg', quality, fullPage: true, clip: { x: 0, y: 0, width, height }, timeout });
+          if (bytes.length <= PAGE_IMAGE_LIMITS.bytes) { image = { mime: 'image/jpeg', width, height, bytes: bytes.length, data: bytes.toString('base64') }; break; }
+        }
       }, {
         refused: url => refused.add(url),
         page: page => {
           page.on('pageerror', error => found.add({ kind: 'script', message: error.message }));
           // A failed load is said once, as its request (below), not again as Chromium's console line about it.
           page.on('console', message => { if (message.type() === 'error' && !message.text().startsWith('Failed to load resource')) found.add({ kind: 'console', message: message.text() }); });
-          page.on('requestfailed', request => found.add({ kind: 'request', message: refused.has(request.url())
-            ? `${said(request.url(), pageOrigin)} was refused: a page loads only its own files and the platform's`
-            : `${request.method()} ${said(request.url(), pageOrigin)} failed: ${request.failure()?.errorText ?? 'no answer'}` }));
+          // A request this browser refused by its own rule (sameOriginOnly) may load for a reader: never the page's problem.
+          page.on('requestfailed', request => { if (!refused.has(request.url())) found.add({ kind: 'request', message: `${request.method()} ${said(request.url(), pageOrigin)} failed: ${request.failure()?.errorText ?? 'no answer'}` }); });
           page.on('response', response => { if (response.status() >= 400) found.add({ kind: 'request', message: `${response.request().method()} ${said(response.url(), pageOrigin)} answered ${response.status()}` }); });
         },
       });
@@ -473,7 +481,7 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
       // What it showed until then is kept: a page that never finishes drawing is itself a problem.
       found.add({ kind: 'timeout', message: 'the page did not finish loading and drawing in time' });
     }
-    return found.result();
+    return { ...found.result(), ...(image ? { image } : {}) };
   }
 
   const started = createBrowserSessions(actor => {
