@@ -44,7 +44,7 @@ const API_MOCKING = leaking(API_INCLUDE, API_EXCLUDE);
 const NODE_INCLUDE = ['services/app/lib/html-components/**/*.test.ts', 'services/app/lib/**/__tests__/**/*.test.{ts,tsx}', 'services/app/components/**/__tests__/**/*.test.{ts,tsx}', 'evals/**/__tests__/**/*.test.{ts,tsx}', 'services/{contracts,utils,sql,browser,auth,events,connectors}/**/__tests__/**/*.test.{ts,tsx}', 'scripts/**/__tests__/**/*.test.mjs'];
 /**
  * Canonical analytics folds, authorization lock order across independent Postgres connections, split-role grants, feed
- * positions, OAuth rotation and the two-process region scenario on real connections: `integration` only,
+ * positions, OAuth rotation and the two-process region scenario on real connections: `integration-databases` only,
  * as the Docker proofs are.
  */
 const REAL_DATABASE_TESTS = ['services/app/lib/artifacts/__tests__/workload-create-postgres.test.ts', 'services/app/lib/analytics/__tests__/canonical-totals-postgres.test.ts', 'services/connectors/__tests__/connectors-docker.test.ts', 'services/app/lib/artifact-access/__tests__/lock-order-postgres.test.ts', 'services/app/lib/platform/__tests__/identity-roles-postgres.test.ts', 'services/events/__tests__/feed-position-postgres.test.ts', 'services/auth/__tests__/oauth-postgres.test.ts', 'services/app/__tests__/region-processes-postgres.test.ts'];
@@ -144,14 +144,12 @@ export default defineConfig({
         },
       },
       {
-        // Heavy, environment-dependent tests: a disposable Dockerised Postgres
-        // (the analytics proof requires Docker; older suites skip without their image) and a real headless
-        // Chromium (browser contract and internal asset rendering). Kept
-        // out of the default `npm test` for a fast inner loop; CI runs this
-        // project in the `integration` job, which already provisions both (see
-        // .github/workflows/ci.yml). Same shape as `node` — node env, root
-        // env/globalSetup via `extends`, the shared setup file — so the moved
-        // tests behave identically; only the include set differs.
+        // Heavy, environment-dependent tests: real headless Chromium (the browser contract, internal asset rendering,
+        // session pages), whole server processes (which serve exports through the local browser) and the long property
+        // runs. Kept out of the default `npm test` for a fast inner loop; CI runs this project in one of the
+        // `integration` job's parts (.github/workflows/ci.yml), which provisions Chromium. Same shape as `node` — node
+        // env, root env/globalSetup via `extends`, the shared setup file — so the moved tests behave identically; only
+        // the include set differs. `npm run test:integration` runs it with `integration-databases` below.
         extends: true,
         test: {
           name: 'integration',
@@ -161,13 +159,29 @@ export default defineConfig({
           environment: 'node',
           include: [
             ...CHROMIUM_TESTS,
+            ...SERVER_BOOT_TESTS,
+            ...PROPERTY_SOAK_TESTS,
+          ],
+          exclude: ['**/node_modules/**'],
+          setupFiles: ['./services/app/test/setup/vitest.setup.ts'],
+        },
+      },
+      {
+        // The disposable Docker databases, apart: the other part of CI's `integration` job, which pulls their images
+        // and no browser. Together in one job, the Doris suite (a JVM) started beside the soak, the Chromium sessions
+        // and the server boots and ran 75-87s against 33s, and a session-pages timing assertion failed beside it
+        // (ci runs 44302940303, 44303974813). Here its neighbours are the short Postgres proofs.
+        extends: true,
+        test: {
+          name: 'integration-databases',
+          maxConcurrency: 1,
+          environment: 'node',
+          include: [
             // The identity-reservation proofs (formerly reserved-ids-proof.yml): 12 CLI processes and
             // a disposable Postgres (a `skipIf` on the image).
             'scripts/__tests__/reserved-ids-proof.test.mjs',
             // The connectors against a disposable TLS Postgres and MySQL, and the lock order on real Postgres (a `skipIf` on each image).
             ...REAL_DATABASE_TESTS,
-            ...SERVER_BOOT_TESTS,
-            ...PROPERTY_SOAK_TESTS,
           ],
           exclude: ['**/node_modules/**'],
           setupFiles: ['./services/app/test/setup/vitest.setup.ts'],

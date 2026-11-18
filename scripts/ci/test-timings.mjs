@@ -27,8 +27,8 @@
  * files and 0.9s in ci.yml's api shards (runs 44142985506-44157005924 and 44139124964-44157428149), and a median of
  * either workflow's runs alone records that, and packs it first again. Runs are grouped by workflow, each file takes its
  * median within each group, and then the lowest of those (`steadyTimings`): pr fast's 32 api runners and ci.yml's 4 pack
- * the api files differently, so a file first on a worker in one is a later file in the other. Saved logs are one group. The integration project is a job of its own, never sharded; its times are here only so its
- * files start longest first (scripts/__tests__/timed-sequencer.test.mjs says why).
+ * the api files differently, so a file first on a worker in one is a later file in the other. Saved logs are one group. The integration projects are ci.yml's two integration parts; their times start each part's
+ * files longest first (scripts/__tests__/timed-sequencer.test.mjs says why).
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';

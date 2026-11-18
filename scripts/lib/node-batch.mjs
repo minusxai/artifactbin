@@ -141,7 +141,7 @@ export function readNodeAffected(root) {
 }
 
 /** The full suite's projects the timings table records (scripts/ci/test-timings.mjs `RECORDED` adds its lenses). */
-export const FULL_SUITE_PROJECTS = Object.freeze(['api', 'api-isolated', 'node', 'ui', 'islands', 'integration']);
+export const FULL_SUITE_PROJECTS = Object.freeze(['api', 'api-isolated', 'node', 'ui', 'islands', 'integration', 'integration-databases']);
 
 /** The artifact `.github/workflows/node-timings.yml` uploads: main's measured `node` file times (`{ runs, files: { node } }`). */
 export const NODE_TIMINGS_ARTIFACT = 'node-batch-timings';

@@ -264,12 +264,31 @@ describe('CI avoids duplicate integration setup', () => {
     const steps = jobs.integration.steps;
     expect(jobs.integration.needs).toEqual(['plan']);
     expect(jobs.integration.if).toBe("needs.plan.outputs.integration == 'true'");
-    const run = steps.findIndex(step => step.run === 'npm run test:integration');
-    for (const provision of [step => step.id === 'playwright', step => step.run === 'npx playwright install chromium', step => step.run === 'docker pull postgres:17-alpine', step => step.run === 'docker pull mysql:8']) {
-      const at = steps.findIndex(provision);
+    const run = steps.findIndex(step => step.run === 'node node_modules/vitest/vitest.mjs run --project=${{ matrix.project }}');
+    const pulls = steps.findIndex(step => /docker pull postgres:17-alpine/.test(step.run ?? ''));
+    const wait = steps.findIndex(step => step.name === 'Wait for the images');
+    const playwright = [steps.findIndex(step => step.id === 'playwright'), steps.findIndex(step => step.run === 'npx playwright install chromium')];
+    for (const at of [...playwright, pulls, wait]) {
       expect(at).toBeGreaterThan(-1);
       expect(at).toBeLessThan(run);
     }
+    // The browser part provisions Chromium and no image; the databases part the images and no browser.
+    for (const at of playwright) expect(steps[at].if).toBe('${{ !matrix.images }}');
+    for (const at of [pulls, wait]) expect(steps[at].if).toBe('matrix.images');
+    // The pulls start first, in the background, together; the wait fails the job on any failed pull.
+    expect(pulls).toBe(0);
+    for (const image of ['postgres:17-alpine', 'mysql:8', 'apache/doris:all-in-one-4.1.3']) expect(steps[pulls].run).toMatch(new RegExp(`docker pull ${image.replace(/[./]/g, '\\$&')} > "\\$RUNNER_TEMP/[^"]+" 2>&1 & `));
+    expect(steps[pulls].run).toMatch(/wait "\$pid" \|\| rc=1/);
+    expect(steps[pulls].run.trimEnd()).toMatch(/\) < \/dev\/null > \/dev\/null 2>&1 &$/);
+    expect(steps[wait].run).toContain('exit "$(cat "$RUNNER_TEMP/docker-pull.status")"');
+    expect(steps.slice(wait + 1).some(step => /docker pull/.test(step.run ?? ''))).toBe(false);
+  });
+  it('runs the integration job in two parts, one per integration project, which `npm run test:integration` runs together', () => {
+    const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
+    expect(jobs.integration.strategy['fail-fast']).toBe(false);
+    expect(jobs.integration.strategy.matrix.include).toEqual([{ part: 'browser', project: 'integration' }, { part: 'databases', project: 'integration-databases', images: true }]);
+    expect(jobs.integration.name).toBe('integration tests (${{ matrix.part }})');
+    expect(JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')).scripts['test:integration']).toBe('vitest run --project=integration --project=integration-databases');
   });
   it('leaves every node shard to Vitest alone: no shard is preloaded with other work', () => {
     const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
@@ -298,7 +317,7 @@ describe('CI avoids duplicate integration setup', () => {
   });
   it('restores the test global setup\'s builds before every Vitest shard and the app build run', () => {
     const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
-    for (const [name, runs] of [['api', 'vitest run'], ['node', 'ci.mjs node'], ['integration', 'test:integration'], ['ui', 'vitest run'], ['build', 'npm run build']]) {
+    for (const [name, runs] of [['api', 'vitest run'], ['node', 'ci.mjs node'], ['integration', 'run --project=${{ matrix.project }}'], ['ui', 'vitest run'], ['build', 'npm run build']]) {
       const steps = jobs[name].steps;
       const restore = steps.findIndex(step => step.id === 'test-builds');
       expect(restore, name).toBeGreaterThan(steps.findIndex(step => step.id === 'install'));
