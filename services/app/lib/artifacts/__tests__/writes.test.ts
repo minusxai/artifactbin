@@ -11,7 +11,7 @@ import { artifactChannel } from '@artifactbin/contracts';
 import { ArtifactParentRefusal, afterCreated, artifactQuotaExceeded, artifactState, assetByteQuotaExceeded, assetByteQuotaLimit, byteQuotaFor, createArtifact, emitDatasetCommitted, emitHeadCommitted, getArtifactById, getArtifactHeaderById, isVersionConflict, isVersionNotArchived, replaceArtifactFor, reserveArtifactIds, revertArtifactFor, setMetadataFor, updateSharingFor } from '@/lib/artifacts';
 import { ARTIFACT_HEADER_COLUMNS, assetBytesForToken, listArtifactsFor, onDatasetCommitted, onHeadCommitted, setArtifactQuotaForTests, setAssetByteQuotaForTests } from '@/lib/artifacts/testing';
 import { type ArtifactRow } from '@/lib/artifact-access';
-import { account, dataset, head, mine, page, readAllPolicy, sql } from '@/__tests__/artifact-fixtures';
+import { account, dataset, head, mine, page, readAllPolicy, sql, trashRow } from '@/__tests__/artifact-fixtures';
 
 const harness = useAppHarness();
 const folder = (actor: { userId: string }, title = 'Folder', ancestor_ids: string[] = []) =>
@@ -180,7 +180,7 @@ describe('quotas, state and after-commit', () => {
     expect(await artifactQuotaExceeded(loose.id, 1000)).toBe(false);
     const row = await createArtifact(loose.id, null, page('One'));
     expect(await artifactQuotaExceeded(loose.id, 1000)).toBe(true);
-    await sql('UPDATE artifacts SET deleted_at=now() WHERE id=$1', [row.id]);
+    await trashRow(row.id);
     expect(await artifactQuotaExceeded(loose.id, 1000)).toBe(true);
     const limit = assetByteQuotaLimit()!;
     expect(limit).toBeGreaterThan(0);

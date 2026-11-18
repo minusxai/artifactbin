@@ -16,13 +16,12 @@ import { avatarUrl, avatarVersion, setAvatar } from '@/lib/avatars';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { getDb } from '@/lib/platform';
 import { PUBLIC_BASE_URL } from '@/lib/platform/config';
-import { agentCookie, request, useAppHarness, setSession } from '@/__tests__/harness';
+import { agentCookie, request, useAppHarness, useSessionUser } from '@/__tests__/harness';
 import sharp from 'sharp';
 
 useAppHarness();
-beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null, emailVerified: true } } : null)));
+const sessionUser = useSessionUser('verified');
 
-const sessionUser = { id: '', email: '' };
 
 beforeEach(() => { sessionUser.id = ''; sessionUser.email = ''; });
 

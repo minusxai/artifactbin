@@ -9,7 +9,7 @@ import {mkdtemp,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {afterAll,beforeAll,beforeEach,describe,expect,it} from 'vitest';
-import {POST as createArtifactRoute} from '@/app/api/artifacts/route';
+import {postArtifact} from '@/__tests__/artifact-fixtures';
 import {createUser,ensureUsername,mintToken} from '@/lib/accounts';
 import {overrideConfig} from '@/lib/platform/config';
 import {shellFile} from '@/lib/platform';
@@ -109,8 +109,7 @@ describe('with a custom shell',()=>{
  });
  it('fills __HEAD_TAGS__ with a document\'s own head only where an anonymous reader may read it, and with nothing elsewhere',async()=>{
   const owner=await ensureUsername(await createUser({email:'mxmx_test_shell_owner@example.com'})),t=await mintToken('o',owner.id);
-  const create=async(title:string,visibility:string)=>((await (await createArtifactRoute(new Request('http://localhost/api/artifacts',{method:'POST',headers:{'content-type':'application/json',authorization:`Bearer ${t.token}`},
-   body:JSON.stringify({title,description:`${title} summary`,html:nativeHtml(`<div><p>${title}</p></div>`),visibility})}))).json()) as {id:string}).id;
+  const create=async(title:string,visibility:string)=>((await (await postArtifact(t.token,{title,description:`${title} summary`,html:nativeHtml(`<div><p>${title}</p></div>`),visibility})).json()) as {id:string}).id;
   const shared=await create('Quarterly $& Report','unlisted'),secret=await create('Private Plans','private');
   const app=server(headed);
   const headOf=async(path:string)=>/<head>([\s\S]*)<\/head>/.exec(await (await app.request(path,html)).text())![1]!;

@@ -6,7 +6,7 @@ import {nativeHtml} from '@/__tests__/native-html-fixture';
  * that clears it.
  */
 import { describe, expect, it } from 'vitest';
-import { request, useAppHarness } from '@/__tests__/harness';
+import { request, useAppHarness, params } from '@/__tests__/harness';
 import { POST as createRoute } from '@/app/api/artifacts/route';
 import { GET as getRoute, DELETE as deleteRoute } from '@/app/api/artifacts/[id]/route';
 import { getArtifactById } from '@/lib/artifacts';
@@ -19,7 +19,6 @@ import { listTrashFor, restoreArtifactFor } from '@/lib/workspace';
 import { createAppServer } from '@/server/app';
 
 useAppHarness();
-const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const j = async (r: Response) => ({ status: r.status, body: (await r.json()) as Record<string, any> });
 async function owner() {
   const u = await createUser({ email: 'o@example.com' });

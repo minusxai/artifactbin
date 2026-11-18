@@ -5,7 +5,7 @@ import { servesDocument } from '@/lib/user-pages';
 import { getDb } from '@/lib/platform/db';
 import { afterEach, expect, it, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
-import { mintAccountToken, request, useAppHarness, testPagesSite as pagesSiteFor } from '@/__tests__/harness';
+import { mintAccountToken, request, useAppHarness, testPagesSite as pagesSiteFor, params } from '@/__tests__/harness';
 import { POST } from '@/app/api/artifacts/route';
 import { GET as read, PUT, PATCH } from '@/app/api/artifacts/[id]/route';
 import { GET as raw } from '@/app/a/[id]/raw/route';
@@ -16,7 +16,6 @@ import { buildHtmlAssets } from '@/lib/html-runtime/server';
 import { artifactPageAnswer, framedDocumentSrc } from '@/lib/document-serving';
 import { markPagesRequest } from '@/lib/http';
 useAppHarness();
-const params=(id:string)=>({params:Promise.resolve({id})});
 const site=pagesSiteFor('pages.example.test','https://app.example.test');
 const source='<!doctype html><html><head><title>Native plan</title><script type="application/json" data-af="state">{"count":3}</script><script type="module">import {client} from "@afbin/apollo"; document.body.dataset.ready="yes"</script></head><body><h1 data-af-id="title">Native content</h1></body></html>';
 async function publish(visibility:'private'|'public'='private'){

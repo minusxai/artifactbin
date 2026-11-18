@@ -6,8 +6,9 @@
  */
 import {describe,expect,it} from 'vitest';
 import {JSDOM} from 'jsdom';
-import {mintAccountToken,request,testIdentity,testPagesSite,useAppHarness} from '@/__tests__/harness';
+import { mintAccountToken, request, testPagesSite, useAppHarness, params } from '@/__tests__/harness';
 import {POST} from '@/app/api/artifacts/route';
+import {publishBundleAndOpen} from './bundle-fixture';
 import {GET as assetGet} from '@/app/a/[id]/assets/route';
 import {GET as raw} from '@/app/a/[id]/raw/route';
 import {GET as download} from '@/app/a/[id]/download/route';
@@ -17,26 +18,11 @@ const file=(path:string,source:string,contentType:string)=>({path,contentType,ba
 const DATA='{"total":42}';
 const SCRIPT='<script type="module">const data=await (await fetch(\'./data.json\')).json();document.querySelector(\'#total\').textContent=String(data.total);</script>';
 const PAGE=`<!doctype html><html><head><title>Totals</title></head><body><p id="total">…</p>${SCRIPT}</body></html>`;
-const params=(id:string)=>({params:Promise.resolve({id})});
 const runtimeOf=(html:string)=>JSON.parse(new JSDOM(html).window.document.querySelector('[data-af="runtime"]')!.textContent!) as {files?:Record<string,string>};
 const ASSET=(page:string,dependency:string)=>`/a/${page}/assets?dependency=${dependency}&revision=1&version=1`;
 
 async function published(visibility:'unlisted'|'private',name:string,entryPath='index.html',files=[file(entryPath.replace(/[^/]*$/,'')+'data.json',DATA,'application/json')]){
- const {createUser,issuePagesTicket}=await import('@/lib/accounts');
- const {setServices}=await import('@/lib/platform');
- const {pagesOriginFor}=await import('@/lib/http');
- const {createAppServer}=await import('@/server/app');
- const user=await createUser({email:`mxmx_test_${name}@example.com`});const owner=await mintAccountToken(name,user.id);
- const response=await POST(request('/api/artifacts',{method:'POST',token:owner.token,headers:{'Idempotency-Key':`script_fetch_${name}_0001`},json:{visibility,html:PAGE,publicationBundle:{entryPath,files}}}));
- const saved=await response.json() as {id:string;dependencyReceipts:{path:string;id:string}[]};
- expect(response.status,JSON.stringify(saved)).toBe(201);
- const site=testPagesSite('pages.example.test','https://app.example.test'),self=pagesOriginFor(saved.id,site);
- const app=createAppServer({indexHtml:async()=>'<html><body><div id="root"></div></body></html>',pagesSite:site});
- setServices({humanSessions:{live:async(id,userId)=>id===`fetch-${user.id}`&&userId===user.id}});
- const ticket=await issuePagesTicket({...testIdentity('session',{userId:user.id,email:user.email}),sessionId:`fetch-${user.id}`},{},Date.now(),{artifactId:saved.id,origin:self});
- const opened=await app.request(self+'/?_pt='+ticket);expect(opened.status).toBe(200);
- const cookie='__Host-afbin_pages='+/__Host-afbin_pages=([^;]+)/.exec(opened.headers.get('set-cookie')??'')![1];
- return {app,self,owner,saved,cookie,served:await opened.text()};
+ return publishBundleAndOpen('script_fetch','fetch',visibility,name,PAGE,{entryPath,files});
 }
 
 describe('a file a page script fetches by its path',()=>{

@@ -1,4 +1,5 @@
 import {it,expect} from 'vitest';
+import {syntheticEnv} from './toolbox-env';
 it('binds targets to one origin and rejects target/server mismatches',async()=>{
  const {resolveTarget}=await import('../../../skills/artifactbin/scripts/toolbox-client.mjs');
  expect(resolveTarget('https://example.test/a/PAGE12','https://example.test')).toEqual({server:'https://example.test',id:'PAGE12'});
@@ -43,13 +44,13 @@ it('flushes watch events before checkpoints, deduplicates replay and validates t
 it('classifies unreadable successful write bodies as unknown without automatic replay',async()=>{
  const {makeClient}=await import('../../../skills/artifactbin/scripts/toolbox-client.mjs');
  for(const route of ['/api/artifacts','/api/artifacts/PAGE12/annotations','/api/artifacts/PAGE12/sql']){
-  let calls=0;const client=makeClient('https://example.test',{env:{ARTIFACTBIN_URL:'https://example.test',ARTIFACTBIN_TOKEN:'synthetic'},fetcher:async()=>{calls++;return new Response('{"truncated":',{status:200});}});
+  let calls=0;const client=makeClient('https://example.test',{env:syntheticEnv('https://example.test'),fetcher:async()=>{calls++;return new Response('{"truncated":',{status:200});}});
   await expect(client.request(route,{method:'POST',body:{},unsafe:true})).rejects.toMatchObject({code:'outcome_unknown',exit:5});expect(calls).toBe(1);
  }
 });
 it('names what a version conflict changed and the one re-read step, and never claims a newer version for another 409',async()=>{
  const {makeClient}=await import('../../../skills/artifactbin/scripts/toolbox-client.mjs');
- const refused=(body:Record<string,unknown>)=>makeClient('https://example.test',{env:{ARTIFACTBIN_URL:'https://example.test',ARTIFACTBIN_TOKEN:'synthetic'},fetcher:async()=>Response.json(body,{status:409})}).request('/api/artifacts/PAGE12',{method:'PUT',body:{},unsafe:true}).catch((error:any)=>error);
+ const refused=(body:Record<string,unknown>)=>makeClient('https://example.test',{env:syntheticEnv('https://example.test'),fetcher:async()=>Response.json(body,{status:409})}).request('/api/artifacts/PAGE12',{method:'PUT',body:{},unsafe:true}).catch((error:any)=>error);
  const step='since your read. Run read.mjs ID --output page.html, reapply your edits to that file and publish it; do not resume this journal.';
  expect(await refused({error:'version_conflict',currentVersion:4,changed:'content'})).toMatchObject({code:'version_conflict',exit:4,recovery:`A newer version was published ${step}`});
  expect(await refused({error:'version_conflict',currentVersion:3,changed:'details'})).toMatchObject({recovery:`The title, description or metadata changed ${step}`});
@@ -62,7 +63,7 @@ it('exports actual image bytes exclusively and reports dimensions',async()=>{
  const root=await mkdtemp(path.join(tmpdir(),'author-export-')),output=path.join(root,'slide.png');
  try{
   const png=Buffer.alloc(24);Buffer.from([137,80,78,71,13,10,26,10]).copy(png);png.writeUInt32BE(390,16);png.writeUInt32BE(844,20);
-  const calls:any[]=[];const options={env:{ARTIFACTBIN_URL:'https://example.test',ARTIFACTBIN_TOKEN:'synthetic'},fetcher:async(url:any,init:any)=>{calls.push({url:String(url),init});return new Response(png,{headers:{'content-type':'image/png'}});}};
+  const calls:any[]=[];const options={env:syntheticEnv('https://example.test'),fetcher:async(url:any,init:any)=>{calls.push({url:String(url),init});return new Response(png,{headers:{'content-type':'image/png'}});}};
   expect(await exportCommand({values:{format:'png',slide:'2',output},positionals:['PAGE12']},options)).toMatchObject({width:390,height:844,outputOwned:true});
   expect(await readFile(output)).toEqual(png);expect(calls[0].url).toContain('/a/PAGE12/export?format=png&slide=2');
   await expect(exportCommand({values:{format:'png',output},positionals:['PAGE12']},options)).rejects.toThrow();
@@ -84,7 +85,7 @@ it('writes a relayed JSON image envelope as the image it carries, checking its f
  try{
   const png=Buffer.alloc(24);Buffer.from([137,80,78,71,13,10,26,10]).copy(png);png.writeUInt32BE(640,16);png.writeUInt32BE(400,20);
   let answer:Record<string,unknown>={id:'PAGE12',version:3,format:'png',mime:'image/png',width:640,height:400,bytes:png.length,data:png.toString('base64')};
-  const options={env:{ARTIFACTBIN_URL:'https://example.test',ARTIFACTBIN_TOKEN:'synthetic'},fetcher:async()=>Response.json(answer)};
+  const options={env:syntheticEnv('https://example.test'),fetcher:async()=>Response.json(answer)};
   const output=path.join(root,'chart.png');
   expect(await exportCommand({values:{format:'png',element:'#orders-chart',output},positionals:['PAGE12']},options)).toMatchObject({id:'PAGE12',format:'png',bytes:png.length,width:640,height:400,outputOwned:true});
   expect(await readFile(output)).toEqual(png);
@@ -102,7 +103,7 @@ it('answers every sql.mjs statement in the documented shape, through a page or a
  const {sqlCommand}=await import('../../../skills/artifactbin/scripts/sql.mjs');
  const sent:Array<{path:string;body?:any;key?:string|null}>=[];
  const rows=Array.from({length:250},(_,i)=>({n:i}));
- const options={env:{ARTIFACTBIN_URL:'https://example.test',ARTIFACTBIN_TOKEN:'synthetic'},fetcher:async(url:any,init:any)=>{
+ const options={env:syntheticEnv('https://example.test'),fetcher:async(url:any,init:any)=>{
   const path=new URL(String(url)).pathname,body=init?.body?JSON.parse(String(init.body)):undefined;
   sent.push({path,body,key:new Headers(init?.headers).get('idempotency-key')});
   if(path==='/api/artifacts/PAGE12')return Response.json({id:'PAGE12',format:'html',version:3});
@@ -204,7 +205,7 @@ it('distinguishes confirmed receipt persistence failure from unknown transport f
  try{
   const journal=await createJournal(journalIntent({server,method:'POST',path:'/api/artifacts',body:{html:'<h1>Fixture</h1>'},operation:'publish'}),{root});
   await mkdir(journal+'.receipt.json');
-  const client=makeClient(server,{env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic'},fetcher:async()=>Response.json({id:'PAGE12',version:1})});
+  const client=makeClient(server,{env:syntheticEnv(server),fetcher:async()=>Response.json({id:'PAGE12',version:1})});
   await expect(resumeJournal(journal,client,'publish')).rejects.toMatchObject({code:'receipt_save_failed',exit:1,details:{committed:true,id:'PAGE12',journal}});
  }finally{await rm(root,{recursive:true,force:true});}
 });
@@ -212,7 +213,7 @@ it('refuses lossy dataset file extensions and writes canonical JSON with nothing
  const {mkdtemp,readFile,readdir,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
  const {readCommand}=await import('../../../skills/artifactbin/scripts/read.mjs');const root=await mkdtemp(path.join(tmpdir(),'author-data-read-'));
  try{
-  const options={env:{ARTIFACTBIN_URL:'https://example.test',ARTIFACTBIN_TOKEN:'synthetic'},fetcher:async()=>Response.json({id:'DATA12',format:'dataset',version:3,state:'a'.repeat(64),rows:[{count:2}]})};
+  const options={env:syntheticEnv('https://example.test'),fetcher:async()=>Response.json({id:'DATA12',format:'dataset',version:3,state:'a'.repeat(64),rows:[{count:2}]})};
   await expect(readCommand({values:{output:path.join(root,'data.csv')},positionals:['DATA12']},options)).rejects.toMatchObject({code:'dataset_output_extension'});
   const read=await readCommand({values:{output:path.join(root,'data.json')},positionals:['DATA12']},options);expect(JSON.parse(await readFile(read.source,'utf8'))).toEqual([{count:2}]);
   // The id lives in the printed update command, never in a file beside the data.
@@ -226,7 +227,7 @@ it('keeps --json read output as canonical HTML that carries its own marker',asyn
  const {sourceIdentity,stripMarker}=await import('../../../skills/artifactbin/scripts/toolbox-source.mjs');
  try{
   const html='<html><body><h1 data-af-id="heading">Canonical</h1></body></html>';
-  const result=await readCommand({values:{output:path.join(root,'page.html'),json:true},positionals:['PAGE12']},{env:{ARTIFACTBIN_URL:'https://example.test',ARTIFACTBIN_TOKEN:'synthetic'},fetcher:async()=>Response.json({id:'PAGE12',format:'html',version:3,state:'a'.repeat(64),sharing_revision:2,html})});
+  const result=await readCommand({values:{output:path.join(root,'page.html'),json:true},positionals:['PAGE12']},{env:syntheticEnv('https://example.test'),fetcher:async()=>Response.json({id:'PAGE12',format:'html',version:3,state:'a'.repeat(64),sharing_revision:2,html})});
   const saved=await readFile(result.source,'utf8');expect(saved).toContain(html);
   expect(sourceIdentity(saved)).toEqual({server:'https://example.test',id:'PAGE12',version:3,state:'a'.repeat(64),sha256:createHash('sha256').update(stripMarker(saved)).digest('hex'),entryPath:'page.html',sharingRevision:2});
   expect(result.outputOwned).toBe(true);expect(await readdir(root)).toEqual(['page.html']);
@@ -322,7 +323,7 @@ it('replies with text alone, and a resolve without --expected-revision reads the
  const {mkdtemp,rm,writeFile}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
  const {commentCommand}=await import('../../../skills/artifactbin/scripts/comment.mjs');
  const root=await mkdtemp(path.join(tmpdir(),'author-reply-')),calls:any[]=[],file=path.join(root,'body.md');await writeFile(file,'Thanks');
- const options={env:{ARTIFACTBIN_URL:'https://example.test',ARTIFACTBIN_TOKEN:'synthetic',ARTIFACTBIN_HOME:root},fetcher:async(url:any,init:any)=>{calls.push({url:String(url),...init});
+ const options={env:syntheticEnv('https://example.test',root),fetcher:async(url:any,init:any)=>{calls.push({url:String(url),...init});
   return Response.json((init?.method??'GET')==='GET'?{annotations:[{id:'ann_root',revision:2,thread:[{id:'ann_root'}]}],next_cursor:null}:{id:'ann_root',revision:3,thread:[]});}};
  try{
   await commentCommand({sub:'reply',values:{thread:'ann_root','body-file':file},positionals:['PAGE12']},options);
@@ -340,7 +341,7 @@ it('retries a keyed comment write through 502/503 with one key, and never retrie
  const run=async(...answers:Array<number|Error>)=>{
   const calls:any[]=[];const queue=[...answers];
   const fetcher=async(url:any,init:any)=>{calls.push({url:String(url),...init});const next=queue.length>1?queue.shift()!:queue[0]!;if(next instanceof Error)throw next;return next===200?Response.json({id:'ann_root',revision:2,thread:[]}):Response.json({error:next===409?'annotation_conflict':'unavailable'},{status:next});};
-  const options={env:{ARTIFACTBIN_URL:'https://example.test',ARTIFACTBIN_TOKEN:'synthetic',ARTIFACTBIN_HOME:root},fetcher,retryDelays:[0,0,0]};
+  const options={env:syntheticEnv('https://example.test',root),fetcher,retryDelays:[0,0,0]};
   const outcome=await commentCommand({sub:'reply',values:{thread:'ann_root','body-file':file,'expected-revision':'1'},positionals:['PAGE12']},options).then(()=>'ok',(error:any)=>error.code);
   return {calls,outcome};
  };
@@ -356,7 +357,7 @@ it('sets independent desired comment reaction state and replays the exact intent
  const {mkdtemp,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
  const {commentCommand}=await import('../../../skills/artifactbin/scripts/comment.mjs');
  const root=await mkdtemp(path.join(tmpdir(),'author-reaction-')),calls:any[]=[];
- const options={env:{ARTIFACTBIN_URL:'https://example.test',ARTIFACTBIN_TOKEN:'synthetic',ARTIFACTBIN_HOME:root},fetcher:async(url:any,init:any)=>{calls.push({url:String(url),...init});return Response.json({id:'ann_root',thread:[{id:'ann_reply',reactions:[{kind:'thumbs_up',count:1,viewer_reacted:true}]}]});}};
+ const options={env:syntheticEnv('https://example.test',root),fetcher:async(url:any,init:any)=>{calls.push({url:String(url),...init});return Response.json({id:'ann_root',thread:[{id:'ann_reply',reactions:[{kind:'thumbs_up',count:1,viewer_reacted:true}]}]});}};
  try{
   const result=await commentCommand({sub:'react',values:{comment:'ann_reply',active:'true'},positionals:['PAGE12']},options);
   expect(calls[0].url).toBe('https://example.test/api/artifacts/PAGE12/annotations/ann_reply/reactions');expect(calls[0].method).toBe('PUT');expect(JSON.parse(calls[0].body)).toEqual({kind:'thumbs_up',active:true});
@@ -951,7 +952,7 @@ it('explicit schema uses only the exact revision schema door and query sends its
  const {sqlCommand}=await import('../../../skills/artifactbin/scripts/sql.mjs');
  const sent:Array<{url:string;body:any}>=[];
  let denied=false;
- const options={env:{ARTIFACTBIN_URL:'https://example.test',ARTIFACTBIN_TOKEN:'synthetic'},fetcher:async(url:any,init:any)=>{
+ const options={env:syntheticEnv('https://example.test'),fetcher:async(url:any,init:any)=>{
   const path=new URL(url).pathname;sent.push({url:String(url),body:init.body?JSON.parse(init.body):undefined});
   if(path==='/api/artifacts/PAGE12')return Response.json({format:'html',version:9});
   if(path==='/api/artifacts/PAGE12/sql/schema')return Response.json(denied?{error:'conflict'}:{pageId:'PAGE12',revision:'2',bindings:[],tables:[{schema:'main',name:'metrics',columns:[{name:'amount',type:'number'}]},{schema:'multi',name:'items',columns:[]}]},{status:denied?409:200});

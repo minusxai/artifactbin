@@ -5,6 +5,7 @@
  * the dataset-mutate tests.
  */
 import {beforeEach,expect,it} from 'vitest';
+import { setVisibility } from '@/__tests__/artifact-fixtures';
 import {setDatasetPolicy,useAppHarness} from '@/__tests__/harness';
 import {getDb} from '@/lib/platform';
 import {artifactState,getArtifactById} from '@/lib/artifacts';
@@ -53,7 +54,7 @@ it('lets the data policy admit a page reader only while the dataset is readable 
  await setDatasetPolicy(f.owner.actor,f.id,policy,0);
  expect(await canWriteDataset((await getArtifactById(f.id))!,reader.actor,true)).toBeNull();
  // Private: signed_in and anonymous rules never apply, so a signed-in page reader cannot write.
- await db.query("UPDATE artifacts SET visibility='private' WHERE id=$1",[f.id]);
+ await setVisibility(f.id, 'private');
  const current=(await getArtifactById(f.id))!;
  expect(await canWriteDataset(current,reader.actor,true)).toBe('dataset_read_only');
  expect(await canWriteDataset(current,f.owner.actor,true)).toBeNull();

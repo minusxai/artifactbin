@@ -1,11 +1,12 @@
 /** Installed SQL transports wait for the server's bounded read, without resetting on retry. */
 import {afterEach, expect, it, vi} from 'vitest';
+import {syntheticEnv} from './toolbox-env';
 import {makeClient, platform} from '../../../skills/artifactbin/scripts/toolbox-client.mjs';
 import {sqlCommand} from '../../../skills/artifactbin/scripts/sql.mjs';
 import {SQL_QUERY_MAX_MS, SQL_WALL_OVERHEAD_MS} from '@artifactbin/contracts';
 
 const server='https://example.test';
-const env={ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic'};
+const env=syntheticEnv(server);
 afterEach(()=>{vi.restoreAllMocks();vi.useRealTimers();});
 
 it.each([

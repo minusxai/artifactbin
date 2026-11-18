@@ -10,7 +10,7 @@ import { GET as events } from '@/app/a/[id]/events/route';
 import { GET as raw } from '@/app/a/[id]/raw/route';
 import { resetLiveSubscriptions } from '../realtime/live';
 import { resetFrameCache, frameBuilds } from '../data/frame';
-import { request, useAppHarness, mintAccountToken } from '@/__tests__/harness';
+import { request, useAppHarness, mintAccountToken, params } from '@/__tests__/harness';
 import { observedRequest } from '@/__tests__/conditional-request';
 import { nativeHtml } from '@/__tests__/native-html-fixture';
 import { readNamed } from '@/__tests__/sse';
@@ -20,7 +20,6 @@ beforeEach(async () => {
   await resetLiveSubscriptions();
 });
 afterAll(resetLiveSubscriptions);
-const params = (id: string) => ({ params: Promise.resolve({ id }) });
 async function fixture() {
   const owner = await mintAccountToken('frames');
   const create = async (json: object) => {

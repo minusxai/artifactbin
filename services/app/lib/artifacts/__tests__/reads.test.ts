@@ -8,7 +8,7 @@ import { useAppHarness } from '@/__tests__/harness';
 import { identityForUser, mintToken } from '@/lib/accounts';
 import { VERSION_PARAM, canReadArtifact, capabilityGuard, UnservableDocument, accessMoved, archivedVersionFor, archivedVersionForActor, createArtifact, getArtifact, getArtifactAccessById, getArtifactById, getArtifactFor, getArtifactHeaderById, getArtifactsFor, getEditableArtifactFor, getLinkReadableArtifact, getLinkReadableArtifacts, getOwnedArtifactFor, hasInvitedUsersFor, readableArtifact, readableArtifactHeader, readableArtifactIdentity, refusingUnservable, replaceArtifactFor, servableDocument, servedRow, snapshotForReader, snapshotHeadFor, unservable, updateSharingFor } from '@/lib/artifacts';
 import { type ArtifactRow } from '@/lib/artifact-access';
-import { account, dataset, mine, page, readAllPolicy, sql } from '@/__tests__/artifact-fixtures';
+import { account, dataset, mine, page, readAllPolicy, setVisibility, trashRow } from '@/__tests__/artifact-fixtures';
 
 useAppHarness();
 
@@ -26,7 +26,7 @@ describe('row lookups', () => {
     expect(identity.row).not.toHaveProperty('meta');
     expect(identity.row.meta_digest).toMatch(/^[a-f0-9]{32}$/);
     expect((await getArtifactById(row.id))!.source).toBe(row.source);
-    await sql('UPDATE artifacts SET deleted_at=now() WHERE id=$1', [row.id]);
+    await trashRow(row.id);
     expect([await getArtifactById(row.id), await getArtifactHeaderById(row.id), await getArtifactAccessById(row.id), await readableArtifactIdentity(owner, row.id)]).toEqual([null, null, null, null]);
   });
 
@@ -104,7 +104,7 @@ describe('reader admission', () => {
     expect(await readableArtifactHeader(stranger, row.id)).toMatchObject({ role: 'commenter', row: { id: row.id } });
     const data = await dataset(owner, readAllPolicy());
     await updateSharingFor(owner, data.id, { linkRole: 'viewer' });
-    await sql("UPDATE artifacts SET visibility='unlisted' WHERE id=$1", [data.id]);
+    await setVisibility(data.id, 'unlisted');
     expect((await readableArtifact(stranger, data.id))!.role).toBe('viewer');
     expect(await readableArtifact(stranger, 'missing')).toBeNull();
   });

@@ -1,4 +1,5 @@
 import {expect,it,vi} from 'vitest';
+import { setVisibility } from '@/__tests__/artifact-fixtures';
 import {useAppHarness,request,mintAccountToken} from '@/__tests__/harness';
 import {POST as create} from '@/app/api/artifacts/route';
 import {GET as readPage,PUT as replacePage} from '@/app/api/artifacts/[id]/route';
@@ -27,7 +28,7 @@ it('keeps an explicitly pinned public dataset readable after its head advances a
  expect(await f.read(anonymous,f.pinned)).toEqual(before);
  expect((await f.read(anonymous,f.live))[0]!.amount).toBe(2);
  expect(await getVersionFor(anonymous,f.id,1)).toBeNull();
- await (await getDb()).query("UPDATE artifacts SET visibility='private' WHERE id=$1",[f.id]);
+ await setVisibility(f.id, 'private');
  await expect(f.read(anonymous,f.pinned)).rejects.toThrow('dataset_not_found');
 });
 it('keeps a private viewer pin readable after a head update without granting editor history access',async()=>{
@@ -66,7 +67,7 @@ it.each(['postgres','sql'])('rejects an authorized unsupported %s binding at pub
  // An unsupported dataset mounts nothing, as if unlinked.
  await expect(f.read(f.actor,f.live)).rejects.toThrow('dataset_not_found');
  // A caller without dataset readership gets no connector-type information.
- await db.query("UPDATE artifacts SET visibility='private' WHERE id=$1",[f.id]);
+ await setVisibility(f.id, 'private');
  const outsider=await mintAccountToken('unsupported-dataset-reader');
  const denied=await create(request('/api/artifacts',{method:'POST',token:outsider.token,json:{html:`<html><head><link rel="af-dataset" data-af-name="data" href="ref:${f.id}"></head><body>Denied</body></html>`}}));
  expect(denied.status).toBe(400);expect(await denied.json()).toEqual({error:'invalid_dataset_binding'});

@@ -3,8 +3,8 @@
  * exporter's tests do: the read seam's current decision, the reader's own audience, element and slide captures, the
  * fit, and, composed behind the real identity host, the recheck after rendering.
  */
-import {createHash} from 'node:crypto';
 import sharp from 'sharp';
+import {delegatedService,audiencesOf,noTokens} from '../../../auth/__tests__/helpers';
 import {afterEach,beforeAll,describe,expect,it,vi} from 'vitest';
 import {attachActor} from '@artifactbin/utils';
 import {createAuthHost} from '@artifactbin/auth';
@@ -129,10 +129,10 @@ describe('behind the identity host',()=>{
   const row=await mine(owner,'Relayed'),host=await createAppHost(),db=await getDb();
   await updateSharingFor(owner,row.id,{shares:[{email:reader.email!,role:'viewer'}]});
   const requests=browser(()=>({ok:true,mime:'image/png',bytes:PNG}));
-  const service={id:'relay',origin:'https://relay.example',introspectionSecretSha256:createHash('sha256').update('synthetic-secret').digest('hex')};
+  const service=delegatedService('relay','https://relay.example','synthetic-secret');
   let afterImage:(()=>Promise<unknown>)|undefined;
-  const auth=createAuthHost({env:{IDENTITY__SERVICE_AUDIENCES:JSON.stringify([{id:service.id,origin:service.origin,introspection_secret_sha256:service.introspectionSecretSha256,artifact_reads:true}])},
-   cookieSecret:'synthetic-cookie',tokens:{byToken:async()=>null},sessions:{resolve:async()=>null},identityDb:db,upstream:async(request,actor)=>{
+  const auth=createAuthHost({env:{IDENTITY__SERVICE_AUDIENCES:audiencesOf(service)},
+   cookieSecret:'synthetic-cookie',tokens:noTokens,sessions:{resolve:async()=>null},identityDb:db,upstream:async(request,actor)=>{
     const response=await host.request(request,actor);
     if(new URL(request.url).pathname===CANONICAL_ARTIFACT_IMAGE_PATH&&afterImage){const body=await response.text();await afterImage();return new Response(body,{status:response.status,headers:response.headers});}
     return response;

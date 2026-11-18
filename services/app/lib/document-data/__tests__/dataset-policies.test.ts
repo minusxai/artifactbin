@@ -1,7 +1,7 @@
 import { getDb } from '@/lib/platform';
 import { identityForUser, createUser, ANONYMOUS_ACTOR, type AccessActor } from '@/lib/accounts';
 import { it, expect, vi } from 'vitest';
-import { POST as create } from '@/app/api/artifacts/route';
+import { publishedId } from '@/__tests__/artifact-fixtures';
 import { PUT as replace } from '@/app/api/artifacts/[id]/route';
 import { artifactState, getArtifactById, replaceArtifactFor, updateSharingFor } from '@/lib/artifacts';
 import { loadDatasetRows } from '@/lib/datasets';
@@ -15,17 +15,7 @@ useAppHarness();
 async function fixture() {
   const owner = await mintToken('policy-owner');
   const actor = identityForUser(owner.userId, owner.id);
-  const publish = async (body: object) => {
-    const r = await create(
-      request('/api/artifacts', {
-        method: 'POST',
-        token: owner.token,
-        json: { visibility: 'public', ...body },
-      }),
-    );
-    expect(r.status, await r.clone().text()).toBe(201);
-    return (await r.json()).id as string;
-  };
+  const publish = (body: Record<string, unknown>) => publishedId(owner.token, { visibility: 'public', ...body });
   const ds = await publish({ dataset: [{ n: 1 }], access: 'readwrite' });
   const doc = await publish({html:`<html><head><link rel="af-dataset" data-af-name="data" href="ref:${ds}"></head><body>Rows</body></html>`});
   // Version 3 (the door refuses v1/v2): every rule role reads and inserts.

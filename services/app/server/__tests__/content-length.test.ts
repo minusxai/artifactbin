@@ -20,7 +20,7 @@ import {nativeHtml} from '@/__tests__/native-html-fixture';
  */
 import { getRequestListener } from '@hono/node-server';
 import { describe, expect, it } from 'vitest';
-import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
+import { postArtifact } from '@/__tests__/artifact-fixtures';
 
 
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
@@ -30,7 +30,6 @@ import { readRawResponse, withHttpServer } from '@artifactbin/test-support/net';
 
 useAppHarness();
 
-const BASE = 'http://localhost:3000';
 
 /** The shared raw reader, in the shape this file's assertions read. */
 const raw = async (port: number, path: string) => {
@@ -41,11 +40,7 @@ const raw = async (port: number, path: string) => {
 describe('what the server promises is what it sends', () => {
   it('answers two DIFFERENT documents with two different content-lengths', async () => {
     const t = await mintToken('t');
-    const create = async (markup: string) => (await (await createArtifactRoute(new Request(`${BASE}/api/artifacts`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${t.token}` },
-      body: JSON.stringify({ title: 'x', html:nativeHtml(markup), visibility: 'public' }),
-    }))).json()) as { id: string };
+    const create = async (markup: string) => (await (await postArtifact(t.token, { title: 'x', html:nativeHtml(markup), visibility: 'public' })).json()) as { id: string };
 
     const small = await create('<div><p>small</p></div>');
     const big = await create(`<div><p>${'much longer text '.repeat(400)}</p></div>`);

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { trashRow } from '@/__tests__/artifact-fixtures';
 import { mintAccountToken, request, useAppHarness } from '@/__tests__/harness';
 import { ANONYMOUS_ACTOR, identityForUser } from '@/lib/accounts';
-import { getDb } from '@/lib/platform';
 import { artifactState, getArtifactById } from '@/lib/artifacts';
 import { POST as create } from '@/app/api/artifacts/route';
 import { PUT as replace } from '@/app/api/artifacts/[id]/route';
@@ -49,7 +49,7 @@ describe('readHtmlPage', () => {
   it('lets anyone read a public page, but never an archived revision once the page is deleted', async () => {
     const { id, actor } = await page('public');
     expect((await readHtmlPage(ANONYMOUS_ACTOR, id, '1')).version).toBe(1);
-    await (await getDb()).query('UPDATE artifacts SET deleted_at = now() WHERE id = $1', [id]);
+    await trashRow(id);
     await expect(readHtmlPage(actor, id, '1')).rejects.toThrow('not found');
   });
 

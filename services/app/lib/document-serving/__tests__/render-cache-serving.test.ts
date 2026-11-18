@@ -1,4 +1,5 @@
 import { EVENTS_SCHEMA } from '@/lib/platform';
+import { setVisibility } from '@/__tests__/artifact-fixtures';
 /**
  * THE RENDER CACHE, through the real app server: an anonymous reader's shell (the app page at /a/<id>) and frame
  * (the document on its own origin) are rendered once per version, and never at the cost of an access decision or a
@@ -7,7 +8,7 @@ import { EVENTS_SCHEMA } from '@/lib/platform';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import * as nativeHtml from '@/lib/document-serving/native-html.server';
 import * as artifacts from '@/lib/artifacts';
-import {mintAccountToken, request, useAppHarness, testPagesSite as pagesSiteFor} from '@/__tests__/harness';
+import {mintAccountToken, request, useAppHarness, testPagesSite as pagesSiteFor, params } from '@/__tests__/harness';
 import {POST} from '@/app/api/artifacts/route';
 import {GET as read, PUT} from '@/app/api/artifacts/[id]/route';
 import {GET as raw} from '@/app/a/[id]/raw/route';
@@ -19,7 +20,6 @@ const harness = useAppHarness();
 const APP = 'https://app.example.test';
 const site = pagesSiteFor('pages.example.test', APP)!;
 const SHELL = '<!doctype html><html><head><title>artifactbin</title></head><body><div id="root"></div></body></html>';
-const params = (id: string) => ({params: Promise.resolve({id})});
 const source = (text: string) => `<!doctype html><html><head><title>Cached plan</title><script type="module">document.body.dataset.ready="yes"</script></head><body><h1>${text}</h1></body></html>`;
 
 async function publish(visibility: 'public' | 'private' = 'public') {
@@ -70,7 +70,7 @@ describe('an anonymous reader is served a shared render', () => {
     expect((await shell(id)).status).toBe(200);
     expect((await frame(id)).status).toBe(200);
     // Access moves without a new version or edit: only the access decision can notice.
-    await (await harness.db()).query("UPDATE artifacts SET visibility='private' WHERE id=$1", [id]);
+    await setVisibility(id, 'private');
     expect((await shell(id)).status).toBe(404);
     expect((await frame(id)).status).toBe(404);
     expect((await raw(request(`/a/${id}/raw`), params(id))).status).toBe(404);

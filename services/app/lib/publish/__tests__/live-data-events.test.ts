@@ -5,7 +5,7 @@ import { changeMembership, getArtifactById } from '@/lib/artifacts';
 import { loadDatasetRows } from '@/lib/datasets';
 import { observedRequest } from '@/__tests__/conditional-request';
 import { nativeHtml } from '@/__tests__/native-html-fixture';
-import { request, useAppHarness, mintAccountToken } from '@/__tests__/harness';
+import { request, useAppHarness, mintAccountToken, params } from '@/__tests__/harness';
 import { sseStream } from '@/__tests__/sse';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 import { POST as mutate } from '@/app/api/artifacts/[id]/mutate/route';
@@ -20,7 +20,6 @@ const subscriptions = () => Object.fromEntries(liveSubscriptionSnapshot().map(({
 // These streams are signed out: they get no presence, so no presence channel and no presence ACL subscriber.
 const documentSubscriptions = (id: string) => ({ [artifactChannel(id)]: 1, [annotationsChannel(id)]: 1, [regionsChannel(id)]: 1 });
 useAppHarness();
-const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const linked = (id: string) =>
   `<!doctype html><html><head><link rel="af-dataset" data-af-name="choices" href="ref:${id}"></head><body><p>Choices</p></body></html>`;
 async function fixture() {

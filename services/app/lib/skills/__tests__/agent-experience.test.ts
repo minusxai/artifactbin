@@ -1,4 +1,5 @@
 import {it,expect} from 'vitest';
+import {syntheticEnv} from './toolbox-env';
 /** What an agent sees when sign-in lapses, and how it anchors a comment without guessing a revision. */
 it('reports a lapsed sign-in as auth_required with the login command, exit 3',async()=>{
  const {toolFailure,toolExit}=await import('../../../skills/artifactbin/scripts/toolbox-client.mjs');
@@ -35,7 +36,7 @@ it('fills the anchor revision from the current page when the anchor omits it',as
  const {commentCommand}=await import('../../../skills/artifactbin/scripts/comment.mjs');
  const root=await mkdtemp(path.join(tmpdir(),'anchor-revision-')),calls:any[]=[],body=path.join(root,'body.md'),anchor=path.join(root,'anchor.json');
  await writeFile(body,'Tighten this');await writeFile(anchor,JSON.stringify({kind:'html-node',v:1,nodeId:'n1',quote:'same words'}));
- const options={env:{ARTIFACTBIN_URL:'https://example.test',ARTIFACTBIN_TOKEN:'synthetic',ARTIFACTBIN_HOME:root},fetcher:async(url:any,init:any)=>{calls.push({url:String(url),...init});return String(url).endsWith('/annotations')?Response.json({id:'ann_1',revision:1,thread:[]}):Response.json({id:'PAGE12',version:7});}};
+ const options={env:syntheticEnv('https://example.test',root),fetcher:async(url:any,init:any)=>{calls.push({url:String(url),...init});return String(url).endsWith('/annotations')?Response.json({id:'ann_1',revision:1,thread:[]}):Response.json({id:'PAGE12',version:7});}};
  try{
   await commentCommand({sub:'add',values:{anchor,'body-file':body},positionals:['PAGE12']},options);
   const sent=calls.find(call=>call.url.endsWith('/annotations'));

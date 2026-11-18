@@ -9,7 +9,7 @@ import {nativeHtml} from '@/__tests__/native-html-fixture';
 import { ACTOR_HEADER, type Actor } from '@artifactbin/contracts';
 import { signActor } from '@artifactbin/utils';
 import { describe, expect, it } from 'vitest';
-import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
+import { postArtifact } from '@/__tests__/artifact-fixtures';
 
 import { mintToken } from '@/lib/accounts';
 import { createUser, ensureUsername } from '@/lib/accounts';
@@ -35,7 +35,7 @@ const canonicalOf = async (server: { request: (path: string, init?: RequestInit)
 async function world() {
   const owner = await ensureUsername(await createUser({ email: 'mxmx_test_owner@example.com' }));
   const t = await mintToken('o', owner.id);
-  const mk = async (body: Record<string, unknown>) => (await (await createArtifactRoute(new Request('http://localhost:3000/api/artifacts', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${t.token}` }, body: JSON.stringify(body) }))).json()) as { id: string };
+  const mk = async (body: Record<string, unknown>) => (await (await postArtifact(t.token, body)).json()) as { id: string };
   return { owner, pub: await mk({ title: 'Pub', html:nativeHtml('<div><p>hi</p></div>'), visibility: 'public' }), priv: await mk({ title: 'Priv', html:nativeHtml('<div><p>secret</p></div>'), visibility: 'private' }) };
 }
 

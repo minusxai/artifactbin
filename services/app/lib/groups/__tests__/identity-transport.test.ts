@@ -5,6 +5,7 @@
  * the service secret is required, and an auth host without a transactional database answers 503, never a guess.
  */
 import {afterEach,beforeEach,describe,expect,it} from 'vitest';
+import {noTokens} from '../../../../auth/__tests__/helpers';
 import {IDENTITY_CALL_PATH,IdentityError,SERVICE_AUTH_HEADER,type TransactionalQueryable} from '@artifactbin/contracts';
 import {identityClient} from '@artifactbin/utils';
 import {createAuthHost} from '@artifactbin/auth';
@@ -16,7 +17,7 @@ import {acceptGroupInvitations,createGroup,deleteGroup,getGroupRole,inviteGroupM
 useAppHarness();
 const secret='identity-transport-secret';
 const appDb:TransactionalQueryable={query:async(sql,params)=>(await getDb()).query(sql,params),transaction:async fn=>(await getDb()).transaction(fn)};
-const host=(identityDb?:TransactionalQueryable|{query:TransactionalQueryable['query']})=>createAuthHost({env:{INTERNAL__SERVICE_SECRET:secret},cookieSecret:'test',tokens:{byToken:async()=>null},sessions:{resolve:async()=>null},upstream:async()=>new Response('app'),appSchema:'public',...(identityDb?{identityDb}:{})});
+const host=(identityDb?:TransactionalQueryable|{query:TransactionalQueryable['query']})=>createAuthHost({env:{INTERNAL__SERVICE_SECRET:secret},cookieSecret:'test',tokens:noTokens,sessions:{resolve:async()=>null},upstream:async()=>new Response('app'),appSchema:'public',...(identityDb?{identityDb}:{})});
 let calls=0;
 beforeEach(()=>{const app=host(appDb);calls=0;setServices({identity:identityClient('http://auth.invalid',{serviceSecret:secret,fetch:async request=>{calls++;return app.fetch(request);}})});});
 afterEach(()=>setServices({identity:undefined}));

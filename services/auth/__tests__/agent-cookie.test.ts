@@ -1,4 +1,5 @@
 import {beforeEach,describe,expect,it} from 'vitest';
+import {noTokens} from './helpers';
 import {createHash} from 'node:crypto';
 import {encodeAgentSession,setCookieHeader} from './legacy-cookie-fixture';
 import {createAuthHost,type AuthOptions} from '../src/parts';
@@ -11,7 +12,7 @@ const token={id:'tok_live',userId:null};
 const options=():AuthOptions=>({
   env:{},cookieSecret:secret,identityDb:testDb(),
   sessions:{resolve:async()=>null},
-  tokens:{byToken:async()=>null},
+  tokens:noTokens,
   upstream:async(_request:Request,actor:unknown)=>Response.json(actor),
 });
 /** A browser-session row for the test's token, expiring `seconds` from now (negative: already expired); `revoked` stamps deleted_at. */

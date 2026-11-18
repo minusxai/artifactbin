@@ -9,10 +9,11 @@
  * played by messages from the frame's window on the document's origin, as its door sends them.
  */
 import { JSDOM } from 'jsdom';
+import { storePolicy } from '@/__tests__/artifact-fixtures';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { attachActor } from '@artifactbin/utils';
 import type { Actor } from '@artifactbin/contracts';
-import { getDb, setServices } from '@/lib/platform';
+import { setServices } from '@/lib/platform';
 import { createArtifactFromBody } from '@/lib/publish';
 import { identityForUser } from '@/lib/accounts';
 import { pagesOriginFor, pagesSite } from '@/lib/http';
@@ -36,8 +37,8 @@ const world = harness.shared(async () => {
   const actor = identityForUser(owner.userId, owner.id, owner.email);
   const dataset = await createArtifactFromBody({ access: 'readwrite', visibility: 'unlisted', dataset: [{ name: 'ada' }, { name: 'bo' }], title: 'People' }, actor, APP);
   const people = (await dataset.json() as { id: string }).id;
-  await (await getDb()).query('UPDATE artifacts SET dataset_policy=$2::jsonb, policy_revision=policy_revision+1 WHERE id=$1', [people, JSON.stringify({ version: 3, tables: [{ table: { schema: 'public', name: 'rows' }, select_permissions: [
-    { role: 'signed_in', permission: { columns: '*', filter: {} } }, { role: 'anonymous', permission: { columns: ['name'], filter: {} } }] }] })]);
+  await storePolicy(people, { version: 3, tables: [{ table: { schema: 'public', name: 'rows' }, select_permissions: [
+    { role: 'signed_in', permission: { columns: '*', filter: {} } }, { role: 'anonymous', permission: { columns: ['name'], filter: {} } }] }] });
   const head = `<link rel="af-dataset" data-af-name="people" href="ref:${people}">`;
   const publish = async (visibility: string) => {
     const created = await createArtifactFromBody({ visibility, html: `<html><head>${head}</head><body><h1 data-af-id="title">Plan</h1></body></html>` }, actor, APP);

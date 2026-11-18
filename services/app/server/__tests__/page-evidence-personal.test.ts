@@ -1,6 +1,7 @@
 /** Real identity host, app handlers and storage: delegation keeps the actual human's current policy view. */
-import {createHash} from 'node:crypto';
 import {it,expect} from 'vitest';
+import { storePolicy, revokeShares } from '@/__tests__/artifact-fixtures';
+import {delegatedService,audiencesOf,noTokens} from '../../../auth/__tests__/helpers';
 import {createAuthHost} from '@artifactbin/auth';
 import {artifactReadKey,signArtifactReadGrant} from '@artifactbin/auth/identity/artifact-read-grants';
 import {PAGE_EVIDENCE_PATH,CANONICAL_PAGE_EVIDENCE_PATH,SERVICE_AUTH_HEADER} from '@artifactbin/contracts';
@@ -16,12 +17,12 @@ it('buffers human evidence and rechecks current app policy and identity parent w
  const create=async(body:unknown)=>{const r=await host.request(new Request('http://localhost/api/artifacts',{method:'POST',body:JSON.stringify(body),headers:{'content-type':'application/json'}}),human);expect(r.status,await r.clone().text()).toBe(201);return r.json();};
  const dataset=await create({title:'Metrics',dataset:[{name:'red',team:'red',secret:'secret-red'},{name:'blue',team:'blue',secret:'secret-blue'}],visibility:'private',destination:{type:'group',id:group.id}});
  const policy={version:3,tables:[{table:{schema:'public',name:'rows'},select_permissions:[{role:'viewer',permission:{columns:['name','team'],filter:{team:{_eq:'red'}}}}]}]};
- await db.query('UPDATE artifacts SET dataset_policy=$2::jsonb,policy_revision=policy_revision+1 WHERE id=$1',[dataset.id,JSON.stringify(policy)]);
+ await storePolicy(dataset.id, policy);
  const page=await create({title:'Evidence',html:`<html><head><link rel="af-dataset" data-af-name="metrics" href="ref:${dataset.id}" data-af-mode="pinned" data-af-revision="1"></head><body>Evidence</body></html>`,visibility:'private',destination:{type:'group',id:group.id}});
  for(const id of [page.id,dataset.id])await db.query("INSERT INTO artifact_shares(artifact_id,user_id,email,role) VALUES($1,$2,$3,'viewer')",[id,null,viewer.email]);
- const service={id:'reader',origin:'https://reader.example',introspectionSecretSha256:createHash('sha256').update('synthetic-secret').digest('hex')};
+ const service=delegatedService('reader','https://reader.example','synthetic-secret');
  let afterBuffer:(()=>Promise<unknown>)|undefined;const operations:unknown[]=[];
- const auth=createAuthHost({env:{IDENTITY__SERVICE_AUDIENCES:JSON.stringify([{id:service.id,origin:service.origin,introspection_secret_sha256:service.introspectionSecretSha256,artifact_reads:true}])},cookieSecret:'synthetic-cookie',tokens:{byToken:async()=>null},sessions:{resolve:async()=>null},identityDb:db,upstream:async(request,actor)=>{
+ const auth=createAuthHost({env:{IDENTITY__SERVICE_AUDIENCES:audiencesOf(service)},cookieSecret:'synthetic-cookie',tokens:noTokens,sessions:{resolve:async()=>null},identityDb:db,upstream:async(request,actor)=>{
   const input=await request.clone().json();operations.push(input);
   const response=await host.request(request,actor);
   if(!input.fingerprint&&afterBuffer){const body=await response.text();await afterBuffer();return new Response(body,{status:response.status});}
@@ -42,12 +43,12 @@ it('buffers human evidence and rechecks current app policy and identity parent w
  expect((await call({grant,operation:{...operation,kind:'artifact-read'}})).status).toBe(400);
  const direct=await auth.request(CANONICAL_PAGE_EVIDENCE_PATH,{method:'POST',body:JSON.stringify({operation})});expect(direct.status).toBe(404);
  // Only page readership remains: neither the arg_ grant nor the page link supplies dataset viewer authority.
- await db.query('DELETE FROM artifact_shares WHERE artifact_id=$1',[dataset.id]);expect((await call()).status).toBeGreaterThanOrEqual(400);
+ await revokeShares(dataset.id);expect((await call()).status).toBeGreaterThanOrEqual(400);
  await db.query("INSERT INTO artifact_shares(artifact_id,user_id,email,role) VALUES($1,$2,$3,'viewer')",[dataset.id,viewer.userId,viewer.email]);
- afterBuffer=()=>db.query('UPDATE artifacts SET dataset_policy=$2::jsonb,policy_revision=policy_revision+1 WHERE id=$1',[dataset.id,JSON.stringify({version:3,tables:[]})]);
+ afterBuffer=()=>storePolicy(dataset.id, {version:3,tables:[]});
  const revoked=await call();expect(revoked.status).toBeGreaterThanOrEqual(400);expect(await revoked.text()).not.toContain('red');
- afterBuffer=undefined;await db.query('UPDATE artifacts SET dataset_policy=$2::jsonb,policy_revision=policy_revision+1 WHERE id=$1',[dataset.id,JSON.stringify(policy)]);
- afterBuffer=async()=>{await db.query('DELETE FROM artifact_shares WHERE artifact_id=$1',[page.id]);};expect((await call()).status).toBeGreaterThanOrEqual(400);
+ afterBuffer=undefined;await storePolicy(dataset.id, policy);
+ afterBuffer=async()=>{await revokeShares(page.id);};expect((await call()).status).toBeGreaterThanOrEqual(400);
  afterBuffer=undefined;await db.query("INSERT INTO artifact_shares(artifact_id,user_id,email,role) VALUES($1,$2,$3,'viewer')",[page.id,viewer.userId,viewer.email]);
  const aborted=new AbortController();afterBuffer=async()=>{aborted.abort();await new Promise(()=>{});};
  const cancelled=await auth.request(PAGE_EVIDENCE_PATH,{method:'POST',signal:aborted.signal,headers:{[SERVICE_AUTH_HEADER]:'synthetic-secret'},body:JSON.stringify({grant,operation})});

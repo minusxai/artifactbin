@@ -13,7 +13,7 @@ import type { ArtifactBackend } from '@/lib/artifact-backend';
 import { COMMENT_IMAGE_LIMITS } from '../../../../contracts/src/comment-image';
 import { fireEvent } from '../../__tests__/helpers';
 import { preloadCommentField } from '../LazyCommentField';
-import { ANN, fetchCalls, flush, httpBackend, installAnnotationFetch, knobs, layer } from './annotation-rig';
+import { ANN, fetchCalls, flush, httpBackend, installAnnotationFetch, knobs, layer, emitLayout } from './annotation-rig';
 import { replaceComment } from './comment-input';
 
 const TEXT: StoryEditSelection = { kind: 'text', path: '1', tag: 'p', rect: { x: 5, y: 6, width: 200, height: 40 }, className: '', style: '', ancestors: [] } as StoryEditSelection;
@@ -263,7 +263,7 @@ describe('attaching an image to a reply from the hover card', () => {
   const hoverCard = async () => {
     const view = layer({ showViewComments: true, editId: 'edit-current' });
     await flush(); await flush();
-    view.runtime.emit({ type: 'mx:annotation-layout', positions: [{ id: ANN.id, rect: { x: 10, y: 120, width: 300, height: 40 } }] });
+    emitLayout(view.runtime, 120);
     const card = view.container.querySelector<HTMLElement>(`[data-annotation-id="${ANN.id}"]`)!;
     fireEvent.mouseEnter(card);
     fireEvent.click(within(card).getByRole('button', { name: 'Expand replies' }));

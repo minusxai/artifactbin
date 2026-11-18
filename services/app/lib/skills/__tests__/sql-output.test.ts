@@ -1,5 +1,6 @@
 /** sql.mjs query --sql-file and --output: rows go from the read into a new file and only a summary is printed. */
 import {mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
+import {syntheticEnv} from './toolbox-env';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
@@ -10,7 +11,7 @@ const columns = [{name: 'month'}, {name: 'region'}, {name: 'note'}, {name: 'reve
 const rows = Array.from({length: 8}, (_, i) => ({month: `2026-0${i + 1}`, region: i % 2 ? 'east' : 'west',
   note: i === 0 ? 'say "hi", then\nleave' : i === 1 ? 'x'.repeat(100) : i === 2 ? null : 'plain', revenue: 100 + i}));
 let root: string, sent: {route: string; body: any}[];
-const options = () => ({env: {ARTIFACTBIN_URL: 'https://example.test', ARTIFACTBIN_TOKEN: 'synthetic', ARTIFACTBIN_HOME: root},
+const options = () => ({env: syntheticEnv('https://example.test',root),
   fetcher: async (url: string, init: RequestInit) => {
     const route = new URL(url).pathname;
     sent.push({route, body: init.body ? JSON.parse(String(init.body)) : undefined});

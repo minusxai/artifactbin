@@ -1,4 +1,5 @@
 /** The rows and people these tests stand on, made through public interfaces only. */
+import { expect } from 'vitest';
 import { nativeHtml } from '@/__tests__/native-html-fixture';
 import { createUser, identityForUser, type AccessActor } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
@@ -28,6 +29,12 @@ export const dataset = (actor: Account, policy?: unknown, extra: Record<string, 
 export const readAllPolicy = () => ({ version: 3, tables: [{ table: { schema: 'public', name: 'rows' }, select_permissions: ['viewer', 'signed_in', 'anonymous'].map((role) => ({ role, permission: { columns: '*', filter: {}, allow_aggregations: true } })) }] });
 /** POST /api/artifacts as the bearer `token`: the route's own Response. */
 export const postArtifact = (token: string, body: Record<string, unknown>) => createArtifactRoute(request('/api/artifacts', { method: 'POST', token, json: body }));
+/** Publish through POST /api/artifacts as `token`, expecting 201: the new artifact's id. */
+export const publishedId = async (token: string, body: Record<string, unknown>): Promise<string> => {
+  const response = await postArtifact(token, body);
+  expect(response.status, await response.clone().text()).toBe(201);
+  return ((await response.json()) as { id: string }).id;
+};
 export const sql = async <T = Record<string, unknown>>(text: string, params: unknown[] = []) => (await (await getDb()).query<T>(text, params)).rows;
 /** Store `policy` as the dataset's policy directly, past the policy door's validation and audit, bumping `policy_revision` as the door does. */
 export const storePolicy = async (id: string, policy: unknown) => { await sql('UPDATE artifacts SET dataset_policy=$2::jsonb, policy_revision=policy_revision+1 WHERE id=$1', [id, JSON.stringify(policy)]); };

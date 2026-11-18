@@ -9,7 +9,7 @@ import {
   CreationReplay, completeMutationReceipt, createArtifact, creationOperation, durableMutation, lookupCreation, mutationInvocation, pinMutationContext,
   recoverCreationIds, reserveArtifactIds, reserveIds, setMutationInvocation, type MutationReceipt,
 } from '@/lib/artifacts';
-import { account, page, sql } from '@/__tests__/artifact-fixtures';
+import { account, page, sql, trashRow } from '@/__tests__/artifact-fixtures';
 
 const harness = useAppHarness();
 const ORIGIN = 'https://app.test/api/artifacts';
@@ -36,7 +36,7 @@ describe('idempotent creation', () => {
     expect(await recoverCreationIds(owner, ORIGIN, [])).toEqual(new Map());
     await sql("UPDATE artifact_creation_operations SET response_until=now()-interval '1 second'");
     expect(await lookupCreation(db, operation)).toEqual({ status: 200, body: { id: row.id, recovered: true, response_expired: true } });
-    await sql('UPDATE artifacts SET deleted_at=now() WHERE id=$1', [row.id]);
+    await trashRow(row.id);
     expect(await lookupCreation(db, operation)).toEqual({ status: 410, body: { error: 'result_deleted', id: row.id } });
   });
 

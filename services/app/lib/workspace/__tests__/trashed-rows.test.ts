@@ -1,4 +1,5 @@
 import {nativeHtml} from '@/__tests__/native-html-fixture';
+import { trashRow } from '@/__tests__/artifact-fixtures';
 /**
  * THE GATE. A trashed row is nonexistent to every public read path. Table-driven,
  * so a new reader is one line here; if a reader bypasses the row-loading seam this goes red.
@@ -6,7 +7,7 @@ import {nativeHtml} from '@/__tests__/native-html-fixture';
 import { describe, expect, it } from 'vitest';
 import { ensureTable } from '@artifactbin/utils';
 import { EVENTS_TABLES } from '@artifactbin/events';
-import { request, useAppHarness } from '@/__tests__/harness';
+import { request, useAppHarness, params } from '@/__tests__/harness';
 import { POST as createRoute, GET as listRoute } from '@/app/api/artifacts/route';
 import { GET as getRoute } from '@/app/api/artifacts/[id]/route';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
@@ -26,7 +27,6 @@ import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser, ensureUsername } from '@/lib/accounts';
 
 useAppHarness();
-const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
 async function trashedWorld() {
   const u = await ensureUsername(await createUser({ email: 'o@example.com' }));
@@ -41,7 +41,7 @@ async function trashedWorld() {
     // the annotations shape may differ; the assertion below only needs one trashed annotation row
     await db.query(`INSERT INTO annotations (id, artifact_id, body, author_kind, deleted_at) VALUES ('ann_trashed0000000001', $1, 'gone', 'human', now())`, [doc.id]);
   });
-  await db.query('UPDATE artifacts SET deleted_at = now() WHERE id = $1', [doc.id]);
+  await trashRow(doc.id);
   return { token: t.token, actor, folder, doc, handle: u.username as string, userId: u.id };
 }
 

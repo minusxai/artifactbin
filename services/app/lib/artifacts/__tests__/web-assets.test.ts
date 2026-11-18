@@ -4,6 +4,7 @@
  * servesWebAsset) reads only it, never the page source.
  */
 import { describe, expect, it } from 'vitest';
+import { setVisibility } from '@/__tests__/artifact-fixtures';
 import { useAppHarness } from '@/__tests__/harness';
 import { nativeHtml } from '@/__tests__/native-html-fixture';
 import { createUser, identityForUser, type AccessActor } from '@/lib/accounts';
@@ -51,7 +52,7 @@ describe('meta.webAssets', () => {
     expect(reverted.meta.webAssets).toEqual([urlHash(A)]);
     expect(await served(host)).toEqual({ a: true, b: false });
 
-    await (await getDb()).query("UPDATE artifacts SET visibility = 'private' WHERE id = $1", [v1.id]);
+    await setVisibility(v1.id, 'private');
     expect(await served(host)).toEqual({ a: false, b: false });
   });
 

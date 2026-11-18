@@ -8,7 +8,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { screen } from '@testing-library/dom';
 import type { StoryEditSelection } from '@/lib/html-bridge/selection-contract';
 import { fireEvent } from '../../__tests__/helpers';
-import { flush, installAnnotationFetch, layer } from './annotation-rig';
+import { flush, installAnnotationFetch, layer, emitPin } from './annotation-rig';
 import { preloadCommentField } from '../LazyCommentField';
 
 beforeEach(installAnnotationFetch);
@@ -28,7 +28,7 @@ describe('the layer reports unsent drafts', () => {
   it('is drafting while an open thread\'s reply holds words, and stops once they are cleared', async () => {
     const onDraftingChange = vi.fn();
     const view = layer({ railOpen: true, onDraftingChange }); await flush();
-    view.runtime.emit({ type: 'mx:annotation-pin', id: 'ann_1', rect: { x: 10, y: 20, width: 300, height: 50 } });
+    emitPin(view.runtime, 'ann_1');
     await screen.findByLabelText('Annotation thread');
     expect(onDraftingChange).toHaveBeenLastCalledWith(false);
     replaceComment(screen.getByLabelText('Reply to annotation'), 'half a thought'); await flush();

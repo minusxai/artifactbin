@@ -1,5 +1,6 @@
 /** A relay's chart drawing: the real auth handler admits it like artifact-read and forwards only the exact body. */
 import {createHash} from 'node:crypto';
+import {noTokens} from './helpers';
 import {describe,it,expect} from 'vitest';
 import {ANONYMOUS,SERVICE_PAYLOAD_LIMIT,CANONICAL_CHART_IMAGE_PATH,CHART_IMAGE_PATH,SERVICE_AUTH_HEADER,type Actor} from '@artifactbin/contracts';
 import {createAuthHost} from '../src/parts';
@@ -14,7 +15,7 @@ describe('delegated chart drawing',()=>{
  it('admits only an opted-in service, forwards the exact keys as the anonymous actor and passes the answer through',async()=>{
   const forwarded:{request:Request;body:string;actor:Actor}[]=[];
   let answer:()=>Response=()=>Response.json({mime:'image/png',width:640,height:400,bytes:3,data:'AAAA'});
-  const app=createAuthHost({env:{IDENTITY__SERVICE_AUDIENCES:audiences,INTERNAL__SERVICE_SECRET:'installation-secret'},cookieSecret:'test',tokens:{byToken:async()=>null},sessions:{resolve:async()=>null},
+  const app=createAuthHost({env:{IDENTITY__SERVICE_AUDIENCES:audiences,INTERNAL__SERVICE_SECRET:'installation-secret'},cookieSecret:'test',tokens:noTokens,sessions:{resolve:async()=>null},
    upstream:async(request,actor)=>{forwarded.push({request,body:await request.text(),actor});return answer();}});
   const call=(body:unknown,secret='service-secret',method='POST')=>app.request(CHART_IMAGE_PATH,{method,headers:{[SERVICE_AUTH_HEADER]:secret},...method==='POST'?{body:typeof body==='string'?body:JSON.stringify(body)}:{}});
   const chart={mark:'bar',encoding:{x:{field:'k',type:'nominal'},y:{field:'v',type:'quantitative'}}},rows=[{k:'a',v:1}];
