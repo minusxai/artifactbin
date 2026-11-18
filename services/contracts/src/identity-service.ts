@@ -13,6 +13,12 @@
  *    INTERNAL__SERVICE_SECRET the answer covers every token; with a service's own introspection secret
  *    (./service-audiences) it covers only tokens bound to that service's audience, every other token answering
  *    `{active: false}`. JSON in and out, read from committed state at request time.
+ *
+ * THE PRINCIPAL (`IdentityIntrospectResponse` `principal_kind`, `group_id`, `group_role`, `issued_by`; the `tokens`
+ * view's `group_id`, `group_role`, `issued_by`, `grant_id`): who a credential acts as. Today always a person: kind
+ * `'user'`, `user_id` set and never null, the group fields null. Once group sign-ins exist a credential may act as a
+ * group at a level (`'member'` or `'editor'`) with no person behind it; a reader checks `principal_kind` before
+ * relying on `user_id` as the person acting.
  */
 import type { ServiceTokenParent } from './service-audiences';
 import { SERVICE_PAYLOAD_ENVELOPE, SERVICE_PAYLOAD_LIMIT } from './payload-limit';

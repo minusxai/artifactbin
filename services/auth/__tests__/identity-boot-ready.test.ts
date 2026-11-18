@@ -85,7 +85,7 @@ describe('ensureIdentitySchema on a database from before the principal columns',
   await ensureIdentitySchema(db,schemas);
   expect(await viewColumns(pg,'tokens')).toEqual([...BEFORE,...PRINCIPAL]);
   expect((await pg.query(`SELECT id,user_id,${PRINCIPAL.join(',')} FROM auth.tokens`)).rows).toEqual([{id:'tok_kept',user_id:'usr_kept',group_id:null,group_role:null,issued_by:null,grant_id:null}]);
-  expect((await pg.query(`SELECT id,${PRINCIPAL.join(',')} FROM identity.tokens`)).rows).toEqual([{id:'tok_kept',group_id:null,group_role:null,issued_by:null,grant_id:null}]);
+  expect((await pg.query(`SELECT id,live,${PRINCIPAL.join(',')} FROM identity.tokens`)).rows).toEqual([{id:'tok_kept',live:true,group_id:null,group_role:null,issued_by:null,grant_id:null}]);
   // The reader's view was not dropped, and reads as before.
   expect((await pg.query('SELECT id,user_id,scope FROM reader.live_tokens')).rows).toEqual([{id:'tok_kept',user_id:'usr_kept',scope:'artifacts'}]);
   // A second boot changes nothing.
