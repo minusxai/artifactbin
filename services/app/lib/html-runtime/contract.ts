@@ -84,7 +84,7 @@ export interface HtmlAssemblyInput {
    */
   offlineSql?: string;
   /** The rows the downloading reader's `sql` reads through the page (lib/dataset-access offlinePageSqlData), in an offline export; a draft's own CSV tables (`config.draft`). */
-  offlineData?: { tables: ReadonlyArray<{ schema: string; name: string; columns: ReadonlyArray<{ name: string; type: string }>; rows: ReadonlyArray<Readonly<Record<string, unknown>>> }> };
+  offlineData?: { tables: ReadonlyArray<{ schema: string; name: string; columns: ReadonlyArray<{ name: string; type: string }>; rows: ReadonlyArray<Readonly<Record<string, unknown>>>; file?: string }> };
   /** Canonical source and nonsecret published identity carried by downloaded files. */
   portable?: PortableDocument;
   /** Embedded assets work without a network; connection is a separate explicit capability. */

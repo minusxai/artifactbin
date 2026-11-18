@@ -1,7 +1,7 @@
 # The browser service
 
 A Chromium that renders a URL to an image (`/render`, `/render-upload`), hands back the SVG a page drew
-(`/harvest`), says what went wrong in a page (`/inspect`: failed components, exceptions, failed requests) and runs persistent isolated scripted sessions (`/sessions`). `BrowserService` and the session types
+(`/harvest`), says what went wrong in a page (`/inspect`: failed components, exceptions, failed requests, unreadable text) and runs persistent isolated scripted sessions (`/sessions`). `BrowserService` and the session types
 in `services/contracts/src` are the wire; `src/index.ts` is the client and the server shell, `src/local.ts`
 Chromium, `src/sessions.ts` and the `session-*` files the sessions, `src/upload-gateway-server.ts` the S3 gateway.
 

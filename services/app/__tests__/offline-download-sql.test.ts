@@ -77,7 +77,8 @@ const reject = (statement: PromiseLike<unknown>) => Promise.resolve(statement).t
 
 it('answers the page\'s own sql table from the rows it carries, with every request refused', async () => {
   const f = await exportedPage();
-  const { runtime, refused, data } = await openOffline(await exported(f.page, f.owner));
+  const html = await exported(f.page, f.owner);
+  const { runtime, refused, data } = await openOffline(html);
   expect(data!.tables.map((t) => `${t.schema}.${t.name}`).sort()).toEqual(['main.notes', 'main.secret', 'main.staff']);
   expect([...await runtime.sql([PAGE_SQL] as unknown as TemplateStringsArray)]).toEqual([{ name: 'ada', salary: 10 }, { name: 'bo', salary: 20 }]);
   // Bound values, aggregates and joins read as the door reads them.
@@ -87,6 +88,15 @@ it('answers the page\'s own sql table from the rows it carries, with every reque
   expect(await reject(runtime.sql`insert into staff (name) values (${'x'})`)).toBe('permission_denied');
   expect(await reject(runtime.sql`select * from sqlite_master`)).toBe('validation_failed');
   expect(refused).not.toHaveBeenCalled();
+  // A copy's own tables say nothing of where their rows came from; the same tables carried as a draft carries its CSVs,
+  // each with its file, say which files a read used (contracts sql-source `file`).
+  expect((await runtime.sql`select name from staff` as unknown as { source?: unknown }).source).toBeUndefined();
+  const block = /(<script type="application\/json" data-af="offline-data">)([^<]*)(<\/script>)/;
+  const carried = JSON.parse(block.exec(html)![2]!) as { tables: Array<{ name: string; file?: string }> };
+  for (const table of carried.tables) table.file = `data/${table.name}.csv`;
+  const draft = await openOffline(html.replace(block, (_all, open, _data, close) => open + JSON.stringify(carried).replace(/</g, '\\u003c') + close));
+  expect((await draft.runtime.sql`select count(*) as n from staff` as unknown as { source?: unknown }).source).toEqual({ kind: 'file', names: ['data/staff.csv'] });
+  expect((await draft.runtime.sql`select n.note from notes n, staff s` as unknown as { source?: unknown }).source).toEqual({ kind: 'file', names: ['data/notes.csv', 'data/staff.csv'] });
 });
 
 it('carries only what its reader may read: a hidden column or an unreadable table is neither in the file nor answered', async () => {

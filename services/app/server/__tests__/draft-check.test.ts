@@ -54,6 +54,12 @@ describe('the identity owner\'s draft-check seam', () => {
     expect((await app.request(`${url.origin}/reports/monthly.csv`, { headers: { host: url.host } })).status).toBe(404);
   });
 
+  it('answers no picture rather than one taller than an image reader takes (an older browser service)', async () => {
+    const tall = { mime: 'image/jpeg' as const, width: 1280, height: 4000, bytes: 3, data: 'AAAA' };
+    setServices({ browser: { ...original, inspect: async (): Promise<PageInspection> => ({ ok: true, truncated: false, image: tall, problems: [] }) } });
+    expect(await (await seam(DRAFT)).json()).toEqual({ problems: [], truncated: false });
+  });
+
   it('answers a refused draft with its code, a browser that cannot look with 503, and only the owner\'s relay with exact keys', async () => {
     let answer: PageInspection = { ok: false, reason: 'failed', detail: 'Render deadline' };
     setServices({ browser: { ...original, inspect: async () => answer } });

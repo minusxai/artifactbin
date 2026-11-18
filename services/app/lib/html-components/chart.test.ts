@@ -354,6 +354,9 @@ it('labels where its rows came from in its own chrome: Live, Snapshot, paused, a
   expect(read.querySelector('.af-data-source')!.nextElementSibling).toBe(read.querySelector('details.af-chart-values'));
   watches[0]!.next(sourced(ROWS, { kind: 'snapshot', at: '2026-11-02T09:05:00.000Z', names: ['t'] }));
   await until(() => label()?.textContent?.startsWith('Snapshot · '), 'snapshot label');
+  watches[0]!.next(sourced(ROWS, { kind: 'file', names: ['t.csv'] }));
+  await until(() => label()?.textContent === 'Snapshot', 'file label');
+  expect(read.querySelector('.af-data-source af-tooltip-content')!.textContent).toBe('Rows from t.csv, a file beside the page.');
   // Live data the reader has not allowed yet: the failure, and the label says paused.
   watches[0]!.error(Object.assign(new Error(SQL_FAILURES.consent_required.notice), { code: 'consent_required', detail: 'wh reads live data' }));
   await until(() => label()?.textContent === 'Live · paused', 'paused label');

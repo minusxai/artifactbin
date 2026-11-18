@@ -167,6 +167,101 @@ function collectFailures(input: { selector: string; limit: number }) {
   return out;
 }
 
+/**
+ * Serialized into Chromium: shown text too faint to read (`contrast`, contracts PageProblem), one problem per pair of
+ * colours with how many elements draw it and the first of them. A colour is read as the page computed it (oklch,
+ * color-mix and the rest: a canvas turns each into sRGB), against the solid backgrounds behind it laid over white;
+ * text over an image or gradient, over a layer that is not its ancestor (a hero's tint or picture, found by what is
+ * drawn under its middle), in an SVG, or not shown is never judged. Text drawn in one of the theme's surface colours
+ * (a shadcn background token: --muted, --card, --accent, --secondary) is told so. Self-contained and total.
+ */
+function collectUnreadable(input: { selector: string; floor: number; limit: number }) {
+  const out: Array<{ kind: 'contrast'; element: string; message: string }> = [];
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 1;
+    const paint = canvas.getContext('2d', { willReadFrequently: true });
+    if (!paint) return out;
+    const rgba = (value: string) => {
+      paint.clearRect(0, 0, 1, 1); paint.fillStyle = 'rgba(0,0,0,0)'; paint.fillStyle = value; paint.fillRect(0, 0, 1, 1);
+      const [r, g, b, a] = paint.getImageData(0, 0, 1, 1).data;
+      return { r: r!, g: g!, b: b!, a: a! / 255 };
+    };
+    type Rgba = ReturnType<typeof rgba>;
+    const over = (top: Rgba, under: Rgba): Rgba => ({ r: top.r * top.a + under.r * (1 - top.a), g: top.g * top.a + under.g * (1 - top.a), b: top.b * top.a + under.b * (1 - top.a), a: 1 });
+    const luminance = (c: Rgba) => {
+      const f = (x: number) => { x /= 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; };
+      return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b);
+    };
+    /** The solid colour behind `element` and what it was written as, or null over an image or gradient. */
+    const behind = (element: Element): { color: Rgba; said: string } | null => {
+      const layers: Array<{ color: Rgba; said: string }> = [];
+      for (let at: Element | null = element; at; at = at.parentElement) {
+        const style = getComputedStyle(at);
+        if (style.backgroundImage !== 'none') return null;
+        const color = rgba(style.backgroundColor);
+        if (color.a > 0) { layers.push({ color, said: style.backgroundColor }); if (color.a >= 1) break; }
+      }
+      let color: Rgba = { r: 255, g: 255, b: 255, a: 1 }, said = 'rgb(255, 255, 255)';
+      for (const layer of layers.reverse()) { color = over(layer.color, color); said = layer.said; }
+      return { color, said };
+    };
+    const name = (el: Element) => el.localName + (typeof el.className === 'string' && el.className.trim() ? '.' + el.className.trim().split(/\s+/)[0] : '');
+    const groups = new Map<string, { count: number; ratio: number; element: string; words: string; color: string; background: string; token?: string }>();
+    const same = (a: Rgba, b: Rgba) => a.a === b.a && a.r === b.r && a.g === b.g && a.b === b.b;
+    const theme = getComputedStyle(document.documentElement);
+    const surfaces = ['--muted', '--card', '--accent', '--secondary'].flatMap((token) => {
+      const value = theme.getPropertyValue(token).trim();
+      return value ? [{ token, color: rgba(value) }] : [];
+    });
+    /** Something other than its own ancestors is drawn right under the middle of `el` (a positioned tint, a picture). */
+    const overLayer = (el: Element) => {
+      const x = scrollX, y = scrollY;
+      try {
+        el.scrollIntoView({ block: 'center', inline: 'center' });
+        const box = el.getBoundingClientRect();
+        for (const under of document.elementsFromPoint(box.left + box.width / 2, box.top + box.height / 2)) {
+          if (under === el || el.contains(under)) continue;
+          return !under.contains(el);
+        }
+        return false;
+      } finally { scrollTo(x, y); }
+    };
+    const root = document.querySelector(input.selector) ?? document.body;
+    const seen = new Set<Element>(), walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const el = node.parentElement, words = (node.textContent ?? '').replace(/\s+/g, ' ').trim();
+      if (!el || seen.has(el) || words.length < 2) continue;
+      seen.add(el);
+      if (el.closest('svg') || !el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) continue;
+      const style = getComputedStyle(el), box = el.getBoundingClientRect();
+      if (box.width < 2 || box.height < 2 || style.backgroundClip === 'text' || style.webkitTextFillColor !== style.color) continue;
+      const back = behind(el);
+      if (!back) continue;
+      let color = rgba(style.color);
+      if (color.a === 0) continue;
+      if (color.a < 1) color = over(color, back.color);
+      const [hi, lo] = [luminance(color), luminance(back.color)].sort((x, y) => y - x);
+      const ratio = Math.round(((hi! + 0.05) / (lo! + 0.05)) * 100) / 100;
+      if (ratio >= input.floor || overLayer(el)) continue;
+      const key = `${style.color}|${back.said}`, group = groups.get(key);
+      if (group) group.count++;
+      else {
+        const token = surfaces.find((surface) => same(surface.color, rgba(style.color)))?.token;
+        groups.set(key, { count: 1, ratio, element: name(el), words: words.length > 40 ? words.slice(0, 39) + '…' : words, color: style.color, background: back.said, ...(token ? { token } : {}) });
+      }
+    }
+    for (const g of groups.values()) {
+      out.push({ kind: 'contrast', element: g.element, message: `unreadable text: ${g.count} element${g.count === 1 ? '' : 's'} (the first ${g.element} "${g.words}") draw${g.count === 1 ? 's' : ''} ${g.color} on ${g.background}, a contrast of ${g.ratio}:1 (text needs at least ${input.floor}:1)${g.token ? `. That is the theme's ${g.token}, a background colour: write text in --foreground or --muted-foreground` : ''}` });
+      if (out.length >= input.limit) break;
+    }
+  } catch { /* a page this cannot read is judged by the rest of the check */ }
+  return out;
+}
+
+/** Text under this contrast against its background is unreadable, not merely below a guideline: said as a problem. */
+const READABLE_CONTRAST = 2;
+
 /** A page's problems, each said once, cut to PAGE_PROBLEM_LIMITS. */
 function problemList() {
   const L = PAGE_PROBLEM_LIMITS, seen = new Set<string>(), problems: PageProblem[] = [];
@@ -458,10 +553,11 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
     try {
       await withReadyPage(req, 1, async ({ page, timeout }) => {
         for (const failure of await page.evaluate(collectFailures, { selector: req.selector, limit: PAGE_PROBLEM_LIMITS.problems + 1 })) found.add(failure);
+        for (const faint of await page.evaluate(collectUnreadable, { selector: req.selector, floor: READABLE_CONTRAST, limit: PAGE_PROBLEM_LIMITS.problems + 1 }).catch(() => [])) found.add(faint);
         if (!req.screenshot) return;
-        // The page as it stood once read, its height capped; a quality that fits the bound, else no picture.
+        // The top of the page as it stood once read, unscaled, each side capped; a quality that fits the bound, else no picture.
         const tall = await page.evaluate(() => Math.max(document.documentElement.scrollHeight, document.body?.scrollHeight ?? 0));
-        const height = Math.max(1, Math.min(Math.ceil(tall), PAGE_IMAGE_LIMITS.height)), width = req.viewport.width;
+        const height = Math.max(1, Math.min(Math.ceil(tall), PAGE_IMAGE_LIMITS.height)), width = Math.min(req.viewport.width, PAGE_IMAGE_LIMITS.width);
         for (const quality of [75, 50, 30]) {
           const bytes = await page.screenshot({ type: 'jpeg', quality, fullPage: true, clip: { x: 0, y: 0, width, height }, timeout });
           if (bytes.length <= PAGE_IMAGE_LIMITS.bytes) { image = { mime: 'image/jpeg', width, height, bytes: bytes.length, data: bytes.toString('base64') }; break; }

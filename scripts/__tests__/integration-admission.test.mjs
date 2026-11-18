@@ -6,6 +6,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { expect, it, onTestFinished } from 'vitest';
 import {tempDirSync} from '../../services/test-support/src/temp-dir.ts';
+import { serverReaderFresh } from '../../services/app/scripts/server-reader-cache.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
 it('admits one concurrent integration case per worker without losing cases', () => {
@@ -107,6 +108,9 @@ it('runs the S3 object-store suites in the databases part against a digest-pinne
     for (const stream of [child.stdout, child.stderr]) stream.setEncoding('utf8').on('data', (chunk) => { output += chunk; });
     child.on('error', reject).on('close', (status) => resolve({ status, output }));
   });
+  // Each run's global setup rebuilds a stale page runtime into the same files: built here once first, so two side by
+  // side never write one file at once (a component change made one read the other's half-written output).
+  if (!serverReaderFresh()) spawnSync(process.execPath, [path.join(root, 'services/app/scripts/build-server-reader.mjs'), '--cache'], { cwd: path.join(root, 'services/app'), stdio: 'inherit' });
   const [ci, local] = await Promise.all([vitest({ CI: 'true' }), vitest({})]);
   expect(ci.status, ci.output).toBe(1);
   expect(ci.output).toContain('TEST_S3_URL is not set');

@@ -31,6 +31,19 @@ export function cancelResizeRender(s: TableState) {
   if (s.resizeFrame !== undefined) cancelAnimationFrame(s.resizeFrame);
   s.resizeFrame = undefined;
 }
+/** Columns are measured again once a font swaps in or the box resizes after a hidden draw. */
+export function watchLayout(s: TableState): { disconnect(): void } {
+  const again = (always: boolean) => () => {
+    if (always || !s.measuredHeaderWidths) s.columnsNeedMeasurement = true;
+    renderAfterResize(s);
+  };
+  const box = new ResizeObserver(again(false)), fonts = s.viewport!.ownerDocument.fonts;
+  const swap = again(true);
+  box.observe(s.viewport!);
+  fonts?.addEventListener?.("loadingdone", swap);
+  const off = () => fonts?.removeEventListener?.("loadingdone", swap);
+  return { disconnect: () => (box.disconnect(), off()) };
+}
 /** Observes a virtualized row; measured heights feed the window, and the table re-renders
  * (next frame) only when some height actually changed. */
 export function observeRowHeight(s: TableState, tr: HTMLTableRowElement) {
@@ -57,6 +70,14 @@ export function measureGridColumns(
   el: AfDataTable, s: TableState, table: HTMLTableElement, head: HTMLTableRowElement,
   body: HTMLTableSectionElement, columns: readonly unknown[],
 ): boolean {
+  // New header words (a sort mark): measure again.
+  const heads = Array.from(head.cells, (cell) => cell.textContent).join("\0");
+  if (s.virtualized && heads !== s.measuredHeads) s.columnsNeedMeasurement = true;
+  s.measuredHeads = heads;
+  const measure = () => {
+    const widths = columns.map((_, i) => head.cells[i]?.getBoundingClientRect().width ?? 0);
+    if (widths.some((width) => width > 0)) s.measuredHeaderWidths = widths;
+  };
   if (s.virtualized && s.columnsNeedMeasurement) {
     // Measure the retained window in natural table layout. A spacer preserves the
     // scroll extent while positioning the same live nodes outside normal flow;
@@ -76,9 +97,7 @@ export function measureGridColumns(
       head.style.cssText = "display:table-row";
       body.style.cssText = "display:table-row-group";
       for (const row of Array.from(body.rows)) row.style.cssText = "display:table-row";
-      const widths =
-        columns.map((_, index) => head.cells[index]?.getBoundingClientRect().width ?? 0);
-      if (widths.some(width => width > 0)) s.measuredHeaderWidths = widths;
+      measure();
     } finally {
       elements.forEach((element, index) => { element.style.cssText = styles[index]!; });
       spacer.remove();
@@ -89,9 +108,7 @@ export function measureGridColumns(
     return true;
   }
   if (!s.virtualized) {
-    const widths =
-      columns.map((_, index) => head.cells[index]?.getBoundingClientRect().width ?? 0);
-    if (widths.some((width) => width > 0)) s.measuredHeaderWidths = widths;
+    measure();
     s.columnsNeedMeasurement = false;
   }
   // The first render lays out naturally; virtualization starts one microtask later, once the

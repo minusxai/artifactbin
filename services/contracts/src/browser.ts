@@ -103,8 +103,10 @@ export const SVG_HARVEST_LIMITS = { images: 200, imageBytes: 2 * 1024 * 1024, to
  * THE PAGE'S OWN PROBLEMS (`inspect`): the same ready page a render photographs, loaded once, and what went wrong in
  * it, as its author needs to hear it: a native component that failed (`[data-af-error]`: its tag, code, label and the
  * sentence it shows), an uncaught exception, a console error, a request that failed or answered 400 or more (one this
- * browser refused by its own `sameOriginOnly` rule is not the page's problem), and a page that never finished drawing
- * (`timeout`). Repeats are said once; at most
+ * browser refused by its own `sameOriginOnly` rule is not the page's problem), text too faint to read (`contrast`: shown
+ * text under 2:1 against the solid background behind it, once per pair of colours, naming the first element, its words
+ * and both colours as the page computed them) and a page that never finished drawing (`timeout`). Repeats are said once;
+ * at most
  * PAGE_PROBLEM_LIMITS.problems, each text cut to its limit, `truncated` when more were seen.
  *
  * `internalOrigin`: the page loads under its public origin (its CSP, its relative links and its origin checks hold),
@@ -114,17 +116,19 @@ export const SVG_HARVEST_LIMITS = { images: 200, imageBytes: 2 * 1024 * 1024, to
  */
 export interface PageInspectRequest extends PageRequest {
   internalOrigin?: string;
-  /** Also answer a JPEG of the page as it stood once read: the viewport's width, the page's height up to
-   * PAGE_IMAGE_LIMITS.height, at most PAGE_IMAGE_LIMITS.bytes (lowering its quality, else none). */
+  /** Also answer a JPEG of the page as it stood once read, unscaled: its top, the viewport's width by the page's height,
+   * each up to PAGE_IMAGE_LIMITS.width and .height (an image reader refuses a larger side), at most
+   * PAGE_IMAGE_LIMITS.bytes (lowering its quality, else none). */
   screenshot?: boolean;
 }
 /** A page's picture: `data` the JPEG, base64; `bytes` its decoded length. */
 export interface PageImage { mime: 'image/jpeg'; width: number; height: number; bytes: number; data: string }
-export const PAGE_IMAGE_LIMITS = { bytes: 2_000_000, height: 4_000 } as const;
+export const PAGE_IMAGE_LIMITS = { bytes: 2_000_000, width: 2_000, height: 2_000 } as const;
 export interface PageProblem {
-  kind: 'component' | 'script' | 'console' | 'request' | 'timeout';
+  kind: 'component' | 'script' | 'console' | 'request' | 'contrast' | 'timeout';
   message: string;
-  /** A component's tag name, its `data-af-error` code and its label (`label` or `aria-label`). */
+  /** A component's tag name, its `data-af-error` code and its label (`label` or `aria-label`); faint text's element
+   * (`tag.class`). */
   element?: string;
   code?: string;
   label?: string;

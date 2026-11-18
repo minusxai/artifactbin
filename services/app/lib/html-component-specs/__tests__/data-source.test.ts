@@ -48,3 +48,18 @@ it('says Live · paused while live data waits for the reader to allow it, whatev
   // Any other failure says nothing about where rows came from.
   expect(sourceLabel([], 'permission_denied')).toBeNull();
 });
+
+it('says Snapshot with no time for rows from a file beside the page, naming the file in its tooltip', () => {
+  const file = { kind: 'file' as const, names: ['data/churn.csv'] };
+  expect(sourceOf(Object.assign([], { source: file }))).toEqual(file);
+  expect(sourceOf(Object.assign([], { source: { kind: 'file', names: [] } }))).toBeNull();
+  expect(sourceLabel([file])).toEqual({ state: 'snapshot', text: 'Snapshot', tooltip: 'Rows from data/churn.csv, a file beside the page.', name: 'Data source: Snapshot' });
+  // Beside stored or live rows, the file is named in the tooltip and no time is invented for it.
+  const mixed = sourceLabel([stored, file])!;
+  expect(mixed.text).toMatch(/^Snapshot · \S.+$/);
+  expect(mixed.tooltip).toMatch(/^Stored data \(orders\), captured .+\. data\/churn\.csv: rows from a file beside the page\.$/);
+  const withLive = sourceLabel([live, file])!;
+  expect(withLive).toMatchObject({ state: 'live', text: 'Live' });
+  expect(withLive.tooltip).toMatch(/^Read live as you at .+\. data\/churn\.csv: rows from a file beside the page\.$/);
+  for (const one of [mixed, withLive]) expect(one.tooltip).not.toContain('Invalid');
+});

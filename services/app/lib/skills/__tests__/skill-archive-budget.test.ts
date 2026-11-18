@@ -58,7 +58,10 @@ import {archiveFor} from '@/lib/skills';
 // 1.629 MiB: main sat 118 bytes under 1.628 (1,706,963); approved queries (groups.mjs queries, approve and unapprove,
 // and the data guide's pointer to them, ~0.9 KB stored) let a group's Admin show a page's default-connection query to
 // every reader, leaving 1,707,861 bytes.
-const SKILL_ARCHIVE_MAX_BYTES=1.629*1024*1024;
+// 1.630 MiB: main sat 269 bytes under 1.629; af-data-table measures its columns again when a sort mark, a font
+// swapping in or being shown after a hidden draw would clip a header (the readable data-table-measure.ts, ~0.7 KB
+// stored), leaving 1,708,556 bytes.
+const SKILL_ARCHIVE_MAX_BYTES=1.630*1024*1024;
 
 describe('the downloadable author skill archive',()=>{
  it('fits its size budget',async()=>{

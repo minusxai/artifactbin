@@ -13,14 +13,16 @@
  * `config.draft`) loads it from its one hosted address, /af/offline-sql.js, over the tables the draft carries (build.test).
  */
 import { SQL_READ_LIMITS, isQueryFailure, type ColumnType, type Row, type RunInput } from '@artifactbin/contracts';
+import type { SqlAnswerSource } from '@artifactbin/contracts/sql-source';
 import { loadSqlite, PreparedCache, type SqliteEngine } from '@artifactbin/sql/core';
 import { offlineSqlNoData } from './portable-chrome-contract';
 
 /** The engine's `sqlite3.wasm`, base64, defined by the build (build.server): a copy cannot fetch it. */
 declare const __AF_SQLITE_WASM__: string;
 
-interface OfflineTable { schema: string; name: string; columns: Array<{ name: string; type: ColumnType }>; rows: Row[] }
-type Reply = { columns: Array<{ name: string; type: string }>; rows: Row[] } | { error: string; message: string };
+/** `file`: the path of the file beside the page its rows were read from (a draft's CSV); a copy's own tables have none. */
+interface OfflineTable { schema: string; name: string; columns: Array<{ name: string; type: ColumnType }>; rows: Row[]; file?: string }
+type Reply = { columns: Array<{ name: string; type: string }>; rows: Row[]; source?: SqlAnswerSource } | { error: string; message: string };
 
 let ready: Promise<{ engine: SqliteEngine; tables: OfflineTable[] }> | undefined;
 // One database for the file's tables, built on the first read and kept: the rows never change in a copy.
@@ -52,5 +54,8 @@ export async function runOfflineSql(request: { sql: string; params: Record<strin
   if (!result) return { error: 'unexpected', message: 'the statement answered nothing' };
   if (isQueryFailure(result)) return { error: result.timedOut ? 'timeout' : 'validation_failed', message: result.error };
   if (result.truncated) return { error: 'result_too_large', message: `a result is at most ${limit} rows; aggregate or filter in SQL` };
-  return { columns: result.columns.map((c) => ({ name: c.name, type: c.type })), rows: result.rows };
+  // Where the rows came from (contracts sql-source): the files the statement's tables were read from, if any.
+  const read = new Set(analysis.reads.filter((r) => r.schema === 'main').map((r) => r.table.toLowerCase()));
+  const files = [...new Set(tables.filter((t) => t.file && read.has(t.name.toLowerCase())).map((t) => t.file!))].sort();
+  return { columns: result.columns.map((c) => ({ name: c.name, type: c.type })), rows: result.rows, ...(files.length ? { source: { kind: 'file', names: files } } : {}) };
 }
