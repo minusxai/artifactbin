@@ -1804,6 +1804,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_tokens_hash ON auth.tokens (token_hash);
 
 CREATE INDEX IF NOT EXISTS idx_tokens_user ON auth.tokens (user_id) WHERE deleted_at IS NULL;
 
+CREATE INDEX IF NOT EXISTS idx_tokens_group ON auth.tokens (group_id) WHERE group_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_tokens_group_issuer ON auth.tokens (issued_by) WHERE group_id IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS auth.handle_reservations (
   handle TEXT NOT NULL,
   kind TEXT NOT NULL,

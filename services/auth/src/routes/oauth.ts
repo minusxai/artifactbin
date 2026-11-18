@@ -1,6 +1,6 @@
 import { BodyTooLargeError, readBody, renderConnectionPage } from '@artifactbin/utils';
 import { escapeHtml } from '@artifactbin/utils/escape';
-import {API_RESOURCE_PATH, INTERNAL_MINT_PATH, SERVICE_TOKEN_PATH, type ServiceAudience, type ServiceTokenParent} from '@artifactbin/contracts';
+import {API_RESOURCE_PATH, GROUP_PRINCIPAL_REFUSED, IdentityError, INTERNAL_MINT_PATH, SERVICE_TOKEN_PATH, isGroupActor, isGroupPrincipalRole, type GroupPrincipalRole, type ServiceAudience, type ServiceTokenParent} from '@artifactbin/contracts';
 /**
  * OAuth 2.1 provider for `/api`: discovery, dynamic client registration,
  * authorization-code + PKCE consent, and rotating refresh tokens. Access
@@ -21,6 +21,15 @@ import {API_RESOURCE_PATH, INTERNAL_MINT_PATH, SERVICE_TOKEN_PATH, type ServiceA
  * deployment's own sign-in: `/oauth/authorize` answers a signed-in browser with its code at once (no consent page) and
  * sends a signed-out one to the login page and back; the code, and the grant it becomes, carry the approving browser
  * session, so the grant ends with it.
+ *
+ * A GROUP'S SIGN-IN (contracts identity-service `GROUP_SIGN_IN_RULE`): a person may authorise an agent to act as a
+ * group they hold at least that level on, at `member` or `editor`, instead of as themselves: `/api/authentication/token`
+ * with `{"group_id": "<id>", "group_role": "member"|"editor"}`, or `/oauth/authorize` with `group_id` and `group_role`,
+ * whose consent page says the agent will act as the group at that level and not as the person (never for a
+ * first-party client, which shows no page, nor for a service's resource). The access token is the identity store's
+ * (`mintGroupSignIn`, no person on the row, `issued_by` the person) with the person's refresh family; every refresh
+ * mints through the same guard, so a refresh after the rule stopped holding answers `invalid_grant` and ends the
+ * family. There is no browser session as a group: the token reaches only the API.
  */
 import { ANONYMOUS, type Upstream } from '@artifactbin/contracts';
 import {
@@ -94,9 +103,35 @@ interface OAuthRoutesOptions {
   serviceAudiences?: readonly ServiceAudience[];
   /** The exchanged tokens' signing key (service-tokens `serviceTokenKey` of AUTH__SECRET); null: the exchange answers 503. */
   serviceTokenKey?: Buffer | null;
+  /** Group sign-ins (../identity-store/accounts `mintGroupSignIn` and the level check); absent: they answer 503. */
+  groupSignIns?: GroupSignIns;
 }
 
-async function mintFor(o: OAuthRoutesOptions, request: Request, grant: { userId: string | null; resource: string; scope: string }): Promise<{ id: string; token: string; expiresIn: number; has_created_document: boolean }> {
+/** What the routes need for a group's sign-in: the guarded mint (throws `IdentityError`), and the consent page's facts. */
+export interface GroupSignIns {
+  mint(input: {issuedBy: string; groupId: string; role: GroupPrincipalRole; audience: string; scope: string}): Promise<{id: string; token: string}>;
+  /** The live group's name when `userId` holds at least `role` on it (`groupLevelHeldSql`), else null. */
+  heldName(userId: string, groupId: string, role: GroupPrincipalRole): Promise<string | null>;
+}
+/** A grant's group principal, when it is a group's sign-in. */
+interface GrantGroup { id: string; role: GroupPrincipalRole }
+/** The rule stopped holding (or never did): the grant ends; never retried as an outage. */
+class GroupSignInRefused extends Error {}
+/** A request's group principal: none (null), a valid one, or undefined when only one of the two is named or the level is not member or editor. */
+const groupAsked = (id: unknown, role: unknown): GrantGroup | null | undefined =>
+  (id === null || id === undefined || id === '') && (role === null || role === undefined || role === '') ? null
+  : typeof id === 'string' && id.length > 0 && id.length <= 128 && isGroupPrincipalRole(role) ? { id, role } : undefined;
+const refuseJson = (status: number, error: string, hint?: string) => new Response(JSON.stringify({ error, ...(hint ? { hint } : {}) }), { status, headers: { 'Content-Type': 'application/json', ...NO_STORE } });
+
+async function mintFor(o: OAuthRoutesOptions, request: Request, grant: { userId: string | null; resource: string; scope: string; group?: (GrantGroup & { issuedBy: string }) | null }): Promise<{ id: string; token: string; expiresIn: number; has_created_document: boolean }> {
+  if (grant.group) {
+    // A group's sign-in: the identity store's guarded mint, for the person who authorised it, re-checked every time.
+    if (!o.groupSignIns) throw new Error('group sign-ins unavailable');
+    try {
+      const minted = await o.groupSignIns.mint({ issuedBy: grant.group.issuedBy, groupId: grant.group.id, role: grant.group.role, audience: grant.resource, scope: grant.scope });
+      return { id: minted.id, token: minted.token, expiresIn: ACCESS_TOKEN_TTL_SECONDS, has_created_document: false };
+    } catch (error) { throw error instanceof IdentityError && error.status < 500 ? new GroupSignInRefused(error.code) : error; }
+  }
   if (!grant.userId) throw new Error('Email account required');
   const identity = await o.sessions.identity?.(grant.userId);
   if (!identity?.email || !identity.emailVerified || identity.userId !== grant.userId) throw new Error('Verified email account required');
@@ -148,25 +183,38 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
       return new Response(JSON.stringify({error:'email_auth_required',hint:'Sign in using the email OTP endpoints first.'}),{status:401,headers:{'Content-Type':'application/json',...NO_STORE}});
     if(!sameOrigin(c.req.raw))
       return new Response(JSON.stringify({error:'forbidden'}),{status:403,headers:{'Content-Type':'application/json',...NO_STORE}});
-    // An optional {"audience":"<service id>"}: a grant for that configured service instead of this API.
-    let requested:unknown;
-    try{const text=await readBody(c.req.raw,{limit:AUTH_BODY_LIMIT,as:'text'});requested=text.trim()?(JSON.parse(text) as {audience?:unknown}|null)?.audience:undefined;}
-    catch(error){if(error instanceof BodyTooLargeError)return payloadTooLarge();requested=null;}
+    // An optional {"audience":"<service id>"}: a grant for that configured service instead of this API; or
+    // {"group_id","group_role"}: a GROUP's sign-in at this API, acting as that group at that level (header).
+    let body:Record<string,unknown>|null;
+    try{const text=await readBody(c.req.raw,{limit:AUTH_BODY_LIMIT,as:'text'});const parsed=text.trim()?JSON.parse(text) as unknown:{};body=parsed&&typeof parsed==='object'&&!Array.isArray(parsed)?parsed as Record<string,unknown>:null;}
+    catch(error){if(error instanceof BodyTooLargeError)return payloadTooLarge();body=null;}
+    const requested=body?body.audience:null;
     const service=typeof requested==='string'?(o.serviceAudiences??[]).find(entry=>entry.id===requested):undefined;
     if(requested!==undefined&&!service)return new Response(JSON.stringify({error:'invalid_audience',hint:'Name a configured service id, or send no audience for this API.'}),{status:400,headers:{'Content-Type':'application/json',...NO_STORE}});
+    let group:GrantGroup|null=null;
+    if(body&&(body.group_id!==undefined||body.group_role!==undefined)){
+      if(service||typeof body.group_id!=='string'||!body.group_id||!isGroupPrincipalRole(body.group_role))
+        return refuseJson(400,'invalid_group_sign_in','Send group_id with group_role member or editor, and no audience.');
+      group={id:body.group_id,role:body.group_role};
+    }
     const scope=service?'':ARTIFACT_SCOPE;
     try{
       const client=await o.oauth.register({client_name:'artifactbin HTTP',redirect_uris:['http://127.0.0.1/callback']});
       const clientId=String(client.client_id);
       const grant={userId:actor.userId,resource:service?service.origin:resource(c.req.raw),scope};
-      const minted=await mintFor(o,c.req.raw,grant);
+      const minted=await mintFor(o,c.req.raw,{...grant,group:group&&{...group,issuedBy:actor.userId}});
       const refreshToken=await o.oauth.issueRefresh({...grant,clientId,accessTokenId:minted.id});
-      return new Response(JSON.stringify({has_created_document:minted.has_created_document,id:minted.id,access_token:minted.token,refresh_token:refreshToken,client_id:clientId,token_type:'Bearer',expires_in:minted.expiresIn,scope,resource:grant.resource}),{status:201,headers:{'Content-Type':'application/json',...NO_STORE}});
-    }catch{return new Response(JSON.stringify({error:'temporarily_unavailable'}),{status:503,headers:{'Content-Type':'application/json',...NO_STORE}});}
+      return new Response(JSON.stringify({has_created_document:minted.has_created_document,id:minted.id,access_token:minted.token,refresh_token:refreshToken,client_id:clientId,token_type:'Bearer',expires_in:minted.expiresIn,scope,resource:grant.resource,...(group?{group_id:group.id,group_role:group.role}:{})}),{status:201,headers:{'Content-Type':'application/json',...NO_STORE}});
+    }catch(error){
+      if(error instanceof GroupSignInRefused)return refuseJson(403,'group_level_not_held','Only someone holding at least that level on the group may sign an agent in as it.');
+      return new Response(JSON.stringify({error:'temporarily_unavailable'}),{status:503,headers:{'Content-Type':'application/json',...NO_STORE}});
+    }
   });
   app.post(SERVICE_TOKEN_PATH, async (c) => {
     const actor=c.get('actor') ?? ANONYMOUS;
     const refuse=(status:number,error:string,hint?:string)=>new Response(JSON.stringify({error,...(hint?{hint}:{})}),{status,headers:{'Content-Type':'application/json',...NO_STORE}});
+    // A group's sign-in has no person to act as at a service: refused as every route refuses it.
+    if(isGroupActor(actor))return refuse(403,GROUP_PRINCIPAL_REFUSED,'A sign-in acting as a group is not exchanged.');
     const parent:ServiceTokenParent|null=actor.credential==='session'&&actor.sessionId?{kind:'session',id:actor.sessionId}:actor.credential==='bearer'&&actor.tokenId?{kind:'token',id:actor.tokenId}:null;
     if(!parent||!actor.userId)return refuse(401,'authentication_required','Send this host\'s own API bearer, or call from a signed-in page.');
     // A cookie is ambient: only this deployment's own pages may spend it here. A bearer is explicit and needs no Origin.
@@ -212,8 +260,11 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
     const requestedResource = q.get('resource') ?? expectedResource;
     const scope = scopeFor(requestedResource, q.get('scope') ?? '');
     const client = clientId ? await o.oauth.client(clientId) : null;
+    const group = groupAsked(q.get('group_id'), q.get('group_role'));
     const problem =
       !client ? 'Unknown client.'
+      : group === undefined ? 'Name group_id with group_role member or editor.'
+      : group && (client.firstParty || serviceFor(requestedResource)) ? 'A group sign-in needs this API and a consent page.'
       : q.get('response_type') !== 'code' ? 'Unsupported response type.'
       : !isValidCodeChallenge(codeChallenge) || method !== 'S256' ? 'Invalid PKCE code challenge.'
       : !clientRedirects(client, redirectUri) ? 'Redirect URI not registered.'
@@ -232,10 +283,18 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
       if (state) url.searchParams.set('state', state);
       return new Response(null, { status: 303, headers: { Location: url.href, ...NO_STORE, 'Referrer-Policy': 'no-referrer' } });
     }
-    const fields = `<input type="hidden" name="client_id" value="${escapeHtml(clientId)}"><input type="hidden" name="redirect_uri" value="${escapeHtml(redirectUri)}"><input type="hidden" name="code_challenge" value="${escapeHtml(codeChallenge)}"><input type="hidden" name="resource" value="${escapeHtml(requestedResource)}"><input type="hidden" name="scope" value="${escapeHtml(scope ?? '')}"><input type="hidden" name="state" value="${escapeHtml(state)}">`;
+    const fields = `<input type="hidden" name="client_id" value="${escapeHtml(clientId)}"><input type="hidden" name="redirect_uri" value="${escapeHtml(redirectUri)}"><input type="hidden" name="code_challenge" value="${escapeHtml(codeChallenge)}"><input type="hidden" name="resource" value="${escapeHtml(requestedResource)}"><input type="hidden" name="scope" value="${escapeHtml(scope ?? '')}"><input type="hidden" name="state" value="${escapeHtml(state)}">${group ? `<input type="hidden" name="group_id" value="${escapeHtml(group.id)}"><input type="hidden" name="group_role" value="${escapeHtml(group.role)}">` : ''}`;
     const service = serviceFor(requestedResource);
     // Only an operator-registered client is named: a dynamic client's name is whatever it registered with.
     const who = client?.configured ? `<strong>${escapeHtml(client.clientName)}</strong>` : service ? 'An application' : 'Your coding agent';
+    if (actor.credential === 'session' && actor.userId && group) {
+      // Acting as a GROUP: said plainly, the level held checked now and again at approval.
+      const name = await o.groupSignIns?.heldName(actor.userId, group.id, group.role).catch(() => null) ?? null;
+      if (!name) return page('artifactbin — error', `<h1>Can’t connect</h1><p class="err">You can sign an agent in as a group only at a level you hold there.</p>`, 403);
+      return page('artifactbin — connect', `<h1>Connect to artifactbin</h1>
+      <p>${client?.configured ? who : 'Your coding agent'} wants to act as the group <strong>${escapeHtml(name)}</strong> at <strong>${group.role}</strong> level, not as you (${escapeHtml(actor.email ?? 'your account')}). It can do what a ${group.role} of ${escapeHtml(name)} can do with the group’s pages, and nothing of yours. It stops when you no longer hold that level there.</p>
+      <form method="POST" action="/oauth/authorize/approve">${fields}<input type="hidden" name="grant" value="group"><button type="submit" name="action" value="approve" aria-label="Approve connection">Approve</button><button type="submit" name="action" value="deny">Deny</button></form>`, 200, redirectUri);
+    }
     if (actor.credential === 'session' && actor.userId) {
       return page('artifactbin — connect', `<h1>Connect to artifactbin</h1>
       ${service ? `<p>${who} wants to act as you at <strong>${escapeHtml(service.id)}</strong> (${escapeHtml(service.origin)}), as <strong>${escapeHtml(actor.email ?? 'your account')}</strong>. It cannot use this site as you.</p>` : client?.configured ? `<p>${who} wants to use this site as <strong>${escapeHtml(actor.email ?? 'your account')}</strong>: read what you may and publish as you.</p>` : `<p>Your coding agent wants to publish artifacts. New artifacts will belong to <strong>${escapeHtml(actor.email ?? 'your account')}</strong>.</p>`}
@@ -261,7 +320,9 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
     const scope = String(form.get('scope') ?? '');
     const state = form.get('state');
     const client = clientId ? await o.oauth.client(clientId) : null;
-    if (!client || !clientRedirects(client, redirectUri) || !isValidCodeChallenge(codeChallenge) || !acceptsResource(c.req.raw, requestedResource) || scopeFor(requestedResource, scope) !== scope) {
+    const group = groupAsked(form.get('group_id'), form.get('group_role'));
+    if (!client || !clientRedirects(client, redirectUri) || !isValidCodeChallenge(codeChallenge) || !acceptsResource(c.req.raw, requestedResource) || scopeFor(requestedResource, scope) !== scope
+      || group === undefined || (group && (client.firstParty || serviceFor(requestedResource)))) {
       return c.json({ error: 'invalid_request' }, 400);
     }
     const actor = c.get('actor') ?? ANONYMOUS;
@@ -274,7 +335,9 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
       if (typeof state === 'string' && state) url.searchParams.set('state',state);
       return Response.redirect(url,303);
     }
-    url.searchParams.set('code', await createAuthCode(o.oauth, { userId: actor.userId, clientId, redirectUri, resource: requestedResource, scope, ...(client.firstParty ? { sessionId: actor.sessionId } : {}) }, codeChallenge));
+    // The fields are the browser's: the level is checked again here, and the code carries the group, never the token body.
+    if (group && !await o.groupSignIns?.heldName(actor.userId, group.id, group.role).catch(() => null)) return c.json({ error: 'group_level_not_held' }, 403);
+    url.searchParams.set('code', await createAuthCode(o.oauth, { userId: actor.userId, clientId, redirectUri, resource: requestedResource, scope, ...(client.firstParty ? { sessionId: actor.sessionId } : {}), ...(group ? { group } : {}) }, codeChallenge));
     if (typeof state === 'string' && state) url.searchParams.set('state', state);
     return Response.redirect(url, 303);
   });
@@ -324,10 +387,13 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
       try {
         // New grants always bind the canonical resource, also when the code was spent through an alias; a service's is its origin.
         const bound = serviceFor(requestedResource) ? requestedResource : expectedResource;
-        const minted = await mintFor(o, c.req.raw, { userId: grant.userId, resource: bound, scope: grant.scope });
+        const group = grant.group && !serviceFor(requestedResource) ? { ...grant.group, issuedBy: grant.userId } : null;
+        if (grant.group && !group) return oauthError('invalid_grant', 'Invalid, expired, or already-used authorization code');
+        const minted = await mintFor(o, c.req.raw, { userId: grant.userId, resource: bound, scope: grant.scope, group });
         const refreshToken = await o.oauth.issueRefresh({ clientId: grant.clientId, userId: grant.userId, resource: bound, scope: grant.scope, accessTokenId: minted.id, sessionId: grant.sessionId ?? null });
-        return oauthJson({ has_created_document: minted.has_created_document, access_token: minted.token, token_type: 'Bearer', expires_in: ACCESS_TOKEN_TTL_SECONDS, refresh_token: refreshToken, scope: grant.scope });
+        return oauthJson({ has_created_document: minted.has_created_document, access_token: minted.token, token_type: 'Bearer', expires_in: ACCESS_TOKEN_TTL_SECONDS, refresh_token: refreshToken, scope: grant.scope, ...(group ? { group_id: group.id, group_role: group.role } : {}) });
       } catch (error) {
+        if (error instanceof GroupSignInRefused) return oauthError('invalid_grant', 'The group sign-in is not held at that level');
         return oauthJson({ error: 'temporarily_unavailable', error_description: 'Token issuance unavailable' }, 503);
       }
     }
@@ -341,8 +407,10 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
         const result=await o.oauth.rotateAndMint(body.refresh_token,body.client_id,serviceFor(requestedResource)?[requestedResource]:resources(c.req.raw),grant=>mintFor(o,c.req.raw,grant));
         if(!result)return oauthError('invalid_grant','Invalid, expired, revoked, or already-used refresh token');
         const {grant,minted}=result;
-        return oauthJson({ has_created_document: minted.has_created_document, access_token: minted.token, token_type: 'Bearer', expires_in: ACCESS_TOKEN_TTL_SECONDS, refresh_token: grant.token, scope: grant.scope });
+        return oauthJson({ has_created_document: minted.has_created_document, access_token: minted.token, token_type: 'Bearer', expires_in: ACCESS_TOKEN_TTL_SECONDS, refresh_token: grant.token, scope: grant.scope, ...(grant.group ? { group_id: grant.group.id, group_role: grant.group.role } : {}) });
       } catch (error) {
+        // A group's sign-in whose rule no longer holds: the grant ends (the family is revoked), never "retry later".
+        if (error instanceof GroupSignInRefused) { await o.oauth.revokeRefresh(body.refresh_token, body.client_id); return oauthError('invalid_grant', 'The group sign-in no longer holds'); }
         return oauthJson({ error: 'temporarily_unavailable', error_description: 'Token issuance unavailable' }, 503);
       }
     }

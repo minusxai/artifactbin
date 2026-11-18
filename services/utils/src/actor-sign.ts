@@ -7,12 +7,14 @@
  * same" HMAC is how a proxy signs something the app rejects.
  */
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { ACTOR_TTL_SECONDS, CREDENTIALS, isWorkloadBinding, type Actor, type Credential } from '@artifactbin/contracts';
+import { ACTOR_TTL_SECONDS, CREDENTIALS, isGroupPrincipalRole, isWorkloadBinding, type Actor, type Credential, type HumanActor } from '@artifactbin/contracts';
 
 /** Tolerated clock difference between proxy and app. */
 const SKEW_SECONDS = 30;
 
 type Claims = Actor & { iat:number; exp:number };
+/** A group principal's fields (contracts `GroupActor`): all of them or none, never beside a person's. */
+const GROUP_FIELDS = ['principal', 'principalGroupId', 'principalGroupRole', 'issuedBy'] as const;
 
 function canonical(obj: Record<string, unknown>): string {
   const keys = Object.keys(obj).filter((k) => obj[k] !== undefined).sort();
@@ -55,8 +57,18 @@ export function verifyActor(header: string | null | undefined, secret: string, o
   const now = Math.floor((opts.now ?? Date.now()) / 1000);
   if (claims.exp + SKEW_SECONDS < now) return null;
   if (claims.iat - SKEW_SECONDS > now) return null;
+  const raw = claims as Record<string, unknown>;
+  // A GROUP's sign-in: exactly its own fields, a bearer, and nothing of a person's; a partial or mixed claim is no one.
+  if (GROUP_FIELDS.some((key) => raw[key] !== undefined)) {
+    const exact = Object.keys(raw).every((key) => ['credential', 'tokenId', 'iat', 'exp', ...GROUP_FIELDS].includes(key));
+    const role = raw.principalGroupRole;
+    return exact && raw.credential === 'bearer' && raw.principal === 'group' && typeof raw.principalGroupId === 'string' && !!raw.principalGroupId
+      && isGroupPrincipalRole(role) && typeof raw.tokenId === 'string' && !!raw.tokenId && typeof raw.issuedBy === 'string' && !!raw.issuedBy
+      ? { credential: 'bearer', principal: 'group', principalGroupId: raw.principalGroupId, principalGroupRole: role, tokenId: raw.tokenId, issuedBy: raw.issuedBy }
+      : null;
+  }
   if(claims.credential==='workload')return claims.serviceWorkload===true&&isWorkloadBinding(claims.workload)&&!claims.userId&&!claims.tokenId&&!claims.sessionId&&!claims.email?{credential:'workload',serviceWorkload:true,workload:claims.workload}:null;
-  const actor: Actor = { credential: claims.credential };
+  const actor: HumanActor = { credential: claims.credential as Credential };
   if (typeof claims.userId === 'string') actor.userId = claims.userId;
   if (typeof claims.tokenId === 'string') actor.tokenId = claims.tokenId;
   if (typeof claims.email === 'string') actor.email = claims.email;

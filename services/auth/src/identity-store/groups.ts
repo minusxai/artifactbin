@@ -39,7 +39,7 @@ export async function effectiveAdminGroupIds(q: Queryable, t: IdentityTables, us
   return (await q.query<{group_id: string}>(`SELECT ga.group_id FROM (${groupAdminsSql(t)}) ga WHERE ga.user_id=$1 ORDER BY ga.group_id COLLATE "C"`, [userId])).rows.map(row => row.group_id);
 }
 
-type GroupMethods = Pick<IdentityService, 'createGroup' | 'updateGroup' | 'setGroupParent' | 'deleteGroup' | 'setGroupMember' | 'removeGroupMember' | 'inviteGroupMember'
+type GroupMethods = Pick<IdentityService, 'revokeGroupSignIn' | 'createGroup' | 'updateGroup' | 'setGroupParent' | 'deleteGroup' | 'setGroupMember' | 'removeGroupMember' | 'inviteGroupMember'
   | 'removeGroupInvitation' | 'acceptGroupInvitations' | 'admitToGroup'>;
 
 export function groupMethods(db: TransactionalQueryable, t: IdentityTables, options: {testDomain?: string}): GroupMethods {
@@ -82,6 +82,13 @@ export function groupMethods(db: TransactionalQueryable, t: IdentityTables, opti
   };
 
   return {
+    async revokeGroupSignIn({actorId, groupId, id}) {
+      return db.transaction(async tx => {
+        await requireAdmin(tx, actorId, groupId);
+        const row = (await tx.query<{name: string | null}>(`UPDATE ${t.tokens} SET deleted_at=now() WHERE id=$1 AND group_id=$2 AND user_id IS NULL AND deleted_at IS NULL RETURNING name`, [id, groupId])).rows[0];
+        return row ? {name: row.name} : null;
+      });
+    },
     async createGroup({actorId, handle: rawHandle, name: rawName, description: rawDescription, parentId: rawParent}) {
       const valid = normalizeCreateGroup({handle: rawHandle, name: rawName, description: rawDescription, parent_id: rawParent});
       if (!valid) throw new IdentityError('invalid_group');

@@ -185,15 +185,20 @@ it('the exchange: a signed-in page and an agent\'s one API bearer each get a fiv
  expect((await exchange({cookie:signed.cookie})).status).toBe(401);
 });
 
-it('the principal columns: no door sets them, whatever a caller sends; every token stays a person\'s and introspects as one',async()=>{
+it('the principal columns: no door sets them from what a caller sends; every token stays a person\'s and introspects as one',async()=>{
  const host=await composed();
  const email='mxmx_test_principal_owner@example.test';
  const PRINCIPAL={group_id:'grp_x',group_role:'editor',issued_by:'usr_x',grant_id:'gnt_x',groupId:'grp_x',groupRole:'editor',issuedBy:'usr_x',grantId:'gnt_x',principal_kind:'group'};
+ // The skill's sign-in door reads `group_id` and `group_role` as an ask for a GROUP's sign-in (contracts identity-service
+ // `GROUP_SIGN_IN_RULE`; group-sign-ins.test.ts): for a group the caller does not hold it is refused, nothing written.
+ const {group_id:_group,group_role:_role,...OTHER}=PRINCIPAL;
  const signed=await host.signIn(email);
  const user=await userIdOf(email);
+ expect((await host.post('/api/authentication/token',PRINCIPAL,{cookie:signed.cookie})).status).toBe(403);
+ expect((await host.post('/api/authentication/token',{audience:'warehouse',...PRINCIPAL},{cookie:signed.cookie})).status).toBe(400);
  // Every door that issues a token, each sent the principal fields beside its own.
- const api=await host.post('/api/authentication/token',PRINCIPAL,{cookie:signed.cookie});
- const scoped=await host.post('/api/authentication/token',{audience:'warehouse',...PRINCIPAL},{cookie:signed.cookie});
+ const api=await host.post('/api/authentication/token',OTHER,{cookie:signed.cookie});
+ const scoped=await host.post('/api/authentication/token',{audience:'warehouse',...OTHER},{cookie:signed.cookie});
  const grant=await api.json() as {access_token:string;refresh_token:string;client_id:string};
  const refreshed=await host.post('/oauth/token',{grant_type:'refresh_token',client_id:grant.client_id,refresh_token:grant.refresh_token,resource:`${origin}/api`,...PRINCIPAL});
  const exchanged=await host.post('/api/authentication/service-token',{audience:'warehouse',...PRINCIPAL},{authorization:`Bearer ${signed.grant.access_token}`});

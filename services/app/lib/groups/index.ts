@@ -12,7 +12,7 @@ import {groupAdminSql,subtreeSql} from './hierarchy';
  */
 import {normalizeCreateGroup} from '@artifactbin/contracts';
 import type {UpdateGroupInput,AccountPreferences,CreateGroupInput,DefaultDestination,GroupAudienceMember,GroupDetail,GroupInvitation,GroupMember,GroupRelative,GroupRole,GroupSummary,Queryable as ContractQueryable} from '@artifactbin/contracts';
-import { getDb, services, deploymentConfig, env } from '../platform';
+import { getDb, services, deploymentConfig, env, emit } from '../platform';
 export interface GroupRecord {id:string;handle:string;name:string;description:string;created_by:string;deleted_at:string|null;parent_id:string|null;}
 export {GroupError} from './errors';
 const summary=(group:GroupRecord,role:GroupRole|null):GroupSummary=>({id:group.id,handle:group.handle,name:group.name,description:group.description,role,parent_id:group.parent_id??null});
@@ -161,3 +161,29 @@ export async function deleteGroup(actorId:string,id:string,handle:string,actor?:
 export {recordGroupMutation,recordGroupChanges,groupQuota,mailGroupChanges} from './mutations';
 import {recordGroupMutation} from './mutations';
 export {groupAdminSql,reachedGroupsSql,subtreeSql,subtreeMemberIds,groupChain} from './hierarchy';
+
+/**
+ * A GROUP'S SIGN-IN as the group's Admins see it (contracts identity-service `GROUP_SIGN_IN_RULE`): an agent acting as
+ * the group at `role`, authorised by `issued_by` (the person), and whether it is still `live`. Never its secret.
+ */
+export interface GroupSignIn {id:string;name:string|null;role:'member'|'editor';issued_by:{id:string;username:string|null;name:string|null};created_at:string;expires_at:string|null;last_used_at:string|null;live:boolean;}
+/** Refuse anyone but an Admin of the group (direct, or through an ancestor): `forbidden` for its other people, `not_found` otherwise. */
+async function requireGroupAdmin(userId:string,groupId:string,db:ContractQueryable):Promise<void>{
+ if((await db.query('SELECT 1 FROM group_admins WHERE group_id=$1 AND user_id=$2',[groupId,userId])).rows.length)return;
+ throw await getGroupRole(userId,groupId,db)?new GroupError('forbidden',403):new GroupError('not_found',404);
+}
+/** Every unexpired, unrevoked sign-in acting as the group, newest first (at most 200), for one of its Admins. */
+export async function listGroupSignIns(userId:string,groupId:string):Promise<GroupSignIn[]>{
+ const db=await getDb();await requireGroupAdmin(userId,groupId,db);
+ return (await db.query<GroupSignIn&{issuer_username:string|null;issuer_name:string|null;issuer_id:string}>(`SELECT t.id,t.name,t.group_role AS role,t.issued_by AS issuer_id,u.username AS issuer_username,u.name AS issuer_name,t.created_at,t.expires_at,t.last_used_at,t.live
+   FROM tokens t LEFT JOIN users u ON u.id=t.issued_by
+  WHERE t.group_id=$1 AND t.user_id IS NULL AND t.grant_id IS NULL AND t.deleted_at IS NULL AND (t.expires_at IS NULL OR t.expires_at>now())
+  ORDER BY t.created_at DESC,t.id LIMIT 200`,[groupId])).rows.map(({issuer_id,issuer_username,issuer_name,...row})=>({...row,issued_by:{id:issuer_id,username:issuer_username,name:issuer_name}}));
+}
+/** An Admin of the group ends one of its sign-ins, through the identity module (which checks the Admin again); false when none matched. */
+export async function revokeGroupSignIn(userId:string,groupId:string,id:string):Promise<boolean>{
+ const row=await services().identity.revokeGroupSignIn({actorId:userId,groupId,id});
+ if(!row)return false;
+ void emit({kind:'user',id:userId},'revoked',{kind:'token',id},{name:row.name,group_id:groupId});
+ return true;
+}

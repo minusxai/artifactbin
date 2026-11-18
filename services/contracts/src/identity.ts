@@ -12,8 +12,14 @@ export interface TokenRecord {
   scope?: string;
   /** ISO expiry; absent when the token does not expire. */
   expiresAt?: string;
-  /** The configured service a run sign-in was issued to (`tokens.issued_by`); absent on every other token. */
+  /** `tokens.issued_by`: a run sign-in's configured service, or the person who authorised a group's sign-in. */
   issuedBy?: string;
+  /**
+   * A GROUP'S SIGN-IN (./identity-service `GROUP_SIGN_IN_RULE`): the group the token acts as and its level, with
+   * `userId` null; absent on every other token. A token with neither `userId` nor `groupId` is unowned, never a group's.
+   */
+  groupId?: string;
+  groupRole?: 'member' | 'editor';
   /** The account's identity, read in the same statement as the token; absent when it has no account row. */
   email?: string;
   emailVerified?: boolean;

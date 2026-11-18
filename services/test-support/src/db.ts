@@ -45,7 +45,11 @@ const TOKENS_DDL: readonly string[] = [
      expires_at TIMESTAMPTZ,
      last_used_at TIMESTAMPTZ,
      -- A run sign-in's service (the identity schema's issued_by), which the bearer read's run fence reads.
-     issued_by TEXT
+     issued_by TEXT,
+     -- A group's sign-in (the identity schema's principal columns), which the bearer read decides first.
+     group_id TEXT,
+     group_role TEXT,
+     grant_id TEXT
    )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_tokens_hash ON auth.tokens (token_hash)`,
 ];

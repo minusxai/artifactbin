@@ -70,6 +70,8 @@ interface AuthorizationGrant {
   scope: string;
   /** A first-party client's grant: the browser session that approved it, which the grant then lives no longer than. */
   sessionId?: string | null;
+  /** A GROUP's sign-in approved at consent (contracts identity-service `GROUP_SIGN_IN_RULE`): the group and its level. */
+  group?: { id: string; role: 'member' | 'editor' } | null;
 }
 
 export interface OAuthClient {
@@ -116,10 +118,12 @@ export function parseOAuthClients(raw: string | undefined): readonly ConfiguredO
 interface RefreshGrant {
   token: string;
   clientId: string;
-  /** Null for an anonymous grant: the rotated access token is minted unowned. */
+  /** The person on the rotated access token; null on a group's sign-in (`group`), which is never an unowned grant. */
   userId: string | null;
   resource: string;
   scope: string;
+  /** A GROUP's sign-in: its group, level and the person who authorised it, read from the rotated access token. */
+  group?: { id: string; role: 'member' | 'editor'; issuedBy: string } | null;
 }
 
 export interface OAuthStore {
@@ -191,7 +195,7 @@ export function createOAuthStore(db: Queryable, schema = 'auth', configured: rea
       const code = randomBytes(24).toString('base64url');
       await db.query(
         `INSERT INTO ${credentials} (kind, credential_hash, subject_id, payload, expires_at) VALUES ($1, $2, $3, $4, $5)`,
-        [AUTHORIZATION_CODE, hash(code), grant.userId, JSON.stringify({ client_id: grant.clientId, redirect_uri: grant.redirectUri, resource: grant.resource, scope: grant.scope, code_challenge: codeChallenge, ...(grant.sessionId ? { session_id: grant.sessionId } : {}) }), new Date(now + Math.min(ttlMs, AUTH_CODE_TTL_MS)).toISOString()],
+        [AUTHORIZATION_CODE, hash(code), grant.userId, JSON.stringify({ client_id: grant.clientId, redirect_uri: grant.redirectUri, resource: grant.resource, scope: grant.scope, code_challenge: codeChallenge, ...(grant.sessionId ? { session_id: grant.sessionId } : {}), ...(grant.group ? { group_id: grant.group.id, group_role: grant.group.role } : {}) }), new Date(now + Math.min(ttlMs, AUTH_CODE_TTL_MS)).toISOString()],
       );
       return code;
     },
@@ -209,7 +213,8 @@ export function createOAuthStore(db: Queryable, schema = 'auth', configured: rea
       if (payload.resource !== input.resource) return null;
       if (typeof payload.code_challenge !== 'string' || s256(input.codeVerifier) !== payload.code_challenge) return null;
       if (typeof payload.scope !== 'string') return null;
-      return { userId: row.subject_id, clientId: input.clientId, redirectUri: payload.redirect_uri, resource: input.resource, scope: payload.scope, sessionId: typeof payload.session_id === 'string' ? payload.session_id : null };
+      const group = typeof payload.group_id === 'string' && (payload.group_role === 'member' || payload.group_role === 'editor') ? { id: payload.group_id, role: payload.group_role } as const : null;
+      return { userId: row.subject_id, clientId: input.clientId, redirectUri: payload.redirect_uri, resource: input.resource, scope: payload.scope, sessionId: typeof payload.session_id === 'string' ? payload.session_id : null, group };
     },
     async issueRefresh(grant) {
       await sweep();
@@ -249,8 +254,8 @@ export function createOAuthStore(db: Queryable, schema = 'auth', configured: rea
     },
     async rotateAndMint(presented, clientId, resources, mint) {
       const resource=resources[0];if(!resource)return null;
-      const row=(await db.query<{group_id:string;payload:Record<string,unknown>|string;user_id:string|null}>(`
-        SELECT current.group_id,current.payload,access.user_id FROM ${credentials} current
+      const row=(await db.query<{group_id:string;payload:Record<string,unknown>|string;user_id:string|null;principal_group_id:string|null;principal_group_role:string|null;issued_by:string|null}>(`
+        SELECT current.group_id,current.payload,access.user_id,access.group_id AS principal_group_id,access.group_role AS principal_group_role,access.issued_by FROM ${credentials} current
         JOIN ${credentials} family ON family.kind='refresh_family' AND family.credential_hash=current.group_id AND family.deleted_at IS NULL
         JOIN ${accessTokens} access ON access.id=current.payload->>'access_token_id' AND access.deleted_at IS NULL
         WHERE current.kind=$1 AND current.credential_hash=$2 AND current.payload->>'client_id'=$3
@@ -263,7 +268,11 @@ export function createOAuthStore(db: Queryable, schema = 'auth', configured: rea
       }
       if(!await this.accessLive(String(objectOf(row.payload).access_token_id))){await this.revokeRefresh(presented,clientId);return null;}
       const payload=objectOf(row.payload);if(typeof payload.scope!=='string')return null;
-      const grant:RefreshGrant={token:refreshToken(),clientId,userId:row.user_id,resource,scope:payload.scope};
+      // A group's sign-in rotates as one (the mint re-checks its rule); a row naming a group but no level or issuer is no grant.
+      const role=row.principal_group_role;
+      const group=row.principal_group_id?(row.user_id===null&&row.issued_by&&(role==='member'||role==='editor')?{id:row.principal_group_id,role:role as 'member'|'editor',issuedBy:row.issued_by}:undefined):null;
+      if(group===undefined){await this.revokeRefresh(presented,clientId);return null;}
+      const grant:RefreshGrant={token:refreshToken(),clientId,userId:row.user_id,resource,scope:payload.scope,group};
       const minted=await mint(grant);
       // Updating the durable family row serializes concurrent finalizers.
       const result=await db.query(`WITH family AS (

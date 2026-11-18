@@ -7,7 +7,8 @@
  *  - `tokens.scopes` (the scope list) and `tokens.live`: the bearer read's own rule (row, expiry, OAuth family or, for a
  *    run sign-in, parent-credential
  *    fence), an audience of this deployment's API or of a configured service (`identity_settings.service_audiences`,
- *    IDENTITY__SERVICE_AUDIENCES) and an active account; a reader accepting a token checks its `audience` itself;
+ *    IDENTITY__SERVICE_AUDIENCES) and an active account, or for a GROUP's sign-in (`group_id` set, no `user_id`) its
+ *    authorisation (./rules `groupSignInLiveSql`) instead; a reader accepting a token checks its `audience` itself;
  *  - `sessions` (Better Auth's `session`, minus its token) and `sessions.live`: unexpired;
  *  - `group_admins`, the one computed view: each live group's effective admins and the group their direct `admin`
  *    row is on (./rules `groupAdminsSql`, the rule the identity module's own checks run), so no reader re-derives it.
@@ -21,7 +22,7 @@
  */
 import type {Table} from '@artifactbin/contracts';
 import {bearerLiveSql} from '../identity/bearer';
-import {authenticatingUserSql,deploymentMemberSql,groupAdminsSql,type RuleNames} from './rules';
+import {authenticatingUserSql,deploymentMemberSql,groupAdminsSql,groupSignInLiveSql,type RuleNames} from './rules';
 import {IDENTITY_TABLES,SECRET_COLUMNS} from './schema';
 
 export interface IdentitySchemas {
@@ -91,9 +92,10 @@ export function identityViewStatements(schemas: IdentitySchemas, options: {sessi
       statements.push(`CREATE OR REPLACE VIEW ${read}.tokens AS
   SELECT ${plain('tokens', 't', {scopes: `
     array_remove(regexp_split_to_array(coalesce(t.scope, ''), '\\s+'), '') AS scopes`, live: `
-    (${exists} AND t.user_id IS NOT NULL
+    (${exists}
       AND EXISTS (SELECT 1 FROM ${settings} s WHERE s.id = 'installation' AND (COALESCE(t.audience, '') = '' OR t.audience = ANY(s.api_audiences) OR t.audience = ANY(s.service_audiences)))
-      AND COALESCE((SELECT u.active FROM ${read}.users u WHERE u.id = t.user_id), false)) AS live`})}
+      AND CASE WHEN t.group_id IS NULL THEN t.user_id IS NOT NULL AND COALESCE((SELECT u.active FROM ${read}.users u WHERE u.id = t.user_id), false)
+        ELSE ${groupSignInLiveSql('t', {groups: `${auth}.groups`, group_members: `${auth}.group_members`}, id => `COALESCE((SELECT issuer.active AND issuer.kind = 'account' AND NOT issuer.test_account FROM ${read}.users issuer WHERE issuer.id = ${id}), false)`)} END) AS live`})}
   FROM ${auth}.tokens t`);
     } else {
       statements.push(`CREATE OR REPLACE VIEW ${read}.${table} AS

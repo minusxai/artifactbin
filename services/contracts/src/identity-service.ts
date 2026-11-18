@@ -16,12 +16,26 @@
  *    `{active: false}`. JSON in and out, read from committed state at request time.
  *
  * THE PRINCIPAL (`IdentityIntrospectResponse` `principal_kind`, `group_id`, `group_role`, `issued_by`; the `tokens`
- * view's `group_id`, `group_role`, `issued_by`, `grant_id`): who a credential acts as. Today always a person: kind
- * `'user'`, `user_id` set and never null, the group fields null. `issued_by` is null too, except on a person's RUN
- * SIGN-IN (./service-audiences `RUN_SIGN_IN_PATH`), where it is the id of the configured service the sign-in was issued
- * to; the principal is still that person. Once group sign-ins exist a credential may act as a group at a level
- * (`'member'` or `'editor'`) with no person behind it; a reader checks `principal_kind` before relying on `user_id` as
- * the person acting.
+ * view's `group_id`, `group_role`, `issued_by`, `grant_id`): who a credential acts as.
+ *  - A PERSON: kind `'user'`, `user_id` set, the group fields null. `issued_by` is null, except on a person's RUN
+ *    SIGN-IN (./service-audiences `RUN_SIGN_IN_PATH`), where it is the id of the configured service the sign-in was
+ *    issued to; the principal is still that person.
+ *  - A GROUP (`GROUP_SIGN_IN_RULE` below): kind `'group'`, `user_id` NULL, `group_id` the group and `group_role` the
+ *    level (`'member'` or `'editor'`, never `'admin'`); `issued_by` the person who authorised it, never the principal.
+ *    There is no person behind it. Only an agent's sign-in is ever a group: no browser session acts as one.
+ * A `tokens` row is a group's exactly when `group_id` is set (`user_id` is then NULL); a row with neither `user_id` nor
+ * `group_id` is an unowned token, never a group's. A reader checks `principal_kind` (or `group_id`) before relying on
+ * `user_id` as the person acting, and refuses a kind it does not handle.
+ *
+ * GROUP_SIGN_IN_RULE: a person (an ordinary account: never a test account or a test user, whose own reach is narrower
+ * than their memberships) signed in with a live verified session may authorise an agent to act as group G at
+ * level L (`member` or `editor`) when they hold at least L on G: a direct `admin` row on G or effective admin of G
+ * through an ancestor (the `group_admins` view) holds editor and member; a direct `editor` row holds editor and member;
+ * a direct `member` row holds member. The sign-in is live only while that still holds: the group exists and is not
+ * deleted, the authorising person's account is `active` (and still an ordinary account) and still holds at least L on G, and neither they nor a group
+ * Admin revoked it (with the usual token expiry and refresh-family fence). Every use re-checks it (`tokens.live`, the
+ * bearer read) and so does every refresh, which rotates as a person's does (a replayed refresh token revokes the
+ * family). A demotion, removal, deactivation or group deletion ends it on the next request.
  */
 import type { ServiceTokenParent } from './service-audiences';
 import { SERVICE_PAYLOAD_ENVELOPE, SERVICE_PAYLOAD_LIMIT } from './payload-limit';
@@ -36,22 +50,25 @@ export const IDENTITY_INTROSPECT_PATH = '/api/internal/identity/introspect';
  * by that id in the matching view (`live`). On an exchanged token `token_id` is the token's own id (`vtk_…`), never a
  * row of `tokens`.
  *
- * THE PRINCIPAL: who the token acts as. `principal_kind` is `'user'` on every active answer today, with `group_id` and
- * `group_role` null: the principal is the person `user_id`. `issued_by` is null except on a run sign-in, where it names
- * the configured service it was issued to (./service-audiences `RUN_SIGN_IN_PATH`). Once group sign-ins exist, a `'group'`
- * answer's principal is the group `group_id` itself at the level `group_role` (`'member'` or `'editor'`), with no
- * person behind it; `issued_by` is then the person who issued the credential, never the principal. A reader checks
- * `principal_kind` before relying on `user_id` as the person acting, and refuses a kind it does not handle. The
- * `tokens` view carries the same facts (`group_id`, `group_role`, `issued_by`, `grant_id`), null on every row today but
- * a run sign-in's `issued_by`.
+ * THE PRINCIPAL: who the token acts as (header above). `'user'`: the person `user_id` (never null), `group_id` and
+ * `group_role` null, `issued_by` null except on a run sign-in, where it names the configured service it was issued to
+ * (./service-audiences `RUN_SIGN_IN_PATH`). `'group'`: the group `group_id` itself at the level `group_role`, with
+ * `user_id` NULL (the only answer where it is) and `issued_by` the person who authorised it, never the principal; an
+ * exchanged token is never a group's. A reader checks `principal_kind` before relying on `user_id` as the person
+ * acting, and refuses a kind it does not handle. The `tokens` view carries the same facts (`group_id`, `group_role`,
+ * `issued_by`, `grant_id`).
  */
 export type IdentityIntrospectResponse =
   | {
-      active: true; principal_kind: IdentityPrincipalKind; user_id: string; token_id: string; scopes: string[]; audience: string | null;
-      expires_at: string | null; parent: ServiceTokenParent | null; group_id: string | null; group_role: IdentityPrincipalGroupRole | null; issued_by: string | null;
+      active: true; principal_kind: 'user'; user_id: string; token_id: string; scopes: string[]; audience: string | null;
+      expires_at: string | null; parent: ServiceTokenParent | null; group_id: null; group_role: null; issued_by: string | null;
+    }
+  | {
+      active: true; principal_kind: 'group'; user_id: null; token_id: string; scopes: string[]; audience: string | null;
+      expires_at: string | null; parent: null; group_id: string; group_role: IdentityPrincipalGroupRole; issued_by: string;
     }
   | { active: false };
-/** What an introspected token acts as: a person, or (once group sign-ins exist) a group at a level. */
+/** What an introspected token acts as: a person, or a group at a level (`GROUP_SIGN_IN_RULE`). */
 export type IdentityPrincipalKind = 'user' | 'group';
 /** The level a group principal acts at: never `admin`. */
 export type IdentityPrincipalGroupRole = 'member' | 'editor';
@@ -69,8 +86,9 @@ export const IDENTITY_SCHEMA = 'identity';
  *    expiry, OAuth family fence or, for a run sign-in, its live parent credential), an audience of this deployment's
  *    API or of a configured service (IDENTITY__SERVICE_AUDIENCES), and an active account. A reader accepting a token
  *    checks its `audience` itself. `group_id`, `group_role`, `issued_by`, `grant_id`: the principal columns (see
- *    `IdentityIntrospectResponse`), null on every row today but a run sign-in's `issued_by` (its service's id); a row
- *    with a group principal will name its group, level, issuing person and approval.
+ *    `IdentityIntrospectResponse`): null on a person's token but a run sign-in's `issued_by` (its service's id); a
+ *    group's sign-in names its group and level, `issued_by` the person who authorised it, and `user_id` is NULL. For a
+ *    group's row `live` is `GROUP_SIGN_IN_RULE` instead of an active account.
  *  - groups (`parent_id` null at a root; `deleted_at` set once deleted), group_members (DIRECT rows only),
  *    group_hierarchy (one row, id 'installation': the revision moves on every group create, delete and reparent),
  *    group_invitations, handle_reservations, group_mail_outbox: the tables as they are.

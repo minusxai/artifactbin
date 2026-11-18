@@ -1,12 +1,15 @@
 /** Shared identity and login boundary. No proxy transport or rate policy. */
-import {CODE_DELIVERY_HEADER, REVALIDATE_ACTOR_HEADER, ANONYMOUS, isInternalApiPath, parseAliasOrigins, parseServiceAudiences, type Actor, type EventsService, type Part, type Queryable, type TokenReader, type TransactionalQueryable, type Upstream} from '@artifactbin/contracts';
+import {CODE_DELIVERY_HEADER, REVALIDATE_ACTOR_HEADER, ANONYMOUS, IDENTITY_SCHEMA, isGroupActor, isInternalApiPath, parseAliasOrigins, parseServiceAudiences, type Actor, type EventsService, type Part, type Queryable, type TokenReader, type TransactionalQueryable, type Upstream} from '@artifactbin/contracts';
 import type {Hono} from 'hono';
 import {BodyTooLargeError,readBody,assemble,buildAssetRequest,buildAssetResponse,attachActor,actorOf} from '@artifactbin/utils';
-import {acceptedOriginsOf,baseUrlOf,mountOAuthRoutes,AUTH_BODY_LIMIT,payloadTooLarge} from './routes/oauth';
+import {acceptedOriginsOf,baseUrlOf,mountOAuthRoutes,AUTH_BODY_LIMIT,payloadTooLarge,type GroupSignIns} from './routes/oauth';
 import {say} from './events';
 import {sessionAuthority} from './session-authority';
 import {serviceTokenKey} from './identity/service-tokens';
-import {createOAuthStore,parseOAuthClients} from './identity/oauth';
+import {ACCESS_TOKEN_TTL_SECONDS,createOAuthStore,parseOAuthClients} from './identity/oauth';
+import {mintGroupSignIn} from './identity-store/accounts';
+import {groupLevelHeldSql} from './identity-store/rules';
+import {identityTables} from './identity-store/tables';
 import {readEnv} from './env';
 import {usesDevOutbox} from './mail';
 /** `setCookies`: Set-Cookie values the store wants sent back (a rolled-forward session cookie). */
@@ -51,6 +54,7 @@ export function bearerAdmission(o: BearerAdmissionOptions): Part {
     let actor:Actor;
     try {actor=await resolveBearer(c.req.raw,o)??ANONYMOUS;}
     catch {return Response.json({error:'session_unavailable'},{status:503,headers:{'cache-control':'no-store'}});}
+    // A group's sign-in has no person to admit: its authorising person's admission is its `live` rule (`users.active`).
     if(actor.userId&&o.admitIdentity&&!await o.admitIdentity({userId:actor.userId}))return Response.json({error:'deployment_admission_required'},{status:403});
     attachActor(c.req.raw,actor);
     await next();
@@ -88,7 +92,7 @@ export function session(o: AuthOptions): Part<AuthEnv> {
           // tables from the app or pretend its attached snapshot is live.
           let current:Actor=ANONYMOUS;
           try {current=await resolveActor(c.req.raw,o);} catch { /* fail closed */ }
-          const identity=(actor:Actor)=>[actor.credential,actor.userId,actor.tokenId,actor.email,actor.emailVerified];
+          const identity=(actor:Actor)=>[actor.credential,actor.userId,actor.tokenId,actor.email,actor.emailVerified,isGroupActor(actor)?actor.principalGroupId:null,isGroupActor(actor)?actor.principalGroupRole:null];
           if(JSON.stringify(identity(current))!==JSON.stringify(identity(admitted))) {
             await c.res.body?.cancel().catch(()=>{});
             c.res=new Response(JSON.stringify({error:'unauthorized'}),{status:401,headers:{'content-type':'application/json','cache-control':'no-store'}});
@@ -184,8 +188,27 @@ export function oauthRoutes(o: AuthOptions): Part<AuthEnv> {
         aliasOrigins: aliasOriginsOf(o),
         serviceAudiences: parseServiceAudiences(readEnv(o.env, 'IDENTITY__SERVICE_AUDIENCES')),
         serviceTokenKey: o.cookieSecret ? serviceTokenKey(o.cookieSecret) : null,
+        groupSignIns: groupSignInsOf(o.identityDb, schema, readEnv(o.env, 'IDENTITY__SCHEMA') ?? IDENTITY_SCHEMA, o.events),
       });
     },
+  };
+}
+
+/**
+ * GROUP SIGN-INS on the auth host's own database (contracts identity-service `GROUP_SIGN_IN_RULE`): the identity store's
+ * guarded mint (24 h, as every OAuth access token) and the level check the consent page asks, by the one rule.
+ */
+function groupSignInsOf(db: Queryable, authSchema: string, readSchema: string, events?: EventsService): GroupSignIns {
+  const t = identityTables(authSchema);
+  return {
+    // Audited as a mint for the person who authorised it, at every issue and every refresh.
+    mint: async input => {
+      const minted = await mintGroupSignIn(t, db, readSchema, {...input, expiresInMs: ACCESS_TOKEN_TTL_SECONDS * 1000});
+      void say(events, {kind: 'user', id: input.issuedBy}, 'minted', {kind: 'token', id: minted.id}, {name: minted.name, group_id: input.groupId});
+      return minted;
+    },
+    heldName: async (userId, groupId, role) => (await db.query<{name: string}>(`SELECT g.name FROM ${t.groups} g WHERE g.id=$2::text AND g.deleted_at IS NULL
+      AND COALESCE((SELECT issuer.active AND issuer.kind='account' AND NOT issuer.test_account FROM ${readSchema}.users issuer WHERE issuer.id=$1::text), false) AND ${groupLevelHeldSql(t, '$1::text', '$2::text', '$3::text')}`, [userId, groupId, role])).rows[0]?.name ?? null,
   };
 }
 
@@ -215,6 +238,9 @@ async function resolveBearer(request:Request,o:BearerAdmissionOptions):Promise<A
   if (!presented) return null;
   // One statement: the token, its OAuth family fence and the account's identity. A failed read throws (503).
   const token = await o.tokens.byToken(presented);
+  // A GROUP's sign-in (contracts `GroupActor`): the reader already decided its rule; never a person, never no one's.
+  if (token?.groupId) return tokenFitsRequest(token, request, o) && token.issuedBy && (token.groupRole === 'member' || token.groupRole === 'editor')
+    ? {credential:'bearer',principal:'group',principalGroupId:token.groupId,principalGroupRole:token.groupRole,tokenId:token.id,issuedBy:token.issuedBy} : ANONYMOUS;
   if (!token?.userId || !tokenFitsRequest(token, request, o)) return ANONYMOUS;
   return {credential:'bearer',tokenId:token.id,userId:token.userId,...(token.email!==undefined?{email:token.email,emailVerified:token.emailVerified}:{})};
 }
