@@ -4,6 +4,7 @@ import {join} from 'node:path';
 import type {BrowserSessionResult} from '@artifactbin/contracts';
 import {checkHosted,checkScript,checkTarget,inspectPage,loadChromium,summarizeCheck} from '../../../skills/artifactbin/scripts/check.mjs';
 import {ToolError,checkDigest,toolFailure} from '../../../skills/artifactbin/scripts/toolbox-client.mjs';
+import {components} from '../../../skills/artifactbin/scripts/toolbox-check-probes.mjs';
 import {prepareBundleUpdate} from '../../../skills/artifactbin/scripts/toolbox-publication-bundle.mjs';
 import {tempDir} from '@artifactbin/test-support/temp-dir';
 
@@ -303,4 +304,24 @@ it('fails smoke when visible text is effectively invisible against its backgroun
  const base={pageErrors:[],consoleErrors:[],httpErrors:[],failedRequests:[],telemetry:[],text:'Deck',overflow:{viewport:1280,content:1280,fits:true}};
  expect(summarizeCheck([{...base,contrast:{checked:40,belowAA:3,unreadable:0,low:[]}}]).smokePassed).toBe(true);
  expect(summarizeCheck([{...base,contrast:{checked:40,belowAA:5,unreadable:2,low:[]}}]).smokePassed).toBe(false);
+});
+
+it('reports each component that failed, by element, code and reason, and fails smoke on an invalid chart',async()=>{
+ const failed=(element:string,code:string,reason:string)=>({localName:element,getAttribute:(name:string)=>name==='data-af-error'?code:null,
+  querySelector:(selector:string)=>selector==='[role="status"]'?{textContent:` ${reason}\n`}:null,textContent:'ignored'});
+ const found=components({ownerDocument:{querySelectorAll:(selector:string)=>selector==='[data-af-error]'?[
+  failed('af-chart','invalid_chart','Chart not drawn: layer[0].data: a data object needs values'),
+  failed('af-data-table','permission_denied','You don\'t have access to this data.')]:[]}});
+ expect(found).toEqual([
+  {element:'af-chart',code:'invalid_chart',reason:'Chart not drawn: layer[0].data: a data object needs values'},
+  {element:'af-data-table',code:'permission_denied',reason:'You don\'t have access to this data.'}]);
+ const base={pageErrors:[],consoleErrors:[],httpErrors:[],failedRequests:[],telemetry:[],text:'Report',overflow:{viewport:1280,content:1280,fits:true}};
+ // A refused read is judged through its failed call (an owner's fails, a guest's is a refusal); a chart description
+ // the element cannot draw fails for every viewer.
+ expect(summarizeCheck([{...base,components:[found[1]]}]).smokePassed).toBe(true);
+ const check={...base,viewport:{width:1280,height:800},steps:{passed:true},components:found};
+ expect(summarizeCheck([check]).smokePassed).toBe(false);
+ const digest=checkDigest({ok:true,code:'completed',smokePassed:false,checks:[check],unverified:[]},'qa.json');
+ expect(digest).toContain('af-chart invalid_chart: Chart not drawn: layer[0].data: a data object needs values');
+ expect(digest).toContain('af-data-table permission_denied');
 });

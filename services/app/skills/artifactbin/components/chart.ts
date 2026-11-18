@@ -35,7 +35,8 @@
  *   (parse(spec, config, {ast:true}), View with expressionInterpreter); a host page maps
  *   @afbin/vega, @afbin/vega-lite and @afbin/apollo in its own import map.
  */
-import { parseChartDescription } from '@/lib/html-component-specs/chart-spec';
+import { chartFailure, InvalidChart, parseChartDescription }
+  from '@/lib/html-component-specs/chart-spec';
 import { registerComponent } from './register-component';
 import { chartStyles } from './chart-styles';
 import {
@@ -46,7 +47,6 @@ import { ChartFrame, endDrawing, observeChart } from './chart-frame';
 import { buildChart, chartModules, resizeChart, resolveSpec, type ChartDraw } from './chart-render';
 export type { ChartDrawContext } from './chart-render';
 
-const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 type Loaded = { rows: ChartRows; columns: string[]; sourced: boolean; truncated: boolean };
 
 export class AfChart extends HTMLElement {
@@ -159,7 +159,7 @@ export class AfChart extends HTMLElement {
           '<script type="application/json"> child.', 'idle');
       }
       const parsed = parseChartDescription(input);
-      if (!parsed.ok) throw new Error(parsed.error);
+      if (!parsed.ok) throw new InvalidChart(parsed.error);
       if (data.sourced && data.rows.length === 0) return this.frame.state('No rows', 'empty');
       const resolved = await resolveSpec(parsed.value, data.rows);
       if (epoch !== this.epoch) return;
@@ -172,7 +172,7 @@ export class AfChart extends HTMLElement {
       this.frame.size(slotOf(resolved, width, height).height);
     } catch (error) {
       box.remove();
-      if (epoch === this.epoch) this.fail(`chart not drawn: ${message(error)}`);
+      if (epoch === this.epoch) this.fail(chartFailure(error));
     }
   }
 

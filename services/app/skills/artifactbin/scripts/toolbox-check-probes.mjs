@@ -87,3 +87,11 @@ export function ids(html) {
     items: duplicated.slice(0, 5).map(([id, count]) => ({id, count}))
   };
 }
+
+/** Each failed component (data-af-error): its element, code and the reason it shows. */
+export function components(html) {
+  return [...html.ownerDocument.querySelectorAll('[data-af-error]')].map(el => ({
+    element: el.localName, code: el.getAttribute('data-af-error'),
+    reason: (el.querySelector('[role="status"]') ?? el).textContent.trim()
+  }));
+}

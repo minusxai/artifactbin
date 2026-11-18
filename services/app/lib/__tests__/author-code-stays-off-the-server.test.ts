@@ -21,9 +21,12 @@ const RETURNED: Array<[RegExp, string]> = [
   [/\b(?:RUNNER|SCHEDULES|DATA_SERVICES)__[A-Z]/, 'a runner, schedule or viewer-connection setting'],
   [/\bissueViewerToken\b|\bVIEWER_CONNECTION_KIND\b/, 'the page-function viewer connection'],
 ];
-/** Product source: every package's code, the app's skill scripts and starters, the server entry and the workflows. */
+/**
+ * Product source: every package's code, the app's skill scripts and starters, the server entry and the workflows. The
+ * gitignored build output (lib/build-assets) is built from that source, and a concurrent build rewrites it mid-scan.
+ */
 const files = [
-  ...sourceFiles(path.join(REPO_ROOT, 'services'), { extensions: /\.(?:ts|tsx|mjs|js|html)$/, skip: ['test', 'testing'] }),
+  ...sourceFiles(path.join(REPO_ROOT, 'services'), { extensions: /\.(?:ts|tsx|mjs|js|html)$/, skip: ['test', 'testing', 'build-assets'] }),
   path.join(REPO_ROOT, 'server.ts'),
   ...sourceFiles(path.join(REPO_ROOT, '.github/workflows'), { extensions: /\.ya?ml$/ }),
 ];

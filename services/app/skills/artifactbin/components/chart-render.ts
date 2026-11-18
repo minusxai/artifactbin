@@ -8,7 +8,9 @@
  * Used by: chart.ts.
  */
 import type { View } from 'vega';
-import type { ChartDescription } from '@/lib/html-component-specs/chart-spec';
+import {
+  InvalidChart, invalidChart, type ChartDescription,
+} from '@/lib/html-component-specs/chart-spec';
 import {
   createChartView, declaredDatasets, legendPlanKey, planChart, resizeVegaView,
   type ChartEngines, type ResolvedChartSpec,
@@ -49,7 +51,7 @@ export async function resolveSpec(description: ChartDescription,
   rows: ChartRows): Promise<ResolvedChartSpec> {
   if (description.kind !== 'recipe') return { spec: description.spec, engine: description.kind };
   const result = (await chartModules.recipes()).resolveChartDescription(description, rows);
-  if (!result.ok) throw new Error(`recipe ${description.recipe}: ${result.error}`);
+  if (!result.ok) throw new InvalidChart(`recipe ${description.recipe}: ${result.error}`);
   return result.resolved;
 }
 
@@ -79,23 +81,32 @@ export interface BuildRequest {
 export async function buildChart(request: BuildRequest): Promise<BuiltChart | null> {
   const { resolved, rows, box, width, height, tokens } = request;
   const engines = await loadEngines(resolved.engine);
-  const slot = slotOf(resolved, width, height);
-  const plan = planChart(engines, resolved, rows, { width, height }, tokens);
-  const declared = declaredDatasets(plan.vegaSpec);
-  const name = declared.includes('main') ? 'main' : request.dataName ?? 'main';
-  if (!declared.includes(name) && request.sourced) {
-    throw new Error(request.dataName
-      ? `the spec declares no dataset named ${request.dataName} (data-name) for the rows`
-      : 'the spec carries its own data, so the rows are not drawn: remove its data (rows bind as ' +
-        'main) or name the dataset they fill with data-name');
+  const slot = slotOf(resolved, width, height), size = { width, height };
+  let view: View | undefined;
+  try {
+    const plan = planChart(engines, resolved, rows, size, tokens);
+    const declared = declaredDatasets(plan.vegaSpec);
+    const name = declared.includes('main') ? 'main' : request.dataName ?? 'main';
+    if (!declared.includes(name) && request.sourced) {
+      throw new InvalidChart(request.dataName
+        ? `the spec declares no dataset named ${request.dataName} (data-name) for the rows`
+        : 'the spec carries its own data, so the rows are not drawn: remove its data (rows bind ' +
+          'as main) or name the dataset they fill with data-name');
+    }
+    if (declared.includes(name) && rows.length === 0) return null;
+    view = createChartView(engines, plan.vegaSpec, rows, {
+      renderer: 'svg', container: box, width: slot.width, height: slot.height,
+      facetLayout: plan.facetLayout, parserConfig: plan.parserConfig, dataName: name,
+    });
+    await view.runAsync();
+    return { view, vl: plan.vl, legendKey: plan.legendKey, slot };
+  } catch (error) {
+    view?.finalize();
+    throw invalidChart(resolved, error, spec => {
+      const p = planChart(engines, { ...resolved, spec }, rows, size, tokens);
+      engines.parse(p.vegaSpec, p.parserConfig, { ast: true });
+    });
   }
-  if (declared.includes(name) && rows.length === 0) return null;
-  const view = createChartView(engines, plan.vegaSpec, rows, {
-    renderer: 'svg', container: box, width: slot.width, height: slot.height,
-    facetLayout: plan.facetLayout, parserConfig: plan.parserConfig, dataName: name,
-  });
-  try { await view.runAsync(); } catch (error) { view.finalize(); throw error; }
-  return { view, vl: plan.vl, legendKey: plan.legendKey, slot };
 }
 
 /**

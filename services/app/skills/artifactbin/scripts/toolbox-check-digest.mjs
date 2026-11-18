@@ -36,6 +36,8 @@ export function checkDigest(envelope,file){
     `${clip(item.id,60)} x${item.count}`).join(', ')}${
     check.ids.duplicates>check.ids.items.length?
      `; +${check.ids.duplicates-check.ids.items.length} more`:''}`);
+  if(check.components?.length)errors.push('components failed: '+check.components.map(c=>
+   `${c.element} ${c.code}: ${clip(c.reason,240)}`).join('; '));
   if(check.unreachable?.length)errors.push(`not loaded here (this browser has no internet; `+
    `readers' browsers load it): ${check.unreachable.join(', ')}`);
   const task=check.error?'task error: '+clip(check.error,1000):

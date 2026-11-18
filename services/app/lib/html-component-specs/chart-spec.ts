@@ -11,7 +11,9 @@
  * Rows bind as the dataset `main` (the spec's own inline `values` stay its own). Refused anywhere
  * in a spec: a `url` key (data, lookups, images): rows reach a chart only by binding, and each
  * view's loader refuses every fetch anyway. A spec is at most CHART_LIMITS.specBytes of JSON and
- * CHART_LIMITS.depth deep.
+ * CHART_LIMITS.depth deep. A Vega-Lite data object names its source (values, name, sequence, sphere or graticule):
+ * an engine would otherwise throw on it unexplained. `locateChartFailure` names the part of a composed spec an engine
+ * failure sits in.
  */
 
 export const CHART_LIMITS = {
@@ -60,6 +62,98 @@ function refusal(spec: unknown): string | null {
   return walk(spec, '', 0);
 }
 
+const DATA_SOURCES = ['values', 'name', 'sequence', 'sphere', 'graticule', 'url'];
+const VIEW_LISTS = ['layer', 'hconcat', 'vconcat', 'concat'] as const;
+const at = (path: string, key: string) => (path ? `${path}.${key}` : key);
+
+const REPEATED = {
+  facet: 'for one panel per value put row/column inside encoding instead',
+  repeat: 'name the repeated field in its encoding as {"repeat": "repeat"}',
+} as const;
+
+/**
+ * The first Vega-Lite shape an engine would throw on unexplained: a data object, in a view or a lookup's `from`, that
+ * names no source (Vega-Lite dereferences `data.format`), or a facet or repeat operator with no `spec` to repeat
+ * (it destructures the missing spec). Only the view structure is walked: inline rows, `datasets` and `usermeta` may
+ * hold anything. `data: null` (no parent data) and `{}` (inherit) pass, as do row/column inside encoding.
+ */
+function dataProblem(view: unknown, path: string): string | null {
+  if (!isRecord(view)) return null;
+  for (const [key, fix] of Object.entries(REPEATED)) {
+    if (key in view && !isRecord(view.spec)) {
+      return `${at(path, key)}: needs a spec: {mark, encoding…} to repeat; ${fix}`;
+    }
+  }
+  const { data } = view;
+  if (isRecord(data) && Object.keys(data).length && !DATA_SOURCES.some(key => key in data)) {
+    return `${at(path, 'data')}: a data object needs values, name, sequence, sphere or graticule, not ` +
+      `${Object.keys(data).join(', ')}; filter rows with transform: [{filter: …}] on the view, and give rows from ` +
+      'sql, a dataset or rows no data (they bind as main)';
+  }
+  const transforms = Array.isArray(view.transform) ? view.transform : [];
+  for (const [i, step] of transforms.entries()) {
+    const hit = isRecord(step) && dataProblem(step.from, `${at(path, 'transform')}[${i}].from`);
+    if (hit) return hit;
+  }
+  for (const key of VIEW_LISTS) {
+    const views = Array.isArray(view[key]) ? view[key] as unknown[] : [];
+    for (const [i, child] of views.entries()) {
+      const hit = dataProblem(child, `${at(path, key)}[${i}]`);
+      if (hit) return hit;
+    }
+  }
+  return dataProblem(view.spec, at(path, 'spec'));
+}
+
+/**
+ * Where in a composed spec an engine failure sits: the first child of a layer or concat that still fails when it is
+ * the only one, its parent's encoding and data kept (`attempt` throws for a failing spec), followed down; null when
+ * no child fails alone, or every one does (the parent is at fault).
+ */
+export function locateChartFailure(spec: Record<string, unknown>,
+  attempt: (spec: Record<string, unknown>) => void): string | null {
+  const fails = (candidate: Record<string, unknown>) => {
+    try { attempt(candidate); return false; } catch { return true; }
+  };
+  for (const key of VIEW_LISTS) {
+    const views = spec[key];
+    if (!Array.isArray(views) || views.length < 2) continue;
+    const alone = (child: unknown) => ({ ...spec, [key]: [child] });
+    const failing = views.map((child) => fails(alone(child)));
+    const i = failing.indexOf(true);
+    if (i < 0 || failing.every(Boolean)) continue;
+    const child = views[i];
+    const inner = isRecord(child) ? locateChartFailure(child, (part) => attempt(alone(part))) : null;
+    return `${key}[${i}]${inner ? '.' + inner : ''}`;
+  }
+  return null;
+}
+
+/** A description its engine cannot draw: af-chart shows it as invalid_chart, the query image's code for it. */
+export class InvalidChart extends Error {}
+
+/**
+ * An engine's exception (an InvalidChart passes through) as what is wrong: the spec is not valid, where
+ * (locateChartFailure), the engine's words kept; a TypeError (a shape the checks above missed) adds a structure hint.
+ */
+export function invalidChart(resolved: { engine: 'vega' | 'vega-lite'; spec: Record<string, unknown> }, error: unknown,
+  attempt: (spec: Record<string, unknown>) => void): InvalidChart {
+  if (error instanceof InvalidChart) return error;
+  const where = resolved.engine === 'vega-lite' ? locateChartFailure(resolved.spec, attempt) : null;
+  const said = (error instanceof Error ? error.message : String(error)).slice(0, 300);
+  return new InvalidChart(`the ${resolved.engine === 'vega' ? 'Vega' : 'Vega-Lite'} spec is not valid` +
+    `${where ? ` at ${where}` : ''} (the engine stopped with: ${said})${error instanceof TypeError
+      ? '; check its structure: each view is {mark, encoding}, a layer or concat list, or facet or repeat with a spec'
+      : ''}`);
+}
+
+/** A failed drawing as af-chart shows it: an InvalidChart as invalid_chart (read-failure's shape), anything else as text. */
+export function chartFailure(error: unknown): { code: string; message: string; detail: string } | string {
+  const text = error instanceof Error ? error.message : String(error);
+  if (!(error instanceof InvalidChart)) return `chart not drawn: ${text}`;
+  return { code: 'invalid_chart', message: `Chart not drawn: ${text}`, detail: text };
+}
+
 const isVegaSpec = (spec: Record<string, unknown>) =>
   Array.isArray(spec.marks) || (typeof spec.$schema === 'string' && /\/vega\/v\d/.test(spec.$schema));
 
@@ -89,9 +183,14 @@ export function parseChartDescription(input: unknown): ChartParse {
     const kind = 'vegaLite' in input ? 'vega-lite' : 'vega';
     const spec = input[kind === 'vega-lite' ? 'vegaLite' : 'vega'];
     if (keys.length !== 1 || !isRecord(spec)) return { ok: false, error: 'wrap exactly one spec: {vegaLite: {…}} or {vega: {…}}' };
-    return { ok: true, value: { kind, spec } };
+    return checked(kind, spec);
   }
-  return { ok: true, value: { kind: isVegaSpec(input) ? 'vega' : 'vega-lite', spec: input } };
+  return checked(isVegaSpec(input) ? 'vega' : 'vega-lite', input);
+}
+
+function checked(kind: 'vega' | 'vega-lite', spec: Record<string, unknown>): ChartParse {
+  const problem = kind === 'vega-lite' ? dataProblem(spec, '') : null;
+  return problem ? { ok: false, error: problem } : { ok: true, value: { kind, spec } };
 }
 
 /** Column kinds inferred from rows, for recipes that pick an axis by type. */
