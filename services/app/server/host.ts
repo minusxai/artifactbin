@@ -32,7 +32,8 @@ interface AppHost {
 }
 /** Shared host composition; no local SQL/browser implementation or deployment identity is imported here. */
 export async function createAppHost(options:AppHostOptions={}):Promise<AppHost>{
- // The skill's deployment extras (SKILLS__EXTRA_DIR) are read now: an invalid directory refuses the boot.
+ // The skill's deployment extras (SKILLS__EXTRA_DIR) are read now: an invalid directory refuses the boot (later
+ // changes are followed without a restart, lib/skills/extras).
  skillExtras();
  setDocumentEditorPolicy(options.documentEditorPolicy);
  setNotificationDelivery(options.notificationDelivery);
