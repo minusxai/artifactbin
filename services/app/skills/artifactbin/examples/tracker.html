@@ -70,7 +70,7 @@ const listed=JSON.stringify(APP.groups),listQuery=sql`select _id, name, grp, not
   , description /* @only collab */
   , count(*) over (partition by case when grp in (select value from json_each(${listed}))
   then grp else '' end) as size, count(*) over () as total from entries order by name limit 1000`;
-let rows=[],sizes=new Map(),total=0,signedIn=false,editing=null;
+let rows=[],sizes=new Map(),total=0,signedIn=false,editing=null,failure=null;
 let typing=null; // the open description's live text // @only collab
 const closeTyping=()=>{typing?.binding.destroy();typing?.text.destroy();typing=null;};//@only collab
 for(const [id,text] of Object.entries({kicker:APP.kicker,title:document.title,summary:APP.summary,
@@ -130,7 +130,7 @@ function render(){
   $('#signin').hidden=canAdd(); // @only own-rows
   // Every listed group gets a section; an entry whose group is no longer listed goes under Other.
   const known=new Set(APP.groups),other=rows.filter(r=>!known.has(r.grp));
-  const groups=[...APP.groups.map(g=>[g,rows.filter(r=>r.grp===g),sizes.get(g)??0]),
+  const groups=failure?[]:[...APP.groups.map(g=>[g,rows.filter(r=>r.grp===g),sizes.get(g)??0]),
     ...other.length?[['Other',other,sizes.get('')??0]]:[]];
   $('#lists').replaceChildren(...groups.map(([group,list,size])=>{
     const key='group-'+slug(group),section=node('section',key,{className:'group'});
@@ -147,6 +147,7 @@ function render(){
 let view='list';const table=$('#table');table.rowKey='id';
 function renderTable(){
   table.hidden=view!=='table';$('#lists').hidden=view==='table';if(view!=='table')return;
+  if(failure)return void(table.error=failure);
   table.columns=[{col:'name',title:APP.nameLabel},{col:'grp',title:APP.groupLabel},
     {col:'note',title:APP.noteLabel},{col:'edit',title:''}];
   table.data={rows:rows.map(r=>({id:r._id,name:r.name,grp:r.grp,note:r.note,edit:canChange(r)})),
@@ -160,8 +161,9 @@ $('#view-list').onclick=()=>setView('list');$('#view-table').onclick=()=>setView
 table.addEventListener('af-edit-intent',event=>{const row=rows.find(r=>r._id===event.detail.key);
   if(row&&canChange(row)){editing=row._id;setView('list');}});
 // @end table
-const show=list=>{rows=list;total=list[0]?.total??0;sizes=new Map(list.map(r=>[APP.groups
-  .includes(r.grp)?r.grp:'',r.size]));if(!rows.some(r=>r._id===editing)){editing=null;render();}};
+const show=(list,failed=null)=>{rows=list;failure=failed;total=list[0]?.total??0;
+  sizes=new Map(list.map(r=>[APP.groups.includes(r.grp)?r.grp:'',r.size]));
+  if(!rows.some(r=>r._id===editing)){editing=null;render();}};
 // One add or save (an edit or a move): one statement, then a fresh read; a write the rules
 // refuse changes nothing (affected 0).
 const add=o=>sql`insert into entries (name, grp, note) values (${o.name}, ${o.grp}, ${o.note})`;
@@ -179,7 +181,7 @@ $('#add').onsubmit=async event=>{event.preventDefault();const name=$('#add-name'
 // Signing in or out shows or hides the controls (a hint from the page's frame, never a grant); a
 // refusal (access removed) clears the rows and controls.
 watchUploadContext(context=>{signedIn=context.state==='signed-in';editing=null;render();});
-const refused=e=>{signedIn=false;editing=null;show([]);status.textContent=e.message;};
+const refused=e=>{signedIn=false;editing=null;show([],e);status.textContent=e.message;};
 try{await new Promise((ok,fail)=>sql.watch(listQuery,list=>{show(list);ok();},
   e=>{fail(e);refused(e);}));status.textContent=`${total} so far.`;}catch(e){refused(e);}
 </script></body></html>

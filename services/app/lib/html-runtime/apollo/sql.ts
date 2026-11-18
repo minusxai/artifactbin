@@ -8,11 +8,16 @@
  *
  * Every `${…}` is a bound parameter (`$p0`, `$p1`…), never SQL text: a string, finite number, boolean, null or Date
  * (its ISO instant); anything else throws before anything is sent. A statement is lazy and re-runnable: each await
- * runs it once, under its own Idempotency-Key. A read answers its rows (the array carries `columns`), a write
- * `{affected, returning}`; a refusal rejects with SqlError (`code`, `message`).
+ * runs it once, under its own Idempotency-Key. A read answers its rows (the array carries `columns`, and
+ * `truncated: true` when a connection cut the rows at the row limit), a write `{affected, returning}`.
+ *
+ * A FAILURE rejects with SqlError: `code` from contracts `SQL_FAILURES` (the one list), `message` one sentence for the
+ * reader when the read's failure has one (else the reason), `detail` the server's own reason for the author. No reply
+ * (the relay or the app unreachable) is `unavailable`; a reply that is not one is `unexpected`.
  *
  * `watch` runs the statement now and again whenever the page's names-only invalidation names a link the statement
- * text mentions (or names none: a change of who reads), one request in flight and one dirty bit, never a queue.
+ * text mentions (or names none: a change of who reads), one request in flight and one dirty bit, never a queue. A
+ * failure goes to `error`; with no `error` it is reported as an uncaught error (reportError), never dropped.
  *
  * A DECLARED QUERY (a live dataset's, `<script type="application/sql" data-af-query="NAME" data-af-dataset="LINK">`):
  *
@@ -24,12 +29,13 @@
  * watch of one runs again on every invalidation, whichever links it names.
  */
 import type { HtmlJsonObject as AfJsonObject } from '@artifactbin/contracts';
+import { SQL_FAILURES } from '@artifactbin/contracts/sql-failures';
 
 type SqlValue = string | number | boolean | null | Date;
 interface SqlColumn { name: string; type: string }
-type SqlRows = AfJsonObject[] & { columns: SqlColumn[] };
+type SqlRows = AfJsonObject[] & { columns: SqlColumn[]; truncated?: true };
 interface SqlWrite { affected: number; returning: AfJsonObject[] }
-type Reply = { columns: SqlColumn[]; rows: AfJsonObject[] } | SqlWrite | { error: string; message?: string };
+type Reply = { columns: SqlColumn[]; rows: AfJsonObject[]; truncated?: boolean } | SqlWrite | { error: string; message?: string; notice?: string };
 
 /** The transport: the frame relay in a hosted page (lib/html-runtime/browser-reader). */
 export interface SqlPort {
@@ -40,8 +46,11 @@ export interface SqlPort {
 }
 
 export class SqlError extends Error {
-  constructor(readonly code: string, message: string) { super(message); this.name = 'SqlError'; }
+  /** `message`: for the reader; `detail`: the server's own reason (the same text when there is no reader's sentence). */
+  constructor(readonly code: string, message: string, readonly detail: string = message) { super(message); this.name = 'SqlError'; }
 }
+/** A failure the runtime itself names, with the list's sentence for the reader. */
+const failure = (code: 'unavailable' | 'unexpected', detail: string) => new SqlError(code, SQL_FAILURES[code].notice, detail);
 
 interface SqlStatement extends PromiseLike<SqlRows | SqlWrite> {
   readonly text: string;
@@ -67,12 +76,22 @@ const key = () => (globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(3
 
 export function createSql(port: SqlPort): SqlTag {
   const run = async (statement: SqlStatement): Promise<SqlRows | SqlWrite> => {
-    const reply = await port.run({ ...(statement.query !== undefined ? { query: statement.query } : { sql: statement.text }), params: { ...statement.params }, idempotencyKey: key() });
-    if (!reply || typeof reply !== 'object') throw new SqlError('unexpected', 'Invalid SQL reply');
-    if ('error' in reply) throw new SqlError(String(reply.error), reply.message ?? String(reply.error));
+    let reply: Reply;
+    try { reply = await port.run({ ...(statement.query !== undefined ? { query: statement.query } : { sql: statement.text }), params: { ...statement.params }, idempotencyKey: key() }); }
+    catch (e) { throw e instanceof SqlError ? e : failure('unavailable', e instanceof Error ? e.message : String(e)); }
+    if (!reply || typeof reply !== 'object') throw failure('unexpected', 'Invalid SQL reply');
+    if ('error' in reply) {
+      const reason = typeof reply.message === 'string' ? reply.message : String(reply.error);
+      // The uniform `{error: 'not_found'}` carries no words of its own: the list's sentence is the reader's.
+      const notice = typeof reply.notice === 'string' ? reply.notice : reply.error === 'not_found' && reply.message === undefined ? SQL_FAILURES.not_found.notice : reason;
+      throw new SqlError(String(reply.error), notice, reason);
+    }
     // `columns` rides on the array, out of iteration and JSON, and stays an ordinary property: a chart library handed
     // the rows may rewrite or delete it (Vega's data ingestion deletes an array's `columns`, d3-dsv style).
-    if ('rows' in reply) return Object.defineProperty([...reply.rows], 'columns', { value: reply.columns, enumerable: false, writable: true, configurable: true }) as SqlRows;
+    if ('rows' in reply) {
+      const rows = Object.defineProperty([...reply.rows], 'columns', { value: reply.columns, enumerable: false, writable: true, configurable: true }) as SqlRows;
+      return reply.truncated ? Object.defineProperty(rows, 'truncated', { value: true, enumerable: false, writable: true, configurable: true }) : rows;
+    }
     return { affected: reply.affected, returning: reply.returning ?? [] };
   };
   const tag = ((strings: TemplateStringsArray, ...values: SqlValue[]): SqlStatement => {
@@ -105,7 +124,9 @@ export function createSql(port: SqlPort): SqlTag {
             const rows = await run(statement);
             if (active && Array.isArray(rows)) next(rows);
           } catch (e) {
-            if (active) error?.(e instanceof SqlError ? e : new SqlError('unexpected', e instanceof Error ? e.message : String(e)));
+            const failed = e instanceof SqlError ? e : failure('unexpected', e instanceof Error ? e.message : String(e));
+            if (active && error) error(failed);
+            else if (active) (globalThis.reportError ?? ((x: unknown) => queueMicrotask(() => { throw x; })))(failed);
           }
         }
       } finally { running = false; }

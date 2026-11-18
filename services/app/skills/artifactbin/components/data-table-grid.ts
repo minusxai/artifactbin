@@ -177,7 +177,7 @@ export function renderGrid(
     }
   if (focused?.isConnected && el.ownerDocument.activeElement !== focused)
     focused.focus({ preventScroll: true });
-  if (!ordered.length) {
+  if (!ordered.length && !s.error) {
     const td = body.insertRow().insertCell();
     td.className = DATA_TABLE_CLASSES.cell;
     td.colSpan = Math.max(1, columns.length);

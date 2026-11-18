@@ -11,6 +11,7 @@ import { afterAll, beforeAll, beforeEach, expect, it, onTestFinished, vi } from 
 import { validateDeploymentConfiguration } from '@/lib/deployment';
 import { trashRow } from '@/__tests__/artifact-fixtures';
 import * as connectors from '@artifactbin/connectors';
+import { SQL_FAILURES } from '@artifactbin/contracts';
 import { setUsername } from '@/lib/accounts';
 import { createAppServer } from '@/server/app';
 import { startPgliteWire, type PgliteWire } from '@artifactbin/test-support/pglite-wire';
@@ -475,4 +476,23 @@ it.each(['canonical', 'owner-host'] as const)('withholds live declared-query row
       expect(executions).toBe(1);
     } finally { spy.mockRestore(); await closeLiveDatasetConnections(); }
   }
+});
+
+it('gives a page\'s live reads their own failure codes and the reader\'s sentence: no access, sign in, a missing table, the database down', async () => {
+  const { alice, bob } = await people();
+  const id = (await createLive(alice)).body.id;
+  const page = (await publish(alice, { html: PAGE(id, MINE) })).body.id;
+  const read = (who: Person | null) => door(page, who, { query: 'mine', params: { min: 0 } });
+  const kind = (reply: { status: number; body: Record<string, any> }) => [reply.status, reply.body.error, reply.body.notice];
+  expect(kind(await read(bob))).toEqual([403, 'permission_denied', SQL_FAILURES.permission_denied.notice]);
+  await setRule(alice, id, 'signed_in');
+  expect(ok(await read(bob)).rows).toEqual([{ id: 2, item: 'cake' }]);
+  expect(kind(await read(null))).toEqual([403, 'sign_in_required', SQL_FAILURES.sign_in_required.notice]);
+  expect(kind(await sql(page, alice, 'select * from shop.sales.nowhere') as never)).toEqual([404, 'dataset_not_found', SQL_FAILURES.dataset_not_found.notice]);
+  // The database unreachable: unavailable, never "not found", and no secret in any of it.
+  const moved = await call(connectionPatch as never, `/api/artifacts/${id}/connection`, id, alice, { method: 'PATCH', json: { port: 1, password: PASSWORD } });
+  expect(moved.status, moved.text).toBe(200);
+  const down = await read(bob);
+  expect(kind(down)).toEqual([503, 'unavailable', SQL_FAILURES.unavailable.notice]);
+  expect(down.text).not.toContain(PASSWORD);
 });

@@ -19,6 +19,16 @@ describe('clients in utils', () => {
     const r = await sqlClient(sqlUrl, { deadlineMs: 5000 }).run({ tables: { t: { rows: [{ a: 1 }], columns: [{ name: 'a', type: 'number' }] } }, queries: [{ name: 'q', sql: 'select a from t' }], params: {} });
     expect(!isQueryFailure(r.q) && r.q.rows).toEqual([{ a: 1 }]);
   });
+  it('sqlClient marks a call the service never answered unavailable, apart from a deadline', async () => {
+    // A port nothing listens on: the connection is refused, a real socket failure.
+    const probe = serveSql(createSql({ maxRows: 3, timeoutMs: 2000 })); const closed = probe.listen(0).url; await probe.close();
+    const input = { tables: {}, queries: [{ name: 'q', sql: 'select 1 as a' }], params: {} };
+    const down = (await sqlClient(closed, { deadlineMs: 5000 }).run(input)).q;
+    expect(isQueryFailure(down) && down.unavailable).toBe(true);
+    expect(isQueryFailure(down) && down.timedOut).toBeFalsy();
+    const ok = (await sqlClient(sqlUrl, { deadlineMs: 5000 }).run({ ...input, queries: [{ name: 'q', sql: 'select nope from nowhere' }] })).q;
+    expect(isQueryFailure(ok) && ok.unavailable).toBeFalsy();
+  });
   it('browserClient serializes a render request and answers the service verdict', async () => {
     const request: RenderRequest = {
       url: 'https://example.test/a/abc123?key=sentinel',

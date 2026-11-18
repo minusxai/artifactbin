@@ -1,13 +1,12 @@
 /**
- * Internal: where af-chart's rows come from. Exactly one source: the `sql` attribute, the `query`
- * property (a statement from the `sql` tag), the `dataset` attribute (every row of one linked
- * dataset) or the `rows` property; none means the spec's own values. The three SQL sources run
+ * Internal: where af-chart's rows come from: its one source (chart.ts). The SQL sources run
  * through `@afbin/apollo`'s `sql.watch` as the reader and rerun when a dataset they name changes.
  * Every opening is its own generation: once it is closed, a late answer or error is dropped, so
  * an older statement never overwrites a newer one.
  * Used by: chart.ts.
  */
 import { CHART_LIMITS } from '@/lib/html-component-specs/chart-spec';
+import { readFailure, type ReadFailure } from '@/lib/html-component-specs/read-failure';
 import type { ChartRows } from './chart-model';
 
 /** A statement as the `sql` tag of `@afbin/apollo` builds it. */
@@ -79,8 +78,8 @@ export function columnsOf(rows: ChartRows): string[] {
  * the close; after it nothing more is delivered.
  */
 export function openSource(source: ChartSource, runtime: ChartRuntime,
-  deliver: (rows: ChartRows, columns: string[]) => void,
-  fail: (message: string) => void): () => void {
+  deliver: (rows: ChartRows, columns: string[], truncated: boolean) => void,
+  fail: (failure: ReadFailure | string) => void): () => void {
   let open = true, stop = () => {};
   const accept = (answer: unknown) => {
     if (!open) return;
@@ -89,10 +88,11 @@ export function openSource(source: ChartSource, runtime: ChartRuntime,
       return fail(`more than ${CHART_LIMITS.rows.toLocaleString('en')} rows: aggregate in SQL ` +
         '(GROUP BY) so the chart draws a summary');
     }
-    deliver(answer as ChartRows, columnsOf(answer as ChartRows));
+    deliver(answer as ChartRows, columnsOf(answer as ChartRows),
+      (answer as { truncated?: unknown }).truncated === true);
   };
   if (source.kind === 'rows') accept(source.rows);
-  else if (source.kind === 'none') deliver([], []);
+  else if (source.kind === 'none') deliver([], [], false);
   else {
     runtime.apollo().then(({ sql }) => {
       if (!open) return;
@@ -100,7 +100,7 @@ export function openSource(source: ChartSource, runtime: ChartRuntime,
         : statementOf(sql, source.kind === 'sql' ? source.text
           : `select * from ${quoted(source.name)} limit ${CHART_LIMITS.rows + 1}`);
       stop = sql.watch(statement, accept, error => {
-        if (open) fail(`could not read the rows: ${error?.message || String(error)}`);
+        if (open) fail(readFailure(error, 'Could not read the rows: '));
       });
     }, () => {
       if (open) fail('this page has no @afbin/apollo to read sql, query or dataset: give rows');

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { SQL_FAILURES } from "@artifactbin/contracts";
 import { STORY_TABLE_CSS } from "@/lib/page-styles";
 import { AfDataTable } from "./data-table";
 import './data-table';
@@ -693,4 +694,38 @@ it("re-renders after resize notifications on the next frame, once, never inside 
   el.remove();
   await nextFrame();
   expect(render).toHaveBeenCalledTimes(1);
+});
+it("shows a failed read's sentence and code instead of \"no rows\", and draws a cut-off answer with its row count", async () => {
+  const columns = [{ name: "id", type: "number" as const }];
+  const notice = SQL_FAILURES.permission_denied.notice;
+  const denied = Object.assign(new Error(notice), { name: "SqlError", code: "permission_denied", detail: "42501 orders is not yours" });
+  // A source whose read is refused: the alert says why, the code is on the element, and no "no rows" claims it is empty.
+  const el = document.createElement("af-data-table") as AfDataTable;
+  document.body.append(el);
+  el.source = { read: async () => { throw denied; } };
+  await vi.waitFor(() => expect(el.getAttribute("data-af-error")).toBe("permission_denied"), { timeout: WAIT_MS });
+  expect(el.querySelector("[role=alert]")!.textContent).toBe(notice);
+  expect(el.querySelectorAll("[role=alert]")).toHaveLength(1);
+  expect(el.textContent).not.toContain("no rows");
+  // A page that reads its rows itself hands the table the failure; new data clears it.
+  const hand = document.createElement("af-data-table") as AfDataTable;
+  document.body.append(hand);
+  hand.data = { columns, rows: [] };
+  expect(hand.textContent).toContain("no rows");
+  for (const code of ["sign_in_required", "unavailable", "timeout", "dataset_not_found", "validation_failed"] as const) {
+    hand.error = Object.assign(new Error(SQL_FAILURES[code].notice), { code, detail: code });
+    expect(hand.getAttribute("data-af-error"), code).toBe(code);
+    expect(hand.querySelector("[role=alert]")!.textContent, code).toBe(SQL_FAILURES[code].notice);
+    expect(hand.textContent, code).not.toContain("no rows");
+  }
+  hand.data = { columns, rows: [{ id: 1 }] };
+  expect(hand.hasAttribute("data-af-error")).toBe(false);
+  expect(hand.querySelector("[role=alert]")).toBeNull();
+  expect(hand.querySelector("tbody td")!.textContent).toBe("1");
+  // Rows a read cut at its limit: drawn, with the row count the table shows for a partial answer.
+  hand.data = { columns, rows: [{ id: 1 }, { id: 2 }], truncated: true };
+  await nextFrame();
+  expect(hand.querySelector("[data-slot=row-count]")!.textContent).toBe("2 of 2 rows");
+  expect(hand.querySelectorAll("tbody tr[data-row-key]")).toHaveLength(2);
+  el.remove(); hand.remove();
 });

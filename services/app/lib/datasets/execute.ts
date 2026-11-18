@@ -42,12 +42,12 @@ async function keyedRead(read:KeyedRead,load:()=>Promise<ReadTables>,life:Return
  life.check();
  const table=out.result;
  if(!table)throw new DatasetError('Query failed');
- if(isQueryFailure(table))throw new CatalogQueryFailure(table.error,table.timedOut===true,table.tooLarge===true);
+ if(isQueryFailure(table))throw new CatalogQueryFailure(table.error,table.timedOut===true,table.tooLarge===true,table.unavailable===true);
  return {...table,refreshedAt:new Date().toISOString()};
 }
-/** The engine refused or interrupted the statement: its message is about the caller's SQL. */
+/** The engine refused or interrupted the statement: its message is about the caller's SQL, unless the engine never answered (`unavailable`). */
 export class CatalogQueryFailure extends DatasetError {
- constructor(message:string,readonly timedOut:boolean,readonly tooLarge=false){super(message);}
+ constructor(message:string,readonly timedOut:boolean,readonly tooLarge=false,readonly unavailable=false){super(message);}
 }
 /** Every $name the statement reads must be supplied: SQLite would bind a missing one as NULL and answer quietly. */
 function requireParams(sql:string,params:Record<string,Scalar>):void{

@@ -7,7 +7,7 @@ import { parseTableHeight, type SortSpec } from "@/lib/html-components/table-val
 import type { AfDataTable } from "./data-table";
 import { renderComparison } from "./data-table-compare";
 import { renderGrid } from "./data-table-grid";
-import { renderAfterResize } from "./data-table-measure";
+import { failTable, renderAfterResize } from "./data-table-measure";
 import {
   DATA_TABLE_CLASSES,
   TableLoader,
@@ -76,7 +76,7 @@ export async function loadTableRows(
   if (!replace && !hasMoreRows(el.data)) return;
   const epoch = ++s.requestEpoch;
   s.pending = true;
-  s.error = "";
+  failTable(el, s, null);
   s.render();
   try {
     // The loader returns undefined when a newer read superseded this one.
@@ -92,8 +92,7 @@ export async function loadTableRows(
     );
     s.value = { ...result, rows };
   } catch (e) {
-    if (epoch === s.requestEpoch)
-      s.error = e instanceof Error ? e.message : "Unable to load rows";
+    if (epoch === s.requestEpoch) failTable(el, s, e);
   } finally {
     if (epoch === s.requestEpoch) {
       s.pending = false;

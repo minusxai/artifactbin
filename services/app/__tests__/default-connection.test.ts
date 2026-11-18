@@ -6,7 +6,9 @@
  * database sees of each reader.
  */
 import {htmlPageDeclarations} from '@/lib/html-page';
+import net from 'node:net';
 import { afterAll, beforeAll, beforeEach, expect, it } from 'vitest';
+import { SQL_FAILURES, type SqlFailureCode } from '@artifactbin/contracts';
 import { startPgliteWire, type PgliteWire } from '@artifactbin/test-support/pglite-wire';
 import { request, setSession, useAppHarness } from './harness';
 import { person, publish, sql, type Person } from './page-sql-door-fixture';
@@ -26,7 +28,17 @@ beforeAll(async () => {
     create schema sales;
     create table sales.orders(id int primary key, owner text not null, item text, amount int);
     create view sales.mine as select id, item from sales.orders where owner = current_setting('app.viewer_id', true);
-    create table public.loose(n int); insert into public.loose values (7);`);
+    create table public.loose(n int); insert into public.loose values (7);
+    create schema guarded; create table guarded.readers(id text primary key);
+    create table guarded.many as select g from generate_series(1, 10001) g;
+    create function guarded.shared_rows() returns table(id int, item text) language plpgsql stable as $$
+    begin
+      if not exists (select 1 from guarded.readers r where r.id = current_setting('app.viewer_id', true)) then
+        raise exception 'orders are not shared with this reader' using errcode = 'insufficient_privilege';
+      end if;
+      return query select o.id, o.item from sales.orders o where o.owner = current_setting('app.viewer_id', true) order by o.id;
+    end $$;
+    create view guarded.shared as select * from guarded.shared_rows();`);
   setting = JSON.stringify({ connector: 'postgres', host: '127.0.0.1', port: wire.port, database: 'postgres', user: 'postgres', password: PASSWORD, tls: 'disable' });
 });
 afterAll(async () => { await closeDefaultConnection(); await wire?.close(); });
@@ -80,7 +92,7 @@ it('refuses anonymous readers, writes, a mix with a stored dataset, and keeps th
   const stored = await publish(alice, { dataset: [{ x: 1 }], title: 'Stored' });
   const page = (await publish(alice, { html: PAGE(`<link rel="af-dataset" data-af-name="kept" href="ref:${stored.body.id}">`) })).body.id;
   const anonymous = await sql(page, null, 'select id from wh.sales.orders');
-  expect([anonymous.status, anonymous.body.error]).toEqual([403, 'permission_denied']);
+  expect([anonymous.status, anonymous.body.error]).toEqual([403, 'sign_in_required']);
   for (const text of ['insert into wh.sales.orders values (9, $p0, $p0, 1)', 'delete from wh.sales.orders', "with w as (delete from wh.sales.orders returning 1) select * from w", "select set_config('app.viewer_id', $p0, false) from wh.sales.orders"]) {
     const write = await sql(page, alice, text, { p0: bob.userId });
     expect([write.status, write.body.error], text).toEqual([403, 'permission_denied']);
@@ -102,6 +114,41 @@ it('answers a page whose install lost its connection with a clear refusal', asyn
   configure(null);
   const reply = await sql(page, alice, 'select id from wh.sales.orders');
   expect([reply.status, reply.body.error, reply.body.message]).toEqual([404, 'dataset_not_found', "wh reads the install's default connection, and this install has none"]);
+});
+
+it('gives each kind of failed read its own code, the reader its sentence, and never a secret', async () => {
+  const { alice } = await readers();
+  const dave = await person('dave'), carol = await person('carol');
+  await wire.db.query('delete from guarded.readers');
+  await wire.db.query('insert into guarded.readers values ($1), ($2)', [alice.userId, dave.userId]);
+  const page = (await publish(alice, { html: PAGE() })).body.id;
+  const shared = 'select id, item from wh.guarded.shared order by id';
+  // The database names its reader: rows for one, an answer with no rows for another, its refusal for a third.
+  expect(ok(await sql(page, alice, shared)).rows).toEqual([{ id: 1, item: 'tea' }, { id: 3, item: 'pie' }]);
+  expect(ok(await sql(page, dave, shared)).rows).toEqual([]);
+  const refused = await sql(page, carol, shared);
+  expect([refused.status, refused.body]).toEqual([403, { error: 'permission_denied', message: 'orders are not shared with this reader', notice: SQL_FAILURES.permission_denied.notice }]);
+  const kinds: Array<[Person | null, string, number, string]> = [
+    [null, shared, 403, 'sign_in_required'],
+    [alice, 'select * from wh.sales.nowhere', 404, 'dataset_not_found'],
+    [alice, 'select * from wh.sales.orders where', 400, 'validation_failed'],
+  ];
+  for (const [who, text, status, code] of kinds) {
+    const reply = await sql(page, who, text);
+    expect([reply.status, reply.body.error, (reply.body as { notice?: string }).notice], text).toEqual([status, code, (SQL_FAILURES[code as SqlFailureCode] as { notice?: string }).notice]);
+  }
+  // Cut at the row limit: a partial answer, marked, not a failure.
+  const cut = await sql(page, alice, 'select g from wh.guarded.many');
+  expect([cut.status, cut.body.rows?.length, (cut.body as { truncated?: boolean }).truncated]).toEqual([200, 10_000, true]);
+  // The database down: unavailable, not "not found", and the setting's secret is nowhere in it.
+  const probe = net.createServer(); await new Promise<void>((resolve) => probe.listen(0, '127.0.0.1', resolve));
+  const closed = (probe.address() as net.AddressInfo).port; await new Promise((resolve) => probe.close(resolve));
+  configure(JSON.stringify({ ...JSON.parse(setting), port: closed }));
+  const down = await sql(page, alice, shared);
+  expect([down.status, down.body.error, (down.body as { notice?: string }).notice]).toEqual([503, 'unavailable', SQL_FAILURES.unavailable.notice]);
+  expect(JSON.stringify(down.body)).not.toContain(PASSWORD);
+  expect(JSON.stringify(refused.body)).not.toContain(PASSWORD);
+  await closeDefaultConnection();
 });
 
 const agent = async (who: Person | null, body: unknown) => { const r = await agentSql(request('/api/default-connection/sql', { method: 'POST', json: body, ...(who ? { token: who.token } : {}) })); return { status: r.status, body: await r.json() as Record<string, unknown> }; };
