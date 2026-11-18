@@ -168,25 +168,17 @@ export let TEST_DOMAIN: string | undefined = (() => {
 })();
 
 /**
- * Rows kept from a data source. A 200k-row sheet imports fine and then makes an
- * unloadable page: every row is fetched from storage, parsed, and serialized
- * into the document. Until there is a query layer, a dataset is a SAMPLE — the
- * first N rows — and the true row count is recorded so nothing is silent.
+ * THE ROW CAP, one number for both places rows can pile into a page. Ingest:
+ * a 200k-row sheet imports fine and then makes an unloadable page (every row
+ * fetched, parsed and serialized into the document), so a dataset is a SAMPLE
+ * — the first N rows — and the true row count is recorded so nothing is
+ * silent. Query: one `<Query>` result is serialized into the page (and every
+ * reader's download), so it carries at most the same N rows; a cut result is
+ * RECORDED (`truncated`, `totalRows`), never silent. One cap means
+ * `select * from ref_<id>` is never cut: only a query that GROWS its input — a
+ * join, a range() — meets it.
  */
 export const MAX_ROWS_LIMIT = Number(env('SQL', 'MAX_ROWS') ?? '10000');
-
-/**
- * The most rows one `<Query>` result may carry into a document. A result is
- * serialized into the page (and into every reader's download), so an unbounded
- * `select *` over a big dataset is the same unloadable page the ingest cap
- * exists to prevent — but a cut result is RECORDED (`truncated`, `totalRows`),
- * never silent, because a chart built from a sample believing it is the set is
- * the failure that matters. Defaults to the INGEST cap, deliberately: every
- * dataset already fits under it, so `select * from ref_<id>` is never cut.
- * Only a query that GROWS its input past the cap — a join, a range() — meets
- * it.
- */
-export const MAX_QUERY_ROWS = Number(env('SQL', 'MAX_QUERY_ROWS') ?? String(MAX_ROWS_LIMIT));
 
 /**
  * How long one query may run before it is interrupted. A document renders
@@ -195,7 +187,8 @@ export const MAX_QUERY_ROWS = Number(env('SQL', 'MAX_QUERY_ROWS') ?? String(MAX_
  */
 export const QUERY_TIMEOUT_MS = sqlTimeout(env('SQL', 'QUERY_TIMEOUT_MS'), SQL_QUERY_DEFAULT_MS, SQL_QUERY_MAX_MS, 'SQL__QUERY_TIMEOUT_MS');
 export const SQL_READ_WALL_TIMEOUT_MS = QUERY_TIMEOUT_MS + SQL_WALL_OVERHEAD_MS;
-export const SQL_MUTATION_TIMEOUT_MS = sqlTimeout(env('SQL', 'QUERY_TIMEOUT_MS'), 5_000, SQL_QUERY_MAX_MS, 'SQL__QUERY_TIMEOUT_MS');
+/** How long one dataset write may run: fixed, whatever the read cap is. */
+export const SQL_MUTATION_TIMEOUT_MS = 5_000;
 
 /** Where the local fallback writes when S3_URL is unset. */
 export const LOCAL_OBJECT_DIR = env('OBJECT_STORE', 'LOCAL_DIR') ?? '.artifact-objects';

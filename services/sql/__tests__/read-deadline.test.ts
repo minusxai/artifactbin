@@ -166,10 +166,10 @@ it('shutdown settles queued and active reads and refuses later work', async () =
   expect(await engine.run(QUICK)).toMatchObject({q:{error:'the SQL engine is closed'}});
 });
 
-it('preserves default and explicitly configured mutation caps separately from reads', async () => {
+it('keeps the mutation cap separate from the read cap', async () => {
   expect(DEFAULT_CAPS.mutationTimeoutMs).toBe(5000);
   expect(sqlCaps({})).toMatchObject({timeoutMs:30000, mutationTimeoutMs:5000});
-  expect(sqlCaps({timeoutMs:7000})).toMatchObject({timeoutMs:7000, mutationTimeoutMs:7000});
+  expect(sqlCaps({timeoutMs:7000})).toMatchObject({timeoutMs:7000, mutationTimeoutMs:5000});
   const engine = createSql({timeoutMs:3000, mutationTimeoutMs:60}, {workers:1});
   try {
     await engine.run(QUICK);

@@ -36,7 +36,7 @@ import { loadSqlite } from '@artifactbin/sql/core';
 import type { AccessActor } from '@/lib/accounts';
 import { artifactState, completeMutationReceipt, durableMutation, getArtifactById, type ArtifactRow } from '@/lib/artifacts';
 import { isMutationRefused, mutateDataset, type MutationStep } from '@/lib/document-data';
-import { MAX_QUERY_ROWS, SQL_READ_WALL_TIMEOUT_MS } from '@/lib/platform';
+import { MAX_ROWS_LIMIT, SQL_READ_WALL_TIMEOUT_MS } from '@/lib/platform';
 import { isQueryFailure, sqlExtensions } from '@/lib/sql';
 import { readLifetime, mutateMounted, type CatalogMount } from '@/lib/datasets';
 import { loadLinked, sqlRefusal, type LoadedDataset, type PageCommitGuard } from './linked';
@@ -176,7 +176,7 @@ async function phaseOne(target: Mounted, others: readonly Mounted[], call: PageS
   const out = await mutateMounted(mounts, {
     policy: visibleWorldPolicy(target),
     table: { schema: target.schema, name: target.name, columns: [...target.visible, ...target.writeOnly], rows: [] },
-    sql: call.sql, params: { ...call.params }, identity: '_id', limit: MAX_QUERY_ROWS, answer: 'written',
+    sql: call.sql, params: { ...call.params }, identity: '_id', limit: MAX_ROWS_LIMIT, answer: 'written',
   }, { signal });
   if (isQueryFailure(out)) {
     if (out.timedOut) refuse('timeout', out.error);

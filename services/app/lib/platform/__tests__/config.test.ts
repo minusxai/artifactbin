@@ -30,7 +30,7 @@ describe('settings', () => {
       APP__ALIAS_ORIGINS: 'https://alias.example.com', APP__OUTBOUND_IPS: '184.169.146.94, 2600:1F1C::1', APP__PAGES_HOST: 'Pages.Example.com.',
       ADMIN__SECRET: 'admin', AUTH__SECRET: 'auth', ANALYTICS__SECRET: 'analytics', ARTIFACTS__ALLOW_PUBLIC: '0',
       QUOTA__ARTIFACTS_PER_TOKEN: '7', ASSETS__MAX_BYTES_PER_TOKEN: '8', HTTP__TRUSTED_PROXY_HOPS: '3',
-      SQL__MAX_ROWS: '50', SQL__MAX_QUERY_ROWS: undefined, SQL__QUERY_TIMEOUT_MS: '900', SQL__SERVICE_URL: 'http://sql',
+      SQL__MAX_ROWS: '50', SQL__QUERY_TIMEOUT_MS: '900', SQL__SERVICE_URL: 'http://sql',
       OBJECT_STORE__LOCAL_DIR: '/objects', WEB_INGEST__ALLOW_PRIVATE: '1', WEB_INGEST__TIMEOUT_MS: '11', WEB_INGEST__MAX_PER_HOUR: '12',
       IMAGES__MAX_BYTES: '13', PDF__MAX_BYTES: '14', FILES__MAX_BYTES: '15', EMAIL__RESEND_API_KEY: 'resend',
       EXPORT__INTERNAL_ORIGIN: ' http://export ', APP__USER_PAGES_HOST: 'U.Example.net.', BROWSER__SERVICE_URL: 'http://browser',
@@ -55,7 +55,6 @@ describe('settings', () => {
       ['ASSETS_MAX_BYTES_PER_TOKEN', 8],
       ['TRUSTED_PROXY_HOPS', 3],
       ['MAX_ROWS_LIMIT', 50],
-      ['MAX_QUERY_ROWS', 50],
       ['QUERY_TIMEOUT_MS', 900],
       ['SQL_SERVICE_URL', 'http://sql'],
       ['LOCAL_OBJECT_DIR', '/objects'],
@@ -76,11 +75,12 @@ describe('settings', () => {
     expect(config.requirePagesHost()).toBe('pages.example.com');
   });
 
+
   it('falls back to its defaults when nothing is set', async () => {
     const unset = Object.fromEntries([
       'APP__PORT', 'APP__HMR_PORT', 'APP__PUBLIC_BASE_URL', 'APP__ASSETS_ORIGIN', 'APP__ALIAS_ORIGINS', 'APP__OUTBOUND_IPS', 'AUTH__SECRET', 'ANALYTICS__SECRET',
       'ARTIFACTS__ALLOW_PUBLIC',
-      'QUOTA__ARTIFACTS_PER_TOKEN', 'ASSETS__MAX_BYTES_PER_TOKEN', 'HTTP__TRUSTED_PROXY_HOPS', 'SQL__MAX_ROWS', 'SQL__MAX_QUERY_ROWS',
+      'QUOTA__ARTIFACTS_PER_TOKEN', 'ASSETS__MAX_BYTES_PER_TOKEN', 'HTTP__TRUSTED_PROXY_HOPS', 'SQL__MAX_ROWS',
       'SQL__QUERY_TIMEOUT_MS', 'OBJECT_STORE__LOCAL_DIR', 'WEB_INGEST__ALLOW_PRIVATE', 'WEB_INGEST__TIMEOUT_MS', 'WEB_INGEST__MAX_PER_HOUR',
       'IMAGES__MAX_BYTES', 'PDF__MAX_BYTES', 'FILES__MAX_BYTES', 'EXPORT__INTERNAL_ORIGIN', 'APP__USER_PAGES_HOST', 'EVENTS__SCHEMA',
     ].map(name => [name, undefined]));
@@ -99,7 +99,6 @@ describe('settings', () => {
       ['ASSETS_MAX_BYTES_PER_TOKEN', 10_000_000_000],
       ['TRUSTED_PROXY_HOPS', 1],
       ['MAX_ROWS_LIMIT', 10_000],
-      ['MAX_QUERY_ROWS', 10_000],
       ['QUERY_TIMEOUT_MS', 30000],
       ['LOCAL_OBJECT_DIR', '.artifact-objects'],
       ['WEB_INGEST_ALLOW_PRIVATE', false],

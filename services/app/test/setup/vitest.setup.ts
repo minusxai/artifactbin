@@ -42,7 +42,7 @@ process.env.OBJECT_STORE__LOCAL_DIR ??= path.join(os.tmpdir(), `artifact-objects
 // Deep paths, not the platform index: a test file's `vi.mock('@/lib/platform/config')` must still reach the index,
 // which is evaluated only when the test's own imports ask for it (after the mock is registered).
 const { setServices } = await import('@/lib/platform/services');
-const { EVENTS_SCHEMA, MAX_QUERY_ROWS, QUERY_TIMEOUT_MS, resetConfigOverrides } = await import('@/lib/platform/config');
+const { EVENTS_SCHEMA, MAX_ROWS_LIMIT, QUERY_TIMEOUT_MS, resetConfigOverrides } = await import('@/lib/platform/config');
 const { overrideRequestHeaders } = await import('@/lib/platform/request-context');
 const { getDb } = await import('@/lib/platform/db');
 const { createSqliteSql } = await import('@artifactbin/sql/sqlite');
@@ -66,7 +66,7 @@ let localBrowser: import('@artifactbin/contracts').BrowserService | undefined;
 const browser = async () => (localBrowser ??= (await import('@artifactbin/browser/local')).createBrowser());
 
 setServices({
-  sql: createSqliteSql({ maxRows: MAX_QUERY_ROWS, timeoutMs: QUERY_TIMEOUT_MS }),
+  sql: createSqliteSql({ maxRows: MAX_ROWS_LIMIT, timeoutMs: QUERY_TIMEOUT_MS }),
   // THE REAL WRITER, on the file's own database — so `trackEvent` lands rows in
   // the events schema in the suite exactly as it does in the single image, and
   // the reads in lib/workspace-analytics see what production sees. The handle is resolved PER
