@@ -19,8 +19,7 @@ only the skill: no loose files at its root (`loadSkillSources` throws).
   folder only once installs run an updater that accepts it.
 - A deployment's own files (`SKILLS__EXTRA_DIR`, `extras.ts`) join the archive under `extras/` only, never
   replacing a product file, with caps of their own; the skill modules and names an extra may import are
-  `EXTRA_ENTRY_POINTS` (pinned by `__tests__/extras.test.ts`): rename one only with that list. An extra
-  `intro.md` (the deployment's introduction) also opens `/llms.txt`, verbatim, before the product guide.
+  `EXTRA_ENTRY_POINTS` (pinned by `__tests__/extras.test.ts`): rename one only with that list.
 - Verify on the task's own dev server only, then `npm run eval` shows an agent using the change.
 - Evals: `evals/` is the private, gitignored `minusxai/artifactbin-evals` repo; its README is the guide. Copy it
   from `~/projects/artifactbin-evals/evals`, never symlink; a copy lacking `evals/README.md` is stale.
