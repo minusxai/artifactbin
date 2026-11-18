@@ -6,6 +6,7 @@ import {randomUUID} from 'node:crypto';
 import {publicationLocalReferences,publicationScriptFetches} from
   './preview-html.mjs';
 import {serverOrigin} from './toolbox-client.mjs';
+import {PAGE_LIMITS} from './toolbox-limits.mjs';
 const types={'.css':'text/css','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg',
   '.jpeg':'image/jpeg','.webp':'image/webp','.gif':'image/gif','.csv':'text/csv','.json':
   'application/json','.js':'text/javascript','.mjs':'text/javascript','.woff2':'font/woff2'};
@@ -40,8 +41,8 @@ const canonical=await realpath(full);if(!canonical.startsWith(project+path.sep))
 if(files.has(name))return;if(name===entry&&entryHtml!==undefined&&!(await lstat(canonical)).isFile(
     ))throw Error('Entry must be a regular file');const bytes=name===entry&&
     entryHtml!==undefined?Buffer.from(entryHtml):await readFile(canonical);if(
-    bytes.length>4_000_000||(size+=bytes.length)>16_000_000||files.size>=100)throw Error(
-    'Publication bundle limit exceeded');
+    bytes.length>PAGE_LIMITS.fileBytes||(size+=bytes.length)>PAGE_LIMITS.totalBytes||
+    files.size>PAGE_LIMITS.files)throw Error('Publication bundle limit exceeded');
 const contentType=types[path.extname(name).toLowerCase()]??'application/octet-stream';files.set(
     name,{path:name,contentType,base64:bytes.toString('base64')});
   if(name===entry||contentType==='text/css'||contentType==='text/javascript'){

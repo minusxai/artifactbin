@@ -1,7 +1,7 @@
 /** Delegated artifact images exercise the real auth handler: the artifact-read fences, a fixed image seam, pass-through refusals. */
 import {createHash} from 'node:crypto';
 import {describe,it,expect} from 'vitest';
-import {ARTIFACT_IMAGE_PATH,ARTIFACT_READ_LIMIT,CANONICAL_ARTIFACT_IMAGE_PATH,CANONICAL_ARTIFACT_READ_PATH,SERVICE_AUTH_HEADER} from '@artifactbin/contracts';
+import {ARTIFACT_IMAGE_PATH,SERVICE_PAYLOAD_LIMIT,CANONICAL_ARTIFACT_IMAGE_PATH,CANONICAL_ARTIFACT_READ_PATH,SERVICE_AUTH_HEADER} from '@artifactbin/contracts';
 import {createAuthHost} from '../src/parts';
 import {artifactReadKey,signArtifactReadGrant} from '../src/identity/artifact-read-grants';
 
@@ -103,7 +103,7 @@ describe('delegated artifact images',()=>{
  });
 
  it('refuses an answer past the buffered cap as too_large, and a non-image answer as unavailable',async()=>{
-  const big=host({image:()=>Response.json({...envelope,data:'x'.repeat(ARTIFACT_READ_LIMIT)})});
+  const big=host({image:()=>Response.json({...envelope,data:'x'.repeat(SERVICE_PAYLOAD_LIMIT)})});
   expect([(await big.call({grant:grantFor(),artifact_id:'abc'})).status]).toEqual([413]);
   const odd=host({image:()=>Response.json({id:'abc'})});
   const response=await odd.call({grant:grantFor(),artifact_id:'abc'});

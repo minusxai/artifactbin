@@ -5,11 +5,11 @@
  */
 import {createHash} from 'node:crypto';
 import sharp from 'sharp';
-import {afterEach,beforeAll,describe,expect,it} from 'vitest';
+import {afterEach,beforeAll,describe,expect,it,vi} from 'vitest';
 import {attachActor} from '@artifactbin/utils';
 import {createAuthHost} from '@artifactbin/auth';
 import {artifactReadKey,signArtifactReadGrant} from '@artifactbin/auth/identity/artifact-read-grants';
-import {ARTIFACT_IMAGE_BYTES,ARTIFACT_IMAGE_PATH,CANONICAL_ARTIFACT_IMAGE_PATH,SERVICE_AUTH_HEADER,type RenderRequest} from '@artifactbin/contracts';
+import {ARTIFACT_IMAGE_BYTES,SERVICE_PAYLOAD_LIMIT,ARTIFACT_IMAGE_PATH,CANONICAL_ARTIFACT_IMAGE_PATH,SERVICE_AUTH_HEADER,type RenderRequest} from '@artifactbin/contracts';
 import {mintAccountToken,useAppHarness} from '@/__tests__/harness';
 import {account,mine} from '@/__tests__/artifact-fixtures';
 import {getDb,setServices} from '@/lib/platform';
@@ -17,6 +17,9 @@ import {updateSharingFor} from '@/lib/artifacts';
 import {exportKeyReader,resetExportRenderer} from '@/lib/export';
 import {createAppServer} from '../app';
 import {createAppHost} from '../host';
+// The image budget follows the service payload limit (about 3 MB); this file holds it at 140,000 bytes so a
+// page-sized capture overflows it without encoding megabytes of noise.
+vi.mock('@artifactbin/contracts',async original=>({...await original<object>(),ARTIFACT_IMAGE_BYTES:140_000}));
 useAppHarness();
 
 let PNG:Buffer;
@@ -147,7 +150,7 @@ describe('behind the identity host',()=>{
   const image=await delivered.json();
   expect(image).toMatchObject({id:row.id,format:'png'});
   expect(image.bytes).toBeLessThanOrEqual(ARTIFACT_IMAGE_BYTES);
-  expect(JSON.stringify(image).length).toBeLessThan(200*1024);
+  expect(JSON.stringify(image).length).toBeLessThan(SERVICE_PAYLOAD_LIMIT);
   expect(requests.length).toBeGreaterThan(0);
   // The share is revoked between the render and delivery: the read seam's second decision refuses it.
   afterImage=()=>updateSharingFor(owner,row.id,{shares:[]});

@@ -658,8 +658,8 @@ const renderChartImageOp: Operation = {
   errors: [
     { status: 400, code: 'invalid_chart', fix: 'the description was refused or could not be drawn; the message names why' },
     { status: 400, code: 'invalid_request', fix: 'rows, width, height, theme or designSystem is out of range; the message gives the range' },
-    { status: 413, code: 'too_large', fix: 'more than 5,000 rows or a body past 512 KiB: aggregate in SQL to fewer rows or columns' },
-    { status: 422, code: 'image_too_large', fix: 'the PNG passed 140,000 bytes: ask for a smaller width and height, or draw fewer marks' },
+    { status: 413, code: 'too_large', fix: 'more than 5,000 rows or a body past 4 MiB (the service payload limit): aggregate in SQL to fewer rows or columns' },
+    { status: 422, code: 'image_too_large', fix: 'the PNG passed ARTIFACT_IMAGE_BYTES (about 3 MB): ask for a smaller width and height, or draw fewer marks' },
     { status: 422, code: 'render_failed', fix: 'drawing exhausted the renderer: draw fewer marks or simplify the spec' },
     { status: 503, code: 'render_busy', fix: 'other charts are drawing: retry in a few seconds' },
     { status: 503, code: 'render_unavailable', fix: 'this server cannot draw charts right now; retry shortly' },

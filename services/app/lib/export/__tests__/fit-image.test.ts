@@ -1,7 +1,6 @@
 /** The byte-budget fit: a large PNG and JPEG come back under the budget in the same format, measured as encoded. */
 import sharp from 'sharp';
 import {describe,expect,it} from 'vitest';
-import {ARTIFACT_IMAGE_BYTES} from '@artifactbin/contracts';
 import {fitImage} from '..';
 
 /** A page-like picture: flat bands, gradients and one noisy channel, so neither encoder can shrink it for free. */
@@ -14,15 +13,17 @@ async function picture(width:number,height:number,format:'png'|'jpg'):Promise<Bu
  const image=sharp(raw,{raw:{width,height,channels:3}});
  return format==='png'?image.png().toBuffer():image.jpeg({quality:92}).toBuffer();
 }
+/** A budget far under the service's (contracts ARTIFACT_IMAGE_BYTES), so the pictures that overflow it stay small and quick. */
+const BUDGET=140_000;
 const measured=async(bytes:Buffer)=>{const meta=await sharp(bytes).metadata();return {format:meta.format,width:meta.width,height:meta.height};};
 
 describe('fitImage',()=>{
  it('fits a large PNG under the budget as a PNG, reporting the dimensions it encoded',async()=>{
   const input=await picture(1200,1600,'png');
-  expect(input.length).toBeGreaterThan(ARTIFACT_IMAGE_BYTES*5);
-  const fitted=await fitImage(input,'png');
+  expect(input.length).toBeGreaterThan(BUDGET*5);
+  const fitted=await fitImage(input,'png',{maxBytes:BUDGET});
   if(!fitted.ok)throw new Error(`not fitted: ${JSON.stringify(fitted)}`);
-  expect(fitted.bytes.length).toBeLessThanOrEqual(ARTIFACT_IMAGE_BYTES);
+  expect(fitted.bytes.length).toBeLessThanOrEqual(BUDGET);
   expect(await measured(fitted.bytes)).toEqual({format:'png',width:fitted.width,height:fitted.height});
   expect(fitted.width).toBeGreaterThanOrEqual(320);
   // The aspect ratio holds: only the width was chosen.
@@ -31,10 +32,10 @@ describe('fitImage',()=>{
 
  it('fits a large JPEG under the budget as a JPEG',async()=>{
   const input=await picture(2400,1600,'jpg');
-  expect(input.length).toBeGreaterThan(ARTIFACT_IMAGE_BYTES*3);
-  const fitted=await fitImage(input,'jpg');
+  expect(input.length).toBeGreaterThan(BUDGET*3);
+  const fitted=await fitImage(input,'jpg',{maxBytes:BUDGET});
   if(!fitted.ok)throw new Error(`not fitted: ${JSON.stringify(fitted)}`);
-  expect(fitted.bytes.length).toBeLessThanOrEqual(ARTIFACT_IMAGE_BYTES);
+  expect(fitted.bytes.length).toBeLessThanOrEqual(BUDGET);
   expect(await measured(fitted.bytes)).toEqual({format:'jpeg',width:fitted.width,height:fitted.height});
   expect(fitted.width).toBeGreaterThanOrEqual(320);
  });

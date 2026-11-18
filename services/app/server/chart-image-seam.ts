@@ -5,7 +5,7 @@
  * anonymous actor (no person is involved; the public reaches no internal path), so a request that
  * arrives with no actor at all, or as anyone, is refused. Exact keys, as the owner checks.
  */
-import { CHART_IMAGE_BODY_LIMIT, CHART_IMAGE_KEYS, type Actor } from '@artifactbin/contracts';
+import { SERVICE_PAYLOAD_LIMIT, CHART_IMAGE_KEYS, type Actor } from '@artifactbin/contracts';
 import { BodyTooLargeError, readBody } from '@artifactbin/utils';
 import { DESIGN_SYSTEM_VARIABLES } from '@/lib/html-systems/server';
 import { chartImageAnswer } from '@/lib/viz';
@@ -15,8 +15,8 @@ const reply = (body: unknown, status = 200) => Response.json(body, { status, hea
 export async function chartImageSeam(request: Request, caller: Actor | null): Promise<Response> {
   if (caller?.credential !== 'none') return reply({ error: 'forbidden' }, 403);
   let body: unknown;
-  try { body = JSON.parse(await readBody(request, { limit: CHART_IMAGE_BODY_LIMIT, as: 'text' })); } catch (error) {
-    return error instanceof BodyTooLargeError ? reply({ error: 'too_large', message: `the request is past ${CHART_IMAGE_BODY_LIMIT} bytes` }, 413)
+  try { body = JSON.parse(await readBody(request, { limit: SERVICE_PAYLOAD_LIMIT, as: 'text' })); } catch (error) {
+    return error instanceof BodyTooLargeError ? reply({ error: 'too_large', max: SERVICE_PAYLOAD_LIMIT, message: `the chart request is past the ${SERVICE_PAYLOAD_LIMIT}-byte limit`, hint: 'aggregate in SQL to fewer rows or columns' }, 413)
       : reply({ error: 'bad_request' }, 400);
   }
   const keys = body && typeof body === 'object' && !Array.isArray(body) ? Object.keys(body) : null;

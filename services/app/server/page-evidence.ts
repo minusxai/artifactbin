@@ -2,7 +2,7 @@
  * human. The second call computes canonical schema/policy identities only, never repeats row SQL.
  * Fingerprints are internal digests, cannot authorize a read, and are never delivered by identity.
  */
-import {ARTIFACT_WORKLOAD_LIMIT,isPageEvidenceOperation,type Actor} from '@artifactbin/contracts';
+import {SERVICE_PAYLOAD_LIMIT,isPageEvidenceOperation,type Actor} from '@artifactbin/contracts';
 import {BodyTooLargeError,readBody} from '@artifactbin/utils';
 import {SQL_READ_WALL_TIMEOUT_MS} from '@/lib/platform';
 import {identityForUser} from '@/lib/accounts';
@@ -12,7 +12,7 @@ export async function personalPageEvidence(request:Request,caller:Actor|null|und
  if(caller?.credential!=='session'||!caller.userId||caller.tokenId||caller.sessionId)return Response.json({error:'forbidden'},{status:403});
  try{
   request=new Request(request,{signal:AbortSignal.any([request.signal,AbortSignal.timeout(SQL_READ_WALL_TIMEOUT_MS)])});
-  const input=JSON.parse(await pageEvidenceStep(request.signal,readBody(request,{limit:ARTIFACT_WORKLOAD_LIMIT+8192,as:'text'})));
+  const input=JSON.parse(await pageEvidenceStep(request.signal,readBody(request,{limit:SERVICE_PAYLOAD_LIMIT+8192,as:'text'})));
   if(!input||!isPageEvidenceOperation(input.operation)||Object.keys(input).some(k=>!['operation','fingerprint'].includes(k))||input.fingerprint!==undefined&&(typeof input.fingerprint!=='string'||!/^[a-f0-9]{64}$/.test(input.fingerprint)))return Response.json({error:'bad_request'},{status:400});
   const actor=identityForUser(caller.userId),operation=input.fingerprint?{kind:'page-evidence-schema' as const,pageId:input.operation.pageId,revision:input.operation.revision}:input.operation;
   const result=await pageEvidenceStep(request.signal,withReadOnlyAccessFacts(()=>preparePageEvidence(request,actor,operation)));

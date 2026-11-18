@@ -8,7 +8,7 @@ import path from 'node:path';
 import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
 import { attachActor } from '@artifactbin/utils';
-import { ANONYMOUS, CANONICAL_CHART_IMAGE_PATH, CHART_IMAGE_BODY_LIMIT } from '@artifactbin/contracts';
+import { ANONYMOUS, CANONICAL_CHART_IMAGE_PATH, SERVICE_PAYLOAD_LIMIT } from '@artifactbin/contracts';
 import { mintAccountToken, request, useAppHarness } from '@/__tests__/harness';
 import { POST as drawRoute } from '@/app/api/charts/image/route';
 import { sqlCommand } from '../../skills/artifactbin/scripts/sql.mjs';
@@ -37,7 +37,7 @@ describe('POST /api/charts/image', () => {
     const invalid = await post({ chart: { recipe: 'pie', bindings: {} }, rows });
     expect(invalid.status).toBe(400);
     expect(await invalid.json()).toEqual({ error: 'invalid_chart', message: expect.stringContaining('unknown recipe "pie"') });
-    const huge = await post(undefined, { token, body: JSON.stringify({ chart, rows: [{ k: 'x'.repeat(CHART_IMAGE_BODY_LIMIT) }] }) });
+    const huge = await post(undefined, { token, body: JSON.stringify({ chart, rows: [{ k: 'x'.repeat(SERVICE_PAYLOAD_LIMIT) }] }) });
     expect(huge.status).toBe(413);
     expect(await huge.json()).toMatchObject({ error: 'too_large', hint: expect.stringContaining('aggregate') });
     expect((await post(undefined, { token, body: '[1]' })).status).toBe(400);
@@ -116,9 +116,9 @@ describe('sql.mjs query --chart', () => {
       await expect(query('DATA12', 'select k, v from rows', { chart: spec, 'chart-output': path.join(root, 'bad.png') }))
         .rejects.toMatchObject({ code: 'invalid_chart', message: expect.stringContaining('Chart refused: unknown recipe "pie"') });
       await writeFile(spec, JSON.stringify(chart));
-      readRows = Array.from({ length: 4000 }, (_, i) => ({ k: `a longer category name ${i}`, v: i }));
+      readRows = Array.from({ length: 10000 }, (_, i) => ({ k: `${'a longer category name '.repeat(20)}${i}`, v: i }));
       sent.length = 0;
-      await expect(query('DATA12', 'select k, v from rows', { chart: spec, 'chart-output': path.join(root, 'big.png'), limit: '5000' }))
+      await expect(query('DATA12', 'select k, v from rows', { chart: spec, 'chart-output': path.join(root, 'big.png'), limit: '10000' }))
         .rejects.toMatchObject({ code: 'chart_rows_too_large', recovery: expect.stringContaining('Aggregate in SQL') });
       expect(sent).not.toContain('/api/charts/image');
     } finally { await rm(root, { recursive: true, force: true }); }

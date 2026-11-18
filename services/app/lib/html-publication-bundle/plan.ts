@@ -2,7 +2,7 @@ import { escapeSourceAttribute } from '@artifactbin/utils/escape';
 import {libraryPathForSpecifier} from '../libraries';
 import path from 'node:path';
 import {admitRuntimeModuleImports} from './runtime-module-imports';
-import {fileContentType} from '@artifactbin/contracts';
+import {fileContentType,PAGE_FILE_LIMITS} from '@artifactbin/contracts';
 import {initSync,parse as parseImports} from 'es-module-lexer';
 import {parseCss,walkCss} from './css';
 import {scriptFetchPaths} from '../html-autofix';
@@ -10,7 +10,7 @@ initSync();
 import {parse, type DefaultTreeAdapterMap} from 'parse5';
 import type {PublicationBundle,BundlePlan,BundleDependency,BundleResolutionContext,AuthoringHtmlOptions} from './contracts';
 export type {PublicationBundle,BundlePlan} from './contracts';
-const MAX_FILES=99,MAX_BYTES=16_000_000,MAX_FILE=4_000_000;
+const {files:MAX_FILES,totalBytes:MAX_BYTES,fileBytes:MAX_FILE}=PAGE_FILE_LIMITS;
 /** `hyperlink`: an `<a>`/`<area>` href. It names a project file only when it has a path; one that names none is navigation. */
 interface Link {start:number;end:number;value:string;kind:'asset'|'dataset';htmlAttribute?:true;runtimeModule?:true;hyperlink?:true}
 /** A hyperlink to the page itself or nowhere: an empty href, a query or hash alone, `.`, `./`. */
@@ -115,7 +115,7 @@ function fetchedPaths(source:string,page:boolean):string[]{
 }
 export function planPublicationBundle(html:string,bundle:PublicationBundle,context:BundleResolutionContext={}):BundlePlan{
  if(!bundle||typeof bundle.entryPath!=='string'||!Array.isArray(bundle.files)||bundle.files.length>MAX_FILES)throw Error('Invalid publication bundle');
- if(html.length>4_000_000||JSON.stringify(bundle).length>24_000_000||Object.keys(bundle.mappings??{}).length>99)throw Error('Publication bundle limit exceeded');
+ if(html.length>4_000_000||JSON.stringify(bundle).length>24_000_000||Object.keys(bundle.mappings??{}).length>MAX_FILES)throw Error('Publication bundle limit exceeded');
  for(const name of Object.keys(bundle.mappings??{}))if(normalized(name)!==name)throw Error('Noncanonical mapping path');
  const entryPath=normalized(bundle.entryPath),files=new Map<string,{bytes:Buffer;contentType:string}>();let total=0;
  for(const file of bundle.files){
@@ -176,7 +176,7 @@ export function planPublicationBundle(html:string,bundle:PublicationBundle,conte
 /** Read-only preview: the final publication repeats this validation before reserving IDs. */
 export function inspectPublicationBundle(html:string,bundle:PublicationBundle,context:BundleResolutionContext={}){
  const plan=planPublicationBundle(html,bundle,context);
- return {entryPath:plan.entryPath,dependencies:plan.dependencies.map(({path,kind,contentType,bytes,dependencies})=>({path,kind,contentType,bytes:bytes.byteLength,dependencies})),reusedPaths:Object.keys(bundle.mappings??{}),limits:{files:99,fileBytes:4_000_000,totalBytes:16_000_000}};
+ return {entryPath:plan.entryPath,dependencies:plan.dependencies.map(({path,kind,contentType,bytes,dependencies})=>({path,kind,contentType,bytes:bytes.byteLength,dependencies})),reusedPaths:Object.keys(bundle.mappings??{}),limits:{...PAGE_FILE_LIMITS}};
 }
 /** Pin hosted dependency reads to the immutable parent version, including nested stylesheet/module URLs. `captureKey`: an
  * export capture's verified key (lib/export read-key), set on each own-door address so the capture's next request is

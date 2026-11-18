@@ -1,17 +1,16 @@
 /**
  * What a draft may hold (lib/page-drafts): stated here once, enforced by ./drafts, answered to the embedding app with
  * the POST (app/api/page/drafts) and shown by `mountDraft` (lib/html-reader/host-shell) as a refusal's code and message.
- * Browser-safe: no node import.
+ * Browser-safe: no node import. Files beside the page (stylesheets, scripts, images, CSV or JSON datasets), any one
+ * file's bytes and all of them together are a published page's (contracts PAGE_FILE_LIMITS). The skill ships the
+ * same numbers to agents (skills/artifactbin/scripts/toolbox-limits.mjs, pinned equal by a test).
  */
+import { PAGE_FILE_LIMITS } from '@artifactbin/contracts';
+
 export const DRAFT_LIMITS = {
-  /** Files beside the page it may link (stylesheets, scripts, images, CSV or JSON datasets). */
-  files: 64,
+  ...PAGE_FILE_LIMITS,
   /** The page's own bytes. */
   htmlBytes: 2_000_000,
-  /** Any one file's bytes. */
-  fileBytes: 4_000_000,
-  /** The page and its files together. */
-  totalBytes: 16_000_000,
   /** Rows in any one linked dataset, and its columns. */
   rows: 50_000,
   columns: 200,
