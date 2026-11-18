@@ -8,6 +8,7 @@ import {mkdir, readFile, readdir, writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import {beforeEach, expect, it, onTestFinished} from 'vitest';
 import {tempDir} from '@artifactbin/test-support/temp-dir';
+import {syntheticEnv} from '@/test/helpers/toolbox-env';
 
 const server = 'https://example.test';
 type Seen = {method: string; path: string; body?: Record<string, unknown>; key?: string};
@@ -36,7 +37,7 @@ async function run(sub: 'read' | 'write', positionals: string[], values: Record<
     if (response === 'lose') throw new Error('socket hang up');
     return response;
   };
-  const options = {env: {ARTIFACTBIN_URL: server, ARTIFACTBIN_TOKEN: 'private-fixture', ARTIFACTBIN_HOME: path.join(root, 'home')}, fetcher, retryDelays: []};
+  const options = {env: syntheticEnv(server, path.join(root, 'home'), { token: 'private-fixture' }), fetcher, retryDelays: []};
   return docCommand({sub, values: {server, ...values}, positionals}, options);
 }
 

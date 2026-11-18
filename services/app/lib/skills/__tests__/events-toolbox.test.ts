@@ -2,6 +2,7 @@ import {it,expect,onTestFinished} from 'vitest';
 import {readdir} from 'node:fs/promises';
 import path from 'node:path';
 import {tempDir} from '@artifactbin/test-support/temp-dir';
+import {syntheticEnv} from '@/test/helpers/toolbox-env';
 /**
  * events.mjs watch, the one events watch: filters reach GET /api/events, --next resumes from its own default log per
  * stream and session, prints others' events and only logs this session's own, and the 15-minute idle stop is an
@@ -17,7 +18,7 @@ async function harness(feed:(n:number)=>any[]){
  const fetcher=async(url:any)=>{const at=new URL(String(url));expect(at.pathname).toBe('/api/events');
   state.queries.push(Object.fromEntries(at.searchParams));state.n++;state.clock+=Number(at.searchParams.get('wait'))*1000;
   return Response.json({events:feed(state.n),next:'c'+state.n});};
- const env={ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic',ARTIFACTBIN_HOME:root,CLAUDECODE:'1',CLAUDE_CODE_SESSION_ID:'events-session'};
+ const env=syntheticEnv(server, root, { claudeSession: 'events-session' });
  const options={env,fetcher,now:()=>state.clock,deliver:async(v:any)=>{state.printed.push(v);}};
  const watch=async(values:Record<string,unknown>)=>{state.printed.length=0;await eventsCommand({sub:'watch',values:{next:true,...values}},options);
   return state.printed.map(v=>typeof v==='string'?v:v.event.id);};

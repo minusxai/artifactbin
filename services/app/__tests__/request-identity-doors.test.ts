@@ -17,7 +17,7 @@ import {GET as list} from '@/app/api/artifacts/route';
 import {GET as read} from '@/app/api/artifacts/[id]/route';
 import {GET as raw} from '@/app/a/[id]/raw/route';
 import {GET as pageSession} from '@/app/api/page/session/route';
-import {createGuestOwner,mintAccountToken,request,setSession,useAppHarness} from './harness';
+import {createGuestOwner,mintAccountToken,request,setSession,useAppHarness,params} from './harness';
 import { sessionActor } from '@/lib/authentication';
 import { seedArtifacts } from '@/__tests__/rows';
 
@@ -27,7 +27,7 @@ const verified=(userId:string,email:string,extra:Partial<HumanActor>={}):Actor=>
 const both=(path:string,bearer:string,actor:Actor,init:{method?:string;headers?:Record<string,string>}={})=>{
  const built=request(path,{actor,...init});built.headers.set('authorization',`Bearer ${bearer}`);return built;
 };
-const ctx=(params:{id:string})=>({params:Promise.resolve(params)});
+
 const lastUsed=async(id:string)=>(await (await harness.db()).query<{last_used_at:string|null;client_harness:string|null}>('SELECT last_used_at,client_harness FROM tokens WHERE id=$1',[id])).rows[0]!;
 const INVALID='mx_'+'x'.repeat(43);
 
@@ -43,18 +43,18 @@ describe('an explicit bearer',()=>{
  it('that does not resolve is refused at every door and never falls back to the cookie identity',async()=>{
   const session=verified(a.userId!,a.email!);
   expect((await list(both('/api/artifacts',INVALID,session))).status).toBe(401);
-  expect((await raw(request('/a/door01/raw',{actor:session}),ctx({id:'door01'}))).status).toBe(200);
-  expect((await raw(both('/a/door01/raw',INVALID,session),ctx({id:'door01'}))).status).toBe(404);
+  expect((await raw(request('/a/door01/raw',{actor:session}),params({id:'door01'}))).status).toBe(200);
+  expect((await raw(both('/a/door01/raw',INVALID,session),params({id:'door01'}))).status).toBe(404);
   // A direct-mode session (no proxy) is a cookie too: an invalid bearer still does not fall back to it.
   setSession({user:{id:a.userId!,email:a.email}});
   expect((await list(request('/api/artifacts',{token:INVALID}))).status).toBe(401);
-  expect((await raw(request('/a/door01/raw',{token:INVALID}),ctx({id:'door01'}))).status).toBe(404);
+  expect((await raw(request('/a/door01/raw',{token:INVALID}),params({id:'door01'}))).status).toBe(404);
  });
  it('beats the cookie when both are present',async()=>{
   const listed=await list(both('/api/artifacts',a.token,verified(b.userId!,b.email!)));
   expect(listed.status).toBe(200);expect(listed.headers.get('X-Artifactbin-Account')).toBe(a.userId);
-  expect((await raw(both('/a/door01/raw',a.token,verified(b.userId!,b.email!)),ctx({id:'door01'}))).status).toBe(200);
-  expect((await raw(both('/a/door01/raw',b.token,verified(a.userId!,a.email!)),ctx({id:'door01'}))).status).toBe(404);
+  expect((await raw(both('/a/door01/raw',a.token,verified(b.userId!,b.email!)),params({id:'door01'}))).status).toBe(200);
+  expect((await raw(both('/a/door01/raw',b.token,verified(a.userId!,a.email!)),params({id:'door01'}))).status).toBe(404);
  });
 });
 
@@ -62,7 +62,7 @@ describe('a session cookie alone',()=>{
  it('is 401 on the token door and accepted on the request and session doors',async()=>{
   const actor=verified(a.userId!,a.email!);
   expect((await list(request('/api/artifacts',{actor}))).status).toBe(401);
-  expect((await raw(request('/a/door01/raw',{actor}),ctx({id:'door01'}))).status).toBe(200);
+  expect((await raw(request('/a/door01/raw',{actor}),params({id:'door01'}))).status).toBe(200);
   expect(await (await pageSession(request('/api/page/session',{actor}))).json()).toMatchObject({user:{id:a.userId},kind:'account',liveEditor:true});
  });
 });
@@ -86,7 +86,7 @@ describe('dry runs',()=>{
   expect(await lastUsed(a.id)).toEqual({last_used_at:null,client_harness:null});
   expect((await list(request('/api/artifacts',{token:a.token,headers:{'Artifactbin-Agent':'claude-code'}}))).status).toBe(200);
   expect(await lastUsed(a.id)).toMatchObject({last_used_at:expect.anything(),client_harness:'claude-code'});
-  expect((await raw(request('/a/door01/raw',{token:b.token,headers:dry}),ctx({id:'door01'}))).status).toBe(404);
+  expect((await raw(request('/a/door01/raw',{token:b.token,headers:dry}),params({id:'door01'}))).status).toBe(404);
   expect((await lastUsed(b.id)).last_used_at).not.toBeNull();
  });
 });
@@ -101,7 +101,7 @@ describe('the browser-session header',()=>{
   await seedArtifacts(db, { id: 'door02', token_id: b.id, user_id: b.userId, title: 'B unlisted', source: nativeHtml('<p id="intro">B</p>'), meta: '{}', format: 'html', visibility: 'unlisted', edit_id: 'door-edit' });
   setDocumentEditorPolicy(account=>account.userId===a.userId&&account.emailVerified===true);
   const claims:Actor={credential:'bearer',userId:a.userId!,tokenId:a.id,email:a.email!,emailVerified:true};
-  const edit=async(headers:Record<string,string>={})=>(await (await read(both('/api/artifacts/door02',a.token,claims,{headers}),ctx({id:'door02'}))).json() as {capabilities:{edit:boolean}}).capabilities.edit;
+  const edit=async(headers:Record<string,string>={})=>(await (await read(both('/api/artifacts/door02',a.token,claims,{headers}),params({id:'door02'}))).json() as {capabilities:{edit:boolean}}).capabilities.edit;
   expect(await edit()).toBe(true);
   expect(await edit({[BROWSER_SESSION_HEADER]:'1'})).toBe(false);
  });

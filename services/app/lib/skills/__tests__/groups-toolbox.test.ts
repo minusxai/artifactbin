@@ -1,5 +1,5 @@
 import {it,expect,onTestFinished} from 'vitest';
-import {syntheticEnv} from './toolbox-env';
+import {syntheticEnv} from '@/test/helpers/toolbox-env';
 import {mkdir,readFile,writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import {tempDir} from '@artifactbin/test-support/temp-dir';
@@ -142,7 +142,7 @@ it('runs every verb through the installed CLI JSON envelope and refuses output o
  const installed=path.join(root,'installed');await mkdir(path.join(installed,'scripts'),{recursive:true});
  for(const [name,content] of Object.entries(files))if(name.startsWith('scripts/'))await writeFile(path.join(installed,name),content);
  const script=path.join(installed,'scripts/groups.mjs');
- const run=(args:string[])=>promisify(execFile)(process.execPath,[script,...args,'--server',origin,'--json','--no-update'],{env:{...process.env,ARTIFACTBIN_URL:origin,ARTIFACTBIN_TOKEN:'synthetic',ARTIFACTBIN_HOME:root}});
+ const run=(args:string[])=>promisify(execFile)(process.execPath,[script,...args,'--server',origin,'--json','--no-update'],{env:{ ...process.env, ...syntheticEnv(origin, root) }});
  try{
   const invocations=[['list'],['show','design_crit'],['create','design_crit','--name','Design Crit'],['update','design_crit','--name','New'],['invite','design_crit','a@example.test'],['uninvite','design_crit','pending@example.test','--yes'],['role','design_crit','teammate','--role','member'],['remove','design_crit','teammate','--yes'],['leave','design_crit','--yes'],['share','PAGE12','--group','design_crit'],['share','PAGE12','--group','design_crit','--datasets'],['unshare','PAGE12','--group','design_crit','--yes'],['unshare','PAGE12','--group','design_crit','--datasets','--yes'],['move','PAGE12','--group','design_crit','--yes'],['link','design_crit','other'],['unlink','design_crit','other','--yes'],['delete','design_crit','--handle','design_crit','--yes']];
   for(const args of invocations){const output=await run(args);expect(JSON.parse(output.stdout),args[0]).toMatchObject({ok:true,code:'completed'});}

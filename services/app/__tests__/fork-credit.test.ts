@@ -3,7 +3,7 @@
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 import { nativeResponseIdentity } from './native-response-identity';
-import { useAppHarness, setSession } from './harness';
+import { useAppHarness, useSessionUser } from './harness';
 import { POST as forkOpRoute } from '@/app/api/artifacts/[id]/fork/route';
 import { OPERATIONS as operations } from '@/lib/operations/registry';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
@@ -18,7 +18,7 @@ import { BASE, sessionUser, params, jreq, create, asSession, noSession, fork, he
 import { setArtifact } from '@/__tests__/rows';
 
 useAppHarness();
-beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null)));
+useSessionUser('email', sessionUser);
 beforeEach(() => { noSession(); });
 
 /**

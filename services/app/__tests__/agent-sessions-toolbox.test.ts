@@ -12,6 +12,7 @@ import { nativeHtml } from './native-html-fixture';
 import { createAppServer } from '@/server/app';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
 import {tempDir} from '@artifactbin/test-support/temp-dir';
+import {syntheticEnv} from '@/test/helpers/toolbox-env';
 
 useAppHarness();
 const SERVER = 'http://localhost:3000';
@@ -27,7 +28,7 @@ async function twoAgents() {
  const doc = await made.json() as { id: string };
  const dir = await tempDir('two-agents-',onTestFinished);
  const home = path.join(dir, 'home');await mkdir(home);
- const shared = { ARTIFACTBIN_URL: SERVER, ARTIFACTBIN_TOKEN: t.token, ARTIFACTBIN_HOME: home };
+ const shared = syntheticEnv(SERVER, home, { token: t.token });
  const anchor = async (nodeId: string) => { const file = path.join(dir, `${nodeId}.json`);await writeFile(file, JSON.stringify({ kind: 'html-node', v: 1, nodeId, quote: '' }));return file; };
  const session = (env: Record<string, string>, extra: { as?: string; ps?: () => never } = {}) => {
   const printed: unknown[] = [];

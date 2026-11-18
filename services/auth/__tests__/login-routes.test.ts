@@ -4,7 +4,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { assemble } from '@artifactbin/utils';
 import { createHumanAuth, sessionStoreOf, type HumanAuth } from '../src/index';
 import { authParts } from '../src/parts';
-import { testAuthOptions } from './helpers';
+import { otpSignIn, testAuthOptions } from './helpers';
 
 const BASE = 'http://localhost:4794';
 const sent: Array<{ to: string; otp?: string }> = [];
@@ -64,16 +64,13 @@ describe('company denied login',()=>{
  it('withholds real verified OTP cookies and denies a captured existing session at device approval',async()=>{
   const app=await proxy({},async()=>false);
   const call=(path:string,body:unknown,cookie?:string)=>app.request(`${BASE}${path}`,{method:'POST',headers:{'content-type':'application/json',origin:BASE,...(cookie?{cookie}:{})},body:JSON.stringify(body)});
-  await call('/api/auth/email-otp/send-verification-otp',{email:'denied@example.com',type:'sign-in'});
-  const res=await call('/api/auth/sign-in/email-otp',{email:'denied@example.com',otp:sent.at(-1)!.otp!});
+  const {login:res}=await otpSignIn(call,'denied@example.com',()=>sent.at(-1)!.otp!,{prefix:'/api/auth'});
   expect(res.status).toBe(403);expect(res.headers.getSetCookie()).toEqual([]);
   expect(await res.json()).toEqual({error:'deployment_admission_required'});
   // An existing verified login is checked too, including the device approval door.
   const open=await proxy({});
   const request=(path:string,body:unknown)=>open.request(`${BASE}${path}`,{method:'POST',headers:{'content-type':'application/json',origin:BASE},body:JSON.stringify(body)});
-  await request('/api/auth/email-otp/send-verification-otp',{email:'existing@example.com',type:'sign-in'});
-  const allowed=await request('/api/auth/sign-in/email-otp',{email:'existing@example.com',otp:sent.at(-1)!.otp!});
-  const cookie=allowed.headers.getSetCookie().map(c=>c.split(';')[0]).join('; ');
+  const {cookie}=await otpSignIn(request,'existing@example.com',()=>sent.at(-1)!.otp!,{prefix:'/api/auth'});
   expect((await app.request(`${BASE}/api/auth/get-session`,{headers:{cookie}})).status).toBe(403);
   expect((await call('/oauth/device/approve',{user_code:'anything'},cookie)).status).toBe(403);
  });
@@ -83,10 +80,8 @@ describe('a human through the identity host', () => {
   it('logs in by OTP through /api/auth and forwards as a session actor under our usr_ ids', async () => {
     const app = await proxy({  });
     const call = (path: string, body: unknown, cookie?: string) => app.request(`${BASE}${path}`, { method: 'POST', headers: { 'content-type': 'application/json', origin: BASE, ...(cookie ? { cookie } : {}) }, body: JSON.stringify(body) });
-    expect((await call('/api/auth/email-otp/send-verification-otp', { email: 'h@example.com', type: 'sign-in' })).status).toBe(200);
-    const otp = sent.find((m) => m.to === 'h@example.com')!.otp!;
-    const res = await call('/api/auth/sign-in/email-otp', { email: 'h@example.com', otp });
-    const cookie = (res.headers.getSetCookie?.() ?? []).map((c) => c.split(';')[0]).join('; ');
+    const { sent: asked, cookie } = await otpSignIn(call, 'h@example.com', () => sent.find((m) => m.to === 'h@example.com')!.otp!, { prefix: '/api/auth' });
+    expect(asked.status).toBe(200);
     await app.request(`${BASE}/api/artifacts`, { headers: { cookie } });
     expect(seenActor).toMatchObject({ credential: 'session', email: 'h@example.com', emailVerified: true });
     expect((seenActor as { userId?: string }).userId).toMatch(/^usr_/);

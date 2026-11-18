@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { useAppHarness, request, mintAccountToken } from './harness';
+import { useAppHarness, request, mintAccountToken, params } from './harness';
 import { avatarUrl } from '@/lib/avatars';
 import { createUser, identityForUser, ownerUsername } from '@/lib/accounts';
 const face=async(id:string)=>({kind:'human',label:await ownerUsername(id),user_id:id,image:avatarUrl({id,image_key:null})});
@@ -16,7 +16,7 @@ import { PUT as bearerReact } from '@/app/api/artifacts/[id]/annotations/[annId]
 import { POST as reply, DELETE as remove } from '@/app/api/my/artifacts/[id]/annotations/[annId]/route';
 import type { AnnotationWire } from '@/lib/annotations';
 useAppHarness();
-const ctx = (id: string, annId = '') => ({params: Promise.resolve({id, annId})});
+
 async function person(name: string) {
  const user = await createUser({email:`mxmx_test_react_${name}@example.com`});
  const token = await mintAccountToken(name,user.id);
@@ -26,11 +26,11 @@ async function world() {
  const owner=await person('owner'),viewer=await person('viewer'),other=await person('other');
  const row=await createArtifact(owner.token.id,owner.user.id,{format:'html',source:nativeHtml('<p data-af-id="p">A paragraph.</p>'),meta:{},visibility:'private',title:'Reactions'});
  await updateSharingFor(owner.actor,row.id,{shares:[{email:viewer.user.email!,role:'viewer'}]});
- const res=await create(request(`/api/my/artifacts/${row.id}/annotations`,{method:'POST',actor:owner.session,json:{body:'Looks good',anchor:nativeAnchor('p')}}),ctx(row.id));
+ const res=await create(request(`/api/my/artifacts/${row.id}/annotations`,{method:'POST',actor:owner.session,json:{body:'Looks good',anchor:nativeAnchor('p')}}),params(row.id));
  expect(res.status,await res.clone().text()).toBe(201);
  return {owner,viewer,other,id:row.id,thread:await res.json() as AnnotationWire};
 }
-const send=(w:Awaited<ReturnType<typeof world>>,who:Awaited<ReturnType<typeof person>>,active:boolean,comment=w.thread.id)=>react(request(`/api/my/artifacts/${w.id}/annotations/${comment}/reactions`,{method:'PUT',actor:who.session,json:{kind:'thumbs_up',active}}),ctx(w.id,comment));
+const send=(w:Awaited<ReturnType<typeof world>>,who:Awaited<ReturnType<typeof person>>,active:boolean,comment=w.thread.id)=>react(request(`/api/my/artifacts/${w.id}/annotations/${comment}/reactions`,{method:'PUT',actor:who.session,json:{kind:'thumbs_up',active}}),params({ id: w.id, annId: comment }));
 const counts=(reactions:AnnotationWire['thread'][number]['reactions'])=>reactions?.map(({by:_by,...rest})=>rest);
 const summary=(thread:AnnotationWire)=>counts(thread.thread[0]!.reactions);
 describe('account comment reactions',()=>{
@@ -50,13 +50,13 @@ describe('account comment reactions',()=>{
   expect((await send(w,w.other,true)).status).toBe(404);
   expect((await send(w,w.owner,true,'ann_missing')).status).toBe(404);
   const second=await createArtifact(w.owner.token.id,w.owner.user.id,{format:'html',source:nativeHtml('<p data-af-id="p">Other</p>'),meta:{},visibility:'private'});
-  expect((await react(request(`/api/my/artifacts/${second.id}/annotations/${w.thread.id}/reactions`,{method:'PUT',actor:w.owner.session,json:{kind:'thumbs_up',active:true}}),ctx(second.id,w.thread.id))).status).toBe(404);
-  expect((await remove(request(`/api/my/artifacts/${w.id}/annotations/${w.thread.id}`,{method:'DELETE',actor:w.owner.session}),ctx(w.id,w.thread.id))).status).toBe(200);
+  expect((await react(request(`/api/my/artifacts/${second.id}/annotations/${w.thread.id}/reactions`,{method:'PUT',actor:w.owner.session,json:{kind:'thumbs_up',active:true}}),params({ id: second.id, annId: w.thread.id }))).status).toBe(404);
+  expect((await remove(request(`/api/my/artifacts/${w.id}/annotations/${w.thread.id}`,{method:'DELETE',actor:w.owner.session}),params({ id: w.id, annId: w.thread.id }))).status).toBe(200);
   expect((await send(w,w.owner,true)).status).toBe(404);
  });
  it('reacts to replies on resolved threads and exposes counts to anonymous admitted readers',async()=>{
   const w=await world();
-  const replied=await reply(request(`/api/my/artifacts/${w.id}/annotations/${w.thread.id}`,{method:'POST',actor:w.owner.session,json:{reply:'Thanks!',resolve:true}}),ctx(w.id,w.thread.id));
+  const replied=await reply(request(`/api/my/artifacts/${w.id}/annotations/${w.thread.id}`,{method:'POST',actor:w.owner.session,json:{reply:'Thanks!',resolve:true}}),params({ id: w.id, annId: w.thread.id }));
   const thread=await replied.json() as AnnotationWire, replyId=thread.thread[1]!.id;
   expect(replied.status).toBe(200);
   const answer=await send(w,w.viewer,true,replyId);expect(answer.status).toBe(200);
@@ -77,16 +77,16 @@ describe('account comment reactions',()=>{
  });
  it('supports account bearer requests and rejects unsupported kinds and anonymous writes',async()=>{
   const w=await world();
-  const res=await bearerReact(request(`/api/artifacts/${w.id}/annotations/${w.thread.id}/reactions`,{method:'PUT',token:w.viewer.token.token,json:{kind:'thumbs_up',active:true}}),ctx(w.id,w.thread.id));
+  const res=await bearerReact(request(`/api/artifacts/${w.id}/annotations/${w.thread.id}/reactions`,{method:'PUT',token:w.viewer.token.token,json:{kind:'thumbs_up',active:true}}),params({ id: w.id, annId: w.thread.id }));
   expect(res.status,await res.clone().text()).toBe(200);
   expect(summary(await res.json())).toEqual([{kind:'thumbs_up',count:1,viewer_reacted:true}]);
-  expect((await react(request(`/api/my/artifacts/${w.id}/annotations/${w.thread.id}/reactions`,{method:'PUT',actor:w.owner.session,json:{kind:'heart',active:true}}),ctx(w.id,w.thread.id))).status).toBe(400);
-  expect((await react(request(`/api/my/artifacts/${w.id}/annotations/${w.thread.id}/reactions`,{method:'PUT',json:{kind:'thumbs_up',active:true}}),ctx(w.id,w.thread.id))).status).toBe(401);
+  expect((await react(request(`/api/my/artifacts/${w.id}/annotations/${w.thread.id}/reactions`,{method:'PUT',actor:w.owner.session,json:{kind:'heart',active:true}}),params({ id: w.id, annId: w.thread.id }))).status).toBe(400);
+  expect((await react(request(`/api/my/artifacts/${w.id}/annotations/${w.thread.id}/reactions`,{method:'PUT',json:{kind:'thumbs_up',active:true}}),params({ id: w.id, annId: w.thread.id }))).status).toBe(401);
  });
  it('lists reactors by the author rule: people with their account, agents by label without one',async()=>{
   const w=await world();
   await send(w,w.viewer,true);
-  const res=await bearerReact(request(`/api/artifacts/${w.id}/annotations/${w.thread.id}/reactions`,{method:'PUT',token:w.owner.token.token,json:{kind:'thumbs_up',active:true},headers:{'Artifactbin-Agent':'Claude Code'}}),ctx(w.id,w.thread.id));
+  const res=await bearerReact(request(`/api/artifacts/${w.id}/annotations/${w.thread.id}/reactions`,{method:'PUT',token:w.owner.token.token,json:{kind:'thumbs_up',active:true},headers:{'Artifactbin-Agent':'Claude Code'}}),params({ id: w.id, annId: w.thread.id }));
   expect(res.status,await res.clone().text()).toBe(200);
   const reaction=(await res.json() as AnnotationWire).thread[0]!.reactions![0]!;
   expect(reaction).toMatchObject({kind:'thumbs_up',count:2,viewer_reacted:true});
@@ -108,7 +108,7 @@ describe('account comment reactions',()=>{
   expect(reaction.by![0]).toEqual({kind:'human',label:'bulk1',user_id:'usr_bulk1',image:avatarUrl({id:'usr_bulk1',image_key:null})});
   const one=await measureQueries(()=>listAnnotationsFor(w.owner.actor,w.id));
   for(let i=0;i<3;i++){
-   const res=await reply(request(`/api/my/artifacts/${w.id}/annotations/${w.thread.id}`,{method:'POST',actor:w.owner.session,json:{reply:`Reply ${i}`}}),ctx(w.id,w.thread.id));
+   const res=await reply(request(`/api/my/artifacts/${w.id}/annotations/${w.thread.id}`,{method:'POST',actor:w.owner.session,json:{reply:`Reply ${i}`}}),params({ id: w.id, annId: w.thread.id }));
    await send(w,w.viewer,true,(await res.json() as AnnotationWire).thread.at(-1)!.id);
   }
   const many=await measureQueries(()=>listAnnotationsFor(w.owner.actor,w.id));

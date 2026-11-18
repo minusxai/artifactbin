@@ -10,7 +10,7 @@ import {nativeAnchor} from './native-annotation-fixture';
  */
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { useAppHarness, request, mintAccountToken as mintToken } from '@/__tests__/harness';
+import { useAppHarness, request, mintAccountToken as mintToken, params } from '@/__tests__/harness';
 import { createUser, identityForUser } from '@/lib/accounts';
 import { createArtifact, getArtifactById, updateSharingFor } from '@/lib/artifacts';
 import { getDb } from '@/lib/platform';
@@ -42,22 +42,21 @@ async function world() {
   return { owner, commenter, editor, id: row.id };
 }
 
-const ctx = (id: string, annId?: string) => ({ params: Promise.resolve({ id, ...(annId ? { annId } : {}) }) as Promise<{ id: string; annId: string }> });
 
 interface Thread { id: string; revision: number; status: string; quote: string | null; anchor: { nodeId?: string } | null; thread: Array<{ id: string; body: string; edited_at?: string }> }
 
 async function comment(who: Person, id: string, body: string, extra: Record<string, unknown> = {}): Promise<Thread> {
-  const res = await createRoute(request(`/api/my/artifacts/${id}/annotations`, { method: 'POST', actor: who.session, json: { anchor:nativeAnchor('lede',1,typeof extra.quote==='string'?extra.quote:''), body } }), ctx(id));
+  const res = await createRoute(request(`/api/my/artifacts/${id}/annotations`, { method: 'POST', actor: who.session, json: { anchor:nativeAnchor('lede',1,typeof extra.quote==='string'?extra.quote:''), body } }), params(id));
   expect(res.status, await res.clone().text()).toBe(201);
   return res.json();
 }
 async function reply(who: Person, id: string, root: string, body: string): Promise<Thread> {
-  const res = await actRoute(request(`/api/my/artifacts/${id}/annotations/${root}`, { method: 'POST', actor: who.session, json: { reply: body } }), ctx(id, root));
+  const res = await actRoute(request(`/api/my/artifacts/${id}/annotations/${root}`, { method: 'POST', actor: who.session, json: { reply: body } }), params({ id: id, annId: root }));
   expect(res.status, await res.clone().text()).toBe(200);
   return res.json();
 }
 const edit = (who: Person, id: string, commentId: string, json: unknown) =>
-  editRoute(request(`/api/my/artifacts/${id}/annotations/${commentId}`, { method: 'PATCH', actor: who.session, json }), ctx(id, commentId));
+  editRoute(request(`/api/my/artifacts/${id}/annotations/${commentId}`, { method: 'PATCH', actor: who.session, json }), params({ id: id, annId: commentId }));
 const bodies = async (id: string) =>
   Object.fromEntries((await (await getDb()).query<{ id: string; body: string }>('SELECT id, body FROM annotations WHERE artifact_id = $1', [id])).rows.map((r) => [r.id, r.body]));
 
@@ -89,7 +88,7 @@ describe('the author edits their own words', () => {
     const made = await comment(w.owner, w.id, 'Check the totals');
     const replied = await reply(w.commenter, w.id, made.id, 'Totals look rigth');
     const replyId = replied.thread[1]!.id;
-    const resolved = await actRoute(request(`/api/my/artifacts/${w.id}/annotations/${made.id}`, { method: 'POST', actor: w.owner.session, json: { resolve: true } }), ctx(w.id, made.id));
+    const resolved = await actRoute(request(`/api/my/artifacts/${w.id}/annotations/${made.id}`, { method: 'POST', actor: w.owner.session, json: { resolve: true } }), params({ id: w.id, annId: made.id }));
     const { revision } = await resolved.json() as Thread;
 
     const res = await edit(w.commenter, w.id, replyId, { body: 'Totals look right', expected_revision: revision });
@@ -113,13 +112,13 @@ describe('the author edits their own words', () => {
 
   it('an agent edits what its own account wrote through the bearer operation, with an Idempotency-Key', async () => {
     const w = await world();
-    const made = await bearerCreateRoute(request(`/api/artifacts/${w.id}/annotations`, { method: 'POST', token: w.editor.token.token, json: { anchor:nativeAnchor('lede'), body: 'Agent note' } }), ctx(w.id));
+    const made = await bearerCreateRoute(request(`/api/artifacts/${w.id}/annotations`, { method: 'POST', token: w.editor.token.token, json: { anchor:nativeAnchor('lede'), body: 'Agent note' } }), params(w.id));
     expect(made.status, await made.clone().text()).toBe(201);
     const thread = await made.json() as Thread;
     const key = randomUUID();
     const send = () => bearerEditRoute(request(`/api/artifacts/${w.id}/annotations/${thread.id}`, {
       method: 'PATCH', token: w.editor.token.token, json: { body: 'Agent note, corrected', expected_revision: thread.revision }, headers: { 'Idempotency-Key': key },
-    }), ctx(w.id, thread.id));
+    }), params({ id: w.id, annId: thread.id }));
     const first = await send();
     expect(first.status, await first.clone().text()).toBe(200);
     expect((await first.json() as Thread).thread[0]!.body).toBe('Agent note, corrected');
@@ -139,10 +138,10 @@ describe('nobody else may', () => {
       expect(res.status).toBe(404);
       expect(await res.json()).toEqual({ error: 'not_found' });
     }
-    const bearer = await bearerEditRoute(request(`/api/artifacts/${w.id}/annotations/${made.id}`, { method: 'PATCH', token: w.owner.token.token, json: { body: 'Nope' } }), ctx(w.id, made.id));
+    const bearer = await bearerEditRoute(request(`/api/artifacts/${w.id}/annotations/${made.id}`, { method: 'PATCH', token: w.owner.token.token, json: { body: 'Nope' } }), params({ id: w.id, annId: made.id }));
     expect(bearer.status).toBe(404);
     expect((await bodies(w.id))[made.id]).toBe('My own words');
-    const removed = await deleteRoute(request(`/api/my/artifacts/${w.id}/annotations/${made.id}`, { method: 'DELETE', actor: w.owner.session }), ctx(w.id, made.id));
+    const removed = await deleteRoute(request(`/api/my/artifacts/${w.id}/annotations/${made.id}`, { method: 'DELETE', actor: w.owner.session }), params({ id: w.id, annId: made.id }));
     expect(removed.status).toBe(200);
   });
 
@@ -171,7 +170,7 @@ describe('a retried browser write lands once', () => {
     const w = await world();
     const made = await comment(w.commenter, w.id, 'First draft');
     const send = (route: typeof actRoute | typeof editRoute, method: string, target: string, json: unknown, key: string) =>
-      route(request(`/api/my/artifacts/${w.id}/annotations/${target}`, { method, actor: w.commenter.session, headers: { 'Idempotency-Key': key }, json }), ctx(w.id, target));
+      route(request(`/api/my/artifacts/${w.id}/annotations/${target}`, { method, actor: w.commenter.session, headers: { 'Idempotency-Key': key }, json }), params({ id: w.id, annId: target }));
     const first = await send(actRoute, 'POST', made.id, { reply: 'Once' }, 'reply-key-0123456789ab');
     const again = await send(actRoute, 'POST', made.id, { reply: 'Once' }, 'reply-key-0123456789ab');
     expect([first.status, again.status]).toEqual([200, 200]);

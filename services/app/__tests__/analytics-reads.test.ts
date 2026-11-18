@@ -4,7 +4,7 @@
 import { nativeHtml } from './native-html-fixture';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { overrideRequestHeaders } from '@/lib/platform';
-import { useAppHarness, request, setSession } from '@/__tests__/harness';
+import { useAppHarness, request, useSessionUser } from '@/__tests__/harness';
 import { artifactPage as ArtifactPage, artifactMetadata as artifactPageMetadata, profilePage as UserPage } from '@/test/helpers/pages';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
@@ -17,7 +17,7 @@ import { BASE, sessionUser, requestHeaders, params, outcome, create, eventRows, 
 holdTelemetry();
 
 useAppHarness();
-beforeEach(() => setSession(() => sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null));
+useSessionUser('email', sessionUser);
 overrideRequestHeaders(() => (requestHeaders.size === 0 ? null : [...requestHeaders]));
 beforeEach(() => {
   sessionUser.id = '';

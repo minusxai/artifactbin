@@ -1,5 +1,5 @@
 import {it,expect,onTestFinished} from 'vitest';
-import {syntheticEnv} from './toolbox-env';
+import {syntheticEnv} from '@/test/helpers/toolbox-env';
 import {writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import {tempDir} from '@artifactbin/test-support/temp-dir';
@@ -27,7 +27,7 @@ it('auth status runs a real refresh and reports authenticated:false when it fail
  const root=await tempDir('status-refresh-',onTestFinished),server='https://example.test';
   const shared=await platform();
   await shared.saveCredentials({server,token:'old_access',refreshToken:'old_refresh',clientId:'client_1',expiresAt:Date.now()-1000},root);
-  const run=(answer:Response)=>authCommand({sub:'status',values:{},positionals:[]},{env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_HOME:root},fetcher:async()=>answer});
+  const run=(answer:Response)=>authCommand({sub:'status',values:{},positionals:[]},{env:syntheticEnv(server, root, { token: null }),fetcher:async()=>answer});
   expect(await run(Response.json({error:'invalid_grant'},{status:400}))).toMatchObject({authenticated:false,source:'private-store'});
   expect(await run(Response.json({access_token:'new_access',refresh_token:'new_refresh',expires_in:3600}))).toMatchObject({authenticated:true,expired:false});
 });

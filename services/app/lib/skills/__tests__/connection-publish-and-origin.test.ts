@@ -9,6 +9,7 @@ import path from 'node:path';
 import {publishCommand} from '../../../skills/artifactbin/scripts/toolbox-publish.mjs';
 import {makeClient,selectedServer} from '../../../skills/artifactbin/scripts/toolbox-client.mjs';
 import {tempDir} from '@artifactbin/test-support/temp-dir';
+import {syntheticEnv} from '@/test/helpers/toolbox-env';
 
 const server='https://example.test';
 async function connectionFile(work:(file:string)=>Promise<void>){
@@ -24,7 +25,7 @@ const recording=()=>{const calls:{method:string;url:string}[]=[];return {calls,f
 
 it('dry-runs a connection without creating it or reading its secret',async()=>connectionFile(async file=>{
  const {calls,fetcher}=recording();
- const options={env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic-fixture'},fetcher,log:()=>{}};
+ const options={env:syntheticEnv(server, undefined, { token: 'synthetic-fixture' }),fetcher,log:()=>{}};
  // The secret path does not exist: reading it would throw.
  const planned=await publishCommand({positionals:[file],values:{type:'connection','dry-run':true,group:'team','secret-file':path.join(file,'missing')}},options);
  expect(planned).toMatchObject({dryRun:true,server,type:'connection',method:'POST',destination:{type:'group',id:'grp_team'}});
@@ -37,7 +38,7 @@ it('dry-runs a connection without creating it or reading its secret',async()=>co
 it.each([['visibility','public'],['personal',true],['create',true],['template','read-only']])(
  'refuses --%s for a connection by name, before any request',async(flag,value)=>connectionFile(async file=>{
  const {calls,fetcher}=recording();
- const options={env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic-fixture'},fetcher,log:()=>{}};
+ const options={env:syntheticEnv(server, undefined, { token: 'synthetic-fixture' }),fetcher,log:()=>{}};
  const refused=await publishCommand({positionals:[file],values:{type:'connection',[flag]:value}},options).catch((error:any)=>error);
  expect(refused).toMatchObject({exit:2,code:'flag_not_supported'});
  expect(refused.message).toContain(`--${flag}`);
@@ -46,7 +47,7 @@ it.each([['visibility','public'],['personal',true],['create',true],['template','
 
 it.each(['https://example.test/','HTTPS://Example.TEST','https://EXAMPLE.test/'])(
  'reads ARTIFACTBIN_URL %s as its origin, and its environment grant answers for it',async url=>{
- const env={ARTIFACTBIN_URL:url,ARTIFACTBIN_TOKEN:'synthetic-fixture'};
+ const env=syntheticEnv(url, undefined, { token: 'synthetic-fixture' });
  expect(selectedServer({},env)).toBe(server);
  const seen:string[]=[];
  const client=makeClient(selectedServer({},env),{env,fetcher:async(target:any,init:any)=>{
@@ -56,7 +57,7 @@ it.each(['https://example.test/','HTTPS://Example.TEST','https://EXAMPLE.test/']
 });
 
 it('keeps refusing an environment grant that belongs to another origin',async()=>{
- const env={ARTIFACTBIN_URL:'https://other.test/',ARTIFACTBIN_TOKEN:'synthetic-fixture'};
+ const env=syntheticEnv('https://other.test/', undefined, { token: 'synthetic-fixture' });
  const client=makeClient(server,{env,fetcher:async()=>Response.json({})});
  await expect(client.request('/api/me')).rejects.toMatchObject({code:'credential_origin_mismatch'});
 });

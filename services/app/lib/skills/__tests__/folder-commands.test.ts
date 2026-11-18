@@ -3,8 +3,9 @@ import {it,expect,onTestFinished} from 'vitest';
 import {readFile} from 'node:fs/promises';
 import path from 'node:path';
 import {tempDir} from '@artifactbin/test-support/temp-dir';
+import {syntheticEnv} from '@/test/helpers/toolbox-env';
 const server='https://example.test';
-const env={ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic-folder-fixture'};
+const env=syntheticEnv(server, undefined, { token: 'synthetic-folder-fixture' });
 it('parses folder collection, folder creation/resume and publish placement',async()=>{
  const {parseCommand}=await import('../../../skills/artifactbin/scripts/toolbox-commands.mjs');
  expect(parseCommand('publish',['report.html','--create','--parent','FOLD12']).values.parent).toBe('FOLD12');

@@ -345,9 +345,8 @@ describe('the SQL scopes admit the link — the doors, not just the predicate', 
 describe('the commenter role, through the routes', () => {
   const sessionUser = useSessionUser();
 
-  const BASE = 'http://localhost:3000';
   const jreq = (path: string, method: string, body?: unknown, token?: string) =>
-    new Request(`${BASE}${path}`, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
+    request(path, { method, headers: { 'Content-Type': 'application/json' }, json: body, token });
   const asSession = (u: { id: string; email: string }) => { sessionUser.id = u.id; sessionUser.email = u.email; };
   const human = { kind: 'human' as const, label: null, transport: 'browser' as const };
 

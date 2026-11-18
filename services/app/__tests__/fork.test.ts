@@ -17,7 +17,7 @@
 /* The browser fork door and what does not travel; the credit line, the operations registry and the bearer door are in
  * fork-credit.test.ts (split for the CI shards; ./fork-fixture.ts). */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { agentCookie, useAppHarness, setSession } from './harness';
+import { agentCookie, useAppHarness, useSessionUser } from './harness';
 import { POST as forkRoute } from '@/app/api/my/artifacts/[id]/fork/route';
 import { GET as getMineRoute } from '@/app/api/my/artifacts/[id]/route';
 import { GET as getSharingRoute, PUT as putSharingRoute } from '@/app/api/my/artifacts/[id]/sharing/route';
@@ -31,7 +31,7 @@ import { setArtifact } from '@/__tests__/rows';
 
 useAppHarness();
 holdTelemetry();
-beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null)));
+useSessionUser('email', sessionUser);
 beforeEach(() => { noSession(); });
 
 describe('POST /api/my/artifacts/:id/fork', () => {

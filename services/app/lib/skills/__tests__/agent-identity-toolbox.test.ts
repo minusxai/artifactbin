@@ -2,6 +2,7 @@ import {expect, it, onTestFinished} from 'vitest';
 import {writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import {tempDir} from '@artifactbin/test-support/temp-dir';
+import {syntheticEnv} from '@/test/helpers/toolbox-env';
 /**
  * EVERY AGENT SESSION HAS A NAME. The installed scripts name the harness and its session on every request
  * (Artifactbin-Agent, Artifactbin-Session), derive "<product> <colour>" deterministically from the session, keep a name
@@ -105,7 +106,7 @@ it('names the session on every request, and every comment write prints the name 
   if (String(url).includes('status=all')) return Response.json({annotations: [{id: 'ann_root', revision: 2, thread: [{id: 'ann_root'}]}], next_cursor: null});
   return String(url).endsWith('/PAGE12') ? Response.json({id: 'PAGE12', version: 3}) : Response.json({id: 'ann_root', revision: 2, thread: []});
  };
- const env = {ARTIFACTBIN_URL: 'https://example.test', ARTIFACTBIN_TOKEN: 'synthetic', ARTIFACTBIN_HOME: root, CODEX_THREAD_ID: 'thread-1'};
+ const env = { ...syntheticEnv('https://example.test', root), CODEX_THREAD_ID: 'thread-1' };
  const anchor = path.join(root, 'anchor.json');
  await writeFile(anchor, JSON.stringify({kind: 'html-node', v: 1, nodeId: 'intro', quote: ''}));
  const watchLine = '\n  node scripts/comment.mjs watch PAGE12 --next';

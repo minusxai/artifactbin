@@ -1,9 +1,8 @@
 import {expect,it,vi} from 'vitest';
-import { setVisibility } from '@/__tests__/artifact-fixtures';
+import { publishedWithActor, setVisibility } from '@/__tests__/artifact-fixtures';
 import {useAppHarness,request,mintAccountToken} from '@/__tests__/harness';
 import {POST as create} from '@/app/api/artifacts/route';
 import {GET as readPage,PUT as replacePage} from '@/app/api/artifacts/[id]/route';
-import { requestOrSessionActor } from '@/lib/authentication';
 import { createUser, identityForUser, type AccessActor } from '@/lib/accounts';
 import {getVersionFor,updateSharingFor} from '@/lib/artifacts';
 import {getDb} from '@/lib/platform';
@@ -14,8 +13,8 @@ useAppHarness();
 const anonymous=identityForUser(null);
 const READ='select _id, amount from data limit 1';
 async function fixture(visibility:'public'|'private'){
- const owner=await mintAccountToken('pinned_dataset_fixture'),req=request('/api/artifacts',{method:'POST',token:owner.token,json:{dataset:[{amount:1}],access:'readwrite',visibility}}),actor=await requestOrSessionActor(req),response=await create(req);
- expect(response.status).toBe(201);const {id}=await response.json(),live={kind:'dataset' as const,name:'data',datasetId:id,mode:'live' as const},pinned={...live,mode:'pinned' as const,revision:'1'};
+ const owner=await mintAccountToken('pinned_dataset_fixture'),{id,actor}=await publishedWithActor(owner.token,{dataset:[{amount:1}],access:'readwrite',visibility});
+ const live={kind:'dataset' as const,name:'data',datasetId:id,mode:'live' as const},pinned={...live,mode:'pinned' as const,revision:'1'};
  const read=async(reader:AccessActor,link:typeof live|typeof pinned)=>{const reply=await linkedSql(reader,link,READ);if(reply.error)throw Error(errorCode(reply)??'');return reply.rows! as Array<{_id:string;amount:number}>;};
  const advance=async()=>{
   expect((await linkedSql(actor,live,'update data set amount = 2')).affected).toBe(1);

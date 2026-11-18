@@ -8,6 +8,7 @@ import {it,expect,onTestFinished} from 'vitest';
 import {mkdir,readFile,writeFile,rm,readdir} from 'node:fs/promises';
 import path from 'node:path';
 import {tempDir} from '@artifactbin/test-support/temp-dir';
+import {syntheticEnv} from '@/test/helpers/toolbox-env';
 
 const server='https://example.test';
 const CSV='month,region,revenue,orders\n2026-01,North,48200,310\n2026-01,South,31150,204\n2026-02,North,51300,322\n';
@@ -22,7 +23,7 @@ async function project(){
   if(pathname==='/api/artifacts'&&method==='POST'){const id='DATA'+String(++made).padStart(4,'0');
    return Response.json({id,url:server+'/a/'+id,version:1,state:'a'.repeat(64),format:'dataset'},{status:201});}
   return Response.json({error:'unexpected'},{status:500});};
- const options={env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'private-fixture',ARTIFACTBIN_HOME:path.join(root,'home')},fetcher,cwd:root,log:()=>{}};
+ const options={env:syntheticEnv(server, path.join(root,'home'), { token: 'private-fixture' }),fetcher,cwd:root,log:()=>{}};
  const run=(values:Record<string,unknown>)=>newPageCommand({values:{server,...values},positionals:[]},options);
  return {root,dir,run,calls,done:()=>rm(root,{recursive:true,force:true})};
 }

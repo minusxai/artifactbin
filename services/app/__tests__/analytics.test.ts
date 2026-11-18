@@ -14,7 +14,7 @@ import { artifactState, getArtifactById, getVersionFor } from '@/lib/artifacts';
 import { observedRequest } from '@/__tests__/conditional-request';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { EVENTS_SCHEMA, overrideRequestHeaders } from '@/lib/platform';
-import { useAppHarness, request, setSession } from '@/__tests__/harness';
+import { useAppHarness, request, useSessionUser } from '@/__tests__/harness';
 import { DELETE as deleteArtifactRoute, PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
 import { DELETE as deleteMyArtifactRoute } from '@/app/api/my/artifacts/[id]/route';
 import { GET as listMyArtifactsRoute } from '@/app/api/my/artifacts/route';
@@ -28,7 +28,7 @@ import { setArtifact } from '@/__tests__/rows';
 holdTelemetry();
 
 const harness = useAppHarness();
-beforeEach(() => setSession(() => sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null));
+useSessionUser('email', sessionUser);
 overrideRequestHeaders(() => (requestHeaders.size === 0 ? null : [...requestHeaders]));
 beforeEach(() => {
   sessionUser.id = '';

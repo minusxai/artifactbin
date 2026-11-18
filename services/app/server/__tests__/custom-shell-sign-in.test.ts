@@ -15,6 +15,7 @@ import {AUTH_SECRET} from '@/lib/platform';
 import {overrideConfig} from '@/lib/platform/config';
 import {useAppHarness} from '@/__tests__/harness';
 import {tempDir} from '@artifactbin/test-support/temp-dir';
+import {otpSignIn} from '../../../auth/__tests__/helpers';
 useAppHarness();
 
 const ORIGIN='http://localhost:3000',DOMAIN='shell-sign-in.test',CODE='c'.repeat(40);
@@ -84,8 +85,8 @@ it('keeps the code\'s attempt cap: five wrong codes spend it',async()=>{
  const spent=await post('/api/auth/sign-in/email-otp',{email,otp:CODE});
  expect(spent.status).toBe(403);expect(await spent.json()).toMatchObject({code:'TOO_MANY_ATTEMPTS'});
  expect(spent.headers.getSetCookie()).toEqual([]);
- expect((await post('/api/auth/email-otp/send-verification-otp',{email,type:'sign-in'})).status).toBe(200);
- expect((await post('/api/auth/sign-in/email-otp',{email,otp:CODE})).status).toBe(200);
+ const again=await otpSignIn(post,email,()=>CODE,{prefix:'/api/auth'});
+ expect(again.sent.status).toBe(200);expect(again.login.status).toBe(200);
 });
 
 it('refuses a sign-in another site starts, so it cannot plant a session; no Origin (a script) and this origin pass',async()=>{

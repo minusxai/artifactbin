@@ -1,5 +1,5 @@
 import {nativeHtml} from '@/__tests__/native-html-fixture';
-import { setVisibility } from '@/__tests__/artifact-fixtures';
+import { postArtifact, setVisibility } from '@/__tests__/artifact-fixtures';
 /**
  * WHAT A PAGE VIEW COSTS THE DATABASE: the app page for a document (`GET /a/<id>`, the HTML door: documentPreparation
  * admits the row, artifactPageAnswer draws its chrome). Production is Postgres behind a small pool, so a view asks each
@@ -13,7 +13,6 @@ import { setVisibility } from '@/__tests__/artifact-fixtures';
 import { ACTOR_HEADER, type Actor } from '@artifactbin/contracts';
 import { signActor } from '@artifactbin/utils';
 import { describe, expect, it } from 'vitest';
-import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { createUser, ensureUsername, mintToken } from '@/lib/accounts';
 import { link } from '@/lib/social';
 import { getDb } from '@/lib/platform';
@@ -68,7 +67,7 @@ async function world() {
   const other = await createUser({ email: 'mxmx_test_budget_other@example.com' });
   const token = await mintToken('budget-author', author.id);
   const mk = async (title: string) => {
-    const response = await createArtifactRoute(new Request('http://localhost:3000/api/artifacts', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${token.token}` }, body: JSON.stringify({ title, html: nativeHtml(`<h1>${title}</h1><p>Body.</p>`), visibility: 'public' }) }));
+    const response = await postArtifact(token.token, { title, html: nativeHtml(`<h1>${title}</h1><p>Body.</p>`), visibility: 'public' });
     expect(response.status, await response.clone().text()).toBe(201);
     return (await response.json() as { id: string }).id;
   };

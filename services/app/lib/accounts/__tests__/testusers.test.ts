@@ -4,7 +4,7 @@ import {nativeHtml} from '@/__tests__/native-html-fixture';
  * The operation family is the surface; `afbin testuser` and `--as` translate to it.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { agentCookie, useAppHarness, createGuestOwner, useSessionUser, params } from '@/__tests__/harness';
+import { agentCookie, useAppHarness, createGuestOwner, useSessionUser, params, request } from '@/__tests__/harness';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { POST as forkOpRoute } from '@/app/api/artifacts/[id]/fork/route';
 import { POST as likeRoute } from '@/app/api/my/artifacts/[id]/like/route';
@@ -23,7 +23,7 @@ useAppHarness();
 const sessionUser = useSessionUser();
 beforeEach(() => { sessionUser.id = ''; sessionUser.email = ''; });
 const jreq = (path: string, method: string, body?: unknown, token?: string, cookie?: string) =>
-  new Request(`${BASE}${path}`, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(cookie ? { Cookie: cookie, Origin: BASE } : {}) }, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
+  request(path, { method, headers: { 'Content-Type': 'application/json', ...(cookie ? { Cookie: cookie, Origin: BASE } : {}) }, json: body, token });
 
 async function account(name: string) {
   const u = await createUser({ email: `mxmx_test_${name}@example.com` }); const t = await mintToken(name, u.id);

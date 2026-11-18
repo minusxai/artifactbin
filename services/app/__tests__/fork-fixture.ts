@@ -6,13 +6,13 @@ import { POST as forkRoute } from '@/app/api/my/artifacts/[id]/fork/route';
 import { POST as forkOpRoute } from '@/app/api/artifacts/[id]/fork/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { getArtifactById } from '@/lib/artifacts';
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
+import { mintAccountToken as mintToken, params } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
 
 export const BASE = 'http://localhost:3000';
 export const sessionUser = { id: '', email: '' };
 
-export const params = (id: string) => ({ params: Promise.resolve({ id }) });
+export { params };
 export const jreq = (path: string, method: string, body?: unknown, token?: string, cookie?: string) =>
   new Request(`${BASE}${path}`, {
     method,

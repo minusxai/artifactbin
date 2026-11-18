@@ -13,6 +13,7 @@ import { POST as drawRoute } from '@/app/api/charts/image/route';
 import { sqlCommand } from '../../skills/artifactbin/scripts/sql.mjs';
 import { createAppServer } from '../app';
 import {tempDir} from '@artifactbin/test-support/temp-dir';
+import {syntheticEnv} from '@/test/helpers/toolbox-env';
 
 useAppHarness();
 const chart = { mark: 'bar', encoding: { x: { field: 'k', type: 'nominal' }, y: { field: 'v', type: 'quantitative' } } };
@@ -71,7 +72,7 @@ describe('sql.mjs query --chart', () => {
     const root = await tempDir('chart-sql-',onTestFinished), spec = path.join(root, 'bar.json');
     const server = 'https://example.test', sent: string[] = [];
     let readRows: unknown[] = rows;
-    const options = { env: { ARTIFACTBIN_URL: server, ARTIFACTBIN_TOKEN: token, ARTIFACTBIN_HOME: root }, fetcher: async (url: string, init: RequestInit) => {
+    const options = { env: syntheticEnv(server, root, { token }), fetcher: async (url: string, init: RequestInit) => {
       const route = new URL(url).pathname;
       sent.push(route);
       // The real route and its token check; everything else is the read the chart draws.

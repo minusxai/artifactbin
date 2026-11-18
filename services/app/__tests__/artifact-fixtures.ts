@@ -7,6 +7,7 @@ import { createArtifact } from '@/lib/artifacts';
 import { type ArtifactRow } from '@/lib/artifact-access';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { request } from '@/__tests__/harness';
+import { requestOrSessionActor } from '@/lib/authentication';
 
 export type Account = AccessActor & { userId: string };
 export async function account(email: string): Promise<Account> {
@@ -34,6 +35,13 @@ export const publishedId = async (token: string, body: Record<string, unknown>):
   const response = await postArtifact(token, body);
   expect(response.status, await response.clone().text()).toBe(201);
   return ((await response.json()) as { id: string }).id;
+};
+/** `publishedId`, resolving the request's actor first as a door does (`requestOrSessionActor`): the new id and that actor. */
+export const publishedWithActor = async (token: string, body: Record<string, unknown>) => {
+  const sent = request('/api/artifacts', { method: 'POST', token, json: body });
+  const actor = await requestOrSessionActor(sent), response = await createArtifactRoute(sent);
+  expect(response.status, await response.clone().text()).toBe(201);
+  return { id: ((await response.json()) as { id: string }).id, actor };
 };
 export const sql = async <T = Record<string, unknown>>(text: string, params: unknown[] = []) => (await (await getDb()).query<T>(text, params)).rows;
 /** Store `policy` as the dataset's policy directly, past the policy door's validation and audit, bumping `policy_revision` as the door does. */

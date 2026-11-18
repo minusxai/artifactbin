@@ -1,5 +1,5 @@
 import {it,expect,onTestFinished} from 'vitest';
-import {syntheticEnv} from './toolbox-env';
+import {syntheticEnv} from '@/test/helpers/toolbox-env';
 import {appendFile,readFile,readdir,utimes,writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import {tempDir} from '@artifactbin/test-support/temp-dir';
@@ -59,7 +59,7 @@ it('watch --next baselines once, resumes from its default checkpoint, skips own 
  const {commentCommand}=await import('../../../skills/artifactbin/scripts/comment.mjs');
  const root=await tempDir('watch-next-',onTestFinished),server='https://example.test';
  // The default log is this agent session's own: watch/<server hash>/PAGE12/<session>.ndjson.
- const env={ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic',ARTIFACTBIN_HOME:root,CLAUDECODE:'1',CLAUDE_CODE_SESSION_ID:'watch-next-session'};
+ const env=syntheticEnv(server, root, { claudeSession: 'watch-next-session' });
  const {sessionId,detectSession}=await import('../../../skills/artifactbin/scripts/toolbox-agent.mjs');
  const {createHash}=await import('node:crypto'),log=path.join(root,'events',createHash('sha256').update(server).digest('hex').slice(0,16),'PAGE12','comments.'+sessionId(detectSession(env))+'.ndjson');
  const mine=ev('e_mine','T',true,'artifact.annotation_replied',{reply_id:'R_mine'});
@@ -174,7 +174,7 @@ async function quietHarness(feed:(n:number)=>any[],replyFirst=false){
  const fetcher=async(url:any)=>{const at=new URL(String(url));
   if(at.pathname.endsWith('/annotations')){state.listings++;return Response.json({annotations:[...state.threads].filter(t=>!state.gone.has(t)).map(id=>({id,status:'open'})),next_cursor:null});}
   const wait=Number(at.searchParams.get('wait'));state.n++;state.clock+=wait*1000;const events=feed(state.n);events.forEach((e:any)=>e.payload?.annotation_id&&state.threads.add(e.payload.annotation_id));return Response.json({events,next:'c'+state.n});};
- const options={env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic',ARTIFACTBIN_HOME:root,CLAUDECODE:'1',CLAUDE_CODE_SESSION_ID:'quiet-session'},fetcher,now:()=>state.clock,replyFirst,deliver:async(v:any)=>{state.printed.push(v);}};
+ const options={env:syntheticEnv(server, root, { claudeSession: 'quiet-session' }),fetcher,now:()=>state.clock,replyFirst,deliver:async(v:any)=>{state.printed.push(v);}};
  /** One watch --next call: its printed lines, others' events as their IDs. */
  const watch=async(values:Record<string,unknown>={})=>{state.printed.length=0;await commentCommand({sub:'watch',values:{next:true,...values},positionals:['PAGE12']},options);return state.printed.map(v=>typeof v==='string'?v:v.event.id);};
  return {root,server,state,watch};
@@ -263,7 +263,7 @@ it('after a publish, edit or comment a watch waits only once a call after the re
   expect(await watch(replied)).toEqual([YET]);expect(state.clock).toBe(late+235000);
   expect(await watch()).toEqual([YET]);
   // A comment write (add, reply, edit, react) arms it too.
-  const env={ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic',ARTIFACTBIN_HOME:root,CLAUDECODE:'1',CLAUDE_CODE_SESSION_ID:'quiet-session'};
+  const env=syntheticEnv(server, root, { claudeSession: 'quiet-session' });
   await commentCommand({sub:'reply',values:{thread:'T',body:'Done'},positionals:['PAGE12']},{env,fetcher:async()=>Response.json({id:'T',revision:2,thread:[]})});
   expect(await watch()).toEqual([DUE]);
 });
@@ -515,6 +515,6 @@ it('documents the watch mode once, by harness, as every printed watch line state
 
 it('refuses a watch --next shorter than a minute, which ends before the person answers',async()=>{
  const {commentCommand}=await import('../../../skills/artifactbin/scripts/comment.mjs');
- await expect(commentCommand({sub:'watch',values:{server:'https://example.test',next:true,wait:'5'},positionals:['PAGE12']},{env:{ARTIFACTBIN_URL:'https://example.test',ARTIFACTBIN_TOKEN:'t'},fetcher:async()=>Response.json({})} as never))
+ await expect(commentCommand({sub:'watch',values:{server:'https://example.test',next:true,wait:'5'},positionals:['PAGE12']},{env:syntheticEnv('https://example.test', undefined, { token: 't' }),fetcher:async()=>Response.json({})} as never))
   .rejects.toMatchObject({code:'wait_too_short',exit:2});
 });

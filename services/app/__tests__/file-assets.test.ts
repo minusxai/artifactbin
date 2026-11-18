@@ -3,7 +3,7 @@ import { setVisibility } from '@/__tests__/artifact-fixtures';
 import { POST } from '@/app/api/artifacts/route';
 import { GET as raw } from '@/app/a/[id]/raw/route';
 import { GET as resolve, HEAD } from '@/app/a/[id]/resolve/route';
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
+import { mintAccountToken as mintToken, params } from '@/__tests__/harness';
 import { getArtifactById } from '@/lib/artifacts';
 import { assetBytesForToken } from '@/lib/artifacts/testing';
 import { useAppHarness } from './harness';
@@ -11,7 +11,7 @@ import { useAppHarness } from './harness';
 useAppHarness();
 const base = 'http://localhost:3000';
 const bytes = new Uint8Array([0x67, 0x6c, 0x54, 0x46, 0, 255, 42]);
-const ctx = (id: string) => ({ params: Promise.resolve({ id }) });
+
 async function upload(query = '', contentType = 'model/gltf-binary', body = bytes, filename = 'scene.glb') {
   const token = await mintToken('files');
   const response = await POST(new Request(`${base}/api/artifacts?format=file&filename=${encodeURIComponent(filename)}${query}`, {
@@ -31,7 +31,7 @@ describe('generic file artifacts', () => {
     expect(file.rawUrl).toContain(`/a/${file.id}/raw`);
     expect((await getArtifactById(file.id))?.meta).toMatchObject({ filename: 'scene.glb', bytes: bytes.length, contentType: 'model/gltf-binary' });
     expect(await assetBytesForToken(token.id)).toBe(bytes.length);
-    const download = await raw(new Request(`${base}/a/${file.id}/raw`), ctx(file.id));
+    const download = await raw(new Request(`${base}/a/${file.id}/raw`), params(file.id));
     expect(download.status).toBe(200);
     expect(new Uint8Array(await download.arrayBuffer())).toEqual(bytes);
   });
@@ -64,10 +64,10 @@ describe('generic file artifacts', () => {
     const { response } = await upload();
     const file = await response.json();
     const url = `${base}/a/Doc123/resolve?ref=ref:${file.id}`;
-    const head = await HEAD(new Request(url, { method: 'HEAD' }), ctx('Doc123'));
+    const head = await HEAD(new Request(url, { method: 'HEAD' }), params('Doc123'));
     expect(head.status).toBe(200);
     expect(await head.text()).toBe('');
-    const res = await resolve(new Request(url), ctx('Doc123'));
+    const res = await resolve(new Request(url), params('Doc123'));
     expect(new Uint8Array(await res.arrayBuffer())).toEqual(bytes);
   });
 
@@ -75,10 +75,10 @@ describe('generic file artifacts', () => {
     const { response: publicResponse, token } = await upload();
     const publicFile = await publicResponse.json();
     const url = `${base}/a/Doc123/resolve?ref=ref:${publicFile.id}`;
-    expect((await HEAD(new Request(url, { method: 'HEAD' }), ctx('Doc123'))).status).toBe(200);
+    expect((await HEAD(new Request(url, { method: 'HEAD' }), params('Doc123'))).status).toBe(200);
     await setVisibility(publicFile.id, 'private');
     for (const ref of [`ref:${publicFile.id}`, 'ref:Miss12', 'https://example.com/a.glb', 'ref:../raw']) {
-      const res = await resolve(new Request(`${base}/a/Doc123/resolve?ref=${encodeURIComponent(ref)}`, { headers: { Authorization: `Bearer ${token.token}` } }), ctx('Doc123'));
+      const res = await resolve(new Request(`${base}/a/Doc123/resolve?ref=${encodeURIComponent(ref)}`, { headers: { Authorization: `Bearer ${token.token}` } }), params('Doc123'));
       expect(res.status).toBe(404);
       expect(await res.text()).toBe('not found');
     }

@@ -10,7 +10,6 @@ import {nativeHtml} from './native-html-fixture';
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 
-
 import { createUser } from '@/lib/accounts';
 import { overrideConfig } from '@/lib/platform/config';
 import { mintToken } from '@/lib/accounts';
@@ -22,7 +21,7 @@ import { DELETE as revokeMine } from '@/app/api/my/tokens/[id]/route';
 import { POST as adoptSession, DELETE as clearSession } from '@/app/api/session/token/route';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { GET as listArtifacts } from '@/app/api/artifacts/route';
-import { cookieValue, request } from './harness';
+import { cookieValue, request, params } from './harness';
 import { useAppHarness } from '@/__tests__/harness';
 import { setArtifact } from '@/__tests__/rows';
 
@@ -32,7 +31,7 @@ const ADMIN = 'admin-secret-for-tests';
 const ADMIN_EMAIL = 'mxmx_test_operator@example.com';
 beforeEach(async () => { await createUser({ email: ADMIN_EMAIL }); });
 beforeEach(() => overrideConfig({}, { ADMIN__SECRET: ADMIN }));
-const params = (p: Record<string, string>) => ({ params: Promise.resolve(p) });
+
 const json = (r: Response) => r.json() as Promise<Record<string, unknown>>;
 type TokenRow = { id: string; status: string; expires_at: string | null; last_used_at: string | null };
 

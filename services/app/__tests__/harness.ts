@@ -241,8 +241,7 @@ export function setSession(session: Session | (() => Session | null) | null): vo
  * A file's mutable signed-in user for direct handler calls: set `.id` (and `.email`) inside a test, '' for nobody. Call it
  * where the file's session `beforeEach` goes. 'email' also reports the address, 'verified' a verified one, 'id' only the id.
  */
-export function useSessionUser(shape: 'email' | 'verified' | 'id' = 'email'): { id: string; email: string } {
-  const user = { id: '', email: '' };
+export function useSessionUser(shape: 'email' | 'verified' | 'id' = 'email', user: { id: string; email: string } = { id: '', email: '' }): { id: string; email: string } {
   beforeEach(() => setSession(() => (user.id ? { user: shape === 'id' ? { id: user.id } : { id: user.id, email: user.email || null, ...(shape === 'verified' ? { emailVerified: true } : {}) } } : null)));
   return user;
 }

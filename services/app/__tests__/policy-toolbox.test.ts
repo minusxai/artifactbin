@@ -14,13 +14,14 @@ import { getArtifactById } from '@/lib/artifacts';
 import { createAppServer } from '@/server/app';
 import {tempDir} from '@artifactbin/test-support/temp-dir';
 import { seedShares } from '@/__tests__/rows';
+import {syntheticEnv} from '@/test/helpers/toolbox-env';
 
 useAppHarness();
 
 const SERVER = 'http://localhost:3000';
 const app = createAppServer({ webDir: 'dist/web' });
 const fetcher = (async (input: string | URL | Request, init?: RequestInit) => app.fetch(new Request(String(input), init))) as typeof fetch;
-const options = (token: string) => ({ env: { ARTIFACTBIN_URL: SERVER, ARTIFACTBIN_TOKEN: token }, fetcher, retryDelays: [] });
+const options = (token: string) => ({ env: syntheticEnv(SERVER, undefined, { token }), fetcher, retryDelays: [] });
 const { policyCommand } = await import('../skills/artifactbin/scripts/policy.mjs');
 type Values = Record<string, unknown>;
 const policy = (token: string, sub: string, positionals: string[], values: Values = {}) => policyCommand({ sub, positionals, values }, options(token));
