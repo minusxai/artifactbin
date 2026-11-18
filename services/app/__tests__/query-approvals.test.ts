@@ -7,11 +7,12 @@
  * the group is deleted, each of which ends it for good. The setting and the database are ./query-approvals-fixture's.
  */
 import {expect,it} from 'vitest';
-import {deleteGroup,recordGroupChanges,setGroupMember} from '@/lib/groups';
+import {createGroup,deleteGroup,recordGroupChanges,setGroupMember,setGroupParent,updateGroup} from '@/lib/groups';
 import {services} from '@/lib/platform';
 import {approvePageQuery} from '@/lib/query-approvals';
 import {admitGroupMember,request,params} from './harness';
 import {GET as listRoute,POST as approveRoute} from '@/app/api/artifacts/[id]/query-approvals/route';
+import {GET as sharingRoute} from '@/app/api/my/artifacts/[id]/sharing/route';
 import {DELETE as revokeRoute} from '@/app/api/artifacts/[id]/query-approvals/[approvalId]/route';
 import {composed,origin,sql} from './group-principal-fixture';
 import {SENSITIVE,TOTALS,asGroup,html,refusedNamingOwner,rows,setting,useApprovalsHost} from './query-approvals-fixture';
@@ -210,4 +211,56 @@ it('serves the sharing dialog\'s browser session the same routes, and refuses a 
  const id=String(((await approved.json()) as {id:string}).id);
  expect((await revokeRoute(request(`${path}/${id}`,{actor,method:'DELETE',origin:'same'}),params({id:page,approvalId:id}))).status).toBe(200);
  expect((await read(olga)).status).toBe(403);
+});
+
+it('indexes a page\'s approvals by page for the export revision read, beside the live-approval unique index',async()=>{
+ await composed();
+ const defs=(await sql<{indexdef:string}>("SELECT indexdef FROM pg_indexes WHERE tablename='page_query_approvals'")).map(row=>row.indexdef);
+ expect(defs.some(def=>/\(page_id\)\s*$/.test(def)&&!/UNIQUE|WHERE/i.test(def)),defs.join('\n')).toBe(true);
+ expect(defs.some(def=>/UNIQUE/.test(def)&&/WHERE/.test(def))).toBe(true);
+});
+
+it('ends an approval found stale during a group change as no person\'s doing, and looks only at the groups that change can affect',async()=>{
+ const host=await composed(),{ada,rob,team,page,approve}=await setting(host);
+ const first=await approve(rob);
+ expect(first.status).toBe(201);
+ // Rob's Admin on Team is taken away outside the app: nothing notices until something asks.
+ await sql("UPDATE auth.group_members SET role='member' WHERE group_id=$1 AND user_id=$2",[team.id,rob.userId]);
+ const live=async(id:string)=>(await sql<{ended_at:string|null}>('SELECT ended_at FROM page_query_approvals WHERE id=$1',[id]))[0]!.ended_at;
+ // A change to an unrelated group (a new root group, a sibling of nothing in Team's tree) does not even look at it.
+ await createGroup(ada.userId,{handle:'elsewhere',name:'Elsewhere'});
+ expect(await live(String(first.body!.id))).toBeNull();
+ // A change inside Team's tree that did not cause it (a rename) finds it: ended, and no person did it.
+ await updateGroup(ada.userId,team.id,{name:'Team renamed'});
+ expect(await sql('SELECT ended_reason,ended_by FROM page_query_approvals WHERE id=$1',[String(first.body!.id)])).toEqual([{ended_reason:'approver_not_admin',ended_by:null}]);
+ await expect.poll(async()=>sql("SELECT subject_kind,subject_id,payload FROM events.events WHERE verb='query_approval_ended' AND object_id=$1",[page])).toEqual([{subject_kind:null,subject_id:null,
+  payload:{approval_id:first.body!.id,query:'totals',query_hash:first.body!.hash,connection:'default:',group_id:team.id,reason:'approver_not_admin',system:true}}]);
+});
+
+it('tells the sharing dialog whether the viewer may approve the page\'s queries: only an Admin of the owning group, never for a person\'s page',async()=>{
+ const host=await composed(),{ada,rob,eve,page}=await setting(host);
+ const personal=String((await host.call('POST','/api/artifacts',ada.token,{title:'Mine',html:html(),destination:{type:'personal'},visibility:'private'})).body!.id);
+ const state=async(who:{userId:string},id:string)=>{
+  const email=String((await sql<{email:string}>('SELECT email FROM users WHERE id=$1',[who.userId]))[0]!.email);
+  const actor={credential:'session' as const,userId:who.userId,email,emailVerified:true};
+  const answer=await sharingRoute(request(`/api/my/artifacts/${id}/sharing`,{actor}),params(id));
+  return {status:answer.status,body:await answer.json() as Record<string,unknown>};
+ };
+ expect((await state(rob,page)).body).toMatchObject({canApproveQueries:true});
+ expect((await state(ada,page)).body).toMatchObject({canApproveQueries:true});
+ const editor=await state(eve,page);
+ expect([editor.status,editor.body.canApproveQueries]).toEqual([200,false]);
+ const mine=await state(ada,personal);
+ expect([mine.status,mine.body.canApproveQueries]).toEqual([200,false]);
+});
+
+it('names the person who moves a group out from under its approver\'s Admin, whose ending it caused',async()=>{
+ const host=await composed(),{ada,rob,root,team,approve}=await setting(host);
+ // Rob is Admin of Team only through Root.
+ await setGroupMember(ada.userId,team.id,rob.userId,'member');
+ await admitGroupMember(ada.userId,root.id,rob.userId,'admin');
+ const first=await approve(rob);
+ expect(first.status,JSON.stringify(first.body)).toBe(201);
+ await setGroupParent(ada.userId,team.id,null,root.id);
+ expect(await sql('SELECT ended_reason,ended_by FROM page_query_approvals WHERE id=$1',[String(first.body!.id)])).toEqual([{ended_reason:'approver_not_admin',ended_by:ada.userId}]);
 });

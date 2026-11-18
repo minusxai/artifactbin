@@ -43,6 +43,8 @@ function VisibilityIcon(props: { icon: SharingIcon; size: number; class?: string
 
 interface SharingState {
   visibility: Visibility; linkRole: ShareRole; shares: ShareEntry[]; canPrivate?: boolean; canPublic?: boolean;
+  /** The viewer is an Admin of the group that owns this page: the only one the approved-queries routes answer. */
+  canApproveQueries?: boolean;
   /** A dataset's writes: who may change it through a document. */
   access?: DatasetAccess;
   writtenBy?: Array<{ id: string; title: string | null; mutations: string[] }>;
@@ -70,7 +72,7 @@ export function DocumentSharing(props: {
   format?: string;
   /** Validated document dependencies; access remains independent of document sharing. */
   refs?: ReadonlyArray<{ id: string; kind: string }>;
-  /** A page: its queries on live data an Admin of its group may approve (./QueryApprovals, drawn only for them). */
+  /** A page: its queries on live data an Admin of its group may approve (./QueryApprovals, asked for and drawn only when the sharing answer says the viewer is one). */
   queryApprovals?: boolean;
 }): JSX.Element {
   const canManage = () => props.owner || Boolean(props.editable);
@@ -210,7 +212,7 @@ export function DocumentSharing(props: {
           <Button type="submit" variant="secondary" size="sm" aria-label="Add email">Add</Button>
         </form>
       </div>
-      <Show when={props.queryApprovals}><Suspense fallback={null}><QueryApprovals id={props.id} /></Suspense></Show>
+      <Show when={props.queryApprovals && state()?.canApproveQueries}><Suspense fallback={null}><QueryApprovals id={props.id} /></Suspense></Show>
       <Show when={props.format === 'dataset'}><Button variant="secondary" size="sm" aria-label="Manage access policies" onClick={(event: MouseEvent) => { close(); if (props.onDataActions) { event.preventDefault(); props.onDataActions(); } }} href={artifactEditPath(props.id)} class="mt-4 w-full justify-start">manage data actions ↗</Button></Show>
     </>}</Show>
   </>;

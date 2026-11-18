@@ -31,6 +31,9 @@ describe('the rendered schema', () => {
     const tokens = schema.slice(schema.indexOf('CREATE TABLE IF NOT EXISTS auth.tokens'), schema.indexOf('CREATE TABLE IF NOT EXISTS auth.handle_reservations'));
     expect(tokens).toMatch(/expires_at TIMESTAMPTZ[\s\S]*last_used_at TIMESTAMPTZ/);
   });
+  it('indexes the approvals of a page by page, for the export revision read and every approval lookup, with a plain idempotent statement', () => {
+    expect(read('SCHEMA.sql')).toContain('CREATE INDEX IF NOT EXISTS idx_page_query_approvals_page ON app.page_query_approvals (page_id);');
+  });
   it('roles.sql creates a role per package and the schema each one OWNS, grants USAGE, and grants no table privilege', () => {
     const roles = read('roles.sql');
     expect(roles).toMatch(/CREATE ROLE artifactbin_events\s+LOGIN/);
