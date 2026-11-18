@@ -1,7 +1,7 @@
 /** Fast-lane regression: exercise Vitest's actual admission policy with cheap stand-ins for server boots.
  * Three file workers must not multiply into five simultaneous server boots each. No server, DB or browser starts.
  */
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { expect, it, onTestFinished } from 'vitest';
@@ -99,11 +99,16 @@ it('runs the S3 object-store suites in the databases part against a digest-pinne
   expect(steps[0].run).toContain('docker pull "$S3_IMAGE"');
   expect(steps[start].run).toContain('curl -fsS -X PUT -o /dev/null http://127.0.0.1:8333/artifactbin-test');
   expect(steps[start].run).toContain(`echo 'TEST_S3_URL=http://test:test@127.0.0.1:8333/artifactbin-test/ci' >> "$GITHUB_ENV"`);
-  // Under CI, without the URL, the file fails rather than skips.
-  const vitest = (env) => spawnSync(process.execPath, [path.join(root, 'node_modules/vitest/vitest.mjs'), 'run', '--project=integration-databases', file], { cwd: root, encoding: 'utf8', timeout: 60_000, env: { ...env, PATH: process.env.PATH, HOME: process.env.HOME } });
-  const ci = vitest({ CI: 'true' });
-  expect(ci.status, ci.stdout + ci.stderr).toBe(1);
-  expect(ci.stdout + ci.stderr).toContain('TEST_S3_URL is not set');
-  const local = vitest({});
-  expect(local.status, local.stdout + local.stderr).toBe(0);
+  // Under CI, without the URL, the file fails rather than skips. The two runs are Vitest processes of their own (7s
+  // apiece on a pr fast guard runner, the lane's slowest guard test one after the other), so they run side by side.
+  const vitest = (env) => new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [path.join(root, 'node_modules/vitest/vitest.mjs'), 'run', '--project=integration-databases', file], { cwd: root, timeout: 60_000, env: { ...env, PATH: process.env.PATH, HOME: process.env.HOME } });
+    let output = '';
+    for (const stream of [child.stdout, child.stderr]) stream.setEncoding('utf8').on('data', (chunk) => { output += chunk; });
+    child.on('error', reject).on('close', (status) => resolve({ status, output }));
+  });
+  const [ci, local] = await Promise.all([vitest({ CI: 'true' }), vitest({})]);
+  expect(ci.status, ci.output).toBe(1);
+  expect(ci.output).toContain('TEST_S3_URL is not set');
+  expect(local.status, local.output).toBe(0);
 });

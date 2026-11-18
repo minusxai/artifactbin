@@ -163,7 +163,7 @@ it('runs every api, api-isolated, ui and islands test on every pull request, pac
  expect(job.env.TEST_BUILDS_KIND).toBe("${{ matrix.shard && 'guards' || matrix.batch && 'node' || matrix.suite && startsWith(matrix.part, 'ui-') && 'ui' || 'api' }}");
  const save=steps.filter(step=>step.uses?.startsWith('actions/cache/save')&&step.with.key.startsWith('test-builds-'));
  expect(save).toHaveLength(1);
- expect(save[0].if).toBe("contains(fromJSON('[\"api-32\",\"ui-7\",\"guards-3\",\"node-4\"]'), matrix.part) && steps.test-builds.outputs.cache-hit != 'true' && steps.test-builds-retry.outputs.cache-hit != 'true'");
+ expect(save[0].if).toBe("contains(fromJSON('[\"api-32\",\"ui-7\",\"guards-3\",\"node-5\"]'), matrix.part) && steps.test-builds.outputs.cache-hit != 'true' && steps.test-builds-retry.outputs.cache-hit != 'true'");
  expect(save[0].with).toEqual({path:steps[restore].with.path,key:steps[restore].with.key});
  // Saved after every test step, so a saver's own transforms are in its entry.
  expect(steps.indexOf(save[0])).toBeGreaterThan(Math.max(...steps.flatMap((step,i)=>(step.run??'').includes('vitest.mjs run')?[i]:[])));
@@ -227,49 +227,60 @@ it('runs the cheap node batch on every pull request: its own runners, its config
 });
 // A node file with no recorded time never ran on a pull request until someone refreshed the table by hand (70 of 668 on
 // 2026-11-17). Main measures them after each green ci run, and every node runner lays those times over the table.
-it('lays main\'s measured node times over the table on every node runner, fetched beside the install and awaited before the batch',()=>{
+it('lays main\'s measured node times over the table on every node runner, fetched beside the install, and chooses the change\'s node files beside the test builds\' restore, awaited before the batch',()=>{
  const steps=workflow('pr-fast.yml').jobs.fast.steps;
  const at=(predicate)=>steps.findIndex(predicate);
  const fetch=at(step=>(step.run??'').includes('scripts/ci/ci.mjs node-timings'));
- const wait=at(step=>(step.run??'').includes('node-timings.status')&&!(step.run??'').includes('ci.mjs'));
+ const choose=at(step=>(step.run??'').includes('node scripts/ci/node-affected.mjs'));
+ const wait=at(step=>(step.run??'').includes('node-affected.status')&&!(step.run??'').includes('node-affected.mjs'));
  const batch=at(step=>step.if==='matrix.batch'&&(step.run??'').includes('vitest.node-batch.config.ts'));
- for(const index of [fetch,wait])expect(steps[index].if).toBe('matrix.batch');
+ for(const index of [fetch,choose,wait])expect(steps[index].if).toBe('matrix.batch');
  // Started right after checkout (ci.mjs is builtin-only, so any Node runs it), in the background.
  expect(fetch).toBe(steps.findIndex(step=>step.id==='checkout')+1);
- expect(steps[fetch].run.trim()).toMatch(/&$/);
- expect(steps[fetch].run).toContain('< /dev/null > /dev/null 2>&1 &');
+ for(const index of [fetch,choose]){
+  expect(steps[index].run.trim()).toMatch(/&$/);
+  expect(steps[index].run).toContain('< /dev/null > /dev/null 2>&1 &');
+ }
  expect(steps[fetch].env.GH_TOKEN).toBe('${{ github.token }}');
- // Its status is written whole (moved into place), so the wait never reads a half-written one.
+ // Each status is written whole (moved into place), so nothing reads a half-written one.
  expect(steps[fetch].run).toContain('mv "$RUNNER_TEMP/node-timings.part" "$RUNNER_TEMP/node-timings.status"');
- // Run as Actions runs them (bash -e), a fetch that fails hands its status and log to the wait, which fails with it,
- // instead of leaving the wait spinning to the job's timeout; one that succeeds lets the batch run.
- for(const [fetcher,status] of [['sh -c "echo answered 503, twice >&2; exit 7"',7],['echo chosen',0]]){
+ expect(steps[choose].run).toContain('mv "$RUNNER_TEMP/node-affected.part" "$RUNNER_TEMP/node-affected.status"');
+ // Run as Actions runs them (bash -e), a fetch or a choice that fails hands its status and log to the wait, which fails
+ // with it, instead of leaving the wait spinning to the job's timeout; the choice never runs on a failed fetch, and the
+ // choice's step summary reaches the wait's.
+ const cases=[
+  {fetcher:'sh -c "echo answered 503, twice >&2; exit 7"',chooser:'sh -c "echo chose anyway; exit 0"',status:7,output:'answered 503, twice',absent:'chose anyway'},
+  {fetcher:'echo laid over',chooser:'sh -c "echo walked >&2; exit 3"',status:3,output:'walked'},
+  {fetcher:'echo laid over',chooser:'sh -c "echo chosen; echo \\"## Node files\\" >> \\"$GITHUB_STEP_SUMMARY\\""',status:0,output:'chosen',summary:'## Node files'},
+ ];
+ for(const {fetcher,chooser,status,output,absent,summary} of cases){
   const temp=tempDirSync('node-timings-step-',onTestFinished);
-   const env={PATH:process.env.PATH,RUNNER_TEMP:temp};
-   const started=spawnSync('bash',['-e','-c',`${steps[fetch].run.replace('node scripts/ci/ci.mjs node-timings',fetcher)}\nwait`],{env,encoding:'utf8'});
-   expect(started.status).toBe(0);
-   const waited=spawnSync('bash',['-e','-c',steps[wait].run],{env,encoding:'utf8',timeout:5000});
-   expect(waited.status).toBe(status);
-   expect(waited.stdout).toContain(status?'answered 503, twice':'chosen');
+  const env={PATH:process.env.PATH,RUNNER_TEMP:temp,GITHUB_STEP_SUMMARY:join(temp,'summary.md')};
+  const background=(index,from,to)=>spawnSync('bash',['-e','-c',`${steps[index].run.replace(from,to)}\nwait`],{env,encoding:'utf8'});
+  expect(background(fetch,'node scripts/ci/ci.mjs node-timings',fetcher).status).toBe(0);
+  expect(background(choose,'node scripts/ci/node-affected.mjs',chooser).status).toBe(0);
+  const waited=spawnSync('bash',['-e','-c',steps[wait].run],{env,encoding:'utf8',timeout:5000});
+  expect(waited.status).toBe(status);
+  expect(waited.stdout).toContain(output);
+  if(absent)expect(waited.stdout).not.toContain(absent);
+  if(summary)expect(readFileSync(env.GITHUB_STEP_SUMMARY,'utf8')).toContain(summary);
  }
  expect(fetch).toBeLessThan(at(step=>step.id==='slim'));
- // The change's own node files are chosen from the same laid-over table, then the batch runs them with its own.
- const choose=at(step=>step.run==='node scripts/ci/node-affected.mjs');
- expect(steps[choose].if).toBe('matrix.batch');
- expect(wait).toBe(choose-1);
- expect(choose).toBe(batch-1);
- // From main's import graph, restored after every install tier (an install restore would replace node_modules).
+ // From main's import graph, restored after every install tier (an install restore would replace node_modules), and
+ // chosen before the test builds' restore so the two overlap; the batch runs right after the wait.
  const graph=at(step=>step.with?.path==='node_modules/.cache/test-graph.json');
  expect(steps[graph].if).toBe('matrix.batch');
  expect(steps[graph].with['restore-keys']).toBe('test-graph-v1-${{ runner.os }}-');
  for(const tier of steps.filter(step=>/install/.test(step.id??'')||/npm (ci|install)/.test(step.run??'')))expect(steps.indexOf(tier),tier.id??tier.run).toBeLessThan(graph);
  expect(graph).toBeLessThan(choose);
+ expect(choose).toBeLessThan(at(step=>step.id==='test-builds'));
+ expect(wait).toBe(batch-1);
  // Main's warm-caches walks every node and integration file's imports and saves the graph the runners restore.
  const warm=workflow().jobs['warm-caches'].steps,walk=warm.findIndex(step=>step.run==='node scripts/ci/node-affected.mjs --warm');
  expect(warm[walk+1].with).toEqual({path:'node_modules/.cache/test-graph.json',key:'test-graph-v1-${{ runner.os }}-${{ github.sha }}'});
  expect(warm[walk+1].uses).toMatch(/^actions\/cache\/save@/);
  // No other runner fetches them: the api, ui and guard runners pack by the committed table alone.
- expect(steps.filter(step=>(step.run??'').includes('node-timings')).map(step=>step.if)).toEqual(['matrix.batch','matrix.batch']);
+ expect(steps.filter(step=>(step.run??'').includes('node-timings')).map(step=>step.if)).toEqual(['matrix.batch','matrix.batch','matrix.batch']);
 });
 it('measures the node batch on main after each green ci push run, checks it, and only then publishes it, starting nothing',()=>{
  const flow=workflow('node-timings.yml');

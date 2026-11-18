@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CI_RUNNER, CONTENDED_START, ISOLATED_FILE_MS, SHARED_FIRST_FILE_MS, WORKERS, pack, readTimings, runOrder, shardWall, weigher } from '../lib/timed-sequencer.mjs';
+import { CI_RUNNER, CONTENDED_START, ISOLATED_FILE_MS, SHARED_FILE_MS, SHARED_FIRST_FILE_MS, UNMEASURED_QUANTILE, WORKERS, pack, readTimings, runOrder, shardWall, weigher } from '../lib/timed-sequencer.mjs';
 import { JOBS, LENSES, RECORDED, medianTimings, mergeTimings, nodeMeasurements, onlyProjects, parseTimings, shardLoads, steadyTimings } from '../ci/test-timings.mjs';
 
 const items = (weights) => Object.entries(weights).map(([key, weight]) => ({ key, weight }));
@@ -36,10 +36,27 @@ describe('timed shard packing', () => {
     expect(Object.keys(timings)).toEqual(['files']);
   });
 
-  it('weighs an unmeasured file at its project median', () => {
-    const weigh = weigher({ files: { api: { 'a.test.ts': 1000, 'b.test.ts': 3000, 'c.test.ts': 9000 } } });
-    expect(weigh('api', 'b.test.ts')).toBe(3000);
-    expect(weigh('api', 'new.test.ts')).toBe(3000);
+  it('weighs an unmeasured file at its project\'s 90th percentile, so a pull request\'s new files spread over the runners', () => {
+    const files = Object.fromEntries(Array.from({ length: 10 }, (_, i) => [`f${i}.test.ts`, (i + 1) * 1000]));
+    const weigh = weigher({ files: { api: files } });
+    expect(weigh('islands', 'f1.test.ts')).toBe(2000);
+    expect(UNMEASURED_QUANTILE).toBe(0.9);
+    expect(weigh('api', 'new.test.ts')).toBe(10000 + SHARED_FILE_MS.api);
+    expect(weigher({ files: { islands: { 'a.test.ts': 1000, 'b.test.ts': 3000, 'c.test.ts': 9000 } } })('islands', 'new.test.ts')).toBe(9000);
+  });
+
+  // Weighed at the api median, a pull request's eight new api files all filled the slack of one runner (api-29), and it
+  // set the clock (46-58s against a 16-18s median runner, pr fast runs 44370437863-44373067630). Packed against the
+  // committed table, eight unmeasured files land on eight runners.
+  it('spreads a pull request\'s unmeasured api files over pr fast\'s api runners, one to a runner', () => {
+    const timings = readTimings();
+    const weigh = weigher(timings);
+    const fresh = Array.from({ length: 8 }, (_, i) => `services/app/__tests__/unmeasured-${i}.test.ts`);
+    const items = [...JOBS['pr-api'].projects.flatMap((project) => Object.keys(timings.files[project] ?? {}).map((file) => ({ key: `${project}:${file}`, project }))),
+      ...fresh.map((file) => ({ key: `api:${file}`, project: 'api' }))].map((item) => ({ ...item, weight: weigh(item.project, item.key.slice(item.project.length + 1)) }));
+    const shards = pack(items, JOBS['pr-api'].count, CI_RUNNER);
+    const holding = shards.map((shard) => shard.filter((key) => key.includes('/unmeasured-')).length).filter(Boolean);
+    expect(holding).toEqual(Array(8).fill(1));
   });
 
   it('keeps a file\'s time when it moves to another project', () => {
@@ -53,7 +70,8 @@ describe('timed shard packing', () => {
   // api-isolated files ran 24-30s against 13-20s for those given none, at the same recorded load.
   it('weighs a file that runs in a fresh module graph by its time plus that graph\'s cost', () => {
     const weigh = weigher({ files: { api: { 'a.test.ts': 3000 }, 'api-isolated': { 'm.test.ts': 3000 }, ui: { 'u.test.ts': 300 }, islands: { 'i.test.tsx': 300 } } });
-    expect(weigh('api', 'a.test.ts')).toBe(3000);
+    // A shared-graph api file pays its per-file setup (`SHARED_FILE_MS`), not a graph.
+    expect(weigh('api', 'a.test.ts')).toBe(3000 + SHARED_FILE_MS.api);
     expect(weigh('islands', 'i.test.tsx')).toBe(300);
     expect(weigh('api-isolated', 'm.test.ts')).toBe(3000 + ISOLATED_FILE_MS['api-isolated']);
     expect(weigh('ui', 'u.test.ts')).toBe(300 + ISOLATED_FILE_MS.ui);
@@ -61,7 +79,7 @@ describe('timed shard packing', () => {
     expect(weigh('node-batch-isolated', 'm.test.ts')).toBe(3000 + ISOLATED_FILE_MS['node-batch-isolated']);
     // The table's loads are what the sequencer packs: the same weights.
     const loads = shardLoads({ files: { 'api-isolated': { 'm.test.ts': 3000 }, api: { 'a.test.ts': 3000 } } });
-    expect(loads.api.reduce((sum, shard) => sum + shard.ms, 0)).toBe(6000 + ISOLATED_FILE_MS['api-isolated']);
+    expect(loads.api.reduce((sum, shard) => sum + shard.ms, 0)).toBe(6000 + ISOLATED_FILE_MS['api-isolated'] + SHARED_FILE_MS.api);
   });
 
   it('reads per-file times from Vitest CI log lines', () => {
@@ -146,7 +164,7 @@ describe('timed shard packing', () => {
     expect(loads.node.map((shard) => shard.files).reduce((a, b) => a + b)).toBe(5);
     expect(loads.node.map((shard) => shard.ms)).toEqual([50, 40, 30, 20, 10, 0]);
     expect(loads.node.reduce((sum, shard) => sum + shard.ms, 0)).toBe(150);
-    expect(loads.api.reduce((sum, shard) => sum + shard.ms, 0)).toBe(12 + ISOLATED_FILE_MS['api-isolated']);
+    expect(loads.api.reduce((sum, shard) => sum + shard.ms, 0)).toBe(12 + ISOLATED_FILE_MS['api-isolated'] + SHARED_FILE_MS.api);
   });
 });
 
@@ -243,7 +261,7 @@ describe('a shard\'s wall time', () => {
     const timings = readTimings();
     const weigh = weigher(timings);
     for (const [job, { projects, count, files }] of Object.entries(JOBS)) {
-      const items = projects.flatMap((project) => (files?.(timings) ?? Object.keys(timings.files[project] ?? {})).map((f) => ({ key: `${project}:${f}`, weight: weigh(project, f), project })));
+      const items = projects.flatMap((project) => (files?.(timings, project) ?? Object.keys(timings.files[project] ?? {})).map((f) => ({ key: `${project}:${f}`, weight: weigh(project, f), project })));
       expect(items.length, job).toBeGreaterThan(10);
       const byKey = new Map(items.map((item) => [item.key, item]));
       const slowest = (shards) => Math.max(...shards.map((keys) => shardWall(keys.map((key) => byKey.get(key)))));

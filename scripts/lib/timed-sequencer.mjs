@@ -7,7 +7,7 @@
  *
  * Every shard job runs Vitest and nothing else, so every shard starts empty: work outside Vitest (the
  * integration project) is a job of its own in ci.yml, never a reserve on a shard.
- * Unknown files (new since the timings were recorded) weigh the project's median.
+ * Unknown files (new since the timings were recorded) weigh the project's 90th percentile (`UNMEASURED_QUANTILE`).
  *
  * A SHARD IS PACKED BY ITS WALL TIME, not its summed time: a runner runs its files on three workers (`WORKERS`), so its
  * wall is the busiest worker's, never less than its longest file, and every worker pays a shared-graph project's
@@ -31,10 +31,21 @@ export function readTimings(file = TIMINGS) {
   try { return JSON.parse(readFileSync(file, 'utf8')); } catch { return { files: {} }; }
 }
 
-function median(values) {
+/**
+ * WHAT A NEVER-MEASURED FILE WEIGHS: its project's 90th percentile, not its median. A new file is usually a pull
+ * request's own, and those are rarely its project's cheapest: weighed at the api median (0.6s) every one of them filled
+ * the slack of the same runner, and that runner set the clock: on one pull request api-29 drew all eight of its
+ * unmeasured files (0.7-9.3s, and one of 35s), a 46-58s Vitest step where the median api runner took 16-18s (pr fast
+ * runs 44370437863, 44372730681, 44373067630). The day's new api files that merged ran 0.8-9s, most past the median
+ * and near the 90th percentile (3.3s); weighed so they spread across the runners. A cheap file weighed high only
+ * leaves its runner a little idle until the table measures it.
+ */
+export const UNMEASURED_QUANTILE = 0.9;
+
+function quantile(values, q) {
   if (!values.length) return 1000;
   const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.floor(sorted.length / 2)];
+  return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * q))];
 }
 
 /**
@@ -52,16 +63,21 @@ export const ISOLATED_FILE_MS = Object.freeze({ 'api-isolated': 2000, ui: 2000, 
 
 /**
  * WHAT EVERY FILE OF A SHARED-GRAPH PROJECT STILL PAYS: its setup files, environment and collection run per file even when
- * the module graph is shared. Only pr fast's node batch (scripts/lib/node-batch.mjs) has files cheap enough for it to
- * matter: their recorded times are tens of milliseconds. Measured locally (3 workers, 236 files): ~58ms per file beyond
- * the file's tests; ~175ms on a CI runner is an ESTIMATE (the local-to-CI factor of ~3 seen on the api shards).
+ * the module graph is shared. The node batch (scripts/lib/node-batch.mjs): measured locally (3 workers, 236 files) ~58ms
+ * per file beyond the file's tests; ~175ms on a CI runner is an ESTIMATE (the local-to-CI factor of ~3 seen on the api
+ * shards). The api project: ~0.4s a file on a pr fast runner beyond the file's recorded time. Without it the packer
+ * filled the many-file api runners past their predicted walls: replayed over 455 api runners' own files and Vitest
+ * times (pr fast runs 44362521013-44390108737), runners given 17 or more files ran 3.7s past their predicted wall and
+ * those given 9-16 3.0s past it, while one- and two-file runners ran 0.9s under, and the slowest api runner of a run was
+ * usually a many-file one. With 0.4s a file those groups come within 0.4s and 1.1s on average (a larger cost fits them
+ * more tightly only by over-predicting the 3-8 file runners further).
  */
-const SHARED_FILE_MS = Object.freeze({ 'node-batch': 175 });
+export const SHARED_FILE_MS = Object.freeze({ 'node-batch': 175, api: 400 });
 
 /**
  * Weight of one file of `project` (ms): its recorded time plus its project's per-file isolation cost. A file measured
  * under another project (moved between `api` and `api-isolated`) keeps its time; a never-measured one weighs the
- * median of its project, or of every file when its project has none.
+ * 90th percentile of its project (`UNMEASURED_QUANTILE`), or of every file when its project has none.
  */
 export function weigher(timings) {
   const recorded = recordedWeigher(timings);
@@ -69,17 +85,17 @@ export function weigher(timings) {
 }
 
 function recordedWeigher(timings) {
-  const medians = new Map();
+  const unmeasured = new Map();
   const anyProject = new Map();
   for (const files of Object.values(timings.files)) for (const [file, ms] of Object.entries(files)) anyProject.set(file, ms);
   return (project, file) => {
     const known = timings.files[project]?.[file] ?? anyProject.get(file);
     if (known !== undefined) return known;
-    if (!medians.has(project)) {
+    if (!unmeasured.has(project)) {
       const own = Object.values(timings.files[project] ?? {});
-      medians.set(project, median(own.length ? own : [...anyProject.values()]));
+      unmeasured.set(project, quantile(own.length ? own : [...anyProject.values()], UNMEASURED_QUANTILE));
     }
-    return medians.get(project);
+    return unmeasured.get(project);
   };
 }
 
@@ -99,7 +115,8 @@ export const WORKERS = 3;
  * (scripts/ci/test-timings.mjs `steadyTimings`): its graph's import and, inside its first file, its first database and
  * first pages. Fitted at 8-9s over 10 pr fast runs whose workers each compiled the page runtime on their first page; with
  * one build per run (services/app/test/setup/html-assets-file.ts), 7.5s fits pr fast runs 44166185767 and 44168708400
- * (their 37 multi-file api shards within 0.4s at the median; the one-file shards 1.2s over, the safe side).
+ * (their 37 multi-file api shards within 0.4s at the median; the one-file shards 1.2s over, the safe side), and still
+ * fits beside the api files' per-file cost (`SHARED_FILE_MS`).
  * The guard runners' two shared-graph projects (vitest.guard.config.ts) pay theirs too: without it their packing predicted
  * 12.2s for shards that ran 21-25s beside one holding only the longest file that ran 10.5s (pr fast run 44140374300).
  * Replaying each guard shard's own file times from 8 runs (24 shards), 4s per worker's first file fits their walls within

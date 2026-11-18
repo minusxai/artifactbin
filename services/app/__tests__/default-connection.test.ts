@@ -22,9 +22,11 @@ import { GET as accountGet } from '@/app/api/page/account/route';
 
 useAppHarness();
 const PASSWORD = 'hunter2-default-secret';
-let wire: PgliteWire, setting: string;
+let wire: PgliteWire, other: PgliteWire, setting: string;
+// Both databases boot side by side (each a PGlite engine, the file's costliest step): the second is the named default
+// `secondary` that 'routes named defaults independently' reads through.
 beforeAll(async () => {
-  wire = await startPgliteWire(`
+  [wire, other] = await Promise.all([startPgliteWire(`
     create schema sales;
     create table sales.orders(id int primary key, owner text not null, item text, amount int);
     create view sales.mine as select id, item from sales.orders where owner = current_setting('app.viewer_id', true);
@@ -38,10 +40,10 @@ beforeAll(async () => {
       end if;
       return query select o.id, o.item from sales.orders o where o.owner = current_setting('app.viewer_id', true) order by o.id;
     end $$;
-    create view guarded.shared as select * from guarded.shared_rows();`);
+    create view guarded.shared as select * from guarded.shared_rows();`), startPgliteWire('create table public.marker(n int); insert into public.marker values (42)')]);
   setting = JSON.stringify({ connector: 'postgres', host: '127.0.0.1', port: wire.port, database: 'postgres', user: 'postgres', password: PASSWORD, tls: 'disable' });
 });
-afterAll(async () => { await closeDefaultConnection(); await wire?.close(); });
+afterAll(async () => { await closeDefaultConnection(); await Promise.all([wire?.close(), other?.close()]); });
 const configure = (value: string | null = setting) => overrideConfig({}, { DATASETS__DEFAULT_CONNECTION: value ?? undefined, DATASETS__ALLOW_PRIVATE_NETWORK: '1' });
 beforeEach(() => { setSession(null); configure(); });
 
@@ -201,7 +203,6 @@ it('stops the boot on a bad value, naming the setting and never the value', () =
 
 it('routes named defaults independently, preserving the viewer, namespace and one-source rule', async () => {
   const {alice,bob}=await readers();
-  const other=await startPgliteWire("create table public.marker(n int); insert into public.marker values (42)");
   try {
     configure(JSON.stringify({default:JSON.parse(setting),connections:{secondary:{...JSON.parse(setting),port:other.port}}}));
     validateDefaultConnection();
@@ -216,7 +217,7 @@ it('routes named defaults independently, preserving the viewer, namespace and on
     expect(schema.body.tables).toEqual(expect.arrayContaining([expect.objectContaining({name:'marker'})]));
     const status=JSON.stringify(await (await statusGet(request('/api/default-connection',{token:alice.token}))).json());
     expect(status).toContain('secondary');expect(status).not.toContain(PASSWORD);
-  } finally {await closeDefaultConnection();await other.close();}
+  } finally {await closeDefaultConnection();}
 });
 
 it('validates every named default without exposing a secret or accepting an unconfigured alias', async () => {

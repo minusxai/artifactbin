@@ -151,7 +151,9 @@ export const NODE_ISOLATED_FILE_MS = 2000;
 /**
  * Time (ms) the reached files may add to pr fast's node runners, summed over all of them, each weighed with its import.
  * The runners' Vitest step took 10-12s with the batch alone (pr fast runs 44299731859, 44308003107); 90s over four
- * runners of three workers is ~7.5s more on each, inside the 40s aim. A pull request's own files are not counted against it.
+ * runners of three workers was to be ~7.5s more on each, but the reached files ran slower beside the batch than their
+ * recorded times and the slowest runner took 18-32s (pr-fast.yml's matrix, FIVE RUNNERS), so five runners share it.
+ * A pull request's own files are not counted against it.
  */
 export const NODE_AFFECTED_BUDGET_MS = 90_000;
 
