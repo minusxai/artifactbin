@@ -3,7 +3,8 @@ import { htmlTextFingerprint as selectionFingerprint } from '@artifactbin/contra
 import type { PresenceRange, PresenceViewer } from '../html-presence';
 import {presenceGeometry} from '../html-presence/model';
 type SelectionPresence = {ranges: PresenceRange[]};
-type Viewer = Omit<PresenceViewer,'selection'> & {selection: SelectionPresence | null; actor: string};
+/** `named`: whether the selection carries the reader's name (false while their cursor already shows it). */
+type Viewer = Omit<PresenceViewer,'selection'> & {selection: SelectionPresence | null; actor: string; named: boolean};
 function validateSelection(input:unknown):SelectionPresence|null {const selection=presenceGeometry({selection:(input as SelectionPresence|null)?.ranges}).selection;return selection?{ranges:selection}:null;}
 const excluded =
   '[data-af="presence-overlay"],[data-af="annotation-overlay"],input,textarea,select,[contenteditable]:not([contenteditable="false"]),script,style,[hidden],[data-af-private]';
@@ -149,7 +150,7 @@ export function paintSelections(layer: HTMLElement, viewers: Viewer[]) {
     const selection = validateSelection(viewer.selection);
     if (!selection) continue;
     const color = `hsl(${[...viewer.actor].reduce((n, c) => n * 31 + c.charCodeAt(0), 0) % 360} 70% 48%)`;
-    let labelAttempted = false;
+    let labelAttempted = !viewer.named;
     const painted = new Set<string>();
     for (const input of selection.ranges) {
       const range = resolve(doc, input);

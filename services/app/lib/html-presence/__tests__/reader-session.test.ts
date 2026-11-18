@@ -1,6 +1,29 @@
 import {expect,it} from 'vitest';
 import {createReaderPresenceSession} from '../reader-session';
 import {readerDefaults,type PresenceFrame,type PresencePublication,type PresencePaint} from '../contract';
+it('never paints or lists any session of the viewer\'s own account, and shows each other person once',async()=>{
+ const own='a'.repeat(64),peer='b'.repeat(64),now=100_000;let incoming=(_frame:PresenceFrame)=>{};
+ const painted:PresencePaint[]=[],listed:string[][]=[];
+ const session=createReaderPresenceSession({session:'tab',revision:'7',nonce:'n',readPreferences:()=>readerDefaults,active:()=>true,
+  publish:async()=>({id:'own-session',colorId:own}),connect:receive=>{incoming=receive;return()=>{};},paint:input=>painted.push(input),changed:viewers=>listed.push(viewers.map(v=>v.id)),
+  clock:{now:()=>now,setInterval:()=>1,clearInterval:()=>{},setTimeout:()=>2,clearTimeout:()=>{}}});
+ await Promise.resolve();await Promise.resolve();
+ const entry=(id:string,colorId:string,seen:number)=>({id,colorId,label:colorId===own?'Self':'Peer',revision:'7',seen,cursor:{nodeId:'a',x:.5,y:.5},selection:null});
+ incoming({viewers:[
+  entry('own-session',own,now),
+  // An earlier load of this very tab whose departure never arrived, and another tab of the same account.
+  entry('own-earlier-load',own,now-30_000),entry('own-other-tab',own,now-1_000),
+  // Another person: a lingering earlier session and their live one.
+  entry('peer-earlier-load',peer,now-30_000),entry('peer-live',peer,now-500),
+ ],total:5,readers:{total:1,expiresAt:now+15_000}});
+ expect(painted.at(-1)?.viewers.map(v=>v.id)).toEqual(['peer-live']);
+ expect(listed.at(-1)).toEqual(['peer-live']);
+ // An idle tab of that person beating after their active one never hides the active tab's cursor, selection or caret.
+ const selection=[{nodeId:'a',start:0,end:2,length:5,fingerprint:'0123abcd'}],region={regionId:'af-1',anchor:'AQID',head:'AQID'};
+ incoming({viewers:[{...entry('own-session',own,now)},{...entry('peer-active',peer,now-5_000),selection,region},{...entry('peer-idle',peer,now-100),cursor:null}],total:3,readers:{total:1,expiresAt:now+15_000}});
+ expect(painted.at(-1)?.viewers).toEqual([expect.objectContaining({id:'peer-active',cursor:{nodeId:'a',x:.5,y:.5},selection,region})]);
+ session.dispose();
+});
 it('owns revision and tab identity, honors separate send/display preferences, expires peers and clears on disposal',async()=>{
  let now=1000,tick=()=>{},every=0,incoming=(_frame:PresenceFrame)=>{},stopped=false,active=true;
  let prefs={...readerDefaults};const published:PresencePublication[]=[],painted:PresencePaint[]=[];
@@ -73,7 +96,8 @@ it('excludes every own-account tab even hidden or capped, retains peer geometry 
  const peer=(id:string,colorId:string)=>({id,colorId,label:'Same label',revision:'1',seen:1,cursor:null,selection:null});
  incoming({viewers:[peer('own','account-a'),peer('own2','account-a'),peer('own3','account-a')],total:3,readers:{total:0,expiresAt:45001}});expect(counts.at(-1)).toEqual([[],0]);
  prefs={...prefs,visible:false};session.preferencesChanged();await Promise.resolve();
- incoming({viewers:[peer('own2','account-a'),peer('b1','account-b'),peer('b2','account-b'),peer('b3','account-b')],total:40,readers:{total:1,expiresAt:45001}});expect(counts.at(-1)).toEqual([['b1','b2','b3'],1]);
+ incoming({viewers:[peer('own2','account-a'),peer('b1','account-b'),peer('b2','account-b'),peer('b3','account-b')],total:40,readers:{total:1,expiresAt:45001}});// One person is listed once, however many sessions they hold.
+ expect(counts.at(-1)).toEqual([['b3'],1]);
  incoming({viewers:[peer('b1','account-b'),peer('c','account-c')],total:40,readers:{total:2,expiresAt:45001}});expect(counts.at(-1)?.[1]).toBe(2);
  now=45001;expiry();await Promise.resolve();expect(counts.at(-1)).toEqual([[],0]);session.dispose();
 });

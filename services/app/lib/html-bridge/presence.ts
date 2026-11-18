@@ -1,6 +1,6 @@
 import type {PresenceGeometry,PresencePaint} from '../html-presence';
 import {captureSelection,paintSelections} from './presence-selection';
-import {PRESENCE_POINTER_THROTTLE_MS} from '../html-presence/model';
+import {PRESENCE_POINTER_THROTTLE_MS,presenceReader,presenceReaders} from '../html-presence/model';
 /** Owns only ephemeral geometry and inert overlays; no credentials, viewer storage or app state. */
 export function startHtmlPresence(win:Window,publish:(geometry:PresenceGeometry)=>void){
  const doc=win.document,layer=doc.createElement('div');layer.setAttribute('data-af','presence-overlay');Object.assign(layer.style,{position:'fixed',inset:'0',pointerEvents:'none',zIndex:'2147483645'});doc.documentElement.append(layer);
@@ -12,18 +12,21 @@ export function startHtmlPresence(win:Window,publish:(geometry:PresenceGeometry)
  const target=(id:string)=>{const nodes=[...doc.querySelectorAll('[data-af-id]')].filter(node=>node.getAttribute('data-af-id')===id);return nodes.length===1&&safe(nodes[0]!)?nodes[0]!:null;};
  const emit=()=>publish({cursor,selection:captureSelection(doc)?.ranges??null});
  const paint=()=>{
-  const viewers=input?.viewers??[],prefs=input?.preferences;
-  paintSelections(selections,prefs?.showSelections?viewers.map(viewer=>({...viewer,actor:viewer.label,selection:viewer.selection?{ranges:viewer.selection}:null})):[]);
+  // One person, one mark: their sessions collapse to the latest (model presenceReaders), a cursor is kept per person so a
+  // session handing over glides instead of doubling, and a selection carries the name only when no cursor of theirs does.
+  const viewers=presenceReaders(input?.viewers??[]),prefs=input?.preferences;
   const shown=new Set<string>();
   if(prefs?.showCursors)for(const viewer of viewers){const c=viewer.cursor,node=c&&target(c.nodeId);if(!node||!c)continue;const rect=node.getBoundingClientRect(),x=rect.x+rect.width*c.x,y=rect.y+rect.height*c.y;
    if(x<0||y<0||x>win.innerWidth||y>win.innerHeight)continue;
-   shown.add(viewer.id);const at=`${c.nodeId}:${c.x}:${c.y}`;let cursor=cursors.get(viewer.id);
-   if(!cursor){const mark=doc.createElement('div');mark.setAttribute('data-af-presence-cursor',viewer.id);Object.assign(mark.style,{position:'fixed',color:'#2563eb',font:'12px sans-serif',background:'white',borderRadius:'3px',padding:'2px',pointerEvents:'none',userSelect:'none'});layer.append(mark);cursor={mark,at};cursors.set(viewer.id,cursor);}
+   const reader=presenceReader(viewer);shown.add(reader);const at=`${c.nodeId}:${c.x}:${c.y}`;let cursor=cursors.get(reader);
+   if(!cursor){const mark=doc.createElement('div');Object.assign(mark.style,{position:'fixed',color:'#2563eb',font:'12px sans-serif',background:'white',borderRadius:'3px',padding:'2px',pointerEvents:'none',userSelect:'none'});layer.append(mark);cursor={mark,at};cursors.set(reader,cursor);}
+   cursor.mark.setAttribute('data-af-presence-cursor',viewer.id);
    const glide=cursor.at!==at;cursor.at=at;
    Object.assign(cursor.mark.style,{transition:glide?`left ${PRESENCE_POINTER_THROTTLE_MS}ms linear, top ${PRESENCE_POINTER_THROTTLE_MS}ms linear`:'none',left:`${x}px`,top:`${y}px`});
    const label=`↖ ${viewer.label}`;if(cursor.mark.textContent!==label)cursor.mark.textContent=label;
   }
   for(const [id,cursor] of cursors)if(!shown.has(id)){cursor.mark.remove();cursors.delete(id);}
+  paintSelections(selections,prefs?.showSelections?viewers.map(viewer=>({...viewer,actor:viewer.label,named:!shown.has(presenceReader(viewer)),selection:viewer.selection?{ranges:viewer.selection}:null})):[]);
  };
  const move=(event:PointerEvent)=>{const origin=event.target as Element;const node=origin?.closest?.('[data-af-id]');if(!node||!safe(origin)||!safe(node)||target(node.getAttribute('data-af-id')!)!==node){cursor=null;emit();return;}const rect=node.getBoundingClientRect();cursor=rect.width>0&&rect.height>0?{nodeId:node.getAttribute('data-af-id')!,x:Math.max(0,Math.min(1,(event.clientX-rect.x)/rect.width)),y:Math.max(0,Math.min(1,(event.clientY-rect.y)/rect.height))}:null;emit();};
  const leave=()=>{cursor=null;emit();};

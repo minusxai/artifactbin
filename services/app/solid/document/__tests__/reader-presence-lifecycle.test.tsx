@@ -117,7 +117,7 @@ it('publishes the frame\'s region caret and paints collaborators\' region carets
  const sentRegion:unknown[]=[],painted:unknown[]=[],published:Array<Record<string,unknown>>=[];
  const controller={send:(command:unknown)=>painted.push(command),subscribe:()=>()=>{},subscribeRegion:(listener:(message:unknown)=>void)=>{regionListener=listener;return()=>{regionListener=()=>{};};},sendRegion:(message:unknown)=>sentRegion.push(message),regionsEnabled:()=>enabled} as unknown as NonNullable<DocumentRuntimeRef['current']>;
  const prefs={visible:true,shareCursor:true,shareSelection:true,showCursors:true,showSelections:true};
- const engine=startReaderPresence({revision:'1',nonce:'n',active:true,controller,backend:{publishPresence:async input=>{published.push(input as unknown as Record<string,unknown>);return 'own';}},preferences:()=>prefs,changed:()=>{}});
+ const engine=startReaderPresence({revision:'1',nonce:'n',active:true,controller,backend:{publishPresence:async input=>{published.push(input as unknown as Record<string,unknown>);return {id:'own',colorId:'b'.repeat(64)};}},preferences:()=>prefs,changed:()=>{}});
  await waitFor(()=>expect(published).toHaveLength(1));
  // The caret's publish is debounced on the session clock: faked here, and its pending timer run, so no real wait decides it.
  const debounced=async(report:()=>void)=>{vi.useFakeTimers({toFake:['setTimeout','clearTimeout']});try{report();await vi.runOnlyPendingTimersAsync();}finally{vi.useRealTimers();}};

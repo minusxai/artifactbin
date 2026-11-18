@@ -1,6 +1,6 @@
 import type {PresenceIdentity,PresenceFrame,PresenceGeometry,PresencePaint,PresencePublication,PresenceViewer,ReaderPreferences} from './contract';
 import type {RegionCaret} from '@artifactbin/contracts';
-import {PRESENCE_HEARTBEAT_MS,PRESENCE_POINTER_THROTTLE_MS,presenceGeometry,presenceRoster,regionCaret} from './model';
+import {PRESENCE_HEARTBEAT_MS,PRESENCE_POINTER_THROTTLE_MS,presenceGeometry,presenceReaders,presenceRoster,regionCaret} from './model';
 export interface ReaderPresencePorts {
  session:string; revision:string; nonce:string;
  readPreferences():ReaderPreferences;
@@ -29,12 +29,15 @@ export function createReaderPresenceSession(ports:ReaderPresencePorts){
   // Older publishers expose account identity only on the own session's trusted room entry.
   ownColor??=roster.viewers.find(viewer=>viewer.id===ownId)?.colorId??null;
   const identityKnown=ownColor!==null||!geometryViewers.some(viewer=>viewer.colorId);
-  const current=geometryViewers.filter(viewer=>!ownColor||viewer.colorId!==ownColor);
+  // A person never sees themselves: none of their own account's sessions (another tab, an earlier load of this one)
+  // is listed or drawn, and every other person appears once (model presenceReaders).
+  const current=presenceReaders(geometryViewers.filter(viewer=>!ownColor||viewer.colorId!==ownColor));
   const stats=roster.readers;
   const total=stats&&Number.isInteger(stats.total)&&stats.total>=0&&Number.isFinite(stats.expiresAt)
    ? (now<stats.expiresAt?stats.total:0)
-   : (identityKnown?new Set(current.map(viewer=>viewer.colorId??viewer.id)).size:0);
-  ports.changed(ownId&&identityKnown?current:[],ownId?total:0);ports.paint({viewers:ownId?geometryViewers:[],preferences:ports.readPreferences()});
+   : (identityKnown?current.length:0);
+  const others=ownId&&identityKnown?current:[];
+  ports.changed(others,ownId?total:0);ports.paint({viewers:others,preferences:ports.readPreferences()});
  };
  const publish=async()=>{if(closed)return;if(busy){pending=true;return;}busy=true;const prefs=ports.readPreferences(),visible=prefs.visible&&ports.active();try{const id=await ports.publish({session:ports.session,revision:ports.revision,visible,cursor:prefs.visible&&prefs.shareCursor&&ports.active()?geometry.cursor:null,selection:prefs.visible&&prefs.shareSelection&&ports.active()?geometry.selection:null,...(region&&prefs.visible&&prefs.shareCursor&&ports.active()?{region}:{})});if(!closed&&id){ownId=typeof id==='string'?id:id.id;ownColor=typeof id==='string'?ownColor:id.colorId;paint();}}catch{/* Ephemeral state heals on the next heartbeat, never replays a mutation. */}finally{busy=false;if(closed){hide();return;}if(pending&&!closed){pending=false;void publish();}}};
  const disconnect=ports.connect(next=>{if(closed)return;roster=next;ports.clock.clearTimeout(countExpiry);
