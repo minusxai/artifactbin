@@ -8,6 +8,9 @@ export interface BundlePlan { html:string; entryPath:string; dependencies:readon
 /** Backend namespaces already supplied atomically or retained from trusted page metadata; how a bare save keeps links. */
 export interface BundleResolutionContext {
  /** A save that carries no project snapshot (bare HTML): a link to a file it does not hold stays as written. */
- linksAsWritten?:boolean }
+ linksAsWritten?:boolean;
+ /** Its files are served at their own paths, the HTML as written (a draft): a file linked as a dataset may also be linked
+  * or loaded as a file, and is a dataset. A published page's references are rewritten to one address per file instead. */
+ filesServedByPath?:boolean }
 /** Reverse only admitted scoped asset/dataset bindings; retain canonical node identities byte-for-byte. */
 export interface AuthoringHtmlOptions {server:string;pageId:string;entryPath:string;receipts:readonly ({path:string}&PublicationBundleMapping)[]}

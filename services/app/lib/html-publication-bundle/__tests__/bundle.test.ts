@@ -18,6 +18,13 @@ describe('dependency publication plan',()=>{
  expect(plan.dependencies.at(-1)?.kind).toBe('dataset');
  expect(plan.rewrite(html,'index.html',new Map([['css/main.css','/a/CSS123/raw?v=1'],['img/a.svg','/a/IMG123/raw?v=1'],['data/tasks.csv','ref:DATA12']]))).toContain('href="ref:DATA12"');
  });
+ it('refuses a file a published page both reads as a dataset and links as a file, naming both uses',()=>{
+ const html='<link rel="af-dataset" data-af-name="weekly" href="./weekly.csv"><a href="./weekly.csv" download>CSV</a>',files=[file('weekly.csv','week\n1','text/csv')];
+ expect(()=>planPublicationBundle(html,{entryPath:'report.html',files})).toThrow('weekly.csv is linked as a dataset (<link rel="af-dataset"> in report.html) and as a file (<a href> in report.html)');
+ expect(()=>planPublicationBundle('<a href="./weekly.csv">CSV</a><link rel="af-dataset" data-af-name="weekly" href="./weekly.csv">',{entryPath:'report.html',files})).toThrow('weekly.csv is linked as a dataset (<link rel="af-dataset"> in report.html) and as a file (<a href> in report.html)');
+ // Where files are served at their own paths (a draft), both uses hold: the file is a dataset, whichever comes first.
+ for(const page of [html,'<a href="./weekly.csv">CSV</a><link rel="af-dataset" data-af-name="weekly" href="./weekly.csv">'])expect(planPublicationBundle(page,{entryPath:'report.html',files},{filesServedByPath:true}).dependencies.map(d=>[d.path,d.kind])).toEqual([['weekly.csv','dataset']]);
+ });
  it('lists missing files before an upload can start',()=>expect(()=>planPublicationBundle('<img src="./missing.svg">',{entryPath:'index.html',files:[]})).toThrow('missing.svg'));
  it('rejects traversal, duplicate paths, invalid base64 and CSS cycles',()=>{
  for(const files of [[file('../escape','x')],[file('a','x'),file('./a','y')],[{path:'a',contentType:'text/plain',base64:'???'}]])expect(()=>planPublicationBundle('',{entryPath:'index.html',files})).toThrow();
