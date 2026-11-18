@@ -148,3 +148,26 @@ export function createBearerReader(o: BearerReaderOptions): TokenReader {
     },
   };
 }
+
+/** A group's sign-in that is live now, by its token row's id (`readLiveGroupSignIn`). */
+export interface LiveGroupSignIn { id: string; groupId: string; groupRole: 'member' | 'editor'; issuedBy: string; expiresAt: string | null }
+
+/**
+ * A GROUP'S SIGN-IN BY ITS ID, live now by exactly what the bearer read above decides for such a row: the read view's
+ * `tokens.live` (row, expiry, family fence, `GROUP_SIGN_IN_RULE`, the approval for a service's) and, for a service's
+ * (`grant_id`), that service still configured with its opt-in at the origin its approval recorded. Also refused: a row
+ * bound to a configured service's origin rather than an API (never minted; a group's credential is for this API). The
+ * check a group's exchanged service token re-asks of its parent at the exchange and at every introspection. One
+ * statement; null when not live, not a group's, or absent.
+ */
+export async function readLiveGroupSignIn(o: { db: Queryable; readSchema?: string; serviceAudiences?: readonly ServiceAudience[] }, tokenId: string): Promise<LiveGroupSignIn | null> {
+  const views = plainIdentifier(o.readSchema ?? 'identity', 'read schema');
+  const row = (await o.db.query<{ live: boolean; user_id: string | null; group_id: string | null; group_role: string | null; issued_by: string | null; grant_id: string | null; audience: string | null; expires_at: string | Date | null; service_origin: string | null }>(
+    `SELECT t.live, t.user_id, t.group_id, t.group_role, t.issued_by, t.grant_id, t.audience, t.expires_at, g.service_origin FROM ${views}.tokens t
+      LEFT JOIN ${views}.group_sign_in_grants g ON g.id=t.grant_id WHERE t.id=$1`, [tokenId])).rows[0];
+  const audiences = o.serviceAudiences ?? [];
+  if (!row || row.live !== true || row.user_id || !row.group_id || !row.issued_by || (row.group_role !== 'member' && row.group_role !== 'editor')) return null;
+  if (!row.audience || audiences.some(service => service.origin === row.audience)) return null;
+  if (row.grant_id && !groupSignInServiceConfigured(audiences, row.issued_by, row.service_origin)) return null;
+  return { id: tokenId, groupId: row.group_id, groupRole: row.group_role, issuedBy: row.issued_by, expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null };
+}

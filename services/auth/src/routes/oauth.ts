@@ -1,6 +1,6 @@
 import { BodyTooLargeError, readBody, renderConnectionPage } from '@artifactbin/utils';
 import { escapeHtml } from '@artifactbin/utils/escape';
-import {API_RESOURCE_PATH, GROUP_PRINCIPAL_REFUSED, IdentityError, INTERNAL_MINT_PATH, SERVICE_TOKEN_PATH, isGroupActor, isGroupPrincipalRole, type GroupPrincipalRole, type ServiceAudience, type ServiceTokenParent} from '@artifactbin/contracts';
+import {API_RESOURCE_PATH, GROUP_PRINCIPALS_NOT_ACCEPTED, IdentityError, INTERNAL_MINT_PATH, SERVICE_TOKEN_PATH, isGroupActor, isGroupPrincipalRole, type GroupPrincipalRole, type ServiceAudience, type ServiceTokenParent} from '@artifactbin/contracts';
 /**
  * OAuth 2.1 provider for `/api`: discovery, dynamic client registration,
  * authorization-code + PKCE consent, and rotating refresh tokens. Access
@@ -15,7 +15,9 @@ import {API_RESOURCE_PATH, GROUP_PRINCIPAL_REFUSED, IdentityError, INTERNAL_MINT
  * browser session (same Origin, as every cookie-borne write) or an ordinary API bearer, for a short-lived token for one
  * configured service (../identity/service-tokens, `parent` naming that credential), and no refresh token: the browser
  * page or agent asks again before it expires. A service token or an exchanged one is no bearer here, so none is
- * exchanged again.
+ * exchanged again. An agent signed in AS A GROUP exchanges its own API bearer the same way, for a service that opts in
+ * (`group_principals`; otherwise 403 `GROUP_PRINCIPALS_NOT_ACCEPTED`): a group's service token (../identity/service-tokens
+ * `signGroupServiceToken`), never past the group sign-in, which is read again here by the bearer read's own rule.
  *
  * A FIRST-PARTY client (IDENTITY__OAUTH_CLIENTS `first_party`, identity/oauth `parseOAuthClients`) is part of this
  * deployment's own sign-in: `/oauth/authorize` answers a signed-in browser with its code at once (no consent page) and
@@ -44,7 +46,8 @@ import {
   type OAuthStore,
   protectedResourceMetadata,
 } from '../identity/oauth';
-import { signServiceToken } from '../identity/service-tokens';
+import { signGroupServiceToken, signServiceToken } from '../identity/service-tokens';
+import type { LiveGroupSignIn } from '../identity/bearer';
 import type { AuthApp, SessionStore } from '../parts';
 
 type App = AuthApp;
@@ -103,6 +106,8 @@ interface OAuthRoutesOptions {
   serviceAudiences?: readonly ServiceAudience[];
   /** The exchanged tokens' signing key (service-tokens `serviceTokenKey` of AUTH__SECRET); null: the exchange answers 503. */
   serviceTokenKey?: Buffer | null;
+  /** A group's exchanged tokens' signing key (service-tokens `groupServiceTokenKey` of AUTH__SECRET); null: a group's exchange answers 503. */
+  groupServiceTokenKey?: Buffer | null;
   /** Group sign-ins (../identity-store/accounts `mintGroupSignIn` and the level check); absent: they answer 503. */
   groupSignIns?: GroupSignIns;
 }
@@ -112,6 +117,8 @@ export interface GroupSignIns {
   mint(input: {issuedBy: string; groupId: string; role: GroupPrincipalRole; audience: string; scope: string}): Promise<{id: string; token: string}>;
   /** The live group's name when `userId` holds at least `role` on it (`groupLevelHeldSql`), else null. */
   heldName(userId: string, groupId: string, role: GroupPrincipalRole): Promise<string | null>;
+  /** The group sign-in `tokenId`, live now by the bearer read's rule (../identity/bearer `readLiveGroupSignIn`), else null. */
+  live(tokenId: string): Promise<LiveGroupSignIn | null>;
 }
 /** A grant's group principal, when it is a group's sign-in. */
 interface GrantGroup { id: string; role: GroupPrincipalRole }
@@ -210,26 +217,46 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
       return new Response(JSON.stringify({error:'temporarily_unavailable'}),{status:503,headers:{'Content-Type':'application/json',...NO_STORE}});
     }
   });
+  /** The configured service a body's `audience` names (undefined: none), or the 413 for a body over the limit. */
+  const serviceAsked=async(request:Request):Promise<ServiceAudience|undefined|Response>=>{
+    let requested:unknown;
+    try{requested=(JSON.parse(await readBody(request,{limit:AUTH_BODY_LIMIT,as:'text'})) as {audience?:unknown}|null)?.audience;}
+    catch(error){if(error instanceof BodyTooLargeError)return payloadTooLarge();requested=null;}
+    return typeof requested==='string'?(o.serviceAudiences??[]).find(entry=>entry.id===requested):undefined;
+  };
   app.post(SERVICE_TOKEN_PATH, async (c) => {
     const actor=c.get('actor') ?? ANONYMOUS;
     const refuse=(status:number,error:string,hint?:string)=>new Response(JSON.stringify({error,...(hint?{hint}:{})}),{status,headers:{'Content-Type':'application/json',...NO_STORE}});
-    // A group's sign-in has no person to act as at a service: refused as every route refuses it.
-    if(isGroupActor(actor))return refuse(403,GROUP_PRINCIPAL_REFUSED,'A sign-in acting as a group is not exchanged.');
+    const issuedAnswer=(issued:{token:string;expiresAt:string},service:ServiceAudience)=>new Response(JSON.stringify({access_token:issued.token,token_type:'Bearer',expires_in:Math.round((Date.parse(issued.expiresAt)-Date.now())/1000),expires_at:issued.expiresAt,audience:service.id,resource:service.origin}),{status:200,headers:{'Content-Type':'application/json',...NO_STORE}});
+    if(isGroupActor(actor)){
+      // An agent signed in as a group (always a bearer): the group itself at that service, if the service opts in.
+      const service=await serviceAsked(c.req.raw);
+      if(service instanceof Response)return service;
+      if(!service)return refuse(400,'invalid_audience','Name a configured service id.');
+      if(service.groupPrincipals!==true)return refuse(403,GROUP_PRINCIPALS_NOT_ACCEPTED,'This service does not accept an agent signed in as a group.');
+      if(!o.groupServiceTokenKey||!o.groupSignIns)return refuse(503,'temporarily_unavailable');
+      // The sign-in again, by the bearer read's rule, and exactly the group, level and issuer the bearer named.
+      let live:LiveGroupSignIn|null;
+      try{live=await o.groupSignIns.live(actor.tokenId);}catch{return refuse(503,'temporarily_unavailable');}
+      if(!live||live.groupId!==actor.principalGroupId||live.groupRole!==actor.principalGroupRole||live.issuedBy!==actor.issuedBy)
+        return refuse(401,'authentication_required','The group sign-in is no longer live: sign in again.');
+      let issued;
+      try{issued=signGroupServiceToken(o.groupServiceTokenKey,service,{group:{id:live.groupId,role:live.groupRole,issuedBy:live.issuedBy},parent:{kind:'token',id:live.id},notAfter:live.expiresAt?Date.parse(live.expiresAt):null});}
+      catch{return refuse(401,'authentication_required','The group sign-in is no longer live: sign in again.');}
+      return issuedAnswer(issued,service);
+    }
     const parent:ServiceTokenParent|null=actor.credential==='session'&&actor.sessionId?{kind:'session',id:actor.sessionId}:actor.credential==='bearer'&&actor.tokenId?{kind:'token',id:actor.tokenId}:null;
     if(!parent||!actor.userId)return refuse(401,'authentication_required','Send this host\'s own API bearer, or call from a signed-in page.');
     // A cookie is ambient: only this deployment's own pages may spend it here. A bearer is explicit and needs no Origin.
     if(parent.kind==='session'&&!sameOrigin(c.req.raw))return refuse(403,'forbidden');
-    let requested:unknown;
-    try{requested=(JSON.parse(await readBody(c.req.raw,{limit:AUTH_BODY_LIMIT,as:'text'})) as {audience?:unknown}|null)?.audience;}
-    catch(error){if(error instanceof BodyTooLargeError)return payloadTooLarge();requested=null;}
-    const service=typeof requested==='string'?(o.serviceAudiences??[]).find(entry=>entry.id===requested):undefined;
+    const service=await serviceAsked(c.req.raw);
+    if(service instanceof Response)return service;
     if(!service)return refuse(400,'invalid_audience','Name a configured service id.');
     if(!o.serviceTokenKey)return refuse(503,'temporarily_unavailable');
     // The same account rule as every grant here: a verified email account this deployment admits.
     const identity=await o.sessions.identity?.(actor.userId).catch(()=>null);
     if(!identity?.email||!identity.emailVerified||identity.userId!==actor.userId||(o.admitIdentity&&!await o.admitIdentity(identity)))return refuse(403,'deployment_admission_required');
-    const issued=signServiceToken(o.serviceTokenKey,service,{userId:actor.userId,parent});
-    return new Response(JSON.stringify({access_token:issued.token,token_type:'Bearer',expires_in:Math.round((Date.parse(issued.expiresAt)-Date.now())/1000),expires_at:issued.expiresAt,audience:service.id,resource:service.origin}),{status:200,headers:{'Content-Type':'application/json',...NO_STORE}});
+    return issuedAnswer(signServiceToken(o.serviceTokenKey,service,{userId:actor.userId,parent}),service);
   });
   const meta = (body: unknown) => new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=3600', 'Access-Control-Allow-Origin': '*' } });
   app.get('/.well-known/oauth-authorization-server', (c) => meta(authServerMetadata(base(c.req.raw))));

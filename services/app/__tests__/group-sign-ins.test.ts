@@ -9,7 +9,7 @@
 import {readFile,readdir,stat,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {beforeEach,expect,it,onTestFinished} from 'vitest';
-import {GROUP_PRINCIPAL_REFUSED,IDENTITY_INTROSPECT_PATH,SERVICE_AUTH_HEADER,SERVICE_TOKEN_PATH} from '@artifactbin/contracts';
+import {GROUP_PRINCIPAL_REFUSED,GROUP_PRINCIPALS_NOT_ACCEPTED,IDENTITY_INTROSPECT_PATH,SERVICE_AUTH_HEADER,SERVICE_TOKEN_PATH} from '@artifactbin/contracts';
 import {createAuthComposedHost} from '@/test/helpers/auth-host';
 import {AUTH_SECRET,getDb,syncIdentitySettings} from '@/lib/platform';
 import {overrideConfig} from '@/lib/platform/config';
@@ -134,8 +134,8 @@ it('acts as the group, not the person: introspection, the lists, and one refusal
  }
  // A public page reads as it would for a member of the group.
  expect((await host.api(issued.access_token,`/api/artifacts/${page}`)).status).toBe(200);
- // Never exchanged for a service: there is no person to act as there.
- expect((await host.json(await host.post(SERVICE_TOKEN_PATH,{audience:'warehouse'},{authorization:`Bearer ${issued.access_token}`}))).body).toMatchObject({error:GROUP_PRINCIPAL_REFUSED});
+ // Never exchanged for a service that does not opt in to group principals (group-service-tokens.test.ts has those that do).
+ expect(await host.json(await host.post(SERVICE_TOKEN_PATH,{audience:'warehouse'},{authorization:`Bearer ${issued.access_token}`}))).toMatchObject({status:403,body:{error:GROUP_PRINCIPALS_NOT_ACCEPTED}});
  // The person sees it among their tokens, labelled with the group and level; the group's Admin sees it on the group.
  expect((await host.myTokens(eve.cookie)).find(token=>token.id===issued.id)).toMatchObject({group:{id:team.id,name:'Team',role:'editor'},status:'active'});
  expect((await host.myTokens(eve.cookie)).find(token=>token.id===issued.id)).not.toHaveProperty('issued_by');

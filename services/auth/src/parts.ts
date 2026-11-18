@@ -1,11 +1,12 @@
 /** Shared identity and login boundary. No proxy transport or rate policy. */
-import {CODE_DELIVERY_HEADER, REVALIDATE_ACTOR_HEADER, ANONYMOUS, IDENTITY_SCHEMA, isGroupActor, isInternalApiPath, parseAliasOrigins, parseServiceAudiences, type Actor, type EventsService, type Part, type Queryable, type TokenReader, type TransactionalQueryable, type Upstream} from '@artifactbin/contracts';
+import {CODE_DELIVERY_HEADER, REVALIDATE_ACTOR_HEADER, ANONYMOUS, IDENTITY_SCHEMA, isGroupActor, isInternalApiPath, parseAliasOrigins, parseServiceAudiences, type Actor, type EventsService, type Part, type Queryable, type ServiceAudience, type TokenReader, type TransactionalQueryable, type Upstream} from '@artifactbin/contracts';
 import type {Hono} from 'hono';
 import {BodyTooLargeError,readBody,assemble,buildAssetRequest,buildAssetResponse,attachActor,actorOf} from '@artifactbin/utils';
 import {acceptedOriginsOf,baseUrlOf,mountOAuthRoutes,AUTH_BODY_LIMIT,payloadTooLarge,type GroupSignIns} from './routes/oauth';
 import {say} from './events';
 import {sessionAuthority} from './session-authority';
-import {serviceTokenKey} from './identity/service-tokens';
+import {groupServiceTokenKey,serviceTokenKey} from './identity/service-tokens';
+import {readLiveGroupSignIn} from './identity/bearer';
 import {ACCESS_TOKEN_TTL_SECONDS,createOAuthStore,parseOAuthClients} from './identity/oauth';
 import {mintGroupSignIn} from './identity-store/accounts';
 import {groupLevelHeldSql} from './identity-store/rules';
@@ -188,7 +189,8 @@ export function oauthRoutes(o: AuthOptions): Part<AuthEnv> {
         aliasOrigins: aliasOriginsOf(o),
         serviceAudiences: parseServiceAudiences(readEnv(o.env, 'IDENTITY__SERVICE_AUDIENCES')),
         serviceTokenKey: o.cookieSecret ? serviceTokenKey(o.cookieSecret) : null,
-        groupSignIns: groupSignInsOf(o.identityDb, schema, readEnv(o.env, 'IDENTITY__SCHEMA') ?? IDENTITY_SCHEMA, o.events),
+        groupServiceTokenKey: o.cookieSecret ? groupServiceTokenKey(o.cookieSecret) : null,
+        groupSignIns: groupSignInsOf(o.identityDb, schema, readEnv(o.env, 'IDENTITY__SCHEMA') ?? IDENTITY_SCHEMA, parseServiceAudiences(readEnv(o.env, 'IDENTITY__SERVICE_AUDIENCES')), o.events),
       });
     },
   };
@@ -198,7 +200,7 @@ export function oauthRoutes(o: AuthOptions): Part<AuthEnv> {
  * GROUP SIGN-INS on the auth host's own database (contracts identity-service `GROUP_SIGN_IN_RULE`): the identity store's
  * guarded mint (24 h, as every OAuth access token) and the level check the consent page asks, by the one rule.
  */
-function groupSignInsOf(db: Queryable, authSchema: string, readSchema: string, events?: EventsService): GroupSignIns {
+function groupSignInsOf(db: Queryable, authSchema: string, readSchema: string, serviceAudiences: readonly ServiceAudience[], events?: EventsService): GroupSignIns {
   const t = identityTables(authSchema);
   return {
     // Audited as a mint for the person who authorised it, at every issue and every refresh.
@@ -209,6 +211,7 @@ function groupSignInsOf(db: Queryable, authSchema: string, readSchema: string, e
     },
     heldName: async (userId, groupId, role) => (await db.query<{name: string}>(`SELECT g.name FROM ${t.groups} g WHERE g.id=$2::text AND g.deleted_at IS NULL
       AND COALESCE((SELECT issuer.active AND issuer.kind='account' AND NOT issuer.test_account FROM ${readSchema}.users issuer WHERE issuer.id=$1::text), false) AND ${groupLevelHeldSql(t, '$1::text', '$2::text', '$3::text')}`, [userId, groupId, role])).rows[0]?.name ?? null,
+    live: tokenId => readLiveGroupSignIn({db, readSchema, serviceAudiences}, tokenId),
   };
 }
 
