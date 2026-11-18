@@ -114,7 +114,7 @@ describe('sql.mjs query --chart', () => {
       // The server's reason reaches the caller; the rows stay under the relay's request cap.
       await writeFile(spec, JSON.stringify({ recipe: 'pie', bindings: {} }));
       await expect(query('DATA12', 'select k, v from rows', { chart: spec, 'chart-output': path.join(root, 'bad.png') }))
-        .rejects.toMatchObject({ code: 'invalid_chart', message: expect.stringContaining('Chart refused: unknown recipe "pie"') });
+        .rejects.toMatchObject({ code: 'invalid_chart', message: expect.stringMatching(/^Request refused \(HTTP 400\): unknown recipe "pie"/) });
       await writeFile(spec, JSON.stringify(chart));
       readRows = Array.from({ length: 10000 }, (_, i) => ({ k: `${'a longer category name '.repeat(20)}${i}`, v: i }));
       sent.length = 0;

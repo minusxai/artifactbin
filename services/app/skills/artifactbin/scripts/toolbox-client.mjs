@@ -91,8 +91,7 @@ try{response=(await (await platform()).retryFetch(()=>originRequest(server,route
      method,idempotencyKey:headers['Idempotency-Key'],safeToRepeat,signal,policy:retryDelays?{
      delaysMs:retryDelays}:undefined})).response;}
 catch{throw new ToolError(unsafe?'outcome_unknown':'network_unavailable',
-     unsafe?'Write outcome is unknown.':'Server request failed.',unsafe?5:1,
-     retryHint(unsafe));}
+     unsafe?'Write outcome is unknown.':'Server request failed.',unsafe?5:1,retryHint(unsafe));}
 if(response.status===401&&attempt===0&&connection?.refreshToken){const shared=await platform();
      connection=await shared.refreshCredentials(connection,root,{fetch:fetcher,signal});continue;}
 if(response.ok){if(raw)return response;try{const data=await response.json();
@@ -105,7 +104,7 @@ if(response.ok){if(raw)return response;try{const data=await response.json();
 const code=typeof refusal.error==='string'?refusal.error:refusal.error?.code??
      'http_'+response.status,said=refusal.message??refusal.error?.message;
 throw new ToolError(code,`Request refused (HTTP ${response.status})`+(typeof said==='string'&&
-     said?': '+said.slice(0,500):'.'),[401,403,404].includes(
+     said?': '+redact(said,connection?.token).slice(0,500):'.'),[401,403,404].includes(
      response.status)?3:response.status===409?4:unsafe&&response.status>=500?5:1,refusal.hint??(
      response.status===409?conflictHint(refusal):
      unsafe?'Retain the journal; retry the exact supported intent after recovery.':
@@ -131,9 +130,12 @@ const authLapse=error=>(error?.code==='auth_required'||/^auth_required\b/.test(S
   error?.message)))&&!(error instanceof ToolError&&/^No saved grant/.test(error.message));
 /** The process exit code for a failure: 3 (auth/access) for a lapsed sign-in. */
 export const toolExit=error=>error?.exit??(authLapse(error)?3:1);
-/** An unexpected error's first line, bounded, with bearer values and token-like runs removed. */
-const causeOf=error=>{const line=String(error?.message??'').split('\n')[0].replace(/Bearer\s+\S+/gi,
-  'Bearer [redacted]').replace(/[A-Za-z0-9_.~+/=-]{32,}/g,'[redacted]').slice(0,300).trim();
+/** Text without bearer values or the presented token. */
+const redact=(text,token)=>(token?text.replaceAll(token,'[redacted]'):text).replace(
+  /Bearer\s+\S+/gi,'Bearer [redacted]');
+/** An unexpected error's first line, bounded, also without token-like runs. */
+const causeOf=error=>{const line=redact(String(error?.message??'').split('\n')[0]).replace(
+  /[A-Za-z0-9_.~+/=-]{32,}/g,'[redacted]').slice(0,300).trim();
   return line?' Cause: '+line:'';};
 export function toolFailure(name,error){
 if(authLapse(error))return {ok:false,code:'auth_required',message:
