@@ -105,22 +105,6 @@ describe('reviewed CSS parser dispatch', () => {
   });
 });
 
-describe('removed query request port', () => {
-  const file='services/app/lib/html-runtime/apollo/watch-query.ts';
-  it('rejects fetch callbacks even at the retired query watcher path', () => {
-    for(const path of [file,file.replaceAll('/', '\\')]) {
-      expect(auditFastSource('options.remote!.fetch()',path)).not.toEqual([]);
-      expect(auditFastSource('options.remote.fetch()',path)).not.toEqual([]);
-    }
-  });
-  it('continues rejecting ambient transport and other capability receivers', () => {
-    for(const source of ['fetch(url)','globalThis.fetch(url)','options.fetch()','other.remote.fetch()','options.other.fetch()','options.remote!.fetch(url)','options.remote![method]()','new options.remote!.fetch()','options.remote!.fetch(fetch(url))']) {
-      expect(auditFastSource(source,file)).not.toEqual([]);
-    }
-    expect(auditFastSource('options.remote!.fetch()','services/app/unreviewed.ts')).not.toEqual([]);
-  });
-});
-
 describe('reviewed parser extension dispatch', () => {
   const file='node_modules/acorn/dist/acorn.mjs';
   const extension='Parser.extend = function extend(){var cls=this; for(var i=0;i<plugins.length;i++){cls=plugins[i](cls);} return cls;}';

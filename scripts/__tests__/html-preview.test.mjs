@@ -6,14 +6,20 @@ import {join} from 'node:path';
 import {request} from 'node:http';
 import {startPreview} from '../../services/app/skills/artifactbin/scripts/preview-server.mjs';
 
+/** Runs `run(dir, start)` in a temporary directory; `start(options)` starts a preview of it, closed (with the directory removed) afterwards. */
+const withDir=async(prefix,run)=>{
+ const dir=await mkdtemp(join(tmpdir(),prefix));let session;
+ const start=async(options)=>session=await startPreview({root:dir,...options});
+ try{return await run(dir,start);}finally{await session?.close();await rm(dir,{recursive:true,force:true});}
+};
+
 test('private preview serves relative files, refuses writes, escapes and foreign hosts',async()=>{
- const dir=await mkdtemp(join(tmpdir(),'preview-'));let session;
- try {
+ await withDir('preview-',async(dir,start)=>{
   const root=join(dir,'site');await mkdir(join(root,'nested'),{recursive:true});
   await writeFile(join(root,'index.html'),'<script src="nested/app.js"></script>');
   await writeFile(join(root,'nested/app.js'),'fetch("./data.json")');await writeFile(join(root,'nested/data.json'),'[1]');
   await writeFile(join(dir,'secret'),'secret');await symlink(join(dir,'secret'),join(root,'escape'));await writeFile(join(root,'.env'),'secret');
-  session=await startPreview({root,port:0});
+  const session=await start({root,port:0});
   const page=await fetch(session.url);assert.equal(page.status,200);assert.match(await page.text(),/nested\/app.js/);
   assert.equal((await (await fetch(session.url+'__af_preview/source?path=%2F')).json()).html,'<script src="nested/app.js"></script>');
   assert.equal((await fetch(session.url+'__af_preview/source?path=%2F..%2Fsecret.html')).status,400);
@@ -24,14 +30,13 @@ test('private preview serves relative files, refuses writes, escapes and foreign
   for(const path of ['escape','.env','%2e%2e%2fsecret','nested/','missing'])assert.equal((await fetch(session.url+path)).status,404,path);
   assert.equal((await fetch(session.url,{method:'POST',body:'x'})).status,405);
   assert.equal(await new Promise((done,reject)=>{request(session.url,{headers:{host:'evil.example'}},r=>{r.resume();done(r.statusCode);}).on('error',reject).end();}),403);
- } finally {await session?.close();await rm(dir,{recursive:true,force:true});}
+ });
 });
 
 test('disk revisions include dependencies, atomic saves and deletions without modifying source',async()=>{
- const dir=await mkdtemp(join(tmpdir(),'preview-revisions-'));let session;
- try {
+ await withDir('preview-revisions-',async(dir,start)=>{
   await writeFile(join(dir,'index.html'),'<h1>Original</h1>');await writeFile(join(dir,'data.json'),'[1]');
-  session=await startPreview({root:dir,revisionIntervalMs:0});
+  const session=await start({revisionIntervalMs:0});
   const revision=async()=> (await (await fetch(session.url+'__af_preview/revision')).json()).revision;
   const first=await revision();
   const html=await (await fetch(session.url)).text();assert.match(html,/File changed/);assert.match(html,/Reload/);
@@ -45,17 +50,16 @@ test('disk revisions include dependencies, atomic saves and deletions without mo
   assert.equal((await fetch(session.url+'data.json')).status,404);
   // Reconnecting clients obtain the current revision without a retained server subscription.
   assert.equal(await revision(),await revision());
- }finally{await session?.close();await rm(dir,{recursive:true,force:true});}
+ });
 });
 
 test('oversized projects and files fail with actionable size errors',async()=>{
- const dir=await mkdtemp(join(tmpdir(),'preview-limit-'));let session;
- try {
+ await withDir('preview-limit-',async(dir,start)=>{
   const {open}=await import('node:fs/promises');const file=await open(join(dir,'large.bin'),'w');await file.truncate(33*1024*1024);await file.close();
-  session=await startPreview({root:dir,revisionIntervalMs:0});
+  const session=await start({revisionIntervalMs:0});
   const response=await fetch(session.url+'__af_preview/revision');assert.equal(response.status,413);assert.match((await response.json()).error,/limit|MiB/);
   const asset=await fetch(session.url+'large.bin');assert.equal(asset.status,413);assert.match(await asset.text(),/exceeds/);
- }finally{await session?.close();await rm(dir,{recursive:true,force:true});}
+ });
 });
 
 test('revision scans share concurrent work and obey an injected cache clock',async()=>{
@@ -76,16 +80,15 @@ test('revision limits bound file count and aggregate bytes',async()=>{
 });
 
 test('a linked local data file is served as a file, never as a dataset session: the preview takes no writes',async()=>{
- const root=await mkdtemp(join(tmpdir(),'preview-no-session-'));let session;
- try {
+ await withDir('preview-no-session-',async(root,start)=>{
   await writeFile(join(root,'index.html'),'<link rel="af-dataset" data-af-name="local" href="./data.json">');await writeFile(join(root,'data.json'),'[{"amount":1}]');
-  session=await startPreview({root,revisionIntervalMs:0});
+  const session=await start({root,revisionIntervalMs:0});
   const config=JSON.parse((await (await fetch(session.url)).text()).match(/<script[^>]*data-af="runtime"[^>]*>([\s\S]*?)<\/script>/)[1]);
   assert.equal(config.offline,true);assert.deepEqual(config.backends,[]);assert.equal(config.localPreview,undefined);assert.equal(config.datasets,undefined);
   assert.equal(await (await fetch(session.url+'data.json')).text(),'[{"amount":1}]');
   const posted=await fetch(session.url+'__af_preview/datasets/abc',{method:'POST',headers:{origin:new URL(session.url).origin,'content-type':'application/json'},body:'{"query":"{x}"}'});
   assert.equal(posted.status,405);
- }finally{await session?.close();await rm(root,{recursive:true,force:true});}
+ });
 });
 
 test('platform modules come only from closed /af/, /af/lib/ and /af/components/ paths, fetched once from the selected server',async()=>{
@@ -109,24 +112,23 @@ test('platform modules come only from closed /af/, /af/lib/ and /af/components/ 
 });
 
 test('private preview mounts only admitted versioned library bytes without eval permissions',async()=>{
- const dir=await mkdtemp(join(tmpdir(),'preview-libraries-'));let session;
- try {
+ await withDir('preview-libraries-',async(dir,start)=>{
   await writeFile(join(dir,'index.html'),'<script type="module">import * as vega from "/af/lib/vega-6.3.1/index.js";</script>');
-  session=await startPreview({root:dir,libraryAssets:{'/af/lib/vega-6.3.1/index.js':'export const version="6.3.1";'}});
+  const session=await start({libraryAssets:{'/af/lib/vega-6.3.1/index.js':'export const version="6.3.1";'}});
   const response=await fetch(session.url+'af/lib/vega-6.3.1/index.js'); assert.equal(response.status,200); assert.equal(await response.text(),'export const version="6.3.1";');
   assert.equal((await fetch(session.url+'af/lib/vega-999.0.0/index.js')).status,404); assert.doesNotMatch(response.headers.get('content-security-policy'),/'unsafe-eval'/);
- }finally{await session?.close();await rm(dir,{recursive:true,force:true});}
+ });
 });
 
 test('explicit export packs local component graphs and registered libraries without changing source',async()=>{
- const {readFile}=await import('node:fs/promises');const dir=await mkdtemp(join(tmpdir(),'preview-export-'));let session;
- try{
+ const {readFile}=await import('node:fs/promises');
+ await withDir('preview-export-',async(dir,start)=>{
   const html='<script type="module">import {lazy} from "./components/main.js";lazy();</script>';
   await mkdir(join(dir,'components'));await writeFile(join(dir,'index.html'),html);
   await writeFile(join(dir,'components/main.js'),'export const lazy=()=>import("./lazy.js");');await writeFile(join(dir,'components/lazy.js'),'export {value} from "/af/lib/fixture-1.0.0/index.js";');
-  session=await startPreview({root:dir,libraryAssets:{'/af/lib/fixture-1.0.0/index.js':'export const value=42;'}});
+  const session=await start({libraryAssets:{'/af/lib/fixture-1.0.0/index.js':'export const value=42;'}});
   const response=await fetch(session.url+'__af_preview/export-source?path=%2F');assert.equal(response.status,200);const packed=await response.json();assert.equal(packed.html,html);assert.match(packed.renderedHtml,/data:text\/javascript;base64,/);assert.match(packed.renderedHtml,/@afbin\/local-export/);assert.equal(await readFile(join(dir,'index.html'),'utf8'),html);
   for(const source of ['<script type="module">import "https://foreign.test/a.js";</script>','<script src="./missing.js"></script>','<script src="../outside.js"></script>']){await writeFile(join(dir,'index.html'),source);const failed=await fetch(session.url+'__af_preview/export-source?path=%2F');assert.equal(failed.status,422);assert.match((await failed.json()).error,/Local export failed/);assert.equal(await readFile(join(dir,'index.html'),'utf8'),source);}
   await writeFile(join(dir,'index.html'),'<script src="./link.js"></script>');await symlink(join(dir,'components/main.js'),join(dir,'link.js'));const failed=await fetch(session.url+'__af_preview/export-source?path=%2F');assert.equal(failed.status,422);assert.match((await failed.json()).error,/Symlink/);
- }finally{await session?.close();await rm(dir,{recursive:true,force:true});}
+ });
 });

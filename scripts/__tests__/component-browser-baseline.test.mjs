@@ -13,6 +13,7 @@ import {installedFiles,componentImport} from '../fixtures/component-baseline/pub
 const repo=path.resolve(import.meta.dirname,'../..');
 const directories=[];
 afterEach(async()=>{await Promise.all(directories.splice(0).map(directory=>rm(directory,{recursive:true,force:true})));});
+const whitePng=()=>sharp({create:{width:2,height:2,channels:4,background:'white'}}).png().toBuffer();
 const noAnimations=()=>({format:'frame-animation-settlement-v1',policy:'document-and-open-shadow-roots;finite-current-and-chained;two-frame-quiescence',shadowCoverage:'open-shadow-roots-only',shadowRoots:0,reducedMotion:false,startedAtMs:0,completedAtMs:0,elapsedMs:0,observed:0,uniqueAnimations:0,rounds:1,alreadyFinished:0,alreadyIdle:0,paused:[],infinite:[],counts:{finished:0,canceled:0,detached:0},timedOut:[]});
 async function setup(){const directory=await mkdtemp(path.join(tmpdir(),'component-baseline-'));directories.push(directory);return directory;}
 describe('default candidate reader gate',()=>{
@@ -230,7 +231,7 @@ describe('reader screenshot contract',()=>{
   });
 
   it('fails the capture with source-bound timeout evidence before taking a screenshot',async()=>{
-    const directory=await setup(),bytes=await sharp({create:{width:2,height:2,channels:4,background:'white'}}).png().toBuffer(),screenshot=vi.fn(async()=>bytes);
+    const directory=await setup(),bytes=await whitePng(),screenshot=vi.fn(async()=>bytes);
     const timeout={...noAnimations(),observed:1,timedOut:[{name:'stuck',playState:'running',duration:10000,iterations:1}]};
     const frame={url:()=> 'http://fixture.lvh.me/reader',evaluate:async fn=>fn.name==='settleFiniteFrameAnimations'?timeout:fn.name==='browserState'?{text:'Ready',controls:[],rows:[],overflow:0}:{stylesheets:[]}};
     const browser={newContext:async()=>({newPage:async()=>({on:()=>{},screenshot}),close:async()=>{}})};
@@ -243,14 +244,14 @@ describe('reader screenshot contract',()=>{
   });
 
   it.each(['jsx','html'])('settles the actual frame before either %s camera screenshot',async implementation=>{
-    const directory=await setup(),order=[],bytes=await sharp({create:{width:2,height:2,channels:4,background:'white'}}).png().toBuffer();
+    const directory=await setup(),order=[],bytes=await whitePng();
     const frame={url:()=> 'http://fixture.lvh.me/reader',evaluate:async fn=>{if(fn.name==='settleFiniteFrameAnimations'){order.push('settled');return noAnimations();}if(fn.name==='browserState')return {text:'Ready',controls:[],rows:[],overflow:0};return {faces:[],used:[],errors:[]};}};
     const captures=await captureBrowserBaseline({browser:{newContext:async()=>({newPage:async()=>({on:()=>{},evaluate:async fn=>fn.name==='settleFiniteFrameAnimations'?noAnimations():undefined}),close:async()=>{}})},mount:async()=>({frame,screenshot:async()=>{order.push('screenshot');return bytes;}}),implementation,sourceRevision:'a'.repeat(40),output:directory,screenshotMode:'document-frame',themes:['light'],viewports:[{width:800,height:600}],fixtures:[{id:'animation',states:[{id:'initial',actions:[]}]}]});
     expect(order).toEqual(['settled','settled','screenshot']);expect(captures[0].animationEvidence).toMatchObject({format:'frame-animation-settlement-v1',infinite:[],timedOut:[]});
   });
 
   it('waits for parent comment transitions after frame font work before the frame camera',async()=>{
-    const directory=await setup(),order=[],bytes=await sharp({create:{width:2,height:2,channels:4,background:'white'}}).png().toBuffer();
+    const directory=await setup(),order=[],bytes=await whitePng();
     let finishParent;const parentFinished=new Promise(resolve=>{finishParent=resolve;});
     const frame={url:()=> 'http://fixture.lvh.me/reader',evaluate:async fn=>{if(fn.name==='settleFiniteFrameAnimations'){order.push('frame');return noAnimations();}if(fn.name==='browserState')return {text:'Ready',controls:[],rows:[],overflow:0};return {faces:[],used:[],errors:[]};}};
     const page={on:()=>{},evaluate:async fn=>{if(fn.name==='settleFiniteFrameAnimations'){order.push('parent-start');await parentFinished;order.push('parent-finished');return {...noAnimations(),observed:1,counts:{finished:1,canceled:0,detached:0}};}}};
@@ -271,7 +272,7 @@ describe('reader screenshot contract',()=>{
     const directory=await setup(),dom=new JSDOM('<html><head><link rel="stylesheet" href="/a/Page123/assets?dependency=Missing"></head><body>Ready</body></html>',{url:'http://app.lvh.me/a/Page123/raw'});
     const saved=Object.getOwnPropertyDescriptor(globalThis,'document');globalThis.document=dom.window.document;
     try{
-      const bytes=await sharp({create:{width:2,height:2,channels:4,background:'white'}}).png().toBuffer();
+      const bytes=await whitePng();
       const frame={url:()=> 'http://app.lvh.me/a/Page123/raw',evaluate:async fn=>fn.name==='settleFiniteFrameAnimations'?noAnimations():fn.name==='browserResources'?fn():fn.name==='browserState'?{text:'Ready',controls:[],rows:[],overflow:0}:{faces:[],used:[],errors:[]}};
       const browser={newContext:async()=>({newPage:async()=>({on:()=>{},screenshot:async()=>bytes}),close:async()=>{}})};
       const captures=await captureBrowserBaseline({browser,mount:async()=>({frame}),implementation:'html',sourceRevision:'a'.repeat(40),output:directory,fixtures:[{id:'theme',states:[{id:'initial',actions:[]}]}]});
@@ -296,7 +297,7 @@ describe('reader screenshot contract',()=>{
   });
 
   it('captures a real mounted document frame only in explicit frame mode',async()=>{
-    const directory=await setup(),bytes=await sharp({create:{width:2,height:2,channels:4,background:'white'}}).png().toBuffer();
+    const directory=await setup(),bytes=await whitePng();
     const performAction=vi.fn(async()=>{}),screenshot=vi.fn(async()=>bytes),pageScreenshot=vi.fn(async()=>bytes);
     const frame={url:()=> 'http://fixture.lvh.me/a/Example1/raw',evaluate:async fn=>fn.name==='settleFiniteFrameAnimations'?noAnimations():fn.name==='browserState'?{text:'Ready',controls:[],rows:[],overflow:0}:fn.toString().includes('requestAnimationFrame')?undefined:{faces:[],used:[],errors:[]}};
     const browser={newContext:async()=>({newPage:async()=>({on:()=>{},evaluate:async fn=>fn.name==='settleFiniteFrameAnimations'?noAnimations():undefined,screenshot:pageScreenshot}),close:async()=>{}})};
@@ -309,7 +310,7 @@ describe('reader screenshot contract',()=>{
 
   it('captures the configured page viewport rather than cropping the html element',async()=>{
     const directory=await setup();const calls=[];
-    const bytes=await sharp({create:{width:2,height:2,channels:4,background:'white'}}).png().toBuffer();
+    const bytes=await whitePng();
     const frame={url:()=> 'http://fixture.lvh.me/a/Example1/raw',evaluate:async fn=>fn.name==='settleFiniteFrameAnimations'?noAnimations():fn.name==='browserState'?{text:'Ready',controls:[],rows:[],overflow:0}:{faces:[],used:[],errors:[]},locator:()=>{throw Error('Element screenshot would clip native top-layer UI');}};
     const browser={newContext:async options=>({newPage:async()=>({on:()=>{},screenshot:async screenshotOptions=>{calls.push({viewport:options.viewport,...screenshotOptions});return bytes;}}),close:async()=>{}})};
     const captures=await captureBrowserBaseline({browser,mount:async()=>({frame}),implementation:'jsx',sourceRevision:'a'.repeat(40),output:directory,fixtures:[{id:'dialog',states:[{id:'open',actions:[]}]}]});
@@ -350,7 +351,7 @@ describe('browser semantic collection',()=>{
     const saved=Object.fromEntries(['document','getComputedStyle','innerWidth'].map(key=>[key,Object.getOwnPropertyDescriptor(globalThis,key)]));
     Object.assign(globalThis,{document:dom.window.document,getComputedStyle:dom.window.getComputedStyle.bind(dom.window),innerWidth:800});
     try {
-      const bytes=await sharp({create:{width:2,height:2,channels:4,background:'white'}}).png().toBuffer();
+      const bytes=await whitePng();
       const frame={url:()=> 'http://fixture.lvh.me/a/Example1/raw',evaluate:async fn=>fn.name==='settleFiniteFrameAnimations'?noAnimations():fn.name==='browserState'?fn():{faces:[],used:[],errors:[]}};
       const browser={newContext:async()=>({newPage:async()=>({on:()=>{},screenshot:async()=>bytes}),close:async()=>{}})};
       const captures=await captureBrowserBaseline({browser,mount:async()=>({frame}),implementation:'jsx',sourceRevision:'a'.repeat(40),output:directory,fixtures:[{id:'controls',states:[{id:'initial',actions:[]}]}]});
@@ -363,7 +364,7 @@ describe('bounded independent reader capture',()=>{
   it('runs at most two contexts and returns fixture order despite completion order',async()=>{
     const directory=await setup();let active=0,peak=0,sequence=0;const completed=[];
     let releaseFirst;const secondScreenshot=new Promise(resolve=>{releaseFirst=resolve;});
-    const bytes=await sharp({create:{width:2,height:2,channels:4,background:'white'}}).png().toBuffer();
+    const bytes=await whitePng();
     const browser={newContext:async()=>{const id=sequence++;active++;peak=Math.max(peak,active);return {newPage:async()=>({id,on:()=>{},screenshot:async()=>{completed.push(id);if(id===1)releaseFirst();return bytes;}}),close:async()=>{active--;}};}};
     const mount=async({page})=>{if(page.id===0)await secondScreenshot;return {frame:{url:()=> 'http://fixture.lvh.me/a/Example1/raw',evaluate:async fn=>fn.name==='settleFiniteFrameAnimations'?noAnimations():fn.name==='browserState'?{text:String(page.id),controls:[],rows:[],overflow:0}:{faces:[],used:[],errors:[]}}};};
     const captures=await captureBrowserBaseline({browser,workerBrowsers:[browser,browser],mount,implementation:'jsx',sourceRevision:'a'.repeat(40),output:directory,fixtures:[{id:'one',states:[{id:'initial',actions:[]}]}]});
@@ -425,7 +426,7 @@ describe('used font evidence',()=>{
       return undefined;
     }};
     targetFrame=frame;
-    const png=await sharp({create:{width:2,height:2,channels:4,background:'white'}}).png().toBuffer();
+    const png=await whitePng();
     const page={on:(type,handler)=>{const group=handlers.get(type)||[];group.push(handler);handlers.set(type,group);},screenshot:async()=>png};
     const browser={version:()=> 'test-browser',newContext:async()=>({newPage:async()=>page,close:async()=>{}})};
     const stylesheet=`@font-face{font-family:Capture Font;src:url("font.woff2");}`;
@@ -580,7 +581,7 @@ describe('component gate resource acceptance',()=>{
 it('persists successful partial captures and a diagnostic failed state before rejecting',async()=>{
   const directory=await setup();let sequence=0,closed=0;
   await writeFile(path.join(directory,'html-captures.json'),'[{"state":"stale prior run"}]');
-  const bytes=await sharp({create:{width:2,height:2,channels:4,background:'white'}}).png().toBuffer();
+  const bytes=await whitePng();
   const browser={newContext:async()=>{const id=sequence++;return {newPage:async()=>({id,on:()=>{},screenshot:async()=>bytes}),close:async()=>{closed++;}};}};
   const frame={url:()=> 'http://fixture.lvh.me/a/Example1/raw',evaluate:async fn=>fn.name==='settleFiniteFrameAnimations'?noAnimations():fn.name==='browserState'?{text:'Completed',controls:[],rows:[],overflow:0}:{faces:[],used:[],errors:[]}};
   await expect(captureBrowserBaseline({browser,mount:async({page})=>{if(page.id===1)throw Error('actual state failed');return {frame};},implementation:'html',sourceRevision:'a'.repeat(40),output:directory,fixtures:[{id:'one',states:[{id:'initial',actions:[]}]}]})).rejects.toThrow('one/light/390/initial: actual state failed');
@@ -595,7 +596,7 @@ it('persists successful partial captures and a diagnostic failed state before re
 
 it('captures later independent fixture groups after early failure and rejects the entire run',async()=>{
   const directory=await setup();let sequence=0,active=0,peak=0,closed=0;
-  const bytes=await sharp({create:{width:2,height:2,channels:4,background:'white'}}).png().toBuffer();
+  const bytes=await whitePng();
   const browser={newContext:async()=>{const id=sequence++;active++;peak=Math.max(peak,active);return {newPage:async()=>({id,on:()=>{},screenshot:async()=>bytes}),close:async()=>{active--;closed++;}};}};
   const frame={url:()=> 'http://fixture.lvh.me/a/Example1/raw',evaluate:async fn=>fn.name==='settleFiniteFrameAnimations'?noAnimations():fn.name==='browserState'?{text:'Later independent success',controls:[],rows:[],overflow:0}:{faces:[],used:[],errors:[]}};
   let failure;
@@ -611,7 +612,7 @@ it('captures later independent fixture groups after early failure and rejects th
 
 it('captures only the explicit retained theme and viewport plan for a private migration pilot',async()=>{
  const directory=await setup(),contexts=[];
- const bytes=await sharp({create:{width:2,height:2,channels:4,background:'white'}}).png().toBuffer();
+ const bytes=await whitePng();
  const frame={url:()=> 'http://fixture.lvh.me/a/Example1/raw',evaluate:async fn=>fn.name==='settleFiniteFrameAnimations'?noAnimations():fn.name==='browserState'?{text:'Ready',controls:[],rows:[],overflow:0}:{faces:[],used:[],errors:[]}};
  const browser={newContext:async options=>{contexts.push(options);return {newPage:async()=>({on:()=>{},screenshot:async()=>bytes}),close:async()=>{}};}};
  const captures=await captureBrowserBaseline({browser,mount:async()=>({frame}),implementation:'jsx',sourceRevision:'a'.repeat(40),output:directory,themes:['light'],viewports:[{width:1280,height:900}],fixtures:[{id:'pilot',states:[{id:'initial',actions:[]}]}]});

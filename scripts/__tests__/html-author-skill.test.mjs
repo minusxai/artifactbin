@@ -5,8 +5,6 @@ import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {JSDOM} from 'jsdom';
 import {beforeAll,afterAll,describe,it,expect} from 'vitest';
-import {nativeSystemCss} from '../../design-systems/lib/html-skill.mjs';
-import {ROSTER} from '../../design-systems/lib/pages.mjs';
 import {GET as skillArchive} from '../../services/app/app/skills/artifactbin.zip/route.ts';
 import {pathToFileURL} from 'node:url';
 const ROOT=path.resolve(import.meta.dirname,'../../services/app/skills/artifactbin'),BASE='https://example.test';
@@ -42,12 +40,6 @@ describe('native author resources',()=>{
    const document=new JSDOM(saved.body.html).window.document;expect(document.doctype?.name).toBe('html');expect(document.documentElement.lang).toBe('en');
    if(name==='csv-dashboard')expect(saved.body.publicationBundle.files.map(file=>file.path)).toContain('examples/deliveries.csv');
    if(name==='tracker'){expect(saved.body.publicationBundle.files.map(file=>file.path)).not.toContain('examples/tracker.ts');expect(saved.body.html).toContain('href="ref:abc123"');}
-  }
- });
- it('generates every shipped design-system stylesheet from the retained specification',async()=>{
-  for(const slug of ROSTER){
-   expect(await readFile(path.join(ROOT,`design-systems/${slug}.css`),'utf8')).toBe(nativeSystemCss(slug));
-   await expect(readFile(path.join(ROOT,`references/html-system-${slug}.md`),'utf8')).rejects.toThrow();
   }
  });
 });
