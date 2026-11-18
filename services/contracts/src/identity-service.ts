@@ -16,9 +16,11 @@
  *
  * THE PRINCIPAL (`IdentityIntrospectResponse` `principal_kind`, `group_id`, `group_role`, `issued_by`; the `tokens`
  * view's `group_id`, `group_role`, `issued_by`, `grant_id`): who a credential acts as. Today always a person: kind
- * `'user'`, `user_id` set and never null, the group fields null. Once group sign-ins exist a credential may act as a
- * group at a level (`'member'` or `'editor'`) with no person behind it; a reader checks `principal_kind` before
- * relying on `user_id` as the person acting.
+ * `'user'`, `user_id` set and never null, the group fields null. `issued_by` is null too, except on a person's RUN
+ * SIGN-IN (./service-audiences `RUN_SIGN_IN_PATH`), where it is the id of the configured service the sign-in was issued
+ * to; the principal is still that person. Once group sign-ins exist a credential may act as a group at a level
+ * (`'member'` or `'editor'`) with no person behind it; a reader checks `principal_kind` before relying on `user_id` as
+ * the person acting.
  */
 import type { ServiceTokenParent } from './service-audiences';
 import { SERVICE_PAYLOAD_ENVELOPE, SERVICE_PAYLOAD_LIMIT } from './payload-limit';
@@ -33,12 +35,14 @@ export const IDENTITY_INTROSPECT_PATH = '/api/internal/identity/introspect';
  * by that id in the matching view (`live`). On an exchanged token `token_id` is the token's own id (`vtk_…`), never a
  * row of `tokens`.
  *
- * THE PRINCIPAL: who the token acts as. `principal_kind` is `'user'` on every active answer today, with `group_id`,
- * `group_role` and `issued_by` null: the principal is the person `user_id`. Once group sign-ins exist, a `'group'`
+ * THE PRINCIPAL: who the token acts as. `principal_kind` is `'user'` on every active answer today, with `group_id` and
+ * `group_role` null: the principal is the person `user_id`. `issued_by` is null except on a run sign-in, where it names
+ * the configured service it was issued to (./service-audiences `RUN_SIGN_IN_PATH`). Once group sign-ins exist, a `'group'`
  * answer's principal is the group `group_id` itself at the level `group_role` (`'member'` or `'editor'`), with no
  * person behind it; `issued_by` is then the person who issued the credential, never the principal. A reader checks
  * `principal_kind` before relying on `user_id` as the person acting, and refuses a kind it does not handle. The
- * `tokens` view carries the same facts (`group_id`, `group_role`, `issued_by`, `grant_id`), all null on every row today.
+ * `tokens` view carries the same facts (`group_id`, `group_role`, `issued_by`, `grant_id`), null on every row today but
+ * a run sign-in's `issued_by`.
  */
 export type IdentityIntrospectResponse =
   | {
@@ -61,10 +65,11 @@ export const IDENTITY_SCHEMA = 'identity';
  * column a reader knows ever moves; anything else is a contract change on both sides.
  *  - users: every account row; `active` is "may sign in and act on this deployment" (Artifactbin's one rule).
  *  - tokens: access tokens, never their hash; `scopes` is the granted scope list; `live` is the bearer read's rule (row,
- *    expiry, OAuth family fence), an audience of this deployment's API or of a configured service
- *    (IDENTITY__SERVICE_AUDIENCES), and an active account. A reader accepting a token checks its `audience` itself.
- *    `group_id`, `group_role`, `issued_by`, `grant_id`: the principal columns (see `IdentityIntrospectResponse`), null
- *    on every row today; a row with a group principal will name its group, level, issuing person and approval.
+ *    expiry, OAuth family fence or, for a run sign-in, its live parent credential), an audience of this deployment's
+ *    API or of a configured service (IDENTITY__SERVICE_AUDIENCES), and an active account. A reader accepting a token
+ *    checks its `audience` itself. `group_id`, `group_role`, `issued_by`, `grant_id`: the principal columns (see
+ *    `IdentityIntrospectResponse`), null on every row today but a run sign-in's `issued_by` (its service's id); a row
+ *    with a group principal will name its group, level, issuing person and approval.
  *  - groups (`parent_id` null at a root; `deleted_at` set once deleted), group_members (DIRECT rows only),
  *    group_hierarchy (one row, id 'installation': the revision moves on every group create, delete and reparent),
  *    group_invitations, handle_reservations, group_mail_outbox: the tables as they are.

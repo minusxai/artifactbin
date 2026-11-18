@@ -99,7 +99,8 @@ const TOKENS: Table = {
     // THE PRINCIPAL. NULL on every row today: the token's principal is its person (`user_id`). A later group
     // sign-in sets `group_id` and its level `group_role` ('member' or 'editor') to make the group itself the
     // principal, `issued_by` to the person who issued it and `grant_id` to the approval it was issued under.
-    // Nothing writes them yet, and the `live` rule does not read them.
+    // Nothing writes them yet, except `issued_by` on a person's RUN SIGN-IN (contracts `RUN_SIGN_IN_PATH`): the id of
+    // the configured service it was issued to, which the `live` rule reads (its parent credential decides it).
     { name: 'group_id', type: 'TEXT' },
     { name: 'group_role', type: 'TEXT' },
     { name: 'issued_by', type: 'TEXT' },

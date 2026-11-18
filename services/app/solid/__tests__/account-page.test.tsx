@@ -59,6 +59,22 @@ it('requires confirmation before revoking a connection', async () => {
   await waitFor(() => expect(calls).toContain('DELETE /api/my/tokens/tok_1'));
 });
 
+it('labels a sign-in a service obtained for work it runs, beside the others, and revokes it the same way', async () => {
+  const calls: string[] = [];
+  stubAccountFetch({ calls, tokens: [
+    { id: 'tok_run', name: 'run-warehouse', issued_by: 'warehouse', status: 'active', created_at: '2026-01-01', deleted_at: null, expires_at: '2027-01-01', last_used_at: null },
+    { id: 'tok_1', name: 'Laptop', status: 'active', created_at: '2026-01-01', deleted_at: null, expires_at: null, last_used_at: null },
+  ] });
+  window.history.replaceState(null, '', '/account');
+  render(() => <App />);
+  const row = await screen.findByRole('row', { name: 'Token row run-warehouse' });
+  expect(row).toHaveTextContent('Signed in for work warehouse runs for you');
+  expect(screen.getByRole('row', { name: 'Token row Laptop' })).not.toHaveTextContent('Signed in for work');
+  fireEvent.click(screen.getByRole('button', { name: 'Revoke token run-warehouse' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Confirm revoke' }));
+  await waitFor(() => expect(calls).toContain('DELETE /api/my/tokens/tok_run'));
+});
+
 it('bounds connections to five rows and separates inactive history', async () => {
   const tokens = Array.from({ length: 12 }, (_, index) => ({ id: `tok_${index}`, name: `Connection ${index}`, status: index < 7 ? 'active' : 'expired', created_at: '2026-01-01', deleted_at: null, expires_at: null, last_used_at: null }));
   stubAccountFetch({ tokens });

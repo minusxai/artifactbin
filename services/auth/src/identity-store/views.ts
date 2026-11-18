@@ -4,7 +4,8 @@
  * `deleted_at IS NULL` themselves), plus computed rule columns that cost nothing unless selected:
  *  - `users.active`: may sign in and act on this deployment (`authenticatingUserSql` and, in a company deployment,
  *    `deploymentMemberSql`, over the deployment mode in `identity_settings`; no settings row: nobody is active);
- *  - `tokens.scopes` (the scope list) and `tokens.live`: the bearer read's own rule (row, expiry, OAuth family
+ *  - `tokens.scopes` (the scope list) and `tokens.live`: the bearer read's own rule (row, expiry, OAuth family or, for a
+ *    run sign-in, parent-credential
  *    fence), an audience of this deployment's API or of a configured service (`identity_settings.service_audiences`,
  *    IDENTITY__SERVICE_AUDIENCES) and an active account; a reader accepting a token checks its `audience` itself;
  *  - `sessions` (Better Auth's `session`, minus its token) and `sessions.live`: unexpired.
