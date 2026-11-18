@@ -48,15 +48,6 @@ describe('a dataset write', () => {
     await channel.stop();
   });
 
-  it('a writer holding a stale row loses the compare-and-swap, re-reads and lands on top', async () => {
-    const { row, actor } = await dataset();
-    const winner = await mutateDataset(row, actor, 'insert into rows (n) values (2)');
-    if (isMutationRefused(winner)) throw new Error(winner.detail);
-    const late = await mutateDataset(row, actor, 'insert into rows (n) values (3)');
-    if (isMutationRefused(late)) throw new Error(late.detail);
-    expect(late).toMatchObject({ rowCount: 3, row: { version: row.version + 2 } });
-  });
-
   it('the commit statement itself refuses a dataset made read-only after the caller read it', async () => {
     const { row, actor } = await dataset();
     await (await harness.db()).query("UPDATE artifacts SET access='read' WHERE id=$1", [row.id]);

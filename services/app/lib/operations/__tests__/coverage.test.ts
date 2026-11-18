@@ -34,10 +34,6 @@ const EXCEPTIONS = new Set([
   '/api/artifacts/{id}/regions/{regionId}/open', // a browser editor's Yjs session (client id and state bytes) for one region
   '/api/artifacts/{id}/regions/{regionId}/updates', // binary Yjs updates of an open browser session, under its server-assigned client id
   '/api/artifacts/{id}/regions/stream', // the editors' SSE relay of region updates; transport, like presence
-  '/api/artifacts/{id}/edits', // retired atomic JSX editing route; answers 404
-  '/api/artifacts/{id}/runs', // asynchronous execution admission; authoring adapter pins the program, no document edit
-  '/api/artifacts/{id}/schedules', // runner scheduling control plane, not a document operation
-  '/api/artifacts/{id}/prepare', // retired authoring resource route; answers 404
   '/api/artifacts/reservations', // CLI identity-pool allocation, not an artifact operation
   '/api/artifacts/preflight', // read-only validation of the actual publication body
   '/api/artifacts/{id}/content', // immutable binary content download; no document rendering or imports

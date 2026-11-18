@@ -61,8 +61,7 @@ describe('login destinations', () => {
   expect(loginRedirectTarget(loopback, ORIGIN)).toBe('/');
   expect(loginRedirectTarget('/login/cli?callbackUrl='+encodeURIComponent(loopback), ORIGIN)).toBe('/');
  });
- it('refuses retired and external login destinations', () => {
-  expect(loginRedirectTarget(loopback, ORIGIN)).toBe('/');
+ it('refuses an external login destination', () => {
   expect(loginRedirectTarget('http://127.0.0.1:9987/callback', ORIGIN)).toBe('/');
  });
  it('keeps website document and consent continuations', () => {

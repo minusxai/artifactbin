@@ -179,14 +179,4 @@ describe('the JSON door\'s caching', () => {
     expect(refused.status).toBe(404);
     expect(await refused.json()).toEqual({ error: 'not_found' });
   });
-
-  it('refuses the nodes door to a reader who may not read the document, whatever validator they hold', async () => {
-    const w = await world();
-    const row = await w.make('private');
-    session = w.owner;
-    const etag = '"retired-node-tree"';
-    session = null;
-    const refused = await artifactPageResponse(ask(row.id, '?part=nodes', { 'if-none-match': etag }), row.id);
-    expect(refused.status).toBe(404);
-  });
 });

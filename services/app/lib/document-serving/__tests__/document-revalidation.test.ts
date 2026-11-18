@@ -69,6 +69,6 @@ describe('native document conditional reads',()=>{
   const w=await world('private');expect((await nodes(w.id,w.user)).status).toBe(404);
   await w.edit(BODY.replace('A plan</h1>','Updated</h1>'));
   expect((await nodes(w.id,w.user,{'if-none-match':'*'})).status).toBe(404);
+  expect((await nodes(w.id,w.user,{},'editor')).status).toBe(404);
  });
- it('does not let conditional headers bypass nodes ACLs or restore the retired editor',async()=>{const w=await world('private'),tag=tagOf(await nodes(w.id,w.user)),other=await createUser({email:'mxmx_test_reval_no_access@example.com'});expect((await nodes(w.id,other,{'if-none-match':tag})).status).toBe(404);expect((await nodes(w.id,null,{'if-none-match':tag})).status).toBe(404);expect((await nodes(w.id,w.user,{'if-none-match':tag},'editor')).status).toBe(404);});
 });

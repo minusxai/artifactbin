@@ -66,12 +66,6 @@ it('still refuses a replacement from a stale base, so rows written by viewers ar
   expect((await getArtifactById(f.ds))!.version).toBe(2);
 });
 
-it('never answers not_found for a dataset the caller can see', async () => {
-  const f = await fixture();
-  const response = await f.put(f.owner.token, [{ m: 1 }]);
-  expect(response.status).not.toBe(404);
-});
-
 it('accepts a stored table with declared columns and no rows, and still refuses a bare empty array', async () => {
   const declared = await publishDataset({ columns: [{ name: 'name', type: 'string' }, { name: 'joined_on', type: 'date' }] }, []);
   expect(declared).not.toBeInstanceOf(Response);

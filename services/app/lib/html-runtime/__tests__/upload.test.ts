@@ -15,7 +15,7 @@ it('portable and aborted uploads refuse before reading or sending bytes',async()
  const controller=new AbortController();controller.abort();const writable=createFileUploader({readOnly:()=>false,datasetId:()=> 'Dataset1',async send(){calls++;throw Error();}});
  await expect(writable.upload(file(),{dataset:'attachments',signal:controller.signal})).rejects.toThrow();expect(calls).toBe(0);
 });
-it('refuses oversized files before transport and rejects incomplete real receipts',async()=>{
+it('refuses oversized files before transport',async()=>{
  let sends=0;const uploader=createFileUploader({readOnly:()=>false,datasetId:()=> 'Dataset123',async send(){sends++;throw Error();}});
  const huge=file();Object.defineProperty(huge,'size',{value:50_000_001});await expect(uploader.upload(huge,{dataset:'attachments'})).rejects.toThrow('50 MB');expect(sends).toBe(0);
 });

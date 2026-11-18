@@ -300,7 +300,7 @@ it('measures the page only after the reader loading placeholder is gone',async()
   waitForFunction:async(fn:Function)=>{const doc=(globalThis as any).document;(globalThis as any).document={querySelector:()=>busy?{}:null};try{expect(fn()).toBe(false);busy=false;expect(fn()).toBe(true);}finally{(globalThis as any).document=doc;}order.push('ready');},
   locator:()=>({waitFor:async()=>{},innerText:async()=>{order.push('text');return busy?'Loading page…':'Ready';},evaluate:async()=>({viewport:390,content:390,fits:true})})};
  const result=await inspectPage(page,{target:'/a/PAGE12',viewport:{width:390,height:844}});
- expect(result.text).toBe('Ready');expect(order.indexOf('ready')).toBeLessThan(order.indexOf('text'));
+ expect(result.text).toBe('Ready');expect(order).toContain('ready');expect(order.indexOf('ready')).toBeLessThan(order.indexOf('text'));
 });
 
 it('fails smoke when visible text is effectively invisible against its background',async()=>{

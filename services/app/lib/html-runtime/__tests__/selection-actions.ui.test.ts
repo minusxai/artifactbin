@@ -31,7 +31,7 @@ function select() {
   window.getSelection()!.addRange(range);
   document.dispatchEvent(new Event("selectionchange"));
 }
-it("offers explicit Comment and Select choices for keyboard selection without acting automatically", () => {
+it("offers an explicit Comment choice for keyboard selection without acting automatically", () => {
   const chosen = setup();
   select();
   expect(chosen).toEqual([]);

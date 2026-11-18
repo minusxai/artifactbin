@@ -33,9 +33,9 @@ describe('independent group owner contracts',()=>{
   const owner=await account('owner'),viewer=await account('member'),other=await account('other');
   const group=await createGroup(owner.id,{handle:'acme',name:'Acme'});
   await admitGroupMember(owner.id,group.id,viewer.id,'member');
-  await expect(setGroupMember(viewer.id,group.id,other.id,'admin')).rejects.toThrow();
-  await expect(removeGroupMember(owner.id,group.id,owner.id)).rejects.toThrow();
-  await expect(setGroupMember(owner.id,group.id,owner.id,'member')).rejects.toThrow();
+  await expect(setGroupMember(viewer.id,group.id,other.id,'admin')).rejects.toMatchObject({code:'forbidden'});
+  await expect(removeGroupMember(owner.id,group.id,owner.id)).rejects.toMatchObject({code:'last_admin'});
+  await expect(setGroupMember(owner.id,group.id,owner.id,'member')).rejects.toMatchObject({code:'last_admin'});
   await admitGroupMember(owner.id,group.id,other.id,'admin');
   await removeGroupMember(other.id,group.id,owner.id);
   expect(await getGroupRole(owner.id,group.id)).toBeNull();

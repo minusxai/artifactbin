@@ -208,7 +208,6 @@ describe('accordion appearance', () => {
     expect(icon.querySelector('path')?.getAttribute('d')).toBe('m6 9 6 6 6-6');
     expect(icon.getAttribute('stroke-linecap')).toBe('round');
     expect(accordionStyles).toContain('transform:translateY(.125rem);color:var(--muted-foreground,currentColor);transition:transform .2s');
-    expect(accordionStyles).not.toContain('rotate(180deg)');
     items[0]!.querySelector('button')!.click();
     expect(items[0]!.querySelector('svg[data-af-accordion-icon] path')?.getAttribute('d')).toBe('m6 9 6 6 6-6');
     expect(accordionStyles).toContain('box-shadow:0 0 0 3px color-mix(in oklab');

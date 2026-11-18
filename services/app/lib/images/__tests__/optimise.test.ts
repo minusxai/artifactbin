@@ -161,10 +161,15 @@ describe('optimiseImage', () => {
   });
 
   it('never makes one that is bigger than the copy it is meant to save', async () => {
+    let made = 0;
     for (const [w, h] of [[1600, 1200], [3000, 1000], [2000, 4000]]) {
       const out = await optimiseImage(await photo(w, h), 'image/jpeg');
-      if (out.variant) expect(out.variant.buffer.length).toBeLessThan(out.buffer.length);
+      if (!out.variant) continue;
+      made++;
+      expect(out.variant.buffer.length).toBeLessThan(out.buffer.length);
     }
+    // A run that made no variant would pass without checking anything.
+    expect(made).toBeGreaterThan(0);
   });
 
   /*

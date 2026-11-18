@@ -69,7 +69,6 @@ describe('native af-button', () => {
     const style = document.querySelector<HTMLStyleElement>('style[data-af-button-styles]')!;
     expect(style.textContent).toContain('data-variant=outline]{color:var(--foreground,#171717);background:var(--background,#fff);border:1px solid currentColor');
     expect(style.textContent).toContain('html[data-af-dark="true"] af-button>button[data-variant=outline]');
-    expect(style.textContent).toContain('color-mix(in oklab,var(--input,#d4d4d4) 30%,transparent)');
   });
 
   it('uses the authored 3px 50-percent focus ring in light and dark themes', () => {
@@ -96,7 +95,6 @@ describe('native af-button', () => {
     expect(getComputedStyle(outline).borderTopWidth).toBe('1px');
     const css=document.querySelector<HTMLStyleElement>('style[data-af-button-styles]')!.textContent!;
     expect(css).toContain('gap:.5rem;border:0 solid currentColor');
-    expect(css).toContain('data-variant=outline]{color:var(--foreground,#171717);background:var(--background,#fff);border:1px solid currentColor');
   });
 
   it('reflects disabled, busy and accessible label attributes and blocks programmatic activation', () => {

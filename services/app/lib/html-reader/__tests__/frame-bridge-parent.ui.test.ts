@@ -46,7 +46,7 @@ describe('relayedRequest', () => {
     ]) expect(relayedRequest(win, 'doc', { headers: {}, body: null, ...request })).toBeNull();
   });
 
-  it('admits the page GraphQL door only with a revision, pins it, and refuses mutations to a read-only reader', () => {
+  it('admits the page SQL door only with a revision, pins it, and refuses mutations to a read-only reader', () => {
     const sql = { path: '/api/artifacts/doc/sql', method: 'POST', headers: {}, body: JSON.stringify({ sql: 'select 1', params: {}, revision: 'forged' }) };
     expect(relayedRequest(win, 'doc', sql)).toBeNull();
     expect(JSON.parse(String(relayedRequest(win, 'doc', sql, { revision: '7', readOnly: true })!.init.body))).toEqual({ sql: 'select 1', params: {}, revision: '7', readOnly:true });

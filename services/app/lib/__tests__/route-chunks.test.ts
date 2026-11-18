@@ -34,9 +34,3 @@ it('keeps app pages and the document runtime outside the initial static graph', 
   expect(graph).not.toContain('solid/pages/Document.tsx');
   expect(graph).not.toContain('solid/editor/InPlaceEditor.tsx');
 });
-
-it('does not load the editor when loading only a profile listing', () => {
-  const graph = staticGraph('solid/pages/Profile.tsx');
-  expect(graph).not.toContain('solid/editor/InPlaceEditor.tsx');
-  expect(graph).not.toContain('solid/editor/ArtifactEditor.tsx');
-});

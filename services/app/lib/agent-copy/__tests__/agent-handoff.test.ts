@@ -38,8 +38,7 @@ describe('the existing-document paste', () => {
   });
 });
 
-it('the product blurb is stable', () => {
-  expect(agentBlurb()).toBe(agentBlurb());
+it('the product blurb names no address', () => {
   expect(agentBlurb()).not.toMatch(/https?:\/\//);
 });
 

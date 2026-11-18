@@ -22,18 +22,11 @@ function viewer(seed?: Record<string, string>) {
   const deliver = () => tabs.forEach((listener) => listener('af:viewer:v2:p'));
   return { open, stored, items, deliver };
 }
-/** The two ways a page changes and reads this document: `@afbin/state` and `gql` (old pages). */
-const paths = {
-  state: {
-    write: (page: PageState, values: HtmlJsonObject) => page.state.setState(values),
-    read: async (page: PageState, keys: readonly string[]) => Object.fromEntries(keys.map((key) => [key, page.state.getState()[key] ?? null])),
-  },
+/** How a page changes and reads this document: `@afbin/state`. */
+const write = (page: PageState, values: HtmlJsonObject) => page.state.setState(values);
+const read = async (page: PageState, keys: readonly string[]) => Object.fromEntries(keys.map((key) => [key, page.state.getState()[key] ?? null]));
 
-} as const;
-
-describe.each(Object.keys(paths) as (keyof typeof paths)[])('saved viewer state over the page defaults, through %s', (name) => {
-  const { write, read } = paths[name];
-
+describe('saved viewer state over the page defaults', () => {
   it('keeps Alice\'s choice and gives her a new default; Bob, who never saved, gets the new defaults', async () => {
     const alice = viewer(), bob = viewer();
     await write(alice.open({ tab: 'summary' }), { tab: 'details' });

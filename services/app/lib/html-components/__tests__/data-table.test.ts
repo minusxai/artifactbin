@@ -101,7 +101,9 @@ describe('formatCell', () => {
   });
   it('a bad d3 format spec falls back to plain text rather than throwing', () => {
     const [bad] = resolveColumns([{ col: 'revenue', fmt: 'not-a-format-%%%' }], COLUMNS, ROWS);
-    expect(() => formatCell(5, bad)).not.toThrow();
+    const [plain] = resolveColumns([{ col: 'revenue' }], COLUMNS, ROWS);
+    expect(formatCell(1234.567, bad)).toBe(formatCell(1234.567, plain));
+    expect(formatCell(5, bad)).toBe('5');
   });
 });
 
