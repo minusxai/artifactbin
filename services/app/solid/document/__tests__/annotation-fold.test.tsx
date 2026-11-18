@@ -144,6 +144,36 @@ describe('a whole thread folds to one line', () => {
   });
 });
 
+describe('the open thread has the rail to itself', () => {
+  const OTHER: AnnotationWire = { ...ANN, id: 'ann_o', snippet: 'another passage', thread: [human('ann_o', 'is this the same cap?', '2026-09-02T00:00:00Z'), human('ann_o2', 'second thought', '2026-09-02T01:00:00Z')] };
+  const card = (text: string) => screen.getAllByLabelText('Annotation thread').find((thread) => thread.textContent!.includes(text))!;
+
+  it('folds and dims every other thread to its summary while one is open, and opening one swaps them', async () => {
+    knobs.open = [LONG_THEN_SHORT, OTHER];
+    layer({ railOpen: true });
+    await flush();
+    // At rest every thread is whole and none is dimmed.
+    expect(within(card('is this the same cap?')).queryByLabelText('Expand thread')).toBeNull();
+    expect(card('is this the same cap?').className).not.toContain('opacity-60');
+    fireEvent.click(within(card("line 1 of the agent's answer")).getByLabelText('Open annotation thread'));
+    await flush();
+    const other = card('is this the same cap?');
+    expect(other.className).toContain('opacity-60');
+    expect(other.className).toContain('hover:opacity-100');
+    expect(within(other).getByLabelText('Expand thread')).toBeTruthy();
+    expect(other.textContent).toContain('1 reply');
+    expect(card("line 1 of the agent's answer").className).not.toContain('opacity-60');
+    // Its expand opens it: the conversation comes back and the first thread steps aside.
+    fireEvent.click(within(other).getByLabelText('Expand thread'));
+    await flush();
+    expect(card('is this the same cap?').textContent).toContain('second thought');
+    expect(card('is this the same cap?').className).not.toContain('opacity-60');
+    expect(card("line 1 of the agent's answer").className).toContain('opacity-60');
+    // Nothing was remembered as folded: that is only ever the reader's own chevron.
+    expect(localStorage.getItem(FOLD_STORAGE_KEY) ?? '').not.toContain('ann_');
+  });
+});
+
 describe('the fold is this viewer’s, and travels nowhere', () => {
   it('no request body and no URL ever carries it', async () => {
     const pushState = vi.spyOn(window.history, 'pushState');

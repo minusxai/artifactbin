@@ -29,6 +29,7 @@ import type { ArtifactRole } from '@artifactbin/contracts';
 import type { AnnotationWire } from '@/lib/annotations';
 import { createReaderHttpBackend } from '@/lib/artifact-backend/reader-http';
 import { loginHref } from '@/lib/http/login-href';
+import { SessionProvider, useSession } from '@/solid/lib/session';
 import type { DocumentRuntimeRef } from '@/lib/html-reader/document-endpoint';
 import type { HostComments, HostCommentsOptions, HostMode } from '@/lib/html-reader/host-comments-contract';
 import { createTrustedOverlayHost } from '@/lib/ui-runtime/trusted-overlay-host';
@@ -68,7 +69,9 @@ export function mountHostComments(options: HostCommentsOptions): HostComments {
   const stopNonce = options.onNonce((next) => setNonce(next || null));
   const runtimeRef: DocumentRuntimeRef = { current: bridge };
 
-  const unmount = render(() => {
+  // The app's session context, as its own pages have it: the discussion reads who is signed in from it (reacting,
+  // a reader's own comments), and without it every reader would look signed out.
+  const unmount = render(() => <SessionProvider>{(() => {
     const backend = createReaderHttpBackend(id);
     const [page, setPage] = createSignal<PageAnswer | null>(null);
     const abort = new AbortController();
@@ -101,9 +104,8 @@ export function mountHostComments(options: HostCommentsOptions): HostComments {
     const openRows = () => (listed() ?? live())?.filter((row) => row.status === 'open') ?? null;
     const openCount = () => openRows()?.length ?? page()?.surface?.openAnnotations ?? 0;
     // Unread: an open thread whose newest comment, by someone else, arrived while the rail was closed (since this mount).
-    const [me, setMe] = createSignal<string | null>(null);
-    void win.fetch('/api/page/session', { credentials: 'same-origin', cache: 'no-store', signal: abort.signal })
-      .then((response) => response.ok ? response.json() as Promise<{ user?: { id?: string } | null }> : null).then((session) => setMe(session?.user?.id ?? null)).catch(() => {});
+    const { session } = useSession();
+    const me = () => session()?.user?.id ?? null;
     const seen = new Map<string, string>();
     let primed = false;
     const [unread, setUnread] = createSignal<ReadonlySet<string>>(new Set());
@@ -130,7 +132,7 @@ export function mountHostComments(options: HostCommentsOptions): HostComments {
       onAnnotationsChange={setListed} onOpenThreadChange={(thread) => options.emit('af-document-thread', { id: thread })} onSignIn={signIn}
       membershipRevision={membershipRevision()} topOffset={Math.max(0, Math.round(bridge.getViewportRect().top))}
       railHost={panel()?.content} frame={options.frame} />}</>;
-  }, overlay.content);
+  })()}</SessionProvider>, overlay.content);
 
   /** The element the shell last gave the rail: a rail the comments open themselves (a mark pressed) opens there too. */
   let lastPanel: HTMLElement | null = null;

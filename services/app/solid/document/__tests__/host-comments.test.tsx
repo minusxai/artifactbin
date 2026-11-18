@@ -117,3 +117,14 @@ it('keeps the app\'s own look for a shell that sets no tokens, and maps only the
   expect(read.length).toBeGreaterThan(10);
   for (const token of read) expect([...THEME_TOKENS, ...OPTIONAL_THEME_TOKENS], token).toContain(`--${token}`);
 });
+
+it('knows a signed-in reader in the rail: reacting is offered, never a sign-in', async () => {
+  knobs.open = [ANN];
+  const { comments } = mount({ role: 'commenter', kind: 'account', openAnnotations: 1 });
+  const panel = document.body.appendChild(document.createElement('aside'));
+  comments.open(panel);
+  const shadow = panel.querySelector('[data-trusted-ui]')!.shadowRoot as unknown as HTMLElement;
+  await within(shadow).findByRole('button', { name: 'React with thumbs up' });
+  expect(within(shadow).queryByRole('button', { name: 'Sign in to react' })).toBeNull();
+  knobs.open = [];
+});
