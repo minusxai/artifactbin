@@ -172,6 +172,8 @@ describe('retryFetch', () => {
     const bodies: Response[] = [];
     const send = vi.fn(async () => { const r = res(502); bodies.push(r); return r; });
     const out = await settle(retryFetch(send, { method: 'GET', policy: { ...noJitter, delaysMs: [10, 10] } }));
+    expect(bodies.length).toBeGreaterThan(1);
+    for (const retried of bodies.slice(0, -1)) expect(retried.bodyUsed, 'a retried body is cancelled').toBe(true);
     expect(out.response.bodyUsed).toBe(false);
     expect(out.response).toBe(bodies.at(-1));
     await expect(out.response.json()).resolves.toEqual({ status: 502 });

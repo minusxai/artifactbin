@@ -19,7 +19,7 @@ describe('af-input', () => {
     expect(detail).toEqual({ value: 'Grace' }); expect(composed).toBe(true);
     expect(root.getAttribute('default-value')).toBe('Ada');
   });
-  it('keeps controlled values until the author updates them and restores canceled edits', () => {
+  it('keeps controlled values until the author updates them', () => {
     const root = input('<af-input value="one"></af-input>'); const native = root.querySelector('input')!;
     native.value = 'two'; native.dispatchEvent(new Event('input', { bubbles: true }));
     expect(native.value).toBe('one');

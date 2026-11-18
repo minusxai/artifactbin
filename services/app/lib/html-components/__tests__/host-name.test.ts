@@ -54,7 +54,7 @@ describe.each(['af-input', 'af-textarea', 'af-switch', 'af-select', 'af-slider',
   it('keeps a visible label working beside it', () => {
     const root = mount(`<${tag} label="Shown" aria-label="Spoken"></${tag}>`);
     nativeCarrier(root, 'Spoken');
-    expect(root.textContent).toContain(tag === 'af-button' ? '' : 'Shown');
+    if (tag !== 'af-button') expect(root.textContent).toContain('Shown');
   });
 });
 

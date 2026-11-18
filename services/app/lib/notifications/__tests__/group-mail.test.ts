@@ -14,6 +14,8 @@ async function seed(id='mail',recipient:string|null=null){
 function delivery(send:(message:GroupEmail)=>Promise<void>,preferences=async(_id:string)=>({invitations:true,activity:true,comments:true})){
  setNotificationDelivery({sendGroupEmail:send,preferences,updatePreferences:async(_id,p)=>p,click:async()=>null});
 }
+/** Let work a late resolution may have started run for real turns of the event loop before asserting it did not send. */
+const drain=async()=>{for(let turn=0;turn<5;turn++)await new Promise<void>(resolve=>setImmediate(resolve));};
 it('schedules rejected mail away from due work, delivers the 26th and quarantines bounded failures',async()=>{
  const db=await seed('00');
  for(let i=1;i<26;i++)await seed(String(i).padStart(2,'0'));
@@ -25,7 +27,8 @@ it('schedules rejected mail away from due work, delivers the 26th and quarantine
  for(let n=1;n<8;n++){await db.query("UPDATE group_mail_outbox SET next_attempt_at=now()-interval '1 second' WHERE sent_at IS NULL");await flushGroupMail(db);}
  expect((await db.query('SELECT 1 FROM group_mail_outbox WHERE quarantined_at IS NOT NULL')).rows).toHaveLength(25);
  const count=send.mock.calls.length;await flushGroupMail(db);expect(send).toHaveBeenCalledTimes(count);
- expect(new Set(send.mock.calls.filter(([m])=>m.id==='00').map(([m])=>m.id)).size).toBe(1);
+ const attempted=(await db.query<{attempts:number}>("SELECT attempts FROM group_mail_outbox WHERE id='00'")).rows[0]!.attempts;
+ expect(send.mock.calls.filter(([m])=>m.id==='00')).toHaveLength(attempted);
 });
 for(const outcome of ['success','failure'])it(`fences stale ${outcome} from the newer claim`,async()=>{
  const db=await seed();const firstEntered=deferred(),firstFinish=deferred(),secondEntered=deferred(),secondFinish=deferred();let calls=0;
@@ -60,7 +63,7 @@ it('claims just before processing and bounds external work without clearing a su
  await vi.advanceTimersByTimeAsync(20_000);await flush;
  expect(send).toHaveBeenCalledTimes(2);
  expect((await db.query("SELECT attempts,sent_at,lease_until FROM group_mail_outbox WHERE id='first'")).rows).toEqual([{attempts:1,sent_at:null,lease_until:null}]);
- finish.resolve();await Promise.resolve();
+ finish.resolve();await drain();
  expect((await db.query("SELECT sent_at FROM group_mail_outbox WHERE id='first'")).rows).toEqual([{sent_at:null}]);
 });
 it('pins a newly registered account across failed attempts and suppresses later reassignment',async()=>{
@@ -94,7 +97,7 @@ it('bounds a stalled preference lookup and never sends when it later resolves',a
  const entered=deferred(),finish=deferred(),send=vi.fn(async()=>{});
  delivery(send,async()=>{entered.resolve();await finish.promise;return {invitations:true,activity:true,comments:true};});
  vi.useFakeTimers({toFake:['setTimeout','clearTimeout']});const flush=flushGroupMail(db);await entered.promise;
- await vi.advanceTimersByTimeAsync(20_000);await flush;finish.resolve();await Promise.resolve();
+ await vi.advanceTimersByTimeAsync(20_000);await flush;finish.resolve();await drain();
  expect(send).not.toHaveBeenCalled();
  expect((await db.query('SELECT sent_at,lease_until,attempts FROM group_mail_outbox')).rows).toEqual([{sent_at:null,lease_until:null,attempts:1}]);
 });

@@ -14,7 +14,6 @@ for(const [kind,body] of Object.entries({
 }))it(`prepares ${kind} bytes without persistence and applies the same prepared objects`,async()=>{
  const store=objectStore();const put=vi.spyOn(store,'put');
  const prepared=await prepareContentInput(body,{overByteQuota:async()=>false});
- expect(prepared instanceof Response ? await prepared.text() : prepared).not.toBeInstanceOf(Response);
  if(prepared instanceof Response)throw new Error(await prepared.text());
  expect(put).not.toHaveBeenCalled();expect(prepared.objects.length).toBeGreaterThan(0);
  const applied=await applyPreparedContent(prepared);

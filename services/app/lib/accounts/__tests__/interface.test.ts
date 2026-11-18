@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createGuestOwner, mintAccountToken, useAppHarness } from '@/__tests__/harness';
 import { ANONYMOUS_ACTOR, DuplicateProfileEmail, NO_IDENTITY, RESERVED_HANDLES, accountOf, answeredOnce, closeTestUserSessions, confirmWelcome, createTestUser, createUser, forgetTestUserSession, forwardedFor, getTestUserRow, hasAdminCredential, hostedCredentialDescriptor, identityForUser, matchesWorkspaceAccount, noteTestUserSession, rememberTokenClient, replaceUserImageKey, resolveTestUser, revokeToken, syncProfile, testUserSessionCount, welcomePending } from '@/lib/accounts';
 import { forgetRequestCredentials, markRequestAuthority } from '@/lib/accounts/tokens';
-import { getDb, runWithRequest, services, setServices } from '@/lib/platform';
+import { TRUSTED_PROXY_HOPS, getDb, runWithRequest, services, setServices } from '@/lib/platform';
 
 useAppHarness();
 const userRow = async (id: string) => (await (await getDb()).query<Record<string, unknown>>('SELECT * FROM users WHERE id = $1', [id])).rows[0];
@@ -32,6 +32,16 @@ describe('actors', () => {
     expect(forwardedFor(headers({}), 1)).toBe('');
     // No trusted hop: every forwarded address is the caller's text, so none identifies them.
     expect(forwardedFor(headers({ 'x-forwarded-for': 'spoof', 'x-real-ip': 'spoof' }), 0)).toBe('');
+  });
+
+  it('keeps one visitor stable however they vary the head they send, and two real visitors apart', () => {
+    const headers = (h: Record<string, string>) => new Headers(h);
+    const seen = (chain: string) => forwardedFor(headers({ 'x-forwarded-for': chain }), TRUSTED_PROXY_HOPS);
+    expect(seen('alpha, 203.0.113.7')).toBe('203.0.113.7');
+    expect(seen('beta, 203.0.113.7')).toBe(seen('alpha, 203.0.113.7'));
+    expect(seen('203.0.113.7')).toBe(seen('alpha, 203.0.113.7'));
+    expect(seen('same, 203.0.113.7')).not.toBe(seen('same, 198.51.100.4'));
+    expect(forwardedFor(headers({ 'x-forwarded-for': 'spoof, 203.0.113.7', 'x-real-ip': '10.0.0.9' }), 1)).toBe('203.0.113.7');
   });
 });
 

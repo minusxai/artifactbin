@@ -109,13 +109,13 @@ it('mixed native Markdown paste validates at the authenticated update boundary',
  const { nativeMarkdownJson }=await import('../../live-regions/native-markdown');
  const initial=createRegionState('rich-native-v1','<h1>Before</h1><p>Text</p>');
  const root=document.createElement('article');document.body.append(root);
- let refused:unknown;
- const e=mountRegionEditor({win:window,root,regionId:'af-region',kind:'rich-native-v1',clientId:602,state:initial.state,post(message){if(message.kind==='region-update'){try{validateRegionUpdate('rich-native-v1',initial.state,message.update,602);}catch(error){refused=error;}}}});
+ let refused:unknown,posted=0;
+ const e=mountRegionEditor({win:window,root,regionId:'af-region',kind:'rich-native-v1',clientId:602,state:initial.state,post(message){if(message.kind==='region-update'){posted++;try{validateRegionUpdate('rich-native-v1',initial.state,message.update,602);}catch(error){refused=error;}}}});
  cleanup.push(()=>{e.destroy();root.remove();});
  const json=nativeMarkdownJson('# Title\n\n- One\n- Two\n\n- [x] Done\n- [ ] Next\n\n```js\nconst x = 1;\n```\n\n**Bold** and [link](https://example.com)');
  const parsed=e.view.state.schema.nodeFromJSON(json);
  e.view.dispatch(e.view.state.tr.replaceWith(0,e.view.state.doc.content.size,parsed.content));e.flush();
- expect(refused).toBeUndefined();
+ expect(posted).toBeGreaterThan(0);expect(refused).toBeUndefined();
 });
 
 it.each(['ul','ol'])('selected sibling range in %s sinks and lifts with its nested child',tag=>{

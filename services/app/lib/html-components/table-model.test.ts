@@ -20,7 +20,7 @@ describe("table model", () => {
       "unique",
     );
   });
-  it("aborts replaced requests and drops stale success and failure", async () => {
+  it("aborts replaced requests and drops a stale success", async () => {
     const loader = new TableLoader();
     let resolve!: (value: TableData) => void;
     let signal!: AbortSignal;

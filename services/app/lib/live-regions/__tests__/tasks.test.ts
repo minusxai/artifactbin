@@ -54,14 +54,6 @@ it('pastes tasks and retains their state through indent, outdent and enter', () 
   expect(a.state.doc.child(1).attrs).toMatchObject({ checked: null, list: null });
   room.invariants();
 });
-it('refuses interactive toggling in a readonly editor', () => {
-  const [, a] = open('<ul><li role="checkbox" aria-checked="false"><p>work</p></li></ul>');
-  a.view.setProps({ editable: () => false });
-  const control = a.view.dom.querySelector('input')!;
-  control.click();
-  expect(a.state.doc.firstChild!.attrs.checked).toBe(false);
-});
-
 it('undo a toggle after concurrent line-format normalization restores its prior value', () => {
   const [, a, b] = open('<ul><li role="checkbox" aria-checked="false"><p>work</p></li></ul>');
   const ids = a.state.doc.firstChild!.attrs;

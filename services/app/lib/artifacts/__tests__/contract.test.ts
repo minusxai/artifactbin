@@ -4,8 +4,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import { useAppHarness } from '@/__tests__/harness';
-import { nativeHtml } from '@/__tests__/native-html-fixture';
-import { createUser, identityForUser, type AccessActor } from '@/lib/accounts';
+import { account, mine, page } from '@/__tests__/artifact-fixtures';
+import { identityForUser, type AccessActor } from '@/lib/accounts';
 import { createGroup } from '@/lib/groups';
 import { mintToken } from '@/lib/accounts/tokens';
 import { artifactState, createArtifact, getArtifactById, getArtifactFor, getArtifactsFor, getLinkReadableArtifact, getOwnedArtifactFor, isVersionConflict, listArtifactPageFor, listVersionsFor, replaceArtifactFor, revertArtifactFor, trashSubtree, updateSharingFor } from '@/lib/artifacts';
@@ -13,13 +13,6 @@ import { canReadArtifact } from '../read-access';
 import { effectiveRole, ownsArtifact, type ArtifactRow } from '@/lib/artifact-access';
 
 const harness = useAppHarness();
-const page = (title: string, extra: Record<string, unknown> = {}) => ({ format: 'html' as const, source: nativeHtml(`<p>${title}</p>`), meta: {}, title, ...extra });
-
-async function account(email: string): Promise<AccessActor & { userId: string }> {
-  const user = await createUser({ email });
-  return identityForUser(user.id, null) as AccessActor & { userId: string };
-}
-const mine = async (actor: AccessActor & { userId: string }, title = 'Doc', extra: Record<string, unknown> = {}) => createArtifact(null, actor.userId, page(title, extra));
 const replace = (actor: AccessActor, row: ArtifactRow, title: string, opts: Parameters<typeof replaceArtifactFor>[3] = {}) =>
   replaceArtifactFor(actor, row.id, page(title), { expectedVersion: row.version, ...opts });
 

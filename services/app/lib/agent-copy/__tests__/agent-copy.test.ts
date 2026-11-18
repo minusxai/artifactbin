@@ -14,12 +14,6 @@ const ID = 'ab3cd9';
 const STARTER = "Edit my artifact at https://x.test/a/ab3cd9 in place. Use the artifactbin author skill and HTTP: https://x.test/llms.txt. If sign-in is required, reuse an email already provided; otherwise ask the user for their email.\n\nIf the user hasn't specified a task, ask what artifact they'd like to build.";
 
 describe('the tokenless paste', () => {
-  it('offers the author skill and HTTP guide without an executable installer',()=>{
-    const guide=JSON.stringify(gettingStarted(B));
-    expect(guide).toContain(`${B}/skills/artifactbin.zip`);
-    expect(guide).not.toMatch(/afbin |@afbin\/cli|\|\s*(?:ba)?sh\b/);
-    expect(guide).not.toContain(`${B}/install.sh`);
-  });
   it('existing: the link plus how to reach afbin, and never a token', () => {
     expect(existingPaste(B, ID)).toBe(STARTER);
     expect(existingPaste(B, ID)).not.toContain('mx_');

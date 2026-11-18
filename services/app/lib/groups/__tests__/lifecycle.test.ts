@@ -50,12 +50,14 @@ it('updates presentation, protects default/nonempty groups, retains handle tombs
 it('deletion racing a publish or a move into the group: whatever lands, a deleted group grants its ex-members nothing',async()=>{
  const owner=await account('race_owner');const actor={...identityForUser(owner.id,null),userId:owner.id};
  const group=await groups.createGroup(owner.id,{handle:'publish_race',name:'Publish'});
- await Promise.allSettled([groups.deleteGroup(owner.id,group.id,group.handle),mine(actor,'New',{destination:{type:'group',id:group.id}})]);
+ const [publishRace]=await Promise.allSettled([groups.deleteGroup(owner.id,group.id,group.handle),mine(actor,'New',{destination:{type:'group',id:group.id}})]);
  const second=await groups.createGroup(owner.id,{handle:'transfer_race',name:'Transfer'});const page=await mine(actor);
- await Promise.allSettled([groups.deleteGroup(owner.id,second.id,second.handle),transferArtifact(actor,page.id,{type:'group',id:second.id})]);
+ const [transferRace]=await Promise.allSettled([groups.deleteGroup(owner.id,second.id,second.handle),transferArtifact(actor,page.id,{type:'group',id:second.id})]);
  const db=await getDb();
- for(const id of [group.id,second.id]){
-  if(await groups.getGroupById(id))continue;
+ for(const [id,race] of [[group.id,publishRace],[second.id,transferRace]] as const){
+  // Either the delete won, or it was refused because the publish or move landed first and the group stands.
+  if(race.status==='rejected'){expect(race.reason).toMatchObject({code:'group_not_empty'});expect(await groups.getGroupById(id)).toBeTruthy();continue;}
+  expect(await groups.getGroupById(id)).toBeFalsy();
   // Soft deleted: rows that still name it stay as they are and are read through a group no one belongs to.
   for(const row of (await db.query<ArtifactRow>('SELECT * FROM artifacts WHERE group_id=$1 AND deleted_at IS NULL',[id])).rows)
    expect(await effectiveRole(row,actor)).toBe('none');

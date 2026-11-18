@@ -5,7 +5,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  APP_HMR_PORT_SETTING, deploymentConfig, env, envNamesRead, parseUserPagesHost, requirePagesHost, resolveHmrPort, unknownEnvNames,
+  deploymentConfig, env, envNamesRead, parseUserPagesHost, requirePagesHost, resolveHmrPort, unknownEnvNames,
 } from '@/lib/platform';
 import { overrideConfig, parseAliasOrigins, parsePagesHost, resetConfigOverrides } from '@/lib/platform/config';
 
@@ -168,7 +168,6 @@ describe('parsers', () => {
     expect(resolveHmrPort('', 3030)).toBe(3031);
     expect(resolveHmrPort('4000', 3030)).toBe(4000);
     for (const bad of ['0', '65536', '1.5', 'x', '-1']) expect(resolveHmrPort(bad, 3030), bad).toBe(3031);
-    expect(APP_HMR_PORT_SETTING === undefined || typeof APP_HMR_PORT_SETTING === 'string').toBe(true);
   });
 });
 

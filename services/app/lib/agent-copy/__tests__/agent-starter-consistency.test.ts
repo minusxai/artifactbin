@@ -23,7 +23,7 @@ const BASE = 'http://localhost:3000';
 /** The retired vocabulary. Each of these, in an agent's hands, is a wrong turn. */
 const RETIRED = ['paste', 'tokens/new', 'tokens/anonymous', 'MCP', '/raw', '/docs/'];
 const CLI_ONLY_RETIRED = ['mint','claim'];
-const httpDiscovery=(name:string)=>name==='the 401 hint'||name==='skills/artifactbin/llms.txt'||name==='skills/artifactbin/SKILL.md'||name==='lib/compiled-page/agent-discovery meta';
+const httpDiscovery=(name:string)=>name==='the 401 hint'||name==='skills/artifactbin/llms.txt'||name==='lib/compiled-page/agent-discovery meta';
 
 /** The single sanctioned mention: a prohibition the skill is allowed to spell out, once. */
 const ALLOWED_SENTENCE = 'never mint or print tokens';
@@ -51,7 +51,6 @@ const gather = async (): Promise<Array<[name: string, text: string]>> => {
     ['lib/agent-copy existingPaste', existingPaste(BASE, 'ab3cd9')],
     ['POST /api/start prompt', started.prompt],
     ['POST /api/my/artifacts/:id/agent-prompt prompt', handed.prompt],
-    ['skills/artifactbin/SKILL.md', llmsText(BASE)],
     ['skills/artifactbin/llms.txt', llmsText(BASE)],
     ['lib/compiled-page/agent-discovery meta', agentDiscovery(BASE).instruction],
     ['lib/agent-contract', agentContract(BASE)],
@@ -78,14 +77,6 @@ describe('every agent-facing starter says the same thing', () => {
       for (const word of [...RETIRED,...(httpDiscovery(name)?[]:CLI_ONLY_RETIRED)]) if (scanned.includes(word.toLowerCase())) offences.push(`${name}: "${word}"`);
     }
     expect(offences).toEqual([]);
-  });
-
-  it('direct HTTP discovery requires email and teaches the real scoped bearer and graph contract',()=>{
-    const guide=publicGuideText('http-auth',BASE)!;
-    expect(guide).toContain('HTTP authentication requires an email account');
-    expect(guide).toContain('/api/authentication/token');
-    expect(guide).toContain('Authorization: Bearer <access_token>');
-    expect(llmsText(BASE)).toContain(`${BASE}/llms/http-auth`);
   });
 
   it('native HTTP discovery routes to runtime and datasets without command setup',()=>{
@@ -127,7 +118,7 @@ describe('the brief', () => {
 });
 
 describe('llms.txt and the discovery head', () => {
-  it('the shared root and deployment-scoped discovery teach both CLI and HTTP', () => {
+  it('the shared root and deployment-scoped discovery name the skill zip and the HTTP API', () => {
     const text = llmsText(BASE);
     expect(text).toMatch(/^## Read first/);
     expect(agentBlurb()).toContain('artifactbin');
@@ -139,7 +130,7 @@ describe('llms.txt and the discovery head', () => {
     expect(help.instruction).not.toContain(agentBlurb());
   });
 
-  it('the guide teaches npm CLI and email HTTP without retired installation or token doors', () => {
+  it('the guide teaches the skill zip and HTTP without retired installation or token doors', () => {
     const text = llmsText(BASE);
     for (const line of ['/skills/artifactbin.zip', 'POST /api/artifacts', 'expectedVersion', `${BASE}/llms/runtime`, 'skill']) expect(text,line).toContain(line);
     expect(text).not.toContain('[[');
@@ -249,8 +240,9 @@ it('keeps the monitor instruction and the served watch guide on the same loop se
 });
 
 
-it('HTTP authentication is direct and reuses the existing rotating credential store',()=>{
+it('HTTP authentication is direct, requires an email account and reuses the existing rotating credential store',()=>{
  const guide=publicGuideText('http-auth',BASE)!;
+ expect(guide).toContain('HTTP authentication requires an email account');
  expect(llmsText(BASE)).toContain(`${BASE}/llms/http-auth`);
  for(const text of [guide]){
   expect(text).not.toContain('credentials.mjs');

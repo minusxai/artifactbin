@@ -134,7 +134,7 @@ describe('the HTTP doors: respondToAnnotationAction, respondToAnnotationEdit, re
     expect((await respondToAnnotationAction({ reply: 'x' }, f.owner, agent, f.doc.id, 'ann_missing')).status).toBe(404);
   });
 
-  it('refuses a state change against a stale revision, but never a plain reply', async () => {
+  it('refuses a state change against a stale revision with a 409 naming the current revision', async () => {
     const f = await fixture();
     const thread = await f.comment('Question');
     const conflict = await respondToAnnotationAction({ resolve: true, expected_revision: 99 }, f.owner, human, f.doc.id, thread.id);

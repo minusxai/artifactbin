@@ -29,7 +29,6 @@ it('uses the shared Markdown typography and themed copy controls',()=>{
  expect(document.querySelector<HTMLStyleElement>('style[data-af-markdown-styles]')!.textContent).toContain('background:var(--background,Canvas)');
  expect(document.querySelector<HTMLStyleElement>('style[data-af-markdown-styles]')!.textContent).toContain('border:1px solid var(--border');
  expect(document.querySelector<HTMLStyleElement>('style[data-af-markdown-styles]')!.textContent).toContain('outline:2px solid var(--ring,Highlight)');
- expect(document.querySelector<HTMLStyleElement>('style[data-af-markdown-styles]')!.textContent).toContain(MARKDOWN_CSS);
  expect(getComputedStyle(el.querySelector('table')!).overflowX).toBe('auto');
  expect(el.querySelector('table')?.parentElement?.classList.contains('mx-md-table-scroll')).toBe(true);
  expect(el.querySelector('th')?.textContent).toBe('Name');

@@ -247,9 +247,8 @@ describe('a region session in the page frame', () => {
     expect(content(h.root).firstElementChild!.outerHTML).toBe('<h2 data-af-id="a1">Hi Live text</h2>');
     const editor = h.editors[0]!;
     // The stream reset: a new session for the mounted region merges, never remounts.
-    const later = peerEdit(h, (text) => text.insert(text.length, ' end'), 98, 1);
+    peerEdit(h, (text) => text.insert(text.length, ' end'), 98, 1);
     h.receive({ kind: 'region-session', regionId: 'r1', regionKind: 'rich-native-v1', clientId: CLIENT + 1, state: Y.encodeStateAsUpdate(h.server), seq: 9 });
-    void later;
     expect(h.editors,JSON.stringify(h.posted)).toHaveLength(1);
     expect(texts(h.root)).toEqual(['Hi Live text', 'Second end']);
     await sleep(REGION_BATCH_MS + 30);

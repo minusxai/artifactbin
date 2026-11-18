@@ -55,13 +55,12 @@ describe('one design system\'s sheet', () => {
   });
 
   it('is a different tag for a different system', async () => {
-    if (HTML_SYSTEM_NAMES.length < 2) return;
+    expect(HTML_SYSTEM_NAMES.length).toBeGreaterThanOrEqual(2);
     const [one, two] = await Promise.all([ask(`?system=${HTML_SYSTEM_NAMES[0]}`), ask(`?system=${HTML_SYSTEM_NAMES[1]}`)]);
     expect(one.headers.get('etag')).not.toBe(two.headers.get('etag'));
   });
 
   it.each(['nonsense', '', '../core', SYSTEM.toUpperCase()])('is 404 for system %j', async (name) => {
-    if (name === SYSTEM.toUpperCase() && name === SYSTEM) return;
     const response = await ask(`?system=${encodeURIComponent(name)}`);
     expect(response.status).toBe(404);
     expect(response.headers.get('etag')).toBeNull();

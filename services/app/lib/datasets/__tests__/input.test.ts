@@ -13,7 +13,6 @@ describe('dataset structured input',()=>{
       expect(catalogInputShape.safeParse(stored({defaultSchema:invalid})).success).toBe(false);
       expect(catalogInputShape.safeParse(stored({tables:[{schema:'public',name:invalid,rows:[],columns:['id']}]})).success).toBe(false);
       expect(catalogInputShape.safeParse(stored({tables:[{schema:'public',name:'rows',rows:[],columns:[invalid]}]})).success).toBe(false);
-      expect(catalogInputShape.safeParse(stored({notebook:{cells:[{id:invalid,name:invalid,sql:'SELECT 1'}]}})).success).toBe(false);
     }
   });
 

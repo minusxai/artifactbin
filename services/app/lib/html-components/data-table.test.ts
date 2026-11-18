@@ -124,35 +124,6 @@ it("uses measured row heights when selecting and positioning a virtual window", 
   expect(layout.start).toBe(0);
   expect(layout.end).toBe(4);
 });
-it("shrinks the virtual range after rendered rows report their actual heights", async () => {
-  const callbacks: ResizeObserverCallback[] = [];
-  class MeasuredResizeObserver implements ResizeObserver {
-    constructor(callback: ResizeObserverCallback) { callbacks.push(callback); }
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  }
-  vi.stubGlobal("ResizeObserver", MeasuredResizeObserver);
-  const el = document.createElement("af-data-table") as AfDataTable;
-  el.height = 420;
-  el.data = {
-    columns: [{ name: "value", type: "number" }],
-    rows: Array.from({ length: 100 }, (_, value) => ({ value })),
-  };
-  document.body.append(el);
-  await Promise.resolve();
-  const rows = [...el.querySelectorAll<HTMLTableRowElement>("tbody tr[data-row-key]")];
-  expect(rows).toHaveLength(25);
-  const entries = rows.map((target) => ({
-    target,
-    contentRect: { height: 43 },
-    borderBoxSize: [{ blockSize: 43 }],
-  }) as unknown as ResizeObserverEntry);
-  callbacks.at(-1)?.(entries, {} as ResizeObserver);
-  await nextFrame();
-  expect(el.querySelectorAll("tbody tr[data-row-key]")).toHaveLength(22);
-  expect(el.querySelector<HTMLTableRowElement>("tbody tr[data-row-key]")?.style.transform).toBe("translateY(0px)");
-});
 it("remeasures changed columns and restores virtual grid layout after comparison mode", async () => {
   const tableDisplaysAtMeasurement: string[] = [];
   const rectSpy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
@@ -274,7 +245,7 @@ it("retains keyed rows and controls while cycling sort with accessible column he
   header.click();
   expect(el.sort).toBeNull();
 });
-it("renders bars, tint, custom cells and scoped edit intents", () => {
+it("renders bars, custom cells and scoped edit intents", () => {
   const el = document.createElement("af-data-table") as AfDataTable;
   el.rowKey = "id";
   el.columns = [{ col: "n", bar: true, colorScale: "diverging", fmt: ".1f" }];
@@ -700,6 +671,7 @@ it("re-renders after resize notifications on the next frame, once, never inside 
   await nextFrame();
   expect(render).toHaveBeenCalledTimes(1);
   expect(el.querySelectorAll("tbody tr[data-row-key]")).toHaveLength(22);
+  expect(el.querySelector<HTMLTableRowElement>("tbody tr[data-row-key]")?.style.transform).toBe("translateY(0px)");
   // A table removed before its frame does not render after it.
   callbacks[0]?.([], {} as ResizeObserver);
   el.remove();

@@ -46,7 +46,6 @@ describe('native authored collapsible', () => {
     const {root,trigger,content} = fixture();
     root.addEventListener('af-change', e => e.preventDefault(), {once:true}); trigger.click();
     expect(root.open).toBe(false); expect(content.hidden).toBe(true);
-    root.removeEventListener('af-change', () => {});
     root.setAttribute('disabled',''); trigger.click(); expect(root.open).toBe(false);
     root.removeAttribute('disabled'); trigger.setAttribute('disabled',''); trigger.click(); expect(root.open).toBe(false);
   });

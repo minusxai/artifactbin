@@ -56,8 +56,6 @@ it('prerendered Mermaid drawings and their per-version harvests belong to the ap
  expect(sql).toMatch(/CREATE TABLE IF NOT EXISTS app\.mermaid_images \([\s\S]*?PRIMARY KEY \(key\)/);
 });
 
-it('fresh schemas omit retired remote identity and work tables',()=>{for(const name of ['remote_agents','remote_work'])expect(declared()['app.'+name]).toBeUndefined();});
-
 it('comment image stages and attachments belong to app',()=>{expect(declared()['app.comment_images']).toBe('app');});
 
 it('membership and its notifications belong to the app',()=>{for(const name of ['relations','member_notifications','user_blocks'])expect(declared()['app.'+name]).toBe('app');});
