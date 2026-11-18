@@ -76,7 +76,10 @@ describe('POST /api/page/drafts', () => {
       rows: [{ _id: '1', region: 'West', amount: 10, day: '2026-01-02' }, { _id: '2', region: 'East', amount: 2.5, day: '2026-01-03' }, { _id: '3', region: 'West', amount: 4, day: '2026-01-04' }] }]);
     // The engine is the shared hosted module, never embedded in a draft.
     expect(html).not.toMatch(/<script[^>]*data-af="offline-sql"/);
-    expect(html).toContain('<h1>Orders</h1>');
+    // Each element the reader wrote is addressed as a published page's is, and knows where its start tag is in that source.
+    const h1 = /<h1 data-af-id="(af-\d+)">Orders<\/h1>/.exec(html)?.[1];
+    expect(h1).toBeTruthy();
+    expect(config.sourcePositions[h1!]).toEqual([1, PAGE.indexOf('<h1>') + 1]);
 
     // The ticket is spent: the same address releases nothing again.
     expect((await get(answer.src)).status).toBe(404);

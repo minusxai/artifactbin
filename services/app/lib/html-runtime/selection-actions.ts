@@ -3,7 +3,8 @@ import type { StoryEditSelection } from "../html-bridge/selection-contract";
 
 /** Native reader chrome only offers actions explicitly granted by the parent. */
 export interface HtmlSelectionActions {
-  update(enabled: boolean): void;
+  /** `select: false` leaves Select out (the host has no use for it); Comment stays. */
+  update(enabled: boolean, options?: { select?: boolean }): void;
   ownsOverlay(node: Node): boolean;
   dispose(): void;
 }
@@ -27,6 +28,7 @@ export function createHtmlSelectionActions({
   doc.head.append(style);
   doc.body.append(toolbar);
   let enabled = false,
+    offerSelect = true,
     held = false,
     context = false,
     active: StoryEditSelection | null = null,
@@ -62,7 +64,7 @@ export function createHtmlSelectionActions({
       "aria-label",
       context ? "Document actions" : "Text selection actions",
     );
-    for (const action of ["annotate", "select"] as const) {
+    for (const action of offerSelect ? (["annotate", "select"] as const) : (["annotate"] as const)) {
       const button = doc.createElement("button");
       button.type = "button";
       button.setAttribute("data-mx-selection-action", action);
@@ -192,7 +194,8 @@ export function createHtmlSelectionActions({
   win.visualViewport?.addEventListener("scroll", reposition);
   return {
     ownsOverlay,
-    update(value) {
+    update(value, options) {
+      if (options?.select !== undefined) offerSelect = options.select;
       const granted = value && !enabled;
       enabled = value;
       if (!enabled) hide();

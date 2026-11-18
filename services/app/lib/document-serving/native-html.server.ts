@@ -19,6 +19,7 @@ import {declaredCspExtensions} from '@/lib/trust';
 import { ASSETS_ORIGIN, embedTrustedOrigins } from '@/lib/platform';
 import { PLATFORM_FONTS_PATH, PLATFORM_STYLES_PATH, htmlSystemsCss, isHtmlSystem } from '@/lib/html-systems';
 import {libraryImports,libraryVersions} from '@/lib/libraries';
+import {identifySourceElements} from '@/lib/html-page';
 import { parse, type DefaultTreeAdapterMap } from 'parse5';
 
 /** Inputs from one permission-checked immutable version. No credential belongs here but `captureKey`, for that one response. */
@@ -87,8 +88,10 @@ export interface NativeDraftRender { label: string; html: string; appOrigin: str
  * origin serves the files beside it at their paths (server/pages-host).
  */
 export async function nativeDraftDocument(input: NativeDraftRender): Promise<string> {
-  const config:HtmlRuntimeConfig={pageId:`draft:${input.label}`,revision:'draft',draft:true,backends:[...input.datasets,...(input.connections??[])],...(input.connections?.length?{draftConnections:[...input.connections],draftLive:input.liveSql===true}:{}),...(input.datasets.length?{datasets:[...input.datasets]}:{}),appOrigin:new URL(input.appOrigin).origin,libraries:libraryImports(libraryVersions()),scriptFingerprint:scriptFingerprint(input.html)};
-  return assembleHtmlPage({platformScriptNonce:randomUUID().replaceAll('-',''),html:nativeCodeHtml(input.html),config,core:await htmlCore(),systemsHref:PLATFORM_STYLES_PATH,designSystem:null,...(input.tables.length?{offlineData:{tables:input.tables}}:{})});
+  // Its elements are addressed as a published page's are, and each knows its line in the source the reader sent.
+  const {html,positions}=identifySourceElements(input.html);
+  const config:HtmlRuntimeConfig={pageId:`draft:${input.label}`,revision:'draft',draft:true,backends:[...input.datasets,...(input.connections??[])],...(input.connections?.length?{draftConnections:[...input.connections],draftLive:input.liveSql===true}:{}),...(input.datasets.length?{datasets:[...input.datasets]}:{}),appOrigin:new URL(input.appOrigin).origin,libraries:libraryImports(libraryVersions()),scriptFingerprint:scriptFingerprint(html),sourcePositions:positions};
+  return assembleHtmlPage({platformScriptNonce:randomUUID().replaceAll('-',''),html:nativeCodeHtml(html),config,core:await htmlCore(),systemsHref:PLATFORM_STYLES_PATH,designSystem:null,...(input.tables.length?{offlineData:{tables:input.tables}}:{})});
 }
 /** A draft's policy: a document's on its own origin, with no door of the app, no declared extension and no other framer. */
 export function nativeDraftPolicy(self:string,app:string):string {

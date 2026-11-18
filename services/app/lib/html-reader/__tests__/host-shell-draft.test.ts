@@ -106,6 +106,37 @@ describe('mountDraft (/af/host.js)', () => {
     }
   });
 
+  it('with comments, grants every new controller Comment without Select and hands the host the reader\'s choice', async () => {
+    const owner = await mintAccountToken('draft_owner');
+    for (const comments of [false, true]) {
+      const { win, container } = hostPage(session(owner));
+      const mounted = await mountDraft(container, { html: '<p>x</p>', files: [], comments }, win);
+      const posted: Array<{ key: string; payload: Record<string, unknown> }> = [];
+      const frameWindow = mounted.frame.contentWindow!;
+      frameWindow.postMessage = ((message: never) => { posted.push(message); }) as Window['postMessage'];
+      const send = (payload: unknown, key?: string) => win.dispatchEvent(new win.MessageEvent('message', { data: { type: STORY_FRAME_BRIDGE_MESSAGE, ...(key ? { key } : {}), payload }, origin: mounted.origin, source: frameWindow }));
+      const chosen: unknown[] = [];
+      container.addEventListener('af-draft-comment', (event) => chosen.push((event as CustomEvent).detail));
+      const grants = () => posted.filter((entry) => (entry.payload?.command as { type?: string } | undefined)?.type === 'mx:selection-actions').map((entry) => entry.payload.command);
+      const selection = { path: 'af-4', tag: 'af-chart', label: 'Weekly revenue', source: { line: 3, column: 5 } };
+      send({ kind: 'hello' });
+      let { key } = posted.find((entry) => entry.payload?.kind === 'attach')!;
+      send({ kind: 'ready', nonce: 'n'.repeat(16) }, key);
+      expect(grants()).toEqual(comments ? [{ type: 'mx:selection-actions', edit: false, annotate: true, select: false }] : []);
+      send({ kind: 'event', event: { type: 'mx:selection-action', nonce: 'n'.repeat(16), action: 'annotate', selection } }, key);
+      // Another controller's nonce, and the Select action, are no comment.
+      send({ kind: 'event', event: { type: 'mx:selection-action', nonce: 'm'.repeat(16), action: 'annotate', selection } }, key);
+      send({ kind: 'event', event: { type: 'mx:selection-action', nonce: 'n'.repeat(16), action: 'select', selection } }, key);
+      expect(chosen).toEqual(comments ? [selection] : []);
+      // The document loaded again: its new controller is granted again.
+      send({ kind: 'hello' });
+      ({ key } = posted.filter((entry) => entry.payload?.kind === 'attach').at(-1)!);
+      send({ kind: 'ready', nonce: 'p'.repeat(16) }, key);
+      expect(grants()).toHaveLength(comments ? 2 : 0);
+      mounted.destroy();
+    }
+  });
+
   it('rejects with the refusal the embedding app can show', async () => {
     const owner = await mintAccountToken('draft_owner');
     const { win, container } = hostPage(session(owner));

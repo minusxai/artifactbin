@@ -261,3 +261,4 @@ export function rewriteHtmlAssetUrls(html:string,replacements:ReadonlyMap<string
 }
 export { isRuntimeCoreSrc } from './core-script.ts';
 export {isStaticWorkloadHtml} from './static.ts';
+export { identifySourceElements } from './source-identities.ts';

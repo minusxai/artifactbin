@@ -40,6 +40,10 @@ export interface StoryEditSelection {
   /** Authored persistent DOM id of the source node. Absent until autosave has persisted one. */
   nodeId?: string;
   tag: string;
+  /** What a reader would call the node: its aria-label, label, title or alt, a heading or caption it opens with, or its first words. */
+  label?: string;
+  /** A draft's: where the node's start tag is in the source its host sent (HtmlRuntimeConfig `sourcePositions`), 1-based. */
+  source?: { line: number; column: number };
   rect: StoryEditRect;
   className: string;
   style: string;
@@ -66,6 +70,8 @@ export interface StorySelectionActionsMessage {
   type: 'mx:selection-actions';
   edit: boolean;
   annotate: boolean;
+  /** `false`: the actions offer no Select (a host with nothing to do with one). Absent: offered. */
+  select?: boolean;
 }
 interface StorySelectMessage {
   type: 'mx:select';

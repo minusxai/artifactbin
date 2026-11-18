@@ -31,6 +31,10 @@
  * Reloading it later can fail (`af-draft-unavailable`) or move it to a new origin (`af-draft-moved`): mount it again.
  * The page reports its content height (`af-draft-size`, `{height}` px, at most 20000) on load and on each change, which
  * the frame on another origin cannot otherwise show its host; with `fitHeight: true` the frame takes that height itself.
+ * With `comments: true` the frame offers its Comment action (on selected words, and on an element by right-click; never
+ * Select), and the host hears the reader's choice as `af-draft-comment`: the selection (lib/html-bridge
+ * selection-contract: `path` the element's `data-af-id`, `tag`, `label`, `quote`, and `source`, its start tag's line and
+ * column in the `html` sent). What to do with it is the host's: the draft stores no comment.
  *
  * Public code: it carries no credential and adds none (requests are this origin's own, `same-origin`). A document
  * trusts exactly one parent origin, baked in when it is served; the module refuses to mount anywhere else, and the
@@ -226,6 +230,8 @@ export interface MountDraftOptions {
   liveSql?: boolean;
   /** The frame's height follows the page's (`af-draft-size`), so the whole page shows with no scroll of its own. */
   fitHeight?: boolean;
+  /** The frame offers Comment; the reader's choice arrives as `af-draft-comment` with the selection. */
+  comments?: boolean;
 }
 export interface MountedDraft {
   readonly frame: HTMLIFrameElement;
@@ -294,12 +300,17 @@ export async function mountDraft(container: HTMLElement, options: MountDraftOpti
     win, frame, frameOrigin: origin, id,
     editId: () => '', source: () => null, appFetch: relay,
     htmlContext: () => ({ revision: 'draft', readOnly: true }),
-    onReady: (nonce) => { if (nonce) emit('af-document-ready', { nonce }); },
+    // Every new controller (a reload starts one) is granted Comment again: a grant does not outlive its document.
+    onReady: (nonce) => { if (nonce && options.comments) bridge.send({ type: 'mx:selection-actions', edit: false, annotate: true, select: false }); if (nonce) emit('af-document-ready', { nonce }); },
     onScroll: (scroll) => emit('af-document-scroll', scroll),
     onSize: (size) => { if (options.fitHeight) frame.style.height = `${size.height}px`; emit('af-draft-size', size); },
     onClosed: (reason) => emit('af-document-closed', { reason }),
   });
-  const stopEvents = bridge.subscribe((event) => emit('af-document-event', event));
+  const stopEvents = bridge.subscribe((event) => {
+    emit('af-document-event', event);
+    const data = event as { type?: unknown; nonce?: unknown; action?: unknown; selection?: unknown } | null;
+    if (options.comments && data?.type === 'mx:selection-action' && data.action === 'annotate' && data.nonce === bridge.nonce && data.selection) emit('af-draft-comment', data.selection);
+  });
   // The same content keeps its origin while this server holds the key; after a restart it moves, and the frame's
   // bridge cannot follow: the host is told (`af-draft-moved`) and mounts the draft again.
   const remint = async () => {
