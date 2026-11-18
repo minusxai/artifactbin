@@ -1,13 +1,8 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import type { CodeStore, ClaimResult, Queryable } from '@artifactbin/contracts';
+import { plainIdentifier } from './sql-identifier';
 
 const sha256 = (value: string): string => createHash('sha256').update(value).digest('hex');
-
-/** It goes into the SQL text, so only a plain lowercase identifier is admitted. */
-function identifier(value: string, what: string): string {
-  if (!/^[a-z_][a-z0-9_]*$/.test(value)) throw new Error(`${what} must be a plain lowercase identifier, got "${value}"`);
-  return value;
-}
 
 /**
  * ONE store for every one-time secret: hashed, single-use, attempts capped. Product-blind — it knows
@@ -23,8 +18,8 @@ function identifier(value: string, what: string): string {
  *    from wrong apart from spent.
  */
 export function createCodeStore(db: Queryable, o: { schema?: string; table?: string } = {}): CodeStore {
-  const table = o.table ? identifier(o.table, 'table') : 'codes';
-  const t = `${o.schema ? `${identifier(o.schema, 'schema')}.` : ''}${table}`;
+  const table = o.table ? plainIdentifier(o.table, 'table') : 'codes';
+  const t = `${o.schema ? `${plainIdentifier(o.schema, 'schema')}.` : ''}${table}`;
 
   return {
     async issue(i): Promise<void> {

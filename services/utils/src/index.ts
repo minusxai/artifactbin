@@ -9,6 +9,7 @@ export { BodyTooLargeError, readBody } from './body';
 export { noopSql, noopBrowser, noopEvents, fakeSql, fakeBrowser, fakeEvents, type FakeEvents } from './fakes';
 export { TOKEN_RE, hashToken } from './tokens';
 export { createCodeStore } from './codes';
+export { plainIdentifier } from './sql-identifier';
 export { cookieName, clearCookieHeader, readCookie } from './agent-session';
 export { renderSchema, renderDroppedTables, ensureTable } from './schema';
 export { sqlClient, browserClient, eventsClient, queryBounds } from './clients';
