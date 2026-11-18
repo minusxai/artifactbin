@@ -8,6 +8,7 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@solidjs/testing-library';
 import { afterEach, expect, it, vi } from 'vitest';
 import { DatasetPolicies } from '../DatasetPolicies';
+import { stubFetch } from '@/test/helpers/fetch-stub';
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
@@ -20,18 +21,20 @@ const loaded = (over: Record<string, unknown> = {}) => ({ revision: 3, source: '
 type Call = { url: string; method: string; body: Record<string, any> | undefined };
 function serve(handlers: { get?: () => unknown; put?: (body: Record<string, any>) => [number, unknown]; templates?: (url: string) => unknown } = {}) {
   const calls: Call[] = [];
-  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-    const method = init?.method ?? 'GET', body = init?.body ? JSON.parse(String(init.body)) : undefined;
-    calls.push({ url, method, body });
-    if (url.includes('/policy/templates')) return Response.json(handlers.templates?.(url));
-    if (method === 'PUT') {
+  const bodyOf = (init?: RequestInit) => init?.body ? JSON.parse(String(init.body)) : undefined;
+  stubFetch({
+    '*/policy/templates*': url => Response.json(handlers.templates?.(url)),
+    'PUT *': (_url, init) => {
+      const body = bodyOf(init);
       const [status, answer] = handlers.put?.(body) ?? [200, body.dryRun
         ? { dryRun: true, saved: false, revision: 3, policy: body.policy, readBackTables: [{ title: 'Table rows (public.rows)', lines: [`checked ${JSON.stringify(body.policy).length}`] }], warnings: [] }
         : { saved: true, revision: 4, policy: body.policy, readBackTables: [{ title: 'Table rows (public.rows)', lines: ['saved'] }], warnings: [] }];
       return Response.json(answer, { status });
-    }
-    return Response.json(handlers.get?.() ?? loaded());
-  }));
+    },
+  }, {
+    fallback: () => Response.json(handlers.get?.() ?? loaded()),
+    onCall: (url, init) => { calls.push({ url, method: init?.method ?? 'GET', body: bodyOf(init) }); },
+  });
   return { calls, dryRuns: () => calls.filter(c => c.body?.dryRun), saves: () => calls.filter(c => c.method === 'PUT' && !c.body?.dryRun) };
 }
 const pick = (label: string, option: string) => { fireEvent.click(screen.getByLabelText(label)); fireEvent.click(screen.getByRole('option', { name: option })); };

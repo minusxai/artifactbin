@@ -18,6 +18,7 @@ import { fireEvent, render } from '../../__tests__/helpers';
 import { AuthorIdentity, positionedComments } from '../AnnotationPreview';
 import {
   ADA_IMAGE, ANN, FACES, RESOLVED, GENERIC_AGENT, MCP_AGENT, NONCE, fetchCalls, flush, httpBackend, installAnnotationFetch, knobs, layer, makeRuntime, showResolved, trustedRoot, emitLayout, emitPin } from './annotation-rig';
+import { stubFetch } from '@/test/helpers/fetch-stub';
 
 beforeEach(installAnnotationFetch);
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
@@ -482,9 +483,7 @@ describe('AnnotationLayer', () => {
 
   it('keeps a reply and its thread when reply deletion fails', async () => {
     const priorFetch = globalThis.fetch;
-    vi.stubGlobal('fetch', vi.fn((url: string | URL | Request, init?: RequestInit) => init?.method === 'DELETE'
-      ? Promise.resolve(new Response('{}', { status: 500 }))
-      : priorFetch(url, init)));
+    stubFetch({ 'DELETE *': () => new Response('{}', { status: 500 }) }, { fallback: (url, init) => priorFetch(url, init) });
     const view = layer({ railOpen: true });
     await flush();
     emitPin(view.runtime, 'ann_1');
@@ -623,10 +622,9 @@ it('starts replies empty even in a tagged thread and retains a failed reply', as
 it('sends a plain reply without a revision and shows both replies when the thread advanced meanwhile', async () => {
   const advanced = { ...ANN, revision: 9, thread: [...ANN.thread, { ...ANN.thread[0]!, id: 'ann_other', body: 'someone else replied' }, { ...ANN.thread[0]!, id: 'ann_mine', body: 'my reply' }] };
   const rig = globalThis.fetch;
-  vi.stubGlobal('fetch', (async (url: string, init?: RequestInit) => {
-    if (init?.method === 'POST' && String(url).endsWith(`/annotations/${ANN.id}`)) { fetchCalls.push({ url: String(url), init }); return new Response(JSON.stringify(advanced), { status: 200 }); }
-    return rig(url, init);
-  }) as unknown as typeof fetch);
+  stubFetch({
+    [`POST */annotations/${ANN.id}`]: (url, init) => { fetchCalls.push({ url, init }); return new Response(JSON.stringify(advanced), { status: 200 }); },
+  }, { fallback: (url, init) => rig(url, init) });
   const view = layer({ railOpen: true });
   await flush();
   emitPin(view.runtime, ANN.id);
@@ -647,13 +645,12 @@ it('a reply that meets a 502 retries under one key, posts once and clears the dr
   const answered = { ...ANN, revision: 5, thread: [...ANN.thread, { ...ANN.thread[0]!, id: 'ann_mine', body: 'through the restart' }] };
   const rig = globalThis.fetch;
   const posts: RequestInit[] = [];
-  vi.stubGlobal('fetch', (async (url: string, init?: RequestInit) => {
-    if (init?.method === 'POST' && String(url).endsWith(`/annotations/${ANN.id}`)) {
-      posts.push(init);
+  stubFetch({
+    [`POST */annotations/${ANN.id}`]: (_url, init) => {
+      posts.push(init!);
       return posts.length === 1 ? new Response('<html>502</html>', { status: 502 }) : new Response(JSON.stringify(answered), { status: 200 });
-    }
-    return rig(url, init);
-  }) as unknown as typeof fetch);
+    },
+  }, { fallback: (url, init) => rig(url, init) });
   try {
     const view = layer({ railOpen: true });
     await flush();
@@ -674,10 +671,9 @@ it('a reply refused with 409 is not retried and keeps the draft', async () => {
   RETRY_TUNING.policy = { delaysMs: [0, 0, 0] };
   const rig = globalThis.fetch;
   let posts = 0;
-  vi.stubGlobal('fetch', (async (url: string, init?: RequestInit) => {
-    if (init?.method === 'POST' && String(url).endsWith(`/annotations/${ANN.id}`)) { posts++; return new Response(JSON.stringify({ error: 'annotation_conflict' }), { status: 409 }); }
-    return rig(url, init);
-  }) as unknown as typeof fetch);
+  stubFetch({
+    [`POST */annotations/${ANN.id}`]: () => { posts++; return new Response(JSON.stringify({ error: 'annotation_conflict' }), { status: 409 }); },
+  }, { fallback: (url, init) => rig(url, init) });
   try {
     const view = layer({ railOpen: true });
     await flush();

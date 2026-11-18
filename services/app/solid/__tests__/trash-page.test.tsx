@@ -10,6 +10,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-li
 import { MemoryRouter, Route } from '@solidjs/router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TrashPage } from '@/solid/pages/Trash';
+import { stubFetch } from '@/test/helpers/fetch-stub';
 
 vi.mock('@/solid/lib/session', () => ({ useSession: () => ({ session: () => ({ user: { id: 'usr_1', email: 'owner@example.com' } }) }) }));
 
@@ -21,14 +22,10 @@ const files = [
 let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
-  fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
-    if (String(url) === '/api/page/trash') return new Response(JSON.stringify({ files }), { status: 200 });
-    if (String(url) === '/api/my/artifacts/doc_1/restore' && init?.method === 'POST') {
-      return new Response(JSON.stringify({ ok: true }), { status: 200 });
-    }
-    return new Response('{}', { status: 404 });
-  });
-  vi.stubGlobal('fetch', fetchMock);
+  fetchMock = stubFetch({
+    '/api/page/trash': () => new Response(JSON.stringify({ files }), { status: 200 }),
+    'POST /api/my/artifacts/doc_1/restore': () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
+  }, { fallback: () => new Response('{}', { status: 404 }) });
 });
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });

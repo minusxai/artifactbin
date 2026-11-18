@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cellKey } from '@artifactbin/contracts';
 import { STORY_FRAME_BRIDGE_MESSAGE } from '@/lib/html-reader/contract';
 import { createFramedStory, type CellEditingLoader } from '../create-framed-story';
+import { stubFetch } from '@/test/helpers/fetch-stub';
 
 const PAGES = 'https://6869.pages.test';
 const KEY = cellKey({ dataset: 'tasks', rowId: 'r_abc', column: 'description' });
@@ -22,13 +23,10 @@ function framedPage(state: 'signed-in' | 'signed-out' | 'scripted', options: { r
   document.body.append(frame);
   const posted: Array<{ key: string; payload: { kind: string } & Record<string, unknown> }> = [];
   vi.spyOn(frame.contentWindow!, 'postMessage').mockImplementation(((data: { key: string; payload: { kind: string } }) => { posted.push(data as never); }) as never);
-  const fetch = vi.fn(async (path: string) => {
-    if (options.refuse) return Response.json({ error: 'not_found' }, { status: 404 });
-    if (path.endsWith('/open')) return Response.json({ regionId: KEY, kind: 'text', clientId: 7, seq: 3, state: 'AAA=', savedVersion: 2 });
-    if (path.endsWith('/updates')) return Response.json({ seq: 4 });
-    return Response.json({});
-  });
-  vi.stubGlobal('fetch', fetch);
+  const fetch = stubFetch(options.refuse ? { '*': () => Response.json({ error: 'not_found' }, { status: 404 }) } : {
+    '*/open': { regionId: KEY, kind: 'text', clientId: 7, seq: 3, state: 'AAA=', savedVersion: 2 },
+    '*/updates': { seq: 4 },
+  }, { fallback: () => Response.json({}) });
   vi.stubGlobal('EventSource', class { close() {} addEventListener() {} });
   const [session] = createSignal({ revision: '1', readOnly: false, uploadSession: { state: state === 'signed-in' ? 'signed-in' as const : 'signed-out' as const } });
   createRoot((dispose) => {

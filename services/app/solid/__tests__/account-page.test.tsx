@@ -3,19 +3,17 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
 import { afterEach, expect, it, vi } from 'vitest';
 import { App } from '@/solid/App';
+import { stubFetch } from '@/test/helpers/fetch-stub';
 
 const SESSION = { user: { id: 'usr_1', email: 'a@example.com', username: 'owner', image: null }, kind: 'account', onboarded: true };
 /** Stubs the account page's reads: the session, the account (default: no photo), an empty inbox and the given tokens. */
 function stubAccountFetch({ account = () => Response.json({ username: 'owner', image: null }), tokens = [], calls }: {
   account?: () => Response | Promise<Response>; tokens?: unknown[]; calls?: string[] } = {}) {
-  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-    calls?.push(`${init?.method ?? 'GET'} ${url}`);
-    if (url === '/api/page/session') return Response.json(SESSION);
-    if (url === '/api/page/account') return account();
-    if (url === '/api/my/people') return Response.json({ autoAccept: false, unread: 0, next: null, blocks: [], notifications: [] });
-    if (url === '/api/my/tokens') return Response.json({ tokens });
-    return Response.json({});
-  }));
+  stubFetch({
+    '/api/page/account': account,
+    '/api/my/people': { autoAccept: false, unread: 0, next: null, blocks: [], notifications: [] },
+    '/api/my/tokens': { tokens },
+  }, { session: SESSION, fallback: () => Response.json({}), onCall: (url, init) => { calls?.push(`${init?.method ?? 'GET'} ${url}`); } });
 }
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.history.replaceState(null, '', '/'); });

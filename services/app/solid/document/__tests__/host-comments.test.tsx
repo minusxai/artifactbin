@@ -16,6 +16,7 @@ import { cleanup } from '@/solid/__tests__/helpers';
 import { ANN, NONCE, flush, installAnnotationFetch, knobs } from './annotation-rig';
 import { mountHostComments } from '../browser-host-comments';
 import { HOST_THEME_ATTR, HOST_THEME_CSS } from '../host-theme';
+import { stubFetch } from '@/test/helpers/fetch-stub';
 
 const mounted: HostComments[] = [];
 beforeEach(() => installAnnotationFetch());
@@ -27,11 +28,10 @@ afterEach(() => {
 /** The admission door's answer for this reader, and the session's, in front of the rig's annotation doors. */
 function serve(page: { role: ArtifactRole; kind: 'account' | 'none'; openAnnotations?: number }) {
   const annotations = globalThis.fetch;
-  vi.stubGlobal('fetch', (async (url: string, init?: RequestInit) => {
-    if (String(url).startsWith('/api/page/artifact/')) return Response.json({ role: page.role, kind: page.kind, archived: null, surface: { openAnnotations: page.openAnnotations ?? 0 } });
-    if (String(url) === '/api/page/session') return Response.json({ kind: page.kind, user: page.kind === 'account' ? { id: 'usr_me' } : null });
-    return annotations(url, init);
-  }) as typeof fetch);
+  stubFetch({
+    '/api/page/artifact/*': { role: page.role, kind: page.kind, archived: null, surface: { openAnnotations: page.openAnnotations ?? 0 } },
+    '/api/page/session': { kind: page.kind, user: page.kind === 'account' ? { id: 'usr_me' } : null },
+  }, { fallback: (url, init) => annotations(url, init) });
 }
 
 function mount(page: Parameters<typeof serve>[0], { signIn = true } = {}) {

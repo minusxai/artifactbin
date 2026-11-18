@@ -13,6 +13,7 @@ import { InboxProvider } from '@/solid/lib/notifications';
 import { ArtifactDataPage, type DataAnswer } from '@/solid/pages/ArtifactData';
 import type { DatasetCatalog } from '@/lib/datasets';
 import { datasetQuerySnippet } from '@/lib/datasets/dataset-usage';
+import { stubFetch } from '@/test/helpers/fetch-stub';
 
 const streams: Array<{ url: string; onmessage: ((event: { data: string }) => void) | null; closed: boolean }> = [];
 class FakeEventSource {
@@ -28,15 +29,13 @@ beforeEach(() => {
   streams.length = 0; pageAnswers = [];
   policy = {source: 'v3', report: [], revision: 1, readBackTables: [{title: 'Table public.rows', lines: ['Owner, editors: see and change everything.', 'Shared viewers: see all rows and columns; add rows.']}], warnings: []};
   vi.stubGlobal('EventSource', FakeEventSource);
-  vi.stubGlobal('fetch', vi.fn(async (input: unknown) => {
-    const url = String(input);
-    if (url.endsWith('/tables')) return Response.json({ rows: [{ region: 'North' }], columns: [{ name: 'region', type: 'string' }], refreshedAt: '2026-09-30T00:00:00.000Z' });
-    if (url.endsWith('/events/frame')) return Response.json({ editId: 'e2', version: 2, by: null, format: 'dataset', title: 'Regional sales', source: null, dataPreview: null });
-    if (url.startsWith('/api/page/artifact/')) return Response.json(pageAnswers.shift() ?? {});
-    if (url.endsWith('/policy')) return Response.json(policy);
-    if (url.endsWith('/sharing')) return Response.json({ visibility: 'public', linkRole: 'viewer', shares: [] });
-    return Response.json({});
-  }));
+  stubFetch({
+    '*/tables': { rows: [{ region: 'North' }], columns: [{ name: 'region', type: 'string' }], refreshedAt: '2026-09-30T00:00:00.000Z' },
+    '*/events/frame': { editId: 'e2', version: 2, by: null, format: 'dataset', title: 'Regional sales', source: null, dataPreview: null },
+    '/api/page/artifact/*': () => Response.json(pageAnswers.shift() ?? {}),
+    '*/policy': () => Response.json(policy),
+    '*/sharing': { visibility: 'public', linkRole: 'viewer', shares: [] },
+  }, { fallback: () => Response.json({}) });
 });
 afterEach(() => { cleanup(); window.history.replaceState(null, '', '/'); vi.unstubAllGlobals(); });
 

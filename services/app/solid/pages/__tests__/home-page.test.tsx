@@ -7,19 +7,20 @@ import { SessionProvider } from '@/solid/lib/session';
 import { HomePage } from '@/solid/pages/Home';
 import { REFRESH_EVENT } from '@/solid/lib/page-data-events';
 import { withPersonalBootstrap } from './home-bootstrap-fetch';
+import { fetchRoutes } from '@/test/helpers/fetch-stub';
 
 const session = { kind: 'account', user: { id: 'one', email: 'one@example.com', username: 'one', image: null }, onboarded: true };
 const core = { signedIn: true, accountId: 'one', artifacts: [{ id: 'ABC123', url: '/a/ABC123', title: 'Private document', format: 'html', version: 1, visibility: 'private', ancestor_ids: [], updated_at: '2026-09-09', views: 0 }], shared: [] };
 const response = (value: unknown) => Response.json(value);
 const open = () => render(() => <MemoryRouter><Route path="*" component={() => <SessionProvider><HomePage /></SessionProvider>} /></MemoryRouter>);
-const workspaceFetch = (handler: (...args: any[]) => any) => vi.fn(withPersonalBootstrap(handler));
+/** Stubs `fetch` with `handler` behind the personal bootstrap (home-bootstrap-fetch.ts) and returns the mock. */
+const workspaceFetch = (handler: (...args: any[]) => any) => { const fetcher = vi.fn(withPersonalBootstrap(handler)); vi.stubGlobal('fetch', fetcher); return fetcher; };
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 it('starts the bootstrap request while identity is pending, then paints only after identity resolves', async () => {
   let resolveSession!: (value: Response) => void;
   const pending = new Promise<Response>(resolve => { resolveSession = resolve; });
-  const fetcher = workspaceFetch((url: string) => url.includes('/session') ? pending : Promise.resolve(response(url.includes('part=core') ? core : { signedIn: true, accountId: 'one', stats: { assets: 0 } })));
-  vi.stubGlobal('fetch', fetcher);
+  const fetcher = workspaceFetch(fetchRoutes({ '/api/page/session': () => pending, '/api/page/home?part=core': core }, { fallback: () => response({ signedIn: true, accountId: 'one', stats: { assets: 0 } }) }));
   open();
   expect(fetcher.mock.calls.map(([url]) => url)).toContain('/api/page/home?part=bootstrap');
   expect(screen.queryByLabelText('Open Private document')).toBeNull();
@@ -30,7 +31,7 @@ it('starts the bootstrap request while identity is pending, then paints only aft
 it('paints the core shelf while insights load', async () => {
   let finish!: (value: Response) => void;
   const insights = new Promise<Response>(resolve => { finish = resolve; });
-  vi.stubGlobal('fetch', workspaceFetch((url: string) => Promise.resolve(url.includes('/session') ? response(session) : url.includes('part=core') ? response(core) : url.includes('claimable') ? response({ claimable: [] }) : insights)));
+  workspaceFetch(fetchRoutes({ '/api/page/home?part=core': core }, { session, fallback: () => insights }));
   open();
   expect(await screen.findByLabelText('Open Private document')).toBeInTheDocument();
   expect(screen.getByLabelText('Loading workspace insights')).toBeInTheDocument();
@@ -40,7 +41,7 @@ it('paints the core shelf while insights load', async () => {
 
 it('offers retry on core failure and never paints another account', async () => {
   let fail = true;
-  vi.stubGlobal('fetch', workspaceFetch((url: string) => Promise.resolve(url.includes('/session') ? response(session) : url.includes('part=core') ? fail ? response({ signedIn: true, accountId: 'other', artifacts: core.artifacts, shared: [] }) : response(core) : response({ signedIn: true, accountId: 'one' }))));
+  workspaceFetch(fetchRoutes({ '/api/page/home?part=core': () => fail ? response({ signedIn: true, accountId: 'other', artifacts: core.artifacts, shared: [] }) : response(core) }, { session, fallback: () => response({ signedIn: true, accountId: 'one' }) }));
   open();
   await screen.findByLabelText('Retry workspace');
   expect(screen.queryByLabelText('Open Private document')).toBeNull();
@@ -50,7 +51,7 @@ it('offers retry on core failure and never paints another account', async () => 
 });
 
 it('explains first creation on an empty account', async () => {
-  vi.stubGlobal('fetch', workspaceFetch((url: string) => Promise.resolve(response(url.includes('/session') ? session : url.includes('part=core') ? { ...core, artifacts: [] } : { signedIn: true, accountId: 'one', stats: { assets: 0 } }))));
+  workspaceFetch(fetchRoutes({ '/api/page/home?part=core': { ...core, artifacts: [] } }, { session, fallback: () => response({ signedIn: true, accountId: 'one', stats: { assets: 0 } }) }));
   open();
   expect(await screen.findByRole('heading', { name: /create your first artifact/i })).toBeInTheDocument();
   expect(screen.getByLabelText('Create dataset')).toHaveAttribute('href', '/datasets/new?personal=1');
@@ -60,7 +61,7 @@ it('explains first creation on an empty account', async () => {
 it('renders a populated folder workspace without recursive updates', async () => {
   const folderRow = { ...core.artifacts[0], id: 'fold01', url: '/a/fold01', title: 'Reports', format: 'folder', ancestor_ids: [] };
   const childRow = { ...core.artifacts[0], id: 'child', title: 'Child', ancestor_ids: ['fold01'] };
-  vi.stubGlobal('fetch', workspaceFetch((url: string) => Promise.resolve(response(url.includes('/session') ? session : url.includes('part=core') ? { ...core, artifacts: [folderRow, childRow] } : { signedIn: true, accountId: 'one', stats: { artifacts: 1, assets: 0, views: 0 }, views: {}, viewsOverTime: [], likes: 0, likesOverTime: [], followers: 0, forks: 0 }))));
+  workspaceFetch(fetchRoutes({ '/api/page/home?part=core': { ...core, artifacts: [folderRow, childRow] } }, { session, fallback: () => response({ signedIn: true, accountId: 'one', stats: { artifacts: 1, assets: 0, views: 0 }, views: {}, viewsOverTime: [], likes: 0, likesOverTime: [], followers: 0, forks: 0 }) }));
   open();
   expect(await screen.findByLabelText('Open folder Reports')).toBeInTheDocument();
   expect(screen.queryByLabelText('Open Child')).toBeNull();
@@ -68,7 +69,7 @@ it('renders a populated folder workspace without recursive updates', async () =>
 
 it('keeps the working shelf before the account dashboard and links to assets, trash, and dataset creation', async () => {
   const insights = { signedIn: true, accountId: 'one', stats: { artifacts: 1004, assets: 204, views: 1234 }, views: {}, viewsOverTime: [0, 2, 5], likes: 3, likesOverTime: [0, 1, 2], followers: 4, forks: 2 };
-  vi.stubGlobal('fetch', workspaceFetch((url: string) => Promise.resolve(response(url.includes('/session') ? session : url.includes('part=core') ? core : insights))));
+  workspaceFetch(fetchRoutes({ '/api/page/home?part=core': core }, { session, fallback: () => response(insights) }));
   const view = open();
   const shelf = await screen.findByLabelText('Shelf');
   const dashboard = await screen.findByLabelText('Dashboard');
@@ -82,14 +83,14 @@ it('keeps the working shelf before the account dashboard and links to assets, tr
 });
 
 it('waits for identity without showing a public marketing page', () => {
-  vi.stubGlobal('fetch', workspaceFetch(() => new Promise<Response>(() => {})));
+  workspaceFetch(() => new Promise<Response>(() => {}));
   open();
   expect(screen.getByLabelText('Loading workspace')).toBeInTheDocument();
   expect(screen.queryByRole('region', { name: 'About Artifactbin' })).toBeNull();
 });
 
 it.each(['none', 'anon'])('redirects %s sessions with held drafts to login', async kind => {
-  vi.stubGlobal('fetch', workspaceFetch((url: string) => Promise.resolve(response(url.includes('/session') ? { kind, user: null } : { signedIn: false, drafts: [{ id: 'AbC123', title: 'Private draft' }] }))));
+  workspaceFetch(fetchRoutes({}, { session: { kind, user: null }, fallback: () => response({ signedIn: false, drafts: [{ id: 'AbC123', title: 'Private draft' }] }) }));
   render(() => <MemoryRouter><Route path="/" component={() => <SessionProvider><HomePage /></SessionProvider>} /><Route path="/login" component={() => <h1>Log in</h1>} /></MemoryRouter>);
   await screen.findByRole('heading', { name: 'Log in' });
   expect(screen.queryByText('Private draft')).toBeNull();
@@ -98,7 +99,7 @@ it.each(['none', 'anon'])('redirects %s sessions with held drafts to login', asy
 const doc = (id: string) => ({ id, url: `/a/${id}`, title: `Doc ${id}`, description: null, format: 'html', version: 1, visibility: 'public', parent_id: null, ancestor_ids: [], updated_at: '2026-08-20T00:00:00.000Z', views: 0 });
 const richInsights = { signedIn: true, accountId: 'one', stats: { artifacts: 1004, assets: 204, views: 1234 }, views: {}, viewsOverTime: [0, 2, 5], likes: 3, likesOverTime: [0, 1, 2], followers: 4, forks: 2 };
 function homeFetch(home: unknown, insights: unknown = richInsights) {
-  vi.stubGlobal('fetch', workspaceFetch((url: string) => Promise.resolve(response(url.includes('/session') ? session : url.includes('part=core') ? home : insights))));
+  workspaceFetch(fetchRoutes({ '/api/page/home?part=core': () => response(home) }, { session, fallback: () => response(insights) }));
 }
 
 it('leads a populated workspace with its shelf and shows all account metrics in the rail', async () => {
@@ -172,7 +173,7 @@ it('filters "Shared with you" too, from "My artifacts"\' own search box', async 
 
 it('refreshes an empty account into its populated library', async () => {
   let current = { signedIn: true, accountId: 'one', artifacts: [] as ReturnType<typeof doc>[], shared: [] };
-  vi.stubGlobal('fetch', workspaceFetch((url: string) => Promise.resolve(response(url.includes('/session') ? session : url.includes('part=core') ? current : { ...richInsights, stats: { ...richInsights.stats, assets: 0 } }))));
+  workspaceFetch(fetchRoutes({ '/api/page/home?part=core': () => response(current) }, { session, fallback: () => response({ ...richInsights, stats: { ...richInsights.stats, assets: 0 } }) }));
   open(); await screen.findByRole('heading', {name:/create your first artifact/i});
   current = { ...current, artifacts: [doc('a')] };
   window.dispatchEvent(new Event(REFRESH_EVENT)); await screen.findByLabelText('Open Doc a');

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { App } from '@/solid/App';
 import { replaceDocument } from '@/solid/lib/document-navigation';
 import { artifactStarter } from '@/lib/workspace/artifact-starters';
+import { stubFetch } from '@/test/helpers/fetch-stub';
 
 vi.mock('@/solid/lib/document-navigation', () => ({ replaceDocument: vi.fn() }));
 
@@ -18,16 +19,17 @@ beforeEach(() => {
   profileStatus = 200;
   startStatus = 200;
   session = { user: null, kind: 'none', onboarded: true };
-  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-    calls.push({ url: String(url), method: init?.method ?? 'GET', ...(url === '/api/my/artifacts' && typeof init?.body === 'string' ? { body: init.body } : {}) });
-    if (url === '/api/page/session') return Response.json(session);
-    if (url === '/api/auth/email-otp/send-verification-otp' || url === '/api/auth/sign-in/email-otp') return Response.json({});
-    if (url === '/api/start' || url === '/api/my/artifacts') return Response.json({ id: 'doc_1' }, { status: startStatus });
-    if (url === '/api/my/profile/image' && init?.method === 'PUT') return Response.json({ image: '/api/users/new_1/avatar?v=1' });
-    if (url === '/api/my/profile' && init?.method === 'PATCH') return Response.json(profileStatus === 200 ? { username: 'chosen' } : { error: 'username_taken' }, { status: profileStatus });
-    if (url === '/api/my/profile') return Response.json({ username: 'initial', image: null });
-    return Response.json({}, { status: 404 });
-  }));
+  const started = () => Response.json({ id: 'doc_1' }, { status: startStatus });
+  stubFetch({
+    '/api/page/session': () => Response.json(session),
+    '/api/auth/email-otp/send-verification-otp': {},
+    '/api/auth/sign-in/email-otp': {},
+    '/api/start': started,
+    '/api/my/artifacts': started,
+    'PUT /api/my/profile/image': { image: '/api/users/new_1/avatar?v=1' },
+    'PATCH /api/my/profile': () => Response.json(profileStatus === 200 ? { username: 'chosen' } : { error: 'username_taken' }, { status: profileStatus }),
+    '/api/my/profile': { username: 'initial', image: null },
+  }, { onCall: (url, init) => { calls.push({ url: String(url), method: init?.method ?? 'GET', ...(url === '/api/my/artifacts' && typeof init?.body === 'string' ? { body: init.body } : {}) }); } });
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.history.replaceState(null, '', '/'); });
 

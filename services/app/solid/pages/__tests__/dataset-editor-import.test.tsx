@@ -3,6 +3,7 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, screen, waitFor } from '@solidjs/testing-library';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { change, click, editor, installDatasetFetch, reply, savedDefinition, state } from '@/solid/test/dataset-catalog';
+import { stubFetch } from '@/test/helpers/fetch-stub';
 
 vi.mock('@/solid/lib/session', () => ({ useSession: () => ({ session: () => state.viewerSession }) }));
 beforeEach(installDatasetFetch);
@@ -10,13 +11,12 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 function importReply(response: () => Promise<Response>) {
   const fallback = globalThis.fetch;
-  vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
-    if (url === '/api/my/datasets/import') {
+  stubFetch({
+    '/api/my/datasets/import': (url, init) => {
       state.calls.push({ url, method: init?.method ?? 'GET', body: JSON.parse(String(init?.body)) });
       return response();
-    }
-    return fallback(url, init);
-  }));
+    },
+  }, { fallback: (url, init) => fallback(url, init) });
 }
 const rows = [{ name: 'Ada', score: 42 }];
 const result = { rows, rowCount: 1, totalRows: 1, truncated: false, headers: ['name', 'score'] };
@@ -107,13 +107,13 @@ it('retains typed loaded table shape and user constraints when another table is 
 
 it('keeps explicit empty table columns and a rejected typed draft for correction and retry', async () => {
   const fallback = globalThis.fetch;
-  vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
-    if (url === '/api/my/artifacts' && init?.method === 'POST' && state.calls.filter(c => c.url === url).length === 0) {
-      state.calls.push({ url, method: 'POST', body: JSON.parse(String(init.body)) });
+  stubFetch({
+    'POST /api/my/artifacts': (url, init) => {
+      if (state.calls.filter(c => c.url === url).length > 0) return fallback(url, init);
+      state.calls.push({ url, method: 'POST', body: JSON.parse(String(init!.body)) });
       return reply({ error: 'invalid_dataset', details: ['Column quantity expects a number.'] }, 400);
-    }
-    return fallback(url, init);
-  }));
+    },
+  }, { fallback: (url, init) => fallback(url, init) });
   editor(); change('Dataset title', 'Typed quantities'); click('Edit dataset source');
   change('Dataset source', JSON.stringify({ kind: 'stored', tables: [{ schema: 'public', name: 'quantities', columns: [{ name: 'quantity', type: 'number' }], rows: [{ quantity: 'invalid' }] }, { schema: 'public', name: 'empty', columns: ['name'], rows: [] }] }));
   click('Apply dataset source'); click('Save dataset');

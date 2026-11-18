@@ -7,6 +7,7 @@ import { createRoot, createSignal } from 'solid-js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { STORY_FRAME_BRIDGE_MESSAGE } from '@/lib/html-reader/contract';
 import { createFramedStory, opensComment, type FramedStory, type RegionEditingLoader } from '../create-framed-story';
+import { stubFetch } from '@/test/helpers/fetch-stub';
 
 const PAGES = 'https://6869.pages.test';
 const PAGE = '<html><body><article data-af-id="notes" data-af-editable="rich"><p data-af-id="n1">x</p></article><p data-af-id="out">y</p></body></html>';
@@ -20,10 +21,7 @@ function framedPage(enabled: () => boolean, load?: RegionEditingLoader, autoOpen
   frame.getBoundingClientRect = () => new DOMRect(100, 50, 600, 400);
   const posted: Array<{ key: string; payload: { kind: string } & Record<string, unknown> }> = [];
   vi.spyOn(frame.contentWindow!, 'postMessage').mockImplementation(((data: { key: string; payload: { kind: string } }) => { posted.push(data as never); }) as never);
-  const fetch = vi.fn(async (path: string) => path.endsWith('/open')
-    ? Response.json({ regionId: 'notes', kind: 'rich', clientId: 7, seq: 0, state: 'AAA=', savedVersion: 2 })
-    : Response.json({ version: 3 }));
-  vi.stubGlobal('fetch', fetch);
+  const fetch = stubFetch({ '*/open': { regionId: 'notes', kind: 'rich', clientId: 7, seq: 0, state: 'AAA=', savedVersion: 2 } }, { fallback: () => Response.json({ version: 3 }) });
   vi.stubGlobal('EventSource', class { close() {} addEventListener() {} });
   const loadHtml = vi.fn(async () => PAGE);
   let story!: FramedStory;

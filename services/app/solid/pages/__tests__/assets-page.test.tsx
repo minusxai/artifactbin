@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@solidjs/te
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route } from '@solidjs/router';
 import { AssetsPage } from '@/solid/pages/Assets';
+import { stubFetch } from '@/test/helpers/fetch-stub';
 
 vi.mock('@/solid/lib/session', () => ({ useSession: () => ({ session: () => ({ user: { id: 'usr_1', email: 'owner@example.com' } }) }) }));
 const payload = {
@@ -15,7 +16,7 @@ const payload = {
   folders: [{ id: 'folder_1', url: '/a/folder_1', title: 'Research', format: 'folder', version: 1, visibility: 'private', ancestor_ids: [], updated_at: '2026-09-01T06:00:00.000Z' }],
 };
 const open = () => render(() => <MemoryRouter><Route path="*" component={AssetsPage} /></MemoryRouter>);
-beforeEach(() => vi.stubGlobal('fetch', vi.fn(async (url: string) => Response.json(String(url).includes('q=Revenue') ? { ...payload, assets: [payload.assets[0]], total: 1 } : payload))));
+beforeEach(() => { stubFetch({ '*q=Revenue*': { ...payload, assets: [payload.assets[0]], total: 1 } }, { fallback: () => Response.json(payload) }); });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 it('links to upload and dataset creation and searches assets', async () => {

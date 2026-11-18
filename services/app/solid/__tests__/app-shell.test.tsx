@@ -8,6 +8,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@solidjs/te
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '@/solid/App';
 import { REFRESH_EVENT } from '@/solid/lib/page-data-events';
+import { stubFetch } from '@/test/helpers/fetch-stub';
 
 let session: unknown;
 let calls: string[];
@@ -15,12 +16,10 @@ let calls: string[];
 beforeEach(() => {
   calls = [];
   session = { user: { id: 'usr_1', email: 'owner@example.com', username: 'owner', image: null }, kind: 'account', onboarded: true };
-  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-    calls.push(String(url));
-    if (String(url) === '/api/page/session') return new Response(JSON.stringify(session), { status: 200 });
-    if (String(url) === '/api/page/trash') return new Response(JSON.stringify({ files: [{ id: 'doc_1', title: 'Quarterly Review', format: 'markup', version: 3, deleted_at: '2026-09-05T06:00:00.000Z' }] }), { status: 200 });
-    return new Response('{}', { status: 404 });
-  }));
+  stubFetch({
+    '/api/page/session': () => new Response(JSON.stringify(session), { status: 200 }),
+    '/api/page/trash': () => new Response(JSON.stringify({ files: [{ id: 'doc_1', title: 'Quarterly Review', format: 'markup', version: 3, deleted_at: '2026-09-05T06:00:00.000Z' }] }), { status: 200 }),
+  }, { fallback: () => new Response('{}', { status: 404 }), onCall: url => { calls.push(String(url)); } });
 });
 
 afterEach(async () => {

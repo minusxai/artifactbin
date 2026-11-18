@@ -59,6 +59,7 @@ vi.mock('@/solid/lib/served-frame', () => ({ adoptServedFrame: () => { const fra
 vi.mock('../editor/SourceEditor', () => ({ default: () => <textarea aria-label="Markup source" /> }));
 
 import { DocumentPage } from '../pages/Document';
+import { stubFetch } from '@/test/helpers/fetch-stub';
 
 beforeEach(() => {
   mockRole = 'commenter';
@@ -78,12 +79,10 @@ beforeEach(() => {
   selectionSend.mockClear();
   selectionReceive = undefined;
   selectionListeners = [];
-  vi.stubGlobal('fetch', vi.fn(async (input: unknown) => {
-    const url = String(input);
-    if (url.includes('/annotations')) return Response.json({ annotations: [], next_cursor: null });
-    if (url.includes('/members')) return Response.json({ members: [], pending: [], self: null, canManage: false, canInvite: false });
-    return Response.json({});
-  }));
+  stubFetch({
+    '*/annotations*': { annotations: [], next_cursor: null },
+    '*/members*': { members: [], pending: [], self: null, canManage: false, canInvite: false },
+  }, { fallback: () => Response.json({}) });
 });
 
 afterEach(async () => { cleanup(); await vi.dynamicImportSettled(); localStorage.clear(); document.cookie = 'mx_theme=; path=/; max-age=0'; document.body.replaceChildren(); window.history.replaceState(null, '', '/'); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
@@ -395,11 +394,9 @@ it('an owner opens sharing without document source editing', async () => {
 });
 
 it('opens the current comments in the document rail', async () => {
-  vi.stubGlobal('fetch', vi.fn(async (input: unknown) => {
-    const url = String(input);
-    if (url.includes('/annotations')) return Response.json({ annotations: [{ id: 'thread-1', snippet: 'A useful point', status: 'open', thread: [{ id: 'first', body: 'Please add the source.', author: { name: 'Reader' } }] }], next_cursor: null });
-    return Response.json({});
-  }));
+  stubFetch({
+    '*/annotations*': { annotations: [{ id: 'thread-1', snippet: 'A useful point', status: 'open', thread: [{ id: 'first', body: 'Please add the source.', author: { name: 'Reader' } }] }], next_cursor: null },
+  }, { fallback: () => Response.json({}) });
   await mountReady();
   fireEvent.click(screen.getByRole('button', { name: 'Comment' }));
   expect(await trusted(1).findByText('Please add the source.')).toBeInTheDocument();

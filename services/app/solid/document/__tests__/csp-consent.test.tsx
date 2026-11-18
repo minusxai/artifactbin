@@ -4,6 +4,7 @@ import { screen, waitFor } from '@testing-library/dom';
 import { fireEvent, render } from '../../__tests__/helpers';
 import { CspConsentBar, cspAskSentence } from '../CspConsentBar';
 import { EMPTY_CSP_EXTENSIONS, type CspRequest } from '@/lib/document/csp-extensions';
+import { stubFetch } from '@/test/helpers/fetch-stub';
 afterEach(() => vi.unstubAllGlobals());
 
 const DECLARED = { ...EMPTY_CSP_EXTENSIONS, connect: ['https://api.open-meteo.com', 'https://mine.example.com'], script: ['https://cdn.plot.ly'] };
@@ -110,8 +111,7 @@ describe('Always for a group', () => {
   });
 
   it('approves the eligible part for the group, reads the reader\'s standing again and reloads', async () => {
-    const fetcher = vi.fn(async (url: string, _init?: RequestInit) => url.startsWith('/api/groups/') ? Response.json({ changed: eligible, addresses: [] }) : Response.json({ cspRequest: { ...ASK, asking: { ...EMPTY_CSP_EXTENSIONS, script: ['https://cdn.plot.ly'] } } }));
-    vi.stubGlobal('fetch', fetcher);
+    const fetcher = stubFetch({ '/api/groups/*': { changed: eligible, addresses: [] } }, { fallback: () => Response.json({ cspRequest: { ...ASK, asking: { ...EMPTY_CSP_EXTENSIONS, script: ['https://cdn.plot.ly'] } } }) });
     const reload = vi.fn();
     const view = render(() => <CspConsentBar id="abc123" request={WITH_GROUP} accountSession reload={reload} />);
     fireEvent.click(view.getByRole('button', { name: 'Always for Team' }));

@@ -4,10 +4,10 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen } from '@solidjs/testing-library';
 import { afterEach, expect, it, vi } from 'vitest';
 import { DefaultConnectionPanel } from '../DefaultConnectionPanel';
+import { stubFetch } from '@/test/helpers/fetch-stub';
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
-const serve = (status: unknown, test: unknown) => vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) =>
-  String(url).endsWith('/test') && init?.method === 'POST' ? Response.json(test) : Response.json(status)));
+const serve = (status: unknown, test: unknown) => stubFetch({ 'POST */test': () => Response.json(test) }, { fallback: () => Response.json(status) });
 
 it('shows the connector and its shown fields, and tests the connection', async () => {
   serve({ configured: true, connector: 'postgres', label: 'PostgreSQL', fields: { host: 'db.example.com', port: 5432, database: 'shop' } }, { ok: true, latencyMs: 12 });

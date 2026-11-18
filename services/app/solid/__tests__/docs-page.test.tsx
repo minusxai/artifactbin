@@ -10,7 +10,7 @@ import { gettingStarted } from '@/lib/agent-copy/getting-started';
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.history.replaceState(null, '', '/'); });
 it('serves the human tour with current templates, live design systems and a link to Getting started', async () => {
-  vi.stubGlobal('fetch', vi.fn(async (url: string) => url === '/api/page/session' ? Response.json({ user: null, kind: 'none', onboarded: true }) : Response.json({})));
+  stubFetch({}, { session: { user: null, kind: 'none', onboarded: true }, fallback: () => Response.json({}) });
   window.history.replaceState(null, '', '/docs-human');
   render(() => <App />);
   await vi.dynamicImportSettled();
@@ -33,7 +33,7 @@ it('serves the human tour with current templates, live design systems and a link
 });
 
 it('renders the same Getting started instructions as Markdown, with sidebar and copyable commands', async () => {
-  vi.stubGlobal('fetch', vi.fn(async (url: string) => url === '/api/page/session' ? Response.json({ user: null, kind: 'none', onboarded: true }) : Response.json({})));
+  stubFetch({}, { session: { user: null, kind: 'none', onboarded: true }, fallback: () => Response.json({}) });
   window.history.replaceState(null, '', '/getting-started');
   render(() => <App />);
   const main = await screen.findByRole('main');
@@ -58,8 +58,8 @@ it('offers the author skill and links to installation instructions',()=>{
 });
 
 it('company setup panel copies shared recipient defaults and preserves explicit Personal starter destination',async()=>{
- const fetcher=vi.fn(async (url:string)=>url==='/api/deployment'?Response.json({mode:'company',setup_complete:true,is_owner:false,default_group:{id:'grp_team',handle:'company_team',name:'Company',description:'',role:null}}):new Promise<Response>(()=>{}));
- vi.stubGlobal('fetch',fetcher);render(()=> <GetStarted destination={{type:'personal'}}/>);
+ const fetcher=stubFetch({'/api/deployment':{mode:'company',setup_complete:true,is_owner:false,default_group:{id:'grp_team',handle:'company_team',name:'Company',description:'',role:null}}},{fallback:()=>new Promise<Response>(()=>{})});
+ render(()=> <GetStarted destination={{type:'personal'}}/>);
  await screen.findByRole('button',{name:'Copy deployment setup instructions'});
  expect(document.body.textContent).toContain('GET /api/groups/company_team');expect(document.body.textContent).toContain('PUT /api/me/preferences');expect(document.body.textContent).not.toContain('grp_team');
  fireEvent.click(screen.getByRole('button',{name:'Create a live document for my agent'}));
@@ -68,6 +68,7 @@ it('company setup panel copies shared recipient defaults and preserves explicit 
 
 import {DeploymentWelcome} from '@/solid/pages/DeploymentWelcome';
 import { agentDiscovery, AGENT_HELP_TITLE } from '@/lib/skills/agent-discovery';
+import { stubFetch } from '@/test/helpers/fetch-stub';
 it('shows the shared descriptive guide before skill installation',()=>{
  render(()=><DeploymentWelcome deployment={{mode:'company',setup_complete:false,is_owner:false,default_group:null}}/>);
  const help=agentDiscovery(window.location.origin);
