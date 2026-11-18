@@ -18,7 +18,7 @@
  *  - an invitation is consumed with its row locked, so acceptance happens exactly once.
  * A refusal is an IdentityError; every change answers the `GroupChange`s it committed, for the app to act on after.
  */
-import {IdentityError,isGroupRole,groupRoleRank,isTestDomainEmail,normalizeCreateGroup,type GroupChange,type GroupInvitation,type GroupRole,type GroupSummary,type IdentityService,type Queryable,type TransactionalQueryable} from '@artifactbin/contracts';
+import {IdentityError,isGroupRole,groupRoleRank,isTestDomainEmail,normalizeCreateGroup,type GroupSignInGrant,type GroupChange,type GroupInvitation,type GroupRole,type GroupSummary,type IdentityService,type Queryable,type TransactionalQueryable} from '@artifactbin/contracts';
 import {reserveHandle} from './accounts';
 import {enqueueGroupMail} from './mail';
 import {groupAdminsSql} from './rules';
@@ -39,7 +39,7 @@ export async function effectiveAdminGroupIds(q: Queryable, t: IdentityTables, us
   return (await q.query<{group_id: string}>(`SELECT ga.group_id FROM (${groupAdminsSql(t)}) ga WHERE ga.user_id=$1 ORDER BY ga.group_id COLLATE "C"`, [userId])).rows.map(row => row.group_id);
 }
 
-type GroupMethods = Pick<IdentityService, 'revokeGroupSignIn' | 'createGroup' | 'updateGroup' | 'setGroupParent' | 'deleteGroup' | 'setGroupMember' | 'removeGroupMember' | 'inviteGroupMember'
+type GroupMethods = Pick<IdentityService, 'revokeGroupSignIn' | 'approveServiceGroupSignIn' | 'revokeServiceGroupSignIn' | 'createGroup' | 'updateGroup' | 'setGroupParent' | 'deleteGroup' | 'setGroupMember' | 'removeGroupMember' | 'inviteGroupMember'
   | 'removeGroupInvitation' | 'acceptGroupInvitations' | 'admitToGroup'>;
 
 export function groupMethods(db: TransactionalQueryable, t: IdentityTables, options: {testDomain?: string}): GroupMethods {
@@ -87,6 +87,24 @@ export function groupMethods(db: TransactionalQueryable, t: IdentityTables, opti
         await requireAdmin(tx, actorId, groupId);
         const row = (await tx.query<{name: string | null}>(`UPDATE ${t.tokens} SET deleted_at=now() WHERE id=$1 AND group_id=$2 AND user_id IS NULL AND deleted_at IS NULL RETURNING name`, [id, groupId])).rows[0];
         return row ? {name: row.name} : null;
+      });
+    },
+    async approveServiceGroupSignIn({actorId, groupId, serviceId, role: level}) {
+      if (level !== 'member' && level !== 'editor') throw new IdentityError('invalid_role');
+      if (typeof serviceId !== 'string' || !/^[a-z][a-z0-9-]{0,62}$/.test(serviceId)) throw new IdentityError('invalid_service');
+      return db.transaction(async tx => {
+        await requireAdmin(tx, actorId, groupId);
+        // One live approval per group, service and level: approving it again answers the one already there.
+        const existing = (await tx.query<GroupSignInGrant>(`SELECT * FROM ${t.group_sign_in_grants} WHERE group_id=$1 AND service_id=$2 AND role=$3 AND deleted_at IS NULL`, [groupId, serviceId, level])).rows[0];
+        if (existing) return existing;
+        return (await tx.query<GroupSignInGrant>(`INSERT INTO ${t.group_sign_in_grants}(id,group_id,role,service_id,approved_by) VALUES($1,$2,$3,$4,$5) RETURNING *`,
+          ['sgg_' + internalId(), groupId, level, serviceId, actorId])).rows[0]!;
+      });
+    },
+    async revokeServiceGroupSignIn({actorId, groupId, id}) {
+      return db.transaction(async tx => {
+        await requireAdmin(tx, actorId, groupId);
+        return (await tx.query<GroupSignInGrant>(`UPDATE ${t.group_sign_in_grants} SET deleted_at=now() WHERE id=$1 AND group_id=$2 AND deleted_at IS NULL RETURNING *`, [id, groupId])).rows[0] ?? null;
       });
     },
     async createGroup({actorId, handle: rawHandle, name: rawName, description: rawDescription, parentId: rawParent}) {

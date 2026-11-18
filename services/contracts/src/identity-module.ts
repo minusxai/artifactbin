@@ -21,7 +21,7 @@ import type {Queryable} from './db';
 import type {UserKind} from './testusers';
 
 /** The tables only the identity module writes (scripts/ci/table-ownership.mjs, the generated grants.sql). */
-export const IDENTITY_OWNED_TABLES = ['users', 'tokens', 'handle_reservations', 'groups', 'group_members', 'group_invitations', 'group_hierarchy', 'group_mail_outbox'] as const;
+export const IDENTITY_OWNED_TABLES = ['users', 'tokens', 'handle_reservations', 'groups', 'group_members', 'group_invitations', 'group_hierarchy', 'group_mail_outbox', 'group_sign_in_grants'] as const;
 
 /** The HTTP transport: POST `{method, input}`, answered `{result}` or `{error, status, retry_after?}`. */
 export const IDENTITY_CALL_PATH = '/api/internal/identity/call';
@@ -119,6 +119,14 @@ export interface IdentityService {
    * `forbidden` (403), or `not_found` (404) for someone with no role on the group.
    */
   revokeGroupSignIn(input: {actorId: string; groupId: string; id: string}): Promise<{name: string | null} | null>;
+  /**
+   * A group Admin (direct, or through an ancestor) approves the configured service `serviceId` to sign an agent in as
+   * the group at `role` (`member` or `editor`) with nobody present (./service-audiences `GROUP_SIGN_IN_PATH`). The
+   * caller (the app) checked the service opted in. Not an Admin: `forbidden` (403) or `not_found` (404).
+   */
+  approveServiceGroupSignIn(input: {actorId: string; groupId: string; serviceId: string; role: 'member' | 'editor'}): Promise<GroupSignInGrant>;
+  /** A group Admin ends an approval: every sign-in issued under it ends on its next check. Null when none was live. */
+  revokeServiceGroupSignIn(input: {actorId: string; groupId: string; id: string}): Promise<GroupSignInGrant | null>;
   /** Stamp last use, at most once a minute. */
   touchToken(input: {id: string}): Promise<void>;
   setTokenHarness(input: {id: string; harness: string}): Promise<void>;
@@ -149,10 +157,13 @@ export interface IdentityService {
   settleGroupMail(input: {id: string; claimToken: string; outcome: 'pin' | 'sent' | 'failed'; recipientId?: string; maxAttempts: number}): Promise<{owned: boolean}>;
 }
 
+/** A group's approval of a service (`group_sign_in_grants`), as the identity module answers it. */
+export interface GroupSignInGrant {id: string; group_id: string; role: 'member' | 'editor'; service_id: string; approved_by: string; created_at: string; deleted_at: string | null}
+
 export type IdentityMethod = keyof IdentityService;
 export const IDENTITY_METHODS: readonly IdentityMethod[] = [
   'syncProfile', 'createUser', 'ensureUsername', 'setUsername', 'setImageKey', 'confirmWelcome', 'setAutoAcceptMentions', 'createTestUser', 'eraseTestUser',
-  'mintToken', 'ensureWebToken', 'findToken', 'revokeToken', 'revokeGroupSignIn', 'touchToken', 'setTokenHarness', 'markRequestAuthority',
+  'mintToken', 'ensureWebToken', 'findToken', 'revokeToken', 'revokeGroupSignIn', 'approveServiceGroupSignIn', 'revokeServiceGroupSignIn', 'touchToken', 'setTokenHarness', 'markRequestAuthority',
   'createGroup', 'updateGroup', 'setGroupParent', 'deleteGroup', 'setGroupMember', 'removeGroupMember', 'inviteGroupMember', 'removeGroupInvitation', 'acceptGroupInvitations', 'admitToGroup',
   'enqueueGroupMail', 'claimGroupMail', 'settleGroupMail',
 ];

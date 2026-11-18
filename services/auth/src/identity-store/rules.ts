@@ -61,11 +61,15 @@ export const groupLevelHeldSql = (names: GroupNames, user: string, group: string
 
 /**
  * A GROUP'S SIGN-IN, LIVE BY ITS AUTHORISATION (contracts identity-service `GROUP_SIGN_IN_RULE`), over the `tokens`
- * row aliased `t` whose `group_id` is set: no person on the row, a level that is never `admin`, the group live, and the
- * person who authorised it (`issued_by`) active (`active(id)`: their `users.active`, an SQL boolean) and still holding
- * at least that level there. A row issued under an approval (`grant_id`) is not live by this rule. The token's own
- * row, expiry and refresh-family fence are the bearer read's (../identity/bearer `bearerLiveSql`).
+ * row aliased `t` whose `group_id` is set: no person on the row, a level that is never `admin`, the group live, and
+ *  - a person's (no `grant_id`): the person who authorised it (`issued_by`) active (`active(id)`, an SQL boolean) and
+ *    still holding at least that level there;
+ *  - a service's (`grant_id`: contracts service-audiences `GROUP_SIGN_IN_PATH`): the approval it was issued under not
+ *    revoked, for this group, level and service (`issued_by`), whoever approved it.
+ * The token's own row, expiry and (a person's) refresh-family fence are the bearer read's (../identity/bearer).
  */
-export const groupSignInLiveSql = (t: string, names: GroupNames, active: (id: string) => string): string => `(${t}.user_id IS NULL AND ${t}.grant_id IS NULL AND ${t}.issued_by IS NOT NULL
+export const groupSignInLiveSql = (t: string, names: GroupNames & {group_sign_in_grants: string}, active: (id: string) => string): string => `(${t}.user_id IS NULL AND ${t}.issued_by IS NOT NULL
       AND ${t}.group_role IN ('member','editor') AND EXISTS (SELECT 1 FROM ${names.groups} signed_group WHERE signed_group.id=${t}.group_id AND signed_group.deleted_at IS NULL)
-      AND ${active(`${t}.issued_by`)} AND ${groupLevelHeldSql(names, `${t}.issued_by`, `${t}.group_id`, `${t}.group_role`)})`;
+      AND CASE WHEN ${t}.grant_id IS NULL THEN ${active(`${t}.issued_by`)} AND ${groupLevelHeldSql(names, `${t}.issued_by`, `${t}.group_id`, `${t}.group_role`)}
+        ELSE EXISTS (SELECT 1 FROM ${names.group_sign_in_grants} signed_grant WHERE signed_grant.id=${t}.grant_id AND signed_grant.deleted_at IS NULL
+          AND signed_grant.group_id=${t}.group_id AND signed_grant.role=${t}.group_role AND signed_grant.service_id=${t}.issued_by) END)`;

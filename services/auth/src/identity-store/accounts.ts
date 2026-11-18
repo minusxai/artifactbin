@@ -103,6 +103,28 @@ export async function mintGroupSignIn(t: IdentityTables, q: Queryable, readSchem
   return {id, name, token, expiresAt};
 }
 
+/**
+ * A SERVICE'S SIGN-IN AS A GROUP (contracts service-audiences `GROUP_SIGN_IN_PATH`): an access token whose principal is
+ * the group an approval names, at the approval's level, with no person on the row, `issued_by` the service and
+ * `grant_id` the approval, at this installation's API, with no refresh token. ONE statement: written only while the
+ * approval `grantId` is live, names `service` and its group is live; otherwise nothing is written and `grant_refused`
+ * (403) answers, whatever the reason. Its liveness after that is the approval's (./rules `groupSignInLiveSql`).
+ */
+export async function mintServiceGroupSignIn(t: IdentityTables, q: Queryable, input: {grantId: string; service: string; expiresInMs: number; audience: string; scope: string}): Promise<MintedIdentityToken & {groupId: string; role: 'member' | 'editor'}> {
+  const ms = input.expiresInMs;
+  if (!Number.isFinite(ms) || ms < MIN_TOKEN_TTL_MS || ms > MAX_TOKEN_TTL_MS) throw new IdentityError('invalid_expiry', 400);
+  const id = tokenId(), token = TOKEN_PREFIX + crypto.randomBytes(32).toString('base64url');
+  const expiresAt = new Date(Date.now() + ms).toISOString(), name = `service-${input.service}`;
+  const minted = await q.query<{group_id: string; group_role: 'member' | 'editor'}>(`INSERT INTO ${t.tokens} (id, name, token_hash, user_id, expires_at, audience, scope, issued_by, group_id, group_role, grant_id)
+    SELECT $1, $2, $3, NULL, $4, $5, $6, g.service_id, g.group_id, g.role, g.id FROM ${t.group_sign_in_grants} g
+     WHERE g.id = $7 AND g.service_id = $8 AND g.deleted_at IS NULL AND g.role IN ('member','editor')
+       AND EXISTS (SELECT 1 FROM ${t.groups} gg WHERE gg.id = g.group_id AND gg.deleted_at IS NULL)
+    RETURNING group_id, group_role`, [id, name, sha256(token), expiresAt, input.audience, input.scope, input.grantId, input.service]);
+  const row = minted.rows[0];
+  if (!row) throw new IdentityError('grant_refused', 403);
+  return {id, name, token, expiresAt, groupId: row.group_id, role: row.group_role};
+}
+
 type AccountMethods = Pick<IdentityService, 'syncProfile' | 'createUser' | 'ensureUsername' | 'setUsername' | 'setImageKey' | 'confirmWelcome' | 'setAutoAcceptMentions'
   | 'createTestUser' | 'eraseTestUser' | 'mintToken' | 'ensureWebToken' | 'findToken' | 'revokeToken' | 'touchToken' | 'setTokenHarness' | 'markRequestAuthority'>;
 

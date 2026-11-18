@@ -108,6 +108,10 @@ describe.skipIf(!dockerImage('postgres:17-alpine'))('identity tables in a split-
   const doomed=(await store.createGroup({actorId:owner.id,handle:'doomed',name:'Doomed'})).group;
   await store.deleteGroup({actorId:owner.id,groupId:doomed.id,handle:'doomed'});
   expect(await store.admitToGroup({userId:owner.id,email:'owner@example.com',groupId:finance.id,inviteOnly:false})).toMatchObject({admitted:true});
+  // A group's approval of a service (group sign-ins), written and revoked by the identity role alone.
+  const approval=await store.approveServiceGroupSignIn({actorId:owner.id,groupId:finance.id,serviceId:'warehouse',role:'member'});
+  expect(approval).toMatchObject({group_id:finance.id,service_id:'warehouse',role:'member',approved_by:owner.id});
+  expect(await store.revokeServiceGroupSignIn({actorId:owner.id,groupId:finance.id,id:approval.id})).toMatchObject({id:approval.id});
   const minted=await store.mintToken({name:'cli',userId:owner.id,expiresInMs:3_600_000});
   expect((await store.findToken({hash:(await auth.query('SELECT token_hash FROM auth.tokens WHERE id=$1',[minted.id])).rows[0].token_hash}))?.id).toBe(minted.id);
   await store.touchToken({id:minted.id});await store.setTokenHarness({id:minted.id,harness:'codex'});await store.markRequestAuthority({prefix:'cli'});

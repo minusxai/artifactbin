@@ -27,16 +27,20 @@ import {ARTIFACT_WORKLOAD_PATH,APP_ARTIFACT_WORKLOAD_PATH,SERVICE_PAYLOAD_LIMIT,
  *  - a RUN SIGN-IN (contracts `RUN_SIGN_IN_PATH`, a service opted in with `run_sign_ins`, its own secret): the person's
  *    exchanged token for that service, verified as introspection verifies it, becomes an ordinary API access token for
  *    that person with no refresh token (./identity-store/accounts `mintRunSignIn`), audited as a mint. Without the
- *    opt-in, or with another credential in the header, the path is passed on as any unknown one.
+ *    opt-in, or with another credential in the header, the path is passed on as any unknown one;
+ *  - a GROUP SIGN-IN for a service (contracts `GROUP_SIGN_IN_PATH`, a service opted in with `group_sign_ins`, its own
+ *    secret): an approval a group's Admin gave THAT service becomes an ordinary API access token acting as the group at
+ *    the approval's level, with no refresh token (./identity-store/accounts `mintServiceGroupSignIn`), audited as a
+ *    mint by the group. Without the opt-in, or with another credential in the header, an unknown path.
  */
 import {createHash,timingSafeEqual} from 'node:crypto';
-import {CHART_IMAGE_PATH,CANONICAL_CHART_IMAGE_PATH,CHART_IMAGE_KEYS,DRAFT_CHECK_PATH,CANONICAL_DRAFT_CHECK_PATH,DRAFT_CHECK_KEYS,ANONYMOUS,ARTIFACT_SCOPE,DEFAULT_TOKEN_TTL_MS,MAX_TOKEN_TTL_MS,MIN_TOKEN_TTL_MS,RUN_SIGN_IN_PATH,type RunSignIn} from '@artifactbin/contracts';
+import {CHART_IMAGE_PATH,CANONICAL_CHART_IMAGE_PATH,CHART_IMAGE_KEYS,DRAFT_CHECK_PATH,CANONICAL_DRAFT_CHECK_PATH,DRAFT_CHECK_KEYS,ANONYMOUS,ARTIFACT_SCOPE,DEFAULT_TOKEN_TTL_MS,MAX_TOKEN_TTL_MS,MIN_TOKEN_TTL_MS,RUN_SIGN_IN_PATH,GROUP_SIGN_IN_PATH,type GroupSignIn,type RunSignIn} from '@artifactbin/contracts';
 import {ARTIFACT_IMAGE_DEADLINE_MS,ARTIFACT_IMAGE_ERRORS,ARTIFACT_IMAGE_ERROR_FIELDS,ARTIFACT_IMAGE_PATH,CANONICAL_ARTIFACT_IMAGE_PATH,ELEMENT_CAPTURE,ARTIFACT_READ_GRANT_PATH,ARTIFACT_READ_PATH,CANONICAL_ARTIFACT_READ_PATH,API_RESOURCE_PATH,HUMAN_SESSION_LIVE_PATH,IDENTITY_CALL_PATH,IDENTITY_SCHEMA,IDENTITY_INTROSPECT_PATH,IDENTITY_METHODS,IdentityError,SERVICE_AUTH_HEADER,parseAliasOrigins,parseServiceAudiences,type IssuedArtifactReadGrant,type IdentityIntrospectResponse,type IdentityMethod,type IdentityService,type Part,type ServiceAudience,type ServiceTokenParent,type TokenRecord,type TransactionalQueryable} from '@artifactbin/contracts';
 import {BodyTooLargeError,readBody,serviceSecretMatches} from '@artifactbin/utils';
 import type {Context} from 'hono';
 import type {AuthEnv,AuthOptions} from './parts';
 import {acceptedOriginsOf,baseUrlOf} from './routes/oauth';
-import {mintRunSignIn} from './identity-store/accounts';
+import {mintRunSignIn,mintServiceGroupSignIn} from './identity-store/accounts';
 import {identityTables} from './identity-store/tables';
 import {say} from './events';
 import {readEnv} from './env';
@@ -133,6 +137,26 @@ export function sessionAuthority(o:AuthOptions):Part<AuthEnv>{return {name:'sess
    void say(o.events,{kind:'user',id:claims.sub},'minted',{kind:'token',id:minted.id},{name:minted.name});
    const expiresAt=minted.expiresAt!;
    return answer({access_token:minted.token,token_type:'Bearer',token_id:minted.id,expires_at:expiresAt,expires_at_ms:Date.parse(expiresAt),server} satisfies RunSignIn);
+  }catch(error){
+   if(error instanceof IdentityError)return answer({error:error.code,...(error.retryAfter!==undefined?{retry_after:error.retryAfter}:{})},error.status);
+   return answer({error:'session_unavailable'},503);
+  }
+ });
+ app.all(GROUP_SIGN_IN_PATH,async(c,next)=>{
+  // Only a service that opted in, presenting its own secret, reaches this route; anyone else meets an unknown path.
+  const service=serviceOf(audiences,c.req.header(SERVICE_AUTH_HEADER));
+  if(!service?.groupSignIns)return next();
+  const input=await admit(c,()=>true);if(input instanceof Response)return input;
+  if(Object.keys(input).some(key=>key!=='grant_id'&&key!=='expires_in')||typeof input.grant_id!=='string'||!/^sgg_[a-z0-9]{1,40}$/.test(input.grant_id))return answer({error:'bad_request'},400);
+  const lifetime=runLifetime(input.expires_in);
+  if(lifetime===null)return answer({error:'invalid_expiry'},400);
+  if(!o.identityDb)return answer({error:'session_unavailable'},503);
+  try{
+   const server=baseUrlOf(c.req.raw,o.trustedHops??0,readEnv(o.env,'APP__PUBLIC_BASE_URL'));
+   const minted=await mintServiceGroupSignIn(identityTables(authSchema),o.identityDb,{grantId:input.grant_id,service:service.id,expiresInMs:lifetime,audience:`${server}${API_RESOURCE_PATH}`,scope:ARTIFACT_SCOPE});
+   void say(o.events,{kind:'group',id:minted.groupId},'minted',{kind:'token',id:minted.id},{name:minted.name,group_id:minted.groupId,grant_id:input.grant_id,service:service.id});
+   const expiresAt=minted.expiresAt!;
+   return answer({access_token:minted.token,token_type:'Bearer',token_id:minted.id,expires_at:expiresAt,expires_at_ms:Date.parse(expiresAt),server,group_id:minted.groupId,group_role:minted.role,grant_id:input.grant_id} satisfies GroupSignIn);
   }catch(error){
    if(error instanceof IdentityError)return answer({error:error.code,...(error.retryAfter!==undefined?{retry_after:error.retryAfter}:{})},error.status);
    return answer({error:'session_unavailable'},503);

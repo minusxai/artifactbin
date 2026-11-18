@@ -21,7 +21,9 @@
  *    SIGN-IN (./service-audiences `RUN_SIGN_IN_PATH`), where it is the id of the configured service the sign-in was
  *    issued to; the principal is still that person.
  *  - A GROUP (`GROUP_SIGN_IN_RULE` below): kind `'group'`, `user_id` NULL, `group_id` the group and `group_role` the
- *    level (`'member'` or `'editor'`, never `'admin'`); `issued_by` the person who authorised it, never the principal.
+ *    level (`'member'` or `'editor'`, never `'admin'`); `issued_by` the person who authorised it, or for a service's
+ *    sign-in under a group's approval (./service-audiences `GROUP_SIGN_IN_PATH`, `grant_id` set) that service's id;
+ *    never the principal.
  *    There is no person behind it. Only an agent's sign-in is ever a group: no browser session acts as one.
  * A `tokens` row is a group's exactly when `group_id` is set (`user_id` is then NULL); a row with neither `user_id` nor
  * `group_id` is an unowned token, never a group's. A reader checks `principal_kind` (or `group_id`) before relying on
@@ -98,6 +100,8 @@ export const IDENTITY_SCHEMA = 'identity';
  *    inherited admin is not a member (`group_members` stays direct). A reader deciding "may this person administer this
  *    group" reads this view rather than re-deriving the rule.
  *  - sessions: Better Auth's browser sessions, never their token; `live` while unexpired.
+ *  - group_sign_in_grants: a group's approvals of configured services (./service-audiences `GROUP_SIGN_IN_PATH`): the
+ *    service, the level, who approved it (history, never authority) and `deleted_at` once revoked. No secret.
  */
 export const IDENTITY_VIEWS = {
   users: ['id', 'email', 'kind', 'parent_user_id', 'expires_at', 'merged_into_user_id', 'name', 'username', 'image_key', 'auto_accept_mentions', 'welcome_pending', 'test_account', 'created_at', 'active'],
@@ -110,6 +114,7 @@ export const IDENTITY_VIEWS = {
   group_mail_outbox: ['id', 'email', 'recipient_id', 'group_id', 'group_name', 'handle', 'action', 'sender_id', 'lease_until', 'claim_token', 'attempts', 'next_attempt_at', 'quarantined_at', 'sent_at', 'created_at'],
   group_admins: ['group_id', 'user_id', 'via_group_id'],
   sessions: ['id', 'expiresAt', 'createdAt', 'updatedAt', 'ipAddress', 'userAgent', 'userId', 'live'],
+  group_sign_in_grants: ['id', 'group_id', 'role', 'service_id', 'approved_by', 'created_at', 'deleted_at'],
 } as const;
 
 /** Purpose-only delegation, service-secret authenticated; never a public API bearer. */

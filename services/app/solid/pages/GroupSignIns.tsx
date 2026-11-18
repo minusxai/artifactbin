@@ -15,7 +15,8 @@ import { ListRow, Panel } from '../ui/Panel';
 import { StatusMessage } from '../ui/StatusMessage';
 import { Badge } from '../ui/ui';
 
-interface GroupSignInView { id: string; name: string | null; role: 'member' | 'editor'; issued_by: { id: string; username: string | null; name: string | null }; created_at: string; live: boolean }
+/** `service`: set when a configured service obtained it under one of the group's approvals. */
+interface GroupSignInView { id: string; name: string | null; role: 'member' | 'editor'; issued_by: { id: string; username: string | null; name: string | null }; created_at: string; live: boolean; service?: string | null }
 
 export function GroupSignIns(props: { group: Pick<GroupSummary, 'id' | 'name' | 'role'> }): JSX.Element {
   const admin = () => props.group.role === 'admin';
@@ -24,7 +25,7 @@ export function GroupSignIns(props: { group: Pick<GroupSummary, 'id' | 'name' | 
   const [selected, setSelected] = createSignal<GroupSignInView | null>(null);
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal('');
-  const who = (signIn: GroupSignInView) => signIn.issued_by.name ?? signIn.issued_by.username ?? 'a former member';
+  const who = (signIn: GroupSignInView) => signIn.service ? `service ${signIn.service}` : signIn.issued_by.name ?? signIn.issued_by.username ?? 'a former member';
   const revoke = async () => {
     const signIn = selected(); if (!signIn || busy()) return;
     setBusy(true); setError('');

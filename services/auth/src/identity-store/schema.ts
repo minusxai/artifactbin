@@ -168,8 +168,21 @@ const GROUP_MAIL_OUTBOX:Table={name:'group_mail_outbox',columns:[
  {name:'quarantined_at',type:'TIMESTAMPTZ'},{name:'sent_at',type:'TIMESTAMPTZ'},{name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
 ],primaryKey:['id'],indexes:[{name:'idx_group_mail_pending',columns:['created_at'],where:'sent_at IS NULL'}]};
 
+/**
+ * A GROUP'S APPROVAL OF A SERVICE (contracts service-audiences `GROUP_SIGN_IN_PATH`): an Admin of the group (direct, or
+ * through an ancestor) let the configured service `service_id` sign an agent in as the group at `role` (`member` or
+ * `editor`) with nobody present. Written only through the identity module (./groups `approveServiceGroupSignIn`);
+ * `approved_by` is history, never authority: the approval belongs to the group and lives until an Admin revokes it
+ * (`deleted_at`) or the group is deleted, and every sign-in issued under it ends with it (`tokens.grant_id`).
+ */
+const GROUP_SIGN_IN_GRANTS:Table={name:'group_sign_in_grants',columns:[
+ {name:'id',type:'TEXT',notNull:true},{name:'group_id',type:'TEXT',notNull:true},{name:'role',type:'TEXT',notNull:true},
+ {name:'service_id',type:'TEXT',notNull:true},{name:'approved_by',type:'TEXT',notNull:true},
+ {name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},{name:'deleted_at',type:'TIMESTAMPTZ'},
+],primaryKey:['id'],indexes:[{name:'idx_group_sign_in_grants_group',columns:['group_id'],where:'deleted_at IS NULL'}]};
+
 /** @public Read by scripts/render-schema.mjs, which finds Table data among this module's exports. */
-export const IDENTITY_TABLES: Table[] = [USERS, TOKENS, HANDLE_RESERVATIONS, GROUPS, GROUP_HIERARCHY, GROUP_MEMBERS, GROUP_INVITATIONS, GROUP_MAIL_OUTBOX];
+export const IDENTITY_TABLES: Table[] = [USERS, TOKENS, HANDLE_RESERVATIONS, GROUPS, GROUP_HIERARCHY, GROUP_MEMBERS, GROUP_INVITATIONS, GROUP_MAIL_OUTBOX, GROUP_SIGN_IN_GRANTS];
 
 /**
  * THE SECRET COLUMNS, the one list: no view exposes them, so only the identity module reads them. A credential's
