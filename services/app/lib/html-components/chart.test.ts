@@ -310,6 +310,10 @@ it('labels where its rows came from in its own chrome: Live, Snapshot, paused, a
   await until(() => label()?.textContent === 'Live · paused', 'paused label');
   expect(read.getAttribute('data-af-error')).toBe('consent_required');
   expect(status(read).textContent).toBe(SQL_FAILURES.consent_required.notice);
+  // An empty rerun takes the label down with the drawing.
+  watches[0]!.next(sourced([], { kind: 'live', at: '2026-11-18T14:40:00.000Z' }));
+  await until(() => status(read).textContent === 'No rows', 'empty');
+  expect(read.querySelector('.af-data-source')).toBeNull();
   // Rows the page wrote into the chart itself carry no source: no label.
   const given = mount({}, { chart: BAR, rows: ROWS });
   await ready(given);

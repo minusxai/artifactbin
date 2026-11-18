@@ -3,11 +3,11 @@
  * ("Live", "Live · paused", "Snapshot · <when>"), worded by lib/html-component-specs data-source
  * from the answer's `rows.source`. A focusable button named "Data source: …" inside an
  * af-tooltip whose content says when and as whom. Kept in place while nothing changes, so a
- * rerender never closes an open tooltip.
+ * rerender never closes an open tooltip. af-tooltip loads lazily, with the first label: a helper
+ * defines nothing on import, and a chart or table that never labels never loads it.
  * Used by: chart-frame.ts, data-table.ts.
  */
 import type { DataSourceLabel } from '@/lib/html-component-specs/data-source';
-import './tooltip';
 
 /** Light-DOM styles for the label; each host's stylesheet carries them. */
 export const dataSourceStyles =
@@ -38,6 +38,7 @@ export class DataSourceSlot {
   }
 
   private build(label: DataSourceLabel): HTMLElement {
+    void import('./tooltip');
     const doc = this.host.ownerDocument;
     const tip = doc.createElement('af-tooltip');
     tip.className = 'af-data-source';

@@ -748,5 +748,12 @@ it("labels where its rows came from from the answer it was handed, and nothing f
   expect(label()!.textContent).toBe("Live · paused");
   el.data = { columns, rows: [{ id: 2 }] };
   expect(el.querySelector(".af-data-source")).toBeNull();
+  // A source whose reads answer `sql` rows keeps the label through its pages.
+  const page = (n: number) => Object.defineProperty([{ id: n }], "source", { value: { kind: "live", at: "2026-11-18T14:32:00.000Z" }, enumerable: false });
+  el.source = { read: async ({ offset }) => ({ rows: page(offset), columns, truncated: offset === 0 }) };
+  await vi.waitFor(() => expect(label()?.textContent).toBe("Live"), { timeout: WAIT_MS });
+  await el.loadMore();
+  expect(el.data.rows).toHaveLength(2);
+  expect(label()!.textContent).toBe("Live");
   el.remove();
 });

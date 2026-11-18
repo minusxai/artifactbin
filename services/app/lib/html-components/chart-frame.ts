@@ -129,6 +129,7 @@ export class ChartFrame {
       this.size(undefined);
     }
     this.values.hidden = true;
+    this.source.show(null);
     this.status.hidden = false;
     this.status.dataset.kind = kind;
     this.status.textContent = text;
