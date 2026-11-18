@@ -15,7 +15,6 @@ it('keeps local grants anonymous read-only and refuses account upgrades',async()
  expect((await makeGrant({checkSession:true})).status).toBe(403);
  expect((await makeGrant({authorizePrivate:true})).status).toBe(403);
  expect(guest.readOnly).toBe(true);
- await (await harness.db()).query('UPDATE artifacts SET visibility=$2 WHERE id=$1',[id,'private']);
 });
 it('rejects cross-origin grants and mismatched or stale source identity',async()=>{
  const bad=request('/api/local-connection',{method:'POST',json:{identity:{}}});bad.headers.set('origin','https://untrusted.example');expect((await grant(bad)).status).toBe(403);

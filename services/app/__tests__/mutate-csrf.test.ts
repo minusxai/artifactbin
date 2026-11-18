@@ -15,7 +15,11 @@ import { createUser, getUserById } from '@/lib/accounts';
 import { agentCookie, request, useAppHarness, setSession } from '@/__tests__/harness';
 
 useAppHarness();
-beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null, emailVerified: true } } : null)));
+beforeEach(() => {
+  sessionUser.id = '';
+  sessionUser.email = '';
+  setSession(() => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null, emailVerified: true } } : null));
+});
 
 const BASE = 'http://localhost:3000';
 const sessionUser = { id: '', email: '' };
@@ -32,22 +36,19 @@ const create = async (token: string, body: Record<string, unknown>) => {
   return (await res.json()) as { id: string };
 };
 const ROWS = [{ choice: 'ramen' }];
+/** A dataset only its owner (and editors) may write, as `token`'s account. */
+const writableDataset = async (token: string) => (await create(token, { dataset: ROWS, columns: [{ name: 'choice', type: 'string' }], access: 'readwrite' })).id;
 const DOC=(ds:string)=>`<!doctype html><html><head><link rel="af-dataset" data-af-name="records" href="ref:${ds}" data-af-mode="live"></head><body><h1>Vote</h1></body></html>`;
 async function bind(token:string,ds:string,visibility:string){
  const doc=(await create(token,{html:DOC(ds),visibility})).id;
  expect((await nativeDatasetClient(doc).rows('records','choice',{token})).response.status).toBe(200);return doc;
 }
 
-beforeEach(async () => {
-  sessionUser.id = '';
-  sessionUser.email = '';
-});
-
 /** A private document + its writable dataset, owned by one account. */
 async function setup() {
   const user = await createUser({ email: 'owner@x.com' });
   const t = await mintToken('t', user.id);
-  const ds = (await create(t.token, { dataset: ROWS, columns: [{ name: 'choice', type: 'string' }], access: 'readwrite' })).id;
+  const ds = await writableDataset(t.token);
   const doc=await bind(t.token,ds,'private');
   return { t, user, ds, doc };
 }
@@ -85,7 +86,7 @@ describe('cross-site writes', () => {
 
   it('never blocks a BEARER, even with a cross-site Origin — an agent is not a browser', async () => {
     const t = await mintToken('t');
-    const ds = (await create(t.token, { dataset: ROWS, columns: [{ name: 'choice', type: 'string' }], access: 'readwrite' })).id;
+    const ds = await writableDataset(t.token);
     const doc=await bind(t.token,ds,'public');
     const res = await write(doc, { token: t.token, origin: 'https://evil.example' });
     expect(res.status, await res.clone().text()).toBe(200);
@@ -119,7 +120,7 @@ describe('cross-site writes', () => {
 
   it('refuses writes from the anonymous served document, including its opaque origin', async () => {
     const t = await mintToken('t');
-    const ds = (await create(t.token, { dataset: ROWS, columns: [{ name: 'choice', type: 'string' }], access: 'readwrite' })).id;
+    const ds = await writableDataset(t.token);
     const doc=await bind(t.token,ds,'public'); // public
     // What a sandboxed document sends: Origin "null", no cookie at all.
     const res = await write(doc, { origin: 'null' });

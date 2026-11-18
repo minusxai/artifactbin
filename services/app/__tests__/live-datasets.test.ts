@@ -311,6 +311,9 @@ it('rate-limits connection tests and answers them to owners and editors only', a
   let limited = 0;
   for (let i = 0; i < 31; i++) if ((await call(connectionTest as never, `/api/artifacts/${id}/connection/test`, id, alice, { method: 'POST' })).status === 429) limited++;
   expect(limited).toBeGreaterThan(0);
+});
+
+it('lists the live connectors and which of them are available', async () => {
   const list = await connectorsGet();
   const connectors = (await list.json()).connectors as Array<{ id: string; available: boolean; group: string }>;
   expect(connectors.map((c) => [c.id, c.available, c.group])).toEqual([['postgres', true, 'live'], ['mysql', true, 'live'], ['bigquery', false, 'live']]);

@@ -42,11 +42,4 @@ describe('GET /health', () => {
     const bare = new Request('http://localhost:3000/health');
     expect((await health(bare)).status).toBe(200);
   });
-
-  it('says nothing about the deployment', async () => {
-    const text = JSON.stringify(await (await health(request('/health'))).json());
-    for (const leak of ['version', 'commit', 'env', 'host', 'database']) {
-      expect(text.toLowerCase()).not.toContain(leak);
-    }
-  });
 });

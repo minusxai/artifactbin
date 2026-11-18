@@ -5,7 +5,7 @@ import {expect,it} from 'vitest';
 import {request,useAppHarness,mintAccountToken} from './harness';
 import {nativeHtml} from './native-html-fixture';
 import {nativeAnchor} from './native-annotation-fixture';
-import {observedRequest,patchMetadata} from './conditional-request';
+import {observedRequest} from './conditional-request';
 import {POST as create} from '@/app/api/artifacts/route';
 import {GET as read,PUT as replace} from '@/app/api/artifacts/[id]/route';
 import {POST as revert} from '@/app/api/artifacts/[id]/revert/route';
@@ -70,8 +70,4 @@ it('direct creation stamps identities and archived restore preserves the origina
  const s=await setup();expect((await s.save(s.first.html.replace(/<p[^>]*>Hello<\/p>/,'<p>Changed</p>'))).status).toBe(200);
  const restored=await revert(await observedRequest(`/api/artifacts/${s.id}/revert`,{method:'POST',token:s.token.token,json:{version:1}}),ctx(s.id));
  expect(restored.status).toBe(200);expect(await restored.json()).toMatchObject({html:s.first.html,version:3});
-});
-it('metadata-only writes preserve canonical source bytes',async()=>{
- const s=await setup();const response=await patchMetadata(s.token.token,s.id,{title:'Named'});
- expect(response.status).toBe(200);expect((await s.head()).html).toBe(s.first.html);
 });

@@ -74,7 +74,7 @@ describe('the one identifier', () => {
     expect('slug' in list.artifacts[0]).toBe(false);
   });
 
-  it('the id is the ref target: ref_<id> binds in SQL, ref_<unknown> 400s as unresolvable', async () => {
+  it('the id is the ref target: ref:<id> stays in the published page, ref:<unknown> is a 400 invalid_dataset_binding', async () => {
     const token = await mint();
     const ds = await create(token, {
       title: 'sales',

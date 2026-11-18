@@ -28,14 +28,18 @@ it('publishes a transitive component/resource closure idempotently and serves on
  expect((await raw(request(`/a/${saved.id}/raw`),context)).status).toBe(404);
  const reader=await raw(request(`/a/${saved.id}/raw`,{token:owner.token}),context);expect(reader.status).toBe(200);expect(await reader.text()).toContain('data-af-id="button"');
  const page=await readHtmlPage(identityForUser(owner.userId,owner.id),saved.id);expect(page?.html).toContain('data-af-id="button"');
+ const texts=new Map<string,string>();
  for(const dependency of saved.dependencyReceipts){
   const url=`/a/${saved.id}/assets?dependency=${dependency.id}&revision=${dependency.revision}&version=1`;
   for(const token of [undefined,other.token])expect((await asset(request(url,{token}),context)).status).toBe(404);
-  const served=await asset(request(url,{token:owner.token}),context);expect(served.status).toBe(200);const text=await served.text();
-  if(dependency.path==='components/button.js'){expect(text).toContain(`/a/${saved.id}/assets?`);expect(text).not.toContain('./shared.js');expect(text).toContain('version=1');}
-  if(dependency.path==='assets/style.css'){expect(text).not.toContain('./nested.css');expect(text).not.toContain('./mark.svg');expect(text).toContain('version=1');}
-  if(dependency.path==='assets/mark.svg')expect(sha(text)).toBe(sha(sourceFiles.find(([path])=>path===dependency.path)![1]!));
+  const served=await asset(request(url,{token:owner.token}),context);expect(served.status).toBe(200);texts.set(dependency.path,await served.text());
  }
+ // Every named dependency is among the receipts, so none of these checks can be skipped by a renamed path.
+ const button=texts.get('components/button.js'),style=texts.get('assets/style.css'),mark=texts.get('assets/mark.svg');
+ expect(button,'components/button.js receipt').toBeDefined();expect(style,'assets/style.css receipt').toBeDefined();expect(mark,'assets/mark.svg receipt').toBeDefined();
+ expect(button).toContain(`/a/${saved.id}/assets?`);expect(button).not.toContain('./shared.js');expect(button).toContain('version=1');
+ expect(style).not.toContain('./nested.css');expect(style).not.toContain('./mark.svg');expect(style).toContain('version=1');
+ expect(sha(mark!)).toBe(sha(sourceFiles.find(([path])=>path==='assets/mark.svg')![1]!));
 });
 it('rejects an unresolved transitive import before creating any dependency',async()=>{
  const owner=await mintAccountToken('mxmx_test_bundle_invalid');const publicationBundle=bundle();publicationBundle.files=publicationBundle.files.filter(f=>f.path!=='components/shared.js');
