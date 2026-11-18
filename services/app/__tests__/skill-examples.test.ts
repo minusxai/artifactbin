@@ -16,13 +16,15 @@ import {request,useAppHarness,mintAccountToken} from './harness';
 // (examples/csv-dashboard.mjs) is a real-sized bundle dependency, so these publish under the product default.
 vi.mock('@/lib/platform/config',async importOriginal=>({...await importOriginal<typeof import('@/lib/platform/config')>(),MAX_FILE_BYTES:50_000_000}));
 useAppHarness();
+/** Downloads the skill archive the service serves and unpacks it into `dir` (as `dir/artifactbin`). */
+const installSkill=async(dir:string)=>{const zip=path.join(dir,'skill.zip');await writeFile(zip,new Uint8Array(await (await skillArchive(new Request('http://localhost/skills/artifactbin.zip'))).arrayBuffer()));execFileSync('unzip',['-q',zip,'-d',dir]);};
 /** No flow ever leaves a file beside the source. */
 const noCompanions=async(dir:string)=>expect((await readdir(dir,{recursive:true})).filter(name=>String(name).endsWith('.af.json'))).toEqual([]);
 describe('installed native author examples',()=>{
  it('publishes report HTML with canonical data-af identities',async()=>{
   const dir=await mkdtemp(path.join(tmpdir(),'native-skill-example-'));
   try{
-   const zip=path.join(dir,'skill.zip');await writeFile(zip,new Uint8Array(await (await skillArchive(new Request('http://localhost/skills/artifactbin.zip'))).arrayBuffer()));execFileSync('unzip',['-q',zip,'-d',dir]);
+   await installSkill(dir);
    const installed=path.join(dir,'artifactbin'),{prepareBundle}=await import(pathToFileURL(path.join(installed,'scripts/toolbox-publication-bundle.mjs')).href);
    // The API test project caps uploaded files at 10 KB; the installed-skill tests cover the full portable font graph.
    const source=await readFile(path.join(installed,'examples/report.html'),'utf8');const saved=await prepareBundle({root:installed,entry:'examples/report.html',entryHtml:source.replace(/<link[^>]*data-af="design-system"[^>]*>/,'<link data-af="design-system" rel="stylesheet" href="https://styles.example/theme.css">'),server:'http://localhost:3000'});
@@ -32,7 +34,7 @@ describe('installed native author examples',()=>{
  it('publishes a dashboard whose CSVs are linked by path: one dataset per file, named by it, updated in place when it changes',async()=>{
   const dir=await mkdtemp(path.join(tmpdir(),'native-skill-dashboard-'));
   try{
-   const zip=path.join(dir,'skill.zip');await writeFile(zip,new Uint8Array(await (await skillArchive(new Request('http://localhost/skills/artifactbin.zip'))).arrayBuffer()));execFileSync('unzip',['-q',zip,'-d',dir]);
+   await installSkill(dir);
    const installed=path.join(dir,'artifactbin'),project=path.join(dir,'project');await (await import('node:fs/promises')).mkdir(project);
    const {publishCommand}=await import(pathToFileURL(path.join(installed,'scripts/toolbox-publish.mjs')).href);
    const owner=await mintAccountToken('sample-dashboard'),server='http://localhost:3000';
@@ -80,7 +82,7 @@ describe('installed native author examples',()=>{
  it('creates and conditionally updates a project through installed helpers with durable dependency receipts',async()=>{
   const dir=await mkdtemp(path.join(tmpdir(),'native-skill-update-'));
   try{
-   const zip=path.join(dir,'skill.zip');await writeFile(zip,new Uint8Array(await (await skillArchive(new Request('http://localhost/skills/artifactbin.zip'))).arrayBuffer()));execFileSync('unzip',['-q',zip,'-d',dir]);
+   await installSkill(dir);
    const installed=path.join(dir,'artifactbin');
    const {prepareBundle,prepareBundleUpdate}=await import(pathToFileURL(path.join(installed,'scripts/toolbox-publication-bundle.mjs')).href);
    const owner=await mintAccountToken('sample-project-update'),server='http://localhost:3000';
@@ -108,7 +110,7 @@ describe('installed native author examples',()=>{
  it('runs the installed canonical read/edit/publish and immutable resume workflow',async()=>{
   const dir=await mkdtemp(path.join(tmpdir(),'author-toolbox-installed-'));
   try{
-   const zip=path.join(dir,'skill.zip');await writeFile(zip,new Uint8Array(await (await skillArchive(new Request('http://localhost/skills/artifactbin.zip'))).arrayBuffer()));execFileSync('unzip',['-q',zip,'-d',dir]);
+   await installSkill(dir);
    const installed=path.join(dir,'artifactbin'),project=path.join(installed,'project');await (await import('node:fs/promises')).mkdir(project);
    const {sourceIdentity,stripMarker}=await import(pathToFileURL(path.join(installed,'scripts/toolbox-source.mjs')).href);
    const {publishCommand}=await import(pathToFileURL(path.join(installed,'scripts/toolbox-publish.mjs')).href),{readCommand}=await import(pathToFileURL(path.join(installed,'scripts/read.mjs')).href),{commentCommand}=await import(pathToFileURL(path.join(installed,'scripts/comment.mjs')).href);
@@ -175,7 +177,7 @@ describe('installed native author examples',()=>{
  it('publishes the tracker as one page that links its entries dataset and runs no code on the server',async()=>{
   const dir=await mkdtemp(path.join(tmpdir(),'native-skill-app-'));
   try{
-  const zip=path.join(dir,'skill.zip');await writeFile(zip,new Uint8Array(await (await skillArchive(new Request('http://localhost/skills/artifactbin.zip'))).arrayBuffer()));execFileSync('unzip',['-q',zip,'-d',dir]);
+  await installSkill(dir);
   const installed=path.join(dir,'artifactbin'),{prepareBundle}=await import(pathToFileURL(path.join(installed,'scripts/toolbox-publication-bundle.mjs')).href),owner=await mintAccountToken('sample-app');
   const dataset=await publish(request('/api/artifacts',{method:'POST',token:owner.token,json:{dataset:execFileSync(process.execPath,[path.join(installed,'examples/gen-transactions.mjs')]).toString()}}));expect(dataset.status).toBe(201);const datasetId=(await dataset.json()).id;
   const source=await readFile(path.join(installed,'examples/tracker.html'),'utf8'),saved=await prepareBundle({root:installed,entry:'examples/tracker.html',entryHtml:source.replaceAll('DATASET_ID',datasetId).replaceAll('TARGETS_ID',datasetId).replace(/<link[^>]*data-af="design-system"[^>]*>/,'<link data-af="design-system" rel="stylesheet" href="https://styles.example/theme.css">'),server:'http://localhost:3000'});const response=await publish(request('/api/artifacts',{method:'POST',token:owner.token,headers:{'Idempotency-Key':saved.idempotencyKey},json:saved.body}));expect(response.status,await response.clone().text()).toBe(201);const page=await response.json();
@@ -185,7 +187,7 @@ describe('installed native author examples',()=>{
  it('runs autofix on publish: writes fixes, refuses problems, --strict refuses fixes, and carries IDs forward on regeneration',async()=>{
   const dir=await mkdtemp(path.join(tmpdir(),'author-autofix-publish-'));
   try{
-   const zip=path.join(dir,'skill.zip');await writeFile(zip,new Uint8Array(await (await skillArchive(new Request('http://localhost/skills/artifactbin.zip'))).arrayBuffer()));execFileSync('unzip',['-q',zip,'-d',dir]);
+   await installSkill(dir);
    const installed=path.join(dir,'artifactbin'),project=path.join(dir,'project');await (await import('node:fs/promises')).mkdir(project);
    const {publishCommand}=await import(pathToFileURL(path.join(installed,'scripts/toolbox-publish.mjs')).href);
    const owner=await mintAccountToken('toolbox-autofix'),server='http://localhost:3000',logs:string[]=[];
