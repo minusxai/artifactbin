@@ -46,6 +46,7 @@ function fakePool(fail?: (sql: string) => boolean) {
   const client = {
     query: run,
     on: (event: string, cb: (arg: never) => void) => { handlers.set(event, [...handlers.get(event) ?? [], cb]); },
+    removeListener: (event: string, cb: (arg: never) => void) => { handlers.set(event, (handlers.get(event) ?? []).filter(h => h !== cb)); },
     release: (destroy?: boolean) => { released.push(destroy); },
   };
   const pool = { query: run, connect: vi.fn(async () => client), end: vi.fn(async () => {}) };
@@ -75,6 +76,17 @@ describe('the Postgres adapter', () => {
     await expect(db.transaction(tx => tx.query('BAD'))).rejects.toThrow('failed: BAD');
     expect(fake.statements).toEqual(['BEGIN', 'GOOD', 'COMMIT', 'BEGIN', 'BAD', 'ROLLBACK']);
     expect(fake.released).toEqual([undefined, undefined]);
+  });
+
+  it('fails a transaction whose session the server ended while it idled, discarding that client, and stops listening', async () => {
+    // pg reports the end on the client with no query to fail (an idle_in_transaction_session_timeout); unheard, it ends the process.
+    let gone = false;
+    const fake = fakePool(() => gone), db = new PostgresDb(fake.pool), ended = new Error('terminating connection due to idle-in-transaction timeout');
+    // As pg does: once the client reported the error, every later query on it fails.
+    await expect(db.transaction(async tx => { await tx.query('GOOD'); gone = true; fake.fire('error', ended); return tx.query('AFTER'); })).rejects.toBe(ended);
+    expect(fake.statements).toEqual(['BEGIN', 'GOOD', 'AFTER']);
+    expect(fake.released).toEqual([true]);
+    expect(() => fake.fire('error', ended)).not.toThrow();
   });
 
   it('holds every LISTEN on one connection, fans notifications out, and unlistens with the last subscriber', async () => {

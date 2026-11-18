@@ -50,7 +50,7 @@ const NODE_INCLUDE = ['services/app/lib/html-components/**/*.test.ts', 'services
 const REAL_DATABASE_TESTS = ['services/app/lib/artifacts/__tests__/workload-create-postgres.test.ts', 'services/app/lib/analytics/__tests__/canonical-totals-postgres.test.ts', 'services/connectors/__tests__/connectors-docker.test.ts', 'services/app/lib/artifact-access/__tests__/lock-order-postgres.test.ts', 'services/app/lib/platform/__tests__/identity-roles-postgres.test.ts', 'services/events/__tests__/feed-position-postgres.test.ts', 'services/auth/__tests__/oauth-postgres.test.ts', 'services/app/__tests__/region-processes-postgres.test.ts'];
 /** The S3 object store against a real S3-compatible server, which only `integration-databases`' CI part starts: it reads the
  * server's URL from TEST_S3_URL, and fails under CI without one. */
-const S3_TESTS = ['services/app/lib/object-store/__tests__/store-s3.test.ts'];
+const S3_TESTS = ['services/app/lib/object-store/__tests__/store-s3.test.ts', 'services/app/lib/object-store/__tests__/sweep-s3.test.ts', 'services/app/lib/export/__tests__/export-expiry-s3.test.ts'];
 /** Real Chromium (the browser contract, internal asset rendering, render lifecycle, session pages): `integration` only. */
 const CHROMIUM_TESTS = chromiumTests(import.meta.dirname, NODE_INCLUDE);
 

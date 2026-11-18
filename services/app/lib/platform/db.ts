@@ -189,6 +189,7 @@ export class PostgresDb implements Db {
     connect(): Promise<{
       query<T>(sql: string, params?: unknown[]): Promise<{ rows: T[]; rowCount: number | null }>;
       on(event: string, cb: (arg: { channel: string; payload?: string }) => void): void;
+      removeListener(event: 'error', cb: (error: unknown) => void): void;
       /** `true` destroys the connection instead of returning it to the pool. */
       release(destroy?: boolean): void;
     }>;
@@ -213,8 +214,16 @@ export class PostgresDb implements Db {
     });
   }
 
+  /**
+   * A session the server ends while this transaction idles (its idle_in_transaction_session_timeout, a restart)
+   * reports the error on the client with no query to fail; the pool listens only on idle clients, and an unheard
+   * error ends the process. Heard here, it fails this transaction and the client is discarded.
+   */
   async transaction<T>(fn: (tx: Queryable) => Promise<T>): Promise<T> {
     const client = await this.pool.connect();
+    let lost: unknown;
+    const onLost = (error: unknown) => { lost ??= error; };
+    client.on('error', onLost);
     try {
       await client.query('BEGIN');
       const tx: Queryable = {
@@ -227,10 +236,11 @@ export class PostgresDb implements Db {
       await client.query('COMMIT');
       return result;
     } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
+      if (lost === undefined) await client.query('ROLLBACK');
+      throw lost ?? error;
     } finally {
-      client.release();
+      client.removeListener('error', onLost);
+      if (lost === undefined) client.release(); else client.release(true);
     }
   }
 

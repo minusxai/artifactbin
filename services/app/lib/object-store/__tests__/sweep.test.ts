@@ -1,66 +1,23 @@
 /**
- * THE OBJECT SWEEP and the publish path that feeds it (./sweep header): an object written and referenced survives the
- * margin, an orphan older than the margin is deleted (on the filesystem store, and on S3 when TEST_S3_URL names a
- * MinIO), an old orphan written again with the same bytes before a sweep, or between its scan and its delete,
- * survives, and a refused publish stores nothing. Export images expire in lib/export (export-expiry.test.ts).
+ * THE OBJECT SWEEP and the publish path that feeds it (./sweep header), on the filesystem store: the shared contract
+ * (sweep-contract.ts, which sweep-s3.test.ts runs on a real S3-compatible server), an object a published row references
+ * looked at again only much later, and a refused publish storing nothing. Export images expire in lib/export
+ * (export-expiry.test.ts).
  */
-import {describe,expect,it,onTestFinished} from 'vitest';
+import {expect,it,onTestFinished} from 'vitest';
 import {mintAccountToken,request,useAppHarness,params} from '@/__tests__/harness';
 import {getDb} from '@/lib/platform';
 import {POST as create} from '@/app/api/artifacts/route';
 import {PUT as replace} from '@/app/api/artifacts/[id]/route';
 import {tempDir} from '@artifactbin/test-support/temp-dir';
-import {ObjectUnavailable,createLocalStore,createS3Store,objectKey,objectStore,parseS3Url,recordObjectWrites,sweepObjects,type ObjectStore} from '..';
-import {forgetRecordedWrites,recordedWrites} from '../sweep';
+import {createLocalStore,objectStore,sweepObjects} from '..';
+import {absent,age,dueAt,sweepSuite} from './sweep-contract';
 
 useAppHarness();
-const age=async(key:string)=>{await (await getDb()).query("UPDATE object_writes SET due_at=now()-interval '1 second' WHERE key=$1",[key]);};
-const dueAt=async(key:string)=>(await (await getDb()).query<{due_at:Date}>('SELECT due_at FROM object_writes WHERE key=$1',[key])).rows[0]?.due_at;
-const unique=()=>JSON.stringify([{n:Math.random()}]);
-const absent=(store:Pick<ObjectStore,'get'>,key:string)=>expect(store.get(key)).rejects.toBeInstanceOf(ObjectUnavailable);
 const datasetKey=async(id:string)=>(await (await getDb()).query<{key:string}>("SELECT meta->>'objectKey' AS key FROM artifacts WHERE id=$1",[id])).rows[0]!.key;
 const recordedKeys=async()=>(await (await getDb()).query<{key:string}>('SELECT key FROM object_writes')).rows.map(row=>row.key);
 
-const stores:[string,()=>Promise<ObjectStore>][]=[['filesystem',async()=>createLocalStore(await tempDir('sweep-store-',onTestFinished))]];
-if(process.env.TEST_S3_URL)stores.push(['s3',async()=>createS3Store(parseS3Url(process.env.TEST_S3_URL!))]);
-describe.each(stores)('on the %s store',(_,open)=>{
- it('deletes an orphan older than the margin and keeps one within it',async()=>{
-  const raw=await open(),store=recordedWrites(raw),db=await getDb();
-  const old=objectKey('dataset',unique()),young=objectKey('dataset',unique());
-  await store.put(old,'[]','application/json');await store.put(young,'[]','application/json');
-  await age(old);
-  expect(await sweepObjects(db,raw)).toEqual({deleted:[old],kept:0});
-  await absent(raw,old);expect((await raw.get(young)).toString()).toBe('[]');
-  expect(await dueAt(old)).toBeUndefined();expect(await dueAt(young)).toBeDefined();
-  // Restartable: a second run finds nothing due and deletes nothing.
-  expect(await sweepObjects(db,raw)).toEqual({deleted:[],kept:0});
- });
- it('keeps an orphan written again between its reference scan and its delete (the recheck under the row lock)',async()=>{
-  const raw=await open(),store=recordedWrites(raw),key=objectKey('file',unique()),db=await getDb();
-  await store.put(key,'bytes');await age(key);
-  // The write lands after the sweep found no reference and before it locks the row to delete.
-  let raced=false;
-  const racing=new Proxy(db,{get(target,name){
-   if(name==='transaction')return async(work:Parameters<typeof db.transaction>[0])=>{if(!raced){raced=true;forgetRecordedWrites();await store.put(key,'bytes');}return target.transaction(work);};
-   const value=Reflect.get(target,name);return typeof value==='function'?value.bind(target):value;}});
-  expect(await sweepObjects(racing,raw)).toEqual({deleted:[],kept:0});
-  expect(raced).toBe(true);expect((await raw.get(key)).toString()).toBe('bytes');
- });
- it('drops the row of a recorded key whose object was never stored, as a failed write leaves it',async()=>{
-  const raw=await open(),key=objectKey('pdf',unique());
-  await recordObjectWrites([key]);await age(key);
-  expect(await sweepObjects(await getDb(),raw)).toEqual({deleted:[key],kept:0});
-  expect(await dueAt(key)).toBeUndefined();
- });
- it('keeps an old orphan that is written again, identical bytes and all, just before the sweep',async()=>{
-  const raw=await open(),store=recordedWrites(raw),key=objectKey('image',unique());
-  await store.put(key,'bytes');await age(key);
-  // Another process (nothing recorded here) writes the same content-addressed object again.
-  forgetRecordedWrites();await store.put(key,'bytes');
-  expect((await sweepObjects(await getDb(),raw)).deleted).toEqual([]);
-  expect((await raw.get(key)).toString()).toBe('bytes');
- });
-});
+sweepSuite('filesystem',async()=>createLocalStore(await tempDir('sweep-store-',onTestFinished)));
 
 it('keeps an object a published row references past the margin, and looks at it again only much later',async()=>{
  const token=await mintAccountToken('sweep-owner'),rows=[{city:'Lagos',n:Math.random()}];
