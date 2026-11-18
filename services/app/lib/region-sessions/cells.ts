@@ -15,7 +15,8 @@
  *  - SAVE: the merged text of every dirty cell the caller may write is written through the dataset's one write path
  *    (lib/dataset-access writeDatasetCells: one dataset version, the caller's rules, guarded on the head the merge
  *    was made from; a write landing first is merged in and the save tried again). The rows are marked saved inside
- *    that commit.
+ *    that commit. A refused write of several cells is tried again a cell at a time, so only a cell the dataset will
+ *    not take closes; the others keep their text.
  */
 import * as Y from 'yjs';
 import { parseCellKey, REGION_UPDATE_MAX_BYTES, type CellScope, type HtmlDatasetLink, type HtmlPageLink, type RegionOpenReply, type RegionUpdateReply } from '@artifactbin/contracts';
@@ -177,6 +178,8 @@ export function cellStore(db: () => Promise<Db>, core: SessionCore): CellStore {
   async function saveDataset(actor: AccessActor, page: ArtifactRow, datasetId: string, due?: SaveDue): Promise<number> {
     const base = await db();
     let saved = 0;
+    // After a refused write of several cells: which one refused is unknown, so each pass then writes one cell alone.
+    let alone = false;
     for (let pass = 0; pass < SAVE_PASSES; pass++) {
       const dirty = (await base.query<{ region_id: string; dirty_since: string | null; last_update_at: string | null }>(
         "SELECT region_id, dirty_since, last_update_at FROM region_states WHERE artifact_id = $1 AND region_id LIKE 'cell:%' AND dirty_since IS NOT NULL ORDER BY region_id", [datasetId],
@@ -197,7 +200,7 @@ export function cellStore(db: () => Promise<Db>, core: SessionCore): CellStore {
       if (!writable.length) return saved;
       // One table per dataset step (a step writes one table); the first table's cells now, the rest on the next pass.
       const table = writable[0]!.cell.tableId;
-      const batch = writable.filter((access) => access.cell.tableId === table);
+      const batch = writable.filter((access) => access.cell.tableId === table).slice(0, alone ? 1 : undefined);
       /** Each cell's merged text at the sequence it was read at, reconciled with this head. */
       const merged: { access: CellAccess; doc: Y.Doc; seq: number; value: string }[] = [];
       const read = await core.transact<null>(async (tx) => {
@@ -218,7 +221,7 @@ export function cellStore(db: () => Promise<Db>, core: SessionCore): CellStore {
         return { answer: { status: 200, body: null } };
       });
       if (read.status !== 200) continue;
-      if (!merged.length) return saved;
+      if (!merged.length) { if (alone) continue; return saved; }
       const outcome = await writeDatasetCells(actor, dataset, page.id, batch[0]!.cell, merged.map(({ access, value }) => ({ rowId: access.cell.rowId, source: access.cell.source, value })), async (commit, written) => {
         const tx = commit as unknown as Queryable;
         for (const { access, doc, seq } of merged) {
@@ -239,12 +242,14 @@ export function cellStore(db: () => Promise<Db>, core: SessionCore): CellStore {
       // Written: the next pass takes another table's cells, and any typed while this one wrote.
       if ('written' in outcome) { saved++; continue; }
       if (outcome.refused !== 'row_changed') {
-        // The dataset will not take this text: the cells close for everyone (`rejected`) rather than stay dirty forever.
+        if (merged.length > 1) { alone = true; continue; }
+        // The dataset will not take this text: the cell closes for everyone (`rejected`) rather than stay dirty forever.
         console.warn('[region-sessions] a cell save was refused:', outcome.detail);
         await core.transact<null>(async (tx) => {
           for (const { access } of merged) { await reconcileGone(tx, datasetId, access.storage); core.forget(datasetId, access.storage); }
           return { answer: NOT_FOUND };
         });
+        if (alone) continue;
         return saved;
       }
     }

@@ -542,3 +542,37 @@ describe('text the dataset will not take', () => {
     expect((await join(viewer)).value()).toBe('Fix the login bug');
   });
 });
+
+describe('one refused cell among several dirty cells', () => {
+  /** The policy with the viewer also writing notes, and optionally a check on what it writes. */
+  const viewerWritesNotes = async (check?: Record<string, unknown>) => {
+    const head = (await getArtifactById(datasetId))!;
+    const policy = POLICY();
+    const viewerRule = policy.tables[0]!.update_permissions.find((entry) => entry.role === 'viewer')!;
+    (viewerRule.permission as Record<string, unknown>).columns = ['description', 'notes'];
+    if (check) (viewerRule.permission as Record<string, unknown>).check = check;
+    const saved = await patchMetadata(ownerToken, datasetId, { policy, expectedPolicyRevision: head.policy_revision ?? 0 });
+    expect(saved.status, await saved.clone().text()).toBe(200);
+  };
+
+  it('closes only the refused cell: the other cell of the table keeps its typing and saves', async () => {
+    await viewerWritesNotes();
+    const description = await join(viewer, key(red));
+    const notes = await join(viewer, key(red, 'notes'));
+    const watching = await stream(viewer, `${key(red)}:${description.reply.seq}`);
+    description.text.insert(description.text.length, ' ok!!');
+    notes.text.insert(notes.text.length, ' and more');
+    expect((await description.push()).status).toBe(200);
+    expect((await notes.push()).status).toBe(200);
+    // The owner adds a check after the typing that refuses only the description.
+    await viewerWritesNotes({ description: { _neq: 'Fix the login bug ok!!' } });
+    expect(await (await flushCells(viewer)).json()).toEqual({ saved: 1 });
+    const frames = await framesUntil(watching.frames!, (frame) => frame.type === 'closed');
+    expect(frames.at(-1)).toEqual({ type: 'closed', regionId: key(red), reason: 'rejected' });
+    const rows = await stored();
+    expect(rows[0]!.description).toBe('Fix the login bug');
+    expect(rows[0]!.notes).toBe('n1 and more');
+    const left = await (await getDb()).query<{ region_id: string; dirty_since: string | null }>("SELECT region_id, dirty_since FROM region_states WHERE artifact_id = $1 AND region_id LIKE 'cell:%'", [datasetId]);
+    expect(left.rows).toEqual([{ region_id: `cell:${red}:notes`, dirty_since: null }]);
+  });
+});

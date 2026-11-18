@@ -1,6 +1,7 @@
 /**
  * WHAT DEPENDS ON AN ARTIFACT, in the owner's scope: the documents (and datasets holding its media)
- * that reference it, and the documents that declare writes to a dataset. The share menu and delete
+ * that reference it, and the documents that declare writes to a dataset. A page's direct media (the images,
+ * PDFs and files its markup names, recorded at publish as `meta.refs`) count as references. The share menu and delete
  * ask this before changing what others rely on.
  */
 import type {HtmlPageLink} from '@artifactbin/contracts';
@@ -33,7 +34,8 @@ async function findDependentsScoped(scope: Scope, refId: string): Promise<Artifa
     if(row.id===refId)continue;
     if(row.format==='html'){
       const links=(row.meta.htmlLinks??[]) as readonly HtmlPageLink[];
-      if(links.some(link=>(link.kind==='dataset'||link.kind==='live-dataset')&&targets.has(link.datasetId)))found.set(row.id,row);
+      const refs=(Array.isArray(row.meta.refs)?row.meta.refs:[]) as ReadonlyArray<{id?:unknown}|null>;
+      if(refs.some(ref=>ref?.id===refId)||links.some(link=>(link.kind==='dataset'||link.kind==='live-dataset')&&targets.has(link.datasetId)))found.set(row.id,row);
       continue;
     }
 
