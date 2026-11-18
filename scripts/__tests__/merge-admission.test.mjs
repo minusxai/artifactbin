@@ -22,7 +22,7 @@ import yaml from 'yaml';
 import {fastContexts} from '../lib/merge-admission.mjs';
 it('derives all matrix contexts and uses a trusted bounded completed-workflow observer',()=>{
  const read=p=>readFileSync(new URL('../../'+p,import.meta.url),'utf8');
- expect(fastContexts(read('.github/workflows/pr-fast.yml'))).toHaveLength(50);
+ expect(fastContexts(read('.github/workflows/pr-fast.yml'))).toHaveLength(51);
  const w=yaml.parse(read('.github/workflows/pr-fast-timing.yml'));
  expect(w.on.workflow_run).toEqual({workflows:['pr fast'],types:['completed']});
  expect(w.permissions).toEqual({contents:'read',actions:'read',statuses:'write'});

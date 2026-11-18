@@ -21,7 +21,7 @@ name: pr fast
 # The full suite stays in ci.yml: it runs on every push to main (and on demand) and gates deploys there; it does
 # not run on pull requests. page-speed.yml is informational.
 #
-# THE RUN TAKES AS LONG AS ITS SLOWEST JOB, so one stalled transfer on one of ~49 runners sets it (a 62.5s fetch made run
+# THE RUN TAKES AS LONG AS ITS SLOWEST JOB, so one stalled transfer on one of ~50 runners sets it (a 62.5s fetch made run
 # 44148017273 93s). The transfers seen stalling are hedged or bounded, each with a fallback that may cost time but never
 # changes what that runner tests: the checkout starts a second fetch of the same sha beside one that has not landed, and
 # every cache download but each chain's last gives up on a stalled segment for the chain's next tier, and the last stays
@@ -206,6 +206,11 @@ jobs:
           # replayed over the last 30 merges, the packing predicted 22.5s on three for a typical product change (the
           # reached files' 90s budget spent) and 40s for the largest test refactor (43 edited files, 0615b93dd); on four,
           # 17.7s and 31s. The batch alone predicts 12.3s on three, 10.2s on four.
+          # FIVE RUNNERS: on four, the reached files cost more than their weights said (a run's median file ran 1.0-1.5x
+          # its recorded time beside the batch, plus its import): the slowest node runner's Vitest took 18-32s with the
+          # budget spent against 8-9s for the batch alone (runs 44362521013-44378487510; 44369250231 reached none), and a
+          # node runner was the last job in 28 of the 57 pr fast runs of 2026-11-18 14:44-19:15 UTC. A fifth spreads the same
+          # files, so none is deferred.
           # THE PULL REQUEST'S OWN INSTALL: a lock this branch changed misses main's install on every push, and every runner
           # reconciles main's tree to it (~2.7s: the miss probe and `npm install`, run 43039126177). This runner, only on
           # that miss, runs a clean `npm ci` (never a reconciled tree: nothing stale is saved) and saves it under this
@@ -214,13 +219,15 @@ jobs:
           - part: install
             install: true
           - part: node-1
-            batch: 1/4
+            batch: 1/5
           - part: node-2
-            batch: 2/4
+            batch: 2/5
           - part: node-3
-            batch: 3/4
+            batch: 3/5
           - part: node-4
-            batch: 4/4
+            batch: 4/5
+          - part: node-5
+            batch: 5/5
     steps:
       # Node 22, the install cache's (its key says node22; its native modules are compiled for that major's ABI): the hosted
       # tool cache's newest 22 goes on PATH (ubuntu-latest's own Node is a 24). setup-node found that same cached 22, then
@@ -511,6 +518,22 @@ jobs:
           path: node_modules/.cache/test-graph.json
           key: test-graph-v1-${{ runner.os }}-${{ github.sha }}
           restore-keys: test-graph-v1-${{ runner.os }}-
+      # THE CHANGE'S OWN NODE FILES AND THE SLOWER ONES IT REACHES (scripts/lib/node-batch.mjs `nodeAffectedFiles`): a new
+      # node file has no recorded time and a slower one is past the batch's cut, so neither ran on the pull request that
+      # changed it. Chosen after main's measured times are laid over the table, as the batch is, so every runner of the run
+      # chooses the same files; the batch config runs them isolated, packed with the batch's.
+      # CHOSEN IN THE BACKGROUND, beside the test builds' restore, and awaited before the batch: run in line it took 2-4s
+      # of every node runner's critical path (pr fast runs 44362521013-44378487510). It reads the install, the import
+      # graph restored above and main's measured times (awaited first), none of which the test builds' restore writes.
+      # Its summary goes to a file the wait hands to that step's summary; its status, like the times', is written whole.
+      - if: matrix.batch
+        name: Choose the change's node files beyond the batch, in the background
+        run: |
+          ( rc=0
+            until [ -f "$RUNNER_TEMP/node-timings.status" ]; do sleep 0.1; done
+            rc=$(cat "$RUNNER_TEMP/node-timings.status")
+            if [ "$rc" = 0 ]; then GITHUB_STEP_SUMMARY="$RUNNER_TEMP/node-affected.md" node scripts/ci/node-affected.mjs > "$RUNNER_TEMP/node-affected.log" 2>&1 || rc=$?; fi
+            echo "$rc" > "$RUNNER_TEMP/node-affected.part"; mv "$RUNNER_TEMP/node-affected.part" "$RUNNER_TEMP/node-affected.status" ) < /dev/null > /dev/null 2>&1 &
       # The root type check is incremental: start from the newest native build info any run of this repository
       # uploaded (scripts/ci/ci.mjs `type-info`), and pass this one on.
       - if: matrix.part == 'types'
@@ -601,23 +624,18 @@ jobs:
       - if: matrix.suite
         run: node node_modules/vitest/vitest.mjs run ${{ matrix.projects }} --shard=${{ matrix.suite }}
       - if: matrix.batch
-        name: Wait for main's measured node times
+        name: Wait for main's measured node times and the change's node files
         run: |
-          until [ -f "$RUNNER_TEMP/node-timings.status" ]; do sleep 0.1; done
+          until [ -f "$RUNNER_TEMP/node-affected.status" ]; do sleep 0.1; done
           cat "$RUNNER_TEMP/node-timings.log"
-          exit "$(cat "$RUNNER_TEMP/node-timings.status")"
-      # THE CHANGE'S OWN NODE FILES AND THE SLOWER ONES IT REACHES (scripts/lib/node-batch.mjs `nodeAffectedFiles`): a new
-      # node file has no recorded time and a slower one is past the batch's cut, so neither ran on the pull request that
-      # changed it. Chosen after main's measured times are laid over the table, as the batch is, so every runner of the run
-      # chooses the same files; the batch config runs them isolated, packed with the batch's.
-      - if: matrix.batch
-        name: Choose the change's node files beyond the batch
-        run: node scripts/ci/node-affected.mjs
+          if [ -f "$RUNNER_TEMP/node-affected.log" ]; then cat "$RUNNER_TEMP/node-affected.log"; fi
+          if [ -f "$RUNNER_TEMP/node-affected.md" ]; then cat "$RUNNER_TEMP/node-affected.md" >> "$GITHUB_STEP_SUMMARY"; fi
+          exit "$(cat "$RUNNER_TEMP/node-affected.status")"
       - if: matrix.batch
         run: node node_modules/vitest/vitest.mjs run --config vitest.node-batch.config.ts --shard=${{ matrix.batch }}
       # The last runner of each kind saves that kind's entry on an exact miss, after its tests, so its transforms are in it:
       # packing puts the longest files first, often one to a runner, so the last runner holds the most files.
-      - if: contains(fromJSON('["api-32","ui-7","guards-3","node-4"]'), matrix.part) && steps.test-builds.outputs.cache-hit != 'true' && steps.test-builds-retry.outputs.cache-hit != 'true'
+      - if: contains(fromJSON('["api-32","ui-7","guards-3","node-5"]'), matrix.part) && steps.test-builds.outputs.cache-hit != 'true' && steps.test-builds-retry.outputs.cache-hit != 'true'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: |

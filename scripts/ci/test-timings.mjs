@@ -35,6 +35,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { CI_RUNNER, pack, readTimings, shardWall, weigher } from '../lib/timed-sequencer.mjs';
 import { FULL_SUITE_PROJECTS, laneFiles, nodeBatchFiles, withMeasuredTimes } from '../lib/node-batch.mjs';
+import { LEAKS_PAST_ITS_FILE } from '../lib/test-isolation.mjs';
 
 /**
  * PROJECTS THAT RE-RUN ANOTHER PROJECT'S FILES: pr-fast.yml's node batch (`node` files in one shared graph) and its guard
@@ -64,12 +65,22 @@ export const JOBS = {
   ui: { projects: ['ui', 'islands'], count: 2 },
   'pr-api': { projects: ['api', 'api-isolated'], count: 32 },
   'pr-ui': { projects: ['ui', 'islands'], count: 7 },
-  // pr-fast.yml's guard runners (vitest.guard.config.ts), packed by their own recorded times (`LENSES`).
-  'pr-guards': { projects: ['pr-guards', 'pr-guards-isolated', 'pr-contracts', 'pr-contracts-isolated'], count: 3 },
+  // pr-fast.yml's guard runners (vitest.guard.config.ts), packed by their own recorded times (`LENSES`). Their files are
+  // the enrolled lists, split by isolation as that config splits them: a recorded file no list enrolls any more runs on
+  // no guard runner, and a newly enrolled one with no time yet still does.
+  'pr-guards': { projects: ['pr-guards', 'pr-guards-isolated', 'pr-contracts', 'pr-contracts-isolated'], count: 3, files: (_timings, project) => guardFiles(project) },
   // pr-fast.yml's node batch (vitest.node-batch.config.ts): its files are chosen from the `node` times, not recorded
   // under a project of their own, so `files` names them (from the recorded `node` files on disk).
-  'pr-node': { projects: ['node-batch'], count: 4, files: (timings) => nodeBatchFiles({ timings, candidates: recordedOnDisk(timings, ['node', 'node-batch']), lane: laneFiles(ROOT), read: (file) => readFileSync(path.join(ROOT, file), 'utf8') }) },
+  'pr-node': { projects: ['node-batch'], count: 5, files: (timings) => nodeBatchFiles({ timings, candidates: recordedOnDisk(timings, ['node', 'node-batch']), lane: laneFiles(ROOT), read: (file) => readFileSync(path.join(ROOT, file), 'utf8') }) },
 };
+
+/** The files vitest.guard.config.ts runs in `project`: its list's files, the leaking ones in its `-isolated` twin. */
+function guardFiles(project) {
+  const list = project.startsWith('pr-contracts') ? 'contract-tests.json' : 'guard-tests.json';
+  const isolated = project.endsWith('-isolated');
+  return JSON.parse(readFileSync(path.join(ROOT, 'scripts/ci', list), 'utf8'))
+    .filter((file) => LEAKS_PAST_ITS_FILE.test(readFileSync(path.join(ROOT, file), 'utf8')) === isolated);
+}
 
 /** The recorded files of `projects` that still exist. */
 function recordedOnDisk(timings, projects) {
@@ -144,7 +155,7 @@ export function mergeTimings(timings, measured) {
 export function shardLoads(timings) {
   const weigh = weigher(timings);
   return Object.fromEntries(Object.entries(JOBS).map(([job, { projects, count, files }]) => {
-    const items = projects.flatMap((project) => (files?.(timings) ?? Object.keys(timings.files[project] ?? {})).map((file) => ({ key: `${project}:${file}`, weight: weigh(project, file), project })));
+    const items = projects.flatMap((project) => (files?.(timings, project) ?? Object.keys(timings.files[project] ?? {})).map((file) => ({ key: `${project}:${file}`, weight: weigh(project, file), project })));
     const byKey = new Map(items.map((item) => [item.key, item]));
     return [job, pack(items, count, CI_RUNNER).map((keys) => {
       const shard = keys.map((key) => byKey.get(key));

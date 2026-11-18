@@ -7,7 +7,7 @@
  *
  * Every shard job runs Vitest and nothing else, so every shard starts empty: work outside Vitest (the
  * integration project) is a job of its own in ci.yml, never a reserve on a shard.
- * Unknown files (new since the timings were recorded) weigh the project's median.
+ * Unknown files (new since the timings were recorded) weigh the project's 90th percentile (`UNMEASURED_QUANTILE`).
  *
  * A SHARD IS PACKED BY ITS WALL TIME, not its summed time: a runner runs its files on three workers (`WORKERS`), so its
  * wall is the busiest worker's, never less than its longest file, and every worker pays a shared-graph project's
@@ -31,10 +31,21 @@ export function readTimings(file = TIMINGS) {
   try { return JSON.parse(readFileSync(file, 'utf8')); } catch { return { files: {} }; }
 }
 
-function median(values) {
+/**
+ * WHAT A NEVER-MEASURED FILE WEIGHS: its project's 90th percentile, not its median. A new file is usually a pull
+ * request's own, and those are rarely its project's cheapest: weighed at the api median (0.6s) every one of them filled
+ * the slack of the same runner, and that runner set the clock: on one pull request api-29 drew all eight of its
+ * unmeasured files (0.7-9.3s, and one of 35s), a 46-58s Vitest step where the median api runner took 16-18s (pr fast
+ * runs 44370437863, 44372730681, 44373067630). The day's new api files that merged ran 0.8-9s, most past the median
+ * and near the 90th percentile (3.3s); weighed so they spread across the runners. A cheap file weighed high only
+ * leaves its runner a little idle until the table measures it.
+ */
+export const UNMEASURED_QUANTILE = 0.9;
+
+function quantile(values, q) {
   if (!values.length) return 1000;
   const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.floor(sorted.length / 2)];
+  return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * q))];
 }
 
 /**
@@ -61,7 +72,7 @@ const SHARED_FILE_MS = Object.freeze({ 'node-batch': 175 });
 /**
  * Weight of one file of `project` (ms): its recorded time plus its project's per-file isolation cost. A file measured
  * under another project (moved between `api` and `api-isolated`) keeps its time; a never-measured one weighs the
- * median of its project, or of every file when its project has none.
+ * 90th percentile of its project (`UNMEASURED_QUANTILE`), or of every file when its project has none.
  */
 export function weigher(timings) {
   const recorded = recordedWeigher(timings);
@@ -69,17 +80,17 @@ export function weigher(timings) {
 }
 
 function recordedWeigher(timings) {
-  const medians = new Map();
+  const unmeasured = new Map();
   const anyProject = new Map();
   for (const files of Object.values(timings.files)) for (const [file, ms] of Object.entries(files)) anyProject.set(file, ms);
   return (project, file) => {
     const known = timings.files[project]?.[file] ?? anyProject.get(file);
     if (known !== undefined) return known;
-    if (!medians.has(project)) {
+    if (!unmeasured.has(project)) {
       const own = Object.values(timings.files[project] ?? {});
-      medians.set(project, median(own.length ? own : [...anyProject.values()]));
+      unmeasured.set(project, quantile(own.length ? own : [...anyProject.values()], UNMEASURED_QUANTILE));
     }
-    return medians.get(project);
+    return unmeasured.get(project);
   };
 }
 

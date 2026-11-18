@@ -71,14 +71,14 @@ jobs:
           for run in "${runs[@]}"; do args+=(--run "$run"); done
           mkdir -p tmp/node-timings
           node scripts/ci/test-timings.mjs --measured tmp/node-timings/node-timings.json "${args[@]}"
-      # The batch these times choose, run as pr fast's four node runners run it (vitest.node-batch.config.ts): a file the
+      # The batch these times choose, run as pr fast's five node runners run it (vitest.node-batch.config.ts): a file the
       # full suite's isolated `node` project passes can still fail beside others in a shared graph.
       - name: Run the node batch they choose
         id: check
         continue-on-error: true
         run: |
           node scripts/ci/test-timings.mjs --apply tmp/node-timings/node-timings.json
-          for shard in 1/4 2/4 3/4 4/4; do
+          for shard in 1/5 2/5 3/5 4/5 5/5; do
             node node_modules/vitest/vitest.mjs run --config vitest.node-batch.config.ts --shard="$shard"
           done
       - if: steps.check.outcome != 'success'
