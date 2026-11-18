@@ -38,7 +38,7 @@ import {paramSqlName} from '@artifactbin/contracts';
  * module computes the rows, holds the transaction, completes receipts and emits the after-commit event.
  */
 import { trackEvent } from '@/lib/analytics';
-import { MAX_QUERY_ROWS, getDb, retryOnConflict, TransactionConflict } from '@/lib/platform';
+import { MAX_ROWS_LIMIT, getDb, retryOnConflict, TransactionConflict } from '@/lib/platform';
 import type { AccessActor } from '@/lib/accounts';
 import type { Scalar } from '@/lib/dataflow';
 import type {MutationOutcome,DatasetMutationPolicy,Queryable} from '@artifactbin/contracts';
@@ -51,7 +51,7 @@ let rowCapOverride: number | null = null;
 export function setDatasetRowCap(cap: number | null): void {
   rowCapOverride = cap;
 }
-const datasetRowCap = (): number => rowCapOverride ?? MAX_QUERY_ROWS;
+const datasetRowCap = (): number => rowCapOverride ?? MAX_ROWS_LIMIT;
 
 interface MutationRefused {
   /**

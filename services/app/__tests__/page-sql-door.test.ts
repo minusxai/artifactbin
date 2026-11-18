@@ -9,7 +9,7 @@
  */
 import { beforeEach, expect, it } from 'vitest';
 import { setSession, useAppHarness } from './harness';
-import { MAX_QUERY_ROWS, services, setServices } from '@/lib/platform';
+import { MAX_ROWS_LIMIT, services, setServices } from '@/lib/platform';
 import { createSqliteSql } from '@artifactbin/sql/sqlite';
 import { sql, fixture, stored, refused } from './page-sql-door-fixture';
 
@@ -102,7 +102,7 @@ it('refuses a statement over the byte cap and an effect over the row cap', async
   // A runaway read inside a write stops at the deadline. The suite's engine (test/setup/vitest.setup.ts) carries the
   // real 5s statement deadline, which this would wait out; the same engine with a 250ms one stops it the same way.
   const engine = services().sql;
-  setServices({ sql: createSqliteSql({ maxRows: MAX_QUERY_ROWS, timeoutMs: 250 }) });
+  setServices({ sql: createSqliteSql({ maxRows: MAX_ROWS_LIMIT, timeoutMs: 250 }) });
   try {
     await refused(f, sql(f.page, f.owner, "with recursive r(i) as (select 1 union all select i + 1 from r) insert into staff (name) select 'n' from r where i = 100000000"), /timeout|validation_failed/);
   } finally {

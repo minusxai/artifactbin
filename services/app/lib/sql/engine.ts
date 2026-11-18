@@ -6,7 +6,7 @@
  * package (services/contracts/src/sql.ts says what the service enforces).
  */
 import type { SqlService } from '@artifactbin/contracts';
-import { MAX_QUERY_ROWS, QUERY_TIMEOUT_MS, services } from '@/lib/platform';
+import { MAX_ROWS_LIMIT, QUERY_TIMEOUT_MS, services } from '@/lib/platform';
 import { queryBounds as bounds } from '@artifactbin/utils';
 
 export type { DryRunResult, MutationInput, MutationOutcome, MutationResult, QueryFailure, QueryOutcome, QueryPage, RunInput, RunManyInput, SqlQuery } from '@artifactbin/contracts';
@@ -20,4 +20,4 @@ export const dryRunMutations: SqlService['dryRunMutations'] = (input) => service
 
 /** The caps THIS process would apply — what a paged read is bounded by before it is even sent. */
 export const queryBounds = (input: { limit?: number; timeoutMs?: number }, page?: { limit: number } | null) =>
-  bounds(input, { maxRows: MAX_QUERY_ROWS, timeoutMs: QUERY_TIMEOUT_MS }, page);
+  bounds(input, { maxRows: MAX_ROWS_LIMIT, timeoutMs: QUERY_TIMEOUT_MS }, page);
