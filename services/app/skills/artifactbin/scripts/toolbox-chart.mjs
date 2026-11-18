@@ -38,12 +38,7 @@ export async function drawChart(client, {chart, output, shown, ...size}, {rows})
     `The chart request is ${bytes} bytes, past ${PAYLOAD_BYTES}.`, 1,
     'Aggregate in SQL to fewer rows or columns, then draw again.');
   const image = await client.request('/api/charts/image', {method: 'POST', body,
-    safeToRepeat: true, timeoutMs: 60000}).catch(error => {
-    // The server's reason says what to fix; the transport's names only the status.
-    if (typeof error.details?.message === 'string')
-      error.message = 'Chart refused: ' + error.details.message;
-    throw error;
-  });
+    safeToRepeat: true, timeoutMs: 60000});
   const png = Buffer.from(String(image.data), 'base64');
   if (png.length < 8 || png.length !== image.bytes || png.readUInt32BE(0) !== 0x89504e47)
     throw fail('invalid_response', 'The chart answer was not a PNG.', 1, 'Retry once.');
