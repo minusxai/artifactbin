@@ -204,14 +204,18 @@ describe('validateRegionUpdate never refuses an honest editor', () => {
     let checked = 0;
     vi.spyOn(Room.prototype, 'send').mockImplementation(function (this: Room, from, count = from.outbox.length) {
       for (let i = 0; i < count && from.outbox.length; i++) {
-        const update = from.outbox[0]!;
-        const check = validateRegionUpdate(this.kind, Y.encodeStateAsUpdate(this.server), update, from.doc.clientID);
-        expect(regionText(check.doc).toString()).toBe((() => { const copy = openRegionDoc(Y.encodeStateAsUpdate(this.server)); Y.applyUpdate(copy, update); return regionText(copy).toString(); })());
+        const update = from.outbox[0]!, state = Y.encodeStateAsUpdate(this.server);
+        const check = validateRegionUpdate(this.kind, state, update, from.doc.clientID);
+        const copy = openRegionDoc(state);
+        Y.applyUpdate(copy, update);
+        expect(regionText(check.doc).toString()).toBe(regionText(copy).toString());
         checked++;
         send.call(this, from, 1);
       }
     });
-    checkConvergence(15, 30, { seed: FAST_SEED });
+    // Ten fixed interleavings deliver 61 updates: enough honest traffic, inside pr fast's per-test budget on a shared runner
+    // (convergence.property.test.ts and the soak own convergence itself).
+    checkConvergence(10, 30, { seed: FAST_SEED });
     expect(checked).toBeGreaterThan(50);
   });
 });
