@@ -28,7 +28,7 @@ async function person(email: string) {
   return { ...identityForUser(userId, t.id), userId, tokenId: t.id };
 }
 const page = (owner: { userId: string; tokenId: string }) =>
-  createArtifact(owner.tokenId, owner.userId, { format: 'markup', source: '<p>x</p>', meta: {}, visibility: 'public' });
+  createArtifact(owner.tokenId, owner.userId, { format: 'html', source: '<p>x</p>', meta: {}, visibility: 'public' });
 
 it('marks a row created for an exact test-domain address, and nothing else', async () => {
   on();

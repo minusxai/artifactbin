@@ -203,7 +203,7 @@
    "services/app/__tests__/sharing-edges.test.ts": 1117,
    "services/app/__tests__/social-preview-image.test.ts": 1192,
    "services/app/__tests__/solid-shell.test.ts": 345,
-   "services/app/__tests__/speedup-cache-access.test.ts": 2017,
+   "services/app/__tests__/source-read-access.test.ts": 2017,
    "services/app/__tests__/speedup-contracts.test.ts": 158,
    "services/app/__tests__/speedup-lifecycle.test.ts": 223,
    "services/app/__tests__/sql-extensions.test.ts": 773,

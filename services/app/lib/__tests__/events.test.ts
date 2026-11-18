@@ -21,7 +21,7 @@ const FIXTURES: Fixtures = {
     updated: { client: 'claude-code', user_id: 'usr_a' },
     edited: { client: 'browser', user_id: 'usr_a' },
     reverted: { client: 'browser', user_id: 'usr_a' },
-    deleted: { client: 'browser', user_id: 'usr_a', format: 'markup', subtree: 0 },
+    deleted: { client: 'browser', user_id: 'usr_a', format: 'html', subtree: 0 },
     exported: { client: 'browser', user_id: null },
     mutated: { client: 'browser', user_id: null },
     viewed: { client: 'browser', user_id: 'usr_a' },
@@ -98,9 +98,9 @@ describe('the placement verbs', () => {
     expect(e.payload).toEqual({ from_parent_id: 'fld111', to_parent_id: null });
   });
   it('a delete carries what went with it — 0 for a document, the subtree size for a folder', () => {
-    const doc = envelope({ kind: 'user', id: 'usr_a' }, 'deleted', { kind: 'artifact', id: 'abc123' }, { format: 'markup', subtree: 0 });
+    const doc = envelope({ kind: 'user', id: 'usr_a' }, 'deleted', { kind: 'artifact', id: 'abc123' }, { format: 'html', subtree: 0 });
     expect(eventName(doc)).toBe('artifact.deleted');
-    expect(doc.payload).toMatchObject({ format: 'markup', subtree: 0 });
+    expect(doc.payload).toMatchObject({ format: 'html', subtree: 0 });
     const folder = envelope({ kind: 'user', id: 'usr_a' }, 'deleted', { kind: 'artifact', id: 'fld123' }, { format: 'folder', subtree: 4 });
     expect(folder.payload).toMatchObject({ format: 'folder', subtree: 4 });
   });

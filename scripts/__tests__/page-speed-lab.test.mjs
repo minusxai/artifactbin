@@ -66,7 +66,7 @@ describe('the page-speed workflow', () => {
     expect(workflow.jobs.report.steps.some(step => String(step.uses).startsWith('actions/download-artifact@'))).toBe(true);
     const report = workflow.jobs.report.steps.map(step => step.run ?? '').join('\n');
     expect(report).toContain('node scripts/ci/page-speed-base.mjs');
-    expect(report).toContain('node scripts/build/size-targets.mjs page-speed/head.json --markdown');
+    // The strict size-target step itself is workflows.test.mjs's ('measures only the head beside the report').
   });
 
   it('keeps full timing measurements on a manual run, while PRs use size only', () => {

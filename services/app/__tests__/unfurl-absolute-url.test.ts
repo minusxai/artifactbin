@@ -20,7 +20,7 @@ import { artifactMetadata as artifactPageMetadata } from '@/test/helpers/pages';
 import type { ArtifactRow } from '@/lib/artifacts';
 
 const row = {
-  id: 'Ab3xK9', title: 'Q3 Revenue', version: 4, format: 'markup',
+  id: 'Ab3xK9', title: 'Q3 Revenue', version: 4, format: 'html',
   source: '<h1>Q3</h1>', description: null, meta: {},
 } as unknown as ArtifactRow;
 

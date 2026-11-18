@@ -293,11 +293,11 @@ describe('page speed: the base is main\'s own measurement of the same bytes', ()
     for (const name of ['Report', 'Size targets']) expect(report.steps.find((step) => step.name === name).if, name).toBe("needs.scope.outputs.relevant == 'true'");
     expect(report.steps.find((step) => step.name === 'Size targets').run).toContain('node scripts/build/size-targets.mjs page-speed/head.json --markdown --strict');
   });
+  // No pull_request trigger at all is 'keeps every slow suite on main' below; pull requests are filtered in the scope job.
   it('reads the push trigger paths the workflow declares; pull requests are filtered in the scope job', () => {
     const paths = triggerPaths(readFileSync(path.join(root, '.github/workflows/page-speed.yml'), 'utf8'));
     expect(paths).toEqual(speed.on.push.paths.filter(pattern => pattern !== '**'));
     expect(paths).not.toContain('**');
-    expect(speed.on.pull_request?.paths).toBeUndefined();
   });
   it('scopes a pull request by the push trigger paths and treats anything unreadable as relevant', () => {
     const paths = ['services/app/**', 'package-lock.json', '.github/workflows/page-speed.yml'];

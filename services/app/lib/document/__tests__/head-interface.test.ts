@@ -22,7 +22,7 @@ describe('titles', () => {
   });
 
 
-  it('reads a Markdown heading, and null without any heading', () => {
+  it('answers null without a heading: no heading, empty or missing input, a blank heading', () => {
     expect(firstHeadingTitle('<p>no heading</p>')).toBeNull();
     expect(firstHeadingTitle('')).toBeNull();
     expect(firstHeadingTitle(null)).toBeNull();
