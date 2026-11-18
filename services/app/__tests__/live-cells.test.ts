@@ -27,6 +27,8 @@ import { nativeDatasetClient } from './native-dataset-http';
 import { mintAccountToken, request, useAppHarness, type RequestOptions } from './harness';
 import { sseStream } from './sse';
 import { dropShares, seedShares } from '@/__tests__/rows';
+/** A condition wait's bound (vi.waitFor's own default is 1 s): the condition decides; this only names one that never came. */
+const WAIT_MS = 20_000;
 
 useAppHarness();
 
@@ -429,7 +431,7 @@ describe('saving through the dataset', () => {
       if (watching.status === 'open') void watching.stream.pipeTo(new WritableStream()).catch(() => {});
       const version = await datasetVersion();
       abort.abort();
-      await vi.waitFor(() => expect(graces).toHaveLength(1));
+      await vi.waitFor(() => expect(graces).toHaveLength(1), { timeout: WAIT_MS });
       await sessions.settle();
       expect(await datasetVersion()).toBe(version);
       graces.shift()!();

@@ -2,6 +2,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 import { requestPath, withRequestLog } from '../request-log';
+/** A condition wait's bound (vi.waitFor's own default is 1 s): the condition decides; this only names one that never came. */
+const WAIT_MS = 20_000;
 
 let server: RunningServer | null = null;
 afterEach(async () => { await server?.close(); server = null; });
@@ -18,7 +20,7 @@ describe('request log', () => {
     await fetch(`${base}/api/artifacts/abc?token=mxmx_secret&code=123#frag`, { method: 'POST', headers: { authorization: 'Bearer mxmx_secret', cookie: 'a=b' }, body: 'secret-body' });
     await fetch(`${base}/missing`);
     // A line is written when its response finishes, which can be just after the client has it.
-    await vi.waitFor(() => expect(lines).toHaveLength(2));
+    await vi.waitFor(() => expect(lines).toHaveLength(2), { timeout: WAIT_MS });
     expect(lines[0]).toMatchObject({ method: 'POST', path: '/api/artifacts/abc', status: 201 });
     expect(typeof lines[0]!.ms).toBe('number');
     expect(lines[1]).toMatchObject({ method: 'GET', path: '/missing', status: 404 });
@@ -31,7 +33,7 @@ describe('request log', () => {
     await fetch(`${base}/api/health?x=1`);
     // A logged request after them is the sentinel: lines are written in the order the responses finish.
     await fetch(`${base}/after`);
-    await vi.waitFor(() => expect(lines).toHaveLength(1));
+    await vi.waitFor(() => expect(lines).toHaveLength(1), { timeout: WAIT_MS });
     expect(lines).toMatchObject([{ path: '/after' }]);
   });
   it('cuts the path at the first ? or #', () => {

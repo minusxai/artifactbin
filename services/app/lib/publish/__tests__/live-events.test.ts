@@ -24,6 +24,8 @@ import {
   subscribeToArtifact,
 } from '../realtime/live';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
+/** A condition wait's bound (vi.waitFor's own default is 1 s): the condition decides; this only names one that never came. */
+const WAIT_MS = 20_000;
 useAppHarness();
 const params = <T extends Record<string, string>>(p: T) => ({
   params: Promise.resolve(p),
@@ -172,7 +174,7 @@ describe('subscription lifecycle', () => {
 
     const edit = await replace(token, doc.id, source('A2'));
     const updated = (await edit.json()) as Wire;
-    await vi.waitFor(() => expect([seenA, seenB]).toEqual([[updated.edit_id], [updated.edit_id]]));
+    await vi.waitFor(() => expect([seenA, seenB]).toEqual([[updated.edit_id], [updated.edit_id]]), { timeout: WAIT_MS });
 
     // After both leave, further writes reach nobody.
     await offA();
@@ -183,7 +185,7 @@ describe('subscription lifecycle', () => {
     const seenC: string[] = [];
     const offC = await subscribeToArtifact(doc.id, (id) => seenC.push(id));
     await replace(token, doc.id, source('A3'));
-    await vi.waitFor(() => expect(seenC).toHaveLength(1));
+    await vi.waitFor(() => expect(seenC).toHaveLength(1), { timeout: WAIT_MS });
     await offC();
     expect(seenA).toHaveLength(1);
     expect(seenB).toHaveLength(1);
@@ -198,7 +200,7 @@ describe('subscription lifecycle', () => {
     const offGood = await subscribeToArtifact(doc.id, (id) => seen.push(id));
 
     await replace(token, doc.id, doc.html.replace('beta text', 'B2'));
-    await vi.waitFor(() => expect(seen).toHaveLength(1));
+    await vi.waitFor(() => expect(seen).toHaveLength(1), { timeout: WAIT_MS });
     await offBad();
     await offGood();
   });

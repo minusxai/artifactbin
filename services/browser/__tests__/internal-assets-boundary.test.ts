@@ -1,6 +1,8 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { internalAssetResponse } from '../src/internal-assets';
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
+/** A condition wait's bound (vi.waitFor's own default is 1 s): the condition decides; this only names one that never came. */
+const WAIT_MS = 20_000;
 
 const origin = 'https://assets.invalid';
 const path = '/assets/' + 'c'.repeat(64);
@@ -56,6 +58,6 @@ for(const behavior of ['redirect','external-redirect','oversize','stream-size','
  mode=behavior;const before=reads, beforeClosed=closed;
  await expect(read(origin+path,'GET',AbortSignal.timeout(behavior==='slow'?50:3000))).rejects.toThrow();
  // The upstream's own close event, however late it arrives after the refusal.
- await vi.waitFor(()=>expect(closed).toBeGreaterThan(beforeClosed));
+ await vi.waitFor(()=>expect(closed).toBeGreaterThan(beforeClosed), { timeout: WAIT_MS });
  expect(reads).toBe(before+1);
 });

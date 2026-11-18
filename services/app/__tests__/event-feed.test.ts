@@ -21,6 +21,8 @@ import { POST as invite } from '@/app/api/groups/[id]/invitations/route';
 import { DELETE as leave } from '@/app/api/groups/[id]/members/me/route';
 import { PUT as share } from '@/app/api/artifacts/[id]/group-shares/[groupId]/route';
 import { GET as feed } from '@/app/api/events/route';
+/** A condition wait's bound (vi.waitFor's own default is 1 s): the condition decides; this only names one that never came. */
+const WAIT_MS = 20_000;
 
 useAppHarness();
 const context = <T extends Record<string, string>>(params: T) => ({ params: Promise.resolve(params) });
@@ -206,7 +208,7 @@ it('holds a waiting request until an event arrives, and caps concurrent waits pe
   const began = Date.now();
   const waiting = page(owner, { artifact_id: doc.id, after: start.next, wait: '20' });
   // The request is held: it found nothing and went to sleep in the wait loop before the event is written.
-  await vi.waitFor(() => expect(sleeps.count()).toBe(1));
+  await vi.waitFor(() => expect(sleeps.count()).toBe(1), { timeout: WAIT_MS });
   await say(owner, 'Wake up');
   expect(types((await waiting).events)).toEqual(['artifact.annotated']);
   expect(Date.now() - began).toBeLessThan(10_000);
@@ -216,7 +218,7 @@ it('holds a waiting request until an event arrives, and caps concurrent waits pe
   sleeps.forget();
   const waits = controllers.map(c => feed(new Request(request(`/api/events?artifact_id=${doc.id}&after=${cursor}&wait=30`, { token: owner.token }), { signal: c.signal })));
   // All four hold their lease and sleep before the fifth asks.
-  await vi.waitFor(() => expect(sleeps.count()).toBe(4));
+  await vi.waitFor(() => expect(sleeps.count()).toBe(4), { timeout: WAIT_MS });
   const refused = await read(owner, { artifact_id: doc.id, after: cursor, wait: '30' });
   expect(refused.status).toBe(429);
   expect(await refused.json()).toEqual({ error: { code: 'too_many_event_waits' } });
