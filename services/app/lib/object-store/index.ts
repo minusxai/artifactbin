@@ -17,12 +17,15 @@ import type { RenderUploadRequest } from '@artifactbin/contracts';
 import { createRequire } from 'node:module';
 import { createHash, randomBytes } from 'crypto';
 import { mkdir, open, readFile, rm } from 'fs/promises';
-import type { Readable } from 'node:stream';
+import { Readable } from 'node:stream';
 import path from 'path';
 import { S3_URL, LOCAL_OBJECT_DIR } from '@/lib/platform';
 import { parseS3Url, storageKeyFor, type S3Config } from './url';
+import { recordedWrites } from './sweep';
+import { stagedObject } from './prepared-objects';
 
 export * from './url';
+export { recordObjectWrites, sweepObjects } from './sweep';
 
 /**
  * A read the store could not satisfy — missing object OR broken credentials,
@@ -127,8 +130,15 @@ export function cachedReads(store: ObjectStore): ObjectStore {
     async delete(key) { forget(key); try { await store.delete(key); } finally { forget(key); } },
     // Deliberately NOT cached and deliberately not counted: a streaming read is
     // the one this cache must never hold (see ObjectStore.getStream).
-    getStream(key, range) { return store.getStream(key, range); },
+    getStream(key, range) {
+      const pending = stagedObject(key)?.bytes;
+      if (pending) return Promise.resolve(Readable.from([range ? pending.subarray(range.start, range.end + 1) : pending]));
+      return store.getStream(key, range);
+    },
     get(key) {
+      // A prepared object read inside its own publication, before its put: the staged bytes, never cached.
+      const pending = stagedObject(key)?.bytes;
+      if (pending) return Promise.resolve(pending);
       const held = reads.get(key);
       if (held) return held.reading;
       const entry: CachedRead = {
@@ -166,11 +176,12 @@ let cached: ObjectStore | null = null;
 /**
  * The store the app uses, from configuration. The two constructors below are
  * exported so tests can build a store against a temp directory or a live MinIO
- * without going through module-level config, which freezes at import.
+ * without going through module-level config, which freezes at import. Its puts of
+ * the swept kinds are recorded first (./sweep), so the sweep can find their orphans.
  */
 export function objectStore(): ObjectStore {
   if (cached) return cached;
-  cached = cachedReads(S3_URL ? createS3Store(parseS3Url(S3_URL)) : createLocalStore(LOCAL_OBJECT_DIR));
+  cached = cachedReads(recordedWrites(S3_URL ? createS3Store(parseS3Url(S3_URL)) : createLocalStore(LOCAL_OBJECT_DIR)));
   return cached;
 }
 
@@ -298,5 +309,5 @@ export { IMAGE_CONTENT_TYPES, loadImage, storeImage } from './image-store';
 export type { ImageMeta } from './image-store';
 export { PDF_CONTENT_TYPE, loadPdfStream, pdfFilename, pdfMetaOf, pdfPageCount, storePdf } from './pdf-store';
 export type { PdfMeta } from './pdf-store';
-export { prepareObjects } from './prepared-objects';
+export { prepareObjects, readingPrepared } from './prepared-objects';
 export type { ContentObjects, PreparedObject } from './prepared-objects';

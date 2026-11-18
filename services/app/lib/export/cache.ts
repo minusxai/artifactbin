@@ -1,5 +1,6 @@
 import {randomUUID} from 'node:crypto';
 import type { Db } from '@/lib/platform';
+import { objectStore, type ObjectStore } from '@/lib/object-store';
 
 export interface ExportImage {
   id:string; artifact_id:string; object_key:string; mime:'image/png'|'image/jpeg';
@@ -9,7 +10,8 @@ export interface ExportImage {
  * `stable`: the picture is a function of its revision alone (a social card), so an image of this revision never goes stale. */
 /** `waitMs`: this caller's own bound on waiting for a render (a bounded delegated call), below the cache's default. */
 interface ExportCacheRequest { cacheKey:string; artifactId:string; revision:string; refresh?:boolean; current?:boolean; stable?:boolean; waitMs?:number }
-interface ExportCacheOptions { freshMs?:number; leaseMs?:number; waitMs?:number; retryMs?:number; pollMs?:number[] }
+/** `objects`: where a produced image's bytes are deleted when its publish is refused (the app's store by default). */
+interface ExportCacheOptions { freshMs?:number; leaseMs?:number; waitMs?:number; retryMs?:number; pollMs?:number[]; objects?:Pick<ObjectStore,'delete'> }
 export type ExportProducer=(id:string)=>Promise<Omit<ExportImage,'id'|'artifact_id'>>;
 
 class ExportCacheUnavailable extends Error {
@@ -28,11 +30,17 @@ export function createExportCache(db:Db,options:ExportCacheOptions={}) {
       c.retry_after>clock_timestamp() AS backoff
     FROM export_image_cache c LEFT JOIN export_images i ON i.id=c.image_id WHERE c.cache_key=$1`,[key])).rows[0];
   const produceAndPublish=async(request:ExportCacheRequest,token:string,produce:ExportProducer):Promise<ExportImage|null>=>{
+    // A produced image is stored under its own new key before its row exists. When the row is certainly not written
+    // (the image is invalid, or the lease was lost and the transaction wrote nothing) nothing will ever name it, so its
+    // bytes go at once. A transaction that failed with an unknown outcome keeps them.
+    let unnamed:string|undefined;
     try {
       const details=await produce(token);
       const image:ExportImage={...details,id:token,artifact_id:request.artifactId};
-      if(!['image/png','image/jpeg'].includes(image.mime)||![image.bytes,image.width,image.height].every(n=>Number.isSafeInteger(n)&&n>0))throw new Error('Invalid export image');
-      return await db.transaction(async tx=>{
+      if(!['image/png','image/jpeg'].includes(image.mime)||![image.bytes,image.width,image.height].every(n=>Number.isSafeInteger(n)&&n>0)){
+        unnamed=details.object_key;throw new Error('Invalid export image');
+      }
+      const accepted=await db.transaction(async tx=>{
         const accepted=await tx.query(`UPDATE export_image_cache SET image_id=$3,source_revision=$4,
           expires_at=clock_timestamp()+$5::int*interval '1 millisecond',claim_token=NULL,lease_until=NULL,retry_after=NULL
           WHERE cache_key=$1 AND claim_token=$2 AND lease_until>clock_timestamp() RETURNING cache_key`,
@@ -42,6 +50,8 @@ export function createExportCache(db:Db,options:ExportCacheOptions={}) {
           [image.id,image.artifact_id,image.object_key,image.mime,image.bytes,image.width,image.height]);
         return image;
       });
+      if(!accepted)unnamed=image.object_key;
+      return accepted;
     } catch (error) {
       // A producer error with `backoff: false` is a definite answer (a missing slide or element), no fault: the claim is
       // released without a retry window, so the page corrected under the same key renders at once.
@@ -50,6 +60,8 @@ export function createExportCache(db:Db,options:ExportCacheOptions={}) {
       else await db.query(`UPDATE export_image_cache SET claim_token=NULL,lease_until=NULL,
         retry_after=clock_timestamp()+$3::int*interval '1 millisecond' WHERE cache_key=$1 AND claim_token=$2`,[request.cacheKey,token,retryMs]);
       throw error;
+    } finally {
+      if(unnamed)await (options.objects??objectStore()).delete(unnamed).catch(()=>{});
     }
   };
   return {
@@ -92,4 +104,24 @@ export function createExportCache(db:Db,options:ExportCacheOptions={}) {
     },
     async drain():Promise<void>{await Promise.allSettled([...jobs]);},
   };
+}
+
+/** An export image nothing points at any more is kept this long: far past any asset grant (5 minutes) naming it. */
+const EXPORT_IMAGE_RETENTION_MS=24*60*60*1000;
+/**
+ * Expires export images by age: those no cache row points at (a refresh replaced them) and older than `retentionMs`,
+ * at most `batch` per run, oldest first. A cache row only ever points at the image its own refresh just inserted, so
+ * an image no row points at is never pointed at again. Each object is deleted before its row, in one transaction
+ * holding those rows, so a crash leaves rows for the next run, never an object nothing names.
+ */
+export async function expireExportImages(db:Db,objects:Pick<ObjectStore,'delete'>=objectStore(),{retentionMs=EXPORT_IMAGE_RETENTION_MS,batch=200}:{retentionMs?:number;batch?:number}={}):Promise<string[]>{
+  return db.transaction(async tx=>{
+    const old=(await tx.query<{id:string;object_key:string}>(`SELECT i.id,i.object_key FROM export_images i
+      WHERE i.created_at<clock_timestamp()-$1::bigint*interval '1 millisecond'
+        AND NOT EXISTS (SELECT 1 FROM export_image_cache c WHERE c.image_id=i.id)
+      ORDER BY i.created_at LIMIT $2 FOR UPDATE SKIP LOCKED`,[retentionMs,batch])).rows;
+    for(const image of old)await objects.delete(image.object_key);
+    if(old.length)await tx.query('DELETE FROM export_images WHERE id=ANY($1::text[])',[old.map(image=>image.id)]);
+    return old.map(image=>image.id);
+  });
 }

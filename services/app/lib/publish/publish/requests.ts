@@ -27,7 +27,8 @@ import { identityForUser, shareTargetsRefusal, TEST_ACCOUNT_RESTRICTED, type Acc
 import { prepareCatalog, DatasetError } from '@/lib/datasets';
 import { json } from '@/lib/http';
 import { ID_RE, getDb } from '@/lib/platform';
-import { prepareContentInput, applyPreparedContent, type PreparedContent } from '../prepared/prepare-content';
+import { prepareContentInput, preparedPersistence, type PreparedContent } from '../prepared/prepare-content';
+import { readingPrepared } from '@/lib/object-store';
 import { lookupWebAssets, refreshWebAssets, type WebAssetImporter } from '../assets/web-assets';
 
 async function updateBundleDependency(actor:PublicationActor,base:string,id:string,body:Record<string,unknown>,key:string):Promise<Response>{
@@ -222,8 +223,8 @@ export async function replaceArtifactWithBody(
   const htmlData=await prepareHtmlDatasets(body,owner,actor);if(htmlData instanceof Response)return htmlData;
   const htmlDatasets=htmlData?.links;
   if (options.dryRun) return preflightReply(prepared);
-  const applied = actor.workload?prepared.content:await applyPreparedContent(prepared);
-  parsed = applied;
+  // The bytes are put as the write transaction's last step, so a refused write stores nothing.
+  const persistPrepared=await preparedPersistence(prepared);
   const input: ArtifactInput = {
     ...parsed,
     ...(actor.workload?{publicationBytes:prepared.objects.reduce((total,object)=>total+object.bytes.length,0)}:{}),
@@ -256,14 +257,15 @@ export async function replaceArtifactWithBody(
     affected:['dataset','image','pdf','file'].includes(input.format)?await findDependentsFor(actor,id):null,
   }:undefined;
   let row;
-  try { row = current.format === 'folder'
+  // The write's own transaction reads the prepared bytes before its last step stores them.
+  try { row = await readingPrepared(prepared.objects, async () => current.format === 'folder'
     ? await setMetadataFor(actor, id, {
       ...(shares!==undefined?{shares}:{}),
       ...(body.title===null || typeof body.title === 'string' ? { title: body.title } : {}),
       ...(visibility ? { visibility } : {}),
       ...(placement ? { ancestor_ids: placement.ancestor_ids } : {}),
     }, {...expected,expectedSharingRevision})
-    : await replaceArtifactFor(actor, id, input, {...expected,expectedSharingRevision,shares,...(actor.workload?{persistPrepared:()=>applyPreparedContent(prepared)}:{}),...(options.mutationReceipt?{mutationReceipt:options.mutationReceipt,mutationReply:async(saved:ArtifactRow):Promise<MutationReply>=>({status:200,body:{...await replacedArtifactWire(saved,base,sentMarkup,{affected:receiptEffects?.affected??null,warnings:receiptEffects?.warnings??[],openAnnotations:committedOpenAnnotations(saved)},receiptOwner),...(bundleReceipts.length?{dependencyReceipts:bundleReceipts}:{})}})}:{})});
+    : await replaceArtifactFor(actor, id, input, {...expected,expectedSharingRevision,shares,persistPrepared,...(options.mutationReceipt?{mutationReceipt:options.mutationReceipt,mutationReply:async(saved:ArtifactRow):Promise<MutationReply>=>({status:200,body:{...await replacedArtifactWire(saved,base,sentMarkup,{affected:receiptEffects?.affected??null,warnings:receiptEffects?.warnings??[],openAnnotations:committedOpenAnnotations(saved)},receiptOwner),...(bundleReceipts.length?{dependencyReceipts:bundleReceipts}:{})}})}:{})}));
   } catch(error) {if(error instanceof DatasetError)return json({error:"dataset_error",details:[error.message]},error.status);throw error;}
   // A refusal the replace composed for itself — `policy_locked` (409) or
   // `policy_mismatch` (400). It exists so this door stops answering the
@@ -401,11 +403,12 @@ async function createArtifactFromBodyPrepared(
   const htmlData=await prepareHtmlDatasets(body,publicationActor,actor);if(htmlData instanceof Response)return htmlData;
   const htmlDatasets=htmlData?.links;
   if (options.dryRun) return preflightReply(prepared);
-  const applied = actor.workload?prepared.content:await applyPreparedContent(prepared);
-  parsed = applied;
+  // The bytes are put as the write transaction's last step, so a refused write stores nothing.
+  const persistPrepared=await preparedPersistence(prepared);
   responseBody = row => ({...createdArtifactWire(row,base,sentMarkup,receiptOwner)});
   let row;
-  try{row = await createArtifact(actor.tokenId, actor.userId, {
+  // The creation's own transaction reads the prepared bytes before its last step stores them.
+  try{row = await readingPrepared(prepared.objects, () => createArtifact(actor.tokenId, actor.userId, {
     ...parsed,
     ...(actor.workload?{publicationBytes:prepared.objects.reduce((total,object)=>total+object.bytes.length,0)}:{}),
     meta:{...parsed.meta,...(htmlData?{htmlQueries:htmlData.queries}:{}),...(options.bundleReceipts?.length?publicationRecord(options.bundleReceipts,options.bundleEntryPath):{})},
@@ -416,7 +419,7 @@ async function createArtifactFromBodyPrepared(
     ...(access ? { access } : {}),
     ancestor_ids: placement.ancestor_ids,
     destination,
-  }, {...(actor.workload?{workloadActor:actor,resource:options.workloadResource,persistPrepared:()=>applyPreparedContent(prepared)}:{}),...(live?{liveConnection:live.connection}:{}),reservedId:body.reserved_id as string|undefined,operation,shares,...(link?{linkRole:link}:{}),...(forkedFrom?{forkedFrom}:{})});}catch(error){if(error instanceof LiveRegionRefusal)return json({error:error.code,details:error.details},409);if(error instanceof CreationReplay)return json(error.reply.body,error.reply.status);if(error instanceof DatasetError)return json({error:'dataset_error',details:[error.message]},error.status);throw error;}
+  }, {persistPrepared,...(actor.workload?{workloadActor:actor,resource:options.workloadResource}:{}),...(live?{liveConnection:live.connection}:{}),reservedId:body.reserved_id as string|undefined,operation,shares,...(link?{linkRole:link}:{}),...(forkedFrom?{forkedFrom}:{})}));}catch(error){if(error instanceof LiveRegionRefusal)return json({error:error.code,details:error.details},409);if(error instanceof CreationReplay)return json(error.reply.body,error.reply.status);if(error instanceof DatasetError)return json({error:'dataset_error',details:[error.message]},error.status);throw error;}
   return json(responseBody(row), 201);
 }
 

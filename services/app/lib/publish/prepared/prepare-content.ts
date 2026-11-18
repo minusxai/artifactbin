@@ -1,4 +1,4 @@
-import { objectStore, prepareObjects, type PreparedObject } from '@/lib/object-store';
+import { objectStore, prepareObjects, recordObjectWrites, type PreparedObject } from '@/lib/object-store';
 import { json } from '@/lib/http';
 import { parseContentInput, type ContentInputCtx } from '../document/input';
 import type { StoredContent } from '@/lib/document';
@@ -25,4 +25,14 @@ export async function applyPreparedContent(prepared: PreparedContent): Promise<S
   const {content} = prepared;
   for (const object of prepared.objects) await objectStore().put(object.key, object.bytes, object.contentType);
   return content;
+}
+
+/**
+ * The persistence of a publication: records its keys for the object sweep now (a committed statement, so call it
+ * before the publishing transaction opens) and returns the puts, which run as that transaction's last step. A
+ * publication refused or failed inside the transaction therefore stores nothing.
+ */
+export async function preparedPersistence(prepared: PreparedContent): Promise<() => Promise<StoredContent>> {
+  await recordObjectWrites(prepared.objects.map(object => object.key));
+  return () => applyPreparedContent(prepared);
 }
