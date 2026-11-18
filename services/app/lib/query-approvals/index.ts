@@ -36,7 +36,8 @@
  * head write: reverting the text does not bring it back), moving the page to another owner, deleting it (restoring it
  * brings none back), a revoke; and the approver losing that membership or the group being
  * deleted (`endStaleApprovals`: from lib/groups after every group change the app makes, and at the first read that finds
- * one no longer holding, whoever changed it). A membership row taken away and put back, or a group deleted (its members'
+ * one no longer holding, whoever changed it; a group change looks only at the groups it can affect and below, and names its
+ * actor only on the endings it caused, an ending it merely found is the system's: no person). A membership row taken away and put back, or a group deleted (its members'
  * rows go with it) and put back, is a new row: it revives nothing even with no read between. The one change the identity
  * views cannot tell apart is a role flipped away and back IN PLACE on the same row with no read between; the identity
  * module makes that flip only in `setGroupMember`, whose change the app records, which ends the approval at once.
@@ -128,7 +129,7 @@ export async function approvedRun(pageId:string,head:{links:readonly HtmlPageLin
  if(row)return {id:row.id,groupId:row.group_id,hash,connection:row.connection};
  // A live approval that no longer holds (its approver is no Admin, its group is gone): ended now, so nothing revives it.
  if((await db.query('SELECT 1 FROM page_query_approvals WHERE page_id=$1 AND query_hash=$2 AND ended_at IS NULL LIMIT 1',[pageId,hash])).rows.length)
-  await db.transaction(async tx=>{await tx.query('SELECT id FROM artifacts WHERE id=$1 FOR SHARE',[pageId]);await endStaleApprovals(tx,null,pageId);});
+  await db.transaction(async tx=>{await tx.query('SELECT id FROM artifacts WHERE id=$1 FOR SHARE',[pageId]);await endStaleApprovals(tx,null,{page:pageId});});
  return null;
 }
 
@@ -144,7 +145,7 @@ export function paramsOutside(allowed:HtmlQueryParams={},sent:unknown,server:rea
  for(const [name,value] of Object.entries(sent)){
   if(server.includes(name))continue;
   const rule=ownRule(allowed,name);
-  if(!rule||typeof rule!=='object')return `this query's approval does not let a reader set ${name}`;
+  if(!rule||typeof rule!=='object')return `${name} cannot be set for this query.`;
   const fits=Object.hasOwn(rule,'values')?Array.isArray((rule as {values?:unknown}).values)&&(rule as {values:readonly unknown[]}).values.some(entry=>entry===value)
    :(rule as {type?:unknown}).type==='text'?typeof value==='string':(rule as {type?:unknown}).type==='number'?typeof value==='number'&&Number.isFinite(value)
    :(rule as {type?:unknown}).type==='boolean'?typeof value==='boolean':(rule as {type?:unknown}).type==='date'&&typeof value==='string'&&DATE.test(value)&&!Number.isNaN(Date.parse(value));
@@ -216,8 +217,8 @@ export async function pageQueryApprovals(actor:AccessActor,pageId:string):Promis
 }
 
 type EndReason='revoked'|'edited'|'moved'|'replaced'|'deleted'|'approver_not_admin'|'group_deleted';
-const payload=(row:Pick<ApprovalRow,'id'|'query_name'|'query_hash'|'connection'|'group_id'>,reason?:EndReason)=>
- ({approval_id:row.id,query:row.query_name,query_hash:row.query_hash,connection:row.connection,group_id:row.group_id,...(reason?{reason}:{})});
+const payload=(row:Pick<ApprovalRow,'id'|'query_name'|'query_hash'|'connection'|'group_id'>,reason?:EndReason,system?:boolean)=>
+ ({approval_id:row.id,query:row.query_name,query_hash:row.query_hash,connection:row.connection,group_id:row.group_id,...(reason?{reason}:{}),...(system?{system:true as const}:{})});
 
 /**
  * An Admin of the owning group approves the head's declared query `query` whose hash they were shown (`hash`). Audited.
@@ -235,7 +236,7 @@ export async function approvePageQuery(actor:AccessActor,pageId:string,input:{qu
   if(declared.hash!==input.hash)throw new QueryApprovalError(409,'query_changed',`${declared.query.name} changed since you looked at it: read it again before approving`);
   const answer=(row:Pick<ApprovalRow,'id'>)=>({id:row.id,query:declared.query.name,hash:declared.hash,connection:connectionName(declared.link)});
   // One that no longer holds ends first; the same Admin's live approval of this very hash is the answer.
-  await endStaleApprovals(tx,actor.userId,pageId);
+  await endStaleApprovals(tx,actor.userId,{page:pageId});
   const same=async()=>(await tx.query<ApprovalRow>(`SELECT ${APPROVAL_COLUMNS} FROM page_query_approvals a WHERE a.page_id=$1 AND a.query_name=$2 AND a.ended_at IS NULL`,[pageId,declared.query.name])).rows[0];
   const live=await same();
   if(live&&live.query_hash===declared.hash&&live.approved_by===actor.userId)return answer(live);
@@ -280,24 +281,43 @@ export async function endQueryApprovals(tx:Queryable,actor:Pick<AccessActor,'use
  for(const row of ended)await recordEvent(tx,actorSubject(actor),'query_approval_ended',{kind:'artifact',id:row.page_id},payload(row,reason));
 }
 
+/** What `endStaleApprovals` looks at, and whose doing an ending is. */
+export interface StaleScope {
+ /** Only this page's approvals. */
+ page?:string;
+ /** Only approvals of these groups and their descendants (what a change to those groups can affect); absent: every one. */
+ groups?:readonly string[];
+ /**
+  * Without it every ending is the subject's. With it only those the change caused are: an approver it concerns
+  * (`approvers`), a group it deleted (`deleted`: the changed groups), the groups below one it reparented (`reparented`).
+  * Any other found stale on the way, one the change did not cause, is a system ending: no person, `system` in the event.
+  */
+ blame?:{approvers:readonly string[];deleted:readonly string[];reparented:readonly string[]};
+}
 /**
- * Ends, audited (`subject`: who made the change, or null when a read found it), every live approval (of `pageId`, or of
- * every page) whose group is deleted (`group_deleted`), whose page is no longer that group's (`moved`), or whose
- * approver no longer holds the Admin membership row they approved under or is no longer an active account
- * (`approver_not_admin`).
+ * Ends, audited, every live approval (in `scope`) whose group is deleted (`group_deleted`), whose page is no longer that
+ * group's (`moved`), or whose approver no longer holds the Admin membership row they approved under or is no longer an
+ * active account (`approver_not_admin`). `subject` is who made the change (null when a read found it); see `StaleScope`
+ * for which endings are theirs.
  */
-export async function endStaleApprovals(tx:Queryable,subject:string|null,pageId?:string):Promise<void>{
+export async function endStaleApprovals(tx:Queryable,subject:string|null,scope:StaleScope={}):Promise<void>{
+ const {page,groups,blame}=scope;
+ const down='WITH RECURSIVE down(id) AS (SELECT unnest($2::text[]) UNION SELECT g.id FROM down JOIN groups g ON g.parent_id=down.id)';
+ const inScope='($1::text IS NULL OR a.page_id=$1) AND ($2::text[] IS NULL OR a.group_id IN (SELECT id FROM down))';
+ const where=[page??null,groups?[...groups]:null];
  // Most installs and most group changes have no live approval at all: then nothing is asked of the group tree.
- if(!(await tx.query('SELECT 1 FROM page_query_approvals WHERE ended_at IS NULL AND ($1::text IS NULL OR page_id=$1) LIMIT 1',[pageId??null])).rows.length)return;
- const ended=(await tx.query<ApprovalRow&{ended_reason:EndReason}>(`WITH stale AS (
+ if(!(await tx.query(`${down} SELECT 1 FROM page_query_approvals a WHERE a.ended_at IS NULL AND ${inScope} LIMIT 1`,where)).rows.length)return;
+ const ended=(await tx.query<ApprovalRow&{ended_reason:EndReason;ended_by:string|null}>(`${down},reparented(id) AS (SELECT unnest($6::text[]) UNION SELECT g.id FROM reparented JOIN groups g ON g.parent_id=reparented.id),stale AS (
    SELECT a.id,CASE WHEN NOT EXISTS (SELECT 1 FROM groups g WHERE g.id=a.group_id AND g.deleted_at IS NULL) THEN 'group_deleted'
      WHEN NOT EXISTS (SELECT 1 FROM artifacts p WHERE p.id=a.page_id AND p.group_id=a.group_id) THEN 'moved' ELSE 'approver_not_admin' END AS reason
-   FROM page_query_approvals a WHERE a.ended_at IS NULL AND ($1::text IS NULL OR a.page_id=$1) AND NOT (
+   FROM page_query_approvals a WHERE a.ended_at IS NULL AND ${inScope} AND NOT (
     EXISTS (SELECT 1 FROM groups g WHERE g.id=a.group_id AND g.deleted_at IS NULL)
     AND EXISTS (SELECT 1 FROM artifacts p WHERE p.id=a.page_id AND p.group_id=a.group_id)
     AND ${APPROVER_HOLDS}))
-  UPDATE page_query_approvals a SET ended_at=now(),ended_by=$2,ended_reason=stale.reason FROM stale WHERE a.id=stale.id AND a.ended_at IS NULL RETURNING a.*`,[pageId??null,subject])).rows;
- for(const row of ended)await recordEvent(tx,subject?{kind:'user',id:subject}:null,'query_approval_ended',{kind:'artifact',id:row.page_id},payload(row,row.ended_reason));
+  UPDATE page_query_approvals a SET ended_at=now(),ended_reason=stale.reason,
+   ended_by=CASE WHEN $7::boolean OR a.approved_by=ANY($4::text[]) OR (stale.reason='group_deleted' AND a.group_id=ANY($5::text[])) OR a.group_id IN (SELECT id FROM reparented) THEN $3::text END
+  FROM stale WHERE a.id=stale.id AND a.ended_at IS NULL RETURNING a.*`,[...where,subject,blame?[...blame.approvers]:[],blame?[...blame.deleted]:[],blame?[...blame.reparented]:[],!blame])).rows;
+ for(const row of ended)await recordEvent(tx,row.ended_by?{kind:'user',id:row.ended_by}:null,'query_approval_ended',{kind:'artifact',id:row.page_id},payload(row,row.ended_reason,!row.ended_by));
 }
 
 /** The page fields an audience change is judged against: its row as the writer locked it. */
@@ -323,7 +343,7 @@ export async function assertAudienceChange(tx:Queryable,actor:AccessActor,page:A
  }
  if(actor.userId&&!actor.principalGroup&&!actor.workload&&(await tx.query('SELECT 1 FROM group_admins WHERE group_id=$1 AND user_id=$2',[page.group_id,actor.userId])).rows.length)return;
  // One that no longer holds ends here; only a live one keeps the page's audience its Admins'.
- await endStaleApprovals(tx,actor.userId,page.id);
+ await endStaleApprovals(tx,actor.userId,{page:page.id});
  if(!(await tx.query('SELECT 1 FROM page_query_approvals WHERE page_id=$1 AND ended_at IS NULL LIMIT 1',[page.id])).rows.length)return;
  const group=(await tx.query<{name:string}>('SELECT name FROM groups WHERE id=$1',[page.group_id])).rows[0]?.name??'the group that owns it';
  throw new QueryApprovalError(403,'approved_query_live',`This page has an approved query that runs as ${group}: while it is live, only an Admin of ${group} may change who can open the page. Ask an Admin to make this change, or to revoke the approval first.`);

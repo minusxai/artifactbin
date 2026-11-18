@@ -242,7 +242,7 @@ it('shows a structured server refusal without marking the unsaved visibility sel
 });
 
 it('shows an Admin each query of the page on live data, approves one after saying what readers will see, and revokes it', async () => {
-  const state = { visibility: 'private', linkRole: 'viewer', shares: [], canPrivate: true };
+  const state = { visibility: 'private', linkRole: 'viewer', shares: [], canPrivate: true, canApproveQueries: true };
   const query = { name: 'totals', connection: 'default:', sql: 'select region, sum(amount) from wh.sales group by region', params: {}, hash: 'a'.repeat(64),
     statement: 'Everyone signed in with their own account who can open this page, including people who later join a group that can open it, will see what totals returns as Team sees it. They cannot change anything in it. While it is approved, only an Admin of Team may change this page\'s sharing. Editing the query, its connection or what readers may vary ends the approval.' };
   let approval: null | { id: string; approved_by: { name: string; username: null }; approved_at: string } = null;
@@ -267,12 +267,18 @@ it('shows an Admin each query of the page on live data, approves one after sayin
   await waitFor(() => expect(screen.getByRole('group', { name: 'Approved queries' })).toHaveTextContent('runs as each reader'));
 });
 
-it('draws no approved queries for someone who is not an Admin of the page\'s group', async () => {
-  const state = { visibility: 'private', linkRole: 'viewer', shares: [], canPrivate: true };
-  const fetcher = stubFetch({ 'GET /api/artifacts/abc123/query-approvals': () => Response.json({ error: 'forbidden' }, { status: 403 }) }, { fallback: () => Response.json(state) });
-  const view = render(() => <DocumentSharing id="abc123" title="Report" owner queryApprovals />);
-  fireEvent.click(view.getByRole('button', { name: 'Share' }));
-  await waitFor(() => expect(fetcher).toHaveBeenCalledWith('/api/artifacts/abc123/query-approvals', expect.anything()));
-  await waitFor(() => expect(screen.getByText('people')).toBeTruthy());
-  expect(screen.queryByRole('group', { name: 'Approved queries' })).toBeNull();
+it('never asks for approved queries unless the sharing answer says the viewer may approve them: no request, so no refusal, for anyone else', async () => {
+  for (const state of [
+    { visibility: 'private', linkRole: 'viewer', shares: [], canPrivate: true, canApproveQueries: false },
+    { visibility: 'private', linkRole: 'viewer', shares: [], canPrivate: true },
+  ]) {
+    const fetcher = stubFetch({ 'GET /api/artifacts/abc123/query-approvals': () => Response.json({ error: 'forbidden' }, { status: 403 }) }, { fallback: () => Response.json(state) });
+    const view = render(() => <DocumentSharing id="abc123" title="Report" owner queryApprovals />);
+    fireEvent.click(view.getByRole('button', { name: 'Share' }));
+    await waitFor(() => expect(screen.getByText('people')).toBeTruthy());
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(fetcher).not.toHaveBeenCalledWith('/api/artifacts/abc123/query-approvals', expect.anything());
+    expect(screen.queryByRole('group', { name: 'Approved queries' })).toBeNull();
+    view.unmount();
+  }
 });

@@ -46,8 +46,10 @@ export async function recordGroupChanges(changes:readonly GroupChange[],actor?:G
  await (await getDb()).transaction(async tx=>{
   for(const id of wake)await notifyAudienceArtifacts(tx,id);
   for(const change of changes)await auditGroupChange(tx,change,actor);
-  // A page query approved by someone this change left without Admin, or of a group it deleted, ends for good.
-  if(changes.length)await endStaleApprovals(tx,changes[0]!.actorId);
+  // A page query approved by someone this change left without Admin, or of a group it deleted, ends for good: only
+  // approvals of the changed groups and below are looked at, and only the endings the change caused name its actor.
+  for(const change of changes)await endStaleApprovals(tx,change.actorId,{groups:[change.groupId],blame:{approvers:change.recipients,deleted:[change.groupId],
+   reparented:'previous_parent_id' in change.details?[change.groupId]:[]}});
  });
 }
 /** An app action's change to what a group sees, audited in the action's own transaction; mail it with `mailGroupChanges` after commit. */

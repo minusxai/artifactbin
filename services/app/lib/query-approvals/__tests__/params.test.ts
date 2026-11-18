@@ -10,8 +10,8 @@ it('refuses a parameter the approval does not name, built-in object names includ
  const allowed={region:{values:['EU','US']},since:{type:'date'}} as const;
  expect(paramsOutside(allowed,{region:'EU',since:'2026-01-02'},[])).toBeNull();
  for(const name of ['constructor','toString','hasOwnProperty','valueOf','__proto__'])
-  expect(paramsOutside(allowed,JSON.parse(`{"${name}":"2026-01-02"}`),[]),name).toBe(`this query's approval does not let a reader set ${name}`);
+  expect(paramsOutside(allowed,JSON.parse(`{"${name}":"2026-01-02"}`),[]),name).toBe(`${name} cannot be set for this query.`);
  expect(paramsOutside(allowed,{region:'APAC'},[])).toBe('That value of region is not allowed for this query.');
  // Its rules are read as the approval's own, never inherited.
- expect(paramsOutside(Object.assign(Object.create({region:{type:'text'}}),{}),{region:'EU'},[])).toBe('this query\'s approval does not let a reader set region');
+ expect(paramsOutside(Object.assign(Object.create({region:{type:'text'}}),{}),{region:'EU'},[])).toBe('region cannot be set for this query.');
 });

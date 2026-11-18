@@ -830,7 +830,8 @@ const PAGE_QUERY_APPROVALS: Table = {
     {name:'approver_via',type:'TEXT'},
     {name:'approver_since',type:'TIMESTAMPTZ'},
   ], primaryKey:['id'],
-  indexes:[{name:'idx_page_query_approvals_live',columns:['page_id','query_name'],unique:true,where:'ended_at IS NULL'}],
+  // The live index is partial (one live approval per query); the page index serves every read by page, ended ones included (the export revision).
+  indexes:[{name:'idx_page_query_approvals_live',columns:['page_id','query_name'],unique:true,where:'ended_at IS NULL'},{name:'idx_page_query_approvals_page',columns:['page_id']}],
 };
 const DATASET_USAGE: Table = {
   name:'dataset_usage',

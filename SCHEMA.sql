@@ -767,6 +767,8 @@ ALTER TABLE app.page_query_approvals ADD COLUMN IF NOT EXISTS approver_since TIM
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_page_query_approvals_live ON app.page_query_approvals (page_id, query_name) WHERE ended_at IS NULL;
 
+CREATE INDEX IF NOT EXISTS idx_page_query_approvals_page ON app.page_query_approvals (page_id);
+
 CREATE TABLE IF NOT EXISTS app.dataset_usage (
   bucket TEXT NOT NULL,
   calls INTEGER NOT NULL DEFAULT 0,

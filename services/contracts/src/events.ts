@@ -48,10 +48,10 @@ interface RestoredPayload { landed_at_root: boolean }
  * A page's declared query approved to run as the page's owning group (`query_approved`), or that approval ended
  * (`query_approval_ended`: `reason` revoked by an Admin, the query edited, the page moved to another owner or deleted,
  * replaced by a newer approval, its approver no longer the group's Admin, or the group deleted), or a read it answered
- * (`approved_query_read`: the subject is the real reader). The subject is who did it (none when a read found the
+ * (`approved_query_read`: the subject is the real reader). The subject is who did it (none, and `system`, when a read or an unrelated group change found the
  * approval ended); the query's text and a reader's values never travel, only its name and hash.
  */
-interface QueryApprovalPayload { approval_id: string; query: string; query_hash: string; connection: string; group_id: string; reason?: 'revoked' | 'edited' | 'moved' | 'deleted' | 'replaced' | 'approver_not_admin' | 'group_deleted' }
+interface QueryApprovalPayload { approval_id: string; query: string; query_hash: string; connection: string; group_id: string; reason?: 'revoked' | 'edited' | 'moved' | 'deleted' | 'replaced' | 'approver_not_admin' | 'group_deleted'; system?: true }
 /** `group_id`: a group's sign-in (identity-service `GROUP_SIGN_IN_RULE`): the group it acts as, when its Admin ended it. */
 interface TokenPayload { name?: string | null; group_id?: string; grant_id?: string; service?: string }
 
