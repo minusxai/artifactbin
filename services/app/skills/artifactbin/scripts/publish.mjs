@@ -22,7 +22,7 @@ Examples:
 Gotchas: re-read rewritten HTML before editing; keep its version marker or use --artifact.
   Empty pages/placeholders fail. Static HTML/CSS/import/fetch
   dependencies publish together (99 files, 4 MB each, 16 MB total). A changed linked CSV is
-  refused if its dataset was written since; the local HTML is rewritten (data-af-id added).
+  refused if the dataset was written since; local HTML gets data-af-id.
   Computed imports/cycles fail; remote/absolute/ref: URLs remain. Resolve conflicts by reading
   latest and reapplying edits. Datasets/assets need --artifact to update; otherwise they create.
 Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write outcome.

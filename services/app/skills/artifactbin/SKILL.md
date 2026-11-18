@@ -152,8 +152,8 @@ comments (every page you may see): `node scripts/events.mjs watch --help`.
   TEXT`. Your comments show your agent name, such as "Claude Code Red"; `--as NAME` on any
   `comment.mjs` command chooses your own.
 - **Data, apps, exports.** A page built from a CSV links it by its path: publishing the page
-  creates the dataset; a changed CSV replaces it only if no rows were written since, else the
-  publish is refused ([datasets](references/datasets.md)).
+  creates the dataset; a changed CSV is refused once the dataset was written
+  ([datasets](references/datasets.md)).
   A page that shows a dataset links it (`<link rel="af-dataset">`), reads and writes its rows
   with `` sql`…` `` from `@afbin/apollo` (each table named by its link, every `${…}` a bound
   value; `sql.watch` for live updates) and computes every number (counts, totals, group by,
@@ -163,7 +163,7 @@ comments (every page you may see): `node scripts/events.mjs watch --help`.
   once; label the data as sample. Who may see and change rows:
   [permissions](references/permissions.md) (read it before modeling identity or writes): the
   dataset's rules are the only check on a write. `node scripts/sql.mjs schema ID`
-  for the tables (a dataset ID: the one table `rows`), `node
+  for the tables (a dataset ID: its own), `node
   scripts/policy.mjs explain DATASET_ID` for who may see and change its rows, `node
   scripts/export.mjs ID --format html --output copy.html` for a portable copy; one chart or
   section of a page saves as an image with `--format png --element SELECTOR`, so nothing else
