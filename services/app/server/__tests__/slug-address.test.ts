@@ -13,6 +13,7 @@ import { mintToken, createUser, ensureUsername } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
 import { createAppServer } from '../app';
 import { useAppHarness } from '@/__tests__/harness';
+import { setArtifact } from '@/__tests__/rows';
 
 useAppHarness();
 
@@ -30,7 +31,7 @@ async function world() {
   const mk = async (title: string, visibility: string) => {
     const { id } = (await (await postArtifact(t.token, { title, html: nativeHtml(`<div><p>${title} words</p></div>`), visibility })).json()) as { id: string };
     // Creation order made explicit: earliest first.
-    await (await getDb()).query(`UPDATE artifacts SET created_at = now() - interval '1 day' + ($2 || ' minutes')::interval WHERE id = $1`, [id, String(minute++)]);
+    await setArtifact(await getDb(), id, { created_at: { sql: `now() - interval '1 day' + '${minute++} minutes'::interval` } });
     return id;
   };
   const ownerHeaders = { ...html, ...as({ credential: 'session', userId: owner.id, email: owner.email }) };
@@ -64,7 +65,7 @@ describe('a title-slug address', () => {
     const second = await w.mk('Notes', 'public');
     const served = async () => JSON.stringify(payloadOf(await (await app.request(`/@${w.owner.username}/notes`, { headers: w.stranger })).text()).artifact);
     expect(await served()).toContain(first);
-    await (await getDb()).query(`UPDATE artifacts SET title = 'Old notes' WHERE id = $1`, [first]);
+    await setArtifact((await getDb()), first, { title: 'Old notes' });
     expect(await served()).toContain(second);
   });
 

@@ -18,6 +18,7 @@ import {observedRequest} from './conditional-request';
 import { artifactQuery } from '@/lib/artifacts/table';
 import { servableDocument, UnservableDocument } from '@/lib/artifacts';
 import {retiredGraph} from './retired-document-fixture';
+import { setArtifact } from '@/__tests__/rows';
 
 const harness = useAppHarness();
 const MARKED = { dataSyntax: 2 };
@@ -102,7 +103,7 @@ describe('restoring a trashed head the current code no longer reads', () => {
   it('is refused by name, and the row stays in the trash', async () => {
     const { owner, id } = await history();
     const db = await harness.db();
-    await db.query("UPDATE artifacts SET source=NULL, deleted_at=now() WHERE id=$1", [id]);
+    await setArtifact(db, id, { source: null, deleted_at: { sql: 'now()' } });
     await expectRefused(await restoreRoute(request(`/api/artifacts/${id}/restore`, { method: 'POST', token: owner.token }), params({ id })), /no longer reads/);
     expect((await db.query<{ trashed: boolean }>('SELECT deleted_at IS NOT NULL AS trashed FROM artifacts WHERE id=$1', [id])).rows).toEqual([{ trashed: true }]);
   });

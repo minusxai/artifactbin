@@ -9,6 +9,7 @@ import {getVersionFor,updateSharingFor} from '@/lib/artifacts';
 import {getDb} from '@/lib/platform';
 import {linkedSql,errorCode} from '@/__tests__/linked-datasets';
 import {authorizeDatasetBinding,DatasetBindingUnsupportedError} from '../index';
+import { setArtifact } from '@/__tests__/rows';
 useAppHarness();
 const anonymous=identityForUser(null);
 const READ='select _id, amount from data limit 1';
@@ -56,8 +57,8 @@ it('rechecks current readership when access changes while an archive is loading'
 
 it.each(['postgres','sql'])('rejects an authorized unsupported %s binding at publication with a stored-row remedy',async(kind)=>{
  const f=await fixture('public'),db=await getDb();
- if(kind==='postgres')await db.query(`UPDATE artifacts SET meta=jsonb_set(meta,'{catalog,kind}','"postgres"'::jsonb) WHERE id=$1`,[f.id]);
- else await db.query(`UPDATE artifacts SET meta=jsonb_set(meta,'{catalog,tables,0,sql}','"select 1"'::jsonb) WHERE id=$1`,[f.id]);
+ if(kind==='postgres')await setArtifact(db, f.id, { meta: { sql: `jsonb_set(meta,'{catalog,kind}','"postgres"'::jsonb)` } });
+ else await setArtifact(db, f.id, { meta: { sql: `jsonb_set(meta,'{catalog,tables,0,sql}','"select 1"'::jsonb)` } });
  for(const mode of ['live','pinned']){
   const response=await create(request('/api/artifacts',{method:'POST',token:f.owner.token,json:{html:`<html><head><link rel="af-dataset" data-af-name="data" href="ref:${f.id}" data-af-mode="${mode}" ${mode==='pinned'?'data-af-revision="1"':''}></head><body>Unsupported</body></html>`}}));
   expect(response.status).toBe(400);
@@ -77,7 +78,7 @@ it('refuses an unsupported live binding on replacement without advancing the sav
  const f=await fixture('public'),html=`<html><head><link rel="af-dataset" data-af-name="data" href="ref:${f.id}"></head><body>Stored rows</body></html>`;
  const created=await create(request('/api/artifacts',{method:'POST',token:f.owner.token,json:{html}}));expect(created.status).toBe(201);const {id}=await created.json(),context={params:Promise.resolve({id})};
  const head=await(await readPage(request(`/api/artifacts/${id}`,{token:f.owner.token}),context)).json();
- await(await getDb()).query(`UPDATE artifacts SET meta=jsonb_set(meta,'{catalog,kind}','"postgres"'::jsonb) WHERE id=$1`,[f.id]);
+ await setArtifact((await getDb()), f.id, { meta: { sql: `jsonb_set(meta,'{catalog,kind}','"postgres"'::jsonb)` } });
  const response=await replacePage(request(`/api/artifacts/${id}`,{method:'PUT',token:f.owner.token,json:{html,expectedVersion:head.version,expectedState:head.state}}),context);
  expect(response.status).toBe(400);expect(await response.json()).toMatchObject({error:'dataset_stable_identity_unavailable'});
  const unchanged=await(await readPage(request(`/api/artifacts/${id}`,{token:f.owner.token}),context)).json();expect(unchanged.version).toBe(head.version);expect(unchanged.html).toBe(head.html);
@@ -85,7 +86,7 @@ it('refuses an unsupported live binding on replacement without advancing the sav
 
 it('refuses to bind a dataset without stored row objects, naming the stable identity it lacks',async()=>{
  const f=await fixture('public');
- await (await getDb()).query("UPDATE artifacts SET meta='{}'::jsonb WHERE id=$1",[f.id]);
+ await setArtifact((await getDb()), f.id, { meta: '{}' });
  const refusal=await authorizeDatasetBinding(f.actor,f.live).catch((error:unknown)=>error);
  expect(refusal).toBeInstanceOf(DatasetBindingUnsupportedError);
  expect(refusal).toMatchObject({message:'dataset_stable_identity_unavailable',code:'dataset_stable_identity_unavailable',hint:expect.stringContaining('stored dataset')});

@@ -26,7 +26,7 @@ const harness = useAppHarness();
 
 const BASE = 'http://localhost:3000';
 const create = async (token: string, body: Record<string, unknown>) => {
-  const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: { visibility: 'public', ...body } }));
+  const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token, json: { visibility: 'public', ...body } }));
   expect(res.status, await res.clone().text()).toBe(201);
   return (await res.json()) as { id: string };
 };

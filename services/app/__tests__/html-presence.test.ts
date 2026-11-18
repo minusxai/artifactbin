@@ -9,11 +9,12 @@ import { createUser } from '@/lib/accounts';
 import {runWithRequest} from '@/lib/platform';
 import {overridePresenceFrameInterval} from '@/lib/publish';
 import {getDb} from '@/lib/platform/db';
+import { seedArtifacts, setArtifact } from '@/__tests__/rows';
 // Frames every 50ms, not every second: every wait below is for a reader's next frame (the interval itself is the room's
 // test, lib/html-presence/__tests__/room.test.ts).
 overridePresenceFrameInterval(50);
 const harness=useAppHarness();let owner:Awaited<ReturnType<typeof createUser>>;
-beforeEach(async()=>{owner=await createUser({email:'mxmx_test_presence@example.com'});await(await harness.db()).query("INSERT INTO artifacts(id,token_id,user_id,format,visibility,version) VALUES ('prespublic','tok_presence',$1,'html','public',1),('presprivate','tok_presence',$1,'html','private',1),('presMixed','tok_presence',$1,'html','public',1)",[owner.id]);});
+beforeEach(async()=>{owner=await createUser({email:'mxmx_test_presence@example.com'});await seedArtifacts((await harness.db()), { id: 'prespublic', token_id: 'tok_presence', user_id: owner.id, format: 'html', visibility: 'public', version: 1 }, { id: 'presprivate', token_id: 'tok_presence', user_id: owner.id, format: 'html', visibility: 'private', version: 1 }, { id: 'presMixed', token_id: 'tok_presence', user_id: owner.id, format: 'html', visibility: 'public', version: 1 });});
 /** Presence frames read until one passes `test` (frames come every 50 ms; a frame that never comes fails at the test timeout). */
 const presenceUntil=async(stream:ReturnType<typeof sseStream>,test:(frame:{data:Record<string,unknown>})=>boolean)=>{const seen=[];for(;;){const [frame]=await stream.named('presence',1);if(!frame)continue;seen.push(frame);if(test(frame))return seen;}};
 const session='00000000-0000-4000-8000-000000000001';
@@ -51,7 +52,7 @@ it('rebinds presence to a published source revision without closing document upd
  const db=await harness.db();
  try{
   expect((await stream.named('message'))[0]?.data.version).toBe(1);
-  await db.query("UPDATE artifacts SET version=2 WHERE id='presMixed'");
+  await setArtifact(db, 'presMixed', { version: 2 });
   await db.query("SELECT pg_notify($1,'')",[artifactChannel('presMixed')]);
   expect((await stream.named('message'))[0]?.data.version).toBe(2);
   await stream.named('presence');
@@ -66,7 +67,7 @@ it('rebinds presence to a published source revision without closing document upd
   const guestRequest=new Request(request('/a/presMixed/events'),{signal:abort.signal});
   const guest=sseStream((await runWithRequest(guestRequest,()=>GET(guestRequest,params('presMixed')))).body!);
   expect((await guest.named('message'))[0]?.data.version).toBe(2);
-  await db.query("UPDATE artifacts SET visibility='private' WHERE id='presMixed'");
+  await setArtifact(db, 'presMixed', { visibility: 'private' });
   await db.query("SELECT pg_notify($1,'')",[artifactChannel('presMixed')]);
   expect(await guest.named('message',1)).toEqual([]);
   expect(guest.ended()).toBe(true);

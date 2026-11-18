@@ -9,6 +9,7 @@ import { trackEvent } from '@/lib/analytics';
 import { ensureEventsSchema } from '@artifactbin/events/local';
 import { folderPageFor } from '@/lib/workspace';
 import { mintAccountToken, request, useAppHarness } from '@/__tests__/harness';
+import { seedArtifacts } from '@/__tests__/rows';
 
 useAppHarness();
 
@@ -23,10 +24,7 @@ async function seed(children: number) {
   const db = await getDb();
   const user = await createUser({ email: 'mxmx_test_folder_volume@example.com' });
   const token = await mintAccountToken('folder-volume', user.id);
-  await db.query(
-    `INSERT INTO artifacts (id, user_id, token_id, format, title, meta, version, visibility) VALUES ('fvfolder', $1, $2, 'folder', 'Volume', '{}', 1, 'private')`,
-    [user.id, token.id],
-  );
+  await seedArtifacts(db, { id: 'fvfolder', user_id: user.id, token_id: token.id, format: 'folder', title: 'Volume', meta: '{}', version: 1, visibility: 'private' });
   await db.query(
     `INSERT INTO artifacts (id, user_id, token_id, format, title, meta, version, visibility, ancestor_ids, updated_at)
      SELECT 'fv' || lpad(i::text, 3, '0'), $1, $2, 'markup', 'Document ' || i, '{}', 1, 'private', ARRAY['fvfolder'], now() - (i || ' minutes')::interval

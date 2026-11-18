@@ -18,7 +18,7 @@ async function setup(){
  const token=await mintToken('agent');
  const response=await createArtifact(request('/api/artifacts',{method:'POST',token:token.token,json:{html:nativeHtml('<p data-af-id="capture">Capture me</p>')}}));
  expect(response.status).toBe(201);const doc=await response.json();
- await (await getDb()).query('UPDATE artifacts SET visibility=$2 WHERE id=$1',[doc.id,'private']);
+ await setArtifact((await getDb()), doc.id, { visibility: 'private' });
  const image=await sharp({create:{width:100,height:50,channels:3,background:'red'}}).png().toBuffer();
  const metadata:CommentImageMetadata={v:1,capturedEditId:doc.edit_id,capturedAt:new Date().toISOString(),method:'region',width:100,height:50,rect:{x:0,y:0,width:100,height:50},viewport:{width:1000,height:800},strokes:[]};
  return {token,doc,image,metadata,actor:identityForUser(token.userId, token.id),browserActor:{credential:'session' as const,userId:token.userId!,email:token.email!,emailVerified:true}};
@@ -66,11 +66,11 @@ describe('comment image attachment ownership',()=>{
 
 it('keeps a stale stage unconsumed and retries a committed comment idempotently',async()=>{
  const s=await setup();const stage=await stageCommentImage(s.actor,s.doc.id,s.image,s.image,s.metadata);if(stage instanceof Response)throw new Error(await stage.text());
- const db=await getDb();await db.query("UPDATE artifacts SET edit_id='new-head' WHERE id=$1",[s.doc.id]);
+ const db=await getDb();await setArtifact(db, s.doc.id, { edit_id: 'new-head' });
  const make=(edit:string,key?:string)=>createComment(request(`/api/my/artifacts/${s.doc.id}/annotations`,{method:'POST',actor:s.browserActor,headers:key?{'Idempotency-Key':key}:undefined,json:{anchor:nativeAnchor('capture'),edit_id:edit,body:'Saved once',attachment_id:stage.id}}),params(s.doc.id));
  expect((await make(s.doc.edit_id)).status).toBe(409);
  expect((await db.query<{annotation_id:string|null}>('SELECT annotation_id FROM comment_images WHERE id=$1',[stage.id])).rows[0].annotation_id).toBeNull();
- await db.query('UPDATE artifacts SET edit_id=$2 WHERE id=$1',[s.doc.id,s.doc.edit_id]);
+ await setArtifact(db, s.doc.id, { edit_id: s.doc.edit_id });
  const first=await make(s.doc.edit_id,'capture-retry-12345');expect(first.status).toBe(201);const wire=await first.json();
  const retry=await make(s.doc.edit_id,'capture-retry-12345');expect(retry.status).toBe(201);expect((await retry.json()).id).toBe(wire.id);
  expect((await make(s.doc.edit_id)).status).toBe(400);
@@ -100,13 +100,14 @@ it('serves annotated pixels through bearer auth and preserves attachment access 
  const stranger=await mintToken('agent');expect((await read(stranger.token)).status).toBe(404);
  expect((await read(s.token.token,'zzzzzz')).status).toBe(404);
  expect((await read(s.token.token,s.doc.id,'invalid')).status).toBe(404);
- await (await getDb()).query('UPDATE artifacts SET visibility=$2 WHERE id=$1',[s.doc.id,'unlisted']);
+ await setArtifact((await getDb()), s.doc.id, { visibility: 'unlisted' });
  expect((await read(stranger.token)).status).toBe(200);
  await (await getDb()).query('UPDATE annotations SET deleted_at=now() WHERE id=$1',[annotation.id]);
  expect((await read(s.token.token)).status).toBe(404);
 });
 
 import {POST as answerComment} from '@/app/api/my/artifacts/[id]/annotations/[annId]/route';
+import { setArtifact } from '@/__tests__/rows';
 describe('a reply carries its own image',()=>{
  const reply=(s:Awaited<ReturnType<typeof setup>>,root:string,json:Record<string,unknown>,actor:typeof s.browserActor=s.browserActor)=>
   answerComment(request(`/api/my/artifacts/${s.doc.id}/annotations/${root}`,{method:'POST',actor,json}),{params:Promise.resolve({id:s.doc.id,annId:root})});
@@ -147,7 +148,7 @@ describe('a reply carries its own image',()=>{
  it('re-checks the image against the current document at save, as a root comment does',async()=>{
   const s=await setup();const root=await thread(s);
   const stage=await stageCommentImage(s.actor,s.doc.id,s.image,s.image,{...s.metadata,method:'upload'});if(stage instanceof Response)throw new Error(await stage.text());
-  const db=await getDb();await db.query("UPDATE artifacts SET edit_id='moved-head' WHERE id=$1",[s.doc.id]);
+  const db=await getDb();await setArtifact(db, s.doc.id, { edit_id: 'moved-head' });
   const refused=await reply(s,root,{reply:'Stale image',attachment_id:stage.id,edit_id:s.doc.edit_id});
   expect(refused.status).toBe(409);expect(await refused.json()).toMatchObject({error:'stale',edit_id:'moved-head',message:expect.stringContaining('send again')});
   expect((await db.query<{annotation_id:string|null}>('SELECT annotation_id FROM comment_images WHERE id=$1',[stage.id])).rows[0].annotation_id).toBeNull();

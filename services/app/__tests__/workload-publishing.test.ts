@@ -11,6 +11,7 @@ import {publicationNamespace} from '@/lib/artifacts';
 import {getDb} from '@/lib/platform';
 import {admitGroupMember,mintAccountToken,useAppHarness} from './harness';
 import {nativeHtml} from './native-html-fixture';
+import { setArtifact } from '@/__tests__/rows';
 useAppHarness();
 const origin='http://127.0.0.1:7451';
 const keyA='fixture_publication_key_a',keyB='fixture_publication_key_b';
@@ -277,9 +278,9 @@ it('denies a role downgrade at the last effect admission',async()=>{
 });
 it('refuses a cross-group moved root and a nonfolder root before claiming intent',async()=>{
  const f=await fixture(),db=await getDb();
- await db.query('UPDATE artifacts SET group_id=$2 WHERE id=$1',[f.folder,f.other.id]);
+ await setArtifact(db, f.folder, { group_id: f.other.id });
  expect((await f.call('/api/artifacts','POST',f.payload,keyA)).status).toBe(403);
- await db.query("UPDATE artifacts SET group_id=$2,format='file' WHERE id=$1",[f.folder,f.group.id]);
+ await setArtifact(db, f.folder, { group_id: f.group.id, format: 'file' });
  expect((await f.call('/api/artifacts','POST',f.payload,keyA)).status).toBe(403);
  expect((await db.query('SELECT * FROM workload_publication_intents')).rows).toEqual([]);
 });

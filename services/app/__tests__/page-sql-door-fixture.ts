@@ -11,6 +11,7 @@ import { createArtifactFromBody } from '@/lib/publish';
 import { getArtifactById } from '@/lib/artifacts';
 import { loadDatasetRows } from '@/lib/datasets';
 import { POST as sqlPost } from '@/app/api/artifacts/[id]/sql/route';
+import { seedShares } from '@/__tests__/rows';
 
 export type Person = Awaited<ReturnType<typeof person>>;
 export type SqlReply = { columns?: Array<{ name: string; type: string }>; rows?: Array<Record<string, unknown>>; affected?: number; returning?: Array<Record<string, unknown>>; error?: string; message?: string };
@@ -63,7 +64,7 @@ export async function fixture() {
   const staff = await publish(owner, { dataset: STAFF, title: 'Staff' });
   const notes = await publish(owner, { dataset: [{ note: 'hello' }], title: 'Notes' });
   const db = await getDb();
-  await db.query("INSERT INTO artifact_shares(artifact_id,user_id,email,role) VALUES($1,$2,$3,'viewer')", [staff.body.id, viewer.userId, viewer.email]);
+  await seedShares(db, { artifact_id: staff.body.id, user_id: viewer.userId, email: viewer.email, role: 'viewer' });
   for (const [id, policy] of [[staff.body.id, POLICY], [notes.body.id, NOTES_POLICY]] as const)
     await storePolicy(id, policy);
   const page = await publish(owner, { html: `<html><head><link rel="af-dataset" data-af-name="staff" href="ref:${staff.body.id}"><link rel="af-dataset" data-af-name="notes" href="ref:${notes.body.id}"></head><body>Staff</body></html>` });

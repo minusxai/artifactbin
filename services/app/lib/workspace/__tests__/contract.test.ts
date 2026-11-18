@@ -8,6 +8,7 @@ import { nativeHtml } from '@/__tests__/native-html-fixture';
 import { createUser, identityForUser, type AccessActor } from '@/lib/accounts';
 import { createArtifact, getArtifactById, updateSharingFor, type ArtifactRow } from '@/lib/artifacts';
 import { groupShelfByRecency, listArtifactsByUser, listPublicArtifactsByUser, listSharedWithEmail, listTrashFor, ownedArtifactState, restoreArtifactFor, trashArtifactFor } from '@/lib/workspace';
+import { setArtifact } from '@/__tests__/rows';
 
 const harness = useAppHarness();
 type Account = AccessActor & { userId: string };
@@ -43,7 +44,7 @@ describe('the trash', () => {
     const earlier = await doc(owner, 'Deleted first', top);
     const later = await doc(owner, 'Deleted with folder', top);
     await trashArtifactFor(owner, earlier.id);
-    await (await harness.db()).query("UPDATE artifacts SET deleted_at = deleted_at - interval '1 minute' WHERE id = $1", [earlier.id]);
+    await setArtifact((await harness.db()), earlier.id, { deleted_at: { sql: "deleted_at - interval '1 minute'" } });
     await trashArtifactFor(owner, top.id);
     expect(await restoreArtifactFor(owner, top.id)).toEqual({ id: top.id, ancestor_ids: [] });
     expect(await placed(later.id)).toEqual([top.id]);
@@ -57,7 +58,7 @@ describe('the trash', () => {
     const inner = await folder(owner, 'Inner', top);
     const leaf = await doc(owner, 'Leaf', inner);
     await trashArtifactFor(owner, inner.id);
-    await (await harness.db()).query("UPDATE artifacts SET deleted_at = deleted_at - interval '1 minute' WHERE id = ANY($1::text[])", [[inner.id, leaf.id]]);
+    await setArtifact((await harness.db()), [inner.id, leaf.id], { deleted_at: { sql: "deleted_at - interval '1 minute'" } });
     await trashArtifactFor(owner, top.id);
     expect(await restoreArtifactFor(owner, inner.id)).toEqual({ id: inner.id, ancestor_ids: [] });
     expect(await placed(inner.id)).toEqual([]);
@@ -84,7 +85,7 @@ describe('the trash', () => {
     const a = await doc(owner, 'A'), b = await doc(owner, 'B');
     await trashArtifactFor(owner, a.id);
     await trashArtifactFor(owner, b.id);
-    await (await harness.db()).query("UPDATE artifacts SET deleted_at = deleted_at + interval '1 hour' WHERE id = $1", [a.id]);
+    await setArtifact((await harness.db()), a.id, { deleted_at: { sql: "deleted_at + interval '1 hour'" } });
     expect((await listTrashFor(owner)).map(row => row.title)).toEqual(['A', 'B']);
   });
 });
@@ -95,7 +96,7 @@ describe('the listings', () => {
     const other = await account('other@example.test');
     const old = await doc(owner, 'Old'), recent = await doc(owner, 'Recent'), gone = await doc(owner, 'Gone');
     await doc(other, 'Theirs');
-    await (await harness.db()).query("UPDATE artifacts SET updated_at = now() - interval '1 day' WHERE id = $1", [old.id]);
+    await setArtifact((await harness.db()), old.id, { updated_at: { sql: "now() - interval '1 day'" } });
     await trashArtifactFor(owner, gone.id);
     expect((await listArtifactsByUser(owner.userId)).map(row => row.id)).toEqual([recent.id, old.id]);
   });

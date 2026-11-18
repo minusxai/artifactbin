@@ -14,6 +14,7 @@ function uploadRequest(documentId:string,editId:string,payload:{datasetId:string
 }
 import {getDb,generateInternalId} from '@/lib/platform';
 import {objectStore} from '@/lib/object-store';
+import { setArtifact } from '@/__tests__/rows';
 useAppHarness();
 it.each(['legacy','grants','direct'])('the native upload port composes with real storage, durable replay and current dataset authority (%s)',async mode=>{
  const owner=await createUser({email:'mxmx_test_native_upload@example.test'}),other=await createUser({email:'mxmx_test_native_upload_other@example.test'}),token=await mintAccountToken('native-upload',owner.id);
@@ -42,7 +43,7 @@ it.each(['legacy','grants','direct'])('the native upload port composes with real
  expect((await (await getDb()).query<{count:number}>('SELECT count(*)::int AS count FROM dataset_images WHERE dataset_id=$1',[dataset.id])).rows[0]?.count).toBe(1);
 });
 
-// The uploader is a page member, not the dataset owner: owner and editors are admin-equivalent and upload regardless.
+// The uploader is a page member, not the dataset owner and editors are admin-equivalent and upload regardless.
 it.each(['source','policy','membership'])('rechecks saved HTML upload authority after real object storage (%s revoked)',async revoke=>{
  const owner=await createUser({email:'mxmx_test_upload_fence@example.test'}),token=await mintAccountToken('upload-fence',owner.id),member=await createUser({email:'mxmx_test_upload_fence_member@example.test'});
  const make=async(body:object)=>{const result=await createArtifact(request('/api/artifacts',{method:'POST',token:token.token,json:body}));expect(result.status).toBe(201);return result.json();};
@@ -55,9 +56,9 @@ it.each(['source','policy','membership'])('rechecks saved HTML upload authority 
  const actor:Actor={credential:'session',userId:member.id,email:member.email??undefined,emailVerified:true},db=await getDb(),objects=objectStore(),put=objects.put.bind(objects);
  const hook=vi.spyOn(objects,'put').mockImplementationOnce(async(...args)=>{
   await put(...args);
-  if(revoke==='source')await db.query('UPDATE artifacts SET edit_id=$2,version=version+1,meta=meta-\'htmlLinks\' WHERE id=$1',[document.id,generateInternalId()]);
+  if(revoke==='source')await setArtifact(db, document.id, { edit_id: generateInternalId(), version: { sql: 'version+1' }, meta: { sql: "meta-'htmlLinks'" } });
   else if(revoke==='membership')await changeMembership(identityForUser(member.id),document.id,{action:'leave'});
-  else await db.query(`UPDATE artifacts SET dataset_policy='{"version":3,"tables":[]}'::jsonb,policy_revision=policy_revision+1 WHERE id=$1`,[dataset.id]);
+  else await setArtifact(db, dataset.id, { dataset_policy: '{"version":3,"tables":[]}', policy_revision: { sql: 'policy_revision+1' } });
  });
  try{
   const payload={datasetId:dataset.id,filename:'fence.txt',contentType:'text/plain',requestId:'upload-fence-request',bytes:new TextEncoder().encode('fenced')},admitted=uploadRequest(document.id,document.edit_id,payload);

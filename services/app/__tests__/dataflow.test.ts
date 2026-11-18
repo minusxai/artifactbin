@@ -9,6 +9,7 @@ import { GET as raw } from "@/app/a/[id]/raw/route";
 import { POST as sqlDoor } from "@/app/api/artifacts/[id]/sql/route";
 import { GET as get, PUT as replace } from "@/app/api/artifacts/[id]/route";
 import { getDb } from "@/lib/platform";
+import { setArtifact } from '@/__tests__/rows';
 useAppHarness();
 const SOURCE_ONLY_SENTINEL =
   "dataset-source-only-7e34d9a1-not-authored-page-state";
@@ -121,25 +122,21 @@ it("validates typed queries and variables against the generated columns", async 
 it("enforces revoked dataset ACL independently of the public page", async () => {
   const f = await fixture();
   const db = await getDb();
-  await db.query("UPDATE artifacts SET visibility='private' WHERE id=$1", [
-    f.dataset,
-  ]);
+  await setArtifact(db, f.dataset, { visibility: 'private' });
   const outsider = await mintAccountToken("reader");
   const response = await f.run("select _id from sales", {}, outsider.token);
   expect(response.error).toBeTruthy();
   expect(response.rows).toBeUndefined();
-  await db.query("UPDATE artifacts SET deleted_at=now() WHERE id=$1", [
-    f.dataset,
-  ]);
+  await setArtifact(db, f.dataset, { deleted_at: { sql: 'now()' } });
   const deleted = await f.run("select _id from sales");
   expect(deleted.error).toBeTruthy();
 });
 it("refuses inaccessible and non-dataset bindings before publication", async () => {
   const f = await fixture();
   const stranger = await mintAccountToken("other");
-  await (
+  await setArtifact((
     await getDb()
-  ).query("UPDATE artifacts SET visibility='private' WHERE id=$1", [f.dataset]);
+  ), f.dataset, { visibility: 'private' });
   for (const ref of [f.dataset, f.id]) {
     const response = await create(
       request("/api/artifacts", {

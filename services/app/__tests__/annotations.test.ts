@@ -30,6 +30,7 @@ import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { setUsername } from '@/lib/accounts';
 import { countOpenAnnotations } from '@/lib/annotations';
 import { avatarUrl } from '@/lib/avatars';
+import { setArtifact } from '@/__tests__/rows';
 
 const harness = useAppHarness();
 
@@ -39,7 +40,7 @@ const DOC =
   + '<div data-af-id="findings">Revenue grew 40% in Q3.</div>';
 
 const create = async (token: string, body: Record<string, unknown>) => {
-  const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: body }));
+  const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token, json: body }));
   expect(res.status, await res.clone().text()).toBe(201);
   return (await res.json()) as { id: string; edit_id: string; version: number };
 };
@@ -62,11 +63,11 @@ interface AnnotationWire {
 }
 
 const annotate = (id: string, actor: import('@artifactbin/contracts').Actor, body: Record<string, unknown>, origin?: string) =>
-  myCreateAnnotationRoute(request(`/api/my/artifacts/${id}/annotations`, { method: 'POST', actor: actor, json: body, origin: origin }), params({ id }));
+  myCreateAnnotationRoute(request(`/api/my/artifacts/${id}/annotations`, { method: 'POST', actor, json: body, origin }), params({ id }));
 
 /** The current head pointer — a create may have bumped it (the anchor-key stamping edit). */
 const headEditId = async (token: string, id: string) => {
-  const res = await getArtifactRoute(request(`/api/artifacts/${id}`, { token: token }), params({ id }));
+  const res = await getArtifactRoute(request(`/api/artifacts/${id}`, { token }), params({ id }));
   return ((await res.json()) as { edit_id: string }).edit_id;
 };
 
@@ -79,7 +80,7 @@ describe('creating (browser door, owner only)', () => {
     const list = () => myListAnnotationsRoute(request(`/api/my/artifacts/${doc.id}/annotations`), params({ id: doc.id }));
     expect((await list()).status).toBe(404);
     for (const visibility of ['unlisted', 'public']) {
-      await (await getDb()).query('UPDATE artifacts SET visibility=$2 WHERE id=$1', [doc.id, visibility]);
+      await setArtifact((await getDb()), doc.id, { visibility });
       const response = await list();
       expect(response.status).toBe(200);
       expect((await response.json()).annotations[0].thread[0].body).toBe('Existing conversation');
@@ -150,7 +151,7 @@ describe('creating (browser door, owner only)', () => {
     const { doc, actor } = await publish();
     const db = await harness.db();
     // The source has no saved data-af-id matching the supplied identity.
-    await artifactQuery(db,'UPDATE artifacts SET document=NULL,source= $2 WHERE id = $1', [doc.id, '<p style="color:red">pre-existing</p>']);
+    await setArtifact(db, doc.id, { document: null, source: '<p style="color:red">pre-existing</p>' });
 
     const res = await annotate(doc.id, actor, { anchor:nativeAnchor('intro'), edit_id: doc.edit_id, body: 'look here' });
     expect(res.status).toBe(400);
@@ -282,7 +283,7 @@ describe('reply / resolve — the agent\'s one mutation', () => {
     expect(r2.thread[2].author).toMatchObject({ kind: 'agent', label: 'Codex', transport: 'http' });
 
     const reopened = await myActOnAnnotationRoute(
-      request(`/api/my/artifacts/${doc.id}/annotations/${a.id}`, { method: 'POST', actor: actor, json: { reopen: true } }),
+      request(`/api/my/artifacts/${doc.id}/annotations/${a.id}`, { method: 'POST', actor, json: { reopen: true } }),
       params({ id: doc.id, annId: a.id }),
     );
     expect(reopened.status).toBe(200);
@@ -323,7 +324,7 @@ describe('reply / resolve — the agent\'s one mutation', () => {
     const withFace = (await (await annotate(doc.id, actor, { anchor:nativeAnchor('findings'), edit_id: await headEditId(t.token, doc.id), body: 'with a face' })).json()) as AnnotationWire;
     expect(withFace.thread[0].author).toMatchObject({ kind: 'human', user_id: user.id, image });
     const humanReply = (await (await myActOnAnnotationRoute(
-      request(`/api/my/artifacts/${doc.id}/annotations/${withFace.id}`, { method: 'POST', actor: actor, json: { reply: 'me again' } }),
+      request(`/api/my/artifacts/${doc.id}/annotations/${withFace.id}`, { method: 'POST', actor, json: { reply: 'me again' } }),
       params({ id: doc.id, annId: withFace.id }),
     )).json()) as AnnotationWire;
     expect(humanReply.thread[1].author).toMatchObject({ kind: 'human', user_id: user.id, image });
@@ -336,7 +337,7 @@ describe('reply / resolve — the agent\'s one mutation', () => {
     // Every read that builds the wire: the owner's list, the bearer page and the GET's inline field.
     const query = vi.spyOn(db, 'query');
     try {
-      const my = (await (await myListAnnotationsRoute(request(`/api/my/artifacts/${doc.id}/annotations`, { actor: actor }), params({ id: doc.id }))).json()) as { annotations: AnnotationWire[] };
+      const my = (await (await myListAnnotationsRoute(request(`/api/my/artifacts/${doc.id}/annotations`, { actor }), params({ id: doc.id }))).json()) as { annotations: AnnotationWire[] };
       const page = (await (await listAnnotationsRoute(request(`/api/artifacts/${doc.id}/annotations`, { token: t.token }), params({ id: doc.id }))).json()) as { annotations: AnnotationWire[] };
       const inline = (await (await getArtifactRoute(request(`/api/artifacts/${doc.id}`, { token: t.token }), params({ id: doc.id }))).json()) as { annotations: AnnotationWire[] };
       expect(inline.annotations).toEqual(page.annotations);
@@ -367,14 +368,14 @@ describe('reply / resolve — the agent\'s one mutation', () => {
     const { doc, actor } = await publish();
     const a = (await (await annotate(doc.id, actor, { anchor:nativeAnchor('findings'), edit_id: doc.edit_id, body: 'q' })).json()) as AnnotationWire;
     const res = await myActOnAnnotationRoute(
-      request(`/api/my/artifacts/${doc.id}/annotations/${a.id}`, { method: 'POST', actor: actor, json: { reply: 'never mind' } }),
+      request(`/api/my/artifacts/${doc.id}/annotations/${a.id}`, { method: 'POST', actor, json: { reply: 'never mind' } }),
       params({ id: doc.id, annId: a.id }),
     );
     expect(res.status).toBe(200);
     const r = (await res.json()) as AnnotationWire;
     expect(r.thread[1].author).toMatchObject({ kind: 'human', transport: 'browser' });
 
-    const my = (await (await myListAnnotationsRoute(request(`/api/my/artifacts/${doc.id}/annotations`, { actor: actor }), params({ id: doc.id }))).json()) as { annotations: AnnotationWire[] };
+    const my = (await (await myListAnnotationsRoute(request(`/api/my/artifacts/${doc.id}/annotations`, { actor }), params({ id: doc.id }))).json()) as { annotations: AnnotationWire[] };
     expect(my.annotations[0].thread).toHaveLength(2);
   });
 
@@ -454,7 +455,7 @@ describe('lifecycle', () => {
     expect(refused.status).toBe(404);
 
     const deleted = await myDeleteAnnotationRoute(
-      request(`/api/my/artifacts/${doc.id}/annotations/${a.id}`, { method: 'DELETE', actor: actor }),
+      request(`/api/my/artifacts/${doc.id}/annotations/${a.id}`, { method: 'DELETE', actor }),
       params({ id: doc.id, annId: a.id }),
     );
     expect(deleted.status).toBe(200);
@@ -486,7 +487,7 @@ describe('lifecycle', () => {
     // the artifact is (trashed-rows.test.ts), so everything hanging off it is.
     // And there is no sweep to take them later: nothing is ever erased.
     expect((await artifactQuery(db,'SELECT 1 FROM annotations WHERE artifact_id = $1', [doc.id])).rows).toHaveLength(1);
-    await artifactQuery(db,`UPDATE artifacts SET deleted_at = now() - interval '400 days' WHERE id = $1`, [doc.id]);
+    await setArtifact(db, doc.id, { deleted_at: { sql: "now() - interval '400 days'" } });
     expect((await artifactQuery(db,'SELECT 1 FROM annotations WHERE artifact_id = $1', [doc.id])).rows).toHaveLength(1);
   });
 });

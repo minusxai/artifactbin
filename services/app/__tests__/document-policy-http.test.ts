@@ -14,6 +14,7 @@ import {GET as version} from '@/app/api/artifacts/[id]/versions/[version]/route'
 import { revokeToken, createUser } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {bearerIdentity,request,useAppHarness} from './harness';
+import { seedArtifacts } from '@/__tests__/rows';
 
 const harness=useAppHarness();
 it('HTTP native publication grants never reach private pages and end on verification loss, policy removal or token revocation',async()=>{
@@ -21,7 +22,7 @@ it('HTTP native publication grants never reach private pages and end on verifica
  setDocumentEditorPolicy(actor=>actor.userId===user.id && actor.emailVerified===true);
  const db=await harness.db();
  for(const [id,title,visibility] of [['abc123','Unlisted document','unlisted'],['prv123','Private document','private']])
-  await db.query(`INSERT INTO artifacts(id,token_id,user_id,title,source,meta,format,visibility,edit_id) VALUES ($1,'tok_owner','usr_owner',$2,$3,'{}','html',$4,'base-edit')`,[id,title,nativeHtml('<p data-af-id="intro">Before</p>'),visibility]);
+  await seedArtifacts(db, { id, token_id: 'tok_owner', user_id: 'usr_owner', title, source: nativeHtml('<p data-af-id="intro">Before</p>'), meta: '{}', format: 'html', visibility, edit_id: 'base-edit' });
  const bearers=await bearerIdentity();
  await bearers.account({userId:user.id,email:user.email!,emailVerified:true});
  const app=new Hono();

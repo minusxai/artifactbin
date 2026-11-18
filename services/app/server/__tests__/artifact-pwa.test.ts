@@ -9,6 +9,7 @@ import { postArtifact } from '@/__tests__/artifact-fixtures';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser, ensureUsername } from '@/lib/accounts';
 import { mintExportKey } from '@/lib/export';
+import { setArtifact } from '@/__tests__/rows';
 
 const harness = useAppHarness();
 const secret = 'vitest-actor-secret-0000000000000000';
@@ -45,7 +46,7 @@ it('protects app pages, manifest metadata and icons, including after access is r
     expect((await app.request(`/a/Absent1/app/${suffix}`)).status).toBe(404);
   }
   const db = await harness.db();
-  await db.query('UPDATE artifacts SET visibility=$1 WHERE id=$2', ['private', w.public.id]);
+  await setArtifact(db, w.public.id, { visibility: 'private' });
   expect((await app.request(`/a/${w.public.id}/app/manifest.webmanifest`)).status).toBe(404);
   expect((await app.request(`/a/${w.public.id}/app/`)).status).toBe(404);
 });
@@ -107,6 +108,6 @@ it('requires explicit opt-in and stops discovery when disabled, while preserving
   for (const asset of ['manifest.webmanifest', 'icon-192.png', 'icon-512.png']) expect((await app.request(base + asset)).status).toBe(404);
   const on = await world();
   expect((await app.request(`/a/${on.public.id}/app/manifest.webmanifest`)).status).toBe(200);
-  await (await harness.db()).query('UPDATE artifacts SET source=$1 WHERE id=$2', ['<!doctype html><html><head></head><body><h1>Disabled</h1></body></html>', on.public.id]);
+  await setArtifact((await harness.db()), on.public.id, { source: '<!doctype html><html><head></head><body><h1>Disabled</h1></body></html>' });
   expect((await app.request(`/a/${on.public.id}/app/manifest.webmanifest`)).status).toBe(404);
 });

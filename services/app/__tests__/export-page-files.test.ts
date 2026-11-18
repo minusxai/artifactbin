@@ -13,6 +13,7 @@ import { createArtifactFromBody } from '@/lib/publish';
 import { mintExportKey } from '@/lib/export';
 import { GET as serveRaw } from '@/app/a/[id]/raw/route';
 import { GET as serveAsset } from '@/app/a/[id]/assets/route';
+import { setArtifact } from '@/__tests__/rows';
 
 useAppHarness();
 
@@ -119,7 +120,7 @@ it("admits the files of the archived version a capture shows, on the capture's k
   // Version 1 archived as it was published, and the head moved on to version 2.
   const db = await getDb();
   await db.query("INSERT INTO artifact_versions (artifact_id, version, title, description, format, source, meta) SELECT id, 1, title, description, format, source, meta FROM artifacts WHERE id=$1", [id]);
-  await db.query('UPDATE artifacts SET version=2 WHERE id=$1', [id]);
+  await setArtifact(db, id, { version: 2 });
   const key = mintExportKey(id, undefined, undefined, owner);
   const response = await serveRaw(new Request(`${BASE}/a/${id}/raw?chrome=0&key=${encodeURIComponent(key)}&version=1`), params(id));
   expect(response.status).toBe(200);

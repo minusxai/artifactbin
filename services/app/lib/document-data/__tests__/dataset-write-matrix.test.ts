@@ -11,6 +11,7 @@ import {getDb} from '@/lib/platform';
 import {getArtifactById} from '@/lib/artifacts';
 import {createArtifactFromBody} from '@/lib/publish';
 import {account,refusal,write} from './dataset-fixture';
+import { seedShares, setArtifact } from '@/__tests__/rows';
 
 useAppHarness();
 
@@ -68,8 +69,8 @@ it('decides every policy shape × caller × door × operation as the stored rule
   const created=await createArtifactFromBody({dataset:[{n:1}],access:'readwrite',visibility:shape.visibility??'public'},{...owner.actor,tokenId:owner.tokenId},'http://localhost:3000');
   expect(created.status,await created.clone().text()).toBe(201);
   const f={db,owner,id:(await created.json()).id as string,row:async()=>(await getArtifactById(f.id))!};
-  await f.db.query("INSERT INTO artifact_shares(artifact_id,user_id,email,role) VALUES($1,$2,$3,'editor'),($1,$4,$5,'viewer')",[f.id,editor.id,editor.email,viewer.id,viewer.email]);
-  await f.db.query('UPDATE artifacts SET dataset_policy=$2::jsonb,access=$3 WHERE id=$1',[f.id,JSON.stringify(shape.policy),shape.access]);
+  await seedShares(f.db, { artifact_id: f.id, user_id: editor.id, email: editor.email, role: 'editor' }, { artifact_id: f.id, user_id: viewer.id, email: viewer.email, role: 'viewer' });
+  await setArtifact(f.db, f.id, { dataset_policy: JSON.stringify(shape.policy), access: shape.access });
   const actors:Record<Caller,AccessActor>={owner:f.owner.actor,editor:editor.actor,viewer:viewer.actor,signedIn:signedIn.actor,anonymous:ANONYMOUS_ACTOR};
   for(const caller of CALLERS)for(const door of DOORS)for(const op of OPS){
    await f.db.query('DELETE FROM dataset_usage');

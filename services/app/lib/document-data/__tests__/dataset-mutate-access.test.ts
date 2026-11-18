@@ -6,6 +6,7 @@ import {expect,it} from 'vitest';
 import {useAppHarness} from '@/__tests__/harness';
 import {canWriteDataset,writeDatasetPolicy} from '@/lib/document-data';
 import {account,datasetFixture as fixture,refusal,write} from './dataset-fixture';
+import { seedShares, setArtifact } from '@/__tests__/rows';
 
 useAppHarness();
 /** A version 3 insert rule for every rule role. */
@@ -22,11 +23,11 @@ it('refuses a write read under an older policy revision, even from the owner',as
 
 it('writes only a readwrite dataset, and only as one of its editors',async()=>{
  const f=await fixture(),editor=await account('editor'),viewer=await account('viewer');
- await f.db.query("INSERT INTO artifact_shares(artifact_id,user_id,email,role) VALUES($1,$2,$3,'editor'),($1,$4,$5,'viewer')",[f.id,editor.id,editor.email,viewer.id,viewer.email]);
+ await seedShares(f.db, { artifact_id: f.id, user_id: editor.id, email: editor.email, role: 'editor' }, { artifact_id: f.id, user_id: viewer.id, email: viewer.email, role: 'viewer' });
  expect(refusal(await write(await f.row(),viewer.actor,'insert into public.rows values (2)'))).toBe('dataset_read_only');
  expect(await canWriteDataset(await f.row(),viewer.actor)).toBe('dataset_read_only');
  expect(refusal(await write(await f.row(),editor.actor,'insert into public.rows values (2)'))).toBeNull();
- await f.db.query("UPDATE artifacts SET access='read' WHERE id=$1",[f.id]);
+ await setArtifact(f.db, f.id, { access: 'read' });
  expect(await canWriteDataset(await f.row(),f.owner.actor)).toBe('dataset_read_only');
  expect(refusal(await write(await f.row(),f.owner.actor,'insert into public.rows values (3)'))).toBe('dataset_read_only');
  expect(await f.rows()).toEqual([{n:1},{n:2}]);

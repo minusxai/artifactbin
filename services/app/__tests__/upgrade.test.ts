@@ -30,6 +30,7 @@ import { SCHEMA_STATEMENTS } from '@/lib/platform';
 import { ensureIdentitySchema } from '@artifactbin/auth/identity-store';
 import type { Queryable, TransactionalQueryable } from '@artifactbin/contracts';
 import { request } from '@/__tests__/harness';
+import { seedArtifacts } from '@/__tests__/rows';
 
 // harness-exempt: reset builds fresh PGlite databases to test schema replay and upgrade behavior
 // harness-exempt: wipe clears the deliberately hand-built schema between upgrade scenarios
@@ -179,7 +180,7 @@ describe('the additive DDL is replay-safe', () => {
     // and one caller's edit_id would then be a valid write proof for every
     // document in the database.
     for (const id of ['aaa111', 'bbb222', 'ccc333']) {
-      await fresh.query('INSERT INTO artifacts (id, token_id) VALUES ($1, $2)', [id, 'tok_x']);
+      await seedArtifacts(fresh, { id, token_id: 'tok_x' });
     }
     const rows = await fresh.query<{ edit_id: string }>('SELECT edit_id FROM artifacts ORDER BY id');
     const heads = rows.rows.map((r) => r.edit_id);
@@ -202,13 +203,13 @@ describe('the additive DDL is replay-safe', () => {
 
     const token = await mint();
     const res = await createArtifactRoute(
-      request('/api/artifacts', { method: 'POST', token: token, json: { visibility: 'public', title: 'after replay', html:nativeHtml('<section><p>alpha text</p></section>') } }),
+      request('/api/artifacts', { method: 'POST', token, json: { visibility: 'public', title: 'after replay', html:nativeHtml('<section><p>alpha text</p></section>') } }),
     );
     expect(res.status).toBe(201);
     const doc = (await res.json()) as Wire;
     expect(doc.id).toMatch(/^[a-zA-Z0-9]{6}$/);
 
-    const read = await readRoute(request(`/api/artifacts/${doc.id}`, { token: token }), params({ id: doc.id }));
+    const read = await readRoute(request(`/api/artifacts/${doc.id}`, { token }), params({ id: doc.id }));
     expect(read.status).toBe(200);
     expect((await read.json()).html).toContain('alpha text');
   });
@@ -218,7 +219,7 @@ describe('an artifact whose edit log has been pruned', () => {
   /** Trim the log the way pruning does, leaving a row with no entries at all. */
   async function withPrunedLog(token: string): Promise<Wire> {
     const res = await createArtifactRoute(
-      request('/api/artifacts', { method: 'POST', token: token, json: { visibility: 'public', title: 'pruned', html:nativeHtml('<section><p>alpha text</p><p>beta text</p></section>') } }),
+      request('/api/artifacts', { method: 'POST', token, json: { visibility: 'public', title: 'pruned', html:nativeHtml('<section><p>alpha text</p><p>beta text</p></section>') } }),
     );
     expect(res.status).toBe(201);
     const doc = (await res.json()) as Wire;
@@ -233,7 +234,7 @@ describe('an artifact whose edit log has been pruned', () => {
     // The page's data must resolve on a row with no reconstructable history
     // behind its head — it renders, rather than 404ing or throwing.
     expect((await artifactPage(doc.id)).kind).toBe('render');
-    const read = await readRoute(request(`/api/artifacts/${doc.id}`, { token: token }), params({ id: doc.id }));
+    const read = await readRoute(request(`/api/artifacts/${doc.id}`, { token }), params({ id: doc.id }));
     expect(read.status).toBe(200);
     expect((await read.json()).html).toContain('alpha text');
   });
@@ -242,7 +243,7 @@ describe('an artifact whose edit log has been pruned', () => {
     const token = await mint();
     const doc = await withPrunedLog(token);
     const res = await editRoute(
-      request(`/api/artifacts/${doc.id}`, { method: 'PUT', token: token, json: await replacement(doc.id,'alpha text','ALPHA') }),
+      request(`/api/artifacts/${doc.id}`, { method: 'PUT', token, json: await replacement(doc.id,'alpha text','ALPHA') }),
       params({ id: doc.id }),
     );
     expect(res.status).toBe(200);

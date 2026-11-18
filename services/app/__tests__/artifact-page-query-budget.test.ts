@@ -19,6 +19,7 @@ import { link } from '@/lib/social';
 import { getDb } from '@/lib/platform';
 import { recordStatements, useAppHarness } from '@/__tests__/harness';
 import { BOOTSTRAP_ID, createAppServer } from '@/server/app';
+import { seedShares } from '@/__tests__/rows';
 
 useAppHarness();
 
@@ -156,7 +157,7 @@ for (const door of ['json', 'html'] as const) describe(`a page view through the 
     expect((await view(door, w.doc, session(w.viewer))).status).toBe(404);
     expect((await view(door, w.doc, null)).status).toBe(404);
     expect((await view(door, w.doc, session(w.author))).status).toBe(200);
-    await db.query("INSERT INTO artifact_shares (artifact_id, email, role) VALUES ($1, $2, 'editor')", [w.doc, w.viewer.email]);
+    await seedShares(db, { artifact_id: w.doc, email: w.viewer.email, role: 'editor' });
     const shared = await view(door, w.doc, session(w.viewer));
     expect(shared.status).toBe(200);
     expect(shared.page!.role).toBe('editor');

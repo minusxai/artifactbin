@@ -6,6 +6,7 @@ import {createGroup,deleteGroup} from '@/lib/groups';
 import {SQL_READ_WALL_TIMEOUT_MS,getDb} from '@/lib/platform';
 import {APP_ARTIFACT_WORKLOAD_PATH} from '@artifactbin/contracts';
 import {mintAccountToken,useAppHarness} from '../../__tests__/harness';
+import { setArtifact } from '@/__tests__/rows';
 // The evidence budget is the service payload limit; this file holds it at 200 KiB so a wide table passes it without
 // building megabytes of metadata.
 vi.mock('@artifactbin/contracts',async original=>({...await original<object>(),SERVICE_PAYLOAD_LIMIT:200*1024}));
@@ -58,14 +59,14 @@ it('reads only explicitly approved pinned page evidence under current viewer pol
   expect((await call({...operation,sql:'select $big as a,$big as b from metrics',params:{big:'x'.repeat(110000)}})).status).toBe(413);
   expect((await call({...operation,sql:'with recursive seq(n) as (select 1 union all select n+1 from seq where n<10001) select n from seq'})).status).toBe(413);
   const original=(await db.query('SELECT * FROM artifacts WHERE id=$1',[dataset.id])).rows[0];
-  const restore=()=>db.query('UPDATE artifacts SET group_id=$2,deleted_at=NULL,dataset_policy=$3::jsonb,policy_revision=$4 WHERE id=$1',[dataset.id,original.group_id,JSON.stringify(original.dataset_policy),original.policy_revision]);
+  const restore=()=>setArtifact(db,dataset.id,{group_id:original.group_id,deleted_at:null,dataset_policy:JSON.stringify(original.dataset_policy),policy_revision:original.policy_revision});
   const foreign=await createGroup(owner.userId!,{handle:'evidence_foreign',name:'Foreign'});
-  for(const mutate of [()=>db.query('UPDATE artifacts SET group_id=$2 WHERE id=$1',[dataset.id,foreign.id]),()=>trashRow(dataset.id)]){
+  for(const mutate of [()=>setArtifact(db,dataset.id,{group_id:foreign.id}),()=>trashRow(dataset.id)]){
    change=mutate;const refused=await call();expect(refused.status).toBeGreaterThanOrEqual(400);expect(await refused.text()).not.toContain('visible');change=null;await restore();
   }
   change=async()=>{grant={...approved,links:[]};};expect((await call()).status).toBe(403);change=null;grant=approved;
   const pageRow=(await db.query('SELECT * FROM artifacts WHERE id=$1',[page.id])).rows[0];
-  change=()=>db.query('UPDATE artifacts SET version=version+1 WHERE id=$1',[page.id]);expect((await call()).status).toBeGreaterThanOrEqual(400);change=null;await db.query('UPDATE artifacts SET version=$2 WHERE id=$1',[page.id,pageRow.version]);
+  change=()=>setArtifact(db,page.id,{version:{sql:'version+1'}});expect((await call()).status).toBeGreaterThanOrEqual(400);change=null;await setArtifact(db, page.id, { version: pageRow.version });
   const archived=(await db.query('SELECT * FROM artifact_versions WHERE artifact_id=$1 AND version=1',[dataset.id])).rows[0];expect(archived).toBeTruthy();
   // Archive deletion is injected after execution: the exact saved data must still be available at delivery.
   change=()=>db.query('DELETE FROM artifact_versions WHERE artifact_id=$1 AND version=1',[dataset.id]);expect((await call()).status).toBeGreaterThanOrEqual(400);change=null;

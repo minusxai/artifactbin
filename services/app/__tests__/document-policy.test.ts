@@ -8,6 +8,7 @@ import {GET,PUT,DELETE} from '@/app/api/my/artifacts/[id]/route';
 import {GET as page} from '@/app/api/page/artifact/[id]/route';
 import {request,useAppHarness} from './harness';
 import {observedRequest} from './conditional-request';
+import { seedArtifacts, setArtifact } from '@/__tests__/rows';
 
 /**
  * The host's document-editor grant at the BROWSER doors (the session the proxy attaches): an admin edits any
@@ -23,7 +24,7 @@ beforeEach(async()=>{
  await (await harness.db()).query("INSERT INTO users(id,email,kind) VALUES ('usr_admin','admin@example.com','account'),('usr_other','other@example.com','account'),('usr_owner','owner@example.com','account')");
  setDocumentEditorPolicy(actor=>actor.userId==='usr_admin' && actor.emailVerified===true);
  for(const [id,title,visibility] of [['abc123','Unlisted document','unlisted'],['prv123','Private document','private']])
-  await (await harness.db()).query(`INSERT INTO artifacts(id,token_id,user_id,title,source,meta,format,visibility,edit_id) VALUES ($1,'tok_owner','usr_owner',$2,$3,'{}','html',$4,'base-edit')`,[id,title,nativeHtml('<p data-af-id="intro">Before</p>'),visibility]);
+  await seedArtifacts((await harness.db()), { id, token_id: 'tok_owner', user_id: 'usr_owner', title, source: nativeHtml('<p data-af-id="intro">Before</p>'), meta: '{}', format: 'html', visibility, edit_id: 'base-edit' });
 });
 it('opens non-private documents with native publication authority with server-provided editor permission',async()=>{
  const req=request(path,options),actor=await sessionActor(req),row=(await getArtifactById('abc123'))!;
@@ -76,7 +77,7 @@ it('does not elevate other users, unverified identities, agent cookies or forged
 });
 it('keeps cross-site writes and private datasets outside the grant',async()=>{
  expect((await PUT(await observedRequest(path,{actor:admin,origin:'https://evil.test',method:'PUT',json:{html:nativeHtml('<p>Attack</p>')}}),context)).status).toBe(403);
- await (await harness.db()).query("UPDATE artifacts SET format='dataset' WHERE id='prv123'");
+ await setArtifact((await harness.db()), 'prv123', { format: 'dataset' });
  expect((await GET(request(privatePath,options),privateContext)).status).toBe(404);
  const actor=await sessionActor(request(privatePath,options));
  expect(await canReadArtifact((await getArtifactById('prv123'))!,actor)).toBe(false);

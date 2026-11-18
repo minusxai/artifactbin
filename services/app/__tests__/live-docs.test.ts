@@ -21,6 +21,7 @@ import { GET as apiGet, PATCH as apiPatch, PUT as apiPut } from '@/app/api/artif
 import { GET as myGet, PUT as myPut } from '@/app/api/my/artifacts/[id]/route';
 import { mintAccountToken, request, useAppHarness, params } from './harness';
 import { sseStream } from './sse';
+import { seedShares } from '@/__tests__/rows';
 
 const harness = useAppHarness();
 
@@ -62,7 +63,7 @@ beforeEach(async () => {
   const row = await createHistoricalPage(null, owner.id, { format: 'html', source: DOC, title: 'Untitled document', meta: { template: 'doc' }, visibility: 'public' });
   pageId = row.id;
   regionId = editableRegions(row.source!)[0]!.id;
-  await (await harness.db()).query('INSERT INTO artifact_shares (artifact_id, email, role) VALUES ($1, $2, $3)', [pageId, editor.email, 'editor']);
+  await seedShares((await harness.db()), { artifact_id: pageId, email: editor.email, role: 'editor' });
   ownerToken = (await mintAccountToken('livedocs-owner', owner.id)).token;
   readerToken = (await mintAccountToken('livedocs-reader')).token;
 });

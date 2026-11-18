@@ -12,6 +12,7 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { getArtifactById } from '@/lib/artifacts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { firstSaveLinks } from '@/__tests__/stored-links';
+import { setArtifact } from '@/__tests__/rows';
 
 const harness = useAppHarness();
 
@@ -38,7 +39,7 @@ const RECIPE = {
 const PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 
 async function create(token: string, body: Record<string, unknown>) {
-  const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: { visibility: 'public', ...body } }));
+  const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token, json: { visibility: 'public', ...body } }));
   return { status: res.status, body: await res.json() };
 }
 
@@ -215,7 +216,7 @@ describe('image tier', () => {
     const t = await mintToken('t');
     const { body } = await create(t.token, { title: 'px', image: PIXEL });
     const db = await harness.db();
-    await db.query(`UPDATE artifacts SET meta = '{"contentType":"image/png"}' WHERE id = $1`, [body.id]);
+    await setArtifact(db, body.id, { meta: '{"contentType":"image/png"}' });
     const res = await serveArtifact(request(`/a/${body.id}/raw`), params({ id: body.id }));
     expect(res.status).toBe(404);
   });

@@ -9,6 +9,7 @@ import {
   uploadFileRequest,
 } from '@/lib/document-data';
 import { account, datasetFixture } from './dataset-fixture';
+import { seedArtifacts, setArtifact } from '@/__tests__/rows';
 
 useAppHarness();
 
@@ -16,8 +17,7 @@ useAppHarness();
 async function documentImporting(owner: { id: string; tokenId: string }, _datasetId: string, refs: Array<{ id: string; kind: string }> = []) {
   const id = `doc${Math.random().toString(36).slice(2, 8)}`;
   const source = `<html><body>Doc</body></html>`;
-  await (await getDb()).query("INSERT INTO artifacts (id, token_id, user_id, format, source, meta, visibility) VALUES ($1,$2,$3,'html',$4,$5::jsonb,'public')",
-    [id, owner.tokenId, owner.id, source, JSON.stringify({ refs })]);
+  await seedArtifacts((await getDb()), { id, token_id: owner.tokenId, user_id: owner.id, format: 'html', source, meta: JSON.stringify({ refs }), visibility: 'public' });
   return (await getArtifactById(id))!;
 }
 
@@ -25,8 +25,8 @@ describe('refs', () => {
   it('reaches only an artifact the document declares, and draws a viz ref and skips a deleted or dataset ref', async () => {
     const f = await datasetFixture();
     const recipe = { description: 'r', engine: 'vega-lite', bindings: [], template: {} };
-    await f.db.query("INSERT INTO artifacts (id, token_id, user_id, format, source, visibility) VALUES ('vizabc', $1, $2, 'viz', $3, 'private'), ('vizgone', $1, $2, 'viz', $3, 'private')", [f.owner.tokenId, f.owner.id, JSON.stringify(recipe)]);
-    await f.db.query("UPDATE artifacts SET deleted_at = now() WHERE id = 'vizgone'");
+    await seedArtifacts(f.db, { id: 'vizabc', token_id: f.owner.tokenId, user_id: f.owner.id, format: 'viz', source: JSON.stringify(recipe), visibility: 'private' }, { id: 'vizgone', token_id: f.owner.tokenId, user_id: f.owner.id, format: 'viz', source: JSON.stringify(recipe), visibility: 'private' });
+    await setArtifact(f.db, 'vizgone', { deleted_at: { sql: 'now()' } });
     const doc = await documentImporting(f.owner, f.id, [{ id: 'vizabc', kind: 'viz' }, { id: 'vizgone', kind: 'viz' }, { id: f.id, kind: 'dataset' }]);
     expect(await referencedArtifactForRow(doc, 'vizabc')).toMatchObject({ id: 'vizabc' });
     expect(await referencedArtifactForRow(doc, f.id)).toMatchObject({ id: f.id });

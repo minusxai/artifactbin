@@ -15,6 +15,7 @@ import { overrideConfig } from '@/lib/platform/config';
 import { createGroup, deleteGroup } from '@/lib/groups';
 import { POST as sqlPost } from '@/app/api/artifacts/[id]/sql/route';
 import { person, params, publish, sql, fixture, stored } from './page-sql-door-fixture';
+import { seedShares } from '@/__tests__/rows';
 
 useAppHarness();
 beforeEach(() => setSession(null));
@@ -70,7 +71,7 @@ it('review3: a group revoke between dataset authorization and page locks prevent
 
 it('review3: sharing edits and the write guard agree on page/share lock order', async () => {
   const f = await fixture(), db = await getDb();
-  await db.query("INSERT INTO artifact_shares(artifact_id,user_id,email,role) VALUES($1,$2,$3,'viewer')", [f.page, f.other.userId, f.other.email]);
+  await seedShares(db, { artifact_id: f.page, user_id: f.other.userId, email: f.other.email, role: 'viewer' });
   // Review 4 (lock only what the decision reads): the page is private, so the reader's access IS its page share.
   await setVisibility(f.page, 'private');
   const traces: string[][] = [];

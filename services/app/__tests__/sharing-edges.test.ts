@@ -19,6 +19,7 @@ import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser, ensureUsername, setUsername } from '@/lib/accounts';
 import { people } from '@/lib/datasets';
 import { getDb } from '@/lib/platform';
+import { setArtifact } from '@/__tests__/rows';
 
 const harness = useAppHarness();
 const sessionUser = useSessionUser();
@@ -81,7 +82,7 @@ describe('share rows survive their artifact\'s delete, and the id is never recyc
     (await (await harness.db()).query('SELECT 1 FROM artifact_shares WHERE artifact_id = $1', [id])).rows.length;
   /** Age the stamp past any retention this product has ever had; nothing sweeps. */
   const age = async (id: string) => {
-    await (await harness.db()).query(`UPDATE artifacts SET deleted_at = now() - interval '400 days' WHERE id = $1`, [id]);
+    await setArtifact((await harness.db()), id, { deleted_at: { sql: "now() - interval '400 days'" } });
   };
 
   it('the bearer DELETE keeps the share list', async () => {
@@ -89,7 +90,7 @@ describe('share rows survive their artifact\'s delete, and the id is never recyc
     await putSharingRoute(request(`/api/my/artifacts/${doc.id}/sharing`, { method: 'PUT', json: { shares: [{email:'a@b.com',role:'viewer'}] } }), params({ id: doc.id }));
     expect(await sharesFor(doc.id)).toBe(1);
 
-    expect((await deleteArtifactRoute(request(`/api/artifacts/${doc.id}`, { method: 'DELETE', token: token }), params({ id: doc.id }))).status).toBe(200);
+    expect((await deleteArtifactRoute(request(`/api/artifacts/${doc.id}`, { method: 'DELETE', token }), params({ id: doc.id }))).status).toBe(200);
     // A restored document must come back shared with the same people, and
     // there is no later sweep to take them: the row and its grants are kept.
     expect(await sharesFor(doc.id)).toBe(1);
@@ -179,7 +180,7 @@ describe('what the surfaces disclose', () => {
     const { owner, token } = await ownerFixture();
     const box = await create(token, { format: 'folder', title: 'Q3' });
     await create(token, { title: 'x', html: '<h1>x</h1>', parent_id: box.id });
-    const byToken = await (await listArtifactsRoute(request('/api/artifacts', { token: token }))).json();
+    const byToken = await (await listArtifactsRoute(request('/api/artifacts', { token }))).json();
     expect(byToken.artifacts.find((a: { id: string }) => a.id !== box.id)).toMatchObject({ visibility: 'private', parent_id: box.id, ancestor_ids: [box.id] });
 
     sessionUser.id = owner.id;
@@ -199,7 +200,7 @@ describe('what the surfaces disclose', () => {
       [{ html: '<h1>y</h1>', parent_id: 'zzzzzz' }, 'invalid_parent'],
       [{ html: '<h1>y</h1>', parent_id: notAFolder.id }, 'invalid_parent'],
     ] as const) {
-      const res = await putArtifact(await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: token, json: body }), params({ id: doc.id }));
+      const res = await putArtifact(await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token, json: body }), params({ id: doc.id }));
       expect(res.status, JSON.stringify(body)).toBe(400);
       expect((await res.json()).error).toBe(error);
     }

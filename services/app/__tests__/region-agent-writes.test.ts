@@ -24,6 +24,7 @@ import { regionSessions } from '@/app/api/artifacts/[id]/regions/doors';
 import { nativeHtml } from './native-html-fixture';
 import { mintAccountToken, request, useAppHarness, type RequestOptions } from './harness';
 import { sseStream } from './sse';
+import { seedShares } from '@/__tests__/rows';
 
 const harness = useAppHarness();
 
@@ -110,7 +111,7 @@ beforeEach(async () => {
   rich = regions.find((region) => region.kind === 'rich')!.id;
   plain = regions.find((region) => region.kind === 'text')!.id;
   const q = await harness.db();
-  for (const [who, role] of [[editor, 'editor'], [viewer, 'viewer']] as const) await q.query('INSERT INTO artifact_shares (artifact_id, email, role) VALUES ($1, $2, $3)', [pageId, who.email, role]);
+  for (const [who, role] of [[editor, 'editor'], [viewer, 'viewer']] as const) await seedShares(q, { artifact_id: pageId, email: who.email, role });
   agent = (await mintAccountToken('regions-agent', owner.id)).token;
   viewerToken = (await mintAccountToken('regions-viewer', viewer.id)).token;
 });

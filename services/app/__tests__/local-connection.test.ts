@@ -5,6 +5,7 @@ import {POST as publish} from '@/app/api/artifacts/route';
 import {POST as grant} from '@/app/api/local-connection/route';
 import {readHtmlPage} from '@/lib/html-publication';
 import {request,useAppHarness,mintAccountToken,setSession} from './harness';
+import { setArtifact } from '@/__tests__/rows';
 const harness=useAppHarness();
 it('keeps local grants anonymous read-only and refuses account upgrades',async()=>{
  const owner=await mintAccountToken('local-connection');
@@ -39,7 +40,7 @@ it('observes stale source metadata without granting operations or leaking privat
  const identity={platformOrigin:'http://localhost:3000',artifactId:id,baseRevision:'99',sourceDigest:'0'.repeat(64)};
  const read=(extra:Record<string,unknown>={})=>observe(request('/api/local-connection/observe-source',{method:'POST',token:owner.token,json:{identity,...extra}}));
  const response=await read();expect(response.status).toBe(200);expect(await response.json()).toEqual({remoteDigest:createHash('sha256').update(page.html).digest('hex'),remoteRevision:page.revision});
- await(await harness.db()).query('UPDATE artifacts SET version=version+1 WHERE id=$1',[id]);
+ await setArtifact((await harness.db()), id, { version: { sql: 'version+1' } });
  const observedNew=await read();expect((await observedNew.json()).remoteRevision).toBe('2');
  const admission=await grant(request('/api/local-connection',{method:'POST',token:owner.token,json:{identity}}));expect(admission.status).toBe(409);
  await setVisibility(id, 'private');
@@ -56,7 +57,7 @@ it('validates idle grants against current source and original account without ex
  const open=async(account:boolean)=>{const res=await grant(request('/api/local-connection',{method:'POST',token:owner.token,json:{identity,authorizePrivate:account}}));expect(res.status).toBe(200);return (await res.json()).capability;};
  const inspect=(cap:string,token=owner.token)=>{const req=request(`/api/local-connection/${id}/status`,{token});req.headers.set('X-Af-Local-Capability',cap);return status(req,{params:Promise.resolve({id})});};
  const guest=await open(false);const switched=await inspect(guest,stranger.token);expect(switched.status).toBe(200);
- await(await harness.db()).query('UPDATE artifacts SET version=version+1 WHERE id=$1',[id]);
+ await setArtifact((await harness.db()), id, { version: { sql: 'version+1' } });
  const changed=await inspect(guest);expect(changed.status).toBe(200);expect(await changed.json()).toMatchObject({compatible:false,remoteRevision:'2'});expect((await inspect(guest)).status).toBe(410);
 });
 

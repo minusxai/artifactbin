@@ -7,11 +7,12 @@ import {useAppHarness} from '@/__tests__/harness';
 import {getDb} from '@/lib/platform';
 import { createUser } from '@/lib/accounts';
 import { membershipInbox, updateMembershipInbox } from '@/lib/notifications';
+import { seedArtifacts, setArtifact } from '@/__tests__/rows';
 useAppHarness();
 it('coalesces an agent reply and resolution, including its own account, and notifies reopening',async()=>{
  const owner=await createUser({email:'mxmx_test_notify_agent@example.com'});
  const db=await getDb();
- await db.query("INSERT INTO artifacts(id,token_id,user_id,format,source,visibility) VALUES('thread1','t',$1,'html','<!doctype html><html><body><p data-af-id=\"note\">Hello</p></body></html>','public')",[owner.id]);
+ await seedArtifacts(db, { id: 'thread1', token_id: 't', user_id: owner.id, format: 'html', source: '<!doctype html><html><body><p data-af-id="note">Hello</p></body></html>', visibility: 'public' });
  await db.query("INSERT INTO annotations(id,artifact_id,body,author_kind,author_user_id,author_token_id,status,snippet) VALUES('ann_thread','thread1','Please fix','human',$1,'t','open','')",[owner.id]);
  const actor=identityForUser(owner.id, 't');
  const result=await actOnAnnotationFor(actor,'thread1','ann_thread',{reply:'Fixed it',resolve:true},{kind:'agent',label:'helper',transport:'http'});
@@ -27,19 +28,19 @@ it('coalesces an agent reply and resolution, including its own account, and noti
 it('keeps a mention and subsequent replies in one conversation item and hides deleted threads',async()=>{
  const alice=await createUser({email:'mxmx_test_thread_a@example.com'}),bob=await createUser({email:'mxmx_test_thread_b@example.com'});
  const db=await getDb();
- await db.query("INSERT INTO artifacts(id,token_id,user_id,format,source,visibility) VALUES('thread2','t',$1,'html','<!doctype html><html><body><p data-af-id=\"note\">Hello</p></body></html>','public')",[alice.id]);
+ await seedArtifacts(db, { id: 'thread2', token_id: 't', user_id: alice.id, format: 'html', source: '<!doctype html><html><body><p data-af-id="note">Hello</p></body></html>', visibility: 'public' });
  await db.query("INSERT INTO annotations(id,artifact_id,body,author_kind,author_user_id,author_token_id,status,snippet) VALUES('ann_mentions','thread2','Please fix','human',$1,'t','open','')",[alice.id]);
  await db.query("INSERT INTO relations(subject_kind,subject_id,verb,object_kind,object_id,status,direction,initiated_by) VALUES('user',$1,'join','artifact','thread2','accepted','invitation',$2)",[bob.id,alice.id]);
- await db.query("UPDATE artifacts SET link_role='commenter' WHERE id='thread2'");
+ await setArtifact(db, 'thread2', { link_role: 'commenter' });
  const actor=identityForUser(alice.id, 't'),recipient=identityForUser(bob.id, null);
  await actOnAnnotationFor(actor,'thread2','ann_mentions',{reply:`Hi [@bob](/people/${bob.id})`},{kind:'human',label:null,transport:'http'});
  await actOnAnnotationFor(actor,'thread2','ann_mentions',{reply:'Another update',resolve:true},{kind:'human',label:null,transport:'http'});
  const inbox=await membershipInbox(recipient);
  expect(inbox.notifications).toHaveLength(1);
  expect(inbox.notifications[0]).toMatchObject({id:`thread:ann_mentions:${bob.id}`,source:'comment:ann_mentions',kind:'reply_resolved'});
- await db.query("UPDATE artifacts SET link_role='viewer' WHERE id='thread2'");
+ await setArtifact(db, 'thread2', { link_role: 'viewer' });
  expect((await membershipInbox(recipient)).notifications).toEqual([]);
- await db.query("UPDATE artifacts SET link_role='commenter' WHERE id='thread2'");
+ await setArtifact(db, 'thread2', { link_role: 'commenter' });
  expect(await deleteAnnotationFor(actor,'thread2','ann_mentions')).toBe(true);
  expect((await db.query("SELECT envelope FROM event_outbox WHERE envelope->'payload'->>'change'='removed'")).rows).toHaveLength(1);
  expect((await membershipInbox(recipient)).notifications).toEqual([]);

@@ -14,6 +14,7 @@ import {
   nativeHtmlCoreResponse, nativeHtmlModuleResponse,  nativeHtmlTitle, serveRawDocument,
 } from '@/lib/document-serving';
 import { FRAME_ALLOW, FRAME_SANDBOX } from '@/lib/html-reader/frame-markup';
+import { setArtifact } from '@/__tests__/rows';
 
 useAppHarness();
 
@@ -126,7 +127,7 @@ describe('the shell cache', () => {
     await failing();
     await failing();
     expect(renders).toBe(6);
-    await (await getDb()).query('UPDATE artifacts SET version = version + 1, updated_at = now() WHERE id = $1', [pub.id]);
+    await setArtifact((await getDb()), pub.id, { version: { sql: 'version + 1' }, updated_at: { sql: 'now()' } });
     expect(await (await ask(undefined, render('next version'))).text()).toBe('next version');
   });
 });

@@ -28,6 +28,7 @@ import { getDb } from '@/lib/platform';
 import { membershipInbox, updateMembershipInbox } from '@/lib/notifications';
 import { POST } from '@/app/api/my/artifacts/[id]/members/route';
 import { explicitlyJoined } from './roles-fixture';
+import { seedArtifacts, seedShares, setArtifact } from '@/__tests__/rows';
 
 const harness = useAppHarness();
 
@@ -580,7 +581,7 @@ describe('artifact membership', () => {
     const eve = await createUser({ email: 'mxmx_test_members_eve@example.com' });
     const db = await getDb();
     for (const [user, username] of [[owner,'member_owner'],[bob,'member_bob'],[eve,'member_eve']] as const) await db.query('UPDATE users SET username=$2 WHERE id=$1',[user.id,username]);
-    await db.query("INSERT INTO artifacts(id,token_id,user_id,format,visibility,link_role) VALUES('a1B2c3','owner-token',$1,'html','public','commenter')",[owner.id]);
+    await seedArtifacts(db, { id: 'a1B2c3', token_id: 'owner-token', user_id: owner.id, format: 'html', visibility: 'public', link_role: 'commenter' });
     return { db, owner, bob, eve, actor: (user: {id:string}) => (identityForUser(user.id, null)) };
   }
   it('joins an owner immediately; readers request and only an editor can approve', async () => {
@@ -623,14 +624,14 @@ describe('artifact membership', () => {
     const w=await world();
     await expect(changeMembership(identityForUser(null, null),'a1B2c3',{action:'join'})).rejects.toThrow(/sign in/i);
     await changeMembership(w.actor(w.bob),'a1B2c3',{action:'join'});
-    await w.db.query("UPDATE artifacts SET visibility='private',sharing_revision=sharing_revision+1 WHERE id='a1B2c3'");
+    await setArtifact(w.db, 'a1B2c3', { visibility: 'private', sharing_revision: { sql: 'sharing_revision+1' } });
     await expect(changeMembership(w.actor(w.owner),'a1B2c3',{action:'approve',userId:w.bob.id})).rejects.toThrow(/access/i);
   });
   it('caps outstanding requests across artifacts and frees slots on withdrawal', async () => {
     const w=await world();
     for(let i=0;i<30;i++) {
       const id=`cap${String(i).padStart(3,'0')}`;
-      await w.db.query("INSERT INTO artifacts(id,token_id,user_id,format,visibility) VALUES($1,'owner-token',$2,'html','public')",[id,w.owner.id]);
+      await seedArtifacts(w.db, { id, token_id: 'owner-token', user_id: w.owner.id, format: 'html', visibility: 'public' });
       await changeMembership(w.actor(w.bob),id,{action:'join'});
     }
     await expect(changeMembership(w.actor(w.bob),'a1B2c3',{action:'join'})).rejects.toThrow(/30/);
@@ -666,7 +667,7 @@ describe('artifact membership', () => {
 
   it('posts resolved comment mentions atomically for agents and ignores examples in code',async()=>{
    const w=await world();await link(w.bob.id,'follow',w.owner.id);
-   await w.db.query(`UPDATE artifacts SET source='<html><body><p data-af-id="mark">Hello</p></body></html>' WHERE id='a1B2c3'`);
+   await setArtifact(w.db, 'a1B2c3', { source: '<html><body><p data-af-id="mark">Hello</p></body></html>' });
    const actor=identityForUser(w.owner.id, 'owner-token');
    const post=(body:string)=>createAnnotationFor(actor,'a1B2c3',{anchor:nativeAnchor('mark'),body},{kind:'agent',label:'test',transport:'http'});
    expect(await post('`[@member_bob](/people/'+w.bob.id+')`')).not.toBeNull();
@@ -694,11 +695,11 @@ describe('artifact membership', () => {
   });
   it('gives an existing requester instant membership after receiving edit access',async()=>{
    const w=await world();await changeMembership(w.actor(w.bob),'a1B2c3',{action:'join'});
-   await w.db.query("INSERT INTO artifact_shares(artifact_id,user_id,email,role) VALUES('a1B2c3',$1,$2,'editor')",[w.bob.id,w.bob.email]);
+   await seedShares(w.db, { artifact_id: 'a1B2c3', user_id: w.bob.id, email: w.bob.email, role: 'editor' });
    expect((await changeMembership(w.actor(w.bob),'a1B2c3',{action:'join'})).self?.status).toBe('accepted');
   });
   it('includes viewing access atomically only when explicitly requested by an editor',async()=>{
-   const w=await world();await w.db.query("UPDATE artifacts SET visibility='private' WHERE id='a1B2c3'");
+   const w=await world();await setArtifact(w.db, 'a1B2c3', { visibility: 'private' });
    await expect(changeMembership(w.actor(w.owner),'a1B2c3',{action:'invite',usernames:['@member_bob']})).rejects.toThrow(/access/);
    await changeMembership(w.actor(w.owner),'a1B2c3',{action:'invite',usernames:['@member_bob'],includeAccess:true});
    expect(await effectiveRole((await getArtifactById('a1B2c3'))!,w.actor(w.bob))).toBe('viewer');
@@ -717,7 +718,7 @@ describe('artifact membership', () => {
    const w=await world();
    await changeMembership(w.actor(w.owner),'a1B2c3',{action:'invite',usernames:['@member_bob']});
    await changeMembership(w.actor(w.bob),'a1B2c3',{action:'dismiss'});
-   await w.db.query("INSERT INTO artifacts(id,token_id,user_id,format,visibility,link_role) VALUES('d4E5f6','owner-token',$1,'html','public','commenter')",[w.owner.id]);
+   await seedArtifacts(w.db, { id: 'd4E5f6', token_id: 'owner-token', user_id: w.owner.id, format: 'html', visibility: 'public', link_role: 'commenter' });
    await expect(changeMembership(w.actor(w.owner),'d4E5f6',{action:'invite',usernames:['@member_bob']})).rejects.toThrow(/declined/);
   });
 

@@ -5,13 +5,14 @@ import {getArtifactById} from '@/lib/artifacts';
 import {urlHash} from '@/lib/document';
 const LAST=urlHash('https://images.example.test/last.png');
 import {publicHomeFiles,servesEmbeddedArtifact,servesWebAsset,type UserPagesOwner} from '..';
+import { seedArtifacts, setArtifact } from '@/__tests__/rows';
 useAppHarness();
 it('keeps embedded bytes and copied web images owner-scoped with 200 eligible posts',async()=>{
  const actor=await mintAccountToken('mxmx_test_host_assets'),db=await getDb();
  const user:UserPagesOwner={kind:'user',id:actor.userId!,handle:'asset_owner'};
  const group:UserPagesOwner={kind:'group',id:'grp_assets',handle:'asset_team'};
  await db.query("INSERT INTO groups(id,handle,name,description,created_by) VALUES($1,$2,'Assets','',$3)",[group.id,group.handle,user.id]);
- await db.query("INSERT INTO artifacts(id,token_id,user_id,format,visibility,source) VALUES('asset01',$1,$2,'image','unlisted',NULL)",[actor.id,user.id]);
+ await seedArtifacts(db, { id: 'asset01', token_id: actor.id, user_id: user.id, format: 'image', visibility: 'unlisted', source: null });
  const row=(await getArtifactById('asset01'))!;
  // The copied image itself: a hash with no web_assets row is refused before any page is read.
  await db.query('INSERT INTO web_assets(url_hash,url,object_key,content_type,bytes) VALUES($1,$2,$3,$4,1)',[urlHash('https://images.example.test/last.png'),'https://images.example.test/last.png','webasset/last','image/png']);
@@ -27,8 +28,8 @@ it('keeps embedded bytes and copied web images owner-scoped with 200 eligible po
  expect(await publicHomeFiles(user)).toHaveLength(199);
  // A regression bound, not a claimed production latency: measured in this real DB fixture.
  expect(performance.now()-started).toBeLessThan(2000); // wall-clock-ok: the stated regression bound for 200 rows of one owner
- await db.query("UPDATE artifacts SET group_id=$1 WHERE id='post0200'",[group.id]);
+ await setArtifact(db, 'post0200', { group_id: group.id });
  expect(await servesEmbeddedArtifact(user,row)).toBe(false);expect(await servesEmbeddedArtifact(group,row)).toBe(true);
- await db.query("UPDATE artifacts SET visibility='private' WHERE id='post0200'");
+ await setArtifact(db, 'post0200', { visibility: 'private' });
  expect(await servesEmbeddedArtifact(group,row)).toBe(false);expect(await servesWebAsset(group,urlHash('https://images.example.test/last.png'))).toBe(false);
 });

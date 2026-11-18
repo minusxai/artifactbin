@@ -9,6 +9,7 @@ import { accountWorkspaceFor, accountWorkspaceInsightsFor, listOwnedArtifacts } 
 import { trackEvent } from '@/lib/analytics';
 import { ensureEventsSchema } from '@artifactbin/events/local';
 import { mintAccountToken, request, useAppHarness } from '@/__tests__/harness';
+import { seedArtifacts } from '@/__tests__/rows';
 
 useAppHarness();
 
@@ -33,7 +34,7 @@ async function seed(docs: number, tag = 'vol') {
      FROM generate_series(1, $3::int) i`,
     [user.id, token.id, docs],
   );
-  await db.query(`INSERT INTO artifacts (id, user_id, token_id, format, title, meta, version) VALUES ('${tag}ds1', $1, $2, 'dataset', 'Data', '{"rowCount": 3}', 1)`, [user.id, token.id]);
+  await seedArtifacts(db, { id: `${tag}ds1`, user_id: user.id, token_id: token.id, format: 'dataset', title: 'Data', meta: '{"rowCount": 3}', version: 1 });
   await ensureEventsSchema(db, EVENTS_SCHEMA);
   await db.query(
     `INSERT INTO ${EVENTS_SCHEMA}.events (id,source,verb,object_kind,object_id,subject_id,at)

@@ -7,6 +7,7 @@ import { viewSeriesByUser } from '@/lib/workspace';
 import { runWithRequest } from '@/lib/platform';
 import { setServices } from '@/lib/platform';
 import { createUser } from '@/lib/accounts';
+import { seedArtifacts } from '@/__tests__/rows';
 
 const harness = useAppHarness();
 let owner: Awaited<ReturnType<typeof createUser>>;
@@ -14,11 +15,7 @@ beforeEach(async () => {
   const db = await harness.db();
   setServices({ events: createEvents({ db, schema: EVENTS_SCHEMA }) });
   owner = await createUser({ email: 'mxmx_test_views@example.com' });
-  await db.query(`INSERT INTO artifacts (id, token_id, user_id, format, visibility) VALUES
-    ('viewpu', 'tok_v', $1, 'html', 'public'),
-    ('viewpr', 'tok_v', $1, 'html', 'private'),
-    ('viewun', 'tok_v', $1, 'html', 'unlisted'),
-    ('viewfo', 'tok_v', $1, 'folder', 'public')`, [owner.id]);
+  await seedArtifacts(db, { id: 'viewpu', token_id: 'tok_v', user_id: owner.id, format: 'html', visibility: 'public' }, { id: 'viewpr', token_id: 'tok_v', user_id: owner.id, format: 'html', visibility: 'private' }, { id: 'viewun', token_id: 'tok_v', user_id: owner.id, format: 'html', visibility: 'unlisted' }, { id: 'viewfo', token_id: 'tok_v', user_id: owner.id, format: 'folder', visibility: 'public' });
 });
 const open = (id: string, options: Parameters<typeof request>[1] = {}, query = '') => {
   const req = request(`/api/page/artifact/${id}/view${query}`, { method: 'POST', origin: 'same', headers: { 'user-agent': 'Mozilla/5.0 view-test' }, ...options });

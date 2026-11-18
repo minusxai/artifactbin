@@ -8,6 +8,7 @@ import {useAppHarness} from '@/__tests__/harness';
 import {getDb} from '@/lib/platform';
 import {recordEvent} from '@/lib/platform';
 import {notificationChannel} from '@/lib/notifications';
+import { seedArtifacts, seedShares } from '@/__tests__/rows';
 
 useAppHarness();
 type Db=Awaited<ReturnType<typeof getDb>>;
@@ -16,7 +17,7 @@ beforeEach(async()=>{
  db=await getDb();
  await db.query(`INSERT INTO users(id,email) VALUES('alice','alice@example.test'),('bob','bob@example.test'),('carol','carol@example.test'),
   ('dave','dave@example.test'),('erin','erin@example.test'),('frank','frank@example.test')`);
- await db.query("INSERT INTO artifacts(id,token_id,user_id,format,visibility) VALUES('doc','t','alice','html','public')");
+ await seedArtifacts(db, { id: 'doc', token_id: 't', user_id: 'alice', format: 'html', visibility: 'public' });
 });
 /** Any verb on any object kind: the projection, not the typed producer, is under test. */
 const record=recordEvent as (...args:[Parameters<typeof recordEvent>[0],{kind:'user';id:string}|null,string,{kind:'artifact'|'user';id:string},Record<string,unknown>])=>Promise<void>;
@@ -47,8 +48,7 @@ it('records a follow for the followed user, without an artifact',async()=>{
 });
 
 it('sends a join request to the owner and every editor share, by account or by unclaimed email, not to viewers',async()=>{
- await db.query(`INSERT INTO artifact_shares(artifact_id,user_id,email,role) VALUES('doc','dave','dave@example.test','editor'),
-  ('doc',NULL,'erin@example.test','editor'),('doc','frank','frank@example.test','viewer'),('doc','carol','carol@example.test','editor')`);
+ await seedShares(db, { artifact_id: 'doc', user_id: 'dave', email: 'dave@example.test', role: 'editor' }, { artifact_id: 'doc', user_id: null, email: 'erin@example.test', role: 'editor' }, { artifact_id: 'doc', user_id: 'frank', email: 'frank@example.test', role: 'viewer' }, { artifact_id: 'doc', user_id: 'carol', email: 'carol@example.test', role: 'editor' });
  await emit('carol','join_requested',{kind:'artifact',id:'doc'},{user_id:'carol',revision:2});
  expect((await inbox()).map(n=>[n.recipient_id,n.id,n.kind,n.user_id])).toEqual([
   ['alice','doc:carol:2:request:alice','request','carol'],

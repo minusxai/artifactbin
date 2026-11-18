@@ -9,6 +9,7 @@ import { artifactQuery } from '@/lib/artifacts/table';
 import { type ShareRole, type Visibility, type Queryable } from '@artifactbin/contracts';
 import { identityForUser, createUser } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
+import { setArtifact } from '@/__tests__/rows';
 
 export const setUserEmail = async (userId: string, email: string) => { await (await getDb()).query('UPDATE users SET email = $2 WHERE id = $1', [userId, email]); };
 
@@ -53,7 +54,7 @@ export async function docOf(owner: Account, visibility: Visibility, linkRole?: S
 /** A row exactly as it was written before the column existed. */
 export async function clearLinkRole(id: string): Promise<ArtifactRow> {
   const db = await getDb();
-  await artifactQuery(db, 'UPDATE artifacts SET link_role = NULL WHERE id = $1', [id]);
+  await setArtifact(db, id, { link_role: null });
   return (await head(id))!;
 }
 

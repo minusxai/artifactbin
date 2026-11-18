@@ -11,6 +11,7 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as serveRaw } from '@/app/a/[id]/raw/route';
 import { GET as pageData } from '@/app/api/page/artifact/[id]/route';
 import { createUser, ensureUsername } from '@/lib/accounts';
+import { setArtifact } from '@/__tests__/rows';
 
 const harness = useAppHarness();
 const app = createAppServer({ indexHtml: async () => '<html><head><title>artifactbin</title></head><body><div id="root"></div></body></html>' });
@@ -32,7 +33,7 @@ describe.each(Object.entries(BROKEN))('a stored graph with %s', (_name, break_) 
     const id = (await made.json() as { id: string }).id;
     const db = await harness.db();
     const stored = structuredClone(retiredGraph) as unknown as Stored;
-    await db.query("UPDATE artifacts SET document=$2::jsonb, source=NULL,format='markup' WHERE id=$1", [id, JSON.stringify(break_(stored))]);
+    await setArtifact(db, id, { document: JSON.stringify(break_(stored)), source: null, format: 'markup' });
 
     for (const path of [`/a/${id}`, `/a/${id}/app/`]) {
       const res = await app.request(path, { headers: { accept: 'text/html' } });

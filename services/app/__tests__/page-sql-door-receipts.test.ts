@@ -9,6 +9,7 @@ import { admitGroupMember, setSession, useAppHarness } from './harness';
 import { getDb, services } from '@/lib/platform';
 import { createGroup, removeGroupMember } from '@/lib/groups';
 import { sql, POLICY, fixture, stored, refused } from './page-sql-door-fixture';
+import { setArtifact } from '@/__tests__/rows';
 
 useAppHarness();
 beforeEach(() => setSession(null));
@@ -72,7 +73,7 @@ it('adversarial: removing a page link after phase one prevents the write commit'
     const result = await original(input);
     if (!moved && input.policy?.role === 'reader' && !('rowsRequired' in result && result.rowsRequired)) {
       moved = true;
-      await (await getDb()).query("UPDATE artifacts SET meta=jsonb_set(meta, '{htmlLinks}', '[]'::jsonb), version=version+1 WHERE id=$1", [f.page]);
+      await setArtifact((await getDb()), f.page, { meta: { sql: "jsonb_set(meta, '{htmlLinks}', '[]'::jsonb)" }, version: { sql: 'version+1' } });
     }
     return result;
   });
@@ -145,7 +146,7 @@ it.each(['private', 'deleted'] as const)('review2: page %s before replay is refu
   const f = await fixture(), db = await getDb();
   const text = "insert into staff (name) values ('old-receipt')", key = 'review2_gone_page_0001';
   expect((await sql(f.page, f.other, text, {}, {key})).status).toBe(200);
-  await db.query(mode === 'private' ? "UPDATE artifacts SET visibility='private' WHERE id=$1" : 'UPDATE artifacts SET deleted_at=now() WHERE id=$1', [f.page]);
+  await setArtifact(db, f.page, mode === 'private' ? { visibility: 'private' } : { deleted_at: { sql: 'now()' } });
   expect((await sql(f.page, f.other, text, {}, {key})).status).toBe(404);
 });
 

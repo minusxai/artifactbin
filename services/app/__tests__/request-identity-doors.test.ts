@@ -19,6 +19,7 @@ import {GET as raw} from '@/app/a/[id]/raw/route';
 import {GET as pageSession} from '@/app/api/page/session/route';
 import {createGuestOwner,mintAccountToken,request,setSession,useAppHarness} from './harness';
 import { sessionActor } from '@/lib/authentication';
+import { seedArtifacts } from '@/__tests__/rows';
 
 const harness=useAppHarness();
 const verified=(userId:string,email:string,extra:Partial<HumanActor>={}):Actor=>({credential:'session',userId,email,emailVerified:true,...extra});
@@ -34,7 +35,7 @@ let a:Awaited<ReturnType<typeof mintAccountToken>>,b:Awaited<ReturnType<typeof m
 beforeEach(async()=>{
  a=await mintAccountToken('mxmx_test_door_a');b=await mintAccountToken('mxmx_test_door_b');
  // One private document of A's, read through the request door to say whose identity a request carried.
- await (await harness.db()).query(`INSERT INTO artifacts(id,token_id,user_id,title,source,meta,format,visibility,edit_id) VALUES ('door01',$1,$2,'A private',$3,'{}','html','private','door-edit')`,[a.id,a.userId,nativeHtml('<p id="intro">Only A</p>')]);
+ await seedArtifacts((await harness.db()), { id: 'door01', token_id: a.id, user_id: a.userId, title: 'A private', source: nativeHtml('<p id="intro">Only A</p>'), meta: '{}', format: 'html', visibility: 'private', edit_id: 'door-edit' });
 });
 afterEach(()=>{setDocumentEditorPolicy();setSession(null);});
 
@@ -97,7 +98,7 @@ describe('the browser-session header',()=>{
  });
  it('suppresses the verified-email claim, so a host grant never reaches a scripted browser',async()=>{
   const db=await harness.db();
-  await db.query(`INSERT INTO artifacts(id,token_id,user_id,title,source,meta,format,visibility,edit_id) VALUES ('door02',$1,$2,'B unlisted',$3,'{}','html','unlisted','door-edit')`,[b.id,b.userId,nativeHtml('<p id="intro">B</p>')]);
+  await seedArtifacts(db, { id: 'door02', token_id: b.id, user_id: b.userId, title: 'B unlisted', source: nativeHtml('<p id="intro">B</p>'), meta: '{}', format: 'html', visibility: 'unlisted', edit_id: 'door-edit' });
   setDocumentEditorPolicy(account=>account.userId===a.userId&&account.emailVerified===true);
   const claims:Actor={credential:'bearer',userId:a.userId!,tokenId:a.id,email:a.email!,emailVerified:true};
   const edit=async(headers:Record<string,string>={})=>(await (await read(both('/api/artifacts/door02',a.token,claims,{headers}),ctx({id:'door02'}))).json() as {capabilities:{edit:boolean}}).capabilities.edit;

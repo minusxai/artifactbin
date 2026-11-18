@@ -9,6 +9,7 @@ import { requestOrSessionActor } from '@/lib/authentication';
 import type { AccessActor } from '@/lib/accounts';
 import {loadDatasetRows} from '@/lib/datasets';
 import {linkedSql,errorCode,liveLink} from '@/__tests__/linked-datasets';
+import { setArtifact } from '@/__tests__/rows';
 useAppHarness();
 /** The retained storage, executor and grants under the generated API, as a page reader with the link named data. */
 async function fixture(dataset:Record<string,unknown>[]|string=[{amount:1,label:'same'},{amount:1,label:'same'},{amount:3,label:null}]){
@@ -63,7 +64,7 @@ it('keeps the original header-only CSV rejection instead of inventing data rows'
 });
 it('refuses remote PostgreSQL catalogs before executing native dataset reads or writes',async()=>{
  const f=await fixture();const db=await getDb();
- await db.query(`UPDATE artifacts SET meta=jsonb_set(meta,'{catalog,kind}','"postgres"'::jsonb) WHERE id=$1`,[f.id]);
+ await setArtifact(db, f.id, { meta: { sql: `jsonb_set(meta,'{catalog,kind}','"postgres"'::jsonb)` } });
  expect(errorCode(await f.sql(f.actor,'select amount from data'))).toBe('dataset_not_found');
  expect(errorCode(await f.sql(f.actor,'delete from data'))).toBe('dataset_not_found');
  expect((await getArtifactById(f.id))?.version).toBe(1);

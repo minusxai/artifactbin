@@ -11,6 +11,7 @@ import { createUser } from '@/lib/accounts';
 import { storeFileContent } from '@/lib/datasets';
 import { getDb } from '@/lib/platform';
 import { publicRefAsset, publicRefAssetResponse } from '@/lib/document-serving';
+import { setArtifact } from '@/__tests__/rows';
 
 useAppHarness();
 
@@ -63,7 +64,7 @@ describe('publicRefAsset', () => {
     const db = await getDb();
     await setVisibility(row.id, 'private');
     expect(await publicRefAsset(row.id)).toBeNull();
-    await db.query("UPDATE artifacts SET visibility = 'public', deleted_at = now() WHERE id = $1", [row.id]);
+    await setArtifact(db, row.id, { visibility: 'public', deleted_at: { sql: 'now()' } });
     expect(await publicRefAsset(row.id)).toBeNull();
   });
 });

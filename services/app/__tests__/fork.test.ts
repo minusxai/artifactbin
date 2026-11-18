@@ -27,6 +27,7 @@ import { EVENTS_SCHEMA, getDb } from '@/lib/platform';
 import { identityForUser } from '@/lib/accounts';
 import { BASE, sessionUser, params, jreq, create, asSession, noSession, fork, head, PROSE, world } from './fork-fixture';
 import { holdTelemetry, settle } from './analytics-fixture';
+import { setArtifact } from '@/__tests__/rows';
 
 useAppHarness();
 holdTelemetry();
@@ -76,7 +77,7 @@ describe('POST /api/my/artifacts/:id/fork', () => {
   it('refuses to copy a document stored in a retired shape, by name', async () => {
     const w = await world();
     const db = await getDb();
-    await db.query("UPDATE artifacts SET format='markup',document=NULL,source=$2 WHERE id=$1", [w.doc.id, '<p id="old">Legacy</p>']);
+    await setArtifact(db, w.doc.id, { format: 'markup', document: null, source: '<p id="old">Legacy</p>' });
     asSession(w.bob);
     const response = await fork(w.doc.id);
     expect(response.status, await response.clone().text()).toBe(410);
