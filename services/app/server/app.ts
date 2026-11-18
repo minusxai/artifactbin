@@ -687,9 +687,9 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   const appPages = spaPaths({ dev: opts.devHmrPort !== undefined });
   app.get('*', async (c) => {
     const pathname = new URL(c.req.url).pathname;
-    // An address the app has no screen for, fetched without asking for HTML, is the app's own answer there (page()'s
-    // 404 for such a caller): the pointer to /llms.txt, never the shell, which tells a fetch tool nothing.
-    if (customShell && shellAnswers(new URL(c.req.url))) return appPages.test(pathname) || wantsHtml(c.req.raw) ? screen(c) : apiNotFound(c);
+    // The shell answers every address it owns, for every caller: its screens are the host's, which this app cannot
+    // tell from unknown addresses, and its head carries the agent pointer a fetch tool reads.
+    if (customShell && shellAnswers(new URL(c.req.url))) return screen(c);
     return appPages.test(pathname) ? page(c) : page(c, 404);
   });
   return app;

@@ -54,25 +54,17 @@ describe('with a custom shell',()=>{
   const head=await app.request('/deep/link',{method:'HEAD',...html});
   expect(head.status).toBe(200);expect(await head.text()).toBe('');
  });
- it('answers a fetch that never asked for HTML as the app does: an address the app has no screen for is the JSON pointer to /llms.txt, a screen is the shell with its agent pointer',async()=>{
-  const app=server(headed),reference=server(null);
-  for(const path of ['/skills','/skills/','/no-such-page','/deep/link']){
-   for(const headers of [{},{accept:'*/*'},{accept:'application/json'}] as Record<string,string>[]){
-    const [shell,own]=await Promise.all([app.request(path,{headers}),reference.request(path,{headers})]);
-    expect(shell.status,path).toBe(404);
-    expect(await shell.json(),path).toEqual(await own.json());
+ it('serves every address it owns to every caller, a fetch tool included, with the agent pointer in its head',async()=>{
+  const app=server(headed),pointer=agentDiscoveryHead(agentDiscovery('http://localhost'));
+  // The host's own screens (/explore, /skills, …) are indistinguishable from unknown addresses here: all are the shell.
+  for(const path of ['/','/login','/account',`/a/${ID}`,'/skills','/explore','/deep/link'])
+   for(const headers of [{},{accept:'*/*'},{accept:'application/json'},{accept:'text/html'}] as Record<string,string>[]){
+    const response=await app.request(path,{headers});
+    expect(response.status,path).toBe(200);
+    const body=await response.text();
+    expect(body,path).toContain('data-shell');
+    expect(body,path).toContain(pointer);
    }
-   // A browser still gets the shell there: it routes client-side.
-   expect(await isShell(await app.request(path,html)),path).toBe(true);
-  }
-  expect(await (await app.request('/skills')).json()).toMatchObject({error:'not_found',help:'/llms.txt'});
-  for(const path of ['/','/login','/account',`/a/${ID}`]){
-   const response=await app.request(path,{headers:{accept:'*/*'}});
-   expect(response.status,path).toBe(200);
-   const body=await response.text();
-   expect(body,path).toContain('data-shell');
-   expect(body,path).toContain(agentDiscoveryHead(agentDiscovery('http://localhost')));
-  }
  });
  it('a document address keeps the framing the app page there allows: its trusted embedders',async()=>{
   overrideConfig({},{APP__DEPLOYMENT_MODE:'public',EMBED__TRUSTED_ORIGINS:'https://portal.example'});
