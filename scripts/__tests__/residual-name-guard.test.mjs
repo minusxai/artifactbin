@@ -196,9 +196,9 @@ describe('one port story', () => {
     expect(src).toMatch(/PUBLIC_BASE_URL[^\n]*3030|APP__PORT[^\n]*3030/);
   });
   it('AGENTS.md agrees: npm run dev is on 3030', () => {
-    const line = read('AGENTS.md').split('\n').find((l) => /npm run dev\b/.test(l) && /localhost:\d+/.test(l));
+    const line = read('AGENTS.md').split('\n').find((l) => /npm run dev\b/.test(l) && /(?:localhost|app\.lvh\.me):\d+/.test(l));
     expect(line).toBeDefined();
-    expect(line).toContain('localhost:3030');
+    expect(line).toContain('app.lvh.me:3030');
   });
 });
 
