@@ -98,7 +98,9 @@ export function nodeBatchFiles({ timings, candidates, lane, read }) {
  *  - `must`: every `node` file the change adds or edits that no pr fast part already runs, whatever its time or record;
  *  - `affected`: the slower files whose import graph reaches a changed file (scripts/lib/test-graph.mjs, the same
  *    selection `npm test` makes), nearest the change first (fewest imports away), then shortest, while their recorded
- *    times (a file without one weighs the `node` median) fit `budgetMs`; `must` never spends it;
+ *    times (a file without one weighs the `node` median) fit `budgetMs`; `must` never spends it. A rerun trigger
+ *    (vitest.config.ts, a package.json) reaches every file at distance Infinity, none nearer: it adds none of them,
+ *    since a budget's worth of the shortest is an arbitrary subset on a cold module cache (#1339's runners: 27-36s);
  *  - `deferred`: the reached files over the budget, named on the run. The full suite still runs every one after merge.
  * @param {{ timings: { files: Record<string, Record<string, number>> }, changed: Iterable<string>, affected: Iterable<{ file: string, distance: number }>, candidates: Set<string>, batch: Set<string>, lane: Set<string>, budgetMs: number }} input
  * @returns {{ must: string[], affected: string[], deferred: string[] }}
@@ -114,9 +116,9 @@ export function nodeAffectedFiles({ timings, changed, affected, candidates, batc
     .sort((a, b) => a.distance - b.distance || weight(a.file) - weight(b.file) || (a.file < b.file ? -1 : a.file > b.file ? 1 : 0));
   const chosen = [], deferred = [];
   let spent = 0;
-  for (const { file } of reached) {
+  for (const { file, distance } of reached) {
     if (chosen.includes(file) || deferred.includes(file)) continue;
-    if (spent + weight(file) <= budgetMs) { chosen.push(file); spent += weight(file); } else deferred.push(file);
+    if (distance !== Infinity && spent + weight(file) <= budgetMs) { chosen.push(file); spent += weight(file); } else deferred.push(file);
   }
   return { must, affected: chosen, deferred: deferred.sort() };
 }
