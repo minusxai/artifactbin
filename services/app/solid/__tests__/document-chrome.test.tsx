@@ -239,6 +239,21 @@ it('shows and sets the APP appearance in the controls panel, while the light doc
   } finally { delete document.documentElement.dataset.theme; }
 });
 
+it('places the artifact menu in a bottom sheet on phones and a dropdown after resizing', async () => {
+  vi.stubGlobal('innerWidth', 390);
+  await mountReady();
+  fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
+  const menu = await menuPanel();
+  expect(menu).toHaveClass('inset-x-0', 'bottom-0');
+  expect(menu).not.toHaveClass('left-0', 'inset-y-0');
+  vi.stubGlobal('innerWidth', 1280);
+  fireEvent(window, new Event('resize'));
+  expect(menu).toHaveClass('right-3'); expect(menu.style.top).toBe('44px');
+  fireEvent.keyDown(document, { key: 'Escape' });
+  expect(menu).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Open menu' })).toHaveFocus();
+});
+
 it('names the author and the document in the bar', async () => {
   await mountReady();
   expect(screen.getByRole('link', { name: "View @ada's profile" })).toHaveAttribute('href', '/@ada');

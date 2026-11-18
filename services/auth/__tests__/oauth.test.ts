@@ -67,6 +67,9 @@ beforeAll(async () => {
 afterAll(async () => { await pg.close(); });
 beforeEach(async () => { await resetTestDb(); session = null; identities.clear(); });
 const asUser = (userId = 'usr_1', email = 'u@example.com') => { session = { userId, email }; identities.set(userId, { userId, email, emailVerified: true }); return { cookie: 'sess=1' }; };
+/** POSTs the signed-in user's `/api/authentication/token` request to `host` (the app by default) with `body`. */
+const issueGrant = (host: { request: (input: string, init?: RequestInit) => Response | Promise<Response> } = app, body: unknown = {}) =>
+  host.request('/api/authentication/token', { method: 'POST', headers: { ...asUser(), origin: BASE, 'content-type': 'application/json' }, body: JSON.stringify(body) });
 
 async function register(redirectUri = REGISTERED_REDIRECT): Promise<string> {
   const response = await app.request('/oauth/register', {
@@ -275,7 +278,7 @@ it('direct HTTP token issuance refuses guest sessions and never offers browser a
  expect(response.status).toBe(401);expect(await response.json()).toMatchObject({error:'email_auth_required'});
 });
 it('direct HTTP token issuance binds a verified email session to an API-scoped bearer',async()=>{
- const response=await app.request('/api/authentication/token',{method:'POST',headers:{...asUser(),origin:BASE,'content-type':'application/json'},body:'{}'});
+ const response=await issueGrant(app);
  expect(response.status).toBe(201);const body=await response.json();expect(body.token_type).toBe('Bearer');
  const token=(await testDb().query('SELECT user_id,audience,scope FROM auth.tokens WHERE id=$1',[body.id])).rows[0];expect(token).toMatchObject({user_id:'usr_1',audience:RESOURCE,scope:'artifacts'});
 });
@@ -336,7 +339,7 @@ describe('a canonical origin switch keeps the former origin as an alias', () => 
  const CANONICAL='http://app.renamed.test';
  const switched=async()=>{const options=await optionsOf();return assemble(authParts({...options,env:{...options.env,APP__PUBLIC_BASE_URL:CANONICAL,APP__ALIAS_ORIGINS:`${BASE},http://other-alias.test`}}));};
  const issueBeforeSwitch=async()=>{
-  const response=await app.request('/api/authentication/token',{method:'POST',headers:{...asUser(),origin:BASE,'content-type':'application/json'},body:'{}'});
+  const response=await issueGrant(app);
   expect(response.status).toBe(201);
   return await response.json() as {access_token:string;refresh_token:string;client_id:string};
  };
@@ -364,7 +367,7 @@ describe('a canonical origin switch keeps the former origin as an alias', () => 
 
  it('signs in through an alias Origin onto the canonical resource and still refuses foreign origins and resources',async()=>{
   const after=await switched();
-  const viaAlias=await after.request('/api/authentication/token',{method:'POST',headers:{...asUser(),origin:BASE,'content-type':'application/json'},body:'{}'});
+  const viaAlias=await issueGrant(after);
   expect(viaAlias.status).toBe(201);const grant=await viaAlias.json() as {id:string;client_id:string;refresh_token:string};
   expect((await testDb().query('SELECT audience FROM auth.tokens WHERE id=$1',[grant.id])).rows[0]).toMatchObject({audience:`${CANONICAL}/api`});
   expect((await after.request('/api/authentication/token',{method:'POST',headers:{...asUser(),origin:'https://foreign.example','content-type':'application/json'},body:'{}'})).status).toBe(403);
@@ -499,7 +502,7 @@ describe('a grant for a configured service (IDENTITY__SERVICE_AUDIENCES): the pe
 
  it('direct issuance by service id binds the token to that service\'s origin with no scope, and this API refuses it',async()=>{
   const host=await withService();
-  const response=await host.request('/api/authentication/token',{method:'POST',headers:{...asUser(),origin:BASE,'content-type':'application/json'},body:JSON.stringify({audience:'warehouse'})});
+  const response=await issueGrant(host,{audience:'warehouse'});
   expect(response.status).toBe(201);
   const grant=await response.json() as {id:string;access_token:string;refresh_token:string;client_id:string;resource:string;scope:string};
   expect(grant).toMatchObject({resource:SERVICE,scope:''});
@@ -516,10 +519,10 @@ describe('a grant for a configured service (IDENTITY__SERVICE_AUDIENCES): the pe
 
  it('an unknown service id, or the service on a host that does not name it, is refused',async()=>{
   const host=await withService();
-  const unknown=await host.request('/api/authentication/token',{method:'POST',headers:{...asUser(),origin:BASE,'content-type':'application/json'},body:JSON.stringify({audience:'payroll'})});
+  const unknown=await issueGrant(host,{audience:'payroll'});
   expect(unknown.status).toBe(400);
   expect(await unknown.json()).toMatchObject({error:'invalid_audience'});
-  const plain=await app.request('/api/authentication/token',{method:'POST',headers:{...asUser(),origin:BASE,'content-type':'application/json'},body:JSON.stringify({audience:'warehouse'})});
+  const plain=await issueGrant(app,{audience:'warehouse'});
   expect(plain.status).toBe(400);
  });
 
@@ -552,7 +555,7 @@ describe('a grant for a configured service (IDENTITY__SERVICE_AUDIENCES): the pe
  it('the skill client keeps a service grant beside the API grant and refreshes it against the service\'s resource',async()=>{
   const host=await withService();const root=await mkdtemp(join(tmpdir(),'afbin-audience-'));
   try{
-   const issue=async(body:unknown)=>await(await host.request('/api/authentication/token',{method:'POST',headers:{...asUser(),origin:BASE,'content-type':'application/json'},body:JSON.stringify(body)})).json() as {access_token:string;refresh_token:string;client_id:string;resource:string};
+   const issue=async(body:unknown)=>await(await issueGrant(host,body)).json() as {access_token:string;refresh_token:string;client_id:string;resource:string};
    const api=await issue({}),service=await issue({audience:'warehouse'});
    await saveCredentials({server:BASE,token:api.access_token,refreshToken:api.refresh_token,clientId:api.client_id,expiresAt:Date.now()+60_000},root);
    await saveCredentials({server:BASE,audience:'warehouse',resource:service.resource,token:service.access_token,refreshToken:service.refresh_token,clientId:service.client_id,expiresAt:Date.now()-1000},root);
@@ -641,7 +644,7 @@ describe('the exchange (contracts SERVICE_TOKEN_PATH): a credential held here fo
   for(const field of NO_REFRESH)expect(body,field).not.toHaveProperty(field);
   expect(claimsOf(body.access_token)).toMatchObject({sub:'usr_1',aud:SERVICE,par:{kind:'token',id:'tok_personal'}});
   // The OAuth grant sign-in gives for this API is an ordinary bearer too.
-  const api=await(await host.request('/api/authentication/token',{method:'POST',headers:{...asUser(),origin:BASE,'content-type':'application/json'},body:'{}'})).json() as {id:string;access_token:string};
+  const api=await(await issueGrant(host)).json() as {id:string;access_token:string};
   session=null;
   const viaGrant=await exchange(host,{authorization:`Bearer ${api.access_token}`});
   expect(viaGrant.status,await viaGrant.clone().text()).toBe(200);
@@ -649,7 +652,7 @@ describe('the exchange (contracts SERVICE_TOKEN_PATH): a credential held here fo
  });
  it('a token for the service itself, an unknown bearer, or an unverified account is refused: only this host\'s own credentials exchange',async()=>{
   const host=await withService();
-  const direct=await(await host.request('/api/authentication/token',{method:'POST',headers:{...asUser(),origin:BASE,'content-type':'application/json'},body:JSON.stringify({audience:'warehouse'})})).json() as {access_token:string};
+  const direct=await(await issueGrant(host,{audience:'warehouse'})).json() as {access_token:string};
   session=null;
   expect((await exchange(host,{authorization:`Bearer ${direct.access_token}`})).status).toBe(401);
   expect((await exchange(host,{authorization:`Bearer mx_${'q'.repeat(40)}`})).status).toBe(401);

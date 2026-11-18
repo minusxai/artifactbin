@@ -13,12 +13,13 @@ async function harness(sub:string,positionals:string[],values:Record<string,unkn
   return Response.json({changed:true});
  }});return {result,calls};
 }
+const ALL={group:'design_crit',role:'editor',handle:'design_crit'};
 it.each([
- ['remove',['design_crit','teammate']],['leave',['PAGE12']],['move',['PAGE12']],['delete',['PAGE12']],['invite',['design_crit','a@example.test']],['role',['design_crit','teammate']],['share',['PAGE12']],
- ['uninvite',['design_crit','other']],['unshare',['design_crit','other']],['unlink',['design_crit','other']],
-])('%s refuses before any HTTP without --yes',async(sub,positionals)=>{
+ ['remove',['design_crit','teammate'],ALL],['leave',['PAGE12'],ALL],['move',['PAGE12'],ALL],['delete',['PAGE12'],ALL],['invite',['design_crit','a@example.test'],ALL],['role',['design_crit','teammate'],ALL],['share',['PAGE12'],ALL],
+ ['uninvite',['design_crit','other'],{group:'design_crit'}],['unshare',['design_crit','other'],{group:'design_crit'}],['unlink',['design_crit','other'],{group:'design_crit'}],
+])('%s refuses before any HTTP without --yes',async(sub,positionals,values)=>{
  const {groupsCommand}=await import('../../../skills/artifactbin/scripts/groups.mjs');let calls=0;
- await expect(groupsCommand({sub,positionals,values:{group:'design_crit',role:'editor',handle:'design_crit'}},{fetcher:async()=>{calls++;throw Error('unexpected');}})).rejects.toMatchObject({exit:2,code:'confirmation_required'});expect(calls).toBe(0);
+ await expect(groupsCommand({sub,positionals,values},{fetcher:async()=>{calls++;throw Error('unexpected');}})).rejects.toMatchObject({exit:2,code:'confirmation_required'});expect(calls).toBe(0);
 });
 it.each([
  ['list',[],{},'/api/groups','GET',undefined],

@@ -325,7 +325,7 @@ it('outputBytes refuses a result one byte past its exact JSON size', async () =>
     const first = (await local.run(input)).q!;
     if (isQueryFailure(first)) throw new Error(first.error);
     const bytes = Buffer.byteLength(JSON.stringify({ rows: first.rows, columns: first.columns }), 'utf8');
-    expect((await local.run({ ...input, outputBytes: bytes })).q).toMatchObject({ rows: first.rows });
+    expect((await local.run({ ...input, outputBytes: bytes })).q).toMatchObject({ rows: first.rows, columns: first.columns });
     expect((await local.run({ ...input, outputBytes: bytes - 1 })).q).toMatchObject({ tooLarge: true });
   }
 });

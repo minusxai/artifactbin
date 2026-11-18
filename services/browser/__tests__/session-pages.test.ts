@@ -20,6 +20,8 @@ const BASE = 'http://app.lvh.me:7999';
 const PAGES = 'lvh.me';
 const DOC = Buffer.from('doc1').toString('hex');
 const DOC_ORIGIN = `http://${DOC}.${PAGES}:7999`;
+/** An HTML response, as the stubbed app and document origins answer. */
+const html=(body:string)=>new Response(body,{headers:{'content-type':'text/html'}});
 const TICKET = 'ticket-0123456789abcdef';
 const COOKIE = 'cookie-0123456789abcdef0123456789';
 
@@ -160,7 +162,6 @@ it('counts a slide clip only where a hidden-overflow box actually overflows', as
 // A steps file that reloads keeps acting on the framed document: after the reload the document frame is a new frame.
 it('runs check steps in the framed document again after page.reload()', async () => {
  let loads=0;
- const html=(body:string)=>new Response(body,{headers:{'content-type':'text/html'}});
  worker=await createSessionProcess({credential:'bearer',userId:'usr_owner'},{baseURL:BASE,pagesHost:PAGES,sandbox:{mode:'none'},request:async request=>{
   const url=new URL(request.url);
   if(url.origin===BASE&&url.pathname==='/a/doc1')return html(`<!doctype html><html><body><header>App bar</header><iframe data-mx-document-frame="" name="mx-document" src="${DOC_ORIGIN}/"></iframe></body></html>`);
@@ -177,7 +178,6 @@ it('runs check steps in the framed document again after page.reload()', async ()
 // Steps reach the framed document's keyboard without a click, and a module-style steps file runs as written.
 it('focuses the framed document for page.keyboard and runs an export-default steps file', async () => {
  const {stepsBody}=await import('../../app/skills/artifactbin/scripts/check.mjs');
- const html=(body:string)=>new Response(body,{headers:{'content-type':'text/html'}});
  worker=await createSessionProcess({credential:'bearer',userId:'usr_owner'},{baseURL:BASE,pagesHost:PAGES,sandbox:{mode:'none'},request:async request=>{
   const url=new URL(request.url);
   if(url.origin===BASE&&url.pathname==='/a/doc1')return html(`<!doctype html><html><body><header>App bar</header><iframe data-mx-document-frame="" name="mx-document" src="${DOC_ORIGIN}/"></iframe></body></html>`);
@@ -194,7 +194,6 @@ it('focuses the framed document for page.keyboard and runs an export-default ste
 // The steps file that ended a hosted session on production (2026-11-07): an array of step calls taking {page}.
 it('runs an export-default array of step calls through the session worker, and the session keeps working', async () => {
  const {stepsBody}=await import('../../app/skills/artifactbin/scripts/check.mjs');
- const html=(body:string)=>new Response(body,{headers:{'content-type':'text/html'}});
  worker=await createSessionProcess({credential:'bearer',userId:'usr_owner'},{baseURL:BASE,pagesHost:PAGES,sandbox:{mode:'none'},request:async request=>{
   const url=new URL(request.url);
   if(url.origin===BASE&&url.pathname==='/a/doc1')return html(`<!doctype html><html><body><iframe data-mx-document-frame="" name="mx-document" src="${DOC_ORIGIN}/"></iframe></body></html>`);
@@ -215,7 +214,6 @@ it('runs an export-default array of step calls through the session worker, and t
 // lists the download and fails nothing. An aborted navigation that started no download, and a request that failed,
 // stay failed requests.
 it('lists a link that downloads a file as a download, not a failed request, and keeps every other failure', async () => {
- const html=(body:string)=>new Response(body,{headers:{'content-type':'text/html'}});
  const asked:string[]=[];
  worker=await createSessionProcess({credential:'bearer',userId:'usr_owner'},{baseURL:BASE,pagesHost:PAGES,sandbox:{mode:'none'},request:async request=>{
   const url=new URL(request.url);asked.push(url.pathname);
@@ -273,7 +271,6 @@ it('reports duplicate data-af-id values and script-created IDs that change on re
 const png=(base64:string)=>{const bytes=Buffer.from(base64,'base64');return {width:bytes.readUInt32BE(16),height:bytes.readUInt32BE(20)};};
 type Shot={screenshot?:{base64:string;height:number;partial?:string};screenshotError?:string};
 it('saves the framed document at its full height in a hosted check, and the first viewport where the page sizes to it', async () => {
- const html=(body:string)=>new Response(body,{headers:{'content-type':'text/html'}});
  const docs:Record<string,string>={'/tall':'<div style="height:3000px;background:linear-gradient(#f00,#00f)">Tall</div>',
   '/hero':'<section style="min-height:100vh;background:#f00">Hero</section><div style="height:2000px">Rest</div>'};
  worker=await createSessionProcess({credential:'bearer',userId:'usr_owner'},{baseURL:BASE,pagesHost:PAGES,sandbox:{mode:'none'},request:async request=>{
@@ -305,7 +302,6 @@ it('saves a local preview at its full height, capped at 8000 px and saying so', 
 // 100vh slide is 48 px short of the viewport until the frame grows by it. Deck chrome (the rail's miniatures,
 // the toolbar) is neither counted nor drawn.
 it('saves each slide of a framed deck at the deck viewport, without its deck chrome', async () => {
- const html=(body:string)=>new Response(body,{headers:{'content-type':'text/html'}});
  const slide=(n:number)=>`<section data-af-slide style="height:100vh;display:flex;align-items:center;justify-content:center;background:hsl(${n*50} 70% 50%)"><h2>Slide ${n}</h2></section>`;
  const deck=`<nav data-af-deck-chrome="rail" style="position:fixed;left:0;top:0;width:120px;height:100%;background:#000">${slide(9).replace('100vh','63px')}</nav>`+
   Array.from({length:6},(_,n)=>slide(n+1)).join('');

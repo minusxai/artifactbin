@@ -7,7 +7,7 @@ import { useAppHarness } from '@/__tests__/harness';
 import { nativeHtml } from '@/__tests__/native-html-fixture';
 import { createUser, identityForUser, type AccessActor } from '@/lib/accounts';
 import { createArtifact, getArtifactById, updateSharingFor, type ArtifactRow } from '@/lib/artifacts';
-import { listArtifactsByUser, listPublicArtifactsByUser, listSharedWithEmail, listTrashFor, ownedArtifactState, restoreArtifactFor, trashArtifactFor } from '@/lib/workspace';
+import { groupShelfByRecency, listArtifactsByUser, listPublicArtifactsByUser, listSharedWithEmail, listTrashFor, ownedArtifactState, restoreArtifactFor, trashArtifactFor } from '@/lib/workspace';
 
 const harness = useAppHarness();
 type Account = AccessActor & { userId: string };
@@ -118,5 +118,16 @@ describe('the listings', () => {
     await updateSharingFor(viewer, own.id, { shares: [{ email: 'viewer@example.test', role: 'editor' }] });
     await trashArtifactFor(owner, trashed.id);
     expect((await listSharedWithEmail(' Viewer@Example.test', viewer.userId)).map(row => [row.id, row.role])).toEqual([[shared.id, 'commenter']]);
+  });
+});
+
+describe('the shelf', () => {
+  it('bands rows by recency, dropping empty bands and keeping row order', () => {
+    // Local calendar days, as the bands are.
+    const row = (format: string, updated_at: string) => ({ format, updated_at });
+    const at = (month: number, day: number, hour: number, year = 2026) => new Date(year, month, day, hour).toISOString();
+    const now = new Date(2026, 2, 31, 12);
+    const bands = groupShelfByRecency([row('html', at(2, 31, 9)), row('html', at(2, 27, 9)), row('html', at(0, 1, 0, 2025))], now);
+    expect(bands.map(band => [band.key, band.rows.length])).toEqual([['today', 1], ['this-week', 1], ['older', 1]]);
   });
 });
