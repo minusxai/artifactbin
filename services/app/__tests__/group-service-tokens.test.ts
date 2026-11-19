@@ -117,13 +117,19 @@ it('a service\'s group sign-in, the very token it was given, is exchanged by who
  expect(await host.exchange(agent.token,'ledger')).toEqual({status:403,body:{error:GROUP_PRINCIPALS_NOT_ACCEPTED,hint:expect.any(String)}});
 });
 
-it('a service that does not opt in is never handed a group, and a person\'s exchange and introspection answers are unchanged',async()=>{
+it('a service that does not opt in is never handed a group',async()=>{
  const host=await composed(),{ada,eve,team}=await tree(host);
  for(const agent of [await eve.asGroup(team.id,'editor'),await host.serviceSignIn(ada,team.id,'member')]){
   expect(await host.exchange(agent.token,'ledger')).toEqual({status:403,body:{error:GROUP_PRINCIPALS_NOT_ACCEPTED,hint:'This service does not accept an agent signed in as a group.'}});
   expect(await host.exchange(agent.token,'nowhere')).toEqual({status:400,body:{error:'invalid_audience',hint:'Name a configured service id.'}});
  }
- // A person, for every service, opted in or not: the exchange's body and the service's answer, field for field.
+});
+
+it('a person\'s exchange and introspection answers are unchanged, field for field, with or without any opt-in',async()=>{
+ // Audiences any installation could have had before group principals existed, beside one that opts in.
+ const before=serviceAudiences(delegatedService('warehouse',WAREHOUSE,SECRETS.warehouse),ledger());
+ await configure(before);
+ const host=await composed(before),eve=await host.signIn('mxmx_test_gst_eve@example.test');
  for(const [audience,at,secret] of [['ledger',LEDGER,SECRETS.ledger],['warehouse',WAREHOUSE,SECRETS.warehouse]] as const){
   const exchanged=await host.exchange(eve.grant.access_token,audience);
   expect(exchanged.status,audience).toBe(200);
@@ -161,17 +167,19 @@ it('never outlives its parent: a group sign-in near its end gives a token that e
 });
 
 /** Each rule a group sign-in lives by, broken: the token already issued answers not active at once, and no new one is issued. */
-async function endsBoth(host:Host,change:string,agent:{token:string},apply:()=>Promise<unknown>,audience:'warehouse'|'crm'='warehouse',next:()=>Host|Promise<Host>=()=>host){
+const DEAD={status:401,body:{error:'authentication_required',hint:expect.any(String)}};
+const NOT_ACCEPTED={status:403,body:{error:GROUP_PRINCIPALS_NOT_ACCEPTED,hint:expect.any(String)}};
+const UNKNOWN={status:400,body:{error:'invalid_audience',hint:'Name a configured service id.'}};
+async function endsBoth(host:Host,change:string,agent:{token:string},apply:()=>Promise<unknown>,audience:'warehouse'|'crm'='warehouse',next:()=>Host|Promise<Host>=()=>host,refused:unknown=DEAD){
  const issued=await host.serviceTokenOf(agent.token,audience);
  const secret=SECRETS[audience];
  expect(await host.introspect(issued,secret),`${change}: before`).toMatchObject({active:true,principal_kind:'group'});
  await apply();
  const now=await next();
- expect(await now.introspect(issued,secret),change).toEqual({active:false});
+ // A service no longer configured cannot ask at all; any other is told it is not active.
+ expect(await now.introspect(issued,secret),change).toEqual(refused===UNKNOWN?{error:'unauthorized'}:{active:false});
  expect(await now.introspect(issued),change).toEqual({active:false});
- const again=await now.exchange(agent.token,audience);
- expect(again.status,`${change}: ${JSON.stringify(again.body)}`).not.toBe(200);
- expect(String(again.body?.access_token??'')).toBe('');
+ expect(await now.exchange(agent.token,audience),change).toEqual(refused);
 }
 
 it('a person\'s group sign-in: demotion, removal, deactivation, deletion, either revocation and expiry end its service tokens at once',async()=>{
@@ -197,8 +205,12 @@ it('a person\'s group sign-in: demotion, removal, deactivation, deletion, either
  // The service that took groups no longer does: what it was given ends, and a new one is refused by name.
  const lasting=await ada.asGroup(team.id,'editor');
  const noLonger=serviceAudiences(warehouse(),crm({group_principals:false}),ledger());
- await endsBoth(host,'service opt-in removed',lasting,()=>configure(noLonger),'crm',()=>composed(noLonger));
- expect((await (await composed(noLonger)).exchange(lasting.token,'crm')).body).toMatchObject({error:GROUP_PRINCIPALS_NOT_ACCEPTED});
+ await endsBoth(host,'service opt-in removed',lasting,()=>configure(noLonger),'crm',()=>composed(noLonger),NOT_ACCEPTED);
+ // The service's whole entry removed: the same, and the service is no longer one to name.
+ const removed=serviceAudiences(warehouse(),ledger());
+ await configure(AUDIENCES);
+ await endsBoth(await composed(),'service entry removed',lasting,()=>configure(removed),'crm',()=>composed(removed),UNKNOWN);
+ await configure(noLonger);
  // ... and the person's own exchange for that service is untouched.
  expect(await (await composed(noLonger)).introspect(await (await composed(noLonger)).serviceTokenOf(ada.grant.access_token,'crm'),SECRETS.crm)).toMatchObject({active:true,principal_kind:'user',user_id:ada.userId});
 });
@@ -211,8 +223,10 @@ it('a service\'s group sign-in: revoked approval, deleted group, the issuing ser
  await endsBoth(host,'group deleted',leaf,()=>deleteGroup(ada.userId,squad.id,'gst_squad'),'crm');
  const expiring=await host.serviceSignIn(ada,team.id,'editor');
  await endsBoth(host,'expired',expiring,()=>sql("UPDATE auth.tokens SET expires_at=now()-interval '1 second' WHERE id=$1",[expiring.id]),'crm');
+ const tokenRevoked=await host.serviceSignIn(ada,team.id,'member');
+ await endsBoth(host,'its own token revoked',tokenRevoked,()=>sql('UPDATE auth.tokens SET deleted_at=now() WHERE id=$1',[tokenRevoked.id]),'crm');
  // The service that signed the agent in is no longer configured to: its group sign-in, and so its service tokens, end.
- for(const [change,audiences] of [['issuer\'s group_sign_ins removed',serviceAudiences(warehouse({group_sign_ins:false}),crm(),ledger())],['issuer\'s entry removed',serviceAudiences(crm(),ledger())]] as const){
+ for(const [change,audiences] of [['issuer\'s group_sign_ins removed',serviceAudiences(warehouse({group_sign_ins:false}),crm(),ledger())],['issuer\'s entry removed',serviceAudiences(crm(),ledger())],['issuer\'s id at another origin',serviceAudiences(warehouse({origin:'http://warehouse-two.localhost:7447'}),crm(),ledger())]] as const){
   await configure(AUDIENCES);
   const agent=await (await composed()).serviceSignIn(ada,team.id,'member');
   await endsBoth(await composed(),change,agent,()=>configure(audiences),'crm',()=>composed(audiences));
