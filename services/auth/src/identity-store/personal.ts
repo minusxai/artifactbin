@@ -18,7 +18,10 @@ const PREFIX = 'pgr_';
 /** The personal group of the person `userId`. */
 export const personalGroupId = (userId: string): string => PREFIX + userId;
 
-/** Over the SQL expression `groupId`: is it a personal group. One spelling for the views, the writers and the rules. */
+/** Is `groupId` a personal group: the writers' check (./groups), before any statement. */
+export const isPersonalGroupId = (groupId: string): boolean => groupId.startsWith(PREFIX);
+
+/** Over the SQL expression `groupId`: is it a personal group, the same rule for the views and the rules. */
 export const isPersonalGroupSql = (groupId: string): string => `starts_with(${groupId}, '${PREFIX}')`;
 
 /**
