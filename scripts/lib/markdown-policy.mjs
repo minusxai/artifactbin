@@ -37,7 +37,7 @@ export const SCOPED_DIRS = [
 ];
 /** The author skill: product content with its own guard (services/app/lib/skills/__tests__/skill-tree.test.ts). */
 const SKILL_ROOT = 'services/app/skills/artifactbin/';
-const ROOT_MAX_BYTES = 8192;
+const ROOT_MAX_BYTES = 9216;
 const SCOPED_MAX_BYTES = 4096;
 export const CLAUDE_TEXT = '@AGENTS.md\n';
 
