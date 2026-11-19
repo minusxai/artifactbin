@@ -168,6 +168,23 @@ function collectFailures(input: { selector: string; limit: number }) {
 }
 
 /**
+ * Serialized into Chromium: a page wider than its window (`overflow`, contracts PageProblem), naming the outermost
+ * elements past its right edge (up to three), as the author check says it. Self-contained and synchronous.
+ */
+function collectOverflow() {
+  const html = document.documentElement, width = html.clientWidth;
+  const content = Math.max(html.scrollWidth, document.body?.scrollWidth ?? 0);
+  if (content <= width + 1) return [];
+  const past = (element: Element | null) => !!element && element.getBoundingClientRect().right > width + 1;
+  const name = (element: Element) => element.localName + (element.id ? '#' + element.id : '')
+    + (typeof element.className === 'string' && element.className.trim() ? '.' + element.className.trim().split(/\s+/)[0] : '');
+  const wide = [...(document.body?.querySelectorAll('*') ?? [])].filter((element) => past(element) && !(element.parentElement !== document.body && past(element.parentElement)));
+  const named = wide.slice(0, 3).map(name);
+  return [{ kind: 'overflow' as const, ...(named[0] ? { element: named[0] } : {}),
+    message: `the page is ${content - width}px wider than its ${width}px window${named.length ? `: ${named.join(', ')} stick${named.length === 1 ? 's' : ''} out` : ''}` }];
+}
+
+/**
  * Serialized into Chromium: shown text too faint to read (`contrast`, contracts PageProblem), one problem per pair of
  * colours with how many elements draw it and the first of them. A colour is read as the page computed it (oklch,
  * color-mix and the rest: a canvas turns each into sRGB), against the solid backgrounds behind it laid over white;
@@ -554,6 +571,7 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
       await withReadyPage(req, 1, async ({ page, timeout }) => {
         for (const failure of await page.evaluate(collectFailures, { selector: req.selector, limit: PAGE_PROBLEM_LIMITS.problems + 1 })) found.add(failure);
         for (const faint of await page.evaluate(collectUnreadable, { selector: req.selector, floor: READABLE_CONTRAST, limit: PAGE_PROBLEM_LIMITS.problems + 1 }).catch(() => [])) found.add(faint);
+        if (req.overflow) for (const wide of await page.evaluate(collectOverflow).catch(() => [])) found.add(wide);
         if (!req.screenshot) return;
         // The top of the page as it stood once read, unscaled, each side capped; a quality that fits the bound, else no picture.
         const tall = await page.evaluate(() => Math.max(document.documentElement.scrollHeight, document.body?.scrollHeight ?? 0));

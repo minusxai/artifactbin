@@ -24,8 +24,9 @@ export function useGroupPrincipalHost():void{
 export const sql=async<T=Record<string,unknown>>(text:string,params:unknown[]=[])=>(await (await getDb()).query<T>(text,params)).rows;
 const otpOf=async(email:string)=>(await readFile(join(directory,'outbox.jsonl'),'utf8')).trim().split('\n').map(line=>JSON.parse(line)).filter(message=>message.to===email).at(-1).otp as string;
 
-export async function composed(){
- const application=await createAuthComposedHost({APP__PUBLIC_BASE_URL:origin,AUTH__SECRET:AUTH_SECRET,INTERNAL__SERVICE_SECRET:SECRET,EMAIL__DEV_OUTBOX_PATH:join(directory,'outbox.jsonl')});
+/** The composed host; `env` adds identity settings (a test's service audiences). */
+export async function composed(env:Record<string,string>={}){
+ const application=await createAuthComposedHost({APP__PUBLIC_BASE_URL:origin,AUTH__SECRET:AUTH_SECRET,INTERNAL__SERVICE_SECRET:SECRET,EMAIL__DEV_OUTBOX_PATH:join(directory,'outbox.jsonl'),...env});
  const fetch=(request:Request)=>application.fetch(request);
  const call=async(method:string,path:string,token:string,body?:unknown)=>{
   const response=await fetch(new Request(origin+path,{method,headers:{authorization:`Bearer ${token}`,...(body===undefined?{}:{'content-type':'application/json'})},...(body===undefined?{}:{body:JSON.stringify(body)})}));

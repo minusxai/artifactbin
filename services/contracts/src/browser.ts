@@ -105,7 +105,8 @@ export const SVG_HARVEST_LIMITS = { images: 200, imageBytes: 2 * 1024 * 1024, to
  * sentence it shows), an uncaught exception, a console error, a request that failed or answered 400 or more (one this
  * browser refused by its own `sameOriginOnly` rule is not the page's problem), text too faint to read (`contrast`: shown
  * text under 2:1 against the solid background behind it, once per pair of colours, naming the first element, its words
- * and both colours as the page computed them) and a page that never finished drawing (`timeout`). Repeats are said once;
+ * and both colours as the page computed them), a page wider than its window when asked (`overflow`) and a page that never
+ * finished drawing (`timeout`). Repeats are said once;
  * at most
  * PAGE_PROBLEM_LIMITS.problems, each text cut to its limit, `truncated` when more were seen.
  *
@@ -120,12 +121,15 @@ export interface PageInspectRequest extends PageRequest {
    * each up to PAGE_IMAGE_LIMITS.width and .height (an image reader refuses a larger side), at most
    * PAGE_IMAGE_LIMITS.bytes (lowering its quality, else none). */
   screenshot?: boolean;
+  /** Also say a page wider than its window (`overflow`: how much wider, naming the outermost elements that stick out).
+   * An older service ignores it and answers no such problem. */
+  overflow?: boolean;
 }
 /** A page's picture: `data` the JPEG, base64; `bytes` its decoded length. */
 export interface PageImage { mime: 'image/jpeg'; width: number; height: number; bytes: number; data: string }
 export const PAGE_IMAGE_LIMITS = { bytes: 2_000_000, width: 2_000, height: 2_000 } as const;
 export interface PageProblem {
-  kind: 'component' | 'script' | 'console' | 'request' | 'contrast' | 'timeout';
+  kind: 'component' | 'script' | 'console' | 'request' | 'contrast' | 'overflow' | 'timeout';
   message: string;
   /** A component's tag name, its `data-af-error` code and its label (`label` or `aria-label`); faint text's element
    * (`tag.class`). */
