@@ -30,27 +30,29 @@ export async function internalAssetResponse(target: string, method: string, asse
 
 /**
  * A page's own request, for an inspection with `internalOrigin` (contracts PageInspectRequest): a GET or HEAD to
- * `target` fetched from the internal origin with the target's own Host, no browser header or credential, no redirect,
- * bounded like an asset; any cookie the app sets is dropped.
+ * `target` fetched from the internal origin with the target's own Host and the PAGE's origin as `Origin` (so the app
+ * answers it as that page's request: a draft's on the app host may load only the public files, server/pages-host), no
+ * other browser header or credential, no redirect, bounded like an asset; any cookie the app sets is dropped.
  */
-export async function internalPageResponse(target: string, method: string, internalOrigin: string, signal: AbortSignal): Promise<Response> {
-  const url = new URL(target), internal = new URL(internalOrigin);
+export async function internalPageResponse(target: string, method: string, internalOrigin: string, pageOrigin: string, signal: AbortSignal): Promise<Response> {
+  const url = new URL(target), internal = new URL(internalOrigin), page = new URL(pageOrigin);
   if (!['GET', 'HEAD'].includes(method) || !['http:', 'https:'].includes(url.protocol) || url.username || url.password
-    || !['http:', 'https:'].includes(internal.protocol) || internal.username || internal.password) throw new Error('page request refused');
-  const response = await fetchInternal(url, method, url.host, internal, signal);
+    || !['http:', 'https:'].includes(internal.protocol) || internal.username || internal.password
+    || page.origin !== pageOrigin || !['http:', 'https:'].includes(page.protocol)) throw new Error('page request refused');
+  const response = await fetchInternal(url, method, url.host, internal, signal, { origin: pageOrigin });
   const headers = new Headers(response.headers);
   headers.delete('set-cookie');
   return new Response(response.body, { status: response.status, headers });
 }
 
 /** GET or HEAD `url`'s path from `internal` with a fixed `Host`; decoded, bounded, never redirected. */
-async function fetchInternal(url: URL, method: string, host: string, internal: URL, signal: AbortSignal): Promise<Response> {
+async function fetchInternal(url: URL, method: string, host: string, internal: URL, signal: AbortSignal, extra: { origin?: string } = {}): Promise<Response> {
   // Node fetch owns/ignores Host. A fixed Host through node:http selects the
   // identical asset boundary both directly in the app and through a cohost proxy.
   // No browser headers, credentials, redirects or environment proxy are used.
   const response = await new Promise<Response>((resolve, reject) => {
     const request = (internal.protocol === 'https:' ? httpsRequest : httpRequest)(internal.origin + url.pathname + url.search, {
-      method, signal, headers: { host, 'accept-encoding': 'identity' },
+      method, signal, headers: { host, 'accept-encoding': 'identity', ...extra },
     }, incoming => {
       const headers = new Headers();
       for (const [key,value] of Object.entries(incoming.headers)) if(value !== undefined) headers.set(key, Array.isArray(value) ? value.join(', ') : value);

@@ -230,6 +230,10 @@ jobs:
       # download alone, not an apt pass (~30s).
       - if: ${{ !matrix.images }}
         run: npx playwright install chromium
+      # Chromium's own sandbox (BROWSER__RENDER_SANDBOX=chromium, services/browser render-lanes.test.ts) needs unprivileged
+      # user namespaces, which Ubuntu 24.04's AppArmor restricts by default; the gate shards lift it the same way.
+      - if: ${{ !matrix.images }}
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       # The test global setup builds the server reader and the hosted libraries behind one content marker
       # (services/app/scripts/server-reader-cache.mjs): ~10s of every shard that restores neither. The entry is keyed by
       # what they are built from (scripts/ci/ci.mjs `test-builds-key`), else the newest; a marker that no longer
@@ -863,6 +867,15 @@ jobs:
         env:
           CI__NEEDS: ${{ toJSON(needs) }}
         run: node scripts/ci/ci.mjs check
+      # A RED RUN NAMES ITS SUSPECTS (scripts/lib/red-report.mjs): the commits since main's last green ci run and the
+      # test files each failed job's log names, in this run's summary and as an error annotation. It never decides the
+      # run: the check above already failed it.
+      - name: Name the commits since main's last green run and the failing test files
+        if: failure()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/ci/ci.mjs red-report
       # Per-job diagnostics remain useful, but the chain is the speed contract:
       # attempt start -> final required rollup, including setup and waits between needs.
       # Target <3 minutes, normal maximum <4; >8 fails on both PR and main.

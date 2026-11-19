@@ -16,9 +16,12 @@
  *
  *   node scripts/ci/node-affected.mjs           # a pr fast node runner
  *   node scripts/ci/node-affected.mjs --warm    # ci.yml warm-caches: fill the edge cache
+ *   node scripts/ci/node-affected.mjs --replay <base>..<head>
+ *                                               # what this checkout's lane chooses for that range's changes (a commit
+ *                                               # that turned main red, say): printed only, no choice file written
  */
 import { execFileSync, spawnSync } from 'node:child_process';
-import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -32,6 +35,12 @@ const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8'
 
 /** Repository-relative paths this run's commit adds or edits (deleted ones have nothing to run). */
 function changedFiles() {
+  if (replay) {
+    const [base, head] = replay.split('..');
+    if (!base || !head) throw new Error('--replay takes <base>..<head>');
+    // Files the range adds or edits that this checkout still has: the graph walked is this checkout's.
+    return { base, files: git('diff', '--name-only', '--no-renames', '--diff-filter=d', base, head).split('\n').filter((file) => file && existsSync(path.join(root, file))) };
+  }
   const repository = `${env.GITHUB_SERVER_URL || 'https://github.com'}/${env.GITHUB_REPOSITORY}`;
   if (!env.GITHUB_REPOSITORY) throw new Error('node-affected needs GITHUB_REPOSITORY');
   let base;
@@ -60,6 +69,7 @@ async function nodeVitest() {
 
 const relative = (file) => path.relative(root, file).split(path.sep).join('/');
 const started = Date.now();
+const replay = process.argv[2] === '--replay' ? process.argv[3] ?? '' : undefined;
 if (process.argv[2] === '--warm') {
   const vitest = await nodeVitest();
   try { console.log(`Walked ${await cacheSpecificationGraphs(vitest)} node and integration files' imports into the edge cache (${Date.now() - started}ms).`); }
@@ -82,8 +92,10 @@ if (process.argv[2] === '--warm') {
   const lane = laneFiles(root);
   const batch = new Set(nodeBatchFiles({ timings, candidates, lane, read: (file) => readFileSync(path.join(root, file), 'utf8') }));
   const chosen = nodeAffectedFiles({ timings, changed: files, affected: reached, candidates, batch, lane, budgetMs: NODE_AFFECTED_BUDGET_MS });
-  mkdirSync(path.dirname(path.join(root, NODE_AFFECTED_FILE)), { recursive: true });
-  writeFileSync(path.join(root, NODE_AFFECTED_FILE), `${JSON.stringify(chosen, null, 1)}\n`);
+  if (replay === undefined) {
+    mkdirSync(path.dirname(path.join(root, NODE_AFFECTED_FILE)), { recursive: true });
+    writeFileSync(path.join(root, NODE_AFFECTED_FILE), `${JSON.stringify(chosen, null, 1)}\n`);
+  }
   const list = (files) => files.map((file) => `- \`${file}\``).join('\n');
   const text = [
     `Node files beyond the batch (changes against ${base.slice(0, 12)}, ${files.length} files; chosen in ${Date.now() - started}ms):`,
@@ -94,6 +106,10 @@ if (process.argv[2] === '--warm') {
     ...(integration.length ? ['', 'Edited integration tests (Docker or Chromium), run after merge only:', list(integration)] : []),
   ].join('\n');
   console.log(text);
-  if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, `\n## ${text.split('\n')[0]}\n\n${text.split('\n').slice(1).join('\n')}\n`);
+  if (replay !== undefined) {
+    const runs = (file) => batch.has(file) ? 'the node batch' : lane.has(file) ? 'a pr fast list' : chosen.must.includes(file) || chosen.affected.includes(file) ? 'beyond the batch' : !candidates.has(file) ? 'not a node file' : 'only after merge';
+    for (const file of process.argv.slice(4)) console.log(`${file}: ${runs(file)}`);
+  }
+  if (env.GITHUB_STEP_SUMMARY && replay === undefined) appendFileSync(env.GITHUB_STEP_SUMMARY, `\n## ${text.split('\n')[0]}\n\n${text.split('\n').slice(1).join('\n')}\n`);
 }
 

@@ -12,7 +12,8 @@
  * statement naming a `default:` link, which runs on the install's default connection as the signed-in reader
  * (POST /api/page/drafts/sql, lib/connections pageConnectionSql: read-only, the page door's code).
  *
- * CHECKED (./check `checkDraft`, for a trusted relay through the identity owner's draft-check seam): the same draft,
+ * CHECKED (./check `checkDraft`, for a trusted relay through the identity owner's draft-check seam, and for a signed-in
+ * author through POST /api/page/drafts/check, within DRAFT_CHECK_LIMITS): the same draft,
  * made for no reader, loaded once in the app's own browser (contracts PageInspectRequest) and forgotten, answering the
  * page's own problems. It reads no data: a `default:` link stays unread there, so its consent refusal is no problem.
  * Checks: __tests__/page-drafts.test.ts,
@@ -21,4 +22,4 @@
  */
 export { DRAFT_LIMITS } from './contracts';
 export { createDraft, draftAwaitsConsent, draftConnections, draftDocument, draftFile, DraftRefusal, resetDrafts } from './drafts';
-export { checkDraft } from './check';
+export { draftCheckAnswer, draftCheckCharges, DRAFT_CHECK_LIMITS, holdDraftCheck } from './check';

@@ -17,7 +17,7 @@ import {
   exclusive
 } from './toolbox-client.mjs';
 import {checkTarget, loadChromium, stepsBody, summarizeCheck} from './toolbox-check-script.mjs';
-import {checkHosted} from './toolbox-check-hosted.mjs';
+import {checkHosted, draftCheck} from './toolbox-check-hosted.mjs';
 import {sourceIdentity} from './toolbox-source.mjs';
 import {checkLocal} from './toolbox-check-local.mjs';
 import {explainCalls} from './toolbox-check-explain.mjs';
@@ -29,8 +29,13 @@ import {DECK_VIEWPORTS, PAGE_VIEWPORTS, isDeck, pageSource, replyFacts, unreadDa
 export async function checkCommand({values, positionals}, options = {}) {
   let input = positional(positionals),
     marker = null;
+  // --draft: one local FILE.html, unpublished, once in the server's browser with no steps.
+  const extra = values.draft && Object.keys(values).find(f => /steps|view|playwright/.test(f));
+  if (values.draft && (extra || !/\.html?$/i.test(input)))
+    throw new ToolError('draft_options', `--draft takes one local FILE.html${
+      extra ? ', no --' + extra : ''}.`, 2);
   // A published file stands for its page: its af-authoring marker names the page and server.
-  if (/\.html?$/i.test(input) && !/^https?:\/\//i.test(input)) {
+  if (!values.draft && /\.html?$/i.test(input) && !/^https?:\/\//i.test(input)) {
     marker = sourceIdentity(await readFile(input, 'utf8').catch(() => ''));
     if (!/^[A-Za-z0-9]{6,12}$/.test(marker?.id ?? ''))
       throw new ToolError(
@@ -48,11 +53,8 @@ export async function checkCommand({values, positionals}, options = {}) {
     .map(value => {
       const match = /^(\d+)x(\d+)$/.exec(value);
       if (!match || [match[1], match[2]].some(n => Number(n) < 240 || Number(n) > 3840))
-        throw new ToolError(
-          'invalid_viewport',
-          'Use WIDTHxHEIGHT with dimensions from 240 to 3840.',
-          2
-        );
+        throw new ToolError('invalid_viewport',
+          'Use WIDTHxHEIGHT with dimensions from 240 to 3840.', 2);
       return {width: Number(match[1]), height: Number(match[2])};
     });
   sized('');
@@ -62,13 +64,11 @@ export async function checkCommand({values, positionals}, options = {}) {
   let result;
   const local =
     /^http:\/\//.test(input) && !/^\/a\/[A-Za-z0-9]{6,12}\/?$/.test(new URL(input).pathname);
-  if (local) {
+  if (values.draft) result = await draftCheck(input, selectedServer(values, options.env), options);
+  else if (local) {
     if (values.viewer || values.server || values['guest-steps'] || values['cleanup-steps'])
-      throw new ToolError(
-        'local_identity',
-        'Loopback preview has no platform viewer/server selection.',
-        2
-      );
+      throw new ToolError('local_identity',
+        'Loopback preview has no platform viewer/server selection.', 2);
     const chromium = await loadChromium(values['playwright-module']);
     const html = await fetch(checkTarget(input).target, {signal: AbortSignal.timeout(3000)})
       .then(response => response.text()).catch(() => '');
@@ -166,9 +166,9 @@ export async function checkCommand({values, positionals}, options = {}) {
   }
   // Each screenshot, and a deck's slides beside it, saved as files; the result keeps the paths.
   const directory = path.join(credentialRoot(options.env), 'checks', randomUUID());
-  const save = async (name, base64) => {
+  const save = async (name, base64, type = '.png') => {
     await mkdir(directory, {recursive: true, mode: 0o700});
-    const file = path.join(directory, name + '.png');
+    const file = path.join(directory, name + type);
     await exclusive(file, Buffer.from(base64, 'base64'));
     return file;
   };
@@ -182,13 +182,13 @@ export async function checkCommand({values, positionals}, options = {}) {
       check.screenshot.slides = await Promise.all(slides.map(async ({base64, ...size}, n) =>
         ({path: await save(`${name}-slide-${n + 1}`, base64), ...size})));
   }
+  // A draft's picture: the top of the page, a JPEG.
+  if (result.image) {
+    result.screenshot = {path: await save('draft', result.image.data, '.jpg')};
+    delete result.image;
+  }
   if (!result.smokePassed)
-    throw new ToolError(
-      'check_failed',
-      'Smoke or task checks failed.',
-      1,
-      'Inspect partial diagnostics and remaining unverified acceptance.',
-      result
-    );
+    throw new ToolError('check_failed', 'Smoke or task checks failed.', 1,
+      'Inspect partial diagnostics and remaining unverified acceptance.', result);
   return result;
 }

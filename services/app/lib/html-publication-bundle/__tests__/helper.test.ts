@@ -137,3 +137,15 @@ it('snapshots a root-relative reference\'s project file, which the plan then car
   const missing=await prepareBundle({root,entry:'index.html',server:'https://example.test'});
   expect(()=>planPublicationBundle(missing.body.html,missing.body.publicationBundle)).toThrow(/\/assets\/fonts\/x\.woff2 \(in css\/site\.css\) names no file/);
 });
+
+it('refuses a hidden file or folder a page names, and a home or root folder, before reading anything (publish and check --draft share it)',async()=>{
+ const {prepareBundle}=await import('../../../skills/artifactbin/scripts/toolbox-publication-bundle.mjs');
+ const {homedir}=await import('node:os');
+ const root=await tempDir('bundle-hidden-',onTestFinished);
+  await mkdir(join(root,'.aws'));await writeFile(join(root,'.aws/credentials'),'[default]\naws_secret_access_key=not-a-real-key\n');await writeFile(join(root,'.env'),'TOKEN=x');
+  for(const html of ['<link rel="stylesheet" href=".aws/credentials">','<img src="./.env">','<script type="module">fetch("./.aws/credentials")</script>','<a href="/.aws/credentials">x</a>']){
+   await writeFile(join(root,'index.html'),html);
+   await expect(prepareBundle({root,entry:'index.html',server:'https://example.test'}),html).rejects.toThrow(/^Hidden files are never bundled: \.(aws\/credentials|env)$/);
+  }
+  for(const folder of [homedir(),'/'])await expect(prepareBundle({root:folder,entry:'index.html',server:'https://example.test'})).rejects.toThrow(/^Move the page into a folder of its own: /);
+});

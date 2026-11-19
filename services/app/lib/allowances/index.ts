@@ -3,7 +3,7 @@
  * a proxy cannot see (they are counted per URL inside one request, or per document), not rate limits.
  *
  * Every allowance takes its clock as `now` (milliseconds; default `Date.now()`), so a caller or a test decides
- * what time it is. One bucket map serves all three, bounded by a sweep.
+ * what time it is. One bucket map serves them all, bounded by a sweep.
  */
 import { forwardedFor } from '../accounts';
 import { TRUSTED_PROXY_HOPS, WEB_INGEST_MAX_PER_HOUR, registerTestOverride } from '../platform';
@@ -46,6 +46,33 @@ const CONNECTION_TESTS_PER_HOUR = 30;
 export function connectionTestRateLimited(userId: string, now = Date.now()): boolean {
   return hourlyAttemptsExhausted(`connection-test:${userId}`, CONNECTION_TESTS_PER_HOUR, now);
 }
+
+/**
+ * A signed-in author's draft checks (app/api/page/drafts/check) load their page in THIS SERVER's browser: DRAFT_CHECKS_PER_HOUR
+ * attempts an hour per person, and each key a check is charged to its own (lib/page-drafts draftCheckCharges), all or
+ * none spent, in the same buckets. The browser service counts the same for every app process at once.
+ */
+const DRAFT_CHECKS_PER_HOUR = 60;
+let draftCheckCap: number | null = null;
+/** Test hook for the hourly draft-check ceiling. */
+export function setDraftCheckCapForTests(cap: number | null): void { draftCheckCap = cap; }
+registerTestOverride(() => { draftCheckCap = null; });
+export function draftCheckRateLimited(charges: ReadonlyArray<{ key: string; perHour: number }>, now = Date.now()): boolean {
+  sweepExpiredBuckets(now);
+  const held = charges.map(({ key, perHour }) => ({ key: `draft-check:${key}`, perHour, times: (webIngestTimes.get(`draft-check:${key}`) ?? []).filter((t) => now - t < WEB_INGEST_WINDOW_MS) }));
+  if (held.some(({ perHour, times }) => times.length >= perHour)) return true;
+  for (const { key, times } of held) webIngestTimes.set(key, [...times, now]);
+  return false;
+}
+/** Gives back what `draftCheckRateLimited(charges, now)` spent, for a check the browser service refused before it ran. */
+export function refundDraftCheck(charges: ReadonlyArray<{ key: string }>, now: number): void {
+  for (const { key } of charges) {
+    const times = webIngestTimes.get(`draft-check:${key}`) ?? [], at = times.lastIndexOf(now);
+    if (at >= 0) times.splice(at, 1);
+  }
+}
+/** The hourly ceiling in force. */
+export const draftChecksPerHour = (): number => draftCheckCap ?? DRAFT_CHECKS_PER_HOUR;
 
 /** Number of live buckets — a test seam for the sweep. */
 export function webIngestBucketCount(): number { return webIngestTimes.size; }

@@ -105,15 +105,20 @@ it('delivers successive real SSE segments through the isolated worker, catches u
  const runtime=(await build({entryPoints:[fileURLToPath(new URL('../../app/lib/http/live-stream.ts',import.meta.url))],bundle:true,write:false,format:'iife',globalName:'LiveRuntime'})).outputFiles[0]!.text;
  const owner:Actor={credential:'bearer',userId:'usr_owner'};
  let revision=1,active=0,appActive=0,peak=0,cancelled=0;
+ // Open upstream streams by the page that asked (its document's `?page=`): a closed page's last segments run out their
+ // window after it, so only its own count says they ended (the base page's streams come and go between segments).
+ const openBy=new Map<string,number>();
  const seen:Array<{url:string;cursor:string|null;actor:Actor}>=[];
  const request=async(request:Request,actor:Actor)=>{
   const url=new URL(request.url);
   if(url.pathname.endsWith('/events')){
    seen.push({url:url.href,cursor:request.headers.get('last-event-id'),actor});
    if(actor!==owner)return new Response('not found',{status:404});
-   return new Response(new ReadableStream({start(controller){active++;if(url.pathname.startsWith('/a/')&&!url.searchParams.has('native'))appActive++;peak=Math.max(peak,active);controller.enqueue(new TextEncoder().encode(`: connected\r\n\r\nretry: 50\r\nid: ${revision}\r\nevent: update\r\ndata: ${revision}\r\n\r\n`));},cancel(){active--;if(url.pathname.startsWith('/a/')&&!url.searchParams.has('native'))appActive--;cancelled++;}}),{headers:{'content-type':'text/event-stream'}});
+   const by=url.searchParams.get('page')??'base';
+   return new Response(new ReadableStream({start(controller){active++;openBy.set(by,(openBy.get(by)??0)+1);if(url.pathname.startsWith('/a/')&&!url.searchParams.has('native'))appActive++;peak=Math.max(peak,active);controller.enqueue(new TextEncoder().encode(`: connected\r\n\r\nretry: 50\r\nid: ${revision}\r\nevent: update\r\ndata: ${revision}\r\n\r\n`));},cancel(){active--;openBy.set(by,openBy.get(by)!-1);if(url.pathname.startsWith('/a/')&&!url.searchParams.has('native'))appActive--;cancelled++;}}),{headers:{'content-type':'text/event-stream'}});
   }
-  return new Response(`<!doctype html><body><p id="value">0</p><script>${runtime};window.values=[];let current=0;window.live=LiveRuntime.openLiveStream({url:'/a/abc123/events',events:{update(data){const value=Number(data);if(value>current){current=value;window.values.push(value);document.querySelector('#value').textContent=String(value);}}}});window.native=new EventSource('/a/abc123/events?native=1');window.nativeValues=[];window.native.addEventListener('update',e=>window.nativeValues.push({data:e.data,id:e.lastEventId}));</script></body>`,{headers:{'content-type':'text/html'}});
+  const page=url.searchParams.get('page');const events=`/a/abc123/events${page?`?page=${page}`:''}`;
+  return new Response(`<!doctype html><body><p id="value">0</p><script>${runtime};window.values=[];let current=0;window.live=LiveRuntime.openLiveStream({url:'${events}',events:{update(data){const value=Number(data);if(value>current){current=value;window.values.push(value);document.querySelector('#value').textContent=String(value);}}}});window.native=new EventSource('${events}${page?'&':'?'}native=1');window.nativeValues=[];window.native.addEventListener('update',e=>window.nativeValues.push({data:e.data,id:e.lastEventId}));</script></body>`,{headers:{'content-type':'text/html'}});
  };
  worker=await createSessionProcess(owner,{baseURL:BASE,request,sandbox:{mode:'none'}});
  const first=await worker.run(`const page=await context.newPage();const failures=[];page.on('requestfailed',r=>failures.push(r.url()));page.on('pageerror',e=>failures.push(e.message));page.on('console',m=>{if(m.type()==='error')failures.push(m.text())});globalThis.testPage=page;globalThis.failures=failures;await page.goto('/a/doc1');await page.locator('#value').filter({hasText:'1'}).waitFor();return await page.evaluate(()=>window.values);`);
@@ -132,11 +137,12 @@ it('delivers successive real SSE segments through the isolated worker, catches u
  expect(seen.filter(item=>new URL(item.url).searchParams.has('native')).length).toBeGreaterThan(1);
  expect(peak).toBeLessThanOrEqual(2);
  for(const width of [1280,390]){
- const smoke=await worker.run(`const checkPage=await context.newPage();try{return await (${inspectSource()})(checkPage,{target:'/a/doc1',viewport:{width:${width},height:800}},async page=>{await page.locator('#value').waitFor();await page.reload();await page.locator('#value').filter({hasText:'3'}).waitFor();return {reload:true};});}finally{await checkPage.close();}`);
+ const smoke=await worker.run(`const checkPage=await context.newPage();try{return await (${inspectSource()})(checkPage,{target:'/a/doc1?page=check${width}',viewport:{width:${width},height:800}},async page=>{await page.locator('#value').waitFor();await page.reload();await page.locator('#value').filter({hasText:'3'}).waitFor();return {reload:true};});}finally{await checkPage.close();}`);
  expect(smoke.error).toBeUndefined();
  const evidence=smoke.result as {failedRequests:unknown[];consoleErrors:string[];pageErrors:string[];httpErrors:unknown[]};
  expect(evidence.failedRequests).toEqual([]);expect(evidence.consoleErrors).toEqual([]);expect(evidence.pageErrors).toEqual([]);expect(evidence.httpErrors).toEqual([]);
  // The check page's streams end with it (its cancels arrive over the wire, however late).
+ await vi.waitFor(()=>expect(openBy.get(`check${width}`)).toBe(0), { timeout: WAIT_MS });
  await vi.waitFor(()=>expect(active).toBeLessThanOrEqual(2), { timeout: WAIT_MS });
  }
  expect(peak).toBeLessThanOrEqual(6);expect(seen.length).toBeLessThan(50);
