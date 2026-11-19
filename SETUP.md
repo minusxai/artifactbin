@@ -72,6 +72,11 @@ matching across them; keep that network private).
 
 - **Image exports and live sessions** need Chromium. Sessions also need bubblewrap, unprivileged user namespaces
   and a delegated cgroup v2 subtree (`BROWSER__SESSION_CGROUP_ROOT`); an ordinary container cannot run them.
+- **Sandboxed renders**: set `BROWSER__RENDER_SANDBOX=chromium` where Chromium's own sandbox can run: a non-root
+  user, unprivileged user namespaces (on Ubuntu 24.04 an AppArmor profile granting `userns`, or
+  `kernel.apparmor_restrict_unprivileged_userns=0`), and a seccomp profile allowing `clone`/`unshare` of user
+  namespaces, as the session containment already needs. The service then refuses to start where it cannot; `none`
+  accepts running unsandboxed. Renders reach only their own origins either way: keep the browser on a private network.
 - **Export uploads straight to S3** go through the upload gateway, `services/browser/src/upload-gateway-server.ts`
   (`BROWSER__UPLOAD_*`).
 

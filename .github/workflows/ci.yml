@@ -230,6 +230,10 @@ jobs:
       # download alone, not an apt pass (~30s).
       - if: ${{ !matrix.images }}
         run: npx playwright install chromium
+      # Chromium's own sandbox (BROWSER__RENDER_SANDBOX=chromium, services/browser render-lanes.test.ts) needs unprivileged
+      # user namespaces, which Ubuntu 24.04's AppArmor restricts by default; the gate shards lift it the same way.
+      - if: ${{ !matrix.images }}
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       # The test global setup builds the server reader and the hosted libraries behind one content marker
       # (services/app/scripts/server-reader-cache.mjs): ~10s of every shard that restores neither. The entry is keyed by
       # what they are built from (scripts/ci/ci.mjs `test-builds-key`), else the newest; a marker that no longer

@@ -116,8 +116,11 @@ async function main(): Promise<void> {
     const { sessionBridge } = await import('@/lib/runtime');
     // `app` is composed below; the hop is chosen once, on the first page a session opens.
     let hop: ReturnType<typeof sessionBridge> | undefined;
-    setServices({ browser: createBrowser({ sessions: { ...sessionProcessPaths(env), baseURL, ...(hmrPort !== null ? { devSocketPort: hmrPort } : {}),
-      request: (request, actor) => (hop ??= sessionBridge({ dev, port, secret: sessionActorSecret, app }))(request, actor) } }) });
+    const browser = createBrowser({ sessions: { ...sessionProcessPaths(env), baseURL, ...(hmrPort !== null ? { devSocketPort: hmrPort } : {}),
+      request: (request, actor) => (hop ??= sessionBridge({ dev, port, secret: sessionActorSecret, app }))(request, actor) } });
+    // BROWSER__RENDER_SANDBOX=chromium: a host that cannot sandbox Chromium refuses to boot here, by name.
+    await browser.start();
+    setServices({ browser });
     // The session settings are read in THAT package, so this process's audit is told about them.
     for (const name of sessionEnvNamesRead()) sessionEnvNames.add(name);
   }

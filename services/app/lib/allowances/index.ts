@@ -49,15 +49,27 @@ export function connectionTestRateLimited(userId: string, now = Date.now()): boo
 
 /**
  * A signed-in author's draft checks (app/api/page/drafts/check) load their page in THIS SERVER's browser: DRAFT_CHECKS_PER_HOUR
- * attempts an hour per author (a person's id, or a group's sign-in `group:<id>:<level>`), in the same buckets.
+ * attempts an hour per person, and each key a check is charged to its own (lib/page-drafts draftCheckCharges), all or
+ * none spent, in the same buckets. The browser service counts the same for every app process at once.
  */
 const DRAFT_CHECKS_PER_HOUR = 60;
 let draftCheckCap: number | null = null;
 /** Test hook for the hourly draft-check ceiling. */
 export function setDraftCheckCapForTests(cap: number | null): void { draftCheckCap = cap; }
 registerTestOverride(() => { draftCheckCap = null; });
-export function draftCheckRateLimited(author: string, now = Date.now()): boolean {
-  return hourlyAttemptsExhausted(`draft-check:${author}`, draftCheckCap ?? DRAFT_CHECKS_PER_HOUR, now);
+export function draftCheckRateLimited(charges: ReadonlyArray<{ key: string; perHour: number }>, now = Date.now()): boolean {
+  sweepExpiredBuckets(now);
+  const held = charges.map(({ key, perHour }) => ({ key: `draft-check:${key}`, perHour, times: (webIngestTimes.get(`draft-check:${key}`) ?? []).filter((t) => now - t < WEB_INGEST_WINDOW_MS) }));
+  if (held.some(({ perHour, times }) => times.length >= perHour)) return true;
+  for (const { key, times } of held) webIngestTimes.set(key, [...times, now]);
+  return false;
+}
+/** Gives back what `draftCheckRateLimited(charges, now)` spent, for a check the browser service refused before it ran. */
+export function refundDraftCheck(charges: ReadonlyArray<{ key: string }>, now: number): void {
+  for (const { key } of charges) {
+    const times = webIngestTimes.get(`draft-check:${key}`) ?? [], at = times.lastIndexOf(now);
+    if (at >= 0) times.splice(at, 1);
+  }
 }
 /** The hourly ceiling in force. */
 export const draftChecksPerHour = (): number => draftCheckCap ?? DRAFT_CHECKS_PER_HOUR;

@@ -2,6 +2,7 @@
  * Used by: toolbox-publish.mjs. */
 import {readFile,realpath,lstat} from 'node:fs/promises';
 import path from 'node:path';
+import {homedir} from 'node:os';
 import {randomUUID} from 'node:crypto';
 import {publicationLocalReferences,publicationScriptFetches} from
   './preview-html.mjs';
@@ -21,11 +22,15 @@ const origin=serverOrigin(server);
 if(entryHtml!==undefined&&typeof entryHtml!=='string')throw Error(
    'Entry HTML override must be a string');
  const project=await realpath(root),files=new Map();let size=0;
+ // A page names what is bundled: never a home directory or a disk's root, nor a hidden file.
+ if(project===path.parse(project).root||project===await realpath(homedir()).catch(()=>''))
+  throw Error('Move the page into a folder of its own: '+project+' is never bundled whole');
  async function load(name){
 if(typeof name!=='string'||!name||name.includes('\\')||path.isAbsolute(name))throw Error(
     'Invalid project path');
 name=path.posix.normalize(name);if(name==='..'||name.startsWith('../'))throw Error(
-    'Dependency escapes project root: '+name);
+    'Dependency escapes project root: '+name);if(name.split('/').some(p=>p[0]==='.'))throw Error(
+    'Hidden files are never bundled: '+name);
   const full=path.join(project,name),parts=name.split('/');let parent=project;
 for(const part of parts){parent=path.join(parent,part);let info;try{info=await lstat(parent);}catch(
     error){if(error.code==='ENOENT'&&mappings[name])return;

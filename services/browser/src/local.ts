@@ -1,15 +1,28 @@
 export { sessionEnvNamesRead, sessionProcessPaths } from './session-config';
 import { createBrowserSessions } from './sessions';
 import { createSessionProcess } from './session-process';
-import type { BrowserSessionOptions } from './session-config';
+import { renderSandboxChoice, type BrowserSessionOptions, type RenderSandboxChoice } from './session-config';
 /**
  * CHROMIUM, IN THIS PROCESS. The only entry of this package that loads
- * Playwright; import it from a composition root only. One browser, launched
- * on first use, closed after a minute idle (./browser-holder owns that
- * lifecycle); renders are SERIALISED — one page at a time bounds memory. A
- * render's deadline closes its own page, never the browser.
+ * Playwright; import it from a composition root only. TWO browsers, each
+ * launched on first use and closed after a minute idle (./browser-holder owns
+ * that lifecycle): one draws exports (render, upload, harvest), the other
+ * checks (inspect), so no check ever waits on or delays an export, and a check
+ * browser that is wedged or replaced never fails an export in flight. Each
+ * lane is SERIALISED (one page at a time bounds memory); the check lane admits
+ * a bounded few by ./check-admission. A render's deadline closes its own page
+ * (its own context), never the browser.
+ *
+ * Every render has its own context behind its own egress proxy (./egress): it
+ * reaches exactly the origins it may load, nothing else, by any protocol; each
+ * browser is launched behind a proxy that refuses everything, with no name
+ * resolution, no unproxied WebRTC UDP and no QUIC (EGRESS_ARGS), with only the
+ * environment Chromium needs (never this process's secrets), and, when
+ * BROWSER__RENDER_SANDBOX=chromium, inside Chromium's own sandbox
+ * (./session-config renderSandboxChoice). Its renderers are held to
+ * ./render-limits.
  */
-import { chromium, errors, type Browser, type Locator, type Page } from 'playwright';
+import { chromium, errors, type Browser, type BrowserContext, type Locator, type Page } from 'playwright';
 import sharp from 'sharp';
 import {admittedUploadUrl,uploadImage,type UploadOptions} from './upload';
 import {browserUploadOptions} from './upload-config';
@@ -17,6 +30,9 @@ import type { BrowserService, BrowserSessions, HarvestedSvg, PageImage, PageInsp
 import { ELEMENT_CAPTURE, PAGE_IMAGE_LIMITS, PAGE_PROBLEM_LIMITS, SVG_HARVEST_LIMITS, type NoElement } from '@artifactbin/contracts';
 import { internalAssetResponse, internalPageResponse } from './internal-assets';
 import { BrowserUnavailable, createBrowserHolder } from './browser-holder';
+import { EGRESS_ARGS, openEgress, type Egress } from './egress';
+import { CHECK_LANE, createCheckAdmission } from './check-admission';
+import { RENDER_LIMIT_POLL_MS, RENDER_LIMITS, processTable, rendererPastLimits, type RenderLimits } from './render-limits';
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_SETTLE_MS = 1_500;
@@ -303,22 +319,98 @@ function said(target: string, pageOrigin: string): string {
   try { const url = new URL(target); return url.origin === pageOrigin ? url.pathname : url.origin + url.pathname; } catch { return target.slice(0, 200); }
 }
 
-/** `launch` replaces Playwright's own launch (and so ignores `executablePath`); tests count and hold browsers with it. */
-export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: () => Promise<string>; launch?: (timeoutMs: number) => Promise<Browser>; sessions?: BrowserSessionOptions; upload?:UploadOptions } = {}): BrowserService & { close(): Promise<void> } {
+/**
+ * The only environment a render browser is started with: what Chromium needs to find its files, fonts and locale.
+ * Everything else this process holds (the internal service secret, upload and session credentials) stays here.
+ */
+const CHROMIUM_ENV = ['PATH', 'HOME', 'TMPDIR', 'TMP', 'TEMP', 'LANG', 'LANGUAGE', 'LC_ALL', 'LC_CTYPE', 'TZ', 'FONTCONFIG_PATH', 'FONTCONFIG_FILE',
+  'XDG_CONFIG_HOME', 'XDG_CACHE_HOME', 'XDG_DATA_HOME', 'XDG_RUNTIME_DIR', 'SystemRoot', 'WINDIR', 'LOCALAPPDATA', 'APPDATA', 'USERPROFILE'] as const;
+export function chromiumEnv(source: NodeJS.ProcessEnv): Record<string, string> {
+  return Object.fromEntries(CHROMIUM_ENV.flatMap((name) => source[name] !== undefined ? [[name, source[name]!]] : []));
+}
+/** A renderer's V8 heap, in MB: past it the page's script runs out of memory inside the page (./render-limits). */
+const RENDERER_HEAP_MB = 1024;
+
+/**
+ * Serialized into every frame of a render BEFORE its scripts (an init script), defence beneath the egress proxy: a
+ * page's RTCPeerConnection is given no ICE server (it still constructs, so a page that only makes one is unchanged).
+ * Self-contained.
+ */
+function quietPeerConnections(): void {
+  for (const name of ['RTCPeerConnection', 'webkitRTCPeerConnection'] as const) {
+    const scope = window as unknown as Record<string, unknown>;
+    const Original = scope[name] as (new (config?: RTCConfiguration) => RTCPeerConnection) | undefined;
+    if (typeof Original !== 'function') continue;
+    const set = Original.prototype.setConfiguration;
+    Original.prototype.setConfiguration = function (this: RTCPeerConnection, config?: RTCConfiguration) { return set.call(this, { ...(config ?? {}), iceServers: [] }); };
+    const Quiet = function (config?: RTCConfiguration) { return new Original({ ...(config ?? {}), iceServers: [] }); } as unknown as typeof Original;
+    Quiet.prototype = Original.prototype;
+    Object.defineProperty(Original.prototype, 'constructor', { value: Quiet, writable: true, configurable: true });
+    Object.setPrototypeOf(Quiet, Original);
+    scope[name] = Quiet;
+  }
+}
+
+/** A page's renderer stopped: past ./render-limits, or crashed on its own. */
+class RendererStopped extends Error {}
+
+/**
+ * `launch` replaces Playwright's own launch (and so ignores `executablePath`, the sandbox and the egress launch); tests
+ * count and hold browsers with it. `sandbox` defaults to BROWSER__RENDER_SANDBOX; `limits` to RENDER_LIMITS.
+ */
+export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: () => Promise<string>; launch?: (timeoutMs: number) => Promise<Browser>; sessions?: BrowserSessionOptions; upload?:UploadOptions; sandbox?: RenderSandboxChoice; limits?: Partial<RenderLimits> } = {}): BrowserService & { close(): Promise<void>; start(): Promise<void> } {
   const upload=opts.upload??browserUploadOptions(process.env);
+  const sandbox = opts.sandbox ?? renderSandboxChoice(process.env);
+  const limits: RenderLimits = { ...RENDER_LIMITS, ...opts.limits };
+  if (sandbox.mode === 'warn') console.warn('[browser] WARNING: renders run Chromium WITHOUT its sandbox (BROWSER__RENDER_SANDBOX is unset). Set BROWSER__RENDER_SANDBOX=chromium where the host allows unprivileged user namespaces (SETUP.md), or =none to accept running unsandboxed.');
   let executablePath: string | undefined;
-  let chain: Promise<unknown> = Promise.resolve();
-  const holder = createBrowserHolder<Browser>({
-    idleMs: opts.idleShutdownMs ?? 60_000,
-    launch: timeoutMs => opts.launch ? opts.launch(timeoutMs) : chromium.launch({ headless: true, timeout: timeoutMs, ...(executablePath ? { executablePath } : {}) }),
-    timer: (run, ms) => { const timer = setTimeout(run, ms); timer.unref?.(); return () => clearTimeout(timer); },
-  });
-  /** Closes this page; one that will not close in time means its browser is wedged, so that browser is retired. */
-  const closePage = async (page: Page, browser: Browser) => {
+  const timer = (run: () => void, ms: number) => { const timer = setTimeout(run, ms); timer.unref?.(); return () => clearTimeout(timer); };
+
+  /** One browser and its serial queue. The marker names its process for ./render-limits. */
+  function lane(name: 'exports' | 'checks') {
+    const marker = `--artifactbin-render-lane=${name}`;
+    const holder = createBrowserHolder<Browser>({
+      idleMs: opts.idleShutdownMs ?? 60_000,
+      launch: async (timeoutMs) => {
+        if (opts.launch) return opts.launch(timeoutMs);
+        // The browser's own proxy refuses everything: a context opened without its render's proxy reaches nothing.
+        const refuseAll: Egress = await openEgress([]);
+        try {
+          const browser = await chromium.launch({ headless: true, timeout: timeoutMs, chromiumSandbox: sandbox.mode === 'chromium', env: chromiumEnv(process.env),
+            proxy: { server: refuseAll.server }, args: [...EGRESS_ARGS, `--js-flags=--max-old-space-size=${RENDERER_HEAP_MB}`, marker], ...(executablePath ? { executablePath } : {}) });
+          browser.on('disconnected', () => { void refuseAll.close(); });
+          return browser;
+        } catch (error) { await refuseAll.close(); throw error; }
+      },
+      timer,
+    });
+    let busy = 0, polling: ReturnType<typeof setInterval> | undefined;
+    /** While a page of this lane is open, its renderers are measured; one past a limit is killed. */
+    const watch = () => {
+      if (busy++ > 0) return;
+      let measuring = false;
+      polling = setInterval(() => {
+        if (measuring) return;
+        measuring = true;
+        void processTable().then((rows) => {
+          for (const row of rendererPastLimits(rows, marker, limits, process.pid)) { try { process.kill(row.pid, 'SIGKILL'); } catch { /* already gone */ } }
+        }).finally(() => { measuring = false; });
+      }, RENDER_LIMIT_POLL_MS);
+      polling.unref?.();
+    };
+    const unwatch = () => { if (--busy === 0) clearInterval(polling); };
+    return { holder, chain: Promise.resolve() as Promise<unknown>, watch, unwatch };
+  }
+  const exportsLane = lane('exports'), checksLane = lane('checks');
+  type Lane = typeof exportsLane;
+  const admission = createCheckAdmission();
+
+  /** Closes this page's context; one that will not close in time means its browser is wedged, so that browser is retired. */
+  const closePage = async (on: Lane, context: BrowserContext, browser: Browser) => {
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const closed = await Promise.race([page.close().then(() => true, () => true), new Promise<boolean>(resolve => { timer = setTimeout(() => resolve(false), PAGE_CLOSE_WAIT_MS); })]);
+    const closed = await Promise.race([context.close().then(() => true, () => true), new Promise<boolean>(resolve => { timer = setTimeout(() => resolve(false), PAGE_CLOSE_WAIT_MS); })]);
     clearTimeout(timer);
-    if (!closed) await holder.retire(browser);
+    if (!closed) await on.holder.retire(browser);
   };
 
   /**
@@ -328,12 +420,15 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
    * readiness wait (diagrams, managed frames, the settle, charts). `use` sees
    * the ready page; the page is closed after, whatever happened.
    */
-  async function withReadyPage<T>(req: PageRequest & { internalOrigin?: string }, deviceScaleFactor: number, use: (ready: { page: Page; surface: Locator; timeout: number; remaining: () => number; waitForCharts: () => Promise<void> }) => Promise<T>, watch?: { page(page: Page): void; refused(url: string): void }): Promise<T> {
+  async function withReadyPage<T>(on: Lane, req: PageRequest & { internalOrigin?: string }, deviceScaleFactor: number, use: (ready: { page: Page; surface: Locator; timeout: number; remaining: () => number; waitForCharts: () => Promise<void> }) => Promise<T>, watch?: { page(page: Page): void; refused(url: string): void }): Promise<T> {
     const deadline=Date.now()+(req.timeoutMs??DEFAULT_TIMEOUT_MS);
     const remaining=()=>{const ms=deadline-Date.now();if(ms<=0)throw new Error('Render deadline');return ms;};
-    const lease = await holder.acquire(remaining());
+    const lease = await on.holder.acquire(remaining());
+    on.watch();
+    let egress: Egress | undefined;
     // The deadline closes THIS page (with its own context), never the browser another render may be using.
-    let opened: Page | undefined;
+    let context: BrowserContext | undefined;
+    let crashed = false;
     let expired = false;
     let deadlineClose: Promise<void> | undefined;
     let renderTimer: ReturnType<typeof setTimeout> | undefined;
@@ -343,10 +438,17 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
     const forwarding = new AbortController();
     const pending = new Set<Promise<void>>();
     try {
-      renderTimer = setTimeout(() => { expired = true; if (opened) deadlineClose = closePage(opened, lease.browser); }, remaining());
+      // What this render may reach over the network: nothing when everything it loads is fetched from the internal
+      // origin (an inspection), else its own origin and the ones it was allowed. Everything else is refused (./egress).
+      egress = await openEgress(req.internalOrigin ? [] : [new URL(req.url).origin, ...(req.allowedOrigins ?? [])]);
+      renderTimer = setTimeout(() => { expired = true; if (context) deadlineClose = closePage(on, context, lease.browser); }, remaining());
       // reducedMotion: the motion kit never arms scroll reveals under it, so a capture always sees the finished page.
-      const page = opened = await lease.browser.newPage({ viewport: req.viewport, reducedMotion: 'reduce', deviceScaleFactor, serviceWorkers: 'block' });
+      context = await lease.browser.newContext({ viewport: req.viewport, reducedMotion: 'reduce', deviceScaleFactor, serviceWorkers: 'block', proxy: { server: egress.server } });
+      if (expired) { deadlineClose = closePage(on, context, lease.browser); throw new Error('Render deadline'); }
+      await context.addInitScript(quietPeerConnections);
+      const page = await context.newPage();
       if (expired) throw new Error('Render deadline');
+      page.on('crash', () => { crashed = true; });
       watch?.page(page);
       const timeout = remaining();
       if (req.sameOriginOnly || req.assetOrigin || req.internalOrigin) {
@@ -364,7 +466,7 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
               } else if (req.internalOrigin && !/^(?:data|blob):/.test(request.url()) && requestOriginAllowed(request.url(), origin, req.allowedOrigins)) {
                 // Inspection: the page's own and allowed origins are fetched from the app itself (contracts PageInspectRequest).
                 const signal = AbortSignal.any([forwarding.signal, AbortSignal.timeout(Math.min(timeout, DEFAULT_TIMEOUT_MS))]);
-                const response = await internalPageResponse(request.url(), request.method(), req.internalOrigin, signal);
+                const response = await internalPageResponse(request.url(), request.method(), req.internalOrigin, origin, signal);
                 await route.fulfill({ status: response.status, headers: Object.fromEntries(response.headers), body: Buffer.from(await response.arrayBuffer()) });
               } else if (!req.sameOriginOnly || requestOriginAllowed(request.url(), origin, req.allowedOrigins)) await route.continue();
               else { watch?.refused(request.url()); await route.abort(); }
@@ -425,11 +527,16 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
       };
       await waitForCharts();
       return await use({ page, surface, timeout, remaining, waitForCharts });
+    } catch (error) {
+      if (crashed) throw new RendererStopped(`the page was stopped: it used more than ${Math.round(limits.bytes / 1048576)} MB of memory or ${limits.threads} threads (each worker is one), or its renderer crashed`);
+      throw error;
     } finally {
       forwarding.abort();
       await Promise.allSettled(pending);
       clearTimeout(renderTimer);
-      if (opened) await (deadlineClose ?? closePage(opened, lease.browser));
+      if (context) await (deadlineClose ?? closePage(on, context, lease.browser));
+      on.unwatch();
+      await egress?.close();
       lease.release();
     }
   }
@@ -443,7 +550,7 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
       : 1;
     const element = typeof req.capture === 'object' && 'element' in req.capture ? req.capture : null;
     // An element is drawn at twice its CSS pixels, so a chart dropped into a slide stays sharp (see ELEMENT_CAPTURE).
-    return withReadyPage(req, element ? ELEMENT_CAPTURE.density : cardDensity, async ({ page, surface, timeout, waitForCharts }) => {
+    return withReadyPage(exportsLane, req, element ? ELEMENT_CAPTURE.density : cardDensity, async ({ page, surface, timeout, waitForCharts }) => {
       const shotOpts = { timeout, ...(req.format === 'jpg' ? { type: 'jpeg' as const, quality: req.quality ?? 85 } : { type: 'png' as const }) };
       const mime = req.format === 'jpg' ? 'image/jpeg' as const : 'image/png' as const;
       const slideNumber = typeof req.capture === 'object' && 'slide' in req.capture ? req.capture.slide ?? 0 : 0;
@@ -550,7 +657,7 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
 
   /** One load's drawings, bounded (SVG_HARVEST_LIMITS); the page is the ready page above. */
   async function harvestOnce(req: SvgHarvestRequest): Promise<HarvestedSvg[]> {
-    return withReadyPage(req, 1, async ({ page }) => {
+    return withReadyPage(exportsLane, req, 1, async ({ page }) => {
       const found = await page.evaluate(collectDrawings, { selector: req.selector, collect: req.collect, limit: SVG_HARVEST_LIMITS.images + 1 });
       if (found.length > SVG_HARVEST_LIMITS.images) throw new Error('Too many drawings');
       let total = 0;
@@ -568,7 +675,7 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
     const found = problemList(), refused = new Set<string>(), pageOrigin = new URL(req.url).origin;
     let image: PageImage | undefined;
     try {
-      await withReadyPage(req, 1, async ({ page, timeout }) => {
+      await withReadyPage(checksLane, req, 1, async ({ page, timeout }) => {
         for (const failure of await page.evaluate(collectFailures, { selector: req.selector, limit: PAGE_PROBLEM_LIMITS.problems + 1 })) found.add(failure);
         for (const faint of await page.evaluate(collectUnreadable, { selector: req.selector, floor: READABLE_CONTRAST, limit: PAGE_PROBLEM_LIMITS.problems + 1 }).catch(() => [])) found.add(faint);
         if (req.overflow) for (const wide of await page.evaluate(collectOverflow).catch(() => [])) found.add(wide);
@@ -593,8 +700,9 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
       });
     } catch (error) {
       if (error instanceof NavigationError || error instanceof BrowserUnavailable) throw error;
-      // What it showed until then is kept: a page that never finishes drawing is itself a problem.
-      found.add({ kind: 'timeout', message: 'the page did not finish loading and drawing in time' });
+      // What it showed until then is kept: a page stopped for what it used, or that never finishes drawing, is itself a problem.
+      if (error instanceof RendererStopped) found.add({ kind: 'script', message: error.message });
+      else found.add({ kind: 'timeout', message: 'the page did not finish loading and drawing in time' });
     }
     return { ...found.result(), ...(image ? { image } : {}) };
   }
@@ -615,12 +723,12 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
   const sessions: BrowserSessions = unsandboxed
     ? { close: () => started.close(), async request(input) { return { ...await started.request(input), sandbox: 'none' }; } }
     : started;
-  const service:BrowserService & {close():Promise<void>} = {
+  const service:BrowserService & {close():Promise<void>;start():Promise<void>} = {
     sessions,
     async render(req): Promise<RenderResult> {
       if(opts.executablePath){try{executablePath=await opts.executablePath();}catch(error){return {ok:false,reason:'unavailable',detail:(error as Error).message};}}
       const deadline=Date.now()+(req.timeoutMs??DEFAULT_TIMEOUT_MS);
-      const run = chain.then(() => {const remaining=deadline-Date.now();if(remaining<=0)throw new Error("Render timed out in queue");return shoot({...req,timeoutMs:remaining});}).then(
+      const run = exportsLane.chain.then(() => {const remaining=deadline-Date.now();if(remaining<=0)throw new Error("Render timed out in queue");return shoot({...req,timeoutMs:remaining});}).then(
         (r): RenderResult => Date.now()>deadline ? {ok:false,reason:'failed',detail:'Render deadline'} : { ok: true, ...r, ...(typeof req.capture === 'object' && 'element' in req.capture ? { element: true as const } : {}) },
         (e): RenderResult => {
           if (e instanceof NoSlideError) return { ok: false, reason: 'no_slide', slides: e.slides };
@@ -630,7 +738,7 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
           return { ok: false, reason: 'failed', detail: (e as Error).message };
         },
       );
-      chain = run;
+      exportsLane.chain = run;
       return run;
     },
     /**
@@ -642,7 +750,7 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
       if(opts.executablePath){try{executablePath=await opts.executablePath();}catch(error){return {ok:false,reason:'unavailable',detail:(error as Error).message};}}
       const loads = Math.min(Math.max(Math.trunc(req.loads ?? 1), 1), SVG_HARVEST_LIMITS.loads);
       const deadline=Date.now()+(req.timeoutMs??DEFAULT_TIMEOUT_MS);
-      const run = chain.then(async () => {
+      const run = exportsLane.chain.then(async () => {
         const answers: HarvestedSvg[][] = [];
         for (let load = 0; load < loads; load++) {
           const remaining=deadline-Date.now();if(remaining<=0)throw new Error('Harvest timed out in queue');
@@ -657,14 +765,21 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
           return { ok: false, reason: 'failed', detail: (e as Error).message };
         },
       );
-      chain = run;
+      exportsLane.chain = run;
       return run;
     },
-    /** THE PAGE'S OWN PROBLEMS (PageInspectRequest): the same ready page, on the same serialized chain and deadline. */
+    /**
+     * THE PAGE'S OWN PROBLEMS (PageInspectRequest): the same ready page, in the check browser, on its own serialized
+     * chain and deadline, admitted first by its charges and the lane's room (./check-admission): `busy` or
+     * `rate_limited` at once, never a queue past CHECK_LANE.
+     */
     async inspect(req): Promise<PageInspection> {
       if(opts.executablePath){try{executablePath=await opts.executablePath();}catch(error){return {ok:false,reason:'unavailable',detail:(error as Error).message};}}
       const deadline=Date.now()+(req.timeoutMs??DEFAULT_TIMEOUT_MS);
-      const run = chain.then(() => {const remaining=deadline-Date.now();if(remaining<=0)throw new Error('Inspect timed out in queue');return inspectOnce({...req,timeoutMs:remaining});}).then(
+      const admitted = admission.admit(Array.isArray(req.charge) ? req.charge : []);
+      if (admitted === 'busy') return { ok: false, reason: 'busy', detail: `at most ${CHECK_LANE.running} check runs and ${CHECK_LANE.waiting} wait, and one of each caller's` };
+      if (admitted === 'rate_limited') return { ok: false, reason: 'rate_limited' };
+      const run = checksLane.chain.then(() => {const remaining=deadline-Date.now();if(remaining<=0)throw new Error('Inspect timed out in queue');return inspectOnce({...req,timeoutMs:remaining});}).finally(() => admitted.release()).then(
         (found): PageInspection => ({ ok: true, ...found }),
         (e): PageInspection => {
           if (e instanceof NavigationError) return { ok: false, reason: 'navigation', detail: e.message };
@@ -672,10 +787,20 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
           return { ok: false, reason: 'failed', detail: (e as Error).message };
         },
       );
-      chain = run;
+      checksLane.chain = run;
       return run;
     },
-    async close() { await sessions.close(); await holder.close(); },
+    /**
+     * Ready to render, or why not: with BROWSER__RENDER_SANDBOX=chromium the export browser is launched once inside
+     * its sandbox, and a host that cannot give it one is refused here, at boot, by name (never a silent fallback).
+     */
+    async start() {
+      if (sandbox.mode !== 'chromium') return;
+      if(opts.executablePath)executablePath=await opts.executablePath();
+      try { (await exportsLane.holder.acquire(30_000)).release(); }
+      catch (error) { throw new Error(`BROWSER__RENDER_SANDBOX=chromium, but Chromium could not start inside its sandbox (${(error as Error).message.split('\n')[0]}). The host must allow unprivileged user namespaces (SETUP.md, "On a server"); set BROWSER__RENDER_SANDBOX=none to accept rendering without it.`); }
+    },
+    async close() { await sessions.close(); await Promise.all([exportsLane.holder.close(), checksLane.holder.close()]); },
   };
   if(upload)service.renderAndUpload=async request=>{
     try{

@@ -22,4 +22,4 @@
  */
 export { DRAFT_LIMITS } from './contracts';
 export { createDraft, draftAwaitsConsent, draftConnections, draftDocument, draftFile, DraftRefusal, resetDrafts } from './drafts';
-export { draftCheckAnswer, DRAFT_CHECK_LIMITS, holdDraftCheck } from './check';
+export { draftCheckAnswer, draftCheckCharges, DRAFT_CHECK_LIMITS, holdDraftCheck } from './check';
