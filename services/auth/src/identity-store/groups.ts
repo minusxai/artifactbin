@@ -22,6 +22,7 @@ import {IdentityError,isGroupRole,groupRoleRank,isTestDomainEmail,normalizeCreat
 import {reserveHandle} from './accounts';
 import {enqueueGroupMail} from './mail';
 import {groupAdminsSql} from './rules';
+import {isPersonalGroupSql} from './personal';
 import {internalId,isUniqueViolation,type IdentityTables} from './tables';
 
 interface GroupRow {id: string; handle: string; name: string; description: string; created_by: string; deleted_at: string | null; parent_id: string | null}
@@ -46,13 +47,13 @@ export function groupMethods(db: TransactionalQueryable, t: IdentityTables, opti
   const role = async (q: Queryable, userId: string, groupId: string): Promise<GroupRole | null> =>
     (await q.query<{role: GroupRole}>(`SELECT m.role FROM ${t.group_members} m JOIN ${t.groups} g ON g.id=m.group_id WHERE m.group_id=$1 AND m.user_id=$2 AND g.deleted_at IS NULL`, [groupId, userId])).rows[0]?.role ?? null;
   const live = async (q: Queryable, id: string): Promise<GroupRow | null> =>
-    (await q.query<GroupRow>(`SELECT * FROM ${t.groups} WHERE id=$1 AND deleted_at IS NULL`, [id])).rows[0] ?? null;
+    (await q.query<GroupRow>(`SELECT * FROM ${t.groups} WHERE id=$1 AND deleted_at IS NULL AND NOT ${isPersonalGroupSql('id')}`, [id])).rows[0] ?? null;
   const isTestAccount = async (q: Queryable, userId: string) =>
     (await q.query<{test_account: boolean}>(`SELECT test_account FROM ${t.users} WHERE id=$1`, [userId])).rows[0]?.test_account === true;
-  /** Lock live groups FOR UPDATE in the canonical order; the ids that were live. */
+  /** Lock live groups FOR UPDATE in the canonical order; the ids that were live. A personal group (./personal) is none: every change refuses it as missing. */
   const lockGroups = async (q: Queryable, ids: readonly string[]): Promise<Set<string>> => {
     if (!ids.length) return new Set();
-    return new Set((await q.query<{id: string}>(`SELECT id FROM ${t.groups} WHERE id=ANY($1::text[]) AND deleted_at IS NULL ORDER BY id COLLATE "C" FOR UPDATE`, [[...new Set(ids)]])).rows.map(row => row.id));
+    return new Set((await q.query<{id: string}>(`SELECT id FROM ${t.groups} WHERE id=ANY($1::text[]) AND deleted_at IS NULL AND NOT ${isPersonalGroupSql('id')} ORDER BY id COLLATE "C" FOR UPDATE`, [[...new Set(ids)]])).rows.map(row => row.id));
   };
   /**
    * The actor administers this live group, which is now locked: directly, or through an ancestor (`effectiveAdminVia`).

@@ -1,7 +1,8 @@
 /**
  * THE IDENTITY READ SURFACE: one thin view per identity table, in the read schema (IDENTITY__SCHEMA, default
  * `identity`), named as the table and exposing it as it is minus `SECRET_COLUMNS` (no filtering: readers keep
- * `deleted_at IS NULL` themselves), plus computed rule columns that cost nothing unless selected:
+ * `deleted_at IS NULL` themselves; the one exception is personal groups, `HIDDEN_ROWS`), plus computed rule columns
+ * that cost nothing unless selected:
  *  - `users.active`: may sign in and act on this deployment (`authenticatingUserSql` and, in a company deployment,
  *    `deploymentMemberSql`, over the deployment mode in `identity_settings`; no settings row: nobody is active);
  *  - `tokens.scopes` (the scope list) and `tokens.live`: the bearer read's own rule (row, expiry, OAuth family or, for a
@@ -24,6 +25,16 @@ import type {Table} from '@artifactbin/contracts';
 import {bearerLiveSql} from '../identity/bearer';
 import {authenticatingUserSql,deploymentMemberSql,groupAdminsSql,groupSignInLiveSql,type RuleNames} from './rules';
 import {IDENTITY_TABLES,SECRET_COLUMNS} from './schema';
+import {isPersonalGroupSql} from './personal';
+
+/**
+ * The rows a view leaves out: every person's personal group (./personal) and its one Admin row, which are identity's
+ * own and no reader's, so `groups`, `group_members` and `group_admins` answer exactly the ordinary groups.
+ */
+const HIDDEN_ROWS: Readonly<Record<string, (alias: string) => string>> = {
+  groups: alias => `NOT ${isPersonalGroupSql(`${alias}.id`)}`,
+  group_members: alias => `NOT ${isPersonalGroupSql(`${alias}.group_id`)}`,
+};
 
 export interface IdentitySchemas {
   /** AUTH__SCHEMA: the identity module's own schema (the base tables, Better Auth, the OAuth credentials). */
@@ -98,12 +109,13 @@ export function identityViewStatements(schemas: IdentitySchemas, options: {sessi
         ELSE ${groupSignInLiveSql('t', {groups: `${auth}.groups`, group_members: `${auth}.group_members`, group_sign_in_grants: `${auth}.group_sign_in_grants`, users: `${auth}.users`}, id => `COALESCE((SELECT issuer.active AND issuer.kind = 'account' AND NOT issuer.test_account FROM ${read}.users issuer WHERE issuer.id = ${id}), false)`)} END) AS live`})}
   FROM ${auth}.tokens t`);
     } else {
+      const hidden = HIDDEN_ROWS[table];
       statements.push(`CREATE OR REPLACE VIEW ${read}.${table} AS
-  SELECT ${plain(table, 'x')} FROM ${auth}.${table} x`);
+  SELECT ${plain(table, 'x')} FROM ${auth}.${table} x${hidden ? ` WHERE ${hidden('x')}` : ''}`);
     }
   }
   statements.push(`CREATE OR REPLACE VIEW ${read}.group_admins AS
-  ${groupAdminsSql({groups: `${auth}.groups`, group_members: `${auth}.group_members`})}`);
+  ${groupAdminsSql({groups: `${auth}.groups`, group_members: `${auth}.group_members`})} AND ${HIDDEN_ROWS.groups!('g')}`);
   if (options.sessions !== false) statements.push(`CREATE OR REPLACE VIEW ${read}.sessions AS
   SELECT ${plain('sessions', 's', {live: '(s."expiresAt" > now()) AS live'})} FROM ${auth}.session s`);
   return statements;

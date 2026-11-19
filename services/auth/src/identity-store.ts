@@ -16,6 +16,7 @@ import {groupMethods} from './identity-store/groups';
 import {mailMethods} from './identity-store/mail';
 import {initializeGroupRoleModel} from './identity-store/group-role-migration';
 import {identityTables} from './identity-store/tables';
+import {ensurePersonalGroups} from './identity-store/personal';
 
 export interface IdentityStoreOptions {
   /** The database: queries, and transactions on a connection of their own. */
@@ -76,7 +77,7 @@ const relationKind = async (db: Queryable, schema: string, name: string) =>
 
 /**
  * THE IDENTITY HOST'S BOOT: its own schema and tables (`ensureAuthSchema`, `IDENTITY_TABLES` under AUTH__SCHEMA), the
- * hierarchy row and the read views (./identity-store/views), in one transaction under an advisory lock so hosts
+ * hierarchy row, every person's personal group (./identity-store/personal) and the read views (./identity-store/views), in one transaction under an advisory lock so hosts
  * booting together do not race. Idempotent; runs on every start of whoever hosts identity (the app's database open in
  * a single-process install, the auth host otherwise), and again once Better Auth's tables exist (the sessions view).
  *
@@ -116,6 +117,7 @@ export async function ensureIdentitySchema(db: TransactionalQueryable, schemas: 
     await ensureTable(tx, IDENTITY_TABLES, {schema: auth});
     await initializeGroupRoleModel(tx, auth);
     await ensureIdentityRows(tx, auth);
+    await ensurePersonalGroups(tx, identityTables(auth));
     if (!await schemaExists(tx, read)) await tx.query(`CREATE SCHEMA ${read}`);
     const sessions = await relationKind(tx, auth, 'session') === 'r';
     const wanted = identityViewColumns();

@@ -3,6 +3,8 @@
  * resolves `users` to the identity read view) and built into the identity views' `active` and `live` columns
  * (qualified names: a view's definition must not depend on who creates it). `names` says where each table is.
  */
+import {isPersonalGroupSql} from './personal';
+
 export interface RuleNames {
   /** The account rows: `users` (the reader's view) or `<auth>.users` (the base table). */
   users: string;
@@ -51,10 +53,11 @@ export const groupAdminsSql = (names: GroupNames): string => `SELECT g.id AS gro
  * whose id is the SQL expression `user` hold at least `level` (an SQL expression, `'member'` or `'editor'`; anything
  * else holds nothing) on the live group `group`. An admin (a direct `admin` row, or an effective admin through an
  * ancestor: `groupAdminsSql`) holds editor and member; a direct `editor` row holds editor and member; a direct
- * `member` row holds member. Editor and Member never flow down the tree. The mint's guard and the `tokens` view's
+ * `member` row holds member. Editor and Member never flow down the tree. Nothing is held on a personal group
+ * (./personal): no sign-in is ever its. The mint's guard and the `tokens` view's
  * `live` both run it (./accounts `mintGroupSignIn`, ./views).
  */
-export const groupLevelHeldSql = (names: GroupNames, user: string, group: string, level: string): string => `(${level} IN ('member','editor') AND (EXISTS (
+export const groupLevelHeldSql = (names: GroupNames, user: string, group: string, level: string): string => `(${level} IN ('member','editor') AND NOT ${isPersonalGroupSql(group)} AND (EXISTS (
     SELECT 1 FROM ${names.group_members} held JOIN ${names.groups} held_group ON held_group.id=held.group_id AND held_group.deleted_at IS NULL
     WHERE held.group_id=${group} AND held.user_id=${user} AND (held.role='admin' OR held.role=${level} OR (held.role='editor' AND ${level}='member')))
   OR EXISTS (SELECT 1 FROM (${groupAdminsSql(names)}) held_admin WHERE held_admin.group_id=${group} AND held_admin.user_id=${user})))`;

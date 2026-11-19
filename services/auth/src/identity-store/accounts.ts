@@ -2,7 +2,8 @@
  * ACCOUNTS, HANDLES AND TOKENS: the identity store's writes to `users`, `handle_reservations` and `tokens`.
  *
  * The app's row per person follows the actor's claims (`syncProfile`): created on first sight with the welcome page
- * pending, its email kept current, a handle assigned (`localpart_xxxx`, renameable). Handles are one namespace with
+ * pending, its email kept current, a handle assigned (`localpart_xxxx`, renameable). Every person is written in the
+ * same statement as their personal group (./personal), which no reader sees. Handles are one namespace with
  * groups' (`reserveHandle`): a reservation is a tombstone, so a released or deleted name is never handed to someone
  * else silently. Tokens are prefix + 256 random bits, only the sha256 stored, soft revoked (`deleted_at`).
  */
@@ -10,6 +11,7 @@ import crypto from 'node:crypto';
 import {IdentityError,MAX_TOKEN_TTL_MS,MIN_TOKEN_TTL_MS,SERVICE_GROUP_SIGN_IN_MAX_TTL_MS,isValidHandle,type ServiceGroupSignInGrant,type IdentityService,type IdentityUserRow,type MintedIdentityToken,type Queryable,type TransactionalQueryable} from '@artifactbin/contracts';
 import {internalId,isUniqueViolation,tokenId,type IdentityTables} from './tables';
 import {groupLevelHeldSql,serviceGrantStandsSql} from './rules';
+import {personalGroupCtes,personalGroupId} from './personal';
 
 const USER_COLS = 'id, email, kind, parent_user_id, expires_at, name, username, image_key, welcome_pending, created_at';
 const TOKEN_PREFIX = 'mx_';
@@ -170,8 +172,9 @@ export function accountMethods(db: TransactionalQueryable, t: IdentityTables): A
       if (!address) return {user: await userById(db, userId)};
       try {
         // A NEW person starts with the welcome page pending (and a test-domain row marked a test account); an
-        // existing row keeps both and only follows the address.
-        await db.query(`INSERT INTO ${t.users} AS u (id, email, welcome_pending, test_account) VALUES ($1, $2, true, $3)
+        // existing row keeps both and only follows the address. Their personal group comes with the row.
+        await db.query(`WITH ${personalGroupCtes(t, '$1::text')}
+          INSERT INTO ${t.users} AS u (id, email, welcome_pending, test_account) VALUES ($1, $2, true, $3)
           ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email WHERE u.email IS DISTINCT FROM EXCLUDED.email`, [userId, address, testAccount]);
       } catch (error) {
         const held = (await db.query<{id: string}>(`SELECT id FROM ${t.users} WHERE email = $1`, [address])).rows[0];
@@ -182,7 +185,7 @@ export function accountMethods(db: TransactionalQueryable, t: IdentityTables): A
       return {user: user && !user.username ? await ensureUsername({userId}) : user};
     },
     async createUser({email, name}) {
-      return (await db.query<IdentityUserRow>(`INSERT INTO ${t.users} (id, email, name) VALUES ($1, $2, $3) RETURNING ${USER_COLS}`,
+      return (await db.query<IdentityUserRow>(`WITH ${personalGroupCtes(t, '$1::text')} INSERT INTO ${t.users} (id, email, name) VALUES ($1, $2, $3) RETURNING ${USER_COLS}`,
         ['usr_' + internalId(), email.toLowerCase().trim(), name ?? null])).rows[0]!;
     },
     ensureUsername,
@@ -219,6 +222,7 @@ export function accountMethods(db: TransactionalQueryable, t: IdentityTables): A
         const id = 'usr_' + internalId();
         const row = (await tx.query<{created_at: string; expires_at: string}>(`INSERT INTO ${t.users} (id, email, kind, parent_user_id, expires_at, name)
           VALUES ($1, NULL, 'testuser', $2, $3, $4) RETURNING created_at, expires_at`, [id, parentId, new Date(Date.now() + ttlMs).toISOString(), label])).rows[0]!;
+        await tx.query(`WITH ${personalGroupCtes(t, '$1::text')} SELECT 1`, [id]);
         const token = await insertToken(t, tx, {name: tokenName, userId: id, expiresInMs: ttlMs});
         return {id, ...row, tokenId: token.id, token: token.token};
       });
@@ -228,6 +232,7 @@ export function accountMethods(db: TransactionalQueryable, t: IdentityTables): A
         if (!(await tx.query(`SELECT id FROM ${t.users} WHERE id = $1 AND kind = 'testuser' FOR UPDATE`, [userId])).rows.length) return false;
         await tx.query(`DELETE FROM ${t.tokens} WHERE user_id = $1`, [userId]);
         await tx.query(`DELETE FROM ${t.group_members} WHERE user_id = $1`, [userId]);
+        await tx.query(`DELETE FROM ${t.groups} WHERE id = $1`, [personalGroupId(userId)]);
         await tx.query(`DELETE FROM ${t.handle_reservations} WHERE kind = 'user' AND subject_id = $1`, [userId]);
         await tx.query(`DELETE FROM ${t.users} WHERE id = $1`, [userId]);
         return true;
