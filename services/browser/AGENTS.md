@@ -30,7 +30,12 @@ Chromium, `src/sessions.ts` and the `session-*` files the sessions, `src/upload-
   restate a number.
 - A render URL must resolve on the service's network to the app: never 127.0.0.1, never a bare host Chrome
   makes a TLD (`app` becomes the HSTS-preloaded `.app`).
+- A render reaches the network only through its own proxy (`src/egress.ts`): its origin and `allowedOrigins`, none
+  with `internalOrigin`. Never launch without `EGRESS_ARGS`, the refuse-all proxy and `chromiumEnv`.
+- Exports and checks have a browser each; checks are admitted by `src/check-admission.ts`, renderers held to
+  `src/render-limits.ts`. `BROWSER__RENDER_SANDBOX=chromium` refuses to start unsandboxed.
 
 ## Checks
+- Egress, lanes, limits, sandbox: `egress.test.ts`, `render-lanes.test.ts`, `check-admission.test.ts`.
 - `npm test -- --files services/browser/__tests__/contract.test.ts services/browser/__tests__/internal-assets.test.ts services/browser/__tests__/internal-assets-boundary.test.ts services/app/server/__tests__/public-assets-host.test.ts services/browser/__tests__/upload.test.ts`
 - Sessions: `services/browser/__tests__/sessions.test.ts`, `session-process.test.ts`, `session-worker.test.ts`.

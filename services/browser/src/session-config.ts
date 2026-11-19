@@ -46,7 +46,23 @@ function readSessionEnv(source: NodeJS.ProcessEnv) {
     sessions: wholeCount('BROWSER__SESSION_MAX', env('BROWSER', 'SESSION_MAX'), DEFAULT_SESSION_CAPACITY.sessions),
     sessionsPerActor: wholeCount('BROWSER__SESSION_MAX_PER_ACTOR', env('BROWSER', 'SESSION_MAX_PER_ACTOR'), DEFAULT_SESSION_CAPACITY.sessionsPerActor),
   };
-  return { cgroupRoot, capacity, sandbox: sandboxFrom(env('BROWSER', 'SANDBOX'), source), pagesHost: pagesHostFrom(env('APP', 'PAGES_HOST')), names: namesRead() };
+  const renderSandbox = renderSandboxFrom(env('BROWSER', 'RENDER_SANDBOX'));
+  return { cgroupRoot, capacity, sandbox: sandboxFrom(env('BROWSER', 'SANDBOX'), source), renderSandbox, pagesHost: pagesHostFrom(env('APP', 'PAGES_HOST')), names: namesRead() };
+}
+
+/**
+ * WHETHER RENDERS RUN IN CHROMIUM'S OWN SANDBOX (`BROWSER__RENDER_SANDBOX`): exports and checks draw authors' pages in
+ * this service's Chromium. `chromium` launches it sandboxed (the host must allow unprivileged user namespaces; the
+ * service refuses to start when it cannot); `none` says out loud that it runs without one; unset runs without one too,
+ * as before, with a warning at boot. Its environment is scrubbed either way (local.ts chromiumEnv). Anything else is
+ * refused: a misspelled hardening switch must never read as "hardened".
+ */
+export interface RenderSandboxChoice { mode: 'chromium' | 'none' | 'warn' }
+export function renderSandboxChoice(source: NodeJS.ProcessEnv): RenderSandboxChoice { return readSessionEnv(source).renderSandbox; }
+function renderSandboxFrom(value: string | undefined): RenderSandboxChoice {
+  if (value === undefined || value === '') return { mode: 'warn' };
+  if (value === 'chromium' || value === 'none') return { mode: value };
+  throw new Error(`BROWSER__RENDER_SANDBOX=${value} is not a setting this build knows: chromium (sandboxed) or none (acknowledged unsandboxed).`);
 }
 
 /**

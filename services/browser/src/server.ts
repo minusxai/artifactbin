@@ -12,5 +12,8 @@ useLoopbackLookup();
 const { env } = createEnv(process.env);
 const port = Number(env('APP', 'PORT') ?? '8080');
 const serviceSecret = serviceSecretForServer(process.env);
-const listening = serveBrowser(createBrowser({ sessions: sessionProcessOptions(process.env) }), { ...(serviceSecret ? { serviceSecret } : {}) }).listen(port, '0.0.0.0');
+const browser = createBrowser({ sessions: sessionProcessOptions(process.env) });
+// BROWSER__RENDER_SANDBOX=chromium: a host that cannot sandbox Chromium refuses to start here, by name, before it listens.
+await browser.start();
+const listening = serveBrowser(browser, { ...(serviceSecret ? { serviceSecret } : {}) }).listen(port, '0.0.0.0');
 log('browser').info(`listening on ${listening.url}`);

@@ -3,9 +3,11 @@
  * and an agent signed in as a group, at either level, hear the draft's console error and its overflow, with a picture;
  * the checking browser carries none of the caller's credentials (every request reaching the app is recorded, and the
  * page says what cookie it sees), and a draft aiming at an internal address (fetch, image, frame, stylesheet,
- * WebSocket, beacon, and the https image and media its policy admits, which only the browser's own rule stops) never
- * reaches it: a TCP listener there counts every connection. As in check-browser.test.ts, only
- * the internal address is this test server's.
+ * WebSocket, beacon, WebRTC's TURN over TCP, a preconnect, and the https image and media its policy admits, which only
+ * the browser's own rule stops) never reaches it: a TCP listener there counts every connection (services/browser
+ * egress.test.ts aims at every other way out). What it asks of the app is asked as the draft's own origin, so the app
+ * answers only its public files (an image its policy admits under /api/users/ is refused 403). As in
+ * check-browser.test.ts, only the internal address is this test server's.
  */
 import { createServer, type Socket } from 'node:net';
 import { afterAll, beforeAll, expect, it } from 'vitest';
@@ -38,15 +40,16 @@ const b64 = (text: string) => Buffer.from(text).toString('base64');
 const draft = () => ({
   entryPath: 'draft.html', files: [{ path: 'data.csv', base64: b64('month,revenue\n2026-01,10\n'), contentType: 'text/csv' }],
   html: `<!doctype html><html><head><meta charset="utf-8"><title>Draft</title>
-<link rel="af-dataset" data-af-name="data" href="./data.csv"><link rel="stylesheet" href="http://${probe}/style.css"></head>
+<link rel="af-dataset" data-af-name="data" href="./data.csv"><link rel="stylesheet" href="http://${probe}/style.css"><link rel="preconnect" href="http://${probe}"></head>
 <body style="margin:0"><h1>Quarterly draft</h1><div id="wide" style="width:3000px;height:20px;background:#eee"></div>
 <img src="http://${probe}/image.png" alt=""><iframe src="http://${probe}/frame" title="x"></iframe>
-<img src="https://${probe}/secure.png" alt=""><video src="https://${probe}/clip.mp4" preload="auto"></video>
+<img src="https://${probe}/secure.png" alt=""><video src="https://${probe}/clip.mp4" preload="auto"></video><img src="${pagesSite().app}/api/users/nobody/avatar" alt="">
 <script type="module">
 console.error('cookie=[' + document.cookie + ']');
 fetch('http://${probe}/fetch').catch(() => {});
 try { new WebSocket('ws://${probe}/socket'); } catch {}
 try { navigator.sendBeacon('http://${probe}/beacon', 'x'); } catch {}
+try { const pc = new RTCPeerConnection({ iceServers: [{ urls: 'turn:${probe}?transport=tcp', username: 'u', credential: 'p' }] }); pc.createDataChannel('x'); pc.createOffer().then((offer) => pc.setLocalDescription(offer)); } catch {}
 const rows = await fetch('./data.csv').then((answer) => answer.text());
 console.error('total is not defined: ' + rows.trim().split('\\n').length + ' lines');
 </script></body></html>`,
@@ -66,7 +69,11 @@ it('a person and a group agent at either level hear the console error and the ov
       { kind: 'console', message: 'cookie=[]' },
       { kind: 'console', message: 'total is not defined: 2 lines' },
       { kind: 'overflow', element: 'div#wide', message: expect.stringMatching(/^the page is \d+px wider than its 1280px window: div#wide sticks out$/) },
+      { kind: 'request', message: `GET ${pagesSite().app}/api/users/nobody/avatar answered 403` },
     ]));
+    // Asked of the app as the draft's own origin, which the app answers with its public files alone.
+    const avatar = reached.find(({ url }) => url.endsWith('/api/users/nobody/avatar'));
+    expect(avatar?.headers.origin, who).toMatch(/^https?:\/\/draft-/);
     expect(found.image, who).toMatchObject({ mime: 'image/jpeg', width: 1280, data: expect.any(String) });
     // What the checking browser asked the app for (the draft, its file): no authorization, no cookie, nothing of the caller.
     expect(reached.some(({ url }) => url.endsWith('/draft.html') || url.includes('/draft.html?')), who).toBe(true);

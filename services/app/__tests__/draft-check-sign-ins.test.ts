@@ -98,35 +98,68 @@ it('refuses by name what is too large, malformed or not a draft, before the brow
  expect(asked).toHaveLength(0);
 });
 
-it('counts each author\'s checks an hour, a group\'s sign-in by its group and level',async()=>{
- const {eve,team,check}=await people();
- stand();setDraftCheckCapForTests(2);onTestFinished(()=>setDraftCheckCapForTests(null));
- const member=await eve.asGroup(team.id,'member'),again=await eve.asGroup(team.id,'member'),editor=await eve.asGroup(team.id,'editor');
- expect((await check(eve.token)).status).toBe(200);expect((await check(eve.token)).status).toBe(200);
- expect(await check(eve.token)).toEqual({status:429,body:{error:'rate_limited',message:'At most 2 draft checks an hour; try again later.'}});
- // The group at member level is one author, whichever of its sign-ins asks; at editor level another.
- expect((await check(member.token)).status).toBe(200);expect((await check(again.token)).status).toBe(200);
- expect((await check(member.token)).status).toBe(429);
- expect((await check(editor.token)).status).toBe(200);
+it('counts a person\'s checks an hour however they sign in, and a group\'s by the group and each member\'s share of it',async()=>{
+ const {host,eve,team,check}=await people();
+ const ada=await host.signIn('mxmx_test_ga_ada@example.test');
+ const asked=stand().asked;setDraftCheckCapForTests(3);onTestFinished(()=>setDraftCheckCapForTests(null));
+ const spent={status:429,body:{error:'rate_limited',message:'At most 3 draft checks an hour (and 15 s of browser time) for you, whichever way you sign in, and a group\'s own share; try again later.'}};
+ const member=await eve.asGroup(team.id,'member'),editor=await eve.asGroup(team.id,'editor');
+ // Eve's own checks and her group agents' are one person's hour (3); her share of the group (2) is spent first.
+ expect((await check(eve.token)).status).toBe(200);
+ expect((await check(member.token)).status).toBe(200);expect((await check(editor.token)).status).toBe(200);
+ expect(await check(member.token)).toEqual(spent);
+ expect(await check(eve.token)).toEqual(spent);
+ // Another member's share of the same group is their own; the group's hour (6) is shared by both.
+ const adaMember=await ada.asGroup(team.id,'member'),adaEditor=await ada.asGroup(team.id,'editor');
+ expect((await check(adaMember.token)).status).toBe(200);expect((await check(adaEditor.token)).status).toBe(200);
+ expect(await check(adaMember.token)).toEqual(spent);
+ // Each check names every key it spends from to the browser service, which counts them for every app process.
+ expect(asked.map(request=>request.charge?.map(charge=>charge.key))).toEqual([
+  [`person:${eve.userId}`],
+  [`person:${eve.userId}`,`group:${team.id}`,`group:${team.id}:by:${eve.userId}`],
+  [`person:${eve.userId}`,`group:${team.id}`,`group:${team.id}:by:${eve.userId}`],
+  [`person:${ada.userId}`,`group:${team.id}`,`group:${team.id}:by:${ada.userId}`],
+  [`person:${ada.userId}`,`group:${team.id}`,`group:${team.id}:by:${ada.userId}`],
+ ]);
+ expect(asked[1]!.charge).toEqual([{key:`person:${eve.userId}`,perHour:3,msPerHour:15_000},{key:`group:${team.id}`,perHour:6,msPerHour:30_000},{key:`group:${team.id}:by:${eve.userId}`,perHour:2,msPerHour:10_000}]);
 });
 
-it('runs one check per author and two in all at once, answering browser_busy past either',async()=>{
- const {eve,team,check}=await people();
+it('runs one check per person (whichever way they sign in) and per group, two in all at once, answering browser_busy past any',async()=>{
+ const {host,eve,team,check}=await people();
+ const ada=await host.signIn('mxmx_test_ga_ada@example.test');
  let open!:()=>void;const hold=new Promise<void>(resolve=>{open=resolve;});
  const {asked}=stand(hold);
- const member=await eve.asGroup(team.id,'member'),editor=await eve.asGroup(team.id,'editor');
+ const member=await eve.asGroup(team.id,'member'),adaMember=await ada.asGroup(team.id,'member');
+ const busy={status:429,body:{error:'browser_busy',message:'At most 1 of your draft checks and 2 in all run at once; check again when yours finishes.'}};
  const first=check(eve.token);
  while(asked.length<1)await new Promise(resolve=>setTimeout(resolve,5));
- const busy={status:429,body:{error:'browser_busy',message:'At most 1 of your draft checks and 2 in all run at once; check again when yours finishes.'}};
- expect(await check(eve.token)).toEqual(busy);
- const second=check(member.token);
+ // Eve signed in as her group is still Eve.
+ expect(await check(eve.token)).toEqual(busy);expect(await check(member.token)).toEqual(busy);
+ const second=check(adaMember.token);
  while(asked.length<2)await new Promise(resolve=>setTimeout(resolve,5));
- expect(await check(editor.token)).toEqual(busy);
+ // The group has a check running (Ada's), and two run in all.
+ expect(await check(ada.token)).toEqual(busy);
  open();
  expect((await first).status).toBe(200);expect((await second).status).toBe(200);
  // A busy refusal spent no hour; a finished check frees its slot.
- expect((await check(editor.token)).status).toBe(200);
+ expect((await check(member.token)).status).toBe(200);
+ expect((await check(ada.token)).status).toBe(200);
+});
+
+it('answers the browser service\'s own refusals (for every app process) as this route\'s, and the relay\'s as a browser that could not look',async()=>{
+ const {eve,check}=await people();
+ setDraftCheckCapForTests(2);onTestFinished(()=>setDraftCheckCapForTests(null));
+ for(const [reason,error] of [['busy','browser_busy'],['rate_limited','rate_limited']] as const){
+  setServices({browser:{...original,inspect:async():Promise<PageInspection>=>({ok:false,reason})}});
+  expect(await check(eve.token)).toMatchObject({status:429,body:{error}});
+ }
+ // The busy refusal spent none of this hour (2): the one rate_limited answer did, so one check is left.
+ stand();
  expect((await check(eve.token)).status).toBe(200);
+ expect((await check(eve.token)).body).toMatchObject({error:'rate_limited'});
+ setServices({browser:{...original,inspect:async():Promise<PageInspection>=>({ok:false,reason:'busy'})}});
+ const {draftCheckAnswer}=await import('@/lib/page-drafts');
+ expect(await draftCheckAnswer(DRAFT)).toEqual({status:503,body:{error:'check_unavailable'}});
 });
 
 it('refuses a guest, a test user, a bare token and nobody, making nothing',async()=>{

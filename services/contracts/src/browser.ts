@@ -50,7 +50,8 @@ export interface PageRequest {
   viewport: { width: number; height: number };
   /** The element to shoot (or harvest under): `body` for a markup document, `main` for a data tier. */
   selector: string;
-  /** Abort every request the page makes to another origin (the document is self-contained by rule). */
+  /** Abort every request the page makes to another origin (the document is self-contained by rule). Whatever it says, a
+   * render reaches no other origin over the network, by any protocol (the browser service's egress proxy). */
   sameOriginOnly?: boolean;
   /** Exact additional first-party origins allowed while `sameOriginOnly` remains enforced. */
   allowedOrigins?: string[];
@@ -124,7 +125,16 @@ export interface PageInspectRequest extends PageRequest {
   /** Also say a page wider than its window (`overflow`: how much wider, naming the outermost elements that stick out).
    * An older service ignores it and answers no such problem. */
   overflow?: boolean;
+  /** Who this check is charged to, each key spending from its own hour (CheckCharge); the browser service keeps the
+   * count for every app process at once. An older service ignores it (the app keeps its own bounds as well). */
+  charge?: CheckCharge[];
 }
+/**
+ * One key a check spends from, in the one browser service: at most one of its checks in the check lane at a time, at
+ * most `perHour` checks and `msPerHour` of browser time in the last hour. Past any, the check is refused (`busy`,
+ * `rate_limited`) before it is loaded.
+ */
+export interface CheckCharge { key: string; perHour: number; msPerHour: number }
 /** A page's picture: `data` the JPEG, base64; `bytes` its decoded length. */
 export interface PageImage { mime: 'image/jpeg'; width: number; height: number; bytes: number; data: string }
 export const PAGE_IMAGE_LIMITS = { bytes: 2_000_000, width: 2_000, height: 2_000 } as const;
@@ -141,6 +151,8 @@ export const PAGE_PROBLEM_LIMITS = { problems: 20, message: 500, element: 40, co
 export type PageInspection =
   | { ok: true; problems: PageProblem[]; truncated: boolean; image?: PageImage }
   | { ok: false; reason: 'unavailable' | 'navigation' | 'failed'; detail?: string }
+  /** The check lane is full or one of its charges already has a check in it (`busy`), or a charge's hour is spent. */
+  | { ok: false; reason: 'busy' | 'rate_limited'; detail?: string }
   /** The service predates this operation (a mixed-version rollout): nothing was inspected. */
   | { ok: false; reason: 'inspect_unavailable' };
 

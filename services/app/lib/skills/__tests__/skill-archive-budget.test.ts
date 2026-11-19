@@ -61,7 +61,9 @@ import {archiveFor} from '@/lib/skills';
 // 1.630 MiB: main sat 269 bytes under 1.629; af-data-table measures its columns again when a sort mark, a font
 // swapping in or being shown after a hidden draw would clip a header (the readable data-table-measure.ts, ~0.7 KB
 // stored), leaving 1,708,556 bytes.
-const SKILL_ARCHIVE_MAX_BYTES=1.630*1024*1024;
+// 1.631 MiB: main sat ~40 bytes under 1.630; bundling (publish and check --draft) refuses hidden files and a home or root
+// folder, so a hostile page cannot name ~/.aws/credentials into an upload, leaving 1,709,439 bytes.
+const SKILL_ARCHIVE_MAX_BYTES=1.631*1024*1024;
 
 describe('the downloadable author skill archive',()=>{
  it('fits its size budget',async()=>{
