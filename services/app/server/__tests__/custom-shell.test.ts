@@ -73,6 +73,21 @@ describe('with a custom shell',()=>{
   expect((await app.request(`/a/${ID}?embed=1`,html)).headers.get('content-security-policy')).toContain('frame-ancestors https://portal.example');
   expect((await app.request('/account',html)).headers.get('content-security-policy')).toContain("frame-ancestors 'self';");
  });
+ it('lets the trusted embedders frame only the embedded chat (/conversations?embed=1), and nothing else',async()=>{
+  overrideConfig({},{APP__DEPLOYMENT_MODE:'public',EMBED__TRUSTED_ORIGINS:''});
+  const app=server(plain),csp=async(path:string)=>(await app.request(path,html)).headers.get('content-security-policy');
+  expect(await csp('/conversations?embed=1')).toContain("frame-ancestors 'self';");
+  overrideConfig({},{APP__DEPLOYMENT_MODE:'public',EMBED__TRUSTED_ORIGINS:'https://portal.example'});
+  expect(await csp('/conversations?embed=1')).toContain("frame-ancestors 'self' https://portal.example;");
+  expect(await csp('/conversations/?embed=1&session=s1')).toContain("frame-ancestors 'self' https://portal.example;");
+  expect(await csp('/?embed=1')).toContain("frame-ancestors 'self';");
+  expect(await csp('/settings?embed=1')).toContain("frame-ancestors 'self';");
+  expect(await csp('/conversations')).toContain("frame-ancestors 'self';");
+  expect(await csp('/conversations?embed=0')).toContain("frame-ancestors 'self';");
+  expect(await csp(`/a/${ID}?embed=1`)).toContain('frame-ancestors https://portal.example;');
+  // Without a shell the app's own screens keep their policy.
+  expect((await server(null).request('/account?embed=1',html)).headers.get('content-security-policy')).toContain("frame-ancestors 'self';");
+ });
  it('leaves the handle step, the agent handoff, the API, assets, every door and file under a page, the installed app and export captures to the app',async()=>{
   const app=server(plain);
   for(const path of ['/welcome','/start','/start?agent=1','/local/connect']){

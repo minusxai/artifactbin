@@ -13,13 +13,19 @@ import {groupLevelHeldSql} from './identity-store/rules';
 import {identityTables} from './identity-store/tables';
 import {readEnv} from './env';
 import {usesDevOutbox} from './mail';
+import {TRUSTED_SIGNIN_PATH,createTrustedTokenVerifier,trustedCallbackPath,trustedEmailOf,trustedIssuersOf} from './identity/trusted-issuers';
+import {trustedSignIn} from './identity-store/trusted-sign-in';
 /** `setCookies`: Set-Cookie values the store wants sent back (a rolled-forward session cookie). */
-export interface SessionInfo {sessionId?:string;userId:string;email?:string;emailVerified?:boolean;setCookies?:string[]}
+export interface SessionInfo {sessionId?:string;userId:string;email?:string;emailVerified?:boolean;setCookies?:string[];
+ /** Set only by trusted-issuer sign-in, after the token verified: the issuer vouches for the person (see `admitIdentity`). */
+ trustedIssuer?:string}
 export interface SessionStore {
  identity?(userId:string):Promise<SessionInfo|null>;
  resolve(request:Request):Promise<SessionInfo|null>;
  live?:(sessionId:string,userId:string)=>Promise<boolean>;
  handler?:(request:Request)=>Promise<Response>;
+ /** A new session for an account already established and admitted (trusted-issuer sign-in): its Set-Cookie values. */
+ start?:(userId:string)=>Promise<string[]>;
 }
 export interface AuthOptions {
  upstream:Upstream;
@@ -36,6 +42,11 @@ export interface AuthOptions {
  events?:EventsService;
  /** Private deployments may explicitly trust their preceding transport. OSS leaves this zero. */
  trustedHops?:number;
+ /**
+  * The identity tables with transactions, for the trusted-issuer sign-in's writes only (./identity/trusted-issuers).
+  * Separate from `identityDb`, whose transactions would also turn on the identity call host.
+  */
+ identityTransactions?:TransactionalQueryable;
 }
 export type AuthEnv={Variables:{actor:Actor}};
 export type AuthApp=Hono<AuthEnv>;
@@ -157,6 +168,7 @@ export function loginRoutes(o: AuthOptions): Part<AuthEnv> {
           return c.json({ error: 'forbidden_origin' }, 403);
         return next();
       });
+      mountTrustedSignIn(a, o);
       if (o.sessions.handler) a.all('/api/auth/*', async c => {
         const response=await o.sessions.handler!(c.req.raw);
         if(!o.admitIdentity||response.status>=400)return response;
@@ -170,6 +182,38 @@ export function loginRoutes(o: AuthOptions): Part<AuthEnv> {
       });
     },
   };
+}
+
+/**
+ * TRUSTED-ISSUER SIGN-IN (./identity/trusted-issuers): a form POST, usually a frame's navigation from the issuer's
+ * page, so it answers like a sign-in page would: 303 to the same-origin `callbackUrl` (default `/`, `group` set to the
+ * token's group) with the session
+ * cookie, or a JSON refusal. Off (404) without a configured issuer. The token is checked before anything is written
+ * (and the issuer's Origin before its signature); the identity writes commit before the session is created, and the
+ * deployment's admission is asked in between, so a refused person gets no session.
+ */
+/** The callback with `group=<the token's group>`, so the page opens in that group rather than one it remembered. */
+const withGroup=(path:string,groupId:string):string=>{const url=new URL(path,'http://callback.invalid');url.searchParams.set('group',groupId);return `${url.pathname}${url.search}${url.hash}`;};
+function mountTrustedSignIn(a:AuthApp,o:AuthOptions):void {
+  const verifier=createTrustedTokenVerifier(trustedIssuersOf(o.env));
+  const schema=readEnv(o.env,'AUTH__SCHEMA')??'auth';
+  a.post(TRUSTED_SIGNIN_PATH,async c=>{
+    const refuse=(error:string,status:401|403|404|415|503)=>c.json({error},status,{'cache-control':'no-store'});
+    if(!verifier.enabled||!o.identityTransactions||!o.sessions.start)return refuse('not_found',404);
+    if(!/^application\/x-www-form-urlencoded(?:;|$)/i.test(c.req.header('content-type')??''))return refuse('unsupported_media_type',415);
+    const form=new URLSearchParams(await c.req.text());
+    const checked=verifier.verify(form.get('token')??'',c.req.header('origin'));
+    if(!checked.ok)return refuse(checked.refusal,checked.refusal==='forbidden_origin'?403:401);
+    const {issuer,subject,group,tenancyId,name}=checked.claims;
+    const result=await trustedSignIn(o.identityTransactions,{issuer:issuer.issuer,subject,group,tenancyId,...(name?{name}:{}),
+      ...(issuer.parentGroup?{parentGroup:issuer.parentGroup}:{}),email:trustedEmailOf(issuer.issuer,subject)},schema);
+    if(!result.ok)return refuse(result.refusal,result.refusal==='parent_group_missing'?503:result.refusal==='invalid_claims'?401:403);
+    if(o.admitIdentity&&!await o.admitIdentity({userId:result.userId,email:result.email,emailVerified:true,trustedIssuer:issuer.issuer}))return refuse('deployment_admission_required',403);
+    const cookies=await o.sessions.start(result.userId);
+    const headers=new Headers({location:withGroup(trustedCallbackPath(form.get('callbackUrl')),result.groupId),'cache-control':'no-store'});
+    for(const cookie of cookies)headers.append('set-cookie',cookie);
+    return new Response(null,{status:303,headers});
+  });
 }
 
 /** Standard OAuth and discovery use the same identity database as human sessions. */

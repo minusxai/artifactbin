@@ -21,7 +21,8 @@
  * this runtime share ONE object instead of the renderer holding a copy.
  */
 import { betterAuth } from 'better-auth';
-import { createAuthMiddleware } from 'better-auth/api';
+import { createAuthEndpoint, createAuthMiddleware } from 'better-auth/api';
+import { setSessionCookie } from 'better-auth/cookies';
 import { getMigrations } from 'better-auth/db/migration';
 import { isTestDomainEmail, type EventsService, type Queryable, type TestDomainSignIn } from '@artifactbin/contracts';
 import { emailOTP, genericOAuth } from 'better-auth/plugins';
@@ -126,13 +127,38 @@ const emailOf = async (db: Kysely<Record<string, unknown>>, userId: string): Pro
 export interface HumanAuth {
   /** Better Auth's HTTP handler: mount at /api/auth/*. */
   handler: (request: Request) => Promise<Response>;
-  sessions: { live(sessionId:string,userId:string):Promise<boolean>; identity?(userId:string): Promise<{userId:string;email:string;emailVerified:boolean}|null>; resolve(request: Request): Promise<{ sessionId:string; userId: string; email: string; emailVerified: boolean; setCookies?: string[] } | null> };
+  sessions: { live(sessionId:string,userId:string):Promise<boolean>; identity?(userId:string): Promise<{userId:string;email:string;emailVerified:boolean}|null>; resolve(request: Request): Promise<{ sessionId:string; userId: string; email: string; emailVerified: boolean; setCookies?: string[] } | null>;
+    /** A new browser session for an account the caller has already admitted (trusted-issuer sign-in): its Set-Cookie values. */
+    start(userId: string): Promise<string[]> };
   /** The instance, for identity routes (sign-out on revoke, …). */
   api: ReturnType<typeof betterAuth>['api'];
 }
 
 const usrId = () => 'usr_' + BigInt('0x' + randomBytes(12).toString('hex')).toString(36);
 const anyId = (model: string) => `${model.slice(0, 3)}_` + BigInt('0x' + randomBytes(12).toString('hex')).toString(36);
+
+/**
+ * THE SERVER-ONLY SESSION DOOR: a session for an account an in-process caller has already established and admitted
+ * (the trusted-issuer sign-in, ../identity/trusted-issuers). `serverOnly` keeps it off Better Auth's router, so no
+ * request reaches it; it creates the session row through Better Auth's own adapter (its `session.create` hooks run as
+ * for every sign-in) and sets the usual session cookie, read back by the caller from the returned headers.
+ */
+const trustedSessionPlugin = {
+  id: 'trusted-session',
+  endpoints: {
+    trustedSession: createAuthEndpoint.serverOnly({ method: 'POST' }, async (ctx) => {
+      const userId = (ctx.body as { userId?: unknown } | undefined)?.userId;
+      if (typeof userId !== 'string' || !userId) throw new Error('trusted session: no user');
+      const user = await ctx.context.internalAdapter.findUserById(userId);
+      if (!user) throw new Error('trusted session: unknown user');
+      // Not remembered: a browser-session cookie, and a server expiry Better Auth never extends (one day). The parent
+      // signs the person in again on every frame load, so nothing longer is needed.
+      const session = await ctx.context.internalAdapter.createSession(userId, true);
+      await setSessionCookie(ctx, { session, user }, true);
+      return ctx.json({ ok: true });
+    }),
+  },
+};
 
 /** The Better Auth options type, named so the renderer and the runtime can share the function's shape. */
 export type BetterAuthOptions = Parameters<typeof betterAuth>[0];
@@ -239,6 +265,7 @@ export function humanAuthOptions(opts: HumanAuthOptions, db: Kysely<Record<strin
     },
     ...(opts.google ? { socialProviders: { google: { clientId: opts.google.clientId, clientSecret: opts.google.clientSecret } } } : {}),
     plugins: [
+      trustedSessionPlugin,
       emailOTP({
         otpLength: 6,
         expiresIn: 600,
@@ -315,6 +342,10 @@ export async function createHumanAuth(opts: HumanAuthOptions): Promise<HumanAuth
         if (!s?.user?.id) return null;
         const setCookies = headers.getSetCookie();
         return { sessionId:s.session.id, userId: s.user.id, email: s.user.email, emailVerified: !!s.user.emailVerified, ...(setCookies.length ? { setCookies } : {}) };
+      },
+      async start(userId) {
+        const api = auth.api as unknown as { trustedSession(input: { body: { userId: string }; returnHeaders: true }): Promise<{ headers: Headers }> };
+        return (await api.trustedSession({ body: { userId }, returnHeaders: true })).headers.getSetCookie();
       },
     },
   };

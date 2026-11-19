@@ -242,6 +242,8 @@ async function main(): Promise<void> {
       cookieSecret: authSecret!,
       secure: baseURL.startsWith('https://'),
       identityDb: queryable,
+      // The trusted-issuer sign-in's writes, in one transaction on the app's own handle (identityDb stays plain).
+      identityTransactions: { ...queryable, transaction: fn => db.transaction(fn) },
       appSchema: readEnv(env, 'APP__SCHEMA'),
       events,
     })]).fetch);

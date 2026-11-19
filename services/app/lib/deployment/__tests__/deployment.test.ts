@@ -38,6 +38,20 @@ describe('company admission',()=>{
   expect(await canUseDeploymentIdentity('next')).toBe(false);
   expect(await admitDeploymentIdentity(identity('next','next@example.com'))).toBe(false);
  });
+ it('admits a trusted issuer person once setup is complete, without the default group or the email patterns',async()=>{
+  overrideConfig({}, {APP__DEPLOYMENT_MODE:'company',APP__DEPLOYMENT_OWNER_EMAIL:'owner@example.com',AUTH__INVITE_ONLY:'true',AUTH__ALLOWED_EMAIL_PATTERNS:'*@example.com'});
+  const tenant={userId:'tenant',email:'user_t1@parent.trusted-issuer.invalid',emailVerified:true};
+  expect(await admitDeploymentIdentity({...tenant,trustedIssuer:'parent'})).toBe(false);
+  await admitDeploymentIdentity(identity('owner','owner@example.com'));
+  const db=await getDb();
+  await db.query("INSERT INTO groups(id,handle,name,created_by) VALUES ('group','team','Team','owner')");
+  await db.query("INSERT INTO group_members(group_id,user_id,role) VALUES ('group','owner','admin')");
+  await setupDeployment('owner','group');
+  expect(await admitDeploymentIdentity(tenant)).toBe(false);
+  expect(await admitDeploymentIdentity({...tenant,trustedIssuer:'parent'})).toBe(true);
+  expect(await admitDeploymentIdentity({userId:'tenant'})).toBe(true);
+  expect((await db.query("SELECT 1 FROM group_members WHERE user_id='tenant'")).rows).toEqual([]);
+ });
  it('invitation and pattern checks compose, preserve roles and refuse unrelated invitations',async()=>{
   overrideConfig({}, {APP__DEPLOYMENT_MODE:'company',APP__DEPLOYMENT_OWNER_EMAIL:'owner@example.com',AUTH__INVITE_ONLY:'true',AUTH__ALLOWED_EMAIL_PATTERNS:'*@example.com'});
   await admitDeploymentIdentity(identity('owner','owner@example.com'));

@@ -520,8 +520,8 @@ export function groupTrustApprovalsEnabled(): boolean {
 
 /**
  * TRUSTED EMBEDDERS: `EMBED__TRUSTED_ORIGINS`, comma-separated origins (https, or http on a local development host)
- * that may frame a document's address, the `/a/<id>` app page and the document it frames on its own origin, and
- * nothing else of the app. `?embed=1` on that address is the EMBEDDED view, which only these origins may frame (no
+ * that may frame a document's address, the `/a/<id>` app page and the document it frames on its own origin, and,
+ * with a custom shell, a shell screen's `?embed=1` view (server/app `shellFramedPolicy`); nothing else of the app. `?embed=1` on that address is the EMBEDDED view, which only these origins may frame (no
  * one when the list is empty). Empty by default: app pages and documents are framed by the app alone. A malformed
  * entry refuses the boot. Read at each use, so a test's `overrideConfig` environment applies.
  */
