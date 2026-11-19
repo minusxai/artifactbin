@@ -6,10 +6,10 @@
  *
  * WHO APPROVES: a person who is an Admin of the group that owns the page (direct, or through an ancestor: the
  * `group_admins` view), and only that. A person-owned page has no approvals; an Editor or Member, an agent signed in as
- * a group, a workload and a test account never approve.
+ * a group and a test account never approve.
  *
  * WHO READS AS THE GROUP (`readsAsGroup`): a signed-in ordinary account (identity `users.kind` `account`, active, not a
- * test account), as a person (never a group's sign-in or a workload), that can open the page (the door asks only after
+ * test account), as a person (never a group's sign-in), that can open the page (the door asks only after
  * admitting the reader; an export capture reads as the requester its key names). A guest, a test user, a visitor with no
  * session and a capture without such a requester run the query as themselves, as on any page; only an account that reads
  * as the group is told the owner's name when refused (lib/page-doors approved-queries).
@@ -111,7 +111,7 @@ async function holding(db:Queryable,page:string,hash?:string):Promise<ApprovalRo
  * Whether they can open the page is the caller's to have asked first.
  */
 export async function readsAsGroup(actor:AccessActor,db?:Queryable):Promise<boolean>{
- if(!actor.userId||actor.principalGroup||actor.workload)return false;
+ if(!actor.userId||actor.principalGroup)return false;
  return !!(await (db??await getDb()).query<{ok:boolean}>("SELECT (kind='account' AND active AND NOT test_account) AS ok FROM users WHERE id=$1",[actor.userId])).rows[0]?.ok;
 }
 
@@ -166,11 +166,11 @@ export async function pageOwnerName(page:{group_id?:string|null;user_id?:string|
 interface PageRow {id:string;group_id:string|null;user_id:string|null;format:string;meta:Record<string,unknown>}
 /**
  * The page, for an Admin of its owning group, and that group's name. Refused: a caller who is no person (a group's
- * agent, a workload, nobody) `forbidden`; a person-owned page `not_group_owned` to its owner; anyone in the group who is
+ * agent, nobody) `forbidden`; a person-owned page `not_group_owned` to its owner; anyone in the group who is
  * not its Admin `forbidden`; everyone else the uniform `not_found`.
  */
 async function adminPage(db:Queryable,actor:AccessActor,pageId:string,lock=false):Promise<{page:PageRow;group:string}>{
- if(!actor.userId||actor.principalGroup||actor.workload)throw new QueryApprovalError(403,'forbidden','only a person who is an Admin of the group that owns the page approves its queries');
+ if(!actor.userId||actor.principalGroup)throw new QueryApprovalError(403,'forbidden','only a person who is an Admin of the group that owns the page approves its queries');
  // The page row first, FOR SHARE when deciding a write (lib/artifact-access locks.ts, step 1); identity is never locked.
  if(lock)await db.query('SELECT id FROM artifacts WHERE id=$1 FOR SHARE',[pageId]);
  const page=(await db.query<PageRow>('SELECT id,group_id,user_id,format,meta FROM artifacts WHERE id=$1 AND deleted_at IS NULL',[pageId])).rows[0];
@@ -341,7 +341,7 @@ export async function assertAudienceChange(tx:Queryable,actor:AccessActor,page:A
   const now=shareMap((await tx.query<{email:string;role:string}>('SELECT email,role FROM artifact_shares WHERE artifact_id=$1',[page.id])).rows),asked=shareMap(next.shares!);
   if(now.size===asked.size&&[...asked].every(([email,role])=>now.get(email)===role))return;
  }
- if(actor.userId&&!actor.principalGroup&&!actor.workload&&(await tx.query('SELECT 1 FROM group_admins WHERE group_id=$1 AND user_id=$2',[page.group_id,actor.userId])).rows.length)return;
+ if(actor.userId&&!actor.principalGroup&&(await tx.query('SELECT 1 FROM group_admins WHERE group_id=$1 AND user_id=$2',[page.group_id,actor.userId])).rows.length)return;
  // One that no longer holds ends here; only a live one keeps the page's audience its Admins'.
  await endStaleApprovals(tx,actor.userId,{page:page.id});
  if(!(await tx.query('SELECT 1 FROM page_query_approvals WHERE page_id=$1 AND ended_at IS NULL LIMIT 1',[page.id])).rows.length)return;

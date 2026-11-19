@@ -30,7 +30,7 @@
  * forgotten with the request's other credential answers whenever it writes a token row. A route that
  * re-checks access mid-run (a long query) asks with `revalidate`: no memo, no side effects.
  */
-import { BROWSER_SESSION_HEADER, isGroupActor, type Credential } from '@artifactbin/contracts';
+import { BROWSER_SESSION_HEADER, CREDENTIALS, isGroupActor, type Credential } from '@artifactbin/contracts';
 import { actorOf } from '@artifactbin/utils';
 import { admitDeploymentIdentity } from '../deployment';
 import { acceptGroupInvitations } from '../groups';
@@ -41,7 +41,6 @@ import { DuplicateProfileEmail, NO_IDENTITY, answeredOnce, liveGroupSignIn, reme
 import { canAuthenticateUser } from '../user-kinds';
 import { hasDocumentEditorAccess } from './document-editor';
 import { hostedRequestRefusal } from './request-authority';
-import {workloadIdentity} from './workload';
 import { auth } from './session';
 
 /**
@@ -74,8 +73,6 @@ const nobody = (): IdentityResolution => ({ kind: 'identity', identity: NO_IDENT
 
 export function resolveRequestIdentity(request: Request | undefined, door: Door, options: ResolveOptions = {}): Promise<IdentityResolution> {
   const carrying = request ?? currentRequest() ?? undefined;
-  const workload=carrying&&workloadIdentity(carrying);
-  if(workload)return Promise.resolve({kind:'identity',identity:workload,clientHarness:null});
   const effects = !options.revalidate;
   if (door !== 'session' && carrying) {
     const presented = explicitBearer(carrying);
@@ -218,7 +215,8 @@ async function sessionIdentity(carrying: Request | undefined, headerOnly: boolea
 /** The proxy's verdict, re-admitted by the app: admission, the agent-cookie and browser-session token checks, hosted authority. */
 async function attachedIdentity(request: Request, effects: boolean): Promise<IdentityResolution> {
   const wire = actorOf(request)!;
-  if(wire.credential==='workload')return nobody();
+  // A credential of a kind this release does not know (a removed workload's, say) is no one.
+  if (!(CREDENTIALS as readonly string[]).includes(wire.credential)) return nobody();
   // A group's sign-in reaches no browser door: no session, agent cookie or scripted browser is ever one.
   if (isGroupActor(wire)) return request.headers.has(BROWSER_SESSION_HEADER) ? nobody() : await groupResolution(wire.tokenId, { id: wire.principalGroupId, role: wire.principalGroupRole }, effects) ?? nobody();
   const userId = wire.userId ?? null, tokenId = wire.tokenId ?? null, browserSession = request.headers.get(BROWSER_SESSION_HEADER) === '1';

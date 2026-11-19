@@ -216,7 +216,7 @@ const createArtifactOp: Operation = {
   ],
   async run(ctx, input) {
     // A group's sign-in creates as its principal (lib/accounts `GroupPrincipal`), charged to its group, with no token of its own.
-    const creator = ctx.actor.workload?{...ctx.actor,workload:ctx.actor.workload}:ctx.actor.principalGroup?{...ctx.actor,principalGroup:ctx.actor.principalGroup}:await withAccountToken(ctx.actor);
+    const creator = ctx.actor.principalGroup?{...ctx.actor,principalGroup:ctx.actor.principalGroup}:await withAccountToken(ctx.actor);
     if (!creator) return reply({ error: 'unauthorized' }, 401);
     const authored = authoredHtml(input);
     if (authored instanceof Response) return fromResponse(authored);

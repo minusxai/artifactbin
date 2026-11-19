@@ -4,8 +4,6 @@ export interface BundleReceipt extends PublicationBundleMapping { path:string }
 interface DependencyWrite {path:string;kind:'asset'|'dataset';contentType:string;base64:string;key:string;/** Stable canonical path slot, including mapped paths whose bytes are omitted on retry. */ reservationIndex:number}
 interface SavedDependency {id:string;revision:string;address:string;state?:string}
 export interface BundlePublisher {
- /** Trusted workload publications admit each canonical path in order, with no content aliasing. */
- resourceIdentity?:'path';
  reuse(path:string,mapping:PublicationBundleMapping):Promise<string>;
  create(input:DependencyWrite):Promise<SavedDependency>;
  update?(input:DependencyWrite,mapping:PublicationBundleMapping):Promise<SavedDependency>;
@@ -21,7 +19,7 @@ export function changedBundlePaths(plan:Pick<BundlePlan,'dependencies'>,mappings
 const PUBLICATION_CONCURRENCY=4;
 /** Per-resource conditional writes retain their identities and durable receipts across retries. */
 export async function publishBundleDependencies(plan:BundlePlan,key:string,publisher:BundlePublisher,mappings:Readonly<Record<string,PublicationBundleMapping>>={}):Promise<{html:string;receipts:BundleReceipt[]}>{
- const concurrency=publisher.resourceIdentity==='path'?1:PUBLICATION_CONCURRENCY;
+ const concurrency=PUBLICATION_CONCURRENCY;
  const addresses=new Map<string,string>(),receipts=new Map<string,BundleReceipt>(),uploaded=new Map<string,Promise<SavedDependency>>(),changed=changedBundlePaths(plan,mappings);
  const digest=(bytes:Uint8Array)=>createHash('sha256').update(bytes).digest('hex');
  const orderedReceipts=()=>[...new Set([...plan.dependencies.map(dependency=>dependency.path),...Object.keys(mappings)])].flatMap(path=>{const receipt=receipts.get(path);return receipt?[receipt]:[];});
@@ -45,7 +43,7 @@ export async function publishBundleDependencies(plan:BundlePlan,key:string,publi
     const input={...dependency,base64,key:key+'_'+Buffer.from(dependency.path).toString('base64url'),reservationIndex},mapping=mappings[dependency.path];let saved:SavedDependency;
     if(mapping){if(!publisher.update)throw Error('Conditional dependency updates unavailable');saved=await publisher.update(input,mapping);}
     else {
-     const fingerprint=publisher.resourceIdentity==='path'?dependency.path:digest(Buffer.from(JSON.stringify([dependency.kind,dependency.contentType,base64])));
+     const fingerprint=digest(Buffer.from(JSON.stringify([dependency.kind,dependency.contentType,base64])));
      let write=uploaded.get(fingerprint);
      if(!write){write=publisher.create(input);uploaded.set(fingerprint,write);}
      saved=await write;

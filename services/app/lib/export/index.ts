@@ -4,5 +4,4 @@ export { EXPORT_RENDER_GENERATION, exportCacheKey, exportImageResponse, parseExp
 export {packOfflineHtmlImages,OfflineHtmlMediaError} from './native-html-media';
 export { exportKeyReader, mintExportKey, verifyExportKey } from './read-key';
 export { exportAssetResponse } from './assets';
-export { fitImage } from './fit-image';
 export { expireExportImages } from './cache';

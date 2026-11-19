@@ -10,7 +10,7 @@ import {createHash} from 'node:crypto';
 import {chmod,mkdir,readFile,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {beforeEach,expect,it,onTestFinished} from 'vitest';
-import {ARTIFACT_READ_GRANT_PATH,GROUP_PRINCIPALS_NOT_ACCEPTED,GROUP_SIGN_IN_PATH,IDENTITY_INTROSPECT_PATH,RUN_SIGN_IN_PATH,SERVICE_AUTH_HEADER,SERVICE_TOKEN_PATH,parseServiceAudiences} from '@artifactbin/contracts';
+import {GROUP_PRINCIPALS_NOT_ACCEPTED,GROUP_SIGN_IN_PATH,IDENTITY_INTROSPECT_PATH,RUN_SIGN_IN_PATH,SERVICE_AUTH_HEADER,SERVICE_TOKEN_PATH,parseServiceAudiences} from '@artifactbin/contracts';
 import {createAuthComposedHost} from '@/test/helpers/auth-host';
 import {AUTH_SECRET,getDb,syncIdentitySettings} from '@/lib/platform';
 import {overrideConfig} from '@/lib/platform/config';
@@ -233,7 +233,7 @@ it('a service\'s group sign-in: revoked approval, deleted group, the issuing ser
  }
 });
 
-it('a group\'s service token obtains nothing: not this API, not another exchange, not a run sign-in or a read grant',async()=>{
+it('a group\'s service token obtains nothing: not this API, not another exchange, not a run sign-in',async()=>{
  const host=await composed(),{ada,eve,team}=await tree(host);
  for(const agent of [await eve.asGroup(team.id,'editor'),await host.serviceSignIn(ada,team.id,'editor')]){
   const token=await host.serviceTokenOf(agent.token);
@@ -241,9 +241,8 @@ it('a group\'s service token obtains nothing: not this API, not another exchange
   expect((await host.exchange(token)).status).toBe(401);
   expect((await host.exchange(token,'crm')).status).toBe(401);
   expect((await host.send('POST','/api/authentication/token',{authorization:`Bearer ${token}`},{})).status).toBe(401);
-  // Warehouse runs work and reads pages for people: with a group's token, it gets neither.
+  // Warehouse runs work for people: with a group's token, it gets no run sign-in.
   expect(await host.send('POST',RUN_SIGN_IN_PATH,{[SERVICE_AUTH_HEADER]:SECRETS.warehouse},{token})).toEqual({status:401,body:{error:'unauthorized'}});
-  expect(await host.send('POST',ARTIFACT_READ_GRANT_PATH,{[SERVICE_AUTH_HEADER]:SECRETS.warehouse},{token})).toEqual({status:401,body:{error:'unauthorized'}});
  }
  expect(await sql('SELECT count(*)::int AS n FROM auth.tokens WHERE issued_by=$1 AND group_id IS NULL',['warehouse'])).toEqual([{n:0}]);
  // A group still cannot be signed in for a service audience directly, nor by OAuth for a service's resource.

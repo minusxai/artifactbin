@@ -1,4 +1,4 @@
-/** Canonical post-read page access, edit, revision and link fence shared by SQL and evidence. */
+/** Canonical post-read page access, edit, revision and link fence shared by the SQL door and the revision schema. */
 import type {AccessActor} from '@/lib/accounts';
 import {getArtifactHeaderById,readableArtifactHeader,accessMoved} from '@/lib/artifacts';
 import {readHtmlPage} from '@/lib/html-publication';

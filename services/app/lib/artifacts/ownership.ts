@@ -30,10 +30,6 @@ export class ArtifactParentRefusal extends DatasetError {
 }
 export async function newArtifactDestination(actor:AccessActor,explicit?:ArtifactDestination,parentId?:string|null):Promise<ArtifactDestination>{
  const db=await getDb();
- if(actor.workload){
-  const g=actor.workload;if(!g.publication||g.role!=='editor'||explicit?.type!=='group'||explicit.id!==g.principal.groupId)throw new DatasetError('Publication destination refused',403);
-  return explicit;
- }
  if(actor.principalGroup){
   // Its group, unless told otherwise; never personal. At editor level only, as a direct Member may not publish.
   if(explicit?.type==='personal')throw new GroupPersonalDestination();
@@ -60,10 +56,6 @@ export async function newArtifactDestination(actor:AccessActor,explicit?:Artifac
 }
 export async function assertDestination(tx:Queryable,actor:AccessActor,destination:ArtifactDestination):Promise<void>{
  if(actor.principalGroup&&destination.type!=='group')throw new GroupPersonalDestination();
- if(actor.workload){
-  if(destination.type!=='group'||destination.id!==actor.workload.principal.groupId||!actor.workload.publication||actor.workload.role!=='editor'||!(await tx.query('SELECT 1 FROM groups WHERE id=$1 AND deleted_at IS NULL',[destination.id])).rows.length)throw new DatasetError('Publication destination refused',403);
-  return;
- }
  if(destination.type==='group'){
   // Read at decision time, unlocked: a membership revoked after this commit refuses the next request
   // (a deleted group's pages grant nobody anything).

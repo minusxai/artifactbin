@@ -20,7 +20,6 @@ import {
 import type { AccessActor } from '@/lib/accounts';
 import { liveAccessFacts, transactionAccessFacts, type AccessFacts, type ArtifactRow } from '@/lib/artifact-access';
 import { catalogOf, DatasetError, LIVE_QUERY_TABLE, liveConnectionOf, loadDatasetRows, type CatalogRowView, type DatasetCatalog, type DatasetTable } from '@/lib/datasets';
-import {pageEvidenceRole} from './evidence';
 import { datasetRole, type DatasetRoleRow } from './role';
 import { storedPolicy } from './stored-policy';
 import { sessionRead, shows, unrestricted, viewRows, type DatasetSession } from './view';
@@ -78,8 +77,7 @@ function admitted(row: DatasetReadRow, role: DatasetRole, tables: TableSelect[],
 export async function datasetReadAccess(row: DatasetReadRow, actor: AccessActor, options: DatasetReadOptions = {}): Promise<DatasetReadDecision> {
   if (row.format !== 'dataset') return { allowed: false, role: null };
   const facts = options.facts ?? (options.tx ? transactionAccessFacts(actor, options.tx) : liveAccessFacts(actor));
-  const evidenceRole=pageEvidenceRole(actor,row,options.pageId);
-  const role = evidenceRole===undefined?await datasetRole(row, actor, { facts, throughPage: !!options.throughPage || !!options.pageId }):evidenceRole;
+  const role = await datasetRole(row, actor, { facts, throughPage: !!options.throughPage || !!options.pageId });
   if (!role) return { allowed: false, role };
   const all = tablesOf(row).map((t) => ({ ...t, permission: READ_ALL }));
   const session: Record<string, Scalar> = {

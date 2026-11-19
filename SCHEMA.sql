@@ -30,60 +30,6 @@ create index "verification_identifier_idx" on "auth"."verification" ("identifier
 
 -- schema "app" — owned by the app role; tables declared by lib/schema.ts
 
-CREATE TABLE IF NOT EXISTS app.workload_publication_intents (
-  namespace TEXT NOT NULL,
-  resource TEXT NOT NULL,
-  fingerprint TEXT NOT NULL,
-  intent_hash TEXT NOT NULL,
-  PRIMARY KEY (namespace, resource)
-);
-
-ALTER TABLE app.workload_publication_intents ADD COLUMN IF NOT EXISTS namespace TEXT NOT NULL;
-
-ALTER TABLE app.workload_publication_intents ADD COLUMN IF NOT EXISTS resource TEXT NOT NULL;
-
-ALTER TABLE app.workload_publication_intents ADD COLUMN IF NOT EXISTS fingerprint TEXT NOT NULL;
-
-ALTER TABLE app.workload_publication_intents ADD COLUMN IF NOT EXISTS intent_hash TEXT NOT NULL;
-
-CREATE TABLE IF NOT EXISTS app.workload_publication_audit (
-  id BIGSERIAL NOT NULL,
-  namespace TEXT NOT NULL,
-  grant_namespace TEXT NOT NULL,
-  group_id TEXT NOT NULL,
-  artifact_id TEXT NOT NULL,
-  bytes BIGINT NOT NULL,
-  binding JSONB NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  PRIMARY KEY (id)
-);
-
-ALTER TABLE app.workload_publication_audit ADD COLUMN IF NOT EXISTS id BIGSERIAL NOT NULL;
-
-ALTER TABLE app.workload_publication_audit ADD COLUMN IF NOT EXISTS namespace TEXT NOT NULL;
-
-ALTER TABLE app.workload_publication_audit ADD COLUMN IF NOT EXISTS grant_namespace TEXT NOT NULL;
-
-ALTER TABLE app.workload_publication_audit ADD COLUMN IF NOT EXISTS group_id TEXT NOT NULL;
-
-ALTER TABLE app.workload_publication_audit ADD COLUMN IF NOT EXISTS artifact_id TEXT NOT NULL;
-
-ALTER TABLE app.workload_publication_audit ADD COLUMN IF NOT EXISTS bytes BIGINT NOT NULL;
-
-ALTER TABLE app.workload_publication_audit ADD COLUMN IF NOT EXISTS binding JSONB NOT NULL;
-
-ALTER TABLE app.workload_publication_audit ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
-
-CREATE TABLE IF NOT EXISTS app.workload_publication_outputs (
-  namespace TEXT NOT NULL,
-  artifact_id TEXT NOT NULL,
-  PRIMARY KEY (namespace, artifact_id)
-);
-
-ALTER TABLE app.workload_publication_outputs ADD COLUMN IF NOT EXISTS namespace TEXT NOT NULL;
-
-ALTER TABLE app.workload_publication_outputs ADD COLUMN IF NOT EXISTS artifact_id TEXT NOT NULL;
-
 CREATE TABLE IF NOT EXISTS app.legacy_page_migrations (
   artifact_id TEXT NOT NULL,
   backup JSONB NOT NULL,
@@ -1661,6 +1607,12 @@ DROP TABLE IF EXISTS app.dataset_secrets;
 DROP TABLE IF EXISTS app.dataset_result_cache;
 
 DROP TABLE IF EXISTS app.comment_reaction_events;
+
+DROP TABLE IF EXISTS app.workload_publication_intents;
+
+DROP TABLE IF EXISTS app.workload_publication_audit;
+
+DROP TABLE IF EXISTS app.workload_publication_outputs;
 
 -- schema "auth" — owned by the auth role; tables declared by the auth's schema module
 

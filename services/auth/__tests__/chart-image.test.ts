@@ -1,4 +1,4 @@
-/** A relay's chart drawing: the real auth handler admits it like artifact-read and forwards only the exact body. */
+/** A relay's chart drawing: the real auth handler admits only an opted-in service's own secret and forwards only the exact body. */
 import {delegatedService,serviceAuthHost,serviceAudiences} from './helpers';
 import {describe,it,expect} from 'vitest';
 import {ANONYMOUS,SERVICE_PAYLOAD_LIMIT,CANONICAL_CHART_IMAGE_PATH,CHART_IMAGE_PATH,SERVICE_AUTH_HEADER,type Actor} from '@artifactbin/contracts';

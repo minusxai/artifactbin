@@ -1,7 +1,7 @@
-/** A shared absolute evidence deadline also bounds an uncooperative nested reader or callback.
+/** A shared absolute deadline also bounds an uncooperative nested reader or callback.
  * Canonical execution still receives the signal and checks it before releasing buffered results.
  */
-export function pageEvidenceStep<T>(signal:AbortSignal,pending:Promise<T>):Promise<T>{
+export function deadlineStep<T>(signal:AbortSignal,pending:Promise<T>):Promise<T>{
  return new Promise((resolve,reject)=>{
   const abort=()=>reject(signal.reason);
   signal.addEventListener('abort',abort,{once:true});

@@ -41,7 +41,3 @@ Hosts: `app.ts`, `public-files.ts`, `pages-host.ts`, `user-host.ts`, `host.ts`. 
 - `npm test -- --files services/app/server/__tests__/routes.test.ts services/app/lib/__tests__/app-page-csp.test.ts services/app/lib/local-connection/__tests__/server.test.ts services/app/__tests__/downstream-exports.test.ts`,
   plus the edited boundary's own `__tests__` file.
 - Own-origin serving in a browser: `node scripts/gate-container.mjs own-origin-script`, once, at the end.
-
-- Delegation requires opted-in per-service RPCs, fresh authority fences and bounded canonical results.
-  Keep grants outside sandboxes. Group creates use canonical workload quotas and durable receipts; no human
-  impersonation. Exact contracts are in `artifact-workload.ts` and contracts.

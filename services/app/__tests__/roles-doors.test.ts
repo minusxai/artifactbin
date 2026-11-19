@@ -525,7 +525,7 @@ describe('editors through every door', () => {
       const { call, id, userId, email } = await invitedTo('editor');
 
       // The pull FIRST: an editor's read rechecks the edit predicate
-      // (artifact-read readArtifactSnapshot), which is where it used to 404 while
+      // (readArtifactSnapshot), which is where it used to 404 while
       // a commenter's read of the same document answered.
       const read = await getArtifactRoute(await call(`/api/artifacts/${id}`), params({ id }));
       expect(read.status, await read.clone().text()).toBe(200);

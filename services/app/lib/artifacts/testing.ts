@@ -10,4 +10,3 @@ export { onDatasetCommitted, onHeadCommitted } from './after-commit';
 
 export {artifactQuotaLimit,setArtifactQuotaForTests} from './quota-policy';
 
-export {claimPublicationIntent,chargePublication} from './workload-publication';

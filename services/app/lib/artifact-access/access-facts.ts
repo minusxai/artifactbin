@@ -9,10 +9,6 @@
  *    readers deciding many rows at once (the notification inbox). Share resolution, the one write a
  *    role read performs, is deferred to `settle()` and applied in one statement.
  */
-import {AsyncLocalStorage} from 'node:async_hooks';
-const readOnlyDecisions=new AsyncLocalStorage<boolean>();
-/** Canonical read-only doors match invitations without stamping them. */
-export const withReadOnlyAccessFacts=<T>(read:()=>T):T=>readOnlyDecisions.run(true,read);
 import { maxRole, type ArtifactRole, type GroupRole, type Queryable, type UserKind } from '@artifactbin/contracts';
 import { getGroupRole, groupReachSql, reachedGroupsSql, subtreeSql } from '@/lib/groups';
 import { userKindOf } from '@/lib/user-kinds';
@@ -30,7 +26,6 @@ import type { AccessActor, GroupPrincipal } from '@/lib/accounts';
 function groupPrincipalFacts(principal: GroupPrincipal, db: () => Promise<Queryable>, lock = false): AccessFacts {
   const live = async (groupId: string) => !!(await (await db()).query('SELECT 1 FROM groups WHERE id=$1 AND deleted_at IS NULL', [groupId])).rows.length;
   return {
-    groupLive: live,
     async groupShareRole(artifactId) {
       const rows = await (await db()).query<{ role: ArtifactRole }>(`SELECT s.role FROM artifact_group_shares s WHERE s.artifact_id=$1 AND s.group_id IN (${groupReachSql('$2')})${lock ? ' FOR SHARE OF s' : ''}`, [artifactId, principal.id]);
       return maxRole(...rows.rows.map((row) => row.role));
@@ -47,7 +42,6 @@ function groupPrincipalFacts(principal: GroupPrincipal, db: () => Promise<Querya
 }
 
 export interface AccessFacts {
-  groupLive(groupId:string):Promise<boolean>;
   /** The actor's role in a live group, or null (always null without an account). */
   groupShareRole(artifactId:string):Promise<ArtifactRole>;
   /**
@@ -87,7 +81,6 @@ export function liveAccessFacts(actor: AccessActor, query?: Queryable): AccessFa
   const db = async () => query ?? await getDb();
   if (actor.principalGroup) return groupPrincipalFacts(actor.principalGroup, db);
   return {
-    async groupLive(groupId){return !!(await (await db()).query('SELECT 1 FROM groups WHERE id=$1 AND deleted_at IS NULL',[groupId])).rows.length;},
     async groupShareRole(artifactId){
       if(!actor.userId)return 'none';
       const rows=await (await db()).query<{role:ArtifactRole}>(GROUP_SHARE_ROLES_SQL,[artifactId,actor.userId]);
@@ -115,7 +108,7 @@ export function liveAccessFacts(actor: AccessActor, query?: Queryable): AccessFa
          )`,
         [artifactId, actor.userId, sessionEmail(actor)],
       );
-      if (!readOnlyDecisions.getStore() && r.rows.some((x) => x.unresolved)) await q.query(RESOLVE_SHARES_SQL('= $1'), [artifactId, actor.userId]);
+      if (r.rows.some((x) => x.unresolved)) await q.query(RESOLVE_SHARES_SQL('= $1'), [artifactId, actor.userId]);
       return maxRole(...r.rows.map((x) => x.role));
     },
     async editorGroupIds() {
@@ -148,7 +141,6 @@ export function transactionAccessFacts(actor: AccessActor, tx: Queryable): Acces
     )).rows;
   };
   return {
-    async groupLive(groupId){return !!(await tx.query('SELECT 1 FROM groups WHERE id=$1 AND deleted_at IS NULL',[groupId])).rows.length;},
     async groupShareRole(artifactId) {
       if (!actor.userId) return 'none';
       // The artifact's group shares, locked as they are read (inserted under the artifact's row lock, which the write
@@ -215,7 +207,6 @@ export function memoAccessFacts(facts: AccessFacts): AccessFacts {
     return found;
   };
   return {
-    groupLive: (groupId) => once('groupLive',groupId,()=>facts.groupLive(groupId)),
     groupShareRole: (artifactId) => once('groupShareRole', artifactId, () => facts.groupShareRole(artifactId)),
     groupRole: (groupId) => once('groupRole', groupId, () => facts.groupRole(groupId)),
     groupAudience: (groupId) => once('groupAudience', groupId, () => facts.groupAudience(groupId)),
@@ -267,7 +258,6 @@ export async function preloadAccessFacts(db: Queryable, actor: AccessActor, rows
   const resolving = new Set<string>();
   let editorGroups: Promise<string[]> | undefined;
   return {
-    groupLive: groupId=>live.groupLive(groupId),
     async groupShareRole(id){return preloaded.has(id)?groupShares.get(id)??'none':live.groupShareRole(id);},
     async groupRole(groupId) { return actor.userId ? groups.get(groupId) ?? null : null; },
     async groupAudience(groupId) { return !!actor.userId && reached.has(groupId); },

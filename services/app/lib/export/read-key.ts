@@ -16,7 +16,7 @@
  * with a timing-safe compare.
  */
 import { createCipheriv, createDecipheriv, createHmac, randomBytes, timingSafeEqual } from 'crypto';
-import { ANONYMOUS_ACTOR, type AccessActor } from '@/lib/accounts';
+import { ANONYMOUS_ACTOR, type AccessActor, type GroupPrincipal } from '@/lib/accounts';
 import { AUTH_SECRET } from '../platform';
 
 /** A render is one page load; a minute is already generous. */
@@ -24,14 +24,29 @@ const TTL_MS = 60_000;
 
 /**
  * WHO A CAPTURE READS AS. An export shows what its requester may see: the door that admitted the requester mints the
- * key FOR them, and the capture's page SQL reads run as that account or token, reads
- * only (lib/page-doors). A key minted for nobody reads as nobody — the shared anonymous render.
+ * key FOR them, and the capture's page SQL reads run as that account or token, or for an agent signed in as a group
+ * as that group at its level (lib/accounts `GroupPrincipal`, never a person), reads only (lib/page-doors). A key minted
+ * for nobody reads as nobody — the shared anonymous render.
  */
-export type ExportReader = Pick<AccessActor, 'userId' | 'tokenId'> & Partial<Pick<AccessActor, 'email'>>;
+export type ExportReader = Pick<AccessActor, 'userId' | 'tokenId'> & Partial<Pick<AccessActor, 'email' | 'principalGroup'>>;
 
 /** The single capture authority: retain the admitted claim, never inherit a host editor grant. */
 export function exportReaderActor(reader: ExportReader): AccessActor {
+  // A group's sign-in: the group alone, with no person, token or address beside it.
+  if (reader.principalGroup) {
+    const { id, role, tokenId, issuedBy } = reader.principalGroup;
+    return { userId: null, tokenId: null, email: null, documentEditor: false, principalGroup: { id, role, tokenId, issuedBy } };
+  }
   return { userId: reader.userId, tokenId: reader.tokenId, email: reader.email ?? null, documentEditor: false };
+}
+
+const ID_CLAIM = (value: unknown): value is string => typeof value === 'string' && value.length > 0 && value.length <= 256;
+/** A key's group claim, exactly: its four fields and a level a group's sign-in acts at; anything else is no one. */
+function groupClaim(value: unknown): GroupPrincipal | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const claim = value as Record<string, unknown>;
+  return Object.keys(claim).length === 4 && ID_CLAIM(claim.id) && (claim.role === 'member' || claim.role === 'editor') && ID_CLAIM(claim.tokenId) && ID_CLAIM(claim.issuedBy)
+    ? { id: claim.id, role: claim.role, tokenId: claim.tokenId, issuedBy: claim.issuedBy } : null;
 }
 
 // Existing backend-secret encryption uses this same AES-GCM construction, but its owner/backend scope and
@@ -48,7 +63,7 @@ const message = (id: string, expiresAt: number, reader: string | null): string =
   reader === null ? `${id}.${expiresAt}` : `reader:${id}.${expiresAt}.${reader}`;
 /** Confidential authenticated claims, never an address encoded as base64 JSON in a capture URL. */
 function readerSegment(id: string, expiresAt: number, reader: ExportReader | undefined): string | null {
-  if (!reader || (!reader.userId && !reader.tokenId)) return null;
+  if (!reader || (!reader.userId && !reader.tokenId && !reader.principalGroup)) return null;
   const iv = randomBytes(12), cipher = createCipheriv('aes-256-gcm', encryptionKey(), iv);
   cipher.setAAD(aad(id, expiresAt));
   return Buffer.concat([iv, cipher.update(JSON.stringify(exportReaderActor(reader)), 'utf8'), cipher.final(), cipher.getAuthTag()]).toString('base64url');
@@ -89,6 +104,11 @@ export function exportKeyReader(id: string, key: string | null | undefined): Acc
     const reader: unknown = JSON.parse(Buffer.concat([cipher.update(bytes.subarray(12, -16)), cipher.final()]).toString('utf8'));
     if (!reader || typeof reader !== 'object') return null;
     const claim = reader as Record<string, unknown>;
+    if (claim.principalGroup !== undefined) {
+      const group = groupClaim(claim.principalGroup);
+      const exact = Object.keys(claim).length === 5 && claim.userId === null && claim.tokenId === null && claim.email === null && claim.documentEditor === false;
+      return group && exact ? exportReaderActor({ userId: null, tokenId: null, principalGroup: group }) : null;
+    }
     if (![claim.userId, claim.tokenId, claim.email].every(value => value === null || typeof value === 'string') || (!claim.userId && !claim.tokenId) || claim.documentEditor !== false) return null;
     return exportReaderActor(claim as ExportReader);
   } catch { return null; }

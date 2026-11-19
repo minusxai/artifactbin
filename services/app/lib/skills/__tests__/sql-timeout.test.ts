@@ -11,7 +11,7 @@ afterEach(()=>{vi.restoreAllMocks();vi.useRealTimers();});
 
 it.each([
   ['page read','query','PAGE12','select 1',{},SQL_QUERY_MAX_MS+SQL_WALL_OVERHEAD_MS+5000],
-  ['page evidence schema','schema','PAGE12',undefined,{revision:'2'},140000],
+  ['page revision schema','schema','PAGE12',undefined,{revision:'2'},140000],
   ['dataset read','query','DATA12','select 1',{},140000],
   ['dataset schema','schema','DATA12',undefined,{},140000],
   ['default read','query','default:example','select 1',{},920000],

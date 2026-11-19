@@ -1,5 +1,5 @@
 import { createArtifactFromBody } from '@/lib/publish';
-import { withTokenAuth, withPublicationAuth } from '@/lib/authentication';
+import { withTokenAuth } from '@/lib/authentication';
 import { type PublicationActor } from '@/lib/accounts';
 import { runOperation } from '@/lib/operations';
 import { PUBLISH_BODY_LIMIT, baseUrl, json, readJson } from '@/lib/http';
@@ -41,7 +41,7 @@ export async function createArtifactFromRequest(
 }
 
 /** POST /api/artifacts — create from `markup`, a data tier, or raw image bytes; returns the shareable URL. */
-export const POST = withPublicationAuth((request: Request, { actor }) =>
+export const POST = withTokenAuth((request: Request, { actor }) =>
   createArtifactFromRequest(request, actor),
 );
 

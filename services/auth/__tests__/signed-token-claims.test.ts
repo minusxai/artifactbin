@@ -1,19 +1,16 @@
 /**
- * The two signed token kinds (exchanged service tokens, `vwt_`, and artifact read grants, `arg_`) share one format and
- * one claims check: every malformed token below, correctly signed, is refused by both, and the well-formed one is
- * accepted by both, so the two validators cannot drift apart.
+ * A person's signed token kind (exchanged service tokens, `vwt_`) and its one claims check: every malformed token below,
+ * correctly signed, is refused, and the well-formed one is accepted.
  */
 import {createHmac} from 'node:crypto';
 import {describe,expect,it} from 'vitest';
 import {SERVICE_TOKEN_TTL_SECONDS} from '@artifactbin/contracts';
-import {artifactReadKey,signArtifactReadGrant,verifyArtifactReadGrant} from '../src/identity/artifact-read-grants';
 import {serviceTokenKey,signServiceToken,verifyServiceToken} from '../src/identity/service-tokens';
 
 const SERVICE={id:'warehouse',origin:'https://warehouse.example',introspectionSecretSha256:null};
 const NOW=Date.UTC(2026,10,18,12),NOW_S=NOW/1000;
 const KINDS=[
  {name:'service token',prefix:'vwt_',ttl:SERVICE_TOKEN_TTL_SECONDS,key:serviceTokenKey('host-secret'),sign:signServiceToken,verify:verifyServiceToken},
- {name:'artifact read grant',prefix:'arg_',ttl:3600,key:artifactReadKey('host-secret'),sign:signArtifactReadGrant,verify:verifyArtifactReadGrant},
 ];
 type Kind=typeof KINDS[number];
 const valid=(ttl:number):Record<string,unknown>=>({sub:'usr_bob',aud:SERVICE.origin,svc:SERVICE.id,iat:NOW_S,exp:NOW_S+ttl,jti:'vtk_1',par:{kind:'session',id:'ses_1'}});

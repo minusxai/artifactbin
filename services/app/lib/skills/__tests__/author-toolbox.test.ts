@@ -74,24 +74,6 @@ it('exports actual image bytes exclusively and reports dimensions',async()=>{
   const {parseCommand}=await import('../../../skills/artifactbin/scripts/toolbox-commands.mjs');
   expect(parseCommand('export',['PAGE12','--format','png','--element','#orders-chart','--output','x.png']).values.element).toBe('#orders-chart');
 });
-it('writes a relayed JSON image envelope as the image it carries, checking its format',async()=>{
- const {exportCommand}=await import('../../../skills/artifactbin/scripts/export.mjs');
- const root=await tempDir('author-export-relay-',onTestFinished);
-  const png=Buffer.alloc(24);Buffer.from([137,80,78,71,13,10,26,10]).copy(png);png.writeUInt32BE(640,16);png.writeUInt32BE(400,20);
-  let answer:Record<string,unknown>={id:'PAGE12',version:3,format:'png',mime:'image/png',width:640,height:400,bytes:png.length,data:png.toString('base64')};
-  const options={env:syntheticEnv('https://example.test'),fetcher:async()=>Response.json(answer)};
-  const output=path.join(root,'chart.png');
-  expect(await exportCommand({values:{format:'png',element:'#orders-chart',output},positionals:['PAGE12']},options)).toMatchObject({id:'PAGE12',format:'png',bytes:png.length,width:640,height:400,outputOwned:true});
-  expect(await readFile(output)).toEqual(png);
-  // Exclusive as ever: the existing file is kept.
-  await expect(exportCommand({values:{format:'png',output},positionals:['PAGE12']},options)).rejects.toThrow();
-  // Another format than asked, a truncated payload or no payload: refused, nothing written.
-  for(const [format,bad] of [['jpg',answer],['png',{...answer,bytes:png.length+1}],['png',{...answer,data:undefined}]] as const){
-   answer=bad as Record<string,unknown>;const file=path.join(root,`bad-${format}-${Math.random()}.${format}`);
-   await expect(exportCommand({values:{format,output:file},positionals:['PAGE12']},options)).rejects.toMatchObject({code:'invalid_image'});
-   await expect(readFile(file)).rejects.toMatchObject({code:'ENOENT'});
-  }
-});
 it('answers every sql.mjs statement in the documented shape, through a page or a dataset, paging a dataset read up to --limit',async()=>{
  const {sqlCommand}=await import('../../../skills/artifactbin/scripts/sql.mjs');
  const sent:Array<{path:string;body?:any;key?:string|null}>=[];
