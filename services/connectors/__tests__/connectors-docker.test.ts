@@ -223,7 +223,11 @@ describe.skipIf(!has('mysql:8'))('mysql 8', () => {
     expect(await failure(my.query({ text: 'with x as (select 1) delete from orders', params: {}, viewer: alice }))).toMatchObject({ code: 'read_only' });
     for (const text of ["select 1 into outfile '/tmp/x'", "select @app.viewer_id := 'u_bob'", "set @app.viewer_id = 'u_bob'", 'drop table orders'])
       expect((await failure(my.query({ text, params: {}, viewer: alice }))).code, text).toBe('read_only');
-    expect(await failure(my.query({ text: 'select sleep(30)', params: {}, viewer: alice, limits: { timeoutMs: 500 } }))).toMatchObject({ code: 'timeout' });
+    // Not SLEEP(): MySQL answers an interrupted SLEEP() with 1 and no error, so the server's max_execution_time could win the
+    // race against the connector's timer and return a row. A real scan is interrupted with error 3024, which maps to timeout.
+    const started = Date.now();
+    expect(await failure(my.query({ text: 'select count(*) as n from information_schema.columns a, information_schema.columns b, information_schema.columns c', params: {}, viewer: alice, limits: { timeoutMs: 500 } }))).toMatchObject({ code: 'timeout' });
+    expect(Date.now() - started).toBeLessThan(3000);
     expect((await my.query({ text: 'select current_database_ok from (select database() as current_database_ok) d', params: {}, viewer: alice, namespace: 'analytics' })).rows).toEqual([{ current_database_ok: 'analytics' }]);
     // A database the account may not see is the server's 1044, a refusal of this account: permission_denied.
     expect((await failure(my.query({ text: 'select 1', params: {}, viewer: alice, namespace: 'nowhere' }))).code).toMatch(/^(invalid_config|permission_denied)$/);
