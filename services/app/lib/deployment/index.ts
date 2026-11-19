@@ -63,8 +63,20 @@ async function settledAdmission(db:Queryable,identity:{userId:string;emailVerifi
  if(!s.setup_complete||!matches(email))return false;
  return undefined;
 }
-export async function admitDeploymentIdentity(identity:{userId:string;email?:string;emailVerified?:boolean}):Promise<boolean> {
+/**
+ * Admission for a request's person. A person a configured trusted issuer just signed in (`trustedIssuer`, set only
+ * after its token verified) is admitted as a member once setup is complete, but never joins the default group: their
+ * only access is the group the issuer named. Their synthetic email never matches the company's patterns.
+ */
+export async function admitDeploymentIdentity(identity:{userId:string;email?:string;emailVerified?:boolean;trustedIssuer?:string}):Promise<boolean> {
  const config=deploymentConfig();if(config.mode==='public')return true;
+ if(identity.trustedIssuer){
+  const db=await getDb();if(await canUseDeploymentIdentity(identity.userId,db))return true;
+  return db.transaction(async tx=>{
+   if(!(await state(tx,true)).setup_complete)return false;
+   await tx.query('INSERT INTO deployment_members(user_id) VALUES ($1) ON CONFLICT DO NOTHING',[identity.userId]);return true;
+  });
+ }
  const policy=admissionPolicyOf({},(_source,key)=>{const [module,name]=key.split('__');return env(module!,name!);});
  const email=identity.email?.trim().toLowerCase(),db=await getDb();
  const settled=await settledAdmission(db,identity,email,config,e=>policy.matches(e));

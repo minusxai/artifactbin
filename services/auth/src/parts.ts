@@ -16,7 +16,9 @@ import {usesDevOutbox} from './mail';
 import {TRUSTED_SIGNIN_PATH,createTrustedTokenVerifier,trustedCallbackPath,trustedEmailOf,trustedIssuersOf} from './identity/trusted-issuers';
 import {trustedSignIn} from './identity-store/trusted-sign-in';
 /** `setCookies`: Set-Cookie values the store wants sent back (a rolled-forward session cookie). */
-export interface SessionInfo {sessionId?:string;userId:string;email?:string;emailVerified?:boolean;setCookies?:string[]}
+export interface SessionInfo {sessionId?:string;userId:string;email?:string;emailVerified?:boolean;setCookies?:string[];
+ /** Set only by trusted-issuer sign-in, after the token verified: the issuer vouches for the person (see `admitIdentity`). */
+ trustedIssuer?:string}
 export interface SessionStore {
  identity?(userId:string):Promise<SessionInfo|null>;
  resolve(request:Request):Promise<SessionInfo|null>;
@@ -206,7 +208,7 @@ function mountTrustedSignIn(a:AuthApp,o:AuthOptions):void {
     const result=await trustedSignIn(o.identityTransactions,{issuer:issuer.issuer,subject,group,tenancyId,...(name?{name}:{}),
       ...(issuer.parentGroup?{parentGroup:issuer.parentGroup}:{}),email:trustedEmailOf(issuer.issuer,subject)},schema);
     if(!result.ok)return refuse(result.refusal,result.refusal==='parent_group_missing'?503:result.refusal==='invalid_claims'?401:403);
-    if(o.admitIdentity&&!await o.admitIdentity({userId:result.userId,email:result.email,emailVerified:true}))return refuse('deployment_admission_required',403);
+    if(o.admitIdentity&&!await o.admitIdentity({userId:result.userId,email:result.email,emailVerified:true,trustedIssuer:issuer.issuer}))return refuse('deployment_admission_required',403);
     const cookies=await o.sessions.start(result.userId);
     const headers=new Headers({location:withGroup(trustedCallbackPath(form.get('callbackUrl')),result.groupId),'cache-control':'no-store'});
     for(const cookie of cookies)headers.append('set-cookie',cookie);
