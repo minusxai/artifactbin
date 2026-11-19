@@ -39,6 +39,13 @@ describe('a red ci run names its suspects', () => {
     expect(redReport({ head: 'abc', green: null, commits: [], jobs: [] }).markdown).toContain('with no green ci run on main to compare against');
   });
 
+  it('names every commit a batch covers, oldest first, so the one that broke it is among them', () => {
+    const commits = ['a', 'b', 'c'].map((letter, index) => ({ sha: letter.repeat(40), subject: `Merge ${index + 1}` }));
+    const { markdown, annotation } = redReport({ head: 'c'.repeat(40), green: { sha: 'f'.repeat(40), run: 1 }, commits, jobs: [{ name: 'build', files: [] }] });
+    expect(markdown).toContain(`3 commit(s) since the last green ci run on main (${'f'.repeat(9)}, run 1):\n\n- aaaaaaaaa Merge 1\n- bbbbbbbbb Merge 2\n- ccccccccc Merge 3\n`);
+    expect(annotation).toContain('3 commit(s) since the last green ci run on main');
+  });
+
   it('runs in the roll-up only when the run failed, after the check that failed it, and never decides the run', () => {
     const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
     const steps = jobs.test.steps;
