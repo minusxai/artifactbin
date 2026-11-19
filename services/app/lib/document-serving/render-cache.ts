@@ -1,6 +1,6 @@
 /**
- * THE RENDER CACHE: finished document responses for anonymous readers — the app page's shell and the
- * document frame (/raw on the document's own origin) — so a popular public page is rendered once per
+ * THE RENDER CACHE: prepared document bytes: the anonymous app shell, and admitted document frames with the same
+ * revision and effective policy. A frequently read page is rendered once per
  * version rather than once per view.
  *
  * What it holds is bytes only: never a decision. Every request still asks the access question of the row
@@ -95,7 +95,7 @@ export function withFreshNonce(template: string): string {
   return template.replaceAll(NONCE_PLACEHOLDER, randomUUID().replaceAll('-', ''));
 }
 
-/** Who may be served from the cache: a reader with no account, no token, no group sign-in and no carried grants. */
+/** Who may be served a shared shell or opaque raw render: a reader with no account, no token, no group sign-in and no carried grants. */
 export function anonymousReader(actor: {userId?: string | null; tokenId?: string | null; principalGroup?: unknown}, carried?: Record<string, unknown> | null): boolean {
   return !actor.userId && !actor.tokenId && !actor.principalGroup && !(carried && Object.keys(carried).length);
 }

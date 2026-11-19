@@ -1,3 +1,4 @@
+import type { DefaultTreeAdapterMap } from 'parse5';
 import type { PortableDocument } from './portable-contract';
 import type { HtmlJsonObject } from '@artifactbin/contracts';
 export interface HtmlRuntimeConfig {
@@ -55,6 +56,8 @@ export interface HtmlRuntimeConfig {
 }
 export interface HtmlAssemblyInput {
   html: string;
+  /** A hosted reader's trusted presentation tags, applied before the final serialization. */
+  decorate?: (document: DefaultTreeAdapterMap['document']) => void;
   config: HtmlRuntimeConfig;
   /** Self-contained classic JS. Runs before every authored script. */
   core: string;

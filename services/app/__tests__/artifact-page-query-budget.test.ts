@@ -135,6 +135,8 @@ for (const door of ['json', 'html'] as const) describe(`a page view through the 
     expect(page.surface.author).toMatchObject({ username: w.author.username, id: w.author.id });
     expect(page.surface.openAnnotations).toBe(2);
     expect(page.surface.hasInvitedUsers).toBe(false);
+    if (door === 'html') expect(page.surface.hasEditableRegions).toBe(false);
+    else expect(page.surface).not.toHaveProperty('hasEditableRegions');
     expect(count).toBeLessThanOrEqual(BUDGET[door].owner);
   });
 

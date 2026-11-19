@@ -17,7 +17,7 @@
  */
 import {designSystemChoice} from '@/lib/html-systems';
 import { LIVE_VERSION_HEADER } from '@/lib/html-runtime';
-import { accessMoved, archivedVersionFor, type ArtifactHeader, type ArtifactRow, canReadArtifact, currentPage, getArtifactById, getArtifactHeaderById, liveRevision, refusingUnservable, servedRow, VERSION_PARAM } from '@/lib/artifacts';
+import { accessMoved, archivedVersionFor, type ArtifactHeader, type ArtifactRow, canReadArtifact, currentPage, getArtifactById, readPageHeader, readPageRow, refusingUnservable, servedRow, VERSION_PARAM } from '@/lib/artifacts';
 import { holdsCreatingToken } from '@/lib/artifact-access';
 import { recordView } from '@/lib/analytics';
 import { verifyExportKey } from '@/lib/export';
@@ -88,27 +88,20 @@ async function serveRaw(request: Request, ctx: RawDocumentRequest): Promise<Resp
   if (pages && pages.id !== id) return notFound();
   const fragment = domain ? null : ctx.fragment ?? null;
   if (!ID_RE.test(id)) return notFound();
-  const key = domain ? null : new URL(request.url).searchParams.get('key');
-  /*
-   * A REVALIDATION is decided on the row's HEADER: a document on its own origin asked with a validator, and nothing that is
-   * never revalidated (a key, a fragment, a version). It is admitted, and answered 304 below, without the database
-   * reading or sending the document (megabytes of JSONB for a large page); only a miss reads the row whole after it.
-   * Every other request reads the row whole once, as its answer has a body.
-   */
+  // A frame can revalidate or reuse prepared bytes without reading the source.
+  // Reader-specific admission and policy are still evaluated on every request.
+  const search = new URL(request.url).searchParams;
+  const key = domain ? null : search.get('key');
+  const archived = search.has(VERSION_PARAM);
   const asked = request.headers.get('if-none-match');
-  const conditional = !!pages && !key && !fragment && !!asked && !new URL(request.url).searchParams.has(VERSION_PARAM);
-  // The SAME viewer the proxy and the page decide ownership with (see below), resolved before the row: it decides
-  // whether this request may be answered from the render cache, which is asked from the header alone.
   const actor = await requestOrSessionActor(request);
-  /*
-   * A SHARED RENDER (./render-cache): an anonymous reader's head document on the app or its own origin —
-   * no key, version, fragment or anonymous owner host, no carried grant. Admission still runs below on the header, every
-   * time, before a cached body may be served; only a miss reads the row whole.
-   */
-  const shared = request.method === 'GET' && !domain && !fragment && !key && !new URL(request.url).searchParams.has(VERSION_PARAM) && !new URL(request.url).searchParams.has('v') && anonymousReader(actor, pages?.carried);
-  const metadataOnly = conditional || shared || (request.method === 'HEAD' && !key && !new URL(request.url).searchParams.has(VERSION_PARAM));
+  const cacheable = request.method === 'GET' && !domain && !fragment && !key && !archived && !search.has('v')
+    && (!!pages || anonymousReader(actor));
+  const metadataOnly = cacheable || (!!pages && !key && !fragment && !!asked && !archived)
+    || (request.method === 'HEAD' && !key && !archived);
+  const snapshot = metadataOnly ? await readPageHeader(id) : null;
   const loaded = metadataOnly ? null : await getArtifactById(id);
-  const header: ArtifactHeader | null = loaded ?? (metadataOnly ? await getArtifactHeaderById(id) : null);
+  const header: ArtifactHeader | null = snapshot?.row ?? loaded;
   if (!header) return notFound();
   if (fragment) return notFound();
   if (domain && !servesDocument(domain.owner, header)) return notFound();
@@ -140,7 +133,7 @@ async function serveRaw(request: Request, ctx: RawDocumentRequest): Promise<Resp
    * THE CURRENT PAGE (lib/artifacts current-page): the head is served with its regions' unsaved live text composed in,
    * so its bytes depend on the live revision as well as the row: it is in the validator and the render cache's key.
    */
-  const live = header.format === 'html' ? await liveRevision(header.id) : 0;
+  const live = snapshot?.live ?? 0;
 
   const base = pages?.site.app ?? baseUrl(request);
   /*
@@ -156,7 +149,7 @@ async function serveRaw(request: Request, ctx: RawDocumentRequest): Promise<Resp
   // Declarations belong to each immutable version; current viewer grants remain dynamic.
   const policyFor=async(row:Pick<ArtifactRow,'id'|'version'|'meta'>)=>nativeHtmlPolicy(id,base,pages?{self:pages.self,app:pages.site.app}:undefined,await cspExtensionsFor({artifact:{id:row.id,version:row.version,declared:storedCspExtensions(row.meta.htmlCsp)},viewer:actor,request,carried:pages?.carried}),{domainReads:directReads});
   let policy=await policyFor(header);
-  const revalidated = !!pages && !key && !new URL(request.url).searchParams.has(VERSION_PARAM);
+  const revalidated = !!pages && !key && !archived;
   const validator = async (row: ArtifactHeader, at = live) => etagOf({
     id: row.id, version: row.version, edit: row.edit_id, updated: row.updated_at, live: at,
     // Source is immutable within a published version; bindings are header metadata.
@@ -180,14 +173,15 @@ async function serveRaw(request: Request, ctx: RawDocumentRequest): Promise<Resp
     const held = etag && matchingTag(asked, etag);
     if (held) return notModified(`W/${held}`);
     if (request.method === 'HEAD') return new Response(null, { headers: responseHeaders(etag) });
-    const hit = shared ? renderCache.get(await frameKey(header)) : undefined;
+    const hit = cacheable ? renderCache.get(await frameKey(header)) : undefined;
     if (hit) {
       counted();
       return new Response(withFreshNonce(new TextDecoder().decode(hit.body)), { headers: responseHeaders(etag) });
     }
   }
 
-  const artifact = loaded ?? await getArtifactById(id);
+  const pageRead = !loaded && header.format === 'html' ? await readPageRow(id) : null;
+  const artifact = loaded ?? (header.format === 'html' ? pageRead?.row : await getArtifactById(id));
   if (!artifact) return notFound();
   // Admission is asked again of the row served when its access moved after the header was read.
   if (!loaded && accessMoved(header, artifact) && !(await admits(artifact))) return notFound();
@@ -197,19 +191,20 @@ async function serveRaw(request: Request, ctx: RawDocumentRequest): Promise<Resp
       const at = domain ? null : await archivedVersionFor(request, artifact, () => requestOrSessionActor(request), { capture: byExportKey });
       if (at === 'not_found') return notFound();
       // The head is its current page (live text composed in); an archived version is served as it was saved.
-      const page = at ? null : await currentPage(artifact);
+      const page = at ? null : await currentPage(artifact, pageRead ? { revision: pageRead.revision } : {});
       const row = { ...servedRow(artifact, at), ...(page ? { source: page.row.source, title: page.row.title } : {}), version: at?.version ?? artifact.version };
-      if(at)policy=await policyFor(row);
+      const sameHead = sameRevision(header, artifact) && !accessMoved(header, artifact);
+      if (at || !sameHead) policy = await policyFor(row);
       const etag = revalidated && !at ? await validator(artifact, page?.live) : null;
       const held = etag && matchingTag(asked, etag);
       if (held) return notModified(`W/${held}`);
       if (request.method === 'HEAD') return new Response(null, { headers: responseHeaders(etag) });
       // Retained only when the row rendered is the one the key was read from (it, or its live text, may have moved since).
-      const retained = shared && !at && sameRevision(header, artifact) && page?.live === live ? await frameKey(header) : null;
+      const retained = cacheable && !at && sameHead && page?.live === live ? await frameKey(header) : null;
       // The owner's design-system choice is page metadata, current for every version shown (not part of the source).
-      const rendered = await nativeHtmlDocument({ row, designSystem: designSystemChoice(artifact.meta), ...(page ? { live: page.live, unsavedIds: page.unsavedIds } : {}), ...(pages ? { appOrigin: pages.site.app } : {}), ...(directReads ? { domainReads: true } : {}), ...(capture && key ? { captureKey: key } : {}), ...(retained ? { platformScriptNonce: NONCE_PLACEHOLDER } : {}) });
+      const rendered = await nativeHtmlDocument({ row, presentation: nativeHtmlPresentation(row, domain), designSystem: designSystemChoice(artifact.meta), ...(page ? { live: page.live, unsavedIds: page.unsavedIds } : {}), ...(pages ? { appOrigin: pages.site.app } : {}), ...(directReads ? { domainReads: true } : {}), ...(capture && key ? { captureKey: key } : {}), ...(retained ? { platformScriptNonce: NONCE_PLACEHOLDER } : {}) });
       counted();
-      const html = await nativeHtmlPresentation(rendered.html,row,domain);
+      const { html } = rendered;
       if (!retained) return new Response(html, { headers: responseHeaders(etag) });
       renderCache.set(retained, { status: 200, headers: [], body: new TextEncoder().encode(html) }, FRAME_TTL_MS);
       return new Response(withFreshNonce(html), { headers: responseHeaders(etag) });

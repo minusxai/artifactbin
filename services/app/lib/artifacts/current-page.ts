@@ -17,6 +17,7 @@ import { getDb, type Queryable } from '../platform';
 import { LIVE_ARTIFACT_SQL, type ArtifactRow } from '@/lib/artifact-access';
 import { composeLiveRegions, liveRevisionOf, revisionOf, type LiveRevision } from './regions';
 import { artifactQuery } from './document';
+import { ARTIFACT_HEADER_COLUMNS, type ArtifactHeader } from './rows';
 import { docTitleAfterSave } from './doc-title';
 
 export type PageRow = Pick<ArtifactRow, 'id' | 'format' | 'version' | 'edit_id' | 'source' | 'title' | 'meta'>;
@@ -71,8 +72,22 @@ export async function readPageRow(id: string): Promise<PageRead | null> {
     `SELECT artifacts.*, ${LIVE_REGIONS_SQL} AS af_live_regions FROM artifacts WHERE id = $1 AND ${LIVE_ARTIFACT_SQL}`, [id])).rows[0];
   if (!found) return null;
   const { af_live_regions: regions, ...row } = found;
+  return { row: row as ArtifactRow, revision: storedRevision(regions) };
+}
+
+/** One metadata-only snapshot for admission, validators and cached frames. */
+export async function readPageHeader(id: string): Promise<{ row: ArtifactHeader; live: number } | null> {
+  const columns = ARTIFACT_HEADER_COLUMNS.join(', ');
+  const found = (await (await getDb()).query<ArtifactHeader & { af_live_regions: unknown }>(
+    `SELECT ${columns}, CASE WHEN format = 'html' THEN ${LIVE_REGIONS_SQL} END AS af_live_regions FROM artifacts WHERE id = $1 AND ${LIVE_ARTIFACT_SQL}`, [id])).rows[0];
+  if (!found) return null;
+  const { af_live_regions: regions, ...row } = found;
+  return { row, live: storedRevision(regions).live };
+}
+
+function storedRevision(regions: unknown): LiveRevision {
   const parsed = (typeof regions === 'string' ? JSON.parse(regions) : regions) as { region_id: string; last_seq: number; dirty: boolean }[] | null;
-  return { row: row as ArtifactRow, revision: revisionOf(parsed ?? []) };
+  return revisionOf(parsed ?? []);
 }
 
 /** The live revision alone (a header read: the render cache's and the validator's key), without composing. */

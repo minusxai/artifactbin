@@ -276,6 +276,7 @@ export function htmlAssetLinks(html:string):HtmlAssetLinks {
 }
 /** Presentation-only URL changes leave saved source, identities and downloaded files untouched. */
 export function rewriteHtmlAssetUrls(html:string,replacements:ReadonlyMap<string,string>):string {
+ if(!replacements.size)return html;
  const edits:import('./html-source').Edit[]=[];
  for(const element of parseSource(html).elements)for(const name of assetAttributes(element)){
   const value=attribute(element,name),next=value&&replacements.get(value),location=element.sourceCodeLocation?.attrs?.[name];

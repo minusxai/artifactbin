@@ -266,18 +266,24 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     forkedFromCredit(artifact.forked_from),
     liveConnection ? Promise.resolve('[]') : artifact.format === 'dataset' ? (datasetDecision && !datasetDecision.full ? datasetRowsFor(datasetDecision, artifact) : loadDatasetRows(artifact)).then(rows => JSON.stringify(rows)) : Promise.resolve(isDoc ? '' : (artifact.format === 'viz' ? artifact.source ?? '' : '')),
   ] as const);
-  // Awaited below; a failure of the preparation first must not leave this one unobserved.
-  void social.catch(() => {});
-  // The shell reads only this version's metadata; the head's is its current page (lib/artifacts current-page): the
-  // title a doc's live heading names. (Its live revision is the frame's own: lib/html-runtime/live-morph.)
-  const page = nativeHtml && !at ? await currentPage(artifact, revision ? { revision } : {}) : null;
+  const ownerScope = role === 'owner' ? actor : null;
+  const readerPick = options.pages && isDoc && !exporting ? readerPickOf(request) : null;
+  // Ticket issuance, theme/live source, policy and chrome have no ordering dependency.
+  const [page, [{ author, liked, likeCount, following, followCount, openAnnotations }, forkedFrom, dataPreview],
+    hasInvitedUsers, framedSrc, publishedUrl, cspRequest] = await Promise.all([
+    nativeHtml && !at ? currentPage(artifact, revision ? { revision } : {}) : null,
+    social,
+    ownerScope ? hasInvitedUsersFor(ownerScope, id) : false,
+    options.pages && isDoc ? (async (site) => {
+      if (exporting && !admitted && !holdsCreatingToken(artifact, actor) && !await canReadArtifact(artifact, actor, facts)) return null;
+      return admittedFrameSrc(request, artifact, actor, site, new URL(request.url).search, readerPick);
+    })(options.pages) : null,
+    userPageUrl(artifact),
+    nativeHtml ? cspRequestFor({artifact:{id:artifact.id,version:at?.version??artifact.version,declared:storedCspExtensions((at?.meta ?? artifact.meta).htmlCsp)},viewer:actor,request}) : undefined,
+  ] as const);
   const row = page ? { ...servedRow(artifact, at), source: page.row.source, title: page.row.title } : servedRow(artifact, at);
   const membershipAvailable = false;
   const pwaEnabled = artifactPwaEnabled(row);
-  const framedDocument = nativeHtml;
-  // Only the HTML door draws the frame (and mints its ticket); both doors answer a framed document with its FramedRuntime.
-  const framing = !!options.pages && framedDocument;
-
 
   const meta = (row.meta ?? {}) as {
     theme?: StoryDesignName | null; colorMode?: 'light' | 'dark' | null; compiledCss?: string | null;
@@ -287,38 +293,24 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   // A CAPTURE may be drawn in either mode (lib/mermaid-images harvests both); a reader sees the author's.
   const capturedColor = exporting ? captureColor(request.url) : null;
   // Captures use their requested mode; readers keep their own preference.
-  const readerPick = framing && !exporting ? readerPickOf(request) : null;
-  // An HTML page's design system and default mode are what its core applies (lib/html-page/design-system): the owner's
-  // saved choice, else the page's own meta, and the system's own default mode — so the reader's toggle starts right.
+  // An HTML page's design system and default mode are what its core applies.
   const look = nativeHtml ? htmlAppearance(row.source ?? '', designSystemChoice(artifact.meta)) : null;
   const design = look ? { theme: (look.designSystem ?? null) as StoryDesignName | null, colorMode: capturedColor ?? look.mode } : resolveStoredStoryDesign(meta.theme, capturedColor ?? meta.colorMode);
-  // A document's sheet is its prepared page's; the data tiers keep their stored one.
   const compiledCss = isDoc ? null : meta.compiledCss ?? null;
-  const ownerScope = role === 'owner' ? actor : null;
-  // The reader was admitted above (or by the caller) unless an export key stood in for the check: only then is it asked.
-  const readerAdmitted = !!admitted || !exporting || holdsCreatingToken(artifact, actor);
-  // Beside the served runtime and the social reads, not after them: none depends on another.
-  const [[{ author, liked, likeCount, following, followCount, openAnnotations }, forkedFrom, dataPreview], hasInvitedUsers, framedSrc] = await Promise.all([
-    // A framed document runs its own first results on its own origin: the app's answer, through either door, carries none.
-    social,
-    ownerScope ? hasInvitedUsersFor(ownerScope, id) : Promise.resolve(false),
-    // The ticket goes in the frame's first URL and is spent by the pages apex before the document loads.
-    framing && isDoc && (readerAdmitted || await canReadArtifact(artifact, actor, facts))
-      ? admittedFrameSrc(request, artifact, actor, options.pages!, new URL(request.url).search, readerPick) : Promise.resolve(null),
-  ] as const);
+  const documentTitle = nativeHtml ? nativeHtmlTitle(row) : null;
   const authorUsername = author?.username ?? null;
   const starter = nativeHtml && !at && row.version === 1 && row.meta.startPlaceholder === true;
   const authorMark = { username: authorUsername, id: author?.id ?? null, image: author ? avatarUrl(author) : null, forkedFrom };
   const follow = artifact.user_id && artifact.user_id !== viewerId ? { userId: artifact.user_id, following, count: followCount } : null;
 
   const framedOrigin = framedSrc?.origin ?? null;
-  const frame: DocumentFrame | null = framedSrc && nativeHtml && !starter ? {
+  const frame: DocumentFrame | null = framedSrc && documentTitle !== null && !starter ? {
     src: framedSrc.src,
     contentUrl: `/a/${artifact.id}/raw${at ? `?version=${at.version}` : ''}`,
-    title: nativeHtmlTitle(row),
+    title: documentTitle,
     colorMode: readerPick ?? design.colorMode ?? 'light',
     head: {
-      title: nativeHtmlTitle(row),
+      title: documentTitle,
       description: row.description,
       // `v`: a new card is a new URL. Chat apps cache an unfurl's image by its URL, so a card that changed (a new share
       // image, an edit) under the same URL kept showing the old one; the raw door's head already carried it.
@@ -333,18 +325,19 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     editId: artifact.edit_id,
     format: artifact.format,
     visibility: artifact.visibility,
-    user_page_url: await userPageUrl(artifact),
+    user_page_url: publishedUrl,
     ...(ownerScope ? { hasInvitedUsers } : {}),
-    title: nativeHtml ? nativeHtmlTitle(row) : row.title,
+    title: documentTitle ?? row.title,
     author: authorMark,
-    ...(nativeHtml ? {
+    ...(documentTitle !== null ? {
       // The framed page's own sheet, script and reader data are the frame's, and the tree is the nodes door's: the
       // app keeps what it reads (FramedRuntime), whichever door it asked. The starter's read view, which is app UI
       // rather than a frame, keeps the whole served runtime, less the tree.
-      runtime: ({ title: nativeHtmlTitle(row), data: {} }) satisfies FramedRuntime,
+      runtime: ({ title: documentTitle, data: {} }) satisfies FramedRuntime,
       // What the reader's chrome derived from the source: the document's own
       // name (lib/document/title) and whether it is still the starter placeholder.
       heading: row.title, starter,
+      ...(options.pages ? { hasEditableRegions: /data-af-editable/i.test(row.source ?? '') } : {}),
     } : {
       // The data tiers: their source is their content (a dataset's only for those who may edit it).
       source: artifact.format==='dataset'&&role!=='owner'&&role!=='editor'?null:row.source,
@@ -384,7 +377,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   const body = {
     canonical: canonicalArtifactPath(artifact, groupId ? ownerGroup?.handle ?? null : authorUsername),
     description: row.description,
-    ...(nativeHtml?{cspRequest:await cspRequestFor({artifact:{id:row.id,version:at?.version??artifact.version,declared:storedCspExtensions(row.meta.htmlCsp)},viewer:actor,request})}:{}),
+    ...(cspRequest ? { cspRequest } : {}),
     role,
     kind,
     /*

@@ -25,6 +25,7 @@ import { parse, type DefaultTreeAdapterMap } from 'parse5';
 /** Inputs from one permission-checked immutable version. No credential belongs here but `captureKey`, for that one response. */
 export interface NativeHtmlRender {
   row: Pick<ArtifactRow, 'id' | 'version' | 'source' | 'meta'>;
+  presentation?: Promise<NonNullable<HtmlAssemblyInput['decorate']>>;
   appOrigin?: string;
   offline?: boolean;
   /** The owner's saved design system (page metadata), which wins over the page's own meta. */
@@ -75,8 +76,11 @@ export async function nativeHtmlDocument(input: NativeHtmlRender): Promise<Nativ
   const stored=(input.row.meta as {htmlScriptFingerprint?:unknown}).htmlScriptFingerprint;
   config.scriptFingerprint=typeof stored==='string'?stored:scriptFingerprint(source);
   const portable={version:1 as const,source,...(input.appOrigin?{identity:{platformOrigin:new URL(input.appOrigin).origin,artifactId:input.row.id,baseRevision:String(input.row.version),sourceDigest:createHash('sha256').update(source).digest('hex'),dependencyIdentity:config.bindings}}:{})};
-  const rendered=input.offline?input.renderedHtml??source:await nativeHtmlAssets(input.row,captureKey);
-  const assembly={platformScriptNonce:input.platformScriptNonce??randomUUID().replaceAll('-',''),...(input.unsavedIds?.size?{unsavedNodeIds:input.unsavedIds}:{}),portable,html:nativeCodeHtml(rendered),config,core:await htmlCore(),systemsHref:PLATFORM_STYLES_PATH,designSystem:input.designSystem??null,...(input.offline?{apollo:(await htmlAssets()).apollo,reader:(await htmlAssets()).reader,chrome:(await htmlAssets()).chrome,portableEngine:(await htmlAssets()).portableEngine,collab:(await htmlAssets()).collab,state:(await htmlAssets()).state,...(input.offlineData?.tables.length?{offlineData:input.offlineData,offlineSql:(await htmlAssets()).offlineSql}:{})}:{})};
+  const [rendered, core, decorate] = await Promise.all([
+    input.offline ? input.renderedHtml ?? source : nativeHtmlAssets(input.row,captureKey),
+    htmlCore(), input.presentation,
+  ]);
+  const assembly={decorate,platformScriptNonce:input.platformScriptNonce??randomUUID().replaceAll('-',''),...(input.unsavedIds?.size?{unsavedNodeIds:input.unsavedIds}:{}),portable,html:nativeCodeHtml(rendered),config,core,systemsHref:PLATFORM_STYLES_PATH,designSystem:input.designSystem??null,...(input.offline?{apollo:(await htmlAssets()).apollo,reader:(await htmlAssets()).reader,chrome:(await htmlAssets()).chrome,portableEngine:(await htmlAssets()).portableEngine,collab:(await htmlAssets()).collab,state:(await htmlAssets()).state,...(input.offlineData?.tables.length?{offlineData:input.offlineData,offlineSql:(await htmlAssets()).offlineSql}:{})}:{})};
   return {html:input.offline?downloadableHtml(assembly):assembleHtmlPage(assembly),config};
 }
 /** A draft's page (lib/page-drafts): the reader's own source, never stored, and the tables its linked CSV files are. */
