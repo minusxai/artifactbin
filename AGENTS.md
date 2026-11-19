@@ -22,24 +22,31 @@ comment, history nowhere. Keep links plain, never `@` imports.
 | [scripts](scripts/AGENTS.md) | delegating (briefs, worktrees, gates, handoffs), any root script |
 | [scripts/ci](scripts/ci/AGENTS.md) | workflows, PR lane budgets, test lists and timings, a red main |
 
+## CI rules (the same in every repository; they override anything else here)
+
+1. **Main is fast:** all of main's CI finishes within 6 minutes, ideally 4.
+2. **Main is reliable:** no flaky tests. A test that fails without a product cause is fixed for good or removed.
+3. **Long tests run nightly:** keep the critical part in main if it fits; the rest runs once a day and blocks nothing.
+4. **Pull-request CI is very fast:** under 60 seconds, ideally 40.
+5. **Recurring main failures move to pull-request CI:** a failure that keeps happening gets a fast check before merge.
+6. **Main is batched and deploys follow green batches:** one batch at a time, never cancelled; a red batch lists its
+   commits and the failing test.
+7. **Only affected tests run:** unit tests are grouped by module and run when that module or its imports changed.
+   End-to-end tests are few and light, and run on every change.
+
 ## Check tiers (read before running commands)
 
 **FAST — after every change:** `npm run validate`, `npm test -- --files <paths>`, the running dev app.
 
 **SLOW — once, at completion before merge, never per edit:** gate containers, PR CI push, bare `npm test`.
 
-- **Finish on FAST, then SLOW once.** Never push, poll CI or gate per edit.
 - **Pre-merge:** FAST → commit, push ONCE → open/update an empty-body PR (no descriptive comments unless
   requested) → `pr fast` green → merge. The full `ci.yml` suite, build, browser gates, page speed and CodeQL run
   on main after merge and gate release. Local gates only for a failed CI gate shard or a reader/hydration change.
 - **PRs into `main`: ONLY squash and merge**, via `node scripts/ci/merge-fast.mjs owner/repo PR`: it checks the exact
   completed fast attempt and its timing, then squash-merges with `--admin --match-head-commit` (admin bypass is for
   reviews only). NEVER `--merge` or `--rebase`. Rebasing a working branch is fine.
-- **Deferred (exit 2) mid-task?** Return to `--files`; report the deferral; PR CI runs the rest. On a red PR: fetch
-  every failed job's log in ONE command, fix all failures together (independent ones in parallel agents), never
-  retry unchanged code.
-- **CI:** main within 6 min (aim 4), batched; no flaky test (fix or remove); long tests nightly; `pr fast`
-  under 60 s (aim 40), never raise it; a recurring main failure gets a fast-lane guard.
+- **Deferred (exit 2) mid-task?** Return to `--files`; report the deferral; PR CI runs the rest.
 
 ## Working rules
 
@@ -51,7 +58,6 @@ comment, history nowhere. Keep links plain, never `@` imports.
   never the index): the cards state their module's row; `npm run validate` enforces it.
 - TDD for features and refactors: contracts, behavioral tests, observe the failure, implement. Refactors go
   Blue → Red → Blue: tests pass, prove the assertion catches broken behavior, restore. Report only observed runs.
-- Probe assumptions; record evidence/unknowns. Order milestones by risk; end with runnable checks.
 - Verify user-facing changes on the task's running app (`npm run dev` on the worktree's own `APP__PORT`, in `.env`).
   Never iterate/test on production; confirm after deploy.
 - **50 files TOTAL.** Above 50: nothing runs; exit 2 means **DEFERRED, NOT PASSED**.
@@ -60,9 +66,6 @@ comment, history nowhere. Keep links plain, never `@` imports.
 - **Reuse evidence** in the same worktree: `npm run validate -- --reuse`, `npm test -- --reuse` (same arguments).
   One-hour receipts need matching sources, command, environment, runtime, lock and generated inputs; failed,
   deferred or empty runs never count. Label it prior evidence; skip reuse after external-state changes; never copy.
-- **Bound investigation:** scoped `rg -l`/`rg -n`, bounded output; skip unrelated fixtures, transcripts, assets
-  and dependencies; batch reads, never repeat searches.
-- After a merge: local main to latest origin/main, `git worktree prune`, remove finished worktrees.
 - Top-level imports, except intentional lazy browser chunks and engine-selecting imports; document a
   new exception at the boundary and verify the bundle.
 - Read env vars through the owning service's audited config (scripts/eval harnesses own theirs). `MODULE__NAME`
@@ -79,13 +82,11 @@ comment, history nowhere. Keep links plain, never `@` imports.
   link access is neither ownership nor dataset write access.
 - After a lockfile merge, regenerate if needed and run `npm ci --dry-run` (a populated install hides a broken
   lock); native packages and browser assets need build/image verification.
-- Delegating: read the scripts card first; every brief inherits these rules.
 
 ## Commands (from the repo root)
 
 - `npm ci` — install pinned dependencies. `npm run setup` — create or repair local settings.
 - `npm run dev` — full local composition, default http://app.lvh.me:3030 (`localhost` breaks sign-in, SETUP.md); `dev:app` the app alone, without login/OAuth.
-- `npm run dev:otp -- <email>` — a local login code from the protected outbox.
 - `npm run eval -- --tasks <name>` — the agent eval against that server (setup: the `lib/skills` row).
 - `npm run validate` — FAST: UI primitives, module graph, table ownership, knip (unused files, exports,
   dependencies), the incremental type check.
