@@ -9,6 +9,14 @@ on:
 permissions:
   contents: read
 
+# MAIN VERIFIES IN BATCHES: one run per ref at a time, never cancelled. Merges that land during a run wait, and GitHub
+# keeps only the newest pending run, which verifies them all together: it runs the full suite (or reuses an identical
+# tree's green run), and a red one names every commit since main's last green run (`red-report`). Production admits
+# only an exact revision whose push run here is green, so it deploys a green batch's head, one batch at a time.
+concurrency:
+  group: main-verification-${{ github.ref }}
+  cancel-in-progress: false
+
 # Wall time is the point: the old single job ran everything serially (7m+, of
 # which npm test was 5m — ~330s of aggregate api-suite work meeting 4 shared
 # vCPUs). The suite now fans out: fast checks + the two lighter vitest
@@ -937,7 +945,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}" > ci-attempt.json
+          # The attempt's jobs: its clock starts at the first one's creation, not at `run_started_at`, which keeps a
+          # batch's time waiting in its concurrency group for the previous one (scripts/lib/ci-elapsed.mjs).
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}/jobs?per_page=100" > ci-attempt.json
           node scripts/lib/ci-elapsed.mjs ci-attempt.json "$GITHUB_STEP_SUMMARY"
       - name: Record the tested tree
         id: tree

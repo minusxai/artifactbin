@@ -250,6 +250,12 @@ describe('CodeQL leaves one overlay database in the cache, not one per merge', (
   });
 });
 
+// Main verifies in batches: one ci run per ref at a time, never cancelled, so merges landing during a run are verified
+// together by the one newest pending run (scripts/ci/AGENTS.md), and production deploys one green batch at a time.
+it('runs main\'s ci one batch at a time and never cancels a running batch',()=>{
+ expect(workflow('ci.yml').concurrency).toEqual({group:'main-verification-${{ github.ref }}','cancel-in-progress':false});
+});
+
 describe('CodeQL scans every merged revision without narrowing analysis',()=>{
  // Every merged revision is a deployment candidate that needs its own scan: cancelling a superseded push scan left
  // ci-green 6e581b2eb, 08f6b19d9, 55b153ff0 and fb1c96116 unadmittable, and the replacing run sat pending 30-40 s

@@ -4,7 +4,7 @@ import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
 import yaml from 'yaml';
-import {CI_BUDGETS, describeCiElapsed, measureCiElapsed} from '../lib/ci-elapsed.mjs';
+import {CI_BUDGETS, attemptStart, describeCiElapsed, measureCiElapsed} from '../lib/ci-elapsed.mjs';
 import {JOBS, shardLoads} from '../ci/test-timings.mjs';
 import {NODE_TIMINGS_ARTIFACT} from '../lib/node-batch.mjs';
 import {tempDirSync} from '../../services/test-support/src/temp-dir.ts';
@@ -38,7 +38,7 @@ it('enforces chained time on main and pull requests before receipts and at the f
  const chain=steps.filter(step=>step.run?.includes('ci-elapsed.mjs'));
  expect(chain).toHaveLength(2);
  expect(chain.every(step=>step.if==='always()' && step['continue-on-error']===undefined)).toBe(true);
- expect(chain[0].run).toContain('/attempts/${GITHUB_RUN_ATTEMPT}');
+ expect(chain[0].run).toContain('/attempts/${GITHUB_RUN_ATTEMPT}/jobs?per_page=100');
  expect(steps.indexOf(chain[0])).toBeLessThan(steps.findIndex(step=>step.id==='tree'));
  expect(steps.at(-1)).toBe(chain[1]);
  expect(chain.every(step=>!step.run.includes('pull_request'))).toBe(true);
@@ -57,6 +57,19 @@ it('exits nonzero for an over-limit attempt and missing start, but accepts a fre
   expect(fresh.status).toBe(0); expect(fresh.stdout).toContain('(target)');
   expect(readFileSync(summary,'utf8')).toContain('hard failure >480s');
   expect(run({created_at:'2020-01-01T00:00:00Z'}).status).toBe(1);
+});
+// A batch waits in ci.yml's concurrency group for the previous one, and `run_started_at` keeps that wait: the main clock
+// starts at the attempt's first job instead, while an attempt without jobs (pr fast, artifactbin-server) keeps its own.
+it('starts a batch\'s clock at its first job, not at the run start that includes its wait for the previous batch',()=>{
+ const jobs=[{created_at:'2026-10-06T00:06:00Z'},{created_at:'2026-10-06T00:05:00Z'},{created_at:null}];
+ expect(attemptStart({run_started_at:'2026-10-06T00:00:00Z',jobs})).toBe('2026-10-06T00:05:00Z');
+ expect(attemptStart({run_started_at:'2026-10-06T00:00:00Z'})).toBe('2026-10-06T00:00:00Z');
+ expect(attemptStart({jobs:[]})).toBeUndefined();
+ const directory=tempDirSync('afbin-ci-elapsed-jobs-',onTestFinished),attempt=join(directory,'jobs.json');
+ const ago=(seconds)=>new Date(Date.now()-seconds*1000).toISOString();
+ writeFileSync(attempt,JSON.stringify({total_count:2,jobs:[{created_at:ago(30)},{created_at:ago(10)}]}));
+ const batch=spawnSync(process.execPath,[fileURLToPath(new URL('../lib/ci-elapsed.mjs',import.meta.url)),attempt],{encoding:'utf8'});
+ expect(batch.status,batch.stdout).toBe(0);expect(batch.stdout).toContain('(target)');
 });
 it('warns rather than fails when a PR consumer includes a long prerequisite wait',()=>{
  const step=workflow().jobs.test.steps.find(step=>step.env?.BUDGET_S),directory=tempDirSync('afbin-job-time-warning-',onTestFinished);
