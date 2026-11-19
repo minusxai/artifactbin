@@ -40,8 +40,10 @@ export async function servesWebAsset(owner:UserPagesOwner,hash:string):Promise<b
  return (await db.query(`SELECT 1 ${pages} AND meta->'webAssets' ? $2 LIMIT 1`,[owner.id,hash])).rows.length>0;
 }
 /** Bare hosts are copies: the app remains canonical, with no domain database lookup. */
-export async function canonicalDocumentUrl(row:Pick<ArtifactRow,'id'|'title'|'user_id'> & {group_id?:string|null}):Promise<string>{
- return `${PUBLIC_BASE_URL.replace(/\/+$/,'')}${canonicalArtifactPath(row,row.group_id?(await documentOwner(row))?.handle??null:await ownerUsername(row.user_id))}`;
+export async function canonicalDocumentUrl(row:Pick<ArtifactRow,'id'|'title'|'user_id'> & {group_id?:string|null}, personalHandle?:string|null):Promise<string>{
+ const handle = row.group_id ? (await documentOwner(row))?.handle ?? null
+  : personalHandle === undefined ? await ownerUsername(row.user_id) : personalHandle;
+ return `${PUBLIC_BASE_URL.replace(/\/+$/,'')}${canonicalArtifactPath(row,handle)}`;
 }
 export function userPageUrlForOwner(row:Pick<ArtifactRow,'id'|'title'|'user_id'|'group_id'|'visibility'|'format'|'deleted_at'>,owner:UserPagesOwner|null):string|null {
  if(!owner||!servesDocument(owner,row))return null;

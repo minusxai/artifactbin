@@ -115,6 +115,7 @@ export function assembleHtmlPage(input: HtmlAssemblyInput): string {
     const charset=head.childNodes.find(node=>'attrs'in node&&node.nodeName==='meta'&&node.attrs.some(attr=>attr.name==='charset'))!;
     head.childNodes=head.childNodes.filter(node=>node!==charset);head.childNodes.unshift(charset);
   }
+  input.decorate?.(document);
   return serialize(document);
 }
 /** Downloads use the same native renderer, with no platform origin or remote capability. */

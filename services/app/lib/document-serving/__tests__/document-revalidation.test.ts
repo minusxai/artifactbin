@@ -57,6 +57,34 @@ describe('native document conditional reads',()=>{
  it('includes authored initial viewer state in the immutable representation',async()=>{const w=await world(),tag=tagOf(await read(w.id));await w.edit(BODY.replace('</head>','<script type="application/json" data-af="state">{"tab":"details"}</script></head>'));const fresh=await read(w.id,{'if-none-match':tag});expect(fresh.status).toBe(200);expect(tagOf(fresh)).not.toBe(tag);expect(await fresh.text()).toContain('"initialState":{"tab":"details"}');});
  it('separates another signed-in reader from the owner and anonymous reader',async()=>{const w=await world(),other=await createUser({email:'mxmx_test_reval_other@example.com'});const owner=await read(w.id,{cookie:await pagesCookie(w.id,w.actor)}),stranger=await read(w.id,{cookie:await pagesCookie(w.id,humanActor(other))}),guest=await read(w.id);expect(new Set([tagOf(owner),tagOf(stranger),tagOf(guest)]).size).toBe(3);});
  it('does not let an owner validator open a private page to an anonymous reader',async()=>{const w=await world('private'),owner=await read(w.id,{cookie:await pagesCookie(w.id,w.actor)});expect(owner.status).toBe(200);const guest=await read(w.id,{'if-none-match':tagOf(owner)});expect(guest.status).toBe(404);expect(tagOf(guest)).toBeNull();});
+ it('reuses a private frame without a validator and keeps access, content and the nonce current', async () => {
+  const w = await world('private');
+  const rendered = vi.spyOn(native, 'nativeHtmlDocument');
+  const cookie = await pagesCookie(w.id, w.actor);
+  expect(cookie).not.toBe('');
+  const a = await read(w.id, {cookie});
+  const db = await getDb(), query = db.query.bind(db), statements: string[] = [];
+  const observed = vi.spyOn(db, 'query').mockImplementation((sql: string, params?: unknown[]) => {
+    statements.push(sql);
+    return query(sql, params);
+  });
+  const b = await read(w.id, {cookie});
+  observed.mockRestore();
+  expect(statements.some(sql => /SELECT (?:artifacts\.)?\*/i.test(sql) && /FROM artifacts/i.test(sql))).toBe(false);
+  expect(statements.filter(sql => /region_states/i.test(sql))).toHaveLength(1);
+  expect(a.status).toBe(200);
+  expect(b.status).toBe(200);
+  expect(rendered).toHaveBeenCalledTimes(1);
+  const first = nativeResponseIdentity(await a.text()), second = nativeResponseIdentity(await b.text());
+  expect(first.html).toBe(second.html);
+  expect(first.nonce).not.toBe(second.nonce);
+  expect((await read(w.id)).status).toBe(404);
+  await w.edit(BODY.replace('A plan</h1>', 'Updated plan</h1>'));
+  expect(await (await read(w.id, {cookie})).text()).toContain('Updated plan');
+  expect(rendered).toHaveBeenCalledTimes(2);
+  liveSessions.delete(w.actor.sessionId!);
+  expect((await read(w.id, {cookie})).status).toBe(404);
+ });
  it('refuses the old page cookie and validator after the human authority revokes its session',async()=>{
   const w=await world('private'),cookie=await pagesCookie(w.id,w.actor),owner=await read(w.id,{cookie});expect(owner.status).toBe(200);
   liveSessions.delete(w.actor.sessionId!);

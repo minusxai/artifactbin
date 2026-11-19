@@ -570,11 +570,12 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
       if (!(await canReadArtifact(row, actor ?? ANONYMOUS_ACTOR, facts))) return { status: 404 };
       // Admitted, by this request's own actor: the page's answer reuses the row and this decision.
       if (url.searchParams.has('key')) return { status: 200, admitted: { row, revision } };
-      const canonicalPath = canonicalArtifactPath(row, await ownerUsername(row.user_id));
+      const personalHandle = await ownerUsername(row.user_id);
+      const canonicalPath = canonicalArtifactPath(row, personalHandle);
       const canonical = canonicalPath + (editingDataset ? '/edit' : '');
       // A title-slug address stays in the address bar: it is the address the person chose to share.
       const servedPath = bySlug ? artifactViewPath(url.pathname) : undefined;
-      return { status: 200, admitted: { row, canonicalPath, revision, ...(servedPath ? { servedPath } : {}) }, canonical: await canonicalDocumentUrl(row), ...(!bySlug && canonical !== url.pathname ? { address: canonical } : {}) };
+      return { status: 200, admitted: { row, canonicalPath, revision, ...(servedPath ? { servedPath } : {}) }, canonical: await canonicalDocumentUrl(row, personalHandle), ...(!bySlug && canonical !== url.pathname ? { address: canonical } : {}) };
     };
     const byId = found ? await admit(found.id, false) : { status: 404 as const };
     if (byId.status === 200 || !slugged) return byId;

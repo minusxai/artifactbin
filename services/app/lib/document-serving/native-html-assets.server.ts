@@ -8,7 +8,11 @@ export async function nativeHtmlAssets(row:Pick<ArtifactRow,'id'|'version'|'sour
  const source=row.source??'',assets=htmlAssetLinks(source),urls=new Map<string,string>();
  const admitted=(row.meta as {refs?:Array<{id:string}>}).refs??[];
  // One header read for every admitted reference: the format and version are all a raw address needs.
- for(const asset of await getArtifactHeadersByIds(assets.refs.filter(id=>admitted.some(ref=>ref.id===id))))if(['image','file','pdf'].includes(asset.format))urls.set('ref:'+asset.id,`/a/${asset.id}/raw?v=${asset.version}`);
- for(const [url,asset] of await lookupWebAssets(assets.imageUrls))urls.set(url,`/assets/${asset.url_hash}`);
+ const [headers, images] = await Promise.all([
+  getArtifactHeadersByIds(assets.refs.filter(id=>admitted.some(ref=>ref.id===id))),
+  lookupWebAssets(assets.imageUrls),
+ ]);
+ for(const asset of headers)if(['image','file','pdf'].includes(asset.format))urls.set('ref:'+asset.id,`/a/${asset.id}/raw?v=${asset.version}`);
+ for(const [url,asset] of images)urls.set(url,`/assets/${asset.url_hash}`);
  return pinPublicationAssetUrls(rewriteHtmlAssetUrls(source,urls),row.id,row.version,'text/html',[],captureKey);
 }

@@ -59,7 +59,7 @@ interface DocumentAnswer {
     runtime?: FramedRuntime;
     refs?: Array<{ id: string; kind: string; title?: string | null }>;
     template?: string | null; theme?: string | null; colorMode?: 'light' | 'dark' | null;
-    heading?: string | null; pwaEnabled?: boolean; membershipAvailable?: boolean;
+    heading?: string | null; hasEditableRegions?: boolean; pwaEnabled?: boolean; membershipAvailable?: boolean;
     visibility?: Visibility; hasInvitedUsers?: boolean;
     author?: { username: string | null; id?: string | null; image?: string | null; forkedFrom?: { label: string; href: string | null } | null } | null;
     /** The document's own origin, which the page frames (lib/document-serving/artifact-page). */
@@ -288,7 +288,9 @@ export function DocumentPage(): JSX.Element {
         // Cells open for a browser that edits live: a person signed in, or a browser session's scripted browser.
         liveEditor: () => session()?.liveEditor === true,
         // Live editing of the page's editable regions: editors of the head only (a viewer or commenter never opens one).
-        regions: backend ? { enabled: editable, loadHtml: async () => (await backend.load())?.html ?? null, autoOpen: page.surface?.template === 'doc', autoFocus: !opensComment(window.location.search) } : undefined,
+        regions: backend ? {
+          // The shell knows whether this saved version can have regions. Recheck after publication.
+          enabled: () => editable() && (page.surface?.hasEditableRegions !== false || htmlHead().version !== page.surface.version), loadHtml: async () => (await backend.load())?.html ?? null, autoOpen: page.surface?.template === 'doc', autoFocus: !opensComment(window.location.search) } : undefined,
       });
       // The document's links to app paths take this page (another document by a full load, an app page by the router).
       const stopNavigation = answerFrameNavigation({ win: window, frame: framed.frame, frameOrigin: framed.origin, navigate: (path) => navigate(path) });
