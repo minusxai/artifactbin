@@ -670,36 +670,6 @@ jobs:
           key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.lock.outputs.install }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
-      # And the SLIM install pr-fast.yml's Vitest runners restore: this install minus what no test there can load (its
-      # restore step and scripts/__tests__/slim-install.test.mjs say what and why). Same paths and key as that step, so
-      # the entry they look up is this one.
-      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
-        id: slim
-        with:
-          path: |
-            node_modules
-            services/*/node_modules
-            services/app/public/fonts
-            services/app/lib/html-systems/font-manifest.json
-            !node_modules/@typescript/typescript-*
-            !node_modules/@fontsource
-            !node_modules/@fontsource-variable
-            !node_modules/lucide-static/font
-          key: install-slim-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.lock.outputs.install }}
-          lookup-only: true
-      - if: steps.slim.outputs.cache-hit != 'true'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
-        with:
-          path: |
-            node_modules
-            services/*/node_modules
-            services/app/public/fonts
-            services/app/lib/html-systems/font-manifest.json
-            !node_modules/@typescript/typescript-*
-            !node_modules/@fontsource
-            !node_modules/@fontsource-variable
-            !node_modules/lucide-static/font
-          key: install-slim-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.lock.outputs.install }}
       # The root type check's incremental build info, which pr-fast.yml's `types` job starts from so a pull
       # request re-checks only what it changed (scripts/ci/ci.mjs `type-info` finds the newest upload). The same
       # command as that job, so the same compiler writes it (scripts/lib/type-check.mjs).
@@ -782,50 +752,97 @@ jobs:
             tmp/test-schema-image
             tmp/vitest-module-cache
           key: test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}
-      # PR FAST'S ENTRIES, ONE PER RUNNER KIND (pr-fast.yml's `TEST_BUILDS_KIND` says why): the same builds, each with
-      # the module cache of its own configuration alone, listed from empty. The api kind's is the entry above's. Measured
-      # locally, warm against cold: a guard shard 6.6 -> 4.3s, a ui shard 4.2 -> 2.5s.
+      # PR FAST'S KITS, ONE PER RUNNER KIND (pr-fast.yml's `TEST_BUILDS_KIND` and `kit` step say why and what): this
+      # install, cut as that step's paths say, with the same builds and the module cache of the kind's own configuration
+      # alone, listed from empty (the api kind's is the entry above's). Measured locally, warm against cold: a guard shard
+      # 6.6 -> 4.3s, a ui shard 4.2 -> 2.5s. Same paths and key as that step, so the entry it looks up is this one.
       - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: |
+            node_modules/*
+            !node_modules/.cache
+            !node_modules/.vite
+            !node_modules/.vite-temp
+            !node_modules/@fontsource
+            !node_modules/@fontsource-variable
+            !node_modules/@typescript
+            node_modules/@typescript/*
+            !node_modules/@typescript/typescript-*
+            !node_modules/lucide-static
+            node_modules/lucide-static/*
+            !node_modules/lucide-static/font
+            node_modules/.cache/test-graph.json
+            services/*/node_modules/*
+            !services/*/node_modules/.cache
+            !services/*/node_modules/.vite
+            services/app/public/fonts
+            services/app/lib/html-systems/font-manifest.json
             services/app/lib/build-assets
             services/app/public/libraries
             tmp/test-schema-image
             tmp/vitest-module-cache
-          key: test-builds-v3-${{ runner.os }}-api-${{ steps.test-builds-key.outputs.key }}-${{ steps.test-builds-key.outputs.modules }}
+          key: pr-kit-v1-${{ runner.os }}-${{ runner.arch }}-node22-api-${{ steps.lock.outputs.install }}-${{ steps.test-builds-key.outputs.key }}-${{ steps.test-builds-key.outputs.modules }}
       - run: |
           rm -rf tmp/vitest-module-cache
           node node_modules/vitest/vitest.mjs list --project=ui --project=islands --filesOnly=false > /dev/null
       - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: |
+            node_modules/*
+            !node_modules/.cache
+            !node_modules/.vite
+            !node_modules/.vite-temp
+            !node_modules/@fontsource
+            !node_modules/@fontsource-variable
+            !node_modules/@typescript
+            node_modules/@typescript/*
+            !node_modules/@typescript/typescript-*
+            !node_modules/lucide-static
+            node_modules/lucide-static/*
+            !node_modules/lucide-static/font
+            node_modules/.cache/test-graph.json
+            services/*/node_modules/*
+            !services/*/node_modules/.cache
+            !services/*/node_modules/.vite
+            services/app/public/fonts
+            services/app/lib/html-systems/font-manifest.json
             services/app/lib/build-assets
             services/app/public/libraries
             tmp/test-schema-image
             tmp/vitest-module-cache
-          key: test-builds-v3-${{ runner.os }}-ui-${{ steps.test-builds-key.outputs.key }}-${{ steps.test-builds-key.outputs.modules }}
+          key: pr-kit-v1-${{ runner.os }}-${{ runner.arch }}-node22-ui-${{ steps.lock.outputs.install }}-${{ steps.test-builds-key.outputs.key }}-${{ steps.test-builds-key.outputs.modules }}
       - run: |
           rm -rf tmp/vitest-module-cache
           node node_modules/vitest/vitest.mjs list --config vitest.guard.config.ts --filesOnly=false > /dev/null
       - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: |
+            node_modules/*
+            !node_modules/.cache
+            !node_modules/.vite
+            !node_modules/.vite-temp
+            !node_modules/@fontsource
+            !node_modules/@fontsource-variable
+            !node_modules/@typescript
+            node_modules/@typescript/*
+            !node_modules/@typescript/typescript-*
+            !node_modules/lucide-static
+            node_modules/lucide-static/*
+            !node_modules/lucide-static/font
+            node_modules/.cache/test-graph.json
+            services/*/node_modules/*
+            !services/*/node_modules/.cache
+            !services/*/node_modules/.vite
+            services/app/public/fonts
+            services/app/lib/html-systems/font-manifest.json
             services/app/lib/build-assets
             services/app/public/libraries
             tmp/test-schema-image
             tmp/vitest-module-cache
-          key: test-builds-v3-${{ runner.os }}-guards-${{ steps.test-builds-key.outputs.key }}-${{ steps.test-builds-key.outputs.modules }}
+          key: pr-kit-v1-${{ runner.os }}-${{ runner.arch }}-node22-guards-${{ steps.lock.outputs.install }}-${{ steps.test-builds-key.outputs.key }}-${{ steps.test-builds-key.outputs.modules }}
       - run: |
           rm -rf tmp/vitest-module-cache
           node node_modules/vitest/vitest.mjs list --config vitest.node-batch.config.ts --filesOnly=false > /dev/null
-      - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
-        with:
-          path: |
-            services/app/lib/build-assets
-            services/app/public/libraries
-            tmp/test-schema-image
-            tmp/vitest-module-cache
-          key: test-builds-v3-${{ runner.os }}-node-${{ steps.test-builds-key.outputs.key }}-${{ steps.test-builds-key.outputs.modules }}
       # PR FAST'S NODE RUNNERS' IMPORT GRAPH: every node and integration file's import edges, which their choice of the
       # change's node files walks (scripts/ci/node-affected.mjs; pr-fast.yml restores the newest).
       - run: node scripts/ci/node-affected.mjs --warm
@@ -833,6 +850,33 @@ jobs:
         with:
           path: node_modules/.cache/test-graph.json
           key: test-graph-v1-${{ runner.os }}-${{ github.sha }}
+      # The node kind's kit holds that graph too, so a node runner's one download carries it.
+      - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            node_modules/*
+            !node_modules/.cache
+            !node_modules/.vite
+            !node_modules/.vite-temp
+            !node_modules/@fontsource
+            !node_modules/@fontsource-variable
+            !node_modules/@typescript
+            node_modules/@typescript/*
+            !node_modules/@typescript/typescript-*
+            !node_modules/lucide-static
+            node_modules/lucide-static/*
+            !node_modules/lucide-static/font
+            node_modules/.cache/test-graph.json
+            services/*/node_modules/*
+            !services/*/node_modules/.cache
+            !services/*/node_modules/.vite
+            services/app/public/fonts
+            services/app/lib/html-systems/font-manifest.json
+            services/app/lib/build-assets
+            services/app/public/libraries
+            tmp/test-schema-image
+            tmp/vitest-module-cache
+          key: pr-kit-v1-${{ runner.os }}-${{ runner.arch }}-node22-node-${{ steps.lock.outputs.install }}-${{ steps.test-builds-key.outputs.key }}-${{ steps.test-builds-key.outputs.modules }}
 
   # THE ROLL-UP, AND THE RECORD OF WHAT IT PASSED ON.
   #

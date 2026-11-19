@@ -35,6 +35,7 @@ The workflows themselves are `.github/workflows/*.yml`; job, runner and shard co
   `node scripts/ci/test-timings.mjs --projects api,api-isolated --run <id> …`; others keep their time.
   Node files join the batch via `node-timings.yml`; a changed one, and slower ones it reaches, run beside it
   (`scripts/lib/node-batch.mjs`).
+- A `pr fast` Vitest runner makes one cache download, its kind's kit (install, test builds); never add a tier.
 - The timing observer reads main's workflow: a PR may add `fast (…)` jobs, but one that drops or renames a job
   main expects is refused (`completedFastAttempt`).
 - Merge a PR into `main` only with `node scripts/ci/merge-fast.mjs owner/repo PR`: it checks the completed fast
