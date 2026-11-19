@@ -8,6 +8,7 @@ import { installCacheHash, installFingerprint } from '../lib/lock-fingerprint.mj
 import { CI_JOBS, buildKey, checkCiResults, planCi, testBuildsKey, vitestConfigKey } from '../lib/ci-plan.mjs';
 import { NODE_TIMINGS_ARTIFACT, measuredArtifact, withMeasuredTimes } from '../lib/node-batch.mjs';
 import { NATIVE_ROOT_BUILD_INFO } from '../lib/type-check.mjs';
+import { failingTestFiles, redReport } from '../lib/red-report.mjs';
 
 const env = process.env;
 const mode = process.argv[2];
@@ -74,6 +75,36 @@ if (mode === 'plan') {
   const failed = checkCiResults(plan, Object.fromEntries(Object.entries(needs).map(([job, value]) => [job, value.result])));
   if (failed.length) throw new Error(`CI jobs did not succeed: ${failed.join(', ')}`);
   console.log('All selected CI jobs passed.');
+} else if (mode === 'red-report') {
+  // A RED RUN NAMES ITS SUSPECTS AND ITS FAILING TESTS (scripts/lib/red-report.mjs): the commits since the newest green
+  // `ci` push run on main that this commit contains, and each failed job's failing test files, read from its log.
+  const repo = env.GITHUB_REPOSITORY, token = env.GH_TOKEN || env.GITHUB_TOKEN, head = env.GITHUB_SHA;
+  if (!repo || !token || !head) throw new Error('red-report needs GITHUB_REPOSITORY, a token and GITHUB_SHA');
+  const api = env.GITHUB_API_URL || 'https://api.github.com';
+  const get = async (route, as = 'json') => {
+    const response = await fetch(`${api}/repos/${repo}${route}`, { headers: { authorization: `Bearer ${token}`, accept: 'application/vnd.github+json', 'x-github-api-version': '2022-11-28' } });
+    if (!response.ok) throw new Error(`${route} answered ${response.status}`);
+    return as === 'json' ? response.json() : response.text();
+  };
+  const { workflow_runs: greens = [] } = await get('/actions/workflows/ci.yml/runs?branch=main&event=push&status=success&per_page=30');
+  let green = null, commits = [];
+  for (const run of greens) {
+    const compare = await get(`/compare/${run.head_sha}...${head}`).catch(() => null);
+    if (compare && ['ahead', 'identical'].includes(compare.status)) {
+      green = { sha: run.head_sha, run: run.id };
+      commits = compare.commits.map((commit) => ({ sha: commit.sha, subject: commit.commit.message.split('\n')[0] }));
+      break;
+    }
+  }
+  const { jobs: all = [] } = await get(`/actions/runs/${env.GITHUB_RUN_ID}/attempts/${env.GITHUB_RUN_ATTEMPT}/jobs?per_page=100`);
+  const jobs = [];
+  for (const job of all.filter((candidate) => candidate.conclusion === 'failure' && candidate.name !== 'test')) {
+    jobs.push({ name: job.name, files: failingTestFiles(await get(`/actions/jobs/${job.id}/logs`, 'text').catch(() => '')) });
+  }
+  const { markdown, annotation } = redReport({ head, green, commits, jobs });
+  if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, markdown);
+  console.log(markdown);
+  console.log(`::error::${annotation}`);
 } else if (mode === 'record-tree') {
   // WHAT THIS RUN TESTED, written where a later push can find it by name.
   const tree = treeOf('HEAD');
@@ -177,5 +208,5 @@ if (mode === 'plan') {
     console.log(`Node batch chosen with ${Object.keys(measured.files?.node ?? {}).length} times main measured (runs ${(measured.runs ?? []).join(', ')}; artifact ${match.id} of run ${match.workflow_run.id}, ${match.created_at}).`);
   }
 } else {
-  throw new Error('Expected plan, node, check, record-tree, lock-fingerprint, build-key, test-builds-key, type-info or node-timings');
+  throw new Error('Expected plan, node, check, red-report, record-tree, lock-fingerprint, build-key, test-builds-key, type-info or node-timings');
 }

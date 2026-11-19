@@ -863,6 +863,15 @@ jobs:
         env:
           CI__NEEDS: ${{ toJSON(needs) }}
         run: node scripts/ci/ci.mjs check
+      # A RED RUN NAMES ITS SUSPECTS (scripts/lib/red-report.mjs): the commits since main's last green ci run and the
+      # test files each failed job's log names, in this run's summary and as an error annotation. It never decides the
+      # run: the check above already failed it.
+      - name: Name the commits since main's last green run and the failing test files
+        if: failure()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/ci/ci.mjs red-report
       # Per-job diagnostics remain useful, but the chain is the speed contract:
       # attempt start -> final required rollup, including setup and waits between needs.
       # Target <3 minutes, normal maximum <4; >8 fails on both PR and main.
