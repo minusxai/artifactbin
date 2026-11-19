@@ -337,7 +337,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
       // What the reader's chrome derived from the source: the document's own
       // name (lib/document/title) and whether it is still the starter placeholder.
       heading: row.title, starter,
-      hasEditableRegions: /data-af-editable/i.test(row.source ?? ''),
+      ...(options.pages ? { hasEditableRegions: /data-af-editable/i.test(row.source ?? '') } : {}),
     } : {
       // The data tiers: their source is their content (a dataset's only for those who may edit it).
       source: artifact.format==='dataset'&&role!=='owner'&&role!=='editor'?null:row.source,
