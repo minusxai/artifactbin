@@ -13,7 +13,9 @@ import {createExportCache,expireExportImages} from '../cache';
 export function exportExpirySuite(name:string,open:()=>Promise<ObjectStore>){
  describe(`export images on the ${name} store`,()=>{
   const absent=(store:ObjectStore,key:string)=>expect(store.get(key)).rejects.toBeInstanceOf(ObjectUnavailable);
-  const options=(objects:ObjectStore)=>({leaseMs:1000,waitMs:500,pollMs:[1,2],retryMs:100,objects});
+  // The cache's own lease and wait: neither may bound a store write here. A fresh S3-compatible server grows its volumes on
+  // a bucket's first write (seconds on CI's SeaweedFS), and a 500ms wait failed this suite whenever it wrote first.
+  const options=(objects:ObjectStore)=>({pollMs:[1,2],retryMs:100,objects});
   const producer=(store:ObjectStore,written:string[],delayMs=0)=>async(id:string)=>{
    const object_key=`exports/objects/${id}.png`;await new Promise(r=>setTimeout(r,delayMs));
    await store.put(object_key,Buffer.from('png'),'image/png');written.push(object_key);
