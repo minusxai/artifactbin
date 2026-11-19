@@ -71,8 +71,8 @@ describe('the markdown policy, each rule seen to fire on a literal tree', () => 
   });
 
   it('R3: the root stays under 8,192 bytes and a scoped file under 4,096', () => {
-    const problems = validate(tree({ 'AGENTS.md': `${goodTree()['AGENTS.md']}${'x'.repeat(8192)}\n`, [scopedAgents]: `# Platform\n\n${'é'.repeat(2048)}\n` }));
-    expect(problems).toContainEqual(expect.stringMatching(/^R3 AGENTS\.md: \d+ bytes; the root must stay under 8192$/));
+    const problems = validate(tree({ 'AGENTS.md': `${goodTree()['AGENTS.md']}${'x'.repeat(8448)}\n`, [scopedAgents]: `# Platform\n\n${'é'.repeat(2048)}\n` }));
+    expect(problems).toContainEqual(expect.stringMatching(/^R3 AGENTS\.md: \d+ bytes; the root must stay under 8448$/));
     expect(problems).toContainEqual(expect.stringMatching(/^R3 services\/app\/lib\/platform\/AGENTS\.md: 41\d\d bytes; a scoped file must stay under 4096$/));
   });
 

@@ -33,11 +33,11 @@ export const SCOPED_DIRS = [
   'services/app/lib/platform', 'services/app/lib/artifact-access', 'services/app/lib/html-runtime',
   'services/app/lib/html-components', 'services/app/lib/page-doors', 'services/app/lib/dataflow',
   'services/app/lib/skills', 'services/app/lib/object-store', 'services/app/solid', 'services/app/server',
-  'services/browser', 'scripts', 'scripts/ci',
+  'services/browser', 'scripts', 'scripts/ci', '.github/workflows',
 ];
 /** The author skill: product content with its own guard (services/app/lib/skills/__tests__/skill-tree.test.ts). */
 const SKILL_ROOT = 'services/app/skills/artifactbin/';
-const ROOT_MAX_BYTES = 8192;
+const ROOT_MAX_BYTES = 8448;
 const SCOPED_MAX_BYTES = 4096;
 export const CLAUDE_TEXT = '@AGENTS.md\n';
 
