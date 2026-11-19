@@ -84,4 +84,16 @@ describe('publication uses shared account destination through the real HTTP hand
   expect(unavailable.status).toBeGreaterThanOrEqual(400);expect(unavailable.status).toBeLessThan(500);
   const db=await getDb();expect((await db.query('SELECT id FROM artifacts WHERE user_id=$1 OR creator_user_id=$1',[b.user.id])).rows).toEqual([]);
  });
+ it('allows an ordinary direct human group Editor to create within its group folder',async()=>{
+  const a=await account('folder-admin'),b=await account('folder-editor');
+  const group=await createGroup(a.user.id,{handle:'editor_folders',name:'Editor folders'});
+  await admitGroupMember(a.user.id,group.id,b.user.id,'editor');
+  const folder=await create(a.token,{format:'folder',title:'Reports',visibility:'private',destination:{type:'group',id:group.id}});
+  expect(folder.status,JSON.stringify(folder.body)).toBe(201);
+  const child=await create(b.token,{html:nativeHtml('<p>Count: 7</p>'),visibility:'private',destination:{type:'group',id:group.id},parent_id:folder.body.id});
+  expect(child.status,JSON.stringify(child.body)).toBe(201);
+  expect(await owner(child.body.id)).toMatchObject({user_id:null,group_id:group.id,creator_user_id:b.user.id});
+  const db=await getDb();
+  expect((await db.query('SELECT ancestor_ids FROM artifacts WHERE id=$1',[child.body.id])).rows[0].ancestor_ids).toEqual([folder.body.id]);
+ });
 });
