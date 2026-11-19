@@ -19,6 +19,8 @@ import {skillPackageFiles,skillRelease} from '../package';
 import {SKILL_MAIN_MAX_BYTES,skillTree} from '..';
 import {tempDirSync} from '@artifactbin/test-support/temp-dir';
 const require=createRequire(import.meta.url);
+// Loaded once, so a request below starts in the same turn its caller does, never a module load later.
+const {decodeRelease}=await import(require.resolve('../../../skills/artifactbin/scripts/toolbox-update-archive.mjs'));
 function directory(files:Record<string,string|Buffer>):string{
  const root=tempDirSync('skill-extras-',onTestFinished);
  for(const [name,content] of Object.entries(files))writeFileSync(path.join(root,name),content);
@@ -28,7 +30,6 @@ const GUIDE='# Warehouse queries\n\nRead when the user asks about the warehouse.
 const SCRIPT='import {makeClient,selectedServer} from \'../scripts/toolbox-client.mjs\';\nconsole.log(typeof makeClient,selectedServer());\n';
 const valid=()=>directory({'warehouse.md':GUIDE,'warehouse.mjs':SCRIPT,'tables.json':'{"tables":[]}'});
 async function served(origin:string){
- const {decodeRelease}=await import(require.resolve('../../../skills/artifactbin/scripts/toolbox-update-archive.mjs'));
  const manifest=await (await latest(new Request(origin+'/skills/artifactbin/latest.json'))).json();
  const bytes=Buffer.from(await (await archive(new Request(origin+'/skills/artifactbin.zip'))).arrayBuffer());
  return {manifest,bytes,files:decodeRelease(bytes,manifest) as Record<string,string>};
@@ -111,11 +112,10 @@ describe('following the directory without a restart',()=>{
  const ORIGIN='https://follow.example';
  const sha=(bytes:Buffer)=>createHash('sha256').update(bytes).digest('hex');
  /** One request for the archive (optionally revalidating) and its decoded extras, checked against its own ETag. */
- async function fetched(tag?:string){
-  const {decodeRelease}=await import(require.resolve('../../../skills/artifactbin/scripts/toolbox-update-archive.mjs'));
-  const response=await archive(new Request(ORIGIN+'/skills/artifactbin.zip',{headers:tag?{'if-none-match':tag}:{}}));
+ async function fetched(tag?:string,sha256?:string){
+  const response=await archive(new Request(ORIGIN+'/skills/artifactbin.zip'+(sha256?`?sha256=${sha256}`:''),{headers:tag?{'if-none-match':tag}:{}}));
   const etag=response.headers.get('etag')!,bytes=Buffer.from(await response.arrayBuffer());
-  if(response.status===304)return {status:304,etag,bytes,extras:null};
+  if(response.status!==200)return {status:response.status,etag,bytes,extras:null,cache:response.headers.get('cache-control')};
   const digest=createHash('sha256').update(bytes).digest();
   expect(etag).toBe(`"${digest.toString('base64url').slice(0,22)}"`);
   // Decoded once per distinct archive. Members are stored uncompressed: the release identity is read from the
@@ -127,7 +127,7 @@ describe('following the directory without a restart',()=>{
    extras=Object.fromEntries(Object.entries(files).filter(([name])=>name.startsWith('extras/')&&name!=='extras/README.md'));
    decoded.set(digest.toString('hex'),extras);
   }
-  return {status:response.status,etag,bytes,extras};
+  return {status:response.status,etag,bytes,extras,cache:response.headers.get('cache-control')};
  }
  const decoded=new Map<string,Record<string,string>>();
  const manifest=async()=>(await latest(new Request(ORIGIN+'/skills/artifactbin/latest.json'))).json();
@@ -234,8 +234,31 @@ describe('following the directory without a restart',()=>{
    const seen=byTag.get(one.etag);if(seen)expect(one.bytes.equals(seen)).toBe(true);else byTag.set(one.etag,one.bytes);
   }
   expect(served[0]!.extras).toEqual(states[0]);expect(served.at(-1)!.extras).toEqual(states.at(-1));
-  const hashes=new Set(served.map(one=>sha(one.bytes)));
-  for(const one of await Promise.all(manifests))expect(hashes).toContain(one.sha256);
+  // Every manifest names one whole state, and its archive is still fetchable by its hash now the directory moved on.
+  for(const one of await Promise.all(manifests)){
+   const held=await fetched(undefined,one.sha256);
+   expect(held.status).toBe(200);expect(sha(held.bytes)).toBe(one.sha256);expect(states).toContainEqual(held.extras);
+  }
+ });
+ it('keeps the archive a manifest named fetchable by its hash after the directory moves on, and only that',async()=>{
+  const dir=directory({'warehouse.md':GUIDE});overrideConfig({},{SKILLS__EXTRA_DIR:dir});
+  const named=await manifest();
+  // An updater reads latest.json, then fetches the archive: the directory changes in between.
+  writeFileSync(path.join(dir,'warehouse.md'),GUIDE+'\nMore.\n');
+  const current=await fetched();
+  expect(sha(current.bytes)).not.toBe(named.sha256);
+  const held=await fetched(undefined,named.sha256);
+  expect(held.status).toBe(200);expect(sha(held.bytes)).toBe(named.sha256);
+  expect(held.extras).toEqual({'extras/warehouse.md':GUIDE});expect(held.cache).toBe('public, max-age=31536000, immutable');
+  expect((await fetched(held.etag,named.sha256)).status).toBe(304);
+  // The current archive answers its own hash even before this process names it (after a restart, or when another
+  // process answered latest.json); any other hash is not held.
+  const now=await fetched(undefined,sha(current.bytes));
+  expect(now.status).toBe(200);expect(now.bytes.equals(current.bytes)).toBe(true);
+  for(const other of ['0'.repeat(64),'not-a-hash']){
+   const missing=await fetched(undefined,other);
+   expect(missing.status).toBe(404);expect(missing.cache).toBe('no-store');
+  }
  });
 });
 

@@ -27,6 +27,29 @@ async function buildArchive(server:string,extras:SkillExtras|null){
  const {bytes,manifest}=skillRelease(files,server);
  return {bytes,manifest,etag:`"${createHash('sha256').update(bytes).digest('base64url').slice(0,22)}"`};
 }
+/**
+ * NAMED ARCHIVES: an updater reads latest.json, then fetches the archive it names; the directory (or a deploy) may
+ * change between the two requests, and both may sit in shared caches for their max-age apart. So every archive a
+ * manifest named stays fetchable, by `?sha256=<its hash>` (archiveNamed), for NAMED_MS after the last manifest that
+ * named it, at most NAMED_KEPT of them per process (about 2 MB each). The manifest's own `url` stays the plain
+ * address, which installed updaters require exactly; current updaters add the query themselves.
+ */
+const NAMED_MS=15*60_000,NAMED_KEPT=8;
+type Release=Awaited<ReturnType<typeof buildArchive>>;
+const named=new Map<string,{release:Release;at:number}>();
+/** The archive for this origin as latest.json names it, held so that its own address answers it afterwards. */
+export async function manifestFor(server:string){
+ const release=await archiveFor(server);
+ const key=`${server}\n${release.manifest.sha256}`,now=Date.now();
+ named.delete(key);named.set(key,{release,at:now});
+ for(const [held,{at}] of named)if(named.size>NAMED_KEPT||now-at>NAMED_MS)named.delete(held);else break;
+ return release;
+}
+/** The archive with this SHA-256 that a manifest for this origin named within NAMED_MS, or null. */
+export function archiveNamed(server:string,sha256:string):Release|null{
+ const held=named.get(`${server}\n${sha256}`);
+ return held&&Date.now()-held.at<=NAMED_MS?held.release:null;
+}
 export function archiveFor(server:string){
  // Extras (SKILLS__EXTRA_DIR) follow their directory: skillExtras() returns a new object only when their files
  // changed, so one archive per origin is rebuilt exactly then, and every request meanwhile shares one build.

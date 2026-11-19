@@ -34,6 +34,7 @@ import { ConnectorFailure, driverFailure } from './errors';
 import { connectTarget, targetOf, type NetworkSeams } from './network';
 import { tablesOf, typeOfName } from './postgres';
 import { SessionPool } from './sessions';
+import { confirmTermination } from './termination';
 import { bindStatement, readOnlyStatement } from './statement';
 import type { ConnectorModule } from './module';
 
@@ -92,18 +93,12 @@ export const mysqlConnector: ConnectorModule = {
     const sessions = new SessionPool<MysqlConnection>({
       async open(database,context){const c=await create(database,context);databases.set(c,database);return c;},
       async close(connection){
-        const deadline=performance.now()+4500;
-        const control=await create(databases.get(connection)!,{timeoutMs:4500});
-        try{
-          // Same-account KILL is followed by server-side absence, never inferred from socket close.
-          await withinTime(Math.max(1,deadline-performance.now()),undefined,()=>control.destroy(),async()=>{
-          try{await call(control,`KILL CONNECTION ${Number(connection.threadId)}`);}
-          catch(error){if((error as {errno?:number}).errno!==1094)throw error;}
-          const rows=await call<Array<{Id:number|string}>>(control,'SHOW PROCESSLIST');
-          if(rows.some(row=>Number(row.Id)===Number(connection.threadId)))throw new ConnectorFailure('unavailable','database termination unconfirmed');
-          connection.destroy();
-          });
-        }finally{control.destroy();}
+        // KILL from a control connection, then absence from its SHOW PROCESSLIST, all within 4.5 s (./termination).
+        await confirmTermination(Number(connection.threadId),async timeoutMs=>{
+          const control=await create(databases.get(connection)!,{timeoutMs});
+          return {query:text=>call(control,text),destroy:()=>control.destroy()};
+        },{boundMs:4500,secrets});
+        connection.destroy();
       },
     });
 

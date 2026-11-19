@@ -173,11 +173,14 @@ it('installs, updates and rolls back deployment extras, and refuses any other ex
  const base=await tempDir('skill-extras-update-',onTestFinished);
  const root=await installedRoot(base);
  let release:ReturnType<typeof skillRelease>;
- const server=await withHttpServer((req,res)=>{res.end(req.url?.endsWith('latest.json')?JSON.stringify(release.manifest):Buffer.from(release.bytes));});
+ const asked:string[]=[];
+ const server=await withHttpServer((req,res)=>{asked.push(req.url!);res.end(req.url?.endsWith('latest.json')?JSON.stringify(release.manifest):Buffer.from(release.bytes));});
  try{
   await writeFile(path.join(root,'release.json'),JSON.stringify({schemaVersion:1,origin:server.base,version:'0'.repeat(64)}));
   release=skillRelease({'SKILL.md':'first','extras/README.md':'# Extras\n','extras/tool.mjs':'export {};\n'},server.base);
   expect((await update(root)).status).toBe('activated');
+  // The archive is asked for by the hash the manifest named, which the server keeps answering after it moves on.
+  expect(asked).toEqual(['/skills/artifactbin/latest.json',`/skills/artifactbin.zip?sha256=${release.manifest.sha256}`]);
   expect(await readFile(path.join(base,'artifactbin','extras/tool.mjs'),'utf8')).toBe('export {};\n');
   const first=release.manifest.version;
   release=skillRelease({'SKILL.md':'first','extras/README.md':'# Extras\n','extras/tool.mjs':'export const second = 1;\n'},server.base);

@@ -14,5 +14,5 @@ export { skillPackageFiles, skillZip } from './package';
 export { buildPreviewParser, buildToolboxPlatform } from './preview-assets.server';
 export { isPublicSkillTopic } from './public-surface';
 export type { SetupInstructionOptions } from './setup-instructions';
-export { archiveFor, skillServer } from './delivery';
+export { archiveFor, archiveNamed, manifestFor, skillServer } from './delivery';
 export { skillExtras } from './extras';
