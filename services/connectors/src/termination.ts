@@ -1,14 +1,18 @@
 /**
  * CONFIRMED TERMINATION (MySQL protocol): a session the pool retires is killed from a second, control connection on
  * the same account, and counts as gone only when that same connection's `SHOW PROCESSLIST` no longer lists its
- * thread. All of it, the control connection's setup included, runs within one bound (`boundMs`), so the pool's own
- * wait (sessions.ts) outlasts it.
+ * thread. KILL returns before that: it flags the thread and shuts its socket, and the thread drops out of the list
+ * only when it next runs (Command `Killed` until then, for as long as one expression that never checks the flag
+ * takes, or the scheduler keeps it waiting). So the list is re-read every `POLL_MS` until the thread is absent. All
+ * of it, the control connection's setup included, runs within one bound (`boundMs`), so the pool's own wait
+ * (sessions.ts) outlasts it.
  *
  * Anything less is `ConnectorFailure('unavailable')` with a message that starts with UNCONFIRMED and says which of
  * the three it was, with the facts that tell them apart:
  *  - the control connection failed (opening it, or answering KILL or SHOW PROCESSLIST): the step and the mapped code;
  *  - the bound expired: what it was waiting on;
- *  - the thread was still listed after KILL: that row's Command, State and Time;
+ *  - the thread was still listed after KILL, in every read until the bound: how many, and the last row's Command,
+ *    State and Time;
  * each with the thread id, the milliseconds since the cleanup began and whether (and how fast) the control
  * connection opened. It never carries a credential, the driver's raw text, or anything of another session; of the
  * thread's own row only Command, State and Time (never Info, User, Host or db).
@@ -21,11 +25,12 @@ export const UNCONFIRMED = 'database termination unconfirmed';
 export interface ControlConnection { query<T>(text: string): Promise<T>; destroy(): void }
 type Row = { Id?: unknown; Command?: unknown; State?: unknown; Time?: unknown };
 const field = (value: unknown) => JSON.stringify(String(value ?? '').slice(0, 64));
+const POLL_MS = 20;
 
 export async function confirmTermination(threadId: number, open: (timeoutMs: number) => Promise<ControlConnection>,
   { boundMs = 4500, secrets = [] as readonly string[] } = {}): Promise<void> {
   const started = performance.now(), deadline = started + boundMs, elapsed = () => Math.round(performance.now() - started);
-  let step = 'opening the control connection', opened: number | null = null, expired = false;
+  let step = 'opening the control connection', opened: number | null = null, expired = false, last: Row | undefined, reads = 0;
   const unconfirmed = (what: string) => new ConnectorFailure('unavailable', `${UNCONFIRMED}: ${what} (thread ${threadId}, ${elapsed()} ms`
     + ` after the cleanup began, ${opened === null ? 'the control connection never opened' : `the control connection opened in ${opened} ms`})`);
   const failedAt = (error: unknown) => {
@@ -33,6 +38,8 @@ export async function confirmTermination(threadId: number, open: (timeoutMs: num
     if (mapped.code === 'timeout' && opened === null) return unconfirmed(`the ${boundMs} ms bound expired while ${step}`);
     return unconfirmed(`the control connection failed while ${step} (${mapped.code}${typeof errno === 'number' ? `, errno ${errno}` : ''})`);
   };
+  const listed = () => unconfirmed(`the thread is still listed after KILL in ${reads} read${reads === 1 ? '' : 's'}`
+    + ` (Command ${field(last!.Command)}, State ${field(last!.State)}, Time ${Number(last!.Time)} s)`);
   let control: ControlConnection;
   try { control = await open(boundMs); } catch (error) { throw failedAt(error); }
   opened = elapsed();
@@ -43,11 +50,16 @@ export async function confirmTermination(threadId: number, open: (timeoutMs: num
       try { await control.query(`KILL CONNECTION ${threadId}`); }
       catch (error) { if ((error as { errno?: number }).errno !== 1094) throw error; }
       step = 'reading SHOW PROCESSLIST';
-      const row = (await control.query<Row[]>('SHOW PROCESSLIST')).find(r => Number(r.Id) === threadId);
-      if (row) throw unconfirmed(`the thread is still listed after KILL (Command ${field(row.Command)}, State ${field(row.State)}, Time ${Number(row.Time)} s)`);
+      while (!expired) {
+        const row = (await control.query<Row[]>('SHOW PROCESSLIST')).find(r => Number(r.Id) === threadId);
+        if (!row) return;
+        last = row; reads++;
+        if (deadline - performance.now() <= POLL_MS) throw listed();
+        await new Promise(resolve => setTimeout(resolve, POLL_MS));
+      }
     });
   } catch (error) {
-    if (expired) throw unconfirmed(`the ${boundMs} ms bound expired while ${step}`);
+    if (expired) throw last ? listed() : unconfirmed(`the ${boundMs} ms bound expired while ${step}`);
     if (error instanceof ConnectorFailure && error.message.startsWith(UNCONFIRMED)) throw error;
     throw failedAt(error);
   } finally { control.destroy(); }
