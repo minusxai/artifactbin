@@ -69,6 +69,11 @@ describe('trusted-issuer sign-in', () => {
     expect(response.status).toBe(303);
     const session = await auth.sessions.resolve(new Request(BASE, { headers: { cookie: cookieOf(response) } }));
     expect(session).toMatchObject({ email: 'user_1@issuer-a.trusted-issuer.invalid', emailVerified: true });
+    // Not remembered: the session cookie ends with the browser, and the server expiry is one day, never extended.
+    const sessionCookie = response.headers.getSetCookie().find((c) => /session_token=/.test(c))!;
+    expect(sessionCookie).not.toMatch(/max-age|expires/i);
+    const [stored] = await rows<{ expiresAt: Date }>(`SELECT "expiresAt" FROM auth.session WHERE "userId"=$1`, [session!.userId]);
+    expect(new Date(stored!.expiresAt).getTime()).toBeLessThanOrEqual(Date.now() + 86_400_000 + 5_000);
     const [person] = await rows<{ id: string; username: string; welcome_pending: boolean; name: string }>(`SELECT id,username,welcome_pending,name FROM auth.users WHERE id=$1`, [session!.userId]);
     expect(person).toMatchObject({ username: 'user_1', welcome_pending: false, name: 'Ada Person' });
     expect(await rows(`SELECT "providerId","accountId" FROM auth.account WHERE "userId"=$1`, [person!.id])).toEqual([{ providerId: 'trusted:issuer-a', accountId: 'user_1' }]);
@@ -140,7 +145,7 @@ describe('trusted-issuer sign-in', () => {
 
   it('keeps callbackUrl on this origin', async () => {
     const target = await app();
-    for (const callbackUrl of ['//elsewhere.example/x', 'https://elsewhere.example/x', '/\\elsewhere.example', 'javascript:alert(1)'])
+    for (const callbackUrl of ['//elsewhere.example/x', 'https://elsewhere.example/x', '/\\elsewhere.example', 'javascript:alert(1)', '/a/..//elsewhere.example', '/.//elsewhere.example'])
       expect((await post(target, { token: token(), callbackUrl })).headers.get('location')).toMatch(/^\/\?group=grp_\w+$/);
     expect((await post(target, { token: token(), callbackUrl: '/a/b?c=1#d' })).headers.get('location')).toMatch(/^\/a\/b\?c=1&group=grp_\w+#d$/);
   });

@@ -478,13 +478,13 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     return embedders.length ? csp.replace("frame-ancestors 'self'", `frame-ancestors 'self' ${embedders.join(' ')}`) : csp;
   };
   /**
-   * A custom shell's EMBEDDED view of any of its screens (`?embed=1`: the shell draws itself without its chrome there)
-   * may also be framed by the deployment's trusted embedders (EMBED__TRUSTED_ORIGINS), beside the app itself; with
-   * none configured it is the app page's policy unchanged. A document address keeps its own rule above.
+   * A custom shell's EMBEDDED chat (`/conversations?embed=1`: the shell draws the chat alone there) may also be framed by
+   * the deployment's trusted embedders (EMBED__TRUSTED_ORIGINS), beside the app itself; every other screen, and the
+   * chat with none configured, keeps the app page's policy. A document address keeps its own rule above.
    */
   const shellFramedPolicy = (url: URL, csp: string): string => {
     const embedders = embedTrustedOrigins();
-    if (url.searchParams.get('embed') !== '1' || !embedders.length || /^\/a\/[^/]+(?:\/app)?\/?$/.test(url.pathname)) return csp;
+    if (url.searchParams.get('embed') !== '1' || !embedders.length || !/^\/conversations\/?$/.test(url.pathname)) return csp;
     return csp.replace("frame-ancestors 'self'", `frame-ancestors 'self' ${embedders.join(' ')}`);
   };
   const pageData = (dir: string) => ROUTES.find((r) => r.dir === dir)?.module.GET as ((request: Request, ctx: { params: Promise<Record<string, string>> }) => Promise<Response>) | undefined;

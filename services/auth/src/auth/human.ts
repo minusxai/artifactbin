@@ -151,8 +151,10 @@ const trustedSessionPlugin = {
       if (typeof userId !== 'string' || !userId) throw new Error('trusted session: no user');
       const user = await ctx.context.internalAdapter.findUserById(userId);
       if (!user) throw new Error('trusted session: unknown user');
-      const session = await ctx.context.internalAdapter.createSession(userId);
-      await setSessionCookie(ctx, { session, user });
+      // Not remembered: a browser-session cookie, and a server expiry Better Auth never extends (one day). The parent
+      // signs the person in again on every frame load, so nothing longer is needed.
+      const session = await ctx.context.internalAdapter.createSession(userId, true);
+      await setSessionCookie(ctx, { session, user }, true);
       return ctx.json({ ok: true });
     }),
   },

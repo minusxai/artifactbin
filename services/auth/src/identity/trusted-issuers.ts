@@ -110,7 +110,8 @@ export function trustedCallbackPath(value: unknown): string {
   const origin = 'http://callback.invalid';
   try {
     const url = new URL(value, origin);
-    return url.origin === origin ? `${url.pathname}${url.search}${url.hash}` : '/';
+    // Re-checked after normalising: `/a/..//evil.example` resolves to the scheme-relative `//evil.example`.
+    return url.origin === origin && !url.pathname.startsWith('//') ? `${url.pathname}${url.search}${url.hash}` : '/';
   } catch { return '/'; }
 }
 

@@ -11,8 +11,8 @@ Hosts: `app.ts`, `public-files.ts`, `pages-host.ts`, `user-host.ts`, `host.ts`. 
   its bootstrap carries no page source or author script. A document runs only at `<hex id>.<pages host>`, and
   `/a/<id>/raw` answers under the document sandbox CSP (`raw.server.ts`). The app CSP's `frame-src` admits only
   itself and the pages hosts.
-- Other origins frame `/a/<id>` only if listed in `EMBED__TRUSTED_ORIGINS` (`app.ts`); with a custom shell, also a
-  shell screen's `?embed=1` view (`shellFramedPolicy`).
+- Other origins frame `/a/<id>` only if listed in `EMBED__TRUSTED_ORIGINS` (`app.ts`); with a custom shell, also the
+  shell's embedded chat, `/conversations?embed=1` (`shellFramedPolicy`).
 - One URL map, contracts `url-space.ts` (`/af/url-space.json`): `/api/` (JSON, links), `/af/` (public,
   credential-free files), `/a/<id>/`, `/@handle`, a few fixed paths, else a screen; host allowlists derive from it.
   Never rewrite public paths from retired root prefixes.
