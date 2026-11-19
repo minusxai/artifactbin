@@ -418,8 +418,8 @@ jobs:
       # - The test builds, the test database's schema image (services/app/test/setup/schema-image-file.ts: each worker
       #   restores its first database instead of running initdb and the boot DDL, 660ms -> 170ms locally) and this kind's
       #   Vitest module cache. Main's kit for other build inputs (a fallback key) is safe: the global setup rebuilds the
-      #   server reader when its markers do not match (scripts/server-reader-cache.mjs), only the image named by this
-      #   checkout's schema key loads, and module entries are keyed by source.
+      #   server reader when its markers do not match (services/app/scripts/server-reader-cache.mjs), only the image
+      #   named by this checkout's schema key loads, and module entries are keyed by source.
       # BOUNDED (SEGMENT_DOWNLOAD_TIMEOUT_MINS, minutes a 128 MB segment, fractions allowed): over 575 install restores the
       # download took 1.4s median and 6.2s p99, then 35.5s once (run 44141023943's node-2, stuck at 70.8% and again at
       # 92.7%). Past the bound actions/cache abandons the download, extracts nothing and reports a miss (no matched key),
