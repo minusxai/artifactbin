@@ -25,13 +25,29 @@ it('confirms only when the same control connection no longer lists the thread, a
   await confirmTermination(42, async () => control(text => { if (text.startsWith('KILL')) throw Object.assign(Error('Unknown thread id: 42'), { errno: 1094 }); return []; }));
 });
 
-it('says the thread was still listed after KILL, with its Command, State and Time and nothing of any session\'s text', async () => {
-  const c = control(text => text === 'SHOW PROCESSLIST' ? [OTHER, { ...OTHER, Id: 42, Command: 'Killed', State: 'cleaning up', Time: 1, Info: 'select hidden from private_table' }] : []);
-  const error = await failure(confirmTermination(42, async () => c, { secrets: ['owner-pass'] }));
-  expect(error).toBeInstanceOf(ConnectorFailure);expect(error.code).toBe('unavailable');
-  expect(error.message).toMatch(/^database termination unconfirmed: the thread is still listed after KILL \(Command "Killed", State "cleaning up", Time 1 s\) \(thread 42, \d+ ms after the cleanup began, the control connection opened in \d+ ms\)$/);
-  for (const hidden of ['secret_column', 'hidden', 'private_table', 'reader', '10.0.0.9', 'shop']) expect(error.message).not.toContain(hidden);
+it('waits for MySQL to delist a killed thread: KILL returns before the thread itself leaves SHOW PROCESSLIST', async () => {
+  // The killed thread clears its own listing when it next runs, so the first reads after KILL can still list it.
+  const log: string[] = [], killed = { ...OTHER, Id: 42, Command: 'Killed', State: 'executing', Time: 0 };
+  let reads = 0;
+  const c = control(text => text === 'SHOW PROCESSLIST' ? (++reads <= 3 ? [OTHER, killed] : [OTHER]) : [], log);
+  await confirmTermination(42, async () => c, { boundMs: 4500 });
+  expect(log).toEqual(['KILL CONNECTION 42', 'SHOW PROCESSLIST', 'SHOW PROCESSLIST', 'SHOW PROCESSLIST', 'SHOW PROCESSLIST']);
   expect(c.destroyed).toBe(1);
+});
+
+it('says the thread was still listed after KILL, with the last row\'s Command, State and Time and nothing of any session\'s text', async () => {
+  // Fake clocks: the paced reads and the elapsed time they report are exact.
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
+  let reads = 0;
+  const c = control(text => text === 'SHOW PROCESSLIST' ? [OTHER, { ...OTHER, Id: 42, Command: 'Killed', State: ++reads > 1 ? 'cleaning up' : 'executing', Time: 1, Info: 'select hidden from private_table' }] : []);
+  const pending = failure(confirmTermination(42, async () => c, { boundMs: 200, secrets: ['owner-pass'] }));
+  await vi.advanceTimersByTimeAsync(200);
+  const error = await pending;
+  // A read every 20 ms until the next would pass the one bound: ten, the last at 180 ms.
+  expect(error).toBeInstanceOf(ConnectorFailure);expect(error.code).toBe('unavailable');
+  expect(error.message).toBe('database termination unconfirmed: the thread is still listed after KILL in 10 reads (Command "Killed", State "cleaning up", Time 1 s) (thread 42, 180 ms after the cleanup began, the control connection opened in 0 ms)');
+  for (const hidden of ['secret_column', 'hidden', 'private_table', 'reader', '10.0.0.9', 'shop']) expect(error.message).not.toContain(hidden);
+  expect(c.destroyed).toBeGreaterThan(0);
 });
 
 it('says the bound expired and what it was waiting on, whether opening the control connection or after it', async () => {
@@ -69,7 +85,7 @@ it('says the control connection failed, at which step and with which code, never
 
 it('keeps the driver\'s account in what close() rejects with and in the quarantine log line, with the same code and type', async () => {
   const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-  const reason = 'database termination unconfirmed: the thread is still listed after KILL (Command "Killed", State "", Time 0 s) (thread 7, 3 ms after the cleanup began, the control connection opened in 2 ms)';
+  const reason = 'database termination unconfirmed: the thread is still listed after KILL in 1 read (Command "Killed", State "", Time 0 s) (thread 7, 3 ms after the cleanup began, the control connection opened in 2 ms)';
   let confirmed = false;
   const pool = new SessionPool<object>({ open: async () => ({}), close: async () => { if (!confirmed) throw new ConnectorFailure('unavailable', reason); } }, { size: 1, idleMs: 30_000, waitMs: 1000 });
   await expect(pool.use('db', async (_, discard) => { discard(); return 'answer'; })).resolves.toBe('answer');

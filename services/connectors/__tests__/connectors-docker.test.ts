@@ -4,7 +4,8 @@
  * giving two viewers different rows through a non-superuser account, the startup parameters, the database a
  * `default:` namespace opens (and 3D000 for one that does not exist), statement timeouts, TLS refusals, a refused
  * sign-in without the password in the error, and MySQL's viewer variables (read through a function, reset after each
- * query, hostile values kept literal). Runs in the `integration` project; skipped without the images, except in CI.
+ * query, hostile values kept literal), and a killed MySQL session confirmed gone only once the server delists it.
+ * Runs in the `integration` project; skipped without the images, except in CI.
  */
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -13,6 +14,7 @@ import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { connectorError, openConnection, type OpenConnection } from '@artifactbin/connectors';
 import { dockerImage } from '@artifactbin/test-support/docker';
+import mysql2 from 'mysql2/promise';
 
 /** CI's integration job pulls all three images: a missing one fails there instead of skipping (test-support/docker). */
 const has = (image: string) => dockerImage(image);
@@ -192,6 +194,25 @@ describe.skipIf(!has('mysql:8'))('mysql 8', () => {
     expect(await pending).toMatchObject({code:'timeout'});
     expect(running()).toBe('0');
     expect((await my.query({text:'select 1 as n',params:{},viewer:alice})).rows).toEqual([{n:1}]);
+  });
+
+  it('confirms a cancelled session gone only once MySQL delists it, which KILL alone does not: the killed thread leaves SHOW PROCESSLIST when it next runs', async () => {
+    const root = await mysql2.createConnection({ host: '127.0.0.1', port, user: 'root', password: 'owner-pass' });
+    const warn = vi.spyOn(console, 'warn');
+    try {
+      // One row whose single expression never checks the kill flag: listed (Command Killed) for its rest after KILL.
+      const text = "select length(sha2(concat(repeat('a', 30000000), sha2(concat(repeat('b', 30000000), sha2(repeat('c', 30000000), 512)), 512)), 512)) as n /* delist_probe */";
+      const probe = async () => (await root.query<mysql2.RowDataPacket[]>("select id from information_schema.processlist where info like '%delist_probe%' and info not like '%processlist%'"))[0];
+      const controller = new AbortController();
+      const pending = failure(my.query({ text, params: {}, viewer: alice, signal: controller.signal }));
+      await vi.waitFor(async () => expect(await probe()).toHaveLength(1), { timeout: 20_000, interval: 5 });
+      controller.abort();
+      expect(await pending).toMatchObject({ code: 'timeout' });
+      // The cleanup waited for the absence: no quarantine, nothing left on the server.
+      expect(warn.mock.calls.map(String).filter(line => line.includes('termination unconfirmed'))).toEqual([]);
+      expect(await probe()).toHaveLength(0);
+      expect((await my.query({ text: 'select 1 as n', params: {}, viewer: alice })).rows).toEqual([{ n: 1 }]);
+    } finally { warn.mockRestore(); await root.end(); }
   });
 
   it('maps types, binds values, refuses writes, INTO and :=, and stops at the time limit', async () => {
