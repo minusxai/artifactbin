@@ -38,8 +38,8 @@ comment, history nowhere. Keep links plain, never `@` imports.
 - **Deferred (exit 2) mid-task?** Return to `--files`; report the deferral; PR CI runs the rest. On a red PR: fetch
   every failed job's log in ONE command, fix all failures together (independent ones in parallel agents), never
   retry unchanged code.
-- **CI speed:** the required check is `pr fast` (`.github/workflows/pr-fast.yml`): aim under 40 s, fail above 60 s,
-  never raise a budget. Every post-merge failure on main gets a fast-lane guard.
+- **CI:** main within 6 min (aim 4), batched; no flaky test (fix or remove); long tests nightly; `pr fast`
+  under 60 s (aim 40), never raise it; a recurring main failure gets a fast-lane guard.
 
 ## Working rules
 
