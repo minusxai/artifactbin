@@ -82,12 +82,16 @@ it('warns rather than fails when a PR consumer includes a long prerequisite wait
 
 // No step's preparation hashes files on the runner: the install keys come from the fingerprint step's output
 // (scripts/__tests__/ci-plan.test.mjs says why and pins that the digest is hashFiles').
-it('keys every install cache, whole or slim, by the fingerprint step\'s output, in the same shape as before',()=>{
+it('keys every install cache, whole or a kit, by the fingerprint step\'s output, in the same shape as before',()=>{
  const files=['ci.yml','pr-fast.yml','node-timings.yml','page-speed.yml'];
  for(const file of files)expect(readFileSync(new URL(`../../.github/workflows/${file}`,import.meta.url),'utf8'),file).not.toContain(".ci-cache-key/install.json')");
  const keys=files.flatMap(file=>Object.values(workflow(file).jobs).flatMap(job=>job.steps??[])).map(step=>step.with?.key).filter(key=>/^install-/.test(key??''));
- expect(keys.length).toBeGreaterThan(15);
- expect([...new Set(keys)].sort()).toEqual(['install-slim-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.lock.outputs.install }}','install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.lock.outputs.install }}']);
+ expect(keys.length).toBeGreaterThanOrEqual(15);
+ expect([...new Set(keys)].sort()).toEqual(['install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.lock.outputs.install }}']);
+ // Every kit key and fallback key holds the same fingerprint, so a kit's install is always this lock's own.
+ const kits=files.flatMap(file=>Object.values(workflow(file).jobs).flatMap(job=>job.steps??[])).filter(step=>/^pr-kit-/.test(step.with?.key??''));
+ expect(kits.length).toBe(6);
+ for(const kit of kits)for(const key of [kit.with.key,...(kit.with['restore-keys']??'').trim().split('\n').filter(Boolean)])expect(key).toMatch(/^pr-kit-v1-\$\{\{ runner\.os \}\}-\$\{\{ runner\.arch \}\}-node22-(\$\{\{ env\.TEST_BUILDS_KIND \}\}|api|ui|guards|node)-\$\{\{ steps\.lock\.outputs\.install \}\}-/);
  // Each job that reads the output writes it first, in a step of its own named `lock`.
  for(const file of files)for(const [name,job] of Object.entries(workflow(file).jobs)){
   const steps=job.steps??[],readers=steps.filter(step=>JSON.stringify(step).includes('steps.lock.outputs.install'));
@@ -165,19 +169,21 @@ it('runs every api, api-isolated, ui and islands test on every pull request, pac
  }
  // No browser: no file in these projects launches Chromium.
  expect(JSON.stringify(job.steps)).not.toContain('playwright');
- // The test builds restore before the run, each runner its own kind's entry (its configuration's module cache: see
- // scripts/__tests__/ci-plan.test.mjs); only the last runner of each kind saves, and only on an exact miss. Packing puts
- // the longest files first, often one to a runner (api-1 and guards held a single file in run 44142401757), so the last
- // runner holds the most files and its entry the most modules.
- const steps=job.steps,restore=steps.findIndex(step=>step.id==='test-builds');
+ // The kit (the install and the test builds) restores before the run, each runner its own kind's entry (its
+ // configuration's module cache: see scripts/__tests__/ci-plan.test.mjs); only the last runner of each kind saves, only on
+ // an exact miss, and only from this lock's own clean install. Packing puts the longest files first, often one to a
+ // runner (api-1 and guards held a single file in run 44142401757), so the last runner holds the most files and its entry
+ // the most modules.
+ const steps=job.steps,restore=steps.findIndex(step=>step.id==='kit');
  expect(restore).toBeGreaterThan(-1);expect(restore).toBeLessThan(steps.indexOf(run));
  expect(steps[restore].uses).toMatch(/^actions\/cache\/restore@/);
- expect(steps[restore].with.key).toBe('test-builds-v3-${{ runner.os }}-${{ env.TEST_BUILDS_KIND }}-${{ steps.test-builds-key.outputs.key }}-${{ steps.test-builds-key.outputs.modules }}');
+ expect(steps[restore].with.key).toBe('pr-kit-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ env.TEST_BUILDS_KIND }}-${{ steps.lock.outputs.install }}-${{ steps.test-builds-key.outputs.key }}-${{ steps.test-builds-key.outputs.modules }}');
  expect(job.env.TEST_BUILDS_KIND).toBe("${{ matrix.shard && 'guards' || matrix.batch && 'node' || matrix.suite && startsWith(matrix.part, 'ui-') && 'ui' || 'api' }}");
- const save=steps.filter(step=>step.uses?.startsWith('actions/cache/save')&&step.with.key.startsWith('test-builds-'));
+ const save=steps.filter(step=>step.uses?.startsWith('actions/cache/save')&&step.with.key.startsWith('pr-kit-'));
  expect(save).toHaveLength(1);
- expect(save[0].if).toBe("contains(fromJSON('[\"api-32\",\"ui-7\",\"guards-3\",\"node-5\"]'), matrix.part) && steps.test-builds.outputs.cache-hit != 'true' && steps.test-builds-retry.outputs.cache-hit != 'true'");
+ expect(save[0].if).toBe("contains(fromJSON('[\"api-32\",\"ui-7\",\"guards-3\",\"node-5\"]'), matrix.part) && steps.kit.outputs.cache-hit != 'true' && (steps.kit.outputs.cache-matched-key != '' || steps.near-install.outputs.cache-hit == 'true')");
  expect(save[0].with).toEqual({path:steps[restore].with.path,key:steps[restore].with.key});
+ expect(steps.filter(step=>step.uses?.startsWith('actions/cache/save')&&/^test-builds-/.test(step.with.key))).toEqual([]);
  // Saved after every test step, so a saver's own transforms are in its entry.
  expect(steps.indexOf(save[0])).toBeGreaterThan(Math.max(...steps.flatMap((step,i)=>(step.run??'').includes('vitest.mjs run')?[i]:[])));
  const savers=JSON.parse(save[0].if.match(/fromJSON\('(.*?)'\)/)[1]);
@@ -189,36 +195,67 @@ it('runs every api, api-isolated, ui and islands test on every pull request, pac
 // p99, then 35.5s (run 44141023943's node-2, stuck at 70.8% then 92.7%); over 538 test-builds restores 0.8s median and 1.9s
 // p99, then 20.4s and a 16.9s "server is busy" that ended in no entry at all (44150141230's ui-5). actions/cache gives up
 // on a 128 MB segment after SEGMENT_DOWNLOAD_TIMEOUT_MINS (fractions allowed) and reports a miss, extracting nothing, so
-// the next tier of the same chain runs: the slim install falls back to the whole one, the whole one to the nearest, the
-// test builds to one more restore, then to building them. The last tier of each chain keeps its default, so a network that
-// is slow everywhere costs time, never a cold `npm ci`.
+// the kit-miss path runs: the nearest whole install, unbounded, and main's test builds. A network that is slow everywhere
+// costs time, never a cold `npm ci`. A second try of the same kit (once a test-builds retry, 15s in run 44493175163) only
+// stacks another bound on the first.
 it('bounds every first cache download and lets the next tier of the same chain take over, the last one unbounded',()=>{
  const steps=workflow('pr-fast.yml').jobs.fast.steps,by=(id)=>steps.find(step=>step.id===id);
  const bound=(step)=>step.env?.SEGMENT_DOWNLOAD_TIMEOUT_MINS;
- // Six seconds a segment for the 164-193 MB installs, three for the 15 MB test builds: twice and more their p99.
- expect(bound(by('slim'))).toBe('0.1');
- // The whole install is bounded as well, first tier or second: as a slim install's fallback it once stalled 32s at 68.2%
- // after the slim one was abandoned at 73.3% (run 44174517646's ui-5, a 67s run). Its fallback is the nearest install,
- // which on this lock's key restores the same entry, unbounded: a network slow everywhere still ends in an install.
+ // Six seconds a segment for the ~150-170 MB kits and installs: about their p99.
+ expect(bound(by('kit'))).toBe('0.1');
+ // The whole install (the types, lint and tests runners') is bounded as well: it once stalled 32s at 68.2% after an
+ // abandoned download (run 44174517646's ui-5, a 67s run). Its fallback, and the kit's, is the nearest install, which on
+ // this lock's key restores the same entry, unbounded: a network slow everywhere still ends in an install.
  expect(bound(by('install'))).toBe('0.1');
  expect(bound(by('near-install'))).toBeUndefined();
  expect(by('near-install').with.key).toBe(by('install').with.key);
- expect(bound(by('test-builds'))).toBe('0.05');
- const retry=by('test-builds-retry');
- expect(steps.indexOf(retry)).toBe(steps.indexOf(by('test-builds'))+1);
- expect(retry.uses).toBe(by('test-builds').uses);
- expect(retry.with).toEqual(by('test-builds').with);
- expect(retry.if).toBe("(matrix.suite || matrix.shard || matrix.batch) && steps.test-builds.outputs.cache-matched-key == ''");
- expect(bound(retry)).toBe('0.25');
+ expect(bound(by('test-builds'))).toBeUndefined();
+ expect(by('test-builds').if).toBe("(matrix.suite || matrix.shard || matrix.batch) && steps.kit.outputs.cache-matched-key == ''");
+ expect(steps.filter(step=>/retry/.test(step.id??''))).toEqual([]);
  // Every bound is a fraction of a minute that actions/cache parses: Number(value) * 60 * 1000 ms a segment.
  const values=steps.flatMap(step=>bound(step)===undefined?[]:[String(bound(step)).match(/'([\d.]+)'|^([\d.]+)$/)]);
  for(const match of values){const minutes=Number(match[1]??match[2]);expect(minutes).toBeGreaterThan(0);expect(minutes).toBeLessThan(1);}
  // The node runners' import graph (scripts/ci/node-affected.mjs's edge cache) is bounded too: without it the choice walks cold.
  const graph=steps.find(step=>step.with?.path==='node_modules/.cache/test-graph.json');
  expect(bound(graph)).toBe('0.1');
- expect(values).toHaveLength(5);
- // A runner whose restore was abandoned builds its test builds itself, as on any miss, and still runs every one of its tests.
- expect(steps.filter(step=>step.if?.includes('steps.test-builds.outputs')).map(step=>step.id??step.uses.split('@')[0])).toEqual(['test-builds-retry','actions/cache/save']);
+ expect(values).toHaveLength(3);
+ // A runner whose kit was abandoned restores the rest on the kit-miss path, and still runs every one of its tests.
+ expect(steps.filter(step=>step.if?.includes('steps.test-builds.outputs'))).toEqual([]);
+});
+// ONE CACHE DOWNLOAD A RUNNER. Run 44493175163's api-7 restored its install, then the whole install after abandoning that,
+// then the test builds, then a retry of those (6+5+4+15s) and made the run 61s. Each Vitest runner now restores its kit
+// alone, and every other restore it can reach waits on a kit that matched nothing; the other runners restore their install.
+// The step conditions are evaluated as Actions would, for every runner of the matrix.
+it('makes exactly one cache download on every runner whose kit or install is there',()=>{
+ const job=workflow('pr-fast.yml').jobs.fast;
+ const evaluate=(condition,matrix,outputs)=>{
+  if(condition===undefined)return true;
+  const js=String(condition).replace(/^\$\{\{\s*|\s*\}\}$/g,'')
+   .replace(/steps\.([\w-]+)\.outputs\.([\w-]+)/g,(_,id,name)=>JSON.stringify(outputs[id]?.[name]??''))
+   .replace(/matrix\.(\w+)/g,(_,name)=>JSON.stringify(matrix[name]??''))
+   .replace(/!=/g,'!==').replace(/([^=!])==([^=])/g,'$1===$2');
+  return Boolean(new Function('contains','fromJSON','startsWith',`return (${js});`)((list,item)=>list.includes(item),JSON.parse,(text,prefix)=>String(text).startsWith(prefix)));
+ };
+ const restores=job.steps.filter(step=>/^actions\/cache(\/restore)?@/.test(step.uses??'')&&!step.with['lookup-only']);
+ // As Actions expands it: an include naming a listed part extends that part's runner, any other adds one.
+ const {part:parts,include}=job.strategy.matrix;
+ const entries=[...parts.map(part=>Object.assign({part},...include.filter(entry=>entry.part===part))),...include.filter(entry=>!parts.includes(entry.part))];
+ const hit={'cache-hit':'true','cache-matched-key':'k'},near={'cache-hit':'','cache-matched-key':'k'};
+ let vitest=0;
+ for(const matrix of entries){
+  if(matrix.install)continue;
+  const tests=Boolean(matrix.suite||matrix.shard||matrix.batch);vitest+=tests;
+  // Exact or fallback-key hit: either way the kit is this lock's install.
+  for(const kit of [hit,near]){
+   const outputs=tests?{kit}:{install:hit};
+   const ran=restores.filter(step=>evaluate(step.if,matrix,outputs)).map(step=>step.id??step.with.path);
+   expect(ran,`${matrix.part}`).toEqual([tests?'kit':'install']);
+  }
+ }
+ expect(vitest).toBe(job.strategy.matrix.include.filter(entry=>entry.suite||entry.shard||entry.batch).length);
+ // Every kit step, here and in main's warm-caches, archives the same paths, so each saved entry is the one restored.
+ const kits=[...job.steps,...workflow().jobs['warm-caches'].steps].filter(step=>/^pr-kit-/.test(step.with?.key??''));
+ for(const kit of kits)expect(kit.with.path).toBe(job.steps.find(step=>step.id==='kit').with.path);
 });
 // The full suite's cheap node files ran only after the merge. pr fast runs them as one shared-graph batch, sharded by time.
 it('runs the cheap node batch on every pull request: its own runners, its config\'s timed shards, each file once',()=>{
@@ -232,15 +269,15 @@ it('runs the cheap node batch on every pull request: its own runners, its config
  const config=readFileSync(new URL('../../vitest.node-batch.config.ts',import.meta.url),'utf8');
  expect(config).toContain('sequence: { sequencer: TimedSequencer }');
  expect(config).toContain('isolate: false');
- // The batch restores the test builds (its global setup's server reader, and the schema image) before it runs.
- const steps=job.steps,restore=steps.findIndex(step=>step.id==='test-builds');
+ // The batch restores its kit (its global setup's server reader, and the schema image) before it runs.
+ const steps=job.steps,restore=steps.findIndex(step=>step.id==='kit');
  expect(steps[restore].if).toContain('matrix.batch');
  expect(restore).toBeLessThan(steps.indexOf(run));
  expect(shardLoads(JSON.parse(readFileSync(new URL('../ci/test-timings.json',import.meta.url),'utf8')))['pr-node']).toHaveLength(count);
 });
 // A node file with no recorded time never ran on a pull request until someone refreshed the table by hand (70 of 668 on
 // 2026-11-17). Main measures them after each green ci run, and every node runner lays those times over the table.
-it('lays main\'s measured node times over the table on every node runner, fetched beside the install, and chooses the change\'s node files beside the test builds\' restore, awaited before the batch',()=>{
+it('lays main\'s measured node times over the table on every node runner, fetched beside the install, and chooses the change\'s node files once its kit is in place, awaited before the batch',()=>{
  const steps=workflow('pr-fast.yml').jobs.fast.steps;
  const at=(predicate)=>steps.findIndex(predicate);
  const fetch=at(step=>(step.run??'').includes('scripts/ci/ci.mjs node-timings'));
@@ -278,20 +315,23 @@ it('lays main\'s measured node times over the table on every node runner, fetche
   if(absent)expect(waited.stdout).not.toContain(absent);
   if(summary)expect(readFileSync(env.GITHUB_STEP_SUMMARY,'utf8')).toContain(summary);
  }
- expect(fetch).toBeLessThan(at(step=>step.id==='slim'));
- // From main's import graph, restored after every install tier (an install restore would replace node_modules), and
- // chosen before the test builds' restore so the two overlap; the batch runs right after the wait.
+ expect(fetch).toBeLessThan(at(step=>step.id==='kit'));
+ // From main's import graph: the node kit's, or without a kit restored after every install tier (an install restore
+ // would replace node_modules); the batch runs right after the wait.
  const graph=at(step=>step.with?.path==='node_modules/.cache/test-graph.json');
- expect(steps[graph].if).toBe('matrix.batch');
+ expect(steps[graph].if).toBe("matrix.batch && steps.kit.outputs.cache-matched-key == ''");
+ expect(steps.find(step=>step.id==='kit').with.path).toContain('\nnode_modules/.cache/test-graph.json\n');
  expect(steps[graph].with['restore-keys']).toBe('test-graph-v1-${{ runner.os }}-');
  for(const tier of steps.filter(step=>/install/.test(step.id??'')||/npm (ci|install)/.test(step.run??'')))expect(steps.indexOf(tier),tier.id??tier.run).toBeLessThan(graph);
  expect(graph).toBeLessThan(choose);
- expect(choose).toBeLessThan(at(step=>step.id==='test-builds'));
+ expect(at(step=>step.id==='test-builds')).toBeLessThan(choose);
  expect(wait).toBe(batch-1);
  // Main's warm-caches walks every node and integration file's imports and saves the graph the runners restore.
  const warm=workflow().jobs['warm-caches'].steps,walk=warm.findIndex(step=>step.run==='node scripts/ci/node-affected.mjs --warm');
  expect(warm[walk+1].with).toEqual({path:'node_modules/.cache/test-graph.json',key:'test-graph-v1-${{ runner.os }}-${{ github.sha }}'});
  expect(warm[walk+1].uses).toMatch(/^actions\/cache\/save@/);
+ // And the node kind's kit, which carries the graph, is saved after the walk.
+ expect(warm.findIndex(step=>/^pr-kit-v1-.*-node22-node-/.test(step.with?.key??''))).toBeGreaterThan(walk+1);
  // No other runner fetches them: the api, ui and guard runners pack by the committed table alone.
  expect(steps.filter(step=>(step.run??'').includes('node-timings')).map(step=>step.if)).toEqual(['matrix.batch','matrix.batch','matrix.batch']);
 });
@@ -447,7 +487,7 @@ it('reconciles the nearest install on a lock miss, restore only, and falls back 
  const steps=workflow('pr-fast.yml').jobs.fast.steps;
  const exact=steps.find(step=>step.id==='install'),near=steps.find(step=>step.id==='near-install');
  expect(near.uses).toMatch(/^actions\/cache\/restore@/);
- expect(near.if).toBe("${{ !matrix.install && steps.slim.outputs.cache-hit != 'true' && steps.install.outputs.cache-hit != 'true' }}");
+ expect(near.if).toBe("${{ !matrix.install && steps.kit.outputs.cache-matched-key == '' && steps.install.outputs.cache-hit != 'true' }}");
  expect(near.with.path).toBe(exact.with.path);
  expect(near.with.key).toBe(exact.with.key);
  expect(near.with['restore-keys']).toBe('install-v5-${{ runner.os }}-${{ runner.arch }}-node22-');
@@ -458,17 +498,18 @@ it('reconciles the nearest install on a lock miss, restore only, and falls back 
  expect(reconcile.if).toContain("steps.near-install.outputs.cache-hit != 'true'");
  expect(reconcile.run).toMatch(/git diff --quiet -- package-lock\.json[^\n]*\n[\s\S]*copy-assets\.mjs[\s\S]*else[\s\S]*git checkout -- package-lock\.json[\s\S]*npm ci /);
  const cold=steps.filter(step=>/^npm ci /.test(step.run??''));
- expect(cold.map(step=>step.if)).toEqual(["matrix.install && steps.own-install.outputs.cache-hit != 'true'","${{ !matrix.install && steps.slim.outputs.cache-hit != 'true' && steps.install.outputs.cache-hit != 'true' && steps.near-install.outputs.cache-matched-key == '' }}"]);
+ expect(cold.map(step=>step.if)).toEqual(["matrix.install && steps.own-install.outputs.cache-hit != 'true'","${{ !matrix.install && steps.kit.outputs.cache-matched-key == '' && steps.install.outputs.cache-hit != 'true' && steps.near-install.outputs.cache-matched-key == '' }}"]);
  // No stale install is ever saved from a pull request: the one install save is the `install` runner's clean `npm ci`,
- // only when this lock's exact key is missing, and every other runner skips it. The other save is the test builds.
- // (The slim install's own save, from the same runner, is scripts/__tests__/slim-install.test.mjs's.)
- const saves=steps.filter(step=>(step.uses?.startsWith('actions/cache/save')||step.uses?.startsWith('actions/cache@'))&&!step.with.key.startsWith('install-slim-'));
- expect(saves.map(step=>step.with.key)).toEqual([exact.with.key,'test-builds-v3-${{ runner.os }}-${{ env.TEST_BUILDS_KIND }}-${{ steps.test-builds-key.outputs.key }}-${{ steps.test-builds-key.outputs.modules }}']);
+ // only when this lock's exact key is missing, and every other runner skips it. The other save is a kind's kit, only
+ // from a kit (whose every key holds this lock) or this lock's exact whole install, never a reconciled tree.
+ const saves=steps.filter(step=>step.uses?.startsWith('actions/cache/save')||step.uses?.startsWith('actions/cache@'));
+ expect(saves.map(step=>step.with.key)).toEqual([exact.with.key,steps.find(step=>step.id==='kit').with.key]);
+ expect(saves[1].if).toMatch(/&& \(steps\.kit\.outputs\.cache-matched-key != '' \|\| steps\.near-install\.outputs\.cache-hit == 'true'\)$/);
  const own=steps.find(step=>step.id==='own-install');
  expect(own).toMatchObject({if:'matrix.install',with:{path:exact.with.path,key:exact.with.key,'lookup-only':true}});
  expect(saves[0]).toMatchObject({if:"matrix.install && steps.own-install.outputs.cache-hit != 'true'",with:{path:exact.with.path,key:exact.with.key}});
- expect(steps.indexOf(cold[0])).toBe(steps.findIndex(step=>step.id==='own-slim')+1);expect(steps.indexOf(saves[0])).toBe(steps.indexOf(cold[0])+1);
- expect(exact.if).toBe("${{ !matrix.install && steps.slim.outputs.cache-hit != 'true' }}");
+ expect(steps.indexOf(cold[0])).toBe(steps.findIndex(step=>step.id==='own-install')+1);expect(steps.indexOf(saves[0])).toBe(steps.indexOf(cold[0])+1);
+ expect(exact.if).toBe("${{ !matrix.install && !matrix.suite && !matrix.shard && !matrix.batch }}");
  expect(workflow('pr-fast.yml').jobs.fast.strategy.matrix.include.filter(entry=>entry.install)).toEqual([{part:'install',install:true}]);
 });
 it('fails the pull request lane past 60 seconds with the plain budget message',()=>{

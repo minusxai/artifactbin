@@ -24,8 +24,9 @@ name: pr fast
 # THE RUN TAKES AS LONG AS ITS SLOWEST JOB, so one stalled transfer on one of ~50 runners sets it (a 62.5s fetch made run
 # 44148017273 93s). The transfers seen stalling are hedged or bounded, each with a fallback that may cost time but never
 # changes what that runner tests: the checkout starts a second fetch of the same sha beside one that has not landed, and
-# every cache download but each chain's last gives up on a stalled segment for the chain's next tier, and the last stays
-# unbounded (scripts/__tests__/workflows.test.mjs, ci-budget.test.mjs). Not yet bounded: the cache lookups and saves, the
+# each Vitest runner makes one cache download (its kit: install and test builds) that gives up on a stalled segment for
+# the kit-miss path, whose whole-install restore stays unbounded (scripts/__tests__/workflows.test.mjs,
+# ci-budget.test.mjs, slim-install.test.mjs). Not yet bounded: the cache lookups and saves, the
 # type-info and node-timings fetches, the artifact upload and the clock's fallback `gh api`; one seen stalling joins them.
 #
 # No workflow-level `concurrency` group: cancel-in-progress holds a new run pending until the old one
@@ -49,7 +50,7 @@ jobs:
     permissions:
       contents: read
       actions: read
-    # WHICH TEST BUILDS THIS RUNNER RESTORES: one entry per runner kind, because Vitest keys its module cache by the
+    # WHICH KIT THIS RUNNER RESTORES (its install and test builds, the `kit` step): one entry per runner kind, because Vitest keys its module cache by the
     # configuration that transformed each module as well as its source. One entry warmed for the api projects alone left
     # the ui, guard and node runners to transform their whole graphs cold (9-15s summed over three workers each, against
     # ~2s on an api runner: runs 44114175470, 44133274884); one warmed for all four would make every runner download all
@@ -214,7 +215,8 @@ jobs:
           # THE PULL REQUEST'S OWN INSTALL: a lock this branch changed misses main's install on every push, and every runner
           # reconciles main's tree to it (~2.7s: the miss probe and `npm install`, run 43039126177). This runner, only on
           # that miss, runs a clean `npm ci` (never a reconciled tree: nothing stale is saved) and saves it under this
-          # lock's key, in this pull request's cache scope; from the next push every runner restores an exact hit.
+          # lock's key, in this pull request's cache scope; from the next push every runner restores an exact hit, and the
+          # last runner of each kind saves its kit from it (the `kit` step).
           # A clean install is ~14-24s; it runs beside the test runners, on the first push of each new lock only.
           - part: install
             install: true
@@ -385,21 +387,6 @@ jobs:
             services/app/lib/html-systems/font-manifest.json
           key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.lock.outputs.install }}
           lookup-only: true
-      - if: matrix.install
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
-        id: own-slim
-        with:
-          path: |
-            node_modules
-            services/*/node_modules
-            services/app/public/fonts
-            services/app/lib/html-systems/font-manifest.json
-            !node_modules/@typescript/typescript-*
-            !node_modules/@fontsource
-            !node_modules/@fontsource-variable
-            !node_modules/lucide-static/font
-          key: install-slim-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.lock.outputs.install }}
-          lookup-only: true
       - if: matrix.install && steps.own-install.outputs.cache-hit != 'true'
         run: npm ci --no-audit --no-fund
       - if: matrix.install && steps.own-install.outputs.cache-hit != 'true'
@@ -411,60 +398,70 @@ jobs:
             services/app/public/fonts
             services/app/lib/html-systems/font-manifest.json
           key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.lock.outputs.install }}
-      # The slim install of a lock whose whole install exists but whose slim one does not (this pull request's first
-      # run after the slim entry was introduced): the whole one, restored, is what it is cut from.
-      - if: matrix.install && steps.own-install.outputs.cache-hit == 'true' && steps.own-slim.outputs.cache-hit != 'true'
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
-        with:
-          path: |
-            node_modules
-            services/*/node_modules
-            services/app/public/fonts
-            services/app/lib/html-systems/font-manifest.json
-          key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.lock.outputs.install }}
-      - if: matrix.install && steps.own-slim.outputs.cache-hit != 'true'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
-        with:
-          path: |
-            node_modules
-            services/*/node_modules
-            services/app/public/fonts
-            services/app/lib/html-systems/font-manifest.json
-            !node_modules/@typescript/typescript-*
-            !node_modules/@fontsource
-            !node_modules/@fontsource-variable
-            !node_modules/lucide-static/font
-          key: install-slim-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.lock.outputs.install }}
-      # THE SLIM INSTALL, for the runners that only run Vitest: the whole install minus what no test here can load
-      # (scripts/__tests__/slim-install.test.mjs names each and refuses an import of one): the native TypeScript compiler
-      # (the `types` runner's), the @fontsource packages (copy-assets reads them at install; the fonts they make are kept),
-      # lucide-static's icon font. About 29 MB of the 166 MB compressed entry. Exact key only: on a miss the whole install
-      # is restored as before, so a lock main has not slimmed yet (this entry's first merge included) costs nothing.
-      # EVERY FIRST CACHE DOWNLOAD IS BOUNDED (SEGMENT_DOWNLOAD_TIMEOUT_MINS, minutes a 128 MB segment, fractions allowed):
-      # over 575 install restores the download took 1.4s median and 6.2s p99, then 35.5s once (run 44141023943's node-2,
-      # stuck at 70.8% and again at 92.7%). Past the bound actions/cache abandons the download, extracts nothing and reports a
-      # miss, so the next tier of this chain runs: the slim install falls back to the whole one, which falls back to the
-      # nearest. The whole one is bounded as a second tier too: after ui-5's slim download was abandoned at 73.3%, the whole
-      # one stalled 32s at 68.2% (run 44174517646, 67s). The nearest keeps the default and, on this lock's key, restores that
-      # same entry, so a network slow everywhere costs time, never a cold `npm ci`. scripts/__tests__/ci-budget.test.mjs pins
-      # each bound.
+      # The test global setup's server reader and hosted libraries (build-runtime.global.ts) are keyed by what they are
+      # built from (scripts/ci/ci.mjs `test-builds-key`), Vitest's module cache by its configuration (`modules`).
+      - if: matrix.suite || matrix.shard || matrix.batch
+        id: test-builds-key
+        run: node scripts/ci/ci.mjs test-builds-key
+      # THE KIT, EVERY VITEST RUNNER'S ONE CACHE DOWNLOAD: the install it tests with and the test builds, one entry per
+      # runner kind (`TEST_BUILDS_KIND` above), written by main's warm-caches. They were three tiered downloads (the
+      # install, the test builds, a retry of those), and a runner that stalled in all of them stacked 6+5+4+15s of setup
+      # and made run 44493175163 61s.
+      # - The install: every key and fallback key holds this lock's fingerprint, so its node_modules is always this lock's
+      #   own clean install. A lock this pull request changed has no kit: the runner takes the path below.
+      # - Without the native TypeScript compiler (the `types` runner's), the @fontsource packages (copy-assets reads them
+      #   at install; the fonts it makes are kept) and lucide-static's icon font: scripts/__tests__/slim-install.test.mjs
+      #   names each and refuses an import of one. actions/cache archives a matched directory whole (its glob has no
+      #   implicit descendants), so they are cut by listing node_modules' entries and leaving them out, and with them
+      #   the tool caches (`.cache`, `.vite`) a run writes there; the node runners' import graph (scripts/lib/test-graph.mjs,
+      #   node_modules/.cache/test-graph.json) is kept in their kind's kit.
+      # - The test builds, the test database's schema image (services/app/test/setup/schema-image-file.ts: each worker
+      #   restores its first database instead of running initdb and the boot DDL, 660ms -> 170ms locally) and this kind's
+      #   Vitest module cache. Main's kit for other build inputs (a fallback key) is safe: the global setup rebuilds the
+      #   server reader when its markers do not match (services/app/scripts/server-reader-cache.mjs), only the image
+      #   named by this checkout's schema key loads, and module entries are keyed by source.
+      # BOUNDED (SEGMENT_DOWNLOAD_TIMEOUT_MINS, minutes a 128 MB segment, fractions allowed): over 575 install restores the
+      # download took 1.4s median and 6.2s p99, then 35.5s once (run 44141023943's node-2, stuck at 70.8% and again at
+      # 92.7%). Past the bound actions/cache abandons the download, extracts nothing and reports a miss (no matched key),
+      # and the runner takes the path a kit miss takes: one restore of the whole install, unbounded, and of main's test
+      # builds; the global setup builds what is missing. An abandoned kit was 3 of 940 Vitest runners' installs
+      # (runs 44462162482-44522371420).
       - if: matrix.suite || matrix.shard || matrix.batch
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
-        id: slim
+        id: kit
         env:
           SEGMENT_DOWNLOAD_TIMEOUT_MINS: '0.1'
         with:
           path: |
-            node_modules
-            services/*/node_modules
-            services/app/public/fonts
-            services/app/lib/html-systems/font-manifest.json
-            !node_modules/@typescript/typescript-*
+            node_modules/*
+            !node_modules/.cache
+            !node_modules/.vite
+            !node_modules/.vite-temp
             !node_modules/@fontsource
             !node_modules/@fontsource-variable
+            !node_modules/@typescript
+            node_modules/@typescript/*
+            !node_modules/@typescript/typescript-*
+            !node_modules/lucide-static
+            node_modules/lucide-static/*
             !node_modules/lucide-static/font
-          key: install-slim-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.lock.outputs.install }}
-      - if: ${{ !matrix.install && steps.slim.outputs.cache-hit != 'true' }}
+            node_modules/.cache/test-graph.json
+            services/*/node_modules/*
+            !services/*/node_modules/.cache
+            !services/*/node_modules/.vite
+            services/app/public/fonts
+            services/app/lib/html-systems/font-manifest.json
+            services/app/lib/build-assets
+            services/app/public/libraries
+            tmp/test-schema-image
+            tmp/vitest-module-cache
+          key: pr-kit-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ env.TEST_BUILDS_KIND }}-${{ steps.lock.outputs.install }}-${{ steps.test-builds-key.outputs.key }}-${{ steps.test-builds-key.outputs.modules }}
+          restore-keys: |
+            pr-kit-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ env.TEST_BUILDS_KIND }}-${{ steps.lock.outputs.install }}-${{ steps.test-builds-key.outputs.key }}-
+            pr-kit-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ env.TEST_BUILDS_KIND }}-${{ steps.lock.outputs.install }}-
+      # The other runners' install (types, lint, tests): the whole one, bounded as the kit is; after ui-5's install download
+      # was abandoned at 73.3%, the next one stalled 32s at 68.2% (run 44174517646, 67s).
+      - if: ${{ !matrix.install && !matrix.suite && !matrix.shard && !matrix.batch }}
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         id: install
         env:
@@ -476,13 +473,15 @@ jobs:
             services/app/public/fonts
             services/app/lib/html-systems/font-manifest.json
           key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.lock.outputs.install }}
+      # WITHOUT A KIT OR THAT INSTALL, the nearest whole install, unbounded: on this lock's key it is that same install, so
+      # a network slow everywhere costs time, never a cold `npm ci`.
       # A PULL REQUEST THAT CHANGES THE LOCK MISSES THAT KEY ON EVERY PUSH: only main saves it, after the merge.
       # A cold `npm ci` was 14-24s of #1018's 47s and 55s runs. So on a miss, restore the newest whole install
       # (this branch's, else main's; restore only, so no stale tree is ever saved) and let `npm install`
       # reconcile it to this lock: it adds, removes and prunes only what the lock changed. If that would rewrite
       # the lock (package.json and lock disagree), it is put back and `npm ci` decides, exactly as before.
       # copy-assets is the app workspace's postinstall, which an unchanged workspace does not re-run.
-      - if: ${{ !matrix.install && steps.slim.outputs.cache-hit != 'true' && steps.install.outputs.cache-hit != 'true' }}
+      - if: ${{ !matrix.install && steps.kit.outputs.cache-matched-key == '' && steps.install.outputs.cache-hit != 'true' }}
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         id: near-install
         with:
@@ -493,8 +492,8 @@ jobs:
             services/app/lib/html-systems/font-manifest.json
           key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.lock.outputs.install }}
           restore-keys: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-
-      # An exact hit here is this lock's own install, restored after the whole install's download was abandoned: nothing to reconcile.
-      - if: ${{ !matrix.install && steps.slim.outputs.cache-hit != 'true' && steps.install.outputs.cache-hit != 'true' && steps.near-install.outputs.cache-hit != 'true' && steps.near-install.outputs.cache-matched-key != '' }}
+      # An exact hit here is this lock's own install: nothing to reconcile.
+      - if: ${{ !matrix.install && steps.kit.outputs.cache-matched-key == '' && steps.install.outputs.cache-hit != 'true' && steps.near-install.outputs.cache-hit != 'true' && steps.near-install.outputs.cache-matched-key != '' }}
         name: Reconcile the nearest install to this lock
         run: |
           npm install --no-audit --no-fund
@@ -504,13 +503,25 @@ jobs:
             git checkout -- package-lock.json package.json 'services/*/package.json'
             npm ci --no-audit --no-fund
           fi
-      - if: ${{ !matrix.install && steps.slim.outputs.cache-hit != 'true' && steps.install.outputs.cache-hit != 'true' && steps.near-install.outputs.cache-matched-key == '' }}
+      - if: ${{ !matrix.install && steps.kit.outputs.cache-matched-key == '' && steps.install.outputs.cache-hit != 'true' && steps.near-install.outputs.cache-matched-key == '' }}
         run: npm ci --no-audit --no-fund
-      # THE NODE RUNNERS' IMPORT GRAPH (scripts/lib/test-graph.mjs's edge cache, node_modules/.cache/test-graph.json), main's
-      # newest (ci.yml's warm-caches walks every node and integration file into it): with it, choosing this change's node
-      # files (scripts/ci/node-affected.mjs, below) took 3.3s locally, fetch included, against 9-24s cold. Its entries are
-      # keyed by content, so a stale one only transforms what changed. Bounded like the install's first tier.
-      - if: matrix.batch
+      # And, without a kit, main's test builds for these sources (ci.yml's whole entry: the builds and the api modules),
+      # else its newest; without either the global setup builds them (~10s).
+      - if: (matrix.suite || matrix.shard || matrix.batch) && steps.kit.outputs.cache-matched-key == ''
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: test-builds
+        with:
+          path: |
+            services/app/lib/build-assets
+            services/app/public/libraries
+            tmp/test-schema-image
+            tmp/vitest-module-cache
+          key: test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}
+          restore-keys: test-builds-v2-${{ runner.os }}-
+      # And the node runners' import graph, main's newest (ci.yml's warm-caches walks every node and integration file into
+      # it): with it, choosing this change's node files (scripts/ci/node-affected.mjs, below) took 3.3s locally, fetch
+      # included, against 9-24s cold. Its entries are keyed by content, so a stale one only transforms what changed.
+      - if: matrix.batch && steps.kit.outputs.cache-matched-key == ''
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         env:
           SEGMENT_DOWNLOAD_TIMEOUT_MINS: '0.1'
@@ -522,9 +533,9 @@ jobs:
       # node file has no recorded time and a slower one is past the batch's cut, so neither ran on the pull request that
       # changed it. Chosen after main's measured times are laid over the table, as the batch is, so every runner of the run
       # chooses the same files; the batch config runs them isolated, packed with the batch's.
-      # CHOSEN IN THE BACKGROUND, beside the test builds' restore, and awaited before the batch: run in line it took 2-4s
-      # of every node runner's critical path (pr fast runs 44362521013-44378487510). It reads the install, the import
-      # graph restored above and main's measured times (awaited first), none of which the test builds' restore writes.
+      # CHOSEN IN THE BACKGROUND and awaited before the batch: run in line it took 2-4s of every node runner's critical
+      # path (pr fast runs 44362521013-44378487510). It reads the install, the import graph (the kit's, or restored above)
+      # and main's measured times (awaited first), all in place before it starts.
       # Its summary goes to a file the wait hands to that step's summary; its status, like the times', is written whole.
       - if: matrix.batch
         name: Choose the change's node files beyond the batch, in the background
@@ -572,53 +583,6 @@ jobs:
           exit "$rc"
       - if: matrix.part == 'tests'
         run: node scripts/ci/fast-check.mjs
-      # The test global setup's server reader and hosted libraries (build-runtime.global.ts), keyed by what they are
-      # built from (scripts/ci/ci.mjs `test-builds-key`) and this runner's kind (`TEST_BUILDS_KIND` above); main's
-      # warm-caches writes each kind's entry. Without one for this kind, main's whole entry for the same sources serves
-      # (ci.yml's: the builds and the api modules), then this kind's newest. A pull request that changes those inputs
-      # rebuilds them (~10s) and the last runner of each kind saves its entry, so its next push restores it.
-      # The entry also carries the test database's schema image (services/app/test/setup/schema-image-file.ts): with it,
-      # each Vitest worker restores its first database instead of running initdb and the boot DDL (660ms -> 170ms
-      # measured locally). Only the file named by this checkout's schema key loads, so a stale entry is a miss. The
-      # guard runners restore it too, for the contract and harness files that open a database.
-      - if: matrix.suite || matrix.shard || matrix.batch
-        id: test-builds-key
-        run: node scripts/ci/ci.mjs test-builds-key
-      # Bounded too: over 538 restores the download took 0.8s median and 1.9s p99, then 20.4s, and once a 16.9s "server is
-      # busy" that ended in no entry at all (run 44150141230's ui-5). An abandoned download extracts nothing; one more restore
-      # of the same entries follows, and without either the global setup builds them (~10s), exactly as on any miss.
-      - if: matrix.suite || matrix.shard || matrix.batch
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
-        id: test-builds
-        env:
-          SEGMENT_DOWNLOAD_TIMEOUT_MINS: '0.05'
-        with:
-          path: |
-            services/app/lib/build-assets
-            services/app/public/libraries
-            tmp/test-schema-image
-            tmp/vitest-module-cache
-          key: test-builds-v3-${{ runner.os }}-${{ env.TEST_BUILDS_KIND }}-${{ steps.test-builds-key.outputs.key }}-${{ steps.test-builds-key.outputs.modules }}
-          restore-keys: |
-            test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}
-            test-builds-v3-${{ runner.os }}-${{ env.TEST_BUILDS_KIND }}-
-            test-builds-v2-${{ runner.os }}-
-      - if: (matrix.suite || matrix.shard || matrix.batch) && steps.test-builds.outputs.cache-matched-key == ''
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
-        id: test-builds-retry
-        env:
-          SEGMENT_DOWNLOAD_TIMEOUT_MINS: '0.25'
-        with:
-          path: |
-            services/app/lib/build-assets
-            services/app/public/libraries
-            tmp/test-schema-image
-            tmp/vitest-module-cache
-          key: test-builds-v3-${{ runner.os }}-${{ env.TEST_BUILDS_KIND }}-${{ steps.test-builds-key.outputs.key }}-${{ steps.test-builds-key.outputs.modules }}
-          restore-keys: |
-            test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}
-            test-builds-v3-${{ runner.os }}-${{ env.TEST_BUILDS_KIND }}-
-            test-builds-v2-${{ runner.os }}-
       - if: matrix.shard
         run: node node_modules/vitest/vitest.mjs run --config vitest.guard.config.ts --shard=${{ matrix.shard }}
       - if: matrix.suite
@@ -633,17 +597,36 @@ jobs:
           exit "$(cat "$RUNNER_TEMP/node-affected.status")"
       - if: matrix.batch
         run: node node_modules/vitest/vitest.mjs run --config vitest.node-batch.config.ts --shard=${{ matrix.batch }}
-      # The last runner of each kind saves that kind's entry on an exact miss, after its tests, so its transforms are in it:
-      # packing puts the longest files first, often one to a runner, so the last runner holds the most files.
-      - if: contains(fromJSON('["api-32","ui-7","guards-3","node-5"]'), matrix.part) && steps.test-builds.outputs.cache-hit != 'true' && steps.test-builds-retry.outputs.cache-hit != 'true'
+      # The last runner of each kind saves that kind's kit on an exact miss, after its tests, so its transforms are in it:
+      # packing puts the longest files first, often one to a runner, so the last runner holds the most files. Only from
+      # this lock's own clean install (a kit, or the whole install's exact key), never a reconciled tree.
+      - if: contains(fromJSON('["api-32","ui-7","guards-3","node-5"]'), matrix.part) && steps.kit.outputs.cache-hit != 'true' && (steps.kit.outputs.cache-matched-key != '' || steps.near-install.outputs.cache-hit == 'true')
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: |
+            node_modules/*
+            !node_modules/.cache
+            !node_modules/.vite
+            !node_modules/.vite-temp
+            !node_modules/@fontsource
+            !node_modules/@fontsource-variable
+            !node_modules/@typescript
+            node_modules/@typescript/*
+            !node_modules/@typescript/typescript-*
+            !node_modules/lucide-static
+            node_modules/lucide-static/*
+            !node_modules/lucide-static/font
+            node_modules/.cache/test-graph.json
+            services/*/node_modules/*
+            !services/*/node_modules/.cache
+            !services/*/node_modules/.vite
+            services/app/public/fonts
+            services/app/lib/html-systems/font-manifest.json
             services/app/lib/build-assets
             services/app/public/libraries
             tmp/test-schema-image
             tmp/vitest-module-cache
-          key: test-builds-v3-${{ runner.os }}-${{ env.TEST_BUILDS_KIND }}-${{ steps.test-builds-key.outputs.key }}-${{ steps.test-builds-key.outputs.modules }}
+          key: pr-kit-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ env.TEST_BUILDS_KIND }}-${{ steps.lock.outputs.install }}-${{ steps.test-builds-key.outputs.key }}-${{ steps.test-builds-key.outputs.modules }}
       - name: PR CI clock (warns at 40s; fails over 60s)
         if: always()
         env:

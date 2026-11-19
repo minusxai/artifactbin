@@ -355,12 +355,15 @@ describe('CI avoids duplicate integration setup', () => {
     const projects = [...new Set(fast.strategy.matrix.include.map(entry => entry.projects).filter(Boolean))];
     expect([...projects, ...configs].sort()).toEqual(Object.values(kinds).sort());
     const steps = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8')).jobs['warm-caches'].steps;
+    const kit = fast.steps.find(step => step.id === 'kit');
     const isList = step => /vitest\.mjs list /.test(step.run ?? '');
     const lists = steps.flatMap((step, i) => isList(step) ? [i] : []);
     for (const [kind, selection] of Object.entries(kinds)) {
-      const save = steps.findIndex(step => (step.uses ?? '').startsWith('actions/cache/save') && step.with.key === `test-builds-v3-\${{ runner.os }}-${kind}-\${{ steps.test-builds-key.outputs.key }}-\${{ steps.test-builds-key.outputs.modules }}`);
+      // Its kit: the install and these builds, under the paths and key pr fast's `kit` step restores.
+      const save = steps.findIndex(step => (step.uses ?? '').startsWith('actions/cache/save') && step.with.key === kit.with.key.replace('${{ env.TEST_BUILDS_KIND }}', kind));
       expect(save, kind).toBeGreaterThan(-1);
-      expect(steps[save].with.path.split('\n').filter(Boolean), kind).toEqual(['services/app/lib/build-assets', 'services/app/public/libraries', SCHEMA_IMAGE_DIR, MODULE_CACHE_DIR]);
+      expect(steps[save].with.path, kind).toBe(kit.with.path);
+      expect(steps[save].with.path.split('\n').filter(Boolean).slice(-4), kind).toEqual(['services/app/lib/build-assets', 'services/app/public/libraries', SCHEMA_IMAGE_DIR, MODULE_CACHE_DIR]);
       const last = Math.max(...lists.filter(i => i < save));
       expect(steps[last].run, kind).toContain(`node node_modules/vitest/vitest.mjs list ${selection} --filesOnly=false > /dev/null`);
       // Every list after the first starts from an empty module cache, so an entry holds its own kind's modules only.
@@ -374,20 +377,15 @@ describe('CI avoids duplicate integration setup', () => {
       .map(([name, job]) => [`${file} ${name}`, job.steps]));
     let entries = 0;
     for (const [name, jobSteps] of steps) {
-      const caches = jobSteps.filter(step => String(step.with?.key ?? '').startsWith('test-builds-'));
+      const caches = jobSteps.filter(step => /^(test-builds|pr-kit)-/.test(String(step.with?.key ?? '')));
       for (const cache of caches) {
         entries++;
-        expect(cache.with.path.split('\n').filter(Boolean), name).toEqual(['services/app/lib/build-assets', 'services/app/public/libraries', SCHEMA_IMAGE_DIR, MODULE_CACHE_DIR]);
-        if (name === 'pr-fast.yml fast') {
-          // A runner kind's entry, falling back to main's whole entry for these very sources (fresh builds, the api
-          // modules), then the kind's newest, then the newest of all.
-          expect(cache.with.key, name).toBe('test-builds-v3-${{ runner.os }}-${{ env.TEST_BUILDS_KIND }}-${{ steps.test-builds-key.outputs.key }}-${{ steps.test-builds-key.outputs.modules }}');
-          if (cache.with['restore-keys'] !== undefined) expect(cache.with['restore-keys'].trim().split('\n'), name).toEqual(['test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}', 'test-builds-v3-${{ runner.os }}-${{ env.TEST_BUILDS_KIND }}-', 'test-builds-v2-${{ runner.os }}-']);
-        } else {
-          expect(cache.with.key, name).toMatch(/^test-builds-v(2-\$\{\{ runner\.os \}\}-\$\{\{ steps\.test-builds-key\.outputs\.key \}\}|3-\$\{\{ runner\.os \}\}-(api|ui|guards|node)-\$\{\{ steps\.test-builds-key\.outputs\.key \}\}-\$\{\{ steps\.test-builds-key\.outputs\.modules \}\})$/);
-          if (!cache.with.key.startsWith('test-builds-v3-')) expect(cache.with.key, name).toBe('test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}');
-          if (cache.with['restore-keys'] !== undefined) expect(cache.with['restore-keys'], name).toBe('test-builds-v2-${{ runner.os }}-');
-        }
+        // pr fast's kits carry the same builds after their install (scripts/__tests__/slim-install.test.mjs), keyed by them too.
+        const kit = cache.with.key.startsWith('pr-kit-');
+        expect(cache.with.path.split('\n').filter(Boolean).slice(kit ? -4 : 0), name).toEqual(['services/app/lib/build-assets', 'services/app/public/libraries', SCHEMA_IMAGE_DIR, MODULE_CACHE_DIR]);
+        if (kit) expect(cache.with.key, name).toMatch(/-\$\{\{ steps\.test-builds-key\.outputs\.key \}\}-\$\{\{ steps\.test-builds-key\.outputs\.modules \}\}$/);
+        else expect(cache.with.key, name).toBe('test-builds-v2-${{ runner.os }}-${{ steps.test-builds-key.outputs.key }}');
+        if (!kit && cache.with['restore-keys'] !== undefined) expect(cache.with['restore-keys'], name).toBe('test-builds-v2-${{ runner.os }}-');
         const key = jobSteps.findIndex(step => step.id === 'test-builds-key');
         expect(key, name).toBeGreaterThan(-1);
         expect(key, name).toBeLessThan(jobSteps.indexOf(cache));
