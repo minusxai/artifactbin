@@ -12,7 +12,12 @@
 import { CONNECTOR_LIMITS } from '@artifactbin/contracts';
 import { log } from '@artifactbin/utils';
 import { ConnectorFailure } from './errors';
+import { UNCONFIRMED } from './termination';
 const warn=log('connectors').warn;
+/** A failed cleanup as one `unavailable` error: a driver's own account of why (./termination) is kept, any other
+ * failure says only its code, never a driver's text. */
+const unconfirmed=(error:unknown)=>new ConnectorFailure('unavailable',error instanceof ConnectorFailure&&error.message.startsWith(UNCONFIRMED)
+ ?error.message:`${UNCONFIRMED}: the driver's close failed (${error instanceof ConnectorFailure?error.code:'not a connector error'})`);
 export interface SessionDriver<S> { open(key:string,context?:{signal?:AbortSignal;timeoutMs?:number}):Promise<S>; close(session:S):Promise<void> }
 interface Entry<S> { key:string; session:Promise<S>; busy:boolean; used:number; until:number; timer?:ReturnType<typeof setTimeout>; retiring?:Promise<void>; retry?:ReturnType<typeof setTimeout> }
 const QUARANTINE={retryMs:1000,graceMs:5000};
@@ -63,11 +68,11 @@ export class SessionPool<S> {
   if(!entry.retiring){
    entry.retiring=entry.session.then(s=>this.driver.close(s),()=>undefined)
     .then(()=>{this.entries.delete(entry);this.wake();})
-    .catch(()=>{throw new ConnectorFailure('unavailable','database termination unconfirmed');})
+    .catch((error:unknown)=>{throw unconfirmed(error);})
     .finally(()=>{entry.retiring=undefined;});
   }
   let timer:ReturnType<typeof setTimeout>;
-  try{await Promise.race([entry.retiring,new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new ConnectorFailure('unavailable','database termination unconfirmed')),5000);})]);}
+  try{await Promise.race([entry.retiring,new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new ConnectorFailure('unavailable',`${UNCONFIRMED}: the pool's 5000 ms wait for the cleanup expired`)),5000);})]);}
   finally{clearTimeout(timer!);}
  }
 
@@ -75,8 +80,8 @@ export class SessionPool<S> {
   * reused) and is logged, never thrown into the caller. */
  private async retire(entry:Entry<S>):Promise<void>{
   try{await this.drop(entry);}
-  catch{
-   warn('session termination unconfirmed; its slot stays quarantined',{sessions:this.entries.size,size:this.bounds.size});
+  catch(error){
+   warn('session termination unconfirmed; its slot stays quarantined',{reason:(error as Error).message,sessions:this.entries.size,size:this.bounds.size});
    if(!entry.retry)this.quarantine(entry,Math.max(entry.until,performance.now())+(this.bounds.graceMs??QUARANTINE.graceMs));
   }
  }

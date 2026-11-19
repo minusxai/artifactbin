@@ -49,7 +49,8 @@ export async function update(root, { background = false, rollback = false } = {}
       manifest.schemaVersion !== 1 ||
       manifest.origin !== c.release.origin ||
       manifest.url !== c.release.origin + "/skills/artifactbin.zip" ||
-      !hex(manifest.version)
+      !hex(manifest.version) ||
+      !hex(manifest.sha256)
     )
       throw Error("Invalid update manifest");
     await atomic(path.join(c.state, "checked.json"), { time: Date.now() });
@@ -70,7 +71,8 @@ export async function update(root, { background = false, rollback = false } = {}
       }
       return { status: background ? "staged" : "activated", version: manifest.version };
     }
-    const bytes = await fetchBytes(manifest.url, limit),
+    // By its hash: the server keeps the archive this manifest named after the skill moves on.
+    const bytes = await fetchBytes(manifest.url + "?sha256=" + manifest.sha256, limit),
       files = decodeRelease(bytes, manifest);
     const directory = "release-" + randomUUID(),
       stage = path.join(c.state, directory.replace("release-", "stage-")),
