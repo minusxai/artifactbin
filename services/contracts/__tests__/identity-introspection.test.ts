@@ -1,7 +1,7 @@
 /**
  * THE INTROSPECTION ANSWER'S PRINCIPAL (./src/identity-service `IdentityIntrospectResponse`): every active answer names
  * what the token acts as. A person's answer has `user_id` set and no group; a group's (`GROUP_SIGN_IN_RULE`) has the
- * group and its level, `issued_by` the person who authorised it, and `user_id` null, the only answer where it is.
+ * group and its level, `issued_by` who issued its sign-in, and `user_id` null, the only answer where it is.
  */
 import {expect,expectTypeOf,it} from 'vitest';
 import {IDENTITY_VIEWS,type IdentityIntrospectResponse,type IdentityPrincipalGroupRole,type IdentityPrincipalKind} from '@artifactbin/contracts';
@@ -21,7 +21,8 @@ it('an active answer carries the principal: a person with a user id, or a group 
   expectTypeOf<Group['group_id']>().toEqualTypeOf<string>();
   expectTypeOf<Group['group_role']>().toEqualTypeOf<IdentityPrincipalGroupRole>();
   expectTypeOf<Group['issued_by']>().toEqualTypeOf<string>();
-  expectTypeOf<Group['parent']>().toEqualTypeOf<null>();
+  // Null on a group's sign-in; on a group's exchanged service token, the group sign-in it was exchanged from.
+  expectTypeOf<Group['parent']>().toEqualTypeOf<{kind: 'token'; id: string} | null>();
   expectTypeOf<IdentityPrincipalGroupRole>().toEqualTypeOf<'member' | 'editor'>();
   expectTypeOf<Extract<IdentityIntrospectResponse, {active: false}>>().toEqualTypeOf<{active: false}>();
   // Branching on the kind narrows `user_id` to the person.

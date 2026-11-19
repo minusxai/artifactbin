@@ -60,6 +60,16 @@
  * group's audit). The service learns the approvals it may present at `GROUP_SIGN_IN_GRANTS_PATH`: the same secret,
  * an empty `{}`, and back `{"approvals": [ServiceGroupSignInGrant…]}`, its own that still stand, oldest first. Without
  * the opt-in both paths answer as an unknown route.
+ *
+ * GROUP PRINCIPALS AT A SERVICE (only for a service whose entry says `"group_principals": true`): an agent signed in as
+ * a group (either way above: a person's `--as-group` sign-in, or a service's under an approval) exchanges its own API
+ * bearer at `SERVICE_TOKEN_PATH` exactly as a person does, and the service token it receives acts as that GROUP at that
+ * level: introspection answers `principal_kind: 'group'`, `user_id` null, the group, its level, `issued_by` (who issued
+ * the group sign-in) and `parent` (the group sign-in's token). It lives as a person's does, never past its parent, and
+ * only while the parent is live by every rule that governs it and the service still opts in. Without the opt-in the
+ * exchange answers 403 `GROUP_PRINCIPALS_NOT_ACCEPTED` to a group, and a person's is unchanged: a service that reads
+ * only `active` and `user_id` is never handed a principal with no person. A group's service token is a different kind
+ * from a person's: it never becomes a run sign-in, an artifact read grant or any other token.
  */
 import { normalizeOrigin } from './server-identity';
 
@@ -76,11 +86,15 @@ export interface ServiceAudience {
   runSignIns?: boolean;
   /** Explicit opt-in to group sign-ins a group's Admin approved (`GROUP_SIGN_IN_PATH`): needs `introspection_secret_sha256`. */
   groupSignIns?: boolean;
+  /** Explicit opt-in to service tokens acting as a group (header above): needs `introspection_secret_sha256`. */
+  groupPrincipals?: boolean;
   artifactWorkloads?: {authorizationUrl:string;authorizationSecret:string};
 }
 
 /** The exchange: a short-lived token for one configured service, for the caller's own session or API bearer. */
 export const SERVICE_TOKEN_PATH = '/api/authentication/service-token';
+/** The exchange's refusal (403) to an agent signed in as a group, for a service that does not opt in to group principals. */
+export const GROUP_PRINCIPALS_NOT_ACCEPTED = 'group_principals_not_accepted';
 /** A run sign-in: an ordinary API access token for the person whose exchanged token the service presents (header above). */
 export const RUN_SIGN_IN_PATH = '/api/internal/identity/run-sign-in';
 /** A run sign-in's answer: what a sandbox writes into the skill's `credentials.env` (header above). */
@@ -133,7 +147,7 @@ export interface IssuedServiceToken {
 
 const ID = /^[a-z][a-z0-9-]{0,62}$/;
 const HEX64 = /^[0-9a-f]{64}$/;
-const WHAT = 'IDENTITY__SERVICE_AUDIENCES must be a JSON array of {"id": "<lower-case id>", "origin": "<https origin>", "introspection_secret_sha256"?: "<64 hex>", "run_sign_ins"?: <boolean, with a secret>, "group_sign_ins"?: <boolean, with a secret>}';
+const WHAT = 'IDENTITY__SERVICE_AUDIENCES must be a JSON array of {"id": "<lower-case id>", "origin": "<https origin>", "introspection_secret_sha256"?: "<64 hex>", "run_sign_ins"?: <boolean, with a secret>, "group_sign_ins"?: <boolean, with a secret>, "group_principals"?: <boolean, with a secret>}';
 
 /** The setting, validated whole: a malformed entry, a repeated id or origin, or an origin that is not one, throws naming it. */
 export function parseServiceAudiences(raw: string | undefined): readonly ServiceAudience[] {
@@ -144,7 +158,7 @@ export function parseServiceAudiences(raw: string | undefined): readonly Service
   const out: ServiceAudience[] = [];
   for (const entry of parsed) {
     const e = entry as Record<string, unknown> | null;
-    if (!e || typeof e !== 'object' || Array.isArray(e) || Object.keys(e).some((key) => !['id', 'origin', 'introspection_secret_sha256', 'artifact_reads', 'artifact_workloads', 'run_sign_ins', 'group_sign_ins'].includes(key))) throw new Error(WHAT);
+    if (!e || typeof e !== 'object' || Array.isArray(e) || Object.keys(e).some((key) => !['id', 'origin', 'introspection_secret_sha256', 'artifact_reads', 'artifact_workloads', 'run_sign_ins', 'group_sign_ins', 'group_principals'].includes(key))) throw new Error(WHAT);
     let workload:ServiceAudience['artifactWorkloads'];
     if(e.artifact_workloads!==undefined){
       const w=e.artifact_workloads as Record<string,unknown>;
@@ -159,9 +173,10 @@ export function parseServiceAudiences(raw: string | undefined): readonly Service
     if (e.artifact_reads !== undefined && typeof e.artifact_reads !== 'boolean') throw new Error(WHAT);
     if (e.run_sign_ins !== undefined && (typeof e.run_sign_ins !== 'boolean' || (e.run_sign_ins && typeof e.introspection_secret_sha256 !== 'string'))) throw new Error(WHAT);
     if (e.group_sign_ins !== undefined && (typeof e.group_sign_ins !== 'boolean' || (e.group_sign_ins && typeof e.introspection_secret_sha256 !== 'string'))) throw new Error(WHAT);
+    if (e.group_principals !== undefined && (typeof e.group_principals !== 'boolean' || (e.group_principals && typeof e.introspection_secret_sha256 !== 'string'))) throw new Error(WHAT);
     if (typeof e.id !== 'string' || !ID.test(e.id) || !origin || (secret !== undefined && (typeof secret !== 'string' || !HEX64.test(secret)))) throw new Error(WHAT);
     if (out.some((other) => other.id === e.id || other.origin === origin)) throw new Error(`IDENTITY__SERVICE_AUDIENCES repeats ${JSON.stringify(e.id)} or its origin`);
-    out.push({ ...(workload?{artifactWorkloads:workload}:{}), id: e.id, origin, introspectionSecretSha256: typeof secret === 'string' ? secret : null, ...(e.artifact_reads !== undefined ? {artifactReads:e.artifact_reads as boolean} : {}), ...(e.run_sign_ins === true ? {runSignIns:true} : {}), ...(e.group_sign_ins === true ? {groupSignIns:true} : {}) });
+    out.push({ ...(workload?{artifactWorkloads:workload}:{}), id: e.id, origin, introspectionSecretSha256: typeof secret === 'string' ? secret : null, ...(e.artifact_reads !== undefined ? {artifactReads:e.artifact_reads as boolean} : {}), ...(e.run_sign_ins === true ? {runSignIns:true} : {}), ...(e.group_sign_ins === true ? {groupSignIns:true} : {}), ...(e.group_principals === true ? {groupPrincipals:true} : {}) });
   }
   return Object.freeze(out);
 }

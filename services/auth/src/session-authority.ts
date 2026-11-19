@@ -12,7 +12,10 @@ import {ARTIFACT_WORKLOAD_PATH,APP_ARTIFACT_WORKLOAD_PATH,SERVICE_PAYLOAD_LIMIT,
  *    identity) and must be bound to this deployment's API or to a configured service (IDENTITY__SERVICE_AUDIENCES); a
  *    exchanged token is verified by its signature (./identity/service-tokens) and by its
  *    parent credential's `live` in the identity views (`tokens` or `sessions`, the rule every reader re-checks with).
- *    Every kind needs an ACTIVE account. Asked
+ *    Every kind needs an ACTIVE account. A GROUP's exchanged token (contracts service-audiences `group_principals`)
+ *    answers the group (`principal_kind: 'group'`, no person, `parent` its group sign-in) only for a service still
+ *    opted in, and only while that parent is live by the bearer read's own rule (./identity/bearer
+ *    `readLiveGroupSignIn`), as the same group, level and issuer. Asked
  *    with INTERNAL__SERVICE_SECRET the answer covers every token; asked with a configured service's own introspection
  *    secret it covers only tokens bound to that service's origin, every other one answering `{active: false}`;
  *  - THE IDENTITY MODULE's calls (contracts `IDENTITY_CALL_PATH`, `IdentityService`, INTERNAL__SERVICE_SECRET only):
@@ -47,7 +50,8 @@ import {say} from './events';
 import {readEnv} from './env';
 import {testDomainSignInOf} from './config';
 import {IdentityNotReady,createIdentityStore,ensureIdentitySchema} from './identity-store';
-import {isServiceToken,verifyServiceToken,serviceTokenKey} from './identity/service-tokens';
+import {groupServiceTokenKey,isGroupServiceToken,isServiceToken,verifyGroupServiceToken,verifyServiceToken,serviceTokenKey} from './identity/service-tokens';
+import {readLiveGroupSignIn} from './identity/bearer';
 import {artifactReadKey,signArtifactReadGrant,verifyArtifactReadGrant} from './identity/artifact-read-grants';
 /** A person's token: no group principal. */
 const PERSON={group_id:null,group_role:null,issued_by:null} as const;
@@ -66,6 +70,7 @@ export function sessionAuthority(o:AuthOptions):Part<AuthEnv>{return {name:'sess
  const secret=readEnv(o.env,'INTERNAL__SERVICE_SECRET');
  const audiences=parseServiceAudiences(readEnv(o.env,'IDENTITY__SERVICE_AUDIENCES'));
  const tokenKey=o.cookieSecret?serviceTokenKey(o.cookieSecret):null;
+ const groupKey=o.cookieSecret?groupServiceTokenKey(o.cookieSecret):null;
  /** A refusal Response, or the parsed JSON object body. `admitted` decides the credential (default: the installation's). */
  const admit=async(c:Context<AuthEnv>,admitted:(presented:string|undefined)=>boolean=presented=>serviceSecretMatches(presented,secret),limit=8192):Promise<Response|Record<string,unknown>>=>{
   if(c.req.method!=='POST')return answer({error:'method_not_allowed'},405);
@@ -109,6 +114,13 @@ export function sessionAuthority(o:AuthOptions):Part<AuthEnv>{return {name:'sess
     const claims=tokenKey?verifyServiceToken(tokenKey,audiences,input.token):null;
     if(!claims||(only&&claims.aud!==only.origin)||!await activeUser(claims.sub)||!await parentLive(claims.par,claims.sub))return inactive;
     return answer({active:true,principal_kind:'user',user_id:claims.sub,token_id:claims.jti,scopes:[],audience:claims.aud,expires_at:new Date(claims.exp*1000).toISOString(),parent:claims.par,...PERSON} satisfies IdentityIntrospectResponse);
+   }
+   if(isGroupServiceToken(input.token)){
+    const claims=groupKey?verifyGroupServiceToken(groupKey,audiences,input.token):null;
+    if(!claims||(only&&claims.aud!==only.origin)||!o.identityDb)return inactive;
+    const parent=await readLiveGroupSignIn({db:o.identityDb,readSchema,serviceAudiences:audiences},claims.par.id);
+    if(!parent||parent.groupId!==claims.grp||parent.groupRole!==claims.rol||parent.issuedBy!==claims.isb)return inactive;
+    return answer({active:true,principal_kind:'group',user_id:null,token_id:claims.jti,scopes:[],audience:claims.aud,expires_at:new Date(claims.exp*1000).toISOString(),parent:claims.par,group_id:claims.grp,group_role:claims.rol,issued_by:claims.isb} satisfies IdentityIntrospectResponse);
    }
    const token=await live(c,await o.tokens.byToken(input.token));
    if(!token||(only&&token.audience!==only.origin))return inactive;

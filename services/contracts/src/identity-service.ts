@@ -23,7 +23,8 @@
  *  - A GROUP (`GROUP_SIGN_IN_RULE` below): kind `'group'`, `user_id` NULL, `group_id` the group and `group_role` the
  *    level (`'member'` or `'editor'`, never `'admin'`); `issued_by` the person who authorised it, or for a service's
  *    sign-in under a group's approval (./service-audiences `GROUP_SIGN_IN_PATH`, `grant_id` set) that service's id;
- *    never the principal.
+ *    never the principal. A group's service token (./service-audiences `group_principals`) answers the same, with
+ *    `parent` the group sign-in it was exchanged from.
  *    There is no person behind it. Only an agent's sign-in is ever a group: no browser session acts as one.
  * A `tokens` row is a group's exactly when `group_id` is set (`user_id` is then NULL); a row with neither `user_id` nor
  * `group_id` is an unowned token, never a group's. A reader checks `principal_kind` (or `group_id`) before relying on
@@ -55,8 +56,9 @@ export const IDENTITY_INTROSPECT_PATH = '/api/internal/identity/introspect';
  * THE PRINCIPAL: who the token acts as (header above). `'user'`: the person `user_id` (never null), `group_id` and
  * `group_role` null, `issued_by` null except on a run sign-in, where it names the configured service it was issued to
  * (./service-audiences `RUN_SIGN_IN_PATH`). `'group'`: the group `group_id` itself at the level `group_role`, with
- * `user_id` NULL (the only answer where it is) and `issued_by` the person who authorised it, never the principal; an
- * exchanged token is never a group's. A reader checks `principal_kind` before relying on `user_id` as the person
+ * `user_id` NULL (the only answer where it is) and `issued_by` who issued the group's sign-in (the person who
+ * authorised it, or a service's id), never the principal; `parent` null, except on a group's exchanged token
+ * (./service-audiences `group_principals`), where it names the group sign-in (`token`) it was exchanged from. A reader checks `principal_kind` before relying on `user_id` as the person
  * acting, and refuses a kind it does not handle. The `tokens` view carries the same facts (`group_id`, `group_role`,
  * `issued_by`, `grant_id`).
  */
@@ -67,7 +69,7 @@ export type IdentityIntrospectResponse =
     }
   | {
       active: true; principal_kind: 'group'; user_id: null; token_id: string; scopes: string[]; audience: string | null;
-      expires_at: string | null; parent: null; group_id: string; group_role: IdentityPrincipalGroupRole; issued_by: string;
+      expires_at: string | null; parent: { kind: 'token'; id: string } | null; group_id: string; group_role: IdentityPrincipalGroupRole; issued_by: string;
     }
   | { active: false };
 /** What an introspected token acts as: a person, or a group at a level (`GROUP_SIGN_IN_RULE`). */

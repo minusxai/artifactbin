@@ -41,6 +41,7 @@ const MALFORMED:[string,(kind:Kind)=>string][]=[
  ['parent of another kind',k=>claims(k,c=>{c.par={kind:'group',id:'g_1'};})],
  ['parent id not an id',k=>claims(k,c=>{c.par={kind:'token',id:'not an id'};})],
  ['parent id missing',k=>claims(k,c=>{c.par={kind:'token'};})],
+ ['a group\'s claims, with no person',k=>claims(k,c=>{delete c.sub;Object.assign(c,{grp:'grp_1',rol:'editor',isb:'usr_ada',par:{kind:'token',id:'tok_1'}});})],
  ['audience not configured',k=>claims(k,c=>{c.svc='crm';})],
  ['audience moved origin',k=>claims(k,c=>{c.aud='https://warehouse2.example';})],
  ['claims null',k=>signed(k,'null')],

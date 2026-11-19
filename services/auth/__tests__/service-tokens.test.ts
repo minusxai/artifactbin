@@ -2,13 +2,14 @@
  * EXCHANGED SERVICE TOKENS (src/identity/service-tokens.ts): bound to one person, one configured audience and the
  * credential they were exchanged for, five minutes, and never a credential at this installation's own API (the bearer
  * read refuses the shape before touching the database). Introspection's answer for them is pinned in
- * session-authority.test.ts.
+ * session-authority.test.ts. A GROUP's service token is its own kind (`vgt_`, its own key, no person in it): every
+ * verifier of a person's refuses it, and it verifies only for a service that opts in to group principals.
  */
 import {createHmac} from 'node:crypto';
 import {describe,expect,it} from 'vitest';
 import {SERVICE_TOKEN_TTL_SECONDS,type TransactionalQueryable} from '@artifactbin/contracts';
 import {createBearerReader} from '../src/identity/bearer';
-import {serviceTokenKey,signServiceToken,verifyServiceToken} from '../src/identity/service-tokens';
+import {groupServiceTokenKey,isGroupServiceToken,isServiceToken,serviceTokenKey,signGroupServiceToken,signServiceToken,verifyGroupServiceToken,verifyServiceToken} from '../src/identity/service-tokens';
 
 const WAREHOUSE={id:'warehouse',origin:'https://warehouse.example',introspectionSecretSha256:null};
 const CRM={id:'crm',origin:'https://crm.example',introspectionSecretSha256:null};
@@ -54,5 +55,65 @@ describe('service tokens',()=>{
   queries.length=0;
   expect(await createBearerReader({db}).byToken(token)).toBeNull();
   expect(queries).toEqual([]);
+ });
+});
+
+describe('a group\'s service tokens',()=>{
+ const groupKey=groupServiceTokenKey('host-secret');
+ const OPTED={...WAREHOUSE,introspectionSecretSha256:'a'.repeat(64),groupPrincipals:true};
+ const input={group:{id:'grp_team',role:'editor' as const,issuedBy:'usr_ada'},parent:{kind:'token' as const,id:'tok_group'},notAfter:null};
+ const signGroup=(now=Date.now(),notAfter:number|null=null)=>signGroupServiceToken(groupKey,OPTED,{...input,notAfter},now);
+ it('carry the group, its level, who issued its sign-in and that sign-in, and no person, for five minutes',()=>{
+  const issued=signGroup();
+  expect(issued.token).toMatch(/^vgt_[\w-]+\.[\w-]+$/);
+  const claims=verifyGroupServiceToken(groupKey,[OPTED],issued.token)!;
+  expect(claims).toEqual({grp:'grp_team',rol:'editor',isb:'usr_ada',aud:WAREHOUSE.origin,svc:'warehouse',iat:expect.any(Number),exp:expect.any(Number),jti:expect.stringMatching(/^vtk_/),par:{kind:'token',id:'tok_group'}});
+  expect(claims).not.toHaveProperty('sub');
+  expect(claims.exp-claims.iat).toBe(SERVICE_TOKEN_TTL_SECONDS);
+ });
+ it('never outlive the group sign-in they were exchanged from, and are not issued for one about to end',()=>{
+  const now=Date.UTC(2026,10,19,12),parentEnds=now+90_000;
+  const issued=signGroup(now,parentEnds);
+  expect(issued.expiresAt).toBe(new Date(parentEnds).toISOString());
+  expect(verifyGroupServiceToken(groupKey,[OPTED],issued.token,now+89_000)).not.toBeNull();
+  expect(verifyGroupServiceToken(groupKey,[OPTED],issued.token,now+90_000)).toBeNull();
+  for(const ends of [now,now+500,now-1000])expect(()=>signGroup(now,ends),String(ends-now)).toThrow('parent_expiring');
+ });
+ it('verify only for a service that still opts in, at its origin, and for no other',()=>{
+  const {token}=signGroup();
+  expect(verifyGroupServiceToken(groupKey,[{...OPTED,groupPrincipals:false}],token)).toBeNull();
+  expect(verifyGroupServiceToken(groupKey,[WAREHOUSE],token)).toBeNull();
+  expect(verifyGroupServiceToken(groupKey,[{...OPTED,origin:'https://warehouse2.example'}],token)).toBeNull();
+  expect(verifyGroupServiceToken(groupKey,[{...CRM,introspectionSecretSha256:'b'.repeat(64),groupPrincipals:true}],token)).toBeNull();
+ });
+ it('need a group at member or editor, an issuer, and a group sign-in (a token) as parent',()=>{
+  for(const change of [{group:{...input.group,role:'admin' as never}},{group:{...input.group,id:'not an id'}},{group:{...input.group,issuedBy:''}},{parent:{kind:'session' as never,id:'ses_1'}},{parent:{kind:'token' as const,id:'not an id'}}])
+   expect(()=>signGroupServiceToken(groupKey,OPTED,{...input,...change}),JSON.stringify(change)).toThrow(/invalid_group|invalid_parent/);
+ });
+ it('are never read as a person\'s: no person verifier, older or current, accepts one, nor the bearer read',async()=>{
+  const {token}=signGroup();
+  // What a verifier that knows only person tokens does with one: not its prefix, so no service token and no bearer.
+  expect(isServiceToken(token)).toBe(false);
+  expect(verifyServiceToken(key,[OPTED],token)).toBeNull();
+  queries.length=0;
+  expect(await createBearerReader({db}).byToken(token)).toBeNull();
+  expect(queries).toEqual([]);
+  // Its claims signed as a person's token, under the person kind's own key: refused for want of a person.
+  const body=token.slice(4).split('.')[0]!;
+  const asPerson=`vwt_${body}.${createHmac('sha256',key).update('vwt_'+body).digest('base64url')}`;
+  expect(verifyServiceToken(key,[OPTED],asPerson)).toBeNull();
+  // Re-prefixed, its signature fails; under the group key but the person prefix, the person kind's key differs.
+  expect(verifyServiceToken(key,[OPTED],'vwt_'+token.slice(4))).toBeNull();
+  expect(verifyServiceToken(groupKey,[OPTED],'vwt_'+token.slice(4))).toBeNull();
+ });
+ it('leave a person\'s token as it was: it verifies as before and never as a group\'s',()=>{
+  const {token}=signServiceToken(key,OPTED,{userId:'usr_bob',parent},Date.now());
+  expect(isGroupServiceToken(token)).toBe(false);
+  expect(verifyServiceToken(key,[OPTED],token)).toMatchObject({sub:'usr_bob',par:parent});
+  expect(verifyGroupServiceToken(groupKey,[OPTED],token)).toBeNull();
+  expect(verifyGroupServiceToken(groupKey,[OPTED],'vgt_'+token.slice(4))).toBeNull();
+  // A person's claims under the group kind's key and prefix: refused, a group's carries no person.
+  const body=token.slice(4).split('.')[0]!;
+  expect(verifyGroupServiceToken(groupKey,[OPTED],`vgt_${body}.${createHmac('sha256',groupKey).update('vgt_'+body).digest('base64url')}`)).toBeNull();
  });
 });
