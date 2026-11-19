@@ -1,6 +1,6 @@
 /**
- * THE SIGNED TOKEN FORMAT, one implementation for every kind (exchanged service tokens ./service-tokens, artifact read
- * grants ./artifact-read-grants): `<prefix><claims>.<mac>`, base64url JSON claims and an HMAC-SHA-256 over prefix and
+ * THE SIGNED TOKEN FORMAT, one implementation for every kind (a person's and a group's exchanged service tokens,
+ * ./service-tokens): `<prefix><claims>.<mac>`, base64url JSON claims and an HMAC-SHA-256 over prefix and
  * claims under a key derived (HKDF) from the host's secret for that kind alone. A kind is its prefix, its HKDF info and
  * its lifetime; the claims and their check are shared, so the kinds cannot drift apart.
  *

@@ -129,6 +129,8 @@ function exportRevision(artifact: ExportIdentity): string {
  * their account (or bare token) AND admitted email claim, keyed-hashed: neither identity nor address appears in a cache key.
  */
 function audienceSegment(audience: ExportReader | null): string {
+  // A group's sign-in: its render read as that group at that level, kept apart from every person's and the other level's.
+  if (audience?.principalGroup) return `-a${createHmac('sha256', AUTH_SECRET).update('export-audience/v1\0').update(JSON.stringify([`g:${audience.principalGroup.id}:${audience.principalGroup.role}`, null])).digest('hex').slice(0, 16)}`;
   if (!audience || (!audience.userId && !audience.tokenId)) return '';
   const who = JSON.stringify([audience.userId ? `u:${audience.userId}` : `t:${audience.tokenId}`, audience.email ?? null]);
   return `-a${createHmac('sha256', AUTH_SECRET).update('export-audience/v1\0').update(who).digest('hex').slice(0, 16)}`;
@@ -161,7 +163,7 @@ const pageLinksOf = (artifact: Partial<Pick<ArtifactRow, 'meta'>>) =>
  * access, unless it reads no data at all and nobody may read it anyway, whose picture is the same for everyone.
  */
 async function exportAudience(artifact: Pick<ArtifactRow, 'id' | 'format'> & Partial<Pick<ArtifactRow, 'meta'>>, reader: AccessActor | undefined): Promise<ExportReader | null> {
-  if (artifact.format !== 'html' || !reader || (!reader.userId && !reader.tokenId)) return null;
+  if (artifact.format !== 'html' || !reader || (!reader.userId && !reader.tokenId && !reader.principalGroup)) return null;
   if (!pageLinksOf(artifact).length) {
     const header = await getArtifactHeaderById(artifact.id);
     if (header && await canReadArtifact(header, ANONYMOUS_ACTOR)) return null;

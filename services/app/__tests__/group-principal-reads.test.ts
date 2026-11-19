@@ -24,12 +24,14 @@ it('reads exactly what a direct member of the group reads, at either level',asyn
  }
 });
 
-it('default deny: every API route the admission list does not name refuses a group agent with the one code, and every named one admits it',async()=>{
+it('default deny: every route a bearer reaches that the admission list does not name refuses a group agent with the one code, and every named one admits it',async()=>{
  const host=await composed(),{eve,team}=await world(host);
  const agent=await eve.asGroup(team.id,'editor');
  const checked:string[]=[];
  for(const route of ROUTES){
-  if(!route.path.startsWith('/api/')||route.path.startsWith('/api/internal/')||route.path.startsWith('/api/auth'))continue;
+  // The API, and the reader's read adapters the identity host admits a bearer to (auth parts `tokenFitsRequest`).
+  const adapter=/^\/a\/:id\/(?:download|export)$/.test(route.path);
+  if(!adapter&&(!route.path.startsWith('/api/')||route.path.startsWith('/api/internal/')||route.path.startsWith('/api/auth')))continue;
   for(const method of route.methods){
    if(method==='HEAD'||method==='OPTIONS')continue;
    const path=route.path.replace(/:[A-Za-z]+/g,'x0x0x0');

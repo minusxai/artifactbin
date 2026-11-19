@@ -20,8 +20,7 @@ Gotchas: one chart or section of a page exports with --element, so nothing else 
   publishing or redrawing to get its image. The HTML copy carries credential-free provenance
   (origin, page ID, saved revision) and opens offline; it carries the page's dataset rows that
   you may read, so its sql tables render offline. It does not overwrite or publish anything,
-  and merely opening or editing it changes nothing on the server. Behind a JSON-only relay an
-  image arrives as {format, data} (base64, fitted small): it is decoded and written the same way.
+  and merely opening or editing it changes nothing on the server.
 Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write outcome.
   Results never contain credentials.`;
 
@@ -63,15 +62,6 @@ function imageDimensions(bytes, format) {
   }
   throw new ToolError('invalid_image', 'Export did not return a supported image payload.', 1);
 }
-// A relay that carries only JSON answers {format, mime, data (base64), ...}: the image it names.
-function relayedImage(envelope, format) {
-  if (envelope?.format !== format || typeof envelope.data !== 'string')
-    throw new ToolError('invalid_image', `Export did not return a ${format} image.`, 1);
-  const bytes = new Uint8Array(Buffer.from(envelope.data, 'base64'));
-  if (Number.isSafeInteger(envelope.bytes) && envelope.bytes !== bytes.byteLength)
-    throw new ToolError('invalid_image', 'Export image payload was incomplete.', 1);
-  return bytes;
-}
 // html: the portable copy; png/jpg: the page, one slide or one element, rendered on the server.
 export async function exportCommand({values, positionals}, options = {}) {
   requireFlags(values, ['format', 'output']);
@@ -90,10 +80,7 @@ export async function exportCommand({values, positionals}, options = {}) {
     raw: true,
     timeoutMs: 60000
   });
-  const relayed = response.headers.get('content-type')?.includes('application/json');
-  const bytes = format !== 'html' && relayed
-      ? relayedImage(await response.json(), format)
-      : new Uint8Array(await response.arrayBuffer()),
+  const bytes = new Uint8Array(await response.arrayBuffer()),
     dimensions = format === 'html' ? {} : imageDimensions(bytes, format);
   if (format === 'html' && !response.headers.get('content-type')?.includes('text/html'))
     throw new ToolError('invalid_export', 'Expected portable HTML.', 1);

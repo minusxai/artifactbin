@@ -1,6 +1,6 @@
 /**
  * THE SERVICE PAYLOAD LIMIT: the one bound on a JSON body a trusted service sends or receives through the identity
- * relay and its app seams (page reads, page and chart images, chart requests, workload and page-evidence answers).
+ * relay and its app seams (chart images and draft checks).
  * A relay that carries these calls further (an agent sandbox's bridge) holds the same number, so every hop refuses
  * at the same size and names it. Past it the answer is 413 `{error:'too_large', max}`.
  */

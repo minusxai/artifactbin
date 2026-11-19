@@ -1,5 +1,4 @@
 import {artifactQuotaLimit} from './quota-policy';
-import {chargePublication,recordPublicationOutput,assertPublicationPlacement} from './workload-publication';
 import {createHash} from 'node:crypto';
 import {convertLegacyPage,editableRegions,LiveRegionRefusal} from '../live-regions';
 import { isDeepStrictEqual } from 'node:util';
@@ -12,7 +11,7 @@ import {assertOwnerPlacement,assertDestination,newArtifactDestination} from './o
 import { identityForUser, type AccessActor } from '@/lib/accounts';
 import { groupAdminSql } from '@/lib/groups';
 import type {ArtifactDestination} from '@artifactbin/contracts';
-import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, groupMemberPredicate, reactionScope, editorScope, lockOrder, ownerPredicate, ownerScope, writerFor, type ArtifactRow, type Scope } from '@/lib/artifact-access';
+import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, groupMemberPredicate, editorScope, lockOrder, ownerPredicate, ownerScope, writerFor, type ArtifactRow, type Scope } from '@/lib/artifact-access';
 import { headBumpSql } from './table';
 import type { DatasetPermissions, DocumentGraph } from '@artifactbin/contracts';
 import { artifactChannel } from '@artifactbin/contracts';
@@ -61,8 +60,6 @@ export async function setLiveDatasetSummary(tx: Queryable, id: string, summary: 
 }
 
 export interface ArtifactInput {
-  /** Server-prepared object bytes, for workload cumulative storage admission. */
-  publicationBytes?:number;
   /** Server-prepared only; never decoded from caller metadata. */
   /** The page's dataset links and default-connection links, in source order. */
   htmlDatasets?:readonly (HtmlDatasetLink|HtmlDefaultConnectionLink|HtmlLiveDatasetLink)[];
@@ -177,12 +174,12 @@ export async function createArtifact(
    *                inside a transaction would enqueue a query behind the
    *                transaction that holds PGLite's one connection.
    */
-  atCreation: { liveConnection?: LiveConnectionInsert; seedOwnerParticipation?:boolean; reservedId?:string; forkedFrom?: string; linkRole?: ShareRole | null; operation?: CreationOperation | null; shares?:ShareEntry[]; datasetPolicy?: { policy: unknown; revision: number }; tx?: Queryable; workloadActor?:AccessActor; resource?:string; persistPrepared?:()=>Promise<unknown>;
+  atCreation: { liveConnection?: LiveConnectionInsert; seedOwnerParticipation?:boolean; reservedId?:string; forkedFrom?: string; linkRole?: ShareRole | null; operation?: CreationOperation | null; shares?:ShareEntry[]; datasetPolicy?: { policy: unknown; revision: number }; tx?: Queryable; persistPrepared?:()=>Promise<unknown>;
     /** A GROUP's sign-in creating (lib/accounts `GroupPrincipal`): `tokenId` is its sign-in's row, `userId` null. */
     principalActor?: AccessActor } = {},
 ): Promise<ArtifactRow> {
-  if (!userId && !tokenId && !atCreation.workloadActor?.workload) throw new Error("Artifact creation requires a user or token");
-  const destination=atCreation.tx ? (input.destination??{type:'personal'} as const) : await newArtifactDestination(atCreation.workloadActor??atCreation.principalActor??identityForUser(userId,tokenId),input.destination,input.ancestor_ids?.at(-1));
+  if (!userId && !tokenId) throw new Error("Artifact creation requires a user or token");
+  const destination=atCreation.tx ? (input.destination??{type:'personal'} as const) : await newArtifactDestination(atCreation.principalActor??identityForUser(userId,tokenId),input.destination,input.ancestor_ids?.at(-1));
   input={...input,destination};
   if(input.format==='html'&&input.source){
     const page=normalizeNewHtmlPage(input.source);
@@ -206,7 +203,6 @@ export async function createArtifact(
       // A group-owned publish locks the group before the page and its datasets (against lib/artifact-access's lock
       // order): a deadlock with a guarded write aborts one side, and the whole creation is retried.
       const row = await retryOnConflict(async() => {
-        if(atCreation.workloadActor&&!await atCreation.workloadActor.finalWorkloadAdmission?.({kind:'artifact-create',format:input.format,parentId:input.ancestor_ids?.at(-1)??null,resource:atCreation.resource??'primary'}))throw new DatasetError('Publication admission refused',403);
         return db.transaction((tx) => insertArtifact(tx, id, tokenId, userId, input, sourceIds, atCreation));
       });
       await afterCreated(row, userId);
@@ -241,14 +237,13 @@ async function insertArtifact(
 ): Promise<ArtifactRow> {
   // The creator as the row records it: ownership, placement and reservations read its ids, never a grant.
   const creatorId = userId ?? tokenId;
-  if (!creatorId&&!atCreation.workloadActor?.workload) throw new Error("Artifact creation requires a user or token");
+  if (!creatorId) throw new Error("Artifact creation requires a user or token");
   // A group's sign-in creates as its principal: never as the bare token its row id names.
-  const creator = atCreation.workloadActor??atCreation.principalActor??identityForUser(userId, tokenId);
+  const creator = atCreation.principalActor??identityForUser(userId, tokenId);
   const actorGroupId = creator.principalGroup?.id ?? null;
   await assertOwnerPlacement(tx,{...creator,groupId:input.destination?.type==='group'?input.destination.id:null},input.ancestor_ids??[]);
   await assertDestination(tx,creator,input.destination??{type:'personal'});
   if (atCreation.operation) await reserveCreation(tx,atCreation.operation);
-  if(creator.workload)await chargePublication(tx,creator,input,id,true);
   await claimArtifactId(tx,id,creator,!!atCreation.reservedId);
   // A FORK carries its source's rows verbatim — a snapshot the forker may read,
   // not rows the forker wrote — so a user column's "must be the logged-in user"
@@ -334,7 +329,6 @@ async function insertArtifact(
   await bindCurrentUserScopes(tx,created.rows[0]);
   // A live dataset's connection is born with it, in this transaction: its secret fields sealed to this dataset's ID.
   if (atCreation.liveConnection) await tx.query('INSERT INTO dataset_connections (dataset_id, config, sealed) VALUES ($1, $2::jsonb, $3)', [id, JSON.stringify(atCreation.liveConnection.config), atCreation.liveConnection.seal(id)]);
-  if(creator.workload)await recordPublicationOutput(tx,creator,created.rows[0]);
   if(atCreation.seedOwnerParticipation!==false&&input.format==='html'&&userId)await seedOwnerJoin(tx,id,userId);
   if (atCreation.operation) await completeCreation(tx,atCreation.operation,created.rows[0]);
   if(atCreation.persistPrepared)await atCreation.persistPrepared();
@@ -424,14 +418,12 @@ async function lockArtifactWrite(tx: Queryable, actor: AccessActor, id: string, 
     `SELECT * FROM artifacts WHERE id = $1 AND ${scope.where('$2')} FOR UPDATE`, [id, scope.val],
   )).rows[0];
   if (!current) return null;
-  if(actor.workload)await assertPublicationPlacement(tx,actor,current.ancestor_ids);
   return {
     current,
     async validateContent(content: Pick<ArtifactInput, 'format' | 'source' | 'meta'>): Promise<void> {
       await validateUserContent(tx, content, actor.userId, key => loadDatasetRows({ meta: { objectKey: key } }));
     },
     async publish(content: ArtifactInput): Promise<ArtifactRow> {
-      if(actor.workload)await chargePublication(tx,actor,{...content,ancestor_ids:current.ancestor_ids},id,false);
       await archiveVersion(tx, current);
       const updated = (await artifactQuery<ArtifactRow>(tx,
         `UPDATE artifacts
@@ -698,7 +690,7 @@ async function replaceScoped(
   // inside the callback would deadlock PGLite's serialized op queue.
   const effects: ReplaceEffects = { moved: null, unchanged: false };
   // Retried whole on a deadlock with a guarded write (lib/platform retryOnConflict); the effects are the last attempt's.
-  const result = await retryOnConflict(() => { effects.moved = null; effects.unchanged = false; return (async()=>{if(actor.workload&&!await actor.finalWorkloadAdmission?.({kind:'artifact-update',artifactId:id,format:input.format}))throw new DatasetError('Publication admission refused',403);return db.transaction((tx) => replaceArtifactInTx(tx, actor, id, input, opts, effects));})(); });
+  const result = await retryOnConflict(() => { effects.moved = null; effects.unchanged = false; return db.transaction((tx) => replaceArtifactInTx(tx, actor, id, input, opts, effects)); });
   const { moved, unchanged } = effects;
   const written = result && !unchanged && !isVersionConflict(result) && !(result instanceof Response) ? result : null;
   if (written) { void trackEvent('update', written.id, { userId: written.user_id }); }
@@ -911,7 +903,7 @@ export function replaceArtifactFor(actor: AccessActor, id: string, input: Artifa
 }
 
 export async function listVersionPageFor(actor: AccessActor, id: string, limit: number, before?: number, through?:number, filters:{author?:string;since?:string;until?:string}={}): Promise<{rows: VersionSummary[]; next?: number} | null> {
-  const scope = actor.workload ? reactionScope(actor) : editorScope(actor);
+  const scope = editorScope(actor);
   const db = await getDb();
   // Keep authorization and the head/history snapshot in one statement.
   const result = await db.query<VersionSummary & {visible: boolean}>(`
@@ -937,11 +929,11 @@ export async function listVersionPageFor(actor: AccessActor, id: string, limit: 
 }
 
 export function listVersionsFor(actor: AccessActor, id: string): Promise<VersionSummary[] | null> {
-  return listVersionsScoped(actor.workload ? reactionScope(actor) : editorScope(actor), id);
+  return listVersionsScoped(editorScope(actor), id);
 }
 
 export function getVersionFor(actor: AccessActor, id: string, version: number): Promise<VersionContent | null> {
-  return getVersionScoped(actor.workload ? reactionScope(actor) : editorScope(actor), id, version);
+  return getVersionScoped(editorScope(actor), id, version);
 }
 
 /**

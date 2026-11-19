@@ -1,5 +1,3 @@
-import {PAGE_EVIDENCE_PATH,CANONICAL_PAGE_EVIDENCE_PATH,isPageEvidenceOperation} from '@artifactbin/contracts';
-import {ARTIFACT_WORKLOAD_PATH,APP_ARTIFACT_WORKLOAD_PATH,SERVICE_PAYLOAD_LIMIT,isWorkloadBinding,isArtifactWorkloadOperation} from '@artifactbin/contracts';
 /**
  * Auth-owned RPC, mounted before browser/session resolution and the public internal-path refusal. Every route here
  * is service-authenticated (SERVICE_AUTH_HEADER) and refused without it:
@@ -25,8 +23,8 @@ import {ARTIFACT_WORKLOAD_PATH,APP_ARTIFACT_WORKLOAD_PATH,SERVICE_PAYLOAD_LIMIT,
  *    `{refused: {code, status, retry_after?, detail?}}` out, both 200; anything else (no transactional database, a
  *    failure) is 503 and the caller's call throws;
  *  - a relay's draft check (contracts `DRAFT_CHECK_PATH`), admitted and forwarded as the chart drawing below is;
- *  - a relay's chart drawing (contracts `CHART_IMAGE_PATH`, a service opted in with `artifact_reads`): no person, no
- *    grant, exact keys, forwarded to the app's fixed seam and answered as it answers;
+ *  - a relay's chart drawing (contracts `CHART_IMAGE_PATH`, a service opted in with `artifact_reads`): no person, exact
+ *    keys, forwarded to the app's fixed seam and answered as it answers;
  *  - a RUN SIGN-IN (contracts `RUN_SIGN_IN_PATH`, a service opted in with `run_sign_ins`, its own secret): the person's
  *    exchanged token for that service, verified as introspection verifies it, becomes an ordinary API access token for
  *    that person with no refresh token (./identity-store/accounts `mintRunSignIn`), audited as a mint. Without the
@@ -39,7 +37,7 @@ import {ARTIFACT_WORKLOAD_PATH,APP_ARTIFACT_WORKLOAD_PATH,SERVICE_PAYLOAD_LIMIT,
  */
 import {createHash,timingSafeEqual} from 'node:crypto';
 import {CHART_IMAGE_PATH,CANONICAL_CHART_IMAGE_PATH,CHART_IMAGE_KEYS,DRAFT_CHECK_PATH,CANONICAL_DRAFT_CHECK_PATH,DRAFT_CHECK_KEYS,ANONYMOUS,ARTIFACT_SCOPE,DEFAULT_TOKEN_TTL_MS,MAX_TOKEN_TTL_MS,MIN_TOKEN_TTL_MS,RUN_SIGN_IN_PATH,GROUP_SIGN_IN_PATH,GROUP_SIGN_IN_GRANTS_PATH,SERVICE_GROUP_SIGN_IN_MAX_TTL_MS,type GroupSignIn,type RunSignIn} from '@artifactbin/contracts';
-import {ARTIFACT_IMAGE_DEADLINE_MS,ARTIFACT_IMAGE_ERRORS,ARTIFACT_IMAGE_ERROR_FIELDS,ARTIFACT_IMAGE_PATH,CANONICAL_ARTIFACT_IMAGE_PATH,ELEMENT_CAPTURE,ARTIFACT_READ_GRANT_PATH,ARTIFACT_READ_PATH,CANONICAL_ARTIFACT_READ_PATH,API_RESOURCE_PATH,HUMAN_SESSION_LIVE_PATH,IDENTITY_CALL_PATH,IDENTITY_SCHEMA,IDENTITY_INTROSPECT_PATH,IDENTITY_METHODS,IdentityError,SERVICE_AUTH_HEADER,parseAliasOrigins,parseServiceAudiences,type IssuedArtifactReadGrant,type IdentityIntrospectResponse,type IdentityMethod,type IdentityService,type Part,type ServiceAudience,type ServiceTokenParent,type TokenRecord,type TransactionalQueryable} from '@artifactbin/contracts';
+import {SERVICE_PAYLOAD_LIMIT,API_RESOURCE_PATH,HUMAN_SESSION_LIVE_PATH,IDENTITY_CALL_PATH,IDENTITY_SCHEMA,IDENTITY_INTROSPECT_PATH,IDENTITY_METHODS,IdentityError,SERVICE_AUTH_HEADER,parseAliasOrigins,parseServiceAudiences,type IdentityIntrospectResponse,type IdentityMethod,type IdentityService,type Part,type ServiceAudience,type ServiceTokenParent,type TokenRecord,type TransactionalQueryable} from '@artifactbin/contracts';
 import {BodyTooLargeError,readBody,serviceSecretMatches} from '@artifactbin/utils';
 import type {Context} from 'hono';
 import type {AuthEnv,AuthOptions} from './parts';
@@ -52,7 +50,6 @@ import {testDomainSignInOf} from './config';
 import {IdentityNotReady,createIdentityStore,ensureIdentitySchema} from './identity-store';
 import {groupServiceTokenKey,isGroupServiceToken,isServiceToken,verifyGroupServiceToken,verifyServiceToken,serviceTokenKey} from './identity/service-tokens';
 import {readLiveGroupSignIn} from './identity/bearer';
-import {artifactReadKey,signArtifactReadGrant,verifyArtifactReadGrant} from './identity/artifact-read-grants';
 /** A person's token: no group principal. */
 const PERSON={group_id:null,group_role:null,issued_by:null} as const;
 /** The lifetime a run sign-in asks for (`expires_in`, seconds; absent: the default), clamped to the token bounds; null when malformed. */
@@ -68,7 +65,8 @@ const serviceOf=(audiences:readonly ServiceAudience[],presented:string|undefined
 };
 export function sessionAuthority(o:AuthOptions):Part<AuthEnv>{return {name:'sessionAuthority',mount:app=>{
  const secret=readEnv(o.env,'INTERNAL__SERVICE_SECRET');
- const audiences=parseServiceAudiences(readEnv(o.env,'IDENTITY__SERVICE_AUDIENCES'));
+ // A key a removed feature used is ignored with one line at boot (contracts service-audiences `REMOVED_SERVICE_AUDIENCE_KEYS`), never its value.
+ const audiences=parseServiceAudiences(readEnv(o.env,'IDENTITY__SERVICE_AUDIENCES'),(id,keys)=>console.warn(`[identity] IDENTITY__SERVICE_AUDIENCES entry ${JSON.stringify(id)} carries ${keys.join(', ')}, which this release no longer has: ignored`));
  const tokenKey=o.cookieSecret?serviceTokenKey(o.cookieSecret):null;
  const groupKey=o.cookieSecret?groupServiceTokenKey(o.cookieSecret):null;
  /** A refusal Response, or the parsed JSON object body. `admitted` decides the credential (default: the installation's). */
@@ -188,109 +186,9 @@ export function sessionAuthority(o:AuthOptions):Part<AuthEnv>{return {name:'sess
   try{return answer({approvals:await listServiceGroupSignInGrants(identityTables(authSchema),o.identityDb,{service:service.id,origin:service.origin})});}
   catch{return answer({error:'session_unavailable'},503);}
  });
- app.all(ARTIFACT_WORKLOAD_PATH,async c=>{
-  let service:ServiceAudience|undefined;
-  const input=await admit(c,presented=>!!(service=serviceOf(audiences,presented))&&!!service.artifactWorkloads,SERVICE_PAYLOAD_LIMIT+8192);
-  if(input instanceof Response)return input;
-  if(Object.keys(input).length!==2||!isWorkloadBinding(input.principal)||!isArtifactWorkloadOperation(input.operation))return answer({error:'bad_request'},400);
-  if(input.principal.issuerId!==service!.id)return answer({error:'forbidden'},403);
-  if(c.req.raw.signal.aborted)return answer({error:'cancelled'},403);
-  try{
-   const request=new Request(new URL(APP_ARTIFACT_WORKLOAD_PATH,c.req.url),{method:'POST',body:JSON.stringify({operation:input.operation}),signal:c.req.raw.signal});
-   const response=await o.upstream(request,{credential:'workload',serviceWorkload:true,workload:input.principal});
-   const body=await readBody(response,{limit:SERVICE_PAYLOAD_LIMIT,as:'text'});
-   return new Response(body,{status:response.status,headers:{'content-type':'application/json','cache-control':'no-store'}});
-  }catch(error){return error instanceof BodyTooLargeError?answer({error:'too_large',max:SERVICE_PAYLOAD_LIMIT},413):answer({error:'workload_unavailable'},503);}
- });
- const grantKey=artifactReadKey(o.cookieSecret);
- // Identity owns its deadline boundary too, including stalled upstream/body readers after app buffering.
- const evidenceStep=<T>(signal:AbortSignal,pending:Promise<T>):Promise<T>=>new Promise((resolve,reject)=>{
-  const abort=()=>reject(signal.reason);signal.addEventListener('abort',abort,{once:true});
-  pending.then(value=>{signal.removeEventListener('abort',abort);signal.aborted?reject(signal.reason):resolve(value);},error=>{signal.removeEventListener('abort',abort);reject(error);});
-  if(signal.aborted)abort();
- });
- app.all(PAGE_EVIDENCE_PATH,async c=>{
-  let service:ServiceAudience|undefined;
-  const signal=AbortSignal.any([c.req.raw.signal,AbortSignal.timeout(20000)]);
-  let input:Response|Record<string,unknown>;
-  try{input=await evidenceStep(signal,admit(c,presented=>!!(service=serviceOf(audiences,presented))&&service.artifactReads===true,SERVICE_PAYLOAD_LIMIT+8192));}catch{return answer({error:'evidence_unavailable'},503);}
-  if(input instanceof Response)return input;
-  if(Object.keys(input).length!==2||typeof input.grant!=='string'||!isPageEvidenceOperation(input.operation))return answer({error:'bad_request'},400);
-  try{
-   const claims=verifyArtifactReadGrant(grantKey,audiences,input.grant);
-   const liveClaims=async()=>{signal.throwIfAborted();return !!claims&&claims.exp>Math.floor(Date.now()/1000)&&claims.svc===service!.id&&claims.aud===service!.origin&&await activeUser(claims.sub)&&await parentLive(claims.par,claims.sub)&&(!o.admitIdentity||await o.admitIdentity({userId:claims.sub}));};
-   if(!await evidenceStep(signal,liveClaims())||!claims)return answer({error:'unauthorized'},401);
-   const invoke=(fingerprint?:string)=>o.upstream(new Request(new URL(CANONICAL_PAGE_EVIDENCE_PATH,c.req.url),{method:'POST',body:JSON.stringify({operation:input.operation,...(fingerprint?{fingerprint}:{})}),signal}),{credential:'session',userId:claims.sub});
-   const response=await evidenceStep(signal,invoke());
-   const buffered=await evidenceStep(signal,readBody(response,{limit:2*SERVICE_PAYLOAD_LIMIT+2048,as:'text'}));
-   if(response.status!==200)return answer({error:'evidence_unavailable'},response.status);
-   const envelope=JSON.parse(buffered);
-   if(typeof envelope.body!=='string'||Buffer.byteLength(envelope.body)>SERVICE_PAYLOAD_LIMIT||typeof envelope.fingerprint!=='string')return answer({error:'too_large',max:SERVICE_PAYLOAD_LIMIT},413);
-   if(!await evidenceStep(signal,liveClaims()))return answer({error:'unauthorized'},401);
-   const checked=await evidenceStep(signal,invoke(envelope.fingerprint));
-   void checked.body?.cancel().catch(()=>{});
-   if(checked.status!==200)return answer({error:'evidence_unavailable'},409);
-   if(!await evidenceStep(signal,liveClaims()))return answer({error:'unauthorized'},401);
-   signal.throwIfAborted();
-   return new Response(envelope.body,{headers:{'content-type':'application/json','cache-control':'no-store'}});
-  }catch(error){return error instanceof BodyTooLargeError?answer({error:'too_large',max:SERVICE_PAYLOAD_LIMIT},413):answer({error:'evidence_unavailable'},503);}
- });
- /** A passed-through image refusal: one of the export door's codes at its own status, with only its detail fields. */
- const imageRefusal=async(response:Response):Promise<Response>=>{
-  let told:Record<string,unknown>={};
-  try{told=JSON.parse(await readBody(response,{limit:8192,as:'text'}));}catch{await response.body?.cancel().catch(()=>{});}
-  const code=typeof told?.error==='string'?told.error:response.status===404?'not_found':'';
-  if(!Object.hasOwn(ARTIFACT_IMAGE_ERRORS,code)||ARTIFACT_IMAGE_ERRORS[code]!==response.status)return answer({error:'image_unavailable'},503);
-  return answer(Object.fromEntries(ARTIFACT_IMAGE_ERROR_FIELDS.filter(key=>key in told&&told[key]!==null&&typeof told[key]!=='object').map(key=>[key,told[key]]).concat([['error',code]])),response.status);
- };
- const imageOptions=(input:Record<string,unknown>)=>(input.format===undefined||input.format==='png'||input.format==='jpg')
-  &&(input.element===undefined||typeof input.element==='string'&&input.element.length>0&&input.element.length<=ELEMENT_CAPTURE.selectorChars)
-  &&(input.slide===undefined||Number.isSafeInteger(input.slide)&&Number(input.slide)>0);
  /**
-  * Delegated canonical reads by an arg_ grant: issue (`{token}`), read (`{grant, artifact_id}`) and image (read's keys
-  * plus `format?`, `element?`, `slide?`). One sequence for read and image: the grant and its live claims, the fixed app
-  * seam as the grant's person, the answer buffered under SERVICE_PAYLOAD_LIMIT, the claims again, the canonical READ
-  * seam's decision again (CURRENT ACL, after the answer was made), the claims again, then delivery. The image call is
-  * bounded whole by ARTIFACT_IMAGE_DEADLINE_MS, a relay's request cut being above it.
-  */
- for(const path of [ARTIFACT_READ_GRANT_PATH,ARTIFACT_READ_PATH,ARTIFACT_IMAGE_PATH])app.all(path,async c=>{
-  const issuing=path===ARTIFACT_READ_GRANT_PATH,image=path===ARTIFACT_IMAGE_PATH;
-  const signal=image?AbortSignal.any([c.req.raw.signal,AbortSignal.timeout(ARTIFACT_IMAGE_DEADLINE_MS)]):undefined;
-  const step=<T>(pending:Promise<T>):Promise<T>=>signal?evidenceStep(signal,pending):pending;
-  const unavailable=image?'image_unavailable':'read_unavailable';
-  let service:ServiceAudience|undefined;
-  let input:Response|Record<string,unknown>;
-  try{input=await step(admit(c,presented=>!!(service=serviceOf(audiences,presented))&&service.artifactReads===true));}catch{return answer({error:unavailable},503);}
-  if(input instanceof Response)return input;
-  const keys=issuing?['token']:['grant','artifact_id'],optional=image?['format','element','slide']:[];
-  if(Object.keys(input).some(key=>!keys.includes(key)&&!optional.includes(key))||keys.some(key=>typeof input[key]!=='string'||!input[key])||image&&!imageOptions(input))return answer({error:'bad_request'},400);
-  try{
-   const claims=issuing?(tokenKey?verifyServiceToken(tokenKey,audiences,input.token as string):null):verifyArtifactReadGrant(grantKey,audiences,input.grant as string);
-   const liveClaims=async()=>{signal?.throwIfAborted();return !!claims&&(issuing||claims.exp>Math.floor(Date.now()/1000))&&claims.svc===service!.id&&claims.aud===service!.origin&&await activeUser(claims.sub)&&await parentLive(claims.par,claims.sub)&&(!o.admitIdentity||await o.admitIdentity({userId:claims.sub}));};
-   if(!await step(liveClaims())||!claims)return answer({error:'unauthorized'},401);
-   if(issuing){const issued=signArtifactReadGrant(grantKey,service!,{userId:claims.sub,parent:claims.par});return answer({grant:issued.token,expires_at:issued.expiresAt,user_id:claims.sub,audience:claims.aud} satisfies IssuedArtifactReadGrant);}
-   const id=input.artifact_id as string;
-   if(!/^[A-Za-z0-9_-]{1,128}$/.test(id))return answer({error:'bad_request'},400);
-   const read=new Request(new URL(CANONICAL_ARTIFACT_READ_PATH+'?id='+encodeURIComponent(id),c.req.url),signal?{signal}:{});
-   const first=image?new Request(new URL(CANONICAL_ARTIFACT_IMAGE_PATH,c.req.url),{method:'POST',signal,
-    body:JSON.stringify({artifact_id:id,...Object.fromEntries(optional.filter(key=>input[key]!==undefined).map(key=>[key,input[key]]))})}):read;
-   const response=await step(o.upstream(first,{credential:'session',userId:claims.sub}));
-   if(response.status!==200){if(image)return await step(imageRefusal(response));await response.body?.cancel();return answer({error:'not_found'},404);}
-   const body=await step(readBody(response,{limit:SERVICE_PAYLOAD_LIMIT,as:'text'}));
-   if(image&&typeof JSON.parse(body)?.data!=='string')return answer({error:unavailable},503);
-   if(!await step(liveClaims()))return answer({error:'unauthorized'},401);
-   // The app's second decision rechecks CURRENT ACL after the buffered answer.
-   const checked=await step(o.upstream(read,{credential:'session',userId:claims.sub}));
-   await checked.body?.cancel();
-   if(checked.status!==200)return answer({error:'not_found'},404);
-   if(!await step(liveClaims()))return answer({error:'unauthorized'},401);
-   signal?.throwIfAborted();
-   return new Response(body,{headers:{'content-type':'application/json','cache-control':'no-store'}});
-  }catch(error){return error instanceof BodyTooLargeError?answer({error:'too_large',max:SERVICE_PAYLOAD_LIMIT},413):answer({error:unavailable},503);}
- });
- /**
-  * A relay's chart drawing (contracts CHART_IMAGE_PATH): admitted like artifact-read (the service's own introspection
-  * secret, `artifact_reads` opt-in), exact keys, no grant (drawing reads no data). The body goes to the fixed app seam as
+  * A relay's chart drawing (contracts CHART_IMAGE_PATH): admitted by the service's own introspection secret and its
+  * `artifact_reads` opt-in, exact keys, no person (drawing reads no data). The body goes to the fixed app seam as
   * the anonymous actor; its status and JSON come back buffered to at most SERVICE_PAYLOAD_LIMIT.
   */
  app.all(CHART_IMAGE_PATH,async c=>{
@@ -308,7 +206,7 @@ export function sessionAuthority(o:AuthOptions):Part<AuthEnv>{return {name:'sess
  });
  /**
   * A relay's draft check (contracts DRAFT_CHECK_PATH): admitted like chart-image (the service's own introspection
-  * secret, `artifact_reads` opt-in), exact keys, no grant (the check reads no data). The body goes to the fixed app seam
+  * secret, `artifact_reads` opt-in), exact keys, no person (the check reads no data). The body goes to the fixed app seam
   * as the anonymous actor; its status and JSON come back buffered to at most SERVICE_PAYLOAD_LIMIT, within 30 s.
   */
  app.all(DRAFT_CHECK_PATH,async c=>{

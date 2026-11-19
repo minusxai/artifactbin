@@ -1,4 +1,4 @@
-/** The installation count ceiling, shared by human tokens and cumulative group workload storage. */
+/** The installation count ceiling a token's artifacts are held to. */
 import {ARTIFACT_QUOTA_PER_TOKEN,registerTestOverride} from '@/lib/platform';
 let override:number|null=null;
 export function setArtifactQuotaForTests(cap:number|null):void{override=cap;}

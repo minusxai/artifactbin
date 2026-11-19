@@ -13,7 +13,7 @@
  *
  * A GROUP'S SERVICE TOKEN (contracts service-audiences `group_principals`): an agent signed in as a group, for a service
  * that opts in. Its own kind: prefix `vgt_`, its own key, claims with no person (./signed-tokens `GroupSignedTokenClaims`),
- * so nothing that verifies a person's token (introspection's person path, a run sign-in, an artifact read grant) ever
+ * so nothing that verifies a person's token (introspection's person path, a run sign-in) ever
  * accepts one, and an older verifier that knows only `vwt_` finds no service token and no bearer: not active. It lives
  * as a person's does but never past its parent, and verifies only for a service still opted in.
  */

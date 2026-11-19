@@ -1,5 +1,5 @@
 export type { Part, Upstream } from './part';
-export { HUMAN_SESSION_LIVE_PATH, ACTOR_HEADER, REVALIDATE_ACTOR_HEADER, ACTOR_TTL_SECONDS, ANONYMOUS, CREDENTIALS, GROUP_PRINCIPAL_REFUSED, isGroupActor, isGroupPrincipalRole, type Actor, type HumanActor, type WorkloadActor, type GroupPrincipalRole, type HumanSessionAuthority, type Credential } from './actor';
+export { HUMAN_SESSION_LIVE_PATH, ACTOR_HEADER, REVALIDATE_ACTOR_HEADER, ACTOR_TTL_SECONDS, ANONYMOUS, CREDENTIALS, GROUP_PRINCIPAL_REFUSED, isGroupActor, isGroupPrincipalRole, type Actor, type HumanActor, type GroupPrincipalRole, type HumanSessionAuthority, type Credential } from './actor';
 export type { Queryable } from './db';
 export * from './sql';
 export * from './sql-failures';
@@ -79,7 +79,4 @@ export type {PortableIdentity} from './portable-document';
 export * from './region-sessions';
 export * from './connectors';
 
-export type {WorkloadBinding, WorkloadOperation, WorkloadReadOperation, WorkloadAuthorization, WorkloadAuthority} from './workload';
 
-export {isPageEvidenceOperation,isPageDatasetSelect,artifactWorkloadOperationJson,ARTIFACT_WORKLOAD_PATH,APP_ARTIFACT_WORKLOAD_PATH,isWorkloadBinding,isArtifactWorkloadOperation} from './artifact-workload';
-export type {PageEvidenceSchema,PageEvidenceSql,PageEvidenceOperation,PageDatasetSelect,ArtifactWorkloadOperation,ArtifactWorkloadScope,ArtifactWorkloadOutputPage} from './artifact-workload';

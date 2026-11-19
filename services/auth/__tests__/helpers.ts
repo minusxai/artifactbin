@@ -18,11 +18,9 @@ export const serviceAuthHost = (options: Omit<AuthOptions, 'cookieSecret' | 'tok
 /** A delegated service as tests name it: its id, origin and the digest of the secret it presents. */
 export const delegatedService = (id: string, origin: string, secret: string) => ({ id, origin, introspectionSecretSha256: createHash('sha256').update(secret).digest('hex') });
 type DelegatedService = ReturnType<typeof delegatedService>;
-/** The `IDENTITY__SERVICE_AUDIENCES` value that admits `services`, each with any other settings it carries (`artifact_reads`, `artifact_workloads`). */
+/** The `IDENTITY__SERVICE_AUDIENCES` value that admits `services`, each with any other settings it carries (`artifact_reads`, say). */
 export const serviceAudiences = (...services: Array<DelegatedService & Record<string, unknown>>) =>
   JSON.stringify(services.map(({ id, origin, introspectionSecretSha256, ...settings }) => ({ id, origin, introspection_secret_sha256: introspectionSecretSha256, ...settings })));
-/** `serviceAudiences` for one service, with or without artifact reads. */
-export const audiencesOf = (service: DelegatedService, artifactReads = true) => serviceAudiences({ ...service, artifact_reads: artifactReads });
 
 /**
  * One-time-code sign-in through the caller's own `post` (path and JSON body in, the handler's Response out): ask for a

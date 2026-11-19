@@ -123,24 +123,3 @@ export function refusesCrossSite(request: Request, actor: Pick<RequestIdentity, 
   return isCookieCredential(actor) && isMutation(request) && isCrossSiteRequest(request);
 }
 
-/** Canonical source reads admit a host workload without manufacturing a token. */
-export function withAuthorReadAuth(handler:AgentOrBrowserHandler) {
- const token=withTokenAuth(handler);
- return async(request:Request,routeCtx?:{params:Promise<Record<string,string>>}):Promise<Response>=>{
-  const resolved=await resolveRequestIdentity(request,'token',{readOnly:true});
-  if(resolved.kind==='identity'&&resolved.identity.workload){
-   return handler(request,{actor:resolved.identity,params:routeCtx?await routeCtx.params:{}});
-  }
-  return token(request,routeCtx);
- };
-}
-
-/** Only the canonical publication doors admit host-only publication identities. */
-export function withPublicationAuth(handler:(request:Request,ctx:{actor:import('@/lib/accounts').PublicationActor;params:Record<string,string>})=>Promise<Response>){
- const token=withTokenAuth(handler);
- return async(request:Request,routeCtx?:{params:Promise<Record<string,string>>}):Promise<Response>=>{
-  const resolved=await resolveRequestIdentity(request,'token');
-  if(resolved.kind==='identity'&&resolved.identity.workload?.publication)return handler(request,{actor:{...resolved.identity,workload:resolved.identity.workload},params:routeCtx?await routeCtx.params:{}});
-  return token(request,routeCtx);
- };
-}

@@ -2,7 +2,7 @@
  * THE PAGE'S SQL DOOR (`POST /api/artifacts/<page>/sql`, `sql` in the page runtime), with what every page door
  * shares: the request's reader, the after-read page verification and the write's commit guard.
  */
-import {pageEvidenceStep} from './deadline';
+import {deadlineStep} from './deadline';
 import {pageVerifier} from './verify';
 import {ACTOR_HEADER,REVALIDATE_ACTOR_HEADER,SQL_READ_LIMITS,type HtmlDatasetLink,type HtmlPageVersion} from '@artifactbin/contracts';
 import {sqlReadFailure,type SqlFailureCode} from '@artifactbin/contracts';
@@ -164,8 +164,8 @@ async function answerSql(request:Request,pageId:string,admission:Admission,reade
     const reply=live??(connection?await admission.step(namingOwner(connection,admitted,actor)):await executePageSql(actor,datasetLinks(page),{sql:body.sql,params:body.params},scope,request.signal));
     // Every reply (rows, a write's reply, a replayed receipt, a refusal) leaves only while the page still holds.
     admission.check();checkRead();executing=false;
-    await admission.step(readSignal?pageEvidenceStep(readSignal,verifyPage(page.revision)):verifyPage(page.revision));
-    if(hostHolds&&!await admission.step(readSignal?pageEvidenceStep(readSignal,hostHolds()):hostHolds()))throw Error('page_unavailable');
+    await admission.step(readSignal?deadlineStep(readSignal,verifyPage(page.revision)):verifyPage(page.revision));
+    if(hostHolds&&!await admission.step(readSignal?deadlineStep(readSignal,hostHolds()):hostHolds()))throw Error('page_unavailable');
     // The last guard: nothing past the SQL output budget leaves, however it was produced.
     const text=JSON.stringify(reply.body);
     if(new TextEncoder().encode(text).length>SQL_READ_LIMITS.outputBytes)return json({error:'result_too_large',message:`an answer is at most ${SQL_READ_LIMITS.outputBytes} bytes; select fewer rows or columns`},413,headers);
@@ -185,8 +185,6 @@ async function answerSql(request:Request,pageId:string,admission:Admission,reade
  }
 }
 
-export {preparePageEvidence,pageEvidenceSchemaDoor} from './evidence';
-
-export {pageEvidenceStep} from './deadline';
+export {pageRevisionSchemaDoor} from './revision-schema';
 
 export {namingOwner,pageDeclaredConnectionSql} from './approved-queries';

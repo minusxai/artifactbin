@@ -3,7 +3,6 @@
  * session, and handed to the app with the request — in-process by reference (utils attachActor),
  * across a network hop as a signed header (utils signActor). The app reads it with actorOf().
  */
-import type {WorkloadBinding} from './workload';
 export const ACTOR_HEADER = 'x-mx-actor';
 /** Internal response marker: the proxy rechecks credentials before delivering delayed query rows. */
 export const REVALIDATE_ACTOR_HEADER = 'x-mx-revalidate-actor';
@@ -12,7 +11,6 @@ export type Credential = (typeof CREDENTIALS)[number];
 
 export interface HumanActor {
   credential: Credential;
-  workload?: never;
   /** Never set: a person's actor is never a group's (`GroupActor`). */
   principal?: never;
   userId?: string;
@@ -23,19 +21,6 @@ export interface HumanActor {
   sessionId?: string;
 }
 
-/** Native host bindings are in-process only; the explicit auth-owned service marker permits principal-only signed transport. */
-export interface WorkloadActor {
- readonly credential:'workload';
- readonly principal?:never;
- /** Auth-owned purpose RPC transport marker; no permission scope. */
- readonly serviceWorkload?:true;
- readonly workload:WorkloadBinding;
- readonly userId?:never;
- readonly tokenId?:never;
- readonly email?:never;
- readonly emailVerified?:never;
- readonly sessionId?:never;
-}
 /**
  * AN AGENT SIGNED IN AS A GROUP (contracts identity-service `GROUP_SIGN_IN_RULE`): a live bearer whose principal is the
  * group `principalGroupId` itself at the level `principalGroupRole`, with NO person behind it: no `userId`, no address,
@@ -50,7 +35,6 @@ export interface GroupActor {
  readonly principalGroupRole:GroupPrincipalRole;
  readonly tokenId:string;
  readonly issuedBy:string;
- readonly workload?:never;
  readonly userId?:never;
  readonly email?:never;
  readonly emailVerified?:never;
@@ -62,7 +46,7 @@ export const isGroupPrincipalRole = (value: unknown): value is GroupPrincipalRol
 export const isGroupActor = (actor: Actor | null | undefined): actor is GroupActor => actor?.principal === 'group';
 /** The one refusal (403) a route that does not admit a group's sign-in answers it with. */
 export const GROUP_PRINCIPAL_REFUSED = 'group_principal_refused';
-export type Actor = HumanActor | WorkloadActor | GroupActor;
+export type Actor = HumanActor | GroupActor;
 export const ANONYMOUS: Actor = { credential: 'none' };
 
 /** Default lifetime of a signed header. Short: it is minted per request. */

@@ -154,9 +154,9 @@ export const groupMemberPredicate = (user:string, role?:'admin'|'editor', alias=
     ? `(EXISTS (SELECT 1 FROM group_members gm JOIN groups g ON g.id=gm.group_id WHERE gm.group_id=${alias}.group_id AND gm.user_id=${user} AND gm.role='editor' AND g.deleted_at IS NULL) OR ${groupAdminSql(user,`${alias}.group_id`)})`
     : `(${alias}.group_id IN (${reachedGroupsSql(user)}) OR ${groupAdminSql(user,`${alias}.group_id`)})`;
 
-export const ownerPredicate = ({ tokenId, userId, groupId, workload, principalGroup }: AccessActor): Scope =>
+export const ownerPredicate = ({ tokenId, userId, groupId, principalGroup }: AccessActor): Scope =>
   // A group's sign-in owns nothing (./access `ownsArtifact`), so no owner-only statement ever matches for it.
-  workload || principalGroup ? {where:p=> `(${p}::text IS NULL AND FALSE)`,val:''} : groupId ? {where:p=>`group_id = ${p}`,val:groupId} : userId ? { where: (p) => `((group_id IS NULL AND user_id = ${p}) OR ${groupMemberPredicate(p,'admin')})`, val: userId } : { where: (p) => `group_id IS NULL AND user_id IS NULL AND token_id = ${p}`, val: tokenId ?? '' };
+  principalGroup ? {where:p=> `(${p}::text IS NULL AND FALSE)`,val:''} : groupId ? {where:p=>`group_id = ${p}`,val:groupId} : userId ? { where: (p) => `((group_id IS NULL AND user_id = ${p}) OR ${groupMemberPredicate(p,'admin')})`, val: userId } : { where: (p) => `group_id IS NULL AND user_id IS NULL AND token_id = ${p}`, val: tokenId ?? '' };
 
 export const ownerScope = (actor: AccessActor): Scope => live(ownerPredicate(actor));
 
@@ -210,7 +210,7 @@ const groupPrincipalScope = (principal: NonNullable<AccessActor['principalGroup'
 });
 
 const scopeAtLeast = (actor: AccessActor, min: ArtifactRole): Scope =>
-  actor.principalGroup ? groupPrincipalScope(actor.principalGroup, min) : actor.workload ? live({val:JSON.stringify({group:actor.workload.principal.groupId,ids:actor.workload.readArtifactIds,writes:actor.workload.publication&&actor.workload.role==='editor'?actor.workload.writeArtifactIds.filter(id=>actor.workload!.readArtifactIds.includes(id)):[]}),where:p=>(min==='viewer'||min==='commenter'||min==='editor')?`(group_id=(${p}::jsonb->>'group') AND id IN (SELECT jsonb_array_elements_text(${p}::jsonb->'${min==='viewer'?'ids':'writes'}')) AND EXISTS (SELECT 1 FROM groups wg WHERE wg.id=artifacts.group_id AND wg.deleted_at IS NULL))`:`(${p}::text IS NULL AND FALSE)`}) : actor.userId
+  actor.principalGroup ? groupPrincipalScope(actor.principalGroup, min) : actor.userId
     ? live({ where: (p) => `(${ownerPredicate(actor).where(p)} OR (${ACCOUNT_REACH_SQL(p)} AND (${groupMemberPredicate(p, 'editor')} OR ${min==='viewer'?groupMemberPredicate(p):'FALSE'} OR ${SHARE_PREDICATE(shareRolesAtLeast(min), p)} OR ${LINK_PREDICATE(min)}${actor.documentEditor ? ` OR ${DOCUMENT_EDITOR_PREDICATE}` : ''})))`, val: actor.userId })
     : ownerScope(actor);
 
