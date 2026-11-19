@@ -21,6 +21,7 @@ comment, history nowhere. Keep links plain, never `@` imports.
 | [browser](services/browser/AGENTS.md) | the browser service: renders, uploads, harvest, live sessions |
 | [scripts](scripts/AGENTS.md) | delegating (briefs, worktrees, gates, handoffs), any root script |
 | [scripts/ci](scripts/ci/AGENTS.md) | workflows, PR lane budgets, test lists and timings, a red main |
+| [.github/workflows](.github/workflows/AGENTS.md) | CI rules: PR CI < 40 s, main CI < 4 min, NO flaky tests etc |
 
 ## Check tiers (read before running commands)
 
