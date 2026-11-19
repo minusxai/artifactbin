@@ -49,6 +49,8 @@ describe('the identity owner\'s draft-check seam', () => {
     expect(url.pathname).toBe('/reports/revenue.html');
     expect(url.searchParams.get('_pt')).toEqual(expect.any(String));
     expect(request).toMatchObject({ internalOrigin: EXPORT_INTERNAL_ORIGIN, sameOriginOnly: true, allowedOrigins: [site.app], selector: 'body', screenshot: true });
+    // The relay's check is as it was: overflow is said only to a signed-in author (app/api/page/drafts/check).
+    expect(request).not.toHaveProperty('overflow');
     expect(documents).toEqual([200, 404, 200]);
     // Forgotten once looked at.
     expect((await app.request(`${url.origin}/reports/monthly.csv`, { headers: { host: url.host } })).status).toBe(404);

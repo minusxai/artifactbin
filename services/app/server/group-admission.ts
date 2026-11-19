@@ -10,8 +10,9 @@
  * Member may not), setting on both exactly what its twin may (a direct Editor of the group: `visibility`, `linkRole`
  * and a dataset's `access`, at creation and on a replace alike; never named `shares`, placement or a policy, which
  * stay with people), commenting and editing its own comments (its group's, at its level), a page's actions (its dataset mutations), the install's default connection and the event feed of what it
- * may observe (the watch every publish and comment tells an agent to start). What is not, on purpose:
- * everything personal (accounts, people, notifications, follows, likes, tokens, trash, drafts, test users, browser
+ * may observe (the watch every publish and comment tells an agent to start), and checking a page it wrote before it is
+ * published (a draft checked in the app's browser as no one: it reads nothing). What is not, on purpose:
+ * everything personal (accounts, people, notifications, follows, likes, tokens, trash, shown drafts, test users, browser
  * sessions), everything of an owner or an Admin (delete, restore, transfer, sharing, members, policy, connections,
  * group administration), forks, exports, regions, presence, reactions and uploads.
  */
@@ -35,6 +36,8 @@ export const GROUP_ADMITTED_ROUTES: readonly (readonly [method: string, path: st
   ['POST', '/api/default-connection/sql'],
   // The comment and change feed, filtered to what the group's members may observe (lib/event-feed).
   ['GET', '/api/events'],
+  // A page it wrote, checked before it is published: made for no reader, it reads no data (lib/page-drafts checkDraft).
+  ['POST', '/api/page/drafts/check'],
 ];
 
 const compiled = GROUP_ADMITTED_ROUTES.map(([method, path]) => ({ method, pattern: new RegExp(`^${path.replace(/:[A-Za-z]+/g, '[^/]+')}/?$`) }));

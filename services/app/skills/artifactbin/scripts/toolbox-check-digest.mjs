@@ -27,6 +27,10 @@ export function checkDigest(envelope,file){
   !check.slides?.overlapping&&!check.idStability?.unstable);
  lines.push(`check ${envelope.ok?'completed':envelope.code}: smoke ${envelope.smokePassed?'passed':
   'failed'}${file&&!clean?`; full result ${file}`:''}`);
+ // A draft (--draft): the server browser's problems and its picture.
+ for(const p of envelope.problems??[])lines.push(`  ${p.kind}${p.element?' '+p.element:''}: ${
+  clip(p.message,240)}`);
+ if(envelope.screenshot)lines.push('  screenshot: '+envelope.screenshot.path);
  for(const check of envelope.checks??[]){
   if(!check?.viewport){lines.push('  '+clip(check?.error??check,240));continue;}
   const errors=['pageErrors','consoleErrors','failedRequests','httpErrors'].filter(key=>check[

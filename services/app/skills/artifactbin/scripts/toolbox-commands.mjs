@@ -50,7 +50,8 @@ const commands = {
       'guest-steps': flag(),
       'cleanup-steps': flag(),
       viewer: flag(),
-      'playwright-module': flag()
+      'playwright-module': flag(),
+      draft: flag('boolean')
     }
   },
   sql: {

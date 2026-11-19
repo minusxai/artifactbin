@@ -1,11 +1,29 @@
 /**
  * Internal: check.mjs's hosted browser: server browser sessions, one per viewport, with
  * receipt-safe status polling and close; a busy or refusing browser is retried here (bounded).
- * Used by: check.mjs (re-export), toolbox-check-command.mjs.
+ * Also --draft (draftCheck). Used by: check.mjs (re-export), toolbox-check-command.mjs.
  */
 import {randomUUID} from 'node:crypto';
-import {platform, ToolError} from './toolbox-client.mjs';
+import path from 'node:path';
+import {makeClient, platform, ToolError} from './toolbox-client.mjs';
 import {checkScript, summarizeCheck} from './toolbox-check-script.mjs';
+import {prepareBundle} from './toolbox-publication-bundle.mjs';
+
+/** check.mjs FILE.html --draft: the unpublished page and the local files it links, checked once in
+ * the server's browser at 1280x800 (POST /api/page/drafts/check); busy is waited for (bounded). */
+export async function draftCheck(file, server, options = {}) {
+  const client = makeClient(server, options), {html, publicationBundle: {entryPath, files}} =
+    (await prepareBundle({root: path.dirname(path.resolve(file)), entry: path.basename(file),
+      server})).body;
+  for (let tries = 0; ; tries++) {
+    const found = await client.request('/api/page/drafts/check',
+      {method: 'POST', body: {html, entryPath, files}}).catch(error => {
+      if (error.code !== 'browser_busy' || tries > 7) throw error;
+    });
+    if (found) return {draft: true, smokePassed: !found.problems.length, checks: [], ...found};
+    await new Promise(resolve => setTimeout(resolve, options.busyDelayMs ?? 5000));
+  }
+}
 
 function origin(value) {
   const url = new URL(value);
