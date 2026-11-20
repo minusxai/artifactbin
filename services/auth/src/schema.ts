@@ -1,7 +1,7 @@
 /** Identity owns two auth primitives: durable clients and lifecycle-managed credentials. */
 import type { Queryable } from '@artifactbin/contracts/db';
 import type { Table } from '@artifactbin/contracts/schema';
-import { ensureTable } from '@artifactbin/utils';
+import { ensureTable } from '@artifactbin/utils/schema';
 
 /** @public Read by scripts/render-schema.mjs, which finds Table data among this module's exports. */
 export const AUTH_TABLES: Table[] = [

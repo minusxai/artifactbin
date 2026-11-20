@@ -11,7 +11,10 @@ import { readRawResponse, withHttpServer } from '@artifactbin/test-support/net';
 import type { Actor } from '@artifactbin/contracts/actor';
 import type { Part } from '@artifactbin/contracts/part';
 import { ACTOR_HEADER } from '@artifactbin/contracts/actor';
-import { actorOf, actorReceiver, assemble, attachActor, inProcess, overHttp, serve, signActor, UPSTREAM_TIMEOUTS } from '@artifactbin/utils';
+import { actorOf, actorReceiver, attachActor, inProcess, overHttp, UPSTREAM_TIMEOUTS } from '@artifactbin/utils/upstream';
+import { assemble } from '@artifactbin/utils/assemble';
+import { serve } from '@artifactbin/utils/serve';
+import { signActor } from '@artifactbin/utils/actor-sign';
 /** A condition wait's bound (vi.waitFor's own default is 1 s): the condition decides; this only names one that never came. */
 const WAIT_MS = 20_000;
 

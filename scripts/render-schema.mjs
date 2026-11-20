@@ -142,7 +142,7 @@ const tableNames = (statements) => {
 
 /* ── the two sides ───────────────────────────────────────────────────────── */
 
-const { renderSchema, renderDroppedTables } = await tsImport('@artifactbin/utils', import.meta.url);
+const { renderSchema, renderDroppedTables } = await tsImport('@artifactbin/utils/schema', import.meta.url);
 
 async function appSide() {
   const mod = await tsImport('../services/app/lib/platform/schema.ts', import.meta.url);

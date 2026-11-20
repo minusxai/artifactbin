@@ -28,7 +28,10 @@ import type { EventsService } from '@artifactbin/contracts/events';
 import type { IdentityService, TransactionalQueryable } from '@artifactbin/contracts/identity-module';
 import type { SqlService } from '@artifactbin/contracts/sql';
 import { createIdentityStore } from '@artifactbin/auth';
-import { humanSessionClient, identityClient, browserClient, eventsClient, noopBrowser, noopEvents, noopSql, sqlClient } from '@artifactbin/utils';
+import { humanSessionClient } from '@artifactbin/utils/human-session';
+import { identityClient } from '@artifactbin/utils/identity-client';
+import { browserClient, eventsClient, sqlClient } from '@artifactbin/utils/clients';
+import { noopBrowser, noopEvents, noopSql } from '@artifactbin/utils/fakes';
 import { AUTH_SERVICE_URL, BROWSER_SERVICE_URL, EVENTS_SERVICE_URL, INTERNAL_SERVICE_SECRET, QUERY_TIMEOUT_MS, SQL_SERVICE_URL, TEST_DOMAIN } from './config';
 import { getDb } from './db';
 

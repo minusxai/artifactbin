@@ -4,7 +4,9 @@
  *   APP__PORT (default 8080) · SQL__MAX_ROWS · SQL__QUERY_TIMEOUT_MS (reads; writes always get 5000 ms)
  */
 import { sqlTimeout, SQL_QUERY_DEFAULT_MS, SQL_QUERY_MAX_MS } from '@artifactbin/contracts/sql';
-import { createEnv, log, serviceSecretForServer } from '@artifactbin/utils';
+import { createEnv } from '@artifactbin/utils/env';
+import { log } from '@artifactbin/utils/log';
+import { serviceSecretForServer } from '@artifactbin/utils/service-auth';
 import { serveSql } from './index';
 import { createSql } from './local';
 

@@ -5,7 +5,7 @@ import type { Hono } from 'hono';
 import type { Manifest } from 'vite';
 import { precompressedStatic } from './content-encoding';
 import { BUILD_ASSET_HEADER, BUILD_ASSET_PATH } from '@artifactbin/contracts/build-assets';
-import { isBuildAssetPath } from '@artifactbin/utils';
+import { isBuildAssetPath } from '@artifactbin/utils/build-assets';
 
 /** The deployment-owned manifest is read once. Missing/malformed builds opt out. */
 function allowedFiles(webDir: string): Set<string> {

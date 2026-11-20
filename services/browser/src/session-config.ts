@@ -1,4 +1,5 @@
-import { createEnv, overHttp } from '@artifactbin/utils';
+import { createEnv } from '@artifactbin/utils/env';
+import { overHttp } from '@artifactbin/utils/upstream';
 import type { SessionProcessOptions } from './session-process';
 
 /** What a composition hands `createBrowser` for sessions: how to spawn one, and how many may live. */

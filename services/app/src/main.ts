@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { serve } from '@artifactbin/utils';
+import { serve } from '@artifactbin/utils/serve';
 import { AUTH_SERVICE_URL, AUTH_SECRET, BROWSER_SERVICE_URL, SQL_SERVICE_URL, services, getDb } from '@/lib/platform';
 import { installShutdown, startAppBackgroundTasks } from '@/lib/runtime';
 import { createAppServer } from '@/server/app';

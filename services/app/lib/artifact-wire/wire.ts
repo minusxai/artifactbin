@@ -1,6 +1,6 @@
 import {userPageUrl,userPageUrlForOwner,type UserPagesOwner} from '@/lib/user-pages';
 import {monitoringGuidance} from './monitoring-guidance';
-import {parseSharingEntries} from '@artifactbin/utils';
+import {parseSharingEntries} from '@artifactbin/utils/sharing';
 import {catalogOf, datasetCreateFields, liveConnectionOf, loadDatasetRows} from '@/lib/datasets';
 /**
  * The wire ↔ storage translation for one artifact: what a read echoes, how a

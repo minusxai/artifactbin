@@ -3,7 +3,7 @@ import {PGlite} from '@electric-sql/pglite';
 import {beforeAll,describe,expect,it} from 'vitest';
 import type { Queryable } from '@artifactbin/contracts/db';
 import type { Table } from '@artifactbin/contracts/schema';
-import {ensureTable,renderSchema} from '@artifactbin/utils';
+import {ensureTable, renderSchema} from '@artifactbin/utils/schema';
 import {serviceSecretForServer} from '../src/service-auth';
 
 /** Schema as data → additive, idempotent DDL; applied twice it changes nothing; a new column appears on the next boot. */

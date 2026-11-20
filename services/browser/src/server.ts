@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 /** THE BROWSER SERVICE AS A PROCESS: `node server`. APP__PORT (default 8080). */
-import { createEnv, log, serviceSecretForServer } from '@artifactbin/utils';
+import { createEnv } from '@artifactbin/utils/env';
+import { log } from '@artifactbin/utils/log';
+import { serviceSecretForServer } from '@artifactbin/utils/service-auth';
 import { serveBrowser } from './index';
 import { createBrowser } from './local';
 import { sessionProcessOptions } from './session-config';

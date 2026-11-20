@@ -1,4 +1,4 @@
-import {createEnv} from '@artifactbin/utils';
+import {createEnv} from '@artifactbin/utils/env';
 import type {UploadOptions} from './upload';
 /** Audited environment boundary for browser upload transport. */
 export function browserUploadOptions(environment:NodeJS.ProcessEnv):UploadOptions|undefined {

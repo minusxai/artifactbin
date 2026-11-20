@@ -35,7 +35,8 @@
 import { groupSignInServiceConfigured, type ServiceAudience } from '@artifactbin/contracts/service-audiences';
 import type { Queryable } from '@artifactbin/contracts/db';
 import type { TokenReader, TokenRecord } from '@artifactbin/contracts/identity';
-import { TOKEN_RE, hashToken, plainIdentifier } from '@artifactbin/utils';
+import { TOKEN_RE, hashToken } from '@artifactbin/utils/tokens';
+import { plainIdentifier } from '@artifactbin/utils/sql-identifier';
 
 export interface BearerReaderOptions {
   db: Queryable;

@@ -8,7 +8,7 @@
 import { SERVICE_PAYLOAD_LIMIT } from '@artifactbin/contracts/payload-limit';
 import { CHART_IMAGE_KEYS } from '@artifactbin/contracts/identity-service';
 import type { Actor } from '@artifactbin/contracts/actor';
-import { BodyTooLargeError, readBody } from '@artifactbin/utils';
+import { BodyTooLargeError, readBody } from '@artifactbin/utils/body';
 import { DESIGN_SYSTEM_VARIABLES } from '@/lib/html-systems/server';
 import { chartImageAnswer } from '@/lib/viz';
 

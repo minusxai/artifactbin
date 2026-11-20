@@ -8,7 +8,7 @@ import {afterEach,beforeEach,describe,expect,it} from 'vitest';
 import {serviceAuthHost} from '../../../../auth/__tests__/helpers';
 import {IDENTITY_CALL_PATH, IdentityError, type TransactionalQueryable} from '@artifactbin/contracts/identity-module';
 import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts/routes';
-import {identityClient} from '@artifactbin/utils';
+import {identityClient} from '@artifactbin/utils/identity-client';
 import {useAppHarness} from '@/__tests__/harness';
 import {createUser,mintToken,revokeToken,setUsername} from '@/lib/accounts';
 import {getDb,setServices} from '@/lib/platform';

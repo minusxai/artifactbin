@@ -23,7 +23,8 @@
     "./node/credentials": "./src/credentials.ts",
     "./node/loopback-lookup": "./src/loopback-lookup.ts",
     "./node/state-lock": "./src/state-lock.ts",
-    "./node/private-directory": "./src/private-directory.ts"
+    "./node/private-directory": "./src/private-directory.ts",
+    "./*": "./src/*.ts"
   },
   "files": [
     "src"

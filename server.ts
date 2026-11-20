@@ -13,7 +13,7 @@ import path from 'node:path';
 import { developmentViteConfig } from './services/app/lib/runtime/dev-vite';
 import { withRequestLog } from './services/app/lib/runtime/request-log';
 import { getRequestListener } from '@hono/node-server';
-import { assemble } from '@artifactbin/utils';
+import { assemble } from '@artifactbin/utils/assemble';
 import { authEnvNamesRead, readEnv } from '@artifactbin/auth';
 import { useLoopbackLookup } from '@artifactbin/utils/node/loopback-lookup';
 

@@ -7,7 +7,8 @@
  * capture and upload; a failed refresh keeps the prior object (lib/export in the app).
  */
 import {createServer} from 'node:http';
-import {createEnv,log} from '@artifactbin/utils';
+import {createEnv} from '@artifactbin/utils/env';
+import {log} from '@artifactbin/utils/log';
 import {browserUploadOptions} from './upload-config';
 import {uploadGateway} from './upload-gateway';
 const options=browserUploadOptions(process.env);

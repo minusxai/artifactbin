@@ -1,7 +1,7 @@
 import { SQL_WALL_OVERHEAD_MS, sqlTimeout, SQL_QUERY_DEFAULT_MS, SQL_QUERY_MAX_MS } from '@artifactbin/contracts/sql';
 import {isIP} from 'node:net';
 
-import { parseAssetsOrigin } from '@artifactbin/utils';
+import { parseAssetsOrigin } from '@artifactbin/utils/assets-origin';
 import { parseOutboundIps } from '@artifactbin/utils/public-address';
 import { DEFAULT_UPLOAD_MAX_BYTES } from '@artifactbin/contracts/upload-limits';
 import { IDENTITY_SCHEMA } from '@artifactbin/contracts/identity-service';

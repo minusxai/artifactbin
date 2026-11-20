@@ -1,7 +1,7 @@
 /** The doubles ship with utils because contracts are types only. A noop is an explicit refusal, never a silent empty. */
 import { describe, expect, it } from 'vitest';
 import { isQueryFailure } from '@artifactbin/contracts/sql';
-import { fakeSql, noopBrowser, noopSql } from '@artifactbin/utils';
+import { fakeSql, noopBrowser, noopSql } from '@artifactbin/utils/fakes';
 
 describe('noops', () => {
   it('sql answers a failure per query, and refuses a dry-run', async () => {

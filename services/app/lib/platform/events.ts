@@ -11,7 +11,7 @@
  * take, or a payload of the wrong shape, is a compile error.
  */
 import type { EventEnvelope, EventPayload, EventVerb, ObjectKind } from '@artifactbin/contracts/events';
-import { envelope as build, type EventObject, type EventSubject } from '@artifactbin/utils';
+import { envelope as build, type EventObject, type EventSubject } from '@artifactbin/utils/events';
 import { services } from './services';
 
 export type { EventObject, EventSubject };

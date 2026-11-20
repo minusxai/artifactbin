@@ -9,7 +9,7 @@ import {createHash,timingSafeEqual} from 'node:crypto';
 import {IDENTITY_SCHEMA} from '@artifactbin/contracts/identity-service';
 import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts/routes';
 import {parseServiceAudiences, type ServiceAudience} from '@artifactbin/contracts/service-audiences';
-import {BodyTooLargeError,readBody} from '@artifactbin/utils';
+import {BodyTooLargeError, readBody} from '@artifactbin/utils/body';
 import type {Context} from 'hono';
 import type {AuthEnv,AuthOptions} from './parts';
 import {readEnv} from './env';

@@ -7,7 +7,7 @@ import http from 'node:http';
 import { format } from 'node:util';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { SERVICE_AUTH_HEADER } from '@artifactbin/contracts/routes';
-import { httpClient, jsonServer } from '@artifactbin/utils';
+import { httpClient, jsonServer } from '@artifactbin/utils/http';
 
 /** POST with the request target EXACTLY as written — `fetch` may normalise a path, and what the server sees in `req.url` is the whole point below. */
 function rawPost(base: string, path: string, body: string): Promise<number> {

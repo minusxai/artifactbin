@@ -8,7 +8,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { URL_SPACE, URL_SPACE_PATH, classifyPath, documentHostServes, isScreenPath, ownerHostServes } from '@artifactbin/contracts/url-space';
-import { isBuildAssetPath } from '@artifactbin/utils';
+import { isBuildAssetPath } from '@artifactbin/utils/build-assets';
 import { ROUTES } from '../routes.generated';
 import { createAppServer } from '../app';
 

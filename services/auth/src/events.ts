@@ -1,6 +1,6 @@
 /** Login lifecycle events, independent of deployment transport. */
 import type { EventEnvelope, EventPayload, EventsService, EventVerb, ObjectKind } from '@artifactbin/contracts/events';
-import { envelope, type EventObject, type EventSubject } from '@artifactbin/utils';
+import { envelope, type EventObject, type EventSubject } from '@artifactbin/utils/events';
 
 type AuthSubject = EventSubject;
 type AuthObject<K extends ObjectKind = ObjectKind> = EventObject<K>;
