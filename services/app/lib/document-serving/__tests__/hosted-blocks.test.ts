@@ -16,7 +16,8 @@ import { GET as flatHost } from '@/app/af/host.js/route';
 import { GET as flatHostComments } from '@/app/af/host-comments.js/route';
 import { GET as flatComponent } from '@/app/af/components/[file]/route';
 import { retainedPublicAssets } from '@/lib/html-runtime/server';
-import { HTML_SYSTEM_NAMES, THEME_TOKENS } from '@/lib/html-systems';
+import { HTML_SYSTEM_NAMES, THEME_TOKENS, setDefaultHtmlSystem, setInstallationDesignSystem } from '@/lib/html-systems';
+import { readInstallationDesignSystem } from '@/lib/html-systems/server';
 import hosted from '../../html-components/hosted.json';
 import { useAppHarness, params } from '@/__tests__/harness';
 
@@ -94,6 +95,33 @@ it('names every public component, the stylesheets and the host module at immutab
   expect(commentsSource).toContain('mountHostComments');
   expect(m.integrity[m.hostComments]).toBe(sri(commentsSource));
   expect(hostSource).toContain(m.hostComments);
+});
+
+it('names the installation design system as the default, first, with its sheet pinned, and drops it when unset', async () => {
+  const unset = await (await manifestRoute(new Request(`${APP}/af/manifest.json`))).text();
+  expect(JSON.parse(unset)).not.toHaveProperty('defaultDesignSystem');
+  // The Harbor fixture (lib/html-systems/__tests__/fixtures/harbor), read as the boot reads APP__DESIGN_SYSTEM_DIR.
+  setInstallationDesignSystem(readInstallationDesignSystem(path.resolve('lib/html-systems/__tests__/fixtures/harbor')));
+  try {
+    const manifest = await (await manifestRoute(new Request(`${APP}/af/manifest.json`))).json() as Manifest & { defaultDesignSystem?: string };
+    expect(manifest.defaultDesignSystem).toBe('harbor');
+    expect(Object.keys(manifest.designSystems)).toEqual(['harbor', ...HTML_SYSTEM_NAMES]);
+    expect(manifest.designSystems.harbor).toMatchObject({ label: 'Harbor', defaultMode: 'light', dark: true });
+    const sheet = await pinned(manifest.designSystems.harbor!.styles);
+    const body = await sheet.text();
+    expect(sheet.status).toBe(200);expect(body).toContain(':root[data-af-design-system="harbor"]');
+    expect(manifest.integrity[manifest.designSystems.harbor!.styles]).toBe(sri(body));
+    expect(await (await pinned(manifest.styles)).text()).toContain(':root[data-af-design-system="harbor"]');
+  } finally { setInstallationDesignSystem(null); }
+  expect(await (await manifestRoute(new Request(`${APP}/af/manifest.json`))).text()).toBe(unset);
+  // A built-in named as the default (APP__DEFAULT_DESIGN_SYSTEM): the same entries, and the field names it.
+  setDefaultHtmlSystem('graphite');
+  try {
+    const named = await (await manifestRoute(new Request(`${APP}/af/manifest.json`))).json() as Manifest & { defaultDesignSystem?: string };
+    expect(named.defaultDesignSystem).toBe('graphite');
+    expect(named.designSystems).toEqual((JSON.parse(unset) as Manifest).designSystems);
+  } finally { setDefaultHtmlSystem(null); }
+  expect(await (await manifestRoute(new Request(`${APP}/af/manifest.json`))).text()).toBe(unset);
 });
 
 it('keeps answering a bundle an earlier deploy built, and refuses what it never stored or that was tampered with', async () => {

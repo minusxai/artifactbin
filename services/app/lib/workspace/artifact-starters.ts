@@ -34,8 +34,18 @@ const DOC_LAYOUT_CSS = [
  * owner types into it the moment it opens (`template: 'doc'` is what the page reads to open it, solid/pages/Document).
  * Its `<title>` follows its first heading on each region save until someone renames it (lib/artifacts doc-title).
  */
-function docStarterHtml(): string {
-  return `<!doctype html><html lang="en">${head(UNTITLED_DOCUMENT, `<meta name="artifactbin:design-system" content="meridian"><style>${DOC_LAYOUT_CSS}</style>`)}<body><main><article data-af-editable="rich-native-v1" class="af-markdown-body"><h1></h1><p></p></article></main></body></html>`;
+function docStarterHtml(designSystem = 'meridian'): string {
+  return `<!doctype html><html lang="en">${head(UNTITLED_DOCUMENT, `<meta name="artifactbin:design-system" content="${designSystem}"><style>${DOC_LAYOUT_CSS}</style>`)}<body><main><article data-af-editable="rich-native-v1" class="af-markdown-body"><h1></h1><p></p></article></main></body></html>`;
+}
+
+/**
+ * A browser create body (POST /api/my/artifacts) with a server default design system (lib/html-systems
+ * defaultHtmlSystem) applied: the untouched doc starter, byte for byte, becomes the same starter in `designSystem`;
+ * any other body comes back as it is (the browser builds the starter and has no registry).
+ */
+export function withStarterDesignSystem(body: unknown, designSystem: string): unknown {
+  if (!body || typeof body !== 'object' || (body as { template?: unknown }).template !== 'doc' || (body as { html?: unknown }).html !== docStarterHtml()) return body;
+  return { ...body, html: docStarterHtml(designSystem) };
 }
 
 /** The page an agent handoff starts from (`/api/start`): a bare titled page the agent replaces whole. */

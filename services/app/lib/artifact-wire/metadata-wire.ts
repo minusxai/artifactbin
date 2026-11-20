@@ -4,7 +4,7 @@ import { writerFor } from '@/lib/artifact-access';
 import { shareTargetsRefusal, TEST_ACCOUNT_RESTRICTED, type AccessActor } from '@/lib/accounts';
 import {STORY_DESIGN_NAMES,STORY_TEMPLATE_NAMES} from '@/lib/validation';
 import {Reply,reply} from '@/lib/http';
-import {HTML_SYSTEM_NAMES,isHtmlSystem} from '@/lib/html-systems';
+import {htmlSystemNames,isHtmlSystem} from '@/lib/html-systems';
 import {validateDatasetPolicyForRow} from '@/lib/datasets';
 export async function updateMetadataFromBody(actor:AccessActor,id:string,body:Record<string,unknown>,base:string,dryRun=false):Promise<Reply>{
  if(['document_update','markup','jsx','markdown','source','operations','annotation_ops','edit_id','old_string','new_string'].some(key=>Object.hasOwn(body,key)))return reply({error:'native_html_required',hint:'Replace page content with the complete html field and observed expectedVersion/expectedState through PUT. Metadata PATCH accepts metadata fields only.'},400);
@@ -25,8 +25,8 @@ export async function updateMetadataFromBody(actor:AccessActor,id:string,body:Re
   const value=body[key];if(value===undefined)continue;
   if(value!==null&&typeof value!=='string')return reply({error:'invalid_metadata',field:key},400);
   // An HTML page's theme is its owner's design-system choice: one of the systems the platform stylesheet carries, or null.
-  if(key==='theme'&&value!==null&&current.format==='html'&&!isHtmlSystem(value))return reply({error:'unknown_theme',allowed:HTML_SYSTEM_NAMES},400);
-  if(key==='theme'&&value!==null&&!STORY_DESIGN_NAMES.includes(value as never))return reply({error:'unknown_theme',allowed:STORY_DESIGN_NAMES},400);
+  if(key==='theme'&&value!==null&&current.format==='html'&&!isHtmlSystem(value))return reply({error:'unknown_theme',allowed:htmlSystemNames()},400);
+  if(key==='theme'&&value!==null&&current.format!=='html'&&!STORY_DESIGN_NAMES.includes(value as never))return reply({error:'unknown_theme',allowed:STORY_DESIGN_NAMES},400);
   if(key==='template'&&value!==null&&!STORY_TEMPLATE_NAMES.includes(value as never))return reply({error:'unknown_template',allowed:STORY_TEMPLATE_NAMES},400);
   if(key==='colorMode'&&value!==null&&value!=='light'&&value!=='dark')return reply({error:'unknown_color_mode'},400);
   Object.assign(patch,{[key]:value});

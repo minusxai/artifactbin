@@ -22,8 +22,7 @@ import { createHash } from 'node:crypto';
 import { publicComponentFiles } from '@/lib/libraries/server';
 import { hostedComponentEntries } from '@/lib/libraries';
 import { buildHtmlAssets, hostCommentsPath, createSourceRetention, retainedPublicAssets, type SourceRetention } from '@/lib/html-runtime/server';
-import { HTML_SYSTEM_NAMES, HTML_SYSTEM_LABELS, PLATFORM_FONTS_PATH, THEME_ATTRIBUTES, THEME_TOKENS, OPTIONAL_THEME_TOKENS, htmlSystemsCss } from '@/lib/html-systems';
-import { HTML_SYSTEM_MODES } from '@/lib/validation/html-system-modes';
+import { PLATFORM_FONTS_PATH, THEME_ATTRIBUTES, THEME_TOKENS, OPTIONAL_THEME_TOKENS, defaultHtmlSystem, designSystemsManifest, htmlSystemNames, htmlSystemsCss, installationDesignSystem } from '@/lib/html-systems';
 import { matchingTag, publicRevalidatedResponse } from '@/lib/http';
 import { NO_STORE, PUBLIC_IMMUTABLE } from './cache-control';
 
@@ -54,11 +53,14 @@ async function blocks(): Promise<Blocks> {
   const [assets, files] = await Promise.all([buildHtmlAssets(), publicComponentFiles()]);
   // A development rebuild of the components changes their bytes: the key (their per-file digests, read once per file
   // by lib/libraries/components.server) follows them, so the manifest does too. The bundle is assembled only then.
-  const key = sha256(JSON.stringify([files ? sorted(files).map(([name, file]) => [name, file.etag]) : null, assets.host ?? '', assets.hostComments ?? '']));
+  // The installation design system and the default (both registered at boot) are in the key too: the manifest names them.
+  const installed = installationDesignSystem(), chosen = defaultHtmlSystem();
+  const key = sha256(JSON.stringify([files ? sorted(files).map(([name, file]) => [name, file.etag]) : null, assets.host ?? '', assets.hostComments ?? '', ...(installed ? [installed.rules] : []), ...(chosen ? [chosen] : [])]));
   if (current?.key === key) return current.blocks;
   const pending = (async (): Promise<Blocks> => {
     const text = files ? bundleText(files) : null;
-    const sheets = { all: assets.systems ?? htmlSystemsCss(), ...Object.fromEntries(HTML_SYSTEM_NAMES.map(name => [name, htmlSystemsCss([name])])) } as Record<string, string>;
+    // A supplied build's sheet predates the boot's installation system: with one, the whole sheet is assembled here.
+    const sheets = { all: (installed ? null : assets.systems) ?? htmlSystemsCss(), ...Object.fromEntries(htmlSystemNames().map(name => [name, htmlSystemsCss([name])])) } as Record<string, string>;
     const retention = {
       components: createSourceRetention(text ? [text] : [], stores.components, sha256),
       styles: createSourceRetention(Object.values(sheets), stores.styles, sha256),
@@ -82,7 +84,7 @@ async function blocks(): Promise<Blocks> {
       version: 1,
       components,
       styles: styleUrl(sheets.all!),
-      designSystems: Object.fromEntries(HTML_SYSTEM_NAMES.map(name => [name, { label: HTML_SYSTEM_LABELS[name], defaultMode: HTML_SYSTEM_MODES[name], styles: styleUrl(sheets[name]!) }])),
+      ...designSystemsManifest(styleUrl),
       fonts: PLATFORM_FONTS_PATH,
       ...(host ? { host } : {}),
       ...(hostComments ? { hostComments } : {}),

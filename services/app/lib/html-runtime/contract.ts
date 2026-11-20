@@ -50,7 +50,7 @@ export interface HtmlRuntimeConfig {
   /** The version's script fingerprint (lib/html-autofix scriptFingerprint): equal values run identical code, so a new version may be morphed in place. */
   scriptFingerprint?: string;
   /** What the core sets on <html> at load (D4): the design system, when the page has one, and the default colour mode. The viewer's own choice (`?mx-mode=`, reader messages) wins over `mode`. */
-  appearance?: { designSystem?: string; mode: 'light' | 'dark' };
+  appearance?: { designSystem?: string; mode: 'light' | 'dark'; lightOnly?: true };
   /** Local preview marker; never an account capability or executable data transport. */
   localPreview?: object;
 }

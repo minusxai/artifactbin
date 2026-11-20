@@ -506,6 +506,23 @@ env('SKILLS', 'EXTRA_DIR');
 export const skillExtrasDir = (): string | null => env('SKILLS', 'EXTRA_DIR')?.trim() || null;
 
 /**
+ * APP__DESIGN_SYSTEM_DIR: a directory this process can read holding one design system of the operator's own
+ * (`system.json` and the .woff2 files it names; lib/html-systems installation.server says the format and its checks),
+ * served like a built-in, and this server's default unless APP__DEFAULT_DESIGN_SYSTEM names another. Read once at boot;
+ * invalid: no boot. Unset, the default: the built-in systems only, unchanged.
+ */
+env('APP', 'DESIGN_SYSTEM_DIR');
+export const designSystemDir = (): string | null => env('APP', 'DESIGN_SYSTEM_DIR')?.trim() || null;
+
+/**
+ * APP__DEFAULT_DESIGN_SYSTEM: the name of this server's default design system, a built-in's or the installation
+ * system's (APP__DESIGN_SYSTEM_DIR) slug. Unset: the installation system when there is one, else no default (as
+ * before). Checked at boot (lib/html-systems installation.server); a name this server does not serve: no boot.
+ */
+env('APP', 'DEFAULT_DESIGN_SYSTEM');
+export const defaultDesignSystemName = (): string | null => env('APP', 'DEFAULT_DESIGN_SYSTEM')?.trim() || null;
+
+/**
  * TRUST__GROUP_APPROVALS: `on` (unset, the default) lets a group's admins approve, for every member of the group and
  * its subgroups, the exact addresses a page may call or load data from (lib/trust/group-trust); `off` offers no such
  * choice, refuses the group addresses API (`group_approvals_disabled`) and ignores the stored approvals, which are kept.

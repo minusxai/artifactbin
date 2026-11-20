@@ -17,7 +17,7 @@ import { buildDocumentCsp, markupCsp,appendCspExtensions } from '@/lib/page-styl
 import {EMPTY_CSP_EXTENSIONS,type CspExtensions} from '@/lib/document';
 import {declaredCspExtensions} from '@/lib/trust';
 import { ASSETS_ORIGIN, embedTrustedOrigins } from '@/lib/platform';
-import { PLATFORM_FONTS_PATH, PLATFORM_STYLES_PATH, htmlSystemsCss, isHtmlSystem } from '@/lib/html-systems';
+import { PLATFORM_FONTS_PATH, PLATFORM_STYLES_PATH, htmlSystemsCss, installationDesignSystem, isHtmlSystem } from '@/lib/html-systems';
 import {libraryImports,libraryVersions} from '@/lib/libraries';
 import {identifySourceElements} from '@/lib/html-page';
 import { parse, type DefaultTreeAdapterMap } from 'parse5';
@@ -154,7 +154,8 @@ export async function nativeHtmlModuleResponse(request:Request,module:NativeHtml
 export async function nativeHtmlSystemsResponse(request:Request):Promise<Response>{
  const system=new URL(request.url).searchParams.get('system');
  if(system!==null)return isHtmlSystem(system)?publicRevalidatedResponse(request,htmlSystemsCss([system]),'text/css; charset=utf-8'):new Response('Not found',{status:404});
- const {systems}=await htmlAssets();
+ // A supplied build's sheet predates the boot's installation system: with one, the whole sheet is assembled here.
+ const systems=installationDesignSystem()?htmlSystemsCss():(await htmlAssets()).systems;
  if(!systems)return new Response('Not found',{status:404});
  return publicRevalidatedResponse(request,systems,'text/css; charset=utf-8');
 }

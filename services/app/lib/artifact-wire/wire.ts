@@ -18,7 +18,7 @@ import { DATASET_ACCESS, SHARE_ROLES, type DatasetAccess, type ShareEntry, type 
 import { PARENT_REFUSED, artifactState, isParentRefusal, parentOf, resolveParent, type ArtifactRow, type ArtifactSummary, type ReplaceOpts, type VersionContent } from '@/lib/artifacts';
 import { rawUrl } from '@/lib/dataflow';
 import { ALLOW_PUBLIC_VISIBILITY, ID_RE } from '@/lib/platform';
-import { resolveStoredStoryDesign } from '@/lib/html-systems';
+import { designSystemChoice, resolveStoredStoryDesign } from '@/lib/html-systems';
 import { Reply, reply } from '@/lib/http';
 
 const safeJson = (s: string): unknown => { try { return JSON.parse(s); } catch { return null; } };
@@ -161,7 +161,8 @@ export async function artifactToWire(row: ArtifactRow, base: string, openAnnotat
     // round-trips them, so every echo carries the open COUNT as the signal;
     // the artifact GET additionally inlines the full open set.
     ...(isDoc ? { open_annotations: openAnnotations } : {}),
-    theme: design.theme,
+    // An HTML page's owner choice may be the installation design system, which the story vocabulary does not hold.
+    theme: (isDoc ? designSystemChoice(meta) : null) ?? design.theme,
     ...(format === 'dataset'
       ? {
           // The write ACL, beside the read one — an agent has to know before

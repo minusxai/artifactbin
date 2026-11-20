@@ -96,27 +96,44 @@ comments (every page you may see): `node scripts/events.mjs watch --help`.
   from someone else's public API: `fetch` it (declare its origin in `csp-connect`, below). No code
   of yours runs on the server: a page reads and writes datasets only.
   If no starter fits, write the page yourself.
-  Keep the starter's design system unless the user names one; then set its `<meta
-  name="artifactbin:design-system" content="NAME">` to a name from the table (the platform serves
+  [% if defaultSystem %]Use this server's default design system, `[[ defaultSystem.slug ]]`
+  (marked in the table), unless the user names another: set the starter's `<meta
+  name="artifactbin:design-system" content="NAME">` to it, or to the name they chose; the other
+  systems stay available (the platform serves[% else %]Keep the starter's design system unless the
+  user names one; then set its `<meta name="artifactbin:design-system" content="NAME">` to a name
+  from the table (the platform serves[% endif %]
   its stylesheet and fonts). Keep viewer-local state in `state` from `@afbin/state`
   ([runtime](references/runtime.md)); state everyone sees lives in a dataset. Screens, routes,
   dialogs and where the page runs: [page apps](references/page-apps.md).
   | Name | Mood | Fits |
   |---|---|---|
-  | `volta` | Loud | Data products, dashboards, launch pages |
-  | `phosphor` | Technical | Dev tools, CI, logs, status pages |
-  | `drafting` | Technical | Plans, specs, explainers, process stories |
-  | `meridian` | Sleek, Professional | Product dashboards, docs, SaaS marketing |
-  | `graphite` | Quiet, Analytical | Analytics apps, internal apps and tools |
-  | `dossier` | Evidential | Plans, reports, post-mortems, long features |
-  | `riso` | Printed | Scrolly stories, picture-book explainers, posters, zines |
-  | `almanac` | Warm | Scrolly explainers, landing pages, long reads, annual reports |
-  | `redline` | Poster | Slides, decision briefs, launch pages, posters |
-  | `nocturne` | Atmospheric | Long reads, features, evening and culture subjects |
-  | `broadsheet` | Editorial | Features, reports, newsletters, long reads |
-  | `signout` | Utilitarian | Booking apps, intake forms, rosters, inventories |
-  | `sorbet` | Fun | Consumer apps, launches, kids and food, celebrations, playful data |
-  | `arcade` | Fun | Games, launches, leaderboards, playful dashboards, teaching |
+[% if installedSystem %]
+  | `[[ installedSystem.slug ]]` | [[ installedSystem.mood ]] | [[ fits(installedSystem.slug,
+  installedSystem.fits) ]] |
+[% endif %]
+  | `volta` | Loud | [[ fits('volta', 'Data products, dashboards, launch pages') ]] |
+  | `phosphor` | Technical | [[ fits('phosphor', 'Dev tools, CI, logs, status pages') ]] |
+  | `drafting` | Technical | [[ fits('drafting', 'Plans, specs, explainers, process stories') ]] |
+  | `meridian` | Sleek, Professional | [[ fits('meridian',
+  'Product dashboards, docs, SaaS marketing') ]] |
+  | `graphite` | Quiet, Analytical | [[ fits('graphite',
+  'Analytics apps, internal apps and tools') ]] |
+  | `dossier` | Evidential | [[ fits('dossier', 'Plans, reports, post-mortems, long features') ]] |
+  | `riso` | Printed | [[ fits('riso',
+  'Scrolly stories, picture-book explainers, posters, zines') ]] |
+  | `almanac` | Warm | [[ fits('almanac',
+  'Scrolly explainers, landing pages, long reads, annual reports') ]] |
+  | `redline` | Poster | [[ fits('redline', 'Slides, decision briefs, launch pages, posters') ]] |
+  | `nocturne` | Atmospheric | [[ fits('nocturne',
+  'Long reads, features, evening and culture subjects') ]] |
+  | `broadsheet` | Editorial | [[ fits('broadsheet',
+  'Features, reports, newsletters, long reads') ]] |
+  | `signout` | Utilitarian | [[ fits('signout',
+  'Booking apps, intake forms, rosters, inventories') ]] |
+  | `sorbet` | Fun | [[ fits('sorbet',
+  'Consumer apps, launches, kids and food, celebrations, playful data') ]] |
+  | `arcade` | Fun | [[ fits('arcade',
+  'Games, launches, leaderboards, playful dashboards, teaching') ]] |
   - Set `<title>` to the page's name: the browser tab and link previews show it.
   - Design: start from the reader's decision; give the opening a concrete point and let typography
     set the hierarchy (no identical cards for every paragraph). Use real data in charts, label

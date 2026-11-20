@@ -1,0 +1,139 @@
+{
+ "slug": "harbor",
+ "name": "Harbor",
+ "mood": "Calm",
+ "jobs": "Reports, dashboards and internal tools",
+ "tagline": "Teal on navy, quiet grounds.",
+ "color_mode": "light",
+ "families": {
+  "display": "\"Harbor Sans\", system-ui, sans-serif",
+  "sans": "\"Harbor Sans\", system-ui, sans-serif",
+  "mono": "ui-monospace, Menlo, monospace"
+ },
+ "fonts": [
+  {
+   "family": "Harbor Sans",
+   "file": "harbor-sans.woff2",
+   "weight": "400 700"
+  }
+ ],
+ "tokens": [
+  {
+   "name": "canvas",
+   "light": "#FFFFFF",
+   "dark": "#0B1622",
+   "usage": "Page ground."
+  },
+  {
+   "name": "surface",
+   "light": "#FFFFFF",
+   "dark": "#102030"
+  },
+  {
+   "name": "sunk",
+   "light": "#F1F6F7",
+   "dark": "#0E1B29"
+  },
+  {
+   "name": "tint",
+   "light": "#E3EEF0",
+   "dark": "#1A2E40"
+  },
+  {
+   "name": "line",
+   "light": "#D3DFE2",
+   "dark": "#24384A"
+  },
+  {
+   "name": "ink",
+   "light": "#0E2233",
+   "dark": "#E6EEF2",
+   "usage": "Text."
+  },
+  {
+   "name": "ink-soft",
+   "light": "#4A5D6B",
+   "dark": "#9FB3C1"
+  },
+  {
+   "name": "on-teal",
+   "light": "#FFFFFF",
+   "dark": "#0B1622"
+  },
+  {
+   "name": "teal",
+   "light": "#0B6E6E",
+   "dark": "#4FC3C0"
+  },
+  {
+   "name": "teal-soft",
+   "light": "#DDF0EF",
+   "dark": "#12393A"
+  },
+  {
+   "name": "negative",
+   "light": "#B42318",
+   "dark": "#F97066"
+  },
+  {
+   "name": "navy",
+   "light": "#1D3557",
+   "dark": "#8FB3DE"
+  },
+  {
+   "name": "amber",
+   "light": "#B7791F",
+   "dark": "#F6C35B"
+  },
+  {
+   "name": "coral",
+   "light": "#D9634C",
+   "dark": "#F2917F"
+  }
+ ],
+ "contract": {
+  "background": "canvas",
+  "foreground": "ink",
+  "card": "surface",
+  "card-foreground": "ink",
+  "popover": "surface",
+  "popover-foreground": "ink",
+  "primary": "teal",
+  "primary-foreground": "on-teal",
+  "secondary": "tint",
+  "secondary-foreground": "ink",
+  "muted": "sunk",
+  "muted-foreground": "ink-soft",
+  "accent": "teal-soft",
+  "accent-foreground": "ink",
+  "destructive": "negative",
+  "destructive-foreground": "on-teal",
+  "border": "line",
+  "input": "line",
+  "ring": "teal",
+  "chart-1": "teal",
+  "chart-2": "navy",
+  "chart-3": "amber",
+  "chart-4": "coral",
+  "chart-5": "ink-soft"
+ },
+ "radius_contract": "15px",
+ "radius_scale": {
+  "md": "100px"
+ },
+ "type_roles": [
+  {
+   "name": "title",
+   "family": "display",
+   "size": "18px",
+   "lh": "24px",
+   "weight": 600
+  }
+ ],
+ "chart_series": [
+  "teal",
+  "navy",
+  "amber",
+  "coral"
+ ]
+}

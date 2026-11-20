@@ -2,11 +2,12 @@
  * The query image end to end: the worker draws real PNGs through the page's pipeline; untrusted input is bounded; a
  * slow chart is cut off and the thread replaced; a full queue says busy; and nothing a spec names is ever fetched.
  */
-import { writeFile } from 'node:fs/promises';
+import { copyFile, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import sharp from 'sharp';
 import { afterAll, afterEach, describe, expect, it, vi, onTestFinished } from 'vitest';
-import { DESIGN_SYSTEM_VARIABLES } from '@/lib/html-systems/server';
+import { DESIGN_SYSTEM_VARIABLES, readInstallationDesignSystem } from '@/lib/html-systems/server';
+import { setInstallationDesignSystem } from '@/lib/html-systems';
 import { parseChartDescription } from '@/lib/html-component-specs/chart-spec';
 import { CHART_IMAGE_LIMITS, configureChartRenderer, renderChartImage } from '../chart-image.server';
 import { drawChart, imageTokens, inertSvg, type ChartDrawJob } from '../chart-draw.server';
@@ -35,6 +36,20 @@ describe('renderChartImage', () => {
     const dark = await renderChartImage({ chart: { vegaLite: bar }, rows, width: 320, height: 200, theme: 'dark', designSystem: 'volta' }, DESIGN_SYSTEM_VARIABLES);
     expect(dark).toMatchObject({ ok: true, width: 320, height: 200 });
     if (dark.ok) expect(await pixel(dark.png, 1, 1)).toBe(imageTokens(DESIGN_SYSTEM_VARIABLES.variables('volta', 'dark'), 'dark').surface);
+  });
+
+  it('draws a light-only installation system light even when dark is asked for', async () => {
+    // The Harbor fixture (lib/html-systems/__tests__/fixtures/harbor) without its dark values.
+    const fixture = path.resolve('lib/html-systems/__tests__/fixtures/harbor'), dir = await tempDir('chart-light-only-', onTestFinished);
+    const spec = JSON.parse(await readFile(path.join(fixture, 'system.json'), 'utf8')) as { tokens: Array<Record<string, string>> };
+    spec.tokens = spec.tokens.map(({ dark: _dark, ...token }) => token);
+    await writeFile(path.join(dir, 'system.json'), JSON.stringify(spec));
+    await copyFile(path.join(fixture, 'harbor-sans.woff2'), path.join(dir, 'harbor-sans.woff2'));
+    setInstallationDesignSystem(readInstallationDesignSystem(dir));
+    onTestFinished(() => setInstallationDesignSystem(null));
+    const drawn = await renderChartImage({ chart: bar, rows, width: 320, height: 200, theme: 'dark', designSystem: 'harbor' }, DESIGN_SYSTEM_VARIABLES);
+    expect(drawn).toMatchObject({ ok: true });
+    if (drawn.ok) expect(await pixel(drawn.png, 1, 1)).toBe(imageTokens(DESIGN_SYSTEM_VARIABLES.variables('harbor', 'light'), 'light').surface);
   });
 
   it('draws a recipe and a raw Vega spec, keeping a native spec its own size within the box', async () => {

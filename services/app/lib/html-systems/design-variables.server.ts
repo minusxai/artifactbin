@@ -6,7 +6,8 @@
  * browser and skill bundles import.
  */
 import { HTML_SYSTEMS } from './html-systems.ts';
-import { HTML_SYSTEM_MODES } from '../validation/html-system-modes.ts';
+import { htmlSystemMode, installationDesignSystem, isKnownHtmlSystem, isLightOnlyHtmlSystem } from '../validation/installation-design-system.ts';
+import { htmlSystemNames } from './index';
 
 type Mode = 'light' | 'dark';
 const cache = new Map<string, Readonly<Record<string, string>>>();
@@ -23,21 +24,24 @@ function block(rules: string, selector: string): Record<string, string> {
 
 /** The named system's variables in `mode`; null when no system has that name. */
 function designSystemVariables(name: string, mode: Mode): Readonly<Record<string, string>> | null {
-  if (!Object.hasOwn(HTML_SYSTEMS, name)) return null;
-  const key = `${name}:${mode}`;
-  let found = cache.get(key);
+  if (!isKnownHtmlSystem(name)) return null;
+  const installed = installationDesignSystem();
+  const rules = installed?.slug === name ? installed.rules : HTML_SYSTEMS[name as keyof typeof HTML_SYSTEMS].rules;
+  // Built-ins are cached; the installation system's (set at boot, replaceable in tests) is read from its rules.
+  const key = installed?.slug === name ? null : `${name}:${mode}`;
+  let found = key ? cache.get(key) : undefined;
   if (!found) {
-    const rules = HTML_SYSTEMS[name as keyof typeof HTML_SYSTEMS].rules;
     const root = `:root[data-af-design-system="${name}"]`;
     found = Object.freeze({ ...block(rules, `:where(${root})`), ...(mode === 'dark' ? block(rules, `:where(${root}[data-af-dark="true"])`) : {}) });
-    cache.set(key, found);
+    if (key) cache.set(key, found);
   }
   return found;
 }
 
 /** What a chart drawn outside a page reads of the design systems: their names, opening modes and variables. */
 export const DESIGN_SYSTEM_VARIABLES = {
-  names: Object.keys(HTML_SYSTEM_MODES) as readonly string[],
-  defaultMode: (name: string): Mode => HTML_SYSTEM_MODES[name] ?? 'light',
+  get names(): readonly string[] { return htmlSystemNames(); },
+  defaultMode: (name: string): Mode => htmlSystemMode(name),
   variables: designSystemVariables,
+  lightOnly: isLightOnlyHtmlSystem,
 };

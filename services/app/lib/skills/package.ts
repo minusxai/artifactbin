@@ -6,11 +6,14 @@ import {isShippedSkillTopic} from './public-surface';
 import {renderTree,skillFileWithFrontmatter} from './serve';
 import {skillExtraName,type SkillExtras} from './extras';
 import type {SkillTree} from './tree';
+import {installationDesignSystem} from '@/lib/html-systems';
 /** `extras` (./extras) join under `extras/` only, and SKILL.md then names their index. */
 export function skillPackageFiles(tree:SkillTree,base:string,assets:SkillPackageAssets=loadSkillAssets(),extras:SkillExtras|null=null):Record<string,string>{
  for(const name of Object.keys(assets))if(!skillAssetName(name))throw Error(`Unsupported skill asset: ${name}`);
  for(const name of Object.keys(extras?.files??{}))if(!skillExtraName(name))throw Error(`Unsupported skill extra: ${name}`);
- return {...extras?.files,...assets,...Object.fromEntries(renderTree(tree,base,true,extras!==null).filter(({file})=>!file.ref||isShippedSkillTopic(file.file.replace(/\.md$/,''))).map(({file,text})=>[file.path.replace(/^artifactbin\//,''),skillFileWithFrontmatter(file,text)]))};
+ // The installation design system's stylesheet (lib/html-systems, APP__DESIGN_SYSTEM_DIR) beside the built-ins'.
+ const system=installationDesignSystem();
+ return {...extras?.files,...assets,...(system?{[`design-systems/${system.slug}.css`]:system.css}:{}),...Object.fromEntries(renderTree(tree,base,true,extras!==null).filter(({file})=>!file.ref||isShippedSkillTopic(file.file.replace(/\.md$/,''))).map(({file,text})=>[file.path.replace(/^artifactbin\//,''),skillFileWithFrontmatter(file,text)]))};
 }
 /** Minimal stored ZIP: standard UTF-8 members, deterministic timestamps and CRC32.
  * Stored members preserve compatibility with already-installed managed updaters. No binary members: fonts load from the platform (D16). */
