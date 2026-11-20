@@ -4,7 +4,7 @@
  * INTERNAL means internal: the prefix is refused at the edge (proxy parts
  * `internalBoundary`, contracts `isInternalApiPath`), so no client can reach
  * this. Its one caller is the proxy's own device-approval exchange (proxy
- * routes/oauth `mintFor`), which calls the app over the upstream seam — a
+ * routes/grants `mintFor`), which calls the app over the upstream seam — a
  * Request the parts never saw — after a human approved the connection in the
  * browser. That approval IS the door; there is no public one.
  *

@@ -41,7 +41,7 @@ import {SERVICE_PAYLOAD_LIMIT,API_RESOURCE_PATH,HUMAN_SESSION_LIVE_PATH,IDENTITY
 import {BodyTooLargeError,readBody,serviceSecretMatches} from '@artifactbin/utils';
 import type {Context} from 'hono';
 import type {AuthEnv,AuthOptions} from './parts';
-import {acceptedOriginsOf,baseUrlOf} from './routes/oauth';
+import {acceptedOriginsOf,baseUrlOf} from './routes/grants';
 import {listServiceGroupSignInGrants,mintRunSignIn,mintServiceGroupSignIn} from './identity-store/accounts';
 import {identityTables} from './identity-store/tables';
 import {say} from './events';

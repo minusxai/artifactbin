@@ -2,7 +2,8 @@
 import {CODE_DELIVERY_HEADER, REVALIDATE_ACTOR_HEADER, ANONYMOUS, IDENTITY_SCHEMA, isGroupActor, isInternalApiPath, parseAliasOrigins, parseServiceAudiences, type Actor, type EventsService, type Part, type Queryable, type ServiceAudience, type TokenReader, type TransactionalQueryable, type Upstream} from '@artifactbin/contracts';
 import type {Hono} from 'hono';
 import {BodyTooLargeError,readBody,assemble,buildAssetRequest,buildAssetResponse,attachActor,actorOf} from '@artifactbin/utils';
-import {acceptedOriginsOf,baseUrlOf,mountOAuthRoutes,AUTH_BODY_LIMIT,payloadTooLarge,type GroupSignIns} from './routes/oauth';
+import {mountOAuthRoutes} from './routes/oauth';
+import {acceptedOriginsOf,baseUrlOf,AUTH_BODY_LIMIT,payloadTooLarge,type GroupSignIns} from './routes/grants';
 import {say} from './events';
 import {sessionAuthority} from './session-authority';
 import {groupServiceTokenKey,serviceTokenKey} from './identity/service-tokens';

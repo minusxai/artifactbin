@@ -438,6 +438,10 @@ describe('grant family revocation', () => {
   await ensureAuthSchema({query});
   expect((await post('/oauth/token',{grant_type:'refresh_token',client_id:grant.client_id,refresh_token:grant.refresh_token})).status).toBe(400);
  });
+ it('answers a token request whose JSON body is null as malformed, never a server error',async()=>{
+  const response=await app.request('/oauth/token',{method:'POST',headers:{'content-type':'application/json'},body:'null'});
+  expect(response.status).toBe(400);expect(await response.json()).toMatchObject({error:'invalid_request',error_description:'Malformed JSON body'});
+ });
  it('serializes two rotations so only one successor is published',async()=>{
   const grant=await issue();const body={grant_type:'refresh_token',client_id:grant.client_id,refresh_token:grant.refresh_token};
   const results=await Promise.all([post('/oauth/token',body),post('/oauth/token',body)]);
