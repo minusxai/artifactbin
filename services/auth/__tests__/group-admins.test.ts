@@ -1,13 +1,13 @@
 /**
  * THE ADMIN RULE (src/identity-store/rules.ts `groupAdminsSql`): an admin of a group is an effective admin of every live
  * group below it, through live groups only, with the nearest direct `admin` row as `via_group_id`; Editor and Member
- * never flow down. The identity module's own checks (`effectiveAdminVia`, `effectiveAdminGroupIds`) and the
+ * never flow down. The identity module's own checks (./group-access `effectiveAdminVia`, `effectiveAdminGroupIds`) and the
  * `group_admins` read view (src/identity-store/views.ts) are the same SQL, asserted here to give the same answers.
  */
 import {PGlite} from '@electric-sql/pglite';
 import {afterEach,beforeEach,expect,it} from 'vitest';
 import type {Queryable} from '@artifactbin/contracts';
-import {effectiveAdminGroupIds,effectiveAdminVia} from '../src/identity-store/groups';
+import {effectiveAdminGroupIds,effectiveAdminVia} from '../src/identity-store/group-access';
 import {identityTables} from '../src/identity-store/tables';
 import {identityViewColumns,identityViewStatements} from '../src/identity-store/views';
 
