@@ -78,7 +78,7 @@ jobs:
         continue-on-error: true
         run: |
           node scripts/ci/test-timings.mjs --apply tmp/node-timings/node-timings.json
-          for shard in 1/5 2/5 3/5 4/5 5/5; do
+          for shard in 1/7 2/7 3/7 4/7 5/7 6/7 7/7; do
             node node_modules/vitest/vitest.mjs run --config vitest.node-batch.config.ts --shard="$shard"
           done
       - if: steps.check.outcome != 'success'

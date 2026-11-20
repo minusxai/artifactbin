@@ -141,19 +141,19 @@ describe('pr fast\'s node files beyond the batch', () => {
   const choose = (changed, affected, budgetMs) => nodeAffectedFiles({ timings, changed, affected, candidates, batch: new Set(['cheap.test.ts']), lane: new Set(['listed.test.ts']), budgetMs });
 
   it('runs the node files the change adds or edits that no other part runs, shortest first, within the budget', () => {
-    // b is slow (20s, 22s with its import), new has no recorded time (the 3s median, 5s): both fit 30s. cheap runs in the
+    // b is slow (20s, 24s with its import), new has no recorded time (the 3s median, 7s): both fit 31s. cheap runs in the
     // batch, listed in its lane, api.test.ts is no node file.
     const changed = ['new.test.ts', 'b.test.ts', 'cheap.test.ts', 'listed.test.ts', 'api.test.ts', 'services/app/lib/x/index.ts'];
-    expect(choose(changed, [], 30_000)).toEqual({ must: ['b.test.ts', 'new.test.ts'], affected: [], deferred: [], deferredOwn: [] });
-    // Under 27s the shorter runs and the longer waits for the merge.
+    expect(choose(changed, [], 31_000)).toEqual({ must: ['b.test.ts', 'new.test.ts'], affected: [], deferred: [], deferredOwn: [] });
+    // Under 31s the shorter runs and the longer waits for the merge.
     expect(choose(changed, [], 10_000)).toEqual({ must: ['new.test.ts'], affected: [], deferred: ['b.test.ts'], deferredOwn: ['b.test.ts'] });
   });
 
   it('bounds a change that edits 150 node files: what fits the budget runs, the rest after merge', () => {
-    // #1433's first attempt edited 172 test files, every one ran, and pr fast took 72s. Unrecorded, each weighs 5s.
+    // #1433's first attempt edited 172 test files, every one ran, and pr fast took 72s. Unrecorded, each weighs 7s.
     const many = Array.from({ length: 150 }, (_, i) => `t${String(i).padStart(3, '0')}.test.ts`);
     const chosen = nodeAffectedFiles({ timings, changed: many, affected: [], candidates: new Set(many), batch: new Set(), lane: new Set(), budgetMs: NODE_AFFECTED_BUDGET_MS });
-    expect(chosen.must).toHaveLength(Math.floor(NODE_AFFECTED_BUDGET_MS / 5000));
+    expect(chosen.must).toHaveLength(Math.floor(NODE_AFFECTED_BUDGET_MS / (3000 + NODE_ISOLATED_FILE_MS)));
     expect([...chosen.must, ...chosen.deferredOwn].sort()).toEqual(many);
     expect(chosen.deferred).toEqual(chosen.deferredOwn);
   });
@@ -161,16 +161,16 @@ describe('pr fast\'s node files beyond the batch', () => {
   it('adds the files the change reaches, nearest first and shortest first, until the budget, and names the rest', () => {
     const reached = [['a', 2], ['c', 3], ['d', 1], ['e', 3], ['f', 2], ['b', 1], ['cheap', 1], ['listed', 1], ['g', 4]]
       .map(([name, distance]) => ({ file: `${name}.test.ts`, distance, nearest: { 'services/app/lib/x/index.ts': distance } }));
-    // Each weighs its recorded time and the import an isolated file pays (NODE_ISOLATED_FILE_MS, 2s): d (1, 4.0s), then
-    // a (2, 5.0s): 9.0s. f (2, 6.0s) does not fit 12.0s; e (3, 2.5s) does; c (3, 3.0s) would pass it. g has no record: it
+    // Each weighs its recorded time and the import an isolated file pays (NODE_ISOLATED_FILE_MS, 4s): d (1, 6.0s), then
+    // a (2, 7.0s): 13.0s. f (2, 8.0s) does not fit 17.5s; e (3, 4.5s) does; c (3, 5.0s) would pass it. g has no record: it
     // weighs the node median (3.0s) and its import, and does not fit either. b is the change's own, cheap and listed run elsewhere.
-    expect(NODE_ISOLATED_FILE_MS).toBe(2000);
-    // b, the change's own (22s), does not fit 12s: it waits for the merge and spends nothing.
-    const chosen = choose(['b.test.ts', 'services/app/lib/x/index.ts'], reached, 12_000);
+    expect(NODE_ISOLATED_FILE_MS).toBe(4000);
+    // b, the change's own (24s), does not fit 17.5s: it waits for the merge and spends nothing.
+    const chosen = choose(['b.test.ts', 'services/app/lib/x/index.ts'], reached, 17_500);
     expect(chosen).toEqual({ must: [], affected: ['d.test.ts', 'a.test.ts', 'e.test.ts'], deferred: ['b.test.ts', 'c.test.ts', 'f.test.ts', 'g.test.ts'], deferredOwn: ['b.test.ts'] });
-    expect(choose([], reached, 12_000).affected).toEqual(chosen.affected);
-    // The change's own files spend the budget first: at 30s b runs, and 8s is left for the reached ones (d, then e).
-    expect(choose(['b.test.ts', 'services/app/lib/x/index.ts'], reached, 30_000)).toEqual({ must: ['b.test.ts'], affected: ['d.test.ts', 'e.test.ts'], deferred: ['a.test.ts', 'c.test.ts', 'f.test.ts', 'g.test.ts'], deferredOwn: [] });
+    expect(choose([], reached, 17_500).affected).toEqual(chosen.affected);
+    // The change's own files spend the budget first: at 34.5s b runs, and 10.5s is left for the reached ones (d, then e).
+    expect(choose(['b.test.ts', 'services/app/lib/x/index.ts'], reached, 34_500)).toEqual({ must: ['b.test.ts'], affected: ['d.test.ts', 'e.test.ts'], deferred: ['a.test.ts', 'c.test.ts', 'f.test.ts', 'g.test.ts'], deferredOwn: [] });
     expect(NODE_AFFECTED_BUDGET_MS).toBe(45_000);
   });
 
@@ -185,8 +185,8 @@ describe('pr fast\'s node files beyond the batch', () => {
       { file: 'store.test.ts', distance: 2, nearest: { [hub]: 3, [store]: 2 } },
     ];
     const times = { files: { node: Object.fromEntries(reached.map(({ file }) => [file, file === 'store.test.ts' ? 3000 : 500])) } };
-    const chosen = nodeAffectedFiles({ timings: times, changed: [hub, store], affected: reached, candidates: new Set(reached.map(({ file }) => file)), batch: new Set(), lane: new Set(), budgetMs: 9_000 });
-    // h1 (rank 2, distance 1, 2.5s), then store.test.ts (rank 2, distance 2, 5.0s): 7.5s; the index's others (rank 6, 2.5s each) do not fit 9s.
+    const chosen = nodeAffectedFiles({ timings: times, changed: [hub, store], affected: reached, candidates: new Set(reached.map(({ file }) => file)), batch: new Set(), lane: new Set(), budgetMs: 11_500 });
+    // h1 (rank 2, distance 1, 4.5s), then store.test.ts (rank 2, distance 2, 7.0s): 11.5s; the index's others (rank 6, 4.5s each) do not fit.
     expect(chosen).toEqual({ must: [], affected: ['h1.test.ts', 'store.test.ts'], deferred: ['h2.test.ts', 'h3.test.ts', 'h4.test.ts', 'h5.test.ts', 'h6.test.ts'], deferredOwn: [] });
   });
 
