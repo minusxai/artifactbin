@@ -6,7 +6,7 @@
  * browser and skill bundles import.
  */
 import { HTML_SYSTEMS } from './html-systems.ts';
-import { htmlSystemMode, installationDesignSystem, isKnownHtmlSystem, isLightOnlyHtmlSystem } from '../validation/installation-design-system.ts';
+import { htmlSystemMode, installationDesignSystem, isKnownHtmlSystem, isLightOnlyHtmlSystem } from '../validation/index.ts';
 import { htmlSystemNames } from './index';
 
 type Mode = 'light' | 'dark';

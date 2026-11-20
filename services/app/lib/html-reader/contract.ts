@@ -236,6 +236,6 @@ export interface ArtifactVersionPing {
 /** Native version metadata; page bytes are read through the HTML door. */
 export interface ArtifactLiveEvent {
  editId:string;version:number;by:string|null;format:string;title:string|null;heading?:string|null;
- source:string|null;dataPreview:string|null;theme:import('@/lib/validation/story-theme-names').StoryDesignName|null;
+ source:string|null;dataPreview:string|null;theme:import('@/lib/validation').StoryDesignName|null;
  colorMode:'light'|'dark'|null;template:string|null;
 }

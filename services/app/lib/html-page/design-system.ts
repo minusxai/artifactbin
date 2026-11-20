@@ -10,7 +10,7 @@
  * Explicit .ts specifiers: the skill scripts load this module directly under Node in a source checkout.
  */
 import {applyEdits,attribute,parseSource,removeElement,type Edit,type Element,type SourceDocument} from './html-source.ts';
-import {htmlSystemMode,isKnownHtmlSystem,isLightOnlyHtmlSystem} from '../validation/installation-design-system.ts';
+import {htmlSystemMode,isKnownHtmlSystem,isLightOnlyHtmlSystem} from '../validation/index.ts';
 
 const DESIGN_SYSTEM_META = 'artifactbin:design-system';
 /** A built-in system, or the installation system the server registered at boot (lib/validation installation-design-system). */

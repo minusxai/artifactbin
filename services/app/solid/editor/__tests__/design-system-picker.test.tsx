@@ -4,7 +4,7 @@ import { createSignal } from 'solid-js';
 import { fireEvent, render } from '@/solid/__tests__/helpers';
 import { screen } from '@testing-library/dom';
 import { STORY_SYSTEMS } from '@/lib/html-systems/story-systems';
-import type { StoryDesignName } from '@/lib/validation/story-theme-names';
+import type { StoryDesignName } from '@/lib/validation';
 import ThemePicker, { ModeChip, TemplateChip } from '../ThemePicker';
 
 beforeEach(() => vi.stubGlobal('matchMedia', () => ({ matches: false, addEventListener() {}, removeEventListener() {} })));

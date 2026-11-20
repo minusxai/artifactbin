@@ -7,9 +7,8 @@
  */
 import {HTML_SYSTEMS,HTML_SYSTEM_FACES} from './html-systems.ts';
 import {MARKDOWN_CSS} from '../html-components/markdown-styles.ts';
-import {HTML_SYSTEM_MODES} from '../validation/html-system-modes.ts';
-import {defaultHtmlSystemName,htmlSystemMode,installationDesignSystem,isKnownHtmlSystem} from '../validation/installation-design-system.ts';
-export {installationDesignSystem,setDefaultHtmlSystem,setInstallationDesignSystem} from '../validation/installation-design-system.ts';
+import {HTML_SYSTEM_MODES,defaultHtmlSystemName,htmlSystemMode,installationDesignSystem,isKnownHtmlSystem} from '../validation/index.ts';
+export {installationDesignSystem,setDefaultHtmlSystem,setInstallationDesignSystem} from '../validation/index.ts';
 
 /** The platform stylesheet's one address: no version or hash, so a deploy shows up on the next load (ETag + no-cache). */
 export const PLATFORM_STYLES_PATH = '/af/styles.css';

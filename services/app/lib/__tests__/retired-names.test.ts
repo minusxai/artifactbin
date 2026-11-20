@@ -160,7 +160,7 @@ describe('retired names are dead names', () => {
  */
 describe('the surviving vocabulary', () => {
   it('is exactly six themes, and no theme guide teaches them any more', async () => {
-    const { STORY_THEME_NAMES } = await import('@/lib/validation/story-theme-names');
+    const { STORY_THEME_NAMES } = await import('@/lib/validation');
     expect([...STORY_THEME_NAMES]).toEqual(['modernist', 'organic', 'industry', 'terminal', 'manuscript', 'pop']);
     const documented = readdirSync(path.join(APP_ROOT, 'skills/artifactbin/references'))
       .filter((f) => f.startsWith('themes-'))

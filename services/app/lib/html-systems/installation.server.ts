@@ -40,8 +40,7 @@ import {createHash} from 'node:crypto';
 import {lstatSync,readdirSync,readFileSync,statSync} from 'node:fs';
 import path from 'node:path';
 import {defaultDesignSystemName,designSystemDir} from '@/lib/platform';
-import {HTML_SYSTEM_MODES} from '../validation/html-system-modes.ts';
-import {setDefaultHtmlSystem,setInstallationDesignSystem,type InstallationDesignSystem} from '../validation/installation-design-system.ts';
+import {HTML_SYSTEM_MODES,setDefaultHtmlSystem,setInstallationDesignSystem,type InstallationDesignSystem} from '../validation/index.ts';
 import {CONTRACT_KEYS,RADIUS_STEPS,STATUS_TOKENS,specHasDark,specRules,specStylesheet,type DesignSystemSpec} from './system-css';
 
 const SPEC_MAX_BYTES=64*1024;
