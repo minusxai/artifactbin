@@ -93,7 +93,7 @@ import { fakeBrowser } from '@artifactbin/utils';
 import { setServices } from '@/lib/platform';
 import { GET as exportImage } from '@/app/a/[id]/export/route';
 import { EXPORT_PNG } from '@/__tests__/export-helpers';
-import type { RenderRequest } from '@artifactbin/contracts';
+import type { RenderRequest } from '@artifactbin/contracts/browser';
 import { setArtifact } from '@/__tests__/rows';
 afterEach(()=>setServices({}));
 it('captures native HTML body through its signed raw URL and keeps private previews private',async()=>{

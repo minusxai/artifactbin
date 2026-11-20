@@ -7,7 +7,8 @@
  */
 import {createHmac} from 'node:crypto';
 import {describe,expect,it} from 'vitest';
-import {SERVICE_TOKEN_TTL_SECONDS,type TransactionalQueryable} from '@artifactbin/contracts';
+import {SERVICE_TOKEN_TTL_SECONDS} from '@artifactbin/contracts/service-audiences';
+import type {TransactionalQueryable} from '@artifactbin/contracts/identity-module';
 import {createBearerReader} from '../src/identity/bearer';
 import {groupServiceTokenKey,isGroupServiceToken,isServiceToken,serviceTokenKey,signGroupServiceToken,signServiceToken,verifyGroupServiceToken,verifyServiceToken} from '../src/identity/service-tokens';
 

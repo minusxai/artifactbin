@@ -4,8 +4,8 @@
  * nothing outside the catalog may be read.
  */
 import { expect, it } from 'vitest';
-import type { MutationInput, MutationResult, RunInput } from '@artifactbin/contracts';
-import { isQueryFailure } from '@artifactbin/contracts';
+import type { MutationInput, MutationResult, RunInput } from '@artifactbin/contracts/sql';
+import { isQueryFailure } from '@artifactbin/contracts/sql';
 import { loadSqlite, PreparedCache } from '@artifactbin/sql/core';
 
 const ROWS = [{ _id: 'a', title: 'one', n: 1 }, { _id: 'b', title: 'two', n: 2 }];

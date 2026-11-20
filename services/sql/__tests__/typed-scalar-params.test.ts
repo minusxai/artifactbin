@@ -8,7 +8,8 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { createSql } from '@artifactbin/sql/local';
 import { createSqliteSql } from '@artifactbin/sql/sqlite';
 import { serveSql, sqlClient } from '@artifactbin/sql';
-import type { DatasetMutationPolicy, SqlService } from '@artifactbin/contracts';
+import type { DatasetMutationPolicy } from '@artifactbin/contracts/dataset-policy';
+import type { SqlService } from '@artifactbin/contracts/sql';
 
 const pool = createSql({}, { workers: 1 }), server = serveSql(pool), remote = sqlClient(server.listen(0).url);
 const sqlite = createSqliteSql(), sqliteServer = serveSql(sqlite), sqliteRemote = sqlClient(sqliteServer.listen(0).url);

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { SQL_FAILURES } from "@artifactbin/contracts";
+import { SQL_FAILURES } from "@artifactbin/contracts/sql-failures";
 import { STORY_TABLE_CSS } from "@/lib/page-styles";
 import { AfDataTable } from "./data-table";
 import './data-table';

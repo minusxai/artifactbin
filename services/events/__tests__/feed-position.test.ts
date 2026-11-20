@@ -7,7 +7,8 @@
 import { randomUUID } from 'node:crypto';
 import { beforeEach, expect, it } from 'vitest';
 import { testDb } from '@artifactbin/test-support/db';
-import type { EventEnvelope, Queryable } from '@artifactbin/contracts';
+import type { EventEnvelope } from '@artifactbin/contracts/events';
+import type { Queryable } from '@artifactbin/contracts/db';
 import { createEvents, ensureEventsSchema } from '@artifactbin/events/local';
 
 const SCHEMA = 'feed_position';
