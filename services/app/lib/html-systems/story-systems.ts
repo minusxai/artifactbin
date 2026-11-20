@@ -1,6 +1,6 @@
 /** Generated design-picker metadata from the shared native HTML system specifications. */
 import systems from './story-systems.json';
-import { STORY_SYSTEM_NAMES, type StorySystemName } from '@/lib/validation/story-system-names';
+import { STORY_SYSTEM_NAMES, type StorySystemName } from '@/lib/validation';
 
 export { STORY_SYSTEM_NAMES };
 

@@ -10,7 +10,7 @@ import {overrideConfig} from '@/lib/platform/config';
 import {HTML_SYSTEMS,HTML_SYSTEM_FACES} from '../html-systems';
 import {HTML_SYSTEM_LABELS,HTML_SYSTEM_NAMES,defaultHtmlSystem,designSystemsManifest,htmlSystemFontPaths,htmlSystemNames,htmlSystemsCss,isHtmlSystem,setDefaultHtmlSystem,setInstallationDesignSystem} from '../index';
 import {DESIGN_SYSTEM_VARIABLES,installDesignSystemFromSettings,platformFontResponse,readInstallationDesignSystem,withOfflineSystemStyle} from '../server';
-import {HTML_SYSTEM_MODES} from '../../validation/html-system-modes';
+import {HTML_SYSTEM_MODES} from '../../validation';
 import {MARKDOWN_CSS} from '../../html-components/markdown-styles';
 import {htmlAppearance} from '../../html-page/design-system';
 import {nativeHtmlSystemsResponse} from '@/lib/document-serving';

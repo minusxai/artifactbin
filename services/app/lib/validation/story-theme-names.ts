@@ -1,9 +1,7 @@
 /**
- * The six story design themes, as plain data. This module imports NOTHING:
- * the reader route needs the names (to resolve a document's light/dark mode)
- * and must not pay for the TypeBox schemas that validate them
- * (lib/__tests__/reader-bundle-hygiene). `lib/validation/atlas-schemas.ts`
- * builds its enum from this list, and the theme registry
+ * The six story design themes, as plain data. This module imports no values:
+ * the reader route needs the names (to resolve a document's light/dark mode).
+ * The index builds STORY_DESIGN_NAMES from this list, and the theme registry
  * (`lib/html-systems/story-themes.ts`) types its entries against it; a registry
  * test asserts one entry per name.
  */

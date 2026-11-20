@@ -1,6 +1,6 @@
 /** Persisted theme metadata and the native design picker palettes. HTML stylesheet delivery belongs to html-systems. */
-import type { StoryThemeName, StoryDesignName } from '@/lib/validation/story-theme-names';
-import { STORY_THEME_NAMES } from '@/lib/validation/story-theme-names';
+import type { StoryThemeName, StoryDesignName } from '@/lib/validation';
+import { STORY_THEME_NAMES } from '@/lib/validation';
 import { getStorySystem } from './story-systems';
 
 export type { StoryDesignName };

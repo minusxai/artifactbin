@@ -139,7 +139,6 @@ const BUNDLED_IMPORTERS = [
 
   'services/app/lib/html-components/table-comparison.ts',
 
-  'services/app/lib/validation/atlas-schemas.ts',
   'services/app/lib/viz/annotation-layers.ts',
   'services/app/lib/viz/chart-plan.ts',
   'services/app/lib/viz/chart-resolve.ts',
@@ -179,7 +178,6 @@ const BUNDLED_LEAVES = {
   'lib/markdown': ['content', 'code-block'],
   'lib/skills': ['agent-discovery', 'setup-instructions'],
   'lib/html-systems': ['story-systems', 'story-themes', ],
-  'lib/validation': [ 'html-system-modes', 'installation-design-system', 'story-system-names', 'story-theme-names'],
   'lib/workspace': ['artifact-starters', 'breadcrumb', 'visibility-icons'],
   // <af-chart> (lib/html-components/chart-render.ts) plans and builds its views with the query image's code; the
   // recipe builders (chart-resolve, viz-templates) load as a lazy chunk of their own.
