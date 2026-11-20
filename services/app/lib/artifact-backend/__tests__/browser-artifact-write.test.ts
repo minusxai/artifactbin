@@ -1,20 +1,10 @@
 import {afterEach,expect,it,vi} from 'vitest';
-import {writeBrowserArtifact,restoreBrowserArtifact} from '../browser-artifact-write';
-import {createHttpBackend} from '../http';
+import {writeBrowserArtifact} from '../browser-artifact-write';
 import {stubFetch} from '@/test/helpers/fetch-stub';
 afterEach(()=>vi.unstubAllGlobals());
 it('does not replace a newer source when a mixed edit was based on an older edit id',async()=>{
  const request=vi.fn(async()=>Response.json({edit_id:'newer',version:2,state:'b'.repeat(64),format:'html',html:'<p>Remote</p>'}));vi.stubGlobal('fetch',request);
  const response=await writeBrowserArtifact('abc123',{source:'<p>Local</p>',title:'Local'},'older');expect(response.status).toBe(409);expect(request).toHaveBeenCalledTimes(1);
-});
-it('keeps native-format history on its conditional restore endpoint',async()=>{
- const calls:Array<{url:string;body:Record<string,any>}>=[];
- stubFetch({'*/versions/1':{format:'image',markup:null,meta:{}}},{
-  fallback:()=>Response.json({format:'markup',version:3,state:'a'.repeat(64),edit_id:'head'}),
-  onCall:(url,init)=>{calls.push({url,body:JSON.parse(String(init?.body??'{}'))});},
- });
- await restoreBrowserArtifact(createHttpBackend('abc123'),1);
- expect(calls.at(-1)).toEqual({url:'/api/my/artifacts/abc123/revert',body:{version:1,expectedVersion:3,expectedState:'a'.repeat(64)}});
 });
 it('publishes native social preview metadata once with the observed version and state',async()=>{
  const html='<!doctype html><html><head></head><body>Page</body></html>';

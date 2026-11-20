@@ -10,10 +10,6 @@ export interface PortableDocument {
   identity?: PortableIdentity;
   privateState?: HtmlJsonObject;
 }
-export interface OriginalFilePort {
-  read(): Promise<string>;
-  write(source: string): Promise<void>;
-}
 /** A local save captures only canonical source, immutable bootstrap assets and explicitly allowed state. */
 export interface PortableCopyOptions {
   document: Document;

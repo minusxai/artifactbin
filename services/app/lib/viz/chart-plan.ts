@@ -456,14 +456,6 @@ export function finishCompiledVega(vegaSpec: VegaSpec, options?: CompileVegaLite
 }
 
 
-/**
- * Bind the query result as the reserved named dataset. Rows arrive from state the
- * caller still owns; vega tags each tuple in place with Symbol(vega_id), so it must
- * own the row objects — shallow-clone each (values are scalars, never mutated).
- */
-export function setMainData(view: View, rows: Record<string, unknown>[]): void {
-  view.data(VIZ_DATASET_MAIN, rows.map(r => ({ ...r })));
-}
 
 const setSignalIfPresent = (view: View, name: string, value: number): void => {
   try {

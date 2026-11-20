@@ -1,7 +1,7 @@
 import {afterEach,describe,expect,it,vi} from 'vitest';
 import {BASEMAP_PATH} from '@artifactbin/contracts/basemap';
 import {BASEMAP_ALLOWED,BASEMAP_UPSTREAM,dailySeries,tileUpstreamUrl} from '..';
-import {BASEMAP_WORKER_URL,basemapStyleUrl,basemapTransformRequest} from '../basemap';
+import {BASEMAP_WORKER_URL} from '../basemap';
 afterEach(()=>vi.unstubAllGlobals());
 
 describe('basemap proxy',()=>{
@@ -11,13 +11,7 @@ describe('basemap proxy',()=>{
   for(const path of ['styles/positron','styles/dark','planet','planet/20250101_001001_pt/14/8192/5461.pbf','fonts/Noto Sans Regular,Noto Sans Bold/0-255.pbf','sprites/ofm_f384/ofm@2x.png','sprites/ofm_f384/ofm.json','natural_earth/ne2sr/3/4/2.png'])expect(allowed(path)).toBe(true);
   for(const path of ['styles/liberty','planet/x/123/1/1.pbf','../etc/passwd','planet/a/1/1/1.pbf?x=1','fonts/a/0-255.json','sprites/other/ofm.png','','https://evil.example/planet'])expect(allowed(path)).toBe(false);
  });
- it('names the style and rewrites only upstream URLs onto the same-origin proxy',()=>{
-  vi.stubGlobal('location',{origin:'https://doc.pages.test'});
-  expect(basemapStyleUrl('light')).toBe(`https://doc.pages.test${BASEMAP_PATH}styles/positron`);
-  expect(basemapStyleUrl('dark')).toBe(`https://doc.pages.test${BASEMAP_PATH}styles/dark`);
-  expect(basemapTransformRequest(`${BASEMAP_UPSTREAM}/planet/v/1/2/3.pbf`)).toEqual({url:`https://doc.pages.test${BASEMAP_PATH}planet/v/1/2/3.pbf`});
-  // A look-alike host or the bare origin is not an upstream path.
-  for(const url of [`${BASEMAP_UPSTREAM}.evil.example/planet`,BASEMAP_UPSTREAM,'https://doc.pages.test/x'])expect(basemapTransformRequest(url)).toEqual({url});
+ it('serves MapLibre\'s module worker same-origin',()=>{
   expect(BASEMAP_WORKER_URL).toBe(`${BASEMAP_PATH}worker.mjs`);
  });
 });

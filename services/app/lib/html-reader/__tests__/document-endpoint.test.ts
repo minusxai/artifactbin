@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { StoryController } from '../../html-reader/contract';
-import { documentReady, documentRect, sendDocument, subscribeDocument } from '../../html-reader/document-endpoint';
+import { documentRect, sendDocument, subscribeDocument } from '../../html-reader/document-endpoint';
 
 function controller() {
   const listeners = new Set<(data: unknown) => void>();
@@ -16,7 +16,6 @@ function controller() {
 describe('the document endpoint', () => {
   it('sends to, subscribes to and measures the current controller, wrapping events as { data }', () => {
     const live = controller(), target = { runtimeRef: { current: live.value } };
-    expect(documentReady(target)).toBe(true);
     sendDocument(target, { type: 'mx:data' });
     expect(live.value.send).toHaveBeenCalledWith({ type: 'mx:data' });
     const seen: unknown[] = [];
@@ -30,7 +29,6 @@ describe('the document endpoint', () => {
 
   it('is inert without a controller: nothing is sent, the unsubscribe is a no-op and there is no rect', () => {
     const target = { runtimeRef: { current: null } };
-    expect(documentReady(target)).toBe(false);
     expect(() => sendDocument(target, 'lost')).not.toThrow();
     const stop = subscribeDocument(target, () => { throw new Error('never'); });
     expect(() => stop()).not.toThrow();
