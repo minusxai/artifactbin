@@ -1,10 +1,12 @@
 /** Allowlisted file uploads: bounded bytes, content-addressed storage, inert streaming downloads. */
-import {type ContentObjects, objectKey, objectStore, ObjectUnavailable} from '@/lib/object-store';
+import {type ContentObjects, objectKey, objectStore, ObjectUnavailable, PDF_CONTENT_TYPE} from '@/lib/object-store';
 import { createHash } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { MAX_FILE_BYTES } from '@/lib/platform';
 import { Reply, reply } from '@/lib/http';
 import type { StoredContent } from '@/lib/document';
+import { sniffAssetType } from '@/lib/web-ingest';
+import { serveInlinePdf } from './pdf-response';
 import { fileContentType, FILE_EXTENSIONS } from '@artifactbin/contracts/file-types';
 
 interface FileMeta {
@@ -87,8 +89,8 @@ export async function storeFileContent(bytes: Buffer, contentType: string, filen
   return { format: 'file', source: null, meta: { ...meta }, derivedTitle: filename };
 }
 
-/** Serves stored file/image/PDF objects without ever interpreting their content. ACL belongs to the caller. */
-export async function serveStoredFile(request: Request, row: { id: string; meta: unknown }, cors = false): Promise<Response> {
+/** Serves stored objects after the caller checks access. Bundle links may opt into verified inline PDFs. */
+export async function serveStoredFile(request: Request, row: { id: string; meta: unknown }, cors = false, inlinePdf?: { etag: string }): Promise<Response> {
   const meta = row.meta as Partial<FileMeta>;
   const common: Record<string, string> = {
     'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
@@ -101,12 +103,24 @@ export async function serveStoredFile(request: Request, row: { id: string; meta:
   const filename = typeof meta.filename === 'string' ? meta.filename : row.id;
   const ascii = filename.replace(/[^a-zA-Z0-9._ -]/g, '_');
   const encoded = encodeURIComponent(filename).replace(/['()*]/g, c => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+  const filenameParameters = `filename="${ascii}"; filename*=UTF-8''${encoded}`;
   const headers = {
     ...common, 'Content-Type': meta.contentType ?? 'application/octet-stream',
-    'Content-Disposition': `attachment; filename="${ascii}"; filename*=UTF-8''${encoded}`,
+    'Content-Disposition': `attachment; ${filenameParameters}`,
   };
-  if (request.method === 'HEAD') return new Response(null, { headers });
   try {
+    if (inlinePdf && meta.contentType === PDF_CONTENT_TYPE && meta.bytes >= 5) {
+      // Bundled files can predate this handler and their MIME type comes from the filename.
+      // Read only the signature so HEAD and range requests never fetch the whole file.
+      const prefix = await objectStore().getStream(meta.objectKey, { start: 0, end: 4 });
+      const chunks: Buffer[] = [];
+      for await (const chunk of prefix) chunks.push(chunk);
+      if (sniffAssetType(Buffer.concat(chunks)) === PDF_CONTENT_TYPE) {
+        return serveInlinePdf(request, { objectKey: meta.objectKey, bytes: meta.bytes, contentType: PDF_CONTENT_TYPE },
+          `inline; ${filenameParameters}`, { cacheControl: 'no-store', cors, etag: inlinePdf.etag });
+      }
+    }
+    if (request.method === 'HEAD') return new Response(null, { headers });
     const stream = await objectStore().getStream(meta.objectKey);
     return new Response(Readable.toWeb(stream) as ReadableStream<Uint8Array>, { headers });
   } catch (error) {

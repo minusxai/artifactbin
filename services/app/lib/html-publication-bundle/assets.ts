@@ -38,13 +38,13 @@ export async function serveBundleAsset(request:Request,actor:AccessActor,pageId:
  // access gets nothing. The tag names every input of the bytes: the stored object, and for pinned text the page
  // version and sibling receipts it is rewritten against, plus the rewrite itself.
  const pinned=new URL(request.url).searchParams.has('version');
- const etag=etagOf({page:pageId,dependency:dependencyId,revision:receipt.revision,object:asset.meta.objectKey??null,sha256:asset.meta.sha256??null,
+ const etag=etagOf({page:pageId,dependency:dependencyId,revision:receipt.revision,pdfDisposition:1,object:asset.meta.objectKey??null,sha256:asset.meta.sha256??null,
   pin:pinned?{version:admitted.version,receipts:admitted.receipts.filter(item=>item.kind==='asset'),rewrite:PIN_REWRITE}:null});
  const held=captureKey===null&&matchingTag(request.headers.get('if-none-match'),etag);
  if(held){const answer=notModified(held);answer.headers.set('Access-Control-Allow-Origin','*');return answer;}
  // Opaque /raw runners need CORS for admitted modules and fonts; admission
  // above remains the authority, and no credentialed wildcard is granted.
- const response=await serveStoredFile(request,asset,true),contentType=response.headers.get('content-type')??'';
+ const response=await serveStoredFile(request,asset,true,{etag}),contentType=response.headers.get('content-type')??'';
  const headers=new Headers(response.headers);
  if(captureKey!==null){headers.set('Cache-Control','no-store');headers.delete('ETag');}else if(response.ok){headers.set('Cache-Control',REVALIDATE);headers.set('ETag',etag);}
  if(response.ok&&request.method!=='HEAD'&&['text/css','text/javascript','application/javascript'].includes(contentType)&&pinned)return new Response(pinPublicationAssetUrls(await response.text(),pageId,admitted.version,contentType,admitted.receipts.filter(item=>item.kind==='asset'),captureKey),{status:response.status,headers});

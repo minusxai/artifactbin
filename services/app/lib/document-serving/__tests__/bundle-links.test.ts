@@ -35,9 +35,9 @@ describe('a file published beside its page',()=>{
   for(const headers of [{},{cookie}] as Record<string,string>[]){
    // The script's fetch, on the document's own origin (connect-src 'self').
    const read=await app.request(self+data,{headers});expect(read.status).toBe(200);expect(await read.json()).toEqual({rows:[1,2,3]});
-   const download=await app.request(self+link,{headers});expect(download.status).toBe(200);
-   expect(download.headers.get('content-type')).toBe('application/pdf');expect(download.headers.get('content-disposition')).toContain('attachment; filename="rota.pdf"');
-   expect(await download.text()).toBe(PDF);
+   const pdf=await app.request(self+link,{headers});expect(pdf.status).toBe(200);
+   expect(pdf.headers.get('content-type')).toBe('application/pdf');expect(pdf.headers.get('content-disposition')).toContain('inline; filename="rota.pdf"');
+   expect(await pdf.text()).toBe(PDF);
   }
   // A reader's click on the link is followed by the app page (frame-links): the app's own door, signed out or in.
   for(const token of [undefined,owner.token]){const clicked=await appRead(link,token);expect(clicked.status).toBe(200);expect(await clicked.text()).toBe(PDF);}
@@ -46,6 +46,33 @@ describe('a file published beside its page',()=>{
   expect(geo.status).toBe(200);expect(geo.headers.get('content-type')).toBe('application/geo+json');
   // Link access reads; it writes nothing through the door.
   for(const method of ['POST','PUT','DELETE'])expect((await app.request(self+link,{method})).status).toBe(404);
+ });
+
+ it('serves PDF HEAD and byte ranges while keeping mislabeled and other files as downloads',async()=>{
+  const html='<a href="./rota.pdf">Rota</a><a href="./fake.pdf">Fake</a><a href="./data.json">Data</a>';
+  const {app,self,saved}=await publishBundleAndOpen('bundle_links','links','unlisted','links_ranges',html,{
+   entryPath:'index.html',files:[...FILES.slice(0,2),file('fake.pdf','<h1>HTML</h1>','application/pdf')],
+  });
+  const address=(path:string)=>self+`/a/${saved.id}/assets?dependency=${saved.dependencyReceipts.find(receipt=>receipt.path===path)!.id}&revision=1`;
+  const head=await app.request(address('rota.pdf'),{method:'HEAD'});
+  expect(head.status).toBe(200);
+  expect(head.headers.get('content-disposition')).toContain('inline; filename="rota.pdf"');
+  expect(head.headers.get('accept-ranges')).toBe('bytes');
+  expect(head.headers.get('content-length')).toBe(String(PDF.length));
+  expect(await head.text()).toBe('');
+  const range=await app.request(address('rota.pdf'),{headers:{range:'bytes=0-4'}});
+  expect(range.status).toBe(206);
+  expect(range.headers.get('content-range')).toBe(`bytes 0-4/${PDF.length}`);
+  expect(range.headers.get('content-security-policy')).toBe('sandbox');
+  expect(range.headers.get('x-content-type-options')).toBe('nosniff');
+  expect(await range.text()).toBe('%PDF-');
+  expect((await app.request(address('rota.pdf'),{headers:{range:'bytes=999-'}})).status).toBe(416);
+  for(const path of ['fake.pdf','data.json']){
+   const response=await app.request(address(path));
+   expect(response.status).toBe(200);
+   expect(response.headers.get('content-disposition')).toMatch(/^attachment;/);
+   await response.text();
+  }
  });
 
  it('answers the owner and nobody signed out on a private page',async()=>{

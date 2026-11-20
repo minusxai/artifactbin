@@ -24,12 +24,11 @@ import { verifyExportKey } from '@/lib/export';
 import {storedCspExtensions} from '@/lib/document';
 import {cspExtensionsFor} from '@/lib/trust';
 import { requestOrSessionActor } from '@/lib/authentication';
-import { baseUrl, parseByteRange, pagesRequestOf, etagOf, matchingTag, notModified } from '@/lib/http';
+import { baseUrl, pagesRequestOf, etagOf, matchingTag, notModified } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
-import { LIVE_DATASET_REFUSAL, liveConnectionOf, serveStoredFile, publicCatalogOf } from '@/lib/datasets';
+import { LIVE_DATASET_REFUSAL, liveConnectionOf, serveInlinePdf, serveStoredFile, publicCatalogOf } from '@/lib/datasets';
 import { datasetReadAccess, viewCatalog } from '@/lib/dataset-permissions';
-import { ObjectUnavailable, loadImage, loadPdfStream, pdfFilename, pdfMetaOf } from '@/lib/object-store';
-import { Readable } from 'node:stream';
+import { ObjectUnavailable, loadImage, pdfFilename, pdfMetaOf } from '@/lib/object-store';
 import { servesDocument } from '@/lib/user-pages';
 import { NO_STORE, REVALIDATE, storedBytesCacheControl } from './cache-control';
 import { nativeHtmlPresentation } from './native-html-presentation.server';
@@ -263,68 +262,11 @@ async function serveRaw(request: Request, ctx: RawDocumentRequest): Promise<Resp
       });
     }
 
-    /*
-     * THE PDF — inline, sandboxed, streamed, seekable.
-     *
-     * Every part of this shape was measured rather than chosen:
-     *  - `inline` is what makes the browser's own viewer render this instead of
-     *    downloading it. `attachment` was measured doing NOTHING when opened
-     *    from inside a document's sandbox — no popup, no download — so it is
-     *    the one disposition a <File> card must not be served under.
-     *  - `Content-Security-Policy: sandbox` does not stop the viewer (measured
-     *    headful: it rendered exactly as the bare inline response did) and puts
-     *    the response at an OPAQUE origin, where localStorage and
-     *    document.cookie both throw. That is what keeps a file any user can
-     *    cause us to store from gaining this origin's privileges — the same
-     *    posture /assets/<hash> and the served document already rely on.
-     *  - the bytes are STREAMED, never read whole: one 25 MB read is its own
-     *    size in RSS for the life of the response and would evict the object
-     *    store's entire read cache (lib/object-store getStream).
-     *  - `Accept-Ranges` plus a real 206, because a viewer opening a long
-     *    document reads its cross-reference table from the END first and then
-     *    seeks; without ranges it must download all of it before the first page.
-     */
     case 'pdf': {
       const meta = pdfMetaOf(artifact);
       if (!meta) return notFound();
-      const range = parseByteRange(request.headers.get('range'), meta.bytes);
-      // Built fresh per response: @hono/node-server writes the computed
-      // Content-Length back INTO this object, so a shared constant would
-      // announce the first body's length for every later one.
-      const headers: Record<string, string> = {
-        ...COMMON,
-        'Content-Type': meta.contentType,
-        'Content-Disposition': `inline; filename="${pdfFilename(artifact.title, artifact.id)}"`,
-        'Content-Security-Policy': 'sandbox',
-        'Accept-Ranges': 'bytes',
-        // Same rule as an image (./cache-control storedBytesCacheControl).
-        'Cache-Control': storedBytesCacheControl(artifact, new URL(request.url).searchParams.has('v')),
-      };
-      if (range === 'unsatisfiable') {
-        return new Response(null, { status: 416, headers: { ...headers, 'Content-Range': `bytes */${meta.bytes}` } });
-      }
-      const length = range ? range.end - range.start + 1 : meta.bytes;
-      // HEAD: the same answer without the body, so a viewer can learn the size
-      // and that ranges are served before it asks for one. No stream is opened.
-      if (request.method === 'HEAD') {
-        return new Response(null, { status: 200, headers: { ...headers, 'Content-Length': String(meta.bytes) } });
-      }
-      let stream: Readable;
-      try {
-        stream = await loadPdfStream(meta, range ?? undefined);
-      } catch (error) {
-        // A row promising bytes the store will not give: corruption or broken
-        // credentials, both page-the-operator events — said plainly, never a 500.
-        if (error instanceof ObjectUnavailable) return unavailable();
-        throw error;
-      }
-      return new Response(Readable.toWeb(stream) as ReadableStream, {
-        status: range ? 206 : 200,
-        headers: {
-          ...headers,
-          'Content-Length': String(length),
-          ...(range ? { 'Content-Range': `bytes ${range.start}-${range.end}/${meta.bytes}` } : {}),
-        },
+      return serveInlinePdf(request, meta, `inline; filename="${pdfFilename(artifact.title, artifact.id)}"`, {
+        cacheControl: storedBytesCacheControl(artifact, new URL(request.url).searchParams.has('v')),
       });
     }
 
