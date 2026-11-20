@@ -24,6 +24,9 @@ function linkAround(state:EditorState):{from:number;to:number;href:string}|null 
  const run=runs.find(run=>run.href&&run.from<$from.pos&&$from.pos<run.to)??runs.find(run=>run.href&&(run.from===$from.pos||run.to===$from.pos));
  return run?.href?{...run,href:run.href}:null;
 }
+/** The toggles a toolbar command names, and the shortcuts (Mod-B, I, E; Mod-Shift-7, 8, 9) that reach them. */
+const TOGGLES:Record<string,(editor:Editor)=>boolean>={strong:e=>e.commands.toggleBold(),em:e=>e.commands.toggleItalic(),code:e=>e.commands.toggleCode(),quote:e=>e.commands.toggleBlockquote(),codeBlock:e=>e.commands.toggleCodeBlock(),ordered:e=>e.commands.toggleOrderedList(),bullet:e=>e.commands.toggleBulletList(),task:e=>e.commands.toggleTaskList()};
+const MARK_KEYS:Record<string,string>={b:'strong',i:'em',e:'code'},LIST_DIGITS:Record<string,string>={7:'ordered',8:'bullet',9:'task'};
 export function mountRegionEditor(options:RegionEditorOptions):RegionEditor {
  if(options.kind!=='rich-native-v1')throw new Error('Legacy page editor retired; reload after migration');
  const {root,post,regionId}=options;
@@ -41,12 +44,14 @@ export function mountRegionEditor(options:RegionEditorOptions):RegionEditor {
  const encode=(pos:number)=>{const sync=ySyncPluginKey.getState(editor.state);return base64(Y.encodeRelativePosition(absolutePositionToRelativePosition(pos,fragment,sync!.binding.mapping)));};
  const decode=(_state:unknown,position:string)=>{try{if(position.length>344)return null;const sync=ySyncPluginKey.getState(editor.state);return relativePositionToAbsolutePosition(doc,fragment,Y.decodeRelativePosition(Uint8Array.from(atob(position),c=>c.charCodeAt(0))),sync!.binding.mapping);}catch{return null;}};
  const caret=()=>{if(!editor?.isFocused || !editor.view.hasFocus() || !ySyncPluginKey.getState(editor.state))return;const s=editor.state.selection;post({kind:'region-caret',regionId,anchor:encode(s.anchor),head:encode(s.head),marks:(editor.state.storedMarks ?? s.$head.marks()).map(m=>m.type.name==='bold'?'strong':m.type.name==='italic'?'em':m.type.name),block:s.$head.parent.type.name==='heading'?`h${s.$head.parent.attrs.level}`:'paragraph'});};
+ /** Put the selection back where two encoded positions now are; false when either is gone. */
+ const select=(at:{anchor:string;head:string})=>{const anchor=decode(editor.state,at.anchor),head=decode(editor.state,at.head);if(anchor===null||head===null)return false;editor.view.dispatch(editor.state.tr.setSelection(TextSelection.between(editor.state.doc.resolve(anchor),editor.state.doc.resolve(head))));return true;};
  const apply=(updates:readonly Uint8Array[])=>{
   if(!updates.length)return;
   const selection=editor.state.selection;
   const kept=selection instanceof TextSelection?{anchor:encode(selection.anchor),head:encode(selection.head)}:null;
   Y.applyUpdate(doc,Y.mergeUpdates([...updates]),REMOTE);doc.clientID=clientId;
-  if(kept){const anchor=decode(editor.state,kept.anchor),head=decode(editor.state,kept.head);if(anchor!==null&&head!==null)editor.view.dispatch(editor.state.tr.setSelection(TextSelection.between(editor.state.doc.resolve(anchor),editor.state.doc.resolve(head))));}
+  if(kept)select(kept);
  };
  editor=new Editor({element:root,extensions:[...nativeExtensions(),NativeIdentityRepair,NativeIndentation,NativeCodePresentation,Collaboration.configure({document:doc,field:NATIVE_ROOT})],
   editorProps:{transformPasted:freshClipboard,transformPastedHTML:html=>normalizeChecklist(html,root.ownerDocument),
@@ -58,11 +63,12 @@ export function mountRegionEditor(options:RegionEditorOptions):RegionEditor {
     if(event.altKey&&event.key==='Enter')return isolated(editor,()=>toggleCheck(editor));
     if(!event.altKey&&event.key.toLowerCase()==='z')return undoNative(editor,event.shiftKey);
     if(!event.altKey&&event.key.toLowerCase()==='y'&&event.ctrlKey)return undoNative(editor,true);
-    if(!event.altKey&&!event.shiftKey&&['b','i','e'].includes(event.key.toLowerCase()))return isolated(editor,()=>event.key.toLowerCase()==='b'?editor.commands.toggleBold():event.key.toLowerCase()==='i'?editor.commands.toggleItalic():editor.commands.toggleCode());
+    const mark=Object.hasOwn(MARK_KEYS,event.key.toLowerCase())?MARK_KEYS[event.key.toLowerCase()]:undefined;
+    if(!event.altKey&&!event.shiftKey&&mark)return isolated(editor,()=>TOGGLES[mark]!(editor));
     if(event.key.toLowerCase()==='k'){post({kind:'region-link',regionId,href:linkAround(view.state)?.href??null});return true;}
     const digit=event.code?.replace('Digit','')||String(event.keyCode-48);
     if(event.altKey&&/^[0-6]$/.test(digit))return structural(editor,()=>digit==='0'?editor.commands.setParagraph():editor.commands.toggleHeading({level:Number(digit) as 1|2|3|4|5|6}));
-    if(event.shiftKey){if(digit==='7')return isolated(editor,()=>editor.commands.toggleOrderedList());if(digit==='8')return isolated(editor,()=>editor.commands.toggleBulletList());if(digit==='9')return isolated(editor,()=>editor.commands.toggleTaskList());}
+    if(event.shiftKey&&Object.hasOwn(LIST_DIGITS,digit))return isolated(editor,()=>TOGGLES[LIST_DIGITS[digit]!]!(editor));
     return false;
    },handlePaste(view,event){if(plainPaste){const text=event.clipboardData?.getData('text/plain');if(text===undefined)return false;view.dispatch(view.state.tr.insertText(text));return true;}if(event.clipboardData?.getData('text/html')||view.state.selection.$from.parent.type.spec.code)return false;const text=event.clipboardData?.getData('text/plain');if(text===undefined)return false;const anchor=encode(view.state.selection.from),head=encode(view.state.selection.to);
    void import(/* @vite-ignore */ MARKDOWN_MODULE).then((module:typeof import('./native-region-markdown'))=>{
@@ -84,7 +90,7 @@ export function mountRegionEditor(options:RegionEditorOptions):RegionEditor {
   const style=root.ownerDocument.createElement('style');style.setAttribute('data-af-native-editor-style','');style.textContent=`[data-af-region-editor="rich-native-v1"] .tiptap{outline:none;white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}`;root.ownerDocument.head.append(style);
  }
  if(options.at!==undefined){let at:ReturnType<typeof view.posAtCoords>|null=null;if(options.at)try{at=view.posAtCoords({left:options.at.x,top:options.at.y});}catch{/* A detached or layout-less frame has no coordinate target. */}if(at)view.dispatch(view.state.tr.setSelection(TextSelection.near(view.state.doc.resolve(at.pos))));if(options.focus!==false)view.focus();}
- if(options.caret){const a=decode(view.state,options.caret.anchor),h=decode(view.state,options.caret.head);if(a!==null&&h!==null)view.dispatch(view.state.tr.setSelection(TextSelection.between(view.state.doc.resolve(a),view.state.doc.resolve(h))));view.focus();}
+ if(options.caret){select(options.caret);view.focus();}
  return {view,flush,
   session(id,state){clientId=id;doc.clientID=id;if(view.composing)held.push(state);else apply([state]);},
   remote(updates){if(view.composing)held.push(...updates);else apply(updates);},
@@ -92,11 +98,11 @@ export function mountRegionEditor(options:RegionEditorOptions):RegionEditor {
    const undo=yUndoPluginKey.getState(editor.state)?.undoManager;
    if(name!=='undo'&&name!=='redo')undo?.stopCapturing();
    const c=editor.commands;let done=false;
-   if(name==='strong')done=c.toggleBold();else if(name==='em')done=c.toggleItalic();else if(name==='code')done=c.toggleCode();else if(name==='undo')done=undoNative(editor);else if(name==='redo')done=undoNative(editor,true);
-   else if(name==='list')done=args.type==='ordered'?c.toggleOrderedList():c.toggleBulletList();
+   if(['strong','em','code','quote','codeBlock'].includes(name))done=TOGGLES[name]!(editor);else if(name==='undo')done=undoNative(editor);else if(name==='redo')done=undoNative(editor,true);
+   else if(name==='list')done=TOGGLES[args.type==='ordered'?'ordered':'bullet']!(editor);
    else if(name==='indent')done=indentNative(editor);else if(name==='outdent')done=indentNative(editor,true);
    else if(name==='heading'&&Number.isInteger(args.level)&&Number(args.level)>=1&&Number(args.level)<=6)done=structural(editor,()=>c.toggleHeading({level:args.level as 1|2|3|4|5|6}));
-   else if(name==='paragraph')done=structural(editor,()=>c.setParagraph());else if(name==='quote')done=c.toggleBlockquote();else if(name==='codeBlock')done=c.toggleCodeBlock();else if(name==='rule'){const {$head}=view.state.selection;if($head.depth===1&&$head.parent.isTextblock){const from=$head.before(1);const tr=view.state.tr.insert(from,view.state.schema.nodes.horizontalRule!.create());view.dispatch(tr.setSelection(TextSelection.near(tr.doc.resolve(from+2))));done=true;}}
+   else if(name==='paragraph')done=structural(editor,()=>c.setParagraph());else if(name==='rule'){const {$head}=view.state.selection;if($head.depth===1&&$head.parent.isTextblock){const from=$head.before(1);const tr=view.state.tr.insert(from,view.state.schema.nodes.horizontalRule!.create());view.dispatch(tr.setSelection(TextSelection.near(tr.doc.resolve(from+2))));done=true;}}
    else if(name==='removeSlash'){const {$head}=view.state.selection;if($head.parent.isTextblock&&$head.parent.textContent.startsWith('/')){view.dispatch(view.state.tr.delete($head.start(),$head.start()+1));done=true;}}
    else if(name==='link'){
     const href=args.href===null?null:typeof args.href==='string'?safeHref(args.href):undefined;

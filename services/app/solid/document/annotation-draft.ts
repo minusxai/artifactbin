@@ -28,6 +28,9 @@ import type { ThreadStore } from './annotation-threads';
 
 export type CommentDraft = ReturnType<typeof createCommentDraft>;
 
+/** What a re-report about the same node keeps from the selection it replaces. */
+const KEPT = ['anchor', 'quote', 'range', 'viewState', 'viewStateError'] as const;
+
 export function createCommentDraft(options: {
   artifactId: string;
   backend: ArtifactBackend;
@@ -158,7 +161,7 @@ export function createCommentDraft(options: {
         if (JSON.stringify(previous) === JSON.stringify(reported)) return previous;
         const sameIdentity = reported?.nodeId && previous?.nodeId && reported.nodeId === previous.nodeId && reported.anchor?.ancestorId === previous.anchor?.ancestorId;
         if (!sameIdentity || reported?.range || reported?.anchor?.range || reported?.anchor?.quote) return reported;
-        const merged = { ...reported, ...(previous.anchor ? { anchor: previous.anchor } : {}), ...(previous.quote ? { quote: previous.quote } : {}), ...(previous.range ? { range: previous.range } : {}), ...(previous.viewState ? {viewState: previous.viewState} : {}), ...(previous.viewStateError ? {viewStateError: previous.viewStateError} : {}) };
+        const merged = { ...reported, ...Object.fromEntries(KEPT.filter((key) => previous[key]).map((key) => [key, previous[key]])) };
         return JSON.stringify(previous) === JSON.stringify(merged) ? previous : merged;
       });
       setFailure(null);
@@ -231,28 +234,15 @@ export function createCommentDraft(options: {
     } else post({ type: 'mx:select', path: null });
   };
 
-  // ESCAPE IS CANCEL, bound on the window while a composer is open: by the time someone reaches
-  // for it the focus may be on the breadcrumb, the buttons, or the document behind.
+  // ESCAPE, bound on the window while a pick or a composer is up: by the time someone reaches for it the focus may
+  // be on the breadcrumb, the buttons, or the document behind. On the page it stands a pick down first, and the draft
+  // stays (escape in the document arrives as a null selection); with no pick it cancels the composer.
   createEffect(() => {
-    if (!selection()) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      // A pick in progress is what escape cancels first; the draft stays.
-      if (untrack(pick)) return;
-      event.stopPropagation();
-      cancel();
-    };
-    window.addEventListener('keydown', onKey);
-    onCleanup(() => window.removeEventListener('keydown', onKey));
-  });
-  // Escape ON THE PAGE stands a pick down; escape in the document arrives as a null selection.
-  createEffect(() => {
-    if (!pick()) return;
+    if (!pick() && !selection()) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       event.stopPropagation();
-      capture.reset();
-      setPick(null);
+      if (untrack(pick)) { capture.reset(); setPick(null); } else cancel();
     };
     window.addEventListener('keydown', onKey);
     onCleanup(() => window.removeEventListener('keydown', onKey));
