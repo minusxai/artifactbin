@@ -57,14 +57,6 @@ export interface PageRequest {
   allowedOrigins?: string[];
   /** Public cached-asset origin; approved byte requests are fulfilled through the render URL's internal origin, without credentials or redirects. */
   assetOrigin?: string;
-  /** Wait for every managed iframe under the capture surface to finish its existing author-ready handshake. */
-  waitForManagedFrames?: boolean;
-  /**
-   * Wait, at most this many ms, until every script component mount (`[data-mx-mount]`) under the surface has been
-   * rendered by the page's script, i.e. no longer shows only its server fallback. Reaching the cap is not a failure:
-   * the shot is taken with whatever the mounts show.
-   */
-  waitForMountsMs?: number;
   /** Extra CSS applied before the shot (hide dev overlays, etc.). */
   injectCss?: string;
   /** Fixed wait after the selector appears, for embeds to hydrate. */

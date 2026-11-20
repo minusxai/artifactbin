@@ -142,8 +142,7 @@ describe('what the app asks the browser for', () => {
       expect(request.sameOriginOnly).toBe(true);
       expect(request.allowedOrigins).toBeUndefined();
       expect(request.assetOrigin).toEqual(ASSETS_ORIGIN ?? undefined);
-      // A document without a script has no component mounts to wait for and no module host to admit.
-      expect(request.waitForMountsMs).toBeUndefined();
+      // A document without a script has no module host to admit (allowedOrigins, above).
     }
     // A FRESH key per attempt: minted at call time, because a key that expired
     // in the queue produced a 200 PNG of a 404 page.
@@ -156,7 +155,6 @@ describe('what the app asks the browser for', () => {
     await exportImageResponse({id:'exprt2',version:++n+1000,format:'html',source},{},'http://localhost:3000');
     expect(browser.seen[0].sameOriginOnly).toBe(true);
     expect(browser.seen[0].allowedOrigins).toBeUndefined();
-    expect(browser.seen[0].waitForMountsMs).toBeUndefined();
   });
 
   it('names the slide as a capture mode, not a separate verb', async () => {
