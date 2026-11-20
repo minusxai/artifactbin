@@ -6,7 +6,8 @@
  * and schema names that merely look reserved.
  */
 import { describe, expect, it } from 'vitest';
-import { isQueryFailure, type DatasetColumn, type DatasetMutationPolicy, type Row } from '@artifactbin/contracts';
+import { isQueryFailure, type DatasetColumn, type Row } from '@artifactbin/contracts/sql';
+import type { DatasetMutationPolicy } from '@artifactbin/contracts/dataset-policy';
 import { loadSqlite } from '@artifactbin/sql/core';
 import { createSqliteSql } from '@artifactbin/sql/sqlite';
 

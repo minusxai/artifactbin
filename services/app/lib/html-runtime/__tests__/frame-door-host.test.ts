@@ -5,7 +5,7 @@
  * (lib/html-reader/host-shell) refuses to mount elsewhere as well (lib/html-reader/__tests__/host-shell.test.ts).
  */
 import { attachActor } from '@artifactbin/utils';
-import type { Actor } from '@artifactbin/contracts';
+import type { Actor } from '@artifactbin/contracts/actor';
 import { expect, it } from 'vitest';
 import { STORY_FRAME_BRIDGE_MESSAGE } from '@/lib/html-reader/contract';
 import { framedDocumentSrc } from '@/lib/document-serving';

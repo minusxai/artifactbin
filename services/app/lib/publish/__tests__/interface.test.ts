@@ -4,7 +4,7 @@
  * the uniform not_found, before anything is parsed or written.
  */
 import {describe,expect,it} from 'vitest';
-import {MAX_DOCUMENT_BYTES} from '@artifactbin/contracts';
+import {MAX_DOCUMENT_BYTES} from '@artifactbin/contracts/document-update';
 import {mintAccountToken,request,useAppHarness} from '@/__tests__/harness';
 import {identityForUser,type TokenHoldingActor} from '@/lib/accounts';
 import {artifactState,getArtifactById} from '@/lib/artifacts';

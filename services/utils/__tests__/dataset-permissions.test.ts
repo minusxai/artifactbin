@@ -1,11 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  DATASET_PERMISSION_LIMITS,
-  DATASET_PERMISSION_TEMPLATES,
-  DATASET_ROLES,
-  type DatasetPermissions,
-  type DatasetPermissionsShape,
-} from '@artifactbin/contracts';
+import { DATASET_PERMISSION_LIMITS, DATASET_PERMISSION_TEMPLATES, DATASET_ROLES, type DatasetPermissions, type DatasetPermissionsShape } from '@artifactbin/contracts/dataset-permissions';
 import {
   datasetPermissionsTemplate,
   readBackDatasetPermissions,

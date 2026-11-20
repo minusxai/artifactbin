@@ -14,7 +14,7 @@ import {nativeHtml} from '@/__tests__/native-html-fixture';
  * people the old session-minted design left behind are taken out.
  */
 import { expect, it, vi } from 'vitest';
-import { BROWSER_SESSION_HEADER } from '@artifactbin/contracts';
+import { BROWSER_SESSION_HEADER } from '@artifactbin/contracts/browser-sessions';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { POST as forkOperation } from '@/app/api/artifacts/[id]/fork/route';
 import { POST as likeRoute } from '@/app/api/my/artifacts/[id]/like/route';

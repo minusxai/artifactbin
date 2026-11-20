@@ -2,7 +2,7 @@ import {otpSignIn,serviceAuthHost} from './helpers';
 import {sessionStoreOf} from '../src/index';
 import {PGlite} from '@electric-sql/pglite';
 import {afterAll,beforeAll,beforeEach,describe,expect,it,vi} from 'vitest';
-import {eventName} from '@artifactbin/contracts';
+import {eventName} from '@artifactbin/contracts/events';
 import {fakeEvents,type FakeEvents} from '@artifactbin/utils';
 import {createHumanAuth,type HumanAuth,humanAuthOptions} from '../src/auth/human';
 import {withHttpServer,type RunningServer} from '@artifactbin/test-support/net';

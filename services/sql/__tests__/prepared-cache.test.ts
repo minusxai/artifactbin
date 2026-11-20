@@ -6,8 +6,8 @@
  * so a role view with fewer columns, other rows or another model never reads another view's entry.
  */
 import { afterAll, describe, expect, it } from 'vitest';
-import type { DatasetColumn, QueryOutcome, Row, RunInput, SqlService } from '@artifactbin/contracts';
-import { isQueryFailure } from '@artifactbin/contracts';
+import type { DatasetColumn, QueryOutcome, Row, RunInput, SqlService } from '@artifactbin/contracts/sql';
+import { isQueryFailure } from '@artifactbin/contracts/sql';
 import { serveSql, sqlClient } from '@artifactbin/sql';
 import { loadSqlite, PreparedCache, type ReadBounds } from '@artifactbin/sql/core';
 import { createSql } from '@artifactbin/sql/local';
