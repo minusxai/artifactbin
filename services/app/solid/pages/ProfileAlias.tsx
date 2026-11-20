@@ -15,7 +15,7 @@ const DocumentPage = lazy(() => import('./Document').then(m => ({ default: m.Doc
 
 /**
  * `/:user/*` — every pretty artifact alias, e.g. `/@user/<id>-slug[/edit]` (also reached by address
- * healing: server/app documentPreparation renders a `/a/<id>[/edit]` request at this address once its
+ * healing: server/document-address admitDocumentAddress renders a `/a/<id>[/edit]` request at this address once its
  * owner has a username). The ONE route for this shape — a sibling route keyed on a single named
  * segment would overlap it and, being listed first, win the match for every one-segment alias
  * (folders included), same as `/a/:id` does with `ArtifactRoute` in solid/App.tsx.

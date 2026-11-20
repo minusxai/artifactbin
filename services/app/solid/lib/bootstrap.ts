@@ -1,5 +1,5 @@
 /**
- * The data the SERVER inlined for this page (server/app withBootstrap), read
+ * The data the SERVER inlined for this page (server/app-shell withBootstrap), read
  * once at module load. It is what makes the first paint the final one: the
  * page renders from it instead of from a fetch that lands a beat later.
  * Consumed ONCE per address — a client navigation to another page fetches,
@@ -16,7 +16,7 @@ interface Payload {
 
 const payload: Payload | null = (() => {
   try {
-    // The body's own child (server/app withBootstrap), never an element of the same id inside the story —
+    // The body's own child (server/app-shell withBootstrap), never an element of the same id inside the story —
     // matched by attribute, since an engine may resolve `#id` through the FIRST element with that id.
     const el = document.querySelector(`body > script[type="application/json"][id="${BOOTSTRAP_ID}"]`);
     return el?.textContent ? JSON.parse(el.textContent) as Payload : null;

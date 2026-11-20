@@ -1,238 +1,51 @@
-import {CANONICAL_CHART_IMAGE_PATH,CANONICAL_DRAFT_CHECK_PATH} from '@artifactbin/contracts';
-import {chartImageSeam} from './chart-image-seam';
-import {draftCheckSeam} from './draft-check-seam';
-import {getDeploymentState} from '@/lib/deployment';
-import { ID_RE, measureQueries, runWithRequest, ASSETS_ORIGIN, setEventProjection, embedTrustedOrigins, shellFile } from '@/lib/platform';
-import { type ArtifactRow, canReadArtifact, type PageRead, readPageRow, slugAddress, slugAddressTarget, UnservableDocument } from '@/lib/artifacts';
-import { effectiveRole, requestAccessFacts } from '@/lib/artifact-access';
-import { artifactAppAsset, artifactAppPath, readableApp, withArtifactAppHead, publicRefAssetResponse, artifactPageAnswer, type ArtifactPageAnswer, DOCUMENT_FRAME_CSS, documentFrameFallback, documentFrameHtml, documentHeadFor, documentHeadTags, type DocumentFrame, cachedShell } from '@/lib/document-serving';
-import { loginRedirectTarget, artifactViewPath, canonicalArtifactPath, parsePrettyPath, spaPaths, APP_BUILD_HEADER, APP_BUILD_META, baseUrl, json, setAppBuild, GITHUB_EXTERNAL_URL, pagesSite as deployedPagesSite, type PagesSite } from '@/lib/http';
 /**
  * THE APP SERVER — Hono, the whole app behind the proxy:
  *
  *  - every `app/**\/route.ts` handler, from the generated table (server/api);
  *  - canonical artifact URLs use the same app document for every viewer,
- *    with permission-filtered prepared data and readable initial story HTML;
+ *    with permission-filtered prepared data and readable initial story HTML
+ *    (./document-address admits the address, ./app-shell renders the page);
  *    explicit raw/export responses retain their document sandbox policy;
  *  - the app's pages: one SPA (web/, built by Vite) served for the app's
- *    paths under the app CSP;
+ *    paths under the app CSP (./app-policy);
  *  - every public file under /af/, and the old addresses that still
  *    answer for some of them (server/public-files).
  *
  * The request is held in AsyncLocalStorage for the duration of each handler
  * (lib/request-context), which is how `publicOrigin()` and analytics see it.
  */
-import { agentDiscovery, agentDiscoveryBody, agentDiscoveryHead, withAgentDiscoveryTail } from '@/lib/agent-copy';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { createGithubResponse } from './external/github';
-import { escapeHtml } from '@artifactbin/utils/escape';
 import { Hono, type Context } from 'hono';
-import { actorReceiver, isPublicAssetRequest, publicAssetResponse } from '@artifactbin/utils';
-import { verifyExportKey, exportAssetResponse } from '@/lib/export';
+import { CANONICAL_CHART_IMAGE_PATH, CANONICAL_DRAFT_CHECK_PATH, isGroupActor } from '@artifactbin/contracts';
+import { actorOf, actorReceiver, isPublicAssetRequest, publicAssetResponse } from '@artifactbin/utils';
+import { getDeploymentState } from '@/lib/deployment';
+import { measureQueries, runWithRequest, ASSETS_ORIGIN, setEventProjection, shellFile } from '@/lib/platform';
+import { slugAddressTarget, UnservableDocument } from '@/lib/artifacts';
+import { artifactAppAsset, artifactAppPath, readableApp, publicRefAssetResponse, type ArtifactPageAnswer, cachedShell } from '@/lib/document-serving';
+import { loginRedirectTarget, spaPaths, APP_BUILD_HEADER, baseUrl, json, setAppBuild, GITHUB_EXTERNAL_URL, pagesSite as deployedPagesSite, type PagesSite } from '@/lib/http';
+import { agentDiscovery, agentDiscoveryHead } from '@/lib/agent-copy';
+import { exportAssetResponse } from '@/lib/export';
 import { projectNotifications } from '@/lib/notifications';
-/** Every static address solid/App.tsx routes: a direct load or a reload of one missing here is a 404. */
-import { ANONYMOUS_ACTOR, ownerUsername, AGENT_COOKIE } from '@/lib/accounts';
+import { ANONYMOUS_ACTOR, AGENT_COOKIE } from '@/lib/accounts';
 import { sessionActor } from '@/lib/authentication';
-import { canEdit, isGroupActor } from '@artifactbin/contracts';
-import { groupAdmitted, groupRefusal } from './group-admission';
-import {actorOf} from '@artifactbin/utils';
+import { linkedStylesheets } from '@/lib/user-pages';
 import { GET as publicAssetBytes } from '@/app/assets/[hash]/route';
+import { chartImageSeam } from './chart-image-seam';
+import { draftCheckSeam } from './draft-check-seam';
+import { createGithubResponse } from './external/github';
+import { groupAdmitted, groupRefusal } from './group-admission';
 import { mountRoutes } from './api';
-import { ROUTES } from './routes.generated';
-import { createListingPreloader, listingPage } from './reader-preloads';
+import { createListingPreloader } from './reader-preloads';
 import { appBuildId, mountBuildAssets } from './build-assets';
 import { compressDynamic, dynamicEncoding, negotiateEncoding } from './content-encoding';
 import { mountPublicFiles, publicFilePath } from './public-files';
 import { userHostBoundary } from './user-host';
 import { pagesHost } from './pages-host';
-import { linkedStylesheets, canonicalDocumentUrl } from '@/lib/user-pages';
-import { THEME_BOOTSTRAP_HASH, APP_SHELL_FONT_PRELOADS, fontPreloadTags } from '@/lib/page-styles';
 import { customShellResponse, loadCustomShell, namesDocument, shellAnswers } from './custom-shell';
-
-/**
- * The `<link rel="help">` and agent metadata an agent that fetched any page reads, on the caller's
- * base — FIRST in the head, ahead of every preload and stylesheet link Vite stamps into the shell, so a
- * shell tool that keeps only the first few kilobytes of a page still sees them. A page with no `<head>`
- * at all gets them before `</head>`.
- */
-function withAgentDiscovery(html: string, origin: string): string {
-  const help = agentDiscovery(origin);
-  const tags = agentDiscoveryHead(help);
-  // Paint a product loading state before app JavaScript arrives. The app replaces
-  // it on mount; agent discovery remains in the head, tail and noscript help.
-  html = html.replace(/<div id="root">/i, (open) => `${open}${agentDiscoveryBody(help)}`);
-  const open = /<head(?:\s[^>]*)?>/i.exec(html);
-  if (open) return `${html.slice(0, open.index + open[0].length)}${tags}${html.slice(open.index + open[0].length)}`;
-  return html.replace('</head>', () => `${tags}</head>`);
-}
-
-/**
- * The generic unfurl card, for an address with no document of its own to
- * photograph — the home page, login, a profile. Absolute against the request's
- * origin for the same reason the artifact tag below is: a relative og:image is
- * resolved by some scrapers against the page URL and by others not at all.
- * `public/og.png` is written by `npm run generate:og`.
- */
-function withGenericSocial(html: string, origin: string): string {
-  const tags = `<meta property="og:image" content="${escapeHtml(origin)}/og.png"><meta name="twitter:card" content="summary_large_image">`;
-  return html.replace('</head>', () => `${tags}</head>`);
-}
-
-/**
- * The frame's one new connection, started from the head: its first URL is on the document's own origin, which spends
- * the ticket and serves the document in one response. The origin comes from the frame the server drew
- * (lib/document-serving/artifact-page), never from the request. It follows the agent pointer, which stays the head's first element.
- */
-function withPreconnects(html: string, frame: DocumentFrame): string {
-  let origin: string;
-  try { origin = new URL(frame.src).origin; } catch { return html; }
-  const tags = `<link rel="preconnect" href="${escapeHtml(origin)}">`;
-  const after = /<meta name="cli"[^>]*>/i.exec(html) ?? /<head(?:\s[^>]*)?>/i.exec(html);
-  return after ? `${html.slice(0, after.index + after[0].length)}${tags}${html.slice(after.index + after[0].length)}` : html;
-}
-
-/**
- * THE APP PAGE FOR A DOCUMENT: the shell, named in its head as the document (its title, description and social
- * card replace the shell's), with the document's frame as the body's first element — drawn by the server, so the
- * document loads with the page, not after the app's code (lib/document-serving/document-frame; solid/pages/Document adopts it).
- */
-function withDocumentFrame(html: string, frame: DocumentFrame): string {
-  const head = withPreconnects(html, frame)
-    .replace(/<title>[\s\S]*?<\/title>/i, '')
-    .replace(/<meta name="description"[^>]*>/i, '')
-    .replace('</head>', () => `${documentHeadTags(frame.head)}<style data-mx-frame-css>${DOCUMENT_FRAME_CSS}</style></head>`);
-  return head.replace(/<body([^>]*)>/i, (open) => `${open}${documentFrameHtml(frame)}`)
-    .replace(/<div id="root">/i, (open) => `${open}${documentFrameFallback(frame)}`);
-}
-
-/** The shell's first-screen face (lib/app-fonts), preloaded on a page with no document of its own. */
-const withShellFonts = (html: string): string => html.replace('</head>', () => `${fontPreloadTags(APP_SHELL_FONT_PRELOADS)}</head>`);
-
-/** Where the server hands the SPA a page's data so its FIRST paint is its final one. */
-export const BOOTSTRAP_ID = 'mx-page-data';
-/** `<` is the only character that can end a script element early; JSON never needs it. */
-const safeJson = (value: unknown): string => JSON.stringify(value).replace(/</g, '\\u003c');
-/**
- * The page's data rides at the END of the body — after the story the server
- * rendered, as the body's own last element — so the first paint never waits
- * for it to download. Still read before the app's first render: the SPA's
- * module runs after the document is parsed (solid/lib/bootstrap reads exactly this
- * element, a direct child of body, which no authored id inside the story can be).
- */
-export const withBootstrap = (html: string, data: unknown): string => {
-  // A function replacement keeps JavaScript's special replacement tokens in
-  // user-authored JSON literal instead of expanding them with the HTML shell.
-  const tag = `<script type="application/json" id="${BOOTSTRAP_ID}">${safeJson(data)}</script>`;
-  const at = html.lastIndexOf('</body>');
-  return at < 0 ? html.replace('</head>', () => `${tag}</head>`) : `${html.slice(0, at)}${tag}${html.slice(at)}`;
-};
-
-/**
- * THE HEAD IN THE ORDER A READER NEEDS IT. The story is readable before any
- * JavaScript runs, so code must not starve what paints it: the charset and
- * viewport, the render-blocking CSS, then the fonts the first screen paints —
- * at high priority — and only then the app's modules and their preloads,
- * which Vite writes early in the shell and the preloaders add at its end.
- */
-// Every module script — inline ones too, so modules keep their relative (execution) order.
-const MODULE_TAG = /<script\b[^>]*\btype=["']module["'][^>]*>[\s\S]*?<\/script>|<link\b[^>]*\brel=["']modulepreload["'][^>]*>/gi;
-const FONT_PRELOAD = /<link\b[^>]*\brel=["']preload["'][^>]*\bas=["']font["'][^>]*>/gi;
-const STYLESHEET = /<link\b[^>]*\brel=["'](?:stylesheet|preload)["'][^>]*\bas=["']style["'][^>]*>|<link\b[^>]*\brel=["']stylesheet["'][^>]*>/gi;
-/** `text` with every match of `pattern` taken out, and the matches, in order — a MOVE, never a filter. */
-function lift(text: string, pattern: RegExp): { rest: string; lifted: string[] } {
-  const lifted: string[] = [];
-  let rest = '', at = 0;
-  for (const m of text.matchAll(pattern)) { rest += text.slice(at, m.index); lifted.push(m[0]); at = m.index! + m[0].length; }
-  return { rest: rest + text.slice(at), lifted };
-}
-/** Where the fonts go: after the render-blocking CSS, else the viewport, the charset, the agent pointer (always first), the head. */
-function fontSlot(head: string): number {
-  let cut = -1;
-  for (const m of head.matchAll(STYLESHEET)) cut = m.index! + m[0].length;
-  if (cut >= 0) return cut;
-  for (const tag of [/<meta\b[^>]*name=["']viewport["'][^>]*>/i, /<meta\b[^>]*charset=[^>]*>/i, /<meta\b[^>]*name=["']cli["'][^>]*>/i, /<head\b[^>]*>/i]) {
-    const m = tag.exec(head);
-    if (m) return m.index + m[0].length;
-  }
-  return 0;
-}
-function withReaderHeadOrder(html: string): string {
-  const end = html.indexOf('</head>');
-  if (end < 0) return html;
-  const code = lift(html.slice(0, end), MODULE_TAG);
-  const faces = lift(code.rest, FONT_PRELOAD);
-  const fonts = faces.lifted.map((tag) => (/\bfetchpriority=/i.test(tag) ? tag : `<link fetchpriority="high"${tag.slice('<link'.length)}`));
-  const cut = fontSlot(faces.rest);
-  return `${faces.rest.slice(0, cut)}${fonts.join('')}${faces.rest.slice(cut)}${code.lifted.join('')}${html.slice(end)}`;
-}
-
-// Inline scripts emitted by our source HTML. Keeping the hashes explicit preserves the production policy.
-export const APP_INLINE_SCRIPT_HASHES = [
-  THEME_BOOTSTRAP_HASH, // theme bootstrap (web/solid-app.html — lib/page-styles/theme-bootstrap, pinned by lib/__tests__/app-page-csp)
-].join(' ');
-
-/**
- * THE APP PAGES' POLICY — one, strict, for every app page: no document ever runs inside one. `frames` are the
- * pages origins (APP__PAGES_HOST) the app page frames documents on — every document label under the pages host,
- * and nothing else (the apex is not a document and is never framed).
- */
-function appCsp({ frames = [] }: { frames?: readonly string[] } = {}): string {
-  return [
-    // 'wasm-unsafe-eval' lets the page COMPILE WebAssembly — the SQLite engine a
-    // reader's document runs its queries on (lib/islands/page-sqlite) —
-    // and nothing else: no eval, no Function, no string timers.
-    "default-src 'none'", `script-src 'self' 'wasm-unsafe-eval' ${APP_INLINE_SCRIPT_HASHES}`, "style-src 'self' 'unsafe-inline'",
-    // Listing thumbnails redirect from /a/:id/export to the configured asset
-    // origin. Admit that destination for images; local posters remain same-origin.
-    `img-src 'self' data: blob:${ASSETS_ORIGIN ? ` ${ASSETS_ORIGIN}` : ''}`,
-    "font-src 'self' data:",
-    // `media-src` has no default of its own either, so without this line every
-    // <video> and <audio> on an app page is refused by `default-src 'none'`.
-    // `'self'` is a stored file played back from /a/<id>/raw; `blob:` is the
-    // upload page previewing a file BEFORE it is sent (web/pages/FileUpload).
-    // GLTFLoader also fetches embedded textures through local blob URLs.
-    // Frame and worker policies stay same-origin; blobs are data here.
-    "media-src 'self' blob:",
-    "connect-src 'self' blob:",
-    "manifest-src 'self'", ['frame-src', "'self'", ...frames].join(' '), "frame-ancestors 'self'",
-    // `worker-src` has no default of its own: it falls back through `child-src`
-    // to `default-src 'none'`, so a worker would be refused by a directive nobody
-    // wrote, silently. The one worker the product starts — MapLibre's, for a
-    // `<DeckGL>` street basemap — is a same-origin module script
-    // (/basemap/worker.mjs, app/basemap), and Vite emits workers as same-origin
-    // assets, so `'self'` is the whole permission — NOT `blob:`, which would
-    // reopen script-from-a-string.
-    "worker-src 'self'",
-    "form-action 'self'", "object-src 'none'", "base-uri 'self'",
-  ].join('; ');
-}
-/** The strict app policy, before the pages origins it frames are named (pagesFrameSources). */
-export const APP_CSP = appCsp();
-/** The policy every app page carries on a deployment whose documents are served under `site` (production adds no more). */
-export const appPagePolicy = (site: PagesSite): string => appCsp({ frames: pagesFrameSources(site) });
-/** The pages origins an app page may frame (lib/http/pages-origin): every document label under the pages host. */
-export function pagesFrameSources(site: PagesSite): string[] {
-  const port = site.port ? `:${site.port}` : '';
-  return [`${site.scheme}//*.${site.host}${port}`];
-}
-/**
- * Only the development socket joins connect-src; production uses the policy unchanged. The socket is on
- * the host the page was addressed by (`baseUrl`: forwarded host and protocol first), because Vite's client
- * dials the host its module loaded from: a server-browser session reaches this process over loopback and
- * names the public host it browsed in `x-forwarded-host`.
- */
-function developmentAppCsp(csp: string, pageOrigin: string, port: number): string {
-  const socket = new URL(pageOrigin);
-  socket.protocol = socket.protocol === 'https:' ? 'wss:' : 'ws:';
-  socket.port = String(port);
-  return csp.replace("connect-src 'self'", `connect-src 'self' ${socket.origin}`);
-}
-const APP_SECURITY_HEADERS = {
-  'x-content-type-options': 'nosniff',
-  'referrer-policy': 'strict-origin-when-cross-origin',
-  'permissions-policy': 'camera=(), microphone=(), geolocation=()',
-};
+import { APP_SECURITY_HEADERS, appPagePolicyAt } from './app-policy';
+import { renderAppPage } from './app-shell';
+import { type Admitted, admitDocumentAddress, anonymousDocumentHead, candidateDocument, pageBootstrap } from './document-address';
 
 export interface AppServerOptions {
   /** Split deployment only: verify the transport header and attach its actor. */
@@ -251,18 +64,6 @@ export interface AppServerOptions {
   /** APP__SHELL_FILE unless a test passes its own: the custom shell (./custom-shell) served for the app's screens. */
   shellFile?: string | null;
 }
-
-/** Which document, if any, a path names — `/a/<id>` or a pretty URL. */
-export function candidateDocument(pathname: string): { id: string } | null {
-  pathname = artifactViewPath(pathname);
-  const segments = pathname.split('/').filter(Boolean);
-  if (segments[0] === 'a') return segments.length === 2 && ID_RE.test(segments[1]) ? { id: segments[1] } : null;
-  if (!segments[0]?.startsWith('@')) return null;
-  const file = parsePrettyPath(segments.slice(1).map((s) => { try { return decodeURIComponent(s); } catch { return s; } }));
-  return file ? { id: file.id } : null;
-}
-
-
 
 /**
  * A guessed machine address is answered in the machine's language. A path
@@ -289,8 +90,6 @@ const apiNotFound = (c: { req: { raw: Request } }) => {
 // The caller asked for a page: a browser's navigation names `text/html`; curl's `*/*` and a fetch tool's do not.
 const wantsHtml = (request: Request): boolean => (request.headers.get('accept') ?? '').includes('text/html');
 
-/** A document row this request already fetched and admitted (documentPreparation), and its canonical path when it was computed. */
-interface Admitted { row: ArtifactRow; canonicalPath?: string; revision?: PageRead['revision']; /** The title-slug address it was resolved from, served there as is. */ servedPath?: string }
 /** The document page's reader header: which renderer answered. */
 const readerHeaders = (reader: ArtifactPageAnswer['reader'] | undefined): Record<string, string> => (reader ? { ['x-mx-reader']: reader.mode } : {});
 
@@ -327,6 +126,25 @@ const buildHeader = (build: string) => async (c: Context, next: () => Promise<vo
   }
 };
 
+/** The configured asset origin's requests: public asset bytes only, credential-free (utils `publicAssetResponse`). */
+const assetsOriginBoundary = (assetsOrigin: string) => async (c: Context, next: () => Promise<void>): Promise<Response | void> => {
+  const incoming = new URL(c.req.url);
+  if (incoming.host !== new URL(assetsOrigin).host && baseUrl(c.req.raw) !== assetsOrigin) return next();
+  // Only the byte validator crosses this anonymous boundary; never credentials.
+  const headers = new Headers();
+  const validator = c.req.header('if-none-match');
+  if (validator !== undefined) headers.set('if-none-match', validator);
+  const request = new Request(assetsOrigin + incoming.pathname + incoming.search, { method: c.req.method, headers });
+  if (!isPublicAssetRequest(request, assetsOrigin)) return new Response('not found', { status: 404, headers: { 'cache-control': 'no-store' } });
+  const response = incoming.pathname.startsWith('/assets/export/')
+    ? await exportAssetResponse(request, incoming.pathname.slice('/assets/export/'.length))
+    : incoming.pathname.startsWith('/assets/ref/')
+    ? await publicRefAssetResponse(request, incoming.pathname.slice('/assets/ref/'.length))
+    : await publicAssetBytes(request, { params: Promise.resolve({ hash: incoming.pathname.slice('/assets/'.length) }) });
+  const safe = publicAssetResponse(response);
+  return c.req.method === 'HEAD' ? new Response(null, { status: safe.status, headers: safe.headers }) : safe;
+};
+
 export function createAppServer(opts: AppServerOptions = {}): Hono {
   // Every composition (server.ts, src/main.ts, server/host) serves through here: facts project into inboxes.
   setEventProjection(projectNotifications);
@@ -356,9 +174,8 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
    */
   const pagesSite = opts.pagesSite ?? deployedPagesSite();
   app.use('*', pagesHost(pagesSite));
-  /** The policy every app page carries: strict, framing only the pages origins. */
-  const appPageCsp = appPagePolicy(pagesSite);
-  const pageCsp = (request: Request): string => (opts.devHmrPort !== undefined ? developmentAppCsp(appPageCsp, baseUrl(request), opts.devHmrPort) : appPageCsp);
+  /** The policy the app page (`shell`: the custom shell's screen) at this request's address carries (./app-policy). */
+  const policyAt = (request: Request, shell = false): string => appPagePolicyAt(new URL(request.url), { site: pagesSite, pageOrigin: baseUrl(request), devHmrPort: opts.devHmrPort, shell });
   // Read at boot: a file that cannot be read stops the boot here, naming the setting.
   const configuredShell = opts.shellFile === undefined ? shellFile() : opts.shellFile;
   const customShell = configuredShell ? loadCustomShell(configuredShell) : null;
@@ -373,24 +190,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   // route can see it (server/user-host); every other host passes straight on.
   // Its home page links the stylesheets THIS page links, read from the same shell.
   app.use('*', userHostBoundary({ stylesheets: async (url) => linkedStylesheets(await index(url)) }));
-  const assetsOrigin = ASSETS_ORIGIN;
-  if (assetsOrigin) app.use('*', async (c, next) => {
-    const incoming = new URL(c.req.url);
-    if (incoming.host !== new URL(assetsOrigin).host && baseUrl(c.req.raw) !== assetsOrigin) return next();
-    // Only the byte validator crosses this anonymous boundary; never credentials.
-    const headers = new Headers();
-    const validator = c.req.header('if-none-match');
-    if (validator !== undefined) headers.set('if-none-match', validator);
-    const request = new Request(assetsOrigin + incoming.pathname + incoming.search, { method: c.req.method, headers });
-    if (!isPublicAssetRequest(request, assetsOrigin)) return new Response('not found', { status: 404, headers: { 'cache-control': 'no-store' } });
-    const response = incoming.pathname.startsWith('/assets/export/')
-      ? await exportAssetResponse(request, incoming.pathname.slice('/assets/export/'.length))
-      : incoming.pathname.startsWith('/assets/ref/')
-      ? await publicRefAssetResponse(request, incoming.pathname.slice('/assets/ref/'.length))
-      : await publicAssetBytes(request, { params: Promise.resolve({ hash: incoming.pathname.slice('/assets/'.length) }) });
-    const safe = publicAssetResponse(response);
-    return c.req.method === 'HEAD' ? new Response(null, { status: safe.status, headers: safe.headers }) : safe;
-  });
+  if (ASSETS_ORIGIN) app.use('*', assetsOriginBoundary(ASSETS_ORIGIN));
   if (!opts.indexHtml) mountBuildAssets(app, webDir);
   const preloadListing = opts.indexHtml ? (html: string) => html : createListingPreloader(webDir);
   // …and per document, the lazy code THIS document runs: its chart module, its Mermaid kinds.
@@ -404,11 +204,10 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
    * The endpoints stay the truth; this is the same data, arriving earlier.
    */
   const page = async (c: { req: { raw: Request; url: string } }, status?: 200 | 404, canonical?: string, address?: string, admitted?: Admitted) => {
-    // A document served at a non-canonical address is rendered AS its canonical address (see documentAddress).
+    // A document served at a non-canonical address is rendered AS its canonical address (see admitDocumentAddress).
     const url = address ? new URL(address + new URL(c.req.url).search, c.req.url).href : c.req.url;
-    const found = status === 404 ? null : await bootstrapFor(c.req.raw, new URL(url).pathname, admitted);
+    const found = status === 404 ? null : await pageBootstrap(c.req.raw, new URL(url).pathname, admitted, pagesSite);
     const data = found ? { ...found.data, ...(address ? { address } : {}) } : null;
-    const appRow = admitted?.row ?? null;
     // A document is the app page's frame (lib/document-serving/document-frame), named in the page's head as the document.
     const frame = found?.frame ?? null;
     // An @-address whose profile resolves to NOTHING is a miss, and a miss is
@@ -423,26 +222,15 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     // gets the app's own 404 page, anything else (curl's `*/*`, a fetch tool)
     // gets the refusal that names the way on.
     if (code === 404 && !wantsHtml(c.req.raw)) return apiNotFound(c);
-    // The agent pointer is injected here, on the request base, for EVERY shell
-    // — the static web/solid-app.html carries none, so there is one source (lib/compiled-page/agent-discovery).
-    const discovered = withAgentDiscovery(html, baseUrl(c.req.raw));
-    const listing = listingPage(data);
-    const fonted = withShellFonts(listing ? preloadListing(discovered, listing) : discovered);
-    const shell = frame ? withDocumentFrame(fonted, frame) : withGenericSocial(fonted, baseUrl(c.req.raw));
-    // The address search engines index a document under (lib/user-pages canonicalDocumentUrl).
-    const linked = canonical ? shell.replace('</head>', () => `<link rel="canonical" href="${escapeHtml(canonical)}"></head>`) : shell;
-    // The build this page is (lib/http/app-build), which the page compares with what the server says later.
-    const indexed = build ? linked.replace('</head>', () => `<meta name="${APP_BUILD_META}" content="${build}"></head>`) : linked;
-    // Last, so the pointer is the page's final line whatever else was inlined.
+    const origin = baseUrl(c.req.raw);
+    const body = renderAppPage(html, { origin, data, frame, canonical, build, appRow: admitted?.row ?? null, preloadListing });
     // Brotli for a client that takes it (server/content-encoding); identity otherwise, as before.
-    const inlined = data;
-    const ordered = withReaderHeadOrder(appRow ? withArtifactAppHead(indexed, appRow) : indexed);
-    return compressDynamic(c.req.raw, new Response(withAgentDiscoveryTail(inlined ? withBootstrap(ordered, inlined) : ordered, agentDiscovery(baseUrl(c.req.raw))), { status: code, headers: {
+    return compressDynamic(c.req.raw, new Response(body, { status: code, headers: {
       'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...APP_SECURITY_HEADERS,
-      'content-security-policy': framedPolicy(new URL(c.req.url), pageCsp(c.req.raw)),
+      'content-security-policy': policyAt(c.req.raw),
       ...readerHeaders(found?.reader),
       // A document's address carries the agent pointer as a header too, for a fetch that reads no body.
-      ...(frame ? { Link: `<${agentDiscovery(baseUrl(c.req.raw)).url}>; rel="help"` } : {}),
+      ...(frame ? { Link: `<${agentDiscovery(origin).url}>; rel="help"` } : {}),
     } }));
   };
 
@@ -452,138 +240,11 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const url = new URL(c.req.url);
     const help = agentDiscovery(baseUrl(c.req.raw));
     // The head slot carries the agent pointer the app page's head carries, then the document's own head where it names one.
-    const head = !customShell.headed ? '' : agentDiscoveryHead(help) + (namesDocument(url) ? await runWithRequest(c.req.raw, () => anonymousHead(c.req.raw, url.pathname)) : '');
+    const head = !customShell.headed ? '' : agentDiscoveryHead(help) + (namesDocument(url) ? await runWithRequest(c.req.raw, () => anonymousDocumentHead(c.req.raw, url.pathname)) : '');
     // The policy the app page at this address carries (a document address admits its trusted embedders), and its agent pointer.
-    return customShellResponse(customShell, c.req.method, shellFramedPolicy(url, framedPolicy(url, pageCsp(c.req.raw))),
+    return customShellResponse(customShell, c.req.method, policyAt(c.req.raw, true),
       { ...APP_SECURITY_HEADERS, Link: `<${help.url}>; rel="help"` }, head);
   };
-  /** The head a link-preview bot sees for a document address: only for a document an ANONYMOUS reader may read. */
-  const anonymousHead = async (request: Request, pathname: string): Promise<string> => {
-    const id = candidateDocument(pathname)?.id ?? (slugAddress(pathname) ? await slugAddressTarget(request, pathname, ANONYMOUS_ACTOR) : null);
-    const read = id ? await readPageRow(id) : null;
-    return read && await canReadArtifact(read.row, ANONYMOUS_ACTOR) ? documentHeadFor(read.row) : '';
-  };
-
-  /**
-   * Who may frame this app page: the app alone; `/local/connect` its local hosts; a document's address (`/a/<id>`, its
-   * `/app/` form) also the deployment's trusted embedders (EMBED__TRUSTED_ORIGINS, empty by default); and that
-   * address's EMBEDDED view (`?embed=1`, the page without the app's bar, solid/lib/embedded) the trusted embedders
-   * ONLY, no one when there are none, so the bar can be hidden only inside a frame they draw. Nothing else.
-   */
-  const framedPolicy = (url: URL, csp: string): string => {
-    if (url.pathname === '/local/connect') return csp.replace("frame-ancestors 'self'", "frame-ancestors file: http://localhost:* http://127.0.0.1:* http://[::1]:*");
-    if (!/^\/a\/[^/]+(?:\/app)?\/?$/.test(url.pathname)) return csp;
-    const embedders = embedTrustedOrigins();
-    if (url.searchParams.get('embed') === '1') return csp.replace("frame-ancestors 'self'", `frame-ancestors ${embedders.length ? embedders.join(' ') : "'none'"}`);
-    return embedders.length ? csp.replace("frame-ancestors 'self'", `frame-ancestors 'self' ${embedders.join(' ')}`) : csp;
-  };
-  /**
-   * A custom shell's EMBEDDED chat (`/conversations?embed=1`: the shell draws the chat alone there) may also be framed by
-   * the deployment's trusted embedders (EMBED__TRUSTED_ORIGINS), beside the app itself; every other screen, and the
-   * chat with none configured, keeps the app page's policy. A document address keeps its own rule above.
-   */
-  const shellFramedPolicy = (url: URL, csp: string): string => {
-    const embedders = embedTrustedOrigins();
-    if (url.searchParams.get('embed') !== '1' || !embedders.length || !/^\/conversations\/?$/.test(url.pathname)) return csp;
-    return csp.replace("frame-ancestors 'self'", `frame-ancestors 'self' ${embedders.join(' ')}`);
-  };
-  const pageData = (dir: string) => ROUTES.find((r) => r.dir === dir)?.module.GET as ((request: Request, ctx: { params: Promise<Record<string, string>> }) => Promise<Response>) | undefined;
-  const profileData = pageData('/api/page/profile/[user]/[[...path]]');
-
-  /**
-   * What this address will be asked for, answered now. A pretty URL that names
-   * a document carries BOTH answers — the resolution and the document page —
-   * because the profile page renders the artifact page, and one missing answer
-   * is one round trip and one visible settle. A document's answer comes with
-   * the story its runtime renders (lib/artifact-page), which the page inlines.
-   */
-  type Bootstrap = { data: { path: string; profile?: unknown; artifact?: unknown }; frame?: DocumentFrame; reader?: ArtifactPageAnswer['reader'] };
-  /** The document parts of an answer the page serves: the document's frame, and which renderer is in it. */
-  const documentParts = (answer: ArtifactPageAnswer | null): Omit<Bootstrap, 'data'> => (answer ? {
-    ...(answer.frame ? { frame: answer.frame } : {}),
-    ...(answer.reader ? { reader: answer.reader } : {}),
-  } : {});
-  async function bootstrapFor(request: Request, pathname = new URL(request.url).pathname, admitted?: Admitted): Promise<Bootstrap | null> {
-    // The ORIGINAL request answers, whatever path it is rendered as: its actor rides on the object (utils inProcess).
-    const url = { pathname };
-    const segments = url.pathname.split('/').filter(Boolean);
-    // The row documentPreparation already fetched and admitted for this request rides along: one fetch, one check.
-    const document = async (id: string) => {
-      const answer = await runWithRequest(request, () => artifactPageAnswer(request, id, { ...(admitted ? { admitted: admitted.row, ...(admitted.revision ? { admittedRevision: admitted.revision } : {}) } : {}), pages: pagesSite }));
-      return answer.status === 200 ? answer : null;
-    };
-    if (segments.at(-1) === 'edit' || (segments[0] === 'a' && segments.length === 3 && segments[2] === 'app')) segments.pop();
-    if (segments[0] === 'a' && segments.length === 2) {
-      const artifact = await document(segments[1]!);
-      return artifact ? { data: { path: url.pathname, artifact: artifact.body }, ...documentParts(artifact) } : null;
-    }
-    if (segments[0]?.startsWith('@')) {
-      /*
-       * The document's own canonical address, already fetched and admitted for this request: the
-       * resolution is the profile route's own answer for it (`{ kind: 'artifact', id }`), without a
-       * second fetch of the row or a second admission.
-       */
-      const own = admitted !== undefined && [admitted.canonicalPath, admitted.servedPath].includes(`/${segments.join('/')}`);
-      const res = own || !profileData ? null : await runWithRequest(request, () => profileData(request, { params: Promise.resolve({ user: segments[0]!, ...(segments.length > 1 ? { path: segments.slice(1).join('/') } : {}) }) }));
-      const profile = own ? { kind: 'artifact', id: admitted!.row.id } : res?.ok ? await res.json() as { kind?: string; id?: string } : null;
-      if (!profile) return null;
-      const artifact = profile.kind === 'artifact' && profile.id ? await document(profile.id) : null;
-      return { data: { path: url.pathname, profile, ...(artifact ? { artifact: artifact.body } : {}) }, ...documentParts(artifact) };
-    }
-    return null;
-  }
-
-  /**
-   * A document address the viewer may not read answers 404 — the STATUS, not
-   * only the page. "Gone" and "not yours" look alike by design, and a 200
-   * carrying a not-found page would be a weaker answer than the one the
-   * server-rendered page gave (and is what a crawler, a curl and the gates
-   * all read). The SPA renders its own 404 body inside it.
-   */
-  /**
-   * The canonical address for a document, when the one the viewer asked for is
-   * not it — served IN PLACE, not redirected: the page is rendered as the
-   * canonical address and names it (`address`) for the SPA to put in the
-   * address bar (solid/lib/heal-address), saving a shared link its round trip. It
-   * runs AFTER the ACL, so a private document never leaks its owner to a
-   * viewer who cannot read it; a valid export key skips the healing, because a
-   * capture must stay at the address it was handed.
-   */
-  const documentPreparation = async (request: Request): Promise<{ status: 200 | 404; address?: string; canonical?: string; admitted?: Admitted }> => {
-    const url = new URL(request.url);
-    const found = candidateDocument(url.pathname);
-    const slugged = slugAddress(url.pathname) !== null;
-    if (!found && !slugged) return { status: 200 };
-    const actor = await sessionActor(request).catch(() => null);
-    const admit = async (id: string, bySlug: boolean): Promise<{ status: 200 | 404; address?: string; canonical?: string; admitted?: Admitted }> => {
-      // The row and its live revision in one statement (lib/artifacts readPageRow), for the page's answer below.
-      const read = await readPageRow(id);
-      if (!read) return { status: 404 };
-      const { row, revision } = read;
-      // A key skips canonical healing, but only a valid key admits the page.
-      const key = url.searchParams.get('key');
-      if (!url.pathname.endsWith('/edit') && key && verifyExportKey(row.id, key)) return { status: 200, admitted: { row, revision } };
-      // The page's answer (artifactPageAnswer) decides this actor's role on this request again: one memo of its access facts serves both.
-      const facts = actor ? requestAccessFacts(request, actor) : undefined;
-      const editingDataset = row.format === 'dataset' && url.pathname.endsWith('/edit');
-      if (editingDataset && (!actor || !canEdit(await effectiveRole(row, actor, facts)))) return { status: 404 };
-      if (!(await canReadArtifact(row, actor ?? ANONYMOUS_ACTOR, facts))) return { status: 404 };
-      // Admitted, by this request's own actor: the page's answer reuses the row and this decision.
-      if (url.searchParams.has('key')) return { status: 200, admitted: { row, revision } };
-      const personalHandle = await ownerUsername(row.user_id);
-      const canonicalPath = canonicalArtifactPath(row, personalHandle);
-      const canonical = canonicalPath + (editingDataset ? '/edit' : '');
-      // A title-slug address stays in the address bar: it is the address the person chose to share.
-      const servedPath = bySlug ? artifactViewPath(url.pathname) : undefined;
-      return { status: 200, admitted: { row, canonicalPath, revision, ...(servedPath ? { servedPath } : {}) }, canonical: await canonicalDocumentUrl(row, personalHandle), ...(!bySlug && canonical !== url.pathname ? { address: canonical } : {}) };
-    };
-    const byId = found ? await admit(found.id, false) : { status: 404 as const };
-    if (byId.status === 200 || !slugged) return byId;
-    // The id named nothing this viewer reads: the address may be a title slug (lib/artifacts/slug-address).
-    const id = await slugAddressTarget(request, url.pathname, actor ?? ANONYMOUS_ACTOR);
-    return id && id !== found?.id ? admit(id, true) : byId;
-  };
-
   // Every public file (server/public-files): /af/, its old addresses, the two root files.
   mountPublicFiles(app, { webDir, publicDir });
   app.all('/chat/*', async c => c.notFound());
@@ -648,7 +309,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
       fallbackId: () => slugAddressTarget(c.req.raw, new URL(c.req.url).pathname, ANONYMOUS_ACTOR),
       encoding: negotiateEncoding(c.req.raw.headers.get('accept-encoding'), ['br']),
     }, async () => {
-      const { status, address, canonical, admitted } = await runWithRequest(c.req.raw, () => documentPreparation(c.req.raw));
+      const { status, address, canonical, admitted } = await runWithRequest(c.req.raw, () => admitDocumentAddress(c.req.raw));
       // Admission's 404 is final; its 200 can mean "not a document
       // address" — a pretty path under an unknown handle still misses, and
       // page() derives that from the profile resolution it already ran.

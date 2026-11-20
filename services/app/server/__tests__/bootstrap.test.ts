@@ -13,7 +13,8 @@ import { postArtifact } from '@/__tests__/artifact-fixtures';
 
 import { mintToken } from '@/lib/accounts';
 import { createUser, ensureUsername } from '@/lib/accounts';
-import { BOOTSTRAP_ID, createAppServer, withBootstrap } from '../app';
+import { createAppServer } from '../app';
+import { BOOTSTRAP_ID, withBootstrap } from '../app-shell';
 import { STORY_FAMILY_ASSETS } from '@/lib/html-systems';
 import { APP_SHELL_FONT_PRELOADS } from '@/lib/page-styles';
 import { useAppHarness } from '@/__tests__/harness';
@@ -82,7 +83,7 @@ describe('inlined page data', () => {
 
   it('carries the owner\'s document page: the surface props and the canonical address', async () => {
     const w = await world();
-    // At the canonical address — the one /a/<id> names and heals to (server/app documentPreparation).
+    // At the canonical address — the one /a/<id> names and heals to (server/document-address admitDocumentAddress).
     const owner = as({ credential: 'session', userId: w.owner.id, email: w.owner.email });
     const path = await canonicalOf(app, w.pub.id, owner);
     const res = await app.request(path, { headers: owner });

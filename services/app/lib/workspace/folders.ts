@@ -25,7 +25,7 @@ interface FolderCrumb {
 
 /**
  * A FOLDER'S WHOLE PAGE, answered in ONE server call and inlined into the HTML
- * (server/app withBootstrap), so the listing is in the first byte.
+ * (server/app-shell withBootstrap), so the listing is in the first byte.
  *
  * A folder has NO CONTENT: its row carries a title, a placement and an ACL and
  * nothing else, so everything a person sees on the page is on this object.

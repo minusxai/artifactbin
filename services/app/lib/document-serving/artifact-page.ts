@@ -57,8 +57,8 @@ export interface ArtifactPageAnswer {
 /** What the app page (never the JSON door) hands the answer. */
 interface ArtifactPageOptions {
   /**
-   * The row the caller already fetched AND admitted for this very request (server/app
-   * documentPreparation): the answer neither fetches it again nor decides admission again — one row
+   * The row the caller already fetched AND admitted for this very request (server/document-address
+   * admitDocumentAddress): the answer neither fetches it again nor decides admission again — one row
    * fetch and one access check per view.
    */
   admitted?: ArtifactRow;
@@ -162,7 +162,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   const exporting = verifyExportKey(header.id, key ?? undefined);
   const actor = await sessionActor(request);
   // Every role decision this view makes reads one memo of the actor's access facts, shared with the app page's own
-  // admission of this very request (server/app documentPreparation): the role is resolved once per view.
+  // admission of this very request (server/document-address admitDocumentAddress): the role is resolved once per view.
   const facts = requestAccessFacts(request, actor);
   if (!admitted && !exporting && !holdsCreatingToken(header, actor) && !(await canReadArtifact(header, actor, facts))) return notFound();
   if (header.format === 'markup' || header.format === 'program' || !ARTIFACT_FORMATS.includes(header.format as ArtifactFormat)) return notFound();

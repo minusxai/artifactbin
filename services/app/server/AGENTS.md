@@ -1,6 +1,7 @@
 # Serving and the trust boundary
 
-Hosts: `app.ts`, `public-files.ts`, `pages-host.ts`, `user-host.ts`, `host.ts`. Also covers
+Hosts: `app.ts` (with `app-policy.ts` the app page CSP, `app-shell.ts` its HTML, `document-address.ts` admission of the
+document an address names), `public-files.ts`, `pages-host.ts`, `user-host.ts`, `host.ts`. Also covers
 `lib/document-serving` and `lib/local-connection`.
 
 ## Rules
@@ -11,8 +12,8 @@ Hosts: `app.ts`, `public-files.ts`, `pages-host.ts`, `user-host.ts`, `host.ts`. 
   its bootstrap carries no page source or author script. A document runs only at `<hex id>.<pages host>`, and
   `/a/<id>/raw` answers under the document sandbox CSP (`raw.server.ts`). The app CSP's `frame-src` admits only
   itself and the pages hosts.
-- Other origins frame `/a/<id>` only if listed in `EMBED__TRUSTED_ORIGINS` (`app.ts`); with a custom shell, also the
-  shell's embedded chat, `/conversations?embed=1` (`shellFramedPolicy`).
+- Other origins frame `/a/<id>` only if listed in `EMBED__TRUSTED_ORIGINS` (`app-policy.ts`); with a custom shell, also the
+  shell's embedded chat, `/conversations?embed=1` (`appPagePolicyAt`).
 - One URL map, contracts `url-space.ts` (`/af/url-space.json`): `/api/` (JSON, links), `/af/` (public,
   credential-free files), `/a/<id>/`, `/@handle`, a few fixed paths, else a screen; host allowlists derive from it.
   Never rewrite public paths from retired root prefixes.

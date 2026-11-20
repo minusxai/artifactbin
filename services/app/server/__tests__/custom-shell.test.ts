@@ -86,7 +86,7 @@ describe('with a custom shell',()=>{
   expect(await csp('/conversations?embed=0')).toContain("frame-ancestors 'self';");
   expect(await csp(`/a/${ID}?embed=1`)).toContain('frame-ancestors https://portal.example;');
   // Without a shell the app's own screens keep their policy.
-  expect((await server(null).request('/account?embed=1',html)).headers.get('content-security-policy')).toContain("frame-ancestors 'self';");
+  for(const path of ['/account?embed=1','/conversations?embed=1'])expect((await server(null).request(path,html)).headers.get('content-security-policy'),path).toContain("frame-ancestors 'self';");
  });
  it('leaves the handle step, the agent handoff, the API, assets, every door and file under a page, the installed app and export captures to the app',async()=>{
   const app=server(plain);
