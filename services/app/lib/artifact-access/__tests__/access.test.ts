@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { useAppHarness } from '@/__tests__/harness';
 import { identityForUser, mintToken, type AccessActor } from '@/lib/accounts';
 import { createGroup, } from '@/lib/groups';
-import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, groupMemberPredicate, linkRoleOf, ownerPredicate, ownerScope, policyReaderSql, roleWithoutLink, annotationScope, commentMonitorScope, documentEditorReaches, editorScope, effectiveRole, holdsCreatingToken, liveAccessFacts, ownsArtifact, preloadAccessFacts, reactionScope, writerFor, type Scope } from '@/lib/artifact-access';
+import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, groupMemberPredicate, linkRoleOf, ownerPredicate, ownerScope, policyReaderSql, roleWithoutLink, annotationScope, commentMonitorScope, documentEditorReaches, editorScope, effectiveRole, holdsCreatingToken, liveAccessFacts, ownsArtifact, preloadAccessFacts, reactionScope, requestAccessFacts, writerFor, type Scope } from '@/lib/artifact-access';
 import { canReadArtifact } from '@/lib/artifacts';
 import { createArtifact, updateSharingFor } from '@/lib/artifacts';
 import { account, head, mine, page, personOfKind, sql, trashRow } from '@/__tests__/artifact-fixtures';
@@ -66,8 +66,11 @@ describe('the role lattice', () => {
     await updateSharingFor(other, sandbox.id, { visibility: 'unlisted', linkRole: 'commenter' });
     const real = await mine(owner);
     await updateSharingFor(owner, real.id, { visibility: 'unlisted', linkRole: 'commenter' });
-    expect(await effectiveRole(await head(sandbox.id), tester)).toBe('commenter');
-    expect(await effectiveRole(await head(real.id), tester)).toBe('viewer');
+    for (const [id, expected] of [[sandbox.id, 'commenter'], [real.id, 'viewer']] as const) {
+      const row = await head(id);
+      expect(await effectiveRole(row, tester)).toBe(expected);
+      expect(await effectiveRole(row, tester, requestAccessFacts(new Request('https://app.test'), tester, id))).toBe(expected);
+    }
   });
 
   it('group editors own a group row, group viewers read it, and nobody else', async () => {
@@ -157,16 +160,20 @@ describe('the rule\'s parts', () => {
 });
 
 describe('access facts', () => {
-  it('live facts stamp an unresolved invitation on first read; preloaded facts defer it to settle', async () => {
+  it('live and page facts stamp unresolved invitations on first read; list facts defer to settle', async () => {
     const owner = await account('owner@example.test');
     const friend = await account('friend@example.test');
     const a = await mine(owner, 'A');
     const b = await mine(owner, 'B');
-    for (const row of [a, b]) await updateSharingFor(owner, row.id, { shares: [{ email: 'friend@example.test', role: 'editor' }] });
+    const c = await mine(owner, 'C');
+    for (const row of [a, b, c]) await updateSharingFor(owner, row.id, { shares: [{ email: 'friend@example.test', role: 'editor' }] });
     const unresolved = async () => (await sql<{ artifact_id: string }>('SELECT artifact_id FROM artifact_shares WHERE user_id IS NULL ORDER BY artifact_id')).map(r => r.artifact_id);
     const live = liveAccessFacts(friend);
     expect(await live.sharedWith(a.id)).toBe(true);
     expect(await live.namedRole(a.id)).toBe('editor');
+    expect(await unresolved()).toEqual([b.id, c.id].sort());
+    const pageFacts = requestAccessFacts(new Request('https://app.test'), friend, c.id);
+    expect(await effectiveRole(await head(c.id), friend, pageFacts)).toBe('editor');
     expect(await unresolved()).toEqual([b.id]);
     const facts = await preloadAccessFacts(await harness.db(), friend, [b]);
     expect(await facts.namedRole(b.id)).toBe('editor');
