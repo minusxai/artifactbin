@@ -1,5 +1,5 @@
 import {it,expect,onTestFinished} from 'vitest';
-import {readFileSync, mkdirSync, writeFileSync, rmSync, existsSync} from 'node:fs';
+import {readFileSync, mkdirSync, writeFileSync, rmSync, existsSync, utimesSync} from 'node:fs';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
@@ -67,7 +67,9 @@ it('starts the clock when the first job starts running, not at the run start, a 
   {status:'in_progress',conclusion:null,created_at:'2026-10-06T00:01:00Z',started_at:'2026-10-06T00:05:00Z'},
   {status:'queued',conclusion:null,created_at:'2026-10-06T00:01:00Z',started_at:'2026-10-06T00:01:00Z'},
   {status:'completed',conclusion:'skipped',created_at:'2026-10-06T00:01:00Z',started_at:'2026-10-06T00:02:00Z'},
-  {status:'in_progress',conclusion:null,started_at:null}];
+  {status:'in_progress',conclusion:null,started_at:null},
+  // `gh run rerun --failed`: a job carried over from the previous attempt keeps its old start under a new creation.
+  {status:'completed',conclusion:'success',created_at:'2026-10-06T00:01:00Z',started_at:'2026-10-05T23:30:00Z'}];
  expect(attemptStart({run_started_at:'2026-10-06T00:00:00Z',jobs})).toBe('2026-10-06T00:05:00Z');
  expect(attemptStart({run_started_at:'2026-10-06T00:00:00Z'})).toBeUndefined();
  expect(attemptStart({jobs:[]})).toBeUndefined();
@@ -487,6 +489,19 @@ it('clocks from the prefetched attempt without fetching it again, and fetches it
  expect(cold.result.status,cold.result.stderr).toBe(0);
  expect(cold.result.stdout).toContain('(target): aim for 40s; the limit is 60s');
  expect(cold.fetched).toBe('api /repos/o/r/actions/runs/7/attempts/1/jobs?per_page=100\n');
+});
+// The job list is fetched at a job's first step, when GitHub may still report every job, this one included, as queued:
+// the clock then times from the fetch (the file's write time; this job had started by then, so a few seconds lenient at
+// most) and says so, never failing closed on that lag. A response that is no job list still fails.
+it('times from the fetch when every job was still reported queued, and says so',()=>{
+ const directory=tempDirSync('afbin-ci-lag-',onTestFinished),attempt=join(directory,'jobs.json'),summary=join(directory,'summary.md');
+ const ago=(seconds)=>new Date(Date.now()-seconds*1000).toISOString();
+ writeFileSync(attempt,JSON.stringify({total_count:2,jobs:[{status:'queued',created_at:ago(500),started_at:ago(500)},{status:'queued',created_at:ago(500)}]}));
+ const fetched=new Date(Date.now()-10000);utimesSync(attempt,fetched,fetched);
+ const run=spawnSync(process.execPath,[fileURLToPath(new URL('../lib/ci-elapsed.mjs',import.meta.url)),'--pr',attempt,summary],{encoding:'utf8'});
+ expect(run.status,run.stdout+run.stderr).toBe(0);
+ expect(run.stdout).toMatch(/PR CI took 1\d\.\ds \(target\)/);
+ expect(readFileSync(summary,'utf8')).toContain('No job was reported running when the job list was fetched');
 });
 // A lock change misses the exact install key on every push; reconciling main's install beats a cold npm ci.
 it('reconciles the nearest install on a lock miss, restore only, and falls back to npm ci if the lock would move',()=>{

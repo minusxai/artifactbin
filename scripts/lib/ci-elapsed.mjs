@@ -2,7 +2,7 @@
 // under 360s and fails above 480s. Both clocks start when the attempt's first job starts running (`attemptStart`).
 // Do not raise these numbers: fix the critical path, or move a test too slow for its lane (a pull request test to
 // ci.yml, a main test to a nightly). scripts/__tests__/ci-budget.test.mjs pins them. Builtins only.
-import {appendFileSync, readFileSync} from 'node:fs';
+import {appendFileSync, readFileSync, statSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 
 /** Budgets in seconds. `pr` is the required pull-request lane (.github/workflows/pr-fast.yml); `full`
@@ -30,12 +30,13 @@ export function measureCiElapsed(startedAt, finishedAt, {lane = 'full'} = {}) {
 }
 
 /** An attempt's start, from its jobs (`/attempts/{n}/jobs`): the earliest `started_at` of a job that has started
- * running (not queued or waiting, whose times GitHub may fill in early, and not skipped). Not the wait for a runner, and
+ * running (not queued or waiting, whose times GitHub may fill in early, not skipped, and not carried over by
+ * `gh run rerun --failed` from an earlier attempt, which keeps its old start under a new `created_at`). Not the wait for a runner, and
  * not `run_started_at`, which keeps a main batch's wait in its concurrency group for the previous one. Read at any
- * job's start it is already final: a job that starts later starts later. Undefined (so the clock fails) without one. */
+ * job's start it is already final: a job that starts later starts later. Undefined while none is reported running. */
 export function attemptStart(attempt) {
   return (Array.isArray(attempt?.jobs) ? attempt.jobs : [])
-    .filter((job) => !['queued', 'waiting'].includes(job?.status) && job?.conclusion !== 'skipped')
+    .filter((job) => !['queued', 'waiting'].includes(job?.status) && job?.conclusion !== 'skipped' && !(Date.parse(job?.started_at) < Date.parse(job?.created_at)))
     .map((job) => job?.started_at).filter((value) => typeof value === 'string' && Number.isFinite(Date.parse(value)))
     .sort((a, b) => Date.parse(a) - Date.parse(b))[0];
 }
@@ -59,8 +60,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     const lane = args[0] === '--pr' ? (args.shift(), 'pr') : 'full';
     const [attemptFile, summaryFile] = args;
     const attempt = JSON.parse(readFileSync(attemptFile, 'utf8'));
-    const result = measureCiElapsed(attemptStart(attempt), new Date().toISOString(), {lane});
-    const text = describeCiElapsed(result, lane);
+    // GitHub can still report every job, the fetching one included, as queued: then the fetch (the file's write time,
+    // after this job started) starts the clock, at most a few seconds late. Anything but a job list still fails.
+    const start = attemptStart(attempt), lag = !start && Array.isArray(attempt?.jobs);
+    const result = measureCiElapsed(lag ? statSync(attemptFile).mtime.toISOString() : start, new Date().toISOString(), {lane});
+    const text = describeCiElapsed(result, lane) + (lag ? ' No job was reported running when the job list was fetched: timed from that fetch, at most a few seconds lenient.' : '');
     console.log(text);
     if (summaryFile) appendFileSync(summaryFile, `\n## CI end-to-end wall clock\n\n${text}\n`);
     if (result.status === 'failed') { console.log(`::error::${text}`); process.exitCode = 1; }
