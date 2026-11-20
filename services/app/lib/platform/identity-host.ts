@@ -14,8 +14,7 @@
  * config on its own.
  */
 import {API_RESOURCE_PATH,type Queryable,type TransactionalQueryable} from '@artifactbin/contracts';
-import {assertGroupRoleModel} from '@artifactbin/auth/identity-store/group-role-migration';
-import {ensureIdentitySchema} from '@artifactbin/auth/identity-store';
+import {assertGroupRoleModel,ensureIdentitySchema} from '@artifactbin/auth';
 import {ALIAS_ORIGINS,AUTH_SCHEMA,AUTH_SERVICE_URL,IDENTITY_READ_SCHEMA,PUBLIC_BASE_URL,deploymentConfig,serviceAudiences} from './config';
 
 /** This process's settings into the row the identity views read. */

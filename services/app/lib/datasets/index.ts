@@ -19,6 +19,5 @@ export type {
 } from './types';
 export { people, resolveDefinitionScope, resolveUserColumnScope, retainUserScope, userOptions, validateUserContent, validateUserWrites } from './user-fields';
 
-export { selectSqlLinks } from './sql-links';
 
 export {readLifetime} from './read-lifetime';

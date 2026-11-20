@@ -5,7 +5,7 @@ import { LIVE_ARTIFACT_SQL } from '@/lib/artifact-access';
 import {validateUserWrites, DatasetError, throttlePublicMutation, catalogOf, importedTables, loadDatasetRows, storeDatasetRows} from '@/lib/datasets';
 import { recheckMutation } from './dataset-policy';
 import {SIGN_IN_REQUIRED} from '@artifactbin/contracts';
-import {loadSqlite} from '@artifactbin/sql/core';
+import {analyzeSql} from '@artifactbin/sql/core';
 import {sqlExtensions, isQueryFailure, runMutation, type MutationInput} from '@/lib/sql';
 import {paramSqlName} from '@artifactbin/contracts';
 /**
@@ -312,7 +312,7 @@ function memberOfDocuments(columns:readonly import('@artifactbin/contracts').Dat
 /** The one stored table a direct write names, by SQLite's own analysis of it over the dataset's catalog. */
 async function writtenTable(catalog:import('@/lib/datasets').DatasetCatalog,sql:string):Promise<{schema:string;table:string}> {
   const relations=catalog.tables.filter(t=>t.objectKey&&t.sql===undefined).map(t=>({schema:t.schema,table:t.name,columns:t.columns}));
-  const writes=(await loadSqlite()).analyze(sql,relations,{mode:'write',extensions:sqlExtensions()}).writes;
+  const writes=(await analyzeSql(sql,relations,{mode:'write',extensions:sqlExtensions()})).writes;
   const [write]=writes;
   if(!write||new Set(writes.map(w=>`${w.schema}\0${w.table}`)).size!==1)throw new Error('exactly one INSERT, UPDATE or DELETE of one catalog table is required');
   return {schema:write.schema,table:write.table};

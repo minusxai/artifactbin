@@ -2,7 +2,10 @@
  * THE ACCOUNT RULES AS SQL, one spelling each, run by the app's own checks (unqualified names: its search_path
  * resolves `users` to the identity read view) and built into the identity views' `active` and `live` columns
  * (qualified names: a view's definition must not depend on who creates it). `names` says where each table is.
+ * The app asks them through the three questions at the end (over its own `users` read view), never as SQL.
  */
+import type {Queryable} from '@artifactbin/contracts';
+
 export interface RuleNames {
   /** The account rows: `users` (the reader's view) or `<auth>.users` (the base table). */
   users: string;
@@ -13,7 +16,7 @@ export interface RuleNames {
 const READER_NAMES: RuleNames = {users: 'users', deploymentMembers: 'deployment_members', deploymentState: 'deployment_state'};
 
 /** Over the `users` row aliased `alias`: a live test user whose parent is an email account. */
-export const liveTestuserWithParentSql = (alias: string, names: RuleNames = READER_NAMES): string => `(${alias}.kind = 'testuser' AND (${alias}.expires_at IS NULL OR ${alias}.expires_at > now()) AND EXISTS
+const liveTestuserWithParentSql = (alias: string, names: RuleNames = READER_NAMES): string => `(${alias}.kind = 'testuser' AND (${alias}.expires_at IS NULL OR ${alias}.expires_at > now()) AND EXISTS
   (SELECT 1 FROM ${names.users} parent WHERE parent.id = ${alias}.parent_user_id AND parent.kind = 'account' AND parent.email IS NOT NULL))`;
 
 /** Over the `users` row aliased `alias`: may this identity hold a credential at all (an email account, or a live test user of one). */
@@ -86,3 +89,18 @@ export const groupSignInLiveSql = (t: string, names: GroupNames & {group_sign_in
       AND CASE WHEN ${t}.grant_id IS NULL THEN ${active(`${t}.issued_by`)} AND ${groupLevelHeldSql(names, `${t}.issued_by`, `${t}.group_id`, `${t}.group_role`)}
         ELSE EXISTS (SELECT 1 FROM ${names.group_sign_in_grants} signed_grant WHERE signed_grant.id=${t}.grant_id AND ${serviceGrantStandsSql('signed_grant', names)}
           AND signed_grant.group_id=${t}.group_id AND signed_grant.role=${t}.group_role AND signed_grant.service_id=${t}.issued_by) END)`;
+
+/** May this user hold a credential at all (an email account, or a live test user of one), over the reader's views. */
+export async function isAuthenticatingUser(db: Queryable, userId: string): Promise<boolean> {
+  return (await db.query(`SELECT 1 FROM users u WHERE u.id=$1 AND ${authenticatingUserSql('u')}`, [userId])).rows.length > 0;
+}
+
+/** The email account a live test user belongs to, or null when the user is not one (over the reader's views). */
+export async function authenticatingTestParent(db: Queryable, userId: string): Promise<string | null> {
+  return (await db.query<{parent_user_id: string}>(`SELECT u.parent_user_id FROM users u WHERE u.id=$1 AND ${liveTestuserWithParentSql('u')}`, [userId])).rows[0]?.parent_user_id ?? null;
+}
+
+/** An admitted member of a company deployment, directly or as a member's live test user (over the reader's views). */
+export async function isDeploymentMember(db: Queryable, userId: string): Promise<boolean> {
+  return (await db.query<{admitted: boolean}>(`SELECT ${deploymentMemberSql('$1::text')} AS admitted`, [userId])).rows[0]?.admitted === true;
+}

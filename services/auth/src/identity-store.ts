@@ -6,7 +6,7 @@
  * ./identity-store/groups; the group mail outbox: ./identity-store/mail.
  */
 import {IDENTITY_OWNED_TABLES,type IdentityService,type Queryable,type TransactionalQueryable} from '@artifactbin/contracts';
-import {ensureTable} from '@artifactbin/utils';
+import {ensureTable,renderSchema} from '@artifactbin/utils';
 import {ensureAuthSchema} from './schema';
 import {IDENTITY_TABLES} from './identity-store/schema';
 import {identityViewColumns,identityViewStatements,plainIdentifier,type IdentitySchemas} from './identity-store/views';
@@ -147,6 +147,11 @@ export function identityMoveStatements(schemas: IdentitySchemas & {owner: string
     `ALTER SCHEMA ${read} OWNER TO ${owner}`,
     `DROP VIEW IF EXISTS ${['groups', 'memberships', 'hierarchy', 'users', 'sessions', 'tokens'].map(view => `${read}.${view}`).join(', ')} CASCADE`,
   ];
+}
+
+/** The identity tables and read views as statements, for a database built from them in one pass (the app's schema image). */
+export function identitySchemaStatements(schemas: IdentitySchemas): string[] {
+  return [...renderSchema(IDENTITY_TABLES, {schema: schemas.auth}), ...identityViewStatements(schemas)];
 }
 
 /** A `pg` pool as the store's database: each transaction on one checked-out client, released after. */

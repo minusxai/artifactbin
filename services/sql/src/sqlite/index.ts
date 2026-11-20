@@ -76,6 +76,42 @@ function engine(sqlite3: Sqlite3): SqliteEngine {
   };
 }
 
+/** `analyze` on the package's own engine, for a caller that only judges statements (the app's write analysis). */
+export async function analyzeSql(sql: string, schema: Relation[], options?: { mode: 'write'; extensions?: SqlExtensions }): Promise<StatementAnalysis> {
+  return (await loadSqlite()).analyze(sql, schema, options);
+}
+
+/** SQLite identifiers fold ASCII only (Unicode-distinct identifiers remain distinct). */
+const identifier = (name: string): string => name.replace(/[A-Z]/g, (c) => c.toLowerCase());
+
+/**
+ * THE RELATIONS ONE READ READS, by SQLite's own analysis over their shapes (no rows): `sql` must be a single SELECT,
+ * and it is then prepared and stepped once over the empty tables it reads with every parameter NULL (the guarded
+ * path `dryRun` takes), so a statement that could not run is refused here too. Throws `TimedOut` past `timeoutMs`
+ * (and past `deadline`, when given) and an Error for anything else; `check`, the caller's cancellation, runs before
+ * each step and may throw.
+ */
+export async function readsOf<R extends Relation>(sql: string, relations: readonly R[], paramNames: readonly string[], bounds: { rows: number; timeoutMs: number; deadline?: number; check?: () => void }): Promise<R[]> {
+  const check = bounds.check ?? (() => undefined);
+  check();
+  const engine = await loadSqlite();
+  check();
+  const analysis = engine.analyze(sql, [...relations]);
+  if (analysis.kind !== 'select' || analysis.writes.length) throw new Error('SQL requires a SELECT statement');
+  const read = relations.filter((r) => analysis.reads.some((x) => identifier(x.schema) === identifier(r.schema) && identifier(x.table) === identifier(r.table)));
+  const db = engine.open();
+  try {
+    for (const relation of read) db.createTable(relation);
+    const prepared = db.prepare(sql, 'read');
+    try {
+      check();
+      const timeoutMs = Math.min(bounds.timeoutMs, bounds.deadline === undefined ? bounds.timeoutMs : Math.max(1, bounds.deadline - performance.now()));
+      prepared.bind(Object.fromEntries(paramNames.map((name) => [name, null]))).rows(bounds.rows, timeoutMs);
+    } finally { prepared.finalize(); }
+  } finally { db.close(); }
+  return read;
+}
+
 /** The engine over the package's own wasm (loaded once), or over supplied wasm bytes. */
 export async function loadSqlite(wasm?: ArrayBuffer | Uint8Array): Promise<SqliteEngine> {
   return engine(await loadSqliteModule(wasm));

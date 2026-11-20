@@ -12,10 +12,8 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AUTH_SCHEMA, DATABASE_URL, IDENTITY_READ_SCHEMA } from './config';
-import { IDENTITY_TABLES } from '@artifactbin/auth/identity-store/schema';
-import { identityViewStatements } from '@artifactbin/auth/identity-store/views';
+import { identitySchemaStatements } from '@artifactbin/auth';
 import { openIdentity } from './identity-host';
-import { renderSchema } from '@artifactbin/utils';
 import { SCHEMA_STATEMENTS } from './schema';
 import { recordQuery } from './query-stats';
 import { SERVING_POOL, withPoolErrors } from '@artifactbin/utils';
@@ -370,7 +368,7 @@ export function schemaImageInputs(): SchemaImageInputs {
   for (;;) {
     try {
       const pkg = JSON.parse(readFileSync(path.join(dir, 'package.json'), 'utf8')) as { name?: string; version?: string };
-      if (pkg.name === '@electric-sql/pglite') return { statements: [...SCHEMA_STATEMENTS, ...renderSchema(IDENTITY_TABLES, { schema: AUTH_SCHEMA }), ...identityViewStatements({ auth: AUTH_SCHEMA, app: 'public', read: IDENTITY_READ_SCHEMA })], backfills: BACKFILLS, engine: `${pkg.name}@${pkg.version}` };
+      if (pkg.name === '@electric-sql/pglite') return { statements: [...SCHEMA_STATEMENTS, ...identitySchemaStatements({ auth: AUTH_SCHEMA, app: 'public', read: IDENTITY_READ_SCHEMA })], backfills: BACKFILLS, engine: `${pkg.name}@${pkg.version}` };
     } catch { /* no package.json at this level */ }
     const up = path.dirname(dir);
     if (up === dir) throw new Error('schemaImageInputs: no @electric-sql/pglite package.json above its entry');
