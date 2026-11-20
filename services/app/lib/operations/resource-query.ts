@@ -7,9 +7,11 @@ import {liveDatasetSql} from '@/lib/live-datasets';
 import {datasetReadAccess, datasetView, sqlRefusal, sqlRefusalMessage, viewCatalog} from '../dataset-permissions';
 import {parseScalarValues, Reply, reply} from '../http';
 import type {TableResult} from '@artifactbin/contracts';
-import {REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts';
 
-/** Query validation, pagination and authorization are independent of the transport. */
+/**
+ * Query validation, pagination and authorization are independent of the transport. A long query re-asks an explicit
+ * bearer itself (`queryResourceForRequest`); its reply carries no proxy revalidation header, as it never has.
+ */
 async function queryResource(actor:AccessActor,id:string,body:Record<string,unknown>,signal?:AbortSignal,checkActor?:()=>Promise<void>):Promise<Reply>{
  if(Object.keys(body).some(key=>!['sql','values','name','limit','cursor','refresh'].includes(key)))return reply({error:'unknown_query_fields'},400);
  if(body.sql!==undefined&&(typeof body.sql!=='string'||!body.sql.trim())||body.name!==undefined&&(typeof body.name!=='string'||!body.name)||body.refresh!==undefined&&typeof body.refresh!=='boolean')return reply({error:'invalid_query'},400);
@@ -24,7 +26,7 @@ async function queryResource(actor:AccessActor,id:string,body:Record<string,unkn
   if(body.cursor!==undefined)return reply({error:'invalid_cursor',hint:'A live dataset answers every row at once (up to its row limit): page with LIMIT and OFFSET in the SQL.'},400);
   const live=await liveDatasetSql(actor,id,{sql:body.sql,params:values},signal);
   if(live.status!==200)return reply(live.body,live.status);
-  return reply({results:[{id,name:'result',execution:'remote',columns:live.body.columns,rows:live.body.rows,next_cursor:null,...(live.body.truncated?{truncated:true}:{})}]},200,{[REVALIDATE_ACTOR_HEADER]:'1'});
+  return reply({results:[{id,name:'result',execution:'remote',columns:live.body.columns,rows:live.body.rows,next_cursor:null,...(live.body.truncated?{truncated:true}:{})}]});
  }
  // A dataset is queried over the caller's role view (lib/dataset-permissions): the rows and columns their select rule shows.
  const decision=row.format==='dataset'?await datasetReadAccess(row,actor):null;
@@ -57,7 +59,7 @@ async function queryResource(actor:AccessActor,id:string,body:Record<string,unkn
    const quote=(value:string)=>'"'+value.replaceAll('"','""')+'"';
    const sql=typeof body.sql==='string'?body.sql:`select * from ${quote(selected!.schema)}.${quote(selected!.name)}`;
    const table=await executeCatalog(stored,sql,values,{datasetId:id,view:decision?.allowed?datasetView(decision):null,limit:Number(limit)+1,offset,refresh:body.refresh===true,authorize,signal});
-   await authorize();return reply({results:[result(selected?`${selected.schema}.${selected.name}`:'result',table)]},200,{[REVALIDATE_ACTOR_HEADER]:'1'});
+   await authorize();return reply({results:[result(selected?`${selected.schema}.${selected.name}`:'result',table)]});
   }
   return reply({error:'not_queryable'},400);
  }catch(error){
