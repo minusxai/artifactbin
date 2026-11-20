@@ -22,7 +22,7 @@ import { GET as likeRoute } from '@/app/api/my/artifacts/[id]/like/route';
 import { countOpenAnnotations } from '@/lib/annotations';
 import { EVENTS_SCHEMA } from '@/lib/platform';
 import { getDb } from '@/lib/platform';
-import { dailyViewsByUser, viewSeriesByUser } from '@/lib/workspace';
+import { viewSeriesByUser } from '@/lib/workspace';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser, ensureUsername } from '@/lib/accounts';
 
@@ -103,14 +103,12 @@ describe('a trashed row is nonexistent to', () => {
     expect(addressed.status).toBe(404);
   });
 
-  it('the view series and the daily totals do not count its views', async () => {
+  it('the view series does not count its views', async () => {
     const w = await trashedWorld();
     await withLog(w);
     const keys = [...(await viewSeriesByUser(w.userId)).keys()];
     expect(keys).not.toContain(w.doc.id);
     expect(keys).toContain(w.folder.id);
-    const daily = await dailyViewsByUser(w.userId);
-    expect(daily.at(-1)?.views, 'the folder\'s view, never the trashed document\'s').toBe(1);
   });
 
   it('a trashed annotation is not counted', async () => {

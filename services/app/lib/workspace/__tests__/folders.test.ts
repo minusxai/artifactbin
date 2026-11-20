@@ -14,7 +14,7 @@ import { getArtifactById, updateSharingFor } from '@/lib/artifacts';
 import { getDb } from '@/lib/platform';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser, identityForUser } from '@/lib/accounts';
-import { buildShelf } from '@/lib/workspace';
+import { buildShelf } from '@/lib/shelf';
 import { setArtifact } from '@/__tests__/rows';
 
 useAppHarness();

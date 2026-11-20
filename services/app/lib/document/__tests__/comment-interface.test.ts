@@ -5,10 +5,10 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-  canonicalQuote, canonicalText, isPersonMentionHref, isTargetRange,
-  parseRel, personMentions, refinementRange,
+  canonicalQuote, isPersonMentionHref, personMentions, refinementRange,
   type AnnotationRange,
 } from '..';
+import { canonicalText, isTargetRange, parseRel } from '../annotation-range';
 import { personMention, personMentionId } from '../person-mentions';
 
 const textRange = (text: string, start: number) => ({ v: 1, parts: [{ rel: '', start, end: start + text.length, text }] });

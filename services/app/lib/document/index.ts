@@ -9,7 +9,7 @@ export { newEditId } from './splice';
 
 export { assetUrlFor, canonicalAssetUrl, urlHash } from './asset-url';
 
-export { displayTitle, firstHeadingTitle } from './title';
+export { displayTitle } from './title';
 export type { SocialPreviewCrop } from './social-preview';
 export { parseSocialPreviewCrop, socialPreviewCrop, socialPreviewImage, socialPreviewImageValue, clampImageCrop, savedSocialPreviewImageCrop, SOCIAL_PREVIEW_OVERVIEW_GENERATION } from './social-preview';
 export type { CspApprovalGroup, CspDirective, CspExtensions, CspRequest } from './csp-extensions';
@@ -19,7 +19,7 @@ export {
 } from './csp-extensions';
 
 export type { AnnotationRange } from './annotation-range';
-export { canonicalQuote, canonicalText, isAreaRange, isTargetRange, parseAnnotationRange, parseRel, refinementRange } from './annotation-range';
+export { canonicalQuote, isAreaRange, parseAnnotationRange, refinementRange } from './annotation-range';
 
 export { isPersonMentionHref, personMentionId, personMentions } from './person-mentions';
 
