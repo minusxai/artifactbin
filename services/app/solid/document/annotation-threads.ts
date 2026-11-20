@@ -21,8 +21,22 @@ import { isFolded, readFolds, toggleFold, unfold, type FoldKind, type Folds } fr
 type Retained = Record<string, { row: AnnotationWire; remaining: number }>;
 
 const sameIds = (a: string[], b: string[]) => a.length === b.length && a.every((id, index) => id === b[index]);
+/** `current` with `elapsed` ms off every thread still counting that `counts` accepts; `current` itself when none is. */
+function countedDown(current: Retained, elapsed: number, counts: (id: string) => boolean): Retained {
+  let changed = false;
+  const next = Object.fromEntries(Object.entries(current).map(([key, value]) => {
+    if (value.remaining <= 0 || !counts(key)) return [key, value];
+    changed = true;
+    return [key, { ...value, remaining: Math.max(0, value.remaining - elapsed) }];
+  }));
+  return changed ? next : current;
+}
+/** `open`, then the retained threads not already among them. */
+const plusRetained = (open: AnnotationWire[], retained: Retained[string][]) => [...open, ...retained.map((value) => value.row).filter((row) => !open.some((item) => item.id === row.id))];
+/** `rows` with `wire` in place of its old row. */
+const swap = (rows: AnnotationWire[], wire: AnnotationWire) => rows.map((row) => (row.id === wire.id ? wire : row));
 /** `rows` with `wire` in place of its old row, or added at the end. */
-const upsert = (rows: AnnotationWire[], wire: AnnotationWire) => rows.some((row) => row.id === wire.id) ? rows.map((row) => (row.id === wire.id ? wire : row)) : [...rows, wire];
+const upsert = (rows: AnnotationWire[], wire: AnnotationWire) => rows.some((row) => row.id === wire.id) ? swap(rows, wire) : [...rows, wire];
 /** `rows` without the thread or reply `id` (a thread that loses a reply moves to its next revision). */
 const withoutComment = (rows: AnnotationWire[], id: string) => rows.flatMap((row) => {
   if (row.id === id) return [];
@@ -32,26 +46,51 @@ const withoutComment = (rows: AnnotationWire[], id: string) => rows.flatMap((row
 
 export type ThreadStore = ReturnType<typeof createThreadStore>;
 
-export function createThreadStore(options: {
+/**
+ * The open threads: the session's own read at mount, replaced wholesale by the live stream. Network responses never
+ * revoke newer state: a read started before a live event or a local write is dropped, and so is one older than a
+ * read already applied. `read` starts another such read (the poll while agents work).
+ */
+function createOpenList(backend: ArtifactBackend, live: Accessor<AnnotationWire[] | null>) {
+  const [rows, write] = createSignal<AnnotationWire[]>([]);
+  let epoch = 0, sequence = 0, applied = 0;
+  const set: typeof write = (next) => { epoch++; return write(next); };
+  const read = (signal: AbortSignal) => {
+    const at = epoch, mine = ++sequence;
+    void backend.listAnnotations(undefined, { signal }).then((list) => {
+      if (!signal.aborted && at === epoch && mine > applied) { applied = mine; write(list); }
+    }).catch(() => {});
+  };
+  onMount(() => { const abort = new AbortController(); read(abort.signal); onCleanup(() => abort.abort()); });
+  createEffect(() => { const next = live(); if (next) set(next); });
+  return { rows, set, read };
+}
+
+/** What this viewer folded, per document — read from the store, so a remount or a reload cannot lose it. */
+function createViewerFolds(artifactId: () => string) {
+  const [folds, setFolds] = createSignal<Folds>(readFolds(untrack(artifactId)));
+  // Folds are per artifact: a different document's rail starts from its own.
+  createEffect(on(artifactId, (id) => setFolds(readFolds(id)), { defer: true }));
+  return {
+    folded: (kind: FoldKind, id: string) => isFolded(folds(), kind, id),
+    toggle: (kind: FoldKind, id: string) => setFolds(toggleFold(untrack(artifactId), kind, id)),
+    /** A thread unfolded, with one of its comments when named. */
+    unfold: (threadId: string, commentId?: string) => setFolds(unfold(untrack(artifactId), { threads: [threadId], comments: commentId ? [commentId] : [] })),
+  };
+}
+
+interface ThreadStoreOptions {
   backend: ArtifactBackend;
   artifactId: () => string;
   mayCreate: () => boolean;
   railOpen: Accessor<boolean>;
   live: Accessor<AnnotationWire[] | null>;
-}) {
+}
+
+export function createThreadStore(options: ThreadStoreOptions) {
   const { backend, mayCreate, railOpen } = options;
-  const [annotations, writeAnnotations] = createSignal<AnnotationWire[]>([]);
-  let annotationEpoch = 0, readSequence = 0, appliedRead = 0;
-  const setAnnotations: typeof writeAnnotations = (next) => { annotationEpoch++; return writeAnnotations(next); };
-  // Network responses never revoke newer state: a read started before a live event or local write is dropped.
-  const readAnnotations = (signal: AbortSignal) => {
-    const epoch = annotationEpoch, sequence = ++readSequence;
-    void backend.listAnnotations(undefined, { signal }).then((list) => {
-      if (!signal.aborted && epoch === annotationEpoch && sequence > appliedRead) {
-        appliedRead = sequence; writeAnnotations(list);
-      }
-    }).catch(() => {});
-  };
+  const list = createOpenList(backend, options.live);
+  const annotations = list.rows, setAnnotations = list.set;
   const [recentResolved, setRecentResolved] = createSignal<Retained>({});
   // A resolution this viewer just acknowledged is history, not an unseen remote event. Keep every
   // acknowledged revision so a delayed index read cannot resurrect its countdown; a later revision
@@ -69,8 +108,7 @@ export function createThreadStore(options: {
   /** The resolved group starts collapsed — local to this rail, never stored. Whatever is being looked at forces it open. */
   const [resolvedOpen, setResolvedOpen] = createSignal(false);
   const [inspectedResolvedId, setInspectedResolvedId] = createSignal<string | null>(null);
-  /** What this viewer folded — read from the store, so a remount or a reload cannot lose it. */
-  const [folds, setFolds] = createSignal<Folds>(readFolds(untrack(options.artifactId)));
+  const folds = createViewerFolds(options.artifactId);
   /** The thread this viewer just asked for; its newest comment is never folded. */
   const [justOpenedId, setJustOpenedId] = createSignal<string | null>(null);
   const [busy, setBusy] = createSignal(false);
@@ -81,21 +119,9 @@ export function createThreadStore(options: {
     void railOpen();
     if (!hasRemoteWork() || busy()) return;
     const abort = new AbortController();
-    const timer = setInterval(() => {
-      readAnnotations(abort.signal);
-    }, 15000);
+    const timer = setInterval(() => list.read(abort.signal), 15000);
     onCleanup(() => { clearInterval(timer); abort.abort(); });
   });
-  // Folds are per artifact: a different document's rail starts from its own.
-  createEffect(on(options.artifactId, (id) => setFolds(readFolds(id)), { defer: true }));
-
-  // The session's own read; the live stream replaces it wholesale.
-  onMount(() => {
-    const abort = new AbortController();
-    readAnnotations(abort.signal);
-    onCleanup(() => abort.abort());
-  });
-  createEffect(() => { const live = options.live(); if (live) setAnnotations(live); });
 
   // Refresh the authorised resolved index when open threads disappear. Never infer resolution from
   // absence: deletion or revocation must remove the content instead.
@@ -137,10 +163,7 @@ export function createThreadStore(options: {
   const retained = () => Object.values(recentResolved()).filter((value) => value.remaining > 0);
   const retainedPinIds = createMemo(() => retained().map((value) => value.row.id).join(','));
   /** Open threads plus those still counting down: what the document edge marks. */
-  const floatingRows = createMemo(() => {
-    const open = annotations();
-    return [...open, ...retained().filter((value) => !open.some((row) => row.id === value.row.id)).map((value) => value.row)];
-  });
+  const floatingRows = createMemo(() => plusRetained(annotations(), retained()));
   /**
    * Every thread with a pin in the document. Reading it tracks the retained SET, never a countdown tick. The ONE resolved
    * thread this viewer expanded rides with the open roots, beside its `openId`: the runtime records the scroll as done when
@@ -153,16 +176,15 @@ export function createThreadStore(options: {
     const recent = untrack(recentResolved);
     const current = annotations();
     const openResolved = open ? (resolvedList() ?? []).find((row) => row.id === open) ?? recent[open]?.row ?? null : null;
-    return [...current, ...(openResolved ? [openResolved] : []), ...Object.values(recent).filter((value) => value.remaining > 0 && value.row.id !== openResolved?.id && !current.some((row) => row.id === value.row.id)).map((value) => value.row)]
+    return plusRetained(openResolved ? [...current, openResolved] : current, Object.values(recent).filter((value) => value.remaining > 0))
       .filter((row) => !row.orphaned && row.anchor)
       .map((row) => ({ row, layoutOnly: row.status === 'resolved' && (row.id !== inspected || row.id !== open) }));
   };
 
   /** A thread as the server now answers it, wherever this viewer holds it (open, resolved, or counting down). */
   const replaceThread = (wire: AnnotationWire) => batch(() => {
-    const swap = (rows: AnnotationWire[]) => rows.map((row) => (row.id === wire.id ? wire : row));
-    setAnnotations((prev) => swap(prev));
-    setResolvedList((prev) => prev && swap(prev));
+    setAnnotations((prev) => swap(prev, wire));
+    setResolvedList((prev) => prev && swap(prev, wire));
     setRecentResolved((current) => current[wire.id] ? { ...current, [wire.id]: { ...current[wire.id]!, row: wire } } : current);
   });
   /** After a conflict: show the thread as it now stands, so the next try applies to it. */
@@ -188,22 +210,12 @@ export function createThreadStore(options: {
         if (conflict(cause)) await reread(annId);
         throw cause;
       }
-      if (body.resolve && wire.status === 'resolved') {
-        const revisions = locallyResolvedRevisions.get(annId) ?? new Set<number | undefined>();
-        revisions.add(wire.revision);
-        locallyResolvedRevisions.set(annId, revisions);
-      }
+      if (body.resolve && wire.status === 'resolved') locallyResolvedRevisions.set(annId, (locallyResolvedRevisions.get(annId) ?? new Set()).add(wire.revision));
       batch(() => {
         setAnnotations((prev) => wire.status === 'resolved' ? prev.filter((row) => row.id !== annId) : upsert(prev, wire));
         setResolvedList((prev) => !prev ? prev : wire.status === 'open' ? prev.filter((row) => row.id !== annId) : upsert(prev, wire));
         if (wire.status === 'resolved') {
-          setRecentResolved((current) => {
-            const retained = current[annId];
-            if (!retained || retained.row.revision !== wire.revision) return current;
-            const next = { ...current };
-            delete next[annId];
-            return next;
-          });
+          setRecentResolved((current) => current[annId]?.row.revision === wire.revision ? Object.fromEntries(Object.entries(current).filter(([id]) => id !== annId)) : current);
           // The thread being looked at moves into resolved history: open the group so it is still there.
           if (untrack(openId) === annId) setResolvedOpen(true);
           setOpenId((current) => (current === annId ? null : current));
@@ -235,17 +247,9 @@ export function createThreadStore(options: {
     batch(() => {
       setAnnotations((prev) => withoutComment(prev, annId));
       setResolvedList((prev) => prev && withoutComment(prev, annId));
-      setRecentResolved((current) => {
-        const next = { ...current };
-        if (next[annId]) delete next[annId];
-        for (const [rootId, value] of Object.entries(next)) {
-          if (!value.row.thread.some((comment) => comment.id === annId)) continue;
-          const [row] = withoutComment([value.row], annId);
-          if (row) next[rootId] = { ...value, row };
-          else delete next[rootId];
-        }
-        return next;
-      });
+      // A retained thread loses the comment too, or goes with it.
+      setRecentResolved((current) => Object.fromEntries(Object.entries(current).flatMap(([rootId, value]) =>
+        withoutComment([value.row], annId).map((row) => [rootId, row === value.row ? value : { ...value, row }]))));
       setOpenId((current) => (current === annId ? null : current));
     });
   });
@@ -267,31 +271,23 @@ export function createThreadStore(options: {
      * comment came for an answer; the thread and its newest comment open together, in one write.
      */
     open: (annId: string) => batch(() => {
+      const row = untrack(annotations).find((item) => item.id === annId);
       setOpenId(annId);
-      setInspectedResolvedId(untrack(annotations).some((row) => row.id === annId) ? null : annId);
+      setInspectedResolvedId(row ? null : annId);
       setJustOpenedId(annId);
-      const newest = untrack(annotations).find((row) => row.id === annId)?.thread.at(-1)?.id;
-      setFolds(unfold(untrack(options.artifactId), { threads: [annId], comments: newest ? [newest] : [] }));
+      folds.unfold(annId, row?.thread.at(-1)?.id);
     }),
     /** Show one comment of a thread unfolded (a notification's target). */
-    unfoldComment: (threadId: string, commentId: string) => setFolds(unfold(untrack(options.artifactId), { threads: [threadId], comments: [commentId] })),
+    unfoldComment: (threadId: string, commentId: string) => folds.unfold(threadId, commentId),
     /** No thread is open (null), or this one is, without unfolding anything. */
     focus: (id: string | null) => setOpenId(id),
     /** A resolved thread expanded in the rail becomes the open thread; pressed again it closes. */
     inspect: (id: string) => batch(() => { setJustOpenedId(id); setInspectedResolvedId(id); setOpenId((current) => current === id ? null : id); }),
-    folded: (kind: FoldKind, id: string) => isFolded(folds(), kind, id),
-    toggleFold: (kind: FoldKind, id: string) => setFolds(toggleFold(untrack(options.artifactId), kind, id)),
+    folded: folds.folded,
+    toggleFold: folds.toggle,
     counting: createMemo(() => retained().length > 0),
     /** `elapsed` ms off every retained thread `counts` accepts (seen, not hovered, not open). */
-    countDown: (elapsed: number, counts: (id: string) => boolean) => setRecentResolved((current) => {
-      let changed = false;
-      const next = Object.fromEntries(Object.entries(current).map(([key, value]) => {
-        if (value.remaining <= 0 || !counts(key)) return [key, value];
-        changed = true;
-        return [key, { ...value, remaining: Math.max(0, value.remaining - elapsed) }];
-      }));
-      return changed ? next : current;
-    }),
+    countDown: (elapsed: number, counts: (id: string) => boolean) => setRecentResolved((current) => countedDown(current, elapsed, counts)),
     busy,
     working,
     actOrThrow,

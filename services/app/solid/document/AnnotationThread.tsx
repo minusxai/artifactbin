@@ -8,45 +8,32 @@
  * comment, the chevron folds the conversation — all per viewer (lib/comment-folds). A resolved card
  * is muted until hovered or focused, and says what it was about when the document no longer can.
  */
-import { createEffect, createSignal, ErrorBoundary, For, lazy, on, onCleanup, Show, Suspense, type JSX } from 'solid-js';
+import { createEffect, For, lazy, on, onCleanup, Show, Suspense, type JSX } from 'solid-js';
 import Check from 'lucide-solid/icons/check';
 import ChevronDown from 'lucide-solid/icons/chevron-down';
 import ChevronRight from 'lucide-solid/icons/chevron-right';
-import EllipsisVertical from 'lucide-solid/icons/ellipsis-vertical';
-import Pencil from 'lucide-solid/icons/pencil';
-import Trash2 from 'lucide-solid/icons/trash-2';
 import type { AnnotationWire } from '@/lib/annotations';
 import type { AnnotationCommentWire } from '@artifactbin/contracts/annotation-comment';
 import type { ArtifactBackend } from '@/lib/artifact-backend';
 import { hasReplyText, remoteWorkLabel, remoteWorkActive } from '@/lib/annotations/remote-reply';
-import { BackendRequestError } from '@/lib/artifact-backend/errors';
 import { agentNameColor } from '../lib/agent-identity';
 import { Button } from '../ui/Button';
 import { Tooltip } from '../ui/Tooltip';
 import { useOptionalInbox } from '../lib/notifications';
 import { useSession } from '../lib/session';
-import { AuthorIdentity, CommentEdited, CommentTimestamp, firstLine, previewText, ThreadContinuation } from './AnnotationPreview';
+import { AuthorIdentity, CommentEdited, CommentTimestamp, firstLine, latestWork, previewText, ThreadContinuation } from './AnnotationPreview';
 import { AnnotationReplyBox } from './AnnotationReplyBox';
 import { CommentFoldingBody } from './CommentFoldingBody';
-import { CommentSubmitHint } from './CommentMarkdown';
-import { CommentMarkdownField } from './LazyCommentField';
-import { persistedText, readDraft, writeDraft } from '../lib/draft-store';
-import { isChunkLoadError, reloadForNewBuild } from '../lib/app-build';
+import { CommentActions } from './CommentActions';
+import { CommentEditor, createCommentEdit } from './CommentEdit';
+import { persistedText } from '../lib/draft-store';
 // Reaction controls load with an opened comment, keeping the reader shell small.
 const CommentReactions = lazy(() => import('./CommentReactions').then(module => ({default:module.CommentReactions})));
 import { CommentScreenshot } from './CommentScreenshot';
 import { createCommentImageDraft, type CommentImageAttachment } from './CommentImageAttach';
 
-/**
- * The delete menu is a lazy chunk (an intentional exception to top-level imports): it matters only once a thread is on
- * screen, so the reader page, which statically imports this layer, does not carry ui/Menu. Its trigger renders at once
- * as the plain fallback below, and the real Menu replaces it as the chunk lands (it starts loading with the first thread).
- */
-const Menu = lazy(() => import('../ui/Menu').then((module) => ({ default: module.Menu })));
-export const preloadThreadMenu = (): Promise<unknown> => Menu.preload();
 
 const threadClass = 'rounded-panel border border-edge bg-comment text-sm';
-const EDIT_FAILED = 'Could not save your edit. It is still here; try again.';
 
 /** ONE fold affordance for a thread, wherever the card is putting it. */
 function ThreadFoldControl(props: { folded: boolean; onToggle: () => void }): JSX.Element {
@@ -54,6 +41,14 @@ function ThreadFoldControl(props: { folded: boolean; onToggle: () => void }): JS
     class="-ml-1">
     <Show when={props.folded} fallback={<ChevronDown size={13} strokeWidth={1.8} />}><ChevronRight size={13} strokeWidth={1.8} /></Show>
   </Button>;
+}
+
+/** What a card says about its target when the document cannot: the words it quoted, if any, and why. */
+function TargetNote(props: { quote?: string | null; note: string }): JSX.Element {
+  return <div class="border-b border-edge bg-surface/60 px-3 py-1.5">
+    <Show when={props.quote}><p class="mb-1 border-l-2 border-edge-bright pl-2 font-sans text-xs leading-snug text-fg/80">{props.quote}</p></Show>
+    <p class="font-mono text-micro text-faint">{props.note}</p>
+  </div>;
 }
 
 interface AnnotationThreadProps {
@@ -116,39 +111,10 @@ function markReadWhenSeen(seen: () => { id: string; revision: number; element: H
   });
 }
 
-/**
- * ONE comment of a thread is edited at a time, in place of its body; the draft survives a refused save. The comment
- * being rewritten and its words are kept for this tab under `key`: a reload reopens the edit where it was. Starting an
- * edit opens the thread (`open`).
- */
-function createCommentEdit(key: string, thread: { onEdit: () => ((commentId: string, body: string) => Promise<void>) | undefined; open: () => void }) {
-  const kept = (() => { try { return JSON.parse(readDraft(key) || 'null') as { comment?: unknown; body?: unknown } | null; } catch { return null; } })();
-  const [editing, setEditing] = createSignal<string | null>(typeof kept?.comment === 'string' && typeof kept.body === 'string' ? kept.comment : null);
-  const [draft, setDraft] = createSignal(editing() ? String(kept?.body) : '');
-  createEffect(() => { const comment = editing(); writeDraft(key, comment ? JSON.stringify({ comment, body: draft() }) : ''); });
-  const [error, setError] = createSignal('');
-  const [saving, setSaving] = createSignal(false);
-  const cancel = () => { if (saving()) return; setEditing(null); setDraft(''); setError(''); };
-  return {
-    editing, draft, setDraft, error, saving, cancel,
-    start: (comment: AnnotationCommentWire) => { setDraft(comment.body); setError(''); setEditing(comment.id); thread.open(); },
-    save: async (comment: AnnotationCommentWire) => {
-      const body = draft();
-      const onEdit = thread.onEdit();
-      if (saving() || !onEdit || !hasReplyText(body)) return;
-      if (body === comment.body) { cancel(); return; }
-      setSaving(true); setError('');
-      try { await onEdit(comment.id, body); setEditing(null); setDraft(''); }
-      catch (cause) { setError(cause instanceof BackendRequestError && cause.code === 'annotation_conflict' ? cause.message : EDIT_FAILED); }
-      finally { setSaving(false); }
-    },
-  };
-}
 
 /** What each agent working on the thread is doing now: its latest report per session. */
 function AgentWorkStatus(props: { work: AnnotationWire['remote_work'] }): JSX.Element {
-  const agents = () => (props.work ?? []).filter((work, index, all) => !all.slice(index + 1).some((next) => next.sessionId === work.sessionId));
-  return <For each={agents()}>{(work) => (
+  return <For each={latestWork(props.work)}>{(work) => (
     <p role="status" class="comment-agent-status border-b border-edge px-3 py-1.5 text-2xs text-muted">
       <a class="comment-agent-status-name" href={`/chat?session=${work.sessionId}`} target="_blank" rel="noopener noreferrer" style={{ color: agentNameColor(work.name) }}>@{work.name}</a>
       <Show when={remoteWorkActive(work)}><span class="comment-agent-spinner" aria-hidden="true" /></Show>
@@ -172,20 +138,12 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
   const visibleComments = () => props.open ? props.a.thread : props.a.thread.slice(0, 1);
   const first = () => props.a.thread[0];
   const replyCount = () => Math.max(0, props.a.thread.length - 1);
-  const canDelete = (comment: AnnotationCommentWire) => {
-    const userId = session()?.user?.id;
-    return props.canCreateComment !== false && (props.canDeleteAny === true
-      || (userId !== undefined && userId !== null && comment.author.user_id === userId)
-      || props.backend.canDeleteLocalAnnotation?.(comment.id) === true);
-  };
-
+  const mine = (comment: AnnotationCommentWire) => { const userId = session()?.user?.id; return userId !== undefined && userId !== null && comment.author.user_id === userId; };
+  const canDelete = (comment: AnnotationCommentWire) => props.canCreateComment !== false
+    && (props.canDeleteAny === true || mine(comment) || props.backend.canDeleteLocalAnnotation?.(comment.id) === true);
   /** Only the words' author may rewrite them: their account online, or the backend's word for a local comment. */
-  const canEdit = (comment: AnnotationCommentWire) => {
-    if (props.canCreateComment === false || !props.onEdit) return false;
-    const userId = session()?.user?.id;
-    return (userId !== undefined && userId !== null && comment.author.user_id === userId)
-      || props.backend.canEditLocalComment?.(comment) === true;
-  };
+  const canEdit = (comment: AnnotationCommentWire) => props.canCreateComment !== false && !!props.onEdit
+    && (mine(comment) || props.backend.canEditLocalComment?.(comment) === true);
   const edit = createCommentEdit(`${props.artifactId}:edit:${props.a.id}`, {
     onEdit: () => props.onEdit,
     open: () => { if (!props.open) props.onOpen(); },
@@ -226,24 +184,10 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
           <Button type="button" variant="link" class="shrink-0" onClick={props.onOpen}>Restore saved view</Button>
         </div>
       </Show>
-      <Show when={props.targetMissing && !props.a.orphaned}>
-        <p class="border-b border-edge bg-surface/60 px-3 py-1.5 font-mono text-micro text-faint">Exact target is unavailable. This comment remains attached to its containing block.</p>
-      </Show>
+      <Show when={props.targetMissing && !props.a.orphaned}><TargetNote note="Exact target is unavailable. This comment remains attached to its containing block." /></Show>
       {/* What this was about, when the document cannot say it: the node is gone, or its quoted words were edited away. */}
-      <Show when={props.a.orphaned}>
-        <div class="border-b border-edge bg-surface/60 px-3 py-1.5">
-          <Show when={props.open && (props.a.quote ?? props.a.snippet)}>
-            <p class="mb-1 border-l-2 border-edge-bright pl-2 font-sans text-xs leading-snug text-fg/80">{props.a.quote ?? props.a.snippet}</p>
-          </Show>
-          <p class="font-mono text-micro text-faint">This passage was removed from the document.</p>
-        </div>
-      </Show>
-      <Show when={props.open && !props.a.orphaned && props.a.quote_found === false && props.a.quote}>
-        <div class="border-b border-edge bg-surface/60 px-3 py-1.5">
-          <p class="mb-1 border-l-2 border-edge-bright pl-2 font-sans text-xs leading-snug text-fg/80">{props.a.quote}</p>
-          <p class="font-mono text-micro text-faint">These words have since been edited.</p>
-        </div>
-      </Show>
+      <Show when={props.a.orphaned}><TargetNote quote={props.open ? props.a.quote ?? props.a.snippet : null} note="This passage was removed from the document." /></Show>
+      <Show when={props.open && !props.a.orphaned && props.a.quote_found === false && props.a.quote}><TargetNote quote={props.a.quote} note="These words have since been edited." /></Show>
       <ul class="flex flex-col gap-3 px-3 py-3">
         {/* Keyed by comment id: a live frame replaces every row object, and must not remount a comment someone is reading. */}
         <For each={visibleComments().map((comment) => comment.id)}>{(commentId, index) => {
@@ -273,60 +217,29 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
                 {/* Only the room the name leaves: the time gives way first (an owner's header also holds resolve and actions). */}
                 <CommentTimestamp iso={c().created_at} class="min-w-0 flex-[1_1_0%] truncate text-right font-mono text-micro text-faint" />
               </span>
-              <Show when={index() === 0}><ThreadFoldControl folded={false} onToggle={props.onToggleFold} /></Show>
-              <Show when={index() === 0 && props.resolved}>
-                <Tooltip content="resolved">
-                  <span class="inline-flex h-5 w-5 items-center justify-center text-accent"><Check size={13} strokeWidth={2} /></span>
-                </Tooltip>
-              </Show>
-              <Show when={index() === 0 && !props.resolved && props.canCreateComment !== false}>
-                <Tooltip content="resolve thread">
-                  <Button type="button" variant="ghost" size="sm" icon aria-label="Resolve annotation" disabled={props.busy} onClick={() => props.onResolve()} class="-mx-1">
-                    <Check size={13} strokeWidth={2} />
-                  </Button>
-                </Tooltip>
-              </Show>
-              <Show when={index() === 0 && props.resolved && props.open}>
-                <Button type="button" variant="ghost" size="sm" icon aria-label="Hide resolved conversation" aria-expanded="true" onClick={() => props.onOpen()}>↑</Button>
+              <Show when={index() === 0}>
+                <ThreadFoldControl folded={false} onToggle={props.onToggleFold} />
+                <Show when={props.resolved} fallback={<Show when={props.canCreateComment !== false}>
+                  <Tooltip content="resolve thread">
+                    <Button type="button" variant="ghost" size="sm" icon aria-label="Resolve annotation" disabled={props.busy} onClick={() => props.onResolve()} class="-mx-1">
+                      <Check size={13} strokeWidth={2} />
+                    </Button>
+                  </Tooltip>
+                </Show>}>
+                  <Tooltip content="resolved">
+                    <span class="inline-flex h-5 w-5 items-center justify-center text-accent"><Check size={13} strokeWidth={2} /></span>
+                  </Tooltip>
+                  <Show when={props.open}>
+                    <Button type="button" variant="ghost" size="sm" icon aria-label="Hide resolved conversation" aria-expanded="true" onClick={() => props.onOpen()}>↑</Button>
+                  </Show>
+                </Show>
               </Show>
               <Show when={(canDelete(c()) || canEdit(c())) && (index() > 0 || !props.resolved || props.open)}>
-                {(() => {
-                  const trigger = (attrs?: object) => (
-                    <Tooltip content={index() === 0 ? 'thread actions' : 'comment actions'}>
-                      <Button aria-haspopup="menu" aria-expanded={false} {...attrs} type="button" variant="ghost" size="sm" icon aria-label={index() === 0 ? 'Annotation actions' : `Comment actions ${index()}`} class="-mr-1">
-                        <EllipsisVertical size={13} strokeWidth={1.8} />
-                      </Button>
-                    </Tooltip>
-                  );
-                  // A chunk that cannot be fetched (the local preview restarted while it loaded, a dropped connection) leaves the
-                  // trigger standing, unavailable until the page loads again, instead of an uncaught error. One a deploy removed
-                  // loads the new build (solid/lib/app-build; the thread's drafts are kept).
-                  return <ErrorBoundary fallback={(error) => { if (isChunkLoadError(error)) reloadForNewBuild(); return trigger({ disabled: true }); }}><Suspense fallback={trigger()}>
-                    <Menu label={index() === 0 ? 'Annotation action menu' : 'Comment action menu'}
-                      items={[
-                        ...(canEdit(c()) ? [{ label: 'Edit comment', text: 'edit', icon: () => <Pencil size={12} strokeWidth={1.75} />, disabled: props.busy || edit.saving(), onSelect: () => edit.start(c()) }] : []),
-                        ...(canDelete(c()) ? [{ label: index() === 0 ? 'Delete thread' : 'Delete comment', text: index() === 0 ? 'delete thread' : 'delete comment', icon: () => <Trash2 size={12} strokeWidth={1.75} />, danger: true, disabled: props.busy, onSelect: () => props.onDelete(c().id) }] : []),
-                      ]}
-                      trigger={(attrs) => trigger(attrs)} />
-                  </Suspense></ErrorBoundary>;
-                })()}
+                <CommentActions ordinal={index()} busy={props.busy} editBusy={edit.saving()}
+                  onEdit={canEdit(c()) ? () => edit.start(c()) : undefined} onDelete={canDelete(c()) ? () => props.onDelete(c().id) : undefined} />
               </Show>
             </div>
-            <Show when={edit.editing() !== c().id} fallback={
-              // Escape cancels, from anywhere in the editor (a native listener: the rail may sit in a shadow root). The
-              // editor's own keymap claims Escape (select parent node), so its defaultPrevented says nothing here; an
-              // open mention picker stops the key before it bubbles this far.
-              <div data-comment-editor on:keydown={(event) => { if (event.key !== 'Escape') return; event.preventDefault(); event.stopPropagation(); edit.cancel(); }}>
-                <CommentMarkdownField backend={props.backend} artifactId={props.artifactId} label="Edit comment" busy={edit.saving()}
-                  value={edit.draft()} onChange={edit.setDraft} onSubmit={() => void edit.save(c())} rows={3} autoFocus />
-                <Show when={edit.error()}><p role="alert" class="text-xs text-danger">{edit.error()}</p></Show>
-                <div class="mt-2 flex items-center justify-end gap-2">
-                  <CommentSubmitHint action="save" />
-                  <Button type="button" variant="ghost" size="sm" aria-label="Cancel edit" disabled={edit.saving()} onClick={edit.cancel}>cancel</Button>
-                  <Button type="button" size="sm" aria-label="Save edit" disabled={edit.saving() || !hasReplyText(edit.draft())} onClick={() => void edit.save(c())}>save</Button>
-                </div>
-              </div>
-            }>
+            <Show when={edit.editing() !== c().id} fallback={<CommentEditor edit={edit} comment={c()} backend={props.backend} artifactId={props.artifactId} />}>
             <Show when={commentFolded()} fallback={
               <Show when={props.open} fallback={<p class="line-clamp-2 font-sans leading-snug text-fg/90">{previewText(c().body)}</p>}>
                 <CommentFoldingBody visibleLines={props.onReact ? 6 : undefined} text={c().body} foldable={!(props.justOpened && newest())} />

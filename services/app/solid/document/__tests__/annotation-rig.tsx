@@ -20,7 +20,7 @@ import { fireEvent, render } from '../../__tests__/helpers';
 import { TrustedUi } from '../../components/TrustedUi';
 import { AnnotationLayer, type AnnotationLayerProps } from '../AnnotationLayer';
 import { preloadScreenshotUpload } from '../AnnotationComposer';
-import { preloadThreadMenu } from '../AnnotationThread';
+import { preloadThreadMenu } from '../CommentActions';
 
 // The rail's delete menu and the upload fallback are lazy chunks: have them in before a test renders.
 beforeAll(() => Promise.all([preloadThreadMenu(), preloadScreenshotUpload()]));

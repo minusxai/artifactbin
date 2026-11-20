@@ -145,10 +145,45 @@ export function ThreadContinuation(props: { thread: AnnotationCommentWire[] }): 
   </span>;
 }
 
-function CompactAuthorMark(props: { author: Author }): JSX.Element {
-  return <Show when={props.author.kind === 'agent'} fallback={<PersonFace author={props.author} size={22} />}>
-    <AgentMark label={agentProgram(props.author)} name={authorLabel(props.author)} compact decorative borderless />
-  </Show>;
+/** A thread at rest: its author's mark, the countdown ring of one resolved elsewhere, and how many messages it holds. */
+function CompactMark(props: { author: Author; messages: number; remaining?: number }): JSX.Element {
+  return <span class="pointer-events-none absolute inset-0 flex items-center justify-start pl-[7px]">
+    <span class="relative flex h-[22px] w-[22px] shrink-0 items-center justify-center">
+      <Show when={props.remaining !== undefined}>
+        <svg aria-hidden="true" class="pointer-events-none absolute -left-1 -top-1 h-[30px] w-[30px] motion-reduce:hidden" viewBox="0 0 40 40"><circle cx="20" cy="20" r="18" fill="none" stroke="currentColor" stroke-width="2" pathLength="100" stroke-dasharray={`${(props.remaining ?? 0) / 100} 100`} transform="rotate(-90 20 20)" /></svg>
+      </Show>
+      <Show when={props.author.kind === 'agent'} fallback={<PersonFace author={props.author} size={22} />}>
+        <AgentMark label={agentProgram(props.author)} name={authorLabel(props.author)} compact decorative borderless />
+      </Show>
+    </span>
+    <Show when={props.messages > 1}>
+      <span data-thread-count aria-hidden="true" class="absolute right-1.5 top-1/2 -translate-y-1/2 font-mono text-micro font-bold leading-none text-fg">{props.messages > 9 ? '9+' : props.messages}</span>
+    </Show>
+  </span>;
+}
+
+/** "+N more": pressed, or rested on for 600 ms, it expands the replies; leaving or unmounting (the card folds) cancels the wait. */
+function MoreReplies(props: { thread: AnnotationCommentWire[]; expanded: boolean; onExpand: () => void }): JSX.Element {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const cancel = () => clearTimeout(timer);
+  onCleanup(cancel);
+  return <Button type="button" variant="ghost" size="sm" aria-label="Expand replies" aria-expanded={props.expanded} onClick={() => props.onExpand()}
+    onMouseEnter={() => { cancel(); timer = setTimeout(() => props.onExpand(), 600); }} onMouseLeave={cancel}
+    class="pointer-events-auto min-w-0"><ThreadContinuation thread={props.thread} /></Button>;
+}
+
+/** An expanded card's replies, oldest first, below the root comment. */
+function PreviewReplies(props: { thread: AnnotationCommentWire[] }): JSX.Element {
+  return <span role="list" aria-label="Thread replies" class="pointer-events-auto mt-2 flex flex-col gap-3 border-t border-edge pt-2">
+    <For each={props.thread.slice(1)}>{(reply) => (
+      <span role="listitem" class="block">
+        <AuthorIdentity author={reply.author} />
+        <span class="mt-1 block whitespace-pre-wrap break-words font-sans text-sm leading-snug text-fg/90">{previewText(reply.body)}</span>
+        <Show when={reply.edited_at}>{(at) => <CommentEdited iso={at()} class="font-mono text-micro text-faint" />}</Show>
+        <Show when={reply.image}>{(image) => <CommentScreenshot image={image()} />}</Show>
+      </span>
+    )}</For>
+  </span>;
 }
 
 /** Local time with an exact, keyboard-reachable timestamp in a tooltip — never a native title. */
@@ -191,9 +226,15 @@ export function positionedComments(annotations: AnnotationWire[], rects: Record<
 }
 
 const ACTIVE_PHASES = ['queued', 'dispatching', 'delivered', 'acknowledged'];
+/** An agent the card shows as working: connected, in an active phase, and saying what it does. */
+const activeWork = (work: NonNullable<AnnotationWire['remote_work']>[number]) => work.connection === 'online' && ACTIVE_PHASES.includes(work.phase) && work.activity !== 'unknown';
+/** A control's click, kept from the card's own (which opens the rail). */
+const only = (run: () => void) => (event: MouseEvent) => { event.stopPropagation(); run(); };
 
-/** A quiet identity mark until intent is shown; then enough context to choose. */
-export function AnnotationPreview(props: {
+/** What each agent working on a thread reported last: one entry per session, newest kept. */
+export const latestWork = (work: AnnotationWire['remote_work']) => (work ?? []).filter((item, index, all) => !all.slice(index + 1).some((next) => next.sessionId === item.sessionId));
+
+interface AnnotationPreviewProps {
   row: AnnotationWire; top: number; remaining?: number; hovered: boolean;
   resolving?: boolean; resolveError?: string;
   /** Room taken on the right (the edit panel): the mark sits beside it, never under it. */
@@ -207,10 +248,12 @@ export function AnnotationPreview(props: {
   draft?: string; onDraftChange?: (value: string) => void;
   /** Pinned, the card ignores the mouse leaving and other markers; only `onClose` puts it away. */
   pinned?: boolean; onPin?: () => void; onClose?: () => void;
-}): JSX.Element {
+}
+
+/** A quiet identity mark until intent is shown; then enough context to choose. */
+export function AnnotationPreview(props: AnnotationPreviewProps): JSX.Element {
   let article!: HTMLElement;
   const [repliesExpanded, setRepliesExpanded] = createSignal(false);
-  const [continuation, setContinuation] = createSignal<HTMLButtonElement>();
   const canReply = () => Boolean(props.onReply && props.backend && props.artifactId);
   // The reply's image lives with the card (its marker), so collapsing the box keeps it, as the layer keeps the words.
   const replyImage = createCommentImageDraft();
@@ -242,29 +285,19 @@ export function AnnotationPreview(props: {
    */
   const [replyRequested, setReplyRequested] = createSignal(false);
   const startReply = () => batch(() => { setReplyRequested(true); setRepliesExpanded(true); props.onPin?.(); });
-  // The preview owns the delay; leaving or unmounting always cancels it.
-  createEffect(() => {
-    if (!props.hovered) { setRepliesExpanded(false); setReplyRequested(false); return; }
-    const button = continuation();
-    if (!button) return;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const cancel = () => { clearTimeout(timer); };
-    const enter = () => { cancel(); timer = setTimeout(() => setRepliesExpanded(true), 600); };
-    button.addEventListener('mouseenter', enter);
-    button.addEventListener('mouseleave', cancel);
-    onCleanup(() => { cancel(); button.removeEventListener('mouseenter', enter); button.removeEventListener('mouseleave', cancel); });
-  });
+  createEffect(() => { if (!props.hovered) { setRepliesExpanded(false); setReplyRequested(false); } });
   const first = () => props.row.thread[0];
   const label = () => first() ? authorLabel(first()!.author) : 'Unknown';
   const messages = () => props.row.thread.length;
-  const agents = () => (props.row.remote_work ?? []).filter((work, index, all) => !all.slice(index + 1).some((next) => next.sessionId === work.sessionId));
-  const activeAgents = () => agents().filter((work) => work.connection === 'online' && ACTIVE_PHASES.includes(work.phase) && work.activity !== 'unknown');
+  const agents = () => latestWork(props.row.remote_work);
+  const activeAgents = () => agents().filter(activeWork);
   const work = () => activeAgents().at(-1) ?? agents().at(-1);
   const inbox = useOptionalInbox();
   const unread = () => inbox?.state()?.notifications.some((n) => !n.read_at && n.source === `comment:${props.row.id}`);
   const working = () => activeAgents().length > 0;
   const compactWidth = () => messages() > 9 ? VIEW_COMMENT_MANY_W : messages() > 1 ? VIEW_COMMENT_COUNTED_W : VIEW_COMMENT_COLLAPSED_W;
   const radius = () => props.hovered ? '5px' : '50% 50% 50% 3px';
+  const inset = () => props.rightInset ?? 0;
   const expanded = () => props.hovered && repliesExpanded();
   // A card with a reply box near the viewport's bottom lifts until the box fits under it.
   const top = () => expanded() && canReply() ? `max(${VIEW_COMMENT_INSET}px, min(${props.top}px, calc(100dvh - ${VIEW_COMMENT_REPLY_ROOM}px)))` : `${props.top}px`;
@@ -280,9 +313,9 @@ export function AnnotationPreview(props: {
       position: 'fixed',
       outline: work() ? `2px solid ${agentNameColor(work()!.name)}` : undefined,
       top: top(),
-      right: `${(props.rightInset ?? 0) + VIEW_COMMENT_INSET}px`,
+      right: `${inset() + VIEW_COMMENT_INSET}px`,
       width: `${props.hovered ? 288 : compactWidth()}px`,
-      'max-width': `calc(100vw - ${(props.rightInset ?? 0) + VIEW_COMMENT_INSET * 2}px)`,
+      'max-width': `calc(100vw - ${inset() + VIEW_COMMENT_INSET * 2}px)`,
       // Hovered, the card is as tall as its content (whole lines: a fixed height cut the body mid-line), at least the preview's.
       height: props.hovered ? 'auto' : `${VIEW_COMMENT_COLLAPSED_H}px`,
       'min-height': props.hovered && !repliesExpanded() ? `${VIEW_COMMENT_EXPANDED_H}px` : undefined,
@@ -306,19 +339,7 @@ export function AnnotationPreview(props: {
     <Show when={work()}>{(current) => <span class="sr-only">{remoteWorkLabel(current())}{agents().length > 1 ? ` · ${agents().length} agents` : null}</span>}</Show>
     <Show when={props.hovered && agents().length > 1}><span class="absolute right-2 top-1 text-micro text-muted">{agents().length} agents</span></Show>
     <Show when={props.remaining !== undefined}><span role="status" class="sr-only motion-reduce:not-sr-only">Resolved · {Math.ceil((props.remaining ?? 0) / 1000)} seconds</span></Show>
-    <Show when={first() && !props.hovered}>
-      <span class="pointer-events-none absolute inset-0 flex items-center justify-start pl-[7px]">
-        <span class="relative flex h-[22px] w-[22px] shrink-0 items-center justify-center">
-          <Show when={props.remaining !== undefined}>
-            <svg aria-hidden="true" class="pointer-events-none absolute -left-1 -top-1 h-[30px] w-[30px] motion-reduce:hidden" viewBox="0 0 40 40"><circle cx="20" cy="20" r="18" fill="none" stroke="currentColor" stroke-width="2" pathLength="100" stroke-dasharray={`${(props.remaining ?? 0) / 100} 100`} transform="rotate(-90 20 20)" /></svg>
-          </Show>
-          <CompactAuthorMark author={first()!.author} />
-        </span>
-        <Show when={messages() > 1}>
-          <span data-thread-count aria-hidden="true" class="absolute right-1.5 top-1/2 -translate-y-1/2 font-mono text-micro font-bold leading-none text-fg">{messages() > 9 ? '9+' : messages()}</span>
-        </Show>
-      </span>
-    </Show>
+    <Show when={!props.hovered && first()}>{(comment) => <CompactMark author={comment().author} messages={messages()} remaining={props.remaining} />}</Show>
     <Show when={first() && props.hovered}>
       <span class="pointer-events-none relative z-10 flex shrink-0 grow animate-[rise_.12s_ease-out] flex-col">
         <span class="flex items-center justify-between gap-2">
@@ -327,7 +348,7 @@ export function AnnotationPreview(props: {
             <CommentTimestamp iso={first()!.created_at} class="whitespace-nowrap font-mono text-micro text-faint" />
             <Show when={props.row.status === 'open' && props.onResolve}>
               <Tooltip content="resolve thread">
-                <Button type="button" variant="ghost" size="sm" aria-label="Resolve thread" disabled={props.resolving} onClick={(event) => { event.stopPropagation(); props.onResolve?.(); }} class="-mr-1">
+                <Button type="button" variant="ghost" size="sm" aria-label="Resolve thread" disabled={props.resolving} onClick={only(() => props.onResolve?.())} class="-mr-1">
                   <Check size={12} strokeWidth={2} />Resolve
                 </Button>
               </Tooltip>
@@ -359,34 +380,22 @@ export function AnnotationPreview(props: {
         {/* The count (and "+N more", which expands the replies) on the left; Reply and the way to the rail on the right. */}
         <span data-card-footer class={`mt-auto flex min-h-[22px] items-center justify-between gap-2 font-mono text-micro text-faint ${repliesExpanded() ? 'pt-2' : ''}`}>
           <Show when={messages() > 1} fallback={<ThreadContinuation thread={props.row.thread} />}>
-            <Button ref={setContinuation} type="button" variant="ghost" size="sm" aria-label="Expand replies" aria-expanded={repliesExpanded()} onClick={() => setRepliesExpanded(true)}
-              class="pointer-events-auto min-w-0"><ThreadContinuation thread={props.row.thread} /></Button>
+            <MoreReplies thread={props.row.thread} expanded={repliesExpanded()} onExpand={() => setRepliesExpanded(true)} />
           </Show>
           <span class="flex shrink-0 items-center gap-2">
             <Show when={canReply() && !repliesExpanded()}>
-              <Button type="button" variant="secondary" size="sm" aria-label="Reply" onClick={(event) => { event.stopPropagation(); startReply(); }} class="pointer-events-auto">
+              <Button type="button" variant="secondary" size="sm" aria-label="Reply" onClick={only(startReply)} class="pointer-events-auto">
                 <Reply size={12} strokeWidth={2} aria-hidden="true" />Reply
               </Button>
             </Show>
             <span class="transition-colors group-hover:text-accent">open →</span>
           </span>
         </span>
-        <Show when={repliesExpanded() && messages() > 1}>
-          <span role="list" aria-label="Thread replies" class="pointer-events-auto mt-2 flex flex-col gap-3 border-t border-edge pt-2">
-            <For each={props.row.thread.slice(1)}>{(reply) => (
-              <span role="listitem" class="block">
-                <AuthorIdentity author={reply.author} />
-                <span class="mt-1 block whitespace-pre-wrap break-words font-sans text-sm leading-snug text-fg/90">{previewText(reply.body)}</span>
-                <Show when={reply.edited_at}>{(at) => <CommentEdited iso={at()} class="font-mono text-micro text-faint" />}</Show>
-                <Show when={reply.image}>{(image) => <CommentScreenshot image={image()} />}</Show>
-              </span>
-            )}</For>
-          </span>
-        </Show>
+        <Show when={repliesExpanded() && messages() > 1}><PreviewReplies thread={props.row.thread} /></Show>
         <Show when={props.pinned}>
           <span class="pointer-events-auto absolute right-0 top-0 z-30">
             <Tooltip content="close">
-              <Button type="button" variant="ghost" size="sm" icon aria-label="Close comment preview" onClick={(event) => { event.stopPropagation(); props.onClose?.(); }}><X size={13} strokeWidth={1.8} /></Button>
+              <Button type="button" variant="ghost" size="sm" icon aria-label="Close comment preview" onClick={only(() => props.onClose?.())}><X size={13} strokeWidth={1.8} /></Button>
             </Tooltip>
           </span>
         </Show>

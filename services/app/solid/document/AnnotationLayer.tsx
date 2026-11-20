@@ -41,7 +41,7 @@ import { draftsUnder, writeDraft } from '../lib/draft-store';
 import { PersonMentionProvider } from './PersonMention';
 import { connectFrameAnnotations } from './annotation-frame';
 import { createCommentDraft } from './annotation-draft';
-import { createThreadStore } from './annotation-threads';
+import { createThreadStore, type ThreadStore } from './annotation-threads';
 
 export interface AnnotationLayerProps {
   id: string;
@@ -139,6 +139,89 @@ function createLinkedComment(linkTarget: () => string | null | undefined) {
   return linked;
 }
 
+/** The window's size, measured again when it or the document's `frame` (a host page's own panel) resizes. */
+function createViewport(frame?: Element) {
+  const [viewport, setViewport] = createSignal({ width: innerWidth, height: innerHeight });
+  onMount(() => {
+    const resize = () => setViewport({ width: innerWidth, height: innerHeight });
+    window.addEventListener('resize', resize);
+    const observer = frame && typeof ResizeObserver === 'function' ? new ResizeObserver(resize) : null;
+    if (frame) observer?.observe(frame);
+    onCleanup(() => { window.removeEventListener('resize', resize); observer?.disconnect(); });
+  });
+  return viewport;
+}
+
+/** Deleting a thread or one reply, once confirmed; a refusal stays in the dialog, and the dialog stays while it runs. */
+function ConfirmDelete(props: { thread: boolean; remove: () => Promise<unknown>; onClose: () => void }): JSX.Element {
+  const [busy, setBusy] = createSignal(false);
+  const [error, setError] = createSignal<string | null>(null);
+  const confirm = async () => {
+    if (busy()) return;
+    setBusy(true); setError(null);
+    try { await props.remove(); props.onClose(); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not complete this action. Try again.'); }
+    finally { setBusy(false); }
+  };
+  return <ConfirmDialog {...(props.thread ? DELETE_THREAD_CONFIRMATION : DELETE_REPLY_CONFIRMATION)} danger busy={busy()} error={error()}
+    onCancel={() => { if (!busy()) props.onClose(); }} onConfirm={() => void confirm()} />;
+}
+
+/**
+ * The layer's unsent replies: each hover card's words, per thread (closing a card never loses one; kept for this tab
+ * too, solid/lib/draft-store, so a reload — the page loading a new build — gives them back), and which rail threads'
+ * reply boxes hold words (each thread owns its own reply draft). `typed`: whether any of them holds words.
+ */
+function createReplyDrafts(artifactId: string) {
+  const [cards, setCards] = createSignal<Record<string, string>>(draftsUnder(`${artifactId}:reply:`));
+  const [threads, setThreads] = createSignal<Record<string, true>>({});
+  return {
+    card: (id: string) => cards()[id] ?? '',
+    setCard: (id: string, value: string) => setCards((current) => {
+      if ((current[id] ?? '') === value) return current;
+      writeDraft(`${artifactId}:reply:${id}`, value);
+      return withEntry(current, id, value);
+    }),
+    noteThread: (id: string, typed: boolean) => setThreads((current) => Boolean(current[id]) === typed ? current : withEntry(current, id, typed || undefined)),
+    typed: () => Object.values(cards()).some(hasReplyText) || Object.keys(threads()).length > 0,
+  };
+}
+
+/** The pick's only indicator once the rail is away, and the phone's only way out of it. */
+function PickStatus(props: { pick: 'block' | 'area'; capturing: boolean; left: number; top: number; onCancel: () => void }): JSX.Element {
+  return <div role="status" data-capture-chrome aria-label={props.pick === 'area' ? 'Screenshot tool active' : 'Select tool active'}
+    class={`${cardClass} fixed z-30 flex items-center gap-2 border-edge-bright px-3 py-1.5 font-mono text-2xs text-muted shadow-xl`}
+    style={{ left: `${props.left}px`, top: `${props.top}px`, transform: 'translateX(-50%)' }}>
+    <SquareDashedMousePointer size={12} strokeWidth={1.8} class="shrink-0 text-accent" />
+    <span class="whitespace-nowrap">{props.pick === 'area' ? (props.capturing ? 'Choose this tab in the sharing dialog' : 'drag an area to screenshot') : 'click a block or highlight text to comment'}</span>
+    <Button type="button" variant="ghost" size="sm" icon aria-label="Cancel picking" onClick={() => props.onCancel()}>
+      <X size={12} strokeWidth={1.8} />
+    </Button>
+  </div>;
+}
+
+/**
+ * A thread resolved elsewhere counts down only while its mark is seen: inside the viewport, the page visible, the
+ * mark neither hovered nor its thread open. `placed` is empty while the marks are away.
+ */
+function countDownWhileSeen(threads: ThreadStore, placed: () => Array<{ annotation: AnnotationWire; top: number }>, height: () => number, hoverId: () => string | null) {
+  const seen = createMemo(() => placed().filter((item) => item.top >= 0 && item.top + VIEW_COMMENT_COLLAPSED_H <= height()).map((item) => item.annotation.id).join(','));
+  createEffect(() => {
+    if (!placed().length || !threads.counting()) return;
+    const visible = new Set(seen().split(','));
+    const hover = hoverId();
+    const open = threads.openId();
+    let last = performance.now();
+    const timer = setInterval(() => {
+      const now = performance.now(), elapsed = Math.min(250, now - last);
+      last = now;
+      if (document.visibilityState !== 'visible') return;
+      threads.countDown(elapsed, (id) => visible.has(id) && id !== hover && id !== open);
+    }, 100);
+    onCleanup(() => clearInterval(timer));
+  });
+}
+
 /** A per-thread record kept in step: `value` empty removes the entry. */
 const withEntry = <T,>(current: Record<string, T>, id: string, value: T | undefined) => {
   const next = { ...current };
@@ -170,33 +253,14 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   const [pinnedId, setPinnedId] = createSignal<string | null>(null);
   /** The hover card that shows: the pinned one, else the one under the pointer. */
   const previewId = () => pinnedId() ?? hoverId();
-  /** Unsent hover-card replies per thread, for this page session: closing a card never loses one. */
-  // Kept for this tab too (solid/lib/draft-store): a reload — the page loading a new build — gives them back.
-  const [replyDrafts, setReplyDrafts] = createSignal<Record<string, string>>(draftsUnder(`${props.id}:reply:`));
-  const setReplyDraft = (id: string, value: string) => setReplyDrafts((current) => {
-    if ((current[id] ?? '') === value) return current;
-    writeDraft(`${props.id}:reply:${id}`, value);
-    return withEntry(current, id, value);
-  });
-  /** Rail threads whose reply box holds words (each thread owns its own reply draft). */
-  const [threadReplies, setThreadReplies] = createSignal<Record<string, true>>({});
-  const noteThreadReply = (id: string, typed: boolean) => setThreadReplies((current) => Boolean(current[id]) === typed ? current : withEntry(current, id, typed || undefined));
+  const replies = createReplyDrafts(props.id);
   const closePreview = () => batch(() => { setPinnedId(null); hoverUi(null); });
   let threadsRoot: HTMLDivElement | undefined;
   /** On a phone the rail is a bottom sheet — a 320px rail over a 390px screen covers the document. */
   const phoneRail = createIsPhoneViewport();
   const [ambientResolveError, setAmbientResolveError] = createSignal<{ id: string; message: string } | null>(null);
   const [deleting, setDeleting] = createSignal<{ id: string; thread: boolean } | null>(null);
-  const [confirmBusy, setConfirmBusy] = createSignal(false);
-  const [confirmError, setConfirmError] = createSignal<string | null>(null);
-  const [viewport, setViewport] = createSignal({ width: innerWidth, height: innerHeight });
-  onMount(() => {
-    const resize = () => setViewport({ width: innerWidth, height: innerHeight });
-    window.addEventListener('resize', resize);
-    const observer = props.frame && typeof ResizeObserver === 'function' ? new ResizeObserver(resize) : null;
-    if (props.frame) observer?.observe(props.frame);
-    onCleanup(() => { window.removeEventListener('resize', resize); observer?.disconnect(); });
-  });
+  const viewport = createViewport(props.frame);
 
   /** A pin, a marker, a link or a new comment opens its thread in the rail; no pick or composer stays up. */
   const openThread = (annId: string) => {
@@ -242,8 +306,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
     pickRequested: Boolean(props.pickRequested),
   });
   createEffect(on(pickOnOpen, (mayPick) => { if (!mayPick && !mayCreate()) setDeleting(null); }));
-  const drafting = createMemo(() => draft.selection() !== null || hasReplyText(draft.words())
-    || Object.values(replyDrafts()).some(hasReplyText) || Object.keys(threadReplies()).length > 0);
+  const drafting = createMemo(() => draft.selection() !== null || hasReplyText(draft.words()) || replies.typed());
   createEffect(on(drafting, (value) => props.onDraftingChange?.(value)));
 
   const frame = connectFrameAnnotations({
@@ -264,15 +327,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
     setAmbientResolveError(null);
     if (!await threads.act(id, { resolve: true })) setAmbientResolveError({ id, message: 'Could not resolve this thread. Try again.' });
   };
-  const confirmDelete = async () => {
-    const pending = deleting();
-    if (!pending || confirmBusy()) return;
-    setConfirmBusy(true); setConfirmError(null);
-    try { await threads.remove(pending.id); setDeleting(null); }
-    catch (cause) { setConfirmError(cause instanceof Error ? cause.message : 'Could not complete this action. Try again.'); }
-    finally { setConfirmBusy(false); }
-  };
-  const askDelete = (commentId: string, thread: boolean) => { if (!mayCreate() || deleting()) return; setConfirmError(null); setDeleting({ id: commentId, thread }); };
+  const askDelete = (commentId: string, thread: boolean) => { if (!mayCreate() || deleting()) return; setDeleting({ id: commentId, thread }); };
 
   const topOffset = () => props.topOffset ?? 0;
   // The collapsed identity mark is small enough for phones too; its click opens the same rail as a sheet.
@@ -288,21 +343,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   createEffect(() => { const pinned = pinnedId(); if (pinned && !placedIds().includes(pinned)) setPinnedId(null); });
 
   // A thread resolved elsewhere counts down only while its mark is seen, not hovered and not open.
-  const visibleResolved = createMemo(() => placed().filter((item) => item.top >= 0 && item.top + VIEW_COMMENT_COLLAPSED_H <= viewport().height).map((item) => item.annotation.id).join(','));
-  createEffect(() => {
-    if (!floating() || !threads.counting()) return;
-    const visible = new Set(visibleResolved().split(','));
-    const hover = hoverId();
-    const open = threads.openId();
-    let last = performance.now();
-    const timer = setInterval(() => {
-      const now = performance.now(), elapsed = Math.min(250, now - last);
-      last = now;
-      if (document.visibilityState !== 'visible') return;
-      threads.countDown(elapsed, (id) => visible.has(id) && id !== hover && id !== open);
-    }, 100);
-    onCleanup(() => clearInterval(timer));
-  });
+  countDownWhileSeen(threads, placed, () => viewport().height, hoverId);
 
   // The document is full-width under an open rail, so what the composer and the pill may use is the
   // document LESS the rail — never its own width.
@@ -332,25 +373,15 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
                 hovered={previewId() === id} resolving={threads.busy()} resolveError={ambientResolveError()?.id === id ? ambientResolveError()?.message : undefined}
                 onResolve={mayCreate() ? () => void resolveFromPreview(id) : undefined} rightInset={props.panelWidth} onOpen={() => openThread(id)} onHover={hoverUi}
                 onReply={mayCreate() && item().annotation.status === 'open' ? (body, attachment) => threads.actOrThrow(id, { reply: body, ...attachment }) : undefined}
-                backend={backend} artifactId={props.id} busy={threads.busy()} draft={replyDrafts()[id] ?? ''} onDraftChange={(value) => setReplyDraft(id, value)}
+                backend={backend} artifactId={props.id} busy={threads.busy()} draft={replies.card(id)} onDraftChange={(value) => replies.setCard(id, value)}
                 pinned={pinnedId() === id} onPin={() => setPinnedId(id)} onClose={closePreview} />
             )}</Show>
           )}</For>
         </div>
       </Show>
 
-      {/* The pick's only indicator once the rail is away, and the phone's only way out of it. */}
-      <Show when={draft.pick()}>
-        <div role="status" data-capture-chrome aria-label={draft.pick() === 'area' ? 'Screenshot tool active' : 'Select tool active'}
-          class={`${cardClass} fixed z-30 flex items-center gap-2 border-edge-bright px-3 py-1.5 font-mono text-2xs text-muted shadow-xl`}
-          style={{ left: `${frameRect().left + frameRect().width / 2}px`, top: `${Math.max(topOffset(), frameRect().top, phoneRail() ? APP_BAR_H : 0) + (props.documentTopInset ?? 0) + VIEW_COMMENT_INSET}px`, transform: 'translateX(-50%)' }}>
-          <SquareDashedMousePointer size={12} strokeWidth={1.8} class="shrink-0 text-accent" />
-          <span class="whitespace-nowrap">{draft.pick() === 'area' ? (draft.capture.busy() ? 'Choose this tab in the sharing dialog' : 'drag an area to screenshot') : 'click a block or highlight text to comment'}</span>
-          <Button type="button" variant="ghost" size="sm" icon aria-label="Cancel picking" onClick={draft.endPick}>
-            <X size={12} strokeWidth={1.8} />
-          </Button>
-        </div>
-      </Show>
+      <Show when={draft.pick()}>{(pick) => <PickStatus pick={pick()} capturing={draft.capture.busy()} onCancel={draft.endPick}
+        left={frameRect().left + frameRect().width / 2} top={Math.max(topOffset(), frameRect().top, phoneRail() ? APP_BAR_H : 0) + (props.documentTopInset ?? 0) + VIEW_COMMENT_INSET} />}</Show>
 
       {/* Drafts belong to the thing being discussed; the saved conversation moves to the rail. */}
       <AnnotationComposer draft={draft} show={mayCreate() && !!draft.selection() && !draft.pick()} busy={threads.busy()} frame={frameRect()} viewport={viewport()}
@@ -361,14 +392,11 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
         <CommentRail threads={threads} draft={draft} artifactId={props.id} backend={backend} mayCreate={mayCreate()} canDeleteAny={props.canDeleteAny}
           phone={phoneRail() || !!props.railSheet} host={props.railHost ?? undefined} topOffset={topOffset()} rightInset={props.rightInset ?? 0}
           onClose={() => props.onRailOpenChange(false)} onSignIn={props.onSignIn} hoverId={hoverId()} onHover={hoverUi}
-          viewStateError={frame.viewStateError()} missing={frame.missing()} onReplyDraftChange={noteThreadReply} onDelete={askDelete} onOpenThread={openThread}
+          viewStateError={frame.viewStateError()} missing={frame.missing()} onReplyDraftChange={replies.noteThread} onDelete={askDelete} onOpenThread={openThread}
           threadsRef={(element) => { threadsRoot = element; }} />
       </Show>
 
-      <Show when={deleting()}>
-        <ConfirmDialog {...(deleting()?.thread ? DELETE_THREAD_CONFIRMATION : DELETE_REPLY_CONFIRMATION)} danger busy={confirmBusy()} error={confirmError()}
-          onCancel={() => { if (!confirmBusy()) setDeleting(null); }} onConfirm={() => void confirmDelete()} />
-      </Show>
+      <Show when={deleting()}>{(pending) => <ConfirmDelete thread={pending().thread} remove={() => threads.remove(pending().id)} onClose={() => setDeleting(null)} />}</Show>
     </CommentsOffline.Provider>
   </PersonMentionProvider></CommentImagesProvider>;
 }
