@@ -58,7 +58,7 @@ describe('/api/internal/* at the edge', () => {
   });
 
   it('the proxy\'s own upstream call is not a client, so the mint still happens', async () => {
-    // What routes/oauth `mintFor` does: build the Request and hand it to the
+    // What routes/grants `mintFor` does: build the Request and hand it to the
     // upstream directly. It never passes through the parts, which is exactly
     // why the boundary above can be absolute.
     const seen: string[] = [];

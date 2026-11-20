@@ -8,7 +8,7 @@
  * is behind it.
  *
  * `INTERNAL_MINT_PATH` is the only credential mint in that surface: the token
- * mint the CLI's device approval spends (proxy routes/oauth `mintFor`). Other
+ * mint the CLI's device approval spends (proxy routes/grants `mintFor`). Other
  * internal calls have their own constants and no public request reaches them.
  */
 const INTERNAL_API_PREFIX = '/api/internal';
