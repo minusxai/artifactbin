@@ -2,13 +2,18 @@
  * knip: unused files, exports, types and dependencies, run by `npm run validate`.
  * Entries are the real ways code is reached when no import names it: node/tsx scripts, gates, servers,
  * build entry lists and assets loaded by path. Each list names where the path comes from.
+ * A `!` suffix marks what ships (servers, routes, bundles, the deployment's entries, operator scripts) and the
+ * production project leaves out tests and their helpers, so `npx knip --production` lists the code only tests
+ * keep alive. Its report is a measure, not a gate: the downstream-exports pins are tests, so the names the private
+ * deployment imports appear there too, and so does @aws-sdk/client-s3, which lib/object-store loads through
+ * createRequire (a test imports it, so the plain run needs no ignore for it).
  */
 /** @type {import('knip').KnipConfig} */
 export default {
   workspaces: {
     '.': {
       entry: [
-        'server.ts',
+        'server.ts!',
         // The fast lane ci.yml runs on main pushes and its independent Vitest configuration.
         'scripts/ci/{fast-check,fast-tests}.mjs', 'vitest.fast.config.ts',
         // pr fast's guard tier: tests that read the repository's files by path (scripts/ci/guard-tests.json).
@@ -50,22 +55,24 @@ export default {
     'services/app': {
       entry: [
         // Route modules: server/routes.generated.ts mounts each as a namespace.
-        'app/**/route.ts',
+        'app/**/route.ts!',
         // Hosted native HTML and library bundles
         // (scripts/build-libraries.mjs over lib/libraries/registry.json), the SPA (vite.config.mts).
         // Native HTML core bundles this module by URL; its exports are the author ABI.
-        'lib/html-runtime/{browser-client,browser-state,build.server,index}.ts',
+        'lib/html-runtime/{browser-client,browser-state,build.server,index}.ts!',
         // Public custom-element API, bundled by build-html-components.
-        'lib/html-components/{tabs,tab-navigation,button,switch,progress,collapsible,dialog,slider,input,textarea,text-control,avatar,segmented,popover,tooltip,floating-position,date-picker,date-calendar,select,select-model,icon,icon-glyphs,floating-geometry,accordion,accordion-model,file-upload,file-upload-model,data-table,table-model,markdown,mermaid,slide-deck,slide-navigation,deck-gl,deck-gl-engine,deck-gl-model,isometric,isometric-model,user,user-model,avatar-model,segmented-model,dialog-model,popover-model,date-picker-styles,tooltip-model,slide-deck-parts,data-table-frame,data-table-grid,data-table-cells,data-table-compare,data-table-measure,chart,chart-data,chart-frame,chart-model,chart-render,chart-styles}.ts',
-        'lib/libraries/*.js', 'web/solid-entry.tsx', 'web/shell.css',
+        'lib/html-components/{tabs,tab-navigation,button,switch,progress,collapsible,dialog,slider,input,textarea,text-control,avatar,segmented,popover,tooltip,floating-position,date-picker,date-calendar,select,select-model,icon,icon-glyphs,floating-geometry,accordion,accordion-model,file-upload,file-upload-model,data-table,table-model,markdown,mermaid,slide-deck,slide-navigation,deck-gl,deck-gl-engine,deck-gl-model,isometric,isometric-model,user,user-model,avatar-model,segmented-model,dialog-model,popover-model,date-picker-styles,tooltip-model,slide-deck-parts,data-table-frame,data-table-grid,data-table-cells,data-table-compare,data-table-measure,chart,chart-data,chart-frame,chart-model,chart-render,chart-styles,markdown-editor,markdown-editor-commands,markdown-editor-model,markdown-editor-styles}.ts!',
+        'lib/libraries/*.js!', 'web/solid-entry.tsx!', 'web/shell.css!',
         // Server bundle workers (scripts/build/build-server.mjs).
-        'lib/viz/chart-image-worker.ts', 'lib/viz/chart-image-worker-dev.mjs',
+        'lib/viz/chart-image-worker.ts!', 'lib/viz/chart-image-worker-dev.mjs',
+        // The app's font faces, which the root vite.config.mts writes into the built SPA.
+        'lib/page-styles/app-font-face-css.mjs!',
         // Build and generator scripts run by path (scripts/lib/dev-runner.mjs, CI).
         'scripts/{build-libraries,build-server-reader,generate-geo-boundaries}.mjs',
         // The HTTP author-skill ZIP loads these explicit text assets by path (lib/skills/assets).
-        'skills/artifactbin/{scripts/*.mjs,examples/*.{html,ts,csv,mjs},resolvers/*.ts,design-systems/*.css}',
+        'skills/artifactbin/{scripts/*.mjs,examples/*.{html,ts,csv,mjs},resolvers/*.ts,design-systems/*.css}!',
         // The deployment's @artifactbin/app entry points (minusxai/artifactbin-server tsconfig paths).
-        'server/host.ts', 'lib/platform/{config,db}.ts', 'lib/accounts/tokens.ts', 'lib/artifacts/{mutation-invocation,document-policy}.ts',
+        'server/host.ts!', 'lib/platform/{config,db}.ts!', 'lib/accounts/tokens.ts!', 'lib/artifacts/{mutation-invocation,document-policy}.ts!',
         // Reached in ways knip does not follow: `Promise.all([import(...)])` (lib/mermaid-images/reader-draw.ts)
         // Native browser assets are reached through explicit build and HTTP entry points.
         // Test fixtures run as their own tsx processes by the tests beside them.
@@ -76,7 +83,7 @@ export default {
         // The native acceptance scenario minusxai/artifactbin-server's scripts/accept-native-html.mjs imports by path.
         'testing/native-acceptance.mjs',
       ],
-      project: ['**/*.{ts,tsx,mjs,js,jsx,css}', '!public/**', '!skills/artifactbin/components/*.ts'],
+      project: ['**/*.{ts,tsx,mjs,js,jsx,css}!', '!public/**', '!skills/artifactbin/components/*.ts', '!**/__tests__/**!', '!{test,solid/test,scripts}/**!', '!lib/artifacts/testing.ts!'],
       ignoreDependencies: [
         // Installed font binaries copied by path (scripts/copy-assets.mjs, scripts/system-font-packages.mjs).
         /^@fontsource(-variable)?\//,
@@ -99,16 +106,17 @@ export default {
     // package's __tests__/downstream-exports.test.ts, so those imports count as uses here. knip does not count an
     // inline `import('@artifactbin/…').Name` type query as a use: import the type instead.
     'services/contracts': { includeEntryExports: true },
-    'services/utils': { includeEntryExports: true },
+    'services/utils': { project: ['**/*.{ts,mjs}!', '!**/__tests__/**!'], includeEntryExports: true },
     'services/test-support': { includeEntryExports: true },
     // Generates ephemeral, single-day TLS certificates for the real SMTP fixture.
-    'services/auth': { ignoreBinaries: ['openssl'], includeEntryExports: true },
+    // Its operator migrations run by path (its package.json `migrate:*` scripts).
+    'services/auth': { entry: ['scripts/*.ts!'], project: ['**/*.ts!', '!**/__tests__/**!'], ignoreBinaries: ['openssl'], includeEntryExports: true },
     // Service servers (their images and the deployment build them) and the SQL pool's worker (scripts/build/build-server.mjs).
-    'services/sql': { entry: ['src/server.ts', 'src/pool-worker.ts'], includeEntryExports: true },
-    'services/events': { entry: ['src/server.ts'], includeEntryExports: true },
+    'services/sql': { entry: ['src/server.ts!', 'src/pool-worker.ts!'], project: ['**/*.{ts,mjs}!', '!**/__tests__/**!'], includeEntryExports: true },
+    'services/events': { entry: ['src/server.ts!'], includeEntryExports: true },
     // Its Docker proof makes single-day TLS certificates for a real Postgres.
     'services/connectors': { ignoreBinaries: ['openssl'], includeEntryExports: true },
-    'services/browser': { entry: ['src/server.ts', 'src/upload-gateway-server.ts'], includeEntryExports: true },
+    'services/browser': { entry: ['src/server.ts!', 'src/upload-gateway-server.ts!'], includeEntryExports: true },
   },
   ignoreIssues: {
     // A route answers HEAD (or another method) with the same handler: `export { GET as HEAD }`.
