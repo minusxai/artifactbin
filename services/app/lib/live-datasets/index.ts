@@ -37,7 +37,7 @@
 import {readLifetime} from '@/lib/datasets';
 import { CONNECTORS, OWN_CONNECTIONS_OFF, type ConnectionConfig, type ConnectorDialect, type ConnectorError, type ConnectorScalar, type ConnectorTestResult, type ConnectorViewer } from '@artifactbin/contracts/connectors';
 import { SQL_READ_LIMITS } from '@artifactbin/contracts/sql';
-import type { DatasetRole } from '@artifactbin/contracts/dataset-permissions';
+import { isDatasetAdmin } from '@artifactbin/contracts/dataset-permissions';
 import type { HtmlDatasetLink, HtmlDeclaredQuery, HtmlDefaultConnectionLink, HtmlLiveDatasetLink, HtmlPageLink, HtmlPageVersion } from '@artifactbin/contracts/html-page';
 import type { Queryable } from '@artifactbin/contracts/db';
 import { SQL_FAILURE_FOR_CONNECTOR, isSqlFailureCode, sqlReadFailure } from '@artifactbin/contracts/sql-failures';
@@ -164,7 +164,6 @@ async function liveRow(id: string): Promise<ArtifactRow | null> {
   const row = await getArtifactById(id);
   return row && row.format === 'dataset' && liveConnectionOf(row.meta) ? row : null;
 }
-const isAdmin = (role: DatasetRole | null) => role === 'owner' || role === 'editor';
 const NOT_FOUND = () => new LiveDatasetRefusal(404, 'not_found', 'not found');
 /** The live dataset `actor` owns or edits; the uniform 404 when they cannot read it, 403 when they only read it. */
 async function editableLive(actor: AccessActor, id: string): Promise<ArtifactRow> {
@@ -173,7 +172,7 @@ async function editableLive(actor: AccessActor, id: string): Promise<ArtifactRow
   const role = await datasetRole(row, actor);
   if (!role) throw NOT_FOUND();
   ownConnectionsAllowed();
-  if (!isAdmin(role)) throw new LiveDatasetRefusal(403, 'permission_denied', 'only the live dataset\'s owner and editors may do this');
+  if (!isDatasetAdmin(role)) throw new LiveDatasetRefusal(403, 'permission_denied', 'only the live dataset\'s owner and editors may do this');
   return row;
 }
 
@@ -231,7 +230,7 @@ export async function liveConnectionDetails(actor: AccessActor, id: string): Pro
   const summary = liveConnectionOf(row.meta)!;
   let roles: string[] = [];
   try { roles = liveQueryRoles(storedPolicy({ policy: row.dataset_policy, tables: [], live: true }).policy); } catch { /* an unreadable policy admits nobody */ }
-  const editor = isAdmin(role) ? await stored(id) : null;
+  const editor = isDatasetAdmin(role) ? await stored(id) : null;
   const config = editor ? { ...editor.config } : null;
   return {
     status: 200,
@@ -271,7 +270,7 @@ export async function updateLiveConnection(actor: AccessActor, id: string, input
       const role = await datasetRole(row, actor, { facts: transactionAccessFacts(actor, tx) });
       if (!role) throw NOT_FOUND();
       ownConnectionsAllowed();
-      if (!isAdmin(role)) throw new LiveDatasetRefusal(403, 'permission_denied', 'only the live dataset\'s owner and editors may change its connection');
+      if (!isDatasetAdmin(role)) throw new LiveDatasetRefusal(403, 'permission_denied', 'only the live dataset\'s owner and editors may change its connection');
       const current = await stored(id, tx, true);
       if (!current) throw NOT_FOUND();
       const sent = input as Record<string, unknown>;
@@ -341,7 +340,7 @@ export async function liveDatasetSql(actor: AccessActor, id: string, raw: { sql?
     const role = row ? await datasetRole(row, actor) : null;
     if (!row || !role) throw NOT_FOUND();
     ownConnectionsAllowed();
-    if (!isAdmin(role)) throw new LiveDatasetRefusal(403, 'permission_denied', 'only a live dataset\'s owner and editors write SQL on it; everyone else runs the queries its pages declare');
+    if (!isDatasetAdmin(role)) throw new LiveDatasetRefusal(403, 'permission_denied', 'only a live dataset\'s owner and editors write SQL on it; everyone else runs the queries its pages declare');
     if (typeof raw.sql !== 'string' || !raw.sql.trim()) throw new LiveDatasetRefusal(400, 'validation_failed', 'sql takes one SQL statement');
     return run(id, row.title ?? id, raw.sql, raw.params, await connectorViewer(actor), signal);
   } catch (e) { return refusal(e); }
@@ -375,7 +374,7 @@ export async function livePageDeclarations(reader: AccessActor, publisher: Acces
     }
     if (!row) throw new LiveDatasetRefusal(400, 'invalid_declared_query', `declared query ${query.name} runs on data-af-dataset="${query.link}", which is not a live dataset or default: link on this page`);
     if (query.params) throw new LiveDatasetRefusal(400, 'invalid_declared_query', `declared query ${query.name}: data-af-params is for a query on a default: link, which a group's Admin may approve`);
-    if (!isAdmin(await datasetRole(row, publisher))) throw new LiveDatasetRefusal(403, 'declared_query_not_permitted', `declared query ${query.name} runs on ${query.link}, a live dataset you do not own or edit: only its owner and editors may declare queries on it`);
+    if (!isDatasetAdmin(await datasetRole(row, publisher))) throw new LiveDatasetRefusal(403, 'declared_query_not_permitted', `declared query ${query.name} runs on ${query.link}, a live dataset you do not own or edit: only its owner and editors may declare queries on it`);
     if (new TextEncoder().encode(query.sql).length > SQL_READ_LIMITS.sqlBytes) throw new LiveDatasetRefusal(400, 'invalid_declared_query', `declared query ${query.name} is at most ${SQL_READ_LIMITS.sqlBytes} bytes`);
     const dialect = specOf(liveConnectionOf(row.meta)!.connector).dialect;
     try { colonParameters(dialect, query.sql); } catch (e) { throw new LiveDatasetRefusal(400, 'invalid_declared_query', `declared query ${query.name}: ${connectorError(e).message}`); }
@@ -391,7 +390,7 @@ export async function assertDeclaredQueriesCopyable(actor: AccessActor, page: { 
     // A default-connection query copies as any page text does: a copy has no approval.
     if (all.some((l) => l.kind === 'default-connection' && l.name === query.link)) continue;
     const link = links.find((l) => l.name === query.link), row = link ? await liveRow(link.datasetId) : null;
-    if (!row || !isAdmin(await datasetRole(row, actor))) throw new LiveDatasetRefusal(403, 'declared_query_not_permitted', `this page declares query ${query.name} on a live dataset you do not own or edit, so it cannot be copied by you`);
+    if (!row || !isDatasetAdmin(await datasetRole(row, actor))) throw new LiveDatasetRefusal(403, 'declared_query_not_permitted', `this page declares query ${query.name} on a live dataset you do not own or edit, so it cannot be copied by you`);
   }
 }
 
