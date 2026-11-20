@@ -21,3 +21,5 @@ export { people, resolveDefinitionScope, resolveUserColumnScope, retainUserScope
 
 
 export {readLifetime} from './read-lifetime';
+
+export { serveInlinePdf } from './pdf-response';
