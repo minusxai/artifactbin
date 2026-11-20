@@ -26,12 +26,6 @@ import { eventsTablePresent } from '@/lib/analytics';
 /** How many days of history the dashboard splines show. */
 export const VIEW_SERIES_DAYS = 30;
 
-interface DailyViews {
-  /** UTC calendar day, 'YYYY-MM-DD'. */
-  day: string;
-  views: number;
-}
-
 /*
  * THE TWO VIEW QUERIES. Both read the same shape — one
  * row per (artifact, UTC day) with the unique-visitor count — so the zero-fill
@@ -56,14 +50,6 @@ const LOG_SERIES = `SELECT e.object_id AS artifact_id, to_char(date_trunc('day',
     AND e.at > now() - ($2::int * interval '1 day')
     AND ($3::text IS NULL OR a.format = $3)
   GROUP BY e.object_id, day`;
-
-const LOG_DAILY = `SELECT to_char(date_trunc('day', e.at AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS day,
-     COUNT(DISTINCT COALESCE(e.subject_id, e.id))::int AS views
-   FROM ${EVENTS_SCHEMA}.events e
-   JOIN artifacts a ON a.id = e.object_id
-  WHERE a.user_id = $1 AND e.object_kind = 'artifact' AND e.verb = 'viewed' AND a.${LIVE_ARTIFACT_SQL}
-  GROUP BY day
-  ORDER BY day`;
 
 const LOG_FORK_COUNT = `SELECT COUNT(*)::int AS n
    FROM ${EVENTS_SCHEMA}.events e
@@ -134,24 +120,4 @@ export async function forkCountByUser(userId: string): Promise<number> {
   return Number(r.rows[0]?.n ?? 0);
 }
 
-/**
- * All-time daily view totals pooled across everything the user owns,
- * zero-filled from the first viewed day through today (empty when no views).
- * Same source rule as `viewSeriesByUser`.
- */
-export async function dailyViewsByUser(userId: string): Promise<DailyViews[]> {
-  if (!(await eventsTablePresent())) return [];
-  const db = await getDb();
-  const r = await db.query<{ day: string; views: number }>(LOG_DAILY, [userId]);
-  if (r.rows.length === 0) return [];
-  const byDay = new Map(r.rows.map((row) => [row.day, row.views]));
-  const out: DailyViews[] = [];
-  const today = new Date().toISOString().slice(0, 10);
-  for (let t = Date.parse(r.rows[0].day); ; t += 86_400_000) {
-    const day = new Date(t).toISOString().slice(0, 10);
-    out.push({ day, views: byDay.get(day) ?? 0 });
-    if (day >= today) break;
-  }
-  return out;
-}
 

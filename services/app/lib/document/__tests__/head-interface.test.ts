@@ -5,10 +5,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   canonicalAssetUrl, CSP_DIRECTIVES, cspOriginMatches, displayTitle, emptyCspExtensions,
-  EMPTY_CSP_EXTENSIONS, firstHeadingTitle, hasCspExtensions, mergeCspExtensions, parseCspOrigin, socialPreviewImage,
+  EMPTY_CSP_EXTENSIONS, hasCspExtensions, mergeCspExtensions, parseCspOrigin, socialPreviewImage,
   socialPreviewImageValue, SOCIAL_PREVIEW_OVERVIEW_GENERATION, subtractCspExtensions, urlHash, assetUrlFor,
 } from '..';
 import { rowTitle, UNTITLED } from '../display-title';
+import { firstHeadingTitle } from '../title';
 import {
   clampImageCrop, defaultImageCrop, imageCropMaxWidth, SOCIAL_PREVIEW_HEIGHT, SOCIAL_PREVIEW_MIN_CROP_WIDTH,
   SOCIAL_PREVIEW_WIDTH, writeSocialPreviewImage,

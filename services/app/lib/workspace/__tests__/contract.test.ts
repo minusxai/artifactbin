@@ -7,7 +7,8 @@ import { useAppHarness } from '@/__tests__/harness';
 import { nativeHtml } from '@/__tests__/native-html-fixture';
 import { createUser, identityForUser, type AccessActor } from '@/lib/accounts';
 import { createArtifact, getArtifactById, updateSharingFor, type ArtifactRow } from '@/lib/artifacts';
-import { groupShelfByRecency, listArtifactsByUser, listPublicArtifactsByUser, listSharedWithEmail, listTrashFor, ownedArtifactState, restoreArtifactFor, trashArtifactFor } from '@/lib/workspace';
+import { groupShelfByRecency } from '@/lib/shelf';
+import { listArtifactsByUser, listPublicArtifactsByUser, listSharedWithEmail, listTrashFor, ownedArtifactState, restoreArtifactFor, trashArtifactFor } from '@/lib/workspace';
 import { setArtifact } from '@/__tests__/rows';
 
 const harness = useAppHarness();

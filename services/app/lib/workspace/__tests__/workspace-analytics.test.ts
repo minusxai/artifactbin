@@ -9,7 +9,7 @@ import type { Queryable } from '@artifactbin/contracts';
 import { createEvents, ensureEventsSchema } from '@artifactbin/events/local';
 import { useAppHarness } from '@/__tests__/harness';
 import { trackEvent } from '@/lib/analytics';
-import { dailyViewsByUser, eventsTablePresent, forkCountByUser, viewSeriesByUser, VIEW_SERIES_DAYS } from '@/lib/workspace';
+import { eventsTablePresent, forkCountByUser, viewSeriesByUser, VIEW_SERIES_DAYS } from '@/lib/workspace';
 import { forgetEventsTable } from '@/lib/workspace/analytics';
 import { seedArtifacts } from '@/__tests__/rows';
 
@@ -63,9 +63,6 @@ describe('the dashboard reads the log', () => {
     expect([...(await viewSeriesByUser('usr_a', 45)).get('art0a1')!].reduce((a, b) => a + b, 0)).toBe(6);
     expect((await viewSeriesByUser('usr_b')).get('art0b1')![VIEW_SERIES_DAYS - 1]).toBe(1);
     expect((await viewSeriesByUser('usr_nobody')).size).toBe(0);
-    const daily = await dailyViewsByUser('usr_a');
-    expect(daily.length).toBeGreaterThanOrEqual(41);
-    expect(daily.at(-1)?.views).toBe(4);
   });
 
   it('with no events table the answers are empty, never an error', async () => {
@@ -74,7 +71,6 @@ describe('the dashboard reads the log', () => {
     await db.query(`INSERT INTO analytics_events (event, artifact_id, visitor) VALUES ('view', 'art0a1', 'v1')`);
     expect(await eventsTablePresent()).toBe(false);
     expect((await viewSeriesByUser('usr_a')).size).toBe(0);
-    expect(await dailyViewsByUser('usr_a')).toEqual([]);
     expect(await forkCountByUser('usr_a')).toBe(0);
   });
   it('live, through the real writer: two opens by one visitor today count once, a second visitor counts', async () => {
@@ -92,7 +88,6 @@ describe('the dashboard reads the log', () => {
     expect(rows).toBe(3);
     const series = (await viewSeriesByUser('usr_a')).get('art0a1')!;
     expect(series[VIEW_SERIES_DAYS - 1]).toBe(2);
-    expect((await dailyViewsByUser('usr_a')).at(-1)?.views).toBe(2);
   });
 });
 
@@ -109,14 +104,4 @@ describe('the aggregates, over the log', () => {
     expect(series!.reduce((a, b) => a + b, 0)).toBe(3); // exports don't count
   });
 
-  it('dailyViewsByUser buckets all owned artifacts per day, zero-filled to today', async () => {
-    const db = await harness.db();
-    await seedArtifacts(db, { id: 'art0a1', token_id: 'tok_a', user_id: 'usr_a' }, { id: 'art0a2', token_id: 'tok_a', user_id: 'usr_a' });
-    await seedLog(db, [['viewed', 'art0a1', 'a', at(0, 1)], ['viewed', 'art0a1', 'b', at(0, 2)], ['viewed', 'art0a2', 'c', at(0, 3)], ['viewed', 'art0a1', 'a', at(2, 1)], ['exported', 'art0a1', 'a', at(0, 4)]]);
-    // Both artifacts pool into one series; the gap day is present as zero.
-    const daily = await dailyViewsByUser('usr_a');
-    expect(daily).toHaveLength(3);
-    expect(daily.map((d) => d.views)).toEqual([1, 0, 3]);
-    expect(daily[2].day > daily[0].day).toBe(true);
-  });
 });
