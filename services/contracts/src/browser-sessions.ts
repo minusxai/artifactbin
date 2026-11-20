@@ -1,5 +1,4 @@
 import type { Actor } from './actor';
-import type { MxError } from './mx';
 import type { ViewerChoice } from './testusers';
 
 /** Forces revalidation of the captured session credential on every app request. */
@@ -16,7 +15,8 @@ export interface BrowserSessionResult {
   result?: unknown;
   pages: BrowserSessionPage[];
   attachments: BrowserSessionAttachment[];
-  error?: MxError;
+  /** A coded error on the wire. */
+  error?: { code: string; message: string };
   /**
    * Development only, and only when `BROWSER__SANDBOX=none`: this session ran with NO OS
    * containment. Said on the wire because the checks that assert containment are Linux

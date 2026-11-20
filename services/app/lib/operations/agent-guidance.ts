@@ -1,4 +1,4 @@
-/** Shared field guidance for HTTP validation and bundled local help. */
+/** The guidance an agent reads on the create and replace fields (./registry): the rules whose absence produced unstyled or unreadable pages. */
 /** The single rule whose absence produced an unstyled document. */
 export const MARKUP_STYLE_RULE =
   'EVERY element needs Tailwind utilities in className — bare HTML renders completely unstyled.';

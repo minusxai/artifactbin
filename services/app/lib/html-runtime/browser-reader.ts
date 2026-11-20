@@ -1,6 +1,6 @@
 import {applyHtmlReaderAppearance} from '../html-bridge/reader';
 import {createUploadContext,bindUploadControl} from './upload-context';
-import {PAGE_VIEWER_ROOT,type UploadContext} from '@artifactbin/contracts';
+import type {UploadContext} from '@artifactbin/contracts';
 import type {PlatformUploadControl} from './upload-contract';
 import {createFileUploader} from './upload';
 import {createUploadRelay} from './upload-relay';
@@ -59,6 +59,9 @@ import {observeHtmlDom,observeSourceAnnotations} from '../html-bridge/observe';
 import {startSourceAnnotationReadiness} from '../html-bridge/imported-observation';
 import { htmlSelection } from '../html-bridge/selection';
 import { revealHtmlAnnotation, createHtmlAnnotationPainter, type HtmlAnnotationPaint } from '../html-bridge/annotations';
+
+/** The viewer authority invalidation namespace in page runtime notifications. */
+const PAGE_VIEWER_ROOT = 'viewer';
 let relay: ((request: Parameters<RemotePort['execute']>[0]) => ReturnType<RemotePort['execute']>) | null = null;
 const relayWaiters = new Set<() => void>();
 const uploadContext=createUploadContext(config.offline===true);
