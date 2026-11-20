@@ -1,6 +1,6 @@
 /** SQL remains the page data contract; deprecated GraphQL doors must not be registered. */
 import { describe, expect, it } from 'vitest';
-import { URL_SPACE } from '@artifactbin/contracts';
+import { URL_SPACE } from '@artifactbin/contracts/url-space';
 import { ROUTES } from '@/server/routes.generated';
 
 describe('retired data doors', () => {

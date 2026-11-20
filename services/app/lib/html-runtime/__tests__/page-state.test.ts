@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import type { HtmlJsonObject } from '@artifactbin/contracts';
+import type { HtmlJsonObject } from '@artifactbin/contracts/html-page';
 import { createPageState, type PageStateOptions } from '../page-state';
 import { createStateStore } from '../state-store';
 import { createLocalStore } from '../apollo/local-store';

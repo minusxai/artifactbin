@@ -7,7 +7,7 @@
  * answers for the same input.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { RunInput } from '@artifactbin/contracts';
+import type { RunInput } from '@artifactbin/contracts/sql';
 import { loadSqlite, SqliteDatabase } from '@artifactbin/sql/core';
 
 const engine = await loadSqlite();

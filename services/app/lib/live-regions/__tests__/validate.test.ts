@@ -7,7 +7,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as Y from 'yjs';
-import { REGION_TEXT_MAX_UNITS, REGION_UPDATE_MAX_BYTES } from '@artifactbin/contracts';
+import { REGION_TEXT_MAX_UNITS, REGION_UPDATE_MAX_BYTES } from '@artifactbin/contracts/region-sessions';
 import { createRegionState, LiveRegionRefusal, openRegionDoc, regionHtml, regionText, validateRegionUpdate, type RegionKind } from '..';
 import { Room } from './harness';
 import { checkConvergence } from './property';

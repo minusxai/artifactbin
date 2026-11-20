@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { assemble } from '@artifactbin/utils';
-import { INTERNAL_MINT_PATH } from '@artifactbin/contracts';
+import { INTERNAL_MINT_PATH } from '@artifactbin/contracts/routes';
 import { authParts } from '../src/parts';
 import { mintTestToken, resetTestDb, testDb, testAuthOptions } from './helpers';
 

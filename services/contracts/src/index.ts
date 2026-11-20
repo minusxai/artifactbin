@@ -24,7 +24,6 @@ export * from './payload-limit';
 export * from './page-limits';
 export * from './identity-module';
 export * from './handles';
-export type { Table } from './schema';
 export * from './dataset-policy';
 export * from './dataset-permissions';
 export * from './dataset-hasura';
@@ -45,8 +44,6 @@ export * from './artifact-format';
 export * from './live-channels';
 export * from './url-space';
 export * from './sign-in-required';
-
-export { CARD_HEIGHT, CARD_WIDTH } from './og-card';
 
 export * from "./groups";
 
