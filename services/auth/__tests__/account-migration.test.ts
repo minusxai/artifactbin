@@ -1,6 +1,6 @@
 import {PGlite} from '@electric-sql/pglite';
 import {Kysely} from 'kysely';
-import {afterEach, beforeEach, expect, it} from 'vitest';
+import {afterAll, beforeAll, beforeEach, expect, it} from 'vitest';
 import {pgliteDialect} from '../src/auth/pglite';
 import {createHumanAuth} from '../src/auth/human';
 import {assertHumanAccountSchema, migrateHumanAccountSchema} from '../src/auth/account-migration';
@@ -9,11 +9,16 @@ import {ACKNOWLEDGEMENT_REQUIRED, migrationTarget, operatorMessage} from '../scr
 let pg: PGlite;
 let db: Kysely<Record<string, unknown>>;
 const options = {writesPausedAndBackupVerified: true} as const;
+// One PGlite for the file: starting one took ~3 s, so a fresh one per case made 12 cases take 36 s. Each case
+// starts from an empty database instead: every schema a case or the code under test creates is dropped, and
+// `public` is recreated empty.
+beforeAll(() => {pg = new PGlite(); db = new Kysely({dialect: pgliteDialect(pg)});});
+afterAll(async () => {await db.destroy();});
 beforeEach(async () => {
-  pg = new PGlite(); db = new Kysely({dialect: pgliteDialect(pg)});
+  const {rows} = await pg.query<{nspname: string}>(`SELECT nspname FROM pg_namespace WHERE nspname NOT LIKE 'pg\\_%' AND nspname <> 'information_schema'`);
+  await pg.exec(rows.map(({nspname}) => `DROP SCHEMA "${nspname}" CASCADE;`).join('') + 'CREATE SCHEMA public;');
   await pg.exec('CREATE SCHEMA auth; CREATE TABLE auth.account (id text PRIMARY KEY, "providerId" text NOT NULL, "accountId" text NOT NULL)');
 });
-afterEach(async () => {await db.destroy();});
 const legacy = async () => {
   await pg.exec(`ALTER TABLE auth.account ADD COLUMN issuer text NOT NULL;
     CREATE UNIQUE INDEX "account_issuer_accountId_uidx" ON auth.account (issuer, "accountId");
