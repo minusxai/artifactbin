@@ -20,7 +20,7 @@ import { datasetReadAccess, datasetRowsFor, sqlRefusal, viewCatalog } from '@/li
  * A native HTML document is assembled only on its runner origin. This answer
  * carries its original sharing/comment shell and a ticketed frame, never its source.
  */
-import { archivedVersionFor, currentPage, readPageRow, servedRow, UnservableDocument, canReadArtifact, accessMoved, getArtifactHeaderById, hasInvitedUsersFor, type ArtifactHeader, type ArtifactRow, type PageRead } from '@/lib/artifacts';
+import { admitRead, archivedVersionFor, currentPage, readPageRow, servedRow, UnservableDocument, accessMoved, getArtifactHeaderById, hasInvitedUsersFor, type ArtifactHeader, type ArtifactRow, type PageRead } from '@/lib/artifacts';
 import { holdsCreatingToken, effectiveRole, requestAccessFacts } from '@/lib/artifact-access';
 import { folderPageFor, accountWorkspaceFor } from '@/lib/workspace';
 import { resolveStoredStoryDesign } from '@/lib/html-systems';
@@ -116,7 +116,7 @@ export async function framedDocumentSrc(request: Request, id: string, site: Page
   const artifact = await getArtifactHeaderById(id);
   if (!artifact || artifact.format !== 'html') return null;
   const actor = await sessionActor(request);
-  if (!holdsCreatingToken(artifact, actor) && !(await canReadArtifact(artifact, actor))) return null;
+  if (!(await admitRead(artifact, actor))) return null;
   return { ...await admittedFrameSrc(request, artifact, actor, site, search, readerPickOf(request)), appOrigin: site.app, revision: String(artifact.version), editId: artifact.edit_id };
 }
 
@@ -164,7 +164,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   // Every role decision this view makes reads one memo of the actor's access facts, shared with the app page's own
   // admission of this very request (server/document-address admitDocumentAddress): the role is resolved once per view.
   const facts = requestAccessFacts(request, actor);
-  if (!admitted && !exporting && !holdsCreatingToken(header, actor) && !(await canReadArtifact(header, actor, facts))) return notFound();
+  if (!admitted && !(await admitRead(header, actor, { facts, exporting }))) return notFound();
   if (header.format === 'markup' || header.format === 'program' || !ARTIFACT_FORMATS.includes(header.format as ArtifactFormat)) return notFound();
   if (!admitted && search.get('part') === 'kind') return kindAnswer(header);
   // The row and its live revision in one statement (lib/artifacts readPageRow): the current page costs no read of its own.
@@ -173,7 +173,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   const revision = admitted ? options.admittedRevision : read?.revision;
   if (!artifact) return notFound();
   // The row moved between the two reads (shared, made private, handed over): admission is asked again of the row served.
-  if (!admitted && accessMoved(header, artifact) && !exporting && !holdsCreatingToken(artifact, actor) && !(await canReadArtifact(artifact, actor, facts))) return notFound();
+  if (!admitted && accessMoved(header, artifact) && !(await admitRead(artifact, actor, { facts, exporting }))) return notFound();
 
   // One role per request, beside the reads that need none of it.
   const groupId = (artifact as typeof artifact & { group_id?: string | null }).group_id ?? null;
@@ -275,7 +275,8 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     social,
     ownerScope ? hasInvitedUsersFor(ownerScope, id) : false,
     options.pages && isDoc ? (async (site) => {
-      if (exporting && !admitted && !holdsCreatingToken(artifact, actor) && !await canReadArtifact(artifact, actor, facts)) return null;
+      // An export key admits the page, never its frame: a keyed capture is framed only for a reader the rule admits.
+      if (exporting && !admitted && !(await admitRead(artifact, actor, { facts }))) return null;
       return admittedFrameSrc(request, artifact, actor, site, new URL(request.url).search, readerPick);
     })(options.pages) : null,
     userPageUrl(artifact),

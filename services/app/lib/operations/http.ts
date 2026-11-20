@@ -1,6 +1,5 @@
 import { hostedAuthorization, hostedRefusal, hostedOperationCompleted } from '@/lib/authentication';
-import { canReadArtifact, durableMutation, getArtifactById, getArtifactFor, MembershipError, readableArtifact, refusingUnservable } from '@/lib/artifacts';
-import { holdsCreatingToken } from '@/lib/artifact-access';
+import { admitRead, durableMutation, getArtifactById, getArtifactFor, MembershipError, readableArtifact, refusingUnservable } from '@/lib/artifacts';
 import { adaptMutationOperationReply, canWriteDataset, normalizeMutationOperation } from '@/lib/document-data';
 import { type AnnotationAuthor, canAnnotate } from '@artifactbin/contracts';
 import {ownedArtifactState} from '@/lib/workspace';
@@ -36,7 +35,7 @@ const AUTHORIZED: Record<string, (actor: AccessActor, input: Record<string, unkn
   update_artifact: async (actor,input) => !!await getArtifactFor(actor,String(input.id)),
   // A live region write: edit access to the page (the region itself is the store's to find).
   write_region: async (actor, input) => !!await getArtifactFor(actor, String(input.id)),
-  mutate_dataset: async (actor, input) => {const row=await getArtifactById(String(input.id));return !!row&&(input.name?await canReadArtifact(row,actor)||holdsCreatingToken(row, actor):await canWriteDataset(row,actor)===null||!!await getArtifactFor(actor,row.id));},
+  mutate_dataset: async (actor, input) => {const row=await getArtifactById(String(input.id));return !!row&&(input.name?await admitRead(row,actor):await canWriteDataset(row,actor)===null||!!await getArtifactFor(actor,row.id));},
   annotate: async (actor, input) => {
     const access = await readableArtifact(actor, String(input.id));
     return !!access && canAnnotate(access.role);

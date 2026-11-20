@@ -14,8 +14,7 @@ import {loadImage} from '@/lib/object-store';
 import { requestOrSessionActor } from '@/lib/authentication';
 import { baseUrl, json } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
-import { getArtifactById, refusingUnservable, canReadArtifact, archivedVersionFor, servedRow } from '@/lib/artifacts';
-import { holdsCreatingToken } from '@/lib/artifact-access';
+import { admitRead, getArtifactById, refusingUnservable, canReadArtifact, archivedVersionFor, servedRow } from '@/lib/artifacts';
 import { nativeHtmlDocument, nativeHtmlTitle } from '@/lib/document-serving';
 import { offlinePageSqlData } from '@/lib/dataset-access';
 import type { HtmlPageLink, HtmlDatasetLink } from '@artifactbin/contracts';
@@ -37,7 +36,7 @@ async function download(request: Request, ctx: { params: Promise<{ id: string }>
   const artifact=await getArtifactById(id);
   if (artifact?.format === 'html') {
     const actor = await requestOrSessionActor(request);
-    if (!holdsCreatingToken(artifact, actor) && !await canReadArtifact(artifact, actor)) return json({ error: 'not_found' }, 404);
+    if (!(await admitRead(artifact, actor))) return json({ error: 'not_found' }, 404);
     const at = await archivedVersionFor(request, artifact, async () => actor);
     if (at === 'not_found') return json({ error: 'not_found' }, 404);
     const platformOrigin=new URL(baseUrl(request)).origin;

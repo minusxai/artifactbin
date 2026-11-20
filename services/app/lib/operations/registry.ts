@@ -2,7 +2,7 @@ import { liveConnectionDetails, liveSchema, testLiveConnection, updateLiveConnec
 import { connectionTestRateLimited } from '@/lib/allowances';
 import {documentOwner} from '@/lib/user-pages';
 import { artifactSummaryToWire, createdArtifactWire, parseExpectedVersion, parseParentField, parseVisibilityValue, updateMetadataFromBody, versionToWire } from '@/lib/artifact-wire';
-import { canReadArtifact, capabilityGuard, findDependentsFor, getArtifactById, getVersionFor, isParentRefusal, isVersionNotArchived, listArtifactPageFor, listVersionPageFor, type MutationReceipt, resolveParent, revertArtifactFor, parseArtifactDestination, transferArtifact } from '@/lib/artifacts';
+import { admitRead, canReadArtifact, capabilityGuard, findDependentsFor, getArtifactById, getVersionFor, isParentRefusal, isVersionNotArchived, listArtifactPageFor, listVersionPageFor, type MutationReceipt, resolveParent, revertArtifactFor, parseArtifactDestination, transferArtifact } from '@/lib/artifacts';
 import { effectiveRole, holdsCreatingToken } from '@/lib/artifact-access';
 import { respondToMutate } from '@/lib/document-data';
 import {GROUP_OPERATIONS} from './groups';
@@ -32,7 +32,6 @@ import { trackEvent } from '@/lib/analytics';
 import { exportImageResponse } from '@/lib/export';
 import { chartImageAnswer } from '@/lib/viz';
 import { DESIGN_SYSTEM_VARIABLES } from '@/lib/html-systems/server';
-import { datasetExportable, datasetReadAccess } from '@/lib/dataset-permissions';
 import {  datasetPermissionTemplates, readDatasetPermissions, writeDatasetPermissions } from '@/lib/dataset-access';
 import type { AnnotationAuthor } from '@artifactbin/contracts';
 
@@ -618,8 +617,7 @@ const exportArtifactOp: Operation = {
     // the publishing token reaches its own document directly; a claimed
     // token's account reaches whatever the account may read.
     // A dataset's image renders every row: only for a role that sees it whole (lib/dataset-permissions).
-    const authorized = holdsCreatingToken(artifact, ctx.actor) || (artifact.format === 'dataset' ? datasetExportable(await datasetReadAccess(artifact, ctx.actor)) : await canReadArtifact(artifact, ctx.actor));
-    if (!authorized) return reply({ error: 'not_found' }, 404);
+    if (!(await admitRead(artifact, ctx.actor, { need: 'export' }))) return reply({ error: 'not_found' }, 404);
     void trackEvent('export', artifact.id, { userId: ctx.actor.userId ?? null });
     const res = await exportImageResponse(artifact, {
       // The capture reads the page's data as the tool's actor (lib/export): readable = exportable, and no more.
@@ -747,7 +745,8 @@ const forkArtifactOp: Operation = {
     // The export operation's rule, for the same reason: the publishing token
     // reaches its own artifact directly, an account reaches whatever it may
     // read. Unreachable and unknown are one answer.
-    if ((!!source.group_id || !holdsCreatingToken(source, ctx.actor)) && !(await canReadArtifact(source, ctx.actor))) {
+    // A group's row is read by the rule alone here: its creating token does not admit a fork of it.
+    if (!(source.group_id ? await canReadArtifact(source, ctx.actor) : await admitRead(source, ctx.actor))) {
       return reply({ error: 'not_found' }, 404);
     }
 

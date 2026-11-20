@@ -27,8 +27,7 @@ import {serveBundleAsset} from '@/lib/html-publication-bundle';
  * document is admitted through belongs with every other door in the app, and
  * the import bounds belong with the importer.
  */
-import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
-import { holdsCreatingToken } from '@/lib/artifact-access';
+import { admitRead, getArtifactById } from '@/lib/artifacts';
 import { resolveImageReference } from '@/lib/artifact-wire';
 import { requestOrSessionActor } from '@/lib/authentication';
 import { importForDocument, WebAssetRefused, WEB_ASSET_KINDS, type WebAssetKind } from '@/lib/publish';
@@ -58,8 +57,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   // export photographs alt text where its picture should be.
   const key = params.get('key');
   const byExportKey = verifyExportKey(artifact.id, key ?? undefined);
-  const admitted = holdsCreatingToken(artifact, actor) || (await canReadArtifact(artifact, actor)) || byExportKey;
-  if (!admitted) return missing();
+  if (!(await admitRead(artifact, actor, { exporting: byExportKey }))) return missing();
 
   if(params.has('dependency')){
     if(!['GET','HEAD'].includes(request.method)||params.getAll('dependency').length!==1||params.getAll('revision').length>1||params.has('u')||managed)return missing();

@@ -13,8 +13,7 @@
  * The same read ACL as the page: a reader who may not read the document gets the uniform 404. Counted
  * per document and reader, like the document's other outbound fetching (lib/allowances).
  */
-import { canReadArtifact, getArtifactById, refusingUnservable, servedRow } from '@/lib/artifacts';
-import { holdsCreatingToken } from '@/lib/artifact-access';
+import { admitRead, getArtifactById, refusingUnservable, servedRow } from '@/lib/artifacts';
 import { documentFetchRateLimited, documentFetchReader } from '@/lib/allowances';
 import { requestOrSessionActor } from '@/lib/authentication';
 import { json, pagesRequestOf } from '@/lib/http';
@@ -54,7 +53,7 @@ async function fetchForDocument(request: Request, ctx: { params: Promise<{ id: s
   const artifact = await getArtifactById(id);
   if (!artifact) return json({ error: 'not_found' }, 404, NO_STORE);
   const actor = await requestOrSessionActor(request);
-  if (!holdsCreatingToken(artifact, actor) && !(await canReadArtifact(artifact, actor))) return json({ error: 'not_found' }, 404, NO_STORE);
+  if (!(await admitRead(artifact, actor))) return json({ error: 'not_found' }, 404, NO_STORE);
 
   const raw = new URL(request.url).searchParams.get('url') ?? '';
   let target: URL;
