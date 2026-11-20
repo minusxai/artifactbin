@@ -1,5 +1,5 @@
 /** Run by pr-fast-timing.yml when a `pr fast` run completes: publish the required `pr fast timing` status, measured
- * from the run's start to its last workload job's completion (scripts/lib/ci-elapsed.mjs budgets). */
+ * from its first job's start to its last workload job's completion (scripts/lib/ci-elapsed.mjs budgets). */
 import {readFileSync} from 'node:fs';
 import {api,inspectAttempt} from './merge-fast.mjs';
 import {describeCiElapsed} from '../lib/ci-elapsed.mjs';

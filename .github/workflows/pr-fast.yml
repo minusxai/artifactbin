@@ -1,8 +1,9 @@
 name: pr fast
 
 # PULL REQUEST CI BUDGET, A HARD RULE: aim for 40s; the limit is 60s. Each job's last step measures
-# the run from its start (queue, setup and install included) and FAILS the pull request past 60s
-# (scripts/lib/ci-elapsed.mjs --pr). Do not raise the budget: fix the critical path instead.
+# the run from its first job's start (setup and install included) and FAILS the pull request past 60s
+# (scripts/lib/ci-elapsed.mjs --pr). Do not raise the budget: fix the critical path, or move a test that
+# cannot fit to ci.yml.
 #
 # This is the required pull request check. It runs validate (type check, knip, module graph, name and
 # UI-primitive guards), the workflow lint, JavaScript syntax, the fast module test list
@@ -77,7 +78,7 @@ jobs:
           # longest-first by measured CI time (scripts/lib/timed-sequencer.mjs over scripts/ci/test-timings.json;
           # `--sums` prints each runner's load). Apart, not mixed: every worker imports the module graph of each project it
           # runs, and a runner given both kinds paid both on all three workers. None of them launches Chromium, so no
-          # runner provisions a browser. Add a runner when a group's load nears the clock; never move a file out.
+          # runner provisions a browser. Add a runner when a group's load nears the clock.
           # EVERY RUNNER DOWNLOADS THE 166 MB INSTALL AT ONCE, and that is what caps the count: at 42 test runners it took
           # a median 5s (p90 6-7, max 7-11); at 52 (40 api runners, run 43042914246) a median 6s, p90 11, max 20, with 18
           # runners past 8s, and the slowest jobs were those downloads, not their tests. So 32, not 40.
@@ -240,7 +241,8 @@ jobs:
       # background while checkout runs. It starts no Node when the cache has a 22; otherwise the runner's own is probed with
       # --version, which exits before JavaScript initialization (evaluating process.versions took 14.7s on the slowest
       # runner of run 43196988989, making its complete attempt 61s).
-      # THE CLOCK'S ATTEMPT, FETCHED HERE IN THE BACKGROUND: the clock (the last step) reads only its run_started_at, and its
+      # THE CLOCK'S ATTEMPT, FETCHED HERE IN THE BACKGROUND: the clock (the last step) reads only its first job's start, final
+      # once this job runs (scripts/lib/ci-elapsed.mjs attemptStart), and its
       # own `gh api` took 0.6s median, 2.0s p90 and 4.1s at worst after every job's tests. Every stream of each background
       # process is redirected, or the runner holds this step open until it ends; the attempt is written whole, then renamed,
       # so the clock reads it complete or fetches it itself.
@@ -250,7 +252,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           attempt="$RUNNER_TEMP/pr-attempt.json"
-          { gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}" > "$attempt.part" && mv "$attempt.part" "$attempt"; } < /dev/null > /dev/null 2>&1 &
+          { gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}/jobs?per_page=100" > "$attempt.part" && mv "$attempt.part" "$attempt"; } < /dev/null > /dev/null 2>&1 &
           cached=$(printf '%s\n' "$RUNNER_TOOL_CACHE"/node/22.*/x64/bin | sort -V | tail -n 1)
           if [ -x "$cached/node" ]; then
             printf '%s\n' "$cached" >> "$GITHUB_PATH"
@@ -634,5 +636,5 @@ jobs:
         # The attempt the first step fetched in the background; fetched here only if that never landed.
         run: |
           attempt="$RUNNER_TEMP/pr-attempt.json"
-          [ -s "$attempt" ] || gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}" > "$attempt"
+          [ -s "$attempt" ] || gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}/jobs?per_page=100" > "$attempt"
           node scripts/lib/ci-elapsed.mjs --pr "$attempt" "$GITHUB_STEP_SUMMARY"

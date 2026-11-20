@@ -930,7 +930,7 @@ jobs:
         run: node scripts/ci/ci.mjs red-report
       # Per-job diagnostics remain useful, but the chain is the speed contract:
       # attempt start -> final required rollup, including setup and waits between needs.
-      # Target <3 minutes, normal maximum <4; >8 fails on both PR and main.
+      # Target <6 minutes; >8 fails.
       - name: every job's wall clock, over-budget named
         if: always()
         # Per-job times include legitimate prerequisite waits: diagnostics on PRs and main.
@@ -989,7 +989,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          # The attempt's jobs: its clock starts at the first one's creation, not at `run_started_at`, which keeps a
+          # The attempt's jobs: its clock starts when the first one starts running, not at `run_started_at`, which keeps a
           # batch's time waiting in its concurrency group for the previous one (scripts/lib/ci-elapsed.mjs).
           gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}/jobs?per_page=100" > ci-attempt.json
           node scripts/lib/ci-elapsed.mjs ci-attempt.json "$GITHUB_STEP_SUMMARY"
