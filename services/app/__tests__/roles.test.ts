@@ -323,12 +323,12 @@ describe('the SQL scopes admit the link — the doors, not just the predicate', 
     expect(refused, 'a commenter link is not an edit link').toBeNull();
   });
 
-  it('lets an authenticated link editor manage sharing', async () => {
+  it('lets an authenticated link editor read the sharing but never change it', async () => {
     const owner = await account('mxmx_test_owner@example.com');
     const stranger = await account('mxmx_test_stranger@example.com');
     const row = await docOf(owner, 'public', 'editor');
-    expect(await getSharingFor(identityForUser(stranger.user.id, stranger.token.id), row.id)).not.toBeNull();
-    expect(await updateSharingFor(identityForUser(stranger.user.id, stranger.token.id), row.id, { visibility: 'private' })).not.toBeNull();
+    expect(await getSharingFor(identityForUser(stranger.user.id, stranger.token.id), row.id)).toMatchObject({ canManageSharing: false });
+    expect(await updateSharingFor(identityForUser(stranger.user.id, stranger.token.id), row.id, { visibility: 'private' })).toBeNull();
   });
 });
 
@@ -479,12 +479,11 @@ describe('what an editor may do with sharing', () => {
    expect((await getArtifactById(f.id))?.link_role).toBe('commenter');
   });
 
-  it('a link editor may apply one atomic patch that removes their access',async()=>{
+  it('a link editor may not patch sharing, not even to remove their own access',async()=>{
    const f=await fixture('editor',true);
-   await updateSharingFor(f.owner.actor,f.id,{visibility:'public',linkRole:'editor',shares:[]});
+   await updateSharingFor(f.owner.actor,f.id,{visibility:'public',linkRole:'editor',access:'read',shares:[]});
    const r=await f.save({visibility:'private',linkRole:'viewer',access:'readwrite'});
-   expect(r.status).toBe(200);
-   expect(await r.json()).toMatchObject({visibility:'private',linkRole:'viewer',access:'readwrite'});
-   expect(await getArtifactById(f.id)).toMatchObject({visibility:'private',link_role:'viewer',access:'readwrite'});
+   expect(r.status).toBe(404);
+   expect(await getArtifactById(f.id)).toMatchObject({visibility:'public',link_role:'editor',access:'read'});
   });
 });

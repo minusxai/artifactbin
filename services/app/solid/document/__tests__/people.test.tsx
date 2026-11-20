@@ -19,7 +19,7 @@ it('shows a pending request without suggesting comment access is blocked', async
 });
 
 it('offers explicit access sharing and unrestricted invitation lookup', async () => {
-  const state = { members: [], pending: [], self: null, canManage: true, canInvite: true };
+  const state = { members: [], pending: [], self: null, canManage: true, canInvite: true, canShare: true };
   const fetcher = stubFetch({ '*?*': { people: [{ user_id: 'u1', username: 'alex', name: 'Alex' }] } }, { fallback: () => Response.json(state) });
   const view = render(() => <DocumentPeople id="abc123" />);
   fireEvent.click(view.getByRole('button', { name: 'People' }));
@@ -32,6 +32,14 @@ it('offers explicit access sharing and unrestricted invitation lookup', async ()
   fireEvent.click(screen.getByRole('button', { name: 'Invite 1 people' }));
   await waitFor(() => expect(fetcher.mock.calls.some(([, init]) => init?.body === JSON.stringify({ action: 'invite', usernames: ['@alex'], includeAccess: true }))).toBe(true));
   expect(fetcher.mock.calls.some(([url]) => url.includes('purpose=invite'))).toBe(true);
+});
+
+it('offers an editor by link alone invitations without viewing access', async () => {
+  stubFetch({ '*?*': { people: [{ user_id: 'u1', username: 'alex', name: 'Alex' }] } }, { fallback: () => Response.json({ members: [], pending: [], self: null, canManage: true, canInvite: true, canShare: false }) });
+  const view = render(() => <DocumentPeople id="abc123" />);
+  fireEvent.click(view.getByRole('button', { name: 'People' }));
+  await waitFor(() => screen.getByRole('combobox', { name: 'Find people by username' }));
+  expect(screen.queryByRole('checkbox', { name: 'Include viewing access' })).toBeNull();
 });
 
 it('reports malformed membership responses', async () => {

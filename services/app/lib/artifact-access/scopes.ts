@@ -87,6 +87,8 @@ export interface ArtifactRow {
  *  - editorScope — the owner OR an account named `editor` in artifact_shares,
  *                  matched through users.email so a collaborator's CLAIMED
  *                  tokens edit too. Reach, edits, PUT, revert, versions.
+ *  - sharingScope — editorScope without the link and the document-editor
+ *                  grant: who changes who reaches the row (below).
  *
  * The predicate runs INSIDE the same WHERE as the id, so a miss is the uniform
  * 404 either way — there is no existence oracle in the difference. Both carry
@@ -201,20 +203,28 @@ const DOCUMENT_EDITOR_PREDICATE = "(artifacts.format = 'html' AND artifacts.visi
  * pages to edit; its audience (pages the group or an ancestor owns) to read; group shares to it or an ancestor; the
  * link in full. No ownership, no named share, no document-editor grant, no other group.
  */
-const groupPrincipalScope = (principal: NonNullable<AccessActor['principalGroup']>, min: ArtifactRole): Scope => live({
+const groupPrincipalScope = (principal: NonNullable<AccessActor['principalGroup']>, min: ArtifactRole, link: boolean): Scope => live({
   val: principal.id,
   where: (p) => `(${principal.role === 'editor' ? `(artifacts.group_id = ${p} AND EXISTS (SELECT 1 FROM groups pg WHERE pg.id = ${p} AND pg.deleted_at IS NULL))` : 'FALSE'}
     OR ${min === 'viewer' ? `artifacts.group_id IN (${groupReachSql(p)})` : 'FALSE'}
     OR EXISTS (SELECT 1 FROM artifact_group_shares gs WHERE gs.artifact_id = artifacts.id AND gs.role IN (${shareRolesAtLeast(min).map((r) => `'${r}'`).join(', ')}) AND gs.group_id IN (${groupReachSql(p)}))
-    OR ${LINK_PREDICATE(min)})`,
+    ${link ? `OR ${LINK_PREDICATE(min)}` : ''})`,
 });
 
-const scopeAtLeast = (actor: AccessActor, min: ArtifactRole): Scope =>
-  actor.principalGroup ? groupPrincipalScope(actor.principalGroup, min) : actor.userId
-    ? live({ where: (p) => `(${ownerPredicate(actor).where(p)} OR (${ACCOUNT_REACH_SQL(p)} AND (${groupMemberPredicate(p, 'editor')} OR ${min==='viewer'?groupMemberPredicate(p):'FALSE'} OR ${SHARE_PREDICATE(shareRolesAtLeast(min), p)} OR ${LINK_PREDICATE(min)}${actor.documentEditor ? ` OR ${DOCUMENT_EDITOR_PREDICATE}` : ''})))`, val: actor.userId })
+const scopeAtLeast = (actor: AccessActor, min: ArtifactRole, link = true): Scope =>
+  actor.principalGroup ? groupPrincipalScope(actor.principalGroup, min, link) : actor.userId
+    ? live({ where: (p) => `(${ownerPredicate(actor).where(p)} OR (${ACCOUNT_REACH_SQL(p)} AND (${groupMemberPredicate(p, 'editor')} OR ${min==='viewer'?groupMemberPredicate(p):'FALSE'} OR ${SHARE_PREDICATE(shareRolesAtLeast(min), p)}${link ? ` OR ${LINK_PREDICATE(min)}` : ''}${link && actor.documentEditor ? ` OR ${DOCUMENT_EDITOR_PREDICATE}` : ''})))`, val: actor.userId })
     : ownerScope(actor);
 
 export const editorScope = (actor: AccessActor): Scope => scopeAtLeast(actor, 'editor');
+
+/**
+ * WHO CHANGES WHO REACHES THE ROW — its visibility, link role, share list, dataset access and dataset policy: the
+ * editor lattice WITHOUT the link and without the host's document-editor grant. The owner, a named editor (by share or
+ * group share), a group Editor or Admin, a group's sign-in at Editor on its own group's pages; never someone who holds
+ * an editor link, who would otherwise name themselves an editor for good. The mirror of ./access `managesSharing`.
+ */
+export const sharingScope = (actor: AccessActor): Scope => scopeAtLeast(actor, 'editor', false);
 
 /**
  * The scope the annotation sidecar reaches a document through: the owner, an

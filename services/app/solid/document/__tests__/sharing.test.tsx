@@ -112,6 +112,14 @@ it('offers view, comment and edit link roles and sends only the changed link rol
   await waitFor(() => expect(screen.getByRole('button', { name: 'Link role' })).toHaveTextContent('can comment'));
 });
 
+it('offers no edit link role on a live dataset, whose link never makes anyone its editor', async () => {
+  stubFetch({}, { fallback: () => Response.json({ visibility: 'unlisted', linkRole: 'viewer', shares: [], access: 'read', canManageSharing: true }) });
+  const view = render(() => <DocumentSharing id="abc123" title="Warehouse" owner format="dataset" live />);
+  fireEvent.click(view.getByRole('button', { name: 'Share' }));
+  fireEvent.click(await waitFor(() => screen.getByRole('button', { name: 'Link role' })));
+  expect(screen.getAllByRole('option').map(option => option.textContent?.trim())).toEqual(['can view', 'can comment']);
+});
+
 it('hides the link role while private and restores the saved choice on return', async () => {
   const state = { visibility: 'private', linkRole: 'commenter', shares: [] };
   stubFetch({ 'PUT *': (_url, init) => { Object.assign(state, JSON.parse(String(init!.body))); return Response.json(state); } }, { fallback: () => Response.json(state) });

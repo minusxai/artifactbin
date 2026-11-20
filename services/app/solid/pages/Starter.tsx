@@ -32,6 +32,8 @@ import { prepareBlankReport } from '../lib/blank-report';
 
 export interface StarterAnswer {
   role: ArtifactRole;
+  /** The viewer may change who reaches the page (lib/artifact-access `managesSharing`). */
+  canManageSharing?: boolean;
   kind: string;
   like?: { liked: boolean; count: number };
   follow?: { userId: string; following: boolean; count: number } | null;
@@ -111,7 +113,7 @@ export function StarterPage(props: { answer: StarterAnswer }): JSX.Element {
       onComment={() => { if (!annotatable) window.location.assign(loginHref(window.location, 'comment')); }}
       onFork={() => setFork(true)} onShare={() => { if (owner) setSharingOpen(true); }} onMembership={() => setPanel('controls')}
       controls={(close) => <DocumentActions groupId={(surface as typeof surface & {group_id?:string|null}).group_id} id={id} title={title()} version={live()?.version ?? surface.version}
-        owner={owner} canEdit={editable} canAnnotate={false} accountSession={accountSession()}
+        owner={owner} canEdit={editable} canManageSharing={answer.canManageSharing} canAnnotate={false} accountSession={accountSession()}
         like={answer.like ?? { liked: false, count: 0 }} onCommentsChange={() => {}}
         forkedFrom={surface.author?.forkedFrom ?? null} hideFork
         membershipRevision={membershipRevision()} onMembershipChange={() => setMembershipRevision((n) => n + 1)}
@@ -120,7 +122,7 @@ export function StarterPage(props: { answer: StarterAnswer }): JSX.Element {
     <TrustedUi overlay layer="navigation">
       <Show when={fork()}><ForkConfirm id={id} title={title()} onClose={() => setFork(false)} /></Show>
       <Show when={sharingOpen()}>
-        <DocumentSharing id={id} title={title()} owner={owner} editable={editable} variant="dialog" version={live()?.version ?? surface.version} onClose={() => setSharingOpen(false)} />
+        <DocumentSharing id={id} title={title()} owner={owner} editable={editable && !!answer.canManageSharing} variant="dialog" version={live()?.version ?? surface.version} onClose={() => setSharingOpen(false)} />
       </Show>
     </TrustedUi>
     {/* The starter sits on the app's own dotted page, under the bar. */}

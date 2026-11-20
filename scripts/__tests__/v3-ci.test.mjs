@@ -31,13 +31,17 @@ describe('main validation', () => {
     const pin = workflow('v3-server-pin.yml');
     expect(pin.on.push.branches).toEqual(['main']);
     const script = pin.jobs.pin.steps[0].run;
+    // Only this exact head, and only forward of the server's current pin.
     expect(script).toContain('git/ref/heads/main');
-    expect(script).toContain('refs/heads/main');
-    // The server token never rides in a URL (git echoes URLs in errors, and argv is visible to `ps`): it is an
-    // environment-scoped request header, masked in its encoded form too.
+    expect(script).toContain('contents/toolkit?ref=main');
+    expect(script).toMatch(/compare\/\$pinned\.\.\.\$SHA/);
+    // The server's pins action moves its pin as a pull request it lands once pr fast is green: nothing here writes
+    // the server's main.
+    expect(script).toContain('gh workflow run pins.yml -R "$server" -f toolkit="$SHA"');
+    expect(script).not.toMatch(/git push|refs\/heads\/main"?\s*$|commit-tree/m);
+    // The server token is the gh environment of the calls that need it, never in a URL or an argument.
     expect(script).not.toMatch(/https:\/\/[^\s"']*SERVER_TOKEN/);
-    expect(script).toContain('GIT_CONFIG_KEY_0=http.https://github.com/.extraheader');
-    expect(script).toMatch(/::add-mask::/);
+    expect(script).not.toMatch(/(-f|--field|--raw-field)[^\n]*SERVER_TOKEN/);
     // One pin mechanism: the old consumer dispatch into the server's update-submodule workflow is gone.
     expect(ci.jobs).not.toHaveProperty('notify-consumer');
   });

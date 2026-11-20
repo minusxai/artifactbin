@@ -236,6 +236,29 @@ it('runs the declared queries of the version a reader has open, never another pa
   expect((await door(page, bob, { query: 'total', revision: '3' })).status).toBe(404);
 });
 
+it('never makes an editor link\'s holder an editor of a live dataset: they are signed_in there, as any link holder', async () => {
+  const { alice, bob } = await people();
+  const id = (await createLive(alice, { visibility: 'unlisted' })).body.id;
+  await updateSharingFor(alice.actor, id, { linkRole: 'editor' });
+  await setRule(alice, id, 'signed_in');
+  const page = (await publish(alice, { html: PAGE(id, MINE), visibility: 'unlisted' })).body.id;
+  // No SQL of their own on the owner's connection, no change to it, no look inside it.
+  const refusals = {
+    agentQuery: await call(queryPost as never, `/api/artifacts/${id}/query`, id, bob, { method: 'POST', json: { sql: 'select n from public.loose' } }),
+    change: await call(connectionPatch as never, `/api/artifacts/${id}/connection`, id, bob, { method: 'PATCH', json: { tls: 'disable' } }),
+    schema: await call(schemaGet as never, `/api/artifacts/${id}/connection/schema`, id, bob),
+    test: await call(connectionTest as never, `/api/artifacts/${id}/connection/test`, id, bob, { method: 'POST' }),
+  };
+  for (const [door, reply] of Object.entries(refusals)) expect(reply.status, door).toBe(403);
+  expect((await call(connectionGet as never, `/api/artifacts/${id}/connection`, id, bob)).body?.config).toBeUndefined();
+  const free = await sql(page, bob, 'select n from shop.loose');
+  expect([free.status, free.body.error]).toEqual([403, 'permission_denied']);
+  const declared = await publish(bob, { html: PAGE(id, MINE) });
+  expect([declared.status, (declared.body as unknown as { error: string }).error]).toEqual([403, 'declared_query_not_permitted']);
+  // What a signed-in link holder may do, the dataset's rules decide: here, run the page's declared query as themselves.
+  expect(ok(await door(page, bob, { query: 'mine', params: { min: 0 } })).rows).toEqual([{ id: 2, item: 'cake' }]);
+});
+
 it('refuses a declared query from a publisher who cannot edit the live dataset, on a stored link, and a pinned live link', async () => {
   const { alice, bob } = await people();
   const id = (await createLive(alice)).body.id;

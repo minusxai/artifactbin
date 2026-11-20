@@ -40,7 +40,8 @@ beforeEach(() => {
 afterEach(() => { cleanup(); window.history.replaceState(null, '', '/'); vi.unstubAllGlobals(); });
 
 const answer = (format: string, over: Partial<DataAnswer['surface']> = {}, role: DataAnswer['role'] = 'viewer'): DataAnswer => ({
-  role, kind: role === 'owner' ? 'account' : 'none',
+  // As the server answers an owner and a named editor (lib/artifact-access `managesSharing`).
+  role, kind: role === 'owner' ? 'account' : 'none', canManageSharing: role === 'owner' || role === 'editor',
   surface: { id: 'art001', editId: 'e1', format, title: 'Regional sales', visibility: 'public', version: 1, source: null, dataPreview: '', columns: [], ...over },
 });
 const open = (data: DataAnswer) => {
@@ -212,8 +213,8 @@ it.each(['owner', 'editor'] as const)('lets a dataset %s manage sharing directly
   expect(await screen.findByLabelText('Read-only data actions')).toBeVisible();
 });
 
-it('gives a dataset reader link sharing without fetching or editing private sharing settings', () => {
-  open(answer('dataset', {catalog: catalog()}));
+it.each([['reader', answer('dataset', {catalog: catalog()})], ['editor by link alone', {...answer('dataset', {catalog: catalog()}, 'editor'), canManageSharing: false}]] as const)('gives a dataset %s link sharing without fetching or editing private sharing settings', (_who, data) => {
+  open(data);
   fireEvent.click(screen.getByRole('tab', {name: 'Sharing'}));
   expect(screen.getByRole('button', {name: 'Copy link'})).toBeVisible();
   expect(screen.queryByLabelText('Make private')).toBeNull();

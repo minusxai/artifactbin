@@ -44,6 +44,8 @@ type Entry = DatasetPermissionEntry<Rule>;
 type ReadBackTable = { title: string; lines: string[] };
 type Loaded = {
   revision: number;
+  /** False for an editor by link alone: a policy says who may use the data, so only those who manage its sharing save one. */
+  canSave?: boolean;
   source: 'v3' | 'none' | 'unreadable';
   report: Array<{ code: string; message: string }>;
   policy: DatasetPermissions | null;
@@ -193,7 +195,7 @@ function PolicyEditor(props: { artifactId: string; saveTarget?: HTMLElement }): 
     setSourceError(''); setCell(null); setTableIndex(0); edit(parsed as DatasetPermissions);
   };
 
-  const canSave = () => !!loaded() && dirty() && !saving() && !check().errors.length && !conflict() && view() === 'rules';
+  const canSave = () => !!loaded() && loaded()!.canSave !== false && dirty() && !saving() && !check().errors.length && !conflict() && view() === 'rules';
   const saveButton = (compact = false) => <Button aria-label="Save access policies" disabled={!canSave()} onClick={() => void save()}>{saving() ? 'Saving…' : compact ? 'Save' : 'Save access policies'}</Button>;
 
   return <section aria-label="Access policies" class="space-y-5 py-4 text-sm text-fg">

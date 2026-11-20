@@ -1,9 +1,10 @@
 import {userPageUrl} from '@/lib/user-pages';
-/** Browser sharing uses edit access for named grants, link access and dataset writes.
+/** Browser sharing: anyone with edit access reads it; changing named grants, link access and dataset writes takes
+ * sharing authority (lib/artifact-access `sharingScope`: never an editor link or the host's document-editor grant).
  * Ownership is independent of the share list. Deletion/restoration retain their
  * owner-only routes. The domain transaction rechecks authorization under a lock.
  */
-import { capabilityGuard, getArtifactFor, getSharingFor, updateSharingFor } from '@/lib/artifacts';
+import { capabilityGuard, getArtifactFor, getSharingArtifactFor, getSharingFor, updateSharingFor } from '@/lib/artifacts';
 import { parseAccessValue, parseLinkRoleValue, parseShareEntries, parseVisibilityValue } from '@/lib/artifact-wire';
 import type { SharingPatch } from '@artifactbin/contracts';
 import { browserActor } from '@/lib/authentication';
@@ -34,7 +35,8 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   // a door with its own parsing accepts `access` on a document and answers 200
   // for a write the SQL then drops, where the others answer 400, and one error
   // code ends up with two different refusals.
-  const current = await getArtifactFor(actor, id);
+  // Only someone who manages its sharing gets past this read, so anyone else (an editor link included) gets the stranger's 404.
+  const current = await getSharingArtifactFor(actor, id);
   if (!current) return json({ error: 'not_found' }, 404);
   // Sharing is how an artifact reaches a PERSON by address, so it is one of the
   // acts a guest is sent to sign in for; a test user shares only inside its own

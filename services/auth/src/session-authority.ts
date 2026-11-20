@@ -35,13 +35,19 @@
  *    mint by the group, for at most a day. Without the opt-in, or with another credential in the header, an unknown
  *    path; so is the service's list of its own approvals (contracts `GROUP_SIGN_IN_GRANTS_PATH`), behind the same door.
  *
+ * The installation's own secret is for callers inside only: a request that came through a front (it carries
+ * X-Forwarded-For, which every front sets, a deployment's nginx or router included) meets session-live and the identity
+ * module's calls as an unknown path, whatever it presents. Callers use the internal address and send no forwarding
+ * header (utils `humanSessionClient`, `identityClient`). A configured service's own secret (introspection, the
+ * sign-ins, the relays) is the same behind a front as inside.
+ *
  * Introspection and the sign-ins are ./token-authority; the door they all share (settings, admission, `answer`) is
  * ./authority-door; the relays and the identity module's calls are below.
  */
 import {CHART_IMAGE_PATH,CANONICAL_CHART_IMAGE_PATH,CHART_IMAGE_KEYS,DRAFT_CHECK_PATH,CANONICAL_DRAFT_CHECK_PATH,DRAFT_CHECK_KEYS,ANONYMOUS} from '@artifactbin/contracts';
 import {SERVICE_PAYLOAD_LIMIT,HUMAN_SESSION_LIVE_PATH,IDENTITY_CALL_PATH,IDENTITY_METHODS,IdentityError,type IdentityMethod,type IdentityService,type Part,type ServiceAudience,type TransactionalQueryable} from '@artifactbin/contracts';
 import {BodyTooLargeError,readBody,serviceSecretMatches} from '@artifactbin/utils';
-import type {Hono} from 'hono';
+import type {Context,Hono} from 'hono';
 import type {AuthEnv,AuthOptions} from './parts';
 import {readEnv} from './env';
 import {testDomainSignInOf} from './config';
@@ -75,6 +81,9 @@ function mountRelays(app:Hono<AuthEnv>,o:AuthOptions,audiences:readonly ServiceA
  });
 }
 
+/** The request came through a front (see the header): the installation-secret routes are not there for it. */
+const throughFront=(c:Context<AuthEnv>)=>c.req.header('x-forwarded-for')!==undefined;
+
 /** The identity module's calls (IDENTITY_CALL_PATH), and the identity host's boot, started with the part. */
 function mountIdentityCalls(app:Hono<AuthEnv>,o:AuthOptions,{authSchema,readSchema}:AuthorityConfig,installation:(presented:string|undefined)=>boolean):void{
  const transactional=(db:unknown):db is TransactionalQueryable=>typeof (db as TransactionalQueryable|undefined)?.transaction==='function';
@@ -97,7 +106,8 @@ function mountIdentityCalls(app:Hono<AuthEnv>,o:AuthOptions,{authSchema,readSche
   });};
   boot();
  }
- app.all(IDENTITY_CALL_PATH,async c=>{
+ app.all(IDENTITY_CALL_PATH,async(c,next)=>{
+  if(throughFront(c))return next();
   const input=await admitService(c,installation);if(input instanceof Response)return input;
   const method=input.method as IdentityMethod;
   if(typeof method!=='string'||!IDENTITY_METHODS.includes(method)||!input.input||typeof input.input!=='object'||Array.isArray(input.input))return answer({error:'bad_request'},400);
@@ -117,7 +127,8 @@ function mountIdentityCalls(app:Hono<AuthEnv>,o:AuthOptions,{authSchema,readSche
 export function sessionAuthority(o:AuthOptions):Part<AuthEnv>{return {name:'sessionAuthority',mount:app=>{
  const config=authorityConfig(o);
  const installation=(presented:string|undefined)=>serviceSecretMatches(presented,config.secret);
- app.all(HUMAN_SESSION_LIVE_PATH,async c=>{
+ app.all(HUMAN_SESSION_LIVE_PATH,async(c,next)=>{
+  if(throughFront(c))return next();
   const input=await admitService(c,installation);if(input instanceof Response)return input;
   if(typeof input.sessionId!=='string'||!input.sessionId||typeof input.userId!=='string'||!input.userId)return answer({error:'bad_request'},400);
   try{return answer({live:await o.sessions.live?.(input.sessionId,input.userId)??false});}catch{return answer({error:'session_unavailable'},503);}

@@ -7,7 +7,7 @@ import type { AccessActor } from '@/lib/accounts';
 import { isLinkOnlyKind } from '@/lib/user-kinds';
 import { liveAccessFacts, type AccessFacts } from './access-facts';
 import type { ArtifactRow } from './scopes';
-import { ANONYMOUS_CEILING, capRole, maxRole, type ArtifactRole } from '@artifactbin/contracts';
+import { ANONYMOUS_CEILING, canEdit, capRole, maxRole, type ArtifactRole } from '@artifactbin/contracts';
 
 /** Does this actor OWN the row — pure, the account by user_id, a bare token by token_id. */
 export function ownsArtifact(row: Pick<ArtifactRow, 'user_id' | 'token_id'> & Partial<Pick<ArtifactRow,'group_id'>>, actor: AccessActor): boolean {
@@ -90,6 +90,19 @@ export async function effectiveRole(
   const account = (!!actor.userId || !!actor.principalGroup) && await reachesAsAccount(row, actor, facts);
   const byLink = account ? linkRoleOf(row) : capRole(linkRoleOf(row), ANONYMOUS_CEILING);
   return maxRole(byLink, account && documentEditorReaches(row, actor) ? 'editor' : 'none', held);
+}
+
+/**
+ * May this actor change who reaches the row (visibility, link role, shares, dataset access and policy): edit access
+ * held WITHOUT the link, so never an editor link and never the host's document-editor grant (neither is part of
+ * `roleWithoutLink`). The mirror of ./scopes `sharingScope`.
+ */
+export async function managesSharing(
+  row: Pick<ArtifactRow, 'id' | 'user_id' | 'token_id'> & Partial<Pick<ArtifactRow, 'format' | 'group_id'>>,
+  actor: AccessActor,
+  facts: AccessFacts = liveAccessFacts(actor),
+): Promise<boolean> {
+  return canEdit(await roleWithoutLink(row, actor, facts));
 }
 
 /**

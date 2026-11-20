@@ -95,7 +95,7 @@ export function DocumentPeople(props: { id: string; revision?: number; onChange?
           <PeopleInvitePicker endpoint={endpoint()} selected={selected()} onSelect={person => setSelected(previous => [...previous, person])} />
           <p class="text-xs leading-5 text-muted">Find anyone by username. Invitations wait for acceptance unless they follow you.</p>
           <div class="flex flex-wrap gap-1"><For each={selected()}>{person => <Button variant="secondary" size="sm" aria-label={`Remove @${person.username}`} onClick={() => setSelected(previous => previous.filter(item => item.user_id !== person.user_id))}>@{person.username} ×</Button>}</For></div>
-          <Show when={current().canManage}><Checkbox size="sm" label="Include viewing access" checked={includeAccess()} onChange={setIncludeAccess} /></Show>
+          <Show when={current().canShare}><Checkbox size="sm" label="Include viewing access" checked={includeAccess()} onChange={setIncludeAccess} /></Show>
           <Button disabled={busy() || selected().length === 0} onClick={() => void act({ action: 'invite', usernames: selected().map(person => `@${person.username}`), includeAccess: includeAccess() })}>Invite{selected().length ? ` ${selected().length} people` : ''}</Button>
           <p class="text-xs leading-5 text-muted">Followers join immediately unless they’ve turned off automatic acceptance. Others see a pending invitation.</p>
         </div></Show>

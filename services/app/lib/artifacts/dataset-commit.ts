@@ -16,7 +16,7 @@ import type { AccessActor } from '@/lib/accounts';
 import type { Queryable } from '@artifactbin/contracts';
 import { newEditId } from '../document';
 import { artifactQuery } from './document';
-import { LIVE_ARTIFACT_SQL, editorScope, policyReaderSql, reactionScope, type ArtifactRow } from '@/lib/artifact-access';
+import { LIVE_ARTIFACT_SQL, editorScope, policyReaderSql, reactionScope, sharingScope, type ArtifactRow } from '@/lib/artifact-access';
 import { headBumpSql, notifyArtifactSql } from './table';
 
 /** How long after the last archived version a write reuses that snapshot (matches the edit protocol). */
@@ -76,11 +76,12 @@ export async function commitDatasetWrite(q: Queryable, commit: DatasetCommit): P
 /**
  * Store a validated dataset policy on the head `row` the caller read: only while the row is still exactly
  * that head (version, edit id, sharing revision), its policy revision is still `revision`, and the actor
- * still reaches it as an editor. Bumps the policy revision, audits the actor and notifies the row's channel;
+ * still manages its sharing (lib/artifact-access `sharingScope`: a policy says who may use the data, so never an
+ * editor link). Bumps the policy revision, audits the actor and notifies the row's channel;
  * null when any of that no longer holds (a conflict for the caller to answer).
  */
 export async function commitDatasetPolicy(q: Queryable, actor: AccessActor, row: ArtifactRow, policy: unknown, revision: number): Promise<number | null> {
-  const scope = editorScope(actor);
+  const scope = sharingScope(actor);
   const result = await q.query<{ policy_revision: number }>(
     `WITH updated AS (
  UPDATE artifacts SET dataset_policy=$3::jsonb,policy_revision=policy_revision+1

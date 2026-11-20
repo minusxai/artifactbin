@@ -8,7 +8,8 @@ Every dataset has one permission document in Hasura's metadata format (version 3
 can see, add, change and delete rows, through every door: the page's `sql` reads and writes,
 `sql.mjs`, downloads and exports. It is the only check on a write: no code of yours runs on the
 server. Read it, change it and save it only with `node scripts/policy.mjs` (`--help`). Only the
-dataset's owner and editors can.
+dataset's owner and editors can, and only those who manage its sharing save it: an editor by link
+alone reads it and dry-runs it, and its save answers not found.
 
 ## Contents
 
@@ -20,7 +21,7 @@ Each request has exactly one role, decided by the dataset's own sharing, never b
 
 | Role | Who | Rules |
 |---|---|---|
-| `owner`, `editor` | The owner, a group Admin or Editor, a named editor | Always full access |
+| `owner`, `editor` | The owner, a group Admin or Editor, a named editor, and on a stored (never a live) dataset a signed-in editor link | Always full access |
 | `viewer` | A named viewer or commenter share, a group Member, a group share of the dataset | Denied unless a rule allows |
 | `signed_in` | A signed-in account with no share of its own (a link holder, or a page's reader) | Denied unless a rule allows |
 | `anonymous` | Signed out (only for unlisted or public datasets) | Denied unless a rule allows |

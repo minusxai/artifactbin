@@ -21,7 +21,7 @@ import { datasetReadAccess, datasetRowsFor, sqlRefusal, viewCatalog } from '@/li
  * carries its original sharing/comment shell and a ticketed frame, never its source.
  */
 import { admitRead, archivedVersionFor, currentPage, readPageRow, servedRow, UnservableDocument, accessMoved, getArtifactHeaderById, hasInvitedUsersFor, type ArtifactHeader, type ArtifactRow, type PageRead } from '@/lib/artifacts';
-import { holdsCreatingToken, effectiveRole, requestAccessFacts } from '@/lib/artifact-access';
+import { holdsCreatingToken, effectiveRole, managesSharing, requestAccessFacts } from '@/lib/artifact-access';
 import { folderPageFor, accountWorkspaceFor } from '@/lib/workspace';
 import { resolveStoredStoryDesign } from '@/lib/html-systems';
 import { verifyExportKey } from '@/lib/export';
@@ -387,6 +387,8 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     description: row.description,
     ...(cspRequest ? { cspRequest } : {}),
     role,
+    // Edit access is not sharing authority: an editor by link alone sees no Sharing action (lib/artifact-access `managesSharing`).
+    canManageSharing: role === 'owner' || (role === 'editor' && await managesSharing(artifact, actor, facts)),
     kind,
     /*
      * WHICH VERSION THIS IS, beside `surface` rather than inside it — the

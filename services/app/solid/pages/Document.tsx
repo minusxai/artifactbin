@@ -51,6 +51,8 @@ const ForkConfirm = lazy(() => import('../document/ForkArtifact').then(m => ({ d
 
 interface DocumentAnswer {
   role: ArtifactRole; kind: string;
+  /** The viewer may change who reaches the page (lib/artifact-access `managesSharing`). */
+  canManageSharing?: boolean;
   deferredChrome?: boolean;
   surface?: {
     group_id?:string|null;
