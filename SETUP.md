@@ -63,7 +63,9 @@ Set, at least:
 
 Optional, each described where it is declared in `.env.example`: a dedicated assets origin, alias origins,
 outbound IPs for firewalls, anonymous publishing hosts (`APP__USER_PAGES_HOST`), a custom shell
-(`APP__SHELL_FILE`) and the product name mail uses (`APP__NAME`), skill extras (`SKILLS__EXTRA_DIR`), a default
+(`APP__SHELL_FILE`) and the product name mail uses (`APP__NAME`), skill extras (`SKILLS__EXTRA_DIR`), a design
+system of the installation's own (`APP__DESIGN_SYSTEM_DIR`) and which system is the default
+(`APP__DEFAULT_DESIGN_SYSTEM`), a default
 database connection every signed-in person reads read-only (`DATASETS__DEFAULT_CONNECTION`) and whether a dataset
 may have its own (`DATASETS__OWN_CONNECTIONS`), company mode,
 test-domain accounts for automated runs, and split services (`SQL__SERVICE_URL`, `BROWSER__SERVICE_URL`,

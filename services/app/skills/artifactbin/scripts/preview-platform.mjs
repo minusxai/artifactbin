@@ -86,13 +86,13 @@ for(const [key,value] of Object.entries(map??{}))if(/^@afbin\/[a-z][a-z0-9-]*$/.
   return imports;
  }
  const styles=new Map();
- /** The platform stylesheet of one design system: a source checkout's own (lib/html-systems),
-  * else the selected server's. */
+ /** The platform stylesheet of one design system: a source checkout's own (lib/html-systems)
+  * for a built-in, else the selected server's (which also serves its own installation system). */
  function systemCss(name){
   if(!/^[a-z][a-z0-9-]{0,63}$/.test(name))return Promise.resolve(null);
   if(!styles.has(name))styles.set(name,(async()=>{
 try{const {htmlSystemsCss,isHtmlSystem}=await import('../../../lib/html-systems/index.ts');
-     return isHtmlSystem(name)?htmlSystemsCss([name]):null;}
+     if(isHtmlSystem(name))return htmlSystemsCss([name]);}
 catch(error){if(!['ERR_MODULE_NOT_FOUND','ERR_UNKNOWN_FILE_EXTENSION'].includes(
      error.code))throw error;}
    const bytes=await remote('/af/styles.css?system='+name,type=>/^text\/css\b/i.test(type));

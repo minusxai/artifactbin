@@ -8,9 +8,8 @@ A host page is another web shell that uses Artifactbin's building blocks: the `a
 the design-system stylesheets and their fonts. They are public, credential-free files served with
 `Access-Control-Allow-Origin: *`; they need no Artifactbin runtime, import map or sign-in.
 `[[ base ]]/af/manifest.json` lists this deploy's pinned, immutable addresses for each of them,
-with an `integrity` hash per file. Read it when you build or deploy the shell, and keep the URLs
-it gives you: they never change, while the flat `/af/components/<name>.js` addresses follow every
-deploy.
+with an `integrity` hash per file. Keep the URLs it gives you: they never change, while the flat
+`/af/components/<name>.js` addresses follow every deploy.
 
 Showing a document itself (its frame and its `sql`) works only for a shell
 served at the app's own origin, for example a front door that passes the app's API through
@@ -29,7 +28,8 @@ only frame the app page `/a/<id>` (its origin must be in the deployment's truste
 - `components`: name → pinned module URL (`/af/v1/components/<digest>/<name>.js`). Its chunks sit
   beside it under the same digest and are listed in `integrity` too.
 - `styles`: every design system in one sheet; `designSystems.<name>.styles`: one system's sheet
-  (`label`, `defaultMode` light or dark). Fonts load from `fonts` (`/af/fonts/`) as text uses them.
+  (`label`, `defaultMode` light or dark; `dark: false`: light only, keep `data-af-dark` false).
+  `defaultDesignSystem`: this server's default system, when it has one. Fonts load from `fonts`.
 - `host`: the document host module (second example); `hostComments`, the comments it loads.
 - `theme`: `attributes` and `tokens`, the contract below. URLs are paths on the manifest's origin.
 

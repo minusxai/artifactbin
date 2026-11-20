@@ -8,6 +8,10 @@
  * SKILL.md, empty from a reference) and `shipped` (true for the downloadable zip, which leaves out prose
  * that links guides served only over HTTP) and `extras` (true when the zip carries this deployment's `extras/`).
  * `connectors`: the connectors this build runs, generated from the registry (`@artifactbin/connectors`).
+ * `defaultSystem`: this server's default design system (lib/html-systems defaultHtmlSystem: APP__DEFAULT_DESIGN_SYSTEM,
+ * else the installation system) as {slug}, or null; SKILL.md then has agents use it. `installedSystem`: the
+ * installation system (APP__DESIGN_SYSTEM_DIR) as {slug, mood, fits}, or null: its table row. `fits(slug, text)`: a
+ * table row's Fits cell, marked as this server's default on the default's row only.
  */
 import { credentialPaths } from '@artifactbin/utils/node/credentials';
 import path from 'node:path';
@@ -15,6 +19,7 @@ import nunjucks from 'nunjucks';
 import type { SkillFile } from './tree';
 import { AUTHENTICATION_INSTRUCTION } from './agent-discovery';
 import { connectorList } from '@artifactbin/connectors';
+import { defaultHtmlSystem, htmlSystemLabel, installationDesignSystem } from '@/lib/html-systems';
 
 const CONNECTORS = connectorList().filter((c) => c.available).map((c) => c.label).join(', ');
 
@@ -34,6 +39,22 @@ const env = new nunjucks.Environment(new nunjucks.FileSystemLoader(path.resolve(
   tags: { variableStart: '[[', variableEnd: ']]', blockStart: '[%', blockEnd: '%]', commentStart: '[[#', commentEnd: '#]]' },
 });
 
+function defaultSystem() {
+  const slug = defaultHtmlSystem();
+  return slug ? { slug } : null;
+}
+/** The installation system's table fields (validated at boot: no `|`, backticks or line breaks). */
+function installedSystem() {
+  const system = installationDesignSystem();
+  return system ? { slug: system.slug, mood: system.mood, fits: system.fits } : null;
+}
+/** A table row's Fits cell; the default's row says so, with its label (and "light only" for a light-only system). */
+function fits(slug: string, text: string): string {
+  if (slug !== defaultHtmlSystem()) return text;
+  const lightOnly = installationDesignSystem()?.slug === slug && !installationDesignSystem()!.dark;
+  return `This server's default (${htmlSystemLabel(slug)}${lightOnly ? ', light only' : ''}): ${text}`;
+}
+
 export function renderSkill(file: SkillFile, opts: RenderOptions): string {
   try {
     return env.renderString(file.body, {
@@ -43,6 +64,9 @@ export function renderSkill(file: SkillFile, opts: RenderOptions): string {
       extras: opts.extras === true,
       authenticationInstruction: AUTHENTICATION_INSTRUCTION,
       connectors: CONNECTORS,
+      defaultSystem: defaultSystem(),
+      installedSystem: installedSystem(),
+      fits,
       references: file.ref ? '' : 'references/',
     }).replace(/\n{3,}/g, '\n\n');
   } catch (error) {

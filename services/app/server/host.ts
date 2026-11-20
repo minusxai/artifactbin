@@ -8,6 +8,7 @@ import {type Actor,type Upstream} from '@artifactbin/contracts';
 import {getDb, type Db, setServices, services, type Services} from '@/lib/platform';
 import {inProcess} from '@artifactbin/utils';
 import {skillExtras} from '@/lib/skills';
+import {installDesignSystemFromSettings} from '@/lib/html-systems/server';
 import {createAppServer,type AppServerOptions} from './app';
 export interface AppHostOptions extends AppServerOptions {
  services?:Partial<Services>;
@@ -34,6 +35,8 @@ export async function createAppHost(options:AppHostOptions={}):Promise<AppHost>{
  // The skill's deployment extras (SKILLS__EXTRA_DIR) are read now: an invalid directory refuses the boot (later
  // changes are followed without a restart, lib/skills/extras).
  skillExtras();
+ // The installation design system (APP__DESIGN_SYSTEM_DIR) is read once, now: an invalid directory refuses the boot.
+ installDesignSystemFromSettings();
  setDocumentEditorPolicy(options.documentEditorPolicy);
  setNotificationDelivery(options.notificationDelivery);
  const db=await getDb();

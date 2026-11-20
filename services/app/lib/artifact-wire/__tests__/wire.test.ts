@@ -13,6 +13,9 @@ import { artifactState, createArtifact, getArtifactFor, listArtifactPageFor, upd
 import { type ArtifactRow } from '@/lib/artifact-access';
 import { account, dataset, head, mine, page, sql } from '@/__tests__/artifact-fixtures';
 import { Reply } from '@/lib/http';
+import path from 'node:path';
+import { setInstallationDesignSystem } from '@/lib/html-systems';
+import { readInstallationDesignSystem } from '@/lib/html-systems/server';
 
 useAppHarness();
 const BASE = 'https://app.test';
@@ -155,5 +158,17 @@ describe('the metadata PATCH from a body', () => {
     expect((await patch(editor, { expectedState: state, expectedSharingRevision: (current.sharing_revision ?? 0) + 1, linkRole: 'commenter' }))).toEqual([409, expect.objectContaining({ error: 'version_conflict', changed: 'sharing' })]);
     const [status, wire] = await patch(editor, { expectedState: state, title: 'By editor', linkRole: 'commenter' });
     expect([status, wire.title, wire.link_role]).toEqual([200, 'By editor', 'commenter']);
+  });
+
+  it('accepts the installation design system as an owner choice and reads it back', async () => {
+    const owner = await account('chooser@example.test');
+    const row = await mine(owner);
+    // The Harbor fixture (lib/html-systems/__tests__/fixtures/harbor), read as the boot reads APP__DESIGN_SYSTEM_DIR.
+    setInstallationDesignSystem(readInstallationDesignSystem(path.resolve('lib/html-systems/__tests__/fixtures/harbor')));
+    try {
+      const reply = await updateMetadataFromBody(owner, row.id, { expectedState: artifactState((await getArtifactFor(owner, row.id))!), theme: 'harbor' }, BASE, false);
+      expect([reply.status, reply.body.theme]).toEqual([200, 'harbor']);
+      expect(((await head(row.id)).meta as { theme?: string }).theme).toBe('harbor');
+    } finally { setInstallationDesignSystem(null); }
   });
 });

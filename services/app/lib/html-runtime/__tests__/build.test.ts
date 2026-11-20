@@ -212,6 +212,13 @@ it('the core sets the platform attributes before authored code, with the viewer 
  expect(root.getAttribute('data-af-design-system')).toBe('nocturne');expect(root.getAttribute('data-af-dark')).toBe('true');
  const viewer=run('https://p.example/?mx-mode=light',{designSystem:'nocturne',mode:'dark'});
  expect(viewer.getAttribute('data-af-dark')).toBe('false');expect(viewer.style.colorScheme).toBe('light');
+ // A light-only system (the installation system without dark values) stays light: ?mx-mode=dark, then a reader message.
+ const held=run('https://p.example/?mx-mode=dark',{designSystem:'harbor',mode:'light',lightOnly:true});
+ expect(held.getAttribute('data-af-dark')).toBe('false');expect(held.style.colorScheme).toBe('light');
+ held.setAttribute('data-af-dark','true');held.style.colorScheme='dark';
+ await new Promise(resolve=>setTimeout(resolve,0));
+ expect(held.getAttribute('data-af-dark')).toBe('false');expect(held.style.colorScheme).toBe('light');
+ expect(run('https://p.example/?mx-mode=dark',{designSystem:'nocturne',mode:'dark'}).getAttribute('data-af-dark')).toBe('true');
 });
 
 it('ships one native editor without the retired rich editor or binding',async()=>{

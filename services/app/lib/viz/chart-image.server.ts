@@ -33,6 +33,8 @@ export interface ChartSystems {
   names: readonly string[];
   defaultMode(name: string): 'light' | 'dark';
   variables(name: string, mode: 'light' | 'dark'): Readonly<Record<string, string>> | null;
+  /** True for a system without dark values: its charts draw light whatever `theme` asks. */
+  lightOnly?(name: string): boolean;
 }
 type ChartImageResult = Extract<ChartDrawResult, { ok: false }> | { ok: true; png: Buffer; width: number; height: number };
 
@@ -68,7 +70,7 @@ function admit(input: Record<string, unknown>, systems?: ChartSystems): ChartDra
   if (system !== null && (typeof system !== 'string' || !systems?.names.includes(system))) {
     return refusal(400, 'invalid_request', `designSystem is one of ${systems?.names.join(', ') || '(none here)'}`);
   }
-  const mode = (theme ?? (system ? systems!.defaultMode(system) : 'light')) as 'light' | 'dark';
+  const mode = (system && systems!.lightOnly?.(system) ? 'light' : theme ?? (system ? systems!.defaultMode(system) : 'light')) as 'light' | 'dark';
   return { description: parsed.value, rows, width, height, mode, variables: system ? systems!.variables(system, mode) : null,
     maxPngBytes: options.maxPngBytes };
 }

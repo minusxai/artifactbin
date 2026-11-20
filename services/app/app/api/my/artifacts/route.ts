@@ -15,13 +15,30 @@ import { artifactSummaryToWire } from '@/lib/artifact-wire';
 import { ensureUserToken } from '@/lib/accounts';
 import { createArtifactFromRequest } from '@/app/api/artifacts/route';
 import { baseUrl, json, unauthorized } from '@/lib/http';
+import { defaultHtmlSystem } from '@/lib/html-systems';
+import { withStarterDesignSystem } from '@/lib/workspace/artifact-starters';
+
+/** With a server default design system (APP__DESIGN_SYSTEM_DIR), "New" documents start in it: the untouched doc
+ * starter the browser sends is rewritten to name it. Without one, or for any other body, the request is unchanged. */
+async function withServerDesignSystem(request: Request): Promise<Request> {
+  const system = defaultHtmlSystem();
+  const type = (request.headers.get('content-type') ?? '').split(';')[0]!.trim().toLowerCase();
+  if (!system || type !== 'application/json' || new URL(request.url).searchParams.has('format')) return request;
+  const text = await request.text();
+  let body: unknown;
+  try { body = JSON.parse(text); } catch { body = undefined; }
+  const next = body === undefined ? body : withStarterDesignSystem(body, system);
+  const headers = new Headers(request.headers);
+  headers.delete('content-length');
+  return new Request(request.url, { method: request.method, headers, body: next === body ? text : JSON.stringify(next) });
+}
 
 export async function POST(request: Request) {
   const actor = await browserActor(request);
   if (actor instanceof Response) return actor;
   // A session mints/reuses its own token to own the row; an agent-cookie browser holds one.
   const creator = actor.userId ? { ...actor, tokenId: await ensureUserToken(actor.userId) } : await withAccountToken(actor);
-  return creator ? createArtifactFromRequest(request, creator) : unauthorized(request);
+  return creator ? createArtifactFromRequest(await withServerDesignSystem(request), creator) : unauthorized(request);
 }
 
 export async function GET(request: Request) {

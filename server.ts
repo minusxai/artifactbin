@@ -74,6 +74,8 @@ async function main(): Promise<void> {
   // The skill's deployment extras (SKILLS__EXTRA_DIR) are read now: an invalid directory refuses the boot (later
   // changes are followed without a restart, lib/skills/extras).
   (await import('@/lib/skills')).skillExtras();
+  // The installation design system (APP__DESIGN_SYSTEM_DIR) is read once, now: an invalid directory refuses the boot.
+  (await import('@/lib/html-systems/server')).installDesignSystemFromSettings();
 
   // An image built without an engine or a browser needs to be told where they
   // went — before a boot canary passes and the first export answers 503.

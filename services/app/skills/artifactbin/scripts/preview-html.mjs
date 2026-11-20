@@ -18,9 +18,11 @@ import {
 export {autofixHtml,formatAutofixReport,scriptFingerprint,
   localReferences} from '../../../lib/html-autofix/index.ts';
 import {scriptFetchPaths} from '../../../lib/html-autofix/index.ts';
-import {htmlAppearance} from '../../../lib/html-page/design-system.ts';
-/** The design system a page names (its meta or <html> attribute), or null. */
-export const pageDesignSystem=source=>htmlAppearance(source).designSystem??null;
+import {declaredDesignSystem,htmlAppearance} from '../../../lib/html-page/design-system.ts';
+/** The design system a page names in its meta, or null: a built-in, or one only the server knows
+ * (its installation system), whose stylesheet the preview then asks it for. */
+export const pageDesignSystem=source=>htmlAppearance(source).designSystem??declaredDesignSystem(
+ source);
 /** The platform stylesheet for one local page — `css`, its resolved system only, which the
  * preview fetches from the selected server's /af/styles.css?system=NAME (lib/html-systems) —
  * inline first in <head>. */
@@ -92,7 +94,10 @@ export function previewHtml(source,notice,localConfig,platformCss){
  html.attrs.push({name:'data-af-private-preview',value:'true'});
  if(localConfig){
   // D4: what the core sets on <html> at load, resolved the way the server resolves it.
-  localConfig={appearance:htmlAppearance(source),...localConfig};
+  // A name only the server knows is applied once the server sent its stylesheet.
+  const look=htmlAppearance(source),named=pageDesignSystem(source);
+  localConfig={appearance:!look.designSystem&&named&&platformCss?{...look,designSystem:named}:look,
+   ...localConfig};
   let previous={};
 function removeRuntime(node){if(!node.childNodes)return;node.childNodes=node.childNodes.filter(
     child=>{if(child.nodeName==='script'&&child.attrs?.some(attr=>attr.name==='data-af'&&

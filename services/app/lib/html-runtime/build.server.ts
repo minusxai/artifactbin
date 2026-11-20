@@ -7,7 +7,7 @@ import {fileURLToPath} from 'node:url';
 import {createRequire} from 'node:module';
 import {createHash} from 'node:crypto';
 import type {HtmlRuntimeAssets} from './contract';
-import {htmlSystemsCss} from '../html-systems';
+import {HTML_SYSTEM_NAMES,htmlSystemsCss} from '../html-systems';
 import {DRAFT_SQL_ENGINE_PATH,RUNTIME_BUILD_KEY,RUNTIME_MODULE_PATHS} from './contract';
 /**
  * Prepended to every lazily loaded runtime module. Core (inline in the page, or /af/core.js) records its build id
@@ -78,7 +78,9 @@ const supplied=document.querySelector('[data-af="runtime"]');
 const config=supplied?JSON.parse(supplied.textContent):{pageId:'local:'+location.pathname,revision:'local',backends:[],offline:true};
 // D4: the platform owns <html data-af-design-system / data-af-dark>; set both before first paint. The viewer's choice
 // arrives as ?mx-mode= (the reader adds it to the frame URL) and later as reader messages; page code only reads them.
-const look=config.appearance;if(look&&typeof look==='object'){const root=document.documentElement;if(typeof look.designSystem==='string'&&/^[a-z][a-z0-9-]{0,63}$/.test(look.designSystem))root.setAttribute('data-af-design-system',look.designSystem);let mode=look.mode==='dark'?'dark':'light';try{const asked=new URLSearchParams(location.search).get('mx-mode');if(asked==='dark'||asked==='light')mode=asked;}catch{}root.setAttribute('data-af-dark',mode==='dark'?'true':'false');root.style.colorScheme=mode;}
+const look=config.appearance;if(look&&typeof look==='object'){const root=document.documentElement;if(typeof look.designSystem==='string'&&/^[a-z][a-z0-9-]{0,63}$/.test(look.designSystem))root.setAttribute('data-af-design-system',look.designSystem);let mode=look.mode==='dark'?'dark':'light';try{const asked=new URLSearchParams(location.search).get('mx-mode');if(asked==='dark'||asked==='light')mode=asked;}catch{}if(look.lightOnly===true)mode='light';root.setAttribute('data-af-dark',mode==='dark'?'true':'false');root.style.colorScheme=mode;
+// A light-only system (the server's installation system without dark values) stays light whoever sets data-af-dark later.
+if(look.lightOnly===true)new MutationObserver(()=>{if(root.getAttribute('data-af-design-system')===look.designSystem&&root.getAttribute('data-af-dark')!=='false'){root.setAttribute('data-af-dark','false');root.style.colorScheme='light';}}).observe(root,{attributes:true,attributeFilter:['data-af-dark','data-af-design-system']});}
 startNativeHtmlTableScroll(document);
 noticeBlockedModals(window);
 const blob=source=>URL.createObjectURL(new Blob([source],{type:'text/javascript'}));
@@ -115,5 +117,5 @@ if(config.offline&&window.parent===window){void import(reader).then(module=>modu
 if(live){installHtmlReaderCommands(window,config.appOrigin);openFrameDoor(window,config.appOrigin,()=>import(reader));}`;
  const core=await build({...options,stdin:{contents:entry,resolveDir:process.cwd(),loader:'ts'},format:'iife'});
  if(!core.outputFiles?.[0]?.text)throw Error('HTML core is empty');
- return {core:core.outputFiles[0].text,systems:htmlSystemsCss(),apollo:guarded.apollo,apolloPath,reader:guarded.reader,readerPath,chrome:guarded.chrome,chromePath,portableEngine:guarded.portableEngine,portableEnginePath,morph:guarded.morph,morphPath,nativeRegions:guarded.nativeRegions,nativeRegionsPath,nativeMarkdown:guarded.nativeMarkdown,nativeMarkdownPath,collab:guarded.collab,collabPath,state:guarded.state,statePath,offlineSql:guarded.offlineSql,host:hostBuild.outputFiles![0]!.text,hostComments};
+ return {core:core.outputFiles[0].text,systems:htmlSystemsCss(HTML_SYSTEM_NAMES),apollo:guarded.apollo,apolloPath,reader:guarded.reader,readerPath,chrome:guarded.chrome,chromePath,portableEngine:guarded.portableEngine,portableEnginePath,morph:guarded.morph,morphPath,nativeRegions:guarded.nativeRegions,nativeRegionsPath,nativeMarkdown:guarded.nativeMarkdown,nativeMarkdownPath,collab:guarded.collab,collabPath,state:guarded.state,statePath,offlineSql:guarded.offlineSql,host:hostBuild.outputFiles![0]!.text,hostComments};
 }

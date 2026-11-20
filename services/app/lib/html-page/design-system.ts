@@ -10,10 +10,11 @@
  * Explicit .ts specifiers: the skill scripts load this module directly under Node in a source checkout.
  */
 import {applyEdits,attribute,parseSource,removeElement,type Edit,type Element,type SourceDocument} from './html-source.ts';
-import {HTML_SYSTEM_MODES} from '../validation/html-system-modes.ts';
+import {htmlSystemMode,isKnownHtmlSystem,isLightOnlyHtmlSystem} from '../validation/installation-design-system.ts';
 
 const DESIGN_SYSTEM_META = 'artifactbin:design-system';
-const known = (name: string | null | undefined): name is string => !!name && Object.hasOwn(HTML_SYSTEM_MODES, name);
+/** A built-in system, or the installation system the server registered at boot (lib/validation installation-design-system). */
+const known = (name: string | null | undefined): name is string => !!name && isKnownHtmlSystem(name);
 const inHead = (element: Element, head: Element | null): boolean => { for (let at = element.parentNode as unknown as Element | null; at; at = at.parentNode as unknown as Element | null) if (at === head) return true; return false; };
 const metaOf = (document: SourceDocument): Element | undefined => document.elements.find((el) => el.tagName === 'meta' && (attribute(el, 'name') ?? '').toLowerCase() === DESIGN_SYSTEM_META && inHead(el, document.head));
 const copiedLinks = (document: SourceDocument): Element[] => document.elements.filter((el) => el.tagName === 'link' && attribute(el, 'data-af') === 'design-system');
@@ -48,14 +49,22 @@ export function normalizeDesignSelection(input: string): DesignNormalization {
   return result;
 }
 
-/** What the core applies at load: the design system (when the page has one) and the default colour mode. */
-interface HtmlAppearance { designSystem?: string; mode: 'light' | 'dark' }
+/** What the core applies at load: the design system (when the page has one) and the default colour mode;
+ * `lightOnly` (only for a light-only installation system) holds the page light whatever the viewer picks. */
+interface HtmlAppearance { designSystem?: string; mode: 'light' | 'dark'; lightOnly?: true }
 
 /** Owner choice overrides explicit head metadata. The selected system supplies its default colour mode. */
 export function htmlAppearance(html: string, ownerChoice?: string | null): HtmlAppearance {
   const document = parseSource(html), meta = metaOf(document);
   const metaName = meta ? attribute(meta, 'content')?.trim() : undefined;
   const designSystem = [ownerChoice, metaName].find(known);
-  const mode = designSystem ? HTML_SYSTEM_MODES[designSystem]! : 'light';
-  return { ...(designSystem ? { designSystem } : {}), mode };
+  const mode = designSystem ? htmlSystemMode(designSystem) : 'light';
+  return { ...(designSystem ? { designSystem } : {}), mode, ...(designSystem && isLightOnlyHtmlSystem(designSystem) ? { lightOnly: true as const } : {}) };
+}
+
+/** The system name a page's head meta writes, known here or not (a design-system name's shape only), or null: what
+ * the skill's local preview asks its server for, which may serve an installation system this checkout does not know. */
+export function declaredDesignSystem(html: string): string | null {
+  const meta = metaOf(parseSource(html)), name = meta ? attribute(meta, 'content')?.trim() : undefined;
+  return name && /^[a-z][a-z0-9-]{0,63}$/.test(name) ? name : null;
 }

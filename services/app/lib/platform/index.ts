@@ -12,7 +12,7 @@ export {
   MAX_FILE_BYTES, MAX_IMAGE_BYTES, MAX_PDF_BYTES, MAX_ROWS_LIMIT, OUTBOUND_IPS, PUBLIC_BASE_URL, QUERY_TIMEOUT_MS, SQL_READ_WALL_TIMEOUT_MS, SQL_MUTATION_TIMEOUT_MS,
   S3_URL, SQL_SERVICE_URL, TEST_DOMAIN, TRUSTED_PROXY_HOPS, WEB_INGEST_ALLOW_PRIVATE, WEB_INGEST_MAX_PER_HOUR, WEB_INGEST_TIMEOUT_MS,
   deploymentConfig, env, envNamesRead, registerTestOverride, parseUserPagesHost, requirePagesHost,
-  resolveHmrPort, unknownEnvNames, serviceAudiences, embedTrustedOrigins, shellFile, skillExtrasDir,
+  resolveHmrPort, unknownEnvNames, serviceAudiences, embedTrustedOrigins, shellFile, skillExtrasDir, designSystemDir, defaultDesignSystemName,
 } from './config';
 export { datasetsAllowPrivateNetwork, defaultConnectionSetting } from './config';
 export { PostgresDb, databaseTargetForRuntime, getDb, parseDatabaseUrl, resetDb, schemaImageInputs, schemaImageKey } from './db';

@@ -7,7 +7,7 @@
 import {lstatSync,readFileSync} from 'node:fs';
 import path from 'node:path';
 import { storyFontManifest as manifest } from '@/lib/html-systems/font-catalog';
-import {PLATFORM_FONTS_PATH,platformFontName} from './index';
+import {PLATFORM_FONTS_PATH,installationDesignSystem,platformFontName} from './index';
 
 const faces=[...Object.values(manifest.families),manifest.app,...Object.values(manifest.systems)].flat() as Array<{url:string}>;
 /** `<name>.woff2` → the hashed file under public/fonts. */
@@ -17,7 +17,8 @@ const files=new Map(faces.map(face=>[platformFontName(face.url)!,face.url.slice(
 export function platformFontBytes(requested:string):Uint8Array|null{
  const name=requested.startsWith(PLATFORM_FONTS_PATH)?requested.slice(PLATFORM_FONTS_PATH.length):requested;
  const file=/^[a-z0-9-]+\.woff2$/.test(name)?files.get(name):undefined;
- if(!file)return null;
+ // The installation design system's own files (./installation.server), read at boot, content-hashed by name.
+ if(!file)return installationDesignSystem()?.fonts.get(name)??null;
  const fonts=path.resolve('public/fonts'),full=path.resolve(fonts,file);
  if(!lstatSync(fonts).isDirectory()||lstatSync(fonts).isSymbolicLink()||!full.startsWith(fonts+path.sep)||lstatSync(full).isSymbolicLink())throw Error('Hosted fonts are unavailable');
  return new Uint8Array(readFileSync(full));
