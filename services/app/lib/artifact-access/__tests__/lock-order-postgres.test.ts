@@ -21,7 +21,7 @@ import { dockerImage } from '@artifactbin/test-support/docker';
 import { identityViewStatements } from '@artifactbin/auth/identity-store/views';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import pg from 'pg';
-import type { Queryable } from '@artifactbin/contracts';
+import type { Queryable } from '@artifactbin/contracts/db';
 import { retryOnConflict } from '@/lib/platform';
 import { datasetWriteAccess } from '@/lib/dataset-permissions';
 import type { ArtifactRow } from '../scopes';

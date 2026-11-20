@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
-import { ACTOR_HEADER, ANONYMOUS, BROWSER_FONT_RESOURCE_PATH, BROWSER_SESSION_HEADER, isInternalApiPath } from '@artifactbin/contracts';
+import { ACTOR_HEADER, ANONYMOUS } from '@artifactbin/contracts/actor';
+import { BROWSER_FONT_RESOURCE_PATH, BROWSER_SESSION_HEADER } from '@artifactbin/contracts/browser-sessions';
+import { isInternalApiPath } from '@artifactbin/contracts/routes';
 import { actorReceiver, signActor } from '@artifactbin/utils';
 import { request } from '@/__tests__/harness';
 import { GET, POST } from '@/app/api/internal/browser-font-resource/route';

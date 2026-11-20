@@ -4,7 +4,7 @@ import {sqlClient} from '@artifactbin/utils';
 import {QUERY_TIMEOUT_MS,SQL_READ_WALL_TIMEOUT_MS} from '@/lib/platform';
 import { expect, it, vi } from 'vitest';
 import { createSql } from '@artifactbin/sql/local';
-import type { SqlService } from '@artifactbin/contracts';
+import type { SqlService } from '@artifactbin/contracts/sql';
 import { executeCatalog } from '../execute';
 import type { DatasetCatalog } from '../types';
 

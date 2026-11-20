@@ -30,7 +30,8 @@ const create = async (token: string, body: Record<string, unknown>) => {
   expect(res.status, await res.clone().text()).toBe(201);
   return (await res.json()) as { id: string };
 };
-import { artifactChannel, annotationsChannel, regionsChannel } from '@artifactbin/contracts';
+import { artifactChannel, annotationsChannel } from '@artifactbin/contracts/live-channels';
+import { regionsChannel } from '@artifactbin/contracts/region-sessions';
 const subscriptions = () => Object.fromEntries(liveSubscriptionSnapshot().map(({ channel, subscribers }) => [channel, subscribers]));
 /** An HTML page's stream also follows its live text (lib/publish/realtime live-pings): one regions channel per page. */
 // These streams are signed out: they get no presence, so no presence channel and no presence ACL subscriber.

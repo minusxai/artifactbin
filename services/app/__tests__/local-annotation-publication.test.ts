@@ -1,6 +1,6 @@
 import {nativeHtml} from './native-html-fixture';
 import {nativeAnchor} from './native-annotation-fixture';
-import {htmlTextFingerprint} from '@artifactbin/contracts';
+import {htmlTextFingerprint} from '@artifactbin/contracts/html-annotation';
 import {it,expect} from 'vitest';
 import {useAppHarness,request,params} from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';

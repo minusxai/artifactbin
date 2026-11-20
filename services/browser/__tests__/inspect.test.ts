@@ -5,7 +5,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import sharp from 'sharp';
-import { PAGE_IMAGE_LIMITS, type BrowserService, type PageInspectRequest } from '@artifactbin/contracts';
+import { PAGE_IMAGE_LIMITS, type BrowserService, type PageInspectRequest } from '@artifactbin/contracts/browser';
 import { browserClient, serveBrowser } from '@artifactbin/browser';
 import { createBrowser } from '@artifactbin/browser/local';
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';

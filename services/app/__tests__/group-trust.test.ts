@@ -18,7 +18,7 @@ import { mintAccountToken } from '@/__tests__/harness';
 import * as groups from '@/lib/groups';
 import { overrideConfig, resetConfigOverrides } from '@/lib/platform/config';
 import { getDb } from '@/lib/platform';
-import type { Actor } from '@artifactbin/contracts';
+import type { Actor } from '@artifactbin/contracts/actor';
 
 useAppHarness();
 afterEach(() => resetConfigOverrides());

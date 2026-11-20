@@ -8,7 +8,7 @@ import {bearerIdentity,useAppHarness,request,agentCookie,params} from './harness
 import {POST as create} from '@/app/api/artifacts/route';
 import {POST as queryPrivateDocument} from '@/app/api/artifacts/[id]/sql/route';
 import {attachActor} from '@artifactbin/utils';
-import {BROWSER_SESSION_HEADER} from '@artifactbin/contracts';
+import {BROWSER_SESSION_HEADER} from '@artifactbin/contracts/browser-sessions';
 import {AUTH_SECRET} from '@/lib/platform';
 
 import { mintAccountToken as mintToken } from '@/__tests__/harness';

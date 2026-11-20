@@ -3,7 +3,7 @@
 import {afterAll,beforeAll,describe,expect,it} from 'vitest';
 import {Pool,type PoolClient} from 'pg';
 import {randomBytes} from 'node:crypto';
-import type {Queryable} from '@artifactbin/contracts';
+import type {Queryable} from '@artifactbin/contracts/db';
 import {hashToken} from '@artifactbin/utils';
 import {createOAuthStore} from '../src/identity/oauth';
 import {ensureAuthSchema} from '../src/schema';

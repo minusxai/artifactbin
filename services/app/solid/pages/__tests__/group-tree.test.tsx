@@ -9,7 +9,7 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@solidjs/testing-library';
 import { afterEach, expect, it, vi } from 'vitest';
-import type { GroupDetail } from '@artifactbin/contracts';
+import type { GroupDetail } from '@artifactbin/contracts/groups';
 import { GroupManagement } from '../Group';
 import { GroupTreePanel, GroupTreeSummary } from '../GroupTree';
 

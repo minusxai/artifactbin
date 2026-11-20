@@ -4,7 +4,7 @@
  * dataset row cap.
  */
 import { describe, expect, it } from 'vitest';
-import type { DatasetSelectPermission } from '@artifactbin/contracts';
+import type { DatasetSelectPermission } from '@artifactbin/contracts/dataset-permissions';
 import { keptRows, unrestricted, viewRows } from '../view';
 
 const COLUMNS = ['name', 'team', 'salary', 'owner', 'note'];

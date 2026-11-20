@@ -8,7 +8,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import * as vega from 'vega';
 import { compile } from 'vega-lite';
 import { expressionInterpreter } from 'vega-interpreter';
-import { SQL_FAILURES } from '@artifactbin/contracts';
+import { SQL_FAILURES } from '@artifactbin/contracts/sql-failures';
 import { chartModules } from './chart-render';
 import './chart';
 

@@ -9,7 +9,8 @@ import { withHttpServer, type RunningServer } from '@artifactbin/test-support/ne
 import { useLoopbackLookup } from '@artifactbin/utils/node/loopback-lookup';
 import { beforeEach, afterEach, describe, expect, it } from 'vitest';
 import { attachActor } from '@artifactbin/utils';
-import { BROWSER_SESSION_HEADER, type Actor } from '@artifactbin/contracts';
+import { BROWSER_SESSION_HEADER } from '@artifactbin/contracts/browser-sessions';
+import type { Actor } from '@artifactbin/contracts/actor';
 import { testIdentity as baseIdentity, useAppHarness, request, testPagesSite as pagesSiteFor } from '@/__tests__/harness';
 import { POST as createRoute } from '@/app/api/artifacts/route';
 import { createUser, exchangePagesTicket, issuePagesTicket, revokeToken } from '@/lib/accounts';
@@ -20,7 +21,7 @@ import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { pagesOriginFor } from '@/lib/http';
 import { framedDocumentSrc } from '@/lib/document-serving';
 import { POST as internalMint } from '@/app/api/internal/tokens/route';
-import { ARTIFACT_SCOPE } from '@artifactbin/contracts';
+import { ARTIFACT_SCOPE } from '@artifactbin/contracts/cli-auth';
 import { allowLocalWebIngest, restoreWebIngestPolicy, setWebIngestPolicy } from '@/test/helpers/web-ingest';
 import { POST as grantRoute } from '@/app/api/trust/route';
 import { createAppServer } from '../server/app';

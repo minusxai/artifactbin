@@ -8,7 +8,7 @@
 import {nativeHtml} from '@/__tests__/native-html-fixture';
 import { POST as create } from '@/app/api/artifacts/route';
 import { mintAccountToken, request } from '@/__tests__/harness';
-import type { Queryable } from '@artifactbin/contracts';
+import type { Queryable } from '@artifactbin/contracts/db';
 
 export const RECIPIENT = { id: 'vol-recipient', email: 'vol-recipient@example.com' };
 const SENDERS = ['vol-s0', 'vol-s1', 'vol-s2', 'vol-s3'];

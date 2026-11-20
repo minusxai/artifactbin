@@ -9,7 +9,8 @@
 import {Hono} from 'hono';
 import {afterAll,beforeEach,describe,expect,it} from 'vitest';
 import {attachActor} from '@artifactbin/utils';
-import type {Actor,GroupArtifact} from '@artifactbin/contracts';
+import type {Actor} from '@artifactbin/contracts/actor';
+import type {GroupArtifact} from '@artifactbin/contracts/groups';
 import {mountRoutes} from '../server/api';
 import {createAppServer} from '../server/app';
 import {identityForUser} from '@/lib/accounts';

@@ -8,8 +8,8 @@
  *  - session door `sessionActor`           GET /api/page/session
  */
 import {afterEach,beforeEach,describe,expect,it} from 'vitest';
-import type {Actor,HumanActor} from '@artifactbin/contracts';
-import {BROWSER_SESSION_HEADER} from '@artifactbin/contracts';
+import type {Actor, HumanActor} from '@artifactbin/contracts/actor';
+import {BROWSER_SESSION_HEADER} from '@artifactbin/contracts/browser-sessions';
 import {nativeHtml} from './native-html-fixture';
 import { createArtifact } from '@/lib/artifacts';
 import { setDocumentEditorPolicy } from '@/lib/authentication';

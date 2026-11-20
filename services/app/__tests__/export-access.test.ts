@@ -12,7 +12,7 @@
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { revokeShares, setVisibility } from '@/__tests__/artifact-fixtures';
 import sharp from 'sharp';
-import type { RenderRequest } from '@artifactbin/contracts';
+import type { RenderRequest } from '@artifactbin/contracts/browser';
 import { mintAccountToken, request, setSession, useAppHarness, params } from './harness';
 import { exportImage, ROWS, STAFF, staffDeck, runtime } from './export-helpers';
 import { identityForUser, type AccessActor } from '@/lib/accounts';

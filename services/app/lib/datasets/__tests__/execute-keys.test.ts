@@ -5,7 +5,7 @@
  * viewer, another row-ID set or another object never reads a database prepared for someone else.
  */
 import { describe, expect, it } from 'vitest';
-import type { RunInput } from '@artifactbin/contracts';
+import type { RunInput } from '@artifactbin/contracts/sql';
 import { createSqliteSql } from '@artifactbin/sql/sqlite';
 import { executeCatalog } from '../execute';
 import type { CatalogRowView, DatasetCatalog } from '../types';

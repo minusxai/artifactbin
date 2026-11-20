@@ -1,8 +1,8 @@
 import {nativeHtml} from './native-html-fixture';
 import { setVisibility } from '@/__tests__/artifact-fixtures';
 import {nativeAnchor} from './native-annotation-fixture';
-import type {HtmlNodeAnchor} from '@artifactbin/contracts';
-import { COMMENT_TARGET_REMOVED } from '@artifactbin/contracts';
+import type {HtmlNodeAnchor} from '@artifactbin/contracts/html-annotation';
+import { COMMENT_TARGET_REMOVED } from '@artifactbin/contracts/annotation-comment';
 import { artifactQuery } from '@/lib/artifacts/table';
 import {observedRequest,patchMetadata} from '@/__tests__/conditional-request';
 import { getDb } from '@/lib/platform';
@@ -63,7 +63,7 @@ interface AnnotationWire {
   thread: Array<{ body: string; author: { kind: string; label: string | null; transport: string; user_id: string | null; image: string | null } }>;
 }
 
-const annotate = (id: string, actor: import('@artifactbin/contracts').Actor, body: Record<string, unknown>, origin?: string) =>
+const annotate = (id: string, actor: import('@artifactbin/contracts/actor').Actor, body: Record<string, unknown>, origin?: string) =>
   myCreateAnnotationRoute(request(`/api/my/artifacts/${id}/annotations`, { method: 'POST', actor, json: body, origin }), params({ id }));
 
 /** The current head pointer — a create may have bumped it (the anchor-key stamping edit). */

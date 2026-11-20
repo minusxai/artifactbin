@@ -9,7 +9,8 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { CONNECTOR_ERROR_CODES, OWN_CONNECTIONS_OFF, SQL_FAILURE_CODES, SQL_FAILURE_FOR_CONNECTOR, SQL_FAILURES } from '@artifactbin/contracts';
+import { CONNECTOR_ERROR_CODES, OWN_CONNECTIONS_OFF } from '@artifactbin/contracts/connectors';
+import { SQL_FAILURE_CODES, SQL_FAILURE_FOR_CONNECTOR, SQL_FAILURES } from '@artifactbin/contracts/sql-failures';
 import { REPO_ROOT } from '@/test/helpers/source-files';
 
 const read = (file: string) => readFileSync(path.join(REPO_ROOT, file), 'utf8');

@@ -5,7 +5,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as Y from 'yjs';
-import type { RegionFrameMessage, RegionParentMessage } from '@artifactbin/contracts';
+import type { RegionFrameMessage, RegionParentMessage } from '@artifactbin/contracts/region-sessions';
 import { createRegionClient, encodeBase64, type RegionClient, type RegionClientEvents, type RegionSession } from '@/lib/artifact-backend/region-http';
 import { commentAfterRegionSave } from '@/lib/annotations/region-comment';
 import { openRegionDoc } from '@/lib/live-regions/cells';

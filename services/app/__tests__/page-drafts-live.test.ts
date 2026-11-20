@@ -6,7 +6,7 @@
  */
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it } from 'vitest';
 import { startPgliteWire, type PgliteWire } from '@artifactbin/test-support/pglite-wire';
-import type { Actor } from '@artifactbin/contracts';
+import type { Actor } from '@artifactbin/contracts/actor';
 import { pagesSite } from '@/lib/http';
 import { overrideConfig } from '@/lib/platform/config';
 import { closeDefaultConnection } from '@/lib/connections';

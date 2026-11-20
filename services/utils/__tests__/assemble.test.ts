@@ -4,7 +4,7 @@
  * reorder — the default list is the readable truth about middleware order.
  */
 import { describe, expect, it } from 'vitest';
-import type { Part } from '@artifactbin/contracts';
+import type { Part } from '@artifactbin/contracts/part';
 import { assemble } from '@artifactbin/utils';
 
 const tag = (name: string, text = name): Part => ({

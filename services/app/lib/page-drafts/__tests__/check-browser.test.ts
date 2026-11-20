@@ -7,7 +7,8 @@
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { getRequestListener } from '@hono/node-server';
 import { attachActor } from '@artifactbin/utils';
-import { ANONYMOUS, CANONICAL_DRAFT_CHECK_PATH } from '@artifactbin/contracts';
+import { ANONYMOUS } from '@artifactbin/contracts/actor';
+import { CANONICAL_DRAFT_CHECK_PATH } from '@artifactbin/contracts/identity-service';
 import { createBrowser } from '@artifactbin/browser/local';
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 import { services, setServices } from '@/lib/platform';

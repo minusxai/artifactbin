@@ -13,7 +13,7 @@ import { createUser } from '@/lib/accounts';
 import { getArtifactById } from '@/lib/artifacts';
 import { editableRegions, openRegionDoc, regionHtml, regionText } from '@/lib/live-regions';
 import { runWithRequest } from '@/lib/platform';
-import type { Actor } from '@artifactbin/contracts';
+import type { Actor } from '@artifactbin/contracts/actor';
 import { attachActor } from '@artifactbin/utils';
 import { POST as openRoute } from '@/app/api/artifacts/[id]/regions/[regionId]/open/route';
 import { POST as updatesRoute } from '@/app/api/artifacts/[id]/regions/[regionId]/updates/route';

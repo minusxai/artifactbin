@@ -14,7 +14,7 @@ import { getArtifactById, getOwnedArtifactFor, selectChildren, canReadArtifact }
 import { canWriteDataset } from '@/lib/document-data';
 import {accountWorkspaceCoreFor, trashArtifactFor, restoreArtifactFor} from '@/lib/workspace';
 import {subscribeChannel} from '@/lib/publish';
-import {artifactChannel} from '@artifactbin/contracts';
+import {artifactChannel} from '@artifactbin/contracts/live-channels';
 import {POST as fork} from '@/app/api/artifacts/[id]/fork/route';
 import { seedShares, setArtifact } from '@/__tests__/rows';
 useAppHarness();

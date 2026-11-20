@@ -8,7 +8,7 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, render, screen, waitFor } from '@solidjs/testing-library';
 import { createMemoryHistory, MemoryRouter, Route } from '@solidjs/router';
 import { afterEach, expect, it, vi } from 'vitest';
-import { CONNECTORS, OWN_CONNECTIONS_OFF } from '@artifactbin/contracts';
+import { CONNECTORS, OWN_CONNECTIONS_OFF } from '@artifactbin/contracts/connectors';
 import { DatasetEditorPage } from '@/solid/pages/DatasetEditor';
 import { stubFetch } from '@/test/helpers/fetch-stub';
 

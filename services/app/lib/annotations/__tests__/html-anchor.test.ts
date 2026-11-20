@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { parseHtmlNodeAnchor, htmlTextFingerprint, type HtmlNodeAnchor } from '@artifactbin/contracts';
+import { parseHtmlNodeAnchor, htmlTextFingerprint, type HtmlNodeAnchor } from '@artifactbin/contracts/html-annotation';
 import { htmlCommentNodes, resolveHtmlCommentAnchor, validHtmlCommentRange } from '../html-anchor';
 const anchor = (over: Partial<HtmlNodeAnchor> = {}): HtmlNodeAnchor => ({ kind: 'html-node', v: 1, revision: '2', nodeId: 'n1', quote: 'same words', ...over });
 it('decodes explicit block context without accepting conflicting selection coordinates',()=>{

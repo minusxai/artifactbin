@@ -8,7 +8,10 @@
 import {readFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {beforeEach,expect,it,onTestFinished} from 'vitest';
-import {GROUP_SIGN_IN_GRANTS_PATH,GROUP_SIGN_IN_PATH,IDENTITY_INTROSPECT_PATH,SERVICE_AUTH_HEADER,parseServiceAudiences,type GroupSignIn,type Queryable} from '@artifactbin/contracts';
+import {GROUP_SIGN_IN_GRANTS_PATH, GROUP_SIGN_IN_PATH, parseServiceAudiences, type GroupSignIn} from '@artifactbin/contracts/service-audiences';
+import {IDENTITY_INTROSPECT_PATH} from '@artifactbin/contracts/identity-service';
+import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts/routes';
+import type {Queryable} from '@artifactbin/contracts/db';
 import {createBearerReader} from '@artifactbin/auth';
 import {liveGroupSignIn} from '@/lib/accounts';
 import {createAuthComposedHost} from '@/test/helpers/auth-host';

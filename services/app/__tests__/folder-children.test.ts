@@ -26,7 +26,7 @@ import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 import { STORY_DATA_EVENT } from '@/lib/html-reader/contract';
 import { getArtifactById, childrenTableFor, updateSharingFor } from '@/lib/artifacts';
 import { subscribeChannel } from '@/lib/publish';
-import { artifactChannel } from '@artifactbin/contracts';
+import { artifactChannel } from '@artifactbin/contracts/live-channels';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { identityForUser, createUser, type AccessActor } from '@/lib/accounts';
 

@@ -4,7 +4,7 @@
  * the visibility, link role and dataset access its twin (a direct Editor) may; it comments where its role reaches, as
  * the group (shown under the group's name, as an agent), and edits only its own comments (the group's, at its level).
  */
-import {GROUP_PRINCIPAL_REFUSED} from '@artifactbin/contracts';
+import {GROUP_PRINCIPAL_REFUSED} from '@artifactbin/contracts/actor';
 import {expect,it} from 'vitest';
 import {admitGroupMember,useAppHarness} from './harness';
 import {composed,page,sql,useGroupPrincipalHost,world} from './group-principal-fixture';

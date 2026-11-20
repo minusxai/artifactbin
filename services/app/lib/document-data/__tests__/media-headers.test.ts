@@ -7,7 +7,7 @@
  */
 import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
-import type { Actor } from '@artifactbin/contracts';
+import type { Actor } from '@artifactbin/contracts/actor';
 import { request, setSession, useAppHarness, mintAccountToken, params as routeParams } from '@/__tests__/harness';
 import { identityForUser, createUser, getUserById } from '@/lib/accounts';
 import { avatarVersion } from '@/lib/avatars';

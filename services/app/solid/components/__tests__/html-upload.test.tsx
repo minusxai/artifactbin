@@ -2,7 +2,7 @@
 import '@testing-library/jest-dom/vitest';
 import {cleanup,fireEvent,render,screen,waitFor} from '@solidjs/testing-library';
 import {afterEach,expect,it,vi} from 'vitest';
-import {MAX_DOCUMENT_BYTES} from '@artifactbin/contracts';
+import {MAX_DOCUMENT_BYTES} from '@artifactbin/contracts/document-update';
 import HtmlUpload from '../HtmlUpload';
 import {openDocument} from '@/solid/lib/document-navigation';
 vi.mock('@/solid/lib/document-navigation',()=>({openDocument:vi.fn()}));

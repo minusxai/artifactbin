@@ -1,6 +1,6 @@
 import {expect,it} from 'vitest';
 import { setVisibility } from '@/__tests__/artifact-fixtures';
-import {artifactChannel} from '@artifactbin/contracts';
+import {artifactChannel} from '@artifactbin/contracts/live-channels';
 import {useAppHarness,request,mintAccountToken,params as routeParams} from '@/__tests__/harness';
 import {POST as createArtifact} from '@/app/api/artifacts/route';
 import {GET as eventsRoute} from '@/app/a/[id]/events/route';

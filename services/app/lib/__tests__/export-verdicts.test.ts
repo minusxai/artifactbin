@@ -13,7 +13,7 @@
  * and 404 says "that slide does not exist — here is how many there are".
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { BrowserService, RenderRequest, RenderResult } from '@artifactbin/contracts';
+import type { BrowserService, RenderRequest, RenderResult } from '@artifactbin/contracts/browser';
 import { exportImageResponse, resetExportRenderer } from '@/lib/export';
 import { setServices } from '@/lib/platform';
 import {useAppHarness} from '@/__tests__/harness';

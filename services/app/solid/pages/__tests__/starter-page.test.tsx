@@ -9,7 +9,7 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@solidjs/testing-library';
 import { Route, Router } from '@solidjs/router';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { START_PLACEHOLDER_MARKUP } from '@artifactbin/contracts';
+import { START_PLACEHOLDER_MARKUP } from '@artifactbin/contracts/start-placeholder';
 import { existingPaste } from '@/lib/agent-copy/agent-copy';
 import { reloadKeepingPlace } from '@/lib/html-reader/reload';
 import { replaceDocument } from '@/solid/lib/document-navigation';

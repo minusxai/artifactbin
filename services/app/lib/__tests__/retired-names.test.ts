@@ -14,7 +14,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { INTERNAL_MINT_PATH } from '@artifactbin/contracts';
+import { INTERNAL_MINT_PATH } from '@artifactbin/contracts/routes';
 import { APP_ROOT, REPO_ROOT, codeOf, sourceFiles } from '@/test/helpers/source-files';
 
 /**
@@ -172,7 +172,7 @@ describe('the surviving vocabulary', () => {
   it('is exactly the surviving artifact formats', async () => {
     // The VALUE, not a regex over the declaration: the runtime list and the type are one
     // declaration now, so asserting the list asserts both.
-    const { ARTIFACT_FORMATS } = await import('@artifactbin/contracts');
+    const { ARTIFACT_FORMATS } = await import('@artifactbin/contracts/artifact-format');
     expect([...ARTIFACT_FORMATS].sort()).toEqual(['dataset', 'file', 'folder', 'html', 'image', 'markup', 'pdf', 'program', 'viz']);
   });
 

@@ -10,7 +10,7 @@ import {getDb,services} from '@/lib/platform';
 import {POST as publish} from '@/app/api/artifacts/route';
 import {createAppServer} from '../app';
 import {fixture,sql,stored} from '@/__tests__/page-sql-door-fixture';
-import {ACTOR_HEADER} from '@artifactbin/contracts';
+import {ACTOR_HEADER} from '@artifactbin/contracts/actor';
 import {DOMAIN_HOME_CSP} from '@/lib/user-pages';
 import { setArtifact } from '@/__tests__/rows';
 useAppHarness();

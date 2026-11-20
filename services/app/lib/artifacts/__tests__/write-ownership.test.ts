@@ -5,7 +5,7 @@
  * token claim's and a guest merge's adoption of artifacts; and the inbox's auto-accept setting.
  */
 import { describe, expect, it } from 'vitest';
-import { artifactChannel } from '@artifactbin/contracts';
+import { artifactChannel } from '@artifactbin/contracts/live-channels';
 import { createGuestOwner, mintAccountToken, setDatasetPolicy, useAppHarness } from '@/__tests__/harness';
 import { publishedId } from '@/__tests__/artifact-fixtures';
 import { createUser, identityForUser } from '@/lib/accounts';

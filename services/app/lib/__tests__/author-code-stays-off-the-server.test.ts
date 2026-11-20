@@ -8,7 +8,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { URL_SPACE } from '@artifactbin/contracts';
+import { URL_SPACE } from '@artifactbin/contracts/url-space';
 import { ROUTES } from '@/server/routes.generated';
 import { REPO_ROOT, sourceFiles } from '@/test/helpers/source-files';
 

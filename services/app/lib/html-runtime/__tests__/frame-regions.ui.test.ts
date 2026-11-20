@@ -5,7 +5,7 @@
  * frame posts and a "server" that is only Yjs bytes (createRegionState, regionHtml). No endpoint exists here: the wire
  * is the contract's RegionParentMessage / RegionFrameMessage, exactly.
  */
-import type { RegionFrameMessage, RegionParentMessage } from '@artifactbin/contracts';
+import type { RegionFrameMessage, RegionParentMessage } from '@artifactbin/contracts/region-sessions';
 import { TextSelection } from 'prosemirror-state';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as Y from 'yjs';

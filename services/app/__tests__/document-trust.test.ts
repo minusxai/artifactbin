@@ -17,7 +17,7 @@ import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { getArtifactById } from '@/lib/artifacts';
 import { cspExtensionsFor, cspRequestFor, sessionTrustCookie } from '@/lib/trust';
 import { EMPTY_CSP_EXTENSIONS } from '@/lib/document/csp-extensions';
-import type { Actor } from '@artifactbin/contracts';
+import type { Actor } from '@artifactbin/contracts/actor';
 
 const harness = useAppHarness();
 /** The session cookie's name, as the trust module sets it. */

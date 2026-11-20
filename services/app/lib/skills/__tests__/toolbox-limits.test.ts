@@ -1,6 +1,6 @@
 /** The skill's copy of the server's size limits is the server's: one number, read by agents and sandboxes. */
 import {expect,it} from 'vitest';
-import {SERVICE_PAYLOAD_LIMIT} from '@artifactbin/contracts';
+import {SERVICE_PAYLOAD_LIMIT} from '@artifactbin/contracts/payload-limit';
 import {DRAFT_LIMITS} from '@/lib/page-drafts';
 
 it('ships the service payload limit and the draft limits exactly',async()=>{

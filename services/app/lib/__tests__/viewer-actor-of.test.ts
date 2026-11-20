@@ -4,7 +4,8 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { attachActor, signActor } from '@artifactbin/utils';
-import { ACTOR_HEADER, BROWSER_SESSION_HEADER } from '@artifactbin/contracts';
+import { ACTOR_HEADER } from '@artifactbin/contracts/actor';
+import { BROWSER_SESSION_HEADER } from '@artifactbin/contracts/browser-sessions';
 import { requestOrSessionActor, sessionActor, setDocumentEditorPolicy } from '@/lib/authentication';
 import { revokeToken } from '@/lib/accounts';
 import { mintAccountToken as mintToken, useAppHarness } from '@/__tests__/harness';

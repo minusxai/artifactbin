@@ -1,6 +1,6 @@
 import {nativeHtml} from './native-html-fixture';
 import {nativeAnchor} from './native-annotation-fixture';
-import type {EventEnvelope} from '@artifactbin/contracts';
+import type {EventEnvelope} from '@artifactbin/contracts/events';
 import {getDb} from '@/lib/platform';
 /** Annotation facts are committed with their notification projections.
  * Reply plus resolution is one fact; standalone resolution, reopening and
@@ -9,7 +9,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeEvents, type FakeEvents } from '@artifactbin/utils';
 import { useAppHarness } from '@/__tests__/harness';
 import { actOnAnnotationFor, createAnnotationFor, deleteAnnotationFor } from '@/lib/annotations';
-import type { AnnotationAuthor } from '@artifactbin/contracts';
+import type { AnnotationAuthor } from '@artifactbin/contracts/annotation-comment';
 import { createArtifact } from '@/lib/artifacts';
 import type { AccessActor } from '@/lib/accounts';
 import { setServices } from '@/lib/platform';

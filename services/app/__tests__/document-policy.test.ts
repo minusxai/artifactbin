@@ -3,7 +3,7 @@ import { artifactState, canReadArtifact, getArtifactById } from '@/lib/artifacts
 import { effectiveRole } from '@/lib/artifact-access';
 import {afterEach,beforeEach,expect,it} from 'vitest';
 import { setDocumentEditorPolicy, sessionActor } from '@/lib/authentication';
-import type {Actor} from '@artifactbin/contracts';
+import type {Actor} from '@artifactbin/contracts/actor';
 import {GET,PUT,DELETE} from '@/app/api/my/artifacts/[id]/route';
 import {GET as page} from '@/app/api/page/artifact/[id]/route';
 import {request,useAppHarness,params} from './harness';

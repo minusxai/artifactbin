@@ -1,4 +1,4 @@
-import {htmlTextFingerprint} from '@artifactbin/contracts';
+import {htmlTextFingerprint} from '@artifactbin/contracts/html-annotation';
 import { afterEach, expect, it } from 'vitest';
 import { captureHtmlRange, resolveHtmlRange } from '../range';
 afterEach(() => { document.body.innerHTML = ''; });

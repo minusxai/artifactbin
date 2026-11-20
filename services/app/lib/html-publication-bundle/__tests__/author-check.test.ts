@@ -1,7 +1,7 @@
 import {expect,it,onTestFinished,vi} from 'vitest';
 import {writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
-import type {BrowserSessionResult} from '@artifactbin/contracts';
+import type {BrowserSessionResult} from '@artifactbin/contracts/browser-sessions';
 import {checkHosted,checkScript,checkTarget,inspectPage,loadChromium,summarizeCheck} from '../../../skills/artifactbin/scripts/check.mjs';
 import {ToolError,checkDigest,toolFailure} from '../../../skills/artifactbin/scripts/toolbox-client.mjs';
 import {components} from '../../../skills/artifactbin/scripts/toolbox-check-probes.mjs';

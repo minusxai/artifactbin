@@ -6,8 +6,8 @@
  */
 import { randomUUID } from 'node:crypto';
 import { expect, it, vi } from 'vitest';
-import type { EventFeedEvent, EventFeedPage } from '@artifactbin/contracts';
-import { AGENT_SESSION_HEADER } from '@artifactbin/contracts';
+import type { EventFeedEvent, EventFeedPage } from '@artifactbin/contracts/event-feed';
+import { AGENT_SESSION_HEADER } from '@artifactbin/contracts/agent';
 import { EVENTS_SCHEMA, getDb } from '@/lib/platform';
 import { mintAccountToken, request, useAppHarness } from './harness';
 import { nativeHtml } from './native-html-fixture';

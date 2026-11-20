@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { FONT_FILES, FONT_STYLES } from '@artifactbin/contracts';
+import { FONT_FILES, FONT_STYLES } from '@artifactbin/contracts/font-sources';
 import { fetchBrowserFontResource } from '../browser-fonts';
 import { WebIngestError } from '../guard';
 import type { fetchWebResource } from '../fetch';

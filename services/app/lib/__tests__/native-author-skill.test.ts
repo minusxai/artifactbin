@@ -10,7 +10,7 @@ import {htmlPwaSettings} from '@/lib/html-page';
 import {packOfflineHtmlImages} from '@/lib/export';
 import {GET as skillArchive} from '@/app/skills/artifactbin.zip/route';
 import {planPublicationBundle} from '@/lib/html-publication-bundle/plan';
-import {parseHtmlNodeAnchor} from '@artifactbin/contracts';
+import {parseHtmlNodeAnchor} from '@artifactbin/contracts/html-annotation';
 import {tempDirSync} from '@artifactbin/test-support/temp-dir';
 const BASE='https://example.test';
 /** The served skill ZIP, built once for the file: two tests read the same archive. */

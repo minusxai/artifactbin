@@ -7,7 +7,7 @@
  */
 import { createRoot, createSignal } from 'solid-js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cellKey } from '@artifactbin/contracts';
+import { cellKey } from '@artifactbin/contracts/region-sessions';
 import { STORY_FRAME_BRIDGE_MESSAGE } from '@/lib/html-reader/contract';
 import { createFramedStory, type CellEditingLoader } from '../create-framed-story';
 import { stubFetch } from '@/test/helpers/fetch-stub';

@@ -1,4 +1,4 @@
-import type {HtmlNodeAnchor} from '@artifactbin/contracts';
+import type {HtmlNodeAnchor} from '@artifactbin/contracts/html-annotation';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HTML_VERSION_MESSAGE, HTML_VERSION_RECEIVED, HTML_VERSION_REFUSED } from '../../html-reader/contract';
 const bridges: Array<{dispose(): void}> = [];

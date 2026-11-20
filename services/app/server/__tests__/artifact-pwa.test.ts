@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 
 import sharp from 'sharp';
-import { ACTOR_HEADER } from '@artifactbin/contracts';
+import { ACTOR_HEADER } from '@artifactbin/contracts/actor';
 import { signActor } from '@artifactbin/utils';
 import { createAppServer } from '../app';
 import { useAppHarness } from '@/__tests__/harness';

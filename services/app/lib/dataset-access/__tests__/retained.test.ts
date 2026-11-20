@@ -6,7 +6,7 @@ import {useAppHarness,request,mintAccountToken} from '@/__tests__/harness';
 import {POST as create} from '@/app/api/artifacts/route';
 import {getArtifactById} from '@/lib/artifacts';
 import { identityForUser, type AccessActor } from '@/lib/accounts';
-import { SQL_FAILURES } from '@artifactbin/contracts';
+import { SQL_FAILURES } from '@artifactbin/contracts/sql-failures';
 import {loadDatasetRows} from '@/lib/datasets';
 import {linkedSql,errorCode,liveLink} from '@/__tests__/linked-datasets';
 import { setArtifact } from '@/__tests__/rows';

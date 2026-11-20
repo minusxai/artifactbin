@@ -7,7 +7,7 @@
  * next request. Written ON CHANGE only: a logged-in reader's hundred query
  * hops must not be a hundred writes.
  */
-import type { Actor } from '@artifactbin/contracts';
+import type { Actor } from '@artifactbin/contracts/actor';
 import { describe, expect, it, vi } from 'vitest';
 import { attachActor } from '@artifactbin/utils';
 import { withTokenAuth } from '@/lib/authentication';

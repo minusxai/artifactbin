@@ -8,7 +8,7 @@ import { mintAccountToken, useAppHarness } from '@/__tests__/harness';
 import { LIVE_TOKEN_SQL } from '@/lib/accounts/tokens';
 import { liveTokenSql } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
-import type { Queryable } from '@artifactbin/contracts';
+import type { Queryable } from '@artifactbin/contracts/db';
 
 useAppHarness();
 

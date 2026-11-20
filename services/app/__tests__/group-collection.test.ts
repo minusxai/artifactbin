@@ -5,7 +5,7 @@ import {expect,it,beforeEach} from 'vitest';
 import {bearerAdmission} from '@artifactbin/auth';
 import {createOAuthStore} from '@artifactbin/auth/identity/oauth';
 import {attachActor} from '@artifactbin/utils';
-import type {Actor} from '@artifactbin/contracts';
+import type {Actor} from '@artifactbin/contracts/actor';
 import {mountRoutes} from '../server/api';
 import {createGroup} from '@/lib/groups';
 import {getDb,setServices} from '@/lib/platform';
@@ -71,12 +71,12 @@ it('keeps inherited reach directional, redacts hidden parents, browses shared sh
   const r=await app.request(`/api/artifacts/${id}/group-shares/${top.id}`,{method:role?'PUT':'DELETE',headers:{authorization:`Bearer ${owner.token}`,'content-type':'application/json'},...(role?{body:JSON.stringify({role})}:{})});expect(r.status,await r.clone().text()).toBe(200);
  };
  await share(folder,'commenter');await share(orphan,'viewer');
- const root=await (await call(member)).json() as import('@artifactbin/contracts').GroupCollection;
+ const root=await (await call(member)).json() as import('@artifactbin/contracts/groups').GroupCollection;
  expect(root.items.map(x=>x.id).sort()).toEqual([folder,orphan,inherited].sort());
  expect(root.items.find(x=>x.id===orphan)?.parent_id).toBeNull();
  for(const secret of [hidden,'Hidden container',unrelated,sideFile,privateFile,deep,'ancestor_ids','source','email'])expect(JSON.stringify(root)).not.toContain(secret);
  const list=async(parent:string)=>{
-  const result=await call(member,child.id,`?parent_id=${parent}`);expect(result.status).toBe(200);return (await result.json() as import('@artifactbin/contracts').GroupCollection).items.map(x=>x.id).sort();
+  const result=await call(member,child.id,`?parent_id=${parent}`);expect(result.status).toBe(200);return (await result.json() as import('@artifactbin/contracts/groups').GroupCollection).items.map(x=>x.id).sort();
  };
  expect(await list(folder)).toEqual([nested,privateFile,publicFile].sort());
  // Commenter shelf access grants discovery of the private nested folder, but its own
@@ -86,7 +86,7 @@ it('keeps inherited reach directional, redacts hidden parents, browses shared sh
  for(const id of [hidden,'absent',orphan])expect((await call(member,child.id,`?parent_id=${id}`)).status).toBe(404);
  expect((await call(member,top.id)).status).toBe(404);
  expect((await call(member,side.id)).status).toBe(404);
- const first=await (await call(member,child.id,'?limit=1')).json() as import('@artifactbin/contracts').GroupCollection;
+ const first=await (await call(member,child.id,'?limit=1')).json() as import('@artifactbin/contracts/groups').GroupCollection;
  expect(first.next_cursor).toBeTypeOf('string');
  const q=`?limit=1&cursor=${encodeURIComponent(first.next_cursor!)}`;
  for(const [who,g,query] of [[peer,child.id,q],[owner,top.id,q],[member,child.id,q+'&parent_id='+folder],[member,child.id,q.replace('limit=1','limit=2')],[member,child.id,'?cursor=garbage'],[member,child.id,q+'x']] as const){
@@ -119,7 +119,7 @@ it('pages past excluded batches without a global cap, preserves tied ordering an
  do{
   const q=new URLSearchParams({parent_id:folder,limit:'37',...(cursor?{cursor}:{})});
   const r=await app.request(`/api/groups/${group.id}/collection?${q}`,{headers:{authorization:`Bearer ${member.token}`}});expect(r.status,await r.clone().text()).toBe(200);
-  const b=await r.json() as import('@artifactbin/contracts').GroupCollection;
+  const b=await r.json() as import('@artifactbin/contracts/groups').GroupCollection;
   expect(b.items.length).toBeLessThanOrEqual(37);for(const row of b.items){found.push(row.id);formats.add(row.format);expect(row.parent_id).toBe(folder);}cursor=b.next_cursor;expect(found.length).toBeLessThanOrEqual(229);
  }while(cursor);
  expect(found).toEqual(Array.from({length:229},(_,i)=>`collection_volume_${String(i+121).padStart(4,'0')}`));

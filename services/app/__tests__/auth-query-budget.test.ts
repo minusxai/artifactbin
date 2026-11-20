@@ -8,7 +8,8 @@
  * the very next request) is pinned beside it so the savings cannot come from skipping the work.
  */
 import { describe, expect, it } from 'vitest';
-import { BROWSER_SESSION_HEADER, type Actor } from '@artifactbin/contracts';
+import { BROWSER_SESSION_HEADER } from '@artifactbin/contracts/browser-sessions';
+import type { Actor } from '@artifactbin/contracts/actor';
 import { GET as sessionRoute } from '@/app/api/page/session/route';
 import { GET as artifactsRoute } from '@/app/api/artifacts/route';
 import { mintAccountToken, recordStatements, request, useAppHarness } from '@/__tests__/harness';

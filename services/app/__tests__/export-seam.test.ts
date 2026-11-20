@@ -11,7 +11,7 @@ import {nativeHtml} from './native-html-fixture';
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from '@artifactbin/utils';
-import type { RenderRequest, RenderResult } from '@artifactbin/contracts';
+import type { RenderRequest, RenderResult } from '@artifactbin/contracts/browser';
 import {exportImage,EXPORT_PNG} from './export-helpers';
 import { createArtifact } from '@/lib/artifacts';
 import {getDb} from '@/lib/platform';

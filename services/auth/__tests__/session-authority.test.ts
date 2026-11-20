@@ -1,7 +1,12 @@
 import {createHash} from 'node:crypto';
 import {serviceAuthHost} from './helpers';
 import {describe,it,expect} from 'vitest';
-import {HUMAN_SESSION_LIVE_PATH,IDENTITY_CALL_PATH,IDENTITY_INTROSPECT_PATH,SERVICE_AUTH_HEADER,type ServiceAudience,type TokenReader,type TokenRecord} from '@artifactbin/contracts';
+import {HUMAN_SESSION_LIVE_PATH} from '@artifactbin/contracts/actor';
+import {IDENTITY_CALL_PATH} from '@artifactbin/contracts/identity-module';
+import {IDENTITY_INTROSPECT_PATH} from '@artifactbin/contracts/identity-service';
+import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts/routes';
+import type {ServiceAudience} from '@artifactbin/contracts/service-audiences';
+import type {TokenReader, TokenRecord} from '@artifactbin/contracts/identity';
 import {serviceTokenKey,signServiceToken} from '../src/identity/service-tokens';
 import {humanSessionClient} from '@artifactbin/utils';
 import {createAuthHost} from '../src/parts';

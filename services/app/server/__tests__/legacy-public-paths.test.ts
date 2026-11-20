@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
-import { classifyPath, emailLinkPath } from '@artifactbin/contracts';
+import { classifyPath, emailLinkPath } from '@artifactbin/contracts/url-space';
 import { setNotificationDelivery } from '@/lib/notifications';
 import { useAppHarness } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';

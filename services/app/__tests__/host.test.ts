@@ -2,7 +2,7 @@ import {nativeHtml} from './native-html-fixture';
 import {it,expect} from 'vitest';
 import {useAppHarness} from './harness';
 import {createAppHost} from '@/server/host';
-import {ANONYMOUS} from '@artifactbin/contracts';
+import {ANONYMOUS} from '@artifactbin/contracts/actor';
 import { resolveToken } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 

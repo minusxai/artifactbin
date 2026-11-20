@@ -1,5 +1,5 @@
 import {it,expect} from 'vitest';
-import type {Queryable} from '@artifactbin/contracts';
+import type {Queryable} from '@artifactbin/contracts/db';
 import {attestSavedHtmlUpload,verifySavedHtmlUpload} from '../saved-html-upload';
 it('binds upload authority to exact document, version and dataset',async()=>{
  const authority={id:'page',editId:'edit',version:1,datasetId:'dataset'},tx={} as Queryable,calls:Queryable[]=[];

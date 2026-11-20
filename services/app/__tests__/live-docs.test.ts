@@ -11,7 +11,7 @@ import { createUser, identityForUser } from '@/lib/accounts';
 import { artifactState, currentPage, getArtifactById } from '@/lib/artifacts';
 import { editableRegions, openRegionDoc, regionText } from '@/lib/live-regions';
 import { getDb, runWithRequest, type Queryable } from '@/lib/platform';
-import type { Actor } from '@artifactbin/contracts';
+import type { Actor } from '@artifactbin/contracts/actor';
 import { POST as openRoute } from '@/app/api/artifacts/[id]/regions/[regionId]/open/route';
 import { POST as updatesRoute } from '@/app/api/artifacts/[id]/regions/[regionId]/updates/route';
 import { regionSessions } from '@/app/api/artifacts/[id]/regions/doors';

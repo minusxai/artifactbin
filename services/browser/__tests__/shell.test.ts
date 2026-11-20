@@ -1,5 +1,6 @@
 import { afterAll, expect, it } from 'vitest';
-import { SERVICE_AUTH_HEADER, type BrowserService } from '@artifactbin/contracts';
+import { SERVICE_AUTH_HEADER } from '@artifactbin/contracts/routes';
+import type { BrowserService } from '@artifactbin/contracts/browser';
 import { serveBrowser } from '../src/index';
 
 const bytes = new Uint8Array([0, 255, 128, 42]);

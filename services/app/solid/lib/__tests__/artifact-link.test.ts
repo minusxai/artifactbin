@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ARTIFACT_FORMATS } from '@artifactbin/contracts';
+import { ARTIFACT_FORMATS } from '@artifactbin/contracts/artifact-format';
 import { artifactLink, isDocumentFormat, knownFormat } from '@/solid/lib/artifact-link';
 
 /** The ONE rule for how an in-app link to an artifact is drawn: a document crosses to the server, everything else stays in the app. */

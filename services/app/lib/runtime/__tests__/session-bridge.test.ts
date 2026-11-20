@@ -11,7 +11,8 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { ACTOR_HEADER, ANONYMOUS, BROWSER_FONT_RESOURCE_PATH, type Actor } from '@artifactbin/contracts';
+import { ACTOR_HEADER, ANONYMOUS, type Actor } from '@artifactbin/contracts/actor';
+import { BROWSER_FONT_RESOURCE_PATH } from '@artifactbin/contracts/browser-sessions';
 import { actorOf, verifyActor } from '@artifactbin/utils';
 import { sessionBridge } from '..';
 

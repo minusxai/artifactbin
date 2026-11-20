@@ -8,7 +8,7 @@
  */
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { waitFor, within } from '@testing-library/dom';
-import type { ArtifactRole } from '@artifactbin/contracts';
+import type { ArtifactRole } from '@artifactbin/contracts/sharing';
 import { OPTIONAL_THEME_TOKENS, THEME_TOKENS } from '@/lib/html-systems';
 import type { FrameBridgeParent } from '@/lib/html-reader/frame-bridge/parent';
 import type { HostComments } from '@/lib/html-reader/host-comments-contract';

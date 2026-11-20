@@ -8,7 +8,7 @@ import {nativeHtml} from '@/__tests__/native-html-fixture';
  */
 import { brotliDecompressSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
-import { ACTOR_HEADER } from '@artifactbin/contracts';
+import { ACTOR_HEADER } from '@artifactbin/contracts/actor';
 import { signActor } from '@artifactbin/utils';
 import { postArtifact } from '@/__tests__/artifact-fixtures';
 import { mintToken } from '@/lib/accounts';

@@ -19,7 +19,7 @@ import {inviteGroupMember,acceptGroupInvitations} from '@/lib/groups';
 import { afterAll, beforeAll, beforeEach, expect, inject } from 'vitest';
 import { attachActor } from '@artifactbin/utils';
 import { createBearerReader, ensureAuthSchema, ensureHumanAuthSchema } from '@artifactbin/auth';
-import type { Actor, Credential } from '@artifactbin/contracts';
+import type { Actor, Credential } from '@artifactbin/contracts/actor';
 import { identityForUser, type AccessActor, type RequestIdentity } from '@/lib/accounts';
 import { overrideSession, type Session } from '@/auth';
 import { AGENT_COOKIE } from '@/lib/accounts/agent-session';
@@ -458,7 +458,7 @@ export async function recordStatements<T>(work: () => Promise<T>): Promise<{ val
 }
 
 /** Admit fixtures through verified-email acceptance, never role PUT. */
-export async function admitGroupMember(actorId:string,groupId:string,userId:string,role:import('@artifactbin/contracts').GroupRole):Promise<void>{
+export async function admitGroupMember(actorId:string,groupId:string,userId:string,role:import('@artifactbin/contracts/groups').GroupRole):Promise<void>{
  const email=(await (await getDb()).query<{email:string}>('SELECT email FROM users WHERE id=$1',[userId])).rows[0]?.email;
  if(!email)throw Error('Fixture member requires an email account');
  await inviteGroupMember(actorId,groupId,email,role);await acceptGroupInvitations(userId,email);

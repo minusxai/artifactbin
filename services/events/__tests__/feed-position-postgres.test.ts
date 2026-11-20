@@ -7,7 +7,8 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Pool } from 'pg';
-import type { EventEnvelope, Queryable } from '@artifactbin/contracts';
+import type { EventEnvelope } from '@artifactbin/contracts/events';
+import type { Queryable } from '@artifactbin/contracts/db';
 import { createEvents, ensureEventsSchema } from '@artifactbin/events/local';
 import { dockerImage, startPostgres, type DisposablePostgres } from '@artifactbin/test-support/docker';
 

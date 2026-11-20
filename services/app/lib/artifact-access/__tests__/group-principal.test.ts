@@ -10,7 +10,7 @@ import {account,dataset,mine,head,readAllPolicy,sql,type Account} from '@/__test
 import {createGroup} from '@/lib/groups';
 import {setArtifactGroupShare,getArtifactFor,changeMembership} from '@/lib/artifacts';
 import {getDb} from '@/lib/platform';
-import {shareRolesAtLeast,type ArtifactRole} from '@artifactbin/contracts';
+import {shareRolesAtLeast, type ArtifactRole} from '@artifactbin/contracts/sharing';
 import type {AccessActor} from '@/lib/accounts';
 import {attestSavedHtmlUpload,uploadGrantContext,effectiveRole,liveAccessFacts,preloadAccessFacts,transactionAccessFacts,readThrough,reactionScope,annotationScope,editorScope,ownerScope,commentMonitorScope,type Scope} from '..';
 useAppHarness();

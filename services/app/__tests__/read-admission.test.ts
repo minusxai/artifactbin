@@ -6,7 +6,7 @@
  * row or for another one. A door that disagrees with its siblings is a row of its own, named.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { BrowserService, RenderResult } from '@artifactbin/contracts';
+import type { BrowserService, RenderResult } from '@artifactbin/contracts/browser';
 import { mintAccountToken, params, request, setSession, testPagesSite, useAppHarness, type RequestOptions } from '@/__tests__/harness';
 import { EXPORT_PNG } from './export-helpers';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';

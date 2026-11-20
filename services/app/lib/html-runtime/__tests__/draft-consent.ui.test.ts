@@ -5,7 +5,7 @@
  * files still answer.
  */
 import {afterEach,expect,it,vi} from 'vitest';
-import {SQL_FAILURES} from '@artifactbin/contracts';
+import {SQL_FAILURES} from '@artifactbin/contracts/sql-failures';
 
 afterEach(()=>{vi.unstubAllGlobals();vi.resetModules();});
 

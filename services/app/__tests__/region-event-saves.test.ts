@@ -7,7 +7,7 @@ import {createHistoricalPage} from './historical-page';
  */
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import * as Y from 'yjs';
-import { REGION_IDLE_SAVE_MS } from '@artifactbin/contracts';
+import { REGION_IDLE_SAVE_MS } from '@artifactbin/contracts/region-sessions';
 import { createUser, identityForUser, type AccessActor } from '@/lib/accounts';
 import { getArtifactById } from '@/lib/artifacts';
 import { editableRegions, openRegionDoc, regionText } from '@/lib/live-regions';

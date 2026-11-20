@@ -6,7 +6,7 @@ import { POST } from '@/app/api/artifacts/[id]/sql/route';
 import * as authentication from '@/lib/authentication';
 import {services,getDb} from '@/lib/platform';
 import {ownerHostSqlRead} from '@/lib/page-doors';
-import {SQL_FAILURES} from '@artifactbin/contracts';
+import {SQL_FAILURES} from '@artifactbin/contracts/sql-failures';
 /** A condition wait's bound (vi.waitFor's own default is 1 s): the condition decides; this only names one that never came. */
 const WAIT_MS = 20_000;
 useAppHarness();

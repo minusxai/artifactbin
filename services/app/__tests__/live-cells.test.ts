@@ -7,7 +7,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setVisibility } from '@/__tests__/artifact-fixtures';
 import * as Y from 'yjs';
-import { BROWSER_SESSION_HEADER, cellKey, type Actor } from '@artifactbin/contracts';
+import { BROWSER_SESSION_HEADER } from '@artifactbin/contracts/browser-sessions';
+import { cellKey } from '@artifactbin/contracts/region-sessions';
+import type { Actor } from '@artifactbin/contracts/actor';
 import { createUser, identityForUser, type AccessActor } from '@/lib/accounts';
 import { getArtifactById } from '@/lib/artifacts';
 import { loadDatasetRows } from '@/lib/datasets';
