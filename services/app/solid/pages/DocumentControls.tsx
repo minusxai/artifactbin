@@ -17,6 +17,7 @@ export default function DocumentControls(props: {
   presence: ReturnType<typeof createReaderPresence>;
   /** The page's answer: its design system, group, app and membership settings, likes and fork origin. */
   answer: {
+    canManageSharing?: boolean;
     surface?: { theme?: string | null; group_id?: string | null; pwaEnabled?: boolean; membershipAvailable?: boolean; author?: { forkedFrom?: { label: string; href: string | null } | null } | null };
     like?: { liked: boolean; count: number };
   };
@@ -40,7 +41,7 @@ export default function DocumentControls(props: {
     <DocumentActions designSystem={{ ...props.design, value: surface()?.theme ?? null }} groupId={surface()?.group_id} pwaEnabled={surface()?.pwaEnabled} membershipAvailable={surface()?.membershipAvailable}
       id={props.id} title={props.title} version={props.version} archived={props.archived}
       onSettings={leave(props.onSettings)} onSocialPreview={leave(props.onSocialPreview)} onRenamed={props.onRenamed}
-      owner={props.owner} canEdit={props.canEdit} canAnnotate={props.canAnnotate} accountSession={props.accountSession}
+      owner={props.owner} canEdit={props.canEdit} canManageSharing={props.answer.canManageSharing} canAnnotate={props.canAnnotate} accountSession={props.accountSession}
       like={props.answer.like ?? { liked: false, count: 0 }} likeUnavailable={props.likeUnavailable} commentsOpen={props.commentsOpen} onCommentsChange={(open) => { props.close(); props.onCommentsChange(open); }}
       openAnnotations={props.openAnnotations} forkedFrom={surface()?.author?.forkedFrom ?? null} hideFork={!props.phone}
       membershipRevision={props.membershipRevision} onMembershipChange={props.onMembershipChange}

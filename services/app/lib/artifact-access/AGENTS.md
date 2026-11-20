@@ -8,9 +8,9 @@ artifact row; lib/artifacts does. Server-only, entered through `index.ts`.
 - Change the rule in both languages in one edit: `access.ts` and `scopes.ts` must give every actor the same role.
 - What a public or unlisted link grants: `linkRoleOf` (the row's `link_role`, viewer when null; nothing on a private
   row), capped at `ANONYMOUS_CEILING` (viewer) for a caller with no account, a guest, or a test user outside its
-  sandbox. It never grants ownership (delete, sharing), never puts a row in a listing (listings read
-  `roleWithoutLink`), and on a dataset it is one input to the dataset's single role: what that role may write is
-  the dataset's own rules, never the link.
+  sandbox. It never grants ownership or sharing (a sharing change asks `sharingScope`), never lists a row
+  (listings read `roleWithoutLink`), and on a dataset is one input to its single
+  role, writing what its rules allow.
 - Lock before deciding. A write that decides access inside its transaction calls `lockAuthorization` first
   (documents, then datasets, each tier by `lockOrder`; SQL locking several rows orders `id COLLATE "C"`), then
   reads every fact through `transactionAccessFacts`, which locks each APP fact it reads (shares, group shares) FOR

@@ -17,7 +17,9 @@
  * door gives; a null save clears the stored policy (read as the read-only template) through lib/document-data
  * `writeDatasetPolicy`.
  *
- * Anyone below editor, and any non-dataset or Postgres-backed id, gets the uniform 404.
+ * Anyone below editor, and any non-dataset or Postgres-backed id, gets the uniform 404; so does a save by an editor
+ * who does not manage the dataset's sharing (lib/artifact-access `sharingScope`: an editor link), whose GET answers
+ * `canSave: false` and whose dry runs still read back.
  */
 import {
   DATASET_ADMIN_ROLES,
@@ -30,11 +32,12 @@ import {
 } from '@artifactbin/contracts';
 import { datasetPermissionsTemplate, readBackDatasetPermissions, validateDatasetPermissions } from '@artifactbin/utils/dataset-permissions';
 import type { AccessActor } from '@/lib/accounts';
-import { commitDatasetPolicy, getArtifactFor, type ArtifactRow } from '@/lib/artifacts';
+import { commitDatasetPolicy, getArtifactFor, getSharingArtifactFor, type ArtifactRow } from '@/lib/artifacts';
 import { storedPolicy, type StoredPolicy } from '@/lib/dataset-permissions';
 import { catalogOf, keepDatasetConfiguration, LEGACY_POLICY_REFUSED, LIVE_QUERY_TABLE, liveConnectionOf, liveQueryRoles, liveRulesProblems, type DatasetTable } from '@/lib/datasets';
 import { writeDatasetPolicy } from '@/lib/document-data';
 import { getDb } from '@/lib/platform';
+import { managesSharing } from '@/lib/artifact-access';
 import { hasuraNames, storedConfiguration } from '@/lib/datasets/graphql-names';
 
 interface PolicyReply { status: number; body: Record<string, unknown> }
@@ -45,9 +48,9 @@ const invalid = (errors: DatasetPermissionsIssue[]): PolicyReply => ({
   body: { error: 'invalid_policy', detail: errors.map((e) => `${e.path}: ${e.message}`).join('; '), errors },
 });
 
-/** A stored dataset the actor edits or owns, with its catalog tables; null for everything else. */
-async function editable(actor: AccessActor, id: string): Promise<{ row: ArtifactRow; tables: DatasetTable[] } | null> {
-  const row = await getArtifactFor(actor, id);
+/** A stored dataset the actor edits or owns (a save: whose sharing it manages), with its catalog tables; null for everything else. */
+async function editable(actor: AccessActor, id: string, read = getArtifactFor): Promise<{ row: ArtifactRow; tables: DatasetTable[] } | null> {
+  const row = await read(actor, id);
   if (!row || row.format !== 'dataset') return null;
   // A live dataset's one rule table (lib/datasets live-rules): who may run the queries pages declare.
   if (liveConnectionOf(row.meta)) return { row, tables: [{ ...LIVE_QUERY_TABLE, columns: [] }] };
@@ -84,6 +87,7 @@ export async function readDatasetPermissions(actor: AccessActor, id: string): Pr
   return ok({
     ...(live ? { live: { connector: live.connector, declaredQueryRoles: reading ? liveQueryRoles(reading.policy) : [], meaning: 'A select entry on public.queries lets that role run the queries pages declare on this live dataset; owner and editors run any SQL.' } } : {}),
     revision: row.policy_revision ?? 0,
+    canSave: await managesSharing(row, actor),
     source: reading?.source ?? 'unreadable',
     report: reading ? [] : [{ code: 'unreadable', message: `${unreadable} Until then nobody below editor can use the data.` }],
     policy: reading?.policy ?? null,
@@ -101,16 +105,17 @@ export async function readDatasetPermissions(actor: AccessActor, id: string): Pr
 /** PUT: validate a v3 policy against the dataset; a dry run answers the read-back, a save needs the current revision. */
 export async function writeDatasetPermissions(actor: AccessActor, id: string, body: Record<string, unknown>): Promise<PolicyReply> {
   const value = body.policy, dryRun = body.dryRun === true;
+  const read = dryRun ? getArtifactFor : getSharingArtifactFor;
   const v3 = !!value && typeof value === 'object' && (value as { version?: unknown }).version === 3;
   if (!v3 && value && typeof value === 'object') {
-    if (!await editable(actor, id)) return NOT_FOUND;
+    if (!await editable(actor, id, read)) return NOT_FOUND;
     return invalid([{ path: 'version', message: LEGACY_POLICY_REFUSED }]);
   }
   if (value === null && !dryRun && Object.hasOwn(body, 'policy')) {
     const response = await writeDatasetPolicy(actor, id, body);
     return { status: response.status, body: (await response.json()) as Record<string, unknown> };
   }
-  const found = await editable(actor, id);
+  const found = await editable(actor, id, read);
   if (!found) return NOT_FOUND;
   const { row, tables } = found;
   if (!v3) return invalid([{ path: Object.hasOwn(body, 'policy') && value && typeof value === 'object' ? 'version' : 'policy', message: 'expected a version 3 policy object; GET the policy for the current rules' }]);

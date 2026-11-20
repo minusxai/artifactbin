@@ -1,4 +1,4 @@
-import { commitDatasetPolicy, type ArtifactRow, getArtifactById, getArtifactFor } from '@/lib/artifacts';
+import { commitDatasetPolicy, type ArtifactRow, getArtifactById, getSharingArtifactFor } from '@/lib/artifacts';
 import type { DatasetPermissions } from '@artifactbin/contracts';
 import { validateDatasetPolicyForRow } from '@/lib/datasets';
 import { datasetWriteAccess, type DatasetWriteOptions } from '@/lib/dataset-permissions';
@@ -13,7 +13,8 @@ export async function setDatasetPolicy(
 ): Promise<
   { revision: number; policy: DatasetPermissions | null } | { conflict: true } | null
 > {
-  const row = await getArtifactFor(actor, id);
+  // A policy says who may use the data: only someone who manages the dataset's sharing sets it (never an editor link).
+  const row = await getSharingArtifactFor(actor, id);
   if (!row || row.format !== 'dataset') return null;
   if (!Number.isSafeInteger(revision) || revision < 0)
     throw new Error('expectedPolicyRevision must be a nonnegative integer');

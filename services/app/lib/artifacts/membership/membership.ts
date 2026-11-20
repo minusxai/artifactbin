@@ -7,7 +7,7 @@ import { readThrough } from '@/lib/artifact-access';
 import { assertAudienceChange } from '@/lib/query-approvals';
 import type { ArtifactMember, MembershipInput, MembershipState, MembershipDirection, MembershipStatus, Queryable } from '@artifactbin/contracts';
 import { PENDING_MEMBERSHIP_LIMIT } from '@artifactbin/contracts';
-import { effectiveRole } from '@/lib/artifact-access';
+import { effectiveRole, managesSharing } from '@/lib/artifact-access';
 import { notifyArtifactSql } from '../table';
 import { type ArtifactRow } from '@/lib/artifact-access';
 import { getArtifactById, getArtifactHeaderById } from '../rows';
@@ -41,7 +41,7 @@ export async function membershipState(actor: AccessActor, id: string): Promise<M
   const db=await getDb();
   const rows=(await db.query<ArtifactMember>(`SELECT ${memberFields} FROM ${JOIN_RELATIONS} m JOIN users u ON u.id=m.user_id WHERE m.artifact_id=$1 AND (m.status='accepted' OR m.user_id=$2 OR ($3 AND m.status='pending')) ORDER BY m.joined_at NULLS LAST,u.username`,[id,actor.userId,canEdit(role)])).rows;
   const mentions=await mentionStatesFor(id,header.version);
-  return {mentions,members:rows.filter(m=>m.status==='accepted'),pending:rows.filter(m=>m.status==='pending'),self:rows.find(m=>m.user_id===actor.userId)??null,canManage:canEdit(role),canInvite:!!actor.userId&&canAnnotate(role)};
+  return {mentions,members:rows.filter(m=>m.status==='accepted'),pending:rows.filter(m=>m.status==='pending'),self:rows.find(m=>m.user_id===actor.userId)??null,canManage:canEdit(role),canInvite:!!actor.userId&&canAnnotate(role),canShare:canEdit(role)&&await managesSharing(header,actor)};
 }
 async function blocked(tx: Queryable, a: string, b: string): Promise<boolean> {
   return !!(await tx.query('SELECT 1 FROM user_blocks WHERE (user_id=$1 AND blocked_user_id=$2) OR (user_id=$2 AND blocked_user_id=$1)',[a,b])).rows.length;
@@ -67,7 +67,8 @@ interface StoredMember {status:MembershipStatus;direction:MembershipDirection;in
 export async function changeMembership(actor: AccessActor, id: string, input: MembershipInput): Promise<MembershipState> {
   const {artifact,role}=await opened(actor,id), userId=await account(actor,artifact), db=await getDb();
   if(!['join','invite','accept','approve','dismiss','leave'].includes(input.action))fail('Unknown membership action',400);
-  if(input.includeAccess&&(input.action!=='invite'||!canEdit(role)))fail('Only owners and editors can include access with an invitation');
+  // Including access writes a share: only someone who manages the artifact's sharing, never an editor link (lib/artifact-access `managesSharing`).
+  if(input.includeAccess&&(input.action!=='invite'||!canEdit(role)||!await managesSharing(artifact,actor)))fail('Only owners and editors can include access with an invitation');
   const targets: string[]=[];
   if(input.action==='invite') {
     if(!canAnnotate(role))fail('Comment or edit access is required to invite people');

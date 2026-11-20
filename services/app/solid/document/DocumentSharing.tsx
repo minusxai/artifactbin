@@ -48,6 +48,8 @@ interface SharingState {
   /** A dataset's writes: who may change it through a document. */
   access?: DatasetAccess;
   writtenBy?: Array<{ id: string; title: string | null; mutations: string[] }>;
+  /** False for an editor by link alone, who may read this and change none of it. */
+  canManageSharing?: boolean;
 }
 // Module-level, so the groups' option objects keep their identity across the refetches a change causes (ToggleGroup keys by it, and a rebuilt row would drop focus).
 const VISIBILITY_OPTIONS = (['public', 'unlisted', 'private'] as const).map(value => ({
@@ -75,7 +77,7 @@ export function DocumentSharing(props: {
   /** A page: its queries on live data an Admin of its group may approve (./QueryApprovals, asked for and drawn only when the sharing answer says the viewer is one). */
   queryApprovals?: boolean;
 }): JSX.Element {
-  const canManage = () => props.owner || Boolean(props.editable);
+  const canManage = () => (props.owner || Boolean(props.editable)) && state()?.canManageSharing !== false;
   const [open, setOpen] = createSignal(props.variant === 'dialog');
   const [state, setState] = createSignal<SharingState | null>(null);
   const canPrivate = createMemo(() => state()?.canPrivate !== false);

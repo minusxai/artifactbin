@@ -9,9 +9,9 @@
 export type { ArtifactRow, Scope } from './scopes';
 export {
   LIVE_ARTIFACT_SQL, SHARE_PREDICATE, annotationScope, commentMonitorScope, editorScope, groupMemberPredicate, ownerPredicate, ownerScope,
-  policyReaderSql, reactionScope, writerFor,
+  policyReaderSql, reactionScope, sharingScope, writerFor,
 } from './scopes';
-export { documentEditorReaches, effectiveRole, holdsCreatingToken, linkRoleOf, ownsArtifact, reachesAsAccount, roleWithoutLink } from './access';
+export { documentEditorReaches, effectiveRole, holdsCreatingToken, linkRoleOf, managesSharing, ownsArtifact, reachesAsAccount, roleWithoutLink } from './access';
 export { liveAccessFacts, memoAccessFacts, preloadAccessFacts, requestAccessFacts, transactionAccessFacts } from './access-facts';
 export type { AccessFacts } from './access-facts';
 export { lockAuthorization, lockOrder } from './locks';

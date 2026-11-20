@@ -155,3 +155,12 @@ it('explains a stored policy that cannot be read and saves a version 3 policy ov
   await waitFor(() => expect(api.saves()).toHaveLength(1));
   expect(api.saves()[0]!.body).toMatchObject({ expectedPolicyRevision: 2, policy: { version: 3, tables: [{ table: ROWS }] } });
 });
+
+it('never offers an editor by link alone a save, which the server would refuse', async () => {
+  const reason = 'The stored dataset policy is version 2: only version 3 is read.';
+  const api = serve({ get: () => loaded({ canSave: false, source: 'unreadable', revision: 2, policy: null, report: [{ code: 'unreadable', message: reason }], readBackTables: [] }) });
+  render(() => <DatasetPolicies artifactId="ds123" expanded />);
+  expect(await screen.findByText(/The stored rules could not be read/)).toHaveTextContent(reason);
+  expect(screen.getByRole('button', { name: 'Save access policies' })).toBeDisabled();
+  expect(api.saves()).toHaveLength(0);
+});

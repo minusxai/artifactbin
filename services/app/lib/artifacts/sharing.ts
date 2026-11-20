@@ -1,5 +1,5 @@
 import {groupQuota,mailGroupChanges,recordGroupMutation,GroupError,getGroupRole,subtreeMemberIds} from '../groups';
-import { ownerScope,editorScope, type ArtifactRow } from '@/lib/artifact-access';
+import { managesSharing, ownerScope, sharingScope, type ArtifactRow } from '@/lib/artifact-access';
 import { notifyArtifactSql } from './table';
 import type { AccessActor } from '@/lib/accounts';
 import { getArtifactFor } from './rows';
@@ -27,10 +27,13 @@ export interface SharingState {
   canPrivate?: boolean;
   /** A page owned by a group the viewer is an Admin of: only then may they approve its queries (lib/query-approvals), and the dialog asks for them. */
   canApproveQueries?: boolean;
+  /** The viewer may change all of this (lib/artifact-access `managesSharing`): false for an editor by link alone, who reads it only. */
+  canManageSharing: boolean;
 }
 
 /**
- * Editor-access read of an artifact's ACL. Null = unknown/foreign (uniform 404).
+ * Editor-access read of an artifact's ACL. Null = unknown/foreign (uniform 404). Changing it takes more than edit
+ * access (`updateSharingFor`): `canManageSharing` says whether this viewer has it.
  *
  * Scoped by ACTOR, not by account: an ANONYMOUS owner has an ACL to manage
  * too, now that `access` lives here — writes anchor on the creating token, not
@@ -52,6 +55,7 @@ export async function getSharingFor(actor: AccessActor, id: string): Promise<Sha
     shares: shares.rows,
     groupShares:(await db.query<GroupShare>("SELECT jsonb_build_object('id',g.id,'handle',g.handle,'name',g.name,'description',g.description,'role',m.role) AS group,s.role FROM artifact_group_shares s JOIN groups g ON g.id=s.group_id LEFT JOIN group_members m ON m.group_id=g.id AND m.user_id=$2 WHERE s.artifact_id=$1 AND g.deleted_at IS NULL ORDER BY g.handle",[id,actor.userId])).rows,
     canPrivate: !!(row.user_id||row.group_id),
+    canManageSharing: await managesSharing(row, actor),
     canApproveQueries: row.format==='html'&&!!row.group_id&&!!actor.userId&&!actor.principalGroup
       &&(await db.query('SELECT 1 FROM group_admins WHERE group_id=$1 AND user_id=$2',[row.group_id,actor.userId])).rows.length>0,
     ...(row.format === 'dataset'
@@ -61,14 +65,16 @@ export async function getSharingFor(actor: AccessActor, id: string): Promise<Sha
 }
 
 /**
- * Editor-access update of an artifact's ACL. `shares` is FULL-REPLACE (the UI
+ * Update of an artifact's ACL by someone who manages its sharing (lib/artifact-access `sharingScope`: the owner, a
+ * named or group editor; never an editor link, which could otherwise name its holder an editor for good, and never
+ * the host's document-editor grant); anyone else gets null, the uniform 404. `shares` is FULL-REPLACE (the UI
  * always sends the whole list — idempotent, no add/remove protocol). Emails
  * are normalized to lowercase and collapsed — the LAST role given for an
  * address wins; the route validates shape and role names upstream.
  */
 export async function updateSharingFor(actor: AccessActor, id: string, patch: SharingPatch): Promise<SharingState | null> {
   const db = await getDb();
-  const scope = editorScope(actor);
+  const scope = sharingScope(actor);
   const done = await db.transaction(async (tx) => {
     const owned = await artifactQuery<ArtifactRow>(tx,`SELECT * FROM artifacts WHERE id = $1 AND ${scope.where('$2')} FOR UPDATE`, [id, scope.val]);
     if (owned.rows.length === 0) return false;
@@ -102,6 +108,7 @@ export async function updateSharingFor(actor: AccessActor, id: string, patch: Sh
       linkRole: patch.linkRole ?? row.link_role ?? 'viewer',
       shares: shares.rows,
       canPrivate: !!(row.user_id||row.group_id),
+      canManageSharing: true,
       ...(row.format === 'dataset' ? {access:patch.access ?? row.access} : {}),
     } satisfies SharingState;
   });

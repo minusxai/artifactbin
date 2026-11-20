@@ -7,7 +7,7 @@ import type { AccessActor } from '@/lib/accounts';
 import { getDb } from '../platform';
 import { artifactQuery, loadArtifactDocument } from './document';
 import { servableDocument } from './servable';
-import { LIVE_ARTIFACT_SQL, editorScope, ownerScope, type ArtifactRow, type Scope } from '@/lib/artifact-access';
+import { LIVE_ARTIFACT_SQL, editorScope, ownerScope, sharingScope, type ArtifactRow, type Scope } from '@/lib/artifact-access';
 
 /** A row without its content: every column but the two that carry it, `document` and `source`. */
 export type ArtifactHeader = Omit<ArtifactRow, 'document' | 'source'>;
@@ -153,6 +153,11 @@ export async function getLinkReadableArtifact(id: string): Promise<ArtifactRow |
 /** The actor's REACH: what they own, and what they are named editor on. */
 export function getArtifactFor(actor: AccessActor, id: string): Promise<ArtifactRow | null> {
   return getArtifactScoped(editorScope(actor), id);
+}
+
+/** What the actor may change the sharing of (lib/artifact-access `sharingScope`): the read behind every policy write. */
+export function getSharingArtifactFor(actor: AccessActor, id: string): Promise<ArtifactRow | null> {
+  return getArtifactScoped(sharingScope(actor), id);
 }
 
 /** What the actor OWNS — the read behind every owner-only surface (sharing, metadata, delete). */

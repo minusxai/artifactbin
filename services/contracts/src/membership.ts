@@ -30,6 +30,8 @@ export interface MembershipState {
   self: ArtifactMember | null;
   canManage: boolean;
   canInvite: boolean;
+  /** The viewer may include viewing access with an invitation: they manage the artifact's sharing (never by an editor link alone). */
+  canShare: boolean;
 }
 
 export const MEMBER_COLUMNS:DatasetColumn[]=[{name:'user_id',type:'user'},{name:'joined_at',type:'timestamp'}];

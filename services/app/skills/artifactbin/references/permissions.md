@@ -8,7 +8,8 @@ Every dataset has one permission document in Hasura's metadata format (version 3
 can see, add, change and delete rows, through every door: the page's `sql` reads and writes,
 `sql.mjs`, downloads and exports. It is the only check on a write: no code of yours runs on the
 server. Read it, change it and save it only with `node scripts/policy.mjs` (`--help`). Only the
-dataset's owner and editors can.
+dataset's owner and editors can, and only those who manage its sharing save it: an editor by link
+alone reads it and dry-runs it, and its save answers not found.
 
 ## Contents
 

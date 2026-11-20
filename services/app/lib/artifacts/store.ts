@@ -11,7 +11,7 @@ import {assertOwnerPlacement,assertDestination,newArtifactDestination} from './o
 import { identityForUser, type AccessActor } from '@/lib/accounts';
 import { groupAdminSql } from '@/lib/groups';
 import type {ArtifactDestination} from '@artifactbin/contracts';
-import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, groupMemberPredicate, editorScope, lockOrder, ownerPredicate, ownerScope, writerFor, type ArtifactRow, type Scope } from '@/lib/artifact-access';
+import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, groupMemberPredicate, editorScope, lockOrder, ownerPredicate, ownerScope, sharingScope, writerFor, type ArtifactRow, type Scope } from '@/lib/artifact-access';
 import { headBumpSql } from './table';
 import type { DatasetPermissions, DocumentGraph } from '@artifactbin/contracts';
 import { artifactChannel } from '@artifactbin/contracts';
@@ -376,9 +376,8 @@ const groupStamp = (actor: AccessActor): string | null => actor.principalGroup?.
 /** Full-replace of the share list. A change moves the sharing revision to `base`+1 — the head this write observed — so
  * one write moves it once however many access settings it changes. */
 export async function writeShares(tx:Queryable,id:string,shares:ShareEntry[],base:number):Promise<{shares:ShareEntry[];sharing_revision:number}>{
- const normalized=[...new Map(shares.map(entry=>[entry.email.trim().toLowerCase(),entry.role])).entries()].sort(([a],[b])=>a.localeCompare(b)).map(([email,role])=>({email,role}));
- const current=(await tx.query<ShareEntry>('SELECT email,role FROM artifact_shares WHERE artifact_id=$1 ORDER BY email',[id])).rows;
- if(JSON.stringify(current)!==JSON.stringify(normalized)){
+ const normalized=normalizeShares(shares);
+ if(await sharesChange(tx,id,normalized)){
   // Retained invitations keep their resolved account identity, even after an
   // email change. Recreating them would transfer access to a reused address.
   await tx.query('DELETE FROM artifact_shares WHERE artifact_id=$1 AND NOT (email=ANY($2::text[]))',[id,normalized.map(entry=>entry.email)]);
@@ -387,6 +386,32 @@ export async function writeShares(tx:Queryable,id:string,shares:ShareEntry[],bas
  }
  const row=(await tx.query<{sharing_revision:number}>('SELECT sharing_revision FROM artifacts WHERE id=$1',[id])).rows[0];
  return {shares:normalized,sharing_revision:row.sharing_revision};
+}
+
+/** Emails lowercased and collapsed (the LAST role given for an address wins), sorted by email. */
+const normalizeShares=(shares:ShareEntry[]):ShareEntry[]=>[...new Map(shares.map(entry=>[entry.email.trim().toLowerCase(),entry.role])).entries()].sort(([a],[b])=>a.localeCompare(b)).map(([email,role])=>({email,role}));
+const sharesChange=async(tx:Queryable,id:string,normalized:ShareEntry[]):Promise<boolean>=>
+ JSON.stringify((await tx.query<ShareEntry>('SELECT email,role FROM artifact_shares WHERE artifact_id=$1 ORDER BY email',[id])).rows)!==JSON.stringify(normalized);
+
+/** The access settings a write asks for: who reaches the row (lib/artifact-access `sharingScope`). */
+interface SharingChange { visibility?: Visibility; link_role?: ShareRole; access?: DatasetAccess; shares?: ShareEntry[]; policy?: unknown }
+
+/**
+ * May this write make its access changes: yes when none of them changes the locked head `current` (a save that
+ * carries the current visibility or link role back changes nothing, so an editor link's ordinary save goes on),
+ * otherwise only for an actor who manages sharing (lib/artifact-access `sharingScope`: never by the link, never by
+ * the host's document-editor grant). Asked inside the write's transaction, right after its row lock, so a refusal is
+ * the same uniform miss a stranger gets before any conflict or named refusal.
+ */
+async function maySetSharing(tx: Queryable, actor: AccessActor, current: ArtifactRow, change: SharingChange): Promise<boolean> {
+  const changed = (change.visibility !== undefined && change.visibility !== current.visibility)
+    || (change.link_role !== undefined && change.link_role !== (current.link_role ?? 'viewer'))
+    || (change.access !== undefined && change.access !== current.access)
+    || (change.policy !== undefined && !isDeepStrictEqual(change.policy, current.dataset_policy ?? null))
+    || (change.shares !== undefined && await sharesChange(tx, current.id, normalizeShares(change.shares)));
+  if (!changed) return true;
+  const scope = sharingScope(actor);
+  return (await tx.query('SELECT 1 FROM artifacts WHERE id=$1 AND ' + scope.where('$2'), [current.id, scope.val])).rows.length > 0;
 }
 
 /**
@@ -720,6 +745,7 @@ async function replaceArtifactInTx(
   let write = await lockArtifactWrite(tx, actor, id);
   if (!write) return null;
   let { current } = write;
+  if (!await maySetSharing(tx, actor, current, { visibility: input.visibility, link_role: input.link_role, access: input.access, shares: opts.shares })) return null;
   /*
    * A GOVERNED DATASET IS THE OWNER'S TO REPUBLISH — AND NOBODY ELSE'S.
    *
@@ -982,6 +1008,7 @@ export async function setMetadataFor(actor: AccessActor, id: string, patch: Meta
     const current = (await artifactQuery<ArtifactRow>(tx,`SELECT * FROM artifacts WHERE id=$1 AND ${scope.where('$2')} FOR UPDATE`, [id,scope.val])).rows[0];
     if (!current) return null;
     if(current.format==='markup')return null;
+    if(!await maySetSharing(tx,actor,current,patch))return null;
     if(patch.ancestor_ids)await assertOwnerPlacement(tx,writerFor(current),patch.ancestor_ids);
     const changed = observedChange(current, opts);
     if (changed) return conflictOf(current, changed);

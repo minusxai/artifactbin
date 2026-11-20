@@ -35,6 +35,8 @@ interface DocumentActionsProps {
   pwaEnabled?: boolean; membershipAvailable?: boolean;
   id: string; title: string; version: number; archived?: boolean;
   owner: boolean; canEdit: boolean; canAnnotate: boolean; accountSession: boolean;
+  /** An editor who may also change who reaches it (the page answer's `canManageSharing`): never an editor by link alone. */
+  canManageSharing?: boolean;
   like: { liked: boolean; count: number }; onCommentsChange: (open: boolean) => void;
   likeUnavailable?: boolean;
   commentsOpen?: boolean; openAnnotations?: number;
@@ -83,7 +85,7 @@ export function DocumentActions(props: DocumentActionsProps): JSX.Element {
       <DocumentSharing id={props.id} title={props.title} owner variant="menu" onOpen={props.onShare} />
       <Show when={props.onDeleted}><DeleteAction id={props.id} title={props.title} onDeleted={props.onDeleted!} /></Show>
     </section></Show>
-    <Show when={!activeOwner() && activeEditor()}><DocumentSharing id={props.id} title={props.title} owner={false} editable variant="menu" onOpen={props.onShare} /></Show>
+    <Show when={!activeOwner() && activeEditor() && props.canManageSharing}><DocumentSharing id={props.id} title={props.title} owner={false} editable variant="menu" onOpen={props.onShare} /></Show>
     <Show when={transferring()}><Suspense><TransferOwnershipDialog id={props.id} title={props.title} currentGroupId={props.groupId} onClose={()=>setTransferring(false)} onTransferred={()=>window.location.assign(`/a/${encodeURIComponent(props.id)}`)}/></Suspense></Show>
   </div>;
 }
