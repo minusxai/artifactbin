@@ -9,7 +9,7 @@
  *
  * The measuring is here; the geometry is in the pure module.
  */
-import { anchorAt, scrollTargetFor, type AnchorCandidate, type ScrollAnchor } from '@/lib/html-reader/scroll-anchor';
+import { anchorAt, type AnchorCandidate, type ScrollAnchor } from '@/lib/html-reader/scroll-anchor';
 import { AST_PATH_ATTR } from '@/lib/html-reader/ast-path';
 
 /** Every element the document can be anchored to, in page coordinates. */
@@ -33,17 +33,4 @@ export function currentAnchor(win: Window): ScrollAnchor | null {
   return anchorAt(documentCandidates(win.document), win.scrollY, win.innerHeight);
 }
 
-/**
- * Put the reader back, and say WHERE that was — the caller compares it with
- * where the document actually ended up, because a document that is still
- * laying out clamps the scroll it is given. Null when this document has no
- * such element any more, which means leaving the position alone rather than
- * jumping somewhere arbitrary.
- */
-export function applyAnchor(win: Window, anchor: ScrollAnchor): number | null {
-  const target = scrollTargetFor(documentCandidates(win.document), anchor);
-  if (target === null) return null;
-  win.scrollTo({ top: target });
-  return target;
-}
 

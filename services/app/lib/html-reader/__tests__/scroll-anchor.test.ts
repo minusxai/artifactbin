@@ -6,7 +6,7 @@
  * indistinguishable from the scroll loss it replaced.
  */
 import { describe, expect, it } from 'vitest';
-import { anchorAt, scrollTargetFor, type AnchorCandidate } from '../scroll-anchor';
+import { anchorAt, type AnchorCandidate } from '../scroll-anchor';
 
 /** A document: a wrapper holding three paragraphs, as the interpreter stamps it. */
 const DOC: AnchorCandidate[] = [
@@ -84,37 +84,3 @@ describe('anchorAt', () => {
   });
 });
 
-describe('scrollTargetFor', () => {
-  it('puts the same place back at the top of the OTHER rendering', () => {
-    // The same document, wrapped narrower: every box is taller and lower down.
-    const canvas: AnchorCandidate[] = [
-      { path: '0', top: 0, height: 1800 },
-      { path: '0.0', top: 0, height: 200 },
-      { path: '0.1', top: 200, height: 800 },
-      { path: '0.2', top: 1000, height: 800 },
-    ];
-    expect(scrollTargetFor(canvas, { path: '0.1', fraction: 0.25 })).toBe(400);
-  });
-
-  it('is the inverse of anchorAt within one rendering', () => {
-    for (const y of [0, 137, 500, 899]) {
-      const back = scrollTargetFor(DOC, anchorAt(DOC, y)!);
-      expect(Math.round(back!)).toBe(y);
-    }
-  });
-
-  it('returns null when the document no longer has that element', () => {
-    expect(scrollTargetFor(DOC, { path: '0.9', fraction: 0 })).toBeNull();
-  });
-
-  it('never asks for a negative offset', () => {
-    const odd: AnchorCandidate[] = [{ path: '0.0', top: -50, height: 10 }];
-    expect(scrollTargetFor(odd, { path: '0.0', fraction: 0 })).toBe(0);
-  });
-
-  it('clamps a fraction that arrived out of range', () => {
-    expect(scrollTargetFor(DOC, { path: '0.1', fraction: 5 })).toBe(500);
-    expect(scrollTargetFor(DOC, { path: '0.1', fraction: -1 })).toBe(100);
-    expect(scrollTargetFor(DOC, { path: '0.1', fraction: Number.NaN })).toBe(100);
-  });
-});

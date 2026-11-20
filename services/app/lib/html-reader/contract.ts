@@ -33,11 +33,6 @@ export function withReaderMode(search: string, mode: 'light' | 'dark' | null): s
   return kept.length ? `?${kept.join('&')}` : '';
 }
 
-/** The pick a URL's search carries, if any. */
-export function readerModeOf(search: string): 'light' | 'dark' | null {
-  const value = new URLSearchParams(search).get(READER_MODE_PARAM);
-  return value === 'light' || value === 'dark' ? value : null;
-}
 /**
  * The app page → a document framed on its own origin (APP__PAGES_HOST): the address's `#hash`, so a
  * link to a heading scrolls the frame. `{ type, hash }`, hash `#…`; the frame takes it from its parent only.
