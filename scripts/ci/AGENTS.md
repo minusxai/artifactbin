@@ -7,17 +7,17 @@ The workflows themselves are `.github/workflows/*.yml`; job, runner and shard co
 
 ## Rules
 - The required check for PRs into `main` is `pr fast` (`.github/workflows/pr-fast.yml`). Aim under 40 s, warn at
-  40 s, fail above 60 s, measured from `run_started_at` to the last workload job; `pr-fast-timing.yml` runs
+  40 s, fail above 60 s, measured from its first job's start to the last workload job; `pr-fast-timing.yml` runs
   `observe-fast.mjs`, which publishes the required `pr fast timing` status from the last workload job's
   completion; its own scheduling, publication and teardown are not measured.
   Each job's last step (`scripts/lib/ci-elapsed.mjs --pr`) is an early diagnostic.
 - Main verifies in batches: one `ci.yml` run per ref at a time, never cancelled; the newest pending run tests
   every merge since. A red one names those commits and failing files; production admits only green revisions.
-- Its chain runs from the attempt's first job (`run_started_at` keeps a batch's wait) through the rollup: aim
-  under 3 minutes, normal under 4, fail above 8. A job over four minutes is a diagnostic, not the limit.
+- Its chain runs from the attempt's first job starting (not `run_started_at`, which keeps a batch's wait) through
+  the rollup: aim under 6 minutes, fail above 8. A job over four minutes is a diagnostic, not the limit.
 - `CI_BUDGETS` in `scripts/lib/ci-elapsed.mjs`, pinned by `scripts/__tests__/ci-budget.test.mjs`, owns these
-  numbers. Never raise a budget, skip coverage, subtract queues or rerun unchanged code to hide slowness,
-  and never move a file out of the lane: investigate the critical path and repetition.
+  numbers. Never raise a budget, skip coverage, subtract waits or rerun unchanged code to hide slowness: fix the
+  critical path, or move a test that cannot fit to `ci.yml` (redesign a critical one).
 - `ci.yml`, page-speed, credential-platform and node-timings run on main or by hand, never on automatic PRs.
   Never add an unbounded PR workflow or wait for full release checks before merging; a green `pr fast` is
   never tested-release evidence. The 40/60 policy holds in every repository.

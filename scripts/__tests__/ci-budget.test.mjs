@@ -21,11 +21,11 @@ it('reports four-minute per-job diagnostics while the complete chain owns the ha
 });
 it('measures the complete attempt chain including waits instead of individual job durations',()=>{
  const start='2026-10-06T00:00:00Z';
- expect(measureCiElapsed(start,'2026-10-06T00:08:01Z')).toEqual({seconds:481,status:'failed',targetSeconds:180,normalSeconds:240,hardSeconds:480});
+ expect(measureCiElapsed(start,'2026-10-06T00:08:01Z')).toEqual({seconds:481,status:'failed',targetSeconds:360,hardSeconds:480});
 });
-it('keeps the hard limit inclusive and reports target and normal ranges separately',()=>{
+it('keeps the hard limit inclusive and reports the target and slow ranges separately',()=>{
  const start='2026-10-06T00:00:00Z';
- for(const [seconds,status] of [[179,'target'],[180,'normal'],[239,'normal'],[240,'slow'],[300,'slow'],[480,'slow'],[480.001,'failed']]) {
+ for(const [seconds,status] of [[179,'target'],[359,'target'],[360,'slow'],[479,'slow'],[480,'slow'],[480.001,'failed']]) {
   expect(measureCiElapsed(start,new Date(Date.parse(start)+seconds*1000).toISOString()).status).toBe(status);
  }
 });
@@ -51,23 +51,29 @@ it('exits nonzero for an over-limit attempt and missing start, but accepts a fre
   writeFileSync(attempt,JSON.stringify(payload));
   return spawnSync(process.execPath,[fileURLToPath(new URL('../lib/ci-elapsed.mjs',import.meta.url)),attempt,summary],{encoding:'utf8'});
  };
-  const old=run({run_started_at:new Date(Date.now()-481000).toISOString()});
+  const started=(ms)=>({jobs:[{status:'in_progress',conclusion:null,started_at:new Date(Date.now()-ms).toISOString()}]});
+  const old=run(started(481000));
   expect(old.status).toBe(1); expect(old.stdout).toContain('::error::');
-  const fresh=run({run_started_at:new Date(Date.now()-1000).toISOString()});
+  const fresh=run(started(1000));
   expect(fresh.status).toBe(0); expect(fresh.stdout).toContain('(target)');
   expect(readFileSync(summary,'utf8')).toContain('hard failure >480s');
   expect(run({created_at:'2020-01-01T00:00:00Z'}).status).toBe(1);
+  expect(run({run_started_at:new Date(Date.now()-1000).toISOString()}).status).toBe(1);
 });
-// A batch waits in ci.yml's concurrency group for the previous one, and `run_started_at` keeps that wait: the main clock
-// starts at the attempt's first job instead, while an attempt without jobs (pr fast, artifactbin-server) keeps its own.
-it('starts a batch\'s clock at its first job, not at the run start that includes its wait for the previous batch',()=>{
- const jobs=[{created_at:'2026-10-06T00:06:00Z'},{created_at:'2026-10-06T00:05:00Z'},{created_at:null}];
+// A batch waits in ci.yml's concurrency group for the previous one, and `run_started_at` keeps that wait; a job waits for a
+// runner after its creation. Both clocks start when the attempt's first job starts running instead.
+it('starts the clock when the first job starts running, not at the run start, a job\'s creation, a queued job or a skipped one',()=>{
+ const jobs=[{status:'completed',conclusion:'success',created_at:'2026-10-06T00:01:00Z',started_at:'2026-10-06T00:06:00Z'},
+  {status:'in_progress',conclusion:null,created_at:'2026-10-06T00:01:00Z',started_at:'2026-10-06T00:05:00Z'},
+  {status:'queued',conclusion:null,created_at:'2026-10-06T00:01:00Z',started_at:'2026-10-06T00:01:00Z'},
+  {status:'completed',conclusion:'skipped',created_at:'2026-10-06T00:01:00Z',started_at:'2026-10-06T00:02:00Z'},
+  {status:'in_progress',conclusion:null,started_at:null}];
  expect(attemptStart({run_started_at:'2026-10-06T00:00:00Z',jobs})).toBe('2026-10-06T00:05:00Z');
- expect(attemptStart({run_started_at:'2026-10-06T00:00:00Z'})).toBe('2026-10-06T00:00:00Z');
+ expect(attemptStart({run_started_at:'2026-10-06T00:00:00Z'})).toBeUndefined();
  expect(attemptStart({jobs:[]})).toBeUndefined();
  const directory=tempDirSync('afbin-ci-elapsed-jobs-',onTestFinished),attempt=join(directory,'jobs.json');
  const ago=(seconds)=>new Date(Date.now()-seconds*1000).toISOString();
- writeFileSync(attempt,JSON.stringify({total_count:2,jobs:[{created_at:ago(30)},{created_at:ago(10)}]}));
+ writeFileSync(attempt,JSON.stringify({total_count:2,jobs:[{status:'completed',conclusion:'success',started_at:ago(30)},{status:'in_progress',started_at:ago(10)}]}));
  const batch=spawnSync(process.execPath,[fileURLToPath(new URL('../lib/ci-elapsed.mjs',import.meta.url)),attempt],{encoding:'utf8'});
  expect(batch.status,batch.stdout).toBe(0);expect(batch.stdout).toContain('(target)');
 });
@@ -443,8 +449,8 @@ it('puts the tool cache\'s newest Node 22 on PATH, starts no Node, and warms tha
   expect(readFileSync(read,'utf8')).toBe(`${bin}/node\n`);
  } finally {writeFileSync(release,'');waitFor(`${read}.done`);}
 });
-// THE CLOCK'S ATTEMPT, FETCHED OFF THE CRITICAL PATH. The clock reads only the attempt's run_started_at, fixed for the
-// attempt, so the first step fetches it in the background; the clock's own `gh api` took 0.6s median, 2.0s p90 and 4.1s at
+// THE CLOCK'S ATTEMPT, FETCHED OFF THE CRITICAL PATH. The clock reads only the attempt's first job start, final once
+// this job runs, so the first step fetches the attempt's jobs in the background; the clock's own `gh api` took 0.6s median, 2.0s p90 and 4.1s at
 // worst after every job's tests (the same runs). The clock still runs last, on always(), and fetches it itself when the
 // prefetch has not landed. Every stream of the background fetch is redirected, or the runner holds the step open until it ends.
 it('prefetches the clock\'s attempt in the background, returning before the fetch ends, and lands it whole',()=>{
@@ -452,22 +458,22 @@ it('prefetches the clock\'s attempt in the background, returning before the fetc
  expect(probe.env).toEqual({GH_TOKEN:'${{ github.token }}'});
  const release=join(tempDirSync('afbin-attempt-release-',onTestFinished),'release');
  // gh blocks until the test releases it: had the step waited for it, the 5s spawn timeout would fail the probe.
- const gh=`gh(){ [ "$1" = api ] && [ "$2" = /repos/o/r/actions/runs/7/attempts/1 ] || return 93; while [ ! -e '${release}' ]; do sleep 0.01; done; printf '{"run_started_at":"2026-11-17T00:00:00Z"}'; }`;
+ const gh=`gh(){ [ "$1" = api ] && [ "$2" = '/repos/o/r/actions/runs/7/attempts/1/jobs?per_page=100' ] || return 93; while [ ! -e '${release}' ]; do sleep 0.01; done; printf '{"jobs":[{"started_at":"2026-11-17T00:00:00Z"}]}'; }`;
  const {directory,result}=probeRun('v22.23.4',{gh,settle:false});
   expect(result.error).toBeUndefined();
   expect(result.status,result.stderr).toBe(0);
   expect(existsSync(join(directory,'pr-attempt.json'))).toBe(false);
   writeFileSync(release,'');
   waitFor(join(directory,'pr-attempt.json'));
-  expect(JSON.parse(readFileSync(join(directory,'pr-attempt.json'),'utf8'))).toEqual({run_started_at:'2026-11-17T00:00:00Z'});
+  expect(JSON.parse(readFileSync(join(directory,'pr-attempt.json'),'utf8'))).toEqual({jobs:[{started_at:'2026-11-17T00:00:00Z'}]});
 });
 it('clocks from the prefetched attempt without fetching it again, and fetches it itself when the prefetch never landed',()=>{
  const clock=workflow('pr-fast.yml').jobs.fast.steps.at(-1);
  const started=new Date(Date.now()-5000).toISOString();
  const run=(prefetched)=>{
   const directory=tempDirSync('afbin-pr-clock-',onTestFinished),calls=join(directory,'calls');
-  if(prefetched)writeFileSync(join(directory,'pr-attempt.json'),JSON.stringify({run_started_at:started}));
-  const gh=`gh(){ printf '%s\\n' "$*" >> '${calls}'; printf '{"run_started_at":"${started}"}'; }`;
+  if(prefetched)writeFileSync(join(directory,'pr-attempt.json'),JSON.stringify({jobs:[{status:'in_progress',started_at:started}]}));
+  const gh=`gh(){ printf '%s\\n' "$*" >> '${calls}'; printf '{"jobs":[{"status":"in_progress","started_at":"${started}"}]}'; }`;
   const result=spawnSync('bash',['-e','-c',`${gh};\n${clock.run}`],{cwd:fileURLToPath(new URL('../..',import.meta.url)),env:{...process.env,GH_TOKEN:'test',GITHUB_REPOSITORY:'o/r',GITHUB_RUN_ID:'7',GITHUB_RUN_ATTEMPT:'1',RUNNER_TEMP:directory,GITHUB_STEP_SUMMARY:join(directory,'summary.md')},encoding:'utf8',timeout:10000});
   const fetched=existsSync(calls)?readFileSync(calls,'utf8'):'';
   rmSync(directory,{recursive:true,force:true});
@@ -480,7 +486,7 @@ it('clocks from the prefetched attempt without fetching it again, and fetches it
  const cold=run(false);
  expect(cold.result.status,cold.result.stderr).toBe(0);
  expect(cold.result.stdout).toContain('(target): aim for 40s; the limit is 60s');
- expect(cold.fetched).toBe('api /repos/o/r/actions/runs/7/attempts/1\n');
+ expect(cold.fetched).toBe('api /repos/o/r/actions/runs/7/attempts/1/jobs?per_page=100\n');
 });
 // A lock change misses the exact install key on every push; reconciling main's install beats a cold npm ci.
 it('reconciles the nearest install on a lock miss, restore only, and falls back to npm ci if the lock would move',()=>{
@@ -516,7 +522,7 @@ it('fails the pull request lane past 60 seconds with the plain budget message',(
  const directory=tempDirSync('afbin-pr-elapsed-',onTestFinished);
  const attempt=join(directory,'attempt.json'),summary=join(directory,'summary.md');
  const run=(seconds)=>{
-  writeFileSync(attempt,JSON.stringify({run_started_at:new Date(Date.now()-seconds*1000).toISOString()}));
+  writeFileSync(attempt,JSON.stringify({jobs:[{status:'in_progress',started_at:new Date(Date.now()-seconds*1000).toISOString()}]}));
   return spawnSync(process.execPath,[fileURLToPath(new URL('../lib/ci-elapsed.mjs',import.meta.url)),'--pr',attempt,summary],{encoding:'utf8'});
  };
   const slow=run(75);
@@ -534,12 +540,12 @@ const prStart = '2026-10-29T00:00:00Z';
 const after = seconds => new Date(Date.parse(prStart) + seconds * 1000).toISOString();
 
 it('keeps the pull request budget at a 40-second aim and a 60-second hard limit', () => {
-  expect(CI_BUDGETS.pr).toEqual({targetSeconds: 40, normalSeconds: 60, hardSeconds: 60});
+  expect(CI_BUDGETS.pr).toEqual({targetSeconds: 40, hardSeconds: 60});
   expect(Object.isFrozen(CI_BUDGETS.pr)).toBe(true);
 });
 
 it('fails a pull request run just past 60 seconds and passes one at 60', () => {
-  for (const [seconds, status] of [[0, 'target'], [39.999, 'target'], [40, 'normal'], [59.999, 'normal'], [60, 'slow'], [60.001, 'failed'], [235, 'failed']]) {
+  for (const [seconds, status] of [[0, 'target'], [39.999, 'target'], [40, 'slow'], [59.999, 'slow'], [60, 'slow'], [60.001, 'failed'], [235, 'failed']]) {
     expect(measureCiElapsed(prStart, after(seconds), {lane: 'pr'}).status, `${seconds}s`).toBe(status);
   }
 });

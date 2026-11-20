@@ -1,4 +1,4 @@
-import {measureCiElapsed} from './ci-elapsed.mjs';
+import {attemptStart,measureCiElapsed} from './ci-elapsed.mjs';
 
 export function fastContexts(source) {
   const base=source.match(/part: \[([^\]]+)\]/)?.[1].split(',').map(s=>s.trim())??[];
@@ -25,5 +25,5 @@ export function completedFastAttempt({run,jobs,repository,head,workflowId,attemp
     seen.add(job.name);finish=Math.max(finish,Date.parse(job.completed_at));
   }
   if(expected.some(name=>!seen.has(name))) refuse();
-  return measureCiElapsed(run.run_started_at,new Date(finish).toISOString(),{lane:'pr'});
+  return measureCiElapsed(attemptStart(jobs),new Date(finish).toISOString(),{lane:'pr'});
 }

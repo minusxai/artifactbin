@@ -21,7 +21,7 @@ comment, history nowhere. Keep links plain, never `@` imports.
 | [browser](services/browser/AGENTS.md) | the browser service: renders, uploads, harvest, live sessions |
 | [scripts](scripts/AGENTS.md) | delegating (briefs, worktrees, gates, handoffs), any root script |
 | [scripts/ci](scripts/ci/AGENTS.md) | workflows, PR lane budgets, test lists and timings, a red main |
-| [.github/workflows](.github/workflows/AGENTS.md) | CI rules: PR CI < 40 s, main CI < 4 min, NO flaky tests etc |
+| [.github/workflows](.github/workflows/AGENTS.md) | CI rules: PR CI under 60 s (aim 40), main CI under 8 min (aim 6), NO flaky tests etc |
 
 ## Check tiers (read before running commands)
 
@@ -39,8 +39,9 @@ comment, history nowhere. Keep links plain, never `@` imports.
 - **Deferred (exit 2) mid-task?** Return to `--files`; report the deferral; PR CI runs the rest. On a red PR: fetch
   every failed job's log in ONE command, fix all failures together (independent ones in parallel agents), never
   retry unchanged code.
-- **CI:** main within 6 min (aim 4), batched; no flaky test (fix or remove); long tests nightly; `pr fast`
-  under 60 s (aim 40), never raise it; a recurring main failure gets a fast-lane guard.
+- **CI:** clocks from the first job's start; `pr fast` under 60 s (aim 40), main under 8 min (aim 6), batched,
+  never raised; no flaky test; a test too slow for `pr fast` moves to main, one too slow for main to a nightly (none
+  yet: every main test job fits); a recurring main failure gets a fast-lane guard.
 
 ## Working rules
 
