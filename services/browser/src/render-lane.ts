@@ -5,8 +5,8 @@
  *
  * `readyPage(req, scale, use, listen?)` is ONE PAGE, LOADED AND SETTLED — what every operation that looks at a page
  * shares: the deadline, which closes that page (its own context), never the browser; the page with service workers
- * blocked; the context-wide admission/forwarding route; navigation; and every readiness wait (diagrams, managed frames,
- * mounts, the settle, data reads, charts). `use` sees the ready page (`ReadyPage`); the page is closed after, whatever
+ * blocked; the context-wide admission/forwarding route; navigation; and every readiness wait (the surface, the settle,
+ * data reads, charts and tables). `use` sees the ready page (`ReadyPage`); the page is closed after, whatever
  * happened. Each page has its own context behind its own egress proxy (./egress): it reaches exactly the origins it
  * may load, nothing else, by any protocol; the browser is launched behind a proxy that refuses everything, with no
  * name resolution, no unproxied WebRTC UDP and no QUIC (EGRESS_ARGS), with only the environment Chromium needs
@@ -26,10 +26,10 @@ const DEFAULT_SETTLE_MS = 1_500;
 const PAGE_CLOSE_WAIT_MS = 5_000;
 
 /**
- * A page's own data reads: its GraphQL, SQL, query and function doors on the render URL's origin. Each answers and ends
- * (the app bounds them); a long-lived stream (`regions/stream`, events) is not one, so it never holds a capture.
+ * A page's own data reads: its SQL and query doors on the render URL's origin. Each answers and ends (the app bounds
+ * them); a long-lived stream (`regions/stream`, events) is not one, so it never holds a capture.
  */
-const DATA_READ_PATH = /^\/api\/artifacts\/[^/]+\/(?:graphql|sql|query|fn\/[^/]+)$/;
+const DATA_READ_PATH = /^\/api\/artifacts\/[^/]+\/(?:sql|query)$/;
 /** After the last data read ends, how long the page gets to draw what it read before readiness goes on. */
 const DATA_QUIET_MS = 500;
 function isDataRead(target: string, pageOrigin: string): boolean {
@@ -47,41 +47,8 @@ export function requestOriginAllowed(target:string,pageOrigin:string,allowedOrig
 function chartsSettled(selector:string):boolean {
  const root=document.querySelector(selector);
  // A hosted <af-chart> is aria-busy while it loads its engine, rows or draws; an <af-data-table sql> until its read answers.
- const busy='[data-mx-chart-state="pending"],af-chart[aria-busy="true"],af-data-table[aria-busy="true"]';
+ const busy='af-chart[aria-busy="true"],af-data-table[aria-busy="true"]';
  return !!root&&!root.matches(busy)&&!root.querySelector(busy);
-}
-
-/**
- * Serialized into Chromium BEFORE the page's own scripts (an init script): which script component mounts the page has
- * rendered. The page runtime (app lib/islands/page-runtime) takes a mount's server fallback out (`replaceChildren()`)
- * and renders the component in the same task, and the parser never removes a node, so a removal from a mount means it
- * was rendered; a mount whose children differ from the ones it had when parsing finished was rendered too (an empty
- * fallback). Self-contained, no nested named functions.
- */
-function watchMounts(): void {
-  const state = { taken: new WeakSet<Element>(), parsed: new WeakMap<Element, Node[]>() };
-  (window as unknown as { __mxMounts: typeof state }).__mxMounts = state;
-  new MutationObserver((records) => {
-    for (const record of records) {
-      const target = record.target as Element;
-      if (record.removedNodes.length && target.nodeType === 1 && target.hasAttribute('data-mx-mount')) state.taken.add(target);
-    }
-  }).observe(document, { childList: true, subtree: true });
-  document.addEventListener('DOMContentLoaded', () => {
-    for (const mount of document.querySelectorAll('[data-mx-mount]')) state.parsed.set(mount, [...mount.childNodes]);
-  });
-}
-
-/** Serialized into Chromium: every mount under the surface rendered (see watchMounts). Synchronous. */
-function mountsRendered(selector: string): boolean {
-  const root = document.querySelector(selector);
-  const state = (window as unknown as { __mxMounts?: { taken: WeakSet<Element>; parsed: WeakMap<Element, Node[]> } }).__mxMounts;
-  if (!root || !state) return true;
-  return [...root.querySelectorAll('[data-mx-mount]')].every((mount) => {
-    if (state.taken.has(mount)) return true;
-    const parsed = state.parsed.get(mount);
-    return !!parsed && (parsed.length !== mount.childNodes.length || parsed.some((node, i) => node !== mount.childNodes[i]));
-  });
 }
 
 /**
@@ -236,7 +203,6 @@ export function createRenderLane(name: 'exports' | 'checks', o: { idleMs: number
           return run;
         });
       }
-      if (req.waitForMountsMs) await page.addInitScript(watchMounts);
       // Data reads in flight, and when the last one ended: a capture waits until the page's data has arrived and drawn.
       const reads = new Set<unknown>(), pageOrigin = new URL(req.url).origin;
       let lastRead = 0;
@@ -251,19 +217,6 @@ export function createRenderLane(name: 'exports' | 'checks', o: { idleMs: number
       // `failed`, where the answer is no_slide with a count of 0.
       const slideCapture = 'capture' in req && typeof req.capture === 'object' && req.capture !== null && 'slide' in req.capture && !!req.capture.slide;
       await surface.waitFor({ timeout, state: slideCapture ? 'attached' : 'visible' });
-      // SSR emits pending diagram markers before hydration. Wait through the
-      // lazy engine and image decode; a handled syntax error is also settled.
-      await page.waitForFunction(selector => {
-        const root = document.querySelector(selector);
-        return !!root && !root.matches('[data-mx-mermaid-state="pending"]') && !root.querySelector('[data-mx-mermaid-state="pending"]');
-      }, req.selector, { timeout });
-      if(req.waitForManagedFrames)await page.waitForFunction(selector=>{
-        const root=document.querySelector(selector);if(!root)return false;
-        return [...root.querySelectorAll('[data-mx-managed-frame]')].every(host=>host.querySelector('iframe[data-mx-author-ready]'));
-      },req.selector,{timeout});
-      // The page's script renders its components a moment after load; a mount still on its fallback at the cap is
-      // photographed as it stands (never a failure: the fallback is a page, a component that never mounts is the author's).
-      if (req.waitForMountsMs) await page.waitForFunction(mountsRendered, req.selector, { timeout: Math.min(req.waitForMountsMs, remaining()) }).catch(() => { remaining(); });
       await page.waitForTimeout(req.settleMs ?? DEFAULT_SETTLE_MS);
       // A page drawn from its data (sql, GraphQL, functions) is ready once no read is in flight and the last one ended a
       // moment ago. A read that never ends runs into the deadline: a failed render, never an image without its data.

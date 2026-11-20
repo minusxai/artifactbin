@@ -37,35 +37,29 @@ ${STACKED_COLORS.map(([r,g,b],i)=>`<section data-af-slide class="slide${i<7?'':'
  */
 const ELEMENT_PAGE = `<html><body style="margin:0;background:rgb(51,51,204)"><main style="width:1200px">
 <div id="other" style="width:300px;height:100px;background:#c33"></div>
-<div id="chart" data-mx-chart-state="pending" style="width:200px;height:100px"></div>
+<af-chart id="chart" aria-busy="true" style="display:block;width:200px;height:100px"></af-chart>
 <div id="hidden" style="display:none;width:50px;height:50px"></div><div id="ghost" style="visibility:hidden;width:50px;height:50px"></div><div id="empty"></div>
 <div id="long" style="width:50px;height:5000px;background:#3c3"></div><div id="tall" style="width:50px;height:9000px;background:#3c3"></div>
-</main><script>fetch('/api/artifacts/x/sql',{method:'POST',body:'{}'}).then(r=>r.json()).then(()=>setTimeout(()=>{const c=document.getElementById('chart');c.innerHTML='<div style="width:100px;height:100px;background:rgb(51,204,51)"></div>';c.dataset.mxChartState='ready'},100))</script></body></html>`;
+</main><script>fetch('/api/artifacts/x/sql',{method:'POST',body:'{}'}).then(r=>r.json()).then(()=>setTimeout(()=>{const c=document.getElementById('chart');c.innerHTML='<div style="width:100px;height:100px;background:rgb(51,204,51)"></div>';c.removeAttribute('aria-busy')},100))</script></body></html>`;
 /* A deck whose script threw before drawing a slide: only the fixed deck chrome is left, so the body has no height. */
 const EMPTY_DECK_PAGE = `<html><body style="margin:0"><main id="deck"></main><nav data-af-deck-chrome style="position:fixed;bottom:0;left:0;width:200px;height:40px">01 / 06</nav><script type="module">throw Error('The dataset returned no usable rows.')</script></body></html>`;
-const READY_PAGE = `<html><body style="margin:0"><main style="width:100px;height:100px;background:#c33"><div data-mx-managed-frame><iframe></iframe></div></main><script>setTimeout(()=>{document.querySelector('iframe').setAttribute('data-mx-author-ready','');document.querySelector('main').style.background='#3c3'},300)</script></body></html>`;
-/* A script component's mount: the server fallback (red) until the page's script replaces it (green), as the page runtime does. */
-const MOUNT_PAGE = `<html><body style="margin:0"><main style="width:100px;height:100px"><div data-mx-mount="Spark" style="width:100px;height:100px;background:#c33"><p style="margin:0">Loading</p></div></main><script>setTimeout(()=>{const m=document.querySelector('[data-mx-mount]');m.replaceChildren();const d=document.createElement('div');d.style.cssText='width:100px;height:100px;background:#3c3';m.append(d)},400)</script></body></html>`;
-const NEVER_MOUNTS_PAGE = `<html><body style="margin:0"><main style="width:100px;height:100px"><div data-mx-mount="Spark" style="width:100px;height:100px;background:#c33"><p>Loading</p></div></main></body></html>`;
-const NEVER_READY_PAGE = `<html><body><main><div data-mx-managed-frame><iframe></iframe></div></main></body></html>`;
-const DIAGRAM_PAGE = `<html><body style="margin:0"><main data-mx-mermaid-state="pending" style="width:100px;height:100px;background:#c33"></main><script>setTimeout(()=>{document.querySelector('main').dataset.mxMermaidState='ready';document.querySelector('main').style.background='#3c3'},400)</script></body></html>`;
-const CHART_PAGE = `<html><body style="margin:0"><main data-mx-chart-state="pending" style="width:100px;height:100px;background:#c33"></main><script>setTimeout(()=>{const m=document.querySelector('main');m.innerHTML='<div data-mx-chart-state="pending"></div>';m.removeAttribute('data-mx-chart-state');setTimeout(()=>{m.firstChild.dataset.mxChartState='ready';m.style.background='#3c3'},300)},300)</script></body></html>`;
-const STUCK_CHART_PAGE = `<html><body><main data-mx-chart-state="pending" style="width:100px;height:100px">Loading chart</main></body></html>`;
+const CHART_PAGE = `<html><body style="margin:0"><main style="width:100px;height:100px;background:#c33"><af-chart aria-busy="true"></af-chart></main><script>setTimeout(()=>{const m=document.querySelector('main');m.innerHTML='<af-chart aria-busy="true"></af-chart>';setTimeout(()=>{m.firstChild.removeAttribute('aria-busy');m.style.background='#3c3'},300)},300)</script></body></html>`;
+const STUCK_CHART_PAGE = `<html><body><main style="width:100px;height:100px"><af-chart aria-busy="true">Loading chart</af-chart></main></body></html>`;
 /*
  * A page that draws the way the kit's diagrams do: an SVG `data:` URL in an
- * <img>, pending until drawn. One figure is reproducible, one draws a random
+ * <img>, a moment after load. One figure is reproducible, one draws a random
  * number every load, and one is a plain image the harvest must skip.
  */
 const DRAWN = (label: string) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><text>${label}</text></svg>`)}`;
-const HARVEST_PAGE = `<html><body style="margin:0"><main><figure data-mx-mermaid-state="pending" data-kind="fixed"></figure><figure data-mx-mermaid-state="pending" data-kind="random"></figure><figure data-mx-mermaid-state="ready" data-kind="png"><img src="data:image/png;base64,iVBORw0KGgo="></figure><img src="http://127.0.0.1:1/cross-origin.png"></main><script>
-setTimeout(()=>{const [a,b]=document.querySelectorAll('figure');a.innerHTML='<img width="120" height="80" src=${JSON.stringify(DRAWN('fixed & sound'))}>';b.innerHTML='<img src="'+${JSON.stringify(DRAWN('').split('%3C%2Ftext%3E')[0])}+Math.random()+'%3C%2Ftext%3E%3C%2Fsvg%3E">';a.dataset.mxMermaidState='ready';b.dataset.mxMermaidState='ready';},200)</script></body></html>`;
+const HARVEST_PAGE = `<html><body style="margin:0"><main><figure data-kind="fixed"></figure><figure data-kind="random"></figure><figure data-kind="png"><img src="data:image/png;base64,iVBORw0KGgo="></figure><img src="http://127.0.0.1:1/cross-origin.png"></main><script>
+setTimeout(()=>{const [a,b]=document.querySelectorAll('figure');a.innerHTML='<img width="120" height="80" src=${JSON.stringify(DRAWN('fixed & sound'))}>';b.innerHTML='<img src="'+${JSON.stringify(DRAWN('').split('%3C%2Ftext%3E')[0])}+Math.random()+'%3C%2Ftext%3E%3C%2Fsvg%3E">';},200)</script></body></html>`;
 /* A tile drawn from the page's own SQL read, which answers after the settle: red until its rows arrive and draw. */
 const DATA_PAGE = `<html><body style="margin:0"><main style="width:100px;height:100px;background:#c33"></main><script>fetch('/api/artifacts/x/sql',{method:'POST',body:'{}'}).then(r=>r.json()).then(()=>setTimeout(()=>{document.querySelector('main').style.background='#3c3'},100))</script></body></html>`;
 /* A data read that never answers; and a long-lived stream, which is not a data read and never holds a capture. */
-const HUNG_DATA_PAGE = `<html><body style="margin:0"><main style="width:100px;height:100px;background:#c33"></main><script>fetch('/api/artifacts/x/graphql',{method:'POST',body:'{}'})</script></body></html>`;
+const HUNG_DATA_PAGE = `<html><body style="margin:0"><main style="width:100px;height:100px;background:#c33"></main><script>fetch('/api/artifacts/hung/sql',{method:'POST',body:'{}'})</script></body></html>`;
 const STREAM_PAGE = `<html><body style="margin:0"><main style="width:100px;height:100px;background:#3c3"></main><script>fetch('/api/artifacts/x/regions/stream')</script></body></html>`;
-/** The fixture's data doors: sql answers late, graphql and the stream never do (until the page goes away). */
-const DATA_DOORS: Record<string, number> = { '/api/artifacts/x/sql': 1200, '/api/artifacts/x/graphql': 60_000, '/api/artifacts/x/regions/stream': 60_000 };
+/** The fixture's data doors: one page's sql answers late, another's and the stream never do (until the page goes away). */
+const DATA_DOORS: Record<string, number> = { '/api/artifacts/x/sql': 1200, '/api/artifacts/hung/sql': 60_000, '/api/artifacts/x/regions/stream': 60_000 };
 let pages: RunningServer;
 let url: string;
 
@@ -74,7 +68,7 @@ const server = serveBrowser(local);
 const listening = server.listen(0);
 const remote = browserClient(listening.url, { deadlineMs: 20_000 });
 beforeAll(async () => {
-  pages = await withHttpServer((q, s) => { const late = DATA_DOORS[q.url ?? '']; if (late !== undefined) { const t = setTimeout(() => { if (!s.destroyed) { s.writeHead(200, { 'content-type': 'application/json' }); s.end('{"columns":[],"rows":[]}'); } }, late); t.unref?.(); s.on('close', () => clearTimeout(t)); return; } if (q.url === '/slow') { const t = setTimeout(() => { if (!s.destroyed) { s.writeHead(200, { 'content-type': 'text/html' }); s.end(PAGE); } }, 1000); s.on('close', () => clearTimeout(t)); return; } s.writeHead(200, { 'content-type': 'text/html' }); s.end(q.url==='/element'?ELEMENT_PAGE:q.url==='/empty-deck'?EMPTY_DECK_PAGE:q.url==='/stacked'?STACKED_DECK_PAGE:q.url==='/slide-chrome'?SLIDE_CHROME_PAGE:q.url==='/mount'?MOUNT_PAGE:q.url==='/never-mounts'?NEVER_MOUNTS_PAGE:q.url==='/harvest'?HARVEST_PAGE:q.url==='/chart'?CHART_PAGE:q.url==='/stuck-chart'?STUCK_CHART_PAGE:q.url==='/diagram'?DIAGRAM_PAGE:q.url==='/ready'?READY_PAGE:q.url==='/data'?DATA_PAGE:q.url==='/hung-data'?HUNG_DATA_PAGE:q.url==='/stream'?STREAM_PAGE:q.url==='/never-ready'?NEVER_READY_PAGE:PAGE); });
+  pages = await withHttpServer((q, s) => { const late = DATA_DOORS[q.url ?? '']; if (late !== undefined) { const t = setTimeout(() => { if (!s.destroyed) { s.writeHead(200, { 'content-type': 'application/json' }); s.end('{"columns":[],"rows":[]}'); } }, late); t.unref?.(); s.on('close', () => clearTimeout(t)); return; } if (q.url === '/slow') { const t = setTimeout(() => { if (!s.destroyed) { s.writeHead(200, { 'content-type': 'text/html' }); s.end(PAGE); } }, 1000); s.on('close', () => clearTimeout(t)); return; } s.writeHead(200, { 'content-type': 'text/html' }); s.end(q.url==='/element'?ELEMENT_PAGE:q.url==='/empty-deck'?EMPTY_DECK_PAGE:q.url==='/stacked'?STACKED_DECK_PAGE:q.url==='/slide-chrome'?SLIDE_CHROME_PAGE:q.url==='/harvest'?HARVEST_PAGE:q.url==='/chart'?CHART_PAGE:q.url==='/stuck-chart'?STUCK_CHART_PAGE:q.url==='/data'?DATA_PAGE:q.url==='/hung-data'?HUNG_DATA_PAGE:q.url==='/stream'?STREAM_PAGE:PAGE); });
   url = `${pages.base}/a/x`;
 });
 afterAll(async () => { await local.close?.(); await server.close(); await pages.close(); });
@@ -113,48 +107,11 @@ describe.each<[string, BrowserService]>([['in-process', local], ['over HTTP', re
     const r=await svc.render({...base(),url:`${pages.base}/stuck-chart`,settleMs:0,timeoutMs:250});
     expect(!r.ok&&r.reason).toBe('failed');
   });
-  it('waits for script component mounts to replace their fallback, and the capture differs from the fallback render', async () => {
-    const centre = async (r: Awaited<ReturnType<BrowserService['render']>>) => {
-      if (!r.ok) throw new Error(JSON.stringify(r));
-      const { data, info } = await sharp(Buffer.from(r.bytes)).raw().toBuffer({ resolveWithObject: true });
-      const at = (50 * info.width + 50) * info.channels;
-      return [...data.subarray(at, at + 3)];
-    };
-    // The fallback render is a page whose script never mounts (no race with the swap), the capture one that does.
-    const fallback = await centre(await svc.render({ ...base(), url: `${pages.base}/never-mounts`, settleMs: 0 }));
-    const mounted = await centre(await svc.render({ ...base(), url: `${pages.base}/mount`, settleMs: 0, waitForMountsMs: 5000 }));
-    expect(fallback).toEqual([204, 51, 51]);
-    expect(mounted).toEqual([51, 204, 51]);
-  });
-  it('captures the fallback after the mount cap instead of failing when a component never mounts', async () => {
-    const started = Date.now();
-    const r = await svc.render({ ...base(), url: `${pages.base}/never-mounts`, settleMs: 0, waitForMountsMs: 300 });
-    expect(r.ok).toBe(true);
-    expect(Date.now() - started).toBeLessThan(5000);
-  });
-  it('waits for a lazy diagram before capturing export pixels', async () => {
-    const r = await svc.render({ ...base(), url: `${pages.base}/diagram`, settleMs: 0 });
-    if (!r.ok) throw new Error(JSON.stringify(r));
-    const { data, info } = await sharp(Buffer.from(r.bytes)).raw().toBuffer({ resolveWithObject: true });
-    const at = (50 * info.width + 50) * info.channels;
-    expect([...data.subarray(at, at + 3)]).toEqual([51, 204, 51]);
-  });
   it('shoots the selected element as a png of its own size', async () => {
     const r = await svc.render(base());
     if (!r.ok) throw new Error(JSON.stringify(r));
     expect(r.mime).toBe('image/png');
     expect(pngSize(r.bytes)).toEqual({ width: 600, height: 300 });
-  });
-  it('waits for managed author readiness instead of capturing a cold blank frame',async()=>{
-    const r=await svc.render({...base(),url:`${pages.base}/ready`,selector:'main',viewport:{width:100,height:100},waitForManagedFrames:true,settleMs:0});
-    if(!r.ok)throw new Error(JSON.stringify(r));
-    const {data,info}=await sharp(Buffer.from(r.bytes)).raw().toBuffer({resolveWithObject:true});
-    const at=(50*info.width+50)*info.channels;
-    expect([...data.subarray(at,at+3)]).toEqual([51,204,51]);
-  });
-  it('fails a managed readiness timeout instead of returning cacheable blank bytes',async()=>{
-    const r=await svc.render({...base(),url:`${pages.base}/never-ready`,waitForManagedFrames:true,settleMs:0,timeoutMs:250});
-    expect(!r.ok&&r.reason).toBe('failed');
   });
   it('fails a render whose deadline elapses while the page is still loading, instead of calling it unreachable',async()=>{
     // A warm page load first, so the 250ms budget below is spent loading the slow page, not on a cold launch.
@@ -306,13 +263,13 @@ describe.each<[string, BrowserService]>([['in-process', local], ['over HTTP', re
     expect(!r.ok && r.reason).toBe('failed');
   });
   it('harvests the drawn SVGs as text, after they draw, with their attributes, once per load', async () => {
-    const r = await svc.harvestSvg!({ url: `${pages.base}/harvest`, viewport: { width: 600, height: 400 }, selector: 'main', collect: 'figure', sameOriginOnly: true, settleMs: 0, timeoutMs: 10_000, loads: 2 });
+    const r = await svc.harvestSvg!({ url: `${pages.base}/harvest`, viewport: { width: 600, height: 400 }, selector: 'main', collect: 'figure', sameOriginOnly: true, settleMs: 600, timeoutMs: 10_000, loads: 2 });
     if (!r.ok) throw new Error(JSON.stringify(r));
     expect(r.loads).toHaveLength(2);
     for (const load of r.loads) {
       // The PNG figure is not a drawing; both SVG figures are, in document order.
       expect(load.map(d => d.attributes['data-kind'])).toEqual(['fixed', 'random']);
-      expect(load[0]).toEqual({ attributes: { 'data-kind': 'fixed', 'data-mx-mermaid-state': 'ready' }, width: 120, height: 80, svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><text>fixed & sound</text></svg>' });
+      expect(load[0]).toEqual({ attributes: { 'data-kind': 'fixed' }, width: 120, height: 80, svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><text>fixed & sound</text></svg>' });
     }
     // Two fresh loads: a caller can tell the reproducible drawing from the random one.
     expect(r.loads[0][0].svg).toBe(r.loads[1][0].svg);
