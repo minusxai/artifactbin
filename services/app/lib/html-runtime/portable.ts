@@ -1,6 +1,6 @@
 import {parse,type DefaultTreeAdapterMap} from 'parse5';
 import { assertStorable } from './apollo/storable';
-import type { OriginalFilePort, PortableDocument, PortableIdentity } from './portable-contract';
+import type { PortableDocument, PortableIdentity } from './portable-contract';
 
 function isPortablePlatformOrigin(value:string):boolean {
  try{const url=new URL(value);return (url.protocol==='https:' || url.protocol==='http:') && url.origin===value && !url.username && !url.password;}catch{return false;}
@@ -46,9 +46,4 @@ export function readPortableDocument(html: string): PortableDocument {
 export function portableDocumentIn(document:DefaultTreeAdapterMap['document']):PortableDocument|undefined {
  const block=portableBlock(document);
  return block===undefined?undefined:envelope(block);
-}
-/** Caller must obtain an explicit writable handle. No automatic disk persistence. */
-export async function saveOriginal(port: OriginalFilePort, expected: string, source: string): Promise<void> {
- if(await port.read()!==expected) throw new Error('Original file changed; save a copy instead');
- await port.write(source);
 }

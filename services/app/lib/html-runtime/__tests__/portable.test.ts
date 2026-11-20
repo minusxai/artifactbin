@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { readPortableDocument, portableScript, saveOriginal } from '../portable';
+import { readPortableDocument, portableScript } from '../portable';
 
 it('reopens exact canonical source and explicitly selected private state without executing delimiters', () => {
  const source='<!DOCTYPE html>\n<script>const x="</script>"</script><p data-af-id="stable">original</p>';
@@ -16,13 +16,6 @@ it('reads a file envelope through the same allowlist, whatever the script tag ca
 it('serializes an allowlisted envelope and rejects secret-bearing provenance URLs',()=>{
  expect(portableScript({version:1,source:'x',token:'secret'} as never)).not.toContain('secret');
  expect(()=>portableScript({version:1,source:'x',identity:{platformOrigin:'https://user:secret@example.test',artifactId:'p',baseRevision:'1',sourceDigest:'a'.repeat(64)}})).toThrow();
-});
-it('rejects stale original files without writing and writes only an explicitly supplied handle',async()=>{
- let disk='external';
- const port={read:async()=>disk,write:async(value:string)=>{disk=value;}};
- await expect(saveOriginal(port,'base','saved')).rejects.toThrow('changed');
- expect(disk).toBe('external');
- disk='base';await saveOriginal(port,'base','saved');expect(disk).toBe('saved');
 });
 it('uses edited file bytes instead of stale embedded canonical source and preserves stable identities',async()=>{
  const { recoverPortableSource }=await import('../portable-source');

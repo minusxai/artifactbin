@@ -14,7 +14,7 @@
  * the fit-autosize pass sees the final legend height (no post-layout clipping).
  */
 import { describe, it, expect } from 'vitest';
-import { computeLegendPlan, setMainData } from '@/lib/viz/chart-plan';
+import { computeLegendPlan } from '@/lib/viz/chart-plan';
 import { compileVegaLite, createVegaView } from '@/lib/viz/render-vega';
 
 type CompiledLegend = { columns?: unknown; orient?: string; values?: unknown[]; title?: string };
@@ -203,8 +203,7 @@ describe('compileVegaLite legend plan injection', () => {
     const vegaSpec = compileVegaLite(BASE as Record<string, unknown>, 'dark', {
       legendPlan: { columns: 2, values: ['Appetizers', 'Beverages', 'Desserts'], moreCount: 2 },
     });
-    const view = createVegaView(vegaSpec, [], { renderer: 'none', width: 400, height: 300 });
-    setMainData(view, ROWS);
+    const view = createVegaView(vegaSpec, ROWS, { renderer: 'none', width: 400, height: 300 });
     await view.runAsync();
     const svg = await view.toSVG();
     view.finalize();
@@ -231,8 +230,7 @@ describe('compileVegaLite legend plan injection', () => {
     const vegaSpec = compileVegaLite(BASE as Record<string, unknown>, 'dark', {
       legendPlan: { columns: 2, values: ['Appetizers', 'Beverages', 'Desserts', 'Main Course'], moreCount: 1 },
     });
-    const view = createVegaView(vegaSpec, [], { renderer: 'none', width: 300, height: 300 });
-    setMainData(view, ROWS);
+    const view = createVegaView(vegaSpec, ROWS, { renderer: 'none', width: 300, height: 300 });
     await expect(view.runAsync()).resolves.toBeDefined();
     view.finalize();
   });

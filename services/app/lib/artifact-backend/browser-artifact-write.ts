@@ -2,7 +2,6 @@
  * then submit one permission-scoped JSONB commit. Non-document metadata retains
  * its existing conditional protocol. */
 import {artifactRequests} from './http';
-import type {ArtifactBackend} from './types';
 /**
  * Listings, folders and the social preview: an online write whose caller reads the Response itself. A source made from
  * an HTML page's current page (its live text composed in, `live` its live revision) names that revision, so its regions
@@ -28,12 +27,3 @@ export async function writeBrowserArtifact(id:string,change:Record<string,unknow
  return requests.patch({...fields,expectedVersion:head.version,expectedState:head.state});
 }
 
-/** History keeps the same UX across format changes. Only document restores
- * compile a graph; restoring a native resource keeps its existing protocol.
- * Resolves with the NEW version the restore produced, or null when refused. */
-export async function restoreBrowserArtifact(backend:ArtifactBackend,version:number):Promise<number|null>{
- const head=await backend.load();if(!head)return null;
- const target=await backend.version(version);if(!target)return null;
- const reverted=await backend.revert({version,expectedVersion:head.version,expectedState:head.state as string});
- return reverted.ok?reverted.body.version:null;
-}

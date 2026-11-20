@@ -8,10 +8,9 @@
 import { createSignal, For, mergeProps, Show, type JSX } from 'solid-js';
 import ChevronDown from 'lucide-solid/icons/chevron-down';
 import X from 'lucide-solid/icons/x';
-import { Badge, MicroLabel } from '../ui/ui';
+import { MicroLabel } from '../ui/ui';
 import { Button } from '../ui/Button';
 import { Popover, type PopoverTriggerAttrs } from '../ui/Popover';
-import { Select } from '../ui/Select';
 import { Tooltip } from '../ui/Tooltip';
 import MobileSheet, { isPhoneViewport } from '../ui/MobileSheet';
 import { getStoryTheme, resolveStoryMode } from '@/lib/html-systems/story-themes';
@@ -54,26 +53,6 @@ function AnchoredPanel(props: {
     : props.trigger(mergeProps(attrs, { onClick: toggle }));
   return <Popover label={props.label} open={props.open} onOpenChange={props.onOpenChange} trigger={trigger}
     class={`p-2 ${props.class}`}>{props.children}</Popover>;
-}
-
-const MODE_VALUE = (mode: 'light' | 'dark' | null) => mode ?? '';
-
-export function ModeChip(props: { mode: 'light' | 'dark' | null; themeDefault: 'light' | 'dark'; onPick: (mode: 'light' | 'dark' | null) => void }): JSX.Element {
-  const options = () => [
-    { value: '', label: `system default (${props.themeDefault})` },
-    { value: 'light', label: 'light' },
-    { value: 'dark', label: 'dark' },
-  ];
-  return <Tooltip content="The mode the document opens in">
-    <Select size="sm" ariaLabel="Color mode" value={MODE_VALUE(props.mode)} options={options()}
-      onChange={(value) => props.onPick(value === 'light' || value === 'dark' ? value : null)} />
-  </Tooltip>;
-}
-
-export function TemplateChip(props: { template: string | null }): JSX.Element {
-  return <Show when={props.template}>
-    <span aria-label={`Page type: ${props.template}`} class="inline-flex capitalize"><Badge tone="default">{props.template}</Badge></span>
-  </Show>;
 }
 
 export default function ThemePicker(props: { value: StoryDesignName | null; colorMode?: 'light' | 'dark' | null; onPick: (theme: StoryDesignName | null) => void }): JSX.Element {
