@@ -56,3 +56,25 @@ it('admits the complete workload and refuses a missing matrix job',()=>{
  const invoke=()=>completedFastAttempt({...f,repository:repo,head:sha,workflowId:2,attempt:1,expected});
  expect(invoke().seconds).toBe(60);f.jobs.jobs.pop();expect(invoke).toThrow();
 });
+
+import {observe} from '../ci/observe-fast.mjs';
+it('the timing observer fails a red attempt\'s status without failing itself, and leaves a superseded event to the newer attempt',()=>{
+ // pr fast 44704512620 failed; its observer (44704608999) timed it anyway, refused it as "Incomplete or mismatched
+ // completed fast attempt" and went red: 6 of 30 observer runs on 2026-11-20 were red pr fast attempts or re-runs.
+ const event=conclusion=>({workflow_run:{id:1,run_attempt:1,head_sha:sha,event:'pull_request',path:'.github/workflows/pr-fast.yml',repository:{full_name:repo},status:'completed',conclusion,html_url:'u'}});
+ const reader=({attempt=1,later=attempt,conclusion='success',newer=false}={})=>{let reads=0;return path=>{
+  if(path===`repos/${repo}/actions/runs/1`)return {run_attempt:reads++?later:attempt,head_sha:sha,conclusion};
+  if(path.startsWith(`repos/${repo}/actions/workflows/pr-fast.yml/runs?`))return {total_count:newer?2:1,workflow_runs:[{id:1},...(newer?[{id:2}]:[])]};
+  throw new Error('unexpected '+path);
+ };};
+ const inspected=[],inspect=seconds=>(_r,id,head)=>{inspected.push(id);const f=fixture(seconds);return {run:f.run,result:check(f)};};
+ for(const conclusion of ['failure','cancelled','timed_out'])
+  expect(observe({event:event(conclusion),repository:repo,api:reader({conclusion}),inspect:inspect(30)})).toEqual({state:'failure',description:`pr fast ${conclusion}: no timing measured`,exitCode:0});
+ expect(inspected).toEqual([]);
+ expect(observe({event:event('success'),repository:repo,api:reader(),inspect:inspect(30)})).toMatchObject({state:'success',exitCode:0});
+ expect(observe({event:event('success'),repository:repo,api:reader(),inspect:inspect(61)})).toMatchObject({state:'failure',exitCode:1});
+ expect(observe({event:event('success'),repository:repo,api:reader(),inspect:()=>{throw new Error('Incomplete or mismatched completed fast attempt');}})).toEqual({state:'failure',description:'Completed fast attempt evidence rejected',exitCode:1});
+ // A re-run before the observer read the run, or before it published, and a newer run of the head: nothing published.
+ for(const api of [reader({attempt:2}),reader({later:2}),reader({newer:true})])expect(observe({event:event('failure'),repository:repo,api,inspect:inspect(30)})).toHaveProperty('skip');
+ expect(()=>observe({event:{workflow_run:{...event('success').workflow_run,event:'push'}},repository:repo,api:reader(),inspect:inspect(30)})).toThrow('Unexpected observer event');
+});
