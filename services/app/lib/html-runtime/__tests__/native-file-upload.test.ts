@@ -1,4 +1,4 @@
-import type {Actor} from '@artifactbin/contracts';
+import type {Actor} from '@artifactbin/contracts/actor';
 import { storePolicy } from '@/__tests__/artifact-fixtures';
 import {expect,it,vi} from 'vitest';
 import { createUser, identityForUser } from '@/lib/accounts';

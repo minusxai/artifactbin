@@ -1,7 +1,7 @@
 import { PGlite } from '@electric-sql/pglite';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, onTestFinished } from 'vitest';
 import { assemble, hashToken } from '@artifactbin/utils';
-import { INTERNAL_MINT_PATH } from '@artifactbin/contracts';
+import { INTERNAL_MINT_PATH } from '@artifactbin/contracts/routes';
 import { createHumanAuth } from '../src/auth/human';
 import { consumeAuthCode, createAuthCode, createOAuthStore, isAllowedRedirectUri, sameRedirectTarget, s256 } from '../src/identity/oauth';
 import { authParts, type AuthOptions } from '../src/parts';

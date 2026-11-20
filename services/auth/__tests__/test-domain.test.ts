@@ -5,7 +5,7 @@
  */
 import {PGlite} from '@electric-sql/pglite';
 import {afterAll,beforeAll,beforeEach,describe,expect,it} from 'vitest';
-import {isTestDomainEmail,parseTestDomainSignIn} from '@artifactbin/contracts';
+import {isTestDomainEmail, parseTestDomainSignIn} from '@artifactbin/contracts/test-domain';
 import {readFileSync} from 'node:fs';
 import {createRequire} from 'node:module';
 import {dirname,join} from 'node:path';

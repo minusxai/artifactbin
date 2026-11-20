@@ -1,7 +1,7 @@
 /** Retired declaration routes disappear; current dataset query and write APIs remain. */
 import {describe, expect, it} from 'vitest';
 import {ROUTES} from '@/server/routes.generated';
-import {URL_SPACE} from '@artifactbin/contracts';
+import {URL_SPACE} from '@artifactbin/contracts/url-space';
 
 describe('retired story doors', () => {
   it('removes page declaration endpoints while retaining dataset operations', () => {

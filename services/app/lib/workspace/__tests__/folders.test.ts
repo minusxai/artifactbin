@@ -27,7 +27,7 @@ async function owner(name = 'owner') {
 }
 const create = async (token: string, body: Record<string, unknown>) => j(await createRoute(request('/api/artifacts', { method: 'POST', json: body, token })));
 const readBack = async (token: string, id: string) => j(await getRoute(request(`/api/artifacts/${id}`, { token }), params(id)));
-const move = async (actor: import('@artifactbin/contracts').Actor, id: string, parent_id: string | null) =>
+const move = async (actor: import('@artifactbin/contracts/actor').Actor, id: string, parent_id: string | null) =>
   j(await patchMineRoute(await observedRequest(`/api/my/artifacts/${id}`, { method: 'PATCH', json: { parent_id }, actor, origin: 'same' }), params(id)));
 
 describe('creating a folder', () => {
@@ -237,7 +237,7 @@ describe("a folder's PUT is a metadata edit", () => {
   };
   const putBearer = async (token: string, id: string, body: Record<string, unknown>) =>
     j(await putRoute(await observedRequest(`/api/artifacts/${id}`, { method: 'PUT', json: body, token }), params(id)));
-  const putSession = async (actor: import('@artifactbin/contracts').Actor, id: string, body: Record<string, unknown>) =>
+  const putSession = async (actor: import('@artifactbin/contracts/actor').Actor, id: string, body: Record<string, unknown>) =>
     j(await putMineRoute(await observedRequest(`/api/my/artifacts/${id}`, { method: 'PUT', json: body, actor, origin: 'same' }), params(id)));
 
   it('renames through PUT with no version, no archived copy and no edit-log row — at either door', async () => {

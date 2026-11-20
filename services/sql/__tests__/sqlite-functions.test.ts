@@ -6,7 +6,8 @@
  * Intl, JavaScript regular expressions, JSON lists, and null in → null out.
  */
 import { describe, expect, it } from 'vitest';
-import { SQL_FUNCTIONS, isQueryFailure, type Row, type Scalar } from '@artifactbin/contracts';
+import { SQL_FUNCTIONS } from '@artifactbin/contracts/sql-functions';
+import { isQueryFailure, type Row, type Scalar } from '@artifactbin/contracts/sql';
 import { createSqliteSql } from '@artifactbin/sql/sqlite';
 import { loadSqlite } from '@artifactbin/sql/core';
 
