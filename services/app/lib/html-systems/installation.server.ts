@@ -78,7 +78,7 @@ const luminance=(hex:string)=>{const [r,g,b]=rgb(hex).map(c=>c<=0.04045?c/12.92:
 const contrastRatio=(a:string,b:string)=>{const [hi,lo]=[luminance(a),luminance(b)].sort((x,y)=>y-x);return (hi!+0.05)/(lo!+0.05);};
 
 /** Every refusal of a parsed `system.json`, as one message; a valid spec comes back typed. */
-export function validateDesignSystemSpec(raw:unknown,fontFiles:ReadonlySet<string>):DesignSystemSpec{
+function validateDesignSystemSpec(raw:unknown,fontFiles:ReadonlySet<string>):DesignSystemSpec{
  const fail=(problem:string):never=>{throw new DesignSystemProblem(problem);};
  const unknown=(where:string,value:Record<string,unknown>,keys:readonly string[])=>{const extra=Object.keys(value).filter(key=>!keys.includes(key));if(extra.length)fail(`${where}: unknown ${extra.length>1?'keys':'key'} ${extra.join(', ')} (allowed: ${keys.join(', ')})`);};
  const text=(where:string,value:unknown,max:number,required=false)=>{if(value===undefined&&!required)return;if(typeof value!=='string'||!value.trim()||unsafeText(value,max))fail(`${where} must be text of at most ${max} characters, without | < > \` or line breaks`);};

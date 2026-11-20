@@ -1,8 +1,5 @@
-import {isUserPagesHost,handleFromUserPagesHost} from './services/app/lib/user-pages';
-import {userHostIngress,userHostStaticPath,USER_HOST_CREDENTIAL_HEADERS} from './services/app/server/user-host';
-import {admitDeploymentIdentity,validateDeploymentConfiguration} from './services/app/lib/deployment';
+import {userHostIngress,viteMayAnswer} from './services/app/server/user-host';
 import {closeDefaultConnection,validateDefaultConnection} from './services/app/lib/connections';
-import {trustedForwarded} from './services/app/lib/http';
 /**
  * OSS single-process host: shared authentication wraps the app. SQL, browser
  * and events run locally unless their service URLs select HTTP implementations.
@@ -13,13 +10,12 @@ import {trustedForwarded} from './services/app/lib/http';
 import http from 'node:http';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
-import { developmentPagesHosts, developmentViteOptions } from './services/app/lib/runtime/dev-vite';
+import { developmentViteConfig } from './services/app/lib/runtime/dev-vite';
 import { withRequestLog } from './services/app/lib/runtime/request-log';
 import { getRequestListener } from '@hono/node-server';
-import { assemble, inProcess } from '@artifactbin/utils';
-import { bearerAdmission, createBearerReader, ensureAuthSchema, ensureHumanAuthSchema, authEnvNamesRead, authParts, readEnv, mailerForRuntime, mailSettingsOf, createHumanAuth, loginProvidersOf, sessionStoreOf, testDomainSignInOf } from '@artifactbin/auth';
+import { assemble } from '@artifactbin/utils';
+import { authEnvNamesRead, readEnv } from '@artifactbin/auth';
 import { useLoopbackLookup } from '@artifactbin/utils/node/loopback-lookup';
-import { parseServiceAudiences } from '@artifactbin/contracts/service-audiences';
 
 // The server's own outbound calls (the exporter, a session's cookie jar, its public URL) may name a loopback
 // host (`app.lvh.me`, `<hex id>.lvh.me`, `*.localhost`): resolved here, never asked of DNS.
@@ -68,154 +64,41 @@ async function main(): Promise<void> {
   const sessionActorSecret = readEnv(env, 'CONTRACT__ACTOR_SECRET')
     || (dev ? randomBytes(32).toString('base64url') : undefined);
 
-  const { getDb } = await import('@/lib/platform');
-  const { canAuthenticateUser } = await import('@/lib/user-kinds');
-  const { createAppServer } = await import('@/server/app');
-  // The skill's deployment extras (SKILLS__EXTRA_DIR) are read now: an invalid directory refuses the boot (later
-  // changes are followed without a restart, lib/skills/extras).
-  (await import('@/lib/skills')).skillExtras();
-  // The installation design system (APP__DESIGN_SYSTEM_DIR) is read once, now: an invalid directory refuses the boot.
-  (await import('@/lib/html-systems/server')).installDesignSystemFromSettings();
+  const { createAppHost } = await import('@/server/host');
+  const { localAuthentication } = await import('@/server/local-authentication');
 
   // An image built without an engine or a browser needs to be told where they
   // went — before a boot canary passes and the first export answers 503.
   const {
     BROWSER_SERVICE_URL, EVENTS_SCHEMA, EVENTS_SERVICE_URL, MAX_ROWS_LIMIT, QUERY_TIMEOUT_MS, SQL_MUTATION_TIMEOUT_MS, SQL_SERVICE_URL,
+    services, setServices,
   } = await import('@/lib/platform');
-
-  /*
-   * THE DATABASE OPENS FIRST, because one of the services below writes through
-   * it. The events writer runs IN THIS PROCESS on the app's OWN handle — a
-   * second engine pointed at one PGLite data directory is a corrupted database,
-   * not a second reader — and the authentication composition below shares this same
-   * `queryable`.
-   */
-  const db = await getDb();
-  const raw = db.raw();
-  const queryable = { query: async <T = Record<string, unknown>>(sql: string, params: unknown[] = []) => (await db.query<T>(sql, params)) as { rows: T[] } };
-
-  /**
-   * THE SERVICES, INJECTED ONCE — this is the only place the process decides
-   * where the SQL engine, Chromium and the event log live (`lib/services` registry).
-   * Registered only when no URL names a service, because `./local` is the
-   * entry that loads the native module, Playwright or the writer's own DDL,
-   * and the lean image has none of them.
-   */
-  const { services, setServices,USER_PAGES_HOST } = await import('@/lib/platform');
   /** Settings another package's env boundary consumed on this process's behalf. */
   const sessionEnvNames = new Set<string>();
-  if (!SQL_SERVICE_URL) {
-    const { createSql } = await import('@artifactbin/sql/local');
-    setServices({ sql: createSql({ maxRows: MAX_ROWS_LIMIT, timeoutMs: QUERY_TIMEOUT_MS, mutationTimeoutMs: SQL_MUTATION_TIMEOUT_MS }) });
-  }
   // Dev only: Vite's HMR socket port, derived from our own port (see the Vite server below). The session browser
   // is told it too, so a hosted check's app page may reach that one loopback socket.
   const hmrPort: number | null = dev
     ? await import('@/lib/platform').then(({ APP_HMR_PORT_SETTING, resolveHmrPort }) => resolveHmrPort(APP_HMR_PORT_SETTING, port))
     : null;
-  if (!BROWSER_SERVICE_URL) {
-    const { createBrowser, sessionEnvNamesRead, sessionProcessPaths } = await import('@artifactbin/browser/local');
-    const { sessionBridge } = await import('@/lib/runtime');
-    // `app` is composed below; the hop is chosen once, on the first page a session opens.
-    let hop: ReturnType<typeof sessionBridge> | undefined;
-    const browser = createBrowser({ sessions: { ...sessionProcessPaths(env), baseURL, ...(hmrPort !== null ? { devSocketPort: hmrPort } : {}),
-      request: (request, actor) => (hop ??= sessionBridge({ dev, port, secret: sessionActorSecret, app }))(request, actor) } });
-    // BROWSER__RENDER_SANDBOX=chromium: a host that cannot sandbox Chromium refuses to boot here, by name.
-    await browser.start();
-    setServices({ browser });
-    // The session settings are read in THAT package, so this process's audit is told about them.
-    for (const name of sessionEnvNamesRead()) sessionEnvNames.add(name);
-  }
-  if (!EVENTS_SERVICE_URL) {
-    const { createEvents, ensureEventsSchema } = await import('@artifactbin/events/local');
-    setServices({ events: createEvents({ db: queryable, schema: EVENTS_SCHEMA }) });
-    // The schema is paid for at boot, not on the first emit; idempotent, and wrapped because telemetry may cost a boot a round trip but never the boot itself.
-    try {
-      await ensureEventsSchema(queryable, EVENTS_SCHEMA);
-    } catch (error) {
-      console.error('[events] schema setup failed:', error);
-    }
-  }
-  /*
-   * ONE `events` FOR THE WHOLE PROCESS. The authentication parts and Better Auth's
-   * hooks say their moments into the SAME writer the app emits through — the
-   * registry decided above once, never a second client — so the log this box
-   * keeps is one table with one connection behind it, and `source` is all
-   * that says whether the app or authentication spoke.
-   */
-  const events = services().events;
 
-  // The SPA: Vite in middleware mode for dev (modules, HMR, index transform); the built tree in production.
+  // The SPA: Vite in front of the listener in development (lib/runtime/dev-vite); the built tree in production.
   let vite: import('vite').ViteDevServer | null = null;
   if (dev && hmrPort !== null) {
-    const { createServer } = await import('vite');
     const { requirePagesHost } = await import('@/lib/platform');
-    vite = await createServer({
-      configFile: path.resolve(import.meta.dirname, 'vite.config.mts'),
-      // Vite's HMR socket defaults to 24678 for every project on the machine;
-      // derive it from our own port so two checkouts never fight over it.
-      // With documents on their own origins (APP__PAGES_HOST), Vite must answer the pages hostnames it
-      // fronts (its DNS-rebinding guard refuses unknown hosts) and leave CORS to the app's origin gate.
-      server: { middlewareMode: true, ws: { port: hmrPort }, ...developmentPagesHosts(requirePagesHost(), baseURL) },
-      appType: 'custom',
-      // Vite pre-bundles what the SPA imports; the server-only trees (vega, sqlite-wasm,
-      // playwright, PGLite) are the app's, never the browser's.
-      ...developmentViteOptions(process.cwd(), port),
-    });
+    vite = await (await import('vite')).createServer(developmentViteConfig({ configFile: path.resolve(import.meta.dirname, 'vite.config.mts'), appRoot: process.cwd(), port, hmrPort, pagesHost: requirePagesHost(), publicBaseUrl: baseURL }));
   }
-  /*
-   * AUTHENTICATION COMPOSITION — skipped whole by `--app-only`: human login,
-   * its schema and mailer, and the public login/OAuth routes.
-   * App-only still uses auth-owned bearer admission against the existing family store.
-   */
-  let authSecret: string | undefined;
-  let human: Awaited<ReturnType<typeof createHumanAuth>> | undefined;
-  // Both compositions admit bearers with auth's one-statement read (token, family fence, identity), so both
-  // create the auth tables it reads at boot; app-only omits login and mint routes.
-  const authSchema = readEnv(env, 'AUTH__SCHEMA') ?? 'auth';
-  await ensureAuthSchema(queryable, authSchema);
-  if (appOnly) await ensureHumanAuthSchema({ schema: authSchema, ...(raw.kind === 'pglite' ? { pglite: raw.instance } : { pool: raw.pool as import('pg').Pool }) });
-  const reader = createBearerReader({ db: queryable, authSchema, readSchema: readEnv(env, 'IDENTITY__SCHEMA'), serviceAudiences: parseServiceAudiences(readEnv(env, 'IDENTITY__SERVICE_AUDIENCES')), admitBearer: token => canAuthenticateUser(token.userId) });
+
   // DATASETS__DEFAULT_CONNECTION: a bad value stops the start here, naming the setting (never its value).
   validateDefaultConnection();
-  if (!appOnly) {
-    validateDeploymentConfiguration();
-    /* HUMAN LOGIN (Better Auth), composed from env — the options from the ONE pure builder. */
-    authSecret = readEnv(env, 'AUTH__SECRET')!;
-    const mailer = mailerForRuntime({
-      ...mailSettingsOf(env),
-      publicBaseUrl: baseURL,
-      devOutboxPath: readEnv(env, 'EMAIL__DEV_OUTBOX_PATH'),
-    });
-    const loginProviders = loginProvidersOf(env);
-    const testDomain = testDomainSignInOf(env);
-    human = await createHumanAuth({
-      secret: authSecret,
-      baseURL,
-      mail: mailer,
-      events,
-      ...(raw.kind === 'pglite' ? { pglite: raw.instance } : { pool: raw.pool as import('pg').Pool }),
-      ...loginProviders,
-      ...(testDomain ? { testDomain } : {}),
-      secure: baseURL.startsWith('https://'),
-      ...(authSchema ? { schema: authSchema } : {}),
-    });
-
-    setServices({humanSessions:human.sessions});
-
-
-  }
-
-  // The identity read surface again, now that Better Auth's tables exist (its `sessions` view), when this process
-  // hosts identity (lib/platform identity-host; its database open made the rest).
-  await (await import('@/lib/platform')).ensureLocalIdentity(db);
-
-  // All process entry points start the same durable jobs/outbox lifecycle.
-  // This import stays after env + service initialization, as do the other app imports.
-  const { startAppBackgroundTasks } = await import('@/lib/runtime');
-  const stopBackgroundTasks = await startAppBackgroundTasks(db);
-
-  const app = createAppServer({
+  /** The admission parts authentication puts in front of the app (server/local-authentication), composed once the database is open. */
+  let admission: Awaited<ReturnType<typeof localAuthentication>> | undefined;
+  let server: http.Server | undefined;
+  let dbKind = '';
+  /*
+   * THE APP HOST (server/host): the database, the boot reads, the durable jobs/outbox lifecycle every process entry
+   * starts, and the app server. The database opens before the services below, because one of them writes through it.
+   */
+  const host = await createAppHost({
     webDir: path.resolve('dist/web'),
     ...(hmrPort !== null ? { devHmrPort: hmrPort } : {}),
     // The separate proxy transports identity in a signed header, rather than on the Request object —
@@ -225,30 +108,72 @@ async function main(): Promise<void> {
       : dev && sessionActorSecret ? { actorSecret: sessionActorSecret } : {}),
     ...(vite ? { indexHtml: async (url: string) =>
       vite!.transformIndexHtml(url, (await import('node:fs')).readFileSync(path.resolve('web/solid-app.html'), 'utf8')) } : {}),
+    initialize: async db => {
+      dbKind = db.raw().kind;
+      const queryable = { query: async <T = Record<string, unknown>>(sql: string, params: unknown[] = []) => (await db.query<T>(sql, params)) as { rows: T[] } };
+      /**
+       * THE SERVICES, INJECTED ONCE — this is the only place the process decides
+       * where the SQL engine, Chromium and the event log live (`lib/services` registry).
+       * Registered only when no URL names a service, because `./local` is the
+       * entry that loads the native module, Playwright or the writer's own DDL,
+       * and the lean image has none of them.
+       */
+      if (!SQL_SERVICE_URL) {
+        const { createSql } = await import('@artifactbin/sql/local');
+        setServices({ sql: createSql({ maxRows: MAX_ROWS_LIMIT, timeoutMs: QUERY_TIMEOUT_MS, mutationTimeoutMs: SQL_MUTATION_TIMEOUT_MS }) });
+      }
+      if (!BROWSER_SERVICE_URL) {
+        const { createBrowser, sessionEnvNamesRead, sessionProcessPaths } = await import('@artifactbin/browser/local');
+        const { sessionBridge } = await import('@/lib/runtime');
+        // The app is composed after this; the hop is chosen once, on the first page a session opens.
+        let hop: ReturnType<typeof sessionBridge> | undefined;
+        const browser = createBrowser({ sessions: { ...sessionProcessPaths(env), baseURL, ...(hmrPort !== null ? { devSocketPort: hmrPort } : {}),
+          request: (request, actor) => (hop ??= sessionBridge({ dev, port, secret: sessionActorSecret, app: host }))(request, actor) } });
+        // BROWSER__RENDER_SANDBOX=chromium: a host that cannot sandbox Chromium refuses to boot here, by name.
+        await browser.start();
+        setServices({ browser });
+        // The session settings are read in THAT package, so this process's audit is told about them.
+        for (const name of sessionEnvNamesRead()) sessionEnvNames.add(name);
+      }
+      /*
+       * The events writer runs IN THIS PROCESS on the app's OWN handle — a second engine pointed at one PGLite data
+       * directory is a corrupted database, not a second reader — and authentication shares this same handle.
+       */
+      if (!EVENTS_SERVICE_URL) {
+        const { createEvents, ensureEventsSchema } = await import('@artifactbin/events/local');
+        setServices({ events: createEvents({ db: queryable, schema: EVENTS_SCHEMA }) });
+        // The schema is paid for at boot, not on the first emit; idempotent, and wrapped because telemetry may cost a boot a round trip but never the boot itself.
+        try {
+          await ensureEventsSchema(queryable, EVENTS_SCHEMA);
+        } catch (error) {
+          console.error('[events] schema setup failed:', error);
+        }
+      }
+      /*
+       * ONE `events` FOR THE WHOLE PROCESS. The authentication parts and Better Auth's
+       * hooks say their moments into the SAME writer the app emits through — the
+       * registry decided above once, never a second client — so the log this box
+       * keeps is one table with one connection behind it, and `source` is all
+       * that says whether the app or authentication spoke.
+       * AUTHENTICATION — human login and the public login/OAuth routes are skipped by `--app-only`, which still
+       * admits bearers with auth's read against the existing family store.
+       */
+      admission = await localAuthentication({ env, db, baseURL, events: services().events, login: !appOnly });
+    },
+    shutdown: async () => {
+      await new Promise<void>((resolve, reject) => server ? server.close(error => error ? reject(error) : resolve()) : resolve());
+      await vite?.close();
+      await closeDefaultConnection();
+    },
   });
 
   /*
    * THE LISTENER: the app alone, or authentication assembled around it. ONE boot
    * path — the flag only decides who answers the socket.
    */
-  const anonymousHosts = {name:'anonymousUserHosts',mount:<E extends import('hono').Env>(host:import('hono').Hono<E>)=>{host.use('*',userHostIngress(app));}};
-  const listener = appOnly
-    ? getRequestListener(assemble([anonymousHosts,bearerAdmission({env,tokens:reader,admitIdentity:admitDeploymentIdentity}),
-      {name:'application',mount:host=>host.all('*',c=>app.fetch(c.req.raw))}]).fetch)
-    : getRequestListener(assemble([anonymousHosts,...authParts({
-      upstream: inProcess(app),
-      env,
-      tokens: reader,
-      sessions: sessionStoreOf(human!),
-      admitIdentity:admitDeploymentIdentity,
-      cookieSecret: authSecret!,
-      secure: baseURL.startsWith('https://'),
-      identityDb: queryable,
-      // The trusted-issuer sign-in's writes, in one transaction on the app's own handle (identityDb stays plain).
-      identityTransactions: { ...queryable, transaction: fn => db.transaction(fn) },
-      appSchema: readEnv(env, 'APP__SCHEMA'),
-      events,
-    })]).fetch);
+  const anonymousHosts = {name:'anonymousUserHosts',mount:<E extends import('hono').Env>(app:import('hono').Hono<E>)=>{app.use('*',userHostIngress(host));}};
+  const listener = getRequestListener(assemble([anonymousHosts, ...admission!(host.request),
+    ...(appOnly ? [{name:'application',mount:(app:import('hono').Hono)=>app.all('*',c=>host.fetch(c.req.raw))}] : [])]).fetch);
 
   /*
    * SAY SOMETHING ABOUT AN ENV NOBODY READ. There is exactly one spelling of
@@ -271,22 +196,9 @@ async function main(): Promise<void> {
    * /@id/*, /node_modules/.vite/* and web/ sources and calls next() for
    * everything else — so in dev its asset paths are matched BEFORE the door check.
    */
-  const server = http.createServer(withRequestLog(
-    vite ? (req, res) => {
-      // The addressed host as the app reads it (lib/http trustedForwarded): a forwarded host only from a trusted hop.
-      const header=(name:string)=>{const value=req.headers[name];return Array.isArray(value)?value.join(','):value??null;};
-      const host=trustedForwarded({get:header},'x-forwarded-host')??req.headers.host??new URL(baseURL).host;
-      if(isUserPagesHost(host,USER_PAGES_HOST)){
-        const pathname=new URL(req.url??'/',baseURL).pathname;
-        // Vite normally fronts authentication. Owner hosts must never reach its
-        // executable source graph or bypass the product's resource boundary.
-        if(!handleFromUserPagesHost(host,USER_PAGES_HOST)||!['GET','HEAD'].includes(req.method??'')||!userHostStaticPath(pathname)){
-          void listener(req,res);return;
-        }
-        for(const name of USER_HOST_CREDENTIAL_HEADERS)delete req.headers[name];
-      }
-      vite!.middlewares(req,res,()=>void listener(req,res));
-    } : listener,
+  server = http.createServer(withRequestLog(
+    // An owner host's request reaches Vite only as server/user-host allows (`viteMayAnswer`).
+    vite ? (req, res) => viteMayAnswer(req, baseURL) ? vite!.middlewares(req, res, () => void listener(req, res)) : void listener(req, res) : listener,
   ));
   server.once('error', (error: NodeJS.ErrnoException) => {
     if (error.code === 'EADDRINUSE') {
@@ -296,18 +208,13 @@ async function main(): Promise<void> {
     console.error('[boot] listener failed:', error);
     process.exit(1);
   });
+  // The host's close: the background tasks, the events flush, then (its `shutdown`) this listener, Vite and the
+  // default connection, and the database last.
   const { installShutdown } = await import('@/lib/runtime');
-  installShutdown({ steps: [
-    stopBackgroundTasks,
-    () => services().events.close?.() ?? Promise.resolve(),
-    () => new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())),
-    async () => { await vite?.close(); },
-    closeDefaultConnection,
-    () => db.close(),
-  ] });
+  installShutdown({ steps: [host.close] });
 
   server.listen(port, () => {
-    console.log(`[boot] ${appOnly ? 'app-only' : 'auth + app'} on ${baseURL} (${dev ? 'dev' : 'production'}, db ${raw.kind})`);
+    console.log(`[boot] ${appOnly ? 'app-only' : 'auth + app'} on ${baseURL} (${dev ? 'dev' : 'production'}, db ${dbKind})`);
     if (hmrPort !== null) console.log(`[boot] vite hmr websocket on ws://localhost:${hmrPort} (defaults to APP__PORT + 1; APP__HMR_PORT overrides)`);
   });
 }
