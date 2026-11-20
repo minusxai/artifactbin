@@ -32,7 +32,7 @@ import type { Panel } from '../components/PageChrome';
 import { DocumentChrome } from '../document/DocumentChrome';
 import { DocumentCommentAction } from '../document/DocumentBarActions';
 import {PendingReaderDialog} from '../document/PendingReaderDialog';
-import { createDocumentDialogs, DocumentDialogs } from './DocumentDialogs';
+import { createDocumentDialogs } from './document-dialog-state';
 import { createDocumentHead } from './document-head';
 import { createFramedPage } from './framed-page';
 
@@ -40,10 +40,12 @@ import { createFramedPage } from './framed-page';
 const DOCUMENT_GROUND = { light: '#ffffff', dark: '#0b0b0c' } as const;
 
 /** Dialogs and controls load on first use (the discussion's own lazy layer: ../document/ReaderDiscussion). */
+/** Sharing, settings and the social preview: loaded once one is asked for. */
+const DocumentDialogs = lazy(() => import('./DocumentDialogs'));
 const AgentHandoffDialog = lazy(() => import('../document/AgentHandoffDialog').then(m => ({default:m.AgentHandoffDialog})));
 const NotFoundPage = lazy(() => import('./NotFound').then(m => ({default:m.NotFoundPage})));
-const ReaderPresenceControls = lazy(() => import('../document/ReaderPresenceControls').then(m => ({ default: m.ReaderPresenceControls })));
-const DocumentActions = lazy(() => import('../document/DocumentActions').then(m => ({ default: m.DocumentActions })));
+/** The bar's controls panel: loaded when it opens. */
+const DocumentControls = lazy(() => import('./DocumentControls'));
 const RegionEditingChrome = lazy(() => import('../document/RegionToolbar').then(m => ({ default: m.RegionEditingChrome })));
 const ForkConfirm = lazy(() => import('../document/ForkArtifact').then(m => ({ default: m.ForkConfirm })));
 
@@ -218,7 +220,7 @@ export function DocumentPage(): JSX.Element {
     else if (name === 'comment') {
       setRailOpen((open) => !open);
     } else if (name === 'fork') setFork(true);
-    else if (name === 'share') { if (isOwner()) dialogs.openSharing(); }
+    else if (name === 'share') { if (isOwner()) dialogs.show('sharing'); }
     else if (name === 'membership' || name === 'join') {
       // The bar's Join/Joined/Pending pill: joining needs an account; the people panel is where it happens.
       if (!accountSession()) { window.location.assign(loginHref(window.location, 'join')); return; }
@@ -294,17 +296,12 @@ export function DocumentPage(): JSX.Element {
       membership={page!.surface?.membership}
       panel={panel} setPanel={setPanel} mode={appAppearance} onMode={chooseMode}
       onComment={() => act('comment')} onFork={() => act('fork')} onShare={() => act('share')} onMembership={() => act('membership')}
-      controls={(close) => <Suspense fallback={<p role="status" aria-busy="true">Loading artifact controls…</p>}><><ReaderPresenceControls preferences={readerPresence.preferences()} onChange={readerPresence.setPreference} viewers={readerPresence.viewers()} total={readerPresence.total()} /><DocumentActions designSystem={{ value: page?.surface?.theme ?? null, colorMode: documentMode(), send: (command) => runtimeRef.current?.send(command), pick }} groupId={page?.surface?.group_id} pwaEnabled={page?.surface?.pwaEnabled} membershipAvailable={page?.surface?.membershipAvailable} id={id!} title={shownTitle()} version={currentVersion()} archived={archivedNow()}
-        onSettings={() => { close(); dialogs.openSettings(); }}
-        onSocialPreview={() => { close(); void dialogs.openSocialPreview(); }}
-        onRenamed={head.renamed}
-        owner={isOwner()} canEdit={editable()} canAnnotate={annotatable()} accountSession={accountSession()}
-        like={page?.like ?? { liked: false, count: 0 }} commentsOpen={railOpen()} onCommentsChange={(open) => { close(); setRailOpen(open); }}
-        openAnnotations={openAnnotationCount()} forkedFrom={page?.surface?.author?.forkedFrom ?? null} hideFork={!phone()}
-        membershipRevision={membershipRevision()} onMembershipChange={() => setMembershipRevision((n) => n + 1)}
-        onShare={() => { close(); dialogs.openSharing(); }}
-        onHandToAgent={isDoc() ? () => { close(); setHandoffOpen(true); } : undefined}
-        onDeleted={isOwner() ? () => window.location.assign('/') : undefined} /></></Suspense>} /></Show>
+      controls={(close) => <Suspense fallback={<p role="status" aria-busy="true">Loading artifact controls…</p>}><DocumentControls close={close} presence={readerPresence} answer={page!}
+        design={{ colorMode: documentMode(), send: (command) => runtimeRef.current?.send(command), pick }} id={id!} title={shownTitle()} version={currentVersion()} archived={archivedNow()}
+        owner={isOwner()} canEdit={editable()} canAnnotate={annotatable()} accountSession={accountSession()} phone={phone()}
+        commentsOpen={railOpen()} openAnnotations={openAnnotationCount()} membershipRevision={membershipRevision()} onCommentsChange={setRailOpen}
+        onMembershipChange={() => setMembershipRevision((n) => n + 1)} onSettings={() => dialogs.show('settings')} onSocialPreview={() => void dialogs.openSocialPreview()}
+        onRenamed={head.renamed} onShare={() => dialogs.show('sharing')} onHandToAgent={isDoc() ? () => setHandoffOpen(true) : undefined} /></Suspense>} /></Show>
     {/* First in document order: lib/islands/trusted-portal hands its portal to every popover, tooltip and dialog. */}
     <TrustedUi overlay layer="navigation">
       <Show when={ready() && (regionUi()?.toolbar() || regionUi()?.slash())}><Suspense fallback={null}><RegionEditingChrome ui={regionUi()!} top={barHeight} right={railInset()} /></Suspense></Show>
@@ -326,7 +323,12 @@ export function DocumentPage(): JSX.Element {
         beforeComment={(subject) => story ? story.beforeComment(subject) : Promise.resolve(subject)} membershipRevision={membershipRevision()}
         topOffset={barHeight} documentTopInset={regionUi()?.toolbar() ? REGION_TOOLBAR_H : 0} />
     </Show>
+    <Show when={dialogs.open() && (dialogs.open() !== 'settings' || backend)}>
+      <Suspense fallback={dialogs.open() === 'sharing' ? <PendingReaderDialog title="Share artifact" onClose={dialogs.close} /> : null}>
     <DocumentDialogs dialogs={dialogs} id={id!} title={shownTitle()} refs={page?.surface?.refs} owner={isOwner()} editable={editable()} queryApprovals={page?.surface?.format === 'html'} version={currentVersion()} onPwaEnabledChange={setPwaEnabled} />
+      </Suspense>
+    </Show>
+    <Show when={dialogs.error()}><p role="alert">{dialogs.error()}</p></Show>
     </TrustedUi>
   </Show>;
 }

@@ -46,8 +46,8 @@ export function createDocumentHead(options: {
     version,
     /** The newest edit id of the version loaded and the version the live stream drew. */
     editId: () => {
-      const heads = [html(), { version: options.live()?.version ?? -1, editId: options.live()?.editId }];
-      return heads.reduce((best, head) => (head.editId && head.version > best.version ? head : best), { version: -1, editId: undefined as string | undefined }).editId;
+      const loaded = html(), drawn = options.live();
+      return drawn?.editId && (drawn.version ?? -1) > (loaded.editId ? loaded.version : -1) ? drawn.editId : loaded.editId || undefined;
     },
   };
 }
