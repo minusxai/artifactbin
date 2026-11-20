@@ -459,6 +459,215 @@ const radar: VizTemplate = {
   },
 };
 
+// Trend card layout (the recipe follows). The KPI header forms a centered two-column lockup: the value is RIGHT
+// aligned to an inner edge; the metric, delta pill, and period are LEFT aligned from the opposite edge. The pill hugs
+// its rendered text — JetBrains Mono is monospace (≈0.62em advance), so its pixel width is
+// length × fontSize × 0.62 + padding. The KPI block anchors to the top of the card. Tall dashboard tiles grow the
+// chart, while the oversized value can borrow space from its quiet edge.
+const MONO_ADVANCE = 0.62;
+const VALUE_ADVANCE = 0.57;
+const VALUE_TRACKING_EM = -0.05;
+const valueColX = "bandwidth('slot') * 0.56";
+const rightColX = "bandwidth('slot') * 0.62";
+const deltaTextExpr = "!isValid(datum.__mx_pct) ? '—' : (datum.__mx_pct > 0 ? '↗ ' : (datum.__mx_pct < 0 ? '↘ ' : '→ ')) + format(abs(datum.__mx_pct), '.1f') + '%'";
+const pillWidthExpr = `length(datum.__mx_deltatext) * deltaSize * ${MONO_ADVANCE} + 20`;
+// Slightly tighter value tracking converts unused vertical room beside the
+// date row into a taller number without crossing the center gutter.
+const valueFontExpr = `max(18, min(valueSize, bandwidth('slot') * 0.54 / max(length(datum.__mx_valuetext) * ${VALUE_ADVANCE}, 1)))`;
+const valueTrackingExpr = `(${valueFontExpr}) * ${VALUE_TRACKING_EM}`;
+// History-fade + area-veil gradients need rgba stops of the series color.
+const seriesRgba = (alpha: number) =>
+  `'rgba(' + rgb(scale('color', datum.__mx_series)).r + ',' + rgb(scale('color', datum.__mx_series)).g + ',' + rgb(scale('color', datum.__mx_series)).b + ',${alpha})'`;
+const pctExpr = "(isValid(datum.__mx_prev) && datum.__mx_prev !== 0) ? (datum.__mx_value - datum.__mx_prev) / abs(datum.__mx_prev) * 100 : null";
+const deltaColor = { up: '#27ae60', down: '#c0392b', flat: '#8b949e' };
+const deltaTint = { up: 'rgba(39,174,96,0.12)', down: 'rgba(192,57,43,0.12)', flat: 'rgba(139,148,158,0.12)' };
+
+/** The trend card's sparkline: veil, fading line, hover targets and the beacon at the latest point. */
+const trendSparkMarks = (interp: string, pointTooltipExpr: string) => [
+  {
+    type: 'area',
+    name: '__mx_spark_area',
+    from: { data: 'card' },
+    encode: {
+      update: {
+        interpolate: { value: interp },
+        x: { scale: '__mx_spark_x', field: '__mx_idx' },
+        y: { scale: '__mx_spark_y', field: '__mx_disp' },
+        y2: { signal: 'plotBottom' },
+        fill: { signal: `{gradient: 'linear', x1: 0, y1: 0, x2: 0, y2: 1, stops: [{offset: 0, color: scale('color', datum.__mx_series)}, {offset: 1, color: ${seriesRgba(0)}}]}` },
+        fillOpacity: { value: 0.16 },
+      },
+    },
+  },
+  {
+    type: 'line',
+    name: '__mx_spark_line',
+    from: { data: 'card' },
+    encode: {
+      update: {
+        interpolate: { value: interp },
+        x: { scale: '__mx_spark_x', field: '__mx_idx' },
+        y: { scale: '__mx_spark_y', field: '__mx_disp' },
+        // History fades in from the past: near-transparent at the
+        // oldest point, full series color at the latest.
+        stroke: { signal: `{gradient: 'linear', x1: 0, y1: 0, x2: 1, y2: 0, stops: [{offset: 0, color: ${seriesRgba(0.14)}}, {offset: 0.55, color: ${seriesRgba(0.55)}}, {offset: 1, color: scale('color', datum.__mx_series)}]}` },
+        strokeWidth: { value: 2.5 },
+        strokeCap: { value: 'round' },
+        strokeJoin: { value: 'round' },
+      },
+      hover: { strokeWidth: { value: 3.5 } },
+    },
+  },
+  // Large transparent hit targets preserve the clean chart while
+  // making every point easy to inspect with a mouse or trackpad.
+  {
+    type: 'symbol',
+    name: '__mx_hover_points',
+    from: { data: 'card' },
+    encode: {
+      update: {
+        x: { scale: '__mx_spark_x', field: '__mx_idx' },
+        y: { scale: '__mx_spark_y', field: '__mx_disp' },
+        fill: { scale: 'color', field: '__mx_series' },
+        fillOpacity: { value: 0 },
+        strokeOpacity: { value: 0 },
+        size: { value: 360 },
+        tooltip: { signal: pointTooltipExpr },
+      },
+      hover: {
+        fillOpacity: { value: 0.18 },
+        size: { value: 360 },
+      },
+    },
+  },
+  // The beacon: a soft halo + solid core marking "now" at the
+  // end of the fading-history ribbon.
+  {
+    type: 'symbol',
+    name: '__mx_latest_point',
+    from: { data: '__mx_latest' },
+    interactive: false,
+    encode: {
+      update: {
+        x: { scale: '__mx_spark_x', field: '__mx_idx' },
+        y: { scale: '__mx_spark_y', field: '__mx_disp' },
+        fill: { scale: 'color', field: '__mx_series' },
+        fillOpacity: { value: 0.14 },
+        size: { value: 300 },
+      },
+    },
+  },
+  {
+    type: 'symbol',
+    name: '__mx_latest_core',
+    from: { data: '__mx_latest' },
+    encode: {
+      update: {
+        x: { scale: '__mx_spark_x', field: '__mx_idx' },
+        y: { scale: '__mx_spark_y', field: '__mx_disp' },
+        fill: { scale: 'color', field: '__mx_series' },
+        size: { value: 60 },
+      },
+      hover: { size: { value: 90 } },
+    },
+  },
+];
+
+/** The trend card's KPI lockup: delta pill, metric label, the big value, delta text and period. */
+const trendKpiMarks = (sparkline: boolean, valueColor: string | null, dateLabelExpr: string) => [
+  // The delta pill: the KPI's one piece of chrome — a tinted chip
+  // hugging the delta text, colored by direction.
+  {
+    type: 'rect',
+    name: '__mx_delta_pill',
+    from: { data: 'kpi' },
+    interactive: false,
+    encode: {
+      update: {
+        x: { signal: rightColX },
+        x2: { signal: `${rightColX} + datum.__mx_pillw` },
+        y: { signal: 'contextCenter - deltaSize * 0.82' },
+        y2: { signal: 'contextCenter + deltaSize * 0.82' },
+        cornerRadius: { signal: 'deltaSize * 0.82' },
+        fill: { signal: `!isValid(datum.__mx_pct) ? '${deltaTint.flat}' : (datum.__mx_pct > 0 ? '${deltaTint.up}' : (datum.__mx_pct < 0 ? '${deltaTint.down}' : '${deltaTint.flat}'))` },
+      },
+    },
+  },
+  // KPI marks deliberately render last so the data can pass behind them
+  // without compromising the number's hierarchy.
+  {
+    type: 'text',
+    from: { data: 'kpi' },
+    interactive: false,
+    encode: {
+      update: {
+        x: { signal: rightColX },
+        y: { signal: 'contextCenter - deltaSize * 0.82 - 6' },
+        align: { value: 'left' },
+        baseline: { value: 'bottom' },
+        text: { signal: "upper(replace(datum.__mx_series, /_/g, ' '))" },
+        fontSize: { signal: 'labelSize' },
+        fontWeight: { value: '600' },
+        letterSpacing: { value: 1.2 },
+        limit: { signal: "bandwidth('slot') * 0.34" },
+        opacity: { value: 0.7 },
+      },
+    },
+  },
+  {
+    type: 'text',
+    from: { data: 'kpi' },
+    interactive: false,
+    encode: {
+      update: {
+        x: { signal: valueColX },
+        y: { signal: sparkline ? `16 + (${valueFontExpr}) / 2` : 'height / 2' },
+        align: { value: 'right' },
+        baseline: { value: 'middle' },
+        text: { field: '__mx_valuetext' },
+        fontSize: { signal: valueFontExpr },
+        fontWeight: { value: 'bold' },
+        letterSpacing: { signal: valueTrackingExpr },
+        fill: valueColor ? { value: valueColor } : { scale: 'color', field: '__mx_series' },
+      },
+    },
+  },
+  {
+    type: 'text',
+    from: { data: 'kpi' },
+    interactive: false,
+    encode: {
+      update: {
+        x: { signal: `${rightColX} + datum.__mx_pillw / 2` },
+        y: { signal: 'contextCenter' },
+        baseline: { value: 'middle' },
+        align: { value: 'center' },
+        text: { field: '__mx_deltatext' },
+        fontSize: { signal: 'deltaSize' },
+        fontWeight: { value: 'bold' },
+        fill: { signal: `!isValid(datum.__mx_pct) ? '${deltaColor.flat}' : (datum.__mx_pct > 0 ? '${deltaColor.up}' : (datum.__mx_pct < 0 ? '${deltaColor.down}' : '${deltaColor.flat}'))` },
+      },
+    },
+  },
+  {
+    type: 'text',
+    from: { data: 'kpi' },
+    interactive: false,
+    encode: {
+      update: {
+        x: { signal: rightColX },
+        y: { signal: 'contextCenter + deltaSize * 0.82 + 6' },
+        baseline: { value: 'top' },
+        align: { value: 'left' },
+        text: { signal: dateLabelExpr },
+        fontSize: { signal: 'dateSize' },
+        limit: { signal: "bandwidth('slot') * 0.34" },
+        opacity: { value: 0.62 },
+      },
+    },
+  },
+];
+
 // ── trend ──────────────────────────────────────────────────────────────
 // KPI cards on the NATIVE VEGA engine: one card per bound measure — big value,
 // delta vs the comparison period, period labels, and a sparkline.
@@ -541,25 +750,6 @@ const trend: VizTemplate = {
     const fmtDate = (ref: string, fmt: string) => `(toDate(${ref}) ? timeFormat(toDate(${ref}), '${fmt}') : '' + ${ref})`;
     const pointTooltipExpr = `{'Metric': replace(datum.__mx_series, /_/g, ' '), 'Date': ${fmtDate('datum.__mx_date', tooltipDateFmt)}, 'Value': ${valueTextExpr}}`;
     const dateLabelExpr = `${fmtDate('datum.__mx_date', labelDateFmt)} + (isValid(datum.__mx_prev_date) ? ' vs ' + ${fmtDate('datum.__mx_prev_date', labelDateFmt)} : '')`;
-    // The KPI header forms a centered two-column lockup: the value is RIGHT
-    // aligned to an inner edge; the metric, delta pill, and period are LEFT
-    // aligned from the opposite edge. The pill hugs its rendered text — JetBrains
-    // Mono is monospace (≈0.62em advance), so its pixel width is
-    // length × fontSize × 0.62 + padding.
-    const MONO_ADVANCE = 0.62;
-    const VALUE_ADVANCE = 0.57;
-    const VALUE_TRACKING_EM = -0.05;
-    const valueColX = "bandwidth('slot') * 0.56";
-    const rightColX = "bandwidth('slot') * 0.62";
-    const deltaTextExpr = "!isValid(datum.__mx_pct) ? '—' : (datum.__mx_pct > 0 ? '↗ ' : (datum.__mx_pct < 0 ? '↘ ' : '→ ')) + format(abs(datum.__mx_pct), '.1f') + '%'";
-    const pillWidthExpr = `length(datum.__mx_deltatext) * deltaSize * ${MONO_ADVANCE} + 20`;
-    // Slightly tighter value tracking converts unused vertical room beside the
-    // date row into a taller number without crossing the center gutter.
-    const valueFontExpr = `max(18, min(valueSize, bandwidth('slot') * 0.54 / max(length(datum.__mx_valuetext) * ${VALUE_ADVANCE}, 1)))`;
-    const valueTrackingExpr = `(${valueFontExpr}) * ${VALUE_TRACKING_EM}`;
-    // History-fade + area-veil gradients need rgba stops of the series color.
-    const seriesRgba = (alpha: number) =>
-      `'rgba(' + rgb(scale('color', datum.__mx_series)).r + ',' + rgb(scale('color', datum.__mx_series)).g + ',' + rgb(scale('color', datum.__mx_series)).b + ',${alpha})'`;
 
     // Folded series names ARE column names — remap aliased ones for display (same
     // chained-ternary idiom as radar). __mx_col keeps the original for formats.
@@ -578,11 +768,6 @@ const trend: VizTemplate = {
       update: typeof override === 'number' && Number.isFinite(override) ? String(override) : responsive,
     });
 
-    // The KPI block anchors to the top of the card. Tall dashboard tiles grow
-    // the chart, while the oversized value can borrow space from its quiet edge.
-    const pctExpr = "(isValid(datum.__mx_prev) && datum.__mx_prev !== 0) ? (datum.__mx_value - datum.__mx_prev) / abs(datum.__mx_prev) * 100 : null";
-    const deltaColor = { up: '#27ae60', down: '#c0392b', flat: '#8b949e' };
-    const deltaTint = { up: 'rgba(39,174,96,0.12)', down: 'rgba(192,57,43,0.12)', flat: 'rgba(139,148,158,0.12)' };
     const interp = p.smooth === false ? 'monotone' : 'basis';
 
     return {
@@ -679,188 +864,8 @@ const trend: VizTemplate = {
               }
             : {}),
           marks: [
-            ...(sparkline
-              ? [
-                  {
-                    type: 'area',
-                    name: '__mx_spark_area',
-                    from: { data: 'card' },
-                    encode: {
-                      update: {
-                        interpolate: { value: interp },
-                        x: { scale: '__mx_spark_x', field: '__mx_idx' },
-                        y: { scale: '__mx_spark_y', field: '__mx_disp' },
-                        y2: { signal: 'plotBottom' },
-                        fill: { signal: `{gradient: 'linear', x1: 0, y1: 0, x2: 0, y2: 1, stops: [{offset: 0, color: scale('color', datum.__mx_series)}, {offset: 1, color: ${seriesRgba(0)}}]}` },
-                        fillOpacity: { value: 0.16 },
-                      },
-                    },
-                  },
-                  {
-                    type: 'line',
-                    name: '__mx_spark_line',
-                    from: { data: 'card' },
-                    encode: {
-                      update: {
-                        interpolate: { value: interp },
-                        x: { scale: '__mx_spark_x', field: '__mx_idx' },
-                        y: { scale: '__mx_spark_y', field: '__mx_disp' },
-                        // History fades in from the past: near-transparent at the
-                        // oldest point, full series color at the latest.
-                        stroke: { signal: `{gradient: 'linear', x1: 0, y1: 0, x2: 1, y2: 0, stops: [{offset: 0, color: ${seriesRgba(0.14)}}, {offset: 0.55, color: ${seriesRgba(0.55)}}, {offset: 1, color: scale('color', datum.__mx_series)}]}` },
-                        strokeWidth: { value: 2.5 },
-                        strokeCap: { value: 'round' },
-                        strokeJoin: { value: 'round' },
-                      },
-                      hover: { strokeWidth: { value: 3.5 } },
-                    },
-                  },
-                  // Large transparent hit targets preserve the clean chart while
-                  // making every point easy to inspect with a mouse or trackpad.
-                  {
-                    type: 'symbol',
-                    name: '__mx_hover_points',
-                    from: { data: 'card' },
-                    encode: {
-                      update: {
-                        x: { scale: '__mx_spark_x', field: '__mx_idx' },
-                        y: { scale: '__mx_spark_y', field: '__mx_disp' },
-                        fill: { scale: 'color', field: '__mx_series' },
-                        fillOpacity: { value: 0 },
-                        strokeOpacity: { value: 0 },
-                        size: { value: 360 },
-                        tooltip: { signal: pointTooltipExpr },
-                      },
-                      hover: {
-                        fillOpacity: { value: 0.18 },
-                        size: { value: 360 },
-                      },
-                    },
-                  },
-                  // The beacon: a soft halo + solid core marking "now" at the
-                  // end of the fading-history ribbon.
-                  {
-                    type: 'symbol',
-                    name: '__mx_latest_point',
-                    from: { data: '__mx_latest' },
-                    interactive: false,
-                    encode: {
-                      update: {
-                        x: { scale: '__mx_spark_x', field: '__mx_idx' },
-                        y: { scale: '__mx_spark_y', field: '__mx_disp' },
-                        fill: { scale: 'color', field: '__mx_series' },
-                        fillOpacity: { value: 0.14 },
-                        size: { value: 300 },
-                      },
-                    },
-                  },
-                  {
-                    type: 'symbol',
-                    name: '__mx_latest_core',
-                    from: { data: '__mx_latest' },
-                    encode: {
-                      update: {
-                        x: { scale: '__mx_spark_x', field: '__mx_idx' },
-                        y: { scale: '__mx_spark_y', field: '__mx_disp' },
-                        fill: { scale: 'color', field: '__mx_series' },
-                        size: { value: 60 },
-                      },
-                      hover: { size: { value: 90 } },
-                    },
-                  },
-                ]
-              : []),
-            // The delta pill: the KPI's one piece of chrome — a tinted chip
-            // hugging the delta text, colored by direction.
-            {
-              type: 'rect',
-              name: '__mx_delta_pill',
-              from: { data: 'kpi' },
-              interactive: false,
-              encode: {
-                update: {
-                  x: { signal: rightColX },
-                  x2: { signal: `${rightColX} + datum.__mx_pillw` },
-                  y: { signal: 'contextCenter - deltaSize * 0.82' },
-                  y2: { signal: 'contextCenter + deltaSize * 0.82' },
-                  cornerRadius: { signal: 'deltaSize * 0.82' },
-                  fill: { signal: `!isValid(datum.__mx_pct) ? '${deltaTint.flat}' : (datum.__mx_pct > 0 ? '${deltaTint.up}' : (datum.__mx_pct < 0 ? '${deltaTint.down}' : '${deltaTint.flat}'))` },
-                },
-              },
-            },
-            // KPI marks deliberately render last so the data can pass behind them
-            // without compromising the number's hierarchy.
-            {
-              type: 'text',
-              from: { data: 'kpi' },
-              interactive: false,
-              encode: {
-                update: {
-                  x: { signal: rightColX },
-                  y: { signal: 'contextCenter - deltaSize * 0.82 - 6' },
-                  align: { value: 'left' },
-                  baseline: { value: 'bottom' },
-                  text: { signal: "upper(replace(datum.__mx_series, /_/g, ' '))" },
-                  fontSize: { signal: 'labelSize' },
-                  fontWeight: { value: '600' },
-                  letterSpacing: { value: 1.2 },
-                  limit: { signal: "bandwidth('slot') * 0.34" },
-                  opacity: { value: 0.7 },
-                },
-              },
-            },
-            {
-              type: 'text',
-              from: { data: 'kpi' },
-              interactive: false,
-              encode: {
-                update: {
-                  x: { signal: valueColX },
-                  y: { signal: sparkline ? `16 + (${valueFontExpr}) / 2` : 'height / 2' },
-                  align: { value: 'right' },
-                  baseline: { value: 'middle' },
-                  text: { field: '__mx_valuetext' },
-                  fontSize: { signal: valueFontExpr },
-                  fontWeight: { value: 'bold' },
-                  letterSpacing: { signal: valueTrackingExpr },
-                  fill: valueColor ? { value: valueColor } : { scale: 'color', field: '__mx_series' },
-                },
-              },
-            },
-            {
-              type: 'text',
-              from: { data: 'kpi' },
-              interactive: false,
-              encode: {
-                update: {
-                  x: { signal: `${rightColX} + datum.__mx_pillw / 2` },
-                  y: { signal: 'contextCenter' },
-                  baseline: { value: 'middle' },
-                  align: { value: 'center' },
-                  text: { field: '__mx_deltatext' },
-                  fontSize: { signal: 'deltaSize' },
-                  fontWeight: { value: 'bold' },
-                  fill: { signal: `!isValid(datum.__mx_pct) ? '${deltaColor.flat}' : (datum.__mx_pct > 0 ? '${deltaColor.up}' : (datum.__mx_pct < 0 ? '${deltaColor.down}' : '${deltaColor.flat}'))` },
-                },
-              },
-            },
-            {
-              type: 'text',
-              from: { data: 'kpi' },
-              interactive: false,
-              encode: {
-                update: {
-                  x: { signal: rightColX },
-                  y: { signal: 'contextCenter + deltaSize * 0.82 + 6' },
-                  baseline: { value: 'top' },
-                  align: { value: 'left' },
-                  text: { signal: dateLabelExpr },
-                  fontSize: { signal: 'dateSize' },
-                  limit: { signal: "bandwidth('slot') * 0.34" },
-                  opacity: { value: 0.62 },
-                },
-              },
-            },
+            ...(sparkline ? trendSparkMarks(interp, pointTooltipExpr) : []),
+            ...trendKpiMarks(sparkline, valueColor, dateLabelExpr),
           ],
         },
       ],
