@@ -5,7 +5,8 @@
  */
 import {afterAll,beforeEach,expect,it} from 'vitest';
 import {Hono} from 'hono';
-import {REVALIDATE_ACTOR_HEADER,type Actor,type Queryable} from '@artifactbin/contracts';
+import {REVALIDATE_ACTOR_HEADER, type Actor} from '@artifactbin/contracts/actor';
+import type {Queryable} from '@artifactbin/contracts/db';
 import {actorOf} from '@artifactbin/utils';
 import {bearerAdmission,createAuthHost,type AuthOptions} from '../src/parts';
 import {createOAuthStore} from '../src/identity/oauth';

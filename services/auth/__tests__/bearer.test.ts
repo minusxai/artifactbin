@@ -1,5 +1,5 @@
 import {afterAll,beforeEach,describe,expect,it} from 'vitest';
-import type {Queryable} from '@artifactbin/contracts';
+import type {Queryable} from '@artifactbin/contracts/db';
 import {bearerLiveSql,createBearerReader} from '../src/identity/bearer';
 import {createOAuthStore} from '../src/identity/oauth';
 import {mintTestToken,resetTestDb,testDb} from './helpers';

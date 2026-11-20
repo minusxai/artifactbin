@@ -8,8 +8,9 @@ import { afterAll, describe, expect, it, vi } from 'vitest';
 import { brotliCompressSync, brotliDecompressSync } from 'node:zlib';
 import { Hono } from 'hono';
 import { readRawResponse, withHttpServer } from '@artifactbin/test-support/net';
-import type { Actor, Part } from '@artifactbin/contracts';
-import { ACTOR_HEADER } from '@artifactbin/contracts';
+import type { Actor } from '@artifactbin/contracts/actor';
+import type { Part } from '@artifactbin/contracts/part';
+import { ACTOR_HEADER } from '@artifactbin/contracts/actor';
 import { actorOf, actorReceiver, assemble, attachActor, inProcess, overHttp, serve, signActor, UPSTREAM_TIMEOUTS } from '@artifactbin/utils';
 /** A condition wait's bound (vi.waitFor's own default is 1 s): the condition decides; this only names one that never came. */
 const WAIT_MS = 20_000;

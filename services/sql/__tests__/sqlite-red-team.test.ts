@@ -6,7 +6,8 @@
  * mutation's own effect or its data policy, and outrunning the deadline.
  */
 import { describe, expect, it } from 'vitest';
-import { isQueryFailure, type DatasetMutationPolicy, type MutationOutcome, type QueryOutcome } from '@artifactbin/contracts';
+import { isQueryFailure, type MutationOutcome, type QueryOutcome } from '@artifactbin/contracts/sql';
+import type { DatasetMutationPolicy } from '@artifactbin/contracts/dataset-policy';
 import { createSqliteSql } from '@artifactbin/sql/sqlite';
 
 const sql = createSqliteSql({ maxRows: 100, timeoutMs: 2000 });

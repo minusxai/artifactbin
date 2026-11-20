@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PostgresDb } from '@/lib/platform';
 import { liveChannelCount, MAX_LIVE_CHANNELS, resetLiveSubscriptions, subscribeChannel } from '../realtime/live';
 import { TooManyLiveChannels, subscribeToAnnotations } from '..';
-import { annotationsChannel } from '@artifactbin/contracts';
+import { annotationsChannel } from '@artifactbin/contracts/live-channels';
 
 class FakeClient extends EventEmitter {
   queries: string[] = [];

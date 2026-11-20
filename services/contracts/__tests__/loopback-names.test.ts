@@ -4,7 +4,8 @@
  * them over plain HTTP. A name that merely CONTAINS one of them is a stranger's.
  */
 import { describe, expect, it } from 'vitest';
-import { isLocalDevelopmentHost, isLoopbackName } from '@artifactbin/contracts';
+import { isLocalDevelopmentHost } from '@artifactbin/contracts/server-identity';
+import { isLoopbackName } from '@artifactbin/contracts/loopback-names';
 
 describe('isLoopbackName', () => {
   it('names localhost, every name under it, lvh.me and every name under it', () => {
