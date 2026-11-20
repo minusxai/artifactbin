@@ -8,7 +8,7 @@ import { committedOpenAnnotations, createdArtifactWire, parseAccessValue, parseE
 import {htmlAssetLinks, htmlPageDeclarations} from '@/lib/html-page';
 import { trackEvent } from '@/lib/analytics';
 import {authorizeDatasetBinding,DatasetBindingUnsupportedError} from '@/lib/dataset-access';
-import type {HtmlDatasetLink,HtmlDeclaredQuery,HtmlDefaultConnectionLink,HtmlLiveDatasetLink} from '@artifactbin/contracts';
+import type {HtmlDatasetLink, HtmlDeclaredQuery, HtmlDefaultConnectionLink, HtmlLiveDatasetLink} from '@artifactbin/contracts/html-page';
 import {hasDefaultConnection} from '@/lib/connections';
 import {LiveDatasetRefusal,livePageDeclarations,prepareLiveDataset,withoutSecrets} from '@/lib/live-datasets';
 import {liveConnectionOf} from '@/lib/datasets';
@@ -21,7 +21,8 @@ import {liveConnectionOf} from '@/lib/datasets';
  * body parsers and the folder placement), so this module calls down into
  * artifacts and nothing in artifacts calls up into it.
  */
-import { CONTENT_FIELDS, type DatasetAccess, type Visibility } from '@artifactbin/contracts';
+import { CONTENT_FIELDS } from '@artifactbin/contracts/artifact-format';
+import type { DatasetAccess, Visibility } from '@artifactbin/contracts/sharing';
 import { identityForUser, shareTargetsRefusal, TEST_ACCOUNT_RESTRICTED, type AccessActor, type PublicationActor } from '@/lib/accounts';
 import { prepareCatalog, DatasetError } from '@/lib/datasets';
 import { Reply, reply } from '@/lib/http';
@@ -179,7 +180,7 @@ export async function replaceArtifactWithBody(
   }
   const prepared: PreparedContent | Reply = current.format === 'folder'
     ? {content: { format: 'folder', source: '', meta: {}, derivedTitle: null }, objects: []}
-    : await prepareContentInput({...(current.format==='dataset'?{columns:((current.meta.columns??[]) as import('@artifactbin/contracts').DatasetColumn[]).filter(c=>c.type==='user')}:{}),template:current.meta.template,...body}, {
+    : await prepareContentInput({...(current.format==='dataset'?{columns:((current.meta.columns??[]) as import('@artifactbin/contracts/sql').DatasetColumn[]).filter(c=>c.type==='user')}:{}),template:current.meta.template,...body}, {
       prepareDataset: (input,objects) => prepareCatalog(input,current,objects),
       loadRef: refLoaderForActor(owner),
       // Account-owned imports may have no historical creator credential.

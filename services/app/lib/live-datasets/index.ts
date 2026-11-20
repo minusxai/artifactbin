@@ -35,8 +35,13 @@
  * is unchanged: the page's reads of it answer the refusal.
  */
 import {readLifetime} from '@/lib/datasets';
-import { CONNECTORS, OWN_CONNECTIONS_OFF, SQL_READ_LIMITS, type ConnectionConfig, type ConnectorDialect, type ConnectorError, type ConnectorScalar, type ConnectorTestResult, type ConnectorViewer, type DatasetRole, type HtmlDatasetLink, type HtmlDeclaredQuery, type HtmlDefaultConnectionLink, type HtmlLiveDatasetLink, type HtmlPageLink, type HtmlPageVersion, type Queryable } from '@artifactbin/contracts';
-import { SQL_FAILURE_FOR_CONNECTOR, isSqlFailureCode, liveSource, sqlReadFailure } from '@artifactbin/contracts';
+import { CONNECTORS, OWN_CONNECTIONS_OFF, type ConnectionConfig, type ConnectorDialect, type ConnectorError, type ConnectorScalar, type ConnectorTestResult, type ConnectorViewer } from '@artifactbin/contracts/connectors';
+import { SQL_READ_LIMITS } from '@artifactbin/contracts/sql';
+import type { DatasetRole } from '@artifactbin/contracts/dataset-permissions';
+import type { HtmlDatasetLink, HtmlDeclaredQuery, HtmlDefaultConnectionLink, HtmlLiveDatasetLink, HtmlPageLink, HtmlPageVersion } from '@artifactbin/contracts/html-page';
+import type { Queryable } from '@artifactbin/contracts/db';
+import { SQL_FAILURE_FOR_CONNECTOR, isSqlFailureCode, sqlReadFailure } from '@artifactbin/contracts/sql-failures';
+import { liveSource } from '@artifactbin/contracts/sql-source';
 import { ConnectorFailure, colonParameters, connectionSummary, connectorError, connectorList, leadingWords, mapQualifiers, openConnection, parseConnectionConfig, qualifierNames, type NetworkSeams, type OpenConnection } from '@artifactbin/connectors';
 import type { AccessActor } from '@/lib/accounts';
 import { canReadArtifact, getArtifactById, setLiveDatasetSummary, type LiveConnectionInsert } from '@/lib/artifacts';

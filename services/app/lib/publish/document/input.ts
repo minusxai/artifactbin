@@ -14,7 +14,8 @@ import { ingestPdfFromUrl } from '@/lib/publish/ingest/pdf';
 import { publishDataset, publishVizRecipe, publishImage, publishPdf, publishFile } from '@/lib/datasets';
 
 
-import { DATA_CONTENT_FIELDS, MAX_DOCUMENT_BYTES, TEXT_CONTENT_FIELDS } from '@artifactbin/contracts';
+import { DATA_CONTENT_FIELDS, TEXT_CONTENT_FIELDS } from '@artifactbin/contracts/artifact-format';
+import { MAX_DOCUMENT_BYTES } from '@artifactbin/contracts/document-update';
 
 
 function tooLarge(value: string): Reply | null {

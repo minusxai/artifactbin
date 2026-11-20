@@ -12,7 +12,7 @@
  *  - A new document in the frame ends this document's sessions (`attached`); pagehide sends pending edits and closes
  *    the stream (the server saves what this reader typed); pageshow from the back-forward cache resumes.
  */
-import { CELL_READONLY, isCellKey, type RegionFrameMessage, type RegionParentMessage } from '@artifactbin/contracts';
+import { CELL_READONLY, isCellKey, type RegionFrameMessage, type RegionParentMessage } from '@artifactbin/contracts/region-sessions';
 import { createRegionClient, type RegionClient, type RegionClientEvents } from '@/lib/artifact-backend/region-http';
 
 interface CellBridge {

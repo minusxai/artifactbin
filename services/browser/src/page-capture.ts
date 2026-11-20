@@ -5,8 +5,8 @@
  * A deck without the asked slide throws `NoSlideError`; an element that cannot be shot throws `NoElementError`.
  */
 import sharp from 'sharp';
-import type { HarvestedSvg, RenderRequest, SvgHarvestRequest } from '@artifactbin/contracts';
-import { ELEMENT_CAPTURE, SVG_HARVEST_LIMITS, type NoElement } from '@artifactbin/contracts';
+import type { HarvestedSvg, RenderRequest, SvgHarvestRequest } from '@artifactbin/contracts/browser';
+import { ELEMENT_CAPTURE, SVG_HARVEST_LIMITS, type NoElement } from '@artifactbin/contracts/browser';
 import type { Locator } from 'playwright';
 import type { ReadyPage } from './render-lane';
 

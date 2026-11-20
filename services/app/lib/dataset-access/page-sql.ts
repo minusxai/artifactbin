@@ -16,7 +16,8 @@
 import {QUERY_TIMEOUT_MS} from '@/lib/platform';
 import {readLifetime} from '@/lib/datasets';
 import { DatasetAccessError } from './errors';
-import { SQL_READ_LIMITS, type ColumnType, type DatasetColumn, type Scalar, type SqlFailureCode } from '@artifactbin/contracts';
+import { SQL_READ_LIMITS, type ColumnType, type DatasetColumn, type Scalar } from '@artifactbin/contracts/sql';
+import type { SqlFailureCode } from '@artifactbin/contracts/sql-failures';
 import { CatalogQueryFailure, executeMounted, type CatalogMount } from '@/lib/datasets';
 import { readsOf, TimedOut } from '@artifactbin/sql/core';
 import { sqlRefusalMessage } from '@/lib/dataset-permissions';

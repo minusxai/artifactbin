@@ -9,7 +9,7 @@
  * Types only. This module holds no compiler (see the index); the record is
  * stored in `meta.parsedArtifact` and shipped to the runtime in the island.
  */
-import type { ColumnType, DatasetColumn, UserConstraints } from '@artifactbin/contracts';
+import type { ColumnType, DatasetColumn, UserConstraints } from '@artifactbin/contracts/sql';
 import type { Scalar, Row } from './dataflow';
 
 /**

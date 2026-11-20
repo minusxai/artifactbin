@@ -16,7 +16,7 @@ import { ANONYMOUS_ACTOR } from '@/lib/accounts';
 import { sessionActor } from '@/lib/authentication';
 import { verifyExportKey } from '@/lib/export';
 import { canonicalDocumentUrl, userPageUrlForOwner } from '@/lib/user-pages';
-import { canEdit } from '@artifactbin/contracts';
+import { canEdit } from '@artifactbin/contracts/sharing';
 import { ROUTES } from './routes.generated';
 
 /** Which document, if any, a path names — `/a/<id>` or a pretty URL. */

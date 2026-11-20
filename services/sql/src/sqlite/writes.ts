@@ -19,7 +19,9 @@
  * `like_matches`/`ilike_matches` (utils `datasetPatternMatch`, the matcher the app's role view uses too), and `_id`
  * reads the policy's `rowId` column.
  */
-import type { ColumnType, DatasetColumn, DatasetMutationPolicy, DatasetOperation, DeletePermission, DryRunMutationsInput, DryRunMutationsResult, InsertPermission, MutationAnalysis, MutationInput, MutationOutcome, Row, RunInput, Scalar, StatementAnalysis, UpdatePermission } from '@artifactbin/contracts';
+import type { ColumnType, DatasetColumn, DryRunMutationsInput, DryRunMutationsResult, MutationInput, MutationOutcome, Row, RunInput, Scalar } from '@artifactbin/contracts/sql';
+import type { DatasetMutationPolicy, DatasetOperation, DeletePermission, InsertPermission, MutationAnalysis, UpdatePermission } from '@artifactbin/contracts/dataset-policy';
+import type { StatementAnalysis } from '@artifactbin/contracts/sql-analysis';
 import { compilePolicyPredicate, policyValue } from '@artifactbin/utils/dataset-policy';
 import { inferColumns } from '@artifactbin/utils/shape';
 import { DEFAULT_CAPS } from '../caps';

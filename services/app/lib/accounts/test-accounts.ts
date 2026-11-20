@@ -16,7 +16,9 @@
  *    follows only test accounts;
  *  - nothing it does reaches a non-test person's notifications (lib/notifications/events).
  */
-import { isTestDomainEmail, type Queryable, type ShareEntry } from '@artifactbin/contracts';
+import { isTestDomainEmail } from '@artifactbin/contracts/test-domain';
+import type { Queryable } from '@artifactbin/contracts/db';
+import type { ShareEntry } from '@artifactbin/contracts/sharing';
 import { TEST_DOMAIN, getDb } from '../platform';
 import type { AccessActor } from './actors';
 

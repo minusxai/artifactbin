@@ -16,7 +16,7 @@ import { artifactState, type ArtifactRow } from '@/lib/artifacts';
 import { storedPolicy } from '@/lib/dataset-permissions';
 import { DatasetError, loadDatasetRows, type DatasetTable } from '@/lib/datasets';
 import { isMutationRefused, mutateDataset } from '@/lib/document-data';
-import type { Queryable } from '@artifactbin/contracts';
+import type { Queryable } from '@artifactbin/contracts/db';
 import { datasetBindingCatalog } from './authority';
 import { hasuraNames, storedConfiguration } from '@/lib/datasets/graphql-names';
 import { ID_COLUMN, quote, rowIdsForObject, tableIdentity } from './model';

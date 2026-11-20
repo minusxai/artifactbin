@@ -2,7 +2,7 @@
  * Accounts and profiles, as the app reads them. A user is the durable owner of account-issued tokens. Every write
  * (create, handle, picture, token revocation) is the identity module's (lib/platform `services().identity`).
  */
-import type { UserKind } from '@artifactbin/contracts';
+import type { UserKind } from '@artifactbin/contracts/testusers';
 import { getDb, type Queryable, emit, services } from '../platform';
 import { forgetRequestCredentials } from './tokens';
 
@@ -51,7 +51,7 @@ const USER_COLS = 'id, email, kind, parent_user_id, expires_at, name, username, 
 // ── Usernames ────────────────────────────────────────────────────────────────
 
 /** Shared user/group handle format, retained as the username API. */
-export { HANDLE_RE as USERNAME_RE } from '@artifactbin/contracts';
+export { HANDLE_RE as USERNAME_RE } from '@artifactbin/contracts/handles';
 
 /**
  * Lazy backfill: the identity module assigns a handle (`localpart_xxxx`) to an account row that has none. Called on

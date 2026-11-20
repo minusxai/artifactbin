@@ -14,8 +14,8 @@ import { safeHref } from './href';
 
 export { safeHref };
 
-export type { RegionKind } from '@artifactbin/contracts';
-import type { RegionKind } from '@artifactbin/contracts';
+export type { RegionKind } from '@artifactbin/contracts/region-sessions';
+import type { RegionKind } from '@artifactbin/contracts/region-sessions';
 
 export const isRegionKind = (value: unknown): value is RegionKind => value === 'rich' || value === 'text' || value === 'rich-native-v1';
 

@@ -7,7 +7,9 @@
  * `restorePoint`s to put them back) is what both judge by, and what types an output column (`declaredType`,
  * `resultColumn`). A refusal is `Refused`, its message the rule.
  */
-import { MUTATION_ONLY_FUNCTIONS, type ColumnRead, type ColumnType, type DatasetColumn, type OutputColumn, type StatementAnalysis, type StatementKind, type TableWrite } from '@artifactbin/contracts';
+import { MUTATION_ONLY_FUNCTIONS } from '@artifactbin/contracts/sql-functions';
+import type { ColumnRead, OutputColumn, StatementAnalysis, StatementKind, TableWrite } from '@artifactbin/contracts/sql-analysis';
+import type { ColumnType, DatasetColumn } from '@artifactbin/contracts/sql';
 import { calendarDate, LIBRARY_NAMES } from './functions';
 import type { Sqlite3 } from './wasm';
 

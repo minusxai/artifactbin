@@ -1,21 +1,11 @@
-import type {
-  BrowserService,
-  BrowserSessionResult,
-  EventEnvelope,
-  EventsService,
-  DryRunMutationsResult,
-  DryRunResult,
-  MutationOutcome,
-  QueryFailure,
-  QueryOutcome,
-  RenderRequest,
-  RenderUploadResult,
-  RenderResult,
-  SqlService,
-  SvgHarvestResult,
-  PageInspection,
-} from '@artifactbin/contracts';
-import { sqlTimeout, SQL_QUERY_DEFAULT_MS, SQL_WALL_OVERHEAD_MS, BROWSER_ROUTES, ELEMENT_CAPTURE_HEADER, EVENTS_ROUTES, SERVICE_AUTH_HEADER, SQL_ROUTES } from '@artifactbin/contracts';
+import type { BrowserService, RenderRequest, RenderUploadResult, RenderResult, SvgHarvestResult, PageInspection } from '@artifactbin/contracts/browser';
+import type { BrowserSessionResult } from '@artifactbin/contracts/browser-sessions';
+import type { EventEnvelope, EventsService } from '@artifactbin/contracts/events';
+import type { DryRunMutationsResult, DryRunResult, MutationOutcome, QueryFailure, QueryOutcome, SqlService } from '@artifactbin/contracts/sql';
+import { sqlTimeout, SQL_QUERY_DEFAULT_MS, SQL_WALL_OVERHEAD_MS, SQL_ROUTES } from '@artifactbin/contracts/sql';
+import { BROWSER_ROUTES, ELEMENT_CAPTURE_HEADER } from '@artifactbin/contracts/browser';
+import { EVENTS_ROUTES } from '@artifactbin/contracts/events';
+import { SERVICE_AUTH_HEADER } from '@artifactbin/contracts/routes';
 import { httpClient } from './http';
 
 const SQL_DEFAULT_TIMEOUT_MS = SQL_QUERY_DEFAULT_MS + SQL_WALL_OVERHEAD_MS;

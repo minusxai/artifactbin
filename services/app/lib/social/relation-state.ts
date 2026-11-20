@@ -1,5 +1,6 @@
 /** Storage for relation lifecycles. Callers own authorization and subject/object locks. */
-import {RELATION_EVENTS,type Queryable,type RelationVerb,type RelationStatus,type RelationDirection} from '@artifactbin/contracts';
+import {RELATION_EVENTS, type RelationVerb, type RelationStatus, type RelationDirection} from '@artifactbin/contracts/relations';
+import type {Queryable} from '@artifactbin/contracts/db';
 
 /** A read projection, not another table: keeps the membership wire independent of storage. */
 export const JOIN_RELATIONS = `(SELECT object_id AS artifact_id, subject_id AS user_id, status, direction,

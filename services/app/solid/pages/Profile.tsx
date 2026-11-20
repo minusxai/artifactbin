@@ -5,7 +5,7 @@ import { Folder, LayoutGrid, List } from 'lucide-solid';
 import { canonicalArtifactPath } from '@/lib/http/urls';
 import { buildShelf, groupShelfByRecency, type ShelfRow } from '@/lib/shelf';
 import type { ProfileSocial } from '@/lib/social';
-import { refusedForSignIn } from '@artifactbin/contracts';
+import { refusedForSignIn } from '@artifactbin/contracts/sign-in-required';
 import { loginHref } from '@/lib/http/login-href';
 import { pageDataChanged } from '@/solid/lib/page-data-events';
 import { takeBootstrap } from '@/solid/lib/bootstrap';

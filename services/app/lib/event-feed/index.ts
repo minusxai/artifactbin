@@ -15,10 +15,8 @@
  * The stored `via` (the writing credential and agent session) only decides `actor.you` and is never served.
  */
 import { createHash } from 'node:crypto';
-import {
-  EVENT_CATEGORIES, EVENT_FEED_DEFAULT_LIMIT, EVENT_FEED_MAX_LIMIT, EVENT_FEED_MAX_WAIT_SECONDS, EVENT_FEED_RETENTION_DAYS,
-  EVENT_FEED_SCHEMA_VERSION, EVENT_FEED_TYPES, type EventFeedEvent, type EventFeedPage, type EventFeedType, type EventOrigin,
-} from '@artifactbin/contracts';
+import { EVENT_CATEGORIES, EVENT_FEED_DEFAULT_LIMIT, EVENT_FEED_MAX_LIMIT, EVENT_FEED_MAX_WAIT_SECONDS, EVENT_FEED_RETENTION_DAYS, EVENT_FEED_SCHEMA_VERSION, EVENT_FEED_TYPES, type EventFeedEvent, type EventFeedPage, type EventFeedType } from '@artifactbin/contracts/event-feed';
+import type { EventOrigin } from '@artifactbin/contracts/events';
 import { accountOf, type AccessActor } from '@/lib/accounts';
 import { commentMonitorScope } from '@/lib/artifact-access';
 import { EVENTS_SCHEMA, getDb, publishEventOutbox } from '@/lib/platform';

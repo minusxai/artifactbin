@@ -1,5 +1,6 @@
 /** Native HTML annotation and selection messages, signed by the frame session. */
-import type { CommentViewState, HtmlNodeAnchor } from '@artifactbin/contracts';
+import type { CommentViewState } from '@artifactbin/contracts/comment-view-state';
+import type { HtmlNodeAnchor } from '@artifactbin/contracts/html-annotation';
 import type { AnnotationRange } from '@/lib/document';
 type MarkdownBlockKind = 'paragraph' | 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'quote' | 'bullet' | 'number' | 'code' | 'check' | 'hr' | 'table';
 interface StoryEditCrumb { path: string; tag: string; hint: string }

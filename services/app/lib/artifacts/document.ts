@@ -1,5 +1,5 @@
 /** Persistence reads preserve native source bytes and stored history without converting retired documents. */
-import type {Queryable} from '@artifactbin/contracts';
+import type {Queryable} from '@artifactbin/contracts/db';
 export function sourceStorage(_format:string,source:string|null,_certified=false,_version=1):{source:string|null;document:null} {
  return {source,document:null};
 }

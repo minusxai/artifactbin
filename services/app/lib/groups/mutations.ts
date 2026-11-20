@@ -7,8 +7,9 @@
  *  - the app's (a page shared with a group or moved into one): `recordGroupMutation` writes the audit and event in
  *    the app's own transaction, and `mailGroupChanges` asks identity for their mail once that commits.
  */
-import {artifactChannel,annotationsChannel,type GroupChange} from '@artifactbin/contracts';
-import type {Queryable} from '@artifactbin/contracts';
+import {artifactChannel, annotationsChannel} from '@artifactbin/contracts/live-channels';
+import type {GroupChange} from '@artifactbin/contracts/identity-module';
+import type {Queryable} from '@artifactbin/contracts/db';
 import {getDb,generateInternalId,recordEvent,services} from '../platform';
 import {GroupError} from './errors';
 import {endStaleApprovals} from '@/lib/query-approvals';

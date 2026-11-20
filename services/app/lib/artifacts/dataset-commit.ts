@@ -13,7 +13,7 @@
  * And a dataset POLICY's commit, the guarded statement behind lib/document-data/dataset-policy.
  */
 import type { AccessActor } from '@/lib/accounts';
-import type { Queryable } from '@artifactbin/contracts';
+import type { Queryable } from '@artifactbin/contracts/db';
 import { newEditId } from '../document';
 import { artifactQuery } from './document';
 import { LIVE_ARTIFACT_SQL, editorScope, policyReaderSql, reactionScope, sharingScope, type ArtifactRow } from '@/lib/artifact-access';

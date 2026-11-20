@@ -1,4 +1,4 @@
-import type {AccountResource} from '@artifactbin/contracts';
+import type {AccountResource} from '@artifactbin/contracts/account-resource';
 /** The CLI's literal YAML and the server use this same finite field vocabulary. */
 export function parseAccountResource(input:unknown):AccountResource{
  if(!input||typeof input!=='object'||Array.isArray(input))throw new Error('Account resources must be mappings.');

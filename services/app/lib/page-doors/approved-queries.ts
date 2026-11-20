@@ -11,7 +11,8 @@
  * hash, connection and group in its payload, never the reader's values; best-effort, as every observational event
  * (lib/platform `emit`).
  */
-import {sqlReadFailure,type HtmlPageVersion} from '@artifactbin/contracts';
+import {sqlReadFailure} from '@artifactbin/contracts/sql-failures';
+import type {HtmlPageVersion} from '@artifactbin/contracts/html-page';
 import type {AccessActor} from '@/lib/accounts';
 import {VIEWER_PARAMS,connectorViewer,declaredConnectionQuery,groupViewer,runDeclaredConnectionQuery,type ConnectionSqlReply} from '@/lib/connections';
 import {approvedRun,pageOwnerName,paramsOutside,readsAsGroup} from '@/lib/query-approvals';

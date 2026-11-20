@@ -16,7 +16,7 @@
  * size target 4 in scripts/build/size-targets.mjs), keeps just the selection bridge and the decision to load it.
  */
 import { createEffect, createSignal, lazy, Show, Suspense, type Accessor, type JSX, type Setter } from 'solid-js';
-import type { ArtifactRole } from '@artifactbin/contracts';
+import type { ArtifactRole } from '@artifactbin/contracts/sharing';
 import type { StoryEditSelection } from '@/lib/html-bridge/selection-contract';
 import type { DocumentRuntimeRef } from '@/lib/html-reader/document-endpoint';
 import { commentAccess, type CommentAccess } from './comment-access';

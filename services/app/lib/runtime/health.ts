@@ -12,7 +12,8 @@
  * Never throws — a probe that explodes is a probe that failed.
  */
 import { getDb, BROWSER_SERVICE_URL, EVENTS_SERVICE_URL, SQL_SERVICE_URL, QUERY_TIMEOUT_MS, INTERNAL_SERVICE_SECRET } from '@/lib/platform';
-import {SQL_ROUTES,SERVICE_AUTH_HEADER} from '@artifactbin/contracts';
+import {SQL_ROUTES} from '@artifactbin/contracts/sql';
+import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts/routes';
 
 type ServiceName = 'sql' | 'browser' | 'events' | 'db';
 

@@ -14,7 +14,7 @@ import { useSession } from '../lib/session';
 import { Button } from '../ui/Button';
 import { SectionHeading } from '../ui/PageHeader';
 import { StatusMessage } from '../ui/StatusMessage';
-import { OWN_CONNECTIONS_OFF } from '@artifactbin/contracts';
+import { OWN_CONNECTIONS_OFF } from '@artifactbin/contracts/connectors';
 import { LiveDatasetForm, VIEWER_NOTE, type ConnectorList } from './LiveDatasetForm';
 
 const STORED = [

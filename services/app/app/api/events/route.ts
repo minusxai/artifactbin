@@ -1,7 +1,7 @@
 import { withTokenAuth } from '@/lib/authentication';
 import { EventFeedRefusal, parseEventFeedQuery, readEventsFor } from '@/lib/event-feed';
 import { json } from '@/lib/http';
-import { AGENT_SESSION_HEADER, agentSessionKey } from '@artifactbin/contracts';
+import { AGENT_SESSION_HEADER, agentSessionKey } from '@artifactbin/contracts/agent';
 
 /** Auth/query translation only; lib/event-feed owns filters, cursors, access and waits (CONTRACT §6). */
 export const GET = withTokenAuth(async (request, { actor }) => {

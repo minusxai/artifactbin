@@ -8,7 +8,7 @@
  * yet (a block typed since the last save is identified only when it is saved). A save with nothing unsaved is a
  * no-op that returns the current version, so the cautious reading costs one request.
  */
-import type { HtmlNodeAnchor } from '@artifactbin/contracts';
+import type { HtmlNodeAnchor } from '@artifactbin/contracts/html-annotation';
 
 /** What the comment composer sends: an html-node anchor, or a bare node id. */
 export interface RegionCommentSubject { anchor?: HtmlNodeAnchor; nodeId?: string }

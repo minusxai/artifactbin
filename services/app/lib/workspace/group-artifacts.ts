@@ -11,7 +11,7 @@
  *
  * The answer carries ids, titles, display names and counts only: no email, no source, no row. Newest first, 200 at most.
  */
-import type {GroupArtifact} from '@artifactbin/contracts';
+import type {GroupArtifact} from '@artifactbin/contracts/groups';
 import type {AccessActor} from '@/lib/accounts';
 import {LIVE_ARTIFACT_SQL,roleWithoutLink} from '@/lib/artifact-access';
 import {GroupError,getGroupRole,groupChain} from '@/lib/groups';

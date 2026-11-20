@@ -18,7 +18,7 @@
  *    visible, read-only, and is in `unsaved`. Offline copies and pages outside the app are `readonly` with no error.
  */
 import * as Y from 'yjs';
-import type { CollabStatus } from '@artifactbin/contracts';
+import type { CollabStatus } from '@artifactbin/contracts/region-sessions';
 import { cellText, openRegionDoc, spliceText, textSplice } from '../live-regions/cells';
 import type { CellLink, CellPeer, CellPort } from './frame-cells';
 

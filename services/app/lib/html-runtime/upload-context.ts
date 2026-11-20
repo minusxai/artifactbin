@@ -1,4 +1,4 @@
-import type {UploadContext} from '@artifactbin/contracts';
+import type {UploadContext} from '@artifactbin/contracts/dataset-upload';
 import type {FileUploadBinding,PlatformUploadControl} from './upload-contract';
 type Watch=(listener:(context:UploadContext)=>void)=>{unsubscribe():void};
 /** This is guidance from the trusted shell, never proof of an insert grant. */

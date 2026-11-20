@@ -18,7 +18,7 @@
  * not-found. The database is the truth and two app processes serialize on its rows; wakeups cross processes through
  * NOTIFY. Composition (the shared LISTEN registry and the heartbeat frame) is the caller's: the routes pass them in.
  */
-import { REGION_IDLE_SAVE_MS } from '@artifactbin/contracts';
+import { REGION_IDLE_SAVE_MS } from '@artifactbin/contracts/region-sessions';
 import type { AccessActor } from '@/lib/accounts';
 import { regionStore, sessionCore, type RegionStore } from './sessions';
 import { cellStore, type CellStore } from './cells';

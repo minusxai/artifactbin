@@ -1,5 +1,5 @@
 import { runtimeId } from '@artifactbin/utils/runtime-id';
-import { ARTIFACT_ID_PATTERN } from '@artifactbin/contracts';
+import { ARTIFACT_ID_PATTERN } from '@artifactbin/contracts/artifact-reference';
 import { LOCAL_PUBLICATION_MESSAGE, type LocalPublicationReceipt } from './contracts';
 
 export function publicationPlatformOrigin(value: string): string {

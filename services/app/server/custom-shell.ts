@@ -52,7 +52,7 @@
  */
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { classifyPath, isScreenPath } from '@artifactbin/contracts';
+import { classifyPath, isScreenPath } from '@artifactbin/contracts/url-space';
 
 const NONCE_PLACEHOLDER = '__CSP_NONCE__';
 const HEAD_PLACEHOLDER = '__HEAD_TAGS__';

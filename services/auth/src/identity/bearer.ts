@@ -32,7 +32,9 @@
  * that service is still configured here with the opt-in at the origin its approval recorded (`serviceAudiences`,
  * contracts `groupSignInServiceConfigured`): configuration the views cannot see, so this read decides it, every use.
  */
-import { groupSignInServiceConfigured, type Queryable, type ServiceAudience, type TokenReader, type TokenRecord } from '@artifactbin/contracts';
+import { groupSignInServiceConfigured, type ServiceAudience } from '@artifactbin/contracts/service-audiences';
+import type { Queryable } from '@artifactbin/contracts/db';
+import type { TokenReader, TokenRecord } from '@artifactbin/contracts/identity';
 import { TOKEN_RE, hashToken, plainIdentifier } from '@artifactbin/utils';
 
 export interface BearerReaderOptions {

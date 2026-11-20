@@ -1,6 +1,8 @@
 /** OAuth 2.1 for `/api`, implemented over the auth domain's clients and credentials. */
 import { createHash, randomBytes } from 'node:crypto';
-import {API_RESOURCE_PATH,ARTIFACT_SCOPE,isLocalDevelopmentHost,type Queryable} from '@artifactbin/contracts';
+import {API_RESOURCE_PATH, ARTIFACT_SCOPE} from '@artifactbin/contracts/cli-auth';
+import {isLocalDevelopmentHost} from '@artifactbin/contracts/server-identity';
+import type {Queryable} from '@artifactbin/contracts/db';
 import {plainIdentifier} from '@artifactbin/utils';
 import {sessionBoundSql} from './bearer';
 
@@ -8,7 +10,7 @@ const AUTH_CODE_TTL_MS = 5 * 60 * 1000;
 // Daily access tokens; longer-lived rotating refresh credentials preserve the connection.
 export const ACCESS_TOKEN_TTL_SECONDS = 24 * 60 * 60;
 const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-export {ARTIFACT_SCOPE} from '@artifactbin/contracts';
+export {ARTIFACT_SCOPE} from '@artifactbin/contracts/cli-auth';
 
 const AUTHORIZATION_CODE = 'authorization_code';
 const REFRESH_TOKEN = 'refresh_token';

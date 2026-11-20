@@ -1,4 +1,4 @@
-import type {DatasetUploadResult} from '@artifactbin/contracts';
+import type {DatasetUploadResult} from '@artifactbin/contracts/dataset-upload';
 /** An upload is an explicit write; abort/disconnect can leave an unknown result. Retry the same File/requestId to recover. */
 export interface FileUploadOptions {dataset:string;signal?:AbortSignal;requestId?:string}
 export interface FileUploadRequest {datasetId:string;filename:string;contentType:string;requestId:string;bytes:Uint8Array}

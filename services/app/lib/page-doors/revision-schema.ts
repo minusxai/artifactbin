@@ -2,7 +2,8 @@
  * group's page, its pinned stored links only, under the reader's own current access and policies. No live, default or
  * connection link mounts, nothing retries; the page and dataset fences are checked again before the answer leaves.
  */
-import {SERVICE_PAYLOAD_LIMIT,type HtmlDatasetLink} from '@artifactbin/contracts';
+import {SERVICE_PAYLOAD_LIMIT} from '@artifactbin/contracts/payload-limit';
+import type {HtmlDatasetLink} from '@artifactbin/contracts/html-page';
 import type {AccessActor} from '@/lib/accounts';
 import {getArtifactHeaderById,getArtifactById} from '@/lib/artifacts';
 import {SQL_READ_WALL_TIMEOUT_MS,getDb} from '@/lib/platform';

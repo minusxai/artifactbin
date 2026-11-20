@@ -1,7 +1,7 @@
 import {parseFragment,type DefaultTreeAdapterMap} from 'parse5';
 import {escapeHtml} from '@artifactbin/utils/escape';
 import {DOMAIN_FOOTER_TEXT} from '@artifactbin/contracts/domain-footer';
-import {CARD_RENDER_GENERATION} from '@artifactbin/contracts';
+import {CARD_RENDER_GENERATION} from '@artifactbin/contracts/og-card';
 import type {ArtifactRow} from '@/lib/artifacts';
 import {PUBLIC_BASE_URL} from '@/lib/platform';
 import {canonicalDocumentUrl} from '@/lib/user-pages';

@@ -12,7 +12,7 @@ import { Panel } from '../ui/Panel';
 import { StatusMessage } from '../ui/StatusMessage';
 
 import { formatFileSize } from '@/lib/ui-runtime/file-display';
-import { FILE_EXTENSIONS, assetFormatOf, fileContentType } from '@artifactbin/contracts';
+import { FILE_EXTENSIONS, assetFormatOf, fileContentType } from '@artifactbin/contracts/file-types';
 import { useSession } from '../lib/session';
 import { copyText } from '../lib/copy-text';
 

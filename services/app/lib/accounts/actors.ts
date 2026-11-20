@@ -2,7 +2,7 @@
  * THE ACTOR TYPES: who is asking, as identity knows it. Resource policy (lib/artifact-access,
  * grants, membership) reads `AccessActor`; nothing here decides what an actor may do.
  */
-import type { Credential } from '@artifactbin/contracts';
+import type { Credential } from '@artifactbin/contracts/actor';
 
 /**
  * THE ACTOR every access decision reads: ownership, shares, the link, the SQL scopes, dataset grants and

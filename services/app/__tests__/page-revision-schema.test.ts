@@ -13,7 +13,7 @@ import {getDb} from '@/lib/platform';
 import {admitGroupMember,mintAccountToken,useAppHarness} from './harness';
 // The door's budget is the service payload limit; this file holds it at 200 KiB so a wide table passes it without
 // building megabytes of metadata.
-vi.mock('@artifactbin/contracts',async original=>({...await original<object>(),SERVICE_PAYLOAD_LIMIT:200*1024}));
+vi.mock('@artifactbin/contracts/payload-limit',async original=>({...await original<object>(),SERVICE_PAYLOAD_LIMIT:200*1024}));
 useAppHarness();
 
 it('describes only the pinned revision of pinned links, opens no rows, holds the budget and refuses once the page or a dataset moves',async()=>{

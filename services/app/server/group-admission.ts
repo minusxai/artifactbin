@@ -18,7 +18,7 @@
  * test users, browser sessions), everything of an owner or an Admin (delete, restore, transfer, sharing, members,
  * policy, connections, group administration), forks, regions, presence, reactions and uploads.
  */
-import { GROUP_PRINCIPAL_REFUSED } from '@artifactbin/contracts';
+import { GROUP_PRINCIPAL_REFUSED } from '@artifactbin/contracts/actor';
 
 /** Each admitted route: its method and its generated path pattern (server/routes.generated `path`). */
 export const GROUP_ADMITTED_ROUTES: readonly (readonly [method: string, path: string])[] = [

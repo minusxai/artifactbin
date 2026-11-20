@@ -2,9 +2,9 @@
 import { retryingFetch } from '@/lib/http/retry-lazily';
 import { createEffect, createMemo, createSignal, onCleanup, Show, type JSX } from 'solid-js';
 import { writeBrowserArtifact } from '@/lib/artifact-backend/browser-artifact-write';
-import type { GroupSummary } from '@artifactbin/contracts';
+import type { GroupSummary } from '@artifactbin/contracts/groups';
 import type { FolderPage as FolderData, AccountWorkspace } from '@/lib/workspace';
-import { type ArtifactRole, canEdit } from '@artifactbin/contracts';
+import { type ArtifactRole, canEdit } from '@artifactbin/contracts/sharing';
 import { openLiveStream } from '@/lib/http/live-stream';
 import { STORY_DATA_EVENT } from '@/lib/html-reader/contract';
 import { pageDataChanged } from '@/solid/lib/page-data-events';

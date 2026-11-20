@@ -1,4 +1,4 @@
-import type {DeploymentState} from '@artifactbin/contracts';
+import type {DeploymentState} from '@artifactbin/contracts/groups';
 import { buildSetupInstructions } from '../skills/setup-instructions';
 
 type GuideBlock =

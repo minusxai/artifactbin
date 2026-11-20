@@ -7,7 +7,7 @@
  * one set of declarations. Each package declares its own tables; the shapes
  * (Column/Index/Table) are the contract's.
  */
-import type { Table } from '@artifactbin/contracts';
+import type { Table } from '@artifactbin/contracts/schema';
 import { renderDroppedTables, renderSchema } from '@artifactbin/utils';
 
 /**

@@ -6,7 +6,7 @@
  *
  * Additive, like every declaration in this product (utils renderSchema): a new column is nullable or has a default.
  */
-import type { Table } from '@artifactbin/contracts';
+import type { Table } from '@artifactbin/contracts/schema';
 
 const USERS: Table = {
   name: 'users',

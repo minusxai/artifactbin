@@ -3,7 +3,9 @@
  * EXPLICIT refusal ("service_unavailable"), never a silent empty result — a
  * chart drawn from silence is the failure the real caps exist to avoid.
  */
-import type { BrowserService, EventEnvelope, EventsService, QueryFailure, RenderResult, SqlService, TableResult } from '@artifactbin/contracts';
+import type { BrowserService, RenderResult } from '@artifactbin/contracts/browser';
+import type { EventEnvelope, EventsService } from '@artifactbin/contracts/events';
+import type { QueryFailure, SqlService, TableResult } from '@artifactbin/contracts/sql';
 
 const UNAVAILABLE: QueryFailure = { error: 'service_unavailable' };
 

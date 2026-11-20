@@ -1,6 +1,6 @@
 /** Engine-neutral frame editor contract; the interactive implementation is native only. */
 import type { EditorView } from 'prosemirror-view';
-import type { RegionFrameMessage, RegionKind } from '@artifactbin/contracts';
+import type { RegionFrameMessage, RegionKind } from '@artifactbin/contracts/region-sessions';
 import type { RegionCaretPaint } from '../html-bridge/region-carets';
 export const REGION_BATCH_MS = 50;
 export const REGION_EDITOR_ATTR = 'data-af-region-editor';

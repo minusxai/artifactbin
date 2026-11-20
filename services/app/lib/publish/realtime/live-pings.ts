@@ -12,7 +12,7 @@
  * Only a region UPDATE (`<regionId>:<seq>`) wakes it: a save (`saved…`) or a close (`closed`) is a new version, which
  * the document's own channel announces.
  */
-import { regionsChannel } from '@artifactbin/contracts';
+import { regionsChannel } from '@artifactbin/contracts/region-sessions';
 
 /** At most one live ping per page this often (a typist's burst becomes about three a second). */
 export const LIVE_PING_MS = 300;

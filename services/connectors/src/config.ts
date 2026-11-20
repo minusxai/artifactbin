@@ -5,7 +5,7 @@
  * by name, so a field added later is hidden until it says otherwise); `connectionSecrets` is what every error text has
  * removed.
  */
-import { CONNECTORS, type ConnectionConfig, type ConnectionSummary, type ConnectorScalar, type ConnectorSpec } from '@artifactbin/contracts';
+import { CONNECTORS, type ConnectionConfig, type ConnectionSummary, type ConnectorScalar, type ConnectorSpec } from '@artifactbin/contracts/connectors';
 import { ConnectorFailure } from './errors';
 
 export const connectorSpec = (id: unknown): ConnectorSpec | undefined => CONNECTORS.find((c) => c.id === id);

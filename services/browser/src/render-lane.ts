@@ -13,7 +13,7 @@
  * (`chromiumEnv`, never this process's secrets), and in Chromium's own sandbox when `o.sandbox` says so.
  */
 import { chromium, errors, type Browser, type BrowserContext, type Locator, type Page } from 'playwright';
-import type { PageRequest } from '@artifactbin/contracts';
+import type { PageRequest } from '@artifactbin/contracts/browser';
 import { internalAssetResponse, internalPageResponse } from './internal-assets';
 import { createBrowserHolder } from './browser-holder';
 import { EGRESS_ARGS, openEgress, type Egress } from './egress';

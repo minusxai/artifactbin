@@ -7,7 +7,8 @@
  * reopening is a new event. Dataset mutations notify nobody. Inbox reads and mail eligibility recheck access rather
  * than trusting an old event, and a stored link never grants access, accepts an invite or marks anything read.
  */
-import type {EventEnvelope,Queryable} from '@artifactbin/contracts';
+import type {EventEnvelope} from '@artifactbin/contracts/events';
+import type {Queryable} from '@artifactbin/contracts/db';
 import {notificationChanged,notifyThread,recordNotification,removeThreadNotifications} from './write';
 
 /** The platform's event projection: recipient state commits with the source action's fact. */

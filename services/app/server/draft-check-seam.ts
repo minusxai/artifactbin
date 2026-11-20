@@ -5,7 +5,8 @@
  * and message, a browser that could not look 503 `check_unavailable`. The owner forwards it as the anonymous actor, so
  * a request with no actor, or as anyone, is refused. Exact keys, as the owner checks.
  */
-import { SERVICE_PAYLOAD_LIMIT, type Actor } from '@artifactbin/contracts';
+import { SERVICE_PAYLOAD_LIMIT } from '@artifactbin/contracts/payload-limit';
+import type { Actor } from '@artifactbin/contracts/actor';
 import { BodyTooLargeError, readBody } from '@artifactbin/utils';
 import { draftCheckAnswer } from '@/lib/page-drafts';
 

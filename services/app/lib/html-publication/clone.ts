@@ -1,4 +1,4 @@
-import type {HtmlDatasetLink,HtmlDefaultConnectionLink,HtmlLiveDatasetLink,HtmlPageLink} from '@artifactbin/contracts';
+import type {HtmlDatasetLink, HtmlDefaultConnectionLink, HtmlLiveDatasetLink, HtmlPageLink} from '@artifactbin/contracts/html-page';
 import type { AccessActor } from '@/lib/accounts';
 /** A clone carries authorized dataset references only; nothing of the source page's access crosses to the copy. */
 export interface HtmlClonePlan {htmlDatasets:readonly (HtmlDatasetLink|HtmlDefaultConnectionLink|HtmlLiveDatasetLink)[]}

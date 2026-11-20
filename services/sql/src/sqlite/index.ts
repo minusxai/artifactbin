@@ -7,7 +7,8 @@
  * structural — except a `held` database, which the page keeps open over the
  * imports it holds.
  */
-import type { DryRunInput, DryRunMutationsInput, DryRunMutationsResult, DryRunResult, MutationInput, MutationOutcome, QueryOutcome, RunInput, RunManyInput, StatementAnalysis } from '@artifactbin/contracts';
+import type { DryRunInput, DryRunMutationsInput, DryRunMutationsResult, DryRunResult, MutationInput, MutationOutcome, QueryOutcome, RunInput, RunManyInput } from '@artifactbin/contracts/sql';
+import type { StatementAnalysis } from '@artifactbin/contracts/sql-analysis';
 import { SqliteDatabase, type Relation } from './database';
 import type { PreparedCache } from './prepared';
 import { dryRunQueries, heldDatabase, runManyQueries, runQueries, type HeldDatabase, type ReadBounds } from './reads';

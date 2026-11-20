@@ -15,7 +15,9 @@
  * (`holdDraftCheck`).
  */
 import { randomUUID } from 'node:crypto';
-import { DRAFT_CHECK_KEYS, PAGE_IMAGE_LIMITS, SQL_FAILURES, type CheckCharge, type PageImage, type PageProblem } from '@artifactbin/contracts';
+import { DRAFT_CHECK_KEYS } from '@artifactbin/contracts/identity-service';
+import { PAGE_IMAGE_LIMITS, type CheckCharge, type PageImage, type PageProblem } from '@artifactbin/contracts/browser';
+import { SQL_FAILURES } from '@artifactbin/contracts/sql-failures';
 import { ASSETS_ORIGIN, EXPORT_INTERNAL_ORIGIN, services } from '@/lib/platform';
 import { draftOriginFor, pagesFrameUrl, pagesSite } from '@/lib/http';
 import { createDraft, DraftRefusal, forgetDraft } from './drafts';

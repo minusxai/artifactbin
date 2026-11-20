@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 import { createEffect, createSignal, on, Show, type JSX } from 'solid-js';
-import type { AccountPreferences, DefaultDestination, DeploymentState } from '@artifactbin/contracts';
+import type { AccountPreferences, DefaultDestination, DeploymentState } from '@artifactbin/contracts/groups';
 import Check from 'lucide-solid/icons/check';
 import { apiRequest } from '../lib/api';
 import { pageDataChanged } from '@/solid/lib/page-data-events';

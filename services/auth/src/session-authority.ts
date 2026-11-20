@@ -44,8 +44,13 @@
  * Introspection and the sign-ins are ./token-authority; the door they all share (settings, admission, `answer`) is
  * ./authority-door; the relays and the identity module's calls are below.
  */
-import {CHART_IMAGE_PATH,CANONICAL_CHART_IMAGE_PATH,CHART_IMAGE_KEYS,DRAFT_CHECK_PATH,CANONICAL_DRAFT_CHECK_PATH,DRAFT_CHECK_KEYS,ANONYMOUS} from '@artifactbin/contracts';
-import {SERVICE_PAYLOAD_LIMIT,HUMAN_SESSION_LIVE_PATH,IDENTITY_CALL_PATH,IDENTITY_METHODS,IdentityError,type IdentityMethod,type IdentityService,type Part,type ServiceAudience,type TransactionalQueryable} from '@artifactbin/contracts';
+import {CHART_IMAGE_PATH, CANONICAL_CHART_IMAGE_PATH, CHART_IMAGE_KEYS, DRAFT_CHECK_PATH, CANONICAL_DRAFT_CHECK_PATH, DRAFT_CHECK_KEYS} from '@artifactbin/contracts/identity-service';
+import {ANONYMOUS} from '@artifactbin/contracts/actor';
+import {SERVICE_PAYLOAD_LIMIT} from '@artifactbin/contracts/payload-limit';
+import {HUMAN_SESSION_LIVE_PATH} from '@artifactbin/contracts/actor';
+import {IDENTITY_CALL_PATH, IDENTITY_METHODS, IdentityError, type IdentityMethod, type IdentityService, type TransactionalQueryable} from '@artifactbin/contracts/identity-module';
+import type {Part} from '@artifactbin/contracts/part';
+import type {ServiceAudience} from '@artifactbin/contracts/service-audiences';
 import {BodyTooLargeError,readBody,serviceSecretMatches} from '@artifactbin/utils';
 import type {Context,Hono} from 'hono';
 import type {AuthEnv,AuthOptions} from './parts';

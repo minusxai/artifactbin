@@ -5,7 +5,8 @@
  * Its own file because the registry imports the operations: an erase importer must not load
  * TESTUSER_OPERATIONS halfway through that cycle.
  */
-import { IDENTITY_OWNED_TABLES, TESTUSER_LIMITS } from '@artifactbin/contracts';
+import { IDENTITY_OWNED_TABLES } from '@artifactbin/contracts/identity-module';
+import { TESTUSER_LIMITS } from '@artifactbin/contracts/testusers';
 import { closeTestUserSessions, testUserSessionCount } from '@/lib/accounts';
 import { expireCommentImagesFor, sweepCommentImages } from '@/lib/annotations';
 import { objectStore } from '@/lib/object-store';

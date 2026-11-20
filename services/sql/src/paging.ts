@@ -2,7 +2,7 @@
  * THE PAGINATION WRAPPER: the author's statement as a subquery, ordered by
  * the requested column and cut with LIMIT/OFFSET.
  */
-import type { QueryPage, SqlQuery } from '@artifactbin/contracts';
+import type { QueryPage, SqlQuery } from '@artifactbin/contracts/sql';
 
 const quoteIdent = (name: string): string => `"${name.replace(/"/g, '""')}"`;
 

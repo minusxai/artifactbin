@@ -8,7 +8,7 @@
  * this answer, so they cannot delay a shelf. Membership is checked by both group reads: a group the
  * account cannot see resolves to `unavailable`, with neither details nor artifacts.
  */
-import type { AccountPreferences, DeploymentState, GroupDetail } from '@artifactbin/contracts';
+import type { AccountPreferences, DeploymentState, GroupDetail } from '@artifactbin/contracts/groups';
 import { getDeploymentState } from '@/lib/deployment';
 import { getAccountPreferences, getGroupDetail } from '@/lib/groups';
 import { accountWorkspaceCoreFor, type AccountWorkspaceCore } from './dashboard';

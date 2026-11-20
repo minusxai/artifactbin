@@ -2,7 +2,7 @@ import {canUseDeploymentIdentity} from '../accounts';
 import {effectiveRoleSql,recordGroupChanges} from '../groups';
 import {validateDefaultConnection} from '../connections';
 /** Durable company bootstrap and admission. All state transitions hold the singleton row lock. */
-import type {ArtifactDestination,DeploymentState,GroupSummary} from '@artifactbin/contracts';
+import type {ArtifactDestination, DeploymentState, GroupSummary} from '@artifactbin/contracts/groups';
 import { getDb, type Queryable, deploymentConfig, embedTrustedOrigins, env, serviceAudiences, services } from '../platform';
 import {admissionPolicyOf} from '@artifactbin/auth';
 import {datasetsOwnConnections,groupTrustApprovalsEnabled} from '../platform';

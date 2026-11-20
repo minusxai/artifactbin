@@ -1,14 +1,14 @@
-import {canEditGroupContent} from '@artifactbin/contracts';
+import {canEditGroupContent} from '@artifactbin/contracts/groups';
 /** Ownership transfer is one atomic closure update, independent of content history. */
 import { actorSubject, emit, generateInternalId, getDb, type Queryable } from '../platform';
 import {notifyParent,parentOf} from './placement';
-import type {ArtifactDestination} from '@artifactbin/contracts';
+import type {ArtifactDestination} from '@artifactbin/contracts/groups';
 import type { AccessActor } from '@/lib/accounts';
 import {DatasetError} from '../datasets';
 import { notifyArtifactSql } from './table';
 import { ownerPredicate, type ArtifactRow } from '@/lib/artifact-access';
 import {mailGroupChanges,recordGroupMutation,getGroupRole} from '../groups';
-import type {GroupChange} from '@artifactbin/contracts';
+import type {GroupChange} from '@artifactbin/contracts/identity-module';
 import {assertTransferDependencies} from './transfer-dependencies';
 import {endQueryApprovals} from '@/lib/query-approvals';
 

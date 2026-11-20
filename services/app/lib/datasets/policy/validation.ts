@@ -1,4 +1,4 @@
-import type {DatasetPermissions,DatasetPermissionsIssue,DatasetPermissionsShape} from '@artifactbin/contracts';
+import type {DatasetPermissions, DatasetPermissionsIssue, DatasetPermissionsShape} from '@artifactbin/contracts/dataset-permissions';
 import {datasetPermissionsTemplate,validateDatasetPermissions} from '@artifactbin/utils/dataset-permissions';
 import type {DatasetHost} from '@/lib/datasets/types';
 import {catalogOf} from '@/lib/datasets/catalog';

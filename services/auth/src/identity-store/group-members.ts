@@ -4,7 +4,9 @@
  * each in its own transaction with the group row locked, each answering the `GroupChange`s it committed. The rules
  * they share (who administers, the last admin, the locks, the change record) are ./group-access.
  */
-import {IdentityError,isGroupRole,groupRoleRank,isTestDomainEmail,type GroupChange,type GroupInvitation,type GroupRole,type IdentityService,type TransactionalQueryable} from '@artifactbin/contracts';
+import {IdentityError, type GroupChange, type IdentityService, type TransactionalQueryable} from '@artifactbin/contracts/identity-module';
+import {isGroupRole, groupRoleRank, type GroupInvitation, type GroupRole} from '@artifactbin/contracts/groups';
+import {isTestDomainEmail} from '@artifactbin/contracts/test-domain';
 import {isTestAccount,lockGroups,memberRole,protectLastAdmin,recordChange,requireAdmin} from './group-access';
 import {internalId,type IdentityTables} from './tables';
 

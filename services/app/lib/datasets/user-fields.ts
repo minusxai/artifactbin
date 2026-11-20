@@ -1,7 +1,8 @@
 import { JOIN_RELATIONS } from '@/lib/social';
 import {serializeDatasetDefinition} from './definition';
 import type {CatalogInput} from './types';
-import type {DatasetColumn, PersonCard, Queryable, Row, UserOption} from '@artifactbin/contracts';
+import type {DatasetColumn, PersonCard, Row, UserOption} from '@artifactbin/contracts/sql';
+import type {Queryable} from '@artifactbin/contracts/db';
 import { avatarUrl } from '@/lib/avatars';
 import {DatasetError} from './errors';
 

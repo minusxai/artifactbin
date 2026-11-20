@@ -21,7 +21,8 @@
  * `groupMethods(db, t, options)` is the whole surface: the tree and group sign-in approvals here, membership and
  * invitations in ./group-members, the checks and locks both use in ./group-access.
  */
-import {IdentityError,normalizeCreateGroup,type GroupSignInGrant,type GroupChange,type GroupRole,type GroupSummary,type IdentityService,type TransactionalQueryable} from '@artifactbin/contracts';
+import {IdentityError, type GroupSignInGrant, type GroupChange, type IdentityService, type TransactionalQueryable} from '@artifactbin/contracts/identity-module';
+import {normalizeCreateGroup, type GroupRole, type GroupSummary} from '@artifactbin/contracts/groups';
 import {reserveHandle} from './accounts';
 import {bumpHierarchy,chainOf,isTestAccount,liveGroup,lockGroups,recordChange,requireAdmin,type GroupRow} from './group-access';
 import {groupMemberMethods} from './group-members';

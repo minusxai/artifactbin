@@ -7,7 +7,7 @@
  * same" HMAC is how a proxy signs something the app rejects.
  */
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { ACTOR_TTL_SECONDS, CREDENTIALS, isGroupPrincipalRole, type Actor, type Credential, type HumanActor } from '@artifactbin/contracts';
+import { ACTOR_TTL_SECONDS, CREDENTIALS, isGroupPrincipalRole, type Actor, type Credential, type HumanActor } from '@artifactbin/contracts/actor';
 
 /** Tolerated clock difference between proxy and app. */
 const SKEW_SECONDS = 30;

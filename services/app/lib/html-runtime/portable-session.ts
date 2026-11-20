@@ -4,7 +4,7 @@ import type { PortableDocument,PortableIdentity } from './portable-contract';
 import { OFFLINE_SQL_NO_DATA,OFFLINE_SQL_NO_DATA_ATTRIBUTE,OFFLINE_SQL_NO_DATA_EVENT,type PortableChromeHandle,type PortableChromeState } from './portable-chrome-contract';
 import {compareSource} from './source-relationship';
 import {sha256Hex} from '@artifactbin/utils/sha256';
-import type {HtmlJsonObject} from '@artifactbin/contracts';
+import type {HtmlJsonObject} from '@artifactbin/contracts/html-page';
 import type { FrameBridgeFramePayload, FrameBridgeParentPayload } from '../html-reader/contract';
 interface PortableSessionOptions {
  win:Window;

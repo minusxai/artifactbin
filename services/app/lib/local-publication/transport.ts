@@ -1,6 +1,6 @@
 import { sha256Hex } from '@artifactbin/utils/sha256';
 import { runtimeId } from '@artifactbin/utils/runtime-id';
-import { ARTIFACT_ID_PATTERN } from '@artifactbin/contracts';
+import { ARTIFACT_ID_PATTERN } from '@artifactbin/contracts/artifact-reference';
 import type { LocalPublicationBody, LocalPublicationPlan, LocalPublicationReceipt, LocalPublicationRequest } from './contracts';
 
 type Fetch = typeof fetch;

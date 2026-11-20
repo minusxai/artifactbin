@@ -1,6 +1,6 @@
 import {readLifetime} from './read-lifetime';
 import {QUERY_TIMEOUT_MS} from '@/lib/platform';
-import {sqlTimeout} from '@artifactbin/contracts';
+import {sqlTimeout} from '@artifactbin/contracts/sql';
 import {createHash} from 'node:crypto';
 import type {ContentObjects} from '@/lib/object-store';
 import {runMutation,runQueries,isQueryFailure} from '@/lib/sql';
@@ -12,7 +12,7 @@ import {storedTables} from './catalog';
 import {loadDatasetRows} from './dataset-store';
 import {createSharedReads} from './shared-reads';
 import type {CatalogRowView,DatasetCatalog,DatasetTable} from './types';
-import type {MutationInput,MutationOutcome,Row} from '@artifactbin/contracts';
+import type {MutationInput, MutationOutcome, Row} from '@artifactbin/contracts/sql';
 interface CatalogQueryOptions {/** The caller's role view (lib/dataset-permissions), or null: decided at every door, never defaulted. */view:CatalogRowView|null;/** Trusted host-owned SQL execution; never a request parameter. */execute?:typeof runQueries;timeoutMs?:number;wallTimeoutMs?:number;objects?:Pick<ContentObjects,'get'>;limit?:number;offset?:number;refresh?:boolean;sort?:{col:string;dir:'asc'|'desc'};paramTypes?:Record<string,import('@/lib/dataflow').DatasetColumn['type']>;datasetId?:string;actor?:AccessActor;signal?:AbortSignal;authorize?:()=>Promise<void>;/** A door's row IDs for one stored table (`table`: its catalog index), by position in its stored object, added as `column` before the role view filters: the generated GraphQL's `_id`. */rowIds?:{table:number;column:string;ids:readonly string[]}}
 type CatalogResult=TableResult&{refreshedAt:string};
 const sha=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('base64url');

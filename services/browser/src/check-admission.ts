@@ -1,4 +1,4 @@
-import type { CheckCharge } from '@artifactbin/contracts';
+import type { CheckCharge } from '@artifactbin/contracts/browser';
 
 /**
  * WHO MAY HOLD THE CHECK BROWSER, decided here, in the one browser service every app process shares, so the count is

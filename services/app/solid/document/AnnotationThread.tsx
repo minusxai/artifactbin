@@ -16,7 +16,7 @@ import EllipsisVertical from 'lucide-solid/icons/ellipsis-vertical';
 import Pencil from 'lucide-solid/icons/pencil';
 import Trash2 from 'lucide-solid/icons/trash-2';
 import type { AnnotationWire } from '@/lib/annotations';
-import type { AnnotationCommentWire } from '@artifactbin/contracts';
+import type { AnnotationCommentWire } from '@artifactbin/contracts/annotation-comment';
 import type { ArtifactBackend } from '@/lib/artifact-backend';
 import { hasReplyText, remoteWorkLabel, remoteWorkActive } from '@/lib/annotations/remote-reply';
 import { BackendRequestError } from '@/lib/artifact-backend/errors';

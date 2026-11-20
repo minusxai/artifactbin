@@ -10,7 +10,7 @@
  */
 import { randomInt } from 'node:crypto';
 import * as Y from 'yjs';
-import { REGION_UPDATE_MAX_BYTES, type RegionFlushReply, type RegionOpenReply, type RegionRefusalBody, type RegionRefusalCode, type RegionUpdateReply } from '@artifactbin/contracts';
+import { REGION_UPDATE_MAX_BYTES, type RegionFlushReply, type RegionOpenReply, type RegionRefusalBody, type RegionRefusalCode, type RegionUpdateReply } from '@artifactbin/contracts/region-sessions';
 import { createRegionState, editableRegions, isRegionId, LiveRegionRefusal, openRegionDoc, validateRegionUpdate, type PageRegion } from '@/lib/live-regions';
 import { editablePage, liveRegionDoc, lockedRegionRows, logRegionUpdate, notifyRegions, saveLiveRegionsInTx, type RegionRow, type SaveDue } from '@/lib/artifacts';
 import type { AccessActor } from '@/lib/accounts';

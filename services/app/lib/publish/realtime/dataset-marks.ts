@@ -1,6 +1,6 @@
 import {createHash} from 'node:crypto';
 import { getDb } from '@/lib/platform';
-import type {HtmlPageLink} from '@artifactbin/contracts';
+import type {HtmlPageLink} from '@artifactbin/contracts/html-page';
 
 /*
  * A DATASET'S MARK: everything about its row that changes when what a reader

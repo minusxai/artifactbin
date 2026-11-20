@@ -1,7 +1,8 @@
 /** Anonymous default hosts: typed owners, eligible HTML, native read doors only. */
 import type { Context, MiddlewareHandler } from 'hono';
 import { artifactIdFromSegment } from '@artifactbin/utils/artifact-reference';
-import { ACTOR_HEADER, ownerHostServes } from '@artifactbin/contracts';
+import { ACTOR_HEADER } from '@artifactbin/contracts/actor';
+import { ownerHostServes } from '@artifactbin/contracts/url-space';
 import { ownerHostSqlRead } from '@/lib/page-doors';
 import { getArtifactById } from '@/lib/artifacts';
 import { PUBLIC_BASE_URL, USER_PAGES_HOST, IS_DEV } from '@/lib/platform';

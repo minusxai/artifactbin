@@ -19,8 +19,8 @@
  * Nothing here decides permission. `can(actor, …)` does, in one place.
  */
 import type { AccessActor } from './actors';
-import type { TestUser } from '@artifactbin/contracts';
-import { TESTUSER_ERRORS, TESTUSER_LIMITS } from '@artifactbin/contracts';
+import type { TestUser } from '@artifactbin/contracts/testusers';
+import { TESTUSER_ERRORS, TESTUSER_LIMITS } from '@artifactbin/contracts/testusers';
 import { emit, getDb, generateInternalId, services } from '../platform';
 import { userKindOf } from '../user-kinds';
 import { testUserSessionCount } from './testuser-sessions';

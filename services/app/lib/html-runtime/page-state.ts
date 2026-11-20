@@ -9,7 +9,7 @@
  * Offline and exported copies run this too: their runtime block's page id (`local:<path>` when none) keys their own
  * origin's storage, so a downloaded file keeps its viewer's state like the hosted page, separately from it.
  */
-import type { HtmlJsonObject } from '@artifactbin/contracts';
+import type { HtmlJsonObject } from '@artifactbin/contracts/html-page';
 import type { StoreReceipt } from './apollo/apollo-contracts';
 import { readStateFragment } from './apollo/state-url';
 import { commentViewDeclaration, createHtmlCommentView } from './comment-view';

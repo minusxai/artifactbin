@@ -16,7 +16,8 @@
  * first (so the save never upgrades a lock), then the region row.
  */
 import * as Y from 'yjs';
-import { canEdit, DOC_REGION, type RegionContentReply, type RegionFlushReply, type RegionFormat, type RegionWriteReply } from '@artifactbin/contracts';
+import { canEdit } from '@artifactbin/contracts/sharing';
+import { DOC_REGION, type RegionContentReply, type RegionFlushReply, type RegionFormat, type RegionWriteReply } from '@artifactbin/contracts/region-sessions';
 import { applyRegionRevision, editableRegions, isRegionId, LiveRegionRefusal, regionMarkdown, validateRegionState, type PageRegion } from '@/lib/live-regions';
 import { checkpointLiveRegions, completeMutationReceipt, currentPage, editablePage, liveRegionDoc, logRegionUpdate, notifyRegions, readableArtifact, saveLiveRegionsInTx, type MutationReceipt } from '@/lib/artifacts';
 import type { AccessActor } from '@/lib/accounts';

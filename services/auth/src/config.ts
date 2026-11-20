@@ -1,5 +1,5 @@
 import type { OidcProvider } from './auth/human';
-import {parseTestDomainSignIn, type TestDomainSignIn} from '@artifactbin/contracts';
+import {parseTestDomainSignIn, type TestDomainSignIn} from '@artifactbin/contracts/test-domain';
 import {readEnv} from './env';
 import type { MailSettings } from './mail';
 const LOGIN_PROVIDER_ENV_NAMES = {

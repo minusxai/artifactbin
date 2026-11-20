@@ -16,13 +16,14 @@
  * A service without an operation answers 503 `<op>_unavailable`, and the client (utils `browserClient`) maps an
  * older service's 404 to the same verdict, so a mixed-version rollout degrades instead of failing.
  */
-import type { BrowserService, RenderRequest, RenderUploadRequest, BrowserSessionRequest, SvgHarvestRequest, PageInspectRequest } from '@artifactbin/contracts';
-import { BROWSER_ROUTES, ELEMENT_CAPTURE_HEADER } from '@artifactbin/contracts';
+import type { BrowserService, RenderRequest, RenderUploadRequest, SvgHarvestRequest, PageInspectRequest } from '@artifactbin/contracts/browser';
+import type { BrowserSessionRequest } from '@artifactbin/contracts/browser-sessions';
+import { BROWSER_ROUTES, ELEMENT_CAPTURE_HEADER } from '@artifactbin/contracts/browser';
 import type { JsonServer } from '@artifactbin/utils';
 import { postServer } from '@artifactbin/utils';
 
 export type * from '@artifactbin/contracts';
-export { BROWSER_ROUTES } from '@artifactbin/contracts';
+export { BROWSER_ROUTES } from '@artifactbin/contracts/browser';
 // `browserClient` lives in @artifactbin/utils; re-exported here so a caller can take the
 // client from the same package as the shell it speaks to. That is how this package's own
 // contract and internal-assets tests reach it; the app imports utils directly.

@@ -1,6 +1,6 @@
 import { retryingFetch } from '@/lib/http/retry-lazily';
 import {createSignal,onCleanup,onMount} from 'solid-js';
-import type {DeploymentState} from '@artifactbin/contracts';
+import type {DeploymentState} from '@artifactbin/contracts/groups';
 /** Public tokenless deployment metadata addresses setup without borrowing a recipient identity. Unmounting stops the read and its retries. */
 export function useSetupDeployment(){
  const [state,setState]=createSignal<DeploymentState>();

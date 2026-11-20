@@ -1,5 +1,5 @@
 import { commitDatasetPolicy, type ArtifactRow, getArtifactById, getSharingArtifactFor } from '@/lib/artifacts';
-import type { DatasetPermissions } from '@artifactbin/contracts';
+import type { DatasetPermissions } from '@artifactbin/contracts/dataset-permissions';
 import { validateDatasetPolicyForRow } from '@/lib/datasets';
 import { datasetWriteAccess, type DatasetWriteOptions } from '@/lib/dataset-permissions';
 import { getDb } from '@/lib/platform';

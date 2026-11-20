@@ -1,4 +1,4 @@
-import {SHARE_ROLES,type ShareEntry,type ShareRole} from '@artifactbin/contracts';
+import {SHARE_ROLES, type ShareEntry, type ShareRole} from '@artifactbin/contracts/sharing';
 
 /** One typed sharing grammar for local YAML and server writes; no legacy bare email form. */
 export function parseSharingEntries(value:unknown):ShareEntry[]|undefined{

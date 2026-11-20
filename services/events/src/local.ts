@@ -6,7 +6,8 @@
  * same data directory; the lean image's server.ts hands it a pg Pool).
  */
 import { randomUUID } from 'node:crypto';
-import type { EventEnvelope, EventSink, EventSubscriber, EventsService, Queryable } from '@artifactbin/contracts';
+import type { EventEnvelope, EventSink, EventSubscriber, EventsService } from '@artifactbin/contracts/events';
+import type { Queryable } from '@artifactbin/contracts/db';
 import { ensureTable } from '@artifactbin/utils';
 import { DEFAULT_EVENTS_SCHEMA, EVENTS_TABLES, IDENTIFIER } from './schema';
 

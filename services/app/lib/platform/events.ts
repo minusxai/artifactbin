@@ -10,7 +10,7 @@
  * The sentence is typed by the catalogue: a verb the object kind does not
  * take, or a payload of the wrong shape, is a compile error.
  */
-import type { EventEnvelope, EventPayload, EventVerb, ObjectKind } from '@artifactbin/contracts';
+import type { EventEnvelope, EventPayload, EventVerb, ObjectKind } from '@artifactbin/contracts/events';
 import { envelope as build, type EventObject, type EventSubject } from '@artifactbin/utils';
 import { services } from './services';
 

@@ -7,7 +7,7 @@
  * window focus; there is no timer.
  */
 import { createContext, createEffect, createSignal, on, onCleanup, onMount, Show, useContext, type Accessor, type JSX } from 'solid-js';
-import type { MembershipStatus } from '@artifactbin/contracts';
+import type { MembershipStatus } from '@artifactbin/contracts/membership';
 import type { ArtifactBackend } from '@/lib/artifact-backend';
 import { personMentionId } from '@/lib/document/person-mentions';
 

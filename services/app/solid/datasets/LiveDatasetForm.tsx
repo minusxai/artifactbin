@@ -1,4 +1,4 @@
-import {canEditGroupContent} from '@artifactbin/contracts';
+import {canEditGroupContent} from '@artifactbin/contracts/groups';
 /* @jsxImportSource solid-js */
 /**
  * A LIVE DATASET'S FORM (lib/live-datasets), drawn from its connector's own fields (contracts `ConnectorSpec`, served
@@ -7,7 +7,8 @@ import {canEditGroupContent} from '@artifactbin/contracts';
  * prefilled, sent only when typed; the server keeps a stored secret only while nothing it depends on moves.
  */
 import { createResource, createSignal, For, Show, type JSX } from 'solid-js';
-import type { ConnectorField, ConnectorSpec, ConnectorTestResult, GroupSummary } from '@artifactbin/contracts';
+import type { ConnectorField, ConnectorSpec, ConnectorTestResult } from '@artifactbin/contracts/connectors';
+import type { GroupSummary } from '@artifactbin/contracts/groups';
 import { apiFetch, apiRequest } from '../lib/api';
 import { creationDestination } from '../lib/creation-destination';
 import { Button } from '../ui/Button';

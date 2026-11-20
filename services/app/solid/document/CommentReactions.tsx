@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 import { createSignal, Show, type JSX } from 'solid-js';
 import ThumbsUp from 'lucide-solid/icons/thumbs-up';
-import type { AnnotationCommentWire, CommentReactionSummary } from '@artifactbin/contracts';
+import type { AnnotationCommentWire, CommentReactionSummary } from '@artifactbin/contracts/annotation-comment';
 import { Button } from '../ui/Button';
 import { Tooltip } from '../ui/Tooltip';
 /**

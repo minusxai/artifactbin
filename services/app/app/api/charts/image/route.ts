@@ -1,7 +1,7 @@
 import { withTokenAuth } from '@/lib/authentication';
 import { runOperation } from '@/lib/operations';
 import { json, PayloadTooLarge, readJson } from '@/lib/http';
-import { SERVICE_PAYLOAD_LIMIT } from '@artifactbin/contracts';
+import { SERVICE_PAYLOAD_LIMIT } from '@artifactbin/contracts/payload-limit';
 
 /**
  * POST /api/charts/image {chart, rows, width?, height?, theme?, designSystem?} — the

@@ -2,7 +2,7 @@
  * The page's local state document (a StatePort) and the JSON helpers it and the page client share. Not GraphQL: the
  * viewer state (../viewer-state) and the comment view keep one of these each.
  */
-import type { HtmlJson as AfJson, HtmlJsonObject as AfJsonObject } from "@artifactbin/contracts";
+import type { HtmlJson as AfJson, HtmlJsonObject as AfJsonObject } from "@artifactbin/contracts/html-page";
 import { check } from "./storable";
 import type { StatePort } from "./apollo-contracts";
 

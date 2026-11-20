@@ -4,11 +4,12 @@ import { uploadGrantContext, attestSavedHtmlUpload, readThrough } from '@/lib/ar
 import { canInsert, datasetReadAccess, datasetWriteAccess } from '@/lib/dataset-permissions';
 import type { AccessActor } from '@/lib/accounts';
 import { artifactQuery } from '@/lib/artifacts/table';
-import type {HtmlPageLink} from '@artifactbin/contracts';
+import type {HtmlPageLink} from '@artifactbin/contracts/html-page';
 import { catalogOf, DatasetError, storeImageContent, uploadedSha256, storeFileContent } from '@/lib/datasets';
 import { objectStore, IMAGE_CONTENT_TYPES } from '@/lib/object-store';
 import { Reply } from '@/lib/http';
-import { assetFormatOf, fileContentType, type DatasetUploadResult } from '@artifactbin/contracts';
+import { assetFormatOf, fileContentType } from '@artifactbin/contracts/file-types';
+import type { DatasetUploadResult } from '@artifactbin/contracts/dataset-upload';
 
 const MAX_DATASET_FILES = 1000;
 const MAX_DATASET_FILE_BYTES = 500_000_000;

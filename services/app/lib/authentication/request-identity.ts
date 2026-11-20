@@ -30,7 +30,8 @@
  * forgotten with the request's other credential answers whenever it writes a token row. A route that
  * re-checks access mid-run (a long query) asks with `revalidate`: no memo, no side effects.
  */
-import { BROWSER_SESSION_HEADER, CREDENTIALS, isGroupActor, type Credential } from '@artifactbin/contracts';
+import { BROWSER_SESSION_HEADER } from '@artifactbin/contracts/browser-sessions';
+import { CREDENTIALS, isGroupActor, type Credential } from '@artifactbin/contracts/actor';
 import { actorOf } from '@artifactbin/utils';
 import { admitDeploymentIdentity } from '../deployment';
 import { acceptGroupInvitations } from '../groups';

@@ -3,18 +3,19 @@ import {createHash} from 'node:crypto';
 import {convertLegacyPage,editableRegions,LiveRegionRefusal} from '../live-regions';
 import { isDeepStrictEqual } from 'node:util';
 import { libraryVersions } from '@/lib/libraries';
-import type {HtmlDatasetLink,HtmlDefaultConnectionLink,HtmlLiveDatasetLink,HtmlPageLink} from '@artifactbin/contracts';
+import type {HtmlDatasetLink, HtmlDefaultConnectionLink, HtmlLiveDatasetLink, HtmlPageLink} from '@artifactbin/contracts/html-page';
 import { completeMutationReceipt, type MutationReceipt, type MutationReply } from './mutation-receipt';
 import { canonicalizeHtmlPage, type HtmlIdentityLedger } from '../html-page';
 import {scriptFingerprint} from '../html-autofix';
 import {assertOwnerPlacement,assertDestination,newArtifactDestination} from './ownership';
 import { identityForUser, type AccessActor } from '@/lib/accounts';
 import { groupAdminSql } from '@/lib/groups';
-import type {ArtifactDestination} from '@artifactbin/contracts';
+import type {ArtifactDestination} from '@artifactbin/contracts/groups';
 import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, groupMemberPredicate, editorScope, lockOrder, ownerPredicate, ownerScope, sharingScope, writerFor, type ArtifactRow, type Scope } from '@/lib/artifact-access';
 import { headBumpSql } from './table';
-import type { DatasetPermissions, DocumentGraph } from '@artifactbin/contracts';
-import { artifactChannel } from '@artifactbin/contracts';
+import type { DatasetPermissions } from '@artifactbin/contracts/dataset-permissions';
+import type { DocumentGraph } from '@artifactbin/contracts/document-update';
+import { artifactChannel } from '@artifactbin/contracts/live-channels';
 import {
   newEditId,
 } from '../document';
@@ -34,12 +35,12 @@ import { closeLiveRegions, liveRevisionOf, pageLedger, planRegionMerge, planRegi
 import { docTitleAfterSave } from './doc-title';
 import { withWebAssets } from './web-assets';
 import { readOnlyDatasetPolicy, validateDatasetPolicyForRow, validateStoredDatasetPolicy } from '../datasets';
-import { type ArtifactFormat } from '@artifactbin/contracts';
+import type { ArtifactFormat } from '@artifactbin/contracts/artifact-format';
 import { Reply, reply, thrownMessage } from '../http';
 import { servableDocument } from './servable';
 import { ancestorsForMove, notifyParent, parentOf } from './placement';
 import type { DatasetColumn } from '@/lib/dataflow';
-import { type DatasetAccess, type ShareEntry, type ShareRole, type Visibility } from '@artifactbin/contracts';
+import type { DatasetAccess, ShareEntry, ShareRole, Visibility } from '@artifactbin/contracts/sharing';
 
 const openAnnotationsSql=(artifactId:string)=>`(SELECT count(*)::int FROM annotations a WHERE a.artifact_id=${artifactId} AND a.root_id IS NULL AND a.deleted_at IS NULL AND a.status='open')`;
 

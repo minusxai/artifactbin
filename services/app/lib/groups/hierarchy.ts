@@ -15,7 +15,7 @@
  * from the next decision. Every read here keeps only live groups (`deleted_at IS NULL`), so a deleted group grants
  * nothing to anyone, whatever app rows still name it.
  */
-import type {Queryable} from '@artifactbin/contracts';
+import type {Queryable} from '@artifactbin/contracts/db';
 
 const REVISION = "group_hierarchy WHERE id='installation'";
 

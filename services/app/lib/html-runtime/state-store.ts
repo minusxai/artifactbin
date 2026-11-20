@@ -14,7 +14,7 @@
  */
 import { createStore, type StoreApi } from 'zustand/vanilla';
 import { persist, type PersistStorage } from 'zustand/middleware';
-import type { HtmlJsonObject } from '@artifactbin/contracts';
+import type { HtmlJsonObject } from '@artifactbin/contracts/html-page';
 import type { StatePort, StoreWrite } from './apollo/apollo-contracts';
 import { canonical, own, setOwn } from './apollo/local-store';
 import { check } from './apollo/storable';

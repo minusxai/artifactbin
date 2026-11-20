@@ -7,7 +7,7 @@
  * the same reason as there: the partial indexes carry those literals. The open-thread count is
  * lib/annotations `countOpenAnnotations`'s: a live root whose status is open.
  */
-import { RELATION_EVENTS } from '@artifactbin/contracts';
+import { RELATION_EVENTS } from '@artifactbin/contracts/relations';
 import { getDb } from '@/lib/platform';
 
 interface PageSocial {

@@ -1,4 +1,4 @@
-import { isLocalDevelopmentHost } from '@artifactbin/contracts';
+import { isLocalDevelopmentHost } from '@artifactbin/contracts/server-identity';
 /** Deployment-owned origin and exact public byte-route boundary. */
 export function parseAssetsOrigin(main: string, controls: string | null, configured: string): string {
   const root = new URL(main), asset = new URL(configured);

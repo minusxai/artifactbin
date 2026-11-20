@@ -47,7 +47,8 @@
  * (`approved_query_read`, lib/page-doors: the real reader as subject, the approval in the payload).
  */
 import {createHash} from 'node:crypto';
-import type {HtmlDeclaredQuery,HtmlDefaultConnectionLink,HtmlPageLink,HtmlQueryParams,Queryable} from '@artifactbin/contracts';
+import type {HtmlDeclaredQuery, HtmlDefaultConnectionLink, HtmlPageLink, HtmlQueryParams} from '@artifactbin/contracts/html-page';
+import type {Queryable} from '@artifactbin/contracts/db';
 import type {AccessActor} from '@/lib/accounts';
 import {actorSubject,generateInternalId,getDb,recordEvent} from '@/lib/platform';
 

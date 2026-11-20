@@ -4,7 +4,7 @@
  * PDFs and files its markup names, recorded at publish as `meta.refs`) count as references. The share menu and delete
  * ask this before changing what others rely on.
  */
-import type {HtmlPageLink} from '@artifactbin/contracts';
+import type {HtmlPageLink} from '@artifactbin/contracts/html-page';
 import type { AccessActor } from '@/lib/accounts';
 import { storedMediaReferences } from '../datasets';
 import { getDb } from '../platform';

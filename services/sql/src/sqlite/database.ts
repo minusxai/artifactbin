@@ -20,7 +20,8 @@
  * so a statement SQLite re-prepares mid-step is judged again, never waved
  * through.
  */
-import type { ColumnType, DatasetColumn, Row, Scalar, StatementAnalysis } from '@artifactbin/contracts';
+import type { ColumnType, DatasetColumn, Row, Scalar } from '@artifactbin/contracts/sql';
+import type { StatementAnalysis } from '@artifactbin/contracts/sql-analysis';
 import { inferColumns, normalizeDate, normalizeTimestamp } from '@artifactbin/utils/shape';
 import { LIBRARY_NAMES, registerLibrary } from './functions';
 import { CORE_FUNCTIONS, Guard, Refused, type StatementMode } from './guard';

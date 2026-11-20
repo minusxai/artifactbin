@@ -8,8 +8,8 @@
  */
 import dns from 'node:dns/promises';
 import net from 'node:net';
-import type { ConnectionConfig, ConnectorNetworkPolicy } from '@artifactbin/contracts';
-import { CONNECTOR_LIMITS } from '@artifactbin/contracts';
+import type { ConnectionConfig, ConnectorNetworkPolicy } from '@artifactbin/contracts/connectors';
+import { CONNECTOR_LIMITS } from '@artifactbin/contracts/connectors';
 import { hostNameSyntax, isAllowedAddress, parseIPv4, parseIPv6 } from '@artifactbin/utils/public-address';
 import { ConnectorFailure } from './errors';
 import {withinTime} from './answer';

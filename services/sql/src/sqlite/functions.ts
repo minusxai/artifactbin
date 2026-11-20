@@ -10,7 +10,7 @@
  * through `Intl`, so the zone database is the runtime's. Everything is
  * deterministic except `uuid`, which the guard admits only in mutations.
  */
-import { SQL_FUNCTIONS, type SqlFunctionSpec } from '@artifactbin/contracts';
+import { SQL_FUNCTIONS, type SqlFunctionSpec } from '@artifactbin/contracts/sql-functions';
 import { normalizeTimestamp } from '@artifactbin/utils/shape';
 import { datasetPatternMatch } from '@artifactbin/utils/dataset-policy';
 

@@ -3,7 +3,8 @@ import { deploymentSetupOptions } from '@/lib/agent-copy/setup-installers';
 import {buildSetupInstructions} from '@/lib/skills/setup-instructions';
 /* @jsxImportSource solid-js */
 import { createSignal, For, onMount, Show, type JSX } from 'solid-js';
-import { DEFAULT_SERVER, type ArtifactDestination } from '@artifactbin/contracts';
+import { DEFAULT_SERVER } from '@artifactbin/contracts/default-server';
+import type { ArtifactDestination } from '@artifactbin/contracts/groups';
 import { ClaudeCodeIcon, CodexIcon, OpenCodeIcon, PiIcon } from '../ui/brand-icons';
 import {Field, Textarea} from '../ui/Field';
 import { CopyBlock } from '../ui/CopyBlock';

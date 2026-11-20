@@ -1,5 +1,5 @@
 import type {PresenceIdentity,PresenceFrame,PresenceGeometry,PresencePaint,PresencePublication,PresenceViewer,ReaderPreferences} from './contract';
-import type {RegionCaret} from '@artifactbin/contracts';
+import type {RegionCaret} from '@artifactbin/contracts/region-sessions';
 import {PRESENCE_HEARTBEAT_MS,PRESENCE_POINTER_THROTTLE_MS,presenceGeometry,presenceReaders,presenceRoster,regionCaret} from './model';
 export interface ReaderPresencePorts {
  session:string; revision:string; nonce:string;

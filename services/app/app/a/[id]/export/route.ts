@@ -9,7 +9,7 @@ import { requestOrSessionActor } from '@/lib/authentication';
 import { exportImageResponse } from '@/lib/export';
 import { baseUrl, json } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
-import { canEdit } from '@artifactbin/contracts';
+import { canEdit } from '@artifactbin/contracts/sharing';
 
 /**
  * `delivery: 'bytes'` is for a caller that cannot follow the redirect to the

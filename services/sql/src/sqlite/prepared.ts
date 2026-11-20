@@ -16,7 +16,7 @@
  * Byte-capped LRU, per thread: the size of an entry is its pages, measured after the build. A database
  * larger than the whole cap answers its read once and is not kept.
  */
-import type { RunInput } from '@artifactbin/contracts';
+import type { RunInput } from '@artifactbin/contracts/sql';
 import type { SqliteDatabase } from './database';
 
 /** Each engine thread's default budget for prepared databases. */

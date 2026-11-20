@@ -6,7 +6,7 @@
  * (TRUST__GROUP_APPROVALS=off answers 403).
  */
 import { createSignal, For, Show, type JSX } from 'solid-js';
-import type { GroupSummary } from '@artifactbin/contracts';
+import type { GroupSummary } from '@artifactbin/contracts/groups';
 import { apiRequest } from '../lib/api';
 import { usePageData } from '../lib/use-page-data';
 import { dateTime } from '../lib/format';

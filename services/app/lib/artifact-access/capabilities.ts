@@ -31,9 +31,9 @@
  * other artifact it may read and fork and nothing else, and it follows only test
  * accounts (`test_account_restricted`).
  */
-import type { Capability } from '@artifactbin/contracts';
+import type { Capability } from '@artifactbin/contracts/testusers';
 import { Reply, reply } from '@/lib/http';
-import { canRead, canEdit } from '@artifactbin/contracts';
+import { canRead, canEdit } from '@artifactbin/contracts/sharing';
 import { effectiveRole, ownsArtifact } from './access';
 import { type ArtifactRow } from './scopes';
 import { isTestAccount, TEST_ACCOUNT_RESTRICTED, type AccessActor, isTestOwned } from '@/lib/accounts';

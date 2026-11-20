@@ -15,8 +15,8 @@
  *    `` `sales`.table ``), or removed when the link names none. Only an unquoted word directly before a `.` and not
  *    itself after one is a qualifier; case-insensitive, as unquoted SQL identifiers are.
  */
-import type { ConnectorDialect, ConnectorScalar } from '@artifactbin/contracts';
-import { CONNECTOR_LIMITS } from '@artifactbin/contracts';
+import type { ConnectorDialect, ConnectorScalar } from '@artifactbin/contracts/connectors';
+import { CONNECTOR_LIMITS } from '@artifactbin/contracts/connectors';
 import { ConnectorFailure } from './errors';
 
 type Kind = 'word' | 'quoted' | 'string' | 'comment' | 'param' | 'positional' | 'punct' | 'space';

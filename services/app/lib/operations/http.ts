@@ -1,7 +1,8 @@
 import { hostedAuthorization, hostedRefusal, hostedOperationCompleted } from '@/lib/authentication';
 import { admitRead, durableMutation, getArtifactById, getArtifactFor, MembershipError, readableArtifact, refusingUnservable } from '@/lib/artifacts';
 import { adaptMutationOperationReply, canWriteDataset, normalizeMutationOperation } from '@/lib/document-data';
-import { type AnnotationAuthor, canAnnotate } from '@artifactbin/contracts';
+import type { AnnotationAuthor } from '@artifactbin/contracts/annotation-comment';
+import { canAnnotate } from '@artifactbin/contracts/sharing';
 import {ownedArtifactState} from '@/lib/workspace';
 /**
  * The HTTP half of the operations registry: a bearer route is a TRANSLATION
@@ -12,7 +13,7 @@ import {ownedArtifactState} from '@/lib/workspace';
  * pipeline).
  */
 import { json, baseUrl } from '@/lib/http';
-import { GROUP_PRINCIPAL_REFUSED } from '@artifactbin/contracts';
+import { GROUP_PRINCIPAL_REFUSED } from '@artifactbin/contracts/actor';
 
 /** The operations a group's sign-in may run: reading, creating in and editing its group's pages, comments, page actions. */
 const GROUP_OPERATIONS = ['get_artifact', 'list_versions', 'get_version', 'create_artifact', 'update_artifact', 'annotate', 'edit_comment', 'mutate_dataset', 'query_resource', 'export_artifact'];

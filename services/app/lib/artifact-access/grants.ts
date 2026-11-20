@@ -6,9 +6,10 @@
 import {verifySavedHtmlUpload,type SavedHtmlUploadDocument} from './saved-html-upload';
 import {EDITOR_GROUPS_SQL,transactionAccessFacts,type AccessFacts} from './access-facts';
 import {effectiveRole,ownsArtifact} from './access';
-import {canEdit} from '@artifactbin/contracts';
+import {canEdit} from '@artifactbin/contracts/sharing';
 import { JOIN_RELATIONS } from '@/lib/social';
-import type { DatasetGrantContext, Queryable } from '@artifactbin/contracts';
+import type { DatasetGrantContext } from '@artifactbin/contracts/dataset-policy';
+import type { Queryable } from '@artifactbin/contracts/db';
 import type { ArtifactRow } from './scopes';
 import type { AccessActor } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';

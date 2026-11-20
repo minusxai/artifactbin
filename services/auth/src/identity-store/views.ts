@@ -20,7 +20,7 @@
  * these views and nothing on the base tables. Every name in a definition is schema-qualified, so a definition does
  * not depend on who runs it.
  */
-import type {Table} from '@artifactbin/contracts';
+import type {Table} from '@artifactbin/contracts/schema';
 import {bearerLiveSql} from '../identity/bearer';
 import {authenticatingUserSql,deploymentMemberSql,groupAdminsSql,groupSignInLiveSql,type RuleNames} from './rules';
 import {IDENTITY_TABLES,SECRET_COLUMNS} from './schema';

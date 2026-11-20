@@ -12,7 +12,7 @@ import {createReaderHttpBackend} from './reader-http';
  * `fetch` and `EventSource` are looked up at call time, never captured.
  */
 import type { AnnotationWire } from '@/lib/annotations';
-import { SIGN_IN_REQUIRED } from '@artifactbin/contracts';
+import { SIGN_IN_REQUIRED } from '@artifactbin/contracts/sign-in-required';
 import { BackendRequestError } from './errors';
 import type { ArtifactBackend, ArtifactVersionSnapshot, ArtifactVersionSummary, ChosenImage, EditAnswer, FlushResponse, ImageChoice, MembersAnswer } from './types';
 

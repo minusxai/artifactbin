@@ -17,8 +17,9 @@ export { chromiumEnv, requestOriginAllowed } from './render-lane';
  */
 import type { Browser } from 'playwright';
 import sharp from 'sharp';
-import type { BrowserService, BrowserSessions, HarvestedSvg, PageInspection, RenderResult, SvgHarvestResult } from '@artifactbin/contracts';
-import { SVG_HARVEST_LIMITS } from '@artifactbin/contracts';
+import type { BrowserService, HarvestedSvg, PageInspection, RenderResult, SvgHarvestResult } from '@artifactbin/contracts/browser';
+import type { BrowserSessions } from '@artifactbin/contracts/browser-sessions';
+import { SVG_HARVEST_LIMITS } from '@artifactbin/contracts/browser';
 import { createBrowserSessions } from './sessions';
 import { createSessionProcess } from './session-process';
 import { renderSandboxChoice, type BrowserSessionOptions, type RenderSandboxChoice } from './session-config';

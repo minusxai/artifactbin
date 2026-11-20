@@ -24,8 +24,11 @@
  * statement passed through unchanged with an optional namespace.
  */
 import {readLifetime} from '@/lib/datasets';
-import { SQL_FAILURE_FOR_CONNECTOR, liveSource, sqlReadFailure, type SqlFailureCode } from '@artifactbin/contracts';
-import { CONNECTORS, SQL_READ_LIMITS, type ConnectionSummary, type ConnectorDialect, type ConnectorError, type ConnectorSchema, type ConnectorTestResult, type ConnectorViewer, type HtmlDeclaredQuery, type HtmlDefaultConnectionLink, type HtmlPageLink, type HtmlPageVersion, type Scalar } from '@artifactbin/contracts';
+import { SQL_FAILURE_FOR_CONNECTOR, sqlReadFailure, type SqlFailureCode } from '@artifactbin/contracts/sql-failures';
+import { liveSource } from '@artifactbin/contracts/sql-source';
+import { CONNECTORS, type ConnectionSummary, type ConnectorDialect, type ConnectorError, type ConnectorSchema, type ConnectorTestResult, type ConnectorViewer } from '@artifactbin/contracts/connectors';
+import { SQL_READ_LIMITS, type Scalar } from '@artifactbin/contracts/sql';
+import type { HtmlDeclaredQuery, HtmlDefaultConnectionLink, HtmlPageLink, HtmlPageVersion } from '@artifactbin/contracts/html-page';
 import { ConnectorFailure, checkedNamespace, colonParameters, connectionSummary, connectorError, leadingWords, mapQualifiers, openConnection, parseConnectionConfig, qualifierNames, type OpenConnection } from '@artifactbin/connectors';
 import { getUserById, type AccessActor } from '@/lib/accounts';
 import { listGroups } from '@/lib/groups';

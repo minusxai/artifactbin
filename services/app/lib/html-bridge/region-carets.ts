@@ -9,7 +9,7 @@
  */
 import type { EditorState } from 'prosemirror-state';
 import type { EditorView } from 'prosemirror-view';
-import type { RegionCaret } from '@artifactbin/contracts';
+import type { RegionCaret } from '@artifactbin/contracts/region-sessions';
 
 /** A collaborator's caret as the parent paints it (contracts region-paint). */
 export type RegionCaretPaint = RegionCaret & { id: string; colorId?: string; label: string };

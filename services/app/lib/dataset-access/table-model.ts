@@ -3,7 +3,8 @@
  * name and what it may change. SQL uses stored `source` names. Persisted Hasura-style `field` identifiers
  * still address collaborative cells and policy metadata.
  */
-import type { DatasetBoolExp, DatasetTableName, Scalar } from '@artifactbin/contracts';
+import type { DatasetBoolExp, DatasetTableName } from '@artifactbin/contracts/dataset-permissions';
+import type { Scalar } from '@artifactbin/contracts/sql';
 
 export type HasuraScalar = 'String' | 'Float' | 'Boolean';
 export interface HasuraColumn {

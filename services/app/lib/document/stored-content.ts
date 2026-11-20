@@ -3,7 +3,7 @@
  * its markup source, its `meta` and a derived title. Type-only, so the content stores and the dataset
  * tiers (lib/datasets, lib/object-store) can name it without importing the publish pipeline.
  */
-import type { ArtifactFormat } from '@artifactbin/contracts';
+import type { ArtifactFormat } from '@artifactbin/contracts/artifact-format';
 
 export interface StoredContent {
   format: ArtifactFormat;

@@ -1,4 +1,4 @@
-import type {Queryable} from '@artifactbin/contracts';
+import type {Queryable} from '@artifactbin/contracts/db';
 /** Upload authority only, never SQL mutation authority; never accepted from a page. */
 export interface SavedHtmlUploadDocument {id:string;editId:string;version:number;datasetId:string;uploadProof:object}
 type Authority=Omit<SavedHtmlUploadDocument,'uploadProof'>;

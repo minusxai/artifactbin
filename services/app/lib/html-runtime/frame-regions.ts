@@ -19,7 +19,7 @@
  * typed twice. A doc opened without a press (the parent's auto-open asks its editor for the `focus` command before
  * the editor mounts) holds its keys the same way, from that command on.
  */
-import type { RegionFrameMessage, RegionParentMessage } from '@artifactbin/contracts';
+import type { RegionFrameMessage, RegionParentMessage } from '@artifactbin/contracts/region-sessions';
 import { LOADED_SOURCE_KEY } from './live-morph-contract';
 import type { RegionCaretPaint } from '../html-bridge/region-carets';
 import type { RegionEditor, RegionEditorOptions, RegionKeyEntry } from './region-editor-contract';

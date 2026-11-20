@@ -13,7 +13,9 @@
  * A test that changes the mode with `overrideConfig` calls `syncIdentitySettings` again: the row does not follow
  * config on its own.
  */
-import {API_RESOURCE_PATH,type Queryable,type TransactionalQueryable} from '@artifactbin/contracts';
+import {API_RESOURCE_PATH} from '@artifactbin/contracts/cli-auth';
+import type {Queryable} from '@artifactbin/contracts/db';
+import type {TransactionalQueryable} from '@artifactbin/contracts/identity-module';
 import {assertGroupRoleModel,ensureIdentitySchema} from '@artifactbin/auth';
 import {ALIAS_ORIGINS,AUTH_SCHEMA,AUTH_SERVICE_URL,IDENTITY_READ_SCHEMA,PUBLIC_BASE_URL,deploymentConfig,serviceAudiences} from './config';
 

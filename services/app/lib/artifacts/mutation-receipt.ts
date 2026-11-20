@@ -1,7 +1,7 @@
 import {principalKey} from '@/lib/accounts';
 import {createHash} from 'node:crypto';
-import type {Queryable} from '@artifactbin/contracts';
-import {MUTATION_REPLY_TIMEOUT_MS} from '@artifactbin/contracts';
+import type {Queryable} from '@artifactbin/contracts/db';
+import {MUTATION_REPLY_TIMEOUT_MS} from '@artifactbin/contracts/sql';
 import type { AccessActor } from '@/lib/accounts';
 import { getDb } from '../platform';
 

@@ -3,7 +3,7 @@ import { effectiveRole } from '@/lib/artifact-access';
 import { forkArtifact, forkRefusal } from '@/lib/publish';
 import { forkOwner } from '@/lib/operations';
 import { browserActor } from '@/lib/authentication';
-import { canRead } from '@artifactbin/contracts';
+import { canRead } from '@artifactbin/contracts/sharing';
 import { ensureUserToken, ownerUsername } from '@/lib/accounts';
 import { canonicalArtifactPath, SMALL_BODY_LIMIT, baseUrl, json, readJson, Reply, toResponse } from '@/lib/http';
 

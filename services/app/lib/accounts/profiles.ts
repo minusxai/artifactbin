@@ -16,7 +16,7 @@
  * this row. There is no boot-time sync: one identity, one row, ids agreeing by
  * construction.
  */
-import { IdentityError } from '@artifactbin/contracts';
+import { IdentityError } from '@artifactbin/contracts/identity-module';
 import { getDb, services } from '../platform';
 import { isTestDomainAddress } from './test-accounts';
 

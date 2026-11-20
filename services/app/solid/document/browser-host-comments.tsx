@@ -25,7 +25,7 @@
  */
 import { createEffect, createSignal, on, onCleanup, untrack } from 'solid-js';
 import { render } from 'solid-js/web';
-import type { ArtifactRole } from '@artifactbin/contracts';
+import type { ArtifactRole } from '@artifactbin/contracts/sharing';
 import type { AnnotationWire } from '@/lib/annotations';
 import { createReaderHttpBackend } from '@/lib/artifact-backend/reader-http';
 import { loginHref } from '@/lib/http/login-href';

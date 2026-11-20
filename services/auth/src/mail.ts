@@ -3,7 +3,7 @@ import { appendFileSync, chmodSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { createTransport } from 'nodemailer';
-import { isLoopbackName } from '@artifactbin/contracts';
+import { isLoopbackName } from '@artifactbin/contracts/loopback-names';
 import { escapeHtml } from '@artifactbin/utils/escape';
 import type { ConnectionOptions } from 'node:tls';
 import type { Mailer, OutgoingMail } from './auth/human';

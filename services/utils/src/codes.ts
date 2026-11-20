@@ -1,5 +1,6 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
-import type { CodeStore, ClaimResult, Queryable } from '@artifactbin/contracts';
+import type { CodeStore, ClaimResult } from '@artifactbin/contracts/identity';
+import type { Queryable } from '@artifactbin/contracts/db';
 import { plainIdentifier } from './sql-identifier';
 
 const sha256 = (value: string): string => createHash('sha256').update(value).digest('hex');

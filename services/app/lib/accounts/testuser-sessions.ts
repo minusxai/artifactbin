@@ -13,7 +13,7 @@
  * `lib/testusers resolveTestUser`, and what that user may do is
  * `lib/capabilities`.
  */
-import type { Actor } from '@artifactbin/contracts';
+import type { Actor } from '@artifactbin/contracts/actor';
 import { services } from '../platform';
 
 /** testuser userId → session ids, each with the OWNER's actor, which is what may close it. */

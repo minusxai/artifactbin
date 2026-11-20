@@ -7,7 +7,7 @@
  * query is a `QueryFailure` for that query alone; its dependents then fail on
  * the missing table, which is the honest report.
  */
-import { isQueryFailure, type ColumnType, type DatasetColumn, type DryRunInput, type DryRunResult, type QueryOutcome, type QueryPage, type Row, type RunInput, type RunManyInput, type Scalar } from '@artifactbin/contracts';
+import { isQueryFailure, type ColumnType, type DatasetColumn, type DryRunInput, type DryRunResult, type QueryOutcome, type QueryPage, type Row, type RunInput, type RunManyInput, type Scalar } from '@artifactbin/contracts/sql';
 import { DEFAULT_CAPS } from '../caps';
 import { pagedQuery } from '../paging';
 import { SqliteDatabase, TimedOut, TooLarge, type Prepared, type TableData } from './database';

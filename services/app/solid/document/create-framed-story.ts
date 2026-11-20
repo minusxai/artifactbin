@@ -6,7 +6,7 @@ import { STORY_URL_VALUES_MESSAGE, type IslandStoryController } from '@/lib/html
 import { commentAfterRegionSave, type RegionCommentSubject } from '@/lib/annotations/region-comment';
 import type { RegionEditing, RegionToolbarState, startRegionEditing } from './region-editing';
 import type { CellEditing, startCellEditing } from './cell-editing';
-import { CELL_READONLY, isCellKey } from '@artifactbin/contracts';
+import { CELL_READONLY, isCellKey } from '@artifactbin/contracts/region-sessions';
 import type { useSession } from '../lib/session';
 
 export { answerFrameNavigation } from '@/lib/html-reader/frame-navigation';

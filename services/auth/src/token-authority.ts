@@ -6,8 +6,16 @@
  * token by its signature and its parent credential's `live`; a group's exchanged token by its live group sign-in.
  * Every kind needs an ACTIVE account.
  */
-import {ARTIFACT_SCOPE,DEFAULT_TOKEN_TTL_MS,MAX_TOKEN_TTL_MS,MIN_TOKEN_TTL_MS,RUN_SIGN_IN_PATH,GROUP_SIGN_IN_PATH,GROUP_SIGN_IN_GRANTS_PATH,SERVICE_GROUP_SIGN_IN_MAX_TTL_MS,type GroupSignIn,type RunSignIn} from '@artifactbin/contracts';
-import {API_RESOURCE_PATH,IDENTITY_INTROSPECT_PATH,IdentityError,SERVICE_AUTH_HEADER,parseAliasOrigins,type IdentityIntrospectResponse,type ServiceAudience,type ServiceTokenParent,type TokenRecord} from '@artifactbin/contracts';
+import {ARTIFACT_SCOPE} from '@artifactbin/contracts/cli-auth';
+import {DEFAULT_TOKEN_TTL_MS, MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS} from '@artifactbin/contracts/handles';
+import {RUN_SIGN_IN_PATH, GROUP_SIGN_IN_PATH, GROUP_SIGN_IN_GRANTS_PATH, SERVICE_GROUP_SIGN_IN_MAX_TTL_MS, type GroupSignIn, type RunSignIn} from '@artifactbin/contracts/service-audiences';
+import {API_RESOURCE_PATH} from '@artifactbin/contracts/cli-auth';
+import {IDENTITY_INTROSPECT_PATH, type IdentityIntrospectResponse} from '@artifactbin/contracts/identity-service';
+import {IdentityError} from '@artifactbin/contracts/identity-module';
+import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts/routes';
+import {parseAliasOrigins} from '@artifactbin/contracts/server-identity';
+import type {ServiceAudience, ServiceTokenParent} from '@artifactbin/contracts/service-audiences';
+import type {TokenRecord} from '@artifactbin/contracts/identity';
 import {serviceSecretMatches} from '@artifactbin/utils';
 import type {Context, Hono} from 'hono';
 import type {AuthEnv,AuthOptions} from './parts';

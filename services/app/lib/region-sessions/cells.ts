@@ -19,7 +19,8 @@
  *    not take closes; the others keep their text.
  */
 import * as Y from 'yjs';
-import { parseCellKey, REGION_UPDATE_MAX_BYTES, type CellScope, type HtmlDatasetLink, type HtmlPageLink, type RegionOpenReply, type RegionUpdateReply } from '@artifactbin/contracts';
+import { parseCellKey, REGION_UPDATE_MAX_BYTES, type CellScope, type RegionOpenReply, type RegionUpdateReply } from '@artifactbin/contracts/region-sessions';
+import type { HtmlDatasetLink, HtmlPageLink } from '@artifactbin/contracts/html-page';
 import { applyCellRevision, cellValue, createCellState, snapshotValue } from '@/lib/live-regions';
 import { canReadArtifact, getArtifactById, liveRegionDoc, lockedRegionRows, logRegionUpdate, notifyRegions, saveIsDue, type ArtifactRow, type RegionRow, type SaveDue } from '@/lib/artifacts';
 import { canUpdateCell, cellCheckAdmits, datasetWriteAccess } from '@/lib/dataset-permissions';

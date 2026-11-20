@@ -2,7 +2,7 @@
  * `#af-state=<base64url of the local-state JSON>` on a page address: local
  * state carried in a URL. Pure and isomorphic (Node and browsers); no graphql.
  */
-import type { HtmlJsonObject as AfJsonObject } from "@artifactbin/contracts";
+import type { HtmlJsonObject as AfJsonObject } from "@artifactbin/contracts/html-page";
 import { AF_STATE_FRAGMENT, AF_STATE_URL_LIMIT } from "./apollo-contracts";
 import type { StateFragment } from "./apollo-contracts";
 import { check } from "./storable";

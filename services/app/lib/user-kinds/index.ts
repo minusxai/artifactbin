@@ -12,7 +12,8 @@
  * read the kind without an import cycle. It answers WHAT a user is; it never
  * decides what that user may DO — that is `lib/capabilities` and nowhere else.
  */
-import type { Queryable, UserKind } from '@artifactbin/contracts';
+import type { Queryable } from '@artifactbin/contracts/db';
+import type { UserKind } from '@artifactbin/contracts/testusers';
 import { getDb } from '../platform';
 import { authenticatingTestParent as testParentOf, isAuthenticatingUser } from '@artifactbin/auth';
 

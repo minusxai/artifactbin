@@ -11,7 +11,8 @@
  * (after the grace), and the idle backstop saves a dataset's quiet dirty cells as any member allowed to.
  */
 import * as Y from 'yjs';
-import { artifactChannel, parseCellKey, regionsChannel, type CellScope, type RegionStreamFrame } from '@artifactbin/contracts';
+import { artifactChannel } from '@artifactbin/contracts/live-channels';
+import { parseCellKey, regionsChannel, type CellScope, type RegionStreamFrame } from '@artifactbin/contracts/region-sessions';
 import { liveRegionDoc, regionUpdatesAfter, type RegionRow } from '@/lib/artifacts';
 import type { AccessActor } from '@/lib/accounts';
 import { base64 } from './sessions';

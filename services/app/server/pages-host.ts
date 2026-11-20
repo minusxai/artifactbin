@@ -45,7 +45,8 @@
  */
 import type { Context, MiddlewareHandler, Next } from 'hono';
 import { attachActor, readCookie } from '@artifactbin/utils';
-import { ANONYMOUS, documentHostServes } from '@artifactbin/contracts';
+import { ANONYMOUS } from '@artifactbin/contracts/actor';
+import { documentHostServes } from '@artifactbin/contracts/url-space';
 import { endPagesSession, exchangePagesTicket, pagesSessionOf, type PagesSession } from '@/lib/accounts';
 import { runWithRequest } from '@/lib/platform';
 import { addressedHost as requestHost, draftFromPagesHost, draftFromPagesOrigin, draftOriginFor, GUEST_TICKET, idFromPagesHost, idFromPagesOrigin, isPagesApexHost, markPagesRequest, PAGES_TICKET_PARAM, pagesCookieName, pagesOriginFor, withoutPagesTicket, type PagesSite } from '@/lib/http';

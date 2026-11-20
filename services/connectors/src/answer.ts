@@ -9,8 +9,9 @@
  *    without a zone when it stores a wall-clock time; `boolean` true/false; `json` the parsed value; arrays are `json`.
  *  - `text` everything else; binary values as `\x` and lowercase hex.
  */
-import type { ConnectorAnswer, ConnectorColumn, ConnectorDialect, ConnectorJson, ConnectorLimits, ConnectorQuery, ConnectorValueType } from '@artifactbin/contracts';
-import { CONNECTOR_LIMITS,sqlTimeout,SQL_QUERY_DEFAULT_MS } from '@artifactbin/contracts';
+import type { ConnectorAnswer, ConnectorColumn, ConnectorDialect, ConnectorJson, ConnectorLimits, ConnectorQuery, ConnectorValueType } from '@artifactbin/contracts/connectors';
+import { CONNECTOR_LIMITS } from '@artifactbin/contracts/connectors';
+import { sqlTimeout, SQL_QUERY_DEFAULT_MS } from '@artifactbin/contracts/sql';
 import { ConnectorFailure } from './errors';
 
 export function limitsOf(query: Pick<ConnectorQuery, 'limits'>, timeoutMs:number=SQL_QUERY_DEFAULT_MS): ConnectorLimits {

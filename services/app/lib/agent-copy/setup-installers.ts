@@ -1,4 +1,4 @@
-import type {DeploymentState} from '@artifactbin/contracts';
+import type {DeploymentState} from '@artifactbin/contracts/groups';
 import { type SetupInstructionOptions } from '../skills';
 
 /** Only confirmed live deployment groups become recipient defaults. Group IDs never enter scripts. */

@@ -1,7 +1,7 @@
-import {canEditGroupContent} from '@artifactbin/contracts';
+import {canEditGroupContent} from '@artifactbin/contracts/groups';
 /* @jsxImportSource solid-js */
 import {createSignal,Show,type JSX} from 'solid-js';
-import type {ArtifactDestination,GroupSummary} from '@artifactbin/contracts';
+import type {ArtifactDestination, GroupSummary} from '@artifactbin/contracts/groups';
 import {apiRequest} from '../lib/api';
 import {usePageData} from '../lib/use-page-data';
 import {Dialog} from '../ui/Dialog';

@@ -1,9 +1,13 @@
-import { SQL_WALL_OVERHEAD_MS, sqlTimeout, SQL_QUERY_DEFAULT_MS, SQL_QUERY_MAX_MS } from '@artifactbin/contracts';
+import { SQL_WALL_OVERHEAD_MS, sqlTimeout, SQL_QUERY_DEFAULT_MS, SQL_QUERY_MAX_MS } from '@artifactbin/contracts/sql';
 import {isIP} from 'node:net';
 
 import { parseAssetsOrigin } from '@artifactbin/utils';
 import { parseOutboundIps } from '@artifactbin/utils/public-address';
-import { DEFAULT_UPLOAD_MAX_BYTES, IDENTITY_SCHEMA, isLocalDevelopmentHost, parseAliasOrigins, parseServiceAudiences, parseTestDomainSignIn, type ServiceAudience } from '@artifactbin/contracts';
+import { DEFAULT_UPLOAD_MAX_BYTES } from '@artifactbin/contracts/upload-limits';
+import { IDENTITY_SCHEMA } from '@artifactbin/contracts/identity-service';
+import { isLocalDevelopmentHost, parseAliasOrigins } from '@artifactbin/contracts/server-identity';
+import { parseServiceAudiences, type ServiceAudience } from '@artifactbin/contracts/service-audiences';
+import { parseTestDomainSignIn } from '@artifactbin/contracts/test-domain';
 
 /**
  * The ONLY file that reads process.env, which keeps runtime configuration

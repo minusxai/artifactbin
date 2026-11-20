@@ -6,7 +6,7 @@ import {portableRenderedDigest} from './portable-source';
 import { portableScript } from './portable';
 import { parse, parseFragment, serialize, type DefaultTreeAdapterMap } from 'parse5';
 import { assertStorable } from './apollo/storable';
-import type { HtmlJsonObject } from '@artifactbin/contracts';
+import type { HtmlJsonObject } from '@artifactbin/contracts/html-page';
 import type { HtmlAssemblyInput } from './contract';
 export type { HtmlAssemblyInput, HtmlRuntimeConfig } from './contract';
 export { createLocalStore } from './apollo/local-store';

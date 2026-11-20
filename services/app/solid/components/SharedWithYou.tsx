@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 import { createMemo, createSignal, For, Show, type JSX } from 'solid-js';
 import type { WorkspaceSharedItem } from '@/lib/workspace';
-import { SHARE_ROLE_LABEL, SHARE_ROLES } from '@artifactbin/contracts';
+import { SHARE_ROLE_LABEL, SHARE_ROLES } from '@artifactbin/contracts/sharing';
 import { FormatBadge, formatLabel, LINK, MicroLabel, timeAgo } from '../ui/ui';
 import { Button } from '../ui/Button';
 import { SearchField } from '../ui/Field';

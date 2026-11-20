@@ -2,7 +2,7 @@ import { type ArtifactRow, getArtifactFor, getLinkReadableArtifact, childrenTabl
 import { writerFor } from '@/lib/artifact-access';
 import { datasetReadAccess, datasetView, sqlRefusal } from '@/lib/dataset-permissions';
 import { ANONYMOUS_ACTOR, type AccessActor } from '@/lib/accounts';
-import type { Row, DatasetColumn } from '@artifactbin/contracts';
+import type { Row, DatasetColumn } from '@artifactbin/contracts/sql';
 import { catalogOf, importedRows, importedTables, type CatalogRowView } from '@/lib/datasets';
 
 type RefData = {tables:Record<string,{rows:Row[];columns:DatasetColumn[]}>;catalog?:import('@/lib/datasets').DatasetCatalog;view?:CatalogRowView|null};

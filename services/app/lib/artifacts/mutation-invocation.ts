@@ -1,4 +1,4 @@
-import type {MutationInput,MutationOutcome,SqlService} from '@artifactbin/contracts';
+import type {MutationInput, MutationOutcome, SqlService} from '@artifactbin/contracts/sql';
 import type { ArtifactRow } from '@/lib/artifact-access';
 import type { AccessActor } from '@/lib/accounts';
 import type {Db} from '@/lib/platform';

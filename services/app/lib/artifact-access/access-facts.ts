@@ -9,7 +9,10 @@
  *    readers deciding many rows at once (the notification inbox). Share resolution, the one write a
  *    role read performs, is deferred to `settle()` and applied in one statement.
  */
-import { maxRole, type ArtifactRole, type GroupRole, type Queryable, type UserKind } from '@artifactbin/contracts';
+import { maxRole, type ArtifactRole } from '@artifactbin/contracts/sharing';
+import type { GroupRole } from '@artifactbin/contracts/groups';
+import type { Queryable } from '@artifactbin/contracts/db';
+import type { UserKind } from '@artifactbin/contracts/testusers';
 import { getGroupRole, groupReachSql, reachedGroupsSql, subtreeSql } from '@/lib/groups';
 import { userKindOf } from '@/lib/user-kinds';
 import { getDb } from '@/lib/platform';

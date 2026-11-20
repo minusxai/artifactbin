@@ -1,7 +1,7 @@
-import {canEditGroupContent} from '@artifactbin/contracts';
+import {canEditGroupContent} from '@artifactbin/contracts/groups';
 /* @jsxImportSource solid-js */
 import { createSignal, For, Show, type JSX } from 'solid-js';
-import type { GroupDetail, GroupMember, GroupRole } from '@artifactbin/contracts';
+import type { GroupDetail, GroupMember, GroupRole } from '@artifactbin/contracts/groups';
 import type { AccountWorkspaceCore } from '@/lib/workspace';
 import { buildGroupSetupInstructions } from '@/lib/skills/setup-instructions';
 import { usePageBreadcrumbs } from '../lib/page-breadcrumbs';

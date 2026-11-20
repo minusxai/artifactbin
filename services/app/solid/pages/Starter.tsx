@@ -9,7 +9,8 @@
  * The first real version on the live stream reloads into the compiled reader. Captures render the placeholder itself.
  */
 import { createEffect, createSignal, onMount, onCleanup, Show, type JSX } from 'solid-js';
-import { type ArtifactRole, canAnnotate as canAnnotateRole, canEdit as canEditRole, canGovern, isStartPlaceholder, type Visibility } from '@artifactbin/contracts';
+import { type ArtifactRole, canAnnotate as canAnnotateRole, canEdit as canEditRole, canGovern, type Visibility } from '@artifactbin/contracts/sharing';
+import { isStartPlaceholder } from '@artifactbin/contracts/start-placeholder';
 import { reloadKeepingPlace } from '@/lib/html-reader/reload';
 import { chooseTheme } from '@/lib/html-reader/reader-mode';
 import { rowTitle } from '@/lib/document/display-title';

@@ -10,7 +10,7 @@ import {canUseDeploymentIdentity} from './deployment-identity';
  */
 import crypto from 'crypto';
 import { getDb, emit, currentRequest, services, serviceAudiences } from '../platform';
-import { groupSignInServiceConfigured } from '@artifactbin/contracts';
+import { groupSignInServiceConfigured } from '@artifactbin/contracts/service-audiences';
 import type { Harness } from './client-identity';
 import { canAuthenticateUser } from '../user-kinds';
 import type { AccessActor, GroupPrincipal } from './actors';
@@ -104,7 +104,7 @@ interface MintedToken {
 }
 
 /** Token lifetimes: six hours by default, one hour at least, 365 days at most (independent of browser session expiry). */
-import { DEFAULT_TOKEN_TTL_MS, MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS } from '@artifactbin/contracts';
+import { DEFAULT_TOKEN_TTL_MS, MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS } from '@artifactbin/contracts/handles';
 export { DEFAULT_TOKEN_TTL_MS, MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS };
 
 interface MintOptions {

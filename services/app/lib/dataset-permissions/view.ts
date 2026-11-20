@@ -17,7 +17,8 @@
  * (content-addressed: a new revision is a new object key, a new rule a new key); a full view
  * (`columns:"*"`, `filter:{}`, no limit) is the rows themselves, with nothing evaluated or copied.
  */
-import { DATASET_ROW_ID, DATASET_ROW_ID_COLUMN, type DatasetBoolExp, type DatasetSelectPermission, type Scalar } from '@artifactbin/contracts';
+import { DATASET_ROW_ID, DATASET_ROW_ID_COLUMN, type DatasetBoolExp, type DatasetSelectPermission } from '@artifactbin/contracts/dataset-permissions';
+import type { Scalar } from '@artifactbin/contracts/sql';
 import { datasetPatternMatch } from '@artifactbin/utils/dataset-policy';
 
 type Row = Record<string, unknown>;

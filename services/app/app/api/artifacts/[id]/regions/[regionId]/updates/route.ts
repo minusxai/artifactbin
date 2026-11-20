@@ -3,7 +3,7 @@
  * before it is stored or relayed: RegionUpdateReply, or a refusal (409 out_of_order, 413 too_large, 422). A cell key
  * (contract CellScope) is a dataset text cell's update.
  */
-import { isCellKey, REGION_UPDATE_MAX_BYTES } from '@artifactbin/contracts';
+import { isCellKey, REGION_UPDATE_MAX_BYTES } from '@artifactbin/contracts/region-sessions';
 import { json } from '@/lib/http';
 import { answer, browserEditor, regionSessions } from '../../doors';
 

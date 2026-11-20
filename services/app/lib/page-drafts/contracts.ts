@@ -5,7 +5,7 @@
  * file's bytes and all of them together are a published page's (contracts PAGE_FILE_LIMITS). The skill ships the
  * same numbers to agents (skills/artifactbin/scripts/toolbox-limits.mjs, pinned equal by a test).
  */
-import { PAGE_FILE_LIMITS } from '@artifactbin/contracts';
+import { PAGE_FILE_LIMITS } from '@artifactbin/contracts/page-limits';
 
 export const DRAFT_LIMITS = {
   ...PAGE_FILE_LIMITS,

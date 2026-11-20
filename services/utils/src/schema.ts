@@ -5,7 +5,8 @@
  * optional access method and expression columns), optionally schema-qualified, + DROP TABLE IF
  * EXISTS for tables no declaration carries any more. Every statement individually executable, in order.
  */
-import type { Column, Queryable, Table } from '@artifactbin/contracts';
+import type { Column, Table } from '@artifactbin/contracts/schema';
+import type { Queryable } from '@artifactbin/contracts/db';
 
 function renderColumn(col: Column): string {
   const parts = [col.name, col.type];

@@ -5,7 +5,9 @@
  * anonymous actor (no person is involved; the public reaches no internal path), so a request that
  * arrives with no actor at all, or as anyone, is refused. Exact keys, as the owner checks.
  */
-import { SERVICE_PAYLOAD_LIMIT, CHART_IMAGE_KEYS, type Actor } from '@artifactbin/contracts';
+import { SERVICE_PAYLOAD_LIMIT } from '@artifactbin/contracts/payload-limit';
+import { CHART_IMAGE_KEYS } from '@artifactbin/contracts/identity-service';
+import type { Actor } from '@artifactbin/contracts/actor';
 import { BodyTooLargeError, readBody } from '@artifactbin/utils';
 import { DESIGN_SYSTEM_VARIABLES } from '@/lib/html-systems/server';
 import { chartImageAnswer } from '@/lib/viz';

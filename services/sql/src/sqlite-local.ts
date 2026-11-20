@@ -7,7 +7,7 @@
  * wrong for a server, which runs the same engine in worker threads
  * (`@artifactbin/sql/local`).
  */
-import { sqlTimeout, SQL_WALL_OVERHEAD_MS, type SqlCallContext, type QueryFailure, type SqlService } from '@artifactbin/contracts';
+import { sqlTimeout, SQL_WALL_OVERHEAD_MS, type SqlCallContext, type QueryFailure, type SqlService } from '@artifactbin/contracts/sql';
 import { queryBounds } from './bounds';
 import { sqlCaps, type SqlCaps } from './caps';
 import type { SqlExtensions } from './extensions';

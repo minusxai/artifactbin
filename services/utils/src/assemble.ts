@@ -1,5 +1,5 @@
 import { Hono, type Env } from 'hono';
-import type { Part } from '@artifactbin/contracts';
+import type { Part } from '@artifactbin/contracts/part';
 
 /**
  * ORDERED LIST IN, HONO APP OUT. Overrides are by name: a Part replaces the

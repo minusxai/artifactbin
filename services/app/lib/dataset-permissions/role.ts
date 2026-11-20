@@ -2,7 +2,8 @@
  * THE DATASET ROLE of one caller: the dataset's own sharing, read through the access facts, decided by the
  * one total derivation in @artifactbin/contracts (`datasetRoleFrom`). Datasets and resolvers both ask here.
  */
-import { datasetRoleFrom, maxRole, type DatasetRole } from '@artifactbin/contracts';
+import { datasetRoleFrom, type DatasetRole } from '@artifactbin/contracts/dataset-permissions';
+import { maxRole } from '@artifactbin/contracts/sharing';
 import type { AccessActor } from '@/lib/accounts';
 import { documentEditorReaches, linkRoleOf, liveAccessFacts, reachesAsAccount, roleWithoutLink, type AccessFacts, type ArtifactRow } from '@/lib/artifact-access';
 import { liveConnectionOf } from '@/lib/datasets';

@@ -6,7 +6,7 @@
  * (`scope`, id), taken one id at a time in `COLLATE "C"` order so two writers never take them in opposite orders,
  * and released with the transaction. A hash collision only serializes two unrelated writers; it never admits one.
  */
-import type {Queryable} from '@artifactbin/contracts';
+import type {Queryable} from '@artifactbin/contracts/db';
 
 export async function lockSubjects(tx: Queryable, scope: string, ids: readonly string[]): Promise<void> {
   for (const id of [...new Set(ids)].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)))

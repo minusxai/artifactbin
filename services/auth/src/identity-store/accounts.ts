@@ -7,7 +7,10 @@
  * else silently. Tokens are prefix + 256 random bits, only the sha256 stored, soft revoked (`deleted_at`).
  */
 import crypto from 'node:crypto';
-import {IdentityError,MAX_TOKEN_TTL_MS,MIN_TOKEN_TTL_MS,SERVICE_GROUP_SIGN_IN_MAX_TTL_MS,isValidHandle,type ServiceGroupSignInGrant,type IdentityService,type IdentityUserRow,type MintedIdentityToken,type Queryable,type TransactionalQueryable} from '@artifactbin/contracts';
+import {IdentityError, type IdentityService, type IdentityUserRow, type MintedIdentityToken, type TransactionalQueryable} from '@artifactbin/contracts/identity-module';
+import {MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS, isValidHandle} from '@artifactbin/contracts/handles';
+import {SERVICE_GROUP_SIGN_IN_MAX_TTL_MS, type ServiceGroupSignInGrant} from '@artifactbin/contracts/service-audiences';
+import type {Queryable} from '@artifactbin/contracts/db';
 import {internalId,isUniqueViolation,tokenId,type IdentityTables} from './tables';
 import {groupLevelHeldSql,serviceGrantStandsSql} from './rules';
 

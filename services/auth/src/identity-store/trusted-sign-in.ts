@@ -15,7 +15,9 @@
  *    other group of that issuer: each sign-in leaves exactly the membership its token names.
  * One advisory lock serializes these sign-ins, so a double-submitted form never meets its own half-created rows.
  */
-import {isValidHandle,type Queryable,type TransactionalQueryable} from '@artifactbin/contracts';
+import {isValidHandle} from '@artifactbin/contracts/handles';
+import type {Queryable} from '@artifactbin/contracts/db';
+import type {TransactionalQueryable} from '@artifactbin/contracts/identity-module';
 import {reserveHandle} from './accounts';
 import {identityTables,internalId,isUniqueViolation} from './tables';
 

@@ -9,7 +9,8 @@
  * it, or the bare address when there is none). Never the actor, and nobody when a test account acts.
  */
 import {randomUUID} from 'node:crypto';
-import type {GroupChange,GroupMailClaim,IdentityService,Queryable,TransactionalQueryable} from '@artifactbin/contracts';
+import type {GroupChange, GroupMailClaim, IdentityService, TransactionalQueryable} from '@artifactbin/contracts/identity-module';
+import type {Queryable} from '@artifactbin/contracts/db';
 import type {IdentityTables} from './tables';
 
 export async function enqueueGroupMail(q: Queryable, t: IdentityTables, change: GroupChange): Promise<void> {

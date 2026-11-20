@@ -4,7 +4,7 @@ import { loginRedirectTarget } from '@/lib/http/safe-redirect';
 import { useSession } from '../lib/session';
 import { apiFetch } from '../lib/api';
 import { replaceDocument } from '../lib/document-navigation';
-import { CODE_DELIVERY_HEADER, codeDeliveryOf, type CodeDelivery } from '@artifactbin/contracts';
+import { CODE_DELIVERY_HEADER, codeDeliveryOf, type CodeDelivery } from '@artifactbin/contracts/cli-auth';
 
 import { FormPage } from '../ui/PageHeader';
 import { Button } from '../ui/Button';

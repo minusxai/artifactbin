@@ -17,7 +17,8 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { Hono, type Context } from 'hono';
-import { CANONICAL_CHART_IMAGE_PATH, CANONICAL_DRAFT_CHECK_PATH, isGroupActor } from '@artifactbin/contracts';
+import { CANONICAL_CHART_IMAGE_PATH, CANONICAL_DRAFT_CHECK_PATH } from '@artifactbin/contracts/identity-service';
+import { isGroupActor } from '@artifactbin/contracts/actor';
 import { actorOf, actorReceiver, isPublicAssetRequest, publicAssetResponse } from '@artifactbin/utils';
 import { getDeploymentState } from '@/lib/deployment';
 import { measureQueries, runWithRequest, ASSETS_ORIGIN, setEventProjection, shellFile } from '@/lib/platform';

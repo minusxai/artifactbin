@@ -16,8 +16,9 @@
  *    that runs SQL text gets past any such check). A gateway built for this reads them as the statement starts.
  *  - Addresses and TLS: ./network.
  */
-import type { ConnectorReadPolicy, ConnectionConfig, ConnectorId, ConnectorNetworkPolicy, ConnectorSpec } from '@artifactbin/contracts';
-import { CONNECTORS,sqlTimeout,SQL_QUERY_DEFAULT_MS,SQL_QUERY_MAX_MS } from '@artifactbin/contracts';
+import type { ConnectorReadPolicy, ConnectionConfig, ConnectorId, ConnectorNetworkPolicy, ConnectorSpec } from '@artifactbin/contracts/connectors';
+import { CONNECTORS } from '@artifactbin/contracts/connectors';
+import { sqlTimeout, SQL_QUERY_DEFAULT_MS, SQL_QUERY_MAX_MS } from '@artifactbin/contracts/sql';
 import { connectorSpec, parseConnectionConfig } from './config';
 import { ConnectorFailure } from './errors';
 import type { ConnectorModule, OpenConnection } from './module';

@@ -1,7 +1,7 @@
 import { escapeSourceAttribute } from '@artifactbin/utils/escape';
 import {isRuntimeCoreSrc,RUNTIME_CORE_PATH} from './core-script.ts';
 // Types only: the skill's scripts run this module's parsers under plain Node, where the contracts index cannot load.
-import type {HtmlDatasetLink,HtmlDeclaredQuery,HtmlDefaultConnectionLink,HtmlQueryParam,HtmlQueryParams} from '@artifactbin/contracts';
+import type {HtmlDatasetLink, HtmlDeclaredQuery, HtmlDefaultConnectionLink, HtmlQueryParam, HtmlQueryParams} from '@artifactbin/contracts/html-page';
 import type {HtmlPageDeclarations} from './links-contracts';
 import { parse, serialize } from 'parse5';
 import { applyEdits, attribute, atHeadStart, insertAttribute, parseSource, removeElement, written } from './html-source.ts';

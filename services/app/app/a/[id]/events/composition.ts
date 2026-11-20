@@ -5,7 +5,7 @@
  */
 import { openDocumentEvents } from '@/lib/publish';
 import { isRegionId } from '@/lib/live-regions';
-import { REGION_STREAM_EVENT } from '@artifactbin/contracts';
+import { REGION_STREAM_EVENT } from '@artifactbin/contracts/region-sessions';
 import { json } from '@/lib/http';
 import { browserEditor, notFound, regionSessions } from '@/app/api/artifacts/[id]/regions/doors';
 

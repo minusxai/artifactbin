@@ -19,7 +19,7 @@ import Ellipsis from 'lucide-solid/icons/ellipsis';
 import ChevronRight from 'lucide-solid/icons/chevron-right';
 import { loginHref } from '@/lib/http/login-href';
 import { artifactAppPath } from '@/lib/document-serving/artifact-pwa';
-import type { Visibility } from '@artifactbin/contracts';
+import type { Visibility } from '@artifactbin/contracts/sharing';
 import { PageChrome, type Panel } from '../components/PageChrome';
 import { Button } from '../ui/Button';
 import { Tooltip } from '../ui/Tooltip';

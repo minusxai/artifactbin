@@ -3,7 +3,7 @@
  * the two Google Fonts resources already admitted by document CSP; the app
  * fetches each through the same DNS-pinned external transport as imports.
  */
-import { FONT_FILES, FONT_STYLES } from '@artifactbin/contracts';
+import { FONT_FILES, FONT_STYLES } from '@artifactbin/contracts/font-sources';
 import { fetchWebResource } from './fetch';
 import { WebIngestError } from './guard';
 import { sniffFontType } from './sniff';
