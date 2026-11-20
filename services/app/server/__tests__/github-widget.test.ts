@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { createAppServer, APP_CSP } from '../app';
+import { createAppServer } from '../app';
+import { APP_CSP } from '../app-policy';
 import { createGithubResponse } from '../external/github';
 import { useAppHarness } from '@/__tests__/harness';
 

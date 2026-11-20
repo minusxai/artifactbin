@@ -17,7 +17,8 @@ import { postArtifact } from '@/__tests__/artifact-fixtures';
 import { mintToken, createUser, ensureUsername } from '@/lib/accounts';
 import { getArtifactById } from '@/lib/artifacts';
 import { mintExportKey } from '@/lib/export';
-import { appPagePolicy, createAppServer } from '../app';
+import { createAppServer } from '../app';
+import { appPagePolicy } from '../app-policy';
 import { useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();

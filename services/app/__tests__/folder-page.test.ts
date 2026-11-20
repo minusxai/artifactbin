@@ -10,7 +10,7 @@ import {observedRequest} from '@/__tests__/conditional-request';
  * behind a runtime an opaque origin cannot cache.
  *
  * So a listing is APP DATA. It is answered by the artifact page endpoint,
- * inlined into the HTML (server/app withBootstrap) and drawn by web/pages
+ * inlined into the HTML (server/app-shell withBootstrap) and drawn by web/pages
  * Folder.tsx. This file pins that answer: who sees which children, which
  * ancestors are named, what the count counts, and the write door that now
  * refuses content on a row that has none.

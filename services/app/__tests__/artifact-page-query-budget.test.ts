@@ -17,7 +17,8 @@ import { createUser, ensureUsername, mintToken } from '@/lib/accounts';
 import { link } from '@/lib/social';
 import { getDb } from '@/lib/platform';
 import { recordStatements, useAppHarness } from '@/__tests__/harness';
-import { BOOTSTRAP_ID, createAppServer } from '@/server/app';
+import { createAppServer } from '@/server/app';
+import { BOOTSTRAP_ID } from '@/server/app-shell';
 import { seedShares } from '@/__tests__/rows';
 
 useAppHarness();

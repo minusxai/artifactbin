@@ -272,8 +272,8 @@ describe('the cache key names the renderer', () => {
  * A folder has no document. Its listing is app data — answered by the page
  * endpoint, inlined into the HTML, drawn by solid/pages/Folder — so the camera is
  * sent to `/a/<id>?key=` with `main` as its target, exactly the path the data
- * tiers already take. A valid `?key=` skips canonical healing (server/app
- * `documentPreparation`), so the camera stays at the address it was handed, and
+ * tiers already take. A valid `?key=` skips canonical healing (server/document-address
+ * `admitDocumentAddress`), so the camera stays at the address it was handed, and
  * the page endpoint honours the same signed key — the shot carries the OWNER's
  * shelf without the headless browser holding a session.
  *

@@ -172,7 +172,7 @@ export function transactionAccessFacts(actor: AccessActor, tx: Queryable): Acces
 
 /**
  * THE PAGE VIEW'S FACTS, asked once each per request: a page view decides the same row more than once — admission
- * (lib/artifacts canReadArtifact, in server/app documentPreparation and lib/document-serving artifact-page) and the
+ * (lib/artifacts canReadArtifact, in server/document-address admitDocumentAddress and lib/document-serving artifact-page) and the
  * chrome's role (effectiveRole) — and each decision would ask the actor's kind, named shares and group shares again.
  * The memo holds each fact's PROMISE (decisions run concurrently), for this request and this actor only; the next
  * request asks the database again, so a share revoked between two requests is refused on the second. Only page-view
