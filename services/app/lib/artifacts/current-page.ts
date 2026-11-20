@@ -66,13 +66,18 @@ const LIVE_REGIONS_SQL = `(SELECT COALESCE(json_agg(json_build_object('region_id
  * A PAGE VIEW'S ONE ROW READ: the live artifact row (as getArtifactById reads it) with its live revision in the same
  * statement, for `currentPage(row, { revision })`, so serving the current page costs a view no statement of its own.
  */
-export interface PageRead { row: ArtifactRow; revision: LiveRevision }
-export async function readPageRow(id: string): Promise<PageRead | null> {
-  const found = (await artifactQuery<ArtifactRow & { af_live_regions: unknown }>(await getDb(),
-    `SELECT artifacts.*, ${LIVE_REGIONS_SQL} AS af_live_regions FROM artifacts WHERE id = $1 AND ${LIVE_ARTIFACT_SQL}`, [id])).rows[0];
+interface PageOwner { handle: string | null; canPublish: boolean }
+export interface PageRead { row: ArtifactRow; revision: LiveRevision; personalOwner?: PageOwner | null }
+export async function readPageRow(id: string, { includePersonalOwner = false } = {}): Promise<PageRead | null> {
+  const owner = includePersonalOwner ? `, (
+    SELECT json_build_object('handle', username, 'canPublish', kind = 'account' AND merged_into_user_id IS NULL)
+    FROM users WHERE users.id = artifacts.user_id
+  ) AS af_personal_owner` : '';
+  const found = (await artifactQuery<ArtifactRow & { af_live_regions: unknown; af_personal_owner?: PageOwner | null }>(await getDb(),
+    `SELECT artifacts.*, ${LIVE_REGIONS_SQL} AS af_live_regions${owner} FROM artifacts WHERE id = $1 AND ${LIVE_ARTIFACT_SQL}`, [id])).rows[0];
   if (!found) return null;
-  const { af_live_regions: regions, ...row } = found;
-  return { row: row as ArtifactRow, revision: storedRevision(regions) };
+  const { af_live_regions: regions, af_personal_owner: personalOwner, ...row } = found;
+  return { row: row as ArtifactRow, revision: storedRevision(regions), ...(includePersonalOwner ? { personalOwner } : {}) };
 }
 
 /** One metadata-only snapshot for admission, validators and cached frames. */

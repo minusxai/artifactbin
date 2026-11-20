@@ -17,15 +17,16 @@ const sha256 = (value: string): string => createHash('sha256').update(value).dig
  *    every wrong guess burns a metered attempt. Reasons, not a boolean: the caller tells expired apart
  *    from wrong apart from spent.
  */
-export function createCodeStore(db: Queryable, o: { schema?: string; table?: string } = {}): CodeStore {
+export function createCodeStore(db: Queryable, o: { schema?: string; table?: string; sweepOnIssue?: boolean } = {}): CodeStore {
   const table = o.table ? plainIdentifier(o.table, 'table') : 'codes';
   const t = `${o.schema ? `${plainIdentifier(o.schema, 'schema')}.` : ''}${table}`;
 
   return {
     async issue(i): Promise<void> {
       const now = i.now ?? Date.now();
-      // Hygiene rides the write path: each issue sweeps its own kind's corpses, so no background job.
-      await db.query(`DELETE FROM ${t} WHERE kind = $1 AND expires_at < $2`, [i.kind, new Date(now).toISOString()]);
+      if (o.sweepOnIssue !== false) {
+        await db.query(`DELETE FROM ${t} WHERE kind = $1 AND expires_at < $2`, [i.kind, new Date(now).toISOString()]);
+      }
       const params = [i.kind, sha256(i.secret), i.subject ?? null, JSON.stringify(i.payload ?? {}), new Date(now + i.ttlMs).toISOString()];
       // A bound code supersedes: one live row per (kind, subject), attempts reset. DELETE+INSERT, not
       // ON CONFLICT — the owner's table may carry no (kind, subject) unique index, and Postgres refuses

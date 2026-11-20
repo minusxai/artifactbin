@@ -4,7 +4,6 @@ import { replaceDocument } from '../lib/document-navigation';
 import { artifactAppPath } from '@/lib/document-serving/artifact-pwa';
 import { createEffect, createSignal, getOwner, lazy, on, onCleanup, onMount, runWithOwner, Show, Suspense, type JSX } from 'solid-js';
 import { APP_BAR_H, REGION_TOOLBAR_H, RIGHT_RAIL_W } from '@/lib/html-reader/edit-bar';
-import { Portal } from 'solid-js/web';
 import { useLocation, useNavigate } from '@solidjs/router';
 import { chooseTheme, storedTheme } from '@/lib/html-reader/reader-mode';
 import { STORY_READER_MODE_MESSAGE } from '@/lib/html-reader/contract';
@@ -16,6 +15,7 @@ import { takeBootstrap } from '@/solid/lib/bootstrap';
 import { isEmbeddedView } from '@/solid/lib/embedded';
 import { reportArtifactView } from '@/solid/lib/artifact-view-report';
 import { useSession } from '../lib/session';
+import type { DocumentChromeDetails } from '../document/deferred-document-chrome';
 import { commentAccess } from '../document/comment-access';
 import type { AnnotationWire } from '@/lib/annotations';
 import { ARTIFACT_ID_PATTERN, type ArtifactRole, canEdit as canEditRole, canGovern, type Visibility } from '@artifactbin/contracts';
@@ -23,7 +23,6 @@ import {ReaderNotice} from '../document/ReaderNotice';
 import type { CspRequest } from '@/lib/document';
 import { ReaderDiscussion } from '../document/ReaderDiscussion';
 import type { FramedStory, RegionUi } from '../document/create-framed-story';
-import { answerFrameNavigation } from '@/lib/html-reader/frame-navigation';
 import { createLiveArtifact } from '../editor/create-live-artifact';
 import { createAppAppearance } from '../ui/theme';
 import { createIsPhoneViewport } from '../ui/MobileSheet';
@@ -46,11 +45,13 @@ const AgentHandoffDialog = lazy(() => import('../document/AgentHandoffDialog').t
 const NotFoundPage = lazy(() => import('./NotFound').then(m => ({default:m.NotFoundPage})));
 /** The bar's controls panel: loaded when it opens. */
 const DocumentControls = lazy(() => import('./DocumentControls'));
+const FrameNotices = lazy(() => import('../document/FrameNotices'));
 const RegionEditingChrome = lazy(() => import('../document/RegionToolbar').then(m => ({ default: m.RegionEditingChrome })));
 const ForkConfirm = lazy(() => import('../document/ForkArtifact').then(m => ({ default: m.ForkConfirm })));
 
 interface DocumentAnswer {
   role: ArtifactRole; kind: string;
+  deferredChrome?: boolean;
   surface?: {
     group_id?:string|null;
     id: string; title: string | null; format: string; version: number; editId?: string;
@@ -60,7 +61,7 @@ interface DocumentAnswer {
     template?: string | null; theme?: string | null; colorMode?: 'light' | 'dark' | null;
     heading?: string | null; hasEditableRegions?: boolean; pwaEnabled?: boolean; membershipAvailable?: boolean;
     visibility?: Visibility; hasInvitedUsers?: boolean;
-    author?: { username: string | null; id?: string | null; image?: string | null; forkedFrom?: { label: string; href: string | null } | null } | null;
+    author?: DocumentChromeDetails['author'];
     /** The document's own origin, which the page frames (lib/document-serving/artifact-page). */
     framedOrigin?: string;
     /** The reader's standing on a document that writes to datasets (the bar's Join/Joined/Pending pill). */
@@ -71,8 +72,8 @@ interface DocumentAnswer {
   cspRequest?: CspRequest;
   /** Why the head runs without its script: the builder's messages, for a writer only (lib/document-serving/artifact-page). */
   scriptFailure?: { errors: string[] };
-  like?: { liked: boolean; count: number };
-  follow?: { userId: string; following: boolean; count: number } | null;
+  like?: DocumentChromeDetails['like'];
+  follow?: DocumentChromeDetails['follow'];
 }
 
 /**
@@ -89,38 +90,6 @@ function createReaderMode(authorMode: 'light' | 'dark') {
     documentMode: () => pick() ?? authorMode,
     chooseMode: (next: 'light' | 'dark') => { chooseTheme(next); setPick(next); },
   };
-}
-
-/** A rail action carried through a sign-in (`?intent=`), taken off the address so a reload does not repeat it. */
-function takeIntent(): string | null {
-  const address = new URL(window.location.href);
-  const carried = address.searchParams.get('intent');
-  if (!carried) return null;
-  address.searchParams.delete('intent');
-  window.history.replaceState(window.history.state, '', address.pathname + address.search + address.hash);
-  return carried;
-}
-
-/** The notices above the frame, in its slot: the document's blocked network request, and (until a newer version is
- * shown: publish refuses a script that does not build, so any newer head built its own) a page script that failed. */
-function FrameNotices(props: { slot: HTMLElement | null; id: string; csp?: CspRequest; accountSession: boolean; scriptErrors?: string[] }): JSX.Element {
-  return <>
-    <Show when={props.csp?.status === 'blocked' && props.slot}>{(slot) => (
-      <Portal mount={slot()}><TrustedUi><ReaderNotice label="Document network access" load={() => import('../document/CspConsentBar')}>{module => <module.CspConsentBar id={props.id} request={props.csp!} accountSession={props.accountSession} />}</ReaderNotice></TrustedUi></Portal>
-    )}</Show>
-    <Show when={!!props.scriptErrors?.length && props.slot}>{(slot) => (
-      <Portal mount={slot()}><TrustedUi><ReaderNotice label="Page script error" load={() => import('../document/ScriptFailureNotice')}>{module => <module.ScriptFailureNotice errors={props.scriptErrors!} />}</ReaderNotice></TrustedUi></Portal>
-    )}</Show>
-  </>;
-}
-
-/** Who a framed upload acts as: a browser session's scripted browser acts as the account it browses as (its writes, like an
- * account's, are judged by the dataset's rules): signed in, with no account for the chrome to name. */
-function uploadSessionOf(session: ReturnType<ReturnType<typeof useSession>['session']>, error: Error | null) {
-  if (error) return { state: 'unavailable' as const };
-  if (!session) return { state: 'loading' as const };
-  if (session.kind === 'account' && session.user) return { state: 'signed-in' as const, subject: session.user.id };
-  return session.liveEditor === true ? { state: 'signed-in' as const } : { state: 'signed-out' as const };
 }
 
 /**
@@ -147,6 +116,9 @@ export function DocumentPage(): JSX.Element {
   const barHeight = embedded ? 0 : APP_BAR_H;
   const rawId = page?.surface?.id ?? /^\/a\/([^/]+)/.exec(location.pathname)?.[1] ?? null;
   const id = rawId && ARTIFACT_ID_PATTERN.test(rawId) ? rawId : null;
+  const [chrome, setChrome] = createSignal<DocumentChromeDetails | null>(null);
+  const like = () => chrome()?.like ?? page?.like;
+  const author = () => chrome()?.author ?? page?.surface?.author ?? null;
   const role = () => page?.role ?? 'viewer';
   const archivedNow = () => !!page?.archived;
   const isOwner = () => canGovern(role()) && !archivedNow();
@@ -159,7 +131,7 @@ export function DocumentPage(): JSX.Element {
   const [railOpen, setRailOpen] = createSignal(false);
   const [annotationItems, setAnnotationItems] = createSignal<AnnotationWire[] | null>(null);
   const [liveAnnotations, setLiveAnnotations] = createSignal<AnnotationWire[] | null>(null);
-  const openAnnotationCount = () => (annotationItems() ?? liveAnnotations())?.filter((row) => row.status === 'open').length ?? page?.surface?.openAnnotations ?? 0;
+  const openAnnotationCount = () => (annotationItems() ?? liveAnnotations())?.filter((row) => row.status === 'open').length ?? chrome()?.openAnnotations ?? page?.surface?.openAnnotations ?? 0;
   const [panel, setPanel] = createSignal<Panel>(null);
   const [fork, setFork] = createSignal(false);
   const { pick, documentMode, chooseMode } = createReaderMode(page?.surface?.colorMode === 'dark' ? 'dark' : 'light');
@@ -239,7 +211,10 @@ export function DocumentPage(): JSX.Element {
     onCleanup(() => { unmounted = true; runtimeRef.current = null; });
     // The document is on screen: one view (a prerendered page counts when it is shown).
     reportArtifactView(window, id);
-    void import('../document/create-framed-story').then(({ createFramedStory, opensComment }) => { if (!unmounted) runWithOwner(owner, () => {
+    if (page.deferredChrome) void import('../document/deferred-document-chrome').then(({ bindDocumentChrome }) => {
+      if (!unmounted) runWithOwner(owner, () => bindDocumentChrome(id, setChrome));
+    }).catch(() => { /* The document and its discussion remain usable without social details. */ });
+    void import('../document/create-framed-story').then(({ answerFrameNavigation, createFramedStory, opensComment, takeIntent, uploadSessionOf }) => { if (!unmounted) runWithOwner(owner, () => {
       story = createFramedStory({
         id, framed,
         editId: () => htmlHead().editId,
@@ -287,16 +262,17 @@ export function DocumentPage(): JSX.Element {
   });
   const currentVersion = head.version;
   const shownTitle = head.title;
+  const scriptErrors = () => currentVersion() <= (page?.surface?.version ?? 0) ? page?.scriptFailure?.errors : undefined;
   return <Show when={id && page && page.surface?.framedOrigin} fallback={<Suspense fallback={<main role="status" aria-busy="true">Loading page…</main>}><NotFoundPage /></Suspense>}>
     <Show when={embedded}><TrustedUi overlay layer="navigation"><div class="fixed right-3 top-3 z-40"><DocumentCommentAction count={openAnnotationCount()} active={railOpen()} onClick={() => act('comment')} /></div></TrustedUi></Show>
-    <Show when={!embedded}><DocumentChrome id={id!} title={shownTitle} author={page!.surface?.author ?? null} follow={page!.follow ?? null}
-      like={page!.like ?? { liked: false, count: 0 }} signedIn={accountSession} comments={openAnnotationCount}
+    <Show when={!embedded}><DocumentChrome id={id!} title={shownTitle} author={author()} follow={chrome()?.follow ?? page!.follow ?? null}
+      like={like() ?? { liked: false, count: 0 }} likeUnavailable={page?.deferredChrome && !like()} signedIn={accountSession} comments={openAnnotationCount}
       archived={page!.archived ?? null} canFork={!archivedNow()} owner={isOwner()}
-      install={pwaEnabled() && !archivedNow()} visibility={page!.surface?.visibility} hasInvitedUsers={page!.surface?.hasInvitedUsers}
+      install={pwaEnabled() && !archivedNow()} visibility={page!.surface?.visibility} hasInvitedUsers={chrome()?.hasInvitedUsers ?? page!.surface?.hasInvitedUsers}
       membership={page!.surface?.membership}
       panel={panel} setPanel={setPanel} mode={appAppearance} onMode={chooseMode}
       onComment={() => act('comment')} onFork={() => act('fork')} onShare={() => act('share')} onMembership={() => act('membership')}
-      controls={(close) => <Suspense fallback={<p role="status" aria-busy="true">Loading artifact controls…</p>}><DocumentControls close={close} presence={readerPresence} answer={page!}
+      controls={(close) => <Suspense fallback={<p role="status" aria-busy="true">Loading artifact controls…</p>}><DocumentControls close={close} presence={readerPresence} answer={{ ...page!, like: like(), surface: page!.surface && { ...page!.surface, author: author() } }} likeUnavailable={page?.deferredChrome && !like()}
         design={{ colorMode: documentMode(), send: (command) => runtimeRef.current?.send(command), pick }} id={id!} title={shownTitle()} version={currentVersion()} archived={archivedNow()}
         owner={isOwner()} canEdit={editable()} canAnnotate={annotatable()} accountSession={accountSession()} phone={phone()}
         commentsOpen={railOpen()} openAnnotations={openAnnotationCount()} membershipRevision={membershipRevision()} onCommentsChange={setRailOpen}
@@ -312,8 +288,11 @@ export function DocumentPage(): JSX.Element {
       <Show when={fork() && id}><Suspense fallback={<PendingReaderDialog title="Fork artifact" onClose={() => setFork(false)} />}><ForkConfirm id={id!} title={page?.surface?.title ?? 'this artifact'} onClose={() => setFork(false)} /></Suspense></Show>
     </TrustedUi>
     {/* The document's notices take their own row above the frame (the frame shrinks), never over it. */}
-    <FrameNotices slot={framedPage.slot()} id={id!} csp={page?.cspRequest} accountSession={accountSession()}
-      scriptErrors={currentVersion() <= (page?.surface?.version ?? 0) ? page?.scriptFailure?.errors : undefined} />
+    <Show when={page?.cspRequest?.status === 'blocked' || scriptErrors()?.length}>
+      <Suspense fallback={null}>
+        <FrameNotices slot={framedPage.slot()} id={id!} csp={page?.cspRequest} accountSession={accountSession()} scriptErrors={scriptErrors()} />
+      </Suspense>
+    </Show>
     <TrustedUi overlay layer="discussion">
     <Show when={id}>
       <ReaderDiscussion id={id!} role={role()} accountSession={accountSession()} archived={archivedNow()} runtimeRef={runtimeRef} ready={ready()} nonce={nonce()}

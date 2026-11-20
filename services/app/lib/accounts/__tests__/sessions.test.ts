@@ -2,7 +2,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { ANONYMOUS } from '@artifactbin/contracts';
 import { request, createGuestOwner, testIdentity as baseIdentity, useAppHarness } from '@/__tests__/harness';
-import { createUser, endPagesSession, endPagesSessionsFor, identityForUser, exchangePagesTicket, issuePagesTicket, mintToken, pagesSessionOf, revokeToken } from '@/lib/accounts';
+import { createUser, endPagesSession, endPagesSessionsFor, identityForUser, exchangePagesTicket, issuePagesTicket, mintToken, pagesSessionOf, revokeToken, sweepExpiredPagesTickets } from '@/lib/accounts';
 import { pagesSessionActor } from '@/lib/accounts/pages-sessions';
 import { setServices,getDb } from '@/lib/platform';
 
@@ -58,6 +58,19 @@ describe('pages tickets', () => {
     expect(await pagesSessionActor(spent!.cookie, 'art_other', t0)).toBeNull();
     expect(await pagesSessionOf('not a cookie')).toBeNull();
     expect(await pagesSessionOf(null)).toBeNull();
+  });
+
+  it('sweeps expired tickets separately from issuance and leaves live tickets redeemable', async () => {
+    const { identity } = await reader();
+    const db = await getDb();
+    const now = Date.now();
+    await issuePagesTicket(identity, {}, now - 60_001, binding);
+    const live = await issuePagesTicket(identity, {}, now, binding);
+    const count = async () => (await db.query('SELECT 1 FROM codes WHERE kind = $1', ['pages_ticket'])).rows.length;
+    expect(await count()).toBe(2);
+    await sweepExpiredPagesTickets(db, now);
+    expect(await count()).toBe(1);
+    expect(await exchangePagesTicket(live!, binding, now)).not.toBeNull();
   });
 
   it('a guest gets a ticket only to carry something, and reads as nobody', async () => {

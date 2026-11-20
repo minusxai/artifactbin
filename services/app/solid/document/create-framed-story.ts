@@ -7,6 +7,9 @@ import { commentAfterRegionSave, type RegionCommentSubject } from '@/lib/annotat
 import type { RegionEditing, RegionToolbarState, startRegionEditing } from './region-editing';
 import type { CellEditing, startCellEditing } from './cell-editing';
 import { CELL_READONLY, isCellKey } from '@artifactbin/contracts';
+import type { useSession } from '../lib/session';
+
+export { answerFrameNavigation } from '@/lib/html-reader/frame-navigation';
 
 /** Region editing (live co-editing of the page's editable regions) is an intentional lazy browser chunk: it carries Yjs, for editors only. */
 export type RegionEditingLoader = () => Promise<{ startRegionEditing: typeof startRegionEditing }>;
@@ -100,6 +103,25 @@ export interface RegionUi {
 export function opensComment(search: string): boolean {
   const params = new URLSearchParams(search);
   return params.has('comment') || params.has('thread') || params.get('intent') === 'comment';
+}
+
+/** A rail action carried through a sign-in (`?intent=`), taken off the address so a reload does not repeat it. */
+export function takeIntent(): string | null {
+  const address = new URL(window.location.href);
+  const carried = address.searchParams.get('intent');
+  if (!carried) return null;
+  address.searchParams.delete('intent');
+  window.history.replaceState(window.history.state, '', address.pathname + address.search + address.hash);
+  return carried;
+}
+
+/** Who a framed upload acts as: a browser session's scripted browser acts as the account it browses as (its writes, like an
+ * account's, are judged by the dataset's rules): signed in, with no account for the chrome to name. */
+export function uploadSessionOf(session: ReturnType<ReturnType<typeof useSession>['session']>, error: Error | null) {
+  if (error) return { state: 'unavailable' as const };
+  if (!session) return { state: 'loading' as const };
+  if (session.kind === 'account' && session.user) return { state: 'signed-in' as const, subject: session.user.id };
+  return session.liveEditor === true ? { state: 'signed-in' as const } : { state: 'signed-out' as const };
 }
 
 export interface FramedStory {

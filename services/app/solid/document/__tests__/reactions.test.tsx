@@ -3,8 +3,26 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/dom';
 import { fireEvent, render } from '../../__tests__/helpers';
 import { LikeAction } from '../LikeAction';
+import { createSignal } from 'solid-js';
 
 afterEach(() => { vi.unstubAllGlobals(); window.history.replaceState(null, '', '/'); });
+
+it('waits for the reader’s reaction before offering the correct toggle', async () => {
+  const fetcher = vi.fn(async () => Response.json({ liked: false, count: 3 }));
+  vi.stubGlobal('fetch', fetcher);
+  const [initial, setInitial] = createSignal<{ liked: boolean; count: number }>();
+  const view = render(() => <LikeAction id="abc" accountSession initial={initial() ?? { liked: false, count: 0 }} unavailable={!initial()} />);
+  const pending = view.getByRole('button', { name: 'Like artifact' });
+  expect(pending).toBeDisabled();
+  fireEvent.click(pending);
+  expect(fetcher).not.toHaveBeenCalled();
+  setInitial({ liked: true, count: 4 });
+  const unlike = await view.findByRole('button', { name: 'Unlike artifact' });
+  expect(unlike).toBeEnabled();
+  fireEvent.click(unlike);
+  await waitFor(() => expect(view.getByRole('button', { name: 'Like artifact' })).toHaveTextContent('3'));
+  expect(fetcher).toHaveBeenCalledWith('/api/my/artifacts/abc/like', { method: 'DELETE', credentials: 'same-origin' });
+});
 
 it('sends a like once and displays the server answer', async () => {
   const fetcher = vi.fn(async () => Response.json({ liked: true, count: 4 }));
