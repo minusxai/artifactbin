@@ -68,6 +68,8 @@ export interface AccessFacts {
 }
 
 const SHARED_WITH_SQL = 'SELECT 1 FROM artifact_shares s WHERE s.artifact_id=$1 AND (s.user_id=$2 OR(s.user_id IS NULL AND s.email=(SELECT email FROM users WHERE id=$2)))';
+const NAMES_READER_SQL = '(s.user_id = $2 OR (s.user_id IS NULL AND (s.email = $3 OR s.email = (SELECT email FROM users WHERE id = $2))))';
+const UNRESOLVED_ACCOUNT_SHARE_SQL = '(s.user_id IS NULL AND s.email = (SELECT email FROM users WHERE id = $2))';
 const RESOLVE_SHARES_SQL = (artifacts: string) => `UPDATE artifact_shares SET user_id = $2 WHERE artifact_id ${artifacts} AND user_id IS NULL AND email = (SELECT email FROM users WHERE id = $2)`;
 export const EDITOR_GROUPS_SQL = "SELECT gm.group_id FROM group_members gm JOIN groups g ON g.id=gm.group_id WHERE gm.user_id=$1 AND gm.role='editor' AND g.deleted_at IS NULL UNION SELECT ga.group_id FROM group_admins ga WHERE ga.user_id=$1";
 /** The best role a group share reaching the actor names: a share to any group the actor's memberships climb to. */
@@ -101,11 +103,7 @@ export function liveAccessFacts(actor: AccessActor, query?: Queryable): AccessFa
       // account's own email: those are stamped with the account's id — the moment of RESOLUTION — and only then,
       // so a role read that finds every share already resolved (nearly all of them) writes nothing.
       const r = await q.query<{ role: ArtifactRole; unresolved: boolean }>(
-        `SELECT s.role, (s.user_id IS NULL AND s.email = (SELECT email FROM users WHERE id = $2)) AS unresolved FROM artifact_shares s
-         WHERE s.artifact_id = $1 AND (
-           s.user_id = $2
-           OR (s.user_id IS NULL AND (s.email = $3 OR s.email = (SELECT email FROM users WHERE id = $2)))
-         )`,
+        `SELECT s.role, ${UNRESOLVED_ACCOUNT_SHARE_SQL} AS unresolved FROM artifact_shares s WHERE s.artifact_id = $1 AND ${NAMES_READER_SQL}`,
         [artifactId, actor.userId, sessionEmail(actor)],
       );
       if (r.rows.some((x) => x.unresolved)) await q.query(RESOLVE_SHARES_SQL('= $1'), [artifactId, actor.userId]);
@@ -170,6 +168,46 @@ export function transactionAccessFacts(actor: AccessActor, tx: Queryable): Acces
   };
 }
 
+interface PageShareFacts {
+  kind: UserKind | null;
+  named_roles: ArtifactRole[];
+  group_roles: ArtifactRole[];
+  unresolved: boolean;
+}
+
+/** The signed-in, non-owner page path needs these three facts together. Use the same predicates as the live
+ * getters over a single snapshot, leaving direct ownership, other artifacts, and write locks on their old paths. */
+const PAGE_SHARE_FACTS_SQL = `WITH named AS (
+  SELECT s.role, ${UNRESOLVED_ACCOUNT_SHARE_SQL} AS unresolved FROM artifact_shares s WHERE s.artifact_id = $1 AND ${NAMES_READER_SQL}
+)
+SELECT
+  (SELECT kind FROM users WHERE id = $2) AS kind,
+  ARRAY(SELECT role::text FROM named) AS named_roles,
+  ARRAY(SELECT role::text FROM (${GROUP_SHARE_ROLES_SQL}) AS group_shares) AS group_roles,
+  EXISTS (SELECT 1 FROM named WHERE unresolved) AS unresolved`;
+
+function pageAccessFacts(actor: AccessActor, artifactId: string): AccessFacts {
+  const live = liveAccessFacts(actor);
+  const userId = actor.userId;
+  if (!userId || actor.principalGroup) return live;
+  let pending: Promise<PageShareFacts> | undefined;
+  const read = () => pending ??= (async () => {
+    const result = await (await getDb()).query<PageShareFacts>(PAGE_SHARE_FACTS_SQL, [artifactId, userId, sessionEmail(actor)]);
+    return result.rows[0]!;
+  })().catch((error) => { pending = undefined; throw error; });
+  return {
+    ...live,
+    async userKind(id) { return id === userId ? (await read()).kind : live.userKind(id); },
+    async groupShareRole(id) { return id === artifactId ? maxRole(...(await read()).group_roles) : live.groupShareRole(id); },
+    async namedRole(id) {
+      if (id !== artifactId) return live.namedRole(id);
+      const facts = await read();
+      if (facts.unresolved) await (await getDb()).query(RESOLVE_SHARES_SQL('= $1'), [id, userId]);
+      return maxRole(...facts.named_roles);
+    },
+  };
+}
+
 /**
  * THE PAGE VIEW'S FACTS, asked once each per request: a page view decides the same row more than once — admission
  * (lib/artifacts canReadArtifact, in server/document-address admitDocumentAddress and lib/document-serving artifact-page) and the
@@ -179,13 +217,13 @@ export function transactionAccessFacts(actor: AccessActor, tx: Queryable): Acces
  * reads use it: a request that writes shares or memberships decides on live facts.
  */
 const pageViewFacts = new WeakMap<Request, Map<string, AccessFacts>>();
-export function requestAccessFacts(request: Request, actor: AccessActor): AccessFacts {
+export function requestAccessFacts(request: Request, actor: AccessActor, artifactId: string): AccessFacts {
   // Every fact reads the actor's account id and session address (or its group principal), and nothing else of it.
-  const key = `${actor.userId ?? ''}\u0000${sessionEmail(actor)}\u0000${actor.principalGroup ? `${actor.principalGroup.id}:${actor.principalGroup.role}` : ''}`;
+  const key = `${artifactId}\u0000${actor.userId ?? ''}\u0000${sessionEmail(actor)}\u0000${actor.principalGroup ? `${actor.principalGroup.id}:${actor.principalGroup.role}` : ''}`;
   let byActor = pageViewFacts.get(request);
   if (!byActor) pageViewFacts.set(request, byActor = new Map());
   let facts = byActor.get(key);
-  if (!facts) byActor.set(key, facts = memoAccessFacts(liveAccessFacts(actor)));
+  if (!facts) byActor.set(key, facts = memoAccessFacts(pageAccessFacts(actor, artifactId)));
   return facts;
 }
 

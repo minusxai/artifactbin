@@ -63,7 +63,7 @@ export async function admitDocumentAddress(request: Request): Promise<Admission>
     const key = url.searchParams.get('key');
     if (!url.pathname.endsWith('/edit') && key && verifyExportKey(row.id, key)) return { status: 200, admitted: { row, revision } };
     // The page's answer (artifactPageAnswer) decides this actor's role on this request again: one memo of its access facts serves both.
-    const facts = actor ? requestAccessFacts(request, actor) : undefined;
+    const facts = actor ? requestAccessFacts(request, actor, row.id) : undefined;
     const editingDataset = row.format === 'dataset' && url.pathname.endsWith('/edit');
     if (editingDataset && (!actor || !canEdit(await effectiveRole(row, actor, facts)))) return { status: 404 };
     if (!(await canReadArtifact(row, actor ?? ANONYMOUS_ACTOR, facts))) return { status: 404 };

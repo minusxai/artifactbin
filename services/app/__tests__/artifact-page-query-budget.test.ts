@@ -30,8 +30,8 @@ useAppHarness();
  * also mints the frame's ticket (three statements for a signed-in reader) and names the canonical address.
  */
 const BUDGET = {
-  json: { signedIn: 7, anonymous: 3, owner: 5 },
-  html: { signedIn: 7, anonymous: 2, owner: 4 },
+  json: { signedIn: 5, anonymous: 3, owner: 5 },
+  html: { signedIn: 5, anonymous: 2, owner: 4 },
 };
 
 const SECRET = 'vitest-actor-secret-0000000000000000';

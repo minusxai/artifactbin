@@ -3,7 +3,7 @@ import {useAppHarness,admitGroupMember} from '@/__tests__/harness';
 import {account,mine,head,sql,dataset} from '@/__tests__/artifact-fixtures';
 import {createGroup,removeGroupMember,setGroupLink} from '@/lib/groups';
 import {setArtifactGroupShare,listArtifactPageFor,getArtifactFor,getSharingFor,updateSharingFor} from '@/lib/artifacts';
-import {effectiveRole,preloadAccessFacts,liveAccessFacts,readThrough,annotationScope,editorScope,ownerScope,reactionScope,policyReaderSql} from '..';
+import {effectiveRole,preloadAccessFacts,liveAccessFacts,requestAccessFacts,readThrough,annotationScope,editorScope,ownerScope,reactionScope,policyReaderSql} from '..';
 import {getDb} from '@/lib/platform';
 import {datasetWriteAccess} from '@/lib/dataset-permissions';
 useAppHarness();
@@ -14,11 +14,13 @@ describe('group principal lattice',()=>{
   const group=await createGroup(owner.userId,{handle:'design_crit',name:'Design'});
   await admitGroupMember(owner.userId,group.id,member.userId,'member');
   const page=await mine(owner);
+  const pageFacts = () => requestAccessFacts(new Request('https://app.test'), member, page.id);
   for(const role of ['viewer','commenter','editor'] as const){
    expect(await setArtifactGroupShare(owner,page.id,group.id,role)).toEqual({changed:true});
    expect(await setArtifactGroupShare(owner,page.id,group.id,role)).toEqual({changed:false});
    const row=await head(page.id),db=await getDb();
    expect(await effectiveRole(row,member,liveAccessFacts(member))).toBe(role);
+   expect(await effectiveRole(row,member,pageFacts())).toBe(role);
    const facts=await preloadAccessFacts(db,member,[row]);
    expect(await effectiveRole(row,member,facts)).toBe(role);
    expect(await readThrough(db,row,member,facts)).toBe(true);
@@ -37,6 +39,7 @@ describe('group principal lattice',()=>{
   expect((await getSharingFor(owner,page.id))?.groupShares).toMatchObject([{group:{id:group.id},role:'editor'}]);
   await removeGroupMember(owner.userId,group.id,member.userId);
   expect(await effectiveRole(await head(page.id),member)).toBe('none');
+  expect(await effectiveRole(await head(page.id),member,pageFacts())).toBe('none');
   expect(await getArtifactFor(member,page.id)).toBeNull();
   expect(await readThrough(await getDb(),await head(page.id),member,await preloadAccessFacts(await getDb(),member,[page]))).toBe(false);
   expect(await admitted(editorScope(member),page.id)).toBe(false);

@@ -182,7 +182,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   const actor = await sessionActor(request);
   // Every role decision this view makes reads one memo of the actor's access facts, shared with the app page's own
   // admission of this very request (server/document-address admitDocumentAddress): the role is resolved once per view.
-  const facts = requestAccessFacts(request, actor);
+  const facts = requestAccessFacts(request, actor, header.id);
   if (!admitted && !(await admitRead(header, actor, { facts, exporting }))) return notFound();
   if (header.format === 'markup' || header.format === 'program' || !ARTIFACT_FORMATS.includes(header.format as ArtifactFormat)) return notFound();
   if (!admitted && search.get('part') === 'kind') return kindAnswer(header);
