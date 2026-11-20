@@ -21,6 +21,9 @@ export const DATASET_ROLES = [
 ] as const;
 export type DatasetRole = (typeof DATASET_ROLES)[number];
 
+/** THE ADMIN RULE, one spelling: a dataset's owner and editors administer it (read every row, write, replace its policy). */
+export const isDatasetAdmin = (role: DatasetRole | null | undefined): role is 'owner' | 'editor' => role === 'owner' || role === 'editor';
+
 /** The roles a rule may name, in the order the read-back lists them. */
 export const DATASET_RULE_ROLES = ['viewer', 'signed_in', 'anonymous'] as const;
 export type DatasetRuleRole = (typeof DATASET_RULE_ROLES)[number];

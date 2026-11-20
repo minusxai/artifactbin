@@ -12,7 +12,7 @@
  *  - A PRIVATE dataset admits signed_in and anonymous callers only through `backend_only` entries (privateCeiling).
  *  - The `access` column is a ceiling on every write, owner included.
  */
-import type { DatasetBoolExp, DatasetPermissions, DatasetRole, DatasetRuleRole, DatasetTableName, DatasetTablePermissions } from '@artifactbin/contracts/dataset-permissions';
+import { isDatasetAdmin, type DatasetBoolExp, type DatasetPermissions, type DatasetRole, type DatasetRuleRole, type DatasetTableName, type DatasetTablePermissions } from '@artifactbin/contracts/dataset-permissions';
 import type { DatasetGrantContext, DatasetMutationPolicy, DatasetOperation } from '@artifactbin/contracts/dataset-policy';
 import type { Queryable } from '@artifactbin/contracts/db';
 import type { Scalar } from '@artifactbin/contracts/sql';
@@ -60,7 +60,7 @@ function tablesOf(row: Pick<ArtifactRow, 'meta'>) {
 async function documentOwnerAdmin(dataset: ArtifactRow, owner: { userId: string | null; tokenId: string | null; groupId?: string | null }, db: Queryable): Promise<boolean> {
   const actor = writerFor({ user_id: owner.userId, token_id: owner.tokenId, group_id: owner.groupId ?? null });
   const role = await datasetRole(dataset, actor, { facts: liveAccessFacts(actor, db) });
-  return role === 'owner' || role === 'editor';
+  return isDatasetAdmin(role);
 }
 
 /** Program trust for backend_only entries: the saved-document checks pass and the page owner administers the dataset. */
@@ -102,7 +102,7 @@ export async function datasetWriteAccess(row: ArtifactRow, actor: AccessActor, o
   const role = await datasetRole(row, actor, { facts, throughPage: options.throughPage || !!options.pageId });
   // A live dataset's rows are its database's, read-only here: no door writes them.
   if (row.format !== 'dataset' || row.access !== 'readwrite' || liveConnectionOf(row.meta)) return { allowed: false, role, revision, reason: 'dataset_read_only' };
-  if (role === 'owner' || role === 'editor') return { allowed: true, admin: true, role, revision };
+  if (isDatasetAdmin(role)) return { allowed: true, admin: true, role, revision };
   if (!role) return { allowed: false, role, revision, reason: 'no_rule' };
   // Read only for a rule role, so an owner or editor can always replace a stored policy that does not read.
   const read = storedPolicy({ policy: row.dataset_policy, tables: tablesOf(row) });

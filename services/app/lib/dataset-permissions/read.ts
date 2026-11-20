@@ -9,7 +9,7 @@
  *  - The decision's `identity` names the role, the policy revision, the session and the rules, for
  *    cursors and read fences: any change refuses a continuation.
  */
-import type { DatasetRole, DatasetRuleRole, DatasetSelectPermission, DatasetTableName } from '@artifactbin/contracts/dataset-permissions';
+import { isDatasetAdmin, type DatasetRole, type DatasetRuleRole, type DatasetSelectPermission, type DatasetTableName } from '@artifactbin/contracts/dataset-permissions';
 import type { Queryable } from '@artifactbin/contracts/db';
 import type { Scalar } from '@artifactbin/contracts/sql';
 import type { AccessActor } from '@/lib/accounts';
@@ -80,7 +80,7 @@ export async function datasetReadAccess(row: DatasetReadRow, actor: AccessActor,
     ...(actor.userId ? { 'x-hasura-user-id': actor.userId } : {}),
     ...(options.pageId ? { 'x-hasura-page-id': options.pageId } : {}),
   };
-  if (role === 'owner' || role === 'editor') return admitted(row, role, all, session, true);
+  if (isDatasetAdmin(role)) return admitted(row, role, all, session, true);
   const read = storedPolicy({ policy: row.dataset_policy, tables: tablesOf(row).map(({ schema, name }) => ({ schema, name })), live: !!liveConnectionOf(row.meta) });
   if (row.visibility === 'private' && (role === 'signed_in' || role === 'anonymous')) return { allowed: false, role };
   const tables = tablesOf(row).map((table): TableSelect => {
