@@ -140,11 +140,12 @@ function createLinkedComment(linkTarget: () => string | null | undefined) {
 }
 
 /** The window's size, measured again when it or the document's `frame` (a host page's own panel) resizes. */
-function createViewport(frame?: Element) {
+function createViewport(frameOf: () => Element | undefined) {
   const [viewport, setViewport] = createSignal({ width: innerWidth, height: innerHeight });
   onMount(() => {
     const resize = () => setViewport({ width: innerWidth, height: innerHeight });
     window.addEventListener('resize', resize);
+    const frame = frameOf();
     const observer = frame && typeof ResizeObserver === 'function' ? new ResizeObserver(resize) : null;
     if (frame) observer?.observe(frame);
     onCleanup(() => { window.removeEventListener('resize', resize); observer?.disconnect(); });
@@ -172,14 +173,14 @@ function ConfirmDelete(props: { thread: boolean; remove: () => Promise<unknown>;
  * too, solid/lib/draft-store, so a reload — the page loading a new build — gives them back), and which rail threads'
  * reply boxes hold words (each thread owns its own reply draft). `typed`: whether any of them holds words.
  */
-function createReplyDrafts(artifactId: string) {
-  const [cards, setCards] = createSignal<Record<string, string>>(draftsUnder(`${artifactId}:reply:`));
+function createReplyDrafts(artifactId: () => string) {
+  const [cards, setCards] = createSignal<Record<string, string>>(draftsUnder(`${artifactId()}:reply:`));
   const [threads, setThreads] = createSignal<Record<string, true>>({});
   return {
     card: (id: string) => cards()[id] ?? '',
     setCard: (id: string, value: string) => setCards((current) => {
       if ((current[id] ?? '') === value) return current;
-      writeDraft(`${artifactId}:reply:${id}`, value);
+      writeDraft(`${artifactId()}:reply:${id}`, value);
       return withEntry(current, id, value);
     }),
     noteThread: (id: string, typed: boolean) => setThreads((current) => Boolean(current[id]) === typed ? current : withEntry(current, id, typed || undefined)),
@@ -202,12 +203,12 @@ function PickStatus(props: { pick: 'block' | 'area'; capturing: boolean; left: n
 
 /**
  * A thread resolved elsewhere counts down only while its mark is seen: inside the viewport, the page visible, the
- * mark neither hovered nor its thread open. `placed` is empty while the marks are away.
+ * mark neither hovered nor its thread open; the interval restarts only when what is seen changes, never per scroll.
  */
-function countDownWhileSeen(threads: ThreadStore, placed: () => Array<{ annotation: AnnotationWire; top: number }>, height: () => number, hoverId: () => string | null) {
+function countDownWhileSeen(threads: ThreadStore, floating: () => boolean, placed: () => Array<{ annotation: AnnotationWire; top: number }>, height: () => number, hoverId: () => string | null) {
   const seen = createMemo(() => placed().filter((item) => item.top >= 0 && item.top + VIEW_COMMENT_COLLAPSED_H <= height()).map((item) => item.annotation.id).join(','));
   createEffect(() => {
-    if (!placed().length || !threads.counting()) return;
+    if (!floating() || !threads.counting()) return;
     const visible = new Set(seen().split(','));
     const hover = hoverId();
     const open = threads.openId();
@@ -253,14 +254,14 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   const [pinnedId, setPinnedId] = createSignal<string | null>(null);
   /** The hover card that shows: the pinned one, else the one under the pointer. */
   const previewId = () => pinnedId() ?? hoverId();
-  const replies = createReplyDrafts(props.id);
+  const replies = createReplyDrafts(() => props.id);
   const closePreview = () => batch(() => { setPinnedId(null); hoverUi(null); });
   let threadsRoot: HTMLDivElement | undefined;
   /** On a phone the rail is a bottom sheet — a 320px rail over a 390px screen covers the document. */
   const phoneRail = createIsPhoneViewport();
   const [ambientResolveError, setAmbientResolveError] = createSignal<{ id: string; message: string } | null>(null);
   const [deleting, setDeleting] = createSignal<{ id: string; thread: boolean } | null>(null);
-  const viewport = createViewport(props.frame);
+  const viewport = createViewport(() => props.frame);
 
   /** A pin, a marker, a link or a new comment opens its thread in the rail; no pick or composer stays up. */
   const openThread = (annId: string) => {
@@ -343,7 +344,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   createEffect(() => { const pinned = pinnedId(); if (pinned && !placedIds().includes(pinned)) setPinnedId(null); });
 
   // A thread resolved elsewhere counts down only while its mark is seen, not hovered and not open.
-  countDownWhileSeen(threads, placed, () => viewport().height, hoverId);
+  countDownWhileSeen(threads, floating, placed, () => viewport().height, hoverId);
 
   // The document is full-width under an open rail, so what the composer and the pill may use is the
   // document LESS the rail — never its own width.
