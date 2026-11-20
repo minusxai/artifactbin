@@ -12,6 +12,7 @@ import { getDb } from '@/lib/platform';
 import { overrideConfig } from '@/lib/platform/config';
 import { pagesSite } from '@/lib/http';
 import { DRAFT_LIMITS, resetDrafts } from '@/lib/page-drafts';
+import { setDefaultHtmlSystem } from '@/lib/html-systems';
 import { createAppServer } from '@/server/app';
 import { mintAccountToken, request, useAppHarness } from './harness';
 
@@ -99,6 +100,26 @@ describe('POST /api/page/drafts', () => {
     expect((await get(`${answer.origin}/api/my/artifacts`)).status).toBe(404);
     expect((await get(`${answer.origin}/a/AbCdEf12/raw`)).status).toBe(404);
     expect(await artifacts()).toBe(before);
+  });
+
+  it('draws a page that names no design system in this server\'s default, and one that names a system in its own', async () => {
+    const owner = await mintAccountToken('draft_owner');
+    const shown = async (html: string) => {
+      const answer = await (await post(session(owner), { html, files: [] })).json() as { src: string };
+      const page = await (await get(answer.src)).text();
+      const config = JSON.parse(/<script type="application\/json" data-af="runtime">([^<]*)<\/script>/.exec(page)![1]!);
+      return { system: config.appearance?.designSystem, styled: /<link[^>]*data-af="platform-styles"/.test(page) };
+    };
+    // A draft is kept by its content: each case is a page of its own.
+    const bare = (title: string) => `<!doctype html><html><head><title>${title}</title></head><body><h1>${title}</h1></body></html>`;
+    const named = bare('Named').replace('<title>', '<meta name="artifactbin:design-system" content="sorbet"><title>');
+    // No default on this server: a page that names none stays unstyled, as a published one does.
+    expect(await shown(bare('Plain'))).toEqual({ system: undefined, styled: false });
+    setDefaultHtmlSystem('meridian');
+    try {
+      expect(await shown(bare('Steps'))).toEqual({ system: 'meridian', styled: true });
+      expect(await shown(named)).toEqual({ system: 'sorbet', styled: true });
+    } finally { setDefaultHtmlSystem(null); }
   });
 
   it('reads a CSV both as a dataset and as a file the page links, whichever reference comes first', async () => {
