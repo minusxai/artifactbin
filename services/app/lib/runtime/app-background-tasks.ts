@@ -4,6 +4,7 @@ import { flushViews } from '../analytics';
 import {startGroupMailDelivery} from '@/lib/notifications';
 import {objectStore, sweepObjects} from '@/lib/object-store';
 import {expireExportImages} from '@/lib/export';
+import { sweepExpiredPagesTickets } from '@/lib/accounts';
 
 /** How often stored objects nothing references are swept and old export images expired (each run is bounded). */
 const STORAGE_SWEEP_MS=6*60*60*1000;
@@ -19,11 +20,22 @@ function startStorageSweep(db:Db):()=>Promise<void>{
  const timer=setInterval(()=>void tick(),STORAGE_SWEEP_MS);timer.unref();
  return async()=>{clearInterval(timer);await pending;};
 }
+function startPagesTicketSweep(db: Db): () => Promise<void> {
+ let pending: Promise<void> | null = null;
+ const timer = setInterval(() => {
+  pending ??= sweepExpiredPagesTickets(db).catch(error => {
+   console.error('[pages ticket sweep] failed:', error);
+  }).finally(() => { pending = null; });
+ }, 60_000);
+ timer.unref();
+ return async () => { clearInterval(timer); await pending; };
+}
 export async function startAppBackgroundTasks(db:Db):Promise<()=>Promise<void>>{
  const stopGroupMail=startGroupMailDelivery(db);
  const stopPublisher=startEventPublisher(db);
  const stopStorageSweep=startStorageSweep(db);
+ const stopPagesTicketSweep=startPagesTicketSweep(db);
  let closing:Promise<void>|undefined;
  // Buffered views (lib/analytics recordView) are written before the publisher drains the outbox.
- return ()=>closing??=(async()=>{try{await stopGroupMail();await stopStorageSweep();}finally{await flushViews();await stopPublisher();}})();
+ return ()=>closing??=(async()=>{try{await Promise.all([stopGroupMail(),stopStorageSweep(),stopPagesTicketSweep()]);}finally{await flushViews();await stopPublisher();}})();
 }

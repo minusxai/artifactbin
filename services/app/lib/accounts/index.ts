@@ -29,7 +29,7 @@ export { matchesWorkspaceAccount } from './guest-owner';
 
 /** Legacy cookie clearing and current document-bound Pages sessions. */
 export { AGENT_COOKIE, agentSessionClearCookie } from './agent-session';
-export { endPagesSession, endPagesSessionsFor, exchangePagesTicket, issuePagesTicket, pagesSessionOf, type PagesSession } from './pages-sessions';
+export { endPagesSession, endPagesSessionsFor, exchangePagesTicket, issuePagesTicket, pagesSessionOf, sweepExpiredPagesTickets, type PagesSession } from './pages-sessions';
 
 /** Test accounts and test users. */
 export { TEST_ACCOUNT_RESTRICTED, isTestAccount, isTestOwned, shareTargetsRefusal, testAccountMayReach } from './test-accounts';

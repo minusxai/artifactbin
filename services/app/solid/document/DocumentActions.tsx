@@ -36,6 +36,7 @@ interface DocumentActionsProps {
   id: string; title: string; version: number; archived?: boolean;
   owner: boolean; canEdit: boolean; canAnnotate: boolean; accountSession: boolean;
   like: { liked: boolean; count: number }; onCommentsChange: (open: boolean) => void;
+  likeUnavailable?: boolean;
   commentsOpen?: boolean; openAnnotations?: number;
   onSettings?: () => void;
   onSocialPreview?: () => void;
@@ -74,7 +75,7 @@ export function DocumentActions(props: DocumentActionsProps): JSX.Element {
       <Show when={props.pwaEnabled && !props.archived}><InstallArtifactLink id={props.id} look="row" /></Show>
       <DownloadOffline id={props.id} version={props.archived ? props.version : undefined} />
       <Show when={!props.hideFork}><ForkArtifact id={props.id} title={props.title} /></Show>
-      <LikeAction id={props.id} accountSession={props.accountSession} initial={props.like} />
+      <LikeAction id={props.id} accountSession={props.accountSession} initial={props.like} unavailable={props.likeUnavailable} />
     </section>
     <Show when={activeOwner()}><section aria-label="Owner actions" class="space-y-1"><h2 class="px-2"><MicroLabel>owner</MicroLabel></h2>
       <Button variant="ghost" size="sm" class={ROW_BUTTON} aria-label={`Transfer ownership of ${props.title}`} onClick={()=>setTransferring(true)}><FolderInput size={14} />transfer ownership</Button>

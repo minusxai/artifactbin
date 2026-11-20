@@ -89,8 +89,17 @@ export async function issuePagesTicket(actor: RequestIdentity, carried: PagesCar
   const snapshot = snapshotOf(actor, options.browserSession === true) ?? (nobody && Object.keys(carried).length ? NOBODY : null);
   if (!snapshot || (snapshot.credential !== 'none' && !await canAuthenticateUser(snapshot.userId))) return null;
   const ticket = randomSecret(24);
-  await (await codes()).issue({ kind: TICKET_KIND, secret: ticket, payload: { ...snapshot, carried: { ...carried }, artifactId: options.artifactId, origin: options.origin }, ttlMs: PAGES_TICKET_TTL_MS, now });
+  await createCodeStore(await getDb(), { sweepOnIssue: false }).issue({ kind: TICKET_KIND, secret: ticket, payload: { ...snapshot, carried: { ...carried }, artifactId: options.artifactId, origin: options.origin }, ttlMs: PAGES_TICKET_TTL_MS, now });
   return ticket;
+}
+
+/** Runtime maintenance. Expiry is enforced by the claim itself even between sweeps. */
+export async function sweepExpiredPagesTickets(db: Queryable, now = Date.now()): Promise<void> {
+  await db.query(`WITH expired AS (
+    SELECT kind, code_hash FROM codes
+    WHERE kind = $1 AND expires_at < $2 ORDER BY expires_at LIMIT 5000 FOR UPDATE SKIP LOCKED
+  ) DELETE FROM codes USING expired WHERE codes.kind = expired.kind AND codes.code_hash = expired.code_hash`,
+  [TICKET_KIND, new Date(now).toISOString()]);
 }
 
 /** A pages session as the document's origin reads it. */

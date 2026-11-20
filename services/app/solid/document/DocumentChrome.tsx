@@ -40,6 +40,7 @@ export interface DocumentChromeProps {
   author: { username: string | null; id?: string | null; image?: string | null } | null;
   follow?: { userId: string; following: boolean; count: number } | null;
   like: { liked: boolean; count: number };
+  likeUnavailable?: boolean;
   /** The reader holds an account session (a like or a follow needs one). */
   signedIn: Accessor<boolean>;
   comments: Accessor<number>;
@@ -67,12 +68,15 @@ export interface DocumentChromeProps {
 
 
 export function DocumentChrome(props: DocumentChromeProps): JSX.Element {
-  const [like, setLike] = createSignal(props.like);
-  const [follow, setFollow] = createSignal(props.follow ?? null);
+  const [changedLike, setLike] = createSignal<DocumentChromeProps['like']>();
+  const [changedFollow, setFollow] = createSignal<NonNullable<DocumentChromeProps['follow']>>();
+  const like = () => changedLike() ?? props.like;
+  const follow = () => changedFollow() ?? props.follow ?? null;
   const reading = () => !props.archived && props.remoteAvailable !== false;
   const toLogin = (intent: 'like' | 'follow') => window.location.assign(loginHref(window.location, intent));
 
   const toggleLike = async () => {
+    if (props.likeUnavailable) return;
     if (!props.signedIn()) { toLogin('like'); return; }
     const answer = await sendReaction<{ liked: boolean; count: number }>(`/api/my/artifacts/${encodeURIComponent(props.id)}/like`, like().liked, 'like');
     if (answer) setLike(answer);
@@ -114,7 +118,7 @@ export function DocumentChrome(props: DocumentChromeProps): JSX.Element {
   const actions = <>
     <Show when={reading()}>
       <Show when={!props.onOpenOriginal}><Tooltip content={like().liked ? 'Unlike' : 'Like'}>
-        <Button variant="ghost" size="sm" icon class="relative min-w-9" aria-label={like().liked ? 'Unlike' : 'Like'} aria-pressed={like().liked} onClick={() => void toggleLike()}>
+        <Button variant="ghost" size="sm" icon class="relative min-w-9" aria-label={like().liked ? 'Unlike' : 'Like'} aria-pressed={like().liked} disabled={props.likeUnavailable} onClick={() => void toggleLike()}>
           <Heart size={18} stroke-width={1.5} fill={like().liked ? 'currentColor' : 'none'} />
           <Show when={like().count > 0}><span class="absolute -right-0.5 -top-0.5 rounded-full bg-accent px-1 font-mono text-micro leading-4 text-action-ink">{like().count}</span></Show>
         </Button>

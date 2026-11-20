@@ -64,6 +64,9 @@ interface ArtifactPageOptions {
   admitted?: ArtifactRow;
   /** With `admitted`: the live revision read with it (lib/artifacts readPageRow), so the view reads it no second time. */
   admittedRevision?: PageRead['revision'];
+  /** Canonical path already resolved by the HTML door, even when the byline is loaded later. */
+  admittedCanonical?: string;
+  admittedPublishedUrl?: string | null;
   /**
    * The app page (the HTML door): it frames the document on its own origin, after handing the reader
    * across with a one-time ticket (lib/accounts/pages-sessions) in the frame's first URL, on its own origin. The JSON door
@@ -142,6 +145,22 @@ async function admittedFrameSrc(request: Request, artifact: Pick<ArtifactRow, 'i
  */
 const kindAnswer = (header: Pick<ArtifactHeader, 'format'>): ArtifactPageAnswer => ({ status: 200, body: { format: header.format } });
 
+async function readDocumentChrome(row: Pick<ArtifactHeader, 'id' | 'user_id' | 'forked_from'>, actor: Awaited<ReturnType<typeof sessionActor>>, owner: boolean, annotations: boolean) {
+  const [social, forkedFrom, hasInvitedUsers] = await Promise.all([
+    pageSocial({ artifactId: row.id, authorId: row.user_id, viewerId: actor.userId, annotations }),
+    forkedFromCredit(row.forked_from),
+    owner ? hasInvitedUsersFor(actor, row.id) : false,
+  ]);
+  const { author, liked, likeCount, following, followCount, openAnnotations } = social;
+  return {
+    author: { username: author?.username ?? null, id: author?.id ?? null, image: author ? avatarUrl(author) : null, forkedFrom },
+    like: { liked, count: likeCount },
+    follow: row.user_id && row.user_id !== actor.userId ? { userId: row.user_id, following, count: followCount } : null,
+    openAnnotations,
+    ...(owner ? { hasInvitedUsers } : {}),
+  };
+}
+
 /** The page's answer; a stored shape the current code no longer serves is its 410 (lib/artifacts/servable). */
 export async function artifactPageAnswer(request: Request, id: string, options: ArtifactPageOptions = {}): Promise<ArtifactPageAnswer> {
   try { return await answerArtifactPage(request, id, options); }
@@ -167,6 +186,12 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   if (!admitted && !(await admitRead(header, actor, { facts, exporting }))) return notFound();
   if (header.format === 'markup' || header.format === 'program' || !ARTIFACT_FORMATS.includes(header.format as ArtifactFormat)) return notFound();
   if (!admitted && search.get('part') === 'kind') return kindAnswer(header);
+  if (!options.pages && search.get('part') === 'chrome') {
+    // The current reader must still be admitted. An export key never buys interactive chrome.
+    if (header.format !== 'html' || exporting || search.has('version')) return notFound();
+    const role = await effectiveRole(header, actor, facts);
+    return { status: 200, body: await readDocumentChrome(header, actor, role === 'owner', true) };
+  }
   // The row and its live revision in one statement (lib/artifacts readPageRow): the current page costs no read of its own.
   const read = admitted ? null : await readPageRow(id);
   const artifact = admitted ?? read?.row;
@@ -247,39 +272,25 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   // Everything below reads THIS row: the artifact wearing that version's bytes
   // when one was asked for, the artifact itself otherwise. A document's comes
   // Source stays on the runner origin; independent shell reads run beside one another.
-  const viewerId = actor.userId;
   // A dataset page shows the reader's role view (lib/dataset-permissions); its creating token and an export read whole.
   // A LIVE dataset's page is its connection (lib/live-datasets): its sharing admitted the reader; it has no rows here.
   const liveConnection = artifact.format === 'dataset' ? liveConnectionOf(artifact.meta) : null;
   const datasetDecision = artifact.format === 'dataset' && !liveConnection && !exporting && !holdsCreatingToken(artifact, actor) ? await datasetReadAccess(artifact, actor) : null;
   if (datasetDecision && !datasetDecision.allowed) return notFound();
-  // Independent reads begin only after ACL admission. These values belong to
-  // this request; no identity or permission answer is retained across requests.
-  const social = Promise.all([
-    /*
-     * The author's row (the handle for the byline and canonical, and their face), the heart, the follow control and
-     * the open comment threads, in one statement (lib/social pageSocial). The heart renders from THIS answer: asking
-     * a second door for it would leave the control blank (or wrong) for a frame on every page load. An anonymous
-     * reader still gets the counts — it is the number, not the button, that everyone can see.
-     */
-    pageSocial({ artifactId: artifact.id, authorId: artifact.user_id, viewerId, annotations: isDoc }),
-    forkedFromCredit(artifact.forked_from),
-    liveConnection ? Promise.resolve('[]') : artifact.format === 'dataset' ? (datasetDecision && !datasetDecision.full ? datasetRowsFor(datasetDecision, artifact) : loadDatasetRows(artifact)).then(rows => JSON.stringify(rows)) : Promise.resolve(isDoc ? '' : (artifact.format === 'viz' ? artifact.source ?? '' : '')),
-  ] as const);
-  const ownerScope = role === 'owner' ? actor : null;
+  const starter = nativeHtml && !at && artifact.version === 1 && artifact.meta.startPlaceholder === true;
+  // Keep guest cache hits, history, capture and non-frame surfaces on their original bootstrap.
+  const deferChrome = !!(options.pages && admitted && options.admittedCanonical && actor.userId && isDoc && !at && !exporting && !starter);
   const readerPick = options.pages && isDoc && !exporting ? readerPickOf(request) : null;
-  // Ticket issuance, theme/live source, policy and chrome have no ordering dependency.
-  const [page, [{ author, liked, likeCount, following, followCount, openAnnotations }, forkedFrom, dataPreview],
-    hasInvitedUsers, framedSrc, publishedUrl, cspRequest] = await Promise.all([
+  const [page, chrome, dataPreview, framedSrc, publishedUrl, cspRequest] = await Promise.all([
     nativeHtml && !at ? currentPage(artifact, revision ? { revision } : {}) : null,
-    social,
-    ownerScope ? hasInvitedUsersFor(ownerScope, id) : false,
+    deferChrome ? null : readDocumentChrome(artifact, actor, role === 'owner', isDoc),
+    liveConnection ? '[]' : artifact.format === 'dataset' ? (datasetDecision && !datasetDecision.full ? datasetRowsFor(datasetDecision, artifact) : loadDatasetRows(artifact)).then(rows => JSON.stringify(rows)) : (artifact.format === 'viz' ? artifact.source ?? '' : ''),
     options.pages && isDoc ? (async (site) => {
       // An export key admits the page, never its frame: a keyed capture is framed only for a reader the rule admits.
       if (exporting && !admitted && !(await admitRead(artifact, actor, { facts }))) return null;
       return admittedFrameSrc(request, artifact, actor, site, new URL(request.url).search, readerPick);
     })(options.pages) : null,
-    userPageUrl(artifact),
+    admitted && options.admittedPublishedUrl !== undefined ? options.admittedPublishedUrl : userPageUrl(artifact),
     nativeHtml ? cspRequestFor({artifact:{id:artifact.id,version:at?.version??artifact.version,declared:storedCspExtensions((at?.meta ?? artifact.meta).htmlCsp)},viewer:actor,request}) : undefined,
   ] as const);
   const row = page ? { ...servedRow(artifact, at), source: page.row.source, title: page.row.title } : servedRow(artifact, at);
@@ -299,10 +310,6 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   const design = look ? { theme: (look.designSystem ?? null) as StoryDesignName | null, colorMode: capturedColor ?? look.mode } : resolveStoredStoryDesign(meta.theme, capturedColor ?? meta.colorMode);
   const compiledCss = isDoc ? null : meta.compiledCss ?? null;
   const documentTitle = nativeHtml ? nativeHtmlTitle(row) : null;
-  const authorUsername = author?.username ?? null;
-  const starter = nativeHtml && !at && row.version === 1 && row.meta.startPlaceholder === true;
-  const authorMark = { username: authorUsername, id: author?.id ?? null, image: author ? avatarUrl(author) : null, forkedFrom };
-  const follow = artifact.user_id && artifact.user_id !== viewerId ? { userId: artifact.user_id, following, count: followCount } : null;
 
   const framedOrigin = framedSrc?.origin ?? null;
   const frame: DocumentFrame | null = framedSrc && documentTitle !== null && !starter ? {
@@ -327,9 +334,9 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     format: artifact.format,
     visibility: artifact.visibility,
     user_page_url: publishedUrl,
-    ...(ownerScope ? { hasInvitedUsers } : {}),
+    ...(chrome?.hasInvitedUsers !== undefined ? { hasInvitedUsers: chrome.hasInvitedUsers } : {}),
     title: documentTitle ?? row.title,
-    author: authorMark,
+    ...(chrome ? { author: chrome.author } : {}),
     ...(documentTitle !== null ? {
       // The framed page's own sheet, script and reader data are the frame's, and the tree is the nodes door's: the
       // app keeps what it reads (FramedRuntime), whichever door it asked. The starter's read view, which is app UI
@@ -373,10 +380,10 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     // Anyone who may COMMENT has a comment badge to fill: computing this
     // for the owner alone left an editor's and a commenter's count at 0
     // forever, on a control they were being shown.
-    openAnnotations,
+    ...(chrome ? { openAnnotations: chrome.openAnnotations } : {}),
   };
   const body = {
-    canonical: canonicalArtifactPath(artifact, groupId ? ownerGroup?.handle ?? null : authorUsername),
+    canonical: deferChrome && !groupId ? options.admittedCanonical : canonicalArtifactPath(artifact, groupId ? ownerGroup?.handle ?? null : chrome?.author.username ?? null),
     description: row.description,
     ...(cspRequest ? { cspRequest } : {}),
     role,
@@ -389,10 +396,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
      * ask for a version can accidentally read one.
      */
     ...(at ? { archived: { version: at.version, head: at.head } } : {}),
-    like: { liked, count: likeCount },
-    // The follow control is keyed by the AUTHOR's id. Null for an anonymous
-    // document, and for the owner, who has nobody here to follow.
-    follow,
+    ...(chrome ? { like: chrome.like, follow: chrome.follow } : { deferredChrome: true }),
     // A document's runtime carries its sheet once, isolated; the data tiers carry their stored one.
     surface,
   };

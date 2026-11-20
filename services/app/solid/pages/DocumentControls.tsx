@@ -23,6 +23,7 @@ export default function DocumentControls(props: {
   design: Omit<DesignSystemHost, 'value'>;
   id: string; title: string; version: number; archived: boolean;
   owner: boolean; canEdit: boolean; canAnnotate: boolean; accountSession: boolean; phone: boolean;
+  likeUnavailable?: boolean;
   commentsOpen: boolean; openAnnotations: number; membershipRevision: number;
   onCommentsChange: (open: boolean) => void;
   onMembershipChange: () => void;
@@ -40,7 +41,7 @@ export default function DocumentControls(props: {
       id={props.id} title={props.title} version={props.version} archived={props.archived}
       onSettings={leave(props.onSettings)} onSocialPreview={leave(props.onSocialPreview)} onRenamed={props.onRenamed}
       owner={props.owner} canEdit={props.canEdit} canAnnotate={props.canAnnotate} accountSession={props.accountSession}
-      like={props.answer.like ?? { liked: false, count: 0 }} commentsOpen={props.commentsOpen} onCommentsChange={(open) => { props.close(); props.onCommentsChange(open); }}
+      like={props.answer.like ?? { liked: false, count: 0 }} likeUnavailable={props.likeUnavailable} commentsOpen={props.commentsOpen} onCommentsChange={(open) => { props.close(); props.onCommentsChange(open); }}
       openAnnotations={props.openAnnotations} forkedFrom={surface()?.author?.forkedFrom ?? null} hideFork={!props.phone}
       membershipRevision={props.membershipRevision} onMembershipChange={props.onMembershipChange}
       onShare={leave(props.onShare)}

@@ -16,6 +16,7 @@ import { takeBootstrap } from '@/solid/lib/bootstrap';
 import { isEmbeddedView } from '@/solid/lib/embedded';
 import { reportArtifactView } from '@/solid/lib/artifact-view-report';
 import { useSession } from '../lib/session';
+import { usePageData } from '../lib/use-page-data';
 import { commentAccess } from '../document/comment-access';
 import type { AnnotationWire } from '@/lib/annotations';
 import { ARTIFACT_ID_PATTERN, type ArtifactRole, canEdit as canEditRole, canGovern, type Visibility } from '@artifactbin/contracts';
@@ -51,6 +52,7 @@ const ForkConfirm = lazy(() => import('../document/ForkArtifact').then(m => ({ d
 
 interface DocumentAnswer {
   role: ArtifactRole; kind: string;
+  deferredChrome?: boolean;
   surface?: {
     group_id?:string|null;
     id: string; title: string | null; format: string; version: number; editId?: string;
@@ -147,6 +149,17 @@ export function DocumentPage(): JSX.Element {
   const barHeight = embedded ? 0 : APP_BAR_H;
   const rawId = page?.surface?.id ?? /^\/a\/([^/]+)/.exec(location.pathname)?.[1] ?? null;
   const id = rawId && ARTIFACT_ID_PATTERN.test(rawId) ? rawId : null;
+  const chrome = usePageData<{
+    author: NonNullable<DocumentAnswer['surface']>['author'];
+    like: DocumentAnswer['like'];
+    follow: DocumentAnswer['follow'];
+    openAnnotations: number;
+    hasInvitedUsers?: boolean;
+  }>(`/api/page/artifact/${encodeURIComponent(id ?? '')}?part=chrome`, {
+    enabled: () => !!id && page?.deferredChrome === true,
+  });
+  const like = () => chrome.data()?.like ?? page?.like;
+  const author = () => chrome.data()?.author ?? page?.surface?.author ?? null;
   const role = () => page?.role ?? 'viewer';
   const archivedNow = () => !!page?.archived;
   const isOwner = () => canGovern(role()) && !archivedNow();
@@ -159,7 +172,7 @@ export function DocumentPage(): JSX.Element {
   const [railOpen, setRailOpen] = createSignal(false);
   const [annotationItems, setAnnotationItems] = createSignal<AnnotationWire[] | null>(null);
   const [liveAnnotations, setLiveAnnotations] = createSignal<AnnotationWire[] | null>(null);
-  const openAnnotationCount = () => (annotationItems() ?? liveAnnotations())?.filter((row) => row.status === 'open').length ?? page?.surface?.openAnnotations ?? 0;
+  const openAnnotationCount = () => (annotationItems() ?? liveAnnotations())?.filter((row) => row.status === 'open').length ?? chrome.data()?.openAnnotations ?? page?.surface?.openAnnotations ?? 0;
   const [panel, setPanel] = createSignal<Panel>(null);
   const [fork, setFork] = createSignal(false);
   const { pick, documentMode, chooseMode } = createReaderMode(page?.surface?.colorMode === 'dark' ? 'dark' : 'light');
@@ -289,14 +302,14 @@ export function DocumentPage(): JSX.Element {
   const shownTitle = head.title;
   return <Show when={id && page && page.surface?.framedOrigin} fallback={<Suspense fallback={<main role="status" aria-busy="true">Loading page…</main>}><NotFoundPage /></Suspense>}>
     <Show when={embedded}><TrustedUi overlay layer="navigation"><div class="fixed right-3 top-3 z-40"><DocumentCommentAction count={openAnnotationCount()} active={railOpen()} onClick={() => act('comment')} /></div></TrustedUi></Show>
-    <Show when={!embedded}><DocumentChrome id={id!} title={shownTitle} author={page!.surface?.author ?? null} follow={page!.follow ?? null}
-      like={page!.like ?? { liked: false, count: 0 }} signedIn={accountSession} comments={openAnnotationCount}
+    <Show when={!embedded}><DocumentChrome id={id!} title={shownTitle} author={author()} follow={chrome.data()?.follow ?? page!.follow ?? null}
+      like={like() ?? { liked: false, count: 0 }} likeUnavailable={page?.deferredChrome && !like()} signedIn={accountSession} comments={openAnnotationCount}
       archived={page!.archived ?? null} canFork={!archivedNow()} owner={isOwner()}
-      install={pwaEnabled() && !archivedNow()} visibility={page!.surface?.visibility} hasInvitedUsers={page!.surface?.hasInvitedUsers}
+      install={pwaEnabled() && !archivedNow()} visibility={page!.surface?.visibility} hasInvitedUsers={chrome.data()?.hasInvitedUsers ?? page!.surface?.hasInvitedUsers}
       membership={page!.surface?.membership}
       panel={panel} setPanel={setPanel} mode={appAppearance} onMode={chooseMode}
       onComment={() => act('comment')} onFork={() => act('fork')} onShare={() => act('share')} onMembership={() => act('membership')}
-      controls={(close) => <Suspense fallback={<p role="status" aria-busy="true">Loading artifact controls…</p>}><DocumentControls close={close} presence={readerPresence} answer={page!}
+      controls={(close) => <Suspense fallback={<p role="status" aria-busy="true">Loading artifact controls…</p>}><DocumentControls close={close} presence={readerPresence} answer={{ ...page!, like: like(), surface: page!.surface && { ...page!.surface, author: author() } }} likeUnavailable={page?.deferredChrome && !like()}
         design={{ colorMode: documentMode(), send: (command) => runtimeRef.current?.send(command), pick }} id={id!} title={shownTitle()} version={currentVersion()} archived={archivedNow()}
         owner={isOwner()} canEdit={editable()} canAnnotate={annotatable()} accountSession={accountSession()} phone={phone()}
         commentsOpen={railOpen()} openAnnotations={openAnnotationCount()} membershipRevision={membershipRevision()} onCommentsChange={setRailOpen}

@@ -95,6 +95,34 @@ describe('inlined page data', () => {
     expect(data.artifact.surface.id).toBe(w.pub.id);
   });
 
+  it('sends the signed-in frame before fetching chrome, which has its own current access check', async () => {
+    const w = await world();
+    const owner = as({ credential: 'session', userId: w.owner.id, email: w.owner.email });
+    const res = await app.request(`/a/${w.priv.id}`, { headers: owner });
+    const html = await res.text();
+    expect(html).toContain('name="mx-document"');
+    expect(inlined(html).artifact).toMatchObject({ role: 'owner', deferredChrome: true });
+    expect(inlined(html).artifact).not.toHaveProperty('like');
+    expect(inlined(html).artifact.surface).not.toHaveProperty('openAnnotations');
+    const warm = await app.request(`/a/${w.priv.id}`, { headers: owner });
+    const queryCount = /desc="(\d+) queries"/.exec(warm.headers.get('server-timing') ?? '')?.[1];
+    expect(Number(queryCount)).toBeLessThanOrEqual(3);
+
+    const endpoint = `/api/page/artifact/${w.priv.id}?part=chrome`;
+    const chrome = await app.request(endpoint, { headers: owner });
+    expect(chrome.status).toBe(200);
+    expect(chrome.headers.get('cache-control')).toBe('no-store');
+    expect(await chrome.json()).toMatchObject({
+      author: { username: w.owner.username },
+      like: { liked: false, count: 0 },
+      follow: null,
+      openAnnotations: 0,
+      hasInvitedUsers: false,
+    });
+    expect((await app.request(endpoint)).status).toBe(404);
+    expect((await app.request(endpoint + '&version=1', { headers: owner })).status).toBe(404);
+  });
+
   it('carries a profile listing', async () => {
     const w = await world();
     const res = await app.request(`/@${w.owner.username}`, { headers: as({ credential: 'session', userId: w.owner.id, email: w.owner.email }) });
