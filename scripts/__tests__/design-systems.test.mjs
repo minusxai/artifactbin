@@ -144,9 +144,11 @@ it('ships highlight token rules in every system stylesheet, each AA-readable on 
 
 it('lists every design system in SKILL.md with its mood and fit, as the specs state them',()=>{
  const skill=readFileSync(path.join(REPO,'services/app/skills/artifactbin/SKILL.md'),'utf8');
+ // Each row's Fits cell is the template's fits(slug, jobs), which marks this server's default; the text wraps freely.
+ const rows=skill.replace(/\s+/g,' ');
  for(const name of ROSTER){
   const spec=loadSpec(name);
-  expect(skill,name).toContain(`| \`${name}\` | ${spec.mood} | ${spec.jobs} |`);
+  expect(rows,name).toContain(`| \`${name}\` | ${spec.mood} | [[ fits('${name}', '${spec.jobs}') ]] |`);
  }
  // Nothing tells an agent to copy or link the stylesheet or fonts: the head meta is the whole binding.
  expect(skill).toContain('artifactbin:design-system');
