@@ -8,7 +8,10 @@ import { assertAudienceChange } from '@/lib/query-approvals';
 import { artifactQuery } from './document';
 import { ALLOW_PUBLIC_VISIBILITY, getDb, actorSubject, emit } from '../platform';
 import type { DatasetAccess, ShareEntry, ShareRole, SharingPatch, Visibility } from '@artifactbin/contracts/sharing';
-import type { GroupShare, GroupShareRole } from '@artifactbin/contracts/groups';
+import type { GroupShareRole } from '@artifactbin/contracts/groups';
+import type { GroupSummary } from '@artifactbin/contracts/groups';
+
+interface GroupShare {group:GroupSummary;role:GroupShareRole;}
 
 // ── Sharing (the private tier's ACL surface) ─────────────────────────────────
 

@@ -31,7 +31,6 @@
  */
 import { createHash, randomUUID } from 'node:crypto';
 import { DatasetAccessError } from './errors';
-import { DATASET_SQL_WRITE_LIMITS } from '@artifactbin/contracts/dataset-hasura';
 import { SQL_READ_LIMITS, type DatasetColumn, type Row, type Scalar } from '@artifactbin/contracts/sql';
 import type { DatasetMutationPolicy } from '@artifactbin/contracts/dataset-policy';
 import type { HtmlDatasetLink } from '@artifactbin/contracts/html-page';
@@ -49,6 +48,7 @@ import { authorityShape, readAuthorityIn, rowsNow, shownRows, type ReadAuthority
 import { readIdentityIn } from './retained';
 import { ID_COLUMN, quote, rowIdsForObject, tableIdentity } from './model';
 import { jsonBytes, runPageSql } from './page-sql';
+import { DATASET_SQL_WRITE_LIMITS } from './linked';
 
 /** One statement and its bound values (`$name`), as the page runtime's `sql` tag sends them. */
 interface PageSqlDoorCall { sql: string; params: Readonly<Record<string, Scalar>> }

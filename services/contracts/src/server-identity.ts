@@ -19,13 +19,6 @@
 
 import { isLoopbackName } from './loopback-names';
 
-export interface ServerIdentityDocument {
-  /** The one origin this deployment calls itself. */
-  origin: string;
-  /** Other origins the same deployment answers at. Never contains `origin`. */
-  aliases: string[];
-}
-
 /**
  * THE LOCAL DEVELOPMENT HOSTS, the only names plain HTTP is accepted on: loopback
  * (`localhost`, `127.0.0.1`, `[::1]`), and the names reserved for or resolving

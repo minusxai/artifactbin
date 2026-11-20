@@ -1,9 +1,11 @@
 import {principalKey} from '@/lib/accounts';
 import {createHash} from 'node:crypto';
 import type {Queryable} from '@artifactbin/contracts/db';
-import {MUTATION_REPLY_TIMEOUT_MS} from '@artifactbin/contracts/sql';
 import type { AccessActor } from '@/lib/accounts';
 import { getDb } from '../platform';
+
+/** End-to-end mutation response budget, including persistence and downstream execution. */
+export const MUTATION_REPLY_TIMEOUT_MS = 200_000;
 
 export interface MutationReply {status:number;body:Record<string,unknown>}
 export interface MutationReceipt {scope:string;key:string;fingerprint:string;context?:Record<string,unknown>}

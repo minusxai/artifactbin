@@ -8,13 +8,13 @@
  * imports it holds.
  */
 import type { DryRunInput, DryRunMutationsInput, DryRunMutationsResult, DryRunResult, MutationInput, MutationOutcome, QueryOutcome, RunInput, RunManyInput } from '@artifactbin/contracts/sql';
-import type { StatementAnalysis } from '@artifactbin/contracts/sql-analysis';
 import { SqliteDatabase, type Relation } from './database';
 import type { PreparedCache } from './prepared';
 import { dryRunQueries, heldDatabase, runManyQueries, runQueries, type HeldDatabase, type ReadBounds } from './reads';
 import { dryRunMutations, runMutation, type WriteBounds } from './writes';
 import { loadSqliteModule, type Sqlite3 } from './wasm';
 import type { SqlExtensions } from '../extensions';
+import type { StatementAnalysis } from './guard';
 
 export { SqliteDatabase, TimedOut, type Relation } from './database';
 export { PreparedCache, preparedKey } from './prepared';

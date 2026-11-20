@@ -1,6 +1,5 @@
 import {userPageUrl,userPageUrlForOwner,type UserPagesOwner} from '@/lib/user-pages';
 import {monitoringGuidance} from './monitoring-guidance';
-import {parseSharingEntries} from '@artifactbin/utils/sharing';
 import {catalogOf, datasetCreateFields, liveConnectionOf, loadDatasetRows} from '@/lib/datasets';
 /**
  * The wire ↔ storage translation for one artifact: what a read echoes, how a
@@ -14,12 +13,31 @@ import {catalogOf, datasetCreateFields, liveConnectionOf, loadDatasetRows} from 
  * answer with the same shape (`edit_id` and refresh `warnings` included).
  */
 import type { AccessActor } from '@/lib/accounts';
-import { DATASET_ACCESS, SHARE_ROLES, type DatasetAccess, type ShareEntry, type ShareRole, type Visibility } from '@artifactbin/contracts/sharing';
+import { SHARE_ROLES, type DatasetAccess, type ShareEntry, type ShareRole, type Visibility } from '@artifactbin/contracts/sharing';
 import { PARENT_REFUSED, artifactState, isParentRefusal, parentOf, resolveParent, type ArtifactRow, type ArtifactSummary, type ReplaceOpts, type VersionContent } from '@/lib/artifacts';
 import { rawUrl } from '@/lib/dataflow';
 import { ALLOW_PUBLIC_VISIBILITY, ID_RE } from '@/lib/platform';
 import { designSystemChoice, resolveStoredStoryDesign } from '@/lib/html-systems';
 import { Reply, reply } from '@/lib/http';
+
+/** One typed sharing grammar for local YAML and server writes; no legacy bare email form. */
+function parseSharingEntries(value:unknown):ShareEntry[]|undefined{
+ if(value===undefined)return undefined;
+ if(!Array.isArray(value)||value.length>100)throw new Error('shares must be a list of at most 100 email/role entries');
+ const entries=new Map<string,ShareRole>();
+ for(const raw of value){
+  if(!raw||typeof raw!=='object'||Array.isArray(raw)||Object.keys(raw).some(key=>!['email','role'].includes(key)))throw new Error('Each share must contain email and role');
+  const email=typeof raw.email==='string'?raw.email.trim().toLowerCase():'';
+  const role=typeof raw.role==='string'?raw.role.replace(/[A-Z]/g,(letter:string)=>letter.toLowerCase()):'';
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))throw new Error('Invalid share email');
+  if(!SHARE_ROLES.includes(role as ShareRole))throw new Error(`Share role must be ${SHARE_ROLES.join(', ')}`);
+  if(entries.has(email)&&entries.get(email)!==role)throw new Error('Conflicting roles for the same share email');
+  entries.set(email,role as ShareRole);
+ }
+ return [...entries].sort(([a],[b])=>a.localeCompare(b)).map(([email,role])=>({email,role}));
+}
+
+const DATASET_ACCESS: readonly DatasetAccess[] = ['read', 'readwrite'];
 
 const safeJson = (s: string): unknown => { try { return JSON.parse(s); } catch { return null; } };
 

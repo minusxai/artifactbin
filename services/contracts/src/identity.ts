@@ -28,16 +28,3 @@ export interface TokenReader {
   /** The bearer path. Refuses a value that is not token-shaped BEFORE hashing or touching the database. */
   byToken(presented: string): Promise<TokenRecord | null>;
 }
-
-/** ONE implementation of an app-owned one-time-code store; auth credentials have their own broader lifecycle. */
-export type ClaimResult =
-  | { ok: true; payload: Record<string, unknown> }
-  | { ok: false; reason: 'expired' | 'exhausted' | 'mismatch' | 'unknown' };
-export interface CodeStore {
-  issue(i: { kind: string; secret: string; subject?: string | null; payload?: Record<string, unknown>; ttlMs: number; now?: number }): Promise<void>;
-  /** High-entropy secrets: one lookup by hash, single use. */
-  claimByHash(i: { kind: string; code: string; now?: number }): Promise<Record<string, unknown> | null>;
-  /** Guessable codes: by subject, attempts counted, capped. */
-  claimBySubject(i: { kind: string; subject: string; code: string; maxAttempts: number; now?: number }): Promise<ClaimResult>;
-  peekByHash(i: { kind: string; code: string; now?: number }): Promise<Record<string, unknown> | null>;
-}

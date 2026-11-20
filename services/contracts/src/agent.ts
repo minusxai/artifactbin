@@ -30,9 +30,6 @@ const DECLARED_AGENT_SLUGS = [
 
 export type DeclaredAgentSlug = (typeof DECLARED_AGENT_SLUGS)[number];
 
-/** The header an HTTP agent names itself in. */
-export const AGENT_HEADER = 'Artifactbin-Agent';
-
 /**
  * The header an agent names its SESSION in: an opaque key (8-64 of A-Z a-z 0-9 _ -) that stays the same for one
  * agent conversation. Two agents sharing one sign-in send different keys, so the comment feed marks only the

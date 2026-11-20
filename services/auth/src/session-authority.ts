@@ -44,7 +44,7 @@
  * Introspection and the sign-ins are ./token-authority; the door they all share (settings, admission, `answer`) is
  * ./authority-door; the relays and the identity module's calls are below.
  */
-import {CHART_IMAGE_PATH, CANONICAL_CHART_IMAGE_PATH, CHART_IMAGE_KEYS, DRAFT_CHECK_PATH, CANONICAL_DRAFT_CHECK_PATH, DRAFT_CHECK_KEYS} from '@artifactbin/contracts/identity-service';
+import { CANONICAL_CHART_IMAGE_PATH, CHART_IMAGE_KEYS, CANONICAL_DRAFT_CHECK_PATH, DRAFT_CHECK_KEYS } from '@artifactbin/contracts/identity-service';
 import {ANONYMOUS} from '@artifactbin/contracts/actor';
 import {SERVICE_PAYLOAD_LIMIT} from '@artifactbin/contracts/payload-limit';
 import {HUMAN_SESSION_LIVE_PATH} from '@artifactbin/contracts/actor';
@@ -52,7 +52,6 @@ import {IDENTITY_CALL_PATH, IDENTITY_METHODS, IdentityError, type IdentityMethod
 import type {Part} from '@artifactbin/contracts/part';
 import type {ServiceAudience} from '@artifactbin/contracts/service-audiences';
 import {BodyTooLargeError, readBody} from '@artifactbin/utils/body';
-import {serviceSecretMatches} from '@artifactbin/utils/service-auth';
 import type {Context,Hono} from 'hono';
 import type {AuthEnv,AuthOptions} from './parts';
 import {readEnv} from './env';
@@ -60,6 +59,26 @@ import {testDomainSignInOf} from './config';
 import {IdentityNotReady,createIdentityStore,ensureIdentitySchema} from './identity-store';
 import {admitService,answer,authorityConfig,serviceOf,type AuthorityConfig} from './authority-door';
 import {mountTokenAuthority} from './token-authority';
+import { serviceSecretMatches } from './token-authority';
+
+/**
+ * A trusted relay's draft check (the same `artifact_reads` opt-in and per-service introspection secret as chart-image,
+ * no grant: the check reads no data). POST exactly DRAFT_CHECK_KEYS, `html` and `files` required (the draft's own
+ * `{path, base64, contentType?}` files, entryPath its page's path among them), at most SERVICE_PAYLOAD_LIMIT bytes. The
+ * identity owner forwards it to the fixed app seam as the anonymous actor and passes its status and JSON through:
+ * `{problems: PageProblem[], truncated, image?: PageImage}` (contracts browser), a draft's refusal `{error: DraftRefusalCode, message}`,
+ * 413 `too_large` or 503 `check_unavailable`.
+ */
+export const DRAFT_CHECK_PATH = '/api/internal/identity/draft-check';
+
+/**
+ * Purpose-only chart drawing for a trusted relay (the `artifact_reads` opt-in and the service's own introspection
+ * secret, nothing else: drawing reads no data). POST
+ * exactly a subset of CHART_IMAGE_KEYS with `chart` and `rows`, at most SERVICE_PAYLOAD_LIMIT bytes. The identity
+ * owner forwards that body to the fixed app seam and passes its status and JSON through, buffered to at most
+ * SERVICE_PAYLOAD_LIMIT: `ChartImageWire`, or `{error, message, hint?}`.
+ */
+export const CHART_IMAGE_PATH = '/api/internal/identity/chart-image';
 
 /**
  * A relay's chart drawing (contracts CHART_IMAGE_PATH) and draft check (DRAFT_CHECK_PATH): admitted by the service's own

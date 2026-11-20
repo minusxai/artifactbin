@@ -89,8 +89,6 @@ export type SvgHarvestResult =
   | { ok: false; reason: 'unavailable' | 'navigation' | 'failed'; detail?: string }
   /** The service predates this operation (a mixed-version rollout): nothing to harvest with. */
   | { ok: false; reason: 'harvest_unavailable' };
-/** Bounds a harvest answer: drawings per load, bytes per drawing, and bytes in all. */
-export const SVG_HARVEST_LIMITS = { images: 200, imageBytes: 2 * 1024 * 1024, totalBytes: 24 * 1024 * 1024, loads: 3 } as const;
 
 /**
  * THE PAGE'S OWN PROBLEMS (`inspect`): the same ready page a render photographs, loaded once, and what went wrong in
@@ -139,7 +137,6 @@ export interface PageProblem {
   code?: string;
   label?: string;
 }
-export const PAGE_PROBLEM_LIMITS = { problems: 20, message: 500, element: 40, code: 64, label: 120 } as const;
 export type PageInspection =
   | { ok: true; problems: PageProblem[]; truncated: boolean; image?: PageImage }
   | { ok: false; reason: 'unavailable' | 'navigation' | 'failed'; detail?: string }

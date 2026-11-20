@@ -12,9 +12,10 @@
  *  - the CONTROL that runs a mutation supplies `_row.<column>` (the row it sits
  *    in) and `_value` (the new value an editing cell holds).
  */
-import { MEMBER_COLUMNS } from '@artifactbin/contracts/membership';
 import type { ColumnType, DatasetColumn } from '@artifactbin/contracts/sql';
 import type { BuiltinInput, BuiltinTable } from './compiled-dataflow';
+
+const MEMBER_COLUMNS:DatasetColumn[]=[{name:'user_id',type:'user'},{name:'joined_at',type:'timestamp'}];
 
 interface BuiltinInputSpec {
   /** As written after `$`; `_row` stands for every `_row.<column>`. */

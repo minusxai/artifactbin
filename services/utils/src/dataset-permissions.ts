@@ -1,6 +1,36 @@
-import { DATASET_ADMIN_ROLES, DATASET_COLUMN_OPERATORS, DATASET_ID_OPERATORS, DATASET_PERMISSION_LIMITS, DATASET_PERMISSION_TEMPLATES, DATASET_ROW_ID, DATASET_RULE_ROLES, DATASET_SESSION_VARIABLES, type DatasetBoolExp, type DatasetPermissionEntry, type DatasetPermissions, type DatasetPermissionsIssue, type DatasetPermissionsReadBack, type DatasetPermissionsResult, type DatasetPermissionsShape, type DatasetPermissionWarning, type DatasetPermissionWarningCode, type DatasetRuleRole, type DatasetTableName, type DatasetTablePermissions } from '@artifactbin/contracts/dataset-permissions';
+import { DATASET_ADMIN_ROLES, DATASET_COLUMN_OPERATORS, DATASET_PERMISSION_TEMPLATES, DATASET_ROW_ID, DATASET_RULE_ROLES, type DatasetBoolExp, type DatasetPermissionEntry, type DatasetPermissions, type DatasetPermissionsIssue, type DatasetPermissionsShape, type DatasetPermissionWarning, type DatasetPermissionWarningCode, type DatasetRuleRole, type DatasetTableName, type DatasetTablePermissions } from '@artifactbin/contracts/dataset-permissions';
 import type { Scalar } from '@artifactbin/contracts/sql';
 import type { Visibility } from '@artifactbin/contracts/sharing';
+
+/**
+ * Session values a rule may reference, matched case-insensitively and stored verbatim. Any other
+ * `X-Hasura-*` value is refused. A value the request lacks makes the rule deny.
+ */
+const DATASET_SESSION_VARIABLES = [
+  'X-Hasura-User-Id',
+  'X-Hasura-Page-Id',
+  'X-Hasura-Role',
+] as const;
+const DATASET_ID_OPERATORS = ['_eq', '_neq', '_in', '_nin'] as const;
+
+export const DATASET_PERMISSION_LIMITS = {
+  bytes: 64_000,
+  tables: 64,
+  depth: 12,
+  predicates: 64,
+  inValues: 100,
+  selectLimit: 1000,
+} as const;
+export type DatasetPermissionsResult =
+  | { ok: true; policy: DatasetPermissions }
+  | { ok: false; errors: DatasetPermissionsIssue[] };
+
+/** The one plain-language description the script, HTTP API and app all show. */
+export interface DatasetPermissionsReadBack {
+  tables: { title: string; lines: string[] }[];
+  warnings: DatasetPermissionWarning[];
+  text: string;
+}
 
 /*
  * Version 3 dataset permissions (Hasura metadata shape): a strict validator that reports every

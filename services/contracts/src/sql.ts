@@ -32,15 +32,6 @@ export type Scalar = string | number | boolean | null;
 export type Row = Record<string, unknown>;
 export type ColumnType = 'string' | 'number' | 'boolean' | 'date' | 'timestamp' | 'user';
 export interface UserConstraints { memberOf?: string[]; self?: boolean }
-export interface UserOption { value: string; label: string }
-/**
- * A PERSON AS A DOCUMENT MAY SHOW THEM: the display name (name, else handle,
- * else the id), the public handle for /@handle, and the public picture URL —
- * or null when the person has not uploaded one (the client draws a generated
- * initial). Computed on the server under the same visibility rules a DataTable
- * user cell has always had (lib/datasets/user-fields); never an email.
- */
-export interface PersonCard { name: string; handle: string | null; image: string | null }
 export interface DatasetColumn { name: string; type: ColumnType; /** Suggested scalar choices for typed authoring controls; not an access restriction. */ choices?: Scalar[]; constraints?: UserConstraints }
 
 export interface TableResult {
@@ -213,7 +204,6 @@ export interface SqlCallContext { signal?: AbortSignal; wallTimeoutMs?: number }
 export const SQL_QUERY_DEFAULT_MS = 30_000;
 export const SQL_QUERY_MAX_MS = 120_000;
 export const SQL_WALL_OVERHEAD_MS = 15_000;
-export const SQL_WALL_HEADER = 'x-sql-wall-timeout-ms';
 /** Canonical validation for operator caps and optional lowering request budgets. */
 export function sqlTimeout(value: unknown, fallback: number, maximum: number, label = 'SQL timeout', clamp = false): number {
   if (value === undefined) return fallback;
@@ -254,6 +244,3 @@ export const SQL_READ_LIMITS = Object.freeze({
 
 /** The wire: one POST per method. `serveSql`/`sqlClient` (the sql package) implement exactly this. */
 export const SQL_ROUTES = { readPolicy:'/read-policy', run: '/run', runMany: '/run-many', mutate: '/mutate', dryRun: '/dry-run', dryRunMutations: '/dry-run-mutations' } as const;
-
-/** End-to-end mutation response budget, including persistence and downstream execution. */
-export const MUTATION_REPLY_TIMEOUT_MS = 200_000;

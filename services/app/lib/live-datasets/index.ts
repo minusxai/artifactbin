@@ -40,7 +40,7 @@ import { SQL_READ_LIMITS } from '@artifactbin/contracts/sql';
 import { isDatasetAdmin } from '@artifactbin/contracts/dataset-permissions';
 import type { HtmlDatasetLink, HtmlDeclaredQuery, HtmlDefaultConnectionLink, HtmlLiveDatasetLink, HtmlPageLink, HtmlPageVersion } from '@artifactbin/contracts/html-page';
 import type { Queryable } from '@artifactbin/contracts/db';
-import { SQL_FAILURE_FOR_CONNECTOR, isSqlFailureCode, sqlReadFailure } from '@artifactbin/contracts/sql-failures';
+import { SQL_FAILURE_FOR_CONNECTOR, sqlReadFailure } from '@artifactbin/contracts/sql-failures';
 import { liveSource } from '@artifactbin/contracts/sql-source';
 import { ConnectorFailure, colonParameters, connectionSummary, connectorError, connectorList, leadingWords, mapQualifiers, openConnection, parseConnectionConfig, qualifierNames, type NetworkSeams, type OpenConnection } from '@artifactbin/connectors';
 import type { AccessActor } from '@/lib/accounts';
@@ -50,6 +50,9 @@ import { VIEWER_PARAMS, connectorViewer, viewerParams } from '@/lib/connections'
 import { liveConnectionOf, liveQueryRoles } from '@/lib/datasets';
 import { datasetReadAccess, datasetRole, storedPolicy } from '@/lib/dataset-permissions';
 import { QUERY_TIMEOUT_MS,datasetConnectionCipher, datasetsAllowPrivateNetwork, datasetsOwnConnections, getDb } from '@/lib/platform';
+import { type SqlFailureCode, SQL_FAILURES } from '@artifactbin/contracts/sql-failures';
+
+const isSqlFailureCode = (code: unknown): code is SqlFailureCode => typeof code === 'string' && Object.hasOwn(SQL_FAILURES, code);
 
 const PURPOSE = 'dataset-connection';
 

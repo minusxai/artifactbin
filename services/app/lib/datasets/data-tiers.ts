@@ -13,7 +13,6 @@ import {normalizeDate,isDate,normalizeTimestamp,isTimestamp} from '@artifactbin/
  * must name a declared binding slot or param; unknown tokens are hard errors
  * naming the token.
  */
-import {parseDatasetColumn} from '@artifactbin/utils/shape';
 import {type ContentObjects, storeImage, IMAGE_CONTENT_TYPES, type ImageMeta, PDF_CONTENT_TYPE, pdfPageCount, storePdf, type PdfMeta} from '@/lib/object-store';
 import { Reply, reply } from '@/lib/http';
 import { MAX_IMAGE_BYTES, MAX_PDF_BYTES } from '@/lib/platform';
@@ -25,6 +24,7 @@ import type { StoredContent } from '@/lib/document';
 import type { VizRecipeBinding, VizRecipeParam } from '@/lib/validation';
 
 import { inferColumns, type ColumnType, type DatasetColumn } from '@/lib/dataflow';
+import { parseDatasetColumn } from './input';
 
 
 function valueMatches(v: unknown, t: ColumnType): boolean {

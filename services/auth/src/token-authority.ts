@@ -8,7 +8,7 @@
  */
 import {ARTIFACT_SCOPE} from '@artifactbin/contracts/cli-auth';
 import {DEFAULT_TOKEN_TTL_MS, MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS} from '@artifactbin/contracts/handles';
-import {RUN_SIGN_IN_PATH, GROUP_SIGN_IN_PATH, GROUP_SIGN_IN_GRANTS_PATH, SERVICE_GROUP_SIGN_IN_MAX_TTL_MS, type GroupSignIn, type RunSignIn} from '@artifactbin/contracts/service-audiences';
+import { RUN_SIGN_IN_PATH, GROUP_SIGN_IN_PATH, GROUP_SIGN_IN_GRANTS_PATH, type GroupSignIn, type RunSignIn } from '@artifactbin/contracts/service-audiences';
 import {API_RESOURCE_PATH} from '@artifactbin/contracts/cli-auth';
 import {IDENTITY_INTROSPECT_PATH, type IdentityIntrospectResponse} from '@artifactbin/contracts/identity-service';
 import {IdentityError} from '@artifactbin/contracts/identity-module';
@@ -16,7 +16,6 @@ import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts/routes';
 import {parseAliasOrigins} from '@artifactbin/contracts/server-identity';
 import type {ServiceAudience, ServiceTokenParent} from '@artifactbin/contracts/service-audiences';
 import type {TokenRecord} from '@artifactbin/contracts/identity';
-import {serviceSecretMatches} from '@artifactbin/utils/service-auth';
 import type {Context, Hono} from 'hono';
 import type {AuthEnv,AuthOptions} from './parts';
 import {acceptedOriginsOf,baseUrlOf} from './routes/grants';
@@ -27,6 +26,17 @@ import {readEnv} from './env';
 import {isGroupServiceToken,isServiceToken,verifyGroupServiceToken,verifyServiceToken} from './identity/service-tokens';
 import {readLiveGroupSignIn} from './identity/bearer';
 import {admitService,answer,serviceOf,type AuthorityConfig} from './authority-door';
+import { SERVICE_GROUP_SIGN_IN_MAX_TTL_MS } from './identity-store/accounts';
+import { timingSafeEqual } from 'node:crypto';
+
+/**
+ * Does `presented` (the SERVICE_AUTH_HEADER value) carry `expected`, the INTERNAL__SERVICE_SECRET? Constant time;
+ * an unset or empty secret matches nothing, so a deployment without one refuses every service call.
+ */
+export function serviceSecretMatches(presented: string | null | undefined, expected: string | null | undefined): boolean {
+  const given = Buffer.from(presented ?? ''), wanted = Buffer.from(expected ?? '');
+  return wanted.length > 0 && given.length === wanted.length && timingSafeEqual(given, wanted);
+}
 
 /** A person's token: no group principal. */
 const PERSON={group_id:null,group_role:null,issued_by:null} as const;

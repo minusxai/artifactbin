@@ -9,11 +9,13 @@ import {createHmac,timingSafeEqual} from 'node:crypto';
 import type {ArtifactRow} from '@/lib/artifacts';
 import {listedFolderChild,parentOf} from '@/lib/artifacts';
 import {canAnnotate} from '@artifactbin/contracts/sharing';
-import type {GroupCollection, GroupCollectionInput, GroupCollectionItem} from '@artifactbin/contracts/groups';
+import type { GroupCollection, GroupCollectionItem } from '@artifactbin/contracts/groups';
 import type {AccessActor} from '@/lib/accounts';
 import {LIVE_ARTIFACT_SQL,effectiveRole,roleWithoutLink} from '@/lib/artifact-access';
 import {GroupError,getGroupRole,groupChain} from '@/lib/groups';
 import {AUTH_SECRET,getDb} from '@/lib/platform';
+
+interface GroupCollectionInput {parent_id?:string;limit?:number;cursor?:string;}
 
 type Row=Pick<ArtifactRow,'id'|'title'|'format'|'user_id'|'group_id'|'token_id'|'visibility'|'link_role'|'ancestor_ids'> & {updated_at:string;sort_time:string;rank:number;seed:boolean};
 type Key={rank:number;time:string;id:string};

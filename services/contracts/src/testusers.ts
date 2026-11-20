@@ -37,16 +37,5 @@ export const TESTUSER_ERRORS = {
   requiresAccount: 'testuser_requires_account',
 } as const;
 
-export interface TestUser {
-  id: string;
-  /** How pages name it: "Test user" plus a short discriminator. */
-  label: string;
-  created_at: string;
-  expires_at: string;
-  /** Live counts, so an agent can say what it made before deleting. */
-  artifacts: number;
-  sessions: number;
-}
-
 /** `--as` on the CLI and `viewer` on the wire: the pages of a session, or the owner of a fork. */
 export type ViewerChoice = 'guest' | { testuser: string };

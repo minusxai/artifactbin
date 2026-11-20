@@ -1,5 +1,13 @@
-import type {RemoteWork} from '../../../contracts/src/remote';
 import {sessionMentions} from './session-mentions';
+import type { RemoteColor, RemoteActivity } from '@artifactbin/contracts/remote';
+
+type RemoteWorkPhase = 'queued' | 'dispatching' | 'superseded' | 'delivered' | 'acknowledged' | 'completed' | 'cancelled' | 'failed' | 'blocked' | 'uncertain' | 'unavailable';
+export interface RemoteWork {
+ id:string; sessionId:string; artifactId:string; threadId:string; commentId:string;
+ name:string; color:RemoteColor; phase:RemoteWorkPhase; updatedAt:string;
+ reason?:'queue_full'|'unauthorized'|'interrupted';
+ activity?:RemoteActivity;connection?:'online'|'offline'|'stopped';
+}
 /** The latest human explicit targets are defaults, never inferred from an agent reply. */
 export function replyMentionPrefix(thread:ReadonlyArray<{body:string;author:{kind:string}}>):string{
  for(let i=thread.length-1;i>=0;i--){const c=thread[i]!;if(c.author.kind!=='human')continue;

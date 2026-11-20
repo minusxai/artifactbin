@@ -6,9 +6,12 @@
  */
 import sharp from 'sharp';
 import type { HarvestedSvg, RenderRequest, SvgHarvestRequest } from '@artifactbin/contracts/browser';
-import { ELEMENT_CAPTURE, SVG_HARVEST_LIMITS, type NoElement } from '@artifactbin/contracts/browser';
+import { ELEMENT_CAPTURE, type NoElement } from '@artifactbin/contracts/browser';
 import type { Locator } from 'playwright';
 import type { ReadyPage } from './render-lane';
+
+/** Bounds a harvest answer: drawings per load, bytes per drawing, and bytes in all. */
+export const SVG_HARVEST_LIMITS = { images: 200, imageBytes: 2 * 1024 * 1024, totalBytes: 24 * 1024 * 1024, loads: 3 } as const;
 
 // The editor can display the overview at ~850 CSS px on a 2x screen. Keeping
 // canonical horizontal resolution avoids enlarging a thumbnail while the

@@ -4,7 +4,7 @@ import ArrowUpRight from 'lucide-solid/icons/arrow-up-right';
 import ImageIcon from 'lucide-solid/icons/image';
 import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';
-import type { CommentImageWire } from '../../../contracts/src/comment-image';
+import type { CommentImageWire } from '@artifactbin/contracts/comment-image';
 
 /**
  * A saved comment image — a small preview and an explicit full-size reader. A captured shot is a "Screenshot";

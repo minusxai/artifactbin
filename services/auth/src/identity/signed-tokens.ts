@@ -15,7 +15,15 @@
  */
 import {createHmac,hkdfSync,randomUUID,timingSafeEqual} from 'node:crypto';
 import {isGroupPrincipalRole, type GroupPrincipalRole} from '@artifactbin/contracts/actor';
-import type {IssuedServiceToken, ServiceAudience, ServiceTokenParent} from '@artifactbin/contracts/service-audiences';
+import type { ServiceAudience, ServiceTokenParent } from '@artifactbin/contracts/service-audiences';
+
+export interface IssuedServiceToken {
+  /** The bearer: handed only to the one service, never to page code, a URL, a log or storage. */
+  token: string;
+  /** The origin it is bound to. */
+  audience: string;
+  expiresAt: string;
+}
 
 const SKEW_S = 5;
 const ID = /^[A-Za-z0-9_.:-]{1,128}$/;

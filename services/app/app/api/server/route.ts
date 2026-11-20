@@ -13,7 +13,14 @@
  * is the whole thing this document exists to settle.
  */
 import { ALIAS_ORIGINS, PUBLIC_BASE_URL } from '@/lib/platform';
-import { normalizeOrigin, type ServerIdentityDocument } from '@artifactbin/contracts/server-identity';
+import { normalizeOrigin } from '@artifactbin/contracts/server-identity';
+
+interface ServerIdentityDocument {
+  /** The one origin this deployment calls itself. */
+  origin: string;
+  /** Other origins the same deployment answers at. Never contains `origin`. */
+  aliases: string[];
+}
 
 export async function GET(_request: Request): Promise<Response> {
   const origin = normalizeOrigin(PUBLIC_BASE_URL) ?? new URL(PUBLIC_BASE_URL).origin;

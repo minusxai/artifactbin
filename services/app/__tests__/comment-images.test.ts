@@ -12,7 +12,7 @@ import {POST as createArtifact} from '@/app/api/artifacts/route';
 import {POST as createComment} from '@/app/api/my/artifacts/[id]/annotations/route';
 import {stageCommentImage,readCommentImage} from '@/lib/annotations';
 import { assetBytesForToken, setAssetByteQuotaForTests } from '@/lib/artifacts/testing';
-import type {CommentImageMetadata} from '../../contracts/src/comment-image';
+import type {CommentImageMetadata} from '@artifactbin/contracts/comment-image';
 useAppHarness();
 async function setup(){
  const token=await mintToken('agent');

@@ -1,11 +1,12 @@
-import { parseCommentViewState, type CommentViewState } from '../../../contracts/src/comment-view-state';
+import { parseCommentViewState, type CommentViewState } from '@artifactbin/contracts/comment-view-state';
 import { artifactQuery } from '@/lib/artifacts/table';
 import {commentMentions} from './saved-mentions';
 import { MembershipError, completeMutationReceipt, type MutationReceipt, readableArtifactHeader, type ArtifactRow } from '@/lib/artifacts';
 import { reactionScope, annotationScope, effectiveRole, type Scope } from '@/lib/artifact-access';
 import {consumeCommentImage,commentImagesFor} from './comment-images';
-import type {CommentImageWire} from '../../../contracts/src/comment-image';
-import type {RemoteWork,RemoteColor} from '../../../contracts/src/remote';
+import type {CommentImageWire} from '@artifactbin/contracts/comment-image';
+import type { RemoteColor } from '@artifactbin/contracts/remote';
+import type { RemoteWork } from './remote-reply';
 import { type AnnotationAuthor, type AnnotationCommentWire, type CommentReactionInput, type CommentReactionSummary, type CommentReactor, COMMENT_REACTORS_MAX } from '@artifactbin/contracts/annotation-comment';
 import type { EventOrigin } from '@artifactbin/contracts/events';
 import { annotationsChannel } from '@artifactbin/contracts/live-channels';

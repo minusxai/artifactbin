@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DATASET_PERMISSION_LIMITS, DATASET_PERMISSION_TEMPLATES, DATASET_ROLES, type DatasetPermissions, type DatasetPermissionsShape } from '@artifactbin/contracts/dataset-permissions';
+import { DATASET_PERMISSION_TEMPLATES, DATASET_ROLES, type DatasetPermissions, type DatasetPermissionsShape } from '@artifactbin/contracts/dataset-permissions';
 import {
   datasetPermissionsTemplate,
   readBackDatasetPermissions,
@@ -18,6 +18,7 @@ import refusedSessionArray from './fixtures/hasura/refused-session-array.json';
 import rowLevelAndIlike from './fixtures/hasura/row-level-and-ilike.json';
 import rowLevelPrice from './fixtures/hasura/row-level-price.json';
 import rowLevelSession from './fixtures/hasura/row-level-session.json';
+import { DATASET_PERMISSION_LIMITS } from '../src/dataset-permissions';
 
 interface Fixture {
   source: string;

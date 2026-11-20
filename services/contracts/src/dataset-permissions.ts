@@ -70,16 +70,6 @@ export function datasetRoleFrom(facts: DatasetRoleFacts): DatasetRole | null {
   return reached ? 'signed_in' : null;
 }
 
-/**
- * Session values a rule may reference, matched case-insensitively and stored verbatim. Any other
- * `X-Hasura-*` value is refused. A value the request lacks makes the rule deny.
- */
-export const DATASET_SESSION_VARIABLES = [
-  'X-Hasura-User-Id',
-  'X-Hasura-Page-Id',
-  'X-Hasura-Role',
-] as const;
-
 /** Column comparison operators (the query `where` grammar). `_id` takes only the ID subset. */
 export const DATASET_COLUMN_OPERATORS = [
   '_eq',
@@ -97,21 +87,11 @@ export const DATASET_COLUMN_OPERATORS = [
   '_nilike',
 ] as const;
 type DatasetColumnOperator = (typeof DATASET_COLUMN_OPERATORS)[number];
-export const DATASET_ID_OPERATORS = ['_eq', '_neq', '_in', '_nin'] as const;
 
 /** The stable platform row ID: predicates may use it; columns and presets may not. */
 export const DATASET_ROW_ID = '_id';
 /** Where a door that serves row IDs (the generated API) carries them on a row: `_id` in a rule reads this column. */
 export const DATASET_ROW_ID_COLUMN = '__af_graphql_row_id';
-
-export const DATASET_PERMISSION_LIMITS = {
-  bytes: 64_000,
-  tables: 64,
-  depth: 12,
-  predicates: 64,
-  inValues: 100,
-  selectLimit: 1000,
-} as const;
 
 type DatasetColumnComparison = {
   [operator in DatasetColumnOperator]?: Scalar | Scalar[] | boolean;
@@ -208,9 +188,6 @@ export interface DatasetPermissionsIssue {
   path: string;
   message: string;
 }
-export type DatasetPermissionsResult =
-  | { ok: true; policy: DatasetPermissions }
-  | { ok: false; errors: DatasetPermissionsIssue[] };
 
 export const DATASET_PERMISSION_TEMPLATES = [
   'read-only',
@@ -228,11 +205,4 @@ export type DatasetPermissionWarningCode =
 export interface DatasetPermissionWarning {
   code: DatasetPermissionWarningCode;
   message: string;
-}
-
-/** The one plain-language description the script, HTTP API and app all show. */
-export interface DatasetPermissionsReadBack {
-  tables: { title: string; lines: string[] }[];
-  warnings: DatasetPermissionWarning[];
-  text: string;
 }

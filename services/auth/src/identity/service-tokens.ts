@@ -17,9 +17,13 @@
  * accepts one, and an older verifier that knows only `vwt_` finds no service token and no bearer: not active. It lives
  * as a person's does but never past its parent, and verifies only for a service still opted in.
  */
-import {SERVICE_TOKEN_TTL_SECONDS, type IssuedServiceToken, type ServiceAudience, type ServiceTokenParent} from '@artifactbin/contracts/service-audiences';
+import { type ServiceAudience, type ServiceTokenParent } from '@artifactbin/contracts/service-audiences';
 import type {GroupPrincipalRole} from '@artifactbin/contracts/actor';
 import {signGroupToken,signToken,signedTokenKey,verifyGroupToken,verifyToken,type GroupSignedTokenClaims,type SignedTokenClaims,type SignedTokenKind} from './signed-tokens';
+import type { IssuedServiceToken } from './signed-tokens';
+
+/** An exchanged token's whole life (`exp - iat`): minutes, never refreshed; the caller asks again. */
+export const SERVICE_TOKEN_TTL_SECONDS = 300;
 
 const SERVICE_TOKEN: SignedTokenKind = {prefix: 'vwt_', keyInfo: 'identity-viewer-token', ttlSeconds: SERVICE_TOKEN_TTL_SECONDS};
 const GROUP_SERVICE_TOKEN: SignedTokenKind = {prefix: 'vgt_', keyInfo: 'identity-group-service-token', ttlSeconds: SERVICE_TOKEN_TTL_SECONDS, principal: 'group'};

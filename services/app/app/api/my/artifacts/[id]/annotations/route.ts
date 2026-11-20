@@ -1,5 +1,5 @@
 import { parseHtmlNodeAnchor } from '@artifactbin/contracts/html-annotation';
-import { parseCommentViewState } from '../../../../../../../contracts/src/comment-view-state';
+import { parseCommentViewState } from '@artifactbin/contracts/comment-view-state';
 import {durableMutation,type MutationReceipt} from '@/lib/artifacts';
 /**
  * The BROWSER's annotation door — where a person's selection becomes a thread

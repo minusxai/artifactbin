@@ -13,23 +13,3 @@ export interface DatasetDefinitionShape {
   refreshSeconds?: number;
   tables: ReadonlyArray<{ schema: string; name: string; columns?: readonly unknown[]; sql?: string; rows?: readonly unknown[] }>;
 }
-
-/** Expand `depth` levels of objects and arrays; anything deeper is written on one line. */
-function format(value: unknown, indent: string, depth: number): string {
-  if (depth <= 0 || value === null || typeof value !== 'object') return JSON.stringify(value);
-  const inner = `${indent}  `;
-  const items = Array.isArray(value)
-    ? value.map(item => format(item, inner, depth - 1))
-    : Object.entries(value).filter(([, item]) => item !== undefined).map(([key, item]) => `${JSON.stringify(key)}: ${format(item, inner, depth - 1)}`);
-  const [open, close] = Array.isArray(value) ? ['[', ']'] : ['{', '}'];
-  return items.length ? `${open}\n${items.map(item => inner + item).join(',\n')}\n${indent}${close}` : `${open}${close}`;
-}
-
-export function formatDatasetDefinition(definition: DatasetDefinitionShape): string {
-  return format({
-    kind: definition.kind,
-    defaultSchema: definition.defaultSchema,
-    refreshSeconds: definition.refreshSeconds,
-    tables: definition.tables.map(({ schema, name, columns, sql, rows }) => ({ schema, name, columns, sql, rows })),
-  }, '', 4);
-}

@@ -4,8 +4,9 @@ import type { Actor } from '@artifactbin/contracts/actor';
 import type { BrowserSessionRequest, BrowserSessionResult, BrowserSessions } from '@artifactbin/contracts/browser-sessions';
 import type { ViewerChoice } from '@artifactbin/contracts/testusers';
 import { ANONYMOUS } from '@artifactbin/contracts/actor';
-import { SESSION_LIMITS } from '@artifactbin/contracts/browser-sessions';
 import { DEFAULT_SESSION_CAPACITY, type SessionCapacity } from './session-config';
+
+export const SESSION_LIMITS = { scriptBytes: 65536, outputBytes: 8 * 1024 * 1024, scriptMs: 20000, idleMs: 30 * 60 * 1000, executions: 16, pages: 8 } as const;
 
 export interface SessionWorker {
   run(code: string): Promise<Pick<BrowserSessionResult, 'result' | 'pages' | 'attachments' | 'error'>>;

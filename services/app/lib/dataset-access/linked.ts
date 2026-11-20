@@ -5,7 +5,6 @@
  * (`write`) and change (`can`). The SQL door and collaborative cells share these authority decisions.
  * Persisted Hasura-style field identifiers remain separate from the source names SQL reads.
  */
-import { DATASET_SQL_WRITE_LIMITS } from '@artifactbin/contracts/dataset-hasura';
 import type { DatasetBoolExp } from '@artifactbin/contracts/dataset-permissions';
 import type { DatasetColumn } from '@artifactbin/contracts/sql';
 import type { HtmlDatasetLink } from '@artifactbin/contracts/html-page';
@@ -23,6 +22,12 @@ import type { HasuraCan, HasuraColumn, HasuraRowCan, HasuraScalar, HasuraTableMo
 import { datasetBindingCatalog, DatasetBindingUnsupportedError } from './authority';
 import { collaborativeColumns } from './cells';
 import type { DatasetSnapshot } from './types';
+
+/** Dataset SQL write quotas and persisted field-name reservations. */
+export const DATASET_SQL_WRITE_LIMITS = {
+  /** Rows one SQL statement may change; above it nothing is written. */
+  rows: 100,
+} as const;
 
 const error = (message: string, code: SqlFailureCode): {message: string; extensions: {code: SqlFailureCode}} => ({ message, extensions: { code } });
 

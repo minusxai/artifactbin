@@ -7,10 +7,10 @@
  */
 import {createHmac} from 'node:crypto';
 import {describe,expect,it} from 'vitest';
-import {SERVICE_TOKEN_TTL_SECONDS} from '@artifactbin/contracts/service-audiences';
 import type {TransactionalQueryable} from '@artifactbin/contracts/identity-module';
 import {createBearerReader} from '../src/identity/bearer';
 import {groupServiceTokenKey,isGroupServiceToken,isServiceToken,serviceTokenKey,signGroupServiceToken,signServiceToken,verifyGroupServiceToken,verifyServiceToken} from '../src/identity/service-tokens';
+import { SERVICE_TOKEN_TTL_SECONDS } from '../src/identity/service-tokens';
 
 const WAREHOUSE={id:'warehouse',origin:'https://warehouse.example',introspectionSecretSha256:null};
 const CRM={id:'crm',origin:'https://crm.example',introspectionSecretSha256:null};
