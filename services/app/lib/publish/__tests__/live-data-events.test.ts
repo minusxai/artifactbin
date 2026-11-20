@@ -221,3 +221,23 @@ it('a newly published native link is subscribed before its version is announced'
     await vi.waitFor(() => expect(subscriptions()).toEqual({}));
   }
 });
+it('names where the reader stands on every frame of a page that follows data, and resumes from it', async () => {
+  const { create } = await fixture();
+  const folder = await create({ format: 'folder', title: 'Board' });
+  const position = new RegExp(`^${folder.id}\\.[A-Za-z0-9_-]{12}$`);
+  const first = await connect(folder.id);
+  let opened: string | undefined;
+  try {
+    opened = (await first.named('message'))[0]?.id;
+    expect(opened).toMatch(position);
+  } finally { first.close(); }
+  // A reader that reconnects from a mark the folder has moved past is sent the one data frame it missed, at the new mark.
+  const stale = `${folder.id}.${'A'.repeat(12)}`;
+  const r = await eventsRoute(request(`/a/${folder.id}/events?since=${encodeURIComponent(stale)}`), params(folder.id));
+  const resumed = sseStream(r.body!);
+  try {
+    const [caught] = await resumed.named('data');
+    expect(caught?.data).toMatchObject({ datasets: [folder.id] });
+    expect(caught?.id).toBe(opened);
+  } finally { resumed.close(); await vi.waitFor(() => expect(subscriptions()).toEqual({})); }
+});
