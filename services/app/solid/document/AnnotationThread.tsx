@@ -93,25 +93,75 @@ interface AnnotationThreadProps {
   onReplyDraftChange?: (typed: boolean) => void;
 }
 
-export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
-  let threadElement: HTMLDivElement | undefined;
+/**
+ * Reading the newest comment of an open thread marks the thread's notifications read: once its read point is on screen
+ * while the page is visible. `seen` names the thread while it is open with its newest comment showing, else null.
+ */
+function markReadWhenSeen(seen: () => { id: string; revision: number; element: HTMLElement | undefined } | null) {
   const inbox = useOptionalInbox();
   const { session } = useSession();
-  const newestFolded = () => props.isCommentFolded(props.a.thread.at(-1)?.id ?? '');
-  // Reading the newest comment of an open thread marks the thread's notifications read.
   createEffect(() => {
     const userId = session()?.user?.id;
-    if (!props.open || props.folded || newestFolded() || !userId || !inbox || !threadElement || typeof IntersectionObserver === 'undefined') return;
-    const id = props.a.id, revision = props.a.revision ?? 1;
+    const thread = seen();
+    if (!thread || !userId || !inbox || !thread.element || typeof IntersectionObserver === 'undefined') return;
+    const { id, revision, element } = thread;
     const observer = new IntersectionObserver((entries) => {
       if (entries.some((entry) => entry.isIntersecting) && document.visibilityState === 'visible') {
         void inbox.load({ read: `thread:${id}:${userId}`, revision });
         observer.disconnect();
       }
     }, { threshold: 0.1 });
-    queueMicrotask(() => { const latest = threadElement?.querySelector('[data-notification-read-point]'); if (latest) observer.observe(latest); });
+    queueMicrotask(() => { const latest = element.querySelector('[data-notification-read-point]'); if (latest) observer.observe(latest); });
     onCleanup(() => observer.disconnect());
   });
+}
+
+/**
+ * ONE comment of a thread is edited at a time, in place of its body; the draft survives a refused save. The comment
+ * being rewritten and its words are kept for this tab under `key`: a reload reopens the edit where it was. Starting an
+ * edit opens the thread (`open`).
+ */
+function createCommentEdit(key: string, thread: { onEdit: () => ((commentId: string, body: string) => Promise<void>) | undefined; open: () => void }) {
+  const kept = (() => { try { return JSON.parse(readDraft(key) || 'null') as { comment?: unknown; body?: unknown } | null; } catch { return null; } })();
+  const [editing, setEditing] = createSignal<string | null>(typeof kept?.comment === 'string' && typeof kept.body === 'string' ? kept.comment : null);
+  const [draft, setDraft] = createSignal(editing() ? String(kept?.body) : '');
+  createEffect(() => { const comment = editing(); writeDraft(key, comment ? JSON.stringify({ comment, body: draft() }) : ''); });
+  const [error, setError] = createSignal('');
+  const [saving, setSaving] = createSignal(false);
+  const cancel = () => { if (saving()) return; setEditing(null); setDraft(''); setError(''); };
+  return {
+    editing, draft, setDraft, error, saving, cancel,
+    start: (comment: AnnotationCommentWire) => { setDraft(comment.body); setError(''); setEditing(comment.id); thread.open(); },
+    save: async (comment: AnnotationCommentWire) => {
+      const body = draft();
+      const onEdit = thread.onEdit();
+      if (saving() || !onEdit || !hasReplyText(body)) return;
+      if (body === comment.body) { cancel(); return; }
+      setSaving(true); setError('');
+      try { await onEdit(comment.id, body); setEditing(null); setDraft(''); }
+      catch (cause) { setError(cause instanceof BackendRequestError && cause.code === 'annotation_conflict' ? cause.message : EDIT_FAILED); }
+      finally { setSaving(false); }
+    },
+  };
+}
+
+/** What each agent working on the thread is doing now: its latest report per session. */
+function AgentWorkStatus(props: { work: AnnotationWire['remote_work'] }): JSX.Element {
+  const agents = () => (props.work ?? []).filter((work, index, all) => !all.slice(index + 1).some((next) => next.sessionId === work.sessionId));
+  return <For each={agents()}>{(work) => (
+    <p role="status" class="comment-agent-status border-b border-edge px-3 py-1.5 text-2xs text-muted">
+      <a class="comment-agent-status-name" href={`/chat?session=${work.sessionId}`} target="_blank" rel="noopener noreferrer" style={{ color: agentNameColor(work.name) }}>@{work.name}</a>
+      <Show when={remoteWorkActive(work)}><span class="comment-agent-spinner" aria-hidden="true" /></Show>
+      <Tooltip content={remoteWorkLabel(work)}><span class="comment-agent-status-label" tabIndex={0}>{work.phase === 'delivered' && remoteWorkActive(work) ? 'Awaiting acknowledgment' : remoteWorkLabel(work)}</span></Tooltip>
+    </p>
+  )}</For>;
+}
+
+export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
+  let threadElement: HTMLDivElement | undefined;
+  const { session } = useSession();
+  const newestFolded = () => props.isCommentFolded(props.a.thread.at(-1)?.id ?? '');
+  markReadWhenSeen(() => props.open && !props.folded && !newestFolded() ? { id: props.a.id, revision: props.a.revision ?? 1, element: threadElement } : null);
 
   // The reply draft — words and image — belongs to the thread, so folding the thread away keeps it.
   // Kept for this tab too (solid/lib/draft-store): a reload — the page loading a new build — gives it back.
@@ -136,31 +186,10 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
     return (userId !== undefined && userId !== null && comment.author.user_id === userId)
       || props.backend.canEditLocalComment?.(comment) === true;
   };
-  // ONE comment of this thread is edited at a time, in place of its body; the draft survives a refused save.
-  // The comment being rewritten and its words, kept for this tab: a reload reopens the edit where it was.
-  const editKey = `${props.artifactId}:edit:${props.a.id}`;
-  const kept = (() => { try { return JSON.parse(readDraft(editKey) || 'null') as { comment?: unknown; body?: unknown } | null; } catch { return null; } })();
-  const [editing, setEditing] = createSignal<string | null>(typeof kept?.comment === 'string' && typeof kept.body === 'string' ? kept.comment : null);
-  const [editDraft, setEditDraft] = createSignal(editing() ? String(kept?.body) : '');
-  createEffect(() => { const comment = editing(); writeDraft(editKey, comment ? JSON.stringify({ comment, body: editDraft() }) : ''); });
-  const [editError, setEditError] = createSignal('');
-  const [saving, setSaving] = createSignal(false);
-  const startEdit = (comment: AnnotationCommentWire) => {
-    setEditDraft(comment.body); setEditError(''); setEditing(comment.id);
-    if (!props.open) props.onOpen();
-  };
-  const cancelEdit = () => { if (saving()) return; setEditing(null); setEditDraft(''); setEditError(''); };
-  const saveEdit = async (comment: AnnotationCommentWire) => {
-    const body = editDraft();
-    if (saving() || !props.onEdit || !hasReplyText(body)) return;
-    if (body === comment.body) { cancelEdit(); return; }
-    setSaving(true); setEditError('');
-    try { await props.onEdit(comment.id, body); setEditing(null); setEditDraft(''); }
-    catch (cause) { setEditError(cause instanceof BackendRequestError && cause.code === 'annotation_conflict' ? cause.message : EDIT_FAILED); }
-    finally { setSaving(false); }
-  };
-
-  const agents = () => (props.a.remote_work ?? []).filter((work, index, all) => !all.slice(index + 1).some((next) => next.sessionId === work.sessionId));
+  const edit = createCommentEdit(`${props.artifactId}:edit:${props.a.id}`, {
+    onEdit: () => props.onEdit,
+    open: () => { if (!props.open) props.onOpen(); },
+  });
 
   return <div ref={threadElement}
     aria-label={props.resolved ? 'Resolved annotation thread' : 'Annotation thread'}
@@ -190,13 +219,7 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
       </div>
     </Show>
     <Show when={!props.folded && !props.receded}>
-      <For each={agents()}>{(work) => (
-        <p role="status" class="comment-agent-status border-b border-edge px-3 py-1.5 text-2xs text-muted">
-          <a class="comment-agent-status-name" href={`/chat?session=${work.sessionId}`} target="_blank" rel="noopener noreferrer" style={{ color: agentNameColor(work.name) }}>@{work.name}</a>
-          <Show when={remoteWorkActive(work)}><span class="comment-agent-spinner" aria-hidden="true" /></Show>
-          <Tooltip content={remoteWorkLabel(work)}><span class="comment-agent-status-label" tabIndex={0}>{work.phase === 'delivered' && remoteWorkActive(work) ? 'Awaiting acknowledgment' : remoteWorkLabel(work)}</span></Tooltip>
-        </p>
-      )}</For>
+      <AgentWorkStatus work={props.a.remote_work} />
       <Show when={props.a.view_state}>
         <div class="flex items-center justify-between gap-2 border-b border-edge px-3 py-1.5 text-2xs text-muted">
           <span role="status">{props.open && props.viewStateError ? props.viewStateError : 'Saved view attached'}</span>
@@ -281,7 +304,7 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
                   return <ErrorBoundary fallback={(error) => { if (isChunkLoadError(error)) reloadForNewBuild(); return trigger({ disabled: true }); }}><Suspense fallback={trigger()}>
                     <Menu label={index() === 0 ? 'Annotation action menu' : 'Comment action menu'}
                       items={[
-                        ...(canEdit(c()) ? [{ label: 'Edit comment', text: 'edit', icon: () => <Pencil size={12} strokeWidth={1.75} />, disabled: props.busy || saving(), onSelect: () => startEdit(c()) }] : []),
+                        ...(canEdit(c()) ? [{ label: 'Edit comment', text: 'edit', icon: () => <Pencil size={12} strokeWidth={1.75} />, disabled: props.busy || edit.saving(), onSelect: () => edit.start(c()) }] : []),
                         ...(canDelete(c()) ? [{ label: index() === 0 ? 'Delete thread' : 'Delete comment', text: index() === 0 ? 'delete thread' : 'delete comment', icon: () => <Trash2 size={12} strokeWidth={1.75} />, danger: true, disabled: props.busy, onSelect: () => props.onDelete(c().id) }] : []),
                       ]}
                       trigger={(attrs) => trigger(attrs)} />
@@ -289,18 +312,18 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
                 })()}
               </Show>
             </div>
-            <Show when={editing() !== c().id} fallback={
+            <Show when={edit.editing() !== c().id} fallback={
               // Escape cancels, from anywhere in the editor (a native listener: the rail may sit in a shadow root). The
               // editor's own keymap claims Escape (select parent node), so its defaultPrevented says nothing here; an
               // open mention picker stops the key before it bubbles this far.
-              <div data-comment-editor on:keydown={(event) => { if (event.key !== 'Escape') return; event.preventDefault(); event.stopPropagation(); cancelEdit(); }}>
-                <CommentMarkdownField backend={props.backend} artifactId={props.artifactId} label="Edit comment" busy={saving()}
-                  value={editDraft()} onChange={setEditDraft} onSubmit={() => void saveEdit(c())} rows={3} autoFocus />
-                <Show when={editError()}><p role="alert" class="text-xs text-danger">{editError()}</p></Show>
+              <div data-comment-editor on:keydown={(event) => { if (event.key !== 'Escape') return; event.preventDefault(); event.stopPropagation(); edit.cancel(); }}>
+                <CommentMarkdownField backend={props.backend} artifactId={props.artifactId} label="Edit comment" busy={edit.saving()}
+                  value={edit.draft()} onChange={edit.setDraft} onSubmit={() => void edit.save(c())} rows={3} autoFocus />
+                <Show when={edit.error()}><p role="alert" class="text-xs text-danger">{edit.error()}</p></Show>
                 <div class="mt-2 flex items-center justify-end gap-2">
                   <CommentSubmitHint action="save" />
-                  <Button type="button" variant="ghost" size="sm" aria-label="Cancel edit" disabled={saving()} onClick={cancelEdit}>cancel</Button>
-                  <Button type="button" size="sm" aria-label="Save edit" disabled={saving() || !hasReplyText(editDraft())} onClick={() => void saveEdit(c())}>save</Button>
+                  <Button type="button" variant="ghost" size="sm" aria-label="Cancel edit" disabled={edit.saving()} onClick={edit.cancel}>cancel</Button>
+                  <Button type="button" size="sm" aria-label="Save edit" disabled={edit.saving() || !hasReplyText(edit.draft())} onClick={() => void edit.save(c())}>save</Button>
                 </div>
               </div>
             }>
@@ -313,8 +336,8 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
             </Show>
             </Show>
             {/* Below the words, not on the author line: that line is already full on a narrow rail. */}
-            <Show when={editing() !== c().id && c().edited_at}>{(at) => <CommentEdited iso={at()} class="mt-0.5 inline-block font-mono text-micro text-faint" />}</Show>
-            <Show when={editing() !== c().id && props.onReact}>
+            <Show when={edit.editing() !== c().id && c().edited_at}>{(at) => <CommentEdited iso={at()} class="mt-0.5 inline-block font-mono text-micro text-faint" />}</Show>
+            <Show when={edit.editing() !== c().id && props.onReact}>
               <Suspense><CommentReactions comment={c()} signedIn={!!session()?.user?.id} unavailable={props.backend.unavailable('commentReactions')}
                 onSignIn={()=>props.onSignIn?.()} onReact={(active)=>props.onReact!(c().id,active)} /></Suspense>
             </Show>
