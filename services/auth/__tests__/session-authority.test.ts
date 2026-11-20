@@ -1,7 +1,7 @@
 import {createHash} from 'node:crypto';
 import {serviceAuthHost} from './helpers';
 import {describe,it,expect} from 'vitest';
-import {HUMAN_SESSION_LIVE_PATH,IDENTITY_INTROSPECT_PATH,SERVICE_AUTH_HEADER,type ServiceAudience,type TokenReader,type TokenRecord} from '@artifactbin/contracts';
+import {HUMAN_SESSION_LIVE_PATH,IDENTITY_CALL_PATH,IDENTITY_INTROSPECT_PATH,SERVICE_AUTH_HEADER,type ServiceAudience,type TokenReader,type TokenRecord} from '@artifactbin/contracts';
 import {serviceTokenKey,signServiceToken} from '../src/identity/service-tokens';
 import {humanSessionClient} from '@artifactbin/utils';
 import {createAuthHost} from '../src/parts';
@@ -63,6 +63,27 @@ describe('identity introspection (contracts IDENTITY_INTROSPECT_PATH)',()=>{
  const call=(app:ReturnType<typeof host>,path:string,body:unknown,auth=secret)=>app.request(origin+path,{method:'POST',headers:{[SERVICE_AUTH_HEADER]:auth,'content-type':'application/json'},body:JSON.stringify(body)});
  const introspect=async(app:ReturnType<typeof host>,token:string,auth=secret)=>(await call(app,IDENTITY_INTROSPECT_PATH,{token},auth)).json();
  const exchanged=(parent:{kind:'token'|'session';id:string}={kind:'session',id:'ses_1'},service=WAREHOUSE,userId='usr_1',at=Date.now())=>signServiceToken(key,service,{userId,parent},at).token;
+ // The installation's own secret works only inside: a request through a front (which sets X-Forwarded-For) meets the
+ // identity calls and session liveness as an unknown path. A configured service's own secret, and introspection, are
+ // the same behind a front as inside.
+ it('refuses the installation secret on the identity calls and session liveness from behind a front, as an unknown path',async()=>{
+  const app=host();
+  const ask=async(path:string,body:unknown,auth:string,via?:string)=>{
+   const response=await app.request(origin+path,{method:'POST',headers:{[SERVICE_AUTH_HEADER]:auth,'content-type':'application/json',...(via===undefined?{}:{'x-forwarded-for':via})},body:JSON.stringify(body)});
+   return {status:response.status,body:await response.text()};
+  };
+  const unknown=await ask('/api/internal/identity/no-such-route',{},secret,'203.0.113.9');
+  expect(unknown.status).toBe(404);
+  const calls:Array<[string,unknown,{status:number}]>=[[IDENTITY_CALL_PATH,{method:'findToken',input:{hash:'x'}},{status:503}],[HUMAN_SESSION_LIVE_PATH,{sessionId:'s',userId:'u'},{status:200}]];
+  for(const [path,body,inside] of calls){
+   for(const via of ['203.0.113.9','10.0.0.2, 203.0.113.9',''])expect(await ask(path,body,secret,via),`${path} via ${JSON.stringify(via)}`).toEqual(unknown);
+   expect(await ask(path,body,'wrong','203.0.113.9'),`${path}: a wrong secret learns nothing more`).toEqual(unknown);
+   expect(await ask(path,body,secret),`${path} inside`).toMatchObject(inside);
+  }
+  for(const [token,auth] of [['mx_live',secret],['mx_warehouse',warehouseSecret]]){
+   expect(JSON.parse((await ask(IDENTITY_INTROSPECT_PATH,{token},auth,'203.0.113.9')).body),`${token} introspected behind a front`).toMatchObject({active:true});
+  }
+ });
  it('refuses introspection without the service secret or a configured service\'s own, before reading anything',async()=>{
   const app=host();relayed.length=0;
   expect((await call(app,IDENTITY_INTROSPECT_PATH,{token:'mx_live'},'wrong')).status).toBe(401);
