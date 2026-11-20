@@ -153,7 +153,7 @@ const BUNDLED_LEAVES = {
   'lib/ui-runtime': ['dialog-shell', 'file-display', 'person-face', 'popper', 'popup-dismiss', 'tooltip-core', 'trusted-overlay-host', 'trusted-portal', 'trusted-ui-styles'],
   'lib/html-reader': ['anchor', 'anchor-restore', 'ast-path', 'contract', 'document-endpoint', 'document-sources', 'edit-bar', 'follow-version', 'frame-bridge/parent', 'frame-markup', 'frame-navigation', 'frame-session', 'frame-src', 'host-comments-contract', 'reader-mode', 'reload'],
   'lib/annotations': ['comment-folds', 'markdown-lite', 'pages', 'region-comment', 'remote-reply', 'session-mentions'],
-  'lib/artifact-backend': ['browser-artifact-write', 'errors', 'http', 'reader-http', 'region-http'],
+  'lib/artifact-backend': ['reader-http', 'region-http'],
   'lib/capture': [],
   'lib/chart': ['chart-theme'],
   'lib/data-ingest': ['types'],

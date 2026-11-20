@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 import { retryingFetch } from '@/lib/http/retry-lazily';
 import { createEffect, createMemo, createSignal, onCleanup, Show, type JSX } from 'solid-js';
-import { writeBrowserArtifact } from '@/lib/artifact-backend/browser-artifact-write';
+import { writeBrowserArtifact } from '@/lib/artifact-backend';
 import type { GroupSummary } from '@artifactbin/contracts/groups';
 import type { FolderPage as FolderData, AccountWorkspace } from '@/lib/workspace';
 import { type ArtifactRole, canEdit } from '@artifactbin/contracts/sharing';

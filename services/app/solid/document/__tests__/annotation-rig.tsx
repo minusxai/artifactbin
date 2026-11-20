@@ -11,8 +11,7 @@
 import { beforeAll, vi } from 'vitest';
 import { createSignal, type JSX } from 'solid-js';
 import type { AnnotationWire } from '@/lib/annotations';
-import { createHttpBackend } from '@/lib/artifact-backend/http';
-import type { ArtifactBackend } from '@/lib/artifact-backend';
+import { createHttpBackend, type ArtifactBackend } from '@/lib/artifact-backend';
 import { type StoryController } from '@/lib/html-reader/contract';
 import type { StoryEditSelection } from '@/lib/html-bridge/selection-contract';
 import { screen } from '@testing-library/dom';

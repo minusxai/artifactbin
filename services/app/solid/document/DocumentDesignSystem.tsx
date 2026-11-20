@@ -7,7 +7,7 @@
  */
 import { createSignal, Show, type JSX } from 'solid-js';
 import ThemePicker from '../editor/ThemePicker';
-import { writeBrowserArtifact } from '@/lib/artifact-backend/browser-artifact-write';
+import { writeBrowserArtifact } from '@/lib/artifact-backend';
 import type { StoryDesignName } from '@/lib/validation';
 import { HTML_SYSTEM_MODES } from '@/lib/validation';
 

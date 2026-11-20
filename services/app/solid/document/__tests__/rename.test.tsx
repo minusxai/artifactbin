@@ -1,10 +1,10 @@
 /* @jsxImportSource solid-js */
 import { expect, it, vi } from 'vitest';
 import { fireEvent, render } from '../../__tests__/helpers';
-import { writeBrowserArtifact } from '@/lib/artifact-backend/browser-artifact-write';
+import { writeBrowserArtifact } from '@/lib/artifact-backend';
 import { waitFor, screen } from '@testing-library/dom';
 import { RenameDocument } from '../RenameDocument';
-vi.mock('@/lib/artifact-backend/browser-artifact-write', () => ({ writeBrowserArtifact: vi.fn() }));
+vi.mock('@/lib/artifact-backend', async (original) => ({ ...await original<typeof import('@/lib/artifact-backend')>(), writeBrowserArtifact: vi.fn() }));
 
 it('saves only title metadata and reports the accepted name', async () => {
   vi.mocked(writeBrowserArtifact).mockResolvedValue(Response.json({}));

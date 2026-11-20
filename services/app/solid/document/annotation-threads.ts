@@ -13,8 +13,7 @@
  */
 import { batch, createEffect, createMemo, createSignal, on, onCleanup, onMount, untrack, type Accessor } from 'solid-js';
 import type { AnnotationWire } from '@/lib/annotations';
-import type { AnnotationActionBody, ArtifactBackend } from '@/lib/artifact-backend';
-import { BackendRequestError } from '@/lib/artifact-backend/errors';
+import { BackendRequestError, type AnnotationActionBody, type ArtifactBackend } from '@/lib/artifact-backend';
 import { isFolded, readFolds, toggleFold, unfold, type FoldKind, type Folds } from '@/lib/annotations/comment-folds';
 
 /** A thread resolved elsewhere, kept on the page for `remaining` milliseconds of being seen. */

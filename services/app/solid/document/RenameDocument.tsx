@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 import { createSignal, Show, type JSX } from 'solid-js';
 import Pencil from 'lucide-solid/icons/pencil';
-import { writeBrowserArtifact } from '@/lib/artifact-backend/browser-artifact-write';
+import { writeBrowserArtifact } from '@/lib/artifact-backend';
 import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';
 import { Field, Input } from '../ui/Field';

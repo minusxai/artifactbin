@@ -9,7 +9,7 @@ import { render } from 'solid-js/web';
 import { expect, it, vi } from 'vitest';
 import { describeRetryingRead } from '@/solid/__tests__/retrying-read';
 import { retryingFetch } from '@/lib/http/retry-lazily';
-import { createHttpBackend } from '@/lib/artifact-backend/http';
+import { createHttpBackend } from '@/lib/artifact-backend';
 import { apiFetch } from '../api';
 import { SessionProvider, useSession } from '../session';
 import { usePageData } from '../use-page-data';

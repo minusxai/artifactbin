@@ -20,7 +20,7 @@ import { datasetQuerySnippet } from '@/lib/datasets/dataset-usage';
 import { formatFileSize } from '@/lib/ui-runtime/file-display';
 import { rowTitle } from '@/lib/document/display-title';
 import type { ReaderForkedFrom } from '@/lib/document-serving';
-import { createHttpBackend } from '@/lib/artifact-backend/http';
+import { createHttpBackend } from '@/lib/artifact-backend';
 import { pageDataChanged } from '@/solid/lib/page-data-events';
 import WorkspaceShell from '../components/WorkspaceShell';
 import { AssetWorkspace, type AssetSection } from '../datasets/AssetWorkspace';
