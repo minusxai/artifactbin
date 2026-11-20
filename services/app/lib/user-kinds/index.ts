@@ -14,7 +14,7 @@
  */
 import type { Queryable, UserKind } from '@artifactbin/contracts';
 import { getDb } from '../platform';
-import { authenticatingUserSql, liveTestuserWithParentSql } from '@artifactbin/auth/identity-store/rules';
+import { authenticatingTestParent as testParentOf, isAuthenticatingUser } from '@artifactbin/auth';
 
 /**
  * The kind of one user, or null when there is no row at all.
@@ -30,17 +30,14 @@ export async function userKindOf(userId: string | null | undefined, query?: Quer
   return row.rows[0]?.kind ?? null;
 }
 
-/** The account rules' one spelling is the identity module's (@artifactbin/auth identity-store/rules): a live test user
- * of an email account, and who may hold a credential at all. The app reads them over its `users` read view. */
-const LIVE_TESTUSER_WITH_PARENT_SQL = liveTestuserWithParentSql('u');
+/** The account rules are the identity module's (@artifactbin/auth): a live test user of an email account, and who may
+ * hold a credential at all, asked over the app's `users` read view. */
 export async function canAuthenticateUser(userId:string|null|undefined,query?:Queryable):Promise<boolean> {
- if(!userId)return false;const db=query??await getDb();
- return (await db.query(`SELECT 1 FROM users u WHERE u.id=$1 AND ${authenticatingUserSql('u')}`,[userId])).rows.length>0;
+ return !!userId&&isAuthenticatingUser(query??await getDb(),userId);
 }
 /** Live delegated identities use the same kind/expiry/parent predicate as credential authentication. */
 export async function authenticatingTestParent(userId:string,query?:Queryable):Promise<string|null> {
- const db=query??await getDb();
- return (await db.query<{parent_user_id:string}>(`SELECT u.parent_user_id FROM users u WHERE u.id=$1 AND ${LIVE_TESTUSER_WITH_PARENT_SQL}`,[userId])).rows[0]?.parent_user_id??null;
+ return testParentOf(query??await getDb(),userId);
 }
 
 /** Is a user of this kind one that reaches a stranger's document only through the LINK? */

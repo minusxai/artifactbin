@@ -17,7 +17,7 @@ export { HANDLE_RE, isValidHandle, RESERVED_HANDLES } from './handles';
 export { DuplicateProfileEmail, confirmWelcome, syncProfile, welcomePending } from './profiles';
 
 /** Whether an account may act on this deployment. */
-export { canUseDeploymentIdentity, deploymentMemberSql } from './deployment-identity';
+export { canUseDeploymentIdentity } from './deployment-identity';
 
 /** Tokens: minting, lookup and the per-request credential memo. */
 export { DEFAULT_TOKEN_TTL_MS, MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS, answeredOnce, ensureUserToken, hostedCredentialDescriptor, listTokensByUser, liveGroupSignIn, liveTokenSql, mintToken, rememberTokenClient, resolveToken, resolveTokenById, revokeToken, sourcedTokenName, tokenStatus, touchToken, withAccountToken } from './tokens';

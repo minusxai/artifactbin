@@ -33,7 +33,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { DatasetAccessError } from './errors';
 import { DATASET_SQL_WRITE_LIMITS, SQL_READ_LIMITS, type DatasetColumn, type DatasetMutationPolicy, type HtmlDatasetLink, type Row, type Scalar } from '@artifactbin/contracts';
 import { SQL_FAILURES, sqlReadFailure, type SqlAnswerSource, type SqlFailureCode } from '@artifactbin/contracts';
-import { loadSqlite } from '@artifactbin/sql/core';
+import { analyzeSql } from '@artifactbin/sql/core';
 import type { AccessActor } from '@/lib/accounts';
 import { artifactState, completeMutationReceipt, durableMutation, getArtifactById, type ArtifactRow } from '@/lib/artifacts';
 import { isMutationRefused, mutateDataset, type MutationStep } from '@/lib/document-data';
@@ -156,7 +156,7 @@ function catalogMount(m: Mounted): CatalogMount | null {
 /** What the statement is, by SQLite's own analysis over the reader's tables (shapes only, no rows). */
 async function analyzed(mounts: readonly Mounted[], sql: string) {
   const relations = mounts.map((m) => ({ schema: m.schema, table: m.name, columns: [...m.visible, ...m.writeOnly] }));
-  try { return (await loadSqlite()).analyze(sql, relations, { mode: 'write', extensions: sqlExtensions() }); }
+  try { return await analyzeSql(sql, relations, { mode: 'write', extensions: sqlExtensions() }); }
   catch (e) { return refuse('validation_failed', e instanceof Error ? e.message : 'the statement was refused'); }
 }
 

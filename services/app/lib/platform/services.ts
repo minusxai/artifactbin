@@ -23,7 +23,7 @@
  */
 import { SQL_WALL_OVERHEAD_MS } from '@artifactbin/contracts';
 import type { HumanSessionAuthority, BrowserService, EventsService, IdentityService, SqlService, TransactionalQueryable } from '@artifactbin/contracts';
-import { createIdentityStore } from '@artifactbin/auth/identity-store';
+import { createIdentityStore } from '@artifactbin/auth';
 import { humanSessionClient, identityClient, browserClient, eventsClient, noopBrowser, noopEvents, noopSql, sqlClient } from '@artifactbin/utils';
 import { AUTH_SERVICE_URL, BROWSER_SERVICE_URL, EVENTS_SERVICE_URL, INTERNAL_SERVICE_SECRET, QUERY_TIMEOUT_MS, SQL_SERVICE_URL, TEST_DOMAIN } from './config';
 import { getDb } from './db';

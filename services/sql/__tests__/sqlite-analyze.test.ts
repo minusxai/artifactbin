@@ -8,7 +8,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { DatasetColumn } from '@artifactbin/contracts';
-import { loadSqlite, type Relation } from '@artifactbin/sql/core';
+import { loadSqlite, readsOf, type Relation } from '@artifactbin/sql/core';
 
 const engine = await loadSqlite();
 const cols = (...names: string[]): DatasetColumn[] => names.map((name) => ({ name, type: 'string' }));
@@ -140,5 +140,38 @@ describe('refusals', () => {
     expect(() => analyze('select * from sqlite_schema')).toThrow(/sqlite_(schema|master) is not data/);
     expect(() => analyze('select 1; select 2')).toThrow(/one statement/);
     expect(() => analyze('select nope from t')).toThrow(/nope/);
+  });
+});
+
+describe('readsOf: the relations one read reads, checked by running it once over their empty shapes', () => {
+  const relations = ['tasks', 'id', 'İd', 'odd"name'].map((table) => ({ link: table, schema: 'main', table, columns: [{ name: 'id', type: 'number' as const }] }));
+  relations.push({ link: 'restricted', schema: 'restricted', table: 'rows', columns: [{ name: 'id', type: 'number' }] });
+  const bounds = { rows: 100, timeoutMs: 1000 };
+  it.each([
+    ['SELECT id FROM tasks', ['tasks']],
+    ['SELECT id AS id FROM tasks AS id WHERE id = $id', ['tasks']],
+    ["SELECT 'id' FROM tasks -- id", ['tasks']],
+    ['WITH id AS (SELECT id FROM tasks) SELECT * FROM id', ['tasks']],
+    ['WITH RECURSIVE id(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM id WHERE n<2) SELECT * FROM tasks JOIN id', ['tasks']],
+    ['SELECT * FROM tasks WHERE EXISTS (WITH id AS (SELECT 1) SELECT * FROM id)', ['tasks']],
+    ['WITH id AS (SELECT 1) SELECT * FROM main.id', ['id']],
+    ['SELECT count(*) FROM "ID"', ['id']],
+    ['SELECT * FROM [id]', ['id']],
+    ['SELECT * FROM `id`', ['id']],
+    ['SELECT * FROM "odd""name"', ['odd"name']],
+    ['SELECT * FROM "İd"', ['İd']],
+    ['SELECT * FROM "restricted"."rows"', ['restricted']],
+    ['SELECT * FROM tasks WHERE EXISTS (SELECT 1 FROM id)', ['id', 'tasks']],
+  ] as const)('selects relations via SQLite: %s', async (sql, wanted) => {
+    expect((await readsOf(sql, relations, ['id'], bounds)).map((r) => r.link).sort()).toEqual(wanted);
+  });
+  it.each(['DELETE FROM id', 'UPDATE tasks SET id = 2', 'SELECT * FROM tasks; SELECT * FROM id', 'SELECT secret FROM id', 'nonsense'])('refuses %s', async (sql) => {
+    await expect(readsOf(sql, relations, [], bounds)).rejects.toThrow();
+  });
+  it('honors the caller\'s cancellation and interrupts the empty-shape run within the deadline', async () => {
+    const controller = new AbortController();
+    controller.abort(Error('canceled'));
+    await expect(readsOf('SELECT 1', relations, [], { ...bounds, check: () => controller.signal.throwIfAborted() })).rejects.toThrow('canceled');
+    await expect(readsOf('WITH RECURSIVE x(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM x WHERE n<1000000000) SELECT sum(n) FROM x', relations, [], { ...bounds, deadline: performance.now() + 20 })).rejects.toThrow('interrupted');
   });
 });

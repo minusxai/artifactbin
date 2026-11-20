@@ -17,7 +17,8 @@ import {QUERY_TIMEOUT_MS} from '@/lib/platform';
 import {readLifetime} from '@/lib/datasets';
 import { DatasetAccessError } from './errors';
 import { SQL_READ_LIMITS, type ColumnType, type DatasetColumn, type Scalar, type SqlFailureCode } from '@artifactbin/contracts';
-import { CatalogQueryFailure, executeMounted, selectSqlLinks, type CatalogMount } from '@/lib/datasets';
+import { CatalogQueryFailure, executeMounted, type CatalogMount } from '@/lib/datasets';
+import { readsOf, TimedOut } from '@artifactbin/sql/core';
 import { sqlRefusalMessage } from '@/lib/dataset-permissions';
 import { ID_COLUMN, tableIdentity } from './model';
 import type { DatasetSnapshot } from './types';
@@ -64,14 +65,13 @@ export async function runPageSql(loaded: readonly SqlLinkedDataset[], call: Page
   try {
     const relations = loaded.flatMap((l) => pageSqlMounts([l], new Set([l.link]), false).map((m) => ({ link: l.link, schema: m.schema, table: m.name, columns: m.columns })));
     let selected: Set<string>;
-    try { const plan = await selectSqlLinks(relations, { tables: {}, queries: [{ name: 'result', sql: call.sql }], paramNames: Object.keys(call.params) }, { signal, deadline });
-      if (plan.errors.result?.timedOut) throw new CatalogQueryFailure('SQL statement timed out', true);
-      if (Object.keys(plan.errors).length) return refuse('validation_failed', 'SQL statement could not be prepared');
-      selected = plan.selected; }
+    // Which loaded datasets the statement reads: SQLite's own analysis over their shapes, no rows (sql readsOf).
+    const check = () => { signal.throwIfAborted(); if (performance.now() >= deadline) throw new Error('sql_deadline'); };
+    try { selected = new Set((await readsOf(call.sql, relations, Object.keys(call.params), { rows: SQL_READ_LIMITS.rows, timeoutMs: QUERY_TIMEOUT_MS, deadline, check })).map((r) => r.link)); }
     catch (e) {
-      if (e instanceof CatalogQueryFailure) throw e;
       signal.throwIfAborted();
       if (performance.now() >= deadline) return refuse('timeout', `a statement runs at most ${QUERY_TIMEOUT_MS} ms`);
+      if (e instanceof TimedOut) throw new CatalogQueryFailure('SQL statement timed out', true);
       return refuse('validation_failed', 'SQL statement could not be prepared');
     }
     signal.throwIfAborted();
