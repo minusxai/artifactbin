@@ -11,7 +11,7 @@ import { createBrowser } from '@artifactbin/browser/local';
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 
 const READY = '<html><body style="margin:0"><main style="width:100px;height:100px;background:#3c3"></main></body></html>';
-const STUCK = '<html><body><main data-mx-chart-state="pending" style="width:100px;height:100px">Loading chart</main></body></html>';
+const STUCK = '<html><body><main style="width:100px;height:100px"><af-chart aria-busy="true">Loading chart</af-chart></main></body></html>';
 // An <af-data-table sql> is aria-busy until its read answers: never photographed before its rows.
 const table = (answersAfterMs: number | null) => '<html><body><main style="width:100px;height:100px">' +
   '<af-data-table aria-busy="true"></af-data-table></main>' + (answersAfterMs === null ? '' : `<script>setTimeout(() =>
