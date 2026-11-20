@@ -5,7 +5,7 @@
  * the same way — and an author's statement is prepared under SQLite's
  * authorizer, which is both the guard and the analysis: the callback decides
  * what the statement may touch, and its record of what it touched is the
- * `StatementAnalysis` the compiler reads.
+ * `StatementAnalysis` the compiler reads (./guard `Guard`, which also keeps the catalog of what is loaded).
  *
  * Types: stored columns are STRICT (`string`/`date`/`timestamp`/`user` TEXT,
  * `number` REAL, `boolean` INTEGER 0/1), with CHECK constraints that keep a
@@ -20,9 +20,10 @@
  * so a statement SQLite re-prepares mid-step is judged again, never waved
  * through.
  */
-import { MUTATION_ONLY_FUNCTIONS, type ColumnRead, type ColumnType, type DatasetColumn, type OutputColumn, type Row, type Scalar, type StatementAnalysis, type StatementKind, type TableWrite } from '@artifactbin/contracts';
+import type { ColumnType, DatasetColumn, Row, Scalar, StatementAnalysis } from '@artifactbin/contracts';
 import { inferColumns, normalizeDate, normalizeTimestamp } from '@artifactbin/utils/shape';
-import { calendarDate, LIBRARY_NAMES, registerLibrary } from './functions';
+import { LIBRARY_NAMES, registerLibrary } from './functions';
+import { CORE_FUNCTIONS, Guard, Refused, type StatementMode } from './guard';
 import type { Sqlite3 } from './wasm';
 
 type DB = InstanceType<Sqlite3['oo1']['DB']>;
@@ -32,11 +33,6 @@ type Stmt = ReturnType<DB['prepare']>;
 export interface Relation { schema: string; table: string; columns: DatasetColumn[]; sql?: string }
 /** A table with its rows, by value. */
 export interface TableData extends Relation { rows: Row[] }
-/** `read`: one SELECT. `write`: one INSERT/UPDATE/DELETE on the target. `any`: either (the compiler's analysis). */
-export type StatementMode = 'read' | 'write' | 'any';
-
-/** The author's statement was refused by the guard; the message says which rule. */
-export class Refused extends Error {}
 /** The statement ran past its deadline and was interrupted. */
 export class TimedOut extends Error {}
 /** A result outgrew its caller's `outputBytes` while it was collected. */
@@ -44,31 +40,6 @@ export class TooLarge extends Error {}
 
 const STORAGE: Record<ColumnType, string> = { string: 'TEXT', number: 'REAL', boolean: 'INTEGER', date: 'TEXT', timestamp: 'TEXT', user: 'TEXT' };
 const quote = (name: string): string => `"${name.replaceAll('"', '""')}"`;
-const key = (schema: string, table: string): string => `${schema.toLowerCase()}\0${table.toLowerCase()}`;
-/** The table-valued functions an author may read from; every other virtual table is refused. */
-const TABLE_FUNCTIONS = new Set(['json_each', 'json_tree']);
-
-/**
- * SQLite's own functions an author may call, taken from this build's
- * `pragma_function_list` and cut to the ones that compute from their
- * arguments. Left out: connection state (`changes`, `last_insert_rowid`,
- * `total_changes`), build introspection (`sqlite_*`), full-text and r-tree
- * internals, `subtype`, `unknown`, `load_extension`. `random`/`randomblob`
- * are here and refused in reads by `MUTATION_ONLY_FUNCTIONS`.
- */
-const CORE_FUNCTIONS: ReadonlySet<string> = new Set([
-  '->', '->>', 'abs', 'acos', 'acosh', 'asin', 'asinh', 'atan', 'atan2', 'atanh', 'avg', 'ceil', 'ceiling', 'char', 'coalesce', 'concat', 'concat_ws',
-  'cos', 'cosh', 'count', 'cume_dist', 'current_date', 'current_time', 'current_timestamp', 'date', 'datetime', 'degrees', 'dense_rank', 'exp',
-  'first_value', 'floor', 'format', 'glob', 'group_concat', 'hex', 'if', 'ifnull', 'iif', 'instr', 'json', 'json_array', 'json_array_insert',
-  'json_array_length', 'json_error_position', 'json_extract', 'json_group_array', 'json_group_object', 'json_insert', 'json_object', 'json_patch',
-  'json_pretty', 'json_quote', 'json_remove', 'json_replace', 'json_set', 'json_type', 'json_valid', 'julianday', 'lag', 'last_value', 'lead',
-  'length', 'like', 'likelihood', 'likely', 'ln', 'log', 'log10', 'log2', 'lower', 'ltrim', 'max', 'min', 'mod', 'nth_value', 'ntile', 'nullif',
-  'octet_length', 'percent_rank', 'percentile', 'percentile_cont', 'percentile_disc', 'pi', 'pow', 'power', 'printf', 'quote', 'radians', 'random',
-  'randomblob', 'rank', 'replace', 'round', 'row_number', 'rtrim', 'sign', 'sin', 'sinh', 'sqrt', 'strftime', 'string_agg', 'substr', 'substring',
-  'sum', 'tan', 'tanh', 'time', 'timediff', 'total', 'trim', 'trunc', 'typeof', 'unhex', 'unicode', 'unistr', 'unistr_quote', 'unixepoch',
-  'unlikely', 'upper', 'zeroblob',
-]);
-
 /**
  * Why each CHECK exists, as the message a failing write shows. A loaded table keeps each value canonical. A
  * mutation's target (`accept`) takes what its column's type can read — a timestamp in a date column, a date or
@@ -154,16 +125,11 @@ function cellBytes(value: unknown, boolean: boolean): number {
   return (JSON.stringify(value) ?? 'null').length;
 }
 
-/** The one timestamp form the engine stores and answers. */
-const CANONICAL_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
-
 const clean = (e: unknown): string => (e instanceof Error ? e.message : String(e)).replace(/^SQLITE_[A-Z_]+: sqlite3 result code \d+: /, '');
-
-interface AuthEvent { code: number; object: string | null; column: string | null; db: string | null; source: string | null }
 
 /** A statement the guard admitted, with what it touches. */
 export class Prepared {
-  constructor(private readonly owner: SqliteDatabase, readonly stmt: Stmt, readonly analysis: StatementAnalysis) {}
+  constructor(private readonly owner: SqliteDatabase, private readonly guard: Guard, readonly stmt: Stmt, readonly analysis: StatementAnalysis) {}
   /** The statement's own text: no second statement, no terminator — safe to wrap as a subquery. */
   get text(): string {
     return this.owner.sqlite3.capi.sqlite3_sql(this.stmt.pointer!).replace(/;$/, '');
@@ -198,7 +164,7 @@ export class Prepared {
     const last = new Map(names.map((name, i) => [name, i]));
     const kept = [...last.values()];
     const keys = kept.map((i) => jsonStringBytes(names[i]!) + 1);
-    const booleans = kept.map((i) => this.owner.declaredType(this.stmt, i) === 'boolean');
+    const booleans = kept.map((i) => this.guard.declaredType(this.stmt, i) === 'boolean');
     const shortest = utf8Bytes(JSON.stringify([...last.keys()].map((name) => ({ name, type: 'date' }))));
     let rowBytes = 0;
     this.owner.within(timeoutMs, () => {
@@ -213,7 +179,7 @@ export class Prepared {
         raw.push(row);
       }
     });
-    const columns = this.analysis.columns.map((c, i) => this.owner.resultColumn(this.stmt, i, c, raw));
+    const columns = this.analysis.columns.map((c, i) => this.guard.resultColumn(this.stmt, i, c, raw));
     if (bounded && 9 + rowBytes + 12 + utf8Bytes(JSON.stringify(columns)) + 1 > outputBytes) throw new TooLarge('result too large');
     const rows = raw.map((values) => Object.fromEntries(columns.map((c, i) => [c.name, jsonValue(values[i], c.type)])));
     return { rows, columns, more };
@@ -227,23 +193,11 @@ export class Prepared {
 
 export class SqliteDatabase {
   readonly #db: DB;
-  /** Every loaded relation, for the guard (may it be read?) and for output types. */
-  readonly #relations = new Map<string, Map<string, DatasetColumn>>();
-  /** SQLite's order for an unqualified name: temp, main, then attached schemas in attach order. */
-  readonly #schemas = ['temp', 'main'];
-  readonly #views = new Set<string>();
-  /** Names of the engine's own triggers; only events they cause bypass the rules. */
-  readonly #internal = new Set<string>();
+  /** What this database holds an author may touch, and whether a statement may run (./guard). */
+  readonly #guard: Guard;
   /** The engine's own functions by name, with their arity: what `scratchWrite` removes again. */
   readonly #functions = new Map<string, number>();
-  /** Functions a trusted extension installed on this database (extensionFunction). */
-  readonly #extensions = new Set<string>();
-  readonly #virtual: ReadonlySet<string>;
   #trusted = 0;
-  #mode: StatementMode = 'read';
-  #target: { schema: string; table: string } | null = null;
-  #events: AuthEvent[] | null = null;
-  #denial: string | null = null;
   #deadline = Infinity;
   #interrupted = false;
 
@@ -252,13 +206,13 @@ export class SqliteDatabase {
     this.#db = new sqlite3.oo1.DB(':memory:');
     try {
       registerLibrary(this.#db as never, (ctx, bytes) => capi.sqlite3_js_aggregate_context(ctx, bytes), (ctx, value) => capi.sqlite3_result_double(ctx, value));
-      this.#virtual = new Set(this.trusted(() => this.#db.exec({ sql: 'SELECT name FROM pragma_module_list', returnValue: 'resultRows' }).map((r) => String(r[0]).toLowerCase())));
+      this.#guard = new Guard(capi, new Set(this.trusted(() => this.#db.exec({ sql: 'SELECT name FROM pragma_module_list', returnValue: 'resultRows' }).map((r) => String(r[0]).toLowerCase()))));
       // A write's effect is read from triggers; REPLACE must fire them too.
       this.trusted(() => this.#db.exec('PRAGMA recursive_triggers = ON'));
       // Bounds on what one statement may allocate: no value past 32 MiB, no statement past 1 MB of text.
       capi.sqlite3_limit(this.#db, capi.SQLITE_LIMIT_LENGTH, 32 * 1024 * 1024);
       capi.sqlite3_limit(this.#db, capi.SQLITE_LIMIT_SQL_LENGTH, 1_000_000);
-      capi.sqlite3_set_authorizer(this.#db, (_p, code, a, b, c, d) => this.#authorize({ code, object: a || null, column: b === 0 ? null : b, db: c || null, source: d || null }), 0);
+      capi.sqlite3_set_authorizer(this.#db, (_p, code, a, b, c, d) => this.#trusted ? capi.SQLITE_OK : this.#guard.authorize({ code, object: a || null, column: b === 0 ? null : b, db: c || null, source: d || null }), 0);
       capi.sqlite3_progress_handler(this.#db, 1000, () => {
         if (performance.now() <= this.#deadline) return 0;
         this.#interrupted = true;
@@ -303,21 +257,21 @@ export class SqliteDatabase {
     const lower = name.toLowerCase();
     if (!/^[a-z_][a-z0-9_]*$/.test(lower) || CORE_FUNCTIONS.has(lower) || LIBRARY_NAMES.has(lower)) throw new Error(`invalid extension function name ${name}`);
     this.#db.createFunction({ name: lower, arity, xFunc: (_ctx: number, ...args: Array<string | number | null>) => fn(...args) } as never);
-    this.#extensions.add(lower);
+    this.#guard.allowExtension(lower);
   }
   /** A fresh unguessable identifier; events attributed to a trigger of this name are the engine's own. */
   internalName(): string {
     const bytes = globalThis.crypto.getRandomValues(new Uint8Array(12));
     const name = `__engine_${Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')}`;
-    this.#internal.add(name);
+    this.#guard.markInternal(name);
     return name;
   }
 
   attach(schema: string): void {
     if (!schema || schema.length > 255 || schema.includes('\0') || /^temp$|^sqlite_/i.test(schema)) throw new Error(`invalid schema name ${schema}`);
-    if (this.#schemas.some((s) => s.toLowerCase() === schema.toLowerCase())) return;
+    if (this.#guard.hasSchema(schema)) return;
     this.exec(`ATTACH ':memory:' AS ${quote(schema)}`);
-    this.#schemas.push(schema);
+    this.#guard.addSchema(schema);
   }
 
   /**
@@ -331,7 +285,7 @@ export class SqliteDatabase {
     const accept = accepting ? this.#accepting() : undefined;
     const ddl = columns.map((c, i) => `${quote(c.name)} ${STORAGE[c.type]}${defaults ? ` DEFAULT (${defaults(i)})` : ''}${check(c, accept)}`).join(', ');
     this.exec(`CREATE TABLE ${quote(spec.schema)}.${quote(spec.table)} (${ddl}) STRICT`);
-    this.#register(spec.schema, spec.table, spec.columns);
+    this.#guard.register(spec.schema, spec.table, spec.columns);
   }
 
   /**
@@ -372,7 +326,7 @@ export class SqliteDatabase {
   /** Drop a loaded table, if it is there — a held import about to be loaded again. */
   drop(schema: string, table: string): void {
     this.exec(`DROP TABLE IF EXISTS ${quote(schema)}.${quote(table)}`);
-    this.#relations.delete(key(schema, table));
+    this.#guard.forget(schema, table);
   }
 
   /**
@@ -382,15 +336,12 @@ export class SqliteDatabase {
    * way while each run's own tables stay its own. Nothing inside may ATTACH.
    */
   scratch<T>(fn: () => T): T {
-    const relations = new Map(this.#relations), views = new Set(this.#views);
+    const restore = this.#guard.restorePoint();
     this.exec('BEGIN');
     try { return fn(); } finally {
       // An error may already have rolled it back.
       if (!this.sqlite3.capi.sqlite3_get_autocommit(this.#db.pointer!)) this.exec('ROLLBACK');
-      this.#relations.clear();
-      for (const [k, v] of relations) this.#relations.set(k, v);
-      this.#views.clear();
-      for (const v of views) this.#views.add(v);
+      restore();
     }
   }
 
@@ -401,7 +352,7 @@ export class SqliteDatabase {
    */
   scratchWrite<T>(fn: () => T): T {
     this.#accepting();
-    const functions = new Set(this.#functions.keys()), internal = new Set(this.#internal);
+    const functions = new Set(this.#functions.keys()), restoreInternal = this.#guard.internalRestorePoint();
     try { return this.scratch(fn); } finally {
       const { capi } = this.sqlite3;
       for (const [name, arity] of [...this.#functions]) {
@@ -409,7 +360,7 @@ export class SqliteDatabase {
         capi.sqlite3_create_function_v2(this.#db.pointer!, name, arity, capi.SQLITE_UTF8, 0, 0, 0, 0, 0);
         this.#functions.delete(name);
       }
-      for (const name of [...this.#internal]) if (!internal.has(name)) this.#internal.delete(name);
+      restoreInternal();
     }
   }
 
@@ -433,8 +384,7 @@ export class SqliteDatabase {
     if (spec.schema !== 'main') this.attach(spec.schema);
     const columns = spec.columns.length ? spec.columns.map((c) => quote(c.name)).join(', ') : '*';
     this.exec(`CREATE VIEW ${quote(spec.schema)}.${quote(spec.table)} AS SELECT ${columns} FROM (\n${text}\n) AS _model`);
-    this.#views.add(spec.table.toLowerCase());
-    this.#register(spec.schema, spec.table, spec.columns);
+    this.#guard.registerView(spec.schema, spec.table, spec.columns);
   }
 
   /** Create views whose dependencies exist, until none can be added; one that never can (a cycle, a broken draft) stays absent. */
@@ -452,10 +402,6 @@ export class SqliteDatabase {
     return this.exec('SELECT name, narg, type FROM pragma_function_list WHERE builtin = 0').map((r) => ({ name: String(r.name), arity: Number(r.narg), kind: r.type === 'a' ? 'aggregate' : r.type === 'w' ? 'window' : 'scalar' }));
   }
 
-  #register(schema: string, table: string, columns: DatasetColumn[]): void {
-    this.#relations.set(key(schema, table), new Map(columns.map((c) => [c.name.toLowerCase(), c])));
-  }
-
   /**
    * Prepare an author's statement under the guard. Exactly one statement
    * (anything after it must be whitespace, comments or empty statements, as
@@ -463,25 +409,21 @@ export class SqliteDatabase {
    */
   prepare(sql: string, mode: StatementMode, target?: { schema: string; table: string }): Prepared {
     const tag = mode === 'write' ? 'Mutation' : 'Query';
-    this.#mode = mode;
-    this.#target = target ?? null;
-    this.#events = [];
-    this.#denial = null;
+    const events = this.#guard.begin(mode, target ?? null);
     let stmt: Stmt;
-    const events = this.#events;
     try {
       stmt = this.#db.prepare(sql);
     } catch (e) {
-      throw this.#denial ? new Refused(this.#denial) : new Error(clean(e));
+      throw this.#guard.denial ? new Refused(this.#guard.denial) : new Error(clean(e));
     } finally {
-      this.#events = null;
+      this.#guard.stop();
     }
     try {
       const text = this.sqlite3.capi.sqlite3_sql(stmt.pointer!);
       if (!sql.startsWith(text) || !this.#onlyEmpty(sql.slice(text.length))) throw new Refused(`a <${tag}> holds exactly one statement — split it into separate <${tag}> declarations`);
-      const analysis = this.#analysis(stmt, events);
-      this.#admit(stmt, analysis, mode, tag);
-      return new Prepared(this, stmt, analysis);
+      const analysis = this.#guard.analysis(stmt, events);
+      this.#guard.admit(stmt, analysis, mode, tag);
+      return new Prepared(this, this.#guard, stmt, analysis);
     } catch (e) {
       stmt.finalize();
       throw e;
@@ -494,8 +436,6 @@ export class SqliteDatabase {
     const { capi, wasm } = this.sqlite3;
     const [sql, length] = wasm.allocCString(rest, true);
     const stack = wasm.pstack.pointer;
-    const events = this.#events;
-    this.#events = null;
     try {
       const pStmt = wasm.pstack.allocPtr() as number, pTail = wasm.pstack.allocPtr() as number;
       const end = sql + length;
@@ -510,154 +450,9 @@ export class SqliteDatabase {
       }
       return true;
     } finally {
-      this.#events = events;
       wasm.pstack.restore(stack);
       wasm.dealloc(sql);
     }
-  }
-
-  /**
-   * THE GUARD. Called by SQLite for every object a statement touches while it
-   * is prepared. Denies anything but reading loaded relations, calling listed
-   * functions and (in write mode) writing the one target — and records each
-   * event for the analysis.
-   */
-  #authorize(e: AuthEvent): number {
-    const { capi } = this.sqlite3;
-    if (this.#trusted) return capi.SQLITE_OK;
-    this.#events?.push(e);
-    if (e.source && this.#internal.has(e.source)) return capi.SQLITE_OK;
-    const reason = this.#deny(e);
-    if (reason === null) return capi.SQLITE_OK;
-    this.#denial ??= reason;
-    return capi.SQLITE_DENY;
-  }
-
-  #deny(e: AuthEvent): string | null {
-    const { capi } = this.sqlite3;
-    const object = e.object?.toLowerCase() ?? '';
-    switch (e.code) {
-      case capi.SQLITE_SELECT:
-      case capi.SQLITE_RECURSIVE:
-        return null;
-      case capi.SQLITE_READ:
-        if (this.#system(object)) return `${e.object} is not data a statement may read (system and virtual tables are refused)`;
-        if (e.db && !TABLE_FUNCTIONS.has(object) && !this.#relations.has(key(e.db, object))) return `${e.db}.${e.object} is not a table this statement may read`;
-        return null;
-      case capi.SQLITE_FUNCTION: {
-        const name = (e.column ?? '').toLowerCase();
-        return CORE_FUNCTIONS.has(name) || LIBRARY_NAMES.has(name) || this.#extensions.has(name) ? null : `function ${name}() is not available`;
-      }
-      case capi.SQLITE_INSERT:
-      case capi.SQLITE_UPDATE:
-      case capi.SQLITE_DELETE:
-        if (this.#mode === 'read') return 'a <Query> may only SELECT — a document reads its data, it never writes it; a write is a <Mutation>';
-        if (this.#system(object) || !e.db || !this.#relations.has(key(e.db, object)) || this.#views.has(object)) return `${e.object} is not a table a <Mutation> may write`;
-        if (this.#target && key(e.db, object) !== key(this.#target.schema, this.#target.table)) return `a <Mutation> writes only its own table ${this.#target.table}, not ${e.object}`;
-        return null;
-      default:
-        return `${ACTIONS[e.code] ?? 'this statement'} is not allowed — a <Query> is one SELECT, a <Mutation> one INSERT, UPDATE or DELETE`;
-    }
-  }
-
-  #system(name: string): boolean {
-    return name.startsWith('sqlite_') || name.startsWith('pragma_') || (this.#virtual.has(name) && !TABLE_FUNCTIONS.has(name));
-  }
-
-  /** The record of what the statement touches, from the authorizer's events and the statement's metadata. */
-  #analysis(stmt: Stmt, events: AuthEvent[]): StatementAnalysis {
-    const { capi } = this.sqlite3;
-    const { SQLITE_READ, SQLITE_SELECT, SQLITE_RECURSIVE, SQLITE_FUNCTION, SQLITE_INSERT, SQLITE_UPDATE, SQLITE_DELETE } = capi;
-    const own = events.filter((e) => !(e.source && this.#internal.has(e.source)));
-    // A CTE announces itself as the source of a SELECT; a view does too, so views are subtracted.
-    const ctes = new Set(own.filter((e) => (e.code === SQLITE_SELECT || e.code === SQLITE_RECURSIVE) && e.source).map((e) => e.source!.toLowerCase()).filter((n) => !this.#views.has(n)));
-    const reads: ColumnRead[] = [];
-    const seen = new Set<string>();
-    for (const e of own) {
-      if (e.code !== SQLITE_READ || !e.object) continue;
-      const table = e.object;
-      // Reads SQLite attributes to a view are the view's own; the statement read the view.
-      if (e.source && this.#views.has(e.source.toLowerCase())) continue;
-      if (TABLE_FUNCTIONS.has(table.toLowerCase())) continue;
-      let schema = e.db;
-      if (!schema) {
-        // SQLite names no schema for a whole-table use of an unqualified name (count(*)), CTEs included.
-        if (ctes.has(table.toLowerCase())) continue;
-        schema = this.#schemas.find((s) => this.#relations.has(key(s, table))) ?? null;
-        if (!schema) continue;
-      }
-      const column = (e.column ?? '').toLowerCase() === 'rowid' ? 'rowid' : e.column ?? '';
-      const id = `${key(schema, table)}\0${column.toLowerCase()}`;
-      if (seen.has(id)) continue;
-      seen.add(id);
-      reads.push({ schema, table, column });
-    }
-    const writes: TableWrite[] = [];
-    for (const e of own) {
-      const op = e.code === SQLITE_INSERT ? 'insert' : e.code === SQLITE_UPDATE ? 'update' : e.code === SQLITE_DELETE ? 'delete' : null;
-      if (!op || !e.object || !e.db) continue;
-      let write = writes.find((w) => w.op === op && key(w.schema, w.table) === key(e.db!, e.object!));
-      if (!write) writes.push((write = { schema: e.db, table: e.object, op, ...(op === 'update' ? { columns: [] } : {}) }));
-      if (op === 'update' && e.column && !write.columns!.includes(e.column)) write.columns!.push(e.column);
-    }
-    const functions = [...new Set(own.filter((e) => e.code === SQLITE_FUNCTION && e.column).map((e) => e.column!.toLowerCase()))];
-    const params: string[] = [];
-    for (let i = 1; i <= stmt.parameterCount; i++) {
-      const name = capi.sqlite3_bind_parameter_name(stmt.pointer!, i);
-      if (!name || name.startsWith('?')) throw new Refused('parameters are named ($name); ? placeholders are not supported');
-      params.push(name.slice(1));
-    }
-    const columns: OutputColumn[] = Array.from({ length: stmt.columnCount }, (_, i) => {
-      const origin = this.#originOf(stmt, i);
-      return { name: stmt.getColumnName(i), declaredType: origin?.column.type ?? null, ...(origin ? { origin: origin.at } : {}) };
-    });
-    const kind: StatementKind = writes[0]?.op ?? 'select';
-    return { kind, reads, writes, functions, params, columns };
-  }
-
-  /** Admission by what the statement is, now that SQLite has said what it does. */
-  #admit(stmt: Stmt, a: StatementAnalysis, mode: StatementMode, tag: string): void {
-    const { capi } = this.sqlite3;
-    if (capi.sqlite3_stmt_isexplain(stmt.pointer!)) throw new Refused('EXPLAIN is not allowed');
-    const readOnly = capi.sqlite3_stmt_readonly(stmt.pointer!) !== 0;
-    const isRead = a.kind === 'select' && readOnly && stmt.columnCount > 0;
-    const isWrite = a.kind !== 'select' && !readOnly && new Set(a.writes.map((w) => `${w.op}\0${key(w.schema, w.table)}`)).size === 1;
-    if (a.kind !== 'select' && stmt.columnCount > 0) throw new Refused(`a <Mutation> cannot use RETURNING — it answers the table's new rows, not a result`);
-    if (mode === 'read' && !isRead) throw new Refused('a <Query> may only SELECT — a document reads its data, it never writes it; a write is a <Mutation>');
-    if (mode === 'write' && !isWrite) throw new Refused('a <Mutation> is one INSERT, UPDATE or DELETE over its own table — nothing else; a read is a <Query>');
-    if (mode === 'any' && !isRead && !isWrite) throw new Refused(`a <${tag}> is one SELECT, or one INSERT, UPDATE or DELETE over one table`);
-    const clocked = a.kind === 'select' ? a.functions.find((f) => MUTATION_ONLY_FUNCTIONS.has(f)) : undefined;
-    if (clocked) throw new Refused(`function ${clocked}() is allowed only in a <Mutation> — its result would differ between runs`);
-  }
-
-  /** The loaded column an output column directly references, if any, and where it lives. */
-  #originOf(stmt: Stmt, i: number): { column: DatasetColumn; at: { schema: string; table: string; column: string } } | null {
-    const { capi } = this.sqlite3;
-    const db = capi.sqlite3_column_database_name(stmt.pointer!, i), table = capi.sqlite3_column_table_name(stmt.pointer!, i), column = capi.sqlite3_column_origin_name(stmt.pointer!, i);
-    if (!db || !table || !column) return null;
-    const found = this.#relations.get(key(db, table))?.get(column.toLowerCase());
-    return found ? { column: found, at: { schema: db, table, column } } : null;
-  }
-  #origin(stmt: Stmt, i: number): DatasetColumn | null { return this.#originOf(stmt, i)?.column ?? null; }
-  /** The declared type of output column `i` when it is a direct reference to a loaded column, else null. */
-  declaredType(stmt: Stmt, i: number): ColumnType | null { return this.#origin(stmt, i)?.type ?? null; }
-
-  /**
-   * An output column's type: its origin's declared column (all of it, for
-   * `user`), else what its values already are. An expression is never
-   * converted: text is a date or a timestamp only when every value is one in
-   * canonical form, so `to_timezone`'s wall-clock text stays wall-clock text.
-   */
-  resultColumn(stmt: Stmt, i: number, output: OutputColumn, raw: unknown[][]): DatasetColumn {
-    const origin = this.#origin(stmt, i);
-    if (origin) return origin.type === 'user' ? { ...origin, name: output.name } : { name: output.name, type: origin.type };
-    const values = raw.map((r) => r[i]).filter((v) => v !== null && v !== undefined);
-    const all = (test: (v: unknown) => boolean) => values.length > 0 && values.every(test);
-    const type: ColumnType = all((v) => typeof v === 'number' || typeof v === 'bigint') ? 'number'
-      : all((v) => typeof v === 'string' && calendarDate(v) !== null) ? 'date'
-        : all((v) => typeof v === 'string' && CANONICAL_TIMESTAMP.test(v)) ? 'timestamp'
-          : 'string';
-    return { name: output.name, type };
   }
 
   /** Run `fn` with the progress handler's deadline armed. */
@@ -671,9 +466,3 @@ export class SqliteDatabase {
     } finally { this.#deadline = Infinity; }
   }
 }
-
-const ACTIONS: Record<number, string> = {
-  0: 'COPY', 1: 'CREATE INDEX', 2: 'CREATE TABLE', 3: 'CREATE INDEX', 4: 'CREATE TABLE', 5: 'CREATE TRIGGER', 6: 'CREATE VIEW', 7: 'CREATE TRIGGER', 8: 'CREATE VIEW',
-  10: 'DROP INDEX', 11: 'DROP TABLE', 12: 'DROP INDEX', 13: 'DROP TABLE', 14: 'DROP TRIGGER', 15: 'DROP VIEW', 16: 'DROP TRIGGER', 17: 'DROP VIEW',
-  19: 'PRAGMA', 22: 'BEGIN/COMMIT/ROLLBACK', 24: 'ATTACH', 25: 'DETACH', 26: 'ALTER TABLE', 27: 'REINDEX', 28: 'ANALYZE', 29: 'CREATE VIRTUAL TABLE', 30: 'DROP VIRTUAL TABLE', 32: 'SAVEPOINT',
-};
