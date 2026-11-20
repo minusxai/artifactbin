@@ -103,11 +103,7 @@ function sourceHeightOf(image: HTMLImageElement, uploaded: boolean): number {
   return uploaded ? measured : Math.max(SOCIAL_PREVIEW_HEIGHT, measured);
 }
 
-/**
- * The frame's own sharp render, laid over the overview once it has loaded; until then the frame says it is sharpening.
- * `loaded` is the last render that finished, kept by the editor: the overlay goes while a gesture runs, and an unchanged
- * frame must not sharpen again when it returns.
- */
+/** The frame's sharp render over the overview once loaded (`loaded`, kept by the editor across gestures). */
 function SharpFrame(props: { url: string; loaded: string; onLoad: (url: string) => void }): JSX.Element {
   const ready = () => props.loaded === props.url;
   return <>
@@ -144,20 +140,14 @@ async function uploadImage(file: File): Promise<string> {
   return body.id;
 }
 
-/**
- * The document's source with this framing: the image it names (or none) and, for an image, its crop; for the
- * document overview, its crop when `writeDocumentCrop` (it was moved, or the page had no image before). Null resets.
- */
+/** The source with this framing: the image it names and its crop, or the overview's crop when `writeDocumentCrop`. */
 function framedSource(source: string, imageId: string | null, crop: SocialPreviewCrop | null, writeDocumentCrop: boolean): string {
   const next = writeSocialPreviewImage(source, imageId);
   if (imageId) return writeSocialPreviewImageCrop(next, crop);
   return writeDocumentCrop ? writeSocialPreviewCrop(next, crop) : next;
 }
 
-/**
- * What the canvas draws: the document's full-page overview, the image the page already names (through the export,
- * at this version), or a newly uploaded image (raw). `attempt` busts a failed load.
- */
+/** What the canvas draws: the overview, the page's own image (through the export) or a new upload (raw). */
 function canvasAddress(id: string, version: number, imageId: string | null, initialImage: string | null, attempt: number): string {
   if (!imageId) return `/a/${id}/export?mode=preview&format=jpg&v=${version}&pv=${SOCIAL_PREVIEW_OVERVIEW_GENERATION}${attempt ? `&attempt=${attempt}` : ''}`;
   return imageId === initialImage ? `/a/${id}/export?mode=preview&image=1&v=${version}&attempt=${attempt}` : `/a/${imageId}/raw?attempt=${attempt}`;

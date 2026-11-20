@@ -69,10 +69,10 @@ function RoleSelect(props: { label: string; value: ShareRole; options: typeof RO
   return <span class="w-32 shrink-0" data-slot={props.slot}><Suspense fallback={<span class="block h-control-sm" />}><Select size="sm" ariaLabel={props.label} value={props.value} options={props.options} onChange={role => props.onChange(role as ShareRole)} /></Suspense></span>;
 }
 
-/** The document's social card as it is now drawn, loading again with each new version, and the way to edit it. */
-function SocialPreviewCard(props: { id: string; version?: number; onEdit: () => void }): JSX.Element {
-  const [status, setStatus] = createSignal<'loading' | 'ready' | 'error'>('loading');
-  createEffect(() => { void props.version; setStatus('loading'); });
+type PreviewStatus = 'loading' | 'ready' | 'error';
+/** The document's social card and the way to edit it; `status` is the door's, so it outlives the dialog. */
+function SocialPreviewCard(props: { id: string; version?: number; status: PreviewStatus; onStatus: (status: PreviewStatus) => void; onEdit: () => void }): JSX.Element {
+  const status = () => props.status, setStatus = props.onStatus;
   /** The card's address, built only from an id of the artifact id's own allowlisted shape. */
   const src = () => ARTIFACT_ID_PATTERN.test(props.id) ? `/a/${props.id}/export?format=jpg&mode=card&v=${Number(props.version ?? 0)}&r=${CARD_RENDER_GENERATION}` : undefined;
   return <figure class="mx-auto mb-5 w-full max-w-xs"><figcaption class="mb-2 text-center text-2xs text-muted">Social preview</figcaption>
@@ -86,27 +86,30 @@ function SocialPreviewCard(props: { id: string; version?: number; onEdit: () => 
   </figure>;
 }
 
-/**
- * A dataset's writes: whether documents may change it, and which do. Closing writes never touches the rows, but it
- * stops the documents that write here: say which first, and keep the dialog while it saves or when it fails.
- */
-function DatasetWrites(props: { state: SharingState; put: (patch: SharingPatch) => Promise<boolean> }): JSX.Element {
-  const current = () => props.state;
-  const writable = () => props.state.access === 'readwrite';
+/** Setting a dataset's writes. Closing them keeps the rows but stops the documents that write here: confirm first. */
+function createWritesSetting(state: () => SharingState | null, put: (patch: SharingPatch) => Promise<boolean>) {
   const [confirmReadOnly, setConfirmReadOnly] = createSignal(false);
   const [readOnlyBusy, setReadOnlyBusy] = createSignal(false);
   const [readOnlyError, setReadOnlyError] = createSignal<string | null>(null);
   const setAccess = (next: DatasetAccess) => {
-    if (next === 'read' && (props.state.writtenBy?.length ?? 0) > 0) { setReadOnlyError(null); setConfirmReadOnly(true); return; }
-    void props.put({ access: next });
+    if (next === 'read' && (state()?.writtenBy?.length ?? 0) > 0) { setReadOnlyError(null); setConfirmReadOnly(true); return; }
+    void put({ access: next });
   };
   const confirmMakeReadOnly = async () => {
     setReadOnlyBusy(true);
-    const done = await props.put({ access: 'read' });
+    const done = await put({ access: 'read' });
     setReadOnlyBusy(false);
     if (done) setConfirmReadOnly(false);
     else setReadOnlyError('Could not update sharing. Try again.');
   };
+  return { confirmReadOnly, setConfirmReadOnly, readOnlyBusy, readOnlyError, setAccess, confirmMakeReadOnly };
+}
+
+/** A dataset's writes: whether documents may change it, and which do. */
+function DatasetWrites(props: { state: SharingState; writes: ReturnType<typeof createWritesSetting> }): JSX.Element {
+  const current = () => props.state;
+  const writable = () => props.state.access === 'readwrite';
+  const { confirmReadOnly, setConfirmReadOnly, readOnlyBusy, readOnlyError, setAccess, confirmMakeReadOnly } = props.writes;
   return <div class="mt-5 border-t border-edge pt-4">
     <p class="mb-1 flex items-center justify-between text-faint"><span class="uppercase tracking-wider">writes</span><PenLine size={11} /></p>
     <ToggleGroup label="Dataset writes" fill value={current().access ?? 'read'} options={WRITE_OPTIONS} onChange={value => setAccess(value as DatasetAccess)} />
@@ -124,7 +127,9 @@ function DatasetWrites(props: { state: SharingState; put: (patch: SharingPatch) 
   </div>;
 }
 
-interface DocumentSharingProps {
+
+/** The document sharing door owns dialog state and sends one field per PATCH-shaped PUT. */
+export function DocumentSharing(props: {
   id: string; title: string; owner: boolean; editable?: boolean; url?: string;
   variant?: 'chip' | 'menu' | 'dialog' | 'embedded'; onClose?: () => void;
   onSharingChange?: (verdict: SharingVerdict) => void;
@@ -141,10 +146,7 @@ interface DocumentSharingProps {
   refs?: ReadonlyArray<{ id: string; kind: string }>;
   /** A page: its queries on live data an Admin of its group may approve (./QueryApprovals, asked for and drawn only when the sharing answer says the viewer is one). */
   queryApprovals?: boolean;
-}
-
-/** The document sharing door owns dialog state and sends one field per PATCH-shaped PUT. */
-export function DocumentSharing(props: DocumentSharingProps): JSX.Element {
+}): JSX.Element {
   const canManage = () => (props.owner || Boolean(props.editable)) && state()?.canManageSharing !== false;
   const [open, setOpen] = createSignal(props.variant === 'dialog');
   const [state, setState] = createSignal<SharingState | null>(null);
@@ -154,6 +156,7 @@ export function DocumentSharing(props: DocumentSharingProps): JSX.Element {
   const [email, setEmail] = createSignal('');
   const [error, setError] = createSignal('');
   const [copied, setCopied] = createSignal(false);
+  const [previewStatus, setPreviewStatus] = createSignal<PreviewStatus>('loading');
   createEffect(() => {
     if (!copied()) return;
     const timer = setTimeout(() => setCopied(false), 1500);
@@ -183,6 +186,7 @@ export function DocumentSharing(props: DocumentSharingProps): JSX.Element {
   };
   // A dataset says who may write it.
   const showWrites = () => props.format === 'dataset' && !!state();
+  const writes = createWritesSetting(state, put);
   onMount(() => {
     if (!canManage()) return;
     const controller = new AbortController();
@@ -192,6 +196,7 @@ export function DocumentSharing(props: DocumentSharingProps): JSX.Element {
     }).catch(() => { if (!controller.signal.aborted) setError('could not load sharing'); });
     onCleanup(() => controller.abort());
   });
+  createEffect(() => { void props.version; setPreviewStatus('loading'); });
   createEffect(() => {
     const current = state();
     if (current) props.onSharingChange?.({ visibility: current.visibility, hasInvitedUsers: current.shares.length > 0 });
@@ -209,7 +214,7 @@ export function DocumentSharing(props: DocumentSharingProps): JSX.Element {
         </li>}</For></ul>
       </aside>
     </Show>
-    <Show when={props.onSocialPreview}><SocialPreviewCard id={props.id} version={props.version} onEdit={() => { close(); props.onSocialPreview?.(); }} /></Show>
+    <Show when={props.onSocialPreview}><SocialPreviewCard id={props.id} version={props.version} status={previewStatus()} onStatus={setPreviewStatus} onEdit={() => { close(); props.onSocialPreview?.(); }} /></Show>
     <Show when={canManage() && !state() && !error()}><StatusMessage kind="loading">loading…</StatusMessage></Show>
     <Show when={error()}><StatusMessage kind="error">{error()}</StatusMessage></Show>
     <Show when={canManage() && state()}>{current => <>
@@ -220,7 +225,7 @@ export function DocumentSharing(props: DocumentSharingProps): JSX.Element {
           <RoleSelect label="Link role" value={current().linkRole ?? 'viewer'} options={props.live ? LIVE_LINK_ROLE_OPTIONS : ROLE_OPTIONS} onChange={role => void put({ linkRole: role })} />
         </label>
       </Show>
-      <Show when={showWrites()}><DatasetWrites state={current()} put={put} /></Show>
+      <Show when={showWrites()}><DatasetWrites state={current()} writes={writes} /></Show>
       <div class="mt-5 border-t border-edge pt-4">
         <p class="mb-1 uppercase tracking-wider text-faint">people</p>
         <For each={current().shares}>{person => <div class="flex items-center justify-between gap-2 py-0.5">
