@@ -31,7 +31,9 @@ beforeAll(async () => {
   });
 });
 afterAll(async () => { await app.close(); });
-const read = (url=origin+path, method='GET', signal=AbortSignal.timeout(3000)) => internalAssetResponse(url,method,origin,app.base,signal);
+// A read waits on the server's answer or the refusal, never on a clock (the test timeout is the backstop); only the
+// slow upstream's case aborts, and there the abort is the event under test.
+const read = (url=origin+path, method='GET', signal=new AbortController().signal) => internalAssetResponse(url,method,origin,app.base,signal);
 it('forwards only bytes with a fixed deployment Host and sanitized response policy',async()=>{
   mode='ok'; const response=await read();
   expect(await response.text()).toBe('bytes');
@@ -56,7 +58,7 @@ describe.each([
 }));
 for(const behavior of ['redirect','external-redirect','oversize','stream-size','slow'])it(`refuses ${behavior} and cancels the upstream`,async()=>{
  mode=behavior;const before=reads, beforeClosed=closed;
- await expect(read(origin+path,'GET',AbortSignal.timeout(behavior==='slow'?50:3000))).rejects.toThrow();
+ await expect(read(origin+path,'GET',behavior==='slow'?AbortSignal.timeout(50):undefined)).rejects.toThrow();
  // The upstream's own close event, however late it arrives after the refusal.
  await vi.waitFor(()=>expect(closed).toBeGreaterThan(beforeClosed), { timeout: WAIT_MS });
  expect(reads).toBe(before+1);

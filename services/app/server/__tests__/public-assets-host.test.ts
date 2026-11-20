@@ -76,7 +76,8 @@ it('internal export transport reaches the real public-byte middleware, not the a
  const proxy=createAuthHost(options);
  for(const fetch of [app.fetch,proxy.fetch]){
  const server=await withHttpServer(getRequestListener(fetch));
- const read=(path:string)=>internalAssetResponse('https://assets.example.test'+path,'GET','https://assets.example.test',server.base,AbortSignal.timeout(3000));
+ // Each read waits on the server's answer, not on a clock: a signal that never fires (the test timeout is the backstop).
+ const read=(path:string)=>internalAssetResponse('https://assets.example.test'+path,'GET','https://assets.example.test',server.base,new AbortController().signal);
  await setVisibility(publicRow.id, 'public');
  try{
   for(const path of ['/assets/'+hash,'/assets/ref/'+publicRow.id]){
