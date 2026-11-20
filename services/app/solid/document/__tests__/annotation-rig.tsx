@@ -18,7 +18,8 @@ import type { StoryEditSelection } from '@/lib/html-bridge/selection-contract';
 import { screen } from '@testing-library/dom';
 import { fireEvent, render } from '../../__tests__/helpers';
 import { TrustedUi } from '../../components/TrustedUi';
-import { AnnotationLayer, preloadScreenshotUpload, type AnnotationLayerProps } from '../AnnotationLayer';
+import { AnnotationLayer, type AnnotationLayerProps } from '../AnnotationLayer';
+import { preloadScreenshotUpload } from '../AnnotationComposer';
 import { preloadThreadMenu } from '../AnnotationThread';
 
 // The rail's delete menu and the upload fallback are lazy chunks: have them in before a test renders.
