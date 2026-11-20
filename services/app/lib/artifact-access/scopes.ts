@@ -11,8 +11,9 @@
 import { ACCOUNT_REACH_SQL } from '@/lib/user-kinds';
 import { identityForUser, type AccessActor } from '@/lib/accounts';
 import { groupAdminSql, groupReachSql, reachedGroupsSql } from '@/lib/groups';
-import type {DocumentGraph} from '@artifactbin/contracts';
-import { shareRolesAtLeast, type ArtifactFormat, type ArtifactRole, type DatasetAccess, type ShareEntry, type ShareRole, type Visibility } from '@artifactbin/contracts';
+import type {DocumentGraph} from '@artifactbin/contracts/document-update';
+import { shareRolesAtLeast, type ArtifactRole, type DatasetAccess, type ShareEntry, type ShareRole, type Visibility } from '@artifactbin/contracts/sharing';
+import type { ArtifactFormat } from '@artifactbin/contracts/artifact-format';
 
 export interface ArtifactRow {
   document?:DocumentGraph|null;

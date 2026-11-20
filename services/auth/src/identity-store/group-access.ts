@@ -5,7 +5,9 @@
  * hierarchy revision a topology change moves first (`bumpHierarchy`) and a group's ancestors (`chainOf`); and
  * `recordChange`, which answers a change to the caller and queues its mail in the same transaction.
  */
-import {IdentityError,type GroupChange,type GroupRole,type Queryable} from '@artifactbin/contracts';
+import {IdentityError, type GroupChange} from '@artifactbin/contracts/identity-module';
+import type {GroupRole} from '@artifactbin/contracts/groups';
+import type {Queryable} from '@artifactbin/contracts/db';
 import {enqueueGroupMail} from './mail';
 import {groupAdminsSql} from './rules';
 import {internalId,type IdentityTables} from './tables';

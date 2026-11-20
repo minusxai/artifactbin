@@ -7,7 +7,7 @@
  *   {"version":3,"tables":[{"table":{"schema":"public","name":"queries"},
  *     "select_permissions":[{"role":"signed_in","permission":{"columns":"*","filter":{}}}]}]}
  */
-import type { DatasetPermissions, DatasetPermissionsIssue, DatasetTableName } from '@artifactbin/contracts';
+import type { DatasetPermissions, DatasetPermissionsIssue, DatasetTableName } from '@artifactbin/contracts/dataset-permissions';
 
 export const LIVE_QUERY_TABLE: DatasetTableName = Object.freeze({ schema: 'public', name: 'queries' });
 

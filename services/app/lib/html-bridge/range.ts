@@ -1,4 +1,4 @@
-import { htmlTextFingerprint, resolveHtmlTextRange, type HtmlNodeAnchor } from '@artifactbin/contracts';
+import { htmlTextFingerprint, resolveHtmlTextRange, type HtmlNodeAnchor } from '@artifactbin/contracts/html-annotation';
 export interface HtmlRangeResolution { status: 'exact' | 'missing' | 'ambiguous'; range: Range | null }
 export function captureHtmlRange(node: Element, range: Range): HtmlNodeAnchor['range'] {
   if (!node.contains(range.startContainer) || !node.contains(range.endContainer) || range.collapsed) return undefined;

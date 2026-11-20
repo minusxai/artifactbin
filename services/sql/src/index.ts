@@ -5,12 +5,12 @@
  * engine is `@artifactbin/sql/local` (worker threads) or `./sqlite` (this
  * thread), and only a composition root loads one.
  */
-import type { SqlService } from '@artifactbin/contracts';
-import { SQL_ROUTES } from '@artifactbin/contracts';
+import type { SqlService } from '@artifactbin/contracts/sql';
+import { SQL_ROUTES } from '@artifactbin/contracts/sql';
 import { jsonServer, type JsonServer, type JsonRoutes } from '@artifactbin/utils';
 
 export type * from '@artifactbin/contracts';
-export { SQL_ROUTES } from '@artifactbin/contracts';
+export { SQL_ROUTES } from '@artifactbin/contracts/sql';
 // `sqlClient` lives in @artifactbin/utils; re-exported here so a caller can take the
 // client from the same package as the shell it speaks to. That is how this package's
 // own tests and the app's story tests reach it; app product code imports utils directly.

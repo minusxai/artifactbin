@@ -1,4 +1,4 @@
-import type {MutationInput,QueryFailure} from '@artifactbin/contracts';
+import type {MutationInput, QueryFailure} from '@artifactbin/contracts/sql';
 import type {SqliteDatabase} from './sqlite/database';
 /**
  * Installed by a trusted composition root; query authors cannot install

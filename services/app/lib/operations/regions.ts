@@ -4,7 +4,7 @@
  * save everyone's unsaved typing as a version on purpose. `_doc` names a doc's one rich region.
  */
 import { z } from 'zod';
-import { DOC_REGION, type RegionFormat } from '@artifactbin/contracts';
+import { DOC_REGION, type RegionFormat } from '@artifactbin/contracts/region-sessions';
 import { agentRegions, type AgentRegions, type RegionAnswer } from '@/lib/region-sessions';
 import { getDb } from '@/lib/platform';
 import type { Operation, OpReply } from './registry';

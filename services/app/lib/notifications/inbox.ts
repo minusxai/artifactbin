@@ -1,5 +1,5 @@
 import { JOIN_RELATIONS, dismissPendingRelations } from '@/lib/social';
-import {canAnnotate} from '@artifactbin/contracts';
+import {canAnnotate} from '@artifactbin/contracts/sharing';
 import {notificationChanged,notificationsChanged} from './write';
 import {getDb,lockSubjects,services} from '@/lib/platform';
 import { MembershipError } from '@/lib/artifacts';

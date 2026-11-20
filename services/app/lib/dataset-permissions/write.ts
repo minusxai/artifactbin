@@ -12,7 +12,10 @@
  *  - A PRIVATE dataset admits signed_in and anonymous callers only through `backend_only` entries (privateCeiling).
  *  - The `access` column is a ceiling on every write, owner included.
  */
-import type { DatasetBoolExp, DatasetGrantContext, DatasetMutationPolicy, DatasetOperation, DatasetPermissions, DatasetRole, DatasetRuleRole, DatasetTableName, DatasetTablePermissions, Queryable, Scalar } from '@artifactbin/contracts';
+import type { DatasetBoolExp, DatasetPermissions, DatasetRole, DatasetRuleRole, DatasetTableName, DatasetTablePermissions } from '@artifactbin/contracts/dataset-permissions';
+import type { DatasetGrantContext, DatasetMutationPolicy, DatasetOperation } from '@artifactbin/contracts/dataset-policy';
+import type { Queryable } from '@artifactbin/contracts/db';
+import type { Scalar } from '@artifactbin/contracts/sql';
 import type { AccessActor } from '@/lib/accounts';
 import { liveAccessFacts, lockAuthorization, transactionAccessFacts, writerFor, type AccessFacts, type ArtifactRow } from '@/lib/artifact-access';
 import { catalogOf, DatasetError, liveConnectionOf } from '@/lib/datasets';

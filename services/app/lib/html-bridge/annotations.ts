@@ -1,6 +1,6 @@
 import {COMMENT_PRESENTATION} from './comment-presentation';
 import type { AnnotationRange } from '../document';
-import { htmlTextFingerprint, type HtmlNodeAnchor } from '@artifactbin/contracts';
+import { htmlTextFingerprint, type HtmlNodeAnchor } from '@artifactbin/contracts/html-annotation';
 import { resolveHtmlRange } from './range';
 interface HtmlAnnotationPin { id: string; nodeId?: string | null; path: string; anchor?: HtmlNodeAnchor; layoutOnly?: boolean; range?: AnnotationRange | null }
 /** Block threads sharing one resolved node share one visual outline; positions remain per thread. */

@@ -1,5 +1,7 @@
 import type {PresenceIdentity,PresenceFrame,PresencePublication} from '@/lib/html-presence';
-import type { CommentReactionInput, AnnotationCommentWire, DocumentGraph, GraphPatch, MembershipStatus } from '@artifactbin/contracts';
+import type { CommentReactionInput, AnnotationCommentWire } from '@artifactbin/contracts/annotation-comment';
+import type { DocumentGraph, GraphPatch } from '@artifactbin/contracts/document-update';
+import type { MembershipStatus } from '@artifactbin/contracts/membership';
 import type { AnnotationWire } from '@/lib/annotations';
 import type { ArtifactDataEvent, ArtifactLiveEvent, ArtifactVersionPing } from '@/lib/html-reader/contract';
 

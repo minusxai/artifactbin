@@ -1,7 +1,7 @@
 /** One monotonic stored-read lifetime. Only uncooperative metadata/object reads are raced;
  * SQL is awaited with this signal so B1 confirms worker termination before releasing capacity.
  */
-import {sqlTimeout} from '@artifactbin/contracts';
+import {sqlTimeout} from '@artifactbin/contracts/sql';
 import {SQL_READ_WALL_TIMEOUT_MS} from '@/lib/platform';
 export function readLifetime(parent?:AbortSignal,wallTimeoutMs?:number){
  const budget=sqlTimeout(wallTimeoutMs,SQL_READ_WALL_TIMEOUT_MS,SQL_READ_WALL_TIMEOUT_MS,'SQL wall timeout',true);

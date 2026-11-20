@@ -5,7 +5,8 @@
  * app's schema. Accounts, handles and tokens: ./identity-store/accounts; groups, membership, invitations and the tree:
  * ./identity-store/groups; the group mail outbox: ./identity-store/mail.
  */
-import {IDENTITY_OWNED_TABLES,type IdentityService,type Queryable,type TransactionalQueryable} from '@artifactbin/contracts';
+import {IDENTITY_OWNED_TABLES, type IdentityService, type TransactionalQueryable} from '@artifactbin/contracts/identity-module';
+import type {Queryable} from '@artifactbin/contracts/db';
 import {ensureTable,renderSchema} from '@artifactbin/utils';
 import {ensureAuthSchema} from './schema';
 import {IDENTITY_TABLES} from './identity-store/schema';

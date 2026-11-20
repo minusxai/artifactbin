@@ -33,7 +33,7 @@
  * Pinned by services/app/__tests__/page-sql-door-locks.test.ts ("lock order") and the two-connection Postgres
  * regression services/app/lib/artifact-access/__tests__/lock-order-postgres.test.ts.
  */
-import type { Queryable } from '@artifactbin/contracts';
+import type { Queryable } from '@artifactbin/contracts/db';
 
 /** The one order every multi-artifact lock takes: code units (ids are ASCII), identical to SQL `COLLATE "C"`. */
 export const lockOrder = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);

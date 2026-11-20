@@ -4,7 +4,8 @@
  * a transport failure (unreachable, non-2xx, an unreadable answer, the deadline) throws `identity_unavailable`,
  * never a guessed answer. No credential enters the URL: the service secret rides SERVICE_AUTH_HEADER.
  */
-import {IDENTITY_CALL_PATH,IDENTITY_METHODS,IdentityError,SERVICE_AUTH_HEADER,type IdentityService} from '@artifactbin/contracts';
+import {IDENTITY_CALL_PATH, IDENTITY_METHODS, IdentityError, type IdentityService} from '@artifactbin/contracts/identity-module';
+import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts/routes';
 
 export function identityClient(origin:string,options:{serviceSecret:string;deadlineMs?:number;fetch?:(request:Request)=>Promise<Response>}):IdentityService {
  if(!options.serviceSecret.trim())throw Error('the identity service requires a service secret');

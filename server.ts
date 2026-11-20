@@ -19,7 +19,7 @@ import { getRequestListener } from '@hono/node-server';
 import { assemble, inProcess } from '@artifactbin/utils';
 import { bearerAdmission, createBearerReader, ensureAuthSchema, ensureHumanAuthSchema, authEnvNamesRead, authParts, readEnv, mailerForRuntime, mailSettingsOf, createHumanAuth, loginProvidersOf, sessionStoreOf, testDomainSignInOf } from '@artifactbin/auth';
 import { useLoopbackLookup } from '@artifactbin/utils/node/loopback-lookup';
-import { parseServiceAudiences } from '@artifactbin/contracts';
+import { parseServiceAudiences } from '@artifactbin/contracts/service-audiences';
 
 // The server's own outbound calls (the exporter, a session's cookie jar, its public URL) may name a loopback
 // host (`app.lvh.me`, `<hex id>.lvh.me`, `*.localhost`): resolved here, never asked of DNS.

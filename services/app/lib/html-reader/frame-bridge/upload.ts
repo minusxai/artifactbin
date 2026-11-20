@@ -1,4 +1,5 @@
-import {DEFAULT_UPLOAD_MAX_BYTES,ARTIFACT_ID_PATTERN} from '@artifactbin/contracts';
+import {DEFAULT_UPLOAD_MAX_BYTES} from '@artifactbin/contracts/upload-limits';
+import {ARTIFACT_ID_PATTERN} from '@artifactbin/contracts/artifact-reference';
 import type {FrameBridgeParentPayload,FrameBridgeFramePayload} from '../contract';
 type FileUploadRequest=Extract<FrameBridgeFramePayload,{kind:'upload-file'}>;
 /** Credential-free child requests can only reach this document's ordinary file door. Server rechecks linked provenance and live dataset insert authority. */

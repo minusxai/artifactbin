@@ -5,7 +5,7 @@ import { THEME_BOOTSTRAP_HASH, THEME_BOOTSTRAP_SCRIPT } from '@/lib/page-styles'
 import { personFaceBackground, personInitial } from '@/lib/ui-runtime/person-face';
 import { buildShelf, groupShelfByRecency, type ShelfRow } from '@/lib/shelf';
 import { domainPostPath } from '@/lib/http';
-import { CARD_RENDER_GENERATION } from '@artifactbin/contracts';
+import { CARD_RENDER_GENERATION } from '@artifactbin/contracts/og-card';
 
 /** A public file, as the profile page route answers it (`strip()` in app/api/page/profile). */
 interface ProfileFile {

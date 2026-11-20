@@ -22,8 +22,8 @@
  */
 import * as Y from 'yjs';
 import { openDocumentRegionStream } from './document-stream';
-import type { RegionFlushReply, RegionKind, RegionOpenReply, RegionRefusalBody, RegionStreamFrame, RegionUpdateReply } from '@artifactbin/contracts';
-import { REGION_UPDATE_MAX_BYTES } from '@artifactbin/contracts';
+import type { RegionFlushReply, RegionKind, RegionOpenReply, RegionRefusalBody, RegionStreamFrame, RegionUpdateReply } from '@artifactbin/contracts/region-sessions';
+import { REGION_UPDATE_MAX_BYTES } from '@artifactbin/contracts/region-sessions';
 import { liveBackoffDelay, type LiveStream, type LiveStreamOptions } from '@/lib/http/live-stream';
 
 /** Local updates within this window go as one request. */

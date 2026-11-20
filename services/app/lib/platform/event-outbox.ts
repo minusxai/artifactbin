@@ -1,5 +1,6 @@
 /** Source-side durability. The caller's transaction owns the action and envelope. */
-import type {EventEnvelope,EventPayload,EventVerb,ObjectKind,Queryable} from '@artifactbin/contracts';
+import type {EventEnvelope, EventPayload, EventVerb, ObjectKind} from '@artifactbin/contracts/events';
+import type {Queryable} from '@artifactbin/contracts/db';
 import type {Db} from './db';
 import {envelope,type EventObject,type EventSubject} from './events';
 import {services} from './services';

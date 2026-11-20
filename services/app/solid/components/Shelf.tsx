@@ -13,7 +13,7 @@ import FolderInput from 'lucide-solid/icons/folder-input';
 import Trash2 from 'lucide-solid/icons/trash-2';
 import { writeBrowserArtifact } from '@/lib/artifact-backend/browser-artifact-write';
 import { buildShelf, parentOfRow, type ShelfRow } from '@/lib/shelf';
-import { CARD_HEIGHT, CARD_RENDER_GENERATION, CARD_WIDTH } from '@artifactbin/contracts';
+import { CARD_HEIGHT, CARD_RENDER_GENERATION, CARD_WIDTH } from '@artifactbin/contracts/og-card';
 import { pageDataChanged } from '@/solid/lib/page-data-events';
 import { Badge, MicroLabel, timeAgo } from '../ui/ui';
 import { Tooltip } from '../ui/Tooltip';

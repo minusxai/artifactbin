@@ -20,7 +20,7 @@
  *    for the slash menu and the link dialog; `command` runs a toolbar or menu command in that editor. A blur keeps the
  *    state (pressing the toolbar blurs the editor).
  */
-import type { RegionFrameMessage, RegionKind, RegionParentMessage } from '@artifactbin/contracts';
+import type { RegionFrameMessage, RegionKind, RegionParentMessage } from '@artifactbin/contracts/region-sessions';
 import { createRegionClient, type RegionClient, type RegionClientEvents } from '@/lib/artifact-backend/region-http';
 import type { RegionMembership } from '@/lib/annotations/region-comment';
 

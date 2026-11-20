@@ -5,12 +5,12 @@
  * the app knows which engine runs; the guards, the caps and the wire live in the
  * package (services/contracts/src/sql.ts says what the service enforces).
  */
-import type { SqlService } from '@artifactbin/contracts';
+import type { SqlService } from '@artifactbin/contracts/sql';
 import { MAX_ROWS_LIMIT, QUERY_TIMEOUT_MS, services } from '@/lib/platform';
 import { queryBounds as bounds } from '@artifactbin/utils';
 
-export type { DryRunResult, MutationInput, MutationOutcome, MutationResult, QueryFailure, QueryOutcome, QueryPage, RunInput, RunManyInput, SqlQuery } from '@artifactbin/contracts';
-export { isQueryFailure } from '@artifactbin/contracts';
+export type { DryRunResult, MutationInput, MutationOutcome, MutationResult, QueryFailure, QueryOutcome, QueryPage, RunInput, RunManyInput, SqlQuery } from '@artifactbin/contracts/sql';
+export { isQueryFailure } from '@artifactbin/contracts/sql';
 
 export const runQueries: SqlService['run'] = (input, context) => services().sql.run(input, context);
 export const runManyQueries: SqlService['runMany'] = (input, context) => services().sql.runMany(input, context);

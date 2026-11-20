@@ -6,7 +6,7 @@
  * request scope. Without request identity each envelope counts separately. sse_connect has no log verb.
  */
 import { createHash } from 'crypto';
-import type { EventEnvelope, EventVerb } from '@artifactbin/contracts';
+import type { EventEnvelope, EventVerb } from '@artifactbin/contracts/events';
 import { forwardedFor, identifyClient } from '../accounts';
 import { ANALYTICS_SECRET, TRUSTED_PROXY_HOPS, currentHeaders, emit, envelope, services, type EventSubject } from '../platform';
 

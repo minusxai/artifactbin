@@ -1,5 +1,6 @@
 import http from 'node:http';
-import { SERVICE_AUTH_HEADER, SQL_QUERY_MAX_MS, SQL_WALL_OVERHEAD_MS, SQL_WALL_HEADER, sqlTimeout, type SqlCallContext } from '@artifactbin/contracts';
+import { SERVICE_AUTH_HEADER } from '@artifactbin/contracts/routes';
+import { SQL_QUERY_MAX_MS, SQL_WALL_OVERHEAD_MS, SQL_WALL_HEADER, sqlTimeout, type SqlCallContext } from '@artifactbin/contracts/sql';
 import { collectNodeBody } from './body';
 
 /** JSON with a Set on the wire as an array — a Set stringifies to `{}` and binds nothing, which is a bug this was found by. */

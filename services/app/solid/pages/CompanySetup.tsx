@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 import { createSignal, Show, type JSX } from 'solid-js';
-import type { DeploymentState, GroupSummary } from '@artifactbin/contracts';
+import type { DeploymentState, GroupSummary } from '@artifactbin/contracts/groups';
 import { Button } from '../ui/Button';
 import { Field } from '../ui/Field';
 import { Select } from '../ui/Select';

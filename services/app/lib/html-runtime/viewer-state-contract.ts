@@ -1,4 +1,4 @@
-import type { HtmlJsonObject } from '@artifactbin/contracts';
+import type { HtmlJsonObject } from '@artifactbin/contracts/html-page';
 import type { StatePort, StoreReceipt } from './apollo/apollo-contracts';
 export interface ViewerStateOptions {
   /** The page's defaults (its state block). The document is these with the viewer's overrides over them (./viewer-overrides). */

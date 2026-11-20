@@ -12,7 +12,7 @@
 import { createHash, createHmac, randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { parse, type DefaultTreeAdapterMap } from 'parse5';
-import { fileContentType } from '@artifactbin/contracts';
+import { fileContentType } from '@artifactbin/contracts/file-types';
 import { inferColumns } from '@artifactbin/utils/shape';
 import { planPublicationBundle } from '@/lib/html-publication-bundle';
 import { coerceRows, parseCsv } from '@/lib/data-ingest';

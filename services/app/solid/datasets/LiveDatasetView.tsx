@@ -6,7 +6,7 @@
  * and why, on an install whose datasets may not have their own connection: `ownConnections: false`).
  */
 import { createResource, createSignal, For, Show, type JSX } from 'solid-js';
-import { OWN_CONNECTIONS_OFF, type ConnectorSchema } from '@artifactbin/contracts';
+import { OWN_CONNECTIONS_OFF, type ConnectorSchema } from '@artifactbin/contracts/connectors';
 import { apiRequest } from '../lib/api';
 import { Checkbox } from '../ui/Checkbox';
 import { Panel } from '../ui/Panel';

@@ -15,7 +15,7 @@
  * draft's own code, 429 `browser_busy` (checks already running; retry when they finish) or `rate_limited` (this
  * hour's checks spent), 503 `check_unavailable`. Never cached.
  */
-import { SERVICE_PAYLOAD_LIMIT } from '@artifactbin/contracts';
+import { SERVICE_PAYLOAD_LIMIT } from '@artifactbin/contracts/payload-limit';
 import { BodyTooLargeError, readBody } from '@artifactbin/utils';
 import { draftCheckRateLimited, draftChecksPerHour, refundDraftCheck } from '@/lib/allowances';
 import { requestActor } from '@/lib/authentication';

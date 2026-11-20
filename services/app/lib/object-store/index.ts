@@ -13,7 +13,7 @@
  * CI with no external service, which is the same promise PGLite makes.
  */
 import {atomicWrite} from '@artifactbin/utils/node/atomic-file';
-import type { RenderUploadRequest } from '@artifactbin/contracts';
+import type { RenderUploadRequest } from '@artifactbin/contracts/browser';
 import { createRequire } from 'node:module';
 import { createHash, randomBytes } from 'crypto';
 import { mkdir, open, readFile, rm } from 'fs/promises';

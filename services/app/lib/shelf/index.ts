@@ -10,7 +10,7 @@
 // TYPE-ONLY, so the module stays runtime-pure: the visibility vocabulary is
 // declared once in lib/artifacts and re-listing it here would be the second
 // spelling this codebase keeps refusing.
-import type { Visibility } from '@artifactbin/contracts';
+import type { Visibility } from '@artifactbin/contracts/sharing';
 
 /**
  * THE FOLDER A ROW SITS IN, from either half of the placement wire.

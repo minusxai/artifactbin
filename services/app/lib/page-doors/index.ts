@@ -4,8 +4,10 @@
  */
 import {deadlineStep} from './deadline';
 import {pageVerifier} from './verify';
-import {ACTOR_HEADER,REVALIDATE_ACTOR_HEADER,SQL_READ_LIMITS,type HtmlDatasetLink,type HtmlPageVersion} from '@artifactbin/contracts';
-import {sqlReadFailure,type SqlFailureCode} from '@artifactbin/contracts';
+import {ACTOR_HEADER, REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts/actor';
+import {SQL_READ_LIMITS} from '@artifactbin/contracts/sql';
+import type {HtmlDatasetLink, HtmlPageVersion} from '@artifactbin/contracts/html-page';
+import {sqlReadFailure, type SqlFailureCode} from '@artifactbin/contracts/sql-failures';
 import { ANONYMOUS_ACTOR, type AccessActor } from '@/lib/accounts';
 import { canReadArtifact, getArtifactHeaderById, accessMoved, type ArtifactRow } from '@/lib/artifacts';
 import {readHtmlPage} from '@/lib/html-publication';

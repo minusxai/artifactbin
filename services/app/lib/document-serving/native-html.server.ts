@@ -11,7 +11,7 @@ import { etagOf, publicRevalidatedResponse } from '@/lib/http';
 const JS='application/javascript; charset=utf-8';
 import type { ArtifactRow } from '@/lib/artifacts';
 import { scriptFingerprint } from '@/lib/html-autofix';
-import type { HtmlPageLink } from '@artifactbin/contracts';
+import type { HtmlPageLink } from '@artifactbin/contracts/html-page';
 import { buildDocumentCsp, markupCsp,appendCspExtensions } from '@/lib/page-styles';
 
 import {EMPTY_CSP_EXTENSIONS,type CspExtensions} from '@/lib/document';

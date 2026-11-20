@@ -1,4 +1,4 @@
-import type { RegionCaret } from '@artifactbin/contracts';
+import type { RegionCaret } from '@artifactbin/contracts/region-sessions';
 import type { PresenceCursor, PresenceFrame, PresenceGeometry, PresenceRange, PresenceViewer } from './contract';
 /** A reader announces itself every heartbeat; it stays on the roster for three, so two lost beats never drop it. */
 export const PRESENCE_HEARTBEAT_MS = 15_000;

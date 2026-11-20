@@ -3,7 +3,7 @@
  * drafts, their dashboard list and their tokens with what each one published. Identity (lib/accounts)
  * knows who a person is; these read the artifact tables on that person's behalf.
  */
-import type { ShareRole } from '@artifactbin/contracts';
+import type { ShareRole } from '@artifactbin/contracts/sharing';
 // The trash gate (lib/artifacts LIVE_ARTIFACT_SQL) is a VALUE here rather
 // than an inherited predicate: these listings build their own statements
 // instead of going through the row-loading seam, so each one names the gate.

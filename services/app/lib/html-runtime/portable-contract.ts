@@ -1,6 +1,6 @@
-import type { HtmlJsonObject } from '@artifactbin/contracts';
-import type {PortableIdentity} from '@artifactbin/contracts';
-export type {PortableIdentity} from '@artifactbin/contracts';
+import type { HtmlJsonObject } from '@artifactbin/contracts/html-page';
+import type {PortableIdentity} from '@artifactbin/contracts/portable-document';
+export type {PortableIdentity} from '@artifactbin/contracts/portable-document';
 /** Canonical author bytes are independent of the live DOM and bootstrap code. */
 export interface PortableDocument {
   version: 1;

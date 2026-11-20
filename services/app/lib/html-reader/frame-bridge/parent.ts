@@ -1,4 +1,5 @@
-import {isCellKey,REGION_UPDATE_MAX_BYTES,type RegionCaret,type RegionFrameMessage,type RegionParentMessage,type UploadContext} from '@artifactbin/contracts';
+import {isCellKey, REGION_UPDATE_MAX_BYTES, type RegionCaret, type RegionFrameMessage, type RegionParentMessage} from '@artifactbin/contracts/region-sessions';
+import type {UploadContext} from '@artifactbin/contracts/dataset-upload';
 import {isRegionId,isRegionPosition} from '@/lib/html-presence/model';
 /** Validation/body transport is an intentional lazy browser chunk, loaded only by an admitted upload call. */
 const loadUploadRelay=()=>import('./upload');

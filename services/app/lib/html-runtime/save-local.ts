@@ -2,7 +2,7 @@ import {downloadPortableCopy,serializePortableCopy} from './browser-portable';
 import {recoverPortableSource} from './portable-source';
 import {readPortableDocument,hasPortableDocument} from './portable';
 import type {PortableDocument,PortableIdentity} from './portable-contract';
-import type {HtmlJsonObject} from '@artifactbin/contracts';
+import type {HtmlJsonObject} from '@artifactbin/contracts/html-page';
 export interface SaveLocalDocumentOptions {
  win:Window;
  identity?:PortableIdentity;

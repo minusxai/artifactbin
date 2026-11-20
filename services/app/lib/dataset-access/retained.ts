@@ -4,7 +4,7 @@ import type {DatasetRowPort,DatasetSnapshot} from './types';
 import {ID_COLUMN,rowIdsForObject,tableIdentity} from './model';
 import {authorizedDatasetRead,resolveDatasetBinding,datasetBindingCatalog} from './authority';
 import {canRunSql,datasetReadAccess,datasetView,viewCatalog} from '@/lib/dataset-permissions';
-import type {Queryable} from '@artifactbin/contracts';
+import type {Queryable} from '@artifactbin/contracts/db';
 import {hasuraNames,storedConfiguration} from '@/lib/datasets/graphql-names';
 import {liveAccessFacts,memoAccessFacts,type AccessFacts} from '@/lib/artifact-access';
 import type {AccessActor} from '@/lib/accounts';

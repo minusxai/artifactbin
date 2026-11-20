@@ -20,7 +20,7 @@
  */
 import sharp from 'sharp';
 import { PUBLIC_BASE_URL } from '../platform';
-import { DEFAULT_UPLOAD_MAX_BYTES } from '@artifactbin/contracts';
+import { DEFAULT_UPLOAD_MAX_BYTES } from '@artifactbin/contracts/upload-limits';
 import { replaceUserImageKey } from '@/lib/accounts';
 import { objectKey, objectStore, type ObjectStore } from '../object-store/index';
 import { sniffImageType } from '../web-ingest';

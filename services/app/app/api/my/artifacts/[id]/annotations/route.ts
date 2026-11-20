@@ -1,4 +1,4 @@
-import { parseHtmlNodeAnchor } from '@artifactbin/contracts';
+import { parseHtmlNodeAnchor } from '@artifactbin/contracts/html-annotation';
 import { parseCommentViewState } from '../../../../../../../contracts/src/comment-view-state';
 import {durableMutation,type MutationReceipt} from '@/lib/artifacts';
 /**
@@ -22,7 +22,7 @@ import { sessionActor, browserActor } from '@/lib/authentication';
 import { capabilityGuard } from '@/lib/artifacts';
 import { json, readJson, Reply, toResponse } from '@/lib/http';
 import { ownerUsername } from '@/lib/accounts';
-import { COMMENT_TARGET_REMOVED } from '@artifactbin/contracts';
+import { COMMENT_TARGET_REMOVED } from '@artifactbin/contracts/annotation-comment';
 
 
 /**

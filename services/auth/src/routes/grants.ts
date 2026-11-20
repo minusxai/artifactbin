@@ -5,7 +5,12 @@
  * `issueGrant`), where a group's sign-in the rule no longer holds throws `GroupSignInRefused`, never an outage.
  */
 import { BodyTooLargeError, readBody } from '@artifactbin/utils';
-import { API_RESOURCE_PATH, IdentityError, INTERNAL_MINT_PATH, type GroupPrincipalRole, type ServiceAudience, type Upstream } from '@artifactbin/contracts';
+import { API_RESOURCE_PATH } from '@artifactbin/contracts/cli-auth';
+import { IdentityError } from '@artifactbin/contracts/identity-module';
+import { INTERNAL_MINT_PATH } from '@artifactbin/contracts/routes';
+import type { GroupPrincipalRole } from '@artifactbin/contracts/actor';
+import type { ServiceAudience } from '@artifactbin/contracts/service-audiences';
+import type { Upstream } from '@artifactbin/contracts/part';
 import { ACCESS_TOKEN_TTL_SECONDS, ARTIFACT_SCOPE, type OAuthStore } from '../identity/oauth';
 import type { LiveGroupSignIn } from '../identity/bearer';
 import type { SessionStore } from '../parts';

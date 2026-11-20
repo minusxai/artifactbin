@@ -22,7 +22,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import type { Hono } from 'hono';
 import { getPath } from 'hono/utils/url';
-import { CACHE_CONTROL, PUBLIC_FILES_PREFIX, publicFileClass } from '@artifactbin/contracts';
+import { CACHE_CONTROL, PUBLIC_FILES_PREFIX, publicFileClass } from '@artifactbin/contracts/url-space';
 import { precompressedStatic } from './content-encoding';
 
 /** Hono's request path, without public URL rewrites. */

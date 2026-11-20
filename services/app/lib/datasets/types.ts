@@ -1,4 +1,4 @@
-import type { ArtifactFormat } from '@artifactbin/contracts';
+import type { ArtifactFormat } from '@artifactbin/contracts/artifact-format';
 import type { DatasetColumn, Row } from '@/lib/dataflow';
 
 /** Public, versioned catalog of stored tables and SQL models. */

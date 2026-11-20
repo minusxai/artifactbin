@@ -17,7 +17,7 @@ import { ID_RE } from '@/lib/platform';
 import { admitRead, getArtifactById, refusingUnservable, canReadArtifact, archivedVersionFor, servedRow } from '@/lib/artifacts';
 import { nativeHtmlDocument, nativeHtmlTitle } from '@/lib/document-serving';
 import { offlinePageSqlData } from '@/lib/dataset-access';
-import type { HtmlPageLink, HtmlDatasetLink } from '@artifactbin/contracts';
+import type { HtmlPageLink, HtmlDatasetLink } from '@artifactbin/contracts/html-page';
 
 const OFFLINE_FILE_MAX_BYTES = 25 * 1024 * 1024;
 /** The most the rows an offline copy's `sql` reads (lib/dataset-access offline-sql) may take; past it the copy carries none. */

@@ -6,12 +6,12 @@
  * down, so artifacts never reaches the annotation store or the remote agents.
  */
 import { MembershipError, type MutationReceipt, type ArtifactRow, checkpointLiveRegions, currentPage, snapshotForReader, snapshotHeadFor } from '@/lib/artifacts';
-import { canEdit } from '@artifactbin/contracts';
+import { canEdit } from '@artifactbin/contracts/sharing';
 import { artifactToWire } from '@/lib/artifact-wire';
 import type { AccessActor } from '@/lib/accounts';
 import { datasetReadAccess, viewDatasetWire } from '@/lib/dataset-permissions';
 import { Reply, reply } from '../http';
-import type { AnnotationAuthor } from '@artifactbin/contracts';
+import type { AnnotationAuthor } from '@artifactbin/contracts/annotation-comment';
 import { AnnotationAttachmentError, AnnotationRevisionError, actOnAnnotationFor, annotationsWireForRow, countOpenAnnotations, editAnnotationCommentFor, setCommentReactionFor, type AnnotationAction, type AnnotationEdit } from './store';
 
 /**

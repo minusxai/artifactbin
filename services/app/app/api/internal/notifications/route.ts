@@ -1,5 +1,5 @@
 import {timingSafeEqual} from 'node:crypto';
-import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts';
+import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts/routes';
 import {INTERNAL_SERVICE_SECRET} from '@/lib/platform';
 import {getDb} from '@/lib/platform';
 import { membershipInbox } from '@/lib/notifications';

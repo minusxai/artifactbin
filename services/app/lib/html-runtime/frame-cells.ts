@@ -9,7 +9,7 @@
  *  - A page that cannot write cells (no app parent: a portable copy, a page opened outside the app) answers every
  *    connect with `closed` `readonly` at once.
  */
-import { CELL_READONLY, isCellKey, type RegionFrameMessage, type RegionParentMessage } from '@artifactbin/contracts';
+import { CELL_READONLY, isCellKey, type RegionFrameMessage, type RegionParentMessage } from '@artifactbin/contracts/region-sessions';
 
 export interface CellPeer {
   /** A session opened: the client id to write under, the merged state and its sequence. */

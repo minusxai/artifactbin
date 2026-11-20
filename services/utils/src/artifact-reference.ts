@@ -1,4 +1,4 @@
-import {ARTIFACT_ID_PATTERN,ARTIFACT_SEGMENT_PATTERN} from '@artifactbin/contracts';
+import {ARTIFACT_ID_PATTERN, ARTIFACT_SEGMENT_PATTERN} from '@artifactbin/contracts/artifact-reference';
 
 /** `/a/<segment>` or `/@<username>/<segment>`; group 1 is the segment, group 2 whatever follows it. */
 const ARTIFACT_PATH_PATTERN=/^\/(?:a|@[^/]+)\/([^/]+)(\/.*)?$/;

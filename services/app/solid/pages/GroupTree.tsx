@@ -13,7 +13,7 @@
  * refusal is shown in plain words (`groupTreeMessage`).
  */
 import { createSignal, For, Show, type JSX } from 'solid-js';
-import type { GroupDetail, GroupRelative, GroupSummary } from '@artifactbin/contracts';
+import type { GroupDetail, GroupRelative, GroupSummary } from '@artifactbin/contracts/groups';
 import { apiRequest } from '../lib/api';
 import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';

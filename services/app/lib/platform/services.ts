@@ -21,8 +21,12 @@
  * `AUTH__SERVICE_URL` it is the auth host over HTTP; otherwise the identity store runs here, on this process's own
  * database (a single-process install and the tests), plain SQL that every image can load.
  */
-import { SQL_WALL_OVERHEAD_MS } from '@artifactbin/contracts';
-import type { HumanSessionAuthority, BrowserService, EventsService, IdentityService, SqlService, TransactionalQueryable } from '@artifactbin/contracts';
+import { SQL_WALL_OVERHEAD_MS } from '@artifactbin/contracts/sql';
+import type { HumanSessionAuthority } from '@artifactbin/contracts/actor';
+import type { BrowserService } from '@artifactbin/contracts/browser';
+import type { EventsService } from '@artifactbin/contracts/events';
+import type { IdentityService, TransactionalQueryable } from '@artifactbin/contracts/identity-module';
+import type { SqlService } from '@artifactbin/contracts/sql';
 import { createIdentityStore } from '@artifactbin/auth';
 import { humanSessionClient, identityClient, browserClient, eventsClient, noopBrowser, noopEvents, noopSql, sqlClient } from '@artifactbin/utils';
 import { AUTH_SERVICE_URL, BROWSER_SERVICE_URL, EVENTS_SERVICE_URL, INTERNAL_SERVICE_SECRET, QUERY_TIMEOUT_MS, SQL_SERVICE_URL, TEST_DOMAIN } from './config';

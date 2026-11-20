@@ -4,7 +4,7 @@
  * change only with a deploy: revalidated by a strong ETag, like the other `/af/` documents.
  */
 import { createHash } from 'node:crypto';
-import { URL_SPACE } from '@artifactbin/contracts';
+import { URL_SPACE } from '@artifactbin/contracts/url-space';
 import { matchingTag } from '@/lib/http';
 
 const body = JSON.stringify(URL_SPACE);

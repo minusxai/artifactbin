@@ -16,7 +16,8 @@
  * NO rate limit here, on purpose — a door is enforced in exactly one place:
  * the proxy counts the OAuth doors in front of the approval that reaches this.
  */
-import {API_RESOURCE_PATH,ARTIFACT_SCOPE,isLoopbackName} from '@artifactbin/contracts';
+import {API_RESOURCE_PATH, ARTIFACT_SCOPE} from '@artifactbin/contracts/cli-auth';
+import {isLoopbackName} from '@artifactbin/contracts/loopback-names';
 import { SMALL_BODY_LIMIT, baseUrl, json, readJson } from '@/lib/http';
 import { agentContract } from '@/lib/agent-copy';
 import { canAuthenticateUser } from '@/lib/user-kinds';

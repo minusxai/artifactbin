@@ -3,7 +3,7 @@
  * transport before opening the new one, preserving both dataset and per-region catch-up positions.
  * This boundary has no Yjs or editor dependency, so ordinary readers stay lightweight.
  */
-import { REGION_STREAM_EVENT, isCellKey } from '@artifactbin/contracts';
+import { REGION_STREAM_EVENT, isCellKey } from '@artifactbin/contracts/region-sessions';
 import { openLiveStream, type LiveStream, type LiveStreamOptions } from '@/lib/http/live-stream';
 interface Consumer { options:LiveStreamOptions; regions:boolean }
 interface Hub { consumers:Set<Consumer>; stream:LiveStream|null; cursor:string; restart():void }

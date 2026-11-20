@@ -7,7 +7,7 @@
  * naming what it found and how to fix it: no rule is guessed. Owner and editor decisions never read it
  * (admin-equivalent), so an owner can still open the dataset and save a version 3 policy over it.
  */
-import { DATASET_RULE_ROLES, type DatasetPermissions, type DatasetTableName } from '@artifactbin/contracts';
+import { DATASET_RULE_ROLES, type DatasetPermissions, type DatasetTableName } from '@artifactbin/contracts/dataset-permissions';
 import { validateDatasetPermissions } from '@artifactbin/utils/dataset-permissions';
 
 export interface StoredPolicyInput {

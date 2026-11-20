@@ -1,5 +1,5 @@
 /** Sandboxed document policy: explicit current document doors and public assets, never general API access. */
-import { BASEMAP_PATH } from '@artifactbin/contracts';
+import { BASEMAP_PATH } from '@artifactbin/contracts/basemap';
 import { FONT_FILES, FONT_STYLES, MODULE_CDNS } from '@/lib/html-reader/document-sources';
 import { CSP_DIRECTIVES, EMPTY_CSP_EXTENSIONS, type CspDirective, type CspExtensions } from '@/lib/document';
 /** Where each kind of subresource may come from — content-independent. */

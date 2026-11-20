@@ -1,4 +1,4 @@
-import { canRead, canAnnotate, type ArtifactRole } from '@artifactbin/contracts';
+import { canRead, canAnnotate, type ArtifactRole } from '@artifactbin/contracts/sharing';
 
 /** Reading a conversation follows document admission; writing also needs an account and a live head. */
 export interface CommentAccess {

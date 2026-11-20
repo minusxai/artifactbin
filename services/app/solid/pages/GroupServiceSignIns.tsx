@@ -7,7 +7,7 @@
  * nor when no configured service may be approved and none is.
  */
 import { createSignal, For, Show, type JSX } from 'solid-js';
-import type { GroupSummary } from '@artifactbin/contracts';
+import type { GroupSummary } from '@artifactbin/contracts/groups';
 import { apiRequest } from '../lib/api';
 import { usePageData } from '../lib/use-page-data';
 import { dateTime } from '../lib/format';

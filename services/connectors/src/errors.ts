@@ -3,7 +3,7 @@
  * own error becomes one through `driverFailure`, which keeps the database's SQLSTATE and message, maps sign-in,
  * TLS, network and timeout failures to their codes, and removes every secret of the connection from the text.
  */
-import type { ConnectorError, ConnectorErrorCode } from '@artifactbin/contracts';
+import type { ConnectorError, ConnectorErrorCode } from '@artifactbin/contracts/connectors';
 
 export class ConnectorFailure extends Error implements ConnectorError {
   constructor(readonly code: ConnectorErrorCode, message: string) { super(message); this.name = 'ConnectorFailure'; }

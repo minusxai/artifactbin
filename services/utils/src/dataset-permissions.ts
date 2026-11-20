@@ -1,27 +1,6 @@
-import {
-  DATASET_ADMIN_ROLES,
-  DATASET_COLUMN_OPERATORS,
-  DATASET_ID_OPERATORS,
-  DATASET_PERMISSION_LIMITS,
-  DATASET_PERMISSION_TEMPLATES,
-  DATASET_ROW_ID,
-  DATASET_RULE_ROLES,
-  DATASET_SESSION_VARIABLES,
-  type DatasetBoolExp,
-  type DatasetPermissionEntry,
-  type DatasetPermissions,
-  type DatasetPermissionsIssue,
-  type DatasetPermissionsReadBack,
-  type DatasetPermissionsResult,
-  type DatasetPermissionsShape,
-  type DatasetPermissionWarning,
-  type DatasetPermissionWarningCode,
-  type DatasetRuleRole,
-  type DatasetTableName,
-  type DatasetTablePermissions,
-  type Scalar,
-  type Visibility,
-} from '@artifactbin/contracts';
+import { DATASET_ADMIN_ROLES, DATASET_COLUMN_OPERATORS, DATASET_ID_OPERATORS, DATASET_PERMISSION_LIMITS, DATASET_PERMISSION_TEMPLATES, DATASET_ROW_ID, DATASET_RULE_ROLES, DATASET_SESSION_VARIABLES, type DatasetBoolExp, type DatasetPermissionEntry, type DatasetPermissions, type DatasetPermissionsIssue, type DatasetPermissionsReadBack, type DatasetPermissionsResult, type DatasetPermissionsShape, type DatasetPermissionWarning, type DatasetPermissionWarningCode, type DatasetRuleRole, type DatasetTableName, type DatasetTablePermissions } from '@artifactbin/contracts/dataset-permissions';
+import type { Scalar } from '@artifactbin/contracts/sql';
+import type { Visibility } from '@artifactbin/contracts/sharing';
 
 /*
  * Version 3 dataset permissions (Hasura metadata shape): a strict validator that reports every

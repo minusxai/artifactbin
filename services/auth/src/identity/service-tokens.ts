@@ -17,7 +17,8 @@
  * accepts one, and an older verifier that knows only `vwt_` finds no service token and no bearer: not active. It lives
  * as a person's does but never past its parent, and verifies only for a service still opted in.
  */
-import {SERVICE_TOKEN_TTL_SECONDS,type GroupPrincipalRole,type IssuedServiceToken,type ServiceAudience,type ServiceTokenParent} from '@artifactbin/contracts';
+import {SERVICE_TOKEN_TTL_SECONDS, type IssuedServiceToken, type ServiceAudience, type ServiceTokenParent} from '@artifactbin/contracts/service-audiences';
+import type {GroupPrincipalRole} from '@artifactbin/contracts/actor';
 import {signGroupToken,signToken,signedTokenKey,verifyGroupToken,verifyToken,type GroupSignedTokenClaims,type SignedTokenClaims,type SignedTokenKind} from './signed-tokens';
 
 const SERVICE_TOKEN: SignedTokenKind = {prefix: 'vwt_', keyInfo: 'identity-viewer-token', ttlSeconds: SERVICE_TOKEN_TTL_SECONDS};

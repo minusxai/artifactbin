@@ -2,7 +2,7 @@
 import { retryingFetch } from '@/lib/http/retry-lazily';
 import { createEffect, createSignal, For, onCleanup, Show, type JSX } from 'solid-js';
 import Users from 'lucide-solid/icons/users';
-import type { MembershipInput, MembershipState } from '@artifactbin/contracts';
+import type { MembershipInput, MembershipState } from '@artifactbin/contracts/membership';
 import { Button } from '../ui/Button';
 import { Checkbox } from '../ui/Checkbox';
 import { Combobox } from '../ui/Combobox';

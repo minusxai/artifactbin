@@ -1,7 +1,9 @@
 import type { AccessActor } from '@/lib/accounts';
 import type { ArtifactRow } from '@/lib/artifacts';
 import type { CatalogRowView, DatasetCatalog } from '@/lib/datasets';
-import type { DatasetRole, HtmlDatasetLink, Scalar } from '@artifactbin/contracts';
+import type { DatasetRole } from '@artifactbin/contracts/dataset-permissions';
+import type { HtmlDatasetLink } from '@artifactbin/contracts/html-page';
+import type { Scalar } from '@artifactbin/contracts/sql';
 import type { HasuraTableNames } from '@/lib/datasets/graphql-names';
 export interface DatasetRowIdentitySidecar {objectKey:string;ids:readonly string[]}
 /** Authorized, revision-specific data. Policy identity changes invalidate cursors. */

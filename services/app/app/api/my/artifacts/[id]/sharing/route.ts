@@ -6,7 +6,7 @@ import {userPageUrl} from '@/lib/user-pages';
  */
 import { capabilityGuard, getArtifactFor, getSharingArtifactFor, getSharingFor, updateSharingFor } from '@/lib/artifacts';
 import { parseAccessValue, parseLinkRoleValue, parseShareEntries, parseVisibilityValue } from '@/lib/artifact-wire';
-import type { SharingPatch } from '@artifactbin/contracts';
+import type { SharingPatch } from '@artifactbin/contracts/sharing';
 import { browserActor } from '@/lib/authentication';
 import { shareTargetsRefusal, TEST_ACCOUNT_RESTRICTED } from '@/lib/accounts';
 import { json, readJson, Reply, toResponse } from '@/lib/http';

@@ -9,7 +9,8 @@
  * by its own code, which the server never runs. Null when there is nothing to carry, the fences failed, or the rows
  * would not fit `maxBytes`: the copy then carries no data and its `sql` says so.
  */
-import type { ColumnType, HtmlDatasetLink, Row } from '@artifactbin/contracts';
+import type { ColumnType, Row } from '@artifactbin/contracts/sql';
+import type { HtmlDatasetLink } from '@artifactbin/contracts/html-page';
 import type { AccessActor } from '@/lib/accounts';
 import { readMountRows } from '@/lib/datasets';
 import { loadLinked } from './linked';

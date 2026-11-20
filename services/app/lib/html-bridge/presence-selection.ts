@@ -1,5 +1,5 @@
 import { visibleSelectionRects } from "./presence-selection-geometry";
-import { htmlTextFingerprint as selectionFingerprint } from '@artifactbin/contracts';
+import { htmlTextFingerprint as selectionFingerprint } from '@artifactbin/contracts/html-annotation';
 import type { PresenceRange, PresenceViewer } from '../html-presence';
 import {presenceGeometry} from '../html-presence/model';
 type SelectionPresence = {ranges: PresenceRange[]};

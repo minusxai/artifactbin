@@ -8,8 +8,8 @@
 import {createHmac,timingSafeEqual} from 'node:crypto';
 import type {ArtifactRow} from '@/lib/artifacts';
 import {listedFolderChild,parentOf} from '@/lib/artifacts';
-import {canAnnotate} from '@artifactbin/contracts';
-import type {GroupCollection,GroupCollectionInput,GroupCollectionItem} from '@artifactbin/contracts';
+import {canAnnotate} from '@artifactbin/contracts/sharing';
+import type {GroupCollection, GroupCollectionInput, GroupCollectionItem} from '@artifactbin/contracts/groups';
 import type {AccessActor} from '@/lib/accounts';
 import {LIVE_ARTIFACT_SQL,effectiveRole,roleWithoutLink} from '@/lib/artifact-access';
 import {GroupError,getGroupRole,groupChain} from '@/lib/groups';

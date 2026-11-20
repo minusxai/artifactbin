@@ -8,7 +8,8 @@
  * (`group_principals`; otherwise 403 `GROUP_PRINCIPALS_NOT_ACCEPTED`): a group's service token (../identity/service-tokens
  * `signGroupServiceToken`), never past the group sign-in, which is read again here by the bearer read's own rule.
  */
-import { ANONYMOUS, GROUP_PRINCIPALS_NOT_ACCEPTED, SERVICE_TOKEN_PATH, isGroupActor, isGroupPrincipalRole, type ServiceAudience, type ServiceTokenParent } from '@artifactbin/contracts';
+import { ANONYMOUS, isGroupActor, isGroupPrincipalRole } from '@artifactbin/contracts/actor';
+import { GROUP_PRINCIPALS_NOT_ACCEPTED, SERVICE_TOKEN_PATH, type ServiceAudience, type ServiceTokenParent } from '@artifactbin/contracts/service-audiences';
 import { ARTIFACT_SCOPE } from '../identity/oauth';
 import { signGroupServiceToken, signServiceToken } from '../identity/service-tokens';
 import type { LiveGroupSignIn } from '../identity/bearer';

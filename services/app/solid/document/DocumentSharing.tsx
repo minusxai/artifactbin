@@ -1,7 +1,9 @@
 /* @jsxImportSource solid-js */
 import { retryingFetch } from '@/lib/http/retry-lazily';
 import { createEffect, createMemo, createSignal, For, lazy, onCleanup, onMount, Show, Suspense, type JSX } from 'solid-js';
-import { ARTIFACT_ID_PATTERN, CARD_RENDER_GENERATION, type DatasetAccess, SHARE_ROLE_LABEL, SHARE_ROLES, type ShareEntry, type ShareRole, type SharingPatch, type Visibility } from '@artifactbin/contracts';
+import { ARTIFACT_ID_PATTERN } from '@artifactbin/contracts/artifact-reference';
+import { CARD_RENDER_GENERATION } from '@artifactbin/contracts/og-card';
+import { type DatasetAccess, SHARE_ROLE_LABEL, SHARE_ROLES, type ShareEntry, type ShareRole, type SharingPatch, type Visibility } from '@artifactbin/contracts/sharing';
 import { artifactEditPath } from '@/lib/http/urls';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import type { SharingVerdict } from '@/lib/workspace';

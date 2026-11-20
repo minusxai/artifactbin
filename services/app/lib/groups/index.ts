@@ -1,5 +1,5 @@
 import {admissionPolicyOf} from '@artifactbin/auth';
-import {isGroupRole} from '@artifactbin/contracts';
+import {isGroupRole} from '@artifactbin/contracts/groups';
 import {GroupError} from './errors';
 import {groupAttempt,recordGroupChanges,type GroupMutationActor} from './mutations';
 import {groupAdminSql,subtreeSql} from './hierarchy';
@@ -10,10 +10,11 @@ import {groupAdminSql,subtreeSql} from './hierarchy';
  * after it commits (./mutations). Reads join the shared tables directly. Membership and links never derive
  * authority from accounts or artifacts; users and groups share one handle namespace (identity's).
  */
-import {normalizeCreateGroup} from '@artifactbin/contracts';
-import type {UpdateGroupInput,AccountPreferences,CreateGroupInput,DefaultDestination,GroupAudienceMember,GroupDetail,GroupInvitation,GroupMember,GroupRelative,GroupRole,GroupSummary,Queryable as ContractQueryable} from '@artifactbin/contracts';
+import {normalizeCreateGroup} from '@artifactbin/contracts/groups';
+import type {UpdateGroupInput, AccountPreferences, CreateGroupInput, DefaultDestination, GroupAudienceMember, GroupDetail, GroupInvitation, GroupMember, GroupRelative, GroupRole, GroupSummary} from '@artifactbin/contracts/groups';
+import type {Queryable as ContractQueryable} from '@artifactbin/contracts/db';
 import { getDb, services, deploymentConfig, env, emit, serviceAudiences } from '../platform';
-import {groupSignInServiceConfigured} from '@artifactbin/contracts';
+import {groupSignInServiceConfigured} from '@artifactbin/contracts/service-audiences';
 export interface GroupRecord {id:string;handle:string;name:string;description:string;created_by:string;deleted_at:string|null;parent_id:string|null;}
 export {GroupError} from './errors';
 const summary=(group:GroupRecord,role:GroupRole|null):GroupSummary=>({id:group.id,handle:group.handle,name:group.name,description:group.description,role,parent_id:group.parent_id??null});

@@ -1,5 +1,5 @@
 import { getArtifactById } from '@/lib/artifacts';
-import { REVALIDATE_ACTOR_HEADER } from '@artifactbin/contracts';
+import { REVALIDATE_ACTOR_HEADER } from '@artifactbin/contracts/actor';
 import { requestOrSessionActor } from '@/lib/authentication';
 import {readJson,json} from '@/lib/http';
 import {LIVE_DATASET_REFUSAL, liveConnectionOf, catalogOf, datasetResponse, executeCatalog, DatasetError} from '@/lib/datasets';

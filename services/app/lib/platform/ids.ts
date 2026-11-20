@@ -16,7 +16,7 @@ import crypto from 'crypto';
 
 export const FILE_ID_LENGTH = 6;
 /** What an artifact id LOOKS like (6–12 of `[a-zA-Z0-9]`): the pure shape lives in contracts, so the browser checks it without node crypto. */
-export { ARTIFACT_ID_PATTERN as ID_RE } from '@artifactbin/contracts';
+export { ARTIFACT_ID_PATTERN as ID_RE } from '@artifactbin/contracts/artifact-reference';
 
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
 

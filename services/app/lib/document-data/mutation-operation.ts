@@ -1,4 +1,4 @@
-import type { Scalar } from '@artifactbin/contracts';
+import type { Scalar } from '@artifactbin/contracts/sql';
 import type { MutationReply } from '@/lib/artifacts';
 
 /** Canonical explicit request inputs for persistent document-action replay. */

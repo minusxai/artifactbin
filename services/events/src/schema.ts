@@ -9,7 +9,7 @@
  * see @artifactbin/contracts events.ts for why the object is always the thing
  * whose owner cares.
  */
-import type { Table } from '@artifactbin/contracts';
+import type { Table } from '@artifactbin/contracts/schema';
 
 export const DEFAULT_EVENTS_SCHEMA = 'events';
 

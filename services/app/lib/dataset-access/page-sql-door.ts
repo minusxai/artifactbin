@@ -31,8 +31,12 @@
  */
 import { createHash, randomUUID } from 'node:crypto';
 import { DatasetAccessError } from './errors';
-import { DATASET_SQL_WRITE_LIMITS, SQL_READ_LIMITS, type DatasetColumn, type DatasetMutationPolicy, type HtmlDatasetLink, type Row, type Scalar } from '@artifactbin/contracts';
-import { SQL_FAILURES, sqlReadFailure, type SqlAnswerSource, type SqlFailureCode } from '@artifactbin/contracts';
+import { DATASET_SQL_WRITE_LIMITS } from '@artifactbin/contracts/dataset-hasura';
+import { SQL_READ_LIMITS, type DatasetColumn, type Row, type Scalar } from '@artifactbin/contracts/sql';
+import type { DatasetMutationPolicy } from '@artifactbin/contracts/dataset-policy';
+import type { HtmlDatasetLink } from '@artifactbin/contracts/html-page';
+import { SQL_FAILURES, sqlReadFailure, type SqlFailureCode } from '@artifactbin/contracts/sql-failures';
+import type { SqlAnswerSource } from '@artifactbin/contracts/sql-source';
 import { analyzeSql } from '@artifactbin/sql/core';
 import type { AccessActor } from '@/lib/accounts';
 import { artifactState, completeMutationReceipt, durableMutation, getArtifactById, type ArtifactRow } from '@/lib/artifacts';

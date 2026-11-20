@@ -1,9 +1,6 @@
-import {
-  DATASET_ROW_ID,
-  type DatasetPolicy,
-  type PolicyPredicate,
-  type Scalar,
-} from '@artifactbin/contracts';
+import { DATASET_ROW_ID } from '@artifactbin/contracts/dataset-permissions';
+import type { DatasetPolicy, PolicyPredicate } from '@artifactbin/contracts/dataset-policy';
+import type { Scalar } from '@artifactbin/contracts/sql';
 
 const comparisons: Record<string, string> = {
   _eq: '=',

@@ -9,14 +9,9 @@
  *  - The decision's `identity` names the role, the policy revision, the session and the rules, for
  *    cursors and read fences: any change refuses a continuation.
  */
-import {
-  type DatasetRole,
-  type DatasetRuleRole,
-  type DatasetSelectPermission,
-  type DatasetTableName,
-  type Queryable,
-  type Scalar,
-} from '@artifactbin/contracts';
+import type { DatasetRole, DatasetRuleRole, DatasetSelectPermission, DatasetTableName } from '@artifactbin/contracts/dataset-permissions';
+import type { Queryable } from '@artifactbin/contracts/db';
+import type { Scalar } from '@artifactbin/contracts/sql';
 import type { AccessActor } from '@/lib/accounts';
 import { liveAccessFacts, transactionAccessFacts, type AccessFacts, type ArtifactRow } from '@/lib/artifact-access';
 import { catalogOf, DatasetError, LIVE_QUERY_TABLE, liveConnectionOf, loadDatasetRows, type CatalogRowView, type DatasetCatalog, type DatasetTable } from '@/lib/datasets';

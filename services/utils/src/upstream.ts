@@ -1,5 +1,6 @@
-import type { Actor, Part, Upstream } from '@artifactbin/contracts';
-import { ACTOR_HEADER } from '@artifactbin/contracts';
+import type { Actor } from '@artifactbin/contracts/actor';
+import type { Part, Upstream } from '@artifactbin/contracts/part';
+import { ACTOR_HEADER } from '@artifactbin/contracts/actor';
 import type { Hono } from 'hono';
 import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';

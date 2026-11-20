@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { TESTUSER_ERRORS, TESTUSER_LIMITS } from '@artifactbin/contracts';
+import { TESTUSER_ERRORS, TESTUSER_LIMITS } from '@artifactbin/contracts/testusers';
 import { createTestUser, getTestUserRow, listTestUsers } from '@/lib/accounts';
 import { eraseTestUser, sweepTestUsers } from './testuser-erase';
 import type { Operation } from './registry';

@@ -2,7 +2,8 @@ import {LiveRegionRefusal} from '@/lib/live-regions';
 import {planHtmlClone} from '@/lib/html-publication';
 import {authorizeDatasetBinding,DatasetBindingUnsupportedError} from '@/lib/dataset-access';
 import { newArtifactDestination, type ArtifactInput, artifactQuotaExceeded, type ArtifactRow, createArtifact, unservable } from '@/lib/artifacts';
-import type {ArtifactDestination, Visibility} from '@artifactbin/contracts';
+import type {ArtifactDestination} from '@artifactbin/contracts/groups';
+import type {Visibility} from '@artifactbin/contracts/sharing';
 import { identityForUser, type TokenHoldingActor } from '@/lib/accounts';
 import { DatasetError, liveConnectionOf } from '@/lib/datasets';
 import { assertDeclaredQueriesCopyable, LiveDatasetRefusal } from '@/lib/live-datasets';
@@ -165,7 +166,7 @@ async function forkInput(
   if(source.format==='html'){
     const {htmlLinks,htmlIdentity,htmlLibraries,...meta}=source.meta;
     try{
-      const plan=await planHtmlClone(actor,(htmlLinks??[]) as import('@artifactbin/contracts').HtmlPageLink[],{authorizeDataset:authorizeDatasetBinding});
+      const plan=await planHtmlClone(actor,(htmlLinks??[]) as import('@artifactbin/contracts/html-page').HtmlPageLink[],{authorizeDataset:authorizeDatasetBinding});
       return {...carried,format:'html',source:source.source,meta,...plan};
     }catch(error){
       if(error instanceof DatasetBindingUnsupportedError)return reply({error:error.code,hint:error.hint},400);

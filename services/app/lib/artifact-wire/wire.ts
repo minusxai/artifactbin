@@ -14,7 +14,7 @@ import {catalogOf, datasetCreateFields, liveConnectionOf, loadDatasetRows} from 
  * answer with the same shape (`edit_id` and refresh `warnings` included).
  */
 import type { AccessActor } from '@/lib/accounts';
-import { DATASET_ACCESS, SHARE_ROLES, type DatasetAccess, type ShareEntry, type ShareRole, type Visibility } from '@artifactbin/contracts';
+import { DATASET_ACCESS, SHARE_ROLES, type DatasetAccess, type ShareEntry, type ShareRole, type Visibility } from '@artifactbin/contracts/sharing';
 import { PARENT_REFUSED, artifactState, isParentRefusal, parentOf, resolveParent, type ArtifactRow, type ArtifactSummary, type ReplaceOpts, type VersionContent } from '@/lib/artifacts';
 import { rawUrl } from '@/lib/dataflow';
 import { ALLOW_PUBLIC_VISIBILITY, ID_RE } from '@/lib/platform';

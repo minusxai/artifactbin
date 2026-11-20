@@ -11,7 +11,7 @@
  * One indexed query (lib/platform/schema idx_artifacts_user_slug / idx_artifacts_group_slug), remembered per request:
  * the shell cache, the page's admission and the profile route ask it once between them.
  */
-import { canRead } from '@artifactbin/contracts';
+import { canRead } from '@artifactbin/contracts/sharing';
 import { titleSlug } from '@artifactbin/utils/artifact-reference';
 import type { AccessActor } from '@/lib/accounts';
 import { roleWithoutLink, type ArtifactRow } from '@/lib/artifact-access';

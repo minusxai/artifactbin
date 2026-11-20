@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { Operation, OpReply } from './registry';
-import type { MembershipInput } from '@artifactbin/contracts';
+import type { MembershipInput } from '@artifactbin/contracts/membership';
 import { changeMembership, MembershipError, membershipState, mentionCandidates } from '@/lib/artifacts';
 const errors=[{status:403,code:'membership_refused',fix:'Check document access, invitation eligibility and who may approve this request.'},{status:409,code:'membership_changed',fix:'Refresh membership state; you may have reached the 30 pending request limit.'}];
 async function response(work:()=>Promise<object>):Promise<OpReply>{try{return {status:200,body:{...await work()}};}catch(error){if(error instanceof MembershipError)return {status:error.status,body:{error:error.status===409?'membership_changed':'membership_refused',detail:error.message}};throw error;}}

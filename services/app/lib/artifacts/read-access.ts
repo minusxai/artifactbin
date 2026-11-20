@@ -5,7 +5,7 @@
  * (@/lib/artifact-access) over the rows this module reads.
  */
 import { can, refusalFor, effectiveRole, type AccessFacts, type ArtifactRow } from '@/lib/artifact-access';
-import type { Capability } from '@artifactbin/contracts';
+import type { Capability } from '@artifactbin/contracts/testusers';
 import type { Reply } from '@/lib/http';
 import type { AccessActor } from '@/lib/accounts';
 import { getArtifactById, getArtifactHeaderById, getArtifactIdentityById, getEditableArtifactFor, type ArtifactHeader, type ArtifactIdentity } from './rows';
@@ -13,7 +13,7 @@ import {servableDocument} from './servable';
 import { holdsCreatingToken } from '@/lib/artifact-access';
 import {liveConnectionOf,publicCatalogOf} from '@/lib/datasets';
 import {datasetExportable,datasetReadAccess,datasetRole} from '@/lib/dataset-permissions';
-import {canRead,canEdit,canAnnotate,type ArtifactRole} from '@artifactbin/contracts';
+import {canRead, canEdit, canAnnotate, type ArtifactRole} from '@artifactbin/contracts/sharing';
 
 /**
  * The ONE read-access decision, made by every public serving path before any

@@ -8,14 +8,15 @@
  * pool) reaches for the local one.
  */
 import { Pool } from 'pg';
-import type { EventsService, EventSink, EventSubscriber, Queryable } from '@artifactbin/contracts';
-import { EVENTS_ROUTES } from '@artifactbin/contracts';
+import type { EventsService, EventSink, EventSubscriber } from '@artifactbin/contracts/events';
+import type { Queryable } from '@artifactbin/contracts/db';
+import { EVENTS_ROUTES } from '@artifactbin/contracts/events';
 import { createEnv, jsonServer, log, serviceSecretForServer, SERVING_POOL, withPoolErrors, type JsonServer } from '@artifactbin/utils';
 import { createEvents, ensureEventsSchema } from './local';
 import { DEFAULT_EVENTS_SCHEMA, IDENTIFIER } from './schema';
 
 export type * from '@artifactbin/contracts';
-export { eventName } from '@artifactbin/contracts';
+export { eventName } from '@artifactbin/contracts/events';
 export { eventsClient } from '@artifactbin/utils';
 export { EVENTS_TABLES } from './schema';
 

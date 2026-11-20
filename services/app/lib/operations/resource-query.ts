@@ -6,7 +6,7 @@ import {catalogOf, executeCatalog, DatasetError, liveConnectionOf} from '../data
 import {liveDatasetSql} from '@/lib/live-datasets';
 import {datasetReadAccess, datasetView, sqlRefusal, sqlRefusalMessage, viewCatalog} from '../dataset-permissions';
 import {parseScalarValues, Reply, reply} from '../http';
-import type {TableResult} from '@artifactbin/contracts';
+import type {TableResult} from '@artifactbin/contracts/sql';
 
 /**
  * Query validation, pagination and authorization are independent of the transport. A long query re-asks an explicit

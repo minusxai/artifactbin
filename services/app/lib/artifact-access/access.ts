@@ -7,7 +7,7 @@ import type { AccessActor } from '@/lib/accounts';
 import { isLinkOnlyKind } from '@/lib/user-kinds';
 import { liveAccessFacts, type AccessFacts } from './access-facts';
 import type { ArtifactRow } from './scopes';
-import { ANONYMOUS_CEILING, canEdit, capRole, maxRole, type ArtifactRole } from '@artifactbin/contracts';
+import { ANONYMOUS_CEILING, canEdit, capRole, maxRole, type ArtifactRole } from '@artifactbin/contracts/sharing';
 
 /** Does this actor OWN the row — pure, the account by user_id, a bare token by token_id. */
 export function ownsArtifact(row: Pick<ArtifactRow, 'user_id' | 'token_id'> & Partial<Pick<ArtifactRow,'group_id'>>, actor: AccessActor): boolean {

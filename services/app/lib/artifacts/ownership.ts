@@ -1,6 +1,6 @@
-import {canEditGroupContent} from '@artifactbin/contracts';
+import {canEditGroupContent} from '@artifactbin/contracts/groups';
 /** Artifact ownership is distinct from attribution and request credentials. */
-import type {ArtifactDestination} from '@artifactbin/contracts';
+import type {ArtifactDestination} from '@artifactbin/contracts/groups';
 import type { AccessActor } from '@/lib/accounts';
 import {actorGroupRole, getAccountPreferences, selectNewArtifactDestination} from '../groups';
 import {DeploymentError,getDeploymentDefaultDestination} from '../deployment';

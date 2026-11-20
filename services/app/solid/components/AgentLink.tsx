@@ -1,5 +1,5 @@
 /* @jsxImportSource solid-js */
-import type { ArtifactDestination } from '@artifactbin/contracts';
+import type { ArtifactDestination } from '@artifactbin/contracts/groups';
 import { createSignal, onCleanup, Show, type JSX } from 'solid-js';
 import { Check, Copy, Loader2 } from 'lucide-solid';
 import { Button } from '../ui/Button';

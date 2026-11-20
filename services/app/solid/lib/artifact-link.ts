@@ -12,7 +12,7 @@
  *
  * Spread the result on the anchor: `<a {...artifactLink(url, row.format)} aria-label=…>`.
  */
-import { ARTIFACT_FORMATS, type ArtifactFormat } from '@artifactbin/contracts';
+import { ARTIFACT_FORMATS, type ArtifactFormat } from '@artifactbin/contracts/artifact-format';
 
 export interface ArtifactLinkAttributes { href: string; rel?: 'external'; state?: string }
 

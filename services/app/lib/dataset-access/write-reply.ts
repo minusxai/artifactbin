@@ -9,7 +9,7 @@
  *    reader's current role view (`rowsNow`). A replay answers the rows' current visible state, not a snapshot: a row
  *    the reader no longer sees (or that is gone) is omitted, hidden columns are absent or null.
  */
-import type { Queryable } from '@artifactbin/contracts';
+import type { Queryable } from '@artifactbin/contracts/db';
 import type { AccessActor } from '@/lib/accounts';
 import type { ArtifactRow } from '@/lib/artifacts';
 import type { CatalogRowView, DatasetTable } from '@/lib/datasets';

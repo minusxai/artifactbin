@@ -5,7 +5,7 @@ import { Readable } from 'node:stream';
 import { MAX_FILE_BYTES } from '@/lib/platform';
 import { Reply, reply } from '@/lib/http';
 import type { StoredContent } from '@/lib/document';
-import { fileContentType, FILE_EXTENSIONS } from '@artifactbin/contracts';
+import { fileContentType, FILE_EXTENSIONS } from '@artifactbin/contracts/file-types';
 
 interface FileMeta {
   objectKey: string;

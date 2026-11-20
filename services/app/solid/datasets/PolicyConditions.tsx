@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 import { For, Show, type JSX } from 'solid-js';
 import X from 'lucide-solid/icons/x';
-import type { PolicyPredicate } from '@artifactbin/contracts';
+import type { PolicyPredicate } from '@artifactbin/contracts/dataset-policy';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Field';
 import { Panel } from '../ui/Panel';

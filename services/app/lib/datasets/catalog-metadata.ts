@@ -1,5 +1,5 @@
 import type {DatasetCatalog} from './types';
-import type {ConnectionSummary} from '@artifactbin/contracts';
+import type {ConnectionSummary} from '@artifactbin/contracts/connectors';
 
 /** One read-only interpretation shared by execution and migration planning:
  * the stored `meta.catalog`, or null when the row carries none. */

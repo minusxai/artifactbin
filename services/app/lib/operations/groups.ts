@@ -1,11 +1,11 @@
-import {GROUP_ROLES} from '@artifactbin/contracts';
+import {GROUP_ROLES} from '@artifactbin/contracts/groups';
 /** Group protocol shared by native operations and the thin HTTP adapters. */
 import {z} from 'zod';
 import type {Operation,OpContext,OpReply} from './registry';
 import {GroupError,createGroup,listGroups,getGroupDetail,searchGroupMembers,updateGroup,deleteGroup,setGroupMember,removeGroupMember,inviteGroupMember,removeGroupInvitation,setGroupLink,setGroupParent} from '@/lib/groups';
 import {setArtifactGroupShare} from '@/lib/artifacts';
 import {groupCollectionFor,groupArtifactsFor} from '@/lib/workspace';
-import type {CreateGroupInput,UpdateGroupInput,GroupRole,GroupShareRole} from '@artifactbin/contracts';
+import type {CreateGroupInput, UpdateGroupInput, GroupRole, GroupShareRole} from '@artifactbin/contracts/groups';
 const id=z.string().min(1),role=z.enum(GROUP_ROLES),parent=z.string().min(1).nullable();
 const errors=[{status:400,code:'invitation_email_not_allowed',fix:'This email is blocked by the installation sign-in policy. Ask the operator to allow the address or domain before inviting them.'},{status:400,code:'invalid_cursor',fix:'Restart the collection listing with the same actor, group, parent and limit.'},{status:403,code:'account_required',fix:'Sign in with an account.'},{status:403,code:'forbidden',fix:'Use a current group admin account.'},{status:404,code:'not_found',fix:'Use a live group you belong to.'},{status:404,code:'not_member',fix:'Invite by email; role PUT only changes an existing member.'},{status:409,code:'last_admin',fix:'Appoint another admin before leaving or demoting the last admin.'},{status:409,code:'group_not_empty',fix:'Move or delete live group-owned work first.'},{status:409,code:'handle_mismatch',fix:'Confirm deletion by echoing the stored handle.'},{status:409,code:'default_group_locked',fix:'The deployment default group cannot be deleted.'},{status:404,code:'parent_not_found',fix:'Use a live parent group you administer.'},{status:409,code:'group_has_children',fix:'Detach or delete its subgroups first.'},{status:409,code:'hierarchy_cycle',fix:'Choose a parent outside the group and its subgroups.'},{status:409,code:'already_has_parent',fix:'State the current parent as from_parent_id to move it.'},{status:409,code:'parent_changed',fix:'Read the group again; its parent changed.'},{status:429,code:'rate_limited',fix:'Wait retry_after seconds before retrying.'}];
 type Work=(ctx:OpContext,input:Record<string,unknown>,user:string)=>Promise<OpReply>;

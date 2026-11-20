@@ -15,7 +15,7 @@
  * entry records the page revision that wrote it: an instance of an OLDER revision never writes over it (./viewer-state
  * rejects its writes), so two open versions of a page cannot erase each other's overrides.
  */
-import type { HtmlJson, HtmlJsonObject } from '@artifactbin/contracts';
+import type { HtmlJson, HtmlJsonObject } from '@artifactbin/contracts/html-page';
 import { canonical, clone, createLocalStore, own, setOwn } from './apollo/local-store';
 
 export interface StoredOverrides { $af: 'overrides'; version: string | null; revision: string | null; overrides: HtmlJsonObject }

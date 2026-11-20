@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 import { createSignal, For, Show, type JSX } from 'solid-js';
-import type { GroupDetail, GroupSummary } from '@artifactbin/contracts';
+import type { GroupDetail, GroupSummary } from '@artifactbin/contracts/groups';
 import Users from 'lucide-solid/icons/users';
 import ChevronRight from 'lucide-solid/icons/chevron-right';
 import Plus from 'lucide-solid/icons/plus';

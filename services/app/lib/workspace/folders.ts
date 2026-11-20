@@ -5,7 +5,7 @@
  */
 import {getGroupById} from '@/lib/groups';
 import { getDb } from '@/lib/platform';
-import { canRead } from '@artifactbin/contracts';
+import { canRead } from '@artifactbin/contracts/sharing';
 import { effectiveRole } from '@/lib/artifact-access';
 import { type ArtifactRow } from '@/lib/artifacts';
 import { LIVE_ARTIFACT_SQL } from '@/lib/artifact-access';

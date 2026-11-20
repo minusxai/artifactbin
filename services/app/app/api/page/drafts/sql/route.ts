@@ -6,7 +6,8 @@
  * time and output limits. Same-origin only: it is the parent's relay, never the draft's own origin, which is refused
  * before it gets here (server/pages-host). Never cached.
  */
-import { SQL_READ_LIMITS, sqlReadFailure } from '@artifactbin/contracts';
+import { SQL_READ_LIMITS } from '@artifactbin/contracts/sql';
+import { sqlReadFailure } from '@artifactbin/contracts/sql-failures';
 import { browserActor } from '@/lib/authentication';
 import { pageConnectionSql } from '@/lib/connections';
 import { json, pagesSite, readJson } from '@/lib/http';

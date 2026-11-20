@@ -6,7 +6,9 @@
  * secret a caller presented (compared in constant time); `answer` is every route's JSON reply.
  */
 import {createHash,timingSafeEqual} from 'node:crypto';
-import {IDENTITY_SCHEMA,SERVICE_AUTH_HEADER,parseServiceAudiences,type ServiceAudience} from '@artifactbin/contracts';
+import {IDENTITY_SCHEMA} from '@artifactbin/contracts/identity-service';
+import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts/routes';
+import {parseServiceAudiences, type ServiceAudience} from '@artifactbin/contracts/service-audiences';
 import {BodyTooLargeError,readBody} from '@artifactbin/utils';
 import type {Context} from 'hono';
 import type {AuthEnv,AuthOptions} from './parts';

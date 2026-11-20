@@ -11,12 +11,12 @@
  *
  * One live text per cell: asking for the same cell again answers the same object until it is destroyed.
  */
-import { cellKey } from '@artifactbin/contracts';
+import { cellKey } from '@artifactbin/contracts/region-sessions';
 import { collabPort } from './browser-reader';
 import { createCollabText, type CollabText } from './collab-binding';
 
 export type { CollabText, CollabBinding, CollabError } from './collab-binding';
-export type { CollabStatus } from '@artifactbin/contracts';
+export type { CollabStatus } from '@artifactbin/contracts/region-sessions';
 
 const texts = new Map<string, CollabText>();
 

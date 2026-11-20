@@ -21,15 +21,8 @@
  * who does not manage the dataset's sharing (lib/artifact-access `sharingScope`: an editor link), whose GET answers
  * `canSave: false` and whose dry runs still read back.
  */
-import {
-  DATASET_ADMIN_ROLES,
-  DATASET_PERMISSION_TEMPLATES,
-  DATASET_RULE_ROLES,
-  type DatasetColumn,
-  type DatasetPermissions,
-  type DatasetPermissionsIssue,
-  type DatasetPermissionsShape,
-} from '@artifactbin/contracts';
+import { DATASET_ADMIN_ROLES, DATASET_PERMISSION_TEMPLATES, DATASET_RULE_ROLES, type DatasetPermissions, type DatasetPermissionsIssue, type DatasetPermissionsShape } from '@artifactbin/contracts/dataset-permissions';
+import type { DatasetColumn } from '@artifactbin/contracts/sql';
 import { datasetPermissionsTemplate, readBackDatasetPermissions, validateDatasetPermissions } from '@artifactbin/utils/dataset-permissions';
 import type { AccessActor } from '@/lib/accounts';
 import { commitDatasetPolicy, getArtifactFor, getSharingArtifactFor, type ArtifactRow } from '@/lib/artifacts';

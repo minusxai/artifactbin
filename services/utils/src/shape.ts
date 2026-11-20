@@ -1,9 +1,9 @@
 import {isTimestamp} from './timestamp';
 export {normalizeDate,isDate,normalizeTimestamp,isTimestamp} from './timestamp';
 /** Column inference for rows by value — pure and safe for browser bundles. */
-import type { ColumnType, DatasetColumn } from '@artifactbin/contracts';
+import type { ColumnType, DatasetColumn } from '@artifactbin/contracts/sql';
 
-export type { DatasetColumn } from '@artifactbin/contracts';
+export type { DatasetColumn } from '@artifactbin/contracts/sql';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 

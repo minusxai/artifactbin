@@ -13,7 +13,7 @@
  */
 import { createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import { runtimeId } from '@artifactbin/utils/runtime-id';
-import { OWN_CONNECTIONS_OFF } from '@artifactbin/contracts';
+import { OWN_CONNECTIONS_OFF } from '@artifactbin/contracts/connectors';
 import { parseDatasetDefinition, serializeDatasetDefinition } from '@/lib/datasets/definition';
 import type { CatalogInput, DatasetCatalog } from '@/lib/datasets';
 import type { DatasetColumn, Row } from '@/lib/dataflow';

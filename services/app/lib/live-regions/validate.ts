@@ -23,7 +23,7 @@
 import * as Y from 'yjs';
 import { validateNativeTree } from './native-state';
 import { NATIVE_ROOT, nativeSchema } from './native-schema';
-import { REGION_TEXT_MAX_UNITS, REGION_UPDATE_MAX_BYTES } from '@artifactbin/contracts';
+import { REGION_TEXT_MAX_UNITS, REGION_UPDATE_MAX_BYTES } from '@artifactbin/contracts/region-sessions';
 import { keysOf } from './lines';
 import { LiveRegionRefusal } from './refusal';
 import { isNodeId, MAX_DEPTH, safeHref, type RegionKind } from './schema';

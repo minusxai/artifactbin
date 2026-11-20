@@ -19,7 +19,7 @@
 import fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
-import type { SqlService } from '@artifactbin/contracts';
+import type { SqlService } from '@artifactbin/contracts/sql';
 import { serveSql, sqlClient } from '@artifactbin/sql';
 import { createSql } from '@artifactbin/sql/local';
 import { executeCatalog, type CatalogRowView, type DatasetCatalog } from '@/lib/datasets';

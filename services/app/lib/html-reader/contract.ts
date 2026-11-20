@@ -1,4 +1,5 @@
-import type {RegionFrameMessage, RegionParentMessage, UploadContext} from '@artifactbin/contracts';
+import type {RegionFrameMessage, RegionParentMessage} from '@artifactbin/contracts/region-sessions';
+import type {UploadContext} from '@artifactbin/contracts/dataset-upload';
 /**
  * The framework-free contract between the document builder (server), the compiler, and the browser
  * islands. BOTH sides import it, so it carries ONLY types and ids: a value

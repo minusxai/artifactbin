@@ -1,5 +1,5 @@
 /** Viewer state storage and the supported SQL transport; no query-language client. */
-import type {HtmlJson as AfJson, HtmlJsonObject as AfJsonObject} from '@artifactbin/contracts';
+import type {HtmlJson as AfJson, HtmlJsonObject as AfJsonObject} from '@artifactbin/contracts/html-page';
 /** A write against the document: replace top-level fields if they still hold the expected values. */
 export interface StoreWrite {
   /** Top-level field → value it must still have (undefined: must be absent). */

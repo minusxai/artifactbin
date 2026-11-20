@@ -1,4 +1,4 @@
-import {DATASET_ROW_ID_COLUMN} from '@artifactbin/contracts';
+import {DATASET_ROW_ID_COLUMN} from '@artifactbin/contracts/dataset-permissions';
 import {createHash} from 'node:crypto';
 import type {DatasetTable} from '@/lib/datasets/types';
 import type {DatasetRowIdentitySidecar} from './types';

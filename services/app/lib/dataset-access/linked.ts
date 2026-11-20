@@ -5,7 +5,12 @@
  * (`write`) and change (`can`). The SQL door and collaborative cells share these authority decisions.
  * Persisted Hasura-style field identifiers remain separate from the source names SQL reads.
  */
-import { DATASET_SQL_WRITE_LIMITS, type DatasetBoolExp, type DatasetColumn, type HtmlDatasetLink, type Queryable, type SqlFailureCode } from '@artifactbin/contracts';
+import { DATASET_SQL_WRITE_LIMITS } from '@artifactbin/contracts/dataset-hasura';
+import type { DatasetBoolExp } from '@artifactbin/contracts/dataset-permissions';
+import type { DatasetColumn } from '@artifactbin/contracts/sql';
+import type { HtmlDatasetLink } from '@artifactbin/contracts/html-page';
+import type { Queryable } from '@artifactbin/contracts/db';
+import type { SqlFailureCode } from '@artifactbin/contracts/sql-failures';
 import type { AccessActor } from '@/lib/accounts';
 import { liveAccessFacts, memoAccessFacts, type AccessFacts } from '@/lib/artifact-access';
 import { getArtifactById } from '@/lib/artifacts';

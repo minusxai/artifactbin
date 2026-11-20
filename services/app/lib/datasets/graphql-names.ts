@@ -13,7 +13,8 @@
  * when a column first appears (the policy's `configuration`, server-owned) arrives with the stored v3
  * policies; until then a stored v3 configuration is honoured and everything else is derived here.
  */
-import { DATASET_RESERVED_FIELDS, type DatasetTableConfiguration, type DatasetTableName } from '@artifactbin/contracts';
+import { DATASET_RESERVED_FIELDS } from '@artifactbin/contracts/dataset-hasura';
+import type { DatasetTableConfiguration, DatasetTableName } from '@artifactbin/contracts/dataset-permissions';
 
 const VALID = /^[A-Za-z][A-Za-z0-9_]*$/;
 const RESERVED_FIELDS: ReadonlySet<string> = new Set(DATASET_RESERVED_FIELDS);

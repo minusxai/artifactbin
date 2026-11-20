@@ -29,7 +29,7 @@
  * declares, filling `:viewer_id`, `:viewer_email` and `:viewer_groups` itself. Its text is not the page's, so a
  * watch of one runs again on every invalidation, whichever links it names.
  */
-import type { HtmlJsonObject as AfJsonObject } from '@artifactbin/contracts';
+import type { HtmlJsonObject as AfJsonObject } from '@artifactbin/contracts/html-page';
 import { SQL_FAILURES } from '@artifactbin/contracts/sql-failures';
 import type { SqlAnswerSource } from '@artifactbin/contracts/sql-source';
 

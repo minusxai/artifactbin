@@ -7,9 +7,9 @@
  * module is in the READER's graph, where that is not a size regression but a
  * build failure ("Could not resolve node:http"). The subpath is the pure half.
  */
-export type { ColumnType, DatasetColumn } from '@artifactbin/contracts';
+export type { ColumnType, DatasetColumn } from '@artifactbin/contracts/sql';
 export { inferColumns } from '@artifactbin/utils/shape';
-import type { ColumnType } from '@artifactbin/contracts';
+import type { ColumnType } from '@artifactbin/contracts/sql';
 
 export const columnVizKind = (t: ColumnType): 'quantitative' | 'temporal' | 'nominal' =>
   t === 'number' ? 'quantitative' : (t === 'date' || t === 'timestamp') ? 'temporal' : 'nominal';

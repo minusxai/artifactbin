@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 import {createSignal,onCleanup,Show,type JSX} from 'solid-js';
-import type {ArtifactDestination} from '@artifactbin/contracts';
+import type {ArtifactDestination} from '@artifactbin/contracts/groups';
 import {checkHtmlUpload,type HtmlUploadSelection} from '../lib/html-upload';
 import {apiFetch} from '../lib/api';
 import {openDocument} from '../lib/document-navigation';

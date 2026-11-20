@@ -2,7 +2,7 @@
 import * as Y from 'yjs';
 import { initProseMirrorDoc, prosemirrorToYXmlFragment, updateYFragment } from '@tiptap/y-tiptap';
 import type { Node as PMNode } from 'prosemirror-model';
-import { REGION_TEXT_MAX_UNITS } from '@artifactbin/contracts';
+import { REGION_TEXT_MAX_UNITS } from '@artifactbin/contracts/region-sessions';
 import { Fragment } from 'prosemirror-model';
 import { nativeSchema, NATIVE_ROOT } from './native-schema';
 import { readNativeHtml, writeNativeHtml } from './native-html';

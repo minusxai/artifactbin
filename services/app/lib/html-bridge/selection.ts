@@ -1,4 +1,4 @@
-import type { HtmlNodeAnchor } from '@artifactbin/contracts';
+import type { HtmlNodeAnchor } from '@artifactbin/contracts/html-annotation';
 import { withHtmlCommentView } from './comment-view-session';
 import { captureHtmlRange } from './range';
 import type { StoryEditSelection } from '../html-bridge/selection-contract';

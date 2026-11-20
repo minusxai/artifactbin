@@ -14,7 +14,8 @@
  * group's claims are never read as a person's, under any key; a group's kind refuses any claims with one.
  */
 import {createHmac,hkdfSync,randomUUID,timingSafeEqual} from 'node:crypto';
-import {isGroupPrincipalRole,type GroupPrincipalRole,type IssuedServiceToken,type ServiceAudience,type ServiceTokenParent} from '@artifactbin/contracts';
+import {isGroupPrincipalRole, type GroupPrincipalRole} from '@artifactbin/contracts/actor';
+import type {IssuedServiceToken, ServiceAudience, ServiceTokenParent} from '@artifactbin/contracts/service-audiences';
 
 const SKEW_S = 5;
 const ID = /^[A-Za-z0-9_.:-]{1,128}$/;

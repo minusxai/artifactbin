@@ -6,8 +6,8 @@ import {renderSocialPreviewImage} from './social-preview-image.server';
 import {loadImage} from '../object-store';
 import {referencedArtifactForRow} from '../document-data';
 import {Readable} from 'node:stream';
-import type {NoElement,RenderRequest,RenderResult as BrowserRenderResult} from '@artifactbin/contracts';
-import {ELEMENT_CAPTURE} from '@artifactbin/contracts';
+import type {NoElement, RenderRequest, RenderResult as BrowserRenderResult} from '@artifactbin/contracts/browser';
+import {ELEMENT_CAPTURE} from '@artifactbin/contracts/browser';
 import { AUTH_SECRET, getDb, ASSETS_ORIGIN, EXPORT_INTERNAL_ORIGIN, services } from '../platform';
 import {createExportCache,type ExportImage} from './cache';
 import {exportAssetUrl} from './assets';
@@ -17,13 +17,13 @@ import { writerFor } from '@/lib/artifact-access';
 import { ANONYMOUS_ACTOR, type AccessActor } from '@/lib/accounts';
 import { datasetReadAccess } from '@/lib/dataset-permissions';
 import { approvalRenderState } from '@/lib/query-approvals';
-import type { HtmlPageLink } from '@artifactbin/contracts';
+import type { HtmlPageLink } from '@artifactbin/contracts/html-page';
 import {
   SOCIAL_PREVIEW_OVERVIEW_GENERATION, parseSocialPreviewCrop, socialPreviewCrop, socialPreviewImage,
   type SocialPreviewCrop,
 } from '../document';
 import { scriptRenderAllowance } from './script-origins';
-import { CARD_HEIGHT, CARD_RENDER_GENERATION, CARD_WIDTH } from '@artifactbin/contracts';
+import { CARD_HEIGHT, CARD_RENDER_GENERATION, CARD_WIDTH } from '@artifactbin/contracts/og-card';
 import { exportReaderActor, mintExportKey, type ExportReader } from './read-key';
 import { json } from '../http';
 import { objectStore } from '../object-store/index';

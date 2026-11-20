@@ -1,4 +1,4 @@
-import type { RegionCaret } from '@artifactbin/contracts';
+import type { RegionCaret } from '@artifactbin/contracts/region-sessions';
 /** Ephemeral reader geometry. Never contains selected text, account credentials or page state. */
 export interface PresenceCursor { nodeId: string; x: number; y: number }
 export interface PresenceRange { nodeId: string; start: number; end: number; length: number; fingerprint: string }

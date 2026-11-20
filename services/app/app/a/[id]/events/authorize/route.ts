@@ -10,7 +10,7 @@
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
 import { htmlLiveLinks } from '@/lib/html-publication';
 import { ID_RE } from '@/lib/platform';
-import { annotationsChannel, artifactChannel } from '@artifactbin/contracts';
+import { annotationsChannel, artifactChannel } from '@artifactbin/contracts/live-channels';
 import { sessionActor } from '@/lib/authentication';
 
 export async function GET(request: Request, ctx: { params: Promise<{ id: string }> }) {

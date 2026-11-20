@@ -12,7 +12,7 @@
  * Never imported by a published page or the reader: the engine is large. An export embeds it; a draft (lib/page-drafts,
  * `config.draft`) loads it from its one hosted address, /af/offline-sql.js, over the tables the draft carries (build.test).
  */
-import { SQL_READ_LIMITS, isQueryFailure, type ColumnType, type Row, type RunInput } from '@artifactbin/contracts';
+import { SQL_READ_LIMITS, isQueryFailure, type ColumnType, type Row, type RunInput } from '@artifactbin/contracts/sql';
 import type { SqlAnswerSource } from '@artifactbin/contracts/sql-source';
 import { loadSqlite, PreparedCache, type SqliteEngine } from '@artifactbin/sql/core';
 import { offlineSqlNoData } from './portable-chrome-contract';

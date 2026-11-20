@@ -3,7 +3,7 @@
  * arrays and plain objects. Pure; shared by the client, the browser store and
  * state URLs.
  */
-import type { HtmlJson as AfJson } from "@artifactbin/contracts";
+import type { HtmlJson as AfJson } from "@artifactbin/contracts/html-page";
 
 function describe(value: unknown): string {
   if (value === undefined) return "undefined";

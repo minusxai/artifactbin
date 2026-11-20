@@ -1,6 +1,6 @@
 import {applyHtmlReaderAppearance} from '../html-bridge/reader';
 import {createUploadContext,bindUploadControl} from './upload-context';
-import type {UploadContext} from '@artifactbin/contracts';
+import type {UploadContext} from '@artifactbin/contracts/dataset-upload';
 import type {PlatformUploadControl} from './upload-contract';
 import {createFileUploader} from './upload';
 import {createUploadRelay} from './upload-relay';

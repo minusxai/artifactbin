@@ -15,7 +15,7 @@
  * wrong shape, is a compile error rather than a bad row.
  */
 import { randomUUID } from 'node:crypto';
-import type { EventEnvelope, EventPayload, EventSource, EventVerb, ObjectKind, SubjectKind } from '@artifactbin/contracts';
+import type { EventEnvelope, EventPayload, EventSource, EventVerb, ObjectKind, SubjectKind } from '@artifactbin/contracts/events';
 
 /** Who did it. `null` at the call site means "nobody we can name" — an anonymous door denial, a code sent to an address that has no account yet. */
 export interface EventSubject { kind: SubjectKind; id: string }

@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 import { Show, type JSX } from 'solid-js';
 import { agentDiscovery, AGENT_HELP_TITLE } from '@/lib/skills/agent-discovery';
-import type { DeploymentState } from '@artifactbin/contracts';
+import type { DeploymentState } from '@artifactbin/contracts/groups';
 import { buildSetupInstructions } from '@/lib/skills/setup-instructions';
 import { deploymentSetupOptions } from '@/lib/agent-copy/setup-installers';
 import { HOME_WORKSPACE_COLUMN } from '../components/WorkspaceLayout';

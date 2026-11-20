@@ -2,7 +2,7 @@ import {datasetResponse, prepareCatalog, catalogOf, executeCatalog, DatasetError
 import {requestActor} from '@/lib/authentication';
 import {getArtifactFor} from '@/lib/artifacts';
 import {readJson,json,Reply,toResponse} from '@/lib/http';
-import {REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts';
+import {REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts/actor';
 export async function POST(request:Request){
  const actor=await requestActor(request);if(actor instanceof Response)return actor;
  const body=await readJson(request);if(!body||typeof body.sql!=='string')return json({error:'invalid_query'},400);

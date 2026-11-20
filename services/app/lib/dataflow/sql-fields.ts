@@ -1,4 +1,4 @@
-import {paramSqlName} from '@artifactbin/contracts';
+import {paramSqlName} from '@artifactbin/contracts/sql-analysis';
 
 /** Normalize native dataset mutation parameter names without changing SQL literals. */
 export function rewriteBuiltinFields(sql: string): { sql: string; fields: Map<string, string>; now: boolean; branches: string[] | null; casts: string[] } {

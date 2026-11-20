@@ -2,7 +2,7 @@
  * Every state change records its source event transactionally; notification rules
  * consume that fact through notification-events, not through a second write path.
  */
-import { RELATION_EVENTS, RELATION_VERBS, type ImmediateRelationVerb, type RelationVerb } from '@artifactbin/contracts';
+import { RELATION_EVENTS, RELATION_VERBS, type ImmediateRelationVerb, type RelationVerb } from '@artifactbin/contracts/relations';
 import { getDb, lockSubjects, recordEvent, type Queryable } from '@/lib/platform';
 
 

@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 import { createSignal, For, Show, type JSX } from 'solid-js';
 import { Bell, Check } from 'lucide-solid';
-import type { MemberNotificationItem } from '@artifactbin/contracts';
+import type { MemberNotificationItem } from '@artifactbin/contracts/membership';
 import { personLinkPath } from '@artifactbin/contracts/url-space';
 import { timeAgo } from '../ui/ui';
 import { Button } from '../ui/Button';

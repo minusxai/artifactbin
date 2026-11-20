@@ -1,5 +1,6 @@
 /** SQL parameter binding shared by current dataset reads and writes. */
-import { paramSqlName, type ColumnType } from '@artifactbin/contracts';
+import { paramSqlName } from '@artifactbin/contracts/sql-analysis';
+import type { ColumnType } from '@artifactbin/contracts/sql';
 import { builtinInput } from './builtins';
 import type { Scalar } from './dataflow';
 

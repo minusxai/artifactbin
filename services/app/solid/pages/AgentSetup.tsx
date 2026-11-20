@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 /** Shared onboarding at the product-owned /start entry, including when a deployment supplies its own shell. */
 import {createSignal, onMount, Show, type JSX} from 'solid-js';
-import type {ArtifactDestination} from '@artifactbin/contracts';
+import type {ArtifactDestination} from '@artifactbin/contracts/groups';
 import {loginHref} from '@/lib/http/login-href';
 import GetStarted from '../components/GetStarted';
 import {replaceDocument} from '../lib/document-navigation';

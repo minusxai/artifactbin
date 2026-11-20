@@ -1,4 +1,5 @@
-import {DEFAULT_UPLOAD_MAX_BYTES,type DatasetUploadResult} from '@artifactbin/contracts';
+import {DEFAULT_UPLOAD_MAX_BYTES} from '@artifactbin/contracts/upload-limits';
+import type {DatasetUploadResult} from '@artifactbin/contracts/dataset-upload';
 import {runtimeId} from '@artifactbin/utils/runtime-id';
 import type {FileUploader,FileUploadTransport} from './upload-contract';
 export function createFileUploader(options:FileUploadTransport&{readOnly():boolean;datasetId(name:string):string|undefined}):FileUploader {

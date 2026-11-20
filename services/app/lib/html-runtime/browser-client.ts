@@ -52,5 +52,5 @@ export const readViewerDocument=()=>state.read();
 
 export type {FileUploadOptions} from './upload-contract';
 
-export type {UploadContext} from '@artifactbin/contracts';
+export type {UploadContext} from '@artifactbin/contracts/dataset-upload';
 export type {PlatformUploadControl,FileUploadBinding} from './upload-contract';

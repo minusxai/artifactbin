@@ -1,5 +1,6 @@
 /** Offline, versioned group-role migration. Startup checks compatibility; it never reinterprets existing grants. */
-import type {Queryable,TransactionalQueryable} from '@artifactbin/contracts';
+import type {Queryable} from '@artifactbin/contracts/db';
+import type {TransactionalQueryable} from '@artifactbin/contracts/identity-module';
 import {identityTables} from './tables';
 
 export const GROUP_ROLE_UPGRADE = 'Stop all identity and app processes and verify a restorable database backup, then run npm run migrate:groups -w services/auth -- --writes-paused-backup-verified with AUTH__MIGRATION_DATABASE_URL and AUTH__SCHEMA identifying the reviewed database, and IDENTITY__SCHEMA when using separate read views. Start only the new release; older releases cannot interpret these roles. Startup never applies this migration.';

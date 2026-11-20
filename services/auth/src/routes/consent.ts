@@ -7,7 +7,7 @@
  */
 import { BodyTooLargeError, readBody, renderConnectionPage } from '@artifactbin/utils';
 import { escapeHtml } from '@artifactbin/utils/escape';
-import { ANONYMOUS, isGroupPrincipalRole } from '@artifactbin/contracts';
+import { ANONYMOUS, isGroupPrincipalRole } from '@artifactbin/contracts/actor';
 import { clientRedirects, createAuthCode, isValidCodeChallenge } from '../identity/oauth';
 import type { AuthApp } from '../parts';
 import { AUTH_BODY_LIMIT, NO_STORE, acceptsResource, isSameOrigin, payloadTooLarge, resourceOf, scopeFor, serviceAt, type GrantGroup, type OAuthRoutesOptions } from './grants';

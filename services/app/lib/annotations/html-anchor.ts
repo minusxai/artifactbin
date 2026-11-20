@@ -1,6 +1,6 @@
 /** Native HTML identities and selected words, independent of compiler coordinates. */
 import { parse, type DefaultTreeAdapterMap } from 'parse5';
-import { htmlTextFingerprint, resolveHtmlTextRange, type HtmlNodeAnchor } from '@artifactbin/contracts';
+import { htmlTextFingerprint, resolveHtmlTextRange, type HtmlNodeAnchor } from '@artifactbin/contracts/html-annotation';
 
 type HtmlNode = DefaultTreeAdapterMap['node'];
 export interface HtmlCommentNode { nodeId: string; text: string }

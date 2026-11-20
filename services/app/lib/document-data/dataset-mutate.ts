@@ -4,10 +4,10 @@ import { artifactQuery } from '@/lib/artifacts/table';
 import { LIVE_ARTIFACT_SQL } from '@/lib/artifact-access';
 import {validateUserWrites, DatasetError, throttlePublicMutation, catalogOf, importedTables, loadDatasetRows, storeDatasetRows} from '@/lib/datasets';
 import { recheckMutation } from './dataset-policy';
-import {SIGN_IN_REQUIRED} from '@artifactbin/contracts';
+import {SIGN_IN_REQUIRED} from '@artifactbin/contracts/sign-in-required';
 import {analyzeSql} from '@artifactbin/sql/core';
 import {sqlExtensions, isQueryFailure, runMutation, type MutationInput} from '@/lib/sql';
-import {paramSqlName} from '@artifactbin/contracts';
+import {paramSqlName} from '@artifactbin/contracts/sql-analysis';
 /**
  * WRITING a dataset — the other half of lib/datasets/dataset-store.
  *
@@ -41,7 +41,9 @@ import { trackEvent } from '@/lib/analytics';
 import { MAX_ROWS_LIMIT, getDb, retryOnConflict, TransactionConflict } from '@/lib/platform';
 import type { AccessActor } from '@/lib/accounts';
 import type { Scalar } from '@/lib/dataflow';
-import type {MutationOutcome,DatasetMutationPolicy,Queryable} from '@artifactbin/contracts';
+import type {MutationOutcome} from '@artifactbin/contracts/sql';
+import type {DatasetMutationPolicy} from '@artifactbin/contracts/dataset-policy';
+import type {Queryable} from '@artifactbin/contracts/db';
 
 /** A CAS miss is an ordinary outcome under concurrency; this bounds the retry, not the correctness. */
 const WRITE_CAS_RETRIES = 8;
@@ -305,7 +307,7 @@ export async function mutateDataset(
 }
 
 /** The documents a table's user columns name in memberOf (`doc:<id>`): their membership is read at commit, so they are locked first. */
-function memberOfDocuments(columns:readonly import('@artifactbin/contracts').DatasetColumn[]):string[]{
+function memberOfDocuments(columns:readonly import('@artifactbin/contracts/sql').DatasetColumn[]):string[]{
  return [...new Set(columns.filter(c=>c.type==='user').flatMap(c=>c.constraints?.memberOf??[]).filter(ref=>ref!=='current').map(ref=>ref.slice(4)))];
 }
 

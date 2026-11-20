@@ -14,7 +14,8 @@
  *    text itself, lib/artifacts current-page). Both go through the store's save, which locks the page FOR UPDATE: a
  *    second process racing it finds nothing left to save.
  */
-import { artifactChannel, isCellKey, regionsChannel, type RegionStreamFrame } from '@artifactbin/contracts';
+import { artifactChannel } from '@artifactbin/contracts/live-channels';
+import { isCellKey, regionsChannel, type RegionStreamFrame } from '@artifactbin/contracts/region-sessions';
 import { editableRegions, isRegionId, type RegionKind } from '@/lib/live-regions';
 import { editablePage, liveRegionDoc, regionUpdatesAfter, type RegionRow, type SaveDue } from '@/lib/artifacts';
 import type { AccessActor } from '@/lib/accounts';

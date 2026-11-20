@@ -1,4 +1,4 @@
-import type {HtmlDeclaredQuery,HtmlPageLink,HtmlPageVersion} from '@artifactbin/contracts';
+import type {HtmlDeclaredQuery, HtmlPageLink, HtmlPageVersion} from '@artifactbin/contracts/html-page';
 import type { AccessActor } from '@/lib/accounts';
 import {readableArtifact} from '@/lib/artifacts';
 import { getDb } from '../platform';

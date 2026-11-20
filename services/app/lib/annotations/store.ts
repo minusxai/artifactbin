@@ -6,7 +6,10 @@ import { reactionScope, annotationScope, effectiveRole, type Scope } from '@/lib
 import {consumeCommentImage,commentImagesFor} from './comment-images';
 import type {CommentImageWire} from '../../../contracts/src/comment-image';
 import type {RemoteWork,RemoteColor} from '../../../contracts/src/remote';
-import { type AnnotationAuthor, type AnnotationCommentWire, type EventOrigin, annotationsChannel, canGovern, type CommentReactionInput, type CommentReactionSummary, type CommentReactor, COMMENT_REACTORS_MAX } from '@artifactbin/contracts';
+import { type AnnotationAuthor, type AnnotationCommentWire, type CommentReactionInput, type CommentReactionSummary, type CommentReactor, COMMENT_REACTORS_MAX } from '@artifactbin/contracts/annotation-comment';
+import type { EventOrigin } from '@artifactbin/contracts/events';
+import { annotationsChannel } from '@artifactbin/contracts/live-channels';
+import { canGovern } from '@artifactbin/contracts/sharing';
 /**
  * ANNOTATIONS — human/agent comments pinned to nodes of a document. The ONLY reader/writer of the
  * `annotations` table.
@@ -25,7 +28,7 @@ import { canonicalQuote, parseAnnotationRange, type AnnotationRange, isAreaRange
 import { avatarUrl } from '@/lib/avatars';
 import { getDb, type Queryable, actorSubject, generateInternalId, recordEvent } from '@/lib/platform';
 import { Reply, reply } from '@/lib/http';
-import { parseHtmlNodeAnchor, type HtmlNodeAnchor } from '@artifactbin/contracts';
+import { parseHtmlNodeAnchor, type HtmlNodeAnchor } from '@artifactbin/contracts/html-annotation';
 import { htmlCommentNodes, resolveHtmlCommentAnchor } from './html-anchor';
 
 

@@ -17,7 +17,7 @@
  * region rows, FOR UPDATE. Wakeups are `pg_notify(regionsChannel)` inside the transaction, delivered at commit.
  */
 import * as Y from 'yjs';
-import { regionsChannel } from '@artifactbin/contracts';
+import { regionsChannel } from '@artifactbin/contracts/region-sessions';
 import { applyRegionRevision, compactRegion, editableRegions, LiveRegionRefusal, openRegionDoc, type RegionKind } from '@/lib/live-regions';
 import type { HtmlIdentityLedger } from '../html-page';
 import type { AccessActor } from '@/lib/accounts';

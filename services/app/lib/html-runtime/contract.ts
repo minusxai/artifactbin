@@ -1,6 +1,6 @@
 import type { DefaultTreeAdapterMap } from 'parse5';
 import type { PortableDocument } from './portable-contract';
-import type { HtmlJsonObject } from '@artifactbin/contracts';
+import type { HtmlJsonObject } from '@artifactbin/contracts/html-page';
 export interface HtmlRuntimeConfig {
   /** Server-verified imported source; preserve its annotation invalidation lifecycle. */
   annotationObservation?: 'imported-source-v1';

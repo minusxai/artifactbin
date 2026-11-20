@@ -14,7 +14,7 @@
  * sources and fails on any construction outside this file.
  */
 import * as Y from 'yjs';
-import type { RegionKind } from '@artifactbin/contracts';
+import type { RegionKind } from '@artifactbin/contracts/region-sessions';
 const NATIVE_ROOT = 'native-v1';
 
 /** The one root a region's (or a live cell's) state holds. */

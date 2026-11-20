@@ -1,6 +1,6 @@
 import {createHash} from 'node:crypto';
 import {parseAccountResource} from '@artifactbin/utils/account-resource';
-import type {ProfileResource} from '@artifactbin/contracts';
+import type {ProfileResource} from '@artifactbin/contracts/account-resource';
 import { getDb, lockSubjects, type Queryable } from '@/lib/platform';
 import { getUserById, isAccountRow, setUsername, type AccessActor } from '@/lib/accounts';
 import { linked, replaceLinked } from '@/lib/social';

@@ -8,7 +8,7 @@
  * delivery. One LISTEN per artifact is shared by all subscribers in this
  * process and fans out in memory; the last unsubscribe closes it.
  */
-import { annotationsChannel, artifactChannel } from '@artifactbin/contracts';
+import { annotationsChannel, artifactChannel } from '@artifactbin/contracts/live-channels';
 import { wakeups } from './wakeup';
 
 /** Payload of a wakeup: the artifact's new head pointer. */

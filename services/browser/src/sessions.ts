@@ -1,7 +1,10 @@
 import { artifactIdFromPathPrefix } from '@artifactbin/utils/artifact-reference';
 import { randomUUID } from 'node:crypto';
-import type { Actor, BrowserSessionRequest, BrowserSessionResult, BrowserSessions, ViewerChoice } from '@artifactbin/contracts';
-import { ANONYMOUS, SESSION_LIMITS } from '@artifactbin/contracts';
+import type { Actor } from '@artifactbin/contracts/actor';
+import type { BrowserSessionRequest, BrowserSessionResult, BrowserSessions } from '@artifactbin/contracts/browser-sessions';
+import type { ViewerChoice } from '@artifactbin/contracts/testusers';
+import { ANONYMOUS } from '@artifactbin/contracts/actor';
+import { SESSION_LIMITS } from '@artifactbin/contracts/browser-sessions';
 import { DEFAULT_SESSION_CAPACITY, type SessionCapacity } from './session-config';
 
 export interface SessionWorker {

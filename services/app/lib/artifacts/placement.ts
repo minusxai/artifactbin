@@ -15,15 +15,15 @@
  */
 import { getDb } from '@/lib/platform';
 import { viewSeriesFor, viewTotalsFor } from '@/lib/analytics';
-import { canAnnotate, canEdit, canRead } from '@artifactbin/contracts';
+import { canAnnotate, canEdit, canRead } from '@artifactbin/contracts/sharing';
 // The hierarchy builds its own statements rather than going through the
 // row-loading seam, so every one of them names the trash gate: a trashed
 // folder is not somewhere to file into, and a trashed child is not listed.
 import { ownerPredicate, LIVE_ARTIFACT_SQL, type ArtifactRow } from '@/lib/artifact-access';
 import { effectiveRole, roleWithoutLink } from '@/lib/artifact-access';
 import { ANONYMOUS_ACTOR, type AccessActor } from '@/lib/accounts';
-import type { ArtifactFormat } from '@artifactbin/contracts';
-import { artifactChannel } from '@artifactbin/contracts';
+import type { ArtifactFormat } from '@artifactbin/contracts/artifact-format';
+import { artifactChannel } from '@artifactbin/contracts/live-channels';
 import { renderSparklineSvg } from '@/lib/viz';
 // The TYPED column shape (@artifactbin/contracts), not dataset-usage's loose
 // one: these columns are registered into the engine, so their types are the

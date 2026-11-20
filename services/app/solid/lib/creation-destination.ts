@@ -1,4 +1,4 @@
-import type { ArtifactDestination } from '@artifactbin/contracts';
+import type { ArtifactDestination } from '@artifactbin/contracts/groups';
 /** Creation links retain the chosen workspace across the editor route. Authority stays server-side. */
 export function creationDestination(search:string):ArtifactDestination|undefined {
  const params=new URLSearchParams(search),id=params.get('group_id');

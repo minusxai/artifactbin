@@ -4,7 +4,7 @@
  * (qualified names: a view's definition must not depend on who creates it). `names` says where each table is.
  * The app asks them through the three questions at the end (over its own `users` read view), never as SQL.
  */
-import type {Queryable} from '@artifactbin/contracts';
+import type {Queryable} from '@artifactbin/contracts/db';
 
 export interface RuleNames {
   /** The account rows: `users` (the reader's view) or `<auth>.users` (the base table). */

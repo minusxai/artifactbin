@@ -24,8 +24,9 @@
  */
 import { isIP } from 'node:net';
 import postgres from 'postgres';
-import type { ConnectionConfig, ConnectorAnswer, ConnectorColumn, ConnectorJson, ConnectorNetworkPolicy, ConnectorQuery, ConnectorSchema, ConnectorValueType } from '@artifactbin/contracts';
-import { CONNECTOR_LIMITS,SQL_QUERY_DEFAULT_MS } from '@artifactbin/contracts';
+import type { ConnectionConfig, ConnectorAnswer, ConnectorColumn, ConnectorJson, ConnectorNetworkPolicy, ConnectorQuery, ConnectorSchema, ConnectorValueType } from '@artifactbin/contracts/connectors';
+import { CONNECTOR_LIMITS } from '@artifactbin/contracts/connectors';
+import { SQL_QUERY_DEFAULT_MS } from '@artifactbin/contracts/sql';
 import { Collector, checkedNamespace, limitsOf, numberValue, plainValue, timestampValue, uniqueColumns, viewerValues, withinTime } from './answer';
 import { connectionSecrets } from './config';
 import { ConnectorFailure, driverFailure } from './errors';

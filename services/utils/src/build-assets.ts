@@ -1,4 +1,5 @@
-import { BUILD_ASSET_HEADER, BUILD_ASSET_PATH, isAppBuildPath } from '@artifactbin/contracts';
+import { BUILD_ASSET_HEADER, BUILD_ASSET_PATH } from '@artifactbin/contracts/build-assets';
+import { isAppBuildPath } from '@artifactbin/contracts/url-space';
 
 /** A candidate is only a probe; the app's manifest is the authority. The shape is the URL map's (`/af/app/`). */
 export function isBuildAssetPath(pathname: string): boolean {

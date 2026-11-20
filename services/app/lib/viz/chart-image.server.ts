@@ -20,7 +20,7 @@ import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { Worker } from 'node:worker_threads';
 import { parseChartDescription } from '@/lib/html-component-specs/chart-spec';
-import { ARTIFACT_IMAGE_BYTES, type ChartImageWire } from '@artifactbin/contracts';
+import { ARTIFACT_IMAGE_BYTES, type ChartImageWire } from '@artifactbin/contracts/identity-service';
 import type { ChartDrawJob, ChartDrawResult } from './chart-draw.server';
 
 export const CHART_IMAGE_LIMITS = {

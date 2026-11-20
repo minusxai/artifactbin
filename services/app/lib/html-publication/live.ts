@@ -1,4 +1,5 @@
-import type {HtmlDatasetLink, HtmlPageLink, Queryable} from '@artifactbin/contracts';
+import type {HtmlDatasetLink, HtmlPageLink} from '@artifactbin/contracts/html-page';
+import type {Queryable} from '@artifactbin/contracts/db';
 /** Names are page-local; revisions are authoritative committed dataset identities. */
 export interface HtmlSharedRevision {name:string; revision:string}
 const liveDataset=(link:HtmlPageLink):link is HtmlDatasetLink=>link.kind==='dataset'&&link.mode==='live';

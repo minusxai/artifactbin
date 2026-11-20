@@ -1,5 +1,6 @@
 /** A page revision's schema uses the SQL reader's canonical mounts, with deferred row IDs: no row objects opened. */
-import type {ColumnType,HtmlDatasetLink} from '@artifactbin/contracts';
+import type {ColumnType} from '@artifactbin/contracts/sql';
+import type {HtmlDatasetLink} from '@artifactbin/contracts/html-page';
 import type {AccessActor} from '@/lib/accounts';
 import {loadLinked} from './linked';
 import {pageSqlMounts} from './page-sql';

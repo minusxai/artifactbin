@@ -4,8 +4,8 @@
  * failed requests, text too faint to read, overflow when asked, and a page that never finished (`timeout`) or was
  * stopped for what it used. A page that could not be reached, or no browser, is thrown, not said as a problem.
  */
-import type { PageImage, PageInspectRequest, PageProblem } from '@artifactbin/contracts';
-import { PAGE_IMAGE_LIMITS, PAGE_PROBLEM_LIMITS } from '@artifactbin/contracts';
+import type { PageImage, PageInspectRequest, PageProblem } from '@artifactbin/contracts/browser';
+import { PAGE_IMAGE_LIMITS, PAGE_PROBLEM_LIMITS } from '@artifactbin/contracts/browser';
 import { BrowserUnavailable } from './browser-holder';
 import { NavigationError, RendererStopped, type RenderLane } from './render-lane';
 

@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 import type {JSX} from 'solid-js';
-import type {Visibility} from '@artifactbin/contracts';
+import type {Visibility} from '@artifactbin/contracts/sharing';
 import {sharingIconFor,VISIBILITY_ICON_NODES} from '@/lib/workspace/visibility-icons';
 /** Owner-only presentation never belongs to the anonymous reader startup graph. */
 export interface DocumentSharingGlyphProps {visibility:Visibility;invited:boolean}

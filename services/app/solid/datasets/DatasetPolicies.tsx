@@ -11,20 +11,8 @@ import { retryingFetch } from '@/lib/http/retry-lazily';
 import { createEffect, createMemo, createSignal, For, Index, on, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import X from 'lucide-solid/icons/x';
-import {
-  DATASET_PERMISSION_OPERATIONS,
-  DATASET_RULE_ROLES,
-  type DatasetBoolExp,
-  type DatasetPermissionEntry,
-  type DatasetPermissionOperation,
-  type DatasetPermissions,
-  type DatasetPermissionsIssue,
-  type DatasetPermissionTemplate,
-  type DatasetPermissionWarning,
-  type DatasetRuleRole,
-  type DatasetTablePermissions,
-  type PolicyPredicate,
-} from '@artifactbin/contracts';
+import { DATASET_PERMISSION_OPERATIONS, DATASET_RULE_ROLES, type DatasetBoolExp, type DatasetPermissionEntry, type DatasetPermissionOperation, type DatasetPermissions, type DatasetPermissionsIssue, type DatasetPermissionTemplate, type DatasetPermissionWarning, type DatasetRuleRole, type DatasetTablePermissions } from '@artifactbin/contracts/dataset-permissions';
+import type { PolicyPredicate } from '@artifactbin/contracts/dataset-policy';
 import { Button } from '../ui/Button';
 import { Checkbox, Switch } from '../ui/Checkbox';
 import { Field, Input, Textarea } from '../ui/Field';

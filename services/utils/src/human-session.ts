@@ -1,5 +1,6 @@
 /** Auth-owner transport. No session credentials or service secrets enter URLs. */
-import {HUMAN_SESSION_LIVE_PATH,SERVICE_AUTH_HEADER,type HumanSessionAuthority} from '@artifactbin/contracts';
+import {HUMAN_SESSION_LIVE_PATH, type HumanSessionAuthority} from '@artifactbin/contracts/actor';
+import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts/routes';
 export function humanSessionClient(origin:string,options:{serviceSecret:string;deadlineMs?:number;fetch?:(request:Request)=>Promise<Response>}):HumanSessionAuthority {
  if(!options.serviceSecret.trim())throw Error('human session authority requires a service secret');
  const url=new URL(origin);

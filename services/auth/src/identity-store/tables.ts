@@ -4,7 +4,7 @@
  * first (the app's resolves the read views of the same names).
  */
 import {randomBytes} from 'node:crypto';
-import {IDENTITY_OWNED_TABLES} from '@artifactbin/contracts';
+import {IDENTITY_OWNED_TABLES} from '@artifactbin/contracts/identity-module';
 
 export type IdentityTables = Record<(typeof IDENTITY_OWNED_TABLES)[number], string>;
 

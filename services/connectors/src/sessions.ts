@@ -9,7 +9,7 @@
  * dropped connection the database no longer lists) frees its slot then. And the slot frees anyway `graceMs` after
  * the deadline of the use it last served: every connector sets the engine's own statement timeout from that use's
  * remaining budget, so by then the database has stopped any work the session carried. */
-import { CONNECTOR_LIMITS } from '@artifactbin/contracts';
+import { CONNECTOR_LIMITS } from '@artifactbin/contracts/connectors';
 import { log } from '@artifactbin/utils';
 import { ConnectorFailure } from './errors';
 import { UNCONFIRMED } from './termination';

@@ -1,5 +1,5 @@
 import {isValidHandle} from '../accounts/handles';
-import {normalizeOrigin} from '@artifactbin/contracts';
+import {normalizeOrigin} from '@artifactbin/contracts/server-identity';
 
 export interface SetupInstructionOptions {serverOrigin:string;groupHandle?:string;setDefault?:boolean;}
 /** Tokenless instructions for both deployment setup and group invitations. Browser-safe. */

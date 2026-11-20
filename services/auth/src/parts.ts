@@ -1,5 +1,15 @@
 /** Shared identity and login boundary. No proxy transport or rate policy. */
-import {CODE_DELIVERY_HEADER, REVALIDATE_ACTOR_HEADER, ANONYMOUS, IDENTITY_SCHEMA, isGroupActor, isInternalApiPath, parseAliasOrigins, parseServiceAudiences, type Actor, type EventsService, type Part, type Queryable, type ServiceAudience, type TokenReader, type TransactionalQueryable, type Upstream} from '@artifactbin/contracts';
+import {CODE_DELIVERY_HEADER} from '@artifactbin/contracts/cli-auth';
+import {REVALIDATE_ACTOR_HEADER, ANONYMOUS, isGroupActor, type Actor} from '@artifactbin/contracts/actor';
+import {IDENTITY_SCHEMA} from '@artifactbin/contracts/identity-service';
+import {isInternalApiPath} from '@artifactbin/contracts/routes';
+import {parseAliasOrigins} from '@artifactbin/contracts/server-identity';
+import {parseServiceAudiences, type ServiceAudience} from '@artifactbin/contracts/service-audiences';
+import type {EventsService} from '@artifactbin/contracts/events';
+import type {Part, Upstream} from '@artifactbin/contracts/part';
+import type {Queryable} from '@artifactbin/contracts/db';
+import type {TokenReader} from '@artifactbin/contracts/identity';
+import type {TransactionalQueryable} from '@artifactbin/contracts/identity-module';
 import type {Hono} from 'hono';
 import {BodyTooLargeError,readBody,assemble,buildAssetRequest,buildAssetResponse,attachActor,actorOf} from '@artifactbin/utils';
 import {mountOAuthRoutes} from './routes/oauth';

@@ -4,7 +4,7 @@
  * trash gate — so a subtree is only ever the actor's own rows.
  */
 import type { AccessActor } from '@/lib/accounts';
-import type { Queryable } from '@artifactbin/contracts';
+import type { Queryable } from '@artifactbin/contracts/db';
 import { ancestorsForMove } from './placement';
 import { LIVE_ARTIFACT_SQL, ownerPredicate } from '@/lib/artifact-access';
 

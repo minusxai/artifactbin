@@ -1,5 +1,5 @@
 import {hostedCredentialDescriptor} from '@/lib/accounts';
-import type {HtmlJson} from '@artifactbin/contracts';
+import type {HtmlJson} from '@artifactbin/contracts/html-page';
 /** What a request's credential allows; resolved from token identity, never from caller headers. */
 export type HostedOperationAuthorization =
  | {kind:'ordinary'}

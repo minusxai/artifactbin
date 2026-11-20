@@ -4,7 +4,7 @@ import {getArtifactById,getArtifactFor,recoverCreationIds,reserveIds} from '@/li
 import {Reply,reply,thrownMessage} from '@/lib/http';
 import {changedBundlePaths,planPublicationBundle,publishBundleDependencies,type PublicationBundle} from '@/lib/html-publication-bundle';
 import {parseCsv} from '@/lib/data-ingest';
-import {FILE_EXTENSIONS} from '@artifactbin/contracts';
+import {FILE_EXTENSIONS} from '@artifactbin/contracts/file-types';
 /** A bundle file the actor may not write, named by its project path. */
 class BundleFileRefusal extends Error {constructor(readonly code:'bundle_file_not_editable'|'bundle_file_not_creatable',readonly path:string){super(code);}}
 /**
