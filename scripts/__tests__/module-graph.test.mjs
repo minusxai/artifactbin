@@ -381,6 +381,15 @@ describe('module graph', () => {
     expect(recordAllowedCycles(scanModuleGraph(tree(libCycle))).cycles).toEqual([ab]);
   });
 
+  it('names in DEEP_MODULES only modules this repository has, each row with only the keys rule 4 reads', () => {
+    const keys = ['entries', 'downstream', 'serverOnly', 'testOnly', 'browserImporters', 'browserLeaves', 'browserLeavesOnly', 'leavesForAll'];
+    for (const [module, row] of Object.entries(DEEP_MODULES)) {
+      const at = path.join(ROOT, 'services/app', module);
+      expect(fs.existsSync(at) || fs.existsSync(`${at}.ts`), `${module} names no module`).toBe(true);
+      expect(Object.keys(row).filter(key => !keys.includes(key)), module).toEqual([]);
+    }
+  });
+
   it('passes on this repository within the time budget', () => {
     const started = Date.now();
     const result = spawnSync(process.execPath, [SCRIPT], { cwd: ROOT, encoding: 'utf8' });
