@@ -24,7 +24,7 @@ import { Button } from '../ui/Button';
 import { Tooltip } from '../ui/Tooltip';
 import { useOptionalInbox } from '../lib/notifications';
 import { useSession } from '../lib/session';
-import { AuthorIdentity, CommentEdited, CommentTimestamp, firstLine, previewText, ThreadContinuation } from './AnnotationPreview';
+import { AuthorIdentity, CommentEdited, CommentTimestamp, firstLine, latestWork, previewText, ThreadContinuation } from './AnnotationPreview';
 import { AnnotationReplyBox } from './AnnotationReplyBox';
 import { CommentFoldingBody } from './CommentFoldingBody';
 import { CommentSubmitHint } from './CommentMarkdown';
@@ -53,6 +53,14 @@ function ThreadFoldControl(props: { folded: boolean; onToggle: () => void }): JS
     class="-ml-1">
     <Show when={props.folded} fallback={<ChevronDown size={13} strokeWidth={1.8} />}><ChevronRight size={13} strokeWidth={1.8} /></Show>
   </Button>;
+}
+
+/** What a card says about its target when the document cannot: the words it quoted, if any, and why. */
+function TargetNote(props: { quote?: string | null; note: string }): JSX.Element {
+  return <div class="border-b border-edge bg-surface/60 px-3 py-1.5">
+    <Show when={props.quote}><p class="mb-1 border-l-2 border-edge-bright pl-2 font-sans text-xs leading-snug text-fg/80">{props.quote}</p></Show>
+    <p class="font-mono text-micro text-faint">{props.note}</p>
+  </div>;
 }
 
 interface AnnotationThreadProps {
@@ -146,8 +154,7 @@ function createCommentEdit(key: string, thread: { onEdit: () => ((commentId: str
 
 /** What each agent working on the thread is doing now: its latest report per session. */
 function AgentWorkStatus(props: { work: AnnotationWire['remote_work'] }): JSX.Element {
-  const agents = () => (props.work ?? []).filter((work, index, all) => !all.slice(index + 1).some((next) => next.sessionId === work.sessionId));
-  return <For each={agents()}>{(work) => (
+  return <For each={latestWork(props.work)}>{(work) => (
     <p role="status" class="comment-agent-status border-b border-edge px-3 py-1.5 text-2xs text-muted">
       <a class="comment-agent-status-name" href={`/chat?session=${work.sessionId}`} target="_blank" rel="noopener noreferrer" style={{ color: agentNameColor(work.name) }}>@{work.name}</a>
       <Show when={remoteWorkActive(work)}><span class="comment-agent-spinner" aria-hidden="true" /></Show>
@@ -171,20 +178,12 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
   const visibleComments = () => props.open ? props.a.thread : props.a.thread.slice(0, 1);
   const first = () => props.a.thread[0];
   const replyCount = () => Math.max(0, props.a.thread.length - 1);
-  const canDelete = (comment: AnnotationCommentWire) => {
-    const userId = session()?.user?.id;
-    return props.canCreateComment !== false && (props.canDeleteAny === true
-      || (userId !== undefined && userId !== null && comment.author.user_id === userId)
-      || props.backend.canDeleteLocalAnnotation?.(comment.id) === true);
-  };
-
+  const mine = (comment: AnnotationCommentWire) => { const userId = session()?.user?.id; return userId !== undefined && userId !== null && comment.author.user_id === userId; };
+  const canDelete = (comment: AnnotationCommentWire) => props.canCreateComment !== false
+    && (props.canDeleteAny === true || mine(comment) || props.backend.canDeleteLocalAnnotation?.(comment.id) === true);
   /** Only the words' author may rewrite them: their account online, or the backend's word for a local comment. */
-  const canEdit = (comment: AnnotationCommentWire) => {
-    if (props.canCreateComment === false || !props.onEdit) return false;
-    const userId = session()?.user?.id;
-    return (userId !== undefined && userId !== null && comment.author.user_id === userId)
-      || props.backend.canEditLocalComment?.(comment) === true;
-  };
+  const canEdit = (comment: AnnotationCommentWire) => props.canCreateComment !== false && !!props.onEdit
+    && (mine(comment) || props.backend.canEditLocalComment?.(comment) === true);
   const edit = createCommentEdit(`${props.artifactId}:edit:${props.a.id}`, {
     onEdit: () => props.onEdit,
     open: () => { if (!props.open) props.onOpen(); },
@@ -225,24 +224,10 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
           <Button type="button" variant="link" class="shrink-0" onClick={props.onOpen}>Restore saved view</Button>
         </div>
       </Show>
-      <Show when={props.targetMissing && !props.a.orphaned}>
-        <p class="border-b border-edge bg-surface/60 px-3 py-1.5 font-mono text-micro text-faint">Exact target is unavailable. This comment remains attached to its containing block.</p>
-      </Show>
+      <Show when={props.targetMissing && !props.a.orphaned}><TargetNote note="Exact target is unavailable. This comment remains attached to its containing block." /></Show>
       {/* What this was about, when the document cannot say it: the node is gone, or its quoted words were edited away. */}
-      <Show when={props.a.orphaned}>
-        <div class="border-b border-edge bg-surface/60 px-3 py-1.5">
-          <Show when={props.open && (props.a.quote ?? props.a.snippet)}>
-            <p class="mb-1 border-l-2 border-edge-bright pl-2 font-sans text-xs leading-snug text-fg/80">{props.a.quote ?? props.a.snippet}</p>
-          </Show>
-          <p class="font-mono text-micro text-faint">This passage was removed from the document.</p>
-        </div>
-      </Show>
-      <Show when={props.open && !props.a.orphaned && props.a.quote_found === false && props.a.quote}>
-        <div class="border-b border-edge bg-surface/60 px-3 py-1.5">
-          <p class="mb-1 border-l-2 border-edge-bright pl-2 font-sans text-xs leading-snug text-fg/80">{props.a.quote}</p>
-          <p class="font-mono text-micro text-faint">These words have since been edited.</p>
-        </div>
-      </Show>
+      <Show when={props.a.orphaned}><TargetNote quote={props.open ? props.a.quote ?? props.a.snippet : null} note="This passage was removed from the document." /></Show>
+      <Show when={props.open && !props.a.orphaned && props.a.quote_found === false && props.a.quote}><TargetNote quote={props.a.quote} note="These words have since been edited." /></Show>
       <ul class="flex flex-col gap-3 px-3 py-3">
         {/* Keyed by comment id: a live frame replaces every row object, and must not remount a comment someone is reading. */}
         <For each={visibleComments().map((comment) => comment.id)}>{(commentId, index) => {
@@ -272,21 +257,22 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
                 {/* Only the room the name leaves: the time gives way first (an owner's header also holds resolve and actions). */}
                 <CommentTimestamp iso={c().created_at} class="min-w-0 flex-[1_1_0%] truncate text-right font-mono text-micro text-faint" />
               </span>
-              <Show when={index() === 0}><ThreadFoldControl folded={false} onToggle={props.onToggleFold} /></Show>
-              <Show when={index() === 0 && props.resolved}>
-                <Tooltip content="resolved">
-                  <span class="inline-flex h-5 w-5 items-center justify-center text-accent"><Check size={13} strokeWidth={2} /></span>
-                </Tooltip>
-              </Show>
-              <Show when={index() === 0 && !props.resolved && props.canCreateComment !== false}>
-                <Tooltip content="resolve thread">
-                  <Button type="button" variant="ghost" size="sm" icon aria-label="Resolve annotation" disabled={props.busy} onClick={() => props.onResolve()} class="-mx-1">
-                    <Check size={13} strokeWidth={2} />
-                  </Button>
-                </Tooltip>
-              </Show>
-              <Show when={index() === 0 && props.resolved && props.open}>
-                <Button type="button" variant="ghost" size="sm" icon aria-label="Hide resolved conversation" aria-expanded="true" onClick={() => props.onOpen()}>↑</Button>
+              <Show when={index() === 0}>
+                <ThreadFoldControl folded={false} onToggle={props.onToggleFold} />
+                <Show when={props.resolved} fallback={<Show when={props.canCreateComment !== false}>
+                  <Tooltip content="resolve thread">
+                    <Button type="button" variant="ghost" size="sm" icon aria-label="Resolve annotation" disabled={props.busy} onClick={() => props.onResolve()} class="-mx-1">
+                      <Check size={13} strokeWidth={2} />
+                    </Button>
+                  </Tooltip>
+                </Show>}>
+                  <Tooltip content="resolved">
+                    <span class="inline-flex h-5 w-5 items-center justify-center text-accent"><Check size={13} strokeWidth={2} /></span>
+                  </Tooltip>
+                  <Show when={props.open}>
+                    <Button type="button" variant="ghost" size="sm" icon aria-label="Hide resolved conversation" aria-expanded="true" onClick={() => props.onOpen()}>↑</Button>
+                  </Show>
+                </Show>
               </Show>
               <Show when={(canDelete(c()) || canEdit(c())) && (index() > 0 || !props.resolved || props.open)}>
                 {(() => {
