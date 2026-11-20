@@ -29,6 +29,7 @@ import { membershipInbox, updateMembershipInbox } from '@/lib/notifications';
 import { POST } from '@/app/api/my/artifacts/[id]/members/route';
 import { explicitlyJoined } from './roles-fixture';
 import { seedArtifacts, seedShares, setArtifact } from '@/__tests__/rows';
+import { Reply } from '@/lib/http';
 
 const harness = useAppHarness();
 
@@ -672,13 +673,13 @@ describe('artifact membership', () => {
    const post=(body:string)=>createAnnotationFor(actor,'a1B2c3',{anchor:nativeAnchor('mark'),body},{kind:'agent',label:'test',transport:'http'});
    expect(await post('`[@member_bob](/people/'+w.bob.id+')`')).not.toBeNull();
    expect((await membershipInbox(w.actor(w.bob))).notifications).toHaveLength(0);
-   const result=await post('[@member_bob](/people/'+w.bob.id+')');expect(result).not.toBeInstanceOf(Response);
+   const result=await post('[@member_bob](/people/'+w.bob.id+')');expect(result).not.toBeInstanceOf(Reply);
    expect((await membershipState(w.actor(w.bob),'a1B2c3')).self?.status).toBe('accepted');
    const inbox=await membershipInbox(w.actor(w.bob));expect(inbox.notifications).toHaveLength(1);
    expect(inbox.notifications[0].source).toMatch(/^comment:/);
    await updateMembershipInbox(w.actor(w.bob),{autoAccept:false,block:w.owner.id});
    expect((await membershipInbox(w.actor(w.bob))).autoAccept).toBe(false);
-   const refused=await post('[@member_bob](/people/'+w.bob.id+')');expect(refused).toBeInstanceOf(Response);expect((refused as Response).status).toBe(403);
+   const refused=await post('[@member_bob](/people/'+w.bob.id+')');expect(refused).toBeInstanceOf(Reply);expect((refused as Reply).status).toBe(403);
    expect((await w.db.query('SELECT * FROM annotations')).rows).toHaveLength(2);
   });
 

@@ -34,6 +34,7 @@ import { POST as mutatePost } from '@/app/api/artifacts/[id]/mutate/route';
 import { GET as contentGet } from '@/app/api/artifacts/[id]/content/route';
 import { GET as artifactGet } from '@/app/api/artifacts/[id]/route';
 import { POST as sqlPost } from '@/app/api/artifacts/[id]/sql/route';
+import { Reply } from '@/lib/http';
 
 useAppHarness();
 const PASSWORD = 'hunter2-live-secret-Zq9';
@@ -261,7 +262,7 @@ it('refuses a declared query from a publisher who cannot edit the live dataset, 
   // Nor does copying a page that declares one.
   const declared = (await publish(alice, { html: PAGE(id, MINE), visibility: 'unlisted' })).body.id;
   const fork = await forkArtifact(bob.actor, (await getArtifactById(declared))!, {});
-  expect(fork instanceof Response ? [fork.status, (await fork.json()).error] : 'forked').toEqual([403, 'declared_query_not_permitted']);
+  expect(fork instanceof Reply ? [fork.status, fork.body.error] : 'forked').toEqual([403, 'declared_query_not_permitted']);
   const stored = (await publish(alice, { dataset: [{ x: 1 }], title: 'Stored' })).body.id;
   const onStored = await publish(alice, { html: `<html><head><link rel="af-dataset" data-af-name="kept" href="ref:${stored}">${SCRIPT('q', 'kept', 'select 1')}</head><body></body></html>` });
   expect((onStored.body as unknown as { error: string }).error).toBe('invalid_declared_query');
@@ -346,7 +347,7 @@ it('keeps a live dataset\'s rules to "who may run declared queries", and every s
   const replaced = await replaceArtifactWithBody({ dataset: [{ x: 1 }] }, alice.actor, id, 'http://localhost:3000');
   expect([replaced.status, replaced.body.error]).toEqual([400, 'live_dataset_connection']);
   const fork = await forkArtifact(alice.actor, row, {});
-  expect(fork instanceof Response ? [fork.status, (await fork.json()).error] : 'forked').toEqual([400, 'not_forkable']);
+  expect(fork instanceof Reply ? [fork.status, fork.body.error] : 'forked').toEqual([400, 'not_forkable']);
 });
 
 it('ignores retired GraphQL naming metadata without granting live query access', async () => {

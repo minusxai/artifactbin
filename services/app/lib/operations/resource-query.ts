@@ -5,30 +5,30 @@ import type { AccessActor } from '@/lib/accounts';
 import {catalogOf, executeCatalog, DatasetError, liveConnectionOf} from '../datasets';
 import {liveDatasetSql} from '@/lib/live-datasets';
 import {datasetReadAccess, datasetView, sqlRefusal, sqlRefusalMessage, viewCatalog} from '../dataset-permissions';
-import {json, parseScalarValues, Reply, toResponse} from '../http';
+import {parseScalarValues, Reply, reply} from '../http';
 import type {TableResult} from '@artifactbin/contracts';
 import {REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts';
 
 /** Query validation, pagination and authorization are independent of the transport. */
-async function queryResource(actor:AccessActor,id:string,body:Record<string,unknown>,signal?:AbortSignal,checkActor?:()=>Promise<void>):Promise<Response>{
- if(Object.keys(body).some(key=>!['sql','values','name','limit','cursor','refresh'].includes(key)))return json({error:'unknown_query_fields'},400);
- if(body.sql!==undefined&&(typeof body.sql!=='string'||!body.sql.trim())||body.name!==undefined&&(typeof body.name!=='string'||!body.name)||body.refresh!==undefined&&typeof body.refresh!=='boolean')return json({error:'invalid_query'},400);
- const values=parseScalarValues(body.values);if(values instanceof Reply)return toResponse(values);
- const limit=body.limit??20;if(!Number.isInteger(limit)||Number(limit)<1||Number(limit)>100)return json({error:'invalid_limit'},400);
+async function queryResource(actor:AccessActor,id:string,body:Record<string,unknown>,signal?:AbortSignal,checkActor?:()=>Promise<void>):Promise<Reply>{
+ if(Object.keys(body).some(key=>!['sql','values','name','limit','cursor','refresh'].includes(key)))return reply({error:'unknown_query_fields'},400);
+ if(body.sql!==undefined&&(typeof body.sql!=='string'||!body.sql.trim())||body.name!==undefined&&(typeof body.name!=='string'||!body.name)||body.refresh!==undefined&&typeof body.refresh!=='boolean')return reply({error:'invalid_query'},400);
+ const values=parseScalarValues(body.values);if(values instanceof Reply)return values;
+ const limit=body.limit??20;if(!Number.isInteger(limit)||Number(limit)<1||Number(limit)>100)return reply({error:'invalid_limit'},400);
  await checkActor?.();
- const readable=await readableArtifact(actor,id);if(!readable)return json({error:'not_found'},404);
+ const readable=await readableArtifact(actor,id);if(!readable)return reply({error:'not_found'},404);
  const {row}=readable;const state=artifactState(row);
  // A LIVE dataset (lib/live-datasets): its owner's or an editor's statement on its connection, every row it answers at once.
  if(row.format==='dataset'&&liveConnectionOf(row.meta)){
-  if(typeof body.sql!=='string')return json({error:'invalid_query',hint:'A live dataset is read with SQL in its database\'s dialect (sql); its tables: GET /api/artifacts/ID/connection/schema.'},400);
-  if(body.cursor!==undefined)return json({error:'invalid_cursor',hint:'A live dataset answers every row at once (up to its row limit): page with LIMIT and OFFSET in the SQL.'},400);
-  const reply=await liveDatasetSql(actor,id,{sql:body.sql,params:values},signal);
-  if(reply.status!==200)return json(reply.body,reply.status);
-  return json({results:[{id,name:'result',execution:'remote',columns:reply.body.columns,rows:reply.body.rows,next_cursor:null,...(reply.body.truncated?{truncated:true}:{})}]},200,{[REVALIDATE_ACTOR_HEADER]:'1'});
+  if(typeof body.sql!=='string')return reply({error:'invalid_query',hint:'A live dataset is read with SQL in its database\'s dialect (sql); its tables: GET /api/artifacts/ID/connection/schema.'},400);
+  if(body.cursor!==undefined)return reply({error:'invalid_cursor',hint:'A live dataset answers every row at once (up to its row limit): page with LIMIT and OFFSET in the SQL.'},400);
+  const live=await liveDatasetSql(actor,id,{sql:body.sql,params:values},signal);
+  if(live.status!==200)return reply(live.body,live.status);
+  return reply({results:[{id,name:'result',execution:'remote',columns:live.body.columns,rows:live.body.rows,next_cursor:null,...(live.body.truncated?{truncated:true}:{})}]},200,{[REVALIDATE_ACTOR_HEADER]:'1'});
  }
  // A dataset is queried over the caller's role view (lib/dataset-permissions): the rows and columns their select rule shows.
  const decision=row.format==='dataset'?await datasetReadAccess(row,actor):null;
- if(decision&&!decision.allowed)return json({error:'not_found'},404);
+ if(decision&&!decision.allowed)return reply({error:'not_found'},404);
  const fingerprint=createHash('sha256').update(JSON.stringify([id,state,body.sql??null,body.name??null,values,limit])).digest('hex');
  let offset=0;
  if(body.cursor!==undefined){
@@ -37,7 +37,7 @@ async function queryResource(actor:AccessActor,id:string,body:Record<string,unkn
    const cursor=JSON.parse(Buffer.from(body.cursor,'base64url').toString());
    if(cursor.fingerprint!==fingerprint||!Number.isSafeInteger(cursor.offset)||cursor.offset<0)throw Error();
    offset=cursor.offset;
-  }catch{return json({error:'invalid_cursor',hint:'Restart this query without cursor; the resource or query inputs changed.'},400);}
+  }catch{return reply({error:'invalid_cursor',hint:'Restart this query without cursor; the resource or query inputs changed.'},400);}
  }
  const authorize=async()=>{
   signal?.throwIfAborted();await checkActor?.();const current=await readableArtifact(actor,id);
@@ -47,30 +47,30 @@ async function queryResource(actor:AccessActor,id:string,body:Record<string,unkn
  const result=(name:string,table:TableResult)=>({id,name,execution:'remote',...table,rows:table.rows.slice(0,Number(limit)),next_cursor:table.rows.length>Number(limit)?Buffer.from(JSON.stringify({fingerprint,offset:offset+Number(limit)})).toString('base64url'):null});
  try{
   if(row.format==='dataset'){
-   const stored=catalogOf(row);if(!stored)return json({error:'not_a_dataset'},400);
+   const stored=catalogOf(row);if(!stored)return reply({error:'not_a_dataset'},400);
    const catalog=decision?.allowed?viewCatalog(decision,stored):stored;
    // Caller SQL needs the role's SQL permission (dataset-permissions `sqlRefusal`, every SQL door's one check).
    const refused=typeof body.sql==='string'&&decision?.allowed?sqlRefusal(decision):null;
-   if(refused)return json({error:'permission_denied',message:sqlRefusalMessage(`${refused.schema}.${refused.name}`)},403);
+   if(refused)return reply({error:'permission_denied',message:sqlRefusalMessage(`${refused.schema}.${refused.name}`)},403);
    const selected=typeof body.name==='string'?catalog.tables.find(table=>table.name===body.name||`${table.schema}.${table.name}`===body.name):catalog.tables.length===1?catalog.tables[0]:undefined;
-   if(body.name&&!selected||!body.sql&&!selected)return json({error:'unknown_table',hint:'Select a table with --name.',names:catalog.tables.map(table=>`${table.schema}.${table.name}`)},400);
+   if(body.name&&!selected||!body.sql&&!selected)return reply({error:'unknown_table',hint:'Select a table with --name.',names:catalog.tables.map(table=>`${table.schema}.${table.name}`)},400);
    const quote=(value:string)=>'"'+value.replaceAll('"','""')+'"';
    const sql=typeof body.sql==='string'?body.sql:`select * from ${quote(selected!.schema)}.${quote(selected!.name)}`;
    const table=await executeCatalog(stored,sql,values,{datasetId:id,view:decision?.allowed?datasetView(decision):null,limit:Number(limit)+1,offset,refresh:body.refresh===true,authorize,signal});
-   await authorize();return json({results:[result(selected?`${selected.schema}.${selected.name}`:'result',table)]},200,{[REVALIDATE_ACTOR_HEADER]:'1'});
+   await authorize();return reply({results:[result(selected?`${selected.schema}.${selected.name}`:'result',table)]},200,{[REVALIDATE_ACTOR_HEADER]:'1'});
   }
-  return json({error:'not_queryable'},400);
+  return reply({error:'not_queryable'},400);
  }catch(error){
   // The SQL validator refuses a statement with a bare Error ("Dataset SQL: …"); that is the caller's
   // statement, not a server fault, and preflight already reports it as invalid_sql. Left to escape it
   // became a 500 the agent could not read (a local eval leg: pi lost four calls to `undeclared parameter $team`).
-  if(error instanceof Error&&error.message.startsWith('Dataset SQL: '))return json({error:'invalid_sql',message:error.message},400);
-  if(error instanceof DatasetError)return json({error:'query_failed',message:error.message},error.status);
+  if(error instanceof Error&&error.message.startsWith('Dataset SQL: '))return reply({error:'invalid_sql',message:error.message},400);
+  if(error instanceof DatasetError)return reply({error:'query_failed',message:error.message},error.status);
   throw error;
  }
 }
 
-export async function queryResourceForRequest(actor:AccessActor,id:string,body:Record<string,unknown>,request:Request):Promise<Response>{
+export async function queryResourceForRequest(actor:AccessActor,id:string,body:Record<string,unknown>,request:Request):Promise<Reply>{
  try{return await queryResource(actor,id,body,request.signal,async()=>{
   // A long query re-asks an explicit bearer whether it still stands (no memo, no side effects).
   if(!request.headers.has('authorization'))return;
@@ -78,5 +78,5 @@ export async function queryResourceForRequest(actor:AccessActor,id:string,body:R
   // A group's sign-in stands while the same sign-in still acts as the same group at the same level (lib/accounts `GroupPrincipal`).
   const was=actor.principalGroup,now=current.principalGroup;
   if(was?!now||now.tokenId!==was.tokenId||now.id!==was.id||now.role!==was.role:!current.tokenId||current.tokenId!==actor.tokenId||current.userId!==actor.userId)throw new DatasetError('Query access revoked',403);
- });}catch(error){if(error instanceof DatasetError)return json({error:'query_access_revoked'},error.status);throw error;}
+ });}catch(error){if(error instanceof DatasetError)return reply({error:'query_access_revoked'},error.status);throw error;}
 }

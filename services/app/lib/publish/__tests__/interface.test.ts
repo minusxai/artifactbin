@@ -173,7 +173,7 @@ describe('fork',()=>{
   const source=(await getArtifactById(id))!;
   expect(forkRefusal(source)).toBeNull();
   const forked=await forkArtifact(forker,source,{title:'Mine'});
-  if(forked instanceof Response)throw new Error(await forked.text());
+  if(forked instanceof Reply)throw new Error(JSON.stringify(forked.body));
   expect(forked.datasets).toEqual([]);
   expect(forked.artifact).toMatchObject({title:'Mine',user_id:forker.userId,source:source.source});
   expect(forked.artifact.id).not.toBe(id);
@@ -181,7 +181,7 @@ describe('fork',()=>{
   const folder=(await getArtifactById(folderId))!;
   expect(await errorOf(forkRefusal(folder)!)).toEqual([400,'not_forkable']);
   const refused=await forkArtifact(forker,folder);
-  expect(refused instanceof Response?await errorOf(refused):refused).toEqual([400,'not_forkable']);
+  expect(refused instanceof Reply?await errorOf(refused):refused).toEqual([400,'not_forkable']);
   expect(await count()).toBe(3);
  });
 });

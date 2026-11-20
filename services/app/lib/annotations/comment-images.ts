@@ -15,7 +15,7 @@ import { readableArtifact, assetByteQuotaLimit } from '@/lib/artifacts';
 import type { AccessActor, TokenHoldingActor } from '@/lib/accounts';
 import { getDb, type Queryable, generateInternalId, lockSubjects } from '../platform';
 import {objectStore,ObjectUnavailable} from '../object-store/index';
-import {json} from '../http';
+import {json,Reply,reply} from '../http';
 
 interface ImageRow {id:string;artifact_id:string;annotation_id:string|null;token_id:string;user_id:string|null;metadata:CommentImageMetadata;bytes:number;ready:boolean;expires_at:string}
 const variants=['original','preview','thumbnail'] as const;
@@ -46,14 +46,14 @@ export async function sweepCommentImages(database?:Queryable):Promise<void>{
  }
 }
 /** Stamps `comment_images.token_id` (NOT NULL): the uploader must hold a token — a session's is its account token (`withAccountToken`). */
-export async function stageCommentImage(actor:TokenHoldingActor,artifactId:string,original:Buffer,preview:Buffer,metadata:unknown):Promise<{id:string}|Response>{
+export async function stageCommentImage(actor:TokenHoldingActor,artifactId:string,original:Buffer,preview:Buffer,metadata:unknown):Promise<{id:string}|Reply>{
  const db=await getDb(),scope=annotationScope(actor);
  const access=await db.query<{edit_id:string}>(`SELECT edit_id FROM artifacts WHERE id=$1 AND ${scope.where('$2')}`,[artifactId,scope.val]);
- if(!access.rows[0])return json({error:'not_found'},404);
- if(!validCommentImage(metadata))return json({error:'invalid_image_metadata'},400);
+ if(!access.rows[0])return reply({error:'not_found'},404);
+ if(!validCommentImage(metadata))return reply({error:'invalid_image_metadata'},400);
  // A moved head says which head it is now: an attached image is restaged against it (solid/document/CommentCapture).
- if(access.rows[0].edit_id!==metadata.capturedEditId)return json({error:'stale',edit_id:access.rows[0].edit_id},409);
- if(original.length>LIMITS.bytes||preview.length>LIMITS.bytes)return json({error:'image_too_large'},413);
+ if(access.rows[0].edit_id!==metadata.capturedEditId)return reply({error:'stale',edit_id:access.rows[0].edit_id},409);
+ if(original.length>LIMITS.bytes||preview.length>LIMITS.bytes)return reply({error:'image_too_large'},413);
  let originals:Buffer,previews:Buffer,thumbnail:Buffer;
  try{
   const decode=async(buffer:Buffer)=>{
@@ -63,7 +63,7 @@ export async function stageCommentImage(actor:TokenHoldingActor,artifactId:strin
   };
   originals=await decode(original);previews=await decode(preview);
   thumbnail=await sharp(previews).resize({width:LIMITS.thumbnail,height:LIMITS.thumbnail,fit:'inside',withoutEnlargement:true}).webp({quality:85}).toBuffer();
- }catch{return json({error:'invalid_image'},400);}
+ }catch{return reply({error:'invalid_image'},400);}
  await sweepCommentImages();
  const bytes=originals.length+previews.length+thumbnail.length,id='cim_'+generateInternalId();
  const reserved=await db.transaction(async tx=>{
@@ -77,13 +77,13 @@ export async function stageCommentImage(actor:TokenHoldingActor,artifactId:strin
   const cap=assetByteQuotaLimit();if(cap&&Number(total.rows[0]?.n??0)+bytes>cap)return false;
   await tx.query("INSERT INTO comment_images (id,artifact_id,token_id,user_id,metadata,bytes,expires_at) VALUES ($1,$2,$3,$4,$5,$6,now()+interval '24 hours')",[id,artifactId,actor.tokenId,actor.userId,JSON.stringify(metadata),bytes]);return true;
  });
- if(!reserved)return json({error:'quota_exceeded'},413);
+ if(!reserved)return reply({error:'quota_exceeded'},413);
  try{
   for(const [variant,buffer] of [['original',originals],['preview',previews],['thumbnail',thumbnail]] as const)await objectStore().put(key(id,variant),buffer,'image/webp');
   await db.query('UPDATE comment_images SET ready=true WHERE id=$1',[id]);return {id};
  }catch{
   await db.query('UPDATE comment_images SET expires_at=now() WHERE id=$1',[id]);await sweepCommentImages();
-  return json({error:'image_storage_unavailable'},503);
+  return reply({error:'image_storage_unavailable'},503);
  }
 }
 /** Called inside the same transaction as the root comment; no external queries or object I/O. */

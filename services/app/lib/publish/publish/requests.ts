@@ -445,7 +445,7 @@ export async function refreshAssetsFor(
   } else {
     urls = [url!];
   }
-  return reply({...await refreshWebAssets(urls, by)});
+  return reply(await refreshWebAssets(urls, by));
 }
 
 function preflightReply(prepared:PreparedContent):Reply {

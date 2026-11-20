@@ -13,12 +13,11 @@ import { canAnnotate, parseHtmlNodeAnchor } from '@artifactbin/contracts';
  * Uniform 404 for an unreachable id, like every scoped read.
  */
 import { createAnnotationFor, listAnnotationPageFor } from '@/lib/annotations';
-import {decodePage, encodeCursor} from '@/lib/http';
 import { accountOf, type AccessActor } from '@/lib/accounts';
 import { withTokenAuth } from '@/lib/authentication';
 import { capabilityGuard } from '@/lib/artifacts';
 import { annotationAuthorForRequest } from '@/lib/annotations';
-import { baseUrl, json, readJson } from '@/lib/http';
+import { baseUrl, decodePage, encodeCursor, json, readJson, Reply, toResponse } from '@/lib/http';
 import { monitoringGuidance } from '@/lib/artifact-wire';
 
 const STATUSES = new Set(['open', 'resolved', 'all']);
@@ -31,7 +30,7 @@ export async function respondToAnnotationList(request: Request, actor: AccessAct
   if(author!==undefined&&!/^[A-Za-z0-9_-]{1,128}$/.test(author))return json({error:'invalid_author'},400);
   const scope=createHash('sha256').update(JSON.stringify([id,actor.principalGroup?accountOf(actor):actor.userId??actor.tokenId,raw,author])).digest('hex');
   const page = decodePage(Object.fromEntries(new URL(request.url).searchParams), 'comments');
-  if (page instanceof Response) return page;
+  if (page instanceof Reply) return toResponse(page);
   if(page.cursor&&page.cursor.scope!==scope)return json({error:'invalid_cursor',hint:'Restart the listing without --cursor; its target or filters changed.'},400);
   const result = await listAnnotationPageFor(actor, id, {status: raw as 'open' | 'resolved' | 'all', limit: page.limit, after: page.cursor?.seq as string | undefined,author});
   if (!result) return json({ error: 'not_found' }, 404);
@@ -69,7 +68,7 @@ export const POST = withTokenAuth(async (request, { actor, params, clientHarness
   const made = await createAnnotationFor(actor, params.id, {
     body: body.body as string, ...(anchor ? { anchor } : {}), ...(typeof body.node_id === 'string'?{nodeId:body.node_id}:{}),...(typeof body.quote==='string'?{quote:body.quote}:{}),...(range?{range}:{}),...(viewState?{viewState}:{}),
   }, annotationAuthorForRequest(request, clientHarness),receipt);
-  if (made instanceof Response) return made;
+  if (made instanceof Reply) return toResponse(made);
   if (!made) return json({error: 'not_found'}, 404);
   if ('refused' in made && made.refused === 'invalid_annotation_revision') return json({error: made.refused, field: 'anchor.revision', hint: 'anchor.revision is the page version number as a string (read.mjs shows it as version), not the state hash or an edit ID.'}, 400);
   if ('refused' in made && made.refused === 'stale') return json({error: 'stale', current_revision: String(made.head.version), hint: 'The element this anchor names is no longer on the page: read it again and anchor to a node in its current version.'}, 409);

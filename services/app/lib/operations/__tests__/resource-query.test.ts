@@ -18,8 +18,11 @@ async function datasetFixture(body: Record<string, unknown>) {
   return {owner, id: created.body.id as string};
 }
 
-const query = (actor: Parameters<typeof queryResourceForRequest>[0], id: string, body: Record<string, unknown>) =>
-  queryResourceForRequest(actor, id, body, request(`/api/artifacts/${id}/query`, {method: 'POST'}));
+type Results = {results: Array<{rows: unknown[]; next_cursor: string | null}>};
+const query = async (actor: Parameters<typeof queryResourceForRequest>[0], id: string, body: Record<string, unknown>) => {
+  const answered = await queryResourceForRequest(actor, id, body, request(`/api/artifacts/${id}/query`, {method: 'POST'}));
+  return {status: answered.status, body: answered.body as Record<string, unknown> & Results};
+};
 
 describe('dataset query contract', () => {
   it('pages a named table, binds scalar SQL values, and refuses a cursor for changed inputs', async () => {
@@ -27,16 +30,16 @@ describe('dataset query contract', () => {
     const body = {name: 'public.rows', limit: 2};
     const first = await query(f.owner.actor, f.id, body);
     expect(first.status).toBe(200);
-    const result = (await first.json()).results[0];
+    const result = first.body.results[0];
     expect(result.rows).toHaveLength(2);
     expect(result.next_cursor).toEqual(expect.any(String));
     const next = await query(f.owner.actor, f.id, {...body, cursor: result.next_cursor});
-    expect((await next.json()).results[0]).toMatchObject({rows: [{n: 3}], next_cursor: null});
+    expect(next.body.results[0]).toMatchObject({rows: [{n: 3}], next_cursor: null});
     expect((await query(f.owner.actor, f.id, {...body, limit: 1, cursor: result.next_cursor})).status).toBe(400);
     const bound = await query(f.owner.actor, f.id, {sql: 'select n from public.rows where n = $n', values: {n: 2}});
-    expect((await bound.json()).results[0].rows).toEqual([{n: 2}]);
+    expect(bound.body.results[0].rows).toEqual([{n: 2}]);
     for (const values of [[], {n: {}}, {n: Infinity}, {n: NaN}]) {
-      expect(await (await query(f.owner.actor, f.id, {values})).json()).toMatchObject({error: 'invalid_values'});
+      expect((await query(f.owner.actor, f.id, {values})).body).toMatchObject({error: 'invalid_values'});
     }
   });
 
@@ -53,7 +56,7 @@ describe('dataset query contract', () => {
       expect(created.status).toBe(201);
       const id = created.body.id as string;
       for (const body of [{}, {name: 'old_query'}, {sql: 'select 1'}]) {
-        expect(await (await query(owner.actor, id, body)).json()).toEqual({error: 'not_queryable'});
+        expect((await query(owner.actor, id, body)).body).toEqual({error: 'not_queryable'});
       }
     }
   });

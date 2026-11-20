@@ -5,7 +5,7 @@ import { forkOwner } from '@/lib/operations';
 import { browserActor } from '@/lib/authentication';
 import { canRead } from '@artifactbin/contracts';
 import { ensureUserToken, ownerUsername } from '@/lib/accounts';
-import { canonicalArtifactPath, SMALL_BODY_LIMIT, baseUrl, json, readJson } from '@/lib/http';
+import { canonicalArtifactPath, SMALL_BODY_LIMIT, baseUrl, json, readJson, Reply, toResponse } from '@/lib/http';
 
 /**
  * POST /api/my/artifacts/:id/fork — "make this mine", from the PAGE.
@@ -61,14 +61,14 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   if ('error' in owner) return json({ error: owner.error, message: owner.message }, owner.status);
   if (body?.dry_run === true) {
     const unforkable = forkRefusal(row);
-    if (unforkable) return unforkable;
+    if (unforkable) return toResponse(unforkable);
     return json({ datasets: [], ...(owner.testuser ? { owner: owner.testuser } : {}) }, 200);
   }
 
   const copy = await forkArtifact(forker, row, {}, owner.actor);
   // A publish refusal (an unownable <Mutation> target, an unreadable ref) is
   // passed through by name — it tells the forker exactly what stopped it.
-  if (copy instanceof Response) return copy;
+  if (copy instanceof Reply) return toResponse(copy);
   // The copy's canonical path is its OWNER's; a sandbox copy is addressed by
   // the test user that holds it, and the reply names that person so the caller
   // never has to look up who a copy belongs to.

@@ -29,6 +29,7 @@ import {bearerIdentity,request,useAppHarness} from './harness';
 import { seedArtifacts, setArtifact } from '@/__tests__/rows';
 import { serviceAuthHost } from '../../auth/__tests__/helpers';
 import {createAuthHost} from '@artifactbin/auth';
+import { Reply } from '@/lib/http';
 
 /**
  * The host's document editor grant (ADMIN__EMAILS in production) through the REAL production shape:
@@ -119,7 +120,7 @@ async function ownerImage(doc:Doc):Promise<string>{
  const owner=identityForUser('usr_owner','tok_owner'),row=(await getArtifactById(doc.id))!;
  const png=await sharp({create:{width:20,height:10,channels:3,background:'red'}}).png().toBuffer();
  const stage=await stageCommentImage(owner,doc.id,png,png,{v:1,capturedEditId:row.edit_id,capturedAt:new Date().toISOString(),method:'region',width:20,height:10,rect:{x:0,y:0,width:20,height:10},viewport:{width:1000,height:800},strokes:[]});
- if(stage instanceof Response)throw new Error(await stage.text());
+ if(stage instanceof Reply)throw new Error(JSON.stringify(stage.body));
  const session:Actor={credential:'session',userId:'usr_owner',email:'owner@example.com',emailVerified:true};
  const made=await myComment(request(`/api/my/artifacts/${doc.id}/annotations`,{method:'POST',actor:session,json:{anchor:{kind:'html-node',v:1,revision:String(row.version),nodeId:'intro',quote:''},edit_id:row.edit_id,body:'See',attachment_id:stage.id}}),params(doc.id));
  if(made.status!==201)throw new Error(await made.text());

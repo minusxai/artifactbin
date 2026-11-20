@@ -6,6 +6,7 @@ import { objectStore } from '@/lib/object-store';
 import { getDb } from '@/lib/platform';
 import { POST as createRoute } from '@/app/api/artifacts/route';
 import { commentImageResponse, createAnnotationFor, expireCommentImagesFor, readCommentImage, stageCommentImage, sweepCommentImages } from '..';
+import { Reply } from '@/lib/http';
 
 useAppHarness();
 const human = { kind: 'human' as const, label: 'Reviewer', transport: 'browser' as const };
@@ -35,14 +36,14 @@ describe('stageCommentImage', () => {
   it('refuses a stranger, bad metadata, a moved head, mismatched or undecodable bytes', async () => {
     const f = await fixture();
     const other = await mintAccountToken('comment-image-stranger');
-    expect((await stageCommentImage(identityForUser(other.userId!, other.id) as never, f.doc.id, f.image, f.image, f.metadata) as Response).status).toBe(404);
+    expect((await stageCommentImage(identityForUser(other.userId!, other.id) as never, f.doc.id, f.image, f.image, f.metadata) as Reply).status).toBe(404);
     for (const metadata of [null, { ...f.metadata, v: 2 }, { ...f.metadata, method: 'paste' }, { ...f.metadata, width: 0 }, { ...f.metadata, rect: { x: 950, y: 0, width: 100, height: 50 } }, { ...f.metadata, strokes: [{ color: 'red', width: 2, points: [[1, 1]] }] }, { ...f.metadata, capturedAt: 'later' }])
-      expect((await stage(f, metadata) as Response).status).toBe(400);
-    const stale = await stage(f, { ...f.metadata, capturedEditId: 'old-edit' }) as Response;
+      expect((await stage(f, metadata) as Reply).status).toBe(400);
+    const stale = await stage(f, { ...f.metadata, capturedEditId: 'old-edit' }) as Reply;
     expect(stale.status).toBe(409);
-    expect(await stale.json()).toEqual({ error: 'stale', edit_id: f.doc.edit_id });
-    expect((await stage(f, { ...f.metadata, width: 99 }) as Response).status).toBe(400);
-    expect((await stage(f, f.metadata, Buffer.from('not an image')) as Response).status).toBe(400);
+    expect(stale.body).toEqual({ error: 'stale', edit_id: f.doc.edit_id });
+    expect((await stage(f, { ...f.metadata, width: 99 }) as Reply).status).toBe(400);
+    expect((await stage(f, f.metadata, Buffer.from('not an image')) as Reply).status).toBe(400);
     expect(await rows()).toEqual([]);
   });
 });

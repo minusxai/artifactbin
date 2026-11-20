@@ -9,7 +9,7 @@ import { assertDeclaredQueriesCopyable, LiveDatasetRefusal } from '@/lib/live-da
 import { datasetReadAccess } from '@/lib/dataset-permissions';
 import { holdsCreatingToken } from '@/lib/artifact-access';
 import { trackEvent } from '@/lib/analytics';
-import { json } from '@/lib/http';
+import { Reply, reply } from '@/lib/http';
 
 /**
  * What a forker may change about the copy AS IT IS MADE — the three fields an
@@ -36,7 +36,7 @@ export interface ForkOverrides {
  * point of the function: refs resolve through `refLoaderForActor(actor)`, so a document whose
  * <Mutation> writes the original owner's dataset, or which reads their private image, is refused
  * BY NAME at this door instead of publishing and failing every write at run time. The refusal
- * Response passes through verbatim.
+ * Reply passes through verbatim.
  *
  * `overrides` are applied to the copy's stored state rather than written afterwards: a post-hoc
  * title would be a second write, rotating the `edit_id` the create reply just handed back.
@@ -63,7 +63,7 @@ export async function forkArtifact(
    * sandbox.
    */
   owner: TokenHoldingActor = actor,
-): Promise<ForkResult | Response> {
+): Promise<ForkResult | Reply> {
   /*
    * WHO CREATES vs WHO OWNS. The copy is created BY the forker's token and FOR
    * the owner's account, which is how the artifact COUNT quota lands on the
@@ -74,7 +74,7 @@ export async function forkArtifact(
    */
   let destination:ArtifactDestination;
   try{destination=await newArtifactDestination(owner,overrides.destination,overrides.ancestor_ids?.at(-1));}
-  catch(error){if(error instanceof DatasetError)return json({error:'invalid_destination',details:[error.message]},error.status);throw error;}
+  catch(error){if(error instanceof DatasetError)return reply({error:'invalid_destination',details:[error.message]},error.status);throw error;}
   overrides={...overrides,destination};
   // Created BY the forker's token, owned BY the owner's account: a row principal, never a request's grant.
   const creator = identityForUser(owner.userId, actor.tokenId);
@@ -88,7 +88,7 @@ export async function forkArtifact(
   const unforkable = forkRefusal(source);
   if (unforkable) return unforkable;
   // A page's declared queries on a live dataset are copied only by someone who may declare them (lib/live-datasets).
-  if (source.format === 'html') { try { await assertDeclaredQueriesCopyable(creator, source); } catch (error) { if (error instanceof LiveDatasetRefusal) return json(error.body, error.status); throw error; } }
+  if (source.format === 'html') { try { await assertDeclaredQueriesCopyable(creator, source); } catch (error) { if (error instanceof LiveDatasetRefusal) return reply(error.body, error.status); throw error; } }
   /*
    * A DATASET COPIES WHAT THE FORKER MAY READ: their role view (lib/dataset-permissions). Owner and editor (and the
    * creating token) copy it whole with its policy; any other reader that sees it whole gets the read-only template
@@ -96,20 +96,20 @@ export async function forkArtifact(
    */
   if (source.format === 'dataset' && !holdsCreatingToken(source, actor)) {
     const decision = await datasetReadAccess(source, actor);
-    if (!decision.allowed) return json({ error: 'not_found' }, 404);
-    if (!decision.full) return json({ error: 'not_forkable', hint: 'Your access shows only part of this dataset: query the rows you can see and publish them as a new dataset.' }, 403);
+    if (!decision.allowed) return reply({ error: 'not_found' }, 404);
+    if (!decision.full) return reply({ error: 'not_forkable', hint: 'Your access shows only part of this dataset: query the rows you can see and publish them as a new dataset.' }, 403);
     if (!decision.admin) source = { ...source, dataset_policy: null, policy_revision: 0 };
   }
   // A copy is born marked current (lib/dataflow/data-syntax): a retired stored shape is never copied into one.
   const retired = unservable(source);
-  if (retired) return retired.response();
+  if (retired) return reply({ error: retired.code, message: retired.message }, retired.status);
   const publicationOwner:TokenHoldingActor=destination.type==='group'?{...identityForUser(null,creator.tokenId),groupId:destination.id}:creator;
-  if(await artifactQuotaExceeded(actor.tokenId,1))return json({error:'quota_exceeded'},403);
+  if(await artifactQuotaExceeded(actor.tokenId,1))return reply({error:'quota_exceeded'},403);
   const input = await forkInput(publicationOwner, source, overrides);
-  if (input instanceof Response) return input;
+  if (input instanceof Reply) return input;
   let row: ArtifactRow;
   try { row = await createArtifact(creator.tokenId, creator.userId, input, { forkedFrom: source.id, linkRole: source.link_role, ...(source.format==='dataset'?{datasetPolicy:{policy:source.dataset_policy??null,revision:source.policy_revision??0}}:{}) }); }
-  catch (error) { if(error instanceof LiveRegionRefusal)return json({error:error.code,details:error.details},409); throw error; }
+  catch (error) { if(error instanceof LiveRegionRefusal)return reply({error:error.code,details:error.details},409); throw error; }
   // Against the SOURCE: "this was forked" is a fact about the original, and the
   // forker is who did it. Never inside a transaction (PGLite deadlock).
   void trackEvent('fork', source.id, { userId: actor.userId, forkId: row.id });
@@ -125,12 +125,12 @@ export async function forkArtifact(
  * faithfully list the original's children and re-pointing it would silently
  * rewrite a document the forker never wrote.
  */
-export function forkRefusal(source: ArtifactRow): Response | null {
+export function forkRefusal(source: ArtifactRow): Reply | null {
   if (source.format === 'folder') {
-    return json({ error: 'not_forkable', hint: "a folder cannot be forked — create one with format: 'folder' and file documents under it with parent_id" }, 400);
+    return reply({ error: 'not_forkable', hint: "a folder cannot be forked — create one with format: 'folder' and file documents under it with parent_id" }, 400);
   }
   if (liveConnectionOf(source.meta)) {
-    return json({ error: 'not_forkable', hint: 'a live dataset cannot be copied (its connection holds a secret): create a new live dataset with the connection you want' }, 400);
+    return reply({ error: 'not_forkable', hint: 'a live dataset cannot be copied (its connection holds a secret): create a new live dataset with the connection you want' }, 400);
   }
   return null;
 }
@@ -147,7 +147,7 @@ async function forkInput(
   actor: TokenHoldingActor,
   source: ArtifactRow,
   overrides: ForkOverrides,
-): Promise<ArtifactInput | Response> {
+): Promise<ArtifactInput | Reply> {
   // Everything the copy keeps that is not the content itself, with the
   // forker's overrides winning. `link_role` is carried too, but through
   // createArtifact's creation-only argument rather than here: it is not part
@@ -168,8 +168,8 @@ async function forkInput(
       const plan=await planHtmlClone(actor,(htmlLinks??[]) as import('@artifactbin/contracts').HtmlPageLink[],{authorizeDataset:authorizeDatasetBinding});
       return {...carried,format:'html',source:source.source,meta,...plan};
     }catch(error){
-      if(error instanceof DatasetBindingUnsupportedError)return json({error:error.code,hint:error.hint},400);
-      if(error instanceof Error&&error.message==='dataset_not_found')return json({error:'dataset_not_found'},400);
+      if(error instanceof DatasetBindingUnsupportedError)return reply({error:error.code,hint:error.hint},400);
+      if(error instanceof Error&&error.message==='dataset_not_found')return reply({error:'dataset_not_found'},400);
       throw error;
     }
   }
