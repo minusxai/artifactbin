@@ -3,7 +3,7 @@ import { createSignal, onCleanup, Show, type JSX } from 'solid-js';
 import RotateCcw from 'lucide-solid/icons/rotate-ccw';
 import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';
-import { writeBrowserArtifact } from '@/lib/artifact-backend/browser-artifact-write';
+import { writeBrowserArtifact } from '@/lib/artifact-backend';
 import {
   DEFAULT_SOCIAL_PREVIEW_CROP,
   SOCIAL_PREVIEW_HEIGHT,

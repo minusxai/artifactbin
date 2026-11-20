@@ -14,7 +14,7 @@ import { isStartPlaceholder } from '@artifactbin/contracts/start-placeholder';
 import { reloadKeepingPlace } from '@/lib/html-reader/reload';
 import { chooseTheme } from '@/lib/html-reader/reader-mode';
 import { rowTitle } from '@/lib/document/display-title';
-import { createHttpBackend } from '@/lib/artifact-backend/http';
+import { artifactRequests, createHttpBackend } from '@/lib/artifact-backend';
 import { initialViewWasReported } from '@/solid/lib/artifact-view-report';
 import type { StoryThemeName } from '@/lib/validation';
 import { loginHref } from '@/lib/http/login-href';
@@ -28,7 +28,6 @@ import { DocumentChrome } from '../document/DocumentChrome';
 import { DocumentSharing } from '../document/DocumentSharing';
 import { ForkConfirm } from '../document/ForkArtifact';
 import { createLiveArtifact } from '../editor/create-live-artifact';
-import {artifactRequests} from '@/lib/artifact-backend/http';
 import { prepareBlankReport } from '../lib/blank-report';
 
 export interface StarterAnswer {

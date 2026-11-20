@@ -1,8 +1,6 @@
 /* @jsxImportSource solid-js */
 import { createResource, createSignal, Show, type JSX } from 'solid-js';
-import {createHttpBackend} from '@/lib/artifact-backend/http';
-import type { ArtifactBackend, ArtifactHead } from '@/lib/artifact-backend';
-import { writeBrowserArtifact } from '@/lib/artifact-backend/browser-artifact-write';
+import { createHttpBackend, writeBrowserArtifact, type ArtifactBackend, type ArtifactHead } from '@/lib/artifact-backend';
 import { readPwaSettings } from '@/lib/html-page/pwa-settings';
 import ReferenceFilesPanel from '../editor/ReferenceFilesPanel';
 import { PwaSettingsPanel, PwaSharingSetting } from '../editor/PwaSettingsPanel';

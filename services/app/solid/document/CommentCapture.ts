@@ -1,8 +1,7 @@
 import { createSignal, onCleanup } from 'solid-js';
 import { beginCapture, CaptureError, encodePng, type CaptureStartResult, type CaptureSession, type CapturedImage, type CaptureRect } from '@/lib/capture';
 import { COMMENT_IMAGE_LIMITS, type BrushStroke, type CommentImageMetadata } from '../../../contracts/src/comment-image';
-import type { ArtifactBackend } from '@/lib/artifact-backend';
-import { BackendRequestError } from '@/lib/artifact-backend/errors';
+import { BackendRequestError, type ArtifactBackend } from '@/lib/artifact-backend';
 
 /** What the server stores (lib/annotations/comment-images decodes exactly these). */
 export const COMMENT_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp'] as const;

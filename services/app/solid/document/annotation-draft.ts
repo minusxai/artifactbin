@@ -15,8 +15,7 @@ import { batch, createEffect, createSignal, on, onCleanup, onMount, untrack, typ
 import { isAreaRange } from '@/lib/document/annotation-range';
 import { runtimeId } from '@artifactbin/utils/runtime-id';
 import type { AnnotationWire } from '@/lib/annotations';
-import type { ArtifactBackend } from '@/lib/artifact-backend';
-import { BackendRequestError } from '@/lib/artifact-backend/errors';
+import { BackendRequestError, type ArtifactBackend } from '@/lib/artifact-backend';
 import { hasReplyText } from '@/lib/annotations/remote-reply';
 import { loginHref } from '@/lib/http/login-href';
 import { COMMENT_TARGET_UNSAVED } from '@artifactbin/contracts/annotation-comment';

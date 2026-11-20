@@ -19,8 +19,7 @@
 import { createContext, createSignal, lazy, onCleanup, Show, Suspense, useContext, type JSX } from 'solid-js';
 import ImagePlus from 'lucide-solid/icons/image-plus';
 import LoaderCircle from 'lucide-solid/icons/loader-circle';
-import type { ArtifactBackend } from '@/lib/artifact-backend';
-import { BackendRequestError } from '@/lib/artifact-backend/errors';
+import { BackendRequestError, type ArtifactBackend } from '@/lib/artifact-backend';
 import { FeatureGate } from '../components/FeatureGate';
 import { Button } from '../ui/Button';
 import { Tooltip } from '../ui/Tooltip';

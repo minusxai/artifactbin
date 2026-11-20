@@ -11,7 +11,7 @@ import EyeOff from 'lucide-solid/icons/eye-off';
 import Pencil from 'lucide-solid/icons/pencil';
 import FolderInput from 'lucide-solid/icons/folder-input';
 import Trash2 from 'lucide-solid/icons/trash-2';
-import { writeBrowserArtifact } from '@/lib/artifact-backend/browser-artifact-write';
+import { writeBrowserArtifact } from '@/lib/artifact-backend';
 import { buildShelf, parentOfRow, type ShelfRow } from '@/lib/shelf';
 import { CARD_HEIGHT, CARD_RENDER_GENERATION, CARD_WIDTH } from '@artifactbin/contracts/og-card';
 import { pageDataChanged } from '@/solid/lib/page-data-events';

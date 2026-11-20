@@ -24,8 +24,7 @@ import { batch, createEffect, createMemo, createSignal, For, on, onCleanup, onMo
 import SquareDashedMousePointer from 'lucide-solid/icons/square-dashed-mouse-pointer';
 import X from 'lucide-solid/icons/x';
 import type { AnnotationWire } from '@/lib/annotations';
-import type { ArtifactBackend } from '@/lib/artifact-backend';
-import { createHttpBackend } from '@/lib/artifact-backend/http';
+import { createHttpBackend, type ArtifactBackend } from '@/lib/artifact-backend';
 import { hasReplyText } from '@/lib/annotations/remote-reply';
 import { APP_BAR_H, RIGHT_RAIL_W } from '@/lib/html-reader/edit-bar';
 import { documentRect, sendDocument, type DocumentRuntimeRef } from '@/lib/html-reader/document-endpoint';
