@@ -11,7 +11,7 @@ import {createGroup,deleteGroup,removeGroupMember,setGroupParent} from '@/lib/gr
 import {setArtifactGroupShare,listArtifactPageFor,getArtifactFor} from '@/lib/artifacts';
 import {datasetWriteAccess} from '@/lib/dataset-permissions';
 import {getDb} from '@/lib/platform';
-import {shareRolesAtLeast,type ArtifactRole} from '@artifactbin/contracts';
+import {shareRolesAtLeast, type ArtifactRole} from '@artifactbin/contracts/sharing';
 import {effectiveRole,liveAccessFacts,preloadAccessFacts,transactionAccessFacts,readThrough,reactionScope,annotationScope,editorScope,ownerScope,commentMonitorScope,policyReaderSql,type Scope} from '..';
 useAppHarness();
 

@@ -5,7 +5,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as Y from 'yjs';
-import type { RegionOpenReply, RegionStreamFrame } from '@artifactbin/contracts';
+import type { RegionOpenReply, RegionStreamFrame } from '@artifactbin/contracts/region-sessions';
 import { openRegionDoc } from '../../live-regions/cells';
 import { createRegionClient, decodeBase64, encodeBase64, REGION_BATCH_MS, type RegionClientEvents } from '../region-http';
 

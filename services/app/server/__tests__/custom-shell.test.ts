@@ -12,7 +12,7 @@ import {postArtifact} from '@/__tests__/artifact-fixtures';
 import {createUser,ensureUsername,mintToken} from '@/lib/accounts';
 import {overrideConfig} from '@/lib/platform/config';
 import {shellFile} from '@/lib/platform';
-import {URL_SPACE,isScreenPath} from '@artifactbin/contracts';
+import {URL_SPACE, isScreenPath} from '@artifactbin/contracts/url-space';
 import {SPA_PATHS} from '@/lib/http/app-pages';
 import {createAppServer} from '../app';
 import {agentDiscovery,agentDiscoveryHead} from '@/lib/agent-copy';

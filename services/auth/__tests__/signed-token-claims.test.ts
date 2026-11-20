@@ -4,7 +4,7 @@
  */
 import {createHmac} from 'node:crypto';
 import {describe,expect,it} from 'vitest';
-import {SERVICE_TOKEN_TTL_SECONDS} from '@artifactbin/contracts';
+import {SERVICE_TOKEN_TTL_SECONDS} from '@artifactbin/contracts/service-audiences';
 import {serviceTokenKey,signServiceToken,verifyServiceToken} from '../src/identity/service-tokens';
 
 const SERVICE={id:'warehouse',origin:'https://warehouse.example',introspectionSecretSha256:null};

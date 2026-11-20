@@ -6,7 +6,7 @@ import { POST as apiComment } from '@/app/api/artifacts/[id]/annotations/route';
 import { PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
 import { observedRequest } from '@/__tests__/conditional-request';
 import { createUser, ensureUsername } from '@/lib/accounts';
-import { htmlTextFingerprint } from '@artifactbin/contracts';
+import { htmlTextFingerprint } from '@artifactbin/contracts/html-annotation';
 import { setArtifact } from '@/__tests__/rows';
 const harness = useAppHarness();
 let account: { id: string; email: string } | null = null;

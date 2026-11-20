@@ -5,7 +5,7 @@
  * real run aborts the statement to demand an external result (the continuation),
  * and whose dry run is a NULL stub.
  */
-import type { QueryFailure } from '@artifactbin/contracts';
+import type { QueryFailure } from '@artifactbin/contracts/sql';
 import type { SqlExtensions } from '../../src/extensions';
 
 const extensions: SqlExtensions = {

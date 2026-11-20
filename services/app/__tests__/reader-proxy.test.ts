@@ -2,7 +2,7 @@ import {nativeHtml} from './native-html-fixture';
 /** Reader URLs use the shared app document; explicit raw/export keeps its sandbox. */
 import { pagesSite } from '@/lib/http';
 import { describe, expect, it } from 'vitest';
-import { ACTOR_HEADER, type Actor } from '@artifactbin/contracts';
+import { ACTOR_HEADER, type Actor } from '@artifactbin/contracts/actor';
 import { signActor } from '@artifactbin/utils';
 import { createAppServer } from '@/server/app';
 import { appPagePolicy } from '@/server/app-policy';

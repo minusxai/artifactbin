@@ -11,7 +11,7 @@ import { afterAll, beforeAll, beforeEach, expect, it, onTestFinished, vi } from 
 import { validateDeploymentConfiguration } from '@/lib/deployment';
 import { trashRow } from '@/__tests__/artifact-fixtures';
 import * as connectors from '@artifactbin/connectors';
-import { SQL_FAILURES } from '@artifactbin/contracts';
+import { SQL_FAILURES } from '@artifactbin/contracts/sql-failures';
 import { setUsername } from '@/lib/accounts';
 import { createAppServer } from '@/server/app';
 import { startPgliteWire, type PgliteWire } from '@artifactbin/test-support/pglite-wire';

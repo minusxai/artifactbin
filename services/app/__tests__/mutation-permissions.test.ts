@@ -1,6 +1,6 @@
 /** Native dataset writes through a page's generated API retain dataset authority and typed-column validation.
  * Retired JSX Value/row-action compiler tests are removed; authored controls use these HTTP operations. */
-import type {Actor} from '@artifactbin/contracts';
+import type {Actor} from '@artifactbin/contracts/actor';
 import { revokeShares } from '@/__tests__/artifact-fixtures';
 import {expect,it,vi} from 'vitest';
 import {objectStore} from '@/lib/object-store';

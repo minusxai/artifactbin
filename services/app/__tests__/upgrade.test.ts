@@ -28,7 +28,8 @@ import { resetAllowances } from '@/lib/allowances';
 import { getDb, resetDb } from '@/lib/platform';
 import { SCHEMA_STATEMENTS } from '@/lib/platform';
 import { ensureIdentitySchema } from '@artifactbin/auth/identity-store';
-import type { Queryable, TransactionalQueryable } from '@artifactbin/contracts';
+import type { Queryable } from '@artifactbin/contracts/db';
+import type { TransactionalQueryable } from '@artifactbin/contracts/identity-module';
 import { request } from '@/__tests__/harness';
 import { seedArtifacts } from '@/__tests__/rows';
 

@@ -6,7 +6,7 @@
  */
 import { afterAll, afterEach, beforeAll, expect, it } from 'vitest';
 import { chromium, type Browser } from 'playwright';
-import type { RenderRequest } from '@artifactbin/contracts';
+import type { RenderRequest } from '@artifactbin/contracts/browser';
 import { createBrowser } from '@artifactbin/browser/local';
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 

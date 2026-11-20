@@ -8,7 +8,7 @@ import { QUIET_MINUTES as SKILL_QUIET_MINUTES } from '../../../skills/artifactbi
 import { POST as startRoute } from '@/app/api/start/route';
 import { POST as agentPromptRoute } from '@/app/api/my/artifacts/[id]/agent-prompt/route';
 import { agentContract, agentBlurb, existingPaste, publicGuideText, llmsText } from '@/lib/agent-copy';
-import { DEFAULT_SERVER } from '@artifactbin/contracts';
+import { DEFAULT_SERVER } from '@artifactbin/contracts/default-server';
 import { gettingStarted } from '@/lib/agent-copy/getting-started';
 import { GET as guideRoute } from '@/app/llms/[topic]/route';
 import { AGENT_HELP_TITLE, agentDiscovery, agentDiscoveryHead } from '@/lib/agent-copy/agent-discovery';

@@ -16,7 +16,7 @@
  * this document is PUBLIC, and an anonymous reader still gets the uniform 404.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { BrowserService, RenderRequest, RenderResult } from '@artifactbin/contracts';
+import type { BrowserService, RenderRequest, RenderResult } from '@artifactbin/contracts/browser';
 import { exportCacheKey, resetExportRenderer } from '@/lib/export';
 import { setServices } from '@/lib/platform';
 import { useAppHarness, request, params } from '@/__tests__/harness';

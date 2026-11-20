@@ -3,7 +3,7 @@ import zlib from 'node:zlib';
 import {nativeResponseIdentity} from '@/__tests__/native-response-identity';
 import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest';
 import {attachActor} from '@artifactbin/utils';
-import type {Actor} from '@artifactbin/contracts';
+import type {Actor} from '@artifactbin/contracts/actor';
 import {useAppHarness,request,setSession,mintAccountToken,testPagesSite as pagesSiteFor,params as routeParams} from '@/__tests__/harness';
 import {observedRequest} from '@/__tests__/conditional-request';
 import {POST as createRoute} from '@/app/api/artifacts/route';

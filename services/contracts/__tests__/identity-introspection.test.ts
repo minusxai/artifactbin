@@ -4,7 +4,7 @@
  * group and its level, `issued_by` who issued its sign-in, and `user_id` null, the only answer where it is.
  */
 import {expect,expectTypeOf,it} from 'vitest';
-import {IDENTITY_VIEWS,type IdentityIntrospectResponse,type IdentityPrincipalGroupRole,type IdentityPrincipalKind} from '@artifactbin/contracts';
+import {IDENTITY_VIEWS, type IdentityIntrospectResponse, type IdentityPrincipalGroupRole, type IdentityPrincipalKind} from '@artifactbin/contracts/identity-service';
 
 type Active = Extract<IdentityIntrospectResponse, {active: true}>;
 type Person = Extract<Active, {principal_kind: 'user'}>;

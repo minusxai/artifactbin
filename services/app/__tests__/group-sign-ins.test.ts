@@ -9,7 +9,10 @@
 import {readFile,readdir,stat,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {beforeEach,expect,it,onTestFinished} from 'vitest';
-import {GROUP_PRINCIPAL_REFUSED,GROUP_PRINCIPALS_NOT_ACCEPTED,IDENTITY_INTROSPECT_PATH,SERVICE_AUTH_HEADER,SERVICE_TOKEN_PATH} from '@artifactbin/contracts';
+import {GROUP_PRINCIPAL_REFUSED} from '@artifactbin/contracts/actor';
+import {GROUP_PRINCIPALS_NOT_ACCEPTED, SERVICE_TOKEN_PATH} from '@artifactbin/contracts/service-audiences';
+import {IDENTITY_INTROSPECT_PATH} from '@artifactbin/contracts/identity-service';
+import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts/routes';
 import {createAuthComposedHost} from '@/test/helpers/auth-host';
 import {AUTH_SECRET,getDb,syncIdentitySettings} from '@/lib/platform';
 import {overrideConfig} from '@/lib/platform/config';

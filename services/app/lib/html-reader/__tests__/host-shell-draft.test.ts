@@ -6,7 +6,7 @@
 import { JSDOM } from 'jsdom';
 import { afterEach, describe, expect, it } from 'vitest';
 import { attachActor } from '@artifactbin/utils';
-import type { Actor } from '@artifactbin/contracts';
+import type { Actor } from '@artifactbin/contracts/actor';
 import { pagesSite } from '@/lib/http';
 import { resetDrafts } from '@/lib/page-drafts';
 import { mountDraft, HostShellError } from '../host-shell';

@@ -4,7 +4,7 @@
  * the session itself still belongs to whoever created it.
  */
 import { expect, it, vi } from 'vitest';
-import { ANONYMOUS, type Actor } from '@artifactbin/contracts';
+import { ANONYMOUS, type Actor } from '@artifactbin/contracts/actor';
 import { createBrowserSessions } from '../src/sessions';
 
 const owner = { credential: 'bearer' as const, tokenId: 'owner', userId: 'usr_owner' };

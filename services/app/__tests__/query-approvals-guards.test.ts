@@ -9,7 +9,7 @@
  */
 import {expect,it} from 'vitest';
 import sharp from 'sharp';
-import type {RenderRequest} from '@artifactbin/contracts';
+import type {RenderRequest} from '@artifactbin/contracts/browser';
 import {identityForUser} from '@/lib/accounts';
 import {getArtifactById} from '@/lib/artifacts';
 import {exportImageResponse,resetExportRenderer} from '@/lib/export';

@@ -10,7 +10,7 @@ import {nativeHtml} from './native-html-fixture';
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { useAppHarness, request, params } from '@/__tests__/harness';
 import { fakeBrowser } from '@artifactbin/utils';
-import type { RenderRequest } from '@artifactbin/contracts';
+import type { RenderRequest } from '@artifactbin/contracts/browser';
 import {exportImage,EXPORT_PNG} from './export-helpers';
 import { GET as serveRaw } from '@/app/a/[id]/raw/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
@@ -20,7 +20,7 @@ import { EXPORT_RENDER_GENERATION, exportCacheKey, parseExportCapture, parseExpo
 
 
 import { setServices } from '@/lib/platform';
-import { CARD_HEIGHT, CARD_WIDTH } from '@artifactbin/contracts';
+import { CARD_HEIGHT, CARD_WIDTH } from '@artifactbin/contracts/og-card';
 
 const EXPORT_BYTES = EXPORT_PNG;
 useAppHarness();

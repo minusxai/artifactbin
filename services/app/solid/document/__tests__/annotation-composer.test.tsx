@@ -13,7 +13,7 @@ import type { StoryEditSelection } from '@/lib/html-bridge/selection-contract';
 import { fireEvent } from '../../__tests__/helpers';
 import { fetchCalls, flush, installAnnotationFetch, knobs, layer } from './annotation-rig';
 import { preloadCommentField } from '../LazyCommentField';
-import { COMMENT_TARGET_UNSAVED } from '@artifactbin/contracts';
+import { COMMENT_TARGET_UNSAVED } from '@artifactbin/contracts/annotation-comment';
 import { stubFetch } from '@/test/helpers/fetch-stub';
 
 beforeEach(() => {

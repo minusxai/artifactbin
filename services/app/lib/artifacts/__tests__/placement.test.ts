@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { useAppHarness } from '@/__tests__/harness';
-import { artifactChannel } from '@artifactbin/contracts';
+import { artifactChannel } from '@artifactbin/contracts/live-channels';
 import { ANONYMOUS_ACTOR } from '@/lib/accounts';
 import { PARENT_REFUSED, childrenTableFor, createArtifact, isParentRefusal, notifyParent, parentOf, rerootArtifact, resolveParent, restoreTrashedSubtree, selectChildren, trashSubtree, updateSharingFor } from '@/lib/artifacts';
 import { account, head, mine } from '@/__tests__/artifact-fixtures';

@@ -2,7 +2,7 @@
  * lib/platform's contract, through its index: identifiers, the request scope and the event envelope.
  * Configuration, the database and the injected services are exercised by every module test that stands on them.
  */
-import type { EventEnvelope, EventsService } from '@artifactbin/contracts';
+import type { EventEnvelope, EventsService } from '@artifactbin/contracts/events';
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import {
   FILE_ID_LENGTH, ID_RE, actorSubject, currentHeaders, currentRequest, emit, envelope, generateFileId, generateInternalId,

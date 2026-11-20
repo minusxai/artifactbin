@@ -7,7 +7,7 @@
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { attachActor } from '@artifactbin/utils';
-import type { Actor } from '@artifactbin/contracts';
+import type { Actor } from '@artifactbin/contracts/actor';
 import { getDb } from '@/lib/platform';
 import { overrideConfig } from '@/lib/platform/config';
 import { pagesSite } from '@/lib/http';

@@ -6,7 +6,7 @@
  */
 import {PGlite} from '@electric-sql/pglite';
 import {afterEach,beforeEach,expect,it} from 'vitest';
-import type {Queryable} from '@artifactbin/contracts';
+import type {Queryable} from '@artifactbin/contracts/db';
 import {effectiveAdminGroupIds,effectiveAdminVia} from '../src/identity-store/group-access';
 import {identityTables} from '../src/identity-store/tables';
 import {identityViewColumns,identityViewStatements} from '../src/identity-store/views';

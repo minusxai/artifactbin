@@ -8,7 +8,7 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
 import { afterEach, expect, it, vi } from 'vitest';
-import { CONNECTORS as SPECS, OWN_CONNECTIONS_OFF } from '@artifactbin/contracts';
+import { CONNECTORS as SPECS, OWN_CONNECTIONS_OFF } from '@artifactbin/contracts/connectors';
 import { NewDatasetPage } from '../NewDataset';
 import { LiveDatasetForm } from '../LiveDatasetForm';
 import { LiveDatasetView } from '../LiveDatasetView';

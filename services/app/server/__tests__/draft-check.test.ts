@@ -6,7 +6,9 @@
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { attachActor } from '@artifactbin/utils';
-import { ANONYMOUS, CANONICAL_DRAFT_CHECK_PATH, type Actor, type PageInspectRequest, type PageInspection } from '@artifactbin/contracts';
+import { ANONYMOUS, type Actor } from '@artifactbin/contracts/actor';
+import { CANONICAL_DRAFT_CHECK_PATH } from '@artifactbin/contracts/identity-service';
+import type { PageInspectRequest, PageInspection } from '@artifactbin/contracts/browser';
 import { EXPORT_INTERNAL_ORIGIN, services, setServices } from '@/lib/platform';
 import { pagesSite } from '@/lib/http';
 import { useAppHarness } from '@/__tests__/harness';

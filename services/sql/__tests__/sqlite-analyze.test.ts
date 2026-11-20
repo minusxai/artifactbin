@@ -7,7 +7,7 @@
  * and the declared type of every output column.
  */
 import { describe, expect, it } from 'vitest';
-import type { DatasetColumn } from '@artifactbin/contracts';
+import type { DatasetColumn } from '@artifactbin/contracts/sql';
 import { loadSqlite, readsOf, type Relation } from '@artifactbin/sql/core';
 
 const engine = await loadSqlite();

@@ -4,7 +4,7 @@
  * one document frame; and a folder's listing is in the FIRST HTML byte its viewer is sent, the whole shelf for its
  * owner and only the public children for a stranger.
  */
-import { ACTOR_HEADER, type Actor } from '@artifactbin/contracts';
+import { ACTOR_HEADER, type Actor } from '@artifactbin/contracts/actor';
 import { signActor } from '@artifactbin/utils';
 import { describe, expect, it } from 'vitest';
 import { createUser, mintToken } from '@/lib/accounts';

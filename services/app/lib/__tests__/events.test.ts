@@ -6,8 +6,8 @@
  * outside the identity verbs or anything that looks like content or a secret.
  */
 import { describe, expect, it } from 'vitest';
-import type { EventPayload, EventVerb, ObjectKind } from '@artifactbin/contracts';
-import { EVENT_VERBS, eventName } from '@artifactbin/contracts';
+import type { EventPayload, EventVerb, ObjectKind } from '@artifactbin/contracts/events';
+import { EVENT_VERBS, eventName } from '@artifactbin/contracts/events';
 import { fakeEvents } from '@artifactbin/utils';
 import { emit, envelope } from '@/lib/platform';
 import { services, setServices } from '@/lib/platform';

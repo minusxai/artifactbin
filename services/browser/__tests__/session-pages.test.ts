@@ -12,7 +12,8 @@ import { afterEach, expect, it, vi } from 'vitest';
 import {build} from 'esbuild';
 import {inspectPage,inspectSource} from '../../app/skills/artifactbin/scripts/check.mjs';
 import {fileURLToPath} from 'node:url';
-import { FORWARDED_HOST, type Actor } from '@artifactbin/contracts';
+import { FORWARDED_HOST } from '@artifactbin/contracts/routes';
+import type { Actor } from '@artifactbin/contracts/actor';
 import { createSessionProcess } from '../src/session-process';
 import type { SessionWorker } from '../src/sessions';
 /** A condition wait's bound (vi.waitFor's own default is 1 s): the condition decides; this only names one that never came. */

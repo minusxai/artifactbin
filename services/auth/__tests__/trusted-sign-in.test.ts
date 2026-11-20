@@ -7,7 +7,7 @@ import { generateKeyPairSync, sign, type KeyObject } from 'node:crypto';
 import { PGlite } from '@electric-sql/pglite';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { assemble, ensureTable } from '@artifactbin/utils';
-import type { TransactionalQueryable } from '@artifactbin/contracts';
+import type { TransactionalQueryable } from '@artifactbin/contracts/identity-module';
 import { createHumanAuth, sessionStoreOf, type HumanAuth } from '../src/index';
 import { authParts } from '../src/parts';
 import { IDENTITY_TABLES } from '../src/identity-store/schema';

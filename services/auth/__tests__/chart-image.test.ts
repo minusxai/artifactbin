@@ -1,7 +1,10 @@
 /** A relay's chart drawing: the real auth handler admits only an opted-in service's own secret and forwards only the exact body. */
 import {delegatedService,serviceAuthHost,serviceAudiences} from './helpers';
 import {describe,it,expect} from 'vitest';
-import {ANONYMOUS,SERVICE_PAYLOAD_LIMIT,CANONICAL_CHART_IMAGE_PATH,CHART_IMAGE_PATH,SERVICE_AUTH_HEADER,type Actor} from '@artifactbin/contracts';
+import {ANONYMOUS, type Actor} from '@artifactbin/contracts/actor';
+import {SERVICE_PAYLOAD_LIMIT} from '@artifactbin/contracts/payload-limit';
+import {CANONICAL_CHART_IMAGE_PATH, CHART_IMAGE_PATH} from '@artifactbin/contracts/identity-service';
+import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts/routes';
 
 const audiences=serviceAudiences({...delegatedService('warehouse','https://warehouse.example','service-secret'),artifact_reads:true},delegatedService('mailer','https://mailer.example','mailer-secret'));
 

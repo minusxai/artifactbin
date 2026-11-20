@@ -4,7 +4,7 @@
  * real page: the verdicts are the contract as much as the bytes are.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { BrowserService, RenderRequest } from '@artifactbin/contracts';
+import type { BrowserService, RenderRequest } from '@artifactbin/contracts/browser';
 import { BROWSER_ROUTES, browserClient, serveBrowser } from '@artifactbin/browser';
 import { createBrowser,requestOriginAllowed } from '@artifactbin/browser/local';
 import sharp from 'sharp';

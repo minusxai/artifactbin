@@ -1,4 +1,4 @@
-import {artifactChannel} from '@artifactbin/contracts';
+import {artifactChannel} from '@artifactbin/contracts/live-channels';
 import {sseStream} from './sse';
 import {beforeEach,expect,it,vi} from 'vitest';
 import {POST} from '@/app/api/artifacts/[id]/presence/route';

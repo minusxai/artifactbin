@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { AnnotationAuthor, HtmlNodeAnchor } from '@artifactbin/contracts';
+import type { AnnotationAuthor } from '@artifactbin/contracts/annotation-comment';
+import type { HtmlNodeAnchor } from '@artifactbin/contracts/html-annotation';
 import { mintAccountToken, request, useAppHarness } from '@/__tests__/harness';
 import { ANONYMOUS_ACTOR, ARTIFACTBIN_AGENT_HEADER, identityForUser } from '@/lib/accounts';
 import { createArtifact, getArtifactById, replaceArtifactFor } from '@/lib/artifacts';

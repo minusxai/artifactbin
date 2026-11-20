@@ -5,7 +5,7 @@ import { expect, it, onTestFinished } from 'vitest';
 import { createAppServer } from '@/server/app';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { START_PLACEHOLDER_MARKUP } from '@artifactbin/contracts';
+import { START_PLACEHOLDER_MARKUP } from '@artifactbin/contracts/start-placeholder';
 import { request, useAppHarness } from './harness';
 import {tempDirSync} from '@artifactbin/test-support/temp-dir';
 

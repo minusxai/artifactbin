@@ -1,7 +1,7 @@
 import {nativeHtml} from './native-html-fixture';
 import { setSession, params } from './harness';
 import {getDb} from '@/lib/platform';
-import type {EventEnvelope} from '@artifactbin/contracts';
+import type {EventEnvelope} from '@artifactbin/contracts/events';
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * THE PLACEMENT MOMENTS — the log's half of the folders and the trash.

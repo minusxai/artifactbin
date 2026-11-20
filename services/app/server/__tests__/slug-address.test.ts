@@ -4,7 +4,7 @@ import {nativeHtml} from '@/__tests__/native-html-fixture';
  * title slugs to it, IN PLACE (no address healing), after the id grammar has had its say. A guessable title only finds a
  * page that is public, or one the viewer holds a role on without the link; anything else is the uniform 404.
  */
-import { ACTOR_HEADER, type Actor } from '@artifactbin/contracts';
+import { ACTOR_HEADER, type Actor } from '@artifactbin/contracts/actor';
 import { signActor } from '@artifactbin/utils';
 import { describe, expect, it } from 'vitest';
 import { postArtifact } from '@/__tests__/artifact-fixtures';

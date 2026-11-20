@@ -11,7 +11,7 @@ import { postArtifact, setVisibility } from '@/__tests__/artifact-fixtures';
  * values (role, likes, follow, author, annotations) are pinned beside it, from a world where every one of them is
  * non-trivial, so the savings cannot come from skipping the work.
  */
-import { ACTOR_HEADER, type Actor } from '@artifactbin/contracts';
+import { ACTOR_HEADER, type Actor } from '@artifactbin/contracts/actor';
 import { signActor } from '@artifactbin/utils';
 import { describe, expect, it } from 'vitest';
 import { createUser, ensureUsername, mintToken } from '@/lib/accounts';

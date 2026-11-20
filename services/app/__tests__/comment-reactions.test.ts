@@ -7,7 +7,7 @@ import { createArtifact, updateSharingFor } from '@/lib/artifacts';
 import { listAnnotationsFor } from '@/lib/annotations';
 import { getDb } from '@/lib/platform/db';
 import { measureQueries } from '@/lib/platform';
-import { COMMENT_REACTORS_MAX } from '@artifactbin/contracts';
+import { COMMENT_REACTORS_MAX } from '@artifactbin/contracts/annotation-comment';
 import { nativeHtml } from './native-html-fixture';
 import { nativeAnchor } from './native-annotation-fixture';
 import { POST as create } from '@/app/api/my/artifacts/[id]/annotations/route';

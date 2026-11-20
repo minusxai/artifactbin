@@ -7,7 +7,7 @@
 import {join} from 'node:path';
 import {createAuthHost,createBearerReader,createHumanAuth,ensureAuthSchema,loginProvidersOf,mailerForRuntime,mailSettingsOf,readEnv,sessionStoreOf,testDomainSignInOf} from '@artifactbin/auth';
 import {createEvents,ensureEventsSchema} from '@artifactbin/events/local';
-import {parseServiceAudiences} from '@artifactbin/contracts';
+import {parseServiceAudiences} from '@artifactbin/contracts/service-audiences';
 import { canAuthenticateUser } from '@/lib/user-kinds';
 import {admitDeploymentIdentity,validateDeploymentConfiguration} from '@/lib/deployment';
 import { EVENTS_SCHEMA, ensureLocalIdentity, setServices } from '@/lib/platform';

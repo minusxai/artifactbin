@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import sharp from 'sharp';
-import type { BrowserService } from '@artifactbin/contracts';
+import type { BrowserService } from '@artifactbin/contracts/browser';
 import { browserClient, serveBrowser } from '@artifactbin/browser';
 import { createBrowser } from '@artifactbin/browser/local';
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';

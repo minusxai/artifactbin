@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { useAppHarness } from '@/__tests__/harness';
 import { account, dataset, head, mine, type Account } from '@/__tests__/artifact-fixtures';
 import { attestSavedHtmlUpload, uploadGrantContext, type ArtifactRow } from '@/lib/artifact-access';
-import type { Queryable } from '@artifactbin/contracts';
+import type { Queryable } from '@artifactbin/contracts/db';
 import type { AccessActor } from '@/lib/accounts';
 import { changeMembership, updateSharingFor } from '@/lib/artifacts';
 import { getDb } from '@/lib/platform';

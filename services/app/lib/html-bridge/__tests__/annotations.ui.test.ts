@@ -1,4 +1,4 @@
-import {htmlTextFingerprint} from '@artifactbin/contracts';
+import {htmlTextFingerprint} from '@artifactbin/contracts/html-annotation';
 import { afterEach, expect, it, vi } from 'vitest';
 import { createHtmlAnnotationPainter } from '../annotations';
 afterEach(() => { vi.restoreAllMocks(); document.body.innerHTML = ''; document.querySelectorAll('[data-af="annotation-overlay"]').forEach((node) => node.remove()); window.getSelection()?.removeAllRanges(); });
@@ -74,7 +74,7 @@ it('reveals only a unique scoped target and leaves stale anchors missing', () =>
  inside.remove();revealHtmlAnnotation(document,pin);expect(outside.scrollIntoView).not.toHaveBeenCalled();
 });
 it('restores all exact migrated nested and sibling parts, while stale or duplicate identities paint nothing', async () => {
- const {htmlTextFingerprint}=await import('@artifactbin/contracts');
+ const {htmlTextFingerprint}=await import('@artifactbin/contracts/html-annotation');
  document.body.innerHTML='<p data-af-id="p">one <b data-af-id="b">two</b> end</p><p data-af-id="next">next words</p>';
  vi.spyOn(Range.prototype,'getClientRects').mockReturnValue([new DOMRect(10,20,30,10)] as unknown as DOMRectList);
  const part=(nodeId:string,quote:string,start:number,end:number)=>{const text=document.querySelector(`[data-af-id="${nodeId}"]`)!.textContent!;return {nodeId,quote,range:{start,end,length:text.length,fingerprint:htmlTextFingerprint(text)}};};
@@ -92,7 +92,7 @@ it('keeps stale migrated selection root geometry without painting any surviving 
  expect(positions[0]?.status).toBe('exact');expect(document.querySelector('[data-af="annotation-overlay"]')!.children.length).toBe(0);painter.dispose();
 });
 it('paints migrated ranges behind text with the original comment palette and cleans registrations',async()=>{
- const {htmlTextFingerprint}=await import('@artifactbin/contracts');document.body.innerHTML='<p data-af-id="root">selected</p>';
+ const {htmlTextFingerprint}=await import('@artifactbin/contracts/html-annotation');document.body.innerHTML='<p data-af-id="root">selected</p>';
  const registry=new Map<string,unknown>(),Highlight=vi.fn(function(...ranges:Range[]){return {ranges};});
  vi.stubGlobal('CSS',{highlights:registry});vi.stubGlobal('Highlight',Highlight);
  try{const painter=createHtmlAnnotationPainter(document),anchor={kind:'html-node' as const,v:1 as const,revision:'3',nodeId:'root',quote:'selected',segments:[{nodeId:'root',quote:'selected',range:{start:0,end:8,length:8,fingerprint:htmlTextFingerprint('selected')}}]};

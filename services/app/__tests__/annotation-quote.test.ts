@@ -1,6 +1,6 @@
 /** Native captures keep selected words and raw text offsets under a stable HTML identity. */
 import {expect,it} from 'vitest';
-import {htmlTextFingerprint,type HtmlNodeAnchor} from '@artifactbin/contracts';
+import {htmlTextFingerprint, type HtmlNodeAnchor} from '@artifactbin/contracts/html-annotation';
 import {useAppHarness,request,mintAccountToken, params } from './harness';
 import {nativeHtml} from './native-html-fixture';
 import {nativeAnchor} from './native-annotation-fixture';

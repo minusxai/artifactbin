@@ -6,7 +6,7 @@
  * Chromium run.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { isQueryFailure } from '@artifactbin/contracts';
+import { isQueryFailure } from '@artifactbin/contracts/sql';
 import { fakeSql } from '@artifactbin/utils';
 
 const load = async () => { vi.resetModules(); return import('@/lib/platform/services'); };

@@ -4,7 +4,10 @@
  * get signed_in or anonymous, never more.
  */
 import { describe, expect, it } from 'vitest';
-import { datasetRoleFrom, type ArtifactRole, type DatasetRoleFacts, type GroupRole, type UserKind } from '@artifactbin/contracts';
+import { datasetRoleFrom, type DatasetRoleFacts } from '@artifactbin/contracts/dataset-permissions';
+import type { ArtifactRole } from '@artifactbin/contracts/sharing';
+import type { GroupRole } from '@artifactbin/contracts/groups';
+import type { UserKind } from '@artifactbin/contracts/testusers';
 import { identityForUser, type AccessActor } from '@/lib/accounts';
 import type { AccessFacts } from '@/lib/artifact-access';
 import { datasetRole, pageRole, type DatasetRoleRow } from '../role';

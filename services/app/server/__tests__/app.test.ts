@@ -8,7 +8,7 @@ import {nativeHtml} from '@/__tests__/native-html-fixture';
  */
 import { agentDiscovery } from '@/lib/skills/agent-discovery';
 import { pagesSite } from '@/lib/http';
-import { ACTOR_HEADER, type Actor } from '@artifactbin/contracts';
+import { ACTOR_HEADER, type Actor } from '@artifactbin/contracts/actor';
 import { signActor } from '@artifactbin/utils';
 import { describe, expect, it } from 'vitest';
 import { postArtifact } from '@/__tests__/artifact-fixtures';

@@ -4,7 +4,7 @@
  * public mutation throttle and the JSON door's error mapping.
  */
 import { describe, expect, it, vi } from 'vitest';
-import type { DatasetColumn } from '@artifactbin/contracts';
+import type { DatasetColumn } from '@artifactbin/contracts/sql';
 import { useAppHarness } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
 import { objectStore, prepareObjects } from '@/lib/object-store';

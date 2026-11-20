@@ -3,7 +3,7 @@
  * the unsaved live text as a page version and anchors to that version, so the words it quotes are in saved source.
  */
 import { describe, expect, it, vi } from 'vitest';
-import type { HtmlNodeAnchor } from '@artifactbin/contracts';
+import type { HtmlNodeAnchor } from '@artifactbin/contracts/html-annotation';
 import { anchorIds, commentAfterRegionSave, commentNeedsRegionSave } from '../region-comment';
 
 const anchor = (nodeId: string, extra: Partial<HtmlNodeAnchor> = {}): HtmlNodeAnchor => ({ kind: 'html-node', v: 1, revision: '4', nodeId, quote: 'typed words', ...extra });

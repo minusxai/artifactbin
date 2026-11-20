@@ -9,7 +9,7 @@ import { replaceArtifactFor, artifactState, type ArtifactRow, canReadArtifact, c
 import { effectiveRole } from '@/lib/artifact-access';
 import { parseShareEntries } from '@/lib/artifact-wire';
 import { linkRoleOf } from '@/lib/artifact-access';
-import { ANONYMOUS_CEILING, type ArtifactRole, atLeast, canAnnotate, canEdit, canGovern, canRead, capRole, maxRole, rankOf, ROLE_ORDER, SHARE_ROLE_LABEL, SHARE_ROLES, type ShareRole, shareRolesAtLeast, type Visibility } from '@artifactbin/contracts';
+import { ANONYMOUS_CEILING, type ArtifactRole, atLeast, canAnnotate, canEdit, canGovern, canRead, capRole, maxRole, rankOf, ROLE_ORDER, SHARE_ROLE_LABEL, SHARE_ROLES, type ShareRole, shareRolesAtLeast, type Visibility } from '@artifactbin/contracts/sharing';
 import { ANONYMOUS_ACTOR, identityForUser, createUser } from '@/lib/accounts';
 import { createAnnotationFor, listAnnotationsFor, actOnAnnotationFor, deleteAnnotationFor } from '@/lib/annotations';
 import { PUT as putArtifactRoute } from '@/app/api/artifacts/[id]/route';

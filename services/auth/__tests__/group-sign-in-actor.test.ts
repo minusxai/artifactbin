@@ -5,7 +5,8 @@
  * being read as a person's actor.
  */
 import {expect,expectTypeOf,it} from 'vitest';
-import {REVALIDATE_ACTOR_HEADER,isGroupActor,type Actor,type GroupPrincipalRole,type HumanActor,type TokenRecord} from '@artifactbin/contracts';
+import {REVALIDATE_ACTOR_HEADER, isGroupActor, type Actor, type GroupPrincipalRole, type HumanActor} from '@artifactbin/contracts/actor';
+import type {TokenRecord} from '@artifactbin/contracts/identity';
 import {signActor,verifyActor} from '@artifactbin/utils';
 import {serviceAuthHost} from './helpers';
 

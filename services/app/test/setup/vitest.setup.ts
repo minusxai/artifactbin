@@ -62,7 +62,7 @@ if (htmlAssetsFile) beforeAll(async () => {
   supplyHtmlAssets(htmlAssetsSupply(htmlAssetsFile));
 });
 
-let localBrowser: import('@artifactbin/contracts').BrowserService | undefined;
+let localBrowser: import('@artifactbin/contracts/browser').BrowserService | undefined;
 const browser = async () => (localBrowser ??= (await import('@artifactbin/browser/local')).createBrowser());
 
 setServices({

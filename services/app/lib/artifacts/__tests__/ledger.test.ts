@@ -4,7 +4,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useAppHarness } from '@/__tests__/harness';
-import { MUTATION_REPLY_TIMEOUT_MS } from '@artifactbin/contracts';
+import { MUTATION_REPLY_TIMEOUT_MS } from '@artifactbin/contracts/sql';
 import {
   CreationReplay, completeMutationReceipt, createArtifact, creationOperation, durableMutation, lookupCreation, mutationInvocation, pinMutationContext,
   recoverCreationIds, reserveArtifactIds, reserveIds, setMutationInvocation, type MutationReceipt,

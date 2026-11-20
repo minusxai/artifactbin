@@ -15,7 +15,8 @@ import { POST } from '@/app/api/artifacts/route';
 import {
   liveSubscriptionSnapshot,
 } from '../realtime/live';
-import { artifactChannel, annotationsChannel, regionsChannel } from '@artifactbin/contracts';
+import { artifactChannel, annotationsChannel } from '@artifactbin/contracts/live-channels';
+import { regionsChannel } from '@artifactbin/contracts/region-sessions';
 import { setArtifact } from '@/__tests__/rows';
 const subscriptions = () => Object.fromEntries(liveSubscriptionSnapshot().map(({ channel, subscribers }) => [channel, subscribers]));
 /** An HTML page's stream also follows its live text (lib/publish/realtime live-pings): one regions channel per page. */

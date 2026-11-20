@@ -5,7 +5,7 @@ import {OPERATIONS,type OpContext} from '@/lib/operations/registry';
 import {useAppHarness,request,mintAccountToken, params } from '@/__tests__/harness';
 import {createArtifact,replaceArtifactFor,artifactState,getArtifactById} from '@/lib/artifacts';
 import {fakeBrowser} from '@artifactbin/utils';
-import type {RenderRequest} from '@artifactbin/contracts';
+import type {RenderRequest} from '@artifactbin/contracts/browser';
 import {setServices} from '@/lib/platform';
 import {resetExportRenderer} from '@/lib/export';
 import {GET as raw} from '@/app/a/[id]/raw/route';

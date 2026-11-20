@@ -5,6 +5,6 @@
  * rather than API tests after merge. scripts/__tests__/stored-shape-pins.test.mjs keeps literal stored dataset links
  * out of the API tests.
  */
-import type {HtmlDatasetLink} from '@artifactbin/contracts';
+import type {HtmlDatasetLink} from '@artifactbin/contracts/html-page';
 import {htmlPageDeclarations} from '@/lib/html-page';
 export const firstSaveLinks=(html:string):HtmlDatasetLink[]=>[...htmlPageDeclarations(html).datasets];

@@ -24,7 +24,7 @@ import {POST as myComment} from '@/app/api/my/artifacts/[id]/annotations/route';
 import {GET as pageArtifact} from '@/app/api/page/artifact/[id]/route';
 import {stageCommentImage} from '@/lib/annotations';
 import sharp from 'sharp';
-import type {Actor} from '@artifactbin/contracts';
+import type {Actor} from '@artifactbin/contracts/actor';
 import {bearerIdentity,request,useAppHarness} from './harness';
 import { seedArtifacts, setArtifact } from '@/__tests__/rows';
 import { serviceAuthHost } from '../../auth/__tests__/helpers';

@@ -8,7 +8,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { annotationsChannel, artifactChannel } from '@artifactbin/contracts';
+import { annotationsChannel, artifactChannel } from '@artifactbin/contracts/live-channels';
 import { getDb } from '@/lib/platform/db';
 import { useAppHarness } from '@/__tests__/harness';
 import { notifyArtifactSql } from '@/lib/artifacts/table';

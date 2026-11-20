@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import * as agentCopy from '@/lib/agent-copy/agent-copy';
 import { existingPaste } from '@/lib/agent-copy';
-import { DEFAULT_SERVER } from '@artifactbin/contracts';
+import { DEFAULT_SERVER } from '@artifactbin/contracts/default-server';
 import { gettingStarted } from '@/lib/agent-copy/getting-started';
 
 const B = 'https://x.test';

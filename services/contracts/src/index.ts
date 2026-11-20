@@ -1,5 +1,5 @@
 export type { Part, Upstream } from './part';
-export { HUMAN_SESSION_LIVE_PATH, ACTOR_HEADER, REVALIDATE_ACTOR_HEADER, ANONYMOUS, GROUP_PRINCIPAL_REFUSED, isGroupActor, type Actor, type HumanActor, type GroupPrincipalRole, type Credential } from './actor';
+export { HUMAN_SESSION_LIVE_PATH, ACTOR_HEADER, REVALIDATE_ACTOR_HEADER, ANONYMOUS, type Actor } from './actor';
 export type { Queryable } from './db';
 export * from './sql';
 export * from './sql-failures';
@@ -16,7 +16,6 @@ export * from './event-feed';
 export * from './relations';
 export * from './agent';
 export * from './routes';
-export { DEFAULT_SERVER } from './default-server';
 export { isLoopbackName } from './loopback-names';
 export { isLocalDevelopmentHost } from './server-identity';
 export * from './artifact-reference';
@@ -44,17 +43,12 @@ export * from './membership';
 
 export * from './document-update';
 
-
 export * from './artifact-format';
 export * from './live-channels';
-export { BASEMAP_PATH } from './basemap';
 export * from './url-space';
 export * from './sign-in-required';
 
-export { CARD_HEIGHT, CARD_RENDER_GENERATION, CARD_WIDTH } from './og-card';
-export { START_PLACEHOLDER_MARKUP } from './start-placeholder';
-export type { AnnotationAuthor } from './annotation-comment';
-export { COMMENT_TARGET_UNSAVED, COMMENT_TARGET_REMOVED, COMMENT_REACTORS_MAX } from './annotation-comment';
+export { CARD_HEIGHT, CARD_WIDTH } from './og-card';
 
 export * from "./groups";
 

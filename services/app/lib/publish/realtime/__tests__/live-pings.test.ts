@@ -3,7 +3,7 @@
  * interval, woken only by region updates, with one shared head read per tick. Driven with a fake clock and channel.
  */
 import { describe, expect, it, vi } from 'vitest';
-import { regionsChannel } from '@artifactbin/contracts';
+import { regionsChannel } from '@artifactbin/contracts/region-sessions';
 import { LIVE_PING_MS, livePings, type LiveFollower } from '../live-pings';
 
 function harness() {

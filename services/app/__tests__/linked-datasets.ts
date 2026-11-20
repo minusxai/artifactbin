@@ -1,5 +1,5 @@
 /** SQL oracle for dataset-link policies, pinned revisions and stable identities. */
-import type {HtmlDatasetLink} from '@artifactbin/contracts';
+import type {HtmlDatasetLink} from '@artifactbin/contracts/html-page';
 import type {AccessActor} from '@/lib/accounts';
 import {executePageSql} from '@/lib/dataset-access';
 export const liveLink=(datasetId:string,name='data'):HtmlDatasetLink=>({kind:'dataset',name,datasetId,mode:'live'});

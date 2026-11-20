@@ -8,7 +8,7 @@
 import {htmlPageDeclarations} from '@/lib/html-page';
 import net from 'node:net';
 import { afterAll, beforeAll, beforeEach, expect, it } from 'vitest';
-import { SQL_FAILURES, type SqlFailureCode } from '@artifactbin/contracts';
+import { SQL_FAILURES, type SqlFailureCode } from '@artifactbin/contracts/sql-failures';
 import { startPgliteWire, type PgliteWire } from '@artifactbin/test-support/pglite-wire';
 import { request, setSession, useAppHarness } from './harness';
 import { person, publish, sql, type Person } from './page-sql-door-fixture';

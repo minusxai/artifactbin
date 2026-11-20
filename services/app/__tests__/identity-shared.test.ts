@@ -11,7 +11,9 @@
 import {readFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {beforeEach,expect,it,onTestFinished} from 'vitest';
-import {IDENTITY_INTROSPECT_PATH,IDENTITY_OWNED_TABLES,IDENTITY_VIEWS,SERVICE_AUTH_HEADER} from '@artifactbin/contracts';
+import {IDENTITY_INTROSPECT_PATH, IDENTITY_VIEWS} from '@artifactbin/contracts/identity-service';
+import {IDENTITY_OWNED_TABLES} from '@artifactbin/contracts/identity-module';
+import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts/routes';
 import {identityViewColumns} from '@artifactbin/auth/identity-store/views';
 import {createAuthComposedHost} from '@/test/helpers/auth-host';
 import {AUTH_SECRET,ensureLocalIdentity,getDb,services,syncIdentitySettings} from '@/lib/platform';

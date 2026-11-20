@@ -3,7 +3,7 @@
  * per-request credential answers, hosted request authority, guest merging, token claiming, the admin secret,
  * test users and their browser sessions, and the forwarded client address.
  */
-import { TESTUSER_ERRORS } from '@artifactbin/contracts';
+import { TESTUSER_ERRORS } from '@artifactbin/contracts/testusers';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createGuestOwner, mintAccountToken, useAppHarness } from '@/__tests__/harness';
 import { ANONYMOUS_ACTOR, DuplicateProfileEmail, NO_IDENTITY, RESERVED_HANDLES, accountOf, answeredOnce, closeTestUserSessions, confirmWelcome, createTestUser, createUser, forgetTestUserSession, forwardedFor, getTestUserRow, hasAdminCredential, hostedCredentialDescriptor, identityForUser, matchesWorkspaceAccount, noteTestUserSession, rememberTokenClient, replaceUserImageKey, resolveTestUser, revokeToken, syncProfile, testUserSessionCount, welcomePending } from '@/lib/accounts';

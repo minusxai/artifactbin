@@ -1,7 +1,7 @@
 import {afterEach,expect,it,vi} from 'vitest';
 import {startHtmlPresence} from '../presence';
 import {readerDefaults,type PresenceGeometry} from '../../html-presence/contract';
-import {htmlTextFingerprint} from '@artifactbin/contracts';
+import {htmlTextFingerprint} from '@artifactbin/contracts/html-annotation';
 afterEach(()=>{document.body.innerHTML='';window.getSelection()?.removeAllRanges();vi.restoreAllMocks();});
 it('draws one person once: one cursor for all their sessions, and one name label for a cursor with a selection',()=>{
  document.body.innerHTML='<p data-af-id="a">Public text</p>';

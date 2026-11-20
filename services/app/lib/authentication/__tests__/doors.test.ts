@@ -4,7 +4,7 @@
  * cookie-carried mutation from another site, a workspace account mismatch, a token whose hosted authority is
  * unavailable — plus the document-editor policy and the hosted operation hooks.
  */
-import { BROWSER_SESSION_HEADER } from '@artifactbin/contracts';
+import { BROWSER_SESSION_HEADER } from '@artifactbin/contracts/browser-sessions';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mintAccountToken, request, setSession, useAppHarness, params } from '@/__tests__/harness';
 import { NO_IDENTITY, revokeToken } from '@/lib/accounts';

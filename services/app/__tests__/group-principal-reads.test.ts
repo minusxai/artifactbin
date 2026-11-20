@@ -3,7 +3,7 @@
  * Root > Team > Squad, a Team sign-in reads exactly what a direct member of Team reads, at either level; every API route
  * the admission list does not name refuses it with the one code.
  */
-import {GROUP_PRINCIPAL_REFUSED} from '@artifactbin/contracts';
+import {GROUP_PRINCIPAL_REFUSED} from '@artifactbin/contracts/actor';
 import {ROUTES} from '@/server/routes.generated';
 import {GROUP_ADMITTED_ROUTES,groupAdmitted} from '@/server/group-admission';
 import {expect,it} from 'vitest';

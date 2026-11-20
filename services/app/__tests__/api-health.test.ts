@@ -15,7 +15,8 @@ import { withHttpServer, type RunningServer } from '@artifactbin/test-support/ne
 import { GET as apiHealth } from '@/app/api/health/route';
 import { stackHealth } from '@/lib/runtime';
 import { QUERY_TIMEOUT_MS } from '@/lib/platform';
-import { SERVICE_AUTH_HEADER, SQL_ROUTES } from '@artifactbin/contracts';
+import { SERVICE_AUTH_HEADER } from '@artifactbin/contracts/routes';
+import { SQL_ROUTES } from '@artifactbin/contracts/sql';
 /** A condition wait's bound (vi.waitFor's own default is 1 s): the condition decides; this only names one that never came. */
 const WAIT_MS = 20_000;
 

@@ -6,7 +6,9 @@
  */
 import {createHmac,hkdfSync} from 'node:crypto';
 import {afterEach,expect,it,vi} from 'vitest';
-import {CHART_IMAGE_PATH,IDENTITY_INTROSPECT_PATH,RUN_SIGN_IN_PATH,SERVICE_AUTH_HEADER} from '@artifactbin/contracts';
+import {CHART_IMAGE_PATH, IDENTITY_INTROSPECT_PATH} from '@artifactbin/contracts/identity-service';
+import {RUN_SIGN_IN_PATH} from '@artifactbin/contracts/service-audiences';
+import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts/routes';
 import {signActor,verifyActor} from '@artifactbin/utils';
 import {delegatedService,serviceAuthHost,serviceAudiences} from './helpers';
 

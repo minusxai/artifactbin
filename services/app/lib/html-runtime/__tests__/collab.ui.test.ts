@@ -7,7 +7,7 @@
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
-import { cellKey, type RegionFrameMessage, type RegionParentMessage } from '@artifactbin/contracts';
+import { cellKey, type RegionFrameMessage, type RegionParentMessage } from '@artifactbin/contracts/region-sessions';
 import { createCellState, openRegionDoc } from '../../live-regions/cells';
 import { createCellPort } from '../frame-cells';
 import { createCollabText, mergeEarlyTyping, type CollabError, type CollabText } from '../collab-binding';
