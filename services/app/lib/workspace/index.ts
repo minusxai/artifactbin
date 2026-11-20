@@ -4,7 +4,7 @@ export { crumbsFor } from './breadcrumb';
 export { groupArtifactsFor } from './group-artifacts';
 export { accountWorkspaceCoreFor, accountWorkspaceFor, accountWorkspaceInsightsFor } from './dashboard';
 export { homeBootstrapFor } from './home';
-export { listAccountTokenRows, listArtifactsByUser, listOwnedArtifacts, listPublicArtifactsByUser, listSharedWithEmail } from './listings';
+export { listArtifactsByUser, listOwnedArtifacts, listPublicArtifactsByUser } from './listings';
 export type { SharedArtifactSummary } from './listings';
 export { workspaceAssetsFor } from './inventory';
 export { listTrashFor, ownedArtifactState, restoreArtifactFor, trashArtifactFor } from './trash';

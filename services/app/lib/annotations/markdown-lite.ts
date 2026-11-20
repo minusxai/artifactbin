@@ -60,12 +60,6 @@ export type MdNode =
 /** The composer toolbar's five verbs; `wrapSelection` is the whole edit. */
 export type MdMarker = 'bold' | 'italic' | 'code' | 'link' | 'list';
 
-interface MdSelection {
-  text: string;
-  start: number;
-  end: number;
-}
-
 /** The subset's block nesting: a quote inside a quote inside a quote, no deeper. */
 const MD_MAX_DEPTH = 3;
 
@@ -463,52 +457,4 @@ export function plainText(nodes: MdNode[]): string {
       case 'list': return node.items.map((item) => plainText(item.children)).join('\n');
     }
   }).filter(Boolean).join('\n');
-}
-
-/* ── the composer's toolbar ──────────────────────────────────────────── */
-
-const WRAPPERS: Record<'bold' | 'italic' | 'code', string> = { bold: '**', italic: '_', code: '`' };
-
-/**
- * Apply one toolbar verb at the caret, answering the text AND the selection to
- * restore — React re-renders a controlled textarea from scratch, so the caret
- * has to be put back deliberately or every press sends it to the end.
- *
- * Wrapping is a TOGGLE: a second press on already-bold words unwraps them,
- * which is what anyone who has pressed the button twice expects.
- */
-export function wrapSelection(text: string, start: number, end: number, marker: MdMarker): MdSelection {
-  const from = Math.max(0, Math.min(start, text.length));
-  const to = Math.max(from, Math.min(end, text.length));
-  const selected = text.slice(from, to);
-
-  if (marker === 'link') {
-    const label = selected || 'text';
-    const urlAt = from + label.length + 3;
-    return { text: `${text.slice(0, from)}[${label}](url)${text.slice(to)}`, start: urlAt, end: urlAt + 3 };
-  }
-
-  if (marker === 'list') {
-    // A list is a LINE verb: it starts at the beginning of the caret's own
-    // line and marks every line the selection touches.
-    const lineStart = text.lastIndexOf('\n', from - 1) + 1;
-    const nextBreak = text.indexOf('\n', to);
-    const lineEnd = nextBreak === -1 ? text.length : nextBreak;
-    const marked = text.slice(lineStart, lineEnd).split('\n')
-      .map((line) => (line.startsWith('- ') ? line : `- ${line}`))
-      .join('\n');
-    return { text: `${text.slice(0, lineStart)}${marked}${text.slice(lineEnd)}`, start: lineStart, end: lineStart + marked.length };
-  }
-
-  const wrap = WRAPPERS[marker];
-  const before = text.slice(0, from);
-  const after = text.slice(to);
-  if (before.endsWith(wrap) && after.startsWith(wrap)) {
-    return {
-      text: `${before.slice(0, before.length - wrap.length)}${selected}${after.slice(wrap.length)}`,
-      start: from - wrap.length,
-      end: to - wrap.length,
-    };
-  }
-  return { text: `${before}${wrap}${selected}${wrap}${after}`, start: from + wrap.length, end: to + wrap.length };
 }

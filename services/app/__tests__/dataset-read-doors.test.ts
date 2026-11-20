@@ -12,7 +12,7 @@ import { getDb } from '@/lib/platform';
 import { getArtifactById, canReadArtifact } from '@/lib/artifacts';
 import { createArtifactFromBody } from '@/lib/publish';
 import { linkedSql, liveLink, errorCode } from './linked-datasets';
-import { datasetResolverForActor } from '@/lib/document-data';
+
 import { OPERATIONS, type OpContext } from '@/lib/operations/registry';
 import { POST as tables } from '@/app/a/[id]/tables/route';
 import { GET as raw } from '@/app/a/[id]/raw/route';
@@ -167,13 +167,6 @@ it('the dataset explorer door (/a/:id/tables) runs SQL only for a role allowed i
   expect((await (await post(owner.token, { sql: 'select count(*) as n from rows' })).json()).rows).toEqual([{ n: 3 }]);
 });
 
-it('a document\'s dataset queries run for a reader only when their role may run SQL', async () => {
-  const { owner, viewer, id } = await setup();
-  expect(await datasetResolverForActor(viewer.actor)(id, 'catalog')).toBeNull();
-  expect(await datasetResolverForActor(viewer.actor)(id, 'import')).toBeNull();
-  expect(await datasetResolverForActor(owner.actor)(id, 'catalog')).not.toBeNull();
-});
-
 it('page GraphQL: generated columns and rows read the view; no role has an aggregate root', async () => {
   const { owner, viewer, id } = await setup();
   const link = liveLink(id);
@@ -187,12 +180,4 @@ it('page GraphQL: generated columns and rows read the view; no role has an aggre
   sees(JSON.stringify(viewerRows.rows), false);
   // A hidden column is not in the viewer's schema; the aggregate root is in nobody's (totals are the page's _sql).
   expect(errorCode(await linkedSql(viewer.actor, link, 'select name, salary from data'))).toBe('validation_failed');
-});
-
-it('markup imports read the reader\'s view', async () => {
-  const { owner, viewer, id } = await setup();
-  await storePolicy(id, SQL_POLICY);
-  const imported = async (actor: AccessActor) => JSON.stringify((await datasetResolverForActor(actor)(id, 'import'))?.tables ?? null);
-  sees(await imported(owner.actor), true);
-  sees(await imported(viewer.actor), false);
 });

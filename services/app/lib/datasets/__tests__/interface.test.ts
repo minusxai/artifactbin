@@ -10,13 +10,7 @@ import { createUser } from '@/lib/accounts';
 import { objectStore, prepareObjects } from '@/lib/object-store';
 import { MAX_FILE_BYTES, MAX_IMAGE_BYTES, getDb } from '@/lib/platform';
 import { seedOwnerJoin } from '@/lib/social';
-import {
-  DatasetError, catalogOf, datasetResponse, importedRows, importedTables, loadDatasetRows,
-  publicCatalogOf, publishDataset, publishFile, publishImage, publishPdf, publishVizRecipe,
-  readFileUpload, resolveUserColumnScope, retainUserScope, serveStoredFile,
-  storeDatasetRows, storeFileContent, storeImageContent, storePdfContent, storedMediaReferences, throttlePublicMutation, uploadedSha256,
-  userOptions, validateDatasetPolicyForRow, validateStoredDatasetPolicy, validateUserContent, validateUserWrites, type DatasetCatalog,
-} from '@/lib/datasets';
+import { DatasetError, catalogOf, datasetResponse, importedRows, importedTables, loadDatasetRows, publicCatalogOf, publishDataset, publishFile, publishImage, publishPdf, publishVizRecipe, readFileUpload, resolveUserColumnScope, retainUserScope, serveStoredFile, storeDatasetRows, storeFileContent, storeImageContent, storePdfContent, storedMediaReferences, throttlePublicMutation, uploadedSha256, validateDatasetPolicyForRow, validateStoredDatasetPolicy, validateUserContent, validateUserWrites, type DatasetCatalog } from '@/lib/datasets';
 import { seedArtifacts } from '@/__tests__/rows';
 import { Reply } from '@/lib/http';
 
@@ -61,7 +55,6 @@ describe('stored catalogs and rows', () => {
     expect(refs).toEqual(new Set([id]));
   });
 
-
 });
 
 describe('user columns', () => {
@@ -82,10 +75,6 @@ describe('user columns', () => {
     await validateUserWrites(db, [column({ memberOf: ['ref:doc_m'] })], [{ who: alice }, { who: bob }], null);
     await expect(validateUserWrites(db, [column({ memberOf: ['ref:doc_m'] })], [{ who: carol }], null)).rejects.toThrow('membership');
     await expect(validateUserWrites(db, [column({ memberOf: ['current'] })], [{ who: alice }], null)).rejects.toThrow('remain unset');
-    expect((await userOptions(db, column({ memberOf: ['ref:doc_m'] }), null)).map(o => o.value).sort()).toEqual([alice, bob].sort());
-    expect(await userOptions(db, column({ memberOf: ['ref:doc_m'], self: true }), carol)).toEqual([]);
-    expect((await userOptions(db, column({ self: true }), carol)).map(o => o.value)).toEqual([carol]);
-    expect(await userOptions(db, column(), alice)).toEqual([]);
     const stored = await storeDatasetRows([{ who: 'usr_missing' }]);
     await expect(validateUserContent(db, { meta: { catalog: { tables: [{ columns: [column()], objectKey: stored.objectKey }] } } }, null, async () => loadDatasetRows({ meta: { objectKey: stored.objectKey } }))).rejects.toThrow('unknown user');
     await validateUserContent(db, { meta: {} }, null, async () => []);

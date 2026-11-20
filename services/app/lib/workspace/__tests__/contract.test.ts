@@ -8,7 +8,7 @@ import { nativeHtml } from '@/__tests__/native-html-fixture';
 import { createUser, identityForUser, type AccessActor } from '@/lib/accounts';
 import { createArtifact, getArtifactById, updateSharingFor, type ArtifactRow } from '@/lib/artifacts';
 import { groupShelfByRecency } from '@/lib/shelf';
-import { listArtifactsByUser, listPublicArtifactsByUser, listSharedWithEmail, listTrashFor, ownedArtifactState, restoreArtifactFor, trashArtifactFor } from '@/lib/workspace';
+import { listArtifactsByUser, listPublicArtifactsByUser, listTrashFor, ownedArtifactState, restoreArtifactFor, trashArtifactFor } from '@/lib/workspace';
 import { setArtifact } from '@/__tests__/rows';
 
 const harness = useAppHarness();
@@ -112,15 +112,6 @@ describe('the listings', () => {
     expect((await listPublicArtifactsByUser(owner.userId)).map(row => row.id)).toEqual([shelf.id]);
   });
 
-  it('shared-with-me names the role and the owner, and leaves out the viewer\'s own rows and trashed ones', async () => {
-    const owner = await account('owner@example.test');
-    const viewer = await account('viewer@example.test');
-    const shared = await doc(owner, 'Shared'), trashed = await doc(owner, 'Trashed'), own = await doc(viewer, 'Own');
-    for (const row of [shared, trashed]) await updateSharingFor(owner, row.id, { shares: [{ email: 'viewer@example.test', role: 'commenter' }] });
-    await updateSharingFor(viewer, own.id, { shares: [{ email: 'viewer@example.test', role: 'editor' }] });
-    await trashArtifactFor(owner, trashed.id);
-    expect((await listSharedWithEmail(' Viewer@Example.test', viewer.userId)).map(row => [row.id, row.role])).toEqual([[shared.id, 'commenter']]);
-  });
 });
 
 describe('the shelf', () => {

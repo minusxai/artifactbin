@@ -87,7 +87,7 @@ const DOCUMENT_BROWSER_LEAVES = [
 const PAGE_STYLES_BROWSER_IMPORTERS = [];
 const PAGE_STYLES_BROWSER_LEAVES = [];
 /** lib/accounts: its index, downstream tokens, and the browser-safe shared handle contract. */
-const ACCOUNTS_ENTRIES = ['', 'tokens', 'handles'];
+const ACCOUNTS_ENTRIES = ['', 'handles'];
 /**
  * lib/document-serving and lib/agent-copy: server code enters through the index (it reads the database, the skill
  * tree and image tools); the app's browser code imports these pure leaf files for values (the app address of an
@@ -209,7 +209,7 @@ export const DEEP_MODULES = {
   'lib/dataflow': { entries: ['', 'server'], browserImporters: DATAFLOW_BROWSER_IMPORTERS, browserLeaves: DATAFLOW_BROWSER_LEAVES },
   'lib/document': { entries: DOCUMENT_ENTRIES, browserImporters: DOCUMENT_BROWSER_IMPORTERS, browserLeaves: DOCUMENT_BROWSER_LEAVES, browserLeavesOnly: true },
   'lib/page-styles': { entries: [''], browserImporters: PAGE_STYLES_BROWSER_IMPORTERS, browserLeaves: PAGE_STYLES_BROWSER_LEAVES },
-  'lib/accounts': { entries: ACCOUNTS_ENTRIES },
+  'lib/accounts': { entries: ACCOUNTS_ENTRIES, downstream: ['tokens'] },
   'lib/notifications': { entries: [''], serverOnly: [''] },
   // Infrastructure (config, db, schema, ids, events, request scope, services): its index only, and never in a browser bundle.
   'lib/platform': { entries: [''], downstream: ['config', 'db', 'services'], serverOnly: [''] },

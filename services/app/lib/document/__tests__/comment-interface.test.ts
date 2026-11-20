@@ -4,10 +4,7 @@
  * and person mentions. Imported through the index, as callers outside the module do.
  */
 import { describe, expect, it } from 'vitest';
-import {
-  canonicalQuote, isPersonMentionHref, personMentions, refinementRange,
-  type AnnotationRange,
-} from '..';
+import { canonicalQuote, isPersonMentionHref, refinementRange, type AnnotationRange } from '..';
 import { canonicalText, isTargetRange, parseRel } from '../annotation-range';
 import { personMention, personMentionId } from '../person-mentions';
 
@@ -85,12 +82,6 @@ describe('person mentions', () => {
   it('writes the one mention spelling, and reads it back beside the stored old form', () => {
     const text = `Hi ${personMention({ user_id: 'u_123', username: 'ada' })} and [@bob](/people/U-9)`;
     expect(text).toContain('[@ada](/api/people/u_123)');
-    expect([...personMentions(text)].map((m) => [m[1], m[2]])).toEqual([['@ada', 'u_123'], ['@bob', 'U-9']]);
-  });
-
-  it('reads no mention from a lookalike', () => {
-    expect([...personMentions('[@a b](/people/x) [ada](/people/x) [@ada](/people/)')]).toEqual([]);
-    expect([...personMentions('')]).toEqual([]);
   });
 
   it('recognises exactly an /api/people/<id> href, or the stored /people/<id> form', () => {

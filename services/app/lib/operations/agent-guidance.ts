@@ -1,25 +1,4 @@
-/** The guidance an agent reads on the create and replace fields (./registry): the rules whose absence produced unstyled or unreadable pages. */
-/** The single rule whose absence produced an unstyled document. */
-export const MARKUP_STYLE_RULE =
-  'EVERY element needs Tailwind utilities in className — bare HTML renders completely unstyled.';
 
-/**
- * The rule whose absence produced a report that contradicted its own data.
- *
- * Codex published a revenue report whose prose read "totals 19400" beside a
- * <Number> (now <Cell>) that computed 19,300 from the same rows. The embed was right; the
- * arithmetic in the agent's head was not. Both surfaces described what the embed
- * IS and neither said when to reach for it, so the agent treated it as a
- * decorative alternative to typing the figure out.
- *
- * A hand-typed figure is also frozen: the dataset can be re-uploaded and the
- * prose still says the old total. That is worse than an ugly page — it is a
- * document that lies quietly, which is the failure this whole tier exists to
- * prevent.
- */
-export const COMPUTED_FIGURE_RULE =
-  'NEVER type a figure into prose that the data can compute — <Cell> inline instead; ' +
-  'typed figures go stale and are often simply wrong.';
 
 /**
  * Agents discover the CSV/sheet forms here or not at all — the schema is the
@@ -75,13 +54,3 @@ export const CSV_URL_FIELD_GUIDANCE =
   'dataset tier from a URL: any PUBLIC CSV link (S3, raw GitHub, a data portal — not only Google Sheets). ' +
   'YOU DO NOT NEED TO DOWNLOAD IT — pass the URL and artifactbin fetches it server-side. ' +
   'Types are inferred per column, same as the dataset field.';
-
-export const MARKUP_FIELD_GUIDANCE = [
-  'Static JSX document. Markup for content, data and layout (kit layouts, charts, controls, conditions, Dialog); the Helmet <script> for behaviour.',
-  MARKUP_STYLE_RULE,
-  'Start with <div data-design="tw" className="@container …">. Use theme tokens, e.g. bg-muted.',
-  'onClick= is rejected; inline style= is allowed. ONE <Helmet> holds <style> and a <script>: an ES module in the document, declared names bound as Solid signals with signal/query/mutation from page.',
-  'Data: <Import name="d" src="ref:<id>" /><Query name="q">{`select … from d.rows`}</Query> (SQLite) in Helmet, then <Chart data="$q" viz={{kind:"vega-lite",spec:{…}}} />.',
-  'Filters: <Value name="x" /> in Helmet, <select value="$x" options="$q" /> in the body; $x in SQL.',
-  COMPUTED_FIGURE_RULE,
-].join(' ');

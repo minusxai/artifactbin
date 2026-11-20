@@ -8,7 +8,7 @@
  */
 
 /** Actors: the identity every access decision reads. */
-export { ARTIFACTBIN_AGENT_HEADER, describeClient, forwardedFor, identifyClient, logClientIdentity, type Harness } from './client-identity';
+export { ARTIFACTBIN_AGENT_HEADER, describeClient, forwardedFor, identifyClient, type Harness } from './client-identity';
 export { ANONYMOUS_ACTOR, NO_IDENTITY, accountOf, identityForUser, principalKey, type GroupPrincipal, type AccessActor, type RequestIdentity, type PublicationActor, type TokenHoldingActor } from './actors';
 
 /** Users and handles. */

@@ -13,7 +13,7 @@ export type { ArtifactRow } from '@/lib/artifact-access';
 
 /** Reads (every server caller): the one read decision and the route gate, the reader snapshot, the lookups, versions and listings, and the state digest. */
 export { admitRead, canReadArtifact, capabilityGuard, readableArtifact, readableArtifactHeader, readableArtifactIdentity, snapshotForReader, snapshotHeadFor } from './read-access';
-export { accessMoved, getArtifact, getArtifactAccessById, getArtifactById, getArtifactFor, getArtifactHeaderById, getArtifactHeadersByIds, getEditableArtifactFor, getLinkReadableArtifact, getOwnedArtifactFor, getSharingArtifactFor, hasInvitedUsersFor } from './rows';
+export { accessMoved, getArtifactAccessById, getArtifactById, getArtifactFor, getArtifactHeaderById, getArtifactHeadersByIds, getEditableArtifactFor, getLinkReadableArtifact, getOwnedArtifactFor, getSharingArtifactFor, hasInvitedUsersFor } from './rows';
 export type { ArtifactHeader } from './rows';
 export { getVersionFor, listVersionsFor, listVersionPageFor, listArtifactPageFor, isVersionNotArchived } from './store';
 export type { ArtifactSummary, VersionContent } from './store';
@@ -68,6 +68,7 @@ export {transferArtifact} from './transfer';
  */
 export { commitDatasetPolicy, commitDatasetWrite } from './dataset-commit';
 export { pinMutationContext } from './mutation-receipt';
+
 export type { MutationReply } from './mutation-receipt';
 export { mutationInvocation } from './mutation-invocation';
 export { childrenTableFor } from './placement';

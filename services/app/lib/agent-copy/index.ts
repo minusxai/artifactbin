@@ -6,5 +6,5 @@
  */
 export { agentContract } from './agent-contract';
 export { existingPaste } from './agent-copy';
-export { agentBlurb, agentDiscovery, agentDiscoveryBody, agentDiscoveryHead, withAgentDiscoveryTail } from './agent-discovery';
+export { agentDiscovery, agentDiscoveryBody, agentDiscoveryHead, withAgentDiscoveryTail } from './agent-discovery';
 export { llmsText, publicGuideText } from './agent-references.server';

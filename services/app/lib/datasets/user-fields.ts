@@ -5,8 +5,6 @@ import type { DatasetColumn, Row } from '@artifactbin/contracts/sql';
 import type {Queryable} from '@artifactbin/contracts/db';
 import { avatarUrl } from '@/lib/avatars';
 import {DatasetError} from './errors';
-
-interface UserOption { value: string; label: string }
 /**
  * A PERSON AS A DOCUMENT MAY SHOW THEM: the display name (name, else handle,
  * else the id), the public handle for /@handle, and the public picture URL —
@@ -43,16 +41,6 @@ export async function validateUserWrites(db:Queryable, columns:DatasetColumn[], 
    if(values.some(value=>!allowed.has(value as string)))throw new DatasetError(`User field ${column.name} requires membership in one of its documents`,403);
   }
  }
-}
-
-/** No unrestricted user directory. Only constrained members or the authenticated user. */
-export async function userOptions(db:Queryable,column:DatasetColumn,userId:string|null):Promise<UserOption[]> {
- const c=column.constraints;
- let ids=c?.memberOf?await memberIds(db,c.memberOf):[];
- if(c?.self)ids=userId&&(!c.memberOf||ids.includes(userId))?[userId]:[];
- if(!ids.length)return [];
- const result=await db.query<{id:string;name:string|null;username:string|null}>('SELECT id,name,username FROM users WHERE id=ANY($1::text[]) ORDER BY COALESCE(name,username,id),id',[ids]);
- return result.rows.map(user=>({value:user.id,label:user.name||user.username||user.id}));
 }
 
 /** Whole-table import/replace uses the same constraints as SQL assignments. */

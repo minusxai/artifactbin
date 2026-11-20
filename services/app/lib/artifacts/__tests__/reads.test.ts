@@ -5,8 +5,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import { useAppHarness } from '@/__tests__/harness';
-import { identityForUser, mintToken } from '@/lib/accounts';
-import { VERSION_PARAM, canReadArtifact, capabilityGuard, UnservableDocument, accessMoved, archivedVersionFor, archivedVersionForActor, createArtifact, getArtifact, getArtifactAccessById, getArtifactById, getArtifactFor, getArtifactHeaderById, getEditableArtifactFor, getLinkReadableArtifact, getOwnedArtifactFor, hasInvitedUsersFor, readableArtifact, readableArtifactHeader, readableArtifactIdentity, refusingUnservable, replaceArtifactFor, servableDocument, servedRow, snapshotForReader, snapshotHeadFor, unservable, updateSharingFor } from '@/lib/artifacts';
+import { identityForUser } from '@/lib/accounts';
+import { VERSION_PARAM, canReadArtifact, capabilityGuard, UnservableDocument, accessMoved, archivedVersionFor, archivedVersionForActor, getArtifactAccessById, getArtifactById, getArtifactFor, getArtifactHeaderById, getEditableArtifactFor, getLinkReadableArtifact, getOwnedArtifactFor, hasInvitedUsersFor, readableArtifact, readableArtifactHeader, readableArtifactIdentity, refusingUnservable, replaceArtifactFor, servableDocument, servedRow, snapshotForReader, snapshotHeadFor, unservable, updateSharingFor } from '@/lib/artifacts';
 import { type ArtifactRow } from '@/lib/artifact-access';
 import { account, dataset, mine, page, readAllPolicy, setVisibility, trashRow } from '@/__tests__/artifact-fixtures';
 
@@ -33,10 +33,6 @@ describe('row lookups', () => {
   it('a token reads its own rows by token; an account\'s reach covers owned and editable rows, with share lists', async () => {
     const owner = await account('owner@example.test');
     const editor = await account('editor@example.test');
-    const loose = await mintToken('loose', null);
-    const tokenRow = await createArtifact(loose.id, null, page('Token'));
-    expect(await getArtifact(loose.id, tokenRow.id)).toMatchObject({ id: tokenRow.id });
-    expect(await getArtifact('other-token', tokenRow.id)).toBeNull();
     const a = await mine(owner, 'A');
     const b = await mine(owner, 'B');
     expect(await hasInvitedUsersFor(owner, a.id)).toBe(false);

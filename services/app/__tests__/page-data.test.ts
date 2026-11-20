@@ -16,7 +16,6 @@ import { updateSharingFor } from '@/lib/artifacts';
 import { identityForUser } from '@/lib/accounts';
 import { link, unlink } from '@/lib/social';
 
-
 import { mintAccountToken as mintToken, params } from '@/__tests__/harness';
 import { createUser, ensureUsername } from '@/lib/accounts';
 import { useAppHarness, request, useSessionUser } from '@/__tests__/harness';
