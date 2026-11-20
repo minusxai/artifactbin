@@ -1,5 +1,6 @@
 import {afterEach,expect,it,vi} from 'vitest';
-import {HUMAN_SESSION_LIVE_PATH,SERVICE_AUTH_HEADER} from '@artifactbin/contracts';
+import {HUMAN_SESSION_LIVE_PATH} from '@artifactbin/contracts/actor';
+import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts/routes';
 afterEach(()=>{vi.unstubAllEnvs();vi.unstubAllGlobals();vi.resetModules();});
 it('split app composition uses the configured auth-owner client ahead of local fallbacks',async()=>{
  vi.resetModules();vi.stubEnv('AUTH__SERVICE_URL','http://auth-owner');vi.stubEnv('INTERNAL__SERVICE_SECRET','test-service-secret');

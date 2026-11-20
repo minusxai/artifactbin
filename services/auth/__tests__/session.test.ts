@@ -1,6 +1,6 @@
 import {beforeEach,describe,expect,it,afterAll,beforeAll} from 'vitest';
 import {createHash} from 'node:crypto';
-import {ACTOR_HEADER,ANONYMOUS} from '@artifactbin/contracts';
+import {ACTOR_HEADER, ANONYMOUS} from '@artifactbin/contracts/actor';
 import {signActor,assemble,cookieName,inProcess} from '@artifactbin/utils';
 import {encodeAgentSession} from './legacy-cookie-fixture';
 import {authParts,type AuthOptions} from '../src/parts';

@@ -3,7 +3,7 @@ import {afterEach, expect, it, vi} from 'vitest';
 import {syntheticEnv} from '@/test/helpers/toolbox-env';
 import {makeClient, platform} from '../../../skills/artifactbin/scripts/toolbox-client.mjs';
 import {sqlCommand} from '../../../skills/artifactbin/scripts/sql.mjs';
-import {SQL_QUERY_MAX_MS, SQL_WALL_OVERHEAD_MS} from '@artifactbin/contracts';
+import {SQL_QUERY_MAX_MS, SQL_WALL_OVERHEAD_MS} from '@artifactbin/contracts/sql';
 
 const server='https://example.test';
 const env=syntheticEnv(server);

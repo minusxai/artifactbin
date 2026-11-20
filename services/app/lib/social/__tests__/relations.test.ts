@@ -1,6 +1,6 @@
 /** Likes and follows: one live edge per pair, revived in place, each transition recorded once in the outbox. */
 import { describe, expect, it } from 'vitest';
-import type { ImmediateRelationVerb, RelationVerb } from '@artifactbin/contracts';
+import type { ImmediateRelationVerb, RelationVerb } from '@artifactbin/contracts/relations';
 import { useAppHarness } from '@/__tests__/harness';
 import { count, has, link, linked, replaceLinked, unlink } from '@/lib/social';
 import { createUser } from '@/lib/accounts';

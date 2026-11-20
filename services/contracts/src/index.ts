@@ -16,8 +16,6 @@ export * from './event-feed';
 export * from './relations';
 export * from './agent';
 export * from './routes';
-export { isLoopbackName } from './loopback-names';
-export { isLocalDevelopmentHost } from './server-identity';
 export * from './artifact-reference';
 export * from './sharing';
 export type { TokenRecord, TokenReader } from './identity';

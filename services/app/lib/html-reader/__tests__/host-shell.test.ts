@@ -12,7 +12,7 @@ import { JSDOM } from 'jsdom';
 import { storePolicy } from '@/__tests__/artifact-fixtures';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { attachActor } from '@artifactbin/utils';
-import type { Actor } from '@artifactbin/contracts';
+import type { Actor } from '@artifactbin/contracts/actor';
 import { setServices } from '@/lib/platform';
 import { createArtifactFromBody } from '@/lib/publish';
 import { identityForUser } from '@/lib/accounts';

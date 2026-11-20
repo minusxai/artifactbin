@@ -10,7 +10,7 @@ import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {getDb} from '@/lib/platform';
 import {notifyThread,recordNotification} from '@/lib/notifications';
 import {POST as delivery} from '@/app/api/internal/notifications/route';
-import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts';
+import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts/routes';
 import {overrideConfig} from '@/lib/platform/config';
 import { seedShares } from '@/__tests__/rows';
 useAppHarness();
