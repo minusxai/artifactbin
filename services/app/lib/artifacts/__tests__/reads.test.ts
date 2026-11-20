@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import { useAppHarness } from '@/__tests__/harness';
 import { identityForUser, mintToken } from '@/lib/accounts';
-import { VERSION_PARAM, canReadArtifact, capabilityGuard, UnservableDocument, accessMoved, archivedVersionFor, archivedVersionForActor, createArtifact, getArtifact, getArtifactAccessById, getArtifactById, getArtifactFor, getArtifactHeaderById, getArtifactsFor, getEditableArtifactFor, getLinkReadableArtifact, getLinkReadableArtifacts, getOwnedArtifactFor, hasInvitedUsersFor, readableArtifact, readableArtifactHeader, readableArtifactIdentity, refusingUnservable, replaceArtifactFor, servableDocument, servedRow, snapshotForReader, snapshotHeadFor, unservable, updateSharingFor } from '@/lib/artifacts';
+import { VERSION_PARAM, canReadArtifact, capabilityGuard, UnservableDocument, accessMoved, archivedVersionFor, archivedVersionForActor, createArtifact, getArtifact, getArtifactAccessById, getArtifactById, getArtifactFor, getArtifactHeaderById, getEditableArtifactFor, getLinkReadableArtifact, getOwnedArtifactFor, hasInvitedUsersFor, readableArtifact, readableArtifactHeader, readableArtifactIdentity, refusingUnservable, replaceArtifactFor, servableDocument, servedRow, snapshotForReader, snapshotHeadFor, unservable, updateSharingFor } from '@/lib/artifacts';
 import { type ArtifactRow } from '@/lib/artifact-access';
 import { account, dataset, mine, page, readAllPolicy, setVisibility, trashRow } from '@/__tests__/artifact-fixtures';
 
@@ -45,9 +45,6 @@ describe('row lookups', () => {
     expect(await hasInvitedUsersFor(editor, b.id)).toBe(false);
     expect((await getArtifactFor(editor, a.id))!.shares).toEqual([{ email: 'editor@example.test', role: 'editor' }]);
     expect(await getOwnedArtifactFor(editor, a.id)).toBeNull();
-    expect((await getArtifactsFor(owner, [a.id, b.id, tokenRow.id])).map(r => r.id).sort()).toEqual([a.id, b.id].sort());
-    expect((await getArtifactsFor(editor, [a.id, b.id])).map(r => r.id)).toEqual([a.id]);
-    expect(await getArtifactsFor(owner, [])).toEqual([]);
     expect((await getEditableArtifactFor(editor, a.id))!.id).toBe(a.id);
     expect(await getEditableArtifactFor(editor, b.id)).toBeNull();
   });
@@ -58,12 +55,9 @@ describe('row lookups', () => {
     const open = await mine(owner, 'Open');
     await updateSharingFor(owner, open.id, { visibility: 'unlisted' });
     const closed = await dataset(owner, readAllPolicy(), { visibility: 'private' });
-    const everyone = await dataset(owner, readAllPolicy());
     expect(await getLinkReadableArtifact(priv.id)).toBeNull();
     expect(await getLinkReadableArtifact(open.id)).toMatchObject({ id: open.id });
     expect(await getLinkReadableArtifact(closed.id)).toBeNull();
-    expect((await getLinkReadableArtifacts([priv.id, open.id, closed.id, everyone.id])).map(r => r.id).sort()).toEqual([open.id, everyone.id].sort());
-    expect(await getLinkReadableArtifacts([])).toEqual([]);
   });
 
   it('accessMoved notices every access column and nothing else', async () => {

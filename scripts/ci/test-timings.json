@@ -7,7 +7,6 @@
    "services/app/__tests__/acl-holes.test.ts": 591,
    "services/app/__tests__/admin-document-access.test.ts": 5395,
    "services/app/__tests__/advanced-http-parity.test.ts": 813,
-   "services/app/__tests__/after-commit.test.ts": 199,
    "services/app/__tests__/agent-actionable-hints.test.ts": 549,
    "services/app/__tests__/agent-prompt.test.ts": 147,
    "services/app/__tests__/agent-session.test.ts": 426,

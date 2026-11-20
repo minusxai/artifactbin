@@ -219,7 +219,6 @@ export async function createArtifact(
 /** What a creation says to the rest of the system, AFTER its transaction committed. */
 export async function afterCreated(row: ArtifactRow, userId: string | null): Promise<void> {
   void trackEvent('create', row.id, { userId, parentId: parentOf(row) });
-  // The first reader of a new document finds it prepared (story's listener, lib/publish/prepared/commit-hooks.server).
   // Its diagrams are drawn to stored SVG in the background; nothing waits on it.
   // A child arriving wakes the folder it landed in, so an open listing
   // re-runs its own query with no reload.

@@ -13,7 +13,7 @@ export type { ArtifactRow } from '@/lib/artifact-access';
 
 /** Reads (every server caller): the one read decision and the route gate, the reader snapshot, the lookups, versions and listings, and the state digest. */
 export { admitRead, canReadArtifact, capabilityGuard, readableArtifact, readableArtifactHeader, readableArtifactIdentity, snapshotForReader, snapshotHeadFor } from './read-access';
-export { accessMoved, getArtifact, getArtifactAccessById, getArtifactById, getArtifactFor, getArtifactHeaderById, getArtifactHeadersByIds, getArtifactsFor, getEditableArtifactFor, getLinkReadableArtifact, getLinkReadableArtifacts, getOwnedArtifactFor, getSharingArtifactFor, hasInvitedUsersFor } from './rows';
+export { accessMoved, getArtifact, getArtifactAccessById, getArtifactById, getArtifactFor, getArtifactHeaderById, getArtifactHeadersByIds, getEditableArtifactFor, getLinkReadableArtifact, getOwnedArtifactFor, getSharingArtifactFor, hasInvitedUsersFor } from './rows';
 export type { ArtifactHeader } from './rows';
 export { getVersionFor, listVersionsFor, listVersionPageFor, listArtifactPageFor, isVersionNotArchived } from './store';
 export type { ArtifactSummary, VersionContent } from './store';
@@ -22,7 +22,7 @@ export { artifactState, observedChange, versionConflict } from './state';
 export { currentPage, liveRevision, readPageHeader, readPageRow, type PageRead } from './current-page';
 export { slugAddress, slugAddressTarget } from './slug-address';
 
-/** Write path (publish, operations, offline): create, edit, replace and revert; metadata; quotas; version conflicts; the creation ledger; id reservation; mutation receipts; the after-commit emitter; and the deployment's two seams. */
+/** Write path (publish, operations, offline): create, edit, replace and revert; metadata; quotas; version conflicts; the creation ledger; id reservation; mutation receipts; and the deployment's two seams. */
 /** Token claim and guest merge (lib/authentication), inside the caller's transaction. */
 export { setLiveDatasetSummary, type LiveConnectionInsert } from './store';
 export { createArtifact, afterCreated, replaceArtifactFor, revertArtifactFor, setMetadataFor, artifactQuotaExceeded, groupArtifactQuotaExceeded, byteQuotaFor, publisherByteQuota, isVersionConflict } from './store';
@@ -38,7 +38,6 @@ export { CreationReplay, creationOperation, lookupCreation, recoverCreationIds }
 export { reserveArtifactIds, reserveIds } from './identities';
 export { completeMutationReceipt, durableMutation } from './mutation-receipt';
 export type { MutationReceipt } from './mutation-receipt';
-export { emitHeadCommitted } from './after-commit';
 export { setMutationInvocation } from './mutation-invocation';
 export type { MutationInvocationFactory } from './mutation-invocation';
 
@@ -71,7 +70,6 @@ export { commitDatasetPolicy, commitDatasetWrite } from './dataset-commit';
 export { pinMutationContext } from './mutation-receipt';
 export type { MutationReply } from './mutation-receipt';
 export { mutationInvocation } from './mutation-invocation';
-export { emitDatasetCommitted } from './after-commit';
 export { childrenTableFor } from './placement';
 
 export {migrateLegacyPage} from './store';

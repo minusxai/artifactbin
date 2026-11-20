@@ -8,7 +8,7 @@ import { account, mine, page } from '@/__tests__/artifact-fixtures';
 import { identityForUser, type AccessActor } from '@/lib/accounts';
 import { createGroup } from '@/lib/groups';
 import { mintToken } from '@/lib/accounts/tokens';
-import { artifactState, createArtifact, getArtifactById, getArtifactFor, getArtifactsFor, getLinkReadableArtifact, getOwnedArtifactFor, isVersionConflict, listArtifactPageFor, listVersionsFor, replaceArtifactFor, revertArtifactFor, trashSubtree, updateSharingFor } from '@/lib/artifacts';
+import { artifactState, createArtifact, getArtifactById, getArtifactFor, getLinkReadableArtifact, getOwnedArtifactFor, isVersionConflict, listArtifactPageFor, listVersionsFor, replaceArtifactFor, revertArtifactFor, trashSubtree, updateSharingFor } from '@/lib/artifacts';
 import { canReadArtifact } from '../read-access';
 import { effectiveRole, ownsArtifact, type ArtifactRow } from '@/lib/artifact-access';
 import { setArtifact } from '@/__tests__/rows';
@@ -133,7 +133,6 @@ describe('the trash gate', () => {
     expect(await getArtifactById(row.id)).toBeNull();
     expect(await getArtifactFor(owner, row.id)).toBeNull();
     expect(await getOwnedArtifactFor(owner, row.id)).toBeNull();
-    expect(await getArtifactsFor(owner, [row.id])).toEqual([]);
     expect(await getLinkReadableArtifact(row.id)).toBeNull();
     expect((await listArtifactPageFor(owner, 10)).rows).toEqual([]);
     expect(await replace(owner, row, 'Ghost')).toBeNull();

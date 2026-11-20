@@ -1,15 +1,15 @@
 /**
  * THE WRITE PATH through the interface: creation (own transaction or the caller's, reserved ids, the post-commit
  * effects), replace and revert under the edit protocol, metadata writes without a content version, the quotas, the
- * observed state and the after-commit hooks.
+ * observed state.
  */
 import { describe, expect, it, vi } from 'vitest';
 import { useAppHarness } from '@/__tests__/harness';
 import { mintToken } from '@/lib/accounts';
 import { ALLOW_PUBLIC_VISIBILITY } from '@/lib/platform';
 import { artifactChannel } from '@artifactbin/contracts/live-channels';
-import { ArtifactParentRefusal, afterCreated, artifactQuotaExceeded, artifactState, assetByteQuotaExceeded, assetByteQuotaLimit, byteQuotaFor, createArtifact, emitDatasetCommitted, emitHeadCommitted, getArtifactById, getArtifactHeaderById, isVersionConflict, isVersionNotArchived, replaceArtifactFor, reserveArtifactIds, revertArtifactFor, setMetadataFor, updateSharingFor } from '@/lib/artifacts';
-import { ARTIFACT_HEADER_COLUMNS, assetBytesForToken, listArtifactsFor, onDatasetCommitted, onHeadCommitted, setArtifactQuotaForTests, setAssetByteQuotaForTests } from '@/lib/artifacts/testing';
+import { ArtifactParentRefusal, afterCreated, artifactQuotaExceeded, artifactState, assetByteQuotaExceeded, assetByteQuotaLimit, byteQuotaFor, createArtifact, getArtifactById, getArtifactHeaderById, isVersionConflict, isVersionNotArchived, replaceArtifactFor, reserveArtifactIds, revertArtifactFor, setMetadataFor, updateSharingFor } from '@/lib/artifacts';
+import { ARTIFACT_HEADER_COLUMNS, assetBytesForToken, listArtifactsFor, setArtifactQuotaForTests, setAssetByteQuotaForTests } from '@/lib/artifacts/testing';
 import { type ArtifactRow } from '@/lib/artifact-access';
 import { account, dataset, head, mine, page, readAllPolicy, sql, trashRow } from '@/__tests__/artifact-fixtures';
 import { Reply } from '@/lib/http';
@@ -174,7 +174,7 @@ describe('metadata', () => {
   });
 });
 
-describe('quotas, state and after-commit', () => {
+describe('quotas and state', () => {
   it('the row cap counts trashed rows; the byte cap charges the account; the observed state ignores derived caches', async () => {
     const owner = await account('owner@example.test');
     const loose = await mintToken('loose', null);
@@ -220,21 +220,6 @@ describe('quotas, state and after-commit', () => {
     } finally { setArtifactQuotaForTests(null); setAssetByteQuotaForTests(undefined as never); }
   });
 
-  it('after-commit: listeners run in order, a throwing one never reaches the write, a disposed one hears nothing', async () => {
-    const heard: string[] = [];
-    const stopBad = onHeadCommitted(() => { throw new Error('listener'); });
-    const stopHead = onHeadCommitted((id, row, change) => heard.push(`head:${id}:${row?.id ?? '-'}:${change?.renderingChanged ?? false}`));
-    const stopData = onDatasetCommitted(id => heard.push(`data:${id}`));
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    expect(() => emitHeadCommitted('a', undefined, { renderingChanged: true })).not.toThrow();
-    emitDatasetCommitted('d');
-    stopBad(); stopHead(); stopData();
-    emitHeadCommitted('b');
-    emitDatasetCommitted('e');
-    expect(heard).toEqual(['head:a:-:true', 'data:d']);
-    expect(warn).toHaveBeenCalledTimes(1);
-    warn.mockRestore();
-  });
 
   it('the owner\'s listing and the header columns', async () => {
     const owner = await account('owner@example.test');

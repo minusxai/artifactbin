@@ -5,7 +5,7 @@
  */
 import type { AccessActor } from '@/lib/accounts';
 import { getDb } from '../platform';
-import { artifactQuery, loadArtifactDocument } from './document';
+import { loadArtifactDocument } from './document';
 import { servableDocument } from './servable';
 import { LIVE_ARTIFACT_SQL, editorScope, ownerScope, sharingScope, type ArtifactRow, type Scope } from '@/lib/artifact-access';
 
@@ -102,21 +102,7 @@ export async function hasInvitedUsersFor(actor: AccessActor, id: string): Promis
   return found.rows[0]?.shared === true;
 }
 
-/** The actor's reach over several rows at once ({@link getArtifactFor}'s scope, `id = ANY`): the ones they own or may edit, without share lists. */
-export async function getArtifactsFor(actor: AccessActor, ids: readonly string[]): Promise<ArtifactRow[]> {
-  if (!ids.length) return [];
-  const db = await getDb();
-  const scope = editorScope(actor);
-  return (await artifactQuery<ArtifactRow>(db, `SELECT * FROM artifacts WHERE id = ANY($1::text[]) AND ${scope.where('$2')}`, [[...ids], scope.val])).rows;
-}
 
-/** {@link getLinkReadableArtifact} for several ids in one read: the rows any caller may use, in the order the database returns them. */
-export async function getLinkReadableArtifacts(ids: readonly string[]): Promise<ArtifactRow[]> {
-  if (!ids.length) return [];
-  const db = await getDb();
-  const rows = (await artifactQuery<ArtifactRow>(db, `SELECT * FROM artifacts WHERE id = ANY($1::text[]) AND ${LIVE_ARTIFACT_SQL}`, [[...ids]])).rows;
-  return rows.filter((row) => row.visibility !== 'private');
-}
 
 const SHARES_PROJECTION="COALESCE((SELECT jsonb_agg(jsonb_build_object('email',s.email,'role',s.role) ORDER BY s.email) FROM artifact_shares s WHERE s.artifact_id=artifacts.id),'[]'::jsonb) AS shares";
 
