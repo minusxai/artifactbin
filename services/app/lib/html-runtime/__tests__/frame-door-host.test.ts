@@ -23,7 +23,7 @@ const site = testPagesSite('pages.example.test', APP);
 it('opens a bridge session only for its parent on the app origin it was served with', async () => {
   const owner = await mintAccountToken('door_owner');
   const created = await createArtifactFromBody({ visibility: 'private', html: '<html><body><h1>Plan</h1></body></html>' }, identityForUser(owner.userId, owner.id, owner.email), APP);
-  const { id } = await created.json() as { id: string };
+  const { id } = created.body as { id: string };
   setServices({ humanSessions: { live: async (ref) => ref === 'door-session' } });
   const reader: Actor = { credential: 'session', sessionId: 'door-session', userId: owner.userId!, email: owner.email ?? '', emailVerified: true };
   const fresh = await framedDocumentSrc(attachActor(new Request(`${APP}/api/page/frame/${id}`), reader), id, site);

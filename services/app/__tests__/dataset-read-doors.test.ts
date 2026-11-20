@@ -38,8 +38,8 @@ async function person(name: string) {
 async function setup() {
   const owner = await person('owner'), viewer = await person('viewer'), other = await person('other');
   const created = await createArtifactFromBody({ dataset: ROWS, access: 'readwrite', visibility: 'unlisted' }, owner.actor as AccessActor & { tokenId: string }, 'http://localhost:3000');
-  expect(created.status, await created.clone().text()).toBe(201);
-  const id = (await created.json()).id as string;
+  expect(created.status, JSON.stringify(created.body)).toBe(201);
+  const id = created.body.id as string;
   const db = await getDb();
   await seedShares(db, { artifact_id: id, user_id: viewer.userId, email: viewer.email, role: 'viewer' });
   await storePolicy(id, POLICY);

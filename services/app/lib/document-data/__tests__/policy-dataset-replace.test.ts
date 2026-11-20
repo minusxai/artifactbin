@@ -13,6 +13,7 @@ import { publishDataset } from '@/lib/datasets';
 import type { StoredContent } from '@/lib/document';
 import { mintAccountToken as mintToken, setDatasetPolicy, params } from '@/__tests__/harness';
 import { request, useAppHarness } from '@/__tests__/harness';
+import { Reply } from '@/lib/http';
 useAppHarness();
 
 const POLICY = {
@@ -68,14 +69,14 @@ it('still refuses a replacement from a stale base, so rows written by viewers ar
 
 it('accepts a stored table with declared columns and no rows, and still refuses a bare empty array', async () => {
   const declared = await publishDataset({ columns: [{ name: 'name', type: 'string' }, { name: 'joined_on', type: 'date' }] }, []);
-  expect(declared).not.toBeInstanceOf(Response);
+  expect(declared).not.toBeInstanceOf(Reply);
   expect((declared as StoredContent).meta).toMatchObject({ rowCount: 0, columns: [{ name: 'name', type: 'string' }, { name: 'joined_on', type: 'date' }] });
   const bare = await publishDataset({}, []);
-  expect(bare).toBeInstanceOf(Response);
-  expect((bare as Response).status).toBe(400);
+  expect(bare).toBeInstanceOf(Reply);
+  expect((bare as Reply).status).toBe(400);
   // The refusal that remains has to say what is wrong with THIS input: a CSV or
   // JSON tier infers its columns from the rows, and zero rows declare nothing.
-  expect(JSON.stringify(await (bare as Response).json())).toMatch(/declared columns/);
+  expect(JSON.stringify((bare as Reply).body)).toMatch(/declared columns/);
 });
 
 /**

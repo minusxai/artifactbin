@@ -1,14 +1,14 @@
 import {datasetResponse, prepareCatalog, catalogOf, executeCatalog, DatasetError} from '@/lib/datasets';
 import {requestActor} from '@/lib/authentication';
 import {getArtifactFor} from '@/lib/artifacts';
-import {readJson,json} from '@/lib/http';
+import {readJson,json,Reply,toResponse} from '@/lib/http';
 import {REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts';
 export async function POST(request:Request){
  const actor=await requestActor(request);if(actor instanceof Response)return actor;
  const body=await readJson(request);if(!body||typeof body.sql!=='string')return json({error:'invalid_query'},400);
  const previous=typeof body.datasetId==='string'?await getArtifactFor(actor,body.datasetId):undefined;
  if(body.datasetId&&!previous)return json({error:'not_found'},404);
- const prepared=await prepareCatalog(body.dataset,previous??undefined);if(prepared instanceof Response)return prepared;
+ const prepared=await prepareCatalog(body.dataset,previous??undefined);if(prepared instanceof Reply)return toResponse(prepared);
  return datasetResponse(()=>executeCatalog(catalogOf(prepared)!,body.sql as string,{}, {view:null/* the caller's own draft, or a dataset they own or edit (getArtifactFor): the whole catalog */,limit:50,refresh:true,datasetId:previous?.id,actor,signal:request.signal,authorize:async()=>{
   const currentActor=await requestActor(request);
   if(currentActor instanceof Response)throw new DatasetError('Dataset not found',404);

@@ -12,10 +12,11 @@ import { SUMMARY_META_FIELDS, artifactSummaryToWire, artifactToWire, committedOp
 import { artifactState, createArtifact, getArtifactFor, listArtifactPageFor, updateSharingFor, getVersionFor, replaceArtifactFor } from '@/lib/artifacts';
 import { type ArtifactRow } from '@/lib/artifact-access';
 import { account, dataset, head, mine, page, sql } from '@/__tests__/artifact-fixtures';
+import { Reply } from '@/lib/http';
 
 useAppHarness();
 const BASE = 'https://app.test';
-const refusal = async (value: unknown) => value instanceof Response ? [value.status, (await value.json()).error] : value;
+const refusal = async (value: unknown) => value instanceof Reply ? [value.status, value.body.error] : value;
 
 describe('body parsers', () => {
   it('each field: absent keeps, a valid value passes, anything else is refused by name', async () => {
@@ -136,7 +137,7 @@ describe('the metadata PATCH from a body', () => {
     const state = artifactState(current);
     const patch = async (actor: typeof owner, body: Record<string, unknown>, dryRun = false) => {
       const reply = await updateMetadataFromBody(actor, row.id, body, BASE, dryRun);
-      return [reply.status, await reply.json()] as const;
+      return [reply.status, reply.body] as const;
     };
     expect((await patch(owner, { html: '<p/>', source: 'x' }))[1].error).toBe('native_html_required');
     expect((await patch(await account('stranger@example.test'), { expectedState: state, title: 'x' }))[0]).toBe(404);

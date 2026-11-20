@@ -12,6 +12,7 @@ import { artifactState, createArtifact, getArtifactById, getArtifactFor, getArti
 import { canReadArtifact } from '../read-access';
 import { effectiveRole, ownsArtifact, type ArtifactRow } from '@/lib/artifact-access';
 import { setArtifact } from '@/__tests__/rows';
+import { Reply } from '@/lib/http';
 
 const harness = useAppHarness();
 const replace = (actor: AccessActor, row: ArtifactRow, title: string, opts: Parameters<typeof replaceArtifactFor>[3] = {}) =>
@@ -43,9 +44,9 @@ describe('the edit protocol', () => {
   it('an HTML replace must name the version it replaces; republishing the head unchanged adds no version', async () => {
     const owner = await account('owner@example.test');
     const v1 = await mine(owner);
-    const unnamed = await replaceArtifactFor(owner, v1.id, page('Unnamed')) as Response;
+    const unnamed = await replaceArtifactFor(owner, v1.id, page('Unnamed')) as Reply;
     expect(unnamed.status).toBe(400);
-    expect(await unnamed.json()).toEqual({ error: 'expected_version_required' });
+    expect(unnamed.body).toEqual({ error: 'expected_version_required' });
     const same = await replaceArtifactFor(owner, v1.id, { ...page('Doc'), source: v1.source }, { expectedVersion: v1.version }) as ArtifactRow;
     expect(same).toMatchObject({ version: v1.version, edit_id: v1.edit_id });
   });

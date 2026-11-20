@@ -17,8 +17,8 @@ export async function account(name:string){
 export async function datasetFixture(body:Record<string,unknown>={}){
  const owner=await account('owner'),db=await getDb();
  const created=await createArtifactFromBody({dataset:[{n:1}],access:'readwrite',visibility:'public',...body},{...owner.actor,tokenId:owner.tokenId},'http://localhost:3000');
- expect(created.status,await created.clone().text()).toBe(201);
- const id=(await created.json()).id as string;
+ expect(created.status,JSON.stringify(created.body)).toBe(201);
+ const id=created.body.id as string;
  const row=async()=>(await getArtifactById(id))!;
  const rows=async()=>loadDatasetRows(await row());
  return {db,owner,id,row,rows};

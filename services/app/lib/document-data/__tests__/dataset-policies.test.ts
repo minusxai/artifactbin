@@ -11,6 +11,7 @@ import { GET as readPolicy, PUT as writePolicy } from '@/app/api/artifacts/[id]/
 import { setDatasetPolicy } from '@/lib/document-data/dataset-policy';
 import { mintAccountToken as mintToken, params } from '@/__tests__/harness';
 import { request, useAppHarness } from '@/__tests__/harness';
+import { Reply } from '@/lib/http';
 useAppHarness();
 async function fixture() {
   const owner = await mintToken('policy-owner');
@@ -97,9 +98,9 @@ it('cannot evade active policy through ordinary file replacement', async () => {
     source: null,
     meta: row.meta,
   });
-  expect(refused).toBeInstanceOf(Response);
-  expect((refused as Response).status).toBe(409);
-  expect(await (refused as Response).json()).toMatchObject({
+  expect(refused).toBeInstanceOf(Reply);
+  expect((refused as Reply).status).toBe(409);
+  expect((refused as Reply).body).toMatchObject({
     error: 'policy_locked',
   });
   const unchanged = (await getArtifactById(f.ds))!;

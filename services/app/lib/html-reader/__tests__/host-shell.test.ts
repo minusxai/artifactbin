@@ -36,13 +36,13 @@ const world = harness.shared(async () => {
   const owner = await mintAccountToken('host_owner'), stranger = await mintAccountToken('host_stranger');
   const actor = identityForUser(owner.userId, owner.id, owner.email);
   const dataset = await createArtifactFromBody({ access: 'readwrite', visibility: 'unlisted', dataset: [{ name: 'ada' }, { name: 'bo' }], title: 'People' }, actor, APP);
-  const people = (await dataset.json() as { id: string }).id;
+  const people = (dataset.body as { id: string }).id;
   await storePolicy(people, { version: 3, tables: [{ table: { schema: 'public', name: 'rows' }, select_permissions: [
     { role: 'signed_in', permission: { columns: '*', filter: {} } }, { role: 'anonymous', permission: { columns: ['name'], filter: {} } }] }] });
   const head = `<link rel="af-dataset" data-af-name="people" href="ref:${people}">`;
   const publish = async (visibility: string) => {
     const created = await createArtifactFromBody({ visibility, html: `<html><head>${head}</head><body><h1 data-af-id="title">Plan</h1></body></html>` }, actor, APP);
-    const body = await created.json() as { id: string };
+    const body = created.body as { id: string };
     expect(created.status, JSON.stringify(body)).toBe(201);
     return body.id;
   };

@@ -8,7 +8,7 @@ import { parseAccessValue, parseLinkRoleValue, parseShareEntries, parseVisibilit
 import type { SharingPatch } from '@artifactbin/contracts';
 import { browserActor } from '@/lib/authentication';
 import { shareTargetsRefusal, TEST_ACCOUNT_RESTRICTED } from '@/lib/accounts';
-import { json, readJson } from '@/lib/http';
+import { json, readJson, Reply, toResponse } from '@/lib/http';
 
 
 export async function GET(request: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -44,21 +44,21 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
 
   const patch: SharingPatch = {};
   const visibility = parseVisibilityValue(body.visibility, !!(current.user_id || current.group_id));
-  if (visibility instanceof Response) return visibility;
+  if (visibility instanceof Reply) return toResponse(visibility);
   if (visibility) patch.visibility = visibility;
 
   // GENERAL ACCESS: the tier (visibility) and the role the link grants are
   // two independent controls in the dialog, and independent here too — an
   // owner may set either without restating the other.
   const linkRole = parseLinkRoleValue(body.linkRole);
-  if (linkRole instanceof Response) return linkRole;
+  if (linkRole instanceof Reply) return toResponse(linkRole);
   if (linkRole) patch.linkRole = linkRole;
 
   const access = parseAccessValue(body.access, current.format);
-  if (access instanceof Response) return access;
+  if (access instanceof Reply) return toResponse(access);
   if (access) patch.access = access;
   const shares = parseShareEntries(body.shares);
-  if (shares instanceof Response) return shares;
+  if (shares instanceof Reply) return toResponse(shares);
   const boxed = await shareTargetsRefusal(actor, shares);
   if (boxed) return json({ error: TEST_ACCOUNT_RESTRICTED, detail: boxed }, 403);
   if (shares) patch.shares = shares;

@@ -1,5 +1,6 @@
 import { browserActor } from '@/lib/authentication';
 import { refreshAssetsFor } from '@/lib/publish';
+import { toResponse } from '@/lib/http';
 
 /**
  * POST /api/my/artifacts/:id/assets/refresh — "refresh external images", from
@@ -15,5 +16,5 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   const actor = await browserActor(request);
   if (actor instanceof Response) return actor;
   const { id } = await ctx.params;
-  return refreshAssetsFor(actor, { id });
+  return toResponse(await refreshAssetsFor(actor, { id }));
 }

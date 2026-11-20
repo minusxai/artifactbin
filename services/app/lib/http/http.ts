@@ -48,6 +48,17 @@ export function json(body: unknown, status = 200, headers: Record<string, string
   });
 }
 
+/**
+ * A LIBRARY'S ANSWER, transport-free: what a lib pipeline returns where it would otherwise build an HTTP Response
+ * (a refusal beside its value, or the whole reply of a write). `x instanceof Reply` tells it from the value. A route
+ * sends it with `toResponse`; an operation (lib/operations) returns it as its reply.
+ */
+export class Reply {
+  constructor(readonly body: Record<string, unknown>, readonly status = 200, readonly headers?: Record<string, string>) {}
+}
+export const reply = (body: Record<string, unknown>, status = 200, headers?: Record<string, string>): Reply => new Reply(body, status, headers);
+export const toResponse = (answer: Reply): Response => json(answer.body, answer.status, answer.headers);
+
 /** Shared refusal: keep HTTP clients on their credential flow; installed CLI remains optional. */
 export function unauthorized(request: Request): Response {
   const base = baseUrl(request);

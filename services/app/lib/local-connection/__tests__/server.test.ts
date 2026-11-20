@@ -14,7 +14,7 @@ async function page(visibility='public'){
  const owner=await mintAccountToken('local-connection-module');
  const actor={...identityForUser(owner.userId,owner.id),tokenId:owner.id};
  const created=await createArtifactFromBody({html:'<html><head></head><body><p>Hello</p></body></html>',visibility},actor,ORIGIN);
- expect(created.status).toBe(201);const {id}=await created.json() as {id:string};
+ expect(created.status).toBe(201);const {id}=created.body as {id:string};
  const current=await readHtmlPage(actor,id);
  return {id,identity:{platformOrigin:ORIGIN,artifactId:id,baseRevision:current.revision,sourceDigest:sha(current.html)}};
 }

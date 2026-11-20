@@ -18,10 +18,11 @@ import {
   userOptions, validateDatasetPolicyForRow, validateStoredDatasetPolicy, validateUserContent, validateUserWrites, type DatasetCatalog,
 } from '@/lib/datasets';
 import { seedArtifacts } from '@/__tests__/rows';
+import { Reply } from '@/lib/http';
 
 useAppHarness();
 
-const failure = async (result: unknown) => (result instanceof Response ? { status: result.status, ...(await result.json()) } : result);
+const failure = async (result: unknown) => (result instanceof Reply ? { status: result.status, ...result.body } : result instanceof Response ? { status: result.status, ...(await result.json()) } : result);
 
 describe('stored catalogs and rows', () => {
   it('stores rows by content and reads them back', async () => {

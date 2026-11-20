@@ -12,6 +12,7 @@ import { ArtifactParentRefusal, afterCreated, artifactQuotaExceeded, artifactSta
 import { ARTIFACT_HEADER_COLUMNS, assetBytesForToken, listArtifactsFor, onDatasetCommitted, onHeadCommitted, setArtifactQuotaForTests, setAssetByteQuotaForTests } from '@/lib/artifacts/testing';
 import { type ArtifactRow } from '@/lib/artifact-access';
 import { account, dataset, head, mine, page, readAllPolicy, sql, trashRow } from '@/__tests__/artifact-fixtures';
+import { Reply } from '@/lib/http';
 
 const harness = useAppHarness();
 const folder = (actor: { userId: string }, title = 'Folder', ancestor_ids: string[] = []) =>
@@ -73,8 +74,8 @@ describe('replace and revert', () => {
     const kept = await replaceArtifactFor(owner, row.id, page('Kept'), { expectedVersion: 2 }) as ArtifactRow;
     expect(kept.shares).toEqual([{ email: 'x@example.test', role: 'editor' }]);
     expect(await replaceArtifactFor(stranger, row.id, page('No'), { expectedVersion: 3 })).toBeNull();
-    const markup = await replaceArtifactFor(owner, row.id, { format: 'markup', source: '<Doc/>', meta: {} }) as Response;
-    expect([markup.status, await markup.json()]).toEqual([400, { error: 'unsupported_format' }]);
+    const markup = await replaceArtifactFor(owner, row.id, { format: 'markup', source: '<Doc/>', meta: {} }) as Reply;
+    expect([markup.status, markup.body]).toEqual([400, { error: 'unsupported_format' }]);
     const invalid = await replaceArtifactFor(owner, row.id, { format: 'html', source: '<script>', meta: {} }, { expectedVersion: 3 });
     expect(isVersionConflict(invalid as ArtifactRow)).toBe(false);
   });
@@ -108,8 +109,8 @@ describe('replace and revert', () => {
     const editor = await account('editor@example.test');
     const data = await dataset(owner, readAllPolicy());
     await updateSharingFor(owner, data.id, { shares: [{ email: 'editor@example.test', role: 'editor' }] });
-    const locked = await replaceArtifactFor(editor, data.id, { format: 'dataset', source: null, meta: {} }) as Response;
-    expect([locked.status, (await locked.json()).error]).toEqual([409, 'policy_locked']);
+    const locked = await replaceArtifactFor(editor, data.id, { format: 'dataset', source: null, meta: {} }) as Reply;
+    expect([locked.status, locked.body.error]).toEqual([409, 'policy_locked']);
     const replaced = await replaceArtifactFor(owner, data.id, { format: 'dataset', source: null, meta: { note: 1 } }) as ArtifactRow;
     expect(replaced).toMatchObject({ version: 2, meta: { note: 1 } });
     const reverted = await revertArtifactFor(owner, data.id, 1);
@@ -125,9 +126,9 @@ describe('replace and revert', () => {
     expect(await revertArtifactFor(stranger, v1.id, 1)).toBeNull();
     expect(await revertArtifactFor(owner, v1.id, 9)).toEqual({ notArchived: true });
     const stale = await revertArtifactFor(owner, v1.id, 1, { expectedVersion: 1 });
-    expect(isVersionNotArchived(stale) && [stale.refusal!.status, (await stale.refusal!.json()).error]).toEqual([409, 'version_conflict']);
+    expect(isVersionNotArchived(stale) && [stale.refusal!.status, stale.refusal!.body.error]).toEqual([409, 'version_conflict']);
     const staleState = await revertArtifactFor(owner, v1.id, 1, { expectedState: artifactState(v1) });
-    expect(isVersionNotArchived(staleState) && await staleState.refusal!.json()).toEqual({ error: 'version_conflict', currentVersion: 2, currentState: artifactState(v2), changed: 'content' });
+    expect(isVersionNotArchived(staleState) && staleState.refusal!.body).toEqual({ error: 'version_conflict', currentVersion: 2, currentState: artifactState(v2), changed: 'content' });
     const done = await revertArtifactFor(owner, v1.id, 1, { expectedVersion: 2, expectedState: artifactState(v2) }) as ArtifactRow;
     expect(done).toMatchObject({ version: 3, title: 'First' });
   });

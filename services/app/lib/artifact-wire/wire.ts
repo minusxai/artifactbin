@@ -19,7 +19,7 @@ import { PARENT_REFUSED, artifactState, isParentRefusal, parentOf, resolveParent
 import { rawUrl } from '@/lib/dataflow';
 import { ALLOW_PUBLIC_VISIBILITY, ID_RE } from '@/lib/platform';
 import { resolveStoredStoryDesign } from '@/lib/html-systems';
-import { json } from '@/lib/http';
+import { Reply, reply } from '@/lib/http';
 
 const safeJson = (s: string): unknown => { try { return JSON.parse(s); } catch { return null; } };
 
@@ -187,16 +187,16 @@ export async function artifactToWire(row: ArtifactRow, base: string, openAnnotat
 }
 
 /** Every conditional HTTP write carries the observed state; replacements also carry its version. */
-export function parseExpectedVersion(body: Record<string, unknown>, requireVersion=true): ReplaceOpts | Response {
+export function parseExpectedVersion(body: Record<string, unknown>, requireVersion=true): ReplaceOpts | Reply {
   const v = body.expectedVersion;
   const state = body.expectedState;
-  if (v !== undefined && !(typeof v === 'number' && Number.isSafeInteger(v) && v > 0)) return json({error:'invalid_expected_version'},400);
-  if (state !== undefined && (typeof state !== 'string' || !/^[a-f0-9]{64}$/.test(state))) return json({error:'invalid_expected_state'},400);
-  if (requireVersion && v === undefined) return json({error:'version_required',hint:'Read the artifact and send its version as expectedVersion.'},400);
-  if (state === undefined) return json({error:'state_required',hint:'Read the artifact and send its state as expectedState.'},400);
+  if (v !== undefined && !(typeof v === 'number' && Number.isSafeInteger(v) && v > 0)) return reply({error:'invalid_expected_version'},400);
+  if (state !== undefined && (typeof state !== 'string' || !/^[a-f0-9]{64}$/.test(state))) return reply({error:'invalid_expected_state'},400);
+  if (requireVersion && v === undefined) return reply({error:'version_required',hint:'Read the artifact and send its version as expectedVersion.'},400);
+  if (state === undefined) return reply({error:'state_required',hint:'Read the artifact and send its state as expectedState.'},400);
   // The live revision a page was read at (its `live`), when the write was made from its live text.
   const live = body.expectedLive;
-  if (live !== undefined && !(typeof live === 'number' && Number.isSafeInteger(live) && live >= 0)) return json({error:'invalid_expected_live'},400);
+  if (live !== undefined && !(typeof live === 'number' && Number.isSafeInteger(live) && live >= 0)) return reply({error:'invalid_expected_live'},400);
   return {...(v !== undefined ? {expectedVersion:v as number} : {}),expectedState:state as string,...(live !== undefined ? {expectedLive:live as number} : {})};
 }
 
@@ -205,10 +205,10 @@ export function parseExpectedVersion(body: Record<string, unknown>, requireVersi
  * access or shares MAY name the `sharing_revision` it read as expectedSharingRevision, and is then refused when that
  * moved; without it the requested settings apply. Ignored on a write that sets none of them.
  */
-export function parseSharingRevision(body: Record<string, unknown>): number | undefined | Response {
+export function parseSharingRevision(body: Record<string, unknown>): number | undefined | Reply {
   const revision = body.expectedSharingRevision;
   if (revision === undefined || !['visibility', 'linkRole', 'access', 'shares'].some(key => body[key] !== undefined)) return undefined;
-  if (!Number.isSafeInteger(revision) || Number(revision) < 0) return json({error:'invalid_metadata',field:'expectedSharingRevision'},400);
+  if (!Number.isSafeInteger(revision) || Number(revision) < 0) return reply({error:'invalid_metadata',field:'expectedSharingRevision'},400);
   return revision as number;
 }
 
@@ -223,22 +223,22 @@ export function parseSharingRevision(body: Record<string, unknown>): number | un
  * shape check may run first; a database read may not, or an id nobody can
  * reach answers 400 where it owes the uniform 404.
  */
-export function parseParentField(body: Record<string, unknown>): string | null | undefined | Response {
+export function parseParentField(body: Record<string, unknown>): string | null | undefined | Reply {
   const p = body.parent_id;
   if (p === undefined) return undefined;
   if (p === null) return null;
   // The same refusal, word for word, as every other way of not being allowed a parent.
-  if (typeof p !== 'string' || !ID_RE.test(p)) return json(PARENT_REFUSED, 400);
+  if (typeof p !== 'string' || !ID_RE.test(p)) return reply(PARENT_REFUSED, 400);
   return p;
 }
 
 /** Validate a raw visibility value (a body field OR a query param). */
-export function parseVisibilityValue(v: unknown, canPrivate: boolean): Visibility | undefined | Response {
+export function parseVisibilityValue(v: unknown, canPrivate: boolean): Visibility | undefined | Reply {
   if (v === undefined || v === null || v === '') return undefined;
-  if (v !== 'public' && v !== 'private' && v !== 'unlisted') return json({ error: 'invalid_visibility' }, 400);
+  if (v !== 'public' && v !== 'private' && v !== 'unlisted') return reply({ error: 'invalid_visibility' }, 400);
   // Only 'private' needs an account to anchor its ACL — 'unlisted' reads like
   // public, so an anonymous doc may be unlisted.
-  if (v === 'private' && !canPrivate) return json({ error: 'private_requires_account' }, 400);
+  if (v === 'private' && !canPrivate) return reply({ error: 'private_requires_account' }, 400);
   /*
    * `public` is a setting a DEPLOYMENT opens (`ARTIFACTS__ALLOW_PUBLIC=1`);
    * closed, it is refused BY NAME rather than quietly written as something
@@ -247,7 +247,7 @@ export function parseVisibilityValue(v: unknown, canPrivate: boolean): Visibilit
    * something untrue about who can find the document.
    */
   if (v === 'public' && !ALLOW_PUBLIC_VISIBILITY) {
-    return json({ error: 'public_not_enabled', hint: 'this deployment has not enabled public documents (ARTIFACTS__ALLOW_PUBLIC=1); use "unlisted", which is already anyone-with-the-link' }, 400);
+    return reply({ error: 'public_not_enabled', hint: 'this deployment has not enabled public documents (ARTIFACTS__ALLOW_PUBLIC=1); use "unlisted", which is already anyone-with-the-link' }, 400);
   }
   return v;
 }
@@ -263,10 +263,10 @@ export function parseVisibilityValue(v: unknown, canPrivate: boolean): Visibilit
  * silently resetting it to `viewer`. Refusing it would make the dialog's two
  * controls order-dependent, which is exactly the kind of rule nobody remembers.
  */
-export function parseLinkRoleValue(v: unknown): ShareRole | undefined | Response {
+export function parseLinkRoleValue(v: unknown): ShareRole | undefined | Reply {
   if (v === undefined || v === null || v === '') return undefined;
   if (!SHARE_ROLES.includes(v as ShareRole)) {
-    return json({ error: 'invalid_link_role', allowed: [...SHARE_ROLES] }, 400);
+    return reply({ error: 'invalid_link_role', allowed: [...SHARE_ROLES] }, 400);
   }
   return v as ShareRole;
 }
@@ -278,20 +278,20 @@ export function parseLinkRoleValue(v: unknown): ShareRole | undefined | Response
  * is nothing to write there, and accepting the field would teach an agent a
  * knob that does nothing.
  */
-export function parseAccessValue(v: unknown, format: string | undefined): DatasetAccess | undefined | Response {
+export function parseAccessValue(v: unknown, format: string | undefined): DatasetAccess | undefined | Reply {
   if (v === undefined || v === null || v === '') return undefined;
   if (!DATASET_ACCESS.includes(v as DatasetAccess)) {
-    return json({ error: 'invalid_access', allowed: [...DATASET_ACCESS] }, 400);
+    return reply({ error: 'invalid_access', allowed: [...DATASET_ACCESS] }, 400);
   }
   if (format !== undefined && format !== 'dataset') {
-    return json({ error: 'access_datasets_only', details: [`access is the write ACL of a dataset — a ${format} artifact has no rows to write`] }, 400);
+    return reply({ error: 'access_datasets_only', details: [`access is the write ACL of a dataset — a ${format} artifact has no rows to write`] }, 400);
   }
   return v as DatasetAccess;
 }
 
 /** Typed sharing is shared with the CLI; absent preserves and [] clears. */
-export function parseShareEntries(v:unknown):ShareEntry[]|undefined|Response{
- try{return parseSharingEntries(v);}catch(error){return json({error:'invalid_shares',detail:error instanceof Error?error.message:'Invalid sharing entries'},400);}
+export function parseShareEntries(v:unknown):ShareEntry[]|undefined|Reply{
+ try{return parseSharingEntries(v);}catch(error){return reply({error:'invalid_shares',detail:error instanceof Error?error.message:'Invalid sharing entries'},400);}
 }
 
 /**
@@ -307,10 +307,10 @@ export async function placementFor(
   parent: string | null | undefined,
   moved: { id: string; format: string } | null,
   mayPlace = true,
-): Promise<{ ancestor_ids: string[] } | undefined | Response> {
+): Promise<{ ancestor_ids: string[] } | undefined | Reply> {
   if (parent === undefined) return undefined;
   const placement = mayPlace ? await resolveParent(owner, parent, moved) : PARENT_REFUSED;
-  return isParentRefusal(placement) ? json(placement, 400) : placement;
+  return isParentRefusal(placement) ? reply(placement, 400) : placement;
 }
 
 /**

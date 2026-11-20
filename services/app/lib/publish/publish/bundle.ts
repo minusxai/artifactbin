@@ -1,7 +1,7 @@
 import {createHash} from 'node:crypto';
 import type { PublicationActor } from '@/lib/accounts';
 import {getArtifactById,getArtifactFor,recoverCreationIds,reserveIds} from '@/lib/artifacts';
-import {json,thrownMessage} from '@/lib/http';
+import {Reply,reply,thrownMessage} from '@/lib/http';
 import {changedBundlePaths,planPublicationBundle,publishBundleDependencies,type PublicationBundle} from '@/lib/html-publication-bundle';
 import {parseCsv} from '@/lib/data-ingest';
 import {FILE_EXTENSIONS} from '@artifactbin/contracts';
@@ -12,8 +12,11 @@ class BundleFileRefusal extends Error {constructor(readonly code:'bundle_file_no
  * even when an editor saves); `dependencies` are the page's recorded receipts, the
  * only mappings reused without an edit-access check.
  */
+/** What a creation reads of its request (lib/publish requests): the idempotency key it replays under, the account it is pinned to. */
+export interface CreationKeys {idempotencyKey?:string|null;account?:string|null}
 export interface BundlePage {id:string;dependencies:readonly unknown[];creator:PublicationActor;newFilesRefused?:boolean}
 const MAPPING_ID=/^[A-Za-z0-9]{6,128}$/;
+const ok=(answer:Reply)=>answer.status>=200&&answer.status<300;
 /** Why a project file cannot publish with its page, and what to do instead. */
 const unsupportedFile=(path:string):string=>/\.html?$/i.test(path)?`unsupported_file_type: ${path} is a page: publish it on its own and link its address`:`unsupported_file_type: ${path}; a page publishes files of these types: ${FILE_EXTENSIONS.join(', ')}`;
 /**
@@ -25,12 +28,12 @@ function csvDatasetFields(path:string,csv:string):{title:string;columns?:{name:s
  const {headers,rows}=parseCsv(csv);
  return {title:file,...(headers.length&&!rows.length?{columns:headers.map(name=>({name,type:'string' as const}))}:{})};
 }
-export async function preparePublicationBundle(body:Record<string,unknown>,actor:PublicationActor,base:string,request:Request|undefined,create:(body:Record<string,unknown>,request:Request)=>Promise<Response>,update:(id:string,body:Record<string,unknown>,key:string)=>Promise<Response>,page?:BundlePage):Promise<{body:Record<string,unknown>;receipts:unknown[];entryPath?:string}|Response>{
- if(typeof body.html!=='string')return body.publicationBundle===undefined?{body,receipts:[]}:json({error:'invalid_publication_bundle'},400);
+export async function preparePublicationBundle(body:Record<string,unknown>,actor:PublicationActor,base:string,keys:CreationKeys,create:(body:Record<string,unknown>,keys:CreationKeys)=>Promise<Reply>,update:(id:string,body:Record<string,unknown>,key:string)=>Promise<Reply>,page?:BundlePage):Promise<{body:Record<string,unknown>;receipts:unknown[];entryPath?:string}|Reply>{
+ if(typeof body.html!=='string')return body.publicationBundle===undefined?{body,receipts:[]}:reply({error:'invalid_publication_bundle'},400);
  let plan;const bundle=body.publicationBundle as PublicationBundle|undefined;
- try{plan=planPublicationBundle(body.html,bundle??{entryPath:'index.html',files:[]},{linksAsWritten:!bundle});}catch(error){return json({error:'unresolved_publication_dependencies',details:[(error as Error).message]},400);}
+ try{plan=planPublicationBundle(body.html,bundle??{entryPath:'index.html',files:[]},{linksAsWritten:!bundle});}catch(error){return reply({error:'unresolved_publication_dependencies',details:[(error as Error).message]},400);}
  if(!bundle)return {body,receipts:[]};
- const key=request?.headers.get('Idempotency-Key');if(!key||!/^[-_A-Za-z0-9]{16,128}$/.test(key))return json({error:'bundle_idempotency_required'},400);
+ const key=keys.idempotencyKey;if(!key||!/^[-_A-Za-z0-9]{16,128}$/.test(key))return reply({error:'bundle_idempotency_required'},400);
  // Each file is authorized on its own, before anything is written: a recorded,
  // unchanged dependency needs nothing more; a changed or newly mapped one needs
  // edit access to its artifact; a new file is created as the page owner.
@@ -40,13 +43,13 @@ export async function preparePublicationBundle(body:Record<string,unknown>,actor
  for(const path of Object.keys(mappings).sort()){
   const mapping=mappings[path]!;
   if(typeof mapping?.id!=='string'||!MAPPING_ID.test(mapping.id)||reusable(path,mapping))continue;
-  if(!await getArtifactFor(actor,mapping.id))return json({error:'bundle_file_not_editable',path},403);
+  if(!await getArtifactFor(actor,mapping.id))return reply({error:'bundle_file_not_editable',path},403);
  }
  const added=page?.newFilesRefused?plan.dependencies.find(dependency=>!mappings[dependency.path]):undefined;
- if(added)return json({error:'bundle_file_not_creatable',path:added.path},403);
+ if(added)return reply({error:'bundle_file_not_creatable',path:added.path},403);
  // New files belong to the page owner, so their identities are reserved and
  // recovered in the owner's namespace. An editor's account pin names the editor.
- const creator=page?.creator??actor,account=creator===actor?request?.headers.get('X-Artifactbin-Account'):null;
+ const creator=page?.creator??actor,account=creator===actor?keys.account:null;
  try{
  const reserved=await reserveIds(creator,createHash('sha256').update(key+'_bundle_ids').digest('hex'),account);
  const pageId=page?.id??body.reserved_id??reserved[99];
@@ -84,22 +87,21 @@ export async function preparePublicationBundle(body:Record<string,unknown>,actor
    const row=await getArtifactFor(actor,mapping.id);if(!row)throw new BundleFileRefusal('bundle_file_not_editable',input.path);
    if(mapping.kind!==input.kind||mapping.kind==='dataset'&&row.format!=='dataset'||mapping.kind==='asset'&&!['image','file','pdf'].includes(row.format))throw Error('Dependency update ownership or kind conflict');
    const payload:Record<string,unknown>={expectedVersion:Number(mapping.revision),...(mapping.state?{expectedState:mapping.state}:{}),...(input.kind==='dataset'?{dataset:Buffer.from(input.base64,'base64').toString('utf8')}:{file:{filename:input.path.split('/').at(-1),contentType:input.contentType,base64:input.base64}})};
-   const response=await update(mapping.id,payload,createHash('sha256').update(input.key+'_update').digest('hex'));const saved=await response.json() as Record<string,unknown>;
-   if(!response.ok||typeof saved.id!=='string')throw Error(typeof saved.error==='string'?saved.error:'Dependency update failed');
+   const updated=await update(mapping.id,payload,createHash('sha256').update(input.key+'_update').digest('hex'));const saved=updated.body;
+   if(!ok(updated)||typeof saved.id!=='string')throw Error(typeof saved.error==='string'?saved.error:'Dependency update failed');
    const revision=String(saved.version);return {id:saved.id,revision,state:typeof saved.state==='string'?saved.state:undefined,address:input.kind==='dataset'?'ref:'+saved.id:assetAddress(saved.id,revision)};
   },
   async create(input){
    const requestKey=createHash('sha256').update(input.key).digest('hex');
-   const headers=new Headers(request?.headers);headers.set('Idempotency-Key',requestKey);if(creator!==actor)headers.delete('X-Artifactbin-Account');
    const dependencyBody:Record<string,unknown>={reserved_id:reservedByPath.get(input.path),visibility:body.visibility??'unlisted',...(body.shares?{shares:body.shares}:{}),...(body.destination?{destination:body.destination}:{}),...(body.parent_id!==undefined?{parent_id:body.parent_id}:{}),...(input.kind==='dataset'?{title:input.path.split('/').at(-1),dataset:Buffer.from(input.base64,'base64').toString('utf8'),...(/^text\/csv\b/.test(input.contentType)?csvDatasetFields(input.path,Buffer.from(input.base64,'base64').toString('utf8')):{})}:{file:{filename:input.path.split('/').at(-1),contentType:input.contentType,base64:input.base64}})};
-   const response=await create(dependencyBody,new Request(base+'/api/artifacts',{method:'POST',headers}));
-   const saved=await response.json() as Record<string,unknown>;if(!response.ok||typeof saved.id!=='string')throw Error(saved.error==='unsupported_file_type'?unsupportedFile(input.path):typeof saved.error==='string'?saved.error:'Dependency publication failed');
+   const created=await create(dependencyBody,{idempotencyKey:requestKey,account});
+   const saved=created.body;if(!ok(created)||typeof saved.id!=='string')throw Error(saved.error==='unsupported_file_type'?unsupportedFile(input.path):typeof saved.error==='string'?saved.error:'Dependency publication failed');
    const revision=String(saved.version??1);return {id:saved.id,revision,state:typeof saved.state==='string'?saved.state:undefined,address:input.kind==='dataset'?'ref:'+saved.id:assetAddress(saved.id,revision)};
   },
  },bundle.mappings);
  const next:Record<string,unknown>={...body,reserved_id:body.reserved_id??reserved[99],html:result.html};delete next.publicationBundle;return {body:next,receipts:result.receipts,entryPath:plan.entryPath};
  }catch(error){
   const cause=error instanceof Error?error.cause:undefined;
-  if(cause instanceof BundleFileRefusal)return json({error:cause.code,path:cause.path,dependencyReceipts:(error as {receipts?:unknown[]}).receipts??[]},403);
-  return json({error:'dependency_publication_incomplete',details:[error instanceof Error&&error.cause instanceof Error?error.cause.message:error instanceof Error?`${error.name}${error.message?': '+error.message:''}`:thrownMessage(error,'Dependency publication failed')],dependencyReceipts:(error as {receipts?:unknown[]}).receipts??[]},409);}
+  if(cause instanceof BundleFileRefusal)return reply({error:cause.code,path:cause.path,dependencyReceipts:(error as {receipts?:unknown[]}).receipts??[]},403);
+  return reply({error:'dependency_publication_incomplete',details:[error instanceof Error&&error.cause instanceof Error?error.cause.message:error instanceof Error?`${error.name}${error.message?': '+error.message:''}`:thrownMessage(error,'Dependency publication failed')],dependencyReceipts:(error as {receipts?:unknown[]}).receipts??[]},409);}
 }

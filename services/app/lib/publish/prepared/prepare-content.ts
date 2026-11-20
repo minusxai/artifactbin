@@ -1,5 +1,5 @@
 import { objectStore, prepareObjects, recordObjectWrites, type PreparedObject } from '@/lib/object-store';
-import { json } from '@/lib/http';
+import { Reply, reply } from '@/lib/http';
 import { parseContentInput, type ContentInputCtx } from '../document/input';
 import type { StoredContent } from '@/lib/document';
 
@@ -10,13 +10,13 @@ export interface PreparedContent {
 type PreparationContext = Omit<ContentInputCtx, 'objects'>;
 
 /** No publication effects: bytes live only in this request's private plan. */
-export async function prepareContentInput(body: Record<string, unknown>, ctx: PreparationContext = {}, options: {allowRemoteInputs?: boolean} = {}): Promise<PreparedContent | Response> {
+export async function prepareContentInput(body: Record<string, unknown>, ctx: PreparationContext = {}, options: {allowRemoteInputs?: boolean} = {}): Promise<PreparedContent | Reply> {
   if (!options.allowRemoteInputs && ['sheetUrl', 'csvUrl', 'imageUrl', 'pdfUrl'].some(key => body[key] != null)) {
-    return json({error: 'dry_run_unsupported', details: ['Remote imports require publication. Download the source locally and push the file to validate it without importing.']}, 400);
+    return reply({error: 'dry_run_unsupported', details: ['Remote imports require publication. Download the source locally and push the file to validate it without importing.']}, 400);
   }
   const staged = prepareObjects({get: key => objectStore().get(key)});
   const content = await parseContentInput(body, {...ctx, objects: staged.store});
-  if (content instanceof Response) return content;
+  if (content instanceof Reply) return content;
   return {content, objects: staged.objects};
 }
 

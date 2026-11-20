@@ -12,6 +12,7 @@ import {
  createArtifactFromBody,forkArtifact,forkRefusal,liveFrameFor,openDocumentEvents,parseContentInput,preflightPublication,
  preparePublicationBundle,refreshAssetsFor,replaceArtifactWithBody,
 } from '..';
+import { Reply } from '@/lib/http';
 
 const harness=useAppHarness();
 const BASE='http://localhost:3030';
@@ -19,9 +20,9 @@ const page=(title:string,body='<p>☕</p>')=>`<!doctype html><html><head><title>
 async function actor(name='publish_interface'):Promise<TokenHoldingActor>{const token=await mintAccountToken(name);return identityForUser(token.userId,token.id);}
 async function created(owner:TokenHoldingActor,body:Record<string,unknown>,headers:Record<string,string>={}){
  const response=await createArtifactFromBody(body,owner,BASE,new Request(`${BASE}/api/artifacts`,{method:'POST',headers}));
- return {status:response.status,body:await response.json() as Record<string,unknown>&{id:string;version:number}};
+ return {status:response.status,body:response.body as Record<string,unknown>&{id:string;version:number}};
 }
-const errorOf=async(response:Response)=>[response.status,((await response.json()) as {error?:string}).error];
+const errorOf=async(answer:Reply|Response)=>[answer.status,((answer instanceof Reply?answer.body:await answer.json()) as {error?:string}).error];
 /** The observed version and state a replace must name. */
 const observed=async(id:string)=>{const row=(await getArtifactById(id))!;return {expectedVersion:row.version,expectedState:artifactState(row)};};
 const count=async()=>(await (await harness.db()).query<{n:number}>('SELECT count(*)::int n FROM artifacts')).rows[0]!.n;
@@ -40,7 +41,7 @@ describe('createArtifactFromBody',()=>{
  it('answers a dry run without writing, and refuses malformed, oversized and combined bodies before writing',async()=>{
   const owner=await actor();
   const dry=await createArtifactFromBody({html:page('Dry')},owner,BASE,undefined,{dryRun:true});
-  expect(await dry.json()).toMatchObject({valid:true,dry_run:true,format:'html'});
+  expect(dry.body).toMatchObject({valid:true,dry_run:true,format:'html'});
   const refusals:Array<[Record<string,unknown>,number,string,{dryRun?:boolean}?]>=[
    [{html:page('x'),publicationBundle:{entryPath:'index.html',files:[]}},400,'bundle_preflight_requires_dependency_plan',{dryRun:true}],
    [{html:page('x'),reserved_id:'../bad'},400,'invalid_reserved_id'],
@@ -74,7 +75,7 @@ describe('replaceArtifactWithBody',()=>{
   expect(await getArtifactById(id)).toMatchObject({version:2,title:'Two'});
   const stale=await replaceArtifactWithBody({html:page('Three'),...first},owner,id,BASE);
   expect(stale.status).toBe(409);
-  expect(await stale.json()).toMatchObject({error:'version_conflict',currentVersion:2});
+  expect(stale.body).toMatchObject({error:'version_conflict',currentVersion:2});
  });
 
  it('answers the uniform not_found to a stranger, and refuses invalid bodies, without moving the version',async()=>{
@@ -93,7 +94,7 @@ describe('replaceArtifactWithBody',()=>{
   expect(await errorOf(await replaceArtifactWithBody({html:page('x'),destination:{type:'user'}},owner,id,BASE))).toEqual([400,'ownership_requires_transfer']);
   expect(await errorOf(await replaceArtifactWithBody({html:page('x'),policy:{}},owner,id,BASE))).toEqual([400,'combined_policy_write']);
   const dry=await replaceArtifactWithBody({html:page('Dry'),...seen},owner,id,BASE,{dryRun:true});
-  expect(await dry.json()).toMatchObject({valid:true,dry_run:true});
+  expect(dry.body).toMatchObject({valid:true,dry_run:true});
   expect((await getArtifactById(id))?.version).toBe(1);
  });
 });
@@ -102,10 +103,10 @@ describe('preflightPublication',()=>{
  const preflight=(owner:TokenHoldingActor,body:Record<string,unknown>)=>preflightPublication(new Request(`${BASE}/api/preflight`),owner,body);
  it('validates a create, a replace and a delete against real identities and permissions',async()=>{
   const owner=await actor('preflight_owner'),stranger=await actor('preflight_stranger');
-  expect(await (await preflight(owner,{input:{html:page('New')}})).json()).toMatchObject({valid:true,dry_run:true});
+  expect((await preflight(owner,{input:{html:page('New')}})).body).toMatchObject({valid:true,dry_run:true});
   const {body:{id}}=await created(owner,{html:page('Old'),visibility:'private'});
-  expect(await (await preflight(owner,{id,input:{html:page('Next'),...await observed(id)}})).json()).toMatchObject({valid:true,dry_run:true});
-  expect(await (await preflight(owner,{id,mode:'delete',input:{}})).json()).toMatchObject({valid:true,would_delete:id,includes_subtree:false,dependents:[]});
+  expect((await preflight(owner,{id,input:{html:page('Next'),...await observed(id)}})).body).toMatchObject({valid:true,dry_run:true});
+  expect((await preflight(owner,{id,mode:'delete',input:{}})).body).toMatchObject({valid:true,would_delete:id,includes_subtree:false,dependents:[]});
   expect(await errorOf(await preflight(stranger,{id,mode:'delete',input:{}}))).toEqual([404,'not_found']);
   expect(await errorOf(await preflight(stranger,{id,input:{html:page('x')}}))).toEqual([404,'not_found']);
   expect((await getArtifactById(id))?.version).toBe(1);
@@ -124,38 +125,38 @@ describe('preflightPublication',()=>{
 
 describe('preparePublicationBundle',()=>{
  const file=(path:string,text:string,contentType:string)=>({path,contentType,base64:Buffer.from(text).toString('base64')});
- const unused=async():Promise<Response>=>{throw new Error('nothing should be written');};
- const keyed=(key:string)=>new Request(`${BASE}/api/artifacts`,{method:'POST',headers:{'Idempotency-Key':key}});
+ const unused=async():Promise<Reply>=>{throw new Error('nothing should be written');};
+ const keyed=(key:string)=>({idempotencyKey:key});
  it('passes a body without a bundle through, and refuses a bundle without html, a key or its files',async()=>{
   const owner=await actor();
-  expect(await preparePublicationBundle({html:'<p>x</p>'},owner,BASE,undefined,unused,unused)).toEqual({body:{html:'<p>x</p>'},receipts:[]});
-  expect(await preparePublicationBundle({title:'no content'},owner,BASE,undefined,unused,unused)).toEqual({body:{title:'no content'},receipts:[]});
+  expect(await preparePublicationBundle({html:'<p>x</p>'},owner,BASE,{},unused,unused)).toEqual({body:{html:'<p>x</p>'},receipts:[]});
+  expect(await preparePublicationBundle({title:'no content'},owner,BASE,{},unused,unused)).toEqual({body:{title:'no content'},receipts:[]});
   const bundle={entryPath:'index.html',files:[file('logo.svg','<svg/>','image/svg+xml')]};
-  const refusals:Array<[Record<string,unknown>,Request|undefined,string]>=[
+  const refusals:Array<[Record<string,unknown>,{idempotencyKey?:string},string]>=[
    [{publicationBundle:bundle},keyed('publish_interface_bundle_01'),'invalid_publication_bundle'],
-   [{html:'<img src="./logo.svg">',publicationBundle:bundle},undefined,'bundle_idempotency_required'],
+   [{html:'<img src="./logo.svg">',publicationBundle:bundle},{},'bundle_idempotency_required'],
    [{html:'<img src="./logo.svg">',publicationBundle:bundle},keyed('short'),'bundle_idempotency_required'],
    [{html:'<img src="./missing.svg">',publicationBundle:bundle},keyed('publish_interface_bundle_01'),'unresolved_publication_dependencies'],
   ];
   for(const [body,req,error] of refusals){
    const result=await preparePublicationBundle(body,owner,BASE,req,unused,unused);
-   expect(result instanceof Response?await errorOf(result):result).toEqual([400,error]);
+   expect(result instanceof Reply?await errorOf(result):result).toEqual([400,error]);
   }
  });
  it('reads no function source: a resolverSources field is never read, and an af-resolver link\'s file is an ordinary asset',async()=>{
   const owner=await actor();const html='<link rel="af-resolver" data-af-name="api" href="./api.ts">';
   // The link names a local file the save does not carry, so it is refused like any other; the field is never read.
-  const bare=await preparePublicationBundle({html,resolverSources:{api:'source'}},owner,BASE,undefined,unused,unused);
-  expect(bare instanceof Response?await errorOf(bare):bare).toEqual([400,'unresolved_publication_dependencies']);
+  const bare=await preparePublicationBundle({html,resolverSources:{api:'source'}},owner,BASE,{},unused,unused);
+  expect(bare instanceof Reply?await errorOf(bare):bare).toEqual([400,'unresolved_publication_dependencies']);
   const missing=await preparePublicationBundle({html,publicationBundle:{entryPath:'index.html',files:[]}},owner,BASE,keyed('publish_interface_bundle_03'),unused,unused);
-  expect(missing instanceof Response?await errorOf(missing):missing).toEqual([400,'unresolved_publication_dependencies']);
+  expect(missing instanceof Reply?await errorOf(missing):missing).toEqual([400,'unresolved_publication_dependencies']);
  });
  it('creates each new file through the caller under a reserved id and rewrites the page to its address',async()=>{
   const owner=await actor();
   const writes:Array<Record<string,unknown>>=[];
-  const create=async(body:Record<string,unknown>)=>{writes.push(body);return Response.json({id:body.reserved_id,version:1},{status:201});};
+  const create=async(body:Record<string,unknown>)=>{writes.push(body);return new Reply({id:body.reserved_id,version:1},201);};
   const result=await preparePublicationBundle({html:'<img src="./img/logo.svg">',visibility:'private',publicationBundle:{entryPath:'index.html',files:[file('img/logo.svg','<svg>☕</svg>','image/svg+xml')]}},owner,BASE,keyed('publish_interface_bundle_02'),create,unused);
-  if(result instanceof Response)throw new Error(await result.text());
+  if(result instanceof Reply)throw new Error(JSON.stringify(result.body));
   expect(writes).toHaveLength(1);
   expect(writes[0]).toMatchObject({visibility:'private',file:{filename:'logo.svg',contentType:'image/svg+xml'}});
   const id=writes[0]!.reserved_id as string;
@@ -192,7 +193,7 @@ describe('refreshAssetsFor',()=>{
   expect(await errorOf(await refreshAssetsFor(owner,{}))).toEqual([400,'nothing_to_refresh']);
   expect(await errorOf(await refreshAssetsFor(owner,{url:'',id:7}))).toEqual([400,'nothing_to_refresh']);
   expect(await errorOf(await refreshAssetsFor(stranger,{id}))).toEqual([404,'not_found']);
-  expect(await (await refreshAssetsFor(owner,{id})).json()).toEqual({refreshed:[],unchanged:[],failed:[]});
+  expect((await refreshAssetsFor(owner,{id})).body).toEqual({refreshed:[],unchanged:[],failed:[]});
  });
 });
 
@@ -207,7 +208,7 @@ describe('parseContentInput',()=>{
   ];
   for(const [body,status,error] of cases){
    const parsed=await parseContentInput(body);
-   expect(parsed instanceof Response?await errorOf(parsed):parsed,JSON.stringify(body).slice(0,60)).toEqual([status,error]);
+   expect(parsed instanceof Reply?await errorOf(parsed):parsed,JSON.stringify(body).slice(0,60)).toEqual([status,error]);
   }
  });
  it('reads a page title and description, makes a folder only when creating, and charges the byte quota before storing',async()=>{
@@ -215,12 +216,12 @@ describe('parseContentInput',()=>{
   expect(await parseContentInput({format:'folder'},{creating:true})).toEqual({format:'folder',source:'',meta:{},derivedTitle:null});
   let asked=0;
   const over=await parseContentInput({image:'aGk='},{overByteQuota:async()=>{asked++;return true;}});
-  expect(over instanceof Response?await errorOf(over):over).toEqual([403,'quota_exceeded']);
+  expect(over instanceof Reply?await errorOf(over):over).toEqual([403,'quota_exceeded']);
   expect(asked).toBe(1);
  });
  it('refuses an asset ref the loader cannot resolve to bytes',async()=>{
   const parsed=await parseContentInput({html:'<img src="ref:abc123">'},{loadRef:async()=>null});
-  expect(parsed instanceof Response?await errorOf(parsed):parsed).toEqual([400,'invalid_refs']);
+  expect(parsed instanceof Reply?await errorOf(parsed):parsed).toEqual([400,'invalid_refs']);
  });
 });
 

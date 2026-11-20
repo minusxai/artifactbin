@@ -4,7 +4,7 @@ import type {ContentObjects} from '@/lib/object-store';
  * transaction. Data and byte tiers retain their original inputs and authority.
  */
 import {nativeCspDeclarations} from '@/lib/trust';
-import { json, thrownMessage } from '../../http';
+import { Reply, reply, thrownMessage } from '../../http';
 import {socialPreviewImage, socialPreviewImageValue, type StoredContent} from '@/lib/document';
 import {canonicalizeHtmlPage,htmlPageMetadata,htmlPwaSettings,htmlAssetLinks} from '@/lib/html-page';
 import {STORY_TEMPLATE_NAMES} from '@/lib/validation';
@@ -17,9 +17,9 @@ import { publishDataset, publishVizRecipe, publishImage, publishPdf, publishFile
 import { DATA_CONTENT_FIELDS, MAX_DOCUMENT_BYTES, TEXT_CONTENT_FIELDS } from '@artifactbin/contracts';
 
 
-function tooLarge(value: string): Response | null {
+function tooLarge(value: string): Reply | null {
   if (Buffer.byteLength(value, 'utf8') > MAX_DOCUMENT_BYTES) {
-    return json({ error: 'too_large', maxBytes: MAX_DOCUMENT_BYTES }, 413);
+    return reply({ error: 'too_large', maxBytes: MAX_DOCUMENT_BYTES }, 413);
   }
   return null;
 }
@@ -35,7 +35,7 @@ const imageTitleFromUrl = (url: string): string | null => {
 
 export interface ContentInputCtx {
   objects?: ContentObjects;
-  prepareDataset?: (input:unknown,objects?:ContentObjects)=>Promise<StoredContent|Response>;
+  prepareDataset?: (input:unknown,objects?:ContentObjects)=>Promise<StoredContent|Reply>;
   /** Identity normalization after caller-coordinate validation, before compilation. */
   /**
    * MAY THIS BODY MAKE A FOLDER — true only where a row is being CREATED.
@@ -74,8 +74,8 @@ export interface ContentInputCtx {
   overByteQuota?: () => Promise<boolean>;
 }
 
-export async function parseContentInput(body: Record<string, unknown>, ctx: ContentInputCtx = {}): Promise<StoredContent | Response> {
-  if(['markup','jsx','markdown','document_update'].some(key=>Object.hasOwn(body,key)))return json({error:'native_html_required',hint:'Publish a complete HTML document in the html field.'},400);
+export async function parseContentInput(body: Record<string, unknown>, ctx: ContentInputCtx = {}): Promise<StoredContent | Reply> {
+  if(['markup','jsx','markdown','document_update'].some(key=>Object.hasOwn(body,key)))return reply({error:'native_html_required',hint:'Publish a complete HTML document in the html field.'},400);
 
   const textPresent = TEXT_CONTENT_FIELDS.filter(
     (k) => typeof body[k] === 'string' && (body[k] as string).length > 0,
@@ -92,38 +92,38 @@ export async function parseContentInput(body: Record<string, unknown>, ctx: Cont
   if (ctx.creating && body.format === 'folder' && present.length === 0) {
     return { format: 'folder', source: '', meta: {}, derivedTitle: null };
   }
-  if (body.program !== undefined || body.format === 'program') return json({error:'unsupported_format'},400);
-  if (present.length !== 1) return json({ error: 'one_of_html_dataset_viz_image_pdf_file' }, 400);
+  if (body.program !== undefined || body.format === 'program') return reply({error:'unsupported_format'},400);
+  if (present.length !== 1) return reply({ error: 'one_of_html_dataset_viz_image_pdf_file' }, 400);
   const kind = present[0];
   if(kind==='html'){
     const source=String(body.html);
     const size=tooLarge(source);if(size)return size;
     try{
       canonicalizeHtmlPage(source);
-      const csp=nativeCspDeclarations(source);if(!csp.ok)return json({error:'invalid_csp',details:csp.errors.map(error=>error.message)},400);
+      const csp=nativeCspDeclarations(source);if(!csp.ok)return reply({error:'invalid_csp',details:csp.errors.map(error=>error.message)},400);
       const metadata=htmlPageMetadata(source),pwa=htmlPwaSettings(source);
       const imageId=socialPreviewImage(source);
-      if(socialPreviewImageValue(source)!==null&&!imageId)return json({error:'invalid_social_preview_image'},400);
+      if(socialPreviewImageValue(source)!==null&&!imageId)return reply({error:'invalid_social_preview_image'},400);
       const refs:Array<{id:string;kind:string}>=[];
       if(imageId){
         const image=await ctx.loadRef?.(imageId);
-        if(ctx.loadRef&&image?.format!=='image')return json({error:'invalid_social_preview_image'},400);
+        if(ctx.loadRef&&image?.format!=='image')return reply({error:'invalid_social_preview_image'},400);
         refs.push({id:imageId,kind:'image'});
       }
-      if(pwa.icon&&ctx.loadRef){const icon=await ctx.loadRef(pwa.icon);if(icon?.format!=='image')return json({error:'invalid_refs'},400);if(!refs.some(ref=>ref.id===pwa.icon))refs.push({id:pwa.icon,kind:'image'});}
-      const assets=htmlAssetLinks(source);if(assets.refs.length>128)return json({error:'invalid_refs'},400);
-      for(const id of assets.refs){if(refs.some(ref=>ref.id===id))continue;const asset=await ctx.loadRef?.(id);if(ctx.loadRef&&(!asset||!['image','file','pdf'].includes(asset.format)))return json({error:'invalid_refs'},400);if(asset)refs.push({id,kind:asset.format});}
+      if(pwa.icon&&ctx.loadRef){const icon=await ctx.loadRef(pwa.icon);if(icon?.format!=='image')return reply({error:'invalid_refs'},400);if(!refs.some(ref=>ref.id===pwa.icon))refs.push({id:pwa.icon,kind:'image'});}
+      const assets=htmlAssetLinks(source);if(assets.refs.length>128)return reply({error:'invalid_refs'},400);
+      for(const id of assets.refs){if(refs.some(ref=>ref.id===id))continue;const asset=await ctx.loadRef?.(id);if(ctx.loadRef&&(!asset||!['image','file','pdf'].includes(asset.format)))return reply({error:'invalid_refs'},400);if(asset)refs.push({id,kind:asset.format});}
       // The page's starter kind (`doc`: a page that is one editable region, opened for its editors on load). A replace
       // carries the stored one unless the body names another (lib/publish requests), so an agent's write keeps a doc a doc.
       const template=(STORY_TEMPLATE_NAMES as readonly unknown[]).includes(body.template)?{template:body.template as string}:{};
       return {format:'html',source,meta:{refs,htmlCsp:csp.extensions,...template},derivedTitle:metadata.title,derivedDescription:metadata.description};
     }
-    catch(error){return json({error:'invalid_html',details:[thrownMessage(error,'Invalid HTML')]},400);}
+    catch(error){return reply({error:'invalid_html',details:[thrownMessage(error,'Invalid HTML')]},400);}
   }
 
   if (kind === 'file') {
-    if (!ctx.overByteQuota) return json({ error: 'file_not_previewable', details: ['Upload the file with POST /api/artifacts.'] }, 400);
-    if (await ctx.overByteQuota()) return json({ error: 'quota_exceeded' }, 403);
+    if (!ctx.overByteQuota) return reply({ error: 'file_not_previewable', details: ['Upload the file with POST /api/artifacts.'] }, 400);
+    if (await ctx.overByteQuota()) return reply({ error: 'quota_exceeded' }, 403);
     return publishFile(body.file, ctx.objects);
   }
   // `dataset` accepts a JSON array (what an agent hand-writes) OR raw CSV text
@@ -135,7 +135,7 @@ export async function parseContentInput(body: Record<string, unknown>, ctx: Cont
   const definitionText=typeof body.dataset==='string'&&/^\s*(?:\{|<Dataset\b)/.test(body.dataset);
   const datasetDefinition=body.dataset&&typeof body.dataset==='object'&&!Array.isArray(body.dataset)||definitionText;
   if (kind === 'dataset' && datasetDefinition) {
-    return ctx.prepareDataset ? ctx.prepareDataset(body.dataset, ctx.objects) : json({error:'dataset_not_previewable',details:['Use the dataset preview endpoint']},400);
+    return ctx.prepareDataset ? ctx.prepareDataset(body.dataset, ctx.objects) : reply({error:'dataset_not_previewable',details:['Use the dataset preview endpoint']},400);
   }
   if (kind === 'dataset' || kind === 'sheetUrl' || kind === 'csvUrl') {
     const source =
@@ -150,7 +150,7 @@ export async function parseContentInput(body: Record<string, unknown>, ctx: Cont
       const ingested = await ingestDataset(source, declared);
       return await publishDataset({ ...body, __totalRows: ingested.totalRows, __truncated: ingested.truncated }, ingested.rows, ctx.objects);
     } catch (error) {
-      if (error instanceof IngestError) return json({ error: 'invalid_dataset', code: error.code, details: [error.message] }, 400);
+      if (error instanceof IngestError) return reply({ error: 'invalid_dataset', code: error.code, details: [error.message] }, 400);
       throw error;
     }
   }
@@ -174,17 +174,17 @@ export async function parseContentInput(body: Record<string, unknown>, ctx: Cont
    */
   if (kind === 'image' || kind === 'imageUrl') {
     if (!ctx.overByteQuota) {
-      return json({
+      return reply({
         error: 'image_not_previewable',
         details: ['an image cannot be previewed — previewing stores nothing, and storing the bytes IS publishing it. POST it to /api/artifacts instead.'],
       }, 400);
     }
     if (await ctx.overByteQuota()) {
-      return json({ error: 'quota_exceeded', details: ['this account is over its stored-byte quota — delete assets you no longer need'] }, 403);
+      return reply({ error: 'quota_exceeded', details: ['this account is over its stored-byte quota — delete assets you no longer need'] }, 403);
     }
     if (kind === 'imageUrl') {
       const ingested = await ingestImageFromUrl(String(body.imageUrl), ctx.objects);
-      if (ingested instanceof Response) return ingested;
+      if (ingested instanceof Reply) return ingested;
       return { ...ingested, derivedTitle: typeof body.title === 'string' ? null : imageTitleFromUrl(String(body.imageUrl)) };
     }
     return await publishImage(body, body.image as string, ctx.objects);
@@ -202,21 +202,21 @@ export async function parseContentInput(body: Record<string, unknown>, ctx: Cont
    */
   if (kind === 'pdf' || kind === 'pdfUrl') {
     if (!ctx.overByteQuota) {
-      return json({
+      return reply({
         error: 'pdf_not_previewable',
         details: ['a pdf cannot be previewed — previewing stores nothing, and storing the file IS publishing it. POST it to /api/artifacts instead.'],
       }, 400);
     }
     if (await ctx.overByteQuota()) {
-      return json({ error: 'quota_exceeded', details: ['this account is over its stored-byte quota — delete assets you no longer need'] }, 403);
+      return reply({ error: 'quota_exceeded', details: ['this account is over its stored-byte quota — delete assets you no longer need'] }, 403);
     }
     if (kind === 'pdfUrl') {
       const ingested = await ingestPdfFromUrl(String(body.pdfUrl), ctx.objects);
-      if (ingested instanceof Response) return ingested;
+      if (ingested instanceof Reply) return ingested;
       return { ...ingested, derivedTitle: typeof body.title === 'string' ? null : imageTitleFromUrl(String(body.pdfUrl)) };
     }
     return await publishPdf(body, body.pdf as string, ctx.objects);
   }
   if (kind === 'viz') return publishVizRecipe(body, body.viz);
-  return json({error:'unsupported_content'},400);
+  return reply({error:'unsupported_content'},400);
 }

@@ -15,7 +15,7 @@ import { getEditableArtifactFor, canReadArtifact, getArtifactById } from '@/lib/
 import { updateMetadataFromBody } from '@/lib/artifact-wire';
 import { browserActor } from '@/lib/authentication';
 import { trashArtifactFor } from '@/lib/workspace';
-import { PUBLISH_BODY_LIMIT, baseUrl, json, readJson } from '@/lib/http';
+import { PUBLISH_BODY_LIMIT, baseUrl, json, readJson, toResponse } from '@/lib/http';
 
 
 /** GET /api/my/artifacts/:id — owner-actor full read-back (for the editor). */
@@ -69,7 +69,7 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
   const body = await readJson(request);
   if (!body) return json({ error: 'invalid_json' }, 400);
   const { id } = await ctx.params;
-  return updateMetadataFromBody(actor,id,body,baseUrl(request));
+  return toResponse(await updateMetadataFromBody(actor,id,body,baseUrl(request)));
 }
 
 /**

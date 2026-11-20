@@ -18,8 +18,8 @@ const page=(title:string,head:string,body:string)=>
 async function actor(name:string):Promise<TokenHoldingActor>{const token=await mintAccountToken(name);return identityForUser(token.userId,token.id);}
 async function created(owner:TokenHoldingActor,body:Record<string,unknown>):Promise<string>{
  const response=await createArtifactFromBody(body,owner,BASE,new Request(`${BASE}/api/artifacts`,{method:'POST'}));
- expect(response.status,await response.clone().text()).toBe(201);
- return ((await response.json()) as {id:string}).id;
+ expect(response.status,JSON.stringify(response.body)).toBe(201);
+ return (response.body as {id:string}).id;
 }
 const media={
  image:{image:PNG},
@@ -28,7 +28,7 @@ const media={
 };
 const deletePreflight=async(owner:TokenHoldingActor,id:string)=>{
  const response=await preflightPublication(new Request(`${BASE}/api/preflight`),owner,{id,mode:'delete',input:{}});
- return {status:response.status,body:await response.json() as {error?:string;dependents?:{id:string}[]}};
+ return {status:response.status,body:response.body as {error?:string;dependents?:{id:string}[]}};
 };
 
 describe('media a page uses directly',()=>{

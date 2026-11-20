@@ -7,6 +7,7 @@ import {createUser,identityForUser} from '@/lib/accounts';
 import {editableRegions} from '@/lib/live-regions';
 import {useAppHarness,mintAccountToken,request,params as routeParams} from './harness';
 import {GET as read,PUT as replace} from '@/app/api/artifacts/[id]/route';
+import { Reply } from '@/lib/http';
 const harness=useAppHarness();
 it('restores a legacy archive into native editing without rewriting the archive',async()=>{
  const user=await createUser({email:'mxmx_test_restore_native@example.com'});
@@ -30,8 +31,8 @@ it('normalizes migrated publications, refuses text, and preserves stale writer c
  const native=await head();
  expect(isVersionConflict(await replaceArtifactFor(actor,row.id,{format:'html',source:row.source,meta:{}},{expectedVersion:row.version}))).toBe(true);
  const refused=await replaceArtifactFor(actor,row.id,{format:'html',source:native.source.replace('rich-native-v1','text'),meta:{}},{expectedVersion:native.version});
- expect(refused).toBeInstanceOf(Response);
- expect((refused as Response).status).toBe(409);
+ expect(refused).toBeInstanceOf(Reply);
+ expect((refused as Reply).status).toBe(409);
  expect(await head()).toEqual(native);
  await replaceArtifactFor(actor,row.id,{format:'html',source:native.source.replace('rich-native-v1','rich').replace('Original','Changed'),meta:{}},{expectedVersion:native.version});
  const changed=await head();

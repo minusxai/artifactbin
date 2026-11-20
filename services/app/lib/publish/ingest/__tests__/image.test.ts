@@ -10,6 +10,7 @@ import { allowLocalWebIngest, restoreWebIngestPolicy } from '@/test/helpers/web-
 import { ingestImageFromUrl } from '../image';
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 import { useLoopbackLookup } from '@artifactbin/utils/node/loopback-lookup';
+import { Reply } from '@/lib/http';
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
 
@@ -56,8 +57,8 @@ afterEach(() => allowLocalWebIngest());
 describe('ingestImageFromUrl', () => {
   it('stores the bytes typed by their magic, with the source URL as provenance', async () => {
     const stored = await ingestImageFromUrl(`${base}/real.png`);
-    expect(stored instanceof Response).toBe(false);
-    if (stored instanceof Response) return;
+    expect(stored instanceof Reply).toBe(false);
+    if (stored instanceof Reply) return;
     expect(stored.format).toBe('image');
     expect(stored.meta.contentType).toBe('image/png');
     expect(stored.meta.sourceUrl).toBe(`${base}/real.png`);
@@ -66,25 +67,25 @@ describe('ingestImageFromUrl', () => {
 
   it('types by the BYTES when the remote header lies', async () => {
     const stored = await ingestImageFromUrl(`${base}/lying-header.txt`);
-    if (stored instanceof Response) throw new Error('refused');
+    if (stored instanceof Reply) throw new Error('refused');
     expect(stored.meta.contentType).toBe('image/png');
   });
 
   it('refuses an html error page served under an image URL', async () => {
     const res = await ingestImageFromUrl(`${base}/error-page.png`);
-    expect(res instanceof Response).toBe(true);
-    if (!(res instanceof Response)) return;
+    expect(res instanceof Reply).toBe(true);
+    if (!(res instanceof Reply)) return;
     expect(res.status).toBe(400);
-    const body = await res.json();
+    const body = res.body;
     expect(body.error).toBe('image_fetch_failed');
     expect(String(body.details)).toContain('not an image');
   });
 
   it('turns fetch refusals into 400s that NAME the url and the reason', async () => {
     const res = await ingestImageFromUrl(`${base}/gone.png`);
-    if (!(res instanceof Response)) throw new Error('should refuse');
+    if (!(res instanceof Reply)) throw new Error('should refuse');
     expect(res.status).toBe(400);
-    const body = await res.json();
+    const body = res.body;
     expect(body.error).toBe('image_fetch_failed');
     expect(body.code).toBe('bad_status');
     expect(String(body.details)).toContain('/gone.png');
@@ -93,8 +94,8 @@ describe('ingestImageFromUrl', () => {
   it('refuses a forbidden target with the guard, never a socket', async () => {
     restoreWebIngestPolicy(); // strict production policy
     const res = await ingestImageFromUrl('https://169.254.169.254/latest/meta-data');
-    if (!(res instanceof Response)) throw new Error('should refuse');
-    expect((await res.json()).code).toBe('forbidden_address');
+    if (!(res instanceof Reply)) throw new Error('should refuse');
+    expect(res.body.code).toBe('forbidden_address');
   });
 
   it('refuses a loopback NAME the server resolves itself (as server.ts does): *.localhost and lvh.me', async () => {
@@ -102,8 +103,8 @@ describe('ingestImageFromUrl', () => {
     useLoopbackLookup();
     for (const url of ['https://anything.localhost/a.png', 'https://x.lvh.me/a.png']) {
       const res = await ingestImageFromUrl(url);
-      if (!(res instanceof Response)) throw new Error(`should refuse ${url}`);
-      expect((await res.json()).code, url).toBe('forbidden_address');
+      if (!(res instanceof Reply)) throw new Error(`should refuse ${url}`);
+      expect(res.body.code, url).toBe('forbidden_address');
     }
   });
 });

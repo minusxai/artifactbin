@@ -35,7 +35,7 @@ import { docTitleAfterSave } from './doc-title';
 import { withWebAssets } from './web-assets';
 import { readOnlyDatasetPolicy, validateDatasetPolicyForRow, validateStoredDatasetPolicy } from '../datasets';
 import { type ArtifactFormat } from '@artifactbin/contracts';
-import { json, thrownMessage } from '../http';
+import { Reply, reply, thrownMessage } from '../http';
 import { servableDocument } from './servable';
 import { ancestorsForMove, notifyParent, parentOf } from './placement';
 import type { DatasetColumn } from '@/lib/dataflow';
@@ -463,11 +463,11 @@ async function reconcileSourceIds(tx: Queryable, updated: ArtifactRow, mode: 're
 }
 
 /** Every restored head is native, regardless of receipts; archive bytes remain immutable. */
-function restoredContent(input: ArtifactInput): ArtifactInput | Response {
+function restoredContent(input: ArtifactInput): ArtifactInput | Reply {
   if (input.format !== 'html') return input;
   try { return {...input, source: convertLegacyPage(input.source ?? '').html}; }
   catch (error) {
-    if (error instanceof LiveRegionRefusal) return json({error: error.code, details: error.details}, 409);
+    if (error instanceof LiveRegionRefusal) return reply({error: error.code, details: error.details}, 409);
     throw error;
   }
 }
@@ -570,7 +570,7 @@ async function getVersionScoped(scope: Scope, id: string, version: number): Prom
  */
 interface VersionNotArchived {
   notArchived: true;
-  refusal?: Response;
+  refusal?: Reply;
 }
 export function isVersionNotArchived(r: ArtifactRow | null | VersionNotArchived): r is VersionNotArchived {
   return r !== null && 'notArchived' in r;
@@ -582,7 +582,7 @@ export function isVersionNotArchived(r: ArtifactRow | null | VersionNotArchived)
  * caller learning "policy_locked" once should not meet a second code for the
  * same fact on the next door.
  */
-const policyLocked = (detail: string): Response => json({error:'policy_locked',detail},409);
+const policyLocked = (detail: string): Reply => reply({error:'policy_locked',detail},409);
 
 /**
  * Revert to an archived version — as a NEW version (the current state is
@@ -599,14 +599,14 @@ async function revertScoped(actor: AccessActor, id: string, version: number, opt
   // unchanged — what changed is that it now says so instead of answering the
   // uniform 404 for a dataset the caller is looking straight at.
   if (initial.dataset_policy) return {notArchived:true,refusal:policyLocked('a dataset with a write policy cannot be reverted — republish the rows you want as the owner')};
-  const condition = (row: ArtifactRow, observed: Pick<ReplaceOpts, 'expectedVersion' | 'expectedState'> = opts): Response | null => {
+  const condition = (row: ArtifactRow, observed: Pick<ReplaceOpts, 'expectedVersion' | 'expectedState'> = opts): Reply | null => {
     const changed = observedChange(row, observed);
-    return changed ? json(versionConflict(row, changed), 409) : null;
+    return changed ? reply(versionConflict(row, changed), 409) : null;
   };
   const refusal = condition(initial); if (refusal) return {notArchived:true,refusal};
   let target = (await artifactQuery<Pick<ArtifactRow, 'title' | 'description' | 'format' | 'source' | 'document' | 'meta'>>(db,'SELECT title,description,format,source,document,meta FROM artifact_versions WHERE artifact_id=$1 AND version=$2',[id,version])).rows[0];
   if (!target) return {notArchived:true};
-  if(target.format==='markup')return {notArchived:true,refusal:json({error:'unsupported_format'},400)};
+  if(target.format==='markup')return {notArchived:true,refusal:reply({error:'unsupported_format'},400)};
 
   // Event fires post-txn: an unawaited query from inside the callback would
   // deadlock PGLite's serialized op queue.
@@ -618,7 +618,7 @@ async function revertScoped(actor: AccessActor, id: string, version: number, opt
     const refusal = condition(current); if (refusal) return {notArchived:true,refusal};
     const moved = condition(current, {expectedVersion: initial.version, expectedState: artifactState(initial)}); if (moved) return {notArchived:true,refusal:moved};
     const normalized = restoredContent(target);
-    if (normalized instanceof Response) return {notArchived:true, refusal:normalized};
+    if (normalized instanceof Reply) return {notArchived:true, refusal:normalized};
     target = {...target, ...normalized};
     // A revert replaces the whole page under its live regions: their unsaved typing is saved as its own version
     // first (the revert archives it), then the regions close and their editors reopen from the reverted text.
@@ -628,10 +628,10 @@ async function revertScoped(actor: AccessActor, id: string, version: number, opt
       current = write.current;
     }
 
-    if(target.format==='dataset'&&!catalogOf(target))return {notArchived:true,refusal:json({error:'dataset_error',details:['Historical dataset has no catalog or stored object key']},400)};
+    if(target.format==='dataset'&&!catalogOf(target))return {notArchived:true,refusal:reply({error:'dataset_error',details:['Historical dataset has no catalog or stored object key']},400)};
     target=retainUserScope(target,current);
     try { await write.validateContent(target); }
-    catch(error) { if(error instanceof DatasetError)return {notArchived:true,refusal:json({error:'dataset_error',details:[error.message]},error.status)};throw error; }
+    catch(error) { if(error instanceof DatasetError)return {notArchived:true,refusal:reply({error:'dataset_error',details:[error.message]},error.status)};throw error; }
 
     const updated = await write.publish(target);
     await logWholeDocumentWrite(tx, current, updated);
@@ -650,7 +650,7 @@ async function revertScoped(actor: AccessActor, id: string, version: number, opt
  */
 type VersionConflict = {conflict: true} & ReturnType<typeof versionConflict>;
 const conflictOf = (current: ArtifactRow, changed: ConflictChange): VersionConflict => ({conflict: true, ...versionConflict(current, changed)});
-export function isVersionConflict(r: ArtifactRow | null | VersionConflict | Response): r is VersionConflict {
+export function isVersionConflict(r: ArtifactRow | null | VersionConflict | Reply): r is VersionConflict {
   return r !== null && 'conflict' in r;
 }
 
@@ -683,16 +683,16 @@ async function replaceScoped(
   id: string,
   input: ArtifactInput,
   opts: ReplaceOpts = {},
-): Promise<ArtifactRow | null | VersionConflict | Response> {
+): Promise<ArtifactRow | null | VersionConflict | Reply> {
   const db = await getDb();
-  if(input.format==='markup')return json({error:'unsupported_format'},400);
+  if(input.format==='markup')return reply({error:'unsupported_format'},400);
   // Event and the parent wakeups fire post-txn — an unawaited query from
   // inside the callback would deadlock PGLite's serialized op queue.
   const effects: ReplaceEffects = { moved: null, unchanged: false };
   // Retried whole on a deadlock with a guarded write (lib/platform retryOnConflict); the effects are the last attempt's.
   const result = await retryOnConflict(() => { effects.moved = null; effects.unchanged = false; return db.transaction((tx) => replaceArtifactInTx(tx, actor, id, input, opts, effects)); });
   const { moved, unchanged } = effects;
-  const written = result && !unchanged && !isVersionConflict(result) && !(result instanceof Response) ? result : null;
+  const written = result && !unchanged && !isVersionConflict(result) && !(result instanceof Reply) ? result : null;
   if (written) { void trackEvent('update', written.id, { userId: written.user_id }); }
   // BOTH ends of a move wake: the folder the row left and the one it joined.
   if (moved) await wakeParents(moved);
@@ -716,7 +716,7 @@ async function replaceArtifactInTx(
   input: ArtifactInput,
   opts: ReplaceOpts,
   effects: ReplaceEffects,
-): Promise<ArtifactRow | null | VersionConflict | Response> {
+): Promise<ArtifactRow | null | VersionConflict | Reply> {
   let write = await lockArtifactWrite(tx, actor, id);
   if (!write) return null;
   let { current } = write;
@@ -747,7 +747,7 @@ async function replaceArtifactInTx(
   if (opts.expectedSharingRevision !== undefined && (current.sharing_revision ?? 0) !== opts.expectedSharingRevision) return conflictOf(current, 'sharing');
   // A page with a live approved query: only an Admin of its group changes who can open it (lib/query-approvals).
   try { await assertAudienceChange(tx, actor, current, { visibility: input.visibility, link_role: input.link_role, ancestor_ids: input.ancestor_ids, shares: opts.shares }); }
-  catch (error) { if (error instanceof QueryApprovalError) return error.response(); throw error; }
+  catch (error) { if (error instanceof QueryApprovalError) return reply(error.body, error.status); throw error; }
   // A page leaving HTML takes its live regions with it: their unsaved typing is saved as its own version first.
   const leavingHtml = current.format === 'html' && input.format !== 'html';
   if (leavingHtml && (await saveRegionsLocked(tx, actor, write)).published) {
@@ -756,16 +756,16 @@ async function replaceArtifactInTx(
   }
   let regions: RegionPlan | null = null;
   if(input.format==='html'){
-    if(opts.expectedVersion===undefined)return json({error:'expected_version_required'},400);
+    if(opts.expectedVersion===undefined)return reply({error:'expected_version_required'},400);
     // Only the HTML check sits inside the try: a database failure is not invalid HTML, so it throws on to the route's logged, fixed 500.
     const reserved=(await tx.query<{source_id:string}>('SELECT source_id FROM artifact_source_ids WHERE artifact_id=$1',[id])).rows.map(row=>row.source_id);
     const old=current.meta.htmlIdentity as HtmlIdentityLedger|undefined;
     let page:ReturnType<typeof canonicalizeHtmlPage>;
     try{page=normalizeNewHtmlPage(input.source??'',{previousHtml:current.source??undefined,ledger:{allocatedIds:reserved,nextNodeId:old?.nextNodeId??1}});}
-    catch(error){if(error instanceof LiveRegionRefusal)return json({error:error.code,details:error.details},409);return json({error:'invalid_html',details:[thrownMessage(error,'Invalid HTML')]},400);}
+    catch(error){if(error instanceof LiveRegionRefusal)return reply({error:error.code,details:error.details},409);return reply({error:'invalid_html',details:[thrownMessage(error,'Invalid HTML')]},400);}
     // Live regions: the written page with editors' unsaved typing merged in, three-way from the head (./regions).
     const merged=current.format==='html'?await planRegionMerge(tx,current,page,{from:fromLive?'live':'saved'}):null;
-    if(merged instanceof Response)return merged;
+    if(merged instanceof Reply)return merged;
     regions=merged;
     const html=merged?.html??page.html;
     // The version's script fingerprint (lib/html-autofix) lets a reader decide morph vs reload; `htmlIdentityCarry` says how this version's missing IDs were filled (D11).
@@ -789,7 +789,7 @@ async function replaceArtifactInTx(
    */
   if (current.dataset_policy) {
     try { validateStoredDatasetPolicy({format:input.format,meta:input.meta,dataset_policy:null}, current.dataset_policy); }
-    catch (error) { return json({error:'policy_mismatch',detail:error instanceof Error?error.message:'The dataset policy does not fit this replacement.'},400); }
+    catch (error) { return reply({error:'policy_mismatch',detail:error instanceof Error?error.message:'The dataset policy does not fit this replacement.'},400); }
   }
   await write.validateContent(input);
 
@@ -898,7 +898,7 @@ export function listArtifactsFor(actor: AccessActor): Promise<ArtifactSummary[]>
   return listArtifactsScoped(ownerScope(actor));
 }
 
-export function replaceArtifactFor(actor: AccessActor, id: string, input: ArtifactInput, opts: ReplaceOpts = {}): Promise<ArtifactRow | VersionConflict | Response | null> {
+export function replaceArtifactFor(actor: AccessActor, id: string, input: ArtifactInput, opts: ReplaceOpts = {}): Promise<ArtifactRow | VersionConflict | Reply | null> {
   return replaceScoped(actor, id, input, opts);
 }
 

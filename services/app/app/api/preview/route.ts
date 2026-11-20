@@ -1,4 +1,4 @@
-import { PUBLISH_BODY_LIMIT, isCrossSiteRequest, json, readJson, unauthorized } from '@/lib/http';
+import { PUBLISH_BODY_LIMIT, isCrossSiteRequest, json, readJson, Reply, toResponse, unauthorized } from '@/lib/http';
 import { requestOrSessionActor } from '@/lib/authentication';
 import { parseContentInput } from '@/lib/publish';
 
@@ -20,6 +20,6 @@ export async function POST(request: Request) {
   const body = await readJson(request, { limit: PUBLISH_BODY_LIMIT });
   if (!body) return json({ error: 'invalid_json' }, 400);
   const parsed = await parseContentInput(body);
-  if (parsed instanceof Response) return parsed;
+  if (parsed instanceof Reply) return toResponse(parsed);
   return json({ html: '', format: parsed.format });
 }

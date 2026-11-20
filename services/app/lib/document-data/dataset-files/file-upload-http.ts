@@ -2,7 +2,7 @@
 import { requestOrSessionActor, refusesCrossSite } from '@/lib/authentication';
 import { DatasetError, readFileUpload } from '@/lib/datasets';
 import { uploadDatasetFile, readDatasetFile } from './feedback-images';
-import { json } from '@/lib/http';
+import { json, Reply, toResponse } from '@/lib/http';
 
 const headers={'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; sandbox",'Referrer-Policy':'no-referrer','Vary':'Origin'};
 export async function uploadFileRequest(request:Request, documentId:string, datasetId:string):Promise<Response> {
@@ -12,7 +12,7 @@ export async function uploadFileRequest(request:Request, documentId:string, data
   let filename:string;
   try { filename=decodeURIComponent(request.headers.get('X-Filename')??''); } catch { return json({error:'invalid_filename'},400,headers); }
   const bytes=await readFileUpload(request);
-  if(bytes instanceof Response)return bytes;
+  if(bytes instanceof Reply)return toResponse(bytes);
   try {
     return json(await uploadDatasetFile({actor:actor,documentId,datasetId,editId:request.headers.get('X-Edit-Id')??'',bytes,contentType:(request.headers.get('content-type')??'application/octet-stream').split(';')[0]!.trim().toLowerCase(),filename,operationKey:request.headers.get('Idempotency-Key')??''}),201,headers);
   } catch(error) {

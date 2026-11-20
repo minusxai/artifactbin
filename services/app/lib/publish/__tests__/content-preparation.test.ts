@@ -3,6 +3,7 @@ import {useAppHarness} from '@/__tests__/harness';
 import {prepareContentInput,applyPreparedContent} from '../prepared/prepare-content';
 import {objectStore} from '@/lib/object-store';
 import {prepareCatalog} from '@/lib/datasets';
+import { Reply } from '@/lib/http';
 useAppHarness();
 const svg=Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><rect width="1" height="1" /></svg>');
 for(const [kind,body] of Object.entries({
@@ -14,7 +15,7 @@ for(const [kind,body] of Object.entries({
 }))it(`prepares ${kind} bytes without persistence and applies the same prepared objects`,async()=>{
  const store=objectStore();const put=vi.spyOn(store,'put');
  const prepared=await prepareContentInput(body,{overByteQuota:async()=>false});
- if(prepared instanceof Response)throw new Error(await prepared.text());
+ if(prepared instanceof Reply)throw new Error(JSON.stringify(prepared.body));
  expect(put).not.toHaveBeenCalled();expect(prepared.objects.length).toBeGreaterThan(0);
  const applied=await applyPreparedContent(prepared);
  expect(applied).toEqual(prepared.content);
@@ -26,8 +27,8 @@ it('prepares stored catalog models against staged data without persisting their 
  const put=vi.spyOn(objectStore(),'put');
  try {
   const result=await prepareContentInput({dataset:{kind:'stored',tables:[{schema:'public',name:'rows',rows:[{n:3}]},{schema:'public',name:'summary',sql:'select sum(n) as total from rows'}]}},{prepareDataset:(input,objects)=>prepareCatalog(input,undefined,objects)});
-  expect(result instanceof Response ? await result.clone().text() : 'prepared').toBe('prepared');
-  if(result instanceof Response)return;
+  expect(result instanceof Reply ? JSON.stringify(result.body) : 'prepared').toBe('prepared');
+  if(result instanceof Reply)return;
   expect(put).not.toHaveBeenCalled();
   expect((result.content.meta.catalog as {tables:unknown[]}).tables[1]).toMatchObject({name:'summary',columns:[{name:'total',type:'number'}]});
  } finally {put.mockRestore();}
@@ -36,10 +37,10 @@ it('invalid markup and explicit remote imports have no preparation effects',asyn
  const put=vi.spyOn(objectStore(),'put');const network=vi.spyOn(globalThis,'fetch').mockRejectedValue(new Error('unexpected fetch'));
  try {
   const invalid=await prepareContentInput({markup:'<Unknown /> <img src="https://example.org/a.png" />'});
-  expect(invalid).toBeInstanceOf(Response);
+  expect(invalid).toBeInstanceOf(Reply);
   const remote=await prepareContentInput({imageUrl:'https://example.org/a.png'});
-  expect(remote).toBeInstanceOf(Response);
-  expect((await (remote as Response).json()).error).toBe('dry_run_unsupported');
+  expect(remote).toBeInstanceOf(Reply);
+  expect((remote as Reply).body.error).toBe('dry_run_unsupported');
   expect(put).not.toHaveBeenCalled();expect(network).not.toHaveBeenCalled();
  } finally {put.mockRestore();network.mockRestore();}
 });

@@ -20,6 +20,7 @@ import { retryingFetch } from '@/lib/http/retry-lazily';
 import { PUBLIC_BASE_URL, overrideRequestHeaders, runWithRequest } from '@/lib/platform';
 import { request } from '@/__tests__/harness';
 import { overrideConfig, resetConfigOverrides } from '@/lib/platform/config';
+import { Reply } from '@/lib/http';
 
 afterEach(() => { resetConfigOverrides(); vi.useRealTimers(); vi.unstubAllGlobals(); overrideRequestHeaders(undefined); resetShared(); setAppBuild(null); });
 
@@ -221,9 +222,9 @@ describe('SQL scalar parameters', () => {
   });
   it.each([null, [], 'x', { a: NaN }, { a: Infinity }, { a: -Infinity }, { a: {} }, { a: [] }])('refuses malformed values %j', async (value) => {
     const response = parseScalarValues(value);
-    expect(response).toBeInstanceOf(Response);
-    expect((response as Response).status).toBe(400);
-    expect(await (response as Response).json()).toMatchObject({ error: 'invalid_values' });
+    expect(response).toBeInstanceOf(Reply);
+    expect((response as Reply).status).toBe(400);
+    expect((response as Reply).body).toMatchObject({ error: 'invalid_values' });
   });
 });
 
