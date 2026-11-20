@@ -1,5 +1,5 @@
 import {afterEach,expect,it,vi} from 'vitest';
-import {htmlSelection} from '../../html-bridge/selection';
+import {htmlSelection} from '../bridge/selection';
 afterEach(()=>{document.body.innerHTML='';localStorage.clear();vi.unstubAllGlobals();vi.resetModules();});
 it('captures opt-in UI state, restores before target layout, and returns the private view on close',async()=>{
  vi.stubGlobal('__AF_RUNTIME_CONFIG__',{pageId:'comment-view-test',revision:'1',backends:[]});

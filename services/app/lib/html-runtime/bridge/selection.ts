@@ -1,7 +1,7 @@
 import type { HtmlNodeAnchor } from '@artifactbin/contracts/html-annotation';
 import { withHtmlCommentView } from './comment-view-session';
 import { captureHtmlRange } from './range';
-import type { StoryEditSelection } from '../html-bridge/selection-contract';
+import type { StoryEditSelection } from './selection-contract';
 const elementOf = (node: Node | null): Element | null => node?.nodeType === 1 ? node as Element : node?.parentElement ?? null;
 const htmlNode = (node: Node | null): Element | null => elementOf(node)?.closest('[data-af-id]') ?? null;
 const LABEL_MAX = 120;

@@ -10,7 +10,7 @@ import { Selection, TextSelection, type EditorState } from 'prosemirror-state';
 import { absolutePositionToRelativePosition, relativePositionToAbsolutePosition, ySyncPluginKey, yUndoPluginKey } from '@tiptap/y-tiptap';
 import * as Y from 'yjs';
 import { nativeExtensions, NATIVE_ROOT, openRegionDoc } from '../live-regions/native-browser';
-import { createRegionCaretPainter } from '../html-bridge/region-carets';
+import { createRegionCaretPainter } from './bridge/region-carets';
 import { safeHref } from '../live-regions/href';
 import type { RegionEditor, RegionEditorOptions } from './region-editor-contract';
 // Markdown is loaded only on paste; keep its parser out of the typing/collaboration chunk.

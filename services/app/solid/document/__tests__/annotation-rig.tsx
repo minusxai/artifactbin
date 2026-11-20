@@ -13,7 +13,7 @@ import { createSignal, type JSX } from 'solid-js';
 import type { AnnotationWire } from '@/lib/annotations';
 import { createHttpBackend, type ArtifactBackend } from '@/lib/artifact-backend';
 import { type StoryController } from '@/lib/html-reader/contract';
-import type { StoryEditSelection } from '@/lib/html-bridge/selection-contract';
+import type { StoryEditSelection } from '@/lib/html-runtime/bridge/selection-contract';
 import { screen } from '@testing-library/dom';
 import { fireEvent, render } from '../../__tests__/helpers';
 import { TrustedUi } from '../../components/TrustedUi';

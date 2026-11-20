@@ -10,7 +10,7 @@ import { screen, waitFor, within } from '@testing-library/dom';
 import { Suspense } from 'solid-js';
 import * as captureScreen from '@/lib/capture';
 import { CaptureError, type CaptureSession } from '@/lib/capture';
-import type { StoryEditSelection } from '@/lib/html-bridge/selection-contract';
+import type { StoryEditSelection } from '@/lib/html-runtime/bridge/selection-contract';
 import { fireEvent, render } from '../../__tests__/helpers';
 import { AnnotationLayer } from '../AnnotationLayer';
 import { preloadCommentField } from '../LazyCommentField';

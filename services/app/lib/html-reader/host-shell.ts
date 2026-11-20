@@ -32,7 +32,7 @@
  * The page reports its content height (`af-draft-size`, `{height}` px, at most 20000) on load and on each change, which
  * the frame on another origin cannot otherwise show its host; with `fitHeight: true` the frame takes that height itself.
  * With `comments: true` the frame offers its Comment action (on selected words, and on an element by right-click; never
- * Select), and the host hears the reader's choice as `af-draft-comment`: the selection (lib/html-bridge
+ * Select), and the host hears the reader's choice as `af-draft-comment`: the selection (lib/html-runtime/bridge
  * selection-contract: `path` the element's `data-af-id`, `tag`, `label`, `quote`, and `source`, its start tag's line and
  * column in the `html` sent). What to do with it is the host's: the draft stores no comment.
  *

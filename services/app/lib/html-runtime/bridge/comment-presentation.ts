@@ -1,5 +1,5 @@
 import { COMMENT_ACTIONS_CSS } from './comment-actions-presentation';
-import { SELECTION_PRESENTATION } from '@/lib/html-bridge/selection-presentation';
+import { SELECTION_PRESENTATION } from './selection-presentation';
 
 const blockOutline = 'outline: 1px solid rgba(245, 158, 11, .15); outline-offset: 3px;';
 const blockInset = 'inset 0 0 0 9999px rgba(245, 158, 11, .08)';

@@ -5,7 +5,7 @@ import { createStateStore } from '../state-store';
 import { createLocalStore } from '../apollo/local-store';
 import { encodeState } from '../apollo/state-url';
 import type { StatePort } from '../apollo/apollo-contracts';
-import { createHtmlCommentViewSession, withHtmlCommentView } from '../../html-bridge/comment-view-session';
+import { createHtmlCommentViewSession, withHtmlCommentView } from '../bridge/comment-view-session';
 
 /** One viewer's browser: a shared localStorage, a `storage` event to other tabs and a page-origin lock. */
 function browser() {

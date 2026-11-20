@@ -3,7 +3,7 @@ import type { StatePort } from './apollo/apollo-contracts';
 interface HtmlCommentViewDeclaration { version:string; fields:readonly string[]; partial?:boolean }
 interface HtmlCommentViewOptions { declaration: HtmlCommentViewDeclaration; state:StatePort; backends:readonly string[] }
 import { derivedCommentViewVersion, parseCommentViewFieldList, parseCommentViewState, type ReviewJson } from '../../../contracts/src/comment-view-state';
-import type { HtmlCommentViewPort } from '../html-bridge';
+import type { HtmlCommentViewPort } from './bridge/comment-view-contract';
 const safe = (key: string) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(key) && key.length <= 128 && !['__proto__','prototype','constructor'].includes(key);
 const list = (text: string) => { const names = parseCommentViewFieldList(text); if (typeof names === 'string') throw new Error('Invalid comment view field list.'); return names; };
 

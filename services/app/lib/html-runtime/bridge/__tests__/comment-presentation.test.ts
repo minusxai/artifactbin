@@ -3,9 +3,9 @@
  * bootstrap serializes, so it must stay plain JSON, and its paint must never hide or replace authored content.
  */
 import { describe, expect, it } from 'vitest';
-import { COMMENT_PRESENTATION } from '../../html-bridge/comment-presentation';
-import { COMMENT_ACTIONS_CSS } from '../../html-bridge/comment-actions-presentation';
-import { SELECTION_PRESENTATION } from '@/lib/html-bridge/selection-presentation';
+import { COMMENT_PRESENTATION } from '../comment-presentation';
+import { COMMENT_ACTIONS_CSS } from '../comment-actions-presentation';
+import { SELECTION_PRESENTATION } from '../selection-presentation';
 
 describe('comment presentation', () => {
   it('is plain serializable data', () => {

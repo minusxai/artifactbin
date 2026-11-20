@@ -13,7 +13,7 @@ import { batch, createContext, createEffect, createSignal, For, onCleanup, Show,
 import { Dynamic } from 'solid-js/web';
 import type { AnnotationWire } from '@/lib/annotations';
 import type { AnnotationCommentWire } from '@artifactbin/contracts/annotation-comment';
-import type { StoryEditRect } from '@/lib/html-bridge/selection-contract';
+import type { StoryEditRect } from '@/lib/html-runtime/bridge/selection-contract';
 import Check from 'lucide-solid/icons/check';
 import PenLine from 'lucide-solid/icons/pen-line';
 import Reply from 'lucide-solid/icons/reply';

@@ -96,7 +96,7 @@ try {
   check((await until(() => counts(A.tab), (c) => c?.open === 1))?.open === 1, 'the comment is saved and the shell\'s count says 1');
   const thread = await A.tab.evaluate(() => window.hostEvents.find((event) => event.name === 'af-document-thread' && event.detail.id)?.detail.id);
   check(typeof thread === 'string', `the shell is told which thread opened (${thread})`);
-  // The frame paints the commented words (its annotation overlay: a highlight or marks, lib/html-bridge/annotations).
+  // The frame paints the commented words (its annotation overlay: a highlight or marks, lib/html-runtime/bridge/annotations).
   check(await until(() => A.frame.locator('[data-af="annotation-overlay"]').evaluate((overlay) => overlay.childElementCount), (n) => n > 0) > 0, 'the commented passage is painted in the frame');
   check(await A.tab.getByRole('button', { name: /^Open annotation conversation by .*, 1 message$/ }).first().waitFor({ timeout: 10_000 }).then(() => true, () => false), 'its mark sits at the frame\'s edge, drawn by the module over the shell');
 
