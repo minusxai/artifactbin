@@ -1,9 +1,6 @@
-import {afterEach,describe,expect,it,vi} from 'vitest';
+import {describe,expect,it} from 'vitest';
 import {annotationSplit} from '../annotation-layers';
-import {GEO_BOUNDARY_DATASET,loadGeoFeatures,resolveGeoAsset} from '../geo-assets';
-import {injectNamedAssets,resizeVegaView,resolveEnvelopeSpec} from '../render-vega';
-import type {VizEnvelope} from '@/lib/validation';
-afterEach(()=>vi.unstubAllGlobals());
+import {resizeVegaView} from '../chart-plan';
 
 describe('native annotation layers',()=>{
  it('splits an annotated unit into its base chart and datum-only rule/rect/text layers',()=>{
@@ -17,49 +14,7 @@ describe('native annotation layers',()=>{
 
 });
 
-describe('geo boundaries',()=>{
- it('resolves only allowlisted ids, defaulting to US states',()=>{
-  expect(resolveGeoAsset('world')).toBe('world');
-  for(const id of ['nowhere',undefined,42,''])expect(resolveGeoAsset(id)).toBe('us-states');
-  expect(GEO_BOUNDARY_DATASET).toBe('__mx_geo_boundary');
- });
- it('never resolves an inherited object key as a boundary asset',()=>{
-  for(const id of ['__proto__','toString','constructor'])expect(resolveGeoAsset(id)).toBe('us-states');
- });
- it('loads a boundary once from its public file and refuses unknown ids and failed loads',async()=>{
-  const features=[{type:'Feature',properties:{name:'Goa'},geometry:null}];
-  const fetch=vi.fn(async()=>Response.json({type:'FeatureCollection',features}));vi.stubGlobal('fetch',fetch);
-  await expect(loadGeoFeatures('atlantis')).rejects.toThrow('unknown geo boundary "atlantis"');
-  expect(await loadGeoFeatures('india-states')).toEqual(features);
-  expect(await loadGeoFeatures('india-states')).toEqual(features);
-  expect(fetch).toHaveBeenCalledOnce();expect(fetch).toHaveBeenCalledWith('/af/geojson/india-states.json');
-  vi.stubGlobal('fetch',vi.fn(async()=>new Response('missing',{status:404})));
-  await expect(loadGeoFeatures('world')).rejects.toThrow('Failed to load boundary asset /af/geojson/world-atlas-countries-110m.json');
- });
-});
-
 describe('render pipeline seams',()=>{
- const envelope=(source:Record<string,unknown>)=>({version:2,source,dataBindings:null,viewParams:null,interactions:null,assets:null}) as unknown as VizEnvelope;
- it('resolves native, detached, shipped and workspace recipe sources to one renderable spec',()=>{
-  expect(resolveEnvelopeSpec(envelope({kind:'vega-lite',spec:{mark:'bar'}}))).toEqual({ok:true,spec:{mark:'bar'},engine:'vega-lite'});
-  expect(resolveEnvelopeSpec(envelope({kind:'vega',spec:{marks:[]},assets:{states:'us-states'}}))).toEqual({ok:true,spec:{marks:[]},engine:'vega',assets:{states:'us-states'}});
-  expect(resolveEnvelopeSpec(envelope({kind:'vega',spec:{marks:[]},assets:{}}))).toEqual({ok:true,spec:{marks:[]},engine:'vega'});
-  expect(resolveEnvelopeSpec(envelope({kind:'recipe',recipe:'team/bars',spec:{marks:[]},grammar:'vega@6'}))).toEqual({ok:true,spec:{marks:[]},engine:'vega'});
-  expect(resolveEnvelopeSpec(envelope({kind:'recipe',recipe:'team/bars',spec:{mark:'bar'}}))).toMatchObject({engine:'vega-lite'});
-  expect(resolveEnvelopeSpec(envelope({kind:'recipe',recipe:'team/bars',unresolved:'deleted'}))).toEqual({ok:false,error:'viz recipe "team/bars" is not resolved (deleted)'});
-  expect(resolveEnvelopeSpec(envelope({kind:'recipe',recipe:'funnel',bindings:{stage:'s',value:'v'}}))).toMatchObject({ok:true,engine:'vega-lite'});
-  expect(resolveEnvelopeSpec(envelope({kind:'recipe',recipe:'nope',bindings:{}}))).toMatchObject({ok:false});
- });
- it('binds every named asset as cloned features beside main, and nothing without assets',async()=>{
-  const shared={type:'Feature',properties:{name:'A'},geometry:null} as never;
-  const bound:Record<string,unknown[]>={},view={data:(name:string,rows:unknown[])=>{bound[name]=rows;}} as never;
-  const load=vi.fn(async()=>[shared]);
-  await injectNamedAssets(view,undefined,load);expect(load).not.toHaveBeenCalled();
-  await injectNamedAssets(view,{states:'us-states',world:'world'},load);
-  expect(Object.keys(bound).sort()).toEqual(['states','world']);
-  expect(bound.states).toEqual([shared]);expect(bound.states![0]).not.toBe(shared);
-  await expect(injectNamedAssets(view,{bad:'x'},async()=>{throw Error('unknown geo boundary');})).rejects.toThrow('unknown geo boundary');
- });
  it('sizes a unit view by its root and a facet by its child signals only',()=>{
   const calls:unknown[][]=[];const signals=new Set(['child_width']);
   const view={width:(w:number)=>calls.push(['width',w]),height:(h:number)=>calls.push(['height',h]),signal:(name:string,value:number)=>{if(!signals.has(name))throw Error(`Unrecognized signal name: ${name}`);calls.push([name,value]);return view;}} as never;

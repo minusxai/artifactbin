@@ -9,9 +9,7 @@
  * visually meaningful way means shipping `@2` and keeping `@1` frozen.
  */
 import type { ColumnFormatConfig } from '@/lib/validation';
-import { VIZ_DATASET_MAIN, type VizResultColumn } from './types';
-import { GEO_ASSETS, GEO_BOUNDARY_DATASET, resolveGeoAsset } from './geo-assets';
-import { tileUrlTemplate } from './tiles';
+import type { VizResultColumn } from './types';
 
 interface VizTemplateBinding {
   name: string;
@@ -53,7 +51,7 @@ type VizParams = Record<string, unknown> | null | undefined;
 interface VizTemplate {
   id: string;
   /** The icon-grid type this recipe implements. */
-  vizType: 'funnel' | 'waterfall' | 'radar' | 'trend' | 'single_value' | 'combo' | 'choropleth' | 'point_map';
+  vizType: 'funnel' | 'waterfall' | 'radar' | 'trend' | 'single_value' | 'combo';
   /** Grammar of the materialized spec ('vega' skips the VL compile). */
   engine: VizTemplateEngine;
   bindings: ReadonlyArray<VizTemplateBinding>;
@@ -63,13 +61,6 @@ interface VizTemplate {
    * recipe can pick a temporal vs. discrete axis from the actual type rather than guessing.
    */
   build(bindings: Record<string, string | string[]>, formats?: VizFormats, params?: VizParams, columns?: VizResultColumn[]): Record<string, unknown>;
-  /**
-   * Named boundary/lookup datasets this recipe references by local name:
-   * `{localDatasetName: assetId}`. The renderer resolves each asset id from the geo
-   * registry and injects its features under the local name (alongside `main`). Only
-   * geo recipes declare assets; everything else binds `main` alone.
-   */
-  assets?(bindings: Record<string, string | string[]>, params?: VizParams): Record<string, string>;
 }
 
 // ── funnel ─────────────────────────────────────────────────────────────
@@ -1117,427 +1108,6 @@ const combo: VizTemplate = {
   },
 };
 
-// ── choropleth ─────────────────────────────────────────────────────────
-// Region-keyed thematic map: each boundary polygon is filled by a value
-// looked up from the query result by region NAME. The boundary geometry is the
-// primary data (one mark per region) injected from the named-asset registry under
-// GEO_BOUNDARY_DATASET — never fetched from the network; the query result is
-// the lookup source under `main`. Two layers: a themed outline of EVERY region
-// (so regions with no data still show) beneath the value-colored regions.
-//
-// Bindings: region (nominal, matches the boundary's name property) + value
-// (quantitative). Params: mapName (any GEO_ASSETS id — us-states|us-counties|
-// world|india-states) picks the boundary + projection; colorScale picks the
-// sequential color scheme; zoom/panX/panY carry the persisted view state.
-const CHOROPLETH_SCHEMES: Record<string, string> = {
-  green: 'greens',
-  blue: 'blues',
-  teal: 'teals',
-  orange: 'oranges',
-  purple: 'purples',
-  red: 'reds',
-  grey: 'greys',
-  'red-yellow-green': 'redyellowgreen',
-  'blue-orange': 'blueorange',
-};
-
-const choropleth: VizTemplate = {
-  id: 'choropleth',
-  vizType: 'choropleth',
-  engine: 'vega',
-  bindings: [
-    { name: 'region', label: 'Region', accepts: ['nominal'] },
-    { name: 'value', label: 'Value', accepts: ['quantitative'] },
-  ],
-  assets(_bindings, params) {
-    const p = (params ?? {}) as Record<string, unknown>;
-    return { [GEO_BOUNDARY_DATASET]: resolveGeoAsset(p.mapName) };
-  },
-  build(bindings, formats, params) {
-    const region = String(bindings.region);
-    const value = String(bindings.value);
-    const p = (params ?? {}) as Record<string, unknown>;
-    const asset = GEO_ASSETS[resolveGeoAsset(p.mapName)];
-    const scheme = typeof p.colorScale === 'string' && CHOROPLETH_SCHEMES[p.colorScale]
-      ? CHOROPLETH_SCHEMES[p.colorScale]
-      : 'greens';
-    const valueTitle = aliasOf(formats, value);
-    const regionTitle = aliasOf(formats, region);
-    const fmt = formats?.[value]?.format;
-    // Interactive zoom (a multiplier) + pan (pixels). albersUsa can `scale`+`translate`
-    // but not recenter (composite), so the projection FITS the whole boundary and
-    // zoom/pan ride the `extent` (fit-to-source-boundary + extent — the proven pattern).
-    // base/user split keeps interactive sets from being clobbered.
-    const zoomVal = typeof p.zoom === 'number' && Number.isFinite(p.zoom) ? Math.min(40, Math.max(0.1, p.zoom)) : 1;
-    const panXVal = typeof p.panX === 'number' && Number.isFinite(p.panX) ? p.panX : 0;
-    const panYVal = typeof p.panY === 'number' && Number.isFinite(p.panY) ? p.panY : 0;
-    const BORDER = 'rgba(139, 148, 158, 0.55)';
-    const ttExpr = `{${JSON.stringify(regionTitle)}: datum.__mx_region, ${JSON.stringify(valueTitle)}: datum[${JSON.stringify(value)}]}`;
-
-    return {
-      autosize: { type: 'none' },
-      signals: [
-        { name: 'tx', update: 'width / 2' },
-        { name: 'ty', update: 'height / 2' },
-        { name: 'zoomUser', value: zoomVal !== 1 ? zoomVal : null, on: [
-          { events: { type: 'wheel', consume: true }, update: 'clamp((zoomUser != null ? zoomUser : 1) * pow(1.0015, -event.deltaY), 0.2, 40)' },
-        ] },
-        { name: 'zoom', update: 'zoomUser != null ? zoomUser : 1' },
-        { name: 'down', value: null, on: [ { events: 'pointerdown', update: 'xy()' }, { events: 'pointerup', update: 'null' } ] },
-        { name: 'panStart', value: null, on: [ { events: 'pointerdown', update: '[panX, panY]' }, { events: 'pointerup', update: 'null' } ] },
-        { name: 'delta', value: [0, 0], on: [ { events: 'pointermove', update: 'down ? [x() - down[0], y() - down[1]] : [0, 0]' } ] },
-        { name: 'panX', value: panXVal, on: [ { events: { signal: 'delta' }, update: 'down && panStart ? panStart[0] + delta[0] : panX' } ] },
-        { name: 'panY', value: panYVal, on: [ { events: { signal: 'delta' }, update: 'down && panStart ? panStart[1] + delta[1] : panY' } ] },
-        // The view state VegaChart reads back and persists after interaction.
-        { name: 'mxViewParams', update: '{zoom: zoom, panX: panX, panY: panY}' },
-      ],
-      data: [
-        { name: VIZ_DATASET_MAIN },
-        { name: GEO_BOUNDARY_DATASET },
-        { name: 'fit_target', source: GEO_BOUNDARY_DATASET },
-        // Join the value onto each boundary region by name; keep only regions WITH data.
-        { name: 'choro', source: GEO_BOUNDARY_DATASET, transform: [
-          { type: 'formula', as: '__mx_region', expr: `datum.properties[${JSON.stringify(asset.nameProp)}]` },
-          { type: 'lookup', from: VIZ_DATASET_MAIN, key: region, fields: ['__mx_region'], values: [value], as: [value] },
-          { type: 'filter', expr: `isValid(datum[${JSON.stringify(value)}])` },
-        ] },
-      ],
-      projections: [{
-        name: 'projection',
-        type: asset.projection,
-        fit: { signal: "data('fit_target')" },
-        extent: { signal: '[[width/2 - width*zoom/2 + panX, height/2 - height*zoom/2 + panY], [width/2 + width*zoom/2 + panX, height/2 + height*zoom/2 + panY]]' },
-      }],
-      scales: [
-        { name: 'color', type: 'linear', domain: { data: 'choro', field: value }, range: { scheme }, zero: false, nice: true },
-      ],
-      legends: [{ fill: 'color', title: valueTitle, ...(fmt ? { format: fmt } : {}), gradientLength: { signal: 'clamp(width - 40, 60, 240)' } }],
-      marks: [{
-        type: 'group', clip: true,
-        encode: { update: { width: { signal: 'width' }, height: { signal: 'height' } } },
-        marks: [
-          // Backdrop: every region outlined (regions with no data still read).
-          { type: 'shape', from: { data: GEO_BOUNDARY_DATASET }, encode: { update: { fill: { value: 'transparent' }, stroke: { value: BORDER }, strokeWidth: { value: 0.5 } } }, transform: [{ type: 'geoshape', projection: 'projection' }] },
-          // Choropleth: the value-colored regions on top.
-          { type: 'shape', from: { data: 'choro' }, encode: { update: { fill: { scale: 'color', field: value }, stroke: { value: BORDER }, strokeWidth: { value: 0.5 }, tooltip: { signal: ttExpr } } }, transform: [{ type: 'geoshape', projection: 'projection' }] },
-        ],
-      }],
-    };
-  },
-};
-
-// The mercator scale a point map uses at zoom 1 when a `center` is set (a region /
-// large-state view). Interactive/persisted zoom is `scale / POINT_MAP_REGION_SCALE`.
-const POINT_MAP_REGION_SCALE = 1700;
-
-// Default street-tile basemap (opt-in via `basemap: 'tiles'`). Carto's "light_all"
-// is muted — designed as a data-viz backdrop so points/flows stay legible. Free, no
-// key; requires the OSM+CARTO attribution the recipe renders. Override with `tileUrl`
-// ({z}/{x}/{y} template) to point at a keyed provider (MapTiler/Stadia/…).
-// The defaults are the SAME-ORIGIN proxy paths (lib/tiles): a served document's
-// CSP admits images from 'self' only, so tiles reach Carto through /tiles/.
-// NOTE: tiles load over the network in the BROWSER only — headless renders (the
-// chart→LLM image, server previews) get the vector boundary fallback beneath instead.
-export const POINT_MAP_DEFAULT_TILE_URL = tileUrlTemplate('light_all');
-// Dark-mode counterpart (Carto "dark matter"). VegaChart swaps the default to this
-// when the chart renders in dark mode and no explicit `tileUrl` override is set.
-export const POINT_MAP_DARK_TILE_URL = tileUrlTemplate('dark_all');
-
-// The pre-proxy absolute Carto URLs, still baked into detached specs stored
-// before /tiles existed — CSP-dead inside a served document, so the theme swap
-// treats them as defaults and rewrites them onto the proxy.
-const POINT_MAP_LEGACY_TILE_URLS: ReadonlySet<string> = new Set([
-  'https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
-  'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-]);
-
-/**
- * The theme swap as a pure decision: given a chart's current `tileUrlTemplate`
- * signal value and the render's color mode, the URL to set — or null to leave
- * a custom user/agent `tileUrl` untouched.
- */
-export function themeTileUrl(current: unknown, colorMode: 'light' | 'dark'): string | null {
-  const isDefault = current === POINT_MAP_DEFAULT_TILE_URL || current === POINT_MAP_DARK_TILE_URL
-    || (typeof current === 'string' && POINT_MAP_LEGACY_TILE_URLS.has(current));
-  if (!isDefault) return null;
-  return colorMode === 'dark' ? POINT_MAP_DARK_TILE_URL : POINT_MAP_DEFAULT_TILE_URL;
-}
-
-// ── point-map ──────────────────────────────────────────────────────────
-// Coordinate map: point/marker rows plotted over a vector basemap backdrop
-// via a projection. The query result is the primary data (`main`); the boundary is a
-// light outline layer beneath (injected from the asset registry — the reverse of
-// choropleth). `size` bound → bubbles; `color` bound → category palette (or a
-// sequential scheme when `colorScale` is set). Binding BOTH `lat2`/`lng2` turns each
-// row into an origin→destination flow line (rule marks) — same recipe, no mode toggle.
-//
-// Bindings: lat, lng (required), lat2, lng2 (optional destination → flows), size,
-// color (optional). Params: mapName (boundary asset), colorScale (quantitative
-// color scheme), markColor (solid marker color), zoom/center (view state),
-// basemap ('tiles' opts into the slippy-tile backdrop) and tileUrl.
-const pointMap: VizTemplate = {
-  id: 'point-map',
-  vizType: 'point_map',
-  engine: 'vega',
-  bindings: [
-    { name: 'lat', label: 'Latitude', accepts: ['quantitative'] },
-    { name: 'lng', label: 'Longitude', accepts: ['quantitative'] },
-    { name: 'lat2', label: 'End latitude', accepts: ['quantitative'], optional: true },
-    { name: 'lng2', label: 'End longitude', accepts: ['quantitative'], optional: true },
-    { name: 'size', label: 'Size', accepts: ['quantitative'], optional: true },
-    { name: 'color', label: 'Color', accepts: ['nominal', 'quantitative'], optional: true },
-  ],
-  assets(_bindings, params) {
-    const p = (params ?? {}) as Record<string, unknown>;
-    return { [GEO_BOUNDARY_DATASET]: resolveGeoAsset(p.mapName) };
-  },
-  build(bindings, formats, params) {
-    const str = (v: string | string[] | undefined) => (typeof v === 'string' && v ? v : null);
-    const lat = String(bindings.lat);
-    const lng = String(bindings.lng);
-    const lat2 = str(bindings.lat2);
-    const lng2 = str(bindings.lng2);
-    const size = str(bindings.size);
-    const color = str(bindings.color);
-    const p = (params ?? {}) as Record<string, unknown>;
-    const isFlow = lat2 != null && lng2 != null;
-    const scheme = typeof p.colorScale === 'string' && CHOROPLETH_SCHEMES[p.colorScale] ? CHOROPLETH_SCHEMES[p.colorScale] : null;
-    // Solid marker color (all points/flows one color) — used when NO data-driven `color`
-    // column is bound. A bound `color` wins (it drives the category/ramp scale). Accepts
-    // any CSS color (hex or name). Default teal.
-    const markColorVal = typeof p.markColor === 'string' && p.markColor ? p.markColor : '#16a085';
-    // Projection controls. The map is a recenterable MERCATOR driven by
-    // `scale` + `center` signals — the canonical vega zoomable-map pattern. (Vega's
-    // projection `fit` can't frame a computed box; it only fits real source geometry.)
-    // `center` [lat, lng] recenters GEOGRAPHICALLY, so it holds across basemaps
-    // (states/counties/world); `zoom` scales in. With no center the projection frames
-    // the DATA extent (where the points are). These same signals carry interactive
-    // pan/zoom later. (choropleth keeps albersUsa + its AK/HI insets and rides its own
-    // zoom/pan on the projection `extent` instead — a RECENTERABLE point map can't use
-    // a composite projection.)
-    // Zoom is a scale MULTIPLIER (1 = region view). Cap high enough to reach street/
-    // building level with tiles (scale ≈ REGION_SCALE·zoom; the wheel/buttons cap scale
-    // at ~8M ≈ slippy z18, so zoom up to ~4700 is reachable). A low cap here collapses
-    // the view on every zoom-in, because persistence round-trips zoom as scale/REGION_SCALE.
-    const zoomVal = typeof p.zoom === 'number' && Number.isFinite(p.zoom) ? Math.min(6000, Math.max(0.05, p.zoom)) : 1;
-    const center = Array.isArray(p.center) && p.center.length === 2
-      && (p.center as unknown[]).every(n => typeof n === 'number' && Number.isFinite(n))
-      ? (p.center as [number, number]) : null;
-    // Street-tile basemap (opt-in). When on, a slippy-tile image layer renders under
-    // the data; the vector boundary stays beneath it as the headless/canvas fallback.
-    const tilesOn = p.basemap === 'tiles';
-    const tileUrlVal = typeof p.tileUrl === 'string' && p.tileUrl ? p.tileUrl : POINT_MAP_DEFAULT_TILE_URL;
-    const colorTitle = color ? aliasOf(formats, color) : '';
-    const sizeTitle = size ? aliasOf(formats, size) : '';
-    // mercator scale ≈ width·(180/π)/longitude-span-in-degrees. `lngE`/`latE` are the
-    // data extents (computed as signals); an explicit center uses a region-level base
-    // scale. Both multiply by zoom. isValid guards the no-data case.
-    // Split each control into a reactive BASE (from data — frames the default view)
-    // and a settable USER override (`value` + `on` — drag/wheel/buttons). `update`
-    // would clobber interactive sets, so `centerLng`/`centerLat`/`scale` COMBINE them
-    // (user wins). A `center` param seeds the user override; zoom seeds the user scale.
-    const DEG = 57.29578;
-    const centerLngBaseExpr = '(isValid(lngE[0]) ? (lngE[0] + lngE[1]) / 2 : 0)';
-    const centerLatBaseExpr = '(isValid(latE[0]) ? (latE[0] + latE[1]) / 2 : 20)';
-    const scaleBaseExpr = `(isValid(lngE[0]) ? min(width * ${DEG} / max(2, lngE[1] - lngE[0]), height * ${DEG} / max(2, latE[1] - latE[0])) * 0.82 : 120)`;
-    const centerLngUserVal = center ? center[1] : null;
-    const centerLatUserVal = center ? center[0] : null;
-    const scaleUserVal = center ? Math.round(POINT_MAP_REGION_SCALE * zoomVal) : null;
-
-    // Project each row's coordinate(s) to pixel x/y (geopoint); flows add a 2nd point.
-    const geopoints: Record<string, unknown>[] = [{ type: 'geopoint', projection: 'projection', fields: [lng, lat], as: ['x', 'y'] }];
-    if (isFlow) geopoints.push({ type: 'geopoint', projection: 'projection', fields: [lng2, lat2], as: ['x2', 'y2'] });
-
-    const scales: Record<string, unknown>[] = [];
-    if (color) {
-      scales.push(scheme
-        ? { name: 'color', type: 'linear', domain: { data: 'marks_data', field: color }, range: { scheme }, zero: false, nice: true }
-        : { name: 'color', type: 'ordinal', domain: { data: 'marks_data', field: color }, range: 'category' });
-    }
-    if (size) {
-      scales.push({ name: 'size', type: 'linear', domain: { data: 'marks_data', field: size }, range: isFlow ? [1, 8] : [40, 700], zero: !isFlow, nice: true });
-    }
-
-    const legends: Record<string, unknown>[] = [];
-    if (color) legends.push({ [isFlow ? 'stroke' : 'fill']: 'color', title: colorTitle });
-    if (size && !isFlow) legends.push({ size: 'size', title: sizeTitle });
-
-    const tt = (pairs: Array<[string, string]>) =>
-      '{' + pairs.map(([label, field]) => `${JSON.stringify(label)}: datum[${JSON.stringify(field)}]`).join(', ') + '}';
-
-    let dataMark: Record<string, unknown>;
-    if (isFlow) {
-      const pairs: Array<[string, string]> = [
-        [`${aliasOf(formats, lat)} (from)`, lat], [`${aliasOf(formats, lng)} (from)`, lng],
-        [`${aliasOf(formats, lat)} (to)`, String(lat2)], [`${aliasOf(formats, lng)} (to)`, String(lng2)],
-      ];
-      if (color) pairs.push([colorTitle, color]);
-      dataMark = {
-        type: 'rule',
-        from: { data: 'marks_data' },
-        encode: { update: {
-          x: { field: 'x' }, y: { field: 'y' }, x2: { field: 'x2' }, y2: { field: 'y2' },
-          stroke: color ? { scale: 'color', field: color } : { value: markColorVal },
-          strokeWidth: size ? { scale: 'size', field: size } : { value: 1.5 },
-          strokeOpacity: { value: 0.5 }, strokeCap: { value: 'round' },
-          tooltip: { signal: tt(pairs) },
-        } },
-      };
-    } else {
-      const pairs: Array<[string, string]> = [[aliasOf(formats, lat), lat], [aliasOf(formats, lng), lng]];
-      if (size) pairs.push([sizeTitle, size]);
-      if (color) pairs.push([colorTitle, color]);
-      dataMark = {
-        type: 'symbol',
-        from: { data: 'marks_data' },
-        encode: { update: {
-          x: { field: 'x' }, y: { field: 'y' },
-          size: size ? { scale: 'size', field: size } : { value: 90 },
-          fill: color ? { scale: 'color', field: color } : { value: markColorVal },
-          fillOpacity: { value: 0.72 }, stroke: { value: 'white' }, strokeWidth: { value: 0.4 },
-          tooltip: { signal: tt(pairs) },
-        } },
-      };
-    }
-
-    // ── Street-tile basemap (opt-in) ────────────────────────────────────────
-    // Web Mercator is LINEAR in the projection's pixel space, so tiles position by
-    // pure arithmetic off the existing `scale`/`center`/`tx`/`ty` signals — no
-    // per-tile geopoint projection. A tile at slippy (X,Y,Z) covers normalized
-    // mercator [X/2^Z … (X+1)/2^Z]; multiply by the world pixel width and offset by
-    // the projected center to get its top-left pixel. The `tiles` dataset enumerates
-    // just the tiles overlapping the viewport (sequence → grid via modulo).
-    const tileSignals: Record<string, unknown>[] = tilesOn ? [
-      { name: 'worldPx', update: 'scale * 2 * PI' },              // full-world px width
-      { name: 'cx', update: '(centerLng + 180) / 360' },          // center normalized X
-      { name: 'cy', update: '0.5 - log(tan(PI / 4 + centerLat * PI / 360)) / (2 * PI)' }, // normalized Y (mercator)
-      { name: 'tileZ', update: 'clamp(round(log(worldPx / 256) / log(2)), 0, 19)' },
-      { name: 'nTiles', update: 'pow(2, tileZ)' },
-      { name: 'tilePx', update: 'worldPx / nTiles' },             // on-screen px per tile
-      { name: 'cTileX', update: 'cx * nTiles' },
-      { name: 'cTileY', update: 'cy * nTiles' },
-      { name: 'tileX0', update: 'floor(cTileX - tx / tilePx) - 1' },
-      { name: 'tileX1', update: 'ceil(cTileX + (width - tx) / tilePx) + 1' },
-      { name: 'tileY0', update: 'max(0, floor(cTileY - ty / tilePx) - 1)' },
-      { name: 'tileY1', update: 'min(nTiles, ceil(cTileY + (height - ty) / tilePx) + 1)' },
-      { name: 'nx', update: 'max(0, tileX1 - tileX0)' },
-      { name: 'ny', update: 'max(0, tileY1 - tileY0)' },
-      { name: 'tileCount', update: 'nx * ny' },
-      { name: 'tileUrlTemplate', value: tileUrlVal },
-    ] : [];
-    const tileData: Record<string, unknown>[] = tilesOn ? [{
-      name: 'tiles',
-      transform: [
-        { type: 'sequence', start: 0, stop: { signal: 'tileCount' }, as: 'i' },
-        { type: 'formula', as: 'gx', expr: 'tileX0 + (datum.i % nx)' },
-        { type: 'formula', as: 'gy', expr: 'tileY0 + floor(datum.i / nx)' },
-        { type: 'formula', as: 'wx', expr: '((round(datum.gx) % nTiles) + nTiles) % nTiles' }, // wrap E–W
-        { type: 'formula', as: 'x', expr: 'tx + (datum.gx - cTileX) * tilePx' },
-        { type: 'formula', as: 'y', expr: 'ty + (datum.gy - cTileY) * tilePx' },
-        { type: 'formula', as: 'url', expr: "replace(replace(replace(tileUrlTemplate, '{z}', '' + tileZ), '{x}', '' + round(datum.wx)), '{y}', '' + round(datum.gy))" },
-      ],
-    }] : [];
-    // +1px on size closes sub-pixel seams between adjacent tiles.
-    const tileImageMark: Record<string, unknown> = {
-      type: 'image', from: { data: 'tiles' },
-      encode: { update: {
-        url: { field: 'url' }, x: { field: 'x' }, y: { field: 'y' },
-        width: { signal: 'tilePx + 1' }, height: { signal: 'tilePx + 1' },
-        aspect: { value: false }, smooth: { value: true },
-      } },
-    };
-    const attributionMark: Record<string, unknown> = {
-      type: 'text',
-      encode: { update: {
-        x: { signal: 'width - 4' }, y: { signal: 'height - 3' },
-        align: { value: 'right' }, baseline: { value: 'bottom' },
-        text: { value: '© OpenStreetMap  © CARTO' },
-        fontSize: { value: 9 }, fill: { value: 'rgba(60, 60, 60, 0.85)' },
-      } },
-    };
-    const boundaryMark: Record<string, unknown> = {
-      type: 'shape', from: { data: GEO_BOUNDARY_DATASET },
-      encode: { update: { fill: { value: 'transparent' }, stroke: { value: 'rgba(139, 148, 158, 0.6)' }, strokeWidth: { value: 0.75 } } },
-      transform: [{ type: 'geoshape', projection: 'projection' }],
-    };
-
-    return {
-      autosize: { type: 'none' },
-      signals: [
-        { name: 'tx', update: 'width / 2' },
-        { name: 'ty', update: 'height / 2' },
-        { name: 'lngE', update: `extent(pluck(data('main'), ${JSON.stringify(lng)}))` },
-        { name: 'latE', update: `extent(pluck(data('main'), ${JSON.stringify(lat)}))` },
-        // Reactive defaults (frame the data). These `update` freely; the effective
-        // center/scale below only fall back to them when there is no user override.
-        { name: 'centerLngBase', update: centerLngBaseExpr },
-        { name: 'centerLatBase', update: centerLatBaseExpr },
-        { name: 'scaleBase', update: scaleBaseExpr },
-        // Interactive pan (drag) + zoom (wheel). `down`/`center0` anchor the drag;
-        // `delta` is the live pixel drag; the USER signals below are settable (no
-        // `update` to clobber them) and win over the base.
-        { name: 'down', value: null, on: [
-          { events: 'pointerdown', update: 'xy()' },
-          { events: 'pointerup', update: 'null' },
-        ] },
-        { name: 'center0', value: null, on: [
-          { events: 'pointerdown', update: '[centerLng, centerLat]' },
-          { events: 'pointerup', update: 'null' },
-        ] },
-        { name: 'delta', value: [0, 0], on: [
-          { events: 'pointermove', update: 'down ? [x() - down[0], y() - down[1]] : [0, 0]' },
-        ] },
-        { name: 'centerLngUser', value: centerLngUserVal, on: [
-          // 360° spans scale·2π pixels in mercator; drag right → view moves left.
-          { events: { signal: 'delta' }, update: 'down && center0 ? center0[0] - delta[0] * 360 / (scale * 2 * PI) : centerLngUser' },
-        ] },
-        { name: 'centerLatUser', value: centerLatUserVal, on: [
-          { events: { signal: 'delta' }, update: 'down && center0 ? clamp(center0[1] + delta[1] * 360 / (scale * 2 * PI), -80, 80) : centerLatUser' },
-        ] },
-        { name: 'scaleUser', value: scaleUserVal, on: [
-          { events: { type: 'wheel', consume: true }, update: `clamp((scaleUser != null ? scaleUser : scaleBase * ${zoomVal}) * pow(1.0015, -event.deltaY), 40, 8000000)` },
-        ] },
-        // Effective view = user override if present, else the reactive base.
-        { name: 'centerLng', update: 'centerLngUser != null ? centerLngUser : centerLngBase' },
-        { name: 'centerLat', update: 'centerLatUser != null ? centerLatUser : centerLatBase' },
-        { name: 'scale', update: `scaleUser != null ? scaleUser : scaleBase * ${zoomVal}` },
-        // The view state VegaChart reads back and persists after interaction.
-        { name: 'mxViewParams', update: `{center: [centerLat, centerLng], zoom: scale / ${POINT_MAP_REGION_SCALE}}` },
-        ...tileSignals,
-      ],
-      data: [
-        { name: 'main' },
-        { name: GEO_BOUNDARY_DATASET },
-        { name: 'marks_data', source: 'main', transform: geopoints },
-        ...tileData,
-      ],
-      projections: [{
-        name: 'projection',
-        type: 'mercator',
-        scale: { signal: 'scale' },
-        center: [{ signal: 'centerLng' }, { signal: 'centerLat' }],
-        translate: [{ signal: 'tx' }, { signal: 'ty' }],
-      }],
-      scales,
-      ...(legends.length ? { legends } : {}),
-      marks: [{
-        type: 'group',
-        clip: true,
-        encode: { update: { width: { signal: 'width' }, height: { signal: 'height' } } },
-        // Boundary drawn FIRST (bottom): tiles cover it in the browser, but it survives
-        // as the fallback wherever tiles can't load (headless PNG, offline). Then tiles,
-        // then the data marks, then attribution on top.
-        marks: [
-          boundaryMark,
-          ...(tilesOn ? [tileImageMark] : []),
-          dataMark,
-          ...(tilesOn ? [attributionMark] : []),
-        ],
-      }],
-    };
-  },
-};
-
 export const VIZ_TEMPLATES: Record<string, VizTemplate> = {
   [funnel.id]: funnel,
   [waterfall.id]: waterfall,
@@ -1545,8 +1115,6 @@ export const VIZ_TEMPLATES: Record<string, VizTemplate> = {
   [trend.id]: trend,
   [singleValue.id]: singleValue,
   [combo.id]: combo,
-  [choropleth.id]: choropleth,
-  [pointMap.id]: pointMap,
 };
 
 /** Registry lookup for a recipe source; null for unknown ids. */
@@ -1555,7 +1123,7 @@ export function getTemplate(recipeId: string): VizTemplate | null {
 }
 
 type MaterializeResult =
-  | { ok: true; spec: Record<string, unknown>; engine: VizTemplateEngine; assets?: Record<string, string> }
+  | { ok: true; spec: Record<string, unknown>; engine: VizTemplateEngine }
   | { ok: false; error: string };
 
 /** Materialize a recipe source into its grammar spec. */
@@ -1578,11 +1146,9 @@ export function materializeRecipe(source: {
   if (badMulti) {
     return { ok: false, error: `recipe "${source.recipe}" binding "${badMulti.name}" takes a single column, not an array` };
   }
-  const assets = template.assets?.(source.bindings, source.params);
   return {
     ok: true,
     spec: template.build(source.bindings, source.columnFormats ?? undefined, source.params, columns),
     engine: template.engine,
-    ...(assets && Object.keys(assets).length > 0 ? { assets } : {}),
   };
 }

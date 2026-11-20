@@ -1,7 +1,7 @@
 /**
  * The same-origin map-tile proxy path. A served document may only load images
- * from 'self' (lib/page-styles/markup-csp: `img-src 'self' data: blob:`), so the
- * point-map street basemap cannot reference Carto's CDN directly — it fetches
+ * from 'self' (lib/page-styles/markup-csp: `img-src 'self' data: blob:`), so a
+ * page's street basemap cannot reference Carto's CDN directly — it fetches
  * `/tiles/<style>/{z}/{x}/{y}.png` on the document's own origin instead, and
  * this module is the one mapping from that path onto the Carto upstream.
  *
@@ -9,28 +9,19 @@
  * help. A fronting proxy may serve `/tiles/` itself as a cache — it never has
  * to, and this route stays the whole of the behaviour.
  *
- * The allowlist is the security boundary: only the two Carto basemap styles the
- * theme swap uses, numeric slippy coordinates, `.png` (optional `@2x`). This is
+ * The allowlist is the security boundary: only the two Carto basemap styles (light
+ * and dark), numeric slippy coordinates, `.png` (optional `@2x`). This is
  * NOT an open proxy — an unrecognized path resolves to null and 404s.
  */
 
 /** The Carto basemap styles the app ships (light theme / dark theme). */
 const TILE_STYLES = ['light_all', 'dark_all'] as const;
-type TileStyle = (typeof TILE_STYLES)[number];
 
 /**
  * Carto's CDN, bare host — the `a.`–`d.` shards exist only for pre-HTTP/2
  * browser connection parallelism and serve identical tiles.
  */
 export const TILE_UPSTREAM_ORIGIN = 'https://basemaps.cartocdn.com';
-
-/**
- * The browser-facing `{z}/{x}/{y}` template for a style — root-relative, so it
- * resolves against whatever origin serves the document.
- */
-export function tileUrlTemplate(style: TileStyle): string {
-  return `/tiles/${style}/{z}/{x}/{y}.png`;
-}
 
 // Slippy coordinates: z is 0–19 in practice (the vega signal clamps there), x/y
 // grow with zoom. Two digits of z and seven of x/y comfortably cover z=19's

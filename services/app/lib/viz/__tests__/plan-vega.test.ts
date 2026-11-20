@@ -1,6 +1,10 @@
-/** planVega is the one chart plan both the server drawing and the island controller use. */
+/** planChart is the one chart plan both the server drawing and the island controller use. */
 import { describe, expect, it } from 'vitest';
-import { computeLegendPlan, computeXLabelAngle, legendPlanKey, planVega, toVegaSpec } from '../render-vega';
+import { computeLegendPlan, computeXLabelAngle, legendPlanKey, planChart, type ChartTheme, type ResolvedChartSpec } from '../chart-plan';
+import { compileVegaLite, SERVER_ENGINES } from '../render-vega';
+
+const planVega = (resolved: ResolvedChartSpec, rows: Record<string, unknown>[], size: { width: number; height: number }, mode: ChartTheme, categoryRange: string[] | null) =>
+  planChart(SERVER_ENGINES, resolved, rows, size, mode, categoryRange);
 
 const spec = {
   mark: 'bar',
@@ -9,13 +13,13 @@ const spec = {
 const rows = Array.from({ length: 12 }, (_, i) => ({ k: `category number ${i}`, v: i, s: `series ${i % 6}` }));
 const resolved = { spec, engine: 'vega-lite' as const };
 
-describe('planVega', () => {
+describe('planChart with the server engines', () => {
   it('composes the same plans and compile the two tiers used to repeat', () => {
     const size = { width: 300, height: 200 };
     const plan = planVega(resolved, rows, size, 'light', null);
     const legendPlan = computeLegendPlan(spec, rows, size.width);
     const xLabelAngle = computeXLabelAngle(spec, rows, size.width);
-    const direct = toVegaSpec(resolved, 'light', { legendPlan, xLabelAngle, facetLayout: null, categoryRange: null });
+    const direct = { vegaSpec: compileVegaLite(spec, 'light', { legendPlan, xLabelAngle, facetLayout: null, categoryRange: null }) };
     expect(plan.vl).toBe(spec);
     expect(plan.facetLayout).toBeNull();
     expect(JSON.stringify(plan.vegaSpec)).toBe(JSON.stringify(direct.vegaSpec));

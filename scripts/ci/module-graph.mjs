@@ -144,7 +144,6 @@ const BUNDLED_IMPORTERS = [
   'services/app/lib/viz/chart-plan.ts',
   'services/app/lib/viz/chart-resolve.ts',
   'services/app/lib/viz/facet-layout.ts',
-  'services/app/lib/viz/geo-assets.ts',
   'services/app/lib/viz/prepare.ts',
   'services/app/lib/viz/theme.ts',
   'services/app/lib/viz/tiles.ts',
@@ -152,7 +151,7 @@ const BUNDLED_IMPORTERS = [
   'services/app/lib/viz/viz-templates.ts',
 ];
 const BUNDLED_LEAVES = {
-  'lib/html-component-specs': ['boundary-ids', 'chart-spec', 'comparison', 'data-source', 'isometric-spec', 'read-failure'],
+  'lib/html-component-specs': ['chart-spec', 'comparison', 'data-source', 'isometric-spec', 'read-failure'],
   'lib/ui-runtime': ['dialog-shell', 'file-display', 'person-face', 'popper', 'popup-dismiss', 'tooltip-core', 'trusted-overlay-host', 'trusted-portal', 'trusted-ui-styles'],
   'lib/html-reader': ['anchor', 'anchor-restore', 'ast-path', 'contract', 'document-endpoint', 'document-sources', 'edit-bar', 'follow-version', 'frame-bridge/parent', 'frame-markup', 'frame-navigation', 'frame-session', 'frame-src', 'host-comments-contract', 'reader-mode', 'reload'],
   'lib/annotations': ['comment-folds', 'markdown-lite', 'pages', 'region-comment', 'remote-reply', 'session-mentions'],
