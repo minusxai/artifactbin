@@ -21,7 +21,7 @@ import X from 'lucide-solid/icons/x';
 import type { ArtifactBackend } from '@/lib/artifact-backend';
 import { parseMarkdownLite, plainText } from '@/lib/annotations/markdown-lite';
 import { remoteWorkLabel } from '@/lib/annotations/remote-reply';
-import { agentNameColor } from '../lib/agent-identity';
+import { agentNameColor } from './agent-identity';
 import { Avatar } from '../ui/Avatar';
 import { Button } from '../ui/Button';
 import { ChatGPTIcon, ClaudeAIIcon, ClaudeCodeIcon, CodexIcon, PiIcon, OpenCodeIcon } from '../ui/brand-icons';

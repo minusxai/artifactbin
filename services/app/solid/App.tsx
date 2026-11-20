@@ -9,7 +9,7 @@ import { usePageIntentPreload } from './lib/use-page-data';
 import { ChromeVisibilityContext, PageChrome } from './components/PageChrome';
 import { OnboardingGate } from './components/OnboardingGate';
 import { InboxProvider } from './lib/notifications';
-import { dropServedFrameOnRoute, servedDocumentFrame } from '@/solid/lib/served-frame';
+import { dropServedFrameOnRoute, servedDocumentFrame } from '@/solid/pages/served-frame';
 import { PageFailure, StaleBuildNavigation } from './components/BuildRecovery';
 
 // Workspace menus and dialogs are not part of a document reader's startup bundle.

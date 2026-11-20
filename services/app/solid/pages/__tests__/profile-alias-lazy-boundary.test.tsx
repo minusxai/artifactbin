@@ -26,7 +26,7 @@ vi.mock('../Document', () => {
 });
 
 // Every address here is the one this load was served at: the server already answered it.
-vi.mock('@/solid/lib/served-frame', () => ({ servedDocumentFrame: () => loaded.servedFrame, servedAt: () => true }));
+vi.mock('@/solid/pages/served-frame', () => ({ servedDocumentFrame: () => loaded.servedFrame, servedAt: () => true }));
 
 import { ProfileAliasRoute } from '@/solid/pages/ProfileAlias';
 

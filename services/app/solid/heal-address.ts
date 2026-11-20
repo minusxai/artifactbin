@@ -2,7 +2,7 @@
  * THE ADDRESS BAR, HEALED IN PLACE — the entry's FIRST import, so it runs before
  * any other module body: before the router is created, before the initial story
  * is captured against the current path, before any inlined data is looked up by
- * path (solid/lib/bootstrap takeBootstrap).
+ * path (solid/pages/bootstrap takeBootstrap).
  *
  * A readable document requested at a non-canonical address is served directly
  * rather than redirected (server/app documentAddress): one round trip fewer for
@@ -11,7 +11,7 @@
  * query and fragment kept — exactly where the old redirect would have left it.
  * Only a same-origin absolute path is ever written.
  */
-import { canonicalAddress } from './bootstrap';
+import { canonicalAddress } from './pages/bootstrap';
 
 const address = canonicalAddress();
 if (address && /^\/(?![/\\])/.test(address) && address !== window.location.pathname) {

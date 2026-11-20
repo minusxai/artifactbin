@@ -16,7 +16,7 @@
  */
 import { createEffect, createSignal, onCleanup } from 'solid-js';
 import { STORY_FRAME_HASH_MESSAGE } from '@/lib/html-reader/contract';
-import { adoptServedFrame } from '@/solid/lib/served-frame';
+import { adoptServedFrame } from '@/solid/pages/served-frame';
 import { framedDocumentFor } from '../document/frame-src';
 
 export function createFramedPage(options: { origin: string | null; top: number; right: () => number; ground: () => string }) {

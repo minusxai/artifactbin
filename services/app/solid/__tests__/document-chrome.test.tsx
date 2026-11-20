@@ -50,13 +50,13 @@ vi.mock('../document/create-framed-story', async (importOriginal) => {
   } };
 });
 vi.mock('../editor/create-live-artifact', () => ({ createLiveArtifact: (options: Parameters<typeof import('../editor/create-live-artifact').createLiveArtifact>[0]) => { mockLiveOptions = options; return () => mockLive(); } }));
-vi.mock('@/solid/lib/bootstrap', () => ({ takeBootstrap: () => ({ kind: mockKind, role: mockRole, canManageSharing: mockManages ?? (mockRole === 'owner' || mockRole === 'editor'), archived: mockArchived, cspRequest: mockCsp, scriptFailure: mockScriptFailure, surface: { id: 'doc12345', template: mockTemplate, pwaEnabled: mockPwa, openAnnotations: mockOpenAnnotations, title: mockTitle, format: 'html', version: 3, sourceLength: mockSourceLength, framedOrigin: 'http://646f633132333435.lvh.me', author: { username: 'ada', id: 'u1', forkedFrom: { label: 'Source document', href: '/a/source' } } } }) }));
+vi.mock('@/solid/pages/bootstrap', () => ({ takeBootstrap: () => ({ kind: mockKind, role: mockRole, canManageSharing: mockManages ?? (mockRole === 'owner' || mockRole === 'editor'), archived: mockArchived, cspRequest: mockCsp, scriptFailure: mockScriptFailure, surface: { id: 'doc12345', template: mockTemplate, pwaEnabled: mockPwa, openAnnotations: mockOpenAnnotations, title: mockTitle, format: 'html', version: 3, sourceLength: mockSourceLength, framedOrigin: 'http://646f633132333435.lvh.me', author: { username: 'ada', id: 'u1', forkedFrom: { label: 'Source document', href: '/a/source' } } } }) }));
 vi.mock('@/lib/http/login-href', () => ({ loginHref: vi.fn(() => '/login') }));
 import { loginHref } from '@/lib/http/login-href';
 vi.mock('../lib/copy-text', () => ({ copyText: vi.fn(async () => true) }));
 import { copyText } from '../lib/copy-text';
 import { captureInstallPrompt } from '@/solid/lib/pwa-install';
-vi.mock('@/solid/lib/served-frame', () => ({ adoptServedFrame: () => { const frame = served; served = null; return frame; } }));
+vi.mock('@/solid/pages/served-frame', () => ({ adoptServedFrame: () => { const frame = served; served = null; return frame; } }));
 // The test exercises the real editor tabs; CodeMirror geometry is outside this page-level contract.
 vi.mock('../editor/SourceEditor', () => ({ default: () => <textarea aria-label="Markup source" /> }));
 

@@ -8,7 +8,7 @@ import Bold from '@tiptap/extension-bold';
 import { safeHref } from '@/lib/annotations/markdown-lite';
 import { isSessionMentionHref } from '@/lib/annotations/session-mentions';
 import { isPersonMentionHref } from '@/lib/document/person-mentions';
-import { agentNameColor } from '../lib/agent-identity';
+import { agentNameColor } from './agent-identity';
 
 const Mention = Node.create({
   name: 'mention', inline: true, group: 'inline', atom: true,

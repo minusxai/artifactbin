@@ -80,7 +80,7 @@ const safeJson = (value: unknown): string => JSON.stringify(value).replace(/</g,
  * The page's data rides at the END of the body — after the story the server
  * rendered, as the body's own last element — so the first paint never waits
  * for it to download. Still read before the app's first render: the SPA's
- * module runs after the document is parsed (solid/lib/bootstrap reads exactly this
+ * module runs after the document is parsed (solid/pages/bootstrap reads exactly this
  * element, a direct child of body, which no authored id inside the story can be).
  */
 export const withBootstrap = (html: string, data: unknown): string => {

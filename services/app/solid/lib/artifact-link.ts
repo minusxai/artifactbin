@@ -14,7 +14,7 @@
  */
 import { ARTIFACT_FORMATS, type ArtifactFormat } from '@artifactbin/contracts/artifact-format';
 
-export interface ArtifactLinkAttributes { href: string; rel?: 'external'; state?: string }
+interface ArtifactLinkAttributes { href: string; rel?: 'external'; state?: string }
 
 export const isDocumentFormat = (format: string | null | undefined): boolean => format === 'html';
 
