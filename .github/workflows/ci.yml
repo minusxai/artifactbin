@@ -96,9 +96,9 @@ jobs:
         run: npm ci
       # A WORKFLOW TYPO IS ONLY EXPENSIVE WHEN THE RUNNER FINDS IT. actionlint parses every workflow
       # here (and shellcheck reads every `run:` block) in about a second, in a pinned image anyone can
-      # run locally: `docker run --rm -v "$PWD":/repo --workdir /repo rhysd/actionlint:1.7.7 -color`.
+      # run locally: `docker run --rm -v "$PWD":/repo --workdir /repo rhysd/actionlint:1.7.12 -color`.
       - name: Lint the workflows
-        run: docker run --rm -v "$PWD":/repo --workdir /repo rhysd/actionlint:1.7.7 -color
+        run: docker run --rm -v "$PWD":/repo --workdir /repo rhysd/actionlint:1.7.12 -color
       - run: npm run validate
       - name: Fast-lane coverage and syntax
         if: github.ref == 'refs/heads/main'
@@ -756,15 +756,25 @@ jobs:
       # install, cut as that step's paths say, with the same builds and the module cache of the kind's own configuration
       # alone, listed from empty (the api kind's is the entry above's). Measured locally, warm against cold: a guard shard
       # 6.6 -> 4.3s, a ui shard 4.2 -> 2.5s. Same paths and key as that step, so the entry it looks up is this one.
+      # One path list (`kit-paths`) for the four saves.
       - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
-          path: |
+          path: &kit-paths |
             node_modules/*
             !node_modules/.cache
             !node_modules/.vite
             !node_modules/.vite-temp
             !node_modules/@fontsource
             !node_modules/@fontsource-variable
+            node_modules/@fontsource/barlow/package.json
+            node_modules/@fontsource/barlow/index.css
+            node_modules/@fontsource/barlow/files/barlow-latin*-[47]00-normal.woff
+            node_modules/@fontsource/ibm-plex-mono/package.json
+            node_modules/@fontsource/ibm-plex-mono/index.css
+            node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin*-[47]00-normal.woff
+            node_modules/@fontsource/old-standard-tt/package.json
+            node_modules/@fontsource/old-standard-tt/index.css
+            node_modules/@fontsource/old-standard-tt/files/old-standard-tt-latin*-[47]00-normal.woff
             !node_modules/@typescript
             node_modules/@typescript/*
             !node_modules/@typescript/typescript-*
@@ -787,58 +797,14 @@ jobs:
           node node_modules/vitest/vitest.mjs list --project=ui --project=islands --filesOnly=false > /dev/null
       - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
-          path: |
-            node_modules/*
-            !node_modules/.cache
-            !node_modules/.vite
-            !node_modules/.vite-temp
-            !node_modules/@fontsource
-            !node_modules/@fontsource-variable
-            !node_modules/@typescript
-            node_modules/@typescript/*
-            !node_modules/@typescript/typescript-*
-            !node_modules/lucide-static
-            node_modules/lucide-static/*
-            !node_modules/lucide-static/font
-            node_modules/.cache/test-graph.json
-            services/*/node_modules/*
-            !services/*/node_modules/.cache
-            !services/*/node_modules/.vite
-            services/app/public/fonts
-            services/app/lib/html-systems/font-manifest.json
-            services/app/lib/build-assets
-            services/app/public/libraries
-            tmp/test-schema-image
-            tmp/vitest-module-cache
+          path: *kit-paths
           key: pr-kit-v1-${{ runner.os }}-${{ runner.arch }}-node22-ui-${{ steps.lock.outputs.install }}-${{ steps.test-builds-key.outputs.key }}-${{ steps.test-builds-key.outputs.modules }}
       - run: |
           rm -rf tmp/vitest-module-cache
           node node_modules/vitest/vitest.mjs list --config vitest.guard.config.ts --filesOnly=false > /dev/null
       - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
-          path: |
-            node_modules/*
-            !node_modules/.cache
-            !node_modules/.vite
-            !node_modules/.vite-temp
-            !node_modules/@fontsource
-            !node_modules/@fontsource-variable
-            !node_modules/@typescript
-            node_modules/@typescript/*
-            !node_modules/@typescript/typescript-*
-            !node_modules/lucide-static
-            node_modules/lucide-static/*
-            !node_modules/lucide-static/font
-            node_modules/.cache/test-graph.json
-            services/*/node_modules/*
-            !services/*/node_modules/.cache
-            !services/*/node_modules/.vite
-            services/app/public/fonts
-            services/app/lib/html-systems/font-manifest.json
-            services/app/lib/build-assets
-            services/app/public/libraries
-            tmp/test-schema-image
-            tmp/vitest-module-cache
+          path: *kit-paths
           key: pr-kit-v1-${{ runner.os }}-${{ runner.arch }}-node22-guards-${{ steps.lock.outputs.install }}-${{ steps.test-builds-key.outputs.key }}-${{ steps.test-builds-key.outputs.modules }}
       - run: |
           rm -rf tmp/vitest-module-cache
@@ -853,29 +819,7 @@ jobs:
       # The node kind's kit holds that graph too, so a node runner's one download carries it.
       - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
-          path: |
-            node_modules/*
-            !node_modules/.cache
-            !node_modules/.vite
-            !node_modules/.vite-temp
-            !node_modules/@fontsource
-            !node_modules/@fontsource-variable
-            !node_modules/@typescript
-            node_modules/@typescript/*
-            !node_modules/@typescript/typescript-*
-            !node_modules/lucide-static
-            node_modules/lucide-static/*
-            !node_modules/lucide-static/font
-            node_modules/.cache/test-graph.json
-            services/*/node_modules/*
-            !services/*/node_modules/.cache
-            !services/*/node_modules/.vite
-            services/app/public/fonts
-            services/app/lib/html-systems/font-manifest.json
-            services/app/lib/build-assets
-            services/app/public/libraries
-            tmp/test-schema-image
-            tmp/vitest-module-cache
+          path: *kit-paths
           key: pr-kit-v1-${{ runner.os }}-${{ runner.arch }}-node22-node-${{ steps.lock.outputs.install }}-${{ steps.test-builds-key.outputs.key }}-${{ steps.test-builds-key.outputs.modules }}
 
   # THE ROLL-UP, AND THE RECORD OF WHAT IT PASSED ON.

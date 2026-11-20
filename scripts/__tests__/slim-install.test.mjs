@@ -9,9 +9,12 @@
  * `!node_modules/@fontsource` left nothing out: the slim entry this replaced was 171 MB against the whole install's 172.
  * The kit lists node_modules' entries instead and leaves the excluded ones out, re-listing a parent's entries where the
  * exclusion is nested (about 37 MB compressed).
+ * A Vitest-run module that reads an excluded package (the chart image fonts) is a READER: the kit lists back exactly the
+ * files it reads, after the exclusion, and this file checks each of them is in every kit.
  */
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 import { expect, it } from 'vitest';
 import yaml from 'yaml';
 
@@ -33,6 +36,38 @@ const OWNERS = new Set([
   // Asserts the type check's path to a native compiler that does not exist; it never loads one.
   'scripts/__tests__/check-local.test.mjs',
 ]);
+
+/**
+ * The modules a Vitest runner loads that read an excluded package, and the files each reads: the chart image fonts
+ * (lib/viz/chart-fonts.server.ts registers each `FACES` package's four WOFF 1.0 faces, found by resolving the package;
+ * its test resolves barlow, one of them).
+ */
+const READERS = new Set(['services/app/lib/viz/chart-fonts.server.ts', 'services/app/lib/viz/__tests__/chart-tokens.test.ts']);
+const readFiles = () => {
+  const source = read('services/app/lib/viz/chart-fonts.server.ts');
+  const faces = [...(source.match(/const FACES = \[(.*)\] as const;/)?.[1] ?? '').matchAll(/\['([a-z0-9-]+)'/g)].map((match) => match[1]);
+  const files = [...(source.match(/for \(const file of \[([^\]]*)\]\)/)?.[1] ?? '').matchAll(/'([a-z0-9-]+)'/g)].map((match) => match[1]);
+  expect(faces).toContain('barlow');
+  expect(files).toHaveLength(4);
+  return faces.flatMap((pkg) => {
+    const dir = `node_modules/@fontsource/${pkg}`;
+    const manifest = JSON.parse(read(`${dir}/package.json`));
+    const entry = (typeof manifest.exports?.['.'] === 'string' ? manifest.exports['.'] : manifest.main ?? 'index.js').replace(/^\.\//, '');
+    return [`${dir}/package.json`, `${dir}/${entry}`, ...files.map((file) => `${dir}/files/${pkg}-${file}-normal.woff`)];
+  });
+};
+/** Whether actions/cache's path list archives `file`: the last pattern that matches it (or a directory holding it, for an include) decides. */
+const archives = (list, file) => {
+  const matches = (pattern) => new RegExp(`^${pattern.replace(/[.+^${}()|\\]/g, '\\$&').replace(/\*/g, '[^/]*')}$`);
+  let kept = false;
+  for (const line of list) {
+    const exclude = line.startsWith('!'), pattern = matches(exclude ? line.slice(1) : line);
+    const hit = exclude ? pattern.test(file) || file.split('/').some((_, i, parts) => pattern.test(parts.slice(0, i + 1).join('/')))
+      : file.split('/').some((_, i, parts) => pattern.test(parts.slice(0, i + 1).join('/')));
+    if (hit) kept = !exclude;
+  }
+  return kept;
+};
 
 const fast = yaml.parse(read('.github/workflows/pr-fast.yml')).jobs.fast;
 const warm = yaml.parse(read('.github/workflows/ci.yml')).jobs['warm-caches'];
@@ -71,6 +106,14 @@ it('is the whole install\'s entries minus exactly the listed exclusions, under o
   expect(fast.steps.some((step) => /^install-slim-/.test(step.with?.key ?? '')) || warm.steps.some((step) => /^install-slim-/.test(step.with?.key ?? ''))).toBe(false);
 });
 
+it('keeps every file a reader loads from an excluded package, in every kit', () => {
+  const needed = readFiles();
+  for (const file of needed) expect(existsSync(new URL(file, root)), file).toBe(true);
+  const all = [...fast.steps, ...warm.steps].filter((step) => step.with?.key?.startsWith?.('pr-kit-'));
+  expect(all).toHaveLength(6);
+  for (const step of all) expect(needed.filter((file) => !archives(paths(step), file)), step.with.key).toEqual([]);
+});
+
 it('is restored only by the Vitest runners, and when none matched they restore the whole install as before', () => {
   expect(kit.if).toBe('matrix.suite || matrix.shard || matrix.batch');
   expect(full.if).toBe('${{ !matrix.install && !matrix.suite && !matrix.shard && !matrix.batch }}');
@@ -81,17 +124,19 @@ it('is restored only by the Vitest runners, and when none matched they restore t
   for (const step of after) expect(step.if).toContain("steps.kit.outputs.cache-matched-key == ''");
 });
 
-/** Every way a module names a package: an import, a dynamic import, a require, or a node_modules path. */
-const specifier = /(?:\bfrom\s*|\bimport\s*\(\s*|\brequire(?:\.resolve)?\s*\(\s*|\bimport\s+)['"]([^'"]+)['"]|node_modules\/((?:@[^/'"\s]+\/)?[^/'"\s]+(?:\/[^'"\s]*)?)/g;
+/** Every way a module names a package: an import, a dynamic import, a require or any `.resolve(` (`require.resolve`,
+ * `createRequire(...).resolve`), quoted or a template literal up to its first `${`, or a node_modules path. */
+const specifier = /(?:\bfrom\s*|\bimport\s*\(\s*|\brequire\s*\(\s*|\.resolve\s*\(\s*|\bimport\s+)(?:['"]([^'"]+)['"]|`([^`$]+))|node_modules\/((?:@[^/'"`\s]+\/)?[^/'"`\s]+(?:\/[^'"`\s]*)?)/g;
+const named = (match) => match[1] ?? match[2] ?? match[3];
 
 it('is never imported, required or resolved outside the scripts that own it', () => {
   const files = execFileSync('git', ['ls-files', '-z'], { cwd: root, encoding: 'utf8' }).split('\0')
-    .filter((file) => /\.(?:[cm]?[jt]sx?)$/.test(file) && !OWNERS.has(file) && !file.endsWith('slim-install.test.mjs'));
+    .filter((file) => /\.(?:[cm]?[jt]sx?)$/.test(file) && !OWNERS.has(file) && !READERS.has(file) && !file.endsWith('slim-install.test.mjs'));
   const offenders = [];
   for (const file of files) {
     const text = read(file);
     for (const match of text.matchAll(specifier)) {
-      const name = match[1] ?? match[2];
+      const name = named(match);
       const hit = EXCLUDED.find(({ pkg }) => pkg.test(name));
       if (hit) offenders.push(`${file}: ${name} (${hit.why})`);
     }
@@ -99,7 +144,13 @@ it('is never imported, required or resolved outside the scripts that own it', ()
   expect(offenders).toEqual([]);
 });
 
-it('refuses a new use: an import of an excluded package is found', () => {
-  const names = [...`import x from '@fontsource/inter';\nconst y = require.resolve("lucide-static/font/lucide.woff");`.matchAll(specifier)].map((match) => match[1] ?? match[2]);
-  expect(names.map((name) => EXCLUDED.some(({ pkg }) => pkg.test(name)))).toEqual([true, true]);
+it('refuses a new use: an import, require or resolve of an excluded package is found, however it is written', () => {
+  const uses = [
+    `import x from '@fontsource/inter';`,
+    'const y = require.resolve("lucide-static/font/lucide.woff");',
+    "const z = createRequire(import.meta.url).resolve('@fontsource/barlow');",
+    'const w = require.resolve(`@fontsource/${pkg}`);',
+  ];
+  const names = uses.map((use) => [...use.matchAll(specifier)].map(named)[0]);
+  expect(names.map((name) => EXCLUDED.some(({ pkg }) => pkg.test(name)))).toEqual([true, true, true, true]);
 });

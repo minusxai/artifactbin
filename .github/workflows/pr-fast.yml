@@ -413,7 +413,10 @@ jobs:
       #   own clean install. A lock this pull request changed has no kit: the runner takes the path below.
       # - Without the native TypeScript compiler (the `types` runner's), the @fontsource packages (copy-assets reads them
       #   at install; the fonts it makes are kept) and lucide-static's icon font: scripts/__tests__/slim-install.test.mjs
-      #   names each and refuses an import of one. actions/cache archives a matched directory whole (its glob has no
+      #   names each and refuses an import of one. Listed back after the exclusion: the chart image fonts, each FACES
+      #   package's entry and four WOFF 1.0 faces that lib/viz/chart-fonts.server.ts and its test read (about 180 KB); the
+      #   same test checks every file they read is in every kit. One list (`kit-paths`) for the restore and the save here,
+      #   and one in ci.yml's warm-caches; the test holds the two equal. actions/cache archives a matched directory whole (its glob has no
       #   implicit descendants), so they are cut by listing node_modules' entries and leaving them out, and with them
       #   the tool caches (`.cache`, `.vite`) a run writes there; the node runners' import graph (scripts/lib/test-graph.mjs,
       #   node_modules/.cache/test-graph.json) is kept in their kind's kit.
@@ -434,13 +437,22 @@ jobs:
         env:
           SEGMENT_DOWNLOAD_TIMEOUT_MINS: '0.1'
         with:
-          path: |
+          path: &kit-paths |
             node_modules/*
             !node_modules/.cache
             !node_modules/.vite
             !node_modules/.vite-temp
             !node_modules/@fontsource
             !node_modules/@fontsource-variable
+            node_modules/@fontsource/barlow/package.json
+            node_modules/@fontsource/barlow/index.css
+            node_modules/@fontsource/barlow/files/barlow-latin*-[47]00-normal.woff
+            node_modules/@fontsource/ibm-plex-mono/package.json
+            node_modules/@fontsource/ibm-plex-mono/index.css
+            node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin*-[47]00-normal.woff
+            node_modules/@fontsource/old-standard-tt/package.json
+            node_modules/@fontsource/old-standard-tt/index.css
+            node_modules/@fontsource/old-standard-tt/files/old-standard-tt-latin*-[47]00-normal.woff
             !node_modules/@typescript
             node_modules/@typescript/*
             !node_modules/@typescript/typescript-*
@@ -605,29 +617,7 @@ jobs:
       - if: contains(fromJSON('["api-32","ui-7","guards-3","node-5"]'), matrix.part) && steps.kit.outputs.cache-hit != 'true' && (steps.kit.outputs.cache-matched-key != '' || steps.near-install.outputs.cache-hit == 'true')
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
-          path: |
-            node_modules/*
-            !node_modules/.cache
-            !node_modules/.vite
-            !node_modules/.vite-temp
-            !node_modules/@fontsource
-            !node_modules/@fontsource-variable
-            !node_modules/@typescript
-            node_modules/@typescript/*
-            !node_modules/@typescript/typescript-*
-            !node_modules/lucide-static
-            node_modules/lucide-static/*
-            !node_modules/lucide-static/font
-            node_modules/.cache/test-graph.json
-            services/*/node_modules/*
-            !services/*/node_modules/.cache
-            !services/*/node_modules/.vite
-            services/app/public/fonts
-            services/app/lib/html-systems/font-manifest.json
-            services/app/lib/build-assets
-            services/app/public/libraries
-            tmp/test-schema-image
-            tmp/vitest-module-cache
+          path: *kit-paths
           key: pr-kit-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ env.TEST_BUILDS_KIND }}-${{ steps.lock.outputs.install }}-${{ steps.test-builds-key.outputs.key }}-${{ steps.test-builds-key.outputs.modules }}
       - name: PR CI clock (warns at 40s; fails over 60s)
         if: always()
