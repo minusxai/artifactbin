@@ -40,7 +40,7 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   // acts a guest is sent to sign in for; a test user shares only inside its own
   // sandbox, where the addresses it could name are its own (lib/capabilities).
   const refusal = await capabilityGuard(actor, 'share', id);
-  if (refusal) return refusal;
+  if (refusal) return toResponse(refusal);
 
   const patch: SharingPatch = {};
   const visibility = parseVisibilityValue(body.visibility, !!(current.user_id || current.group_id));

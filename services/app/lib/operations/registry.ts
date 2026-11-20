@@ -109,8 +109,8 @@ export async function forkOwner(
   return { actor: identityForUser(resolved.id, resolved.tokenId), testuser: resolved.id };
 }
 
-/** A lib pipeline already answers a Response; an OpReply is that, transport-free. */
-async function fromResponse(res: Response): Promise<OpReply> {
+/** The export renderer answers HTTP (lib/export exportImageResponse, an image or its refusal): a refusal read back once. */
+async function exportRefusal(res: Response): Promise<OpReply> {
   let body: Record<string, unknown>;
   try {
     body = (await res.json()) as Record<string, unknown>;
@@ -286,7 +286,7 @@ const annotateOp: Operation = {
     // The same gate the browser's comment door has: a guest is sent to sign in,
     // a test user is held inside its sandbox (lib/capabilities).
     const refusal = await capabilityGuard(ctx.actor, 'comment', String(input.id));
-    if (refusal) return fromResponse(refusal);
+    if (refusal) return refusal;
     return respondToAnnotationAction(input, ctx.actor, ctx.author, String(input.id), String(input.annotation_id),ctx.mutationReceipt);
   },
 };
@@ -309,7 +309,7 @@ const editCommentOp: Operation = {
     // A group's sign-in edits the group's own comments (lib/annotations `editAnnotationCommentFor`).
     if (!ctx.actor.userId && !ctx.actor.principalGroup) return reply({ error: 'account_required', hint: 'Follow /llms/http-auth and sign in with an account; an anonymous credential wrote no comments to edit.' }, 403);
     const refusal = await capabilityGuard(ctx.actor, 'comment', String(input.id));
-    if (refusal) return fromResponse(refusal);
+    if (refusal) return refusal;
     return respondToAnnotationEdit(input, ctx.actor, String(input.id), String(input.comment_id), ctx.mutationReceipt, ctx.author?.writerSession);
   },
 };
@@ -630,7 +630,7 @@ const exportArtifactOp: Operation = {
       ...Object.fromEntries(['mode','crop','image','search','element'].filter(key=>typeof input[key]==='string').map(key=>[key,input[key] as string])),
     }, ctx.base);
     const mime = res.headers.get('Content-Type') ?? '';
-    if (!res.ok || !mime.startsWith('image/')) return fromResponse(res);
+    if (!res.ok || !mime.startsWith('image/')) return exportRefusal(res);
     return {
       status: 200,
       body: { id: artifact.id, format: mime },
@@ -753,7 +753,7 @@ const forkArtifactOp: Operation = {
     // A TEST USER forks inside its sandbox and nowhere else: the account brings
     // a page in for it (`as` below), and it copies within.
     const sandbox = await capabilityGuard(ctx.actor, 'fork', String(input.id));
-    if (sandbox) return fromResponse(sandbox);
+    if (sandbox) return sandbox;
 
     // WHO WOULD OWN IT is resolved before the dry run as well as before the
     // copy: `as` naming a test user that is not yours, or one that has expired,

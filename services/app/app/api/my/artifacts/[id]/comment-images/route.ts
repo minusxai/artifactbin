@@ -9,7 +9,7 @@ export async function POST(request:Request,ctx:{params:Promise<{id:string}>}){
  const browser=await browserActor(request);if(browser instanceof Response)return browser;
  // The upload is charged to a token: a session's is its account token, as every browser create is.
  const actor=await withAccountToken(browser);if(!actor)return unauthorized(request);
- const {id}=await ctx.params;const refusal=await capabilityGuard(actor,'comment',id);if(refusal)return refusal;
+ const {id}=await ctx.params;const refusal=await capabilityGuard(actor,'comment',id);if(refusal)return toResponse(refusal);
  // Bound the stream before parsing multipart, including requests without Content-Length.
  const reader=request.body?.getReader();if(!reader)return json({error:'invalid_image'},400);
  const chunks:Uint8Array[]=[];let size=0;

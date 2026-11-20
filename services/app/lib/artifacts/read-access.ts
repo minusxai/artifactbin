@@ -4,8 +4,9 @@
  * snapshot a reader is answered with, and the route gate for a capability. Decided by the access rule
  * (@/lib/artifact-access) over the rows this module reads.
  */
-import { can, capabilityRefusal, effectiveRole, type AccessFacts, type ArtifactRow } from '@/lib/artifact-access';
+import { can, refusalFor, effectiveRole, type AccessFacts, type ArtifactRow } from '@/lib/artifact-access';
 import type { Capability } from '@artifactbin/contracts';
+import type { Reply } from '@/lib/http';
 import type { AccessActor } from '@/lib/accounts';
 import { getArtifactById, getArtifactHeaderById, getArtifactIdentityById, getEditableArtifactFor, type ArtifactHeader, type ArtifactIdentity } from './rows';
 import {servableDocument} from './servable';
@@ -66,10 +67,10 @@ export async function admitRead(
  * stranger an id is real: the gate speaks only to someone the artifact is
  * already visible to.
  */
-export async function capabilityGuard(actor: AccessActor, capability: Capability, artifactId: string): Promise<Response | null> {
+export async function capabilityGuard(actor: AccessActor, capability: Capability, artifactId: string): Promise<Reply | null> {
   const row = await getArtifactById(artifactId);
   if (!row || !(await can(actor, 'read', row))) return null;
-  return (await can(actor, capability, row)) ? null : capabilityRefusal(actor, artifactId);
+  return (await can(actor, capability, row)) ? null : refusalFor(actor, artifactId);
 }
 
 

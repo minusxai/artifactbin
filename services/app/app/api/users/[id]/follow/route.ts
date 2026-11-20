@@ -10,10 +10,10 @@
  * relation has no state to report about it either.
  */
 import { refusesCrossSite } from '@/lib/authentication';
-import { json, unauthorized } from '@/lib/http';
+import { json, toResponse, unauthorized } from '@/lib/http';
 import { count, has, link, unlink } from '@/lib/social';
 import { getUserById } from '@/lib/accounts';
-import { can, capabilityRefusal } from '@/lib/artifact-access';
+import { can, refusalFor } from '@/lib/artifact-access';
 import { userKindOf } from '@/lib/user-kinds';
 import { sessionActor } from '@/lib/authentication';
 import { type AccessActor } from '@/lib/accounts';
@@ -43,7 +43,7 @@ async function opened(request: Request, ctx: Ctx): Promise<{ id: string; actor: 
 async function acting(request: Request, ctx: Ctx): Promise<{ id: string; userId: string } | Response> {
   const opening = await opened(request, ctx);
   if (opening instanceof Response) return opening;
-  if (!(await can(opening.actor, 'follow', { userId: opening.id }))) return capabilityRefusal(opening.actor);
+  if (!(await can(opening.actor, 'follow', { userId: opening.id }))) return toResponse(await refusalFor(opening.actor));
   return opening.actor.userId ? { id: opening.id, userId: opening.actor.userId } : unauthorized(request);
 }
 

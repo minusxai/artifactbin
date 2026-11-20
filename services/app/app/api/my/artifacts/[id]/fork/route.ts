@@ -47,7 +47,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   // A guest is sent to sign in by the line above; a TEST USER holds an account
   // id and is still refused — it forks inside its sandbox and nowhere else.
   const sandbox = await capabilityGuard(actor, 'fork', id);
-  if (sandbox) return sandbox;
+  if (sandbox) return toResponse(sandbox);
   // The browser forks through the account's own token, whatever cookie it rode in on.
   const forker = { ...actor, tokenId: await ensureUserToken(userId) };
   // A body is optional here (the control row sends none), so an unreadable one

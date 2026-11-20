@@ -62,7 +62,7 @@ export const POST = withTokenAuth(async (request, { actor, params, clientHarness
   // a test user is held inside its sandbox, at this door exactly as at the
   // browser's (lib/capabilities).
   const refusal = await capabilityGuard(actor, 'comment', params.id);
-  if (refusal) return refusal;
+  if (refusal) return toResponse(refusal);
   const key=request.headers.get('Idempotency-Key');
   const work=async(receipt?:MutationReceipt)=>{
   const made = await createAnnotationFor(actor, params.id, {
