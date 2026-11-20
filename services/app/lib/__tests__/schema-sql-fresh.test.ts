@@ -85,3 +85,5 @@ describe('Better Auth in the rendered schema', () => {
     expect(sql).not.toMatch(/rendered in wave 3/);
   });
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

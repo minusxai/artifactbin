@@ -44,3 +44,5 @@ it('lets a viewer write only what the viewer policy permits',async()=>{
  expect(refusal(await write(await f.row(),viewer.actor,'delete from public.rows'))).toBe('policy_denied');
  expect(await f.rows()).toEqual([{n:1},{n:2}]);
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

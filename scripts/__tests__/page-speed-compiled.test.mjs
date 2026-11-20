@@ -102,3 +102,5 @@ it('does not let bridge readiness outrun the interactive author fixture',async()
  window.document.documentElement.dataset.afReady='yes';window.__documentView.check();
  expect(window.__documentView.ready).not.toBeNull();window.close();
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

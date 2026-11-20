@@ -151,3 +151,5 @@ it('keeps explicit names stable while exposing the current value separately',()=
  expect(trigger.getAttribute('aria-label')).toBe('Due date: Pick a date');
  expect(trigger.hasAttribute('aria-description')).toBe(false);
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

@@ -295,3 +295,5 @@ describe('what the bytes actually are', () => {
     expect(((await getArtifactById(png.id))!.meta as { contentType: string }).contentType).not.toBe('image/jpeg');
   });
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

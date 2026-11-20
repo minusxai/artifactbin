@@ -85,3 +85,5 @@ it('decides every policy shape × caller × door × operation as the stored rule
  expect(actual).toEqual(want);
 },120_000);
 
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

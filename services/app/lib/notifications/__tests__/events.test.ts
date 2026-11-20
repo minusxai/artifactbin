@@ -131,3 +131,5 @@ it('names a stable, private wakeup channel per recipient',()=>{
  expect(notificationChannel('alice')).not.toBe(notificationChannel('bob'));
  expect(notificationChannel('alice')).not.toContain('alice');
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

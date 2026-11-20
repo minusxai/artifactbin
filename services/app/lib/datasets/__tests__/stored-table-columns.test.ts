@@ -62,3 +62,5 @@ it('refuses a definition in the retired <Dataset> markup by name, changing nothi
   expect(await markup.json()).toEqual({ error: 'invalid_dataset', details: [expect.stringMatching(/the definition is JSON.*<Dataset> markup is not accepted/)] });
   expect(await select('select * from public.rows order by id')).toEqual([{ id: 1, task: 'a' }, { id: 2, task: 'b' }]);
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

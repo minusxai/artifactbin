@@ -171,3 +171,5 @@ describe('the collection page', () => {
     expect((await listArtifactPageFor(owner, 10, undefined, { search: 'doc 3' })).rows.map(r => r.id)).toEqual([ids[3]]);
   });
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

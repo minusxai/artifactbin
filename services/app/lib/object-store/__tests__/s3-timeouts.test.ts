@@ -26,3 +26,5 @@ describe('S3 store against an endpoint that never answers', () => {
     await expect(store.get('documents/never-answered')).rejects.toThrow();
   }, 15_000);
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

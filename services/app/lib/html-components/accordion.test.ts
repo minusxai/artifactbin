@@ -225,3 +225,5 @@ describe('accordion appearance', () => {
     root.remove();
   });
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

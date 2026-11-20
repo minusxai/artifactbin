@@ -76,3 +76,5 @@ describe('what publish refuses or keeps',()=>{
   expect((await unlinked.json() as {details:string[]}).details.join(' ')).toContain("fetch('./data.json')");
  });
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

@@ -116,3 +116,5 @@ describe('a platform boundary file a page fetches by its path',()=>{
   expect(Buffer.from(files['/af/geojson/india-states.json']!.replace('data:application/json;base64,',''),'base64')).toEqual(geo);
  });
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

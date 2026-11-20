@@ -101,3 +101,5 @@ describe('native document conditional reads',()=>{
   expect((await nodes(w.id,w.user,{},'editor')).status).toBe(404);
  });
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

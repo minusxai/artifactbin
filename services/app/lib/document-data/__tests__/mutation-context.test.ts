@@ -29,3 +29,5 @@ it('will not execute an interrupted claimed operation again or overwrite a pinne
  await expect(work()).rejects.toThrow('connection lost');
  expect((await work()).body.error).toBe('operation_pending');expect(calls).toBe(1);
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

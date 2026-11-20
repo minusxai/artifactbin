@@ -99,3 +99,5 @@ describe('af-slider', () => {
     expect(changes).toBe(1); expect(second!.value).toBe(2);
   });
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

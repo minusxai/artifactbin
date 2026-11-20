@@ -147,3 +147,5 @@ it('keeps popup within viewport and flips above near the bottom', () => {
 });
 
 it('distinguishes an empty placeholder from selected zero and false labels',()=>{const root=fixture();root.setAttribute('placeholder','All categories');const value=()=>root.querySelector('.af-select-value')!;expect(value().textContent).toBe('All categories');expect(value().hasAttribute('data-placeholder')).toBe(true);root.options=[{value:0,label:'Zero'},{value:false,label:'False'}];root.value=0;expect(value().textContent).toBe('Zero');expect(value().hasAttribute('data-placeholder')).toBe(false);root.value=false;expect(value().textContent).toBe('False');expect(value().hasAttribute('data-placeholder')).toBe(false);root.value=null;expect(value().textContent).toBe('All categories');expect(value().hasAttribute('data-placeholder')).toBe(true);});
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

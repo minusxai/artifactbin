@@ -185,3 +185,5 @@ describe('validate type-checker', () => {
       put('src/broken.ts','export {};\n');expect(compile(root)).toEqual({status:0,errors:[]});
   },60_000);
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

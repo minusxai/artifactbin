@@ -198,3 +198,5 @@ it('does not invent SVG boxes from percentage units, comments or child elements'
  }
  const result=await optimiseImage(Buffer.from('<?xml version="1.0"?><svg width="40px" height="20px"/>'),'image/svg+xml');expect([result.width,result.height]).toEqual([40,20]);
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

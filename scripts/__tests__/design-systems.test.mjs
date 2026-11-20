@@ -154,3 +154,5 @@ it('lists every design system in SKILL.md with its mood and fit, as the specs st
  expect(skill).toContain('artifactbin:design-system');
  expect(skill).not.toMatch(/data-af="design-system"|copy[^.\n]*design-systems\/|link[^.\n]*design-systems\/NAME/);
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

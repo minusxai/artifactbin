@@ -91,3 +91,5 @@ describe('clearAvatar', () => {
     expect((await getUserById(user.id))!.image_key).toBeNull();
   });
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

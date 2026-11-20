@@ -63,3 +63,5 @@ it('returns an actionable invitation refusal without queueing an unusable invita
  expect(await response.json()).toEqual({error:'invitation_email_not_allowed',message:'This email is blocked by the installation sign-in policy. Ask the operator to allow the address or domain before inviting them.'});
  expect((await (await getDb()).query('SELECT id FROM group_invitations')).rows).toEqual([]);
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

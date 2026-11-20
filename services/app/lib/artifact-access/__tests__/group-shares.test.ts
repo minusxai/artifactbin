@@ -74,3 +74,5 @@ describe('group principal lattice',()=>{
   expect((await datasetWriteAccess(await head(data.id),member,{throughPage:true})).role).toBe('signed_in');
  });
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

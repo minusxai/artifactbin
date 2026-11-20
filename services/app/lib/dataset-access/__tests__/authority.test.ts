@@ -92,3 +92,5 @@ it('refuses to bind a dataset without stored row objects, naming the stable iden
  expect(refusal).toMatchObject({message:'dataset_stable_identity_unavailable',code:'dataset_stable_identity_unavailable',hint:expect.stringContaining('stored dataset')});
  await expect(authorizeDatasetBinding(identityForUser(null),{...f.live,datasetId:'missing'})).rejects.toThrow('dataset_not_found');
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

@@ -28,3 +28,5 @@ it('drains forwarded large failed-gate output before the runner exits',async()=>
   const result=await runGateProcess(process.execPath,['--input-type=module','-e',`import {flushGateOutput} from ${JSON.stringify(module)};console.log('x'.repeat(1024*1024));await flushGateOutput();process.exit(1);`],{timeoutMs:5000});
   expect(result.ok).toBe(false);expect(result.output).toBe('x'.repeat(1024*1024)+'\n');
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

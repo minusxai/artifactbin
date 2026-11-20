@@ -127,3 +127,5 @@ describe('native slide deck',()=>{
     deck.remove();next.click();expect(deck.index).toBe(0);document.body.append(deck);next.click();expect(deck.index).toBe(1);
   });
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

@@ -205,3 +205,5 @@ it('keeps native code language and presentation tokens morphable while retaining
  expect(()=>morphHtmlVersion(document,before,served(2,region('2')),SCRIPTS,undefined,new Map([['native',root]]))).not.toThrow();
  expect(root.firstChild).toBe(child);
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

@@ -35,3 +35,5 @@ it('refuses a write whose expected state has moved, and applies one whose state 
  expect(refusal(await write(await f.row(),f.owner.actor,'update public.rows set n=6',{expectedState:state}))).toBe('row_changed');
  expect(await f.rows()).toEqual([{n:5}]);
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

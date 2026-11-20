@@ -77,3 +77,5 @@ it('draws quotes and lists with the browser indent a doc editor uses, and code w
  expect(el.querySelector('pre code')?.className).toMatch(/^language-/);
  expect(table.width).toBe('fit-content');expect(table.maxWidth).toBe('100%');expect(el.querySelector('button')!.textContent).toBe('Copy code');
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

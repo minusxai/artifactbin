@@ -100,3 +100,5 @@ it('gives a refused write no sentence for a reader: only a failed read is told t
  expect(write.notice).toBeUndefined();
  expect(await linkedSql(actor,pinned,'select nope from data')).toMatchObject({error:'validation_failed',notice:SQL_FAILURES.validation_failed.notice});
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

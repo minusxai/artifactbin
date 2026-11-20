@@ -105,3 +105,5 @@ it('names the columns a stored table declares with bare names when it starts emp
   const table = (row.meta.catalog as {tables:Array<{columns:Array<{name:string;type:string}>}>}).tables[0];
   expect(table.columns).toEqual([{ name: 'name', type: 'string' }, { name: 'note', type: 'string' }]);
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

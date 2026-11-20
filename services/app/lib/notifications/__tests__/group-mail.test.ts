@@ -101,3 +101,5 @@ it('bounds a stalled preference lookup and never sends when it later resolves',a
  expect(send).not.toHaveBeenCalled();
  expect((await db.query('SELECT sent_at,lease_until,attempts FROM group_mail_outbox')).rows).toEqual([{sent_at:null,lease_until:null,attempts:1}]);
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

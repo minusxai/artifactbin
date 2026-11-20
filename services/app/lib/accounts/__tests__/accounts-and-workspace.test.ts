@@ -70,3 +70,5 @@ describe('a folder\'s page', () => {
     expect(strangerHtml).not.toContain('Quiet Note');
   });
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

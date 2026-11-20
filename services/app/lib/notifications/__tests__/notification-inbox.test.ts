@@ -64,3 +64,5 @@ it('serves one member notification to the delivery service, with the recipient a
  await f.db.query('INSERT INTO user_blocks(user_id,blocked_user_id) VALUES($1,$2)',[f.recipient.id,f.sender.id]);
  expect(await (await read('follow-1')).json()).toEqual({notification:null});
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

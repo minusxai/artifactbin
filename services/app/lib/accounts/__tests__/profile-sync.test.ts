@@ -261,3 +261,5 @@ describe('a person the app already knew, arriving under a proxy-minted id', () =
     expect(rows[0].id).toBe('usr_oldid000000000');
   });
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

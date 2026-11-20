@@ -75,3 +75,5 @@ it('a page without either meta keeps one plain <style> per component, as publish
   expect(styles[0]!.textContent).toBe(tabsComponent.styles);
   expect(styles[0]!.parentElement).toBe(page.document.head);
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

@@ -23,3 +23,5 @@ it('distinguishes retained authored identities from changing generated identitie
  doc.querySelector('input').setAttribute('data-af-id','note-table');expect(richIdentityFacts(authored,doc)).toEqual({retained:true,unique:false});
  doc.querySelector('aside').setAttribute('data-af-id','changed-note');expect(richIdentityFacts(authored,doc).retained).toBe(false);
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

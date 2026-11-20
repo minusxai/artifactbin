@@ -31,3 +31,5 @@ it('caps member count before any installation',()=>{
  const entries=[...Object.entries(required),...Array.from({length:4000},(_,index)=>['references/file'+index+'.md',''])];
  expect(()=>installedFiles(zip(entries))).toThrow(/Unsupported skill ZIP member/);
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

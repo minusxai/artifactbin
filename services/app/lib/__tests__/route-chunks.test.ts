@@ -34,3 +34,5 @@ it('keeps app pages and the document runtime outside the initial static graph', 
   expect(graph).not.toContain('solid/pages/Document.tsx');
   expect(graph).not.toContain('solid/editor/InPlaceEditor.tsx');
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

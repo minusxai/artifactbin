@@ -28,3 +28,5 @@ it('a 50,000-character paragraph is built, read, revised and compacted in under 
   const used = process.cpuUsage(cpu);
   expect((used.user + used.system) / 1000).toBeLessThan(2000);
 }, 20_000);
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

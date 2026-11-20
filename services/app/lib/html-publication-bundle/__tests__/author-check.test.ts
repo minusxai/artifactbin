@@ -325,3 +325,5 @@ it('reports each component that failed, by element, code and reason, and fails s
  expect(digest).toContain('af-chart invalid_chart: Chart not drawn: layer[0].data: a data object needs values');
  expect(digest).toContain('af-data-table permission_denied');
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

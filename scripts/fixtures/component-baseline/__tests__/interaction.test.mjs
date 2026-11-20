@@ -89,3 +89,5 @@ it('uses actual SQLite display truncation and the next page for row1001',async()
   expect(stateExpectationIssues(expected,semantic('',[],[['id'],['1001']]))).toEqual([]);
   expect(stateExpectationIssues(expected,semantic('',[],[['id'],['1000']]))).not.toEqual([]);
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

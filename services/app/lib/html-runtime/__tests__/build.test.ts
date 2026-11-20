@@ -340,3 +340,5 @@ it('ships the host comments module apart, at the pinned address the host module 
  expect(assets.core).not.toContain('host-comments');
  expect(comments).not.toContain('afbin:runtime-reload');
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

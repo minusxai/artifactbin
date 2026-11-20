@@ -209,3 +209,5 @@ it('keeps an authored name without title parts and does not manufacture missing 
   expect(root.querySelector('#missing-authored-id')).toBeNull();
   content.removeAttribute('aria-labelledby'); await tick(); expect(native.getAttribute('aria-label')).toBe('Fallback name');
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

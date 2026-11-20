@@ -98,3 +98,5 @@ it('reports total and database time on the inbox route', async () => {
   expect(anonymous.status).toBe(401);
   expect(anonymous.headers.get('Server-Timing')).toMatch(/^total;dur=/);
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

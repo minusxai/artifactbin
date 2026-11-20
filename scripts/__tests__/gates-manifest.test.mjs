@@ -252,3 +252,5 @@ it('preserves one-attempt gates and retries only eligible contention failures',(
   const runner=readFileSync(path.join(SCRIPTS,'gates.mjs'),'utf8');
   expect(runner).toContain('shouldRetryAlone(specFor(name), workers.length)');
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

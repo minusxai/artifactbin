@@ -65,3 +65,5 @@ it('renders the admitted Pele module from an actual offline page without fetchin
  const fetch=vi.fn(()=>{throw Error('network unavailable');});vi.stubGlobal('fetch',fetch);
  try{const rendered=await import(/* @vite-ignore */`data:text/javascript;base64,${Buffer.from(module).toString('base64')}`);expect(rendered.svg).toContain('Draft');expect(rendered.svg).toContain('Done');expect(fetch).not.toHaveBeenCalled();}finally{vi.unstubAllGlobals();}
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

@@ -67,3 +67,5 @@ it('retries delivery with one stable key and honors blocks and preferences',asyn
  await inviteGroupMember(owner.userId,group.id,member.email!,'admin');await sql('INSERT INTO user_blocks(user_id,blocked_user_id) VALUES($1,$2)',[member.userId,owner.userId]);
  await flushGroupMail(db);expect(sent).toHaveBeenCalledTimes(2);
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

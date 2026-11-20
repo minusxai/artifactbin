@@ -86,3 +86,5 @@ it('reads native publication guards with the API credential only in the HTTP hea
 it.each([Response.json({error:'not_found'},{status:404}), Response.json({format:'markup',version:1,state:'old'})])('refuses unavailable or retired fixture heads', async response => {
   await expect(readDocumentHead('https://example.test','page12','credential',async()=>response)).rejects.toThrow(/cannot read|native HTML/);
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

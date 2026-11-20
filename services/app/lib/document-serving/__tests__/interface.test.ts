@@ -131,3 +131,5 @@ describe('the shell cache', () => {
     expect(await (await ask(undefined, render('next version'))).text()).toBe('next version');
   });
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

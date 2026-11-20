@@ -48,3 +48,5 @@ describe('history and listings', () => {
     expect((await listArtifactPageFor({ userId: null, tokenId: loose.id, email: null, documentEditor: false }, 10)).rows.map(r => r.id)).toEqual([tokenRow.id]);
   });
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

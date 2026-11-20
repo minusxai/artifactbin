@@ -103,3 +103,5 @@ it('requests dismissal when the trigger becomes disabled, while controlled visib
  const b = fixture('open'); const intents: boolean[] = []; b.root.addEventListener('af-change',e => intents.push((e as CustomEvent).detail.value));
  b.trigger.disabled = true; await tick(); expect(intents).toEqual([false]); expect(b.root.open).toBe(true);
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

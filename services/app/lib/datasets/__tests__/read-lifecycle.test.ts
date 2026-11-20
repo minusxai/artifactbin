@@ -111,3 +111,5 @@ it.each([0,-1,1.5,NaN,Infinity])('rejects malformed wall budget %s without dispa
  await expect(executeCatalog(catalog,'select 1',{}, {view:null,wallTimeoutMs,execute:async()=>{executions++;return {};}})).rejects.toBeDefined();
  expect(executions).toBe(0);
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

@@ -143,3 +143,5 @@ describe('revocation takes effect for the next request',()=>{
   expect(await roleOf(doc.id,f.retailOnly)).toBe('viewer');
  });
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

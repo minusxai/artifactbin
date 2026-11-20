@@ -106,3 +106,5 @@ describe('the mutation invocation seam', () => {
     expect(engine.mutate).toHaveBeenCalledTimes(1);
   });
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

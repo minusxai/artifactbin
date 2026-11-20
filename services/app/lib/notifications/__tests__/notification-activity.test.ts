@@ -66,3 +66,5 @@ it('rolls back a source fact and its notification together; unrelated facts stay
  expect((await db.query('SELECT id FROM event_outbox')).rows).toHaveLength(1);
  expect((await db.query('SELECT id FROM member_notifications')).rows).toEqual([]);
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

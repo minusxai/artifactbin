@@ -186,3 +186,5 @@ describe('what the re-encode costs', () => {
     expect(photo.length).toBeGreaterThan(1024 * 1024);
   });
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

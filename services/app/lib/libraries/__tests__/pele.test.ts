@@ -35,3 +35,5 @@ it('ships pinned independent Pele APIs and renders readable diagrams with safe l
   expect(bytes.byteLength).toBeLessThan(2_000_000);expect(gzipSync(bytes).byteLength).toBeLessThan(400_000);
  }
 },30000);
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

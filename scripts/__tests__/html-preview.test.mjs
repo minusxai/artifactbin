@@ -129,3 +129,5 @@ test('explicit export packs local component graphs and registered libraries with
   await writeFile(join(dir,'index.html'),'<script src="./link.js"></script>');await symlink(join(dir,'components/main.js'),join(dir,'link.js'));const failed=await fetch(session.url+'__af_preview/export-source?path=%2F');assert.equal(failed.status,422);assert.match((await failed.json()).error,/Symlink/);
  });
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

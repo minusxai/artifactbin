@@ -124,3 +124,5 @@ it('respects an explicitly focusable trigger wrapper', async () => {
  const host=document.createElement('af-tooltip');host.innerHTML='<af-tooltip-trigger tabindex="0" role="button"><span>Help</span></af-tooltip-trigger><af-tooltip-content>Details</af-tooltip-content>';document.body.append(host);await Promise.resolve();
  expect(host.querySelector('button')).toBeNull();const wrapper=host.querySelector<HTMLElement>('af-tooltip-trigger')!;wrapper.focus();expect((host as AfTooltip).open).toBe(true);
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

@@ -83,3 +83,5 @@ it('answers the direct write door with the refusal shapes its callers read',asyn
  const [readOnly,hint]=await write({sql:'insert into public.rows values (6)'});
  expect([readOnly,hint.error]).toEqual([403,'dataset_read_only']);expect(hint.details[0]).toContain('"access": "readwrite"');
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

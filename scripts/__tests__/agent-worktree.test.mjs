@@ -128,3 +128,5 @@ describe('worktree dependencies', () => {
     expect(calls.filter(c => c[0] === 'npm')).toHaveLength(2);
   }));
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

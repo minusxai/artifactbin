@@ -152,3 +152,5 @@ describe('the app CSP', () => {
     expect(csp.replace(/frame-src [^;]*/, "frame-src 'self'")).toBe(APP_CSP);
   });
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

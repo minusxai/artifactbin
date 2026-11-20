@@ -90,3 +90,5 @@ describe('an image export of an archived version', () => {
     expect(head.status, await head.clone().text()).toBe(200);
   });
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

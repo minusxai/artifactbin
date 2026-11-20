@@ -67,3 +67,5 @@ it.each(['source','policy','membership'])('rechecks saved HTML upload authority 
   expect((await db.query<{count:number}>('SELECT count(*)::int AS count FROM dataset_images WHERE dataset_id=$1',[dataset.id])).rows[0]?.count).toBe(0);
  }finally{hook.mockRestore();}
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

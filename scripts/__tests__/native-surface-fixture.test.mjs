@@ -59,3 +59,5 @@ it('keeps a row draft and binds its observed values in the conditional SQL save'
  expect(calls.find(call=>call.text.startsWith('update'))).toEqual({text:'update data set "hours" = ? where _id = ? and "hours" IS ?',values:[5,'r1',3]});
  expect(state.getState().edits).toEqual({});expect(document.querySelector('#receipt').textContent).toBe('committed');
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

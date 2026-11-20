@@ -409,3 +409,5 @@ it('permits test-support in package tests while rejecting it in product code', (
     expect(checkModuleGraph(scanModuleGraph(root), allowList([])).violations.join('\n')).toContain(`Package pkg/${name} may import only`);
   }
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

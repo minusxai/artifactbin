@@ -205,3 +205,5 @@ it('isolates canonical source versions and rolls memberships and cursor back tog
   expect((await db.query('SELECT views FROM canonical_view_totals')).rows).toEqual([{ views: 999 }]);
   expect((await viewTotalsFor(['art1'])).get('art1')).toBe(1);
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

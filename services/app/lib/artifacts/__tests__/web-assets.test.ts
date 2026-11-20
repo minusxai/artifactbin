@@ -70,3 +70,5 @@ describe('a page without meta.webAssets', () => {
     expect(await served(host)).toEqual({ a: false, b: false });
   });
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

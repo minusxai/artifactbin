@@ -51,3 +51,5 @@ it('runs the installed graph parser and repeated source recovery with Node alone
   await writeFile(join(dir,'probe.mjs'),'import {packPreviewExport} from "./preview-html.mjs";const packed=await packPreviewExport({html:'+JSON.stringify(saved)+',pathname:"/index.html",load:async()=>({contentType:"text/javascript",bytes:Buffer.from("export const value=42;")})});if(!packed.includes("data:text/javascript;base64,"))throw Error("graph missing");process.stdout.write("packed");');
   expect(execFileSync(process.execPath,[join(dir,'probe.mjs')],{cwd:dir,encoding:'utf8'})).toBe('packed');
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

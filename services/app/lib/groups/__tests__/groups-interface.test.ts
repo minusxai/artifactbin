@@ -100,3 +100,5 @@ it('finds an exact member ID through scoped search without global discovery',asy
  await admitGroupMember(owner.id,group.id,member.id,'member');
  expect(await searchGroupMembers(owner.id,group.id,member.id)).toMatchObject([{user_id:member.id}]);
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

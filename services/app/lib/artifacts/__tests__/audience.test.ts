@@ -117,3 +117,5 @@ describe('the account profile', () => {
     expect(await propose({ liked: [] })).toMatchObject({ status: 409, body: { error: 'state_conflict' } });
   });
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

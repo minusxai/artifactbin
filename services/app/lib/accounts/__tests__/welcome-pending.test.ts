@@ -119,3 +119,5 @@ describe('GET /api/page/session — user', () => {
     expect(anon.user).toBeNull();
   });
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

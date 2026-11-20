@@ -157,3 +157,5 @@ it('uses caller helper text as accessible picker guidance with a stable unique I
  first.helperText='<b>Plain text</b>';expect(document.getElementById(id)?.textContent).toBe('<b>Plain text</b>');expect(document.getElementById(id)?.querySelector('b')).toBeNull();
  first.helperText='';expect(document.getElementById(id)?.textContent).toBe('Uploads unavailable.');
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

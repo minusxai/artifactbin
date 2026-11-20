@@ -135,3 +135,5 @@ describe('the shell and the story name one file per face', () => {
     expect([...new Set(clashes)]).toEqual([]);
   }, 60_000);
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

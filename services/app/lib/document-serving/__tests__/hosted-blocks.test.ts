@@ -158,3 +158,5 @@ it('leaves the flat addresses pages load as they were', async () => {
   expect(hostModule.headers.get('cache-control')).toBe('no-cache');
   expect(hostModule.headers.get('access-control-allow-origin')).toBe('*');
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

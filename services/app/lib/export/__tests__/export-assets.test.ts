@@ -118,3 +118,5 @@ describe('persistent export delivery',()=>{
   expect(signed.contentType).toBe('image/png');expect(signed.url).not.toContain('test-secret');
  });
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

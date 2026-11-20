@@ -123,3 +123,5 @@ it('installs world-readable directories, which a production image copies and ser
  await buildComponentAssets({...dirs,readableDir});
  for(const dir of [dirs.outputDir,readableDir])expect(((await stat(dir)).mode&0o777).toString(8),dir).toBe('755');
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

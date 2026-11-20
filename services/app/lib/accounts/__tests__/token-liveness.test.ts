@@ -30,3 +30,5 @@ describe('token liveness', () => {
     expect(seen).toEqual({ start: true, wall: false });
   });
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

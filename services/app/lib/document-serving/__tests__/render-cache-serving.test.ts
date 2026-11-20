@@ -106,3 +106,5 @@ describe('an anonymous reader is served a shared render', () => {
     expect(rows[0]!.n).toBe(3);
   });
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

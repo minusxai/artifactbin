@@ -20,3 +20,5 @@ it('provides pinned native Mermaid and framework-free deck.gl APIs as closed bro
   const source=await readFile(path.resolve('lib/libraries',spec.entry),'utf8');expect(source).not.toContain('html-components');
  }
 },30000);
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

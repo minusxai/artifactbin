@@ -47,3 +47,5 @@ it('rate-limits rule-admitted signed-out writes to 30 a minute per dataset',asyn
  expect(refusal(await write(await f.row(),f.owner.actor,'insert into public.rows values (3)'))).toBeNull();
  }finally{vi.useRealTimers();}
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

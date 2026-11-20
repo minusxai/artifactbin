@@ -170,3 +170,5 @@ describe('what the app asks the browser for', () => {
     expect(browser.seen[0].viewport).toEqual({ width: 1600, height: 840 });
   });
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

@@ -259,3 +259,5 @@ it('refuses a policy validated against dataset content that changed before its c
   expect((await original('SELECT revision FROM dataset_policy_audit WHERE dataset_id=$1',[f.ds])).rows).toEqual([]);
  }finally{spy.mockRestore();}
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

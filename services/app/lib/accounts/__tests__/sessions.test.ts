@@ -164,3 +164,5 @@ it.each(['session', 'bearer'] as const)('DELETE session/token ends %s-backed doc
   expect(response.headers.get('cache-control')).toBe('no-store');
   expect(await pagesSessionOf(spent!.cookie, Date.now(), binding.artifactId)).toBeNull();
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

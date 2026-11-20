@@ -86,3 +86,5 @@ describe('the inbox auto-accept setting', () => {
     await expect(updateMembershipInbox(identityForUser(guest.userId, guest.tokenId), { autoAccept: true })).rejects.toThrow('Sign in');
   });
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

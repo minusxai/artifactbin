@@ -15,3 +15,5 @@ test('the complete npm PGLite package supports fresh persistence, rollback and r
   expect(result.stderr).toBe('');expect(result.status).toBe(0);
 });
 
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

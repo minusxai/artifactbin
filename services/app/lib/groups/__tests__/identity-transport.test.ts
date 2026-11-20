@@ -64,3 +64,5 @@ describe('the identity module over HTTP',()=>{
   expect(()=>identityClient('http://auth.invalid',{serviceSecret:''})).toThrow();
  });
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

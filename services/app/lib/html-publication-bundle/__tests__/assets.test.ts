@@ -87,3 +87,5 @@ describe('loadBundleAssetResources',()=>{
   await expect(loadBundleAssetResources(new Request(`${BASE}/a/${id}/download`),ANONYMOUS_ACTOR,id)).rejects.toThrow('Bundle page unavailable');
  });
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

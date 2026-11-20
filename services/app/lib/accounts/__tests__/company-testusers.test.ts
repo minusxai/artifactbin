@@ -43,3 +43,5 @@ describe('company delegated test identities',()=>{
   expect(await canUseDeploymentIdentity(child.id)).toBe(false);expect(await resolveToken(child.token)).toBeNull();
  });
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

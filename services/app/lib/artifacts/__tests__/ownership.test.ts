@@ -58,3 +58,5 @@ describe('destinations and transfer', () => {
     await expect(transferArtifact(owner, mixed.id, { type: 'group', id: group.id })).rejects.toThrow('different owner');
   });
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

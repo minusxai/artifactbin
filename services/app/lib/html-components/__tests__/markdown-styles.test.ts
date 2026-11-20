@@ -85,3 +85,5 @@ it('carries native checklist presentation before an editor mounts',()=>{
  expect(MARKDOWN_CSS).toContain('li[data-checked="true"]');
  expect(MARKDOWN_CSS).toContain('li[data-checked]>label');
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

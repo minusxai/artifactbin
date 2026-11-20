@@ -168,3 +168,5 @@ it("guards computed module URLs with per-character data:/blob: prefix checks", (
   for (const value of ["https://x.test/a.js", "./a.js", "DATA:x", 1, null])
     expect(() => run(value)).toThrow(TypeError);
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

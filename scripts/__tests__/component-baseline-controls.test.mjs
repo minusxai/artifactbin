@@ -109,3 +109,5 @@ describe('retained control baseline provenance and authored scenarios',()=>{
     } finally {dom.window.close();}
   });
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

@@ -244,3 +244,5 @@ describe('a host page on another origin', () => {
     expect(container.querySelector('iframe')).toBeNull();
   });
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

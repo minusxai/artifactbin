@@ -17,3 +17,5 @@ describe('slide capture geometry settlement',()=>{
   });
   it('runs the geometry check in the actual frame after selection',async()=>{const calls=[];await settleInteraction({fixture:{id:'slides-two'},action:{action:'click',name:'Next slide'},implementation:'html',frame:{waitForFunction:async()=>calls.push('selected'),evaluate:async(fn,arg)=>calls.push([fn,arg])}});expect(calls).toEqual(['selected',[settleSlideGeometry,{implementation:'html'}]]);});
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

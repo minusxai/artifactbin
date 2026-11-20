@@ -177,3 +177,5 @@ it('requires matching auth-owner admission for OAuth audience-bound bearers even
  expect((await door(request('/api/account/profile',{token:t.token}))).status).toBe(401);
  expect((await door(request('/api/account/profile',{headers:{authorization:`Bearer ${t.token}`},actor:{credential:'bearer',tokenId:t.id,userId:t.userId!}}))).status).toBe(200);
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

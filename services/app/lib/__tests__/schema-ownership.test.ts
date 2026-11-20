@@ -151,3 +151,5 @@ it('the head\'s content publisher column stays on the app\'s artifacts, kept wit
  expect(declared()['app.artifacts']).toBe('app');
  expect(sql).toContain('ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS content_publisher_user_id TEXT');
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

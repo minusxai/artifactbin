@@ -91,3 +91,5 @@ it('changes the script fingerprint when a versioned path becomes @afbin/<name>, 
  expect(runtime(assembled).libraries['@afbin/vega']).toBeDefined();
  expect(scriptFingerprint(page('@afbin/vega'))).toBe(bare);
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

@@ -74,3 +74,5 @@ it('does not treat page membership or a read rule as dataset authority; an edito
  await updateSharingFor(actor,ds.id,{shares:[{email:bob.email!,role:'editor'}]});
  expect((await write('shared_editor')).outcome).toBe('committed');expect((await getArtifactById(ds.id))?.version).toBe(2);
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

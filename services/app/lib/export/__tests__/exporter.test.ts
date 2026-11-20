@@ -282,3 +282,5 @@ describe('renderArtifactImage',()=>{
   expect(await renderArtifactImage(page(),'png',{...options,volatile:true})).toEqual({ok:false,reason:'failed'});
  });
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

@@ -93,3 +93,5 @@ describe('POST /api/artifacts/<id>/mutate — the owner\'s door', () => {
     expect(notData.status).toBe(400);
   });
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

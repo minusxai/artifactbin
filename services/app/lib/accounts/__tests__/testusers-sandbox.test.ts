@@ -126,3 +126,5 @@ it('keeps a distinct display label on each retained test identity',async()=>{
  const identity=await getUserById(testuser.id);
  expect(identity?.name).toBe(testuser.label);expect(identity?.name).toMatch(/^Test user /);
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

@@ -75,3 +75,5 @@ it('re-evaluated components sharing floating helpers define nothing twice and do
   expect(styleCount()).toBe(before.styles);
   for (const name of ['af-popover-styles', 'af-tooltip-styles', 'af-select-styles']) expect(document.querySelectorAll(`style[data-${name}]`)).toHaveLength(1);
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

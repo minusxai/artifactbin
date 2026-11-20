@@ -688,3 +688,5 @@ it('proves fonts on visible text inside display-contents identities without coun
  try{const evidence=await fontLoadingEvidence();expect(evidence.used).toMatchObject([{family:'Body Font',weight:'400',text:'Visible identity text',loaded:true}]);expect(fontByteProof({...evidence,resources:[{url:'http://localhost/body.woff2',status:200,sha256:'d'.repeat(64)}]})).toEqual({used:[{family:'Body Font',style:'normal',weight:'400',hashes:['d'.repeat(64)]}],errors:[]});expect(fontByteProof({...evidence,resources:[]} ).errors).toContain('Used declared font Body Font normal 400 has no verified response bytes');}
  finally{globalThis.document=prior;dom.window.close();}
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

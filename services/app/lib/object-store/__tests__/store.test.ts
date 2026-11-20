@@ -271,3 +271,5 @@ it('reports a denied differing-byte replacement and preserves the existing compl
   expect((await store.get('islands/module')).toString()).toBe('old compiled module');
   expect(await readdir(path.join(dir,'islands'))).toEqual(['module']);
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

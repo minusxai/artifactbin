@@ -79,3 +79,5 @@ it('tells a publish naming a missing local component copy to import the hosted m
   writeFileSync(path.join(root,'index.html'),'<af-tabs></af-tabs><script type="module">import "@afbin/tabs";</script>');
   expect((await prepareBundle({root,entry:'index.html',server:'https://app.example'})).body.publicationBundle.files).toEqual([]);
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

@@ -172,3 +172,5 @@ it('provisions reader assets conservatively from the selected import graph', () 
   expect(broken.provided).toEqual([]);
   expect(broken.commands.some(command => command[0] === 'run')).toBe(false);
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

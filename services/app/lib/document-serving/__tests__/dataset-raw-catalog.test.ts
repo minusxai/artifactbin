@@ -49,3 +49,5 @@ it('keeps a live connection summary and the artifact access boundary', async () 
   expect(await response.json()).toEqual({ connection, message: expect.stringContaining('rows stay in its database') });
   expect((await serveRawDocument(request(`/a/${id}/raw`), { id })).status).toBe(404);
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

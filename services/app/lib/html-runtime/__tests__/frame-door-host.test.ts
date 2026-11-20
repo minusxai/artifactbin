@@ -57,3 +57,5 @@ it('opens a bridge session only for its parent on the app origin it was served w
   await expect.poll(() => started).toBe(1);
   close();
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

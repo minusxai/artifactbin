@@ -65,3 +65,5 @@ describe('actual original/new rich reader fixture inputs',()=>{
   expect(slides.limitations.join(' ')).toContain('reader owns the outer rail gutter');
  });
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

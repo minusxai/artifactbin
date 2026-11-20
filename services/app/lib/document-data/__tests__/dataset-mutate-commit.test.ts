@@ -14,3 +14,5 @@ it('validates assigned user fields at commit: a self field takes only the caller
  expect(refusal(await write(await f.row(),f.owner.actor,`update public.rows set done_by='${f.owner.id}', owner_id='${other.id}'`))).toBeNull();
  expect(await f.rows()).toEqual([{n:1,done_by:f.owner.id,owner_id:other.id}]);
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

@@ -82,3 +82,5 @@ it('a deleted group grants nothing through what still names it: its pages, its s
  expect((await groups.getGroupDetail(owner.id,other.id))?.linked_groups).toEqual([]);
  expect(await groups.listGroups(member.id)).toEqual([]);
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

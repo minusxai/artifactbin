@@ -149,3 +149,5 @@ it('refuses a hidden file or folder a page names, and a home or root folder, bef
   }
   for(const folder of [homedir(),'/'])await expect(prepareBundle({root:folder,entry:'index.html',server:'https://example.test'})).rejects.toThrow(/^Move the page into a folder of its own: /);
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

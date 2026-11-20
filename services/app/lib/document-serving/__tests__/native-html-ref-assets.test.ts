@@ -53,3 +53,5 @@ describe('a page that names thirty ref: images', () => {
     expect(value).toContain('No images');
   });
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

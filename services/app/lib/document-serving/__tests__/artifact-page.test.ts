@@ -180,3 +180,5 @@ describe('the JSON door\'s caching', () => {
     expect(await refused.json()).toEqual({ error: 'not_found' });
   });
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

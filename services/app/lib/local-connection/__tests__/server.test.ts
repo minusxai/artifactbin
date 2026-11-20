@@ -72,3 +72,5 @@ it('reports an idle grant compatible until the head moves, then revokes it',asyn
  const moved=await status();expect(moved.status).toBe(200);expect(await moved.json()).toMatchObject({compatible:false,remoteRevision:String(Number(identity.baseRevision)+1)});
  expect((await status()).status).toBe(410);
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

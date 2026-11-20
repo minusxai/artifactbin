@@ -228,3 +228,5 @@ it('tells a served page its declared connect hosts, which its core reaches throu
  const plain=await nativeHtml.nativeHtmlDocument({row:{...row,source:'<!doctype html><html><head><title>Plain</title></head><body></body></html>'}});
  expect(plain.config.connect).toBeUndefined();
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

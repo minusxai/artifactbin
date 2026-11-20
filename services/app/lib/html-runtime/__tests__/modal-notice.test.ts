@@ -44,3 +44,5 @@ it('is installed by the core before any author script runs',async()=>{
  expect(calls).toEqual(['confirm']);
  expect(warned.join('\n')).toMatch(/confirm\(\) is blocked[\s\S]*af-dialog/);
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

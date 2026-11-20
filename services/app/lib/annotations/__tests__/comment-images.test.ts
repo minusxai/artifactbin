@@ -112,3 +112,5 @@ describe('expireCommentImagesFor and sweepCommentImages', () => {
     expect(await rows()).toEqual([{ id: staged.id, annotation_id: null, ready: true, expired: false }]);
   });
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

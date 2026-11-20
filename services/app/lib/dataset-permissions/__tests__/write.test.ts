@@ -164,3 +164,5 @@ describe('assertWriteCommit', () => {
     await expect(commit(f.data, f.owner, owner)).rejects.toThrow('Mutation permission changed');
   });
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

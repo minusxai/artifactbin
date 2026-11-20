@@ -56,3 +56,5 @@ it('prebuilds real shipped script compactions without deploying the source compi
   expect(await helpers.compactSkillScript(authored),name).toBe(expected);
  }
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

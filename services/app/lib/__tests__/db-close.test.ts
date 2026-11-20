@@ -35,3 +35,5 @@ describe('closing the embedded database', () => {
     expect((await pending).rows[0]!.n).toBe(1);
   });
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

@@ -30,3 +30,5 @@ it('checks inviter authority first and preserves access for already admitted acc
  await sql('INSERT INTO deployment_members(user_id) VALUES ($1)',[member.userId]);
  await expect(inviteGroupMember(owner.userId,group.id,member.email!,'member')).resolves.toBeDefined();
 });
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)

@@ -116,3 +116,5 @@ it('auto-accepts a mention from someone the recipient follows unless they turned
  await expect(db.transaction(tx=>invitePeople(tx,row,alice,['dave'],'node:other'))).rejects.toThrow('Person is not eligible for this invitation');
 });
 const carol=()=>identityForUser('carol',null,'carol@example.test');
+
+// pr fast budget probe: an edit of many node test files (closed unmerged)
