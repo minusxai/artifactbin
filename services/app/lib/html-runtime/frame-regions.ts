@@ -95,6 +95,47 @@ interface Session {
   shown: Node[];
 }
 
+/** From the press to the editor: the keys go to an invisible input at the press (else the region's corner), and are kept in order. */
+function holdKeys(doc: Document, root: HTMLElement, at: { x: number; y: number } | null): Held {
+  const input = doc.createElement('textarea');
+  const box = at ?? (() => { const rect = root.getBoundingClientRect(); return { x: rect.left, y: rect.top }; })();
+  input.setAttribute('data-af', 'region-keys');
+  input.setAttribute('aria-label', 'Region editor, opening');
+  for (const [name, value] of [['autocomplete', 'off'], ['autocapitalize', 'off'], ['spellcheck', 'false']]) input.setAttribute(name, value!);
+  input.style.cssText = `position:fixed;left:${Math.round(box.x)}px;top:${Math.round(box.y)}px;width:2px;height:1.2em;margin:0;padding:0;border:0;outline:0;opacity:0;resize:none;overflow:hidden;font-size:16px;caret-color:transparent;pointer-events:none;z-index:2147483647`;
+  const entry: Held = { input, entries: [], composing: false, then: null, stop: () => {} };
+  const keep = (next: RegionKeyEntry) => { if (entry.entries.length < MAX_HELD_KEYS) entry.entries.push(next); };
+  /** What the input holds is typed text not yet kept: kept now, in order before the next key. */
+  const take = (composed?: true) => { if (input.value) { keep(composed ? { text: input.value, composed } : { text: input.value }); input.value = ''; } };
+  const onKey = (event: KeyboardEvent) => {
+    if (event.isComposing || entry.composing || event.keyCode === 229) return;
+    const mod = event.ctrlKey || event.metaKey;
+    if (!(EDITING_KEYS.has(event.key) && !mod && !event.altKey) && !(mod && !event.altKey && MOD_KEYS.has(event.key.toLowerCase()))) return;
+    event.preventDefault();
+    take();
+    const { key, code, keyCode, shiftKey, altKey, ctrlKey, metaKey } = event;
+    keep({ key, code, keyCode, shiftKey, altKey, ctrlKey, metaKey });
+  };
+  // A keyboard that says nothing on keydown (Android) still says what it does here.
+  const onBeforeInput = (event: InputEvent) => {
+    if (entry.composing || event.isComposing) return;
+    const key = event.inputType === 'insertLineBreak' || event.inputType === 'insertParagraph' ? 'Enter' : event.inputType === 'deleteContentBackward' && !input.value ? 'Backspace' : null;
+    if (!key) return;
+    event.preventDefault();
+    take();
+    keep({ key });
+  };
+  const onInput = (event: Event) => { if (!entry.composing && !(event as InputEvent).isComposing) take(); };
+  const onStart = () => { take(); entry.composing = true; };
+  const onEnd = () => { entry.composing = false; take(true); const then = entry.then; entry.then = null; then?.(); };
+  const listeners: Array<[string, EventListener]> = [['keydown', onKey as EventListener], ['beforeinput', onBeforeInput as EventListener], ['input', onInput], ['compositionstart', onStart], ['compositionend', onEnd]];
+  for (const [type, listener] of listeners) input.addEventListener(type, listener);
+  entry.stop = () => { for (const [type, listener] of listeners) input.removeEventListener(type, listener); input.remove(); };
+  doc.documentElement.append(input);
+  input.focus({ preventScroll: true });
+  return entry;
+}
+
 export function startFrameRegions({ win, post, load, pageId }: FrameRegionsOptions): FrameRegions {
   const doc = win.document;
   /** The caret the document this one replaced kept for it (a rebuild), until its region's editor mounts. */
@@ -126,47 +167,9 @@ export function startFrameRegions({ win, post, load, pageId }: FrameRegionsOptio
     const id = element?.getAttribute('data-af-id');
     return id && enabled.has(id) && regionRoot(id) === element ? id : null;
   };
-  /** From the press to the editor: the keys go to an invisible input at the press, and are kept in order. */
   const hold = (id: string, at: { x: number; y: number } | null) => {
     const root = regionRoot(id);
-    if (!root || held.has(id)) return;
-    const input = doc.createElement('textarea');
-    const box = at ?? (() => { const rect = root.getBoundingClientRect(); return { x: rect.left, y: rect.top }; })();
-    input.setAttribute('data-af', 'region-keys');
-    input.setAttribute('aria-label', 'Region editor, opening');
-    for (const [name, value] of [['autocomplete', 'off'], ['autocapitalize', 'off'], ['spellcheck', 'false']]) input.setAttribute(name, value!);
-    input.style.cssText = `position:fixed;left:${Math.round(box.x)}px;top:${Math.round(box.y)}px;width:2px;height:1.2em;margin:0;padding:0;border:0;outline:0;opacity:0;resize:none;overflow:hidden;font-size:16px;caret-color:transparent;pointer-events:none;z-index:2147483647`;
-    const entry: Held = { input, entries: [], composing: false, then: null, stop: () => {} };
-    const keep = (next: RegionKeyEntry) => { if (entry.entries.length < MAX_HELD_KEYS) entry.entries.push(next); };
-    /** What the input holds is typed text not yet kept: kept now, in order before the next key. */
-    const take = (composed?: true) => { if (input.value) { keep(composed ? { text: input.value, composed } : { text: input.value }); input.value = ''; } };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.isComposing || entry.composing || event.keyCode === 229) return;
-      const mod = event.ctrlKey || event.metaKey;
-      if (!(EDITING_KEYS.has(event.key) && !mod && !event.altKey) && !(mod && !event.altKey && MOD_KEYS.has(event.key.toLowerCase()))) return;
-      event.preventDefault();
-      take();
-      const { key, code, keyCode, shiftKey, altKey, ctrlKey, metaKey } = event;
-      keep({ key, code, keyCode, shiftKey, altKey, ctrlKey, metaKey });
-    };
-    // A keyboard that says nothing on keydown (Android) still says what it does here.
-    const onBeforeInput = (event: InputEvent) => {
-      if (entry.composing || event.isComposing) return;
-      const key = event.inputType === 'insertLineBreak' || event.inputType === 'insertParagraph' ? 'Enter' : event.inputType === 'deleteContentBackward' && !input.value ? 'Backspace' : null;
-      if (!key) return;
-      event.preventDefault();
-      take();
-      keep({ key });
-    };
-    const onInput = (event: Event) => { if (!entry.composing && !(event as InputEvent).isComposing) take(); };
-    const onStart = () => { take(); entry.composing = true; };
-    const onEnd = () => { entry.composing = false; take(true); const then = entry.then; entry.then = null; then?.(); };
-    const listeners: Array<[string, EventListener]> = [['keydown', onKey as EventListener], ['beforeinput', onBeforeInput as EventListener], ['input', onInput], ['compositionstart', onStart], ['compositionend', onEnd]];
-    for (const [type, listener] of listeners) input.addEventListener(type, listener);
-    entry.stop = () => { for (const [type, listener] of listeners) input.removeEventListener(type, listener); input.remove(); };
-    held.set(id, entry);
-    doc.documentElement.append(input);
-    input.focus({ preventScroll: true });
+    if (root && !held.has(id)) held.set(id, holdKeys(doc, root, at));
   };
   const release = (id: string) => { const entry = held.get(id); if (entry) { held.delete(id); entry.stop(); } };
   const ask = (id: string, at: { x: number; y: number } | null) => {

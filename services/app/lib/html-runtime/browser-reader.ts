@@ -50,6 +50,10 @@ export const remote: RemotePort = {
   execute: async () => { throw new RemoteUnreachable('Remote relay has not attached'); },
 };
 const invalidationListeners = new Set<(names: readonly string[],reason?:QueryInvalidation) => void>();
+/** An event the frame sends its parent. */
+type FrameEvent = Extract<FrameBridgeFramePayload, { kind: 'event' }>['event'];
+/** Tell every author subscription these names read again; one subscriber cannot stop the others. */
+const invalidate=(names:readonly string[],reason?:QueryInvalidation)=>{for(const listener of invalidationListeners)try{listener(names,reason);}catch{/* Independent subscriptions. */}};
 /** An invalidation contains names, never rows or authority. Backend watches re-query through the same trusted relay. */
 export function onResolverChange(listener: (names: readonly string[],reason?:QueryInvalidation) => void): { unsubscribe(): void } { invalidationListeners.add(listener); return { unsubscribe: () => { invalidationListeners.delete(listener); } }; }
 import type { FrameBridgeAttach, FrameBridgeFramePayload, FrameBridgeParentPayload } from '../html-reader/contract';
@@ -105,6 +109,8 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
   const stopFileNavigation = refuseFileNavigation(win);
   const stopLinks = config.appOrigin ? followAppLinks(win, config.appOrigin) : () => {};
   const nonce = runtimeId();
+  /** One event for the parent, signed with this session's nonce. */
+  const emit = (event: Omit<FrameEvent, 'nonce'>) => post({ kind: 'event', event: { ...event, nonce } as FrameEvent });
   let call = 0;
   let uploadSession=createUploadRelay(post,()=>++call);uploads=uploadSession;
   /** The last settled session the parent reported: the first one is what this document's first reads ran under. */
@@ -117,7 +123,7 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
     if(context.state!=='signed-in'&&context.state!=='signed-out')return;
     const changed=session!==undefined&&session!==context.state;session=context.state;
     // Signing in or out changes who reads the page: the built-in viewer and every remote read answer again.
-    if(changed)for(const listener of invalidationListeners)try{listener([...config.backends,PAGE_VIEWER_ROOT],'authority');}catch{/* Independent subscriptions. */}
+    if(changed)invalidate([...config.backends,PAGE_VIEWER_ROOT],'authority');
   };
   updateUploadContext(attach?.uploadContext??{state:'unavailable',scope:nonce});
   let canAnnotate = false, canSelect = true;
@@ -127,7 +133,7 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
   const commentView = createHtmlCommentViewSession(win.document);
   /** While a new version is pending, the document that replaces this one, whichever, opens where the reader is now. */
   const keepReadingPlace = () => captureReadingPlace(win, config.pageId, annotations.openId);
-  const presence = startHtmlPresence(win, geometry => post({kind:'event',event:{type:'mx:presence',nonce,geometry}}));
+  const presence = startHtmlPresence(win, geometry => emit({type:'mx:presence',geometry}));
   const regions = startFrameRegions({ win, post, load: loadRegionEditor, pageId: config.pageId });
   const cells = cellPort.attach(post);
   let pick: 'block' | 'area' | 'select' | null = null;
@@ -135,10 +141,12 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
   let suppressClick = false;
   let drag: { x: number; y: number; target: Node } | null = null;
   let sourceReady=!sourceObservation;
-  const layout = (report=true) => {const positions=painter.paint(annotations);if(report&&sourceReady)post({ kind: 'event', event: { type: 'mx:annotation-layout', nonce, positions, viewStateError: commentView.error } });};
+  const layout = (report=true) => {const positions=painter.paint(annotations);if(report&&sourceReady)emit({ type: 'mx:annotation-layout', positions, viewStateError: commentView.error });};
   // A draft's node also says where its start tag is in the source its host sent (config `sourcePositions`).
+  /** What a reader picked at `target` (or their text selection), as the parent reads a selection. */
+  const picked = (target?: Parameters<typeof htmlSelection>[1]) => htmlSelection(win, target, config.revision, config.savedNodeIds);
   const located = <T extends { path: string } | null>(selected: T): T => { const at = selected && config.sourcePositions?.[selected.path]; return at ? { ...selected, source: { line: at[0], column: at[1] } } : selected; };
-  const actions = createHtmlSelectionActions({ win, capture: target => located(htmlSelection(win, target, config.revision, config.savedNodeIds)), onAction: (action, selected) => post({ kind: 'event', event: { type: 'mx:selection-action', nonce, action, selection: selected } }) });
+  const actions = createHtmlSelectionActions({ win, capture: target => located(picked(target)), onAction: (action, selected) => emit({ type: 'mx:selection-action', action, selection: selected }) });
   const readiness=sourceObservation?startSourceAnnotationReadiness(win,()=>{sourceReady=true;if(annotations.pins.length)layout();}):null;
   const ownsOverlay=(node:Node)=>painter.ownsOverlay(node)||presence.ownsOverlay(node)||actions.ownsOverlay(node)||regions.ownsOverlay(node);
   const observation=observeHtmlDom(win,ownsOverlay,()=>{if(annotations.pins.length)layout(!sourceObservation);presence.paint();},painter.ownsMutation);
@@ -146,7 +154,7 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
   const click = (event: MouseEvent) => {
     if (suppressClick) { suppressClick = false; event.preventDefault(); return; }
     const target = (event.target as Element)?.closest?.('[data-af-id]');
-    if (pick && canAnnotate) { event.preventDefault(); const selected = htmlSelection(win, target, config.revision, config.savedNodeIds); if (selected) post({ kind: 'event', event: { type: 'mx:selection', nonce, selection: selected } }); return; }
+    if (pick && canAnnotate) { event.preventDefault(); const selected = picked(target); if (selected) emit({ type: 'mx:selection', selection: selected }); return; }
 
   };
   const pending = new Map<number, { resolve: (value: Awaited<ReturnType<RemotePort['execute']>>) => void; reject: (error: Error) => void }>();
@@ -158,11 +166,11 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
   });
   for (const ready of [...relayWaiters]) ready();
   const attachedRelay=relay;
-  if(connectedBefore)void Promise.resolve().then(()=>{if(relay===attachedRelay)for(const listener of invalidationListeners)try{listener([...config.backends]);}catch{/* Independent subscriptions. */}});
+  if(connectedBefore)void Promise.resolve().then(()=>{if(relay===attachedRelay)invalidate([...config.backends]);});
   connectedBefore=true;
   const selection = () => {
     if (pick === 'area' || !win.getSelection()?.toString().trim()) return;
-    post({ kind: 'event', event: { type: 'mx:selection', nonce, selection: htmlSelection(win, undefined, config.revision, config.savedNodeIds) } });
+    emit({ type: 'mx:selection', selection: picked() });
   };
   const resize = () => layout();
   const scroll = () => { post({ kind: 'scroll', scrollX: win.scrollX, scrollY: win.scrollY }); selection(); if (annotations.pins.length) layout(); };
@@ -179,21 +187,17 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
     if (pick === 'area') win.getSelection()?.removeAllRanges();
     let node = start.target.nodeType === 1 ? start.target as Element : start.target.parentElement;
     while (node && !node.contains(event.target as Node)) node = node.parentElement;
-    const selected = htmlSelection(win, node, config.revision, config.savedNodeIds);
+    const selected = picked(node);
     if (!selected) return;
     const rect = selected.rect;
     const x = Math.max(rect.x, Math.min(start.x, event.clientX)), y = Math.max(rect.y, Math.min(start.y, event.clientY));
     const width = Math.min(rect.x + rect.width, Math.max(start.x, event.clientX)) - x, height = Math.min(rect.y + rect.height, Math.max(start.y, event.clientY)) - y;
-    if (width > 0 && height > 0 && rect.width > 0 && rect.height > 0) post({ kind: 'event', event: { type: 'mx:selection', nonce, selection: { ...selected, captureRect: { x, y, width, height }, range: { v: 1, kind: 'area', box: { x: (x - rect.x) / rect.width, y: (y - rect.y) / rect.height, w: width / rect.width, h: height / rect.height } } } } });
+    if (width > 0 && height > 0 && rect.width > 0 && rect.height > 0) emit({ type: 'mx:selection', selection: { ...selected, captureRect: { x, y, width, height }, range: { v: 1, kind: 'area', box: { x: (x - rect.x) / rect.width, y: (y - rect.y) / rect.height, w: width / rect.width, h: height / rect.height } } } });
   };
-  const key = (event: KeyboardEvent) => { if (event.key === 'Escape' && pick) { pick = null; win.document.documentElement.style.cursor = cursor; post({ kind: 'event', event: { type: 'mx:selection', nonce, selection: null } }); } };
-  win.document.addEventListener('keydown', key);
-  win.document.addEventListener('pointerdown', down);
-  win.document.addEventListener('pointerup', up);
-  win.document.addEventListener('click', click);
-  win.document.addEventListener('selectionchange', selection);
-  win.addEventListener('scroll', scroll, { passive: true });
-  win.addEventListener('resize', resize);
+  const key = (event: KeyboardEvent) => { if (event.key === 'Escape' && pick) { pick = null; win.document.documentElement.style.cursor = cursor; emit({ type: 'mx:selection', selection: null }); } };
+  const listening = [[win.document, 'keydown', key], [win.document, 'pointerdown', down], [win.document, 'pointerup', up], [win.document, 'click', click],
+    [win.document, 'selectionchange', selection], [win, 'scroll', scroll, { passive: true }], [win, 'resize', resize]] as Array<[EventTarget, string, EventListener, AddEventListenerOptions?]>;
+  for (const [target, type, listener, options] of listening) target.addEventListener(type, listener, options);
   post({ kind: 'ready', nonce });
   // The document's height, once per new value, for a parent that sizes its frame to the page (host-shell `fitHeight`).
   let height = -1;
@@ -219,11 +223,11 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
         if (command?.type === 'mx:presence') presence.receive(payload.command as PresencePaint);
         // A new published version (solid/document/follow-html-version): drawn in place when safe, else this document is rebuilt
         // from it (told first, so the parent follows instead of reloading); the parent reloads only when no version was read.
-        if (command?.type === HTML_VERSION_MESSAGE) { const version = Number((payload.command as { version?: unknown }).version), live = Number((payload.command as { live?: unknown }).live ?? 0); if (Number.isInteger(version) && Number.isSafeInteger(live)) { win.addEventListener('pagehide', keepReadingPlace); post({ kind: 'event', event: { type: HTML_VERSION_RECEIVED, nonce } }); void loadLiveMorph().then((morph) => morph.applyHtmlVersion(win, config, version, undefined, regions.editing, live)).then((applied) => { if (applied.rebuild) { regions.keepForRebuild(); post({ kind: 'event', event: { type: HTML_VERSION_REBUILT, nonce, revision: applied.revision, ...(applied.reason ? { reason: applied.reason } : {}) } }); win.location.replace(applied.rebuild); return; } win.removeEventListener('pagehide', keepReadingPlace); config.revision = applied.revision; config.live = applied.live ?? 0; config.savedNodeIds = applied.savedNodeIds; if (annotations.pins.length) layout(); presence.paint(); post({ kind: 'event', event: { type: HTML_VERSION_APPLIED, nonce, revision: applied.revision } }); }, (error: unknown) => post({ kind: 'event', event: { type: HTML_VERSION_REFUSED, nonce, reason: String(error instanceof Error ? error.message : error).slice(0, 300) } })); } }
-        if (command?.type === 'mx:data' && Array.isArray(command.datasets)) { const ids = new Set(command.datasets); const names = config.backends.filter((name) => ids.has(name) || ids.has(config.bindings?.[name] ?? '')); if (names.length) for (const listener of invalidationListeners) try { listener(names,"data"); } catch { /* One subscriber cannot stop the others. */ } }
+        if (command?.type === HTML_VERSION_MESSAGE) { const version = Number((payload.command as { version?: unknown }).version), live = Number((payload.command as { live?: unknown }).live ?? 0); if (Number.isInteger(version) && Number.isSafeInteger(live)) { win.addEventListener('pagehide', keepReadingPlace); emit({ type: HTML_VERSION_RECEIVED }); void loadLiveMorph().then((morph) => morph.applyHtmlVersion(win, config, version, undefined, regions.editing, live)).then((applied) => { if (applied.rebuild) { regions.keepForRebuild(); emit({ type: HTML_VERSION_REBUILT, revision: applied.revision, ...(applied.reason ? { reason: applied.reason } : {}) }); win.location.replace(applied.rebuild); return; } win.removeEventListener('pagehide', keepReadingPlace); config.revision = applied.revision; config.live = applied.live ?? 0; config.savedNodeIds = applied.savedNodeIds; if (annotations.pins.length) layout(); presence.paint(); emit({ type: HTML_VERSION_APPLIED, revision: applied.revision }); }, (error: unknown) => emit({ type: HTML_VERSION_REFUSED, reason: String(error instanceof Error ? error.message : error).slice(0, 300) })); } }
+        if (command?.type === 'mx:data' && Array.isArray(command.datasets)) { const ids = new Set(command.datasets); const names = config.backends.filter((name) => ids.has(name) || ids.has(config.bindings?.[name] ?? '')); if (names.length) invalidate(names, 'data'); }
         if (command?.type === 'mx:selection-actions') { canAnnotate = command.annotate === true; canSelect = command.select !== false; }
         if (command?.type === 'mx:annotations') { annotations = { pins: command.pins ?? [], mode: command.mode ?? 'off', openId: command.openId ?? null, hoverId: command.hoverId ?? null }; canAnnotate = command.canComment ?? canAnnotate; pick = command.pick ?? null; win.document.documentElement.style.cursor = pick ? 'crosshair' : cursor; }
-        if (command?.type === 'mx:select') { const matches = [...win.document.querySelectorAll('[data-af-id]')].filter((node) => node.getAttribute('data-af-id') === command.path); const target = matches.length===1 ? matches[0] : null; const selected = target ? htmlSelection(win, target, config.revision, config.savedNodeIds) : null; if (command.reveal) target?.scrollIntoView?.(); post({ kind: 'event', event: { type: 'mx:selection', nonce, selection: selected } }); }
+        if (command?.type === 'mx:select') { const matches = [...win.document.querySelectorAll('[data-af-id]')].filter((node) => node.getAttribute('data-af-id') === command.path); const target = matches.length===1 ? matches[0] : null; const selected = target ? picked(target) : null; if (command.reveal) target?.scrollIntoView?.(); emit({ type: 'mx:selection', selection: selected }); }
         if (command?.type === 'mx:annotations' || command?.type === 'mx:selection-actions') actions.update(canAnnotate && !pick, { select: canSelect });
         if (command?.type === 'mx:annotations') void commentView.receive(command).then(changed => { const pin = annotations.pins.find(pin => pin.id === annotations.openId); // The thread the reader had open in the document this one replaced (a version rebuilt it, or the page reloaded around it, ./reading-place) is already open: their carried place wins over revealing it again.
  const carried = changed && takeCarriedThread(win) === pin?.id; if(changed && pin && !carried) revealHtmlAnnotation(win.document,pin); layout(); });
@@ -243,15 +247,9 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
       regions.dispose();
       cells.dispose();
       win.document.documentElement.style.cursor = cursor;
-      win.document.removeEventListener('keydown', key);
-      win.document.removeEventListener('pointerdown', down);
-      win.document.removeEventListener('pointerup', up);
+      for (const [target, type, listener] of listening) target.removeEventListener(type, listener);
       for (const entry of pending.values()) entry.reject(new Error('Frame closed; remote outcome unknown'));
       pending.clear();
-      win.document.removeEventListener('click', click);
-      win.document.removeEventListener('selectionchange', selection);
-      win.removeEventListener('scroll', scroll);
-      win.removeEventListener('resize', resize);
       win.removeEventListener('pagehide', keepReadingPlace);
       sizes?.disconnect();
     },
@@ -265,7 +263,7 @@ export function startPortableDocument(win:Window=window,publishOrigin?:string):P
  portableStartup=(async()=>{
   const name='@afbin/portable';const {startPortableSession}=await import(name) as typeof import('./portable-session');
   const dispose=startPortableSession({win,publishOrigin,adoptIdentity(identity,source){config.pageId=identity.artifactId;config.revision=identity.baseRevision;const parsed=new DOMParser().parseFromString(source,'text/html'),declarations=sourceNamespaces(parsed);config.backends=declarations.names;config.bindings=declarations.bindings;},attach:post=>startFrameBridge({win,post}),online(value){
-   if(value&&config.backends.length)for(const listener of invalidationListeners)try{listener([...config.backends]);}catch{/* Independent author subscribers. */}
+   if(value&&config.backends.length)invalidate([...config.backends]);
   }});
   return dispose;
  })().catch(error=>{win.document.documentElement.setAttribute('data-af-connection','unavailable');throw error;});
