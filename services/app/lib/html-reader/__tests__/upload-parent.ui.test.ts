@@ -1,5 +1,5 @@
 import {expect,it,vi} from 'vitest';
-import {createFrameBridgeParent} from '../../html-reader/frame-bridge/parent';
+import {createFrameBridgeParent} from '../frame-bridge/parent';
 /** A condition wait's bound (vi.waitFor's own default is 1 s): the condition decides; this only names one that never came. */
 const WAIT_MS = 20_000;
 /** Answers `finish` with `response`, then waits until the relay has read its body and acted on it (one more turn). */

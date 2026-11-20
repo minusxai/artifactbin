@@ -25,7 +25,7 @@ import { loginHref } from '@/lib/http/login-href';
 import MobileSheet from '../ui/MobileSheet';
 import { Button } from '../ui/Button';
 import { FeatureGate } from '../components/FeatureGate';
-import { RIGHT_RAIL_W } from '@/lib/html-reader/edit-bar';
+import { RIGHT_RAIL_W } from '@/lib/html-reader';
 import { AnnotationThread } from './AnnotationThread';
 import type { CommentDraft } from './annotation-draft';
 import type { ThreadStore } from './annotation-threads';

@@ -15,7 +15,7 @@ import { Tooltip } from '../ui/Tooltip';
 import { Button } from '../ui/Button';
 import { useOptionalInbox } from '../lib/notifications';
 import { Avatar } from '../ui/Avatar';
-import { chooseTheme } from '@/lib/html-reader/reader-mode';
+import { chooseTheme } from '@/lib/html-reader';
 import { createIsPhoneViewport } from '../ui/MobileSheet';
 
 // The three panels are interaction-only (see PageChromePanels), so the reader's bytes do not carry the Drawer or the inbox: the module

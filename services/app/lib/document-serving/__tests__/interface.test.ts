@@ -13,7 +13,7 @@ import {
   DOCUMENT_FRAME_CSS, cachedShell, componentModuleResponse, documentFrameFallback, documentFrameHtml, documentHeadTags,
   nativeHtmlCoreResponse, nativeHtmlModuleResponse,  nativeHtmlTitle, serveRawDocument,
 } from '@/lib/document-serving';
-import { FRAME_ALLOW, FRAME_SANDBOX } from '@/lib/html-reader/frame-markup';
+import { FRAME_ALLOW, FRAME_SANDBOX } from '@/lib/html-reader';
 import { setArtifact } from '@/__tests__/rows';
 
 useAppHarness();

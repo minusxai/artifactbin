@@ -11,8 +11,7 @@
  * takes the tab) and nothing it does not; the app's own CSP `frame-src` admits only the pages hosts.
  */
 import { escapeHtml } from '@artifactbin/utils/escape';
-import { FRAME_ALLOW, FRAME_SANDBOX, STORY_FRAMED_ATTR } from '@/lib/html-reader/frame-markup';
-import { APP_BAR_H } from '@/lib/html-reader/edit-bar';
+import { FRAME_ALLOW, FRAME_SANDBOX, STORY_FRAMED_ATTR, APP_BAR_H } from '@/lib/html-reader';
 
 /** What the app page needs to draw a document's frame and name the document in its head. */
 export interface DocumentFrame {

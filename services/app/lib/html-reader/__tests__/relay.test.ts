@@ -1,5 +1,5 @@
 import {expect,it} from 'vitest';
-import {relayedRequest} from '../../html-reader/frame-bridge/parent';
+import {relayedRequest} from '../frame-bridge/parent';
 const win={location:{origin:'https://platform.example'}} as Window;
 it('admits the page SQL door: the trusted revision and read-only state bound, its Idempotency-Key relayed, nothing else carried', () => {
   const key = 'k_0123456789abcdef';

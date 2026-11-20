@@ -11,7 +11,7 @@
 import { createEffect, createSignal, onMount, onCleanup, Show, type JSX } from 'solid-js';
 import { type ArtifactRole, canAnnotate as canAnnotateRole, canEdit as canEditRole, canGovern, type Visibility } from '@artifactbin/contracts/sharing';
 import { isStartPlaceholder } from '@artifactbin/contracts/start-placeholder';
-import { chooseTheme } from '@/lib/html-reader/reader-mode';
+import { chooseTheme } from '@/lib/html-reader';
 import { rowTitle } from '@/lib/document/display-title';
 import { artifactRequests, createHttpBackend } from '@/lib/artifact-backend';
 import { initialViewWasReported } from '@/solid/lib/artifact-view-report';

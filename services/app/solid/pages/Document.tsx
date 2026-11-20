@@ -3,11 +3,8 @@ import { replaceDocument } from '../lib/document-navigation';
 /* @jsxImportSource solid-js */
 import { artifactAppPath } from '@/lib/document-serving/artifact-pwa';
 import { createEffect, createSignal, getOwner, lazy, on, onCleanup, onMount, runWithOwner, Show, Suspense, type JSX } from 'solid-js';
-import { APP_BAR_H, REGION_TOOLBAR_H, RIGHT_RAIL_W } from '@/lib/html-reader/edit-bar';
+import { APP_BAR_H, REGION_TOOLBAR_H, RIGHT_RAIL_W, chooseTheme, storedTheme, STORY_READER_MODE_MESSAGE, type DocumentRuntimeRef } from '@/lib/html-reader';
 import { useLocation, useNavigate } from '@solidjs/router';
-import { chooseTheme, storedTheme } from '@/lib/html-reader/reader-mode';
-import { STORY_READER_MODE_MESSAGE } from '@/lib/html-reader/contract';
-import type { DocumentRuntimeRef } from '@/lib/html-reader/document-endpoint';
 import type { FramedRuntime } from '@/lib/document-serving';
 import {createReaderHttpBackend} from '@/lib/artifact-backend/reader-http';
 import { loginHref } from '@/lib/http/login-href';

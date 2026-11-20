@@ -16,7 +16,7 @@ import MessageSquare from 'lucide-solid/icons/message-square';
 import X from 'lucide-solid/icons/x';
 import type { ArtifactBackend } from '@/lib/artifact-backend';
 import { hasReplyText } from '@/lib/annotations/remote-reply';
-import { APP_BAR_H } from '@/lib/html-reader/edit-bar';
+import { APP_BAR_H } from '@/lib/html-reader';
 import type { StoryEditParentMessage } from '@/lib/html-runtime/bridge/selection-contract';
 import { Button } from '../ui/Button';
 import { FloatingPanel } from '../ui/FloatingPanel';

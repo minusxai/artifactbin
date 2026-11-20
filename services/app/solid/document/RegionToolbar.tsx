@@ -30,7 +30,7 @@ import Redo2 from 'lucide-solid/icons/redo-2';
 import IndentIncrease from 'lucide-solid/icons/indent-increase';
 import IndentDecrease from 'lucide-solid/icons/indent-decrease';
 import { safeHref } from '@/lib/live-regions/href';
-import { REGION_TOOLBAR_H } from '@/lib/html-reader/edit-bar';
+import { REGION_TOOLBAR_H } from '@/lib/html-reader';
 import { Button } from '../ui/Button';
 import { ComboboxList, createListNavigation } from '../ui/Combobox';
 import { Field, Input } from '../ui/Field';

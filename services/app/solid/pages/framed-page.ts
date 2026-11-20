@@ -15,7 +15,7 @@
  * Interface: `createFramedPage({ origin, top, right, ground })` → `{ adopt, frame, slot, forwardHash, settleStateFragment }`.
  */
 import { createEffect, createSignal, onCleanup } from 'solid-js';
-import { STORY_FRAME_HASH_MESSAGE } from '@/lib/html-reader/contract';
+import { STORY_FRAME_HASH_MESSAGE } from '@/lib/html-reader';
 import { adoptServedFrame } from '@/solid/lib/served-frame';
 import { framedDocumentFor } from '../document/frame-src';
 

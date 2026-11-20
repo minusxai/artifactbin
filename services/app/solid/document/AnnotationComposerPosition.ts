@@ -1,5 +1,5 @@
 import type { StoryEditSelection } from '@/lib/html-runtime/bridge/selection-contract';
-import { APP_BAR_H } from '@/lib/html-reader/edit-bar';
+import { APP_BAR_H } from '@/lib/html-reader';
 
 export interface ComposerPoint { left: number; top: number }
 

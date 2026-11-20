@@ -16,7 +16,7 @@ let served: HTMLElement | null = null;
 vi.mock('@/solid/lib/bootstrap', () => ({ takeBootstrap: () => ({ kind: 'account', role: 'viewer', archived: null, surface: { id: 'doc12345', title: 'A doc', format: 'html', version: 3, framedOrigin: 'http://646f633132333435.lvh.me', author: null } }) }));
 vi.mock('@/solid/lib/served-frame', () => ({ adoptServedFrame: () => { const frame = served; served = null; return frame; } }));
 
-import { answerFrameNavigation, appNavigationTarget } from '@/lib/html-reader/frame-navigation';
+import { answerFrameNavigation } from '@/lib/html-reader/framed-story';
 import { DocumentPage } from '../../pages/Document';
 import { stubFetch } from '@/test/helpers/fetch-stub';
 
@@ -111,11 +111,6 @@ describe('answerFrameNavigation', () => {
     ask('/a/B', frame.contentWindow);
     stopClicked();
     expect(clicked.assign).toHaveBeenCalledWith('https://app.test/a/B');
-  });
-
-  it('names the target on this page\'s own origin', () => {
-    expect(appNavigationTarget(window, '/a/B?x=1#h')?.href).toBe(`${window.location.origin}/a/B?x=1#h`);
-    expect(appNavigationTarget(window, '//elsewhere.test/')).toBeNull();
   });
 });
 

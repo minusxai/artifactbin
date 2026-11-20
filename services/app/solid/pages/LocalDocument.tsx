@@ -2,10 +2,8 @@
 import { retryingFetch } from '@/lib/http/retry-lazily';
 import {createEffect,createSignal,lazy,on,onCleanup,onMount,Show,Suspense} from 'solid-js';
 import {installLocalConnectionBroker,LOCAL_CHROME_COLLAPSED_HEIGHT,LOCAL_CHROME_CANVAS_SCHEME,type LinkedDocument,type LocalConnectionBroker,type LocalConnectionState,type SourceObservation} from '@/lib/local-connection';
-import {STORY_READER_MODE_MESSAGE,type StoryController,type FrameBridgeFramePayload} from '@/lib/html-reader/contract';
-import {chooseTheme,storedTheme} from '@/lib/html-reader/reader-mode';
+import { STORY_READER_MODE_MESSAGE, type StoryController, type FrameBridgeFramePayload, chooseTheme, storedTheme, type DocumentRuntimeRef } from '@/lib/html-reader';
 import {createAppAppearance} from '../ui/theme';
-import type {DocumentRuntimeRef} from '@/lib/html-reader/document-endpoint';
 import {DocumentChrome} from '../document/DocumentChrome';
 import type {Panel} from '../components/PageChrome';
 import {Input} from '../ui/Field';

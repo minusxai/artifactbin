@@ -17,7 +17,7 @@ import { trackEvent } from '@/lib/analytics';
 import { canReadArtifact, currentPage, getArtifactAccessById, getArtifactById, type ArtifactRow } from '@/lib/artifacts';
 import { authorHandle, ANONYMOUS_ACTOR } from '@/lib/accounts';
 import { sessionActor } from '@/lib/authentication';
-import { STORY_ANNOTATIONS_EVENT, type ArtifactVersionPing } from '@/lib/html-reader/contract';
+import { STORY_ANNOTATIONS_EVENT, type ArtifactVersionPing } from '@/lib/html-reader';
 import { LIVE_KEEPALIVE_MS, liveKeepaliveFrame } from '@/lib/http';
 import { subscribeChannel, subscribeToAnnotations, subscribeToArtifact, TooManyLiveChannels } from './live';
 import { changedSince } from './dataset-marks';

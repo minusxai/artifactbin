@@ -37,7 +37,7 @@ import {CARD_RENDER_GENERATION} from '@artifactbin/contracts/og-card';
 import {getGroupById} from '@/lib/groups';
 import type { StoryDesignName } from '@/lib/validation';
 import { captureColor } from '@/lib/mermaid-images';
-import { THEME_KEY, withReaderMode } from '@/lib/html-reader/contract';
+import { THEME_KEY, withReaderMode } from '@/lib/html-reader';
 import { pagesFrameUrl, pagesOriginFor, type PagesSite } from '../http';
 import {storedCspExtensions} from '@/lib/document';
 import { carriedTrust,cspRequestFor } from '@/lib/trust';

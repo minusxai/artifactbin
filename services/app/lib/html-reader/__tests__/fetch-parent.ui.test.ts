@@ -1,5 +1,5 @@
 import {expect,it,vi} from 'vitest';
-import {createFrameBridgeParent} from '../../html-reader/frame-bridge/parent';
+import {createFrameBridgeParent} from '../frame-bridge/parent';
 it.each(['response','transport-error','body-error'] as const)('a stale SQL %s cannot satisfy a replacement frame call',async outcome=>{
  const frame=document.createElement('iframe');document.body.append(frame);const messages:any[]=[];
  vi.spyOn(frame.contentWindow!,'postMessage').mockImplementation(message=>messages.push(message));

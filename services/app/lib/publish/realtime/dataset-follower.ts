@@ -20,7 +20,7 @@ import { canReadArtifact, getArtifactById, type ArtifactRow } from '@/lib/artifa
 import type { AccessActor } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
 import { changedHtmlSharedRevisions, htmlLiveLinks, htmlSharedRevisions } from '@/lib/html-publication';
-import { STORY_DATA_EVENT, type ArtifactDataEvent } from '@/lib/html-reader/contract';
+import { STORY_DATA_EVENT, type ArtifactDataEvent } from '@/lib/html-reader';
 import { subscribeToArtifact, TooManyLiveChannels } from './live';
 import { liveDatasetIds, marksOf, marksOfToken, tokenOf } from './dataset-marks';
 import type { SseChannel } from './sse-channel';

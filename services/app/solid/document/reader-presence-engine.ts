@@ -1,9 +1,8 @@
 import {runtimeId} from '@artifactbin/utils/runtime-id';
 import {createReaderPresenceSession} from '@/lib/html-presence/reader-session';
 import type {PresenceFrame,ReaderPreferences,PresenceViewer} from '@/lib/html-presence';
-import type {DocumentRuntimeRef} from '@/lib/html-reader/document-endpoint';
+import type { DocumentRuntimeRef, FrameBridgeParent } from '@/lib/html-reader';
 import type {ArtifactBackend} from '@/lib/artifact-backend';
-import type {FrameBridgeParent} from '@/lib/html-reader/frame-bridge/parent';
 import type {PresencePaint} from '@/lib/html-presence';
 /** The bridge's region channel, when the controller is a frame bridge (frame-bridge/parent). */
 type RegionChannel=Pick<FrameBridgeParent,'subscribeRegion'|'sendRegion'|'regionsEnabled'>;

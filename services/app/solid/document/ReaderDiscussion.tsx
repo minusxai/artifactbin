@@ -18,7 +18,7 @@
 import { createEffect, createSignal, lazy, Show, Suspense, type Accessor, type JSX, type Setter } from 'solid-js';
 import type { ArtifactRole } from '@artifactbin/contracts/sharing';
 import type { StoryEditSelection } from '@/lib/html-runtime/bridge/selection-contract';
-import type { DocumentRuntimeRef } from '@/lib/html-reader/document-endpoint';
+import type { DocumentRuntimeRef } from '@/lib/html-reader';
 import { commentAccess, type CommentAccess } from './comment-access';
 import { needsCommentPresentation } from './comment-presentation';
 import type { LayerProps } from './ReaderDiscussionLayer';

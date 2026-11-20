@@ -1,15 +1,15 @@
 
 import { createEffect, createSignal, on, onCleanup, type Accessor } from 'solid-js';
-import { createFrameBridgeParent, type FrameBridgeParent } from '@/lib/html-reader/frame-bridge/parent';
+import { createFrameBridgeParent, keepFrameSession } from '@/lib/html-reader/framed-story';
+import { type FrameBridgeParent, STORY_URL_VALUES_MESSAGE, type IslandStoryController } from '@/lib/html-reader';
 import { withUrlValuesOf } from '@/lib/dataflow/url-values';
-import { STORY_URL_VALUES_MESSAGE, type IslandStoryController } from '@/lib/html-reader/contract';
 import { commentAfterRegionSave, type RegionCommentSubject } from '@/lib/annotations/region-comment';
 import type { RegionEditing, RegionToolbarState, startRegionEditing } from './region-editing';
 import type { CellEditing, startCellEditing } from './cell-editing';
 import { CELL_READONLY, isCellKey } from '@artifactbin/contracts/region-sessions';
 import type { useSession } from '../lib/session';
 
-export { answerFrameNavigation } from '@/lib/html-reader/frame-navigation';
+export { answerFrameNavigation } from '@/lib/html-reader/framed-story';
 
 /** Region editing (live co-editing of the page's editable regions) is an intentional lazy browser chunk: it carries Yjs, for editors only. */
 export type RegionEditingLoader = () => Promise<{ startRegionEditing: typeof startRegionEditing }>;
@@ -21,7 +21,6 @@ const loadCellEditing: CellEditingLoader = () => import('./cell-editing');
 // The frame's light helpers live in ./frame-src, which the document page and the consent bar import without this module.
 import { framedDocumentFor, DOCUMENT_FRAME_SELECTOR, type FramedDocument } from './frame-src';
 import { freshFrameSrc } from '@/lib/html-reader/frame-src';
-import { keepFrameSession } from '@/lib/html-reader/frame-session';
 export { framedDocumentFor, freshFrameSrc, DOCUMENT_FRAME_SELECTOR };
 
 /**

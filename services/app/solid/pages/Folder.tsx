@@ -6,7 +6,7 @@ import type { GroupSummary } from '@artifactbin/contracts/groups';
 import type { FolderPage as FolderData, AccountWorkspace } from '@/lib/workspace';
 import { type ArtifactRole, canEdit } from '@artifactbin/contracts/sharing';
 import { openLiveStream } from '@/lib/http/live-stream';
-import { STORY_DATA_EVENT } from '@/lib/html-reader/contract';
+import { STORY_DATA_EVENT } from '@/lib/html-reader';
 import { pageDataChanged } from '@/solid/lib/page-data-events';
 import { PAGE_COLUMN } from '../ui/ui';
 import { Button } from '../ui/Button';
