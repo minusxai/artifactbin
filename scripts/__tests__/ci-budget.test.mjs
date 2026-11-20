@@ -189,7 +189,7 @@ it('runs every api, api-isolated, ui and islands test on every pull request, pac
  expect(job.env.TEST_BUILDS_KIND).toBe("${{ matrix.shard && 'guards' || matrix.batch && 'node' || matrix.suite && startsWith(matrix.part, 'ui-') && 'ui' || 'api' }}");
  const save=steps.filter(step=>step.uses?.startsWith('actions/cache/save')&&step.with.key.startsWith('pr-kit-'));
  expect(save).toHaveLength(1);
- expect(save[0].if).toBe("contains(fromJSON('[\"api-32\",\"ui-7\",\"guards-3\",\"node-5\"]'), matrix.part) && steps.kit.outputs.cache-hit != 'true' && steps.kit-again.outputs.cache-hit != 'true' && (steps.kit.outputs.cache-matched-key != '' || steps.kit-again.outputs.cache-matched-key != '' || steps.near-install.outputs.cache-hit == 'true')");
+ expect(save[0].if).toBe("contains(fromJSON('[\"api-32\",\"ui-7\",\"guards-3\",\"node-7\"]'), matrix.part) && steps.kit.outputs.cache-hit != 'true' && steps.kit-again.outputs.cache-hit != 'true' && (steps.kit.outputs.cache-matched-key != '' || steps.kit-again.outputs.cache-matched-key != '' || steps.near-install.outputs.cache-hit == 'true')");
  expect(save[0].with).toEqual({path:steps[restore].with.path,key:steps[restore].with.key});
  expect(steps.filter(step=>step.uses?.startsWith('actions/cache/save')&&/^test-builds-/.test(step.with.key))).toEqual([]);
  // Saved after every test step, so a saver's own transforms are in its entry.

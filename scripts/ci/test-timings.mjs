@@ -71,7 +71,7 @@ export const JOBS = {
   'pr-guards': { projects: ['pr-guards', 'pr-guards-isolated', 'pr-contracts', 'pr-contracts-isolated'], count: 3, files: (_timings, project) => guardFiles(project) },
   // pr-fast.yml's node batch (vitest.node-batch.config.ts): its files are chosen from the `node` times, not recorded
   // under a project of their own, so `files` names them (from the recorded `node` files on disk).
-  'pr-node': { projects: ['node-batch'], count: 5, files: (timings) => nodeBatchFiles({ timings, candidates: recordedOnDisk(timings, ['node', 'node-batch']), lane: laneFiles(ROOT), read: (file) => readFileSync(path.join(ROOT, file), 'utf8') }) },
+  'pr-node': { projects: ['node-batch'], count: 7, files: (timings) => nodeBatchFiles({ timings, candidates: recordedOnDisk(timings, ['node', 'node-batch']), lane: laneFiles(ROOT), read: (file) => readFileSync(path.join(ROOT, file), 'utf8') }) },
 };
 
 /** The files vitest.guard.config.ts runs in `project`: its list's files, the leaking ones in its `-isolated` twin. */

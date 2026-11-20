@@ -151,17 +151,19 @@ export function nodeAffectedFiles({ timings, changed, affected, candidates, batc
 
 /**
  * What a file of `node-batch-isolated` costs beyond its recorded time: the table holds a file's tests alone, and each of
- * these imports a fresh module graph first, as an api-isolated file does (timed-sequencer.mjs `ISOLATED_FILE_MS`, 2s
- * measured there). Weighed by recorded time alone, a full budget of reached files (60, ~90s recorded) took the node
- * runners' Vitest step to 19-33s against ~18s predicted, and the run to 53s (pr fast run 44310861237, 17.9s of import).
+ * these imports a fresh module graph first. Weighed by recorded time alone, a full budget of reached files (60, ~90s
+ * recorded) took the node runners' Vitest step to 19-33s against ~18s predicted (pr fast run 44310861237). At 2s, an
+ * api-isolated file's import, 19 edited files added 66s to the five runners' Vitest steps against 38s weighed, 3.5s
+ * each beyond their 1.2s of tests (run 44775452083 against 44775468359, 2026-11-20): 4s.
  */
-export const NODE_ISOLATED_FILE_MS = 2000;
+export const NODE_ISOLATED_FILE_MS = 4000;
 
 /**
- * Time (ms) the change's own and reached files may add to pr fast's five node runners, summed over all of them, each
- * weighed with its import. With the batch alone the slowest runner's Vitest step took 11-15s (21s once); with 90s of
- * reached files it took 21-29s and a node runner was a run's last job (pr fast runs 44767515214-44773563049,
- * 2026-11-20). 45s keeps the slowest runner near 18s, its job near 30s. What does not fit runs after merge.
+ * Time (ms) the change's own and reached files may add to pr fast's seven node runners, summed over all of them, each
+ * weighed with its import. With the batch alone the slowest of five runners' Vitest step took 11-15s (21s once); with
+ * 90s of reached files it took 21-29s and a node runner was a run's last job (pr fast runs 44767515214-44773563049,
+ * 2026-11-20). 45s, about eleven files at 4s of import each, over seven runners keeps the slowest near 15s, its job
+ * near 30s. What does not fit runs after merge.
  */
 export const NODE_AFFECTED_BUDGET_MS = 45_000;
 
