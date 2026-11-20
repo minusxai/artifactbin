@@ -113,10 +113,6 @@ export interface RunSignIn {
 export const GROUP_SIGN_IN_PATH = '/api/internal/identity/group-sign-in';
 /** A service's own approvals that still stand (header above): its own secret and `{}` in, `{approvals}` out. */
 export const GROUP_SIGN_IN_GRANTS_PATH = '/api/internal/identity/group-sign-in-grants';
-/** The longest a service's group sign-in lives: a day, whatever it asks; unasked, DEFAULT_TOKEN_TTL_MS. */
-export const SERVICE_GROUP_SIGN_IN_MAX_TTL_MS = 24 * 60 * 60 * 1000;
-/** One approval a service may present (`GROUP_SIGN_IN_GRANTS_PATH`): the group, its handle and name, the level. */
-export interface ServiceGroupSignInGrant { id: string; group_id: string; group_handle: string; group_name: string; role: 'member' | 'editor'; approved_at: string }
 /**
  * Is a service's group sign-in or approval still that configured service's: `serviceId` is configured here, opted in
  * to group sign-ins, at `origin` (what the approval recorded; null matches nothing). Asked on every use, where the
@@ -131,18 +127,8 @@ export interface GroupSignIn extends RunSignIn {
   group_role: 'member' | 'editor';
   grant_id: string;
 }
-/** An exchanged token's whole life (`exp - iat`): minutes, never refreshed; the caller asks again. */
-export const SERVICE_TOKEN_TTL_SECONDS = 300;
 /** The credential an exchanged token was issued for: an access token (`tokens` row) or a browser session (`sessions` row). */
 export interface ServiceTokenParent { kind: 'token' | 'session'; id: string }
-
-export interface IssuedServiceToken {
-  /** The bearer: handed only to the one service, never to page code, a URL, a log or storage. */
-  token: string;
-  /** The origin it is bound to. */
-  audience: string;
-  expiresAt: string;
-}
 
 const ID = /^[a-z][a-z0-9-]{0,62}$/;
 const HEX64 = /^[0-9a-f]{64}$/;

@@ -3,7 +3,7 @@ import { withAccountToken } from '@/lib/accounts';
 import {capabilityGuard} from '@/lib/artifacts';
 import {json,Reply,toResponse,unauthorized} from '@/lib/http';
 import {stageCommentImage} from '@/lib/annotations';
-import {COMMENT_IMAGE_LIMITS} from '../../../../../../../contracts/src/comment-image';
+import {COMMENT_IMAGE_LIMITS} from '@artifactbin/contracts/comment-image';
 
 export async function POST(request:Request,ctx:{params:Promise<{id:string}>}){
  const browser=await browserActor(request);if(browser instanceof Response)return browser;

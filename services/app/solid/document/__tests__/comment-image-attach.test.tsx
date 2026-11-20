@@ -10,7 +10,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { screen, waitFor, within } from '@testing-library/dom';
 import type { StoryEditSelection } from '@/lib/html-runtime/bridge/selection-contract';
 import type { ArtifactBackend } from '@/lib/artifact-backend';
-import { COMMENT_IMAGE_LIMITS } from '../../../../contracts/src/comment-image';
+import { COMMENT_IMAGE_LIMITS } from '@artifactbin/contracts/comment-image';
 import { fireEvent } from '../../__tests__/helpers';
 import { preloadCommentField } from '../LazyCommentField';
 import { ANN, fetchCalls, flush, httpBackend, installAnnotationFetch, knobs, layer, emitLayout } from './annotation-rig';

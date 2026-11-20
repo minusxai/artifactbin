@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 import { createSignal, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import { encodePng, type CapturedImage } from '@/lib/capture';
-import { COMMENT_IMAGE_LIMITS, type BrushStroke } from '../../../contracts/src/comment-image';
+import { COMMENT_IMAGE_LIMITS, type BrushStroke } from '@artifactbin/contracts/comment-image';
 import Undo2 from 'lucide-solid/icons/undo-2';
 import { Button } from '../ui/Button';
 import { SwatchPicker, SWATCHES } from '../ui/ColorField';

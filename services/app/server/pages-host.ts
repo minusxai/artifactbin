@@ -45,7 +45,6 @@
  */
 import type { Context, MiddlewareHandler, Next } from 'hono';
 import { attachActor } from '@artifactbin/utils/upstream';
-import { readCookie } from '@artifactbin/utils/agent-session';
 import { ANONYMOUS } from '@artifactbin/contracts/actor';
 import { documentHostServes } from '@artifactbin/contracts/url-space';
 import { endPagesSession, exchangePagesTicket, pagesSessionOf, type PagesSession } from '@/lib/accounts';
@@ -55,6 +54,15 @@ import { GET as rawGet, HEAD as rawHead } from '@/app/a/[id]/raw/route';
 import { compressDynamic } from './content-encoding';
 import { nativeDraftPolicy } from '@/lib/document-serving';
 import { draftDocument, draftFile } from '@/lib/page-drafts';
+
+function readCookie(header: string | null, name: string): string | undefined {
+  if (!header) return undefined;
+  for (const part of header.split(';')) {
+    const [k, ...v] = part.trim().split('=');
+    if (k === name) return v.join('=');
+  }
+  return undefined;
+}
 
 /** A document's own sub-paths: the doors its page calls, and nothing else of the app. */
 const DOORS = ['events', 'events/frame', 'story', 'viewer', 'assets', 'resolve', 'fetch', 'css'] as const;

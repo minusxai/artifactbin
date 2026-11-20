@@ -7,13 +7,14 @@ import { readThrough } from '@/lib/artifact-access';
 import { assertAudienceChange } from '@/lib/query-approvals';
 import type { ArtifactMember, MembershipInput, MembershipState, MembershipDirection, MembershipStatus } from '@artifactbin/contracts/membership';
 import type { Queryable } from '@artifactbin/contracts/db';
-import { PENDING_MEMBERSHIP_LIMIT } from '@artifactbin/contracts/membership';
 import { effectiveRole, managesSharing } from '@/lib/artifact-access';
 import { notifyArtifactSql } from '../table';
 import { type ArtifactRow } from '@/lib/artifact-access';
 import { getArtifactById, getArtifactHeaderById } from '../rows';
 import { canAnnotate, canEdit, canRead } from '@artifactbin/contracts/sharing';
 import { can } from '@/lib/artifact-access';
+
+const PENDING_MEMBERSHIP_LIMIT = 30;
 
 export class MembershipError extends DatasetError {
   constructor(message: string, status = 403) { super(message,status); }

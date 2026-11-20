@@ -9,7 +9,7 @@
  * access and the comment's live state, with private, no-store caching. Comment images are never public artifacts.
  */
 import sharp from 'sharp';
-import {COMMENT_IMAGE_LIMITS as LIMITS,type CommentImageMetadata,type CommentImageWire} from '../../../contracts/src/comment-image';
+import {COMMENT_IMAGE_LIMITS as LIMITS,type CommentImageMetadata,type CommentImageWire} from '@artifactbin/contracts/comment-image';
 import { annotationScope } from '@/lib/artifact-access';
 import { readableArtifact, assetByteQuotaLimit } from '@/lib/artifacts';
 import type { AccessActor, TokenHoldingActor } from '@/lib/accounts';

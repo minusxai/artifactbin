@@ -44,7 +44,6 @@ export type Visibility = 'public' | 'private' | 'unlisted';
  * otherwise, and an unlisted one can be the writable table behind a poll.
  */
 export type DatasetAccess = 'read' | 'readwrite';
-export const DATASET_ACCESS: readonly DatasetAccess[] = ['read', 'readwrite'];
 
 /** How the share menu names each role. */
 export const SHARE_ROLE_LABEL: Record<ShareRole, string> = { viewer: 'can view', commenter: 'can comment', editor: 'can edit' };

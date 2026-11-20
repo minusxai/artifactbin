@@ -5,9 +5,11 @@
  * stopped for what it used. A page that could not be reached, or no browser, is thrown, not said as a problem.
  */
 import type { PageImage, PageInspectRequest, PageProblem } from '@artifactbin/contracts/browser';
-import { PAGE_IMAGE_LIMITS, PAGE_PROBLEM_LIMITS } from '@artifactbin/contracts/browser';
+import { PAGE_IMAGE_LIMITS } from '@artifactbin/contracts/browser';
 import { BrowserUnavailable } from './browser-holder';
 import { NavigationError, RendererStopped, type RenderLane } from './render-lane';
+
+const PAGE_PROBLEM_LIMITS = { problems: 20, message: 500, element: 40, code: 64, label: 120 } as const;
 
 /**
  * Serialized into Chromium: every native component under the surface that failed (`[data-af-error]`, lib/html-component-specs

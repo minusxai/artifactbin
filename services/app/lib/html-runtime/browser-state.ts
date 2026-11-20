@@ -8,7 +8,7 @@ import type { StoreReceipt } from './apollo/apollo-contracts';
 import { config, remote } from './browser-reader';
 import { createPageRoute, pageSeat, type PageSeat } from './page-route';
 import { createPageState } from './page-state';
-import { STATE_VERSION_ATTRIBUTE, isStateVersion } from '../../../contracts/src/state-version';
+import { STATE_VERSION_ATTRIBUTE, isStateVersion } from '@artifactbin/contracts/state-version';
 
 // A raw authored file may place its state block after the blocking core script: read it when this module first runs.
 const block = document.querySelector('[data-af="state"]');

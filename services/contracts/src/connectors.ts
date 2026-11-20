@@ -262,6 +262,3 @@ export interface Connection {
  * `tls: 'disable'`. Link-local and cloud metadata addresses are refused either way.
  */
 export interface ConnectorNetworkPolicy { readonly allowPrivateNetwork: boolean }
-
-/** Trusted operator read cap; never a public query option. */
-export interface ConnectorReadPolicy { readonly queryTimeoutMs:number }

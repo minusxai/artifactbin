@@ -21,7 +21,6 @@
  */
 import type { ColumnType, DatasetColumn, DryRunMutationsInput, DryRunMutationsResult, MutationInput, MutationOutcome, Row, RunInput, Scalar } from '@artifactbin/contracts/sql';
 import type { DatasetMutationPolicy, DatasetOperation, DeletePermission, InsertPermission, MutationAnalysis, UpdatePermission } from '@artifactbin/contracts/dataset-policy';
-import type { StatementAnalysis } from '@artifactbin/contracts/sql-analysis';
 import { compilePolicyPredicate, policyValue } from '@artifactbin/utils/dataset-policy';
 import { inferColumns } from '@artifactbin/utils/shape';
 import { DEFAULT_CAPS } from '../caps';
@@ -30,6 +29,7 @@ import type { Sqlite3 } from './wasm';
 import { preparedKey, type PreparedCache } from './prepared';
 import { mountCatalog } from './reads';
 import type { SqlExtensions } from '../extensions';
+import type { StatementAnalysis } from './guard';
 
 export interface WriteBounds { limit: number; timeoutMs: number }
 

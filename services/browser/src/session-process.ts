@@ -18,13 +18,14 @@ import { tmpdir, homedir } from 'node:os';
 import path from 'node:path';
 import type { Actor } from '@artifactbin/contracts/actor';
 import type { BrowserSessionResult } from '@artifactbin/contracts/browser-sessions';
-import { BROWSER_FONT_RESOURCE_PATH, BROWSER_SESSION_HEADER, SESSION_LIMITS } from '@artifactbin/contracts/browser-sessions';
+import { BROWSER_FONT_RESOURCE_PATH, BROWSER_SESSION_HEADER } from '@artifactbin/contracts/browser-sessions';
 import { FONT_FILES, FONT_STYLES } from '@artifactbin/contracts/font-sources';
 import { FORWARDED_HOST, FORWARDED_PROTO } from '@artifactbin/contracts/routes';
 import { SESSION_WORKER_SOURCE } from './session-worker';
 import { createPagesCookieJar, sessionBrowserArgs, sessionOrigins, type PagesCookieJar } from './session-origins';
 import type { SessionSandboxChoice } from './session-config';
 import type { SessionWorker } from './sessions';
+import { SESSION_LIMITS } from './sessions';
 
 export interface SessionProcessOptions {
   baseURL: string;

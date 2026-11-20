@@ -13,8 +13,10 @@
  * when a column first appears (the policy's `configuration`, server-owned) arrives with the stored v3
  * policies; until then a stored v3 configuration is honoured and everything else is derived here.
  */
-import { DATASET_RESERVED_FIELDS } from '@artifactbin/contracts/dataset-hasura';
 import type { DatasetTableConfiguration, DatasetTableName } from '@artifactbin/contracts/dataset-permissions';
+
+/** Persisted Hasura-style column identifiers reserve these names and anything starting `__`. */
+const DATASET_RESERVED_FIELDS = ['_id', '_can', '_and', '_or', '_not', 'true', 'false', 'null'] as const;
 
 const VALID = /^[A-Za-z][A-Za-z0-9_]*$/;
 const RESERVED_FIELDS: ReadonlySet<string> = new Set(DATASET_RESERVED_FIELDS);

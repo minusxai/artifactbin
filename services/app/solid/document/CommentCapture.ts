@@ -1,6 +1,6 @@
 import { createSignal, onCleanup } from 'solid-js';
 import { beginCapture, CaptureError, encodePng, type CaptureStartResult, type CaptureSession, type CapturedImage, type CaptureRect } from '@/lib/capture';
-import { COMMENT_IMAGE_LIMITS, type BrushStroke, type CommentImageMetadata } from '../../../contracts/src/comment-image';
+import { COMMENT_IMAGE_LIMITS, type BrushStroke, type CommentImageMetadata } from '@artifactbin/contracts/comment-image';
 import { BackendRequestError, type ArtifactBackend } from '@/lib/artifact-backend';
 
 /** What the server stores (lib/annotations/comment-images decodes exactly these). */

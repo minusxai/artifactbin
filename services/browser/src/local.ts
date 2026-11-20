@@ -19,7 +19,6 @@ import type { Browser } from 'playwright';
 import sharp from 'sharp';
 import type { BrowserService, HarvestedSvg, PageInspection, RenderResult, SvgHarvestResult } from '@artifactbin/contracts/browser';
 import type { BrowserSessions } from '@artifactbin/contracts/browser-sessions';
-import { SVG_HARVEST_LIMITS } from '@artifactbin/contracts/browser';
 import { createBrowserSessions } from './sessions';
 import { createSessionProcess } from './session-process';
 import { renderSandboxChoice, type BrowserSessionOptions, type RenderSandboxChoice } from './session-config';
@@ -31,6 +30,7 @@ import { RENDER_LIMITS, type RenderLimits } from './render-limits';
 import { DEFAULT_TIMEOUT_MS, NavigationError, createRenderLane } from './render-lane';
 import { NoElementError, NoSlideError, captureOf, harvestDrawings } from './page-capture';
 import { inspectOnce } from './page-inspection';
+import { SVG_HARVEST_LIMITS } from './page-capture';
 
 /** A page operation's failure, as its verdict: never reached (`navigation`), no browser (`unavailable`), else `failed`. */
 const failure = (e: unknown) => e instanceof NavigationError ? { ok: false as const, reason: 'navigation' as const, detail: e.message }

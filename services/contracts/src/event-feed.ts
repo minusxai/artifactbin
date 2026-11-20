@@ -36,10 +36,6 @@ export const EVENT_FEED_MAX_WAIT_SECONDS = 30;
 /** The removed comment feed's wait, kept only until the production proxy (artifactbin-server) moves its long-poll
  * deadline to EVENT_FEED_MAX_WAIT_SECONDS: the pin moves on every merge here, so dropping it first breaks that build. */
 export const COMMENT_CHANGES_MAX_WAIT_SECONDS = 60;
-export const EVENT_FEED_DEFAULT_LIMIT = 100;
-export const EVENT_FEED_MAX_LIMIT = 200;
-/** A cursor whose next event was accepted longer ago than this is expired (410 `cursor_expired`): resynchronize. */
-export const EVENT_FEED_RETENTION_DAYS = 30;
 
 /** `group`: an agent signed in as that group (./identity-service `GROUP_SIGN_IN_RULE`), no person behind it. */
 interface EventFeedActor { kind: 'user' | 'token' | 'group'; id: string; you: boolean }

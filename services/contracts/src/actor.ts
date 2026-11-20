@@ -49,9 +49,6 @@ export const GROUP_PRINCIPAL_REFUSED = 'group_principal_refused';
 export type Actor = HumanActor | GroupActor;
 export const ANONYMOUS: Actor = { credential: 'none' };
 
-/** Default lifetime of a signed header. Short: it is minted per request. */
-export const ACTOR_TTL_SECONDS = 120;
-
 /** The identity owner revalidates a human session for derived pages sessions. */
 export interface HumanSessionAuthority { live(sessionId:string,userId:string):Promise<boolean> }
 

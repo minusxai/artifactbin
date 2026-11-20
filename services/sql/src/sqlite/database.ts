@@ -21,11 +21,11 @@
  * through.
  */
 import type { ColumnType, DatasetColumn, Row, Scalar } from '@artifactbin/contracts/sql';
-import type { StatementAnalysis } from '@artifactbin/contracts/sql-analysis';
 import { inferColumns, normalizeDate, normalizeTimestamp } from '@artifactbin/utils/shape';
 import { LIBRARY_NAMES, registerLibrary } from './functions';
 import { CORE_FUNCTIONS, Guard, Refused, type StatementMode } from './guard';
 import type { Sqlite3 } from './wasm';
+import type { StatementAnalysis } from './guard';
 
 type DB = InstanceType<Sqlite3['oo1']['DB']>;
 type Stmt = ReturnType<DB['prepare']>;

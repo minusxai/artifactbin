@@ -6,10 +6,17 @@
  * same data directory; the lean image's server.ts hands it a pg Pool).
  */
 import { randomUUID } from 'node:crypto';
-import type { EventEnvelope, EventSink, EventSubscriber, EventsService } from '@artifactbin/contracts/events';
+import type { EventEnvelope, EventSink, EventsService } from '@artifactbin/contracts/events';
 import type { Queryable } from '@artifactbin/contracts/db';
 import { ensureTable } from '@artifactbin/utils/schema';
 import { DEFAULT_EVENTS_SCHEMA, EVENTS_TABLES, IDENTIFIER } from './schema';
+
+/**
+ * A DURABLE subscriber: every stored event gets a delivery row per subscriber in the same statement that stores it,
+ * and the service's boot drains them every second, one event at a time, retrying a failed delivery with exponential
+ * backoff (at most an hour). Empty in the OSS composition; a deployment fills the list. IDs must be unique.
+ */
+export interface EventSubscriber { id: string; deliver: EventSink }
 
 interface EventsWriterOptions {
   db: Queryable;

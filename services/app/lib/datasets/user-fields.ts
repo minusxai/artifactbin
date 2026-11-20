@@ -1,10 +1,20 @@
 import { JOIN_RELATIONS } from '@/lib/social';
 import {serializeDatasetDefinition} from './definition';
 import type {CatalogInput} from './types';
-import type {DatasetColumn, PersonCard, Row, UserOption} from '@artifactbin/contracts/sql';
+import type { DatasetColumn, Row } from '@artifactbin/contracts/sql';
 import type {Queryable} from '@artifactbin/contracts/db';
 import { avatarUrl } from '@/lib/avatars';
 import {DatasetError} from './errors';
+
+interface UserOption { value: string; label: string }
+/**
+ * A PERSON AS A DOCUMENT MAY SHOW THEM: the display name (name, else handle,
+ * else the id), the public handle for /@handle, and the public picture URL —
+ * or null when the person has not uploaded one (the client draws a generated
+ * initial). Computed on the server under the same visibility rules a DataTable
+ * user cell has always had (lib/datasets/user-fields); never an email.
+ */
+interface PersonCard { name: string; handle: string | null; image: string | null }
 
 /** Accepted membership plus legacy sharing/ownership; never public-link readership alone. */
 async function memberIds(db:Queryable, refs:string[],lock=false):Promise<string[]> {

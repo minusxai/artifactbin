@@ -9,10 +9,14 @@
 import crypto from 'node:crypto';
 import {IdentityError, type IdentityService, type IdentityUserRow, type MintedIdentityToken, type TransactionalQueryable} from '@artifactbin/contracts/identity-module';
 import {MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS, isValidHandle} from '@artifactbin/contracts/handles';
-import {SERVICE_GROUP_SIGN_IN_MAX_TTL_MS, type ServiceGroupSignInGrant} from '@artifactbin/contracts/service-audiences';
 import type {Queryable} from '@artifactbin/contracts/db';
 import {internalId,isUniqueViolation,tokenId,type IdentityTables} from './tables';
 import {groupLevelHeldSql,serviceGrantStandsSql} from './rules';
+
+/** The longest a service's group sign-in lives: a day, whatever it asks; unasked, DEFAULT_TOKEN_TTL_MS. */
+export const SERVICE_GROUP_SIGN_IN_MAX_TTL_MS = 24 * 60 * 60 * 1000;
+/** One approval a service may present (`GROUP_SIGN_IN_GRANTS_PATH`): the group, its handle and name, the level. */
+export interface ServiceGroupSignInGrant { id: string; group_id: string; group_handle: string; group_name: string; role: 'member' | 'editor'; approved_at: string }
 
 const USER_COLS = 'id, email, kind, parent_user_id, expires_at, name, username, image_key, welcome_pending, created_at';
 const TOKEN_PREFIX = 'mx_';

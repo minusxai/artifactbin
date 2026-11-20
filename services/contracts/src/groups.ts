@@ -40,16 +40,9 @@ export interface GroupAudienceMember {user_id:string;username:string|null;name:s
 export interface GroupDetail {group:GroupSummary;members:GroupMember[];linked_groups:GroupSummary[];invitations?:GroupInvitation[];parent:GroupRelative|null;subgroups:GroupRelative[];subgroup_audience:GroupAudienceMember[];admin_via?:{id:string;handle:string;name:string}|null;}
 export interface DeploymentState {mode:'public'|'company';setup_complete:boolean;is_owner:boolean;default_group:GroupSummary|null;}
 export interface CreateGroupInput {handle:string;name:string;description?:string;parent_id?:string|null;}
-export interface NewArtifactDestinationContext {
- explicit?:ArtifactDestination;
- parent?:ArtifactDestination;
- preference?:DefaultDestination;
- deployment_default?:ArtifactDestination;
-}
 
 export interface UpdateGroupInput {name?:string;description?:string;}
 export type GroupShareRole = 'viewer' | 'commenter' | 'editor';
-export interface GroupShare {group:GroupSummary;role:GroupShareRole;}
 /**
  * A create-group request normalized (handle lowercased and trimmed, name and description trimmed), or null when it
  * is malformed: the one rule the app checks before charging its quota and the identity module enforces.
@@ -69,4 +62,3 @@ export interface GroupCollectionItem {
 }
 /** Folders first, then newest first, with an ID tiebreaker; cursors are opaque and scope-bound. */
 export interface GroupCollection {items:GroupCollectionItem[];next_cursor:string|null;}
-export interface GroupCollectionInput {parent_id?:string;limit?:number;cursor?:string;}

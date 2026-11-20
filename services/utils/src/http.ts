@@ -1,7 +1,9 @@
 import http from 'node:http';
 import { SERVICE_AUTH_HEADER } from '@artifactbin/contracts/routes';
-import { SQL_QUERY_MAX_MS, SQL_WALL_OVERHEAD_MS, SQL_WALL_HEADER, sqlTimeout, type SqlCallContext } from '@artifactbin/contracts/sql';
+import { SQL_QUERY_MAX_MS, SQL_WALL_OVERHEAD_MS, sqlTimeout, type SqlCallContext } from '@artifactbin/contracts/sql';
 import { collectNodeBody } from './body';
+
+const SQL_WALL_HEADER = 'x-sql-wall-timeout-ms';
 
 /** JSON with a Set on the wire as an array — a Set stringifies to `{}` and binds nothing, which is a bug this was found by. */
 const replacer = (_k: string, v: unknown) => (v instanceof Set ? [...v] : v);

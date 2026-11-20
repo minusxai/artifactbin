@@ -1,4 +1,12 @@
-import type {ArtifactDestination, NewArtifactDestinationContext} from '@artifactbin/contracts/groups';
+import type { ArtifactDestination } from '@artifactbin/contracts/groups';
+import type { DefaultDestination } from '@artifactbin/contracts/groups';
+
+interface NewArtifactDestinationContext {
+ explicit?:ArtifactDestination;
+ parent?:ArtifactDestination;
+ preference?:DefaultDestination;
+ deployment_default?:ArtifactDestination;
+}
 /** Pure ordering only. Callers must authorize the selected owner and refuse inaccessible defaults. */
 export function selectNewArtifactDestination(context:NewArtifactDestinationContext):ArtifactDestination {
  const {explicit,parent,preference,deployment_default}=context;

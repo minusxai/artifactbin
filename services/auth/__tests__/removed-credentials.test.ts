@@ -6,11 +6,12 @@
  */
 import {createHmac,hkdfSync} from 'node:crypto';
 import {afterEach,expect,it,vi} from 'vitest';
-import {CHART_IMAGE_PATH, IDENTITY_INTROSPECT_PATH} from '@artifactbin/contracts/identity-service';
+import { IDENTITY_INTROSPECT_PATH } from '@artifactbin/contracts/identity-service';
 import {RUN_SIGN_IN_PATH} from '@artifactbin/contracts/service-audiences';
 import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts/routes';
 import {signActor,verifyActor} from '@artifactbin/utils';
 import {delegatedService,serviceAuthHost,serviceAudiences} from './helpers';
+import { CHART_IMAGE_PATH } from '../src/session-authority';
 
 const CALLBACK_SECRET='synthetic-callback-secret-value';
 const ENTRY={...delegatedService('warehouse','https://warehouse.example','service-secret'),artifact_reads:true,run_sign_ins:true,

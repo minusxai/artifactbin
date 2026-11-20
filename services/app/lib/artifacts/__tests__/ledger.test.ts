@@ -4,12 +4,12 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useAppHarness } from '@/__tests__/harness';
-import { MUTATION_REPLY_TIMEOUT_MS } from '@artifactbin/contracts/sql';
 import {
   CreationReplay, completeMutationReceipt, createArtifact, creationOperation, durableMutation, lookupCreation, mutationInvocation, pinMutationContext,
   recoverCreationIds, reserveArtifactIds, reserveIds, setMutationInvocation, type MutationReceipt,
 } from '@/lib/artifacts';
 import { account, page, sql, trashRow } from '@/__tests__/artifact-fixtures';
+import { MUTATION_REPLY_TIMEOUT_MS } from '../mutation-receipt';
 
 const harness = useAppHarness();
 const ORIGIN = 'https://app.test/api/artifacts';

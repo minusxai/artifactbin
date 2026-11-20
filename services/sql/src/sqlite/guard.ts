@@ -7,11 +7,56 @@
  * `restorePoint`s to put them back) is what both judge by, and what types an output column (`declaredType`,
  * `resultColumn`). A refusal is `Refused`, its message the rule.
  */
-import { MUTATION_ONLY_FUNCTIONS } from '@artifactbin/contracts/sql-functions';
-import type { ColumnRead, OutputColumn, StatementAnalysis, StatementKind, TableWrite } from '@artifactbin/contracts/sql-analysis';
 import type { ColumnType, DatasetColumn } from '@artifactbin/contracts/sql';
 import { calendarDate, LIBRARY_NAMES } from './functions';
 import type { Sqlite3 } from './wasm';
+import { MUTATION_ONLY_FUNCTIONS } from './functions';
+
+type StatementKind = 'select' | 'insert' | 'update' | 'delete';
+
+interface ColumnRead {
+  /** The attached schema: an `<Import>` name, `main` for document tables, or `_` built-ins. */
+  schema: string;
+  table: string;
+  /** Empty when the statement uses the table without reading a column (`count(*)`, `exists (select 1 …)`). */
+  column: string;
+}
+
+interface TableWrite {
+  schema: string;
+  table: string;
+  op: 'insert' | 'update' | 'delete';
+  /** The columns an UPDATE assigns; absent for INSERT and DELETE. */
+  columns?: string[];
+}
+
+export interface OutputColumn {
+  name: string;
+  /**
+   * The source column's declared type when the output is a direct column
+   * reference (SQLite `decltype`), else null. A `user` column keeps its type
+   * only through a direct projection.
+   */
+  declaredType: ColumnType | null;
+  /**
+   * The loaded column it directly references, when there is one — what lets
+   * the compiler type a projection of an earlier query's result by that
+   * query's own (compiled) column type.
+   */
+  origin?: { schema: string; table: string; column: string };
+}
+
+export interface StatementAnalysis {
+  kind: StatementKind;
+  /** Base-table columns read. Reads of CTEs and subqueries are not included. */
+  reads: ColumnRead[];
+  writes: TableWrite[];
+  /** Function names called, lower-cased and deduplicated. */
+  functions: string[];
+  /** Parameter names in first-appearance order, without the `$`, as written in the executable SQL. */
+  params: string[];
+  columns: OutputColumn[];
+}
 
 type Stmt = ReturnType<InstanceType<Sqlite3['oo1']['DB']>['prepare']>;
 

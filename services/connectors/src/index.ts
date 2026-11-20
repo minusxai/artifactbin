@@ -16,7 +16,7 @@
  *    that runs SQL text gets past any such check). A gateway built for this reads them as the statement starts.
  *  - Addresses and TLS: ./network.
  */
-import type { ConnectorReadPolicy, ConnectionConfig, ConnectorId, ConnectorNetworkPolicy, ConnectorSpec } from '@artifactbin/contracts/connectors';
+import type { ConnectionConfig, ConnectorId, ConnectorNetworkPolicy, ConnectorSpec } from '@artifactbin/contracts/connectors';
 import { CONNECTORS } from '@artifactbin/contracts/connectors';
 import { sqlTimeout, SQL_QUERY_DEFAULT_MS, SQL_QUERY_MAX_MS } from '@artifactbin/contracts/sql';
 import { connectorSpec, parseConnectionConfig } from './config';
@@ -25,6 +25,7 @@ import type { ConnectorModule, OpenConnection } from './module';
 import { mysqlConnector } from './mysql';
 import type { NetworkSeams } from './network';
 import { postgresConnector } from './postgres';
+import type { ConnectorReadPolicy } from './module';
 
 /** Each registered connector's module; one the install cannot run is absent (its configuration opens `unavailable`). */
 const MODULES: Partial<Record<ConnectorId, ConnectorModule>> = { postgres: postgresConnector, mysql: mysqlConnector };

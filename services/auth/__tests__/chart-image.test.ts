@@ -3,8 +3,9 @@ import {delegatedService,serviceAuthHost,serviceAudiences} from './helpers';
 import {describe,it,expect} from 'vitest';
 import {ANONYMOUS, type Actor} from '@artifactbin/contracts/actor';
 import {SERVICE_PAYLOAD_LIMIT} from '@artifactbin/contracts/payload-limit';
-import {CANONICAL_CHART_IMAGE_PATH, CHART_IMAGE_PATH} from '@artifactbin/contracts/identity-service';
+import { CANONICAL_CHART_IMAGE_PATH } from '@artifactbin/contracts/identity-service';
 import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts/routes';
+import { CHART_IMAGE_PATH } from '../src/session-authority';
 
 const audiences=serviceAudiences({...delegatedService('warehouse','https://warehouse.example','service-secret'),artifact_reads:true},delegatedService('mailer','https://mailer.example','mailer-secret'));
 

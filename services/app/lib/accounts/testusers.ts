@@ -19,11 +19,21 @@
  * Nothing here decides permission. `can(actor, …)` does, in one place.
  */
 import type { AccessActor } from './actors';
-import type { TestUser } from '@artifactbin/contracts/testusers';
 import { TESTUSER_ERRORS, TESTUSER_LIMITS } from '@artifactbin/contracts/testusers';
 import { emit, getDb, generateInternalId, services } from '../platform';
 import { userKindOf } from '../user-kinds';
 import { testUserSessionCount } from './testuser-sessions';
+
+interface TestUser {
+  id: string;
+  /** How pages name it: "Test user" plus a short discriminator. */
+  label: string;
+  created_at: string;
+  expires_at: string;
+  /** Live counts, so an agent can say what it made before deleting. */
+  artifacts: number;
+  sessions: number;
+}
 
 /** `users.name` for a minted row: what pages show, and what a person recognises in the database. */
 const TESTUSER_LABEL = 'Test user';

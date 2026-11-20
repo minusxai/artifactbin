@@ -1,7 +1,19 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
-import type { CodeStore, ClaimResult } from '@artifactbin/contracts/identity';
 import type { Queryable } from '@artifactbin/contracts/db';
 import { plainIdentifier } from './sql-identifier';
+
+/** ONE implementation of an app-owned one-time-code store; auth credentials have their own broader lifecycle. */
+type ClaimResult =
+  | { ok: true; payload: Record<string, unknown> }
+  | { ok: false; reason: 'expired' | 'exhausted' | 'mismatch' | 'unknown' };
+interface CodeStore {
+  issue(i: { kind: string; secret: string; subject?: string | null; payload?: Record<string, unknown>; ttlMs: number; now?: number }): Promise<void>;
+  /** High-entropy secrets: one lookup by hash, single use. */
+  claimByHash(i: { kind: string; code: string; now?: number }): Promise<Record<string, unknown> | null>;
+  /** Guessable codes: by subject, attempts counted, capped. */
+  claimBySubject(i: { kind: string; subject: string; code: string; maxAttempts: number; now?: number }): Promise<ClaimResult>;
+  peekByHash(i: { kind: string; code: string; now?: number }): Promise<Record<string, unknown> | null>;
+}
 
 const sha256 = (value: string): string => createHash('sha256').update(value).digest('hex');
 
