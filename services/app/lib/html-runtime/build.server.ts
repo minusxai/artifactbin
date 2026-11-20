@@ -74,7 +74,7 @@ async function compile():Promise<HtmlRuntimeAssets>{
  const buildId=createHash('sha256').update(JSON.stringify(unguarded)).digest('hex').slice(0,16);
  const guarded=Object.fromEntries(Object.entries(unguarded).map(([key,source])=>[key,skewGuard(buildId)+source])) as typeof unguarded;
  const {apolloPath,readerPath,chromePath,portableEnginePath,morphPath,nativeRegionsPath,nativeMarkdownPath,collabPath,statePath}=RUNTIME_MODULE_PATHS;
- const entry=`import {installHtmlReaderCommands} from ${JSON.stringify(fileURLToPath(new URL('../html-bridge/reader.ts',import.meta.url)))};
+ const entry=`import {installHtmlReaderCommands} from ${JSON.stringify(fileURLToPath(new URL('./bridge/reader.ts',import.meta.url)))};
 import {openFrameDoor} from ${JSON.stringify(fileURLToPath(new URL('./frame-door.ts',import.meta.url)))};
 import {installPageFetch} from ${JSON.stringify(fileURLToPath(new URL('./page-fetch.ts',import.meta.url)))};
 import {startNativeHtmlTableScroll} from ${JSON.stringify(fileURLToPath(new URL('./table-scroll.ts',import.meta.url)))};

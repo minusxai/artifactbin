@@ -28,7 +28,7 @@ import { createHttpBackend, type ArtifactBackend } from '@/lib/artifact-backend'
 import { hasReplyText } from '@/lib/annotations/remote-reply';
 import { APP_BAR_H, RIGHT_RAIL_W } from '@/lib/html-reader/edit-bar';
 import { documentRect, sendDocument, type DocumentRuntimeRef } from '@/lib/html-reader/document-endpoint';
-import type { StoryEditParentMessage, StoryEditSelection } from '@/lib/html-bridge/selection-contract';
+import type { StoryEditParentMessage, StoryEditSelection } from '@/lib/html-runtime/bridge/selection-contract';
 import { Button } from '../ui/Button';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { createIsPhoneViewport } from '../ui/MobileSheet';

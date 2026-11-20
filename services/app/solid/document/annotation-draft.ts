@@ -19,7 +19,7 @@ import { BackendRequestError, type ArtifactBackend } from '@/lib/artifact-backen
 import { hasReplyText } from '@/lib/annotations/remote-reply';
 import { loginHref } from '@/lib/http/login-href';
 import { COMMENT_TARGET_UNSAVED } from '@artifactbin/contracts/annotation-comment';
-import type { StoryEditParentMessage, StoryEditSelection } from '@/lib/html-bridge/selection-contract';
+import type { StoryEditParentMessage, StoryEditSelection } from '@/lib/html-runtime/bridge/selection-contract';
 import { createCommentCapture } from './CommentCapture';
 import { createCommentImageDraft, preloadScreenshotEditor, type CommentImageAttachment } from './CommentImageAttach';
 import { persistedText } from '../lib/draft-store';

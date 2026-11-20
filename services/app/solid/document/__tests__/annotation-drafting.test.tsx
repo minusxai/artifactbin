@@ -6,7 +6,7 @@ import { replaceComment } from './comment-input';
  */
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen } from '@testing-library/dom';
-import type { StoryEditSelection } from '@/lib/html-bridge/selection-contract';
+import type { StoryEditSelection } from '@/lib/html-runtime/bridge/selection-contract';
 import { fireEvent } from '../../__tests__/helpers';
 import { flush, installAnnotationFetch, layer, openPinnedThread } from './annotation-rig';
 import { preloadCommentField } from '../LazyCommentField';

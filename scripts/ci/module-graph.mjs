@@ -120,9 +120,9 @@ const BUNDLED_IMPORTERS = [
   'services/app/lib/document/splice.ts',
 
   'services/app/lib/html-autofix/index.ts',
-  'services/app/lib/html-bridge/presence-selection.ts',
-  'services/app/lib/html-bridge/presence.ts',
-  'services/app/lib/html-bridge/region-carets.ts',
+  'services/app/lib/html-runtime/bridge/presence-selection.ts',
+  'services/app/lib/html-runtime/bridge/presence.ts',
+  'services/app/lib/html-runtime/bridge/region-carets.ts',
   'services/app/lib/html-page/design-system.ts',
   'services/app/lib/html-runtime/browser-client.ts',
   'services/app/lib/html-runtime/browser-portable.ts',
@@ -159,7 +159,6 @@ const BUNDLED_LEAVES = {
   'lib/data-ingest': ['types'],
   'lib/datasets': ['dataset-usage', 'definition', 'graphql-names', 'types'],
   'lib/dataset-access': [],
-  'lib/html-bridge': ['annotations', 'comment-actions-presentation', 'comment-view-session', 'imported-observation', 'observe', 'presence', 'reader', 'region-carets', 'selection', 'selection-contract', ],
   'lib/html-components': ['hosted.json', 'markdown-styles', 'row-identity', 'table-comparison', 'table-values'],
   'lib/html-page': ['core-script', 'design-system', 'html-source', 'pwa-settings'],
   'lib/offline-dependencies': ['contracts'],
@@ -168,7 +167,7 @@ const BUNDLED_LEAVES = {
   // carries the server's parse5 readers and compaction. The page's link dialog checks a URL through `href` alone.
   // `cells` (a dataset text cell's text, no ProseMirror) is the page library @afbin/collab's door.
   'lib/live-regions': ['native-browser', 'native-markdown', 'cells', 'href'],
-  'lib/html-runtime': ['native-editing-behavior', 'native-code-presentation', 'browser-portable', 'portable', 'portable-chrome-contract', 'portable-source', 'source-relationship'],
+  'lib/html-runtime': ['bridge/selection-contract', 'native-editing-behavior', 'native-code-presentation', 'browser-portable', 'portable', 'portable-chrome-contract', 'portable-source', 'source-relationship'],
   'lib/http': [
     'app-build', 'app-pages', 'intent', 'live-stream', 'login-href', 'retry', 'retry-lazily', 'safe-redirect',
     'shared-request', 'urls',

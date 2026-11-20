@@ -13,7 +13,7 @@ import type { HtmlJsonObject } from '@artifactbin/contracts/html-page';
 import type { StoreReceipt } from './apollo/apollo-contracts';
 import { readStateFragment } from './apollo/state-url';
 import { commentViewDeclaration, createHtmlCommentView } from './comment-view';
-import { installHtmlCommentView } from '../html-bridge/comment-view-session';
+import { installHtmlCommentView } from './bridge/comment-view-session';
 import { createStateStore, type PageStore } from './state-store';
 import { createViewerState } from './viewer-state';
 import type { ViewerStatePort } from './viewer-state-contract';

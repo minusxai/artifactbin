@@ -8,7 +8,7 @@
  * own ground), and a slot for page notices is drawn in it, above the frame, so the frame shrinks to make room.
  *
  * The frame's page behaviour reads the address's `#hash` (never `#edit`, the app's own). An `#af-state=` link opens the
- * framed page with that state once: the frame's address takes the fragment (lib/html-bridge/reader) and its
+ * framed page with that state once: the frame's address takes the fragment (lib/html-runtime/bridge/reader) and its
  * `@afbin/state` seeds from it. Once the frame's controller runs it has it, and this address drops it, so the frame's
  * next load (a reload, a rebuilt version) keeps the reader's own state.
  *

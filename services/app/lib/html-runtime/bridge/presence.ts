@@ -1,6 +1,6 @@
-import type {PresenceGeometry,PresencePaint} from '../html-presence';
+import type {PresenceGeometry,PresencePaint} from '../../html-presence';
 import {captureSelection,paintSelections} from './presence-selection';
-import {PRESENCE_POINTER_THROTTLE_MS,presenceReader,presenceReaders} from '../html-presence/model';
+import {PRESENCE_POINTER_THROTTLE_MS,presenceReader,presenceReaders} from '../../html-presence/model';
 /** Owns only ephemeral geometry and inert overlays; no credentials, viewer storage or app state. */
 export function startHtmlPresence(win:Window,publish:(geometry:PresenceGeometry)=>void){
  const doc=win.document,layer=doc.createElement('div');layer.setAttribute('data-af','presence-overlay');Object.assign(layer.style,{position:'fixed',inset:'0',pointerEvents:'none',zIndex:'2147483645'});doc.documentElement.append(layer);

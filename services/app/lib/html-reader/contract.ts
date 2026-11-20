@@ -5,7 +5,7 @@ import type {UploadContext} from '@artifactbin/contracts/dataset-upload';
  * islands. BOTH sides import it, so it carries ONLY types and ids: a value
  * here would drag one side's graph into the other's bundle. The Solid
  * composition lives in lib/islands (rt.tsx, boot.ts) and the compiler in
- * lib/compiled-page. The in-place editing and annotation messages are lib/html-bridge/selection-contract's.
+ * lib/compiled-page. The in-place editing and annotation messages are lib/html-runtime/bridge/selection-contract's.
  */
 /** Live data widget contents belong to Solid, rather than the server-fragment morph. */
 export const LIVE_DATA_ATTR = 'data-mx-live';
@@ -107,7 +107,7 @@ export const STORY_ANNOTATIONS_EVENT = 'annotations';
  * (create-in-place-edit, AnnotationLayer, SelectionActions) check them unchanged.
  * Origins: the page accepts only the document's own origin (`'null'` for the
  * sandboxed `/a/<id>/raw` in development); the frame accepts only the app's.
- * Geometry in `event`s stays in the FRAME's viewport (lib/html-bridge/selection-contract StoryEditRect); the page
+ * Geometry in `event`s stays in the FRAME's viewport (lib/html-runtime/bridge/selection-contract StoryEditRect); the page
  * adds the iframe's box (StoryController.getViewportRect).
  * ──────────────────────────────────────────────────────────────────────────── */
 export const STORY_FRAME_BRIDGE_MESSAGE = 'mx:frame-bridge';

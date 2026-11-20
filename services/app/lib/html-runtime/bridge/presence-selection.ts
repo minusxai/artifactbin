@@ -1,7 +1,7 @@
 import { visibleSelectionRects } from "./presence-selection-geometry";
 import { htmlTextFingerprint as selectionFingerprint } from '@artifactbin/contracts/html-annotation';
-import type { PresenceRange, PresenceViewer } from '../html-presence';
-import {presenceGeometry} from '../html-presence/model';
+import type { PresenceRange, PresenceViewer } from '../../html-presence';
+import {presenceGeometry} from '../../html-presence/model';
 type SelectionPresence = {ranges: PresenceRange[]};
 /** `named`: whether the selection carries the reader's name (false while their cursor already shows it). */
 type Viewer = Omit<PresenceViewer,'selection'> & {selection: SelectionPresence | null; actor: string; named: boolean};

@@ -3,7 +3,7 @@ import * as Y from 'yjs';
 import { NodeSelection, TextSelection } from 'prosemirror-state';
 import { canonicalizeHtmlPage } from '../../html-page';
 import { compactRegion, createRegionState, validateRegionUpdate, regionHtml } from '../../live-regions';
-import { createHtmlAnnotationPainter, revealHtmlAnnotation } from '../../html-bridge/annotations';
+import { createHtmlAnnotationPainter, revealHtmlAnnotation } from '../bridge/annotations';
 import { mountRegionEditor } from '../native-region-editor';
 import type { RegionEditor } from '../region-editor-contract';
 const cleanup:Array<()=>void>=[];

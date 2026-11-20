@@ -21,7 +21,7 @@
  */
 import type { RegionFrameMessage, RegionParentMessage } from '@artifactbin/contracts/region-sessions';
 import { LOADED_SOURCE_KEY } from './live-morph-contract';
-import type { RegionCaretPaint } from '../html-bridge/region-carets';
+import type { RegionCaretPaint } from './bridge/region-carets';
 import type { RegionEditor, RegionEditorOptions, RegionKeyEntry } from './region-editor-contract';
 
 interface RegionEditorModule { mountRegionEditor(options: RegionEditorOptions): RegionEditor }

@@ -13,7 +13,7 @@
 import { batch, createEffect, createSignal, onCleanup } from 'solid-js';
 import type { AnnotationWire } from '@/lib/annotations';
 import { sendDocument, subscribeDocument, type DocumentRuntimeRef } from '@/lib/html-reader/document-endpoint';
-import { isEditFrameMessage, type StoryAnnotationsMessage, type StoryEditRect, type StoryEditSelection } from '@/lib/html-bridge/selection-contract';
+import { isEditFrameMessage, type StoryAnnotationsMessage, type StoryEditRect, type StoryEditSelection } from '@/lib/html-runtime/bridge/selection-contract';
 
 /** What the layer shows right now, read inside the posting effect (so each read is a dependency). */
 export interface FrameAnnotationState {

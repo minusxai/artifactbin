@@ -1,5 +1,5 @@
 import {nativeCodeHtml} from './native-code-html';
-import {hasImportedSourceObservation} from '../html-bridge';
+import {hasImportedSourceObservation} from '../html-runtime/server';
 import {type HtmlAssemblyInput, type HtmlRuntimeConfig, assembleHtmlPage, downloadableHtml} from '@/lib/html-runtime';
 import {buildHtmlAssets} from '@/lib/html-runtime/server';
 import {nativeHtmlAssets} from './native-html-assets.server';

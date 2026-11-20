@@ -1,4 +1,4 @@
-import type { CommentViewState } from '../../../contracts/src/comment-view-state';
+import type { CommentViewState } from '../../../../contracts/src/comment-view-state';
 import type { HtmlCommentViewCommand, HtmlCommentViewPort } from './comment-view-contract';
 const SLOT=Symbol.for('artifactbin.html-comment-view.v1');
 type Owner={ [SLOT]?: HtmlCommentViewPort };

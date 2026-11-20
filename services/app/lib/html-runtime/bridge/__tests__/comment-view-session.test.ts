@@ -1,5 +1,5 @@
 import {expect,it,vi} from 'vitest';
-import type {HtmlCommentViewPort} from '..';
+import type {HtmlCommentViewPort} from '../comment-view-contract';
 import {createHtmlCommentViewSession,installHtmlCommentView,withHtmlCommentView} from '../comment-view-session';
 const view=(screen:string)=>({v:2,state:{$html:{version:'one',fields:{screen}}}}) as never;
 /** A port over one declared field, recording every restore. */

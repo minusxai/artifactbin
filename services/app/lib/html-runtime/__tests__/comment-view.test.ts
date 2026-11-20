@@ -24,7 +24,7 @@ it('rejects backend names and invalid declarations', () => {
  expect(()=>createHtmlCommentView({state,declaration:{version:'one',fields:['shared']},backends:['shared']})).toThrow();
 });
 
-import { createHtmlCommentViewSession, installHtmlCommentView, withHtmlCommentView } from '../../html-bridge/comment-view-session';
+import { createHtmlCommentViewSession, installHtmlCommentView, withHtmlCommentView } from '../bridge/comment-view-session';
 it('restores on open and explicit request only, and returns private view on close', async () => {
  const {state,view}=setup(); const owner={}; installHtmlCommentView(owner,view); const session=createHtmlCommentViewSession(owner);
  const command={openId:'thread',pins:[{id:'thread',viewState:{v:2,state:{$html:{version:'one',fields:{screen:'detail'}}}}}]};

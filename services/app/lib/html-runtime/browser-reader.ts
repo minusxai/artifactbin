@@ -1,13 +1,13 @@
-import {applyHtmlReaderAppearance} from '../html-bridge/reader';
+import {applyHtmlReaderAppearance} from './bridge/reader';
 import {createUploadContext,bindUploadControl} from './upload-context';
 import type {UploadContext} from '@artifactbin/contracts/dataset-upload';
 import type {PlatformUploadControl} from './upload-contract';
 import {createFileUploader} from './upload';
 import {createUploadRelay} from './upload-relay';
 import { createHtmlSelectionActions } from './selection-actions';
-import {createHtmlCommentViewSession} from '../html-bridge/comment-view-session';
-import type {HtmlCommentViewCommand} from '../html-bridge';
-import {startHtmlPresence} from '../html-bridge/presence';
+import {createHtmlCommentViewSession} from './bridge/comment-view-session';
+import type {HtmlCommentViewCommand} from './bridge/comment-view-contract';
+import {startHtmlPresence} from './bridge/presence';
 import type {PresencePaint} from '../html-presence';
 import {refuseFileNavigation} from './frame-file-drops';
 import {followAppLinks} from '@/lib/html-runtime/frame-links';
@@ -59,10 +59,10 @@ export function onResolverChange(listener: (names: readonly string[],reason?:Que
 import type { FrameBridgeAttach, FrameBridgeFramePayload, FrameBridgeParentPayload } from '../html-reader/contract';
 interface FrameBridgeStartOptions { win: Window; post: (payload: FrameBridgeFramePayload) => void; attach?: FrameBridgeAttach }
 interface FrameBridgeSession { receive(payload: FrameBridgeParentPayload): void; dispose(): void }
-import {observeHtmlDom,observeSourceAnnotations} from '../html-bridge/observe';
-import {startSourceAnnotationReadiness} from '../html-bridge/imported-observation';
-import { htmlSelection } from '../html-bridge/selection';
-import { revealHtmlAnnotation, createHtmlAnnotationPainter, type HtmlAnnotationPaint } from '../html-bridge/annotations';
+import {observeHtmlDom,observeSourceAnnotations} from './bridge/observe';
+import {startSourceAnnotationReadiness} from './bridge/imported-observation';
+import { htmlSelection } from './bridge/selection';
+import { revealHtmlAnnotation, createHtmlAnnotationPainter, type HtmlAnnotationPaint } from './bridge/annotations';
 
 /** The viewer authority invalidation namespace in page runtime notifications. */
 const PAGE_VIEWER_ROOT = 'viewer';

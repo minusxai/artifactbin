@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { HtmlJsonObject } from '@artifactbin/contracts/html-page';
 import { createPageState, type PageState, type PageStateOptions } from '../page-state';
 import { encodeState } from '../apollo/state-url';
-import { createHtmlCommentViewSession, withHtmlCommentView } from '../../html-bridge/comment-view-session';
+import { createHtmlCommentViewSession, withHtmlCommentView } from '../bridge/comment-view-session';
 
 /** One viewer's browser storage (one localStorage), shared by every load of the page in it. */
 function viewer(seed?: Record<string, string>) {
