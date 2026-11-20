@@ -51,6 +51,32 @@ interface Interaction {
 }
 interface SaveResponse { edit_id?: string; source?: string; error?: string; details?: Array<{ message?: string }> }
 
+/** Where a drag leaves the crop: moved by the pointer's travel, or resized along the frame's diagonal (outward faster). */
+function draggedCrop(held: Interaction, clientX: number, clientY: number, previewWidth: number): SocialPreviewCrop {
+  const scale = held.camera.width * CAMERA_PADDING / previewWidth;
+  const dx = (clientX - held.clientX) * scale;
+  const dy = (clientY - held.clientY) * scale;
+  if (held.kind === 'move') return { ...held.crop, x: held.crop.x - dx, y: held.crop.y - dy };
+  const ratio = SOCIAL_PREVIEW_HEIGHT / SOCIAL_PREVIEW_WIDTH;
+  const rawResizeDelta = (dx + ratio * dy) / (1 + ratio * ratio);
+  return { ...held.crop, width: held.crop.width + (rawResizeDelta > 0 ? rawResizeDelta * RESIZE_OUTWARD_SENSITIVITY : rawResizeDelta) };
+}
+
+/** Where a wheel leaves the crop: a pinch (ctrl/⌘ + wheel) resizes about the centre; otherwise it pans (shift: sideways). */
+function wheeledCrop(current: SocialPreviewCrop, camera: SocialPreviewCrop, event: WheelEvent, previewWidth: number): SocialPreviewCrop {
+  const unit = event.deltaMode === 1 ? WHEEL_LINE : event.deltaMode === 2 ? WHEEL_PAGE : 1;
+  if (event.ctrlKey || event.metaKey) {
+    const width = current.width * Math.exp(event.deltaY * unit * PINCH_ZOOM);
+    return { width, x: current.x + (current.width - width) / 2, y: current.y + (socialPreviewCropHeight(current.width) - socialPreviewCropHeight(width)) / 2 };
+  }
+  const scale = camera.width * CAMERA_PADDING / previewWidth;
+  const dx = (event.shiftKey && !event.deltaX ? event.deltaY : event.deltaX) * unit * scale;
+  const dy = (event.shiftKey && !event.deltaX ? 0 : event.deltaY) * unit * scale;
+  return { ...current, x: current.x + dx, y: current.y + dy };
+}
+
+const ARROWS: Record<string, { x: number; y: number }> = { ArrowLeft: { x: -1, y: 0 }, ArrowRight: { x: 1, y: 0 }, ArrowUp: { x: 0, y: -1 }, ArrowDown: { x: 0, y: 1 } };
+
 interface SocialPreviewEditorProps { id: string; source: string; editId: string; version: number; onClose: () => void }
 
 /** The share-card crop editor: a locked 40:21 frame the owner pans and resizes over the document
@@ -132,13 +158,7 @@ export function SocialPreviewEditor(props: SocialPreviewEditorProps): JSX.Elemen
     if (!held || held.pointerId !== event.pointerId || !frame) return;
     const previewWidth = frame.parentElement?.getBoundingClientRect().width ?? 0;
     if (previewWidth <= 0) return;
-    const scale = held.camera.width * CAMERA_PADDING / previewWidth;
-    const dx = (event.clientX - held.clientX) * scale;
-    const dy = (event.clientY - held.clientY) * scale;
-    const ratio = SOCIAL_PREVIEW_HEIGHT / SOCIAL_PREVIEW_WIDTH;
-    const rawResizeDelta = (dx + ratio * dy) / (1 + ratio * ratio);
-    const resizeDelta = rawResizeDelta > 0 ? rawResizeDelta * RESIZE_OUTWARD_SENSITIVITY : rawResizeDelta;
-    const next = boundCrop(held.kind === 'move' ? { ...held.crop, x: held.crop.x - dx, y: held.crop.y - dy } : { ...held.crop, width: held.crop.width + resizeDelta }, sourceHeight());
+    const next = boundCrop(draggedCrop(held, event.clientX, event.clientY, previewWidth), sourceHeight());
     held.latest = next;
     if (imageId()) imageDraft = next;
     setCropDirty(true); setReset(false); setCrop(next);
@@ -158,30 +178,18 @@ export function SocialPreviewEditor(props: SocialPreviewEditorProps): JSX.Elemen
     const previewWidth = event.currentTarget.getBoundingClientRect().width;
     if (previewWidth <= 0) return;
     event.preventDefault();
-    const unit = event.deltaMode === 1 ? WHEEL_LINE : event.deltaMode === 2 ? WHEEL_PAGE : 1;
-    const current = crop();
-    let next: SocialPreviewCrop;
-    if (event.ctrlKey || event.metaKey) {
-      const width = current.width * Math.exp(event.deltaY * unit * PINCH_ZOOM);
-      next = { width, x: current.x + (current.width - width) / 2, y: current.y + (socialPreviewCropHeight(current.width) - socialPreviewCropHeight(width)) / 2 };
-    } else {
-      const scale = camera().width * CAMERA_PADDING / previewWidth;
-      const dx = (event.shiftKey && !event.deltaX ? event.deltaY : event.deltaX) * unit * scale;
-      const dy = (event.shiftKey && !event.deltaX ? 0 : event.deltaY) * unit * scale;
-      next = { ...current, x: current.x + dx, y: current.y + dy };
-    }
     setInteracting(true);
-    update(next);
+    update(wheeledCrop(crop(), camera(), event, previewWidth));
     clearTimeout(wheelSettle);
     wheelSettle = setTimeout(() => setInteracting(false), WHEEL_SETTLE_MS);
   };
 
   const moveByKey = (event: KeyboardEvent) => {
     const step = event.shiftKey ? 1 : 10;
-    const delta = ({ ArrowLeft: { x: -step, y: 0 }, ArrowRight: { x: step, y: 0 }, ArrowUp: { x: 0, y: -step }, ArrowDown: { x: 0, y: step } } as Record<string, { x: number; y: number }>)[event.key];
+    const delta = ARROWS[event.key];
     if (!delta) return;
     event.preventDefault();
-    update({ ...crop(), x: crop().x + delta.x, y: crop().y + delta.y });
+    update({ ...crop(), x: crop().x + delta.x * step, y: crop().y + delta.y * step });
   };
 
   const resizeByKey = (event: KeyboardEvent) => {

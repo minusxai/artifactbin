@@ -705,6 +705,17 @@ it('opens native PWA and file settings without entering a document editor', asyn
   expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
 });
 
+it('an action in the controls panel closes the panel, and its dialog closes again', async () => {
+  mockRole = 'owner';
+  await mountReady();
+  fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
+  fireEvent.click(within(await controls()).getByRole('button', { name: 'Artifact settings' }));
+  const settings = await trusted().findByRole('dialog', { name: 'Artifact settings' });
+  await waitFor(() => expect(trusted().queryByRole('button', { name: 'Artifact settings' })).toBeNull());
+  fireEvent.click(within(settings).getByRole('button', { name: /^Close/ }));
+  await waitFor(() => expect(trusted().queryByRole('dialog', { name: 'Artifact settings' })).toBeNull());
+});
+
 it('loads stored script diagnostics in the trusted frame slot without changing the document',async()=>{
  mockScriptFailure={errors:['Stored script diagnostic']};await mountReady();
  expect(await trusted().findByText('Stored script diagnostic')).toBeTruthy();
