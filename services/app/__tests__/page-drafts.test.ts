@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { attachActor } from '@artifactbin/utils';
 import type { Actor } from '@artifactbin/contracts';
 import { getDb } from '@/lib/platform';
+import { overrideConfig } from '@/lib/platform/config';
 import { pagesSite } from '@/lib/http';
 import { DRAFT_LIMITS, resetDrafts } from '@/lib/page-drafts';
 import { createAppServer } from '@/server/app';
@@ -114,6 +115,18 @@ describe('POST /api/page/drafts', () => {
       expect(file.status).toBe(200);
       expect(await file.text()).toBe(Buffer.from(FILES[1]!.base64, 'base64').toString());
     }
+  });
+
+  it('may be framed by the trusted embedders, as a document may, and by no one else', async () => {
+    const owner = await mintAccountToken('draft_owner');
+    const ancestors = async () => {
+      const answer = await (await post(session(owner), { html: PAGE, files: FILES })).json() as { src: string };
+      return /frame-ancestors ([^;]+)/.exec((await get(answer.src)).headers.get('content-security-policy') ?? '')![1]!.split(' ').sort();
+    };
+    expect(await ancestors()).toEqual([APP]);
+    overrideConfig({}, { EMBED__TRUSTED_ORIGINS: 'https://parent.example.test' });
+    try { expect(await ancestors()).toEqual([APP, 'https://parent.example.test'].sort()); }
+    finally { overrideConfig({}, { EMBED__TRUSTED_ORIGINS: undefined }); }
   });
 
   it('refuses every call from a draft origin to the app, and to a document\'s doors', async () => {

@@ -99,7 +99,8 @@ export async function nativeDraftDocument(input: NativeDraftRender): Promise<str
 }
 /** A draft's policy: a document's on its own origin, with no door of the app, no declared extension and no other framer. */
 export function nativeDraftPolicy(self:string,app:string):string {
-  return buildDocumentCsp({self,app}).replace(/script-src ([^;]+)/,"script-src 'unsafe-inline' $1");
+  // A draft is framed where its reader's chat is, so the trusted embedders may frame it as they may a document.
+  return buildDocumentCsp({self,app,framers:embedTrustedOrigins()}).replace(/script-src ([^;]+)/,"script-src 'unsafe-inline' $1");
 }
 /** Inline author code is confined to the per-page origin, or the opaque /raw sandbox. */
 export function nativeHtmlPolicy(id:string,base:string,pages?:{self:string;app:string},extensions:CspExtensions=EMPTY_CSP_EXTENSIONS,options:{domainReads?:boolean}={}):string {
