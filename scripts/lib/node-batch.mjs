@@ -100,30 +100,40 @@ export function nodeBatchFiles({ timings, candidates, lane, read }) {
  * THE PULL REQUEST'S OWN NODE FILES, beyond the batch (scripts/ci/node-affected.mjs chooses them on every pr fast node
  * runner; vitest.node-batch.config.ts runs them in `node-batch-isolated`, one fresh graph per file, as the `node`
  * project does). The batch alone left a new file with no recorded time, and every slower file a change reached, to the
- * post-merge suite. Now:
- *  - `must`: every `node` file the change adds or edits that no pr fast part already runs, whatever its time or record;
- *  - `affected`: the slower files whose import graph reaches a changed file (scripts/lib/test-graph.mjs, the same
- *    selection `npm test` makes), the change's closest tests first, then shortest, while their recorded times (a file
- *    without one weighs the `node` median), each with its import (`NODE_ISOLATED_FILE_MS`), fit `budgetMs`; `must`
- *    never spends it. Closest is not fewest imports from any changed file: a file most tests import (the contracts
+ * post-merge suite. Now, ONE BUDGET (`budgetMs`) for both, so the node runners' time is bounded however many files a
+ * change edits: each file weighs its recorded time (a file without one weighs the `node` median) and its import
+ * (`NODE_ISOLATED_FILE_MS`):
+ *  - `must`: the `node` files the change adds or edits that no pr fast part already runs, spent first, shortest first
+ *    (a new file, unrecorded, at the median). Until 2026-11-20 every one ran whatever the budget: a change editing 172
+ *    test files took pr fast to 72s (#1433's first attempt), and that change went in as six pull requests;
+ *  - `affected`: then the slower files whose import graph reaches a changed file (scripts/lib/test-graph.mjs, the same
+ *    selection `npm test` makes), the change's closest tests first, then shortest, while they fit what `must` left.
+ *    Closest is not fewest imports from any changed file: a file most tests import (the contracts
  *    index) is one import from dozens of them, and those outbid the few tests of a module whose code changed, two
  *    imports from it (#1345 deferred lib/annotations' own store test so, and main went red). A file ranks by the
  *    fewest reached files within its distance of some changed file it reaches (`nearest`): the files nearer a narrow
  *    change than it is, and itself. One changed file still orders nearest first. A rerun trigger
  *    (vitest.config.ts, a package.json) reaches every file at distance Infinity, none nearer: it adds none of them,
  *    since a budget's worth of the shortest is an arbitrary subset on a cold module cache (#1339's runners: 27-36s);
- *  - `deferred`: the reached files over the budget, named on the run. The full suite still runs every one after merge.
+ *  - `deferred`: the edited and reached files over the budget (`deferredOwn`: the edited ones among them), named on the
+ *    run. The full suite still runs every one after merge.
  * @param {{ timings: { files: Record<string, Record<string, number>> }, changed: Iterable<string>, affected: Iterable<{ file: string, distance: number, nearest: Record<string, number> }>, candidates: Set<string>, batch: Set<string>, lane: Set<string>, budgetMs: number }} input
- * @returns {{ must: string[], affected: string[], deferred: string[] }}
+ * @returns {{ must: string[], affected: string[], deferred: string[], deferredOwn: string[] }}
  */
 export function nodeAffectedFiles({ timings, changed, affected, candidates, batch, lane, budgetMs }) {
   const runsElsewhere = (file) => !candidates.has(file) || batch.has(file) || lane.has(file);
-  const must = [...new Set(changed)].filter((file) => !runsElsewhere(file)).sort();
   const node = timings.files.node ?? {};
   const values = Object.values(node).sort((a, b) => a - b);
   const median = values.length ? values[Math.floor(values.length / 2)] : NODE_BATCH_MAX_MS;
   const weight = (file) => (node[file] ?? median) + NODE_ISOLATED_FILE_MS;
-  const competing = [...affected].filter(({ file }) => !runsElsewhere(file) && !must.includes(file));
+  const own = [...new Set(changed)].filter((file) => !runsElsewhere(file));
+  const must = [], deferredOwn = [];
+  let spent = 0;
+  for (const file of own.sort((a, b) => weight(a) - weight(b) || (a < b ? -1 : a > b ? 1 : 0))) {
+    if (spent + weight(file) <= budgetMs) { must.push(file); spent += weight(file); } else deferredOwn.push(file);
+  }
+  must.sort();
+  const competing = [...affected].filter(({ file }) => !runsElsewhere(file) && !own.includes(file));
   // Each changed file's distances to the files competing for the budget, to count how many lie within a distance.
   const around = new Map();
   for (const { nearest } of competing) for (const [changed, steps] of Object.entries(nearest)) around.set(changed, [...(around.get(changed) ?? []), steps]);
@@ -131,13 +141,12 @@ export function nodeAffectedFiles({ timings, changed, affected, candidates, batc
   const rank = ({ distance, nearest }) => distance === Infinity ? Infinity : Math.min(...Object.entries(nearest).map(([changed, steps]) => within(changed, steps)));
   const reached = competing.map((entry) => ({ ...entry, rank: rank(entry) }))
     .sort((a, b) => a.rank - b.rank || a.distance - b.distance || weight(a.file) - weight(b.file) || (a.file < b.file ? -1 : a.file > b.file ? 1 : 0));
-  const chosen = [], deferred = [];
-  let spent = 0;
+  const chosen = [], deferred = [...deferredOwn];
   for (const { file, distance } of reached) {
     if (chosen.includes(file) || deferred.includes(file)) continue;
     if (distance !== Infinity && spent + weight(file) <= budgetMs) { chosen.push(file); spent += weight(file); } else deferred.push(file);
   }
-  return { must, affected: chosen, deferred: deferred.sort() };
+  return { must, affected: chosen, deferred: deferred.sort(), deferredOwn: deferredOwn.sort() };
 }
 
 /**
@@ -149,13 +158,12 @@ export function nodeAffectedFiles({ timings, changed, affected, candidates, batc
 export const NODE_ISOLATED_FILE_MS = 2000;
 
 /**
- * Time (ms) the reached files may add to pr fast's node runners, summed over all of them, each weighed with its import.
- * The runners' Vitest step took 10-12s with the batch alone (pr fast runs 44299731859, 44308003107); 90s over four
- * runners of three workers was to be ~7.5s more on each, but the reached files ran slower beside the batch than their
- * recorded times and the slowest runner took 18-32s (pr-fast.yml's matrix, FIVE RUNNERS), so five runners share it.
- * A pull request's own files are not counted against it.
+ * Time (ms) the change's own and reached files may add to pr fast's five node runners, summed over all of them, each
+ * weighed with its import. With the batch alone the slowest runner's Vitest step took 11-15s (21s once); with 90s of
+ * reached files it took 21-29s and a node runner was a run's last job (pr fast runs 44767515214-44773563049,
+ * 2026-11-20). 45s keeps the slowest runner near 18s, its job near 30s. What does not fit runs after merge.
  */
-export const NODE_AFFECTED_BUDGET_MS = 90_000;
+export const NODE_AFFECTED_BUDGET_MS = 45_000;
 
 /** Where a node runner writes its choice (repository-relative), for vitest.node-batch.config.ts to read. */
 export const NODE_AFFECTED_FILE = 'tmp/node-affected.json';

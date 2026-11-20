@@ -99,8 +99,8 @@ it('is the whole install\'s entries minus exactly the listed exclusions, under o
   for (const cache of ['!node_modules/.cache', '!node_modules/.vite', '!services/*/node_modules/.cache', '!services/*/node_modules/.vite']) expect(list).toContain(cache);
   expect(at('node_modules/.cache/test-graph.json')).toBeGreaterThan(at('!node_modules/.cache'));
   const all = [...fast.steps, ...warm.steps].filter((step) => /^actions\/cache(?:\/(?:save|restore))?@/.test(step.uses ?? '') && step.with.key.startsWith('pr-kit-'));
-  // pr fast: the runners' restore and the last runners' save; warm-caches: one save per runner kind.
-  expect(all).toHaveLength(6);
+  // pr fast: the runners' restore, its one bounded second try and the last runners' save; warm-caches: one save per runner kind.
+  expect(all).toHaveLength(7);
   for (const step of all) expect(paths(step)).toEqual(list);
   expect(all.filter((step) => step.uses.startsWith('actions/cache/save@'))).toHaveLength(5);
   expect(fast.steps.some((step) => /^install-slim-/.test(step.with?.key ?? '')) || warm.steps.some((step) => /^install-slim-/.test(step.with?.key ?? ''))).toBe(false);
@@ -110,7 +110,7 @@ it('keeps every file a reader loads from an excluded package, in every kit', () 
   const needed = readFiles();
   for (const file of needed) expect(existsSync(new URL(file, root)), file).toBe(true);
   const all = [...fast.steps, ...warm.steps].filter((step) => step.with?.key?.startsWith?.('pr-kit-'));
-  expect(all).toHaveLength(6);
+  expect(all).toHaveLength(7);
   for (const step of all) expect(needed.filter((file) => !archives(paths(step), file)), step.with.key).toEqual([]);
 });
 
