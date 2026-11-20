@@ -12,27 +12,19 @@
  * stream self-syncing — a client that connects late, reconnects, or misses a
  * wakeup converges on the next event with no cursor bookkeeping.
  */
-import {presenceAccountIdentity, createPresenceRoom, presenceChannel, PRESENCE_EVENT, type PresenceFrame} from '@/lib/html-presence';
-import { getDb, ID_RE, registerTestOverride } from '@/lib/platform';
-import { htmlLiveLinks, htmlSharedRevisions, changedHtmlSharedRevisions } from '@/lib/html-publication';
+import { ID_RE } from '@/lib/platform';
 import { trackEvent } from '@/lib/analytics';
-import { canReadArtifact, currentPage, getArtifactAccessById, getArtifactById } from '@/lib/artifacts';
+import { canReadArtifact, currentPage, getArtifactAccessById, getArtifactById, type ArtifactRow } from '@/lib/artifacts';
 import { authorHandle, ANONYMOUS_ACTOR } from '@/lib/accounts';
 import { sessionActor } from '@/lib/authentication';
-import { STORY_ANNOTATIONS_EVENT, STORY_DATA_EVENT, type ArtifactDataEvent, type ArtifactVersionPing } from '@/lib/html-reader/contract';
+import { STORY_ANNOTATIONS_EVENT, type ArtifactVersionPing } from '@/lib/html-reader/contract';
 import { LIVE_KEEPALIVE_MS, liveKeepaliveFrame } from '@/lib/http';
 import { subscribeChannel, subscribeToAnnotations, subscribeToArtifact, TooManyLiveChannels } from './live';
-import { changedSince, marksOf, marksOfToken, tokenOf,liveDatasetIds } from './dataset-marks';
+import { changedSince } from './dataset-marks';
 import { livePings } from './live-pings';
-
-/**
- * A test's presence frame interval (`overridePresenceFrameInterval`): the room's one-second interval made every wait for
- * a reader's next frame in services/app/__tests__/html-presence.test.ts a second (7.6s of its 7.6s). Cleared with the
- * test overrides at the end of each file.
- */
-let presenceFrameIntervalMs: number | undefined;
-export function overridePresenceFrameInterval(ms: number | undefined): void { presenceFrameIntervalMs = ms; }
-registerTestOverride(() => { presenceFrameIntervalMs = undefined; });
+import { sseChannel } from './sse-channel';
+import { datasetFollower } from './dataset-follower';
+import { presenceFollower } from './presence-follower';
 
 /** What a live ping names: the head and its live revision, and the current page's title. */
 interface LiveHead { editId: string; version: number; live: number; title: string | null }
@@ -76,92 +68,25 @@ export async function openDocumentEvents(request: Request, id: string): Promise<
   // Connect only — never in the wakeup loop, which fires per remote edit.
   void trackEvent('sse_connect', artifactId, { userId: actor.userId });
 
-  /**
-   * THE DOCUMENT'S DATASETS, WATCHED BESIDE THE DOCUMENT ITSELF.
-   *
-   * A dataset write is a version on the DATASET's row and a NOTIFY on the
-   * DATASET's channel (lib/document-data/dataset-mutate) — nothing about the document
-   * changes, so the stream above would never mention it and every chart built
-   * on that data would sit stale until someone reloaded. So this stream also
-   * listens on each dataset the document reads or writes, and forwards a small
-   * `data` frame naming it; the runtime re-runs exactly the queries that read
-   * it (lib/dataflow/dataflow queriesReadingDatasets).
-   *
-   * A separate SSE EVENT NAME, deliberately: the default `message` frame is
-   * the whole document and is guarded by `editId`/`version` at both ends, and
-   * a data wakeup carries neither. Old clients ignore an unknown event name,
-   * so this is additive on the wire.
-   *
-   * The set follows the DOCUMENT: an edit can add or drop a `<Query>`, so it
-   * is re-derived on every document frame and the subscriptions are adjusted.
+  /*
+   * EVERY WAKEUP ASKS ADMISSION AGAIN: a stream is long-lived and access is not. Without this, someone who connected
+   * while a document was public kept receiving everything written after it was made private — revocation that never
+   * reached the one reader it was aimed at. `readableRow` re-reads the row (deleted while watching, or no longer
+   * readable: the stream ends); `stillReadable` asks of the access columns alone.
    */
-  let sharedMarks = new Map<string,string>();
-  const datasetUnsubs = new Map<string, () => Promise<void>>();
+  const readableRow = async (): Promise<ArtifactRow | null> => {
+    const row = await getArtifactById(id);
+    if (row && await canReadArtifact(row, actor)) return row;
+    void close();
+    return null;
+  };
+  const stillReadable = async () => { const access = await getArtifactAccessById(id); return !!access && await canReadArtifact(access, actor); };
 
-  const encoder = new TextEncoder();
-  const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
-  const writer = writable.getWriter();
+  const channel = sseChannel();
   let closed = false;
   let unsubscribe: (() => Promise<void>) | undefined;
   let liveUnsub: (() => void) | undefined;
-  let presenceRoom:Awaited<ReturnType<typeof createPresenceRoom>>|undefined;
-  // The document frame always opens the stream: a room's immediate first roster waits for it (latest wins meanwhile).
-  let presenceWriting=false,documentSent=false,latestPresence:PresenceFrame|null=null;
-  const writePresence=()=>{if(closed||!documentSent||presenceWriting||!latestPresence)return;const frame=latestPresence;latestPresence=null;presenceWriting=true;void writer.write(encoder.encode(`event: ${PRESENCE_EVENT}\ndata: ${JSON.stringify(frame)}\n\n`)).catch(()=>void close()).finally(()=>{presenceWriting=false;writePresence();});};
-
-  /**
-   * WHERE THIS READER STANDS: the mark of every dataset the stream follows (lib/publish/prepared/served-results
-   * `marksOf`), sent as the SSE `id:` of every document and data frame. A connection that is cut (an idle proxy, a
-   * deploy, a sleeping laptop) reopens with `?since=<the last id>` (lib/http/live-stream), and the `since` catch-up
-   * below sends the `data` frame for every dataset that moved in the gap — once: the cursor a frame carries already
-   * includes the change it announces. Marks are taken after the dataset is subscribed, so a write after the mark
-   * always wakes the stream. A `since` the reader brings seeds them, so the opening frame never claims a position
-   * past a change the catch-up has not sent yet.
-   */
-  const marks = marksOfToken(new URL(request.url).searchParams.get('since'));
-  const position = () => {
-    if (initial.format === 'html') return '';
-    for (const datasetId of [...marks.keys()]) if (!datasetUnsubs.has(datasetId)) marks.delete(datasetId);
-    return marks.size ? `id: ${tokenOf(marks)}\n` : '';
-  };
-
-  const send = (event: ArtifactVersionPing) =>
-    writer.write(encoder.encode(`${position()}data: ${JSON.stringify(event)}\n\n`)).catch(() => { /* client gone */ });
-
-  /** A DATA wakeup: this dataset changed, re-run what reads it. */
-  const sendData = (event: ArtifactDataEvent) =>
-    writer.write(encoder.encode(`${position()}event: ${STORY_DATA_EVENT}\ndata: ${JSON.stringify(event)}\n\n`)).catch(() => { /* client gone */ });
-
-  let sharedQueue = Promise.resolve();
-  const pushHtmlShared = (row: NonNullable<Awaited<ReturnType<typeof getArtifactById>>>) => sharedQueue = sharedQueue.then(async () => {
-    if (row.format !== 'html' || closed) return;
-    const current = await htmlSharedRevisions(await getDb(), htmlLiveLinks(row.meta), {mayReadDataset:async datasetId=>{const dataset=await getArtifactById(datasetId);return !!dataset&&dataset.format==='dataset'&&await canReadArtifact(dataset,actor);}});
-    if (closed) return;
-    const changed = changedHtmlSharedRevisions(sharedMarks, current);
-    sharedMarks = new Map(current.map(mark => [mark.name, mark.revision]));
-    if (changed.length) await sendData({datasets:changed.map(mark=>mark.name),version:row.version,revisions:Object.fromEntries(changed.map(mark=>[mark.name,mark.revision]))});
-  }).catch(() => { void close(); });
-
-  /**
-   * Comment pings follow document read admission, rechecked on every wakeup.
-   * The event carries no comment content; the listing independently checks admission.
-   */
-  const sendAnnotations = () =>
-    writer.write(encoder.encode(`event: ${STORY_ANNOTATIONS_EVENT}\ndata: {}\n\n`)).catch(() => { /* client gone */ });
-
-  const pushAnnotations = async () => {
-    if (closed) return;
-    const row = await getArtifactById(id);
-    if (!row) return void close();
-    if (!(await canReadArtifact(row, actor))) return void close();
-    void sendAnnotations();
-  };
-
   let annotationsUnsub: (() => Promise<void>) | undefined;
-
-  const keepalive = setInterval(() => {
-    writer.write(encoder.encode(liveKeepaliveFrame())).catch(() => { /* client gone */ });
-  }, LIVE_KEEPALIVE_MS);
 
   /**
    * THE DATABASE LISTENER WENT AWAY (lib/db PostgresDb): no wakeup can reach
@@ -170,89 +95,45 @@ export async function openDocumentEvents(request: Request, id: string): Promise<
    * opening frame is a catch-up read, so nothing written meanwhile is lost.
    */
   const listenerLost = () => void close();
+  const datasets = datasetFollower({
+    format: initial.format, actor, channel, since: new URL(request.url).searchParams.get('since'), lost: listenerLost,
+    onWake: datasetId => void (async () => { if (closed) return; const row = await readableRow(); if (row) await datasets.wake(datasetId, row); })(),
+  });
+  const presence = presenceFollower({ id, actor, channel, close: () => void close() });
+  const send = (event: ArtifactVersionPing) => channel.send(JSON.stringify(event), { id: datasets.position() });
+
+  /**
+   * Comment pings follow document read admission, rechecked on every wakeup.
+   * The event carries no comment content; the listing independently checks admission.
+   */
+  const pushAnnotations = async () => {
+    if (closed || !(await readableRow())) return;
+    void channel.send('{}', { event: STORY_ANNOTATIONS_EVENT });
+  };
+
+  const keepalive = setInterval(() => void channel.sendFramed(liveKeepaliveFrame()), LIVE_KEEPALIVE_MS);
 
   const close = async () => {
     if (closed) return;
     closed = true;
     clearInterval(keepalive);
-    presenceRoom?.dispose();latestPresence=null;
+    presence.dispose();
     if (unsubscribe) await unsubscribe().catch(() => {});
     liveUnsub?.();
     if (annotationsUnsub) await annotationsUnsub().catch(() => {});
-    for (const drop of datasetUnsubs.values()) await drop().catch(() => {});
-    datasetUnsubs.clear();
-    await writer.close().catch(() => {});
+    await datasets.close();
+    await channel.close();
   };
   // A cancelled response reader rejects the writable side even when the request's
   // signal stays live (for example a streaming client that releases its body).
   // Release every LISTEN immediately, rather than waiting for another write to fail.
-  void writer.closed.catch(() => void close());
-
-
-  /**
-   * A dataset wakeup. The document's own ACL is re-checked here exactly as it
-   * is for a document frame — a stream is long-lived and access is not — and
-   * the payload is deliberately tiny: which dataset, and the version it
-   * reached. The rows themselves come from the query endpoint, under the same
-   * ACL as everything else, so this frame reveals nothing a reader could not
-   * already fetch.
-   */
-  const wakeDataset = async (datasetId: string) => {
-    if (closed) return;
-    const row = await getArtifactById(id);
-    if (!row) return void close();
-    if (!(await canReadArtifact(row, actor))) return void close();
-    if (row.format === 'html') { await pushHtmlShared(row); return; }
-    const [dataset, now] = await Promise.all([getArtifactById(datasetId), datasetUnsubs.has(datasetId) ? marksOf([datasetId]) : null]);
-    const mark = now?.get(datasetId);
-    if (mark) marks.set(datasetId, mark);
-    void sendData({ datasets: [datasetId], version: dataset?.version ?? 0 });
-  };
-
-  /**
-   * Follow exactly the datasets this version of the row depends on.
-   *
-   * A FOLDER DEPENDS ON ITSELF, and that rule is stated here rather than
-   * inferred from its stored source: a folder HAS no source, so nothing would
-   * name it and an open listing would sit stale until someone reloaded. A child
-   * write NOTIFYs the parent's channel (lib/folders notifyParent) and travels
-   * as an ordinary `event: data` frame naming the folder's id, so the folder
-   * page and an authored `<Files>` document both re-read on the same ping.
-   */
-  const followDatasets = async (row: NonNullable<Awaited<ReturnType<typeof getArtifactById>>>) => {
-    if (closed) return;
-    const wanted = new Set(row.format === 'html' ? liveDatasetIds(htmlLiveLinks(row.meta)) : row.format === 'folder' ? [row.id] : []);
-    for (const [datasetId, drop] of datasetUnsubs) {
-      if (wanted.has(datasetId)) continue;
-      datasetUnsubs.delete(datasetId);
-      await drop().catch(() => {});
-    }
-    const added: string[] = [];
-    for (const datasetId of wanted) {
-      if (datasetUnsubs.has(datasetId)) continue;
-      try {
-        // Reserve the slot before awaiting, so two frames arriving together
-        // cannot open two subscriptions to the same channel.
-        datasetUnsubs.set(datasetId, async () => {});
-        const drop = await subscribeToArtifact(datasetId, () => void wakeDataset(datasetId), listenerLost);
-        if (closed) { await drop().catch(() => {}); datasetUnsubs.delete(datasetId); return; }
-        datasetUnsubs.set(datasetId, drop);
-        added.push(datasetId);
-      } catch (error) {
-        // At capacity: the document itself still streams. Data updates then
-        // arrive on the reader's next interaction rather than on their own.
-        datasetUnsubs.delete(datasetId);
-        if (!(error instanceof TooManyLiveChannels)) throw error;
-      }
-    }
-    // Newly followed: marked now that they are subscribed (a mark the reader brought is kept for the catch-up).
-    if (row.format !== 'html' && added.length) for (const [datasetId, mark] of await marksOf(added)) if (!marks.has(datasetId)) marks.set(datasetId, mark);
-  };
+  void channel.gone.catch(() => void close());
 
   // Last stylesheet sent on THIS connection, so repeats can be skipped.
   let lastVersionSent = -1;
   /** The live revision last announced within `lastVersionSent` (an HTML page's live text, ./live-pings). */
   let lastLiveSent = -1;
+  let documentSent = false;
   let frameQueue = Promise.resolve();
 
   /*
@@ -262,7 +143,7 @@ export async function openDocumentEvents(request: Request, id: string): Promise<
    * would have to understand, which is what lets a proxy blind to content
    * hold it.
    */
-  const frameFor = async (row: NonNullable<Awaited<ReturnType<typeof getArtifactById>>>): Promise<ArtifactVersionPing> => {
+  const frameFor = async (row: ArtifactRow): Promise<ArtifactVersionPing> => {
     // An HTML page is announced as its current page (lib/artifacts current-page): its live revision and its title.
     const page = row.format === 'html' ? await currentPage(row) : null;
     return {
@@ -274,26 +155,7 @@ export async function openDocumentEvents(request: Request, id: string): Promise<
     };
   };
 
-  let presenceRevision:string|undefined,replacingPresence=false;
-  const followPresence=async(row:NonNullable<Awaited<ReturnType<typeof getArtifactById>>>)=>{
-    // A signed-out reader gets no presence: other readers' cursors, selections and handles go only to
-    // signed-in readers. A guest still shares its own cursor (app/api/artifacts/[id]/presence).
-    if(!actor.userId)return;
-    if(closed||row.format!=='html'||presenceRevision===String(row.version))return;
-    // A new source revision replaces only its presence room, never the document stream.
-    replacingPresence=true;presenceRoom?.dispose();replacingPresence=false;
-    latestPresence=null;presenceRevision=String(row.version);
-    const room=await createPresenceRoom({revision:String(row.version),readerIdentity:presenceAccountIdentity(actor.userId),
-      authorize:async()=>{const current=await getArtifactAccessById(id);return !!current&&await canReadArtifact(current,actor);},
-      subscribe:(receive,lost)=>subscribeChannel(presenceChannel(id),receive,lost),
-      subscribeAcl:(changed,lost)=>subscribeToArtifact(id,changed,lost),
-      send:frame=>{latestPresence=frame;writePresence();},close:()=>{if(!replacingPresence)void close();},frameIntervalMs:presenceFrameIntervalMs,
-      clock:{now:Date.now,setTimeout:(work,ms)=>setTimeout(work,ms),clearTimeout:timer=>clearTimeout(timer as ReturnType<typeof setTimeout>),setInterval:(work,ms)=>setInterval(work,ms),clearInterval:timer=>clearInterval(timer as ReturnType<typeof setInterval>)}
-    });
-    presenceRoom=room;if(closed)room.dispose();
-  };
-
-  const queueRow = (row: NonNullable<Awaited<ReturnType<typeof getArtifactById>>>) => {
+  const queueRow = (row: ArtifactRow) => {
     frameQueue = frameQueue.then(async () => {
       if (closed || row.version < lastVersionSent) return;
       const frame = await frameFor(row);
@@ -309,11 +171,11 @@ export async function openDocumentEvents(request: Request, id: string): Promise<
       // A FOLDER's one data dependency is ITSELF, which is what makes a
       // child's publish reach an open folder page through the path a dataset
       // write already travels.
-      await followPresence(row);
-      await followDatasets(row);
-      await pushHtmlShared(row);
+      await presence.follow(row);
+      await datasets.follow(row);
+      await datasets.pushShared(row);
       await send(frame);
-      if(!documentSent){documentSent=true;writePresence();}
+      if (!documentSent) { documentSent = true; presence.documentSent(); }
       // An edit shifts anchors; annotator connections' pins must follow the document
       // frame that moved them. Plain reader connections are no-ops.
       void pushAnnotations();
@@ -329,8 +191,7 @@ export async function openDocumentEvents(request: Request, id: string): Promise<
   const pushLive = (head: () => Promise<LiveHead | null>) => {
     frameQueue = frameQueue.then(async () => {
       if (closed) return;
-      const access = await getArtifactAccessById(id);
-      if (!access || !(await canReadArtifact(access, actor))) return void close();
+      if (!(await stillReadable())) return void close();
       const current = await head();
       if (closed || !current || current.version !== lastVersionSent || current.live <= lastLiveSent) return;
       lastLiveSent = current.live;
@@ -342,14 +203,9 @@ export async function openDocumentEvents(request: Request, id: string): Promise<
   // makes a missed or duplicated wakeup harmless.
   const pushCurrent = async (payload?: string) => {
     if (closed) return;
-    const row = await getArtifactById(id);
-    if (!row) return void close(); // deleted while watching
-    // Re-check on EVERY wakeup, not just at connect: a stream is long-lived
-    // and access is not. Without this, someone who connected while a document
-    // was public kept receiving everything written after it was made private
-    // — revocation that never reached the one reader it was aimed at.
-    if (!(await canReadArtifact(row, actor))) return void close();
-    if (payload === 'members') void sendData({datasets:['_members'],version:row.version});
+    const row = await readableRow();
+    if (!row) return;
+    if (payload === 'members') void datasets.sendData({datasets:['_members'],version:row.version});
     queueRow(row);
   };
 
@@ -360,7 +216,7 @@ export async function openDocumentEvents(request: Request, id: string): Promise<
     // queued rather than awaited (see below), so waiting for it would leave a
     // window in which a write to this document's dataset reached nobody.
     // Later frames adjust the set when an edit changes what the document reads.
-    await followDatasets(initial);
+    await datasets.follow(initial);
     if (initial.format === 'html') {
       try {
         liveUnsub = await pageLive.follow(artifactId, { tick: pushLive, lost: listenerLost });
@@ -370,22 +226,19 @@ export async function openDocumentEvents(request: Request, id: string): Promise<
         if (!(error instanceof TooManyLiveChannels)) throw error;
       }
     }
-    {
-      try {
-        annotationsUnsub = await subscribeToAnnotations(artifactId, () => void pushAnnotations(), listenerLost);
-      } catch (error) {
-        // At capacity: the document still streams; annotation changes then
-        // arrive with the next document frame instead of on their own.
-        if (!(error instanceof TooManyLiveChannels)) throw error;
-      }
+    try {
+      annotationsUnsub = await subscribeToAnnotations(artifactId, () => void pushAnnotations(), listenerLost);
+    } catch (error) {
+      // At capacity: the document still streams; annotation changes then
+      // arrive with the next document frame instead of on their own.
+      if (!(error instanceof TooManyLiveChannels)) throw error;
     }
   } catch (error) {
     // At capacity: say so plainly instead of holding a stream that will never
     // deliver. The page still renders and reloads fine without live updates.
-    liveUnsub?.();
+    // Either way, nothing this stream opened is left behind.
+    await close();
     if (!(error instanceof TooManyLiveChannels)) throw error;
-    clearInterval(keepalive);
-    await writer.close().catch(() => {});
     return { status: 'busy' };
   }
   request.signal.addEventListener('abort', () => void close());
@@ -417,10 +270,10 @@ export async function openDocumentEvents(request: Request, id: string): Promise<
    */
   const since = new URL(request.url).searchParams.get('since');
   if (since && initial.format !== 'html') {
-    void changedSince(since, [...datasetUnsubs.keys()])
-      .then(async (changed) => { for (const datasetId of changed) await wakeDataset(datasetId); })
+    void changedSince(since, datasets.followed())
+      .then(async (changed) => { for (const datasetId of changed) { if (closed) return; const row = await readableRow(); if (row) await datasets.wake(datasetId, row); } })
       .catch(() => { /* a failed catch-up is a missed wakeup: the next change still arrives */ });
   }
 
-  return { status: 'open', stream: readable };
+  return { status: 'open', stream: channel.readable };
 }

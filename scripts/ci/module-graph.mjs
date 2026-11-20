@@ -15,10 +15,10 @@
  *      edge still is one — the list only shrinks, and a new back edge is a reviewed edit to it;
  *   4. a lib module is entered from outside only through its index, or, with a row in DEEP_MODULES below, its listed entries
  *      (and downstream paths a deployment imports by path, which need no importer here),
- *      and from listed browser-bundled code also through listed leaves; browserLeavesOnly rows (lib/islands,
- *      lib/document) are stricter (server code uses an entry, browser code a leaf). Browser-bundled code may
+ *      and from listed browser-bundled code also through listed leaves; browserLeavesOnly rows (lib/document)
+ *      are stricter (server code uses an entry, browser code a leaf). Browser-bundled code may
  *      always import TYPES from an entry: types are erased, so a type-only import cannot change a bundle.
- *      A serverOnly entry (lib/reader-chrome's index) is refused to every row's browser importers for
+ *      A serverOnly entry (lib/artifacts' index) is refused to every row's browser importers for
  *      values. A testOnly entry (lib/artifacts' testing) is refused to all product code. A new deep import is a reviewed
  *      edit to the table, and every listed entry and leaf must still be imported, so the lists only shrink. Tests and
  *      harnesses are held to rule 4 alone: their own module freely, another module through its entries, test-only
@@ -180,8 +180,6 @@ const BUNDLED_LEAVES = {
   'lib/markdown': ['content', 'code-block'],
   'lib/skills': ['agent-discovery', 'setup-instructions'],
   'lib/html-systems': ['story-systems', 'story-themes', ],
-  'lib/story-ui': [
-    'comment-target', ],
   'lib/validation': [ 'html-system-modes', 'story-system-names', 'story-theme-names'],
   'lib/workspace': ['artifact-starters', 'breadcrumb', 'visibility-icons'],
   // <af-chart> (lib/html-components/chart-render.ts) plans and builds its views with the query image's code; the
@@ -197,7 +195,7 @@ const bundled = module => ({ entries: [''], browserImporters: BUNDLED_IMPORTERS,
  * `downstream` (paths minusxai/artifactbin-server imports, pinned by __tests__/downstream-exports.test.ts: importable
  * like entries, never stale), and optionally `browserImporters` (path
  * prefixes ending in `/`, or exact files) with the `browserLeaves` only they may import.
- * `browserLeavesOnly` (lib/islands, lib/document) also refuses entries to browser-bundled code for values.
+ * `browserLeavesOnly` (lib/document) also refuses entries to browser-bundled code for values.
  * `serverOnly` lists entries no browser-bundled file (any row's browserImporters) may import for values.
  * `testOnly` lists entries only tests and the test harness may import (a module's names no product code uses).
  * Type-only imports of an entry are allowed from anywhere: they are erased and cannot change a bundle.
@@ -221,7 +219,6 @@ export const DEEP_MODULES = {
   // Infrastructure (config, db, schema, ids, events, request scope, services): its index only, and never in a browser bundle.
   'lib/platform': { entries: [''], downstream: ['config', 'db', 'services'], serverOnly: [''] },
   'lib/document-serving': { entries: [''], serverOnly: [''], browserImporters: ['services/app/solid/'], browserLeaves: DOCUMENT_SERVING_BROWSER_LEAVES },
-  'lib/shelf': { entries: [''], browser: [''] },
   'lib/user-pages': { entries: [''], serverOnly: [''] },
   'lib/agent-copy': { entries: [''], serverOnly: [''], browserImporters: ['services/app/solid/'], browserLeaves: AGENT_COPY_BROWSER_LEAVES },
   // Above lib/accounts and lib/artifacts: request identity, its doors, token claims and guest merges.
@@ -236,7 +233,6 @@ export const DEEP_MODULES = {
   'lib/html-systems': { ...bundled('lib/html-systems'), entries: ['', 'server'], serverOnly: ['server'] },
   // A story's design vocabulary and its CSS compile (node, tailwind), and the edits to its JSX source: browser-bundled
   // code imports the leaves, because each index re-exports files a bundle would keep.
-  'lib/story-edit': { ...bundled('lib/story-edit'), serverOnly: [''] },
   'lib/html-runtime': { ...bundled('lib/html-runtime'), entries: ['', 'server'], serverOnly: ['server'] },
   'lib/live-regions': { ...bundled('lib/live-regions'), serverOnly: [''] },
   'lib/libraries': { entries: ['', 'server'], serverOnly: ['server'] },
