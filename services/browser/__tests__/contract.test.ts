@@ -47,12 +47,12 @@ const CHART_PAGE = `<html><body style="margin:0"><main style="width:100px;height
 const STUCK_CHART_PAGE = `<html><body><main style="width:100px;height:100px"><af-chart aria-busy="true">Loading chart</af-chart></main></body></html>`;
 /*
  * A page that draws the way the kit's diagrams do: an SVG `data:` URL in an
- * <img>, a moment after load. One figure is reproducible, one draws a random
+ * <img>, busy until drawn (the harvest waits for that). One figure is reproducible, one draws a random
  * number every load, and one is a plain image the harvest must skip.
  */
 const DRAWN = (label: string) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><text>${label}</text></svg>`)}`;
-const HARVEST_PAGE = `<html><body style="margin:0"><main><figure data-kind="fixed"></figure><figure data-kind="random"></figure><figure data-kind="png"><img src="data:image/png;base64,iVBORw0KGgo="></figure><img src="http://127.0.0.1:1/cross-origin.png"></main><script>
-setTimeout(()=>{const [a,b]=document.querySelectorAll('figure');a.innerHTML='<img width="120" height="80" src=${JSON.stringify(DRAWN('fixed & sound'))}>';b.innerHTML='<img src="'+${JSON.stringify(DRAWN('').split('%3C%2Ftext%3E')[0])}+Math.random()+'%3C%2Ftext%3E%3C%2Fsvg%3E">';},200)</script></body></html>`;
+const HARVEST_PAGE = `<html><body style="margin:0"><main><af-chart aria-busy="true"></af-chart><figure data-kind="fixed"></figure><figure data-kind="random"></figure><figure data-kind="png"><img src="data:image/png;base64,iVBORw0KGgo="></figure><img src="http://127.0.0.1:1/cross-origin.png"></main><script>
+setTimeout(()=>{const [a,b]=document.querySelectorAll('figure');a.innerHTML='<img width="120" height="80" src=${JSON.stringify(DRAWN('fixed & sound'))}>';b.innerHTML='<img src="'+${JSON.stringify(DRAWN('').split('%3C%2Ftext%3E')[0])}+Math.random()+'%3C%2Ftext%3E%3C%2Fsvg%3E">';document.querySelector('af-chart').removeAttribute('aria-busy');},200)</script></body></html>`;
 /* A tile drawn from the page's own SQL read, which answers after the settle: red until its rows arrive and draw. */
 const DATA_PAGE = `<html><body style="margin:0"><main style="width:100px;height:100px;background:#c33"></main><script>fetch('/api/artifacts/x/sql',{method:'POST',body:'{}'}).then(r=>r.json()).then(()=>setTimeout(()=>{document.querySelector('main').style.background='#3c3'},100))</script></body></html>`;
 /* A data read that never answers; and a long-lived stream, which is not a data read and never holds a capture. */
@@ -263,7 +263,7 @@ describe.each<[string, BrowserService]>([['in-process', local], ['over HTTP', re
     expect(!r.ok && r.reason).toBe('failed');
   });
   it('harvests the drawn SVGs as text, after they draw, with their attributes, once per load', async () => {
-    const r = await svc.harvestSvg!({ url: `${pages.base}/harvest`, viewport: { width: 600, height: 400 }, selector: 'main', collect: 'figure', sameOriginOnly: true, settleMs: 600, timeoutMs: 10_000, loads: 2 });
+    const r = await svc.harvestSvg!({ url: `${pages.base}/harvest`, viewport: { width: 600, height: 400 }, selector: 'main', collect: 'figure', sameOriginOnly: true, settleMs: 0, timeoutMs: 10_000, loads: 2 });
     if (!r.ok) throw new Error(JSON.stringify(r));
     expect(r.loads).toHaveLength(2);
     for (const load of r.loads) {
