@@ -4,12 +4,12 @@
  */
 import {randomUUID} from 'node:crypto';
 import {afterEach,describe,expect,it} from 'vitest';
-import type {RenderRequest} from '@artifactbin/contracts';
-import {CARD_HEIGHT,CARD_WIDTH} from '@artifactbin/contracts';
+import type {RenderRequest} from '@artifactbin/contracts/browser';
+import {CARD_HEIGHT, CARD_WIDTH} from '@artifactbin/contracts/og-card';
 import {useAppHarness} from '@/__tests__/harness';
 import {getDb,setServices} from '@/lib/platform';
 import {objectStore} from '@/lib/object-store';
-import {ELEMENT_CAPTURE} from '@artifactbin/contracts';
+import {ELEMENT_CAPTURE} from '@artifactbin/contracts/browser';
 import {EXPORT_RENDER_GENERATION,exportCacheKey,exportImageResponse,exportKeyReader,mintExportKey,parseExportCapture,parseExportElement,parseExportFormat,parseExportSlide,renderArtifactImage,resetExportRenderer,verifyExportKey} from '..';
 
 useAppHarness();

@@ -5,7 +5,7 @@
  * while a query runs, and what replaces a thread that stops answering.
  */
 import { describe, expect, it } from 'vitest';
-import type { RunInput } from '@artifactbin/contracts';
+import type { RunInput } from '@artifactbin/contracts/sql';
 import { execFileSync } from 'node:child_process';
 import { serveSql } from '@artifactbin/sql';
 import { createSql } from '@artifactbin/sql/local';

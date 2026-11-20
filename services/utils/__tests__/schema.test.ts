@@ -1,7 +1,8 @@
 import {testDb} from '@artifactbin/test-support/db';
 import {PGlite} from '@electric-sql/pglite';
 import {beforeAll,describe,expect,it} from 'vitest';
-import type { Queryable, Table } from '@artifactbin/contracts';
+import type { Queryable } from '@artifactbin/contracts/db';
+import type { Table } from '@artifactbin/contracts/schema';
 import {ensureTable,renderSchema} from '@artifactbin/utils';
 import {serviceSecretForServer} from '../src/service-auth';
 

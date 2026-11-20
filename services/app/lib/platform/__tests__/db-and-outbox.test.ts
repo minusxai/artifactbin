@@ -4,7 +4,7 @@
  * the outbox a source action commits its facts to and the publisher that drains it.
  */
 // harness-exempt: reset lib/platform's own resetDb and configureDb are the subject: the shared adapter reopens after a reset (last test in the file)
-import type { EventEnvelope, EventsService } from '@artifactbin/contracts';
+import type { EventEnvelope, EventsService } from '@artifactbin/contracts/events';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useAppHarness } from '@/__tests__/harness';
 import {

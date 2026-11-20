@@ -10,7 +10,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { identityForUser } from '@/lib/accounts';
 import { z } from 'zod';
-import type { BrowserSessionRequest, BrowserSessionResult } from '@artifactbin/contracts';
+import type { BrowserSessionRequest, BrowserSessionResult } from '@artifactbin/contracts/browser-sessions';
 import { OPERATIONS, type OpContext } from '@/lib/operations/registry';
 import { services, setServices } from '@/lib/platform';
 

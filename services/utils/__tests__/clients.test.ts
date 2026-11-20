@@ -2,7 +2,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
-import { isQueryFailure, type RenderRequest } from '@artifactbin/contracts';
+import { isQueryFailure } from '@artifactbin/contracts/sql';
+import type { RenderRequest } from '@artifactbin/contracts/browser';
 import { browserClient, fakeBrowser, sqlClient } from '@artifactbin/utils';
 import { inferColumns } from '@artifactbin/utils/shape';
 import { serveSql } from '@artifactbin/sql';

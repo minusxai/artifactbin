@@ -1,7 +1,7 @@
 import {beforeEach,expect,it} from 'vitest';
 import {createAuthHost} from '../src/parts';
 import {createBearerReader} from '../src/identity/bearer';
-import type {Actor} from '@artifactbin/contracts';
+import type {Actor} from '@artifactbin/contracts/actor';
 import {mintTestToken,resetTestDb,testDb,testAuthOptions} from './helpers';
 beforeEach(async()=>{await resetTestDb();await testDb().query('DELETE FROM auth."user"');});
 it('resolves fresh identity for ordinary bearer requests and never accepts a mismatched account',async()=>{

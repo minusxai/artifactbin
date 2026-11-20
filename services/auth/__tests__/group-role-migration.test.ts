@@ -1,7 +1,7 @@
 /** The role rename must preserve authority once, including invitations, without promoting new Editors. */
 import {PGlite} from '@electric-sql/pglite';
 import {afterEach,beforeEach,expect,it} from 'vitest';
-import type {TransactionalQueryable} from '@artifactbin/contracts';
+import type {TransactionalQueryable} from '@artifactbin/contracts/identity-module';
 import {assertGroupRoleModel,migrateGroupRoles} from '../src/identity-store/group-role-migration';
 import manifest from '../package.json';
 let pg:PGlite;

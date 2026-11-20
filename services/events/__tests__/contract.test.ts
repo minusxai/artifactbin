@@ -7,8 +7,10 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { testDb } from '@artifactbin/test-support/db';
-import type { EventEnvelope, EventsService, Queryable } from '@artifactbin/contracts';
-import { EVENTS_ROUTES, SERVICE_AUTH_HEADER } from '@artifactbin/contracts';
+import type { EventEnvelope, EventsService } from '@artifactbin/contracts/events';
+import type { Queryable } from '@artifactbin/contracts/db';
+import { EVENTS_ROUTES } from '@artifactbin/contracts/events';
+import { SERVICE_AUTH_HEADER } from '@artifactbin/contracts/routes';
 import { eventsClient, loadEventsConfig, runEvents, serveEvents } from '@artifactbin/events';
 import { createEvents, ensureEventsSchema } from '@artifactbin/events/local';
 
