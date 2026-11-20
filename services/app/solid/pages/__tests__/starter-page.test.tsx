@@ -11,12 +11,10 @@ import { Route, Router } from '@solidjs/router';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { START_PLACEHOLDER_MARKUP } from '@artifactbin/contracts/start-placeholder';
 import { existingPaste } from '@/lib/agent-copy/agent-copy';
-import { reloadKeepingPlace } from '@/lib/html-reader/reload';
 import { replaceDocument } from '@/solid/lib/document-navigation';
 import { StarterPage, type StarterAnswer } from '@/solid/pages/Starter';
 import { stubFetch } from '@/test/helpers/fetch-stub';
 
-vi.mock('@/lib/html-reader/reload', () => ({ reloadKeepingPlace: vi.fn() }));
 vi.mock('@/solid/lib/document-navigation', () => ({ replaceDocument: vi.fn() }));
 
 const streams: Array<{ url: string; onmessage: ((event: { data: string }) => void) | null }> = [];
@@ -28,7 +26,7 @@ class FakeEventSource {
 let frameSource = START_PLACEHOLDER_MARKUP;
 beforeEach(() => {
   streams.length = 0; frameSource = START_PLACEHOLDER_MARKUP;
-  vi.mocked(reloadKeepingPlace).mockClear(); vi.mocked(replaceDocument).mockClear();
+  vi.mocked(replaceDocument).mockClear();
   document.body.removeAttribute('data-mx-view-reported');
   vi.stubGlobal('EventSource', FakeEventSource);
   stubFetch({
@@ -110,7 +108,8 @@ it('reloads into the compiled reader when the first real version arrives, not be
   const stream = streams.find((candidate) => candidate.url === '/a/sta001/events')!;
   frameSource = '<h1>Landed by the agent</h1>';
   stream.onmessage?.({ data: JSON.stringify({ editId: 'e2', version: 2, by: null }) });
-  await waitFor(() => expect(reloadKeepingPlace).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(replaceDocument).toHaveBeenCalledTimes(1));
+  expect(replaceDocument).toHaveBeenCalledWith(window.location.href);
 });
 
 it('reports the open once', async () => {
