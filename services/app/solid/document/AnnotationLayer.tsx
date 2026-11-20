@@ -138,6 +138,21 @@ function createLinkedComment(linkTarget: () => string | null | undefined) {
   return linked;
 }
 
+/** Deleting a thread or one reply, once confirmed: a refusal stays in the dialog, which stays while it runs. */
+function ConfirmDelete(props: { thread: boolean; remove: () => Promise<unknown>; onClose: () => void }): JSX.Element {
+  const [busy, setBusy] = createSignal(false);
+  const [error, setError] = createSignal<string | null>(null);
+  const confirm = async () => {
+    if (busy()) return;
+    setBusy(true); setError(null);
+    try { await props.remove(); props.onClose(); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not complete this action. Try again.'); }
+    finally { setBusy(false); }
+  };
+  return <ConfirmDialog {...(props.thread ? DELETE_THREAD_CONFIRMATION : DELETE_REPLY_CONFIRMATION)} danger busy={busy()} error={error()}
+    onCancel={() => { if (!busy()) props.onClose(); }} onConfirm={() => void confirm()} />;
+}
+
 /** A per-thread record kept in step: `value` empty removes the entry. */
 const withEntry = <T,>(current: Record<string, T>, id: string, value: T | undefined) => {
   const next = { ...current };
@@ -186,8 +201,6 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   const phoneRail = createIsPhoneViewport();
   const [ambientResolveError, setAmbientResolveError] = createSignal<{ id: string; message: string } | null>(null);
   const [deleting, setDeleting] = createSignal<{ id: string; thread: boolean } | null>(null);
-  const [confirmBusy, setConfirmBusy] = createSignal(false);
-  const [confirmError, setConfirmError] = createSignal<string | null>(null);
   const [viewport, setViewport] = createSignal({ width: innerWidth, height: innerHeight });
   onMount(() => {
     const resize = () => setViewport({ width: innerWidth, height: innerHeight });
@@ -263,15 +276,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
     setAmbientResolveError(null);
     if (!await threads.act(id, { resolve: true })) setAmbientResolveError({ id, message: 'Could not resolve this thread. Try again.' });
   };
-  const confirmDelete = async () => {
-    const pending = deleting();
-    if (!pending || confirmBusy()) return;
-    setConfirmBusy(true); setConfirmError(null);
-    try { await threads.remove(pending.id); setDeleting(null); }
-    catch (cause) { setConfirmError(cause instanceof Error ? cause.message : 'Could not complete this action. Try again.'); }
-    finally { setConfirmBusy(false); }
-  };
-  const askDelete = (commentId: string, thread: boolean) => { if (!mayCreate() || deleting()) return; setConfirmError(null); setDeleting({ id: commentId, thread }); };
+  const askDelete = (commentId: string, thread: boolean) => { if (!mayCreate() || deleting()) return; setDeleting({ id: commentId, thread }); };
 
   const topOffset = () => props.topOffset ?? 0;
   // The collapsed identity mark is small enough for phones too; its click opens the same rail as a sheet.
@@ -364,10 +369,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
           threadsRef={(element) => { threadsRoot = element; }} />
       </Show>
 
-      <Show when={deleting()}>
-        <ConfirmDialog {...(deleting()?.thread ? DELETE_THREAD_CONFIRMATION : DELETE_REPLY_CONFIRMATION)} danger busy={confirmBusy()} error={confirmError()}
-          onCancel={() => { if (!confirmBusy()) setDeleting(null); }} onConfirm={() => void confirmDelete()} />
-      </Show>
+      <Show when={deleting()}>{(pending) => <ConfirmDelete thread={pending().thread} remove={() => threads.remove(pending().id)} onClose={() => setDeleting(null)} />}</Show>
     </CommentsOffline.Provider>
   </PersonMentionProvider></CommentImagesProvider>;
 }

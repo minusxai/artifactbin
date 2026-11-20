@@ -20,8 +20,12 @@ import { isFolded, readFolds, toggleFold, unfold, type FoldKind, type Folds } fr
 type Retained = Record<string, { row: AnnotationWire; remaining: number }>;
 
 const sameIds = (a: string[], b: string[]) => a.length === b.length && a.every((id, index) => id === b[index]);
+/** `rows` with `wire` in place of its old row. */
+const swap = (rows: AnnotationWire[], wire: AnnotationWire) => rows.map((row) => (row.id === wire.id ? wire : row));
 /** `rows` with `wire` in place of its old row, or added at the end. */
-const upsert = (rows: AnnotationWire[], wire: AnnotationWire) => rows.some((row) => row.id === wire.id) ? rows.map((row) => (row.id === wire.id ? wire : row)) : [...rows, wire];
+const upsert = (rows: AnnotationWire[], wire: AnnotationWire) => rows.some((row) => row.id === wire.id) ? swap(rows, wire) : [...rows, wire];
+/** `open`, then the retained threads not already among them. */
+const plusRetained = (open: AnnotationWire[], retained: Retained[string][]) => [...open, ...retained.map((value) => value.row).filter((row) => !open.some((item) => item.id === row.id))];
 /** `rows` without the thread or reply `id` (a thread that loses a reply moves to its next revision). */
 const withoutComment = (rows: AnnotationWire[], id: string) => rows.flatMap((row) => {
   if (row.id === id) return [];
@@ -136,10 +140,7 @@ export function createThreadStore(options: {
   const retained = () => Object.values(recentResolved()).filter((value) => value.remaining > 0);
   const retainedPinIds = createMemo(() => retained().map((value) => value.row.id).join(','));
   /** Open threads plus those still counting down: what the document edge marks. */
-  const floatingRows = createMemo(() => {
-    const open = annotations();
-    return [...open, ...retained().filter((value) => !open.some((row) => row.id === value.row.id)).map((value) => value.row)];
-  });
+  const floatingRows = createMemo(() => plusRetained(annotations(), retained()));
   /**
    * Every thread with a pin in the document. Reading it tracks the retained SET, never a countdown tick. The ONE resolved
    * thread this viewer expanded rides with the open roots, beside its `openId`: the runtime records the scroll as done when
@@ -152,16 +153,15 @@ export function createThreadStore(options: {
     const recent = untrack(recentResolved);
     const current = annotations();
     const openResolved = open ? (resolvedList() ?? []).find((row) => row.id === open) ?? recent[open]?.row ?? null : null;
-    return [...current, ...(openResolved ? [openResolved] : []), ...Object.values(recent).filter((value) => value.remaining > 0 && value.row.id !== openResolved?.id && !current.some((row) => row.id === value.row.id)).map((value) => value.row)]
+    return plusRetained(openResolved ? [...current, openResolved] : current, Object.values(recent).filter((value) => value.remaining > 0))
       .filter((row) => !row.orphaned && row.anchor)
       .map((row) => ({ row, layoutOnly: row.status === 'resolved' && (row.id !== inspected || row.id !== open) }));
   };
 
   /** A thread as the server now answers it, wherever this viewer holds it (open, resolved, or counting down). */
   const replaceThread = (wire: AnnotationWire) => batch(() => {
-    const swap = (rows: AnnotationWire[]) => rows.map((row) => (row.id === wire.id ? wire : row));
-    setAnnotations((prev) => swap(prev));
-    setResolvedList((prev) => prev && swap(prev));
+    setAnnotations((prev) => swap(prev, wire));
+    setResolvedList((prev) => prev && swap(prev, wire));
     setRecentResolved((current) => current[wire.id] ? { ...current, [wire.id]: { ...current[wire.id]!, row: wire } } : current);
   });
   /** After a conflict: show the thread as it now stands, so the next try applies to it. */
@@ -187,22 +187,12 @@ export function createThreadStore(options: {
         if (conflict(cause)) await reread(annId);
         throw cause;
       }
-      if (body.resolve && wire.status === 'resolved') {
-        const revisions = locallyResolvedRevisions.get(annId) ?? new Set<number | undefined>();
-        revisions.add(wire.revision);
-        locallyResolvedRevisions.set(annId, revisions);
-      }
+      if (body.resolve && wire.status === 'resolved') locallyResolvedRevisions.set(annId, (locallyResolvedRevisions.get(annId) ?? new Set()).add(wire.revision));
       batch(() => {
         setAnnotations((prev) => wire.status === 'resolved' ? prev.filter((row) => row.id !== annId) : upsert(prev, wire));
         setResolvedList((prev) => !prev ? prev : wire.status === 'open' ? prev.filter((row) => row.id !== annId) : upsert(prev, wire));
         if (wire.status === 'resolved') {
-          setRecentResolved((current) => {
-            const retained = current[annId];
-            if (!retained || retained.row.revision !== wire.revision) return current;
-            const next = { ...current };
-            delete next[annId];
-            return next;
-          });
+          setRecentResolved((current) => current[annId]?.row.revision === wire.revision ? Object.fromEntries(Object.entries(current).filter(([id]) => id !== annId)) : current);
           // The thread being looked at moves into resolved history: open the group so it is still there.
           if (untrack(openId) === annId) setResolvedOpen(true);
           setOpenId((current) => (current === annId ? null : current));
@@ -234,17 +224,9 @@ export function createThreadStore(options: {
     batch(() => {
       setAnnotations((prev) => withoutComment(prev, annId));
       setResolvedList((prev) => prev && withoutComment(prev, annId));
-      setRecentResolved((current) => {
-        const next = { ...current };
-        if (next[annId]) delete next[annId];
-        for (const [rootId, value] of Object.entries(next)) {
-          if (!value.row.thread.some((comment) => comment.id === annId)) continue;
-          const [row] = withoutComment([value.row], annId);
-          if (row) next[rootId] = { ...value, row };
-          else delete next[rootId];
-        }
-        return next;
-      });
+      // A retained thread loses the comment too, or goes with it.
+      setRecentResolved((current) => Object.fromEntries(Object.entries(current).flatMap(([rootId, value]) =>
+        withoutComment([value.row], annId).map((row) => [rootId, row === value.row ? value : { ...value, row }]))));
       setOpenId((current) => (current === annId ? null : current));
     });
   });
@@ -266,10 +248,11 @@ export function createThreadStore(options: {
      * comment came for an answer; the thread and its newest comment open together, in one write.
      */
     open: (annId: string) => batch(() => {
+      const row = untrack(annotations).find((item) => item.id === annId);
+      const newest = row?.thread.at(-1)?.id;
       setOpenId(annId);
-      setInspectedResolvedId(untrack(annotations).some((row) => row.id === annId) ? null : annId);
+      setInspectedResolvedId(row ? null : annId);
       setJustOpenedId(annId);
-      const newest = untrack(annotations).find((row) => row.id === annId)?.thread.at(-1)?.id;
       setFolds(unfold(untrack(options.artifactId), { threads: [annId], comments: newest ? [newest] : [] }));
     }),
     /** Show one comment of a thread unfolded (a notification's target). */
