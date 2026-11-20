@@ -39,6 +39,11 @@ export interface DatasetRoleFacts {
   account: boolean;
   /** What the dataset's link alone grants (`none` when private). */
   linkRole: ArtifactRole;
+  /**
+   * A LIVE dataset (its rows stay in a database it holds a connection to): there an editor runs any SQL with the
+   * owner's stored connection, so a link never makes anyone its editor.
+   */
+  live: boolean;
   visibility: Visibility;
   /**
    * The caller arrives through a page that links the dataset. With no sharing of their own they get
@@ -49,13 +54,13 @@ export interface DatasetRoleFacts {
 
 /**
  * THE ONE ROLE DERIVATION for a dataset request: exactly one role, or null (the uniform 404). The first
- * matching step wins: owner; editor (a named editor share, or the link's editor role for an account);
- * anonymous (no account); viewer (a viewer or commenter share, or group Member); signed_in (an account
- * reaching through the link or a linking page). A page never raises the role.
+ * matching step wins: owner; editor (a named editor share, or the link's editor role for an account on a
+ * stored dataset, never a live one); anonymous (no account); viewer (a viewer or commenter share, or group
+ * Member); signed_in (an account reaching through the link or a linking page). A page never raises the role.
  */
 export function datasetRoleFrom(facts: DatasetRoleFacts): DatasetRole | null {
   if (facts.held === 'owner') return 'owner';
-  if (facts.held === 'editor' || (facts.account && facts.linkRole === 'editor')) return 'editor';
+  if (facts.held === 'editor' || (facts.account && facts.linkRole === 'editor' && !facts.live)) return 'editor';
   const reached = facts.visibility !== 'private' || facts.throughPage;
   if (!facts.account) return reached ? 'anonymous' : null;
   if (facts.held === 'viewer' || facts.held === 'commenter') return 'viewer';

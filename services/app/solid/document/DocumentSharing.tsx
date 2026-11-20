@@ -30,6 +30,8 @@ const Select = lazy(() => import('../ui/Select').then((m) => ({ default: m.Selec
 const QueryApprovals = lazy(() => import('./QueryApprovals').then((m) => ({ default: m.QueryApprovals })));
 
 const ROLE_OPTIONS = SHARE_ROLES.map((role) => ({ value: role, label: SHARE_ROLE_LABEL[role] }));
+/** A live dataset's link never makes anyone its editor (contracts `datasetRoleFrom`), so it is not offered. */
+const LIVE_LINK_ROLE_OPTIONS = ROLE_OPTIONS.filter((option) => option.value !== 'editor');
 /** What the sharing surface is for: the Share dialog's description and the editor's Sharing tab say the same. */
 const SHARING_DESCRIPTION = 'Manage access, invite people, or copy the link.';
 const PUBLIC_DISABLED = 'Public documents are disabled on this server. Use unlisted to share with anyone who has the link, or private for invited people and group members.';
@@ -72,6 +74,8 @@ export function DocumentSharing(props: {
   onOpen?: () => void;
   /** The artifact's format: a dataset's sharing also answers who may WRITE it (the writes row). */
   format?: string;
+  /** A live dataset: its link grants at most a signed-in reader's role, never edit. */
+  live?: boolean;
   /** Validated document dependencies; access remains independent of document sharing. */
   refs?: ReadonlyArray<{ id: string; kind: string }>;
   /** A page: its queries on live data an Admin of its group may approve (./QueryApprovals, asked for and drawn only when the sharing answer says the viewer is one). */
@@ -177,7 +181,7 @@ export function DocumentSharing(props: {
       <Show when={!canPublic()}><p aria-label="Public visibility policy" class="mt-2 leading-relaxed text-muted">{PUBLIC_DISABLED}</p></Show>
       <Show when={current().visibility !== 'private'}>
         <label class="mt-2 flex items-center justify-between gap-2 text-muted"><span>anyone with the link</span>
-          <span class="w-32 shrink-0"><Suspense fallback={<span class="block h-control-sm" />}><Select size="sm" ariaLabel="Link role" value={current().linkRole ?? 'viewer'} options={ROLE_OPTIONS} onChange={role => void put({ linkRole: role as ShareRole })} /></Suspense></span>
+          <span class="w-32 shrink-0"><Suspense fallback={<span class="block h-control-sm" />}><Select size="sm" ariaLabel="Link role" value={current().linkRole ?? 'viewer'} options={props.live ? LIVE_LINK_ROLE_OPTIONS : ROLE_OPTIONS} onChange={role => void put({ linkRole: role as ShareRole })} /></Suspense></span>
         </label>
       </Show>
       <Show when={showWrites()}>

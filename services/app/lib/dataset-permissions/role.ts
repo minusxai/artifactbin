@@ -5,9 +5,10 @@
 import { datasetRoleFrom, maxRole, type DatasetRole } from '@artifactbin/contracts';
 import type { AccessActor } from '@/lib/accounts';
 import { documentEditorReaches, linkRoleOf, liveAccessFacts, reachesAsAccount, roleWithoutLink, type AccessFacts, type ArtifactRow } from '@/lib/artifact-access';
+import { liveConnectionOf } from '@/lib/datasets';
 
-/** The dataset columns a role decision reads. */
-export type DatasetRoleRow = Pick<ArtifactRow, 'id' | 'user_id' | 'token_id' | 'visibility' | 'link_role'> & Partial<Pick<ArtifactRow, 'group_id' | 'format'>>;
+/** The dataset columns a role decision reads; `meta` says whether it is a live dataset (its stored connection). */
+export type DatasetRoleRow = Pick<ArtifactRow, 'id' | 'user_id' | 'token_id' | 'visibility' | 'link_role' | 'meta'> & Partial<Pick<ArtifactRow, 'group_id' | 'format'>>;
 
 export interface DatasetRoleOptions {
   /** Where the facts are read: inside a commit transaction, its facts (`liveAccessFacts(actor, tx)`). */
@@ -27,7 +28,7 @@ export async function datasetRole(row: DatasetRoleRow, actor: AccessActor, optio
   const account = held !== 'owner' && (!!actor.userId || !!actor.principalGroup) && await reachesAsAccount(row, actor, facts);
   // The host's document-editor grant reaches html pages only (never a dataset): it is the page's editor role.
   const granted = account && documentEditorReaches(row, actor) ? maxRole(held, 'editor') : held;
-  return datasetRoleFrom({ held: granted, account, linkRole: linkRoleOf(row), visibility: row.visibility, throughPage: !!options.throughPage });
+  return datasetRoleFrom({ held: granted, account, linkRole: linkRoleOf(row), visibility: row.visibility, throughPage: !!options.throughPage, live: !!liveConnectionOf(row.meta) });
 }
 
 /**

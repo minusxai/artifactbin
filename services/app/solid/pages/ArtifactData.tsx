@@ -195,7 +195,7 @@ export function ArtifactDataPage(props: { answer: DataAnswer }): JSX.Element {
           <Show when={format === 'dataset' && section() === 'actions'}><DatasetActionsView id={id} canInspect={canEdit()} /></Show>
           <Show when={section() === 'sharing'}>
             <Panel class="mx-auto max-w-2xl space-y-4">
-              <DocumentSharing id={id} title={title()} owner={owner()} editable={canEdit() && !!props.answer.canManageSharing} variant="embedded" format={format} onDataActions={() => setSection('actions')} />
+              <DocumentSharing id={id} title={title()} owner={owner()} editable={canEdit() && !!props.answer.canManageSharing} variant="embedded" format={format} live={!!surface.liveConnection} onDataActions={() => setSection('actions')} />
               <Show when={canEdit() && props.answer.canManageSharing}><p class="text-xs text-muted">Sharing changes save immediately.</p></Show>
             </Panel>
           </Show>

@@ -9,7 +9,7 @@ artifact row; lib/artifacts does. Server-only, entered through `index.ts`.
 - What a public or unlisted link grants: `linkRoleOf` (the row's `link_role`, viewer when null; nothing on a private
   row), capped at `ANONYMOUS_CEILING` (viewer) for a caller with no account, a guest, or a test user outside its
   sandbox. It never grants ownership or sharing (a sharing change asks `sharingScope`), never lists a row
-  (listings read `roleWithoutLink`), and on a dataset is one input to its single
+  (listings read `roleWithoutLink`), never edits a live dataset, and on a dataset is one input to its single
   role, writing what its rules allow.
 - Lock before deciding. A write that decides access inside its transaction calls `lockAuthorization` first
   (documents, then datasets, each tier by `lockOrder`; SQL locking several rows orders `id COLLATE "C"`), then

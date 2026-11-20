@@ -9,13 +9,15 @@ import { identityForUser, type AccessActor } from '@/lib/accounts';
 import type { AccessFacts } from '@/lib/artifact-access';
 import { datasetRole, pageRole, type DatasetRoleRow } from '../role';
 
-const facts = (over: Partial<DatasetRoleFacts>): DatasetRoleFacts => ({ held: 'none', account: true, linkRole: 'viewer', visibility: 'unlisted', throughPage: false, ...over });
+const facts = (over: Partial<DatasetRoleFacts>): DatasetRoleFacts => ({ held: 'none', account: true, linkRole: 'viewer', visibility: 'unlisted', throughPage: false, live: false, ...over });
 
 describe('datasetRoleFrom (the contract)', () => {
   it.each<[string, Partial<DatasetRoleFacts>, ReturnType<typeof datasetRoleFrom>]>([
     ['the owning account, token or group editor', { held: 'owner' }, 'owner'],
     ['a named editor share', { held: 'editor' }, 'editor'],
     ['the link role editor, for an account', { linkRole: 'editor' }, 'editor'],
+    ['the link role editor, for an account, on a live dataset', { linkRole: 'editor', live: true }, 'signed_in'],
+    ['a named editor share on a live dataset', { held: 'editor', live: true }, 'editor'],
     ['the link role editor, without an account', { linkRole: 'editor', account: false }, 'anonymous'],
     ['no account on a linkable dataset', { account: false }, 'anonymous'],
     ['no account on a private dataset', { account: false, visibility: 'private', linkRole: 'none' }, null],
@@ -41,7 +43,9 @@ function fakeFacts(over: { group?: GroupRole | null; kinds?: Record<string, User
     editorGroupIds: async () => [],
   };
 }
-const row = (over: Partial<DatasetRoleRow> = {}): DatasetRoleRow => ({ id: 'ds1', user_id: 'owner', token_id: null, visibility: 'unlisted', link_role: null, format: 'dataset', ...over });
+const row = (over: Partial<DatasetRoleRow> = {}): DatasetRoleRow => ({ id: 'ds1', user_id: 'owner', token_id: null, visibility: 'unlisted', link_role: null, format: 'dataset', meta: {}, ...over });
+/** A live dataset's row as lib/live-datasets writes it: its connection, never a secret. */
+const LIVE_META = { connection: { connector: 'postgres', label: 'Warehouse', fields: {} } };
 const user = (id: string): AccessActor => identityForUser(id, null);
 
 describe('datasetRole (the dataset sharing, read through access facts)', () => {
@@ -64,7 +68,18 @@ describe('datasetRole (the dataset sharing, read through access facts)', () => {
   it('caps the link role editor at anonymous without an account, and never lets the document-editor grant reach a dataset', async () => {
     expect(await datasetRole(row({ link_role: 'editor' }), identityForUser(null, null), { facts: fakeFacts() })).toBe('anonymous');
     expect(await datasetRole(row({ link_role: 'editor' }), user('reader'), { facts: fakeFacts() })).toBe('editor');
+    expect(await datasetRole(row({ link_role: 'editor', meta: LIVE_META }), user('reader'), { facts: fakeFacts() }), 'a live dataset').toBe('signed_in');
     expect(await datasetRole(row(), { ...user('admin'), documentEditor: true }, { facts: fakeFacts() })).toBe('signed_in');
+  });
+  // A link never makes anyone editor of a LIVE dataset, whose editors run any SQL with the owner's stored connection.
+  it.each<[string, Partial<DatasetRoleRow>, Parameters<typeof fakeFacts>[0], string, string]>([
+    ['a named editor', {}, { named: 'editor' }, 'editor', 'editor'],
+    ['an editor link', { link_role: 'editor' }, {}, 'editor', 'signed_in'],
+    ['a group editor', { group_id: 'g1' }, { group: 'editor' }, 'editor', 'editor'],
+    ['a viewer link', { link_role: 'viewer' }, {}, 'signed_in', 'signed_in'],
+  ])('%s: stored and live', async (_who, over, held, stored, live) => {
+    expect(await datasetRole(row(over), user('reader'), { facts: fakeFacts(held) }), 'stored').toBe(stored);
+    expect(await datasetRole(row({ ...over, meta: LIVE_META }), user('reader'), { facts: fakeFacts(held) }), 'live').toBe(live);
   });
   it('answers none for a private dataset unless the caller arrives through a linking page', async () => {
     const closed = row({ visibility: 'private', link_role: 'editor' });

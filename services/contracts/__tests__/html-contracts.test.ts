@@ -6,7 +6,7 @@ describe('HTML product contracts',()=>{
  it('accepts authored HTML as first-class content',()=>{expect(ARTIFACT_FORMATS).toContain('html');expect(TEXT_CONTENT_FIELDS).toContain('html');});
  it('keeps annotation roles distinct from resolver write roles',()=>{
   // Resolver roles are now the page role from datasetRoleFrom (the Hasura names); a commenter share is viewer.
-  expect((['none','viewer','commenter','editor','owner'] as const).map(held=>datasetRoleFrom({held,account:true,linkRole:'none',visibility:'private',throughPage:false}))).toEqual([null,'viewer','viewer','editor','owner']);
+  expect((['none','viewer','commenter','editor','owner'] as const).map(held=>datasetRoleFrom({held,account:true,linkRole:'none',visibility:'private',throughPage:false,live:false}))).toEqual([null,'viewer','viewer','editor','owner']);
  });
  it('accepts explicit historical HTML anchors and refuses AST paths and invalid ranges',()=>{
   const anchor={kind:'html-node',v:1,revision:'revision-a',nodeId:'n12',quote:'selected',range:{start:1,end:4,length:7,fingerprint:'text-a'}};
