@@ -92,7 +92,7 @@ it('keeps a test account to test accounts\' artifacts: read and fork elsewhere, 
   expect(await can(test, 'comment', await row(outGroup.id))).toBe(false);
   const refusal = await capabilityGuard(test, 'comment', realPage.id);
   expect(refusal?.status).toBe(403);
-  expect(await refusal?.json()).toMatchObject({ error: 'test_account_restricted' });
+  expect(refusal?.body).toMatchObject({ error: 'test_account_restricted' });
 });
 
 it('invites and adds only test accounts to artifacts and groups', async () => {

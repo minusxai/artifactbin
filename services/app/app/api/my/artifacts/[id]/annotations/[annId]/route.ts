@@ -34,7 +34,7 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
   if (actor instanceof Response) return actor;
   const { id, annId } = await ctx.params;
   const refusal = await capabilityGuard(actor, 'comment', id);
-  if (refusal) return refusal;
+  if (refusal) return toResponse(refusal);
   const body = await readJson(request);
   const key = request.headers.get('Idempotency-Key');
   if (!key || !body) return toResponse(await respondToAnnotationEdit(body, actor, id, annId));

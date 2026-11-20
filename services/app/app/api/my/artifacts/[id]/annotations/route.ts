@@ -79,7 +79,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   // attributed to a person, and an anonymous cookie is not one. A TEST USER
   // comments inside its sandbox and nowhere else (lib/capabilities).
   const refusal = await capabilityGuard(actor, 'comment', id);
-  if (refusal) return refusal;
+  if (refusal) return toResponse(refusal);
   const body = await readJson(request);
   if (!body) return json({ error: 'invalid_json' }, 400);
   const parsed = parseCreateBody(body);

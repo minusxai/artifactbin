@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { useAppHarness } from '@/__tests__/harness';
 import { identityForUser } from '@/lib/accounts';
-import { attestSavedHtmlUpload, can, capabilityRefusal, readThrough, refusalFor, uploadGrantContext, type ArtifactRow } from '@/lib/artifact-access';
+import { attestSavedHtmlUpload, can, readThrough, refusalFor, uploadGrantContext, type ArtifactRow } from '@/lib/artifact-access';
 import { canReadArtifact, capabilityGuard } from '@/lib/artifacts';
 import { updateSharingFor } from '@/lib/artifacts';
 import { account, dataset, head, mine, personOfKind, readAllPolicy, sql } from '@/__tests__/artifact-fixtures';
@@ -82,8 +82,8 @@ describe('the capability table', () => {
     expect(await refusalFor(friend)).toMatchObject({ status: 403, body: { error: 'test_account_restricted' } });
     expect(await refusalFor(tester, 'abc123')).toMatchObject({ status: 403, body: { error: 'sandbox_only', hint: expect.stringContaining('abc123') } });
     expect(await refusalFor(guest)).toEqual({ status: 401, body: { error: 'sign_in_required' } });
-    const refused = await capabilityRefusal(guest, row.id);
-    expect([refused.status, await refused.json()]).toEqual([401, { error: 'sign_in_required' }]);
+    const refused = await refusalFor(guest, row.id);
+    expect([refused.status, refused.body]).toEqual([401, { error: 'sign_in_required' }]);
     // The gate speaks only to someone the artifact is visible to.
     expect(await capabilityGuard(guest, 'comment', 'missing')).toBeNull();
     expect((await capabilityGuard(guest, 'comment', row.id))!.status).toBe(401);

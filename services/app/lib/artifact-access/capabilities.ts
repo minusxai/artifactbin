@@ -32,7 +32,7 @@
  * accounts (`test_account_restricted`).
  */
 import type { Capability } from '@artifactbin/contracts';
-import { json } from '@/lib/http';
+import { Reply, reply } from '@/lib/http';
 import { canRead, canEdit } from '@artifactbin/contracts';
 import { effectiveRole, ownsArtifact } from './access';
 import { type ArtifactRow } from './scopes';
@@ -132,8 +132,6 @@ export async function can(actor: AccessActor, capability: Capability, target?: C
 const SIGN_IN_REQUIRED_ERROR = 'sign_in_required';
 const SANDBOX_ONLY_ERROR = 'sandbox_only';
 
-export interface CapabilityRefusal { status: number; body: { error: string; hint?: string; message?: string } }
-
 /**
  * WHAT TO SAY when `can` said no. Two audiences, two answers:
  *
@@ -146,25 +144,16 @@ export interface CapabilityRefusal { status: number; body: { error: string; hint
  * `capability` is not in the message on purpose: the caller's own route says
  * what was being attempted, and a refusal that repeats it reads as a lecture.
  */
-export async function refusalFor(actor: AccessActor, artifactId?: string): Promise<CapabilityRefusal> {
+export async function refusalFor(actor: AccessActor, artifactId?: string): Promise<Reply> {
   if (await isTestAccount(actor.userId)) {
-    return { status: 403, body: { error: TEST_ACCOUNT_RESTRICTED, hint: 'a test account acts only on artifacts test accounts own, and follows only test accounts' } };
+    return reply({ error: TEST_ACCOUNT_RESTRICTED, hint: 'a test account acts only on artifacts test accounts own, and follows only test accounts' }, 403);
   }
   if ((await kindOfActor(actor)) === 'testuser') {
     const target = artifactId ?? '<id>';
-    return {
-      status: 403,
-      body: {
-        error: SANDBOX_ONLY_ERROR,
-        hint: `a test user acts only inside its sandbox. Create a sandbox-owned copy of ${target} first, then act on the copy`,
-      },
-    };
+    return reply({
+      error: SANDBOX_ONLY_ERROR,
+      hint: `a test user acts only inside its sandbox. Create a sandbox-owned copy of ${target} first, then act on the copy`,
+    }, 403);
   }
-  return { status: 401, body: { error: SIGN_IN_REQUIRED_ERROR } };
-}
-
-/** The refusal as a Response, for the routes that answer one directly. */
-export async function capabilityRefusal(actor: AccessActor, artifactId?: string): Promise<Response> {
-  const refusal = await refusalFor(actor, artifactId);
-  return json(refusal.body, refusal.status);
+  return reply({ error: SIGN_IN_REQUIRED_ERROR }, 401);
 }

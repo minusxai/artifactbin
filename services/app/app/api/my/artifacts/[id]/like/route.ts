@@ -23,9 +23,9 @@
  * exists.
  */
 import { canReadArtifact, getArtifactById, type ArtifactRow } from '@/lib/artifacts';
-import { can, capabilityRefusal } from '@/lib/artifact-access';
+import { can, refusalFor } from '@/lib/artifact-access';
 import { refusesCrossSite } from '@/lib/authentication';
-import { json, unauthorized } from '@/lib/http';
+import { json, toResponse, unauthorized } from '@/lib/http';
 import { count, has, link, unlink } from '@/lib/social';
 import { sessionActor } from '@/lib/authentication';
 import { type AccessActor } from '@/lib/accounts';
@@ -53,7 +53,7 @@ async function opened(request: Request, ctx: Ctx): Promise<{ artifact: ArtifactR
 async function acting(request: Request, ctx: Ctx): Promise<{ id: string; userId: string } | Response> {
   const opening = await opened(request, ctx);
   if (opening instanceof Response) return opening;
-  if (!(await can(opening.actor, 'like', opening.artifact))) return capabilityRefusal(opening.actor, opening.artifact.id);
+  if (!(await can(opening.actor, 'like', opening.artifact))) return toResponse(await refusalFor(opening.actor, opening.artifact.id));
   return opening.actor.userId ? { id: opening.artifact.id, userId: opening.actor.userId } : unauthorized(request);
 }
 

@@ -17,4 +17,4 @@ export type { AccessFacts } from './access-facts';
 export { lockAuthorization, lockOrder } from './locks';
 export { readThrough, uploadGrantContext } from './grants';
 export { attestSavedHtmlUpload } from './saved-html-upload';
-export { can, capabilityRefusal, refusalFor } from './capabilities';
+export { can, refusalFor } from './capabilities';
