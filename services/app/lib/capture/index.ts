@@ -1,2 +1,4 @@
-/** The capture module's interface: what code outside lib/capture imports (rule 4, scripts/ci/module-graph.mjs). */
-export type { CapturedImage } from './contract';
+/** The capture module's interface: a tab capture session (./screen), the synchronous PNG encoder (./png) and their contract. */
+export { beginCapture } from './screen';
+export { encodePng } from './png';
+export { CaptureError, type CapturedImage, type CaptureRect, type CaptureSession, type CaptureStartResult } from './contract';

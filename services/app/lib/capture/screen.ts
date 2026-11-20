@@ -146,4 +146,3 @@ export async function beginCapture(): Promise<CaptureSession> {
   }};
 }
 
-export {CaptureError} from "./contract";

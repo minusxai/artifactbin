@@ -5,7 +5,7 @@ import {mintAccountToken,request,useAppHarness} from '@/__tests__/harness';
 import {identityForUser} from '@/lib/accounts';
 import {readHtmlPage} from '@/lib/html-publication';
 import {createArtifactFromBody} from '@/lib/publish';
-import {grantLocalConnection,localConnectionStatus,observeLocalSource,revokeLocalConnection} from '..';
+import {grantLocalConnection,localConnectionStatus,observeLocalSource,revokeLocalConnection} from '../server';
 import { setArtifact } from '@/__tests__/rows';
 const harness=useAppHarness();
 const ORIGIN='http://localhost:3000';

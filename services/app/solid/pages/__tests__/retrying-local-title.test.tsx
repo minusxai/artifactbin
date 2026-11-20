@@ -6,7 +6,7 @@
 import { render } from 'solid-js/web';
 import { MemoryRouter, Route } from '@solidjs/router';
 import { vi } from 'vitest';
-import type { LocalBrokerOptions } from '@/lib/local-connection/broker';
+import type { LocalBrokerOptions } from '@/lib/local-connection';
 import { describeRetryingRead } from '@/solid/__tests__/retrying-read';
 import { LocalDocumentPage } from '../LocalDocument';
 
@@ -14,7 +14,7 @@ const captured = vi.hoisted(() => ({ options: null as LocalBrokerOptions | null 
 vi.mock('../../lib/session', () => ({ useSession: () => ({ session: () => ({ kind: 'none' }) }) }));
 vi.mock('../../editor/create-live-artifact', () => ({ createLiveArtifact: () => () => null }));
 vi.mock('../../document/AnnotationLayer', () => ({ AnnotationLayer: () => null }));
-vi.mock('@/lib/local-connection/broker', () => ({ installLocalConnectionBroker(options: LocalBrokerOptions) {
+vi.mock('@/lib/local-connection', async (original) => ({ ...await original<typeof import('@/lib/local-connection')>(), installLocalConnectionBroker(options: LocalBrokerOptions) {
   captured.options = options;
   return { sourceChanged: vi.fn(), authorize: vi.fn(), signIn: vi.fn(), resize: vi.fn(), post: vi.fn(), disconnect: vi.fn(), retry: vi.fn(), dispose: vi.fn() };
 } }));

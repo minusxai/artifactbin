@@ -132,7 +132,6 @@ const BUNDLED_IMPORTERS = [
   'services/app/lib/html-systems/index.ts',
 
   'services/app/lib/libraries/index.ts',
-  'services/app/lib/local-connection/read-backend.ts',
 
   'services/app/lib/html-systems/story-systems.ts',
   'services/app/lib/html-systems/story-themes.ts',
@@ -155,7 +154,7 @@ const BUNDLED_LEAVES = {
   'lib/html-reader': ['anchor', 'anchor-restore', 'ast-path', 'contract', 'document-endpoint', 'document-sources', 'edit-bar', 'follow-version', 'frame-bridge/parent', 'frame-markup', 'frame-navigation', 'frame-session', 'frame-src', 'host-comments-contract', 'reader-mode', 'reload'],
   'lib/annotations': ['comment-folds', 'markdown-lite', 'pages', 'region-comment', 'remote-reply', 'session-mentions'],
   'lib/artifact-backend': ['browser-artifact-write', 'errors', 'http', 'reader-http', 'region-http'],
-  'lib/capture': ['contract', 'png', 'screen'],
+  'lib/capture': [],
   'lib/chart': ['chart-theme'],
   'lib/data-ingest': ['types'],
   'lib/datasets': ['dataset-usage', 'definition', 'graphql-names', 'types'],
@@ -174,7 +173,7 @@ const BUNDLED_LEAVES = {
     'app-build', 'app-pages', 'intent', 'live-stream', 'login-href', 'retry', 'retry-lazily', 'safe-redirect',
     'shared-request', 'urls',
   ],
-  'lib/local-connection': ['broker', 'browser', 'contracts', 'read-backend'],
+  'lib/local-connection': ['browser'],
   'lib/markdown': ['content', 'code-block'],
   'lib/skills': ['agent-discovery', 'setup-instructions'],
   'lib/html-systems': ['story-systems', 'story-themes', ],
@@ -232,6 +231,8 @@ export const DEEP_MODULES = {
   // code imports the leaves, because each index re-exports files a bundle would keep.
   'lib/html-runtime': { ...bundled('lib/html-runtime'), entries: ['', 'server'], serverOnly: ['server'] },
   'lib/live-regions': { ...bundled('lib/live-regions'), serverOnly: [''] },
+  // The index is the app page's browser door; the server's HTTP adapter (node:crypto, the store) enters through `server`.
+  'lib/local-connection': { ...bundled('lib/local-connection'), entries: ['', 'server'], serverOnly: ['server'] },
   'lib/libraries': { entries: ['', 'server'], serverOnly: ['server'] },
   'lib/object-store': { entries: [''] },
   // server.ts imports these two statically, before it reads configuration; the index loads lib/platform.

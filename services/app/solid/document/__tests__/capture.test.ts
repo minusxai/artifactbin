@@ -3,7 +3,8 @@ import { createRoot, createSignal } from 'solid-js';
 import type { ArtifactBackend } from '@/lib/artifact-backend';
 import { createCommentCapture } from '../CommentCapture';
 
-vi.mock('@/lib/capture/screen', () => ({
+vi.mock('@/lib/capture', async (original) => ({
+  ...await original<typeof import('@/lib/capture')>(),
   beginCapture: vi.fn(async () => ({
     dispose: vi.fn(),
     capture: vi.fn(async (rect: { x: number; y: number; width: number; height: number }) => ({

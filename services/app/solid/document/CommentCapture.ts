@@ -1,7 +1,5 @@
 import { createSignal, onCleanup } from 'solid-js';
-import { beginCapture } from '@/lib/capture/screen';
-import { encodePng } from '@/lib/capture/png';
-import { CaptureError, type CaptureStartResult, type CaptureSession, type CapturedImage, type CaptureRect } from '@/lib/capture/contract';
+import { beginCapture, CaptureError, encodePng, type CaptureStartResult, type CaptureSession, type CapturedImage, type CaptureRect } from '@/lib/capture';
 import { COMMENT_IMAGE_LIMITS, type BrushStroke, type CommentImageMetadata } from '../../../contracts/src/comment-image';
 import type { ArtifactBackend } from '@/lib/artifact-backend';
 import { BackendRequestError } from '@/lib/artifact-backend/errors';

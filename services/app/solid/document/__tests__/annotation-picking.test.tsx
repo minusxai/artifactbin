@@ -8,8 +8,8 @@ import { replaceComment } from './comment-input';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/dom';
 import { Suspense } from 'solid-js';
-import * as captureScreen from '@/lib/capture/screen';
-import { CaptureError, type CaptureSession } from '@/lib/capture/contract';
+import * as captureScreen from '@/lib/capture';
+import { CaptureError, type CaptureSession } from '@/lib/capture';
 import type { StoryEditSelection } from '@/lib/html-bridge/selection-contract';
 import { fireEvent, render } from '../../__tests__/helpers';
 import { AnnotationLayer } from '../AnnotationLayer';
@@ -24,7 +24,6 @@ const creates = () => fetchCalls.filter((call) => call.url.endsWith('/api/my/art
 
 describe('picking a block from the rail', () => {
   beforeAll(() => preloadCommentField());
-  beforeEach(() => { vi.spyOn(captureScreen, 'captureAvailable').mockReturnValue(true); });
   const PICKED: StoryEditSelection = {
     kind: 'text', path: '2.1', nodeId: 'node-2-1', tag: 'p', rect: { x: 5, y: 6, width: 200, height: 40 }, className: '', style: '',
     ancestors: [{ path: '2', tag: 'section', hint: 'max-w-2xl' }],
@@ -65,7 +64,6 @@ describe('picking a block from the rail', () => {
   });
 
   it('keeps Screenshot usable where the browser cannot capture this tab: the area tool still starts', async () => {
-    vi.spyOn(captureScreen, 'captureAvailable').mockReturnValue(false);
     layer({ railOpen: true, editId: 'edit-current' }); await flush();
     const button = screen.getByRole('button', { name: 'Screenshot' });
     expect(button).toBeEnabled();

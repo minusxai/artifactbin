@@ -1,8 +1,7 @@
 import {createEffect,createMemo,createSignal,on,onCleanup,type Accessor} from 'solid-js';
 import type {AnnotationWire} from '@/lib/annotations';
-import type {LinkedDocument,LocalConnectionState} from '@/lib/local-connection';
+import {createLocalReadBackend,type LinkedDocument,type LocalConnectionState} from '@/lib/local-connection';
 import type {DocumentRuntimeRef} from '@/lib/html-reader/document-endpoint';
-import {createLocalReadBackend} from '@/lib/local-connection/read-backend';
 import {createLiveArtifact} from '../editor/create-live-artifact';
 import {createReaderPresence} from './create-reader-presence';
 /** The same live reader as hosted pages, under anonymous ACLs and the current local connection lifetime. */

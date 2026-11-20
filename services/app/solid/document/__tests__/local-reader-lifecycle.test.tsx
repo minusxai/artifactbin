@@ -3,7 +3,7 @@ import {createSignal} from 'solid-js';
 import {expect,it,vi} from 'vitest';
 import {waitFor} from '@testing-library/dom';
 import {render} from '../../__tests__/helpers';
-import type {LinkedDocument,LocalConnectionState} from '@/lib/local-connection/contracts';
+import type {LinkedDocument,LocalConnectionState} from '@/lib/local-connection';
 const captured=vi.hoisted(()=>({subscriptions:[] as any[]}));
 vi.mock('../../editor/create-live-artifact',()=>({createLiveArtifact:(options:unknown)=>{captured.subscriptions.push(options);return ()=>null;}}));
 vi.mock('../create-reader-presence',()=>({createReaderPresence:()=>({receive:vi.fn(),viewers:()=>[],preferences:()=>({})})}));
