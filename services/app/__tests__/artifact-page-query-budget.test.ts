@@ -4,7 +4,8 @@ import { postArtifact, setVisibility } from '@/__tests__/artifact-fixtures';
  * WHAT A PAGE VIEW COSTS THE DATABASE: the app page for a document (`GET /a/<id>`, the HTML door: documentPreparation
  * admits the row, artifactPageAnswer draws its chrome). Production is Postgres behind a small pool, so a view asks each
  * thing once: the viewer's role is resolved once per request (admission and the chrome share one memo of access
- * facts), and the author, likes, follows and open-annotation count arrive in one statement.
+ * facts). The author, likes, follows and open-annotation count arrive in one statement, in a separate response
+ * for signed-in HTML views so that the shell can send the frame first.
  *
  * Each case records the statements a view issues after a first, warming view and pins the budget; the page's
  * values (role, likes, follow, author, annotations) are pinned beside it, from a world where every one of them is
@@ -19,7 +20,7 @@ import { getDb } from '@/lib/platform';
 import { recordStatements, useAppHarness } from '@/__tests__/harness';
 import { createAppServer } from '@/server/app';
 import { BOOTSTRAP_ID } from '@/server/app-shell';
-import { seedShares } from '@/__tests__/rows';
+import { dropShares, seedShares } from '@/__tests__/rows';
 
 useAppHarness();
 
@@ -30,7 +31,7 @@ useAppHarness();
  */
 const BUDGET = {
   json: { signedIn: 7, anonymous: 3, owner: 5 },
-  html: { signedIn: 11, anonymous: 4, owner: 9 },
+  html: { signedIn: 7, anonymous: 2, owner: 4 },
 };
 
 const SECRET = 'vitest-actor-secret-0000000000000000';
@@ -53,6 +54,21 @@ async function view(door: Door, id: string, actor: Actor | null, search = ''): P
 }
 
 const userKindReads = (sql: string[]) => sql.filter((text) => /SELECT kind FROM users/i.test(text)).length;
+
+async function signedInChrome(door: Door, page: Record<string, any>, id: string, actor: Actor) {
+  if (door === 'json') return { ...page.surface, like: page.like, follow: page.follow };
+  expect(page.deferredChrome).toBe(true);
+  expect(page).not.toHaveProperty('like');
+  expect(page).not.toHaveProperty('follow');
+  expect(page.surface).not.toHaveProperty('author');
+  expect(page.surface).not.toHaveProperty('openAnnotations');
+  expect(page.surface).not.toHaveProperty('hasInvitedUsers');
+
+  const { value, sql } = await recordStatements(() => view('json', id, actor, '?part=chrome'));
+  expect(value.status).toBe(200);
+  expect(sql.filter((statement) => /AS open_annotations/i.test(statement))).toHaveLength(1);
+  return value.page!;
+}
 
 /**
  * An author with a handle and a face; a public page with three likes (the viewer's among them) and two open comment
@@ -98,11 +114,12 @@ for (const door of ['json', 'html'] as const) describe(`a page view through the 
     const page = value.page!;
     expect(page.role).toBe('viewer');
     expect(page.kind).toBe('account');
-    expect(page.like).toEqual({ liked: true, count: 3 });
-    expect(page.follow).toEqual({ userId: w.author.id, following: true, count: 2 });
-    expect(page.surface.author).toEqual({ username: w.author.username, id: w.author.id, image: expect.stringContaining(`/${w.author.id}`), forkedFrom: null });
-    expect(page.surface.openAnnotations).toBe(2);
-    expect(page.surface).not.toHaveProperty('hasInvitedUsers');
+    const chrome = await signedInChrome(door, page, w.doc, actor);
+    expect(chrome.like).toEqual({ liked: true, count: 3 });
+    expect(chrome.follow).toEqual({ userId: w.author.id, following: true, count: 2 });
+    expect(chrome.author).toEqual({ username: w.author.username, id: w.author.id, image: expect.stringContaining(`/${w.author.id}`), forkedFrom: null });
+    expect(chrome.openAnnotations).toBe(2);
+    expect(chrome).not.toHaveProperty('hasInvitedUsers');
     expect(count).toBeLessThanOrEqual(BUDGET[door].signedIn);
     expect(userKindReads(sql)).toBeLessThanOrEqual(1);
   });
@@ -131,11 +148,12 @@ for (const door of ['json', 'html'] as const) describe(`a page view through the 
     expect(value.status).toBe(200);
     const page = value.page!;
     expect(page.role).toBe('owner');
-    expect(page.like).toEqual({ liked: false, count: 3 });
-    expect(page.follow).toBeNull();
-    expect(page.surface.author).toMatchObject({ username: w.author.username, id: w.author.id });
-    expect(page.surface.openAnnotations).toBe(2);
-    expect(page.surface.hasInvitedUsers).toBe(false);
+    const chrome = await signedInChrome(door, page, w.doc, actor);
+    expect(chrome.like).toEqual({ liked: false, count: 3 });
+    expect(chrome.follow).toBeNull();
+    expect(chrome.author).toMatchObject({ username: w.author.username, id: w.author.id });
+    expect(chrome.openAnnotations).toBe(2);
+    expect(chrome.hasInvitedUsers).toBe(false);
     if (door === 'html') expect(page.surface.hasEditableRegions).toBe(false);
     else expect(page.surface).not.toHaveProperty('hasEditableRegions');
     expect(count).toBeLessThanOrEqual(BUDGET[door].owner);
@@ -146,10 +164,12 @@ for (const door of ['json', 'html'] as const) describe(`a page view through the 
     const db = await getDb();
     await db.query("UPDATE relations SET deleted_at = now() WHERE object_id IN ($1, $2)", [w.doc, w.author.id]);
     await db.query("UPDATE annotations SET status = 'resolved' WHERE artifact_id = $1", [w.doc]);
-    const page = (await view(door, w.doc, session(w.viewer))).page!;
-    expect(page.like).toEqual({ liked: false, count: 0 });
-    expect(page.follow).toEqual({ userId: w.author.id, following: false, count: 0 });
-    expect(page.surface.openAnnotations).toBe(0);
+    const actor = session(w.viewer);
+    const page = (await view(door, w.doc, actor)).page!;
+    const chrome = await signedInChrome(door, page, w.doc, actor);
+    expect(chrome.like).toEqual({ liked: false, count: 0 });
+    expect(chrome.follow).toEqual({ userId: w.author.id, following: false, count: 0 });
+    expect(chrome.openAnnotations).toBe(0);
   });
 
   it('still refuses a private page to a signed-in stranger with the uniform 404, and admits a named share', async () => {
@@ -163,5 +183,10 @@ for (const door of ['json', 'html'] as const) describe(`a page view through the 
     const shared = await view(door, w.doc, session(w.viewer));
     expect(shared.status).toBe(200);
     expect(shared.page!.role).toBe('editor');
+    if (door === 'html') {
+      expect((await view('json', w.doc, session(w.viewer), '?part=chrome')).status).toBe(200);
+      await dropShares(db, w.doc, { email: w.viewer.email });
+      expect((await view('json', w.doc, session(w.viewer), '?part=chrome')).status).toBe(404);
+    }
   });
 });
