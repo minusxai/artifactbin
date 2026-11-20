@@ -1,5 +1,5 @@
 import { assertWriteCommit, datasetWriteAccess, tableMutationPolicy, type DatasetWriteOptions } from '@/lib/dataset-permissions';
-import { artifactState, completeMutationReceipt, type MutationReceipt, commitDatasetWrite, type ArtifactRow, mutationInvocation, emitDatasetCommitted } from '@/lib/artifacts';
+import { artifactState, completeMutationReceipt, type MutationReceipt, commitDatasetWrite, type ArtifactRow, mutationInvocation } from '@/lib/artifacts';
 import { artifactQuery } from '@/lib/artifacts/table';
 import { LIVE_ARTIFACT_SQL } from '@/lib/artifact-access';
 import {validateUserWrites, DatasetError, throttlePublicMutation, catalogOf, importedTables, loadDatasetRows, storeDatasetRows} from '@/lib/datasets';
@@ -35,7 +35,7 @@ import {paramSqlName} from '@artifactbin/contracts/sql-analysis';
  * use (so `revert` works on data), and the row's own channel is NOTIFYed, so
  * every open document reading this dataset re-queries (lib/publish/realtime/live).
  * The head swap itself is lib/artifacts' (commitDatasetWrite), which owns the artifacts table; this
- * module computes the rows, holds the transaction, completes receipts and emits the after-commit event.
+ * module computes the rows, holds the transaction and completes receipts.
  */
 import { trackEvent } from '@/lib/analytics';
 import { MAX_ROWS_LIMIT, getDb, retryOnConflict, TransactionConflict } from '@/lib/platform';
@@ -292,10 +292,6 @@ export async function mutateDataset(
 
     if (row) {
       void trackEvent('mutate', row.id, { userId: row.user_id });
-      // Committed: story's listener flags the guest snapshots that read this dataset and queues their heads'
-      // revalidation (lib/publish/prepared/commit-hooks.server). Beside the NOTIFY, never awaited, never failing
-      // the write — freshness is decided on read by the marks, this only lets a head revalidate before anyone asks.
-      emitDatasetCommitted(row.id);
       return { row, affected: out.affected, rowCount: out.rows.length, ...(trace?{steps}:{}) };
     }
     // Lost the CAS. Re-run against what landed — see the module doc: for DML
