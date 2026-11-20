@@ -4,7 +4,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { chooseTheme, storedTheme } from '../../html-reader/reader-mode';
 import { READER_MODE_PARAM, withReaderMode } from '../../html-reader/contract';
 
-beforeEach(() => { window.name = ''; window.history.replaceState(null, '', '/'); });
+beforeEach(() => { window.history.replaceState(null, '', '/'); });
 
 describe('chooseTheme: the app shell\'s stored preference', () => {
   beforeEach(() => { delete document.documentElement.dataset.theme; localStorage.clear(); });

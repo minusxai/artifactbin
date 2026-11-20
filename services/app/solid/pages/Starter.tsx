@@ -11,7 +11,6 @@
 import { createEffect, createSignal, onMount, onCleanup, Show, type JSX } from 'solid-js';
 import { type ArtifactRole, canAnnotate as canAnnotateRole, canEdit as canEditRole, canGovern, type Visibility } from '@artifactbin/contracts/sharing';
 import { isStartPlaceholder } from '@artifactbin/contracts/start-placeholder';
-import { reloadKeepingPlace } from '@/lib/html-reader/reload';
 import { chooseTheme } from '@/lib/html-reader/reader-mode';
 import { rowTitle } from '@/lib/document/display-title';
 import { artifactRequests, createHttpBackend } from '@/lib/artifact-backend';
@@ -99,7 +98,7 @@ export function StarterPage(props: { answer: StarterAnswer }): JSX.Element {
     const frame = live();
     if (converting() || !frame || reloading || frame.format !== 'html' || frame.version <= surface.version || isStartPlaceholder(frame.source, frame.version)) return;
     reloading = true;
-    reloadKeepingPlace(window);
+    replaceDocument(window.location.href); // the same address: a plain reload
   });
   const title = () => rowTitle(live() ?? surface);
   const chooseMode = (next: 'light' | 'dark') => { chooseTheme(next); setMode(next); };
