@@ -140,6 +140,66 @@ describe('email OTP', () => {
   });
 });
 
+/**
+ * NOTHING BUT THE SIGN-IN CODE AND A CONFIRMED EMAIL CHANGE MAILS ANYONE. Every HTTP endpoint Better Auth registers
+ * (core and plugins, so an upgrade that adds a mail path fails here) is asked by a stranger and by a signed-in person
+ * (each its own unverified user, so a sign-out or a deletion in one row cannot pass another), with a body that fills
+ * every field a mailer reads. Each answers 404 or sends nothing, except the two the product is: the sign-in code
+ * (`send-verification-otp`, type sign-in) and `/change-email` with a session (confirmed at the current address).
+ */
+describe('the mail an outsider can cause', () => {
+  const DISABLED = ['/email-otp/request-password-reset', '/forget-password/email-otp', '/email-otp/reset-password', '/email-otp/check-verification-otp', '/email-otp/request-email-change', '/email-otp/change-email', '/send-verification-email'];
+  const endpoints = () => [...new Map(Object.values(auth.api as Record<string, { path?: string; options?: { method?: string | string[]; metadata?: { SERVER_ONLY?: boolean } } }>)
+    .filter((endpoint) => typeof endpoint?.path === 'string' && !endpoint.options?.metadata?.SERVER_ONLY)
+    .map((endpoint) => [endpoint.path!, [endpoint.options?.method ?? 'POST'].flat().map((m) => m === '*' ? 'POST' : m)] as const)).entries()];
+  let n = 0;
+  /** A signed-in person, unverified unless asked (the only kind `/send-verification-email` mails). */
+  async function person(verified = false): Promise<{ email: string; cookie: string }> {
+    const email = `mail-path-${++n}@example.com`, cookie = await signInByOtp(email);
+    if (!verified) await pg.query('UPDATE auth.user SET "emailVerified"=false WHERE email=$1', [email]);
+    sent.length = 0;
+    return { email, cookie };
+  }
+  const ask = (path: string, method: string, email: string, cookie?: string) => {
+    const fields = { email, type: 'forget-password', newEmail: `moved-${email}`, callbackURL: '/', redirectTo: '/', otp: '000000', password: 'a-long-password-1', newPassword: 'a-long-password-1', token: 'x' };
+    const url = new URL(`http://localhost:4794/api/auth${path.replace(/:\w+/g, 'x')}`);
+    if (method === 'GET') for (const [key, value] of Object.entries(fields)) url.searchParams.set(key, value);
+    return auth.handler(new Request(url, { method, headers: { 'content-type': 'application/json', origin: 'http://localhost:4794', ...(cookie ? { cookie } : {}) }, ...(method === 'GET' ? {} : { body: JSON.stringify(fields) }) }));
+  };
+
+  it('enumerates every endpoint, and each one answers 404 or mails nobody', async () => {
+    const all = endpoints();
+    expect(all.map(([path]) => path)).toEqual(expect.arrayContaining([...DISABLED, '/email-otp/send-verification-otp', '/change-email', '/sign-in/email-otp']));
+    const open: string[] = [];
+    for (const [path, methods] of all) for (const method of methods) for (const signedIn of [false, true]) {
+      if (signedIn && path === '/change-email') continue;
+      const who = await person();
+      const response = await ask(path, method, who.email, signedIn ? who.cookie : undefined);
+      const asked = `${method} ${path}${signedIn ? ' (signed in)' : ''}`;
+      if (DISABLED.includes(path) && response.status !== 404) open.push(`${asked}: answers ${response.status}`);
+      if (response.status !== 404 && sent.length) open.push(`${asked}: mails ${sent.map((m) => m.kind).join(',')}`);
+    }
+    expect(open).toEqual([]);
+  });
+
+  it('still mails the sign-in code, and the change of address to the current one', async () => {
+    const who = await person(true);
+    expect((await call('/email-otp/send-verification-otp', { email: who.email, type: 'sign-in' })).status).toBe(200);
+    expect(sent.map((m) => [m.to, m.kind])).toEqual([[who.email, 'otp']]);
+    sent.length = 0;
+    expect((await ask('/change-email', 'POST', who.email, who.cookie)).status).toBe(200);
+    expect(sent.map((m) => [m.to, m.kind])).toEqual([[who.email, 'change-email']]);
+  });
+
+  it('answers other code types as sent, sending nothing', async () => {
+    const who = await person();
+    for (const type of ['email-verification', 'forget-password', 'change-email']) {
+      expect((await call('/email-otp/send-verification-otp', { email: who.email, type })).status, type).toBeLessThan(500);
+    }
+    expect(sent).toEqual([]);
+  });
+});
+
 describe('OIDC', () => {
   it('denies a verified OIDC callback before returning its session cookie or redirect',async()=>{
     nextProfile={id:'denied-oidc',email:'mxmx_test_denied_oidc@example.com',emailVerified:true};

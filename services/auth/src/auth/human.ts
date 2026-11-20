@@ -11,7 +11,8 @@
  *  - account linking on VERIFIED email only, and the OTP provider trusted —
  *    an OTP user who later clicks the IdP lands on the SAME usr_;
  *  - `changeEmail` enabled — the new address is verified before it counts;
- *  - passwords disabled (sidesteps CVE-2026-67327 outright);
+ *  - passwords disabled (sidesteps CVE-2026-67327 outright), and with them every route that mails or takes a code
+ *    for anything but signing in (`MAIL_PATHS_OFF`): only the sign-in code and a confirmed email change mail anyone;
  *  - `genericOAuth` given EXPLICIT endpoints where possible: discovery is
  *    fetched at init and an unreachable IdP aborts boot — loudly, by design.
  *
@@ -134,6 +135,14 @@ export interface HumanAuth {
   api: ReturnType<typeof betterAuth>['api'];
 }
 
+/**
+ * Better Auth routes that mail someone or take a code for anything but signing in: the OTP password reset, code
+ * checking, OTP email change and the anonymous resend of a verification link. Nothing here uses them; each answers 404
+ * over HTTP (server-side `auth.api` calls are unaffected). `/change-email` and `/verify-email` stay: they are how an
+ * address changes, confirmed at the current one first.
+ */
+const MAIL_PATHS_OFF = ['/email-otp/request-password-reset', '/forget-password/email-otp', '/email-otp/reset-password', '/email-otp/check-verification-otp', '/email-otp/request-email-change', '/email-otp/change-email', '/send-verification-email'];
+
 const usrId = () => 'usr_' + BigInt('0x' + randomBytes(12).toString('hex')).toString(36);
 const anyId = (model: string) => `${model.slice(0, 3)}_` + BigInt('0x' + randomBytes(12).toString('hex')).toString(36);
 
@@ -182,6 +191,7 @@ export function humanAuthOptions(opts: HumanAuthOptions, db: Kysely<Record<strin
     secret: opts.secret,
     database: { db, type: 'postgres' },
     emailAndPassword: { enabled: false },
+    disabledPaths: MAIL_PATHS_OFF,
     // Identity itself has no request limiter. OTP attempt caps remain part of code verification.
     rateLimit: { enabled: false },
     session: { cookieCache: { enabled: false } },
@@ -273,7 +283,9 @@ export function humanAuthOptions(opts: HumanAuthOptions, db: Kysely<Record<strin
         // A resend inside the code's lifetime re-sends the same code: the one already in the mail app stays valid.
         resendStrategy: 'reuse',
         ...testDomain.plugin,
+        // Only a sign-in code is ever mailed: a code of any other type answers as sent and goes nowhere.
         sendVerificationOTP: async ({ email, otp, type }) => {
+          if (type !== 'sign-in') return;
           await mail.send({ to: email, kind: 'otp', subject: 'Your login code', text: `Your code is ${otp}`, otp: `${otp}`, url: type });
         },
       }),
