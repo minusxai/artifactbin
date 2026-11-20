@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { SMTPServer } from 'smtp-server';
 import type { AddressInfo } from 'node:net';
-import { mailSettingsOf, completeLoginMethods } from '../src/config';
+import { mailSettingsOf } from '../src/config';
 import { smtpMailer, mailerForRuntime } from '../src/mail';
 import { authEnvNamesRead } from '../src/env';
 import {tempDirSync} from '@artifactbin/test-support/temp-dir';
@@ -43,11 +43,8 @@ async function fixture(options: { secure?: boolean; reject?: boolean; rejectAuth
 describe('SMTP configuration', () => {
   it('audits and completes SMTP with enforced STARTTLS defaults, preserving Resend shape', () => {
     expect(mailSettingsOf(env)).toEqual({ from: env.EMAIL__FROM, smtp: { host: 'localhost', port: 587, secure: false } });
-    expect(completeLoginMethods(env).mail).toEqual(mailSettingsOf(env));
     expect(mailSettingsOf({ ...env, EMAIL__SMTP_SECURE: 'true' }).smtp).toMatchObject({ port: 465, secure: true });
     for (const name of ['HOST','PORT','SECURE','USER','PASSWORD']) expect(authEnvNamesRead().has(`EMAIL__SMTP_${name}`)).toBe(true);
-    expect(completeLoginMethods({ EMAIL__RESEND_API_KEY: 're_test', EMAIL__FROM: 'x' }).mail).toEqual({ apiKey: 're_test', from: 'x' });
-    expect(completeLoginMethods({ EMAIL__SMTP_HOST: 'localhost' }).mail).toBeUndefined();
   });
   it('rejects incomplete, unsafe, or ambiguous settings without printing their values', () => {
     for (const invalid of [

@@ -7,7 +7,7 @@
 import {PGlite} from '@electric-sql/pglite';
 import {afterEach,beforeEach,expect,it} from 'vitest';
 import type {Queryable} from '@artifactbin/contracts/db';
-import {effectiveAdminGroupIds,effectiveAdminVia} from '../src/identity-store/group-access';
+import { effectiveAdminVia } from '../src/identity-store/group-access';
 import {identityTables} from '../src/identity-store/tables';
 import {identityViewColumns,identityViewStatements} from '../src/identity-store/views';
 
@@ -45,9 +45,6 @@ it('an admin administers every group below theirs, through the nearest direct ad
  expect(await effectiveAdminVia(db,t,'lee','mid')).toBeNull();
  for(const user of ['ed','meg'])for(const group of ['root','mid','leaf','tip'])expect(await effectiveAdminVia(db,t,user,group),`${user} ${group}`).toBeNull();
  expect(await effectiveAdminVia(db,t,'ann','other')).toBeNull();
- expect(await effectiveAdminGroupIds(db,t,'ann')).toEqual(['leaf','mid','root','tip']);
- expect(await effectiveAdminGroupIds(db,t,'bob')).toEqual(['leaf','mid','tip']);
- expect(await effectiveAdminGroupIds(db,t,'meg')).toEqual([]);
  // A nearer direct admin row wins: Ann holds admin on Leaf too, so Tip is hers through Leaf.
  await pg.exec("INSERT INTO auth.group_members VALUES('leaf','ann','admin')");
  expect(await effectiveAdminVia(db,t,'ann','tip')).toBe('leaf');
@@ -80,7 +77,6 @@ it('a deleted group grants nothing and ends the climb: nothing above it reaches 
  ]);
  expect(await effectiveAdminVia(db,t,'ann','leaf')).toBeNull();
  expect(await effectiveAdminVia(db,t,'bob','mid')).toBeNull();
- expect(await effectiveAdminGroupIds(db,t,'ann')).toEqual(['root']);
  await pg.exec("UPDATE auth.groups SET deleted_at=now() WHERE id='tip'");
  expect(await effectiveAdminVia(db,t,'lee','tip')).toBeNull();
 });

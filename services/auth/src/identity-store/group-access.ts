@@ -18,10 +18,6 @@ export interface GroupRow {id: string; handle: string; name: string; description
 export async function effectiveAdminVia(q: Queryable, t: IdentityTables, userId: string, groupId: string): Promise<string | null> {
   return (await q.query<{via_group_id: string}>(`SELECT ga.via_group_id FROM (${groupAdminsSql(t)}) ga WHERE ga.group_id=$1 AND ga.user_id=$2`, [groupId, userId])).rows[0]?.via_group_id ?? null;
 }
-/** Every live group `userId` effectively administers, directly or through an ancestor, ordered by id. */
-export async function effectiveAdminGroupIds(q: Queryable, t: IdentityTables, userId: string): Promise<string[]> {
-  return (await q.query<{group_id: string}>(`SELECT ga.group_id FROM (${groupAdminsSql(t)}) ga WHERE ga.user_id=$1 ORDER BY ga.group_id COLLATE "C"`, [userId])).rows.map(row => row.group_id);
-}
 
 /** `userId`'s direct role in live `groupId`, or null. */
 export const memberRole = async (q: Queryable, t: IdentityTables, userId: string, groupId: string): Promise<GroupRole | null> =>

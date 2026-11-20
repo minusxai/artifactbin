@@ -7,7 +7,7 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { URL_SPACE, URL_SPACE_PATH, classifyPath, documentHostServes, isScreenPath, ownerHostServes } from '@artifactbin/contracts/url-space';
+import { URL_SPACE, classifyPath, documentHostServes, isScreenPath, ownerHostServes } from '@artifactbin/contracts/url-space';
 import { isBuildAssetPath } from '@artifactbin/utils/build-assets';
 import { ROUTES } from '../routes.generated';
 import { createAppServer } from '../app';
@@ -75,15 +75,15 @@ describe('the classifier and the allowlists that derive from it', () => {
   });
 });
 
-describe(URL_SPACE_PATH, () => {
+describe('/af/url-space.json', () => {
   it('serves the exported map, public and revalidated', async () => {
     const app = createAppServer({ indexHtml: async () => '<div id="root"></div>' });
-    const res = await app.request(URL_SPACE_PATH);
+    const res = await app.request('/af/url-space.json');
     expect(res.status).toBe(200);
     expect(await res.text()).toBe(JSON.stringify(URL_SPACE));
     expect(res.headers.get('access-control-allow-origin')).toBe('*');
     expect(res.headers.get('cache-control')).toBe('no-cache');
-    expect((await app.request(URL_SPACE_PATH, { headers: { 'if-none-match': res.headers.get('etag')! } })).status).toBe(304);
+    expect((await app.request('/af/url-space.json', { headers: { 'if-none-match': res.headers.get('etag')! } })).status).toBe(304);
     expect(URL_SPACE.version).toBe(2);
   });
 });
