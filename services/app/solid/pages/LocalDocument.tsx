@@ -1,8 +1,7 @@
 /* @jsxImportSource solid-js */
 import { retryingFetch } from '@/lib/http/retry-lazily';
 import {createEffect,createSignal,lazy,on,onCleanup,onMount,Show,Suspense} from 'solid-js';
-import {installLocalConnectionBroker,type LocalConnectionBroker} from '@/lib/local-connection/broker';
-import {LOCAL_CHROME_COLLAPSED_HEIGHT,LOCAL_CHROME_CANVAS_SCHEME,type LinkedDocument,type LocalConnectionState} from '@/lib/local-connection/contracts';
+import {installLocalConnectionBroker,LOCAL_CHROME_COLLAPSED_HEIGHT,LOCAL_CHROME_CANVAS_SCHEME,type LinkedDocument,type LocalConnectionBroker,type LocalConnectionState,type SourceObservation} from '@/lib/local-connection';
 import {STORY_READER_MODE_MESSAGE,type StoryController,type FrameBridgeFramePayload} from '@/lib/html-reader/contract';
 import {chooseTheme,storedTheme} from '@/lib/html-reader/reader-mode';
 import {createAppAppearance} from '../ui/theme';
@@ -16,7 +15,6 @@ import {readPortableDocument} from '@/lib/html-runtime/portable';
 import {compareSource} from '@/lib/html-runtime/source-relationship';
 import {recoverPortableSource} from '@/lib/html-runtime/portable-source';
 import {sha256Hex} from '@artifactbin/utils/sha256';
-import type {SourceObservation} from '@/lib/local-connection';
 import {localSourceStatus} from './local-source-status';
 import {createLocalReader} from '../document/create-local-reader';
 const ReaderPresenceControls=lazy(()=>import('../document/ReaderPresenceControls').then(module=>({default:module.ReaderPresenceControls})));

@@ -3,7 +3,7 @@ import '@testing-library/jest-dom/vitest';
 import {cleanup,render,screen,fireEvent,waitFor,within} from '@solidjs/testing-library';
 import {MemoryRouter,Route} from '@solidjs/router';
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
-import type {LocalBrokerOptions} from '@/lib/local-connection/broker';
+import type {LocalBrokerOptions} from '@/lib/local-connection';
 import {STORY_READER_MODE_MESSAGE} from '@/lib/html-reader/contract';
 import {LocalDocumentPage} from '../LocalDocument';
 const broker=vi.hoisted(()=>({sourceChanged:vi.fn(),authorize:vi.fn(),signIn:vi.fn(),resize:vi.fn(),post:vi.fn(),disconnect:vi.fn(),retry:vi.fn(),dispose:vi.fn()}));
@@ -13,7 +13,7 @@ const annotation=vi.hoisted(()=>({topOffset:undefined as number|undefined,canCre
 const live=vi.hoisted(()=>({options:null as Parameters<typeof import('../../editor/create-live-artifact').createLiveArtifact>[0]|null}));
 vi.mock('../../editor/create-live-artifact',()=>({createLiveArtifact(options:Parameters<typeof import('../../editor/create-live-artifact').createLiveArtifact>[0]){live.options=options;return ()=>null;}}));
 const captured=vi.hoisted(()=>({options:null as LocalBrokerOptions|null}));
-vi.mock('@/lib/local-connection/broker',()=>({installLocalConnectionBroker(options:LocalBrokerOptions){captured.options=options;options.onIdentity?.({platformOrigin:'https://platform.example',artifactId:'p',baseRevision:'1',sourceDigest:'a'.repeat(64)});options.onState('permission-required');return broker;}}));
+vi.mock('@/lib/local-connection',async original=>({...await original<typeof import('@/lib/local-connection')>(),installLocalConnectionBroker(options:LocalBrokerOptions){captured.options=options;options.onIdentity?.({platformOrigin:'https://platform.example',artifactId:'p',baseRevision:'1',sourceDigest:'a'.repeat(64)});options.onState('permission-required');return broker;}}));
 vi.mock('../../document/AnnotationLayer',()=>({AnnotationLayer:(props:{topOffset?:number;canCreateComment:boolean;onSignIn?:()=>void;liveAnnotations?:unknown})=>{Object.defineProperty(annotation,'topOffset',{get:()=>props.topOffset,configurable:true});Object.defineProperty(annotation,'live',{get:()=>props.liveAnnotations,configurable:true});Object.defineProperty(annotation,'onSignIn',{get:()=>props.onSignIn,configurable:true});Object.defineProperty(annotation,'canCreate',{get:()=>props.canCreateComment,configurable:true});return null;}}));
 beforeEach(()=>{vi.clearAllMocks();account.signedIn=false;localStorage.clear();document.documentElement.removeAttribute('data-theme');vi.stubGlobal('fetch',vi.fn(async()=>Response.json({})));});
 afterEach(async()=>{cleanup();await vi.dynamicImportSettled();localStorage.clear();document.documentElement.removeAttribute('data-theme');vi.unstubAllGlobals();});
