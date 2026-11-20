@@ -9,8 +9,9 @@
  * The token is a compact JWS, EdDSA (Ed25519) only, verified with the issuer's public key: `iss` a configured issuer,
  * `aud` its audience, `exp` in the future, `iat` present and not ahead of now, at most 300 s between them, and `jti`
  * used once (a replayed `jti` is refused until its token expires; the record of used ids is this process's memory, so
- * a multi-process install accepts a token at most once per process). Claims: `sub` (the person's handle), `group` (the
- * group's handle), `tenancy_id` (the group's tenancy, fixed at its creation) and an optional `name`. The request's
+ * a multi-process install accepts a token at most once per process). Claims: `sub` (the person's email address, or a
+ * handle the issuer owns), `group` (the group's handle) and `tenancy_id` (the group's tenancy, fixed at its creation);
+ * any other claim (such as `name`) is ignored. The request's
  * `Origin` must be one of the issuer's origins; every other sign-in keeps refusing foreign origins.
  * The identity writes are ../identity-store/trusted-sign-in.
  */
@@ -61,7 +62,7 @@ function isOrigin(value: string): boolean {
   try { const url = new URL(value); return (url.protocol === 'https:' || url.protocol === 'http:') && url.origin === value; } catch { return false; }
 }
 
-export interface TrustedClaims { issuer: TrustedIssuer; subject: string; group: string; tenancyId: string; name?: string; jti: string; exp: number }
+export interface TrustedClaims { issuer: TrustedIssuer; subject: string; group: string; tenancyId: string; jti: string; exp: number }
 export type TrustedTokenRefusal = 'invalid_token' | 'unknown_issuer' | 'forbidden_origin' | 'replayed_token';
 
 const json = (part: string): Record<string, unknown> | null => {
@@ -90,16 +91,16 @@ export function createTrustedTokenVerifier(issuers: ReadonlyMap<string, TrustedI
       if (!origin || !issuer.origins.includes(origin)) return {ok: false, refusal: 'forbidden_origin'};
       if (!verify(null, Buffer.from(`${head}.${body}`), issuer.key, Buffer.from(signature, 'base64url'))) return {ok: false, refusal: 'invalid_token'};
       const at = now(), seconds = at / 1000;
-      const {aud, exp, iat, jti, sub, group, tenancy_id: tenancyId, name} = payload;
+      const {aud, exp, iat, jti, sub, group, tenancy_id: tenancyId} = payload;
       const audienceOk = aud === issuer.audience || (Array.isArray(aud) && aud.length === 1 && aud[0] === issuer.audience);
       if (!audienceOk || typeof exp !== 'number' || typeof iat !== 'number' || !Number.isFinite(exp) || !Number.isFinite(iat)
         || exp <= seconds || iat > seconds + CLOCK_SKEW_S || exp <= iat || exp - iat > MAX_LIFETIME_S
-        || !plain(jti, 200) || !plain(sub, 64) || !plain(group, 64) || !plain(tenancyId, 200) || (name !== undefined && !plain(name, 120))) return {ok: false, refusal: 'invalid_token'};
+        || !plain(jti, 200) || !plain(sub, 254) || !plain(group, 64) || !plain(tenancyId, 200)) return {ok: false, refusal: 'invalid_token'};
       prune(at);
       const key = `${issuer.issuer}\u0000${jti}`;
       if (used.has(key)) return {ok: false, refusal: 'replayed_token'};
       used.set(key, exp);
-      return {ok: true, claims: {issuer, subject: sub, group, tenancyId, ...(name !== undefined ? {name} : {}), jti, exp}};
+      return {ok: true, claims: {issuer, subject: sub, group, tenancyId, jti, exp}};
     },
   };
 }
@@ -115,5 +116,5 @@ export function trustedCallbackPath(value: unknown): string {
   } catch { return '/'; }
 }
 
-/** The person's address at this deployment: synthetic and undeliverable (`.invalid` is reserved, RFC 2606). */
+/** A handle subject's address at this deployment: synthetic and undeliverable (`.invalid` is reserved, RFC 2606). */
 export const trustedEmailOf = (issuer: string, subject: string): string => `${subject}@${issuer}.trusted-issuer.invalid`;
