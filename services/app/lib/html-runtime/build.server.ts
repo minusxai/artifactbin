@@ -19,20 +19,28 @@ let assets:Promise<HtmlRuntimeAssets>|undefined;
 /** Build immutable code once, or read the build a composition supplies (./assets-supply.server). Page configuration is supplied only by assembly. */
 export function buildHtmlAssets():Promise<HtmlRuntimeAssets>{return assets??=suppliedOrCompiled(compile).catch(error=>{assets=undefined;throw error;});}
 export async function buildHtmlCore():Promise<string>{return (await buildHtmlAssets()).core;}
+const options={bundle:true,minify:true,write:false,platform:'browser' as const,target:'es2022'};
+/** One bundle's minified source; an empty build is an error (`empty` says which). */
+const bundled=async(extra:Parameters<typeof build>[0],empty='HTML runtime build produced no module')=>{
+ const text=(await build({...options,...extra})).outputFiles?.[0]?.text;
+ if(!text)throw Error(empty);
+ return text;
+};
+/** One runtime module: `file` bundled as an ES module. */
+const esm=(file:URL,extra:Parameters<typeof build>[0]={})=>bundled({entryPoints:[fileURLToPath(file)],format:'esm',...extra});
+/** Resolve the bare `filter` import as the external `path`: a module the page's import map supplies. */
+const external=(name:string,filter:RegExp,path:string):Plugin=>({name,setup(builder:PluginBuild){builder.onResolve({filter},()=>({path,external:true}));}});
 async function compile():Promise<HtmlRuntimeAssets>{
- const options={bundle:true,minify:true,write:false,platform:'browser' as const,target:'es2022'};
- const reader=await build({...options,entryPoints:[fileURLToPath(new URL('./browser-reader.ts',import.meta.url))],format:'esm',external:['@afbin/chrome','@afbin/portable','@afbin/morph'],banner:{js:`const __AF_RUNTIME_CONFIG__=(()=>{const supplied=document.querySelector('[data-af="runtime"]');return supplied?JSON.parse(supplied.textContent):{pageId:'local:'+location.pathname,revision:'local',backends:[],offline:true};})();`}});
+ const readerSource=await esm(new URL('./browser-reader.ts',import.meta.url),{external:['@afbin/chrome','@afbin/portable','@afbin/morph'],banner:{js:`const __AF_RUNTIME_CONFIG__=(()=>{const supplied=document.querySelector('[data-af="runtime"]');return supplied?JSON.parse(supplied.textContent):{pageId:'local:'+location.pathname,revision:'local',backends:[],offline:true};})();`}});
  // `@afbin/state` owns the page's one local-state document; `@afbin/apollo` imports it rather than carrying a second copy.
- const sharedState={name:'shared-state',setup(builder:PluginBuild){builder.onResolve({filter:/^\.\/browser-state$/},()=>({path:'@afbin/state',external:true}));}};
- const sharedReader={name:'shared-reader',setup(builder:PluginBuild){builder.onResolve({filter:/^\.\/browser-reader$/},()=>({path:'@afbin/reader',external:true}));}};
- const author=await build({...options,entryPoints:[fileURLToPath(new URL('./browser-client.ts',import.meta.url))],format:'esm',plugins:[sharedReader,sharedState]});
+ const sharedState=external('shared-state',/^\.\/browser-state$/,'@afbin/state');
+ const sharedReader=external('shared-reader',/^\.\/browser-reader$/,'@afbin/reader');
+ const apollo=await esm(new URL('./browser-client.ts',import.meta.url),{plugins:[sharedReader,sharedState]});
  // Zustand and the viewer's document (./browser-state): loaded only when a page imports `@afbin/state` or `@afbin/apollo`.
- const stateBuild=await build({...options,entryPoints:[fileURLToPath(new URL('./browser-state.ts',import.meta.url))],format:'esm',plugins:[sharedReader]});
- const readerSource=reader.outputFiles?.[0]?.text,apollo=author.outputFiles?.[0]?.text;
- if(!readerSource||!apollo)throw Error('HTML runtime build produced no module');
- const portableBuild=await build({...options,entryPoints:[fileURLToPath(new URL('./portable-session.ts',import.meta.url))],format:'esm',external:['@afbin/chrome']});
+ const state=await esm(new URL('./browser-state.ts',import.meta.url),{plugins:[sharedReader]});
+ const portableEngine=await esm(new URL('./portable-session.ts',import.meta.url),{external:['@afbin/chrome']});
  // The live morph (./live-morph) loads only when a new version reaches an open framed page.
- const morphBuild=await build({...options,entryPoints:[fileURLToPath(new URL('./live-morph.ts',import.meta.url))],format:'esm'});
+ const morph=await esm(new URL('./live-morph.ts',import.meta.url));
  // The native region editor (./native-region-editor: Tiptap and Yjs) loads only when the parent opens a region session for an editor.
  const regionPlugins:Plugin[]=[{
   name:'pure-lib0-dom-schemas',
@@ -44,25 +52,25 @@ async function compile():Promise<HtmlRuntimeAssets>{
   }));},
  }];
  // Live dataset text cells (./collab: Yjs, no ProseMirror) load only when a page imports `@afbin/collab`; the frame's cell port is the reader's.
- const nativeMarkdownBuild=await build({...options,entryPoints:[fileURLToPath(new URL('./native-region-markdown.ts',import.meta.url))],format:'esm'});
- const nativeRegionsBuild=await build({...options,entryPoints:[fileURLToPath(new URL('./native-region-editor.ts',import.meta.url))],format:'esm',conditions:['production'],define:{'process.env.NODE_ENV':'"production"'},plugins:regionPlugins});
- const collabBuild=await build({...options,entryPoints:[fileURLToPath(new URL('./collab.ts',import.meta.url))],format:'esm',plugins:[sharedReader]});
+ const nativeMarkdown=await esm(new URL('./native-region-markdown.ts',import.meta.url));
+ const nativeRegions=await esm(new URL('./native-region-editor.ts',import.meta.url),{conditions:['production'],define:{'process.env.NODE_ENV':'"production"'},plugins:regionPlugins});
+ const collab=await esm(new URL('./collab.ts',import.meta.url),{plugins:[sharedReader]});
  // The `sql` engine (./offline-sql): embedded in a downloaded copy that carries its reader's rows, and served once at
  // /af/offline-sql.js for drafts (lib/page-drafts), which share it instead of carrying ~600 KB each. Never a published page's.
  // Its wasm is the SQL service's own (resolved where services/sql declares it), inlined: a copy fetches nothing.
  const sqliteWasm=await readFile(createRequire(fileURLToPath(new URL('../../../sql/package.json',import.meta.url))).resolve('@sqlite.org/sqlite-wasm/sqlite3.wasm'));
- const offlineSqlBuild=await build({...options,entryPoints:[fileURLToPath(new URL('./offline-sql.ts',import.meta.url))],format:'esm',define:{__AF_SQLITE_WASM__:JSON.stringify(sqliteWasm.toString('base64'))}});
+ const offlineSql=await esm(new URL('./offline-sql.ts',import.meta.url),{define:{__AF_SQLITE_WASM__:JSON.stringify(sqliteWasm.toString('base64'))}});
  // The document host module (lib/html-reader/host-shell, /af/host.js): loaded by another shell on the app's origin, never by
  // a page, so it has no import-map entry and no skew guard (no core runs beside it); the manifest pins it by digest.
  // Its discussion (the host comments module, ./build-portable-chrome) is a module of its own the host module imports only
  // when a shell asks for comments; the host module names that build's pinned address (/af/v1/host/<sha256>.js, kept by
  // the same retention), so a pinned host module always loads the comments it was built with.
  const hostComments=await buildHostComments();
- const hostBuild=await build({...options,entryPoints:[fileURLToPath(new URL('../html-reader/host-shell.ts',import.meta.url))],format:'esm',define:{__AF_HOST_COMMENTS__:JSON.stringify(hostCommentsPath(hostComments))}});
+ const host=await esm(new URL('../html-reader/host-shell.ts',import.meta.url),{define:{__AF_HOST_COMMENTS__:JSON.stringify(hostCommentsPath(hostComments))}});
  const chrome=await buildPortableChrome();
  // D17: flat platform addresses, revalidated by ETag (no version or hash). A page open across a deploy can load a newer
  // lazy module against its older core, so every lazy module carries this build's id and refuses another core's (skewGuard).
- const unguarded={apollo,reader:readerSource,chrome,portableEngine:portableBuild.outputFiles![0]!.text,morph:morphBuild.outputFiles![0]!.text,nativeRegions:nativeRegionsBuild.outputFiles![0]!.text,nativeMarkdown:nativeMarkdownBuild.outputFiles![0]!.text,collab:collabBuild.outputFiles![0]!.text,state:stateBuild.outputFiles![0]!.text,offlineSql:offlineSqlBuild.outputFiles![0]!.text};
+ const unguarded={apollo,reader:readerSource,chrome,portableEngine,morph,nativeRegions,nativeMarkdown,collab,state,offlineSql};
  const buildId=createHash('sha256').update(JSON.stringify(unguarded)).digest('hex').slice(0,16);
  const guarded=Object.fromEntries(Object.entries(unguarded).map(([key,source])=>[key,skewGuard(buildId)+source])) as typeof unguarded;
  const {apolloPath,readerPath,chromePath,portableEnginePath,morphPath,nativeRegionsPath,nativeMarkdownPath,collabPath,statePath}=RUNTIME_MODULE_PATHS;
@@ -84,22 +92,20 @@ if(look.lightOnly===true)new MutationObserver(()=>{if(root.getAttribute('data-af
 startNativeHtmlTableScroll(document);
 noticeBlockedModals(window);
 const blob=source=>URL.createObjectURL(new Blob([source],{type:'text/javascript'}));
-const portableReader=document.querySelector('[data-af="reader"]');
-if(supplied&&config.offline&&!document.documentElement.hasAttribute('data-af-private-preview')&&!portableReader)throw Error('Portable HTML is missing its reader module');
-const reader=portableReader?blob(JSON.parse(portableReader.textContent)):new URL(${JSON.stringify(readerPath)},document.currentScript.src||location.href).href;
+const base=document.currentScript.src||location.href;
+// A module a portable copy embeds (as a blob URL), else the platform's; a copy must embed reader and author.
+const moduleUrl=(block,url)=>block?blob(JSON.parse(block.textContent)):url.href;
+const required=(block,what,url)=>{if(supplied&&config.offline&&!document.documentElement.hasAttribute('data-af-private-preview')&&!block)throw Error('Portable HTML is missing its '+what+' module');return moduleUrl(block,url);};
+const reader=required(document.querySelector('[data-af="reader"]'),'reader',new URL(${JSON.stringify(readerPath)},base));
 const portable=document.querySelector('[data-af="apollo"]');
-if(supplied&&config.offline&&!document.documentElement.hasAttribute('data-af-private-preview')&&!portable)throw Error('Portable HTML is missing its author module');
-const apollo=portable?blob(JSON.parse(portable.textContent)):new URL(${JSON.stringify(apolloPath)},document.currentScript.src||location.href).href;
-const stateBlock=document.querySelector('[data-af="state-module"]');
-const state=stateBlock?blob(JSON.parse(stateBlock.textContent)):new URL(${JSON.stringify(statePath)},document.currentScript.src||location.href).href;
-const engineBlock=document.querySelector('[data-af="portable-engine"]');
-const portableEngine=engineBlock?blob(JSON.parse(engineBlock.textContent)):new URL(${JSON.stringify(portableEnginePath)},document.currentScript.src||location.href).href;
-const chromeBlock=document.querySelector('[data-af="chrome"]');
-const chrome=chromeBlock?blob(JSON.parse(chromeBlock.textContent)):new URL(${JSON.stringify(chromePath)},document.currentScript.src||location.href).href;
+const apollo=required(portable,'author',new URL(${JSON.stringify(apolloPath)},base));
+const state=moduleUrl(document.querySelector('[data-af="state-module"]'),new URL(${JSON.stringify(statePath)},base));
+const portableEngine=moduleUrl(document.querySelector('[data-af="portable-engine"]'),new URL(${JSON.stringify(portableEnginePath)},base));
+const chrome=moduleUrl(document.querySelector('[data-af="chrome"]'),new URL(${JSON.stringify(chromePath)},base));
 const live=config.appOrigin&&!config.offline&&window.parent!==window;
 const sqlBlock=config.offline?document.querySelector('[data-af="offline-sql"]'):null;
 const collabBlock=document.querySelector('[data-af="collab"]');
-const collab=collabBlock?blob(JSON.parse(collabBlock.textContent)):config.offline?null:new URL(${JSON.stringify(collabPath)},document.currentScript.src||location.href).href;
+const collab=collabBlock||!config.offline?moduleUrl(collabBlock,new URL(${JSON.stringify(collabPath)},base)):null;
 // The source this document loaded, before its deferred and module scripts run: what a new version is compared against (./live-morph LOADED_SOURCE).
 // A framed page rebuilt from a new version (./live-morph rebuild) puts the reader back where the previous document left them.
 if(live)restoreReadingPlace(window,config.pageId);
@@ -108,14 +114,13 @@ if(!config.publishOrigin&&document.currentScript.src)config.publishOrigin=new UR
 const sharedBlock=config.offline?document.querySelector('[data-af="offline-modules"]'):null;
 const sharedImports={};if(sharedBlock)for(const [key,source]of Object.entries(JSON.parse(sharedBlock.textContent))){if(!(key.startsWith('@afbin/offline/')&&/^[a-f0-9]{64}$/.test(key.slice(15)))||typeof source!=='string')throw Error('Invalid embedded module table');sharedImports[key]=blob(source);}
 if(Object.keys(sharedImports).length)addEventListener('pagehide',event=>{if(!event.persisted)for(const url of Object.values(sharedImports))URL.revokeObjectURL(url);});
-const libraries={};if(!portable)for(const [key,value]of Object.entries(config.libraries??{}))if(/^@afbin\\/[a-z][a-z0-9-]*$/.test(key)&&/^\\/af\\/(?:lib\\/[a-z][a-z0-9-]*-\\d+\\.\\d+\\.\\d+\\/index|components\\/[a-z][a-z0-9-]*)\\.js$/.test(value))libraries[key]=new URL(value,document.currentScript.src||location.href).href;
+const libraries={};if(!portable)for(const [key,value]of Object.entries(config.libraries??{}))if(/^@afbin\\/[a-z][a-z0-9-]*$/.test(key)&&/^\\/af\\/(?:lib\\/[a-z][a-z0-9-]*-\\d+\\.\\d+\\.\\d+\\/index|components\\/[a-z][a-z0-9-]*)\\.js$/.test(value))libraries[key]=new URL(value,base).href;
 const map=document.createElement('script');if(platformNonce)map.nonce=platformNonce;map.type='importmap';map.textContent=JSON.stringify({imports:{...libraries,...sharedImports,'@afbin/apollo':apollo,'@afbin/state':state,'@afbin/reader':reader,'@afbin/chrome':chrome,'@afbin/portable':portableEngine,...(collab?{'@afbin/collab':collab}:{}),...(sqlBlock?{'@afbin/offline-sql':blob(JSON.parse(sqlBlock.textContent))}:config.draft&&!config.offline?{'@afbin/offline-sql':new URL(${JSON.stringify(DRAFT_SQL_ENGINE_PATH)},document.currentScript.src||location.href).href}:{}),...(live?{'@afbin/morph':new URL(${JSON.stringify(morphPath)},document.currentScript.src||location.href).href,'@afbin/native-markdown':new URL(${JSON.stringify(nativeMarkdownPath)},document.currentScript.src||location.href).href,'@afbin/native-regions':new URL(${JSON.stringify(nativeRegionsPath)},document.currentScript.src||location.href).href}:{})}});document.currentScript.after(map);
 // A fetch of a file the page published reads it wherever the page is (config.files), and a GET to a host it declares
 // goes through its fetch door (config.connect), before any author script runs (./page-fetch).
 installPageFetch(window,config.files,!config.offline&&Array.isArray(config.connect)&&config.connect.length?{pageId:config.pageId,origins:config.connect}:undefined);
 if(config.offline&&window.parent===window){void import(reader).then(module=>module.startPortableDocument(window,config.publishOrigin)).catch(()=>document.documentElement.setAttribute('data-af-connection','unavailable'));}
 if(live){installHtmlReaderCommands(window,config.appOrigin);openFrameDoor(window,config.appOrigin,()=>import(reader));}`;
- const core=await build({...options,stdin:{contents:entry,resolveDir:process.cwd(),loader:'ts'},format:'iife'});
- if(!core.outputFiles?.[0]?.text)throw Error('HTML core is empty');
- return {core:core.outputFiles[0].text,systems:htmlSystemsCss(HTML_SYSTEM_NAMES),apollo:guarded.apollo,apolloPath,reader:guarded.reader,readerPath,chrome:guarded.chrome,chromePath,portableEngine:guarded.portableEngine,portableEnginePath,morph:guarded.morph,morphPath,nativeRegions:guarded.nativeRegions,nativeRegionsPath,nativeMarkdown:guarded.nativeMarkdown,nativeMarkdownPath,collab:guarded.collab,collabPath,state:guarded.state,statePath,offlineSql:guarded.offlineSql,host:hostBuild.outputFiles![0]!.text,hostComments};
+ const core=await bundled({stdin:{contents:entry,resolveDir:process.cwd(),loader:'ts'},format:'iife'},'HTML core is empty');
+ return {core,systems:htmlSystemsCss(HTML_SYSTEM_NAMES),...guarded,...RUNTIME_MODULE_PATHS,host,hostComments};
 }
