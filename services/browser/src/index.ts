@@ -1,5 +1,5 @@
 /**
- * THE BROWSER SERVICE, from the outside: the contract, an HTTP client, and
+ * THE BROWSER SERVICE, from the outside: the contract (@artifactbin/contracts/browser and browser-sessions), an HTTP client, and
  * the server shell over ANY BrowserService. No Playwright here — that is
  * `@artifactbin/browser/local`, loaded only by a composition root.
  *
@@ -22,7 +22,8 @@ import { BROWSER_ROUTES, ELEMENT_CAPTURE_HEADER } from '@artifactbin/contracts/b
 import type { JsonServer } from '@artifactbin/utils';
 import { postServer } from '@artifactbin/utils';
 
-export type * from '@artifactbin/contracts';
+export type * from '@artifactbin/contracts/browser';
+export type * from '@artifactbin/contracts/browser-sessions';
 export { BROWSER_ROUTES } from '@artifactbin/contracts/browser';
 // `browserClient` lives in @artifactbin/utils; re-exported here so a caller can take the
 // client from the same package as the shell it speaks to. That is how this package's own

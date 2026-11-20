@@ -1,6 +1,6 @@
 /**
  * THE EVENTS SERVICE, from the outside: the contract (re-exported from
- * @artifactbin/contracts), the table it owns, the HTTP client that speaks the
+ * @artifactbin/contracts/events), the table it owns, the HTTP client that speaks the
  * wire (utils' eventsClient), the server shell that serves ANY EventsService
  * over it, and the boot a process entry or a deployment wrapper calls. The
  * writer itself is `@artifactbin/events/local` — the shell serves whatever
@@ -15,7 +15,8 @@ import { createEnv, jsonServer, log, serviceSecretForServer, SERVING_POOL, withP
 import { createEvents, ensureEventsSchema } from './local';
 import { DEFAULT_EVENTS_SCHEMA, IDENTIFIER } from './schema';
 
-export type * from '@artifactbin/contracts';
+export type * from '@artifactbin/contracts/events';
+export type { Queryable } from '@artifactbin/contracts/db';
 export { eventName } from '@artifactbin/contracts/events';
 export { eventsClient } from '@artifactbin/utils';
 export { EVENTS_TABLES } from './schema';

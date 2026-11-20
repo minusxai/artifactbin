@@ -1,7 +1,7 @@
 import {expect,it,vi} from 'vitest';
 import {noTokens,signInByOtp,serviceAuthHost} from './helpers';
 import {createAuthHost,type AuthOptions} from '../src/parts';
-import {REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts';
+import {REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts/actor';
 import {PGlite} from '@electric-sql/pglite';
 import {createHumanAuth} from '../src/auth/human';
 const marker=REVALIDATE_ACTOR_HEADER;

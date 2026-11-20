@@ -5,7 +5,8 @@
  */
 import {PGlite} from '@electric-sql/pglite';
 import {afterEach,describe,expect,it} from 'vitest';
-import type {Queryable,TransactionalQueryable} from '@artifactbin/contracts';
+import type {Queryable} from '@artifactbin/contracts/db';
+import type {TransactionalQueryable} from '@artifactbin/contracts/identity-module';
 import {IdentityNotReady,ensureIdentitySchema} from '../src/identity-store';
 import {assertGroupRoleModel,migrateGroupRoles} from '../src/identity-store/group-role-migration';
 

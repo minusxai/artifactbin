@@ -1,12 +1,13 @@
 import {expect,it,vi} from 'vitest';
-import {ACTOR_HEADER,ANONYMOUS,BROWSER_SESSION_HEADER,type Actor} from '@artifactbin/contracts';
+import {ACTOR_HEADER, ANONYMOUS, type Actor} from '@artifactbin/contracts/actor';
+import {BROWSER_SESSION_HEADER} from '@artifactbin/contracts/browser-sessions';
 import {createEnv} from '@artifactbin/utils';
 import {createSessionProcess,forwardSessionFetch,sessionPlainPlan,sessionSandboxPlan} from '../src/session-process';
 import {sessionCapacity,sessionEnvNamesRead,sessionProcessPaths,sessionSandboxChoice} from '../src/session-config';
 import {createBrowserSessions} from '../src/sessions';
 import {createPagesCookieJar,sessionBrowserArgs,sessionOrigins} from '../src/session-origins';
 import {createSessionRequestQueue} from '../src/session-request-queue';
-import {FORWARDED_HOST} from '@artifactbin/contracts';
+import {FORWARDED_HOST} from '@artifactbin/contracts/routes';
 it('launches SEA through its trusted selector with only the executable and browser tree mounted',()=>{
  const plan=sessionSandboxPlan('/tmp/private-session','/cache/chromium/chrome-linux64','/home/operator/bin/afbin',['--internal-browser-worker']);
  expect(plan.args).toContain('--unshare-all');expect(plan.args).toContain('--die-with-parent');expect(plan.args).toContain('--new-session');

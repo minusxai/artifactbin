@@ -1,55 +1,21 @@
-export type { Part, Upstream } from './part';
-export { HUMAN_SESSION_LIVE_PATH, ACTOR_HEADER, REVALIDATE_ACTOR_HEADER, ANONYMOUS, type Actor } from './actor';
-export type { Queryable } from './db';
-export * from './sql';
-export * from './sql-failures';
-export * from './sql-source';
-export * from './sql-analysis';
-export * from './sql-functions';
-export * from './browser';
-export * from './browser-sessions';
-export * from './testusers';
-export * from './test-domain';
-export * from './service-audiences';
-export * from './events';
-export * from './event-feed';
-export * from './relations';
-export * from './agent';
-export * from './routes';
-export * from './artifact-reference';
-export * from './sharing';
-export type { TokenRecord, TokenReader } from './identity';
-export * from './identity-service';
-export * from './payload-limit';
-export * from './page-limits';
-export * from './identity-module';
-export * from './handles';
-export * from './dataset-policy';
-export * from './dataset-permissions';
-export * from './dataset-hasura';
-
-export * from './cli-auth';
-
-export * from './account-resource';
-
+/**
+ * @artifactbin/contracts is entered by topic: each file here is its own entry (`@artifactbin/contracts/<file>`, the
+ * package's `./*` export), so a caller names the one contract it speaks. This root entry keeps only the names the
+ * private deployment imports from it (__tests__/downstream-exports.test.ts) while it moves to the topic entries.
+ */
+export { ACTOR_HEADER, ANONYMOUS, HUMAN_SESSION_LIVE_PATH, type Actor } from './actor';
+export { ARTIFACT_ID_PATTERN } from './artifact-reference';
 export { BUILD_ASSET_PATH } from './build-assets';
-
-export * from './font-sources';
-
-export * from './membership';
-
-export * from './document-update';
-
-export * from './artifact-format';
-export * from './live-channels';
-export * from './url-space';
-export * from './sign-in-required';
-
-export * from "./groups";
-
-export * from './html-page';
-export * from './html-annotation';
-
-export * from './region-sessions';
-export * from './connectors';
-
+export { CONNECTORS, CONNECTOR_ERROR_CODES, CONNECTOR_LIMITS, CONNECTOR_VALUE_TYPES, type Connection, type ConnectionConfig, type ConnectionSummary, type ConnectorAnswer, type ConnectorColumn, type ConnectorDialect, type ConnectorError, type ConnectorErrorCode, type ConnectorField, type ConnectorFieldKind, type ConnectorId, type ConnectorJson, type ConnectorLimits, type ConnectorNetworkPolicy, type ConnectorQuery, type ConnectorScalar, type ConnectorSchema, type ConnectorSchemaTable, type ConnectorSpec, type ConnectorTestResult, type ConnectorValueType, type ConnectorViewer } from './connectors';
+export type { DatasetPolicy } from './dataset-policy';
+export type { Queryable } from './db';
+export { COMMENT_CHANGES_MAX_WAIT_SECONDS, EVENT_FEED_MAX_WAIT_SECONDS } from './event-feed';
+export { eventName, type EventEnvelope, type EventPayload, type EventVerb, type EventsService, type ObjectKind } from './events';
+export { IDENTITY_CALL_PATH, IDENTITY_OWNED_TABLES, type TransactionalQueryable } from './identity-module';
+export { IDENTITY_INTROSPECT_PATH } from './identity-service';
+export type { TokenReader, TokenRecord } from './identity';
+export type { Part, Upstream } from './part';
+export { FORWARDED_HOST, FORWARDED_PROTO, SERVICE_AUTH_HEADER } from './routes';
+export { isQueryFailure, type MutationInput, type MutationOutcome, type SqlService } from './sql';
+export { isTestDomainEmail } from './test-domain';
+export { URL_SPACE, URL_SPACE_PATH, classifyPath, documentHostServes, emailLinkPath, isAppBuildPath, isScreenPath, ownerHostServes, personLinkPath, type PathKind } from './url-space';

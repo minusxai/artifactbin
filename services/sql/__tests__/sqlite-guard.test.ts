@@ -6,7 +6,7 @@
  * functions we list; only the tables we loaded.
  */
 import { describe, expect, it } from 'vitest';
-import { isQueryFailure, type QueryOutcome } from '@artifactbin/contracts';
+import { isQueryFailure, type QueryOutcome } from '@artifactbin/contracts/sql';
 import { createSqliteSql } from '@artifactbin/sql/sqlite';
 import { loadSqlite, type SqliteDatabase } from '@artifactbin/sql/core';
 

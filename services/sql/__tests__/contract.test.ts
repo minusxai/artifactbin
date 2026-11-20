@@ -6,8 +6,8 @@
  * that the compositions, and in-process and remote, can never disagree.
  */
 import { afterAll, describe, expect, it, vi } from 'vitest';
-import type { SqlService } from '@artifactbin/contracts';
-import { isQueryFailure } from '@artifactbin/contracts';
+import type { SqlService } from '@artifactbin/contracts/sql';
+import { isQueryFailure } from '@artifactbin/contracts/sql';
 import { SQL_ROUTES, serveSql, sqlClient } from '@artifactbin/sql';
 import { createSql } from '@artifactbin/sql/local';
 import { createSqliteSql } from '@artifactbin/sql/sqlite';
