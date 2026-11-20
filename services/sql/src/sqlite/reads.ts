@@ -10,7 +10,8 @@
 import { isQueryFailure, type ColumnType, type DatasetColumn, type DryRunInput, type DryRunResult, type QueryOutcome, type QueryPage, type Row, type RunInput, type RunManyInput, type Scalar } from '@artifactbin/contracts';
 import { DEFAULT_CAPS } from '../caps';
 import { pagedQuery } from '../paging';
-import { Refused, SqliteDatabase, TimedOut, TooLarge, type Prepared, type TableData } from './database';
+import { SqliteDatabase, TimedOut, TooLarge, type Prepared, type TableData } from './database';
+import { Refused } from './guard';
 import { preparedKey, type PreparedCache } from './prepared';
 import type { Sqlite3 } from './wasm';
 

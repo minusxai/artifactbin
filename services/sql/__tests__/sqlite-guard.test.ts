@@ -8,6 +8,7 @@
 import { describe, expect, it } from 'vitest';
 import { isQueryFailure, type QueryOutcome } from '@artifactbin/contracts';
 import { createSqliteSql } from '@artifactbin/sql/sqlite';
+import { loadSqlite, type SqliteDatabase } from '@artifactbin/sql/core';
 
 const sql = createSqliteSql({ maxRows: 100, timeoutMs: 2000 });
 const TABLE = { rows: [{ a: 1 }, { a: 2 }], columns: [{ name: 'a', type: 'number' as const }] };
@@ -93,5 +94,22 @@ describe('writes admit one INSERT, UPDATE or DELETE on the target', () => {
 describe('parameters', () => {
   it('refuses anonymous placeholders, which cannot be bound by name', async () => {
     expect(errorOf(await read('select a from t where a > ?'))).toMatch(/named/);
+  });
+});
+
+const engine = await loadSqlite();
+describe('the catalog the guard judges by', () => {
+  it.each<[string, (db: SqliteDatabase) => void, string | null]>([
+    ['refuses a table the engine made but never loaded', (db) => { db.exec('CREATE TABLE main.hidden (a)'); }, 'main.hidden is not a table this statement may read'],
+    ['still reads a loaded table a rolled-back scratch run dropped', (db) => { db.scratch(() => db.drop('main', 'hidden')); }, null],
+  ])('%s', (_, setup, refusal) => {
+    const db = engine.open();
+    try {
+      db.load({ schema: 'main', table: 'hidden', columns: [{ name: 'a', type: 'number' }], rows: [{ a: 1 }] });
+      if (refusal) db.drop('main', 'hidden');
+      setup(db);
+      const admitted = (() => { try { db.prepare('SELECT a FROM hidden', 'read').finalize(); return null; } catch (e) { return (e as Error).message; } })();
+      expect(admitted).toBe(refusal);
+    } finally { db.close(); }
   });
 });
