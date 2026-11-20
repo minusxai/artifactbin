@@ -6,17 +6,17 @@ import type {ContentObjects} from '@/lib/object-store';
  * one implementation rather than two that agree today.
  */
 import { MAX_PDF_BYTES } from '@/lib/platform';
-import { json } from '@/lib/http';
+import { Reply, reply } from '@/lib/http';
 import { storePdfContent } from '@/lib/datasets';
 import type { StoredContent } from '@/lib/document';
 import { fetchWebResource, WebIngestError } from '@/lib/web-ingest';
 
 /**
- * Fetch and store one PDF. Refusals are ready-to-return Responses that NAME the
+ * Fetch and store one PDF. Refusals are Replies that NAME the
  * url and the reason: the caller is a publish door, and an agent can act on
  * "404" or "not a PDF" where it cannot act on silence.
  */
-export async function ingestPdfFromUrl(url: string, objects?: ContentObjects): Promise<StoredContent | Response> {
+export async function ingestPdfFromUrl(url: string, objects?: ContentObjects): Promise<StoredContent | Reply> {
   let bytes: Buffer;
   let finalUrl: string;
   try {
@@ -25,18 +25,17 @@ export async function ingestPdfFromUrl(url: string, objects?: ContentObjects): P
     finalUrl = got.finalUrl;
   } catch (error) {
     if (error instanceof WebIngestError) {
-      return json({ error: 'pdf_fetch_failed', code: error.code, details: [`${url}: ${error.message}`] }, 400);
+      return reply({ error: 'pdf_fetch_failed', code: error.code, details: [`${url}: ${error.message}`] }, 400);
     }
     throw error;
   }
   const stored = await storePdfContent(bytes, objects);
-  if (stored instanceof Response) {
+  if (stored instanceof Reply) {
     // The store's own refusal, re-labelled as what it is from out here: the
     // URL is what the caller can act on, and `invalid_pdf` on a fetch reads as
     // though they had sent the bytes.
-    const body = await stored.clone().json().catch(() => ({})) as { error?: string; details?: string[] };
-    if (body.error === 'invalid_pdf') {
-      return json({
+    if (stored.body.error === 'invalid_pdf') {
+      return reply({
         error: 'pdf_fetch_failed', code: 'unsupported_type',
         details: [`${url}: the response is not a PDF — a dead link often serves an html error page`],
       }, 400);

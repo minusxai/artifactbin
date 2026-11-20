@@ -15,7 +15,7 @@ async function datasetFixture(body: Record<string, unknown>) {
   const owner = await account('owner');
   const created = await createArtifactFromBody({dataset: [{n: 1}], visibility: 'public', ...body}, {...owner.actor, tokenId: owner.tokenId}, 'http://localhost:3000');
   expect(created.status).toBe(201);
-  return {owner, id: (await created.json()).id as string};
+  return {owner, id: created.body.id as string};
 }
 
 const query = (actor: Parameters<typeof queryResourceForRequest>[0], id: string, body: Record<string, unknown>) =>
@@ -51,7 +51,7 @@ describe('dataset query contract', () => {
     for (const content of [{html: '<html><body>Page</body></html>'}, {format: 'folder'}]) {
       const created = await createArtifactFromBody({...content, visibility: 'public'}, {...owner.actor, tokenId: owner.tokenId}, 'http://localhost:3000');
       expect(created.status).toBe(201);
-      const {id} = await created.json();
+      const id = created.body.id as string;
       for (const body of [{}, {name: 'old_query'}, {sql: 'select 1'}]) {
         expect(await (await query(owner.actor, id, body)).json()).toEqual({error: 'not_queryable'});
       }

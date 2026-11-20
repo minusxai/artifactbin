@@ -2,7 +2,7 @@ import { createArtifactFromBody } from '@/lib/publish';
 import { withTokenAuth } from '@/lib/authentication';
 import { type PublicationActor } from '@/lib/accounts';
 import { runOperation } from '@/lib/operations';
-import { PUBLISH_BODY_LIMIT, baseUrl, json, readJson } from '@/lib/http';
+import { PUBLISH_BODY_LIMIT, baseUrl, json, readJson, Reply, toResponse } from '@/lib/http';
 import { readFileUpload } from '@/lib/datasets';
 
 /**
@@ -24,7 +24,7 @@ export async function createArtifactFromRequest(
   const fileUpload = q.get('format') === 'file';
   if (fileUpload || contentType.startsWith('image/')) {
     const bytes = await readFileUpload(request);
-    if (bytes instanceof Response) return bytes;
+    if (bytes instanceof Reply) return toResponse(bytes);
     // Transport decoding only. Validation, staging, quota and durable replay
     // belong to the same publication pipeline as JSON creates.
     const body = {
@@ -33,7 +33,7 @@ export async function createArtifactFromRequest(
       ...(q.has('title')?{title:q.get('title')}:{}),
       ...(q.has('visibility')?{visibility:q.get('visibility')}:{}),
     };
-    return createArtifactFromBody(body,actor,baseUrl(request),request);
+    return toResponse(await createArtifactFromBody(body,actor,baseUrl(request),request));
   }
   const body = await readJson(request, { limit: PUBLISH_BODY_LIMIT });
   if (!body) return json({ error: 'invalid_json' }, 400);

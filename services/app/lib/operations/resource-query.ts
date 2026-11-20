@@ -5,7 +5,7 @@ import type { AccessActor } from '@/lib/accounts';
 import {catalogOf, executeCatalog, DatasetError, liveConnectionOf} from '../datasets';
 import {liveDatasetSql} from '@/lib/live-datasets';
 import {datasetReadAccess, datasetView, sqlRefusal, sqlRefusalMessage, viewCatalog} from '../dataset-permissions';
-import {json, parseScalarValues} from '../http';
+import {json, parseScalarValues, Reply, toResponse} from '../http';
 import type {TableResult} from '@artifactbin/contracts';
 import {REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts';
 
@@ -13,7 +13,7 @@ import {REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts';
 async function queryResource(actor:AccessActor,id:string,body:Record<string,unknown>,signal?:AbortSignal,checkActor?:()=>Promise<void>):Promise<Response>{
  if(Object.keys(body).some(key=>!['sql','values','name','limit','cursor','refresh'].includes(key)))return json({error:'unknown_query_fields'},400);
  if(body.sql!==undefined&&(typeof body.sql!=='string'||!body.sql.trim())||body.name!==undefined&&(typeof body.name!=='string'||!body.name)||body.refresh!==undefined&&typeof body.refresh!=='boolean')return json({error:'invalid_query'},400);
- const values=parseScalarValues(body.values);if(values instanceof Response)return values;
+ const values=parseScalarValues(body.values);if(values instanceof Reply)return toResponse(values);
  const limit=body.limit??20;if(!Number.isInteger(limit)||Number(limit)<1||Number(limit)>100)return json({error:'invalid_limit'},400);
  await checkActor?.();
  const readable=await readableArtifact(actor,id);if(!readable)return json({error:'not_found'},404);

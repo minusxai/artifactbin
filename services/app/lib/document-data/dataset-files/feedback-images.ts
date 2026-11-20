@@ -7,6 +7,7 @@ import { artifactQuery } from '@/lib/artifacts/table';
 import type {HtmlPageLink} from '@artifactbin/contracts';
 import { catalogOf, DatasetError, storeImageContent, uploadedSha256, storeFileContent } from '@/lib/datasets';
 import { objectStore, IMAGE_CONTENT_TYPES } from '@/lib/object-store';
+import { Reply } from '@/lib/http';
 import { assetFormatOf, fileContentType, type DatasetUploadResult } from '@artifactbin/contracts';
 
 const MAX_DATASET_FILES = 1000;
@@ -105,7 +106,7 @@ async function uploadContent(input:UploadInput&{filename?:string},generic=false)
   const receipt=generic?fileAnswer:answer;
   if(cached)return receipt(cached,true);
   const media=await (format==='image'?storeImageContent(bytes,generic?fileContentType(filename)!:contentType):storeFileContent(bytes,contentType,filename));
-  if(media instanceof Response)throw new DatasetError((await media.json().catch(()=>({error:'invalid_file'}))).error??'Invalid file',media.status);
+  if(media instanceof Reply)throw new DatasetError(String(media.body.error??'Invalid file'),media.status);
   const currentImageId=generateInternalId(),meta={...media.meta,...(generic?{format:media.format,filename}:{})} as Record<string,unknown>;
   return db.transaction(async tx=>{
     await authorizeCurrent(tx,'UPDATE');

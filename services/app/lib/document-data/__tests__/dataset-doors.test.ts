@@ -76,7 +76,7 @@ it('answers the direct write door with the refusal shapes its callers read',asyn
  expect(await write({sql:'insert into public.rows values (4)'},stranger.actor)).toEqual([404,{error:'not_found'}]);
  expect(await loadDatasetRows((await getArtifactById(f.id))!)).toEqual([{n:1},{n:2}]);
  const doc=await createArtifactFromBody({html:'<!doctype html><html><body><p>Doc</p></body></html>'},{...f.owner.actor,tokenId:f.owner.tokenId},'http://localhost:3000');
- const docId=(await doc.json()).id as string;
+ const docId=doc.body.id as string;
  expect((await write({sql:'insert into public.rows values (5)'},f.owner.actor,docId))).toEqual([400,expect.objectContaining({error:'not_a_dataset'})]);
  await setArtifact(db, f.id, { access: 'read' });
  const [readOnly,hint]=await write({sql:'insert into public.rows values (6)'});

@@ -22,7 +22,7 @@ export async function person(name: string) {
 export { params };
 export async function publish(owner: Person, body: Record<string, unknown>) {
   const created = await createArtifactFromBody({ ...('dataset' in body ? { access: 'readwrite' } : {}), visibility: 'unlisted', ...body }, owner.actor, 'http://localhost:3000');
-  return { status: created.status, body: await created.json() as { id: string } };
+  return { status: created.status, body: created.body as { id: string } };
 }
 export async function sql(page: string, who: Person | null, text: string, values: Record<string, unknown> = {}, options: { key?: string; revision?: string; readOnly?: boolean } = {}) {
   const response = await sqlPost(request(`/api/artifacts/${page}/sql`, { method: 'POST', json: { sql: text, params: values, revision: options.revision ?? '1', ...(options.readOnly ? { readOnly: true } : {}) }, ...(who ? { token: who.token } : {}), ...(options.key ? { headers: { 'Idempotency-Key': options.key } } : {}) }), params(page));

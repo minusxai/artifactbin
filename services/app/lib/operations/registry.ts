@@ -12,7 +12,7 @@ import { QUERY_APPROVAL_OPERATIONS } from './query-approvals';
 import {createHash} from 'node:crypto';
 import {queryResourceForRequest} from './resource-query';
 import {artifactWireFor,readArtifactSnapshot,respondToAnnotationAction,respondToAnnotationEdit,respondToCommentReaction} from '@/lib/annotations';
-import {decodePage, encodeCursor} from '@/lib/http';
+import {decodePage, encodeCursor, Reply} from '@/lib/http';
 import {ACCOUNT_OPERATIONS} from './account';
 import { BROWSER_SESSION_OPERATIONS } from './browser-sessions';
 import { TESTUSER_OPERATIONS } from './testusers';
@@ -219,8 +219,8 @@ const createArtifactOp: Operation = {
     const creator = ctx.actor.principalGroup?{...ctx.actor,principalGroup:ctx.actor.principalGroup}:await withAccountToken(ctx.actor);
     if (!creator) return reply({ error: 'unauthorized' }, 401);
     const authored = authoredHtml(input);
-    if (authored instanceof Response) return fromResponse(authored);
-    return fromResponse(await createArtifactFromBody(authored, creator, ctx.base, ctx.request));
+    if (authored instanceof Reply) return authored;
+    return createArtifactFromBody(authored, creator, ctx.base, ctx.request);
   },
 };
 
@@ -249,8 +249,8 @@ const updateArtifactOp: Operation = {
   ],
   async run(ctx, input) {
     const authored = authoredHtml(input);
-    if (authored instanceof Response) return fromResponse(authored);
-    return fromResponse(await replaceArtifactWithBody(authored, ctx.actor, String(input.id), ctx.base,{mutationReceipt:ctx.mutationReceipt,request:ctx.request}));
+    if (authored instanceof Reply) return authored;
+    return replaceArtifactWithBody(authored, ctx.actor, String(input.id), ctx.base,{mutationReceipt:ctx.mutationReceipt,request:ctx.request});
   },
 };
 
@@ -398,7 +398,7 @@ const updateMetadataOp: Operation = {
   shares:CONTENT_FIELDS.shares,expectedSharingRevision:z.number().int().min(0).optional(),policy:z.record(z.string(),z.unknown()).nullable().optional(),expectedPolicyRevision:z.number().int().min(0).optional()},
  annotations:{},example:{input:{id:'aB3xK9',title:'Updated title',expectedState:'a'.repeat(64)}},
  errors:[NOT_FOUND,OWNER_ONLY,{status:400,code:'state_required',fix:'Read the current artifact and send its state as expectedState.'},{status:400,code:'unknown_theme',fix:'the 400 carries allowed — the live theme and design-system names'},VERSION_CONFLICT],
- async run(ctx,input){const {id,...body}=input;return fromResponse(await updateMetadataFromBody(ctx.actor,String(id),body,ctx.base));},
+ async run(ctx,input){const {id,...body}=input;return updateMetadataFromBody(ctx.actor,String(id),body,ctx.base);},
 };
 
 const transferArtifactOp: Operation = {
@@ -435,12 +435,12 @@ const revertArtifactOp: Operation = {
       return reply({ error: 'version_required' }, 400);
     }
     const expected = parseExpectedVersion(input);
-    if (expected instanceof Response) return fromResponse(expected);
+    if (expected instanceof Reply) return expected;
     const row = await revertArtifactFor(ctx.actor, String(input.id), input.version, expected);
     // Distinct from not_found: the artifact is yours, that checkpoint just was
     // never archived (save-less edits coalesce). list_versions has the real ones.
     if (isVersionNotArchived(row)) {
-      if(row.refusal) return fromResponse(row.refusal);
+      if(row.refusal) return row.refusal;
       return reply({ error: 'version_not_archived' }, 409);
     }
     if (!row) return reply({ error: 'not_found' }, 404);
@@ -726,9 +726,9 @@ const forkArtifactOp: Operation = {
     // doors run — so `private` without an account is the one refusal it has
     // always been, never a silent downgrade of the copy.
     const visibility = parseVisibilityValue(input.visibility, !!ctx.actor.userId);
-    if (visibility instanceof Response) return fromResponse(visibility);
+    if (visibility instanceof Reply) return visibility;
     const parent = parseParentField(input);
-    if (parent instanceof Response) return fromResponse(parent);
+    if (parent instanceof Reply) return parent;
     // The COPY's placement, against the FORKER's own folders — nothing about
     // the source's is carried, because it is somebody else's tree.
     const placement = parent === undefined ? undefined : await resolveParent(ctx.actor, parent, null);
@@ -815,7 +815,7 @@ const refreshAssetOp: Operation = {
     // over the hour's fetch allowance), never a refusal of the call.
   ],
   async run(ctx, input) {
-    return fromResponse(await refreshAssetsFor(ctx.actor, input));
+    return refreshAssetsFor(ctx.actor, input);
   },
 };
 

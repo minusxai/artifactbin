@@ -46,8 +46,8 @@ async function teamTracker(dir: string) {
   const created = await createArtifactFromBody({ html: `<html><head><link rel="af-dataset" data-af-name="entries" ` +
     `href="ref:${entries}"></head><body><h1>Launch tasks</h1></body></html>`, title: 'Launch tasks', visibility: 'unlisted' },
   identityForUser(owner.userId!, owner.id) as AccessActor & { tokenId: string }, SERVER);
-  expect(created.status, await created.clone().text()).toBe(201);
-  const page = (await created.json()).id as string;
+  expect(created.status, JSON.stringify(created.body)).toBe(201);
+  const page = created.body.id as string;
   const group = await createGroup(owner.userId!, { handle: 'launch_crew', name: 'Launch crew' });
   for (const member of [first, second]) await admitGroupMember(owner.userId!, group.id, member.userId!, 'member');
   const groups = (sub: string, values: Record<string, unknown>) =>

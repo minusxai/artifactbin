@@ -19,6 +19,7 @@ import {getRequestListener} from '@hono/node-server';
 import {createAuthHost} from '@artifactbin/auth';
 import {testAuthOptions} from '../../../auth/__tests__/helpers';
 import {tempDirSync} from '@artifactbin/test-support/temp-dir';
+import { Reply } from '@/lib/http';
 useAppHarness();
 beforeEach(()=>overrideConfig({publicBaseUrl:'https://example.test',assetsOrigin:'https://assets.example.test'}));
 it('allows the export redirect host in app image policy, including development pages',async()=>{
@@ -50,7 +51,7 @@ it('direct app only serves cached byte GET/HEAD on asset host, ignoring credenti
 
 it('reuses public ref bytes anonymously but never exposes a private ref, even with owner credentials',async()=>{
  const token=await mintToken('asset-host-ref'),bytes=Buffer.from([1,2,3]),stored=await storeFileContent(bytes,'model/gltf-binary','scene.glb');
- if(stored instanceof Response)throw new Error(await stored.text());
+ if(stored instanceof Reply)throw new Error(JSON.stringify(stored.body));
  const publicRow=await createArtifact(token.id,null,{...stored,title:'public',description:null,visibility:'public'}),privateRow=await createArtifact(token.id,null,{...stored,title:'private',description:null,visibility:'private'});
  const publicId=publicRow.id,privateId=privateRow.id,app=createAppServer({indexHtml:async()=>'<head></head>'}),host='https://assets.example.test';
  const first=await app.request(`${host}/assets/ref/${publicId}`,{headers:{authorization:`Bearer ${token.token}`,cookie:'session=secret'}});
@@ -64,7 +65,7 @@ it('reuses public ref bytes anonymously but never exposes a private ref, even wi
 
 it('internal export transport reaches the real public-byte middleware, not the authenticated app routes',async()=>{
  const token=await mintToken('internal-asset-ref'),bytes=Buffer.from([3,2,1]),stored=await storeFileContent(bytes,'model/gltf-binary','scene.glb');
- if(stored instanceof Response)throw new Error(await stored.text());
+ if(stored instanceof Reply)throw new Error(JSON.stringify(stored.body));
  const publicRow=await createArtifact(token.id,null,{...stored,title:'public',description:null,visibility:'public'}),privateRow=await createArtifact(token.id,null,{...stored,title:'private',description:null,visibility:'private'});
  const hash='b'.repeat(64),key=objectKey('webasset',bytes);
  await objectStore().put(key,bytes,'application/octet-stream');

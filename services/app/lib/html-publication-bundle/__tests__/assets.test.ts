@@ -14,7 +14,7 @@ async function bundledPage(visibility:'private'|'public'='private'){
  const token=await mintAccountToken('bundle_assets_owner');
  const owner=identityForUser(token.userId,token.id);
  const response=await createArtifactFromBody({visibility,html:'<link rel="stylesheet" href="./main.css"><img src="./logo.svg">',publicationBundle:{entryPath:'index.html',files:[file('main.css','body{background:url(./logo.svg)}','text/css'),file('logo.svg','<svg>☕</svg>','image/svg+xml')]}},owner,BASE,new Request(`${BASE}/api/artifacts`,{method:'POST',headers:{'Idempotency-Key':'bundle_assets_test_0001'}}));
- const saved=await response.json() as {id:string;dependencyReceipts:Receipt[]};
+ const saved=response.body as {id:string;dependencyReceipts:Receipt[]};
  expect(response.status,JSON.stringify(saved)).toBe(201);
  const receipt=(path:string)=>saved.dependencyReceipts.find(entry=>entry.path===path)!;
  return {owner,id:saved.id,logo:receipt('logo.svg'),css:receipt('main.css')};

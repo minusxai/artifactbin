@@ -227,7 +227,7 @@ it('runs the declared queries of the version a reader has open, never another pa
   const other = (await publish(alice, { html: PAGE(id, SCRIPT('secret', 'shop', 'select owner_email from sales.orders')) })).body.id;
   const row = (await getArtifactById(page))!;
   const second = await replaceArtifactWithBody({ html: PAGE(id, SCRIPT('total', 'shop', 'select count(*)::int as total from sales.orders')), expectedVersion: row.version, expectedState: (await call(artifactGet as never, `/api/artifacts/${page}`, page, alice)).body.state }, alice.actor, page, 'http://localhost:3000');
-  expect(second.status, await second.clone().text()).toBe(200);
+  expect(second.status, JSON.stringify(second.body)).toBe(200);
   expect(ok(await door(page, bob, { query: 'total', revision: '1' })).rows).toEqual([{ total: 46 }]);
   expect(ok(await door(page, bob, { query: 'total', revision: '2' })).rows).toEqual([{ total: 3 }]);
   expect((await door(page, bob, { query: 'secret', revision: '2' })).body.error).toBe('unknown_query');
@@ -248,7 +248,7 @@ it('refuses a declared query from a publisher who cannot edit the live dataset, 
   await updateSharingFor(alice.actor, page, { shares: [{ email: bob.email!, role: 'editor' }] });
   const head = await call(artifactGet as never, `/api/artifacts/${page}`, page, bob);
   const replaced = await replaceArtifactWithBody({ html: PAGE(id, MINE), expectedVersion: head.body.version, expectedState: head.body.state }, bob.actor, page, 'http://localhost:3000');
-  expect([replaced.status, (await replaced.json()).error]).toEqual([403, 'declared_query_not_permitted']);
+  expect([replaced.status, replaced.body.error]).toEqual([403, 'declared_query_not_permitted']);
   // A page editor not shared on the dataset republishes the owner's page that links it (no declared queries): the link
   // is the owner's to hold, as a stored dataset's is.
   const carol = await person('carol');
@@ -257,7 +257,7 @@ it('refuses a declared query from a publisher who cannot edit the live dataset, 
   await updateSharingFor(alice.actor, linking, { shares: [{ email: carol.email!, role: 'editor' }] });
   const carolHead = await call(artifactGet as never, `/api/artifacts/${linking}`, linking, carol);
   const carolSave = await replaceArtifactWithBody({ html: PAGE(closed, '<title>v2</title>'), expectedVersion: carolHead.body.version, expectedState: carolHead.body.state }, carol.actor, linking, 'http://localhost:3000');
-  expect(carolSave.status, await carolSave.clone().text()).toBe(200);
+  expect(carolSave.status, JSON.stringify(carolSave.body)).toBe(200);
   // Nor does copying a page that declares one.
   const declared = (await publish(alice, { html: PAGE(id, MINE), visibility: 'unlisted' })).body.id;
   const fork = await forkArtifact(bob.actor, (await getArtifactById(declared))!, {});
@@ -344,7 +344,7 @@ it('keeps a live dataset\'s rules to "who may run declared queries", and every s
   expect(await refusedBy(contentGet(request(`/api/artifacts/${id}/content`, { token: alice.token }), params(id)))).toEqual([400, 'live_dataset']);
   expect(await refusedBy(mutatePost(request(`/api/artifacts/${id}/mutate`, { method: 'POST', token: alice.token, json: { sql: 'delete from rows' } }), params(id)))).toEqual([400, 'live_dataset']);
   const replaced = await replaceArtifactWithBody({ dataset: [{ x: 1 }] }, alice.actor, id, 'http://localhost:3000');
-  expect([replaced.status, (await replaced.json()).error]).toEqual([400, 'live_dataset_connection']);
+  expect([replaced.status, replaced.body.error]).toEqual([400, 'live_dataset_connection']);
   const fork = await forkArtifact(alice.actor, row, {});
   expect(fork instanceof Response ? [fork.status, (await fork.json()).error] : 'forked').toEqual([400, 'not_forkable']);
 });
@@ -370,8 +370,8 @@ it('lets a group own a live dataset (its editors change and query it), and keeps
   await admitGroupMember(alice.userId!, group.id, bob.userId!, 'admin');
   await admitGroupMember(alice.userId!, group.id, carol.userId!, 'member');
   const keyed = await createArtifactFromBody({ connection: config(), title: 'Team DB', destination: { type: 'group', id: group.id } }, alice.actor, 'http://localhost:3000', request('/api/artifacts', { method: 'POST', headers: { 'Idempotency-Key': 'live-dataset-key-0001' } }));
-  expect(keyed.status, await keyed.clone().text()).toBe(201);
-  const id = ((await keyed.json()) as { id: string }).id;
+  expect(keyed.status, JSON.stringify(keyed.body)).toBe(201);
+  const id = (keyed.body as { id: string }).id;
   expect((await getArtifactById(id))!.group_id).toBe(group.id);
   expect((await call(connectionPatch as never, `/api/artifacts/${id}/connection`, id, bob, { method: 'PATCH', json: { tls: 'disable' } })).status).toBe(200);
   expect((await call(connectionPatch as never, `/api/artifacts/${id}/connection`, id, carol, { method: 'PATCH', json: { tls: 'disable' } })).status).toBe(403);
@@ -379,7 +379,7 @@ it('lets a group own a live dataset (its editors change and query it), and keeps
   expect((await (await getDb()).query('SELECT count(*)::int AS n FROM artifact_creation_operations')).rows[0]).toEqual({ n: 1 });
   // The ledger's fingerprint leaves the secret out: the same request with another password is the same request (a replay).
   const again = await createArtifactFromBody({ connection: config({ password: 'another-one' }), title: 'Team DB', destination: { type: 'group', id: group.id } }, alice.actor, 'http://localhost:3000', request('/api/artifacts', { method: 'POST', headers: { 'Idempotency-Key': 'live-dataset-key-0001' } }));
-  expect([again.status, ((await again.json()) as { id: string }).id]).toEqual([201, id]);
+  expect([again.status, (again.body as { id: string }).id]).toEqual([201, id]);
   expect(await everyStoredRow()).not.toContain(PASSWORD);
 });
 

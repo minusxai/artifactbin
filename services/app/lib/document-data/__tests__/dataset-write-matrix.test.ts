@@ -67,8 +67,8 @@ it('decides every policy shape × caller × door × operation as the stored rule
  const actual:Record<string,boolean>={},want:Record<string,boolean>={};
  for(const shape of SHAPES){
   const created=await createArtifactFromBody({dataset:[{n:1}],access:'readwrite',visibility:shape.visibility??'public'},{...owner.actor,tokenId:owner.tokenId},'http://localhost:3000');
-  expect(created.status,await created.clone().text()).toBe(201);
-  const f={db,owner,id:(await created.json()).id as string,row:async()=>(await getArtifactById(f.id))!};
+  expect(created.status,JSON.stringify(created.body)).toBe(201);
+  const f={db,owner,id:created.body.id as string,row:async()=>(await getArtifactById(f.id))!};
   await seedShares(f.db, { artifact_id: f.id, user_id: editor.id, email: editor.email, role: 'editor' }, { artifact_id: f.id, user_id: viewer.id, email: viewer.email, role: 'viewer' });
   await setArtifact(f.db, f.id, { dataset_policy: JSON.stringify(shape.policy), access: shape.access });
   const actors:Record<Caller,AccessActor>={owner:f.owner.actor,editor:editor.actor,viewer:viewer.actor,signedIn:signedIn.actor,anonymous:ANONYMOUS_ACTOR};

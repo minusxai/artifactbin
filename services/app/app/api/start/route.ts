@@ -12,7 +12,7 @@
  */
 import { createArtifact, parseArtifactDestination } from '@/lib/artifacts';
 import { existingPaste } from '@/lib/agent-copy';
-import { baseUrl, json, readJson, unauthorized } from '@/lib/http';
+import { baseUrl, json, readJson, Reply, toResponse, unauthorized } from '@/lib/http';
 import {agentStarterHtml} from '@/lib/workspace';
 import { canAuthenticateUser } from '@/lib/user-kinds';
 import { requestOrSessionActor, sessionActor } from '@/lib/authentication';
@@ -29,7 +29,7 @@ export async function POST(request: Request) {
   if (!creator || !await canUseDeploymentIdentity(creator.userId) || !await canAuthenticateUser(creator.userId)) return unauthorized(request);
   // A person who chooses "New" gets a doc instead (lib/workspace artifactStarter, through the normal create door).
   const parsed = await parseContentInput({ html: agentStarterHtml() }, {});
-  if (parsed instanceof Response) return parsed; // unreachable: the starting document is fixed and valid
+  if (parsed instanceof Reply) return toResponse(parsed); // unreachable: the starting document is fixed and valid
 
   const body = await readJson(request, {allowEmpty:true});
   if (!body) return json({error:'invalid_json'},400);

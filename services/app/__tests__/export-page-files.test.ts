@@ -34,7 +34,7 @@ async function filesPage(visibility: 'private' | 'unlisted') {
   const owner = identityForUser(minted.userId, minted.id, minted.email) as AccessActor & { tokenId: string };
   const response = await createArtifactFromBody({ visibility, html: HTML, publicationBundle: { entryPath: 'index.html', files: FILES } }, owner, BASE,
     request(`/api/artifacts`, { method: 'POST', headers: { 'Idempotency-Key': `export_page_files_${visibility}_${pages}` } }));
-  const saved = await response.json() as { id: string; dependencyReceipts: Array<{ path: string; id: string }> };
+  const saved = response.body as { id: string; dependencyReceipts: Array<{ path: string; id: string }> };
   expect(response.status, JSON.stringify(saved)).toBe(201);
   const receipt = (path: string) => saved.dependencyReceipts.find(entry => entry.path === path)!.id;
   return { owner, id: saved.id, receipts: { css: receipt('main.css'), logo: receipt('logo.svg'), script: receipt('app.mjs'), data: receipt('data.json') } };

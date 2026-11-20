@@ -1,6 +1,6 @@
 import type {ContentObjects} from '@/lib/object-store';
 import type { StoredContent } from '@/lib/document';
-import {json} from '@/lib/http';
+import {Reply,reply} from '@/lib/http';
 import {publishDataset} from '@/lib/datasets/data-tiers';
 import {loadDatasetRows} from '@/lib/datasets/dataset-store';
 import type {DatasetCatalog,DatasetHost,DatasetTable} from './types';
@@ -36,7 +36,7 @@ function reshapeWithoutRows(table:{schema:string;name:string;columns?:Array<stri
  if(retyped.length)throw new DatasetError(`${where}: retyping stored column ${retyped.join(', ')} needs the table's rows restated: include its "rows" to reshape it`);
  return declared.filter(c=>!prior.columns.some(p=>p.name===c.name)).map(c=>'type' in c?c as DatasetColumn:{name:c.name,type:'string' as const});
 }
-export async function prepareCatalog(input:unknown,previous?:Pick<DatasetHost,'id'|'meta'>,objects?:ContentObjects):Promise<StoredContent|Response> {
+export async function prepareCatalog(input:unknown,previous?:Pick<DatasetHost,'id'|'meta'>,objects?:ContentObjects):Promise<StoredContent|Reply> {
  try{
   const authored=parseDatasetDefinition(input);
   const data={...authored,defaultSchema:authored.defaultSchema??'public',refreshSeconds:authored.refreshSeconds??60};const seen=new Set<string>();for(const t of data.tables){if(seen.has(key(t)))throw new DatasetError('Table names must be unique within a schema');seen.add(key(t));}
@@ -53,7 +53,7 @@ export async function prepareCatalog(input:unknown,previous?:Pick<DatasetHost,'i
     if(!added.length){tables.push({...prior});continue;}
     // Omitted rows mean KEEP them: republish the stored rows under the widened shape, null in each new column.
     const rows=objects?JSON.parse((await objects.get(prior.objectKey)).toString('utf8')):await loadDatasetRows({meta:{objectKey:prior.objectKey}});
-    const stored=await publishDataset({columns:[...prior.columns,...added]},rows,objects);if(stored instanceof Response)return stored;
+    const stored=await publishDataset({columns:[...prior.columns,...added]},rows,objects);if(stored instanceof Reply)return stored;
     tables.push({schema:t.schema,name:t.name,columns:stored.meta.columns as DatasetTable['columns'],objectKey:stored.meta.objectKey as string});continue;
    }
    const declared=t.columns?.filter(c=>typeof c!=='string')??prior?.columns.filter(c=>c.type==='user');
@@ -64,7 +64,7 @@ export async function prepareCatalog(input:unknown,previous?:Pick<DatasetHost,'i
     * still types them, and a bare name must not silently retype a number.
     */
    const named=t.rows?.length===0&&!declared?.length?t.columns?.filter(c=>typeof c==='string').map(name=>({name,type:'string' as const})):undefined;
-   const stored=await publishDataset(declared?.length?{columns:declared}:named?.length?{columns:named}:{},t.rows,objects);if(stored instanceof Response)return stored;
+   const stored=await publishDataset(declared?.length?{columns:declared}:named?.length?{columns:named}:{},t.rows,objects);if(stored instanceof Reply)return stored;
    tables.push({schema:t.schema,name:t.name,columns:stored.meta.columns as DatasetTable['columns'],objectKey:stored.meta.objectKey as string});
   }
   const catalog:DatasetCatalog={kind:data.kind,defaultSchema:data.defaultSchema,refreshSeconds:0,tables};
@@ -77,7 +77,7 @@ export async function prepareCatalog(input:unknown,previous?:Pick<DatasetHost,'i
   // Keep the original single-table alias pinned to public.rows; adding tables never rebinds it.
   const legacy=tables.find(t=>t.schema==='public'&&t.name==='rows'&&t.objectKey);
   return {format:'dataset',source:serializeDatasetDefinition(data),derivedTitle:null,meta:{catalog,...(legacy?{objectKey:legacy.objectKey,columns:legacy.columns}:{}),columns:legacy?.columns??[]}};
- }catch(error){return json({error:'invalid_dataset',details:[error instanceof Error?error.message:'Dataset validation failed']},error instanceof DatasetError?error.status:400);}
+ }catch(error){return reply({error:'invalid_dataset',details:[error instanceof Error?error.message:'Dataset validation failed']},error instanceof DatasetError?error.status:400);}
 }
 export async function storedTables(catalog:DatasetCatalog,objects?:Pick<ContentObjects,'get'>):Promise<Record<string,{rows:Record<string,unknown>[];columns:DatasetTable['columns']}>> {
  return Object.fromEntries(await Promise.all(catalog.tables.map(async(t,i)=>[ `dataset_table_${i}`,{rows:t.objectKey?(objects?JSON.parse((await objects.get(t.objectKey)).toString('utf8')):await loadDatasetRows({meta:{objectKey:t.objectKey}})):[],columns:t.columns}] as const)));

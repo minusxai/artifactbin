@@ -3,7 +3,7 @@ import {type ContentObjects, objectKey, objectStore, ObjectUnavailable} from '@/
 import { createHash } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { MAX_FILE_BYTES } from '@/lib/platform';
-import { json } from '@/lib/http';
+import { Reply, reply } from '@/lib/http';
 import type { StoredContent } from '@/lib/document';
 import { fileContentType, FILE_EXTENSIONS } from '@artifactbin/contracts';
 
@@ -37,20 +37,20 @@ interface FileMeta {
 export const uploadedSha256 = (bytes: Buffer): string => createHash('sha256').update(bytes).digest('hex');
 
 /** The JSON body form; raw-body uploads avoid base64 overhead for larger files. */
-export async function publishFile(input: unknown, objects?: ContentObjects): Promise<StoredContent | Response> {
+export async function publishFile(input: unknown, objects?: ContentObjects): Promise<StoredContent | Reply> {
   const file = input as { filename?: unknown; contentType?: unknown; base64?: unknown } | null;
   if (!file || typeof file.filename !== 'string' || typeof file.contentType !== 'string' || typeof file.base64 !== 'string') {
-    return json({ error: 'invalid_file', details: ['file must be {filename, contentType, base64}'] }, 400);
+    return reply({ error: 'invalid_file', details: ['file must be {filename, contentType, base64}'] }, 400);
   }
-  if (file.base64.length > 4 * Math.ceil(MAX_FILE_BYTES / 3)) return json({ error: 'file_too_large', maxBytes: MAX_FILE_BYTES }, 413);
+  if (file.base64.length > 4 * Math.ceil(MAX_FILE_BYTES / 3)) return reply({ error: 'file_too_large', maxBytes: MAX_FILE_BYTES }, 413);
   if (file.base64.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(file.base64)) {
-    return json({ error: 'invalid_file', details: ['base64 must contain valid, padded base64 bytes'] }, 400);
+    return reply({ error: 'invalid_file', details: ['base64 must contain valid, padded base64 bytes'] }, 400);
   }
   return storeFileContent(Buffer.from(file.base64, 'base64'), file.contentType, file.filename, objects);
 }
 
-export async function readFileUpload(request: Request): Promise<Buffer | Response> {
-  const tooLarge = () => json({ error: 'file_too_large', maxBytes: MAX_FILE_BYTES }, 413);
+export async function readFileUpload(request: Request): Promise<Buffer | Reply> {
+  const tooLarge = () => reply({ error: 'file_too_large', maxBytes: MAX_FILE_BYTES }, 413);
   if (Number(request.headers.get('content-length')) > MAX_FILE_BYTES) return tooLarge();
   const reader = request.body?.getReader();
   if (!reader) return Buffer.alloc(0);
@@ -68,16 +68,16 @@ export async function readFileUpload(request: Request): Promise<Buffer | Respons
   return Buffer.concat(chunks, size);
 }
 
-export async function storeFileContent(bytes: Buffer, contentType: string, filename: string, objects: ContentObjects = objectStore()): Promise<StoredContent | Response> {
-  if (bytes.length > MAX_FILE_BYTES) return json({ error: 'file_too_large', maxBytes: MAX_FILE_BYTES }, 413);
+export async function storeFileContent(bytes: Buffer, contentType: string, filename: string, objects: ContentObjects = objectStore()): Promise<StoredContent | Reply> {
+  if (bytes.length > MAX_FILE_BYTES) return reply({ error: 'file_too_large', maxBytes: MAX_FILE_BYTES }, 413);
   if (!filename || filename.length > 255 || !filename.isWellFormed() || /[\x00-\x1f\x7f/\\]/.test(filename)) {
-    return json({ error: 'invalid_filename', details: ['Provide a filename of 1–255 characters without paths or control characters.'] }, 400);
+    return reply({ error: 'invalid_filename', details: ['Provide a filename of 1–255 characters without paths or control characters.'] }, 400);
   }
   if (!/^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/i.test(contentType)) {
-    return json({ error: 'invalid_content_type' }, 400);
+    return reply({ error: 'invalid_content_type' }, 400);
   }
   const canonicalType = fileContentType(filename);
-  if (!canonicalType) return json({ error: 'unsupported_file_type', allowed: FILE_EXTENSIONS }, 400);
+  if (!canonicalType) return reply({ error: 'unsupported_file_type', allowed: FILE_EXTENSIONS }, 400);
   // The final extension controls the served type, including clients that send
   // application/octet-stream. This is extension validation, not byte sniffing.
   contentType = canonicalType;

@@ -20,6 +20,7 @@ import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { identityForUser, createUser, revokeUserToken } from '@/lib/accounts';
 import { listAccountTokenRows } from '@/lib/workspace';
 import { setArtifact } from '@/__tests__/rows';
+import { Reply } from '@/lib/http';
 
 const harness = useAppHarness();
 
@@ -190,7 +191,7 @@ describe('user-scoped versions + revert (dashboard)', () => {
 
     const actor=identityForUser(user.id, '');
     const reverted=await revertArtifactFor(actor,art.id,1);
-    expect(reverted).not.toBeInstanceOf(Response);
+    expect(reverted).not.toBeInstanceOf(Reply);
     expect(reverted).toMatchObject({version:3});
     expect((await getArtifactById(art.id))?.source).toContain('>v1</h1>');
   });

@@ -1,7 +1,7 @@
 import {ArtifactParentRefusal,PARENT_REFUSED} from '@/lib/artifacts';
 import {LiveRegionRefusal} from '@/lib/live-regions';
 import {documentOwner,type UserPagesOwner} from '@/lib/user-pages';
-import {preparePublicationBundle} from './bundle';
+import {preparePublicationBundle,type CreationKeys} from './bundle';
 import { getSharingFor, durableMutation, type MutationReceipt, type MutationReply, parseArtifactDestination, newArtifactDestination, type ArtifactInput, artifactQuotaExceeded, groupArtifactQuotaExceeded, publisherByteQuota, GroupPersonalDestination, type ArtifactRow, byteQuotaFor, canReadArtifact, createArtifact, creationOperation, CreationReplay, findDependentsFor, getArtifactById, getArtifactFor, getOwnedArtifactFor, isVersionConflict, lookupCreation, observedChange, versionConflict, refLoaderForActor, replaceArtifactFor, setMetadataFor } from '@/lib/artifacts';
 import { ownsArtifact, writerFor } from '@/lib/artifact-access';
 import { committedOpenAnnotations, createdArtifactWire, parseAccessValue, parseExpectedVersion, parseLinkRoleValue, parseParentField, parseShareEntries, parseSharingRevision, parseVisibilityValue, placementFor, replacedArtifactWire } from '@/lib/artifact-wire';
@@ -24,18 +24,21 @@ import {liveConnectionOf} from '@/lib/datasets';
 import { CONTENT_FIELDS, type DatasetAccess, type Visibility } from '@artifactbin/contracts';
 import { identityForUser, shareTargetsRefusal, TEST_ACCOUNT_RESTRICTED, type AccessActor, type PublicationActor } from '@/lib/accounts';
 import { prepareCatalog, DatasetError } from '@/lib/datasets';
-import { json } from '@/lib/http';
+import { Reply, reply } from '@/lib/http';
 import { ID_RE, getDb } from '@/lib/platform';
 import { prepareContentInput, preparedPersistence, type PreparedContent } from '../prepared/prepare-content';
 import { readingPrepared } from '@/lib/object-store';
 import { lookupWebAssets, refreshWebAssets, type WebAssetImporter } from '../assets/web-assets';
 
-async function updateBundleDependency(actor:PublicationActor,base:string,id:string,body:Record<string,unknown>,key:string):Promise<Response>{
+/** What a creation reads of its request: the idempotency key it replays under and the account it is pinned to. */
+const creationKeys=(request?:Request):CreationKeys=>({idempotencyKey:request?.headers.get('Idempotency-Key'),account:request?.headers.get('X-Artifactbin-Account')});
+
+async function updateBundleDependency(actor:PublicationActor,base:string,id:string,body:Record<string,unknown>,key:string):Promise<Reply>{
  // A changed bundle file needs edit access to its own artifact, never page ownership.
- if(!await getArtifactFor(actor,id))return json({error:'bundle_file_not_editable'},403);
+ if(!await getArtifactFor(actor,id))return reply({error:'bundle_file_not_editable'},403);
  const saved=await durableMutation(actor,base,key,{id,body},async receipt=>{
-  const response=await replaceArtifactWithBody(body,actor,id,base,{mutationReceipt:receipt});return {status:response.status,body:await response.json() as Record<string,unknown>};
- });return json(saved.body,saved.status);
+  const replaced=await replaceArtifactWithBody(body,actor,id,base,{mutationReceipt:receipt});return {status:replaced.status,body:replaced.body};
+ });return reply(saved.body,saved.status);
 }
 
 /** A page's data links (stored, live and default-connection) and its declared queries, as publish records them. */
@@ -44,30 +47,30 @@ type HtmlDataLinks=readonly (HtmlDatasetLink|HtmlDefaultConnectionLink|HtmlLiveD
  * `actor` authorizes the stored links (the page's owner on a replace); `publisher`, the person saving, must own or
  * edit each live dataset the page declares queries on (lib/live-datasets).
  */
-async function prepareHtmlDatasets(body:Record<string,unknown>,actor:AccessActor,publisher:AccessActor):Promise<{links:HtmlDataLinks;queries:HtmlDeclaredQuery[]}|undefined|Response>{
+async function prepareHtmlDatasets(body:Record<string,unknown>,actor:AccessActor,publisher:AccessActor):Promise<{links:HtmlDataLinks;queries:HtmlDeclaredQuery[]}|undefined|Reply>{
  if(typeof body.html!=='string')return undefined;
  try{
   const {datasets:declared,connections,queries:written}=htmlPageDeclarations(body.html);
   // `default:` reads the install's default connection: refused where the install has none.
-  if(connections.length&&!hasDefaultConnection())return json({error:'default_connection_not_configured',details:connections.map(link=>`link "${link.name}" reads the install's default connection (href="default:${link.namespace}"), and this server has none (DATASETS__DEFAULT_CONNECTION)`)},400);
+  if(connections.length&&!hasDefaultConnection())return reply({error:'default_connection_not_configured',details:connections.map(link=>`link "${link.name}" reads the install's default connection (href="default:${link.namespace}"), and this server has none (DATASETS__DEFAULT_CONNECTION)`)},400);
   const {links,queries}=await livePageDeclarations(actor,publisher,declared,written,connections);
   const datasets=links.filter((link):link is HtmlDatasetLink=>link.kind==='dataset');
   await Promise.all(datasets.map(binding=>authorizeDatasetBinding(actor,binding)));
   return {links:[...links,...connections],queries};
  }catch(error){
-  if(error instanceof LiveDatasetRefusal)return json(error.body,error.status);
-  if(error instanceof DatasetBindingUnsupportedError)return json({error:error.code,hint:error.hint},400);
-  return json({error:'invalid_dataset_binding'},400);
+  if(error instanceof LiveDatasetRefusal)return reply(error.body,error.status);
+  if(error instanceof DatasetBindingUnsupportedError)return reply({error:error.code,hint:error.hint},400);
+  return reply({error:'invalid_dataset_binding'},400);
  }
 }
 
 
 
-function parseAccessField(body: Record<string, unknown>, format: string | undefined): DatasetAccess | undefined | Response {
+function parseAccessField(body: Record<string, unknown>, format: string | undefined): DatasetAccess | undefined | Reply {
   return parseAccessValue(body.access, format);
 }
 
-function parseVisibility(body: Record<string, unknown>, canPrivate: boolean): Visibility | undefined | Response {
+function parseVisibility(body: Record<string, unknown>, canPrivate: boolean): Visibility | undefined | Reply {
   return parseVisibilityValue(body.visibility, canPrivate);
 }
 
@@ -92,42 +95,42 @@ export async function replaceArtifactWithBody(
   id: string,
   base: string,
   options: {dryRun?:boolean;mutationReceipt?:MutationReceipt;request?:Request} = {},
-): Promise<Response> {
-  if (!body) return json({ error: 'invalid_json' }, 400);
-  if(['markup','jsx','markdown','document_update'].some(key=>Object.hasOwn(body!,key)))return json({error:'native_html_required',hint:'Replace native pages with the complete html field and observed version and state.'},400);
+): Promise<Reply> {
+  if (!body) return reply({ error: 'invalid_json' }, 400);
+  if(['markup','jsx','markdown','document_update'].some(key=>Object.hasOwn(body!,key)))return reply({error:'native_html_required',hint:'Replace native pages with the complete html field and observed version and state.'},400);
   // The row FIRST: refs and imports resolve as the DOCUMENT's owner, never as
   // the writer — an editor (artifact_shares.role) replacing a document that
   // carries its owner's <Mutation> or private image must not fail on assets
   // they could never own. Unreachable is the uniform 404, before any parse.
   const current = await getArtifactFor(actor, id);
-  if (!current) return json({ error: 'not_found' }, 404);
+  if (!current) return reply({ error: 'not_found' }, 404);
   // A group's sign-in sets what its twin (a direct editor of the group) may on a replace: content, `visibility`, `linkRole`
   // and `access`, as the editor this read reached it as. Named shares, placement, the connection and the policy stay with
   // people (server/group-admission).
   if (actor.principalGroup && ['parent_id','destination','shares','connection','policy','expectedPolicyRevision'].some(key=>Object.hasOwn(body!,key)))
-    return json({ error: 'group_principal_refused', details: ['A sign-in acting as a group changes a page\'s content, visibility, link role and access, never its named shares, placement or policy.'] }, 403);
+    return reply({ error: 'group_principal_refused', details: ['A sign-in acting as a group changes a page\'s content, visibility, link role and access, never its named shares, placement or policy.'] }, 403);
   if (liveConnectionOf(current.meta) && (CONTENT_FIELDS.some((f) => body![f] !== undefined) || body!.connection !== undefined)) {
-    return json({ error: 'live_dataset_connection', message: 'A live dataset\'s content is its connection: change it with PATCH /api/artifacts/ID/connection (owner and editors); its rows stay in its database.' }, 400);
+    return reply({ error: 'live_dataset_connection', message: 'A live dataset\'s content is its connection: change it with PATCH /api/artifacts/ID/connection (owner and editors); its rows stay in its database.' }, 400);
   }
-  if(body.destination!==undefined)return json({error:'ownership_requires_transfer',hint:'Use the transfer endpoint to change owner.'},400);
-  if(Object.hasOwn(body,'policy')||Object.hasOwn(body,'expectedPolicyRevision'))return json({error:'combined_policy_write',hint:'Publish content first, then change policy in the dataset YAML without replacing content.'},400);
+  if(body.destination!==undefined)return reply({error:'ownership_requires_transfer',hint:'Use the transfer endpoint to change owner.'},400);
+  if(Object.hasOwn(body,'policy')||Object.hasOwn(body,'expectedPolicyRevision'))return reply({error:'combined_policy_write',hint:'Publish content first, then change policy in the dataset YAML without replacing content.'},400);
   // Sharing settings use edit access; filing under an owner's folder still checks placement.
   const owned = body.parent_id !== undefined ? await getOwnedArtifactFor(actor, id) : null;
   const owner = writerFor(current);
   const sentMarkup = body.markup;
-  if(body.annotation_ops!==undefined)return json({error:'invalid_annotation_operations'},400);
+  if(body.annotation_ops!==undefined)return reply({error:'invalid_annotation_operations'},400);
   const expected = parseExpectedVersion(body);
-  if (expected instanceof Response) return expected;
+  if (expected instanceof Reply) return expected;
   let bundleReceipts:unknown[]=[],bundleEntryPath:string|undefined;
   const bundleSupplied=body.publicationBundle!==undefined;
   // The caller's own fields: a bundle save injects the head's visibility and shares below, which are no change.
   const sent=body;
   if(typeof body.html==='string'){
     // A content write is fenced only on what it replaces (lib/artifacts state): a sharing or policy change since the read never refuses it.
-    const changed=observedChange(current,expected);if(changed)return json(versionConflict(current,changed),409);
-    if(body.publicationBundle!==undefined&&(expected.expectedVersion===undefined||expected.expectedState===undefined))return json({error:'bundle_requires_observed_state'},400);
+    const changed=observedChange(current,expected);if(changed)return reply(versionConflict(current,changed),409);
+    if(body.publicationBundle!==undefined&&(expected.expectedVersion===undefined||expected.expectedState===undefined))return reply({error:'bundle_requires_observed_state'},400);
     // A group's sign-in commits a bundle as itself (its page's existing files only: it creates none for a group page).
-    if(body.publicationBundle!==undefined&&((!actor.tokenId&&!actor.principalGroup)||options.dryRun))return json({error:'bundle_requires_authenticated_commit'},400);
+    if(body.publicationBundle!==undefined&&((!actor.tokenId&&!actor.principalGroup)||options.dryRun))return reply({error:'bundle_requires_authenticated_commit'},400);
     // Edit access to the page is enough to save a bundle; each file is then
     // authorized on its own (preparePublicationBundle). New files belong to the
     // page owner, so an editor's save never leaves the owner's page depending on
@@ -144,8 +147,8 @@ export async function replaceArtifactWithBody(
       const sharing=await getSharingFor(actor,id);
       body={...body,visibility:body.visibility??current.visibility,shares:body.shares??sharing?.shares};
     }
-    const bundled=await preparePublicationBundle(body,actor as PublicationActor,base,options.request,(dependency,dependencyRequest)=>createArtifactFromBody(dependency,creator,base,dependencyRequest),(dependencyId,input,key)=>updateBundleDependency(actor as PublicationActor,base,dependencyId,input,key),{id,dependencies:Array.isArray(current.meta.htmlPublicationDependencies)?current.meta.htmlPublicationDependencies:[],creator,newFilesRefused});
-    if(bundled instanceof Response)return bundled;
+    const bundled=await preparePublicationBundle(body,actor as PublicationActor,base,creationKeys(options.request),(dependency,dependencyKeys)=>createArtifactFromBodyPrepared(dependency,creator,base,dependencyKeys),(dependencyId,input,key)=>updateBundleDependency(actor as PublicationActor,base,dependencyId,input,key),{id,dependencies:Array.isArray(current.meta.htmlPublicationDependencies)?current.meta.htmlPublicationDependencies:[],creator,newFilesRefused});
+    if(bundled instanceof Reply)return bundled;
     body=bundled.body;bundleReceipts=bundled.receipts;bundleEntryPath=bundled.entryPath;
   }
   /*
@@ -171,10 +174,10 @@ export async function replaceArtifactWithBody(
    */
   if (current.format === 'folder') {
     if (CONTENT_FIELDS.some((f) => body[f] !== undefined)) {
-      return json({ error: 'not_editable', details: ['a folder has no content — its page is its listing. Only title, visibility and folder are editable, in the folder YAML you push'] }, 400);
+      return reply({ error: 'not_editable', details: ['a folder has no content — its page is its listing. Only title, visibility and folder are editable, in the folder YAML you push'] }, 400);
     }
   }
-  const prepared: PreparedContent | Response = current.format === 'folder'
+  const prepared: PreparedContent | Reply = current.format === 'folder'
     ? {content: { format: 'folder', source: '', meta: {}, derivedTitle: null }, objects: []}
     : await prepareContentInput({...(current.format==='dataset'?{columns:((current.meta.columns??[]) as import('@artifactbin/contracts').DatasetColumn[]).filter(c=>c.type==='user')}:{}),template:current.meta.template,...body}, {
       prepareDataset: (input,objects) => prepareCatalog(input,current,objects),
@@ -183,20 +186,20 @@ export async function replaceArtifactWithBody(
       // A group's sign-in is charged to its group, never the page owner's token, and imports no remote input.
       overByteQuota: actor.principalGroup?publisherByteQuota(actor):byteQuotaFor(owner.tokenId, owner.userId),
     }, {allowRemoteInputs:!options.dryRun&&!actor.principalGroup});
-  if (prepared instanceof Response) return prepared;
+  if (prepared instanceof Reply) return prepared;
   let parsed = prepared.content;
 
   const visibility = parseVisibility(body, !!actor.userId||!!actor.principalGroup);
-  if (visibility instanceof Response) return visibility;
+  if (visibility instanceof Reply) return visibility;
   const parent = parseParentField(body);
-  if (parent instanceof Response) return parent;
+  if (parent instanceof Reply) return parent;
   const access = parseAccessField(body, parsed.format);
-  if (access instanceof Response) return access;
-  const shares=parseShareEntries(body.shares);if(shares instanceof Response)return shares;const boxed=await shareTargetsRefusal(actor,shares);if(boxed)return json({error:TEST_ACCOUNT_RESTRICTED,detail:boxed},403);
-  if(body.visibility===null||body.linkRole===null)return json({error:'invalid_metadata',hint:'visibility and linkRole cannot be null.'},400);
-  const link=parseLinkRoleValue(body.linkRole);if(link instanceof Response)return link;
+  if (access instanceof Reply) return access;
+  const shares=parseShareEntries(body.shares);if(shares instanceof Reply)return shares;const boxed=await shareTargetsRefusal(actor,shares);if(boxed)return reply({error:TEST_ACCOUNT_RESTRICTED,detail:boxed},403);
+  if(body.visibility===null||body.linkRole===null)return reply({error:'invalid_metadata',hint:'visibility and linkRole cannot be null.'},400);
+  const link=parseLinkRoleValue(body.linkRole);if(link instanceof Reply)return link;
   const expectedSharingRevision=parseSharingRevision(sent);
-  if(expectedSharingRevision instanceof Response)return expectedSharingRevision;
+  if(expectedSharingRevision instanceof Reply)return expectedSharingRevision;
   /*
    * PLACEMENT IS RESOLVED HERE, AFTER the scope answered `current` above — a
    * row this caller cannot reach is the uniform 404 whatever the body says,
@@ -219,11 +222,11 @@ export async function replaceArtifactWithBody(
    * code to learn, and it says nothing about whether the parent exists.
    */
   const placement = await placementFor(writerFor(current), parent, { id: current.id, format: current.format }, !!owned);
-  if (placement instanceof Response) return placement;
+  if (placement instanceof Reply) return placement;
 
   const changed = observedChange(current, expected);
-  if (changed) return json(versionConflict(current, changed), 409);
-  const htmlData=await prepareHtmlDatasets(body,owner,actor);if(htmlData instanceof Response)return htmlData;
+  if (changed) return reply(versionConflict(current, changed), 409);
+  const htmlData=await prepareHtmlDatasets(body,owner,actor);if(htmlData instanceof Reply)return htmlData;
   const htmlDatasets=htmlData?.links;
   if (options.dryRun) return preflightReply(prepared);
   // The bytes are put as the write transaction's last step, so a refused write stores nothing.
@@ -268,14 +271,14 @@ export async function replaceArtifactWithBody(
       ...(placement ? { ancestor_ids: placement.ancestor_ids } : {}),
     }, {...expected,expectedSharingRevision})
     : await replaceArtifactFor(actor, id, input, {...expected,expectedSharingRevision,shares,persistPrepared,...(options.mutationReceipt?{mutationReceipt:options.mutationReceipt,mutationReply:async(saved:ArtifactRow):Promise<MutationReply>=>({status:200,body:{...await replacedArtifactWire(saved,base,sentMarkup,{affected:receiptEffects?.affected??null,warnings:receiptEffects?.warnings??[],openAnnotations:committedOpenAnnotations(saved)},receiptOwner),...(bundleReceipts.length?{dependencyReceipts:bundleReceipts}:{})}})}:{})}));
-  } catch(error) {if(error instanceof DatasetError)return json({error:"dataset_error",details:[error.message]},error.status);throw error;}
+  } catch(error) {if(error instanceof DatasetError)return reply({error:"dataset_error",details:[error.message]},error.status);throw error;}
   // A refusal the replace composed for itself — `policy_locked` (409) or
   // `policy_mismatch` (400). It exists so this door stops answering the
   // uniform 404 below for a governed dataset the caller is looking straight
   // at; it is already the answer, and is not re-worded here.
-  if (row instanceof Response) return row;
-  if (isVersionConflict(row)) { const {conflict:_conflict,...body}=row; return json(body, 409); }
-  if (!row) return json({ error: 'not_found' }, 404);
+  if (row instanceof Reply) return row;
+  if (isVersionConflict(row)) { const {conflict:_conflict,...body}=row; return reply(body, 409); }
+  if (!row) return reply({ error: 'not_found' }, 404);
 
   if(row.format==='html')void trackEvent('edit',row.id,{userId:actor.userId??null});
 
@@ -283,7 +286,7 @@ export async function replaceArtifactWithBody(
   // resolve (warnings, never blocks).
   const warnings = receiptEffects?receiptEffects.warnings:[];
   const affected = receiptEffects?receiptEffects.affected:['dataset','image','pdf','file'].includes(row.format) ? await findDependentsFor(actor,row.id) : null;
-  return json({...await replacedArtifactWire(row, base, sentMarkup, { affected, warnings, openAnnotations: committedOpenAnnotations(row) },receiptOwner),...(bundleReceipts.length?{dependencyReceipts:bundleReceipts}:{})});
+  return reply({...await replacedArtifactWire(row, base, sentMarkup, { affected, warnings, openAnnotations: committedOpenAnnotations(row) },receiptOwner),...(bundleReceipts.length?{dependencyReceipts:bundleReceipts}:{})});
 }
 
 /**
@@ -292,27 +295,28 @@ export async function replaceArtifactWithBody(
  * transport-only branch of its own: a raw `Content-Type: image/*` body, which
  * has no JSON envelope for this function to read.
  */
-export async function createArtifactFromBody(body:Record<string,unknown>,actor:PublicationActor,base:string,request?:Request,options:{dryRun?:boolean}={}):Promise<Response>{
- if(options.dryRun&&body.publicationBundle!==undefined)return json({error:'bundle_preflight_requires_dependency_plan'},400);
- const bundled=await preparePublicationBundle(body,actor,base,request,(dependency,dependencyRequest)=>createArtifactFromBodyPrepared(dependency,actor,base,dependencyRequest),(dependencyId,input,key)=>updateBundleDependency(actor,base,dependencyId,input,key));
- if(bundled instanceof Response)return bundled;
+export async function createArtifactFromBody(body:Record<string,unknown>,actor:PublicationActor,base:string,request?:Request,options:{dryRun?:boolean}={}):Promise<Reply>{
+ if(options.dryRun&&body.publicationBundle!==undefined)return reply({error:'bundle_preflight_requires_dependency_plan'},400);
+ const keys=creationKeys(request);
+ const bundled=await preparePublicationBundle(body,actor,base,keys,(dependency,dependencyKeys)=>createArtifactFromBodyPrepared(dependency,actor,base,dependencyKeys),(dependencyId,input,key)=>updateBundleDependency(actor,base,dependencyId,input,key));
+ if(bundled instanceof Reply)return bundled;
 
- const response=await createArtifactFromBodyPrepared(bundled.body,actor,base,request,{...options,bundleReceipts:bundled.receipts,bundleEntryPath:bundled.entryPath});
- if(!bundled.receipts.length)return response;
- return json({...await response.json(),dependencyReceipts:bundled.receipts},response.status);
+ const created=await createArtifactFromBodyPrepared(bundled.body,actor,base,keys,{...options,bundleReceipts:bundled.receipts,bundleEntryPath:bundled.entryPath});
+ if(!bundled.receipts.length)return created;
+ return reply({...created.body,dependencyReceipts:bundled.receipts},created.status);
 }
 
 async function createArtifactFromBodyPrepared(
   body: Record<string, unknown>,
   actor: PublicationActor,
   base: string,
-  request?: Request,
+  keys: CreationKeys = {},
   options: {dryRun?:boolean;bundleReceipts?:unknown[];bundleEntryPath?:string} = {},
-): Promise<Response> {
+): Promise<Reply> {
   let destination;
-  try{destination=parseArtifactDestination(body.destination);}catch(error){if(error instanceof DatasetError)return json({error:'invalid_destination',details:[error.message]},error.status);throw error;}
-  if(body.reserved_id!==undefined&&(typeof body.reserved_id!=='string'||!ID_RE.test(body.reserved_id)))return json({error:'invalid_reserved_id'},400);
-  if(Object.hasOwn(body,'policy')||Object.hasOwn(body,'expectedPolicyRevision'))return json({error:'combined_policy_write',hint:'Publish the dataset first, pull its YAML, then change its policy.'},400);
+  try{destination=parseArtifactDestination(body.destination);}catch(error){if(error instanceof DatasetError)return reply({error:'invalid_destination',details:[error.message]},error.status);throw error;}
+  if(body.reserved_id!==undefined&&(typeof body.reserved_id!=='string'||!ID_RE.test(body.reserved_id)))return reply({error:'invalid_reserved_id'},400);
+  if(Object.hasOwn(body,'policy')||Object.hasOwn(body,'expectedPolicyRevision'))return reply({error:'combined_policy_write',hint:'Publish the dataset first, pull its YAML, then change its policy.'},400);
   // LINEAGE. A fork is made locally — a draft with the source's identity stripped
   // and `forked_from` recorded — and its FIRST create presents that id here. The
   // claim is checked, not trusted: provenance may only name a source this actor
@@ -320,9 +324,9 @@ async function createArtifactFromBodyPrepared(
   // and unreachable is unknown. Written once at creation; no later write touches it.
   let forkedFrom: string | undefined;
   if (body.forked_from !== undefined && body.forked_from !== null) {
-    if (typeof body.forked_from !== 'string' || !ID_RE.test(body.forked_from)) return json({ error: 'invalid_metadata', hint: 'forked_from is the id of the artifact this copy came from.' }, 400);
+    if (typeof body.forked_from !== 'string' || !ID_RE.test(body.forked_from)) return reply({ error: 'invalid_metadata', hint: 'forked_from is the id of the artifact this copy came from.' }, 400);
     const source = await getArtifactById(body.forked_from);
-    if (!source || (!ownsArtifact(source,actor) && !(await canReadArtifact(source, actor)))) return json({ error: 'not_found', hint: 'forked_from must name an artifact you can read.' }, 404);
+    if (!source || (!ownsArtifact(source,actor) && !(await canReadArtifact(source, actor)))) return reply({ error: 'not_found', hint: 'forked_from must name an artifact you can read.' }, 404);
     forkedFrom = source.id;
   }
   let receiptOwner:UserPagesOwner|null = null;
@@ -330,50 +334,50 @@ async function createArtifactFromBodyPrepared(
   // A live dataset (`connection`): its secret fields never reach the creation ledger's fingerprint.
   let live:ReturnType<typeof prepareLiveDataset>|undefined;
   if(body.connection!==undefined&&body.connection!==null){
-   if(CONTENT_FIELDS.some(field=>body[field]!==undefined&&body[field]!==null))return json({ error: 'one_of_html_dataset_viz_image_pdf_file' }, 400);
-   try{live=prepareLiveDataset(body.connection);}catch(error){if(error instanceof LiveDatasetRefusal)return json(error.body,error.status);throw error;}
+   if(CONTENT_FIELDS.some(field=>body[field]!==undefined&&body[field]!==null))return reply({ error: 'one_of_html_dataset_viz_image_pdf_file' }, 400);
+   try{live=prepareLiveDataset(body.connection);}catch(error){if(error instanceof LiveDatasetRefusal)return reply(error.body,error.status);throw error;}
   }
   let operation;
-  try {operation = await creationOperation(actor,base,request?.headers.get('Idempotency-Key'),live?{...body,connection:withoutSecrets(body.connection)}:body,row=>({status:201,body:responseBody(row)}),request?.headers.get('X-Artifactbin-Account'));}
-  catch(error){if(error instanceof LiveRegionRefusal)return json({error:error.code,details:error.details},409);if(error instanceof CreationReplay)return json(error.reply.body,error.reply.status);throw error;}
-  if(operation){const replay=await lookupCreation(await getDb(),operation);if(replay)return json(replay.body,replay.status);}
+  try {operation = await creationOperation(actor,base,keys.idempotencyKey,live?{...body,connection:withoutSecrets(body.connection)}:body,row=>({status:201,body:responseBody(row)}),keys.account);}
+  catch(error){if(error instanceof LiveRegionRefusal)return reply({error:error.code,details:error.details},409);if(error instanceof CreationReplay)return reply(error.reply.body,error.reply.status);throw error;}
+  if(operation){const replay=await lookupCreation(await getDb(),operation);if(replay)return reply(replay.body,replay.status);}
   // A group's sign-in shares nothing (sharing is its Admins'), and its count quota is its group's, never a token's.
-  if (actor.principalGroup && body.shares !== undefined) return json({ error: 'group_principal_refused', details: ['A sign-in acting as a group does not share; ask an Admin of the group.'] }, 403);
-  if (actor.principalGroup && await groupArtifactQuotaExceeded(actor.principalGroup.id)) return json({ error: 'quota_exceeded', details: ['this group has hit its artifact COUNT quota for agent sign-ins — deleting does not free it'] }, 403);
-  if (!actor.principalGroup && await artifactQuotaExceeded(actor.tokenId!)) return json({ error: 'quota_exceeded', details: ['this token has hit its artifact COUNT quota — deleting does not free it (nothing is erased), so ask your user for another token'] }, 403);
-  const shares=parseShareEntries(body.shares);if(shares instanceof Response)return shares;const boxed=await shareTargetsRefusal(actor,shares);if(boxed)return json({error:TEST_ACCOUNT_RESTRICTED,detail:boxed},403);
-  if(body.visibility===null||body.linkRole===null)return json({error:'invalid_metadata',hint:'visibility and linkRole cannot be null.'},400);
-  const link=parseLinkRoleValue(body.linkRole);if(link instanceof Response)return link;
+  if (actor.principalGroup && body.shares !== undefined) return reply({ error: 'group_principal_refused', details: ['A sign-in acting as a group does not share; ask an Admin of the group.'] }, 403);
+  if (actor.principalGroup && await groupArtifactQuotaExceeded(actor.principalGroup.id)) return reply({ error: 'quota_exceeded', details: ['this group has hit its artifact COUNT quota for agent sign-ins — deleting does not free it'] }, 403);
+  if (!actor.principalGroup && await artifactQuotaExceeded(actor.tokenId!)) return reply({ error: 'quota_exceeded', details: ['this token has hit its artifact COUNT quota — deleting does not free it (nothing is erased), so ask your user for another token'] }, 403);
+  const shares=parseShareEntries(body.shares);if(shares instanceof Reply)return shares;const boxed=await shareTargetsRefusal(actor,shares);if(boxed)return reply({error:TEST_ACCOUNT_RESTRICTED,detail:boxed},403);
+  if(body.visibility===null||body.linkRole===null)return reply({error:'invalid_metadata',hint:'visibility and linkRole cannot be null.'},400);
+  const link=parseLinkRoleValue(body.linkRole);if(link instanceof Reply)return link;
   const parent = parseParentField(body);
-  if (parent instanceof Response) return parent;
+  if (parent instanceof Reply) return parent;
   // Nothing exists yet to be unreachable, so there is no ordering question
   // here: the parent is the only row being read, and it must be the caller's
   // own folder or this is the one refusal.
   // Resolve and authorize the destination before looking up its folder namespace.
   // A direct group Editor may publish there without owning the group personally.
-  try{destination=await newArtifactDestination(actor,destination,parent);}catch(error){if(error instanceof ArtifactParentRefusal)return json(PARENT_REFUSED,400);if(error instanceof GroupPersonalDestination)return json({error:'group_principal_personal_refused',details:[error.message]},403);if(error instanceof DatasetError)return json({error:'invalid_destination',details:[error.message]},error.status);throw error;}
+  try{destination=await newArtifactDestination(actor,destination,parent);}catch(error){if(error instanceof ArtifactParentRefusal)return reply(PARENT_REFUSED,400);if(error instanceof GroupPersonalDestination)return reply({error:'group_principal_personal_refused',details:[error.message]},403);if(error instanceof DatasetError)return reply({error:'invalid_destination',details:[error.message]},error.status);throw error;}
   const placementOwner = destination.type==='group' ? {...identityForUser(actor.userId,actor.tokenId),groupId:destination.id} : actor;
   const placement = (await placementFor(placementOwner, parent, null)) ?? { ancestor_ids: [] };
-  if (placement instanceof Response) return placement;
+  if (placement instanceof Reply) return placement;
   receiptOwner = await documentOwner({user_id:actor.userId,group_id:destination?.type==='group'?destination.id:null});
   // A group publishes as the group: the creating token, no account, the group as owner (never the actor's grant).
   // A group's sign-in resolves what it publishes as itself, by its own rule (never as the group's owner).
   const publicationActor:AccessActor=actor.principalGroup?actor:destination.type==='group'?{...identityForUser(null,actor.tokenId),groupId:destination.id}:actor;
   const sentMarkup=body.markup;
-  const prepared: PreparedContent | Response = live ? {content:live.content,objects:[]} : await prepareContentInput(body, {
+  const prepared: PreparedContent | Reply = live ? {content:live.content,objects:[]} : await prepareContentInput(body, {
     creating: true,
     prepareDataset: (input,objects) => prepareCatalog(input,undefined,objects),
     loadRef: refLoaderForActor(publicationActor),
     overByteQuota: publisherByteQuota(actor),
   }, {allowRemoteInputs:!options.dryRun&&!actor.principalGroup});
-  if (prepared instanceof Response) return prepared;
+  if (prepared instanceof Reply) return prepared;
   let parsed = prepared.content;
   const visibility = parseVisibility(body, !!actor.userId||!!actor.principalGroup);
-  if (visibility instanceof Response) return visibility;
+  if (visibility instanceof Reply) return visibility;
   const access = parseAccessField(body, parsed.format);
-  if (access instanceof Response) return access;
+  if (access instanceof Reply) return access;
 
-  const htmlData=await prepareHtmlDatasets(body,publicationActor,actor);if(htmlData instanceof Response)return htmlData;
+  const htmlData=await prepareHtmlDatasets(body,publicationActor,actor);if(htmlData instanceof Reply)return htmlData;
   const htmlDatasets=htmlData?.links;
   if (options.dryRun) return preflightReply(prepared);
   // The bytes are put as the write transaction's last step, so a refused write stores nothing.
@@ -391,8 +395,8 @@ async function createArtifactFromBodyPrepared(
     ...(access ? { access } : {}),
     ancestor_ids: placement.ancestor_ids,
     destination,
-  }, {persistPrepared,...(actor.principalGroup?{principalActor:actor}:{}),...(live?{liveConnection:live.connection}:{}),reservedId:body.reserved_id as string|undefined,operation,shares,...(link?{linkRole:link}:{}),...(forkedFrom?{forkedFrom}:{})}));}catch(error){if(error instanceof LiveRegionRefusal)return json({error:error.code,details:error.details},409);if(error instanceof CreationReplay)return json(error.reply.body,error.reply.status);if(error instanceof DatasetError)return json({error:'dataset_error',details:[error.message]},error.status);throw error;}
-  return json(responseBody(row), 201);
+  }, {persistPrepared,...(actor.principalGroup?{principalActor:actor}:{}),...(live?{liveConnection:live.connection}:{}),reservedId:body.reserved_id as string|undefined,operation,shares,...(link?{linkRole:link}:{}),...(forkedFrom?{forkedFrom}:{})}));}catch(error){if(error instanceof LiveRegionRefusal)return reply({error:error.code,details:error.details},409);if(error instanceof CreationReplay)return reply(error.reply.body,error.reply.status);if(error instanceof DatasetError)return reply({error:'dataset_error',details:[error.message]},error.status);throw error;}
+  return reply(responseBody(row), 201);
 }
 
 
@@ -422,16 +426,16 @@ async function createArtifactFromBodyPrepared(
 export async function refreshAssetsFor(
   actor: AccessActor,
   input: { url?: unknown; id?: unknown },
-): Promise<Response> {
+): Promise<Reply> {
   const url = typeof input.url === 'string' && input.url ? input.url : null;
   const id = typeof input.id === 'string' && input.id ? input.id : null;
-  if (!url && !id) return json({ error: 'nothing_to_refresh', details: ['name a url, or the id of a document whose external urls should be refreshed'] }, 400);
+  if (!url && !id) return reply({ error: 'nothing_to_refresh', details: ['name a url, or the id of a document whose external urls should be refreshed'] }, 400);
 
   let urls: string[];
   let by: WebAssetImporter = actor;
   if (id) {
     const row = await getArtifactFor(actor, id);
-    if (!row) return json({ error: 'not_found' }, 404);
+    if (!row) return reply({ error: 'not_found' }, 404);
     const named = row.format==='html' ? htmlAssetLinks(row.source ?? '').imageUrls : [];
     const held = await lookupWebAssets(named);
     urls = named.filter((u) => held.has(u));
@@ -441,11 +445,11 @@ export async function refreshAssetsFor(
   } else {
     urls = [url!];
   }
-  return json(await refreshWebAssets(urls, by));
+  return reply({...await refreshWebAssets(urls, by)});
 }
 
-function preflightReply(prepared:PreparedContent):Response {
-  return json({valid:true,dry_run:true,markup:prepared.content.source,format:prepared.content.format,
+function preflightReply(prepared:PreparedContent):Reply {
+  return reply({valid:true,dry_run:true,markup:prepared.content.source,format:prepared.content.format,
     planned:{objects:prepared.objects.length},
     commit_checks:['authorization','quota','references','observed_state']});
 }

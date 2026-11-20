@@ -30,12 +30,12 @@ const POLICY = { version: 3, tables: [{
 export async function staffDeck(owner: Parameters<typeof createArtifactFromBody>[1], visibility: 'private' | 'unlisted') {
   const dataset = await createArtifactFromBody({ dataset: STAFF, title: 'Staff', access: 'readwrite', visibility }, owner, 'http://localhost:3000');
   expect(dataset.status).toBe(201);
-  const staff = (await dataset.json() as { id: string }).id;
+  const staff = (dataset.body as { id: string }).id;
   await storePolicy(staff, POLICY);
   const html = `<html><head><link rel="af-dataset" data-af-name="staff" href="ref:${staff}"></head><body><main id="deck"></main></body></html>`;
   const page = await createArtifactFromBody({ html, visibility }, owner, 'http://localhost:3000');
   expect(page.status).toBe(201);
-  return { page: (await page.json() as { id: string }).id, staff };
+  return { page: (page.body as { id: string }).id, staff };
 }
 
 /** The runtime configuration a served page carries. */

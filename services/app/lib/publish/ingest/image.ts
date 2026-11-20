@@ -7,17 +7,17 @@ import type {ContentObjects} from '@/lib/object-store';
  * refuse, not become an "image" that renders broken forever.
  */
 import { MAX_IMAGE_BYTES } from '@/lib/platform';
-import { json } from '@/lib/http';
+import { Reply, reply } from '@/lib/http';
 import { storeImageContent } from '@/lib/datasets';
 import type { StoredContent } from '@/lib/document';
 import { fetchWebResource, WebIngestError, sniffImageType } from '@/lib/web-ingest';
 
 /**
- * Fetch and store one image. Refusals are ready-to-return Responses that NAME
+ * Fetch and store one image. Refusals are Replies that NAME
  * the url and the reason — the caller is a publish door, and an agent can act
  * on "404" where it cannot act on silence.
  */
-export async function ingestImageFromUrl(url: string, objects?: ContentObjects): Promise<StoredContent | Response> {
+export async function ingestImageFromUrl(url: string, objects?: ContentObjects): Promise<StoredContent | Reply> {
   let bytes: Buffer;
   let finalUrl: string;
   try {
@@ -26,19 +26,19 @@ export async function ingestImageFromUrl(url: string, objects?: ContentObjects):
     finalUrl = got.finalUrl;
   } catch (error) {
     if (error instanceof WebIngestError) {
-      return json({ error: 'image_fetch_failed', code: error.code, details: [`${url}: ${error.message}`] }, 400);
+      return reply({ error: 'image_fetch_failed', code: error.code, details: [`${url}: ${error.message}`] }, 400);
     }
     throw error;
   }
   const contentType = sniffImageType(bytes);
   if (!contentType) {
-    return json({
+    return reply({
       error: 'image_fetch_failed', code: 'unsupported_type',
       details: [`${url}: the response is not an image (png|jpeg|webp|gif|svg) — a dead link often serves an html error page`],
     }, 400);
   }
   const stored = await storeImageContent(bytes, contentType, objects);
-  if (stored instanceof Response) return stored;
+  if (stored instanceof Reply) return stored;
   // Provenance: where the copy came from. The document references OUR copy —
   // an import is a snapshot, deliberately — but the origin stays answerable.
   return { ...stored, meta: { ...stored.meta, sourceUrl: finalUrl } };

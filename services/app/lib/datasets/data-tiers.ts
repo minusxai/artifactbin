@@ -15,7 +15,7 @@ import {normalizeDate,isDate,normalizeTimestamp,isTimestamp} from '@artifactbin/
  */
 import {parseDatasetColumn} from '@artifactbin/utils/shape';
 import {type ContentObjects, storeImage, IMAGE_CONTENT_TYPES, type ImageMeta, PDF_CONTENT_TYPE, pdfPageCount, storePdf, type PdfMeta} from '@/lib/object-store';
-import { json } from '@/lib/http';
+import { Reply, reply } from '@/lib/http';
 import { MAX_IMAGE_BYTES, MAX_PDF_BYTES } from '@/lib/platform';
 import { storeDatasetRows } from './dataset-store';
 import { uploadedSha256 } from './file-store';
@@ -39,10 +39,10 @@ function valueMatches(v: unknown, t: ColumnType): boolean {
   }
 }
 
-export async function publishDataset(body: Record<string, unknown>, rows: unknown, objects?: ContentObjects): Promise<StoredContent | Response> {
+export async function publishDataset(body: Record<string, unknown>, rows: unknown, objects?: ContentObjects): Promise<StoredContent | Reply> {
   const details: string[] = [];
   if (!Array.isArray(rows)) {
-    return json({ error: 'invalid_dataset', details: ['dataset must be a JSON array of flat objects'] }, 400);
+    return reply({ error: 'invalid_dataset', details: ['dataset must be a JSON array of flat objects'] }, 400);
   }
   /*
    * AN EMPTY TABLE IS ONLY EMPTY OF ROWS.
@@ -55,7 +55,7 @@ export async function publishDataset(body: Record<string, unknown>, rows: unknow
    * The guard therefore belongs to the tier that infers, not to every dataset.
    */
   if (rows.length === 0 && !(Array.isArray(body.columns) && body.columns.length > 0)) {
-    return json({ error: 'invalid_dataset', details: ['dataset has no rows and no declared columns — send at least one row, or declare columns to publish an empty table'] }, 400);
+    return reply({ error: 'invalid_dataset', details: ['dataset has no rows and no declared columns — send at least one row, or declare columns to publish an empty table'] }, 400);
   }
   for (const [i, row] of rows.entries()) {
     if (row === null || typeof row !== 'object' || Array.isArray(row)) {
@@ -66,17 +66,17 @@ export async function publishDataset(body: Record<string, unknown>, rows: unknow
       if (v !== null && typeof v === 'object') details.push(`row ${i} column "${k}" is nested — datasets are one flat table`);
     }
   }
-  if (details.length) return json({ error: 'invalid_dataset', details }, 400);
+  if (details.length) return reply({ error: 'invalid_dataset', details }, 400);
 
   const flat = rows as Array<Record<string, unknown>>;
   const declaredRaw = body.columns;
   let columns: DatasetColumn[];
   if (declaredRaw !== undefined && declaredRaw !== null) {
-    if (!Array.isArray(declaredRaw)) return json({ error: 'invalid_dataset', details: ['columns must be an array of {name, type}'] }, 400);
+    if (!Array.isArray(declaredRaw)) return reply({ error: 'invalid_dataset', details: ['columns must be an array of {name, type}'] }, 400);
     const declared: DatasetColumn[] = [];
     for (const c of declaredRaw) {
       try { declared.push(parseDatasetColumn(c)); }
-      catch (error) { return json({error:'invalid_dataset',details:[error instanceof Error ? error.message : 'Invalid column']},400); }
+      catch (error) { return reply({error:'invalid_dataset',details:[error instanceof Error ? error.message : 'Invalid column']},400); }
     }
     // Declared wins; rows are validated against it. Inference fills undeclared columns.
     for (const [i, row] of flat.entries()) {
@@ -86,7 +86,7 @@ export async function publishDataset(body: Record<string, unknown>, rows: unknow
         }
       }
     }
-    if (details.length) return json({ error: 'invalid_dataset', details }, 400);
+    if (details.length) return reply({ error: 'invalid_dataset', details }, 400);
     const declaredNames = new Set(declared.map((c) => c.name));
     columns = [...declared, ...inferColumns(flat).filter((c) => !declaredNames.has(c.name))];
   } else {
@@ -95,7 +95,7 @@ export async function publishDataset(body: Record<string, unknown>, rows: unknow
 
   for (const row of flat) for (const column of columns) if((column.type==='timestamp' || column.type==='date') && row[column.name]!=null) {
     try { row[column.name]=column.type==='date' ? normalizeDate(row[column.name],column.name) : normalizeTimestamp(row[column.name],column.name); }
-    catch(error){return json({error:'invalid_dataset',details:[error instanceof Error?error.message:'Invalid timestamp']},400);}
+    catch(error){return reply({error:'invalid_dataset',details:[error instanceof Error?error.message:'Invalid timestamp']},400);}
   }
   // The rows go to the object store; the row keeps a reference. See
   // lib/datasets/dataset-store.ts for why a 27 MB blob cannot live in a column.
@@ -132,12 +132,12 @@ function collectTemplateTokens(value: unknown, out: Set<string>): void {
 
 const RECIPE_ACCEPTS = ['nominal', 'quantitative', 'temporal'];
 
-export function publishVizRecipe(_body: Record<string, unknown>, recipe: unknown): StoredContent | Response {
+export function publishVizRecipe(_body: Record<string, unknown>, recipe: unknown): StoredContent | Reply {
   const details: string[] = [];
   const r = recipe as {
     description?: unknown; engine?: unknown; bindings?: unknown; params?: unknown; template?: unknown;
   } | null;
-  if (!r || typeof r !== 'object') return json({ error: 'invalid_viz', details: ['viz must be a VizRecipeContent object'] }, 400);
+  if (!r || typeof r !== 'object') return reply({ error: 'invalid_viz', details: ['viz must be a VizRecipeContent object'] }, 400);
   if (typeof r.description !== 'string') details.push('description (string) is required');
   if (r.engine !== 'vega-lite' && r.engine !== 'vega') details.push("engine must be 'vega-lite' | 'vega'");
   if (!Array.isArray(r.bindings) || r.bindings.length === 0) details.push('bindings (non-empty array) is required');
@@ -150,7 +150,7 @@ export function publishVizRecipe(_body: Record<string, unknown>, recipe: unknown
     }
   }
   const params = (Array.isArray(r.params) ? r.params : []) as VizRecipeParam[];
-  if (details.length) return json({ error: 'invalid_viz', details }, 400);
+  if (details.length) return reply({ error: 'invalid_viz', details }, 400);
 
   // Token rule (recipe-file.ts): every template token names a slot or param.
   const declared = new Set([...bindings.map((b) => b.name), ...params.map((p) => p.name)]);
@@ -159,7 +159,7 @@ export function publishVizRecipe(_body: Record<string, unknown>, recipe: unknown
   for (const tok of used) {
     if (!declared.has(tok)) details.push(`template token {{${tok}}} names no declared binding slot or param`);
   }
-  if (details.length) return json({ error: 'invalid_viz', details }, 400);
+  if (details.length) return reply({ error: 'invalid_viz', details }, 400);
 
   return {
     format: 'viz',
@@ -181,12 +181,12 @@ const IMAGE_DATA_URL_RE = /^data:(image\/(?:png|jpeg|webp|gif|svg\+xml));base64,
  * to the object store; the row keeps `meta.objectKey` and the row stores no payload
  * (see lib/object-store/image-store).
  */
-export async function storeImageContent(buffer: Buffer, contentType: string, objects?: ContentObjects): Promise<StoredContent | Response> {
+export async function storeImageContent(buffer: Buffer, contentType: string, objects?: ContentObjects): Promise<StoredContent | Reply> {
   if (!(IMAGE_CONTENT_TYPES as readonly string[]).includes(contentType)) {
-    return json({ error: 'invalid_image', details: [`unsupported image type "${contentType}" (png|jpeg|webp|gif|svg+xml)`] }, 400);
+    return reply({ error: 'invalid_image', details: [`unsupported image type "${contentType}" (png|jpeg|webp|gif|svg+xml)`] }, 400);
   }
-  if (buffer.length === 0) return json({ error: 'invalid_image', details: ['image is empty'] }, 400);
-  if (buffer.length > MAX_IMAGE_BYTES) return json({ error: 'image_too_large', maxBytes: MAX_IMAGE_BYTES }, 413);
+  if (buffer.length === 0) return reply({ error: 'invalid_image', details: ['image is empty'] }, 400);
+  if (buffer.length > MAX_IMAGE_BYTES) return reply({ error: 'image_too_large', maxBytes: MAX_IMAGE_BYTES }, 413);
   /*
    * THE TYPE COMES FROM THE BYTES, and the label is only how the caller asked.
    *
@@ -200,7 +200,7 @@ export async function storeImageContent(buffer: Buffer, contentType: string, obj
    */
   const sniffed = sniffImageType(buffer);
   if (!sniffed) {
-    return json({ error: 'invalid_image', details: ['those bytes are not an image (png|jpeg|webp|gif|svg+xml) — the type is read from the file, never from what it is labelled'] }, 400);
+    return reply({ error: 'invalid_image', details: ['those bytes are not an image (png|jpeg|webp|gif|svg+xml) — the type is read from the file, never from what it is labelled'] }, 400);
   }
   /*
    * THE ONE DOOR every upload comes through — the picker, a paste, a drop and
@@ -239,9 +239,9 @@ export async function storeImageContent(buffer: Buffer, contentType: string, obj
   return { format: 'image', source: null, meta: { ...meta }, derivedTitle: null };
 }
 
-export async function publishImage(_body: Record<string, unknown>, dataUrl: string, objects?: ContentObjects): Promise<StoredContent | Response> {
+export async function publishImage(_body: Record<string, unknown>, dataUrl: string, objects?: ContentObjects): Promise<StoredContent | Reply> {
   const m = IMAGE_DATA_URL_RE.exec(dataUrl);
-  if (!m) return json({ error: 'invalid_image', details: ['image must be a base64 data: URL (png|jpeg|webp|gif|svg+xml)'] }, 400);
+  if (!m) return reply({ error: 'invalid_image', details: ['image must be a base64 data: URL (png|jpeg|webp|gif|svg+xml)'] }, 400);
   return storeImageContent(Buffer.from(m[2], 'base64'), m[1], objects);
 }
 
@@ -262,11 +262,11 @@ const PDF_DATA_URL_RE = /^data:application\/pdf;base64,([A-Za-z0-9+/=]*)$/;
  *
  * Unlike an image, nothing is re-encoded or resized: see lib/object-store/pdf-store.
  */
-export async function storePdfContent(buffer: Buffer, objects?: ContentObjects): Promise<StoredContent | Response> {
-  if (buffer.length === 0) return json({ error: 'invalid_pdf', details: ['the pdf is empty'] }, 400);
-  if (buffer.length > MAX_PDF_BYTES) return json({ error: 'pdf_too_large', maxBytes: MAX_PDF_BYTES }, 413);
+export async function storePdfContent(buffer: Buffer, objects?: ContentObjects): Promise<StoredContent | Reply> {
+  if (buffer.length === 0) return reply({ error: 'invalid_pdf', details: ['the pdf is empty'] }, 400);
+  if (buffer.length > MAX_PDF_BYTES) return reply({ error: 'pdf_too_large', maxBytes: MAX_PDF_BYTES }, 413);
   if (sniffAssetType(buffer) !== PDF_CONTENT_TYPE) {
-    return json({ error: 'invalid_pdf', details: ['those bytes are not a PDF — the type comes from the file, never from its name or its Content-Type'] }, 400);
+    return reply({ error: 'invalid_pdf', details: ['those bytes are not a PDF — the type comes from the file, never from its name or its Content-Type'] }, 400);
   }
   const located = await storePdf(buffer, objects);
   const meta: PdfMeta = {
@@ -283,8 +283,8 @@ export async function storePdfContent(buffer: Buffer, objects?: ContentObjects):
   return { format: 'pdf', source: null, meta: { ...meta }, derivedTitle: null };
 }
 
-export async function publishPdf(_body: Record<string, unknown>, dataUrl: string, objects?: ContentObjects): Promise<StoredContent | Response> {
+export async function publishPdf(_body: Record<string, unknown>, dataUrl: string, objects?: ContentObjects): Promise<StoredContent | Reply> {
   const m = PDF_DATA_URL_RE.exec(dataUrl);
-  if (!m) return json({ error: 'invalid_pdf', details: ['pdf must be a base64 data: URL — data:application/pdf;base64,<…>. To publish one that is already on the web, send pdfUrl instead.'] }, 400);
+  if (!m) return reply({ error: 'invalid_pdf', details: ['pdf must be a base64 data: URL — data:application/pdf;base64,<…>. To publish one that is already on the web, send pdfUrl instead.'] }, 400);
   return storePdfContent(Buffer.from(m[1], 'base64'), objects);
 }

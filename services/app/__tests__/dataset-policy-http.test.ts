@@ -36,8 +36,8 @@ const OWN_ROWS = {
 async function fixture() {
   const owner = await person('owner'), editor = await person('editor'), viewer = await person('viewer'), stranger = await person('stranger');
   const created = await createArtifactFromBody({ dataset: [{ name: 'a', created_by: 'x' }], title: 'Signups', access: 'readwrite', visibility: 'unlisted' }, owner.actor as AccessActor & { tokenId: string }, 'http://localhost:3000');
-  expect(created.status, await created.clone().text()).toBe(201);
-  const id = (await created.json()).id as string;
+  expect(created.status, JSON.stringify(created.body)).toBe(201);
+  const id = created.body.id as string;
   const db = await getDb();
   for (const [who, role] of [[editor, 'editor'], [viewer, 'viewer']] as const)
     await seedShares(db, { artifact_id: id, user_id: who.userId, email: who.email, role });

@@ -16,7 +16,7 @@ it('describes old single-table storage and preserves owner, viewer and denied-ro
   const actor = identityForUser(owner.userId, owner.id, owner.email);
   const created = await createArtifactFromBody({ dataset: [{ name: 'Ada', salary: 10 }], visibility: 'unlisted' }, actor, 'http://localhost:3000');
   expect(created.status).toBe(201);
-  const { id } = await created.json();
+  const id = created.body.id as string;
   const db = await getDb();
   await seedShares(db, { artifact_id: id, user_id: viewer.userId, email: viewer.email, role: 'viewer' });
   await setArtifact(db, id, { dataset_policy: JSON.stringify({ version: 3, tables: [{ table: { schema: 'public', name: 'rows' }, select_permissions: [{ role: 'viewer', permission: { columns: ['name'], filter: {} } }] }] }) });
@@ -40,7 +40,7 @@ it('keeps a live connection summary and the artifact access boundary', async () 
   const actor = identityForUser(owner.userId, owner.id, owner.email);
   const created = await createArtifactFromBody({ dataset: [{ n: 1 }], visibility: 'private' }, actor, 'http://localhost:3000');
   expect(created.status).toBe(201);
-  const { id } = await created.json();
+  const id = created.body.id as string;
   const connection = { connector: 'postgres', name: 'Example connection' };
   await setArtifact((await getDb()), id, { meta: JSON.stringify({ connection }) });
   const response = await serveRawDocument(request(`/a/${id}/raw`, { token: owner.token }), { id });

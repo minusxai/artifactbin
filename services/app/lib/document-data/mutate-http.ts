@@ -5,7 +5,7 @@ import { getArtifactById, getArtifactFor, type MutationReceipt } from '@/lib/art
 import { parseExpectedVersion } from '@/lib/artifact-wire';
 import { bindParams, bindTypes, platformValues } from '@/lib/dataflow';
 import { rewriteBuiltinFields } from '@/lib/dataflow/server';
-import { json, parseScalarValues } from '@/lib/http';
+import { json, parseScalarValues, Reply, toResponse } from '@/lib/http';
 import { canWriteDataset } from './dataset-policy';
 import { isMutationRefused, mutateDataset } from './dataset-mutate';
 
@@ -47,11 +47,11 @@ export async function respondToMutate(
     return json({ error: 'sql_required', details: [`one INSERT, UPDATE or DELETE naming a catalog table, for example public.rows`] }, 400);
   }
   const expected=body.expectedState===undefined?undefined:parseExpectedVersion(body,false);
-  if(expected instanceof Response)return expected;
+  if(expected instanceof Reply)return toResponse(expected);
   const policyRevision=body.expectedPolicyRevision;
   if(policyRevision!==undefined&&(!Number.isSafeInteger(policyRevision)||Number(policyRevision)<0))return json({error:'invalid_expected_policy_revision',details:['expectedPolicyRevision must be the nonnegative policy_revision the artifact read answered']},400);
   const values = parseScalarValues(body.values);
-  if (values instanceof Response) return values;
+  if (values instanceof Reply) return toResponse(values);
 
   // The built-ins read as they do in a document: `$_me.id` is the caller, `$_now` the moment, `$_tz` UTC.
   const { sql, fields } = rewriteBuiltinFields(body.sql);

@@ -12,13 +12,14 @@ import { storeFileContent } from '@/lib/datasets';
 import { getDb } from '@/lib/platform';
 import { publicRefAsset, publicRefAssetResponse } from '@/lib/document-serving';
 import { setArtifact } from '@/__tests__/rows';
+import { Reply } from '@/lib/http';
 
 useAppHarness();
 
 /** The served type follows the file's extension (lib/datasets/file-store), so the extension names it here. */
 async function stored(owner: string, extension: string, visibility: 'public' | 'unlisted' | 'private', format: 'file' | 'image' | 'pdf' = 'file', bytes = Buffer.from([1, 2, 3])) {
   const content = await storeFileContent(bytes, 'application/octet-stream', `thing.${extension}`);
-  if (content instanceof Response) throw new Error(await content.text());
+  if (content instanceof Reply) throw new Error(JSON.stringify(content.body));
   return createArtifact(null, owner, { ...content, format, title: 'thing', description: null, visibility });
 }
 const owner = async () => (await createUser({ email: 'mxmx_test_refs@example.com' })).id;

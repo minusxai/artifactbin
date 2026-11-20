@@ -10,15 +10,15 @@
  * in any source the store writes.
  */
 import { PortableSourceUnverified, verifiedPortableSource } from '@/lib/html-runtime/portable-source';
-import { json } from '@/lib/http';
+import { Reply, reply } from '@/lib/http';
 
-export function authoredHtml<T extends Record<string, unknown>>(body: T): T | Response {
+export function authoredHtml<T extends Record<string, unknown>>(body: T): T | Reply {
   if (typeof body.html !== 'string') return body;
   try {
     const html = verifiedPortableSource(body.html);
     return html === body.html ? body : { ...body, html };
   } catch (error) {
-    if (error instanceof PortableSourceUnverified) return json({ error: 'portable_copy_unverified', details: [error.message] }, 400);
+    if (error instanceof PortableSourceUnverified) return reply({ error: 'portable_copy_unverified', details: [error.message] }, 400);
     throw error;
   }
 }

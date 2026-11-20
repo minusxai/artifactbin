@@ -17,6 +17,7 @@ import { createGroup, deleteGroup } from '@/lib/groups';
 import { POST as sqlPost } from '@/app/api/artifacts/[id]/sql/route';
 import { person, params, publish, sql, fixture, stored } from './page-sql-door-fixture';
 import { seedShares } from '@/__tests__/rows';
+import { Reply } from '@/lib/http';
 
 useAppHarness();
 beforeEach(() => setSession(null));
@@ -217,7 +218,7 @@ describe('retry on deadlock and serialization failure', () => {
     spy = failing(db, 1);
     let replaced;
     try { replaced = await replaceArtifactFor(f.owner.actor, created.id, { format: 'html', source: '<p>team v2</p>', meta: {}, title: 'Team page' }, { expectedVersion: 1 }); } finally { spy.mockRestore(); }
-    expect(replaced && 'version' in replaced ? replaced.version : replaced instanceof Response ? await replaced.text() : replaced).toBe(2);
+    expect(replaced && 'version' in replaced ? replaced.version : replaced instanceof Reply ? JSON.stringify(replaced.body) : replaced).toBe(2);
     // Exhausted: a retryable TransactionConflict, nothing created.
     spy = failing(db, 50);
     try { await expect(createArtifact(null, f.owner.userId, { format: 'html', source: '<p>x</p>', meta: {}, title: 'Never', destination: { type: 'group', id: team.id } })).rejects.toBeInstanceOf(TransactionConflict); } finally { spy.mockRestore(); }
@@ -238,7 +239,7 @@ it('a write whose user column names a document in memberOf locks that document i
   const owner = await person('member_owner');
   const report = await publish(owner, { html: '<html><body>Report</body></html>' });
   const team = await createArtifactFromBody({ dataset: [{ id: 1, assignee: null }], columns: [{ name: 'id', type: 'number' }, { name: 'assignee', type: 'user', constraints: { memberOf: [`ref:${report.body.id}`] } }], access: 'readwrite', visibility: 'unlisted', title: 'Team' }, owner.actor, 'http://localhost:3000');
-  const teamId = (await team.json() as { id: string }).id;
+  const teamId = (team.body as { id: string }).id;
   const page = (await publish(owner, { html: `<html><head><link rel="af-dataset" data-af-name="team" href="ref:${teamId}"></head><body>x</body></html>` })).body.id;
   const db = await getDb(), locked: string[][] = [];
   const spy = spyOnStatements(db, () => {

@@ -23,7 +23,7 @@ import type { HtmlIdentityLedger } from '../html-page';
 import type { AccessActor } from '@/lib/accounts';
 import { editorScope, type ArtifactRow } from '@/lib/artifact-access';
 import type { Queryable } from '../platform';
-import { json } from '../http';
+import { Reply, reply } from '../http';
 
 /** Snapshots are kept for the last 50 versions or 7 days, whichever keeps more; logged updates for 30 days. */
 const SNAPSHOT_VERSIONS_KEPT = 50;
@@ -265,7 +265,7 @@ export async function planRegionSave(tx: Queryable, current: ArtifactRow, ledger
  * checked is still current), so each region merges from its live state, not the head's snapshot: merging from the
  * snapshot would apply the live edits the writer read a second time.
  */
-export async function planRegionMerge(tx: Queryable, current: ArtifactRow, page: { html: string; ledger: HtmlIdentityLedger }, options: { from?: 'saved' | 'live' } = {}): Promise<RegionPlan | Response> {
+export async function planRegionMerge(tx: Queryable, current: ArtifactRow, page: { html: string; ledger: HtmlIdentityLedger }, options: { from?: 'saved' | 'live' } = {}): Promise<RegionPlan | Reply> {
   const rows = await lockedRegionRows(tx, current.id);
   if (!rows.length) return { ...page, commit: async () => ({}) };
   const declared = new Map(editableRegions(page.html).map((region) => [region.id, region]));
@@ -277,13 +277,13 @@ export async function planRegionMerge(tx: Queryable, current: ArtifactRow, page:
     const doc = await liveRegionDoc(tx, current.id, row);
     const saved = options.from === 'live' ? { snapshot: Y.encodeSnapshot(Y.snapshot(doc)) }
       : (await tx.query<{ snapshot: Uint8Array }>('SELECT snapshot FROM region_snapshots WHERE artifact_id = $1 AND region_id = $2 AND version = $3', [current.id, row.region_id, current.version])).rows[0];
-    if (!saved) return json({ error: 'region_snapshot_missing', regionId: row.region_id }, 409);
+    if (!saved) return reply({ error: 'region_snapshot_missing', regionId: row.region_id }, 409);
     let revision: { update: Uint8Array };
     try { revision = applyRegionRevision({ kind: row.kind, live: Y.encodeStateAsUpdate(doc), savedSnapshot: saved.snapshot, html: region.inner }); }
     catch (error) {
       if (!(error instanceof LiveRegionRefusal)) throw error;
-      if (error.code === 'unsupported_content') return json({ error: 'unsupported_content', regionId: row.region_id, details: error.details }, 422);
-      return json({ error: 'region_snapshot_missing', regionId: row.region_id }, 409);
+      if (error.code === 'unsupported_content') return reply({ error: 'unsupported_content', regionId: row.region_id, details: error.details }, 422);
+      return reply({ error: 'region_snapshot_missing', regionId: row.region_id }, 409);
     }
     const updates: Uint8Array[] = [];
     if (!isEmptyUpdate(revision.update)) { Y.applyUpdate(doc, revision.update); updates.push(revision.update); }

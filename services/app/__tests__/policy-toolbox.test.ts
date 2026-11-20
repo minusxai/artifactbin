@@ -30,8 +30,8 @@ const failure = async (run: Promise<unknown>) => { try { await run; } catch (err
 async function fixture() {
   const owner = await mintAccountToken('cli_owner'), viewer = await mintAccountToken('cli_viewer');
   const created = await createArtifactFromBody({ dataset: [{ name: 'seed', created_by: 'nobody' }], title: 'Signups', access: 'readwrite', visibility: 'unlisted' }, identityForUser(owner.userId, owner.id) as AccessActor & { tokenId: string }, SERVER);
-  expect(created.status, await created.clone().text()).toBe(201);
-  const id = (await created.json()).id as string;
+  expect(created.status, JSON.stringify(created.body)).toBe(201);
+  const id = created.body.id as string;
   await seedShares((await getDb()), { artifact_id: id, user_id: viewer.userId, email: viewer.email, role: 'viewer' });
   const dir = await tempDir('policy-cli-',onTestFinished);
   const file = async (name: string, value: unknown) => { const at = path.join(dir, name); await writeFile(at, typeof value === 'string' ? value : JSON.stringify(value)); return at; };
