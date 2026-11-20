@@ -3,7 +3,6 @@ import {
   DATASET_PERMISSION_LIMITS,
   DATASET_PERMISSION_TEMPLATES,
   DATASET_ROLES,
-  datasetRoleAtLeast,
   type DatasetPermissions,
   type DatasetPermissionsShape,
 } from '@artifactbin/contracts';
@@ -71,11 +70,8 @@ const one = (op: string, permission: unknown, role = 'signed_in') =>
   wrap({ table: rows, [`${op}_permissions`]: [{ role, permission }] });
 
 describe('roles', () => {
-  it('orders roles weakest first for the resolver "at least" reading', () => {
+  it('orders roles weakest first', () => {
     expect(DATASET_ROLES).toEqual(['anonymous', 'signed_in', 'viewer', 'editor', 'owner']);
-    expect(datasetRoleAtLeast('viewer', 'signed_in')).toBe(true);
-    expect(datasetRoleAtLeast('signed_in', 'viewer')).toBe(false);
-    expect(datasetRoleAtLeast('owner', 'owner')).toBe(true);
   });
 });
 

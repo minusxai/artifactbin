@@ -10,7 +10,6 @@ export * from './browser';
 export * from './browser-sessions';
 export * from './testusers';
 export * from './test-domain';
-export * from './mx';
 export * from './service-audiences';
 export * from './events';
 export * from './event-feed';
@@ -46,7 +45,6 @@ export * from './membership';
 
 export * from './document-update';
 
-export * from './mutation-operations';
 
 
 // Runtime snapshot parsing is imported directly by comment consumers; re-exporting it here
@@ -61,7 +59,6 @@ export { BASEMAP_PATH } from './basemap';
 export * from './url-space';
 export * from './sign-in-required';
 
-export * from './agent-guidance';
 export { CARD_HEIGHT, CARD_RENDER_GENERATION, CARD_WIDTH } from './og-card';
 export { isStartPlaceholder, START_PLACEHOLDER_MARKUP } from './start-placeholder';
 export type { AnnotationAuthor, AnnotationCommentWire, CommentReactionSummary, CommentReactionInput, CommentReactor } from './annotation-comment';
@@ -73,7 +70,6 @@ export { assetFormatOf, FILE_EXTENSIONS, fileContentType } from './file-types';
 
 export * from './html-page';
 export * from './html-annotation';
-export * from './page-operation';
 
 export type {PortableIdentity} from './portable-document';
 export * from './region-sessions';

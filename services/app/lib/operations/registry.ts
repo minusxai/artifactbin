@@ -17,7 +17,8 @@ import {ACCOUNT_OPERATIONS} from './account';
 import { BROWSER_SESSION_OPERATIONS } from './browser-sessions';
 import { TESTUSER_OPERATIONS } from './testusers';
 import { identityForUser, resolveTestUser, withAccountToken, type AccessActor, type TokenHoldingActor } from '@/lib/accounts';
-import { canEdit, CSV_URL_FIELD_GUIDANCE, OWN_CONNECTIONS_OFF, DATASET_FIELD_GUIDANCE, IMAGE_URL_FIELD_GUIDANCE, PDF_FIELD_GUIDANCE, PDF_URL_FIELD_GUIDANCE, SHEET_URL_FIELD_GUIDANCE, TESTUSER_ERRORS } from '@artifactbin/contracts';
+import { canEdit, OWN_CONNECTIONS_OFF, TESTUSER_ERRORS } from '@artifactbin/contracts';
+import { CSV_URL_FIELD_GUIDANCE, DATASET_FIELD_GUIDANCE, IMAGE_URL_FIELD_GUIDANCE, PDF_FIELD_GUIDANCE, PDF_URL_FIELD_GUIDANCE, SHEET_URL_FIELD_GUIDANCE } from './agent-guidance';
 /** Shared HTTP operations and schemas.
  * Routes translate HTTP; each operation receives an actor and delegates domain behavior.
  */

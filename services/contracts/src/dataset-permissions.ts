@@ -28,14 +28,6 @@ export type DatasetRuleRole = (typeof DATASET_RULE_ROLES)[number];
 /** Admin-equivalent: always full access, so a rule naming them is refused. */
 export const DATASET_ADMIN_ROLES = ['owner', 'editor'] as const;
 
-/** True when `role` is `minimum` or stronger (the resolver `@auth` reading). */
-export function datasetRoleAtLeast(
-  role: DatasetRole,
-  minimum: DatasetRole,
-): boolean {
-  return DATASET_ROLES.indexOf(role) >= DATASET_ROLES.indexOf(minimum);
-}
-
 /**
  * What the dataset's OWN sharing says about one caller: the facts `datasetRoleFrom` decides from. The
  * owning lib module (`lib/dataset-permissions` `datasetRole`) reads them; resolvers call that, never this.
