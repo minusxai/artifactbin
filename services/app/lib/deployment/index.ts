@@ -66,7 +66,7 @@ async function settledAdmission(db:Queryable,identity:{userId:string;emailVerifi
 /**
  * Admission for a request's person. A person a configured trusted issuer just signed in (`trustedIssuer`, set only
  * after its token verified) is admitted as a member once setup is complete, but never joins the default group: their
- * only access is the group the issuer named. Their synthetic email never matches the company's patterns.
+ * only access is the group the issuer named. Their address is never matched against the company's patterns.
  */
 export async function admitDeploymentIdentity(identity:{userId:string;email?:string;emailVerified?:boolean;trustedIssuer?:string}):Promise<boolean> {
  const config=deploymentConfig();if(config.mode==='public')return true;
