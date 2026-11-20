@@ -8,7 +8,7 @@
  * rules. The server stays the validation and admission boundary for every write.
  */
 import { retryingFetch } from '@/lib/http/retry-lazily';
-import { createEffect, createMemo, createSignal, For, Index, on, onCleanup, onMount, Show, type JSX } from 'solid-js';
+import { createEffect, createMemo, createSignal, For, Index, on, onCleanup, onMount, Show, untrack, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import X from 'lucide-solid/icons/x';
 import { DATASET_PERMISSION_OPERATIONS, DATASET_RULE_ROLES, type DatasetBoolExp, type DatasetPermissionEntry, type DatasetPermissionOperation, type DatasetPermissions, type DatasetPermissionsIssue, type DatasetPermissionTemplate, type DatasetPermissionWarning, type DatasetRuleRole, type DatasetTablePermissions } from '@artifactbin/contracts/dataset-permissions';
@@ -69,14 +69,69 @@ export function DatasetPolicies(props: { artifactId: string; expanded?: boolean;
   </div>;
 }
 
+/** The three starting policies the server builds for this dataset (own-rows names its owner column). */
+function TemplatePanel(props: { artifactId: string; columns: string[]; onApply: (policy: DatasetPermissions) => void; onError: (message: string) => void }): JSX.Element {
+  const [ownerColumn, setOwnerColumn] = createSignal('');
+  const [templateBusy, setTemplateBusy] = createSignal(false);
+  const applyTemplate = async (name: DatasetPermissionTemplate) => {
+    setTemplateBusy(true); props.onError('');
+    try {
+      const query = name === 'own-rows' ? `?ownerColumn=${encodeURIComponent(ownerColumn())}` : '';
+      const response = await apiFetch(`${policyUrl(props.artifactId)}/templates${query}`);
+      if (!response.ok) throw new Error('Could not load templates.');
+      const found = ((await response.json()) as { templates: Template[] }).templates.find(t => t.name === name);
+      if (!found?.ok || !found.policy) throw new Error(found?.errors?.map(e => e.message).join('; ') || 'That template does not fit this dataset.');
+      props.onApply(found.policy);
+    } catch (cause) { props.onError(cause instanceof Error ? cause.message : 'Could not apply the template.'); }
+    finally { setTemplateBusy(false); }
+  };
+  return <Panel padding="sm" title="Start from a template" class="space-y-3">
+    <div class="grid gap-3 sm:grid-cols-3">
+      <For each={['read-only', 'own-rows', 'editors-only'] as DatasetPermissionTemplate[]}>{name => <div class="space-y-2">
+        <p class="text-xs text-muted">{TEMPLATE_LABEL[name]}</p>
+        <Show when={name === 'own-rows'}><Field label="Owner column"><Select value={ownerColumn()} placeholder="Choose a column" options={props.columns.map(c => ({ value: c, label: c }))} onChange={setOwnerColumn} /></Field></Show>
+        <Button variant="secondary" size="sm" disabled={templateBusy() || (name === 'own-rows' && !ownerColumn())} aria-label={`Apply ${name} template`} onClick={() => void applyTemplate(name)}>Apply {name}</Button>
+      </div>}</For>
+    </div>
+  </Panel>;
+}
+
+/** The draft as Hasura's version 3 JSON, opened from the policy as it stood; applying a valid document replaces it. */
+function PolicyJson(props: { policy: DatasetPermissions | null; onApply: (policy: DatasetPermissions) => void; onDiscard: () => void }): JSX.Element {
+  const [source, setSource] = createSignal(pretty(untrack(() => props.policy)));
+  const [sourceError, setSourceError] = createSignal('');
+  const applySource = () => {
+    let parsed: unknown;
+    try { parsed = JSON.parse(source()); } catch { setSourceError('This is not valid JSON.'); return; }
+    const shaped = parsed as { version?: unknown; tables?: unknown };
+    if (!shaped || typeof shaped !== 'object' || shaped.version !== 3 || !Array.isArray(shaped.tables)) { setSourceError('Expected a version 3 policy: {"version": 3, "tables": [...]}.'); return; }
+    setSourceError(''); props.onApply(parsed as DatasetPermissions);
+  };
+  return <div class="space-y-2">
+    <Field label="Hasura permissions JSON" hint="The version 3 document: tables[] with select, insert, update and delete permissions. Applying it checks it on the server."><Textarea size="sm" surface="code" rows={22} spellcheck={false} value={source()} onInput={event => setSource(event.currentTarget.value)} /></Field>
+    <Show when={sourceError()}><StatusMessage kind="error">{sourceError()}</StatusMessage></Show>
+    <div class="flex gap-2"><Button onClick={applySource}>Apply JSON</Button><Button variant="secondary" onClick={() => props.onDiscard()}>Discard JSON changes</Button></div>
+  </div>;
+}
+
+/** What the server says the rules mean, table by table, or what must be fixed first. */
+function ReadBack(props: { check: Check; checking: boolean }): JSX.Element {
+  const check = () => props.check, checking = () => props.checking;
+  return <Panel padding="sm" label="Read-back" aria-busy={checking()} class="space-y-2">
+    <h3 class="font-semibold">What these rules mean</h3>
+    <Show when={check().errors.length}><StatusMessage kind="error"><p>Fix these before saving:</p><ul class="mt-1 list-disc pl-5"><For each={check().errors}>{issue => <li><span class="font-mono">{issue.path}</span>: {issue.message}</li>}</For></ul></StatusMessage></Show>
+    <For each={check().tables}>{t => <div><p class="font-medium">{t.title}</p><ul class="list-disc pl-5"><For each={t.lines}>{line => <li>{line}</li>}</For></ul></div>}</For>
+    <Show when={check().warnings.length}><StatusMessage kind="caution"><ul class="list-disc pl-5"><For each={check().warnings}>{w => <li>{w.message}</li>}</For></ul></StatusMessage></Show>
+    <Show when={checking()}><p class="text-xs text-muted">Checking…</p></Show>
+  </Panel>;
+}
+
 function PolicyEditor(props: { artifactId: string; saveTarget?: HTMLElement }): JSX.Element {
   const [loaded, setLoaded] = createSignal<Loaded | null>(null);
   const [draft, setDraft] = createSignal<DatasetPermissions | null>(null);
   const [tableIndex, setTableIndex] = createSignal(0);
   const [cell, setCell] = createSignal<{ role: Role; op: Op } | null>(null);
   const [view, setView] = createSignal<'rules' | 'json'>('rules');
-  const [source, setSource] = createSignal('');
-  const [sourceError, setSourceError] = createSignal('');
   const [check, setCheck] = createSignal<Check>({ tables: [], warnings: [], errors: [] });
   const [checking, setChecking] = createSignal(false);
   const [loadError, setLoadError] = createSignal('');
@@ -84,8 +139,6 @@ function PolicyEditor(props: { artifactId: string; saveTarget?: HTMLElement }): 
   const [conflict, setConflict] = createSignal(false);
   const [notice, setNotice] = createSignal('');
   const [saving, setSaving] = createSignal(false);
-  const [ownerColumn, setOwnerColumn] = createSignal('');
-  const [templateBusy, setTemplateBusy] = createSignal(false);
 
   const accept = (value: Loaded) => {
     setLoaded(value);
@@ -158,30 +211,8 @@ function PolicyEditor(props: { artifactId: string; saveTarget?: HTMLElement }): 
     finally { setSaving(false); }
   };
 
-  const applyTemplate = async (name: DatasetPermissionTemplate) => {
-    setTemplateBusy(true); setError('');
-    try {
-      const query = name === 'own-rows' ? `?ownerColumn=${encodeURIComponent(ownerColumn())}` : '';
-      const response = await apiFetch(`${policyUrl(props.artifactId)}/templates${query}`);
-      if (!response.ok) throw new Error('Could not load templates.');
-      const found = ((await response.json()) as { templates: Template[] }).templates.find(t => t.name === name);
-      if (!found?.ok || !found.policy) throw new Error(found?.errors?.map(e => e.message).join('; ') || 'That template does not fit this dataset.');
-      edit(found.policy); setCell(null); setTableIndex(0);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not apply the template.'); }
-    finally { setTemplateBusy(false); }
-  };
-
-  const showJson = (value: string) => {
-    if (value === 'json') { setSource(pretty(draft())); setSourceError(''); }
-    setView(value as 'rules' | 'json');
-  };
-  const applySource = () => {
-    let parsed: unknown;
-    try { parsed = JSON.parse(source()); } catch { setSourceError('This is not valid JSON.'); return; }
-    const shaped = parsed as { version?: unknown; tables?: unknown };
-    if (!shaped || typeof shaped !== 'object' || shaped.version !== 3 || !Array.isArray(shaped.tables)) { setSourceError('Expected a version 3 policy: {"version": 3, "tables": [...]}.'); return; }
-    setSourceError(''); setCell(null); setTableIndex(0); edit(parsed as DatasetPermissions);
-  };
+  /** A whole new policy (a template's, or JSON applied): from its first table, with no rule open. */
+  const replace = (policy: DatasetPermissions) => { setCell(null); setTableIndex(0); edit(policy); };
 
   const canSave = () => !!loaded() && loaded()!.canSave !== false && dirty() && !saving() && !check().errors.length && !conflict() && view() === 'rules';
   const saveButton = (compact = false) => <Button aria-label="Save access policies" disabled={!canSave()} onClick={() => void save()}>{saving() ? 'Saving…' : compact ? 'Save' : 'Save access policies'}</Button>;
@@ -197,22 +228,10 @@ function PolicyEditor(props: { artifactId: string; saveTarget?: HTMLElement }): 
       </Show>
       <Show when={value().source === 'none'}><StatusMessage kind="notice">No rules are saved yet. These are the defaults: everyone who reaches the dataset reads it, and only the owner and editors change rows.</StatusMessage></Show>
 
-      <Panel padding="sm" title="Start from a template" class="space-y-3">
-        <div class="grid gap-3 sm:grid-cols-3">
-          <For each={['read-only', 'own-rows', 'editors-only'] as DatasetPermissionTemplate[]}>{name => <div class="space-y-2">
-            <p class="text-xs text-muted">{TEMPLATE_LABEL[name]}</p>
-            <Show when={name === 'own-rows'}><Field label="Owner column"><Select value={ownerColumn()} placeholder="Choose a column" options={allColumns().map(c => ({ value: c, label: c }))} onChange={setOwnerColumn} /></Field></Show>
-            <Button variant="secondary" size="sm" disabled={templateBusy() || (name === 'own-rows' && !ownerColumn())} aria-label={`Apply ${name} template`} onClick={() => void applyTemplate(name)}>Apply {name}</Button>
-          </div>}</For>
-        </div>
-      </Panel>
+      <TemplatePanel artifactId={props.artifactId} columns={allColumns()} onApply={replace} onError={setError} />
 
-      <Tabs label="Policy view" variant="segmented" size="sm" value={view()} onChange={showJson} items={[{ value: 'rules', label: 'Rules' }, { value: 'json', label: 'Hasura JSON' }]} />
-      <Show when={view() === 'rules'} fallback={<div class="space-y-2">
-        <Field label="Hasura permissions JSON" hint="The version 3 document: tables[] with select, insert, update and delete permissions. Applying it checks it on the server."><Textarea size="sm" surface="code" rows={22} spellcheck={false} value={source()} onInput={event => setSource(event.currentTarget.value)} /></Field>
-        <Show when={sourceError()}><StatusMessage kind="error">{sourceError()}</StatusMessage></Show>
-        <div class="flex gap-2"><Button onClick={applySource}>Apply JSON</Button><Button variant="secondary" onClick={() => setView('rules')}>Discard JSON changes</Button></div>
-      </div>}>
+      <Tabs label="Policy view" variant="segmented" size="sm" value={view()} onChange={value => setView(value as 'rules' | 'json')} items={[{ value: 'rules', label: 'Rules' }, { value: 'json', label: 'Hasura JSON' }]} />
+      <Show when={view() === 'rules'} fallback={<PolicyJson policy={draft()} onApply={replace} onDiscard={() => setView('rules')} />}>
         <Show when={(draft()?.tables.length ?? 0) > 1}><Field label="Rules for table"><Select value={String(tableIndex())} options={(draft()?.tables ?? []).map((t, i) => ({ value: String(i), label: `${t.table.schema}.${t.table.name}` }))} onChange={next => { setTableIndex(Number(next)); setCell(null); }} /></Field></Show>
         <Show when={table()}>{current => <>
           <Table label={`Permissions for ${current().table.schema}.${current().table.name}`} density="sm">
@@ -234,13 +253,7 @@ function PolicyEditor(props: { artifactId: string; saveTarget?: HTMLElement }): 
         </>}</Show>
       </Show>
 
-      <Panel padding="sm" label="Read-back" aria-busy={checking()} class="space-y-2">
-        <h3 class="font-semibold">What these rules mean</h3>
-        <Show when={check().errors.length}><StatusMessage kind="error"><p>Fix these before saving:</p><ul class="mt-1 list-disc pl-5"><For each={check().errors}>{issue => <li><span class="font-mono">{issue.path}</span>: {issue.message}</li>}</For></ul></StatusMessage></Show>
-        <For each={check().tables}>{t => <div><p class="font-medium">{t.title}</p><ul class="list-disc pl-5"><For each={t.lines}>{line => <li>{line}</li>}</For></ul></div>}</For>
-        <Show when={check().warnings.length}><StatusMessage kind="caution"><ul class="list-disc pl-5"><For each={check().warnings}>{w => <li>{w.message}</li>}</For></ul></StatusMessage></Show>
-        <Show when={checking()}><p class="text-xs text-muted">Checking…</p></Show>
-      </Panel>
+      <ReadBack check={check()} checking={checking()} />
 
       <Show when={conflict()}><StatusMessage kind="error" action={<Button variant="secondary" size="sm" onClick={() => void load()}>Reload latest rules</Button>}>These rules, the dataset or its sharing changed since you opened them. Reload the latest rules and reapply your change.</StatusMessage></Show>
       <Show when={error()}><StatusMessage kind="error">{error()}</StatusMessage></Show>

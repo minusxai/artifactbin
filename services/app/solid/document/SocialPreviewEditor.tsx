@@ -1,5 +1,5 @@
 /* @jsxImportSource solid-js */
-import { createSignal, onCleanup, Show, type JSX } from 'solid-js';
+import { createMemo, createSignal, onCleanup, Show, type JSX } from 'solid-js';
 import RotateCcw from 'lucide-solid/icons/rotate-ccw';
 import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';
@@ -75,7 +75,97 @@ function wheeledCrop(current: SocialPreviewCrop, camera: SocialPreviewCrop, even
   return { ...current, x: current.x + dx, y: current.y + dy };
 }
 
+/** The camera's box over the source: the frame it follows, padded so the frame never touches the canvas edge. */
+const cameraBox = (camera: SocialPreviewCrop) => {
+  const width = camera.width * CAMERA_PADDING, height = socialPreviewCropHeight(camera.width) * CAMERA_PADDING;
+  return { width, height, x: camera.x - (width - camera.width) / 2, y: camera.y - (height - socialPreviewCropHeight(camera.width)) / 2 };
+};
+
 const ARROWS: Record<string, { x: number; y: number }> = { ArrowLeft: { x: -1, y: 0 }, ArrowRight: { x: 1, y: 0 }, ArrowUp: { x: 0, y: -1 }, ArrowDown: { x: 0, y: 1 } };
+
+/** Where an arrow key leaves the crop: moved 10 px (Shift: 1), or when `resize`, left/right resize it 20 px (Shift: 1). Null for any other key. */
+function keyedCrop(crop: SocialPreviewCrop, event: KeyboardEvent, resize: boolean): SocialPreviewCrop | null {
+  if (resize) {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return null;
+    const step = event.shiftKey ? 1 : 20;
+    return { ...crop, width: crop.width + (event.key === 'ArrowRight' ? step : -step) };
+  }
+  const delta = Object.hasOwn(ARROWS, event.key) ? ARROWS[event.key]! : null;
+  if (!delta) return null;
+  const step = event.shiftKey ? 1 : 10;
+  return { ...crop, x: crop.x + delta.x * step, y: crop.y + delta.y * step };
+}
+
+/** The loaded image's height in source pixels (its width is the frame's 1600); the overview is never shorter than a card. */
+function sourceHeightOf(image: HTMLImageElement, uploaded: boolean): number {
+  const density = image.naturalWidth / SOCIAL_PREVIEW_WIDTH;
+  const measured = density > 0 ? image.naturalHeight / density : SOCIAL_PREVIEW_HEIGHT;
+  return uploaded ? measured : Math.max(SOCIAL_PREVIEW_HEIGHT, measured);
+}
+
+/**
+ * The frame's own sharp render, laid over the overview once it has loaded; until then the frame says it is sharpening.
+ * `loaded` is the last render that finished, kept by the editor: the overlay goes while a gesture runs, and an unchanged
+ * frame must not sharpen again when it returns.
+ */
+function SharpFrame(props: { url: string; loaded: string; onLoad: (url: string) => void }): JSX.Element {
+  const ready = () => props.loaded === props.url;
+  return <>
+    <img src={props.url} alt="" aria-hidden="true" draggable={false} onLoad={() => props.onLoad(props.url)}
+      class={`pointer-events-none absolute inset-0 h-full w-full select-none transition-opacity duration-150 motion-reduce:transition-none ${ready() ? 'opacity-100' : 'opacity-0'}`} />
+    <Show when={!ready()}>
+      <span aria-live="polite" class="absolute right-1.5 top-1.5 flex items-center gap-1.5 rounded-chip bg-surface/80 px-2 py-1 font-mono text-micro text-fg">
+        <span aria-hidden="true" class="h-2.5 w-2.5 animate-spin rounded-full border border-edge-bright border-t-accent motion-reduce:animate-none" />
+        sharpening…
+      </span>
+    </Show>
+  </>;
+}
+
+/** The canvas before its image shows: rendering or loading it, or why it could not, with a retry. */
+function CanvasStatus(props: { failed: boolean; uploaded: boolean; onRetry: () => void }): JSX.Element {
+  return <div role="status" aria-live={props.failed ? undefined : 'polite'} class="absolute inset-0 flex min-h-48 flex-col items-center justify-center gap-3 bg-surface px-4 text-center font-mono text-xs text-muted">
+    <Show when={props.failed} fallback={<>
+      <span aria-hidden="true" class="h-5 w-5 animate-spin rounded-full border-2 border-edge-bright border-t-accent motion-reduce:animate-none" />
+      <span>{props.uploaded ? 'loading image…' : 'rendering full-page overview…'}</span>
+      <Show when={!props.uploaded}><span class="text-micro text-faint">Complex artifacts can take a few seconds.</span></Show>
+    </>}>
+      <span>The preview could not be loaded.</span>
+      <Button variant="secondary" size="sm" onClick={() => props.onRetry()}>retry</Button>
+    </Show>
+  </div>;
+}
+
+/** Uploads an image as an artifact of its own; its id, or the server's refusal as the error's message. */
+async function uploadImage(file: File): Promise<string> {
+  const response = await fetch('/api/my/artifacts', { method: 'POST', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file });
+  const body = await response.json();
+  if (!response.ok || typeof body.id !== 'string') throw new Error(body.details?.find((item: { message?: string }) => item.message)?.message ?? body.error ?? 'Could not upload image.');
+  return body.id;
+}
+
+/**
+ * The document's source with this framing: the image it names (or none) and, for an image, its crop; for the
+ * document overview, its crop when `writeDocumentCrop` (it was moved, or the page had no image before). Null resets.
+ */
+function framedSource(source: string, imageId: string | null, crop: SocialPreviewCrop | null, writeDocumentCrop: boolean): string {
+  const next = writeSocialPreviewImage(source, imageId);
+  if (imageId) return writeSocialPreviewImageCrop(next, crop);
+  return writeDocumentCrop ? writeSocialPreviewCrop(next, crop) : next;
+}
+
+/**
+ * What the canvas draws: the document's full-page overview, the image the page already names (through the export,
+ * at this version), or a newly uploaded image (raw). `attempt` busts a failed load.
+ */
+function canvasAddress(id: string, version: number, imageId: string | null, initialImage: string | null, attempt: number): string {
+  if (!imageId) return `/a/${id}/export?mode=preview&format=jpg&v=${version}&pv=${SOCIAL_PREVIEW_OVERVIEW_GENERATION}${attempt ? `&attempt=${attempt}` : ''}`;
+  return imageId === initialImage ? `/a/${id}/export?mode=preview&image=1&v=${version}&attempt=${attempt}` : `/a/${imageId}/raw?attempt=${attempt}`;
+}
+
+/** The overview rendered sharp inside `crop` alone. */
+const focusedAddress = (id: string, version: number, crop: SocialPreviewCrop) =>
+  `/a/${id}/export?mode=preview&format=png&v=${version}&pv=${SOCIAL_PREVIEW_OVERVIEW_GENERATION}&focus=1&crop=${encodeURIComponent(`x=${crop.x};y=${crop.y};width=${crop.width}`)}`;
 
 interface SocialPreviewEditorProps { id: string; source: string; editId: string; version: number; onClose: () => void }
 
@@ -111,35 +201,19 @@ export function SocialPreviewEditor(props: SocialPreviewEditorProps): JSX.Elemen
   let wheelSettle: ReturnType<typeof setTimeout> | undefined;
   onCleanup(() => clearTimeout(wheelSettle));
 
-  const documentPreviewUrl = () => `/a/${props.id}/export?mode=preview&format=jpg&v=${props.version}&pv=${SOCIAL_PREVIEW_OVERVIEW_GENERATION}${previewAttempt() ? `&attempt=${previewAttempt()}` : ''}`;
-  const previewUrl = () => {
-    const id = imageId();
-    if (!id) return documentPreviewUrl();
-    return id === initialImage ? `/a/${props.id}/export?mode=preview&image=1&v=${props.version}&attempt=${previewAttempt()}` : `/a/${id}/raw?attempt=${previewAttempt()}`;
-  };
+  const previewUrl = () => canvasAddress(props.id, props.version, imageId(), initialImage, previewAttempt());
   const boundCrop = (next: SocialPreviewCrop, height: number) => imageId() ? clampImageCrop(next, height) : clampCrop(next, height);
   const height = () => socialPreviewCropHeight(crop().width);
   const magnification = () => Math.round(SOCIAL_PREVIEW_WIDTH / crop().width * 100);
-  const focusedCrop = () => rounded(crop());
-  const focusedUrl = () => `/a/${props.id}/export?mode=preview&format=png&v=${props.version}&pv=${SOCIAL_PREVIEW_OVERVIEW_GENERATION}&focus=1&crop=${encodeURIComponent(`x=${focusedCrop().x};y=${focusedCrop().y};width=${focusedCrop().width}`)}`;
-  const focusedReady = () => loadedFocusedUrl() === focusedUrl();
-  const cameraHeight = () => socialPreviewCropHeight(camera().width) * CAMERA_PADDING;
-  const cameraWidth = () => camera().width * CAMERA_PADDING;
-  const cameraX = () => camera().x - (cameraWidth() - camera().width) / 2;
-  const cameraY = () => camera().y - (cameraHeight() - socialPreviewCropHeight(camera().width)) / 2;
+  const focusedUrl = () => focusedAddress(props.id, props.version, rounded(crop()));
+  const view = createMemo(() => cameraBox(camera()));
 
-  const update = (next: SocialPreviewCrop) => {
-    setCropDirty(true); setReset(false);
-    const clamped = boundCrop(next, sourceHeight());
-    if (imageId()) imageDraft = clamped;
-    setCrop(clamped); setCamera(clamped);
-  };
+  /** The frame moves to `next` (already bounded): the framing is now this person's, not the saved or reset one. */
+  const place = (next: SocialPreviewCrop) => { if (imageId()) imageDraft = next; setCropDirty(true); setReset(false); setCrop(next); };
+  const update = (next: SocialPreviewCrop) => { const clamped = boundCrop(next, sourceHeight()); place(clamped); setCamera(clamped); };
 
   const onImageLoad = (event: Event) => {
-    const image = event.currentTarget as HTMLImageElement;
-    const density = image.naturalWidth / SOCIAL_PREVIEW_WIDTH;
-    const measuredHeight = density > 0 ? image.naturalHeight / density : SOCIAL_PREVIEW_HEIGHT;
-    const nextHeight = imageId() ? measuredHeight : Math.max(SOCIAL_PREVIEW_HEIGHT, measuredHeight);
+    const nextHeight = sourceHeightOf(event.currentTarget as HTMLImageElement, !!imageId());
     setSourceHeight(nextHeight);
     const clamped = imageId() ? clampImageCrop(imageDraft ?? defaultImageCrop(nextHeight), nextHeight) : clampCrop(crop(), nextHeight);
     setCamera(clamped); setCrop(clamped);
@@ -160,8 +234,7 @@ export function SocialPreviewEditor(props: SocialPreviewEditorProps): JSX.Elemen
     if (previewWidth <= 0) return;
     const next = boundCrop(draggedCrop(held, event.clientX, event.clientY, previewWidth), sourceHeight());
     held.latest = next;
-    if (imageId()) imageDraft = next;
-    setCropDirty(true); setReset(false); setCrop(next);
+    place(next);
     if (held.kind === 'move' || next.width >= held.crop.width) setCamera(next);
   };
 
@@ -184,31 +257,23 @@ export function SocialPreviewEditor(props: SocialPreviewEditorProps): JSX.Elemen
     wheelSettle = setTimeout(() => setInteracting(false), WHEEL_SETTLE_MS);
   };
 
-  const moveByKey = (event: KeyboardEvent) => {
-    const step = event.shiftKey ? 1 : 10;
-    const delta = ARROWS[event.key];
-    if (!delta) return;
-    event.preventDefault();
-    update({ ...crop(), x: crop().x + delta.x * step, y: crop().y + delta.y * step });
+  /** The arrow keys on the frame move it; on its corner handle (`resize`) they resize it, and stay the handle's. */
+  const byKey = (resize: boolean) => (event: KeyboardEvent) => {
+    const next = keyedCrop(crop(), event, resize);
+    if (!next) return;
+    event.preventDefault(); if (resize) event.stopPropagation();
+    update(next);
   };
 
-  const resizeByKey = (event: KeyboardEvent) => {
-    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
-    event.preventDefault(); event.stopPropagation();
-    const step = event.shiftKey ? 1 : 20;
-    update({ ...crop(), width: crop().width + (event.key === 'ArrowRight' ? step : -step) });
-  };
+  const showImage = (id: string | null) => { setImageReady(false); setImageFailed(false); setImageId(id); };
 
   const upload = async (file: File) => {
     setUploading(true); setError('');
     try {
-      const response = await fetch('/api/my/artifacts', { method: 'POST', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file });
-      const body = await response.json();
-      if (!response.ok || typeof body.id !== 'string') throw new Error(body.details?.find((item: { message?: string }) => item.message)?.message ?? body.error ?? 'Could not upload image.');
+      const id = await uploadImage(file);
       if (!imageId()) Object.assign(documentDraft, { crop: crop(), reset: reset(), dirty: cropDirty() });
       imageDraft = null;
-      setCropDirty(false); setReset(false); setImageReady(false); setImageFailed(false);
-      setImageId(body.id);
+      setCropDirty(false); setReset(false); showImage(id);
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not upload image. Try again.'); }
     finally { setUploading(false); if (uploadInput) uploadInput.value = ''; }
   };
@@ -216,10 +281,7 @@ export function SocialPreviewEditor(props: SocialPreviewEditorProps): JSX.Elemen
   const save = async () => {
     if (saving() || uploading()) return;
     setSaving(true); setError('');
-    const persisted = reset() ? null : rounded(boundCrop(crop(), sourceHeight()));
-    let nextSource = writeSocialPreviewImage(base().source, imageId());
-    if (imageId()) nextSource = writeSocialPreviewImageCrop(nextSource, persisted);
-    else if (cropDirty() || !initialImage) nextSource = writeSocialPreviewCrop(nextSource, persisted);
+    const nextSource = framedSource(base().source, imageId(), reset() ? null : rounded(boundCrop(crop(), sourceHeight())), cropDirty() || !initialImage);
     try {
       const response = await writeBrowserArtifact(props.id, { source: nextSource }, base().editId);
       const body = await response.json().catch(() => ({})) as SaveResponse;
@@ -235,15 +297,17 @@ export function SocialPreviewEditor(props: SocialPreviewEditorProps): JSX.Elemen
     finally { setSaving(false); }
   };
 
+  const resetCrop = () => { setCropDirty(true); imageDraft = null; const next = imageId() ? defaultImageCrop(sourceHeight()) : DEFAULT_SOCIAL_PREVIEW_CROP; setCrop(next); setCamera(next); setReset(true); setError(''); };
+
   const useDocumentFraming = () => {
-    setImageId(null); setImageReady(false); setImageFailed(false);
+    showImage(null);
     setCrop(documentDraft.crop); setCamera(documentDraft.crop); setReset(documentDraft.reset); setCropDirty(documentDraft.dirty);
   };
 
   return <Dialog title="Social preview" size="xl" closeLabel="Close social preview" description="Drag or scroll to pan. Pinch or drag the corner to resize the locked 40:21 frame." onClose={props.onClose} initialFocus="[data-cancel-preview]"
     footer={<div class="flex w-full items-center justify-between gap-3">
       <Button variant="ghost" aria-label="Reset social preview" disabled={!imageReady() || uploading() || saving()}
-        onClick={() => { setCropDirty(true); imageDraft = null; const next = imageId() ? defaultImageCrop(sourceHeight()) : DEFAULT_SOCIAL_PREVIEW_CROP; setCrop(next); setCamera(next); setReset(true); setError(''); }}>
+        onClick={resetCrop}>
         <RotateCcw size={13} /> reset
       </Button>
       <div class="flex gap-2">
@@ -261,41 +325,20 @@ export function SocialPreviewEditor(props: SocialPreviewEditorProps): JSX.Elemen
         <img src={previewUrl()} alt={imageId() ? 'Uploaded social preview' : 'Artifact preview'} draggable={false}
           onLoad={onImageLoad} onError={() => { setImageFailed(true); setImageReady(false); }}
           class={`pointer-events-none absolute h-auto max-w-none select-none ease-out motion-reduce:transition-none ${interacting() ? '' : 'transition-[left,top,width] duration-200'}`}
-          style={{ width: `${SOCIAL_PREVIEW_WIDTH / cameraWidth() * 100}%`, left: `${-cameraX() / cameraWidth() * 100}%`, top: `${-cameraY() / cameraHeight() * 100}%` }} />
-        <Show when={!imageReady() && !imageFailed()}>
-          <div role="status" aria-live="polite" class="absolute inset-0 flex min-h-48 flex-col items-center justify-center gap-3 bg-surface px-4 text-center font-mono text-xs text-muted">
-            <span aria-hidden="true" class="h-5 w-5 animate-spin rounded-full border-2 border-edge-bright border-t-accent motion-reduce:animate-none" />
-            <span>{imageId() ? 'loading image…' : 'rendering full-page overview…'}</span>
-            <Show when={!imageId()}><span class="text-micro text-faint">Complex artifacts can take a few seconds.</span></Show>
-          </div>
-        </Show>
-        <Show when={imageFailed()}>
-          <div role="status" class="absolute inset-0 flex min-h-48 flex-col items-center justify-center gap-3 bg-surface px-4 text-center font-mono text-xs text-muted">
-            <span>The preview could not be loaded.</span>
-            <Button variant="secondary" size="sm" onClick={() => { setImageFailed(false); setPreviewAttempt(value => value + 1); }}>retry</Button>
-          </div>
-        </Show>
+          style={{ width: `${SOCIAL_PREVIEW_WIDTH / view().width * 100}%`, left: `${-view().x / view().width * 100}%`, top: `${-view().y / view().height * 100}%` }} />
+        <Show when={!imageReady()}><CanvasStatus failed={imageFailed()} uploaded={!!imageId()} onRetry={() => { setImageFailed(false); setPreviewAttempt(value => value + 1); }} /></Show>
         <Show when={imageReady()}>
           <div ref={frame} role="group" tabIndex={0} aria-label="Move social preview crop" aria-valuetext={`x ${Math.round(crop().x)}, y ${Math.round(crop().y)}, width ${Math.round(crop().width)}`}
-            onKeyDown={moveByKey} onPointerDown={begin('move')} onPointerMove={move} onPointerUp={end} onPointerCancel={end}
+            onKeyDown={byKey(false)} onPointerDown={begin('move')} onPointerMove={move} onPointerUp={end} onPointerCancel={end}
             class={`absolute cursor-move border-2 border-accent shadow-[0_0_0_9999px_rgba(0,0,0,0.55)] outline-none ease-out focus:ring-2 focus:ring-accent focus:ring-offset-2 motion-reduce:transition-none ${interacting() ? '' : 'transition-[left,top,width,height] duration-200'}`}
-            style={{ left: `${(crop().x - cameraX()) / cameraWidth() * 100}%`, top: `${(crop().y - cameraY()) / cameraHeight() * 100}%`, width: `${crop().width / cameraWidth() * 100}%`, height: `${height() / cameraHeight() * 100}%`, 'touch-action': 'none' }}>
-            <Show when={!imageId() && !interacting()}>
-              <img src={focusedUrl()} alt="" aria-hidden="true" draggable={false} onLoad={() => setLoadedFocusedUrl(focusedUrl())}
-                class={`pointer-events-none absolute inset-0 h-full w-full select-none transition-opacity duration-150 motion-reduce:transition-none ${focusedReady() ? 'opacity-100' : 'opacity-0'}`} />
-              <Show when={!focusedReady()}>
-                <span aria-live="polite" class="absolute right-1.5 top-1.5 flex items-center gap-1.5 rounded-chip bg-surface/80 px-2 py-1 font-mono text-micro text-fg">
-                  <span aria-hidden="true" class="h-2.5 w-2.5 animate-spin rounded-full border border-edge-bright border-t-accent motion-reduce:animate-none" />
-                  sharpening…
-                </span>
-              </Show>
-            </Show>
+            style={{ left: `${(crop().x - view().x) / view().width * 100}%`, top: `${(crop().y - view().y) / view().height * 100}%`, width: `${crop().width / view().width * 100}%`, height: `${height() / view().height * 100}%`, 'touch-action': 'none' }}>
+            <Show when={!imageId() && !interacting()}><SharpFrame url={focusedUrl()} loaded={loadedFocusedUrl()} onLoad={setLoadedFocusedUrl} /></Show>
             <span class="absolute left-1 top-1 bg-accent px-1.5 py-1 font-mono text-micro text-action-ink">1600 × 840 · {magnification()}%</span>
             <div role="slider" tabIndex={0} aria-label="Resize social preview crop"
               aria-valuemin={imageId() ? Math.min(SOCIAL_PREVIEW_MIN_CROP_WIDTH, imageCropMaxWidth(sourceHeight())) : SOCIAL_PREVIEW_MIN_CROP_WIDTH}
               aria-valuemax={imageId() ? imageCropMaxWidth(sourceHeight()) : SOCIAL_PREVIEW_WIDTH}
               aria-valuenow={Math.round(crop().width)}
-              onKeyDown={resizeByKey} onPointerDown={begin('resize')} onPointerMove={move} onPointerUp={end} onPointerCancel={end}
+              onKeyDown={byKey(true)} onPointerDown={begin('resize')} onPointerMove={move} onPointerUp={end} onPointerCancel={end}
               class="absolute -bottom-2 -right-2 h-5 w-5 cursor-se-resize rounded-full border-2 border-surface bg-accent shadow outline-none focus:ring-2 focus:ring-accent" style={{ 'touch-action': 'none' }} />
           </div>
         </Show>

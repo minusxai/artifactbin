@@ -64,8 +64,67 @@ const WRITE_OPTIONS = [
   { value: 'readwrite', label: 'read & write', ariaLabel: 'Make read & write', tooltip: 'you and dataset editors may add, change and remove rows' },
 ];
 
-/** The document sharing door owns dialog state and sends one field per PATCH-shaped PUT. */
-export function DocumentSharing(props: {
+/** A role picker, loaded with the open panel (Select is lazy here); `slot` marks it a tooltip's trigger. */
+function RoleSelect(props: { label: string; value: ShareRole; options: typeof ROLE_OPTIONS; slot?: string; onChange: (role: ShareRole) => void }): JSX.Element {
+  return <span class="w-32 shrink-0" data-slot={props.slot}><Suspense fallback={<span class="block h-control-sm" />}><Select size="sm" ariaLabel={props.label} value={props.value} options={props.options} onChange={role => props.onChange(role as ShareRole)} /></Suspense></span>;
+}
+
+/** The document's social card as it is now drawn, loading again with each new version, and the way to edit it. */
+function SocialPreviewCard(props: { id: string; version?: number; onEdit: () => void }): JSX.Element {
+  const [status, setStatus] = createSignal<'loading' | 'ready' | 'error'>('loading');
+  createEffect(() => { void props.version; setStatus('loading'); });
+  /** The card's address, built only from an id of the artifact id's own allowlisted shape. */
+  const src = () => ARTIFACT_ID_PATTERN.test(props.id) ? `/a/${props.id}/export?format=jpg&mode=card&v=${Number(props.version ?? 0)}&r=${CARD_RENDER_GENERATION}` : undefined;
+  return <figure class="mx-auto mb-5 w-full max-w-xs"><figcaption class="mb-2 text-center text-2xs text-muted">Social preview</figcaption>
+    <div class="relative aspect-[40/21] w-full overflow-hidden rounded-md border border-edge bg-raised">
+      <Show when={status() !== 'ready'}><div role="status" class="absolute inset-0 flex items-center justify-center text-2xs text-muted">{status() === 'loading' ? 'Loading preview…' : 'Preview unavailable'}</div></Show>
+      <Show when={status() !== 'error'}><img alt="Current social preview" src={src()}
+        onLoad={() => setStatus('ready')} onError={() => setStatus('error')} class={`h-full w-full object-contain transition-opacity duration-200 motion-reduce:transition-none ${status() === 'ready' ? 'opacity-100' : 'opacity-0'}`} /></Show>
+      <Tooltip content="Edit thumbnail"><Button variant="secondary" size="sm" icon aria-label="Edit social preview" onClick={() => props.onEdit()}
+        class="absolute right-2 top-2"><PenLine size={15} /></Button></Tooltip>
+    </div>
+  </figure>;
+}
+
+/**
+ * A dataset's writes: whether documents may change it, and which do. Closing writes never touches the rows, but it
+ * stops the documents that write here: say which first, and keep the dialog while it saves or when it fails.
+ */
+function DatasetWrites(props: { state: SharingState; put: (patch: SharingPatch) => Promise<boolean> }): JSX.Element {
+  const current = () => props.state;
+  const writable = () => props.state.access === 'readwrite';
+  const [confirmReadOnly, setConfirmReadOnly] = createSignal(false);
+  const [readOnlyBusy, setReadOnlyBusy] = createSignal(false);
+  const [readOnlyError, setReadOnlyError] = createSignal<string | null>(null);
+  const setAccess = (next: DatasetAccess) => {
+    if (next === 'read' && (props.state.writtenBy?.length ?? 0) > 0) { setReadOnlyError(null); setConfirmReadOnly(true); return; }
+    void props.put({ access: next });
+  };
+  const confirmMakeReadOnly = async () => {
+    setReadOnlyBusy(true);
+    const done = await props.put({ access: 'read' });
+    setReadOnlyBusy(false);
+    if (done) setConfirmReadOnly(false);
+    else setReadOnlyError('Could not update sharing. Try again.');
+  };
+  return <div class="mt-5 border-t border-edge pt-4">
+    <p class="mb-1 flex items-center justify-between text-faint"><span class="uppercase tracking-wider">writes</span><PenLine size={11} /></p>
+    <ToggleGroup label="Dataset writes" fill value={current().access ?? 'read'} options={WRITE_OPTIONS} onChange={value => setAccess(value as DatasetAccess)} />
+    <p class="mt-2 leading-relaxed text-muted">{writable()
+      ? 'Sharing controls who can view and manage this dataset. Data rules below control which actions everyone with view access may run. Without a data policy, only dataset editors may write rows.'
+      : 'Documents can only read this dataset. A <Mutation> naming it is refused when you publish.'}</p>
+    <Show when={current().writtenBy?.length}><div class="mt-2"><p class="mb-1 uppercase tracking-wider text-faint">written by</p>
+      <For each={current().writtenBy}>{writer => <div class="flex items-center justify-between py-0.5"><span class="truncate">{writer.title ?? writer.id}</span><span class="ml-2 shrink-0 text-faint">{writer.mutations.join(', ')}</span></div>}</For>
+    </div></Show>
+    <Show when={confirmReadOnly()}>
+      <ConfirmDialog title="Make this dataset read-only?" action="Make read-only" confirmLabel="Confirm read-only" cancelLabel="Keep writable" danger busy={readOnlyBusy()} error={readOnlyError()}
+        description={`${current().writtenBy?.length ?? 0} document${current().writtenBy?.length === 1 ? '' : 's'} write${current().writtenBy?.length === 1 ? 's' : ''} here. Their buttons will stop working until you turn writes back on. The rows stay.`}
+        onConfirm={() => void confirmMakeReadOnly()} onCancel={() => setConfirmReadOnly(false)} />
+    </Show>
+  </div>;
+}
+
+interface DocumentSharingProps {
   id: string; title: string; owner: boolean; editable?: boolean; url?: string;
   variant?: 'chip' | 'menu' | 'dialog' | 'embedded'; onClose?: () => void;
   onSharingChange?: (verdict: SharingVerdict) => void;
@@ -82,7 +141,10 @@ export function DocumentSharing(props: {
   refs?: ReadonlyArray<{ id: string; kind: string }>;
   /** A page: its queries on live data an Admin of its group may approve (./QueryApprovals, asked for and drawn only when the sharing answer says the viewer is one). */
   queryApprovals?: boolean;
-}): JSX.Element {
+}
+
+/** The document sharing door owns dialog state and sends one field per PATCH-shaped PUT. */
+export function DocumentSharing(props: DocumentSharingProps): JSX.Element {
   const canManage = () => (props.owner || Boolean(props.editable)) && state()?.canManageSharing !== false;
   const [open, setOpen] = createSignal(props.variant === 'dialog');
   const [state, setState] = createSignal<SharingState | null>(null);
@@ -92,7 +154,6 @@ export function DocumentSharing(props: {
   const [email, setEmail] = createSignal('');
   const [error, setError] = createSignal('');
   const [copied, setCopied] = createSignal(false);
-  const [previewStatus, setPreviewStatus] = createSignal<'loading' | 'ready' | 'error'>('loading');
   createEffect(() => {
     if (!copied()) return;
     const timer = setTimeout(() => setCopied(false), 1500);
@@ -122,22 +183,6 @@ export function DocumentSharing(props: {
   };
   // A dataset says who may write it.
   const showWrites = () => props.format === 'dataset' && !!state();
-  const writable = () => state()?.access === 'readwrite';
-  const [confirmReadOnly, setConfirmReadOnly] = createSignal(false);
-  const [readOnlyBusy, setReadOnlyBusy] = createSignal(false);
-  const [readOnlyError, setReadOnlyError] = createSignal<string | null>(null);
-  // Closing writes never touches the rows, but it stops the documents that write here: say which first.
-  const setAccess = (next: DatasetAccess) => {
-    if (next === 'read' && (state()?.writtenBy?.length ?? 0) > 0) { setReadOnlyError(null); setConfirmReadOnly(true); return; }
-    void put({ access: next });
-  };
-  const confirmMakeReadOnly = async () => {
-    setReadOnlyBusy(true);
-    const done = await put({ access: 'read' });
-    setReadOnlyBusy(false);
-    if (done) setConfirmReadOnly(false);
-    else setReadOnlyError('Could not update sharing. Try again.');
-  };
   onMount(() => {
     if (!canManage()) return;
     const controller = new AbortController();
@@ -151,9 +196,6 @@ export function DocumentSharing(props: {
     const current = state();
     if (current) props.onSharingChange?.({ visibility: current.visibility, hasInvitedUsers: current.shares.length > 0 });
   });
-  createEffect(() => { void props.version; setPreviewStatus('loading'); });
-  /** The card's address, built only from an id of the artifact id's own allowlisted shape. */
-  const previewSrc = () => ARTIFACT_ID_PATTERN.test(props.id) ? `/a/${props.id}/export?format=jpg&mode=card&v=${Number(props.version ?? 0)}&r=${CARD_RENDER_GENERATION}` : undefined;
   const datasetRefs = () => (props.refs ?? []).filter(ref => ref.kind === 'dataset');
   const body = () => <>
     <Button variant="secondary" size="sm" aria-label="Copy link" onClick={copy} class="mb-4 w-full">
@@ -167,15 +209,7 @@ export function DocumentSharing(props: {
         </li>}</For></ul>
       </aside>
     </Show>
-    <Show when={props.onSocialPreview}><figure class="mx-auto mb-5 w-full max-w-xs"><figcaption class="mb-2 text-center text-2xs text-muted">Social preview</figcaption>
-      <div class="relative aspect-[40/21] w-full overflow-hidden rounded-md border border-edge bg-raised">
-        <Show when={previewStatus() !== 'ready'}><div role="status" class="absolute inset-0 flex items-center justify-center text-2xs text-muted">{previewStatus() === 'loading' ? 'Loading preview…' : 'Preview unavailable'}</div></Show>
-        <Show when={previewStatus() !== 'error'}><img alt="Current social preview" src={previewSrc()}
-          onLoad={() => setPreviewStatus('ready')} onError={() => setPreviewStatus('error')} class={`h-full w-full object-contain transition-opacity duration-200 motion-reduce:transition-none ${previewStatus() === 'ready' ? 'opacity-100' : 'opacity-0'}`} /></Show>
-        <Tooltip content="Edit thumbnail"><Button variant="secondary" size="sm" icon aria-label="Edit social preview" onClick={() => { close(); props.onSocialPreview?.(); }}
-          class="absolute right-2 top-2"><PenLine size={15} /></Button></Tooltip>
-      </div>
-    </figure></Show>
+    <Show when={props.onSocialPreview}><SocialPreviewCard id={props.id} version={props.version} onEdit={() => { close(); props.onSocialPreview?.(); }} /></Show>
     <Show when={canManage() && !state() && !error()}><StatusMessage kind="loading">loading…</StatusMessage></Show>
     <Show when={error()}><StatusMessage kind="error">{error()}</StatusMessage></Show>
     <Show when={canManage() && state()}>{current => <>
@@ -183,34 +217,18 @@ export function DocumentSharing(props: {
       <Show when={!canPublic()}><p aria-label="Public visibility policy" class="mt-2 leading-relaxed text-muted">{PUBLIC_DISABLED}</p></Show>
       <Show when={current().visibility !== 'private'}>
         <label class="mt-2 flex items-center justify-between gap-2 text-muted"><span>anyone with the link</span>
-          <span class="w-32 shrink-0"><Suspense fallback={<span class="block h-control-sm" />}><Select size="sm" ariaLabel="Link role" value={current().linkRole ?? 'viewer'} options={props.live ? LIVE_LINK_ROLE_OPTIONS : ROLE_OPTIONS} onChange={role => void put({ linkRole: role as ShareRole })} /></Suspense></span>
+          <RoleSelect label="Link role" value={current().linkRole ?? 'viewer'} options={props.live ? LIVE_LINK_ROLE_OPTIONS : ROLE_OPTIONS} onChange={role => void put({ linkRole: role })} />
         </label>
       </Show>
-      <Show when={showWrites()}>
-        <div class="mt-5 border-t border-edge pt-4">
-          <p class="mb-1 flex items-center justify-between text-faint"><span class="uppercase tracking-wider">writes</span><PenLine size={11} /></p>
-          <ToggleGroup label="Dataset writes" fill value={current().access ?? 'read'} options={WRITE_OPTIONS} onChange={value => setAccess(value as DatasetAccess)} />
-          <p class="mt-2 leading-relaxed text-muted">{writable()
-            ? 'Sharing controls who can view and manage this dataset. Data rules below control which actions everyone with view access may run. Without a data policy, only dataset editors may write rows.'
-            : 'Documents can only read this dataset. A <Mutation> naming it is refused when you publish.'}</p>
-          <Show when={current().writtenBy?.length}><div class="mt-2"><p class="mb-1 uppercase tracking-wider text-faint">written by</p>
-            <For each={current().writtenBy}>{writer => <div class="flex items-center justify-between py-0.5"><span class="truncate">{writer.title ?? writer.id}</span><span class="ml-2 shrink-0 text-faint">{writer.mutations.join(', ')}</span></div>}</For>
-          </div></Show>
-          <Show when={confirmReadOnly()}>
-            <ConfirmDialog title="Make this dataset read-only?" action="Make read-only" confirmLabel="Confirm read-only" cancelLabel="Keep writable" danger busy={readOnlyBusy()} error={readOnlyError()}
-              description={`${current().writtenBy?.length ?? 0} document${current().writtenBy?.length === 1 ? '' : 's'} write${current().writtenBy?.length === 1 ? 's' : ''} here. Their buttons will stop working until you turn writes back on. The rows stay.`}
-              onConfirm={() => void confirmMakeReadOnly()} onCancel={() => setConfirmReadOnly(false)} />
-          </Show>
-        </div>
-      </Show>
+      <Show when={showWrites()}><DatasetWrites state={current()} put={put} /></Show>
       <div class="mt-5 border-t border-edge pt-4">
         <p class="mb-1 uppercase tracking-wider text-faint">people</p>
         <For each={current().shares}>{person => <div class="flex items-center justify-between gap-2 py-0.5">
           <span class="min-w-0 truncate">{person.email}</span>
           <span class="flex shrink-0 items-center gap-1">
             <Tooltip content="already viewable by link" disabled={current().visibility === 'private' || person.role === 'editor'}>
-              <span class="w-32 shrink-0" data-slot={current().visibility !== 'private' && person.role !== 'editor' ? 'tooltip-trigger' : undefined}><Suspense fallback={<span class="block h-control-sm" />}><Select size="sm" ariaLabel={`Role for ${person.email}`} value={person.role} options={ROLE_OPTIONS}
-                onChange={role => void put({ shares: current().shares.map(entry => entry.email === person.email ? { ...entry, role: role as ShareRole } : entry) })} /></Suspense></span>
+              <RoleSelect label={`Role for ${person.email}`} value={person.role} options={ROLE_OPTIONS} slot={current().visibility !== 'private' && person.role !== 'editor' ? 'tooltip-trigger' : undefined}
+                onChange={role => void put({ shares: current().shares.map(entry => entry.email === person.email ? { ...entry, role } : entry) })} />
             </Tooltip>
             <Button variant="ghost" size="sm" icon aria-label={`Remove ${person.email}`} onClick={() => void put({ shares: current().shares.filter(entry => entry.email !== person.email) })}><X size={11} /></Button>
           </span>
