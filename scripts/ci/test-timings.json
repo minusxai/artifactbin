@@ -948,7 +948,6 @@
    "services/app/solid/__tests__/shared-jsdom-lifecycle.test.tsx": 37,
    "services/app/solid/account/__tests__/default-connection-panel.test.tsx": 34,
    "services/app/solid/components/__tests__/agent-link-destination.test.tsx": 43,
-   "services/app/solid/components/__tests__/artifact-controls.test.tsx": 49,
    "services/app/solid/components/__tests__/browse-extras.test.tsx": 362,
    "services/app/solid/components/__tests__/dashboard.test.tsx": 84,
    "services/app/solid/components/__tests__/docs-human.test.tsx": 50,
@@ -1049,7 +1048,6 @@
    "services/app/lib/html-bridge/__tests__/range.ui.test.ts": 53,
    "services/app/lib/html-bridge/__tests__/reader.ui.test.ts": 27,
    "services/app/lib/html-bridge/__tests__/selection.ui.test.ts": 56,
-   "services/app/lib/html-reader/__tests__/anchor-restore.ui.test.ts": 24,
    "services/app/lib/html-reader/__tests__/anchor.ui.test.ts": 46,
    "services/app/lib/html-reader/__tests__/frame-bridge-parent.ui.test.ts": 53,
    "services/app/lib/html-runtime/__tests__/bridge.ui.test.ts": 1060,
@@ -1109,8 +1107,7 @@
    "services/app/web/__tests__/bootstrap-payload.ui.test.ts": 30,
    "services/app/web/__tests__/heal-address.ui.test.ts": 51,
    "services/app/web/__tests__/page-data-store.ui.test.ts": 22,
-   "services/app/web/__tests__/page-preload.ui.test.ts": 30,
-   "services/app/web/__tests__/restore-reader.ui.test.ts": 16
+   "services/app/web/__tests__/page-preload.ui.test.ts": 30
   },
   "integration": {
    "scripts/__tests__/app-only-auth.test.mjs": 12045,

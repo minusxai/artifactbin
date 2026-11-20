@@ -7,6 +7,7 @@
  */
 import { createResource, createSignal, For, Show, type JSX } from 'solid-js';
 import { OWN_CONNECTIONS_OFF, type ConnectorSchema } from '@artifactbin/contracts/connectors';
+import { isDatasetAdmin, type DatasetRole } from '@artifactbin/contracts/dataset-permissions';
 import { apiRequest } from '../lib/api';
 import { Checkbox } from '../ui/Checkbox';
 import { Panel } from '../ui/Panel';
@@ -14,7 +15,7 @@ import { StatusMessage } from '../ui/StatusMessage';
 import { VIEWER_NOTE, type ConnectorList } from './LiveDatasetForm';
 
 type Details = {
-  role: string; declaredQueryRoles: string[];
+  role: DatasetRole; declaredQueryRoles: string[];
   connection: { connector: string; label: string; fields: Record<string, string | number> };
   pages: Array<{ id: string; title: string | null; queries: string[] }>;
 };
@@ -39,7 +40,7 @@ export function LiveDatasetView(props: { id: string }): JSX.Element {
     catch (error) { setRuleError(error instanceof Error ? error.message : 'Could not save who may run declared queries.'); }
     finally { setSaving(false); }
   };
-  const admin = () => details()?.role === 'owner' || details()?.role === 'editor';
+  const admin = () => isDatasetAdmin(details()?.role);
   const [own] = createResource(async () => (await apiRequest<ConnectorList>('/api/connections')).ownConnections !== false);
   const [schema] = createResource(() => (admin() && own() ? props.id : null), (id) => apiRequest<ConnectorSchema>(`/api/artifacts/${encodeURIComponent(id)}/connection/schema`));
   return <div class="mt-4 space-y-4 font-sans">

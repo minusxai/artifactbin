@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { applyAnchor, currentAnchor } from '@/lib/html-reader/anchor';
+import { currentAnchor } from '@/lib/html-reader/anchor';
 
 let scroll = 0;
 function mount(heights: number[], hidden: number[] = []) {
@@ -35,19 +35,3 @@ describe('currentAnchor', () => {
   });
 });
 
-describe('applyAnchor', () => {
-  it('scrolls back to the anchored place and answers the target it asked for', () => {
-    mount([100, 100, 100, 100]);
-    expect(applyAnchor(window, { path: '0.2', fraction: 0.25 })).toBe(225);
-    expect(scroll).toBe(225);
-  });
-
-  it('leaves the position alone when the anchored element is gone, and clamps a bad fraction', () => {
-    mount([100, 100]);
-    scroll = 40;
-    expect(applyAnchor(window, { path: '9.9', fraction: 0 })).toBeNull();
-    expect(window.scrollTo).not.toHaveBeenCalled();
-    expect(applyAnchor(window, { path: '0.1', fraction: 7 })).toBe(200);
-    expect(applyAnchor(window, { path: '0.1', fraction: Number.NaN })).toBe(100);
-  });
-});

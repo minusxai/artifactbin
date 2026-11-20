@@ -92,15 +92,5 @@ export function anchorAt(
   return { path: best.path, fraction: clamp01(fraction) };
 }
 
-/**
- * Where to scroll the other rendering so the reader is looking at the same
- * thing. Null when this document has no such element any more — the caller
- * keeps the position it has rather than jumping somewhere arbitrary.
- */
-export function scrollTargetFor(candidates: AnchorCandidate[], anchor: ScrollAnchor): number | null {
-  const found = candidates.find((c) => c.path === anchor.path);
-  if (!found) return null;
-  return Math.max(0, found.top + clamp01(anchor.fraction) * Math.max(found.height, 1));
-}
 
 const clamp01 = (n: number): number => (Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0);

@@ -13,7 +13,6 @@ import { githubStarMarkup, wireGithubStar } from '@/solid/components/github-star
 import { useSession } from '../lib/session';
 import { Tooltip } from '../ui/Tooltip';
 import { Button } from '../ui/Button';
-import { Dialog } from '../ui/Dialog';
 import { useOptionalInbox } from '../lib/notifications';
 import { Avatar } from '../ui/Avatar';
 import { chooseTheme } from '@/lib/html-reader/reader-mode';
@@ -25,14 +24,6 @@ import { createIsPhoneViewport } from '../ui/MobileSheet';
 type Panels = typeof import('./PageChromePanels');
 const loadPanels = () => import('./PageChromePanels');
 
-/** Artifact controls from the editor seam; the named export below owns app pages. */
-export default function ArtifactPageChrome(props: { authed: boolean; anon: boolean; title: string; label: string; children: JSX.Element }): JSX.Element {
-  const [open, setOpen] = createSignal(false);
-  return <aside class="fixed right-4 top-4 z-40">
-    <Button variant="secondary" size="sm" aria-label="Open artifact controls" aria-expanded={open()} onClick={() => setOpen(value => !value)}>{props.title || 'Artifact'} ···</Button>
-    <Show when={open()}><Dialog title={props.label} onClose={() => setOpen(false)} footer={<Button variant="secondary" aria-label={`Dismiss ${props.label.toLowerCase()}`} onClick={() => setOpen(false)}>Close</Button>}>{props.children}</Dialog></Show>
-  </aside>;
-}
 
 export type Panel = 'menu' | 'controls' | 'notifications' | null;
 /** A route may suppress the app bar while it owns the whole viewport (the 404 page). */
