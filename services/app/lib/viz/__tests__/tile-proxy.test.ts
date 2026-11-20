@@ -1,14 +1,11 @@
 /**
  * The same-origin map-tile proxy (lib/tiles + app/tiles): a served document may
- * only load images from 'self' (markup CSP), so the point-map basemap templates
- * must be root-relative proxied paths, the route must answer ONLY the
- * allowlisted tile shape (never an open proxy), and the theme swap must treat
- * the retired absolute Carto URLs as defaults — detached specs stored before
- * the proxy existed carry them baked in.
+ * only load images from 'self' (markup CSP), so a basemap fetches tiles from
+ * root-relative proxied paths, and the route must answer ONLY the allowlisted
+ * tile shape (never an open proxy).
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { TILE_UPSTREAM_ORIGIN, tileUpstreamUrl, tileUrlTemplate } from '@/lib/viz/tiles';
-import { POINT_MAP_DARK_TILE_URL, POINT_MAP_DEFAULT_TILE_URL, themeTileUrl } from '@/lib/viz/viz-templates';
+import { TILE_UPSTREAM_ORIGIN, tileUpstreamUrl } from '@/lib/viz/tiles';
 import { GET as serveTile } from '@/app/tiles/[...tile]/route';
 import { request } from '@/__tests__/harness';
 
@@ -16,37 +13,6 @@ const routeCtx = (tile: string[]) => ({ params: Promise.resolve({ tile }) });
 const REQ = request('/tiles/dark_all/3/2/3.png');
 
 afterEach(() => vi.unstubAllGlobals());
-
-describe('tile templates', () => {
-  it('point-map defaults are root-relative proxied paths, not cartocdn', () => {
-    expect(POINT_MAP_DEFAULT_TILE_URL).toBe('/tiles/light_all/{z}/{x}/{y}.png');
-    expect(POINT_MAP_DARK_TILE_URL).toBe('/tiles/dark_all/{z}/{x}/{y}.png');
-  });
-
-  it('the recipe constants and the proxy module agree on the path shape', () => {
-    expect(tileUrlTemplate('light_all')).toBe(POINT_MAP_DEFAULT_TILE_URL);
-    expect(tileUrlTemplate('dark_all')).toBe(POINT_MAP_DARK_TILE_URL);
-  });
-});
-
-describe('themeTileUrl (the theme swap, pure)', () => {
-  it('swaps a default to the mode-matching default', () => {
-    expect(themeTileUrl(POINT_MAP_DEFAULT_TILE_URL, 'dark')).toBe(POINT_MAP_DARK_TILE_URL);
-    expect(themeTileUrl(POINT_MAP_DARK_TILE_URL, 'light')).toBe(POINT_MAP_DEFAULT_TILE_URL);
-  });
-
-  it('treats the retired absolute Carto URLs as defaults (stored detached specs)', () => {
-    expect(themeTileUrl('https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', 'light')).toBe(POINT_MAP_DEFAULT_TILE_URL);
-    expect(themeTileUrl('https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png', 'light')).toBe(POINT_MAP_DEFAULT_TILE_URL);
-    expect(themeTileUrl('https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', 'dark')).toBe(POINT_MAP_DARK_TILE_URL);
-  });
-
-  it('leaves a custom tileUrl untouched (null), and refuses non-strings', () => {
-    expect(themeTileUrl('https://tiles.example.com/{z}/{x}/{y}.png?key=abc', 'dark')).toBeNull();
-    expect(themeTileUrl(undefined, 'dark')).toBeNull();
-    expect(themeTileUrl(42, 'light')).toBeNull();
-  });
-});
 
 describe('tileUpstreamUrl (the allowlist)', () => {
   it('maps an allowlisted tile path onto the Carto upstream', () => {

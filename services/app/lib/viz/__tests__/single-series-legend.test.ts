@@ -8,7 +8,7 @@
  * invites ("experiment with colors"), so it must win.
  */
 import { describe, it, expect } from 'vitest';
-import { injectSingleSeriesLegend } from '../render-vega';
+import { injectSingleSeriesLegend } from '../chart-plan';
 
 const bar = (mark: unknown) => ({
   mark,

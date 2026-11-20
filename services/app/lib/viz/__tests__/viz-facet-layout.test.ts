@@ -4,11 +4,8 @@
  * height leaves every facet at Vega-Lite's 300px default and clips the SVG.
  */
 import { describe, expect, it } from 'vitest';
-import {
-  compileVegaLite,
-  computeFacetLayoutPlan,
-  createVegaView,
-} from '@/lib/viz/render-vega';
+import { computeFacetLayoutPlan } from '@/lib/viz/facet-layout';
+import { compileVegaLite, createVegaView } from '@/lib/viz/render-vega';
 
 const FACET_SPEC = {
   facet: {

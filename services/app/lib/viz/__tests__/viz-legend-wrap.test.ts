@@ -14,7 +14,8 @@
  * the fit-autosize pass sees the final legend height (no post-layout clipping).
  */
 import { describe, it, expect } from 'vitest';
-import { compileVegaLite, computeLegendPlan, createVegaView, setMainData } from '@/lib/viz/render-vega';
+import { computeLegendPlan, setMainData } from '@/lib/viz/chart-plan';
+import { compileVegaLite, createVegaView } from '@/lib/viz/render-vega';
 
 type CompiledLegend = { columns?: unknown; orient?: string; values?: unknown[]; title?: string };
 const legendsOf = (vegaSpec: object): CompiledLegend[] =>
