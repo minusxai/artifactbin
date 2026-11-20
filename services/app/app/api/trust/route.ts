@@ -24,8 +24,7 @@
  * "Once" lives in the browser session (a signed session cookie), so any reader may use it; Always and
  * a stored Never belong to an account (401 otherwise) — a signed-out Never is kept for the session.
  */
-import { canReadArtifact, getArtifactById, type ArtifactRow } from '@/lib/artifacts';
-import { holdsCreatingToken } from '@/lib/artifact-access';
+import { admitRead, getArtifactById, type ArtifactRow } from '@/lib/artifacts';
 import { refusesCrossSite, sessionActor } from '@/lib/authentication';
 import { type AccessActor, type RequestIdentity } from '@/lib/accounts';
 import { json, readJson, unauthorized } from '@/lib/http';
@@ -46,7 +45,7 @@ async function opened(request: Request, artifactId: unknown): Promise<{ artifact
   if (refusesCrossSite(request, actor)) return json({ error: 'forbidden' }, 403);
   if (typeof artifactId !== 'string' || !ID_RE.test(artifactId)) return json({ error: 'invalid_artifact_id' }, 400);
   const artifact = await getArtifactById(artifactId);
-  if (!artifact || artifact.format !== 'html' || !(holdsCreatingToken(artifact, actor) || (await canReadArtifact(artifact, actor)))) return json({ error: 'not_found' }, 404);
+  if (!artifact || artifact.format !== 'html' || !(await admitRead(artifact, actor))) return json({ error: 'not_found' }, 404);
   return { artifact, actor, viewer: actor };
 }
 

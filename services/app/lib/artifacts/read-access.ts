@@ -1,5 +1,6 @@
 /**
- * READER ADMISSION: the one read decision every serving path makes, the readable row with the reader's role, the
+ * READER ADMISSION: the one read decision every serving path makes (`canReadArtifact`), the door's admission over it
+ * (`admitRead`: an export key or the creating token, then the rule), the readable row with the reader's role, the
  * snapshot a reader is answered with, and the route gate for a capability. Decided by the access rule
  * (@/lib/artifact-access) over the rows this module reads.
  */
@@ -8,8 +9,9 @@ import type { Capability } from '@artifactbin/contracts';
 import type { AccessActor } from '@/lib/accounts';
 import { getArtifactById, getArtifactHeaderById, getArtifactIdentityById, getEditableArtifactFor, type ArtifactHeader, type ArtifactIdentity } from './rows';
 import {servableDocument} from './servable';
+import { holdsCreatingToken } from '@/lib/artifact-access';
 import {liveConnectionOf,publicCatalogOf} from '@/lib/datasets';
-import {datasetReadAccess,datasetRole} from '@/lib/dataset-permissions';
+import {datasetExportable,datasetReadAccess,datasetRole} from '@/lib/dataset-permissions';
 import {canRead,canEdit,canAnnotate,type ArtifactRole} from '@artifactbin/contracts';
 
 /**
@@ -37,6 +39,21 @@ export async function canReadArtifact(
   }
   // One decision, asked one way: reading is simply the bottom of the lattice.
   return canRead(await effectiveRole({ ...row, token_id: '' }, reader, facts));
+}
+
+/**
+ * THE DOOR'S READ ADMISSION, which every door serving a document's bytes asks: a signed export key for this row
+ * (`exporting`, verified by the caller), the token that created the row, or the access rule (`canReadArtifact`).
+ * `need: 'export'` asks a dataset for a role that sees it whole, since its image renders every row.
+ */
+export async function admitRead(
+  row: Pick<ArtifactRow, 'id' | 'visibility' | 'user_id' | 'link_role' | 'token_id'> & Partial<Pick<ArtifactRow, 'format' | 'group_id' | 'meta' | 'dataset_policy' | 'policy_revision'>>,
+  actor: AccessActor,
+  options: { facts?: AccessFacts; exporting?: boolean; need?: 'read' | 'export' } = {},
+): Promise<boolean> {
+  if (options.exporting || holdsCreatingToken(row, actor)) return true;
+  if (options.need === 'export' && row.format === 'dataset') return datasetExportable(await datasetReadAccess(row as Parameters<typeof datasetReadAccess>[0], actor));
+  return canReadArtifact(row, actor, options.facts);
 }
 
 /**

@@ -17,7 +17,7 @@
  */
 import {designSystemChoice} from '@/lib/html-systems';
 import { LIVE_VERSION_HEADER } from '@/lib/html-runtime';
-import { accessMoved, archivedVersionFor, type ArtifactHeader, type ArtifactRow, canReadArtifact, currentPage, getArtifactById, readPageHeader, readPageRow, refusingUnservable, servedRow, VERSION_PARAM } from '@/lib/artifacts';
+import { accessMoved, admitRead, archivedVersionFor, type ArtifactHeader, type ArtifactRow, currentPage, getArtifactById, readPageHeader, readPageRow, refusingUnservable, servedRow, VERSION_PARAM } from '@/lib/artifacts';
 import { holdsCreatingToken } from '@/lib/artifact-access';
 import { recordView } from '@/lib/analytics';
 import { verifyExportKey } from '@/lib/export';
@@ -127,7 +127,7 @@ async function serveRaw(request: Request, ctx: RawDocumentRequest): Promise<Resp
   // Bearer first, then the browser credentials, the same order as the export route, so the CLI
   // can fetch the page of an artifact its token owns or may read (resolved above).
   const byExportKey = verifyExportKey(header.id, key ?? undefined);
-  const admits = async (row: ArtifactHeader) => holdsCreatingToken(row, actor) || (await canReadArtifact(row, actor)) || byExportKey;
+  const admits = (row: ArtifactHeader) => admitRead(row, actor, { exporting: byExportKey });
   if (!(await admits(header))) return notFound();
   /*
    * THE CURRENT PAGE (lib/artifacts current-page): the head is served with its regions' unsaved live text composed in,

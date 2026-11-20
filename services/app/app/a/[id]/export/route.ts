@@ -3,11 +3,10 @@ import { LIVE_DATASET_REFUSAL, liveConnectionOf } from '@/lib/datasets';
  * Editor previews return ephemeral bytes. The operations API keeps its binary adapter. */
 import { trackEvent } from '@/lib/analytics';
 import { archivedVersionFor, servedRow } from '@/lib/artifacts';
-import { canReadArtifact, getArtifactById, refusingUnservable } from '@/lib/artifacts';
-import { effectiveRole, holdsCreatingToken } from '@/lib/artifact-access';
+import { admitRead, getArtifactById, refusingUnservable } from '@/lib/artifacts';
+import { effectiveRole } from '@/lib/artifact-access';
 import { requestOrSessionActor } from '@/lib/authentication';
 import { exportImageResponse } from '@/lib/export';
-import { datasetExportable, datasetReadAccess } from '@/lib/dataset-permissions';
 import { baseUrl, json } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
 import { canEdit } from '@artifactbin/contracts';
@@ -35,8 +34,7 @@ async function exportArtifact(request: Request, ctx: { params: Promise<{ id: str
   // A live dataset has no rows here to photograph (lib/live-datasets).
   if (artifact.format === 'dataset' && liveConnectionOf(artifact.meta)) return json({ error: 'live_dataset', message: LIVE_DATASET_REFUSAL }, 400);
   // A dataset's image renders every row (a keyed render): only for a role that sees it whole (lib/dataset-permissions).
-  const authorized = holdsCreatingToken(artifact, actor) || (artifact.format === 'dataset' ? datasetExportable(await datasetReadAccess(artifact, actor)) : await canReadArtifact(artifact, actor));
-  if (!authorized) return json({ error: 'not_found' }, 404);
+  if (!(await admitRead(artifact, actor, { need: 'export' }))) return json({ error: 'not_found' }, 404);
   const q = new URL(request.url).searchParams;
   /*
    * `?version=N` — photograph the document AS IT WAS. The version ACL runs
