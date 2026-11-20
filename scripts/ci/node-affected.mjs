@@ -99,10 +99,11 @@ if (process.argv[2] === '--warm') {
   const list = (files) => files.map((file) => `- \`${file}\``).join('\n');
   const text = [
     `Node files beyond the batch (changes against ${base.slice(0, 12)}, ${files.length} files; chosen in ${Date.now() - started}ms):`,
-    `${chosen.must.length} the change adds or edits, ${chosen.affected.length} it reaches within the ${NODE_AFFECTED_BUDGET_MS / 1000}s budget, ${chosen.deferred.length} reached past it (run after merge).`,
+    `${chosen.must.length} the change adds or edits and ${chosen.affected.length} it reaches within the ${NODE_AFFECTED_BUDGET_MS / 1000}s budget; ${chosen.deferredOwn.length} edited and ${chosen.deferred.length - chosen.deferredOwn.length} reached past it (run after merge).`,
     ...(chosen.must.length ? ['', 'Added or edited:', list(chosen.must)] : []),
     ...(chosen.affected.length ? ['', 'Reached:', list(chosen.affected)] : []),
-    ...(chosen.deferred.length ? ['', 'Reached past the budget, run after merge only:', list(chosen.deferred)] : []),
+    ...(chosen.deferredOwn.length ? ['', 'Added or edited past the budget, run after merge only:', list(chosen.deferredOwn)] : []),
+    ...(chosen.deferred.length > chosen.deferredOwn.length ? ['', 'Reached past the budget, run after merge only:', list(chosen.deferred.filter((file) => !chosen.deferredOwn.includes(file)))] : []),
     ...(integration.length ? ['', 'Edited integration tests (Docker or Chromium), run after merge only:', list(integration)] : []),
   ].join('\n');
   console.log(text);

@@ -98,7 +98,7 @@ it('keys every install cache, whole or a kit, by the fingerprint step\'s output,
  expect([...new Set(keys)].sort()).toEqual(['install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.lock.outputs.install }}']);
  // Every kit key and fallback key holds the same fingerprint, so a kit's install is always this lock's own.
  const kits=files.flatMap(file=>Object.values(workflow(file).jobs).flatMap(job=>job.steps??[])).filter(step=>/^pr-kit-/.test(step.with?.key??''));
- expect(kits.length).toBe(6);
+ expect(kits.length).toBe(7);
  for(const kit of kits)for(const key of [kit.with.key,...(kit.with['restore-keys']??'').trim().split('\n').filter(Boolean)])expect(key).toMatch(/^pr-kit-v1-\$\{\{ runner\.os \}\}-\$\{\{ runner\.arch \}\}-node22-(\$\{\{ env\.TEST_BUILDS_KIND \}\}|api|ui|guards|node)-\$\{\{ steps\.lock\.outputs\.install \}\}-/);
  // Each job that reads the output writes it first, in a step of its own named `lock`.
  for(const file of files)for(const [name,job] of Object.entries(workflow(file).jobs)){
@@ -189,7 +189,7 @@ it('runs every api, api-isolated, ui and islands test on every pull request, pac
  expect(job.env.TEST_BUILDS_KIND).toBe("${{ matrix.shard && 'guards' || matrix.batch && 'node' || matrix.suite && startsWith(matrix.part, 'ui-') && 'ui' || 'api' }}");
  const save=steps.filter(step=>step.uses?.startsWith('actions/cache/save')&&step.with.key.startsWith('pr-kit-'));
  expect(save).toHaveLength(1);
- expect(save[0].if).toBe("contains(fromJSON('[\"api-32\",\"ui-7\",\"guards-3\",\"node-5\"]'), matrix.part) && steps.kit.outputs.cache-hit != 'true' && (steps.kit.outputs.cache-matched-key != '' || steps.near-install.outputs.cache-hit == 'true')");
+ expect(save[0].if).toBe("contains(fromJSON('[\"api-32\",\"ui-7\",\"guards-3\",\"node-5\"]'), matrix.part) && steps.kit.outputs.cache-hit != 'true' && steps.kit-again.outputs.cache-hit != 'true' && (steps.kit.outputs.cache-matched-key != '' || steps.kit-again.outputs.cache-matched-key != '' || steps.near-install.outputs.cache-hit == 'true')");
  expect(save[0].with).toEqual({path:steps[restore].with.path,key:steps[restore].with.key});
  expect(steps.filter(step=>step.uses?.startsWith('actions/cache/save')&&/^test-builds-/.test(step.with.key))).toEqual([]);
  // Saved after every test step, so a saver's own transforms are in its entry.
@@ -204,13 +204,17 @@ it('runs every api, api-isolated, ui and islands test on every pull request, pac
 // p99, then 20.4s and a 16.9s "server is busy" that ended in no entry at all (44150141230's ui-5). actions/cache gives up
 // on a 128 MB segment after SEGMENT_DOWNLOAD_TIMEOUT_MINS (fractions allowed) and reports a miss, extracting nothing, so
 // the kit-miss path runs: the nearest whole install, unbounded, and main's test builds. A network that is slow everywhere
-// costs time, never a cold `npm ci`. A second try of the same kit (once a test-builds retry, 15s in run 44493175163) only
-// stacks another bound on the first.
+// costs time, never a cold `npm ci`. An abandoned kit is tried once more, bounded the same (`kit-again`), before that
+// fallback: the nearest install, 171 MB, stalled 20-38s after an abandoned kit (runs 44770173779, 44771987008: 60s and
+// 87s), and a fresh kit download takes 2-4s. Never a third try, and never a retry of a later tier.
 it('bounds every first cache download and lets the next tier of the same chain take over, the last one unbounded',()=>{
  const steps=workflow('pr-fast.yml').jobs.fast.steps,by=(id)=>steps.find(step=>step.id===id);
  const bound=(step)=>step.env?.SEGMENT_DOWNLOAD_TIMEOUT_MINS;
  // Six seconds a segment for the ~150-170 MB kits and installs: about their p99.
  expect(bound(by('kit'))).toBe('0.1');
+ expect(bound(by('kit-again'))).toBe('0.1');
+ expect(by('kit-again').if).toBe("(matrix.suite || matrix.shard || matrix.batch) && steps.kit.outputs.cache-matched-key == ''");
+ expect({...by('kit-again').with}).toEqual({...by('kit').with});
  // The whole install (the types, lint and tests runners') is bounded as well: it once stalled 32s at 68.2% after an
  // abandoned download (run 44174517646's ui-5, a 67s run). Its fallback, and the kit's, is the nearest install, which on
  // this lock's key restores the same entry, unbounded: a network slow everywhere still ends in an install.
@@ -218,7 +222,7 @@ it('bounds every first cache download and lets the next tier of the same chain t
  expect(bound(by('near-install'))).toBeUndefined();
  expect(by('near-install').with.key).toBe(by('install').with.key);
  expect(bound(by('test-builds'))).toBeUndefined();
- expect(by('test-builds').if).toBe("(matrix.suite || matrix.shard || matrix.batch) && steps.kit.outputs.cache-matched-key == ''");
+ expect(by('test-builds').if).toBe("(matrix.suite || matrix.shard || matrix.batch) && steps.kit.outputs.cache-matched-key == '' && steps.kit-again.outputs.cache-matched-key == ''");
  expect(steps.filter(step=>/retry/.test(step.id??''))).toEqual([]);
  // Every bound is a fraction of a minute that actions/cache parses: Number(value) * 60 * 1000 ms a segment.
  const values=steps.flatMap(step=>bound(step)===undefined?[]:[String(bound(step)).match(/'([\d.]+)'|^([\d.]+)$/)]);
@@ -226,7 +230,7 @@ it('bounds every first cache download and lets the next tier of the same chain t
  // The node runners' import graph (scripts/ci/node-affected.mjs's edge cache) is bounded too: without it the choice walks cold.
  const graph=steps.find(step=>step.with?.path==='node_modules/.cache/test-graph.json');
  expect(bound(graph)).toBe('0.1');
- expect(values).toHaveLength(3);
+ expect(values).toHaveLength(4);
  // A runner whose kit was abandoned restores the rest on the kit-miss path, and still runs every one of its tests.
  expect(steps.filter(step=>step.if?.includes('steps.test-builds.outputs'))).toEqual([]);
 });
@@ -327,7 +331,7 @@ it('lays main\'s measured node times over the table on every node runner, fetche
  // From main's import graph: the node kit's, or without a kit restored after every install tier (an install restore
  // would replace node_modules); the batch runs right after the wait.
  const graph=at(step=>step.with?.path==='node_modules/.cache/test-graph.json');
- expect(steps[graph].if).toBe("matrix.batch && steps.kit.outputs.cache-matched-key == ''");
+ expect(steps[graph].if).toBe("matrix.batch && steps.kit.outputs.cache-matched-key == '' && steps.kit-again.outputs.cache-matched-key == ''");
  expect(steps.find(step=>step.id==='kit').with.path).toContain('\nnode_modules/.cache/test-graph.json\n');
  expect(steps[graph].with['restore-keys']).toBe('test-graph-v1-${{ runner.os }}-');
  for(const tier of steps.filter(step=>/install/.test(step.id??'')||/npm (ci|install)/.test(step.run??'')))expect(steps.indexOf(tier),tier.id??tier.run).toBeLessThan(graph);
@@ -508,7 +512,7 @@ it('reconciles the nearest install on a lock miss, restore only, and falls back 
  const steps=workflow('pr-fast.yml').jobs.fast.steps;
  const exact=steps.find(step=>step.id==='install'),near=steps.find(step=>step.id==='near-install');
  expect(near.uses).toMatch(/^actions\/cache\/restore@/);
- expect(near.if).toBe("${{ !matrix.install && steps.kit.outputs.cache-matched-key == '' && steps.install.outputs.cache-hit != 'true' }}");
+ expect(near.if).toBe("${{ !matrix.install && steps.kit.outputs.cache-matched-key == '' && steps.kit-again.outputs.cache-matched-key == '' && steps.install.outputs.cache-hit != 'true' }}");
  expect(near.with.path).toBe(exact.with.path);
  expect(near.with.key).toBe(exact.with.key);
  expect(near.with['restore-keys']).toBe('install-v5-${{ runner.os }}-${{ runner.arch }}-node22-');
@@ -519,13 +523,13 @@ it('reconciles the nearest install on a lock miss, restore only, and falls back 
  expect(reconcile.if).toContain("steps.near-install.outputs.cache-hit != 'true'");
  expect(reconcile.run).toMatch(/git diff --quiet -- package-lock\.json[^\n]*\n[\s\S]*copy-assets\.mjs[\s\S]*else[\s\S]*git checkout -- package-lock\.json[\s\S]*npm ci /);
  const cold=steps.filter(step=>/^npm ci /.test(step.run??''));
- expect(cold.map(step=>step.if)).toEqual(["matrix.install && steps.own-install.outputs.cache-hit != 'true'","${{ !matrix.install && steps.kit.outputs.cache-matched-key == '' && steps.install.outputs.cache-hit != 'true' && steps.near-install.outputs.cache-matched-key == '' }}"]);
+ expect(cold.map(step=>step.if)).toEqual(["matrix.install && steps.own-install.outputs.cache-hit != 'true'","${{ !matrix.install && steps.kit.outputs.cache-matched-key == '' && steps.kit-again.outputs.cache-matched-key == '' && steps.install.outputs.cache-hit != 'true' && steps.near-install.outputs.cache-matched-key == '' }}"]);
  // No stale install is ever saved from a pull request: the one install save is the `install` runner's clean `npm ci`,
  // only when this lock's exact key is missing, and every other runner skips it. The other save is a kind's kit, only
  // from a kit (whose every key holds this lock) or this lock's exact whole install, never a reconciled tree.
  const saves=steps.filter(step=>step.uses?.startsWith('actions/cache/save')||step.uses?.startsWith('actions/cache@'));
  expect(saves.map(step=>step.with.key)).toEqual([exact.with.key,steps.find(step=>step.id==='kit').with.key]);
- expect(saves[1].if).toMatch(/&& \(steps\.kit\.outputs\.cache-matched-key != '' \|\| steps\.near-install\.outputs\.cache-hit == 'true'\)$/);
+ expect(saves[1].if).toMatch(/&& \(steps\.kit\.outputs\.cache-matched-key != '' \|\| steps\.kit-again\.outputs\.cache-matched-key != '' \|\| steps\.near-install\.outputs\.cache-hit == 'true'\)$/);
  const own=steps.find(step=>step.id==='own-install');
  expect(own).toMatchObject({if:'matrix.install',with:{path:exact.with.path,key:exact.with.key,'lookup-only':true}});
  expect(saves[0]).toMatchObject({if:"matrix.install && steps.own-install.outputs.cache-hit != 'true'",with:{path:exact.with.path,key:exact.with.key}});

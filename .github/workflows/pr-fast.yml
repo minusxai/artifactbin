@@ -212,7 +212,8 @@ jobs:
           # its recorded time beside the batch, plus its import): the slowest node runner's Vitest took 18-32s with the
           # budget spent against 8-9s for the batch alone (runs 44362521013-44378487510; 44369250231 reached none), and a
           # node runner was the last job in 28 of the 57 pr fast runs of 2026-11-18 14:44-19:15 UTC. A fifth spreads the same
-          # files, so none is deferred.
+          # files. ONE BUDGET since 2026-11-20 (NODE_AFFECTED_BUDGET_MS, 45s): the change's own node files first, then the
+          # reached ones; an edit of 172 test files had run every one and taken the run to 72s.
           # THE PULL REQUEST'S OWN INSTALL: a lock this branch changed misses main's install on every push, and every runner
           # reconciles main's tree to it (~2.7s: the miss probe and `npm install`, run 43039126177). This runner, only on
           # that miss, runs a clean `npm ci` (never a reconciled tree: nothing stale is saved) and saves it under this
@@ -473,6 +474,22 @@ jobs:
           restore-keys: |
             pr-kit-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ env.TEST_BUILDS_KIND }}-${{ steps.lock.outputs.install }}-${{ steps.test-builds-key.outputs.key }}-
             pr-kit-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ env.TEST_BUILDS_KIND }}-${{ steps.lock.outputs.install }}-
+      # AN ABANDONED KIT IS TRIED ONCE MORE, bounded the same, before the unbounded whole install below: the stalls seen
+      # are one download's (both of run 44771987008's api-30 attempts froze near 120 MiB, the end of the first 128 MiB
+      # segment), and that fallback, a 171 MB install restore, stalled the same way for 20-38s and made runs 44770173779
+      # 60s and 44771987008 87s. A fresh download of the kit takes 2-4s. A lock this pull request changed has no kit:
+      # the second lookup misses in under a second.
+      - if: (matrix.suite || matrix.shard || matrix.batch) && steps.kit.outputs.cache-matched-key == ''
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: kit-again
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: '0.1'
+        with:
+          path: *kit-paths
+          key: pr-kit-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ env.TEST_BUILDS_KIND }}-${{ steps.lock.outputs.install }}-${{ steps.test-builds-key.outputs.key }}-${{ steps.test-builds-key.outputs.modules }}
+          restore-keys: |
+            pr-kit-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ env.TEST_BUILDS_KIND }}-${{ steps.lock.outputs.install }}-${{ steps.test-builds-key.outputs.key }}-
+            pr-kit-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ env.TEST_BUILDS_KIND }}-${{ steps.lock.outputs.install }}-
       # The other runners' install (types, lint, tests): the whole one, bounded as the kit is; after ui-5's install download
       # was abandoned at 73.3%, the next one stalled 32s at 68.2% (run 44174517646, 67s).
       - if: ${{ !matrix.install && !matrix.suite && !matrix.shard && !matrix.batch }}
@@ -495,7 +512,7 @@ jobs:
       # reconcile it to this lock: it adds, removes and prunes only what the lock changed. If that would rewrite
       # the lock (package.json and lock disagree), it is put back and `npm ci` decides, exactly as before.
       # copy-assets is the app workspace's postinstall, which an unchanged workspace does not re-run.
-      - if: ${{ !matrix.install && steps.kit.outputs.cache-matched-key == '' && steps.install.outputs.cache-hit != 'true' }}
+      - if: ${{ !matrix.install && steps.kit.outputs.cache-matched-key == '' && steps.kit-again.outputs.cache-matched-key == '' && steps.install.outputs.cache-hit != 'true' }}
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         id: near-install
         with:
@@ -507,7 +524,7 @@ jobs:
           key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.lock.outputs.install }}
           restore-keys: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-
       # An exact hit here is this lock's own install: nothing to reconcile.
-      - if: ${{ !matrix.install && steps.kit.outputs.cache-matched-key == '' && steps.install.outputs.cache-hit != 'true' && steps.near-install.outputs.cache-hit != 'true' && steps.near-install.outputs.cache-matched-key != '' }}
+      - if: ${{ !matrix.install && steps.kit.outputs.cache-matched-key == '' && steps.kit-again.outputs.cache-matched-key == '' && steps.install.outputs.cache-hit != 'true' && steps.near-install.outputs.cache-hit != 'true' && steps.near-install.outputs.cache-matched-key != '' }}
         name: Reconcile the nearest install to this lock
         run: |
           npm install --no-audit --no-fund
@@ -517,11 +534,11 @@ jobs:
             git checkout -- package-lock.json package.json 'services/*/package.json'
             npm ci --no-audit --no-fund
           fi
-      - if: ${{ !matrix.install && steps.kit.outputs.cache-matched-key == '' && steps.install.outputs.cache-hit != 'true' && steps.near-install.outputs.cache-matched-key == '' }}
+      - if: ${{ !matrix.install && steps.kit.outputs.cache-matched-key == '' && steps.kit-again.outputs.cache-matched-key == '' && steps.install.outputs.cache-hit != 'true' && steps.near-install.outputs.cache-matched-key == '' }}
         run: npm ci --no-audit --no-fund
       # And, without a kit, main's test builds for these sources (ci.yml's whole entry: the builds and the api modules),
       # else its newest; without either the global setup builds them (~10s).
-      - if: (matrix.suite || matrix.shard || matrix.batch) && steps.kit.outputs.cache-matched-key == ''
+      - if: (matrix.suite || matrix.shard || matrix.batch) && steps.kit.outputs.cache-matched-key == '' && steps.kit-again.outputs.cache-matched-key == ''
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         id: test-builds
         with:
@@ -535,7 +552,7 @@ jobs:
       # And the node runners' import graph, main's newest (ci.yml's warm-caches walks every node and integration file into
       # it): with it, choosing this change's node files (scripts/ci/node-affected.mjs, below) took 3.3s locally, fetch
       # included, against 9-24s cold. Its entries are keyed by content, so a stale one only transforms what changed.
-      - if: matrix.batch && steps.kit.outputs.cache-matched-key == ''
+      - if: matrix.batch && steps.kit.outputs.cache-matched-key == '' && steps.kit-again.outputs.cache-matched-key == ''
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         env:
           SEGMENT_DOWNLOAD_TIMEOUT_MINS: '0.1'
@@ -614,7 +631,7 @@ jobs:
       # The last runner of each kind saves that kind's kit on an exact miss, after its tests, so its transforms are in it:
       # packing puts the longest files first, often one to a runner, so the last runner holds the most files. Only from
       # this lock's own clean install (a kit, or the whole install's exact key), never a reconciled tree.
-      - if: contains(fromJSON('["api-32","ui-7","guards-3","node-5"]'), matrix.part) && steps.kit.outputs.cache-hit != 'true' && (steps.kit.outputs.cache-matched-key != '' || steps.near-install.outputs.cache-hit == 'true')
+      - if: contains(fromJSON('["api-32","ui-7","guards-3","node-5"]'), matrix.part) && steps.kit.outputs.cache-hit != 'true' && steps.kit-again.outputs.cache-hit != 'true' && (steps.kit.outputs.cache-matched-key != '' || steps.kit-again.outputs.cache-matched-key != '' || steps.near-install.outputs.cache-hit == 'true')
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: *kit-paths

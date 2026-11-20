@@ -133,17 +133,29 @@ describe('pr fast\'s node batch', () => {
   });
 });
 
-// THE PULL REQUEST'S OWN NODE FILES (scripts/ci/node-affected.mjs): a node file the pull request adds or changes runs on it
-// whatever its time; a slower file its change reaches runs too, nearest first, within a recorded-time budget.
+// THE PULL REQUEST'S OWN NODE FILES (scripts/ci/node-affected.mjs): the node files the pull request adds or changes, then
+// the slower files its change reaches, nearest first, share one recorded-time budget; what does not fit runs after merge.
 describe('pr fast\'s node files beyond the batch', () => {
   const timings = { files: { node: { 'a.test.ts': 3000, 'b.test.ts': 20000, 'c.test.ts': 1000, 'd.test.ts': 2000, 'e.test.ts': 500, 'f.test.ts': 4000, 'cheap.test.ts': 40, 'listed.test.ts': 5000 } } };
   const candidates = new Set(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'cheap', 'listed', 'new'].map((name) => `${name}.test.ts`));
   const choose = (changed, affected, budgetMs) => nodeAffectedFiles({ timings, changed, affected, candidates, batch: new Set(['cheap.test.ts']), lane: new Set(['listed.test.ts']), budgetMs });
 
-  it('runs every node file the change adds or edits that no other part runs, whatever its time or record', () => {
-    // b is slow, new has no recorded time: both run. cheap runs in the batch, listed in its lane, api.test.ts is no node file.
-    const chosen = choose(['new.test.ts', 'b.test.ts', 'cheap.test.ts', 'listed.test.ts', 'api.test.ts', 'services/app/lib/x/index.ts'], [], 0);
-    expect(chosen).toEqual({ must: ['b.test.ts', 'new.test.ts'], affected: [], deferred: [] });
+  it('runs the node files the change adds or edits that no other part runs, shortest first, within the budget', () => {
+    // b is slow (20s, 22s with its import), new has no recorded time (the 3s median, 5s): both fit 30s. cheap runs in the
+    // batch, listed in its lane, api.test.ts is no node file.
+    const changed = ['new.test.ts', 'b.test.ts', 'cheap.test.ts', 'listed.test.ts', 'api.test.ts', 'services/app/lib/x/index.ts'];
+    expect(choose(changed, [], 30_000)).toEqual({ must: ['b.test.ts', 'new.test.ts'], affected: [], deferred: [], deferredOwn: [] });
+    // Under 27s the shorter runs and the longer waits for the merge.
+    expect(choose(changed, [], 10_000)).toEqual({ must: ['new.test.ts'], affected: [], deferred: ['b.test.ts'], deferredOwn: ['b.test.ts'] });
+  });
+
+  it('bounds a change that edits 150 node files: what fits the budget runs, the rest after merge', () => {
+    // #1433's first attempt edited 172 test files, every one ran, and pr fast took 72s. Unrecorded, each weighs 5s.
+    const many = Array.from({ length: 150 }, (_, i) => `t${String(i).padStart(3, '0')}.test.ts`);
+    const chosen = nodeAffectedFiles({ timings, changed: many, affected: [], candidates: new Set(many), batch: new Set(), lane: new Set(), budgetMs: NODE_AFFECTED_BUDGET_MS });
+    expect(chosen.must).toHaveLength(Math.floor(NODE_AFFECTED_BUDGET_MS / 5000));
+    expect([...chosen.must, ...chosen.deferredOwn].sort()).toEqual(many);
+    expect(chosen.deferred).toEqual(chosen.deferredOwn);
   });
 
   it('adds the files the change reaches, nearest first and shortest first, until the budget, and names the rest', () => {
@@ -153,11 +165,13 @@ describe('pr fast\'s node files beyond the batch', () => {
     // a (2, 5.0s): 9.0s. f (2, 6.0s) does not fit 12.0s; e (3, 2.5s) does; c (3, 3.0s) would pass it. g has no record: it
     // weighs the node median (3.0s) and its import, and does not fit either. b is the change's own, cheap and listed run elsewhere.
     expect(NODE_ISOLATED_FILE_MS).toBe(2000);
+    // b, the change's own (22s), does not fit 12s: it waits for the merge and spends nothing.
     const chosen = choose(['b.test.ts', 'services/app/lib/x/index.ts'], reached, 12_000);
-    expect(chosen).toEqual({ must: ['b.test.ts'], affected: ['d.test.ts', 'a.test.ts', 'e.test.ts'], deferred: ['c.test.ts', 'f.test.ts', 'g.test.ts'] });
-    // The changed file's own time never spends the reached files' budget.
+    expect(chosen).toEqual({ must: [], affected: ['d.test.ts', 'a.test.ts', 'e.test.ts'], deferred: ['b.test.ts', 'c.test.ts', 'f.test.ts', 'g.test.ts'], deferredOwn: ['b.test.ts'] });
     expect(choose([], reached, 12_000).affected).toEqual(chosen.affected);
-    expect(NODE_AFFECTED_BUDGET_MS).toBeGreaterThan(0);
+    // The change's own files spend the budget first: at 30s b runs, and 8s is left for the reached ones (d, then e).
+    expect(choose(['b.test.ts', 'services/app/lib/x/index.ts'], reached, 30_000)).toEqual({ must: ['b.test.ts'], affected: ['d.test.ts', 'e.test.ts'], deferred: ['a.test.ts', 'c.test.ts', 'f.test.ts', 'g.test.ts'], deferredOwn: [] });
+    expect(NODE_AFFECTED_BUDGET_MS).toBe(45_000);
   });
 
   it('puts a narrow change\'s own tests before the many one import from a file most tests import', () => {
@@ -173,14 +187,14 @@ describe('pr fast\'s node files beyond the batch', () => {
     const times = { files: { node: Object.fromEntries(reached.map(({ file }) => [file, file === 'store.test.ts' ? 3000 : 500])) } };
     const chosen = nodeAffectedFiles({ timings: times, changed: [hub, store], affected: reached, candidates: new Set(reached.map(({ file }) => file)), batch: new Set(), lane: new Set(), budgetMs: 9_000 });
     // h1 (rank 2, distance 1, 2.5s), then store.test.ts (rank 2, distance 2, 5.0s): 7.5s; the index's others (rank 6, 2.5s each) do not fit 9s.
-    expect(chosen).toEqual({ must: [], affected: ['h1.test.ts', 'store.test.ts'], deferred: ['h2.test.ts', 'h3.test.ts', 'h4.test.ts', 'h5.test.ts', 'h6.test.ts'] });
+    expect(chosen).toEqual({ must: [], affected: ['h1.test.ts', 'store.test.ts'], deferred: ['h2.test.ts', 'h3.test.ts', 'h4.test.ts', 'h5.test.ts', 'h6.test.ts'], deferredOwn: [] });
   });
 
   it('adds none of the files a rerun trigger reaches, every one equally: the change\'s own files still run', () => {
     // A vitest.config.ts or package.json change reaches every file at distance Infinity (scripts/lib/test-graph.mjs); a
     // budget's worth of the shortest was an arbitrary subset, on a cold module cache: #1339's node runners took 27-36s.
     const everything = [...candidates].map((file) => ({ file, distance: Infinity, nearest: {} }));
-    expect(choose(['b.test.ts', 'vitest.config.ts'], everything, 60_000)).toEqual({ must: ['b.test.ts'], affected: [], deferred: ['a.test.ts', 'c.test.ts', 'd.test.ts', 'e.test.ts', 'f.test.ts', 'g.test.ts', 'new.test.ts'] });
+    expect(choose(['b.test.ts', 'vitest.config.ts'], everything, 60_000)).toEqual({ must: ['b.test.ts'], affected: [], deferred: ['a.test.ts', 'c.test.ts', 'd.test.ts', 'e.test.ts', 'f.test.ts', 'g.test.ts', 'new.test.ts'], deferredOwn: [] });
   });
 
   it('gives the batch config the chosen files as an isolated project only when a runner wrote them', () => {
