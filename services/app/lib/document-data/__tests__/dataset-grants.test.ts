@@ -10,6 +10,7 @@ import { setDatasetPolicy as setThroughDoor } from '@/lib/document-data/dataset-
 import { readableArtifact, changeMembership, getArtifactById, updateSharingFor } from '@/lib/artifacts';
 
 import { forkArtifact } from '@/lib/publish';
+import { Reply } from '@/lib/http';
 useAppHarness();
 it('enforces read grants independently of link visibility and keeps owner administration',async()=>{
  const owner=await createUser({email:'mxmx_test_read_grants@example.com'});
@@ -52,7 +53,7 @@ it('keeps a private dataset and its grants unchanged when its native owner page 
  const ds=await make({dataset:[{n:1}],visibility:'private'});
  const originalPolicy=(await getArtifactById(ds))!.dataset_policy;
  const doc=await make({visibility:'private',html:`<html><head><link rel="af-dataset" data-af-name="data" href="ref:${ds}"></head><body>Rows</body></html>`});
- const fork=await forkArtifact({...actor,tokenId:owner.id},(await getArtifactById(doc))!,{visibility:'public'});if(fork instanceof Response)throw Error(await fork.text());
+ const fork=await forkArtifact({...actor,tokenId:owner.id},(await getArtifactById(doc))!,{visibility:'public'});if(fork instanceof Reply)throw Error(JSON.stringify(fork.body));
  expect(fork.datasets).toEqual([]);expect(fork.artifact.source).toContain(`ref:${ds}`);
  expect((await getArtifactById(ds))?.visibility).toBe('private');expect((await getArtifactById(ds))?.dataset_policy).toEqual(originalPolicy);
  expect(await readableArtifact(identityForUser(null,''),ds)).toBeNull();

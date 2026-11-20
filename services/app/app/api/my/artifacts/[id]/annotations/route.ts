@@ -20,7 +20,7 @@ import { createAnnotationFor, type CreateAnnotationInput } from '@/lib/annotatio
 import { isAreaRange, refinementRange, parseAnnotationRange } from '@/lib/document';
 import { sessionActor, browserActor } from '@/lib/authentication';
 import { capabilityGuard } from '@/lib/artifacts';
-import { json, readJson } from '@/lib/http';
+import { json, readJson, Reply, toResponse } from '@/lib/http';
 import { ownerUsername } from '@/lib/accounts';
 import { COMMENT_TARGET_REMOVED } from '@artifactbin/contracts';
 
@@ -92,7 +92,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   const made = await createAnnotationFor(actor, id, parsed.input, {
     kind: 'human', label: await ownerUsername(actor.userId), transport: 'browser',
   },receipt);
-  if (made instanceof Response) return made; // the anchor edit's named publish refusal
+  if (made instanceof Reply) return toResponse(made); // the anchor edit's named publish refusal
   if (!made) return json({ error: 'not_found' }, 404);
   if ('refused' in made) {
     if (made.refused === 'stale') return json({ error: 'stale', message: COMMENT_TARGET_REMOVED, edit_id: made.head.editId, version: made.head.version }, 409);

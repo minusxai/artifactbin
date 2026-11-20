@@ -14,6 +14,7 @@ import {loadDatasetRows} from '@/lib/datasets';
 import {account,datasetFixture,type Db} from './dataset-fixture';
 import {canWriteDataset,respondToMutate,writeDatasetPolicy} from '@/lib/document-data';
 import { setArtifact } from '@/__tests__/rows';
+import { Reply } from '@/lib/http';
 
 useAppHarness();
 let db:Db;
@@ -24,7 +25,7 @@ const policy={version:3,tables:[{table:{schema:'public',name:'rows'},select_perm
 const legacy={version:1,enforcement:'enabled',tables:[{table:{schema:'public',name:'rows'},insert_permissions:[{role:'viewer',permission:{columns:'*',check:{}}}]}]};
 
 const fixture=()=>datasetFixture();
-const reply=async(response:Response|Promise<Response>)=>{const r=await response;return [r.status,await r.json()] as const;};
+const reply=async(answer:Reply|Response|Promise<Reply|Response>)=>{const r=await answer;return [r.status,r instanceof Reply?r.body:await r.json()] as const;};
 
 // The read half moved to the policy API (dataset-policy-http.test.ts) with the old app policy route.
 it('saves a policy against its revision, audits it, and refuses stale, invalid or foreign writes',async()=>{

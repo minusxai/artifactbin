@@ -288,7 +288,7 @@ const annotateOp: Operation = {
     // a test user is held inside its sandbox (lib/capabilities).
     const refusal = await capabilityGuard(ctx.actor, 'comment', String(input.id));
     if (refusal) return fromResponse(refusal);
-    return fromResponse(await respondToAnnotationAction(input, ctx.actor, ctx.author, String(input.id), String(input.annotation_id),ctx.mutationReceipt));
+    return respondToAnnotationAction(input, ctx.actor, ctx.author, String(input.id), String(input.annotation_id),ctx.mutationReceipt);
   },
 };
 
@@ -311,7 +311,7 @@ const editCommentOp: Operation = {
     if (!ctx.actor.userId && !ctx.actor.principalGroup) return reply({ error: 'account_required', hint: 'Follow /llms/http-auth and sign in with an account; an anonymous credential wrote no comments to edit.' }, 403);
     const refusal = await capabilityGuard(ctx.actor, 'comment', String(input.id));
     if (refusal) return fromResponse(refusal);
-    return fromResponse(await respondToAnnotationEdit(input, ctx.actor, String(input.id), String(input.comment_id), ctx.mutationReceipt, ctx.author?.writerSession));
+    return respondToAnnotationEdit(input, ctx.actor, String(input.id), String(input.comment_id), ctx.mutationReceipt, ctx.author?.writerSession);
   },
 };
 
@@ -324,7 +324,7 @@ const reactCommentOp: Operation = {
   annotations: {},
   example: {input:{id:'aB3xK9',comment_id:'ann_123',kind:'thumbs_up',active:true}},
   errors: [NOT_FOUND,{status:403,code:'account_required',fix:'sign in with an account to react'},{status:400,code:'invalid_comment_reaction',fix:'send kind thumbs_up and boolean active'}],
-  async run(ctx,input) {return fromResponse(await respondToCommentReaction(input,ctx.actor,String(input.id),String(input.comment_id),ctx.author));},
+  async run(ctx,input) {return respondToCommentReaction(input,ctx.actor,String(input.id),String(input.comment_id),ctx.author);},
 };
 
 const listArtifactsOp: Operation = {
@@ -338,7 +338,7 @@ const listArtifactsOp: Operation = {
   errors: [],
   async run(ctx, input) {
     const page = decodePage(input, 'artifacts');
-    if (page instanceof Response) return fromResponse(page);
+    if (page instanceof Reply) return page;
     for(const [key,allowed] of Object.entries({type:['artifact','folder','dataset','file'],visibility:['private','unlisted','public'],relationship:['all','owned','shared']}))if(input[key]!==undefined&&!allowed.includes(String(input[key])))return reply({error:'invalid_filter',field:key},400);
     if(input.parent_id!==undefined&&(typeof input.parent_id!=='string'||!/^[A-Za-z0-9]{6,12}$/.test(input.parent_id)))return reply({error:'invalid_container'},400);
     if(input.search!==undefined&&(typeof input.search!=='string'||input.search.length>1000))return reply({error:'invalid_filter',field:'search'},400);
@@ -363,7 +363,7 @@ const listVersionsOp: Operation = {
     const page = decodePage(input, 'versions');
     for(const key of ['since','until'])if(input[key]!==undefined&&(typeof input[key]!=='string'||!Number.isFinite(Date.parse(String(input[key])))))return reply({error:'invalid_filter',field:key,hint:'Use an ISO-8601 timestamp.'},400);
     if(input.author!==undefined&&typeof input.author!=='string')return reply({error:'invalid_filter',field:'author'},400);
-    if (page instanceof Response) return fromResponse(page);
+    if (page instanceof Reply) return page;
     const version=input.version===undefined?undefined:Number(input.version);
     if(version!==undefined&&(!Number.isSafeInteger(version)||version<1))return reply({error:'invalid_version',hint:'Use a positive integer version.'},400);
     const result = await listVersionPageFor(ctx.actor, String(input.id), page.limit, page.cursor?.version as number | undefined,version,{author:input.author as string|undefined,since:input.since as string|undefined,until:input.until as string|undefined});
@@ -581,7 +581,7 @@ const mutateDatasetOp: Operation = {
     { status: 503, code: 'dataset_busy', fix: 'concurrent writes contended — retry after a moment (Retry-After rides the response)' },
   ],
   async run(ctx, input) {
-    return fromResponse(await respondToMutate(ctx.actor, String(input.id), input,ctx.mutationReceipt));
+    return respondToMutate(ctx.actor, String(input.id), input,ctx.mutationReceipt);
   },
 };
 
@@ -771,12 +771,12 @@ const forkArtifactOp: Operation = {
     // exactly what the real call would refuse.
     if (input.dry_run === true) {
       const unforkable = forkRefusal(source);
-      if (unforkable) return fromResponse(unforkable);
+      if (unforkable) return unforkable;
       return { status: 200, body: { datasets: [], ...(owner.testuser ? { owner: owner.testuser } : {}) } };
     }
 
     const copy = await forkArtifact(forker, source, overrides, owner.actor);
-    if (copy instanceof Response) return fromResponse(copy);
+    if (copy instanceof Reply) return copy;
     return { status: 201, body: { ...createdArtifactWire(copy.artifact, ctx.base, undefined, await documentOwner(copy.artifact)), forked_from: source.id, datasets: copy.datasets, ...(owner.testuser ? { owner: owner.testuser } : {}) } };
   },
 };
@@ -826,7 +826,7 @@ const queryResourceOp:Operation={
  input:{id:z.string(),sql:z.string().optional(),name:z.string().optional(),values:z.record(z.string(),z.union([z.string(),z.number(),z.boolean(),z.null()])).optional(),limit:z.number().int().min(1).max(100).optional(),cursor:z.string().optional(),refresh:z.boolean().optional()},
  annotations:{readOnly:true},example:{input:{id:'aB3xK9',limit:20}},
  errors:[NOT_FOUND,OWN_CONNECTIONS,{status:400,code:'invalid_sql',fix:'the statement was refused — the message names the reason (an undeclared $parameter, a disallowed function, unsupported syntax); fix the SQL or pass the parameter in values'},{status:403,code:'permission_denied',fix:'your role\'s select rule does not allow aggregations, so SQL is refused; omit sql and pass name to read the table\'s rows, or ask the owner to allow aggregations'}],
- async run(ctx,input){const {id,...body}=input;return fromResponse(await queryResourceForRequest(ctx.actor,String(id),body,ctx.request));},
+ async run(ctx,input){const {id,...body}=input;return queryResourceForRequest(ctx.actor,String(id),body,ctx.request);},
 };
 
 export const OPERATIONS: Operation[] = [

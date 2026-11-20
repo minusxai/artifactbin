@@ -6,7 +6,7 @@
  * 20; `?cursor=` the previous page's `next_cursor`, null on the last); a service's come as `services`, one row per
  * approval with how many it holds (revoking the approval, DELETE /api/groups/:id/service-sign-ins/:grantId, ends them).
  */
-import { decodePage, encodeCursor, json, unauthorized } from '@/lib/http';
+import { decodePage, encodeCursor, json, Reply, toResponse, unauthorized } from '@/lib/http';
 import { sessionActor } from '@/lib/authentication';
 import { GroupError, listGroupSignIns } from '@/lib/groups';
 
@@ -15,7 +15,7 @@ export async function GET(request: Request, ctx: { params: Promise<Record<string
   if (actor.credential !== 'session' || !actor.userId) return unauthorized(request);
   const { id } = await ctx.params;
   const page = decodePage(Object.fromEntries(new URL(request.url).searchParams), 'sign-ins');
-  if (page instanceof Response) return page;
+  if (page instanceof Reply) return toResponse(page);
   const after = page.cursor ? { created: String(page.cursor.created), id: String(page.cursor.id) } : undefined;
   try {
     const listed = await listGroupSignIns(actor.userId, String(id), { limit: page.limit, ...(after ? { after } : {}) });

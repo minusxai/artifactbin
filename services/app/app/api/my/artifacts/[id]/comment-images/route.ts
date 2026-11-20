@@ -1,7 +1,7 @@
 import { browserActor } from '@/lib/authentication';
 import { withAccountToken } from '@/lib/accounts';
 import {capabilityGuard} from '@/lib/artifacts';
-import {json,unauthorized} from '@/lib/http';
+import {json,Reply,toResponse,unauthorized} from '@/lib/http';
 import {stageCommentImage} from '@/lib/annotations';
 import {COMMENT_IMAGE_LIMITS} from '../../../../../../../contracts/src/comment-image';
 
@@ -19,6 +19,6 @@ export async function POST(request:Request,ctx:{params:Promise<{id:string}>}){
   const original=form.get('original'),preview=form.get('preview'),metadata=form.get('metadata');
   if(!(original instanceof Blob)||!(preview instanceof Blob)||typeof metadata!=='string'||metadata.length>1024*1024)return json({error:'invalid_image'},400);
   const result=await stageCommentImage(actor,id,Buffer.from(await original.arrayBuffer()),Buffer.from(await preview.arrayBuffer()),JSON.parse(metadata));
-  return result instanceof Response?result:json(result,201);
+  return result instanceof Reply?toResponse(result):json(result,201);
  }catch{return json({error:'invalid_image'},400);}
 }

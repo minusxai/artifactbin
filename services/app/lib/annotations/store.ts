@@ -24,6 +24,7 @@ import type { AccessActor } from '@/lib/accounts';
 import { canonicalQuote, parseAnnotationRange, type AnnotationRange, isAreaRange } from '@/lib/document';
 import { avatarUrl } from '@/lib/avatars';
 import { getDb, type Queryable, actorSubject, generateInternalId, recordEvent } from '@/lib/platform';
+import { Reply, reply } from '@/lib/http';
 import { parseHtmlNodeAnchor, type HtmlNodeAnchor } from '@artifactbin/contracts';
 import { htmlCommentNodes, resolveHtmlCommentAnchor } from './html-anchor';
 
@@ -266,7 +267,7 @@ export async function createAnnotationFor(
   input: CreateAnnotationInput,
   author: AnnotationAuthor,
   receipt?:MutationReceipt,
-): Promise<AnnotationWire | CreateAnnotationRefusal | Response | null> {
+): Promise<AnnotationWire | CreateAnnotationRefusal | Reply | null> {
   const viewState = input.viewState === undefined ? null : parseCommentViewState(input.viewState);
   if (input.viewState !== undefined && !viewState) return { refused: 'bad_view_state' };
   const db = await getDb();
@@ -330,8 +331,8 @@ export async function createAnnotationFor(
     const [wire] = await wireFor(tx, row, inserted.rows, actor.userId);
     if(wire&&receipt)await completeMutationReceipt(tx,receipt,{status:201,body:wire as unknown as Record<string,unknown>});
     return wire ?? null;
-  }).catch(error=>{if(error instanceof MembershipError)return new Response(JSON.stringify({error:'mention_refused',detail:error.message}),{status:error.status,headers:{'Content-Type':'application/json'}});throw error;});
-  if (!made || made instanceof Response || 'refused' in made) return made;
+  }).catch(error=>{if(error instanceof MembershipError)return reply({error:'mention_refused',detail:error.message},error.status);throw error;});
+  if (!made || made instanceof Reply || 'refused' in made) return made;
   return made;
 }
 

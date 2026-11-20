@@ -27,13 +27,13 @@ describe('comment image attachment ownership',()=>{
  it('accepts an individual 50 MB image and refuses one byte more',async()=>{
   const s=await setup();const bytes=Buffer.alloc(50_000_000);s.image.copy(bytes);
   const accepted=await stageCommentImage(s.actor,s.doc.id,bytes,s.image,s.metadata);
-  expect(accepted).not.toBeInstanceOf(Response);
+  expect(accepted).not.toBeInstanceOf(Reply);
   const refused=await stageCommentImage(s.actor,s.doc.id,Buffer.alloc(50_000_001),s.image,s.metadata);
-  expect(refused).toBeInstanceOf(Response);expect((refused as Response).status).toBe(413);
+  expect(refused).toBeInstanceOf(Reply);expect((refused as Reply).status).toBe(413);
  });
  it('stages privately, atomically attaches to a root and charges all variants',async()=>{
   const s=await setup();const stage=await stageCommentImage(s.actor,s.doc.id,s.image,s.image,s.metadata);
-  expect(stage).not.toBeInstanceOf(Response);if(stage instanceof Response)return;
+  expect(stage).not.toBeInstanceOf(Reply);if(stage instanceof Reply)return;
   expect(await assetBytesForToken(s.token.id)).toBeGreaterThan(0);
   expect(await readCommentImage(s.actor,s.doc.id,stage.id,'preview')).toBeNull();
   const response=await createComment(request(`/api/my/artifacts/${s.doc.id}/annotations`,{method:'POST',actor:s.browserActor,json:{anchor:nativeAnchor('capture'),edit_id:s.doc.edit_id,body:'Look here',attachment_id:stage.id}}),params(s.doc.id));
@@ -47,25 +47,25 @@ describe('comment image attachment ownership',()=>{
  });
  it('refuses invalid raster and metadata before reserving bytes',async()=>{
   const s=await setup();const result=await stageCommentImage(s.actor,s.doc.id,Buffer.from('not an image'),s.image,s.metadata);
-  expect(result).toBeInstanceOf(Response);expect((result as Response).status).toBe(400);
+  expect(result).toBeInstanceOf(Reply);expect((result as Reply).status).toBe(400);
   expect(await assetBytesForToken(s.token.id)).toBe(0);
  });
  it('refuses over-quota reservations, including the incoming bytes',async()=>{
   const s=await setup();setAssetByteQuotaForTests(1);
-  try {expect((await stageCommentImage(s.actor,s.doc.id,s.image,s.image,s.metadata) as Response).status).toBe(413);}
+  try {expect((await stageCommentImage(s.actor,s.doc.id,s.image,s.image,s.metadata) as Reply).status).toBe(413);}
   finally{setAssetByteQuotaForTests(null);}
  });
  it('checks captured revision even when supplied with a stable node',async()=>{
   const s=await setup();
   const result=await stageCommentImage(s.actor,s.doc.id,s.image,s.image,{...s.metadata,capturedEditId:'old'});
-  expect((result as Response).status).toBe(409);
+  expect((result as Reply).status).toBe(409);
   // It names the head now, so an attached image (of no version) can be staged against it.
-  expect(await (result as Response).json()).toEqual({error:'stale',edit_id:s.doc.edit_id});
+  expect((result as Reply).body).toEqual({error:'stale',edit_id:s.doc.edit_id});
  });
 });
 
 it('keeps a stale stage unconsumed and retries a committed comment idempotently',async()=>{
- const s=await setup();const stage=await stageCommentImage(s.actor,s.doc.id,s.image,s.image,s.metadata);if(stage instanceof Response)throw new Error(await stage.text());
+ const s=await setup();const stage=await stageCommentImage(s.actor,s.doc.id,s.image,s.image,s.metadata);if(stage instanceof Reply)throw new Error(JSON.stringify(stage.body));
  const db=await getDb();await setArtifact(db, s.doc.id, { edit_id: 'new-head' });
  const make=(edit:string,key?:string)=>createComment(request(`/api/my/artifacts/${s.doc.id}/annotations`,{method:'POST',actor:s.browserActor,headers:key?{'Idempotency-Key':key}:undefined,json:{anchor:nativeAnchor('capture'),edit_id:edit,body:'Saved once',attachment_id:stage.id}}),params(s.doc.id));
  expect((await make(s.doc.edit_id)).status).toBe(409);
@@ -79,14 +79,14 @@ it('keeps a stale stage unconsumed and retries a committed comment idempotently'
 
 it('rejects another actor consuming a private stage and malformed stroke coordinates',async()=>{
  const s=await setup();
- const invalid=await stageCommentImage(s.actor,s.doc.id,s.image,s.image,{...s.metadata,strokes:[{color:'#ff0000',width:2,points:[[200,5]]}]});expect((invalid as Response).status).toBe(400);
- const stranger=await mintToken('agent');const result=await stageCommentImage(identityForUser(stranger.userId, stranger.id),s.doc.id,s.image,s.image,s.metadata);expect((result as Response).status).toBe(404);
+ const invalid=await stageCommentImage(s.actor,s.doc.id,s.image,s.image,{...s.metadata,strokes:[{color:'#ff0000',width:2,points:[[200,5]]}]});expect((invalid as Reply).status).toBe(400);
+ const stranger=await mintToken('agent');const result=await stageCommentImage(identityForUser(stranger.userId, stranger.id),s.doc.id,s.image,s.image,s.metadata);expect((result as Reply).status).toBe(404);
 });
 
 import {GET as readAgentImage} from '@/app/api/artifacts/[id]/comment-images/[imageId]/route';
 it('serves annotated pixels through bearer auth and preserves attachment access and deletion rules',async()=>{
  const s=await setup();const preview=await sharp({create:{width:100,height:50,channels:3,background:'blue'}}).png().toBuffer();
- const stage=await stageCommentImage(s.actor,s.doc.id,s.image,preview,s.metadata);if(stage instanceof Response)throw new Error(await stage.text());
+ const stage=await stageCommentImage(s.actor,s.doc.id,s.image,preview,s.metadata);if(stage instanceof Reply)throw new Error(JSON.stringify(stage.body));
  const read=(token:string|undefined,id=s.doc.id,variant='')=>readAgentImage(request(`/api/artifacts/${id}/comment-images/${stage.id}${variant?`?variant=${variant}`:''}`,{token}),params({ id,imageId:stage.id }));
  expect((await read(undefined)).status).toBe(401);
  expect((await read(s.token.token)).status).toBe(404); // Unconsumed stages stay private.
@@ -108,6 +108,7 @@ it('serves annotated pixels through bearer auth and preserves attachment access 
 
 import {POST as answerComment} from '@/app/api/my/artifacts/[id]/annotations/[annId]/route';
 import { setArtifact } from '@/__tests__/rows';
+import { Reply } from '@/lib/http';
 describe('a reply carries its own image',()=>{
  const reply=(s:Awaited<ReturnType<typeof setup>>,root:string,json:Record<string,unknown>,actor:typeof s.browserActor=s.browserActor)=>
   answerComment(request(`/api/my/artifacts/${s.doc.id}/annotations/${root}`,{method:'POST',actor,json}),params({ id:s.doc.id,annId:root }));
@@ -117,7 +118,7 @@ describe('a reply carries its own image',()=>{
  };
  it('attaches a staged image to the reply alone, readable with the document and gone with the reply',async()=>{
   const s=await setup();const root=await thread(s);
-  const stage=await stageCommentImage(s.actor,s.doc.id,s.image,s.image,{...s.metadata,method:'upload'});if(stage instanceof Response)throw new Error(await stage.text());
+  const stage=await stageCommentImage(s.actor,s.doc.id,s.image,s.image,{...s.metadata,method:'upload'});if(stage instanceof Reply)throw new Error(JSON.stringify(stage.body));
   const answered=await reply(s,root,{reply:'Here is what I see',attachment_id:stage.id,edit_id:s.doc.edit_id});
   expect(answered.status,await answered.clone().text()).toBe(200);
   const wire=await answered.json();
@@ -135,7 +136,7 @@ describe('a reply carries its own image',()=>{
  });
  it('refuses an image without a reply, without its revision, or staged by someone else',async()=>{
   const s=await setup();const root=await thread(s);
-  const stage=await stageCommentImage(s.actor,s.doc.id,s.image,s.image,s.metadata);if(stage instanceof Response)throw new Error(await stage.text());
+  const stage=await stageCommentImage(s.actor,s.doc.id,s.image,s.image,s.metadata);if(stage instanceof Reply)throw new Error(JSON.stringify(stage.body));
   expect((await reply(s,root,{resolve:true,attachment_id:stage.id,edit_id:s.doc.edit_id})).status).toBe(400);
   expect((await reply(s,root,{reply:'No revision',attachment_id:stage.id})).status).toBe(400);
   expect((await reply(s,root,{reply:'Wrong revision',attachment_id:stage.id,edit_id:'other-edit'})).status).toBe(409);
@@ -147,7 +148,7 @@ describe('a reply carries its own image',()=>{
  });
  it('re-checks the image against the current document at save, as a root comment does',async()=>{
   const s=await setup();const root=await thread(s);
-  const stage=await stageCommentImage(s.actor,s.doc.id,s.image,s.image,{...s.metadata,method:'upload'});if(stage instanceof Response)throw new Error(await stage.text());
+  const stage=await stageCommentImage(s.actor,s.doc.id,s.image,s.image,{...s.metadata,method:'upload'});if(stage instanceof Reply)throw new Error(JSON.stringify(stage.body));
   const db=await getDb();await setArtifact(db, s.doc.id, { edit_id: 'moved-head' });
   const refused=await reply(s,root,{reply:'Stale image',attachment_id:stage.id,edit_id:s.doc.edit_id});
   expect(refused.status).toBe(409);expect(await refused.json()).toMatchObject({error:'stale',edit_id:'moved-head',message:expect.stringContaining('send again')});

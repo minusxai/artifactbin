@@ -99,7 +99,7 @@ describe('addressing a request', () => {
 
 describe('pagination', () => {
   const cursor = (kind: string, position: Record<string, unknown>) => ({ cursor: encodeCursor(kind, position) });
-  const refused = async (result: unknown) => (result instanceof Response ? { status: result.status, ...(await result.json()) } : result);
+  const refused = async (result: unknown) => (result instanceof Reply ? { status: result.status, ...result.body } : result);
 
   it('defaults to 20 and accepts 1 through 100', async () => {
     expect(decodePage({}, 'artifacts')).toEqual({ limit: 20 });

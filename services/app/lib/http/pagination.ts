@@ -1,4 +1,4 @@
-import {json} from './http';
+import {Reply,reply} from './http';
 
 export function encodeCursor(kind: string, position: Record<string, unknown>): string {
   return Buffer.from(JSON.stringify({v: 1, kind, position})).toString('base64url');
@@ -6,9 +6,9 @@ export function encodeCursor(kind: string, position: Record<string, unknown>): s
 
 /** Cursor shapes are owned here so malformed input never reaches SQL casts. */
 export function decodePage(input: Record<string, unknown>, kind: 'artifacts' | 'versions' | 'comments' | 'sign-ins'):
-  {limit: number; cursor?: Record<string, unknown>} | Response {
+  {limit: number; cursor?: Record<string, unknown>} | Reply {
   const limit = input.limit === undefined ? 20 : Number(input.limit);
-  if (!Number.isInteger(limit) || limit < 1 || limit > 100) return json({error: 'invalid_limit', hint: 'limit must be an integer from 1 to 100'}, 400);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) return reply({error: 'invalid_limit', hint: 'limit must be an integer from 1 to 100'}, 400);
   if (input.cursor === undefined) return {limit};
   try {
     if (typeof input.cursor !== 'string' || input.cursor.length > 1024 || !/^[A-Za-z0-9_-]+$/.test(input.cursor)) throw new Error();
@@ -22,5 +22,5 @@ export function decodePage(input: Record<string, unknown>, kind: 'artifacts' | '
     } else if (typeof p.id !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(p.id) ||
       typeof p.created !== 'string' || !/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}(?::?\d{2})?)$/.test(p.created) || !Number.isFinite(Date.parse(p.created))) throw new Error();
     return {limit, cursor: p};
-  } catch { return json({error: 'invalid_cursor', hint: 'Pass cursor only the next_cursor the same listing returned; a cursor never carries over to another listing or filter'}, 400); }
+  } catch { return reply({error: 'invalid_cursor', hint: 'Pass cursor only the next_cursor the same listing returned; a cursor never carries over to another listing or filter'}, 400); }
 }

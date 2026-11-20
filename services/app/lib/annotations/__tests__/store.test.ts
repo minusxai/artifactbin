@@ -132,12 +132,12 @@ describe('the HTTP doors: respondToAnnotationAction, respondToAnnotationEdit, re
     const thread = await f.comment('Question');
     const ok = await respondToAnnotationAction({ reply: 'Answer' }, f.owner, agent, f.doc.id, thread.id);
     expect(ok.status).toBe(200);
-    expect(((await ok.json()) as Wire).thread).toHaveLength(2);
+    expect((ok.body as Wire).thread).toHaveLength(2);
     expect((await respondToAnnotationAction(null, f.owner, agent, f.doc.id, thread.id)).status).toBe(400);
     for (const body of [{}, { reply: '   ' }, { reply: 1 }, { resolve: true, reopen: true }, { resolve: 'yes' }, { expected_revision: -1, reply: 'x' }, { reply: 'x', attachment_id: 'cim_abc' }, { reply: 'x', attachment_id: 'bad id', edit_id: 'e' }]) {
       const refused = await respondToAnnotationAction(body, f.owner, agent, f.doc.id, thread.id);
       expect(refused.status).toBe(400);
-      expect(await refused.json()).toEqual({ error: 'invalid_annotation_action' });
+      expect(refused.body).toEqual({ error: 'invalid_annotation_action' });
     }
     expect((await respondToAnnotationAction({ reply: 'x' }, f.owner, agent, f.doc.id, 'ann_missing')).status).toBe(404);
   });
@@ -147,7 +147,7 @@ describe('the HTTP doors: respondToAnnotationAction, respondToAnnotationEdit, re
     const thread = await f.comment('Question');
     const conflict = await respondToAnnotationAction({ resolve: true, expected_revision: 99 }, f.owner, human, f.doc.id, thread.id);
     expect(conflict.status).toBe(409);
-    expect(await conflict.json()).toMatchObject({ error: 'annotation_conflict', current_revision: expect.any(Number) });
+    expect(conflict.body).toMatchObject({ error: 'annotation_conflict', current_revision: expect.any(Number) });
   });
 
   it('edits only the actor’s own comment, with a uniform 404 otherwise', async () => {
@@ -155,7 +155,7 @@ describe('the HTTP doors: respondToAnnotationAction, respondToAnnotationEdit, re
     const thread = await f.comment('Typo hre');
     const edited = await respondToAnnotationEdit({ body: 'Typo here' }, f.owner, f.doc.id, thread.id);
     expect(edited.status).toBe(200);
-    expect(((await edited.json()) as Wire).thread[0]!.body).toBe('Typo here');
+    expect((edited.body as Wire).thread[0]!.body).toBe('Typo here');
     expect((await respondToAnnotationEdit({ body: 'Mine now' }, await stranger(), f.doc.id, thread.id)).status).toBe(404);
     expect((await respondToAnnotationEdit(null, f.owner, f.doc.id, thread.id)).status).toBe(400);
     for (const body of [{}, { body: '  ' }, { body: 'x', expected_revision: 1.5 }]) expect((await respondToAnnotationEdit(body, f.owner, f.doc.id, thread.id)).status).toBe(400);
@@ -168,7 +168,7 @@ describe('the HTTP doors: respondToAnnotationAction, respondToAnnotationEdit, re
     const thread = await f.comment('Nice');
     const on = await respondToCommentReaction({ kind: 'thumbs_up', active: true }, f.owner, f.doc.id, thread.id, human);
     expect(on.status).toBe(200);
-    expect(JSON.stringify(await on.json())).toContain('thumbs_up');
+    expect(JSON.stringify(on.body)).toContain('thumbs_up');
     expect((await respondToCommentReaction({ kind: 'thumbs_up', active: false }, f.owner, f.doc.id, thread.id, human)).status).toBe(200);
     expect((await respondToCommentReaction({ kind: 'thumbs_up', active: true }, ANONYMOUS_ACTOR, f.doc.id, thread.id, human)).status).toBe(403);
     for (const body of [null, {}, { kind: 'heart', active: true }, { kind: 'thumbs_up', active: 'yes' }]) expect((await respondToCommentReaction(body, f.owner, f.doc.id, thread.id, human)).status).toBe(400);

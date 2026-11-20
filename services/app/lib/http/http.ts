@@ -56,7 +56,8 @@ export function json(body: unknown, status = 200, headers: Record<string, string
 export class Reply {
   constructor(readonly body: Record<string, unknown>, readonly status = 200, readonly headers?: Record<string, string>) {}
 }
-export const reply = (body: Record<string, unknown>, status = 200, headers?: Record<string, string>): Reply => new Reply(body, status, headers);
+/** A Reply from any JSON object: a wire type with no index signature included. */
+export const reply = (body: object, status = 200, headers?: Record<string, string>): Reply => new Reply(body as Record<string, unknown>, status, headers);
 export const toResponse = (answer: Reply): Response => json(answer.body, answer.status, answer.headers);
 
 /** Shared refusal: keep HTTP clients on their credential flow; installed CLI remains optional. */

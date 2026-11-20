@@ -6,7 +6,7 @@
 import { deleteAnnotationFor, respondToAnnotationAction, respondToAnnotationEdit } from '@/lib/annotations';
 import { capabilityGuard, durableMutation } from '@/lib/artifacts';
 import { browserActor } from '@/lib/authentication';
-import { json, readJson } from '@/lib/http';
+import { json, readJson, toResponse } from '@/lib/http';
 import { ownerUsername } from '@/lib/accounts';
 
 export async function POST(request: Request, ctx: { params: Promise<{ id: string; annId: string }> }) {
@@ -17,10 +17,10 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   const author = { kind: 'human' as const, label: await ownerUsername(actor.userId), transport: 'browser' as const };
   // An Idempotency-Key makes a retried reply (the reader retries through a deploy restart) land once.
   const key = request.headers.get('Idempotency-Key');
-  if (!key || !body) return respondToAnnotationAction(body, actor, author, id, annId);
+  if (!key || !body) return toResponse(await respondToAnnotationAction(body, actor, author, id, annId));
   const result = await durableMutation(actor, request.url, key, { operation: 'annotate', id, annId, body }, async (receipt) => {
-    const response = await respondToAnnotationAction(body, actor, author, id, annId, receipt);
-    return { status: response.status, body: await response.json() };
+    const answered = await respondToAnnotationAction(body, actor, author, id, annId, receipt);
+    return { status: answered.status, body: answered.body };
   });
   return json(result.body, result.status);
 }
@@ -37,10 +37,10 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
   if (refusal) return refusal;
   const body = await readJson(request);
   const key = request.headers.get('Idempotency-Key');
-  if (!key || !body) return respondToAnnotationEdit(body, actor, id, annId);
+  if (!key || !body) return toResponse(await respondToAnnotationEdit(body, actor, id, annId));
   const result = await durableMutation(actor, request.url, key, { operation: 'edit_comment', id, annId, body }, async (receipt) => {
-    const response = await respondToAnnotationEdit(body, actor, id, annId, receipt);
-    return { status: response.status, body: await response.json() };
+    const answered = await respondToAnnotationEdit(body, actor, id, annId, receipt);
+    return { status: answered.status, body: answered.body };
   });
   return json(result.body, result.status);
 }
