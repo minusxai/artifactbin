@@ -1,6 +1,6 @@
 name: v3 CodeQL
 
-# Every merged v3 SHA receives both security scans before deployment admission. The weekly run
+# Main's batches receive both security scans before deployment admission. The weekly run
 # rescans an unchanged main against new query packs.
 # Both languages retain the default security query suite and complete source coverage.
 # Advanced setup requires GitHub default setup to remain off (not-configured).
@@ -14,12 +14,14 @@ on:
 permissions:
   contents: read
 
-# Each merged revision is a deployment candidate and needs its own scan. A shared push group cancelled the scan of a
-# green revision whenever the next merge landed (so production waited for the newest merge's whole chain, or for a fix
-# when that merge was red), and held the new scan pending 30-40 s until the old one stopped. A push scan shares a group
-# only with its own revision; scheduled and manual scans keep queueing per ref.
+# Batched like ci.yml (CI rule 8): one push scan per ref at a time, never cancelled. Merges landing during a scan leave
+# one pending run, GitHub's newest, which scans main as it then is; a revision it skipped has no scan and is never
+# admitted. Deployment admits only a revision with its own green ci, scan and page speed (the private server's
+# isolated source gates), and the newest revision always gets each, so production moves to the newest
+# fully checked revision once merges pause. (A shared group with cancel-in-progress once cancelled running scans of
+# green revisions, leaving them unadmittable.) Scheduled and manual scans keep a group per ref and event.
 concurrency:
-  group: ${{ github.event_name == 'push' && format('{0}-push-{1}', github.workflow, github.sha) || format('{0}-{1}-{2}', github.workflow, github.ref, github.event_name) }}
+  group: ${{ github.event_name == 'push' && format('{0}-push-{1}', github.workflow, github.ref) || format('{0}-{1}-{2}', github.workflow, github.ref, github.event_name) }}
   cancel-in-progress: false
 
 jobs:

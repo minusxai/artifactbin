@@ -256,14 +256,14 @@ it('runs main\'s ci one batch at a time and never cancels a running batch',()=>{
  expect(workflow('ci.yml').concurrency).toEqual({group:'main-verification-${{ github.ref }}','cancel-in-progress':false});
 });
 
-describe('CodeQL scans every merged revision without narrowing analysis',()=>{
- // Every merged revision is a deployment candidate that needs its own scan: cancelling a superseded push scan left
- // ci-green 6e581b2eb, 08f6b19d9, 55b153ff0 and fb1c96116 unadmittable, and the replacing run sat pending 30-40 s
- // until the old one stopped (runs 41959629389, 41963771255). A push scan is grouped by its exact revision only.
- it('never cancels or queues one revision\'s push scan behind another revision\'s',()=>{
+describe('CodeQL scans main in batches without narrowing analysis',()=>{
+ // Batched like ci.yml: one push scan per ref at a time, never cancelled. Cancelling a running scan once left ci-green
+ // 6e581b2eb, 08f6b19d9, 55b153ff0 and fb1c96116 unadmittable (runs 41959629389, 41963771255); a batch is never
+ // cancelled, and only a pending run GitHub replaced is skipped. Scheduled and manual scans never join a push batch.
+ it('runs push scans one batch per ref at a time and never cancels a running scan',()=>{
   const scan=workflow('v3-codeql.yml');
   expect(scan.concurrency['cancel-in-progress']).toBe(false);
-  expect(scan.concurrency.group).toBe("${{ github.event_name == 'push' && format('{0}-push-{1}', github.workflow, github.sha) || format('{0}-{1}-{2}', github.workflow, github.ref, github.event_name) }}");
+  expect(scan.concurrency.group).toBe("${{ github.event_name == 'push' && format('{0}-push-{1}', github.workflow, github.ref) || format('{0}-{1}-{2}', github.workflow, github.ref, github.event_name) }}");
  });
  it('uploads the same complete findings while omitting optional push database archives',()=>{
   const steps=workflow('v3-codeql.yml').jobs.analyze.steps;
