@@ -8,7 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { resolveHmrPort } from '@/lib/platform';
-import { developmentViteOptions } from '..';
+import { developmentViteConfig } from '..';
 import { resolvePort, DEFAULT_DEV_PORT } from '../../../../../scripts/lib/dev-env.mjs';
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -55,21 +55,18 @@ describe('resolveHmrPort — Vite HMR websocket port beside the app port', () =>
   });
 });
 
-describe('developmentViteOptions', () => {
+describe('developmentViteConfig', () => {
+  const config = (o: Partial<Parameters<typeof developmentViteConfig>[0]> = {}) => developmentViteConfig({ configFile: 'vite.config.mts', appRoot, port: 7242, hmrPort: 7243, pagesHost: 'lvh.me', publicBaseUrl: 'http://localhost:3030/', ...o });
   it('scans an existing entry relative to the Vite web root', () => {
-    for (const entry of developmentViteOptions(appRoot, 7242).optimizeDeps.entries)
+    for (const entry of config().optimizeDeps.entries)
       expect(existsSync(path.resolve(appRoot, 'web', entry))).toBe(true);
   });
   it('keeps separate dev servers from replacing each other’s optimized dependencies', () => {
-    expect(developmentViteOptions(appRoot, 7242).cacheDir).not.toBe(developmentViteOptions(appRoot, 7284).cacheDir);
+    expect(config().cacheDir).not.toBe(config({ port: 7284 }).cacheDir);
   });
-});
-
-describe('developmentPagesHosts', () => {
-  it('lets Vite answer every document label under the pages domain and the app host, with its own CORS off', async () => {
-    const { developmentPagesHosts } = await import('../dev-vite');
-    expect(developmentPagesHosts('lvh.me', 'http://localhost:3030/')).toEqual({ allowedHosts: ['.lvh.me', 'localhost'], cors: false });
-    expect(developmentPagesHosts('pages.test', 'https://app.example:8443')).toEqual({ allowedHosts: ['.pages.test', 'app.example'], cors: false });
-    expect(() => developmentPagesHosts('lvh.me', 'not a url')).toThrow();
+  it('lets Vite answer every document label under the pages domain and the app host, with its own CORS off', () => {
+    expect(config().server).toMatchObject({ allowedHosts: ['.lvh.me', 'localhost'], cors: false, middlewareMode: true, ws: { port: 7243 } });
+    expect(config({ pagesHost: 'pages.test', publicBaseUrl: 'https://app.example:8443' }).server).toMatchObject({ allowedHosts: ['.pages.test', 'app.example'], cors: false });
+    expect(() => config({ publicBaseUrl: 'not a url' })).toThrow();
   });
 });

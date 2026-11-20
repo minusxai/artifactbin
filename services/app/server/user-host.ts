@@ -8,7 +8,7 @@ import { getArtifactById } from '@/lib/artifacts';
 import { PUBLIC_BASE_URL, USER_PAGES_HOST, IS_DEV } from '@/lib/platform';
 import { isUserPagesHost, handleFromUserPagesHost, ownerForHandle, documentOwner, userPagesOrigin, publicHomeFiles, homePageId, eligibleDocument, servesDocument, servesEmbeddedArtifact, servesWebAsset, type UserPagesOwner } from '@/lib/user-pages';
 import { DOMAIN_HOME_CSP, renderDomainHome, type ProfileListingData } from '@/lib/user-pages';
-import { PayloadTooLarge, baseUrl, readBody } from '@/lib/http';
+import { PayloadTooLarge, baseUrl, readBody, trustedForwarded } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
 import { runWithRequest } from '@/lib/platform';
 import { domainPostPath } from '@/lib/http';
@@ -36,7 +36,23 @@ export function userHostStaticPath(path:string):boolean {
  return ownerHostServes(path)||(IS_DEV&&path==='/shell.css');
 }
 /** Credentials never reach a handler on an anonymous owner host: the reader is a guest, by construction. */
-export const USER_HOST_CREDENTIAL_HEADERS = ['cookie', 'authorization', 'proxy-authorization', ACTOR_HEADER];
+const USER_HOST_CREDENTIAL_HEADERS = ['cookie', 'authorization', 'proxy-authorization', ACTOR_HEADER];
+
+/**
+ * DEVELOPMENT: may Vite, which fronts the listener and so authentication (server.ts), answer this request? Any host
+ * but an owner host, yes. An owner host must never reach Vite's executable source graph or pass the product's
+ * resource boundary: only a GET or HEAD of a static path on a named owner host, its credentials removed here, and
+ * every other owner-host request goes to the listener. `baseURL` names the host a request without one addresses.
+ */
+export function viteMayAnswer(req: import('node:http').IncomingMessage, baseURL: string): boolean {
+  // The addressed host as the app reads it (lib/http trustedForwarded): a forwarded host only from a trusted hop.
+  const header = (name: string) => { const value = req.headers[name]; return Array.isArray(value) ? value.join(',') : value ?? null; };
+  const host = trustedForwarded({ get: header }, 'x-forwarded-host') ?? req.headers.host ?? new URL(baseURL).host;
+  if (!isUserPagesHost(host, USER_PAGES_HOST)) return true;
+  if (!handleFromUserPagesHost(host, USER_PAGES_HOST) || !['GET', 'HEAD'].includes(req.method ?? '') || !userHostStaticPath(new URL(req.url ?? '/', baseURL).pathname)) return false;
+  for (const name of USER_HOST_CREDENTIAL_HEADERS) delete req.headers[name];
+  return true;
+}
 
 const NOT_FOUND_HTML = '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Not found</title></head><body style="font:16px/1.6 system-ui,sans-serif;max-width:680px;margin:64px auto;padding:0 16px"><h1 style="font-size:20px">Not found</h1></body></html>';
 const notFound = (): Response => new Response(NOT_FOUND_HTML, { status: 404, headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'referrer-policy':'no-referrer' } });

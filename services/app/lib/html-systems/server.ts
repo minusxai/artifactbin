@@ -2,4 +2,4 @@
 export { platformFontResponse } from './fonts.server';
 export { withOfflineSystemStyle } from './offline.server';
 export { DESIGN_SYSTEM_VARIABLES } from './design-variables.server';
-export { installDesignSystemFromSettings, readInstallationDesignSystem, validateDesignSystemSpec } from './installation.server';
+export { installDesignSystemFromSettings, readInstallationDesignSystem } from './installation.server';
