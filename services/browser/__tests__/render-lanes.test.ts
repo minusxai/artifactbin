@@ -46,6 +46,18 @@ it('a check that never yields delays no export: checks draw in their own browser
   } finally { await chromium.close(); }
 }, 60_000);
 
+it('draws one export page at a time: a render asked second waits for the first to finish', async () => {
+  const chromium = createBrowser();
+  try {
+    const done: string[] = [];
+    await Promise.all([
+      chromium.render({ ...shot('/plain'), settleMs: 1_500 }).then((result) => { expect(result.ok).toBe(true); done.push('first'); }),
+      chromium.render({ ...shot('/plain'), settleMs: 0 }).then((result) => { expect(result.ok).toBe(true); done.push('second'); }),
+    ]);
+    expect(done).toEqual(['first', 'second']);
+  } finally { await chromium.close(); }
+}, 60_000);
+
 it('a page past its memory or its thread limit is stopped alone, said as its problem, while an export goes on', async () => {
   const chromium = createBrowser({ limits: { bytes: 700 * 1024 * 1024, threads: 64 } });
   try {

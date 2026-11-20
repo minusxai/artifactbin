@@ -3,10 +3,12 @@
 A Chromium that renders a URL to an image (`/render`, `/render-upload`), hands back the SVG a page drew
 (`/harvest`), says what went wrong in a page (`/inspect`: failed components, exceptions, failed requests, unreadable text, overflow when asked) and runs persistent isolated scripted sessions (`/sessions`). `BrowserService` and the session types
 in `services/contracts/src` are the wire; `src/index.ts` is the client and the server shell, `src/local.ts`
-Chromium, `src/sessions.ts` and the `session-*` files the sessions, `src/upload-gateway-server.ts` the S3 gateway.
+Chromium (`render-lane.ts` one browser, its serial queue and the ready page; `page-capture.ts` images and drawings;
+`page-inspection.ts` a page's problems), `src/sessions.ts` and the `session-*` files the sessions, `src/upload-gateway-server.ts` the S3 gateway.
 
 ## Rules
-- Only `src/local.ts` loads Playwright, and only a composition root imports it; the package root never does.
+- Only the package's `local` entry (`src/local.ts` and the render and session files under it) loads Playwright, and only a
+  composition root imports it; the package root never does.
 - The service holds no credentials and sets no cookies: a render URL carries its own short-lived key, and a
   signed upload URL never enters the page, a log or the database. Uploads follow no redirect.
 - The asset origin is cached-byte transport, never a fetch proxy: only GET and HEAD that `isPublicAssetRequest`
