@@ -10,7 +10,7 @@
  * the deadline of the use it last served: every connector sets the engine's own statement timeout from that use's
  * remaining budget, so by then the database has stopped any work the session carried. */
 import { CONNECTOR_LIMITS } from '@artifactbin/contracts/connectors';
-import { log } from '@artifactbin/utils';
+import { log } from '@artifactbin/utils/log';
 import { ConnectorFailure } from './errors';
 import { UNCONFIRMED } from './termination';
 const warn=log('connectors').warn;

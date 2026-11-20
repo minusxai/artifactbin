@@ -5,7 +5,7 @@
  * The liveness probes (`/health`, `/api/health`) are skipped: an orchestrator polls them every few seconds.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { log } from '@artifactbin/utils';
+import { log } from '@artifactbin/utils/log';
 
 const SKIPPED_PATHS = new Set(['/health', '/api/health']);
 const requests = log('http');

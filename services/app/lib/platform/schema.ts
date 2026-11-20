@@ -8,7 +8,7 @@
  * (Column/Index/Table) are the contract's.
  */
 import type { Table } from '@artifactbin/contracts/schema';
-import { renderDroppedTables, renderSchema } from '@artifactbin/utils';
+import { renderDroppedTables, renderSchema } from '@artifactbin/utils/schema';
 
 /**
  * titleSlug (@artifactbin/utils artifact-reference) in SQL, for the title-slug indexes: lowercase, every run of

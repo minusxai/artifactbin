@@ -32,7 +32,7 @@
  */
 import { BROWSER_SESSION_HEADER } from '@artifactbin/contracts/browser-sessions';
 import { CREDENTIALS, isGroupActor, type Credential } from '@artifactbin/contracts/actor';
-import { actorOf } from '@artifactbin/utils';
+import { actorOf } from '@artifactbin/utils/upstream';
 import { admitDeploymentIdentity } from '../deployment';
 import { acceptGroupInvitations } from '../groups';
 import { pagesRequestOf } from '../http';

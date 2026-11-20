@@ -7,7 +7,7 @@ import {useSqlExtensions} from '@/lib/sql';
 import type {Actor} from '@artifactbin/contracts/actor';
 import type {Upstream} from '@artifactbin/contracts/part';
 import {getDb, type Db, setServices, services, type Services} from '@/lib/platform';
-import {inProcess} from '@artifactbin/utils';
+import {inProcess} from '@artifactbin/utils/upstream';
 import {skillExtras} from '@/lib/skills';
 import {installDesignSystemFromSettings} from '@/lib/html-systems/server';
 import {createAppServer,type AppServerOptions} from './app';

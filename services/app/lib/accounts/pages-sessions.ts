@@ -26,7 +26,7 @@
  * only what was carried.
  */
 import crypto from 'node:crypto';
-import { createCodeStore } from '@artifactbin/utils';
+import { createCodeStore } from '@artifactbin/utils/codes';
 import { ANONYMOUS, type Actor } from '@artifactbin/contracts/actor';
 import type { Queryable } from '@artifactbin/contracts/db';
 import { getDb,services } from '../platform';

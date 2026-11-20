@@ -16,7 +16,7 @@ import { identitySchemaStatements } from '@artifactbin/auth';
 import { openIdentity } from './identity-host';
 import { SCHEMA_STATEMENTS } from './schema';
 import { recordQuery } from './query-stats';
-import { SERVING_POOL, withPoolErrors } from '@artifactbin/utils';
+import { SERVING_POOL, withPoolErrors } from '@artifactbin/utils/pool';
 
 /**
  * The single database knob, dispatched on scheme — the URL IS the type:

@@ -19,8 +19,8 @@
 import type { BrowserService, RenderRequest, RenderUploadRequest, SvgHarvestRequest, PageInspectRequest } from '@artifactbin/contracts/browser';
 import type { BrowserSessionRequest } from '@artifactbin/contracts/browser-sessions';
 import { BROWSER_ROUTES, ELEMENT_CAPTURE_HEADER } from '@artifactbin/contracts/browser';
-import type { JsonServer } from '@artifactbin/utils';
-import { postServer } from '@artifactbin/utils';
+import type { JsonServer } from '@artifactbin/utils/http';
+import { postServer } from '@artifactbin/utils/http';
 
 export type * from '@artifactbin/contracts/browser';
 export type * from '@artifactbin/contracts/browser-sessions';
@@ -28,7 +28,7 @@ export { BROWSER_ROUTES } from '@artifactbin/contracts/browser';
 // `browserClient` lives in @artifactbin/utils; re-exported here so a caller can take the
 // client from the same package as the shell it speaks to. That is how this package's own
 // contract and internal-assets tests reach it; the app imports utils directly.
-export { browserClient } from '@artifactbin/utils';
+export { browserClient } from '@artifactbin/utils/clients';
 
 export function serveBrowser(svc: BrowserService, opts: { maxBody?: number; serviceSecret?: string } = {}): JsonServer {
   return postServer(

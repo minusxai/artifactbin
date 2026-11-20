@@ -1,28 +1,22 @@
 export { assemble } from './assemble';
 export { serve } from './serve';
-export { attachActor, actorOf, inProcess, overHttp, actorReceiver, UPSTREAM_TIMEOUTS } from './upstream';
+export { attachActor, actorOf, inProcess, overHttp, actorReceiver } from './upstream';
 export { signActor, verifyActor } from './actor-sign';
 export { createEnv } from './env';
-export { httpClient, jsonServer, postServer, type JsonServer, type JsonRoutes } from './http';
+export { httpClient } from './http';
 export { log } from './log';
-export { BodyTooLargeError, readBody } from './body';
-export { noopSql, noopBrowser, noopEvents, fakeSql, fakeBrowser, fakeEvents, type FakeEvents } from './fakes';
-export { TOKEN_RE, hashToken } from './tokens';
-export { createCodeStore } from './codes';
-export { plainIdentifier } from './sql-identifier';
-export { cookieName, clearCookieHeader, readCookie } from './agent-session';
-export { renderSchema, renderDroppedTables, ensureTable } from './schema';
-export { sqlClient, browserClient, eventsClient, queryBounds } from './clients';
-export { serviceSecretForServer, serviceSecretMatches } from './service-auth';
+export { noopEvents, fakeSql, fakeBrowser, fakeEvents, type FakeEvents } from './fakes';
+export { hashToken } from './tokens';
+export { cookieName } from './agent-session';
+export { ensureTable } from './schema';
+export { sqlClient, browserClient, eventsClient } from './clients';
+export { serviceSecretForServer } from './service-auth';
 export { SERVING_POOL, withPoolErrors } from './pool';
 export { envelope, type EventSubject, type EventObject } from './events';
 export { parseAssetsOrigin, isPublicAssetRequest, publicAssetResponse } from './assets-origin';
 
 export * from './dataset-policy';
-export {parseSharingEntries} from './sharing';
 
-export { isBuildAssetPath, buildAssetRequest, buildAssetResponse } from './build-assets';
-export { renderConnectionPage } from './connection-page';
+export { buildAssetRequest, buildAssetResponse } from './build-assets';
 
-export {humanSessionClient} from './human-session';
-export {identityClient} from './identity-client';
+export { humanSessionClient } from './human-session';

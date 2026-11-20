@@ -16,7 +16,7 @@ import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts/routes';
 import {parseAliasOrigins} from '@artifactbin/contracts/server-identity';
 import type {ServiceAudience, ServiceTokenParent} from '@artifactbin/contracts/service-audiences';
 import type {TokenRecord} from '@artifactbin/contracts/identity';
-import {serviceSecretMatches} from '@artifactbin/utils';
+import {serviceSecretMatches} from '@artifactbin/utils/service-auth';
 import type {Context, Hono} from 'hono';
 import type {AuthEnv,AuthOptions} from './parts';
 import {acceptedOriginsOf,baseUrlOf} from './routes/grants';

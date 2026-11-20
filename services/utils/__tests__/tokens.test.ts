@@ -1,6 +1,6 @@
 import {createHash} from 'node:crypto';
 import {describe,expect,it} from 'vitest';
-import {TOKEN_RE,hashToken} from '@artifactbin/utils';
+import {TOKEN_RE, hashToken} from '@artifactbin/utils/tokens';
 
 /** The presented-token shape and its stored hash; the read itself is auth's `createBearerReader`. */
 describe('bearer token shape and hash', () => {

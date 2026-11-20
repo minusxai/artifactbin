@@ -2,7 +2,7 @@
 import { PGlite } from '@electric-sql/pglite';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Queryable } from '@artifactbin/contracts/db';
-import { createCodeStore } from '@artifactbin/utils';
+import { createCodeStore } from '@artifactbin/utils/codes';
 
 const DDL = (t: string) => `CREATE TABLE ${t} (kind TEXT NOT NULL, code_hash TEXT NOT NULL, subject TEXT, payload JSONB NOT NULL DEFAULT '{}', attempts INTEGER NOT NULL DEFAULT 0, expires_at TIMESTAMPTZ NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (kind, code_hash))`;
 let pg: PGlite; let db: Queryable;

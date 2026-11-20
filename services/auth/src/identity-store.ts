@@ -7,7 +7,7 @@
  */
 import {IDENTITY_OWNED_TABLES, type IdentityService, type TransactionalQueryable} from '@artifactbin/contracts/identity-module';
 import type {Queryable} from '@artifactbin/contracts/db';
-import {ensureTable,renderSchema} from '@artifactbin/utils';
+import {ensureTable, renderSchema} from '@artifactbin/utils/schema';
 import {ensureAuthSchema} from './schema';
 import {IDENTITY_TABLES} from './identity-store/schema';
 import {identityViewColumns,identityViewStatements,plainIdentifier,type IdentitySchemas} from './identity-store/views';

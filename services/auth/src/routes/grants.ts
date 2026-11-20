@@ -4,7 +4,7 @@
  * or a configured service, scope empty); reading an auth body to AUTH_BODY_LIMIT; and issuing access (`mintFor`,
  * `issueGrant`), where a group's sign-in the rule no longer holds throws `GroupSignInRefused`, never an outage.
  */
-import { BodyTooLargeError, readBody } from '@artifactbin/utils';
+import { BodyTooLargeError, readBody } from '@artifactbin/utils/body';
 import { API_RESOURCE_PATH } from '@artifactbin/contracts/cli-auth';
 import { IdentityError } from '@artifactbin/contracts/identity-module';
 import { INTERNAL_MINT_PATH } from '@artifactbin/contracts/routes';

@@ -8,7 +8,7 @@
 import { randomUUID } from 'node:crypto';
 import type { EventEnvelope, EventSink, EventSubscriber, EventsService } from '@artifactbin/contracts/events';
 import type { Queryable } from '@artifactbin/contracts/db';
-import { ensureTable } from '@artifactbin/utils';
+import { ensureTable } from '@artifactbin/utils/schema';
 import { DEFAULT_EVENTS_SCHEMA, EVENTS_TABLES, IDENTIFIER } from './schema';
 
 interface EventsWriterOptions {

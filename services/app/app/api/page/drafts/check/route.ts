@@ -16,7 +16,7 @@
  * hour's checks spent), 503 `check_unavailable`. Never cached.
  */
 import { SERVICE_PAYLOAD_LIMIT } from '@artifactbin/contracts/payload-limit';
-import { BodyTooLargeError, readBody } from '@artifactbin/utils';
+import { BodyTooLargeError, readBody } from '@artifactbin/utils/body';
 import { draftCheckRateLimited, draftChecksPerHour, refundDraftCheck } from '@/lib/allowances';
 import { requestActor } from '@/lib/authentication';
 import { json } from '@/lib/http';

@@ -1,5 +1,5 @@
 /** Clear the retired ownership cookie at sign-out without reading or authenticating it. */
-import { cookieName, clearCookieHeader } from '@artifactbin/utils';
+import { cookieName, clearCookieHeader } from '@artifactbin/utils/agent-session';
 import { PUBLIC_BASE_URL } from '@/lib/platform';
 
 const SECURE_COOKIE = PUBLIC_BASE_URL.startsWith('https://');

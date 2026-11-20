@@ -5,7 +5,8 @@
  * Page and form live together: the hidden fields one writes are the ones the other reads. A GROUP'S SIGN-IN is said
  * plainly on the page, never for a first-party client or a service, and the level held is checked at both steps.
  */
-import { BodyTooLargeError, readBody, renderConnectionPage } from '@artifactbin/utils';
+import { BodyTooLargeError, readBody } from '@artifactbin/utils/body';
+import { renderConnectionPage } from '@artifactbin/utils/connection-page';
 import { escapeHtml } from '@artifactbin/utils/escape';
 import { ANONYMOUS, isGroupPrincipalRole } from '@artifactbin/contracts/actor';
 import { clientRedirects, createAuthCode, isValidCodeChallenge } from '../identity/oauth';

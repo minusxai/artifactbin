@@ -44,7 +44,8 @@
  * `Sec-Fetch-*` reach the handlers untouched.
  */
 import type { Context, MiddlewareHandler, Next } from 'hono';
-import { attachActor, readCookie } from '@artifactbin/utils';
+import { attachActor } from '@artifactbin/utils/upstream';
+import { readCookie } from '@artifactbin/utils/agent-session';
 import { ANONYMOUS } from '@artifactbin/contracts/actor';
 import { documentHostServes } from '@artifactbin/contracts/url-space';
 import { endPagesSession, exchangePagesTicket, pagesSessionOf, type PagesSession } from '@/lib/accounts';

@@ -19,7 +19,7 @@
  * the same signed header a split deployment uses. The secret is generated per boot
  * (`server.ts`) and never leaves the process, so nothing outside it can mint an actor.
  */
-import { inProcess, overHttp } from '@artifactbin/utils';
+import { inProcess, overHttp } from '@artifactbin/utils/upstream';
 import { BROWSER_FONT_RESOURCE_PATH } from '@artifactbin/contracts/browser-sessions';
 import type { Upstream } from '@artifactbin/contracts/part';
 import type { Hono } from 'hono';

@@ -1,4 +1,4 @@
-import { isPublicAssetRequest, publicAssetResponse } from '@artifactbin/utils';
+import { isPublicAssetRequest, publicAssetResponse } from '@artifactbin/utils/assets-origin';
 import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import { Readable } from 'node:stream';

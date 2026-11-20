@@ -7,14 +7,14 @@
  */
 import type { SqlService } from '@artifactbin/contracts/sql';
 import { SQL_ROUTES } from '@artifactbin/contracts/sql';
-import { jsonServer, type JsonServer, type JsonRoutes } from '@artifactbin/utils';
+import { jsonServer, type JsonServer, type JsonRoutes } from '@artifactbin/utils/http';
 
 export type * from '@artifactbin/contracts/sql';
 export { SQL_ROUTES } from '@artifactbin/contracts/sql';
 // `sqlClient` lives in @artifactbin/utils; re-exported here so a caller can take the
 // client from the same package as the shell it speaks to. That is how this package's
 // own tests and the app's story tests reach it; app product code imports utils directly.
-export { sqlClient } from '@artifactbin/utils';
+export { sqlClient } from '@artifactbin/utils/clients';
 
 /** The one GET a shell answers — the liveness/readiness probe for whatever orchestrates the service. */
 const HEALTH = '/health';

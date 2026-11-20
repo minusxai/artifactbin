@@ -7,7 +7,7 @@
  */
 import { SERVICE_PAYLOAD_LIMIT } from '@artifactbin/contracts/payload-limit';
 import type { Actor } from '@artifactbin/contracts/actor';
-import { BodyTooLargeError, readBody } from '@artifactbin/utils';
+import { BodyTooLargeError, readBody } from '@artifactbin/utils/body';
 import { draftCheckAnswer } from '@/lib/page-drafts';
 
 const reply = (body: unknown, status = 200) => Response.json(body, { status, headers: { 'cache-control': 'no-store' } });

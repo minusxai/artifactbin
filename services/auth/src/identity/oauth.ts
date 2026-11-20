@@ -3,7 +3,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import {API_RESOURCE_PATH, ARTIFACT_SCOPE} from '@artifactbin/contracts/cli-auth';
 import {isLocalDevelopmentHost} from '@artifactbin/contracts/server-identity';
 import type {Queryable} from '@artifactbin/contracts/db';
-import {plainIdentifier} from '@artifactbin/utils';
+import {plainIdentifier} from '@artifactbin/utils/sql-identifier';
 import {sessionBoundSql} from './bearer';
 
 const AUTH_CODE_TTL_MS = 5 * 60 * 1000;

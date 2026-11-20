@@ -7,7 +7,7 @@
  */
 import type { SqlService } from '@artifactbin/contracts/sql';
 import { MAX_ROWS_LIMIT, QUERY_TIMEOUT_MS, services } from '@/lib/platform';
-import { queryBounds as bounds } from '@artifactbin/utils';
+import { queryBounds as bounds } from '@artifactbin/utils/clients';
 
 export type { DryRunResult, MutationInput, MutationOutcome, MutationResult, QueryFailure, QueryOutcome, QueryPage, RunInput, RunManyInput, SqlQuery } from '@artifactbin/contracts/sql';
 export { isQueryFailure } from '@artifactbin/contracts/sql';

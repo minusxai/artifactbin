@@ -11,14 +11,18 @@ import { Pool } from 'pg';
 import type { EventsService, EventSink, EventSubscriber } from '@artifactbin/contracts/events';
 import type { Queryable } from '@artifactbin/contracts/db';
 import { EVENTS_ROUTES } from '@artifactbin/contracts/events';
-import { createEnv, jsonServer, log, serviceSecretForServer, SERVING_POOL, withPoolErrors, type JsonServer } from '@artifactbin/utils';
+import { createEnv } from '@artifactbin/utils/env';
+import { jsonServer, type JsonServer } from '@artifactbin/utils/http';
+import { log } from '@artifactbin/utils/log';
+import { serviceSecretForServer } from '@artifactbin/utils/service-auth';
+import { SERVING_POOL, withPoolErrors } from '@artifactbin/utils/pool';
 import { createEvents, ensureEventsSchema } from './local';
 import { DEFAULT_EVENTS_SCHEMA, IDENTIFIER } from './schema';
 
 export type * from '@artifactbin/contracts/events';
 export type { Queryable } from '@artifactbin/contracts/db';
 export { eventName } from '@artifactbin/contracts/events';
-export { eventsClient } from '@artifactbin/utils';
+export { eventsClient } from '@artifactbin/utils/clients';
 export { EVENTS_TABLES } from './schema';
 
 /** The one GET a shell answers — the liveness/readiness probe for whatever orchestrates the service. */
