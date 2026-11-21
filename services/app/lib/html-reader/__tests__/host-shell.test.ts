@@ -84,7 +84,7 @@ function framedDocument(win: Window & typeof globalThis, mounted: MountedDocumen
 }
 
 describe('a host page on the app\'s own origin', () => {
-  it('remounts the frame under an eligible group only after its reader clicks', async () => {
+  it.each([false, true])('requires a click for eligible and link-required groups (link-required %s)', async required => {
     const w = world();
     const {win, container} = hostPage(session(w.owner));
     const path = '/api/artifacts/' + w.privatePage + '/sql';
@@ -94,7 +94,7 @@ describe('a host page on the app\'s own origin', () => {
       if (url !== path) return server(url, init);
       sent.push(JSON.parse(String(init?.body)));
       return Response.json({error:'permission_denied', reader_id:w.owner.userId,
-        viewing_as:{id:'group_a', name:'Analytics'},eligible_groups:[{id:'group_b',name:'Operations'}]}, {status:403});
+        viewing_as:{id:'group_a', name:'Analytics'},...(required ? {required_group:{id:'group_b',name:'Operations'}} : {eligible_groups:[{id:'group_b',name:'Operations'}]})}, {status:403});
     };
     const mounted = await mountDocument(container,{id:w.privatePage},win);
     const frame = framedDocument(win,mounted);
@@ -104,7 +104,7 @@ describe('a host page on the app\'s own origin', () => {
     expect(sent[0]).not.toHaveProperty('reader_group_id');
     expect(container.textContent).toContain('Viewing as Analytics');
     const button = container.querySelector('button')!;
-    expect(button.textContent).toBe('Switch to Operations');
+    expect(button.textContent).toBe(required ? 'Request access as Operations' : 'Switch to Operations');
     button.click();
     await expect.poll(() => mounted.frame.src).not.toBe(original);
     await framedDocument(win,mounted).fetchThrough(path,'POST',JSON.stringify({sql:'select 1'}));

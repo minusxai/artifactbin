@@ -271,3 +271,44 @@ it('isolates pooled page reads and schema by group and leaves an ordinary siblin
   expect(schema.status).toBe(200);
   expect(wire.databases.at(-1)).toBe('catalog/'+first.id);
 });
+
+it('requests a pinned group on a readable third-group page before either read reaches the connector', async () => {
+  const {alice, bob} = await readers();
+  const a = await createGroup(alice.userId!, {handle:'analytics', name:'Analytics'});
+  const b = await createGroup(alice.userId!, {handle:'operations', name:'Operations'});
+  const c = await createGroup(alice.userId!, {handle:'publishing', name:'Publishing'});
+  await admitGroupMember(alice.userId!, a.id, bob.userId!, 'member');
+  await admitGroupMember(alice.userId!, b.id, bob.userId!, 'member');
+  overrideConfig({}, {DATASETS__ALLOW_PRIVATE_NETWORK:'1', DATASETS__GROUP_SCOPED_CONNECTIONS:'@default', DATASETS__DEFAULT_CONNECTION:setting});
+  const statement = 'select n from wh.public.loose';
+  const html = PAGE('<script type="application/sql" data-af-query="counted" data-af-dataset="wh">select 7 as n</script>')
+    .replace('warehouse/finance','warehouse/operations');
+  const page = (await publish(alice,{html,destination:{type:'group',id:c.id},visibility:'unlisted'})).body.id;
+  const read = async (call: Record<string,string>, group?: string) => {
+    const response = await pageSql(request('/api/artifacts/'+page+'/sql',{method:'POST',token:bob.token,
+      json:{...call, revision:'1', reader_scope_user:bob.userId, reader_group_id:group}}),params(page));
+    return {status:response.status,body:await response.json()};
+  };
+  const calls = [{sql:statement}, {query:'counted'}] as Record<string,string>[];
+  const start = wire.databases.length;
+  for (const call of calls) {
+    const denied = await read(call);
+    expect(denied).toMatchObject({status:403,body:{reader_id:bob.userId,viewing_as:{id:a.id},required_group:{id:b.id,name:'Operations'}}});
+    expect(denied.body).not.toHaveProperty('eligible_group_ids');
+  }
+  expect(wire.databases.length).toBe(start);
+  for (const call of calls) expect(await read(call,b.id)).toMatchObject({status:200,body:{reader_id:bob.userId,viewing_as:{id:b.id},rows:[{n:7}]}});
+  expect(wire.databases.slice(start)).toEqual(['warehouse/'+b.id]);
+  // Even a directly held pin can be denied by the database after selection.
+  const policy = await read({sql:'select * from wh.guarded.shared'},b.id);
+  expect(policy).toMatchObject({status:403,body:{error:'permission_denied',viewing_as:{id:b.id}}});
+  expect(policy.body).not.toHaveProperty('required_group');
+  await removeGroupMember(alice.userId!,b.id,bob.userId!);
+  for (const call of calls) {
+    expect((await read(call,b.id)).status).toBe(403);
+    const refusal = await read(call);
+    expect(refusal.status).toBe(403);
+    expect(refusal.body).not.toHaveProperty('required_group');
+    expect(JSON.stringify(refusal.body)).not.toContain(b.id);
+  }
+});

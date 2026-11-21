@@ -13,7 +13,7 @@ export default function ReaderGroupNotice(props: {scope: ReaderScope; slot: HTML
       <span>Viewing as {props.scope.name}</span>
       <Show when={props.scope.choices.length}><span>Access denied as {props.scope.name}.</span></Show>
       <For each={props.scope.choices}>{group =>
-        <Button size="sm" onClick={() => props.switchGroup(group.id)}>Switch to {group.name}</Button>}
+        <Button size="sm" onClick={() => props.switchGroup(group.id)}>{props.scope.requestAccess ? 'Request access as ' : 'Switch to '}{group.name}</Button>}
       </For>
     </section></TrustedUi></Portal>}</Show>;
 }
