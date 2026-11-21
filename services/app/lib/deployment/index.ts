@@ -3,7 +3,8 @@ import {effectiveRoleSql,recordGroupChanges} from '../groups';
 import {validateDefaultConnection} from '../connections';
 /** Durable company bootstrap and admission. All state transitions hold the singleton row lock. */
 import type {ArtifactDestination, DeploymentState, GroupSummary} from '@artifactbin/contracts/groups';
-import { getDb, type Queryable, deploymentConfig, embedTrustedOrigins, env, serviceAudiences, services } from '../platform';
+import type {Queryable} from '@artifactbin/contracts/db';
+import { getDb, deploymentConfig, embedTrustedOrigins, env, serviceAudiences, services } from '../platform';
 import {admissionPolicyOf} from '@artifactbin/auth';
 import {datasetsOwnConnections,groupTrustApprovalsEnabled} from '../platform';
 interface State {owner_user_id:string|null;default_group_id:string|null;setup_complete:boolean}
@@ -69,14 +70,15 @@ async function settledAdmission(db:Queryable,identity:{userId:string;emailVerifi
  * after its token verified) is admitted as a member once setup is complete, but never joins the default group: their
  * only access is the group the issuer named. Their address is never matched against the company's patterns.
  */
-export async function admitDeploymentIdentity(identity:{userId:string;email?:string;emailVerified?:boolean;trustedIssuer?:string}):Promise<boolean> {
+export async function admitDeploymentIdentity(identity:{userId:string;email?:string;emailVerified?:boolean;trustedIssuer?:string},signInTx?:Queryable):Promise<boolean> {
  const config=deploymentConfig();if(config.mode==='public')return true;
  if(identity.trustedIssuer){
-  const db=await getDb();if(await canUseDeploymentIdentity(identity.userId,db))return true;
-  return db.transaction(async tx=>{
+  const admit=async(tx:Queryable)=>{
+   if(await canUseDeploymentIdentity(identity.userId,tx))return true;
    if(!(await state(tx,true)).setup_complete)return false;
    await tx.query('INSERT INTO deployment_members(user_id) VALUES ($1) ON CONFLICT DO NOTHING',[identity.userId]);return true;
-  });
+  };
+  return signInTx ? admit(signInTx) : (await getDb()).transaction(admit);
  }
  const policy=admissionPolicyOf({},(_source,key)=>{const [module,name]=key.split('__');return env(module!,name!);});
  const email=identity.email?.trim().toLowerCase(),db=await getDb();

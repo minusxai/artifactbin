@@ -100,10 +100,22 @@ export function GroupManagement(props:{detail:GroupDetail;refresh:()=>void}):JSX
  const admin=()=>props.detail.group.role==='admin'; const root=()=>`/api/groups/${props.detail.group.id}`;
  const searching=()=>!!query().trim();
  const search=usePageData<{members:GroupMember[]}>(()=>`${root()}/members?query=${encodeURIComponent(query().trim())}`,{enabled:searching});
- const mutate=async(path:string,method:'POST'|'PUT'|'DELETE',body?:unknown)=>{if(busy())return;setBusy(true);setError('');try{await apiRequest(path,method,body);props.refresh();if(searching())void search.refresh(true);}catch(e){setError(e instanceof Error ? e.message === 'last_admin' ? 'Keep at least one admin in this group. Add another admin before changing this person.' : e.message : 'Could not update group.');}finally{setBusy(false);}};
+ const mutate=async(path:string,method:'POST'|'PUT'|'PATCH'|'DELETE',body?:unknown)=>{if(busy())return;setBusy(true);setError('');try{await apiRequest(path,method,body);props.refresh();if(searching())void search.refresh(true);}catch(e){setError(e instanceof Error ? e.message === 'last_admin' ? 'Keep at least one admin in this group. Add another admin before changing this person.' : e.message : 'Could not update group.');}finally{setBusy(false);}};
  const members=()=>searching() ? search.data()?.members ?? [] : props.detail.members;
  const nameOf=(person:GroupMember)=>person.name??person.username??'member';
  return <div class="mt-10 grid items-start gap-6 min-[1100px]:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]"><Show when={error()}><StatusMessage kind="error" class="min-[1100px]:col-span-2">{error()}</StatusMessage></Show>
+ <Show when={admin()}><Panel title="Tenancy ID" label="Group tenancy">
+  <Show when={props.detail.group.host_provisioned === false} fallback={<p>{props.detail.group.tenancy_id ?? 'Unset'} · Managed by the sign-in provider</p>}>
+   <form class="flex gap-3" onSubmit={e=>{
+    e.preventDefault();
+    const value=new FormData(e.currentTarget).get('tenancy_id');
+    if(typeof value==='string')void mutate(root(),'PATCH',{tenancy_id:value || null});
+   }}>
+    <Input aria-label="Tenancy ID" name="tenancy_id" maxLength={200} value={props.detail.group.tenancy_id ?? ''}/>
+    <Button type="submit" disabled={busy()}>Save tenancy ID</Button>
+   </form>
+  </Show>
+ </Panel></Show>
  <Panel label="Group people" title="People">
   <p class="mb-3 text-sm leading-relaxed text-muted">Members of {props.detail.group.name} itself. Membership is direct: it does not come from a parent group or a subgroup.</p>
   <p class="mb-3 text-sm leading-relaxed text-muted">Members read group files. Editors also publish and edit them. Admins additionally manage people, settings and group-owned sharing, here and in every subgroup. Personal files stay private unless shared.</p>

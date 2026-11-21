@@ -139,7 +139,7 @@ export interface IdentityService {
 
   // ── groups (each answers the changes it committed) ────────────────────────
   createGroup(input: {actorId: string; handle: string; name: string; description?: string; parentId?: string | null}): Promise<{group: GroupSummary; hierarchyRevision: number; changes: GroupChange[]}>;
-  updateGroup(input: {actorId: string; groupId: string; name?: string; description?: string}): Promise<{group: GroupSummary; changes: GroupChange[]}>;
+  updateGroup(input: {actorId: string; groupId: string; name?: string; description?: string; tenancy_id?: string | null}): Promise<{group: GroupSummary; changes: GroupChange[]}>;
   setGroupParent(input: {actorId: string; groupId: string; parentId: string | null; fromParentId?: string | null}): Promise<{changed: boolean; parent_id: string | null; previous_parent_id: string | null; hierarchy_revision?: number; changes: GroupChange[]}>;
   /** Soft delete (`deleted_at`): refused while live subgroups remain (`group_has_children`). */
   deleteGroup(input: {actorId: string; groupId: string; handle: string}): Promise<{changes: GroupChange[]}>;

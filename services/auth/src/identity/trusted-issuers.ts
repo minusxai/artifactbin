@@ -10,7 +10,7 @@
  * `aud` its audience, `exp` in the future, `iat` present and not ahead of now, at most 300 s between them, and `jti`
  * used once (a replayed `jti` is refused until its token expires; the record of used ids is this process's memory, so
  * a multi-process install accepts a token at most once per process). Claims: `sub` (the person's email address, or a
- * handle the issuer owns), `group` (the group's handle) and `tenancy_id` (the group's tenancy, fixed at its creation);
+ * handle the issuer owns), `group` (the group's handle) and `tenancy_id` (the group's tenancy, refreshed at each admitted sign-in);
  * any other claim (such as `name`) is ignored. The request's
  * `Origin` must be one of the issuer's origins; every other sign-in keeps refusing foreign origins.
  * The identity writes are ../identity-store/trusted-sign-in.

@@ -37,11 +37,11 @@ export interface GroupAudienceMember {user_id:string;username:string|null;name:s
  * names the ancestor that authority comes from (absent otherwise). `parent` and `subgroups` place the group in the
  * installation's tree; `subgroup_audience` (at most 100) lists the people its shares also reach through its subgroups.
  */
-export interface GroupDetail {group:GroupSummary & {company_root?:boolean};members:GroupMember[];linked_groups:GroupSummary[];invitations?:GroupInvitation[];parent:GroupRelative|null;subgroups:GroupRelative[];subgroup_audience:GroupAudienceMember[];admin_via?:{id:string;handle:string;name:string}|null;}
+export interface GroupDetail {group:GroupSummary & {company_root?:boolean;tenancy_id?:string|null;host_provisioned?:boolean};members:GroupMember[];linked_groups:GroupSummary[];invitations?:GroupInvitation[];parent:GroupRelative|null;subgroups:GroupRelative[];subgroup_audience:GroupAudienceMember[];admin_via?:{id:string;handle:string;name:string}|null;}
 export interface DeploymentState {mode:'public'|'company';setup_complete:boolean;is_owner:boolean;default_group:GroupSummary|null;}
 export interface CreateGroupInput {handle:string;name:string;description?:string;parent_id?:string|null;}
 
-export interface UpdateGroupInput {name?:string;description?:string;}
+export interface UpdateGroupInput {name?:string;description?:string;tenancy_id?:string|null;}
 export type GroupShareRole = 'viewer' | 'commenter' | 'editor';
 /**
  * A create-group request normalized (handle lowercased and trimmed, name and description trimmed), or null when it

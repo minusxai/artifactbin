@@ -16,6 +16,20 @@ it.each(['member','editor'] as const)('%s can search people without management c
  expect(screen.queryByRole('link',{name:'Alice'})).not.toBeInTheDocument();
  expect(screen.queryByRole('button',{name:'Invite person'})).not.toBeInTheDocument();
 });
+it.each([true,false])('shows the current tenancy and allows edits only for manual groups (host %s)',async host=>{
+ vi.stubGlobal('fetch',vi.fn(async()=>Response.json({})));
+ render(()=> <GroupManagement detail={{...detail,group:{...detail.group,host_provisioned:host,tenancy_id:'tenant-a'}}} refresh={()=>{}}/>);
+ if(host){
+  expect(screen.getByText(/tenant-a · Managed by/)).toBeInTheDocument();
+  expect(screen.queryByRole('button',{name:'Save tenancy ID'})).not.toBeInTheDocument();
+ }else{
+  const field=screen.getByRole('textbox',{name:'Tenancy ID'});
+  expect(field).toHaveValue('tenant-a');
+  fireEvent.input(field,{target:{value:'tenant-b'}});
+  fireEvent.click(screen.getByRole('button',{name:'Save tenancy ID'}));
+  await waitFor(()=>expect(fetch).toHaveBeenCalledWith('/api/groups/g1',expect.objectContaining({method:'PATCH',body:JSON.stringify({tenancy_id:'tenant-b'})})));
+ }
+});
 it('keeps last-admin refusal visible and preserves member role',async()=>{
  vi.stubGlobal('fetch',vi.fn(async()=>Response.json({error:'last_admin'},{status:409})));
  render(()=> <GroupManagement detail={detail} refresh={()=>{}} />);

@@ -4,7 +4,7 @@ import {getGroupRole,acceptGroupInvitations} from '@/lib/groups';
 import {describe,it,expect} from 'vitest';
 import {useAppHarness,request,mintAccountToken,params} from './harness';
 import {POST as create,GET as list} from '@/app/api/groups/route';
-import {GET as detail} from '@/app/api/groups/[id]/route';
+import {GET as detail,PATCH as update} from '@/app/api/groups/[id]/route';
 import {POST as invite} from '@/app/api/groups/[id]/invitations/route';
 import {PUT as member} from '@/app/api/groups/[id]/members/[userId]/route';
 import {GET as preferences,PUT as savePreferences} from '@/app/api/me/preferences/route';
@@ -32,6 +32,14 @@ describe('groups authenticated HTTP boundary',()=>{
   expect((await invite(request('/api/groups/'+group.id+'/invitations',{method:'POST',token:owner.token,json:{email:viewer.email,role:'member'}}),params({id:group.id}))).status).toBe(201);
   await acceptGroupInvitations(viewer.userId!,viewer.email!);
   expect((await invite(request('/api/groups/'+group.id+'/invitations',{method:'POST',token:viewer.token,json:{email:'mxmx_test_new@example.com',role:'admin'}}),params({id:group.id}))).status).toBe(403);
+  const patch=(token:string,tenancy_id:string)=>update(request('/api/groups/'+group.id,{method:'PATCH',token,json:{tenancy_id}}),params({id:group.id}));
+  const settings=async()=>(await (await detail(request('/api/groups/'+group.id,{token:owner.token}),params({id:group.id}))).json()).group;
+  expect((await patch(owner.token,'tenant-a')).status).toBe(200);
+  expect((await patch(viewer.token,'tenant-b')).status).toBe(403);
+  expect(await settings()).toMatchObject({tenancy_id:'tenant-a',host_provisioned:false});
+  await (await getDb()).query("UPDATE groups SET trusted_issuer='issuer-a' WHERE id=$1",[group.id]);
+  expect((await patch(owner.token,'tenant-b')).status).toBe(403);
+  expect(await settings()).toMatchObject({tenancy_id:'tenant-a',host_provisioned:true});
   const viewed=await (await detail(request('/api/groups/'+group.id,{token:viewer.token}),params({id:group.id}))).json();expect(viewed.invitations).toBeUndefined();expect(viewed.members[0]).not.toHaveProperty('email');
  });
  it('resolves the reader default from live direct memberships and the saved destination',async()=>{
