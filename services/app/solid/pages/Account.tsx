@@ -15,7 +15,7 @@ import { SectionHeading } from '../ui/PageHeader';
 
 export function AccountPage(): JSX.Element {
   const { session } = useSession();
-  const page = usePageData<{ username: string | null; image: string | null; user_page_url?: string | null }>('/api/page/account');
+  const page = usePageData<{ name: string | null; username: string | null; image: string | null; user_page_url?: string | null }>('/api/page/account');
   return <Show when={!session() || !!session()?.user} fallback={<Navigate href="/login?callbackUrl=/account" />}>
     <main class="workspace-page">
       <WorkspaceHeading title="Account" description="Manage your profile, publishing and API access." />
@@ -24,7 +24,7 @@ export function AccountPage(): JSX.Element {
         <section aria-labelledby="profile-heading"><SectionHeading id="profile-heading" class="mb-4">Profile</SectionHeading>
           <Panel class="grid items-start gap-5 lg:grid-cols-[240px_minmax(0,1fr)] lg:gap-6">
             <div class="border-b border-edge pb-5 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-6"><p class="mb-3 text-sm font-medium">Profile photo</p><AvatarCircle compact image={page.data()?.image ?? null} initial={page.data()?.username ?? 'a'} userId={session()?.user?.id ?? ''} onChange={() => void page.refresh(true)} onRemove={() => void page.refresh(true)} /></div>
-            <UsernameCard username={page.data()?.username ?? null} />
+            <UsernameCard name={page.data()?.name ?? null} username={page.data()?.username ?? null} />
           </Panel>
         </section>
         <Show when={page.data()?.user_page_url}>{url => <p class="text-sm text-muted">Your public home: <a class="text-accent" href={url()}>{url()}</a></p>}</Show>

@@ -8,11 +8,24 @@ import { apiFetch } from '../lib/api';
 
 const HANDLE_REFUSALS: Record<string, string> = { username_taken: 'that handle is taken — pick another', invalid_username: '3–32 characters: lowercase letters, numbers, internal underscores (no hyphens)' };
 
-export function UsernameCard(props: { username: string | null }): JSX.Element {
+export function UsernameCard(props: { name?: string | null; username: string | null }): JSX.Element {
   const [value, setValue] = createSignal('');
   const [status, setStatus] = createSignal<string | null>(null);
   const [busy, setBusy] = createSignal(false);
   createEffect(() => setValue(props.username ?? ''));
+  const [name, setName] = createSignal('');
+  createEffect(() => setName(props.name ?? ''));
+  const saveName = async () => {
+    setBusy(true);
+    setStatus(null);
+    const response = await apiFetch('/api/my/profile', 'PATCH', {name:name()}).catch(() => null);
+    setBusy(false);
+    if (!response?.ok) { setStatus('Could not save the display name.'); return; }
+    setName(name().trim());
+    setStatus('saved');
+    pageDataChanged();
+    profileChanged();
+  };
   const save = async () => {
     setBusy(true); setStatus(null);
     const response = await apiFetch('/api/my/profile', 'PATCH', { username: value() }).catch(() => null);
@@ -23,6 +36,12 @@ export function UsernameCard(props: { username: string | null }): JSX.Element {
     setStatus(HANDLE_REFUSALS[body.error ?? ''] ?? 'could not save that handle');
   };
   return <section class="min-w-0">
+    <form class="mb-4" onSubmit={event => { event.preventDefault(); void saveName(); }}>
+      <Field label="Display name"><div class="flex items-center gap-2">
+        <Input autocomplete="name" maxLength={200} value={name()} onInput={event => setName(event.currentTarget.value)} />
+        <Button type="submit" aria-label="Save display name" disabled={busy() || !name().trim()}>Save</Button>
+      </div></Field>
+    </form>
     <form onSubmit={event => { event.preventDefault(); void save(); }}><Field label="Handle" hint="Renaming is safe: links already shared keep working.">
       <div class="flex items-center gap-2"><span aria-hidden="true" class="w-4 text-center font-mono text-sm text-faint">@</span><Input aria-label="Username" autocomplete="off" spellcheck={false} value={value()} onInput={event => setValue(event.currentTarget.value)} class="min-w-0 flex-1" /><Button type="submit" aria-label="Save username" disabled={busy() || !value().trim()}>{busy() ? 'Saving…' : 'Save'}</Button></div>
     </Field></form>

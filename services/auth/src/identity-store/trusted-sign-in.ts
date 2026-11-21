@@ -28,7 +28,7 @@ import type {Queryable} from '@artifactbin/contracts/db';
 import type {TransactionalQueryable} from '@artifactbin/contracts/identity-module';
 import {companyGroupState} from './company-group';
 import {chainOf, liveGroup} from './group-access';
-import {accountMethods,reserveHandle} from './accounts';
+import {accountMethods,reserveHandle,writeDisplayName} from './accounts';
 import {identityTables,internalId,isUniqueViolation} from './tables';
 
 export interface TrustedSignInInput {
@@ -77,10 +77,7 @@ export async function trustedSignIn(db: TransactionalQueryable, input: TrustedSi
       // groups, so access the issuer has since withdrawn (another tenant) never lingers here.
       await tx.query(`DELETE FROM ${t.group_members} m USING ${t.groups} g WHERE m.group_id=g.id AND m.user_id=$1 AND g.trusted_issuer=$2 AND m.group_id<>$3`, [person.userId, input.issuer, group.groupId]);
       if (admit && !await admit(person, tx)) throw new Refused('deployment_admission_required');
-      if (input.name !== undefined) {
-        await tx.query(`UPDATE ${t.users} SET name=$2 WHERE id=$1 AND name IS DISTINCT FROM $2`, [person.userId, input.name]);
-        await tx.query(`UPDATE ${better('user')} SET name=$2,"updatedAt"=now() WHERE id=$1 AND name IS DISTINCT FROM $2`, [person.userId, input.name]);
-      }
+      if (input.name !== undefined) await writeDisplayName(tx, t, authSchema, person.userId, input.name);
       if (input.groupName !== undefined)
         await tx.query(`UPDATE ${t.groups} SET name=$2 WHERE id=$1 AND name IS DISTINCT FROM $2`, [group.groupId, input.groupName]);
       return {ok: true as const, userId: person.userId, email: person.email, groupId: group.groupId, created: {user: person.created, group: group.created}};

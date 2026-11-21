@@ -24,8 +24,17 @@ describe('cli-account-resources', () => {
    const token=await mintToken('mxmx_test_account_profile', user.id);
    const artifact=await createArtifact(token.id,user.id,{format:'html',source:nativeSource('<p>Like</p>'),meta:{},visibility:'private'});
    const read=await GET(request('/api/account/profile',{token:token.token}));expect(read.status).toBe(200);const profile=await read.json();expect(profile.type).toBe('profile');
-   const body={...profile,username:'mxmx_test_profile_new',liked:[artifact.id],following:[other.id]};
+   const otherToken=await mintToken('mxmx_test_account_other',other.id);
+   const otherProfile=await GET(request('/api/account/profile',{token:otherToken.token}));
+   const otherBefore=await otherProfile.json();
+   const foreign=await PATCH(request('/api/account/profile',{method:'PATCH',token:token.token,json:{...otherBefore,name:'Wrong person'}}));
+   expect(foreign.status).toBe(404);
+   const body={...profile,name:'River Sample',username:'mxmx_test_profile_new',liked:[artifact.id],following:[other.id]};
    const updated=await PATCH(request('/api/account/profile',{method:'PATCH',token:token.token,json:body}));expect(updated.status).toBe(200);expect(await has(user.id,'like',artifact.id)).toBe(true);expect(await has(user.id,'follow',other.id)).toBe(true);
+   const ownRead=await GET(request('/api/account/profile',{token:token.token}));
+   expect(await ownRead.json()).toMatchObject({id:user.id,name:'River Sample'});
+   const otherRead=await GET(request('/api/account/profile',{token:otherToken.token}));
+   expect(await otherRead.json()).toEqual(otherBefore);
    const stale=await PATCH(request('/api/account/profile',{method:'PATCH',token:token.token,json:{...body,following:[]}}));expect(stale.status).toBe(409);expect(await has(user.id,'follow',other.id)).toBe(true);
    const invalid=await PATCH(request('/api/account/profile',{method:'PATCH',token:token.token,json:{...await updated.json(),username:'@invalid',following:[]}}));expect(invalid.status).toBe(400);expect(await has(user.id,'follow',other.id)).toBe(true);
   });

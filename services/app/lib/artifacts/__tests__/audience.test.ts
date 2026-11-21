@@ -112,8 +112,10 @@ describe('the account profile', () => {
     expect(await propose({ liked: [hidden.id] })).toEqual({ status: 404, body: { error: 'not_found' } });
     expect(await propose({ following: [owner.userId] })).toEqual({ status: 400, body: { error: 'invalid_follow', id: owner.userId } });
     expect(await propose({ email: 'other@example.test' })).toMatchObject({ status: 400, body: { error: 'readonly_field' } });
-    const changed = await propose({ liked: [row.id], following: [friend.userId], username: 'owner2' });
-    expect(changed).toMatchObject({ status: 200, body: { liked: [row.id], following: [friend.userId], username: 'owner2' } });
+    expect(await propose({ username: 'unused_handle', name: '   ' })).toMatchObject({status:400, body:{error:'invalid_name'}});
+    expect(await accountProfile(owner.userId)).toEqual(profile);
+    const changed = await propose({ liked: [row.id], following: [friend.userId], username: 'owner2', name: 'Owner Name' });
+    expect(changed).toMatchObject({ status: 200, body: { liked: [row.id], following: [friend.userId], username: 'owner2', name: 'Owner Name' } });
     expect(await propose({ liked: [] })).toMatchObject({ status: 409, body: { error: 'state_conflict' } });
   });
 });

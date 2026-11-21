@@ -32,7 +32,7 @@ export interface IdentityStoreOptions {
 export function createIdentityStore(options: IdentityStoreOptions): IdentityService {
   const t = identityTables(options.authSchema), db = retrying(options.db);
   return {
-    ...accountMethods(db, t), ...groupMethods(db, t, options), ...mailMethods(db, t),
+    ...accountMethods(db, t, options.authSchema), ...groupMethods(db, t, options), ...mailMethods(db, t),
   };
 }
 

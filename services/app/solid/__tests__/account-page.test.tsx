@@ -19,12 +19,13 @@ function stubAccountFetch({ account = () => Response.json({ username: 'owner', i
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.history.replaceState(null, '', '/'); });
 
 it('loads the account handle late while keeping profile controls without the retired data uploader', async () => {
-  stubAccountFetch({ account: async () => { await new Promise(resolve => setTimeout(resolve, 5)); return Response.json({ username: 'owner', image: '/api/users/usr_1/avatar?v=1', user_page_url:'https://owner.u.example.test' }); } });
+  stubAccountFetch({ account: async () => { await new Promise(resolve => setTimeout(resolve, 5)); return Response.json({ name: 'Sample Reader', username: 'owner', image: '/api/users/usr_1/avatar?v=1', user_page_url:'https://owner.u.example.test' }); } });
   window.history.replaceState(null, '', '/account');
   const view = render(() => <App />);
   await vi.dynamicImportSettled();
   expect(await screen.findByRole('button', { name: 'Upload a photo' })).toBeInTheDocument();
   await waitFor(() => expect((screen.getByRole('textbox', { name: 'Username' }) as HTMLInputElement).value).toBe('owner'));
+  expect(screen.getByRole('textbox', {name:'Display name'})).toHaveValue('Sample Reader');
   expect(view.container.querySelector('img[src="/api/users/usr_1/avatar?v=1"]')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Remove photo' })).toBeInTheDocument();
   expect(screen.getByRole('link',{name:'https://owner.u.example.test'})).toHaveAttribute('href','https://owner.u.example.test');

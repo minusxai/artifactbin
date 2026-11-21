@@ -16,6 +16,7 @@
  * The identity writes are ../identity-store/trusted-sign-in.
  */
 import {createPublicKey, verify, type KeyObject} from 'node:crypto';
+import {displayName} from '@artifactbin/contracts/account-resource';
 import {readEnv} from '../env';
 
 export const TRUSTED_SIGNIN_PATH = '/api/auth/trusted-sign-in';
@@ -68,7 +69,6 @@ export type TrustedTokenRefusal = 'invalid_token' | 'unknown_issuer' | 'forbidde
 const json = (part: string): Record<string, unknown> | null => {
   try { const value = JSON.parse(Buffer.from(part, 'base64url').toString('utf8')); return value && typeof value === 'object' && !Array.isArray(value) ? value : null; } catch { return null; }
 };
-const displayName = (value: unknown) => plain(value, 200) && value.trim() ? value.trim() : undefined;
 const plain = (value: unknown, max: number): value is string => typeof value === 'string' && value.length > 0 && value.length <= max && !/[\u0000-\u001f\u007f]/.test(value);
 
 /**
