@@ -1,6 +1,6 @@
 import { afterEach, expect, it } from 'vitest';
 import * as Y from 'yjs';
-import { NodeSelection, Selection, TextSelection } from 'prosemirror-state';
+import { NodeSelection, TextSelection } from 'prosemirror-state';
 import { canonicalizeHtmlPage } from '../../html-page';
 import { compactRegion, createRegionState, validateRegionUpdate, regionHtml } from '../../live-regions';
 import { createHtmlAnnotationPainter, revealHtmlAnnotation } from '../bridge/annotations';
@@ -60,14 +60,22 @@ it('saved code language produces presentation tokens without changing editor tex
  expect(e.view.state.doc.textContent).toBe('const x = 1;');
  expect(JSON.stringify(e.view.state.doc.toJSON())).not.toContain('token');
 });
-it('Control+E moves to the document end and Mod+Shift+E toggles inline code',()=>{
+it.each(['Paragraph','Bullet','Nested'])('Control+E stops at the end of %s',text=>{
+ const e=single('<p>Paragraph</p><ul><li><p>Bullet</p><ul><li><p>Nested</p></li></ul></li></ul><p>Last</p>');
+ const {view}=e;
+ let start=0;
+ view.state.doc.descendants((node,pos)=>{if(node.isText&&node.text===text)start=pos;});
+ view.focus();
+ view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc,start+1)));
+ view.dom.dispatchEvent(new KeyboardEvent('keydown',{key:'e',ctrlKey:true,bubbles:true,cancelable:true}));
+ expect(view.state.selection.eq(TextSelection.create(view.state.doc,start+text.length))).toBe(true);
+ expect(view.state.storedMarks).toBeNull();
+ expect(view.dom.querySelector('code')).toBeNull();
+});
+it('Mod+Shift+E toggles inline code',()=>{
  const e=single('<p>First</p><p>Last</p>');
  const {view}=e;
  view.focus();
- view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc,1,6)));
- view.dom.dispatchEvent(new KeyboardEvent('keydown',{key:'e',ctrlKey:true,bubbles:true,cancelable:true}));
- expect(view.state.selection.eq(Selection.atEnd(view.state.doc))).toBe(true);
- expect(view.dom.querySelector('code')).toBeNull();
  view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc,1,6)));
  const mac=/Mac|iP(hone|[oa]d)/.test(navigator.platform);
  view.dom.dispatchEvent(new KeyboardEvent('keydown',{key:'E',keyCode:69,ctrlKey:!mac,metaKey:mac,shiftKey:true,bubbles:true,cancelable:true}));

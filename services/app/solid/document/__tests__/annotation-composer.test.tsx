@@ -1,4 +1,4 @@
-import { replaceComment } from './comment-input';
+import { replaceComment, selectCommentText } from './comment-input';
 /* @jsxImportSource solid-js */
 /**
  * THE COMPOSER — what a new comment
@@ -379,6 +379,23 @@ describe('the annotation composer', () => {
     fireEvent.keyDown(composer, { key: 'Enter', metaKey: true });
     await flush();
     expect(createdBody()).toMatchObject({ body: 'from the keyboard' });
+  });
+
+  it('moves the comment caret with Control+E and formats code with Mod+Shift+E', async () => {
+    layer({ railOpen: true, initialSelection: TEXT({ path: '0', rect: { x: 0, y: 0, width: 100, height: 40 } }) });
+    await flush();
+    const composer = await screen.findByLabelText('Annotation comment');
+    replaceComment(composer, 'First\n\nLast');
+    await selectCommentText(composer, 0, 3);
+    fireEvent.keyDown(composer, { key: 'e', ctrlKey: true });
+    expect(window.getSelection()?.isCollapsed).toBe(true);
+    expect(window.getSelection()?.anchorNode?.textContent).toBe('First');
+    expect(window.getSelection()?.anchorOffset).toBe(5);
+    expect(composer.querySelector('code')).toBeNull();
+    await selectCommentText(composer, 0, 5);
+    const mac = /Mac|iP(hone|[oa]d)/.test(navigator.platform);
+    fireEvent.keyDown(composer, { key: 'E', keyCode: 69, shiftKey: true, ctrlKey: !mac, metaKey: mac });
+    expect(composer.querySelector('code')?.textContent).toBe('First');
   });
 
   it('opens the composer on a text selection handed in from view mode', async () => {
