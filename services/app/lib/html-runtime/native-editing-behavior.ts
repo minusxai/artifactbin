@@ -2,9 +2,10 @@
 import { isolated } from './native-editor-actions';
 import { safeHref } from '../live-regions/href';
 import type { Editor } from '@tiptap/core';
-import { Extension } from '@tiptap/core';
+import { createChainableState, Extension } from '@tiptap/core';
 import { Fragment, Slice, type Node as PMNode } from 'prosemirror-model';
-import { Plugin, Selection, type EditorState, type Transaction } from 'prosemirror-state';
+import { liftListItem, sinkListItem } from 'prosemirror-schema-list';
+import { Plugin, Selection, TextSelection, type EditorState, type Transaction } from 'prosemirror-state';
 
 /** Copied blocks are new identities, even when an internal clipboard slice carries original attributes. */
 export function freshClipboard(slice:Slice):Slice {
@@ -26,6 +27,23 @@ function indentText(state:EditorState,dispatch:((tr:Transaction)=>void)|undefine
  if(dispatch){const tr=state.tr;for(const change of changes.reverse()){if(outdent)tr.delete(change.pos,change.pos+change.remove);else tr.insertText('  ',change.pos);}dispatch(tr.scrollIntoView());}
  return true;
 }
+/** A range ending at the start of a list item has selected none of that item's text. */
+function listIndentState(state: EditorState): EditorState {
+ const { doc, selection } = state;
+ if (!(selection instanceof TextSelection) || selection.empty) return state;
+ const { $to, from, anchor, head } = selection;
+ if ($to.parentOffset !== 0 || $to.depth < 2 || $to.index(-1) !== 0 ||
+     !['listItem', 'taskItem'].includes($to.node(-1).type.name)) return state;
+ const beforeItem = $to.before(-1);
+ if (from >= beforeItem) return state;
+ const end = Selection.findFrom(doc.resolve(beforeItem), -1, true);
+ if (!end || end.head <= from) return state;
+ const range = anchor === from
+  ? TextSelection.create(doc, from, end.head)
+  : TextSelection.create(doc, end.head, head);
+ return createChainableState({ state, transaction: state.tr.setSelection(range) });
+}
+
 /** List indentation never falls back to editing text, even when sinking is impossible. */
 export function indentNative(editor:Editor,outdent=false):boolean {
  const {state}=editor;
@@ -37,7 +55,11 @@ export function indentNative(editor:Editor,outdent=false):boolean {
  state.doc.nodesBetween(state.selection.from,state.selection.to,node=>{
   if(!item&&(node.type.name==='listItem'||node.type.name==='taskItem'))item=node.type.name;
  });
- if(item){if(outdent)editor.commands.liftListItem(item);else editor.commands.sinkListItem(item);return true;}
+ if (item) {
+  const command = outdent ? liftListItem : sinkListItem;
+  command(state.schema.nodes[item]!)(listIndentState(state), editor.view.dispatch);
+  return true;
+ }
  return indentText(state,editor.view.dispatch,outdent);
 }
 export const NativeIndentation=Extension.create({
