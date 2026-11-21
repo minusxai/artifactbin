@@ -3,7 +3,7 @@ import { isolated, structural, undoNative, moveSibling, normalizeChecklist, togg
 import { deleteListSeparator } from './native-separator-deletion';
 import { Editor } from '@tiptap/core';
 import Collaboration from '@tiptap/extension-collaboration';
-import { NativeIdentityRepair, NativeIndentation, freshClipboard, indentNative } from './native-editing-behavior';
+import { NativeEditorShortcuts, NativeIdentityRepair, NativeIndentation, freshClipboard, indentNative } from './native-editing-behavior';
 import { NativeCodePresentation } from './native-code-presentation';
 import { Slice } from 'prosemirror-model';
 import { Selection, TextSelection, type EditorState } from 'prosemirror-state';
@@ -24,9 +24,9 @@ function linkAround(state:EditorState):{from:number;to:number;href:string}|null 
  const run=runs.find(run=>run.href&&run.from<$from.pos&&$from.pos<run.to)??runs.find(run=>run.href&&(run.from===$from.pos||run.to===$from.pos));
  return run?.href?{...run,href:run.href}:null;
 }
-/** The toggles a toolbar command names, and the shortcuts (Mod-B, I, E; Mod-Shift-7, 8, 9) that reach them. */
+/** The toggles a toolbar command names, and the shortcuts (Mod-B, I; Mod-Shift-7, 8, 9) that reach them. */
 const TOGGLES:Record<string,(editor:Editor)=>boolean>={strong:e=>e.commands.toggleBold(),em:e=>e.commands.toggleItalic(),code:e=>e.commands.toggleCode(),quote:e=>e.commands.toggleBlockquote(),codeBlock:e=>e.commands.toggleCodeBlock(),ordered:e=>e.commands.toggleOrderedList(),bullet:e=>e.commands.toggleBulletList(),task:e=>e.commands.toggleTaskList()};
-const MARK_KEYS:Record<string,string>={b:'strong',i:'em',e:'code'},LIST_DIGITS:Record<string,string>={7:'ordered',8:'bullet',9:'task'};
+const MARK_KEYS:Record<string,string>={b:'strong',i:'em'},LIST_DIGITS:Record<string,string>={7:'ordered',8:'bullet',9:'task'};
 export function mountRegionEditor(options:RegionEditorOptions):RegionEditor {
  if(options.kind!=='rich-native-v1')throw new Error('Legacy page editor retired; reload after migration');
  const {root,post,regionId}=options;
@@ -53,7 +53,7 @@ export function mountRegionEditor(options:RegionEditorOptions):RegionEditor {
   Y.applyUpdate(doc,Y.mergeUpdates([...updates]),REMOTE);doc.clientID=clientId;
   if(kept)select(kept);
  };
- editor=new Editor({element:root,extensions:[...nativeExtensions(),NativeIdentityRepair,NativeIndentation,NativeCodePresentation,Collaboration.configure({document:doc,field:NATIVE_ROOT})],
+ editor=new Editor({element:root,extensions:[...nativeExtensions(),NativeIdentityRepair,NativeIndentation,NativeEditorShortcuts,NativeCodePresentation,Collaboration.configure({document:doc,field:NATIVE_ROOT})],
   editorProps:{transformPasted:freshClipboard,transformPastedHTML:html=>normalizeChecklist(html,root.ownerDocument),
    handleTextInput(view,from,to,text){const at=view.state.doc.resolve(from);if(text==='/'&&from===to&&at.parent.isTextblock&&!at.parent.type.spec.code&&!at.parent.content.size){const box=view.coordsAtPos(from);post({kind:'region-slash',regionId,x:box.left,y:box.bottom});}return false;},
    handleKeyDown(view,event){

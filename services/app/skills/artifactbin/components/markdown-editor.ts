@@ -1,7 +1,7 @@
 /**
  * <af-markdown-editor>: a rich text field whose value is Markdown: headings, bold, italic,
  *   strikethrough, inline code, lists, quotes, code blocks and dividers, from a toolbar,
- *   shortcuts (Mod-B, Mod-I, Mod-Shift-X, Mod-E) or typed Markdown (`# `, `- `, `**bold**`).
+ *   shortcuts (Mod-B, Mod-I, Mod-Shift-X, Mod-Shift-E) or typed Markdown (`# `, `- `, `**bold**`).
  * Usage: import '@afbin/markdown-editor';  (registers the tag; this .ts is the readable contract)
  * Props: value (Markdown string), label, placeholder, rows (minimum height), disabled, readonly.
  * Events: af-change (bubbles) with event.detail.value: the Markdown, or null when empty.

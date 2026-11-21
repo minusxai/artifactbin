@@ -113,7 +113,7 @@ describe('the region toolbar', () => {
     const page = chrome();
     page.state([], 'paragraph');
     expect(shortcutText('Mod-Shift-8')).toBe('Ctrl+Shift+8');
-    for (const [name, keys] of [['Bold', 'Control+B'], ['Italic', 'Control+I'], ['Inline code', 'Control+E'], ['Link', 'Control+K'], ['Bulleted list', 'Control+Shift+8'], ['Numbered list', 'Control+Shift+7'], ['Undo', 'Control+Z']] as const)
+    for (const [name, keys] of [['Bold', 'Control+B'], ['Italic', 'Control+I'], ['Inline code', 'Control+Shift+E'], ['Link', 'Control+K'], ['Bulleted list', 'Control+Shift+8'], ['Numbered list', 'Control+Shift+7'], ['Undo', 'Control+Z']] as const)
       expect(button(name)).toHaveAttribute('aria-keyshortcuts', keys);
     fireEvent.focus(button('Bold'));
     await waitFor(() => expect(screen.getByRole('tooltip')).toHaveTextContent('Bold (Ctrl+B)'));

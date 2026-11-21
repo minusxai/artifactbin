@@ -1,6 +1,6 @@
 import { waitFor } from '@testing-library/dom';
 import { afterEach, expect, it, vi } from "vitest";
-import { TextSelection } from "prosemirror-state";
+import { Selection, TextSelection } from "prosemirror-state";
 import {
   commentDocument,
   commentMarkdown,
@@ -68,6 +68,19 @@ it("pastes Markdown as formatting, ignores HTML, and supports undo and redo", ()
   replaceComment(editor.view.dom, "<img src=x onerror=alert(1)>");
   expect(editor.view.dom.querySelector("img")).toBeNull();
   expect(editor.view.dom.textContent).toBe("<img src=x onerror=alert(1)>");
+});
+it("uses Control+E to move to the end and Mod+Shift+E for inline code", () => {
+  const { view, onChange } = mount("First\n\nLast");
+  const selectFirst = () =>
+    view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, 1, 6)));
+  selectFirst();
+  fireEvent.keyDown(view.dom, { key: "e", ctrlKey: true });
+  expect(view.state.selection.eq(Selection.atEnd(view.state.doc))).toBe(true);
+  expect(onChange).not.toHaveBeenCalled();
+  selectFirst();
+  const mac = /Mac|iP(hone|[oa]d)/.test(navigator.platform);
+  fireEvent.keyDown(view.dom, { key: "E", keyCode: 69, ctrlKey: !mac, metaKey: mac, shiftKey: true });
+  expect(onChange).toHaveBeenLastCalledWith("`First`\n\nLast");
 });
 it("turns typed Markdown into a mark without losing the caret", () => {
   const editor = mount();

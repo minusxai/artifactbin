@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
 import { editorSchema, normalizeMarkdown, parseMarkdown, serializeMarkdown } from './markdown-editor-model';
-import { EditorState, TextSelection } from 'prosemirror-state';
+import { EditorState, Selection, TextSelection } from 'prosemirror-state';
 import { EditorView } from 'prosemirror-view';
 import { editorPlugins } from './markdown-editor-commands';
 import './markdown-editor';
@@ -50,6 +50,28 @@ const typed = (source: string, text: string) => {
   }
   const markdown = serializeMarkdown(view.state.doc); view.destroy(); return markdown;
 };
+
+it('keeps Control+E for navigation and formats inline code with Mod+Shift+E', () => {
+  const view = new EditorView(document.createElement('div'), {
+    state: EditorState.create({ doc: parseMarkdown('First\n\nLast'), plugins: editorPlugins() }),
+  });
+  try {
+    const selectFirst = () =>
+      view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, 1, 6)));
+    selectFirst();
+    view.dom.dispatchEvent(new KeyboardEvent('keydown', { key: 'e', ctrlKey: true, cancelable: true }));
+    expect(view.state.selection.eq(Selection.atEnd(view.state.doc))).toBe(true);
+    expect(serializeMarkdown(view.state.doc)).toBe('First\n\nLast');
+    selectFirst();
+    const mac = /Mac|iP(hone|[oa]d)/.test(navigator.platform);
+    view.dom.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'E', keyCode: 69, ctrlKey: !mac, metaKey: mac, shiftKey: true, cancelable: true,
+    }));
+    expect(serializeMarkdown(view.state.doc)).toBe('`First`\n\nLast');
+  } finally {
+    view.destroy();
+  }
+});
 
 describe('markdown-editor typing rules', () => {
   it('turns typed Markdown into formatting', () => {

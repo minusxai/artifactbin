@@ -1,6 +1,6 @@
 import { afterEach, expect, it } from 'vitest';
 import * as Y from 'yjs';
-import { NodeSelection, TextSelection } from 'prosemirror-state';
+import { NodeSelection, Selection, TextSelection } from 'prosemirror-state';
 import { canonicalizeHtmlPage } from '../../html-page';
 import { compactRegion, createRegionState, validateRegionUpdate, regionHtml } from '../../live-regions';
 import { createHtmlAnnotationPainter, revealHtmlAnnotation } from '../bridge/annotations';
@@ -59,6 +59,21 @@ it('saved code language produces presentation tokens without changing editor tex
  expect(e.view.dom.querySelector('[class*="token"]')).not.toBeNull();
  expect(e.view.state.doc.textContent).toBe('const x = 1;');
  expect(JSON.stringify(e.view.state.doc.toJSON())).not.toContain('token');
+});
+it('Control+E moves to the document end and Mod+Shift+E toggles inline code',()=>{
+ const e=single('<p>First</p><p>Last</p>');
+ const {view}=e;
+ view.focus();
+ view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc,1,6)));
+ view.dom.dispatchEvent(new KeyboardEvent('keydown',{key:'e',ctrlKey:true,bubbles:true,cancelable:true}));
+ expect(view.state.selection.eq(Selection.atEnd(view.state.doc))).toBe(true);
+ expect(view.dom.querySelector('code')).toBeNull();
+ view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc,1,6)));
+ const mac=/Mac|iP(hone|[oa]d)/.test(navigator.platform);
+ view.dom.dispatchEvent(new KeyboardEvent('keydown',{key:'E',keyCode:69,ctrlKey:!mac,metaKey:mac,shiftKey:true,bubbles:true,cancelable:true}));
+ expect(view.dom.querySelector('code')?.textContent).toBe('First');
+ expect(e.command('undo')).toBe(true);
+ expect(view.dom.querySelector('code')).toBeNull();
 });
 it('code paste is literal, while explicit plain paste drops clipboard formatting',()=>{
  const code=single('<pre><code class="language-js"></code></pre>');
