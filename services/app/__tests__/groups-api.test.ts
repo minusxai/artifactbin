@@ -73,11 +73,11 @@ describe('a group\'s page data names its place in the tree and who receives its 
    {user_id:eve.userId,username:null,name:null,via:{id:outlet.id,handle:'tree_outlet',name:'Outlet'}},
    {user_id:rita.userId,username:null,name:null,via:{id:retail.id,handle:'tree_retail',name:'Retail'}},
   ].sort((a,b)=>a.user_id!.localeCompare(b.user_id!)));
-  // From Retail, as Rita: its parent (Rita is not a Finance member: no role), its subgroup, and Outlet's Eve.
+  // From Retail, as Rita: its parent (Rita is not a Finance member: no role), and its own members.
   const middle=await read(rita.token,retail.id);
   expect(middle.parent).toEqual({id:finance.id,handle:'tree_finance',name:'Finance',role:null});
-  expect(middle.subgroups).toEqual([{id:outlet.id,handle:'tree_outlet',name:'Outlet',role:null}]);
-  expect(middle.subgroup_audience.map((m:{user_id:string})=>m.user_id)).toEqual([eve.userId]);
+  expect(middle.subgroups).toEqual([]);
+  expect(middle.subgroup_audience).toEqual([]);
   // A leaf has no subgroups and no subgroup audience.
   const leaf=await read(eve.token,outlet.id);
   expect(leaf).toMatchObject({parent:{id:retail.id,role:null},subgroups:[],subgroup_audience:[]});
