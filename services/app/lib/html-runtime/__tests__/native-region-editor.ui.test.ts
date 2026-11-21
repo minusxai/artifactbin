@@ -133,6 +133,21 @@ it('mixed native Markdown paste validates at the authenticated update boundary',
  expect(posted).toBeGreaterThan(0);expect(refused).toBeUndefined();
 });
 
+it.each([false,true])('Tab moves only bullets with selected text, reverse=%s',reverse=>{
+ const e=single('<ul><li><p>Alpha</p></li><li><p>Bravo</p></li><li><p>Charlie</p></li><li><p>Delta</p></li></ul>');
+ const {view}=e;
+ const positions:number[]=[];
+ view.state.doc.descendants((node,pos)=>{if(node.isText)positions.push(pos);});
+ const from=positions[1]!,to=positions[3]!;
+ const before=view.state.doc.toJSON();
+ view.focus();
+ view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc,reverse?to:from,reverse?from:to)));
+ view.dom.dispatchEvent(new KeyboardEvent('keydown',{key:'Tab',bubbles:true,cancelable:true}));
+ expect([...view.dom.querySelectorAll('ul ul > li > p')].map(p=>p.textContent)).toEqual(['Bravo','Charlie']);
+ view.dom.dispatchEvent(new KeyboardEvent('keydown',{key:'Tab',shiftKey:true,bubbles:true,cancelable:true}));
+ expect(view.state.doc.toJSON()).toEqual(before);
+});
+
 it.each(['ul','ol'])('selected sibling range in %s sinks and lifts with its nested child',tag=>{
  const e=single(`<${tag}><li><p>Before</p></li><li><p>Parent</p><${tag}><li><p>Child</p></li></${tag}></li><li><p>Sibling</p></li></${tag}>`);
  const positions:number[]=[];e.view.state.doc.descendants((node,pos)=>{if(node.isText)positions.push(pos);});
