@@ -10,6 +10,7 @@ import { assemble, ensureTable } from '@artifactbin/utils';
 import type { TransactionalQueryable } from '@artifactbin/contracts/identity-module';
 import { createHumanAuth, sessionStoreOf, type HumanAuth } from '../src/index';
 import { authParts } from '../src/parts';
+import { createIdentityStore } from '../src/identity-store';
 import { IDENTITY_TABLES } from '../src/identity-store/schema';
 import { testAuthOptions } from './helpers';
 
@@ -59,6 +60,13 @@ beforeAll(async () => {
   await pg.query(`INSERT INTO auth.group_hierarchy(id,revision) VALUES('installation',0)`);
   await pg.query(`INSERT INTO auth.groups(id,handle,name,created_by) VALUES('grp_parent','parent_team','Parent','usr_admin'),('grp_plain','plain_team','Plain','usr_admin')`);
   await pg.query(`INSERT INTO auth.users(id,email,username) VALUES('usr_taken','taken@example.com','taken_user')`);
+  await pg.exec(`CREATE SCHEMA company_app;
+    CREATE TABLE company_app.identity_settings(id text PRIMARY KEY, deployment_mode text);
+    CREATE TABLE company_app.deployment_state(id text PRIMARY KEY, owner_user_id text, default_group_id text, setup_complete boolean);
+    CREATE TABLE public.identity_settings (LIKE company_app.identity_settings);
+    CREATE TABLE public.deployment_state (LIKE company_app.deployment_state);
+    INSERT INTO public.identity_settings VALUES('installation','public');
+    INSERT INTO company_app.identity_settings VALUES('installation','company');`);
   db = {
     query: (sql, params) => pg.query(sql, params) as never,
     transaction: fn => pg.transaction(tx => fn({ query: (sql, params) => tx.query(sql, params) as never })),
@@ -67,6 +75,34 @@ beforeAll(async () => {
 afterAll(async () => { await pg.close(); });
 
 describe('trusted-issuer sign-in', () => {
+  it('allows the company owner to bootstrap one root, then requires a parent; public groups may detach', async () => {
+    const store = createIdentityStore({db, authSchema:'auth', appSchema:'company_app'});
+    await pg.query("INSERT INTO auth.users(id,email) VALUES ('usr_head','head@example.com')");
+    await pg.query("INSERT INTO company_app.deployment_state VALUES('company','usr_head',null,false)");
+    const create=(handle:string,parentId?:string)=>store.createGroup({actorId:'usr_head',handle,name:handle,parentId});
+    const root=(await create('bootstrap_root')).group;
+    await expect(create('extra_root')).rejects.toMatchObject({code:'company_parent_required'});
+    await pg.query("UPDATE company_app.deployment_state SET default_group_id=$1,setup_complete=true WHERE id='company'",[root.id]);
+    const child=(await create('company_child',root.id)).group;
+    await expect(store.setGroupParent({actorId:'usr_head',groupId:child.id,parentId:null})).rejects.toMatchObject({code:'company_parent_required'});
+    await expect(create('extra_root')).rejects.toMatchObject({code:'company_parent_required'});
+    await pg.query("UPDATE company_app.identity_settings SET deployment_mode='public'");
+    await expect(create('public_root')).resolves.toMatchObject({group:{parent_id:null}});
+    await expect(store.setGroupParent({actorId:'usr_head',groupId:child.id,parentId:null})).resolves.toMatchObject({changed:true,parent_id:null});
+    await pg.query("UPDATE company_app.identity_settings SET deployment_mode='company'");
+    await pg.query("DELETE FROM company_app.deployment_state");
+  });
+  it('puts each newly provisioned group under the company root, including when the default is a subgroup', async () => {
+    const target = await app({TRUSTED_SIGNIN__ISSUERS:issuers({parentGroup:undefined}), APP__SCHEMA:'company_app'});
+    await pg.query("INSERT INTO auth.groups(id,handle,name,created_by,parent_id) VALUES('grp_default','default_team','Default','usr_admin','grp_parent')");
+    await pg.query("INSERT INTO company_app.deployment_state VALUES('company','usr_admin','grp_parent',true)");
+    for (const [group, defaultGroup] of [['root_default','grp_parent'],['nested_default','grp_default']]) {
+      await pg.query("UPDATE company_app.deployment_state SET default_group_id=$1 WHERE id='company'", [defaultGroup]);
+      const response=await post(target,{token:token({sub:'company_reader',group})});
+      expect(response.status).toBe(303);
+      expect(await rows('SELECT parent_id FROM auth.groups WHERE handle=$1',[group])).toEqual([{parent_id:'grp_parent'}]);
+    }
+  });
   it('signs the person in, creating the person, the group under its parent with its tenancy, and the membership', async () => {
     const target = await app();
     const response = await post(target, { token: token(), callbackUrl: '/conversations?embed=1' });

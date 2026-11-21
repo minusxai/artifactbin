@@ -25,7 +25,7 @@ async function state(db:Queryable,lock=false):Promise<State> {
 /** The live group and the reader's role in it (lib/groups `effectiveRoleSql`: admin through an ancestor counts), read at decision time (identity rows are never locked here). */
 async function group(db:Queryable,id:string|null,userId:string|null):Promise<GroupSummary|null> {
  if(!id)return null;
- return (await db.query<GroupSummary>(`SELECT g.id,g.handle,g.name,g.description,${effectiveRoleSql('$2')} AS role FROM groups g WHERE g.id=$1 AND g.deleted_at IS NULL`,[id,userId])).rows[0]??null;
+ return (await db.query<GroupSummary>(`SELECT g.id,g.handle,g.name,g.description,g.parent_id,${effectiveRoleSql('$2')} AS role FROM groups g WHERE g.id=$1 AND g.deleted_at IS NULL`,[id,userId])).rows[0]??null;
 }
 export async function getDeploymentState(userId:string|null):Promise<DeploymentState> {
  const {mode}=deploymentConfig();if(mode==='public')return {mode,setup_complete:true,is_owner:false,default_group:null};
@@ -43,6 +43,7 @@ export async function setupDeployment(userId:string,groupId:string):Promise<Depl
  const db=await getDb();await db.transaction(async tx=>{
   const s=await state(tx,true);if(s.owner_user_id!==userId)throw new DeploymentError('deployment_owner_required',403,'Deployment owner required');
   const g=await group(tx,groupId,userId);if(g?.role!=='admin')throw new DeploymentError('default_group_unavailable',403,'Default group requires Admin membership');
+  if(g.parent_id)throw new DeploymentError('default_group_unavailable',409,'Choose a group with no parent for company setup');
   await tx.query('UPDATE deployment_state SET default_group_id=$2,setup_complete=true WHERE id=$1',[ID,groupId]);
  });return getDeploymentState(userId);
 }

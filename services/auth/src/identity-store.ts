@@ -23,6 +23,8 @@ export interface IdentityStoreOptions {
   db: TransactionalQueryable;
   /** AUTH__SCHEMA: where the base tables are (default `auth`). */
   authSchema?: string;
+  /** App schema for deployment state on a separate identity connection. */
+  appSchema?: string;
   /** The test domain (TEST_DOMAIN): a test account invites only addresses there. */
   testDomain?: string;
 }
@@ -30,7 +32,7 @@ export interface IdentityStoreOptions {
 export function createIdentityStore(options: IdentityStoreOptions): IdentityService {
   const t = identityTables(options.authSchema), db = retrying(options.db);
   return {
-    ...accountMethods(db, t), ...groupMethods(db, t, {testDomain: options.testDomain}), ...mailMethods(db, t),
+    ...accountMethods(db, t), ...groupMethods(db, t, options), ...mailMethods(db, t),
   };
 }
 

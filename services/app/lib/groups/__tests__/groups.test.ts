@@ -2,7 +2,7 @@ import {admitGroupMember} from '@/__tests__/harness';
 import {describe,it,expect} from 'vitest';
 import {useAppHarness} from '@/__tests__/harness';
 import { createUser, setUsername } from '@/lib/accounts';
-import {overrideConfig} from '@/lib/platform/config';
+import {overrideConfig,resetConfigOverrides} from '@/lib/platform/config';
 import {getDb} from '@/lib/platform/db';
 import {createGroup,getGroupDetail,searchGroupMembers,getGroupRole,setGroupMember,removeGroupMember,getAccountPreferences,setAccountPreferences,inviteGroupMember,acceptGroupInvitations,setGroupLink} from '..';
 useAppHarness();
@@ -84,7 +84,8 @@ describe('independent group owner contracts',()=>{
   expect((await getGroupDetail(invited.id,group.id))?.invitations).toBeUndefined();
   expect((await getGroupDetail(owner.id,group.id))?.invitations).toEqual([]);
  });
- it('limits the member directory to the active group, and to admins in the company root',async()=>{
+ it('limits the member directory to the active group, and to admins in the company root',async({onTestFinished})=>{
+  onTestFinished(resetConfigOverrides);
   const owner=await account('owner'), member=await account('member'), peer=await account('peer');
   const root=await createGroup(owner.id,{handle:'org_root',name:'Organization'});
   const team=await createGroup(owner.id,{handle:'org_team',name:'Team',parent_id:root.id});

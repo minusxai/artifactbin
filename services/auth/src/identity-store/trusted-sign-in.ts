@@ -25,6 +25,8 @@
 import {isValidHandle} from '@artifactbin/contracts/handles';
 import type {Queryable} from '@artifactbin/contracts/db';
 import type {TransactionalQueryable} from '@artifactbin/contracts/identity-module';
+import {companyGroupState} from './company-group';
+import {chainOf, liveGroup} from './group-access';
 import {accountMethods,reserveHandle} from './accounts';
 import {identityTables,internalId,isUniqueViolation} from './tables';
 
@@ -56,7 +58,7 @@ function trustedSubjectEmail(subject: string): string | null {
   return domain === 'invalid' || domain.endsWith('.invalid') ? null : address;
 }
 
-export async function trustedSignIn(db: TransactionalQueryable, input: TrustedSignInInput, authSchema = 'auth'): Promise<TrustedSignInResult> {
+export async function trustedSignIn(db: TransactionalQueryable, input: TrustedSignInInput, authSchema = 'auth', appSchema?: string): Promise<TrustedSignInResult> {
   const isEmail = input.subject.includes('@'), address = isEmail ? trustedSubjectEmail(input.subject) : null;
   const subjectOk = isEmail ? address !== null : isValidHandle(input.subject) && input.subject !== input.group;
   if (!subjectOk || !isValidHandle(input.group)) return {ok: false, refusal: 'invalid_claims'};
@@ -65,7 +67,7 @@ export async function trustedSignIn(db: TransactionalQueryable, input: TrustedSi
     const result = await db.transaction(async tx => {
       await tx.query("SELECT pg_advisory_xact_lock(hashtext('artifactbin.identity.trusted-sign-in'))");
       const person = address ? await ensureEmailPerson(tx, address, t, better) : await ensurePerson(tx, input, t, better);
-      const group = await ensureGroup(tx, input, person.userId, t);
+      const group = await ensureGroup(tx, input, person.userId, t, appSchema);
       await tx.query(`INSERT INTO ${t.group_members}(group_id,user_id,role) VALUES($1,$2,'member') ON CONFLICT (group_id,user_id) DO NOTHING`, [group.groupId, person.userId]);
       // The issuer decides which of its groups the person may act in NOW: drop their other memberships in this issuer's
       // groups, so access the issuer has since withdrawn (another tenant) never lingers here.
@@ -115,7 +117,7 @@ async function ensureEmailPerson(tx: Queryable, address: string, t: Tables, bett
   return {userId, email: address, created: !auth && !app};
 }
 
-async function ensureGroup(tx: Queryable, input: TrustedSignInInput, userId: string, t: Tables) {
+async function ensureGroup(tx: Queryable, input: TrustedSignInInput, userId: string, t: Tables, appSchema?: string) {
   const existing = (await tx.query<{id: string; deleted_at: string | null; trusted_issuer: string | null; tenancy_id: string | null}>(
     `SELECT id,deleted_at,trusted_issuer,tenancy_id FROM ${t.groups} WHERE handle=$1`, [input.group])).rows[0];
   if (existing) {
@@ -129,6 +131,14 @@ async function ensureGroup(tx: Queryable, input: TrustedSignInInput, userId: str
   if (input.parentGroup) {
     parentId = (await tx.query<{id: string}>(`SELECT id FROM ${t.groups} WHERE (id=$1 OR handle=$1) AND deleted_at IS NULL`, [input.parentGroup])).rows[0]?.id ?? null;
     if (!parentId) throw new Refused('parent_group_missing');
+  }
+  const company = await companyGroupState(tx, appSchema);
+  if (company) {
+    const root = company.setup_complete && company.default_group_id
+      ? (await chainOf(tx, t, company.default_group_id)).at(-1) : null;
+    if (!root || (await liveGroup(tx, t, root))?.parent_id !== null) throw new Refused('parent_group_missing');
+    if (parentId && !(await chainOf(tx, t, parentId)).includes(root)) throw new Refused('parent_group_missing');
+    parentId ??= root;
   }
   const groupId = 'grp_' + internalId();
   try { await reserveHandle(t, tx, input.group, 'group', groupId); } catch (error) { if (isUniqueViolation(error)) throw new Refused('group_conflict'); throw error; }

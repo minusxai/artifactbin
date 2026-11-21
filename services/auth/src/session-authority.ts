@@ -118,7 +118,7 @@ function mountIdentityCalls(app:Hono<AuthEnv>,o:AuthOptions,{authSchema,readSche
   const db=o.identityDb,appSchema=o.appSchema??readEnv(o.env,'APP__SCHEMA');
   if(!transactional(db)||!appSchema)throw Error('identity_unavailable');
   await ensureIdentitySchema(db,{auth:authSchema,app:appSchema,read:readSchema});
-  return createIdentityStore({db,authSchema,testDomain:testDomainSignInOf(o.env,()=>{})?.domain});
+  return createIdentityStore({db,authSchema,appSchema,testDomain:testDomainSignInOf(o.env,()=>{})?.domain});
  })().catch(error=>{identity=null;throw error;});
  // The identity host's boot, started with the part: the app's boot waits for the views this creates, and this waits
  // (retrying while IdentityNotReady: the app's own tables come first) for the app's. Never awaited by a request.
