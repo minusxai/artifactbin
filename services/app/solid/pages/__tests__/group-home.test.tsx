@@ -1,11 +1,13 @@
 /* @jsxImportSource solid-js */
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@solidjs/testing-library';
+import { Suspense } from 'solid-js';
 import { createMemoryHistory, MemoryRouter, Route } from '@solidjs/router';
 import { afterEach, expect, it, vi } from 'vitest';
 import { DefaultDestinationControl } from '../../components/DefaultDestinationControl';
 import { PageChrome } from '../../components/PageChrome';
 import { PageBreadcrumbProvider } from '../../lib/page-breadcrumbs';
+import { GroupPage } from '../Group';
 import { HomePage } from '../Home';
 import { CompanySetup } from '../CompanySetup';
 import { SessionProvider } from '../../lib/session';
@@ -34,6 +36,22 @@ it.each(['editor','admin'])('%s can create group content',async(role)=>{
  expect(screen.getByRole('button',{name:'Create'})).toBeInTheDocument();
 });
 it('uses the default group shelf, links its handle to the group page, and hides write controls for viewers',async()=>{stub();open();expect(await screen.findByRole('heading',{name:'Team'})).toBeInTheDocument();expect(screen.getByRole('link',{name:'@team'})).toHaveAttribute('href','/@team');expect(screen.queryByRole('button',{name:'Create'})).toBeNull();expect(screen.queryByRole('button',{name:'Invite person'})).toBeNull();});
+it.each([
+ ['the company root',true], ['a non-root group',false], ['a response without the classification',undefined],
+])('describes the company audience only on the company root page (%s)',async(_label,company_root)=>{
+ stubFetch({
+  '/api/groups/team':{...groupDestination.detail,group:{...group,company_root}},
+  '/api/page/home?part=core&groupId=g1':emptyShelf,
+ },{session,fallback:notFound});
+ render(()=> <MemoryRouter><Route path="*" component={()=> <SessionProvider><Suspense><GroupPage identity="team"/></Suspense></SessionProvider>}/></MemoryRouter>);
+ const shelf=await screen.findByRole('region',{name:'Group artifacts'});
+ const audience=within(shelf);
+ if(company_root){
+  const notice=await audience.findByText(/Everyone in this company group and its subgroups/);
+  expect(notice).toHaveTextContent('including people who sign in through its host');
+  expect(notice).toHaveTextContent('Public and signed-out access depend on each page’s sharing settings.');
+ }else expect(audience.queryByText(/Everyone in this company group and its subgroups/)).toBeNull();
+});
 it('reaches the default group from one initial request: no preference, details or shelf waterfall, and no personal shelf',async()=>{
  const fetcher=stub();open();expect(await screen.findByRole('heading',{name:'Team'})).toBeInTheDocument();
  await waitFor(()=>expect(screen.getByRole('button',{name:'Remove default'})).toBeEnabled());
