@@ -12,7 +12,7 @@ import {enqueueGroupMail} from './mail';
 import {groupAdminsSql} from './rules';
 import {internalId,type IdentityTables} from './tables';
 
-export interface GroupRow {id: string; handle: string; name: string; description: string; created_by: string; deleted_at: string | null; parent_id: string | null}
+export interface GroupRow {trusted_issuer: string | null; tenancy_id: string | null; id: string; handle: string; name: string; description: string; created_by: string; deleted_at: string | null; parent_id: string | null}
 
 /** The group `userId` effectively administers live `groupId` through (itself, or its nearest ancestor with a direct `admin` row), or null. */
 export async function effectiveAdminVia(q: Queryable, t: IdentityTables, userId: string, groupId: string): Promise<string | null> {

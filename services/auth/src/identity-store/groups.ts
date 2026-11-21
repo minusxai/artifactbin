@@ -119,17 +119,20 @@ export function groupMethods(db: TransactionalQueryable, t: IdentityTables, opti
     },
 
     async updateGroup({actorId, groupId, ...input}) {
-      if (!input || !Object.keys(input).length || Object.keys(input).some(key => !['name', 'description'].includes(key))
+      if (!input || !Object.keys(input).length || Object.keys(input).some(key => !['name', 'description', 'tenancy_id'].includes(key))
+        || (input.tenancy_id != null && (typeof input.tenancy_id !== 'string' || !input.tenancy_id.trim() || input.tenancy_id.length > 200 || /[\u0000-\u001f\u007f]/.test(input.tenancy_id)))
         || (input.name !== undefined && (typeof input.name !== 'string' || !input.name.trim() || input.name.trim().length > 120))
         || (input.description !== undefined && (typeof input.description !== 'string' || input.description.trim().length > 2000))) throw new IdentityError('invalid_group');
       return db.transaction(async tx => {
         await requireAdmin(tx, t, actorId, groupId);
         const before = (await liveGroup(tx, t, groupId))!;
         const name = input.name?.trim() ?? before.name, description = input.description?.trim() ?? before.description;
-        if (name === before.name && description === before.description) return {group: summary(before, 'admin'), changes: []};
-        const row = (await tx.query<GroupRow>(`UPDATE ${t.groups} SET name=$2,description=$3 WHERE id=$1 RETURNING *`, [groupId, name, description])).rows[0]!;
+        if (input.tenancy_id !== undefined && before.trusted_issuer !== null) throw new IdentityError('host_managed_tenancy', 403);
+        const tenancy = input.tenancy_id === undefined ? before.tenancy_id : input.tenancy_id;
+        if (tenancy === before.tenancy_id && name === before.name && description === before.description) return {group: summary(before, 'admin'), changes: []};
+        const row = (await tx.query<GroupRow>(`UPDATE ${t.groups} SET name=$2,description=$3,tenancy_id=$4 WHERE id=$1 RETURNING *`, [groupId, name, description, tenancy])).rows[0]!;
         const changes: GroupChange[] = [];
-        await recordChange(tx, t, changes, actorId, groupId, 'updated', {previous: {name: before.name, description: before.description}, next: {name, description}});
+        await recordChange(tx, t, changes, actorId, groupId, 'updated', {previous: {name: before.name, description: before.description, tenancy_id: before.tenancy_id}, next: {name, description, tenancy_id: tenancy}});
         return {group: summary(row, 'admin'), changes};
       });
     },

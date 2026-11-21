@@ -189,9 +189,31 @@ describe('trusted-issuer sign-in', () => {
     expect((await post(target, { token: valid })).status).toBe(303);
   });
 
-  it('refuses a different tenancy for an existing group, and handles it did not create', async () => {
+  it('refreshes only the bound group tenancy on each successful sign-in', async () => {
+    const target = await app({ TRUSTED_SIGNIN__ISSUERS: twoIssuers() });
+    const claims = { sub: 'reader_one', group: 'host_team', tenancy_id: 'first' };
+    const sign = (tenancy_id: string) => post(target, { token: token({ ...claims, tenancy_id }) });
+    expect((await sign('first')).status).toBe(303);
+    await pg.query("UPDATE auth.groups SET name='Custom', description='Existing settings' WHERE handle='host_team'");
+    const snapshot = () => rows("SELECT * FROM auth.groups WHERE handle='host_team'");
+    const [before] = await snapshot();
+    expect((await sign('second')).status).toBe(303);
+    await refused(await post(target, { token: token({ ...claims, sub:'other_reader', iss:'issuer-b' }, { key:otherKeys.privateKey }) }), 403, 'group_conflict');
+    await refused(await post(target, { token: token(claims, { key:stranger.privateKey }) }), 401, 'invalid_token');
+    await refused(await post(target, { token: token({ ...claims, sub:'taken_user' }) }), 403, 'subject_conflict');
+    const denied = assemble(authParts(await testAuthOptions({ env:{TRUSTED_SIGNIN__ISSUERS:issuers()},
+      sessions:sessionStoreOf(auth), identityTransactions:db, admitIdentity:async()=>false })));
+    await refused(await post(denied, { token:token(claims) }), 403, 'deployment_admission_required');
+    expect(await snapshot()).toEqual([{ ...before, tenancy_id: 'second' }]);
+    const concurrent = await Promise.all([sign('third'), sign('fourth')]);
+    expect(concurrent.map(response => response.status)).toEqual([303,303]);
+    const [after] = await snapshot();
+    expect(['third','fourth']).toContain(after!.tenancy_id);
+    expect(after).toEqual({ ...before, tenancy_id: after!.tenancy_id });
+  });
+
+  it('refuses handles it did not create', async () => {
     const target = await app();
-    await refused(await post(target, { token: token({ sub: 'user_5', tenancy_id: 'tenant-2' }) }), 403, 'tenancy_mismatch');
     await refused(await post(target, { token: token({ sub: 'user_5', group: 'plain_team' }) }), 403, 'group_conflict');
     await refused(await post(target, { token: token({ sub: 'user_5', group: 'parent_team' }) }), 403, 'group_conflict');
     await refused(await post(target, { token: token({ sub: 'taken_user', group: 'group_9' }) }), 403, 'subject_conflict');

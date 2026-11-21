@@ -1,5 +1,6 @@
 /** Whether an account may act on this deployment: public deployments admit everyone, company deployments their admitted members and those members' test accounts. */
-import { getDb, type Queryable, deploymentConfig } from '../platform';
+import type {Queryable} from '@artifactbin/contracts/db';
+import { getDb, deploymentConfig } from '../platform';
 import { isDeploymentMember } from '@artifactbin/auth';
 
 /** Credential IDs already admitted remain valid when policy or defaults change. */

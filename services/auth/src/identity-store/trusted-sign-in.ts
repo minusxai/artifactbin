@@ -14,8 +14,8 @@
  *    never sees `/welcome`) and the handle's reservation. A subject whose handle or address someone else already holds
  *    is refused. Handles never contain `@`, so the two kinds never meet.
  *  - The group is found by handle. A new one records the issuer and the tenancy (`groups.trusted_issuer`,
- *    `groups.tenancy_id`, exposed by the identity view) and never changes them; an existing group another issuer (or
- *    nobody's issuer) created, or one with a different tenancy, is refused. Under the configured parent group when there
+ *    `groups.tenancy_id`, exposed by the identity view) and refreshes its tenancy at each admitted sign-in. An existing group
+ *    created manually or by another issuer is refused. Under the configured parent group when there
  *    is one, including on an installation with several roots. A missing configured parent is refused. With no
  *    configured parent, a company group goes under the top ancestor of the deployment default.
  *  - The person is a direct `member` of the group (no admin: nobody administers an issuer's group from here), and of no
@@ -41,7 +41,7 @@ export interface TrustedSignInInput {
   /** A handle subject's synthetic address (never delivered to); unused for an email subject. */
   email: string;
 }
-type TrustedSignInRefusal = 'subject_conflict' | 'group_conflict' | 'tenancy_mismatch' | 'parent_group_missing' | 'invalid_claims';
+type TrustedSignInRefusal = 'subject_conflict' | 'group_conflict' | 'deployment_admission_required' | 'parent_group_missing' | 'invalid_claims';
 export type TrustedSignInResult =
   | {ok: true; userId: string; email: string; groupId: string; created: {user: boolean; group: boolean}}
   | {ok: false; refusal: TrustedSignInRefusal};
@@ -59,7 +59,8 @@ function trustedSubjectEmail(subject: string): string | null {
   return domain === 'invalid' || domain.endsWith('.invalid') ? null : address;
 }
 
-export async function trustedSignIn(db: TransactionalQueryable, input: TrustedSignInInput, authSchema = 'auth', appSchema?: string): Promise<TrustedSignInResult> {
+export async function trustedSignIn(db: TransactionalQueryable, input: TrustedSignInInput, authSchema = 'auth', appSchema?: string,
+  admit?: (person: {userId: string; email: string}, tx: Queryable) => Promise<boolean>): Promise<TrustedSignInResult> {
   const isEmail = input.subject.includes('@'), address = isEmail ? trustedSubjectEmail(input.subject) : null;
   const subjectOk = isEmail ? address !== null : isValidHandle(input.subject) && input.subject !== input.group;
   if (!subjectOk || !isValidHandle(input.group)) return {ok: false, refusal: 'invalid_claims'};
@@ -73,6 +74,7 @@ export async function trustedSignIn(db: TransactionalQueryable, input: TrustedSi
       // The issuer decides which of its groups the person may act in NOW: drop their other memberships in this issuer's
       // groups, so access the issuer has since withdrawn (another tenant) never lingers here.
       await tx.query(`DELETE FROM ${t.group_members} m USING ${t.groups} g WHERE m.group_id=g.id AND m.user_id=$1 AND g.trusted_issuer=$2 AND m.group_id<>$3`, [person.userId, input.issuer, group.groupId]);
+      if (admit && !await admit(person, tx)) throw new Refused('deployment_admission_required');
       return {ok: true as const, userId: person.userId, email: person.email, groupId: group.groupId, created: {user: person.created, group: group.created}};
     });
     // An email person gets their handle the way an email sign-in's does (its own transaction, so after this one).
@@ -120,10 +122,10 @@ async function ensureEmailPerson(tx: Queryable, address: string, t: Tables, bett
 
 async function ensureGroup(tx: Queryable, input: TrustedSignInInput, userId: string, t: Tables, appSchema?: string) {
   const existing = (await tx.query<{id: string; deleted_at: string | null; trusted_issuer: string | null; tenancy_id: string | null}>(
-    `SELECT id,deleted_at,trusted_issuer,tenancy_id FROM ${t.groups} WHERE handle=$1`, [input.group])).rows[0];
+    `SELECT id,deleted_at,trusted_issuer,tenancy_id FROM ${t.groups} WHERE handle=$1 FOR UPDATE`, [input.group])).rows[0];
   if (existing) {
     if (existing.deleted_at || existing.trusted_issuer !== input.issuer) throw new Refused('group_conflict');
-    if (existing.tenancy_id !== input.tenancyId) throw new Refused('tenancy_mismatch');
+    if (existing.tenancy_id !== input.tenancyId) await tx.query(`UPDATE ${t.groups} SET tenancy_id=$2 WHERE id=$1`, [existing.id, input.tenancyId]);
     return {groupId: existing.id, created: false};
   }
   // A new group is a topology change: the hierarchy revision moves first, as for every create.

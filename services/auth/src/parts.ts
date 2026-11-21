@@ -43,7 +43,7 @@ export interface SessionStore {
 }
 export interface AuthOptions {
  upstream:Upstream;
- admitIdentity?:(identity:SessionInfo)=>Promise<boolean>;
+ admitIdentity?:(identity:SessionInfo,tx?:Queryable)=>Promise<boolean>;
  env:Record<string,string|undefined>;
  /** The bearer read (`createBearerReader`): token, OAuth family fence and identity in one statement. */
  tokens:TokenReader;
@@ -203,8 +203,7 @@ export function loginRoutes(o: AuthOptions): Part<AuthEnv> {
  * page, so it answers like a sign-in page would: 303 to the same-origin `callbackUrl` (default `/`, `group` set to the
  * token's group) with the session
  * cookie, or a JSON refusal. Off (404) without a configured issuer. The token is checked before anything is written
- * (and the issuer's Origin before its signature); the identity writes commit before the session is created, and the
- * deployment's admission is asked in between, so a refused person gets no session.
+ * (and the issuer's Origin before its signature); deployment admission and identity writes share a transaction before the session is created.
  */
 /** The callback with `group=<the token's group>`, so the page opens in that group rather than one it remembered. */
 const withGroup=(path:string,groupId:string):string=>{const url=new URL(path,'http://callback.invalid');url.searchParams.set('group',groupId);return `${url.pathname}${url.search}${url.hash}`;};
@@ -220,9 +219,9 @@ function mountTrustedSignIn(a:AuthApp,o:AuthOptions):void {
     if(!checked.ok)return refuse(checked.refusal,checked.refusal==='forbidden_origin'?403:401);
     const {issuer,subject,group,tenancyId}=checked.claims;
     const result=await trustedSignIn(o.identityTransactions,{issuer:issuer.issuer,subject,group,tenancyId,
-      ...(issuer.parentGroup?{parentGroup:issuer.parentGroup}:{}),email:trustedEmailOf(issuer.issuer,subject)},schema,o.appSchema??readEnv(o.env,'APP__SCHEMA'));
+      ...(issuer.parentGroup?{parentGroup:issuer.parentGroup}:{}),email:trustedEmailOf(issuer.issuer,subject)},schema,o.appSchema??readEnv(o.env,'APP__SCHEMA'),
+      o.admitIdentity && ((person,tx)=>o.admitIdentity!({userId:person.userId,email:person.email,emailVerified:true,trustedIssuer:issuer.issuer},tx)));
     if(!result.ok)return refuse(result.refusal,result.refusal==='parent_group_missing'?503:result.refusal==='invalid_claims'?401:403);
-    if(o.admitIdentity&&!await o.admitIdentity({userId:result.userId,email:result.email,emailVerified:true,trustedIssuer:issuer.issuer}))return refuse('deployment_admission_required',403);
     const cookies=await o.sessions.start(result.userId);
     const headers=new Headers({location:withGroup(trustedCallbackPath(form.get('callbackUrl')),result.groupId),'cache-control':'no-store'});
     for(const cookie of cookies)headers.append('set-cookie',cookie);

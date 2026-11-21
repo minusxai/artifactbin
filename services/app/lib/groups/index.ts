@@ -15,7 +15,7 @@ import type {UpdateGroupInput, AccountPreferences, CreateGroupInput, DefaultDest
 import type {Queryable as ContractQueryable} from '@artifactbin/contracts/db';
 import { getDb, services, deploymentConfig, env, emit, serviceAudiences } from '../platform';
 import {groupSignInServiceConfigured} from '@artifactbin/contracts/service-audiences';
-export interface GroupRecord {id:string;handle:string;name:string;description:string;created_by:string;deleted_at:string|null;parent_id:string|null;}
+export interface GroupRecord {trusted_issuer:string|null;tenancy_id:string|null;id:string;handle:string;name:string;description:string;created_by:string;deleted_at:string|null;parent_id:string|null;}
 export {GroupError} from './errors';
 const summary=(group:GroupRecord,role:GroupRole|null):GroupSummary=>({id:group.id,handle:group.handle,name:group.name,description:group.description,role,parent_id:group.parent_id??null});
 export async function getGroupById(id:string,query?:ContractQueryable):Promise<GroupRecord|null>{return (await (query??await getDb()).query<GroupRecord>('SELECT * FROM groups WHERE id=$1 AND deleted_at IS NULL',[id])).rows[0]??null;}
@@ -116,7 +116,7 @@ export async function getGroupDetail(userId:string|null,idOrHandle:string):Promi
  const parent=group.parent_id?(await db.query<GroupRelative>(RELATIVE_SQL+'g.id=$1',[group.parent_id,userId])).rows[0]??null:null;
  const subgroups=!admin?[]:(await db.query<GroupRelative>(RELATIVE_SQL+'g.parent_id=$1 ORDER BY g.name,g.id',[group.id,userId])).rows;
  const subgroup_audience=subgroups.length?(await db.query<{user_id:string;username:string|null;name:string|null;via_id:string;via_handle:string;via_name:string}>(SUBGROUP_AUDIENCE_SQL,[group.id])).rows.map(({via_id,via_handle,via_name,...person}):GroupAudienceMember=>({...person,via:{id:via_id,handle:via_handle,name:via_name}})):[];
- return {group:{...summary(group,role),company_root:group.company_root},members,linked_groups,...(invitations?{invitations}:{}),parent,subgroups,subgroup_audience,...(admin_via?{admin_via}:{})};
+ return {group:{...summary(group,role),company_root:group.company_root,...(admin?{tenancy_id:group.tenancy_id,host_provisioned:group.trusted_issuer!==null}:{})},members,linked_groups,...(invitations?{invitations}:{}),parent,subgroups,subgroup_audience,...(admin_via?{admin_via}:{})};
 }
 export async function searchGroupMembers(userId:string,groupId:string,query:string):Promise<GroupMember[]>{
  const db=await getDb(),group=await directoryGroup(db,userId,groupId);
@@ -178,7 +178,7 @@ export async function setAccountPreferences(userId:string,destination:DefaultDes
 }
 export { selectNewArtifactDestination } from './destination';
 
-/** Mutable presentation only; handles are reserved identity tombstones. */
+/** Group settings; handles are reserved identity tombstones. */
 export async function updateGroup(actorId:string,id:string,input:UpdateGroupInput,actor?:GroupMutationActor):Promise<GroupSummary>{
  if(!input||typeof input!=='object')throw new GroupError('invalid_group');
  const updated=await services().identity.updateGroup({...input,actorId,groupId:id});
