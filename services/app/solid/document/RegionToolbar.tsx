@@ -136,7 +136,7 @@ export function RegionToolbar(props: { ui: RegionUi; state: Accessor<RegionToolb
       <ToolbarSeparator />
       <Command label="Bold" keys="Mod-b" pressed={mark('strong')} onPress={() => run('strong')}><Bold size={16} /></Command>
       <Command label="Italic" keys="Mod-i" pressed={mark('em')} onPress={() => run('em')}><Italic size={16} /></Command>
-      <Command label="Inline code" keys="Mod-e" pressed={mark('code')} onPress={() => run('code')}><Code size={16} /></Command>
+      <Command label="Inline code" keys="Mod-Shift-e" pressed={mark('code')} onPress={() => run('code')}><Code size={16} /></Command>
       <LinkControl ui={props.ui} state={state} />
       <ToolbarSeparator />
       <Command label="Bulleted list" keys="Mod-Shift-8" pressed={block() === 'bullet'} onPress={() => run('list', { type: block() === 'bullet' ? null : 'bullet' })}><List size={16} /></Command>

@@ -1,5 +1,5 @@
 /** Versioned native tree schema. Browser and server use precisely the same supported nodes. */
-import { Extension, getSchema, type Node } from '@tiptap/core';
+import { Extension, getSchema, type Mark, type Node } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
@@ -76,7 +76,10 @@ const IdentifiedStarterKit = StarterKit.extend({
           ...(node.attrs.codeAfId ? {'data-af-id':node.attrs.codeAfId} : {}),
           ...(node.attrs.language ? {class:this.options.languageClassPrefix+node.attrs.language} : {}),
         },0]];
-      } }) : extension.name === 'listItem' ? (extension as Node).extend({content:'(paragraph | heading) block*'}) : extension);
+      } }) : extension.name === 'listItem' ? (extension as Node).extend({content:'(paragraph | heading) block*'})
+        // The editor's shortcut extension binds inline code and reserves Control+E for navigation.
+        : extension.name === 'code' ? (extension as Mark).extend({ addKeyboardShortcuts: () => ({}) })
+        : extension);
   },
 });
 export function nativeExtensions() {

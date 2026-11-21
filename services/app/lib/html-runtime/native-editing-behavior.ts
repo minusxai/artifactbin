@@ -4,7 +4,7 @@ import { safeHref } from '../live-regions/href';
 import type { Editor } from '@tiptap/core';
 import { Extension } from '@tiptap/core';
 import { Fragment, Slice, type Node as PMNode } from 'prosemirror-model';
-import {Plugin, type EditorState, type Transaction} from 'prosemirror-state';
+import { Plugin, Selection, type EditorState, type Transaction } from 'prosemirror-state';
 
 /** Copied blocks are new identities, even when an internal clipboard slice carries original attributes. */
 export function freshClipboard(slice:Slice):Slice {
@@ -47,6 +47,22 @@ export const NativeIndentation=Extension.create({
   'Shift-Tab':()=>this.editor.isActive('codeBlock')?false:isolated(this.editor,()=>indentNative(this.editor,true)),
   Escape:()=>{this.editor.view.dom.blur();return true;},
  };},
+});
+
+export const NativeEditorShortcuts = Extension.create({
+  name: 'nativeEditorShortcuts',
+  priority: 1100,
+  addKeyboardShortcuts() {
+    return {
+      'Ctrl-e': () => {
+        const { view } = this.editor;
+        const { tr, doc } = view.state;
+        view.dispatch(tr.setSelection(Selection.atEnd(doc)).scrollIntoView());
+        return true;
+      },
+      'Mod-Shift-e': () => isolated(this.editor, () => this.editor.commands.toggleCode()),
+    };
+  },
 });
 
 /** Follow the original content through splits; a copied identity must not move an existing comment to new text. */
