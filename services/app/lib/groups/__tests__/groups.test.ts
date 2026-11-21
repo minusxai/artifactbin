@@ -2,8 +2,9 @@ import {admitGroupMember} from '@/__tests__/harness';
 import {describe,it,expect} from 'vitest';
 import {useAppHarness} from '@/__tests__/harness';
 import { createUser, setUsername } from '@/lib/accounts';
+import {overrideConfig} from '@/lib/platform/config';
 import {getDb} from '@/lib/platform/db';
-import {createGroup,getGroupDetail,getGroupRole,setGroupMember,removeGroupMember,getAccountPreferences,setAccountPreferences,inviteGroupMember,acceptGroupInvitations,setGroupLink} from '..';
+import {createGroup,getGroupDetail,searchGroupMembers,getGroupRole,setGroupMember,removeGroupMember,getAccountPreferences,setAccountPreferences,inviteGroupMember,acceptGroupInvitations,setGroupLink} from '..';
 useAppHarness();
 const account=async(name:string)=>createUser({email:`mxmx_test_${name}@example.com`});
 describe('independent group owner contracts',()=>{
@@ -82,6 +83,33 @@ describe('independent group owner contracts',()=>{
   expect(await getGroupRole(invited.id,group.id)).toBe('member');
   expect((await getGroupDetail(invited.id,group.id))?.invitations).toBeUndefined();
   expect((await getGroupDetail(owner.id,group.id))?.invitations).toEqual([]);
+ });
+ it('limits the member directory to the active group, and to admins in the company root',async()=>{
+  const owner=await account('owner'), member=await account('member'), peer=await account('peer');
+  const root=await createGroup(owner.id,{handle:'org_root',name:'Organization'});
+  const team=await createGroup(owner.id,{handle:'org_team',name:'Team',parent_id:root.id});
+  const leaf=await createGroup(owner.id,{handle:'org_leaf',name:'Leaf',parent_id:team.id});
+  const other=await createGroup(owner.id,{handle:'other_root',name:'Other'});
+  for(const g of [root,team,other]) await admitGroupMember(owner.id,g.id,member.id,'member');
+  await admitGroupMember(owner.id,root.id,peer.id,'member');
+  await setGroupLink(owner.id,team.id,leaf.id,true);
+  await setGroupLink(owner.id,root.id,other.id,true);
+  const db=await getDb();
+  await db.query(`WITH added AS (
+   INSERT INTO users(id,email) SELECT 'usr_dir_'||n,'mxmx_test_dir_'||n||'@example.com' FROM generate_series(1,101) n RETURNING id
+  ) INSERT INTO group_members(group_id,user_id,role) SELECT $1,id,'member' FROM added`,[team.id]);
+  overrideConfig({}, {APP__DEPLOYMENT_MODE:'company',APP__DEPLOYMENT_OWNER_EMAIL:owner.email!});
+  await db.query("INSERT INTO deployment_state(id,default_group_id,setup_complete) VALUES ('company',$1,true) ON CONFLICT(id) DO UPDATE SET default_group_id=excluded.default_group_id,setup_complete=true",[team.id]);
+  const directory=await getGroupDetail(member.id,root.id);
+  expect(directory?.members.map(m=>m.user_id)).toEqual([owner.id]);
+  expect(directory).toMatchObject({subgroups:[],subgroup_audience:[],linked_groups:[]});
+  expect(await searchGroupMembers(member.id,root.id,peer.id)).toEqual([]);
+  const own=await getGroupDetail(member.id,team.id);
+  expect(own).toMatchObject({subgroups:[],subgroup_audience:[],linked_groups:[]});
+  expect(own?.members).toHaveLength(103);
+  expect((await getGroupDetail(member.id,other.id))?.members).toHaveLength(2);
+  expect((await getGroupDetail(owner.id,root.id))?.members).toHaveLength(3);
+  expect((await searchGroupMembers(owner.id,root.id,peer.id)).map(m=>m.user_id)).toEqual([peer.id]);
  });
  it('links groups for navigation without inheriting membership',async()=>{
   const owner=await account('owner'),viewer=await account('member');const first=await createGroup(owner.id,{handle:'first_team',name:'First'}),second=await createGroup(owner.id,{handle:'second_team',name:'Second'});

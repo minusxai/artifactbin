@@ -2,7 +2,7 @@ import {admissionPolicyOf} from '@artifactbin/auth';
 import {isGroupRole} from '@artifactbin/contracts/groups';
 import {GroupError} from './errors';
 import {groupAttempt,recordGroupChanges,type GroupMutationActor} from './mutations';
-import {groupAdminSql,subtreeSql} from './hierarchy';
+import {groupAdminSql,groupReachSql,subtreeSql} from './hierarchy';
 /**
  * GROUPS, AS THE APP SEES THEM. Every write (create, rename, delete, reparent, membership, invitations) is the
  * identity module's (lib/platform `services().identity`, contracts `IdentityService`): these functions translate a
@@ -74,26 +74,55 @@ const SUBGROUP_AUDIENCE_SQL=`SELECT * FROM (SELECT DISTINCT ON (m.user_id) m.use
  FROM group_members m JOIN users u ON u.id=m.user_id JOIN groups g ON g.id=m.group_id
  WHERE m.group_id IN (${subtreeSql('$1')}) AND m.group_id<>$1 AND NOT EXISTS (SELECT 1 FROM group_members d WHERE d.group_id=$1 AND d.user_id=m.user_id)
  ORDER BY m.user_id,g.name,g.id) audience ORDER BY lower(coalesce(name,username,'')),user_id LIMIT 100`;
+/** Both directory entry points resolve the same effective role and the company's root. A configured
+ * default may still be below the root while an installation is moving its existing groups. */
+async function directoryGroup(db:ContractQueryable,userId:string,id:string,handle:string|null=null){
+ const root=deploymentConfig().mode==='company'
+  ? `g.parent_id IS NULL AND g.id IN (${groupReachSql("(SELECT default_group_id FROM deployment_state WHERE id='company')")})`
+  : 'false';
+ return (await db.query<GroupRecord & {role:GroupRole|null;company_root:boolean}>(`
+  SELECT g.*, ${effectiveRoleSql('$2')} AS role, (${root}) AS company_root
+  FROM groups g WHERE g.deleted_at IS NULL AND (g.id=$1 OR g.handle=$3)
+  ORDER BY (g.id=$1) DESC LIMIT 1`,[id,userId,handle])).rows[0];
+}
+
+async function directoryMembers(db:ContractQueryable,groupId:string,adminsOnly:boolean,query:string){
+ const term=query.trim().replace(/^@/,'');
+ return (await db.query<GroupMember>(`SELECT m.user_id,u.username,u.name,m.role
+  FROM group_members m JOIN users u ON u.id=m.user_id WHERE m.group_id=$1
+  AND (NOT $3::boolean OR m.role='admin')
+  AND ($2='' OR lower(m.user_id)=lower($2) OR strpos(lower(coalesce(u.username,'')||' '||coalesce(u.name,'')),lower($2))>0)
+  ORDER BY (lower(m.user_id)=lower($2)) DESC,u.username,m.user_id ${term?'LIMIT 100':''}`,[groupId,term,adminsOnly])).rows;
+}
 /**
  * A group's page, for a member or an admin of it (directly or through an ancestor). `members` are the direct rows, so an
  * inherited admin is never listed: `admin_via` names the ancestor their authority comes from (absent for everyone else).
  * `parent` and `subgroups` place it in the tree, each with the reader's role there (`getGroupRole`'s, so a subgroup of a
- * group they administer reads `admin`); `subgroup_audience` is who else its shares reach (./hierarchy: the direct
+ * group they administer reads `admin`). Only admins see descendants and their members. In the company root a
+ * member's directory lists only admins. For admins, `subgroup_audience` is who else its shares reach (the direct
  * members of every descendant), who are NOT members of this group.
  */
 export async function getGroupDetail(userId:string|null,idOrHandle:string):Promise<GroupDetail|null>{
- const db=await getDb();const group=(await db.query<GroupRecord>('SELECT * FROM groups WHERE (id=$1 OR handle=$2) AND deleted_at IS NULL',[idOrHandle,idOrHandle.replace(/^@/,'').toLowerCase()])).rows[0];
- if(!group)return null;const role=await getGroupRole(userId,group.id,db);if(!role)return null;
- const admin_via=role==='admin'?await inheritedAdminVia(userId!,group.id,db):null;
- const members=await searchGroupMembers(userId!,group.id,'');
- const linked_groups=(await db.query<GroupSummary>('SELECT g.id,g.handle,g.name,g.description,m.role,g.parent_id FROM group_links l JOIN groups g ON g.id=l.linked_group_id LEFT JOIN group_members m ON m.group_id=g.id AND m.user_id=$2 WHERE l.group_id=$1 AND g.deleted_at IS NULL ORDER BY g.name',[group.id,userId])).rows;
+ if(!userId)return null;
+ const db=await getDb(),group=await directoryGroup(db,userId,idOrHandle,idOrHandle.replace(/^@/,'').toLowerCase());
+ if(!group?.role)return null;
+ const role=group.role,admin=role==='admin',adminsOnly=!admin && group.company_root;
+ const admin_via=admin?await inheritedAdminVia(userId,group.id,db):null;
+ const members=await directoryMembers(db,group.id,adminsOnly,'');
+ const linked_groups=adminsOnly?[]:(await db.query<GroupSummary>(`SELECT g.id,g.handle,g.name,g.description,m.role,g.parent_id
+  FROM group_links l JOIN groups g ON g.id=l.linked_group_id LEFT JOIN group_members m ON m.group_id=g.id AND m.user_id=$2
+  WHERE l.group_id=$1 AND g.deleted_at IS NULL ${admin?'':`AND g.id NOT IN (${subtreeSql('$1')})`} ORDER BY g.name`,[group.id,userId])).rows;
  const invitations=role==='admin'?(await db.query<GroupInvitation>('SELECT id,email,role,created_at,invited_by FROM group_invitations WHERE group_id=$1 ORDER BY created_at',[group.id])).rows:undefined;
  const parent=group.parent_id?(await db.query<GroupRelative>(RELATIVE_SQL+'g.id=$1',[group.parent_id,userId])).rows[0]??null:null;
- const subgroups=(await db.query<GroupRelative>(RELATIVE_SQL+'g.parent_id=$1 ORDER BY g.name,g.id',[group.id,userId])).rows;
+ const subgroups=!admin?[]:(await db.query<GroupRelative>(RELATIVE_SQL+'g.parent_id=$1 ORDER BY g.name,g.id',[group.id,userId])).rows;
  const subgroup_audience=subgroups.length?(await db.query<{user_id:string;username:string|null;name:string|null;via_id:string;via_handle:string;via_name:string}>(SUBGROUP_AUDIENCE_SQL,[group.id])).rows.map(({via_id,via_handle,via_name,...person}):GroupAudienceMember=>({...person,via:{id:via_id,handle:via_handle,name:via_name}})):[];
  return {group:summary(group,role),members,linked_groups,...(invitations?{invitations}:{}),parent,subgroups,subgroup_audience,...(admin_via?{admin_via}:{})};
 }
-export async function searchGroupMembers(userId:string,groupId:string,query:string):Promise<GroupMember[]>{const db=await getDb();if(!await getGroupRole(userId,groupId,db))throw new GroupError('not_found',404);return (await db.query<GroupMember>("SELECT m.user_id,u.username,u.name,m.role FROM group_members m JOIN users u ON u.id=m.user_id WHERE m.group_id=$1 AND ($2='' OR lower(m.user_id)=lower($2) OR strpos(lower(coalesce(u.username,'')||' '||coalesce(u.name,'')),lower($2))>0) ORDER BY (lower(m.user_id)=lower($2)) DESC,u.username,m.user_id LIMIT 100",[groupId,query.trim().replace(/^@/,'')])).rows;}
+export async function searchGroupMembers(userId:string,groupId:string,query:string):Promise<GroupMember[]>{
+ const db=await getDb(),group=await directoryGroup(db,userId,groupId);
+ if(!group?.role)throw new GroupError('not_found',404);
+ return directoryMembers(db,group.id,group.role!=='admin' && group.company_root,query);
+}
 export async function setGroupMember(actorId:string,groupId:string,userId:string,role:GroupRole,actor?:GroupMutationActor):Promise<void>{
  await recordGroupChanges((await services().identity.setGroupMember({actorId,groupId,userId,role})).changes,actor);
 }
