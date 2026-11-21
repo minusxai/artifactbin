@@ -23,6 +23,7 @@
  */
 import {IdentityError, type GroupSignInGrant, type GroupChange, type IdentityService, type TransactionalQueryable} from '@artifactbin/contracts/identity-module';
 import {normalizeCreateGroup, type GroupRole, type GroupSummary} from '@artifactbin/contracts/groups';
+import {companyGroupState} from './company-group';
 import {reserveHandle} from './accounts';
 import {bumpHierarchy,chainOf,isTestAccount,liveGroup,lockGroups,recordChange,requireAdmin,type GroupRow} from './group-access';
 import {groupMemberMethods} from './group-members';
@@ -35,7 +36,7 @@ class Unchanged extends Error { constructor(public parentId: string | null) { su
 type GroupMethods = Pick<IdentityService, 'revokeGroupSignIn' | 'approveServiceGroupSignIn' | 'revokeServiceGroupSignIn' | 'createGroup' | 'updateGroup' | 'setGroupParent' | 'deleteGroup' | 'setGroupMember' | 'removeGroupMember' | 'inviteGroupMember'
   | 'removeGroupInvitation' | 'acceptGroupInvitations' | 'admitToGroup'>;
 
-export function groupMethods(db: TransactionalQueryable, t: IdentityTables, options: {testDomain?: string}): GroupMethods {
+export function groupMethods(db: TransactionalQueryable, t: IdentityTables, options: {testDomain?: string; appSchema?: string}): GroupMethods {
   return {
     async revokeGroupSignIn({actorId, groupId, id}) {
       return db.transaction(async tx => {
@@ -84,6 +85,16 @@ export function groupMethods(db: TransactionalQueryable, t: IdentityTables, opti
         // Only an admin of the parent (directly or through an ancestor) creates beneath it: the new subtree's members
         // receive the parent's shares. The creator becomes the new group's first direct admin.
         if (parentId) await requireAdmin(tx, t, actorId, parentId, 'parent_not_found');
+        else {
+          const company = await companyGroupState(tx, options.appSchema);
+          if (company) {
+            // The setup owner needs a first root to select. The hierarchy lock serializes competing creations.
+            const mayBootstrap = !company.setup_complete && company.owner_user_id === actorId &&
+              !(await tx.query(`SELECT 1 FROM ${t.groups} g JOIN ${t.group_members} m ON m.group_id=g.id
+                WHERE g.parent_id IS NULL AND g.deleted_at IS NULL AND m.user_id=$1 AND m.role='admin' LIMIT 1`, [actorId])).rows.length;
+            if (!mayBootstrap) throw new IdentityError('company_parent_required', 409);
+          }
+        }
         const id = 'grp_' + internalId();
         try { await reserveHandle(t, tx, handle, 'group', id); } catch (error) { if (isUniqueViolation(error)) throw new IdentityError('handle_taken', 409); throw error; }
         await tx.query(`INSERT INTO ${t.groups}(id,handle,name,description,created_by,parent_id) VALUES($1,$2,$3,$4,$5,$6)`, [id, handle, name, description, actorId, parentId]);
@@ -128,6 +139,7 @@ export function groupMethods(db: TransactionalQueryable, t: IdentityTables, opti
           await requireAdmin(tx, t, actorId, id);
           if (fromParentId !== undefined && fromParentId !== previous) throw new IdentityError('parent_changed', 409);
           if (previous === parentId) throw new Unchanged(previous);
+          if (!parentId && await companyGroupState(tx, options.appSchema)) throw new IdentityError('company_parent_required', 409);
           if (previous && parentId && fromParentId === undefined) throw new IdentityError('already_has_parent', 409);
           if (previous) await requireAdmin(tx, t, actorId, previous, 'parent_not_found');
           if (parentId) {

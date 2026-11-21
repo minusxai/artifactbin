@@ -27,6 +27,8 @@ describe('company admission',()=>{
   await db.query("UPDATE group_members SET role='member' WHERE group_id='group' AND user_id='owner'");
   await expect(setupDeployment('owner','group')).rejects.toThrow('Admin membership');
   await db.query("UPDATE group_members SET role='admin' WHERE group_id='group' AND user_id='owner'");
+  await db.query("INSERT INTO groups(id,handle,name,created_by,parent_id) VALUES ('child','subteam','Subteam','owner','group')");
+  await expect(setupDeployment('owner','child')).rejects.toMatchObject({code:'default_group_unavailable'});
   await setupDeployment('owner','group');
   expect(await getDeploymentDefaultDestination()).toEqual({type:'group',id:'group'});
   expect(await admitDeploymentIdentity(identity('member','member@example.com'))).toBe(true);

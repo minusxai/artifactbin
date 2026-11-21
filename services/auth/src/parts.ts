@@ -220,7 +220,7 @@ function mountTrustedSignIn(a:AuthApp,o:AuthOptions):void {
     if(!checked.ok)return refuse(checked.refusal,checked.refusal==='forbidden_origin'?403:401);
     const {issuer,subject,group,tenancyId}=checked.claims;
     const result=await trustedSignIn(o.identityTransactions,{issuer:issuer.issuer,subject,group,tenancyId,
-      ...(issuer.parentGroup?{parentGroup:issuer.parentGroup}:{}),email:trustedEmailOf(issuer.issuer,subject)},schema);
+      ...(issuer.parentGroup?{parentGroup:issuer.parentGroup}:{}),email:trustedEmailOf(issuer.issuer,subject)},schema,o.appSchema??readEnv(o.env,'APP__SCHEMA'));
     if(!result.ok)return refuse(result.refusal,result.refusal==='parent_group_missing'?503:result.refusal==='invalid_claims'?401:403);
     if(o.admitIdentity&&!await o.admitIdentity({userId:result.userId,email:result.email,emailVerified:true,trustedIssuer:issuer.issuer}))return refuse('deployment_admission_required',403);
     const cookies=await o.sessions.start(result.userId);

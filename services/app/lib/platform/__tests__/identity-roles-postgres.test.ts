@@ -89,7 +89,7 @@ describe.skipIf(!dockerImage('postgres:17-alpine'))('identity tables in a split-
  });
 
  it('the identity role performs every identity write, through the identity store', async()=>{
-  const store=createIdentityStore({db:identityDbOf(auth),authSchema:'auth'});
+  const store=createIdentityStore({db:identityDbOf(auth),authSchema:'auth',appSchema:'app'});
   const owner=await store.createUser({email:'owner@example.com'});
   await store.syncProfile({userId:'usr_member',email:'member@example.com',testAccount:false});
   expect(await store.setUsername({userId:owner.id,username:'owner_one'})).toEqual({ok:true,username:'owner_one'});
