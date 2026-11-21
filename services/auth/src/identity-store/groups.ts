@@ -25,7 +25,7 @@ import {IdentityError, type GroupSignInGrant, type GroupChange, type IdentitySer
 import {normalizeCreateGroup, type GroupRole, type GroupSummary} from '@artifactbin/contracts/groups';
 import {companyGroupState} from './company-group';
 import {reserveHandle} from './accounts';
-import {bumpHierarchy,chainOf,isTestAccount,liveGroup,lockGroups,recordChange,requireAdmin,type GroupRow} from './group-access';
+import {bumpHierarchy,chainOf,effectiveAdminVia,memberRole,isTestAccount,liveGroup,lockGroups,recordChange,requireAdmin,type GroupRow} from './group-access';
 import {groupMemberMethods} from './group-members';
 import {internalId,isUniqueViolation,type IdentityTables} from './tables';
 
@@ -33,11 +33,23 @@ const summary = (group: GroupRow, role: GroupRole | null): GroupSummary => ({id:
 /** No edge moved: rolled back, so the revision does not move either. */
 class Unchanged extends Error { constructor(public parentId: string | null) { super('unchanged'); } }
 
-type GroupMethods = Pick<IdentityService, 'revokeGroupSignIn' | 'approveServiceGroupSignIn' | 'revokeServiceGroupSignIn' | 'createGroup' | 'updateGroup' | 'setGroupParent' | 'deleteGroup' | 'setGroupMember' | 'removeGroupMember' | 'inviteGroupMember'
+type GroupMethods = Pick<IdentityService, 'setDefaultDestination' | 'revokeGroupSignIn' | 'approveServiceGroupSignIn' | 'revokeServiceGroupSignIn' | 'createGroup' | 'updateGroup' | 'setGroupParent' | 'deleteGroup' | 'setGroupMember' | 'removeGroupMember' | 'inviteGroupMember'
   | 'removeGroupInvitation' | 'acceptGroupInvitations' | 'admitToGroup'>;
 
 export function groupMethods(db: TransactionalQueryable, t: IdentityTables, options: {testDomain?: string; appSchema?: string}): GroupMethods {
   return {
+    async setDefaultDestination({userId, destination}) {
+      if (!destination || !['personal','group','inherit'].includes(destination.type) ||
+          Object.keys(destination).some(key => key !== 'type' && !(destination.type === 'group' && key === 'id')))
+        throw new IdentityError('invalid_destination');
+      await db.transaction(async tx => {
+        if (destination.type === 'group' && (typeof destination.id !== 'string' ||
+            !(await memberRole(tx,t,userId,destination.id) || await effectiveAdminVia(tx,t,userId,destination.id))))
+          throw new IdentityError('group_unavailable',403);
+        await tx.query(`INSERT INTO ${t.account_preferences}(user_id,default_destination) VALUES($1,$2::jsonb)
+          ON CONFLICT(user_id) DO UPDATE SET default_destination=EXCLUDED.default_destination`, [userId,JSON.stringify(destination)]);
+      });
+    },
     async revokeGroupSignIn({actorId, groupId, id}) {
       return db.transaction(async tx => {
         await requireAdmin(tx, t, actorId, groupId);

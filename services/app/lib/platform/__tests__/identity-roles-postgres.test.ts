@@ -59,9 +59,18 @@ describe.skipIf(!dockerImage('postgres:17-alpine'))('identity tables in a split-
   await superuser.query(`GRANT USAGE ON SCHEMA identity TO service_reader; GRANT SELECT ON ALL TABLES IN SCHEMA identity TO service_reader;
    ALTER DEFAULT PRIVILEGES FOR ROLE artifactbin_auth IN SCHEMA identity GRANT SELECT ON TABLES TO service_reader`);
   auth=pool('artifactbin_auth','auth');
+  // Upgrade from split roles with preferences still in the app, including a stored group choice.
+  await app.query(`CREATE TABLE app.account_preferences(user_id text PRIMARY KEY, default_destination jsonb NOT NULL);
+   INSERT INTO app.account_preferences VALUES ('prior','{"type":"group","id":"root_b"}')`);
+  await expect(ensureIdentitySchema(identityDbOf(auth),{auth:'auth',app:'app',read:'identity'})).rejects.toThrow(/stop the old app/);
+  await superuser.query('BEGIN; ALTER TABLE app.account_preferences SET SCHEMA auth; ALTER TABLE auth.account_preferences OWNER TO artifactbin_auth; COMMIT');
   await ensureHumanAuthSchema({pool:auth,schema:'auth'});
   await ensureIdentitySchema(identityDbOf(auth),{auth:'auth',app:'app',read:'identity'});
   service=pool('service_reader','identity');
+  await auth.query(`INSERT INTO auth.users(id,email) VALUES ('prior','prior@example.com');
+   INSERT INTO auth.groups(id,name,handle,created_by,parent_id) VALUES ('root_b','Root','root_b','prior',NULL),('child_b','Child','child_b','prior','root_b');
+   INSERT INTO auth.group_members(group_id,user_id,role) VALUES ('root_b','prior','member'),('child_b','prior','member')`);
+  expect((await service.query("SELECT default_group_id FROM users WHERE id='prior'")).rows).toEqual([{default_group_id:'root_b'}]);
  },180_000);
  afterAll(async()=>{
   for(const p of pools)await p.end().catch(()=>{});
@@ -97,6 +106,10 @@ describe.skipIf(!dockerImage('postgres:17-alpine'))('identity tables in a split-
   await store.confirmWelcome({userId:'usr_member'});await store.setAutoAcceptMentions({userId:owner.id,autoAccept:false});
   const finance=(await store.createGroup({actorId:owner.id,handle:'finance',name:'Finance'})).group;
   const retail=(await store.createGroup({actorId:owner.id,handle:'retail',name:'Retail',parentId:finance.id})).group;
+  const readerDefault=async()=>(await service.query('SELECT default_group_id FROM users WHERE id=$1',[owner.id])).rows[0].default_group_id;
+  expect(await readerDefault()).toBe(retail.id);
+  await store.setDefaultDestination({userId:owner.id,destination:{type:'group',id:finance.id}});
+  expect(await readerDefault()).toBe(finance.id);
   const invited=await store.inviteGroupMember({actorId:owner.id,groupId:retail.id,email:'member@example.com',role:'member'});
   expect(invited.changes).toHaveLength(1);
   expect((await store.acceptGroupInvitations({userId:'usr_member',email:'member@example.com'})).groupIds).toEqual([retail.id]);

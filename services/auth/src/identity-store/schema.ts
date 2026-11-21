@@ -8,6 +8,10 @@
  */
 import type { Table } from '@artifactbin/contracts/schema';
 
+const ACCOUNT_PREFERENCES:Table={name:'account_preferences',columns:[
+ {name:'user_id',type:'TEXT',notNull:true},{name:'default_destination',type:'JSONB',notNull:true,default:"'{\"type\":\"inherit\"}'::jsonb"},
+],primaryKey:['user_id']};
+
 const USERS: Table = {
   name: 'users',
   columns: [
@@ -189,7 +193,7 @@ const GROUP_SIGN_IN_GRANTS:Table={name:'group_sign_in_grants',columns:[
 ],primaryKey:['id'],indexes:[{name:'idx_group_sign_in_grants_group',columns:['group_id'],where:'deleted_at IS NULL'}]};
 
 /** @public Read by scripts/render-schema.mjs, which finds Table data among this module's exports. */
-export const IDENTITY_TABLES: Table[] = [USERS, TOKENS, HANDLE_RESERVATIONS, GROUPS, GROUP_HIERARCHY, GROUP_MEMBERS, GROUP_INVITATIONS, GROUP_MAIL_OUTBOX, GROUP_SIGN_IN_GRANTS];
+export const IDENTITY_TABLES: Table[] = [USERS, ACCOUNT_PREFERENCES, TOKENS, HANDLE_RESERVATIONS, GROUPS, GROUP_HIERARCHY, GROUP_MEMBERS, GROUP_INVITATIONS, GROUP_MAIL_OUTBOX, GROUP_SIGN_IN_GRANTS];
 
 /**
  * THE SECRET COLUMNS, the one list: no view exposes them, so only the identity module reads them. A credential's

@@ -1,3 +1,4 @@
+import {getDb} from '@/lib/platform';
 import {DELETE as withdraw} from '@/app/api/groups/[id]/invitations/[invitationId]/route';
 import {getGroupRole,acceptGroupInvitations} from '@/lib/groups';
 import {describe,it,expect} from 'vitest';
@@ -32,6 +33,32 @@ describe('groups authenticated HTTP boundary',()=>{
   await acceptGroupInvitations(viewer.userId!,viewer.email!);
   expect((await invite(request('/api/groups/'+group.id+'/invitations',{method:'POST',token:viewer.token,json:{email:'mxmx_test_new@example.com',role:'admin'}}),params({id:group.id}))).status).toBe(403);
   const viewed=await (await detail(request('/api/groups/'+group.id,{token:viewer.token}),params({id:group.id}))).json();expect(viewed.invitations).toBeUndefined();expect(viewed.members[0]).not.toHaveProperty('email');
+ });
+ it('resolves the reader default from live direct memberships and the saved destination',async()=>{
+  const person=await mintAccountToken('group_default'),db=await getDb();
+  const read=async()=>(await db.query<{default_group_id:string|null}>('SELECT default_group_id FROM users WHERE id=$1',[person.userId])).rows[0]!.default_group_id;
+  const group=async(handle:string,parent_id?:string)=>(await (await create(request('/api/groups',{method:'POST',token:person.token,json:{handle,name:handle,parent_id}}))).json()).id as string;
+  const save=async(default_destination:object)=>expect((await savePreferences(request('/api/me/preferences',{method:'PUT',token:person.token,json:{default_destination}}))).status).toBe(200);
+  expect(await read()).toBeNull();
+  const root=await group('first_root');
+  expect(await read()).toBe(root);
+  const first=await group('first_child',root),otherRoot=await group('other_root'),second=await group('other_child',otherRoot);
+  expect(await read()).toBe(first);
+  await db.query("UPDATE group_members SET created_at='2000-01-01' WHERE user_id=$1 AND group_id IN ($2,$3)",[person.userId,first,second]);
+  expect(await read()).toBe([first,second].sort()[0]);
+  await save({type:'group',id:second});
+  expect(await read()).toBe(second);
+  await db.query('DELETE FROM group_members WHERE user_id=$1 AND group_id=$2',[person.userId,second]);
+  expect(await read()).toBe(first);
+  await save({type:'group',id:second}); // still a publishing destination through inherited administration
+  expect(await read()).toBe(first);
+  for(const type of ['personal','inherit']){
+   await save({type});
+   expect(await (await preferences(request('/api/me/preferences',{token:person.token}))).json()).toEqual({default_destination:{type}});
+   expect(await read()).toBe(first);
+  }
+  await db.query('UPDATE groups SET deleted_at=now() WHERE id=$1',[first]);
+  expect(await read()).toBe(root);
  });
  it('validates preference membership and invalid JSON destinations',async()=>{
   const owner=await mintAccountToken('owner');expect(await (await preferences(request('/api/me/preferences',{token:owner.token}))).json()).toEqual({default_destination:{type:'inherit'}});

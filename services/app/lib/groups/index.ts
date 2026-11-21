@@ -172,7 +172,10 @@ export async function setGroupLink(actorId:string,groupId:string,linkedId:string
 });}
 /** The saved preference as it stands: one naming a deleted group is left in place (the home page reports it unavailable). */
 export async function getAccountPreferences(userId:string):Promise<AccountPreferences>{return {default_destination:(await (await getDb()).query<{default_destination:DefaultDestination}>('SELECT default_destination FROM account_preferences WHERE user_id=$1',[userId])).rows[0]?.default_destination??{type:'inherit'}};}
-export async function setAccountPreferences(userId:string,destination:DefaultDestination):Promise<AccountPreferences>{if(!destination||!['personal','group','inherit'].includes(destination.type)||Object.keys(destination).some(k=>k!=='type'&&(destination.type!=='group'||k!=='id')))throw new GroupError('invalid_destination');await (await getDb()).transaction(async tx=>{if(destination.type==='group'&&(typeof destination.id!=='string'||!await getGroupRole(userId,destination.id,tx)))throw new GroupError('group_unavailable',403);await tx.query('INSERT INTO account_preferences(user_id,default_destination) VALUES($1,$2::jsonb) ON CONFLICT(user_id) DO UPDATE SET default_destination=EXCLUDED.default_destination',[userId,JSON.stringify(destination)]);});return {default_destination:destination};}
+export async function setAccountPreferences(userId:string,destination:DefaultDestination):Promise<AccountPreferences>{
+ await services().identity.setDefaultDestination({userId,destination});
+ return {default_destination:destination};
+}
 export { selectNewArtifactDestination } from './destination';
 
 /** Mutable presentation only; handles are reserved identity tombstones. */

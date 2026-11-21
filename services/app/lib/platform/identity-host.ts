@@ -36,7 +36,7 @@ export async function ensureLocalIdentity(db: TransactionalQueryable): Promise<v
 
 /** `users`, then `group_admins` (the access rule's admin view): the first that does not resolve to the read view, or none. */
 const readsView = async (db: Queryable): Promise<{ok: boolean; name: string; found: string}> => {
-  for (const name of ['users', 'group_admins']) {
+  for (const name of ['users', 'group_admins', 'account_preferences']) {
     const row = (await db.query<{relkind: string; schema: string}>(
       'SELECT c.relkind, n.nspname AS schema FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE c.oid=to_regclass($1)', [name])).rows[0];
     if (!(row?.relkind === 'v' && row.schema === IDENTITY_READ_SCHEMA)) return {ok: false, name, found: row ? `${row.schema}.${name} (${row.relkind === 'v' ? 'a view' : 'a table'})` : 'nothing'};
