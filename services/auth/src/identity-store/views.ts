@@ -4,6 +4,8 @@
  * `deleted_at IS NULL` themselves), plus computed rule columns that cost nothing unless selected:
  *  - `users.active`: may sign in and act on this deployment (`authenticatingUserSql` and, in a company deployment,
  *    `deploymentMemberSql`, over the deployment mode in `identity_settings`; no settings row: nobody is active);
+ *  - `users.default_group_id`: a live direct membership, preferring the explicit publishing group, then the earliest
+ *    subgroup across all trees, then the earliest root. NULL without a live membership. A preference grants no access.
  *  - `tokens.scopes` (the scope list) and `tokens.live`: the bearer read's own rule (row, expiry, OAuth family or, for a
  *    run sign-in, parent-credential
  *    fence), an audience of this deployment's API or of a configured service (`identity_settings.service_audiences`,
@@ -51,7 +53,7 @@ export const plainIdentifier = (value: string, what: string): string => {
  * reader applying IDENTITY.sql) replaces the view in place, appending, rather than dropping it.
  */
 const RULE_COLUMNS: Readonly<Record<string, {after: string; rules: readonly string[]}>> = {
-  users: {after: 'created_at', rules: ['active']},
+  users: {after: 'created_at', rules: ['active', 'default_group_id']},
   tokens: {after: 'last_used_at', rules: ['scopes', 'live']},
 };
 
@@ -85,7 +87,14 @@ export function identityViewStatements(schemas: IdentitySchemas, options: {sessi
       statements.push(`CREATE OR REPLACE VIEW ${read}.users AS
   SELECT ${plain('users', 'u', {active: `
     COALESCE((SELECT ${authenticatingUserSql('u', names)} AND (s.deployment_mode = 'public' OR ${deploymentMemberSql('u.id', names)})
-      FROM ${settings} s WHERE s.id = 'installation'), false) AS active`})}
+      FROM ${settings} s WHERE s.id = 'installation'), false) AS active`, default_group_id: `
+    (SELECT m.group_id FROM ${auth}.group_members m
+      JOIN ${auth}.groups g ON g.id=m.group_id AND g.deleted_at IS NULL
+      LEFT JOIN ${auth}.account_preferences p ON p.user_id=m.user_id
+      WHERE m.user_id=u.id
+      ORDER BY (p.default_destination->>'type'='group' AND p.default_destination->>'id'=g.id) DESC NULLS LAST,
+        (g.parent_id IS NULL), m.created_at, g.id COLLATE "C"
+      LIMIT 1) AS default_group_id`})}
   FROM ${auth}.users u`);
     } else if (table === 'tokens') {
       const {exists} = bearerLiveSql({auth, tokens: `${auth}.tokens`, sessions: options.sessions !== false});

@@ -90,6 +90,18 @@ With a separate SQL service, set `SQL__QUERY_TIMEOUT_MS` equally on the app and 
 message: stop every writer, back up, then run `npm run migrate:account -w services/auth -- --writes-paused-backup-verified`
 with `AUTH__MIGRATION_DATABASE_URL` set. It never runs at startup.
 
+**Upgrading account preferences.** Identity now owns the existing preference rows. Stop old writers
+before upgrading. A single-role install moves the table at startup. On an existing split-role install,
+run the following as the database operator before starting the new hosts, substituting your schema and role names.
+The move keeps the rows and their primary key. Existing identity reader views can stay in place.
+
+```sql
+BEGIN;
+ALTER TABLE app.account_preferences SET SCHEMA auth;
+ALTER TABLE auth.account_preferences OWNER TO artifactbin_auth;
+COMMIT;
+```
+
 **Upgrading group roles.** The old group Editor could administer members and owned files; it becomes
 Admin. The old Viewer becomes Member. The new Editor publishes and edits group content, without member
 administration or ownership. Artifact share roles (viewer/commenter/editor) are unchanged.

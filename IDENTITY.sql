@@ -24,8 +24,18 @@ CREATE OR REPLACE VIEW identity.users AS
   OR EXISTS (SELECT 1 FROM auth.users tu JOIN app.deployment_members pm ON pm.user_id=tu.parent_user_id JOIN app.deployment_state ds ON ds.id='company' AND ds.setup_complete=true
    WHERE tu.id=u.id AND (tu.kind = 'testuser' AND (tu.expires_at IS NULL OR tu.expires_at > now()) AND EXISTS
   (SELECT 1 FROM auth.users parent WHERE parent.id = tu.parent_user_id AND parent.kind = 'account' AND parent.email IS NOT NULL)))))
-      FROM app.identity_settings s WHERE s.id = 'installation'), false) AS active
+      FROM app.identity_settings s WHERE s.id = 'installation'), false) AS active,
+    (SELECT m.group_id FROM auth.group_members m
+      JOIN auth.groups g ON g.id=m.group_id AND g.deleted_at IS NULL
+      LEFT JOIN auth.account_preferences p ON p.user_id=m.user_id
+      WHERE m.user_id=u.id
+      ORDER BY (p.default_destination->>'type'='group' AND p.default_destination->>'id'=g.id) DESC NULLS LAST,
+        (g.parent_id IS NULL), m.created_at, g.id COLLATE "C"
+      LIMIT 1) AS default_group_id
   FROM auth.users u;
+
+CREATE OR REPLACE VIEW identity.account_preferences AS
+  SELECT x.user_id, x.default_destination FROM auth.account_preferences x;
 
 CREATE OR REPLACE VIEW identity.tokens AS
   SELECT t.id, t.name, t.user_id, t.client_harness, t.audience, t.scope, t.request_authority, t.created_at, t.deleted_at, t.expires_at, t.last_used_at,

@@ -11,6 +11,7 @@ import type { TransactionalQueryable } from '@artifactbin/contracts/identity-mod
 import { createHumanAuth, sessionStoreOf, type HumanAuth } from '../src/index';
 import { authParts } from '../src/parts';
 import { createIdentityStore } from '../src/identity-store';
+import { identityViewStatements } from '../src/identity-store/views';
 import { IDENTITY_TABLES } from '../src/identity-store/schema';
 import { testAuthOptions } from './helpers';
 
@@ -63,10 +64,14 @@ beforeAll(async () => {
   await pg.exec(`CREATE SCHEMA company_app;
     CREATE TABLE company_app.identity_settings(id text PRIMARY KEY, deployment_mode text);
     CREATE TABLE company_app.deployment_state(id text PRIMARY KEY, owner_user_id text, default_group_id text, setup_complete boolean);
+    CREATE SCHEMA identity;
+    CREATE TABLE company_app.deployment_members(user_id text PRIMARY KEY);
     CREATE TABLE public.identity_settings (LIKE company_app.identity_settings);
     CREATE TABLE public.deployment_state (LIKE company_app.deployment_state);
     INSERT INTO public.identity_settings VALUES('installation','public');
     INSERT INTO company_app.identity_settings VALUES('installation','company');`);
+  const userView=identityViewStatements({auth:'auth',app:'company_app',read:'identity'}).find(sql=>sql.startsWith('CREATE OR REPLACE VIEW identity.users '))!;
+  await pg.exec(userView);
   db = {
     query: (sql, params) => pg.query(sql, params) as never,
     transaction: fn => pg.transaction(tx => fn({ query: (sql, params) => tx.query(sql, params) as never })),
@@ -100,6 +105,8 @@ describe('trusted-issuer sign-in', () => {
       await pg.query("UPDATE company_app.deployment_state SET default_group_id=$1 WHERE id='company'", [defaultGroup]);
       const response=await post(target,{token:token({sub:'company_reader',group})});
       expect(response.status).toBe(303);
+      expect(await rows(`SELECT g.handle FROM identity.users u JOIN auth.groups g ON g.id=u.default_group_id
+        WHERE u.username='company_reader'`)).toEqual([{handle:group}]);
       expect(await rows('SELECT parent_id FROM auth.groups WHERE handle=$1',[group])).toEqual([{parent_id:'grp_parent'}]);
     }
   });

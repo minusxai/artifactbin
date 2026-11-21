@@ -16,12 +16,12 @@
  * A refusal is an `IdentityError` (code, HTTP status, optional retry-after seconds and detail), the same object on both
  * transports; anything else is a failure of the module itself.
  */
-import type {GroupInvitation,GroupRole,GroupSummary} from './groups';
+import type {DefaultDestination,GroupInvitation,GroupRole,GroupSummary} from './groups';
 import type {Queryable} from './db';
 import type {UserKind} from './testusers';
 
 /** The tables only the identity module writes (scripts/ci/table-ownership.mjs, the generated grants.sql). */
-export const IDENTITY_OWNED_TABLES = ['users', 'tokens', 'handle_reservations', 'groups', 'group_members', 'group_invitations', 'group_hierarchy', 'group_mail_outbox', 'group_sign_in_grants'] as const;
+export const IDENTITY_OWNED_TABLES = ['users', 'account_preferences', 'tokens', 'handle_reservations', 'groups', 'group_members', 'group_invitations', 'group_hierarchy', 'group_mail_outbox', 'group_sign_in_grants'] as const;
 
 /** The HTTP transport: POST `{method, input}`, answered `{result}` or `{error, status, retry_after?}`. */
 export const IDENTITY_CALL_PATH = '/api/internal/identity/call';
@@ -80,6 +80,7 @@ export interface GroupMailClaim {
 }
 
 export interface IdentityService {
+  setDefaultDestination(input: {userId: string; destination: DefaultDestination}): Promise<void>;
   // ── accounts ──────────────────────────────────────────────────────────────
   /** The account row follows the actor's claims: created on first sight (welcome pending), email kept current, a
    * handle assigned. `duplicate_email` (409) when the address already belongs to another id. */
@@ -165,7 +166,7 @@ export interface GroupSignInGrant {id: string; group_id: string; role: 'member' 
 
 export type IdentityMethod = keyof IdentityService;
 export const IDENTITY_METHODS: readonly IdentityMethod[] = [
-  'syncProfile', 'createUser', 'ensureUsername', 'setUsername', 'setImageKey', 'confirmWelcome', 'setAutoAcceptMentions', 'createTestUser', 'eraseTestUser',
+  'setDefaultDestination', 'syncProfile', 'createUser', 'ensureUsername', 'setUsername', 'setImageKey', 'confirmWelcome', 'setAutoAcceptMentions', 'createTestUser', 'eraseTestUser',
   'mintToken', 'ensureWebToken', 'findToken', 'revokeToken', 'revokeGroupSignIn', 'approveServiceGroupSignIn', 'revokeServiceGroupSignIn', 'touchToken', 'setTokenHarness', 'markRequestAuthority',
   'createGroup', 'updateGroup', 'setGroupParent', 'deleteGroup', 'setGroupMember', 'removeGroupMember', 'inviteGroupMember', 'removeGroupInvitation', 'acceptGroupInvitations', 'admitToGroup',
   'enqueueGroupMail', 'claimGroupMail', 'settleGroupMail',

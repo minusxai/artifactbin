@@ -113,6 +113,8 @@ export async function ensureIdentitySchema(db: TransactionalQueryable, schemas: 
       try { for (const table of moving) await tx.query(`ALTER TABLE ${app}.${table} SET SCHEMA ${auth}`); }
       catch (error) {
         if ((error as {code?: string}).code !== '42501') throw error;
+        if (moving.length === 1 && moving[0] === 'account_preferences')
+          throw new IdentityNotReady(`identity: stop the old app and move its preferences as the database operator in one transaction: BEGIN; ALTER TABLE ${app}.account_preferences SET SCHEMA ${auth}; ALTER TABLE ${auth}.account_preferences OWNER TO <the identity role>; COMMIT;`);
         throw new IdentityNotReady(`identity: ${moving.map(table => `${app}.${table}`).join(', ')} must move to ${auth} once, as a superuser (identityMoveStatements), for example:\n${identityMoveStatements({auth, app, read, owner: '<the identity role>'}).join(';\n')};`);
       }
     }

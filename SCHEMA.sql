@@ -183,16 +183,6 @@ ALTER TABLE app.group_links ADD COLUMN IF NOT EXISTS group_id TEXT NOT NULL;
 
 ALTER TABLE app.group_links ADD COLUMN IF NOT EXISTS linked_group_id TEXT NOT NULL;
 
-CREATE TABLE IF NOT EXISTS app.account_preferences (
-  user_id TEXT NOT NULL,
-  default_destination JSONB NOT NULL DEFAULT '{"type":"inherit"}'::jsonb,
-  PRIMARY KEY (user_id)
-);
-
-ALTER TABLE app.account_preferences ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL;
-
-ALTER TABLE app.account_preferences ADD COLUMN IF NOT EXISTS default_destination JSONB NOT NULL DEFAULT '{"type":"inherit"}'::jsonb;
-
 CREATE TABLE IF NOT EXISTS app.deployment_state (
   id TEXT NOT NULL,
   owner_user_id TEXT,
@@ -1753,6 +1743,16 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON auth.users (email);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON auth.users (username);
 
 CREATE INDEX IF NOT EXISTS idx_users_parent ON auth.users (parent_user_id);
+
+CREATE TABLE IF NOT EXISTS auth.account_preferences (
+  user_id TEXT NOT NULL,
+  default_destination JSONB NOT NULL DEFAULT '{"type":"inherit"}'::jsonb,
+  PRIMARY KEY (user_id)
+);
+
+ALTER TABLE auth.account_preferences ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL;
+
+ALTER TABLE auth.account_preferences ADD COLUMN IF NOT EXISTS default_destination JSONB NOT NULL DEFAULT '{"type":"inherit"}'::jsonb;
 
 CREATE TABLE IF NOT EXISTS auth.tokens (
   id TEXT NOT NULL,
