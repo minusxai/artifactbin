@@ -16,7 +16,8 @@
  *  - The group is found by handle. A new one records the issuer and the tenancy (`groups.trusted_issuer`,
  *    `groups.tenancy_id`, exposed by the identity view) and never changes them; an existing group another issuer (or
  *    nobody's issuer) created, or one with a different tenancy, is refused. Under the configured parent group when there
- *    is one (missing parent: refused, never created as a root), so it inherits what readers attach to that parent.
+ *    is one, including on an installation with several roots. A missing configured parent is refused. With no
+ *    configured parent, a company group goes under the top ancestor of the deployment default.
  *  - The person is a direct `member` of the group (no admin: nobody administers an issuer's group from here), and of no
  *    other group of that issuer: each sign-in leaves exactly the membership its token names. Another issuer's groups
  *    and plain groups are not touched, so one email person may sit in a group of each issuer.
@@ -132,13 +133,12 @@ async function ensureGroup(tx: Queryable, input: TrustedSignInInput, userId: str
     parentId = (await tx.query<{id: string}>(`SELECT id FROM ${t.groups} WHERE (id=$1 OR handle=$1) AND deleted_at IS NULL`, [input.parentGroup])).rows[0]?.id ?? null;
     if (!parentId) throw new Refused('parent_group_missing');
   }
-  const company = await companyGroupState(tx, appSchema);
+  const company = parentId === null ? await companyGroupState(tx, appSchema) : null;
   if (company) {
     const root = company.setup_complete && company.default_group_id
       ? (await chainOf(tx, t, company.default_group_id)).at(-1) : null;
     if (!root || (await liveGroup(tx, t, root))?.parent_id !== null) throw new Refused('parent_group_missing');
-    if (parentId && !(await chainOf(tx, t, parentId)).includes(root)) throw new Refused('parent_group_missing');
-    parentId ??= root;
+    parentId = root;
   }
   const groupId = 'grp_' + internalId();
   try { await reserveHandle(t, tx, input.group, 'group', groupId); } catch (error) { if (isUniqueViolation(error)) throw new Refused('group_conflict'); throw error; }
