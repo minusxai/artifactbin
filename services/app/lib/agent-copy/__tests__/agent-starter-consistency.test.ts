@@ -7,7 +7,7 @@ import { monitoringGuidance, WATCH_LOOP } from '@/lib/artifact-wire';
 import { QUIET_MINUTES as SKILL_QUIET_MINUTES } from '../../../skills/artifactbin/scripts/toolbox-comments.mjs';
 import { POST as startRoute } from '@/app/api/start/route';
 import { POST as agentPromptRoute } from '@/app/api/my/artifacts/[id]/agent-prompt/route';
-import { agentContract, agentBlurb, existingPaste, publicGuideText, llmsText } from '@/lib/agent-copy';
+import { agentContract, existingPaste, publicGuideText, llmsText } from '@/lib/agent-copy';
 import { DEFAULT_SERVER } from '@artifactbin/contracts/default-server';
 import { gettingStarted } from '@/lib/agent-copy/getting-started';
 import { GET as guideRoute } from '@/app/llms/[topic]/route';
@@ -17,7 +17,6 @@ import { MARKDOWN_CONTENT_TYPE, unauthorized } from '@/lib/http';
 import { buildQuickSheet, QUICK_SHEET_MAX_BYTES } from '@/test/helpers/skill-docs';
 import { createUser } from '@/lib/accounts';
 import { request, useAppHarness, params } from '@/__tests__/harness';
-
 
 const BASE = 'http://localhost:3000';
 /** The retired vocabulary. Each of these, in an agent's hands, is a wrong turn. */
@@ -95,8 +94,6 @@ describe('every agent-facing starter says the same thing', () => {
   });
 });
 
-
-
 /**
  * The brief (`skills/artifactbin/SKILL.md`) is the ONE file a harness reads on its own: its description is
  * always in context, its body loads on trigger, and the references load only when the body sends the agent
@@ -121,13 +118,10 @@ describe('llms.txt and the discovery head', () => {
   it('the shared root and deployment-scoped discovery name the skill zip and the HTTP API', () => {
     const text = llmsText(BASE);
     expect(text).toMatch(/^## Read first/);
-    expect(agentBlurb()).toContain('artifactbin');
     const help = agentDiscovery(BASE);
     expect(help.url).toBe(`${BASE}/llms.txt`);
     expect(help.instruction).toContain(`${BASE}/skills/artifactbin.zip`);
     expect(help.instruction).toContain('HTTP API');
-    // Product blurb and shared root are separate; discovery need not repeat the blurb.
-    expect(help.instruction).not.toContain(agentBlurb());
   });
 
   it('the guide teaches the skill zip and HTTP without retired installation or token doors', () => {
@@ -183,8 +177,6 @@ describe('public HTTP authoring references', () => {
   });
 });
 
-
-
 it('HTTP guidance preserves rotating credentials across tasks and renews without email login',()=>{
  const guide=publicGuideText('http-auth',BASE)!;
  expect(guide).toContain('refresh_token');expect(guide).toContain('client_id');
@@ -192,7 +184,6 @@ it('HTTP guidance preserves rotating credentials across tasks and renews without
  expect(guide).toContain('grant_type');expect(guide).toContain('/oauth/token');
  expect(guide).toContain('Atomically');expect(guide).not.toContain('there is no refresh token');
 });
-
 
 describe('shared instructions after missing credentials and before publishing claims',()=>{
  it('asks for the real recipient email before sending an OTP rather than inventing an identity',()=>{
@@ -239,7 +230,6 @@ it('keeps the monitor instruction and the served watch guide on the same loop se
  expect(text).toContain(`(#${anchor})`);
 });
 
-
 it('HTTP authentication is direct, requires an email account and reuses the existing rotating credential store',()=>{
  const guide=publicGuideText('http-auth',BASE)!;
  expect(guide).toContain('HTTP authentication requires an email account');
@@ -264,7 +254,6 @@ it('keeps sign-in conditional across root guides and discovery', () => {
  }
  expect(agentDiscovery(BASE).instruction).toContain('If sign-in is required');
 });
-
 
 /**
  * THE WATCH CONTRACT AGENTS READ: after a publish the agent replies and watches, a comment from someone the page is

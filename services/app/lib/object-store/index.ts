@@ -15,7 +15,7 @@
 import {atomicWrite} from '@artifactbin/utils/node/atomic-file';
 import type { RenderUploadRequest } from '@artifactbin/contracts/browser';
 import { createRequire } from 'node:module';
-import { createHash, randomBytes } from 'crypto';
+import { createHash } from 'crypto';
 import { mkdir, open, readFile, rm } from 'fs/promises';
 import { Readable } from 'node:stream';
 import path from 'path';
@@ -46,11 +46,6 @@ export class ObjectUnavailable extends Error {
 export function objectKey(kind: string, bytes: Buffer | string): string {
   const digest = createHash('sha256').update(bytes).digest('hex').slice(0, 32);
   return `${kind}/${digest}`;
-}
-
-/** A unique key, for content that must not be deduplicated. */
-export function uniqueObjectKey(kind: string): string {
-  return `${kind}/${randomBytes(16).toString('hex')}`;
 }
 
 /** An inclusive byte range, spelled the way HTTP spells one (`bytes=start-end`). */
@@ -184,7 +179,6 @@ export function objectStore(): ObjectStore {
   cached = cachedReads(recordedWrites(S3_URL ? createS3Store(parseS3Url(S3_URL)) : createLocalStore(LOCAL_OBJECT_DIR)));
   return cached;
 }
-
 
 const nodeRequire = createRequire(import.meta.url);
 

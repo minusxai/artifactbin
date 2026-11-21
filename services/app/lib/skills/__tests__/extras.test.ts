@@ -14,7 +14,7 @@ import {GET as archive} from '@/app/skills/artifactbin.zip/route';
 import {GET as latest} from '@/app/skills/artifactbin/latest.json/route';
 import {GET as llms} from '@/app/llms.txt/route';
 import {overrideConfig} from '@/lib/platform/config';
-import {EXTRA_ENTRY_POINTS,EXTRA_FILE_MAX_BYTES,EXTRAS_MAX_BYTES,EXTRAS_MAX_FILES,readSkillExtras,skillExtras} from '../extras';
+import {EXTRA_FILE_MAX_BYTES,EXTRAS_MAX_BYTES,EXTRAS_MAX_FILES,readSkillExtras,skillExtras} from '../extras';
 import {skillPackageFiles,skillRelease} from '../package';
 import {SKILL_MAIN_MAX_BYTES,skillTree} from '..';
 import {tempDirSync} from '@artifactbin/test-support/temp-dir';
@@ -286,6 +286,12 @@ describe('the served guide (/llms.txt)',()=>{
  });
 });
 
+/** The skill modules an extra's script may import, and the exported names it may rely on. */
+const EXTRA_ENTRY_POINTS={
+ 'scripts/toolbox-client.mjs':['makeClient','selectedServer','credentialRoot','runTool','ToolError'],
+ 'scripts/toolbox-service-token.mjs':['serviceToken'],
+ 'scripts/toolbox-config.mjs':['default'],
+} as const;
 describe('what an extra may import',()=>{
  it('keeps every entry point and name the extras documentation promises',async()=>{
   for(const [file,names] of Object.entries(EXTRA_ENTRY_POINTS)){

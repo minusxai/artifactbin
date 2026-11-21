@@ -45,6 +45,3 @@ export function cellValue(rows: ReadonlyArray<Record<string, unknown>>, column: 
   const value = aggregateNumber(rows, column, agg);
   return Number.isFinite(value) ? { kind: 'number', value } : null;
 }
-
-/** The aggregates that read numbers: over a column the query types as text they show nothing. */
-export const NUMERIC_AGGS: ReadonlySet<NumberAgg> = new Set(['sum', 'avg', 'median', 'min', 'max']);

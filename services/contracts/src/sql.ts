@@ -31,7 +31,7 @@ import type { DatasetMutationPolicy, MutationAnalysis } from './dataset-policy';
 export type Scalar = string | number | boolean | null;
 export type Row = Record<string, unknown>;
 export type ColumnType = 'string' | 'number' | 'boolean' | 'date' | 'timestamp' | 'user';
-export interface UserConstraints { memberOf?: string[]; self?: boolean }
+interface UserConstraints { memberOf?: string[]; self?: boolean }
 export interface DatasetColumn { name: string; type: ColumnType; /** Suggested scalar choices for typed authoring controls; not an access restriction. */ choices?: Scalar[]; constraints?: UserConstraints }
 
 export interface TableResult {

@@ -21,6 +21,3 @@ export function withAgentDiscoveryTail(html:string,help:AgentDiscovery):string{
  const at=html.lastIndexOf('</body>');
  return at<0?html:`${html.slice(0,at)}${agentDiscoveryTail(help)}${html.slice(at)}`;
 }
-
-/** Stable product blurb; authoring guidance is served from the shared skill root. */
-export function agentBlurb():string{return 'artifactbin publishes native HTML pages, datasets and media.';}

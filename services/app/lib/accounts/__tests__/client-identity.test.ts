@@ -4,7 +4,7 @@
  * bare `node`, which names a RUNTIME and not an agent.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { ARTIFACTBIN_AGENT_HEADER, identifyClient, describeClient, logClientIdentity } from '@/lib/accounts';
+import { ARTIFACTBIN_AGENT_HEADER, identifyClient, describeClient } from '@/lib/accounts';
 
 const byUa = (userAgent: string) => identifyClient({ userAgent });
 
@@ -54,15 +54,6 @@ describe('User-Agent — what it can and cannot tell us', () => {
 });
 
 describe('logging', () => {
-  it('emits one readable line and returns the identity', () => {
-    const spy = vi.spyOn(console, 'log').mockImplementation(() => {});
-    const id = logClientIdentity('api:request', { userAgent: 'node', agentHeader: 'claude-code' });
-    expect(id.harness).toBe('claude-code');
-    expect(spy).toHaveBeenCalledTimes(1);
-    expect(String(spy.mock.calls[0][0])).toContain('claude-code');
-    expect(String(spy.mock.calls[0][0])).toContain('api:request');
-  });
-
   it('describes compactly', () => {
     expect(describeClient(identifyClient({ userAgent: 'openai-mcp/1.0.0' }))).toBe('chatgpt (openai-mcp/1.0.0, via user-agent)');
   });

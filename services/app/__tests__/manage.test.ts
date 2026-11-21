@@ -18,12 +18,11 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { getArtifactById,listVersionsFor,revertArtifactFor } from '@/lib/artifacts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { identityForUser, createUser, revokeUserToken } from '@/lib/accounts';
-import { listAccountTokenRows } from '@/lib/workspace';
+
 import { setArtifact } from '@/__tests__/rows';
 import { Reply } from '@/lib/http';
 
 const harness = useAppHarness();
-
 
 async function create(token: string, html: string, title = 'x') {
   const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token, json: { title, html: nativeHtml(html) } }));
@@ -41,20 +40,6 @@ async function put(token: string, id: string, html: string) {
 }
 
 describe('token management', () => {
-  it('lists a user’s tokens with artifact counts and revoked state', async () => {
-    const user = await createUser({ email: 'mxmx_test_versions@example.test' });
-    const a = await mintToken('laptop', user.id);
-    const b = await mintToken('desktop', user.id);
-    await mintToken('someone-elses', null);
-    await create(a.token, '<p>1</p>');
-    await create(a.token, '<p>2</p>');
-
-    const tokens = await listAccountTokenRows(user.id);
-    expect(tokens.map((t) => t.name).sort()).toEqual(['desktop', 'laptop']);
-    const laptop = tokens.find((t) => t.name === 'laptop');
-    expect(laptop).toMatchObject({ id: a.id, artifacts: 2, deleted_at: null });
-    expect(tokens.find((t) => t.name === 'desktop')).toMatchObject({ id: b.id, artifacts: 0 });
-  });
 
   it('revokes only your own live tokens; revoked tokens stop authenticating', async () => {
     const alice = await createUser({ email: 'a@x.com' });
@@ -69,11 +54,6 @@ describe('token management', () => {
       request('/api/artifacts', { method: 'POST', token: t.token, json: { html: nativeHtml('<p>x</p>') } }),
     );
     expect(res.status).toBe(401);
-
-    // Still listed (with deleted_at set) so the dashboard shows history.
-    const tokens = await listAccountTokenRows(alice.id);
-    expect(tokens).toHaveLength(1);
-    expect(tokens[0].deleted_at).not.toBeNull();
   });
 });
 

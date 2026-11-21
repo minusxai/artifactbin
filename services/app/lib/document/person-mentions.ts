@@ -9,5 +9,4 @@ const HREF=`(?:/api)?/people/`;
 export function isPersonMentionHref(href:string):boolean{return new RegExp(`^${HREF}${ID}$`).test(href);}
 /** The user id a mention link names, in either form; null for anything else. */
 export function personMentionId(href:string):string|null{return new RegExp(`^${HREF}(${ID})$`).exec(href)?.[1]??null;}
-export function personMentions(text:string):RegExpStringIterator<RegExpExecArray>{return text.matchAll(new RegExp(`\\[(@[a-z0-9_]+)\\]\\(${HREF}(${ID})\\)`,'gi'));}
 export function personMention(person:{user_id:string;username:string}):string{return `[@${person.username}](${personLinkPath(person.user_id)})`;}

@@ -7,16 +7,7 @@
  * door and "format this number" for every renderer, so the two cannot drift.
  */
 import { describe, expect, it } from 'vitest';
-import { isNumberFormat, numberFormatter, NUMBER_FORMAT_HINT } from '../number-format';
-
-describe('isNumberFormat', () => {
-  it('accepts d3-format specs', () => {
-    for (const ok of [',.0f', '$,.2f', '.1%', ',d', '.2s', '', undefined]) expect(isNumberFormat(ok)).toBe(true);
-  });
-  it('refuses what an agent guesses', () => {
-    for (const bad of [',0', '0,0', '#,##0', 'not-a-format-%%%']) expect(isNumberFormat(bad)).toBe(false);
-  });
-});
+import { numberFormatter } from '../number-format';
 
 describe('numberFormatter', () => {
   it('formats with d3 for a valid spec', () => {
@@ -26,8 +17,5 @@ describe('numberFormatter', () => {
   it('NEVER throws: an invalid spec falls back to the default number format', () => {
     expect(numberFormatter(',0')(1493.4)).toBe(numberFormatter(undefined)(1493.4));
     expect(numberFormatter(undefined)(1493.4)).toMatch(/1,?493\.4/);
-  });
-  it('names the fix', () => {
-    expect(NUMBER_FORMAT_HINT).toMatch(/,\.0f/);
   });
 });

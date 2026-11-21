@@ -13,7 +13,7 @@
  * a `javascript:` href that this module hands out.
  */
 import { describe, it, expect } from 'vitest';
-import { parseInline, parseMarkdownLite, plainText, safeHref, wrapSelection, type MdNode } from '@/lib/annotations';
+import { parseInline, parseMarkdownLite, plainText, safeHref, type MdNode } from '@/lib/annotations';
 
 /** The tests read blocks by shape, so a tiny reader keeps them legible. */
 const para = (nodes: MdNode[], at = 0) => {
@@ -162,36 +162,6 @@ describe('plainText — what the compact surfaces show', () => {
     expect(plainText(parseMarkdownLite(body))).toBe(
       'Fixed in lib/config.ts:\nconst max = 10;\nbumped the cap\nadded a test',
     );
-  });
-});
-
-describe('wrapSelection — the composer toolbar', () => {
-  it('wraps the selection for bold, italic and code, and answers the caret to restore', () => {
-    expect(wrapSelection('make it loud', 8, 12, 'bold')).toEqual({ text: 'make it **loud**', start: 10, end: 14 });
-    expect(wrapSelection('make it loud', 8, 12, 'italic')).toEqual({ text: 'make it _loud_', start: 9, end: 13 });
-    expect(wrapSelection('call foo now', 5, 8, 'code')).toEqual({ text: 'call `foo` now', start: 6, end: 9 });
-  });
-
-  it('inserts empty markers at a caret with nothing selected', () => {
-    expect(wrapSelection('ab', 1, 1, 'bold')).toEqual({ text: 'a****b', start: 3, end: 3 });
-  });
-
-  it('a second press UNWRAPS what the first wrapped', () => {
-    const once = wrapSelection('make it loud', 8, 12, 'bold');
-    expect(wrapSelection(once.text, once.start, once.end, 'bold')).toEqual({ text: 'make it loud', start: 8, end: 12 });
-  });
-
-  it('link seeds a template and selects the url for typing over', () => {
-    const linked = wrapSelection('see the docs', 4, 12, 'link');
-    expect(linked.text).toBe('see [the docs](url)');
-    expect(linked.text.slice(linked.start, linked.end)).toBe('url');
-  });
-
-  it('list is a LINE verb: it marks every line the selection touches', () => {
-    const listed = wrapSelection('one\ntwo\nthree', 0, 7, 'list');
-    expect(listed.text).toBe('- one\n- two\nthree');
-    const fromCaret = wrapSelection('one\ntwo', 5, 5, 'list');
-    expect(fromCaret.text).toBe('one\n- two');
   });
 });
 

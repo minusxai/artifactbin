@@ -121,16 +121,6 @@ export function describeClient(id: ClientIdentity): string {
   return `${id.harness} (${id.label}${id.version ? ` ${id.version}` : ''}, via ${id.source})`;
 }
 
-/** Emit the identity of a caller. Telemetry only — never gate on this. */
-export function logClientIdentity(context: string, input: {
-  agentHeader?: string | null;
-  userAgent?: string | null;
-}): ClientIdentity {
-  const id = identifyClient(input);
-  console.log(`[client] ${context}: ${describeClient(id)}`);
-  return id;
-}
-
 /**
  * WHERE the caller is, as the nearest trusted proxy saw them.
  *

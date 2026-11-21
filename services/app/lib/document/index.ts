@@ -21,6 +21,6 @@ export {
 export type { AnnotationRange } from './annotation-range';
 export { canonicalQuote, isAreaRange, parseAnnotationRange, refinementRange } from './annotation-range';
 
-export { isPersonMentionHref, personMentionId, personMentions } from './person-mentions';
+export { isPersonMentionHref, personMentionId } from './person-mentions';
 
 export { authoringCapabilities } from './authoring-capabilities';

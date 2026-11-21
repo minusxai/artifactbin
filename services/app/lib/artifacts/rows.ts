@@ -24,11 +24,6 @@ export const ARTIFACT_HEADER_COLUMNS = [
 ] as const;
 const HEADER_SELECT = ARTIFACT_HEADER_COLUMNS.join(', ');
 
-export async function getArtifact(tokenId: string, id: string): Promise<ArtifactRow | null> {
-  const db = await getDb();
-  return loadArtifactDocument<ArtifactRow>(db,`SELECT * FROM artifacts WHERE id = $1 AND group_id IS NULL AND token_id = $2 AND (user_id IS NULL OR user_id=(SELECT user_id FROM tokens WHERE tokens.id=$2)) AND ${LIVE_ARTIFACT_SQL}`, [id, tokenId]);
-}
-
 /**
  * Unscoped read for the public serving paths (/a/<id> and its sub-routes).
  * The id is an ADDRESS, not a credential — whether this viewer may see the
@@ -101,8 +96,6 @@ export async function hasInvitedUsersFor(actor: AccessActor, id: string): Promis
   );
   return found.rows[0]?.shared === true;
 }
-
-
 
 const SHARES_PROJECTION="COALESCE((SELECT jsonb_agg(jsonb_build_object('email',s.email,'role',s.role) ORDER BY s.email) FROM artifact_shares s WHERE s.artifact_id=artifacts.id),'[]'::jsonb) AS shares";
 

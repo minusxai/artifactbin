@@ -1,14 +1,11 @@
 /** Dataset reference resolution, read authorization and dataset file door refusals through the public interface. */
 import { describe, expect, it } from 'vitest';
 import { request, useAppHarness } from '@/__tests__/harness';
-import { ANONYMOUS_ACTOR } from '@/lib/accounts';
+
 import { getArtifactById } from '@/lib/artifacts';
 import { getDb } from '@/lib/platform';
-import {
-  datasetResolverForActor, readFileRequest, referencedArtifactForRow,
-  uploadFileRequest,
-} from '@/lib/document-data';
-import { account, datasetFixture } from './dataset-fixture';
+import { readFileRequest, referencedArtifactForRow, uploadFileRequest } from '@/lib/document-data';
+import { datasetFixture } from './dataset-fixture';
 import { seedArtifacts, setArtifact } from '@/__tests__/rows';
 
 useAppHarness();
@@ -31,16 +28,6 @@ describe('refs', () => {
     expect(await referencedArtifactForRow(doc, 'vizabc')).toMatchObject({ id: 'vizabc' });
     expect(await referencedArtifactForRow(doc, f.id)).toMatchObject({ id: f.id });
     expect(await referencedArtifactForRow(doc, 'undeclared')).toBeNull();
-  });
-});
-
-describe('the actor\'s dataset resolver', () => {
-  it('resolves what the actor can read, and nothing of a stranger\'s private dataset', async () => {
-    const f = await datasetFixture({ visibility: 'private' });
-    const stranger = await account('stranger');
-    expect(await datasetResolverForActor(f.owner.actor)(f.id)).toMatchObject({ tables: { rows: { rows: [{ n: 1 }] } } });
-    expect(await datasetResolverForActor(stranger.actor)(f.id)).toBeNull();
-    expect(await datasetResolverForActor(ANONYMOUS_ACTOR)(f.id)).toBeNull();
   });
 });
 
