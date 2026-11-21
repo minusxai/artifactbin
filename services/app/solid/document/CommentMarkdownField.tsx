@@ -19,12 +19,13 @@ import { Tooltip } from '../ui/Tooltip';
 import { CommentMentionPicker, type MentionKeyboard } from './CommentMentionPicker';
 import { AttachImageButton, CommentImageDraftView, createImageDropTarget, ImageDropTarget, type CommentImageDraft } from './CommentImageAttach';
 
-/** ⌘B / ⌘I / ⌘E — the three every editor binds, and nothing beyond them. */
-const KEYS: Record<string, MdMarker> = { b: 'bold', i: 'italic', e: 'code' };
+/** Inline code is bound by the editor alongside Control+E navigation. */
+const KEYS: Record<string, MdMarker> = { b: 'bold', i: 'italic' };
+const MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
 const TOOLBAR = [
-  { marker: 'bold', label: 'Bold', hint: 'bold (⌘B)', Icon: Bold },
-  { marker: 'italic', label: 'Italic', hint: 'italic (⌘I)', Icon: Italic },
-  { marker: 'code', label: 'Code', hint: 'code (⌘E)', Icon: Code },
+  { marker: 'bold', label: 'Bold', hint: MAC ? 'bold (⌘B)' : 'bold (Ctrl+B)', Icon: Bold },
+  { marker: 'italic', label: 'Italic', hint: MAC ? 'italic (⌘I)' : 'italic (Ctrl+I)', Icon: Italic },
+  { marker: 'code', label: 'Code', hint: MAC ? 'code (⌘⇧E)' : 'code (Ctrl+Shift+E)', Icon: Code },
   { marker: 'link', label: 'Link', hint: 'link', Icon: Link2 },
   { marker: 'list', label: 'List', hint: 'list', Icon: List },
 ] satisfies Array<{ marker: MdMarker; label: string; hint: string; Icon: typeof Bold }>;

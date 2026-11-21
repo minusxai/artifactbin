@@ -76,12 +76,7 @@ export const NativeEditorShortcuts = Extension.create({
   priority: 1100,
   addKeyboardShortcuts() {
     return {
-      'Ctrl-e': () => {
-        const { view } = this.editor;
-        const { tr, doc } = view.state;
-        view.dispatch(tr.setSelection(Selection.atEnd(doc)).scrollIntoView());
-        return true;
-      },
+      'Ctrl-e': () => this.editor.commands.selectTextblockEnd(),
       'Mod-Shift-e': () => isolated(this.editor, () => this.editor.commands.toggleCode()),
     };
   },

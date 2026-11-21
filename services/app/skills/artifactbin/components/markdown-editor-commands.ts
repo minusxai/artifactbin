@@ -3,15 +3,15 @@
  * (`# `, `- `, `1. `, `> `, ``` and `---` at a line start; **bold**, *italic*, ~~strike~~, `code`).
  * Used by: markdown-editor.ts.
  */
-import { baseKeymap, chainCommands, exitCode, lift, setBlockType, toggleMark, wrapIn }
-  from 'prosemirror-commands';
+import { baseKeymap, chainCommands, exitCode, lift, selectTextblockEnd, setBlockType,
+  toggleMark, wrapIn } from 'prosemirror-commands';
 import { history, redo, undo } from 'prosemirror-history';
 import { InputRule, inputRules, textblockTypeInputRule, wrappingInputRule }
   from 'prosemirror-inputrules';
 import { keymap } from 'prosemirror-keymap';
 import type { MarkType, NodeType } from 'prosemirror-model';
 import { liftListItem, sinkListItem, splitListItem, wrapInList } from 'prosemirror-schema-list';
-import { Selection, type Command, type EditorState, type Plugin } from 'prosemirror-state';
+import type { Command, EditorState, Plugin } from 'prosemirror-state';
 import { editorSchema as schema } from './markdown-editor-model';
 
 const { nodes, marks } = schema;
@@ -137,10 +137,7 @@ export function editorPlugins(): Plugin[] {
     'Mod-z': undo, 'Shift-Mod-z': redo, 'Mod-y': redo,
     'Mod-b': toggleMark(marks.strong!), 'Mod-i': toggleMark(marks.em!),
     'Mod-Shift-x': toggleMark(marks.strike!), 'Mod-Shift-e': toggleMark(marks.code!),
-    'Ctrl-e': (state, dispatch) => {
-      dispatch?.(state.tr.setSelection(Selection.atEnd(state.doc)).scrollIntoView());
-      return true;
-    },
+    'Ctrl-e': selectTextblockEnd,
     'Mod-Alt-0': setBlockType(nodes.paragraph!), 'Mod-Alt-1': heading(1),
     'Mod-Alt-2': heading(2), 'Mod-Alt-3': heading(3),
     'Shift-Enter': hardBreak,

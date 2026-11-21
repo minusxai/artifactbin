@@ -1,6 +1,6 @@
 import { waitFor } from '@testing-library/dom';
 import { afterEach, expect, it, vi } from "vitest";
-import { Selection, TextSelection } from "prosemirror-state";
+import { TextSelection } from "prosemirror-state";
 import {
   commentDocument,
   commentMarkdown,
@@ -75,7 +75,7 @@ it("uses Control+E to move to the end and Mod+Shift+E for inline code", () => {
     view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, 1, 6)));
   selectFirst();
   fireEvent.keyDown(view.dom, { key: "e", ctrlKey: true });
-  expect(view.state.selection.eq(Selection.atEnd(view.state.doc))).toBe(true);
+  expect(view.state.selection.eq(TextSelection.create(view.state.doc, 6))).toBe(true);
   expect(onChange).not.toHaveBeenCalled();
   selectFirst();
   const mac = /Mac|iP(hone|[oa]d)/.test(navigator.platform);
