@@ -157,7 +157,8 @@ export async function mountDocument(container: HTMLElement, options: MountDocume
       notice ??= doc.createElement('section');
       notice.setAttribute('aria-label', 'Data access');
       notice.textContent = 'Viewing as ' + scope.name;
-      frame.before(notice);
+      // Keep the frame's top edge stable while an asynchronous read finishes or a selection is in progress.
+      frame.after(notice);
       if (scope.choices.length) notice.append(' · Access denied as ' + scope.name + '. ');
       for (const group of scope.choices) {
         const button = doc.createElement('button');

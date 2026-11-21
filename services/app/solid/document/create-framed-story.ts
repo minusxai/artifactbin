@@ -1,6 +1,6 @@
 
 import { createEffect, createSignal, on, onCleanup, type Accessor } from 'solid-js';
-import { createFrameBridgeParent, type FrameBridgeParent } from '@/lib/html-reader/frame-bridge/parent';
+import { createFrameBridgeParent, type FrameBridgeParent, type ReaderScope } from '@/lib/html-reader/frame-bridge/parent';
 import { withUrlValuesOf } from '@/lib/dataflow/url-values';
 import { STORY_URL_VALUES_MESSAGE, type IslandStoryController } from '@/lib/html-reader/contract';
 import { commentAfterRegionSave, type RegionCommentSubject } from '@/lib/annotations/region-comment';
@@ -139,6 +139,33 @@ export interface FramedStory {
    */
   beforeComment<T extends RegionCommentSubject>(subject: T): Promise<T>;
   regionUi: RegionUi;
+}
+
+/** This mount holds one reader's explicit selection. A fresh ticket reruns one-shot reads after a click. */
+export function createReaderGroups(id: string, frame: HTMLIFrameElement, subject: Accessor<string | undefined | null>) {
+  let selected: {user: string; group: string} | undefined;
+  const [seen, setSeen] = createSignal<ReaderScope>();
+  createEffect(on(subject, (user, old) => {
+    if (old && user !== old) { selected = undefined; setSeen(undefined); }
+  }));
+  return {
+    scope: () => seen()?.user === subject() ? seen() : undefined,
+    selection: () => selected,
+    observe(scope: ReaderScope) {
+      if (!selected || selected.user !== scope.user) selected = {user:scope.user, group:scope.group};
+      setSeen(previous => previous?.user === scope.user && previous.group === scope.group && !scope.choices.length ? previous : scope);
+    },
+    async choose(group: string) {
+      const user = subject();
+      if (!user || seen()?.user !== user) return;
+      const src = await freshFrameSrc(id);
+      if (src && subject() === user) {
+        selected = {user, group};
+        setSeen(undefined);
+        frame.src = src;
+      }
+    },
+  };
 }
 
 export function createFramedStory(options: FramedStoryOptions): FramedStory {
