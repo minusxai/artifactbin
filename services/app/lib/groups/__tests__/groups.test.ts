@@ -99,16 +99,21 @@ describe('independent group owner contracts',()=>{
   await db.query(`WITH added AS (
    INSERT INTO users(id,email) SELECT 'usr_dir_'||n,'mxmx_test_dir_'||n||'@example.com' FROM generate_series(1,101) n RETURNING id
   ) INSERT INTO group_members(group_id,user_id,role) SELECT $1,id,'member' FROM added`,[team.id]);
+  expect((await getGroupDetail(member.id,root.id))?.group).toMatchObject({company_root:false});
   overrideConfig({}, {APP__DEPLOYMENT_MODE:'company',APP__DEPLOYMENT_OWNER_EMAIL:owner.email!});
   await db.query("INSERT INTO deployment_state(id,default_group_id,setup_complete) VALUES ('company',$1,true) ON CONFLICT(id) DO UPDATE SET default_group_id=excluded.default_group_id,setup_complete=true",[team.id]);
   const directory=await getGroupDetail(member.id,root.id);
+  expect(directory?.group).toMatchObject({company_root:true});
   expect(directory?.members.map(m=>m.user_id)).toEqual([owner.id]);
   expect(directory).toMatchObject({subgroups:[],subgroup_audience:[],linked_groups:[]});
   expect(await searchGroupMembers(member.id,root.id,peer.id)).toEqual([]);
   const own=await getGroupDetail(member.id,team.id);
   expect(own).toMatchObject({subgroups:[],subgroup_audience:[],linked_groups:[]});
+  expect(own?.group).toMatchObject({company_root:false});
   expect(own?.members).toHaveLength(103);
-  expect((await getGroupDetail(member.id,other.id))?.members).toHaveLength(2);
+  const unrelated=await getGroupDetail(member.id,other.id);
+  expect(unrelated?.group).toMatchObject({company_root:false});
+  expect(unrelated?.members).toHaveLength(2);
   expect((await getGroupDetail(owner.id,root.id))?.members).toHaveLength(3);
   expect((await searchGroupMembers(owner.id,root.id,peer.id)).map(m=>m.user_id)).toEqual([peer.id]);
  });

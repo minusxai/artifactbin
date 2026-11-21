@@ -1,6 +1,6 @@
 import {canEditGroupContent} from '@artifactbin/contracts/groups';
 /* @jsxImportSource solid-js */
-import { createSignal, For, Show, type JSX } from 'solid-js';
+import { createSignal, For, lazy, Show, type JSX } from 'solid-js';
 import type { GroupDetail, GroupMember, GroupRole } from '@artifactbin/contracts/groups';
 import type { AccountWorkspaceCore } from '@/lib/workspace';
 import { buildGroupSetupInstructions } from '@/lib/skills/setup-instructions';
@@ -26,6 +26,9 @@ import { GroupTreePanel, GroupTreeSummary, SubgroupAudience } from './GroupTree'
 import { GroupAddresses } from './GroupAddresses';
 import { GroupSignIns } from './GroupSignIns';
 import { GroupServiceSignIns } from './GroupServiceSignIns';
+
+// The audience notice is only needed on the company group's shelf.
+const GroupAudienceNotice = lazy(() => import('./GroupAudienceNotice'));
 
 /** A group's page at its own address: details first, then its shelf. Home hands `GroupWorkspace` both at once. */
 export function GroupPage(props: { identity: string }): JSX.Element {
@@ -55,7 +58,7 @@ export function GroupWorkspace(props: { detail: GroupDetail; shelf: AccountWorks
  <PageHeader class="mb-9 mt-5" title={value().group.name} leading={<span class="group-avatar group-avatar-large" aria-hidden="true"><Users size={26}/></span>} actions={<><DefaultDestinationControl compact group={value().group} initial={props.defaults} onSaved={props.onDefaultSaved}/><Tooltip content="Manage people, invitations, subgroups and linked groups."><Button size="sm" variant="secondary" icon aria-label="Group settings" href={`/groups/${encodeURIComponent(value().group.handle)}/settings`}><Settings size={16} aria-hidden="true"/></Button></Tooltip></>} badge={<Badge>{value().group.role==='admin'?'Admin':value().group.role==='editor'?'Editor':'Member'}</Badge>}
   description={<><p class="break-all"><a href={`/@${encodeURIComponent(value().group.handle)}`} class="rounded-chip underline-offset-4 hover:text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">@{value().group.handle}</a></p><Show when={value().group.description}><p class="mt-3">{value().group.description}</p></Show><InheritedAdmin detail={value()}/><GroupTreeSummary detail={value()}/></>}>
  </PageHeader>
- <section aria-label="Group artifacts" class="workspace-library"><SectionHeading class="mb-5">Files and folders</SectionHeading><Show when={props.shelf} fallback={<Show when={props.shelfFailed} fallback={<StatusMessage kind="loading">Loading artifacts…</StatusMessage>}><StatusMessage kind="error" action={<Button variant="link" type="button" onClick={props.retryShelf}>Retry artifacts</Button>}>Could not load group artifacts.</StatusMessage></Show>}>{rows=><Shelf groupId={value().group.id} rows={rows().artifacts} actions={value().group.role==='admin'?'full':'share'} assets={false} scopeParentId={null}/>}</Show></section>
+ <section aria-label="Group artifacts" class="workspace-library"><SectionHeading class="mb-5">Files and folders</SectionHeading><Show when={value().group.company_root}><GroupAudienceNotice/></Show><Show when={props.shelf} fallback={<Show when={props.shelfFailed} fallback={<StatusMessage kind="loading">Loading artifacts…</StatusMessage>}><StatusMessage kind="error" action={<Button variant="link" type="button" onClick={props.retryShelf}>Retry artifacts</Button>}>Could not load group artifacts.</StatusMessage></Show>}>{rows=><Shelf groupId={value().group.id} rows={rows().artifacts} actions={value().group.role==='admin'?'full':'share'} assets={false} scopeParentId={null}/>}</Show></section>
  </div></WorkspaceShell>;
 }
 
