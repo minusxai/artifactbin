@@ -44,13 +44,6 @@ export interface RegionOpenReply {
   /** The page version this live state was last saved as. */
   savedVersion: number;
 }
-
-/** `POST /api/artifacts/:id/regions/:regionId/updates` */
-export interface RegionUpdateRequest {
-  clientId: number;
-  /** One Yjs update (possibly merged from several), base64. */
-  update: string;
-}
 export interface RegionUpdateReply {
   seq: number;
   /** The update held nothing the server did not already have (a retry). */
@@ -83,13 +76,6 @@ export interface RegionContentReply {
   version: number;
   markdown?: string;
   html?: string;
-}
-
-/** `PUT /api/artifacts/:id/regions/:regionId` (Idempotency-Key honoured). Exactly one of markdown, html. */
-export interface RegionWriteRequest {
-  markdown?: string;
-  html?: string;
-  base_version: number;
 }
 export interface RegionWriteReply {
   regionId: string;

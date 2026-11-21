@@ -72,8 +72,6 @@ export type IdentityIntrospectResponse =
       expires_at: string | null; parent: { kind: 'token'; id: string } | null; group_id: string; group_role: IdentityPrincipalGroupRole; issued_by: string;
     }
   | { active: false };
-/** What an introspected token acts as: a person, or a group at a level (`GROUP_SIGN_IN_RULE`). */
-export type IdentityPrincipalKind = 'user' | 'group';
 /** The level a group principal acts at: never `admin`. */
 export type IdentityPrincipalGroupRole = 'member' | 'editor';
 

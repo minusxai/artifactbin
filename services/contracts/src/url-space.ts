@@ -2,7 +2,7 @@
  * THE URL SPACE: what every path on an Artifactbin origin is, declared once. This repository's servers and
  * host boundaries derive their allowlists from it (server/public-files, server/pages-host, server/user-host,
  * utils `isBuildAssetPath`); a deployment's proxy, a co-hosted service's router or a custom shell import the
- * same data (`URL_SPACE`, `classifyPath`) or fetch it from `URL_SPACE_PATH`. Pure data and functions with no imports,
+ * same data (`URL_SPACE`, `classifyPath`) or fetch it from `/af/url-space.json`. Pure data and functions with no imports,
  * so any runtime can load it.
  *
  *   Prefix              Job
@@ -29,8 +29,6 @@
 
 /** Bumped when a consumer would read the document differently (a field changes meaning or goes away). */
 const URL_SPACE_VERSION = 2;
-/** Where the map is served, public and revalidated like the other `/af/` documents. */
-export const URL_SPACE_PATH = '/af/url-space.json';
 
 const API_PREFIX = '/api/';
 export const PUBLIC_FILES_PREFIX = '/af/';
@@ -199,7 +197,7 @@ export function ownerHostServes(pathname: string): boolean {
 /** A Vite build file the proxy may answer without a session (utils build-assets): manifest-checked by the app. */
 export const isAppBuildPath = (pathname: string): boolean => /^\/af\/app\/[\w.-]+\.(?:js|css|woff2)$/.test(pathname);
 
-/** The map as one JSON document: served at URL_SPACE_PATH byte for byte (`JSON.stringify(URL_SPACE)`). */
+/** The map as one JSON document: served at /af/url-space.json byte for byte (`JSON.stringify(URL_SPACE)`). */
 export const URL_SPACE = {
   version: URL_SPACE_VERSION,
   api: { prefix: API_PREFIX, internal: '/api/internal/', links: LINK_ENDPOINTS },

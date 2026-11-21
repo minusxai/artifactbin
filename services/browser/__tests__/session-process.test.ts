@@ -3,7 +3,7 @@ import {ACTOR_HEADER, ANONYMOUS, type Actor} from '@artifactbin/contracts/actor'
 import {BROWSER_SESSION_HEADER} from '@artifactbin/contracts/browser-sessions';
 import {createEnv} from '@artifactbin/utils';
 import {createSessionProcess,forwardSessionFetch,sessionPlainPlan,sessionSandboxPlan} from '../src/session-process';
-import {sessionCapacity,sessionEnvNamesRead,sessionProcessPaths,sessionSandboxChoice} from '../src/session-config';
+import {sessionEnvNamesRead,sessionProcessPaths} from '../src/session-config';
 import {createBrowserSessions} from '../src/sessions';
 import {createPagesCookieJar,sessionBrowserArgs,sessionOrigins} from '../src/session-origins';
 import {createSessionRequestQueue} from '../src/session-request-queue';
@@ -138,14 +138,14 @@ it('runs the same worker as a plain child, with the sandbox mounts replaced by r
 });
 
 it('reads the switch at the browser service env boundary and refuses it in production',()=>{
- expect(sessionSandboxChoice({})).toEqual({mode:'bubblewrap'});
- expect(sessionSandboxChoice({BROWSER__SANDBOX:'none',NODE_ENV:'development'})).toEqual({mode:'none'});
- expect(sessionSandboxChoice({BROWSER__SANDBOX:'none'})).toEqual({mode:'none'});
- const production=sessionSandboxChoice({BROWSER__SANDBOX:'none',NODE_ENV:'production'});
+ expect(sessionProcessPaths({}).sandbox).toEqual({mode:'bubblewrap'});
+ expect(sessionProcessPaths({BROWSER__SANDBOX:'none',NODE_ENV:'development'}).sandbox).toEqual({mode:'none'});
+ expect(sessionProcessPaths({BROWSER__SANDBOX:'none'}).sandbox).toEqual({mode:'none'});
+ const production=sessionProcessPaths({BROWSER__SANDBOX:'none',NODE_ENV:'production'}).sandbox!;
  expect(production.mode).toBe('bubblewrap');
  expect(production.refusal).toMatch(/BROWSER__SANDBOX/);
  expect(production.refusal).toMatch(/production/);
- const wrong=sessionSandboxChoice({BROWSER__SANDBOX:'bwrap',NODE_ENV:'development'});
+ const wrong=sessionProcessPaths({BROWSER__SANDBOX:'bwrap',NODE_ENV:'development'}).sandbox!;
  expect(wrong.mode).toBe('bubblewrap');
  expect(wrong.refusal).toMatch(/BROWSER__SANDBOX/);
  // The setting travels with the other session paths, so one composition reads it once.
@@ -161,20 +161,20 @@ it('spawns without bubblewrap when the sandbox is off, and refuses a production 
  // No worker is started here: the refusal happens before any process or cgroup exists.
  await expect(createSessionProcess({credential:'bearer',userId:'usr_owner'},{
   baseURL:'http://app',request:async()=>new Response('page'),
-  sandbox:sessionSandboxChoice({BROWSER__SANDBOX:'none',NODE_ENV:'production'}),
+  sandbox:sessionProcessPaths({BROWSER__SANDBOX:'none',NODE_ENV:'production'}).sandbox,
  })).rejects.toThrow(/BROWSER__SANDBOX/);
  await expect(createSessionProcess({credential:'bearer',userId:'usr_owner'},{
   baseURL:'http://app',request:async()=>new Response('page'),
-  sandbox:sessionSandboxChoice({BROWSER__SANDBOX:'nope'}),
+  sandbox:sessionProcessPaths({BROWSER__SANDBOX:'nope'}).sandbox,
  })).rejects.toThrow(/BROWSER__SANDBOX/);
 });
 
 it('reads session capacity at the same env boundary, defaulting to two and refusing anything but a whole number',()=>{
- expect(sessionCapacity({})).toEqual({sessions:2,sessionsPerActor:2});
- expect(sessionCapacity({BROWSER__SESSION_MAX:'',BROWSER__SESSION_MAX_PER_ACTOR:''})).toEqual({sessions:2,sessionsPerActor:2});
- expect(sessionCapacity({BROWSER__SESSION_MAX:'8',BROWSER__SESSION_MAX_PER_ACTOR:'3'})).toEqual({sessions:8,sessionsPerActor:3});
+ expect(sessionProcessPaths({}).capacity).toEqual({sessions:2,sessionsPerActor:2});
+ expect(sessionProcessPaths({BROWSER__SESSION_MAX:'',BROWSER__SESSION_MAX_PER_ACTOR:''}).capacity).toEqual({sessions:2,sessionsPerActor:2});
+ expect(sessionProcessPaths({BROWSER__SESSION_MAX:'8',BROWSER__SESSION_MAX_PER_ACTOR:'3'}).capacity).toEqual({sessions:8,sessionsPerActor:3});
  for(const value of ['0','-1','1.5','abc',' 3','3 ','1e2'])for(const name of ['BROWSER__SESSION_MAX','BROWSER__SESSION_MAX_PER_ACTOR'])
-  expect(()=>sessionCapacity({[name]:value}),`${name}=${value}`).toThrow(name);
+  expect(()=>sessionProcessPaths({[name]:value}),`${name}=${value}`).toThrow(name);
  // It travels with the other session settings, so every composition that spreads them enforces it.
  expect(sessionProcessPaths({BROWSER__SESSION_MAX:'5'})).toMatchObject({capacity:{sessions:5,sessionsPerActor:2}});
  // And the boot audit hears that this boundary read both names.
