@@ -103,6 +103,17 @@ describe('trusted-issuer sign-in', () => {
       expect(await rows('SELECT parent_id FROM auth.groups WHERE handle=$1',[group])).toEqual([{parent_id:'grp_parent'}]);
     }
   });
+  it('uses the configured issuer parent when the company default belongs to a different root', async () => {
+    await pg.query(`INSERT INTO company_app.deployment_state VALUES('company','usr_admin','grp_plain',true)
+      ON CONFLICT (id) DO UPDATE SET default_group_id=EXCLUDED.default_group_id,setup_complete=true`);
+    const target = await app({TRUSTED_SIGNIN__ISSUERS:issuers({parentGroup:'parent_team'}), APP__SCHEMA:'company_app'});
+    const claims = {sub:'partner_reader',group:'partner_group'};
+    const first = await post(target,{token:token(claims)});
+    expect(first.status).toBe(303);
+    expect(await rows('SELECT parent_id FROM auth.groups WHERE handle=$1',[claims.group])).toEqual([{parent_id:'grp_parent'}]);
+    const returning = await post(target,{token:token(claims)});
+    expect(returning.status).toBe(303);
+  });
   it('signs the person in, creating the person, the group under its parent with its tenancy, and the membership', async () => {
     const target = await app();
     const response = await post(target, { token: token(), callbackUrl: '/conversations?embed=1' });
