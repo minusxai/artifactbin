@@ -22,8 +22,8 @@ import { createEffect, createMemo, lazy, Match, Show, Switch, untrack, type JSX 
 import { useLocation, useParams } from '@solidjs/router';
 import type { FolderPage as FolderData, AccountWorkspace } from '@/lib/workspace';
 import type { ArtifactRole } from '@artifactbin/contracts/sharing';
-import { takeBootstrap } from '@/solid/lib/bootstrap';
-import { claimServedPath } from '../lib/served-frame';
+import { takeBootstrap } from '@/solid/pages/bootstrap';
+import { claimServedPath } from './served-frame';
 import { isDocumentFormat, knownFormat } from '../lib/artifact-link';
 import { replaceDocument } from '../lib/document-navigation';
 import { PAGE_COLUMN } from '../ui/ui';

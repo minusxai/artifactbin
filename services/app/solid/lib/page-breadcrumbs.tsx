@@ -3,7 +3,7 @@
 import { createContext, createEffect, createSignal, onCleanup, useContext, type Accessor, type JSX, type Setter } from 'solid-js';
 import { useLocation } from '@solidjs/router';
 
-export interface PageCrumb { label:string; href?:string }
+interface PageCrumb { label:string; href?:string }
 interface Entry { address:string; crumbs:PageCrumb[] }
 const Context=createContext<{entry:Accessor<Entry|null>;setEntry:Setter<Entry|null>}>();
 

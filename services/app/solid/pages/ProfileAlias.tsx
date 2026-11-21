@@ -2,9 +2,9 @@
 import { createEffect, createMemo, lazy, Show, type JSX } from 'solid-js';
 import { useLocation, useParams } from '@solidjs/router';
 import { artifactViewPath, parsePrettyPath, titleSlug } from '@/lib/http/urls';
-import { servedArtifactId } from '@/solid/lib/bootstrap';
+import { servedArtifactId } from '@/solid/pages/bootstrap';
 import { replaceDocument } from '@/solid/lib/document-navigation';
-import { servedAt, servedDocumentFrame } from '@/solid/lib/served-frame';
+import { servedAt, servedDocumentFrame } from '@/solid/pages/served-frame';
 
 // Artifact aliases are a small route entry: reading a document must not load profile UI.
 // Each destination stays a lazy browser chunk, including the trailing-slash profile fallback.

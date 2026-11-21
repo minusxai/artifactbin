@@ -12,11 +12,11 @@ import { Route, Router } from '@solidjs/router';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ArtifactAddressRoute } from '@/solid/pages/ArtifactAddress';
 import { replaceDocument } from '@/solid/lib/document-navigation';
-import { claimServedPath } from '@/solid/lib/served-frame';
+import { claimServedPath } from '@/solid/pages/served-frame';
 import { stubFetch } from '@/test/helpers/fetch-stub';
 
 vi.mock('@/solid/lib/document-navigation', () => ({ replaceDocument: vi.fn(), openDocument: vi.fn() }));
-vi.mock('@/solid/lib/served-frame', async (original) => ({ ...(await original<typeof import('@/solid/lib/served-frame')>()), claimServedPath: vi.fn(() => false) }));
+vi.mock('@/solid/pages/served-frame', async (original) => ({ ...(await original<typeof import('@/solid/pages/served-frame')>()), claimServedPath: vi.fn(() => false) }));
 
 const FOLDER = { folder: { id: 'fold01', title: 'Reports', trail: [], count: { documents: 0, folders: 0 }, rows: [] }, role: 'viewer' };
 const IMAGE = { role: 'viewer', kind: 'none', surface: { id: 'img001', editId: 'e1', format: 'image', title: 'Sunset', version: 1, dataPreview: '', columns: [] } };

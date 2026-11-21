@@ -19,7 +19,7 @@ import type { AnnotationWire } from '@/lib/annotations';
 import type { AnnotationCommentWire } from '@artifactbin/contracts/annotation-comment';
 import { BackendRequestError, type ArtifactBackend } from '@/lib/artifact-backend';
 import { hasReplyText, remoteWorkLabel, remoteWorkActive } from '@/lib/annotations/remote-reply';
-import { agentNameColor } from '../lib/agent-identity';
+import { agentNameColor } from './agent-identity';
 import { Button } from '../ui/Button';
 import { Tooltip } from '../ui/Tooltip';
 import { useOptionalInbox } from '../lib/notifications';
@@ -29,7 +29,7 @@ import { AnnotationReplyBox } from './AnnotationReplyBox';
 import { CommentFoldingBody } from './CommentFoldingBody';
 import { CommentSubmitHint } from './CommentMarkdown';
 import { CommentMarkdownField } from './LazyCommentField';
-import { persistedText, readDraft, writeDraft } from '../lib/draft-store';
+import { persistedText, readDraft, writeDraft } from './draft-store';
 import { isChunkLoadError, reloadForNewBuild } from '../lib/app-build';
 // Reaction controls load with an opened comment, keeping the reader shell small.
 const CommentReactions = lazy(() => import('./CommentReactions').then(module => ({default:module.CommentReactions})));
@@ -170,7 +170,7 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
   markReadWhenSeen(() => props.open && !props.folded && !newestFolded() ? { id: props.a.id, revision: props.a.revision ?? 1, element: threadElement } : null);
 
   // The reply draft — words and image — belongs to the thread, so folding the thread away keeps it.
-  // Kept for this tab too (solid/lib/draft-store): a reload — the page loading a new build — gives it back.
+  // Kept for this tab too (solid/document/draft-store): a reload — the page loading a new build — gives it back.
   const [reply, setReply] = persistedText(`${props.artifactId}:thread-reply:${props.a.id}`);
   const replyImage = createCommentImageDraft();
   createEffect(on(() => hasReplyText(reply()), (typed) => props.onReplyDraftChange?.(typed)));

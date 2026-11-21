@@ -11,7 +11,6 @@ import { retryingFetch } from '@/lib/http/retry-lazily';
 import { createEffect, createMemo, createSignal, on, onCleanup, untrack, type Accessor } from 'solid-js';
 import { createPageDataStore, type PageDataSnapshot } from '@/solid/lib/page-data-store';
 import { REFRESH_EVENT } from '@/solid/lib/page-data-events';
-import { homeBootstrapKey } from './home-resource';
 import { useSession } from './session';
 import { noteServerBuild } from './app-build';
 import { APP_BUILD_HEADER } from '@/lib/http/app-build';
@@ -30,6 +29,9 @@ async function fetchPageData<T>(url: string, signal: AbortSignal): Promise<T> {
  * (ArtifactAddress) before it fetches anything, so a document's JSON is never wasted work; the compiled page owns
  * its own intent rule.
  */
+/** Home's first request: the effective destination and what it renders (see lib/workspace/home). */
+export const homeBootstrapKey = (personal: boolean): string => `/api/page/home?part=bootstrap${personal ? '&personal=1' : ''}`;
+
 const PRELOADABLE: Array<[RegExp, (m: RegExpExecArray, url: URL) => string]> = [
   // Home's bootstrap resolves the destination server-side, so a group homepage never fetches the personal shelf.
   [/^\/$/, (_m, url) => homeBootstrapKey(url.searchParams.get('personal') === '1')],

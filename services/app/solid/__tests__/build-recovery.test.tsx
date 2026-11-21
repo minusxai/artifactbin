@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ErrorBoundary, lazy, Suspense } from 'solid-js';
 import { MemoryRouter, Route, createMemoryHistory, useNavigate } from '@solidjs/router';
 import { APP_BUILD_META } from '@/lib/http/app-build';
-import { buildStale, isChunkLoadError, noteServerBuild, registerBeforeReload, watchAppBuild, type BuildHost } from '@/solid/lib/app-build';
+import { buildStale, isChunkLoadError, noteServerBuild, watchAppBuild, type BuildHost } from '@/solid/lib/app-build';
 import { PageFailure, StaleBuildNavigation } from '@/solid/components/BuildRecovery';
 
 const CHUNK_404 = () => new TypeError('Failed to fetch dynamically imported module: https://app.example.test/assets/CommentMarkdownField-Cp4XxIWn.js');
@@ -96,20 +96,6 @@ describe('a missing chunk', () => {
     host.dispatchEvent(new Event('pageshow'));
     failingPage(CHUNK_404);
     await waitFor(() => expect(host.location.reload).toHaveBeenCalledTimes(1));
-  });
-
-  it('waits for registered unsaved work to flush before it reloads', async () => {
-    load('aaaaaaaaaaaa');
-    let release!: () => void;
-    const flushed = new Promise<void>((resolve) => { release = resolve; });
-    const unregister = registerBeforeReload(() => flushed);
-    failingPage(CHUNK_404);
-    await screen.findByRole('status', { name: 'Loading the latest version' });
-    await settle();
-    expect(host.location.reload, 'not while a save is in flight').not.toHaveBeenCalled();
-    release();
-    await waitFor(() => expect(host.location.reload).toHaveBeenCalledTimes(1));
-    unregister();
   });
 
   it('any other failure keeps Retry, which re-renders the page, beside Reload', async () => {

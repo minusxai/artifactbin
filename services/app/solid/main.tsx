@@ -1,11 +1,10 @@
 /* @jsxImportSource solid-js */
 /** The Solid application entry for the Trash HTML page. */
-// FIRST: the address bar holds the canonical path before anything below reads it (solid/lib/heal-address).
-import './lib/heal-address';
+// FIRST: the address bar holds the canonical path before anything below reads it (solid/heal-address).
+import './heal-address';
 import { captureInstallPrompt } from '@/solid/lib/pwa-install';
 import { render } from 'solid-js/web';
-import '@/solid/lib/heal-address';
-import { captureServedFrame } from '@/solid/lib/served-frame';
+import { captureServedFrame } from '@/solid/pages/served-frame';
 import { configureTrustedUiFromShell } from '@/lib/ui-runtime/trusted-ui-styles';
 import { App } from './App';
 import { watchAppBuild } from './lib/app-build';

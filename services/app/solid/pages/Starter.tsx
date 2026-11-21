@@ -14,7 +14,7 @@ import { isStartPlaceholder } from '@artifactbin/contracts/start-placeholder';
 import { chooseTheme } from '@/lib/html-reader/reader-mode';
 import { rowTitle } from '@/lib/document/display-title';
 import { artifactRequests, createHttpBackend } from '@/lib/artifact-backend';
-import { initialViewWasReported } from '@/solid/lib/artifact-view-report';
+import { initialViewWasReported } from '@/solid/pages/artifact-view-report';
 import type { StoryThemeName } from '@/lib/validation';
 import { loginHref } from '@/lib/http/login-href';
 import { replaceDocument } from '../lib/document-navigation';
@@ -27,7 +27,7 @@ import { DocumentChrome } from '../document/DocumentChrome';
 import { DocumentSharing } from '../document/DocumentSharing';
 import { ForkConfirm } from '../document/ForkArtifact';
 import { createLiveArtifact } from '../editor/create-live-artifact';
-import { prepareBlankReport } from '../lib/blank-report';
+import { prepareBlankReport } from './blank-report';
 
 export interface StarterAnswer {
   role: ArtifactRole;
@@ -81,7 +81,7 @@ export function StarterPage(props: { answer: StarterAnswer }): JSX.Element {
   onMount(() => setChromeVisible?.(false));
   onCleanup(() => setChromeVisible?.(true));
 
-  // ── one view per open (solid/lib/artifact-view-report: the served page reports a compiled read itself) ──
+  // ── one view per open (solid/pages/artifact-view-report: the served page reports a compiled read itself) ──
   onMount(() => {
     if (initialViewWasReported(document, id)) return;
     document.body.setAttribute('data-mx-view-reported', id);
