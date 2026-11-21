@@ -31,8 +31,8 @@ import { SQL_READ_LIMITS, type Scalar } from '@artifactbin/contracts/sql';
 import type { HtmlDeclaredQuery, HtmlDefaultConnectionLink, HtmlPageLink, HtmlPageVersion } from '@artifactbin/contracts/html-page';
 import { ConnectorFailure, checkedNamespace, colonParameters, connectionSummary, connectorError, leadingWords, mapQualifiers, openConnection, parseConnectionConfig, qualifierNames, type OpenConnection } from '@artifactbin/connectors';
 import { getUserById, type AccessActor } from '@/lib/accounts';
-import { listGroups } from '@/lib/groups';
-import { QUERY_TIMEOUT_MS,datasetsAllowPrivateNetwork, defaultConnectionSetting } from '@/lib/platform';
+import { getGroupById, listGroups } from '@/lib/groups';
+import { getDb, groupScopedConnections, QUERY_TIMEOUT_MS,datasetsAllowPrivateNetwork, defaultConnectionSetting } from '@/lib/platform';
 
 const SETTING = 'DATASETS__DEFAULT_CONNECTION';
 interface ConfiguredConnection { connection: OpenConnection; summary: ConnectionSummary; dialect: ConnectorDialect }
@@ -81,19 +81,19 @@ function configured(): typeof current {
     throw new Error(`${SETTING} is not a valid connection: ${connectorError(e).message}`);
   }
 }
-function selected(namespace?: string): (ConfiguredConnection & { namespace?: string }) | null {
+function selected(namespace?: string): (ConfiguredConnection & { namespace?: string; scoped: boolean }) | null {
   const c = configured();
   if (!c) return null;
   if (c.routed && namespace?.includes(':')) {
     const at = namespace.indexOf(':'), alias = namespace.slice(0, at), target = c.named.get(alias);
     if (!target) throw new ConnectorFailure('invalid_query', 'unknown named default connection');
-    return { ...target, namespace: namespace.slice(at + 1) || undefined };
+    return { ...target, scoped: groupScopedConnections().has(alias), namespace: namespace.slice(at + 1) || undefined };
   }
-  return { ...c.fallback, namespace };
+  return { ...c.fallback, scoped: groupScopedConnections().has('@default'), namespace };
 }
 
 /** Run at boot (lib/deployment): a bad value stops the start, naming the setting. Opens no socket. */
-export function validateDefaultConnection(): void { datasetsAllowPrivateNetwork(); configured(); }
+export function validateDefaultConnection(): void { datasetsAllowPrivateNetwork(); groupScopedConnections(); configured(); }
 
 /** What the settings page shows: whether there is one, its connector and shown fields (host, port, database). */
 export function defaultConnectionStatus(): { configured: false } | ({ configured: true; connections?: Record<string, ConnectionSummary> } & ConnectionSummary) {
@@ -105,7 +105,12 @@ export const hasDefaultConnection = (): boolean => !!defaultConnectionSetting();
 /** "Test connection", run as the signed-in person who asked (a gateway answers nothing for nobody). */
 export async function testDefaultConnection(actor: AccessActor & { userId: string }): Promise<ConnectorTestResult> {
   const c = configured();
-  return c ? c.fallback.connection.test({ viewer: await viewerOf(actor) }) : { ok: false, error: { code: 'unavailable', message: 'this install has no default connection' } };
+  if (!c) return { ok: false, error: { code: 'unavailable', message: 'this install has no default connection' } };
+  const viewer = await viewerOf(actor);
+  try {
+    const scope = await scopedTarget(selected()!, viewer);
+    return c.fallback.connection.test({ viewer, namespace: scope.namespace });
+  } catch (e) { if (e instanceof ConnectorFailure) return {ok:false,error:connectorError(e)}; throw e; }
 }
 
 /** Closes the connection's sessions (process shutdown, tests). */
@@ -156,14 +161,54 @@ function refused(e: ConnectorError): ConnectionSqlReply {
   return reply(code, code === 'unavailable' || e.code === 'invalid_config' ? `the default connection is unavailable (${e.code}): ${e.message}` : e.message);
 }
 
-async function run(reader: AccessActor | ConnectorViewer, text: string, params: Readonly<Record<string, Scalar>>, namespace: string | undefined, signal: AbortSignal): Promise<ConnectionSqlReply> {
+type ScopeChoice = { pageGroup?: string | null; requested?: unknown };
+type ReaderGroup = { id: string; name: string; handle: string; default_group_id: string | null };
+
+/** Decide again on each schema/read. Only direct, live memberships participate. Agent namespaces may name a handle. */
+async function scopedTarget(c: NonNullable<ReturnType<typeof selected>>, viewer: ConnectorViewer, choice?: ScopeChoice) {
+  if (!c.scoped) return { namespace: c.namespace };
+  const [database, explicit, ...rest] = String(c.namespace || c.summary.fields.database).split('/');
+  if (!database || rest.length || explicit === '') throw new ConnectorFailure('invalid_query', 'invalid scoped database');
+  if (viewer.groupRole) {
+    const group = viewer.groups[0];
+    if (!group || viewer.groups.length !== 1) throw new ConnectorFailure('permission_denied', 'group unavailable');
+    if (explicit && explicit !== group && explicit !== (await getGroupById(group))?.handle)
+      throw new ConnectorFailure('permission_denied', 'the database names another group');
+    return { namespace: database + '/' + group };
+  }
+  const groups = (await (await getDb()).query<ReaderGroup>(`
+    SELECT g.id,g.name,g.handle,u.default_group_id FROM users u
+    JOIN group_members m ON m.user_id=u.id JOIN groups g ON g.id=m.group_id
+    WHERE u.id=$1 AND g.deleted_at IS NULL`, [viewer.id])).rows;
+  const initial = groups.find(g => g.id === choice?.pageGroup)?.id ?? groups[0]?.default_group_id;
+  const requested = choice?.requested;
+  const group = choice === undefined && explicit
+    ? groups.find(g => g.id === explicit || g.handle === explicit)
+    : groups.find(g => g.id === (requested === undefined ? initial : requested));
+  if (!group || (explicit && explicit !== group.id && explicit !== group.handle))
+    throw new ConnectorFailure('permission_denied', 'no directly held group is available for this read');
+  return { namespace: database + '/' + group.id, viewing_as: { id: group.id, name: group.name }, groups };
+}
+
+async function run(reader: AccessActor | ConnectorViewer, text: string, params: Readonly<Record<string, Scalar>>, namespace: string | undefined, signal: AbortSignal, choice?: ScopeChoice): Promise<ConnectionSqlReply> {
   const life=readLifetime(signal);
   try {
     const c = selected(namespace);
     if (!c) return reply('dataset_not_found', 'this install has no default connection');
-    const answer = await c.connection.query({ text, params, viewer: 'groups' in reader ? reader : await life.step(viewerOf(reader)), ...(c.namespace ? { namespace: c.namespace } : {}), limits: { rows: SQL_READ_LIMITS.rows }, signal:life.signal });
-    life.check();
-    return { status: 200, body: { columns: answer.columns, rows: answer.rows, ...(answer.truncated ? { truncated: true } : {}), source: liveSource() } };
+    const viewer = 'groups' in reader ? reader : await life.step(viewerOf(reader));
+    const scope = await life.step(scopedTarget(c, viewer, choice));
+    const metadata = choice && scope.viewing_as ? { viewing_as: scope.viewing_as, reader_id: viewer.id } : {};
+    try {
+      const answer = await c.connection.query({ text, params, viewer, namespace: scope.namespace, limits: { rows: SQL_READ_LIMITS.rows }, signal: life.signal });
+      life.check();
+      return { status: 200, body: { ...metadata, columns: answer.columns, rows: answer.rows, ...(answer.truncated ? { truncated: true } : {}), source: liveSource() } };
+    } catch (e) {
+      if (!(e instanceof ConnectorFailure)) throw e;
+      const denial = refused(connectorError(e));
+      const choices = scope.groups?.filter(g => g.id !== scope.viewing_as?.id && e.eligible_group_ids?.includes(g.id))
+        .map(({id, name}) => ({id, name}));
+      return { ...denial, body: { ...denial.body, ...metadata, ...(choices?.length && { eligible_group_ids: choices.map(g => g.id), eligible_groups: choices }) } };
+    }
   } catch (e) {
     if (e instanceof ConnectorFailure) return refused(connectorError(e));
     throw e;
@@ -181,7 +226,7 @@ function checkedCall(raw: { sql?: unknown; params?: unknown }): { sql: string; p
  * A page statement that names one of the page's default-connection links, answered here; null when it names none
  * (the stored-dataset door answers it). `actor` is the reader the page door already admitted to the page.
  */
-export async function pageConnectionSql(actor: AccessActor, links: readonly HtmlPageLink[], raw: { sql?: unknown; params?: unknown }, signal: AbortSignal, admission?:{step<T>(pending:Promise<T>):Promise<T>;dispatch(read:boolean):AbortSignal}): Promise<ConnectionSqlReply | null> {
+export async function pageConnectionSql(actor: AccessActor, links: readonly HtmlPageLink[], raw: { sql?: unknown; params?: unknown }, signal: AbortSignal, admission?:{step<T>(pending:Promise<T>):Promise<T>;dispatch(read:boolean):AbortSignal}, choice: ScopeChoice = {}): Promise<ConnectionSqlReply | null> {
   const defaults = links.filter((l): l is Extract<HtmlPageLink, { kind: 'default-connection' }> => l.kind === 'default-connection');
   if (!defaults.length || typeof raw.sql !== 'string') return null;
   let dialect: ConnectorDialect = configured()?.fallback.dialect ?? 'postgres';
@@ -211,7 +256,7 @@ export async function pageConnectionSql(actor: AccessActor, links: readonly Html
   let text: string;
   try { text = mapQualifiers(dialect, call.sql, new Map(used.map((l) => [l.name.toLowerCase(), '']))); } catch (e) { return refused(connectorError(e)); }
   signal=admission?.dispatch(true)??signal;
-  return run(actor, text, call.params, databases[0] || undefined, signal);
+  return run(actor, text, call.params, databases[0] || undefined, signal, choice);
 }
 
 /** A version's declared query `name` on one of its default-connection links, with that link; null when it names none. */
@@ -227,7 +272,7 @@ export function declaredConnectionQuery(page: Pick<HtmlPageVersion, 'links' | 'q
  * own, never the caller's: written like any statement on the link (`NAME.table` or plain), `:name` binding `params`
  * and the server's `:viewer_*` values, which a caller may not send.
  */
-export async function runDeclaredConnectionQuery(viewer: ConnectorViewer, declared: { query: HtmlDeclaredQuery; link: HtmlDefaultConnectionLink }, params: unknown, signal: AbortSignal, admission?: { dispatch(read: boolean): AbortSignal }): Promise<ConnectionSqlReply> {
+export async function runDeclaredConnectionQuery(viewer: ConnectorViewer, declared: { query: HtmlDeclaredQuery; link: HtmlDefaultConnectionLink }, params: unknown, signal: AbortSignal, admission?: { dispatch(read: boolean): AbortSignal }, choice: ScopeChoice = {}): Promise<ConnectionSqlReply> {
   if (params !== undefined && (!params || typeof params !== 'object' || Array.isArray(params))) return reply('validation_failed', 'params must be an object of scalars');
   const sent = (params ?? {}) as Record<string, Scalar>;
   const filled = Object.keys(sent).find((name) => (VIEWER_PARAMS as readonly string[]).includes(name));
@@ -241,7 +286,7 @@ export async function runDeclaredConnectionQuery(viewer: ConnectorViewer, declar
     text = mapQualifiers(dialect, colonParameters(dialect, declared.query.sql).text, new Map([[declared.link.name.toLowerCase(), '']]));
   } catch (e) { return refused(connectorError(e)); }
   signal = admission?.dispatch(true) ?? signal;
-  return run(viewer, text, { ...sent, ...viewerParams(viewer) }, declared.link.namespace || undefined, signal);
+  return run(viewer, text, { ...sent, ...viewerParams(viewer) }, declared.link.namespace || undefined, signal, choice);
 }
 
 /** An agent's statement, as its signed-in account, passed through; `namespace` (what follows `default:`) the database. */
@@ -259,7 +304,9 @@ export async function defaultConnectionSchema(actor: AccessActor, namespace: str
   try {
     const c = selected(namespace);
     if (!c) return reply('dataset_not_found', 'this install has no default connection');
-    const schema: ConnectorSchema = await c.connection.schema({ viewer: await viewerOf(actor), ...(c.namespace ? { namespace: c.namespace } : {}), signal });
+    const viewer = await viewerOf(actor);
+    const scope = await scopedTarget(c, viewer);
+    const schema: ConnectorSchema = await c.connection.schema({ viewer, namespace: scope.namespace, signal });
     return { status: 200, body: { connector: c.summary.connector, ...schema } };
   } catch (e) {
     if (e instanceof ConnectorFailure) return refused(connectorError(e));

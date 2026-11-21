@@ -162,7 +162,8 @@ async function answerSql(request:Request,pageId:string,admission:Admission,reade
     // A declared query on a default-connection link runs as the reader, or as the page's group where an approval holds
     // (./approved-queries); a refusal of a signed-in account on the default connection names whom to ask.
     const live=await pageLiveDatasetSql(actor,page,{sql:body.sql,params:body.params,query:body.query},request.signal,admission);
-    const connection=live?null:await pageDeclaredConnectionSql(actor,page,head,{query:body.query,params:body.params},request.signal,admission)??await pageConnectionSql(actor,page.links,{sql:body.sql,params:body.params},request.signal,admission);
+    const choice={pageGroup:admitted.group_id,requested:body.reader_scope_user===actor.userId?body.reader_group_id:undefined};
+    const connection=live?null:await pageDeclaredConnectionSql(actor,page,head,{query:body.query,params:body.params},request.signal,admission,choice)??await pageConnectionSql(actor,page.links,{sql:body.sql,params:body.params},request.signal,admission,choice);
     const reply=live??(connection?await admission.step(namingOwner(connection,admitted,actor)):await executePageSql(actor,datasetLinks(page),{sql:body.sql,params:body.params},scope,request.signal));
     // Every reply (rows, a write's reply, a replayed receipt, a refusal) leaves only while the page still holds.
     admission.check();checkRead();executing=false;

@@ -464,6 +464,14 @@ export const serviceAudiences = (): readonly ServiceAudience[] => parseServiceAu
  */
 env('DATASETS', 'DEFAULT_CONNECTION');
 export const defaultConnectionSetting = (): string | null => env('DATASETS', 'DEFAULT_CONNECTION')?.trim() || null;
+// Only these default-connection routes accept a database/group startup namespace.
+export function groupScopedConnections(): ReadonlySet<string> {
+  const value = env('DATASETS', 'GROUP_SCOPED_CONNECTIONS')?.trim();
+  const names = value ? value.split(',').map(name => name.trim()) : [];
+  if (names.some(name => name !== '@default' && !/^[a-z][a-z0-9_-]{0,31}$/.test(name)))
+    throw new Error('DATASETS__GROUP_SCOPED_CONNECTIONS expects comma-separated connection aliases or @default');
+  return new Set(names);
+}
 /**
  * DATASETS__ALLOW_PRIVATE_NETWORK: `1` lets connections reach loopback and private addresses and turn TLS off
  * (`"tls":"disable"`), for development or a database on the install's own network. `0` (unset, the default): public

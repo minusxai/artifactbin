@@ -53,6 +53,7 @@ interface FramedStoryOptions {
   editId: () => string;
   source: () => string | null;
   /** Trusted saved HTML revision and archive policy from the platform bootstrap. */
+  onReaderScope?: Parameters<typeof createFrameBridgeParent>[0]['onReaderScope'];
   htmlContext?: Parameters<typeof createFrameBridgeParent>[0]['htmlContext'];
   /**
    * Whether this browser edits live (the session payload's `liveEditor`: an account session, or a browser session's
@@ -149,7 +150,7 @@ export function createFramedStory(options: FramedStoryOptions): FramedStory {
   const start = () => {
     const bridge = createFrameBridgeParent({
       win: window, frame, frameOrigin: origin, id: options.id,
-      editId: options.editId, source: options.source, htmlContext: options.htmlContext,
+      editId: options.editId, source: options.source, htmlContext: options.htmlContext, onReaderScope: options.onReaderScope,
       onReady: (next) => setNonce(next || null),
       onClosed: (reason) => { if (reason !== 'disposed') console.warn(`[frame-bridge] ${reason}`); },
       onUrlValues: (values, push) => followFramedValues(window, values, push),

@@ -141,11 +141,36 @@ export async function mountDocument(container: HTMLElement, options: MountDocume
   frame.src = first.src;
   container.append(frame);
 
+  // Each mount owns its choice. A click obtains a fresh frame ticket and reruns one-shot reads as well as watches.
+  let selection: {user:string;group:string} | undefined;
+  let notice: HTMLElement | undefined;
+  let shown: {user:string;group:string} | undefined;
   const bridge = createFrameBridgeParent({
     win, frame, frameOrigin: origin, id,
     editId: () => first.editId, source: () => null,
     // No upload session: the bridge refuses uploads before any request.
-    htmlContext: () => ({ revision, readOnly: false }),
+    htmlContext: () => ({ revision, readOnly: false, selection }),
+    onReaderScope(scope) {
+      if (!selection || selection.user !== scope.user) selection = {user:scope.user,group:scope.group};
+      if (shown?.user === scope.user && shown.group === scope.group && !scope.choices.length) return;
+      shown = scope;
+      notice ??= doc.createElement('section');
+      notice.setAttribute('aria-label', 'Data access');
+      notice.textContent = 'Viewing as ' + scope.name;
+      frame.before(notice);
+      if (scope.choices.length) notice.append(' · Access denied as ' + scope.name + '. ');
+      for (const group of scope.choices) {
+        const button = doc.createElement('button');
+        button.type = 'button';
+        button.textContent = 'Switch to ' + group.name;
+        button.onclick = () => {
+          selection = {user:scope.user, group:group.id};
+          notice?.remove(); shown = undefined;
+          reload();
+        };
+        notice.append(button);
+      }
+    },
     onReady: (nonce) => { if (nonce) emit('af-document-ready', { nonce }); for (const listener of [...nonceListeners]) listener(nonce); },
     onScroll: (scroll) => emit('af-document-scroll', scroll),
     onClosed: (reason) => emit('af-document-closed', { reason }),
@@ -209,7 +234,7 @@ export async function mountDocument(container: HTMLElement, options: MountDocume
     notifyData: (datasets) => bridge.invalidate(datasets),
     openComments(panel) { wanted = { open: true, panel: panel ?? null }; comments?.open(panel ?? null); },
     closeComments() { wanted = { open: false, panel: null }; comments?.close(); },
-    destroy() { destroyed = true; comments?.destroy(); nonceListeners.clear(); stopEvents(); stopNavigation(); stopSession(); bridge.dispose(); frame.remove(); },
+    destroy() { destroyed = true; notice?.remove(); selection = undefined; comments?.destroy(); nonceListeners.clear(); stopEvents(); stopNavigation(); stopSession(); bridge.dispose(); frame.remove(); },
   };
 }
 

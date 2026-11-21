@@ -17,11 +17,12 @@ import { PGlite } from '@electric-sql/pglite';
 
 /** One frontend message as received: its type letter, and for Query and Parse its SQL text. */
 interface WireMessage { type: string; sql?: string }
-export interface PgliteWire { port: number; db: PGlite; messages: WireMessage[]; close(): Promise<void> }
+export interface PgliteWire { port: number; db: PGlite; databases: string[]; messages: WireMessage[]; close(): Promise<void> }
 
 export async function startPgliteWire(setup: string): Promise<PgliteWire> {
   const db = await PGlite.create();
   await db.exec(setup);
+  const databases: string[] = [];
   const messages: WireMessage[] = [];
   let chain = Promise.resolve();
   function serve(sock: net.Socket) {
@@ -36,6 +37,8 @@ export async function startPgliteWire(setup: string): Promise<PgliteWire> {
           if (buf.length < len) return;
           const msg = buf.subarray(0, len); buf = buf.subarray(len);
           if (len === 8 && msg.readInt32BE(4) === 80877103) { sock.write('N'); continue; }
+          const fields = msg.subarray(8).toString('utf8').split('\0');
+          databases.push(fields[fields.indexOf('database') + 1]!);
           started = true;
           sock.write(Buffer.from(await db.execProtocolRaw(new Uint8Array(msg))));
           continue;
@@ -59,7 +62,7 @@ export async function startPgliteWire(setup: string): Promise<PgliteWire> {
   const server = net.createServer(serve);
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   return {
-    port: (server.address() as net.AddressInfo).port, db, messages,
+    port: (server.address() as net.AddressInfo).port, db, databases, messages,
     close: async () => { await new Promise<void>((resolve) => server.close(() => resolve())); await db.close(); },
   };
 }

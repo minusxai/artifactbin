@@ -1,3 +1,4 @@
+import type {ReaderScope} from '@/lib/html-reader/frame-bridge/parent';
 import {createReaderPresence} from '../document/create-reader-presence';
 import { replaceDocument } from '../lib/document-navigation';
 /* @jsxImportSource solid-js */
@@ -37,6 +38,7 @@ import { createDocumentHead } from './document-head';
 import { createFramedPage } from './framed-page';
 
 /** The document's own ground around its frame (a starter shows the app's dotted page instead). These hexes are the document's colors, not the app theme: they match the served reader's ground in each mode. */
+const ReaderGroupNotice = lazy(() => import('../document/ReaderGroupNotice'));
 const DOCUMENT_GROUND = { light: '#ffffff', dark: '#0b0b0c' } as const;
 
 /** Dialogs and controls load on first use (the discussion's own lazy layer: ../document/ReaderDiscussion). */
@@ -119,6 +121,20 @@ export function DocumentPage(): JSX.Element {
   const barHeight = embedded ? 0 : APP_BAR_H;
   const rawId = page?.surface?.id ?? /^\/a\/([^/]+)/.exec(location.pathname)?.[1] ?? null;
   const id = rawId && ARTIFACT_ID_PATTERN.test(rawId) ? rawId : null;
+  // A click reloads the whole document so one-shot SQL and watches both run in the new scope.
+  // The handoff is consumed once, on the same page, and the server binds it to the authenticated person.
+  const handoff = 'reader-group-switch';
+  let selection: {user:string;group:string} | undefined;
+  const [readerScope, setReaderScope] = createSignal<ReaderScope>();
+  const subject = () => session()?.user?.id;
+  const observeScope = (scope: ReaderScope) => {
+    if (!selection || selection.user !== scope.user) selection = {user:scope.user,group:scope.group};
+    setReaderScope(previous => previous && previous.user === scope.user && previous.group === scope.group && !scope.choices.length
+      ? previous : scope);
+  };
+  createEffect(on(subject, (user, old) => {
+    if (old && user !== old) { selection=undefined; setReaderScope(undefined); }
+  }));
   const [chrome, setChrome] = createSignal<DocumentChromeDetails | null>(null);
   const like = () => chrome()?.like ?? page?.like;
   const author = () => chrome()?.author ?? page?.surface?.author ?? null;
@@ -205,6 +221,11 @@ export function DocumentPage(): JSX.Element {
 
   onMount(() => {
     if (!page || !id) return;
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(handoff) ?? 'null');
+      sessionStorage.removeItem(handoff);
+      if (saved?.page === id) selection = {user:saved.user,group:saved.group};
+    } catch { /* No pending explicit switch. */ }
     const framed = framedPage.adopt();
     if (!framed) return;
     // The bridge to the frame (create-framed-story, frame-bridge/parent) is loaded now: the frame attaches after its own
@@ -222,9 +243,11 @@ export function DocumentPage(): JSX.Element {
         id, framed,
         editId: () => htmlHead().editId,
         source: () => null,
+        onReaderScope: observeScope,
         htmlContext: page.surface?.format === 'html' ? () => ({
           revision: String(page.archived?.version ?? (htmlHead().version || 1)),
           readOnly: !!page.archived,
+          selection: selection && (!subject() || selection.user === subject()) ? selection : undefined,
           uploadSession: uploadSessionOf(session(), sessionError()),
         }) : undefined,
         // Cells open for a browser that edits live: a person signed in, or a browser session's scripted browser.
@@ -290,6 +313,11 @@ export function DocumentPage(): JSX.Element {
       <Show when={page?.surface?.pwaEnabled && location.pathname === artifactAppPath(id!) && new URLSearchParams(location.search).has('install')}><ReaderNotice label="App installation" load={() => import('../document/InstallArtifact')}>{({InstallArtifact}) => <InstallArtifact id={id!} title={page?.surface?.title ?? 'Untitled artifact'} />}</ReaderNotice></Show>
       <Show when={fork() && id}><Suspense fallback={<PendingReaderDialog title="Fork artifact" onClose={() => setFork(false)} />}><ForkConfirm id={id!} title={page?.surface?.title ?? 'this artifact'} onClose={() => setFork(false)} /></Suspense></Show>
     </TrustedUi>
+    <Show when={readerScope()?.user === subject() && readerScope()}>{scope =>
+      <Suspense fallback={null}><ReaderGroupNotice scope={scope()} slot={framedPage.slot()} switchGroup={group => {
+        sessionStorage.setItem(handoff, JSON.stringify({page:id,user:subject(),group}));
+        window.location.reload();
+      }} /></Suspense>}</Show>
     {/* The document's notices take their own row above the frame (the frame shrinks), never over it. */}
     <Show when={page?.cspRequest?.status === 'blocked' || scriptErrors()?.length}>
       <Suspense fallback={null}>

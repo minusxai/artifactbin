@@ -20,13 +20,13 @@ import {actorSubject,emit} from '@/lib/platform';
 
 type Admission={step<T>(pending:Promise<T>):Promise<T>;dispatch(read:boolean):AbortSignal};
 
-export async function pageDeclaredConnectionSql(actor:AccessActor,page:HtmlPageVersion,head:HtmlPageVersion,raw:{query?:unknown;params?:unknown},signal:AbortSignal,admission:Admission):Promise<ConnectionSqlReply|null>{
+export async function pageDeclaredConnectionSql(actor:AccessActor,page:HtmlPageVersion,head:HtmlPageVersion,raw:{query?:unknown;params?:unknown},signal:AbortSignal,admission:Admission,choice:{pageGroup?:string|null;requested?:unknown}={}):Promise<ConnectionSqlReply|null>{
  const declared=raw.query===undefined?null:declaredConnectionQuery(page,raw.query);
  if(!declared)return null;
  const viewer=await admission.step(connectorViewer(actor));
  if(!viewer)return sqlReadFailure('sign_in_required',`sign in to read ${declared.link.name}: the default connection answers signed-in people only`);
  const approval=await admission.step(approvedRun(page.pageId,head,declared,actor));
- if(!approval)return runDeclaredConnectionQuery(viewer,declared,raw.params,signal,admission);
+ if(!approval)return runDeclaredConnectionQuery(viewer,declared,raw.params,signal,admission,choice);
  const outside=paramsOutside(declared.query.params,raw.params,VIEWER_PARAMS);
  // Said as it is: the value is not one this query takes, whatever the reader's own access.
  if(outside){const refused=sqlReadFailure('permission_denied',outside);return {...refused,body:{...refused.body,notice:outside.charAt(0).toUpperCase()+outside.slice(1)}};}

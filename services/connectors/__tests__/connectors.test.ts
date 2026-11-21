@@ -76,6 +76,16 @@ describe('configuration', () => {
 
 describe('driver errors', () => {
   const as = (raw: unknown) => connectorError(driverFailure(raw, ['hunter2-secret']));
+  it('preserves group alternatives only from a structured access refusal before bounding its message', () => {
+    const ids = Array.from({length: 60}, (_, i) => 'group_' + i);
+    const wire = 'group_access_denied: ' + JSON.stringify({reason: 'table unavailable', eligible_group_ids: ids});
+    const expected = {code: 'permission_denied', message: 'table unavailable', eligible_group_ids: ids};
+    expect(as({name: 'PostgresError', code: '42501', message: wire})).toEqual(expected);
+    expect(as({sqlState: '42000', errno: 1142, sqlMessage: wire})).toEqual(expected);
+    expect(as({sqlState: '42000', errno: 1143, sqlMessage: wire})).not.toHaveProperty('eligible_group_ids');
+    expect(as({name: 'PostgresError', code: '42601', message: wire})).not.toHaveProperty('eligible_group_ids');
+    expect(as({name: 'PostgresError', code: '42501', message: wire.replace('"group_1"', 'null')})).not.toHaveProperty('eligible_group_ids');
+  });
   it('maps the database\'s own refusal and missing-object codes, never its text, and names no account or address', () => {
     for (const errno of [1044, 1142, 1143, 1227, 1370]) {
       const e = as({ sqlState: '42000', errno, sqlMessage: "SELECT command denied to user 'reader'@'10.1.2.3' for table 'orders'" });

@@ -6,13 +6,13 @@
 import type { ConnectorError, ConnectorErrorCode } from '@artifactbin/contracts/connectors';
 
 export class ConnectorFailure extends Error implements ConnectorError {
-  constructor(readonly code: ConnectorErrorCode, message: string) { super(message); this.name = 'ConnectorFailure'; }
-  toJSON(): ConnectorError { return { code: this.code, message: this.message }; }
+  constructor(readonly code: ConnectorErrorCode, message: string, readonly eligible_group_ids?: readonly string[]) { super(message); this.name = 'ConnectorFailure'; }
+  toJSON(): ConnectorError { return { code: this.code, message: this.message, ...(this.eligible_group_ids && { eligible_group_ids: this.eligible_group_ids }) }; }
 }
 
 /** The `ConnectorError` an error carries, or `unavailable` for anything else (whose text is never shown). */
 export function connectorError(error: unknown): ConnectorError {
-  return error instanceof ConnectorFailure ? { code: error.code, message: error.message } : { code: 'unavailable', message: 'the connection failed' };
+  return error instanceof ConnectorFailure ? error.toJSON() : { code: 'unavailable', message: 'the connection failed' };
 }
 
 const UNTRUSTED_CODES = new Set(['SELF_SIGNED_CERT_IN_CHAIN', 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY', 'DEPTH_ZERO_SELF_SIGNED_CERT', 'UNABLE_TO_VERIFY_LEAF_SIGNATURE', 'UNABLE_TO_GET_ISSUER_CERT']);
@@ -39,7 +39,7 @@ function redact(text: string, secrets: readonly string[]): string {
 }
 
 export function driverFailure(raw: unknown, secrets: readonly string[]): ConnectorFailure {
-  if (raw instanceof ConnectorFailure) return new ConnectorFailure(raw.code, redact(raw.message, secrets));
+  if (raw instanceof ConnectorFailure) return new ConnectorFailure(raw.code, redact(raw.message, secrets), raw.eligible_group_ids);
   const e = (raw && typeof raw === 'object' ? raw : {}) as DriverError;
   const code = typeof e.code === 'string' ? e.code : undefined;
   const message = String(e.message ?? '');
@@ -50,6 +50,18 @@ export function driverFailure(raw: unknown, secrets: readonly string[]): Connect
   if (state) {
     // MySQL's own text names the account and the address it connected from ('user'@'host'): neither is shown.
     const own = e.name === 'PostgresError' ? message : String(e.sqlMessage ?? message).replace(MYSQL_ACCOUNT, 'this connection\'s account');
+    const wire = e.name === 'PostgresError' ? message : e.sqlMessage;
+    const prefix = 'group_access_denied: ';
+    if (((e.name === 'PostgresError' && state === '42501') || (state === '42000' && e.errno === 1142))
+        && typeof wire === 'string' && wire.startsWith(prefix)) {
+      try {
+        const { reason, eligible_group_ids: ids } = JSON.parse(wire.slice(prefix.length));
+        if (typeof reason === 'string' && Array.isArray(ids) && ids.every(id => typeof id === 'string'
+            && /^[A-Za-z0-9_-]+$/.test(id) && !secrets.some(secret => secret && id.includes(secret)))) {
+          return new ConnectorFailure('permission_denied', redact(reason.replace(MYSQL_ACCOUNT, "this connection's account"), secrets), ids);
+        }
+      } catch { /* Malformed refusals retain ordinary bounded display text. */ }
+    }
     const text = `${state} ${own}`;
     if (AUTH_STATES.has(state) || e.errno === 1045) return fail('auth_failed', `the database refused the sign-in (${state})`);
     // No such database (Postgres 3D000, MySQL 1049): what followed default: names nothing there.

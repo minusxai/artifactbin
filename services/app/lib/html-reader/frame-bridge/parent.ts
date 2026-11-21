@@ -10,10 +10,12 @@ const loadUploadRelay=()=>import('./upload');
 import { runtimeId } from '@artifactbin/utils/runtime-id';
 import { STORY_DATA_MESSAGE, STORY_FRAME_BRIDGE_MESSAGE, STORY_URL_VALUES_MESSAGE, isFrameBridgeEnvelope, type FrameBridgeFramePayload, type FrameBridgeParentPayload, type IslandStoryController } from '@/lib/html-reader/contract';
 
-interface HtmlRelayContext { revision: string; readOnly: boolean; uploadSession?:{state:'loading'|'signed-out'|'signed-in'|'unavailable';subject?:string} }
+export interface ReaderScope { user: string; group: string; name: string; choices: {id:string;name:string}[] }
+interface HtmlRelayContext { revision: string; readOnly: boolean; selection?: {user: string; group: string}; uploadSession?:{state:'loading'|'signed-out'|'signed-in'|'unavailable';subject?:string} }
 interface FrameBridgeParentOptions {
   /** Set by the trusted HTML shell, never by a page message. */
   htmlContext?: () => HtmlRelayContext;
+  onReaderScope?: (scope: ReaderScope) => void;
   win: Window;
   frame: HTMLIFrameElement;
   /** The framed document's origin: its pages origin, or `'null'` for the sandboxed `/raw` copy (development). */
@@ -155,7 +157,7 @@ function relayedSql(url: URL, request: { headers: unknown; body: unknown }, html
     if (SENT_HEADERS.includes(name.toLowerCase())) headers[name] = value;
     else if (name.toLowerCase() === 'idempotency-key' && IDEMPOTENCY_KEY.test(value)) headers['Idempotency-Key'] = value;
   }
-  return { path: url.pathname, init: { method: 'POST', headers, body: JSON.stringify({ ...(query !== undefined ? { query } : { sql }), params, revision: htmlContext.revision, ...(htmlContext.readOnly ? { readOnly: true } : {}) }) } };
+  return { path: url.pathname, init: { method: 'POST', headers, body: JSON.stringify({ ...(query !== undefined ? { query } : { sql }), params, ...(htmlContext.selection && {reader_group_id:htmlContext.selection.group,reader_scope_user:htmlContext.selection.user}), revision: htmlContext.revision, ...(htmlContext.readOnly ? { readOnly: true } : {}) }) } };
 }
 
 export function createFrameBridgeParent(options: FrameBridgeParentOptions): FrameBridgeParent {
@@ -231,7 +233,8 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
   const relay = async (payload: Extract<FrameBridgeFramePayload, { kind: 'fetch' }>) => {
     const relayKey=key;
     const reply=(answer:FrameBridgeParentPayload)=>{if(key===relayKey)post(answer);};
-    const request = relayedRequest(win, id, payload, options.htmlContext?.());
+    const context = options.htmlContext?.();
+    const request = relayedRequest(win, id, payload, context);
     if (!request) {
       if (payload.path === `/api/artifacts/${encodeURIComponent(id)}/sql`) reply({ kind: 'fetch-result', call: payload.call, status: 403, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ error: 'permission_denied', message: 'This page request is not permitted' }) });
       else reply({ kind: 'fetch-result', call: payload.call, error: 'refused' });
@@ -241,7 +244,17 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
       const response = await appFetch(request.path, request.init);
       const headers: Record<string, string> = {};
       response.headers.forEach((value, name) => { if (KEPT_HEADERS.includes(name.toLowerCase())) headers[name.toLowerCase()] = value; });
-      reply({ kind: 'fetch-result', call: payload.call, status: response.status, headers, body: await response.text() });
+      const body = await response.text();
+      if (options.onReaderScope && key === relayKey && body.includes('"viewing_as":')) {
+        const data = JSON.parse(body);
+        const now = options.htmlContext?.()?.selection;
+        const current = context?.selection === now || (now?.user === data.reader_id && now?.group === data.viewing_as?.id);
+        if (current && typeof data.reader_id === 'string' && typeof data.viewing_as?.id === 'string' && typeof data.viewing_as.name === 'string') {
+          options.onReaderScope({user:data.reader_id,group:data.viewing_as.id,name:data.viewing_as.name,
+            choices:response.status === 403 && data.error === 'permission_denied' ? data.eligible_groups ?? [] : []});
+        }
+      }
+      reply({ kind: 'fetch-result', call: payload.call, status: response.status, headers, body });
     } catch (error) {
       reply({ kind: 'fetch-result', call: payload.call, error: String(error instanceof Error ? error.message : error) });
     }

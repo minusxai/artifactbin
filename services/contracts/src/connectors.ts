@@ -237,7 +237,7 @@ export const CONNECTOR_ERROR_CODES = [
   'unavailable',
 ] as const;
 export type ConnectorErrorCode = (typeof CONNECTOR_ERROR_CODES)[number];
-export interface ConnectorError { readonly code: ConnectorErrorCode; readonly message: string }
+export interface ConnectorError { readonly code: ConnectorErrorCode; readonly message: string; readonly eligible_group_ids?: readonly string[] }
 
 export type ConnectorTestResult = { readonly ok: true; readonly latencyMs: number } | { readonly ok: false; readonly error: ConnectorError };
 
