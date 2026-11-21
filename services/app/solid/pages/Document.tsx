@@ -1,3 +1,4 @@
+import type {createReaderGroups} from '../document/create-framed-story';
 import {createReaderPresence} from '../document/create-reader-presence';
 import { replaceDocument } from '../lib/document-navigation';
 /* @jsxImportSource solid-js */
@@ -37,6 +38,7 @@ import { createDocumentHead } from './document-head';
 import { createFramedPage } from './framed-page';
 
 /** The document's own ground around its frame (a starter shows the app's dotted page instead). These hexes are the document's colors, not the app theme: they match the served reader's ground in each mode. */
+const ReaderGroupNotice = lazy(() => import('../document/ReaderGroupNotice'));
 const DOCUMENT_GROUND = { light: '#ffffff', dark: '#0b0b0c' } as const;
 
 /** Dialogs and controls load on first use (the discussion's own lazy layer: ../document/ReaderDiscussion). */
@@ -119,6 +121,7 @@ export function DocumentPage(): JSX.Element {
   const barHeight = embedded ? 0 : APP_BAR_H;
   const rawId = page?.surface?.id ?? /^\/a\/([^/]+)/.exec(location.pathname)?.[1] ?? null;
   const id = rawId && ARTIFACT_ID_PATTERN.test(rawId) ? rawId : null;
+  const [readerGroups,setReaderGroups] = createSignal<ReturnType<typeof createReaderGroups>>();
   const [chrome, setChrome] = createSignal<DocumentChromeDetails | null>(null);
   const like = () => chrome()?.like ?? page?.like;
   const author = () => chrome()?.author ?? page?.surface?.author ?? null;
@@ -217,14 +220,18 @@ export function DocumentPage(): JSX.Element {
     if (page.deferredChrome) void import('../document/deferred-document-chrome').then(({ bindDocumentChrome }) => {
       if (!unmounted) runWithOwner(owner, () => bindDocumentChrome(id, setChrome));
     }).catch(() => { /* The document and its discussion remain usable without social details. */ });
-    void import('../document/create-framed-story').then(({ answerFrameNavigation, createFramedStory, opensComment, takeIntent, uploadSessionOf }) => { if (!unmounted) runWithOwner(owner, () => {
+    void import('../document/create-framed-story').then(({ answerFrameNavigation, createFramedStory, createReaderGroups, opensComment, takeIntent, uploadSessionOf }) => { if (!unmounted) runWithOwner(owner, () => {
+      const groups = createReaderGroups(id, framed.frame, () => session()?.user?.id);
+      setReaderGroups(groups);
       story = createFramedStory({
         id, framed,
         editId: () => htmlHead().editId,
         source: () => null,
+        onReaderScope: groups.observe,
         htmlContext: page.surface?.format === 'html' ? () => ({
           revision: String(page.archived?.version ?? (htmlHead().version || 1)),
           readOnly: !!page.archived,
+          selection: groups.selection(),
           uploadSession: uploadSessionOf(session(), sessionError()),
         }) : undefined,
         // Cells open for a browser that edits live: a person signed in, or a browser session's scripted browser.
@@ -290,6 +297,8 @@ export function DocumentPage(): JSX.Element {
       <Show when={page?.surface?.pwaEnabled && location.pathname === artifactAppPath(id!) && new URLSearchParams(location.search).has('install')}><ReaderNotice label="App installation" load={() => import('../document/InstallArtifact')}>{({InstallArtifact}) => <InstallArtifact id={id!} title={page?.surface?.title ?? 'Untitled artifact'} />}</ReaderNotice></Show>
       <Show when={fork() && id}><Suspense fallback={<PendingReaderDialog title="Fork artifact" onClose={() => setFork(false)} />}><ForkConfirm id={id!} title={page?.surface?.title ?? 'this artifact'} onClose={() => setFork(false)} /></Suspense></Show>
     </TrustedUi>
+    <Show when={readerGroups()?.scope()}>{scope =>
+      <Suspense fallback={null}><ReaderGroupNotice scope={scope()} slot={framedPage.slot()} switchGroup={readerGroups()!.choose} /></Suspense>}</Show>
     {/* The document's notices take their own row above the frame (the frame shrinks), never over it. */}
     <Show when={page?.cspRequest?.status === 'blocked' || scriptErrors()?.length}>
       <Suspense fallback={null}>

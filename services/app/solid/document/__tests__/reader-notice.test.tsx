@@ -1,7 +1,8 @@
 /* @jsxImportSource solid-js */
 import '@testing-library/jest-dom/vitest';
-import {cleanup,fireEvent,render,screen} from '@solidjs/testing-library';
+import {cleanup,fireEvent,render,screen,within} from '@solidjs/testing-library';
 import {afterEach,expect,it,vi} from 'vitest';
+import ReaderGroupNotice from '../ReaderGroupNotice';
 import {ReaderNotice} from '../ReaderNotice';
 afterEach(cleanup);
 it('shows loading, handles failed downloads explicitly, and retries to the real notice',async()=>{
@@ -17,4 +18,14 @@ it('does not render a late notice after the requested notice unmounts',async()=>
  const load=()=>new Promise<typeof import('../ScriptFailureNotice')>(done=>{resolve=done;});
  const page=render(()=><ReaderNotice label="Page script error" load={load}>{module=><module.ScriptFailureNotice errors={['Late diagnostic']}/>}</ReaderNotice>);
  page.unmount();resolve(await import('../ScriptFailureNotice'));await Promise.resolve();expect(screen.queryByText('Late diagnostic')).toBeNull();
+});
+
+it('shows the selected group and offers an eligible group only as an explicit action', () => {
+ const switchGroup=vi.fn();
+ render(()=><ReaderGroupNotice slot={document.body} scope={{user:'reader',group:'a',name:'Analytics',choices:[{id:'b',name:'Operations'}]}} switchGroup={switchGroup}/>);
+ const notice=within(document.querySelector('[data-trusted-ui]')!.shadowRoot!.querySelector<HTMLElement>('[data-trusted-ui-root]')!);
+ expect(notice.getByText('Viewing as Analytics')).toBeInTheDocument();
+ expect(switchGroup).not.toHaveBeenCalled();
+ fireEvent.click(notice.getByRole('button',{name:'Switch to Operations'}));
+ expect(switchGroup.mock.calls).toEqual([['b']]);
 });

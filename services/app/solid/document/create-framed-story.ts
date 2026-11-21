@@ -1,6 +1,6 @@
 
 import { createEffect, createSignal, on, onCleanup, type Accessor } from 'solid-js';
-import { createFrameBridgeParent, type FrameBridgeParent } from '@/lib/html-reader/frame-bridge/parent';
+import { createFrameBridgeParent, type FrameBridgeParent, type ReaderScope } from '@/lib/html-reader/frame-bridge/parent';
 import { withUrlValuesOf } from '@/lib/dataflow/url-values';
 import { STORY_URL_VALUES_MESSAGE, type IslandStoryController } from '@/lib/html-reader/contract';
 import { commentAfterRegionSave, type RegionCommentSubject } from '@/lib/annotations/region-comment';
@@ -53,6 +53,7 @@ interface FramedStoryOptions {
   editId: () => string;
   source: () => string | null;
   /** Trusted saved HTML revision and archive policy from the platform bootstrap. */
+  onReaderScope?: Parameters<typeof createFrameBridgeParent>[0]['onReaderScope'];
   htmlContext?: Parameters<typeof createFrameBridgeParent>[0]['htmlContext'];
   /**
    * Whether this browser edits live (the session payload's `liveEditor`: an account session, or a browser session's
@@ -140,6 +141,33 @@ export interface FramedStory {
   regionUi: RegionUi;
 }
 
+/** This mount holds one reader's explicit selection. A fresh ticket reruns one-shot reads after a click. */
+export function createReaderGroups(id: string, frame: HTMLIFrameElement, subject: Accessor<string | undefined | null>) {
+  let selected: {user: string; group: string} | undefined;
+  const [seen, setSeen] = createSignal<ReaderScope>();
+  createEffect(on(subject, (user, old) => {
+    if (old && user !== old) { selected = undefined; setSeen(undefined); }
+  }));
+  return {
+    scope: () => seen()?.user === subject() ? seen() : undefined,
+    selection: () => selected,
+    observe(scope: ReaderScope) {
+      if (!selected || selected.user !== scope.user) selected = {user:scope.user, group:scope.group};
+      setSeen(previous => previous?.user === scope.user && previous.group === scope.group && !scope.choices.length ? previous : scope);
+    },
+    async choose(group: string) {
+      const user = subject();
+      if (!user || seen()?.user !== user) return;
+      const src = await freshFrameSrc(id);
+      if (src && subject() === user) {
+        selected = {user, group};
+        setSeen(undefined);
+        frame.src = src;
+      }
+    },
+  };
+}
+
 export function createFramedStory(options: FramedStoryOptions): FramedStory {
   const { frame, origin } = options.framed;
   const [nonce, setNonce] = createSignal<string | null>(null);
@@ -149,7 +177,7 @@ export function createFramedStory(options: FramedStoryOptions): FramedStory {
   const start = () => {
     const bridge = createFrameBridgeParent({
       win: window, frame, frameOrigin: origin, id: options.id,
-      editId: options.editId, source: options.source, htmlContext: options.htmlContext,
+      editId: options.editId, source: options.source, htmlContext: options.htmlContext, onReaderScope: options.onReaderScope,
       onReady: (next) => setNonce(next || null),
       onClosed: (reason) => { if (reason !== 'disposed') console.warn(`[frame-bridge] ${reason}`); },
       onUrlValues: (values, push) => followFramedValues(window, values, push),

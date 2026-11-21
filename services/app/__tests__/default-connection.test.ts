@@ -6,16 +6,18 @@
  * database sees of each reader.
  */
 import {htmlPageDeclarations} from '@/lib/html-page';
+import {createGroup,removeGroupMember} from '@/lib/groups';
 import net from 'node:net';
 import { afterAll, beforeAll, beforeEach, expect, it } from 'vitest';
 import { SQL_FAILURES, type SqlFailureCode } from '@artifactbin/contracts/sql-failures';
 import { startPgliteWire, type PgliteWire } from '@artifactbin/test-support/pglite-wire';
-import { request, setSession, useAppHarness } from './harness';
+import { admitGroupMember, params, request, setSession, useAppHarness } from './harness';
 import { person, publish, sql, type Person } from './page-sql-door-fixture';
 import { overrideConfig } from '@/lib/platform/config';
 import { closeDefaultConnection, validateDefaultConnection } from '@/lib/connections';
 import { getArtifactById } from '@/lib/artifacts';
 import { GET as statusGet } from '@/app/api/default-connection/route';
+import { POST as pageSql } from '@/app/api/artifacts/[id]/sql/route';
 import { POST as agentSql } from '@/app/api/default-connection/sql/route';
 import { POST as testPost } from '@/app/api/default-connection/test/route';
 import { GET as accountGet } from '@/app/api/page/account/route';
@@ -230,4 +232,42 @@ it('validates every named default without exposing a secret or accepting an unco
   configure(JSON.stringify({default:JSON.parse(setting),connections:{secondary:JSON.parse(setting)}}));
   const denied=await agent(alice,{sql:'select 1',namespace:'missing:db'});
   expect(denied.status).toBe(400);
+});
+
+it('isolates pooled page reads and schema by group and leaves an ordinary sibling alias alone', async () => {
+  const {alice, bob} = await readers();
+  const first = await createGroup(alice.userId!,{handle:'first_team',name:'First'});
+  const second = await createGroup(alice.userId!,{handle:'second_team',name:'Second'});
+  overrideConfig({}, {DATASETS__ALLOW_PRIVATE_NETWORK:'1',DATASETS__GROUP_SCOPED_CONNECTIONS:'gateway',
+    DATASETS__DEFAULT_CONNECTION:JSON.stringify({default:JSON.parse(setting),connections:{gateway:JSON.parse(setting)}})});
+  const html = PAGE().replace('default:warehouse/finance','default:gateway:warehouse');
+  const personal = (await publish(alice,{html})).body.id;
+  const team = (await publish(alice,{html,destination:{type:'group',id:second.id},visibility:'unlisted'})).body.id;
+  const start = wire.databases.length;
+  const read = 'select * from wh.public.loose';
+  expect((await sql(personal,alice,read)).body).toMatchObject({viewing_as:{id:first.id,name:'First'}});
+  expect((await sql(team,alice,read)).body).toMatchObject({viewing_as:{id:second.id,name:'Second'}});
+  expect((await sql(personal,alice,read)).status).toBe(200);
+  expect((await sql(personal,bob,read)).status).toBe(403);
+  expect((await sql(personal,bob,'select * from raw.public.loose')).status).toBe(200);
+  expect(wire.databases.slice(start)).toEqual(['warehouse/'+first.id,'warehouse/'+second.id,'postgres']);
+  await admitGroupMember(alice.userId!,first.id,bob.userId!,'member');
+  expect((await sql(team,bob,read)).body).toMatchObject({viewing_as:{id:first.id}});
+  await admitGroupMember(alice.userId!,second.id,bob.userId!,'member');
+  const wireMessage = 'group_access_denied: '+JSON.stringify({reason:'table unavailable',eligible_group_ids:[second.id,'unknown']});
+  await wire.db.query('CREATE TABLE public.refusals(message text)');
+  await wire.db.query('INSERT INTO public.refusals VALUES ($1)',[wireMessage]);
+  await wire.db.exec(`CREATE FUNCTION public.refuse() RETURNS int LANGUAGE plpgsql AS $$
+    BEGIN RAISE EXCEPTION '%' , (SELECT message FROM public.refusals) USING ERRCODE='42501'; END $$`);
+  const refused = await sql(personal,bob,'select wh.public.refuse()');
+  expect(refused.status).toBe(403);
+  expect(refused.body).toMatchObject({viewing_as:{id:first.id},eligible_group_ids:[second.id],eligible_groups:[{id:second.id,name:'Second'}]});
+  const switched = () => pageSql(request('/api/artifacts/'+personal+'/sql',{method:'POST',token:bob.token,
+    json:{sql:read,revision:'1',reader_scope_user:bob.userId,reader_group_id:second.id}}),params(personal));
+  expect(await (await switched()).json()).toMatchObject({viewing_as:{id:second.id},rows:[{n:7}]});
+  await removeGroupMember(alice.userId!,second.id,bob.userId!);
+  expect((await switched()).status).toBe(403);
+  const schema = await agentSql(request('/api/default-connection/sql',{method:'POST',token:alice.token,json:{namespace:'gateway:catalog'}}));
+  expect(schema.status).toBe(200);
+  expect(wire.databases.at(-1)).toBe('catalog/'+first.id);
 });

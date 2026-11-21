@@ -14,7 +14,7 @@ export {
   deploymentConfig, env, envNamesRead, registerTestOverride, parseUserPagesHost, requirePagesHost,
   resolveHmrPort, unknownEnvNames, serviceAudiences, embedTrustedOrigins, shellFile, skillExtrasDir, designSystemDir, defaultDesignSystemName,
 } from './config';
-export { datasetsAllowPrivateNetwork, defaultConnectionSetting } from './config';
+export { datasetsAllowPrivateNetwork, defaultConnectionSetting, groupScopedConnections } from './config';
 export { PostgresDb, databaseTargetForRuntime, getDb, parseDatabaseUrl, resetDb, schemaImageInputs, schemaImageKey } from './db';
 export type { Db, Queryable, SchemaImageInputs } from './db';
 export { actorSubject, emit, envelope } from './events';
