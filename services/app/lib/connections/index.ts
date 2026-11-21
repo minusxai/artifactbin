@@ -164,6 +164,16 @@ function refused(e: ConnectorError): ConnectionSqlReply {
 type ScopeChoice = { pageGroup?: string | null; requested?: unknown };
 type ReaderGroup = { id: string; name: string; handle: string; default_group_id: string | null };
 
+type GroupLabel = Pick<ReaderGroup, 'id' | 'name'>;
+const label = ({id, name}: ReaderGroup): GroupLabel => ({id, name});
+
+/** A page pin prevents dispatch. Membership lets the reader request a new read, whose policy is still unchecked. */
+class PagePinMismatch extends ConnectorFailure {
+  constructor(readonly viewingAs: GroupLabel, readonly readerId: string, readonly required?: GroupLabel) {
+    super('permission_denied', 'the selected group cannot read this database link');
+  }
+}
+
 /** Decide again on each schema/read. Only direct, live memberships participate. Agent namespaces may name a handle. */
 async function scopedTarget(c: NonNullable<ReturnType<typeof selected>>, viewer: ConnectorViewer, choice?: ScopeChoice) {
   if (!c.scoped) return { namespace: c.namespace };
@@ -185,9 +195,13 @@ async function scopedTarget(c: NonNullable<ReturnType<typeof selected>>, viewer:
   const group = choice === undefined && explicit
     ? groups.find(g => g.id === explicit || g.handle === explicit)
     : groups.find(g => g.id === (requested === undefined ? initial : requested));
-  if (!group || (explicit && explicit !== group.id && explicit !== group.handle))
+  if (!group)
     throw new ConnectorFailure('permission_denied', 'no directly held group is available for this read');
-  return { namespace: database + '/' + group.id, viewing_as: { id: group.id, name: group.name }, groups };
+  if (explicit && explicit !== group.id && explicit !== group.handle) {
+    const required = groups.find(g => g.id === explicit || g.handle === explicit);
+    throw new PagePinMismatch(label(group), viewer.id, required && label(required));
+  }
+  return { namespace: database + '/' + group.id, viewing_as: label(group), groups: explicit ? [] : groups };
 }
 
 async function run(reader: AccessActor | ConnectorViewer, text: string, params: Readonly<Record<string, Scalar>>, namespace: string | undefined, signal: AbortSignal, choice?: ScopeChoice): Promise<ConnectionSqlReply> {
@@ -210,6 +224,11 @@ async function run(reader: AccessActor | ConnectorViewer, text: string, params: 
       return { ...denial, body: { ...denial.body, ...metadata, ...(choices?.length && { eligible_group_ids: choices.map(g => g.id), eligible_groups: choices }) } };
     }
   } catch (e) {
+    if (e instanceof PagePinMismatch) {
+      const denial = refused(e);
+      return { ...denial, body: { ...denial.body, viewing_as: e.viewingAs, reader_id: e.readerId,
+        ...(e.required && {required_group: e.required}) } };
+    }
     if (e instanceof ConnectorFailure) return refused(connectorError(e));
     throw e;
   }finally{life.close();}

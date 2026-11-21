@@ -20,12 +20,12 @@ it('does not render a late notice after the requested notice unmounts',async()=>
  page.unmount();resolve(await import('../ScriptFailureNotice'));await Promise.resolve();expect(screen.queryByText('Late diagnostic')).toBeNull();
 });
 
-it('shows the selected group and offers an eligible group only as an explicit action', () => {
+it.each([false,true])('labels the explicit group action according to eligibility (request only %s)', requestAccess => {
  const switchGroup=vi.fn();
- render(()=><ReaderGroupNotice slot={document.body} scope={{user:'reader',group:'a',name:'Analytics',choices:[{id:'b',name:'Operations'}]}} switchGroup={switchGroup}/>);
+ render(()=><ReaderGroupNotice slot={document.body} scope={{requestAccess,user:'reader',group:'a',name:'Analytics',choices:[{id:'b',name:'Operations'}]}} switchGroup={switchGroup}/>);
  const notice=within(document.querySelector('[data-trusted-ui]')!.shadowRoot!.querySelector<HTMLElement>('[data-trusted-ui-root]')!);
  expect(notice.getByText('Viewing as Analytics')).toBeInTheDocument();
  expect(switchGroup).not.toHaveBeenCalled();
- fireEvent.click(notice.getByRole('button',{name:'Switch to Operations'}));
+ fireEvent.click(notice.getByRole('button',{name:requestAccess ? 'Request access as Operations' : 'Switch to Operations'}));
  expect(switchGroup.mock.calls).toEqual([['b']]);
 });

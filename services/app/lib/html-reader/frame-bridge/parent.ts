@@ -10,7 +10,7 @@ const loadUploadRelay=()=>import('./upload');
 import { runtimeId } from '@artifactbin/utils/runtime-id';
 import { STORY_DATA_MESSAGE, STORY_FRAME_BRIDGE_MESSAGE, STORY_URL_VALUES_MESSAGE, isFrameBridgeEnvelope, type FrameBridgeFramePayload, type FrameBridgeParentPayload, type IslandStoryController } from '@/lib/html-reader/contract';
 
-export interface ReaderScope { user: string; group: string; name: string; choices: {id:string;name:string}[] }
+export interface ReaderScope { user: string; group: string; name: string; requestAccess?: boolean; choices: {id:string;name:string}[] }
 interface HtmlRelayContext { revision: string; readOnly: boolean; selection?: {user: string; group: string}; uploadSession?:{state:'loading'|'signed-out'|'signed-in'|'unavailable';subject?:string} }
 interface FrameBridgeParentOptions {
   /** Set by the trusted HTML shell, never by a page message. */
@@ -250,8 +250,10 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
         const now = options.htmlContext?.()?.selection;
         const current = context?.selection === now || (now?.user === data.reader_id && now?.group === data.viewing_as?.id);
         if (current && typeof data.reader_id === 'string' && typeof data.viewing_as?.id === 'string' && typeof data.viewing_as.name === 'string') {
+          const denied = response.status === 403 && data.error === 'permission_denied';
+          const required = denied && data.required_group;
           options.onReaderScope({user:data.reader_id,group:data.viewing_as.id,name:data.viewing_as.name,
-            choices:response.status === 403 && data.error === 'permission_denied' ? data.eligible_groups ?? [] : []});
+            requestAccess: !!required, choices: required ? [required] : denied ? data.eligible_groups ?? [] : []});
         }
       }
       reply({ kind: 'fetch-result', call: payload.call, status: response.status, headers, body });

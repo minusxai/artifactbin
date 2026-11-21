@@ -163,7 +163,7 @@ export async function mountDocument(container: HTMLElement, options: MountDocume
       for (const group of scope.choices) {
         const button = doc.createElement('button');
         button.type = 'button';
-        button.textContent = 'Switch to ' + group.name;
+        button.textContent = (scope.requestAccess ? 'Request access as ' : 'Switch to ') + group.name;
         button.onclick = () => {
           selection = {user:scope.user, group:group.id};
           notice?.remove(); shown = undefined;
