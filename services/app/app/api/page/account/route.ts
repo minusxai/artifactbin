@@ -10,5 +10,5 @@ export async function GET(request: Request) {
   if (actor.credential !== 'session' || !actor.userId) return unauthorized(request);
   const user = await getUserById(actor.userId);
   const named = user ? await ensureUsername(user) : null;
-  return json({ user_page_url: named?.username ? userPagesOrigin(named.username) : null, username: named?.username ?? null, image: named ? avatarUrl(named) : null }, 200, { 'Cache-Control': 'no-store' });
+  return json({ name: named?.name ?? null, user_page_url: named?.username ? userPagesOrigin(named.username) : null, username: named?.username ?? null, image: named ? avatarUrl(named) : null }, 200, { 'Cache-Control': 'no-store' });
 }

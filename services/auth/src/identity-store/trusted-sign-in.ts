@@ -6,7 +6,7 @@
  *    an email sign-in reaches, from this issuer, another issuer or a sign-in of their own. A new one gets what an email
  *    sign-in gives it: Better Auth's verified `user` row and the identity `users` row under one id, and a handle from
  *    the address (`ensureUsername`, after the transaction). The welcome page stays done for a new person only; an
- *    existing person's rows are not changed. A reserved `.invalid` address is refused (the synthetic addresses below).
+ *    existing person keeps their handle and welcome state. A reserved `.invalid` address is refused (the synthetic addresses below).
  *  - Any other subject is a handle the issuer owns. The person is found by its Better Auth `account` row (`providerId`
  *    = `trusted:<issuer>`, `accountId` = subject), never by username (renameable). A new one gets Better Auth's `user`
  *    row (the synthetic, non-deliverable address the caller names, verified, since a session authenticates only a
@@ -28,7 +28,7 @@ import type {Queryable} from '@artifactbin/contracts/db';
 import type {TransactionalQueryable} from '@artifactbin/contracts/identity-module';
 import {companyGroupState} from './company-group';
 import {chainOf, liveGroup} from './group-access';
-import {accountMethods,reserveHandle} from './accounts';
+import {accountMethods,reserveHandle,writeDisplayName} from './accounts';
 import {identityTables,internalId,isUniqueViolation} from './tables';
 
 export interface TrustedSignInInput {
@@ -36,6 +36,8 @@ export interface TrustedSignInInput {
   subject: string;
   group: string;
   tenancyId: string;
+  name?: string;
+  groupName?: string;
   /** The parent group's handle or id, when the issuer's groups live under one. */
   parentGroup?: string;
   /** A handle subject's synthetic address (never delivered to); unused for an email subject. */
@@ -75,6 +77,9 @@ export async function trustedSignIn(db: TransactionalQueryable, input: TrustedSi
       // groups, so access the issuer has since withdrawn (another tenant) never lingers here.
       await tx.query(`DELETE FROM ${t.group_members} m USING ${t.groups} g WHERE m.group_id=g.id AND m.user_id=$1 AND g.trusted_issuer=$2 AND m.group_id<>$3`, [person.userId, input.issuer, group.groupId]);
       if (admit && !await admit(person, tx)) throw new Refused('deployment_admission_required');
+      if (input.name !== undefined) await writeDisplayName(tx, t, authSchema, person.userId, input.name);
+      if (input.groupName !== undefined)
+        await tx.query(`UPDATE ${t.groups} SET name=$2 WHERE id=$1 AND name IS DISTINCT FROM $2`, [group.groupId, input.groupName]);
       return {ok: true as const, userId: person.userId, email: person.email, groupId: group.groupId, created: {user: person.created, group: group.created}};
     });
     // An email person gets their handle the way an email sign-in's does (its own transaction, so after this one).

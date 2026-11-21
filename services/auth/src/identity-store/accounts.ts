@@ -6,6 +6,7 @@
  * groups' (`reserveHandle`): a reservation is a tombstone, so a released or deleted name is never handed to someone
  * else silently. Tokens are prefix + 256 random bits, only the sha256 stored, soft revoked (`deleted_at`).
  */
+import {displayName} from '@artifactbin/contracts/account-resource';
 import crypto from 'node:crypto';
 import {IdentityError, type IdentityService, type IdentityUserRow, type MintedIdentityToken, type TransactionalQueryable} from '@artifactbin/contracts/identity-module';
 import {MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS, isValidHandle} from '@artifactbin/contracts/handles';
@@ -145,10 +146,17 @@ export async function listServiceGroupSignInGrants(t: IdentityTables, q: Queryab
     .map(row => ({...row, approved_at: new Date(row.approved_at).toISOString()}));
 }
 
-type AccountMethods = Pick<IdentityService, 'syncProfile' | 'createUser' | 'ensureUsername' | 'setUsername' | 'setImageKey' | 'confirmWelcome' | 'setAutoAcceptMentions'
+type AccountMethods = Pick<IdentityService, 'syncProfile' | 'createUser' | 'ensureUsername' | 'setProfileNames' | 'setUsername' | 'setImageKey' | 'confirmWelcome' | 'setAutoAcceptMentions'
   | 'createTestUser' | 'eraseTestUser' | 'mintToken' | 'ensureWebToken' | 'findToken' | 'revokeToken' | 'touchToken' | 'setTokenHarness' | 'markRequestAuthority'>;
 
-export function accountMethods(db: TransactionalQueryable, t: IdentityTables): AccountMethods {
+export async function writeDisplayName(tx: Queryable, t: IdentityTables, authSchema: string, userId: string, name: string) {
+  await tx.query(`UPDATE ${t.users} SET name=$2 WHERE id=$1 AND name IS DISTINCT FROM $2`, [userId, name]);
+  // An installation with only the identity store has no Better Auth table.
+  if (!(await tx.query('SELECT to_regclass($1) AS relation', [authSchema + '."user"'])).rows[0]?.relation) return;
+  await tx.query(`UPDATE ${authSchema}."user" SET name=$2,"updatedAt"=now() WHERE id=$1 AND name IS DISTINCT FROM $2`, [userId, name]);
+}
+
+export function accountMethods(db: TransactionalQueryable, t: IdentityTables, authSchema = 'auth'): AccountMethods {
   const userById = async (q: Queryable, id: string, lock = false) =>
     (await q.query<IdentityUserRow>(`SELECT ${USER_COLS} FROM ${t.users} WHERE id = $1${lock ? ' FOR UPDATE' : ''}`, [id])).rows[0] ?? null;
 
@@ -170,6 +178,27 @@ export function accountMethods(db: TransactionalQueryable, t: IdentityTables): A
     }
     throw new Error('could not assign a username');
   }
+
+  const setProfileNames: AccountMethods['setProfileNames'] = async ({userId, name, username: requested}) => {
+    const username = requested?.toLowerCase().trim();
+    if (username !== undefined && !isValidHandle(username)) return {error:'invalid'};
+    if (name !== undefined && !displayName(name)) return {error:'invalid_name'};
+    try {
+      return await db.transaction(async tx => {
+        const user = await userById(tx, userId, true);
+        if (!user || (name !== undefined && user.kind !== 'account')) return {error:'invalid'} as const;
+        if (username !== undefined) {
+          await reserveHandle(t, tx, username, 'user', userId);
+          await tx.query(`UPDATE ${t.users} SET username=$2 WHERE id=$1`, [userId, username]);
+        }
+        if (name !== undefined) await writeDisplayName(tx, t, authSchema, userId, name.trim());
+        return {ok:true} as const;
+      });
+    } catch (error) {
+      if (isUniqueViolation(error)) return {error:'taken'};
+      throw error;
+    }
+  };
 
   return {
     async syncProfile({userId, email, testAccount}) {
@@ -193,20 +222,11 @@ export function accountMethods(db: TransactionalQueryable, t: IdentityTables): A
         ['usr_' + internalId(), email.toLowerCase().trim(), name ?? null])).rows[0]!;
     },
     ensureUsername,
-    async setUsername({userId, username: requested}) {
-      const username = requested.toLowerCase().trim();
-      if (!isValidHandle(username)) return {error: 'invalid'};
-      try {
-        return await db.transaction(async tx => {
-          if (!await userById(tx, userId, true)) return {error: 'invalid'} as const;
-          await reserveHandle(t, tx, username, 'user', userId);
-          await tx.query(`UPDATE ${t.users} SET username=$2 WHERE id=$1`, [userId, username]);
-          return {ok: true, username} as const;
-        });
-      } catch (error) {
-        if (isUniqueViolation(error)) return {error: 'taken'};
-        throw error;
-      }
+    setProfileNames,
+    async setUsername({userId, username}) {
+      const result = await setProfileNames({userId, username});
+      if ('error' in result) return {error:result.error === 'taken' ? 'taken' : 'invalid'};
+      return {ok:true, username:username.toLowerCase().trim()};
     },
     async setImageKey({userId, key}) {
       return db.transaction(async tx => {

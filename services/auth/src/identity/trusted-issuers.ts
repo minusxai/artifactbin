@@ -11,11 +11,12 @@
  * used once (a replayed `jti` is refused until its token expires; the record of used ids is this process's memory, so
  * a multi-process install accepts a token at most once per process). Claims: `sub` (the person's email address, or a
  * handle the issuer owns), `group` (the group's handle) and `tenancy_id` (the group's tenancy, refreshed at each admitted sign-in);
- * any other claim (such as `name`) is ignored. The request's
+ * optional text claims `name` and `group_name` supply display names. The request's
  * `Origin` must be one of the issuer's origins; every other sign-in keeps refusing foreign origins.
  * The identity writes are ../identity-store/trusted-sign-in.
  */
 import {createPublicKey, verify, type KeyObject} from 'node:crypto';
+import {displayName} from '@artifactbin/contracts/account-resource';
 import {readEnv} from '../env';
 
 export const TRUSTED_SIGNIN_PATH = '/api/auth/trusted-sign-in';
@@ -62,7 +63,7 @@ function isOrigin(value: string): boolean {
   try { const url = new URL(value); return (url.protocol === 'https:' || url.protocol === 'http:') && url.origin === value; } catch { return false; }
 }
 
-export interface TrustedClaims { issuer: TrustedIssuer; subject: string; group: string; tenancyId: string; jti: string; exp: number }
+export interface TrustedClaims { issuer: TrustedIssuer; subject: string; group: string; tenancyId: string; name?: string; groupName?: string; jti: string; exp: number }
 export type TrustedTokenRefusal = 'invalid_token' | 'unknown_issuer' | 'forbidden_origin' | 'replayed_token';
 
 const json = (part: string): Record<string, unknown> | null => {
@@ -100,7 +101,8 @@ export function createTrustedTokenVerifier(issuers: ReadonlyMap<string, TrustedI
       const key = `${issuer.issuer}\u0000${jti}`;
       if (used.has(key)) return {ok: false, refusal: 'replayed_token'};
       used.set(key, exp);
-      return {ok: true, claims: {issuer, subject: sub, group, tenancyId, jti, exp}};
+      return {ok: true, claims: {issuer, subject: sub, group, tenancyId, jti, exp,
+        name: displayName(payload.name), groupName: displayName(payload.group_name)}};
     },
   };
 }

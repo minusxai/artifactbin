@@ -42,7 +42,7 @@ const now = () => Math.floor(Date.now() / 1000);
 function token(claims: Record<string, unknown> = {}, o: { key?: KeyObject; header?: Record<string, unknown> } = {}): string {
   const part = (value: unknown) => Buffer.from(JSON.stringify(value)).toString('base64url');
   const head = part(o.header ?? { alg: 'EdDSA', typ: 'JWT' });
-  const body = part({ iss: 'issuer-a', aud: AUDIENCE, iat: now(), exp: now() + 120, jti: `jti-${++counter}`, sub: 'user_1', group: 'group_1', tenancy_id: 'tenant-1', name: 'Ada Person', ...claims });
+  const body = part({ iss: 'issuer-a', aud: AUDIENCE, iat: now(), exp: now() + 120, jti: `jti-${++counter}`, sub: 'user_1', group: 'group_1', tenancy_id: 'tenant-1', ...claims });
   return `${head}.${body}.${sign(null, Buffer.from(`${head}.${body}`), o.key ?? keys.privateKey).toString('base64url')}`;
 }
 const post = async (target: Awaited<ReturnType<typeof app>>, form: Record<string, string>, headers: Record<string, string> = { origin: EMBEDDER }) =>
@@ -133,7 +133,7 @@ describe('trusted-issuer sign-in', () => {
     const [stored] = await rows<{ expiresAt: Date }>(`SELECT "expiresAt" FROM auth.session WHERE "userId"=$1`, [session!.userId]);
     expect(new Date(stored!.expiresAt).getTime()).toBeLessThanOrEqual(Date.now() + 86_400_000 + 5_000);
     const [person] = await rows<{ id: string; username: string; welcome_pending: boolean; name: string }>(`SELECT id,username,welcome_pending,name FROM auth.users WHERE id=$1`, [session!.userId]);
-    // The token's `name` is ignored: the person is named by their handle.
+    // Without a name claim, a new handle person is named by their handle.
     expect(person).toMatchObject({ username: 'user_1', welcome_pending: false, name: 'user_1' });
     expect(await rows(`SELECT name FROM auth."user" WHERE id=$1`, [person!.id])).toEqual([{ name: 'user_1' }]);
     expect(await rows(`SELECT "providerId","accountId" FROM auth.account WHERE "userId"=$1`, [person!.id])).toEqual([{ providerId: 'trusted:issuer-a', accountId: 'user_1' }]);
@@ -293,13 +293,23 @@ describe('trusted-issuer sign-in', () => {
     expect(await rows(`SELECT 1 FROM auth.groups WHERE handle='group_e3'`)).toEqual([]);
   });
 
-  it('ignores a name claim whatever it holds', async () => {
+  it.each(['named_reader', 'named@example.com'])('refreshes only supplied names for %s after admission', async sub => {
     const target = await app();
-    for (const name of [42, 'x'.repeat(500), { first: 'Ada' }])
-      expect((await post(target, { token: token({ sub: 'user_7', group: 'group_7', name }) })).status).toBe(303);
-    expect(await rows(`SELECT name FROM auth.users WHERE username='user_7'`)).toEqual([{ name: 'user_7' }]);
-    expect((await post(target, { token: token({ sub: 'named@example.com', group: 'group_7', name: 'Someone Else' }) })).status).toBe(303);
-    expect(await rows(`SELECT name FROM auth.users WHERE email='named@example.com'`)).toEqual([{ name: null }]);
+    const group = sub.includes('@') ? 'named_email_team' : 'named_handle_team';
+    const claims = { sub, group };
+    const names = () => rows(`SELECT u.id, u.username, u.email, u.name, a.name AS auth_name, g.id AS group_id, g.name AS group_name
+      FROM auth.groups g JOIN auth.group_members m ON m.group_id=g.id JOIN auth.users u ON u.id=m.user_id
+      JOIN auth."user" a ON a.id=u.id WHERE g.handle=$1`, [group]);
+    const first = {name:'River', group_name:'Sample team'};
+    expect((await post(target, {token:token({...claims, ...first})})).status).toBe(303);
+    const [before] = await names();
+    expect(before).toMatchObject({...first, auth_name:'River'});
+    for (const patch of [{name:'Robin'}, {group_name:'Renamed team'}, {}])
+      expect((await post(target, {token:token({...claims, ...patch})})).status).toBe(303);
+    const denied = assemble(authParts(await testAuthOptions({env:{TRUSTED_SIGNIN__ISSUERS:issuers()},
+      sessions:sessionStoreOf(auth), identityTransactions:db, admitIdentity:async()=>false})));
+    await refused(await post(denied, {token:token({...claims, ...first})}), 403, 'deployment_admission_required');
+    expect(await names()).toEqual([{...before, name:'Robin', auth_name:'Robin', group_name:'Renamed team'}]);
   });
 
   it('keeps callbackUrl on this origin', async () => {
