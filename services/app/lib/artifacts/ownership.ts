@@ -1,7 +1,7 @@
 /** Artifact ownership is distinct from attribution and request credentials. */
 import type {ArtifactDestination} from '@artifactbin/contracts/groups';
 import type { AccessActor } from '@/lib/accounts';
-import {actorGroupRole, getAccountPreferences, selectNewArtifactDestination} from '../groups';
+import {groupPublicationRole, getAccountPreferences, selectNewArtifactDestination} from '../groups';
 import {DeploymentError,getDeploymentDefaultDestination} from '../deployment';
 import { getDb, type Queryable } from '../platform';
 import {DatasetError} from '../datasets';
@@ -43,12 +43,12 @@ export async function newArtifactDestination(actor:AccessActor,explicit?:Artifac
   const destination=explicit??{type:'group' as const,id:actor.principalGroup.id};
   const parent=parentId?(await db.query<ArtifactRow>('SELECT * FROM artifacts WHERE id=$1 AND deleted_at IS NULL',[parentId])).rows[0]:undefined;
   if(parentId&&(!parent||parent.format!=='folder'||parent.group_id!==destination.id))throw new ArtifactParentRefusal();
-  if(!canCreate(await actorGroupRole(actor,destination.id,db),false))throw new DatasetError('Publication is unavailable for this group destination',403);
+  if(!canCreate(await groupPublicationRole(actor,destination.id,db),false))throw new DatasetError('Publication is unavailable for this group destination',403);
   return destination;
  }
  const parent=parentId?(await db.query<ArtifactRow>('SELECT * FROM artifacts WHERE id=$1 AND deleted_at IS NULL',[parentId])).rows[0]:undefined;
  if(parentId&&(!parent||parent.format!=='folder'))throw new ArtifactParentRefusal();
- if(parent&&(parent.group_id?!canCreate(await actorGroupRole(actor,parent.group_id),memberPage):(parent.user_id?parent.user_id!==actor.userId:parent.token_id!==actor.tokenId)))throw new ArtifactParentRefusal();
+ if(parent&&(parent.group_id?!canCreate(await groupPublicationRole(actor,parent.group_id,db),memberPage):(parent.user_id?parent.user_id!==actor.userId:parent.token_id!==actor.tokenId)))throw new ArtifactParentRefusal();
  const preference=actor.userId?(await getAccountPreferences(actor.userId)).default_destination:undefined;
  let deployment_default:ArtifactDestination|undefined;
  if(!explicit&&!parent&&(!preference||preference.type==='inherit')){
@@ -58,7 +58,7 @@ export async function newArtifactDestination(actor:AccessActor,explicit?:Artifac
  let destination:ArtifactDestination;
  try{destination=selectNewArtifactDestination({explicit,parent:parent?destinationOf(parent):undefined,preference,deployment_default});}
  catch{throw new DatasetError('Destination conflicts with parent owner',400);}
- if(destination.type==='group'&&!canCreate(await actorGroupRole(actor,destination.id),memberPage))throw new DatasetError('Publication is unavailable for this group destination',403);
+ if(destination.type==='group'&&!canCreate(await groupPublicationRole(actor,destination.id,db),memberPage))throw new DatasetError('Publication is unavailable for this group destination',403);
  return destination;
 }
 export async function assertDestination(tx:Queryable,actor:AccessActor,destination:ArtifactDestination,memberPage=false):Promise<boolean>{
@@ -66,7 +66,7 @@ export async function assertDestination(tx:Queryable,actor:AccessActor,destinati
  if(destination.type==='group'){
   // Read at decision time, unlocked: a membership revoked after this commit refuses the next request
   // (a deleted group's pages grant nobody anything).
-  const role=await actorGroupRole(actor,destination.id,tx);
+  const role=await groupPublicationRole(actor,destination.id,tx);
   if(!canCreate(role,!actor.principalGroup&&memberPage))throw new DatasetError('Publication is unavailable for this group destination',403);
   return role==='member';
  }

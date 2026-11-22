@@ -40,6 +40,20 @@ export async function actorGroupRole(actor:{userId:string|null;principalGroup?:{
  if(actor.principalGroup)return actor.principalGroup.id===groupId&&await getGroupById(groupId,query)?actor.principalGroup.role:null;
  return getGroupRole(actor.userId,groupId,query);
 }
+const companyRootSql=()=>deploymentConfig().mode==='company'
+ ? `g.parent_id IS NULL AND g.id IN (${groupReachSql("(SELECT default_group_id FROM deployment_state WHERE id='company' AND setup_complete)")})`
+ : 'false';
+const canPublishGroupPages=(role:GroupRole|null,companyRoot:boolean)=>role==='admin'||(role==='member'&&!companyRoot);
+
+/** Resolve the publication role and root classification in one read at the write decision. */
+export async function groupPublicationRole(actor:Parameters<typeof actorGroupRole>[0],groupId:string,query:ContractQueryable):Promise<GroupRole|'editor'|null>{
+ if(actor.principalGroup||deploymentConfig().mode!=='company')return actorGroupRole(actor,groupId,query);
+ if(!actor.userId)return null;
+ const group=(await query.query<{role:GroupRole|null;company_root:boolean}>(`
+  SELECT ${effectiveRoleSql('$2')} AS role, (${companyRootSql()}) AS company_root
+  FROM groups g WHERE g.id=$1 AND g.deleted_at IS NULL`,[groupId,actor.userId])).rows[0];
+ return group&&canPublishGroupPages(group.role,group.company_root)?group.role:null;
+}
 /** The ancestor the reader administers live `groupId` through when they hold no direct `admin` row on it (an inherited admin), or null. */
 async function inheritedAdminVia(userId:string,groupId:string,query:ContractQueryable):Promise<{id:string;handle:string;name:string}|null>{
  // `via_group_id` is the nearest group with a direct admin row: the group itself for a direct admin.
@@ -77,11 +91,8 @@ const SUBGROUP_AUDIENCE_SQL=`SELECT * FROM (SELECT DISTINCT ON (m.user_id) m.use
 /** Both directory entry points resolve the same effective role and the company's root. A configured
  * default may still be below the root while an installation is moving its existing groups. */
 async function directoryGroup(db:ContractQueryable,userId:string,id:string,handle:string|null=null){
- const root=deploymentConfig().mode==='company'
-  ? `g.parent_id IS NULL AND g.id IN (${groupReachSql("(SELECT default_group_id FROM deployment_state WHERE id='company')")})`
-  : 'false';
  return (await db.query<GroupRecord & {role:GroupRole|null;company_root:boolean}>(`
-  SELECT g.*, ${effectiveRoleSql('$2')} AS role, (${root}) AS company_root
+  SELECT g.*, ${effectiveRoleSql('$2')} AS role, (${companyRootSql()}) AS company_root
   FROM groups g WHERE g.deleted_at IS NULL AND (g.id=$1 OR g.handle=$3)
   ORDER BY (g.id=$1) DESC LIMIT 1`,[id,userId,handle])).rows[0];
 }
@@ -116,7 +127,7 @@ export async function getGroupDetail(userId:string|null,idOrHandle:string):Promi
  const parent=group.parent_id?(await db.query<GroupRelative>(RELATIVE_SQL+'g.id=$1',[group.parent_id,userId])).rows[0]??null:null;
  const subgroups=!admin?[]:(await db.query<GroupRelative>(RELATIVE_SQL+'g.parent_id=$1 ORDER BY g.name,g.id',[group.id,userId])).rows;
  const subgroup_audience=subgroups.length?(await db.query<{user_id:string;username:string|null;name:string|null;via_id:string;via_handle:string;via_name:string}>(SUBGROUP_AUDIENCE_SQL,[group.id])).rows.map(({via_id,via_handle,via_name,...person}):GroupAudienceMember=>({...person,via:{id:via_id,handle:via_handle,name:via_name}})):[];
- return {group:{...summary(group,role),company_root:group.company_root,host_provisioned:group.trusted_issuer!==null,...(admin?{tenancy_id:group.tenancy_id}:{})},members,linked_groups,can_publish_pages:role==='admin'||role==='member',...(invitations?{invitations}:{}),parent,subgroups,subgroup_audience,...(admin_via?{admin_via}:{})};
+ return {group:{...summary(group,role),company_root:group.company_root,host_provisioned:group.trusted_issuer!==null,...(admin?{tenancy_id:group.tenancy_id}:{})},members,linked_groups,can_publish_pages:canPublishGroupPages(role,group.company_root),...(invitations?{invitations}:{}),parent,subgroups,subgroup_audience,...(admin_via?{admin_via}:{})};
 }
 export async function searchGroupMembers(userId:string,groupId:string,query:string):Promise<GroupMember[]>{
  const db=await getDb(),group=await directoryGroup(db,userId,groupId);

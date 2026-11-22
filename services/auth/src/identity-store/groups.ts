@@ -26,7 +26,7 @@ import {normalizeCreateGroup, type GroupRole, type GroupSummary} from '@artifact
 import {IDENTITY_SCHEMA} from '@artifactbin/contracts/identity-service';
 import {plainIdentifier} from '@artifactbin/utils/sql-identifier';
 import {companyGroupState} from './company-group';
-import {bumpHierarchy,chainOf,effectiveAdminVia,insertGroup,memberRole,isTestAccount,liveGroup,lockGroups,recordChange,requireAdmin,type GroupRow} from './group-access';
+import {bumpHierarchy,chainOf,effectiveAdminVia,insertGroup,memberRole,isTestAccount,liveGroup,lockGroups,recordChange,requireAdmin,requireManualMembership,type GroupRow} from './group-access';
 import {groupMemberMethods} from './group-members';
 import {internalId,type IdentityTables} from './tables';
 
@@ -185,6 +185,7 @@ export function groupMethods(db: TransactionalQueryable, t: IdentityTables, opti
         await bumpHierarchy(tx, t);
         await requireAdmin(tx, t, actorId, id);
         if (handle !== (await liveGroup(tx, t, id))!.handle) throw new IdentityError('handle_mismatch', 409);
+        await requireManualMembership(tx, t, id);
         if ((await tx.query(`SELECT 1 FROM ${t.groups} WHERE parent_id=$1 AND deleted_at IS NULL LIMIT 1`, [id])).rows.length) throw new IdentityError('group_has_children', 409);
         const members = (await tx.query<{user_id: string}>(`SELECT user_id FROM ${t.group_members} WHERE group_id=$1`, [id])).rows.map(row => row.user_id);
         const changes: GroupChange[] = [];
