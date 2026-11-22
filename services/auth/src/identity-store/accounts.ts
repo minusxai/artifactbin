@@ -69,20 +69,34 @@ const RUN_SIGN_INS_PER_SERVICE = 50;
  * the cap (RUN_SIGN_INS_PER_SERVICE live ones per person and service; past it `rate_limited`) commit together.
  * The route has already verified the exchanged token, the account and the parent; this writes nothing else.
  */
-export async function mintRunSignIn(t: IdentityTables, q: Queryable, authSchema: string, input: {userId: string; service: string; parent: {kind: 'token' | 'session'; id: string}; expiresInMs: number; audience: string; scope: string}): Promise<MintedIdentityToken> {
+export async function mintRunSignIn(t: IdentityTables, q: Queryable, authSchema: string, readSchema: string, input: {groupId: string | null; userId: string; service: string; parent: {kind: 'token' | 'session'; id: string}; expiresInMs: number; audience: string; scope: string}): Promise<MintedIdentityToken> {
   const ms = input.expiresInMs;
   if (!Number.isFinite(ms) || ms < MIN_TOKEN_TTL_MS || ms > MAX_TOKEN_TTL_MS) throw new IdentityError('invalid_expiry', 400);
   const id = tokenId(), token = TOKEN_PREFIX + crypto.randomBytes(32).toString('base64url');
   const expiresAt = new Date(Date.now() + ms).toISOString(), name = `run-${input.service}`;
-  const minted = await q.query<{id: string}>(`WITH capped AS (
-      SELECT 1 FROM (SELECT count(*) AS live FROM ${t.tokens} WHERE user_id=$4 AND issued_by=$8 AND deleted_at IS NULL AND expires_at>now()) held WHERE held.live < $11),
-    token AS (INSERT INTO ${t.tokens} (id, name, token_hash, user_id, expires_at, audience, scope, issued_by) SELECT $1, $2, $3, $4, $5, $6, $7, $8 FROM capped RETURNING id),
+  // Personal group runs keep the person in issued_by (the audit identity) and the issuing service on the credential.
+  const eligible = personalGroupAuthority(t, readSchema, '$4::text', '$12::text', "'member'");
+  const minted = await q.query<{id: string | null}>(`WITH eligible AS (SELECT 1 WHERE $12::text IS NULL OR ${eligible}),
+    capped AS (SELECT 1 FROM eligible WHERE (SELECT count(*) FROM ${t.tokens} held
+      WHERE held.deleted_at IS NULL AND held.expires_at>now() AND ((held.user_id=$4 AND held.issued_by=$8)
+        OR (held.group_id IS NOT NULL AND held.grant_id IS NULL AND held.issued_by=$4 AND EXISTS (
+          SELECT 1 FROM ${authSchema}.credentials run WHERE run.kind='run_sign_in' AND run.credential_hash=held.id AND run.payload->>'service'=$8)))) < $11),
+    token AS (INSERT INTO ${t.tokens} (id, name, token_hash, user_id, expires_at, audience, scope, issued_by, group_id, group_role)
+      SELECT $1, $2, $3, CASE WHEN $12::text IS NULL THEN $4::text END, $5, $6, $7, CASE WHEN $12::text IS NULL THEN $8::text ELSE $4::text END,
+        $12, CASE WHEN $12::text IS NOT NULL THEN 'member' END FROM capped RETURNING id),
     credential AS (INSERT INTO ${authSchema}.credentials (kind, credential_hash, subject_id, payload, expires_at)
       SELECT 'run_sign_in', token.id, $4, jsonb_build_object('access_token_id', token.id, 'parent_kind', $9::text, 'parent_id', $10::text, 'service', $8::text), $5 FROM token RETURNING credential_hash)
-    SELECT credential_hash AS id FROM credential`,
-    [id, name, sha256(token), input.userId, expiresAt, input.audience, input.scope, input.service, input.parent.kind, input.parent.id, RUN_SIGN_INS_PER_SERVICE]);
-  if (!minted.rows.length) throw new IdentityError('rate_limited', 429, 3600);
+    SELECT (SELECT credential_hash FROM credential) AS id FROM eligible`,
+    [id, name, sha256(token), input.userId, expiresAt, input.audience, input.scope, input.service, input.parent.kind, input.parent.id, RUN_SIGN_INS_PER_SERVICE, input.groupId]);
+  if (!minted.rows.length) throw new IdentityError('group_level_not_held', 403);
+  if (!minted.rows[0]!.id) throw new IdentityError('rate_limited', 429, 3600);
   return {id, name, token, expiresAt};
+}
+
+function personalGroupAuthority(t: IdentityTables, readSchema: string, user: string, group: string, role: string): string {
+  if (!/^[a-z_][a-z0-9_]*$/.test(readSchema)) throw new Error('identity: the read schema is not a plain identifier');
+  return `(EXISTS (SELECT 1 FROM ${readSchema}.users issuer WHERE issuer.id=${user} AND issuer.active AND issuer.kind='account' AND NOT issuer.test_account)
+    AND ${groupLevelHeldSql(t, user, group, role)})`;
 }
 
 /**
@@ -98,14 +112,11 @@ export async function mintGroupSignIn(t: IdentityTables, q: Queryable, readSchem
   const ms = input.expiresInMs;
   if (!Number.isFinite(ms) || ms < MIN_TOKEN_TTL_MS || ms > MAX_TOKEN_TTL_MS) throw new IdentityError('invalid_expiry', 400);
   if (input.role !== 'member' && input.role !== 'editor') throw new IdentityError('invalid_group_role', 400);
-  if (!/^[a-z_][a-z0-9_]*$/.test(readSchema)) throw new Error('identity: the read schema is not a plain identifier');
   const id = tokenId(), token = TOKEN_PREFIX + crypto.randomBytes(32).toString('base64url');
   const expiresAt = new Date(Date.now() + ms).toISOString(), name = `group-${input.role}`;
   const minted = await q.query<{id: string}>(`INSERT INTO ${t.tokens} (id, name, token_hash, user_id, expires_at, audience, scope, issued_by, group_id, group_role)
     SELECT $1, $2, $3, NULL, $4, $5, $6, $7::text, $8::text, $9::text
-     WHERE COALESCE((SELECT issuer.active AND issuer.kind = 'account' AND NOT issuer.test_account FROM ${readSchema}.users issuer WHERE issuer.id = $7::text), false)
-       AND EXISTS (SELECT 1 FROM ${t.groups} g WHERE g.id = $8::text AND g.deleted_at IS NULL)
-       AND ${groupLevelHeldSql(t, '$7::text', '$8::text', '$9::text')}
+     WHERE ${personalGroupAuthority(t, readSchema, '$7::text', '$8::text', '$9::text')}
     RETURNING id`, [id, name, sha256(token), expiresAt, input.audience, input.scope, input.issuedBy, input.groupId, input.role]);
   if (!minted.rows.length) throw new IdentityError('group_level_not_held', 403);
   return {id, name, token, expiresAt};

@@ -21,7 +21,10 @@
  * records the service (`tokens.issued_by`, the service's id; introspection answers it) and the exchanged token's parent
  * credential, and is live only while that parent is: signing out or revoking the parent ends it on the next request.
  * The person sees and revokes it with their other tokens. POST with SERVICE_AUTH_HEADER (the service's own
- * introspection secret) and `{"token": "<vwt_…>", "expires_in"?: <seconds>}`; anything else is refused, an ordinary
+ * introspection secret) and `{"token": "<vwt_…>", "expires_in"?: <seconds>}`; optionally include both `group_id` and `group_role: "member"` to sign
+ * in as that group under the person's current authority. That bearer has the same RunSignIn response, the original
+ * parent and service recorded on its run credential, and the person in `issued_by` for audit. It needs no standing
+ * grant and stops working when the person loses the required group level. Anything else is refused, an ordinary
  * bearer in place of the exchanged token included. Without the opt-in the path answers as an unknown route.
  *
  * Writing the skill's sign-in file from the answer (`RunSignIn`), in the sandbox's `ARTIFACTBIN_HOME` (default

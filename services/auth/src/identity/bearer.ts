@@ -17,14 +17,14 @@
  * The lateral form keeps the planner on `idx_auth_credentials_access` (an EXISTS inside an OR lets it hash
  * every live family); `kind` is a literal so the partial index matches.
  *
- * A RUN SIGN-IN (a token with `issued_by`, a configured service's id: contracts `RUN_SIGN_IN_PATH`) has no family. It
+ * A RUN SIGN-IN (contracts `RUN_SIGN_IN_PATH`) has no family. It
  * is live instead through its `run_sign_in` credential row (keyed by the token's id), and only while the parent
  * credential named there is: a live browser session of the same person, or a live token of theirs that is not itself a
- * run sign-in. A second lateral (`run`) reads it by primary key. Every other token has `issued_by` null and keeps the
- * rule above unchanged.
+ * run sign-in. A second lateral (`run`) reads it by primary key. Its subject is the personal token’s user_id or
+ * the group token’s authorizing person (issued_by).
  *
  * A GROUP'S SIGN-IN (`group_id` set, `user_id` NULL: contracts identity-service `GROUP_SIGN_IN_RULE`) is decided
- * before either: its row, an audience and, for a person's (an OAuth grant's token), the family fence here; a service's
+ * by its row, an audience and, for a person's, a live OAuth family or Member run parent; a service's
  * (`grant_id`: contracts service-audiences `GROUP_SIGN_IN_PATH`) has no family and no refresh. Then its
  * authorisation, which needs the groups, the tree and the authorising person's `active`: a second statement, only for
  * such a row, reads its `live` in the identity read view (`readSchema`), the one spelling of that rule. A row with
@@ -88,19 +88,19 @@ export function bearerLiveSql(o: { auth: string; tokens: string; sessions?: bool
   const group = `t.user_id IS NULL AND COALESCE(t.audience,'')<>''`;
   // A run sign-in's credential row, live while its parent is: the person's session, or a token of theirs that is not
   // itself a run sign-in, by that token's own rule (row and family).
-  const run = `FROM ${auth}.credentials run WHERE run.kind='run_sign_in' AND run.credential_hash=t.id AND run.deleted_at IS NULL AND run.subject_id=t.user_id
-      AND ((run.payload->>'parent_kind'='session' AND ${sessions ? `EXISTS (SELECT 1 FROM ${auth}.session ps WHERE ps.id=run.payload->>'parent_id' AND ps."userId"=t.user_id AND ps."expiresAt">now())` : 'FALSE'})
-        OR (run.payload->>'parent_kind'='token' AND EXISTS (SELECT 1 FROM ${tokens} p WHERE p.id=run.payload->>'parent_id' AND p.user_id=t.user_id AND p.issued_by IS NULL AND ${rowLiveOf('p')}
+  const run = `FROM ${auth}.credentials run WHERE run.kind='run_sign_in' AND run.credential_hash=t.id AND run.deleted_at IS NULL AND (t.group_id IS NULL OR t.group_role='member') AND run.subject_id=CASE WHEN t.group_id IS NULL THEN t.user_id ELSE t.issued_by END
+      AND ((run.payload->>'parent_kind'='session' AND ${sessions ? `EXISTS (SELECT 1 FROM ${auth}.session ps WHERE ps.id=run.payload->>'parent_id' AND ps."userId"=run.subject_id AND ps."expiresAt">now())` : 'FALSE'})
+        OR (run.payload->>'parent_kind'='token' AND EXISTS (SELECT 1 FROM ${tokens} p WHERE p.id=run.payload->>'parent_id' AND p.user_id=run.subject_id AND p.issued_by IS NULL AND ${rowLiveOf('p')}
           AND (COALESCE(p.audience,'')='' OR EXISTS (SELECT 1 ${family('p', 'pmember', 'pfamily', 'psibling', 'paccess')})))))`;
   return {
     fence: `LEFT JOIN LATERAL (SELECT 1 AS live ${family('t')} LIMIT 1) fence ON true
-    LEFT JOIN LATERAL (SELECT 1 AS live ${run} LIMIT 1) run ON t.issued_by IS NOT NULL AND t.group_id IS NULL`,
-    // A group's sign-in first (never a person's, never unowned): no person on the row, no approval, an audience and a live family.
+    LEFT JOIN LATERAL (SELECT 1 AS live ${run} LIMIT 1) run ON t.issued_by IS NOT NULL AND t.grant_id IS NULL`,
+    // A group's authority comes from an approval, a family, or a run bound to the original personal parent.
     live: `${rowLive}
-      AND (CASE WHEN t.group_id IS NOT NULL THEN (${group} AND (t.grant_id IS NOT NULL OR fence.live IS NOT NULL))
+      AND (CASE WHEN t.group_id IS NOT NULL THEN (${group} AND (t.grant_id IS NOT NULL OR fence.live IS NOT NULL OR run.live IS NOT NULL))
         WHEN t.issued_by IS NULL THEN (COALESCE(t.audience,'')='' OR fence.live IS NOT NULL) ELSE run.live IS NOT NULL END)`,
     // The same predicate with the fences as subqueries, for a reader whose FROM must stay the one table (a view).
-    exists: `(${rowLive} AND (CASE WHEN t.group_id IS NOT NULL THEN (${group} AND (t.grant_id IS NOT NULL OR EXISTS (SELECT 1 ${family('t')})))
+    exists: `(${rowLive} AND (CASE WHEN t.group_id IS NOT NULL THEN (${group} AND (t.grant_id IS NOT NULL OR EXISTS (SELECT 1 ${family('t')}) OR EXISTS (SELECT 1 ${run})))
       WHEN t.issued_by IS NULL THEN (COALESCE(t.audience,'')='' OR EXISTS (SELECT 1 ${family('t')})) ELSE EXISTS (SELECT 1 ${run}) END))`,
   };
 }

@@ -93,7 +93,9 @@ export function mountTokenAuthority(app:Hono<AuthEnv>,o:AuthOptions,{secret,audi
   const service=serviceOf(audiences,c.req.header(SERVICE_AUTH_HEADER));
   if(!service?.runSignIns)return next();
   const input=await admitService(c,()=>true);if(input instanceof Response)return input;
-  if(Object.keys(input).some(key=>key!=='token'&&key!=='expires_in')||typeof input.token!=='string'||!input.token)return answer({error:'bad_request'},400);
+  if(Object.keys(input).some(key=>!['token','expires_in','group_id','group_role'].includes(key))||typeof input.token!=='string'||!input.token)return answer({error:'bad_request'},400);
+  const groupId=input.group_id;
+  if((groupId!==undefined||input.group_role!==undefined)&&(typeof groupId!=='string'||!/^grp_[a-z0-9]+$/.test(groupId)||input.group_role!=='member'))return answer({error:'bad_request'},400);
   const lifetime=runLifetime(input.expires_in);
   if(lifetime===null)return answer({error:'invalid_expiry'},400);
   const unauthorized=answer({error:'unauthorized'},401);
@@ -106,7 +108,7 @@ export function mountTokenAuthority(app:Hono<AuthEnv>,o:AuthOptions,{secret,audi
    if(claims.par.kind==='token'&&(await o.identityDb!.query<{issued_by:string|null}>(`SELECT issued_by FROM ${readSchema}.tokens WHERE id=$1`,[claims.par.id])).rows[0]?.issued_by)
     return answer({error:'parent_not_eligible'},403);
    const server=baseUrlOf(c.req.raw,o.trustedHops??0,readEnv(o.env,'APP__PUBLIC_BASE_URL'));
-   const minted=await mintRunSignIn(identityTables(authSchema),o.identityDb!,authSchema,{userId:claims.sub,service:service.id,parent:claims.par,expiresInMs:lifetime,audience:`${server}${API_RESOURCE_PATH}`,scope:ARTIFACT_SCOPE});
+   const minted=await mintRunSignIn(identityTables(authSchema),o.identityDb!,authSchema,readSchema,{groupId:typeof groupId==='string'?groupId:null,userId:claims.sub,service:service.id,parent:claims.par,expiresInMs:lifetime,audience:`${server}${API_RESOURCE_PATH}`,scope:ARTIFACT_SCOPE});
    void say(o.events,{kind:'user',id:claims.sub},'minted',{kind:'token',id:minted.id},{name:minted.name});
    const expiresAt=minted.expiresAt!;
    return answer({access_token:minted.token,token_type:'Bearer',token_id:minted.id,expires_at:expiresAt,expires_at_ms:Date.parse(expiresAt),server} satisfies RunSignIn);

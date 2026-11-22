@@ -281,3 +281,38 @@ it('the skill\'s own helper exchanges a group\'s sign-in as it does a person\'s:
  // A service that takes no groups refuses the skill by name.
  await expect(serviceToken(group,'ledger')).rejects.toMatchObject({code:GROUP_PRINCIPALS_NOT_ACCEPTED});
 });
+
+it('narrows a personal service token to a Member run sign-in under its original parent',async()=>{
+ const host=await composed(),{ada,eve,team,squad}=await tree(host);
+ const token=await host.serviceTokenOf(eve.grant.access_token);
+ const run=(body:Record<string,unknown>,secret=SECRETS.warehouse)=>host.send('POST',RUN_SIGN_IN_PATH,{[SERVICE_AUTH_HEADER]:secret},{token,...body});
+ const scope={group_id:team.id,group_role:'member'};
+ for(const bad of [{group_id:team.id},{group_role:'member'},{...scope,group_id:null},{...scope,group_role:'editor'},{...scope,group_role:'admin'},{...scope,grant_id:'sgg_example'}])
+  expect((await run(bad)).status).toBe(400);
+ expect((await run({...scope,group_id:squad.id})).status).toBe(403);
+ expect((await run({...scope,token:await host.serviceTokenOf(eve.grant.access_token,'crm')})).status).toBe(401);
+ const standing=await host.serviceSignIn(ada,team.id,'member');
+ expect((await run({...scope,token:await host.serviceTokenOf(standing.token)})).status).toBe(401);
+ const issue=async()=>{
+  const result=await run({...scope,expires_in:3600});
+  expect(result.status).toBe(200);
+  const {access_token,token_id,expires_at,expires_at_ms}=result.body!;
+  expect(result.body).toMatchObject({token_type:'Bearer',server:origin,expires_at_ms:Date.parse(String(expires_at))});
+  expect(Math.abs(Number(expires_at_ms)-Date.now()-3600000)).toBeLessThan(5000);
+  expect(await host.introspect(String(access_token))).toMatchObject({active:true,principal_kind:'group',...scope,user_id:eve.userId,issued_by:eve.userId});
+  expect(await sql('SELECT grant_id FROM auth.tokens WHERE id=$1',[token_id])).toEqual([{grant_id:null}]);
+  const exchanged=await host.serviceTokenOf(String(access_token),'crm');
+  expect(await host.introspect(exchanged,SECRETS.crm)).toEqual(groupAnswer(team.id,'member',eve.userId,String(token_id),CRM,eve.userId));
+  return [String(access_token),exchanged];
+ };
+ const first=await issue();
+ await removeGroupMember(ada.userId,team.id,eve.userId);
+ for(const bearer of first)expect(await host.introspect(bearer)).toEqual({active:false});
+ expect((await run(scope)).status).toBe(403);
+ await admitGroupMember(ada.userId,team.id,eve.userId,'member');
+ const second=await issue();
+ expect((await host.send('DELETE',`/api/my/tokens/${eve.grant.id}`,{cookie:eve.cookie})).status).toBe(204);
+ for(const bearer of second)expect(await host.introspect(bearer)).toEqual({active:false});
+ expect((await run(scope)).status).toBe(401);
+ expect(await host.introspect(standing.token)).toMatchObject({active:true,user_id:null,issued_by:'warehouse'});
+});
