@@ -128,6 +128,36 @@ describe('trusted-issuer sign-in', () => {
     }
     expect(await rows("SELECT id FROM auth.groups WHERE handle='path_denied'")).toEqual([]);
   });
+  it('transitions only the bound handle to one email, with atomic conflicts and safe retries', async () => {
+    const target = await app({TRUSTED_SIGNIN__ISSUERS:twoIssuers()});
+    const group = 'convert_group', handle = 'convert_reader', email = 'converted@example.com';
+    const claims = {sub:email,group,previous_handle:handle,name:'Host suggestion'};
+    const send = (fields:Record<string,unknown>, key = keys.privateKey) => post(target,{token:token(fields,{key})});
+    const session = async (r:Response) => {
+      expect(r.status).toBe(303);
+      return (await auth.sessions.resolve(new Request(BASE,{headers:{cookie:cookieOf(r)}})))!;
+    };
+    const original = await session(await send({sub:handle,group,name:'Personal name'}));
+    await pg.query("INSERT INTO auth.group_members(group_id,user_id,role) VALUES('grp_plain',$1,'editor')",[original.userId]);
+    const memberships = () => rows('SELECT group_id,role FROM auth.group_members WHERE user_id=$1 ORDER BY group_id',[original.userId]);
+    const before = await memberships();
+    await refused(await send({...claims,iss:'issuer-b'},otherKeys.privateKey),403,'subject_conflict');
+    await refused(await send({...claims,sub:'taken@example.com'}),403,'subject_conflict');
+    await refused(await send({...claims,previous_handle:'unknown_handle'}),403,'subject_conflict');
+    await refused(await send({...claims,group:'plain_team'}),403,'group_conflict');
+    expect(await rows('SELECT email FROM auth.users WHERE id=$1',[original.userId])).toEqual([{email:original.email}]);
+    const once = token(claims);
+    const migrated = await Promise.all([post(target,{token:once}),send(claims)]);
+    for (const r of migrated) expect(await session(r)).toMatchObject({userId:original.userId,email});
+    await refused(await post(await app(),{token:once}),401,'replayed_token');
+    await refused(await send({...claims,sub:'replacement@example.com'}),403,'subject_conflict');
+    expect(await session(await send({sub:handle,group,name:'Stale host name'}))).toMatchObject({userId:original.userId,email});
+    expect(await session(await send({sub:email,group}))).toMatchObject({userId:original.userId,email});
+    for (const table of ['auth.users','auth."user"']) {
+      expect(await rows(`SELECT id,name FROM ${table} WHERE email=$1`,[email])).toEqual([{id:original.userId,name:'Personal name'}]);
+    }
+    expect(await memberships()).toEqual(before);
+  });
   it('shares a person, group and replay record across two issuer sites with their own keys', async () => {
     const second = 'https://second.example';
     const [first] = JSON.parse(issuers());

@@ -102,6 +102,13 @@ ALTER TABLE auth.account_preferences OWNER TO artifactbin_auth;
 COMMIT;
 ```
 
+**Moving an issuer-owned handle to email.** Set `sub` to the verified email and include the original
+handle in the signed string claim `previous_handle`. Only the issuer that bound that handle can move
+its synthetic address to an unclaimed email. The account ID, handle and personal name are preserved,
+and ordinary membership reconciliation still applies. Use a fresh token and unique `jti` to retry
+the same address. A different address or an unknown binding refuses the entire sign-in. After success,
+email sign-ins can omit `previous_handle`.
+
 **Signed group placement.** An issuer with a configured `parentGroup` may include
 `"parent_groups": ["division", "team"]` in its signed sign-in token. List existing live group handles
 from parent to direct child. The first must be the configured group or a descendant. A new token group

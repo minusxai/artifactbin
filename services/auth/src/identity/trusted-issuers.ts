@@ -74,7 +74,7 @@ function isOrigin(value: string): boolean {
   try { const url = new URL(value); return (url.protocol === 'https:' || url.protocol === 'http:') && url.origin === value; } catch { return false; }
 }
 
-export interface TrustedClaims { issuer: TrustedIssuer; subject: string; group: string; tenancyId: string; name?: string; groupName?: string; parentGroups?: string[]; jti: string; exp: number }
+export interface TrustedClaims { issuer: TrustedIssuer; subject: string; group: string; tenancyId: string; name?: string; groupName?: string; parentGroups?: string[]; previousHandle?: string; jti: string; exp: number }
 export type TrustedTokenRefusal = 'invalid_token' | 'unknown_issuer' | 'forbidden_origin' | 'replayed_token';
 
 const json = (part: string): Record<string, unknown> | null => {
@@ -110,6 +110,9 @@ export function createTrustedTokenVerifier(issuers: ReadonlyMap<string, TrustedI
       if (!audienceOk || typeof exp !== 'number' || typeof iat !== 'number' || !Number.isFinite(exp) || !Number.isFinite(iat)
         || exp <= seconds || iat > seconds + CLOCK_SKEW_S || exp <= iat || exp - iat > MAX_LIFETIME_S
         || !plain(jti, 200) || !plain(sub, 254) || !plain(group, 64) || !plain(tenancyId, 200)) return {ok: false, refusal: 'invalid_token'};
+      const previousHandle = payload.previous_handle;
+      if (previousHandle !== undefined && (typeof previousHandle !== 'string' || !isValidHandle(previousHandle) || !sub.includes('@')))
+        return {ok:false, refusal:'invalid_token'};
       const parentGroups = payload.parent_groups;
       if (parentGroups !== undefined && (!Array.isArray(parentGroups) || !parentGroups.length ||
         parentGroups.some(handle => typeof handle !== 'string' || !isValidHandle(handle)) ||
@@ -118,7 +121,7 @@ export function createTrustedTokenVerifier(issuers: ReadonlyMap<string, TrustedI
       const key = `${issuer.issuer}\u0000${jti}`;
       if (used.has(key)) return {ok: false, refusal: 'replayed_token'};
       used.set(key, exp);
-      return {ok: true, claims: {issuer, subject: sub, group, parentGroups, tenancyId, jti, exp,
+      return {ok: true, claims: {issuer, subject: sub, group, parentGroups, previousHandle, tenancyId, jti, exp,
         name: displayName(payload.name), groupName: displayName(payload.group_name)}};
     },
   };
