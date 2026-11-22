@@ -218,11 +218,11 @@ function mountTrustedSignIn(a:AuthApp,o:AuthOptions):void {
     const form=new URLSearchParams(await c.req.text());
     const checked=verifier.verify(form.get('token')??'',c.req.header('origin'));
     if(!checked.ok)return refuse(checked.refusal,checked.refusal==='forbidden_origin'?403:401);
-    const {issuer,subject,group,tenancyId,name,groupName}=checked.claims;
-    const result=await trustedSignIn(o.identityTransactions,{issuer:issuer.issuer,subject,group,tenancyId,name,groupName,joinCompanyRoot,
+    const {issuer,subject,group,tenancyId,name,groupName,jti,exp}=checked.claims;
+    const result=await trustedSignIn(o.identityTransactions,{issuer:issuer.issuer,jti,exp,subject,group,tenancyId,name,groupName,joinCompanyRoot,
       ...(issuer.parentGroup?{parentGroup:issuer.parentGroup}:{}),email:trustedEmailOf(issuer.issuer,subject)},schema,o.appSchema??readEnv(o.env,'APP__SCHEMA'),
       o.admitIdentity && ((person,tx)=>o.admitIdentity!({userId:person.userId,email:person.email,emailVerified:true,trustedIssuer:issuer.issuer},tx)));
-    if(!result.ok)return refuse(result.refusal,result.refusal==='parent_group_missing'?503:result.refusal==='invalid_claims'?401:403);
+    if(!result.ok)return refuse(result.refusal,result.refusal==='parent_group_missing'?503:(result.refusal==='invalid_claims'||result.refusal==='replayed_token')?401:403);
     const cookies=await o.sessions.start(result.userId);
     const headers=new Headers({location:withGroup(trustedCallbackPath(form.get('callbackUrl')),result.groupId),'cache-control':'no-store'});
     for(const cookie of cookies)headers.append('set-cookie',cookie);

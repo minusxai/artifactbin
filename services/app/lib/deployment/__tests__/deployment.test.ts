@@ -1,4 +1,4 @@
-import {generateKeyPairSync} from 'node:crypto';
+import {generateKeyPairSync,randomUUID} from 'node:crypto';
 import {describe,it,expect} from 'vitest';
 import {trustedSignIn} from '@artifactbin/auth/identity-store/trusted-sign-in';
 import {localAuthentication} from '@/server/local-authentication';
@@ -82,7 +82,7 @@ describe('company admission',()=>{
    issuer:'host',audience:'app',origins:['https://issuer.example'],publicJwk:generateKeyPairSync('ed25519').publicKey.export({format:'jwk'}),
   }])};
   const sign=async(subject:string,joinCompanyRoot=false)=>{
-   const result=await trustedSignIn(db,{issuer:'host',joinCompanyRoot,subject,email:subject+'@host.invalid',group:'host_team',parentGroup:'other_root',tenancyId:'tenant'},
+   const result=await trustedSignIn(db,{issuer:'host',jti:randomUUID(),exp:Date.now()/1000+120,joinCompanyRoot,subject,email:subject+'@host.invalid',group:'host_team',parentGroup:'other_root',tenancyId:'tenant'},
     'auth',undefined,(person,tx)=>admitDeploymentIdentity({...person,emailVerified:true,trustedIssuer:'host'},tx));
    if(!result.ok)throw new Error(result.refusal);
    return result;

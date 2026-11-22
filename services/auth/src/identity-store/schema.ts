@@ -196,8 +196,16 @@ const GROUP_SIGN_IN_GRANTS:Table={name:'group_sign_in_grants',columns:[
  {name:'service_origin',type:'TEXT'},
 ],primaryKey:['id'],indexes:[{name:'idx_group_sign_in_grants_group',columns:['group_id'],where:'deleted_at IS NULL'}]};
 
+// Immutable sign-in facts. The app reads the view to project them into its audit with its own role.
+const HOST_TENANCY_CHANGES: Table = {name:'host_tenancy_changes', columns:[
+  {name:'seq',type:'BIGSERIAL',notNull:true}, {name:'group_id',type:'TEXT',notNull:true},
+  {name:'issuer',type:'TEXT',notNull:true}, {name:'person_id',type:'TEXT',notNull:true},
+  {name:'previous_tenancy_id',type:'TEXT'}, {name:'tenancy_id',type:'TEXT',notNull:true},
+  {name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'clock_timestamp()'},
+],primaryKey:['seq']};
+
 /** @public Read by scripts/render-schema.mjs, which finds Table data among this module's exports. */
-export const IDENTITY_TABLES: Table[] = [USERS, ACCOUNT_PREFERENCES, TOKENS, HANDLE_RESERVATIONS, GROUPS, GROUP_HIERARCHY, GROUP_MEMBERS, GROUP_INVITATIONS, GROUP_MAIL_OUTBOX, GROUP_SIGN_IN_GRANTS];
+export const IDENTITY_TABLES: Table[] = [USERS, ACCOUNT_PREFERENCES, TOKENS, HANDLE_RESERVATIONS, GROUPS, GROUP_HIERARCHY, GROUP_MEMBERS, GROUP_INVITATIONS, GROUP_MAIL_OUTBOX, GROUP_SIGN_IN_GRANTS, HOST_TENANCY_CHANGES];
 
 /**
  * THE SECRET COLUMNS, the one list: no view exposes them, so only the identity module reads them. A credential's

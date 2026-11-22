@@ -118,6 +118,7 @@ export const IDENTITY_VIEWS = {
   group_hierarchy: ['id', 'revision', 'role_model_version'],
   group_members: ['group_id', 'user_id', 'role', 'created_at'],
   group_invitations: ['id', 'group_id', 'email', 'role', 'invited_by', 'created_at'],
+  host_tenancy_changes: ['seq', 'group_id', 'issuer', 'person_id', 'previous_tenancy_id', 'tenancy_id', 'created_at'],
   group_mail_outbox: ['id', 'email', 'recipient_id', 'group_id', 'group_name', 'handle', 'action', 'sender_id', 'lease_until', 'claim_token', 'attempts', 'next_attempt_at', 'quarantined_at', 'sent_at', 'created_at'],
   group_admins: ['group_id', 'user_id', 'via_group_id'],
   sessions: ['id', 'expiresAt', 'createdAt', 'updatedAt', 'ipAddress', 'userAgent', 'userId', 'live'],

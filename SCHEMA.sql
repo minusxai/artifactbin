@@ -81,12 +81,13 @@ ALTER TABLE app.group_quotas ADD COLUMN IF NOT EXISTS used INTEGER NOT NULL;
 CREATE TABLE IF NOT EXISTS app.group_audit (
   id TEXT NOT NULL,
   group_id TEXT NOT NULL,
-  actor_user_id TEXT NOT NULL,
+  actor_user_id TEXT,
   actor_token_id TEXT,
   client_harness TEXT,
   action TEXT NOT NULL,
   details JSONB NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  host_change_seq BIGINT,
   PRIMARY KEY (id)
 );
 
@@ -94,7 +95,7 @@ ALTER TABLE app.group_audit ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
 
 ALTER TABLE app.group_audit ADD COLUMN IF NOT EXISTS group_id TEXT NOT NULL;
 
-ALTER TABLE app.group_audit ADD COLUMN IF NOT EXISTS actor_user_id TEXT NOT NULL;
+ALTER TABLE app.group_audit ADD COLUMN IF NOT EXISTS actor_user_id TEXT;
 
 ALTER TABLE app.group_audit ADD COLUMN IF NOT EXISTS actor_token_id TEXT;
 
@@ -105,6 +106,12 @@ ALTER TABLE app.group_audit ADD COLUMN IF NOT EXISTS action TEXT NOT NULL;
 ALTER TABLE app.group_audit ADD COLUMN IF NOT EXISTS details JSONB NOT NULL;
 
 ALTER TABLE app.group_audit ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+ALTER TABLE app.group_audit ADD COLUMN IF NOT EXISTS host_change_seq BIGINT;
+
+ALTER TABLE app.group_audit ALTER COLUMN actor_user_id DROP NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_group_audit_host_change ON app.group_audit (host_change_seq) WHERE host_change_seq IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_group_audit_group ON app.group_audit (group_id, created_at);
 
@@ -2024,6 +2031,31 @@ ALTER TABLE auth.group_sign_in_grants ADD COLUMN IF NOT EXISTS deleted_at TIMEST
 ALTER TABLE auth.group_sign_in_grants ADD COLUMN IF NOT EXISTS service_origin TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_group_sign_in_grants_group ON auth.group_sign_in_grants (group_id) WHERE deleted_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS auth.host_tenancy_changes (
+  seq BIGSERIAL NOT NULL,
+  group_id TEXT NOT NULL,
+  issuer TEXT NOT NULL,
+  person_id TEXT NOT NULL,
+  previous_tenancy_id TEXT,
+  tenancy_id TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+  PRIMARY KEY (seq)
+);
+
+ALTER TABLE auth.host_tenancy_changes ADD COLUMN IF NOT EXISTS seq BIGSERIAL NOT NULL;
+
+ALTER TABLE auth.host_tenancy_changes ADD COLUMN IF NOT EXISTS group_id TEXT NOT NULL;
+
+ALTER TABLE auth.host_tenancy_changes ADD COLUMN IF NOT EXISTS issuer TEXT NOT NULL;
+
+ALTER TABLE auth.host_tenancy_changes ADD COLUMN IF NOT EXISTS person_id TEXT NOT NULL;
+
+ALTER TABLE auth.host_tenancy_changes ADD COLUMN IF NOT EXISTS previous_tenancy_id TEXT;
+
+ALTER TABLE auth.host_tenancy_changes ADD COLUMN IF NOT EXISTS tenancy_id TEXT NOT NULL;
+
+ALTER TABLE auth.host_tenancy_changes ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp();
 
 -- schema "events" — owned by the events role; tables declared by services/events/src/schema.ts
 

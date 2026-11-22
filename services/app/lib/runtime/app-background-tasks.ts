@@ -1,5 +1,6 @@
 /** Process compositions share this lifecycle; creating a request handler never starts workers. */
 import {type Db, startEventPublisher} from '@/lib/platform';
+import {projectHostTenancyChanges} from '@/lib/groups';
 import { flushViews } from '../analytics';
 import {startGroupMailDelivery} from '@/lib/notifications';
 import {objectStore, sweepObjects} from '@/lib/object-store';
@@ -31,11 +32,22 @@ function startPagesTicketSweep(db: Db): () => Promise<void> {
  return async () => { clearInterval(timer); await pending; };
 }
 export async function startAppBackgroundTasks(db:Db):Promise<()=>Promise<void>>{
+ let auditPending: Promise<void> | undefined;
+ const auditTick = () => auditPending ??= projectHostTenancyChanges(db)
+   .catch(() => { console.error('[group audit] host tenancy projection failed, will retry'); })
+   .finally(() => { auditPending = undefined; });
+ const auditTimer = setInterval(auditTick, 1000);
+ auditTimer.unref();
+ void auditTick();
  const stopGroupMail=startGroupMailDelivery(db);
  const stopPublisher=startEventPublisher(db);
  const stopStorageSweep=startStorageSweep(db);
  const stopPagesTicketSweep=startPagesTicketSweep(db);
  let closing:Promise<void>|undefined;
  // Buffered views (lib/analytics recordView) are written before the publisher drains the outbox.
- return ()=>closing??=(async()=>{try{await Promise.all([stopGroupMail(),stopStorageSweep(),stopPagesTicketSweep()]);}finally{await flushViews();await stopPublisher();}})();
+ return () => closing ??= (async () => {
+  clearInterval(auditTimer);
+  try { await Promise.all([auditPending,stopGroupMail(),stopStorageSweep(),stopPagesTicketSweep()]); }
+  finally { await flushViews(); await stopPublisher(); }
+ })();
 }

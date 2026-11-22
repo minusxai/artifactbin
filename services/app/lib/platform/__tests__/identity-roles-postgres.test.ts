@@ -24,9 +24,10 @@ import type {Queryable} from '@artifactbin/contracts/db';
 import {IdentityNotReady,createIdentityStore,ensureIdentitySchema,identityDbOf,identityMoveStatements} from '@artifactbin/auth/identity-store';
 import {assertGroupRoleModel,migrateGroupRoles} from '@artifactbin/auth/identity-store/group-role-migration';
 import {SECRET_COLUMNS} from '@artifactbin/auth/identity-store/schema';
-import {ensureHumanAuthSchema} from '@artifactbin/auth';
+import {createAuthHost,createHumanAuth,sessionStoreOf,ensureHumanAuthSchema} from '@artifactbin/auth';
 import {SCHEMA_STATEMENTS} from '@/lib/platform';
-import {reachedGroupsSql,subtreeSql} from '@/lib/groups';
+import {tenancyIssuer} from '@/test/helpers/trusted-tenancy';
+import {projectHostTenancyChanges,reachedGroupsSql,subtreeSql} from '@/lib/groups';
 import {transactionAccessFacts} from '@/lib/artifact-access';
 
 const ROOT=join(__dirname,'../../../../..');
@@ -95,6 +96,27 @@ describe.skipIf(!dockerImage('postgres:17-alpine'))('identity tables in a split-
   await assertGroupRoleModel(db,'role_upgrade');
   expect((await superuser.query('SELECT user_id,role FROM role_upgrade.group_members ORDER BY user_id')).rows).toEqual([{user_id:'new',role:'editor'},{user_id:'old',role:'admin'}]);
   expect((await superuser.query('SELECT role FROM role_upgrade.group_invitations')).rows).toEqual([{role:'member'}]);
+ });
+
+ it('projects admitted changes across roles and retries a failed audit insert',async()=>{
+  const issuer=tenancyIssuer(),db=identityDbOf(auth),baseURL='http://localhost:3000';
+  const secret='disposable-split-role-test-secret';
+  const human=await createHumanAuth({pool:auth,schema:'auth',secret,baseURL,mail:{send:async()=>{}}});
+  const host=createAuthHost({env:issuer.env,cookieSecret:secret,tokens:{byToken:async()=>null},sessions:sessionStoreOf(human),
+    identityTransactions:db,identityDb:db,appSchema:'app',upstream:async()=>new Response()});
+  expect((await host.fetch(issuer.request('initial','creator'))).status).toBe(303);
+  const results=await Promise.all(['left','right'].map(tenant=>host.fetch(issuer.request(tenant,'reader'))));
+  expect(results.map(r=>r.status)).toEqual([303,303]);
+  expect(await code(auth.query('SELECT * FROM app.group_audit'))).toBe('42501');
+  await app.query("ALTER TABLE group_audit ADD CONSTRAINT fail_projection CHECK (action <> 'host_tenancy_changed')");
+  try {expect(await code(projectHostTenancyChanges(app))).toBe('23514');}
+  finally {await app.query('ALTER TABLE group_audit DROP CONSTRAINT fail_projection');}
+  await Promise.all([projectHostTenancyChanges(app),projectHostTenancyChanges(app)]);
+  const final=(await app.query("SELECT tenancy_id FROM groups WHERE handle='host_team'")).rows[0].tenancy_id;
+  const middle=final==='left'?'right':'left';
+  expect((await app.query(`SELECT details->'previous'->>'tenancy_id' AS prior,details->'next'->>'tenancy_id' AS next
+    FROM group_audit WHERE action='host_tenancy_changed' ORDER BY created_at,host_change_seq`)).rows)
+    .toEqual([{prior:'initial',next:middle},{prior:middle,next:final}]);
  });
 
  it('the identity role performs every identity write, through the identity store', async()=>{

@@ -24,6 +24,7 @@
  *    when the selected group sits under a different root. An existing stronger root role is retained.
  * One advisory lock serializes these sign-ins, so a double-submitted form never meets its own half-created rows.
  */
+import {hashToken} from '@artifactbin/utils';
 import {isValidHandle} from '@artifactbin/contracts/handles';
 import type {Queryable} from '@artifactbin/contracts/db';
 import type {TransactionalQueryable} from '@artifactbin/contracts/identity-module';
@@ -33,6 +34,8 @@ import {identityTables,internalId,isUniqueViolation} from './tables';
 
 export interface TrustedSignInInput {
   issuer: string;
+  jti: string;
+  exp: number;
   subject: string;
   group: string;
   tenancyId: string;
@@ -45,7 +48,7 @@ export interface TrustedSignInInput {
   /** A handle subject's synthetic address (never delivered to); unused for an email subject. */
   email: string;
 }
-type TrustedSignInRefusal = 'subject_conflict' | 'group_conflict' | 'deployment_admission_required' | 'parent_group_missing' | 'invalid_claims';
+type TrustedSignInRefusal = 'replayed_token' | 'subject_conflict' | 'group_conflict' | 'deployment_admission_required' | 'parent_group_missing' | 'invalid_claims';
 export type TrustedSignInResult =
   | {ok: true; userId: string; email: string; groupId: string; created: {user: boolean; group: boolean}}
   | {ok: false; refusal: TrustedSignInRefusal};
@@ -72,6 +75,13 @@ export async function trustedSignIn(db: TransactionalQueryable, input: TrustedSi
   try {
     const result = await db.transaction(async tx => {
       await tx.query("SELECT pg_advisory_xact_lock(hashtext('artifactbin.identity.trusted-sign-in'))");
+      // A verifier's in-memory replay check cannot see an admission by another process.
+      const receipt = hashToken(JSON.stringify([input.issuer,input.jti]));
+      await tx.query(`DELETE FROM ${better('credentials')} WHERE kind='trusted_sign_in' AND expires_at<=clock_timestamp()`);
+      const spent = await tx.query(`INSERT INTO ${better('credentials')}(kind,credential_hash,expires_at)
+        SELECT 'trusted_sign_in',$1,to_timestamp($2) WHERE to_timestamp($2)>clock_timestamp()
+        ON CONFLICT DO NOTHING RETURNING 1`, [receipt,input.exp]);
+      if (!spent.rows.length) throw new Refused('replayed_token');
       const emailPerson = address ? await ensureEmailPerson(tx, address, t, better) : null;
       const person = emailPerson ?? await ensurePerson(tx, input, t, better);
       const rootId = input.joinCompanyRoot ? await requiredCompanyRoot(tx, t, appSchema) : null;
@@ -167,7 +177,11 @@ async function ensureGroup(tx: Queryable, input: TrustedSignInInput, userId: str
     `SELECT id,deleted_at,trusted_issuer,tenancy_id FROM ${t.groups} WHERE handle=$1 FOR UPDATE`, [input.group])).rows[0];
   if (existing) {
     if (existing.deleted_at || existing.trusted_issuer !== input.issuer) throw new Refused('group_conflict');
-    if (existing.tenancy_id !== input.tenancyId) await tx.query(`UPDATE ${t.groups} SET tenancy_id=$2 WHERE id=$1`, [existing.id, input.tenancyId]);
+    if (existing.tenancy_id !== input.tenancyId) {
+      await tx.query(`UPDATE ${t.groups} SET tenancy_id=$2 WHERE id=$1`, [existing.id, input.tenancyId]);
+      await tx.query(`INSERT INTO ${t.host_tenancy_changes}(group_id,issuer,person_id,previous_tenancy_id,tenancy_id)
+        VALUES($1,$2,$3,$4,$5)`, [existing.id, existing.trusted_issuer, userId, existing.tenancy_id, input.tenancyId]);
+    }
     return {groupId: existing.id, created: false};
   }
   // A new group is a topology change: the hierarchy revision moves first, as for every create.
