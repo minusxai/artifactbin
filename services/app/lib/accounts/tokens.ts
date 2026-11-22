@@ -5,7 +5,7 @@ import {canUseDeploymentIdentity} from './deployment-identity';
  * unknown and revoked are indistinguishable to callers.
  *
  * A token may be anonymous (user_id NULL) or bound to a user; artifacts it
- * creates inherit that owner at publish time. A GROUP's sign-in (`group_id` set, user_id NULL too: contracts
+ * creates inherit that owner at publish time. A GROUP's sign-in (`group_id` set, `user_id` for audit only: contracts
  * identity-service `GROUP_SIGN_IN_RULE`) is neither: no read here ever takes it for an anonymous token.
  */
 import crypto from 'crypto';
@@ -24,7 +24,7 @@ import type { AccessActor, GroupPrincipal } from './actors';
 export async function liveGroupSignIn(id: string): Promise<Omit<GroupPrincipal, 'tokenId'> | null> {
   const db = await getDb();
   const row = (await db.query<{ group_id: string; group_role: string; issued_by: string; grant_id: string | null }>(
-    'SELECT group_id, group_role, issued_by, grant_id FROM tokens WHERE id = $1 AND group_id IS NOT NULL AND user_id IS NULL AND live', [id])).rows[0];
+    'SELECT group_id, group_role, issued_by, grant_id FROM tokens WHERE id = $1 AND group_id IS NOT NULL AND live', [id])).rows[0];
   if (row?.grant_id) {
     const approval = (await db.query<{ service_origin: string | null }>('SELECT service_origin FROM group_sign_in_grants WHERE id = $1', [row.grant_id])).rows[0];
     if (!groupSignInServiceConfigured(serviceAudiences(), row.issued_by, approval?.service_origin)) return null;
@@ -169,7 +169,7 @@ export async function mintToken(
 export async function ensureUserToken(userId: string): Promise<string> {
   const db = await getDb();
   const existing = await db.query<{ id: string }>(
-    "SELECT id FROM tokens WHERE user_id = $1 AND name = 'web' AND deleted_at IS NULL LIMIT 1",
+    "SELECT id FROM tokens WHERE group_id IS NULL AND user_id = $1 AND name = 'web' AND deleted_at IS NULL LIMIT 1",
     [userId],
   );
   if (existing.rows[0]) return existing.rows[0].id;
@@ -307,7 +307,7 @@ export async function listTokensByUser(userId: string): Promise<TokenRow[]> {
   return (await db.query<TokenRow>(
     `SELECT t.id, t.name, t.user_id, t.created_at, t.deleted_at, t.expires_at, t.last_used_at, t.issued_by, t.live, t.group_id, g.name AS group_name, t.group_role
        FROM tokens t LEFT JOIN groups g ON g.id = t.group_id
-      WHERE (t.user_id = $1 OR (t.group_id IS NOT NULL AND t.user_id IS NULL AND t.grant_id IS NULL AND t.issued_by = $1)) AND t.deleted_at IS NULL
+      WHERE t.user_id = $1 AND t.deleted_at IS NULL
       ORDER BY t.last_used_at DESC NULLS LAST, t.created_at DESC`,
     [userId],
   )).rows;
@@ -318,7 +318,7 @@ export function hostedCredentialDescriptor(owner:string,id:string):Promise<{name
  return answeredOnce(`descriptor:${owner}:${id}`,()=>readCredentialDescriptor(owner,id));
 }
 async function readCredentialDescriptor(owner:string,id:string):Promise<{name:string|null;expiresAt:string|null;scoped:boolean}|null>{
- const db=await getDb();const row=(await db.query<{name:string|null;expires_at:string|null;request_authority:boolean}>(`SELECT name,expires_at,request_authority FROM tokens WHERE id=$1 AND user_id=$2 AND ${LIVE_TOKEN_SQL}`,[id,owner])).rows[0];
+ const db=await getDb();const row=(await db.query<{name:string|null;expires_at:string|null;request_authority:boolean}>(`SELECT name,expires_at,request_authority FROM tokens WHERE id=$1 AND group_id IS NULL AND user_id=$2 AND ${LIVE_TOKEN_SQL}`,[id,owner])).rows[0];
  return row?{name:row.name,expiresAt:row.expires_at,scoped:row.request_authority}:null;
 }
 

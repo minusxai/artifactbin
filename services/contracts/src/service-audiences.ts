@@ -64,11 +64,11 @@
  * GROUP PRINCIPALS AT A SERVICE (only for a service whose entry says `"group_principals": true`): an agent signed in as
  * a group (either way above: a person's `--as-group` sign-in, or a service's under an approval) exchanges its own API
  * bearer at `SERVICE_TOKEN_PATH` exactly as a person does, and the service token it receives acts as that GROUP at that
- * level: introspection answers `principal_kind: 'group'`, `user_id` null, the group, its level, `issued_by` (who issued
+ * level: introspection answers `principal_kind: 'group'`, `user_id` the person who authorised the parent (null under a service approval), the group, its level, `issued_by` (who issued
  * the group sign-in) and `parent` (the group sign-in's token). It lives as a person's does, never past its parent, and
  * only while the parent is live by every rule that governs it and the service still opts in. Without the opt-in the
  * exchange answers 403 `GROUP_PRINCIPALS_NOT_ACCEPTED` to a group, and a person's is unchanged: a service that reads
- * only `active` and `user_id` is never handed a principal with no person. A group's service token is a different kind
+ * only `active` and `user_id` is never handed a group principal. A group's service token is a different kind
  * from a person's: it never becomes a run sign-in or any other token.
  */
 import { normalizeOrigin } from './server-identity';

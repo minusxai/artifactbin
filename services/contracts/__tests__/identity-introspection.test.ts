@@ -1,7 +1,7 @@
 /**
  * THE INTROSPECTION ANSWER'S PRINCIPAL (./src/identity-service `IdentityIntrospectResponse`): every active answer names
  * what the token acts as. A person's answer has `user_id` set and no group; a group's (`GROUP_SIGN_IN_RULE`) has the
- * group and its level, `issued_by` who issued its sign-in, and `user_id` null, the only answer where it is.
+ * group and its level, `issued_by` who issued its sign-in, and `user_id` the authorising person or null under a service approval.
  */
 import {expect,expectTypeOf,it} from 'vitest';
 import {IDENTITY_VIEWS, type IdentityIntrospectResponse, type IdentityPrincipalGroupRole, type IdentityPrincipalKind} from '@artifactbin/contracts/identity-service';
@@ -10,14 +10,14 @@ type Active = Extract<IdentityIntrospectResponse, {active: true}>;
 type Person = Extract<Active, {principal_kind: 'user'}>;
 type Group = Extract<Active, {principal_kind: 'group'}>;
 
-it('an active answer carries the principal: a person with a user id, or a group at a level with none', () => {
+it('an active answer carries the principal: a person with a user id, or a group at a level with an optional audit person', () => {
   expectTypeOf<Active['principal_kind']>().toEqualTypeOf<IdentityPrincipalKind>();
   expectTypeOf<IdentityPrincipalKind>().toEqualTypeOf<'user' | 'group'>();
   expectTypeOf<Active['user_id']>().toEqualTypeOf<string | null>();
   expectTypeOf<Person['user_id']>().toEqualTypeOf<string>();
   expectTypeOf<Person['group_id']>().toEqualTypeOf<null>();
   expectTypeOf<Person['issued_by']>().toEqualTypeOf<string | null>();
-  expectTypeOf<Group['user_id']>().toEqualTypeOf<null>();
+  expectTypeOf<Group['user_id']>().toEqualTypeOf<string | null>();
   expectTypeOf<Group['group_id']>().toEqualTypeOf<string>();
   expectTypeOf<Group['group_role']>().toEqualTypeOf<IdentityPrincipalGroupRole>();
   expectTypeOf<Group['issued_by']>().toEqualTypeOf<string>();

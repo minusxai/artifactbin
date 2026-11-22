@@ -26,7 +26,7 @@ const HEADER_SELECT = ARTIFACT_HEADER_COLUMNS.join(', ');
 
 export async function getArtifact(tokenId: string, id: string): Promise<ArtifactRow | null> {
   const db = await getDb();
-  return loadArtifactDocument<ArtifactRow>(db,`SELECT * FROM artifacts WHERE id = $1 AND group_id IS NULL AND token_id = $2 AND (user_id IS NULL OR user_id=(SELECT user_id FROM tokens WHERE tokens.id=$2)) AND ${LIVE_ARTIFACT_SQL}`, [id, tokenId]);
+  return loadArtifactDocument<ArtifactRow>(db,`SELECT * FROM artifacts WHERE id = $1 AND group_id IS NULL AND token_id = $2 AND (user_id IS NULL OR user_id=(SELECT user_id FROM tokens WHERE tokens.id=$2 AND tokens.group_id IS NULL)) AND ${LIVE_ARTIFACT_SQL}`, [id, tokenId]);
 }
 
 /**

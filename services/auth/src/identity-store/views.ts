@@ -9,7 +9,7 @@
  *  - `tokens.scopes` (the scope list) and `tokens.live`: the bearer read's own rule (row, expiry, OAuth family or, for a
  *    run sign-in, parent-credential
  *    fence), an audience of this deployment's API or of a configured service (`identity_settings.service_audiences`,
- *    IDENTITY__SERVICE_AUDIENCES) and an active account, or for a GROUP's sign-in (`group_id` set, no `user_id`) its
+ *    IDENTITY__SERVICE_AUDIENCES) and an active account, or for a GROUP's sign-in (`group_id` set, `user_id` projected from the personal issuer for audit) its
  *    authorisation (./rules `groupSignInLiveSql`) instead; a reader accepting a token checks its `audience` itself;
  *  - `sessions` (Better Auth's `session`, minus its token) and `sessions.live`: unexpired;
  *  - `group_admins`, the one computed view: each live group's effective admins and the group their direct `admin`
@@ -99,7 +99,7 @@ export function identityViewStatements(schemas: IdentitySchemas, options: {sessi
     } else if (table === 'tokens') {
       const {exists} = bearerLiveSql({auth, tokens: `${auth}.tokens`, sessions: options.sessions !== false});
       statements.push(`CREATE OR REPLACE VIEW ${read}.tokens AS
-  SELECT ${plain('tokens', 't', {scopes: `
+  SELECT ${plain('tokens', 't', {user_id: 'CASE WHEN t.group_id IS NOT NULL AND t.grant_id IS NULL THEN t.issued_by ELSE t.user_id END AS user_id', scopes: `
     array_remove(regexp_split_to_array(coalesce(t.scope, ''), '\\s+'), '') AS scopes`, live: `
     (${exists}
       AND EXISTS (SELECT 1 FROM ${settings} s WHERE s.id = 'installation' AND (COALESCE(t.audience, '') = '' OR t.audience = ANY(s.api_audiences) OR t.audience = ANY(s.service_audiences)))

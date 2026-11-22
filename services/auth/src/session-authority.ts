@@ -3,7 +3,7 @@
  * is service-authenticated (SERVICE_AUTH_HEADER) and refused without it:
  *  - session-live (INTERNAL__SERVICE_SECRET): is a human session still live (the pages sessions' revalidation);
  *  - identity introspection (contracts `IDENTITY_INTROSPECT_PATH`): a presented token, answered with its principal
- *    (a person, `principal_kind: 'user'`, or for a group's sign-in the group at its level with `user_id` null:
+ *    (a person, `principal_kind: 'user'`, or for a group's sign-in the group at its level with an optional audit person:
  *    contracts identity-service `GROUP_SIGN_IN_RULE`, which the bearer read decides), user, id, scopes, audience,
  *    expiry and, for an exchanged token, the credential it was issued for. An
  *    access token is read by the one bearer read every API request is admitted by (token, OAuth family fence,
@@ -11,7 +11,7 @@
  *    exchanged token is verified by its signature (./identity/service-tokens) and by its
  *    parent credential's `live` in the identity views (`tokens` or `sessions`, the rule every reader re-checks with).
  *    Every kind needs an ACTIVE account. A GROUP's exchanged token (contracts service-audiences `group_principals`)
- *    answers the group (`principal_kind: 'group'`, no person, `parent` its group sign-in) only for a service still
+ *    answers the group (`principal_kind: 'group'`, audit person from its parent, `parent` its group sign-in) only for a service still
  *    opted in, and only while that parent is live by the bearer read's own rule (./identity/bearer
  *    `readLiveGroupSignIn`), as the same group, level and issuer. Asked
  *    with INTERNAL__SERVICE_SECRET the answer covers every token; asked with a configured service's own introspection

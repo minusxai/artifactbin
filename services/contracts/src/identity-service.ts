@@ -20,13 +20,13 @@
  *  - A PERSON: kind `'user'`, `user_id` set, the group fields null. `issued_by` is null, except on a person's RUN
  *    SIGN-IN (./service-audiences `RUN_SIGN_IN_PATH`), where it is the id of the configured service the sign-in was
  *    issued to; the principal is still that person.
- *  - A GROUP (`GROUP_SIGN_IN_RULE` below): kind `'group'`, `user_id` NULL, `group_id` the group and `group_role` the
+ *  - A GROUP (`GROUP_SIGN_IN_RULE` below): kind `'group'`, `user_id` the authorising person (null under a service approval), `group_id` the group and `group_role` the
  *    level (`'member'` or `'editor'`, never `'admin'`); `issued_by` the person who authorised it, or for a service's
  *    sign-in under a group's approval (./service-audiences `GROUP_SIGN_IN_PATH`, `grant_id` set) that service's id;
  *    never the principal. A group's service token (./service-audiences `group_principals`) answers the same, with
  *    `parent` the group sign-in it was exchanged from.
- *    There is no person behind it. Only an agent's sign-in is ever a group: no browser session acts as one.
- * A `tokens` row is a group's exactly when `group_id` is set (`user_id` is then NULL); a row with neither `user_id` nor
+ *    The audit person confers no personal authority. Only an agent's sign-in is ever a group: no browser session acts as one.
+ * A `tokens` row is a group's exactly when `group_id` is set; a row with neither `user_id` nor
  * `group_id` is an unowned token, never a group's. A reader checks `principal_kind` (or `group_id`) before relying on
  * `user_id` as the person acting, and refuses a kind it does not handle.
  *
@@ -56,7 +56,7 @@ export const IDENTITY_INTROSPECT_PATH = '/api/internal/identity/introspect';
  * THE PRINCIPAL: who the token acts as (header above). `'user'`: the person `user_id` (never null), `group_id` and
  * `group_role` null, `issued_by` null except on a run sign-in, where it names the configured service it was issued to
  * (./service-audiences `RUN_SIGN_IN_PATH`). `'group'`: the group `group_id` itself at the level `group_role`, with
- * `user_id` NULL (the only answer where it is) and `issued_by` who issued the group's sign-in (the person who
+ * `user_id` the authorising person or null for a service approval and `issued_by` who issued the group's sign-in (the person who
  * authorised it, or a service's id), never the principal; `parent` null, except on a group's exchanged token
  * (./service-audiences `group_principals`), where it names the group sign-in (`token`) it was exchanged from. A reader checks `principal_kind` before relying on `user_id` as the person
  * acting, and refuses a kind it does not handle. The `tokens` view carries the same facts (`group_id`, `group_role`,
@@ -68,7 +68,7 @@ export type IdentityIntrospectResponse =
       expires_at: string | null; parent: ServiceTokenParent | null; group_id: null; group_role: null; issued_by: string | null;
     }
   | {
-      active: true; principal_kind: 'group'; user_id: null; token_id: string; scopes: string[]; audience: string | null;
+      active: true; principal_kind: 'group'; user_id: string | null; token_id: string; scopes: string[]; audience: string | null;
       expires_at: string | null; parent: { kind: 'token'; id: string } | null; group_id: string; group_role: IdentityPrincipalGroupRole; issued_by: string;
     }
   | { active: false };
@@ -94,7 +94,7 @@ export const IDENTITY_SCHEMA = 'identity';
  *    API or of a configured service (IDENTITY__SERVICE_AUDIENCES), and an active account. A reader accepting a token
  *    checks its `audience` itself. `group_id`, `group_role`, `issued_by`, `grant_id`: the principal columns (see
  *    `IdentityIntrospectResponse`): null on a person's token but a run sign-in's `issued_by` (its service's id); a
- *    group's sign-in names its group and level, `issued_by` the person who authorised it, and `user_id` is NULL. For a
+ *    group's sign-in names its group and level, `issued_by` the person who authorised it, and `user_id` names that person (null under a service approval). For a
  *    group's row `live` is `GROUP_SIGN_IN_RULE` instead of an active account.
  *  - groups (`parent_id` null at a root; `deleted_at` set once deleted), group_members (DIRECT rows only),
  *    group_hierarchy (one row, id 'installation': the revision moves on every group create, delete and reparent),

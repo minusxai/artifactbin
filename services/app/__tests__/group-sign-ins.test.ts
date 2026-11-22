@@ -1,7 +1,7 @@
 /**
  * AN AGENT SIGNED IN AS A GROUP (contracts identity-service `GROUP_SIGN_IN_RULE`), end to end on the composed host: a
  * person with a verified session who holds at least a level on a group obtains, through the skill's sign-in door, a
- * sign-in whose principal is the group itself at that level with no person on it; it is live only while that still
+ * sign-in whose principal is the group itself at that level, naming the authorising person for audit; it is live only while that still
  * holds, refreshes as a person's does, introspects as the group, is listed and revoked by the person and by the group's
  * Admins, is never taken for an unowned token, and (until the access rule admits it) every app route refuses it with
  * one code.
@@ -80,6 +80,7 @@ it('obtains a group sign-in at each level a person holds, and refuses every othe
   expect(issued.body).toMatchObject({group_id:group.id,group_role:role,token_type:'Bearer',refresh_token:expect.stringMatching(/^mxr_/),resource:`${origin}/api`,scope:'artifacts'});
   expect(await sql('SELECT user_id,group_id,group_role,issued_by,grant_id,audience FROM auth.tokens WHERE id=$1',[issued.body!.id])).toEqual([{user_id:null,group_id:group.id,group_role:role,issued_by:who.userId,grant_id:null,audience:`${origin}/api`}]);
   expect(await host.live(String(issued.body!.id))).toBe(true);
+  expect(await sql('SELECT user_id,group_id,group_role FROM tokens WHERE id=$1',[issued.body!.id])).toEqual([{user_id:who.userId,group_id:group.id,group_role:role}]);
   // Audited as a mint for the person who authorised it, naming the group.
   await expect.poll(async()=>sql("SELECT subject_id,payload->>'group_id' AS group_id FROM events.events WHERE verb='minted' AND object_kind='token' AND object_id=$1",[issued.body!.id])).toEqual([{subject_id:who.userId,group_id:group.id}]);
  }
@@ -124,7 +125,7 @@ it('an Admin of an ancestor alone holds both levels below it, lists and revokes 
 it('acts as the group, not the person: introspection, the lists, and one refusal at every app route',async()=>{
  const host=await composed(),{ada,eve,team}=await tree(host);
  const issued=(await host.asGroup(eve.cookie,team.id,'editor')).body as unknown as Grant;
- expect(await host.introspect(issued.access_token)).toEqual({active:true,principal_kind:'group',user_id:null,token_id:issued.id,scopes:['artifacts'],audience:`${origin}/api`,expires_at:expect.any(String),parent:null,group_id:team.id,group_role:'editor',issued_by:eve.userId});
+ expect(await host.introspect(issued.access_token)).toEqual({active:true,principal_kind:'group',user_id:eve.userId,token_id:issued.id,scopes:['artifacts'],audience:`${origin}/api`,expires_at:expect.any(String),parent:null,group_id:team.id,group_role:'editor',issued_by:eve.userId});
  // The person's own sign-in still introspects as the person.
  expect(await host.introspect(eve.grant.access_token)).toMatchObject({principal_kind:'user',user_id:eve.userId,group_id:null});
  // Every route the app does not admit for a group's sign-in (server/group-admission) answers the one refusal: the

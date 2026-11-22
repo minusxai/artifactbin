@@ -139,7 +139,7 @@ export async function resolveTestUser(userId: string | null, testUserId: string)
   if (!found) return TESTUSER_ERRORS.notYours;
   if (found.expires_at && Date.parse(found.expires_at) <= Date.now()) return TESTUSER_ERRORS.expired;
   const token = await db.query<{ id: string }>(
-    'SELECT id FROM tokens WHERE user_id = $1 AND deleted_at IS NULL AND (expires_at IS NULL OR expires_at > now()) ORDER BY created_at DESC LIMIT 1',
+    'SELECT id FROM tokens WHERE group_id IS NULL AND user_id = $1 AND deleted_at IS NULL AND (expires_at IS NULL OR expires_at > now()) ORDER BY created_at DESC LIMIT 1',
     [testUserId],
   );
   const live = token.rows[0];

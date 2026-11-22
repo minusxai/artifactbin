@@ -61,7 +61,7 @@ export function mountTokenAuthority(app:Hono<AuthEnv>,o:AuthOptions,{secret,audi
  };
  /** An exchanged token's parent, still live for that same user: its row in the `tokens` or `sessions` view, as a service re-checks it. */
  const parentLive=async(parent:ServiceTokenParent,userId:string)=>!!o.identityDb&&(await o.identityDb.query<{live:boolean}>(parent.kind==='token'
-  ?`SELECT live FROM ${readSchema}.tokens WHERE id=$1 AND user_id=$2`:`SELECT live FROM ${readSchema}.sessions WHERE id=$1 AND "userId"=$2`,[parent.id,userId])).rows[0]?.live===true;
+  ?`SELECT live FROM ${readSchema}.tokens WHERE id=$1 AND group_id IS NULL AND user_id=$2`:`SELECT live FROM ${readSchema}.sessions WHERE id=$1 AND "userId"=$2`,[parent.id,userId])).rows[0]?.live===true;
  app.all(IDENTITY_INTROSPECT_PATH,async c=>{
   // The installation itself (every token), or one configured service (only tokens bound to its own origin).
   const asker:{only:ServiceAudience|null}={only:null};
@@ -80,11 +80,11 @@ export function mountTokenAuthority(app:Hono<AuthEnv>,o:AuthOptions,{secret,audi
     if(!claims||(only&&claims.aud!==only.origin)||!o.identityDb)return inactive;
     const parent=await readLiveGroupSignIn({db:o.identityDb,readSchema,serviceAudiences:audiences},claims.par.id);
     if(!parent||parent.groupId!==claims.grp||parent.groupRole!==claims.rol||parent.issuedBy!==claims.isb)return inactive;
-    return answer({active:true,principal_kind:'group',user_id:null,token_id:claims.jti,scopes:[],audience:claims.aud,expires_at:new Date(claims.exp*1000).toISOString(),parent:claims.par,group_id:claims.grp,group_role:claims.rol,issued_by:claims.isb} satisfies IdentityIntrospectResponse);
+    return answer({active:true,principal_kind:'group',user_id:parent.auditUserId,token_id:claims.jti,scopes:[],audience:claims.aud,expires_at:new Date(claims.exp*1000).toISOString(),parent:claims.par,group_id:claims.grp,group_role:claims.rol,issued_by:claims.isb} satisfies IdentityIntrospectResponse);
    }
    const token=await live(c,await o.tokens.byToken(input.token));
    if(!token||(only&&token.audience!==only.origin))return inactive;
-   if(token.groupId&&token.groupRole&&token.issuedBy)return answer({active:true,principal_kind:'group',user_id:null,token_id:token.id,scopes:token.scope?.split(/\s+/).filter(Boolean)??[],audience:token.audience??null,expires_at:token.expiresAt??null,parent:null,group_id:token.groupId,group_role:token.groupRole,issued_by:token.issuedBy} satisfies IdentityIntrospectResponse);
+   if(token.groupId&&token.groupRole&&token.issuedBy)return answer({active:true,principal_kind:'group',user_id:token.auditUserId??null,token_id:token.id,scopes:token.scope?.split(/\s+/).filter(Boolean)??[],audience:token.audience??null,expires_at:token.expiresAt??null,parent:null,group_id:token.groupId,group_role:token.groupRole,issued_by:token.issuedBy} satisfies IdentityIntrospectResponse);
    return answer({active:true,principal_kind:'user',user_id:token.userId!,token_id:token.id,scopes:token.scope?.split(/\s+/).filter(Boolean)??[],audience:token.audience??null,expires_at:token.expiresAt??null,parent:null,...PERSON,issued_by:token.issuedBy??null} satisfies IdentityIntrospectResponse);
   }catch{return answer({error:'session_unavailable'},503);}
  });

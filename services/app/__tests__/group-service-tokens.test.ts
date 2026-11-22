@@ -81,7 +81,7 @@ async function tree(host:Host){
  await admitGroupMember(ada.userId,team.id,eve.userId,'editor');
  return {ada,eve,root,team,squad};
 }
-const groupAnswer=(group:string,role:string,issuedBy:string,parent:string,audience=WAREHOUSE)=>({active:true,principal_kind:'group',user_id:null,token_id:expect.stringMatching(/^vtk_/),scopes:[],audience,expires_at:expect.any(String),parent:{kind:'token',id:parent},group_id:group,group_role:role,issued_by:issuedBy});
+const groupAnswer=(group:string,role:string,issuedBy:string,parent:string,audience=WAREHOUSE,userId:string|null=null)=>({active:true,principal_kind:'group',user_id:userId,token_id:expect.stringMatching(/^vtk_/),scopes:[],audience,expires_at:expect.any(String),parent:{kind:'token',id:parent},group_id:group,group_role:role,issued_by:issuedBy});
 
 it('a person\'s group sign-in exchanges its own bearer as a person does, and the service learns the group, exactly',async()=>{
  const host=await composed(),{eve,team}=await tree(host);
@@ -96,7 +96,7 @@ it('a person\'s group sign-in exchanges its own bearer as a person does, and the
  const token=String(exchanged.body!.access_token);
  // The service, with its own secret: the group at that level, no person, who signed it in, and the parent sign-in.
  const seen=await host.introspect(token,SECRETS.warehouse);
- expect(seen).toEqual(groupAnswer(team.id,'editor',eve.userId,agent.id));
+ expect(seen).toEqual(groupAnswer(team.id,'editor',eve.userId,agent.id,WAREHOUSE,eve.userId));
  expect(Object.keys(seen!)).toEqual(['active','principal_kind','user_id','token_id','scopes','audience','expires_at','parent','group_id','group_role','issued_by']);
  expect(seen!.expires_at).toBe(exchanged.body!.expires_at);
  expect(await host.introspect(token)).toEqual(seen);
@@ -104,7 +104,7 @@ it('a person\'s group sign-in exchanges its own bearer as a person does, and the
  expect(await host.introspect(token,SECRETS.crm)).toEqual({active:false});
  expect(await host.introspect(token,SECRETS.ledger)).toEqual({active:false});
  const forCrm=await host.serviceTokenOf(agent.token,'crm');
- expect(await host.introspect(forCrm,SECRETS.crm)).toEqual(groupAnswer(team.id,'editor',eve.userId,agent.id,CRM));
+ expect(await host.introspect(forCrm,SECRETS.crm)).toEqual(groupAnswer(team.id,'editor',eve.userId,agent.id,CRM,eve.userId));
  expect(await host.introspect(forCrm,SECRETS.warehouse)).toEqual({active:false});
 });
 
@@ -265,7 +265,7 @@ it('the skill\'s own helper exchanges a group\'s sign-in as it does a person\'s:
  expect(await login({'as-group':team.id,level:'editor'})).toMatchObject({authenticated:true,actsAs:{group:team.id,level:'editor'}});
  const person=makeClient(origin,{env,fetcher}),group=makeClient(origin,{env:{...env,ARTIFACTBIN_AS_GROUP:team.id},fetcher});
  const asGroup=await serviceToken(group,'warehouse'),asPerson=await serviceToken(person,'warehouse');
- expect(await host.introspect(asGroup,SECRETS.warehouse)).toMatchObject({active:true,principal_kind:'group',user_id:null,group_id:team.id,group_role:'editor',issued_by:eve.userId});
+ expect(await host.introspect(asGroup,SECRETS.warehouse)).toMatchObject({active:true,principal_kind:'group',user_id:eve.userId,group_id:team.id,group_role:'editor',issued_by:eve.userId});
  // Each client keeps its own: the person's is still the person's.
  expect(await host.introspect(asPerson,SECRETS.warehouse)).toMatchObject({active:true,principal_kind:'user',user_id:eve.userId});
  expect(await serviceToken(group,'warehouse')).toBe(asGroup);

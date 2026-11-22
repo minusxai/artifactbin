@@ -12,8 +12,11 @@ useAppHarness();
 useGroupPrincipalHost();
 
 it('at editor level creates in its group only and edits its group\'s pages; a member does neither',async()=>{
- const host=await composed(),{eve,root,team,squad,pages}=await world(host);
+ const host=await composed(),{ada,eve,root,team,squad,pages}=await world(host);
  const editor=await eve.asGroup(team.id,'editor'),member=await eve.asGroup(team.id,'member');
+ const narrowedOwner=await ada.asGroup(team.id,'editor');
+ expect((await host.call('GET',`/api/artifacts/${pages.personal}`,ada.token)).status).toBe(200);
+ expect((await host.call('GET',`/api/artifacts/${pages.personal}`,narrowedOwner.token)).status).toBe(404);
  const made=await host.call('POST','/api/artifacts',editor.token,{title:'By the agent',html:page('By the agent')});
  expect(made.status,JSON.stringify(made.body)).toBe(201);
  const id=String(made.body!.id);
