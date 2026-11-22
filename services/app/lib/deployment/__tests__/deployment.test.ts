@@ -62,7 +62,7 @@ describe('company admission',()=>{
   expect(await admitDeploymentIdentity({...tenant,trustedIssuer:'parent'})).toBe(true);
   expect(await admitDeploymentIdentity({userId:'tenant'})).toBe(true);
  });
- it('joins verified host identities to the root and backfills only provable prior admissions',async()=>{
+ it('joins verified host identities to the root and backfills admitted accounts with current live issuer seats',async()=>{
   const owner=await account('mxmx_test_owner@example.com');
   const page=await mine(owner,'Root page',{visibility:'private',destination:{type:'personal'}});
   const siblingPage=await mine(owner,'Sibling page',{visibility:'private',destination:{type:'personal'}});
@@ -89,26 +89,39 @@ describe('company admission',()=>{
   };
   const creator=await sign('creator@example.com'),handle=await sign('reader_handle'),email=await sign('reader@example.com');
   const members=async()=> (await db.query<{user_id:string}>("SELECT user_id FROM group_members WHERE group_id='root' AND role='member'")).rows.map(m=>m.user_id).sort();
-  const current=await sign('known@example.com'), removed=await sign('removed_handle'), denied=await sign('later_admitted');
+  const current=await sign('known@example.com'), removed=await sign('removed_handle'), moved=await sign('moved@example.com');
   // Emulate an upgrade: older sign-ins have no explicit sign-in record.
-  await db.query('UPDATE auth.users SET trusted_sign_in_group=NULL,trusted_sign_in_at=NULL WHERE id<>$1',[current.userId]);
+  await db.query('UPDATE auth.users SET trusted_sign_in_group=NULL,trusted_sign_in_at=NULL WHERE id NOT IN ($1,$2)',[current.userId,moved.userId]);
   await db.query('DELETE FROM group_members WHERE user_id=$1',[removed.userId]);
-  await db.query("UPDATE deployment_members SET admitted_at=admitted_at+interval '1 day' WHERE user_id=$1",[denied.userId]);
+  await db.query(`INSERT INTO groups(id,handle,name,created_by,trusted_issuer,deleted_at) VALUES
+   ('next','next_team','Next',$1,'host',NULL),('deleted','old_team','Old',$1,'host',now()),
+   ('inactive','inactive_team','Inactive',$1,'unconfigured',NULL)`,[owner.userId]);
+  await db.query("UPDATE group_members SET group_id='next' WHERE user_id=$1 AND group_id=$2",[moved.userId,creator.groupId]);
   const manual=await account('mxmx_test_invited@example.com');
   await db.query("INSERT INTO deployment_members(user_id) VALUES ($1)",[manual.userId]);
-  await db.query("INSERT INTO group_members(group_id,user_id,role) VALUES ($1,$2,'member')",[creator.groupId,manual.userId]);
+  await db.query("INSERT INTO group_members(group_id,user_id,role) VALUES ($1,$2,'admin')",[creator.groupId,manual.userId]);
+  for(const group of ['deleted','inactive','sibling',creator.groupId]){
+   const person=await account('mxmx_test_'+group+'@example.com');
+   if(group!==creator.groupId)await db.query('INSERT INTO deployment_members(user_id) VALUES ($1)',[person.userId]);
+   await db.query("INSERT INTO group_members(group_id,user_id,role) VALUES ($1,$2,'member')",[group,person.userId]);
+  }
+  // A previous enabled release already granted this person the root, then an admin removed it.
+  await db.query("UPDATE auth.users SET trusted_root_granted='root' WHERE id=$1",[handle.userId]);
   const boot=(settings:Record<string,string>)=>localAuthentication({
    env:{AUTH__SECRET:'test-deployment-secret'.padEnd(32,'0'),...settings},db,
    baseURL:'http://app.example.com',events:services().events,login:true,
   });
-  await boot({});
+  await boot({TRUSTED_SIGNIN__ISSUERS:env.TRUSTED_SIGNIN__ISSUERS});
   expect(await members()).toEqual([]);
+  const marked=async()=> (await db.query<{id:string}>("SELECT id FROM auth.users WHERE trusted_root_granted='root'")).rows.map(u=>u.id).sort();
+  expect(await marked()).toEqual([handle.userId]);
+  const eligible=[creator.userId,current.userId,email.userId,moved.userId,manual.userId].sort();
   await boot(env);
-  await boot(env);
-  expect(await members()).toEqual([creator.userId,handle.userId,current.userId].sort());
+  expect(await members()).toEqual(eligible);
+  expect(await marked()).toEqual([...eligible,handle.userId].sort());
   await db.query("DELETE FROM group_members WHERE group_id='root' AND user_id=$1",[creator.userId]);
   await boot(env);
-  expect(await members()).toEqual([handle.userId,current.userId].sort());
+  expect(await members()).toEqual(eligible.filter(id=>id!==creator.userId));
   await sign('reader@example.com',true);
   const directory=await getGroupDetail(email.userId,'root');
   expect(directory?.members.map(m=>m.user_id)).toEqual([owner.userId]);
