@@ -24,10 +24,9 @@
 import {IdentityError, type GroupSignInGrant, type GroupChange, type IdentityService, type TransactionalQueryable} from '@artifactbin/contracts/identity-module';
 import {normalizeCreateGroup, type GroupRole, type GroupSummary} from '@artifactbin/contracts/groups';
 import {companyGroupState} from './company-group';
-import {reserveHandle} from './accounts';
-import {bumpHierarchy,chainOf,effectiveAdminVia,memberRole,isTestAccount,liveGroup,lockGroups,recordChange,requireAdmin,type GroupRow} from './group-access';
+import {bumpHierarchy,chainOf,effectiveAdminVia,insertGroup,memberRole,isTestAccount,liveGroup,lockGroups,recordChange,requireAdmin,type GroupRow} from './group-access';
 import {groupMemberMethods} from './group-members';
-import {internalId,isUniqueViolation,type IdentityTables} from './tables';
+import {internalId,type IdentityTables} from './tables';
 
 const summary = (group: GroupRow, role: GroupRole | null): GroupSummary => ({id: group.id, handle: group.handle, name: group.name, description: group.description, role, parent_id: group.parent_id ?? null});
 /** No edge moved: rolled back, so the revision does not move either. */
@@ -107,10 +106,7 @@ export function groupMethods(db: TransactionalQueryable, t: IdentityTables, opti
             if (!mayBootstrap) throw new IdentityError('company_parent_required', 409);
           }
         }
-        const id = 'grp_' + internalId();
-        try { await reserveHandle(t, tx, handle, 'group', id); } catch (error) { if (isUniqueViolation(error)) throw new IdentityError('handle_taken', 409); throw error; }
-        await tx.query(`INSERT INTO ${t.groups}(id,handle,name,description,created_by,parent_id) VALUES($1,$2,$3,$4,$5,$6)`, [id, handle, name, description, actorId, parentId]);
-        await tx.query(`INSERT INTO ${t.group_members}(group_id,user_id,role) VALUES($1,$2,'admin')`, [id, actorId]);
+        const id = await insertGroup(tx, t, actorId, valid);
         const changes: GroupChange[] = [];
         await recordChange(tx, t, changes, actorId, id, 'created', parentId ? {parent_id: parentId} : {});
         if (parentId) await recordChange(tx, t, changes, actorId, parentId, 'subgroup_attached', {group_id: id});

@@ -117,6 +117,46 @@ is created directly under the last handle. An existing token group must already 
 An empty, missing-member, disconnected or out-of-scope path refuses the sign-in. Omit the claim to
 use the existing issuer placement rules.
 
+**Preparing a new company root on PostgreSQL.** Use this operator command for an already configured
+company that needs to place existing roots under a fresh root. Pause app and identity writers and
+automatic reconciliation, and verify a restorable backup. On the reviewed database, read
+`owner_user_id` and `default_group_id` from `app.deployment_state` (row `company`), and `revision`
+from `auth.group_hierarchy` (row `installation`). Use the configured schemas if they differ.
+Supply the operator database connection through `AUTH__MIGRATION_DATABASE_URL` in the protected
+environment. The operator needs write access to the identity tables and group audit, and permission
+to lock the company state and settings rows. Set `APP__SCHEMA` and `AUTH__SCHEMA` if customized.
+
+```sh
+npm run prepare:company-root -w services/auth -- --writes-paused-backup-verified \
+  <owner-id> <current-default-id> <hierarchy-revision> <fresh-handle> 'Company root'
+```
+
+The command prints the new group ID. It creates an empty, independent root with only the
+designated owner as direct Admin, and records `company_root_prepared`. The expected owner, live
+default root and hierarchy revision must still match. If output was lost, look up the handle and
+audit on the reviewed database before taking another action. A repeat with the same revision
+refuses and an occupied handle is never reused. A failed preparation rolls back the group,
+membership, handle reservation, audit and revision together.
+
+Keep trusted root enrollment off during the change. Resume the services for the authenticated
+steps. As the designated owner, send `POST /api/deployment/setup` with JSON
+`{"group_id":"<new-root-id>"}` to explicitly select the new root. This is the step that changes
+the company default and records `company_default_changed`. New ordinary admissions use that default,
+subject to the admissions policy. The default also backs the inherited home and serves as the publishing
+fallback when no explicit, parent or account destination applies and the publisher has the required
+role. Existing admissions, preferences and memberships carry forward. The trusted root, when enrollment is enabled, is the live root above
+the default. Reparenting the old default before selection can therefore change the trusted root
+even while the stored default still points to the old group.
+
+Use `groups reparent GROUP --parent GROUP --yes` for each existing root being moved. The
+authenticated actor must have Admin on each moved group and on the new parent. Arrange any
+needed branch-role change explicitly with an existing branch Admin. Moving a branch keeps its
+group ID, direct roles, owned pages and subtree, including existing issuer parents. The new root's
+Admins inherit Admin over attached branches. Root members do not inherit branch memberships, and
+branches' members can receive shares to their ancestors. Verify branch access, issuer placement
+and the admission cohort before separately enrolling or promoting anyone on the root, or enabling
+trusted root enrollment.
+
 **Company root membership for trusted sign-in.** Set `TRUSTED_SIGNIN__JOIN_COMPANY_ROOT=true` on the
 trusted-sign-in and identity hosts only when the company root is ready for every issuer’s people.
 Check its data grants and private page shares first. The setting defaults to false. Restart the hosts

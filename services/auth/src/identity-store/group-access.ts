@@ -10,7 +10,8 @@ import type {GroupRole} from '@artifactbin/contracts/groups';
 import type {Queryable} from '@artifactbin/contracts/db';
 import {enqueueGroupMail} from './mail';
 import {groupAdminsSql} from './rules';
-import {internalId,type IdentityTables} from './tables';
+import {reserveHandle} from './accounts';
+import {internalId,isUniqueViolation,type IdentityTables} from './tables';
 
 export interface GroupRow {trusted_issuer: string | null; tenancy_id: string | null; id: string; handle: string; name: string; description: string; created_by: string; deleted_at: string | null; parent_id: string | null}
 
@@ -50,6 +51,22 @@ export const protectLastAdmin = async (q: Queryable, t: IdentityTables, id: stri
   if (await memberRole(q, t, userId, id) === 'admin' && Number((await q.query<{count: string}>(`SELECT count(*) FROM ${t.group_members} WHERE group_id=$1 AND role='admin'`, [id])).rows[0]!.count) <= 1)
     throw new IdentityError('last_admin', 409);
 };
+/** Insert a fresh group and its first direct Admin after the caller has checked creation authority. */
+export async function insertGroup(q: Queryable, t: IdentityTables, actorId: string,
+  {handle, name, description, parentId}: {handle: string; name: string; description: string; parentId: string | null}): Promise<string> {
+  const id = 'grp_' + internalId();
+  try {
+    await reserveHandle(t, q, handle, 'group', id);
+    await q.query(`INSERT INTO ${t.groups}(id,handle,name,description,created_by,parent_id) VALUES($1,$2,$3,$4,$5,$6)`,
+      [id, handle, name, description, actorId, parentId]);
+  } catch (error) {
+    if (isUniqueViolation(error)) throw new IdentityError('handle_taken', 409);
+    throw error;
+  }
+  await q.query(`INSERT INTO ${t.group_members}(group_id,user_id,role) VALUES($1,$2,'admin')`, [id, actorId]);
+  return id;
+}
+
 /** A topology change's first statement: the revision moved (rolled back with the change). */
 export const bumpHierarchy = async (q: Queryable, t: IdentityTables): Promise<number> => Number((await q.query<{revision: string | number}>(
   `INSERT INTO ${t.group_hierarchy} AS h (id,revision) VALUES('installation',1) ON CONFLICT (id) DO UPDATE SET revision=h.revision+1 RETURNING revision`)).rows[0]?.revision ?? 0);

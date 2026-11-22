@@ -26,6 +26,7 @@
     "vitest": "4.1.12"
   },
   "scripts": {
+    "prepare:company-root": "node --import tsx scripts/prepare-company-root.ts",
     "migrate:groups": "node --import tsx scripts/migrate-groups.ts",
     "migrate:account": "node --import tsx scripts/migrate-account.ts"
   }

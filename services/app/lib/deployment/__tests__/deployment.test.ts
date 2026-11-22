@@ -49,6 +49,23 @@ describe('company admission',()=>{
   expect(await canUseDeploymentIdentity('next')).toBe(false);
   expect(await admitDeploymentIdentity(identity('next','next@example.com'))).toBe(false);
  });
+ it('audits an explicit default change once and retains existing company admissions',async()=>{
+  overrideConfig({}, {APP__DEPLOYMENT_MODE:'company',APP__DEPLOYMENT_OWNER_EMAIL:'owner@example.com',AUTH__INVITE_ONLY:'false'});
+  await admitDeploymentIdentity(identity('owner','owner@example.com'));
+  const db=await getDb();
+  await db.query(`INSERT INTO groups(id,handle,name,created_by) VALUES ('old','old_root','Old','owner'),('next','next_root','Next','owner')`);
+  await db.query("INSERT INTO group_members(group_id,user_id,role) VALUES ('old','owner','admin'),('next','owner','admin')");
+  await setupDeployment('owner','old');
+  expect(await admitDeploymentIdentity(identity('existing','existing@example.com'))).toBe(true);
+  await setupDeployment('owner','next');
+  await setupDeployment('owner','next');
+  expect(await admitDeploymentIdentity({userId:'existing'})).toBe(true);
+  expect(await admitDeploymentIdentity(identity('new','new@example.com'))).toBe(true);
+  expect((await db.query("SELECT group_id,user_id FROM group_members WHERE user_id IN ('existing','new') ORDER BY user_id")).rows)
+   .toEqual([{group_id:'old',user_id:'existing'},{group_id:'next',user_id:'new'}]);
+  expect((await db.query("SELECT group_id,actor_user_id,details FROM group_audit WHERE action='company_default_changed'")).rows)
+   .toEqual([{group_id:'next',actor_user_id:'owner',details:{previous_default_group_id:'old'}}]);
+ });
  it('admits the verified issuer independently of email patterns after setup',async()=>{
   overrideConfig({}, {APP__DEPLOYMENT_MODE:'company',APP__DEPLOYMENT_OWNER_EMAIL:'owner@example.com',AUTH__INVITE_ONLY:'true',AUTH__ALLOWED_EMAIL_PATTERNS:'*@example.com'});
   const tenant={userId:'tenant',email:'user_t1@parent.trusted-issuer.invalid',emailVerified:true};
