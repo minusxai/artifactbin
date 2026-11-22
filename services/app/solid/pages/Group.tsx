@@ -119,7 +119,7 @@ export function GroupManagement(props:{detail:GroupDetail;refresh:()=>void}):JSX
  </Panel></Show>
  <Panel label="Group people" title="People">
   <p class="mb-3 text-sm leading-relaxed text-muted">Members of {props.detail.group.name} itself. Membership is direct: it does not come from a parent group or a subgroup.</p>
-  <p class="mb-3 text-sm leading-relaxed text-muted">Members read group files. Editors also publish and edit them. Admins additionally manage people, settings and group-owned sharing, here and in every subgroup. Personal files stay private unless shared.</p>
+  <p class="mb-3 text-sm leading-relaxed text-muted">Members read group files and can publish new pages in their own ordinary groups. Only root Admins can publish into the company root. Admins can edit group files and manage people, settings and group-owned sharing, here and in every subgroup. Personal files stay private unless shared.</p>
   <Show when={props.detail.group.host_provisioned}><p class="mb-3 text-sm leading-relaxed text-muted">The sign-in provider decides who can join this group.</p></Show>
   <Show when={admin() && props.detail.group.company_root}><p class="mb-3 text-sm leading-relaxed text-muted">Removing someone from this group ends their access to the company workspace.</p></Show>
   <InheritedAdmin detail={props.detail}/>
