@@ -37,7 +37,7 @@ type SqlValue = string | number | boolean | null | Date;
 interface SqlColumn { name: string; type: string }
 type SqlRows = AfJsonObject[] & { columns: SqlColumn[]; truncated?: true; source?: SqlAnswerSource };
 interface SqlWrite { affected: number; returning: AfJsonObject[] }
-type Reply = { columns: SqlColumn[]; rows: AfJsonObject[]; truncated?: boolean; source?: SqlAnswerSource } | SqlWrite | { error: string; message?: string; notice?: string; eligible_group_ids?: readonly string[] };
+type Reply = { columns: SqlColumn[]; rows: AfJsonObject[]; truncated?: boolean; source?: SqlAnswerSource } | SqlWrite | { error: string; message?: string; notice?: string };
 
 /** The transport: the frame relay in a hosted page (lib/html-runtime/browser-reader). */
 export interface SqlPort {
@@ -49,7 +49,7 @@ export interface SqlPort {
 
 export class SqlError extends Error {
   /** `message`: for the reader; `detail`: the server's own reason (the same text when there is no reader's sentence). */
-  constructor(readonly code: string, message: string, readonly detail: string = message, readonly eligible_group_ids?: readonly string[]) { super(message); this.name = 'SqlError'; }
+  constructor(readonly code: string, message: string, readonly detail: string = message) { super(message); this.name = 'SqlError'; }
 }
 /** A failure the runtime itself names, with the list's sentence for the reader. */
 const failure = (code: 'unavailable' | 'unexpected', detail: string) => new SqlError(code, SQL_FAILURES[code].notice, detail);
@@ -86,9 +86,7 @@ export function createSql(port: SqlPort): SqlTag {
       const reason = typeof reply.message === 'string' ? reply.message : String(reply.error);
       // The uniform `{error: 'not_found'}` carries no words of its own: the list's sentence is the reader's.
       const notice = typeof reply.notice === 'string' ? reply.notice : reply.error === 'not_found' && reply.message === undefined ? SQL_FAILURES.not_found.notice : reason;
-      const ids = reply.error === 'permission_denied' && Array.isArray(reply.eligible_group_ids)
-        && reply.eligible_group_ids.every(id => typeof id === 'string') ? reply.eligible_group_ids : undefined;
-      throw new SqlError(String(reply.error), notice, reason, ids);
+      throw new SqlError(String(reply.error), notice, reason);
     }
     // `columns` rides on the array, out of iteration and JSON, and stays an ordinary property: a chart library handed
     // the rows may rewrite or delete it (Vega's data ingestion deletes an array's `columns`, d3-dsv style).

@@ -89,17 +89,28 @@ describe('a host page on the app\'s own origin', () => {
     const {win, container} = hostPage(session(w.owner));
     const path = '/api/artifacts/' + w.privatePage + '/sql';
     const sent: Record<string,unknown>[] = [];
+    const row = {reader_id:'dataset reader', viewing_as:'dataset context', required_group:'dataset pin',
+      eligible_groups:'dataset labels', eligible_group_ids:'dataset ids'};
+    const columns = Object.keys(row).map(name => ({name,type:'string'}));
     const server = win.fetch;
     win.fetch = async (url, init) => {
       if (url !== path) return server(url, init);
       sent.push(JSON.parse(String(init?.body)));
-      return Response.json({error:'permission_denied', reader_id:w.owner.userId,
-        viewing_as:{id:'group_a', name:'Analytics'},...(required ? {required_group:{id:'group_b',name:'Operations'}} : {eligible_groups:[{id:'group_b',name:'Operations'}]})}, {status:403});
+      const current = {id:'group_a',name:'Analytics'}, other = {id:'group_b',name:'Operations'};
+      const metadata = {reader_id:w.owner.userId, viewing_as:current, eligible_group_ids:[other.id]};
+      if (sent.length === 2) return Response.json({...metadata, viewing_as:other, rows:[row],
+        columns:columns.map(column => ({...column,...metadata})), source:{kind:'live',at:'now',...metadata}});
+      return Response.json({error:'permission_denied', message:'denied as group_a (Analytics)',
+        notice:'Ask Operations for access', ...metadata,
+        ...(required ? {required_group:other} : {eligible_groups:[other]})}, {status:403});
     };
     const mounted = await mountDocument(container,{id:w.privatePage},win);
     const frame = framedDocument(win,mounted);
     const original = mounted.frame.src;
-    await frame.fetchThrough(path,'POST',JSON.stringify({sql:'select 1', reader_group_id:'spoof'}));
+    const query = required ? {query:'counted'} : {sql:'select 1'};
+    const refused = await frame.fetchThrough(path,'POST',JSON.stringify({...query, reader_group_id:'spoof'}));
+    const notice = "You don't have access to this data. Ask the page's owner for access.";
+    expect(refused.body).toEqual({error:'permission_denied',message:notice,notice});
     expect(sent).toHaveLength(1);
     expect(sent[0]).not.toHaveProperty('reader_group_id');
     expect(container.textContent).toContain('Viewing as Analytics');
@@ -107,7 +118,8 @@ describe('a host page on the app\'s own origin', () => {
     expect(button.textContent).toBe(required ? 'Request access as Operations' : 'Switch to Operations');
     button.click();
     await expect.poll(() => mounted.frame.src).not.toBe(original);
-    await framedDocument(win,mounted).fetchThrough(path,'POST',JSON.stringify({sql:'select 1'}));
+    const answer = await framedDocument(win,mounted).fetchThrough(path,'POST',JSON.stringify(query));
+    expect(answer.body).toEqual({rows:[row],columns,source:{kind:'live',at:'now'}});
     expect(sent[1]).toMatchObject({reader_group_id:'group_b',reader_scope_user:w.owner.userId});
     mounted.destroy();
     expect(container.textContent).toBe('');

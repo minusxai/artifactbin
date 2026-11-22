@@ -9,7 +9,7 @@ function setup(frameOrigin = FRAME, extra: Partial<Parameters<typeof createFrame
   const win = Object.assign(new EventTarget(), { location: { origin: APP } }) as unknown as Window;
   const frame = Object.assign(new EventTarget(), { contentWindow, clientLeft: 2, clientTop: 3, clientWidth: 300, clientHeight: 200, getBoundingClientRect: () => ({ left: 10, top: 20 }) }) as unknown as HTMLIFrameElement;
   const events = { ready: [] as string[], closed: [] as string[], values: [] as string[], scroll: [] as unknown[], size: [] as unknown[], pressed: 0 };
-  const appFetch = vi.fn(async () => new Response('{"ok":true}', { status: 200, headers: { 'content-type': 'application/json', 'x-secret': 'no', 'retry-after': '3' } }));
+  const appFetch = vi.fn(async () => new Response(JSON.stringify({rows:[{viewing_as:'column'}], reader_id:'host-only'}), { status: 200, headers: { 'content-type': 'application/json', 'x-secret': 'no', 'retry-after': '3' } }));
   const bridge = createFrameBridgeParent({
     win, frame, frameOrigin, id: 'doc', editId: () => 'edit_1', source: () => '<p/>', appFetch,
     onReady: nonce => events.ready.push(nonce), onClosed: reason => events.closed.push(reason), onUrlValues: search => events.values.push(search),
@@ -112,7 +112,7 @@ describe('createFrameBridgeParent', () => {
     await flush(); await flush();
     const results = t.posted.filter(p => p.data.payload.kind === 'fetch-result').map(p => p.data.payload);
     expect(results).toContainEqual({ kind: 'fetch-result', call: 2, error: 'refused' });
-    expect(results).toContainEqual({ kind: 'fetch-result', call: 1, status: 200, headers: { 'content-type': 'application/json', 'retry-after': '3' }, body: '{"ok":true}' });
+    expect(results).toContainEqual({ kind: 'fetch-result', call: 1, status: 200, headers: { 'content-type': 'application/json', 'retry-after': '3' }, body: JSON.stringify({rows:[{viewing_as:'column'}]}) });
     expect(t.appFetch).toHaveBeenCalledTimes(1);
     expect(t.appFetch).toHaveBeenCalledWith('/api/artifacts/doc/sql', expect.objectContaining({ headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sql: 'select 1', params: {}, revision: '7', readOnly:true }) }));
   });

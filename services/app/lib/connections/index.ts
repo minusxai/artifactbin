@@ -174,7 +174,7 @@ class PagePinMismatch extends ConnectorFailure {
   }
 }
 
-/** Decide again on each schema/read. Only direct, live memberships participate. Agent namespaces may name a handle. */
+/** Decide again on each schema/read. Direct membership and live administration allow selection. Only membership supplies a default. Agent namespaces may name a handle. */
 async function scopedTarget(c: NonNullable<ReturnType<typeof selected>>, viewer: ConnectorViewer, choice?: ScopeChoice) {
   if (!c.scoped) return { namespace: c.namespace };
   const [database, explicit, ...rest] = String(c.namespace || c.summary.fields.database).split('/');
@@ -188,7 +188,10 @@ async function scopedTarget(c: NonNullable<ReturnType<typeof selected>>, viewer:
   }
   const groups = (await (await getDb()).query<ReaderGroup>(`
     SELECT g.id,g.name,g.handle,u.default_group_id FROM users u
-    JOIN group_members m ON m.user_id=u.id JOIN groups g ON g.id=m.group_id
+    JOIN groups g ON g.id IN (
+      SELECT m.group_id FROM group_members m WHERE m.user_id=$1
+      UNION SELECT a.group_id FROM group_admins a WHERE a.user_id=$1
+    )
     WHERE u.id=$1 AND g.deleted_at IS NULL`, [viewer.id])).rows;
   const initial = groups.find(g => g.id === choice?.pageGroup)?.id ?? groups[0]?.default_group_id;
   const requested = choice?.requested;
@@ -196,7 +199,7 @@ async function scopedTarget(c: NonNullable<ReturnType<typeof selected>>, viewer:
     ? groups.find(g => g.id === explicit || g.handle === explicit)
     : groups.find(g => g.id === (requested === undefined ? initial : requested));
   if (!group)
-    throw new ConnectorFailure('permission_denied', 'no directly held group is available for this read');
+    throw new ConnectorFailure('permission_denied', 'no eligible group is available for this read');
   if (explicit && explicit !== group.id && explicit !== group.handle) {
     const required = groups.find(g => g.id === explicit || g.handle === explicit);
     throw new PagePinMismatch(label(group), viewer.id, required && label(required));
@@ -206,9 +209,11 @@ async function scopedTarget(c: NonNullable<ReturnType<typeof selected>>, viewer:
 
 async function run(reader: AccessActor | ConnectorViewer, text: string, params: Readonly<Record<string, Scalar>>, namespace: string | undefined, signal: AbortSignal, choice?: ScopeChoice): Promise<ConnectionSqlReply> {
   const life=readLifetime(signal);
+  let scopedPage = false;
   try {
     const c = selected(namespace);
     if (!c) return reply('dataset_not_found', 'this install has no default connection');
+    scopedPage = !!choice && c.scoped;
     const viewer = 'groups' in reader ? reader : await life.step(viewerOf(reader));
     const scope = await life.step(scopedTarget(c, viewer, choice));
     const metadata = choice && scope.viewing_as ? { viewing_as: scope.viewing_as, reader_id: viewer.id } : {};
@@ -221,7 +226,13 @@ async function run(reader: AccessActor | ConnectorViewer, text: string, params: 
       const denial = refused(connectorError(e));
       const choices = scope.groups?.filter(g => g.id !== scope.viewing_as?.id && e.eligible_group_ids?.includes(g.id))
         .map(({id, name}) => ({id, name}));
-      return { ...denial, body: { ...denial.body, ...metadata, ...(choices?.length && { eligible_group_ids: choices.map(g => g.id), eligible_groups: choices }) } };
+      // A connector may interpolate private context anywhere in its diagnostic. Only certify a
+      // diagnostic constructed entirely from the public link, never its scoped wire namespace.
+      const database = c.namespace?.split('/')[0];
+      const missing = database && `there is no ${c.dialect} connection ${database}`;
+      const pageMessage = missing && denial.body.message === missing ? missing : undefined;
+      return { ...denial, body: { ...denial.body, ...metadata,
+        ...(scopedPage && {page_message: pageMessage ?? null}), ...(choices?.length && { eligible_group_ids: choices.map(g => g.id), eligible_groups: choices }) } };
     }
   } catch (e) {
     if (e instanceof PagePinMismatch) {
@@ -229,7 +240,10 @@ async function run(reader: AccessActor | ConnectorViewer, text: string, params: 
       return { ...denial, body: { ...denial.body, viewing_as: e.viewingAs, reader_id: e.readerId,
         ...(e.required && {required_group: e.required}) } };
     }
-    if (e instanceof ConnectorFailure) return refused(connectorError(e));
+    if (e instanceof ConnectorFailure) {
+      const denial = refused(connectorError(e));
+      return scopedPage ? {...denial, body:{...denial.body, page_message:null}} : denial;
+    }
     throw e;
   }finally{life.close();}
 }

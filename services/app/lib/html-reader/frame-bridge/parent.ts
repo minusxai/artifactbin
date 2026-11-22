@@ -160,6 +160,27 @@ function relayedSql(url: URL, request: { headers: unknown; body: unknown }, html
   return { path: url.pathname, init: { method: 'POST', headers, body: JSON.stringify({ ...(query !== undefined ? { query } : { sql }), params, ...(htmlContext.selection && {reader_group_id:htmlContext.selection.group,reader_scope_user:htmlContext.selection.user}), revision: htmlContext.revision, ...(htmlContext.readOnly ? { readOnly: true } : {}) }) } };
 }
 
+/** Only the public SQL result crosses into the document. Dataset rows can have any column names. */
+function publicSqlReply(data: {
+  reader_id?: string; viewing_as?: {id:string;name:string}; eligible_group_ids?: string[]; eligible_groups?: unknown; required_group?: unknown;
+  error?: string; message?: string; notice?: string; page_message?: string | null;
+  rows?: unknown[]; columns?: {name:string;type:string}[]; truncated?: boolean;
+  source?: {kind:string;at?:string;names?:string[]};
+  affected?: number; returning?: unknown[]; returningOmitted?: string;
+}) {
+  if (data.error) {
+    const {error, message, notice} = data;
+    const scoped = 'page_message' in data || 'reader_id' in data || 'viewing_as' in data
+      || 'required_group' in data || 'eligible_groups' in data || 'eligible_group_ids' in data;
+    if (!scoped) return {error, message, notice};
+    const generic = error === 'permission_denied' ? "You don't have access to this data. Ask the page's owner for access." : 'This data could not be read.';
+    return {error, message:data.page_message ?? generic, notice:notice && generic};
+  }
+  const {columns, rows, truncated, source, affected, returning, returningOmitted} = data;
+  return {columns:columns?.map(({name,type}) => ({name,type})), rows, truncated,
+    source:source && {kind:source.kind,at:source.at,names:source.names}, affected, returning, returningOmitted};
+}
+
 export function createFrameBridgeParent(options: FrameBridgeParentOptions): FrameBridgeParent {
   const { win, frame, frameOrigin, id } = options;
   const appFetch = options.appFetch ?? sameOriginFetch(win);
@@ -244,9 +265,8 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
       const response = await appFetch(request.path, request.init);
       const headers: Record<string, string> = {};
       response.headers.forEach((value, name) => { if (KEPT_HEADERS.includes(name.toLowerCase())) headers[name.toLowerCase()] = value; });
-      const body = await response.text();
-      if (options.onReaderScope && key === relayKey && body.includes('"viewing_as":')) {
-        const data = JSON.parse(body);
+      const data = await response.json().catch(() => { throw new Error('Invalid SQL reply'); });
+      if (options.onReaderScope && key === relayKey) {
         const now = options.htmlContext?.()?.selection;
         const current = context?.selection === now || (now?.user === data.reader_id && now?.group === data.viewing_as?.id);
         if (current && typeof data.reader_id === 'string' && typeof data.viewing_as?.id === 'string' && typeof data.viewing_as.name === 'string') {
@@ -256,6 +276,7 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
             requestAccess: !!required, choices: required ? [required] : denied ? data.eligible_groups ?? [] : []});
         }
       }
+      const body = JSON.stringify(publicSqlReply(data));
       reply({ kind: 'fetch-result', call: payload.call, status: response.status, headers, body });
     } catch (error) {
       reply({ kind: 'fetch-result', call: payload.call, error: String(error instanceof Error ? error.message : error) });
