@@ -47,7 +47,17 @@ CREATE OR REPLACE VIEW identity.tokens AS
         AND NOT EXISTS (
           SELECT 1 FROM auth.credentials sibling LEFT JOIN auth.tokens access ON access.id=sibling.payload->>'access_token_id'
           WHERE sibling.kind='refresh_token' AND sibling.group_id=member.group_id
-            AND (sibling.deleted_at IS NOT NULL OR access.id IS NULL OR access.deleted_at IS NOT NULL)))))
+            AND (sibling.deleted_at IS NOT NULL OR access.id IS NULL OR access.deleted_at IS NOT NULL))) OR EXISTS (SELECT 1 FROM auth.credentials run WHERE run.kind='run_sign_in' AND run.credential_hash=t.id AND run.deleted_at IS NULL AND (t.group_id IS NULL OR t.group_role='member') AND run.subject_id=CASE WHEN t.group_id IS NULL THEN t.user_id ELSE t.issued_by END
+      AND ((run.payload->>'parent_kind'='session' AND EXISTS (SELECT 1 FROM auth.session ps WHERE ps.id=run.payload->>'parent_id' AND ps."userId"=run.subject_id AND ps."expiresAt">now()))
+        OR (run.payload->>'parent_kind'='token' AND EXISTS (SELECT 1 FROM auth.tokens p WHERE p.id=run.payload->>'parent_id' AND p.user_id=run.subject_id AND p.issued_by IS NULL AND p.deleted_at IS NULL AND (p.expires_at IS NULL OR p.expires_at>now())
+          AND (COALESCE(p.audience,'')='' OR EXISTS (SELECT 1 FROM auth.credentials pmember
+      JOIN auth.credentials pfamily ON pfamily.kind='refresh_family' AND pfamily.credential_hash=pmember.group_id AND pfamily.deleted_at IS NULL
+      WHERE COALESCE(p.audience,'')<>'' AND pmember.kind='refresh_token' AND pmember.payload->>'access_token_id'=p.id
+        AND (pfamily.payload->>'session_id' IS NULL OR EXISTS (SELECT 1 FROM auth.session bound WHERE bound.id=pfamily.payload->>'session_id' AND bound."expiresAt">now()))
+        AND NOT EXISTS (
+          SELECT 1 FROM auth.credentials psibling LEFT JOIN auth.tokens paccess ON paccess.id=psibling.payload->>'access_token_id'
+          WHERE psibling.kind='refresh_token' AND psibling.group_id=pmember.group_id
+            AND (psibling.deleted_at IS NOT NULL OR paccess.id IS NULL OR paccess.deleted_at IS NOT NULL))))))))))
       WHEN t.issued_by IS NULL THEN (COALESCE(t.audience,'')='' OR EXISTS (SELECT 1 FROM auth.credentials member
       JOIN auth.credentials family ON family.kind='refresh_family' AND family.credential_hash=member.group_id AND family.deleted_at IS NULL
       WHERE COALESCE(t.audience,'')<>'' AND member.kind='refresh_token' AND member.payload->>'access_token_id'=t.id
@@ -55,9 +65,9 @@ CREATE OR REPLACE VIEW identity.tokens AS
         AND NOT EXISTS (
           SELECT 1 FROM auth.credentials sibling LEFT JOIN auth.tokens access ON access.id=sibling.payload->>'access_token_id'
           WHERE sibling.kind='refresh_token' AND sibling.group_id=member.group_id
-            AND (sibling.deleted_at IS NOT NULL OR access.id IS NULL OR access.deleted_at IS NOT NULL)))) ELSE EXISTS (SELECT 1 FROM auth.credentials run WHERE run.kind='run_sign_in' AND run.credential_hash=t.id AND run.deleted_at IS NULL AND run.subject_id=t.user_id
-      AND ((run.payload->>'parent_kind'='session' AND EXISTS (SELECT 1 FROM auth.session ps WHERE ps.id=run.payload->>'parent_id' AND ps."userId"=t.user_id AND ps."expiresAt">now()))
-        OR (run.payload->>'parent_kind'='token' AND EXISTS (SELECT 1 FROM auth.tokens p WHERE p.id=run.payload->>'parent_id' AND p.user_id=t.user_id AND p.issued_by IS NULL AND p.deleted_at IS NULL AND (p.expires_at IS NULL OR p.expires_at>now())
+            AND (sibling.deleted_at IS NOT NULL OR access.id IS NULL OR access.deleted_at IS NOT NULL)))) ELSE EXISTS (SELECT 1 FROM auth.credentials run WHERE run.kind='run_sign_in' AND run.credential_hash=t.id AND run.deleted_at IS NULL AND (t.group_id IS NULL OR t.group_role='member') AND run.subject_id=CASE WHEN t.group_id IS NULL THEN t.user_id ELSE t.issued_by END
+      AND ((run.payload->>'parent_kind'='session' AND EXISTS (SELECT 1 FROM auth.session ps WHERE ps.id=run.payload->>'parent_id' AND ps."userId"=run.subject_id AND ps."expiresAt">now()))
+        OR (run.payload->>'parent_kind'='token' AND EXISTS (SELECT 1 FROM auth.tokens p WHERE p.id=run.payload->>'parent_id' AND p.user_id=run.subject_id AND p.issued_by IS NULL AND p.deleted_at IS NULL AND (p.expires_at IS NULL OR p.expires_at>now())
           AND (COALESCE(p.audience,'')='' OR EXISTS (SELECT 1 FROM auth.credentials pmember
       JOIN auth.credentials pfamily ON pfamily.kind='refresh_family' AND pfamily.credential_hash=pmember.group_id AND pfamily.deleted_at IS NULL
       WHERE COALESCE(p.audience,'')<>'' AND pmember.kind='refresh_token' AND pmember.payload->>'access_token_id'=p.id

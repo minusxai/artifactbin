@@ -27,7 +27,7 @@
  *    keys, forwarded to the app's fixed seam and answered as it answers;
  *  - a RUN SIGN-IN (contracts `RUN_SIGN_IN_PATH`, a service opted in with `run_sign_ins`, its own secret): the person's
  *    exchanged token for that service, verified as introspection verifies it, becomes an ordinary API access token for
- *    that person with no refresh token (./identity-store/accounts `mintRunSignIn`), audited as a mint. Without the
+ *    that person or as a specified group at Member level with no refresh token (./identity-store/accounts `mintRunSignIn`), audited as a mint. Without the
  *    opt-in, or with another credential in the header, the path is passed on as any unknown one;
  *  - a GROUP SIGN-IN for a service (contracts `GROUP_SIGN_IN_PATH`, a service opted in with `group_sign_ins`, its own
  *    secret): an approval a group's Admin gave THAT service becomes an ordinary API access token acting as the group at
