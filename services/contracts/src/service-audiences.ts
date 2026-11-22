@@ -98,6 +98,19 @@ export const SERVICE_TOKEN_PATH = '/api/authentication/service-token';
 /** The exchange's refusal (403) to an agent signed in as a group, for a service that does not opt in to group principals. */
 export const GROUP_PRINCIPALS_NOT_ACCEPTED = 'group_principals_not_accepted';
 /** A run sign-in: an ordinary API access token for the person whose exchanged token the service presents (header above). */
+/** A run-enabled service records explicit Member consent and issues or revokes that revision's runs. */
+export const SCHEDULE_SIGN_IN_PATH = '/api/internal/identity/schedule-sign-in';
+export type ScheduleSignInRequest =
+  | {action: 'consent'; token: string; group_id: string; schedule_id: string; revision: string}
+  | {action: 'issue'; grant_id: string; schedule_id: string; revision: string; expires_in?: number}
+  | {action: 'revoke'; grant_id: string; schedule_id: string; revision: string};
+export interface ScheduleConsent {
+  grant_id: string;
+  user_id: string;
+  group_id: string;
+  group_role: 'member';
+}
+
 export const RUN_SIGN_IN_PATH = '/api/internal/identity/run-sign-in';
 /** A run sign-in's answer: what a sandbox writes into the skill's `credentials.env` (header above). */
 export interface RunSignIn {

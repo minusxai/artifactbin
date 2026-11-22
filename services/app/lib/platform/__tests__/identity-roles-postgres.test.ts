@@ -24,7 +24,11 @@ import type {Queryable} from '@artifactbin/contracts/db';
 import {IdentityNotReady,createIdentityStore,ensureIdentitySchema,identityDbOf,identityMoveStatements} from '@artifactbin/auth/identity-store';
 import {assertGroupRoleModel,migrateGroupRoles} from '@artifactbin/auth/identity-store/group-role-migration';
 import {SECRET_COLUMNS} from '@artifactbin/auth/identity-store/schema';
-import {createAuthHost,createHumanAuth,sessionStoreOf,ensureHumanAuthSchema} from '@artifactbin/auth';
+import {createAuthHost,createBearerReader,createHumanAuth,sessionStoreOf,ensureHumanAuthSchema} from '@artifactbin/auth';
+import {IDENTITY_INTROSPECT_PATH} from '@artifactbin/contracts/identity-service';
+import {SCHEDULE_SIGN_IN_PATH,SERVICE_TOKEN_PATH} from '@artifactbin/contracts/service-audiences';
+import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts/routes';
+import {createHash} from 'node:crypto';
 import {SCHEMA_STATEMENTS} from '@/lib/platform';
 import {tenancyIssuer} from '@/test/helpers/trusted-tenancy';
 import {projectHostTenancyChanges,reachedGroupsSql,subtreeSql} from '@/lib/groups';
@@ -43,7 +47,7 @@ describe.skipIf(!dockerImage('postgres:17-alpine'))('identity tables in a split-
  let superuser:pg.Pool,app:pg.Pool,auth:pg.Pool,service:pg.Pool;
 
  beforeAll(async()=>{
-  container=execFileSync('docker',['run','--rm','-d','-e','POSTGRES_PASSWORD=pw','-p','127.0.0.1::5432','postgres:17-alpine'],{encoding:'utf8'}).trim();
+  container=execFileSync('docker',['run','--rm','-d','--tmpfs','/var/lib/postgresql/data','-e','POSTGRES_PASSWORD=pw','-p','127.0.0.1::5432','postgres:17-alpine'],{encoding:'utf8'}).trim();
   port=Number(execFileSync('docker',['port',container,'5432/tcp'],{encoding:'utf8'}).trim().split('\n')[0]!.split(':').at(-1));
   superuser=pool('postgres','public');
   for(let attempt=0;;attempt++){
@@ -80,6 +84,74 @@ describe.skipIf(!dockerImage('postgres:17-alpine'))('identity tables in a split-
   for(const p of pools)await p.end().catch(()=>{});
   if(container)spawnSync('docker',['rm','-f',container],{stdio:'ignore'});
  },30_000);
+
+ it('serializes competing schedule consents and invalidates old credentials at takeover',async()=>{
+  const db=identityDbOf(auth),baseURL='http://app.test',secret='disposable-schedule-cookie-key-0000';
+  const serviceSecret='disposable-schedule-service-key',otherSecret='disposable-other-service-key';
+  const configured=(id:string,key:string)=>({id,origin:`https://${id}.example.test`,run_sign_ins:true,group_principals:true,
+   introspection_secret_sha256:createHash('sha256').update(key).digest('hex')});
+  let otp='';
+  const human=await createHumanAuth({pool:auth,schema:'auth',secret,baseURL,mail:{send:async message=>{otp=message.otp??'';}}});
+  const host=createAuthHost({env:{APP__PUBLIC_BASE_URL:baseURL,INTERNAL__SERVICE_SECRET:secret,
+   IDENTITY__SERVICE_AUDIENCES:JSON.stringify([configured('scheduler',serviceSecret),configured('other',otherSecret)])},
+   cookieSecret:secret,tokens:createBearerReader({db}),sessions:sessionStoreOf(human),identityDb:db,appSchema:'app',upstream:async()=>new Response(null,{status:404})});
+  const post=(path:string,body:unknown,headers:Record<string,string>={})=>host.request(baseURL+path,{method:'POST',
+   headers:{origin:baseURL,'content-type':'application/json',...headers},body:JSON.stringify(body)});
+  const store=createIdentityStore({db,authSchema:'auth',appSchema:'app'});
+  await auth.query("INSERT INTO auth.groups(id,handle,name,created_by) VALUES('grp_schedule','disposable_schedule','Schedule','prior'),('grp_alternate','disposable_alternate','Alternate','prior')");
+  const person=async(email:string,role:string)=>{
+   expect((await post('/api/auth/email-otp/send-verification-otp',{email,type:'sign-in'})).status).toBe(200);
+   const login=await post('/api/auth/sign-in/email-otp',{email,otp});
+   expect(login.status).toBe(200);
+   const cookie=login.headers.getSetCookie().map(line=>line.split(';')[0]).join('; ');
+   const user=(await login.json()).user.id as string;
+   await store.syncProfile({userId:user,email,testAccount:false});
+   await auth.query("INSERT INTO auth.group_members(group_id,user_id,role) VALUES('grp_schedule',$1,$2),('grp_alternate',$1,'member')",[user,role]);
+   const serviceToken=await post(SERVICE_TOKEN_PATH,{audience:'scheduler'},{cookie});
+   expect(serviceToken.status,await serviceToken.clone().text()).toBe(200);
+   return {user,token:(await serviceToken.json()).access_token as string};
+  };
+  const first=await person('mxmx_test_schedule_first@example.test','admin');
+  const second=await person('mxmx_test_schedule_second@example.test','member');
+  const call=async(body:unknown,key=serviceSecret)=>{
+   const response=await post(SCHEDULE_SIGN_IN_PATH,body,{[SERVICE_AUTH_HEADER]:key});
+   return {status:response.status,body:await response.json()};
+  };
+  const scope={schedule_id:'daily',revision:'before'},consent={...scope,action:'consent',token:first.token,group_id:'grp_schedule'};
+  const results=await Promise.all([call(consent),call(consent),call({...consent,token:second.token})]);
+  // Whichever owner wins, only that owner may retry this revision.
+  const grant=results[2]!.status===200?results[2]!:results[0]!;
+  expect(grant.status,JSON.stringify(results)).toBe(200);
+  expect(results).toEqual(grant.body.user_id===first.user?[grant,grant,{status:409,body:{error:'schedule_conflict'}}]:
+   [{status:409,body:{error:'schedule_conflict'}},{status:409,body:{error:'schedule_conflict'}},grant]);
+  const prior={...scope,grant_id:grant.body.grant_id};
+  expect((await call({...prior,action:'issue'},otherSecret)).status).toBe(403);
+  const start=await call({...prior,action:'issue'});
+  expect(start.status).toBe(200);
+  const exchange=await post(SERVICE_TOKEN_PATH,{audience:'scheduler'},{authorization:`Bearer ${start.body.access_token}`});
+  expect(exchange.status,await exchange.clone().text()).toBe(200);
+  const exchanged=(await exchange.json()).access_token;
+  const inspect=async(token:string)=>(await post(IDENTITY_INTROSPECT_PATH,{token},{[SERVICE_AUTH_HEADER]:secret})).json();
+  expect(await inspect(exchanged)).toMatchObject({active:true,user_id:grant.body.user_id,group_id:'grp_schedule',group_role:'member'});
+  expect((await call({...prior,action:'revoke'})).status).toBe(200);
+  const successor=grant.body.user_id===first.user?second:first;
+  expect((await call({...consent,revision:'after',token:successor.token,group_id:'grp_alternate'})).status).toBe(409);
+  const takeover=await call({...consent,revision:'after',token:successor.token});
+  expect(takeover).toEqual({status:200,body:{grant_id:expect.any(String),user_id:successor.user,group_id:'grp_schedule',group_role:'member'}});
+  expect((await call({...prior,action:'issue'})).status).toBe(403);
+  expect(await inspect(exchanged)).toEqual({active:false});
+  expect(await inspect(start.body.access_token)).toEqual({active:false});
+
+  const current={action:'issue',schedule_id:scope.schedule_id,revision:'after',grant_id:takeover.body.grant_id};
+  const activeRun=await call(current);
+  expect(activeRun.status).toBe(200);
+  expect(await inspect(activeRun.body.access_token)).toMatchObject({active:true,user_id:successor.user,group_role:'member'});
+  await auth.query("DELETE FROM auth.group_members WHERE group_id='grp_schedule' AND user_id=$1",[successor.user]);
+  expect(await inspect(activeRun.body.access_token)).toEqual({active:false});
+  await auth.query("INSERT INTO auth.group_members(group_id,user_id,role) VALUES('grp_schedule',$1,'member')",[successor.user]);
+  expect(await inspect(activeRun.body.access_token)).toEqual({active:false});
+  expect((await call(current)).status).toBe(403);
+ });
 
  it('exposes an operator-assigned personal tenancy to the read-only identity role',async()=>{
   const read=()=>service.query("SELECT tenancy_id FROM users WHERE id='prior'").then(result=>result.rows);

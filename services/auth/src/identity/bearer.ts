@@ -21,7 +21,8 @@
  * is live instead through its `run_sign_in` credential row (keyed by the token's id), and only while the parent
  * credential named there is: a live browser session of the same person, or a live token of theirs that is not itself a
  * run sign-in. A second lateral (`run`) reads it by primary key. Its subject is the personal token’s user_id or
- * the group token’s authorizing person (issued_by).
+ * the group token’s authorizing person (issued_by). A schedule run uses a consent tied to one direct seat as
+ * its parent, so either revocation or deletion of that seat ends the run and its service exchanges.
  *
  * A GROUP'S SIGN-IN (`group_id` set, `user_id` NULL: contracts identity-service `GROUP_SIGN_IN_RULE`) is decided
  * by its row, an audience and, for a person's, a live OAuth family or Member run parent; a service's
@@ -36,6 +37,7 @@ import { groupSignInServiceConfigured, type ServiceAudience } from '@artifactbin
 import type { Queryable } from '@artifactbin/contracts/db';
 import type { TokenReader, TokenRecord } from '@artifactbin/contracts/identity';
 import { TOKEN_RE, hashToken } from '@artifactbin/utils/tokens';
+import { scheduleSeatSql } from '../identity-store/schedule-consent';
 import { plainIdentifier } from '@artifactbin/utils/sql-identifier';
 
 export interface BearerReaderOptions {
@@ -71,7 +73,7 @@ export function sessionBoundSql(auth: string, family: string, sessions = true): 
  * `createBearerReader` below and by the `tokens` read view's `live` (../identity-store/views), so the two cannot disagree. `auth` and
  * `tokens` are interpolated: the auth schema and the (possibly schema-qualified) tokens table.
  */
-export function bearerLiveSql(o: { auth: string; tokens: string; sessions?: boolean }): { fence: string; live: string; exists: string } {
+export function bearerLiveSql(o: { auth: string; tokens: string; sessions?: boolean; scheduleSeats?: boolean }): { fence: string; live: string; exists: string } {
   const { auth, tokens } = o;
   const sessions = o.sessions !== false;
   /** The family fence over the `tokens` row aliased `a` (`t`, or a run sign-in's parent `p`). */
@@ -87,9 +89,16 @@ export function bearerLiveSql(o: { auth: string; tokens: string; sessions?: bool
   const rowLive = rowLiveOf('t');
   const group = `t.user_id IS NULL AND COALESCE(t.audience,'')<>''`;
   // A run sign-in's credential row, live while its parent is: the person's session, or a token of theirs that is not
-  // itself a run sign-in, by that token's own rule (row and family).
+  // itself a run sign-in, by that token's own rule (row and family). For schedule runs the group view also
+  // checks the direct seat, as part of the group authorisation read shared by bearers and exchanged tokens.
   const run = `FROM ${auth}.credentials run WHERE run.kind='run_sign_in' AND run.credential_hash=t.id AND run.deleted_at IS NULL AND (t.group_id IS NULL OR t.group_role='member') AND run.subject_id=CASE WHEN t.group_id IS NULL THEN t.user_id ELSE t.issued_by END
-      AND ((run.payload->>'parent_kind'='session' AND ${sessions ? `EXISTS (SELECT 1 FROM ${auth}.session ps WHERE ps.id=run.payload->>'parent_id' AND ps."userId"=run.subject_id AND ps."expiresAt">now())` : 'FALSE'})
+      AND ((run.payload->>'parent_kind'='schedule' AND t.group_id IS NOT NULL AND EXISTS (
+          SELECT 1 FROM ${auth}.credentials consent WHERE consent.kind='schedule_consent'
+            AND consent.credential_hash=run.payload->>'parent_id' AND consent.deleted_at IS NULL
+            AND consent.subject_id=run.subject_id AND consent.group_id=t.group_id
+            AND consent.payload->>'service'=run.payload->>'service'
+            ${o.scheduleSeats ? `AND ${scheduleSeatSql(auth, 'consent')}` : ''}))
+        OR (run.payload->>'parent_kind'='session' AND ${sessions ? `EXISTS (SELECT 1 FROM ${auth}.session ps WHERE ps.id=run.payload->>'parent_id' AND ps."userId"=run.subject_id AND ps."expiresAt">now())` : 'FALSE'})
         OR (run.payload->>'parent_kind'='token' AND EXISTS (SELECT 1 FROM ${tokens} p WHERE p.id=run.payload->>'parent_id' AND p.user_id=run.subject_id AND p.issued_by IS NULL AND ${rowLiveOf('p')}
           AND (COALESCE(p.audience,'')='' OR EXISTS (SELECT 1 ${family('p', 'pmember', 'pfamily', 'psibling', 'paccess')})))))`;
   return {

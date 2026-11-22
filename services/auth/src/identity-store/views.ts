@@ -97,7 +97,7 @@ export function identityViewStatements(schemas: IdentitySchemas, options: {sessi
       LIMIT 1) AS default_group_id`, handle: 'u.username AS handle'})}
   FROM ${auth}.users u`);
     } else if (table === 'tokens') {
-      const {exists} = bearerLiveSql({auth, tokens: `${auth}.tokens`, sessions: options.sessions !== false});
+      const {exists} = bearerLiveSql({auth, tokens: `${auth}.tokens`, sessions: options.sessions !== false, scheduleSeats: true});
       statements.push(`CREATE OR REPLACE VIEW ${read}.tokens AS
   SELECT ${plain('tokens', 't', {user_id: 'CASE WHEN t.group_id IS NOT NULL AND t.grant_id IS NULL THEN t.issued_by ELSE t.user_id END AS user_id', scopes: `
     array_remove(regexp_split_to_array(coalesce(t.scope, ''), '\\s+'), '') AS scopes`, live: `

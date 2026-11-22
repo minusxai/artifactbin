@@ -6,6 +6,7 @@
  * groups' (`reserveHandle`): a reservation is a tombstone, so a released or deleted name is never handed to someone
  * else silently. Tokens are prefix + 256 random bits, only the sha256 stored, soft revoked (`deleted_at`).
  */
+import { scheduleSeatSql } from './schedule-consent';
 import {displayName} from '@artifactbin/contracts/account-resource';
 import crypto from 'node:crypto';
 import {IdentityError, type IdentityService, type IdentityUserRow, type MintedIdentityToken, type TransactionalQueryable} from '@artifactbin/contracts/identity-module';
@@ -67,16 +68,24 @@ const RUN_SIGN_INS_PER_SERVICE = 50;
  * in an auth `run_sign_in` credential row keyed by the token's id: the bearer read's `run` fence (../identity/bearer)
  * keeps it live only while that parent is. ONE statement, so it needs no transaction: the row, its credential and
  * the cap (RUN_SIGN_INS_PER_SERVICE live ones per person and service; past it `rate_limited`) commit together.
- * The route has already verified the exchanged token, the account and the parent; this writes nothing else.
+ * For interactive runs the route verifies the exchanged token and its parent. For scheduled runs the insert also
+ * checks the consent and its direct seat, so a stale grant cannot supply a token.
  */
-export async function mintRunSignIn(t: IdentityTables, q: Queryable, authSchema: string, readSchema: string, input: {groupId: string | null; userId: string; service: string; parent: {kind: 'token' | 'session'; id: string}; expiresInMs: number; audience: string; scope: string}): Promise<MintedIdentityToken> {
+export async function mintRunSignIn(t: IdentityTables, q: Queryable, authSchema: string, readSchema: string, input: {groupId: string | null; userId: string; service: string; parent: {kind: 'token' | 'session'; id: string} | {kind: 'schedule'; id: string; origin: string; scheduleId: string; revision: string}; expiresInMs: number; audience: string; scope: string}): Promise<MintedIdentityToken> {
   const ms = input.expiresInMs;
   if (!Number.isFinite(ms) || ms < MIN_TOKEN_TTL_MS || ms > MAX_TOKEN_TTL_MS) throw new IdentityError('invalid_expiry', 400);
   const id = tokenId(), token = TOKEN_PREFIX + crypto.randomBytes(32).toString('base64url');
   const expiresAt = new Date(Date.now() + ms).toISOString(), name = `run-${input.service}`;
+  const consent = input.parent.kind === 'schedule' ? input.parent : null;
   // Personal group runs keep the person in issued_by (the audit identity) and the issuing service on the credential.
   const eligible = personalGroupAuthority(t, readSchema, '$4::text', '$12::text', "'member'");
-  const minted = await q.query<{id: string | null}>(`WITH eligible AS (SELECT 1 WHERE $12::text IS NULL OR ${eligible}),
+  const minted = await q.query<{id: string | null}>(`WITH eligible AS (SELECT 1 WHERE
+      CASE WHEN $9::text='schedule' THEN $12::text IS NOT NULL AND ${eligible} AND EXISTS (
+        SELECT 1 FROM ${authSchema}.credentials consent WHERE consent.kind='schedule_consent'
+          AND consent.credential_hash=$10 AND consent.subject_id=$4 AND consent.group_id=$12 AND consent.deleted_at IS NULL
+          AND consent.payload->>'service'=$8 AND consent.payload->>'origin'=$13 AND consent.payload->>'schedule'=$14
+          AND consent.payload->>'revision'=$15 AND ${scheduleSeatSql(authSchema, 'consent')})
+      ELSE $12::text IS NULL OR ${eligible} END),
     capped AS (SELECT 1 FROM eligible WHERE (SELECT count(*) FROM ${t.tokens} held
       WHERE held.deleted_at IS NULL AND held.expires_at>now() AND ((held.user_id=$4 AND held.issued_by=$8)
         OR (held.group_id IS NOT NULL AND held.grant_id IS NULL AND held.issued_by=$4 AND EXISTS (
@@ -87,8 +96,8 @@ export async function mintRunSignIn(t: IdentityTables, q: Queryable, authSchema:
     credential AS (INSERT INTO ${authSchema}.credentials (kind, credential_hash, subject_id, payload, expires_at)
       SELECT 'run_sign_in', token.id, $4, jsonb_build_object('access_token_id', token.id, 'parent_kind', $9::text, 'parent_id', $10::text, 'service', $8::text), $5 FROM token RETURNING credential_hash)
     SELECT (SELECT credential_hash FROM credential) AS id FROM eligible`,
-    [id, name, sha256(token), input.userId, expiresAt, input.audience, input.scope, input.service, input.parent.kind, input.parent.id, RUN_SIGN_INS_PER_SERVICE, input.groupId]);
-  if (!minted.rows.length) throw new IdentityError('group_level_not_held', 403);
+    [id, name, sha256(token), input.userId, expiresAt, input.audience, input.scope, input.service, input.parent.kind, input.parent.id, RUN_SIGN_INS_PER_SERVICE, input.groupId, consent?.origin ?? null, consent?.scheduleId ?? null, consent?.revision ?? null]);
+  if (!minted.rows.length) throw new IdentityError(consent ? 'grant_refused' : 'group_level_not_held', 403);
   if (!minted.rows[0]!.id) throw new IdentityError('rate_limited', 429, 3600);
   return {id, name, token, expiresAt};
 }

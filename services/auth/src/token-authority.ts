@@ -1,6 +1,6 @@
 /**
  * WHAT A PRESENTED TOKEN IS, for a service: `mountTokenAuthority(app, o, config)` mounts identity introspection
- * (contracts `IDENTITY_INTROSPECT_PATH`), the RUN SIGN-IN (`RUN_SIGN_IN_PATH`) and a service's GROUP SIGN-IN with its
+ * (contracts `IDENTITY_INTROSPECT_PATH`), interactive and scheduled RUN SIGN-IN and a service's GROUP SIGN-IN with its
  * list of approvals (`GROUP_SIGN_IN_PATH`, `GROUP_SIGN_IN_GRANTS_PATH`), each as ./session-authority's header says.
  * An access token is live by the one bearer read (and must be bound to this API or a configured service); an exchanged
  * token by its signature and its parent credential's `live`; a group's exchanged token by its live group sign-in.
@@ -8,7 +8,7 @@
  */
 import {ARTIFACT_SCOPE} from '@artifactbin/contracts/cli-auth';
 import {DEFAULT_TOKEN_TTL_MS, MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS} from '@artifactbin/contracts/handles';
-import { RUN_SIGN_IN_PATH, GROUP_SIGN_IN_PATH, GROUP_SIGN_IN_GRANTS_PATH, type GroupSignIn, type RunSignIn } from '@artifactbin/contracts/service-audiences';
+import { RUN_SIGN_IN_PATH, SCHEDULE_SIGN_IN_PATH, GROUP_SIGN_IN_PATH, GROUP_SIGN_IN_GRANTS_PATH, type GroupSignIn, type RunSignIn } from '@artifactbin/contracts/service-audiences';
 import {API_RESOURCE_PATH} from '@artifactbin/contracts/cli-auth';
 import {IDENTITY_INTROSPECT_PATH, type IdentityIntrospectResponse} from '@artifactbin/contracts/identity-service';
 import {IdentityError} from '@artifactbin/contracts/identity-module';
@@ -20,6 +20,7 @@ import type {Context, Hono} from 'hono';
 import type {AuthEnv,AuthOptions} from './parts';
 import {acceptedOriginsOf,baseUrlOf} from './routes/grants';
 import {listServiceGroupSignInGrants,mintRunSignIn,mintServiceGroupSignIn} from './identity-store/accounts';
+import {readScheduleConsent,recordScheduleConsent,revokeScheduleConsent} from './identity-store/schedule-consent';
 import {identityTables} from './identity-store/tables';
 import {say} from './events';
 import {readEnv} from './env';
@@ -62,6 +63,23 @@ export function mountTokenAuthority(app:Hono<AuthEnv>,o:AuthOptions,{secret,audi
  /** An exchanged token's parent, still live for that same user: its row in the `tokens` or `sessions` view, as a service re-checks it. */
  const parentLive=async(parent:ServiceTokenParent,userId:string)=>!!o.identityDb&&(await o.identityDb.query<{live:boolean}>(parent.kind==='token'
   ?`SELECT live FROM ${readSchema}.tokens WHERE id=$1 AND group_id IS NULL AND user_id=$2`:`SELECT live FROM ${readSchema}.sessions WHERE id=$1 AND "userId"=$2`,[parent.id,userId])).rows[0]?.live===true;
+ const serverOf=(c:Context<AuthEnv>)=>baseUrlOf(c.req.raw,o.trustedHops??0,readEnv(o.env,'APP__PUBLIC_BASE_URL'));
+ const verifiedServiceParent=async(token:string,service:ServiceAudience)=>{
+  const claims=isServiceToken(token)&&tokenKey?verifyServiceToken(tokenKey,audiences,token):null;
+  if(!claims||claims.svc!==service.id||claims.aud!==service.origin||!await activeUser(claims.sub)||!await parentLive(claims.par,claims.sub)
+    ||(o.admitIdentity&&!await o.admitIdentity({userId:claims.sub})))throw new IdentityError('unauthorized',401);
+  if(claims.par.kind==='token'&&(await o.identityDb!.query<{issued_by:string|null}>(`SELECT issued_by FROM ${readSchema}.tokens WHERE id=$1`,[claims.par.id])).rows[0]?.issued_by)
+   throw new IdentityError('parent_not_eligible',403);
+  return claims;
+ };
+ const respondRun=(minted:Awaited<ReturnType<typeof mintRunSignIn>>,server:string,userId:string)=>{
+  void say(o.events,{kind:'user',id:userId},'minted',{kind:'token',id:minted.id},{name:minted.name});
+  const expiresAt=minted.expiresAt!;
+  return answer({access_token:minted.token,token_type:'Bearer',token_id:minted.id,expires_at:expiresAt,expires_at_ms:Date.parse(expiresAt),server} satisfies RunSignIn);
+ };
+ const runError=(error:unknown)=>error instanceof IdentityError
+  ?answer({error:error.code,...(error.retryAfter!==undefined?{retry_after:error.retryAfter}:{})},error.status)
+  :answer({error:'session_unavailable'},503);
  app.all(IDENTITY_INTROSPECT_PATH,async c=>{
   // The installation itself (every token), or one configured service (only tokens bound to its own origin).
   const asker:{only:ServiceAudience|null}={only:null};
@@ -98,24 +116,48 @@ export function mountTokenAuthority(app:Hono<AuthEnv>,o:AuthOptions,{secret,audi
   if((groupId!==undefined||input.group_role!==undefined)&&(typeof groupId!=='string'||!/^grp_[a-z0-9]+$/.test(groupId)||input.group_role!=='member'))return answer({error:'bad_request'},400);
   const lifetime=runLifetime(input.expires_in);
   if(lifetime===null)return answer({error:'invalid_expiry'},400);
-  const unauthorized=answer({error:'unauthorized'},401);
   try{
-   // The person's exchanged token for THIS service, exactly as introspection verifies one; never an ordinary bearer.
-   const claims=isServiceToken(input.token)&&tokenKey?verifyServiceToken(tokenKey,audiences,input.token):null;
-   if(!claims||claims.svc!==service.id||claims.aud!==service.origin||!await activeUser(claims.sub)||!await parentLive(claims.par,claims.sub)
-    ||(o.admitIdentity&&!await o.admitIdentity({userId:claims.sub})))return unauthorized;
-   // One level only: a run sign-in is never the parent of another.
-   if(claims.par.kind==='token'&&(await o.identityDb!.query<{issued_by:string|null}>(`SELECT issued_by FROM ${readSchema}.tokens WHERE id=$1`,[claims.par.id])).rows[0]?.issued_by)
-    return answer({error:'parent_not_eligible'},403);
-   const server=baseUrlOf(c.req.raw,o.trustedHops??0,readEnv(o.env,'APP__PUBLIC_BASE_URL'));
+   const claims=await verifiedServiceParent(input.token,service);
+   const server=serverOf(c);
    const minted=await mintRunSignIn(identityTables(authSchema),o.identityDb!,authSchema,readSchema,{groupId:typeof groupId==='string'?groupId:null,userId:claims.sub,service:service.id,parent:claims.par,expiresInMs:lifetime,audience:`${server}${API_RESOURCE_PATH}`,scope:ARTIFACT_SCOPE});
-   void say(o.events,{kind:'user',id:claims.sub},'minted',{kind:'token',id:minted.id},{name:minted.name});
-   const expiresAt=minted.expiresAt!;
-   return answer({access_token:minted.token,token_type:'Bearer',token_id:minted.id,expires_at:expiresAt,expires_at_ms:Date.parse(expiresAt),server} satisfies RunSignIn);
-  }catch(error){
-   if(error instanceof IdentityError)return answer({error:error.code,...(error.retryAfter!==undefined?{retry_after:error.retryAfter}:{})},error.status);
-   return answer({error:'session_unavailable'},503);
-  }
+   return respondRun(minted,server,claims.sub);
+  }catch(error){return runError(error);}
+ });
+ app.all(SCHEDULE_SIGN_IN_PATH,async(c,next)=>{
+  const service=serviceOf(audiences,c.req.header(SERVICE_AUTH_HEADER));
+  if(!service?.runSignIns)return next();
+  const input=await admitService(c,()=>true);if(input instanceof Response)return input;
+  const {action,schedule_id:id,revision,token,group_id:groupId,grant_id:grantId}=input;
+  const fields=action==='consent'?['token','group_id']:action==='issue'?['grant_id','expires_in']:action==='revoke'?['grant_id']:null;
+  if(!fields||Object.keys(input).some(key=>!['action','schedule_id','revision',...fields].includes(key))
+    ||typeof id!=='string'||!id.trim()||id.length>256||typeof revision!=='string'||!revision.trim()||revision.length>256)
+   return answer({error:'bad_request'},400);
+  const db=o.identityDb;
+  if(!db)return answer({error:'session_unavailable'},503);
+  const target={service,id,revision};
+  try{
+   if(action==='consent'){
+    if(typeof token!=='string'||!token||typeof groupId!=='string'||!/^grp_[a-z0-9]+$/.test(groupId))return answer({error:'bad_request'},400);
+    const claims=await verifiedServiceParent(token,service);
+    return answer(await recordScheduleConsent(db,authSchema,readSchema,{...target,userId:claims.sub,groupId}));
+   }
+   if(typeof grantId!=='string'||!/^scg_[a-z0-9]{1,40}$/.test(grantId))return answer({error:'bad_request'},400);
+   const grant={...target,grantId};
+   if(action==='revoke'){
+    await revokeScheduleConsent(db,authSchema,grant);
+    return answer({ok:true});
+   }
+   const lifetime=runLifetime(input.expires_in);
+   if(lifetime===null)return answer({error:'invalid_expiry'},400);
+   const owner=await readScheduleConsent(db,authSchema,grant);
+   if(o.admitIdentity&&!await o.admitIdentity({userId:owner.subject_id}))return answer({error:'grant_refused'},403);
+   const server=serverOf(c);
+   const minted=await mintRunSignIn(identityTables(authSchema),db,authSchema,readSchema,{
+    groupId:owner.group_id,userId:owner.subject_id,service:service.id,parent:{kind:'schedule',id:grantId,origin:service.origin,scheduleId:id,revision},
+    expiresInMs:Math.min(lifetime,SERVICE_GROUP_SIGN_IN_MAX_TTL_MS),audience:`${server}${API_RESOURCE_PATH}`,scope:ARTIFACT_SCOPE,
+   });
+   return respondRun(minted,server,owner.subject_id);
+  }catch(error){return runError(error);}
  });
  app.all(GROUP_SIGN_IN_PATH,async(c,next)=>{
   // Only a service that opted in, presenting its own secret, reaches this route; anyone else meets an unknown path.
