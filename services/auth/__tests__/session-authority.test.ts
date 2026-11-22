@@ -46,6 +46,7 @@ describe('identity introspection (contracts IDENTITY_INTROSPECT_PATH)',()=>{
  const AUDIENCES=JSON.stringify([{id:WAREHOUSE.id,origin:WAREHOUSE.origin,introspection_secret_sha256:WAREHOUSE.introspectionSecretSha256},{id:CRM.id,origin:CRM.origin}]);
  const records:Record<string,TokenRecord>={
   mx_live:{id:'tok_live',userId:'usr_1',audience:`${origin}/api`,scope:'artifacts',expiresAt:'2030-01-01T00:00:00.000Z'},
+  mx_narrowed:{id:'tok_narrowed',userId:null,auditUserId:'usr_1',groupId:'grp_team',groupRole:'member',issuedBy:'usr_1'},
   mx_plain:{id:'tok_plain',userId:'usr_1'},
   mx_elsewhere:{id:'tok_elsewhere',userId:'usr_1',audience:'http://other.test/api',scope:'artifacts'},
   mx_refused:{id:'tok_refused',userId:'usr_refused'},
@@ -60,7 +61,7 @@ describe('identity introspection (contracts IDENTITY_INTROSPECT_PATH)',()=>{
   // The one active rule, read where every reader reads it (the identity `users` view), not a host-supplied callback.
   identityDb:{query:async<T>(sql:string,params?:unknown[])=>{
    // An exchanged token's parent, read where a service re-checks it: the `tokens` and `sessions` views' `live`.
-   if(/FROM identity\.tokens WHERE id=\$1 AND user_id=\$2$/.test(sql)||/FROM identity\.sessions WHERE id=\$1 AND "userId"=\$2$/.test(sql))
+   if(/FROM identity\.tokens WHERE id=\$1 AND group_id IS NULL AND user_id=\$2$/.test(sql)||/FROM identity\.sessions WHERE id=\$1 AND "userId"=\$2$/.test(sql))
     return {rows:(parents[`${sql.includes('sessions')?'session':'token'}:${params?.[0]}`]===params?.[1]?[{live:!dead.has(String(params?.[0]))}]:[]) as T[]};
    if(!/FROM identity\.users WHERE id=\$1/.test(sql))throw Error(`unexpected ${sql}`);return {rows:[{active:params?.[0]!=='usr_refused'}] as T[]};}},
   sessions:{resolve:async()=>null},
@@ -110,13 +111,14 @@ describe('identity introspection (contracts IDENTITY_INTROSPECT_PATH)',()=>{
   expect((await call(app,IDENTITY_INTROSPECT_PATH,{})).status).toBe(400);
   expect((await call(host({byToken:async()=>{throw Error('down');}}),IDENTITY_INTROSPECT_PATH,{token:'mx_live'})).status).toBe(503);
  });
- it('every active answer names its principal: a person, user_id never null, no group; the inactive answer carries nothing more',async()=>{
+ it('pins the exact active and inactive answers, including a person acting only in one group',async()=>{
   const app=host();dead.clear();
   for(const [token,auth] of [['mx_live',secret],['mx_plain',secret],['mx_warehouse',warehouseSecret],[exchanged(),warehouseSecret],[exchanged({kind:'token',id:'tok_plain'}),secret]] as const){
    const body=await introspect(app,token,auth);
    expect(body,token).toMatchObject({active:true,principal_kind:'user',user_id:'usr_1',group_id:null,group_role:null,issued_by:null});
    expect(Object.keys(body).sort(),token).toEqual(['active','audience','expires_at','group_id','group_role','issued_by','parent','principal_kind','scopes','token_id','user_id']);
   }
+  expect(await introspect(app,'mx_narrowed')).toEqual({active:true,principal_kind:'group',user_id:'usr_1',token_id:'tok_narrowed',scopes:[],audience:null,expires_at:null,parent:null,group_id:'grp_team',group_role:'member',issued_by:'usr_1'});
   for(const token of ['mx_unknown','mx_refused'])expect(await introspect(app,token),token).toEqual({active:false});
  });
  it('with a service\'s own secret: only tokens bound to that service\'s origin, every other one inactive',async()=>{

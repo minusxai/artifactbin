@@ -120,6 +120,8 @@ const TOKENS: Table = {
     { name: 'idx_tokens_hash', columns: ['token_hash'], unique: true },
     // An account's live tokens (lib/accounts/tokens: the web token, the token list).
     { name: 'idx_tokens_user', columns: ['user_id'], where: 'deleted_at IS NULL' },
+    // The identity view also attributes personally authorised group tokens to the issuing account.
+    { name: 'idx_tokens_live_account', columns: ['(CASE WHEN group_id IS NOT NULL AND grant_id IS NULL THEN issued_by ELSE user_id END)'], where: 'deleted_at IS NULL' },
     // A group's sign-ins: by group (its Admins' list) and by the person who authorised them (their token list).
     { name: 'idx_tokens_group', columns: ['group_id'], where: 'group_id IS NOT NULL' },
     { name: 'idx_tokens_group_issuer', columns: ['issued_by'], where: 'group_id IS NOT NULL' },

@@ -41,7 +41,7 @@ registerTestOverride(() => { override = undefined; });
 /** The account a token belongs to, or null when it is anonymous. */
 async function accountFor(tokenId: string): Promise<string | null> {
   const db = await getDb();
-  const r = await db.query<{ user_id: string | null }>('SELECT user_id FROM tokens WHERE id = $1', [tokenId]);
+  const r = await db.query<{ user_id: string | null }>('SELECT user_id FROM tokens WHERE id = $1 AND group_id IS NULL', [tokenId]);
   return r.rows[0]?.user_id ?? null;
 }
 

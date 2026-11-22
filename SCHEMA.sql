@@ -1837,6 +1837,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_tokens_hash ON auth.tokens (token_hash);
 
 CREATE INDEX IF NOT EXISTS idx_tokens_user ON auth.tokens (user_id) WHERE deleted_at IS NULL;
 
+CREATE INDEX IF NOT EXISTS idx_tokens_live_account ON auth.tokens ((CASE WHEN group_id IS NOT NULL AND grant_id IS NULL THEN issued_by ELSE user_id END)) WHERE deleted_at IS NULL;
+
 CREATE INDEX IF NOT EXISTS idx_tokens_group ON auth.tokens (group_id) WHERE group_id IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_tokens_group_issuer ON auth.tokens (issued_by) WHERE group_id IS NOT NULL;

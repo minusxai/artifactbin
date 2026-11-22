@@ -38,7 +38,7 @@ CREATE OR REPLACE VIEW identity.account_preferences AS
   SELECT x.user_id, x.default_destination FROM auth.account_preferences x;
 
 CREATE OR REPLACE VIEW identity.tokens AS
-  SELECT t.id, t.name, t.user_id, t.client_harness, t.audience, t.scope, t.request_authority, t.created_at, t.deleted_at, t.expires_at, t.last_used_at,
+  SELECT t.id, t.name, CASE WHEN t.group_id IS NOT NULL AND t.grant_id IS NULL THEN t.issued_by ELSE t.user_id END AS user_id, t.client_harness, t.audience, t.scope, t.request_authority, t.created_at, t.deleted_at, t.expires_at, t.last_used_at,
     array_remove(regexp_split_to_array(coalesce(t.scope, ''), '\s+'), '') AS scopes,
     ((t.deleted_at IS NULL AND (t.expires_at IS NULL OR t.expires_at>now()) AND (CASE WHEN t.group_id IS NOT NULL THEN (t.user_id IS NULL AND COALESCE(t.audience,'')<>'' AND (t.grant_id IS NOT NULL OR EXISTS (SELECT 1 FROM auth.credentials member
       JOIN auth.credentials family ON family.kind='refresh_family' AND family.credential_hash=member.group_id AND family.deleted_at IS NULL

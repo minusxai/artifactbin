@@ -37,7 +37,7 @@ it('crosses the signed hop as exactly its own fields; partial, mixed or person-s
 
 it('a group record from the bearer read becomes the group actor, and a changed level at revalidation refuses the held rows',async()=>{
  let level:'member'|'editor'='editor';
- const record=():TokenRecord=>({id:'tok_group',userId:null,groupId:'grp_team',groupRole:level,issuedBy:'usr_owner',audience:`${ORIGIN}/api`,scope:'artifacts'});
+ const record=():TokenRecord=>({id:'tok_group',userId:null,auditUserId:'usr_owner',groupId:'grp_team',groupRole:level,issuedBy:'usr_owner',audience:`${ORIGIN}/api`,scope:'artifacts'});
  const host=serviceAuthHost({env:{APP__PUBLIC_BASE_URL:ORIGIN},tokens:{byToken:async()=>record()},
   upstream:async(request,actor)=>{
    if(new URL(request.url).searchParams.has('revalidate'))level='member';

@@ -234,7 +234,7 @@ export async function listGroupSignIns(userId:string,groupId:string,page:{limit:
  const rows=(await db.query<GroupSignIn&{issuer_username:string|null;issuer_name:string|null;issuer_id:string;position:string}>(`SELECT t.id,t.name,t.group_role AS role,t.issued_by AS issuer_id,u.username AS issuer_username,u.name AS issuer_name,t.created_at,t.expires_at,t.last_used_at,t.live,
     t.created_at::text AS position
    FROM tokens t LEFT JOIN users u ON u.id=t.issued_by
-  WHERE t.group_id=$1 AND t.user_id IS NULL AND t.grant_id IS NULL AND t.deleted_at IS NULL AND (t.expires_at IS NULL OR t.expires_at>now())
+  WHERE t.group_id=$1 AND t.grant_id IS NULL AND t.deleted_at IS NULL AND (t.expires_at IS NULL OR t.expires_at>now())
     AND ($3::timestamptz IS NULL OR (t.created_at,t.id) < ($3::timestamptz,$4::text))
   ORDER BY t.created_at DESC,t.id DESC LIMIT $2`,[groupId,page.limit+1,page.after?.created??null,page.after?.id??null])).rows;
  const shown=rows.slice(0,page.limit).map(({issuer_id,issuer_username,issuer_name,position:_position,...row})=>({...row,issued_by:{id:issuer_id,username:issuer_username,name:issuer_name}}));

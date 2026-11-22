@@ -19,6 +19,8 @@ export interface TokenRecord {
    * `userId` null; absent on every other token. A token with neither `userId` nor `groupId` is unowned, never a group's.
    */
   groupId?: string;
+  /** Person who authorized a group bearer, for introspection only. Never the request actor. */
+  auditUserId?: string;
   groupRole?: 'member' | 'editor';
   /** The account's identity, read in the same statement as the token; absent when it has no account row. */
   email?: string;

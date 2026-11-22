@@ -71,7 +71,7 @@ it('chooses the launch indexes and the snapshot GIN index', async () => {
   for (const table of ['auth.tokens', 'member_notifications', 'event_outbox', 'data_snapshots']) await db.query(`ANALYZE ${table}`);
 
   // An account's live tokens (lib/accounts/tokens).
-  expect(await plan('SELECT id FROM tokens WHERE user_id = $1 AND deleted_at IS NULL', ['user8'])).toContain('idx_tokens_user');
+  expect(await plan('SELECT id FROM tokens WHERE user_id = $1 AND deleted_at IS NULL', ['user8'])).toContain('idx_tokens_live_account');
   // An account's own documents (lib/workspace/listings).
   expect(await plan(`SELECT id FROM artifacts WHERE group_id IS NULL AND user_id = $1 AND ${LIVE_ARTIFACT_SQL} ORDER BY updated_at DESC LIMIT 200`, ['user5']))
     .toContain('idx_artifacts_user_updated');

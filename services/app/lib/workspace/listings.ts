@@ -110,7 +110,7 @@ export async function listAccountTokenRows(userId: string): Promise<UserTokenRow
   const r = await db.query<UserTokenRow & { artifacts: string | number }>(
     `SELECT t.id, t.name, t.created_at, t.deleted_at, COUNT(a.id) AS artifacts
      FROM tokens t LEFT JOIN artifacts a ON a.token_id = t.id AND a.${LIVE_ARTIFACT_SQL}
-     WHERE t.user_id = $1
+     WHERE t.group_id IS NULL AND t.user_id = $1
      GROUP BY t.id, t.name, t.created_at, t.deleted_at
      ORDER BY t.created_at DESC`,
     [userId],

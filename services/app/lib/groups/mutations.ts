@@ -33,7 +33,7 @@ async function notifyAudienceArtifacts(tx:Queryable,groupId:string):Promise<void
 }
 /** The audit row and the event of one change, in the caller's transaction. */
 async function auditGroupChange(tx:Queryable,change:GroupChange,actor?:GroupMutationActor):Promise<void>{
- const token=actor?.tokenId?(await tx.query<{id:string;client_harness:string|null}>('SELECT id,client_harness FROM tokens WHERE id=$1 AND user_id=$2',[actor.tokenId,change.actorId])).rows[0]:null;
+ const token=actor?.tokenId?(await tx.query<{id:string;client_harness:string|null}>('SELECT id,client_harness FROM tokens WHERE group_id IS NULL AND id=$1 AND user_id=$2',[actor.tokenId,change.actorId])).rows[0]:null;
  await notifyAudienceArtifacts(tx,change.groupId);
  await tx.query('INSERT INTO group_audit(id,group_id,actor_user_id,actor_token_id,client_harness,action,details) VALUES($1,$2,$3,$4,$5,$6,$7::jsonb) ON CONFLICT (id) DO NOTHING',[change.id,change.groupId,change.actorId,token?.id??null,token?.client_harness??null,change.action,JSON.stringify(change.details)]);
  await recordEvent(tx,{kind:'user',id:change.actorId},'changed',{kind:'group',id:change.groupId},{action:change.action,audit_id:change.id,recipients:change.recipients,...(typeof change.details.invitation_id==='string'?{invitation_id:change.details.invitation_id}:{})});

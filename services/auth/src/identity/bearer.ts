@@ -129,7 +129,7 @@ export function createBearerReader(o: BearerReaderOptions): TokenReader {
             LEFT JOIN ${views}.group_sign_in_grants g ON g.id=t.grant_id WHERE t.id=$1`, [row.id])).rows[0];
           if (authorised?.live !== true || !groupSignInServiceConfigured(o.serviceAudiences ?? [], row.issued_by, authorised.service_origin)) return null;
         }
-        return { id: row.id, userId: null, groupId: row.group_id, groupRole: row.group_role, issuedBy: row.issued_by,
+        return { id: row.id, userId: null, ...(row.grant_id ? {} : {auditUserId: row.issued_by}), groupId: row.group_id, groupRole: row.group_role, issuedBy: row.issued_by,
           ...(row.audience ? { audience: row.audience } : {}), ...(row.scope ? { scope: row.scope } : {}), ...(row.expires_at ? { expiresAt: new Date(row.expires_at).toISOString() } : {}) };
       }
       const token: TokenRecord = {
@@ -153,7 +153,7 @@ export function createBearerReader(o: BearerReaderOptions): TokenReader {
 }
 
 /** A group's sign-in that is live now, by its token row's id (`readLiveGroupSignIn`). */
-export interface LiveGroupSignIn { id: string; groupId: string; groupRole: 'member' | 'editor'; issuedBy: string; expiresAt: string | null }
+export interface LiveGroupSignIn { auditUserId: string | null; id: string; groupId: string; groupRole: 'member' | 'editor'; issuedBy: string; expiresAt: string | null }
 
 /**
  * A GROUP'S SIGN-IN BY ITS ID, live now by exactly what the bearer read above decides for such a row: the read view's
@@ -169,8 +169,8 @@ export async function readLiveGroupSignIn(o: { db: Queryable; readSchema?: strin
     `SELECT t.live, t.user_id, t.group_id, t.group_role, t.issued_by, t.grant_id, t.audience, t.expires_at, g.service_origin FROM ${views}.tokens t
       LEFT JOIN ${views}.group_sign_in_grants g ON g.id=t.grant_id WHERE t.id=$1`, [tokenId])).rows[0];
   const audiences = o.serviceAudiences ?? [];
-  if (!row || row.live !== true || row.user_id || !row.group_id || !row.issued_by || (row.group_role !== 'member' && row.group_role !== 'editor')) return null;
+  if (!row || row.live !== true || row.user_id !== (row.grant_id ? null : row.issued_by) || !row.group_id || !row.issued_by || (row.group_role !== 'member' && row.group_role !== 'editor')) return null;
   if (!row.audience || audiences.some(service => service.origin === row.audience)) return null;
   if (row.grant_id && !groupSignInServiceConfigured(audiences, row.issued_by, row.service_origin)) return null;
-  return { id: tokenId, groupId: row.group_id, groupRole: row.group_role, issuedBy: row.issued_by, expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null };
+  return { id: tokenId, auditUserId: row.user_id, groupId: row.group_id, groupRole: row.group_role, issuedBy: row.issued_by, expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null };
 }
