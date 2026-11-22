@@ -51,6 +51,14 @@ export const protectLastAdmin = async (q: Queryable, t: IdentityTables, id: stri
   if (await memberRole(q, t, userId, id) === 'admin' && Number((await q.query<{count: string}>(`SELECT count(*) FROM ${t.group_members} WHERE group_id=$1 AND role='admin'`, [id])).rows[0]!.count) <= 1)
     throw new IdentityError('last_admin', 409);
 };
+/** Add direct Member seats after the caller has authorized the account set and serialized group writes. */
+export async function insertMissingGroupMembers(q: Queryable, t: IdentityTables, groupId: string, userIds: string[]): Promise<string[]> {
+  if (!userIds.length) return [];
+  return (await q.query<{user_id: string}>(`INSERT INTO ${t.group_members}(group_id,user_id,role)
+    SELECT $1,id,'member' FROM unnest($2::text[]) AS id
+    ON CONFLICT (group_id,user_id) DO NOTHING RETURNING user_id`, [groupId,userIds])).rows.map(row => row.user_id);
+}
+
 /** Insert a fresh group and its first direct Admin after the caller has checked creation authority. */
 export async function insertGroup(q: Queryable, t: IdentityTables, actorId: string,
   {handle, name, description, parentId}: {handle: string; name: string; description: string; parentId: string | null}): Promise<string> {
