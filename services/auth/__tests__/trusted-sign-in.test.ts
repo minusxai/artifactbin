@@ -80,6 +80,25 @@ beforeAll(async () => {
 afterAll(async () => { await pg.close(); });
 
 describe('trusted-issuer sign-in', () => {
+  it('shares a person, group and replay record across two issuer sites with their own keys', async () => {
+    const second = 'https://second.example';
+    const [first] = JSON.parse(issuers());
+    const site = {...first, origins:[second], publicJwk:otherKeys.publicKey.export({format:'jwk'})};
+    const configured = (overrides = {}) => app({TRUSTED_SIGNIN__ISSUERS:JSON.stringify([first, {...site, ...overrides}])});
+    const target = await configured();
+    const claims = {sub:'shared_reader', group:'shared_group'};
+    const a = await post(target, {token:token({...claims,jti:'shared-once'})});
+    expect(a.status).toBe(303);
+    await refused(await post(target,{token:token(claims)}, {origin:second}),401,'invalid_token');
+    await refused(await post(target,{token:token({...claims,jti:'shared-once'},{key:otherKeys.privateKey})},{origin:second}),401,'replayed_token');
+    const b = await post(target,{token:token(claims,{key:otherKeys.privateKey})},{origin:second});
+    expect(b.status).toBe(303);
+    expect(b.headers.get('location')).toBe(a.headers.get('location'));
+    const person = async (response:Response) => (await auth.sessions.resolve(new Request(BASE,{headers:{cookie:cookieOf(response)}})))!.userId;
+    expect(await person(b)).toBe(await person(a));
+    await expect(configured({parentGroup:'other_parent'})).rejects.toThrow(/parentGroup/);
+    await expect(configured({audience:'other-audience'})).rejects.toThrow(/audience/);
+  });
   it('allows the company owner to bootstrap one root, then requires a parent; public groups may detach', async () => {
     const store = createIdentityStore({db, authSchema:'auth', appSchema:'company_app'});
     await pg.query("INSERT INTO auth.users(id,email) VALUES ('usr_head','head@example.com')");

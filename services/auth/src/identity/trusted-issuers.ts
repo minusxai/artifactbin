@@ -6,6 +6,7 @@
  *   [{"issuer":"<name>","audience":"<aud>","origins":["https://site.example"],"publicJwk":{"kty":"OKP","crv":"Ed25519","x":"…"},
  *     "parentGroup":"<group handle or id, optional>"}]
  *
+ * Repeat an issuer with the same audience and parentGroup to add a signing key for its listed origins.
  * The token is a compact JWS, EdDSA (Ed25519) only, verified with the issuer's public key: `iss` a configured issuer,
  * `aud` its audience, `exp` in the future, `iat` present and not ahead of now, at most 300 s between them, and `jti`
  * used once (a replayed `jti` is refused until its token expires; the record of used ids is this process's memory, so
@@ -26,8 +27,7 @@ const CLOCK_SKEW_S = 30;
 export interface TrustedIssuer {
   issuer: string;
   audience: string;
-  origins: readonly string[];
-  key: KeyObject;
+  keysByOrigin: ReadonlyMap<string, readonly KeyObject[]>;
   parentGroup?: string;
 }
 
@@ -46,7 +46,6 @@ export function trustedIssuersOf(env: Record<string, string | undefined>): Reado
     if (!e || typeof e !== 'object') fail('every entry must be an object');
     const {issuer, audience, origins, publicJwk, parentGroup} = e!;
     if (typeof issuer !== 'string' || !/^[a-z0-9][a-z0-9-]{0,39}$/.test(issuer)) fail('issuer must be 1-40 lowercase letters, digits or hyphens');
-    if (issuers.has(issuer as string)) fail(`issuer ${issuer} is named twice`);
     if (typeof audience !== 'string' || !audience.trim()) fail(`issuer ${issuer}: audience must be a nonempty string`);
     if (!Array.isArray(origins) || !origins.length || origins.some(o => typeof o !== 'string' || !isOrigin(o))) fail(`issuer ${issuer}: origins must be a nonempty list of origins (scheme://host[:port])`);
     if (parentGroup !== undefined && (typeof parentGroup !== 'string' || !parentGroup)) fail(`issuer ${issuer}: parentGroup must be a nonempty string`);
@@ -54,7 +53,12 @@ export function trustedIssuersOf(env: Record<string, string | undefined>): Reado
     if (!jwk || jwk.kty !== 'OKP' || jwk.crv !== 'Ed25519' || typeof jwk.x !== 'string' || 'd' in jwk) fail(`issuer ${issuer}: publicJwk must be a public Ed25519 OKP key`);
     let key: KeyObject;
     try { key = createPublicKey({key: {kty: 'OKP', crv: 'Ed25519', x: jwk!.x as string}, format: 'jwk'}); } catch { return fail(`issuer ${issuer}: publicJwk is not a valid key`); }
-    issuers.set(issuer as string, {issuer: issuer as string, audience: audience as string, origins: origins as string[], key, ...(parentGroup ? {parentGroup: parentGroup as string} : {})});
+    const previous = issuers.get(issuer as string);
+    if (previous && (previous.audience !== audience || previous.parentGroup !== parentGroup))
+      fail(`issuer ${issuer}: entries must agree on audience and parentGroup`);
+    const keysByOrigin = new Map(previous?.keysByOrigin);
+    for (const origin of new Set(origins as string[])) keysByOrigin.set(origin, [...(keysByOrigin.get(origin) ?? []), key]);
+    issuers.set(issuer as string, {issuer: issuer as string, audience: audience as string, keysByOrigin, parentGroup: parentGroup as string | undefined});
   }
   return issuers;
 }
@@ -89,8 +93,10 @@ export function createTrustedTokenVerifier(issuers: ReadonlyMap<string, TrustedI
       if (!header || !payload || header.alg !== 'EdDSA' || 'crit' in header) return {ok: false, refusal: 'invalid_token'};
       const issuer = typeof payload.iss === 'string' ? issuers.get(payload.iss) : undefined;
       if (!issuer) return {ok: false, refusal: 'unknown_issuer'};
-      if (!origin || !issuer.origins.includes(origin)) return {ok: false, refusal: 'forbidden_origin'};
-      if (!verify(null, Buffer.from(`${head}.${body}`), issuer.key, Buffer.from(signature, 'base64url'))) return {ok: false, refusal: 'invalid_token'};
+      const keys = origin && issuer.keysByOrigin.get(origin);
+      if (!keys) return {ok: false, refusal: 'forbidden_origin'};
+      const message = Buffer.from(`${head}.${body}`), bytes = Buffer.from(signature, 'base64url');
+      if (!keys.some(key => verify(null, message, key, bytes))) return {ok: false, refusal: 'invalid_token'};
       const at = now(), seconds = at / 1000;
       const {aud, exp, iat, jti, sub, group, tenancy_id: tenancyId} = payload;
       const audienceOk = aud === issuer.audience || (Array.isArray(aud) && aud.length === 1 && aud[0] === issuer.audience);
