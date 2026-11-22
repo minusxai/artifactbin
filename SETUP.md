@@ -138,7 +138,42 @@ audit on the reviewed database before taking another action. A repeat with the s
 refuses and an occupied handle is never reused. A failed preparation rolls back the group,
 membership, handle reservation, audit and revision together.
 
-Keep trusted root enrollment off during the change. Resume the services for the authenticated
+**Atomic move of a prepared company root (split-role PostgreSQL).** Keep app and identity writers and
+automatic reconciliation paused, trusted root enrollment off, and verify a restorable backup. Use the
+same operator connection and schemas as for preparation, with `IDENTITY__SCHEMA` set if the identity
+read schema is named differently. The operator connection must be able to write both schemas.
+The app, auth, and events runtime roles keep their existing grants.
+
+Use the hierarchy revision **after** preparation. Supply the bound company owner's verified account ID.
+The owner must have direct Admin on both defaults and every listed branch. The target must be the root
+prepared for this owner and previous default, with no attached branches. List only live standalone
+roots whose parent should become the new root. Include the old default only if it should move too.
+An empty branch list changes only the default.
+
+```sh
+umask 077
+npm --silent run move:company-root -- --writes-paused-backup-verified "$OWNER_ID" \
+  plan "$OLD_DEFAULT_ID" "$NEW_ROOT_ID" "$HIERARCHY_REVISION" "$BRANCH_ID" > "$PLAN_FILE"
+npm --silent run move:company-root -- --writes-paused-backup-verified "$OWNER_ID" apply "$PLAN_FILE"
+npm --silent run move:company-root -- --writes-paused-backup-verified "$OWNER_ID" \
+  invert "$MOVE_ID" "$APPLIED_REVISION"
+```
+
+Store and review the JSON privately before applying. Planning seals the ordered edge set in a
+`company_move_planned` audit row and leaves the tree and default in place. Use the plan's `id` for
+`MOVE_ID` and its `expectedRevision` plus one for `APPLIED_REVISION`. Invert only when you intend to
+restore the original edges and default. Each direction advances the hierarchy revision once and
+commits the edge writes, default, group audits, outbox and any affected approval endings together.
+The inverse appends compensating audits linked to the original move. Ended approvals stay ended.
+Admissions, direct memberships, preferences and descendant edges carry forward.
+
+If a response is lost, repeat the same command with the same inputs. A committed apply or inverse
+returns `already_applied` or `already_inverted` while its result is still current. An intervening
+change to the default or hierarchy, a changed seal, or loss of owner or branch eligibility refuses
+the operation. The command compensates only moves it applied. The ordinary API steps below are
+available for independent changes and create no reversible seal.
+
+**Independent default selection and branch attachment.** Keep trusted root enrollment off during the change. Resume the services for the authenticated
 steps. As the designated owner, send `POST /api/deployment/setup` with JSON
 `{"group_id":"<new-root-id>"}` to explicitly select the new root. This is the step that changes
 the company default and records `company_default_changed`. New ordinary admissions use that default,

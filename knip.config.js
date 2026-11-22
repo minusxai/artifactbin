@@ -98,6 +98,8 @@ export default {
         // from the platform's import map.
         /^@afbin\//,
       ],
+      // The split-role integration proof can start an isolated native PostgreSQL cluster.
+      ignoreBinaries: ['initdb', 'pg_ctl'],
       // The test scripts' `--config ../../vitest.config.ts`, named so its paths resolve from the repository root.
       vitest: { config: ['../../vitest.config.ts'] },
     },

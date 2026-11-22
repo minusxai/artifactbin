@@ -201,7 +201,7 @@ export async function deleteGroup(actorId:string,id:string,handle:string,actor?:
  await recordGroupChanges((await services().identity.deleteGroup({actorId,groupId:id,handle})).changes,actor);
 }
 
-export {recordGroupMutation,recordGroupChanges,groupQuota,mailGroupChanges} from './mutations';
+export {recordGroupMutation,recordGroupChanges,recordGroupChangesInTransaction,groupQuota,mailGroupChanges} from './mutations';
 import {recordGroupMutation} from './mutations';
 export {groupAdminSql,groupReachSql,reachedGroupsSql,subtreeSql,subtreeMemberIds,groupChain} from './hierarchy';
 

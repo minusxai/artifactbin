@@ -10,11 +10,14 @@
  * And the production upgrade: a database whose app role still owns the identity tables (and the former identity views)
  * refuses the identity boot with the one-time move named; after `identityMoveStatements`, run by a superuser, it boots,
  * every row is kept, and the app role reads them only through the views.
- * Runs in the `integration` project; skipped without the image, except in CI, which provides it (test-support/docker).
+ * The company move uses the same split grants, including for its rollback and retry tests.
+ * Runs in `integration-databases`. Set IDENTITY_ROLES_TEST_NATIVE_POSTGRES=1 to use local initdb and pg_ctl
+ * with a private Unix socket. CI provides the Docker image (test-support/docker).
  */
 import {execFileSync,spawnSync} from 'node:child_process';
 import { dockerImage } from '@artifactbin/test-support/docker';
-import {readFileSync} from 'node:fs';
+import {mkdtempSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import pg from 'pg';
 import {afterAll,beforeAll,describe,expect,it} from 'vitest';
@@ -29,33 +32,45 @@ import {SCHEMA_STATEMENTS} from '@/lib/platform';
 import {tenancyIssuer} from '@/test/helpers/trusted-tenancy';
 import {projectHostTenancyChanges,reachedGroupsSql,subtreeSql} from '@/lib/groups';
 import {enrollCompanyRoot,planCompanyRootEnrollment} from '../../../../auth/scripts/enroll-company-root';
+import {planCompanyMove,applyCompanyMove,invertCompanyMove} from '@/scripts/move-company-root';
+import {prepareCompanyRoot} from '../../../../auth/scripts/prepare-company-root';
 import {transactionAccessFacts} from '@/lib/artifact-access';
 
 const ROOT=join(__dirname,'../../../../..');
 
-describe.skipIf(!dockerImage('postgres:17-alpine'))('identity tables in a split-role database',()=>{
- let container='',port=0;
+const nativePostgres=process.env.IDENTITY_ROLES_TEST_NATIVE_POSTGRES==='1';
+describe.skipIf(!nativePostgres&&!dockerImage('postgres:17-alpine'))('identity tables in a split-role database',()=>{
+ let container='',socket='',port=0;
  const pools:pg.Pool[]=[];
- const pool=(user:string,searchPath:string,database='postgres')=>{const p=new pg.Pool({host:'127.0.0.1',port,user,password:'pw',database,options:`-c search_path=${searchPath}`,max:2});pools.push(p);return p;};
+ const pool=(user:string,searchPath:string,database='postgres')=>{const p=new pg.Pool({host:socket||'127.0.0.1',port,user,password:'pw',database,options:`-c search_path=${searchPath}`,max:2});pools.push(p);return p;};
  const code=(promise:Promise<unknown>)=>promise.then(()=>'ok',(error:{code?:string})=>error.code??String(error));
- let superuser:pg.Pool,app:pg.Pool,auth:pg.Pool,service:pg.Pool;
+ let superuser:pg.Pool,app:pg.Pool,auth:pg.Pool,events:pg.Pool,service:pg.Pool;
 
  beforeAll(async()=>{
-  container=execFileSync('docker',['run','--rm','-d','-e','POSTGRES_PASSWORD=pw','-p','127.0.0.1::5432','postgres:17-alpine'],{encoding:'utf8'}).trim();
-  port=Number(execFileSync('docker',['port',container,'5432/tcp'],{encoding:'utf8'}).trim().split('\n')[0]!.split(':').at(-1));
+  if(nativePostgres){
+   socket=mkdtempSync(join(tmpdir(),'identity-roles-'));
+   const data=join(socket,'data');
+   execFileSync('initdb',['-D',data,'-U','postgres','-A','trust','--no-sync']);
+   execFileSync('pg_ctl',['-D',data,'-l',join(socket,'server.log'),'-o',`-k '${socket}' -c listen_addresses=''`,'-w','start']);
+   port=5432;
+  }else{
+   container=execFileSync('docker',['run','--rm','-d','-e','POSTGRES_PASSWORD=pw','-p','127.0.0.1::5432','postgres:17-alpine'],{encoding:'utf8'}).trim();
+   port=Number(execFileSync('docker',['port',container,'5432/tcp'],{encoding:'utf8'}).trim().split('\n')[0]!.split(':').at(-1));
+  }
   superuser=pool('postgres','public');
   for(let attempt=0;;attempt++){
    try{await superuser.query('SELECT 1');break;}catch{if(attempt>120)throw Error('postgres never became ready');await new Promise(r=>setTimeout(r,500));}
   }
   // The operator's fresh-database steps: roles.sql (with passwords), the app's boot, the identity host's boot, grants.sql.
   await superuser.query(readFileSync(join(ROOT,'roles.sql'),'utf8'));
-  await superuser.query("ALTER ROLE artifactbin_app PASSWORD 'pw'; ALTER ROLE artifactbin_auth PASSWORD 'pw'; CREATE ROLE service_reader LOGIN PASSWORD 'pw'");
+  await superuser.query("ALTER ROLE artifactbin_app PASSWORD 'pw'; ALTER ROLE artifactbin_auth PASSWORD 'pw'; ALTER ROLE artifactbin_events PASSWORD 'pw'; CREATE ROLE service_reader LOGIN PASSWORD 'pw'");
   // No role may create a schema in this database: every boot must check before creating (product bug 2).
   await superuser.query('REVOKE CREATE ON DATABASE postgres FROM PUBLIC');
   app=pool('artifactbin_app','app,identity');
   for(const statement of SCHEMA_STATEMENTS)await app.query(statement);
   await app.query("INSERT INTO identity_settings(id,deployment_mode,api_audiences) VALUES('installation','public',ARRAY['http://app.test/api'])");
-  await superuser.query('CREATE TABLE events.events(id text)');
+  events=pool('artifactbin_events','events');
+  await events.query('CREATE TABLE events.events(id text)');
   await superuser.query(readFileSync(join(ROOT,'grants.sql'),'utf8'));
   // Another service's grant, as IDENTITY.sql's header gives it (render-schema --reader-role).
   await superuser.query(`GRANT USAGE ON SCHEMA identity TO service_reader; GRANT SELECT ON ALL TABLES IN SCHEMA identity TO service_reader;
@@ -76,6 +91,10 @@ describe.skipIf(!dockerImage('postgres:17-alpine'))('identity tables in a split-
  },180_000);
  afterAll(async()=>{
   for(const p of pools)await p.end().catch(()=>{});
+  if(socket){
+   execFileSync('pg_ctl',['-D',join(socket,'data'),'-m','fast','-w','stop']);
+   rmSync(socket,{recursive:true,force:true});
+  }
   if(container)spawnSync('docker',['rm','-f',container],{stdio:'ignore'});
  },30_000);
 
@@ -288,6 +307,106 @@ describe.skipIf(!dockerImage('postgres:17-alpine'))('identity tables in a split-
   await expect(planCompanyRootEnrollment(operator,target)).rejects.toMatchObject({code:'root_already_enrolled'});
   expect((await auth.query("SELECT user_id FROM group_members WHERE group_id='move_root' AND user_id='ordinary'")).rows).toEqual([]);
  });
+
+ it('commits and compensates only a reviewed company move under production split roles',async()=>{
+  const operator=identityDbOf(superuser);
+  const target={appSchema:'app',authSchema:'auth',readSchema:'identity',ownerId:'seal_owner'};
+  await auth.query(`INSERT INTO users(id,email) VALUES ('seal_owner','seal-owner@example.com'),('seal_peer','seal-peer@example.com');
+   INSERT INTO auth."user"(id,name,email,"emailVerified","createdAt","updatedAt")
+   VALUES ('seal_owner','Owner','seal-owner@example.com',true,now(),now());
+   INSERT INTO groups(id,handle,name,created_by,parent_id) VALUES
+   ('seal_old','seal_old','Old','seal_owner',NULL),('seal_branch','seal_branch','Branch','seal_owner',NULL),
+   ('seal_other','seal_other','Other','seal_owner',NULL),('seal_child','seal_child','Child','seal_owner','seal_branch');
+   INSERT INTO group_members(group_id,user_id,role) VALUES
+   ('seal_old','seal_owner','admin'),('seal_branch','seal_owner','admin'),('seal_other','seal_peer','admin');`);
+  await app.query(`UPDATE identity_settings SET deployment_mode='company' WHERE id='installation';
+   INSERT INTO deployment_state(id,owner_user_id,default_group_id,setup_complete) VALUES ('company','seal_owner','seal_old',true)
+   ON CONFLICT (id) DO UPDATE SET owner_user_id=excluded.owner_user_id,default_group_id=excluded.default_group_id,setup_complete=true;`);
+  const revision=async()=>Number((await auth.query("SELECT revision FROM group_hierarchy WHERE id='installation'")).rows[0].revision);
+  const root=await prepareCompanyRoot(operator,{...target,defaultId:'seal_old',expectedRevision:await revision(),handle:'seal_new',name:'New'});
+  const request={...target,expectedRevision:await revision(),defaultId:'seal_old',rootId:root,branchIds:['seal_old','seal_branch']};
+  await expect(planCompanyMove(operator,{...request,ownerId:'seal_peer'})).rejects.toMatchObject({code:'deployment_owner_required'});
+  await expect(planCompanyMove(operator,{...request,branchIds:['seal_other']})).rejects.toMatchObject({code:'branch_ineligible'});
+  await expect(planCompanyMove(operator,{...request,readSchema:'public'})).rejects.toMatchObject({code:'identity_views_mismatch'});
+  await expect(planCompanyMove(identityDbOf(app),request)).rejects.toMatchObject({code:'42501'});
+  await expect(planCompanyMove(identityDbOf(auth),request)).rejects.toMatchObject({code:'42501'});
+  await expect(planCompanyMove(identityDbOf(events),request)).rejects.toMatchObject({code:'42501'});
+  await auth.query(`UPDATE auth."user" SET "emailVerified"=false WHERE id='seal_owner'`);
+  await expect(planCompanyMove(operator,request)).rejects.toMatchObject({code:'deployment_owner_required'});
+  await auth.query(`UPDATE auth."user" SET "emailVerified"=true WHERE id='seal_owner'`);
+  const stale=await planCompanyMove(operator,request);
+  await app.query("UPDATE deployment_state SET default_group_id=$1 WHERE id='company'",[root]);
+  await app.query("UPDATE deployment_state SET default_group_id='seal_old' WHERE id='company'");
+  await expect(applyCompanyMove(operator,target,stale)).rejects.toMatchObject({code:'move_plan_changed'});
+  const url=new URL(`postgresql://postgres:pw@127.0.0.1:${port}/postgres`);
+  if(socket)url.searchParams.set('host',socket);
+  const cli=(...args:string[])=>execFileSync(process.execPath,['--import','tsx','services/app/scripts/move-company-root.ts',
+   '--writes-paused-backup-verified',target.ownerId,...args],{cwd:ROOT,encoding:'utf8',
+   env:{...process.env,AUTH__MIGRATION_DATABASE_URL:url.toString(),AUTH__SCHEMA:'auth',APP__SCHEMA:'app',IDENTITY__SCHEMA:'identity'}}).trim();
+  const plan=await planCompanyMove(operator,request);
+  expect(JSON.parse(cli('plan',request.defaultId,root,String(request.expectedRevision),...request.branchIds))).toEqual(plan);
+  await expect(applyCompanyMove(operator,target,{...plan,branchIds:['seal_old']})).rejects.toMatchObject({code:'move_plan_changed'});
+  const snap=async()=>({
+   groups:(await auth.query("SELECT id,parent_id FROM groups WHERE id=ANY($1::text[]) ORDER BY id",[[root,'seal_old','seal_branch','seal_child','seal_other']])).rows,
+   revision:await revision(),
+   state:(await app.query("SELECT * FROM deployment_state WHERE id='company'")).rows,
+   audit:(await app.query('SELECT * FROM group_audit ORDER BY id')).rows,
+   outbox:(await app.query('SELECT * FROM event_outbox ORDER BY id')).rows,
+   approvals:(await app.query('SELECT * FROM page_query_approvals ORDER BY id')).rows,
+  });
+  const before=await snap();
+  await app.query(`ALTER TABLE event_outbox ADD CONSTRAINT interrupt_sealed_move CHECK (envelope->'payload'->>'action' <> 'company_default_changed') NOT VALID`);
+  try{
+   await expect(applyCompanyMove(operator,target,plan)).rejects.toMatchObject({code:'23514'});
+   expect(await snap()).toEqual(before);
+  }finally{await app.query('ALTER TABLE event_outbox DROP CONSTRAINT interrupt_sealed_move');}
+  expect((await Promise.all([applyCompanyMove(operator,target,plan),applyCompanyMove(operator,target,plan)])).sort())
+   .toEqual(['already_applied','applied']);
+  const planDir=mkdtempSync(join(tmpdir(),'move-plan-'));
+  try{
+   const file=join(planDir,'reviewed.json');
+   writeFileSync(file,JSON.stringify(plan),{mode:0o600});
+   expect(cli('apply',file)).toBe('already_applied');
+  }finally{rmSync(planDir,{recursive:true,force:true});}
+  const applied=await snap();
+  expect(applied.revision).toBe(before.revision+1);
+  expect(applied.audit.length).toBe(before.audit.length+5);
+  expect(applied.outbox.length).toBe(before.outbox.length+5);
+  expect(applied.groups.filter(row=>row.parent_id===root).map(row=>row.id)).toEqual(['seal_branch','seal_old']);
+  expect(applied.state[0].default_group_id).toBe(root);
+  const identity=createIdentityStore({db:identityDbOf(auth),authSchema:'auth',appSchema:'app'});
+  await expect(identity.setGroupParent({actorId:target.ownerId,groupId:'seal_branch',parentId:null,fromParentId:root}))
+   .rejects.toMatchObject({code:'company_parent_required'});
+  await expect(invertCompanyMove(operator,target,plan.id,applied.revision-1)).rejects.toMatchObject({code:'move_state_changed'});
+  await app.query(`INSERT INTO artifacts(id,token_id,visibility,group_id) VALUES
+   ('seal_page','tok','private','seal_branch'),('seal_unrelated_page','tok','private','seal_other');
+   INSERT INTO page_query_approvals(id,page_id,query_name,query_hash,connection,group_id,approved_by,approver_via,approver_since)
+   VALUES ('seal_unrelated_approval','seal_unrelated_page','total','hash','connection','seal_other','seal_peer','seal_other',now());`);
+  await app.query(`INSERT INTO page_query_approvals(id,page_id,query_name,query_hash,connection,group_id,approved_by,approver_via,approver_since)
+   SELECT 'seal_approval','seal_page','total','hash','connection','seal_branch','seal_owner',$1,created_at
+   FROM group_members WHERE group_id=$1 AND user_id='seal_owner'`,[root]);
+  const beforeInverse=await snap();
+  await app.query(`ALTER TABLE event_outbox ADD CONSTRAINT interrupt_sealed_inverse CHECK (envelope->>'verb' <> 'query_approval_ended') NOT VALID`);
+  try{
+   await expect(invertCompanyMove(operator,target,plan.id,applied.revision)).rejects.toMatchObject({code:'23514'});
+   expect(await snap()).toEqual(beforeInverse);
+  }finally{await app.query('ALTER TABLE event_outbox DROP CONSTRAINT interrupt_sealed_inverse');}
+  expect(await invertCompanyMove(operator,target,plan.id,applied.revision)).toBe('inverted');
+  expect(cli('invert',plan.id,String(applied.revision))).toBe('already_inverted');
+  const inverted=await snap();
+  expect(inverted.revision).toBe(applied.revision+1);
+  expect(inverted.groups).toEqual(before.groups);
+  expect(inverted.state).toEqual(before.state);
+  expect(inverted.audit).toEqual(expect.arrayContaining(applied.audit));
+  expect(inverted.outbox).toEqual(expect.arrayContaining(applied.outbox));
+  expect(inverted.approvals.find(row=>row.id==='seal_unrelated_approval'))
+   .toEqual(beforeInverse.approvals.find(row=>row.id==='seal_unrelated_approval'));
+  expect(inverted.audit.filter(row=>row.details.compensates_move_id===plan.id)).toHaveLength(5);
+  expect(inverted.approvals.find(row=>row.id==='seal_approval')).toMatchObject({ended_by:target.ownerId,ended_reason:'approver_not_admin'});
+  await expect(applyCompanyMove(operator,target,plan)).rejects.toMatchObject({code:'move_state_changed'});
+  await auth.query("UPDATE group_hierarchy SET revision=revision+1 WHERE id='installation'");
+  await expect(invertCompanyMove(operator,target,plan.id,applied.revision)).rejects.toMatchObject({code:'move_state_changed'});
+ },30_000);
 
  it('upgrades a database whose app role owns the identity tables: refused until the one-time move, then every row kept and only the views readable', async()=>{
   await superuser.query('CREATE DATABASE upgrade');

@@ -21,6 +21,7 @@
  * `groupMethods(db, t, options)` is the whole surface: the tree and group sign-in approvals here, membership and
  * invitations in ./group-members, the checks and locks both use in ./group-access.
  */
+import type {Queryable} from '@artifactbin/contracts/db';
 import {IdentityError, type GroupSignInGrant, type GroupChange, type IdentityService, type TransactionalQueryable} from '@artifactbin/contracts/identity-module';
 import {normalizeCreateGroup, type GroupRole, type GroupSummary} from '@artifactbin/contracts/groups';
 import {companyGroupState} from './company-group';
@@ -31,6 +32,17 @@ import {internalId,type IdentityTables} from './tables';
 const summary = (group: GroupRow, role: GroupRole | null): GroupSummary => ({id: group.id, handle: group.handle, name: group.name, description: group.description, role, parent_id: group.parent_id ?? null});
 /** No edge moved: rolled back, so the revision does not move either. */
 class Unchanged extends Error { constructor(public parentId: string | null) { super('unchanged'); } }
+
+/** Shared write and receipts after the caller has locked and authorized the exact edge. */
+export async function writeGroupParent(tx: Queryable, t: IdentityTables, actorId: string, id: string,
+    previous: string | null, parentId: string | null, receipt: Record<string, unknown> = {}): Promise<GroupChange[]> {
+  await tx.query(`UPDATE ${t.groups} SET parent_id=$2 WHERE id=$1`, [id, parentId]);
+  const changes: GroupChange[] = [];
+  await recordChange(tx, t, changes, actorId, id, 'reparented', {...receipt, previous_parent_id: previous, parent_id: parentId});
+  if (previous) await recordChange(tx, t, changes, actorId, previous, 'subgroup_detached', {...receipt, group_id: id});
+  if (parentId) await recordChange(tx, t, changes, actorId, parentId, 'subgroup_attached', {...receipt, group_id: id});
+  return changes;
+}
 
 type GroupMethods = Pick<IdentityService, 'setDefaultDestination' | 'revokeGroupSignIn' | 'approveServiceGroupSignIn' | 'revokeServiceGroupSignIn' | 'createGroup' | 'updateGroup' | 'setGroupParent' | 'deleteGroup' | 'setGroupMember' | 'removeGroupMember' | 'inviteGroupMember'
   | 'removeGroupInvitation' | 'acceptGroupInvitations' | 'admitToGroup'>;
@@ -157,11 +169,7 @@ export function groupMethods(db: TransactionalQueryable, t: IdentityTables, opti
             await requireAdmin(tx, t, actorId, parentId, 'parent_not_found');
             if ((await chainOf(tx, t, parentId)).includes(id)) throw new IdentityError('hierarchy_cycle', 409);
           }
-          await tx.query(`UPDATE ${t.groups} SET parent_id=$2 WHERE id=$1`, [id, parentId]);
-          const changes: GroupChange[] = [];
-          await recordChange(tx, t, changes, actorId, id, 'reparented', {previous_parent_id: previous, parent_id: parentId});
-          if (previous) await recordChange(tx, t, changes, actorId, previous, 'subgroup_detached', {group_id: id});
-          if (parentId) await recordChange(tx, t, changes, actorId, parentId, 'subgroup_attached', {group_id: id});
+          const changes = await writeGroupParent(tx, t, actorId, id, previous, parentId);
           return {changed: true, parent_id: parentId, previous_parent_id: previous, hierarchy_revision: revision, changes};
         });
       } catch (error) {

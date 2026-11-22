@@ -44,14 +44,19 @@ async function auditGroupChange(tx:Queryable,change:GroupChange,actor?:GroupMuta
  */
 export async function recordGroupChanges(changes:readonly GroupChange[],actor?:GroupMutationActor,wake:readonly string[]=[]):Promise<void>{
  if(!changes.length&&!wake.length)return;
- await (await getDb()).transaction(async tx=>{
-  for(const id of wake)await notifyAudienceArtifacts(tx,id);
-  for(const change of changes)await auditGroupChange(tx,change,actor);
-  // A page query approved by someone this change left without Admin, or of a group it deleted, ends for good: only
-  // approvals of the changed groups and below are looked at, and only the endings the change caused name its actor.
-  for(const change of changes)await endStaleApprovals(tx,change.actorId,{groups:[change.groupId],blame:{approvers:change.recipients,deleted:[change.groupId],
-   reparented:'previous_parent_id' in change.details?[change.groupId]:[]}});
- });
+ await (await getDb()).transaction(tx=>recordGroupChangesInTransaction(tx,changes,{actor,wake}));
+}
+/** Use when the caller owns both the edge write and app effects in one PostgreSQL transaction. */
+export async function recordGroupChangesInTransaction(tx:Queryable,changes:readonly GroupChange[],options:{
+ actor?:GroupMutationActor;wake?:readonly string[];approvalChanges?:readonly GroupChange[];
+}={}):Promise<void>{
+ const {actor,wake=[],approvalChanges=changes}=options;
+ for(const id of wake)await notifyAudienceArtifacts(tx,id);
+ for(const change of changes)await auditGroupChange(tx,change,actor);
+ // A page query approved by someone this change left without Admin, or of a group it deleted, ends for good: only
+ // approvals of the changed groups and below are looked at, and only the endings the change caused name its actor.
+ for(const change of approvalChanges)await endStaleApprovals(tx,change.actorId,{groups:[change.groupId],blame:{approvers:change.recipients,deleted:[change.groupId],
+  reparented:'previous_parent_id' in change.details?[change.groupId]:[]}});
 }
 /** An app action's change to what a group sees, audited in the action's own transaction; mail it with `mailGroupChanges` after commit. */
 export async function recordGroupMutation(tx:Queryable,userId:string,groupId:string,action:string,details:Record<string,unknown>={},recipients:string[]=[],actor?:GroupMutationActor):Promise<GroupChange>{
