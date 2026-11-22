@@ -284,7 +284,13 @@ jobs:
         env:
           TRUSTED_SIGNIN_TEST_POSTGRES: '1'
         run: |
-          export PATH="/usr/lib/postgresql/16/bin:$PATH"
+          # ubuntu-latest can move to an image with a different PostgreSQL major.
+          for pg_bin in /usr/lib/postgresql/*/bin; do
+            if [[ -x "$pg_bin/initdb" && -x "$pg_bin/pg_ctl" ]]; then
+              export PATH="$pg_bin:$PATH"
+              break
+            fi
+          done
           command -v initdb
           command -v pg_ctl
           node node_modules/vitest/vitest.mjs run --project=node services/auth/__tests__/trusted-sign-in.test.ts
