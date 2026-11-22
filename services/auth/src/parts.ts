@@ -1,6 +1,6 @@
 /** Shared identity and login boundary. No proxy transport or rate policy. */
 import {CODE_DELIVERY_HEADER} from '@artifactbin/contracts/cli-auth';
-import {REVALIDATE_ACTOR_HEADER, ANONYMOUS, isGroupActor, type Actor} from '@artifactbin/contracts/actor';
+import {REVALIDATE_ACTOR_HEADER, ANONYMOUS, isGroupActor, isGroupActorRole, type Actor} from '@artifactbin/contracts/actor';
 import {IDENTITY_SCHEMA} from '@artifactbin/contracts/identity-service';
 import {isInternalApiPath} from '@artifactbin/contracts/routes';
 import {parseAliasOrigins} from '@artifactbin/contracts/server-identity';
@@ -269,7 +269,7 @@ function groupSignInsOf(db: Queryable, authSchema: string, readSchema: string, s
     },
     heldName: async (userId, groupId, role) => (await db.query<{name: string}>(`SELECT g.name FROM ${t.groups} g WHERE g.id=$2::text AND g.deleted_at IS NULL
       AND COALESCE((SELECT issuer.active AND issuer.kind='account' AND NOT issuer.test_account FROM ${readSchema}.users issuer WHERE issuer.id=$1::text), false) AND ${groupLevelHeldSql(t, '$1::text', '$2::text', '$3::text')}`, [userId, groupId, role])).rows[0]?.name ?? null,
-    live: tokenId => readLiveGroupSignIn({db, readSchema, serviceAudiences}, tokenId),
+    live: tokenId => readLiveGroupSignIn({db, authSchema, readSchema, serviceAudiences}, tokenId),
   };
 }
 
@@ -300,7 +300,7 @@ async function resolveBearer(request:Request,o:BearerAdmissionOptions):Promise<A
   // One statement: the token, its OAuth family fence and the account's identity. A failed read throws (503).
   const token = await o.tokens.byToken(presented);
   // A GROUP's sign-in (contracts `GroupActor`): the reader already decided its rule; never a person, never no one's.
-  if (token?.groupId) return tokenFitsRequest(token, request, o) && token.issuedBy && (token.groupRole === 'member' || token.groupRole === 'editor')
+  if (token?.groupId) return tokenFitsRequest(token, request, o) && token.issuedBy && isGroupActorRole(token.groupRole)
     ? {credential:'bearer',principal:'group',principalGroupId:token.groupId,principalGroupRole:token.groupRole,tokenId:token.id,issuedBy:token.issuedBy} : ANONYMOUS;
   if (!token?.userId || !tokenFitsRequest(token, request, o)) return ANONYMOUS;
   return {credential:'bearer',tokenId:token.id,userId:token.userId,...(token.email!==undefined?{email:token.email,emailVerified:token.emailVerified}:{})};

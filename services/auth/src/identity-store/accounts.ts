@@ -6,6 +6,8 @@
  * groups' (`reserveHandle`): a reservation is a tombstone, so a released or deleted name is never handed to someone
  * else silently. Tokens are prefix + 256 random bits, only the sha256 stored, soft revoked (`deleted_at`).
  */
+import type { ServiceTokenParent } from '@artifactbin/contracts/service-audiences';
+import { interactiveAdminHeldSql, interactiveParentLiveSql } from './interactive-consent';
 import { scheduleSeatSql } from './schedule-consent';
 import {displayName} from '@artifactbin/contracts/account-resource';
 import crypto from 'node:crypto';
@@ -69,14 +71,16 @@ const RUN_SIGN_INS_PER_SERVICE = 50;
  * keeps it live only while that parent is. ONE statement, so it needs no transaction: the row, its credential and
  * the cap (RUN_SIGN_INS_PER_SERVICE live ones per person and service; past it `rate_limited`) commit together.
  * For interactive runs the route verifies the exchanged token and its parent. For scheduled runs the insert also
- * checks the consent and its direct seat, so a stale grant cannot supply a token.
+ * checks the consent and direct seat. An interactive Admin run checks its consent, original credential and Admin tenure.
  */
-export async function mintRunSignIn(t: IdentityTables, q: Queryable, authSchema: string, readSchema: string, input: {groupId: string | null; userId: string; service: string; parent: {kind: 'token' | 'session'; id: string} | {kind: 'schedule'; id: string; origin: string; scheduleId: string; revision: string}; expiresInMs: number; audience: string; scope: string}): Promise<MintedIdentityToken> {
+export async function mintRunSignIn(t: IdentityTables, q: Queryable, authSchema: string, readSchema: string, input: {groupId: string | null; userId: string; service: string; parent: {kind: 'token' | 'session'; id: string} | {kind: 'schedule'; id: string; origin: string; scheduleId: string; revision: string} | {kind: 'interactive'; id: string; origin: string; contextId: string; personal: ServiceTokenParent}; expiresInMs: number; audience: string; scope: string}): Promise<MintedIdentityToken> {
   const ms = input.expiresInMs;
   if (!Number.isFinite(ms) || ms < MIN_TOKEN_TTL_MS || ms > MAX_TOKEN_TTL_MS) throw new IdentityError('invalid_expiry', 400);
   const id = tokenId(), token = TOKEN_PREFIX + crypto.randomBytes(32).toString('base64url');
   const expiresAt = new Date(Date.now() + ms).toISOString(), name = `run-${input.service}`;
-  const consent = input.parent.kind === 'schedule' ? input.parent : null;
+  const parent = input.parent;
+  const consent = parent.kind === 'schedule' || parent.kind === 'interactive' ? parent : null;
+  const personal = parent.kind === 'interactive' ? parent.personal : null;
   // Personal group runs keep the person in issued_by (the audit identity) and the issuing service on the credential.
   const eligible = personalGroupAuthority(t, readSchema, '$4::text', '$12::text', "'member'");
   const minted = await q.query<{id: string | null}>(`WITH eligible AS (SELECT 1 WHERE
@@ -85,6 +89,15 @@ export async function mintRunSignIn(t: IdentityTables, q: Queryable, authSchema:
           AND consent.credential_hash=$10 AND consent.subject_id=$4 AND consent.group_id=$12 AND consent.deleted_at IS NULL
           AND consent.payload->>'service'=$8 AND consent.payload->>'origin'=$13 AND consent.payload->>'schedule'=$14
           AND consent.payload->>'revision'=$15 AND ${scheduleSeatSql(authSchema, 'consent')})
+      WHEN $9::text='interactive' THEN EXISTS (
+        SELECT 1 FROM ${authSchema}.credentials consent
+          JOIN ${readSchema}.users u ON u.id=consent.subject_id AND u.active AND u.kind='account' AND NOT u.test_account
+        WHERE consent.kind='interactive_consent' AND consent.credential_hash=$10
+          AND consent.subject_id=$4 AND consent.group_id=$12 AND consent.deleted_at IS NULL
+          AND consent.payload->>'service'=$8 AND consent.payload->>'origin'=$13 AND consent.payload->>'context'=$14
+          AND consent.payload->>'parent_kind'=$16 AND consent.payload->>'parent_id'=$17
+          AND ${interactiveParentLiveSql(readSchema, '$16::text', '$17', '$4')}
+          AND ${interactiveAdminHeldSql(authSchema, 'consent')})
       ELSE $12::text IS NULL OR ${eligible} END),
     capped AS (SELECT 1 FROM eligible WHERE (SELECT count(*) FROM ${t.tokens} held
       WHERE held.deleted_at IS NULL AND held.expires_at>now() AND ((held.user_id=$4 AND held.issued_by=$8)
@@ -92,11 +105,11 @@ export async function mintRunSignIn(t: IdentityTables, q: Queryable, authSchema:
           SELECT 1 FROM ${authSchema}.credentials run WHERE run.kind='run_sign_in' AND run.credential_hash=held.id AND run.payload->>'service'=$8)))) < $11),
     token AS (INSERT INTO ${t.tokens} (id, name, token_hash, user_id, expires_at, audience, scope, issued_by, group_id, group_role)
       SELECT $1, $2, $3, CASE WHEN $12::text IS NULL THEN $4::text END, $5, $6, $7, CASE WHEN $12::text IS NULL THEN $8::text ELSE $4::text END,
-        $12, CASE WHEN $12::text IS NOT NULL THEN 'member' END FROM capped RETURNING id),
+        $12, CASE WHEN $9::text='interactive' THEN 'admin' WHEN $12::text IS NOT NULL THEN 'member' END FROM capped RETURNING id),
     credential AS (INSERT INTO ${authSchema}.credentials (kind, credential_hash, subject_id, payload, expires_at)
       SELECT 'run_sign_in', token.id, $4, jsonb_build_object('access_token_id', token.id, 'parent_kind', $9::text, 'parent_id', $10::text, 'service', $8::text), $5 FROM token RETURNING credential_hash)
     SELECT (SELECT credential_hash FROM credential) AS id FROM eligible`,
-    [id, name, sha256(token), input.userId, expiresAt, input.audience, input.scope, input.service, input.parent.kind, input.parent.id, RUN_SIGN_INS_PER_SERVICE, input.groupId, consent?.origin ?? null, consent?.scheduleId ?? null, consent?.revision ?? null]);
+    [id, name, sha256(token), input.userId, expiresAt, input.audience, input.scope, input.service, input.parent.kind, input.parent.id, RUN_SIGN_INS_PER_SERVICE, input.groupId, consent?.origin ?? null, parent.kind === 'schedule' ? parent.scheduleId : parent.kind === 'interactive' ? parent.contextId : null, parent.kind === 'schedule' ? parent.revision : null, personal?.kind ?? null, personal?.id ?? null]);
   if (!minted.rows.length) throw new IdentityError(consent ? 'grant_refused' : 'group_level_not_held', 403);
   if (!minted.rows[0]!.id) throw new IdentityError('rate_limited', 429, 3600);
   return {id, name, token, expiresAt};

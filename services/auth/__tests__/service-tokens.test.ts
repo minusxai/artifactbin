@@ -90,8 +90,8 @@ describe('a group\'s service tokens',()=>{
   expect(verifyGroupServiceToken(groupKey,[{...OPTED,origin:'https://warehouse2.example'}],token)).toBeNull();
   expect(verifyGroupServiceToken(groupKey,[{...CRM,introspectionSecretSha256:'b'.repeat(64),groupPrincipals:true}],token)).toBeNull();
  });
- it('need a group at member or editor, an issuer, and a group sign-in (a token) as parent',()=>{
-  for(const change of [{group:{...input.group,role:'admin' as never}},{group:{...input.group,id:'not an id'}},{group:{...input.group,issuedBy:''}},{parent:{kind:'session' as never,id:'ses_1'}},{parent:{kind:'token' as const,id:'not an id'}}])
+ it('need a group at a supported level, an issuer, and a group sign-in (a token) as parent',()=>{
+  for(const change of [{group:{...input.group,role:'owner' as never}},{group:{...input.group,id:'not an id'}},{group:{...input.group,issuedBy:''}},{parent:{kind:'session' as never,id:'ses_1'}},{parent:{kind:'token' as const,id:'not an id'}}])
    expect(()=>signGroupServiceToken(groupKey,OPTED,{...input,...change}),JSON.stringify(change)).toThrow(/invalid_group|invalid_parent/);
  });
  it('are never read as a person\'s: no person verifier, older or current, accepts one, nor the bearer read',async()=>{

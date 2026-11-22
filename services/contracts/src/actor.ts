@@ -32,7 +32,7 @@ export interface GroupActor {
  readonly credential:'bearer';
  readonly principal:'group';
  readonly principalGroupId:string;
- readonly principalGroupRole:GroupPrincipalRole;
+ readonly principalGroupRole:GroupActorRole;
  readonly tokenId:string;
  readonly issuedBy:string;
  readonly userId?:never;
@@ -40,9 +40,12 @@ export interface GroupActor {
  readonly emailVerified?:never;
  readonly sessionId?:never;
 }
-/** The levels a group principal acts at: never `admin` (administration stays with people). */
+/** Levels available to ordinary group sign-in mints. */
 export type GroupPrincipalRole = 'member' | 'editor';
 export const isGroupPrincipalRole = (value: unknown): value is GroupPrincipalRole => value === 'member' || value === 'editor';
+/** Admin can only come from an explicit personal interactive grant. */
+export type GroupActorRole = GroupPrincipalRole | 'admin';
+export const isGroupActorRole = (value: unknown): value is GroupActorRole => value === 'admin' || isGroupPrincipalRole(value);
 export const isGroupActor = (actor: Actor | null | undefined): actor is GroupActor => actor?.principal === 'group';
 /** The one refusal (403) a route that does not admit a group's sign-in answers it with. */
 export const GROUP_PRINCIPAL_REFUSED = 'group_principal_refused';

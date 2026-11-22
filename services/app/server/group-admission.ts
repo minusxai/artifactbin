@@ -17,8 +17,9 @@
  * not, on purpose: everything personal (accounts, people, notifications, follows, likes, tokens, trash, shown drafts,
  * test users, browser sessions), everything of an owner or an Admin (delete, restore, transfer, sharing, members,
  * policy, connections, group administration), forks, regions, presence, reactions and uploads.
+ * An interactive Admin may also edit the metadata of its exact group. The operation and identity store check its target.
  */
-import { GROUP_PRINCIPAL_REFUSED } from '@artifactbin/contracts/actor';
+import { GROUP_PRINCIPAL_REFUSED, type GroupActorRole } from '@artifactbin/contracts/actor';
 
 /** Each admitted route: its method and its generated path pattern (server/routes.generated `path`). */
 export const GROUP_ADMITTED_ROUTES: readonly (readonly [method: string, path: string])[] = [
@@ -49,7 +50,8 @@ export const GROUP_ADMITTED_ROUTES: readonly (readonly [method: string, path: st
 const compiled = GROUP_ADMITTED_ROUTES.map(([method, path]) => ({ method, pattern: new RegExp(`^${path.replace(/:[A-Za-z]+/g, '[^/]+')}/?$`) }));
 
 /** Is this request one a group's sign-in may make? HEAD rides its GET. */
-export function groupAdmitted(method: string, pathname: string): boolean {
+export function groupAdmitted(method: string, pathname: string, role?: GroupActorRole): boolean {
+  if (role === 'admin' && method === 'PATCH' && /^\/api\/groups\/[^/]+\/?$/.test(pathname)) return true;
   const asked = method === 'HEAD' ? 'GET' : method;
   return compiled.some((route) => route.method === asked && route.pattern.test(pathname));
 }

@@ -1,6 +1,6 @@
 /**
  * WHAT A PRESENTED TOKEN IS, for a service: `mountTokenAuthority(app, o, config)` mounts identity introspection
- * (contracts `IDENTITY_INTROSPECT_PATH`), interactive and scheduled RUN SIGN-IN and a service's GROUP SIGN-IN with its
+ * (contracts `IDENTITY_INTROSPECT_PATH`), personal, interactive grant and scheduled RUN SIGN-IN and a service's GROUP SIGN-IN with its
  * list of approvals (`GROUP_SIGN_IN_PATH`, `GROUP_SIGN_IN_GRANTS_PATH`), each as ./session-authority's header says.
  * An access token is live by the one bearer read (and must be bound to this API or a configured service); an exchanged
  * token by its signature and its parent credential's `live`; a group's exchanged token by its live group sign-in.
@@ -8,7 +8,7 @@
  */
 import {ARTIFACT_SCOPE} from '@artifactbin/contracts/cli-auth';
 import {DEFAULT_TOKEN_TTL_MS, MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS} from '@artifactbin/contracts/handles';
-import { RUN_SIGN_IN_PATH, SCHEDULE_SIGN_IN_PATH, GROUP_SIGN_IN_PATH, GROUP_SIGN_IN_GRANTS_PATH, type GroupSignIn, type RunSignIn } from '@artifactbin/contracts/service-audiences';
+import { CHAT_SIGN_IN_PATH, RUN_SIGN_IN_PATH, SCHEDULE_SIGN_IN_PATH, GROUP_SIGN_IN_PATH, GROUP_SIGN_IN_GRANTS_PATH, type GroupSignIn, type RunSignIn } from '@artifactbin/contracts/service-audiences';
 import {API_RESOURCE_PATH} from '@artifactbin/contracts/cli-auth';
 import {IDENTITY_INTROSPECT_PATH, type IdentityIntrospectResponse} from '@artifactbin/contracts/identity-service';
 import {IdentityError} from '@artifactbin/contracts/identity-module';
@@ -20,6 +20,7 @@ import type {Context, Hono} from 'hono';
 import type {AuthEnv,AuthOptions} from './parts';
 import {acceptedOriginsOf,baseUrlOf} from './routes/grants';
 import {listServiceGroupSignInGrants,mintRunSignIn,mintServiceGroupSignIn} from './identity-store/accounts';
+import {recordInteractiveConsent,revokeInteractiveConsent} from './identity-store/interactive-consent';
 import {readScheduleConsent,recordScheduleConsent,revokeScheduleConsent} from './identity-store/schedule-consent';
 import {identityTables} from './identity-store/tables';
 import {say} from './events';
@@ -96,8 +97,9 @@ export function mountTokenAuthority(app:Hono<AuthEnv>,o:AuthOptions,{secret,audi
    if(isGroupServiceToken(input.token)){
     const claims=groupKey?verifyGroupServiceToken(groupKey,audiences,input.token):null;
     if(!claims||(only&&claims.aud!==only.origin)||!o.identityDb)return inactive;
-    const parent=await readLiveGroupSignIn({db:o.identityDb,readSchema,serviceAudiences:audiences},claims.par.id);
+    const parent=await readLiveGroupSignIn({db:o.identityDb,authSchema,readSchema,serviceAudiences:audiences},claims.par.id);
     if(!parent||parent.groupId!==claims.grp||parent.groupRole!==claims.rol||parent.issuedBy!==claims.isb)return inactive;
+    if(parent.interactiveService&&(parent.interactiveService.id!==claims.svc||parent.interactiveService.origin!==claims.aud))return inactive;
     return answer({active:true,principal_kind:'group',user_id:parent.auditUserId,token_id:claims.jti,scopes:[],audience:claims.aud,expires_at:new Date(claims.exp*1000).toISOString(),parent:claims.par,group_id:claims.grp,group_role:claims.rol,issued_by:claims.isb} satisfies IdentityIntrospectResponse);
    }
    const token=await live(c,await o.tokens.byToken(input.token));
@@ -157,6 +159,41 @@ export function mountTokenAuthority(app:Hono<AuthEnv>,o:AuthOptions,{secret,audi
     expiresInMs:Math.min(lifetime,SERVICE_GROUP_SIGN_IN_MAX_TTL_MS),audience:`${server}${API_RESOURCE_PATH}`,scope:ARTIFACT_SCOPE,
    });
    return respondRun(minted,server,owner.subject_id);
+  }catch(error){return runError(error);}
+ });
+ app.all(CHAT_SIGN_IN_PATH,async(c,next)=>{
+  const service=serviceOf(audiences,c.req.header(SERVICE_AUTH_HEADER));
+  if(!service?.runSignIns)return next();
+  const input=await admitService(c,()=>true);if(input instanceof Response)return input;
+  const {action,chat_id:contextId,group_id:groupId,token,grant_id:grantId}=input;
+  const fields=action==='consent'?['token','group_role']:action==='issue'?['token','grant_id','expires_in']:action==='revoke'?['grant_id']:null;
+  if(!fields||Object.keys(input).some(key=>!['action','chat_id','group_id',...fields].includes(key))
+    ||typeof contextId!=='string'||!contextId.trim()||contextId.length>256
+    ||typeof groupId!=='string'||!/^grp_[a-z0-9]+$/.test(groupId))return answer({error:'bad_request'},400);
+  const db=o.identityDb;
+  if(!db)return answer({error:'session_unavailable'},503);
+  const target={service,contextId,groupId};
+  try{
+   if(action==='consent'){
+    if(input.group_role!=='admin'||typeof token!=='string'||!token)return answer({error:'bad_request'},400);
+    const claims=await verifiedServiceParent(token,service);
+    return answer(await recordInteractiveConsent(db,authSchema,readSchema,{...target,userId:claims.sub,parent:claims.par}));
+   }
+   if(typeof grantId!=='string'||!/^icg_[a-z0-9]{1,40}$/.test(grantId))return answer({error:'bad_request'},400);
+   if(action==='revoke'){
+    await revokeInteractiveConsent(db,authSchema,{...target,grantId});
+    return answer({ok:true});
+   }
+   const lifetime=runLifetime(input.expires_in);
+   if(lifetime===null)return answer({error:'invalid_expiry'},400);
+   if(typeof token!=='string'||!token)return answer({error:'bad_request'},400);
+   const claims=await verifiedServiceParent(token,service);
+   const server=serverOf(c);
+   const minted=await mintRunSignIn(identityTables(authSchema),db,authSchema,readSchema,{
+    groupId,userId:claims.sub,service:service.id,parent:{kind:'interactive',id:grantId,origin:service.origin,contextId,personal:claims.par},
+    expiresInMs:Math.min(lifetime,SERVICE_GROUP_SIGN_IN_MAX_TTL_MS),audience:`${server}${API_RESOURCE_PATH}`,scope:ARTIFACT_SCOPE,
+   });
+   return respondRun(minted,server,claims.sub);
   }catch(error){return runError(error);}
  });
  app.all(GROUP_SIGN_IN_PATH,async(c,next)=>{

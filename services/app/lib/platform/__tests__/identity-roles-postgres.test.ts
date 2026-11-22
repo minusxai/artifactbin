@@ -26,7 +26,7 @@ import {assertGroupRoleModel,initializeGroupRoleModel,migrateGroupRoles} from '@
 import {SECRET_COLUMNS} from '@artifactbin/auth/identity-store/schema';
 import {createAuthHost,createBearerReader,createHumanAuth,sessionStoreOf,ensureHumanAuthSchema} from '@artifactbin/auth';
 import {IDENTITY_INTROSPECT_PATH} from '@artifactbin/contracts/identity-service';
-import {SCHEDULE_SIGN_IN_PATH,SERVICE_TOKEN_PATH} from '@artifactbin/contracts/service-audiences';
+import {CHAT_SIGN_IN_PATH,SCHEDULE_SIGN_IN_PATH,SERVICE_TOKEN_PATH,parseServiceAudiences} from '@artifactbin/contracts/service-audiences';
 import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts/routes';
 import {createHash} from 'node:crypto';
 import {SCHEMA_STATEMENTS} from '@/lib/platform';
@@ -85,16 +85,21 @@ describe.skipIf(!dockerImage('postgres:17-alpine'))('identity tables in a split-
   if(container)spawnSync('docker',['rm','-f',container],{stdio:'ignore'});
  },30_000);
 
- it('serializes competing schedule consents and invalidates old credentials at takeover',async()=>{
+ it('serializes competing context consents and invalidates old credentials',async()=>{
   const db=identityDbOf(auth),baseURL='http://app.test',secret='disposable-schedule-cookie-key-0000';
   const serviceSecret='disposable-schedule-service-key',otherSecret='disposable-other-service-key';
   const configured=(id:string,key:string)=>({id,origin:`https://${id}.example.test`,run_sign_ins:true,group_principals:true,
    introspection_secret_sha256:createHash('sha256').update(key).digest('hex')});
   let otp='';
   const human=await createHumanAuth({pool:auth,schema:'auth',secret,baseURL,mail:{send:async message=>{otp=message.otp??'';}}});
-  const host=createAuthHost({env:{APP__PUBLIC_BASE_URL:baseURL,INTERNAL__SERVICE_SECRET:secret,
-   IDENTITY__SERVICE_AUDIENCES:JSON.stringify([configured('scheduler',serviceSecret),configured('other',otherSecret)])},
-   cookieSecret:secret,tokens:createBearerReader({db}),sessions:sessionStoreOf(human),identityDb:db,appSchema:'app',upstream:async()=>new Response(null,{status:404})});
+  const authority=(entries:ReturnType<typeof configured>[])=>{
+   const audiences=JSON.stringify(entries);
+   return createAuthHost({env:{APP__PUBLIC_BASE_URL:baseURL,INTERNAL__SERVICE_SECRET:secret,IDENTITY__SERVICE_AUDIENCES:audiences},
+    cookieSecret:secret,tokens:createBearerReader({db,serviceAudiences:parseServiceAudiences(audiences)}),sessions:sessionStoreOf(human),
+    identityDb:db,upstream:async()=>new Response(null,{status:404})});
+  };
+  const configuredService=configured('scheduler',serviceSecret);
+  const host=authority([configuredService,configured('other',otherSecret)]);
   const post=(path:string,body:unknown,headers:Record<string,string>={})=>host.request(baseURL+path,{method:'POST',
    headers:{origin:baseURL,'content-type':'application/json',...headers},body:JSON.stringify(body)});
   const store=createIdentityStore({db,authSchema:'auth',appSchema:'app'});
@@ -117,6 +122,25 @@ describe.skipIf(!dockerImage('postgres:17-alpine'))('identity tables in a split-
    const response=await post(SCHEDULE_SIGN_IN_PATH,body,{[SERVICE_AUTH_HEADER]:key});
    return {status:response.status,body:await response.json()};
   };
+  const interactive={action:'consent',token:first.token,group_id:'grp_schedule',chat_id:'context-demo',group_role:'admin'};
+  const chat=async(body:unknown)=>(await post(CHAT_SIGN_IN_PATH,body,{[SERVICE_AUTH_HEADER]:serviceSecret})).json();
+  const [recorded,retry]=await Promise.all([chat(interactive),chat(interactive)]);
+  expect(recorded).toEqual({grant_id:expect.any(String),user_id:first.user,group_id:interactive.group_id,group_role:'admin'});
+  expect(retry).toEqual(recorded);
+  const target={grant_id:recorded.grant_id,chat_id:interactive.chat_id,group_id:interactive.group_id};
+  const {access_token:scoped,token_id:scopedId}=await chat({...target,action:'issue',token:first.token});
+  expect(scoped).toMatch(/^mx_/);
+  const live=()=>service.query('SELECT live FROM tokens WHERE id=$1',[scopedId]).then(result=>result.rows);
+  expect(await live()).toEqual([{live:true}]);
+  const moved=authority([{...configuredService,origin:'https://moved.example.test'}]);
+  const movedCall=(path:string,body:unknown,key:string)=>moved.request(baseURL+path,{method:'POST',
+   headers:{'content-type':'application/json',[SERVICE_AUTH_HEADER]:key},body:JSON.stringify(body)});
+  expect(await (await movedCall(IDENTITY_INTROSPECT_PATH,{token:scoped},secret)).json()).toEqual({active:false});
+  expect((await movedCall(CHAT_SIGN_IN_PATH,{...target,action:'revoke'},serviceSecret)).status).toBe(403);
+  expect(await live()).toEqual([{live:true}]);
+  expect(await chat({...target,action:'revoke'})).toEqual({ok:true});
+  expect(await live()).toEqual([{live:false}]);
+
   const scope={schedule_id:'daily',revision:'before'},consent={...scope,action:'consent',token:first.token,group_id:'grp_schedule'};
   const results=await Promise.all([call(consent),call(consent),call({...consent,token:second.token})]);
   // Whichever owner wins, only that owner may retry this revision.

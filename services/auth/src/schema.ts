@@ -40,6 +40,8 @@ export const AUTH_TABLES: Table[] = [
       // Keep the current consent unique, and retain prior revisions as tombstones.
       { name: 'idx_schedule_consent_active', columns: ["(payload->>'service')", "(payload->>'schedule')"], unique: true, where: "kind='schedule_consent' AND deleted_at IS NULL" },
       { name: 'idx_schedule_consent_revision', columns: ["(payload->>'service')", "(payload->>'schedule')", "(payload->>'revision')"], unique: true, where: "kind='schedule_consent'" },
+      // Keep a context unique even after revocation, so a retry cannot restore old authority.
+      { name: 'idx_interactive_consent_context', columns: ["(payload->>'service')", "(payload->>'context')"], unique: true, where: "kind='interactive_consent'" },
       // Bearer admission's family fence: a refresh token's membership by its access token id.
       // Production builds it CONCURRENTLY by hand before deploy; this keeps the same name and definition.
       { name: 'idx_auth_credentials_access', columns: ["(payload->>'access_token_id')"], where: "kind='refresh_token'" },

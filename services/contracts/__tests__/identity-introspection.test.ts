@@ -23,7 +23,7 @@ it('an active answer carries the principal: a person with a user id, or a group 
   expectTypeOf<Group['issued_by']>().toEqualTypeOf<string>();
   // Null on a group's sign-in; on a group's exchanged service token, the group sign-in it was exchanged from.
   expectTypeOf<Group['parent']>().toEqualTypeOf<{kind: 'token'; id: string} | null>();
-  expectTypeOf<IdentityPrincipalGroupRole>().toEqualTypeOf<'member' | 'editor'>();
+  expectTypeOf<IdentityPrincipalGroupRole>().toEqualTypeOf<'member' | 'editor' | 'admin'>();
   expectTypeOf<Extract<IdentityIntrospectResponse, {active: false}>>().toEqualTypeOf<{active: false}>();
   // Branching on the kind narrows `user_id` to the person.
   const personOf = (answer: IdentityIntrospectResponse) => answer.active && answer.principal_kind === 'user' ? answer.user_id : null;

@@ -2,7 +2,7 @@
  * THE ACTOR TYPES: who is asking, as identity knows it. Resource policy (lib/artifact-access,
  * grants, membership) reads `AccessActor`; nothing here decides what an actor may do.
  */
-import type { Credential } from '@artifactbin/contracts/actor';
+import type { Credential, GroupActorRole } from '@artifactbin/contracts/actor';
 
 /**
  * THE ACTOR every access decision reads: ownership, shares, the link, the SQL scopes, dataset grants and
@@ -33,7 +33,7 @@ export interface AccessActor {
   /**
    * AN AGENT SIGNED IN AS A GROUP (contracts `GroupActor`, identity-service `GROUP_SIGN_IN_RULE`): set only then, and
    * then `userId`, `tokenId` and `email` are null, so no reading of the actor as a person or as an unowned token
-   * applies. Its access is lib/artifact-access's one rule for it (`groupPrincipalOf`); every other door refuses it.
+   * applies. Its access is scoped to its group and the doors in server/group-admission.
    */
   principalGroup?: GroupPrincipal | null;
 }
@@ -42,7 +42,7 @@ export interface AccessActor {
  * The group a sign-in acts as, at its level, with the sign-in's own token row (attribution, never ownership) and the
  * person who authorised it (`issuedBy`, never the principal).
  */
-export interface GroupPrincipal { id: string; role: 'member' | 'editor'; tokenId: string; issuedBy: string }
+export interface GroupPrincipal { id: string; role: GroupActorRole; tokenId: string; issuedBy: string }
 
 /**
  * One request's resolved identity: the actor, plus how it proved itself. `credential` keys the same-site

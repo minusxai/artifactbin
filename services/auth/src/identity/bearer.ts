@@ -22,7 +22,8 @@
  * credential named there is: a live browser session of the same person, or a live token of theirs that is not itself a
  * run sign-in. A second lateral (`run`) reads it by primary key. Its subject is the personal token’s user_id or
  * the group token’s authorizing person (issued_by). A schedule run uses a consent tied to one direct seat as
- * its parent, so either revocation or deletion of that seat ends the run and its service exchanges.
+ * its parent, so either revocation or deletion of that seat ends the run and its service exchanges. An interactive
+ * Admin run needs the original live personal parent and the same Admin tenure, inheritance path and admission.
  *
  * A GROUP'S SIGN-IN (`group_id` set, `user_id` NULL: contracts identity-service `GROUP_SIGN_IN_RULE`) is decided
  * by its row, an audience and, for a person's, a live OAuth family or Member run parent; a service's
@@ -33,6 +34,8 @@
  * that service is still configured here with the opt-in at the origin its approval recorded (`serviceAudiences`,
  * contracts `groupSignInServiceConfigured`): configuration the views cannot see, so this read decides it, every use.
  */
+import {isGroupActorRole, type GroupActorRole} from '@artifactbin/contracts/actor';
+import {interactiveAdminHeldSql} from '../identity-store/interactive-consent';
 import { groupSignInServiceConfigured, type ServiceAudience } from '@artifactbin/contracts/service-audiences';
 import type { Queryable } from '@artifactbin/contracts/db';
 import type { TokenReader, TokenRecord } from '@artifactbin/contracts/identity';
@@ -73,7 +76,7 @@ export function sessionBoundSql(auth: string, family: string, sessions = true): 
  * `createBearerReader` below and by the `tokens` read view's `live` (../identity-store/views), so the two cannot disagree. `auth` and
  * `tokens` are interpolated: the auth schema and the (possibly schema-qualified) tokens table.
  */
-export function bearerLiveSql(o: { auth: string; tokens: string; sessions?: boolean; scheduleSeats?: boolean }): { fence: string; live: string; exists: string } {
+export function bearerLiveSql(o: { auth: string; tokens: string; sessions?: boolean; groupConsents?: boolean }): { fence: string; live: string; exists: string } {
   const { auth, tokens } = o;
   const sessions = o.sessions !== false;
   /** The family fence over the `tokens` row aliased `a` (`t`, or a run sign-in's parent `p`). */
@@ -91,25 +94,37 @@ export function bearerLiveSql(o: { auth: string; tokens: string; sessions?: bool
   // A run sign-in's credential row, live while its parent is: the person's session, or a token of theirs that is not
   // itself a run sign-in, by that token's own rule (row and family). For schedule runs the group view also
   // checks the direct seat, as part of the group authorisation read shared by bearers and exchanged tokens.
-  const run = `FROM ${auth}.credentials run WHERE run.kind='run_sign_in' AND run.credential_hash=t.id AND run.deleted_at IS NULL AND (t.group_id IS NULL OR t.group_role='member') AND run.subject_id=CASE WHEN t.group_id IS NULL THEN t.user_id ELSE t.issued_by END
-      AND ((run.payload->>'parent_kind'='schedule' AND t.group_id IS NOT NULL AND EXISTS (
-          SELECT 1 FROM ${auth}.credentials consent WHERE consent.kind='schedule_consent'
-            AND consent.credential_hash=run.payload->>'parent_id' AND consent.deleted_at IS NULL
-            AND consent.subject_id=run.subject_id AND consent.group_id=t.group_id
-            AND consent.payload->>'service'=run.payload->>'service'
-            ${o.scheduleSeats ? `AND ${scheduleSeatSql(auth, 'consent')}` : ''}))
-        OR (run.payload->>'parent_kind'='session' AND ${sessions ? `EXISTS (SELECT 1 FROM ${auth}.session ps WHERE ps.id=run.payload->>'parent_id' AND ps."userId"=run.subject_id AND ps."expiresAt">now())` : 'FALSE'})
-        OR (run.payload->>'parent_kind'='token' AND EXISTS (SELECT 1 FROM ${tokens} p WHERE p.id=run.payload->>'parent_id' AND p.user_id=run.subject_id AND p.issued_by IS NULL AND ${rowLiveOf('p')}
-          AND (COALESCE(p.audience,'')='' OR EXISTS (SELECT 1 ${family('p', 'pmember', 'pfamily', 'psibling', 'paccess')})))))`;
+  const personalParent = (kind: string, id: string) => `(
+    (${kind}='session' AND ${sessions ? `EXISTS (SELECT 1 FROM ${auth}.session ps
+      WHERE ps.id=${id} AND ps."userId"=run.subject_id AND ps."expiresAt">now())` : 'FALSE'})
+    OR (${kind}='token' AND EXISTS (SELECT 1 FROM ${tokens} p WHERE p.id=${id}
+      AND p.group_id IS NULL AND p.user_id=run.subject_id AND p.issued_by IS NULL AND ${rowLiveOf('p')}
+      AND (COALESCE(p.audience,'')='' OR EXISTS (SELECT 1 ${family('p', 'pmember', 'pfamily', 'psibling', 'paccess')})))))`;
+  const consentOf = (kind: string) => `FROM ${auth}.credentials consent WHERE consent.kind='${kind}'
+    AND consent.credential_hash=run.payload->>'parent_id' AND consent.deleted_at IS NULL
+    AND consent.subject_id=run.subject_id AND consent.group_id=t.group_id
+    AND consent.payload->>'service'=run.payload->>'service'`;
+  const run = `FROM ${auth}.credentials run WHERE run.kind='run_sign_in' AND run.credential_hash=t.id AND run.deleted_at IS NULL
+      AND run.subject_id=CASE WHEN t.group_id IS NULL THEN t.user_id ELSE t.issued_by END
+      AND CASE WHEN t.group_role='admin' THEN run.payload->>'parent_kind'='interactive' AND EXISTS (
+        SELECT 1 ${consentOf('interactive_consent')}
+          AND ${personalParent("consent.payload->>'parent_kind'", "consent.payload->>'parent_id'")}
+          ${o.groupConsents ? `AND ${interactiveAdminHeldSql(auth, 'consent')}` : ''})
+      ELSE (t.group_id IS NULL OR t.group_role='member') AND (
+        (run.payload->>'parent_kind'='schedule' AND t.group_id IS NOT NULL AND EXISTS (
+          SELECT 1 ${consentOf('schedule_consent')} ${o.groupConsents ? `AND ${scheduleSeatSql(auth, 'consent')}` : ''}))
+        OR ${personalParent("run.payload->>'parent_kind'", "run.payload->>'parent_id'")}) END`;
   return {
     fence: `LEFT JOIN LATERAL (SELECT 1 AS live ${family('t')} LIMIT 1) fence ON true
     LEFT JOIN LATERAL (SELECT 1 AS live ${run} LIMIT 1) run ON t.issued_by IS NOT NULL AND t.grant_id IS NULL`,
     // A group's authority comes from an approval, a family, or a run bound to the original personal parent.
     live: `${rowLive}
-      AND (CASE WHEN t.group_id IS NOT NULL THEN (${group} AND (t.grant_id IS NOT NULL OR fence.live IS NOT NULL OR run.live IS NOT NULL))
+      AND (CASE WHEN t.group_id IS NOT NULL THEN (${group} AND (CASE WHEN t.group_role='admin' THEN t.grant_id IS NULL AND run.live IS NOT NULL
+          ELSE t.grant_id IS NOT NULL OR fence.live IS NOT NULL OR run.live IS NOT NULL END))
         WHEN t.issued_by IS NULL THEN (COALESCE(t.audience,'')='' OR fence.live IS NOT NULL) ELSE run.live IS NOT NULL END)`,
     // The same predicate with the fences as subqueries, for a reader whose FROM must stay the one table (a view).
-    exists: `(${rowLive} AND (CASE WHEN t.group_id IS NOT NULL THEN (${group} AND (t.grant_id IS NOT NULL OR EXISTS (SELECT 1 ${family('t')}) OR EXISTS (SELECT 1 ${run})))
+    exists: `(${rowLive} AND (CASE WHEN t.group_id IS NOT NULL THEN (${group} AND (CASE WHEN t.group_role='admin' THEN t.grant_id IS NULL AND EXISTS (SELECT 1 ${run})
+      ELSE t.grant_id IS NOT NULL OR EXISTS (SELECT 1 ${family('t')}) OR EXISTS (SELECT 1 ${run}) END))
       WHEN t.issued_by IS NULL THEN (COALESCE(t.audience,'')='' OR EXISTS (SELECT 1 ${family('t')})) ELSE EXISTS (SELECT 1 ${run}) END))`,
   };
 }
@@ -129,8 +144,10 @@ export function createBearerReader(o: BearerReaderOptions): TokenReader {
       if (!row) return null;
       if (row.group_id !== null && row.group_id !== undefined) {
         // A group's sign-in: its authorisation, by the read view's one rule. No account, so no account policy.
-        if (row.user_id || !row.issued_by || (row.group_role !== 'member' && row.group_role !== 'editor')) return null;
-        if (!row.grant_id) {
+        if (row.user_id || !row.issued_by || !isGroupActorRole(row.group_role)) return null;
+        if (row.group_role === 'admin') {
+          if (!await readLiveGroupSignIn(o, row.id)) return null;
+        } else if (!row.grant_id) {
           if ((await o.db.query<{ live: boolean }>(`SELECT live FROM ${views}.tokens WHERE id=$1`, [row.id])).rows[0]?.live !== true) return null;
         } else {
           // A service's: live by the rule, and still that configured service, opted in, at the origin it was approved at.
@@ -162,7 +179,7 @@ export function createBearerReader(o: BearerReaderOptions): TokenReader {
 }
 
 /** A group's sign-in that is live now, by its token row's id (`readLiveGroupSignIn`). */
-export interface LiveGroupSignIn { auditUserId: string | null; id: string; groupId: string; groupRole: 'member' | 'editor'; issuedBy: string; expiresAt: string | null }
+export interface LiveGroupSignIn { auditUserId: string | null; id: string; groupId: string; groupRole: GroupActorRole; interactiveService?: {id: string; origin: string}; issuedBy: string; expiresAt: string | null }
 
 /**
  * A GROUP'S SIGN-IN BY ITS ID, live now by exactly what the bearer read above decides for such a row: the read view's
@@ -172,14 +189,24 @@ export interface LiveGroupSignIn { auditUserId: string | null; id: string; group
  * check a group's exchanged service token re-asks of its parent at the exchange and at every introspection. One
  * statement; null when not live, not a group's, or absent.
  */
-export async function readLiveGroupSignIn(o: { db: Queryable; readSchema?: string; serviceAudiences?: readonly ServiceAudience[] }, tokenId: string): Promise<LiveGroupSignIn | null> {
+export async function readLiveGroupSignIn(o: { db: Queryable; authSchema?: string; readSchema?: string; serviceAudiences?: readonly ServiceAudience[] }, tokenId: string): Promise<LiveGroupSignIn | null> {
   const views = plainIdentifier(o.readSchema ?? 'identity', 'read schema');
   const row = (await o.db.query<{ live: boolean; user_id: string | null; group_id: string | null; group_role: string | null; issued_by: string | null; grant_id: string | null; audience: string | null; expires_at: string | Date | null; service_origin: string | null }>(
     `SELECT t.live, t.user_id, t.group_id, t.group_role, t.issued_by, t.grant_id, t.audience, t.expires_at, g.service_origin FROM ${views}.tokens t
       LEFT JOIN ${views}.group_sign_in_grants g ON g.id=t.grant_id WHERE t.id=$1`, [tokenId])).rows[0];
   const audiences = o.serviceAudiences ?? [];
-  if (!row || row.live !== true || row.user_id !== (row.grant_id ? null : row.issued_by) || !row.group_id || !row.issued_by || (row.group_role !== 'member' && row.group_role !== 'editor')) return null;
+  if (!row || row.live !== true || row.user_id !== (row.grant_id ? null : row.issued_by) || !row.group_id || !row.issued_by || !isGroupActorRole(row.group_role)) return null;
   if (!row.audience || audiences.some(service => service.origin === row.audience)) return null;
   if (row.grant_id && !groupSignInServiceConfigured(audiences, row.issued_by, row.service_origin)) return null;
-  return { id: tokenId, auditUserId: row.user_id, groupId: row.group_id, groupRole: row.group_role, issuedBy: row.issued_by, expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null };
+  let interactiveService: LiveGroupSignIn['interactiveService'];
+  if (row.group_role === 'admin') {
+    const auth = plainIdentifier(o.authSchema ?? 'auth', 'auth schema');
+    const binding = (await o.db.query<{id: string; origin: string}>(`SELECT consent.payload->>'service' AS id,consent.payload->>'origin' AS origin
+      FROM ${auth}.credentials run JOIN ${auth}.credentials consent ON consent.kind='interactive_consent'
+        AND consent.credential_hash=run.payload->>'parent_id' AND consent.deleted_at IS NULL
+      WHERE run.kind='run_sign_in' AND run.credential_hash=$1 AND run.payload->>'parent_kind'='interactive'`, [tokenId])).rows[0];
+    if (!binding || !audiences.some(service => service.runSignIns && service.id === binding.id && service.origin === binding.origin)) return null;
+    interactiveService = binding;
+  }
+  return { ...(interactiveService ? {interactiveService} : {}), id: tokenId, auditUserId: row.user_id, groupId: row.group_id, groupRole: row.group_role, issuedBy: row.issued_by, expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null };
 }

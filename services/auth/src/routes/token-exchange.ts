@@ -81,6 +81,7 @@ export function mountTokenExchange(app: AuthApp, o: OAuthRoutesOptions): void {
       try{live=await o.groupSignIns.live(actor.tokenId);}catch{return refuse(503,'temporarily_unavailable');}
       if(!live||live.groupId!==actor.principalGroupId||live.groupRole!==actor.principalGroupRole||live.issuedBy!==actor.issuedBy)
         return refuse(401,'authentication_required','The group sign-in is no longer live: sign in again.');
+      if(live.interactiveService&&(live.interactiveService.id!==service.id||live.interactiveService.origin!==service.origin))return refuse(403,'forbidden_audience');
       let issued;
       try{issued=signGroupServiceToken(o.groupServiceTokenKey,service,{group:{id:live.groupId,role:live.groupRole,issuedBy:live.issuedBy},parent:{kind:'token',id:live.id},notAfter:live.expiresAt?Date.parse(live.expiresAt):null});}
       catch{return refuse(401,'authentication_required','The group sign-in is no longer live: sign in again.');}

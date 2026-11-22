@@ -41,31 +41,113 @@ CREATE OR REPLACE VIEW identity.account_preferences AS
 CREATE OR REPLACE VIEW identity.tokens AS
   SELECT t.id, t.name, CASE WHEN t.group_id IS NOT NULL AND t.grant_id IS NULL THEN t.issued_by ELSE t.user_id END AS user_id, t.client_harness, t.audience, t.scope, t.request_authority, t.created_at, t.deleted_at, t.expires_at, t.last_used_at,
     array_remove(regexp_split_to_array(coalesce(t.scope, ''), '\s+'), '') AS scopes,
-    ((t.deleted_at IS NULL AND (t.expires_at IS NULL OR t.expires_at>now()) AND (CASE WHEN t.group_id IS NOT NULL THEN (t.user_id IS NULL AND COALESCE(t.audience,'')<>'' AND (t.grant_id IS NOT NULL OR EXISTS (SELECT 1 FROM auth.credentials member
-      JOIN auth.credentials family ON family.kind='refresh_family' AND family.credential_hash=member.group_id AND family.deleted_at IS NULL
-      WHERE COALESCE(t.audience,'')<>'' AND member.kind='refresh_token' AND member.payload->>'access_token_id'=t.id
-        AND (family.payload->>'session_id' IS NULL OR EXISTS (SELECT 1 FROM auth.session bound WHERE bound.id=family.payload->>'session_id' AND bound."expiresAt">now()))
-        AND NOT EXISTS (
-          SELECT 1 FROM auth.credentials sibling LEFT JOIN auth.tokens access ON access.id=sibling.payload->>'access_token_id'
-          WHERE sibling.kind='refresh_token' AND sibling.group_id=member.group_id
-            AND (sibling.deleted_at IS NOT NULL OR access.id IS NULL OR access.deleted_at IS NOT NULL))) OR EXISTS (SELECT 1 FROM auth.credentials run WHERE run.kind='run_sign_in' AND run.credential_hash=t.id AND run.deleted_at IS NULL AND (t.group_id IS NULL OR t.group_role='member') AND run.subject_id=CASE WHEN t.group_id IS NULL THEN t.user_id ELSE t.issued_by END
-      AND ((run.payload->>'parent_kind'='schedule' AND t.group_id IS NOT NULL AND EXISTS (
-          SELECT 1 FROM auth.credentials consent WHERE consent.kind='schedule_consent'
-            AND consent.credential_hash=run.payload->>'parent_id' AND consent.deleted_at IS NULL
-            AND consent.subject_id=run.subject_id AND consent.group_id=t.group_id
-            AND consent.payload->>'service'=run.payload->>'service'
-            AND EXISTS (SELECT 1 FROM auth.group_members seat JOIN auth.groups g ON g.id=seat.group_id AND g.deleted_at IS NULL
-    WHERE seat.group_id=consent.group_id AND seat.user_id=consent.subject_id AND seat.role IN ('member','admin') AND seat.seat_id::text=consent.payload->>'seat')))
-        OR (run.payload->>'parent_kind'='session' AND EXISTS (SELECT 1 FROM auth.session ps WHERE ps.id=run.payload->>'parent_id' AND ps."userId"=run.subject_id AND ps."expiresAt">now()))
-        OR (run.payload->>'parent_kind'='token' AND EXISTS (SELECT 1 FROM auth.tokens p WHERE p.id=run.payload->>'parent_id' AND p.user_id=run.subject_id AND p.issued_by IS NULL AND p.deleted_at IS NULL AND (p.expires_at IS NULL OR p.expires_at>now())
-          AND (COALESCE(p.audience,'')='' OR EXISTS (SELECT 1 FROM auth.credentials pmember
+    ((t.deleted_at IS NULL AND (t.expires_at IS NULL OR t.expires_at>now()) AND (CASE WHEN t.group_id IS NOT NULL THEN (t.user_id IS NULL AND COALESCE(t.audience,'')<>'' AND (CASE WHEN t.group_role='admin' THEN t.grant_id IS NULL AND EXISTS (SELECT 1 FROM auth.credentials run WHERE run.kind='run_sign_in' AND run.credential_hash=t.id AND run.deleted_at IS NULL
+      AND run.subject_id=CASE WHEN t.group_id IS NULL THEN t.user_id ELSE t.issued_by END
+      AND CASE WHEN t.group_role='admin' THEN run.payload->>'parent_kind'='interactive' AND EXISTS (
+        SELECT 1 FROM auth.credentials consent WHERE consent.kind='interactive_consent'
+    AND consent.credential_hash=run.payload->>'parent_id' AND consent.deleted_at IS NULL
+    AND consent.subject_id=run.subject_id AND consent.group_id=t.group_id
+    AND consent.payload->>'service'=run.payload->>'service'
+          AND (
+    (consent.payload->>'parent_kind'='session' AND EXISTS (SELECT 1 FROM auth.session ps
+      WHERE ps.id=consent.payload->>'parent_id' AND ps."userId"=run.subject_id AND ps."expiresAt">now()))
+    OR (consent.payload->>'parent_kind'='token' AND EXISTS (SELECT 1 FROM auth.tokens p WHERE p.id=consent.payload->>'parent_id'
+      AND p.group_id IS NULL AND p.user_id=run.subject_id AND p.issued_by IS NULL AND p.deleted_at IS NULL AND (p.expires_at IS NULL OR p.expires_at>now())
+      AND (COALESCE(p.audience,'')='' OR EXISTS (SELECT 1 FROM auth.credentials pmember
       JOIN auth.credentials pfamily ON pfamily.kind='refresh_family' AND pfamily.credential_hash=pmember.group_id AND pfamily.deleted_at IS NULL
       WHERE COALESCE(p.audience,'')<>'' AND pmember.kind='refresh_token' AND pmember.payload->>'access_token_id'=p.id
         AND (pfamily.payload->>'session_id' IS NULL OR EXISTS (SELECT 1 FROM auth.session bound WHERE bound.id=pfamily.payload->>'session_id' AND bound."expiresAt">now()))
         AND NOT EXISTS (
           SELECT 1 FROM auth.credentials psibling LEFT JOIN auth.tokens paccess ON paccess.id=psibling.payload->>'access_token_id'
           WHERE psibling.kind='refresh_token' AND psibling.group_id=pmember.group_id
-            AND (psibling.deleted_at IS NOT NULL OR paccess.id IS NULL OR paccess.deleted_at IS NOT NULL))))))))))
+            AND (psibling.deleted_at IS NOT NULL OR paccess.id IS NULL OR paccess.deleted_at IS NOT NULL)))))))
+          AND EXISTS (SELECT 1 FROM (WITH RECURSIVE up(id, parent_id, edge, path) AS (
+    SELECT id,parent_id,parent_edge_id,ARRAY[]::uuid[] FROM auth.groups WHERE id=consent.group_id AND deleted_at IS NULL
+    UNION ALL
+    SELECT p.id,p.parent_id,p.parent_edge_id,up.path || up.edge FROM up
+      JOIN auth.groups p ON p.id=up.parent_id WHERE p.deleted_at IS NULL AND cardinality(up.path)<10000
+  )
+  SELECT m.admin_tenure_id AS tenure,to_jsonb(up.path) AS path FROM up JOIN auth.group_members m
+    ON m.group_id=up.id AND m.user_id=consent.subject_id AND m.role='admin') held
+    JOIN auth.users owner ON owner.id=consent.subject_id AND owner.interactive_authority_id::text=consent.payload->>'authority'
+    WHERE held.tenure::text=consent.payload->>'tenure' AND held.path=consent.payload->'path'))
+      ELSE (t.group_id IS NULL OR t.group_role='member') AND (
+        (run.payload->>'parent_kind'='schedule' AND t.group_id IS NOT NULL AND EXISTS (
+          SELECT 1 FROM auth.credentials consent WHERE consent.kind='schedule_consent'
+    AND consent.credential_hash=run.payload->>'parent_id' AND consent.deleted_at IS NULL
+    AND consent.subject_id=run.subject_id AND consent.group_id=t.group_id
+    AND consent.payload->>'service'=run.payload->>'service' AND EXISTS (SELECT 1 FROM auth.group_members seat JOIN auth.groups g ON g.id=seat.group_id AND g.deleted_at IS NULL
+    WHERE seat.group_id=consent.group_id AND seat.user_id=consent.subject_id AND seat.role IN ('member','admin') AND seat.seat_id::text=consent.payload->>'seat')))
+        OR (
+    (run.payload->>'parent_kind'='session' AND EXISTS (SELECT 1 FROM auth.session ps
+      WHERE ps.id=run.payload->>'parent_id' AND ps."userId"=run.subject_id AND ps."expiresAt">now()))
+    OR (run.payload->>'parent_kind'='token' AND EXISTS (SELECT 1 FROM auth.tokens p WHERE p.id=run.payload->>'parent_id'
+      AND p.group_id IS NULL AND p.user_id=run.subject_id AND p.issued_by IS NULL AND p.deleted_at IS NULL AND (p.expires_at IS NULL OR p.expires_at>now())
+      AND (COALESCE(p.audience,'')='' OR EXISTS (SELECT 1 FROM auth.credentials pmember
+      JOIN auth.credentials pfamily ON pfamily.kind='refresh_family' AND pfamily.credential_hash=pmember.group_id AND pfamily.deleted_at IS NULL
+      WHERE COALESCE(p.audience,'')<>'' AND pmember.kind='refresh_token' AND pmember.payload->>'access_token_id'=p.id
+        AND (pfamily.payload->>'session_id' IS NULL OR EXISTS (SELECT 1 FROM auth.session bound WHERE bound.id=pfamily.payload->>'session_id' AND bound."expiresAt">now()))
+        AND NOT EXISTS (
+          SELECT 1 FROM auth.credentials psibling LEFT JOIN auth.tokens paccess ON paccess.id=psibling.payload->>'access_token_id'
+          WHERE psibling.kind='refresh_token' AND psibling.group_id=pmember.group_id
+            AND (psibling.deleted_at IS NOT NULL OR paccess.id IS NULL OR paccess.deleted_at IS NOT NULL)))))))) END)
+      ELSE t.grant_id IS NOT NULL OR EXISTS (SELECT 1 FROM auth.credentials member
+      JOIN auth.credentials family ON family.kind='refresh_family' AND family.credential_hash=member.group_id AND family.deleted_at IS NULL
+      WHERE COALESCE(t.audience,'')<>'' AND member.kind='refresh_token' AND member.payload->>'access_token_id'=t.id
+        AND (family.payload->>'session_id' IS NULL OR EXISTS (SELECT 1 FROM auth.session bound WHERE bound.id=family.payload->>'session_id' AND bound."expiresAt">now()))
+        AND NOT EXISTS (
+          SELECT 1 FROM auth.credentials sibling LEFT JOIN auth.tokens access ON access.id=sibling.payload->>'access_token_id'
+          WHERE sibling.kind='refresh_token' AND sibling.group_id=member.group_id
+            AND (sibling.deleted_at IS NOT NULL OR access.id IS NULL OR access.deleted_at IS NOT NULL))) OR EXISTS (SELECT 1 FROM auth.credentials run WHERE run.kind='run_sign_in' AND run.credential_hash=t.id AND run.deleted_at IS NULL
+      AND run.subject_id=CASE WHEN t.group_id IS NULL THEN t.user_id ELSE t.issued_by END
+      AND CASE WHEN t.group_role='admin' THEN run.payload->>'parent_kind'='interactive' AND EXISTS (
+        SELECT 1 FROM auth.credentials consent WHERE consent.kind='interactive_consent'
+    AND consent.credential_hash=run.payload->>'parent_id' AND consent.deleted_at IS NULL
+    AND consent.subject_id=run.subject_id AND consent.group_id=t.group_id
+    AND consent.payload->>'service'=run.payload->>'service'
+          AND (
+    (consent.payload->>'parent_kind'='session' AND EXISTS (SELECT 1 FROM auth.session ps
+      WHERE ps.id=consent.payload->>'parent_id' AND ps."userId"=run.subject_id AND ps."expiresAt">now()))
+    OR (consent.payload->>'parent_kind'='token' AND EXISTS (SELECT 1 FROM auth.tokens p WHERE p.id=consent.payload->>'parent_id'
+      AND p.group_id IS NULL AND p.user_id=run.subject_id AND p.issued_by IS NULL AND p.deleted_at IS NULL AND (p.expires_at IS NULL OR p.expires_at>now())
+      AND (COALESCE(p.audience,'')='' OR EXISTS (SELECT 1 FROM auth.credentials pmember
+      JOIN auth.credentials pfamily ON pfamily.kind='refresh_family' AND pfamily.credential_hash=pmember.group_id AND pfamily.deleted_at IS NULL
+      WHERE COALESCE(p.audience,'')<>'' AND pmember.kind='refresh_token' AND pmember.payload->>'access_token_id'=p.id
+        AND (pfamily.payload->>'session_id' IS NULL OR EXISTS (SELECT 1 FROM auth.session bound WHERE bound.id=pfamily.payload->>'session_id' AND bound."expiresAt">now()))
+        AND NOT EXISTS (
+          SELECT 1 FROM auth.credentials psibling LEFT JOIN auth.tokens paccess ON paccess.id=psibling.payload->>'access_token_id'
+          WHERE psibling.kind='refresh_token' AND psibling.group_id=pmember.group_id
+            AND (psibling.deleted_at IS NOT NULL OR paccess.id IS NULL OR paccess.deleted_at IS NOT NULL)))))))
+          AND EXISTS (SELECT 1 FROM (WITH RECURSIVE up(id, parent_id, edge, path) AS (
+    SELECT id,parent_id,parent_edge_id,ARRAY[]::uuid[] FROM auth.groups WHERE id=consent.group_id AND deleted_at IS NULL
+    UNION ALL
+    SELECT p.id,p.parent_id,p.parent_edge_id,up.path || up.edge FROM up
+      JOIN auth.groups p ON p.id=up.parent_id WHERE p.deleted_at IS NULL AND cardinality(up.path)<10000
+  )
+  SELECT m.admin_tenure_id AS tenure,to_jsonb(up.path) AS path FROM up JOIN auth.group_members m
+    ON m.group_id=up.id AND m.user_id=consent.subject_id AND m.role='admin') held
+    JOIN auth.users owner ON owner.id=consent.subject_id AND owner.interactive_authority_id::text=consent.payload->>'authority'
+    WHERE held.tenure::text=consent.payload->>'tenure' AND held.path=consent.payload->'path'))
+      ELSE (t.group_id IS NULL OR t.group_role='member') AND (
+        (run.payload->>'parent_kind'='schedule' AND t.group_id IS NOT NULL AND EXISTS (
+          SELECT 1 FROM auth.credentials consent WHERE consent.kind='schedule_consent'
+    AND consent.credential_hash=run.payload->>'parent_id' AND consent.deleted_at IS NULL
+    AND consent.subject_id=run.subject_id AND consent.group_id=t.group_id
+    AND consent.payload->>'service'=run.payload->>'service' AND EXISTS (SELECT 1 FROM auth.group_members seat JOIN auth.groups g ON g.id=seat.group_id AND g.deleted_at IS NULL
+    WHERE seat.group_id=consent.group_id AND seat.user_id=consent.subject_id AND seat.role IN ('member','admin') AND seat.seat_id::text=consent.payload->>'seat')))
+        OR (
+    (run.payload->>'parent_kind'='session' AND EXISTS (SELECT 1 FROM auth.session ps
+      WHERE ps.id=run.payload->>'parent_id' AND ps."userId"=run.subject_id AND ps."expiresAt">now()))
+    OR (run.payload->>'parent_kind'='token' AND EXISTS (SELECT 1 FROM auth.tokens p WHERE p.id=run.payload->>'parent_id'
+      AND p.group_id IS NULL AND p.user_id=run.subject_id AND p.issued_by IS NULL AND p.deleted_at IS NULL AND (p.expires_at IS NULL OR p.expires_at>now())
+      AND (COALESCE(p.audience,'')='' OR EXISTS (SELECT 1 FROM auth.credentials pmember
+      JOIN auth.credentials pfamily ON pfamily.kind='refresh_family' AND pfamily.credential_hash=pmember.group_id AND pfamily.deleted_at IS NULL
+      WHERE COALESCE(p.audience,'')<>'' AND pmember.kind='refresh_token' AND pmember.payload->>'access_token_id'=p.id
+        AND (pfamily.payload->>'session_id' IS NULL OR EXISTS (SELECT 1 FROM auth.session bound WHERE bound.id=pfamily.payload->>'session_id' AND bound."expiresAt">now()))
+        AND NOT EXISTS (
+          SELECT 1 FROM auth.credentials psibling LEFT JOIN auth.tokens paccess ON paccess.id=psibling.payload->>'access_token_id'
+          WHERE psibling.kind='refresh_token' AND psibling.group_id=pmember.group_id
+            AND (psibling.deleted_at IS NOT NULL OR paccess.id IS NULL OR paccess.deleted_at IS NOT NULL)))))))) END) END))
       WHEN t.issued_by IS NULL THEN (COALESCE(t.audience,'')='' OR EXISTS (SELECT 1 FROM auth.credentials member
       JOIN auth.credentials family ON family.kind='refresh_family' AND family.credential_hash=member.group_id AND family.deleted_at IS NULL
       WHERE COALESCE(t.audience,'')<>'' AND member.kind='refresh_token' AND member.payload->>'access_token_id'=t.id
@@ -73,35 +155,68 @@ CREATE OR REPLACE VIEW identity.tokens AS
         AND NOT EXISTS (
           SELECT 1 FROM auth.credentials sibling LEFT JOIN auth.tokens access ON access.id=sibling.payload->>'access_token_id'
           WHERE sibling.kind='refresh_token' AND sibling.group_id=member.group_id
-            AND (sibling.deleted_at IS NOT NULL OR access.id IS NULL OR access.deleted_at IS NOT NULL)))) ELSE EXISTS (SELECT 1 FROM auth.credentials run WHERE run.kind='run_sign_in' AND run.credential_hash=t.id AND run.deleted_at IS NULL AND (t.group_id IS NULL OR t.group_role='member') AND run.subject_id=CASE WHEN t.group_id IS NULL THEN t.user_id ELSE t.issued_by END
-      AND ((run.payload->>'parent_kind'='schedule' AND t.group_id IS NOT NULL AND EXISTS (
-          SELECT 1 FROM auth.credentials consent WHERE consent.kind='schedule_consent'
-            AND consent.credential_hash=run.payload->>'parent_id' AND consent.deleted_at IS NULL
-            AND consent.subject_id=run.subject_id AND consent.group_id=t.group_id
-            AND consent.payload->>'service'=run.payload->>'service'
-            AND EXISTS (SELECT 1 FROM auth.group_members seat JOIN auth.groups g ON g.id=seat.group_id AND g.deleted_at IS NULL
-    WHERE seat.group_id=consent.group_id AND seat.user_id=consent.subject_id AND seat.role IN ('member','admin') AND seat.seat_id::text=consent.payload->>'seat')))
-        OR (run.payload->>'parent_kind'='session' AND EXISTS (SELECT 1 FROM auth.session ps WHERE ps.id=run.payload->>'parent_id' AND ps."userId"=run.subject_id AND ps."expiresAt">now()))
-        OR (run.payload->>'parent_kind'='token' AND EXISTS (SELECT 1 FROM auth.tokens p WHERE p.id=run.payload->>'parent_id' AND p.user_id=run.subject_id AND p.issued_by IS NULL AND p.deleted_at IS NULL AND (p.expires_at IS NULL OR p.expires_at>now())
-          AND (COALESCE(p.audience,'')='' OR EXISTS (SELECT 1 FROM auth.credentials pmember
+            AND (sibling.deleted_at IS NOT NULL OR access.id IS NULL OR access.deleted_at IS NOT NULL)))) ELSE EXISTS (SELECT 1 FROM auth.credentials run WHERE run.kind='run_sign_in' AND run.credential_hash=t.id AND run.deleted_at IS NULL
+      AND run.subject_id=CASE WHEN t.group_id IS NULL THEN t.user_id ELSE t.issued_by END
+      AND CASE WHEN t.group_role='admin' THEN run.payload->>'parent_kind'='interactive' AND EXISTS (
+        SELECT 1 FROM auth.credentials consent WHERE consent.kind='interactive_consent'
+    AND consent.credential_hash=run.payload->>'parent_id' AND consent.deleted_at IS NULL
+    AND consent.subject_id=run.subject_id AND consent.group_id=t.group_id
+    AND consent.payload->>'service'=run.payload->>'service'
+          AND (
+    (consent.payload->>'parent_kind'='session' AND EXISTS (SELECT 1 FROM auth.session ps
+      WHERE ps.id=consent.payload->>'parent_id' AND ps."userId"=run.subject_id AND ps."expiresAt">now()))
+    OR (consent.payload->>'parent_kind'='token' AND EXISTS (SELECT 1 FROM auth.tokens p WHERE p.id=consent.payload->>'parent_id'
+      AND p.group_id IS NULL AND p.user_id=run.subject_id AND p.issued_by IS NULL AND p.deleted_at IS NULL AND (p.expires_at IS NULL OR p.expires_at>now())
+      AND (COALESCE(p.audience,'')='' OR EXISTS (SELECT 1 FROM auth.credentials pmember
       JOIN auth.credentials pfamily ON pfamily.kind='refresh_family' AND pfamily.credential_hash=pmember.group_id AND pfamily.deleted_at IS NULL
       WHERE COALESCE(p.audience,'')<>'' AND pmember.kind='refresh_token' AND pmember.payload->>'access_token_id'=p.id
         AND (pfamily.payload->>'session_id' IS NULL OR EXISTS (SELECT 1 FROM auth.session bound WHERE bound.id=pfamily.payload->>'session_id' AND bound."expiresAt">now()))
         AND NOT EXISTS (
           SELECT 1 FROM auth.credentials psibling LEFT JOIN auth.tokens paccess ON paccess.id=psibling.payload->>'access_token_id'
           WHERE psibling.kind='refresh_token' AND psibling.group_id=pmember.group_id
-            AND (psibling.deleted_at IS NOT NULL OR paccess.id IS NULL OR paccess.deleted_at IS NOT NULL)))))))) END))
+            AND (psibling.deleted_at IS NOT NULL OR paccess.id IS NULL OR paccess.deleted_at IS NOT NULL)))))))
+          AND EXISTS (SELECT 1 FROM (WITH RECURSIVE up(id, parent_id, edge, path) AS (
+    SELECT id,parent_id,parent_edge_id,ARRAY[]::uuid[] FROM auth.groups WHERE id=consent.group_id AND deleted_at IS NULL
+    UNION ALL
+    SELECT p.id,p.parent_id,p.parent_edge_id,up.path || up.edge FROM up
+      JOIN auth.groups p ON p.id=up.parent_id WHERE p.deleted_at IS NULL AND cardinality(up.path)<10000
+  )
+  SELECT m.admin_tenure_id AS tenure,to_jsonb(up.path) AS path FROM up JOIN auth.group_members m
+    ON m.group_id=up.id AND m.user_id=consent.subject_id AND m.role='admin') held
+    JOIN auth.users owner ON owner.id=consent.subject_id AND owner.interactive_authority_id::text=consent.payload->>'authority'
+    WHERE held.tenure::text=consent.payload->>'tenure' AND held.path=consent.payload->'path'))
+      ELSE (t.group_id IS NULL OR t.group_role='member') AND (
+        (run.payload->>'parent_kind'='schedule' AND t.group_id IS NOT NULL AND EXISTS (
+          SELECT 1 FROM auth.credentials consent WHERE consent.kind='schedule_consent'
+    AND consent.credential_hash=run.payload->>'parent_id' AND consent.deleted_at IS NULL
+    AND consent.subject_id=run.subject_id AND consent.group_id=t.group_id
+    AND consent.payload->>'service'=run.payload->>'service' AND EXISTS (SELECT 1 FROM auth.group_members seat JOIN auth.groups g ON g.id=seat.group_id AND g.deleted_at IS NULL
+    WHERE seat.group_id=consent.group_id AND seat.user_id=consent.subject_id AND seat.role IN ('member','admin') AND seat.seat_id::text=consent.payload->>'seat')))
+        OR (
+    (run.payload->>'parent_kind'='session' AND EXISTS (SELECT 1 FROM auth.session ps
+      WHERE ps.id=run.payload->>'parent_id' AND ps."userId"=run.subject_id AND ps."expiresAt">now()))
+    OR (run.payload->>'parent_kind'='token' AND EXISTS (SELECT 1 FROM auth.tokens p WHERE p.id=run.payload->>'parent_id'
+      AND p.group_id IS NULL AND p.user_id=run.subject_id AND p.issued_by IS NULL AND p.deleted_at IS NULL AND (p.expires_at IS NULL OR p.expires_at>now())
+      AND (COALESCE(p.audience,'')='' OR EXISTS (SELECT 1 FROM auth.credentials pmember
+      JOIN auth.credentials pfamily ON pfamily.kind='refresh_family' AND pfamily.credential_hash=pmember.group_id AND pfamily.deleted_at IS NULL
+      WHERE COALESCE(p.audience,'')<>'' AND pmember.kind='refresh_token' AND pmember.payload->>'access_token_id'=p.id
+        AND (pfamily.payload->>'session_id' IS NULL OR EXISTS (SELECT 1 FROM auth.session bound WHERE bound.id=pfamily.payload->>'session_id' AND bound."expiresAt">now()))
+        AND NOT EXISTS (
+          SELECT 1 FROM auth.credentials psibling LEFT JOIN auth.tokens paccess ON paccess.id=psibling.payload->>'access_token_id'
+          WHERE psibling.kind='refresh_token' AND psibling.group_id=pmember.group_id
+            AND (psibling.deleted_at IS NOT NULL OR paccess.id IS NULL OR paccess.deleted_at IS NOT NULL)))))))) END) END))
       AND EXISTS (SELECT 1 FROM app.identity_settings s WHERE s.id = 'installation' AND (COALESCE(t.audience, '') = '' OR t.audience = ANY(s.api_audiences) OR t.audience = ANY(s.service_audiences)))
       AND CASE WHEN t.group_id IS NULL THEN t.user_id IS NOT NULL AND COALESCE((SELECT u.active FROM identity.users u WHERE u.id = t.user_id), false)
         ELSE (t.user_id IS NULL AND t.issued_by IS NOT NULL
-      AND t.group_role IN ('member','editor') AND EXISTS (SELECT 1 FROM auth.groups signed_group WHERE signed_group.id=t.group_id AND signed_group.deleted_at IS NULL)
-      AND CASE WHEN t.grant_id IS NULL THEN COALESCE((SELECT issuer.active AND issuer.kind = 'account' AND NOT issuer.test_account FROM identity.users issuer WHERE issuer.id = t.issued_by), false) AND (t.group_role IN ('member','editor') AND (EXISTS (
+      AND t.group_role IN ('member','editor','admin') AND EXISTS (SELECT 1 FROM auth.groups signed_group WHERE signed_group.id=t.group_id AND signed_group.deleted_at IS NULL)
+      AND CASE WHEN t.grant_id IS NULL THEN COALESCE((SELECT issuer.active AND issuer.kind = 'account' AND NOT issuer.test_account FROM identity.users issuer WHERE issuer.id = t.issued_by), false)
+        AND (t.group_role='admin' OR (t.group_role IN ('member','editor') AND (EXISTS (
     SELECT 1 FROM auth.group_members held JOIN auth.groups held_group ON held_group.id=held.group_id AND held_group.deleted_at IS NULL
     WHERE held.group_id=t.group_id AND held.user_id=t.issued_by AND (held.role='admin' OR (t.group_role='member' AND held.role IN ('member','editor'))))
   OR EXISTS (SELECT 1 FROM (SELECT g.id AS group_id, a.user_id, a.via_group_id FROM auth.groups g CROSS JOIN LATERAL (
     WITH RECURSIVE up(id, depth) AS (SELECT g.id, 0 UNION ALL SELECT p.id, up.depth+1 FROM up JOIN auth.groups c ON c.id=up.id JOIN auth.groups p ON p.id=c.parent_id WHERE p.deleted_at IS NULL AND up.depth<10000)
     SELECT DISTINCT ON (m.user_id) m.user_id, up.id AS via_group_id FROM up JOIN auth.group_members m ON m.group_id=up.id AND m.role='admin' ORDER BY m.user_id, up.depth) a
-  WHERE g.deleted_at IS NULL) held_admin WHERE held_admin.group_id=t.group_id AND held_admin.user_id=t.issued_by)))
+  WHERE g.deleted_at IS NULL) held_admin WHERE held_admin.group_id=t.group_id AND held_admin.user_id=t.issued_by))))
         ELSE EXISTS (SELECT 1 FROM auth.group_sign_in_grants signed_grant WHERE signed_grant.id=t.grant_id AND (signed_grant.deleted_at IS NULL AND signed_grant.role IN ('member','editor')
       AND EXISTS (SELECT 1 FROM auth.groups granted_group WHERE granted_group.id=signed_grant.group_id AND granted_group.deleted_at IS NULL)
       AND NOT EXISTS (SELECT 1 FROM auth.users approver WHERE approver.id=signed_grant.approved_by AND approver.test_account))

@@ -80,17 +80,18 @@ export const serviceGrantStandsSql = (g: string, names: {groups: string; users: 
 
 /**
  * A GROUP'S SIGN-IN, LIVE BY ITS AUTHORISATION (contracts identity-service `GROUP_SIGN_IN_RULE`), over the `tokens`
- * row aliased `t` whose `group_id` is set: no person on the row, a level that is never `admin`, the group live, and
+ * row aliased `t` whose `group_id` is set: no person on the row, the group live, and
  *  - a person's (no `grant_id`): the person who authorised it (`issued_by`) active (`active(id)`, an SQL boolean) and
- *    still holding at least that level there;
+ *    still holding at least that level there. The bearer fence checks an interactive Admin grant's exact tenure;
  *  - a service's (`grant_id`: contracts service-audiences `GROUP_SIGN_IN_PATH`): the approval it was issued under still
  *    standing (`serviceGrantStandsSql`), for this group, level and service (`issued_by`), whoever approved it.
  *    Its service's configuration is the bearer read's and the app's (contracts `groupSignInServiceConfigured`).
  * The token's own row, expiry and (a person's) refresh-family fence are the bearer read's (../identity/bearer).
  */
 export const groupSignInLiveSql = (t: string, names: GroupNames & {group_sign_in_grants: string; users: string}, active: (id: string) => string): string => `(${t}.user_id IS NULL AND ${t}.issued_by IS NOT NULL
-      AND ${t}.group_role IN ('member','editor') AND EXISTS (SELECT 1 FROM ${names.groups} signed_group WHERE signed_group.id=${t}.group_id AND signed_group.deleted_at IS NULL)
-      AND CASE WHEN ${t}.grant_id IS NULL THEN ${active(`${t}.issued_by`)} AND ${groupLevelHeldSql(names, `${t}.issued_by`, `${t}.group_id`, `${t}.group_role`)}
+      AND ${t}.group_role IN ('member','editor','admin') AND EXISTS (SELECT 1 FROM ${names.groups} signed_group WHERE signed_group.id=${t}.group_id AND signed_group.deleted_at IS NULL)
+      AND CASE WHEN ${t}.grant_id IS NULL THEN ${active(`${t}.issued_by`)}
+        AND (${t}.group_role='admin' OR ${groupLevelHeldSql(names, `${t}.issued_by`, `${t}.group_id`, `${t}.group_role`)})
         ELSE EXISTS (SELECT 1 FROM ${names.group_sign_in_grants} signed_grant WHERE signed_grant.id=${t}.grant_id AND ${serviceGrantStandsSql('signed_grant', names)}
           AND signed_grant.group_id=${t}.group_id AND signed_grant.role=${t}.group_role AND signed_grant.service_id=${t}.issued_by) END)`;
 

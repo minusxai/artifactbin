@@ -138,7 +138,10 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   if (opts.actorSecret) actorReceiver(opts.actorSecret).mount(app);
   // AN AGENT SIGNED IN AS A GROUP (contracts `GroupActor`) reaches only the routes ./group-admission lists: one refusal
   // for every other, before any door, page or asset, in-process and across the signed hop alike.
-  app.use('*', async (c, next) => isGroupActor(actorOf(c.req.raw)) && !groupAdmitted(c.req.method, new URL(c.req.url).pathname) ? groupRefusal() : next());
+  app.use('*', async (c, next) => {
+    const actor = actorOf(c.req.raw);
+    return isGroupActor(actor) && !groupAdmitted(c.req.method, new URL(c.req.url).pathname, actor.principalGroupRole) ? groupRefusal() : next();
+  });
   /*
    * Every document on its own origin (server/pages-host): a pages hostname, a pages Origin and the
    * pages cookie are decided there, before any other host boundary.

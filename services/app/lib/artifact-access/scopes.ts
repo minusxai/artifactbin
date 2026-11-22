@@ -197,13 +197,13 @@ const DOCUMENT_EDITOR_PREDICATE = "(artifacts.format = 'html' AND artifacts.visi
  */
 /**
  * A GROUP'S SIGN-IN (lib/accounts `GroupPrincipal`), the mirror of ./access-facts `groupPrincipalFacts`: what a person
- * holds whose only relationship is a direct membership of the group `p` at its level. At editor level the group's own
+ * holds whose only relationship is a direct membership of the group `p` at its level. At editor and Admin levels the group's own
  * pages to edit; its audience (pages the group or an ancestor owns) to read; group shares to it or an ancestor; the
  * link in full. No ownership, no named share, no document-editor grant, no other group.
  */
 const groupPrincipalScope = (principal: NonNullable<AccessActor['principalGroup']>, min: ArtifactRole, link: boolean): Scope => live({
   val: principal.id,
-  where: (p) => `(${principal.role === 'editor' ? `(artifacts.group_id = ${p} AND EXISTS (SELECT 1 FROM groups pg WHERE pg.id = ${p} AND pg.deleted_at IS NULL))` : 'FALSE'}
+  where: (p) => `(${principal.role === 'editor' || principal.role === 'admin' ? `(artifacts.group_id = ${p} AND EXISTS (SELECT 1 FROM groups pg WHERE pg.id = ${p} AND pg.deleted_at IS NULL))` : 'FALSE'}
     OR ${min === 'viewer' ? `artifacts.group_id IN (${groupReachSql(p)})` : 'FALSE'}
     OR EXISTS (SELECT 1 FROM artifact_group_shares gs WHERE gs.artifact_id = artifacts.id AND gs.role IN (${shareRolesAtLeast(min).map((r) => `'${r}'`).join(', ')}) AND gs.group_id IN (${groupReachSql(p)}))
     ${link ? `OR ${LINK_PREDICATE(min)}` : ''})`,
