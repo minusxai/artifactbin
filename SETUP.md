@@ -117,6 +117,20 @@ is created directly under the last handle. An existing token group must already 
 An empty, missing-member, disconnected or out-of-scope path refuses the sign-in. Omit the claim to
 use the existing issuer placement rules.
 
+**Binding a person to a tenant on PostgreSQL.** Use the identity operator command once every
+consumer that enforces warehouse tenancy understands `identity.users.tenancy_id`. Supply the
+reviewed database through the protected `AUTH__MIGRATION_DATABASE_URL` environment variable and set
+`AUTH__SCHEMA` when customized. The database role needs read and update access to the identity
+account table. Use the stable account ID and the expected current binding. An empty argument
+means no binding. The update refuses a missing account or a changed binding.
+
+```sh
+npm run set:person-tenancy -w services/auth -- <person-id> '' <tenant-id>
+```
+
+To clear a binding, pass the current tenant ID as the expected value and an empty final argument.
+A binding belongs to the account and remains in place when its group memberships or profile change.
+
 **Preparing a new company root on PostgreSQL.** Use this operator command for an already configured
 company that needs to place existing roots under a fresh root. Pause app and identity writers and
 automatic reconciliation, and verify a restorable backup. On the reviewed database, read

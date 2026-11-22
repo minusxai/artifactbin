@@ -31,7 +31,7 @@ CREATE OR REPLACE VIEW identity.users AS
       WHERE m.user_id=u.id
       ORDER BY (p.default_destination->>'type'='group' AND p.default_destination->>'id'=g.id) DESC NULLS LAST,
         (g.parent_id IS NULL), m.created_at, g.id COLLATE "C"
-      LIMIT 1) AS default_group_id, u.username AS handle
+      LIMIT 1) AS default_group_id, u.username AS handle, u.tenancy_id
   FROM auth.users u;
 
 CREATE OR REPLACE VIEW identity.account_preferences AS
