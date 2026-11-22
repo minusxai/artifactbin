@@ -22,10 +22,6 @@ export interface SessionSandboxChoice {
   refusal?: string;
 }
 
-export function sessionSandboxChoice(source: NodeJS.ProcessEnv): SessionSandboxChoice {
-  return readSessionEnv(source).sandbox;
-}
-
 /**
  * HOW MANY LIVE BROWSERS THIS SERVICE HOLDS. `sessions` is the whole service's cap, shared by
  * every owner (`BROWSER__SESSION_MAX`); `sessionsPerActor` is what one credential may hold of it
@@ -34,10 +30,6 @@ export function sessionSandboxChoice(source: NodeJS.ProcessEnv): SessionSandboxC
  */
 export interface SessionCapacity { sessions: number; sessionsPerActor: number }
 export const DEFAULT_SESSION_CAPACITY: SessionCapacity = { sessions: 2, sessionsPerActor: 2 };
-
-export function sessionCapacity(source: NodeJS.ProcessEnv): SessionCapacity {
-  return readSessionEnv(source).capacity;
-}
 
 /** The session settings and the names they were read under, from ONE audited reader. */
 function readSessionEnv(source: NodeJS.ProcessEnv) {

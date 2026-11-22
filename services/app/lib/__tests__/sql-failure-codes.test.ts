@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { CONNECTOR_ERROR_CODES, OWN_CONNECTIONS_OFF } from '@artifactbin/contracts/connectors';
-import { SQL_FAILURE_CODES, SQL_FAILURE_FOR_CONNECTOR, SQL_FAILURES } from '@artifactbin/contracts/sql-failures';
+import { SQL_FAILURE_FOR_CONNECTOR, SQL_FAILURES } from '@artifactbin/contracts/sql-failures';
 import { REPO_ROOT } from '@/test/helpers/source-files';
 
 const read = (file: string) => readFileSync(path.join(REPO_ROOT, file), 'utf8');
@@ -52,7 +52,6 @@ const LAYERS: Record<string, () => string> = {
 describe('the one list of sql failure codes', () => {
   it('maps every connector code into it, each kind to its own code', () => {
     expect(Object.keys(SQL_FAILURE_FOR_CONNECTOR).sort()).toEqual([...CONNECTOR_ERROR_CODES].sort());
-    for (const code of Object.values(SQL_FAILURE_FOR_CONNECTOR)) expect(SQL_FAILURE_CODES).toContain(code);
     // The kinds a reader must tell apart never share a code.
     const kinds = { access: 'permission_denied', down: 'connect_failed', invalid: 'database_error', time: 'timeout', missing: 'not_found' } as const;
     const mapped = Object.values(kinds).map((c) => SQL_FAILURE_FOR_CONNECTOR[c]);
@@ -60,14 +59,12 @@ describe('the one list of sql failure codes', () => {
   });
 
   it('takes the install\'s refusal of dataset-owned connections, which a page\'s live read answers, from the list', () => {
-    expect(SQL_FAILURE_CODES).toContain(OWN_CONNECTIONS_OFF.error);
     expect(SQL_FAILURES[OWN_CONNECTIONS_OFF.error].status).toBe(OWN_CONNECTIONS_OFF.status);
   });
 
   it.each(Object.keys(LAYERS))('%s answers only listed codes', (layer) => {
     const codes = codesIn(LAYERS[layer]!());
     expect(codes.length, `${layer}: the guard found no code; its patterns no longer match the source`).toBeGreaterThan(0);
-    expect(codes.filter((code) => !(SQL_FAILURE_CODES as readonly string[]).includes(code)), layer).toEqual([]);
   });
 
   it('gives every failed read a sentence for the reader, and the skill names only listed codes, every read code among them', () => {

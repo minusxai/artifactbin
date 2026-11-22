@@ -59,7 +59,6 @@ export const SQL_FAILURES = /* @__PURE__ */ Object.freeze({
   unexpected: { status: 502, notice: 'This data could not be read.' },
 } satisfies Record<string, { status: number; notice?: string }>);
 export type SqlFailureCode = keyof typeof SQL_FAILURES;
-export const SQL_FAILURE_CODES = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.keys(SQL_FAILURES) as SqlFailureCode[]);
 
 /** Every connector error as the page answers it (contracts connectors `CONNECTOR_ERROR_CODES`). */
 export const SQL_FAILURE_FOR_CONNECTOR: Readonly<Record<ConnectorErrorCode, SqlFailureCode>> = /* @__PURE__ */ Object.freeze({

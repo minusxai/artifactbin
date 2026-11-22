@@ -88,43 +88,6 @@ export function mailSettingsOf(source: Record<string, string | undefined>): Mail
   return { from, ...branding, smtp: { host, port, secure, ...(user && password ? { user, password } : {}) } };
 }
 
-/**
- * WHICH LOGIN METHODS COULD ACTUALLY COMPLETE A ROUND TRIP — a stricter question than
- * `loginProvidersOf`, which answers "what did the operator name". A host that boots with a named
- * but unfinished method serves a login page whose button dies at the provider, so the one caller
- * that must refuse before serving (the CLI's `teamSettings`) asks this instead. It is derived from
- * `loginProvidersOf`, so the provider names stay read in exactly one place and the env audit
- * (`readEnv`) still sees every one of them.
- *
- * - **mail** needs a completed Resend or SMTP transport AND a sender. `EMAIL__FROM` is not optional in practice: the composition
- *   falls back to `artifactbin <login@example.com>`, a domain no real provider is verified for, so
- *   the key alone sends nothing.
- * - **google** is already all-or-nothing in `loginProvidersOf`; this only rejects blank values.
- * - **oidc** needs a client id and secret on top of the provider id, plus somewhere to send the
- *   browser: a discovery URL, or all three explicit endpoints. `userInfoUrl` is genuinely required
- *   in the explicit shape because `loginProvidersOf` never supplies a `userInfo` hook, so
- *   `createHumanAuth` sets no `getUserInfo` and Better Auth must fetch the claims itself.
- */
-export interface CompleteLoginMethods {
-  mail?: MailSettings;
-  google?: { clientId: string; clientSecret: string };
-  oidc?: OidcProvider;
-}
-const filled = (value: string | undefined): boolean => (value ?? '').trim().length > 0;
-export function completeLoginMethods(source: Record<string, string | undefined>): CompleteLoginMethods {
-  const named = loginProvidersOf(source);
-  const mail = mailSettingsOf(source), from = readEnv(source, 'EMAIL__FROM');
-  const oidc = named.oidc;
-  const endpoints = filled(oidc?.discoveryUrl)
-    || (filled(oidc?.authorizationUrl) && filled(oidc?.tokenUrl) && filled(oidc?.userInfoUrl));
-  return {
-    ...(filled(from) && (mail.apiKey || mail.smtp) ? { mail } : {}),
-    ...(named.google && filled(named.google.clientId) && filled(named.google.clientSecret) ? { google: named.google } : {}),
-    ...(oidc && filled(oidc.providerId) && filled(oidc.clientId) && filled(oidc.clientSecret) && endpoints ? { oidc } : {}),
-  };
-}
-
-
 export interface AdmissionPolicy {inviteOnly:boolean;matches:(email:string)=>boolean}
 /** Email rules are comma-separated exact addresses or simple * globs, never regex. */
 export function admissionPolicyOf(source:Record<string,string|undefined>,read:typeof readEnv=readEnv):AdmissionPolicy {

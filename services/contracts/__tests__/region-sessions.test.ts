@@ -8,7 +8,7 @@ import {
   REGION_IDLE_SAVE_MS, REGION_TEXT_MAX_UNITS, REGION_UPDATE_MAX_BYTES, regionsChannel,
   type RegionCaret, type RegionFlushReply, type RegionFrameMessage, type RegionKind, type RegionOpenReply,
   type RegionParentMessage, type RegionRefusalBody, type RegionRefusalCode, type RegionStreamFrame,
-  type RegionUpdateReply, type RegionUpdateRequest, DOC_REGION, cellKey, isCellKey, parseCellKey, CELL_READONLY, type CollabStatus, type RegionContentReply, type RegionWriteRequest, type RegionWriteReply,
+  type RegionUpdateReply, DOC_REGION, cellKey, isCellKey, parseCellKey, CELL_READONLY, type CollabStatus, type RegionContentReply, type RegionWriteReply,
 } from '../src/region-sessions';
 import * as contract from '../src/region-sessions';
 
@@ -41,11 +41,9 @@ describe('region sessions contract', () => {
   it('carries every wire shape as JSON or structured-clone data', () => {
     const kind: RegionKind = 'rich';
     const open: RegionOpenReply = { regionId: 'af-6', kind, clientId: 7, seq: 3, state: 'AA==', savedVersion: 2 };
-    const request: RegionUpdateRequest = { clientId: 7, update: 'AA==' };
     const replies: RegionUpdateReply[] = [{ seq: 4 }, { seq: 4, duplicate: true }];
     const flush: RegionFlushReply = { version: 3 };
     const content: RegionContentReply[] = [{ regionId: 'af-6', kind, version: 3, markdown: '# Plan' }, { regionId: 'af-6', kind, version: 3, html: '<h1>Plan</h1>' }];
-    const write: RegionWriteRequest[] = [{ markdown: '# Plan', base_version: 3 }, { html: '<h1>Plan</h1>', base_version: 3 }];
     const written: RegionWriteReply = { regionId: 'af-6', kind, version: 4, html: '<h1>Plan</h1>', markdown: '# Plan' };
     const agentRefusals: RegionRefusalBody[] = [
       { error: 'unsupported_content', details: ['<img>'] },
@@ -82,7 +80,7 @@ describe('region sessions contract', () => {
       { kind: 'region-link', regionId: 'af-6', href: 'https://example.com' },
       { kind: 'region-link', regionId: 'af-6', href: null },
     ];
-    for (const value of [open, request, ...replies, flush, refusal, ...frames, ...content, ...write, written, ...agentRefusals]) expect(JSON.parse(JSON.stringify(value))).toEqual(value);
+    for (const value of [open, ...replies, flush, refusal, ...frames, ...content, written, ...agentRefusals]) expect(JSON.parse(JSON.stringify(value))).toEqual(value);
     for (const message of [...toFrame, ...fromFrame]) expect(structuredClone(message)).toEqual(message);
     expect(new Set(codes).size).toBe(codes.length);
   });
