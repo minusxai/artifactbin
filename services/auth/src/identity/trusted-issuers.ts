@@ -33,6 +33,13 @@ export interface TrustedIssuer {
 
 const fail = (message: string): never => { throw new Error(`TRUSTED_SIGNIN__ISSUERS: ${message}`); };
 
+export function joinsCompanyRoot(env: Record<string, string | undefined>): boolean {
+  const value = readEnv(env, 'TRUSTED_SIGNIN__JOIN_COMPANY_ROOT');
+  if (value === undefined || value === '' || value === 'false') return false;
+  if (value === 'true') return true;
+  throw new Error('TRUSTED_SIGNIN__JOIN_COMPANY_ROOT must be true or false');
+}
+
 /** The configured issuers by name; empty when the setting is unset. A malformed value stops the boot, naming the setting (never a key). */
 export function trustedIssuersOf(env: Record<string, string | undefined>): ReadonlyMap<string, TrustedIssuer> {
   const raw = readEnv(env, 'TRUSTED_SIGNIN__ISSUERS')?.trim();

@@ -56,6 +56,7 @@ import type {Context,Hono} from 'hono';
 import type {AuthEnv,AuthOptions} from './parts';
 import {readEnv} from './env';
 import {testDomainSignInOf} from './config';
+import {backfillTrustedRoot} from './identity-store/trusted-root-backfill';
 import {IdentityNotReady,createIdentityStore,ensureIdentitySchema} from './identity-store';
 import {admitService,answer,authorityConfig,serviceOf,type AuthorityConfig} from './authority-door';
 import {mountTokenAuthority} from './token-authority';
@@ -118,6 +119,7 @@ function mountIdentityCalls(app:Hono<AuthEnv>,o:AuthOptions,{authSchema,readSche
   const db=o.identityDb,appSchema=o.appSchema??readEnv(o.env,'APP__SCHEMA');
   if(!transactional(db)||!appSchema)throw Error('identity_unavailable');
   await ensureIdentitySchema(db,{auth:authSchema,app:appSchema,read:readSchema});
+  await backfillTrustedRoot(db,o.env,authSchema,appSchema);
   return createIdentityStore({db,authSchema,appSchema,testDomain:testDomainSignInOf(o.env,()=>{})?.domain});
  })().catch(error=>{identity=null;throw error;});
  // The identity host's boot, started with the part: the app's boot waits for the views this creates, and this waits

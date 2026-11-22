@@ -34,6 +34,10 @@ const USERS: Table = {
     { name: 'expires_at', type: 'TIMESTAMPTZ' },
     // Verified guest adoption preserves the identity pinned by existing CLI workspaces.
     { name: 'merged_into_user_id', type: 'TEXT' },
+    // Last group vouched for by a verified sign-in, for upgrading historical seats.
+    { name: 'trusted_sign_in_group', type: 'TEXT' },
+    { name: 'trusted_sign_in_at', type: 'TIMESTAMPTZ' },
+    { name: 'trusted_root_granted', type: 'TEXT' },
     { name: 'name', type: 'TEXT' },
     // Public handle for pretty URLs (/@username/...). Lowercase [a-z0-9_],
     // auto-assigned at login (localpart_xxxx), renameable. Nullable so the
@@ -202,6 +206,7 @@ export const IDENTITY_TABLES: Table[] = [USERS, ACCOUNT_PREFERENCES, TOKENS, HAN
  * `verification` codes; the OAuth `credentials` hashes and payloads and `clients`).
  */
 export const SECRET_COLUMNS: Readonly<Record<string, readonly string[]>> = {
+  users: ['trusted_sign_in_group', 'trusted_sign_in_at', 'trusted_root_granted'],
   tokens: ['token_hash'],
   session: ['token'],
 };

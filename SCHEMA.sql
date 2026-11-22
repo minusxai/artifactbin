@@ -1696,6 +1696,9 @@ CREATE TABLE IF NOT EXISTS auth.users (
   parent_user_id TEXT,
   expires_at TIMESTAMPTZ,
   merged_into_user_id TEXT,
+  trusted_sign_in_group TEXT,
+  trusted_sign_in_at TIMESTAMPTZ,
+  trusted_root_granted TEXT,
   name TEXT,
   username TEXT,
   image_key TEXT,
@@ -1717,6 +1720,12 @@ ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS parent_user_id TEXT;
 ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
 
 ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS merged_into_user_id TEXT;
+
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS trusted_sign_in_group TEXT;
+
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS trusted_sign_in_at TIMESTAMPTZ;
+
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS trusted_root_granted TEXT;
 
 ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS name TEXT;
 

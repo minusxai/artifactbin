@@ -19,3 +19,15 @@ export async function companyGroupState(tx: Queryable, appSchema?: string) {
   if (state?.deployment_mode !== 'company') throw new Error('deployment settings unavailable');
   return state;
 }
+
+/** Null for public mode. Company sign-in requires a complete live path from the default to a root. */
+export async function companySignInRoot(tx: Queryable, groups: string, appSchema?: string) {
+  const state = await companyGroupState(tx, appSchema);
+  if (!state) return null;
+  const root = state.setup_complete && state.default_group_id
+    ? (await tx.query<{id:string}>(`WITH RECURSIVE ancestors(id,parent_id) AS (
+        SELECT id,parent_id FROM ${groups} WHERE id=$1 AND deleted_at IS NULL
+        UNION SELECT g.id,g.parent_id FROM ${groups} g JOIN ancestors a ON g.id=a.parent_id WHERE g.deleted_at IS NULL
+      ) SELECT id FROM ancestors WHERE parent_id IS NULL`, [state.default_group_id])).rows[0] : undefined;
+  return {rootId:root?.id};
+}

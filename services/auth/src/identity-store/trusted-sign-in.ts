@@ -20,14 +20,14 @@
  *    configured parent, a company group goes under the top ancestor of the deployment default.
  *  - The person is a direct `member` of the group (no admin: nobody administers an issuer's group from here), and of no
  *    other group of that issuer: each sign-in leaves exactly the membership its token names. Another issuer's groups
- *    and plain groups are not touched, so one email person may sit in a group of each issuer.
+ *    and plain groups are retained. With company root membership enabled the person also joins the default group's live root, even
+ *    when the selected group sits under a different root. An existing stronger root role is retained.
  * One advisory lock serializes these sign-ins, so a double-submitted form never meets its own half-created rows.
  */
 import {isValidHandle} from '@artifactbin/contracts/handles';
 import type {Queryable} from '@artifactbin/contracts/db';
 import type {TransactionalQueryable} from '@artifactbin/contracts/identity-module';
-import {companyGroupState} from './company-group';
-import {chainOf, liveGroup} from './group-access';
+import {companySignInRoot} from './company-group';
 import {accountMethods,reserveHandle,writeDisplayName} from './accounts';
 import {identityTables,internalId,isUniqueViolation} from './tables';
 
@@ -36,6 +36,8 @@ export interface TrustedSignInInput {
   subject: string;
   group: string;
   tenancyId: string;
+  /** Company root membership setting of the verifying host. */
+  joinCompanyRoot?: boolean;
   name?: string;
   groupName?: string;
   /** The parent group's handle or id, when the issuer's groups live under one. */
@@ -71,12 +73,16 @@ export async function trustedSignIn(db: TransactionalQueryable, input: TrustedSi
     const result = await db.transaction(async tx => {
       await tx.query("SELECT pg_advisory_xact_lock(hashtext('artifactbin.identity.trusted-sign-in'))");
       const person = address ? await ensureEmailPerson(tx, address, t, better) : await ensurePerson(tx, input, t, better);
-      const group = await ensureGroup(tx, input, person.userId, t, appSchema);
+      const rootId = input.joinCompanyRoot ? await requiredCompanyRoot(tx, t, appSchema) : null;
+      const group = await ensureGroup(tx, input, person.userId, t, rootId, appSchema);
       await tx.query(`INSERT INTO ${t.group_members}(group_id,user_id,role) VALUES($1,$2,'member') ON CONFLICT (group_id,user_id) DO NOTHING`, [group.groupId, person.userId]);
       // The issuer decides which of its groups the person may act in NOW: drop their other memberships in this issuer's
       // groups, so access the issuer has since withdrawn (another tenant) never lingers here.
-      await tx.query(`DELETE FROM ${t.group_members} m USING ${t.groups} g WHERE m.group_id=g.id AND m.user_id=$1 AND g.trusted_issuer=$2 AND m.group_id<>$3`, [person.userId, input.issuer, group.groupId]);
+      await tx.query(`DELETE FROM ${t.group_members} m USING ${t.groups} g WHERE m.group_id=g.id AND m.user_id=$1 AND g.trusted_issuer=$2 AND m.group_id<>$3 AND m.group_id IS DISTINCT FROM $4::text`, [person.userId, input.issuer, group.groupId, rootId]);
       if (admit && !await admit(person, tx)) throw new Refused('deployment_admission_required');
+      if (rootId) await tx.query(`INSERT INTO ${t.group_members}(group_id,user_id,role) VALUES($1,$2,'member') ON CONFLICT (group_id,user_id) DO NOTHING`, [rootId, person.userId]);
+      await tx.query(`UPDATE ${t.users} SET trusted_sign_in_group=$2,trusted_sign_in_at=now(),
+        trusted_root_granted=COALESCE($3,trusted_root_granted) WHERE id=$1`, [person.userId, group.groupId, rootId]);
       if (input.name !== undefined) await writeDisplayName(tx, t, authSchema, person.userId, input.name);
       if (input.groupName !== undefined)
         await tx.query(`UPDATE ${t.groups} SET name=$2 WHERE id=$1 AND name IS DISTINCT FROM $2`, [group.groupId, input.groupName]);
@@ -148,7 +154,13 @@ async function ensureEmailPerson(tx: Queryable, address: string, t: Tables, bett
   return {userId, email: address, created: !auth && !app};
 }
 
-async function ensureGroup(tx: Queryable, input: TrustedSignInInput, userId: string, t: Tables, appSchema?: string) {
+async function requiredCompanyRoot(tx: Queryable, t: Tables, appSchema?: string) {
+  const company = await companySignInRoot(tx, t.groups, appSchema);
+  if (company && !company.rootId) throw new Refused('parent_group_missing');
+  return company?.rootId ?? null;
+}
+
+async function ensureGroup(tx: Queryable, input: TrustedSignInInput, userId: string, t: Tables, rootId: string | null, appSchema?: string) {
   const existing = (await tx.query<{id: string; deleted_at: string | null; trusted_issuer: string | null; tenancy_id: string | null}>(
     `SELECT id,deleted_at,trusted_issuer,tenancy_id FROM ${t.groups} WHERE handle=$1 FOR UPDATE`, [input.group])).rows[0];
   if (existing) {
@@ -158,17 +170,12 @@ async function ensureGroup(tx: Queryable, input: TrustedSignInInput, userId: str
   }
   // A new group is a topology change: the hierarchy revision moves first, as for every create.
   await tx.query(`INSERT INTO ${t.group_hierarchy} AS h (id,revision) VALUES('installation',1) ON CONFLICT (id) DO UPDATE SET revision=h.revision+1`);
-  let parentId: string | null = null;
+  let parentId = rootId;
   if (input.parentGroup) {
     parentId = (await tx.query<{id: string}>(`SELECT id FROM ${t.groups} WHERE (id=$1 OR handle=$1) AND deleted_at IS NULL`, [input.parentGroup])).rows[0]?.id ?? null;
     if (!parentId) throw new Refused('parent_group_missing');
-  }
-  const company = parentId === null ? await companyGroupState(tx, appSchema) : null;
-  if (company) {
-    const root = company.setup_complete && company.default_group_id
-      ? (await chainOf(tx, t, company.default_group_id)).at(-1) : null;
-    if (!root || (await liveGroup(tx, t, root))?.parent_id !== null) throw new Refused('parent_group_missing');
-    parentId = root;
+  } else if (!input.joinCompanyRoot) {
+    parentId = await requiredCompanyRoot(tx, t, appSchema);
   }
   const groupId = 'grp_' + internalId();
   try { await reserveHandle(t, tx, input.group, 'group', groupId); } catch (error) { if (isUniqueViolation(error)) throw new Refused('group_conflict'); throw error; }
