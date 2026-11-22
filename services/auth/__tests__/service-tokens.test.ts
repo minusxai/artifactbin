@@ -128,8 +128,8 @@ describe('a verified session signing in an agent as one group',()=>{
 
  it('uses only the requested membership and level when the agent acts',async()=>{
   const host=await composed();
-  const {ada,eve,team,squad}=await world(host,false);
-  // Eve edits Team and is a direct Member of Squad.
+  const {ada,eve,team,squad}=await world(host,false,'member');
+  // Eve is a direct Member of Team and Squad.
   await admitGroupMember(ada.userId,squad.id,eve.userId,'member');
   const publish=(token:string,id:string)=>host.call('POST','/api/artifacts',token,{
    title:'Group notes',html:page('Group notes'),visibility:'private',destination:{type:'group',id},

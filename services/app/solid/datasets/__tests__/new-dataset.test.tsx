@@ -26,7 +26,7 @@ function serve(answers: Record<string, unknown> = {}) {
   stubFetch({
     ...Object.fromEntries(Object.entries(answers).map(([key, answer]) => [key, () => Response.json(answer)])),
     '/api/connections': { connectors: CONNECTORS },
-    '/api/groups': { groups: [{ id: 'g1', name: 'Finance', role: 'editor' }, { id: 'g2', name: 'Readers', role: 'member' }] },
+    '/api/groups': { groups: [{ id: 'g1', name: 'Finance', role: 'admin' }, { id: 'g2', name: 'Readers', role: 'member' }] },
   }, {
     fallback: () => Response.json({ error: 'unexpected' }, { status: 500 }),
     onCall: (url, init) => { calls.push({ url, method: init?.method ?? 'GET', body: init?.body ? JSON.parse(String(init.body)) : undefined }); },

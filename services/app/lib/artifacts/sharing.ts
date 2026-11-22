@@ -57,7 +57,7 @@ export async function getSharingFor(actor: AccessActor, id: string): Promise<Sha
     canPublic: ALLOW_PUBLIC_VISIBILITY,
     linkRole: (row.link_role ?? 'viewer') as ShareRole,
     shares: shares.rows,
-    groupShares:(await db.query<GroupShare>("SELECT jsonb_build_object('id',g.id,'handle',g.handle,'name',g.name,'description',g.description,'role',m.role) AS group,s.role FROM artifact_group_shares s JOIN groups g ON g.id=s.group_id LEFT JOIN group_members m ON m.group_id=g.id AND m.user_id=$2 WHERE s.artifact_id=$1 AND g.deleted_at IS NULL ORDER BY g.handle",[id,actor.userId])).rows,
+    groupShares:(await db.query<GroupShare>("SELECT jsonb_build_object('id',g.id,'handle',g.handle,'name',g.name,'description',g.description,'role',CASE m.role WHEN 'editor' THEN 'member' ELSE m.role END) AS group,s.role FROM artifact_group_shares s JOIN groups g ON g.id=s.group_id LEFT JOIN group_members m ON m.group_id=g.id AND m.user_id=$2 WHERE s.artifact_id=$1 AND g.deleted_at IS NULL ORDER BY g.handle",[id,actor.userId])).rows,
     canPrivate: !!(row.user_id||row.group_id),
     canManageSharing: await managesSharing(row, actor),
     canApproveQueries: row.format==='html'&&!!row.group_id&&!!actor.userId&&!actor.principalGroup
