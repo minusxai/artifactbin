@@ -123,10 +123,9 @@ Check its data grants and private page shares first. The setting defaults to fal
 after changing it. An admitted sign-in adds Member on the root and preserves any stronger role.
 
 On enabled startup, identity backfills admitted accounts with a current seat in a configured issuer’s
-live group and evidence of verified sign-in during that seat and admission. Older releases recorded
-handle bindings and issuer-group creators. An older email user who joined an existing group may
-have no such record and joins the root at their next verified sign-in. A manual invitation or a
-removed issuer seat does not qualify. Turning the setting off stops new root grants and keeps existing seats.
+live group, including people added manually or moved between host groups. Each grant is recorded
+for that root. Later startups preserve a removal from the root, including grants recorded by an earlier
+release. Turning the setting off stops new root grants and keeps existing seats.
 
 **Upgrading group roles.** The old group Editor could administer members and owned files; it becomes
 Admin. The old Viewer becomes Member. The new Editor publishes and edits group content, without member

@@ -1,6 +1,4 @@
-/** Enabled identity-host boot. A current issuer seat must predate proof of verified sign-in, and the person
- * must already have been admitted at that time. Legacy handle bindings and issuer group creation can prove
- * this for some historical people. Other historical email subjects wait for their next verified sign-in.
+/** Enabled identity-host boot grants the company root to admitted accounts holding a live configured issuer seat.
  * Record completion with the grant so a boot retry cannot restore a root membership someone later removed.
  */
 import type {TransactionalQueryable} from '@artifactbin/contracts/identity-module';
@@ -24,11 +22,7 @@ export async function backfillTrustedRoot(db:TransactionalQueryable, env:Record<
       JOIN ${prefix}deployment_members d ON d.user_id=u.id
       JOIN ${t.group_members} m ON m.user_id=u.id
       JOIN ${t.groups} g ON g.id=m.group_id AND g.deleted_at IS NULL AND g.trusted_issuer=ANY($2::text[])
-      WHERE u.kind='account' AND u.trusted_root_granted IS DISTINCT FROM $1 AND (
-        (u.trusted_sign_in_group=g.id AND u.trusted_sign_in_at>=greatest(m.created_at,d.admitted_at))
-        OR (g.created_by=u.id AND g.created_at>=greatest(m.created_at,d.admitted_at))
-        OR EXISTS (SELECT 1 FROM ${authSchema}.account a WHERE a."userId"=u.id
-          AND a."providerId"='trusted:'||g.trusted_issuer AND a."createdAt">=greatest(m.created_at,d.admitted_at)))
+      WHERE u.kind='account' AND u.trusted_root_granted IS DISTINCT FROM $1
     ), recorded AS (
       UPDATE ${t.users} SET trusted_root_granted=$1 WHERE id IN (SELECT id FROM eligible) RETURNING id
     )
