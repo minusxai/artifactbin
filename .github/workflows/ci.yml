@@ -278,6 +278,16 @@ jobs:
           curl -fsS -X PUT -o /dev/null http://127.0.0.1:8333/artifactbin-test
           echo 'TEST_S3_URL=http://test:test@127.0.0.1:8333/artifactbin-test/ci' >> "$GITHUB_ENV"
       - run: node node_modules/vitest/vitest.mjs run --project=${{ matrix.project }}
+      - if: matrix.images
+        name: Trusted sign-in against PostgreSQL
+        timeout-minutes: 1
+        env:
+          TRUSTED_SIGNIN_TEST_POSTGRES: '1'
+        run: |
+          export PATH="/usr/lib/postgresql/16/bin:$PATH"
+          command -v initdb
+          command -v pg_ctl
+          node node_modules/vitest/vitest.mjs run --project=node services/auth/__tests__/trusted-sign-in.test.ts
 
   # jsdom setup dominates the ui project (~110s serial on a 4-vCPU runner —
   # the environment boots per test file), so it shards like api does. Two shards ran 186s and 119s
