@@ -60,6 +60,8 @@ const USERS: Table = {
     { name: 'created_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
     // Assigned by the identity operator. NULL preserves existing account behavior.
     { name: 'tenancy_id', type: 'TEXT' },
+    // Root removal suspends company admission while retaining its historical record.
+    { name: 'deployment_admission_revoked', type: 'BOOLEAN', notNull: true, default: 'false' },
   ],
   primaryKey: ['id'],
   // Both unique constraints use the `indexes` form ON PURPOSE: entries in

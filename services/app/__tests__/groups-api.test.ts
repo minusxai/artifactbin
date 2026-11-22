@@ -40,6 +40,9 @@ describe('groups authenticated HTTP boundary',()=>{
   await (await getDb()).query("UPDATE groups SET trusted_issuer='issuer-a' WHERE id=$1",[group.id]);
   expect((await patch(owner.token,'tenant-b')).status).toBe(403);
   expect(await settings()).toMatchObject({tenancy_id:'tenant-a',host_provisioned:true});
+  const refused=await invite(request('/api/groups/'+group.id+'/invitations',{method:'POST',token:owner.token,json:{email:outsider.email,role:'member'}}),params({id:group.id}));
+  expect(refused.status).toBe(403);
+  expect(await refused.json()).toMatchObject({error:'host_managed_membership'});
   const viewed=await (await detail(request('/api/groups/'+group.id,{token:viewer.token}),params({id:group.id}))).json();expect(viewed.invitations).toBeUndefined();expect(viewed.members[0]).not.toHaveProperty('email');
  });
  it('resolves the reader default from live direct memberships and the saved destination',async()=>{

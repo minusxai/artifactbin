@@ -20,10 +20,11 @@ DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'identity'
 CREATE OR REPLACE VIEW identity.users AS
   SELECT u.id, u.email, u.kind, u.parent_user_id, u.expires_at, u.merged_into_user_id, u.name, u.username, u.image_key, u.auto_accept_mentions, u.welcome_pending, u.test_account, u.created_at,
     COALESCE((SELECT ((u.kind='account' AND u.email IS NOT NULL) OR (u.kind = 'testuser' AND (u.expires_at IS NULL OR u.expires_at > now()) AND EXISTS
-  (SELECT 1 FROM auth.users parent WHERE parent.id = u.parent_user_id AND parent.kind = 'account' AND parent.email IS NOT NULL))) AND (s.deployment_mode = 'public' OR (EXISTS (SELECT 1 FROM app.deployment_members dm WHERE dm.user_id=u.id)
+  (SELECT 1 FROM auth.users parent WHERE parent.id = u.parent_user_id AND parent.kind = 'account' AND parent.email IS NOT NULL))) AND (s.deployment_mode = 'public' OR ((EXISTS (SELECT 1 FROM app.deployment_members dm WHERE dm.user_id=u.id)
+    AND NOT EXISTS (SELECT 1 FROM auth.users removed WHERE removed.id=u.id AND removed.deployment_admission_revoked))
   OR EXISTS (SELECT 1 FROM auth.users tu JOIN app.deployment_members pm ON pm.user_id=tu.parent_user_id JOIN app.deployment_state ds ON ds.id='company' AND ds.setup_complete=true
    WHERE tu.id=u.id AND (tu.kind = 'testuser' AND (tu.expires_at IS NULL OR tu.expires_at > now()) AND EXISTS
-  (SELECT 1 FROM auth.users parent WHERE parent.id = tu.parent_user_id AND parent.kind = 'account' AND parent.email IS NOT NULL)))))
+  (SELECT 1 FROM auth.users parent WHERE parent.id = tu.parent_user_id AND parent.kind = 'account' AND parent.email IS NOT NULL)) AND NOT EXISTS (SELECT 1 FROM auth.users removed WHERE removed.id=tu.parent_user_id AND removed.deployment_admission_revoked))))
       FROM app.identity_settings s WHERE s.id = 'installation'), false) AS active,
     (SELECT m.group_id FROM auth.group_members m
       JOIN auth.groups g ON g.id=m.group_id AND g.deleted_at IS NULL
@@ -31,7 +32,7 @@ CREATE OR REPLACE VIEW identity.users AS
       WHERE m.user_id=u.id
       ORDER BY (p.default_destination->>'type'='group' AND p.default_destination->>'id'=g.id) DESC NULLS LAST,
         (g.parent_id IS NULL), m.created_at, g.id COLLATE "C"
-      LIMIT 1) AS default_group_id, u.username AS handle, u.tenancy_id
+      LIMIT 1) AS default_group_id, u.username AS handle, u.tenancy_id, u.deployment_admission_revoked
   FROM auth.users u;
 
 CREATE OR REPLACE VIEW identity.account_preferences AS

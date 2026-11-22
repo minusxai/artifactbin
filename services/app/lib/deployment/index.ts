@@ -1,5 +1,5 @@
 import {canUseDeploymentIdentity} from '../accounts';
-import {effectiveRoleSql,recordGroupChanges,recordGroupMutation} from '../groups';
+import {effectiveRoleSql,groupReachSql,recordGroupChanges,recordGroupMutation} from '../groups';
 import {validateDefaultConnection} from '../connections';
 /** Durable company bootstrap and admission. All state transitions hold the singleton row lock. */
 import type {ArtifactDestination, DeploymentState, GroupSummary} from '@artifactbin/contracts/groups';
@@ -55,7 +55,7 @@ export async function setupDeployment(userId:string,groupId:string):Promise<Depl
  * authenticated request in a non-public deployment asks, and nearly all are people already admitted (or
  * plainly refused), so they must not queue on the one `deployment_state` lock. Only first-owner binding and
  * admitting a new member write, and those still take it. A refusal read without the lock can lose a race
- * with a concurrent admission by at most one request; an admission is never taken back.
+ * with a concurrent admission by at most one request; root removal is reflected by the live identity check.
  */
 async function settledAdmission(db:Queryable,identity:{userId:string;emailVerified?:boolean},email:string|undefined,config:ReturnType<typeof deploymentConfig>,matches:(email:string)=>boolean):Promise<boolean|undefined> {
  const s=(await db.query<State>('SELECT owner_user_id,default_group_id,setup_complete FROM deployment_state WHERE id=$1',[ID])).rows[0];
@@ -96,11 +96,15 @@ export async function admitDeploymentIdentity(identity:{userId:string;email?:str
    await tx.query('INSERT INTO deployment_members(user_id) VALUES ($1) ON CONFLICT DO NOTHING',[identity.userId]);return true;
   }
   if(!s.setup_complete||!policy.matches(email)||!s.default_group_id||!await group(tx,s.default_group_id,null))return false;
-  return {groupId:s.default_group_id};
+  const revoked=(await tx.query('SELECT 1 FROM users WHERE id=$1 AND deployment_admission_revoked',[identity.userId])).rows.length>0;
+  // A returning account needs a new invitation to the root, even during a migration with a nested default.
+  const root=revoked?(await tx.query<{id:string}>(`SELECT g.id FROM groups g
+   WHERE g.parent_id IS NULL AND g.id IN (${groupReachSql('$1')})`,[s.default_group_id])).rows[0]?.id:null;
+  return {groupId:root??s.default_group_id};
  });
  if(typeof decided==='boolean')return decided;
  // Joining the default group is the identity module's write, after this transaction (never inside it); the admission
- // row follows once it succeeded. An admission is never taken back, so a crash between the two only re-asks.
+ // row follows once it succeeded. A root removal racing this insert still wins through the identity revocation flag.
  const admitted=await services().identity.admitToGroup({userId:identity.userId,email:email!,groupId:decided.groupId,inviteOnly:policy.inviteOnly});
  if(!admitted.admitted)return false;
  await recordGroupChanges(admitted.changes);

@@ -1714,6 +1714,7 @@ CREATE TABLE IF NOT EXISTS auth.users (
   test_account BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   tenancy_id TEXT,
+  deployment_admission_revoked BOOLEAN NOT NULL DEFAULT false,
   PRIMARY KEY (id)
 );
 
@@ -1750,6 +1751,8 @@ ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS test_account BOOLEAN NOT NULL DE
 ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
 ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS tenancy_id TEXT;
+
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS deployment_admission_revoked BOOLEAN NOT NULL DEFAULT false;
 
 ALTER TABLE auth.users ALTER COLUMN email DROP NOT NULL;
 

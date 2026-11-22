@@ -22,7 +22,7 @@ export async function backfillTrustedRoot(db:TransactionalQueryable, env:Record<
       JOIN ${prefix}deployment_members d ON d.user_id=u.id
       JOIN ${t.group_members} m ON m.user_id=u.id
       JOIN ${t.groups} g ON g.id=m.group_id AND g.deleted_at IS NULL AND g.trusted_issuer=ANY($2::text[])
-      WHERE u.kind='account' AND u.trusted_root_granted IS DISTINCT FROM $1
+      WHERE u.kind='account' AND NOT u.deployment_admission_revoked AND u.trusted_root_granted IS DISTINCT FROM $1
     ), recorded AS (
       UPDATE ${t.users} SET trusted_root_granted=$1 WHERE id IN (SELECT id FROM eligible) RETURNING id
     )

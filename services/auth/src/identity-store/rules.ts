@@ -23,13 +23,17 @@ const liveTestuserWithParentSql = (alias: string, names: RuleNames = READER_NAME
 export const authenticatingUserSql = (alias: string, names: RuleNames = READER_NAMES): string =>
   `((${alias}.kind='account' AND ${alias}.email IS NOT NULL) OR ${liveTestuserWithParentSql(alias, names)})`;
 
+const admissionNotRevokedSql = (id: string, names: RuleNames): string =>
+  `NOT EXISTS (SELECT 1 FROM ${names.users} removed WHERE removed.id=${id} AND removed.deployment_admission_revoked)`;
+
 /**
  * Over the user whose id is the SQL expression `id`: an admitted member of a company deployment, directly or as the
- * live test user of one once setup is complete. The mode is NOT in it: a public deployment admits everyone first.
+ * live test user of one once setup is complete. A root removal overrides the historical admission record. The mode is NOT in it: a public deployment admits everyone first.
  */
-export const deploymentMemberSql = (id: string, names: RuleNames = READER_NAMES): string => `(EXISTS (SELECT 1 FROM ${names.deploymentMembers} dm WHERE dm.user_id=${id})
+export const deploymentMemberSql = (id: string, names: RuleNames = READER_NAMES): string => `((EXISTS (SELECT 1 FROM ${names.deploymentMembers} dm WHERE dm.user_id=${id})
+    AND ${admissionNotRevokedSql(id, names)})
   OR EXISTS (SELECT 1 FROM ${names.users} tu JOIN ${names.deploymentMembers} pm ON pm.user_id=tu.parent_user_id JOIN ${names.deploymentState} ds ON ds.id='company' AND ds.setup_complete=true
-   WHERE tu.id=${id} AND ${liveTestuserWithParentSql('tu', names)}))`;
+   WHERE tu.id=${id} AND ${liveTestuserWithParentSql('tu', names)} AND ${admissionNotRevokedSql('tu.parent_user_id', names)}))`;
 
 /** Where the group tree's rows are for `groupAdminsSql`: the base tables (qualified) or the reader's views. */
 export interface GroupNames {groups: string; group_members: string}
