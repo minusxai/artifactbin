@@ -265,6 +265,9 @@ it('isolates pooled page reads and schema by group and leaves an ordinary siblin
   const refused = await sql(personal,bob,'select wh.public.refuse()');
   expect(refused.status).toBe(403);
   expect(refused.body).toMatchObject({viewing_as:{id:first.id},eligible_group_ids:[second.id],eligible_groups:[{id:second.id,name:'Second'}]});
+  await wire.db.query('UPDATE public.refusals SET message=$1',['viewer_refused: there is no postgres connection warehouse']);
+  const missing = await sql(personal,bob,'select wh.public.refuse()');
+  expect(missing.body).toMatchObject({error:'permission_denied',page_message:'there is no postgres connection warehouse'});
   const switched = () => pageSql(request('/api/artifacts/'+personal+'/sql',{method:'POST',token:bob.token,
     json:{sql:read,revision:'1',reader_scope_user:bob.userId,reader_group_id:second.id}}),params(personal));
   expect(await (await switched()).json()).toMatchObject({viewing_as:{id:second.id},rows:[{n:7}]});

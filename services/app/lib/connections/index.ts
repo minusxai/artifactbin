@@ -230,7 +230,7 @@ async function run(reader: AccessActor | ConnectorViewer, text: string, params: 
       // diagnostic constructed entirely from the public link, never its scoped wire namespace.
       const database = c.namespace?.split('/')[0];
       const missing = database && `there is no ${c.dialect} connection ${database}`;
-      const pageMessage = missing && denial.body.message === missing ? missing : undefined;
+      const pageMessage = missing && typeof denial.body.message === 'string' && denial.body.message.endsWith(missing) ? missing : undefined;
       return { ...denial, body: { ...denial.body, ...metadata,
         ...(scopedPage && {page_message: pageMessage ?? null}), ...(choices?.length && { eligible_group_ids: choices.map(g => g.id), eligible_groups: choices }) } };
     }
