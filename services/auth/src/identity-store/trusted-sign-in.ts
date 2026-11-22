@@ -6,7 +6,7 @@
  *    an email sign-in reaches, from this issuer, another issuer or a sign-in of their own. A new one gets what an email
  *    sign-in gives it: Better Auth's verified `user` row and the identity `users` row under one id, and a handle from
  *    the address (`ensureUsername`, after the transaction). The welcome page stays done for a new person only; an
- *    existing person keeps their handle and welcome state. A reserved `.invalid` address is refused (the synthetic addresses below).
+ *    existing person keeps their handle, welcome state and chosen name. A supplied name fills an empty email profile. A reserved `.invalid` address is refused (the synthetic addresses below).
  *  - Any other subject is a handle the issuer owns. The person is found by handle, authenticated by its Better Auth `account` row (`providerId`
  *    = `trusted:<issuer>`, `accountId` = subject). A new one gets Better Auth's `user`
  *    row (the synthetic, non-deliverable address the caller names, verified, since a session authenticates only a
@@ -72,7 +72,8 @@ export async function trustedSignIn(db: TransactionalQueryable, input: TrustedSi
   try {
     const result = await db.transaction(async tx => {
       await tx.query("SELECT pg_advisory_xact_lock(hashtext('artifactbin.identity.trusted-sign-in'))");
-      const person = address ? await ensureEmailPerson(tx, address, t, better) : await ensurePerson(tx, input, t, better);
+      const emailPerson = address ? await ensureEmailPerson(tx, address, t, better) : null;
+      const person = emailPerson ?? await ensurePerson(tx, input, t, better);
       const rootId = input.joinCompanyRoot ? await requiredCompanyRoot(tx, t, appSchema) : null;
       const group = await ensureGroup(tx, input, person.userId, t, rootId, appSchema);
       await tx.query(`INSERT INTO ${t.group_members}(group_id,user_id,role) VALUES($1,$2,'member') ON CONFLICT (group_id,user_id) DO NOTHING`, [group.groupId, person.userId]);
@@ -83,7 +84,7 @@ export async function trustedSignIn(db: TransactionalQueryable, input: TrustedSi
       if (rootId) await tx.query(`INSERT INTO ${t.group_members}(group_id,user_id,role) VALUES($1,$2,'member') ON CONFLICT (group_id,user_id) DO NOTHING`, [rootId, person.userId]);
       await tx.query(`UPDATE ${t.users} SET trusted_sign_in_group=$2,trusted_sign_in_at=now(),
         trusted_root_granted=COALESCE($3,trusted_root_granted) WHERE id=$1`, [person.userId, group.groupId, rootId]);
-      if (input.name !== undefined) await writeDisplayName(tx, t, authSchema, person.userId, input.name);
+      if (input.name !== undefined && (!emailPerson || emailPerson.canFillName)) await writeDisplayName(tx, t, authSchema, person.userId, input.name);
       if (input.groupName !== undefined)
         await tx.query(`UPDATE ${t.groups} SET name=$2 WHERE id=$1 AND name IS DISTINCT FROM $2`, [group.groupId, input.groupName]);
       return {ok: true as const, userId: person.userId, email: person.email, groupId: group.groupId, created: {user: person.created, group: group.created}};
@@ -145,13 +146,14 @@ async function findOrCreateHandlePerson(tx: Queryable, input: TrustedSignInInput
  * address held by something other than an account, are refused.
  */
 async function ensureEmailPerson(tx: Queryable, address: string, t: Tables, better: (table: string) => string) {
-  const auth = (await tx.query<{id: string}>(`SELECT id FROM ${better('user')} WHERE email=$1`, [address])).rows[0];
-  const app = (await tx.query<{id: string; kind: string}>(`SELECT id,kind FROM ${t.users} WHERE email=$1`, [address])).rows[0];
+  // Take the same row locks, in the same order, as a personal profile edit. Either projection can predate the other.
+  const app = (await tx.query<{id: string; kind: string; name: string | null}>(`SELECT id,kind,name FROM ${t.users} WHERE email=$1 FOR UPDATE`, [address])).rows[0];
+  const auth = (await tx.query<{id: string; name: string}>(`SELECT id,name FROM ${better('user')} WHERE email=$1 FOR UPDATE`, [address])).rows[0];
   if ((auth && app && auth.id !== app.id) || (app && app.kind !== 'account')) throw new Refused('subject_conflict');
   const userId = auth?.id ?? app?.id ?? 'usr_' + internalId();
-  if (!auth) await tx.query(`INSERT INTO ${better('user')}(id,name,email,"emailVerified","createdAt","updatedAt") VALUES($1,'',$2,true,now(),now())`, [userId, address]);
-  if (!app) await tx.query(`INSERT INTO ${t.users}(id,email,welcome_pending) VALUES($1,$2,false)`, [userId, address]);
-  return {userId, email: address, created: !auth && !app};
+  if (!auth) await tx.query(`INSERT INTO ${better('user')}(id,name,email,"emailVerified","createdAt","updatedAt") VALUES($1,$3,$2,true,now(),now())`, [userId, address, app?.name ?? '']);
+  if (!app) await tx.query(`INSERT INTO ${t.users}(id,email,name,welcome_pending) VALUES($1,$2,$3,false)`, [userId, address, auth?.name || null]);
+  return {userId, email: address, created: !auth && !app, canFillName: !app?.name?.trim() && !auth?.name.trim()};
 }
 
 async function requiredCompanyRoot(tx: Queryable, t: Tables, appSchema?: string) {

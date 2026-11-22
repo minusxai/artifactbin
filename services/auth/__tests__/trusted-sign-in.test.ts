@@ -309,9 +309,11 @@ describe('trusted-issuer sign-in', () => {
     const [group] = await rows<{ id: string }>(`SELECT id FROM auth.groups WHERE handle='group_e2'`);
     expect(await rows(`SELECT user_id FROM auth.group_members WHERE group_id=$1`, [group!.id])).toEqual([{ user_id: 'usr_signed' }]);
     // An app row without a Better Auth row (`taken@example.com`): the sign-in row is written under the same id.
-    const taken = await post(target, { token: token({ sub: 'taken@example.com', group: 'group_e2', tenancy_id: 'tenant-e2' }) });
+    await pg.query("UPDATE auth.users SET name='Existing name' WHERE id='usr_taken'");
+    const taken = await post(target, { token: token({ name: 'From host', sub: 'taken@example.com', group: 'group_e2', tenancy_id: 'tenant-e2' }) });
     expect((await auth.sessions.resolve(new Request(BASE, { headers: { cookie: cookieOf(taken) } })))?.userId).toBe('usr_taken');
-    expect(await rows(`SELECT username FROM auth.users WHERE id='usr_taken'`)).toEqual([{ username: 'taken_user' }]);
+    expect(await rows(`SELECT u.username,u.name,a.name AS auth_name FROM auth.users u JOIN auth."user" a USING (id) WHERE id='usr_taken'`))
+      .toEqual([{ username: 'taken_user', name: 'Existing name', auth_name: 'Existing name' }]);
     // Rows naming two different people for one address are refused.
     await pg.query(`INSERT INTO auth."user"(id,name,email,"emailVerified","createdAt","updatedAt") VALUES('usr_split_a','','split@example.com',true,now(),now())`);
     await pg.query(`INSERT INTO auth.users(id,email) VALUES('usr_split_b','split@example.com')`);
@@ -357,7 +359,22 @@ describe('trusted-issuer sign-in', () => {
     const denied = assemble(authParts(await testAuthOptions({env:{TRUSTED_SIGNIN__ISSUERS:issuers()},
       sessions:sessionStoreOf(auth), identityTransactions:db, admitIdentity:async()=>false})));
     await refused(await post(denied, {token:token({...claims, ...first})}), 403, 'deployment_admission_required');
-    expect(await names()).toEqual([{...before, name:'Robin', auth_name:'Robin', group_name:'Renamed team'}]);
+    const expected = sub.includes('@') ? 'River' : 'Robin';
+    expect(await names()).toEqual([{...before, name:expected, auth_name:expected, group_name:'Renamed team'}]);
+  });
+
+  it('preserves a personal name across both hosts and fills an empty email name once', async () => {
+    const target = await app({ TRUSTED_SIGNIN__ISSUERS: twoIssuers() });
+    for (const [id, initial] of [['named_account', 'Chosen Self'], ['empty_account', '']] as const) {
+      const sub = id + '@example.com';
+      await pg.query(`INSERT INTO auth."user"(id,name,email,"emailVerified","createdAt","updatedAt") VALUES($1,$2,$3,true,now(),now())`,[id,initial,sub]);
+      await pg.query('INSERT INTO auth.users(id,email,name) VALUES($1,$2,$3)',[id,sub,initial]);
+      const names = () => rows('SELECT u.name, a.name AS auth_name FROM auth.users u JOIN auth."user" a ON a.id=u.id WHERE u.id=$1',[id]);
+      expect((await post(target,{token:token({sub, group:'name_group_a', name:'From A'})})).status).toBe(303);
+      expect(await names()).toEqual([{name:initial || 'From A',auth_name:initial || 'From A'}]);
+      expect((await post(target,{token:token({iss:'issuer-b',sub,group:'name_group_b',name:'From B'},{key:otherKeys.privateKey})})).status).toBe(303);
+      expect(await names()).toEqual([{name:initial || 'From A',auth_name:initial || 'From A'}]);
+    }
   });
 
   it('keeps callbackUrl on this origin', async () => {
