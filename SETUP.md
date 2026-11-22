@@ -102,6 +102,17 @@ ALTER TABLE auth.account_preferences OWNER TO artifactbin_auth;
 COMMIT;
 ```
 
+**Company root membership for trusted sign-in.** Set `TRUSTED_SIGNIN__JOIN_COMPANY_ROOT=true` on the
+trusted-sign-in and identity hosts only when the company root is ready for every issuer’s people.
+Check its data grants and private page shares first. The setting defaults to false. Restart the hosts
+after changing it. An admitted sign-in adds Member on the root and preserves any stronger role.
+
+On enabled startup, identity backfills admitted accounts with a current seat in a configured issuer’s
+live group and evidence of verified sign-in during that seat and admission. Older releases recorded
+handle bindings and issuer-group creators. An older email user who joined an existing group may
+have no such record and joins the root at their next verified sign-in. A manual invitation or a
+removed issuer seat does not qualify. Turning the setting off stops new root grants and keeps existing seats.
+
 **Upgrading group roles.** The old group Editor could administer members and owned files; it becomes
 Admin. The old Viewer becomes Member. The new Editor publishes and edits group content, without member
 administration or ownership. Artifact share roles (viewer/commenter/editor) are unchanged.

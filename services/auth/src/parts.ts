@@ -27,7 +27,7 @@ import {groupLevelHeldSql} from './identity-store/rules';
 import {identityTables} from './identity-store/tables';
 import {readEnv} from './env';
 import {usesDevOutbox} from './mail';
-import {TRUSTED_SIGNIN_PATH,createTrustedTokenVerifier,trustedCallbackPath,trustedEmailOf,trustedIssuersOf} from './identity/trusted-issuers';
+import {TRUSTED_SIGNIN_PATH,createTrustedTokenVerifier,joinsCompanyRoot,trustedCallbackPath,trustedEmailOf,trustedIssuersOf} from './identity/trusted-issuers';
 import {trustedSignIn} from './identity-store/trusted-sign-in';
 /** `setCookies`: Set-Cookie values the store wants sent back (a rolled-forward session cookie). */
 export interface SessionInfo {sessionId?:string;userId:string;email?:string;emailVerified?:boolean;setCookies?:string[];
@@ -61,8 +61,6 @@ export interface AuthOptions {
   * Separate from `identityDb`, whose transactions would also turn on the identity call host.
   */
  identityTransactions?:TransactionalQueryable;
- /** Opt in to direct company root seats on verified sign-in. */
- joinCompanyRoot?:boolean;
 }
 export type AuthEnv={Variables:{actor:Actor}};
 export type AuthApp=Hono<AuthEnv>;
@@ -210,6 +208,7 @@ export function loginRoutes(o: AuthOptions): Part<AuthEnv> {
 /** The callback with `group=<the token's group>`, so the page opens in that group rather than one it remembered. */
 const withGroup=(path:string,groupId:string):string=>{const url=new URL(path,'http://callback.invalid');url.searchParams.set('group',groupId);return `${url.pathname}${url.search}${url.hash}`;};
 function mountTrustedSignIn(a:AuthApp,o:AuthOptions):void {
+  const joinCompanyRoot=joinsCompanyRoot(o.env);
   const verifier=createTrustedTokenVerifier(trustedIssuersOf(o.env));
   const schema=readEnv(o.env,'AUTH__SCHEMA')??'auth';
   a.post(TRUSTED_SIGNIN_PATH,async c=>{
@@ -220,7 +219,7 @@ function mountTrustedSignIn(a:AuthApp,o:AuthOptions):void {
     const checked=verifier.verify(form.get('token')??'',c.req.header('origin'));
     if(!checked.ok)return refuse(checked.refusal,checked.refusal==='forbidden_origin'?403:401);
     const {issuer,subject,group,tenancyId,name,groupName}=checked.claims;
-    const result=await trustedSignIn(o.identityTransactions,{issuer:issuer.issuer,subject,group,tenancyId,name,groupName,joinCompanyRoot:o.joinCompanyRoot,
+    const result=await trustedSignIn(o.identityTransactions,{issuer:issuer.issuer,subject,group,tenancyId,name,groupName,joinCompanyRoot,
       ...(issuer.parentGroup?{parentGroup:issuer.parentGroup}:{}),email:trustedEmailOf(issuer.issuer,subject)},schema,o.appSchema??readEnv(o.env,'APP__SCHEMA'),
       o.admitIdentity && ((person,tx)=>o.admitIdentity!({userId:person.userId,email:person.email,emailVerified:true,trustedIssuer:issuer.issuer},tx)));
     if(!result.ok)return refuse(result.refusal,result.refusal==='parent_group_missing'?503:result.refusal==='invalid_claims'?401:403);

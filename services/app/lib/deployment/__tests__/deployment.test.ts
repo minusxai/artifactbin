@@ -1,9 +1,10 @@
+import {generateKeyPairSync} from 'node:crypto';
 import {describe,it,expect} from 'vitest';
 import {trustedSignIn} from '@artifactbin/auth/identity-store/trusted-sign-in';
-import {backfillTrustedRoot} from '@artifactbin/auth/identity-store/trusted-root-backfill';
+import {localAuthentication} from '@/server/local-authentication';
 import {getGroupDetail} from '@/lib/groups';
 import {identityForUser} from '@/lib/accounts';
-import {syncIdentitySettings} from '@/lib/platform';
+import {ensureLocalIdentity,services,syncIdentitySettings} from '@/lib/platform';
 import {effectiveRole} from '@/lib/artifact-access';
 import {setArtifactGroupShare} from '@/lib/artifacts';
 import {account,head,mine} from '@/__tests__/artifact-fixtures';
@@ -69,45 +70,52 @@ describe('company admission',()=>{
   const db=await getDb();
   await bearerIdentity();
   await syncIdentitySettings(db);
+  await ensureLocalIdentity(db);
   await admitDeploymentIdentity(identity(owner.userId,owner.email!));
   await db.query("INSERT INTO groups(id,handle,name,created_by) VALUES ('root','org_root','Organization',$1),('other','other_root','Other',$1)",[owner.userId]);
   await db.query("INSERT INTO group_members(group_id,user_id,role) VALUES ('root',$1,'admin'),('other',$1,'admin')",[owner.userId]);
   await setupDeployment(owner.userId,'root');
   await setArtifactGroupShare(owner,page.id,'root','viewer');
-  await db.query("INSERT INTO groups(id,handle,name,created_by,parent_id) VALUES ('sibling','sibling_team','Sibling',$1,'other')",[owner.userId]);
+  await db.query("INSERT INTO groups(id,handle,name,created_by,parent_id) VALUES ('sibling','sibling_team','Sibling',$1,'root')",[owner.userId]);
   await setArtifactGroupShare(owner,siblingPage.id,'sibling','viewer');
-  const sign=async(subject:string)=>{
-   const result=await trustedSignIn(db,{issuer:'host',joinCompanyRoot:true,subject,email:subject+'@host.invalid',group:'host_team',parentGroup:'other_root',tenancyId:'tenant'},
+  const env={TRUSTED_SIGNIN__JOIN_COMPANY_ROOT:'true',TRUSTED_SIGNIN__ISSUERS:JSON.stringify([{
+   issuer:'host',audience:'app',origins:['https://issuer.example'],publicJwk:generateKeyPairSync('ed25519').publicKey.export({format:'jwk'}),
+  }])};
+  const sign=async(subject:string,joinCompanyRoot=false)=>{
+   const result=await trustedSignIn(db,{issuer:'host',joinCompanyRoot,subject,email:subject+'@host.invalid',group:'host_team',parentGroup:'other_root',tenancyId:'tenant'},
     'auth',undefined,(person,tx)=>admitDeploymentIdentity({...person,emailVerified:true,trustedIssuer:'host'},tx));
    if(!result.ok)throw new Error(result.refusal);
    return result;
   };
   const creator=await sign('creator@example.com'),handle=await sign('reader_handle'),email=await sign('reader@example.com');
   const members=async()=> (await db.query<{user_id:string}>("SELECT user_id FROM group_members WHERE group_id='root' AND role='member'")).rows.map(m=>m.user_id).sort();
-  expect(await members()).toEqual([creator.userId,handle.userId,email.userId].sort());
+  const current=await sign('known@example.com'), removed=await sign('removed_handle'), denied=await sign('later_admitted');
+  // Emulate an upgrade: older sign-ins have no explicit sign-in record.
+  await db.query('UPDATE auth.users SET trusted_sign_in_group=NULL,trusted_sign_in_at=NULL WHERE id<>$1',[current.userId]);
+  await db.query('DELETE FROM group_members WHERE user_id=$1',[removed.userId]);
+  await db.query("UPDATE deployment_members SET admitted_at=admitted_at+interval '1 day' WHERE user_id=$1",[denied.userId]);
+  const manual=await account('mxmx_test_invited@example.com');
+  await db.query("INSERT INTO deployment_members(user_id) VALUES ($1)",[manual.userId]);
+  await db.query("INSERT INTO group_members(group_id,user_id,role) VALUES ($1,$2,'member')",[creator.groupId,manual.userId]);
+  const boot=(settings:Record<string,string>)=>localAuthentication({
+   env:{AUTH__SECRET:'test-deployment-secret'.padEnd(32,'0'),...settings},db,
+   baseURL:'http://app.example.com',events:services().events,login:true,
+  });
+  await boot({});
+  expect(await members()).toEqual([]);
+  await boot(env);
+  await boot(env);
+  expect(await members()).toEqual([creator.userId,handle.userId,current.userId].sort());
+  await db.query("DELETE FROM group_members WHERE group_id='root' AND user_id=$1",[creator.userId]);
+  await boot(env);
+  expect(await members()).toEqual([handle.userId,current.userId].sort());
+  await sign('reader@example.com',true);
   const directory=await getGroupDetail(email.userId,'root');
   expect(directory?.members.map(m=>m.user_id)).toEqual([owner.userId]);
   expect(directory?.subgroups).toEqual([]);
   const actor=identityForUser(email.userId);
   expect(await effectiveRole(await head(page.id),actor)).toBe('viewer');
   expect(await effectiveRole(await head(siblingPage.id),actor)).toBe('none');
-  // Pre-upgrade rows: verified people have their host-selected membership but no root grant.
-  await db.query("DELETE FROM group_members WHERE group_id='root' AND role='member'");
-  const manual=await account('mxmx_test_invited@example.com');
-  await db.query("INSERT INTO deployment_members(user_id) VALUES ($1)",[manual.userId]);
-  await db.query("INSERT INTO group_members(group_id,user_id,role) VALUES ($1,$2,'member')",[creator.groupId,manual.userId]);
-  const backfill=()=>backfillTrustedRoot(db,'auth','public');
-  expect(await backfill()).toBe(2);
-  expect(await backfill()).toBe(0);
-  expect(await members()).toEqual([creator.userId,handle.userId].sort());
-  // An older handler could commit an issuer group before refusing admission. Later manual admission
-  // cannot retroactively prove that sign-in succeeded.
-  await db.query("UPDATE deployment_members SET admitted_at=admitted_at+interval '1 day' WHERE user_id=$1",[creator.userId]);
-  await db.query("DELETE FROM group_members WHERE group_id='root' AND user_id=$1",[creator.userId]);
-  expect(await backfill()).toBe(0);
-  await sign('creator@example.com');
-  await sign('reader@example.com');
-  expect(await members()).toEqual([creator.userId,handle.userId,email.userId].sort());
  });
  it('invitation and pattern checks compose, preserve roles and refuse unrelated invitations',async()=>{
   overrideConfig({}, {APP__DEPLOYMENT_MODE:'company',APP__DEPLOYMENT_OWNER_EMAIL:'owner@example.com',AUTH__INVITE_ONLY:'true',AUTH__ALLOWED_EMAIL_PATTERNS:'*@example.com'});

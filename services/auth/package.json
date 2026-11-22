@@ -26,7 +26,6 @@
     "vitest": "4.1.12"
   },
   "scripts": {
-    "backfill:trusted-root": "node --import tsx scripts/backfill-trusted-root.ts",
     "migrate:groups": "node --import tsx scripts/migrate-groups.ts",
     "migrate:account": "node --import tsx scripts/migrate-account.ts"
   }

@@ -17,5 +17,6 @@ export const sessionStoreOf = (h: HumanAuth): SessionStore => ({
   start: (userId) => h.sessions.start(userId),
 });
 export {IdentityNotReady,createIdentityStore,ensureIdentitySchema,identityDbOf,identityMoveStatements,identitySchemaStatements} from './identity-store';
+export {backfillTrustedRoot} from './identity-store/trusted-root-backfill';
 export {assertGroupRoleModel} from './identity-store/group-role-migration';
 export {authenticatingTestParent,isAuthenticatingUser,isDeploymentMember} from './identity-store/rules';

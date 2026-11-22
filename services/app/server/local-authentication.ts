@@ -10,7 +10,7 @@
  * bearer admission runs, over the same tables. Either way the identity read surface is ensured again afterwards,
  * now that Better Auth's tables exist (its `sessions` view).
  */
-import { authParts, bearerAdmission, createBearerReader, createHumanAuth, ensureAuthSchema, ensureHumanAuthSchema, loginProvidersOf, mailerForRuntime, mailSettingsOf, readEnv, sessionStoreOf, testDomainSignInOf } from '@artifactbin/auth';
+import { backfillTrustedRoot, authParts, bearerAdmission, createBearerReader, createHumanAuth, ensureAuthSchema, ensureHumanAuthSchema, loginProvidersOf, mailerForRuntime, mailSettingsOf, readEnv, sessionStoreOf, testDomainSignInOf } from '@artifactbin/auth';
 import type { EventsService } from '@artifactbin/contracts/events';
 import type { Part, Upstream } from '@artifactbin/contracts/part';
 import { parseServiceAudiences } from '@artifactbin/contracts/service-audiences';
@@ -53,6 +53,7 @@ export async function localAuthentication(o: LocalAuthenticationOptions): Promis
   });
   setServices({ humanSessions: human.sessions });
   await ensureLocalIdentity(db);
+  await backfillTrustedRoot(db,env,authSchema,readEnv(env,'APP__SCHEMA'));
   return upstream => authParts({
     upstream, env, tokens, sessions: sessionStoreOf(human), admitIdentity: admitDeploymentIdentity, cookieSecret: secret, secure,
     identityDb: queryable,

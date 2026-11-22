@@ -36,7 +36,7 @@ export interface TrustedSignInInput {
   subject: string;
   group: string;
   tenancyId: string;
-  /** Explicit composition choice. Omitted by production hosts pending access review. */
+  /** Company root membership setting of the verifying host. */
   joinCompanyRoot?: boolean;
   name?: string;
   groupName?: string;
@@ -81,6 +81,8 @@ export async function trustedSignIn(db: TransactionalQueryable, input: TrustedSi
       await tx.query(`DELETE FROM ${t.group_members} m USING ${t.groups} g WHERE m.group_id=g.id AND m.user_id=$1 AND g.trusted_issuer=$2 AND m.group_id<>$3 AND m.group_id IS DISTINCT FROM $4::text`, [person.userId, input.issuer, group.groupId, rootId]);
       if (admit && !await admit(person, tx)) throw new Refused('deployment_admission_required');
       if (rootId) await tx.query(`INSERT INTO ${t.group_members}(group_id,user_id,role) VALUES($1,$2,'member') ON CONFLICT (group_id,user_id) DO NOTHING`, [rootId, person.userId]);
+      await tx.query(`UPDATE ${t.users} SET trusted_sign_in_group=$2,trusted_sign_in_at=now(),
+        trusted_root_granted=COALESCE($3,trusted_root_granted) WHERE id=$1`, [person.userId, group.groupId, rootId]);
       if (input.name !== undefined) await writeDisplayName(tx, t, authSchema, person.userId, input.name);
       if (input.groupName !== undefined)
         await tx.query(`UPDATE ${t.groups} SET name=$2 WHERE id=$1 AND name IS DISTINCT FROM $2`, [group.groupId, input.groupName]);
