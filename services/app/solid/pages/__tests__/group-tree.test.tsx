@@ -39,7 +39,7 @@ it('lists direct members, and apart from them the people who receive the group\'
   render(() => <GroupManagement detail={withTree} refresh={() => {}} />);
   const people = screen.getByRole('region', { name: 'Group people' });
   expect(people).toHaveTextContent('Membership is direct');
-  expect(people).toHaveTextContent(/Members.*publish new pages into their group/);
+  expect(people).toHaveTextContent(/Members.*publish new pages in their own ordinary groups\. Only root Admins can publish into the company root/);
   expect(people).not.toHaveTextContent(/Editor/i);
   const audience = within(people).getByRole('region', { name: 'Receives shared files through a subgroup' });
   expect(within(audience).getByRole('link', { name: 'Eve' })).toHaveAttribute('href', '/@eve');

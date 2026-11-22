@@ -8,7 +8,7 @@ describe('shared recipient setup instructions',()=>{
   expect(text).not.toMatch(/afbin |@afbin\/cli/);
   expect(text).toContain('GET /api/groups/research');expect(text).toContain('PUT /api/me/preferences');
   expect(text).toContain('"id":"<resolved group.id>"');expect(text).toContain('sender’s login is never transferred');
-  expect(text).toMatch(/Members.*publish new pages into their group/);
+  expect(text).toMatch(/Members.*publish new pages in their own ordinary groups\. Only root Admins can publish into the company root/);
   expect(text).toContain('Admins');
   expect(text).not.toMatch(/Editors?/i);
   expect(text).not.toContain('app.artifactbin.dev');
