@@ -143,7 +143,8 @@ describe('trusted-issuer sign-in', () => {
     const before = await memberships();
     await refused(await send({...claims,iss:'issuer-b'},otherKeys.privateKey),403,'subject_conflict');
     await refused(await send({...claims,sub:'taken@example.com'}),403,'subject_conflict');
-    await refused(await send({...claims,previous_handle:'unknown_handle'}),403,'subject_conflict');
+    await refused(await send({...claims,previous_handle:'new_handle',sub:'taken@example.com'}),403,'subject_conflict');
+    expect(await rows("SELECT id FROM auth.users WHERE username='new_handle'")).toEqual([]);
     await refused(await send({...claims,group:'plain_team'}),403,'group_conflict');
     expect(await rows('SELECT email FROM auth.users WHERE id=$1',[original.userId])).toEqual([{email:original.email}]);
     const once = token(claims);
@@ -157,6 +158,23 @@ describe('trusted-issuer sign-in', () => {
       expect(await rows(`SELECT id,name FROM ${table} WHERE email=$1`,[email])).toEqual([{id:original.userId,name:'Personal name'}]);
     }
     expect(await memberships()).toEqual(before);
+  });
+  it('accepts first use of a free signed handle and email, and preserves their identity on later sign-ins', async () => {
+    const target = await app();
+    const handle = 'first_reader', email = 'first.reader@example.com', group = 'first_team';
+    async function signIn(claims: Record<string,unknown>) {
+      const response = await post(target,{token:token({group,...claims})});
+      expect(response.status).toBe(303);
+      return (await auth.sessions.resolve(new Request(BASE,{headers:{cookie:cookieOf(response)}})))!;
+    }
+    const first = await signIn({sub:email,previous_handle:handle,name:'First Reader'});
+    for (const claims of [{sub:email,previous_handle:handle,name:'Later Suggestion'}, {sub:handle}, {sub:email}]) {
+      expect(await signIn(claims)).toMatchObject({userId:first.userId,email});
+    }
+    expect(await rows('SELECT username,name FROM auth.users WHERE id=$1',[first.userId]))
+      .toEqual([{username:handle,name:'First Reader'}]);
+    await refused(await post(target,{token:token({group,sub:email,previous_handle:'different_reader'})}),403,'subject_conflict');
+    expect(await rows("SELECT id FROM auth.users WHERE username='different_reader'")).toEqual([]);
   });
   it('shares a person, group and replay record across two issuer sites with their own keys', async () => {
     const second = 'https://second.example';

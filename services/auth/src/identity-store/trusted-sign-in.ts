@@ -73,7 +73,7 @@ export async function trustedSignIn(db: TransactionalQueryable, input: TrustedSi
   admit?: (person: {userId: string; email: string}, tx: Queryable) => Promise<boolean>): Promise<TrustedSignInResult> {
   const isEmail = input.subject.includes('@'), address = isEmail ? trustedSubjectEmail(input.subject) : null;
   const subjectOk = isEmail ? address !== null : isValidHandle(input.subject) && input.subject !== input.group;
-  if (!subjectOk || !isValidHandle(input.group) || (input.previousHandle !== undefined && (!address || !isValidHandle(input.previousHandle)))) return {ok: false, refusal: 'invalid_claims'};
+  if (!subjectOk || !isValidHandle(input.group) || (input.previousHandle !== undefined && (!address || !isValidHandle(input.previousHandle) || input.previousHandle === input.group))) return {ok: false, refusal: 'invalid_claims'};
   const t = identityTables(authSchema), better = (table: string) => `${authSchema}."${table}"`;
   try {
     const result = await db.transaction(async tx => {
@@ -85,8 +85,11 @@ export async function trustedSignIn(db: TransactionalQueryable, input: TrustedSi
         SELECT 'trusted_sign_in',$1,to_timestamp($2) WHERE to_timestamp($2)>clock_timestamp()
         ON CONFLICT DO NOTHING RETURNING 1`, [receipt,input.exp]);
       if (!spent.rows.length) throw new Refused('replayed_token');
-      if (address && input.previousHandle) await transitionHandle(tx,t,better,input.issuer,input.previousHandle,address);
+      const createdByHandle = address && input.previousHandle
+        ? await transitionHandle(tx, t, better, input, input.previousHandle, address)
+        : false;
       const emailPerson = address ? await ensureEmailPerson(tx, address, t, better) : null;
+      if (emailPerson && createdByHandle) { emailPerson.created = true; emailPerson.canFillName = true; }
       const person = emailPerson ?? await ensurePerson(tx, input, t, better);
       const rootId = input.joinCompanyRoot ? await requiredCompanyRoot(tx, t, appSchema) : null;
       const group = await ensureGroup(tx, input, person.userId, t, rootId, appSchema);
@@ -154,29 +157,28 @@ async function findOrCreateHandlePerson(tx: Queryable, input: TrustedSignInInput
   return {userId, email: input.email, created: true};
 }
 
-/** A binding authorizes exactly one transition away from the original synthetic address. */
-async function transitionHandle(tx: Queryable, t: Tables, better: (table:string)=>string, issuer:string, handle:string, address:string) {
-  const matches = (await tx.query<{id:string;email:string}>(`SELECT u.id,u.email FROM ${t.users} u
-    JOIN ${better('account')} a ON a."userId"=u.id
-    WHERE a."providerId"=$1 AND a."accountId"=$2 AND u.kind='account'
-    AND NOT EXISTS (SELECT 1 FROM ${t.users} holder WHERE holder.username=$2 AND holder.id<>u.id)
-    FOR UPDATE OF u,a`, [trustedProviderId(issuer),handle])).rows;
-  const person = matches[0];
-  if (!person || matches.length !== 1 || (person.email !== trustedEmailOf(issuer,handle) && person.email !== address))
-    throw new Refused('subject_conflict');
-  const auth = (await tx.query<{email:string}>(`SELECT email FROM ${better('user')} WHERE id=$1 FOR UPDATE`,[person.id])).rows[0];
+/** Resolve the issuer's stable handle, creating it on first use. Email conflicts roll back that creation too. */
+async function transitionHandle(tx: Queryable, t: Tables, better: (table:string)=>string, input: TrustedSignInInput, handle:string, address:string) {
+  const synthetic = trustedEmailOf(input.issuer,handle);
+  const person = await ensurePerson(tx,{...input,subject:handle,email:synthetic},t,better);
+  if (person.email !== synthetic && person.email !== address) throw new Refused('subject_conflict');
+  const auth = (await tx.query<{email:string}>(`SELECT auth.email FROM ${better('user')} auth
+    JOIN ${better('account')} binding ON binding."userId"=auth.id
+    WHERE auth.id=$1 AND binding."providerId"=$2 AND binding."accountId"=$3 FOR UPDATE OF auth,binding`,
+    [person.userId,trustedProviderId(input.issuer),handle])).rows[0];
   if (auth?.email !== person.email) throw new Refused('subject_conflict');
   const occupied = await tx.query(`SELECT 1 FROM ${t.users} WHERE lower(email)=$1 AND id<>$2
-    UNION ALL SELECT 1 FROM ${better('user')} WHERE lower(email)=$1 AND id<>$2`,[address,person.id]);
+    UNION ALL SELECT 1 FROM ${better('user')} WHERE lower(email)=$1 AND id<>$2`,[address,person.userId]);
   if (occupied.rows.length) throw new Refused('subject_conflict');
-  if (person.email === address) return;
+  if (person.email === address) return false;
   try {
-    await tx.query(`UPDATE ${t.users} SET email=$2 WHERE id=$1`,[person.id,address]);
-    await tx.query(`UPDATE ${better('user')} SET email=$2,"emailVerified"=true,"updatedAt"=now() WHERE id=$1`,[person.id,address]);
+    await tx.query(`UPDATE ${t.users} SET email=$2 WHERE id=$1`,[person.userId,address]);
+    await tx.query(`UPDATE ${better('user')} SET email=$2,"emailVerified"=true,"updatedAt"=now() WHERE id=$1`,[person.userId,address]);
   } catch (error) {
     if (isUniqueViolation(error)) throw new Refused('subject_conflict');
     throw error;
   }
+  return person.created;
 }
 
 /**

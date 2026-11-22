@@ -106,8 +106,9 @@ COMMIT;
 handle in the signed string claim `previous_handle`. Only the issuer that bound that handle can move
 its synthetic address to an unclaimed email. The account ID, handle and personal name are preserved,
 and ordinary membership reconciliation still applies. Use a fresh token and unique `jti` to retry
-the same address. A different address or an unknown binding refuses the entire sign-in. After success,
-email sign-ins can omit `previous_handle`.
+the same address. On first use, a free handle and an unclaimed email create one person atomically.
+An occupied email, a handle held by another identity, or a later change of address refuses the sign-in.
+After success, email sign-ins can omit `previous_handle`.
 
 **Signed group placement.** An issuer with a configured `parentGroup` may include
 `"parent_groups": ["division", "team"]` in its signed sign-in token. List existing live group handles
