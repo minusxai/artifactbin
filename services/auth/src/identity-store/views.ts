@@ -53,7 +53,7 @@ export const plainIdentifier = (value: string, what: string): string => {
  * reader applying IDENTITY.sql) replaces the view in place, appending, rather than dropping it.
  */
 const RULE_COLUMNS: Readonly<Record<string, {after: string; rules: readonly string[]}>> = {
-  users: {after: 'created_at', rules: ['active', 'default_group_id']},
+  users: {after: 'created_at', rules: ['active', 'default_group_id', 'handle']},
   tokens: {after: 'last_used_at', rules: ['scopes', 'live']},
 };
 
@@ -94,7 +94,7 @@ export function identityViewStatements(schemas: IdentitySchemas, options: {sessi
       WHERE m.user_id=u.id
       ORDER BY (p.default_destination->>'type'='group' AND p.default_destination->>'id'=g.id) DESC NULLS LAST,
         (g.parent_id IS NULL), m.created_at, g.id COLLATE "C"
-      LIMIT 1) AS default_group_id`})}
+      LIMIT 1) AS default_group_id`, handle: 'u.username AS handle'})}
   FROM ${auth}.users u`);
     } else if (table === 'tokens') {
       const {exists} = bearerLiveSql({auth, tokens: `${auth}.tokens`, sessions: options.sessions !== false});

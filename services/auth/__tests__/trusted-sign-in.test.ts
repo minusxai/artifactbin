@@ -105,6 +105,21 @@ beforeAll(async () => {
 });
 afterAll(async () => { await closeDatabase?.(); });
 
+it('appends the handle alias without breaking an existing username reader', async () => {
+  await pg.query('CREATE SCHEMA identity_upgrade');
+  const view = identityViewStatements({auth:'auth',app:'company_app',read:'identity_upgrade'})
+    .find(sql=>sql.startsWith('CREATE OR REPLACE VIEW identity_upgrade.users '))!;
+  await pg.query(view.replace(', u.username AS handle', ''));
+  await pg.query('CREATE VIEW public.legacy_usernames AS SELECT id, username FROM identity_upgrade.users');
+  await pg.query(view);
+  expect(await rows("SELECT id, username FROM public.legacy_usernames WHERE id='usr_taken'"))
+    .toEqual([{id:'usr_taken',username:'taken_user'}]);
+  const readPerson = (id: string) => rows('SELECT id, username, handle FROM identity_upgrade.users WHERE id=$1', [id]);
+  expect(await readPerson('usr_taken')).toEqual([{id:'usr_taken',username:'taken_user',handle:'taken_user'}]);
+  await pg.query("INSERT INTO auth.users(id) VALUES('usr_without_handle')");
+  expect(await readPerson('usr_without_handle')).toEqual([{id:'usr_without_handle',username:null,handle:null}]);
+});
+
 describe('trusted-issuer sign-in', () => {
   it('resolves signed parent handles consecutively within the configured hierarchy', async () => {
     const target = await app();
