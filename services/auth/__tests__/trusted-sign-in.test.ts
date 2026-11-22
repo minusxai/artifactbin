@@ -33,8 +33,8 @@ const issuers = (extra: Record<string, unknown> = {}) => JSON.stringify([{
 const twoIssuers = () => JSON.stringify([...JSON.parse(issuers()), {
   issuer: 'issuer-b', audience: AUDIENCE, origins: [EMBEDDER], publicJwk: otherKeys.publicKey.export({ format: 'jwk' }), parentGroup: 'parent_team',
 }]);
-const app = async (env: Record<string, string | undefined> = { TRUSTED_SIGNIN__ISSUERS: issuers() }) => assemble(authParts(await testAuthOptions({
-  env, sessions: sessionStoreOf(auth), identityTransactions: db,
+const app = async (env: Record<string, string | undefined> = { TRUSTED_SIGNIN__ISSUERS: issuers() }, joinCompanyRoot = false) => assemble(authParts(await testAuthOptions({
+  env, sessions: sessionStoreOf(auth), identityTransactions: db, joinCompanyRoot,
 })));
 
 let counter = 0;
@@ -143,21 +143,33 @@ describe('trusted-issuer sign-in', () => {
       expect(await rows(`SELECT g.handle FROM identity.users u JOIN auth.groups g ON g.id=u.default_group_id
         WHERE u.username='company_reader'`)).toEqual([{handle:group}]);
       expect(await rows('SELECT parent_id FROM auth.groups WHERE handle=$1',[group])).toEqual([{parent_id:'grp_parent'}]);
+      expect(await rows(`SELECT g.handle FROM auth.group_members m JOIN auth.groups g ON g.id=m.group_id
+        JOIN auth.users u ON u.id=m.user_id WHERE u.username='company_reader'`)).toEqual([{handle:group}]);
     }
   });
   it('uses the configured issuer parent when the company default belongs to a different root', async () => {
     await pg.query(`INSERT INTO company_app.deployment_state VALUES('company','usr_admin','grp_plain',true)
       ON CONFLICT (id) DO UPDATE SET default_group_id=EXCLUDED.default_group_id,setup_complete=true`);
-    const target = await app({TRUSTED_SIGNIN__ISSUERS:issuers({parentGroup:'parent_team'}), APP__SCHEMA:'company_app'});
+    const target = await app({TRUSTED_SIGNIN__ISSUERS:issuers({parentGroup:'parent_team'}), APP__SCHEMA:'company_app'}, true);
     const claims = {sub:'partner_reader',group:'partner_group'};
     const first = await post(target,{token:token(claims)});
     expect(first.status).toBe(303);
     expect(await rows('SELECT parent_id FROM auth.groups WHERE handle=$1',[claims.group])).toEqual([{parent_id:'grp_parent'}]);
-    const returning = await post(target,{token:token(claims)});
+    const memberships = () => rows(`SELECT g.handle,m.role FROM auth.group_members m JOIN auth.groups g ON g.id=m.group_id
+      JOIN auth.users u ON u.id=m.user_id WHERE u.username=$1 ORDER BY g.handle`,[claims.sub]);
+    expect(await memberships()).toEqual([{handle:'partner_group',role:'member'},{handle:'plain_team',role:'member'}]);
+    await pg.query("UPDATE auth.group_members SET role='editor' WHERE group_id='grp_plain' AND user_id=(SELECT id FROM auth.users WHERE username=$1)",[claims.sub]);
+    const denied = assemble(authParts(await testAuthOptions({env:{TRUSTED_SIGNIN__ISSUERS:issuers(),APP__SCHEMA:'company_app'},
+      sessions:sessionStoreOf(auth),identityTransactions:db,joinCompanyRoot:true,admitIdentity:async()=>false})));
+    await refused(await post(denied,{token:token({...claims,group:'refused_group'})}),403,'deployment_admission_required');
+    expect(await rows("SELECT id FROM auth.groups WHERE handle='refused_group'")).toEqual([]);
+    expect(await memberships()).toEqual([{handle:'partner_group',role:'member'},{handle:'plain_team',role:'editor'}]);
+    const returning = await post(target,{token:token({...claims,group:'replacement_group'})});
     expect(returning.status).toBe(303);
+    expect(await memberships()).toEqual([{handle:'plain_team',role:'editor'},{handle:'replacement_group',role:'member'}]);
   });
   it('signs the person in, creating the person, the group under its parent with its tenancy, and the membership', async () => {
-    const target = await app();
+    const target = await app(undefined,true);
     const response = await post(target, { token: token(), callbackUrl: '/conversations?embed=1' });
     expect(response.status).toBe(303);
     const session = await auth.sessions.resolve(new Request(BASE, { headers: { cookie: cookieOf(response) } }));
@@ -175,6 +187,7 @@ describe('trusted-issuer sign-in', () => {
     const [group] = await rows<{ id: string }>(`SELECT id,parent_id,trusted_issuer,tenancy_id FROM auth.groups WHERE handle='group_1'`);
     expect(group).toMatchObject({ parent_id: 'grp_parent', trusted_issuer: 'issuer-a', tenancy_id: 'tenant-1' });
     expect(response.headers.get('location')).toBe(`/conversations?embed=1&group=${group!.id}`);
+    expect(await rows('SELECT group_id FROM auth.group_members WHERE user_id=$1',[person!.id])).toEqual([{group_id:group!.id}]);
     expect(await rows(`SELECT user_id,role FROM auth.group_members WHERE group_id=$1`, [group!.id])).toEqual([{ user_id: person!.id, role: 'member' }]);
     // The same person again (a new token): the same account and group, no second row.
     const again = await post(target, { token: token() });
