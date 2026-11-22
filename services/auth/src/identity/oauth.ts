@@ -27,6 +27,12 @@ export function isAllowedRedirectUri(uri: string): boolean {
   return url.protocol === 'http:' && LOOPBACK_HOSTS.has(url.hostname);
 }
 
+/** Native terminal consent uses the validated HTTP loopback callback. */
+export function isTerminalRedirect(redirectUri: string): boolean {
+  const url = new URL(redirectUri);
+  return url.protocol === 'http:' && LOOPBACK_HOSTS.has(url.hostname);
+}
+
 export const isValidCodeChallenge = (value: string): boolean => /^[A-Za-z0-9_-]{43}$/.test(value);
 export const isValidCodeVerifier = (value: string): boolean => /^[A-Za-z0-9._~-]{43,128}$/.test(value);
 
@@ -118,6 +124,8 @@ export function parseOAuthClients(raw: string | undefined): readonly ConfiguredO
 }
 
 interface RefreshGrant {
+  /** Terminal consent provenance, retained on the family across rotations. */
+  terminal?: boolean;
   token: string;
   clientId: string;
   /** The person on the rotated access token; null on a group's sign-in (`group`), which is never an unowned grant. */
@@ -228,7 +236,7 @@ export function createOAuthStore(db: Queryable, schema = 'auth', configured: rea
           VALUES ('refresh_family', $4, $4, $7::jsonb, $6)
         ) INSERT INTO ${credentials} (kind, credential_hash, subject_id, group_id, payload, expires_at) VALUES ($1, $2, $3, $4, $5, $6)`,
         [REFRESH_TOKEN, hash(token), grant.userId, family, JSON.stringify({ client_id: grant.clientId, resource: grant.resource, scope: grant.scope, access_token_id: grant.accessTokenId }), new Date(Date.now() + REFRESH_TOKEN_TTL_MS).toISOString(),
-          JSON.stringify(grant.sessionId ? { session_id: grant.sessionId } : {})],
+          JSON.stringify({ ...(grant.sessionId ? { session_id: grant.sessionId } : {}), ...(grant.terminal ? { terminal: true } : {}) })],
       );
       return token;
     },
@@ -256,8 +264,8 @@ export function createOAuthStore(db: Queryable, schema = 'auth', configured: rea
     },
     async rotateAndMint(presented, clientId, resources, mint) {
       const resource=resources[0];if(!resource)return null;
-      const row=(await db.query<{group_id:string;payload:Record<string,unknown>|string;user_id:string|null;principal_group_id:string|null;principal_group_role:string|null;issued_by:string|null}>(`
-        SELECT current.group_id,current.payload,access.user_id,access.group_id AS principal_group_id,access.group_role AS principal_group_role,access.issued_by FROM ${credentials} current
+      const row=(await db.query<{group_id:string;payload:Record<string,unknown>|string;terminal:boolean|null;user_id:string|null;principal_group_id:string|null;principal_group_role:string|null;issued_by:string|null}>(`
+        SELECT current.group_id,current.payload,family.payload->'terminal' = 'true'::jsonb AS terminal,access.user_id,access.group_id AS principal_group_id,access.group_role AS principal_group_role,access.issued_by FROM ${credentials} current
         JOIN ${credentials} family ON family.kind='refresh_family' AND family.credential_hash=current.group_id AND family.deleted_at IS NULL
         JOIN ${accessTokens} access ON access.id=current.payload->>'access_token_id' AND access.deleted_at IS NULL
         WHERE current.kind=$1 AND current.credential_hash=$2 AND current.payload->>'client_id'=$3
@@ -274,7 +282,7 @@ export function createOAuthStore(db: Queryable, schema = 'auth', configured: rea
       const role=row.principal_group_role;
       const group=row.principal_group_id?(row.user_id===null&&row.issued_by&&(role==='member'||role==='editor')?{id:row.principal_group_id,role:role as 'member'|'editor',issuedBy:row.issued_by}:undefined):null;
       if(group===undefined){await this.revokeRefresh(presented,clientId);return null;}
-      const grant:RefreshGrant={token:refreshToken(),clientId,userId:row.user_id,resource,scope:payload.scope,group};
+      const grant:RefreshGrant={token:refreshToken(),clientId,userId:row.user_id,resource,scope:payload.scope,group,...(row.terminal ? { terminal: true } : {})};
       const minted=await mint(grant);
       // Updating the durable family row serializes concurrent finalizers.
       const result=await db.query(`WITH family AS (

@@ -32,7 +32,7 @@ export async function POST(request: Request) {
   const actor = await sessionActor(request);
   const userId = actor.credential === 'session' ? actor.userId : null;
   if (!await canAuthenticateUser(userId)) return json({ error: 'email_auth_required' }, 401);
-  const body = ((await readJson(request, { allowEmpty: true, limit: SMALL_BODY_LIMIT })) ?? {}) as { expiresInHours?: unknown; audience?: unknown; scope?: unknown };
+  const body = ((await readJson(request, { allowEmpty: true, limit: SMALL_BODY_LIMIT })) ?? {}) as { expiresInHours?: unknown; audience?: unknown; scope?: unknown; source?: unknown };
   let expiresInMs: number | undefined;
   if (body.expiresInHours !== undefined) {
     if (typeof body.expiresInHours !== 'number' || !Number.isFinite(body.expiresInHours)) return json({ error: 'invalid_expiry' }, 400);
@@ -63,7 +63,7 @@ export async function POST(request: Request) {
       }
     }
   }
-  const minted = await mintToken(sourcedTokenName('api'), userId, { expiresInMs, audience, scope });
+  const minted = await mintToken(sourcedTokenName(body.source === 'agent' && scope === ARTIFACT_SCOPE ? 'agent' : 'api'), userId, { expiresInMs, audience, scope });
   return json(
     {
       has_created_document: await hasCreatedDocument(userId!),

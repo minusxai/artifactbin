@@ -11,7 +11,7 @@ import { INTERNAL_MINT_PATH } from '@artifactbin/contracts/routes';
 import type { GroupPrincipalRole } from '@artifactbin/contracts/actor';
 import type { ServiceAudience } from '@artifactbin/contracts/service-audiences';
 import type { Upstream } from '@artifactbin/contracts/part';
-import { ACCESS_TOKEN_TTL_SECONDS, ARTIFACT_SCOPE, type OAuthStore } from '../identity/oauth';
+import { ACCESS_TOKEN_TTL_SECONDS, ARTIFACT_SCOPE, isTerminalRedirect, type OAuthStore } from '../identity/oauth';
 import type { LiveGroupSignIn } from '../identity/bearer';
 import type { SessionStore } from '../parts';
 
@@ -72,6 +72,10 @@ export function acceptedOriginsOf(request: Request, trustedHops: number, publicB
   return [base, ...aliasOrigins.filter((origin) => origin !== base)];
 }
 
+/** Only a personal, consented API grant with a native callback is a terminal agent grant. */
+export const isTerminalConsent = (o: OAuthRoutesOptions, resource: string, redirectUri: string) =>
+  !serviceAt(o, resource) && isTerminalRedirect(redirectUri);
+
 const originsOf = (o: OAuthRoutesOptions, request: Request) => acceptedOriginsOf(request, o.trustedHops, o.publicBaseUrl, o.aliasOrigins);
 /** The request's Origin is one this deployment answers at: the rule for every cookie-borne write here. */
 export const isSameOrigin = (o: OAuthRoutesOptions, request: Request) => originsOf(o, request).includes(request.headers.get('origin') ?? '');
@@ -108,7 +112,7 @@ export async function readAuthJson(request: Request, blank?: object): Promise<un
 type Minted = { id: string; token: string; expiresIn: number; has_created_document: boolean };
 
 /** The access token a grant stands for: a group's sign-in through the guarded mint, else the person's own through the app. */
-export async function mintFor(o: OAuthRoutesOptions, request: Request, grant: { userId: string | null; resource: string; scope: string; group?: (GrantGroup & { issuedBy: string }) | null }): Promise<Minted> {
+export async function mintFor(o: OAuthRoutesOptions, request: Request, grant: { userId: string | null; resource: string; scope: string; terminal?: boolean; group?: (GrantGroup & { issuedBy: string }) | null }): Promise<Minted> {
   if (grant.group) {
     // A group's sign-in: the identity store's guarded mint, for the person who authorised it, re-checked every time.
     if (!o.groupSignIns) throw new Error('group sign-ins unavailable');
@@ -122,7 +126,7 @@ export async function mintFor(o: OAuthRoutesOptions, request: Request, grant: { 
   if (!identity?.email || !identity.emailVerified || identity.userId !== grant.userId) throw new Error('Verified email account required');
   if(o.admitIdentity&&!await o.admitIdentity(identity))throw new Error('Deployment admission required');
   const expiresIn = ACCESS_TOKEN_TTL_SECONDS;
-  const payload = { expiresInHours: expiresIn / 3600, audience: grant.resource, scope: grant.scope };
+  const payload = { expiresInHours: expiresIn / 3600, audience: grant.resource, scope: grant.scope, ...(grant.terminal ? { source: 'agent' } : {}) };
   // The INTERNAL mint: the app's only credential-issuing route, refused at
   // the edge (parts `internalBoundary`) and reached only here, on the upstream
   // seam, after a human approved this connection in the browser.
@@ -139,9 +143,9 @@ export async function mintFor(o: OAuthRoutesOptions, request: Request, grant: { 
 }
 
 /** A new grant: its access token (`mintFor`, a group's sign-in issued by `userId`) and a new refresh family for `clientId`. */
-export async function issueGrant(o: OAuthRoutesOptions, request: Request, grant: { clientId: string; userId: string; resource: string; scope: string; sessionId?: string | null; group: GrantGroup | null }): Promise<{ minted: Minted; refreshToken: string }> {
-  const { clientId, userId, resource, scope, sessionId, group } = grant;
-  const minted = await mintFor(o, request, { userId, resource, scope, group: group && { ...group, issuedBy: userId } });
-  const refreshToken = await o.oauth.issueRefresh({ clientId, userId, resource, scope, accessTokenId: minted.id, sessionId: sessionId ?? null });
+export async function issueGrant(o: OAuthRoutesOptions, request: Request, grant: { clientId: string; userId: string; resource: string; scope: string; sessionId?: string | null; terminal?: boolean; group: GrantGroup | null }): Promise<{ minted: Minted; refreshToken: string }> {
+  const { clientId, userId, resource, scope, sessionId, terminal, group } = grant;
+  const minted = await mintFor(o, request, { userId, resource, scope, terminal, group: group && { ...group, issuedBy: userId } });
+  const refreshToken = await o.oauth.issueRefresh({ clientId, userId, resource, scope, accessTokenId: minted.id, sessionId: sessionId ?? null, terminal });
   return { minted, refreshToken };
 }

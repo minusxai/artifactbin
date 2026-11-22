@@ -10,7 +10,7 @@ import { escapeHtml } from '@artifactbin/utils/escape';
 import { ANONYMOUS, isGroupPrincipalRole } from '@artifactbin/contracts/actor';
 import { clientRedirects, createAuthCode, isValidCodeChallenge } from '../identity/oauth';
 import type { AuthApp } from '../parts';
-import { AUTH_BODY_LIMIT, NO_STORE, acceptsResource, isSameOrigin, payloadTooLarge, resourceOf, scopeFor, serviceAt, type GrantGroup, type OAuthRoutesOptions } from './grants';
+import { AUTH_BODY_LIMIT, NO_STORE, acceptsResource, isSameOrigin, isTerminalConsent, payloadTooLarge, resourceOf, scopeFor, serviceAt, type GrantGroup, type OAuthRoutesOptions } from './grants';
 
 /** Shared, dependency-free shell for proxy consent and CLI callback pages.
  * bodyHtml is trusted server-authored markup; callers escape interpolated data.
@@ -105,8 +105,10 @@ export function mountConsent(app: AuthApp, o: OAuthRoutesOptions): void {
       ${approve('group')}`, 200, redirectUri);
     }
     if (actor.credential === 'session' && actor.userId) {
+      const terminal = isTerminalConsent(o, requestedResource, redirectUri);
       return page('artifactbin — connect', `<h1>Connect to artifactbin</h1>
       ${service ? `<p>${who} wants to act as you at <strong>${escapeHtml(service.id)}</strong> (${escapeHtml(service.origin)}), as <strong>${email}</strong>. It cannot use this site as you.</p>` : client.configured ? `<p>${who} wants to use this site as <strong>${email}</strong>: read what you may and publish as you.</p>` : `<p>Your coding agent wants to publish artifacts. New artifacts will belong to <strong>${email}</strong>.</p>`}
+      ${terminal ? '<p>Signing out of the browser keeps this terminal connected. You can revoke its agent token from your account.</p>' : ''}
       ${approve('user')}`, 200, redirectUri);
     }
     return page('artifactbin — connect', `<h1>Connect to artifactbin</h1>

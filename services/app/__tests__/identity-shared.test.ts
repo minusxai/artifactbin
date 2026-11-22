@@ -9,6 +9,7 @@
  * reviewed edit here and in every reader that applies a byte-for-byte copy of IDENTITY.sql.
  */
 import {readFile} from 'node:fs/promises';
+import {createHash} from 'node:crypto';
 import {join} from 'node:path';
 import {beforeEach,expect,it,onTestFinished} from 'vitest';
 import {IDENTITY_INTROSPECT_PATH, IDENTITY_VIEWS} from '@artifactbin/contracts/identity-service';
@@ -44,7 +45,8 @@ async function composed(){
   return {status:minted.status,grant:await minted.json(),cookie};
  };
  const get=(path:string,headers:Record<string,string>={})=>application.fetch(new Request(origin+path,{headers}));
- return {post,get,service,signIn};
+ const postForm=(path:string,body:URLSearchParams,cookie:string)=>application.fetch(new Request(origin+path,{method:'POST',headers:{origin,cookie},body}));
+ return {post,postForm,get,service,signIn};
 }
 const sql=async<T=Record<string,unknown>>(text:string,params:unknown[]=[])=>(await (await getDb()).query<T>(text,params)).rows;
 const userIdOf=async(email:string)=>(await sql<{id:string}>('SELECT id FROM users WHERE email=$1',[email]))[0]!.id;
@@ -185,6 +187,44 @@ it('the exchange: a signed-in page and an agent\'s one API bearer each get a fiv
  expect(await sql('SELECT live FROM identity.sessions WHERE id=$1',[session!.id])).toEqual([]);
  expect(await introspect(page.body.access_token)).toEqual({active:false});
  expect((await exchange({cookie:signed.cookie})).status).toBe(401);
+});
+
+it('keeps a consented terminal agent signed in after browser sign-out, through refresh, until token revocation or admission loss', async () => {
+ const host = await composed();
+ const email = 'mxmx_test_terminal@example.test';
+ const {cookie} = await host.signIn(email);
+ const user = await userIdOf(email);
+ const redirect = 'http://127.0.0.1:9987/callback';
+ const resource = origin + '/api';
+ const verifier = 'v'.repeat(43);
+ const challenge = createHash('sha256').update(verifier).digest('base64url');
+ const registered = await host.post('/oauth/register', {client_name: 'Terminal', redirect_uris: [redirect]});
+ expect(registered.status).toBe(201);
+ const {client_id} = await registered.json();
+ const form = new URLSearchParams({client_id, redirect_uri: redirect, code_challenge: challenge, resource, scope: 'artifacts', action: 'approve'});
+ const consent = await host.get('/oauth/authorize?' + new URLSearchParams({...Object.fromEntries(form), response_type: 'code', code_challenge_method: 'S256'}), {cookie});
+ expect(await consent.text()).toContain('Signing out of the browser keeps this terminal connected');
+ const approved = await host.postForm('/oauth/authorize/approve', form, cookie);
+ expect(approved.status).toBe(303);
+ const code = new URL(approved.headers.get('location')!).searchParams.get('code');
+ const issued = await host.post('/oauth/token', {grant_type: 'authorization_code', client_id, code, redirect_uri: redirect, code_verifier: verifier});
+ expect(issued.status).toBe(200);
+ const first = await issued.json();
+ const api = (bearer: string) => host.get('/api/artifacts', {authorization: 'Bearer ' + bearer});
+ expect((await host.post('/api/auth/sign-out', {}, {cookie})).status).toBe(200);
+ expect((await api(first.access_token)).status).toBe(200);
+ const refreshed = await host.post('/oauth/token', {grant_type: 'refresh_token', client_id, refresh_token: first.refresh_token});
+ expect(refreshed.status).toBe(200);
+ const second = await refreshed.json();
+ expect((await api(second.access_token)).status).toBe(200);
+ expect(await sql("SELECT name,user_id FROM identity.tokens WHERE user_id=$1 AND name LIKE 'agent-%'", [user]))
+  .toEqual([0, 1].map(() => ({name: expect.stringMatching(/^agent-[0-9a-f]{6}$/), user_id: user})));
+ await sql("UPDATE users SET kind='guest' WHERE id=$1", [user]);
+ expect((await api(second.access_token)).status).toBe(401);
+ await sql("UPDATE users SET kind='account' WHERE id=$1", [user]);
+ expect((await api(second.access_token)).status).toBe(200);
+ expect((await host.post('/oauth/revoke', {client_id, token: second.refresh_token})).status).toBe(200);
+ for (const issued of [first, second]) expect((await api(issued.access_token)).status).toBe(401);
 });
 
 it('the principal columns: no door sets them from what a caller sends; every token stays a person\'s and introspects as one',async()=>{
