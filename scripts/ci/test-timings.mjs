@@ -99,6 +99,52 @@ export function parseTimings(text) {
   return files;
 }
 
+/** A partial retry replaces only the shards it ran. Read each effective job by id so a missing
+ * entry in GitHub's run log archive cannot trigger gh's workflow-wide log fallback. */
+export function measuredNodeRun(jobs, readLog) {
+  const latest = new Map();
+  for (const job of jobs) {
+    const previous = latest.get(job.name);
+    if (!previous || previous.run_attempt < job.run_attempt) latest.set(job.name, job);
+  }
+  // A previously tested tree selects no workloads. Only an explicitly skipped node matrix
+  // contributes no sample; an absent matrix or a partially missing shard set is an error.
+  const matrix = [...latest.values()].filter(job => job.name === 'node' || job.name.startsWith('node tests ('));
+  if (matrix.length && matrix.every(job => job.conclusion === 'skipped')) return { node: {} };
+  const node = {};
+  const count = JOBS.node.count;
+  for (let shard = 1; shard <= count; shard++) {
+    const name = `node tests (${shard}/${count})`;
+    const job = latest.get(name);
+    if (job?.conclusion !== 'success') throw new Error(`${name}: ${job?.conclusion ?? 'missing job'}`);
+    const log = readLog(job.id).replace(COLOUR, '');
+    const times = parseTimings(log).node ?? {};
+    const summary = /Test Files\s+(\d+) passed\b/.exec(log);
+    if (!summary || !Object.keys(times).length || Object.keys(times).length !== Number(summary[1])) {
+      throw new Error(`${name} (job ${job.id}): incomplete node file timings`);
+    }
+    for (const [file, ms] of Object.entries(times)) {
+      if (Object.hasOwn(node, file)) throw new Error(`${name}: duplicate timing for ${file}`);
+      node[file] = ms;
+    }
+  }
+  return { node };
+}
+
+function readMeasuredRun(run) {
+  const api = (...args) => {
+    try {
+      return execFileSync('gh', ['api', ...args], { encoding: 'utf8', maxBuffer: 64 << 20 });
+    } catch {
+      // A child process error can include stdout (partial job logs).
+      throw new Error(`Failed to read GitHub Actions endpoint ${args.at(-1)}`);
+    }
+  };
+  const root = 'repos/{owner}/{repo}/actions';
+  const pages = JSON.parse(api('--paginate', '--slurp', `${root}/runs/${run}/jobs?filter=all&per_page=100`));
+  return measuredNodeRun(pages.flatMap(page => page.jobs), id => api(`${root}/jobs/${id}/logs`));
+}
+
 /** Each file's median time (ms, rounded) over several runs' parsed times (`parseTimings`), by project. */
 export function medianTimings(runs) {
   const samples = {};
@@ -188,19 +234,20 @@ if (import.meta.url === `file://${process.argv[1]}` && process.argv[2] === '--ap
   const out = option(args, '--measured');
   if (args.includes('--measured') && !out) throw new Error('usage: test-timings.mjs --measured <out> (--run <id> ... | <log> ...)');
   const runs = args.flatMap((arg, i) => (args[i - 1] === '--run' ? [arg] : []));
-  const logs = runs.length
-    ? runs.map((run) => execFileSync('gh', ['run', 'view', run, '--log'], { encoding: 'utf8', maxBuffer: 1 << 30 }))
-    : args.filter((arg, i) => !['--measured', '--projects'].includes(arg) && !['--measured', '--projects'].includes(args[i - 1])).map((file) => readFileSync(file, 'utf8'));
+  const samples = runs.length
+    ? runs.map((run) => out ? readMeasuredRun(run) : parseTimings(execFileSync('gh', ['run', 'view', run, '--log'], { encoding: 'utf8', maxBuffer: 1 << 30 })))
+    : args.filter((arg, i) => !['--measured', '--projects'].includes(arg) && !['--measured', '--projects'].includes(args[i - 1])).map((file) => parseTimings(readFileSync(file, 'utf8')));
   if (out) {
-    const measured = medianTimings(logs.map(parseTimings));
+    const measured = medianTimings(samples);
     const node = nodeMeasurements(measured, (file) => existsSync(path.join(ROOT, file)), runs);
+    if (!Object.keys(node.files.node).length) throw new Error('No measured node file timings');
     write(out, node);
-    console.log(`test-timings: ${Object.keys(node.files.node).length} node file times in ${out}, each the median of ${runs.length ? `runs ${runs.join(', ')}` : `${logs.length} log(s)`}`);
+    console.log(`test-timings: ${Object.keys(node.files.node).length} node file times in ${out}, each the median of ${runs.length ? `runs ${runs.join(', ')}` : `${samples.length} log(s)`}`);
     process.exit(0);
   }
   const workflow = (run) => execFileSync('gh', ['run', 'view', run, '--json', 'workflowName', '--jq', '.workflowName'], { encoding: 'utf8' }).trim();
   const groups = new Map();
-  logs.forEach((log, i) => { const key = runs.length ? workflow(runs[i]) : 'logs'; groups.set(key, [...(groups.get(key) ?? []), parseTimings(log)]); });
+  samples.forEach((sample, i) => { const key = runs.length ? workflow(runs[i]) : 'logs'; groups.set(key, [...(groups.get(key) ?? []), sample]); });
   // `--projects`: a refresh of some projects leaves every other section as it was recorded (the node batch, chosen by its
   // recorded times, keeps its files).
   const measured = onlyProjects(steadyTimings([...groups.values()]), option(args, '--projects')?.split(','));
