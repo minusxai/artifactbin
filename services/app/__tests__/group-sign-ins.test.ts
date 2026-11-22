@@ -63,7 +63,7 @@ async function tree(host:Awaited<ReturnType<typeof composed>>){
  const root=await createGroup(ada.userId,{handle:'gs_root',name:'Root'});
  const team=await createGroup(ada.userId,{handle:'gs_team',name:'Team',parent_id:root.id});
  const squad=await createGroup(ada.userId,{handle:'gs_squad',name:'Squad',parent_id:team.id});
- await admitGroupMember(ada.userId,team.id,eve.userId,'editor');
+ await admitGroupMember(ada.userId,team.id,eve.userId,'admin');
  await admitGroupMember(ada.userId,team.id,max.userId,'member');
  await admitGroupMember(ada.userId,root.id,rob.userId,'admin');
  // Rob holds no row below Root: what he holds on Team and Squad is the inherited Admin rule alone.
@@ -73,7 +73,7 @@ async function tree(host:Awaited<ReturnType<typeof composed>>){
 
 it('obtains a group sign-in at each level a person holds, and refuses every other ask',async()=>{
  const host=await composed(),{ada,eve,max,out,root,team,squad}=await tree(host);
- // Held: an Admin (direct on Root, inherited on Team and Squad) at both levels; an Editor at both; a Member at member.
+ // Held: an Admin (direct on Root, inherited on Team and Squad) at both levels; a direct Admin at both; a Member at member.
  for(const [who,group,role] of [[ada,root,'editor'],[ada,team,'editor'],[ada,squad,'member'],[eve,team,'editor'],[eve,team,'member'],[max,team,'member']] as const){
   const issued=await host.asGroup(who.cookie,group.id,role);
   expect(issued.status,`${group.name} ${role}`).toBe(201);
@@ -84,8 +84,8 @@ it('obtains a group sign-in at each level a person holds, and refuses every othe
   // Audited as a mint for the person who authorised it, naming the group.
   await expect.poll(async()=>sql("SELECT subject_id,payload->>'group_id' AS group_id FROM events.events WHERE verb='minted' AND object_kind='token' AND object_id=$1",[issued.body!.id])).toEqual([{subject_id:who.userId,group_id:group.id}]);
  }
- // Not held: a Member asking editor, an Editor on a subgroup (Editor never flows down), someone outside, a deleted or unknown group.
- for(const [who,group,role] of [[max,team.id,'editor'],[eve,squad.id,'member'],[out,team.id,'member'],[max,root.id,'member'],[ada,'grp_nowhere','member']] as const)
+ // Not held: a Member asking editor, a Member outside its group, someone outside, a deleted or unknown group.
+ for(const [who,group,role] of [[max,team.id,'editor'],[max,squad.id,'member'],[out,team.id,'member'],[max,root.id,'member'],[ada,'grp_nowhere','member']] as const)
   expect(await host.asGroup(who.cookie,group,role),`${group} ${role}`).toEqual({status:403,body:{error:'group_level_not_held',hint:expect.any(String)}});
  // Malformed: admin is never a level, a level with no group, a group with an audience.
  expect((await host.asGroup(ada.cookie,team.id,'admin')).body).toMatchObject({error:'invalid_group_sign_in'});
@@ -147,8 +147,7 @@ it('acts as the group, not the person: introspection, the lists, and one refusal
  const listed=await host.json(await host.fetch(new Request(`${origin}/api/groups/${team.id}/sign-ins`,{headers:{cookie:ada.cookie}})));
  expect(listed.body!.sign_ins).toEqual([expect.objectContaining({id:issued.id,role:'editor',issued_by:expect.objectContaining({id:eve.userId}),live:true})]);
  expect(JSON.stringify(listed.body)).not.toContain(issued.access_token);
- // An Editor is no Admin: the group's list is refused.
- expect((await host.fetch(new Request(`${origin}/api/groups/${team.id}/sign-ins`,{headers:{cookie:eve.cookie}}))).status).toBe(403);
+ expect((await host.fetch(new Request(`${origin}/api/groups/${team.id}/sign-ins`,{headers:{cookie:eve.cookie}}))).status).toBe(200);
 });
 
 it('is live only while its rule holds: demotion, removal, deactivation, deletion and either revocation end it',async()=>{
@@ -210,7 +209,7 @@ it('refreshes as a person\'s does, re-checking the rule each time; a replay or a
  const next=(await host.asGroup(eve.cookie,team.id,'editor')).body as unknown as Grant;
  await setGroupMember(ada.userId,team.id,eve.userId,'member');
  expect(await host.refresh(next)).toEqual({status:400,body:{error:'invalid_grant',error_description:expect.any(String)}});
- await setGroupMember(ada.userId,team.id,eve.userId,'editor');
+ await setGroupMember(ada.userId,team.id,eve.userId,'admin');
  expect(await host.live(next.id)).toBe(false);
  expect((await host.refresh(next)).body).toMatchObject({error:'invalid_grant'});
 });

@@ -18,7 +18,7 @@ async function setting(){
  const owner=await mintAccountToken('mxmx_test_history_owner'),member=await mintAccountToken('mxmx_test_history_member'),stranger=await mintAccountToken('mxmx_test_history_stranger'),editor=await mintAccountToken('mxmx_test_history_editor');
  const group=await createGroup(owner.userId!,{handle:'removal_history',name:'History'});
  await admitGroupMember(owner.userId!,group.id,member.userId!,'member');
- await admitGroupMember(owner.userId!,group.id,editor.userId!,'editor');
+ await admitGroupMember(owner.userId!,group.id,editor.userId!,'admin');
  const host=await createAppHost();
  const as=(who:typeof owner)=>({credential:'bearer' as const,userId:who.userId!,tokenId:who.id});
  const call=async(who:typeof owner,path:string,method='GET',body?:unknown)=>{
@@ -40,7 +40,7 @@ it('keeps what a workload published readable by its group, through the ordinary 
  await db.query('UPDATE artifact_versions SET actor_user_id=NULL,actor_token_id=NULL WHERE artifact_id=$1',[page.id]);
  await db.query("INSERT INTO artifact_creation_operations (scope,operation_key,request_hash,artifact_id,response,response_status,response_until) VALUES ($1,$2,$3,$4,$5::jsonb,201,now())",
   ['workload:'+'f'.repeat(64),'0'.repeat(64),'e'.repeat(64),page.id,JSON.stringify({id:page.id})]);
- // Its group's member reads it and its Editor its history, as any page's; a stranger reads neither.
+ // Its group's member reads it and its Admin its history, as any page's; a stranger reads neither.
  const read=await call(member,'/api/artifacts/'+page.id);
  expect(read.status,JSON.stringify(read.body)).toBe(200);
  expect(read.body).toMatchObject({id:page.id,version:2});

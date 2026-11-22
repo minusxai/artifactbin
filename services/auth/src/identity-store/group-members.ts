@@ -87,11 +87,11 @@ export function groupMemberMethods(db: TransactionalQueryable, t: IdentityTables
         if (!(await tx.query(`SELECT id FROM ${t.users} WHERE id=$1 AND email=$2 AND kind='account'`, [userId, email])).rows.length) throw new IdentityError('verified_email_mismatch', 403);
         // Every invited group locked first (one statement, canonical order), then its invitations: each is consumed once.
         const locked = await lockGroups(tx, t, (await tx.query<{group_id: string}>(`SELECT DISTINCT group_id FROM ${t.group_invitations} WHERE email=$1`, [email])).rows.map(row => row.group_id));
-        const invitations = (await tx.query<{id: string; group_id: string; role: GroupRole}>(`SELECT i.id,i.group_id,i.role FROM ${t.group_invitations} i JOIN ${t.groups} g ON g.id=i.group_id
+        const invitations = (await tx.query<{id: string; group_id: string; role: GroupRole}>(`SELECT i.id,i.group_id,CASE i.role WHEN 'editor' THEN 'member' ELSE i.role END AS role FROM ${t.group_invitations} i JOIN ${t.groups} g ON g.id=i.group_id
           WHERE i.email=$1 AND g.deleted_at IS NULL AND g.trusted_issuer IS NULL ORDER BY i.group_id FOR UPDATE OF i`, [email])).rows.filter(invitation => locked.has(invitation.group_id));
         const changes: GroupChange[] = [];
         for (const invitation of invitations) {
-          const accepted = (await tx.query<{role:GroupRole}>(`INSERT INTO ${t.group_members} AS m (group_id,user_id,role) VALUES($1,$2,$3) ON CONFLICT(group_id,user_id) DO UPDATE SET role=CASE WHEN m.role='admin' OR EXCLUDED.role='admin' THEN 'admin' WHEN m.role='editor' OR EXCLUDED.role='editor' THEN 'editor' ELSE 'member' END RETURNING role`, [invitation.group_id, userId, invitation.role])).rows[0]!.role;
+          const accepted = (await tx.query<{role:GroupRole}>(`INSERT INTO ${t.group_members} AS m (group_id,user_id,role) VALUES($1,$2,$3) ON CONFLICT(group_id,user_id) DO UPDATE SET role=CASE WHEN m.role='admin' OR EXCLUDED.role='admin' THEN 'admin' ELSE 'member' END RETURNING role`, [invitation.group_id, userId, invitation.role])).rows[0]!.role;
           await tx.query(`DELETE FROM ${t.group_invitations} WHERE id=$1`, [invitation.id]);
           await recordChange(tx, t, changes, userId, invitation.group_id, 'joined', {role: accepted});
         }
@@ -103,7 +103,7 @@ export function groupMemberMethods(db: TransactionalQueryable, t: IdentityTables
       const email = rawEmail.trim().toLowerCase();
       return db.transaction(async tx => {
         if (!(await lockGroups(tx, t, [groupId])).has(groupId)) return {admitted: false, changes: []};
-        const invitation = (await tx.query<{role: GroupRole}>(`SELECT role FROM ${t.group_invitations} WHERE group_id=$1 AND lower(email)=$2 FOR UPDATE`, [groupId, email])).rows[0];
+        const invitation = (await tx.query<{role: GroupRole}>(`SELECT CASE role WHEN 'editor' THEN 'member' ELSE role END AS role FROM ${t.group_invitations} WHERE group_id=$1 AND lower(email)=$2 FOR UPDATE`, [groupId, email])).rows[0];
         if ((await liveGroup(tx, t, groupId))?.trusted_issuer != null) return {admitted: false, changes: []};
         const person = (await tx.query<{deployment_admission_revoked: boolean}>(`SELECT deployment_admission_revoked
           FROM ${t.users} WHERE id=$1 FOR UPDATE`, [userId])).rows[0];
@@ -114,9 +114,9 @@ export function groupMemberMethods(db: TransactionalQueryable, t: IdentityTables
           if (company?.rootId !== groupId) return {admitted: false, changes: []};
           await tx.query(`UPDATE ${t.users} SET deployment_admission_revoked=false WHERE id=$1`, [userId]);
         }
-        const previous = (await tx.query<{role: GroupRole}>(`SELECT role FROM ${t.group_members} WHERE group_id=$1 AND user_id=$2`, [groupId, userId])).rows[0]?.role ?? null;
+        const previous = (await tx.query<{role: GroupRole}>(`SELECT CASE role WHEN 'editor' THEN 'member' ELSE role END AS role FROM ${t.group_members} WHERE group_id=$1 AND user_id=$2`, [groupId, userId])).rows[0]?.role ?? null;
         if (!invitation) await insertMissingGroupMembers(tx,t,groupId,[userId]);
-        else await tx.query(`INSERT INTO ${t.group_members} AS m (group_id,user_id,role) VALUES ($1,$2,$3) ON CONFLICT (group_id,user_id) DO UPDATE SET role=CASE WHEN m.role='admin' OR EXCLUDED.role='admin' THEN 'admin' WHEN m.role='editor' OR EXCLUDED.role='editor' THEN 'editor' ELSE 'member' END`, [groupId, userId, invitation.role]);
+        else await tx.query(`INSERT INTO ${t.group_members} AS m (group_id,user_id,role) VALUES ($1,$2,$3) ON CONFLICT (group_id,user_id) DO UPDATE SET role=CASE WHEN m.role='admin' OR EXCLUDED.role='admin' THEN 'admin' ELSE 'member' END`, [groupId, userId, invitation.role]);
         if (invitation) await tx.query(`DELETE FROM ${t.group_invitations} WHERE group_id=$1 AND lower(email)=$2`, [groupId, email]);
         const changes: GroupChange[] = [];
         if (!previous || (invitation && groupRoleRank(invitation.role) > groupRoleRank(previous)))

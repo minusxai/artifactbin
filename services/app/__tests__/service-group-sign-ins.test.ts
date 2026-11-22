@@ -70,12 +70,12 @@ async function tree(host:Awaited<ReturnType<typeof composed>>){
  const team=await createGroup(ada.userId,{handle:'sg_team',name:'Team',parent_id:root.id});
  const squad=await createGroup(ada.userId,{handle:'sg_squad',name:'Squad',parent_id:team.id});
  await admitGroupMember(ada.userId,root.id,rob.userId,'admin');
- await admitGroupMember(ada.userId,team.id,eve.userId,'editor');
+ await admitGroupMember(ada.userId,team.id,eve.userId,'member');
  const page=(await host.api(eve.token,'POST','/api/artifacts',{title:'Team page',html:'<!doctype html><html><head></head><body><p>Team</p></body></html>',destination:{type:'group',id:team.id},visibility:'private'})).body!.id as string;
  return {ada,rob,eve,root,team,squad,page};
 }
 
-it('an Admin, direct or through an ancestor, approves an opted-in service at member or editor level; an Editor cannot',async()=>{
+it('an Admin, direct or through an ancestor, approves an opted-in service at member or editor level; a Member cannot',async()=>{
  const host=await composed(),{ada,rob,eve,team}=await tree(host);
  const direct=await host.approve(ada,team.id,'warehouse','editor');
  expect(direct.status,JSON.stringify(direct.body)).toBe(201);
@@ -83,7 +83,7 @@ it('an Admin, direct or through an ancestor, approves an opted-in service at mem
  expect(inherited.status).toBe(201);
  // The same approval again answers the one already there.
  expect((await host.approve(ada,team.id,'warehouse','editor')).body).toEqual(direct.body);
- // An Editor, a service that did not opt in or does not exist, and an admin level: refused, nothing written.
+ // A Member, a service that did not opt in or does not exist, and an admin level: refused, nothing written.
  expect(await host.approve(eve,team.id,'warehouse','member')).toMatchObject({status:403,body:{error:'forbidden'}});
  for(const service of ['ledger','nowhere'])expect(await host.approve(ada,team.id,service,'member')).toMatchObject({status:400,body:{error:'unknown_service'}});
  expect(await host.approve(ada,team.id,'warehouse','admin')).toMatchObject({status:400,body:{error:'invalid_role'}});
@@ -277,6 +277,7 @@ it('a service lists its own live approvals and nobody else\'s, through a route h
 
 it('shows an Admin a service\'s sign-ins as one row per approval with their count, and people\'s in full, page by page',async()=>{
  const host=await composed(),{ada,eve,team}=await tree(host);
+ await setGroupMember(ada.userId,team.id,eve.userId,'admin');
  const grant=String((await host.approve(ada,team.id,'warehouse','editor')).body!.id);
  for(let i=0;i<3;i++)expect((await host.groupSignIn(WAREHOUSE_SECRET,{grant_id:grant})).status).toBe(200);
  const people:string[]=[];

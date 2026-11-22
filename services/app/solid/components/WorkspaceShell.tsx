@@ -17,7 +17,7 @@ import { useSession } from '../lib/session';
 import './workspace.css';
 
 /** Workspace navigation owns route links and creation; pages own their content and data. */
-export default function WorkspaceShell(props: { children: JSX.Element; parentId?: string | null; onCreated?: () => void; groupId?: string; canCreate?: boolean; personal?: boolean }): JSX.Element {
+export default function WorkspaceShell(props: { children: JSX.Element; parentId?: string | null; onCreated?: () => void; groupId?: string; canCreate?: boolean; publishOnly?: boolean; personal?: boolean }): JSX.Element {
   const location = useLocation();
   const [navigationOpen, setNavigationOpen] = createSignal(false);
   const inbox = useOptionalInbox();
@@ -36,7 +36,7 @@ export default function WorkspaceShell(props: { children: JSX.Element; parentId?
   return <div class="workspace-shell">
     <nav aria-label="Workspace" class="workspace-nav" data-expanded={navigationOpen()}>
       <div class="workspace-nav-top">
-      <Show when={props.canCreate !== false}><WorkspaceCreate parentId={props.parentId} groupId={props.groupId} personal={props.personal} onCreated={props.onCreated ?? pageDataChanged} /></Show>
+      <Show when={props.canCreate !== false}><WorkspaceCreate parentId={props.parentId} groupId={props.groupId} publishOnly={props.publishOnly} personal={props.personal} onCreated={props.onCreated ?? pageDataChanged} /></Show>
       <Button variant="secondary" class="workspace-mobile-toggle" aria-label="Toggle navigation" aria-controls="workspace-navigation" aria-expanded={navigationOpen()} onClick={()=>setNavigationOpen(open=>!open)}><Show when={navigationOpen()} fallback={<Menu size={18}/>}><X size={18}/></Show><span>Navigation</span></Button></div>
       <div id="workspace-navigation" class="workspace-navigation">
       <p class="workspace-nav-label">Workspace</p>

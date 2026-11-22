@@ -8,7 +8,8 @@ import { GroupManagement, GroupSettingsPage } from '../Group';
 import { stubFetch } from '@/test/helpers/fetch-stub';
 const detail = {group:{id:'g1',handle:'team',name:'Team',description:'',role:'admin' as const},members:[{user_id:'u1',username:'alice',name:'Alice',role:'admin' as const}],linked_groups:[],invitations:[],parent:null,subgroups:[],subgroup_audience:[]};
 afterEach(()=>{cleanup();vi.unstubAllGlobals();});
-it.each(['member','editor'] as const)('%s can search people without management controls',(role)=>{
+it('a member can search people without management controls',()=>{
+ const role='member';
  vi.stubGlobal('fetch',vi.fn(async()=>Response.json({members:[]})));
  render(()=> <GroupManagement detail={{...detail,group:{...detail.group,role}}} refresh={()=>{}} />);
  expect(screen.getByRole('link',{name:'Alice'})).toHaveAttribute('href','/@alice');
@@ -114,7 +115,7 @@ it('shows an Admin the agents signed in as the group, with level and who signed 
  view.unmount();
  const quiet=vi.fn(async()=>Response.json({sign_ins:[]}));
  vi.stubGlobal('fetch',quiet);
- for(const role of ['member','editor'] as const){
+ for(const role of ['member'] as const){
   const other=render(()=> <GroupSignIns group={{id:'g1',name:'Team',role}}/>);
   expect(other.queryByRole('region',{name:'Agents signed in as this group'})).toBeNull();
   other.unmount();
@@ -172,7 +173,7 @@ it('shows an Admin the services approved to act as the group, says plainly what 
  view.unmount();
  const quiet=vi.fn(async()=>Response.json({approvals:[],services:[]}));
  vi.stubGlobal('fetch',quiet);
- const other=render(()=> <GroupServiceSignIns group={{id:'g1',name:'Team',role:'editor'}}/>);
+ const other=render(()=> <GroupServiceSignIns group={{id:'g1',name:'Team',role:'member'}}/>);
  expect(other.queryByRole('region',{name:'Services that may act as this group'})).toBeNull();
  expect(quiet).not.toHaveBeenCalled();
 });

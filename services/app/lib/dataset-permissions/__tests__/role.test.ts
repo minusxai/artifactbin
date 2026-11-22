@@ -78,7 +78,7 @@ describe('datasetRole (the dataset sharing, read through access facts)', () => {
   it.each<[string, Partial<DatasetRoleRow>, Parameters<typeof fakeFacts>[0], string, string]>([
     ['a named editor', {}, { named: 'editor' }, 'editor', 'editor'],
     ['an editor link', { link_role: 'editor' }, {}, 'editor', 'signed_in'],
-    ['a group editor', { group_id: 'g1' }, { group: 'editor' }, 'editor', 'editor'],
+    ['a group member', { group_id: 'g1' }, { group: 'member' }, 'viewer', 'viewer'],
     ['a viewer link', { link_role: 'viewer' }, {}, 'signed_in', 'signed_in'],
   ])('%s: stored and live', async (_who, over, held, stored, live) => {
     expect(await datasetRole(row(over), user('reader'), { facts: fakeFacts(held) }), 'stored').toBe(stored);

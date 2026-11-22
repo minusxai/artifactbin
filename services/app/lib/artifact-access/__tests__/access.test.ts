@@ -154,8 +154,8 @@ describe('the rule\'s parts', () => {
     expect(await where(policyReaderSql('$2', '$3'), [stranger.userId, null])).toBe(false);
     const group = await createGroup(owner.userId, { handle: 'parts_team', name: 'Parts' });
     const team = await mine(owner, 'Team', { destination: { type: 'group', id: group.id } });
-    const member = async (user: string, role?: 'editor') => (await sql('SELECT id FROM artifacts WHERE id=$1 AND ' + groupMemberPredicate('$2', role), [team.id, user])).length === 1;
-    expect([await member(owner.userId, 'editor'), await member(stranger.userId)]).toEqual([true, false]);
+    const member = async (user: string, role?: 'admin') => (await sql('SELECT id FROM artifacts WHERE id=$1 AND ' + groupMemberPredicate('$2', role), [team.id, user])).length === 1;
+    expect([await member(owner.userId, 'admin'), await member(stranger.userId)]).toEqual([true, false]);
   });
 });
 

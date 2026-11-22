@@ -83,7 +83,7 @@ CREATE OR REPLACE VIEW identity.tokens AS
       AND t.group_role IN ('member','editor') AND EXISTS (SELECT 1 FROM auth.groups signed_group WHERE signed_group.id=t.group_id AND signed_group.deleted_at IS NULL)
       AND CASE WHEN t.grant_id IS NULL THEN COALESCE((SELECT issuer.active AND issuer.kind = 'account' AND NOT issuer.test_account FROM identity.users issuer WHERE issuer.id = t.issued_by), false) AND (t.group_role IN ('member','editor') AND (EXISTS (
     SELECT 1 FROM auth.group_members held JOIN auth.groups held_group ON held_group.id=held.group_id AND held_group.deleted_at IS NULL
-    WHERE held.group_id=t.group_id AND held.user_id=t.issued_by AND (held.role='admin' OR held.role=t.group_role OR (held.role='editor' AND t.group_role='member')))
+    WHERE held.group_id=t.group_id AND held.user_id=t.issued_by AND (held.role='admin' OR (t.group_role='member' AND held.role IN ('member','editor'))))
   OR EXISTS (SELECT 1 FROM (SELECT g.id AS group_id, a.user_id, a.via_group_id FROM auth.groups g CROSS JOIN LATERAL (
     WITH RECURSIVE up(id, depth) AS (SELECT g.id, 0 UNION ALL SELECT p.id, up.depth+1 FROM up JOIN auth.groups c ON c.id=up.id JOIN auth.groups p ON p.id=c.parent_id WHERE p.deleted_at IS NULL AND up.depth<10000)
     SELECT DISTINCT ON (m.user_id) m.user_id, up.id AS via_group_id FROM up JOIN auth.group_members m ON m.group_id=up.id AND m.role='admin' ORDER BY m.user_id, up.depth) a

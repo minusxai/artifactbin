@@ -7,7 +7,7 @@ import type {HtmlDatasetLink, HtmlDefaultConnectionLink, HtmlLiveDatasetLink, Ht
 import { completeMutationReceipt, type MutationReceipt, type MutationReply } from './mutation-receipt';
 import { canonicalizeHtmlPage, type HtmlIdentityLedger } from '../html-page';
 import {scriptFingerprint} from '../html-autofix';
-import {assertOwnerPlacement,assertDestination,newArtifactDestination} from './ownership';
+import {assertOwnerPlacement,assertDestination,newArtifactDestination,permitsMemberPage} from './ownership';
 import { identityForUser, type AccessActor } from '@/lib/accounts';
 import { groupAdminSql } from '@/lib/groups';
 import type {ArtifactDestination} from '@artifactbin/contracts/groups';
@@ -127,7 +127,7 @@ export async function artifactQuotaExceeded(tokenId: string, creating = 1): Prom
 }
 
 /** First owning report attachment freezes unresolved memberOf scopes atomically. */
-async function bindCurrentUserScopes(tx:Queryable,document:ArtifactRow):Promise<void> {
+async function bindCurrentUserScopes(tx:Queryable,document:ArtifactRow,memberPublication=false):Promise<void> {
  if(document.format!=='html')return;
  const bindings=(document.meta.htmlLinks??[]) as readonly HtmlPageLink[];
  const refs=document.format==='html'?bindings.filter((link):link is HtmlDatasetLink=>link.kind==='dataset'&&link.mode==='live').map(link=>({id:link.datasetId})):(document.meta.refs as Array<{id:string}>|undefined)??[];
@@ -136,7 +136,7 @@ async function bindCurrentUserScopes(tx:Queryable,document:ArtifactRow):Promise<
   const dataset=(await artifactQuery<ArtifactRow>(tx,"SELECT * FROM artifacts WHERE id=$1 AND format='dataset' AND deleted_at IS NULL FOR UPDATE",[ref.id])).rows[0];
   const catalog=dataset?catalogOf(dataset):null;
   if(!dataset||!catalog||!catalog.tables.some(t=>t.columns.some(c=>c.constraints?.memberOf?.includes('current'))))continue;
-  if(document.group_id ? dataset.group_id!==document.group_id : dataset.group_id || (document.user_id ? dataset.user_id!==document.user_id : dataset.token_id!==document.token_id))throw new DatasetError('Only the dataset owner can bind memberOf current to a report',403);
+  if(memberPublication || (document.group_id ? dataset.group_id!==document.group_id : dataset.group_id || (document.user_id ? dataset.user_id!==document.user_id : dataset.token_id!==document.token_id)))throw new DatasetError('Only the dataset owner can bind memberOf current to a report',403);
   const columns=(cs:DatasetColumn[])=>resolveUserColumnScope(cs,document.id);
   const bound={...catalog,tables:catalog.tables.map(t=>({...t,columns:columns(t.columns)}))};
   const source=resolveDefinitionScope(dataset.source,document.id)??null;
@@ -177,10 +177,11 @@ export async function createArtifact(
    */
   atCreation: { liveConnection?: LiveConnectionInsert; seedOwnerParticipation?:boolean; reservedId?:string; forkedFrom?: string; linkRole?: ShareRole | null; operation?: CreationOperation | null; shares?:ShareEntry[]; datasetPolicy?: { policy: unknown; revision: number }; tx?: Queryable; persistPrepared?:()=>Promise<unknown>;
     /** A GROUP's sign-in creating (lib/accounts `GroupPrincipal`): `tokenId` is its sign-in's row, `userId` null. */
+    pagePublication?: {explicitGroup:boolean;hasShares:boolean;asGroupOwner:boolean;bundleDependency?:boolean};
     principalActor?: AccessActor } = {},
 ): Promise<ArtifactRow> {
   if (!userId && !tokenId) throw new Error("Artifact creation requires a user or token");
-  const destination=atCreation.tx ? (input.destination??{type:'personal'} as const) : await newArtifactDestination(atCreation.principalActor??identityForUser(userId,tokenId),input.destination,input.ancestor_ids?.at(-1));
+  const destination=atCreation.tx ? (input.destination??{type:'personal'} as const) : await newArtifactDestination(atCreation.principalActor??identityForUser(userId,tokenId),input.destination,input.ancestor_ids?.at(-1),memberPagePublication(input,atCreation));
   input={...input,destination};
   if(input.format==='html'&&input.source){
     const page=normalizeNewHtmlPage(input.source);
@@ -225,6 +226,14 @@ export async function afterCreated(row: ArtifactRow, userId: string | null): Pro
   await notifyParent(parentOf(row));
 }
 
+function memberPagePublication(input:ArtifactInput,options:NonNullable<Parameters<typeof createArtifact>[3]>):boolean {
+ const publication=options.pagePublication;
+ return !!publication && !publication.asGroupOwner && permitsMemberPage({
+  format:input.format,visibility:input.visibility,explicitGroup:publication.explicitGroup,
+  shares:publication.hasShares||options.shares?.length ? true : undefined,linkRole:options.linkRole,bundleDependency:publication.bundleDependency,
+ });
+}
+
 /** The creation itself: every row one artifact is born with, and nothing outside the transaction. */
 async function insertArtifact(
   tx: Queryable,
@@ -242,7 +251,7 @@ async function insertArtifact(
   const creator = atCreation.principalActor??identityForUser(userId, tokenId);
   const actorGroupId = creator.principalGroup?.id ?? null;
   await assertOwnerPlacement(tx,{...creator,groupId:input.destination?.type==='group'?input.destination.id:null},input.ancestor_ids??[]);
-  await assertDestination(tx,creator,input.destination??{type:'personal'});
+  const memberPublication=await assertDestination(tx,creator,input.destination??{type:'personal'},memberPagePublication(input,atCreation));
   if (atCreation.operation) await reserveCreation(tx,atCreation.operation);
   await claimArtifactId(tx,id,creator,!!atCreation.reservedId);
   // A FORK carries its source's rows verbatim — a snapshot the forker may read,
@@ -326,7 +335,7 @@ async function insertArtifact(
   ],
   );
   Object.assign(created.rows[0],await writeShares(tx,id,atCreation.shares??[],created.rows[0].sharing_revision??0));
-  await bindCurrentUserScopes(tx,created.rows[0]);
+  await bindCurrentUserScopes(tx,created.rows[0],memberPublication);
   // A live dataset's connection is born with it, in this transaction: its secret fields sealed to this dataset's ID.
   if (atCreation.liveConnection) await tx.query('INSERT INTO dataset_connections (dataset_id, config, sealed) VALUES ($1, $2::jsonb, $3)', [id, JSON.stringify(atCreation.liveConnection.config), atCreation.liveConnection.seal(id)]);
   if(atCreation.seedOwnerParticipation!==false&&input.format==='html'&&userId)await seedOwnerJoin(tx,id,userId);

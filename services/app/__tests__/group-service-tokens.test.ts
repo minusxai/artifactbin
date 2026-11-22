@@ -78,7 +78,7 @@ async function tree(host:Host){
  const root=await createGroup(ada.userId,{handle:'gst_root',name:'Root'});
  const team=await createGroup(ada.userId,{handle:'gst_team',name:'Team',parent_id:root.id});
  const squad=await createGroup(ada.userId,{handle:'gst_squad',name:'Squad',parent_id:team.id});
- await admitGroupMember(ada.userId,team.id,eve.userId,'editor');
+ await admitGroupMember(ada.userId,team.id,eve.userId,'admin');
  return {ada,eve,root,team,squad};
 }
 const groupAnswer=(group:string,role:string,issuedBy:string,parent:string,audience=WAREHOUSE,userId:string|null=null)=>({active:true,principal_kind:'group',user_id:userId,token_id:expect.stringMatching(/^vtk_/),scopes:[],audience,expires_at:expect.any(String),parent:{kind:'token',id:parent},group_id:group,group_role:role,issued_by:issuedBy});
@@ -284,6 +284,7 @@ it('the skill\'s own helper exchanges a group\'s sign-in as it does a person\'s:
 
 it('narrows a personal service token to a Member run sign-in under its original parent',async()=>{
  const host=await composed(),{ada,eve,team,squad}=await tree(host);
+ await setGroupMember(ada.userId,team.id,eve.userId,'member');
  const token=await host.serviceTokenOf(eve.grant.access_token);
  const run=(body:Record<string,unknown>,secret=SECRETS.warehouse)=>host.send('POST',RUN_SIGN_IN_PATH,{[SERVICE_AUTH_HEADER]:secret},{token,...body});
  const scope={group_id:team.id,group_role:'member'};

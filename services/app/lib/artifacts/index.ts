@@ -58,7 +58,7 @@ export { UnservableDocument, refusingUnservable, servableDocument, unservable } 
 export { VERSION_PARAM, archivedVersionFor, archivedVersionForActor, servedRow } from './archived-version';
 
 /** Independent ownership destinations and atomic ownership transfer. */
-export {parseArtifactDestination,newArtifactDestination,ArtifactParentRefusal,GroupPersonalDestination} from './ownership';
+export {parseArtifactDestination,newArtifactDestination,permitsMemberPage,ArtifactParentRefusal,GroupPersonalDestination} from './ownership';
 export {transferArtifact} from './transfer';
 
 /**

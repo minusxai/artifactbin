@@ -2,13 +2,14 @@ import {ArtifactParentRefusal,PARENT_REFUSED} from '@/lib/artifacts';
 import {LiveRegionRefusal} from '@/lib/live-regions';
 import {documentOwner,type UserPagesOwner} from '@/lib/user-pages';
 import {preparePublicationBundle,type CreationKeys} from './bundle';
-import { getSharingFor, durableMutation, type MutationReceipt, type MutationReply, parseArtifactDestination, newArtifactDestination, type ArtifactInput, artifactQuotaExceeded, groupArtifactQuotaExceeded, publisherByteQuota, GroupPersonalDestination, type ArtifactRow, byteQuotaFor, canReadArtifact, createArtifact, creationOperation, CreationReplay, findDependentsFor, getArtifactById, getArtifactFor, getOwnedArtifactFor, isVersionConflict, lookupCreation, observedChange, versionConflict, refLoaderForActor, replaceArtifactFor, setMetadataFor } from '@/lib/artifacts';
+import { getSharingFor, durableMutation, type MutationReceipt, type MutationReply, parseArtifactDestination, newArtifactDestination, permitsMemberPage, type ArtifactInput, artifactQuotaExceeded, groupArtifactQuotaExceeded, publisherByteQuota, GroupPersonalDestination, type ArtifactRow, byteQuotaFor, canReadArtifact, createArtifact, creationOperation, CreationReplay, findDependentsFor, getArtifactById, getArtifactFor, getOwnedArtifactFor, isVersionConflict, lookupCreation, observedChange, versionConflict, refLoaderForActor, replaceArtifactFor, setMetadataFor } from '@/lib/artifacts';
 import { ownsArtifact, writerFor } from '@/lib/artifact-access';
 import { committedOpenAnnotations, createdArtifactWire, parseAccessValue, parseExpectedVersion, parseLinkRoleValue, parseParentField, parseShareEntries, parseSharingRevision, parseVisibilityValue, placementFor, replacedArtifactWire } from '@/lib/artifact-wire';
 import {htmlAssetLinks, htmlPageDeclarations} from '@/lib/html-page';
 import { trackEvent } from '@/lib/analytics';
 import {authorizeDatasetBinding,DatasetBindingUnsupportedError} from '@/lib/dataset-access';
 import type {HtmlDatasetLink, HtmlDeclaredQuery, HtmlDefaultConnectionLink, HtmlLiveDatasetLink} from '@artifactbin/contracts/html-page';
+import {getGroupRole} from '@/lib/groups';
 import {hasDefaultConnection} from '@/lib/connections';
 import {LiveDatasetRefusal,livePageDeclarations,prepareLiveDataset,withoutSecrets} from '@/lib/live-datasets';
 import {liveConnectionOf} from '@/lib/datasets';
@@ -299,7 +300,13 @@ export async function replaceArtifactWithBody(
 export async function createArtifactFromBody(body:Record<string,unknown>,actor:PublicationActor,base:string,request?:Request,options:{dryRun?:boolean}={}):Promise<Reply>{
  if(options.dryRun&&body.publicationBundle!==undefined)return reply({error:'bundle_preflight_requires_dependency_plan'},400);
  const keys=creationKeys(request);
- const bundled=await preparePublicationBundle(body,actor,base,keys,(dependency,dependencyKeys)=>createArtifactFromBodyPrepared(dependency,actor,base,dependencyKeys),(dependencyId,input,key)=>updateBundleDependency(actor,base,dependencyId,input,key));
+ // Only files attached to an explicitly targeted new HTML page use its publication allowance.
+ // The dependency callback is internal and each dependency rechecks the same destination.
+ const bundleDestination=body.destination as {type?:unknown}|undefined;
+ const memberBundle=typeof body.html==='string' && bundleDestination?.type==='group'
+   && body.shares===undefined && (body.linkRole===undefined || body.linkRole==='viewer')
+   && (body.visibility===undefined || ['private','unlisted','public'].includes(String(body.visibility)));
+ const bundled=await preparePublicationBundle(body,actor,base,keys,(dependency,dependencyKeys)=>createArtifactFromBodyPrepared(dependency,actor,base,dependencyKeys,{bundleDependency:memberBundle}),(dependencyId,input,key)=>updateBundleDependency(actor,base,dependencyId,input,key));
  if(bundled instanceof Reply)return bundled;
 
  const created=await createArtifactFromBodyPrepared(bundled.body,actor,base,keys,{...options,bundleReceipts:bundled.receipts,bundleEntryPath:bundled.entryPath});
@@ -312,7 +319,7 @@ async function createArtifactFromBodyPrepared(
   actor: PublicationActor,
   base: string,
   keys: CreationKeys = {},
-  options: {dryRun?:boolean;bundleReceipts?:unknown[];bundleEntryPath?:string} = {},
+  options: {dryRun?:boolean;bundleReceipts?:unknown[];bundleEntryPath?:string;bundleDependency?:boolean} = {},
 ): Promise<Reply> {
   let destination;
   try{destination=parseArtifactDestination(body.destination);}catch(error){if(error instanceof DatasetError)return reply({error:'invalid_destination',details:[error.message]},error.status);throw error;}
@@ -355,15 +362,22 @@ async function createArtifactFromBodyPrepared(
   // here: the parent is the only row being read, and it must be the caller's
   // own folder or this is the one refusal.
   // Resolve and authorize the destination before looking up its folder namespace.
-  // A direct group Editor may publish there without owning the group personally.
-  try{destination=await newArtifactDestination(actor,destination,parent);}catch(error){if(error instanceof ArtifactParentRefusal)return reply(PARENT_REFUSED,400);if(error instanceof GroupPersonalDestination)return reply({error:'group_principal_personal_refused',details:[error.message]},403);if(error instanceof DatasetError)return reply({error:'invalid_destination',details:[error.message]},error.status);throw error;}
+  const visibility = parseVisibility(body, !!actor.userId||!!actor.principalGroup);
+  if (visibility instanceof Reply) return visibility;
+  const explicitGroup=destination?.type==='group';
+  const pagePublication={explicitGroup,hasShares:body.shares!==undefined,asGroupOwner:false,bundleDependency:options.bundleDependency};
+  const mayPublishPage=permitsMemberPage({format:typeof body.html==='string'?'html':body.dataset!==undefined?'dataset':body.file!==undefined?'file':undefined,visibility,explicitGroup,shares:body.shares,linkRole:link,bundleDependency:options.bundleDependency});
+  try{destination=await newArtifactDestination(actor,destination,parent,mayPublishPage);}catch(error){if(error instanceof ArtifactParentRefusal)return reply(PARENT_REFUSED,400);if(error instanceof GroupPersonalDestination)return reply({error:'group_principal_personal_refused',details:[error.message]},403);if(error instanceof DatasetError)return reply({error:'invalid_destination',details:[error.message]},error.status);throw error;}
   const placementOwner = destination.type==='group' ? {...identityForUser(actor.userId,actor.tokenId),groupId:destination.id} : actor;
   const placement = (await placementFor(placementOwner, parent, null)) ?? { ancestor_ids: [] };
   if (placement instanceof Reply) return placement;
   receiptOwner = await documentOwner({user_id:actor.userId,group_id:destination?.type==='group'?destination.id:null});
   // A group publishes as the group: the creating token, no account, the group as owner (never the actor's grant).
   // A group's sign-in resolves what it publishes as itself, by its own rule (never as the group's owner).
-  const publicationActor:AccessActor=actor.principalGroup?actor:destination.type==='group'?{...identityForUser(null,actor.tokenId),groupId:destination.id}:actor;
+  const groupId=destination.type==='group'?destination.id:null;
+  const asGroupOwner=!!groupId && !actor.principalGroup && await getGroupRole(actor.userId,groupId)==='admin';
+  pagePublication.asGroupOwner=asGroupOwner;
+  const publicationActor:AccessActor=asGroupOwner?{...identityForUser(null,actor.tokenId),groupId}:actor;
   const sentMarkup=body.markup;
   const prepared: PreparedContent | Reply = live ? {content:live.content,objects:[]} : await prepareContentInput(body, {
     creating: true,
@@ -372,9 +386,7 @@ async function createArtifactFromBodyPrepared(
     overByteQuota: publisherByteQuota(actor),
   }, {allowRemoteInputs:!options.dryRun&&!actor.principalGroup});
   if (prepared instanceof Reply) return prepared;
-  let parsed = prepared.content;
-  const visibility = parseVisibility(body, !!actor.userId||!!actor.principalGroup);
-  if (visibility instanceof Reply) return visibility;
+  const parsed = prepared.content;
   const access = parseAccessField(body, parsed.format);
   if (access instanceof Reply) return access;
 
@@ -396,7 +408,7 @@ async function createArtifactFromBodyPrepared(
     ...(access ? { access } : {}),
     ancestor_ids: placement.ancestor_ids,
     destination,
-  }, {persistPrepared,...(actor.principalGroup?{principalActor:actor}:{}),...(live?{liveConnection:live.connection}:{}),reservedId:body.reserved_id as string|undefined,operation,shares,...(link?{linkRole:link}:{}),...(forkedFrom?{forkedFrom}:{})}));}catch(error){if(error instanceof LiveRegionRefusal)return reply({error:error.code,details:error.details},409);if(error instanceof CreationReplay)return reply(error.reply.body,error.reply.status);if(error instanceof DatasetError)return reply({error:'dataset_error',details:[error.message]},error.status);throw error;}
+  }, {persistPrepared,pagePublication,...(actor.principalGroup?{principalActor:actor}:{}),...(live?{liveConnection:live.connection}:{}),reservedId:body.reserved_id as string|undefined,operation,shares,...(link?{linkRole:link}:{}),...(forkedFrom?{forkedFrom}:{})}));}catch(error){if(error instanceof LiveRegionRefusal)return reply({error:error.code,details:error.details},409);if(error instanceof CreationReplay)return reply(error.reply.body,error.reply.status);if(error instanceof DatasetError)return reply({error:'dataset_error',details:[error.message]},error.status);throw error;}
   return reply(responseBody(row), 201);
 }
 

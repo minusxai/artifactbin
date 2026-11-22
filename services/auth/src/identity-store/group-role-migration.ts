@@ -20,6 +20,9 @@ export async function initializeGroupRoleModel(db:Queryable,schema:string):Promi
  const rows=(await db.query(`SELECT 1 FROM ${t.group_members} UNION ALL SELECT 1 FROM ${t.group_invitations} LIMIT 1`)).rows;
  if(!rows.length)await db.query(`INSERT INTO ${t.group_hierarchy}(id,revision,role_model_version) VALUES('installation',0,2) ON CONFLICT(id) DO UPDATE SET role_model_version=2 WHERE ${t.group_hierarchy}.role_model_version=1`);
  await assertGroupRoleModel(db,schema);
+ // Version 2 readers already understand Member. Keep the view and version stable during rolling upgrades.
+ await db.query(`UPDATE ${t.group_members} SET role='member' WHERE role='editor'`);
+ await db.query(`UPDATE ${t.group_invitations} SET role='member' WHERE role='editor'`);
 }
 
 /** All old editors become Admins and all old viewers become Members, invitations included, exactly once. */

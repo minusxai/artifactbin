@@ -63,7 +63,7 @@ export const groupAdminsSql = (names: GroupNames): string => `SELECT g.id AS gro
  */
 export const groupLevelHeldSql = (names: GroupNames, user: string, group: string, level: string): string => `(${level} IN ('member','editor') AND (EXISTS (
     SELECT 1 FROM ${names.group_members} held JOIN ${names.groups} held_group ON held_group.id=held.group_id AND held_group.deleted_at IS NULL
-    WHERE held.group_id=${group} AND held.user_id=${user} AND (held.role='admin' OR held.role=${level} OR (held.role='editor' AND ${level}='member')))
+    WHERE held.group_id=${group} AND held.user_id=${user} AND (held.role='admin' OR (${level}='member' AND held.role IN ('member','editor'))))
   OR EXISTS (SELECT 1 FROM (${groupAdminsSql(names)}) held_admin WHERE held_admin.group_id=${group} AND held_admin.user_id=${user})))`;
 
 /**

@@ -1,7 +1,5 @@
 /**
- * THE RULE FOR A GROUP'S SIGN-IN (lib/accounts `GroupPrincipal`), in both languages: on every page, its role is exactly
- * the role of its TWIN, a person whose only relationship to anything is a direct membership of the group at the same
- * level; and every decision source agrees on it (the JavaScript rule over live, preloaded and transaction facts,
+ * THE RULE FOR A GROUP'S SIGN-IN (lib/accounts `GroupPrincipal`), in both languages: on every page, a Member sign-in has the role of a direct Member. An Editor-level sign-in can edit its group's pages. and every decision source agrees on it (the JavaScript rule over live, preloaded and transaction facts,
  * `readThrough`, and the SQL scopes), with no ownership ever. Root > Team > Squad; the principal is Team's.
  */
 import {it,expect} from 'vitest';
@@ -26,7 +24,7 @@ async function principalRole(id:string,actor:AccessActor,twin?:Account):Promise<
  expect(await db.transaction(tx=>effectiveRole(row,actor,transactionAccessFacts(actor,tx))),'transaction').toBe(live);
  expect(await readThrough(db,row,actor),'readThrough').toBe(live!=='none');
  expect(await admitted(reactionScope(actor),id),'sql viewer').toBe(live!=='none');
- if(twin)expect(await admitted(commentMonitorScope(actor),id),'sql comment monitor').toBe(await admitted(commentMonitorScope(twin),id));
+ if(twin&&actor.principalGroup?.role==='member')expect(await admitted(commentMonitorScope(actor),id),'sql comment monitor').toBe(await admitted(commentMonitorScope(twin),id));
  expect(await admitted(annotationScope(actor),id),'sql commenter').toBe(reaches(live,'commenter'));
  expect(await admitted(editorScope(actor),id),'sql editor').toBe(reaches(live,'editor'));
  expect(await admitted(ownerScope(actor),id),'sql owner').toBe(false);
@@ -60,15 +58,15 @@ async function tree(){
 }
 const principal=(group:string,role:'member'|'editor'):AccessActor=>({userId:null,tokenId:null,email:null,documentEditor:false,principalGroup:{id:group,role,tokenId:'tok_group_sign_in',issuedBy:'usr_someone'}});
 
-it('holds exactly its twin\'s role on every page, at both levels, and every source agrees',async()=>{
+it('agrees with an ordinary Member except for the scoped Editor grant',async()=>{
  const t=await tree();
  for(const role of ['member','editor'] as const){
   const twin:Account=await account(`mxmx_test_gp_twin_${role}@example.com`);
-  await admitGroupMember(t.admin.userId,t.team.id,twin.userId,role);
+  await admitGroupMember(t.admin.userId,t.team.id,twin.userId,'member');
   const actor=principal(t.team.id,role);
   for(const [name,id] of Object.entries(t.pages)){
    const expected=await effectiveRole(await head(id),twin);
-   expect(await principalRole(id,actor,twin),`${role} ${name}`).toBe(expected==='owner'?'none':expected);
+   expect(await principalRole(id,actor,twin),`${role} ${name}`).toBe(role==='editor'&&['team','teamPublic'].includes(name)?'editor':expected);
   }
   // What that means, spelled out for the editor: its group's pages to edit, its ancestor's to read, nothing below it.
   if(role==='editor'){
@@ -104,14 +102,15 @@ it('uses a page\'s actions exactly when its twin may: the twin asks to join, and
  const outcomes:Record<string,boolean>={};
  for(const role of ['member','editor'] as const){
   const twin:Account=await account(`mxmx_test_gp_act_${role}@example.com`);
-  await admitGroupMember(t.admin.userId,t.team.id,twin.userId,role);
+  await admitGroupMember(t.admin.userId,t.team.id,twin.userId,'member');
   const actor=principal(t.team.id,role);
   for(const [name,id] of Object.entries(t.pages)){
    // The twin's own way in: it asks to join; whether that is accepted without an owner or editor is what it may do.
    await changeMembership(twin,id,{action:'join'}).catch(()=>null);
    const twinMay=await mayAct(twin,id);
-   expect(await mayAct(actor,id),`${role} ${name}`).toBe(twinMay);
-   outcomes[`${role} ${name}`]=twinMay;
+   const agentMay=await mayAct(actor,id);
+   expect(agentMay,`${role} ${name}`).toBe(role==='editor'&&['team','teamPublic'].includes(name)||twinMay);
+   outcomes[`${role} ${name}`]=agentMay;
   }
  }
  // Spelled out: a member's join of its group's page, or of a page shared with it to comment, waits for approval.

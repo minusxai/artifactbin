@@ -1,11 +1,12 @@
 /** Normal publication, saved reader and dependency delivery without migration staging. */
 import {it,expect,vi} from 'vitest';
 import {createHash} from 'node:crypto';
-import {useAppHarness,mintAccountToken,request,params} from './harness';
+import {useAppHarness,mintAccountToken,request,params,admitGroupMember} from './harness';
 import {POST} from '@/app/api/artifacts/route';
 import {GET as raw} from '@/app/a/[id]/raw/route';
 import {GET as asset} from '@/app/a/[id]/assets/route';
 import {identityForUser} from '@/lib/accounts';
+import {createGroup} from '@/lib/groups';
 import {getDb} from '@/lib/platform';
 import {readHtmlPage} from '@/lib/html-publication';
 vi.mock('@/lib/platform/config',async importOriginal=>{
@@ -57,4 +58,19 @@ it('publishes a large PDF through its native tier and serves its exact bytes und
  const url=`/a/${page.id}/assets?dependency=${pdf.id}&revision=1&version=1`;
  expect((await asset(request(url,{token:other.token}),context)).status).toBe(404);
  const served=await asset(request(url,{token:owner.token}),context);expect(served.status).toBe(200);expect(served.headers.get('content-type')).toContain('application/pdf');expect(sha(new Uint8Array(await served.arrayBuffer()))).toBe(sha(bytes));
+});
+
+it('allows a Member to publish a private page with its bundle and retains group ownership',async()=>{
+ const admin=await mintAccountToken('mxmx_test_bundle_admin'),member=await mintAccountToken('mxmx_test_bundle_member');
+ const group=await createGroup(admin.userId!,{handle:'bundle_group',name:'Bundle group'});
+ await admitGroupMember(admin.userId!,group.id,member.userId!,'member');
+ const response=await POST(request('/api/artifacts',{method:'POST',token:member.token,headers:{'Idempotency-Key':'html_member_bundle_0001'},json:{html,visibility:'private',destination:{type:'group',id:group.id},publicationBundle:bundle()}}));
+ const saved=await response.json();
+ expect(response.status,JSON.stringify(saved)).toBe(201);
+ expect(saved.dependencyReceipts).toHaveLength(5);
+ const ids=[saved.id,...saved.dependencyReceipts.map((dependency:{id:string})=>dependency.id)];
+ const db=await getDb();
+ expect((await db.query('SELECT DISTINCT group_id,user_id,creator_user_id,visibility FROM artifacts WHERE id=ANY($1)',[ids])).rows)
+  .toEqual([{group_id:group.id,user_id:null,creator_user_id:member.userId,visibility:'private'}]);
+ expect((await raw(request('/a/'+saved.id+'/raw'),params(saved.id))).status).toBe(404);
 });

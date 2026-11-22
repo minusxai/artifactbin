@@ -26,7 +26,7 @@ export async function effectiveAdminGroupIds(q: Queryable, t: IdentityTables, us
 
 /** `userId`'s direct role in live `groupId`, or null. */
 export const memberRole = async (q: Queryable, t: IdentityTables, userId: string, groupId: string): Promise<GroupRole | null> =>
-  (await q.query<{role: GroupRole}>(`SELECT m.role FROM ${t.group_members} m JOIN ${t.groups} g ON g.id=m.group_id WHERE m.group_id=$1 AND m.user_id=$2 AND g.deleted_at IS NULL`, [groupId, userId])).rows[0]?.role ?? null;
+  (await q.query<{role: GroupRole}>(`SELECT CASE m.role WHEN 'editor' THEN 'member' ELSE m.role END AS role FROM ${t.group_members} m JOIN ${t.groups} g ON g.id=m.group_id WHERE m.group_id=$1 AND m.user_id=$2 AND g.deleted_at IS NULL`, [groupId, userId])).rows[0]?.role ?? null;
 export const liveGroup = async (q: Queryable, t: IdentityTables, id: string): Promise<GroupRow | null> =>
   (await q.query<GroupRow>(`SELECT * FROM ${t.groups} WHERE id=$1 AND deleted_at IS NULL`, [id])).rows[0] ?? null;
 export const isTestAccount = async (q: Queryable, t: IdentityTables, userId: string) =>
