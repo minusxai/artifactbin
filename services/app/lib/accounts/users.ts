@@ -66,7 +66,7 @@ export async function ensureUsername<T extends AnyUserRow>(user: T): Promise<T> 
  * Rename. The old name is RELEASED (URLs are id-anchored, so nothing breaks);
  * uniform 'invalid' for malformed and reserved names, 'taken' on conflict.
  */
-export async function setUsername(userId: string, requested: string): Promise<{ ok: true; username: string } | { error: 'invalid' | 'taken' }> {
+export async function setUsername(userId: string, requested: string): Promise<{ ok: true; username: string } | { error: 'invalid' | 'taken' | 'managed_username' }> {
   return services().identity.setUsername({ userId, username: requested });
 }
 

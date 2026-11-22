@@ -146,7 +146,7 @@ export async function listServiceGroupSignInGrants(t: IdentityTables, q: Queryab
     .map(row => ({...row, approved_at: new Date(row.approved_at).toISOString()}));
 }
 
-type AccountMethods = Pick<IdentityService, 'syncProfile' | 'createUser' | 'ensureUsername' | 'setProfileNames' | 'setUsername' | 'setImageKey' | 'confirmWelcome' | 'setAutoAcceptMentions'
+type AccountMethods = Pick<IdentityService, 'syncProfile' | 'createUser' | 'ensureUsername' | 'hasManagedUsername' | 'setProfileNames' | 'setUsername' | 'setImageKey' | 'confirmWelcome' | 'setAutoAcceptMentions'
   | 'createTestUser' | 'eraseTestUser' | 'mintToken' | 'ensureWebToken' | 'findToken' | 'revokeToken' | 'touchToken' | 'setTokenHarness' | 'markRequestAuthority'>;
 
 export async function writeDisplayName(tx: Queryable, t: IdentityTables, authSchema: string, userId: string, name: string) {
@@ -179,6 +179,12 @@ export function accountMethods(db: TransactionalQueryable, t: IdentityTables, au
     throw new Error('could not assign a username');
   }
 
+  async function hasManagedUsername(q: Queryable, userId: string): Promise<boolean> {
+    // Identity-only installs have no Better Auth accounts. Only a handle subject creates a trusted provider binding.
+    if (!(await q.query('SELECT to_regclass($1) AS relation', [authSchema + '.account'])).rows[0]?.relation) return false;
+    return (await q.query(`SELECT 1 FROM ${authSchema}.account WHERE "userId"=$1 AND "providerId" LIKE 'trusted:%' LIMIT 1`, [userId])).rows.length > 0;
+  }
+
   const setProfileNames: AccountMethods['setProfileNames'] = async ({userId, name, username: requested}) => {
     const username = requested?.toLowerCase().trim();
     if (username !== undefined && !isValidHandle(username)) return {error:'invalid'};
@@ -187,7 +193,8 @@ export function accountMethods(db: TransactionalQueryable, t: IdentityTables, au
       return await db.transaction(async tx => {
         const user = await userById(tx, userId, true);
         if (!user || (name !== undefined && user.kind !== 'account')) return {error:'invalid'} as const;
-        if (username !== undefined) {
+        if (username !== undefined && username !== user.username) {
+          if (await hasManagedUsername(tx, userId)) return {error:'managed_username'} as const;
           await reserveHandle(t, tx, username, 'user', userId);
           await tx.query(`UPDATE ${t.users} SET username=$2 WHERE id=$1`, [userId, username]);
         }
@@ -223,9 +230,10 @@ export function accountMethods(db: TransactionalQueryable, t: IdentityTables, au
     },
     ensureUsername,
     setProfileNames,
+    hasManagedUsername: ({userId}) => hasManagedUsername(db, userId),
     async setUsername({userId, username}) {
       const result = await setProfileNames({userId, username});
-      if ('error' in result) return {error:result.error === 'taken' ? 'taken' : 'invalid'};
+      if ('error' in result) return {error:result.error === 'invalid_name' ? 'invalid' : result.error};
       return {ok:true, username:username.toLowerCase().trim()};
     },
     async setImageKey({userId, key}) {

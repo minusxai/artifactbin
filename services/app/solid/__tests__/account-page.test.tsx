@@ -38,6 +38,16 @@ it('loads the account handle late while keeping profile controls without the ret
   expect(screen.getByRole('link',{name:'HTTP authentication guide'})).toHaveAttribute('href','/llms/http-auth');
 });
 
+it('shows a managed handle and keeps the display name editable', async () => {
+  stubAccountFetch({account: () => Response.json({username:'reader', managed_username:true, name:'Reader'})});
+  window.history.replaceState(null, '', '/account');
+  render(() => <App />);
+  expect(await screen.findByText('Your sign-in provider manages this handle.')).toBeInTheDocument();
+  expect(screen.getByText('@reader')).toBeInTheDocument();
+  expect(screen.queryByRole('textbox', {name:'Username'})).toBeNull();
+  expect(screen.getByRole('textbox', {name:'Display name'})).toHaveValue('Reader');
+});
+
 // The accounts gate's claim leg, moved here: a verified account's page lists CLI connections to revoke, and nothing
 // anywhere asks a person to paste a token.
 it('asks a person for no pasted token anywhere on the account page', async () => {

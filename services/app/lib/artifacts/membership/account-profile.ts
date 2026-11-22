@@ -72,6 +72,7 @@ export async function updateAccountProfile(actor:AccessActor,input:unknown,recei
  if(proposal && 'status' in proposal)return proposal;
  if(proposal){
   const changed=await services().identity.setProfileNames({userId,...proposal.names});
+  if('error' in changed && changed.error==='managed_username')return {status:409,body:{error:changed.error,hint:'Your sign-in provider manages this handle.'}};
   if('error' in changed)return changed.error==='taken'?{status:409,body:{error:'username_taken'}}:{status:400,body:{error:changed.error==='invalid_name'?'invalid_name':'invalid_username'}};
  }
  const result:MutationReply=await db.transaction(async query=>{

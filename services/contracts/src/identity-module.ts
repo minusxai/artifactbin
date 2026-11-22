@@ -88,8 +88,9 @@ export interface IdentityService {
   createUser(input: {email: string; name?: string | null}): Promise<IdentityUserRow>;
   /** Assign a handle to an account row that has none; the row as it stands after. */
   ensureUsername(input: {userId: string}): Promise<IdentityUserRow | null>;
-  setProfileNames(input: {userId: string; name?: string; username?: string}): Promise<{ok: true} | {error: 'invalid' | 'taken' | 'invalid_name'}>;
-  setUsername(input: {userId: string; username: string}): Promise<{ok: true; username: string} | {error: 'invalid' | 'taken'}>;
+  hasManagedUsername(input: {userId: string}): Promise<boolean>;
+  setProfileNames(input: {userId: string; name?: string; username?: string}): Promise<{ok: true} | {error: 'invalid' | 'taken' | 'managed_username' | 'invalid_name'}>;
+  setUsername(input: {userId: string; username: string}): Promise<{ok: true; username: string} | {error: 'invalid' | 'taken' | 'managed_username'}>;
   /** Point the picture at `key` (null: none); the key it replaced, for the caller to delete. */
   setImageKey(input: {userId: string; key: string | null}): Promise<{previous: string | null}>;
   confirmWelcome(input: {userId: string}): Promise<void>;
@@ -167,7 +168,7 @@ export interface GroupSignInGrant {id: string; group_id: string; role: 'member' 
 
 export type IdentityMethod = keyof IdentityService;
 export const IDENTITY_METHODS: readonly IdentityMethod[] = [
-  'setDefaultDestination', 'syncProfile', 'createUser', 'ensureUsername', 'setUsername', 'setProfileNames', 'setImageKey', 'confirmWelcome', 'setAutoAcceptMentions', 'createTestUser', 'eraseTestUser',
+  'setDefaultDestination', 'syncProfile', 'createUser', 'ensureUsername', 'setUsername', 'setProfileNames', 'hasManagedUsername', 'setImageKey', 'confirmWelcome', 'setAutoAcceptMentions', 'createTestUser', 'eraseTestUser',
   'mintToken', 'ensureWebToken', 'findToken', 'revokeToken', 'revokeGroupSignIn', 'approveServiceGroupSignIn', 'revokeServiceGroupSignIn', 'touchToken', 'setTokenHarness', 'markRequestAuthority',
   'createGroup', 'updateGroup', 'setGroupParent', 'deleteGroup', 'setGroupMember', 'removeGroupMember', 'inviteGroupMember', 'removeGroupInvitation', 'acceptGroupInvitations', 'admitToGroup',
   'enqueueGroupMail', 'claimGroupMail', 'settleGroupMail',

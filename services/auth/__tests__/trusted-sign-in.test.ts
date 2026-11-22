@@ -99,6 +99,22 @@ describe('trusted-issuer sign-in', () => {
     await expect(configured({parentGroup:'other_parent'})).rejects.toThrow(/parentGroup/);
     await expect(configured({audience:'other-audience'})).rejects.toThrow(/audience/);
   });
+  it('restores a renamed legacy handle only to its bound issuer and person', async () => {
+    const target = await app({TRUSTED_SIGNIN__ISSUERS:twoIssuers()});
+    const claims = {sub:'legacy_reader',group:'legacy_team'};
+    const first = await post(target,{token:token(claims)});
+    const person = (await auth.sessions.resolve(new Request(BASE,{headers:{cookie:cookieOf(first)}})))!;
+    await pg.query("UPDATE auth.users SET username='past_rename' WHERE id=$1",[person.userId]);
+    await pg.query("UPDATE auth.handle_reservations SET handle='past_rename' WHERE subject_id=$1",[person.userId]);
+    await pg.query("INSERT INTO auth.users(id,username) VALUES('usr_holder','legacy_reader')");
+    await refused(await post(target,{token:token(claims)}),403,'subject_conflict');
+    await pg.query("DELETE FROM auth.users WHERE id='usr_holder'");
+    await refused(await post(target,{token:token({...claims,iss:'issuer-b'},{key:otherKeys.privateKey})}),403,'subject_conflict');
+    const returning = await post(target,{token:token(claims)});
+    expect(returning.status).toBe(303);
+    expect((await auth.sessions.resolve(new Request(BASE,{headers:{cookie:cookieOf(returning)}})))?.userId).toBe(person.userId);
+    expect(await rows('SELECT username FROM auth.users WHERE id=$1',[person.userId])).toEqual([{username:claims.sub}]);
+  });
   it('allows the company owner to bootstrap one root, then requires a parent; public groups may detach', async () => {
     const store = createIdentityStore({db, authSchema:'auth', appSchema:'company_app'});
     await pg.query("INSERT INTO auth.users(id,email) VALUES ('usr_head','head@example.com')");
