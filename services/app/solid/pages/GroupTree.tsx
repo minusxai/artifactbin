@@ -12,6 +12,7 @@
  * (`from_parent_id`), so the server refuses a stale one (`parent_changed`) instead of silently re-rooting. Every
  * refusal is shown in plain words (`groupTreeMessage`).
  */
+import { personLabel } from '../lib/person-label';
 import { createSignal, For, Show, type JSX } from 'solid-js';
 import type { GroupDetail, GroupRelative, GroupSummary } from '@artifactbin/contracts/groups';
 import { apiRequest } from '../lib/api';
@@ -57,7 +58,7 @@ export function GroupTreeSummary(props: { detail: GroupDetail }): JSX.Element {
 
 /** The people this group's shares reach through a subgroup, apart from its members. */
 export function SubgroupAudience(props: { detail: GroupDetail }): JSX.Element {
-  const nameOf = (person: GroupDetail['subgroup_audience'][number]) => person.name ?? person.username ?? 'Someone';
+  const nameOf = (person: GroupDetail['subgroup_audience'][number]) => personLabel(person, 'Someone');
   return <Show when={props.detail.subgroups.length}>
     <section aria-label="Receives shared files through a subgroup" class="mt-6">
       <h3 class="m-0 font-sans text-sm font-semibold text-fg">Receives shared files through a subgroup</h3>

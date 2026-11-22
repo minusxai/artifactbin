@@ -22,7 +22,7 @@ const shape = (value: unknown): unknown => Array.isArray(value) ? [value.length 
   : value === null ? 'null' : typeof value;
 
 async function world() {
-  const owner = await createUser({ email: OWNER });
+  const owner = await createUser({ email: OWNER, name: 'Sample Owner' });
   const token = await mintAccountToken('shapes', owner.id);
   const actor = { credential: 'session' as const, userId: owner.id, email: owner.email!, emailVerified: true };
   const make = async (json: Record<string, unknown>) => (await (await publish(request('/api/artifacts', { method: 'POST', token: token.token, json: { visibility: 'private', destination: { type: 'personal' }, ...json } }))).json() as { id: string }).id;
@@ -44,7 +44,7 @@ describe('the JSON door keeps the shape of everything that is not a framed docum
     await w.make({ title: 'Filed', html: '<p>filed</p>', parent_id: folder });
     const body = await w.answer(folder);
     expect(shape({ ...body, workspace: undefined })).toEqual({
-      canonical: 'string', kind: 'string', ownerUsername: 'string', role: 'string', workspace: 'undefined',
+      canonical: 'string', kind: 'string', ownerName: 'string', ownerUsername: 'string', role: 'string', workspace: 'undefined',
       folder: {
         count: { documents: 'number', folders: 'number' }, id: 'string', title: 'string', trail: ['empty'],
         rows: [{ ancestor_ids: ['string'], format: 'string', id: 'string', parent_id: 'string', title: 'string', updated_at: 'string', url: 'string', version: 'number', views: 'number', visibility: 'string' }],

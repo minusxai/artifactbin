@@ -86,7 +86,7 @@ function PersonalHomePage(props:{core:PersonalCore;defaultControl?:JSX.Element})
   const detail = () => wrongAccount() ? null : insights.data();
   const empty = () => Boolean(account() && account()!.artifacts.length === 0 && account()!.shared.length === 0 && !detail()?.stats?.assets);
   const failed = () => wrongAccount() || Boolean(core.error());
-  const greeting = () => { const name = session()?.user?.email?.split('@')[0] ?? ''; return `${name ? `hi ${name}, l` : 'l'}et’s create your first artifact!`; };
+  const greeting = () => { const name = session()?.user?.name?.trim() || session()?.user?.email?.split('@')[0] || ''; return `${name ? `hi ${name}, l` : 'l'}et’s create your first artifact!`; };
   onMount(dropServedFrame);
   return <Show when={!(session() && session()!.kind !== 'account') && !(home() && !home()!.signedIn)} fallback={<Navigate href="/login" />}>
     <Show when={account()} fallback={<main class={`${HOME_WORKSPACE_COLUMN} mt-8 pb-24`}><Show when={failed()} fallback={<WorkspaceSkeleton />}><div role="alert"><p>Could not load your workspace.</p><Button variant="secondary" size="sm" aria-label="Retry workspace" onClick={session() ? load : reload}>Try again</Button></div></Show></main>}>

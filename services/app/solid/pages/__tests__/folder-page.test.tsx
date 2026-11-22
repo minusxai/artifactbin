@@ -22,7 +22,7 @@ it('names the folder, count and readable trail', () => {
   expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Reports');
   expect(screen.getByText('2 documents and 1 folder')).toBeInTheDocument();
   const trail = within(screen.getByRole('navigation',{name:'Current page'}));
-  expect(trail.getByRole('link', { name: '@team' })).toHaveAttribute('href', '/@team');
+  expect(trail.getByRole('link', { name: 'Team' })).toHaveAttribute('href', '/@team');
   expect(trail.getByRole('link', { name: 'Work' })).toHaveAttribute('href', '/a/r1');
   expect(trail.getByText('Reports')).toHaveAttribute('aria-current','page');
   expect(screen.queryByLabelText('Folder trail')).toBeNull();

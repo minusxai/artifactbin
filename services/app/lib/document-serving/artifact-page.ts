@@ -31,7 +31,7 @@ import { ID_RE } from '@/lib/platform';
 import { avatarUrl } from '@/lib/avatars';
 import { browserSessionKind, isBrowserSessionRequest, requestOrSessionActor, sessionActor } from '@/lib/authentication';
 import { pageSocial } from '@/lib/social';
-import { issuePagesTicket, ownerUsername } from '@/lib/accounts';
+import { issuePagesTicket, getUserById } from '@/lib/accounts';
 import {ARTIFACT_FORMATS, type ArtifactFormat} from '@artifactbin/contracts/artifact-format';
 import {CARD_RENDER_GENERATION} from '@artifactbin/contracts/og-card';
 import {getGroupById} from '@/lib/groups';
@@ -154,7 +154,7 @@ async function readDocumentChrome(row: Pick<ArtifactHeader, 'id' | 'user_id' | '
   ]);
   const { author, liked, likeCount, following, followCount, openAnnotations } = social;
   return {
-    author: { username: author?.username ?? null, id: author?.id ?? null, image: author ? avatarUrl(author) : null, forkedFrom },
+    author: { name: author?.name ?? null, username: author?.username ?? null, id: author?.id ?? null, image: author ? avatarUrl(author) : null, forkedFrom },
     like: { liked, count: likeCount },
     follow: row.user_id && row.user_id !== actor.userId ? { userId: row.user_id, following, count: followCount } : null,
     openAnnotations,
@@ -226,7 +226,8 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
    * count and nothing to frame.
    */
   if (artifact.format === 'folder') {
-    const handle = groupId ? ownerGroup?.handle ?? null : await ownerUsername(artifact.user_id);
+    const person = !groupId && artifact.user_id ? await getUserById(artifact.user_id) : null;
+    const handle = ownerGroup?.handle ?? person?.username ?? null;
     const [folder, workspace] = await Promise.all([
       folderPageFor(artifact, actor),
       role === 'owner' && actor.userId
@@ -236,6 +237,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     return { status: 200, body: {
       canonical: canonicalArtifactPath(artifact, handle),
       ownerUsername: handle,
+      ownerName: person?.username ? person.name : null,
       role,
       kind,
       // The TOKEN travels beside the account, as everywhere the folder ACL is

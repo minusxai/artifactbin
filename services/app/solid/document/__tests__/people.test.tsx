@@ -26,8 +26,8 @@ it('offers explicit access sharing and unrestricted invitation lookup', async ()
   const finder = await waitFor(() => screen.getByRole('combobox', { name: 'Find people by username' }));
   finder.focus();
   fireEvent.click(finder);
-  fireEvent.click(await waitFor(() => screen.getByRole('option', { name: /@alex/ })));
-  expect(screen.getByRole('button', { name: 'Remove @alex' })).toBeInTheDocument();
+  fireEvent.click(await waitFor(() => screen.getByRole('option', { name: /Alex.*@.*alex/ })));
+  expect(screen.getByRole('button', { name: 'Remove Alex' })).toBeInTheDocument();
   fireEvent.click(screen.getByRole('checkbox', { name: 'Include viewing access' }));
   fireEvent.click(screen.getByRole('button', { name: 'Invite 1 people' }));
   await waitFor(() => expect(fetcher.mock.calls.some(([, init]) => init?.body === JSON.stringify({ action: 'invite', usernames: ['@alex'], includeAccess: true }))).toBe(true));
@@ -75,6 +75,17 @@ it('suggests people in the shared combobox: Escape closes the list, the keyboard
   fireEvent.keyDown(finder, { key: 'ArrowDown' });
   fireEvent.keyDown(finder, { key: 'ArrowDown' });
   fireEvent.keyDown(finder, { key: 'Enter' });
-  expect(screen.getByRole('button', { name: 'Remove @bo' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Remove Bo' })).toBeInTheDocument();
   expect(fetcher.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false);
+});
+
+it('names accepted and pending people without displaying a private identifier for an unnamed person', async () => {
+  const state = { members: [{ user_id: 'private-id', username: null, name: '' }, { user_id: 'member', username: 'one', name: 'First Reader' }],
+    pending: [{ user_id: 'pending', username: 'two', name: 'Next Reader', direction: 'request' }], self: null, canManage: true, canInvite: false };
+  stubFetch({}, { fallback: () => Response.json(state) });
+  render(() => <DocumentPeople id="abc123" initialOpen />);
+  expect(await screen.findByRole('button', { name: 'Approve Next Reader' })).toBeInTheDocument();
+  expect(screen.getByText('First Reader')).toBeInTheDocument();
+  expect(screen.getByText('Someone')).toBeInTheDocument();
+  expect(screen.queryByText('private-id')).toBeNull();
 });

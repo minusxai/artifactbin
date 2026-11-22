@@ -6,6 +6,7 @@
  * approve (stating plainly what readers will then see) or a revoke. Nothing is drawn for anyone else, or for a page with
  * no such query: the service answers them with a refusal or an empty list.
  */
+import { personLabel } from '../lib/person-label';
 import { createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import { Button } from '../ui/Button';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -49,7 +50,7 @@ export function QueryApprovals(props: { id: string }): JSX.Element {
     } catch { setError('Could not change the approval. Try again.'); }
     finally { setBusy(false); }
   };
-  const by = (approval: NonNullable<QueryApproval['approval']>) => approval.approved_by.name ?? approval.approved_by.username ?? 'a former Admin';
+  const by = (approval: NonNullable<QueryApproval['approval']>) => personLabel(approval.approved_by, 'a former Admin');
   return <Show when={listing()?.queries.length ? listing() : null}>{current => <div class="mt-5 border-t border-edge pt-4" role="group" aria-label="Approved queries">
     <p class="mb-1 uppercase tracking-wider text-faint">queries on live data</p>
     <p class="mb-2 leading-relaxed text-muted">Each runs as the reader, who sees only data they may read. Approve one to show its results, as {current().group.name} sees them, to everyone signed in with their own account who can open this page.</p>

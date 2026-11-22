@@ -11,6 +11,8 @@
  *
  * The document itself is not here: it is the frame under this bar, on its own origin (lib/document-serving/document-frame).
  */
+import type { DocumentChromeDetails } from './deferred-document-chrome';
+import { personLabel } from '../lib/person-label';
 import { createSignal, lazy, Show, Suspense, type Accessor, type JSX } from 'solid-js';
 import Heart from 'lucide-solid/icons/heart';
 import GitFork from 'lucide-solid/icons/git-fork';
@@ -37,7 +39,7 @@ const archivedBanner = (version: number, head: number): string => `Version ${ver
 export interface DocumentChromeProps {
   id: string;
   title: Accessor<string>;
-  author: { username: string | null; id?: string | null; image?: string | null } | null;
+  author: DocumentChromeDetails['author'];
   follow?: { userId: string; following: boolean; count: number } | null;
   like: { liked: boolean; count: number };
   likeUnavailable?: boolean;
@@ -94,11 +96,11 @@ export function DocumentChrome(props: DocumentChromeProps): JSX.Element {
   const byline = <>
     <Show when={username()}>{(handle) => <>
       <ChevronRight size={14} class="shrink-0 text-faint" aria-hidden="true" />
-      <a href={`/@${handle()}`} aria-label={`View @${handle()}'s profile`} class="flex min-w-0 items-center gap-1.5 text-muted no-underline hover:text-accent">
-        <Show when={props.author?.id}>{(authorId) => <Avatar image={props.author?.image ?? null} initial={handle()} userId={authorId()} size={20} />}</Show><span class="truncate">@{handle()}</span>
+      <a href={`/@${handle()}`} aria-label={`View ${personLabel(props.author)}'s profile`} class="flex min-w-0 items-center gap-1.5 text-muted no-underline hover:text-accent">
+        <Show when={props.author?.id}>{(authorId) => <Avatar image={props.author?.image ?? null} initial={props.author?.name?.trim() || handle()} userId={authorId()} size={20} />}</Show><span class="truncate">{personLabel(props.author)}</span>
       </a>
       <Show when={follow()}>{(state) => (
-        <Button variant="secondary" size="sm" aria-label={`${state().following ? 'Unfollow' : 'Follow'} @${handle()}`} aria-pressed={state().following} onClick={() => void toggleFollow()}>
+        <Button variant="secondary" size="sm" aria-label={`${state().following ? 'Unfollow' : 'Follow'} ${personLabel(props.author)}`} aria-pressed={state().following} onClick={() => void toggleFollow()}>
           {state().following ? 'following' : 'follow'}
         </Button>
       )}</Show>

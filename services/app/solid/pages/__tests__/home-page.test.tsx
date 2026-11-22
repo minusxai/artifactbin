@@ -9,7 +9,7 @@ import { REFRESH_EVENT } from '@/solid/lib/page-data-events';
 import { withPersonalBootstrap } from './home-bootstrap-fetch';
 import { fetchRoutes } from '@/test/helpers/fetch-stub';
 
-const session = { kind: 'account', user: { id: 'one', email: 'one@example.com', username: 'one', image: null }, onboarded: true };
+const session = { kind: 'account', user: { id: 'one', name: 'Example Reader', email: 'one@example.com', username: 'one', image: null }, onboarded: true };
 const core = { signedIn: true, accountId: 'one', artifacts: [{ id: 'ABC123', url: '/a/ABC123', title: 'Private document', format: 'html', version: 1, visibility: 'private', ancestor_ids: [], updated_at: '2026-09-09', views: 0 }], shared: [] };
 const response = (value: unknown) => Response.json(value);
 const open = () => render(() => <MemoryRouter><Route path="*" component={() => <SessionProvider><HomePage /></SessionProvider>} /></MemoryRouter>);
@@ -144,7 +144,7 @@ it('offers one trash link only to an account', async () => {
 it('names first creation and shows the setup panel on an empty account', async () => {
   homeFetch({ signedIn: true, accountId: 'one', artifacts: [], shared: [] }, { ...richInsights, stats: { ...richInsights.stats, assets: 0 } }); open();
   const heading = await screen.findByRole('heading', { name: /create your first artifact/i });
-  expect(heading).toHaveTextContent('hi one, let’s create your first artifact!');
+  expect(heading).toHaveTextContent('hi Example Reader, let’s create your first artifact!');
   const panel = screen.getByLabelText('Get started');
   expect(screen.getByLabelText('Create a live document for my agent')).toBeInTheDocument();
   expect(heading.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

@@ -26,7 +26,7 @@ beforeEach(async () => {
   const db = await harness.db();
   await db.query(`CREATE SCHEMA IF NOT EXISTS ${EVENTS_SCHEMA}`);
   await ensureTable(db, EVENTS_TABLES, { schema: EVENTS_SCHEMA });
-  alice = await createUser({ email: 'mxmx_test_feed_alice@example.com' });
+  alice = await createUser({ name: 'Sample Reader', email: 'mxmx_test_feed_alice@example.com' });
   bob = await createUser({ email: 'mxmx_test_feed_bob@example.com' });
   carol = await createUser({ email: 'mxmx_test_feed_carol@example.com' });
   await db.query(`UPDATE users SET username = CASE id WHEN $1 THEN 'alice' WHEN $2 THEN 'bob' ELSE username END WHERE id IN ($1, $2)`, [alice.id, bob.id]);
@@ -57,17 +57,17 @@ describe('GET /api/page/profile/@handle', () => {
     expect(asCarol.kind).toBe('public-profile');
     // `owner` is EVERYONE's half now — it carries the picture the hero draws
     // (lib/avatars), and the owner looking at their own page needs it too.
-    expect(asCarol.owner).toEqual({ id: alice.id, image: null });
+    expect(asCarol.owner).toEqual({ id: alice.id, name: 'Sample Reader', image: null });
     expect(asCarol.social).toMatchObject({ followers: 1, following: 0, relation: { youFollow: true, followsYou: false } });
     const asBob = await (await profilePage(request('/api/page/profile/@alice', { actor: session(bob) }), ctx)).json();
     expect(asBob.social).toMatchObject({ followers: 1, relation: { youFollow: false } });
     const anonymous = await (await profilePage(request('/api/page/profile/@alice'), ctx)).json();
-    expect(anonymous.owner).toEqual({ id: alice.id, image: null });
+    expect(anonymous.owner).toEqual({ id: alice.id, name: 'Sample Reader', image: null });
     expect(anonymous.social).toEqual({ followers: 1, following: 0 });
     const own = await (await profilePage(request('/api/page/profile/@alice', { actor: session(alice) }), ctx)).json();
     expect(own.kind).toBe('public-profile');
     expect(own.files).toEqual(asCarol.files);
-    expect(own.owner).toEqual({ id: alice.id, image: null });
+    expect(own.owner).toEqual({ id: alice.id, name: 'Sample Reader', image: null });
     // The counts are everyone's; the relationship is the stranger's half.
     expect(own.social).toEqual({ followers: 1, following: 0 });
   });

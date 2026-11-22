@@ -1,4 +1,5 @@
 /* @jsxImportSource solid-js */
+import { personLabel } from '../lib/person-label';
 import type { Accessor, JSX } from 'solid-js';
 import Ellipsis from 'lucide-solid/icons/ellipsis';
 import { REPO_URL } from '@/lib/http/urls';
@@ -25,9 +26,10 @@ export function DocumentCompactMenu(input: DocumentCompactMenuProps): JSX.Elemen
     const items: MenuEntry[] = [];
     const handle = username();
     if (handle) {
-      items.push({ label: `View @${handle}'s profile`, text: `@${handle}`, href: `/@${handle}` });
+      const author = personLabel(props.author);
+      items.push({ label: `View ${author}'s profile`, text: author, href: `/@${handle}` });
       const state = follow();
-      if (state) items.push({ label: `${state.following ? 'Unfollow' : 'Follow'} @${handle}`, text: state.following ? 'Unfollow author' : 'Follow author', onSelect: () => void toggleFollow() });
+      if (state) items.push({ label: `${state.following ? 'Unfollow' : 'Follow'} ${author}`, text: state.following ? 'Unfollow author' : 'Follow author', onSelect: () => void toggleFollow() });
     }
     if (reading()) {
       items.push({ label: like().liked ? 'Unlike' : 'Like', text: `${like().liked ? 'Unlike' : 'Like'}${like().count ? ` · ${like().count}` : ''}`, disabled: props.likeUnavailable, onSelect: () => void toggleLike() });

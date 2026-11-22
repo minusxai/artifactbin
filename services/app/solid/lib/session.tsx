@@ -12,7 +12,7 @@ import { createPageDataStore, type PageDataStore } from '@/solid/lib/page-data-s
 import { PAGE_DATA_CHANGED, PROFILE_CHANGED, REFRESH_EVENT } from '@/solid/lib/page-data-events';
 
 interface SessionState {
-  user: { id: string; email: string | null; username: string | null; image: string | null } | null;
+  user: { id: string; email: string | null; name?: string | null; username: string | null; image: string | null } | null;
   kind: 'account' | 'none';
   onboarded: boolean;
   /** This browser edits live (regions, dataset cells): an account session, or a browser session's scripted browser. */

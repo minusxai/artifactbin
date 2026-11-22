@@ -18,7 +18,7 @@ it.each([false, true])('marks all notifications read from the inbox (compact: %s
         await new Promise<void>(resolve => { finish = resolve; });
         read = true;
       }
-      return Response.json({ autoAccept: false, unread: read ? 0 : 70, next: null, blocks: [], notifications: [{ id: 'n1', artifact_id: 'doc1', user_id: 'usr_1', sender_id: 'usr_2', username: 'alice', kind: 'reply', title: 'Notes', read_at: read ? new Date().toISOString() : null, revision: 1 }] });
+      return Response.json({ autoAccept: false, unread: read ? 0 : 70, next: null, blocks: [], notifications: [{ id: 'n1', artifact_id: 'doc1', user_id: 'usr_1', sender_id: 'usr_2', username: 'alice', name: 'Alex Example', kind: 'reply', title: 'Notes', read_at: read ? new Date().toISOString() : null, revision: 1 }] });
     },
   }, { session: SESSION });
   window.history.replaceState(null, '', '/notifications');
@@ -32,7 +32,7 @@ it.each([false, true])('marks all notifications read from the inbox (compact: %s
   expect(writes).toEqual([{ readAll: true }]);
   finish!();
   await waitFor(() => expect(screen.queryByLabelText('Unread')).not.toBeInTheDocument());
-  expect(view.getByRole('link', { name: '@alice replied in Notes' })).toBeInTheDocument();
+  expect(view.getByRole('link', { name: 'Alex Example replied in Notes' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Notifications' })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Mark all as read' })).not.toBeInTheDocument();
 });
@@ -40,7 +40,7 @@ it('keeps unread notifications and allows another attempt when marking all fails
   stubFetch({
     '/api/my/people': (_url, init) => {
       if (init?.method === 'PATCH') return Response.json({}, { status: 500 });
-      return Response.json({ autoAccept: false, unread: 1, next: null, blocks: [], notifications: [{ id: 'n1', artifact_id: 'doc1', sender_id: 'usr_2', username: 'alice', kind: 'reply', title: 'Notes', read_at: null, revision: 1 }] });
+      return Response.json({ autoAccept: false, unread: 1, next: null, blocks: [], notifications: [{ id: 'n1', artifact_id: 'doc1', sender_id: 'usr_2', username: 'alice', name: 'Alex Example', kind: 'reply', title: 'Notes', read_at: null, revision: 1 }] });
     },
   }, { session: SESSION });
   window.history.replaceState(null, '', '/notifications');
@@ -81,7 +81,7 @@ it('labels an agent reply without showing an unrelated accepted invitation statu
  expect(screen.getByRole('link',{name:'@alice invited you to Shared'}).closest('li')).toHaveTextContent('Invitation accepted');
 });
 
-const INBOX = { autoAccept: false, unread: 1, next: null, blocks: [], notifications: [{ id: 'n1', artifact_id: 'doc1', user_id: 'usr_1', sender_id: 'usr_2', username: 'alice', kind: 'reply', source: null, title: 'Notes', read_at: null, revision: 1 }] };
+const INBOX = { autoAccept: false, unread: 1, next: null, blocks: [], notifications: [{ id: 'n1', artifact_id: 'doc1', user_id: 'usr_1', sender_id: 'usr_2', username: 'alice', name: 'Alex Example', kind: 'reply', source: null, title: 'Notes', read_at: null, revision: 1 }] };
 
 it('retries a failed load visibly, keeps a failed retry dated and clears the error once a retry succeeds', async () => {
   let clock = Date.parse('2026-10-10T10:00:00Z');
@@ -114,7 +114,7 @@ it('retries a failed load visibly, keeps a failed retry dated and clears the err
   expect(retrying).toBeDisabled();
   release!();
   await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
-  expect(screen.getByRole('link', { name: '@alice replied in Notes' })).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Alex Example replied in Notes' })).toBeInTheDocument();
 });
 
 it('keeps loaded notifications when a refresh fails and treats a dropped live stream as a quiet status', async () => {
@@ -131,7 +131,7 @@ it('keeps loaded notifications when a refresh fails and treats a dropped live st
   }, { session: SESSION });
   window.history.replaceState(null, '', '/notifications');
   render(() => <App />);
-  const link = await screen.findByRole('link', { name: '@alice replied in Notes' });
+  const link = await screen.findByRole('link', { name: 'Alex Example replied in Notes' });
   await waitFor(() => expect(streams.length).toBeGreaterThan(0));
   streams.at(-1)!.onerror?.(new Event('error'));
   expect(await screen.findByRole('status', { name: 'Live updates' })).toHaveTextContent('Reconnecting');
@@ -141,5 +141,5 @@ it('keeps loaded notifications when a refresh fails and treats a dropped live st
   fail = true;
   fireEvent.click(await screen.findByRole('button', { name: 'Mark all as read' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('Could not load notifications');
-  expect(screen.getByRole('link', { name: '@alice replied in Notes' })).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Alex Example replied in Notes' })).toBeInTheDocument();
 });

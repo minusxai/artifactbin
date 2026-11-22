@@ -21,7 +21,7 @@ interface ProfileRelation {
   youFollow: boolean;
   followsYou: boolean;
   /** Up to KNOWN_FOLLOWERS_SHOWN of the people you follow who follow them, newest first. */
-  known: Array<{ id: string; username: string; image: string | null }>;
+  known: Array<{ id: string; name?: string | null; username: string; image: string | null }>;
   /** All of them, named or not. */
   knownTotal: number;
 }
@@ -40,7 +40,7 @@ export async function profileSocial(ownerId: string, viewerId: string | null): P
     relation: {
       youFollow,
       followsYou,
-      known: known.users.map((u) => ({ id: u.id, username: u.username, image: avatarUrl(u) })),
+      known: known.users.map((u) => ({ id: u.id, name: u.name, username: u.username, image: avatarUrl(u) })),
       knownTotal: known.total,
     },
   };

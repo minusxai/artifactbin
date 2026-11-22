@@ -81,16 +81,17 @@ describe('Solid shell', () => {
   });
 
   it.each([null, '/api/users/usr_1/avatar?v=1'])('shows account identity in the footer with photo %s', async image => {
-    session = { user: { id: 'usr_1', email: 'owner@example.com', username: 'owner', image }, kind: 'account', onboarded: true };
+    session = { user: { id: 'usr_1', email: 'owner@example.com', username: 'owner', name: 'Sample Reader', image }, kind: 'account', onboarded: true };
     window.history.replaceState(null, '', '/trash');
     render(() => <App />);
     await screen.findByRole('table');
     const account = within(screen.getByRole('navigation', { name: 'Workspace' })).getByRole('link', { name: 'Account settings' });
     expect(account).toHaveAttribute('href', '/account');
-    await waitFor(() => expect(account).toHaveTextContent('owner@example.com'));
+    await waitFor(() => expect(account).toHaveTextContent('Sample Reader'));
+    expect(screen.getByRole('button', { name: 'Open menu' })).toHaveTextContent('S');
     expect(account).not.toHaveTextContent('Account settings');
     if (image) expect(account.querySelector('img')).toHaveAttribute('src', image);
-    else expect(account.querySelector('[data-face-initial]')).toHaveTextContent('O');
+    else expect(account.querySelector('[data-face-initial]')).toHaveTextContent('S');
   });
 
   it('links the footer to the signed-in account’s public profile', async () => {

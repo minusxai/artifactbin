@@ -15,7 +15,7 @@ import Shelf from '../components/Shelf';
 import WorkspaceLayout, { HOME_WORKSPACE_COLUMN } from '../components/WorkspaceLayout';
 import { usePageBreadcrumbs } from '../lib/page-breadcrumbs';
 
-interface FolderProps { folder: FolderData & {group?:Pick<GroupSummary,'id'|'handle'|'name'>}; role: ArtifactRole; workspace?: AccountWorkspace; ownerUsername?: string | null }
+interface FolderProps { folder: FolderData & {group?:Pick<GroupSummary,'id'|'handle'|'name'>}; role: ArtifactRole; workspace?: AccountWorkspace; ownerName?: string | null; ownerUsername?: string | null }
 const NAME_TYPE = 'font-sans text-lg leading-normal font-medium tracking-[-0.01em] text-fg';
 const summaryOf = ({ documents, folders }: FolderData['count']) => [documents ? `${documents} document${documents === 1 ? '' : 's'}` : '', folders ? `${folders} folder${folders === 1 ? '' : 's'}` : ''].filter(Boolean).join(' and ');
 
@@ -26,7 +26,7 @@ export function FolderPage(props: FolderProps): JSX.Element {
   const [draft, setDraft] = createSignal('');
   const folderId = createMemo(() => folder().id);
   usePageBreadcrumbs(()=>[
-    {label:folder().group?`@${folder().group!.handle}`:props.role!=='owner'&&props.ownerUsername?`@${props.ownerUsername}`:'Personal',href:folder().group?`/@${folder().group!.handle}`:props.role!=='owner'&&props.ownerUsername?`/@${props.ownerUsername}`:'/?personal=1'},
+    {label:folder().group?folder().group!.name:props.role!=='owner'&&props.ownerUsername?(props.ownerName?.trim() || `@${props.ownerUsername}`):'Personal',href:folder().group?`/@${folder().group!.handle}`:props.role!=='owner'&&props.ownerUsername?`/@${props.ownerUsername}`:'/?personal=1'},
     ...folder().trail.map(crumb=>({label:crumb.title??crumb.id,href:crumb.url})),
     {label:folder().title??'Untitled folder'},
   ]);

@@ -15,7 +15,7 @@ it('offers only people, preserves stable identity and never requests agent sessi
  const fetch = vi.fn(async(_url:RequestInfo|URL)=>Response.json({people,mentions:{}}));vi.stubGlobal('fetch',fetch);
  const select=vi.fn();
  render(()=><CommentMentionPicker backend={createHttpBackend('doc1')} artifactId="doc1" query="as" onSelect={select}/>);
- fireEvent.click(await screen.findByLabelText('Mention @asha'));
+ fireEvent.click(await screen.findByLabelText('Mention Asha'));
  expect(select).toHaveBeenCalledWith('[@asha](/api/people/usr_asha)');
  expect(fetch.mock.calls.map(call=>String(call[0]))).toEqual(['/api/my/artifacts/doc1/members?query=as']);
  expect(screen.queryByRole('link',{name:/agent/i})).toBeNull();
@@ -25,11 +25,11 @@ it('navigates person choices with wrapping and selects without submitting the co
  const submit=vi.fn(),escape=vi.fn();
  render(()=>{const [value,change]=createSignal('');return <div onKeyDown={escape}><CommentMarkdownField label="Draft" artifactId="doc1" backend={backend()} value={value()} onChange={change} onSubmit={()=>submit(value())}/></div>;});
  const field=screen.getByLabelText('Draft');replaceComment(field,'@');
- await screen.findByLabelText('Mention @asha');
+ await screen.findByLabelText('Mention Asha');
  fireEvent.keyDown(field,{key:'ArrowUp'});fireEvent.keyDown(field,{key:'Enter'});
  expect(field.textContent).toBe('@lee');expect(submit).not.toHaveBeenCalled();
  fireEvent.keyDown(field,{key:'Enter',ctrlKey:true});expect(submit).toHaveBeenCalledWith('[@lee](/api/people/usr_lee)');
- replaceComment(field,'@');await screen.findByLabelText('Mention @asha');escape.mockClear();
+ replaceComment(field,'@');await screen.findByLabelText('Mention Asha');escape.mockClear();
  fireEvent.keyDown(field,{key:'Escape'});expect(screen.queryByLabelText('Mention people')).toBeNull();expect(escape).not.toHaveBeenCalled();
 });
 it('treats @ as plain text in offline files and preserves the draft',()=>{

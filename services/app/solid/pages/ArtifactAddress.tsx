@@ -41,7 +41,7 @@ const DATA_FORMATS = ['image', 'pdf', 'file', 'viz', 'dataset'] as const;
 
 interface ArtifactAnswer {
   role: ArtifactRole; kind: string;
-  folder?: FolderData; workspace?: AccountWorkspace; ownerUsername?: string | null;
+  folder?: FolderData; workspace?: AccountWorkspace; ownerName?: string | null; ownerUsername?: string | null;
   surface?: { id: string; format: string; starter?: boolean };
 }
 
@@ -56,7 +56,7 @@ export function ArtifactAddressRoute(props: { id?: string; editing?: boolean; /*
   const served = takeBootstrap<ArtifactAnswer>(location.pathname, 'artifact');
   if (editing()) {
     // `/edit`: a dataset's address is its editor; every other artifact keeps its one page.
-    if (served?.folder) return <FolderPage folder={served.folder} role={served.role} workspace={served.workspace} ownerUsername={served.ownerUsername} />;
+    if (served?.folder) return <FolderPage folder={served.folder} role={served.role} workspace={served.workspace} ownerName={served.ownerName} ownerUsername={served.ownerUsername} />;
     if (isData(served) && served!.surface!.format !== 'dataset') return <ArtifactDataPage answer={served as unknown as DataAnswer} />;
     return <DatasetEditorPage artifactId={id()} />;
   }
@@ -86,7 +86,7 @@ export function ArtifactAddressRoute(props: { id?: string; editing?: boolean; /*
     {/* The page door answers a uniform 404 for a missing artifact and a private one alike (canReadArtifact): that
         is the not-found page, not a load failure to retry. */}
     <Match when={failure()?.status === 404}><Show when={!props.onMissing}><NotFoundPage /></Show></Match>
-    <Match when={page.data()?.folder}>{(folder) => <FolderPage folder={folder()} role={page.data()!.role} workspace={page.data()?.workspace} ownerUsername={page.data()?.ownerUsername} />}</Match>
+    <Match when={page.data()?.folder}>{(folder) => <FolderPage folder={folder()} role={page.data()!.role} workspace={page.data()?.workspace} ownerName={page.data()?.ownerName} ownerUsername={page.data()?.ownerUsername} />}</Match>
 
     <Match when={page.data()?.surface?.starter}><StarterPage answer={page.data() as unknown as import('./Starter').StarterAnswer} /></Match>
     <Match when={isData(page.data())}><ArtifactDataPage answer={page.data() as unknown as DataAnswer} /></Match>

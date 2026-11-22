@@ -11,7 +11,7 @@ it.each(['/@cee', '/@cee/'])('renders the public profile at %s, filters its shel
   const calls: string[] = [];
   stubFetch({
     '/api/my/people': { autoAccept: false, unread: 0, next: null, blocks: [], notifications: [] },
-    '/api/page/profile/%40cee': { kind: 'public-profile', handle: 'cee', owner: { id: 'owner', image: null }, social: { following: 2, followers: 3, relation: { youFollow: false, followsYou: true, known: [], knownTotal: 0 } }, authed: true, anon: false, files: [
+    '/api/page/profile/%40cee': { kind: 'public-profile', handle: 'cee', owner: { name: 'Example Owner', id: 'owner', image: null }, social: { following: 2, followers: 3, relation: { youFollow: false, followsYou: true, known: [{ id: "known", name: "Known Reader", username: "reader" }], knownTotal: 1 } }, authed: true, anon: false, files: [
       { id: 'a', title: 'First note', description: 'hello', format: 'html', version: 1, updated_at: '2026-09-28T12:00:00Z' },
       { id: 'b', title: 'Second note', format: 'html', version: 1, updated_at: '2026-09-27T12:00:00Z' },
       { id: 'asset', title: 'Asset', format: 'image', version: 1, updated_at: '2026-09-27T12:00:00Z' },
@@ -22,7 +22,9 @@ it.each(['/@cee', '/@cee/'])('renders the public profile at %s, filters its shel
   window.history.replaceState(null, '', path);
   render(() => <App />);
   await vi.dynamicImportSettled();
-  expect(await screen.findByRole('link', { name: 'Profile root' })).toHaveTextContent('@cee');
+  expect(await screen.findByRole('link', { name: 'Profile root' })).toHaveTextContent('Example Owner');
+  expect(screen.getByRole('navigation', { name: 'Current page' })).toHaveTextContent('Example Owner');
+  expect(screen.getByRole('link', { name: 'Known Reader' })).toHaveAttribute('href', '/@reader');
   expect(screen.getByRole('button', { name: 'Follow back' })).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Follow back' }));
   await waitFor(() => expect(screen.getByRole('button', { name: 'Following' })).toHaveAttribute('aria-pressed', 'true'));

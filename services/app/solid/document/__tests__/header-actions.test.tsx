@@ -13,7 +13,7 @@ function mount(capabilities: Partial<Pick<ComponentProps<typeof DocumentChrome>,
   const comment = vi.fn(), fork = vi.fn(), share = vi.fn(), membership = vi.fn();
   window.history.replaceState(null, '', '/header-test');
   render(() => <Router><Route path="/header-test" component={() => <DocumentChrome
-    id="example" title={() => 'A readable artifact title'} author={{ username: 'example_author_with_a_long_name', id: 'author' }}
+    id="example" title={() => 'A readable artifact title'} author={{ name: 'Sample Author', username: 'example_author_with_a_long_name', id: 'author' }}
     follow={{ userId: 'author', following: false, count: 0 }} like={{ liked: false, count: 0 }} signedIn={() => true}
     comments={() => 3} panel={() => null} setPanel={() => {}}
     mode={() => 'light'} onMode={() => {}} onComment={comment} onFork={fork} onShare={share}
@@ -31,7 +31,7 @@ it.each([390, 700])('retains compact header actions in a reachable menu at %ipx'
   const open = await screen.findByRole('button', { name: 'More artifact actions' });
   fireEvent.click(open);
   const menu = await screen.findByRole('menu', { name: 'Artifact actions' });
-  for (const name of ["View @example_author_with_a_long_name's profile", 'Follow @example_author_with_a_long_name', 'Like', 'Fork artifact', 'Install app', 'Share', 'Join artifact', 'Star artifactbin on GitHub']) {
+  for (const name of ["View Sample Author's profile", 'Follow Sample Author', 'Like', 'Fork artifact', 'Install app', 'Share', 'Join artifact', 'Star artifactbin on GitHub']) {
     expect(within(menu).getByRole('menuitem', { name })).toBeInTheDocument();
   }
   fireEvent.click(within(menu).getByRole('menuitem', { name: 'Fork artifact' }));
@@ -47,7 +47,7 @@ it('returns the direct desktop actions after resizing', async () => {
   vi.stubGlobal('innerWidth', 1280);
   fireEvent(window, new Event('resize'));
   expect(screen.queryByRole('button', { name: 'More artifact actions' })).toBeNull();
-  expect(screen.getByRole('button', { name: 'Follow @example_author_with_a_long_name' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Follow Sample Author' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Fork artifact' })).toBeInTheDocument();
 });
 
@@ -60,7 +60,7 @@ it('preserves capability and archived guards in the compact action menu', async 
   for (const name of ['Like', 'Fork artifact', 'Install app', 'Share', 'Join artifact']) {
     expect(within(menu).queryByRole('menuitem', { name })).toBeNull();
   }
-  expect(within(menu).getByRole('menuitem', { name: 'Follow @example_author_with_a_long_name' })).toBeInTheDocument();
+  expect(within(menu).getByRole('menuitem', { name: 'Follow Sample Author' })).toBeInTheDocument();
   expect(within(menu).getByRole('menuitem', { name: 'Version 1 of 2 · read-only' })).toBeDisabled();
   fireEvent.keyDown(menu, { key: 'Escape' });
   expect(screen.queryByRole('menu')).toBeNull();

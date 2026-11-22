@@ -23,6 +23,7 @@ import { TrustedUi } from '../components/TrustedUi';
 import { useChromeVisibility, type Panel } from '../components/PageChrome';
 import { StarterInstructions } from '../components/StarterInstructions';
 import { DocumentActions } from '../document/DocumentActions';
+import type { DocumentChromeDetails } from '../document/deferred-document-chrome';
 import { DocumentChrome } from '../document/DocumentChrome';
 import { DocumentSharing } from '../document/DocumentSharing';
 import { ForkConfirm } from '../document/ForkArtifact';
@@ -39,7 +40,7 @@ export interface StarterAnswer {
   surface: {
     id: string; editId: string; format: string; title: string | null; version: number; starter: true;
     heading?: string | null; visibility?: Visibility; hasInvitedUsers?: boolean; openAnnotations?: number;
-    author?: { username: string | null; id?: string | null; image?: string | null; forkedFrom?: { label: string; href: string | null } | null } | null;
+    author?: DocumentChromeDetails['author'];
     theme?: StoryThemeName | null; colorMode?: 'light' | 'dark' | null;
     template?: string | null;
   };

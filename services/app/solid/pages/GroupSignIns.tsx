@@ -6,6 +6,7 @@
  * row per approval with how many it holds, whose revoke ends the approval and so all of them at once. Nothing is drawn
  * for a Member or Editor.
  */
+import { personLabel } from '../lib/person-label';
 import { createEffect, createSignal, For, on, Show, type JSX } from 'solid-js';
 import type { GroupSummary } from '@artifactbin/contracts/groups';
 import { apiRequest } from '../lib/api';
@@ -35,7 +36,7 @@ export function GroupSignIns(props: { group: Pick<GroupSummary, 'id' | 'name' | 
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal('');
   const [moreError, setMoreError] = createSignal('');
-  const who = (signIn: GroupSignInView) => signIn.issued_by.name ?? signIn.issued_by.username ?? 'a former member';
+  const who = (signIn: GroupSignInView) => personLabel(signIn.issued_by, 'a former member');
   const isService = (entry: GroupSignInView | ServiceSignInsView): entry is ServiceSignInsView => 'grant_id' in entry;
   const showMore = async () => {
     const cursor = nextCursor(); if (!cursor || busy()) return;

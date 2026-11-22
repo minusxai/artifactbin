@@ -1,4 +1,5 @@
 /* @jsxImportSource solid-js */
+import { personLabel } from '../lib/person-label';
 import { createSignal, For, Show, type JSX } from 'solid-js';
 import { Bell, Check } from 'lucide-solid';
 import type { MemberNotificationItem } from '@artifactbin/contracts/membership';
@@ -10,7 +11,7 @@ import { useInbox } from '../lib/notifications';
 import { apiFetch } from '../lib/api';
 
 const ACTION: Record<string, string> = { group_invited:'invited you to group',group_role_changed:'changed your role in group',group_member_removed:'removed your membership in group',group_deleted:'deleted group',group_shared:'shared a page with group',group_unshared:'removed a page share from group',group_transferred:'moved a page to group',request: 'asked to join', invitation: 'invited you to', joined: 'added you to', follow: 'followed you', like: 'liked', reply_resolved: 'replied and resolved your comment in', reply: 'replied in', resolved: 'resolved a comment in', reopened: 'reopened a comment in' };
-function senderLabel(item: MemberNotificationItem): string { return item.agent_label ? item.agent_label === 'Agent' ? 'Agent' : `@${item.agent_label.replace(/^@/, '')}` : `@${item.username ?? 'someone'}`; }
+function senderLabel(item: MemberNotificationItem): string { return item.agent_label ? item.agent_label === 'Agent' ? 'Agent' : `@${item.agent_label.replace(/^@/, '')}` : personLabel(item); }
 function destination(item: MemberNotificationItem): string {
   if(item.source?.startsWith('group:'))return item.group_handle?'/@'+encodeURIComponent(item.group_handle):'/account';
   if (item.kind === 'follow') return personLinkPath(item.sender_id);

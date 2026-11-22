@@ -23,7 +23,7 @@ export function AccountPage(): JSX.Element {
       <div class="space-y-8">
         <section aria-labelledby="profile-heading"><SectionHeading id="profile-heading" class="mb-4">Profile</SectionHeading>
           <Panel class="grid items-start gap-5 lg:grid-cols-[240px_minmax(0,1fr)] lg:gap-6">
-            <div class="border-b border-edge pb-5 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-6"><p class="mb-3 text-sm font-medium">Profile photo</p><AvatarCircle compact image={page.data()?.image ?? null} initial={page.data()?.username ?? 'a'} userId={session()?.user?.id ?? ''} onChange={() => void page.refresh(true)} onRemove={() => void page.refresh(true)} /></div>
+            <div class="border-b border-edge pb-5 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-6"><p class="mb-3 text-sm font-medium">Profile photo</p><AvatarCircle compact image={page.data()?.image ?? null} initial={page.data()?.name?.trim() || page.data()?.username || 'a'} userId={session()?.user?.id ?? ''} onChange={() => void page.refresh(true)} onRemove={() => void page.refresh(true)} /></div>
             <UsernameCard name={page.data()?.name ?? null} username={page.data()?.username ?? null} />
           </Panel>
         </section>

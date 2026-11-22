@@ -77,7 +77,7 @@ async function signedInChrome(door: Door, page: Record<string, any>, id: string,
  */
 async function world() {
   const db = await getDb();
-  const author = await ensureUsername(await createUser({ email: 'mxmx_test_budget_author@example.com' }));
+  const author = await ensureUsername(await createUser({ name: 'Sample Author', email: 'mxmx_test_budget_author@example.com' }));
   await db.query("UPDATE users SET image_key = 'avatars/budget-author.webp' WHERE id = $1", [author.id]);
   const viewer = await ensureUsername(await createUser({ email: 'mxmx_test_budget_viewer@example.com' }));
   const fan = await createUser({ email: 'mxmx_test_budget_fan@example.com' });
@@ -117,7 +117,7 @@ for (const door of ['json', 'html'] as const) describe(`a page view through the 
     const chrome = await signedInChrome(door, page, w.doc, actor);
     expect(chrome.like).toEqual({ liked: true, count: 3 });
     expect(chrome.follow).toEqual({ userId: w.author.id, following: true, count: 2 });
-    expect(chrome.author).toEqual({ username: w.author.username, id: w.author.id, image: expect.stringContaining(`/${w.author.id}`), forkedFrom: null });
+    expect(chrome.author).toEqual({ name: 'Sample Author', username: w.author.username, id: w.author.id, image: expect.stringContaining(`/${w.author.id}`), forkedFrom: null });
     expect(chrome.openAnnotations).toBe(2);
     expect(chrome).not.toHaveProperty('hasInvitedUsers');
     expect(count).toBeLessThanOrEqual(BUDGET[door].signedIn);
@@ -134,7 +134,7 @@ for (const door of ['json', 'html'] as const) describe(`a page view through the 
     expect(page.role).toBe('viewer');
     expect(page.like).toEqual({ liked: false, count: 3 });
     expect(page.follow).toEqual({ userId: w.author.id, following: false, count: 2 });
-    expect(page.surface.author).toMatchObject({ username: w.author.username, id: w.author.id });
+    expect(page.surface.author).toMatchObject({ name: 'Sample Author', username: w.author.username, id: w.author.id });
     expect(page.surface.openAnnotations).toBe(2);
     expect(count).toBeLessThanOrEqual(BUDGET[door].anonymous);
   });
@@ -151,7 +151,7 @@ for (const door of ['json', 'html'] as const) describe(`a page view through the 
     const chrome = await signedInChrome(door, page, w.doc, actor);
     expect(chrome.like).toEqual({ liked: false, count: 3 });
     expect(chrome.follow).toBeNull();
-    expect(chrome.author).toMatchObject({ username: w.author.username, id: w.author.id });
+    expect(chrome.author).toMatchObject({ name: 'Sample Author', username: w.author.username, id: w.author.id });
     expect(chrome.openAnnotations).toBe(2);
     expect(chrome.hasInvitedUsers).toBe(false);
     if (door === 'html') expect(page.surface.hasEditableRegions).toBe(false);

@@ -48,7 +48,7 @@ describeRetryingRead('the invite lookup', () => ({
     fireEvent.focusIn(finder); (finder as HTMLElement).focus(); fireEvent.click(finder);
     return { abort: () => unmount?.() };
   },
-  landed: () => !!document.body.textContent?.includes('@alex'),
+  landed: () => !!document.body.textContent?.includes('Alex'),
 }), {
   matches: (url) => url.startsWith('/api/my/artifacts/doc1/members?purpose=invite'),
   ok: () => Response.json({ people: [{ user_id: 'u1', username: 'alex', name: 'Alex' }] }),

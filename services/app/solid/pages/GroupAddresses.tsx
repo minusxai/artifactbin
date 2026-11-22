@@ -5,6 +5,7 @@
  * read the list; admins remove. Nothing is drawn when the installation turns group approvals off
  * (TRUST__GROUP_APPROVALS=off answers 403).
  */
+import { personLabel } from '../lib/person-label';
 import { createSignal, For, Show, type JSX } from 'solid-js';
 import type { GroupSummary } from '@artifactbin/contracts/groups';
 import { apiRequest } from '../lib/api';
@@ -41,7 +42,7 @@ export function GroupAddresses(props: { group: Pick<GroupSummary, 'id' | 'name' 
           <ul class="mt-2"><For each={value().addresses}>{(address) => <ListRow>
             <span class="min-w-0 flex-1 break-all font-medium">{address.host.replace(/^https:\/\//, '')}</span>
             <Badge tone="dim">{KIND[address.directive]}</Badge>
-            <span class="text-xs text-muted">Approved by {address.approved_by.name ?? address.approved_by.username ?? 'a former member'} · {dateTime(address.approved_at)}</span>
+            <span class="text-xs text-muted">Approved by {personLabel(address.approved_by, 'a former member')} · {dateTime(address.approved_at)}</span>
             <Show when={admin()}><Button variant="secondary" type="button" disabled={busy()} aria-label={`Remove ${address.host} (${KIND[address.directive]})`} onClick={() => void remove(address)}>Remove</Button></Show>
           </ListRow>}</For></ul>
         </Show>}

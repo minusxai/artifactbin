@@ -91,13 +91,13 @@ describe('GET /api/page/session — user', () => {
     };
 
   it('carries the handle and picture address, reading the row without writing it', async () => {
-    const user = await createUser({ email: 'mxmx_test_sessionpic@example.com' });
+    const user = await createUser({ name: 'Sample Viewer', email: 'mxmx_test_sessionpic@example.com' });
     await (await getDb()).query('UPDATE users SET username = NULL WHERE id = $1', [user.id]);
     sessionUser.id = user.id; sessionUser.email = user.email;
 
     // No handle yet and no picture: the route reports both as null and does
     // NOT assign a handle — a hot no-store read never writes.
-    expect((await body()).user).toEqual({ id: user.id, email: user.email, username: null, image: null });
+    expect((await body()).user).toEqual({ id: user.id, email: user.email, name: 'Sample Viewer', username: null, image: null });
     expect((await getUserById(user.id))?.username).toBeNull();
 
     await (await getDb()).query("UPDATE users SET username = 'sessionpic' WHERE id = $1", [user.id]);
@@ -105,7 +105,7 @@ describe('GET /api/page/session — user', () => {
     const row = await getUserById(user.id);
     const image = avatarUrl(row!);
     expect(image).toBe(new URL(`/api/users/${user.id}/avatar?v=${avatarVersion(key)}`, PUBLIC_BASE_URL).href);
-    expect((await body()).user).toEqual({ id: user.id, email: user.email, username: 'sessionpic', image });
+    expect((await body()).user).toEqual({ id: user.id, email: user.email, name: 'Sample Viewer', username: 'sessionpic', image });
   });
 
   it('is null for nobody and for a browser holding only a token', async () => {
