@@ -29,7 +29,7 @@ export function CommentMentionPicker(props: {
   <Show when={people().length}>
    <ComboboxList id={`${id}-people`} label="People" options={people()} optionKey={person=>person.user_id}
     active={nav.active()} onActive={nav.setActive} onSelect={choose}
-    renderOption={person=><span aria-label={`Mention ${personLabel(person)}`} class="flex w-full min-w-0 items-baseline gap-2 text-left"><span class="text-sm text-fg">{personLabel(person)}</span><Show when={person.name?.trim()}><span class="truncate text-xs text-muted">@{person.username}</span></Show></span>}/>
+    renderOption={person=><span aria-label={`Mention ${personLabel(person)}`} class="flex w-full min-w-0 items-baseline gap-2 text-left"><span class="text-sm text-fg">{personLabel(person)}</span><Show when={person.name?.trim()}><span class="truncate text-xs text-muted">/@{person.username}</span></Show></span>}/>
   </Show>
   <Show when={unavailable} fallback={<Show when={!people().length}><p class="px-2 py-1 text-xs text-muted">No matching followers or members.</p></Show>}>
    <p role="note" class="px-2 py-1 text-xs text-muted">{unavailable}</p>

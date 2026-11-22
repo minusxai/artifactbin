@@ -132,7 +132,7 @@ function PeopleInvitePicker(props: { endpoint: string; selected: Person[]; onSel
     <div on:focusin={() => setEngaged(true)}>
       <Combobox ariaLabel="Find people by username" listLabel="People suggestions" placeholder="@username"
         value={query()} onValue={value => { setEngaged(true); setQuery(value); }} options={options()} optionKey={person => person.user_id}
-        renderOption={person => <>{personLabel(person)}<Show when={person.name?.trim()}><span class="ml-2 text-xs text-muted">@{person.username}</span></Show></>}
+        renderOption={person => <>{personLabel(person)}<Show when={person.name?.trim()}><span class="ml-2 text-xs text-muted">/@{person.username}</span></Show></>}
         status={loading() ? 'Finding people…' : error() || (options().length ? undefined : 'No people found.')}
         onSelect={person => { props.onSelect(person); setQuery(''); }} />
     </div>

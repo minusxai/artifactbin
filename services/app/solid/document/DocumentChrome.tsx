@@ -2,7 +2,7 @@
 /**
  * THE DOCUMENT PAGE'S BAR — the app's one bar (solid/components/PageChrome) with what a document adds to it:
  *
- *  - the BYLINE in place of the crumbs: the author's face and `@handle` (their profile), the follow pill, the
+ *  - the BYLINE in place of the crumbs: the author's face and display name (their profile), the follow pill, the
  *    document's title, the Join/Joined/Pending pill, and an
  *    archived version's one fixed line;
  *  - the RAIL beside the star: like and comment (with their counts), fork, install and share — the reader's
@@ -19,7 +19,6 @@ import GitFork from 'lucide-solid/icons/git-fork';
 import Download from 'lucide-solid/icons/download';
 import Ellipsis from 'lucide-solid/icons/ellipsis';
 import ChevronRight from 'lucide-solid/icons/chevron-right';
-import { loginHref } from '@/lib/http/login-href';
 import { artifactAppPath } from '@/lib/document-serving/artifact-pwa';
 import type { Visibility } from '@artifactbin/contracts/sharing';
 import { PageChrome, type Panel } from '../components/PageChrome';
@@ -31,7 +30,6 @@ const CompactMenu = lazy(() => import('./DocumentCompactMenu').then(module => ({
 import { DocumentTitle } from '../components/PageBar';
 import { DocumentCommentAction } from './DocumentBarActions';
 import { Avatar } from '../ui/Avatar';
-import { sendReaction } from './reactions';
 
 /** The one line an archived render's bar carries. */
 const archivedBanner = (version: number, head: number): string => `Version ${version} of ${head} · read-only`;
@@ -75,19 +73,18 @@ export function DocumentChrome(props: DocumentChromeProps): JSX.Element {
   const like = () => changedLike() ?? props.like;
   const follow = () => changedFollow() ?? props.follow ?? null;
   const reading = () => !props.archived && props.remoteAvailable !== false;
-  const toLogin = (intent: 'like' | 'follow') => window.location.assign(loginHref(window.location, intent));
-
+  // The document can display both counts before the reader needs either reaction's network code.
   const toggleLike = async () => {
     if (props.likeUnavailable) return;
-    if (!props.signedIn()) { toLogin('like'); return; }
-    const answer = await sendReaction<{ liked: boolean; count: number }>(`/api/my/artifacts/${encodeURIComponent(props.id)}/like`, like().liked, 'like');
+    const { toggleDocumentLike } = await import('./reactions');
+    const answer = await toggleDocumentLike(props.signedIn(), props.id, like().liked);
     if (answer) setLike(answer);
   };
   const toggleFollow = async () => {
     const current = follow();
     if (!current) return;
-    if (!props.signedIn()) { toLogin('follow'); return; }
-    const answer = await sendReaction<{ following: boolean; count: number }>(`/api/users/${encodeURIComponent(current.userId)}/follow`, current.following, 'follow');
+    const { toggleDocumentFollow } = await import('./reactions');
+    const answer = await toggleDocumentFollow(props.signedIn(), current.userId, current.following);
     if (answer) setFollow({ ...current, following: answer.following, count: answer.count });
   };
 

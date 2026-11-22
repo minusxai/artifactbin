@@ -78,7 +78,7 @@ it('labels an agent reply without showing an unrelated accepted invitation statu
  window.history.replaceState(null,'','/notifications');render(()=><App/>);
  const link=await screen.findByRole('link',{name:'@afbin replied in Notes'});
  expect(link.closest('li')).not.toHaveTextContent('Invitation accepted');
- expect(screen.getByRole('link',{name:'@alice invited you to Shared'}).closest('li')).toHaveTextContent('Invitation accepted');
+ expect(screen.getByRole('link',{name:'/@alice invited you to Shared'}).closest('li')).toHaveTextContent('Invitation accepted');
 });
 
 const INBOX = { autoAccept: false, unread: 1, next: null, blocks: [], notifications: [{ id: 'n1', artifact_id: 'doc1', user_id: 'usr_1', sender_id: 'usr_2', username: 'alice', name: 'Alex Example', kind: 'reply', source: null, title: 'Notes', read_at: null, revision: 1 }] };
