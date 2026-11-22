@@ -3,7 +3,7 @@
  * reader, unless the reader reads as the group (a signed-in ordinary account that can open the page: lib/query-approvals
  * `readsAsGroup`) and an approval holds for exactly the query of the version read (`approvedRun`). Then it runs as an
  * agent signed in as the page's owning group at member level (lib/connections `groupViewer`), the reader's own identity
- * never sent as the reader; a parameter outside what the approval allows is refused, saying the value is not allowed
+ * used to check its current tenancy against the group chain before and after the delegated read; a parameter outside what the approval allows is refused, saying the value is not allowed
  * for this query, never run as the reader instead. Only a declared query, read by name from the version, ever runs as
  * the group: a reader's own `sql` always runs as the reader. The approval is asked again after the read, so one revoked
  * meanwhile never answers. Anonymous readers are refused, as everywhere on the default connection. Every read run as
@@ -15,7 +15,7 @@ import {sqlReadFailure} from '@artifactbin/contracts/sql-failures';
 import type {HtmlPageVersion} from '@artifactbin/contracts/html-page';
 import type {AccessActor} from '@/lib/accounts';
 import {VIEWER_PARAMS,connectorViewer,declaredConnectionQuery,groupViewer,runDeclaredConnectionQuery,type ConnectionSqlReply} from '@/lib/connections';
-import {approvedRun,pageOwnerName,paramsOutside,readsAsGroup} from '@/lib/query-approvals';
+import {approvedQueryScope,approvedRun,pageOwnerName,paramsOutside,readsAsGroup} from '@/lib/query-approvals';
 import {actorSubject,emit} from '@/lib/platform';
 
 type Admission={step<T>(pending:Promise<T>):Promise<T>;dispatch(read:boolean):AbortSignal};
@@ -27,12 +27,16 @@ export async function pageDeclaredConnectionSql(actor:AccessActor,page:HtmlPageV
  if(!viewer)return sqlReadFailure('sign_in_required',`sign in to read ${declared.link.name}: the default connection answers signed-in people only`);
  const approval=await admission.step(approvedRun(page.pageId,head,declared,actor));
  if(!approval)return runDeclaredConnectionQuery(viewer,declared,raw.params,signal,admission,choice);
+ const scope=await admission.step(approvedQueryScope(actor.userId,approval.groupId));
+ if(!scope)return sqlReadFailure('permission_denied','');
  const outside=paramsOutside(declared.query.params,raw.params,VIEWER_PARAMS);
  // Said as it is: the value is not one this query takes, whatever the reader's own access.
  if(outside){const refused=sqlReadFailure('permission_denied',outside);return {...refused,body:{...refused.body,notice:outside.charAt(0).toUpperCase()+outside.slice(1)}};}
  const reply=await runDeclaredConnectionQuery(groupViewer(approval.groupId,'member'),declared,raw.params,signal,admission);
  // Revoked, edited or no longer the group's while it ran: the door reads again, as the reader.
  if((await admission.step(approvedRun(page.pageId,head,declared,actor)))?.id!==approval.id)throw new Error('dataset_changed');
+ const current=await admission.step(approvedQueryScope(actor.userId,approval.groupId));
+ if(!current || JSON.stringify(current)!==JSON.stringify(scope))return sqlReadFailure('permission_denied','');
  void emit(actorSubject(actor),'approved_query_read',{kind:'artifact',id:page.pageId},{approval_id:approval.id,query:declared.query.name,query_hash:approval.hash,connection:approval.connection,group_id:approval.groupId});
  return reply;
 }
