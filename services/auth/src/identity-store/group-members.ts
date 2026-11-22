@@ -7,7 +7,7 @@
 import {IdentityError, type GroupChange, type IdentityService, type TransactionalQueryable} from '@artifactbin/contracts/identity-module';
 import {isGroupRole, groupRoleRank, type GroupInvitation, type GroupRole} from '@artifactbin/contracts/groups';
 import {isTestDomainEmail} from '@artifactbin/contracts/test-domain';
-import {insertMissingGroupMembers,isTestAccount,liveGroup,lockGroups,memberRole,protectLastAdmin,recordChange,requireAdmin} from './group-access';
+import {insertMissingGroupMembers,isTestAccount,liveGroup,lockGroups,memberRole,protectLastAdmin,recordChange,requireAdmin,requireManualMembership} from './group-access';
 import {internalId,type IdentityTables} from './tables';
 import {companySignInRoot} from './company-group';
 
@@ -19,6 +19,7 @@ export function groupMemberMethods(db: TransactionalQueryable, t: IdentityTables
       if (!isGroupRole(next)) throw new IdentityError('invalid_role');
       return db.transaction(async tx => {
         await requireAdmin(tx, t, actorId, groupId);
+        await requireManualMembership(tx, t, groupId);
         const previous = await memberRole(tx, t, userId, groupId);
         if (!previous) throw new IdentityError('not_member', 404);
         if (await isTestAccount(tx, t, actorId) && !await isTestAccount(tx, t, userId)) throw new IdentityError('test_account_restricted', 403);
@@ -36,6 +37,7 @@ export function groupMemberMethods(db: TransactionalQueryable, t: IdentityTables
         if (actorId === userId) {
           if (!(await lockGroups(tx, t, [groupId])).has(groupId) || !await memberRole(tx, t, actorId, groupId)) throw new IdentityError('not_found', 404);
         } else await requireAdmin(tx, t, actorId, groupId);
+        await requireManualMembership(tx, t, groupId);
         if (!await memberRole(tx, t, userId, groupId)) return {changes: []};
         await protectLastAdmin(tx, t, groupId, userId);
         const company = await companySignInRoot(tx, t.groups, options.appSchema);
@@ -58,7 +60,7 @@ export function groupMemberMethods(db: TransactionalQueryable, t: IdentityTables
       const email = rawEmail.trim().toLowerCase();
       return db.transaction(async tx => {
         await requireAdmin(tx, t, actorId, groupId);
-        if ((await liveGroup(tx, t, groupId))?.trusted_issuer != null) throw new IdentityError('host_managed_membership', 403);
+        await requireManualMembership(tx, t, groupId);
         if (await isTestAccount(tx, t, actorId) && !(options.testDomain && isTestDomainEmail(email, options.testDomain))) throw new IdentityError('test_account_restricted', 403);
         const previous = (await tx.query<GroupInvitation>(`SELECT id,email,role,created_at,invited_by FROM ${t.group_invitations} WHERE group_id=$1 AND email=$2`, [groupId, email])).rows[0];
         if (previous?.role === invited) return {invitation: {...previous, changed: false}, changes: []};

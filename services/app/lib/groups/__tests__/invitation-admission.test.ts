@@ -4,7 +4,7 @@ import {account,sql} from '@/__tests__/artifact-fixtures';
 import {getDb,services,syncIdentitySettings} from '@/lib/platform';
 import {admitDeploymentIdentity,setupDeployment} from '@/lib/deployment';
 import {overrideConfig,resetConfigOverrides} from '@/lib/platform/config';
-import {createGroup,inviteGroupMember,removeGroupMember} from '..';
+import {createGroup,deleteGroup,inviteGroupMember,removeGroupMember,setGroupMember} from '..';
 useAppHarness();
 afterEach(resetConfigOverrides);
 async function companyGroup(handle:string){
@@ -72,4 +72,25 @@ it('refuses manual invitations and ignores old invitations for issuer-managed gr
  expect(await services().identity.acceptGroupInvitations({userId:person.userId,email:person.email!})).toEqual({groupIds:[],changes:[]});
  expect(await sql('SELECT group_id FROM group_members WHERE user_id=$1',[person.userId])).toEqual([]);
  expect(await sql("SELECT id FROM group_invitations WHERE id='legacy'")).toEqual([{id:'legacy'}]);
+});
+
+it('keeps host-managed seats under issuer control for both direct and inherited admins',async()=>{
+ const {owner,group}=await companyGroup('managed_root');
+ const direct=await account('mxmx_test_direct@example.com');
+ const member=await account('mxmx_test_member@example.com');
+ const subgroup=await createGroup(owner.userId,{handle:'managed_team',name:'Managed team',parent_id:group.id});
+ await sql("UPDATE auth.groups SET trusted_issuer='example-issuer' WHERE id=$1",[subgroup.id]);
+ await sql("INSERT INTO auth.group_members(group_id,user_id,role) VALUES ($1,$2,'member')",[subgroup.id,member.userId]);
+ await sql("UPDATE auth.group_members SET user_id=$2 WHERE group_id=$1 AND role='admin'",[subgroup.id,direct.userId]);
+ const refusal={code:'host_managed_membership',status:403};
+ for(const actor of [owner,direct]){
+  await expect(setGroupMember(actor.userId,subgroup.id,member.userId,'admin')).rejects.toMatchObject(refusal);
+  await expect(removeGroupMember(actor.userId,subgroup.id,member.userId)).rejects.toMatchObject(refusal);
+  await expect(deleteGroup(actor.userId,subgroup.id,subgroup.handle)).rejects.toMatchObject(refusal);
+ }
+ await expect(removeGroupMember(member.userId,subgroup.id,member.userId)).rejects.toMatchObject(refusal);
+ expect(await services().identity.admitToGroup({userId:owner.userId,email:owner.email!,groupId:subgroup.id,inviteOnly:false}))
+  .toEqual({admitted:false,changes:[]});
+ expect(await sql('SELECT user_id,role FROM group_members WHERE group_id=$1 ORDER BY role',[subgroup.id]))
+  .toEqual([{user_id:direct.userId,role:'admin'},{user_id:member.userId,role:'member'}]);
 });

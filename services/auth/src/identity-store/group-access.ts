@@ -46,6 +46,10 @@ export const requireAdmin = async (q: Queryable, t: IdentityTables, actorId: str
   if (!await memberRole(q, t, actorId, id)) throw new IdentityError(missing, 404);
   throw new IdentityError('forbidden', 403);
 };
+/** Manual seat mutations call this after authorizing the actor and locking the live group. */
+export async function requireManualMembership(q: Queryable, t: IdentityTables, id: string) {
+  if ((await liveGroup(q, t, id))?.trusted_issuer != null) throw new IdentityError('host_managed_membership', 403);
+}
 /** A change may not leave a group without a DIRECT admin: an inherited admin is never counted. */
 export const protectLastAdmin = async (q: Queryable, t: IdentityTables, id: string, userId: string) => {
   if (await memberRole(q, t, userId, id) === 'admin' && Number((await q.query<{count: string}>(`SELECT count(*) FROM ${t.group_members} WHERE group_id=$1 AND role='admin'`, [id])).rows[0]!.count) <= 1)
