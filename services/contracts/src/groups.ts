@@ -1,11 +1,11 @@
 import type {ArtifactFormat} from './artifact-format';
 import {isValidHandle} from './handles';
 /** Group identity is independent of accounts and artifacts. IDs, never handles, carry authority. */
-export type GroupRole = 'member' | 'editor' | 'admin';
+export type GroupRole = 'member' | 'admin';
 /** Group roles govern this group only; artifact sharing and external data policies are separate. */
-export const GROUP_ROLES = ['member', 'editor', 'admin'] as const;
+export const GROUP_ROLES = ['member', 'admin'] as const;
 export const isGroupRole = (value: unknown): value is GroupRole => typeof value === 'string' && (GROUP_ROLES as readonly string[]).includes(value);
-export const canEditGroupContent = (role: GroupRole | null | undefined): boolean => role === 'editor' || role === 'admin';
+export const canEditGroupContent = (role: GroupRole | null | undefined): boolean => role === 'admin';
 export const groupRoleRank = (role: GroupRole): number => GROUP_ROLES.indexOf(role);
 export type ArtifactDestination = {type:'personal'} | {type:'group';id:string};
 export type DefaultDestination = ArtifactDestination | {type:'inherit'};
@@ -37,7 +37,7 @@ export interface GroupAudienceMember {user_id:string;username:string|null;name:s
  * names the ancestor that authority comes from (absent otherwise). `parent` and `subgroups` place the group in the
  * installation's tree; `subgroup_audience` (at most 100) lists the people its shares also reach through its subgroups.
  */
-export interface GroupDetail {group:GroupSummary & {company_root?:boolean;tenancy_id?:string|null;host_provisioned?:boolean};members:GroupMember[];linked_groups:GroupSummary[];invitations?:GroupInvitation[];parent:GroupRelative|null;subgroups:GroupRelative[];subgroup_audience:GroupAudienceMember[];admin_via?:{id:string;handle:string;name:string}|null;}
+export interface GroupDetail {group:GroupSummary & {company_root?:boolean;tenancy_id?:string|null;host_provisioned?:boolean};members:GroupMember[];can_publish_pages?:boolean;linked_groups:GroupSummary[];invitations?:GroupInvitation[];parent:GroupRelative|null;subgroups:GroupRelative[];subgroup_audience:GroupAudienceMember[];admin_via?:{id:string;handle:string;name:string}|null;}
 export interface DeploymentState {mode:'public'|'company';setup_complete:boolean;is_owner:boolean;default_group:GroupSummary|null;}
 export interface CreateGroupInput {handle:string;name:string;description?:string;parent_id?:string|null;}
 

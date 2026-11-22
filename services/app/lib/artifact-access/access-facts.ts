@@ -51,7 +51,7 @@ export interface AccessFacts {
    * The actor's role in a live group (lib/groups `getGroupRole`): `admin` when they administer it directly or through
    * an ancestor (identity's `group_admins`), else their direct membership's role. Only administration flows down.
    */
-  groupRole(groupId: string): Promise<GroupRole | null>;
+  groupRole(groupId: string): Promise<GroupRole | 'editor' | null>;
   /**
    * Is the actor in this live group's AUDIENCE: a direct member of it or of any descendant (lib/groups hierarchy)?
    * What a group-owned artifact's member-read rule and a group share both reach; never an administrative role.
@@ -74,7 +74,7 @@ const SHARED_WITH_SQL = 'SELECT 1 FROM artifact_shares s WHERE s.artifact_id=$1 
 const NAMES_READER_SQL = '(s.user_id = $2 OR (s.user_id IS NULL AND (s.email = $3 OR s.email = (SELECT email FROM users WHERE id = $2))))';
 const UNRESOLVED_ACCOUNT_SHARE_SQL = '(s.user_id IS NULL AND s.email = (SELECT email FROM users WHERE id = $2))';
 const RESOLVE_SHARES_SQL = (artifacts: string) => `UPDATE artifact_shares SET user_id = $2 WHERE artifact_id ${artifacts} AND user_id IS NULL AND email = (SELECT email FROM users WHERE id = $2)`;
-export const EDITOR_GROUPS_SQL = "SELECT gm.group_id FROM group_members gm JOIN groups g ON g.id=gm.group_id WHERE gm.user_id=$1 AND gm.role='editor' AND g.deleted_at IS NULL UNION SELECT ga.group_id FROM group_admins ga WHERE ga.user_id=$1";
+export const EDITOR_GROUPS_SQL = "SELECT ga.group_id FROM group_admins ga WHERE ga.user_id=$1";
 /** The best role a group share reaching the actor names: a share to any group the actor's memberships climb to. */
 const GROUP_SHARE_ROLES_SQL = `SELECT s.role FROM artifact_group_shares s JOIN users u ON u.id=$2 WHERE s.artifact_id=$1 AND u.kind='account' AND s.group_id IN (${reachedGroupsSql('$2')})`;
 const AUDIENCE_SQL = `SELECT EXISTS (SELECT 1 FROM (${reachedGroupsSql('$2')}) reached WHERE reached.id=$1) AS reached`;
@@ -282,7 +282,7 @@ export async function preloadAccessFacts(db: Queryable, actor: AccessActor, rows
   const reached = new Set<string>();
   const shares = new Map<string, ShareFact[]>();
   if (actor.userId) {
-    for (const g of (await db.query<{ group_id: string; role: GroupRole }>("SELECT m.group_id,m.role FROM group_members m JOIN groups g ON g.id=m.group_id WHERE m.user_id=$1 AND g.deleted_at IS NULL UNION ALL SELECT ga.group_id,'admin' FROM group_admins ga WHERE ga.user_id=$1", [actor.userId])).rows) if (groups.get(g.group_id) !== 'admin') groups.set(g.group_id, g.role);
+    for (const g of (await db.query<{ group_id: string; role: GroupRole }>("SELECT m.group_id,CASE m.role WHEN 'editor' THEN 'member' ELSE m.role END AS role FROM group_members m JOIN groups g ON g.id=m.group_id WHERE m.user_id=$1 AND g.deleted_at IS NULL UNION ALL SELECT ga.group_id,'admin' FROM group_admins ga WHERE ga.user_id=$1", [actor.userId])).rows) if (groups.get(g.group_id) !== 'admin') groups.set(g.group_id, g.role);
     for (const g of (await db.query<{ id: string }>(reachedGroupsSql('$1'), [actor.userId])).rows) reached.add(g.id);
     if (ids.length) {
       const found = await db.query<ShareFact>(

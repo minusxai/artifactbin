@@ -51,12 +51,12 @@ export async function composed(env:Record<string,string>={}){
 export const page=(title:string)=>`<!doctype html><html><head></head><body><h1>${title}</h1><p data-af-id="intro">Body of ${title}</p></body></html>`;
 
 /** The tree and its pages: who owns each, and how each is shared. */
-export async function world(host:Awaited<ReturnType<typeof composed>>,withPages=true){
+export async function world(host:Awaited<ReturnType<typeof composed>>,withPages=true,eveRole:'member'|'admin'='admin'){
  const ada=await host.signIn('mxmx_test_ga_ada@example.test'),eve=await host.signIn('mxmx_test_ga_eve@example.test');
  const root=await createGroup(ada.userId,{handle:'ga_root',name:'Root'});
  const team=await createGroup(ada.userId,{handle:'ga_team',name:'Team',parent_id:root.id});
  const squad=await createGroup(ada.userId,{handle:'ga_squad',name:'Squad',parent_id:team.id});
- await admitGroupMember(ada.userId,team.id,eve.userId,'editor');
+ await admitGroupMember(ada.userId,team.id,eve.userId,eveRole);
  const publish=async(token:string,title:string,extra:Record<string,unknown>={})=>{
   const made=await host.call('POST','/api/artifacts',token,{title,html:page(title),...extra});
   expect(made.status,`${title}: ${JSON.stringify(made.body)}`).toBe(201);

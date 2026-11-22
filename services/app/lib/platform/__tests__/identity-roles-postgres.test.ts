@@ -114,7 +114,7 @@ describe.skipIf(!dockerImage('postgres:17-alpine'))('identity tables in a split-
   await superuser.query("INSERT INTO role_upgrade.group_members VALUES('g','new','editor')");
   expect(await migrateGroupRoles(db,options)).toEqual({changed:false});
   await assertGroupRoleModel(db,'role_upgrade');
-  expect((await superuser.query('SELECT user_id,role FROM role_upgrade.group_members ORDER BY user_id')).rows).toEqual([{user_id:'new',role:'editor'},{user_id:'old',role:'admin'}]);
+  expect((await superuser.query('SELECT user_id,role FROM role_upgrade.group_members ORDER BY user_id')).rows).toEqual([{user_id:'new',role:'member'},{user_id:'old',role:'admin'}]);
   expect((await superuser.query('SELECT role FROM role_upgrade.group_invitations')).rows).toEqual([{role:'member'}]);
  });
 

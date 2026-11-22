@@ -55,7 +55,7 @@ it('lets only an Admin of the owning group change who can open a page while an a
  const dialog=await host.fetch(new Request(`${origin}/api/my/artifacts/${page}/sharing`,{method:'PUT',headers:{cookie:eve.cookie,origin,'content-type':'application/json'},body:JSON.stringify({visibility:'unlisted'})}));
  refusedLive({status:dialog.status,body:await dialog.json() as Record<string,unknown>});
  // Nor an agent signed in as the group at editor level.
- const agent=await eve.asGroup(team.id,'editor');
+ const agent=await ada.asGroup(team.id,'editor');
  refusedLive(await host.call('PUT',`/api/artifacts/${page}`,agent.token,{html:html(),expectedVersion:current.version,expectedState:current.state,visibility:'unlisted'}));
  // Nor an invitation that gives a person access.
  const nia=await host.signIn('mxmx_test_qa_nia@example.test');
@@ -63,7 +63,7 @@ it('lets only an Admin of the owning group change who can open a page while an a
  refusedLive(await host.call('POST',`/api/artifacts/${page}/members`,eve.token,{action:'invite',usernames:[`@${username}`],includeAccess:true}));
  // Nothing changed, and Eve's changes to anything else still go through.
  expect(await sql('SELECT visibility,link_role FROM artifacts WHERE id=$1',[page])).toEqual([{visibility:'private',link_role:null}]);
- expect(await sql('SELECT email FROM artifact_shares WHERE artifact_id=$1',[page])).toEqual([{email:'mxmx_test_qa_olga@example.test'}]);
+ expect(await sql('SELECT email FROM artifact_shares WHERE artifact_id=$1 ORDER BY email',[page])).toEqual([{email:'mxmx_test_ga_eve@example.test'},{email:'mxmx_test_qa_olga@example.test'}]);
  expect((await patch(eve,{title:'Sales, renamed',visibility:'private'})).status).toBe(200);
  expect((await read(olga)).status).toBe(200);
  // An Admin of the group may.
@@ -79,7 +79,7 @@ it('keeps a group page\'s group shares its Admins\' alone while an approved quer
  const approved=await approve(ada);
  expect(approved.status).toBe(201);
  const share=(who:{token:string},group:string)=>host.call('PUT',`/api/artifacts/${page}/group-shares/${group}`,who.token,{role:'viewer'});
- // Eve, an Editor of Team, may not share it with a group of her own: a group page's group shares are its Admins' alone.
+ // Eve, an editor of the page, may not share it with a group of her own: a group page's group shares are its Admins' alone.
  const eves=await createGroup(eve.userId,{handle:'qa_eves',name:'Eves'});
  const refused=await share(eve,eves.id);
  expect([refused.status,refused.body?.error],JSON.stringify(refused.body)).toEqual([404,'not_found']);

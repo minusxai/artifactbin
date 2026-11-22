@@ -273,7 +273,7 @@ it('isolates pooled page reads and schema by group and leaves an ordinary siblin
   expect(await (await switched()).json()).toMatchObject({viewing_as:{id:second.id},rows:[{n:7}]});
   const privatePage = (await publish(alice,{html,visibility:'private',destination:{type:'personal'}})).body.id;
   expect((await sql(privatePage,bob,read)).status).toBe(404);
-  await setGroupMember(alice.userId!,parent.id,bob.userId!,'editor');
+  await setGroupMember(alice.userId!,parent.id,bob.userId!,'member');
   expect((await switched()).status).toBe(403);
   expect((await sql(team,bob,read)).body).toMatchObject({viewing_as:{id:first.id}});
   const schema = await agentSql(request('/api/default-connection/sql',{method:'POST',token:alice.token,json:{namespace:'gateway:catalog'}}));

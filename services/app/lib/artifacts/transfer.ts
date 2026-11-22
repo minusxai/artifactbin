@@ -62,5 +62,5 @@ export async function transferArtifact(actor:AccessActor,id:string,destination:A
 
 /** The actor directly edits the live group, read at decision time (identity rows are never locked by the app). */
 async function requireTransferGroup(tx:Queryable,actor:AccessActor,id:string):Promise<void>{
- if(!canEditGroupContent(await getGroupRole(actor.userId,id,tx)))throw new DatasetError('Destination requires group Editor or Admin membership',403);
+ if(!canEditGroupContent(await getGroupRole(actor.userId,id,tx)))throw new DatasetError('Destination requires group Admin access',403);
 }

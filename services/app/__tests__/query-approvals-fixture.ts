@@ -2,8 +2,9 @@
  * THE FIXTURE for the approved-query tests (query-approvals*.test.ts): the composed host of the group-principal tests,
  * and a real Postgres engine on a loopback socket (test-support pglite-wire) as the install's default connection, whose
  * guarded view refuses (42501) any reader whose groups are not allowed and shows the reader values it was sent. Root >
- * Team > Squad: Ada created all three (Admin), Rob is Team's Admin, Eve its Editor, Mia its Member; Olga is outside it.
+ * Team > Squad: Ada created all three (Admin), Rob is Team's Admin, Eve a Member with an editor share on the page, Mia its Member; Olga is outside it.
  */
+import {setGroupMember} from '@/lib/groups';
 import {afterAll,beforeAll,beforeEach,expect} from 'vitest';
 import {startPgliteWire,type PgliteWire} from '@artifactbin/test-support/pglite-wire';
 import {closeDefaultConnection} from '@/lib/connections';
@@ -45,12 +46,13 @@ export type Host=Awaited<ReturnType<typeof composed>>;
 export async function setting(host:Host){
  const {ada,eve,root,team,squad}=await world(host,false);
  const rob=await host.signIn('mxmx_test_qa_rob@example.test'),mia=await host.signIn('mxmx_test_qa_mia@example.test'),olga=await host.signIn('mxmx_test_qa_olga@example.test');
+ await setGroupMember(ada.userId,team.id,eve.userId,'member');
  await admitGroupMember(ada.userId,team.id,rob.userId,'admin');
  await admitGroupMember(ada.userId,team.id,mia.userId,'member');
  // The data is the team's: its members read it themselves; Olga has no access of her own.
  await wire.db.query('delete from public.allowed_groups');
  await wire.db.query('insert into public.allowed_groups values ($1)',[team.id]);
- const made=await host.call('POST','/api/artifacts',ada.token,{title:'Sales',html:html(),destination:{type:'group',id:team.id},visibility:'private',shares:[{email:'mxmx_test_qa_olga@example.test',role:'viewer'}]});
+ const made=await host.call('POST','/api/artifacts',ada.token,{title:'Sales',html:html(),destination:{type:'group',id:team.id},visibility:'private',shares:[{email:'mxmx_test_qa_olga@example.test',role:'viewer'},{email:'mxmx_test_ga_eve@example.test',role:'editor'}]});
  expect(made.status,JSON.stringify(made.body)).toBe(201);
  const page=String(made.body!.id);
  /** A reader runs the declared query `totals` (of `revision`, default the head), as the page's chart would. */

@@ -31,10 +31,11 @@ function stub(unavailable=false){return stubFetch({
 },{session,fallback:notFound});}
 const requested=(fetcher:ReturnType<typeof stub>)=>fetcher.mock.calls.map(([url])=>String(url));
 const deferred=()=>{let resolve!:(value:Response)=>void;const promise=new Promise<Response>(done=>{resolve=done;});return {promise,resolve};};
-it.each(['editor','admin'])('%s can create group content',async(role)=>{
- stubFetch({},{session,fallback:()=>bootstrapOf({...groupDestination,detail:{...groupDestination.detail,group:{...group,role}}})});
+it.each(['member','admin'])('%s can upload a group page',async(role)=>{
+ stubFetch({},{session,fallback:()=>bootstrapOf({...groupDestination,detail:{...groupDestination.detail,can_publish_pages:true,group:{...group,role}}})});
  open();expect(await screen.findByRole('heading',{name:'Team'})).toBeInTheDocument();
- expect(screen.getByRole('button',{name:'Create'})).toBeInTheDocument();
+ fireEvent.click(screen.getByRole('button',{name:'Create'}));
+ expect(await screen.findByText('Upload HTML')).toBeInTheDocument();
 });
 it('uses the default group shelf, links its handle to the group page, and hides write controls for viewers',async()=>{stub();open();expect(await screen.findByRole('heading',{name:'Team'})).toBeInTheDocument();expect(screen.getByRole('link',{name:'/@team'})).toHaveAttribute('href','/@team');expect(screen.queryByRole('button',{name:'Create'})).toBeNull();expect(screen.queryByRole('button',{name:'Invite person'})).toBeNull();});
 it.each([

@@ -1,7 +1,7 @@
 /**
  * WHO CHANGES WHO REACHES AN ARTIFACT (lib/artifact-access `sharingScope` / `managesSharing`): every writer of
  * visibility, link role, the share list, dataset access and dataset policy, asked by every kind of editor. The owner,
- * a named editor, a group Editor and a group's sign-in at Editor on its own pages may; an editor by LINK, the host's
+ * a named editor, a group's sign-in at Editor on its own pages may; an editor by LINK, the host's
  * document-editor grant and a viewer get the uniform miss, the answer a stranger gets. A link editor's ordinary save
  * that carries the current settings back is still a save, and naming themselves an editor is refused at every door.
  */
@@ -21,9 +21,9 @@ import { artifactPageAnswer } from '@/lib/document-serving';
 
 useAppHarness();
 
-const CALLERS = ['owner', 'named editor', 'group editor', 'group sign-in at editor', 'link editor', 'document editor', 'viewer'] as const;
+const CALLERS = ['owner', 'named editor', 'group member', 'group sign-in at editor', 'link editor', 'document editor', 'viewer'] as const;
 type Caller = (typeof CALLERS)[number];
-const MANAGES: readonly Caller[] = ['owner', 'named editor', 'group editor', 'group sign-in at editor'];
+const MANAGES: readonly Caller[] = ['owner', 'named editor', 'group sign-in at editor'];
 
 const sql = async (text: string, values: unknown[] = []) => (await (await getDb()).query(text, values)).rows;
 const head = async (id: string): Promise<ArtifactRow> => (await getArtifactById(id))!;
@@ -36,11 +36,11 @@ async function subject(caller: Caller, format: 'html' | 'dataset'): Promise<{ ro
   const content = format === 'html'
     ? { format: 'html' as const, source: nativeHtml('<p data-af-id="root">shared</p>'), meta: {}, title: 'Shared' }
     : { format: 'dataset' as const, source: null, meta: {}, title: 'Data', access: 'readwrite' as const };
-  if (caller === 'group editor' || caller === 'group sign-in at editor') {
+  if (caller === 'group member' || caller === 'group sign-in at editor') {
     const team = await createGroup(owner.userId, { handle: `sa_team${n}`, name: 'Team' });
-    await admitGroupMember(owner.userId, team.id, other.userId, 'editor');
+    await admitGroupMember(owner.userId, team.id, other.userId, 'member');
     const row = await createArtifact(null, owner.userId, { ...content, visibility: 'private', destination: { type: 'group', id: team.id } });
-    const actor: AccessActor = caller === 'group editor' ? other
+    const actor: AccessActor = caller === 'group member' ? other
       : { userId: null, tokenId: null, email: null, documentEditor: false, principalGroup: { id: team.id, role: 'editor', tokenId: 'tok_sa_group_sign_in', issuedBy: owner.userId } };
     return { row: await head(row.id), actor, self: other };
   }
@@ -91,7 +91,7 @@ describe('every writer of who reaches an artifact, asked by every kind of editor
     if (actor.userId) await sql('UPDATE users SET username=$2 WHERE id=$1 AND username IS NULL', [actor.userId, 'sa_inviter']);
     const invited = changeMembership(actor, row.id, { action: 'invite', usernames: ['@sa_invitee'], includeAccess: true });
     if (MANAGES.includes(caller)) await invited;
-    else await expect(invited).rejects.toThrow(/owners and editors|participate/);
+    else await expect(invited).rejects.toThrow(/owners and editors|participate|not found/i);
     expect((await sql('SELECT 1 FROM artifact_shares WHERE artifact_id=$1 AND email=$2', [row.id, invitee.email])).length).toBe(MANAGES.includes(caller) ? 1 : 0);
   });
 });
@@ -140,7 +140,7 @@ describe('the page answer says who manages sharing', () => {
       expect(answer.status, `${format}: ${JSON.stringify(answer.body)}`).toBe(200);
       const body = answer.body as { canManageSharing?: boolean; role?: string };
       // Every editor here holds edit access on the page; only those who manage sharing are offered it.
-      if (format === 'html' && caller !== 'viewer') expect(body.role, format).toMatch(/^(owner|editor)$/);
+      if (format === 'html' && caller !== 'viewer' && caller !== 'group member') expect(body.role, format).toMatch(/^(owner|editor)$/);
       expect(body.canManageSharing, format).toBe(MANAGES.includes(caller));
     }
   });

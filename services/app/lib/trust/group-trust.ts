@@ -7,7 +7,7 @@
  *
  *  - Script, style and frame run or embed code: never a group's to grant. A wildcard declaration is never approvable,
  *    and an approval is the canonical exact origin a declaration normalises to (lib/document `parseCspOrigin`).
- *  - Who: an admin of the group, directly or through a parent group (`GroupRole` is member, editor or admin; an editor cannot change approvals). Any direct member reads
+ *  - Who: an admin of the group, directly or through a parent group (`GroupRole` is member or admin; a member cannot change approvals). Any direct member reads
  *    the list. Every change is audited on the group (lib/groups `recordGroupMutation`) in its own transaction.
  *  - A reader's own Never on a document still wins there (./document-trust `standingOf`).
  *  - TRUST__GROUP_APPROVALS=off: nothing is offered, the API refuses, and stored rows are ignored (never deleted).

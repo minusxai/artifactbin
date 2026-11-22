@@ -100,7 +100,7 @@ async function world(host:Awaited<ReturnType<typeof composed>>){
  const root=await createGroup(ada.userId,{handle:'ae_root',name:'Root'});
  const team=await createGroup(ada.userId,{handle:'ae_team',name:'Team',parent_id:root.id});
  const squad=await createGroup(ada.userId,{handle:'ae_squad',name:'Squad',parent_id:team.id});
- await admitGroupMember(ada.userId,team.id,eve.userId,'editor');
+ await admitGroupMember(ada.userId,team.id,eve.userId,'admin');
  const publish=async(token:string,body:Record<string,unknown>)=>{const made=await host.call('POST','/api/artifacts',token,body);expect(made.status,JSON.stringify(made.body)).toBe(201);return String(made.body!.id);};
  const staff=await publish(eve.token,{title:'Staff',dataset:STAFF,visibility:'private',destination:{type:'group',id:team.id}});
  const html=`<html><head><link rel="af-dataset" data-af-name="staff" href="ref:${staff}"></head><body><section id="staff-chart"><af-chart sql="${QUERY}"></af-chart></section></body></html>`;

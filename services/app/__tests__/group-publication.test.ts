@@ -73,21 +73,27 @@ describe('publication uses shared account destination through the real HTTP hand
   const conflict=await create(a.token,{html:nativeHtml('<p id="intro">Wrong owner</p>'),parent_id:folder.body.id,destination:{type:'group',id:group.id}});
   expect(conflict.status).toBeGreaterThanOrEqual(400);expect(conflict.status).toBeLessThan(500);
  });
- it('lets viewers choose a default but refuses publication and never falls back after membership removal',async()=>{
+ it('publishes to a member’s saved group by explicit visibility and refuses private publication without an explicit group',async()=>{
   const a=await account('owner'),b=await account('member');const group=await createGroup(a.user.id,{handle:'publishing',name:'Publishing'});
   await admitGroupMember(a.user.id,group.id,b.user.id,'member');
   await setAccountPreferences(b.user.id,{type:'group',id:group.id});
-  const denied=await create(b.token,{html:nativeHtml('<p id="intro">Viewer cannot publish</p>')});
-  expect(denied.status).toBeGreaterThanOrEqual(400);expect(denied.status).toBeLessThan(500);
+  const page={html:nativeHtml('<p>Member publication</p>')};
+  expect((await create(b.token,page)).status).toBe(403);
+  const published=await create(b.token,{...page,visibility:'unlisted'});
+  expect(published.status,JSON.stringify(published.body)).toBe(201);
+  expect(await owner(published.body.id)).toMatchObject({user_id:null,group_id:group.id,creator_user_id:b.user.id});
+  const destination={type:'group',id:group.id};
+  expect((await create(b.token,{format:'folder',title:'No folder',destination})).status).toBe(403);
+  expect((await create(b.token,{...page,destination,shares:[{email:a.user.email,role:'viewer'}]})).status).toBe(403);
+  const child=await createGroup(a.user.id,{handle:'child_group',name:'Child',parent_id:group.id});
+  expect((await create(b.token,{...page,destination:{type:'group',id:child.id}})).status).toBe(403);
   await removeGroupMember(a.user.id,group.id,b.user.id);
-  const unavailable=await create(b.token,{html:nativeHtml('<p id="intro">No silent personal fallback</p>')});
-  expect(unavailable.status).toBeGreaterThanOrEqual(400);expect(unavailable.status).toBeLessThan(500);
-  const db=await getDb();expect((await db.query('SELECT id FROM artifacts WHERE user_id=$1 OR creator_user_id=$1',[b.user.id])).rows).toEqual([]);
+  expect((await create(b.token,{...page,visibility:'unlisted'})).status).toBe(403);
  });
- it('allows an ordinary direct human group Editor to create within its group folder',async()=>{
-  const a=await account('folder-admin'),b=await account('folder-editor');
-  const group=await createGroup(a.user.id,{handle:'editor_folders',name:'Editor folders'});
-  await admitGroupMember(a.user.id,group.id,b.user.id,'editor');
+ it('allows a direct member to create within its group folder',async()=>{
+  const a=await account('folder-admin'),b=await account('folder-member');
+  const group=await createGroup(a.user.id,{handle:'member_folders',name:'Member folders'});
+  await admitGroupMember(a.user.id,group.id,b.user.id,'member');
   const folder=await create(a.token,{format:'folder',title:'Reports',visibility:'private',destination:{type:'group',id:group.id}});
   expect(folder.status,JSON.stringify(folder.body)).toBe(201);
   const child=await create(b.token,{html:nativeHtml('<p>Count: 7</p>'),visibility:'private',destination:{type:'group',id:group.id},parent_id:folder.body.id});

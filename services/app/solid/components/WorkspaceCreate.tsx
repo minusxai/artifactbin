@@ -25,7 +25,7 @@ import HtmlUpload from './HtmlUpload';
 import { apiFetch } from '../lib/api';
 
 const TYPE_ICONS = { doc: FileText, editorial: Newspaper, deck: Presentation, dashboard: LayoutDashboard, plan: ListChecks, landing: PanelTop, scrolly: ScrollText, app: AppWindow } satisfies Record<ArtifactStarterTemplate, typeof FileText>;
-export default function WorkspaceCreate(props: { onCreated: () => void; parentId?: string | null; groupId?: string; personal?: boolean }): JSX.Element {
+export default function WorkspaceCreate(props: { onCreated: () => void; parentId?: string | null; groupId?: string; publishOnly?: boolean; personal?: boolean }): JSX.Element {
   const [uploadHtml, setUploadHtml] = createSignal(false);
   const [dialog, setDialog] = createSignal(false);
   const [name, setName] = createSignal('');
@@ -58,10 +58,11 @@ export default function WorkspaceCreate(props: { onCreated: () => void; parentId
   };
   const starterItem = (starter: (typeof ARTIFACT_STARTERS)[number]) => { const Icon = TYPE_ICONS[starter.template]; return { label: starter.label, text: starter.label, icon: () => <Icon size={14} class="shrink-0 text-muted" aria-hidden="true" />, disabled: busy(), onSelect: () => void createArtifact(starter.template) }; };
   // "New" is a doc, ready to type in (lib/workspace artifactStarter); the other kinds start from a template.
-  const entries = (): MenuEntry[] => [
+  const upload: MenuEntry = { label: 'Upload HTML', text: 'Upload HTML', icon: () => <FileUp size={14} />, onSelect: () => setUploadHtml(true) };
+  const entries = (): MenuEntry[] => props.publishOnly ? [upload] : [
     starterItem(ARTIFACT_STARTERS[0]!),
     { label: 'Template', text: 'Template', icon: () => <LayoutTemplate size={14} />, items: ARTIFACT_STARTERS.slice(1).map(starterItem) },
-    { label: 'Upload HTML', text: 'Upload HTML', icon: () => <FileUp size={14} />, onSelect: () => setUploadHtml(true) },
+    upload,
     { label: 'Folder', text: 'Folder', icon: () => <FolderPlus size={14} />, onSelect: choose },
     { section: 'assets', items: [
       { label: 'File', text: 'File', icon: () => <FileUp size={14} />, href: creationHref('/files/new') },

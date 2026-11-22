@@ -31,7 +31,7 @@ it('runs a declared query as each reader until an Admin approves it; then as the
   statement:'Everyone signed in with their own account who can open this page, including people who later join a group that can open it, will see what totals returns as Team sees it. '+
    'They may choose region (one of EU, US); any other value is refused. While it is approved, only an Admin of Team may change this page\'s sharing. '+
    'Editing the query, its connection or what readers may vary ends the approval.'}]});
- // An Editor of the group may neither see nor approve it.
+ // An editor of the page may neither see nor approve it.
  expect((await approvals(eve)).status).toBe(403);
  expect(await approve(eve)).toMatchObject({status:403,body:{error:'forbidden'}});
  expect(await approve(olga)).toMatchObject({status:404});
@@ -190,9 +190,9 @@ it('a page owned by a person has no approved queries, and an agent signed in as 
  expect((await host.call('GET',`/api/artifacts/${personal}/query-approvals`,eve.token)).status).toBe(404);
  // The group's agent, at either level, is refused at the app's edge and by the approval itself.
  for(const level of ['member','editor'] as const){
-  const agent=await eve.asGroup(team.id,level);
+  const agent=await ada.asGroup(team.id,level);
   expect(await approve(agent)).toMatchObject({status:403,body:{error:'group_principal_refused'}});
-  await expect(approvePageQuery({userId:null,tokenId:null,email:null,documentEditor:false,principalGroup:{id:team.id,role:level,issuedBy:eve.userId,tokenId:agent.tokenId}},page,{query:'totals',hash:'0'.repeat(64)})).rejects.toMatchObject({status:403,code:'forbidden'});
+  await expect(approvePageQuery({userId:null,tokenId:null,email:null,documentEditor:false,principalGroup:{id:team.id,role:level,issuedBy:ada.userId,tokenId:agent.tokenId}},page,{query:'totals',hash:'0'.repeat(64)})).rejects.toMatchObject({status:403,code:'forbidden'});
  }
  expect(await sql('SELECT count(*)::int AS n FROM page_query_approvals')).toEqual([{n:0}]);
 });

@@ -48,7 +48,7 @@ async function tree(){
  const mid=await createGroup(founder.userId,{handle:'mid_team',name:'Mid',parent_id:root.id});
  const leaf=await createGroup(founder.userId,{handle:'leaf_team',name:'Leaf',parent_id:mid.id});
  await admitGroupMember(founder.userId,root.id,ann.userId,'admin');
- await admitGroupMember(founder.userId,root.id,ed.userId,'editor');
+ await admitGroupMember(founder.userId,root.id,ed.userId,'member');
  await admitGroupMember(founder.userId,root.id,meg.userId,'member');
  await admitGroupMember(founder.userId,leaf.id,lee.userId,'admin');
  await admitGroupMember(founder.userId,leaf.id,mia.userId,'member');
@@ -76,11 +76,11 @@ describe('an admin of a parent administers its subgroups without being their mem
   expect(await routed.json()).toMatchObject({group:{id:t.leaf.id,role:'admin'},admin_via:{id:t.root.id}});
 
   const fixture=new Set((await sql<{id:string}>('SELECT id FROM group_audit')).map(row=>row.id));
-  const invitation=await inviteGroupMember(t.ann.userId,t.leaf.id,'mxmx_test_newcomer@example.com','editor');
+  const invitation=await inviteGroupMember(t.ann.userId,t.leaf.id,'mxmx_test_newcomer@example.com','member');
   expect((await getGroupDetail(t.ann.userId,t.leaf.id))!.invitations!.map(i=>i.id)).toEqual([invitation.id]);
   await removeGroupInvitation(t.ann.userId,t.leaf.id,invitation.id);
-  await setGroupMember(t.ann.userId,t.leaf.id,t.mia.userId,'editor');
-  expect((await getGroupDetail(t.lee.userId,t.leaf.id))!.members.find(m=>m.user_id===t.mia.userId)!.role).toBe('editor');
+  await setGroupMember(t.ann.userId,t.leaf.id,t.mia.userId,'admin');
+  expect((await getGroupDetail(t.lee.userId,t.leaf.id))!.members.find(m=>m.user_id===t.mia.userId)!.role).toBe('admin');
   expect((await updateGroup(t.ann.userId,t.leaf.id,{name:'Leaf, renamed'})).name).toBe('Leaf, renamed');
   await setGroupLink(t.ann.userId,t.leaf.id,t.root.id,true);
   expect((await getGroupDetail(t.ann.userId,t.leaf.id))!.linked_groups.map(g=>g.id)).toEqual([t.root.id]);
@@ -147,12 +147,12 @@ describe('Editor and Member never flow down, and nothing flows up',()=>{
    await refused(inviteGroupMember(person.userId,t.leaf.id,'mxmx_test_x@example.com','member'),'not_found');
    await refused(updateGroup(person.userId,t.leaf.id,{name:'Mine'}),'not_found');
    await refused(createGroup(person.userId,{handle:`sub_${person.userId.slice(-6).toLowerCase()}`,name:'Sub',parent_id:t.leaf.id}),'parent_not_found');
-   await refused(setGroupMember(person.userId,t.leaf.id,t.mia.userId,'editor'),'not_found');
+   await refused(setGroupMember(person.userId,t.leaf.id,t.mia.userId,'member'),'not_found');
    expect(await roleOf(page.id,person)).toBe('none');
-   await expect(mine(person,'Into Leaf',{destination:{type:'group',id:t.leaf.id}})).rejects.toThrow(/Editor or Admin/);
+   await expect(mine(person,'Into Leaf',{destination:{type:'group',id:t.leaf.id}})).rejects.toThrow(/Publication is unavailable/);
   }
   // At Root itself their direct roles are unchanged.
-  expect(await roleOf(rootPage.id,t.ed)).toBe('editor');
+  expect(await roleOf(rootPage.id,t.ed)).toBe('viewer');
   expect(await roleOf(rootPage.id,t.meg)).toBe('viewer');
   // Leaf's own admin administers nothing above Leaf.
   expect((await getGroupDetail(t.lee.userId,t.mid.id))).toBeNull();
@@ -178,7 +178,7 @@ describe('revocation and the last-admin guard',()=>{
   expect(await getGroupDetail(t.ann.userId,t.leaf.id)).toBeNull();
   expect(await roleOf(page.id,t.ann)).toBe('none');
   await refused(inviteGroupMember(t.ann.userId,t.leaf.id,'mxmx_test_late@example.com','member'),'not_found');
-  await refused(setGroupMember(t.ann.userId,t.leaf.id,t.mia.userId,'editor'),'not_found');
+  await refused(setGroupMember(t.ann.userId,t.leaf.id,t.mia.userId,'member'),'not_found');
   expect(await sql('SELECT group_id FROM group_admins WHERE user_id=$1',[t.ann.userId])).toEqual([]);
  });
 

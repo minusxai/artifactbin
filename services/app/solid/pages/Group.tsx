@@ -54,9 +54,9 @@ export function GroupUnavailable(props:{retry:()=>void}): JSX.Element {
 export function GroupWorkspace(props: { detail: GroupDetail; shelf: AccountWorkspaceCore | null; shelfFailed: boolean; retryShelf: () => void; refresh: () => void; defaults?: DefaultDestinationState; onDefaultSaved?: () => void }): JSX.Element {
  const value=()=>props.detail;
  usePageBreadcrumbs(()=>[{label:value().group.name}]);
- return <WorkspaceShell onCreated={props.refresh} groupId={value().group.id} canCreate={canEditGroupContent(value().group.role)}><div class="workspace-page groups-page">
+ return <WorkspaceShell onCreated={props.refresh} groupId={value().group.id} canCreate={canEditGroupContent(value().group.role) || value().can_publish_pages===true} publishOnly={!canEditGroupContent(value().group.role)}><div class="workspace-page groups-page">
  <a href="/groups" class="font-sans text-sm font-medium text-muted hover:text-accent">Groups</a>
- <PageHeader class="mb-9 mt-5" title={value().group.name} leading={<span class="group-avatar group-avatar-large" aria-hidden="true"><Users size={26}/></span>} actions={<><DefaultDestinationControl compact group={value().group} initial={props.defaults} onSaved={props.onDefaultSaved}/><Tooltip content="Manage people, invitations, subgroups and linked groups."><Button size="sm" variant="secondary" icon aria-label="Group settings" href={`/groups/${encodeURIComponent(value().group.handle)}/settings`}><Settings size={16} aria-hidden="true"/></Button></Tooltip></>} badge={<Badge>{value().group.role==='admin'?'Admin':value().group.role==='editor'?'Editor':'Member'}</Badge>}
+ <PageHeader class="mb-9 mt-5" title={value().group.name} leading={<span class="group-avatar group-avatar-large" aria-hidden="true"><Users size={26}/></span>} actions={<><DefaultDestinationControl compact group={value().group} initial={props.defaults} onSaved={props.onDefaultSaved}/><Tooltip content="Manage people, invitations, subgroups and linked groups."><Button size="sm" variant="secondary" icon aria-label="Group settings" href={`/groups/${encodeURIComponent(value().group.handle)}/settings`}><Settings size={16} aria-hidden="true"/></Button></Tooltip></>} badge={<Badge>{value().group.role==='admin'?'Admin':'Member'}</Badge>}
   description={<><p class="break-all"><a href={`/@${encodeURIComponent(value().group.handle)}`} class="rounded-chip underline-offset-4 hover:text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">/@{value().group.handle}</a></p><Show when={value().group.description}><p class="mt-3">{value().group.description}</p></Show><InheritedAdmin detail={value()}/><GroupTreeSummary detail={value()}/></>}>
  </PageHeader>
  <section aria-label="Group artifacts" class="workspace-library"><SectionHeading class="mb-5">Files and folders</SectionHeading><Show when={value().group.company_root}><GroupAudienceNotice/></Show><Show when={props.shelf} fallback={<Show when={props.shelfFailed} fallback={<StatusMessage kind="loading">Loading artifacts…</StatusMessage>}><StatusMessage kind="error" action={<Button variant="link" type="button" onClick={props.retryShelf}>Retry artifacts</Button>}>Could not load group artifacts.</StatusMessage></Show>}>{rows=><Shelf groupId={value().group.id} rows={rows().artifacts} actions={value().group.role==='admin'?'full':'share'} assets={false} scopeParentId={null}/>}</Show></section>
@@ -92,7 +92,7 @@ function GroupSettings(props:{detail:GroupDetail;refresh:()=>void}):JSX.Element 
  </div>;
 }
 
-const ROLE_OPTIONS=[{value:'member',label:'Member'},{value:'editor',label:'Editor'},{value:'admin',label:'Admin'}];
+const ROLE_OPTIONS=[{value:'member',label:'Member'},{value:'admin',label:'Admin'}];
 const INVITE_ROLE_OPTIONS=ROLE_OPTIONS;
 
 /** Membership edits use server-confirmed state. Refusals, including the last admin, stay visible. */

@@ -14,7 +14,7 @@ const account=(name:string)=>createUser({email:`mxmx_test_${name}@example.com`})
 const revision=async()=>hierarchyRevision(await getDb());
 const parentOf=async(id:string)=>(await (await getDb()).query<{parent_id:string|null}>('SELECT parent_id FROM groups WHERE id=$1',[id])).rows[0]?.parent_id;
 const audit=async(id:string)=>(await (await getDb()).query<{action:string;details:Record<string,unknown>}>('SELECT action,details FROM group_audit WHERE group_id=$1 ORDER BY created_at,id',[id])).rows;
-const join=async(owner:string,group:string,user:{id:string;email:string},role:'member'|'editor'|'admin')=>{await groups.inviteGroupMember(owner,group,user.email,role);await groups.acceptGroupInvitations(user.id,user.email);};
+const join=async(owner:string,group:string,user:{id:string;email:string},role:'member'|'admin')=>{await groups.inviteGroupMember(owner,group,user.email,role);await groups.acceptGroupInvitations(user.id,user.email);};
 /** Finance ⊃ {Retail, Enterprise}, all administered by `admin`. */
 async function tree(){
  const admin=await account('admin');
@@ -86,13 +86,13 @@ describe('subgroups',()=>{
 
  it('needs an admin of the moved group, its current parent and its new one; ancestry grants only an admin\'s authority',async()=>{
   const {admin,finance,retail}=await tree(),lead=await account('lead');
-  // An editor of Retail and a viewer of Finance: Retail's administrator cannot lift it out of Finance.
+  // A member of Retail and a viewer of Finance: Retail's administrator cannot lift it out of Finance.
   await join(admin.id,retail.id,lead,'admin');await join(admin.id,finance.id,lead,'member');
   await expect(groups.setGroupParent(lead.id,retail.id,null)).rejects.toMatchObject({code:'forbidden',status:403});
   const own=await groups.createGroup(lead.id,{handle:'lead_team',name:'Lead team'});
   await expect(groups.setGroupParent(lead.id,own.id,finance.id)).rejects.toMatchObject({code:'forbidden'});
-  // Finance's editor administers neither Retail nor its membership by ancestry: Editor never flows down.
-  const head=await account('head');await join(admin.id,finance.id,head,'editor');
+  // Finance membership gives no authority to administer Retail.
+  const head=await account('head');await join(admin.id,finance.id,head,'member');
   await expect(groups.setGroupParent(head.id,retail.id,null)).rejects.toMatchObject({code:'not_found',status:404});
   await expect(groups.updateGroup(head.id,retail.id,{name:'Mine'})).rejects.toMatchObject({code:'not_found'});
   expect(await groups.getGroupRole(head.id,retail.id)).toBeNull();

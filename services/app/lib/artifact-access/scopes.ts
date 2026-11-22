@@ -147,15 +147,12 @@ export const SHARE_PREDICATE = (roles: readonly string[], param: string) =>
  */
 /**
  * A group-owned row's members. `'admin'`: an admin of the owning group, directly or through an ancestor (identity's
- * `group_admins`, lib/groups `groupAdminSql`), its owner. `'editor'`: that, or a direct editor row (Editor never
- * flows down). Without a role: the owning group's AUDIENCE, a direct member of it or of any descendant (./access-facts
+ * `group_admins`, lib/groups `groupAdminSql`), its owner. Without a role: the owning group's AUDIENCE, a direct member of it or of any descendant (./access-facts
  * `groupAudience`), the same subtree a share to that group reaches, and its admins, who read what they own.
  */
-export const groupMemberPredicate = (user:string, role?:'admin'|'editor', alias='artifacts') => role==='admin'
+export const groupMemberPredicate = (user:string, role?:'admin', alias='artifacts') => role==='admin'
   ? groupAdminSql(user,`${alias}.group_id`)
-  : role==='editor'
-    ? `(EXISTS (SELECT 1 FROM group_members gm JOIN groups g ON g.id=gm.group_id WHERE gm.group_id=${alias}.group_id AND gm.user_id=${user} AND gm.role='editor' AND g.deleted_at IS NULL) OR ${groupAdminSql(user,`${alias}.group_id`)})`
-    : `(${alias}.group_id IN (${reachedGroupsSql(user)}) OR ${groupAdminSql(user,`${alias}.group_id`)})`;
+  : `(${alias}.group_id IN (${reachedGroupsSql(user)}) OR ${groupAdminSql(user,`${alias}.group_id`)})`;
 
 export const ownerPredicate = ({ tokenId, userId, groupId, principalGroup }: AccessActor): Scope =>
   // A group's sign-in owns nothing (./access `ownsArtifact`), so no owner-only statement ever matches for it.
@@ -214,7 +211,7 @@ const groupPrincipalScope = (principal: NonNullable<AccessActor['principalGroup'
 
 const scopeAtLeast = (actor: AccessActor, min: ArtifactRole, link = true): Scope =>
   actor.principalGroup ? groupPrincipalScope(actor.principalGroup, min, link) : actor.userId
-    ? live({ where: (p) => `(${ownerPredicate(actor).where(p)} OR (${ACCOUNT_REACH_SQL(p)} AND (${groupMemberPredicate(p, 'editor')} OR ${min==='viewer'?groupMemberPredicate(p):'FALSE'} OR ${SHARE_PREDICATE(shareRolesAtLeast(min), p)}${link ? ` OR ${LINK_PREDICATE(min)}` : ''}${link && actor.documentEditor ? ` OR ${DOCUMENT_EDITOR_PREDICATE}` : ''})))`, val: actor.userId })
+    ? live({ where: (p) => `(${ownerPredicate(actor).where(p)} OR (${ACCOUNT_REACH_SQL(p)} AND (${groupMemberPredicate(p, 'admin')} OR ${min==='viewer'?groupMemberPredicate(p):'FALSE'} OR ${SHARE_PREDICATE(shareRolesAtLeast(min), p)}${link ? ` OR ${LINK_PREDICATE(min)}` : ''}${link && actor.documentEditor ? ` OR ${DOCUMENT_EDITOR_PREDICATE}` : ''})))`, val: actor.userId })
     : ownerScope(actor);
 
 export const editorScope = (actor: AccessActor): Scope => scopeAtLeast(actor, 'editor');

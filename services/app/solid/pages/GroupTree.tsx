@@ -146,7 +146,7 @@ export function GroupTreePanel(props: { detail: GroupDetail; refresh: () => void
     <div class="mt-5 grid gap-1">
       <span class="font-sans text-xs font-medium text-muted">Subgroups</span>
       <Show when={props.detail.subgroups.length} fallback={<StatusMessage kind="empty">No subgroups yet.</StatusMessage>}>
-        <ul class="m-0"><For each={props.detail.subgroups}>{(group) => <ListRow class="justify-between">{relativeName(group)}<Show when={group.role} fallback={<Badge tone="dim">Not a member</Badge>}><Badge>{group.role === 'admin' ? 'Admin' : group.role === 'editor' ? 'Editor' : 'Member'}</Badge></Show></ListRow>}</For></ul>
+        <ul class="m-0"><For each={props.detail.subgroups}>{(group) => <ListRow class="justify-between">{relativeName(group)}<Show when={group.role} fallback={<Badge tone="dim">Not a member</Badge>}><Badge>{group.role === 'admin' ? 'Admin' : 'Member'}</Badge></Show></ListRow>}</For></ul>
       </Show>
       <p class="m-0 mt-2 font-sans text-xs leading-relaxed text-muted">Files shared with {props.detail.group.name} also reach every subgroup’s members. Membership never carries over: a subgroup member is not a member of {props.detail.group.name}, and a member of {props.detail.group.name} is not a member of its subgroups. A group with subgroups cannot be deleted until they are moved or deleted.</p>
     </div>

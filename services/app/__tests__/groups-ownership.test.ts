@@ -121,7 +121,7 @@ it('preserves unlisted link reading while refusing former owner data writes and 
  await f.db.query('DELETE FROM group_members WHERE user_id=$1',[f.creator.id]);
  const row=(await getArtifactById(id))!;expect(await canReadArtifact(row,ANONYMOUS_ACTOR)).toBe(true);
  expect(await canWriteDataset(row,identityForUser(f.creator.id, f.a.id))).toBe('dataset_read_only');
- expect((await create(request('/api/artifacts',{method:'POST',token:f.c.token,json:{html:nativeHtml('<p>Refused</p>'),destination:{type:'group',id:'grp_ownership'}}}))).status).toBe(403);
+ expect((await create(request('/api/artifacts',{method:'POST',token:f.c.token,json:{dataset:[{n:2}],destination:{type:'group',id:'grp_ownership'}}}))).status).toBe(403);
 });
 
 it('resolves group publication refs as the saved group owner and refuses creator private dependencies',async()=>{
