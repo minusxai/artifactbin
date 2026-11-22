@@ -696,7 +696,7 @@ async function ownerLeg(browser, seed) {
         origin: new URL(BASE).origin,
         cookie: member.cookie,
       },
-      body: JSON.stringify({ username }),
+      body: JSON.stringify({ username, name: 'Mention fixture member' }),
     });
     if (!profile.ok)
       throw new Error(
@@ -722,7 +722,7 @@ async function ownerLeg(browser, seed) {
     await page.getByLabel('Mention people', { exact: true }).waitFor();
     await expect(page.getByRole('listbox', { name: 'People' })).toBeVisible();
     await expect(
-      page.getByLabel(`Mention @${username}`, { exact: true }),
+      page.getByLabel('Mention Mention fixture member', { exact: true }),
     ).toBeVisible();
     check(
       true,
