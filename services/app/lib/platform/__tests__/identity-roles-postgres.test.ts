@@ -22,7 +22,7 @@ import {IDENTITY_OWNED_TABLES} from '@artifactbin/contracts/identity-module';
 import {IDENTITY_VIEWS} from '@artifactbin/contracts/identity-service';
 import type {Queryable} from '@artifactbin/contracts/db';
 import {IdentityNotReady,createIdentityStore,ensureIdentitySchema,identityDbOf,identityMoveStatements} from '@artifactbin/auth/identity-store';
-import {assertGroupRoleModel,migrateGroupRoles} from '@artifactbin/auth/identity-store/group-role-migration';
+import {assertGroupRoleModel,initializeGroupRoleModel,migrateGroupRoles} from '@artifactbin/auth/identity-store/group-role-migration';
 import {SECRET_COLUMNS} from '@artifactbin/auth/identity-store/schema';
 import {createAuthHost,createHumanAuth,sessionStoreOf,ensureHumanAuthSchema} from '@artifactbin/auth';
 import {SCHEMA_STATEMENTS} from '@/lib/platform';
@@ -113,6 +113,8 @@ describe.skipIf(!dockerImage('postgres:17-alpine'))('identity tables in a split-
   expect(await migrateGroupRoles(db,options)).toEqual({changed:true});
   await superuser.query("INSERT INTO role_upgrade.group_members VALUES('g','new','editor')");
   expect(await migrateGroupRoles(db,options)).toEqual({changed:false});
+  expect((await superuser.query("SELECT role FROM role_upgrade.group_members WHERE user_id='new'")).rows).toEqual([{role:'editor'}]);
+  await initializeGroupRoleModel(db,'role_upgrade');
   await assertGroupRoleModel(db,'role_upgrade');
   expect((await superuser.query('SELECT user_id,role FROM role_upgrade.group_members ORDER BY user_id')).rows).toEqual([{user_id:'new',role:'member'},{user_id:'old',role:'admin'}]);
   expect((await superuser.query('SELECT role FROM role_upgrade.group_invitations')).rows).toEqual([{role:'member'}]);
