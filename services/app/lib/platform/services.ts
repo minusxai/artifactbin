@@ -32,7 +32,7 @@ import { humanSessionClient } from '@artifactbin/utils/human-session';
 import { identityClient } from '@artifactbin/utils/identity-client';
 import { browserClient, eventsClient, sqlClient } from '@artifactbin/utils/clients';
 import { noopBrowser, noopEvents, noopSql } from '@artifactbin/utils/fakes';
-import { AUTH_SERVICE_URL, BROWSER_SERVICE_URL, EVENTS_SERVICE_URL, INTERNAL_SERVICE_SECRET, QUERY_TIMEOUT_MS, SQL_SERVICE_URL, TEST_DOMAIN } from './config';
+import { AUTH_SCHEMA, IDENTITY_READ_SCHEMA, AUTH_SERVICE_URL, BROWSER_SERVICE_URL, EVENTS_SERVICE_URL, INTERNAL_SERVICE_SECRET, QUERY_TIMEOUT_MS, SQL_SERVICE_URL, TEST_DOMAIN } from './config';
 import { getDb } from './db';
 
 export interface Services { humanSessions:HumanSessionAuthority; identity:IdentityService; sql: SqlService; browser: BrowserService; events: EventsService }
@@ -68,7 +68,7 @@ export function services(): Services {
   const local = registry();
   return {
     humanSessions:remote.humanSessions??local.humanSessions??noops.humanSessions,
-    identity:remote.identity??local.identity??createIdentityStore({db:appDatabase,testDomain:TEST_DOMAIN}),
+    identity:remote.identity??local.identity??createIdentityStore({db:appDatabase,authSchema:AUTH_SCHEMA,readSchema:IDENTITY_READ_SCHEMA,testDomain:TEST_DOMAIN}),
     sql: remote.sql ?? local.sql ?? noops.sql,
     browser: remote.browser ?? local.browser ?? noops.browser,
     events: remote.events ?? local.events ?? noops.events,

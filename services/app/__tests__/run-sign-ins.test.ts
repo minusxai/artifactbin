@@ -12,7 +12,7 @@ import {join} from 'node:path';
 import {afterEach,beforeEach,expect,it,onTestFinished,vi} from 'vitest';
 import {DEFAULT_TOKEN_TTL_MS, MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS} from '@artifactbin/contracts/handles';
 import {IDENTITY_INTROSPECT_PATH} from '@artifactbin/contracts/identity-service';
-import {RUN_SIGN_IN_PATH, SCHEDULE_SIGN_IN_PATH, SERVICE_TOKEN_PATH, parseServiceAudiences, type RunSignIn, type ScheduleSignInRequest} from '@artifactbin/contracts/service-audiences';
+import {CHAT_SIGN_IN_PATH, RUN_SIGN_IN_PATH, SCHEDULE_SIGN_IN_PATH, SERVICE_TOKEN_PATH, parseServiceAudiences, type ChatSignInRequest, type RunSignIn, type ScheduleSignInRequest} from '@artifactbin/contracts/service-audiences';
 import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts/routes';
 import {createAuthComposedHost} from '@/test/helpers/auth-host';
 import {AUTH_SECRET,getDb,syncIdentitySettings} from '@/lib/platform';
@@ -104,6 +104,121 @@ it('authorizes only the consenting direct seat and permanently fences revoked or
  expect((await call({...current,action:'revoke'})).status).toBe(200);
  expect(await host.introspect(last)).toEqual({active:false});
  expect((await call(fresh)).status).toBe(409);
+});
+
+it('confines explicit interactive Admin consent to its owner, context, service and one group',async()=>{
+ const host=await composed();
+ const owner=await host.signIn('mxmx_test_interactive_owner@example.test');
+ const peer=await host.signIn('mxmx_test_interactive_peer@example.test');
+ const groupFor=async(handle:string,cookie=owner.cookie,parent_id?:string)=>{
+  const response=await host.post('/api/groups',{handle,name:handle,...(parent_id?{parent_id}:{})},{cookie});
+  expect(response.status,await response.clone().text()).toBe(201);
+  return (await response.json() as {id:string}).id;
+ };
+ const root=await groupFor('interactive_root'), group=await groupFor('interactive_team',owner.cookie,root);
+ const child=await groupFor('interactive_child',owner.cookie,group), other=await groupFor('interactive_other');
+ const peerId=await userIdOf('mxmx_test_interactive_peer@example.test');
+ const user=await userIdOf('mxmx_test_interactive_owner@example.test');
+ await sql("INSERT INTO auth.group_members(group_id,user_id,role) VALUES($1,$2,'admin'),($3,$2,'admin')",[root,peerId,group]);
+ // The owner is effective Admin via the root, with no direct seat on this group.
+ await sql('DELETE FROM auth.group_members WHERE group_id=$1 AND user_id=$2',[group,user]);
+ const token=await host.exchange('warehouse',{cookie:owner.cookie});
+ const scope={group_id:group,chat_id:'conversation-demo'};
+ const call=(body:unknown,secret=WAREHOUSE_SECRET)=>host.runSignIn(body,secret,CHAT_SIGN_IN_PATH);
+ const consent={...scope,action:'consent',token,group_role:'admin'} satisfies ChatSignInRequest;
+ const recorded=await call(consent);
+ expect(recorded).toEqual({status:200,body:{grant_id:expect.any(String),user_id:user,group_id:group,group_role:'admin'}});
+ expect(await call(consent)).toEqual(recorded);
+ expect((await call({...consent,group_id:other})).status).toBe(409);
+ const peerToken=await host.exchange('warehouse',{cookie:peer.cookie});
+ expect((await call({...consent,token:peerToken,group_id:other,chat_id:'forbidden-context'})).status).toBe(403);
+ expect((await call(consent,LEDGER_SECRET)).status).toBe(404);
+ const action={...scope,grant_id:String(recorded.body!.grant_id)};
+ const issue={...action,action:'issue',expires_in:600,token};
+ for(const denied of [{...issue,chat_id:'elsewhere'},{...issue,group_id:other},
+  {...issue,token:peerToken},
+  {...issue,token:await host.exchange('warehouse',{bearer:owner.grant.access_token})}])
+  expect((await call(denied)).status).toBe(403);
+ expect((await call(issue,CRM_SECRET)).status).toBe(401);
+ expect((await call({...action,action:'revoke'},CRM_SECRET)).status).toBe(403);
+ expect((await call({...action,action:'revoke',group_id:other})).status).toBe(403);
+ expect((await call({...action,action:'revoke',chat_id:'elsewhere'})).status).toBe(403);
+ const mint=async(body=issue)=>{
+  const answer=await call(body);
+  expect(answer.status,JSON.stringify(answer.body)).toBe(200);
+  return String(answer.body!.access_token);
+ };
+ const bearer=await mint();
+ const auth=(bearer:string)=>({authorization:'Bearer '+bearer});
+ const patch=(id:string,bearer:string,body:Record<string,unknown>={description:'Updated in context'})=>
+  host.fetch(new Request(origin+'/api/groups/'+id,{method:'PATCH',headers:{...auth(bearer),'content-type':'application/json'},body:JSON.stringify(body)}));
+ expect(await host.introspect(bearer)).toMatchObject({active:true,principal_kind:'group',group_role:'admin',group_id:group,user_id:user});
+ expect((await patch(group,bearer)).status).toBe(200);
+ expect(await sql('SELECT description FROM groups WHERE id=$1',[group])).toEqual([{description:'Updated in context'}]);
+ expect(await sql("SELECT actor_user_id,actor_token_id FROM group_audit WHERE group_id=$1 AND action='updated'",[group]))
+  .toEqual([{actor_user_id:user,actor_token_id:(await host.introspect(bearer))!.token_id}]);
+ for(const id of [other,root,child])expect((await patch(id,bearer)).status).toBe(403);
+ expect((await patch(group,bearer,{tenancy_id:'other-tenant'})).status).toBe(403);
+ expect((await host.post('/api/deployment/setup',{group_id:group},auth(bearer))).status).toBe(403);
+ expect((await host.fetch(new Request(origin+'/api/me',{headers:auth(bearer)}))).status).toBe(403);
+ const exchanged=await host.exchange('warehouse',{bearer});
+ expect(await host.introspect(exchanged)).toMatchObject({active:true,principal_kind:'group',group_role:'admin',group_id:group,user_id:user});
+ expect((await host.post(SERVICE_TOKEN_PATH,{audience:'crm'},auth(bearer))).status).toBe(403);
+ expect((await call({...consent,token:exchanged,chat_id:'secondary'})).status).toBe(401);
+ expect((await host.runSignIn({token:exchanged})).status).toBe(401);
+ expect((await host.runSignIn({token,group_id:group,group_role:'admin'})).status).toBe(400);
+ expect((await host.post('/api/authentication/token',{group_id:group,group_role:'admin'},{cookie:owner.cookie})).status).toBe(400);
+ const changeRole=async(role:string)=>host.fetch(new Request(origin+'/api/groups/'+root+'/members/'+user,{
+  method:'PUT',headers:{cookie:peer.cookie,origin,'content-type':'application/json'},body:JSON.stringify({role})
+ }));
+ expect((await changeRole('member')).status).toBe(200);
+ expect((await patch(group,bearer)).status).toBe(401);
+ expect((await changeRole('admin')).status).toBe(200);
+ expect(await host.introspect(exchanged)).toEqual({active:false});
+ expect(await host.introspect(bearer)).toEqual({active:false});
+ expect((await call(issue)).status).toBe(403);
+ expect((await call(consent)).status).toBe(409);
+
+ const freshConsent={...consent,chat_id:'another-conversation'};
+ const fresh=await call(freshConsent);
+ const current={...issue,chat_id:freshConsent.chat_id,grant_id:String(fresh.body!.grant_id)};
+ const second=await mint(current), secondExchange=await host.exchange('warehouse',{bearer:second});
+ const revoke={action:'revoke',group_id:group,chat_id:current.chat_id,grant_id:String(current.grant_id)} satisfies ChatSignInRequest;
+ for(let attempt=0;attempt<2;attempt++)expect(await call(revoke)).toEqual({status:200,body:{ok:true}});
+ expect(await host.introspect(second)).toEqual({active:false});
+ expect(await host.introspect(secondExchange)).toEqual({active:false});
+ expect((await call(current)).status).toBe(403);
+
+ const movedConsent={...consent,chat_id:'inherited-conversation'};
+ const movedGrant=await call(movedConsent);
+ const movedIssue={...issue,chat_id:movedConsent.chat_id,grant_id:String(movedGrant.body!.grant_id)};
+ const movedBearer=await mint(movedIssue);
+ const setParent=async(parent_id:string|null,from_parent_id:string|null)=>host.fetch(new Request(origin+'/api/groups/'+group+'/parent',{
+  method:'PUT',headers:{cookie:peer.cookie,origin,'content-type':'application/json'},body:JSON.stringify({parent_id,from_parent_id})
+ }));
+ expect((await setParent(null,root)).status).toBe(200);
+ expect((await setParent(root,null)).status).toBe(200);
+ expect(await host.introspect(movedBearer)).toEqual({active:false});
+ expect((await call(movedIssue)).status).toBe(403);
+
+ const finalConsent={...consent,chat_id:'session-bound-conversation'};
+ const finalGrant=await call(finalConsent);
+ const finalIssue={...issue,chat_id:finalConsent.chat_id,grant_id:String(finalGrant.body!.grant_id)};
+ const last=await mint(finalIssue), lastExchange=await host.exchange('warehouse',{bearer:last});
+ expect((await host.post('/api/auth/sign-out',{},{cookie:owner.cookie})).status).toBe(200);
+ expect(await host.introspect(last)).toEqual({active:false});
+ expect(await host.introspect(lastExchange)).toEqual({active:false});
+ expect((await call(finalIssue)).status).toBe(401);
+
+ const personalToken=await host.exchange('warehouse',{bearer:peer.grant.access_token});
+ const tokenConsent={...consent,chat_id:'bearer-bound-conversation',token:personalToken};
+ const tokenGrant=await call(tokenConsent);
+ const tokenIssue={...issue,chat_id:tokenConsent.chat_id,grant_id:String(tokenGrant.body!.grant_id),token:personalToken};
+ const tokenRun=await mint(tokenIssue), tokenExchange=await host.exchange('warehouse',{bearer:tokenRun});
+ expect((await host.post('/oauth/revoke',{client_id:peer.grant.client_id,token:peer.grant.refresh_token})).status).toBe(200);
+ expect(await host.introspect(tokenRun)).toEqual({active:false});
+ expect(await host.introspect(tokenExchange)).toEqual({active:false});
+ expect((await call(tokenIssue)).status).toBe(401);
 });
 
 it('the happy path: a stored API token for the person, issued_by the service, no refresh family, listed and revocable by them',async()=>{

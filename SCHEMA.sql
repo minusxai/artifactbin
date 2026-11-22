@@ -1696,6 +1696,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_schedule_consent_active ON auth.credential
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_schedule_consent_revision ON auth.credentials ((payload->>'service'), (payload->>'schedule'), (payload->>'revision')) WHERE kind='schedule_consent';
 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_interactive_consent_context ON auth.credentials ((payload->>'service'), (payload->>'context')) WHERE kind='interactive_consent';
+
 CREATE INDEX IF NOT EXISTS idx_auth_credentials_access ON auth.credentials ((payload->>'access_token_id')) WHERE kind='refresh_token';
 
 -- schema "auth" — the identity module's base tables (users, tokens, groups …), owned by the auth role; declared by services/auth/src/identity-store/schema.ts; read only through the identity views
@@ -1719,6 +1721,7 @@ CREATE TABLE IF NOT EXISTS auth.users (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   tenancy_id TEXT,
   deployment_admission_revoked BOOLEAN NOT NULL DEFAULT false,
+  interactive_authority_id UUID NOT NULL DEFAULT gen_random_uuid(),
   PRIMARY KEY (id)
 );
 
@@ -1757,6 +1760,8 @@ ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL 
 ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS tenancy_id TEXT;
 
 ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS deployment_admission_revoked BOOLEAN NOT NULL DEFAULT false;
+
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS interactive_authority_id UUID NOT NULL DEFAULT gen_random_uuid();
 
 ALTER TABLE auth.users ALTER COLUMN email DROP NOT NULL;
 
@@ -1877,6 +1882,7 @@ CREATE TABLE IF NOT EXISTS auth.groups (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   deleted_at TIMESTAMPTZ,
   parent_id TEXT,
+  parent_edge_id UUID NOT NULL DEFAULT gen_random_uuid(),
   trusted_issuer TEXT,
   tenancy_id TEXT,
   PRIMARY KEY (id)
@@ -1897,6 +1903,8 @@ ALTER TABLE auth.groups ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL
 ALTER TABLE auth.groups ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 
 ALTER TABLE auth.groups ADD COLUMN IF NOT EXISTS parent_id TEXT;
+
+ALTER TABLE auth.groups ADD COLUMN IF NOT EXISTS parent_edge_id UUID NOT NULL DEFAULT gen_random_uuid();
 
 ALTER TABLE auth.groups ADD COLUMN IF NOT EXISTS trusted_issuer TEXT;
 
@@ -1925,6 +1933,7 @@ CREATE TABLE IF NOT EXISTS auth.group_members (
   role TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   seat_id UUID NOT NULL DEFAULT gen_random_uuid(),
+  admin_tenure_id UUID NOT NULL DEFAULT gen_random_uuid(),
   PRIMARY KEY (group_id, user_id)
 );
 
@@ -1937,6 +1946,8 @@ ALTER TABLE auth.group_members ADD COLUMN IF NOT EXISTS role TEXT NOT NULL;
 ALTER TABLE auth.group_members ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
 ALTER TABLE auth.group_members ADD COLUMN IF NOT EXISTS seat_id UUID NOT NULL DEFAULT gen_random_uuid();
+
+ALTER TABLE auth.group_members ADD COLUMN IF NOT EXISTS admin_tenure_id UUID NOT NULL DEFAULT gen_random_uuid();
 
 CREATE INDEX IF NOT EXISTS idx_group_members_user ON auth.group_members (user_id);
 

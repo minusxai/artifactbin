@@ -21,7 +21,7 @@
  *    SIGN-IN (./service-audiences `RUN_SIGN_IN_PATH`), where it is the id of the configured service the sign-in was
  *    issued to; the principal is still that person.
  *  - A GROUP (`GROUP_SIGN_IN_RULE` below): kind `'group'`, `user_id` the authorising person (null under a service approval), `group_id` the group and `group_role` the
- *    level (`'member'` or `'editor'`, never `'admin'`); `issued_by` the person who authorised it, or for a service's
+ *    level (`'member'`, `'editor'`, or `'admin'` under a personal interactive grant); `issued_by` the person who authorised it, or for a service's
  *    sign-in under a group's approval (./service-audiences `GROUP_SIGN_IN_PATH`, `grant_id` set) that service's id;
  *    never the principal. A group's service token (./service-audiences `group_principals`) answers the same, with
  *    `parent` the group sign-in it was exchanged from.
@@ -39,6 +39,8 @@
  * Admin revoked it (with the usual token expiry and refresh-family fence). Every use re-checks it (`tokens.live`, the
  * bearer read) and so does every refresh, which rotates as a person's does (a replayed refresh token revokes the
  * family). A demotion, removal, deactivation or group deletion ends it on the next request.
+ * An interactive Admin grant (CHAT_SIGN_IN_PATH) additionally requires the original personal credential, effective
+ * Admin tenure and inheritance path. Its group is the full extent of its Admin authority.
  */
 import type { ServiceTokenParent } from './service-audiences';
 import { SERVICE_PAYLOAD_ENVELOPE, SERVICE_PAYLOAD_LIMIT } from './payload-limit';
@@ -75,7 +77,7 @@ export type IdentityIntrospectResponse =
 /** What an introspected token acts as: a person, or a group at a level (`GROUP_SIGN_IN_RULE`). */
 export type IdentityPrincipalKind = 'user' | 'group';
 /** The level a group principal acts at: never `admin`. */
-export type IdentityPrincipalGroupRole = 'member' | 'editor';
+export type IdentityPrincipalGroupRole = 'member' | 'editor' | 'admin';
 
 /** The default read schema (IDENTITY__SCHEMA): where the identity views live. */
 export const IDENTITY_SCHEMA = 'identity';

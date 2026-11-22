@@ -127,7 +127,7 @@ const reader = (actor: AccessActor): boolean => !!actor.userId || !!actor.princi
 /** An agent signed in as `groupId` at `role` as a database sees it: no person, exactly that group, its level. */
 export const groupViewer = (groupId: string, role: 'member' | 'editor'): ConnectorViewer => ({ id: '', email: null, groups: [groupId], groupRole: role });
 async function viewerOf(actor: AccessActor): Promise<ConnectorViewer> {
-  if (actor.principalGroup) return groupViewer(actor.principalGroup.id, actor.principalGroup.role);
+  if (actor.principalGroup) return groupViewer(actor.principalGroup.id, actor.principalGroup.role === 'admin' ? 'editor' : actor.principalGroup.role);
   const user = await getUserById(actor.userId!);
   const groups = (await listGroups(actor.userId!)).map((g) => g.id);
   return { id: actor.userId!, email: (user as { email?: string | null } | null)?.email ?? actor.email ?? null, groups, groupRole: '' };

@@ -36,7 +36,7 @@ export async function getGroupRole(userId:string|null,groupId:string,query?:Cont
  * `getGroupRole`; a group's sign-in (lib/accounts `GroupPrincipal`) holds its level on its own group and nothing on any
  * other, as a direct member of that group alone would.
  */
-export async function actorGroupRole(actor:{userId:string|null;principalGroup?:{id:string;role:'member'|'editor'}|null},groupId:string,query?:ContractQueryable):Promise<GroupRole|'editor'|null>{
+export async function actorGroupRole(actor:{userId:string|null;principalGroup?:{id:string;role:GroupRole|'editor'}|null},groupId:string,query?:ContractQueryable):Promise<GroupRole|'editor'|null>{
  if(actor.principalGroup)return actor.principalGroup.id===groupId&&await getGroupById(groupId,query)?actor.principalGroup.role:null;
  return getGroupRole(actor.userId,groupId,query);
 }
@@ -179,10 +179,10 @@ export async function setAccountPreferences(userId:string,destination:DefaultDes
 export { selectNewArtifactDestination } from './destination';
 
 /** Group settings; handles are reserved identity tombstones. */
-export async function updateGroup(actorId:string,id:string,input:UpdateGroupInput,actor?:GroupMutationActor):Promise<GroupSummary>{
+export async function updateGroup(actorId:string,id:string,input:UpdateGroupInput,actor?:GroupMutationActor,interactiveTokenId?:string):Promise<GroupSummary>{
  if(!input||typeof input!=='object')throw new GroupError('invalid_group');
- const updated=await services().identity.updateGroup({...input,actorId,groupId:id});
- await recordGroupChanges(updated.changes,actor);
+ const updated=await services().identity.updateGroup({...input,actorId,groupId:id,...(interactiveTokenId?{interactiveTokenId}:{})});
+ await recordGroupChanges(updated.changes,interactiveTokenId?{tokenId:interactiveTokenId}:actor);
  return updated.group;
 }
 /**
@@ -210,7 +210,7 @@ export {groupAdminSql,groupReachSql,reachedGroupsSql,subtreeSql,subtreeMemberIds
  * `GROUP_SIGN_IN_RULE`): an agent acting as the group at `role`, authorised by `issued_by` (the person), and whether
  * it is still `live`. Never its secret.
  */
-interface GroupSignIn {id:string;name:string|null;role:'member'|'editor';issued_by:{id:string;username:string|null;name:string|null};created_at:string;expires_at:string|null;last_used_at:string|null;live:boolean;}
+interface GroupSignIn {id:string;name:string|null;role:GroupRole|'editor';issued_by:{id:string;username:string|null;name:string|null};created_at:string;expires_at:string|null;last_used_at:string|null;live:boolean;}
 /**
  * A SERVICE'S SIGN-INS UNDER ONE APPROVAL, as one row (contracts service-audiences `GROUP_SIGN_IN_PATH`): how many
  * unexpired ones it holds and when it last obtained one. Revoking the approval ends them all, so they are not listed

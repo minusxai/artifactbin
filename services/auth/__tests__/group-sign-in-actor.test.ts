@@ -5,7 +5,7 @@
  * being read as a person's actor.
  */
 import {expect,expectTypeOf,it} from 'vitest';
-import {REVALIDATE_ACTOR_HEADER, isGroupActor, type Actor, type GroupPrincipalRole, type HumanActor} from '@artifactbin/contracts/actor';
+import {REVALIDATE_ACTOR_HEADER, isGroupActor, type Actor, type GroupActorRole, type HumanActor} from '@artifactbin/contracts/actor';
 import type {TokenRecord} from '@artifactbin/contracts/identity';
 import {signActor,verifyActor} from '@artifactbin/utils';
 import {serviceAuthHost} from './helpers';
@@ -17,7 +17,7 @@ const sign=(claims:Record<string,unknown>)=>signActor(claims as unknown as Actor
 
 it('is never a person: not assignable to a HumanActor, and narrowed by isGroupActor',()=>{
  expectTypeOf(group).not.toMatchTypeOf<HumanActor>();
- expectTypeOf<Extract<Actor,{principal:'group'}>['principalGroupRole']>().toEqualTypeOf<GroupPrincipalRole>();
+ expectTypeOf<Extract<Actor,{principal:'group'}>['principalGroupRole']>().toEqualTypeOf<GroupActorRole>();
  expect(isGroupActor(group)).toBe(true);
  expect(isGroupActor({credential:'bearer',userId:'usr_owner',tokenId:'tok_x'})).toBe(false);
  expect(isGroupActor({credential:'none'})).toBe(false);
@@ -25,9 +25,11 @@ it('is never a person: not assignable to a HumanActor, and narrowed by isGroupAc
 
 it('crosses the signed hop as exactly its own fields; partial, mixed or person-shaped claims are no one',()=>{
  expect(verifyActor(signActor(group,SECRET),SECRET)).toEqual(group);
+ const interactive={...group,principalGroupRole:'admin'} as const;
+ expect(verifyActor(signActor(interactive,SECRET),SECRET)).toEqual(interactive);
  for(const bad of [
   {...group,userId:'usr_owner'},{...group,email:'owner@example.test'},{...group,sessionId:'ses_1'},
-  {...group,credential:'session'},{...group,principalGroupRole:'admin'},{...group,principalGroupId:''},
+  {...group,credential:'session'},{...group,principalGroupRole:'owner'},{...group,principalGroupId:''},
   {credential:'bearer',principal:'group',principalGroupId:'grp_team',principalGroupRole:'member',tokenId:'tok_group'},
   {credential:'bearer',tokenId:'tok_group',principalGroupId:'grp_team'},{credential:'bearer',tokenId:'tok_group',issuedBy:'usr_owner'},
  ])expect(verifyActor(sign(bad),SECRET),JSON.stringify(bad)).toBeNull();

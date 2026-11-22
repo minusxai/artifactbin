@@ -7,7 +7,7 @@
  * same" HMAC is how a proxy signs something the app rejects.
  */
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { CREDENTIALS, isGroupPrincipalRole, type Actor, type Credential, type HumanActor } from '@artifactbin/contracts/actor';
+import { CREDENTIALS, isGroupActorRole, type Actor, type Credential, type HumanActor } from '@artifactbin/contracts/actor';
 
 /** Default lifetime of a signed header. Short: it is minted per request. */
 const ACTOR_TTL_SECONDS = 120;
@@ -68,7 +68,7 @@ export function verifyActor(header: string | null | undefined, secret: string, o
     const exact = Object.keys(raw).every((key) => ['credential', 'tokenId', 'iat', 'exp', ...GROUP_FIELDS].includes(key));
     const role = raw.principalGroupRole;
     return exact && raw.credential === 'bearer' && raw.principal === 'group' && typeof raw.principalGroupId === 'string' && !!raw.principalGroupId
-      && isGroupPrincipalRole(role) && typeof raw.tokenId === 'string' && !!raw.tokenId && typeof raw.issuedBy === 'string' && !!raw.issuedBy
+      && isGroupActorRole(role) && typeof raw.tokenId === 'string' && !!raw.tokenId && typeof raw.issuedBy === 'string' && !!raw.issuedBy
       ? { credential: 'bearer', principal: 'group', principalGroupId: raw.principalGroupId, principalGroupRole: role, tokenId: raw.tokenId, issuedBy: raw.issuedBy }
       : null;
   }

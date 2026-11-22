@@ -62,6 +62,7 @@ const USERS: Table = {
     { name: 'tenancy_id', type: 'TEXT' },
     // Root removal suspends company admission while retaining its historical record.
     { name: 'deployment_admission_revoked', type: 'BOOLEAN', notNull: true, default: 'false' },
+    { name: 'interactive_authority_id', type: 'UUID', notNull: true, default: 'gen_random_uuid()' },
   ],
   primaryKey: ['id'],
   // Both unique constraints use the `indexes` form ON PURPOSE: entries in
@@ -145,6 +146,7 @@ const GROUPS:Table={name:'groups',columns:[
  // THE TREE (lib/groups hierarchy): one parent at most, in this installation (this database), never a cycle.
  // NULL is a root. Written only by the topology changes, under the hierarchy revision's row.
  {name:'parent_id',type:'TEXT'},
+ {name:'parent_edge_id',type:'UUID',notNull:true,default:'gen_random_uuid()'},
  // A group a trusted issuer's sign-in created (./trusted-sign-in): that issuer, and the tenancy it named, both set at
  // creation and never changed. NULL for every other group.
  {name:'trusted_issuer',type:'TEXT'},{name:'tenancy_id',type:'TEXT'},
@@ -165,6 +167,7 @@ const GROUP_MEMBERS:Table={name:'group_members',columns:[
  {name:'group_id',type:'TEXT',notNull:true},{name:'user_id',type:'TEXT',notNull:true},
  {name:'role',type:'TEXT',notNull:true},{name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
  {name:'seat_id',type:'UUID',notNull:true,default:'gen_random_uuid()'},
+ {name:'admin_tenure_id',type:'UUID',notNull:true,default:'gen_random_uuid()'},
 ],primaryKey:['group_id','user_id'],indexes:[{name:'idx_group_members_user',columns:['user_id']}]};
 
 const GROUP_INVITATIONS:Table={name:'group_invitations',columns:[
@@ -221,8 +224,9 @@ export const IDENTITY_TABLES: Table[] = [USERS, ACCOUNT_PREFERENCES, TOKENS, HAN
  * `verification` codes; the OAuth `credentials` hashes and payloads and `clients`).
  */
 export const SECRET_COLUMNS: Readonly<Record<string, readonly string[]>> = {
-  group_members: ['seat_id'],
-  users: ['trusted_sign_in_group', 'trusted_sign_in_at', 'trusted_root_granted'],
+  groups: ['parent_edge_id'],
+  group_members: ['seat_id', 'admin_tenure_id'],
+  users: ['trusted_sign_in_group', 'trusted_sign_in_at', 'trusted_root_granted', 'interactive_authority_id'],
   tokens: ['token_hash'],
   session: ['token'],
 };

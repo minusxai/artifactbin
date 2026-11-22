@@ -23,6 +23,8 @@ export interface IdentityStoreOptions {
   db: TransactionalQueryable;
   /** AUTH__SCHEMA: where the base tables are (default `auth`). */
   authSchema?: string;
+  /** IDENTITY__SCHEMA, the read views (default identity). */
+  readSchema?: string;
   /** App schema for deployment state on a separate identity connection. */
   appSchema?: string;
   /** The test domain (TEST_DOMAIN): a test account invites only addresses there. */

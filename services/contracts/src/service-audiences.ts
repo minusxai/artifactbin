@@ -111,6 +111,24 @@ export interface ScheduleConsent {
   group_role: 'member';
 }
 
+/**
+ * Explicit Admin consent from a personal service token. A context ID is unique per service and cannot be reused
+ * after revocation or loss of the original authority. Issue requires a fresh service token from the same personal
+ * session or API bearer. All three actions require the configured run-enabled service's own secret.
+ */
+export const CHAT_SIGN_IN_PATH = '/api/internal/identity/chat-sign-in';
+export type ChatSignInRequest = {group_id: string; chat_id: string} & (
+  | {action: 'consent'; token: string; group_role: 'admin'}
+  | {action: 'issue'; token: string; grant_id: string; expires_in?: number}
+  | {action: 'revoke'; grant_id: string}
+);
+export interface ChatConsent {
+  grant_id: string;
+  user_id: string;
+  group_id: string;
+  group_role: 'admin';
+}
+
 export const RUN_SIGN_IN_PATH = '/api/internal/identity/run-sign-in';
 /** A run sign-in's answer: what a sandbox writes into the skill's `credentials.env` (header above). */
 export interface RunSignIn {

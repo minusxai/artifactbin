@@ -18,7 +18,7 @@
  * as a person's does but never past its parent, and verifies only for a service still opted in.
  */
 import { type ServiceAudience, type ServiceTokenParent } from '@artifactbin/contracts/service-audiences';
-import type {GroupPrincipalRole} from '@artifactbin/contracts/actor';
+import type {GroupActorRole} from '@artifactbin/contracts/actor';
 import {signGroupToken,signToken,signedTokenKey,verifyGroupToken,verifyToken,type GroupSignedTokenClaims,type SignedTokenClaims,type SignedTokenKind} from './signed-tokens';
 import type { IssuedServiceToken } from './signed-tokens';
 
@@ -53,7 +53,7 @@ export const groupServiceTokenKey = (secret: string): Buffer => signedTokenKey(G
 
 /** A group's token for `service` (which must opt in: the caller checks), for its sign-in `parent`, never past `notAfter` (ms). */
 export const signGroupServiceToken = (key: Buffer, service: ServiceAudience,
-  input: {group: {id: string; role: GroupPrincipalRole; issuedBy: string}; parent: {kind: 'token'; id: string}; notAfter: number | null}, now = Date.now()): IssuedServiceToken =>
+  input: {group: {id: string; role: GroupActorRole; issuedBy: string}; parent: {kind: 'token'; id: string}; notAfter: number | null}, now = Date.now()): IssuedServiceToken =>
   signGroupToken(GROUP_SERVICE_TOKEN, key, service, input, now);
 
 /** Is `token` shaped like a group's service token at all? */

@@ -9,6 +9,7 @@ import {canUseDeploymentIdentity} from './deployment-identity';
  * identity-service `GROUP_SIGN_IN_RULE`) is neither: no read here ever takes it for an anonymous token.
  */
 import crypto from 'crypto';
+import {isGroupActorRole, type GroupActorRole} from '@artifactbin/contracts/actor';
 import { getDb, emit, currentRequest, services, serviceAudiences } from '../platform';
 import { groupSignInServiceConfigured } from '@artifactbin/contracts/service-audiences';
 import type { Harness } from './client-identity';
@@ -29,7 +30,7 @@ export async function liveGroupSignIn(id: string): Promise<Omit<GroupPrincipal, 
     const approval = (await db.query<{ service_origin: string | null }>('SELECT service_origin FROM group_sign_in_grants WHERE id = $1', [row.grant_id])).rows[0];
     if (!groupSignInServiceConfigured(serviceAudiences(), row.issued_by, approval?.service_origin)) return null;
   }
-  return row && (row.group_role === 'member' || row.group_role === 'editor') ? { id: row.group_id, role: row.group_role, issuedBy: row.issued_by } : null;
+  return row && isGroupActorRole(row.group_role) ? { id: row.group_id, role: row.group_role, issuedBy: row.issued_by } : null;
 }
 
 
@@ -295,7 +296,7 @@ export interface TokenRow {
   /** A group's sign-in this account authorised (`issued_by` is then this account): its group, that group's name and the level. */
   group_id: string | null;
   group_name: string | null;
-  group_role: 'member' | 'editor' | null;
+  group_role: GroupActorRole | null;
 }
 
 /**

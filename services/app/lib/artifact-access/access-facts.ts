@@ -21,7 +21,7 @@ import type { AccessActor, GroupPrincipal } from '@/lib/accounts';
 /**
  * THE FACTS FOR A GROUP'S SIGN-IN (lib/accounts `GroupPrincipal`), the one rule for it: exactly a person whose ONLY
  * relationship to anything is a direct membership of the principal's group at its level. Its role is that level on
- * that group alone (Editor and Member never flow down, and it administers nothing); its audience and its group shares
+ * that group alone (no role flows down); its audience and its group shares
  * reach that group and its ancestors (lib/groups `groupReachSql`, the person rule's `reachedGroupsSql` seeded with the
  * one group); it has no account, address, named share or user kind. `lock`: inside a write's transaction, the group
  * shares it reads are locked FOR SHARE, as `transactionAccessFacts` locks a person's.
@@ -40,7 +40,7 @@ function groupPrincipalFacts(principal: GroupPrincipal, db: () => Promise<Querya
     userKind: async (userId) => userId ? userKindOf(userId, await db()) : null,
     sharedWith: async () => false,
     namedRole: async () => 'none',
-    async editorGroupIds() { return principal.role === 'editor' && await live(principal.id) ? [principal.id] : []; },
+    async editorGroupIds() { return (principal.role === 'editor' || principal.role === 'admin') && await live(principal.id) ? [principal.id] : []; },
   };
 }
 

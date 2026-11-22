@@ -88,7 +88,7 @@ export async function runOperation(
   author: AnnotationAuthor = { kind: 'agent', label: null, transport: 'http' },
 ): Promise<Response> {
   // A group's sign-in runs only the operations its admitted routes run (server/group-admission), whatever the route.
-  if(actor.principalGroup&&!GROUP_OPERATIONS.includes(name))return json({error:GROUP_PRINCIPAL_REFUSED,message:'This operation does not accept a sign-in acting as a group.'},403);
+  if(actor.principalGroup&&!GROUP_OPERATIONS.includes(name)&&!(name==='update_group'&&actor.principalGroup.role==='admin'))return json({error:GROUP_PRINCIPAL_REFUSED,message:'This operation does not accept a sign-in acting as a group.'},403);
   const scope=await hostedAuthorization(actor.userId,actor.tokenId,name,input);
   const refusal=hostedRefusal(scope);if(refusal)return refusal;
   const complete=async(response:Response)=>{if(scope.kind==='allowed')await hostedOperationCompleted(actor.userId,actor.tokenId,name,input,response);return response;};

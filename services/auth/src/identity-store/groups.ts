@@ -23,6 +23,8 @@
  */
 import {IdentityError, type GroupSignInGrant, type GroupChange, type IdentityService, type TransactionalQueryable} from '@artifactbin/contracts/identity-module';
 import {normalizeCreateGroup, type GroupRole, type GroupSummary} from '@artifactbin/contracts/groups';
+import {IDENTITY_SCHEMA} from '@artifactbin/contracts/identity-service';
+import {plainIdentifier} from '@artifactbin/utils/sql-identifier';
 import {companyGroupState} from './company-group';
 import {bumpHierarchy,chainOf,effectiveAdminVia,insertGroup,memberRole,isTestAccount,liveGroup,lockGroups,recordChange,requireAdmin,type GroupRow} from './group-access';
 import {groupMemberMethods} from './group-members';
@@ -35,7 +37,7 @@ class Unchanged extends Error { constructor(public parentId: string | null) { su
 type GroupMethods = Pick<IdentityService, 'setDefaultDestination' | 'revokeGroupSignIn' | 'approveServiceGroupSignIn' | 'revokeServiceGroupSignIn' | 'createGroup' | 'updateGroup' | 'setGroupParent' | 'deleteGroup' | 'setGroupMember' | 'removeGroupMember' | 'inviteGroupMember'
   | 'removeGroupInvitation' | 'acceptGroupInvitations' | 'admitToGroup'>;
 
-export function groupMethods(db: TransactionalQueryable, t: IdentityTables, options: {testDomain?: string; appSchema?: string}): GroupMethods {
+export function groupMethods(db: TransactionalQueryable, t: IdentityTables, options: {testDomain?: string; appSchema?: string; readSchema?: string}): GroupMethods {
   return {
     async setDefaultDestination({userId, destination}) {
       if (!destination || !['personal','group','inherit'].includes(destination.type) ||
@@ -114,13 +116,20 @@ export function groupMethods(db: TransactionalQueryable, t: IdentityTables, opti
       });
     },
 
-    async updateGroup({actorId, groupId, ...input}) {
+    async updateGroup({actorId, groupId, interactiveTokenId, ...input}) {
       if (!input || !Object.keys(input).length || Object.keys(input).some(key => !['name', 'description', 'tenancy_id'].includes(key))
         || (input.tenancy_id != null && (typeof input.tenancy_id !== 'string' || !input.tenancy_id.trim() || input.tenancy_id.length > 200 || /[\u0000-\u001f\u007f]/.test(input.tenancy_id)))
         || (input.name !== undefined && (typeof input.name !== 'string' || !input.name.trim() || input.name.trim().length > 120))
         || (input.description !== undefined && (typeof input.description !== 'string' || input.description.trim().length > 2000))) throw new IdentityError('invalid_group');
       return db.transaction(async tx => {
         await requireAdmin(tx, t, actorId, groupId);
+        if (interactiveTokenId !== undefined) {
+          if (!interactiveTokenId || input.tenancy_id !== undefined) throw new IdentityError('forbidden', 403);
+          const read = plainIdentifier(options.readSchema ?? IDENTITY_SCHEMA, 'read schema');
+          if (!(await tx.query(`SELECT 1 FROM ${read}.tokens WHERE id=$1 AND group_id=$2 AND user_id=$3
+            AND group_role='admin' AND live`, [interactiveTokenId,groupId,actorId])).rows.length)
+            throw new IdentityError('forbidden', 403);
+        }
         const before = (await liveGroup(tx, t, groupId))!;
         const name = input.name?.trim() ?? before.name, description = input.description?.trim() ?? before.description;
         if (input.tenancy_id !== undefined && before.trusted_issuer !== null) throw new IdentityError('host_managed_tenancy', 403);
@@ -157,7 +166,7 @@ export function groupMethods(db: TransactionalQueryable, t: IdentityTables, opti
             await requireAdmin(tx, t, actorId, parentId, 'parent_not_found');
             if ((await chainOf(tx, t, parentId)).includes(id)) throw new IdentityError('hierarchy_cycle', 409);
           }
-          await tx.query(`UPDATE ${t.groups} SET parent_id=$2 WHERE id=$1`, [id, parentId]);
+          await tx.query(`UPDATE ${t.groups} SET parent_id=$2,parent_edge_id=gen_random_uuid() WHERE id=$1`, [id, parentId]);
           const changes: GroupChange[] = [];
           await recordChange(tx, t, changes, actorId, id, 'reparented', {previous_parent_id: previous, parent_id: parentId});
           if (previous) await recordChange(tx, t, changes, actorId, previous, 'subgroup_detached', {group_id: id});

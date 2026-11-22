@@ -24,7 +24,7 @@ export function groupMemberMethods(db: TransactionalQueryable, t: IdentityTables
         if (await isTestAccount(tx, t, actorId) && !await isTestAccount(tx, t, userId)) throw new IdentityError('test_account_restricted', 403);
         if (previous === next) return {changes: []};
         if (next !== 'admin') await protectLastAdmin(tx, t, groupId, userId);
-        await tx.query(`UPDATE ${t.group_members} SET role=$3 WHERE group_id=$1 AND user_id=$2`, [groupId, userId, next]);
+        await tx.query(`UPDATE ${t.group_members} SET role=$3,admin_tenure_id=gen_random_uuid() WHERE group_id=$1 AND user_id=$2`, [groupId, userId, next]);
         const changes: GroupChange[] = [];
         await recordChange(tx, t, changes, actorId, groupId, 'role_changed', {user_id: userId, previous_role: previous, role: next}, [userId]);
         return {changes};
@@ -41,7 +41,7 @@ export function groupMemberMethods(db: TransactionalQueryable, t: IdentityTables
         const company = await companySignInRoot(tx, t.groups, options.appSchema);
         if (company?.rootId === groupId) {
           if (company.ownerId === userId) throw new IdentityError('deployment_owner_required', 409);
-          await tx.query(`UPDATE ${t.users} SET deployment_admission_revoked=true WHERE id=$1 AND kind='account'`, [userId]);
+          await tx.query(`UPDATE ${t.users} SET deployment_admission_revoked=true,interactive_authority_id=gen_random_uuid() WHERE id=$1 AND kind='account'`, [userId]);
           // An invitation left over from before removal cannot readmit the account.
           await tx.query(`DELETE FROM ${t.group_invitations} i USING ${t.users} u
             WHERE i.group_id=$1 AND u.id=$2 AND lower(i.email)=lower(u.email)`, [groupId, userId]);

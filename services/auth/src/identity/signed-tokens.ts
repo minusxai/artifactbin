@@ -9,12 +9,12 @@
  * expired or future token, a lifetime over the kind's, and an audience no longer configured.
  *
  * A GROUP's kind (`principal: 'group'`, ./service-tokens) carries no `sub` at all: `grp` the group, `rol` its level
- * (`member` or `editor`), `isb` who issued the group's sign-in, and `par` that sign-in (always a `token`). Its `exp`
+ * (`member`, `editor` or interactive `admin`), `isb` who issued the group's sign-in, and `par` that sign-in (always a `token`). Its `exp`
  * may be earlier than iat + lifetime (never past its parent). A person's kind refuses any claims without `sub`, so a
  * group's claims are never read as a person's, under any key; a group's kind refuses any claims with one.
  */
 import {createHmac,hkdfSync,randomUUID,timingSafeEqual} from 'node:crypto';
-import {isGroupPrincipalRole, type GroupPrincipalRole} from '@artifactbin/contracts/actor';
+import {isGroupActorRole, type GroupActorRole} from '@artifactbin/contracts/actor';
 import type { ServiceAudience, ServiceTokenParent } from '@artifactbin/contracts/service-audiences';
 
 export interface IssuedServiceToken {
@@ -37,7 +37,7 @@ export interface SignedTokenClaims {
 }
 /** The verified claims of a group's signed token: the group, its level, who issued its sign-in, and that sign-in. */
 export interface GroupSignedTokenClaims {
-  grp: string; rol: GroupPrincipalRole; isb: string; aud: string; svc: string; iat: number; exp: number; jti: string;
+  grp: string; rol: GroupActorRole; isb: string; aud: string; svc: string; iat: number; exp: number; jti: string;
   par: {kind: 'token'; id: string};
 }
 
@@ -70,10 +70,10 @@ export function signToken(kind: SignedTokenKind, key: Buffer, service: ServiceAu
  * lifetime or at `notAfter` (ms, the parent's own expiry), whichever is sooner. Throws when that is already past.
  */
 export function signGroupToken(kind: SignedTokenKind, key: Buffer, service: ServiceAudience,
-  input: {group: {id: string; role: GroupPrincipalRole; issuedBy: string}; parent: {kind: 'token'; id: string}; notAfter: number | null}, now = Date.now()): IssuedServiceToken {
+  input: {group: {id: string; role: GroupActorRole; issuedBy: string}; parent: {kind: 'token'; id: string}; notAfter: number | null}, now = Date.now()): IssuedServiceToken {
   if (kind.principal !== 'group') throw new Error('invalid_kind');
   const {group, parent} = input;
-  if (!group || !ID.test(group.id) || !isGroupPrincipalRole(group.role) || !ID.test(group.issuedBy)) throw new Error('invalid_group');
+  if (!group || !ID.test(group.id) || !isGroupActorRole(group.role) || !ID.test(group.issuedBy)) throw new Error('invalid_group');
   if (!parent || parent.kind !== 'token' || !ID.test(parent.id)) throw new Error('invalid_parent');
   const iat = Math.floor(now / 1000);
   const exp = Math.min(iat + kind.ttlSeconds, input.notAfter === null ? Infinity : Math.floor(input.notAfter / 1000));
@@ -112,7 +112,7 @@ export function verifyToken(kind: SignedTokenKind, key: Buffer, audiences: reado
 export function verifyGroupToken(kind: SignedTokenKind, key: Buffer, audiences: readonly ServiceAudience[], token: string, now = Date.now()): GroupSignedTokenClaims | null {
   if (kind.principal !== 'group') return null;
   const c = open(kind, key, audiences, token, now) as Partial<GroupSignedTokenClaims> & {sub?: unknown} | null;
-  if (!c || 'sub' in c || typeof c.grp !== 'string' || !ID.test(c.grp) || !isGroupPrincipalRole(c.rol) || typeof c.isb !== 'string' || !ID.test(c.isb)
+  if (!c || 'sub' in c || typeof c.grp !== 'string' || !ID.test(c.grp) || !isGroupActorRole(c.rol) || typeof c.isb !== 'string' || !ID.test(c.isb)
     || !c.par || typeof c.par !== 'object' || c.par.kind !== 'token' || typeof c.par.id !== 'string' || !ID.test(c.par.id)) return null;
   return c as GroupSignedTokenClaims;
 }
