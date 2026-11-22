@@ -5,7 +5,7 @@ import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
 import yaml from 'yaml';
 import {CI_BUDGETS, attemptStart, describeCiElapsed, measureCiElapsed} from '../lib/ci-elapsed.mjs';
-import {JOBS, measuredNodeRun, shardLoads} from '../ci/test-timings.mjs';
+import {JOBS, measuredNodeRun, readMeasuredRun, shardLoads} from '../ci/test-timings.mjs';
 import {NODE_TIMINGS_ARTIFACT} from '../lib/node-batch.mjs';
 import {tempDirSync} from '../../services/test-support/src/temp-dir.ts';
 const workflow=(name='ci.yml')=>yaml.parse(readFileSync(new URL(`../../.github/workflows/${name}`,import.meta.url),'utf8'));
@@ -622,4 +622,21 @@ it('measures each node shard once across a partial retry and requires every pass
  expect(()=>measuredNodeRun(jobs.slice(1),log)).toThrow(/node tests/);
  expect(()=>measuredNodeRun([...jobs,{...replacement,conclusion:'failure'}],log)).toThrow(/node tests/);
  expect(()=>measuredNodeRun(jobs,id=>log(id).replace('1 passed (1)','2 passed (2)'))).toThrow(/timing/);
+});
+
+it.each([true,false])('captures coloured shard logs with the installed gh api flags (supports opt-in: %s)', supportsFlag => {
+ const jobs = Array.from({length:JOBS.node.count}, (_, i) => ({
+   id:i+1, name:`node tests (${i+1}/${JOBS.node.count})`, run_attempt:1, conclusion:'success',
+ }));
+ const measured = readMeasuredRun('123', (...args) => {
+   if (args[0] === '--help') return supportsFlag ? '  --allow-escape-sequences  Allow printing terminal escape sequences' : '';
+   if (args.includes('--paginate')) {
+     expect(args).not.toContain('--allow-escape-sequences');
+     return JSON.stringify([{jobs}]);
+   }
+   expect(args.includes('--allow-escape-sequences')).toBe(supportsFlag);
+   const id = /jobs\/(\d+)\/logs$/.exec(args.at(-1))[1];
+   return `\x1b[32m✓\x1b[0m  node  example-${id}.test.ts (1 test) 12ms\n Test Files  1 passed (1)`;
+ });
+ expect(Object.keys(measured.node)).toHaveLength(jobs.length);
 });
