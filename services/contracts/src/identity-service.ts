@@ -111,7 +111,7 @@ export const IDENTITY_SCHEMA = 'identity';
  *    when approved (`service_origin`). No secret.
  */
 export const IDENTITY_VIEWS = {
-  users: ['id', 'email', 'kind', 'parent_user_id', 'expires_at', 'merged_into_user_id', 'name', 'username', 'image_key', 'auto_accept_mentions', 'welcome_pending', 'test_account', 'created_at', 'active', 'default_group_id', 'handle', 'tenancy_id'],
+  users: ['id', 'email', 'kind', 'parent_user_id', 'expires_at', 'merged_into_user_id', 'name', 'username', 'image_key', 'auto_accept_mentions', 'welcome_pending', 'test_account', 'created_at', 'active', 'default_group_id', 'handle', 'tenancy_id', 'deployment_admission_revoked'],
   account_preferences: ['user_id', 'default_destination'],
   tokens: ['id', 'name', 'user_id', 'client_harness', 'audience', 'scope', 'request_authority', 'created_at', 'deleted_at', 'expires_at', 'last_used_at', 'scopes', 'live', 'group_id', 'group_role', 'issued_by', 'grant_id'],
   handle_reservations: ['handle', 'kind', 'subject_id'],

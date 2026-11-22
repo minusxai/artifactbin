@@ -29,5 +29,5 @@ export async function companySignInRoot(tx: Queryable, groups: string, appSchema
         SELECT id,parent_id FROM ${groups} WHERE id=$1 AND deleted_at IS NULL
         UNION SELECT g.id,g.parent_id FROM ${groups} g JOIN ancestors a ON g.id=a.parent_id WHERE g.deleted_at IS NULL
       ) SELECT id FROM ancestors WHERE parent_id IS NULL`, [state.default_group_id])).rows[0] : undefined;
-  return {rootId:root?.id};
+  return {rootId:root?.id, ownerId:state.owner_user_id};
 }

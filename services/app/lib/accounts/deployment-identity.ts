@@ -3,7 +3,7 @@ import type {Queryable} from '@artifactbin/contracts/db';
 import { getDb, deploymentConfig } from '../platform';
 import { isDeploymentMember } from '@artifactbin/auth';
 
-/** Credential IDs already admitted remain valid when policy or defaults change. */
+/** Read current admission for a credential’s account. */
 export async function canUseDeploymentIdentity(userId:string|null|undefined,query?:Queryable):Promise<boolean> {
  if(deploymentConfig().mode==='public')return true;
  if(!userId)return false;

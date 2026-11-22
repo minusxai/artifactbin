@@ -1,15 +1,15 @@
 import {afterEach,it,expect} from 'vitest';
 import {useAppHarness} from '@/__tests__/harness';
 import {account,sql} from '@/__tests__/artifact-fixtures';
-import {getDb,syncIdentitySettings} from '@/lib/platform';
+import {getDb,services,syncIdentitySettings} from '@/lib/platform';
 import {admitDeploymentIdentity,setupDeployment} from '@/lib/deployment';
 import {overrideConfig,resetConfigOverrides} from '@/lib/platform/config';
-import {createGroup,inviteGroupMember} from '..';
+import {createGroup,inviteGroupMember,removeGroupMember} from '..';
 useAppHarness();
 afterEach(resetConfigOverrides);
 async function companyGroup(handle:string){
  const owner=await account('mxmx_test_owner@example.com');
- overrideConfig({}, {APP__DEPLOYMENT_MODE:'company',APP__DEPLOYMENT_OWNER_EMAIL:owner.email!,AUTH__ALLOWED_EMAIL_PATTERNS:'*@example.com'});
+ overrideConfig({}, {APP__DEPLOYMENT_MODE:'company',APP__DEPLOYMENT_OWNER_EMAIL:owner.email!,AUTH__ALLOWED_EMAIL_PATTERNS:'*@example.com',AUTH__INVITE_ONLY:'false'});
  await syncIdentitySettings(await getDb());
  expect(await admitDeploymentIdentity({userId:owner.userId,email:owner.email!,emailVerified:true})).toBe(true);
  const group=await createGroup(owner.userId,{handle,name:'Admission'});
@@ -40,4 +40,36 @@ it('checks inviter authority first and preserves access for already admitted acc
  await expect(inviteGroupMember(member.userId,group.id,'mxmx_test_other@other.com','member')).rejects.toMatchObject({code:'not_found',status:404});
  await sql('INSERT INTO deployment_members(user_id) VALUES ($1)',[member.userId]);
  await expect(inviteGroupMember(owner.userId,group.id,member.email!,'member')).resolves.toBeDefined();
+});
+
+it('revokes admission when a root seat is removed, preserving other seats and allowing an explicit reinvitation',async()=>{
+ const {owner,group}=await companyGroup('company_root');
+ const person=await account('mxmx_test_departing@example.com');
+ const identity={userId:person.userId,email:person.email!,emailVerified:true};
+ expect(await admitDeploymentIdentity(identity)).toBe(true);
+ const subgroup=await createGroup(owner.userId,{handle:'other_team',name:'Other team',parent_id:group.id});
+ await sql("INSERT INTO auth.group_members(group_id,user_id,role) VALUES ($1,$2,'member')",[subgroup.id,person.userId]);
+ await inviteGroupMember(owner.userId,group.id,person.email!,'member');
+ await removeGroupMember(owner.userId,group.id,person.userId);
+ expect(await sql('SELECT active FROM users WHERE id=$1',[person.userId])).toEqual([{active:false}]);
+ expect(await admitDeploymentIdentity(identity)).toBe(false);
+ expect(await sql('SELECT group_id FROM group_members WHERE user_id=$1',[person.userId])).toEqual([{group_id:subgroup.id}]);
+ expect(await sql('SELECT user_id FROM deployment_members WHERE user_id=$1',[person.userId])).toEqual([{user_id:person.userId}]);
+ await inviteGroupMember(owner.userId,group.id,person.email!,'member');
+ expect(await admitDeploymentIdentity(identity)).toBe(true);
+ expect(await sql('SELECT active FROM users WHERE id=$1',[person.userId])).toEqual([{active:true}]);
+ await sql("UPDATE auth.group_members SET role='admin' WHERE group_id=$1 AND user_id=$2",[group.id,person.userId]);
+ await expect(removeGroupMember(owner.userId,group.id,owner.userId)).rejects.toMatchObject({code:'deployment_owner_required',status:409});
+});
+
+it('refuses manual invitations and ignores old invitations for issuer-managed groups',async()=>{
+ const {owner,group}=await companyGroup('issuer_root');
+ const subgroup=await createGroup(owner.userId,{handle:'issuer_group',name:'Issuer group',parent_id:group.id});
+ const person=await account('mxmx_test_invitee@example.com');
+ await sql("UPDATE auth.groups SET trusted_issuer='example-issuer' WHERE id=$1",[subgroup.id]);
+ await expect(inviteGroupMember(owner.userId,subgroup.id,person.email!,'member')).rejects.toMatchObject({code:'host_managed_membership',status:403});
+ await sql("INSERT INTO auth.group_invitations(id,group_id,email,role,invited_by) VALUES ('legacy',$1,$2,'member',$3)",[subgroup.id,person.email,owner.userId]);
+ expect(await services().identity.acceptGroupInvitations({userId:person.userId,email:person.email!})).toEqual({groupIds:[],changes:[]});
+ expect(await sql('SELECT group_id FROM group_members WHERE user_id=$1',[person.userId])).toEqual([]);
+ expect(await sql("SELECT id FROM group_invitations WHERE id='legacy'")).toEqual([{id:'legacy'}]);
 });

@@ -176,3 +176,9 @@ it('shows an Admin the services approved to act as the group, says plainly what 
  expect(other.queryByRole('region',{name:'Services that may act as this group'})).toBeNull();
  expect(quiet).not.toHaveBeenCalled();
 });
+
+it.each(['admin','member'] as const)('explains issuer-managed membership to a %s and omits the invite form',(role)=>{
+ render(()=> <GroupManagement detail={{...detail,group:{...detail.group,role,host_provisioned:true}}} refresh={()=>{}} />);
+ expect(screen.getByText('The sign-in provider decides who can join this group.')).toBeInTheDocument();
+ expect(screen.queryByRole('button',{name:'Invite person'})).not.toBeInTheDocument();
+});

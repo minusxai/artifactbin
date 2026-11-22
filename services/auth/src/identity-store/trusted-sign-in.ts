@@ -91,12 +91,16 @@ export async function trustedSignIn(db: TransactionalQueryable, input: TrustedSi
       const emailPerson = address ? await ensureEmailPerson(tx, address, t, better) : null;
       if (emailPerson && createdByHandle) { emailPerson.created = true; emailPerson.canFillName = true; }
       const person = emailPerson ?? await ensurePerson(tx, input, t, better);
-      const rootId = input.joinCompanyRoot ? await requiredCompanyRoot(tx, t, appSchema) : null;
+      const company = await companySignInRoot(tx, t.groups, appSchema);
+      if (company && (await tx.query(`SELECT 1 FROM ${t.users} WHERE id=$1 AND deployment_admission_revoked`, [person.userId])).rows.length)
+        throw new Refused('deployment_admission_required');
+      if (input.joinCompanyRoot && company && !company.rootId) throw new Refused('parent_group_missing');
+      const rootId = input.joinCompanyRoot ? company?.rootId ?? null : null;
       const group = await ensureGroup(tx, input, person.userId, t, rootId, appSchema);
       await tx.query(`INSERT INTO ${t.group_members}(group_id,user_id,role) VALUES($1,$2,'member') ON CONFLICT (group_id,user_id) DO NOTHING`, [group.groupId, person.userId]);
       // The issuer decides which of its groups the person may act in NOW: drop their other memberships in this issuer's
       // groups, so access the issuer has since withdrawn (another tenant) never lingers here.
-      await tx.query(`DELETE FROM ${t.group_members} m USING ${t.groups} g WHERE m.group_id=g.id AND m.user_id=$1 AND g.trusted_issuer=$2 AND m.group_id<>$3 AND m.group_id IS DISTINCT FROM $4::text`, [person.userId, input.issuer, group.groupId, rootId]);
+      await tx.query(`DELETE FROM ${t.group_members} m USING ${t.groups} g WHERE m.group_id=g.id AND m.user_id=$1 AND g.trusted_issuer=$2 AND m.group_id<>$3 AND m.group_id IS DISTINCT FROM $4::text`, [person.userId, input.issuer, group.groupId, company?.rootId ?? null]);
       if (admit && !await admit(person, tx)) throw new Refused('deployment_admission_required');
       if (rootId) await tx.query(`INSERT INTO ${t.group_members}(group_id,user_id,role) VALUES($1,$2,'member') ON CONFLICT (group_id,user_id) DO NOTHING`, [rootId, person.userId]);
       await tx.query(`UPDATE ${t.users} SET trusted_sign_in_group=$2,trusted_sign_in_at=now(),

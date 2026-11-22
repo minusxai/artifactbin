@@ -105,14 +105,16 @@ beforeAll(async () => {
 });
 afterAll(async () => { await closeDatabase?.(); });
 
-it('appends the handle alias without breaking an existing username reader', async () => {
+it('appends handle, tenancy and admission columns without breaking an existing username reader', async () => {
   await pg.query('CREATE SCHEMA identity_upgrade');
   const view = identityViewStatements({auth:'auth',app:'company_app',read:'identity_upgrade'})
     .find(sql=>sql.startsWith('CREATE OR REPLACE VIEW identity_upgrade.users '))!;
-  const withHandle = view.replace(', u.tenancy_id', '');
+  const withTenancy = view.replace(', u.deployment_admission_revoked', '');
+  const withHandle = withTenancy.replace(', u.tenancy_id', '');
   await pg.query(withHandle.replace(', u.username AS handle', ''));
   await pg.query('CREATE VIEW public.legacy_usernames AS SELECT id, username FROM identity_upgrade.users');
   await pg.query(withHandle);
+  await pg.query(withTenancy);
   await pg.query(view);
   expect(await rows("SELECT id, username FROM public.legacy_usernames WHERE id='usr_taken'"))
     .toEqual([{id:'usr_taken',username:'taken_user'}]);
@@ -260,6 +262,31 @@ describe('trusted-issuer sign-in', () => {
         JOIN auth.users u ON u.id=m.user_id WHERE u.username='company_reader'`)).toEqual([{handle:group}]);
     }
   });
+  it('does not let a fresh issuer assertion restore admission after removal from the designated root', async () => {
+    await pg.query("INSERT INTO auth.groups(id,handle,name,created_by,parent_id) VALUES ('grp_nested_removal','nested_removal','Nested default','usr_admin','grp_parent')");
+    await pg.query("INSERT INTO company_app.deployment_state VALUES('company','usr_admin','grp_nested_removal',true) ON CONFLICT (id) DO UPDATE SET default_group_id=EXCLUDED.default_group_id,setup_complete=true");
+    const store = createIdentityStore({db,authSchema:'auth',appSchema:'company_app'});
+    await pg.query("INSERT INTO auth.group_members(group_id,user_id,role) VALUES ('grp_parent','usr_admin','admin')");
+    const target = await app({TRUSTED_SIGNIN__ISSUERS:issuers(),APP__SCHEMA:'company_app',TRUSTED_SIGNIN__JOIN_COMPANY_ROOT:'true'});
+    const claims = {sub:'removed_reader',group:'removed_readers'};
+    try {
+      const first = await post(target,{token:token(claims)});
+      expect(first.status).toBe(303);
+      const person = await auth.sessions.resolve(new Request(BASE,{headers:{cookie:cookieOf(first)}}));
+      const userId = person!.userId;
+      await pg.query("INSERT INTO company_app.deployment_members(user_id) VALUES ($1)",[userId]);
+      expect(await rows("SELECT active FROM identity.users WHERE id=$1",[userId])).toEqual([{active:true}]);
+      await store.removeGroupMember({actorId:'usr_admin',groupId:'grp_parent',userId});
+      expect(await rows("SELECT active FROM identity.users WHERE id=$1",[userId])).toEqual([{active:false}]);
+      await refused(await post(target,{token:token({...claims,group:'replacement_readers'})}),403,'deployment_admission_required');
+      expect(await rows(`SELECT g.handle FROM auth.group_members m JOIN auth.groups g ON g.id=m.group_id WHERE m.user_id=$1`,[userId]))
+        .toEqual([{handle:claims.group}]);
+      expect(await rows("SELECT id FROM auth.groups WHERE handle='replacement_readers'")).toEqual([]);
+    } finally {
+      await pg.query("DELETE FROM auth.group_members WHERE group_id='grp_parent' AND user_id='usr_admin'");
+    }
+  });
+
   it('uses the configured issuer parent when the company default belongs to a different root', async () => {
     await pg.query(`INSERT INTO company_app.deployment_state VALUES('company','usr_admin','grp_plain',true)
       ON CONFLICT (id) DO UPDATE SET default_group_id=EXCLUDED.default_group_id,setup_complete=true`);

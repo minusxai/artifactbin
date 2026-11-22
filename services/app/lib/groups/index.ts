@@ -116,7 +116,7 @@ export async function getGroupDetail(userId:string|null,idOrHandle:string):Promi
  const parent=group.parent_id?(await db.query<GroupRelative>(RELATIVE_SQL+'g.id=$1',[group.parent_id,userId])).rows[0]??null:null;
  const subgroups=!admin?[]:(await db.query<GroupRelative>(RELATIVE_SQL+'g.parent_id=$1 ORDER BY g.name,g.id',[group.id,userId])).rows;
  const subgroup_audience=subgroups.length?(await db.query<{user_id:string;username:string|null;name:string|null;via_id:string;via_handle:string;via_name:string}>(SUBGROUP_AUDIENCE_SQL,[group.id])).rows.map(({via_id,via_handle,via_name,...person}):GroupAudienceMember=>({...person,via:{id:via_id,handle:via_handle,name:via_name}})):[];
- return {group:{...summary(group,role),company_root:group.company_root,...(admin?{tenancy_id:group.tenancy_id,host_provisioned:group.trusted_issuer!==null}:{})},members,linked_groups,...(invitations?{invitations}:{}),parent,subgroups,subgroup_audience,...(admin_via?{admin_via}:{})};
+ return {group:{...summary(group,role),company_root:group.company_root,host_provisioned:group.trusted_issuer!==null,...(admin?{tenancy_id:group.tenancy_id}:{})},members,linked_groups,...(invitations?{invitations}:{}),parent,subgroups,subgroup_audience,...(admin_via?{admin_via}:{})};
 }
 export async function searchGroupMembers(userId:string,groupId:string,query:string):Promise<GroupMember[]>{
  const db=await getDb(),group=await directoryGroup(db,userId,groupId);
@@ -159,7 +159,7 @@ export async function removeGroupInvitation(actorId:string,groupId:string,id:str
  */
 export async function acceptGroupInvitations(userId:string,verifiedEmail:string):Promise<string[]>{
  const email=verifiedEmail.trim().toLowerCase();
- if(!(await (await getDb()).query('SELECT 1 FROM group_invitations i JOIN groups g ON g.id=i.group_id WHERE i.email=$1 AND g.deleted_at IS NULL LIMIT 1',[email])).rows.length)return [];
+ if(!(await (await getDb()).query('SELECT 1 FROM group_invitations i JOIN groups g ON g.id=i.group_id WHERE i.email=$1 AND g.deleted_at IS NULL AND g.trusted_issuer IS NULL LIMIT 1',[email])).rows.length)return [];
  const accepted=await services().identity.acceptGroupInvitations({userId,email});
  await recordGroupChanges(accepted.changes);
  return accepted.groupIds;
