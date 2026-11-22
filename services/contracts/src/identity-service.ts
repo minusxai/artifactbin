@@ -86,6 +86,7 @@ export const IDENTITY_SCHEMA = 'identity';
  * this literal). A column added at the end of a table is added at the end of its view, after its rule columns, so no
  * column a reader knows ever moves; anything else is a contract change on both sides.
  *  - users: every account row; `active` is "may sign in and act on this deployment" (Artifactbin's one rule).
+ *    `handle` aliases the stored `username` during the naming transition.
  *    `default_group_id` selects a live direct membership: the saved group, else the earliest subgroup, else the
  *    earliest root (membership creation time, then group id in C collation). NULL without one. Readers still
  *    check admission and permissions for the operation. Personal and inherit affect publishing only.
@@ -110,7 +111,7 @@ export const IDENTITY_SCHEMA = 'identity';
  *    when approved (`service_origin`). No secret.
  */
 export const IDENTITY_VIEWS = {
-  users: ['id', 'email', 'kind', 'parent_user_id', 'expires_at', 'merged_into_user_id', 'name', 'username', 'image_key', 'auto_accept_mentions', 'welcome_pending', 'test_account', 'created_at', 'active', 'default_group_id'],
+  users: ['id', 'email', 'kind', 'parent_user_id', 'expires_at', 'merged_into_user_id', 'name', 'username', 'image_key', 'auto_accept_mentions', 'welcome_pending', 'test_account', 'created_at', 'active', 'default_group_id', 'handle'],
   account_preferences: ['user_id', 'default_destination'],
   tokens: ['id', 'name', 'user_id', 'client_harness', 'audience', 'scope', 'request_authority', 'created_at', 'deleted_at', 'expires_at', 'last_used_at', 'scopes', 'live', 'group_id', 'group_role', 'issued_by', 'grant_id'],
   handle_reservations: ['handle', 'kind', 'subject_id'],
