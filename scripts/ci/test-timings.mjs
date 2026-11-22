@@ -131,18 +131,21 @@ export function measuredNodeRun(jobs, readLog) {
   return { node };
 }
 
-function readMeasuredRun(run) {
-  const api = (...args) => {
-    try {
-      return execFileSync('gh', ['api', ...args], { encoding: 'utf8', maxBuffer: 64 << 20 });
-    } catch {
-      // A child process error can include stdout (partial job logs).
-      throw new Error(`Failed to read GitHub Actions endpoint ${args.at(-1)}`);
-    }
-  };
+function githubApi(...args) {
+  try {
+    return execFileSync('gh', ['api', ...args], { encoding: 'utf8', maxBuffer: 64 << 20 });
+  } catch {
+    // A child process error can include stdout (partial job logs).
+    throw new Error(`Failed to read GitHub Actions endpoint ${args.at(-1)}`);
+  }
+}
+
+export function readMeasuredRun(run, api = githubApi) {
   const root = 'repos/{owner}/{repo}/actions';
   const pages = JSON.parse(api('--paginate', '--slurp', `${root}/runs/${run}/jobs?filter=all&per_page=100`));
-  return measuredNodeRun(pages.flatMap(page => page.jobs), id => api(`${root}/jobs/${id}/logs`));
+  // Newer gh versions guard even piped output. Capture the coloured log for the parser only.
+  const logFlags = api('--help').includes('--allow-escape-sequences') ? ['--allow-escape-sequences'] : [];
+  return measuredNodeRun(pages.flatMap(page => page.jobs), id => api(...logFlags, `${root}/jobs/${id}/logs`));
 }
 
 /** Each file's median time (ms, rounded) over several runs' parsed times (`parseTimings`), by project. */
