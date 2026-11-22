@@ -15,6 +15,7 @@ import {getArtifactById} from '@/lib/artifacts';
 import {exportImageResponse,resetExportRenderer} from '@/lib/export';
 import {readHtmlPage} from '@/lib/html-publication';
 import {pageDeclaredConnectionSql,namingOwner} from '@/lib/page-doors';
+import {approvalRenderState} from '@/lib/query-approvals';
 import {setServices} from '@/lib/platform';
 import {createGroup,setGroupParent} from '@/lib/groups';
 import {createGuestOwner,admitGroupMember} from './harness';
@@ -224,4 +225,29 @@ it('answers a repeated approval of the same query by the same Admin with the app
  expect(byRob.body!.id).not.toBe(first.body!.id);
  expect(await sql('SELECT ended_reason FROM page_query_approvals WHERE id=$1',[String(first.body!.id)])).toEqual([{ended_reason:'replaced'}]);
  expect(page).toBeTruthy();
+});
+
+it('uses the current personal and inherited group bindings for approved queries and stored renders', async () => {
+ const host = await composed(), {ada,olga,root,team,page,read,approve} = await setting(host);
+ expect((await approve(ada)).status).toBe(201);
+ const actor = identityForUser(olga.userId);
+ const render = () => approvalRenderState(page,actor);
+ expect((await read(olga)).status).toBe(200);
+ const unbound = await render();
+ try {
+  await sql('UPDATE auth.users SET tenancy_id=$1 WHERE id=$2',['north',olga.userId]);
+  expect((await read(olga)).status).toBe(403);
+  expect(await render()).not.toEqual(unbound);
+  await sql('UPDATE auth.groups SET tenancy_id=$1 WHERE id=$2',['north',root.id]);
+  expect(rows(await read(olga))).toEqual([{region:'EU',total:15,...asGroup(team.id)}]);
+  const matched = await render();
+  expect(matched).not.toEqual(unbound);
+  await sql('UPDATE auth.groups SET tenancy_id=$1 WHERE id=$2',['south',team.id]);
+  expect((await read(olga)).status).toBe(403);
+  expect(await render()).not.toEqual(matched);
+ } finally {
+  await sql('UPDATE auth.users SET tenancy_id=NULL WHERE id=$1',[olga.userId]);
+  await sql('UPDATE auth.groups SET tenancy_id=NULL WHERE id IN ($1,$2)',[root.id,team.id]);
+ }
+ expect((await read(olga)).status).toBe(200);
 });

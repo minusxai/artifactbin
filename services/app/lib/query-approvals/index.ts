@@ -117,6 +117,28 @@ export async function readsAsGroup(actor:AccessActor,db?:Queryable):Promise<bool
 }
 
 /**
+ * Group scope at the time of a delegated read. The group must be live and its ancestry complete.
+ * A bound reader can use the approval only under that same binding.
+ */
+export async function approvedQueryScope(userId:string|null,groupId:string,db?:Queryable):Promise<string[]|null>{
+ if(!userId)return null;
+ const [row]=(await (db??await getDb()).query<{tenancies:string[]}>(
+  `WITH RECURSIVE chain(id,parent_id,tenancy_id) AS (
+    SELECT id,parent_id,tenancy_id FROM groups WHERE id=$2 AND deleted_at IS NULL
+    UNION
+    SELECT g.id,g.parent_id,g.tenancy_id FROM groups g JOIN chain c ON g.id=c.parent_id WHERE g.deleted_at IS NULL
+  ), scope AS (
+    SELECT COALESCE(array_agg(DISTINCT tenancy_id ORDER BY tenancy_id) FILTER (WHERE tenancy_id IS NOT NULL),'{}') AS tenancies
+    FROM chain HAVING bool_or(parent_id IS NULL)
+  )
+  SELECT scope.tenancies FROM users u CROSS JOIN scope
+  WHERE u.id=$1 AND u.kind='account' AND u.active AND NOT u.test_account
+    AND (u.tenancy_id IS NULL OR scope.tenancies=ARRAY[u.tenancy_id])`,
+  [userId,groupId])).rows;
+ return row?.tenancies??null;
+}
+
+/**
  * THE READ'S QUESTION (lib/page-doors): does an approval hold for `declared`, the query of the version read, with the
  * page's `head`? The approval's id and group, or null (the read runs as the reader). `reader` is who reads: one who does
  * not read as the group (`readsAsGroup`) is answered null without asking.
@@ -361,6 +383,9 @@ export async function approvalRenderState(pageId:string,reader:AccessActor|null)
  const all=(await db.query<{id:string;ended:boolean}>('SELECT id,ended_at IS NOT NULL AS ended FROM page_query_approvals WHERE page_id=$1 ORDER BY id',[pageId])).rows;
  if(!all.length)return {revision:'',current:false};
  const group=!!reader&&await readsAsGroup(reader,db);
- const held=group?(await holding(db,pageId)).map(row=>row.id).sort():[];
- return {revision:`-q${createHash('sha256').update(JSON.stringify([all,group,held])).digest('hex').slice(0,16)}`,current:true};
+ const approvals=group?await holding(db,pageId):[];
+ const owner=approvals[0]?.group_id;
+ const scope=owner?await approvedQueryScope(reader!.userId,owner,db):null;
+ const held=scope?approvals.map(row=>row.id).sort():[];
+ return {revision:`-q${createHash('sha256').update(JSON.stringify([all,group,held,scope])).digest('hex').slice(0,16)}`,current:true};
 }
