@@ -110,7 +110,7 @@ export default {
     'services/test-support': { includeEntryExports: true },
     // Generates ephemeral, single-day TLS certificates for the real SMTP fixture.
     // Its operator migrations run by path (its package.json `migrate:*` scripts).
-    'services/auth': { entry: ['scripts/*.ts!'], project: ['**/*.ts!', '!**/__tests__/**!'], ignoreBinaries: ['openssl'], includeEntryExports: true },
+    'services/auth': { entry: ['scripts/*.ts!'], project: ['**/*.ts!', '!**/__tests__/**!'], ignoreBinaries: ['openssl', 'initdb', 'pg_ctl'], includeEntryExports: true },
     // Service servers (their images and the deployment build them) and the SQL pool's worker (scripts/build/build-server.mjs).
     'services/sql': { entry: ['src/server.ts!', 'src/pool-worker.ts!'], project: ['**/*.{ts,mjs}!', '!**/__tests__/**!'], includeEntryExports: true },
     'services/events': { entry: ['src/server.ts!'], includeEntryExports: true },
