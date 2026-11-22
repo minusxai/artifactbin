@@ -258,7 +258,7 @@ it('places the artifact menu in a bottom sheet on phones and a dropdown after re
 
 it('names the author and the document in the bar', async () => {
   await mountReady();
-  expect(screen.getByRole('link', { name: "View @ada's profile" })).toHaveAttribute('href', '/@ada');
+  expect(screen.getByRole('link', { name: "View /@ada's profile" })).toHaveAttribute('href', '/@ada');
   expect(screen.getByText('A copy', { selector: '[data-mx-document-title]' })).toHaveAttribute('data-mx-document-title');
 });
 
