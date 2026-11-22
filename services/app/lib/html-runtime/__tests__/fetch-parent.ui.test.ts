@@ -13,14 +13,14 @@ it.each(['response','transport-error','body-error'] as const)('a stale SQL %s ca
   const oldKey=messages[0].key;send(oldKey,{kind:'ready',nonce:'old'});send(oldKey,query);expect(jobs).toHaveLength(1);
   expect(JSON.parse(appFetch.mock.calls[0]![1].body as string).revision).toBe('1');expect(appFetch.mock.calls[0]![1].headers).not.toHaveProperty('authorization');
   send(oldKey,{kind:'hello'});const nextKey=messages.at(-1).key;expect(nextKey).not.toBe(oldKey);revision='2';send(nextKey,{kind:'ready',nonce:'new'});send(nextKey,query);expect(jobs).toHaveLength(2);expect(JSON.parse(appFetch.mock.calls[1]![1].body as string).revision).toBe('2');
-  const oldText=vi.fn(async()=>{if(outcome==='body-error')throw Error('old body failed');return JSON.stringify({data:{records:{value:'old'}}});});
-  if(outcome==='transport-error')jobs[0]!.reject(Error('old transport failed'));else jobs[0]!.resolve({status:200,headers:new Headers(),text:oldText} as unknown as Response);
-  if(outcome!=='transport-error')await vi.waitFor(()=>expect(oldText).toHaveBeenCalledTimes(1));
+  const oldJson=vi.fn(async()=>{if(outcome==='body-error')throw Error('old body failed');return {rows:[{value:'old'}], reader_id:'previous-reader'};});
+  if(outcome==='transport-error')jobs[0]!.reject(Error('old transport failed'));else jobs[0]!.resolve({status:200,headers:new Headers(),json:oldJson} as unknown as Response);
+  if(outcome!=='transport-error')await vi.waitFor(()=>expect(oldJson).toHaveBeenCalledTimes(1));
   // Drain the accepted request and its body continuation, without completing the replacement request.
   await new Promise(resolve=>setTimeout(resolve,0));
   expect(messages.filter(message=>message.key===nextKey&&message.payload.kind==='fetch-result')).toHaveLength(0);
-  jobs[1]!.resolve(Response.json({data:{records:{value:'current'}}}));
+  jobs[1]!.resolve(Response.json({rows:[{value:'current'}], reader_id:'current-reader'}));
   await vi.waitFor(()=>expect(messages.filter(message=>message.key===nextKey&&message.payload.kind==='fetch-result')).toHaveLength(1));
-  expect(JSON.parse(messages.at(-1).payload.body)).toEqual({data:{records:{value:'current'}}});expect(messages.at(-1).payload.call).toBe(1);
+  expect(JSON.parse(messages.at(-1).payload.body)).toEqual({rows:[{value:'current'}]});expect(messages.at(-1).payload.call).toBe(1);
  }finally{parent.dispose();frame.remove();vi.restoreAllMocks();}
 });

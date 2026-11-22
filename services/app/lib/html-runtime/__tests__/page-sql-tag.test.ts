@@ -164,8 +164,8 @@ it('gives the uniform not_found, which carries no words, the list\'s sentence fo
   expect(await createSql(p)`select 1`.then(() => null, (e: unknown) => e)).toMatchObject({ code: 'not_found', message: 'This page\'s data can\'t be read: the page is gone, or you no longer have access to it.', detail: 'not_found' });
 });
 
-it('carries eligible group ids on the refusal without issuing another read', async () => {
+it('discards host-only group ids on the refusal without issuing another read', async () => {
   const {p, sent} = port(() => ({error: 'permission_denied', message: 'table unavailable', eligible_group_ids: ['group_b']}));
-  await expect(createSql(p)`select * from sales`).rejects.toMatchObject({eligible_group_ids: ['group_b']});
+  await expect(createSql(p)`select * from sales`).rejects.not.toHaveProperty('eligible_group_ids');
   expect(sent).toHaveLength(1);
 });

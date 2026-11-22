@@ -6,7 +6,7 @@
  * database sees of each reader.
  */
 import {htmlPageDeclarations} from '@/lib/html-page';
-import {createGroup,removeGroupMember} from '@/lib/groups';
+import {createGroup,removeGroupMember,setAccountPreferences,setGroupMember} from '@/lib/groups';
 import net from 'node:net';
 import { afterAll, beforeAll, beforeEach, expect, it } from 'vitest';
 import { SQL_FAILURES, type SqlFailureCode } from '@artifactbin/contracts/sql-failures';
@@ -237,12 +237,14 @@ it('validates every named default without exposing a secret or accepting an unco
 it('isolates pooled page reads and schema by group and leaves an ordinary sibling alias alone', async () => {
   const {alice, bob} = await readers();
   const first = await createGroup(alice.userId!,{handle:'first_team',name:'First'});
-  const second = await createGroup(alice.userId!,{handle:'second_team',name:'Second'});
+  const parent = await createGroup(alice.userId!,{handle:'parent_team',name:'Parent'});
+  const second = await createGroup(alice.userId!,{handle:'second_team',name:'Second',parent_id:parent.id});
   overrideConfig({}, {DATASETS__ALLOW_PRIVATE_NETWORK:'1',DATASETS__GROUP_SCOPED_CONNECTIONS:'gateway',
     DATASETS__DEFAULT_CONNECTION:JSON.stringify({default:JSON.parse(setting),connections:{gateway:JSON.parse(setting)}})});
   const html = PAGE().replace('default:warehouse/finance','default:gateway:warehouse');
   const personal = (await publish(alice,{html})).body.id;
   const team = (await publish(alice,{html,destination:{type:'group',id:second.id},visibility:'unlisted'})).body.id;
+  await setAccountPreferences(alice.userId!,{type:'group',id:first.id});
   const start = wire.databases.length;
   const read = 'select * from wh.public.loose';
   expect((await sql(personal,alice,read)).body).toMatchObject({viewing_as:{id:first.id,name:'First'}});
@@ -253,7 +255,8 @@ it('isolates pooled page reads and schema by group and leaves an ordinary siblin
   expect(wire.databases.slice(start)).toEqual(['warehouse/'+first.id,'warehouse/'+second.id,'postgres']);
   await admitGroupMember(alice.userId!,first.id,bob.userId!,'member');
   expect((await sql(team,bob,read)).body).toMatchObject({viewing_as:{id:first.id}});
-  await admitGroupMember(alice.userId!,second.id,bob.userId!,'member');
+  await admitGroupMember(alice.userId!,parent.id,bob.userId!,'admin');
+  expect((await sql(team,bob,read)).body).toMatchObject({viewing_as:{id:second.id}});
   const wireMessage = 'group_access_denied: '+JSON.stringify({reason:'table unavailable',eligible_group_ids:[second.id,'unknown']});
   await wire.db.query('CREATE TABLE public.refusals(message text)');
   await wire.db.query('INSERT INTO public.refusals VALUES ($1)',[wireMessage]);
@@ -262,11 +265,17 @@ it('isolates pooled page reads and schema by group and leaves an ordinary siblin
   const refused = await sql(personal,bob,'select wh.public.refuse()');
   expect(refused.status).toBe(403);
   expect(refused.body).toMatchObject({viewing_as:{id:first.id},eligible_group_ids:[second.id],eligible_groups:[{id:second.id,name:'Second'}]});
+  await wire.db.query('UPDATE public.refusals SET message=$1',['viewer_refused: there is no postgres connection warehouse']);
+  const missing = await sql(personal,bob,'select wh.public.refuse()');
+  expect(missing.body).toMatchObject({error:'permission_denied',page_message:'there is no postgres connection warehouse'});
   const switched = () => pageSql(request('/api/artifacts/'+personal+'/sql',{method:'POST',token:bob.token,
     json:{sql:read,revision:'1',reader_scope_user:bob.userId,reader_group_id:second.id}}),params(personal));
   expect(await (await switched()).json()).toMatchObject({viewing_as:{id:second.id},rows:[{n:7}]});
-  await removeGroupMember(alice.userId!,second.id,bob.userId!);
+  const privatePage = (await publish(alice,{html,visibility:'private',destination:{type:'personal'}})).body.id;
+  expect((await sql(privatePage,bob,read)).status).toBe(404);
+  await setGroupMember(alice.userId!,parent.id,bob.userId!,'editor');
   expect((await switched()).status).toBe(403);
+  expect((await sql(team,bob,read)).body).toMatchObject({viewing_as:{id:first.id}});
   const schema = await agentSql(request('/api/default-connection/sql',{method:'POST',token:alice.token,json:{namespace:'gateway:catalog'}}));
   expect(schema.status).toBe(200);
   expect(wire.databases.at(-1)).toBe('catalog/'+first.id);
@@ -275,10 +284,11 @@ it('isolates pooled page reads and schema by group and leaves an ordinary siblin
 it('requests a pinned group on a readable third-group page before either read reaches the connector', async () => {
   const {alice, bob} = await readers();
   const a = await createGroup(alice.userId!, {handle:'analytics', name:'Analytics'});
-  const b = await createGroup(alice.userId!, {handle:'operations', name:'Operations'});
+  const parent = await createGroup(alice.userId!, {handle:'parent_team', name:'Parent'});
+  const b = await createGroup(alice.userId!, {handle:'operations', name:'Operations', parent_id:parent.id});
   const c = await createGroup(alice.userId!, {handle:'publishing', name:'Publishing'});
   await admitGroupMember(alice.userId!, a.id, bob.userId!, 'member');
-  await admitGroupMember(alice.userId!, b.id, bob.userId!, 'member');
+  await admitGroupMember(alice.userId!, parent.id, bob.userId!, 'admin');
   overrideConfig({}, {DATASETS__ALLOW_PRIVATE_NETWORK:'1', DATASETS__GROUP_SCOPED_CONNECTIONS:'@default', DATASETS__DEFAULT_CONNECTION:setting});
   const statement = 'select n from wh.public.loose';
   const html = PAGE('<script type="application/sql" data-af-query="counted" data-af-dataset="wh">select 7 as n</script>')
@@ -299,11 +309,11 @@ it('requests a pinned group on a readable third-group page before either read re
   expect(wire.databases.length).toBe(start);
   for (const call of calls) expect(await read(call,b.id)).toMatchObject({status:200,body:{reader_id:bob.userId,viewing_as:{id:b.id},rows:[{n:7}]}});
   expect(wire.databases.slice(start)).toEqual(['warehouse/'+b.id]);
-  // Even a directly held pin can be denied by the database after selection.
+  // Even an administered pin can be denied by the database after selection.
   const policy = await read({sql:'select * from wh.guarded.shared'},b.id);
   expect(policy).toMatchObject({status:403,body:{error:'permission_denied',viewing_as:{id:b.id}}});
   expect(policy.body).not.toHaveProperty('required_group');
-  await removeGroupMember(alice.userId!,b.id,bob.userId!);
+  await removeGroupMember(alice.userId!,parent.id,bob.userId!);
   for (const call of calls) {
     expect((await read(call,b.id)).status).toBe(403);
     const refusal = await read(call);
