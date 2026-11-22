@@ -12,6 +12,9 @@ import {createBearerReader} from '../src/identity/bearer';
 import {groupServiceTokenKey,isGroupServiceToken,isServiceToken,serviceTokenKey,signGroupServiceToken,signServiceToken,verifyGroupServiceToken,verifyServiceToken} from '../src/identity/service-tokens';
 import { SERVICE_TOKEN_TTL_SECONDS } from '../src/identity/service-tokens';
 
+import {admitGroupMember,useAppHarness} from '../../app/__tests__/harness';
+import {composed,origin,page,useGroupPrincipalHost,world} from '../../app/__tests__/group-principal-fixture';
+
 const WAREHOUSE={id:'warehouse',origin:'https://warehouse.example',introspectionSecretSha256:null};
 const CRM={id:'crm',origin:'https://crm.example',introspectionSecretSha256:null};
 const queries:string[]=[];
@@ -116,5 +119,45 @@ describe('a group\'s service tokens',()=>{
   // A person's claims under the group kind's key and prefix: refused, a group's carries no person.
   const body=token.slice(4).split('.')[0]!;
   expect(verifyGroupServiceToken(groupKey,[OPTED],`vgt_${body}.${createHmac('sha256',groupKey).update('vgt_'+body).digest('base64url')}`)).toBeNull();
+ });
+});
+
+describe('a verified session signing in an agent as one group',()=>{
+ useAppHarness();
+ useGroupPrincipalHost();
+
+ it('uses only the requested membership and level when the agent acts',async()=>{
+  const host=await composed();
+  const {ada,eve,team,squad}=await world(host,false);
+  // Eve edits Team and is a direct Member of Squad.
+  await admitGroupMember(ada.userId,squad.id,eve.userId,'member');
+  const publish=(token:string,id:string)=>host.call('POST','/api/artifacts',token,{
+   title:'Group notes',html:page('Group notes'),visibility:'private',destination:{type:'group',id},
+  });
+  const teamPage=await publish(eve.token,team.id);
+  const squadPage=await publish(ada.token,squad.id);
+  expect(teamPage.status).toBe(201);
+  expect(squadPage.status).toBe(201);
+
+  const requestGrant=(group_id:string,group_role:string)=>host.fetch(new Request(origin+'/api/authentication/token',{
+   method:'POST',headers:{origin,cookie:eve.cookie,'content-type':'application/json'},
+   body:JSON.stringify({group_id,group_role}),
+  }));
+  const issued=await requestGrant(team.id,'member');
+  expect(issued.status).toBe(201);
+  const grant=await issued.json();
+  expect(grant).toMatchObject({group_id:team.id,group_role:'member',token_type:'Bearer',access_token:expect.any(String)});
+
+  const read=(token:string,id:unknown)=>host.call('GET',`/api/artifacts/${id}`,token);
+  expect((await read(grant.access_token,teamPage.body!.id)).status).toBe(200);
+  expect((await publish(grant.access_token,team.id)).status).toBe(403);
+  expect((await read(eve.token,squadPage.body!.id)).status).toBe(200);
+  expect((await read(grant.access_token,squadPage.body!.id)).status).toBe(404);
+
+  for(const [role,status,error] of [['editor',403,'group_level_not_held'],['admin',400,'invalid_group_sign_in']] as const){
+   const refused=await requestGrant(squad.id,role);
+   expect(refused.status).toBe(status);
+   expect(await refused.json()).toMatchObject({error});
+  }
  });
 });
