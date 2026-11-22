@@ -31,6 +31,8 @@ import {projectHostTenancyChanges,reachedGroupsSql,subtreeSql} from '@/lib/group
 import {enrollCompanyRoot,planCompanyRootEnrollment} from '../../../../auth/scripts/enroll-company-root';
 import {transactionAccessFacts} from '@/lib/artifact-access';
 
+import {setPersonTenancy} from '../../../../auth/scripts/set-person-tenancy';
+
 const ROOT=join(__dirname,'../../../../..');
 
 describe.skipIf(!dockerImage('postgres:17-alpine'))('identity tables in a split-role database',()=>{
@@ -78,6 +80,23 @@ describe.skipIf(!dockerImage('postgres:17-alpine'))('identity tables in a split-
   for(const p of pools)await p.end().catch(()=>{});
   if(container)spawnSync('docker',['rm','-f',container],{stdio:'ignore'});
  },30_000);
+
+ it('exposes an operator-assigned personal tenancy to the read-only identity role',async()=>{
+  const read=()=>service.query("SELECT tenancy_id FROM users WHERE id='prior'").then(result=>result.rows);
+  expect(await read()).toEqual([{tenancy_id:null}]);
+  const set=(expected:string|null,tenancy:string|null)=>setPersonTenancy(superuser,'auth','prior',expected,tenancy);
+  await set(null,'tenant-a');
+  try {
+   expect(await read()).toEqual([{tenancy_id:'tenant-a'}]);
+   await expect(set(null,'tenant-b')).rejects.toThrow('person_tenancy_changed_or_missing');
+   await expect(set('tenant-a','')).rejects.toThrow('invalid_person_tenancy');
+   expect(await code(service.query("UPDATE identity.users SET tenancy_id=NULL WHERE id='prior'"))).toBe('42501');
+   expect(await read()).toEqual([{tenancy_id:'tenant-a'}]);
+  } finally {
+   await set('tenant-a',null);
+  }
+  expect(await read()).toEqual([{tenancy_id:null}]);
+ });
 
  it('migrates existing grants atomically on PostgreSQL and never promotes a new Editor on a repeated run',async()=>{
   await superuser.query(`CREATE SCHEMA role_upgrade;

@@ -109,8 +109,10 @@ it('appends the handle alias without breaking an existing username reader', asyn
   await pg.query('CREATE SCHEMA identity_upgrade');
   const view = identityViewStatements({auth:'auth',app:'company_app',read:'identity_upgrade'})
     .find(sql=>sql.startsWith('CREATE OR REPLACE VIEW identity_upgrade.users '))!;
-  await pg.query(view.replace(', u.username AS handle', ''));
+  const withHandle = view.replace(', u.tenancy_id', '');
+  await pg.query(withHandle.replace(', u.username AS handle', ''));
   await pg.query('CREATE VIEW public.legacy_usernames AS SELECT id, username FROM identity_upgrade.users');
+  await pg.query(withHandle);
   await pg.query(view);
   expect(await rows("SELECT id, username FROM public.legacy_usernames WHERE id='usr_taken'"))
     .toEqual([{id:'usr_taken',username:'taken_user'}]);

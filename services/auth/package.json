@@ -28,6 +28,7 @@
   "scripts": {
     "enroll:company-root": "node --import tsx scripts/enroll-company-root.ts",
     "prepare:company-root": "node --import tsx scripts/prepare-company-root.ts",
+    "set:person-tenancy": "node --import tsx scripts/set-person-tenancy.ts",
     "migrate:groups": "node --import tsx scripts/migrate-groups.ts",
     "migrate:account": "node --import tsx scripts/migrate-account.ts"
   }

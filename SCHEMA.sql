@@ -1713,6 +1713,7 @@ CREATE TABLE IF NOT EXISTS auth.users (
   welcome_pending BOOLEAN NOT NULL DEFAULT false,
   test_account BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  tenancy_id TEXT,
   PRIMARY KEY (id)
 );
 
@@ -1747,6 +1748,8 @@ ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS welcome_pending BOOLEAN NOT NULL
 ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS test_account BOOLEAN NOT NULL DEFAULT false;
 
 ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS tenancy_id TEXT;
 
 ALTER TABLE auth.users ALTER COLUMN email DROP NOT NULL;
 

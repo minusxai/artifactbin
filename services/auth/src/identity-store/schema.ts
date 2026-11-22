@@ -58,6 +58,8 @@ const USERS: Table = {
     // rows take the default and are never marked, so a later cleanup can select exactly these.
     { name: 'test_account', type: 'BOOLEAN', notNull: true, default: 'false' },
     { name: 'created_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
+    // Assigned by the identity operator. NULL preserves existing account behavior.
+    { name: 'tenancy_id', type: 'TEXT' },
   ],
   primaryKey: ['id'],
   // Both unique constraints use the `indexes` form ON PURPOSE: entries in
