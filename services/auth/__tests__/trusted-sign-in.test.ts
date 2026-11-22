@@ -80,6 +80,41 @@ beforeAll(async () => {
 afterAll(async () => { await pg.close(); });
 
 describe('trusted-issuer sign-in', () => {
+  it('shares a person, group and replay record across two issuer sites with their own keys', async () => {
+    const second = 'https://second.example';
+    const [first] = JSON.parse(issuers());
+    const site = {...first, origins:[second], publicJwk:otherKeys.publicKey.export({format:'jwk'})};
+    const configured = (overrides = {}) => app({TRUSTED_SIGNIN__ISSUERS:JSON.stringify([first, {...site, ...overrides}])});
+    const target = await configured();
+    const claims = {sub:'shared_reader', group:'shared_group'};
+    const a = await post(target, {token:token({...claims,jti:'shared-once'})});
+    expect(a.status).toBe(303);
+    await refused(await post(target,{token:token(claims)}, {origin:second}),401,'invalid_token');
+    await refused(await post(target,{token:token({...claims,jti:'shared-once'},{key:otherKeys.privateKey})},{origin:second}),401,'replayed_token');
+    const b = await post(target,{token:token(claims,{key:otherKeys.privateKey})},{origin:second});
+    expect(b.status).toBe(303);
+    expect(b.headers.get('location')).toBe(a.headers.get('location'));
+    const person = async (response:Response) => (await auth.sessions.resolve(new Request(BASE,{headers:{cookie:cookieOf(response)}})))!.userId;
+    expect(await person(b)).toBe(await person(a));
+    await expect(configured({parentGroup:'other_parent'})).rejects.toThrow(/parentGroup/);
+    await expect(configured({audience:'other-audience'})).rejects.toThrow(/audience/);
+  });
+  it('restores a renamed legacy handle only to its bound issuer and person', async () => {
+    const target = await app({TRUSTED_SIGNIN__ISSUERS:twoIssuers()});
+    const claims = {sub:'legacy_reader',group:'legacy_team'};
+    const first = await post(target,{token:token(claims)});
+    const person = (await auth.sessions.resolve(new Request(BASE,{headers:{cookie:cookieOf(first)}})))!;
+    await pg.query("UPDATE auth.users SET username='past_rename' WHERE id=$1",[person.userId]);
+    await pg.query("UPDATE auth.handle_reservations SET handle='past_rename' WHERE subject_id=$1",[person.userId]);
+    await pg.query("INSERT INTO auth.users(id,username) VALUES('usr_holder','legacy_reader')");
+    await refused(await post(target,{token:token(claims)}),403,'subject_conflict');
+    await pg.query("DELETE FROM auth.users WHERE id='usr_holder'");
+    await refused(await post(target,{token:token({...claims,iss:'issuer-b'},{key:otherKeys.privateKey})}),403,'subject_conflict');
+    const returning = await post(target,{token:token(claims)});
+    expect(returning.status).toBe(303);
+    expect((await auth.sessions.resolve(new Request(BASE,{headers:{cookie:cookieOf(returning)}})))?.userId).toBe(person.userId);
+    expect(await rows('SELECT username FROM auth.users WHERE id=$1',[person.userId])).toEqual([{username:claims.sub}]);
+  });
   it('allows the company owner to bootstrap one root, then requires a parent; public groups may detach', async () => {
     const store = createIdentityStore({db, authSchema:'auth', appSchema:'company_app'});
     await pg.query("INSERT INTO auth.users(id,email) VALUES ('usr_head','head@example.com')");

@@ -25,6 +25,7 @@ export async function GET(request: Request) {
   // An account that has no handle yet is given one on sight.
   const withName = await ensureUsername(user);
   return json({
+    managed_username: await services().identity.hasManagedUsername({userId:withName.id}),
     email: withName.email,
     username: withName.username,
     name: withName.name,
@@ -60,6 +61,7 @@ export async function PATCH(request: Request) {
     };
     const result = await services().identity.setProfileNames({userId:session.user.id,...names});
     if ('error' in result) {
+      if (result.error === 'managed_username') return json({error:result.error}, 409);
       if (result.error === 'taken') return json({error:'username_taken'}, 409);
       return json({error:result.error === 'invalid_name' ? 'invalid_name' : 'invalid_username'}, 400);
     }

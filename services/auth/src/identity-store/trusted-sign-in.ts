@@ -7,8 +7,8 @@
  *    sign-in gives it: Better Auth's verified `user` row and the identity `users` row under one id, and a handle from
  *    the address (`ensureUsername`, after the transaction). The welcome page stays done for a new person only; an
  *    existing person keeps their handle and welcome state. A reserved `.invalid` address is refused (the synthetic addresses below).
- *  - Any other subject is a handle the issuer owns. The person is found by its Better Auth `account` row (`providerId`
- *    = `trusted:<issuer>`, `accountId` = subject), never by username (renameable). A new one gets Better Auth's `user`
+ *  - Any other subject is a handle the issuer owns. The person is found by handle, authenticated by its Better Auth `account` row (`providerId`
+ *    = `trusted:<issuer>`, `accountId` = subject). A new one gets Better Auth's `user`
  *    row (the synthetic, non-deliverable address the caller names, verified, since a session authenticates only a
  *    verified address), that account row, the identity `users` row (handle = subject, welcome already done: the person
  *    never sees `/welcome`) and the handle's reservation. A subject whose handle or address someone else already holds
@@ -94,19 +94,42 @@ export async function trustedSignIn(db: TransactionalQueryable, input: TrustedSi
 type Tables = ReturnType<typeof identityTables>;
 
 async function ensurePerson(tx: Queryable, input: TrustedSignInInput, t: Tables, better: (table: string) => string) {
+  try { return await findOrCreateHandlePerson(tx, input, t, better); }
+  catch (error) {
+    if (isUniqueViolation(error)) throw new Refused('subject_conflict');
+    throw error;
+  }
+}
+
+async function findOrCreateHandlePerson(tx: Queryable, input: TrustedSignInInput, t: Tables, better: (table: string) => string) {
   const provider = trustedProviderId(input.issuer);
-  const bound = (await tx.query<{userId: string; email: string | null}>(
-    `SELECT a."userId", u.email FROM ${better('account')} a JOIN ${t.users} u ON u.id=a."userId" WHERE a."providerId"=$1 AND a."accountId"=$2`, [provider, input.subject])).rows[0];
-  if (bound) return {userId: bound.userId, email: bound.email ?? input.email, created: false};
+  const owner = (await tx.query<{id:string; email:string; bound:boolean}>(`
+    SELECT u.id,u.email,EXISTS(SELECT 1 FROM ${better('account')} a
+      WHERE a."userId"=u.id AND a."providerId"=$2 AND a."accountId"=$1) AS bound
+    FROM ${t.users} u WHERE u.username=$1 FOR UPDATE`, [input.subject,provider])).rows[0];
+  if (owner) {
+    if (!owner.bound) throw new Refused('subject_conflict');
+    return {userId:owner.id,email:owner.email,created:false};
+  }
+  // Before host handles were fixed the person could release this name. Recover only their original binding.
+  const legacy = (await tx.query<{id:string; email:string; provider:string}>(`
+    SELECT u.id,u.email,a."providerId" AS provider FROM ${better('account')} a JOIN ${t.users} u ON u.id=a."userId"
+    WHERE a."accountId"=$1 AND a."providerId" LIKE 'trusted:%' FOR UPDATE OF u`, [input.subject])).rows;
+  if (legacy.length) {
+    const person = legacy[0]!;
+    if (legacy.length !== 1 || person.provider !== provider) throw new Refused('subject_conflict');
+    await reserveHandle(t,tx,input.subject,'user',person.id);
+    await tx.query(`UPDATE ${t.users} SET username=$2 WHERE id=$1`,[person.id,input.subject]);
+    return {userId:person.id,email:person.email,created:false};
+  }
   // Nobody else may hold the handle or the address: the subject names this issuer's person, never an existing one.
-  const heldHandle = (await tx.query(`SELECT 1 FROM ${t.handle_reservations} WHERE handle=$1 UNION ALL SELECT 1 FROM ${t.users} WHERE username=$1`, [input.subject])).rows.length > 0;
   const heldAddress = (await tx.query(`SELECT 1 FROM ${better('user')} WHERE email=$1 UNION ALL SELECT 1 FROM ${t.users} WHERE email=$1`, [input.email])).rows.length > 0;
-  if (heldHandle || heldAddress) throw new Refused('subject_conflict');
+  if (heldAddress) throw new Refused('subject_conflict');
   const userId = 'usr_' + internalId(), name = input.subject;
+  await reserveHandle(t, tx, input.subject, 'user', userId);
   await tx.query(`INSERT INTO ${better('user')}(id,name,email,"emailVerified","createdAt","updatedAt") VALUES($1,$2,$3,true,now(),now())`, [userId, name, input.email]);
   await tx.query(`INSERT INTO ${better('account')}(id,"accountId","providerId","userId","createdAt","updatedAt") VALUES($1,$2,$3,$4,now(),now())`, ['acc_' + internalId(), input.subject, provider, userId]);
   await tx.query(`INSERT INTO ${t.users}(id,email,name,username,welcome_pending) VALUES($1,$2,$3,$4,false)`, [userId, input.email, name, input.subject]);
-  try { await reserveHandle(t, tx, input.subject, 'user', userId); } catch (error) { if (isUniqueViolation(error)) throw new Refused('subject_conflict'); throw error; }
   return {userId, email: input.email, created: true};
 }
 
