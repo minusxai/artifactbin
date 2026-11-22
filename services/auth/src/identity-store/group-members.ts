@@ -7,7 +7,7 @@
 import {IdentityError, type GroupChange, type IdentityService, type TransactionalQueryable} from '@artifactbin/contracts/identity-module';
 import {isGroupRole, groupRoleRank, type GroupInvitation, type GroupRole} from '@artifactbin/contracts/groups';
 import {isTestDomainEmail} from '@artifactbin/contracts/test-domain';
-import {isTestAccount,lockGroups,memberRole,protectLastAdmin,recordChange,requireAdmin} from './group-access';
+import {insertMissingGroupMembers,isTestAccount,lockGroups,memberRole,protectLastAdmin,recordChange,requireAdmin} from './group-access';
 import {internalId,type IdentityTables} from './tables';
 
 type GroupMemberMethods = Pick<IdentityService, 'setGroupMember' | 'removeGroupMember' | 'inviteGroupMember' | 'removeGroupInvitation' | 'acceptGroupInvitations' | 'admitToGroup'>;
@@ -96,7 +96,8 @@ export function groupMemberMethods(db: TransactionalQueryable, t: IdentityTables
         const invitation = (await tx.query<{role: GroupRole}>(`SELECT role FROM ${t.group_invitations} WHERE group_id=$1 AND lower(email)=$2 FOR UPDATE`, [groupId, email])).rows[0];
         if (inviteOnly && !invitation) return {admitted: false, changes: []};
         const previous = (await tx.query<{role: GroupRole}>(`SELECT role FROM ${t.group_members} WHERE group_id=$1 AND user_id=$2`, [groupId, userId])).rows[0]?.role ?? null;
-        await tx.query(`INSERT INTO ${t.group_members} AS m (group_id,user_id,role) VALUES ($1,$2,$3) ON CONFLICT (group_id,user_id) DO UPDATE SET role=CASE WHEN m.role='admin' OR EXCLUDED.role='admin' THEN 'admin' WHEN m.role='editor' OR EXCLUDED.role='editor' THEN 'editor' ELSE 'member' END`, [groupId, userId, invitation?.role ?? 'member']);
+        if (!invitation) await insertMissingGroupMembers(tx,t,groupId,[userId]);
+        else await tx.query(`INSERT INTO ${t.group_members} AS m (group_id,user_id,role) VALUES ($1,$2,$3) ON CONFLICT (group_id,user_id) DO UPDATE SET role=CASE WHEN m.role='admin' OR EXCLUDED.role='admin' THEN 'admin' WHEN m.role='editor' OR EXCLUDED.role='editor' THEN 'editor' ELSE 'member' END`, [groupId, userId, invitation.role]);
         if (invitation) await tx.query(`DELETE FROM ${t.group_invitations} WHERE group_id=$1 AND lower(email)=$2`, [groupId, email]);
         const changes: GroupChange[] = [];
         if (!previous || (invitation && groupRoleRank(invitation.role) > groupRoleRank(previous)))

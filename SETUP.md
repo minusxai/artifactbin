@@ -157,6 +157,34 @@ branches' members can receive shares to their ancestors. Verify branch access, i
 and the admission cohort before separately enrolling or promoting anyone on the root, or enabling
 trusted root enrollment.
 
+**Enrolling previously admitted accounts after the default move (PostgreSQL).** After selecting
+the prepared root, pause all app and identity writers and automatic reconciliation again, and verify a
+restorable backup. Keep automatic trusted root enrollment off. Use the same operator connection and
+schemas as for preparation. The app and identity runtime roles retain their existing permissions.
+Generate a plan into a private file outside the repository. Use `npm --silent` to capture only JSON.
+
+```sh
+umask 077
+npm --silent run enroll:company-root -w services/auth -- --writes-paused-backup-verified \
+  <owner-id> <new-default-id> plan > /private/path/root-enrollment.json
+npm --silent run enroll:company-root -w services/auth -- --writes-paused-backup-verified \
+  <owner-id> <new-default-id> apply /private/path/root-enrollment.json
+```
+
+Review the full account list and revisions before apply. The proposed additions are the rows with
+`role: null` and `removed: false`. The plan includes active email accounts admitted by the time of
+the move and still admitted at review, whether or not they have an issuer seat. Review what the root
+already exposes before adding Members. The command checks the designated owner, live root, audited
+default move, role model, hierarchy revision and account and seat snapshot again under lock. If the
+plan changed, generate and review a fresh one. Discard superseded plans and plans from before a
+restore or database replacement.
+
+Apply adds missing direct Member seats and records `company_root_enrolled` atomically. It preserves
+existing roles and skips previously audited removals. An exact retry reports `already_applied`.
+The completion audit is retained for the root's lifetime so later removals and revocations survive
+retries. The command changes only root memberships and their audit. Run it once on each installation
+that needs enrollment, then resume services.
+
 **Company root membership for trusted sign-in.** Set `TRUSTED_SIGNIN__JOIN_COMPANY_ROOT=true` on the
 trusted-sign-in and identity hosts only when the company root is ready for every issuer’s people.
 Check its data grants and private page shares first. The setting defaults to false. Restart the hosts

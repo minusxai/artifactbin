@@ -28,6 +28,7 @@ import {createAuthHost,createHumanAuth,sessionStoreOf,ensureHumanAuthSchema} fro
 import {SCHEMA_STATEMENTS} from '@/lib/platform';
 import {tenancyIssuer} from '@/test/helpers/trusted-tenancy';
 import {projectHostTenancyChanges,reachedGroupsSql,subtreeSql} from '@/lib/groups';
+import {enrollCompanyRoot,planCompanyRootEnrollment} from '../../../../auth/scripts/enroll-company-root';
 import {transactionAccessFacts} from '@/lib/artifact-access';
 
 const ROOT=join(__dirname,'../../../../..');
@@ -217,6 +218,75 @@ describe.skipIf(!dockerImage('postgres:17-alpine'))('identity tables in a split-
    expect(await facts.userKind(owner)).toBe('account');
    await client.query('COMMIT');
   }finally{client.release();}
+ });
+
+ it('enrolls only the reviewed admissions into a moved root once, under split-role PostgreSQL',async()=>{
+  const target={appSchema:'app',authSchema:'auth',ownerId:'move_owner',defaultId:'move_root'};
+  const operator=identityDbOf(superuser);
+  await auth.query(`INSERT INTO users(id,email) VALUES
+   ('move_owner','move-owner@example.com'),('ordinary','ordinary@example.com'),('strong','strong@example.com'),
+   ('removed','removed@example.com'),('excluded','excluded@example.com'),('revoked','revoked@example.com'),('late','late@example.com');
+   INSERT INTO groups(id,handle,name,created_by,parent_id) VALUES
+   ('move_root','move_root','New root','move_owner',NULL),('private_branch','private_branch','Branch','strong','move_root');
+   INSERT INTO group_members(group_id,user_id,role) VALUES
+   ('move_root','move_owner','admin'),('move_root','strong','editor'),('private_branch','strong','admin');`);
+  await app.query(`UPDATE identity_settings SET deployment_mode='company' WHERE id='installation';
+   INSERT INTO deployment_state(id,owner_user_id,default_group_id,setup_complete)
+   VALUES ('company','move_owner','move_root',true) ON CONFLICT (id) DO UPDATE
+   SET owner_user_id=excluded.owner_user_id, default_group_id=excluded.default_group_id, setup_complete=true;
+   INSERT INTO deployment_members(user_id,admitted_at) SELECT id,now()-interval '1 day' FROM users
+   WHERE id IN ('move_owner','ordinary','strong','removed','revoked');
+   INSERT INTO group_audit(id,group_id,actor_user_id,action,details) VALUES
+   ('prepared','move_root','move_owner','company_root_prepared','{"previous_default_group_id":"root_b"}'),
+   ('moved','move_root','move_owner','company_default_changed','{"previous_default_group_id":"root_b"}'),
+   ('removed','move_root','move_owner','member_removed','{"user_id":"removed"}');
+   INSERT INTO deployment_members(user_id,admitted_at) VALUES ('late',now()+interval '1 hour');
+   INSERT INTO artifacts(id,token_id,visibility) VALUES ('branch_page','tok','private');
+   INSERT INTO artifact_group_shares(artifact_id,group_id,role,created_by) VALUES ('branch_page','private_branch','viewer','strong');`);
+  const read=(userId:string)=>transactionAccessFacts({userId,tokenId:null,email:null,documentEditor:false} as never,
+   {query:async(sql:string,params?:unknown[])=>({rows:(await app.query(sql,params as never[])).rows})} as Queryable).groupShareRole('branch_page');
+  expect(await read('ordinary')).toBe('none');
+  await expect(planCompanyRootEnrollment(operator,{...target,ownerId:'strong'})).rejects.toMatchObject({code:'deployment_owner_required'});
+  await expect(planCompanyRootEnrollment(operator,{...target,defaultId:'root_b'})).rejects.toMatchObject({code:'default_group_changed'});
+  const original=await planCompanyRootEnrollment(operator,target);
+  await expect(enrollCompanyRoot(identityDbOf(app),target,original)).rejects.toMatchObject({code:'42501'});
+  await expect(enrollCompanyRoot(identityDbOf(auth),target,original)).rejects.toMatchObject({code:'42501'});
+  await app.query("DELETE FROM deployment_members WHERE user_id='revoked'");
+  await expect(enrollCompanyRoot(operator,target,original)).rejects.toMatchObject({code:'enrollment_plan_changed'});
+  await app.query("UPDATE deployment_state SET default_group_id='root_b' WHERE id='company'");
+  await expect(enrollCompanyRoot(operator,target,original)).rejects.toMatchObject({code:'default_group_changed'});
+  await app.query("UPDATE deployment_state SET default_group_id='move_root' WHERE id='company'");
+  const hierarchyPlan=await planCompanyRootEnrollment(operator,target);
+  await auth.query("UPDATE group_hierarchy SET revision=revision+1 WHERE id='installation'");
+  await expect(enrollCompanyRoot(operator,target,hierarchyPlan)).rejects.toMatchObject({code:'enrollment_plan_changed'});
+  const plan=await planCompanyRootEnrollment(operator,target);
+  expect(plan.accounts.map(({id,role,removed})=>({id,role,removed}))).toEqual([
+   {id:'move_owner',role:'admin',removed:false},{id:'ordinary',role:null,removed:false},
+   {id:'removed',role:null,removed:true},{id:'strong',role:'editor',removed:false},
+  ]);
+  const before=await auth.query("SELECT (SELECT count(*) FROM group_invitations) AS invitations,(SELECT count(*) FROM group_mail_outbox) AS mail");
+  await app.query("ALTER TABLE group_audit ADD CONSTRAINT reject_enrollment CHECK (action <> 'company_root_enrolled')");
+  try {
+   await expect(enrollCompanyRoot(operator,target,plan)).rejects.toMatchObject({code:'23514'});
+   expect(await planCompanyRootEnrollment(operator,target)).toEqual(plan);
+  } finally {
+   await app.query('ALTER TABLE group_audit DROP CONSTRAINT reject_enrollment');
+  }
+  expect((await Promise.all([enrollCompanyRoot(operator,target,plan),enrollCompanyRoot(operator,target,plan)])).sort())
+   .toEqual(['already_applied','applied']);
+  expect((await auth.query("SELECT user_id,role FROM group_members WHERE group_id='move_root' ORDER BY user_id")).rows).toEqual([
+   {user_id:'move_owner',role:'admin'},{user_id:'ordinary',role:'member'},{user_id:'strong',role:'editor'},
+  ]);
+  expect((await auth.query("SELECT (SELECT count(*) FROM group_invitations) AS invitations,(SELECT count(*) FROM group_mail_outbox) AS mail")).rows).toEqual(before.rows);
+  expect(await read('ordinary')).toBe('none');
+  expect(await read('strong')).toBe('viewer');
+  expect((await app.query("SELECT actor_user_id,details->'added_user_ids' AS added FROM group_audit WHERE action='company_root_enrolled' AND group_id='move_root'")).rows)
+   .toEqual([{actor_user_id:'move_owner',added:['ordinary']}]);
+  await createIdentityStore({db:identityDbOf(auth),authSchema:'auth',appSchema:'app'})
+   .removeGroupMember({actorId:'move_owner',groupId:'move_root',userId:'ordinary'});
+  expect(await enrollCompanyRoot(operator,target,plan)).toBe('already_applied');
+  await expect(planCompanyRootEnrollment(operator,target)).rejects.toMatchObject({code:'root_already_enrolled'});
+  expect((await auth.query("SELECT user_id FROM group_members WHERE group_id='move_root' AND user_id='ordinary'")).rows).toEqual([]);
  });
 
  it('upgrades a database whose app role owns the identity tables: refused until the one-time move, then every row kept and only the views readable', async()=>{
