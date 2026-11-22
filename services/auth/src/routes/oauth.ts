@@ -20,7 +20,7 @@
 import { ACCESS_TOKEN_TTL_SECONDS, authServerMetadata, consumeAuthCode, isValidCodeVerifier, protectedResourceMetadata } from '../identity/oauth';
 import type { AuthApp } from '../parts';
 import { mountConsent } from './consent';
-import { CORS, GroupSignInRefused, NO_STORE, acceptsResource, baseUrlOf, issueGrant, mintFor, readAuthJson, readAuthText, resourceOf, resourcesOf, serviceAt, type OAuthRoutesOptions } from './grants';
+import { CORS, GroupSignInRefused, NO_STORE, acceptsResource, baseUrlOf, issueGrant, isTerminalConsent, mintFor, readAuthJson, readAuthText, resourceOf, resourcesOf, serviceAt, type OAuthRoutesOptions } from './grants';
 import { mountTokenExchange } from './token-exchange';
 
 /** The downstream deployment imports `baseUrlOf` from this path (auth `downstream-exports.test`). */
@@ -81,7 +81,8 @@ export function mountOAuthRoutes(app: AuthApp, o: OAuthRoutesOptions): void {
     if (body === null) return oauthError('invalid_request', 'Malformed JSON body');
     const expectedResource = resourceOf(o, c.req.raw);
     if (!body.client_id) return oauthError('invalid_request', 'Missing client_id');
-    if (!await o.oauth.client(body.client_id)) return oauthError('invalid_client', 'Unknown client');
+    const client = await o.oauth.client(body.client_id);
+    if (!client) return oauthError('invalid_client', 'Unknown client');
 
     if (body.grant_type === 'authorization_code') {
       if (!body.code) return oauthError('invalid_request', 'Missing code');
@@ -97,7 +98,7 @@ export function mountOAuthRoutes(app: AuthApp, o: OAuthRoutesOptions): void {
         const service = serviceAt(o, requestedResource);
         if (grant.group && service) return oauthError('invalid_grant', 'Invalid, expired, or already-used authorization code');
         const group = grant.group ?? null;
-        const { minted, refreshToken } = await issueGrant(o, c.req.raw, { clientId: grant.clientId, userId: grant.userId, resource: service ? requestedResource : expectedResource, scope: grant.scope, sessionId: grant.sessionId, group });
+        const { minted, refreshToken } = await issueGrant(o, c.req.raw, { clientId: grant.clientId, userId: grant.userId, resource: service ? requestedResource : expectedResource, scope: grant.scope, sessionId: grant.sessionId, group, terminal: !client.firstParty && !grant.sessionId && !group && isTerminalConsent(o, requestedResource, grant.redirectUri) });
         return oauthJson({ has_created_document: minted.has_created_document, access_token: minted.token, token_type: 'Bearer', expires_in: ACCESS_TOKEN_TTL_SECONDS, refresh_token: refreshToken, scope: grant.scope, ...(group ? { group_id: group.id, group_role: group.role } : {}) });
       } catch (error) {
         if (error instanceof GroupSignInRefused) return oauthError('invalid_grant', 'The group sign-in is not held at that level');
