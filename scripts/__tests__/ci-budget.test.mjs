@@ -5,7 +5,7 @@ import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
 import yaml from 'yaml';
 import {CI_BUDGETS, attemptStart, describeCiElapsed, measureCiElapsed} from '../lib/ci-elapsed.mjs';
-import {JOBS, shardLoads} from '../ci/test-timings.mjs';
+import {JOBS, measuredNodeRun, shardLoads} from '../ci/test-timings.mjs';
 import {NODE_TIMINGS_ARTIFACT} from '../lib/node-batch.mjs';
 import {tempDirSync} from '../../services/test-support/src/temp-dir.ts';
 const workflow=(name='ci.yml')=>yaml.parse(readFileSync(new URL(`../../.github/workflows/${name}`,import.meta.url),'utf8'));
@@ -606,4 +606,20 @@ it('enrolls node contract tests that the full suite also runs, once each, outsid
   expect(file).toMatch(/^services\/app\/lib\/(?:.+\/)?__tests__\/[^/]+(?<!\.ui)\.test\.ts$/);
   expect(fast).not.toContain(file);expect(guards).not.toContain(file);
  }
+});
+
+it('measures each node shard once across a partial retry and requires every passed file timing',()=>{
+ const jobs=Array.from({length:JOBS.node.count},(_,i)=>({
+   id:i+1,name:`node tests (${i+1}/${JOBS.node.count})`,run_attempt:1,conclusion:'success',
+ }));
+ const replacement={...jobs[0],id:77,run_attempt:2};
+ const history=[replacement,...jobs,{id:88,name:'checks',run_attempt:2,conclusion:'success'}];
+ const log=id=>`✓  node  example-${id}.test.ts (2 tests) ${id}ms\n Test Files  1 passed (1)`;
+ const result=measuredNodeRun(history,log);
+ expect(result.node).toEqual(Object.fromEntries([77,2,3,4,5,6].map(id=>[`example-${id}.test.ts`,id])));
+ expect(measuredNodeRun([{name:'node tests (/6)',run_attempt:1,conclusion:'skipped'}],log)).toEqual({node:{}});
+ expect(()=>measuredNodeRun([],log)).toThrow(/missing job/);
+ expect(()=>measuredNodeRun(jobs.slice(1),log)).toThrow(/node tests/);
+ expect(()=>measuredNodeRun([...jobs,{...replacement,conclusion:'failure'}],log)).toThrow(/node tests/);
+ expect(()=>measuredNodeRun(jobs,id=>log(id).replace('1 passed (1)','2 passed (2)'))).toThrow(/timing/);
 });
