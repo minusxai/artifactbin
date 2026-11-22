@@ -1,5 +1,5 @@
 import {canUseDeploymentIdentity} from '../accounts';
-import {effectiveRoleSql,recordGroupChanges} from '../groups';
+import {effectiveRoleSql,recordGroupChanges,recordGroupMutation} from '../groups';
 import {validateDefaultConnection} from '../connections';
 /** Durable company bootstrap and admission. All state transitions hold the singleton row lock. */
 import type {ArtifactDestination, DeploymentState, GroupSummary} from '@artifactbin/contracts/groups';
@@ -45,7 +45,9 @@ export async function setupDeployment(userId:string,groupId:string):Promise<Depl
   const s=await state(tx,true);if(s.owner_user_id!==userId)throw new DeploymentError('deployment_owner_required',403,'Deployment owner required');
   const g=await group(tx,groupId,userId);if(g?.role!=='admin')throw new DeploymentError('default_group_unavailable',403,'Default group requires Admin membership');
   if(g.parent_id)throw new DeploymentError('default_group_unavailable',409,'Choose a group with no parent for company setup');
+  if(s.setup_complete&&s.default_group_id===groupId)return;
   await tx.query('UPDATE deployment_state SET default_group_id=$2,setup_complete=true WHERE id=$1',[ID,groupId]);
+  if(s.setup_complete)await recordGroupMutation(tx,userId,groupId,'company_default_changed',{previous_default_group_id:s.default_group_id});
  });return getDeploymentState(userId);
 }
 /**
