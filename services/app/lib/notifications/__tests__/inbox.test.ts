@@ -84,7 +84,7 @@ it('blocking hides the other person in both directions, dismisses invitations ei
   ('user','bob','join','artifact','doc','pending','request','bob'),('user','bob','join','artifact','carols','pending','invitation','alice')`);
  const blocked=await updateMembershipInbox(bob,{block:'alice'});
  expect(blocked.notifications).toEqual([]);
- expect(blocked.blocks).toEqual([{user_id:'alice',username:'alice'}]);
+ expect(blocked.blocks).toEqual([{user_id:'alice',username:'alice',name:null}]);
  expect(await ids(alice)).toEqual([]);
  // Only what one of them initiated for the other is dismissed; bob's own request to alice's document stays pending.
  expect((await db.query("SELECT object_id,status FROM relations WHERE subject_id='bob' ORDER BY object_id")).rows).toEqual([{object_id:'carols',status:'dismissed'},{object_id:'doc',status:'pending'}]);
