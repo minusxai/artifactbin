@@ -10,7 +10,7 @@
 import { describe, it, expect, vi, onTestFinished } from 'vitest';
 import { readdir } from 'fs/promises';
 import path from 'path';
-import { ObjectUnavailable, cachedReads, objectKey, resetReadCache, uniqueObjectKey, createLocalStore, parseS3Url, storageKeyFor, type ObjectStore } from '../index';
+import { ObjectUnavailable, cachedReads, objectKey, resetReadCache, createLocalStore, parseS3Url, storageKeyFor, type ObjectStore } from '../index';
 import { contractSuite, streamSuite } from './store-contract';
 import {tempDir} from '@artifactbin/test-support/temp-dir';
 
@@ -73,10 +73,6 @@ describe('object keys', () => {
     expect(key.split('/')).toHaveLength(2);
     expect(key).not.toMatch(/\.\./);
   });
-
-  it('unique keys never repeat', () => {
-    expect(uniqueObjectKey('dataset')).not.toBe(uniqueObjectKey('dataset'));
-  });
 });
 
 // ── local filesystem backend ────────────────────────────────────────────────
@@ -137,7 +133,6 @@ describe('getStream', () => {
     const dir = await tempDir('ab-stream-',onTestFinished);
     return createLocalStore(dir);
   });
-
 
   it('never enters the read cache, so a big object cannot evict what the cache is for', async () => {
     resetReadCache();
@@ -201,7 +196,6 @@ describe('getStream', () => {
     expect((await store.get('dataset/small')).toString()).toBe('a,b\n1,2');
     expect(gets).toBe(1);
 
-
   });
 });
 
@@ -236,7 +230,6 @@ describe('local objects publish complete bytes', () => {
     expect(await readdir(path.join(dir,'islands'))).toEqual(['module']);
   });
 });
-
 
 it('publishes the same cache key concurrently without replacing identical existing bytes',async()=>{
   const dir=await tempDir('ab-publish-identical-',onTestFinished);

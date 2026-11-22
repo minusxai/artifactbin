@@ -4,7 +4,7 @@
  * trailing slash changes nothing, every address it names is on that origin) and carries no credential.
  */
 import { describe, expect, it } from 'vitest';
-import { agentBlurb, agentContract, existingPaste } from '@/lib/agent-copy';
+import { agentContract, existingPaste } from '@/lib/agent-copy';
 
 const ORIGINS = ['https://app.example.test', 'http://127.0.0.1:45407', 'https://blog.example.org'];
 const addresses = (text: string) => [...text.matchAll(/\bhttps?:\/\/[^\s)]+?(?=[.,]?(?:\s|$))/g)].map((match) => match[0]);
@@ -36,10 +36,6 @@ describe('the existing-document paste', () => {
   it('asks about an artifact for an unknown or missing template', () => {
     for (const template of [undefined, null, 'nonsense']) expect(existingPaste('https://x.test', 'Ab12cd', template)).toMatch(/ask what artifact they'd like to build\.$/);
   });
-});
-
-it('the product blurb names no address', () => {
-  expect(agentBlurb()).not.toMatch(/https?:\/\//);
 });
 
 describe('deployment setup options', () => {

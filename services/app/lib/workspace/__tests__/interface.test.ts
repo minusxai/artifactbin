@@ -9,10 +9,7 @@ import { useAppHarness } from '@/__tests__/harness';
 import { createUser, mintToken } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
 import { link } from '@/lib/social';
-import {
-  accountWorkspaceCoreFor, artifactStarter, homeBootstrapFor, likeSummaryByUser, listAccountTokenRows, listOwnedArtifacts,
-  workspaceAssetsFor,
-} from '@/lib/workspace';
+import { accountWorkspaceCoreFor, artifactStarter, homeBootstrapFor, likeSummaryByUser, listOwnedArtifacts, workspaceAssetsFor } from '@/lib/workspace';
 import { ARTIFACT_STARTERS } from '@/lib/workspace/artifact-starters';
 import { parentOfRow } from '@/lib/shelf';
 import { VISIBILITY_ICON_NODES, sharingIconFor } from '@/lib/workspace/visibility-icons';
@@ -119,10 +116,6 @@ describe('owned listings and tokens', () => {
     expect((await listOwnedArtifacts('user_id', alice.id)).map(a => a.id).sort()).toEqual(['a1', 'a2']);
     expect((await listOwnedArtifacts('token_id', second.id)).map(a => a.id)).toEqual(['a2']);
     expect(await listOwnedArtifacts('user_id', 'nobody')).toEqual([]);
-    await (await getDb()).query('UPDATE tokens SET deleted_at = now() WHERE id = $1', [second.id]);
-    const tokens = await listAccountTokenRows(alice.id);
-    expect(tokens.map(t => [t.name, t.artifacts, t.deleted_at === null]).sort()).toEqual([['alice-cli', 1, true], ['second', 1, false]]);
-    expect(await listAccountTokenRows('nobody')).toEqual([]);
   });
 });
 

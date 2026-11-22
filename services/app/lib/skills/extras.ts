@@ -40,12 +40,6 @@ import {skillExtrasDir} from '@/lib/platform';
 export const EXTRA_FILE_MAX_BYTES=64*1024;
 export const EXTRAS_MAX_BYTES=256*1024;
 export const EXTRAS_MAX_FILES=32;
-/** The skill modules an extra's script may import, and the exported names it may rely on (pinned by a test). */
-export const EXTRA_ENTRY_POINTS={
- 'scripts/toolbox-client.mjs':['makeClient','selectedServer','credentialRoot','runTool','ToolError'],
- 'scripts/toolbox-service-token.mjs':['serviceToken'],
- 'scripts/toolbox-config.mjs':['default'],
-} as const;
 const SOURCE_NAME=/^[a-z0-9-]+\.(?:md|mjs|json)$/;
 /** An archive member the extras may occupy: an operator file, or the generated index. */
 export const skillExtraName=(name:string):boolean=>/^extras\/(?:(?!readme\.)[a-z0-9-]+\.(?:md|mjs|json)|README\.md)$/.test(name);

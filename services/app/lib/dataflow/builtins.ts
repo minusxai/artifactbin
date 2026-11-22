@@ -13,7 +13,7 @@
  *    in) and `_value` (the new value an editing cell holds).
  */
 import type { ColumnType, DatasetColumn } from '@artifactbin/contracts/sql';
-import type { BuiltinInput, BuiltinTable } from './compiled-dataflow';
+import type { BuiltinTable } from './compiled-dataflow';
 
 const MEMBER_COLUMNS:DatasetColumn[]=[{name:'user_id',type:'user'},{name:'joined_at',type:'timestamp'}];
 
@@ -53,35 +53,6 @@ export function builtinInput(logical: string): BuiltinInputSpec | null {
   return BUILTIN_INPUTS.find((b) => b.name === name) ?? null;
 }
 
-/** `_row.day` → `day`; anything else → null. */
-export const rowField = (logical: string): string | null => ROW_FIELD.exec(logical)?.[1] ?? null;
-
-export const isBuiltinInput = (logical: string): logical is BuiltinInput => builtinInput(logical) !== null;
-export const isBuiltinTable = (name: string): name is BuiltinTable => Object.hasOwn(BUILTIN_TABLES, name);
-
-/** SQLite's clock functions, which a statement may not call: the current time is `$_now`, identical on server and browser. */
-export const CLOCK_FUNCTIONS: ReadonlySet<string> = new Set(['current_date', 'current_time', 'current_timestamp']);
-
-/** `_me`, the viewer: bare, it is a row; its field is `_me.id`. */
-export const VIEWER = '_me';
-export const VIEWER_ID: BuiltinInput = '_me.id';
-
-/** Names a declaration may not take: `_` belongs to the built-ins, `ref_` to the removed dataset-table syntax. */
-export const reservedDeclarationName = (name: string): string | null =>
-  name.startsWith('_') ? 'names beginning with _ belong to the built-ins ($_me.id, $_now, $_row.<column>)'
-    : name.startsWith('ref_') ? 'ref_<id> once named a dataset table; read a dataset through <Import>'
-      : name.includes('__') ? 'a double underscore is how SQL spells a built-in field ($_me.id binds as $_me__id)'
-        : null;
-
-/**
- * The attribute positions that only READ their reference — where a built-in
- * markup input (`$_me.id`) may sit. Deliberately tiny and opt-in: a binding
- * position added later must not silently become a place a built-in is written.
- */
-export const READ_ONLY_REF_ATTRS: Readonly<Record<string, ReadonlySet<string>>> = {
-  User: new Set(['userId']), UserImage: new Set(['userId']), UserHandle: new Set(['userId']),
-};
-
 /** What the platform supplies to every run: the viewer, the instant and the zone. */
 export interface PlatformInputs { userId: string | null; now: string; tz: string }
 
@@ -93,9 +64,4 @@ export const platformValues = (p: PlatformInputs): Record<'_me.id' | '_now' | '_
 export function readerZone(tz: unknown): string {
   if (typeof tz !== 'string' || !tz || tz.length > 64) return 'UTC';
   try { new Intl.DateTimeFormat('en-US', { timeZone: tz }); return tz; } catch { return 'UTC'; }
-}
-
-/** The zone of whoever is running this code — what the runtime sends as `$_tz`. */
-export function localZone(): string {
-  try { return readerZone(Intl.DateTimeFormat().resolvedOptions().timeZone); } catch { return 'UTC'; }
 }

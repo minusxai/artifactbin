@@ -1,7 +1,7 @@
 /**
  * `SQL__SERVICE_URL` MUST MOVE EVERY ENGINE CALL, NOT MOST OF THEM.
  *
- * `dryRunQueries` runs on every write that can resolve its refs, so an entry
+ * A dry run runs on every write that can resolve its refs, so an entry
  * point without a remote branch opens a local DuckDB instance on the most
  * ordinary request the app serves. In-process that is invisible (it works, on a
  * module the deployment believes it has moved); on an image built without the
@@ -19,37 +19,6 @@ const withService = async () => {
 
 afterEach(() => { delete process.env.SQL__SERVICE_URL; vi.restoreAllMocks(); vi.resetModules(); });
 
-describe('dryRunQueries with a service configured', () => {
-  it('asks the service instead of opening an instance here', async () => {
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ errors: [], columns: { q: [{ name: 'n', type: 'number' }] } }), { status: 200 }),
-    );
-    const { dryRunQueries } = await withService();
-    const out = await dryRunQueries({ tables: {}, queries: [{ name: 'q', sql: 'select 1 as n' }], paramNames: [] });
-    expect(fetchSpy).toHaveBeenCalledOnce();
-    expect(fetchSpy.mock.calls[0][0]).toBe(`${SERVICE}/dry-run`);
-    expect(out.columns.q).toEqual([{ name: 'n', type: 'number' }]);
-  });
-
-  it('sends paramNames as an ARRAY — a Set JSON-stringifies to {} and binds nothing', async () => {
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ errors: [], columns: {} }), { status: 200 }),
-    );
-    const { dryRunQueries } = await withService();
-    await dryRunQueries({ tables: {}, queries: [], paramNames: new Set(['from', 'to']) as unknown as string[] });
-    const body = JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string);
-    expect(body.paramNames).toEqual(['from', 'to']);
-  });
-
-  it('reports a service that cannot answer as the queries failing, never as clean', async () => {
-    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('connect ECONNREFUSED'));
-    const { dryRunQueries } = await withService();
-    const out = await dryRunQueries({ tables: {}, queries: [{ name: 'q', sql: 'select 1' }], paramNames: [] });
-    expect(out.errors).toHaveLength(1);
-    expect(out.errors[0].error).toMatch(/ECONNREFUSED/);
-  });
-});
-
 describe('every engine entry point, not most of them', () => {
   /*
    * One entry point without a remote branch only shows up as a full gate run
@@ -61,7 +30,6 @@ describe('every engine entry point, not most of them', () => {
   const CALLS: Array<[string, (m: any) => Promise<unknown>]> = [
     ['runQueries', (m) => m.runQueries({ tables: {}, queries: [{ name: 'q', sql: 'select 1' }], params: {} })],
     ['runMutation', (m) => m.runMutation({ table: { name: 't', rows: [], columns: [] }, sql: 'delete from t', params: {} })],
-    ['dryRunQueries', (m) => m.dryRunQueries({ tables: {}, queries: [{ name: 'q', sql: 'select 1' }], paramNames: [] })],
     ['dryRunMutations', (m) => m.dryRunMutations({ tables: {}, mutations: [{ name: 'm', sql: 'delete from t', target: 't' }], paramNames: [] })],
   ];
 

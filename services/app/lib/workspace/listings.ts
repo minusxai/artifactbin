@@ -10,7 +10,7 @@ import type { ShareRole } from '@artifactbin/contracts/sharing';
 import { SUMMARY_META_FIELDS } from '@/lib/artifact-wire';
 import { type ArtifactSummary } from '@/lib/artifacts';
 import { LIVE_ARTIFACT_SQL } from '@/lib/artifact-access';
-import type { TokenRow } from '@/lib/accounts/tokens';
+
 import { getDb } from '@/lib/platform';
 import { viewTotalsFor } from '@/lib/analytics';
 
@@ -65,29 +65,6 @@ export async function listPublicArtifactsByUser(userId: string): Promise<Artifac
 /** A row of somebody else's work, shared to this viewer's email, and what they may do with it. */
 export type SharedArtifactSummary = ArtifactSummary & { owner_username: string | null; role: ShareRole };
 
-/**
- * The recipient's side of `artifact_shares`: everything shared to this email,
- * newest first, with the owner's handle so a row can say who shared it.
- *
- * Keyed by EMAIL (shares are, so an invite can predate the account), matched
- * lowercased exactly as canReadArtifact matches the viewer. `excludeUserId`
- * keeps the viewer's own artifacts out — being on your own share list is not
- * a discovery.
- */
-export async function listSharedWithEmail(email: string, excludeUserId?: string): Promise<SharedArtifactSummary[]> {
-  const db = await getDb();
-  const r = await db.query<SharedArtifactSummary>(
-    `SELECT ${summaryColumns('$3', 'a.')}, u.username AS owner_username, s.role
-     FROM artifacts a
-     JOIN artifact_shares s ON s.artifact_id = a.id
-     LEFT JOIN users u ON u.id = a.user_id
-     WHERE s.email = $1 AND ($2::text IS NULL OR a.user_id IS DISTINCT FROM $2::text) AND a.${LIVE_ARTIFACT_SQL}
-     ORDER BY a.updated_at DESC LIMIT 200`,
-    [email.toLowerCase().trim(), excludeUserId ?? null, META_ALLOWED],
-  );
-  return r.rows;
-}
-
 export async function listArtifactsByUser(userId: string): Promise<OwnedArtifactSummary[]> {
   return listOwnedArtifacts('user_id', userId);
 }
@@ -100,21 +77,4 @@ export async function listOwnedArtifacts(col: 'user_id' | 'token_id', value: str
     [value, META_ALLOWED],
   );
   return withViews(r.rows);
-}
-
-type UserTokenRow = Pick<TokenRow, 'id' | 'name' | 'created_at' | 'deleted_at'> & { artifacts: number };
-
-/** The user's machine tokens (revoked ones included, so the dashboard shows history). */
-export async function listAccountTokenRows(userId: string): Promise<UserTokenRow[]> {
-  const db = await getDb();
-  const r = await db.query<UserTokenRow & { artifacts: string | number }>(
-    `SELECT t.id, t.name, t.created_at, t.deleted_at, COUNT(a.id) AS artifacts
-     FROM tokens t LEFT JOIN artifacts a ON a.token_id = t.id AND a.${LIVE_ARTIFACT_SQL}
-     WHERE t.user_id = $1
-     GROUP BY t.id, t.name, t.created_at, t.deleted_at
-     ORDER BY t.created_at DESC`,
-    [userId],
-  );
-  // COUNT comes back as a string on some drivers.
-  return r.rows.map((row) => ({ ...row, artifacts: Number(row.artifacts) }));
 }

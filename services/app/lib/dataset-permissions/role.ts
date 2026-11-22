@@ -31,11 +31,3 @@ export async function datasetRole(row: DatasetRoleRow, actor: AccessActor, optio
   const granted = account && documentEditorReaches(row, actor) ? maxRole(held, 'editor') : held;
   return datasetRoleFrom({ held: granted, account, linkRole: linkRoleOf(row), visibility: row.visibility, throughPage: !!options.throughPage, live: !!liveConnectionOf(row.meta) });
 }
-
-/**
- * THE PAGE ROLE of one caller, which resolver `@auth` reads: the same derivation over the PAGE's own
- * sharing (a page is reached directly, never through another page).
- */
-export function pageRole(row: DatasetRoleRow, actor: AccessActor, options: Pick<DatasetRoleOptions, 'facts'> = {}): Promise<DatasetRole | null> {
-  return datasetRole(row, actor, { facts: options.facts });
-}

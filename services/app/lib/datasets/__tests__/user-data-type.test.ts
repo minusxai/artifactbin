@@ -9,7 +9,7 @@ import {observedRequest} from '@/__tests__/conditional-request';
 import {POST as mutateRoute} from '@/app/api/artifacts/[id]/mutate/route';
 import {getDb} from '@/lib/platform';
 import { getArtifactById, changeMembership } from '@/lib/artifacts';
-import {loadDatasetRows, people, userOptions} from '@/lib/datasets';
+import { loadDatasetRows, people } from '@/lib/datasets';
 import { mintAccountToken as mintToken, params } from '@/__tests__/harness';
 import { identityForUser, createUser } from '@/lib/accounts';
 import { avatarUrl } from '@/lib/avatars';
@@ -61,8 +61,6 @@ describe('native user fields',()=>{
   expect(archived.rows[0].meta.columns[1].constraints?.memberOf).toEqual(['current']);
   const column=(await getArtifactById(dataset.id))!.meta.columns as Array<{name:string;type:'user';constraints?:{memberOf:string[]}}>;
   expect(column[1].constraints?.memberOf).toEqual([`ref:${report.id}`]);
-  const options=await userOptions(await getDb(),column[1],a.user.id);
-  expect(options.map(option=>option.value).sort()).toEqual([a.user.id,b.user.id].sort());
   const replacement=await replaceRoute(await observedRequest(`/api/artifacts/${dataset.id}`,{method:'PUT',token:a.token,json:{dataset:{kind:'stored',tables:[{schema:'public',name:'rows',columns:[{name:'id',type:'number'},{name:'assignee',type:'user',constraints:{memberOf:['current']}}],rows:[{id:1,assignee:null}]}]}}}),params(dataset.id));
   expect(replacement.status,await replacement.clone().text()).toBe(200);
   expect((await getArtifactById(dataset.id))!.source).toContain(`ref:${report.id}`);

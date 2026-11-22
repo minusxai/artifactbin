@@ -21,7 +21,7 @@ import { getArtifactById } from '@/lib/artifacts';
 import { getUserById, identityForUser, createTestUser, createUser, getUserByUsername } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
 import { request, useAppHarness, params } from '@/__tests__/harness';
-import { userOptions } from '@/lib/datasets';
+
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { listPublicArtifactsByUser } from '@/lib/workspace';
 
@@ -112,13 +112,6 @@ it('is invisible to everything that lists people or their public work', async ()
   // And the public index it would have had is empty, because nothing it
   // publishes can be public at all.
   expect(await listPublicArtifactsByUser(testuser.id)).toEqual([]);
-
-  // The <User> option picker offers members of a named document. A stranger's
-  // picker never offers a test user…
-  const shared = await publish(owner.token, { html:nativeHtml('<p>team</p>'), visibility: 'unlisted' });
-  const column = { name: 'who', type: 'user' as const, constraints: { memberOf: [`ref:${shared.id}`] } };
-  const offered = await userOptions(db, column, owner.userId);
-  expect(offered.map(option => option.value)).toEqual([owner.userId]);
 });
 
 it('keeps a distinct display label on each retained test identity',async()=>{

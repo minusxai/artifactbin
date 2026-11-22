@@ -13,9 +13,7 @@ export type { DryRunResult, MutationInput, MutationOutcome, MutationResult, Quer
 export { isQueryFailure } from '@artifactbin/contracts/sql';
 
 export const runQueries: SqlService['run'] = (input, context) => services().sql.run(input, context);
-export const runManyQueries: SqlService['runMany'] = (input, context) => services().sql.runMany(input, context);
 export const runMutation: SqlService['mutate'] = (input) => services().sql.mutate(input);
-export const dryRunQueries: SqlService['dryRun'] = (input) => services().sql.dryRun({ ...input, paramNames: [...input.paramNames] });
 export const dryRunMutations: SqlService['dryRunMutations'] = (input) => services().sql.dryRunMutations({ ...input, paramNames: [...input.paramNames] });
 
 /** The caps THIS process would apply — what a paged read is bounded by before it is even sent. */
