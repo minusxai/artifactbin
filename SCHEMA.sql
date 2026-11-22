@@ -1692,6 +1692,10 @@ CREATE INDEX IF NOT EXISTS idx_auth_credentials_group ON auth.credentials (group
 
 CREATE INDEX IF NOT EXISTS idx_auth_credentials_expiry ON auth.credentials (expires_at);
 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_schedule_consent_active ON auth.credentials ((payload->>'service'), (payload->>'schedule')) WHERE kind='schedule_consent' AND deleted_at IS NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_schedule_consent_revision ON auth.credentials ((payload->>'service'), (payload->>'schedule'), (payload->>'revision')) WHERE kind='schedule_consent';
+
 CREATE INDEX IF NOT EXISTS idx_auth_credentials_access ON auth.credentials ((payload->>'access_token_id')) WHERE kind='refresh_token';
 
 -- schema "auth" — the identity module's base tables (users, tokens, groups …), owned by the auth role; declared by services/auth/src/identity-store/schema.ts; read only through the identity views
@@ -1920,6 +1924,7 @@ CREATE TABLE IF NOT EXISTS auth.group_members (
   user_id TEXT NOT NULL,
   role TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  seat_id UUID NOT NULL DEFAULT gen_random_uuid(),
   PRIMARY KEY (group_id, user_id)
 );
 
@@ -1930,6 +1935,8 @@ ALTER TABLE auth.group_members ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL;
 ALTER TABLE auth.group_members ADD COLUMN IF NOT EXISTS role TEXT NOT NULL;
 
 ALTER TABLE auth.group_members ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+ALTER TABLE auth.group_members ADD COLUMN IF NOT EXISTS seat_id UUID NOT NULL DEFAULT gen_random_uuid();
 
 CREATE INDEX IF NOT EXISTS idx_group_members_user ON auth.group_members (user_id);
 

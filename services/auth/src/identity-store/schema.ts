@@ -164,6 +164,7 @@ const GROUP_HIERARCHY:Table={name:'group_hierarchy',columns:[
 const GROUP_MEMBERS:Table={name:'group_members',columns:[
  {name:'group_id',type:'TEXT',notNull:true},{name:'user_id',type:'TEXT',notNull:true},
  {name:'role',type:'TEXT',notNull:true},{name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
+ {name:'seat_id',type:'UUID',notNull:true,default:'gen_random_uuid()'},
 ],primaryKey:['group_id','user_id'],indexes:[{name:'idx_group_members_user',columns:['user_id']}]};
 
 const GROUP_INVITATIONS:Table={name:'group_invitations',columns:[
@@ -220,6 +221,7 @@ export const IDENTITY_TABLES: Table[] = [USERS, ACCOUNT_PREFERENCES, TOKENS, HAN
  * `verification` codes; the OAuth `credentials` hashes and payloads and `clients`).
  */
 export const SECRET_COLUMNS: Readonly<Record<string, readonly string[]>> = {
+  group_members: ['seat_id'],
   users: ['trusted_sign_in_group', 'trusted_sign_in_at', 'trusted_root_granted'],
   tokens: ['token_hash'],
   session: ['token'],

@@ -49,7 +49,14 @@ CREATE OR REPLACE VIEW identity.tokens AS
           SELECT 1 FROM auth.credentials sibling LEFT JOIN auth.tokens access ON access.id=sibling.payload->>'access_token_id'
           WHERE sibling.kind='refresh_token' AND sibling.group_id=member.group_id
             AND (sibling.deleted_at IS NOT NULL OR access.id IS NULL OR access.deleted_at IS NOT NULL))) OR EXISTS (SELECT 1 FROM auth.credentials run WHERE run.kind='run_sign_in' AND run.credential_hash=t.id AND run.deleted_at IS NULL AND (t.group_id IS NULL OR t.group_role='member') AND run.subject_id=CASE WHEN t.group_id IS NULL THEN t.user_id ELSE t.issued_by END
-      AND ((run.payload->>'parent_kind'='session' AND EXISTS (SELECT 1 FROM auth.session ps WHERE ps.id=run.payload->>'parent_id' AND ps."userId"=run.subject_id AND ps."expiresAt">now()))
+      AND ((run.payload->>'parent_kind'='schedule' AND t.group_id IS NOT NULL AND EXISTS (
+          SELECT 1 FROM auth.credentials consent WHERE consent.kind='schedule_consent'
+            AND consent.credential_hash=run.payload->>'parent_id' AND consent.deleted_at IS NULL
+            AND consent.subject_id=run.subject_id AND consent.group_id=t.group_id
+            AND consent.payload->>'service'=run.payload->>'service'
+            AND EXISTS (SELECT 1 FROM auth.group_members seat JOIN auth.groups g ON g.id=seat.group_id AND g.deleted_at IS NULL
+    WHERE seat.group_id=consent.group_id AND seat.user_id=consent.subject_id AND seat.role IN ('member','admin') AND seat.seat_id::text=consent.payload->>'seat')))
+        OR (run.payload->>'parent_kind'='session' AND EXISTS (SELECT 1 FROM auth.session ps WHERE ps.id=run.payload->>'parent_id' AND ps."userId"=run.subject_id AND ps."expiresAt">now()))
         OR (run.payload->>'parent_kind'='token' AND EXISTS (SELECT 1 FROM auth.tokens p WHERE p.id=run.payload->>'parent_id' AND p.user_id=run.subject_id AND p.issued_by IS NULL AND p.deleted_at IS NULL AND (p.expires_at IS NULL OR p.expires_at>now())
           AND (COALESCE(p.audience,'')='' OR EXISTS (SELECT 1 FROM auth.credentials pmember
       JOIN auth.credentials pfamily ON pfamily.kind='refresh_family' AND pfamily.credential_hash=pmember.group_id AND pfamily.deleted_at IS NULL
@@ -67,7 +74,14 @@ CREATE OR REPLACE VIEW identity.tokens AS
           SELECT 1 FROM auth.credentials sibling LEFT JOIN auth.tokens access ON access.id=sibling.payload->>'access_token_id'
           WHERE sibling.kind='refresh_token' AND sibling.group_id=member.group_id
             AND (sibling.deleted_at IS NOT NULL OR access.id IS NULL OR access.deleted_at IS NOT NULL)))) ELSE EXISTS (SELECT 1 FROM auth.credentials run WHERE run.kind='run_sign_in' AND run.credential_hash=t.id AND run.deleted_at IS NULL AND (t.group_id IS NULL OR t.group_role='member') AND run.subject_id=CASE WHEN t.group_id IS NULL THEN t.user_id ELSE t.issued_by END
-      AND ((run.payload->>'parent_kind'='session' AND EXISTS (SELECT 1 FROM auth.session ps WHERE ps.id=run.payload->>'parent_id' AND ps."userId"=run.subject_id AND ps."expiresAt">now()))
+      AND ((run.payload->>'parent_kind'='schedule' AND t.group_id IS NOT NULL AND EXISTS (
+          SELECT 1 FROM auth.credentials consent WHERE consent.kind='schedule_consent'
+            AND consent.credential_hash=run.payload->>'parent_id' AND consent.deleted_at IS NULL
+            AND consent.subject_id=run.subject_id AND consent.group_id=t.group_id
+            AND consent.payload->>'service'=run.payload->>'service'
+            AND EXISTS (SELECT 1 FROM auth.group_members seat JOIN auth.groups g ON g.id=seat.group_id AND g.deleted_at IS NULL
+    WHERE seat.group_id=consent.group_id AND seat.user_id=consent.subject_id AND seat.role IN ('member','admin') AND seat.seat_id::text=consent.payload->>'seat')))
+        OR (run.payload->>'parent_kind'='session' AND EXISTS (SELECT 1 FROM auth.session ps WHERE ps.id=run.payload->>'parent_id' AND ps."userId"=run.subject_id AND ps."expiresAt">now()))
         OR (run.payload->>'parent_kind'='token' AND EXISTS (SELECT 1 FROM auth.tokens p WHERE p.id=run.payload->>'parent_id' AND p.user_id=run.subject_id AND p.issued_by IS NULL AND p.deleted_at IS NULL AND (p.expires_at IS NULL OR p.expires_at>now())
           AND (COALESCE(p.audience,'')='' OR EXISTS (SELECT 1 FROM auth.credentials pmember
       JOIN auth.credentials pfamily ON pfamily.kind='refresh_family' AND pfamily.credential_hash=pmember.group_id AND pfamily.deleted_at IS NULL

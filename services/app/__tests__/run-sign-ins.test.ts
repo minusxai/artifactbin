@@ -12,7 +12,7 @@ import {join} from 'node:path';
 import {afterEach,beforeEach,expect,it,onTestFinished,vi} from 'vitest';
 import {DEFAULT_TOKEN_TTL_MS, MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS} from '@artifactbin/contracts/handles';
 import {IDENTITY_INTROSPECT_PATH} from '@artifactbin/contracts/identity-service';
-import {RUN_SIGN_IN_PATH, SERVICE_TOKEN_PATH, parseServiceAudiences, type RunSignIn} from '@artifactbin/contracts/service-audiences';
+import {RUN_SIGN_IN_PATH, SCHEDULE_SIGN_IN_PATH, SERVICE_TOKEN_PATH, parseServiceAudiences, type RunSignIn, type ScheduleSignInRequest} from '@artifactbin/contracts/service-audiences';
 import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts/routes';
 import {createAuthComposedHost} from '@/test/helpers/auth-host';
 import {AUTH_SECRET,getDb,syncIdentitySettings} from '@/lib/platform';
@@ -25,7 +25,7 @@ useAppHarness();
 const SECRET='run-sign-in-test-service-secret',origin='http://localhost:3000';
 const WAREHOUSE='http://warehouse.localhost:7444',WAREHOUSE_SECRET='warehouse-introspection-secret',LEDGER_SECRET='ledger-introspection-secret',CRM_SECRET='crm-introspection-secret';
 // Warehouse and CRM opted in; Ledger has its own secret and nothing else.
-const AUDIENCES=serviceAudiences({...delegatedService('warehouse',WAREHOUSE,WAREHOUSE_SECRET),run_sign_ins:true},delegatedService('ledger','http://ledger.localhost:7445',LEDGER_SECRET),
+const AUDIENCES=serviceAudiences({...delegatedService('warehouse',WAREHOUSE,WAREHOUSE_SECRET),run_sign_ins:true,group_principals:true},delegatedService('ledger','http://ledger.localhost:7445',LEDGER_SECRET),
  {...delegatedService('crm','http://crm.localhost:7446',CRM_SECRET),run_sign_ins:true});
 let directory='';
 beforeEach(async()=>{overrideConfig({internalServiceSecret:SECRET,publicBaseUrl:origin},{IDENTITY__SERVICE_AUDIENCES:AUDIENCES});await syncIdentitySettings(await getDb());directory=await tempDir('run-sign-in-',onTestFinished);});
@@ -56,6 +56,55 @@ async function composed(){
 }
 const sql=async<T=Record<string,unknown>>(text:string,params:unknown[]=[])=>(await (await getDb()).query<T>(text,params)).rows;
 const userIdOf=async(email:string)=>(await sql<{id:string}>('SELECT id FROM users WHERE email=$1',[email]))[0]!.id;
+
+it('authorizes only the consenting direct seat and permanently fences revoked or departed schedule runs',async()=>{
+ const host=await composed(),email='mxmx_test_schedule_owner@example.test';
+ const {cookie}=await host.signIn(email), user=await userIdOf(email);
+ const group='grp_schedule', other='grp_other', child='grp_child';
+ await sql("INSERT INTO auth.groups(id,handle,name,created_by,parent_id) VALUES($1,'schedule','Schedule',$4,NULL),($2,'other','Other',$4,NULL),($3,'child','Child',$4,$1)",[group,other,child,user]);
+ const addSeat=()=>sql("INSERT INTO auth.group_members(group_id,user_id,role) VALUES($1,$2,'admin')",[group,user]);
+ const removeSeat=()=>sql('DELETE FROM auth.group_members WHERE group_id=$1 AND user_id=$2',[group,user]);
+ await addSeat();
+ const call=(body:ScheduleSignInRequest,secret=WAREHOUSE_SECRET)=>host.runSignIn(body,secret,SCHEDULE_SIGN_IN_PATH);
+ const token=await host.exchange('warehouse',{cookie});
+ const consent={action:'consent' as const,token,group_id:group,schedule_id:'schedule-demo',revision:'revision-1'};
+ for(const scope of [other,child])expect((await call({...consent,group_id:scope})).status).toBe(403);
+ expect((await call(consent,CRM_SECRET)).status).toBe(401);
+ const issued=await call(consent);
+ expect(issued).toEqual({status:200,body:{grant_id:expect.any(String),user_id:user,group_id:group,group_role:'member'}});
+ expect(await call(consent)).toEqual(issued);
+ expect((await call({...consent,revision:'revision-2'})).status).toBe(409);
+ const action={grant_id:String(issued.body!.grant_id),schedule_id:consent.schedule_id,revision:consent.revision};
+ expect((await call({...action,action:'issue'},CRM_SECRET)).status).toBe(403);
+ expect((await call({...action,action:'revoke'},CRM_SECRET)).status).toBe(403);
+ expect((await call({...action,action:'issue',revision:'stale'})).status).toBe(403);
+ const issue=async(input=action)=>{
+  const run=await call({...input,action:'issue',expires_in:600});
+  expect(run.status).toBe(200);
+  const bearer=String(run.body!.access_token);
+  expect(await host.introspect(bearer)).toMatchObject({active:true,principal_kind:'group',user_id:user,group_id:group,group_role:'member'});
+  return bearer;
+ };
+ const first=await issue();
+ const exchanged=await host.exchange('warehouse',{bearer:first});
+ expect(await host.introspect(exchanged)).toMatchObject({active:true,group_id:group,group_role:'member'});
+ await removeSeat();
+ expect(await host.introspect(first)).toEqual({active:false});
+ await addSeat();
+ expect(await host.introspect(exchanged)).toEqual({active:false});
+ expect(await host.introspect(first)).toEqual({active:false});
+ expect((await call({...action,action:'issue'})).status).toBe(403);
+ expect((await call(consent)).status).toBe(409);
+ for(let attempt=0;attempt<2;attempt++)expect((await call({...action,action:'revoke'})).status).toBe(200);
+ const fresh={...consent,revision:'revision-2'};
+ const next=await call(fresh);
+ expect(next.status).toBe(200);
+ const current={...action,grant_id:String(next.body!.grant_id),revision:fresh.revision};
+ const last=await issue(current);
+ expect((await call({...current,action:'revoke'})).status).toBe(200);
+ expect(await host.introspect(last)).toEqual({active:false});
+ expect((await call(fresh)).status).toBe(409);
+});
 
 it('the happy path: a stored API token for the person, issued_by the service, no refresh family, listed and revocable by them',async()=>{
  const host=await composed(),email='mxmx_test_run_owner@example.test';
