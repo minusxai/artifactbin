@@ -102,6 +102,13 @@ ALTER TABLE auth.account_preferences OWNER TO artifactbin_auth;
 COMMIT;
 ```
 
+**Signed group placement.** An issuer with a configured `parentGroup` may include
+`"parent_groups": ["division", "team"]` in its signed sign-in token. List existing live group handles
+from parent to direct child. The first must be the configured group or a descendant. A new token group
+is created directly under the last handle. An existing token group must already have that parent.
+An empty, missing-member, disconnected or out-of-scope path refuses the sign-in. Omit the claim to
+use the existing issuer placement rules.
+
 **Company root membership for trusted sign-in.** Set `TRUSTED_SIGNIN__JOIN_COMPANY_ROOT=true` on the
 trusted-sign-in and identity hosts only when the company root is ready for every issuer’s people.
 Check its data grants and private page shares first. The setting defaults to false. Restart the hosts

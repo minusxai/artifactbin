@@ -4,13 +4,19 @@
  * other token, origin or identity conflict is refused without a session.
  */
 import { generateKeyPairSync, sign, type KeyObject } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { Pool } from 'pg';
+import type { Queryable } from '@artifactbin/contracts/db';
 import { PGlite } from '@electric-sql/pglite';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { assemble, ensureTable } from '@artifactbin/utils';
 import type { TransactionalQueryable } from '@artifactbin/contracts/identity-module';
 import { createHumanAuth, ensureAuthSchema, sessionStoreOf, type HumanAuth } from '../src/index';
 import { authParts } from '../src/parts';
-import { createIdentityStore } from '../src/identity-store';
+import { createIdentityStore, identityDbOf } from '../src/identity-store';
 import { identityViewStatements } from '../src/identity-store/views';
 import { IDENTITY_TABLES } from '../src/identity-store/schema';
 import { testAuthOptions } from './helpers';
@@ -22,7 +28,8 @@ const keys = generateKeyPairSync('ed25519');
 const stranger = generateKeyPairSync('ed25519');
 const otherKeys = generateKeyPairSync('ed25519');
 
-let pg: PGlite;
+let pg: Queryable;
+let closeDatabase: () => Promise<void>;
 let auth: HumanAuth;
 let db: TransactionalQueryable;
 const rows = async <T = Record<string, unknown>>(sql: string, params: unknown[] = []) => (await pg.query<T>(sql, params)).rows;
@@ -55,14 +62,35 @@ async function refused(response: Response, status: number, error: string) {
 }
 
 beforeAll(async () => {
-  pg = new PGlite();
-  auth = await createHumanAuth({ pglite: pg, schema: 'auth', secret: 'trusted-sign-in-secret'.padEnd(32, '0'), baseURL: BASE, mail: { send: async () => {} } });
+  // TRUSTED_SIGNIN_TEST_POSTGRES=1 runs the same HTTP and session assertions over separate PostgreSQL connections.
+  let driver;
+  if (process.env.TRUSTED_SIGNIN_TEST_POSTGRES === '1') {
+    const dir = mkdtempSync(join(tmpdir(),'signin-'));
+    const data = join(dir,'data');
+    execFileSync('initdb',['-D',data,'-U','postgres','-A','trust','--no-sync']);
+    execFileSync('pg_ctl',['-D',data,'-l',join(dir,'server.log'),'-o',`-k '${dir}' -c listen_addresses=''`,'-w','start']);
+    const pool = new Pool({host:dir,user:'postgres',database:'postgres',port:5432});
+    pg = db = identityDbOf(pool);
+    driver = {pool};
+    closeDatabase = async () => {
+      await pool.end();
+      execFileSync('pg_ctl',['-D',data,'-m','fast','-w','stop']);
+      rmSync(dir,{recursive:true,force:true});
+    };
+  } else {
+    const local = new PGlite();
+    pg = local;
+    db = {query:local.query.bind(local),transaction:fn => local.transaction(tx => fn(tx))};
+    driver = {pglite:local};
+    closeDatabase = () => local.close();
+  }
+  auth = await createHumanAuth({ ...driver, schema: 'auth', secret: 'trusted-sign-in-secret'.padEnd(32, '0'), baseURL: BASE, mail: { send: async () => {} } });
   await ensureTable({ query: (sql: string, params?: unknown[]) => pg.query(sql, params) as never }, IDENTITY_TABLES, { schema: 'auth' });
   await ensureAuthSchema(pg, 'auth');
   await pg.query(`INSERT INTO auth.group_hierarchy(id,revision) VALUES('installation',0)`);
   await pg.query(`INSERT INTO auth.groups(id,handle,name,created_by) VALUES('grp_parent','parent_team','Parent','usr_admin'),('grp_plain','plain_team','Plain','usr_admin')`);
   await pg.query(`INSERT INTO auth.users(id,email,username) VALUES('usr_taken','taken@example.com','taken_user')`);
-  await pg.exec(`CREATE SCHEMA company_app;
+  const schemaSetup = `CREATE SCHEMA company_app;
     CREATE TABLE company_app.identity_settings(id text PRIMARY KEY, deployment_mode text);
     CREATE TABLE company_app.deployment_state(id text PRIMARY KEY, owner_user_id text, default_group_id text, setup_complete boolean);
     CREATE SCHEMA identity;
@@ -70,17 +98,36 @@ beforeAll(async () => {
     CREATE TABLE public.identity_settings (LIKE company_app.identity_settings);
     CREATE TABLE public.deployment_state (LIKE company_app.deployment_state);
     INSERT INTO public.identity_settings VALUES('installation','public');
-    INSERT INTO company_app.identity_settings VALUES('installation','company');`);
+    INSERT INTO company_app.identity_settings VALUES('installation','company');`;
+  for (const statement of schemaSetup.split(';').filter(s=>s.trim())) await pg.query(statement);
   const userView=identityViewStatements({auth:'auth',app:'company_app',read:'identity'}).find(sql=>sql.startsWith('CREATE OR REPLACE VIEW identity.users '))!;
-  await pg.exec(userView);
-  db = {
-    query: (sql, params) => pg.query(sql, params) as never,
-    transaction: fn => pg.transaction(tx => fn({ query: (sql, params) => tx.query(sql, params) as never })),
-  };
+  await pg.query(userView);
 });
-afterAll(async () => { await pg.close(); });
+afterAll(async () => { await closeDatabase?.(); });
 
 describe('trusted-issuer sign-in', () => {
+  it('resolves signed parent handles consecutively within the configured hierarchy', async () => {
+    const target = await app();
+    await pg.query(`INSERT INTO auth.groups(id,handle,name,created_by,parent_id) VALUES
+      ('grp_branch','path_branch','Branch','usr_admin','grp_parent'),
+      ('grp_leaf','path_leaf','Leaf','usr_admin','grp_branch')`);
+    const signIn = (parent_groups: unknown, group = 'path_team', sub = 'path_reader') =>
+      post(target, {token:token({group,sub,parent_groups})});
+    expect((await signIn(['path_branch','path_leaf'])).status).toBe(303);
+    expect((await signIn(['parent_team','path_branch','path_leaf'])).status).toBe(303);
+    await refused(await signIn(['path_branch'],'path_team','path_refused'),403,'group_conflict');
+    for (const path of [['path_leaf','path_branch'], ['parent_team','path_leaf'], ['missing_parent'], ['plain_team']]) {
+      await refused(await signIn(path,'path_denied','path_refused'),403,'group_conflict');
+    }
+    expect(await rows("SELECT parent_id FROM auth.groups WHERE handle='path_team'")).toEqual([{parent_id:'grp_leaf'}]);
+    expect(await rows("SELECT id FROM auth.users WHERE username='path_refused'")).toEqual([]);
+    const unconfigured = await app({TRUSTED_SIGNIN__ISSUERS:issuers({parentGroup:undefined})});
+    await refused(await post(unconfigured,{token:token({parent_groups:['plain_team'],group:'path_denied'})}),403,'group_conflict');
+    for (const malformed of [[], 'path_leaf', [null], ['path_leaf','path_leaf']]) {
+      await refused(await signIn(malformed,'path_denied'),401,'invalid_token');
+    }
+    expect(await rows("SELECT id FROM auth.groups WHERE handle='path_denied'")).toEqual([]);
+  });
   it('shares a person, group and replay record across two issuer sites with their own keys', async () => {
     const second = 'https://second.example';
     const [first] = JSON.parse(issuers());

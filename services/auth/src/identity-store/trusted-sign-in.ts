@@ -43,6 +43,7 @@ export interface TrustedSignInInput {
   joinCompanyRoot?: boolean;
   name?: string;
   groupName?: string;
+  parentGroups?: string[];
   /** The parent group's handle or id, when the issuer's groups live under one. */
   parentGroup?: string;
   /** A handle subject's synthetic address (never delivered to); unused for an email subject. */
@@ -172,11 +173,30 @@ async function requiredCompanyRoot(tx: Queryable, t: Tables, appSchema?: string)
   return company?.rootId ?? null;
 }
 
+/** Read the live ancestry under the same hierarchy lock that serializes group moves. */
+async function signedParent(tx: Queryable, t: Tables, path: string[], ceiling?: string) {
+  if (!ceiling || !path.length) throw new Refused('group_conflict');
+  await tx.query(`INSERT INTO ${t.group_hierarchy}(id,revision) VALUES('installation',0) ON CONFLICT DO NOTHING`);
+  await tx.query(`SELECT id FROM ${t.group_hierarchy} WHERE id='installation' FOR UPDATE`);
+  const bounds = (await tx.query<{id:string}>(`SELECT id FROM ${t.groups}
+    WHERE (id=$1 OR handle=$1) AND deleted_at IS NULL`, [ceiling])).rows;
+  if (bounds.length !== 1) throw new Refused('group_conflict');
+  const chain = (await tx.query<{id:string;handle:string}>(`WITH RECURSIVE ancestors AS (
+    SELECT id,handle,parent_id,0 AS depth FROM ${t.groups} WHERE handle=$1 AND deleted_at IS NULL
+    UNION ALL SELECT g.id,g.handle,g.parent_id,a.depth+1 FROM ancestors a
+    JOIN ${t.groups} g ON g.id=a.parent_id WHERE g.deleted_at IS NULL AND a.depth<10000
+  ) SELECT id,handle FROM ancestors ORDER BY depth`, [path.at(-1)])).rows;
+  const top = chain.findIndex(group => group.id === bounds[0]!.id);
+  if (top < path.length-1 || path.some((handle,i) => handle !== chain[path.length-1-i]?.handle)) throw new Refused('group_conflict');
+  return chain[0]!.id;
+}
+
 async function ensureGroup(tx: Queryable, input: TrustedSignInInput, userId: string, t: Tables, rootId: string | null, appSchema?: string) {
-  const existing = (await tx.query<{id: string; deleted_at: string | null; trusted_issuer: string | null; tenancy_id: string | null}>(
-    `SELECT id,deleted_at,trusted_issuer,tenancy_id FROM ${t.groups} WHERE handle=$1 FOR UPDATE`, [input.group])).rows[0];
+  const requestedParent = input.parentGroups ? await signedParent(tx,t,input.parentGroups,input.parentGroup) : null;
+  const existing = (await tx.query<{id: string; parent_id:string|null; deleted_at: string | null; trusted_issuer: string | null; tenancy_id: string | null}>(
+    `SELECT id,parent_id,deleted_at,trusted_issuer,tenancy_id FROM ${t.groups} WHERE handle=$1 FOR UPDATE`, [input.group])).rows[0];
   if (existing) {
-    if (existing.deleted_at || existing.trusted_issuer !== input.issuer) throw new Refused('group_conflict');
+    if (existing.deleted_at || existing.trusted_issuer !== input.issuer || (requestedParent && existing.parent_id !== requestedParent)) throw new Refused('group_conflict');
     if (existing.tenancy_id !== input.tenancyId) {
       await tx.query(`UPDATE ${t.groups} SET tenancy_id=$2 WHERE id=$1`, [existing.id, input.tenancyId]);
       await tx.query(`INSERT INTO ${t.host_tenancy_changes}(group_id,issuer,person_id,previous_tenancy_id,tenancy_id)
@@ -186,11 +206,11 @@ async function ensureGroup(tx: Queryable, input: TrustedSignInInput, userId: str
   }
   // A new group is a topology change: the hierarchy revision moves first, as for every create.
   await tx.query(`INSERT INTO ${t.group_hierarchy} AS h (id,revision) VALUES('installation',1) ON CONFLICT (id) DO UPDATE SET revision=h.revision+1`);
-  let parentId = rootId;
-  if (input.parentGroup) {
+  let parentId = requestedParent ?? rootId;
+  if (!requestedParent && input.parentGroup) {
     parentId = (await tx.query<{id: string}>(`SELECT id FROM ${t.groups} WHERE (id=$1 OR handle=$1) AND deleted_at IS NULL`, [input.parentGroup])).rows[0]?.id ?? null;
     if (!parentId) throw new Refused('parent_group_missing');
-  } else if (!input.joinCompanyRoot) {
+  } else if (!requestedParent && !input.joinCompanyRoot) {
     parentId = await requiredCompanyRoot(tx, t, appSchema);
   }
   const groupId = 'grp_' + internalId();
