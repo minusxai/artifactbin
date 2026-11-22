@@ -8,7 +8,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { assemble, ensureTable } from '@artifactbin/utils';
 import type { TransactionalQueryable } from '@artifactbin/contracts/identity-module';
-import { createHumanAuth, sessionStoreOf, type HumanAuth } from '../src/index';
+import { createHumanAuth, ensureAuthSchema, sessionStoreOf, type HumanAuth } from '../src/index';
 import { authParts } from '../src/parts';
 import { createIdentityStore } from '../src/identity-store';
 import { identityViewStatements } from '../src/identity-store/views';
@@ -58,6 +58,7 @@ beforeAll(async () => {
   pg = new PGlite();
   auth = await createHumanAuth({ pglite: pg, schema: 'auth', secret: 'trusted-sign-in-secret'.padEnd(32, '0'), baseURL: BASE, mail: { send: async () => {} } });
   await ensureTable({ query: (sql: string, params?: unknown[]) => pg.query(sql, params) as never }, IDENTITY_TABLES, { schema: 'auth' });
+  await ensureAuthSchema(pg, 'auth');
   await pg.query(`INSERT INTO auth.group_hierarchy(id,revision) VALUES('installation',0)`);
   await pg.query(`INSERT INTO auth.groups(id,handle,name,created_by) VALUES('grp_parent','parent_team','Parent','usr_admin'),('grp_plain','plain_team','Plain','usr_admin')`);
   await pg.query(`INSERT INTO auth.users(id,email,username) VALUES('usr_taken','taken@example.com','taken_user')`);
@@ -245,6 +246,8 @@ describe('trusted-issuer sign-in', () => {
     await pg.query("UPDATE auth.groups SET name='Custom', description='Existing settings' WHERE handle='host_team'");
     const snapshot = () => rows("SELECT * FROM auth.groups WHERE handle='host_team'");
     const [before] = await snapshot();
+    const secondToken = token({...claims, sub:'another_reader', tenancy_id:'second'});
+    expect((await post(target, {token:secondToken})).status).toBe(303);
     expect((await sign('second')).status).toBe(303);
     await refused(await post(target, { token: token({ ...claims, sub:'other_reader', iss:'issuer-b' }, { key:otherKeys.privateKey }) }), 403, 'group_conflict');
     await refused(await post(target, { token: token(claims, { key:stranger.privateKey }) }), 401, 'invalid_token');
@@ -258,6 +261,15 @@ describe('trusted-issuer sign-in', () => {
     const [after] = await snapshot();
     expect(['third','fourth']).toContain(after!.tenancy_id);
     expect(after).toEqual({ ...before, tenancy_id: after!.tenancy_id });
+    await refused(await post(await app(), {token:secondToken}), 401, 'replayed_token');
+    const transitions = await rows(`SELECT u.username, c.issuer, c.previous_tenancy_id, c.tenancy_id
+      FROM auth.host_tenancy_changes c JOIN auth.users u ON u.id=c.person_id WHERE c.group_id=$1 ORDER BY c.seq`, [before!.id]);
+    const middle = after!.tenancy_id === 'third' ? 'fourth' : 'third';
+    expect(transitions).toEqual([
+      {username:'another_reader',issuer:'issuer-a',previous_tenancy_id:'first',tenancy_id:'second'},
+      {username:'reader_one',issuer:'issuer-a',previous_tenancy_id:'second',tenancy_id:middle},
+      {username:'reader_one',issuer:'issuer-a',previous_tenancy_id:middle,tenancy_id:after!.tenancy_id},
+    ]);
   });
 
   it('refuses handles it did not create', async () => {

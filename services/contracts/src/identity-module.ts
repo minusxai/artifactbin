@@ -21,7 +21,7 @@ import type {Queryable} from './db';
 import type {UserKind} from './testusers';
 
 /** The tables only the identity module writes (scripts/ci/table-ownership.mjs, the generated grants.sql). */
-export const IDENTITY_OWNED_TABLES = ['users', 'account_preferences', 'tokens', 'handle_reservations', 'groups', 'group_members', 'group_invitations', 'group_hierarchy', 'group_mail_outbox', 'group_sign_in_grants'] as const;
+export const IDENTITY_OWNED_TABLES = ['users', 'account_preferences', 'tokens', 'handle_reservations', 'groups', 'group_members', 'group_invitations', 'group_hierarchy', 'group_mail_outbox', 'group_sign_in_grants', 'host_tenancy_changes'] as const;
 
 /** The HTTP transport: POST `{method, input}`, answered `{result}` or `{error, status, retry_after?}`. */
 export const IDENTITY_CALL_PATH = '/api/internal/identity/call';

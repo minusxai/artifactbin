@@ -983,9 +983,10 @@ const IDENTITY_SETTINGS:Table={name:'identity_settings',columns:[
 ],primaryKey:['id']};
 const GROUP_QUOTAS:Table={name:'group_quotas',columns:[{name:'user_id',type:'TEXT',notNull:true},{name:'action',type:'TEXT',notNull:true},{name:'window_start',type:'BIGINT',notNull:true},{name:'used',type:'INTEGER',notNull:true}],primaryKey:['user_id','action']};
 const GROUP_AUDIT:Table={name:'group_audit',columns:[
- {name:'id',type:'TEXT',notNull:true},{name:'group_id',type:'TEXT',notNull:true},{name:'actor_user_id',type:'TEXT',notNull:true},{name:'actor_token_id',type:'TEXT'},{name:'client_harness',type:'TEXT'},
+ {name:'id',type:'TEXT',notNull:true},{name:'group_id',type:'TEXT',notNull:true},{name:'actor_user_id',type:'TEXT',relaxNotNull:true},{name:'actor_token_id',type:'TEXT'},{name:'client_harness',type:'TEXT'},
  {name:'action',type:'TEXT',notNull:true},{name:'details',type:'JSONB',notNull:true},{name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
-],primaryKey:['id'],indexes:[{name:'idx_group_audit_group',columns:['group_id','created_at']}]};
+ {name:'host_change_seq',type:'BIGINT'},
+],primaryKey:['id'],indexes:[{name:'idx_group_audit_host_change',columns:['host_change_seq'],unique:true,where:'host_change_seq IS NOT NULL'},{name:'idx_group_audit_group',columns:['group_id','created_at']}]};
 const ARTIFACT_GROUP_SHARES:Table={name:'artifact_group_shares',columns:[
  {name:'artifact_id',type:'TEXT',notNull:true},{name:'group_id',type:'TEXT',notNull:true},
  {name:'role',type:'TEXT',notNull:true},

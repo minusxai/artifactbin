@@ -63,3 +63,17 @@ export async function recordGroupMutation(tx:Queryable,userId:string,groupId:str
 export async function mailGroupChanges(changes:readonly GroupChange[]):Promise<void>{
  for(const change of changes)await services().identity.enqueueGroupMail({change});
 }
+
+/**
+ * The host supplies the tenancy and the person is the subject of the sign-in. The identity writer assigns seq
+ * under its sign-in lock, so committed rows form a prefix even when several hosts sign people in concurrently.
+ * The app role reads the identity view and advances its indexed cursor in the same statement as the audit rows.
+ */
+export async function projectHostTenancyChanges(db: Queryable): Promise<void> {
+ await db.query(`INSERT INTO group_audit(id,group_id,action,details,created_at,host_change_seq)
+   SELECT 'ga_host_' || seq,group_id,'host_tenancy_changed',
+     jsonb_build_object('trusted_issuer',issuer,'sign_in_user_id',person_id,'previous',jsonb_build_object('tenancy_id',previous_tenancy_id),
+       'next',jsonb_build_object('tenancy_id',tenancy_id)),created_at,seq
+   FROM host_tenancy_changes WHERE seq > COALESCE((SELECT max(host_change_seq) FROM group_audit),0)
+   ORDER BY seq LIMIT 100 ON CONFLICT DO NOTHING`);
+}

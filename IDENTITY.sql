@@ -104,6 +104,9 @@ CREATE OR REPLACE VIEW identity.group_mail_outbox AS
 CREATE OR REPLACE VIEW identity.group_sign_in_grants AS
   SELECT x.id, x.group_id, x.role, x.service_id, x.approved_by, x.created_at, x.deleted_at, x.service_origin FROM auth.group_sign_in_grants x;
 
+CREATE OR REPLACE VIEW identity.host_tenancy_changes AS
+  SELECT x.seq, x.group_id, x.issuer, x.person_id, x.previous_tenancy_id, x.tenancy_id, x.created_at FROM auth.host_tenancy_changes x;
+
 CREATE OR REPLACE VIEW identity.group_admins AS
   SELECT g.id AS group_id, a.user_id, a.via_group_id FROM auth.groups g CROSS JOIN LATERAL (
     WITH RECURSIVE up(id, depth) AS (SELECT g.id, 0 UNION ALL SELECT p.id, up.depth+1 FROM up JOIN auth.groups c ON c.id=up.id JOIN auth.groups p ON p.id=c.parent_id WHERE p.deleted_at IS NULL AND up.depth<10000)

@@ -293,3 +293,5 @@ export async function revokeServiceGroupSignIn(userId:string,groupId:string,id:s
  await recordGroupChanges(revoked.changes,actor);
  return true;
 }
+
+export {projectHostTenancyChanges} from './mutations';
