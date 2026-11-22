@@ -1,5 +1,6 @@
 /* @jsxImportSource solid-js */
 /** People a comment draft can mention; keyboard focus remains in the composer. */
+import { personLabel } from '../lib/person-label';
 import { createEffect, createSignal, createUniqueId, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import type { ArtifactBackend, MemberPerson } from '@/lib/artifact-backend';
 import { personMention } from '@/lib/document/person-mentions';
@@ -28,7 +29,7 @@ export function CommentMentionPicker(props: {
   <Show when={people().length}>
    <ComboboxList id={`${id}-people`} label="People" options={people()} optionKey={person=>person.user_id}
     active={nav.active()} onActive={nav.setActive} onSelect={choose}
-    renderOption={person=><span aria-label={`Mention @${person.username}`} class="flex w-full min-w-0 items-baseline gap-2 text-left"><span class="text-sm text-fg">@{person.username}</span><span class="truncate text-xs text-muted">{person.name}</span></span>}/>
+    renderOption={person=><span aria-label={`Mention ${personLabel(person)}`} class="flex w-full min-w-0 items-baseline gap-2 text-left"><span class="text-sm text-fg">{personLabel(person)}</span><Show when={person.name?.trim()}><span class="truncate text-xs text-muted">/@{person.username}</span></Show></span>}/>
   </Show>
   <Show when={unavailable} fallback={<Show when={!people().length}><p class="px-2 py-1 text-xs text-muted">No matching followers or members.</p></Show>}>
    <p role="note" class="px-2 py-1 text-xs text-muted">{unavailable}</p>

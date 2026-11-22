@@ -16,7 +16,7 @@ import { seedShares } from '@/__tests__/rows';
 useAppHarness();
 beforeEach(()=>overrideConfig({internalServiceSecret:'notification-test-service'}));
 async function fixture(){
- const sender=await createUser({email:'sender@example.com'}),recipient=await createUser({email:'recipient@example.com'}),token=await mintToken('test',sender.id);
+ const sender=await createUser({email:'sender@example.com',name:'Sample Sender'}),recipient=await createUser({email:'recipient@example.com'}),token=await mintToken('test',sender.id);
  const publish=async(body:object)=>(await create(request('/api/artifacts',{method:'POST',token:token.token,json:body}))).json();
  const doc=await publish({html: nativeHtml('<p>Tasks</p>'),visibility:'unlisted'}),db=await getDb();
  return {sender,recipient,token,doc,db,actor:identityForUser(recipient.id, null)};
@@ -30,7 +30,7 @@ it('marks every notification read across pages, preserves history and isolates t
  setSession({user:{id:f.recipient.id,email:f.recipient.email}});
  const clear=()=>patchInbox(request('/api/my/people',{method:'PATCH',json:{readAll:true}}));
  const response=await clear();expect(response.status).toBe(200);
- const inbox=await response.json();expect(inbox.unread).toBe(0);expect(inbox.notifications).toHaveLength(50);expect(inbox.next).toBe(50);
+ const inbox=await response.json();expect(inbox.notifications[0]).toMatchObject({name:'Sample Sender'});expect(inbox.notifications[0]).not.toHaveProperty('email');expect(inbox.unread).toBe(0);expect(inbox.notifications).toHaveLength(50);expect(inbox.next).toBe(50);
  expect((await membershipInbox(f.actor,50)).notifications).toHaveLength(1);
  const rows=(await f.db.query<{revision:number;seen_revision:number;read_at:string}>('SELECT revision,seen_revision,read_at FROM member_notifications WHERE recipient_id=$1',[f.recipient.id])).rows;
  expect(rows).toHaveLength(51);for(const row of rows){expect(row.seen_revision).toBe(row.revision);expect(row.read_at).not.toBeNull();}
@@ -63,4 +63,5 @@ it('serves one member notification to the delivery service, with the recipient a
  expect((await read('follow-1','wrong-secret-of-same-size!')).status).toBe(401);
  await f.db.query('INSERT INTO user_blocks(user_id,blocked_user_id) VALUES($1,$2)',[f.recipient.id,f.sender.id]);
  expect(await (await read('follow-1')).json()).toEqual({notification:null});
+ expect((await membershipInbox(f.actor)).blocks).toEqual([{user_id:f.sender.id,name:'Sample Sender',username:null}]);
 });

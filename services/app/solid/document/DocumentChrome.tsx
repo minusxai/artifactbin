@@ -2,7 +2,7 @@
 /**
  * THE DOCUMENT PAGE'S BAR — the app's one bar (solid/components/PageChrome) with what a document adds to it:
  *
- *  - the BYLINE in place of the crumbs: the author's face and `@handle` (their profile), the follow pill, the
+ *  - the BYLINE in place of the crumbs: the author's face and display name (their profile), the follow pill, the
  *    document's title, the Join/Joined/Pending pill, and an
  *    archived version's one fixed line;
  *  - the RAIL beside the star: like and comment (with their counts), fork, install and share — the reader's
@@ -11,13 +11,14 @@
  *
  * The document itself is not here: it is the frame under this bar, on its own origin (lib/document-serving/document-frame).
  */
+import type { DocumentChromeDetails } from './deferred-document-chrome';
+import { personLabel } from '../lib/person-label';
 import { createSignal, lazy, Show, Suspense, type Accessor, type JSX } from 'solid-js';
 import Heart from 'lucide-solid/icons/heart';
 import GitFork from 'lucide-solid/icons/git-fork';
 import Download from 'lucide-solid/icons/download';
 import Ellipsis from 'lucide-solid/icons/ellipsis';
 import ChevronRight from 'lucide-solid/icons/chevron-right';
-import { loginHref } from '@/lib/http/login-href';
 import { artifactAppPath } from '@/lib/document-serving/artifact-pwa';
 import type { Visibility } from '@artifactbin/contracts/sharing';
 import { PageChrome, type Panel } from '../components/PageChrome';
@@ -29,7 +30,6 @@ const CompactMenu = lazy(() => import('./DocumentCompactMenu').then(module => ({
 import { DocumentTitle } from '../components/PageBar';
 import { DocumentCommentAction } from './DocumentBarActions';
 import { Avatar } from '../ui/Avatar';
-import { sendReaction } from './reactions';
 
 /** The one line an archived render's bar carries. */
 const archivedBanner = (version: number, head: number): string => `Version ${version} of ${head} · read-only`;
@@ -37,7 +37,7 @@ const archivedBanner = (version: number, head: number): string => `Version ${ver
 export interface DocumentChromeProps {
   id: string;
   title: Accessor<string>;
-  author: { username: string | null; id?: string | null; image?: string | null } | null;
+  author: DocumentChromeDetails['author'];
   follow?: { userId: string; following: boolean; count: number } | null;
   like: { liked: boolean; count: number };
   likeUnavailable?: boolean;
@@ -73,19 +73,18 @@ export function DocumentChrome(props: DocumentChromeProps): JSX.Element {
   const like = () => changedLike() ?? props.like;
   const follow = () => changedFollow() ?? props.follow ?? null;
   const reading = () => !props.archived && props.remoteAvailable !== false;
-  const toLogin = (intent: 'like' | 'follow') => window.location.assign(loginHref(window.location, intent));
-
+  // The document can display both counts before the reader needs either reaction's network code.
   const toggleLike = async () => {
     if (props.likeUnavailable) return;
-    if (!props.signedIn()) { toLogin('like'); return; }
-    const answer = await sendReaction<{ liked: boolean; count: number }>(`/api/my/artifacts/${encodeURIComponent(props.id)}/like`, like().liked, 'like');
+    const { toggleDocumentLike } = await import('./reactions');
+    const answer = await toggleDocumentLike(props.signedIn(), props.id, like().liked);
     if (answer) setLike(answer);
   };
   const toggleFollow = async () => {
     const current = follow();
     if (!current) return;
-    if (!props.signedIn()) { toLogin('follow'); return; }
-    const answer = await sendReaction<{ following: boolean; count: number }>(`/api/users/${encodeURIComponent(current.userId)}/follow`, current.following, 'follow');
+    const { toggleDocumentFollow } = await import('./reactions');
+    const answer = await toggleDocumentFollow(props.signedIn(), current.userId, current.following);
     if (answer) setFollow({ ...current, following: answer.following, count: answer.count });
   };
 
@@ -94,11 +93,11 @@ export function DocumentChrome(props: DocumentChromeProps): JSX.Element {
   const byline = <>
     <Show when={username()}>{(handle) => <>
       <ChevronRight size={14} class="shrink-0 text-faint" aria-hidden="true" />
-      <a href={`/@${handle()}`} aria-label={`View @${handle()}'s profile`} class="flex min-w-0 items-center gap-1.5 text-muted no-underline hover:text-accent">
-        <Show when={props.author?.id}>{(authorId) => <Avatar image={props.author?.image ?? null} initial={handle()} userId={authorId()} size={20} />}</Show><span class="truncate">@{handle()}</span>
+      <a href={`/@${handle()}`} aria-label={`View ${personLabel(props.author)}'s profile`} class="flex min-w-0 items-center gap-1.5 text-muted no-underline hover:text-accent">
+        <Show when={props.author?.id}>{(authorId) => <Avatar image={props.author?.image ?? null} initial={props.author?.name?.trim() || handle()} userId={authorId()} size={20} />}</Show><span class="truncate">{personLabel(props.author)}</span>
       </a>
       <Show when={follow()}>{(state) => (
-        <Button variant="secondary" size="sm" aria-label={`${state().following ? 'Unfollow' : 'Follow'} @${handle()}`} aria-pressed={state().following} onClick={() => void toggleFollow()}>
+        <Button variant="secondary" size="sm" aria-label={`${state().following ? 'Unfollow' : 'Follow'} ${personLabel(props.author)}`} aria-pressed={state().following} onClick={() => void toggleFollow()}>
           {state().following ? 'following' : 'follow'}
         </Button>
       )}</Show>

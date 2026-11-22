@@ -1,4 +1,5 @@
 /* @jsxImportSource solid-js */
+import { personLabel } from '../lib/person-label';
 import { retryingFetch } from '@/lib/http/retry-lazily';
 import { createEffect, createSignal, For, onCleanup, Show, type JSX } from 'solid-js';
 import Users from 'lucide-solid/icons/users';
@@ -80,21 +81,21 @@ export function DocumentPeople(props: { id: string; revision?: number; onChange?
           </div>
         </Show>
         <ul class="divide-y divide-edge"><For each={current().members}>{member => <li class="flex items-center gap-3 py-2.5">
-          <span class="flex h-7 w-7 items-center justify-center rounded-full bg-accent-soft text-xs text-accent">{(member.name ?? member.username ?? '?').slice(0, 1).toUpperCase()}</span>
-          <span class="min-w-0 truncate text-sm">{member.username ? `@${member.username}` : member.name ?? member.user_id}</span>
+          <span class="flex h-7 w-7 items-center justify-center rounded-full bg-accent-soft text-xs text-accent">{(member.name?.trim() || member.username || '?').slice(0, 1).toUpperCase()}</span>
+          <span class="min-w-0 truncate text-sm">{personLabel(member)}</span>
           <span class="ml-auto text-xs text-muted">Member</span>
         </li>}</For></ul>
         <Show when={current().canManage}><For each={current().pending.filter(member => member.user_id !== self()?.user_id)}>{member => <div class="space-y-2 rounded-lg border border-edge p-3">
-          <p class="text-xs">@{member.username ?? member.user_id} · {member.direction === 'invitation' ? 'Invitation pending' : 'Wants to join'}</p>
+          <p class="text-xs">{personLabel(member)} · {member.direction === 'invitation' ? 'Invitation pending' : 'Wants to join'}</p>
           <div class="flex gap-2">
-            <Show when={member.direction === 'request'}><Button disabled={busy()} onClick={() => void act({ action: 'approve', userId: member.user_id })}>Approve @{member.username ?? member.user_id}</Button></Show>
+            <Show when={member.direction === 'request'}><Button disabled={busy()} onClick={() => void act({ action: 'approve', userId: member.user_id })}>Approve {personLabel(member)}</Button></Show>
             <Button variant="secondary" disabled={busy()} onClick={() => void act({ action: 'dismiss', userId: member.user_id })}>Dismiss</Button>
           </div>
         </div>}</For></Show>
         <Show when={current().canInvite}><div class="space-y-2 border-t border-edge pt-4">
           <PeopleInvitePicker endpoint={endpoint()} selected={selected()} onSelect={person => setSelected(previous => [...previous, person])} />
-          <p class="text-xs leading-5 text-muted">Find anyone by username. Invitations wait for acceptance unless they follow you.</p>
-          <div class="flex flex-wrap gap-1"><For each={selected()}>{person => <Button variant="secondary" size="sm" aria-label={`Remove @${person.username}`} onClick={() => setSelected(previous => previous.filter(item => item.user_id !== person.user_id))}>@{person.username} ×</Button>}</For></div>
+          <p class="text-xs leading-5 text-muted">Find anyone by name or username. Invitations wait for acceptance unless they follow you.</p>
+          <div class="flex flex-wrap gap-1"><For each={selected()}>{person => <Button variant="secondary" size="sm" aria-label={`Remove ${personLabel(person)}`} onClick={() => setSelected(previous => previous.filter(item => item.user_id !== person.user_id))}>{personLabel(person)} ×</Button>}</For></div>
           <Show when={current().canShare}><Checkbox size="sm" label="Include viewing access" checked={includeAccess()} onChange={setIncludeAccess} /></Show>
           <Button disabled={busy() || selected().length === 0} onClick={() => void act({ action: 'invite', usernames: selected().map(person => `@${person.username}`), includeAccess: includeAccess() })}>Invite{selected().length ? ` ${selected().length} people` : ''}</Button>
           <p class="text-xs leading-5 text-muted">Followers join immediately unless they’ve turned off automatic acceptance. Others see a pending invitation.</p>
@@ -128,10 +129,10 @@ function PeopleInvitePicker(props: { endpoint: string; selected: Person[]; onSel
     onCleanup(() => controller.abort());
   });
   return <Field label="Add people">
-    <div onFocusIn={() => setEngaged(true)}>
+    <div on:focusin={() => setEngaged(true)}>
       <Combobox ariaLabel="Find people by username" listLabel="People suggestions" placeholder="@username"
-        value={query()} onValue={setQuery} options={options()} optionKey={person => person.user_id}
-        renderOption={person => <>@{person.username}<span class="ml-2 text-xs text-muted">{person.name}</span></>}
+        value={query()} onValue={value => { setEngaged(true); setQuery(value); }} options={options()} optionKey={person => person.user_id}
+        renderOption={person => <>{personLabel(person)}<Show when={person.name?.trim()}><span class="ml-2 text-xs text-muted">/@{person.username}</span></Show></>}
         status={loading() ? 'Finding people…' : error() || (options().length ? undefined : 'No people found.')}
         onSelect={person => { props.onSelect(person); setQuery(''); }} />
     </div>

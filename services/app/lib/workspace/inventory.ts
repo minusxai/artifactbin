@@ -75,7 +75,7 @@ export type WorkspaceAssets = Awaited<ReturnType<typeof workspaceAssetsFor>>;
 /** Complete authorized shared inventory: the selected view must precede counts and pagination. */
 export async function workspaceSharedFor(userId: string, email: string): Promise<WorkspaceSharedItem[]> {
   const db = await getDb();
-  const result = await db.query<WorkspaceSharedItem>(`SELECT a.id, a.title, a.description, a.format, a.version, a.visibility, a.updated_at, u.username AS owner_username, s.role
+  const result = await db.query<WorkspaceSharedItem>(`SELECT a.id, a.title, a.description, a.format, a.version, a.visibility, a.updated_at, u.username AS owner_username, CASE WHEN u.username IS NOT NULL THEN u.name END AS owner_name, s.role
     FROM artifacts a JOIN artifact_shares s ON s.artifact_id = a.id LEFT JOIN users u ON u.id = a.user_id
     WHERE s.email = $1 AND a.user_id IS DISTINCT FROM $2::text AND a.${LIVE_ARTIFACT_SQL}
     ORDER BY a.updated_at DESC, a.id DESC`, [email.toLowerCase().trim(), userId]);

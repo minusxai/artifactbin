@@ -66,7 +66,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ user: strin
   return json({
     kind: 'public-profile',
     handle,
-    owner: { id: owner.id, image: avatarUrl(owner) },
+    owner: { id: owner.id, name: owner.name, image: avatarUrl(owner) },
     social,
     files: strip(files).map(({ ancestor_ids: _placement, ...card }) => card),
     authed: !!actor.userId,

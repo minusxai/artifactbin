@@ -5,7 +5,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import SharedWithYou from '@/solid/components/SharedWithYou';
 import type { WorkspaceSharedItem } from '@/lib/workspace';
 
-const shared = (id: string, role: WorkspaceSharedItem['role'] = 'viewer'): WorkspaceSharedItem => ({ id, title: `doc ${id}`, description: null, format: 'markup', role, version: 1, visibility: 'private', updated_at: '2026-08-01T00:00:00.000Z', owner_username: 'alice' });
+const shared = (id: string, role: WorkspaceSharedItem['role'] = 'viewer'): WorkspaceSharedItem => ({ id, title: `doc ${id}`, description: null, format: 'markup', role, version: 1, visibility: 'private', updated_at: '2026-08-01T00:00:00.000Z', owner_name: 'Sample Author', owner_username: 'alice' });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 it('keeps shared work absent when empty, and filters by role and search', () => {
@@ -31,11 +31,11 @@ it('ANDs an external query (Home\'s own search box) with its own search box', ()
 });
 
 it('names each recipient role and uses short artifact links even for untitled work', () => {
-  render(() => <SharedWithYou items={[shared('one'), shared('two', 'editor'), { ...shared('three', 'commenter'), title: null, owner_username: null }]} />);
+  render(() => <SharedWithYou items={[shared('one'), shared('two', 'editor'), { ...shared('three', 'commenter'), title: null, owner_name: null, owner_username: null }]} />);
   expect(screen.getByLabelText('Your role on one')).toHaveTextContent('can view');
   expect(screen.getByLabelText('Your role on two')).toHaveTextContent('can edit');
   expect(screen.getByLabelText('Your role on three')).toHaveTextContent('can comment');
-  expect(screen.getByLabelText('Shared with you')).toHaveTextContent('@alice');
+  expect(screen.getByLabelText('Shared with you')).toHaveTextContent('Sample Author');
   expect(screen.getByLabelText('Open shared artifact one')).toHaveAttribute('href', '/a/one');
   expect(screen.getByLabelText('Open shared artifact three')).toHaveAttribute('href', '/a/three');
   expect(screen.getByLabelText('Open shared artifact three')).toHaveTextContent('three');

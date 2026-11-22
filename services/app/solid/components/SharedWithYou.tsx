@@ -31,7 +31,7 @@ export default function SharedWithYou(props: { items: WorkspaceSharedItem[]; que
   const filtering = () => Boolean(outer() || q() || formatPicks().length || rolePicks().length);
   const visible = createMemo(() => inventory().filter(item => {
     const format = item.format ?? 'markup';
-    const searchable = [item.title, item.description, item.id, item.owner_username ? `@${item.owner_username}` : null, formatLabel(format), SHARE_ROLE_LABEL[item.role]].filter(Boolean).join(' ').toLowerCase();
+    const searchable = [item.title, item.owner_name, item.description, item.id, item.owner_username ? `@${item.owner_username}` : null, formatLabel(format), SHARE_ROLE_LABEL[item.role]].filter(Boolean).join(' ').toLowerCase();
     return (!outer() || searchable.includes(outer())) && (!q() || searchable.includes(q())) && (!formatPicks().length || formatPicks().includes(format)) && (!rolePicks().length || rolePicks().includes(item.role));
   }));
   const pageIndex = () => Math.min(page(), Math.max(0, Math.ceil(visible().length / PAGE_SIZE) - 1));
@@ -51,7 +51,7 @@ export default function SharedWithYou(props: { items: WorkspaceSharedItem[]; que
         <Show when={visible().length === 0}><li class="py-6"><StatusMessage kind="empty" class="justify-center">{q() ? <>nothing matches &ldquo;{query().trim()}&rdquo;</> : outer() ? <>nothing matches &ldquo;{(props.query ?? '').trim()}&rdquo;</> : filtering() ? 'nothing matches the active filters' : `no shared ${view()}`}</StatusMessage></li></Show>
         <For each={paged()}>{item => <ListRow class="gap-x-4">
           <a {...artifactLink(`/a/${item.id}`, item.format ?? 'markup')} aria-label={`Open shared artifact ${item.id}`} class={`min-w-0 flex-1 truncate ${LINK}`}>{item.title || item.id}</a>
-          <span class="w-28 truncate text-muted">{item.owner_username ? `@${item.owner_username}` : ''}</span>
+          <span class="w-28 truncate text-muted">{item.owner_name?.trim() || (item.owner_username ? `@${item.owner_username}` : '')}</span>
           <span class="w-24 text-muted" aria-label={`Your role on ${item.id}`}>{SHARE_ROLE_LABEL[item.role]}</span>
           <FormatBadge format={item.format} />
           <span class="w-20 whitespace-nowrap text-right text-muted">{timeAgo(item.updated_at)}</span>

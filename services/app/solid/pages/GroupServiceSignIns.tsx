@@ -6,6 +6,7 @@
  * whose confirmation says in plain words what the service will be able to do. Nothing is drawn for a Member or Editor,
  * nor when no configured service may be approved and none is.
  */
+import { personLabel } from '../lib/person-label';
 import { createSignal, For, Show, type JSX } from 'solid-js';
 import type { GroupSummary } from '@artifactbin/contracts/groups';
 import { apiRequest } from '../lib/api';
@@ -38,7 +39,7 @@ export function GroupServiceSignIns(props: { group: Pick<GroupSummary, 'id' | 'n
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal('');
   const chosen = () => service() || list.data()?.services[0]?.id || '';
-  const who = (approval: Approval) => approval.approved_by.name ?? approval.approved_by.username ?? 'a former Admin';
+  const who = (approval: Approval) => personLabel(approval.approved_by, 'a former Admin');
   const act = async () => {
     const asked = asking(); if (!asked || busy()) return;
     setBusy(true); setError('');

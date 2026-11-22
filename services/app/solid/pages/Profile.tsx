@@ -1,4 +1,6 @@
 /* @jsxImportSource solid-js */
+import { usePageBreadcrumbs } from '../lib/page-breadcrumbs';
+import { personLabel } from '../lib/person-label';
 import { createMemo, createSignal, For, lazy, Show, type JSX } from 'solid-js';
 import { Navigate, useLocation, useParams } from '@solidjs/router';
 import { Folder, LayoutGrid, List } from 'lucide-solid';
@@ -28,7 +30,7 @@ interface ProfileAnswer {
   kind: 'public-profile' | 'redirect' | 'artifact' | 'group';
   to?: string;
   handle?: string;
-  owner?: { id: string; image: string | null };
+  owner?: { id: string; name?: string | null; image: string | null };
   social?: ProfileSocial;
   authed?: boolean;
   files?: ShelfRow[];
@@ -42,13 +44,15 @@ export function ProfilePage(): JSX.Element {
   const page = usePageData<ProfileAnswer>(() => `/api/page/profile/${encodeURIComponent(params.user ?? '')}`, {
     seed: () => takeBootstrap<ProfileAnswer>(location.pathname, 'profile'),
   });
+  const ownerLabel = () => personLabel({ name: page.data()?.owner?.name, username: page.data()?.handle });
+  usePageBreadcrumbs(() => page.data()?.kind === 'public-profile' ? [{ label: ownerLabel() }] : []);
   return <Show when={page.data()} fallback={<Show when={page.error()} fallback={<main aria-label="Loading page" role="status" class="mx-auto max-w-4xl px-4 py-10">Loading profile…</main>}><NotFoundPage /></Show>}>
     {answer => <Show when={answer().kind !== 'group'} fallback={<GroupPage identity={answer().handle!}/>}><Show when={answer().kind === 'public-profile' && answer().handle} fallback={answer().kind === 'redirect' && answer().to ? <Navigate href={answer().to!} /> : <NotFoundPage />}>
       <main class="mx-auto max-w-6xl px-5 py-8 font-sans sm:px-8 sm:py-10">
         <Show when={page.error()}><Button variant="secondary" class="mb-4" type="button" aria-label="Retry profile" onClick={() => void page.refresh(true)}>Could not refresh profile. Retry</Button></Show>
         <header class="mb-8 border-b border-edge pb-7">
           <p class="text-sm text-muted">Public profile</p>
-          <div class="mt-2 flex items-center gap-3"><Show when={answer().owner}><Avatar userId={answer().owner!.id} image={answer().owner!.image ?? null} initial={answer().handle!} size={48} /></Show><h1 class="flex min-w-0 flex-wrap items-baseline gap-x-1.5 text-3xl font-semibold tracking-tight text-fg"><a href={path()} aria-label="Profile root" class="min-w-0 break-all no-underline transition-colors hover:text-accent"><span class="text-accent">@</span>{answer().handle}</a></h1></div>
+          <div class="mt-2 flex items-center gap-3"><Show when={answer().owner}><Avatar userId={answer().owner!.id} image={answer().owner!.image ?? null} initial={answer().owner?.name?.trim() || answer().handle!} size={48} /></Show><h1 class="flex min-w-0 flex-wrap items-baseline gap-x-1.5 text-3xl font-semibold tracking-tight text-fg"><a href={path()} aria-label="Profile root" class="min-w-0 break-all no-underline transition-colors hover:text-accent">{ownerLabel()}</a></h1></div>
           <Show when={answer().owner && answer().social}><Social ownerId={answer().owner!.id} social={answer().social!} signedIn={!!answer().authed} /></Show>
           <p class="mt-4 text-sm text-muted">{(answer().files ?? []).filter(row => row.format === 'html' || row.format === 'folder').length} public artifact{(answer().files ?? []).filter(row => row.format === 'html' || row.format === 'folder').length === 1 ? '' : 's'}</p>
         </header>
@@ -75,7 +79,7 @@ function Social(props: { ownerId: string; social: ProfileSocial; signedIn: boole
     finally { inFlight = false; setBusy(false); }
   };
   const label = () => following() ? 'Following' : props.social.relation?.followsYou ? 'Follow back' : 'Follow';
-  return <div role="group" aria-label="Follows" class="mt-3 flex flex-col gap-2"><div class="flex flex-wrap items-center gap-x-4 gap-y-2"><p class="flex flex-wrap items-center gap-x-3 text-sm text-muted"><span><strong class="text-fg">{props.social.following.toLocaleString('en-US')}</strong> Following</span><span><strong class="text-fg">{followers().toLocaleString('en-US')}</strong> {followers() === 1 ? 'Follower' : 'Followers'}</span><Show when={props.social.relation?.followsYou}><Badge>Follows you</Badge></Show></p><Show when={props.social.relation || !props.signedIn}><Show when={props.signedIn} fallback={<Button href={loginHref(window.location)} aria-label="Follow">Follow</Button>}><Button type="button" aria-label={label()} pressed={following()} disabled={busy()} onClick={() => void toggle()}>{label()}</Button></Show></Show></div><Show when={props.social.relation?.knownTotal}><p class="text-xs text-muted">Followed by <For each={props.social.relation?.known}>{(person, i) => <><Show when={i() > 0}>, </Show><a href={`/@${person.username}`}>{person.username}</a></>}</For></p></Show></div>;
+  return <div role="group" aria-label="Follows" class="mt-3 flex flex-col gap-2"><div class="flex flex-wrap items-center gap-x-4 gap-y-2"><p class="flex flex-wrap items-center gap-x-3 text-sm text-muted"><span><strong class="text-fg">{props.social.following.toLocaleString('en-US')}</strong> Following</span><span><strong class="text-fg">{followers().toLocaleString('en-US')}</strong> {followers() === 1 ? 'Follower' : 'Followers'}</span><Show when={props.social.relation?.followsYou}><Badge>Follows you</Badge></Show></p><Show when={props.social.relation || !props.signedIn}><Show when={props.signedIn} fallback={<Button href={loginHref(window.location)} aria-label="Follow">Follow</Button>}><Button type="button" aria-label={label()} pressed={following()} disabled={busy()} onClick={() => void toggle()}>{label()}</Button></Show></Show></div><Show when={props.social.relation?.knownTotal}><p class="text-xs text-muted">Followed by <For each={props.social.relation?.known}>{(person, i) => <><Show when={i() > 0}>, </Show><a href={`/@${person.username}`}>{personLabel(person)}</a></>}</For></p></Show></div>;
 }
 
 function ProfileShelf(props: { handle: string; rows: ShelfRow[] }): JSX.Element {

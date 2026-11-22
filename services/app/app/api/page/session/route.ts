@@ -33,7 +33,7 @@ export async function GET(request: Request) {
   const userId = actor.credential === 'session' ? actor.userId : undefined;
   const row = userId ? await getUserById(userId) : null;
   const user = userId
-    ? { id: userId, email: actor.email, username: row?.username ?? null, image: row ? avatarUrl(row) : null }
+    ? { id: userId, email: actor.email, name: row?.name ?? null, username: row?.username ?? null, image: row ? avatarUrl(row) : null }
     : null;
   const onboarded = userId ? !(await welcomePending(row)) : true;
   return json({ user, kind, onboarded, liveEditor: isEditingBrowser(request, actor) }, 200, { 'Cache-Control': 'no-store' });

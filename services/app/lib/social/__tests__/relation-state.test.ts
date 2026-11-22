@@ -77,7 +77,7 @@ describe('profileSocial', () => {
     expect(seen).toMatchObject({ followers: 5, following: 1, relation: { youFollow: false, followsYou: true, knownTotal: 4 } });
     expect(seen.relation!.known).toHaveLength(3);
     expect(seen.relation!.known.map(k => k.username)).not.toContain('nameless');
-    expect(seen.relation!.known[0]).toEqual({ id: expect.any(String), username: expect.any(String), image: null });
+    expect(seen.relation!.known[0]).toEqual({ id: expect.any(String), name: null, username: expect.any(String), image: null });
     await link(viewer, 'follow', owner);
     expect((await profileSocial(owner, viewer)).relation).toMatchObject({ youFollow: true, followsYou: true });
   });

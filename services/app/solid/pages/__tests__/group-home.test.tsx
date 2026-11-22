@@ -7,6 +7,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { DefaultDestinationControl } from '../../components/DefaultDestinationControl';
 import { PageChrome } from '../../components/PageChrome';
 import { PageBreadcrumbProvider } from '../../lib/page-breadcrumbs';
+import { GroupsPage } from '../Groups';
 import { GroupPage } from '../Group';
 import { HomePage } from '../Home';
 import { CompanySetup } from '../CompanySetup';
@@ -35,7 +36,7 @@ it.each(['editor','admin'])('%s can create group content',async(role)=>{
  open();expect(await screen.findByRole('heading',{name:'Team'})).toBeInTheDocument();
  expect(screen.getByRole('button',{name:'Create'})).toBeInTheDocument();
 });
-it('uses the default group shelf, links its handle to the group page, and hides write controls for viewers',async()=>{stub();open();expect(await screen.findByRole('heading',{name:'Team'})).toBeInTheDocument();expect(screen.getByRole('link',{name:'@team'})).toHaveAttribute('href','/@team');expect(screen.queryByRole('button',{name:'Create'})).toBeNull();expect(screen.queryByRole('button',{name:'Invite person'})).toBeNull();});
+it('uses the default group shelf, links its handle to the group page, and hides write controls for viewers',async()=>{stub();open();expect(await screen.findByRole('heading',{name:'Team'})).toBeInTheDocument();expect(screen.getByRole('link',{name:'/@team'})).toHaveAttribute('href','/@team');expect(screen.queryByRole('button',{name:'Create'})).toBeNull();expect(screen.queryByRole('button',{name:'Invite person'})).toBeNull();});
 it.each([
  ['the company root',true], ['a non-root group',false], ['a response without the classification',undefined],
 ])('describes the company audience only on the company root page (%s)',async(_label,company_root)=>{
@@ -281,9 +282,15 @@ it('names the default group in the top bar and clears it on Personal navigation'
  render(()=> <MemoryRouter history={history}><Route path="*" component={()=> <SessionProvider><PageBreadcrumbProvider><PageChrome star={false}/><HomePage/></PageBreadcrumbProvider></SessionProvider>}/></MemoryRouter>);
  await screen.findByRole('heading',{name:'Team'});
  const navigation=screen.getByRole('navigation',{name:'Current page'});
- await waitFor(()=>expect(navigation).toHaveTextContent('@team'));
+ await waitFor(()=>expect(navigation).toHaveTextContent('Team'));
  history.set({value:'/?personal=1',replace:false});
  await screen.findByRole('button',{name:'Set Personal as default'});
  await waitFor(()=>expect(navigation).toHaveTextContent('Personal'));
- expect(navigation).not.toHaveTextContent('@team');
+ expect(navigation).not.toHaveTextContent('Team');
+});
+
+it('links a group directory name and address to the same group', async () => {
+ stubFetch({'/api/groups':{groups:[{...group, name:'Sample Operations'}]}});
+ render(() => <GroupsPage/>);
+ expect(await screen.findByRole('link',{name:/Sample Operations.*Member/})).toHaveAttribute('href','/@team');
 });

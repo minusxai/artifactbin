@@ -14,7 +14,7 @@ import { workspaceCountsFor, workspaceDocumentsFor, workspaceSharedFor } from '.
 
 // Workspace projections deliberately exclude source metadata and engagement.
 // Discovery keeps the same ownership/share/trash gates as the general listings.
-export type WorkspaceSharedItem = Pick<SharedArtifactSummary, 'id' | 'title' | 'description' | 'format' | 'version' | 'visibility' | 'updated_at' | 'owner_username' | 'role'>;
+export type WorkspaceSharedItem = Pick<SharedArtifactSummary, 'id' | 'title' | 'description' | 'format' | 'version' | 'visibility' | 'updated_at' | 'owner_username' | 'role'> & { owner_name?: string | null };
 
 export async function accountWorkspaceCoreFor(userId: string, email?: string | null, groupId?:string) {
   if(groupId && !(await getGroupRole(userId,groupId)))return null;

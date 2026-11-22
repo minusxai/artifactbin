@@ -1,3 +1,4 @@
+import { personLabel } from '../lib/person-label';
 import {canEditGroupContent} from '@artifactbin/contracts/groups';
 /* @jsxImportSource solid-js */
 import { createSignal, For, lazy, Show, type JSX } from 'solid-js';
@@ -52,11 +53,11 @@ export function GroupUnavailable(props:{retry:()=>void}): JSX.Element {
  */
 export function GroupWorkspace(props: { detail: GroupDetail; shelf: AccountWorkspaceCore | null; shelfFailed: boolean; retryShelf: () => void; refresh: () => void; defaults?: DefaultDestinationState; onDefaultSaved?: () => void }): JSX.Element {
  const value=()=>props.detail;
- usePageBreadcrumbs(()=>[{label:`@${value().group.handle}`}]);
+ usePageBreadcrumbs(()=>[{label:value().group.name}]);
  return <WorkspaceShell onCreated={props.refresh} groupId={value().group.id} canCreate={canEditGroupContent(value().group.role)}><div class="workspace-page groups-page">
  <a href="/groups" class="font-sans text-sm font-medium text-muted hover:text-accent">Groups</a>
  <PageHeader class="mb-9 mt-5" title={value().group.name} leading={<span class="group-avatar group-avatar-large" aria-hidden="true"><Users size={26}/></span>} actions={<><DefaultDestinationControl compact group={value().group} initial={props.defaults} onSaved={props.onDefaultSaved}/><Tooltip content="Manage people, invitations, subgroups and linked groups."><Button size="sm" variant="secondary" icon aria-label="Group settings" href={`/groups/${encodeURIComponent(value().group.handle)}/settings`}><Settings size={16} aria-hidden="true"/></Button></Tooltip></>} badge={<Badge>{value().group.role==='admin'?'Admin':value().group.role==='editor'?'Editor':'Member'}</Badge>}
-  description={<><p class="break-all"><a href={`/@${encodeURIComponent(value().group.handle)}`} class="rounded-chip underline-offset-4 hover:text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">@{value().group.handle}</a></p><Show when={value().group.description}><p class="mt-3">{value().group.description}</p></Show><InheritedAdmin detail={value()}/><GroupTreeSummary detail={value()}/></>}>
+  description={<><p class="break-all"><a href={`/@${encodeURIComponent(value().group.handle)}`} class="rounded-chip underline-offset-4 hover:text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">/@{value().group.handle}</a></p><Show when={value().group.description}><p class="mt-3">{value().group.description}</p></Show><InheritedAdmin detail={value()}/><GroupTreeSummary detail={value()}/></>}>
  </PageHeader>
  <section aria-label="Group artifacts" class="workspace-library"><SectionHeading class="mb-5">Files and folders</SectionHeading><Show when={value().group.company_root}><GroupAudienceNotice/></Show><Show when={props.shelf} fallback={<Show when={props.shelfFailed} fallback={<StatusMessage kind="loading">Loading artifacts…</StatusMessage>}><StatusMessage kind="error" action={<Button variant="link" type="button" onClick={props.retryShelf}>Retry artifacts</Button>}>Could not load group artifacts.</StatusMessage></Show>}>{rows=><Shelf groupId={value().group.id} rows={rows().artifacts} actions={value().group.role==='admin'?'full':'share'} assets={false} scopeParentId={null}/>}</Show></section>
  </div></WorkspaceShell>;
@@ -76,7 +77,7 @@ export function GroupSettingsPage(props:{identity:string}):JSX.Element {
 }
 
 function GroupSettings(props:{detail:GroupDetail;refresh:()=>void}):JSX.Element {
- usePageBreadcrumbs(()=>[{label:`@${props.detail.group.handle}`,href:`/@${props.detail.group.handle}`},{label:'Group settings'}]);
+ usePageBreadcrumbs(()=>[{label:props.detail.group.name,href:`/@${props.detail.group.handle}`},{label:'Group settings'}]);
  const [error,setError]=createSignal(''); const [copied,setCopied]=createSignal(false);
  const copy=async()=>{try{if(await copyText(buildGroupSetupInstructions({serverOrigin:window.location.origin,groupHandle:props.detail.group.handle})))setCopied(true);else setError('Could not copy instructions.');}catch{setError('Could not copy instructions.');}};
  return <div class="workspace-page groups-page">
@@ -102,7 +103,7 @@ export function GroupManagement(props:{detail:GroupDetail;refresh:()=>void}):JSX
  const search=usePageData<{members:GroupMember[]}>(()=>`${root()}/members?query=${encodeURIComponent(query().trim())}`,{enabled:searching});
  const mutate=async(path:string,method:'POST'|'PUT'|'PATCH'|'DELETE',body?:unknown)=>{if(busy())return;setBusy(true);setError('');try{await apiRequest(path,method,body);props.refresh();if(searching())void search.refresh(true);}catch(e){setError(e instanceof Error ? e.message === 'last_admin' ? 'Keep at least one admin in this group. Add another admin before changing this person.' : e.message : 'Could not update group.');}finally{setBusy(false);}};
  const members=()=>searching() ? search.data()?.members ?? [] : props.detail.members;
- const nameOf=(person:GroupMember)=>person.name??person.username??'member';
+ const nameOf=(person:GroupMember)=>personLabel(person, 'Member');
  return <div class="mt-10 grid items-start gap-6 min-[1100px]:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]"><Show when={error()}><StatusMessage kind="error" class="min-[1100px]:col-span-2">{error()}</StatusMessage></Show>
  <Show when={admin()}><Panel title="Tenancy ID" label="Group tenancy">
   <Show when={props.detail.group.host_provisioned === false} fallback={<p>{props.detail.group.tenancy_id ?? 'Unset'} · Managed by the sign-in provider</p>}>
@@ -122,7 +123,7 @@ export function GroupManagement(props:{detail:GroupDetail;refresh:()=>void}):JSX
   <InheritedAdmin detail={props.detail}/>
   <SearchField label="Search people" value={query()} onValue={setQuery} clearOnEscape/>
   <div class="mt-3 empty:hidden"><Show when={searching() && search.pending()}><StatusMessage kind="loading">Searching people…</StatusMessage></Show><Show when={searching() && search.error()}><StatusMessage kind="error" action={<Button variant="link" type="button" onClick={()=>void search.refresh(true)}>Retry people search</Button>}>Could not search people.</StatusMessage></Show><Show when={searching() && search.data() && !search.pending() && !search.error() && !members().length}><StatusMessage kind="empty">No people match your search.</StatusMessage></Show></div>
-  <ul class="mt-2"><For each={members()}>{person=><ListRow><Show when={person.username} fallback={<span class="min-w-0 flex-1">{person.name??'Member'}</span>}><a class="min-w-0 flex-1 break-words font-medium hover:text-accent" href={`/@${encodeURIComponent(person.username!)}`}>{person.name??person.username}</a></Show><Show when={admin()} fallback={<Badge tone="dim">{person.role}</Badge>}><Select class="w-32" ariaLabel={`Role for ${nameOf(person)}`} value={person.role} options={ROLE_OPTIONS} disabled={busy()} onChange={next=>{if(next!==person.role)void mutate(`${root()}/members/${person.user_id}`,'PUT',{role:next});}}/><Button variant="danger" type="button" disabled={busy()} aria-label={`Remove ${nameOf(person)}`} onClick={()=>void mutate(`${root()}/members/${person.user_id}`,'DELETE')}>Remove</Button></Show></ListRow>}</For></ul>
+  <ul class="mt-2"><For each={members()}>{person=><ListRow><Show when={person.username} fallback={<span class="min-w-0 flex-1">{nameOf(person)}</span>}><a class="min-w-0 flex-1 break-words font-medium hover:text-accent" href={`/@${encodeURIComponent(person.username!)}`}>{nameOf(person)}</a></Show><Show when={admin()} fallback={<Badge tone="dim">{person.role}</Badge>}><Select class="w-32" ariaLabel={`Role for ${nameOf(person)}`} value={person.role} options={ROLE_OPTIONS} disabled={busy()} onChange={next=>{if(next!==person.role)void mutate(`${root()}/members/${person.user_id}`,'PUT',{role:next});}}/><Button variant="danger" type="button" disabled={busy()} aria-label={`Remove ${nameOf(person)}`} onClick={()=>void mutate(`${root()}/members/${person.user_id}`,'DELETE')}>Remove</Button></Show></ListRow>}</For></ul>
   <Show when={admin()}><form class="mt-6 grid gap-3 sm:grid-cols-[minmax(0,1fr)_8rem]" onSubmit={e=>{e.preventDefault();void mutate(`${root()}/invitations`,'POST',{email:email(),role:role()});}}><Input type="email" required aria-label="Invitation email" placeholder="Email address" value={email()} onInput={e=>setEmail(e.currentTarget.value)}/><Select ariaLabel="Invitation role" value={role()} options={INVITE_ROLE_OPTIONS} onChange={next=>setRole(next as GroupRole)}/><Button class="justify-self-start sm:col-span-2" disabled={busy()} type="submit">Invite person</Button></form><ul class="mt-2"><For each={props.detail.invitations}>{invite=><ListRow class="justify-between"><span class="min-w-0 break-words">{invite.email} · {invite.role}</span><Button variant="secondary" type="button" disabled={busy()} aria-label={`Cancel invitation to ${invite.email}`} onClick={()=>void mutate(`${root()}/invitations/${invite.id}`,'DELETE')}>Cancel invitation</Button></ListRow>}</For></ul></Show>
   <SubgroupAudience detail={props.detail}/>
  </Panel>

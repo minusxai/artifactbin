@@ -36,7 +36,7 @@ export function AvatarCircle(props: { image: string | null; initial: string; use
   return <div>
     <div class="flex flex-col items-center gap-3 text-center min-[400px]:flex-row min-[400px]:gap-5 min-[400px]:text-left">
       <div data-avatar-circle="" aria-hidden="true" tabIndex={-1} onClick={pick} class={`relative flex ${props.compact ? 'size-16' : 'size-24'} shrink-0 items-center justify-center overflow-hidden rounded-full text-muted ${pending() ? '' : 'cursor-pointer'} ${image() ? 'border border-edge' : 'border border-edge-bright bg-raised hover:border-muted'}`}>
-        <Show when={image()} fallback={<Show when={pending() !== 'upload'}><UserRound class="size-10" strokeWidth={1.5} /></Show>}><Avatar image={image()} initial={props.initial} userId={props.userId} /></Show>
+        <Show when={image() || props.compact} fallback={<Show when={pending() !== 'upload'}><UserRound class="size-10" strokeWidth={1.5} /></Show>}><Avatar image={image()} initial={props.initial} userId={props.userId} /></Show>
         <Show when={pending() === 'upload'}><span class={`absolute inset-0 flex items-center justify-center ${image() ? 'bg-black/55 text-white' : ''}`}><LoaderCircle class="size-8 animate-spin" /></span></Show>
       </div>
       <div class="min-w-0"><div class="flex flex-wrap justify-center gap-2 min-[400px]:justify-start">

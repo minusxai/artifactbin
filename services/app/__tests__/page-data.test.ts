@@ -49,7 +49,7 @@ describe('GET /api/page/session', () => {
     const w = await world();
     asSession(w.owner);
     const body = await (await sessionPage(request('/api/page/session'))).json();
-    expect(body.user).toEqual({ id: w.owner.id, email: w.owner.email, username: w.owner.username ?? null, image: null });
+    expect(body.user).toEqual({ id: w.owner.id, email: w.owner.email, name: null, username: w.owner.username ?? null, image: null });
     expect(body.kind).toBe('account');
     // Library metrics belong to the dashboard, not duplicated in global chrome.
     expect(body).not.toHaveProperty('stats');
@@ -253,7 +253,7 @@ describe('GET /api/page/profile/@user/...', () => {
     const stranger = await (await profilePage(request(`/api/page/profile/@${h}`), params({ user: `@${h}` }))).json();
     expect(stranger.social).toMatchObject({ followers: 4, following: 2, relation: { youFollow: false, followsYou: true, knownTotal: 3 } });
     expect(stranger.social.relation.known.map((k: { username: string }) => k.username).sort()).toEqual([ann.username, bob.username, cat.username].sort());
-    for (const k of stranger.social.relation.known) expect(Object.keys(k).sort()).toEqual(['id', 'image', 'username']);
+    for (const k of stranger.social.relation.known) expect(Object.keys(k).sort()).toEqual(['id', 'image', 'name', 'username']);
 
     asSession(w.owner);
     const own = await (await profilePage(request(`/api/page/profile/@${h}`), params({ user: `@${h}` }))).json();

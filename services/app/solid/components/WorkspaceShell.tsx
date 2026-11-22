@@ -43,8 +43,8 @@ export default function WorkspaceShell(props: { children: JSX.Element; parentId?
       <div class="workspace-nav-links"><For each={links}>{({ label, href, Icon }, index) => <a href={href} aria-label={label} aria-current={active(href) ? 'page' : undefined} class={`workspace-nav-link ${index() === 3 ? 'workspace-nav-divider' : ''}`}><Icon size={17} stroke-width={1.6} /><span>{label}</span><Show when={href === '/notifications' && inbox?.state()?.unread}>{count => <span aria-label={`${count()} unread notifications`} class="ml-auto"><Badge tone="accent">{Number(count()) > 99 ? '99+' : count()}</Badge></span>}</Show></a>}</For>
       </div>
       <div class="workspace-nav-footer"><a href="/docs-human" aria-current={active('/docs-human') ? 'page' : undefined} class="workspace-nav-link"><BookOpen size={15} stroke-width={1.6} /><span>Human docs</span></a><Show when={person()?.username}>{username => <a href={`/@${encodeURIComponent(username())}`} class="workspace-nav-link"><UserRound size={15} stroke-width={1.6} /><span>Public profile</span></a>}</Show><a href="/account" aria-label="Account settings" aria-current={active('/account') ? 'page' : undefined} class="workspace-nav-link workspace-account"><Show when={person()} fallback={<Settings2 size={15} stroke-width={1.6} />}>
-        {user => <Avatar image={user().image} initial={user().username || user().email || '?'} userId={user().id} size={24} />}
-      </Show><span class="workspace-account-copy"><span>{person()?.email || person()?.username || 'Account'}</span></span></a><p class="workspace-tagline">Google Docs for agents</p></div>
+        {user => <Avatar image={user().image} initial={user().name?.trim() || user().username || user().email || '?'} userId={user().id} size={24} />}
+      </Show><span class="workspace-account-copy"><span>{person()?.name?.trim() || person()?.email || 'Account'}</span></span></a><p class="workspace-tagline">Google Docs for agents</p></div>
       </div>
     </nav>
     <div class="workspace-content">{props.children}</div>

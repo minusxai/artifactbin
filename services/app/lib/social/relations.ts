@@ -149,13 +149,13 @@ export async function countLinked(userId: string, verb: RelationVerb): Promise<n
  * newest first, as X names them under a profile. Only accounts with a handle
  * are counted, so "and N others" never counts someone the list could not name.
  */
-export async function followersYouKnow(viewerId: string, userId: string, limit: number): Promise<{ total: number; users: Array<{ id: string; username: string; image_key: string | null }> }> {
+export async function followersYouKnow(viewerId: string, userId: string, limit: number): Promise<{ total: number; users: Array<{ id: string; name: string | null; username: string; image_key: string | null }> }> {
   const entry = vocabulary('follow');
   const edge = (alias: string) =>
     `${alias}.subject_kind = '${RELATION_SUBJECT_KIND}' AND ${alias}.verb = 'follow' AND ${alias}.object_kind = '${entry.object}' AND ${alias}.deleted_at IS NULL AND ${alias}.status = 'accepted'`;
   const db = await getDb();
-  const rows = await db.query<{ id: string; username: string; image_key: string | null; total: string | number }>(
-    `SELECT u.id, u.username, u.image_key, COUNT(*) OVER () AS total
+  const rows = await db.query<{ id: string; name: string | null; username: string; image_key: string | null; total: string | number }>(
+    `SELECT u.id, u.name, u.username, u.image_key, COUNT(*) OVER () AS total
        FROM relations theirs
        JOIN relations mine ON ${edge('mine')} AND mine.subject_id = $1 AND mine.object_id = theirs.subject_id
        JOIN users u ON u.id = theirs.subject_id AND u.username IS NOT NULL
@@ -164,7 +164,7 @@ export async function followersYouKnow(viewerId: string, userId: string, limit: 
       LIMIT ${Math.max(1, Math.floor(limit))}`,
     [viewerId, userId],
   );
-  return { total: Number(rows.rows[0]?.total ?? 0), users: rows.rows.map(({ id, username, image_key }) => ({ id, username, image_key })) };
+  return { total: Number(rows.rows[0]?.total ?? 0), users: rows.rows.map(({ id, name, username, image_key }) => ({ id, name, username, image_key })) };
 }
 
 /** Live edges OUT of a user for a verb: the artifacts they like, the users they follow — the audience of a feed. */

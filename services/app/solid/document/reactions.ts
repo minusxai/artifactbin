@@ -25,3 +25,13 @@ export async function sendReaction<T>(href: string, on: boolean, intent: 'like' 
     return answer;
   } catch { return null; /* Keep the server's last known state. */ }
 }
+
+export async function toggleDocumentLike(signedIn: boolean, id: string, liked: boolean) {
+  if (!signedIn) { navigateAway(loginHref(window.location, 'like')); return null; }
+  return sendReaction<{ liked: boolean; count: number }>(`/api/my/artifacts/${encodeURIComponent(id)}/like`, liked, 'like');
+}
+
+export async function toggleDocumentFollow(signedIn: boolean, userId: string, following: boolean) {
+  if (!signedIn) { navigateAway(loginHref(window.location, 'follow')); return null; }
+  return sendReaction<{ following: boolean; count: number }>(`/api/users/${encodeURIComponent(userId)}/follow`, following, 'follow');
+}
