@@ -217,7 +217,7 @@ describe.skipIf(!dockerImage('postgres:17-alpine'))('identity tables in a split-
  });
 
  it('projects admitted changes across roles and retries a failed audit insert',async()=>{
-  const issuer=tenancyIssuer(),db=identityDbOf(auth),baseURL='http://localhost:3000';
+  const db=identityDbOf(auth),issuer=await tenancyIssuer(db),baseURL='http://localhost:3000';
   const secret='disposable-split-role-test-secret';
   const human=await createHumanAuth({pool:auth,schema:'auth',secret,baseURL,mail:{send:async()=>{}}});
   const host=createAuthHost({env:issuer.env,cookieSecret:secret,tokens:{byToken:async()=>null},sessions:sessionStoreOf(human),

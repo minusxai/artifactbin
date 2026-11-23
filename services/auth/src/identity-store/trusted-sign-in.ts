@@ -15,43 +15,34 @@
  *    is refused. A signed previous_handle explicitly links the bound synthetic address to one email subject.
  *  - The group is found by handle. A new one records the issuer and the tenancy (`groups.trusted_issuer`,
  *    `groups.tenancy_id`, exposed by the identity view) and refreshes its tenancy at each admitted sign-in. An existing group
- *    created manually or by another issuer is refused. Under the configured parent group when there
- *    is one, including on an installation with several roots. A missing configured parent is refused. With no
- *    configured parent, a company group goes under the top ancestor of the deployment default.
- *  - The person is a direct `member` of the group (no admin: nobody administers an issuer's group from here), and of no
- *    other group of that issuer: each sign-in leaves exactly the membership its token names. Another issuer's groups
- *    and plain groups are retained. With company root membership enabled the person also joins the default group's live root, even
- *    when the selected group sits under a different root. An existing stronger root role is retained.
+ *    created manually or by another issuer is refused. The verified path is resolved under the configured ceiling.
+ *    An existing group must still have the signed direct parent.
+ *  - Each listed group gains a direct Member seat unless the person already holds a role there. Other seats and
+ *    roles are retained. Empty lists cannot start a session. Company root enrollment remains a separate setting.
  * One advisory lock serializes these sign-ins, so a double-submitted form never meets its own half-created rows.
  */
 import {hashToken} from '@artifactbin/utils';
 import {isValidHandle} from '@artifactbin/contracts/handles';
 import type {Queryable} from '@artifactbin/contracts/db';
 import type {TransactionalQueryable} from '@artifactbin/contracts/identity-module';
-import {trustedEmailOf} from '../identity/trusted-issuers';
+import {trustedEmailOf,type TrustedClaims,type TrustedGroup} from '../identity/trusted-issuers';
 import {companySignInRoot} from './company-group';
 import {accountMethods,reserveHandle,writeDisplayName} from './accounts';
 import {identityTables,internalId,isUniqueViolation} from './tables';
 
-export interface TrustedSignInInput {
+interface TrustedPerson {
   issuer: string;
   jti: string;
   exp: number;
   subject: string;
-  group: string;
-  tenancyId: string;
-  /** Company root membership setting of the verifying host. */
-  joinCompanyRoot?: boolean;
-  name?: string;
-  groupName?: string;
-  parentGroups?: string[];
-  previousHandle?: string;
-  /** The parent group's handle or id, when the issuer's groups live under one. */
-  parentGroup?: string;
-  /** A handle subject's synthetic address (never delivered to); unused for an email subject. */
   email: string;
+  name?: string;
+  previousHandle?: string;
+  joinCompanyRoot?: boolean;
+  parentGroup: string;
 }
-type TrustedSignInRefusal = 'replayed_token' | 'subject_conflict' | 'group_conflict' | 'deployment_admission_required' | 'parent_group_missing' | 'invalid_claims';
+type TrustedSignInInput = TrustedPerson & Pick<TrustedClaims,'groups'|'activeGroup'>;
+type TrustedSignInRefusal = 'no_authorized_groups' | 'replayed_token' | 'subject_conflict' | 'group_conflict' | 'deployment_admission_required' | 'parent_group_missing' | 'invalid_claims';
 export type TrustedSignInResult =
   | {ok: true; userId: string; email: string; groupId: string; created: {user: boolean; group: boolean}}
   | {ok: false; refusal: TrustedSignInRefusal};
@@ -72,8 +63,11 @@ function trustedSubjectEmail(subject: string): string | null {
 export async function trustedSignIn(db: TransactionalQueryable, input: TrustedSignInInput, authSchema = 'auth', appSchema?: string,
   admit?: (person: {userId: string; email: string}, tx: Queryable) => Promise<boolean>): Promise<TrustedSignInResult> {
   const isEmail = input.subject.includes('@'), address = isEmail ? trustedSubjectEmail(input.subject) : null;
-  const subjectOk = isEmail ? address !== null : isValidHandle(input.subject) && input.subject !== input.group;
-  if (!subjectOk || !isValidHandle(input.group) || (input.previousHandle !== undefined && (!address || !isValidHandle(input.previousHandle) || input.previousHandle === input.group))) return {ok: false, refusal: 'invalid_claims'};
+  const {groups,activeGroup} = input;
+  if (!groups.length) return {ok:false,refusal:'no_authorized_groups'};
+  const subjectOk = isEmail ? address !== null : isValidHandle(input.subject);
+  if (!subjectOk || groups.some(g => !isValidHandle(g.handle) || g.handle === input.subject || g.handle === input.previousHandle) ||
+    (input.previousHandle !== undefined && (!address || !isValidHandle(input.previousHandle)))) return {ok:false, refusal:'invalid_claims'};
   const t = identityTables(authSchema), better = (table: string) => `${authSchema}."${table}"`;
   try {
     const result = await db.transaction(async tx => {
@@ -96,19 +90,21 @@ export async function trustedSignIn(db: TransactionalQueryable, input: TrustedSi
         throw new Refused('deployment_admission_required');
       if (input.joinCompanyRoot && company && !company.rootId) throw new Refused('parent_group_missing');
       const rootId = input.joinCompanyRoot ? company?.rootId ?? null : null;
-      const group = await ensureGroup(tx, input, person.userId, t, rootId, appSchema);
-      await tx.query(`INSERT INTO ${t.group_members}(group_id,user_id,role) VALUES($1,$2,'member') ON CONFLICT (group_id,user_id) DO NOTHING`, [group.groupId, person.userId]);
-      // The issuer decides which of its groups the person may act in NOW: drop their other memberships in this issuer's
-      // groups, so access the issuer has since withdrawn (another tenant) never lingers here.
-      await tx.query(`DELETE FROM ${t.group_members} m USING ${t.groups} g WHERE m.group_id=g.id AND m.user_id=$1 AND g.trusted_issuer=$2 AND m.group_id<>$3 AND m.group_id IS DISTINCT FROM $4::text`, [person.userId, input.issuer, group.groupId, company?.rootId ?? null]);
+      let active: {groupId:string; created:boolean} | undefined;
+      for (const claim of groups) {
+        const group = await ensureGroup(tx,input,claim,person.userId,t);
+        if (claim.name !== undefined) await tx.query(`UPDATE ${t.groups} SET name=$2 WHERE id=$1 AND name IS DISTINCT FROM $2`,[group.groupId,claim.name]);
+        if (claim.handle === activeGroup) active=group;
+        await tx.query(`INSERT INTO ${t.group_members}(group_id,user_id,role)
+          VALUES($1,$2,'member') ON CONFLICT(group_id,user_id) DO NOTHING`,[group.groupId,person.userId]);
+      }
+      if (!active) throw new Refused('invalid_claims');
       if (admit && !await admit(person, tx)) throw new Refused('deployment_admission_required');
       if (rootId) await tx.query(`INSERT INTO ${t.group_members}(group_id,user_id,role) VALUES($1,$2,'member') ON CONFLICT (group_id,user_id) DO NOTHING`, [rootId, person.userId]);
       await tx.query(`UPDATE ${t.users} SET trusted_sign_in_group=$2,trusted_sign_in_at=now(),
-        trusted_root_granted=COALESCE($3,trusted_root_granted) WHERE id=$1`, [person.userId, group.groupId, rootId]);
+        trusted_root_granted=COALESCE($3,trusted_root_granted) WHERE id=$1`, [person.userId, active.groupId, rootId]);
       if (input.name !== undefined && (emailPerson ? emailPerson.canFillName : person.email === input.email)) await writeDisplayName(tx, t, authSchema, person.userId, input.name);
-      if (input.groupName !== undefined)
-        await tx.query(`UPDATE ${t.groups} SET name=$2 WHERE id=$1 AND name IS DISTINCT FROM $2`, [group.groupId, input.groupName]);
-      return {ok: true as const, userId: person.userId, email: person.email, groupId: group.groupId, created: {user: person.created, group: group.created}};
+      return {ok: true as const, userId: person.userId, email: person.email, groupId: active.groupId, created: {user: person.created, group: active.created}};
     });
     // An email person gets their handle the way an email sign-in's does (its own transaction, so after this one).
     if (address) await accountMethods(db, t).ensureUsername({userId: result.userId});
@@ -121,7 +117,7 @@ export async function trustedSignIn(db: TransactionalQueryable, input: TrustedSi
 
 type Tables = ReturnType<typeof identityTables>;
 
-async function ensurePerson(tx: Queryable, input: TrustedSignInInput, t: Tables, better: (table: string) => string) {
+async function ensurePerson(tx: Queryable, input: TrustedPerson, t: Tables, better: (table: string) => string) {
   try { return await findOrCreateHandlePerson(tx, input, t, better); }
   catch (error) {
     if (isUniqueViolation(error)) throw new Refused('subject_conflict');
@@ -129,7 +125,7 @@ async function ensurePerson(tx: Queryable, input: TrustedSignInInput, t: Tables,
   }
 }
 
-async function findOrCreateHandlePerson(tx: Queryable, input: TrustedSignInInput, t: Tables, better: (table: string) => string) {
+async function findOrCreateHandlePerson(tx: Queryable, input: TrustedPerson, t: Tables, better: (table: string) => string) {
   const provider = trustedProviderId(input.issuer);
   const owner = (await tx.query<{id:string; email:string; bound:boolean}>(`
     SELECT u.id,u.email,EXISTS(SELECT 1 FROM ${better('account')} a
@@ -162,7 +158,7 @@ async function findOrCreateHandlePerson(tx: Queryable, input: TrustedSignInInput
 }
 
 /** Resolve the issuer's stable handle, creating it on first use. Email conflicts roll back that creation too. */
-async function transitionHandle(tx: Queryable, t: Tables, better: (table:string)=>string, input: TrustedSignInInput, handle:string, address:string) {
+async function transitionHandle(tx: Queryable, t: Tables, better: (table:string)=>string, input: TrustedPerson, handle:string, address:string) {
   const synthetic = trustedEmailOf(input.issuer,handle);
   const person = await ensurePerson(tx,{...input,subject:handle,email:synthetic},t,better);
   if (person.email !== synthetic && person.email !== address) throw new Refused('subject_conflict');
@@ -201,20 +197,14 @@ async function ensureEmailPerson(tx: Queryable, address: string, t: Tables, bett
   return {userId, email: address, created: !auth && !app, canFillName: !app?.name?.trim() && !auth?.name.trim()};
 }
 
-async function requiredCompanyRoot(tx: Queryable, t: Tables, appSchema?: string) {
-  const company = await companySignInRoot(tx, t.groups, appSchema);
-  if (company && !company.rootId) throw new Refused('parent_group_missing');
-  return company?.rootId ?? null;
-}
-
 /** Read the live ancestry under the same hierarchy lock that serializes group moves. */
-async function signedParent(tx: Queryable, t: Tables, path: string[], ceiling?: string) {
+async function signedParent(tx: Queryable, t: Tables, path: string[], ceiling: string) {
   if (!ceiling || !path.length) throw new Refused('group_conflict');
   await tx.query(`INSERT INTO ${t.group_hierarchy}(id,revision) VALUES('installation',0) ON CONFLICT DO NOTHING`);
   await tx.query(`SELECT id FROM ${t.group_hierarchy} WHERE id='installation' FOR UPDATE`);
   const bounds = (await tx.query<{id:string}>(`SELECT id FROM ${t.groups}
     WHERE (id=$1 OR handle=$1) AND deleted_at IS NULL`, [ceiling])).rows;
-  if (bounds.length !== 1) throw new Refused('group_conflict');
+  if (bounds.length !== 1) throw new Refused('parent_group_missing');
   const chain = (await tx.query<{id:string;handle:string}>(`WITH RECURSIVE ancestors AS (
     SELECT id,handle,parent_id,0 AS depth FROM ${t.groups} WHERE handle=$1 AND deleted_at IS NULL
     UNION ALL SELECT g.id,g.handle,g.parent_id,a.depth+1 FROM ancestors a
@@ -225,31 +215,24 @@ async function signedParent(tx: Queryable, t: Tables, path: string[], ceiling?: 
   return chain[0]!.id;
 }
 
-async function ensureGroup(tx: Queryable, input: TrustedSignInInput, userId: string, t: Tables, rootId: string | null, appSchema?: string) {
-  const requestedParent = input.parentGroups ? await signedParent(tx,t,input.parentGroups,input.parentGroup) : null;
+async function ensureGroup(tx: Queryable, input: TrustedPerson, claim: TrustedGroup, userId: string, t: Tables) {
+  const parentId = await signedParent(tx,t,claim.parentHandles,input.parentGroup);
   const existing = (await tx.query<{id: string; parent_id:string|null; deleted_at: string | null; trusted_issuer: string | null; tenancy_id: string | null}>(
-    `SELECT id,parent_id,deleted_at,trusted_issuer,tenancy_id FROM ${t.groups} WHERE handle=$1 FOR UPDATE`, [input.group])).rows[0];
+    `SELECT id,parent_id,deleted_at,trusted_issuer,tenancy_id FROM ${t.groups} WHERE handle=$1 FOR UPDATE`, [claim.handle])).rows[0];
   if (existing) {
-    if (existing.deleted_at || existing.trusted_issuer !== input.issuer || (requestedParent && existing.parent_id !== requestedParent)) throw new Refused('group_conflict');
-    if (existing.tenancy_id !== input.tenancyId) {
-      await tx.query(`UPDATE ${t.groups} SET tenancy_id=$2 WHERE id=$1`, [existing.id, input.tenancyId]);
+    if (existing.deleted_at || existing.trusted_issuer !== input.issuer || existing.parent_id !== parentId) throw new Refused('group_conflict');
+    if (existing.tenancy_id !== claim.tenancyId) {
+      await tx.query(`UPDATE ${t.groups} SET tenancy_id=$2 WHERE id=$1`, [existing.id, claim.tenancyId]);
       await tx.query(`INSERT INTO ${t.host_tenancy_changes}(group_id,issuer,person_id,previous_tenancy_id,tenancy_id)
-        VALUES($1,$2,$3,$4,$5)`, [existing.id, existing.trusted_issuer, userId, existing.tenancy_id, input.tenancyId]);
+        VALUES($1,$2,$3,$4,$5)`, [existing.id, existing.trusted_issuer, userId, existing.tenancy_id, claim.tenancyId]);
     }
     return {groupId: existing.id, created: false};
   }
   // A new group is a topology change: the hierarchy revision moves first, as for every create.
   await tx.query(`INSERT INTO ${t.group_hierarchy} AS h (id,revision) VALUES('installation',1) ON CONFLICT (id) DO UPDATE SET revision=h.revision+1`);
-  let parentId = requestedParent ?? rootId;
-  if (!requestedParent && input.parentGroup) {
-    parentId = (await tx.query<{id: string}>(`SELECT id FROM ${t.groups} WHERE (id=$1 OR handle=$1) AND deleted_at IS NULL`, [input.parentGroup])).rows[0]?.id ?? null;
-    if (!parentId) throw new Refused('parent_group_missing');
-  } else if (!requestedParent && !input.joinCompanyRoot) {
-    parentId = await requiredCompanyRoot(tx, t, appSchema);
-  }
   const groupId = 'grp_' + internalId();
-  try { await reserveHandle(t, tx, input.group, 'group', groupId); } catch (error) { if (isUniqueViolation(error)) throw new Refused('group_conflict'); throw error; }
+  try { await reserveHandle(t, tx, claim.handle, 'group', groupId); } catch (error) { if (isUniqueViolation(error)) throw new Refused('group_conflict'); throw error; }
   await tx.query(`INSERT INTO ${t.groups}(id,handle,name,description,created_by,parent_id,trusted_issuer,tenancy_id) VALUES($1,$2,$2,'',$3,$4,$5,$6)`,
-    [groupId, input.group, userId, parentId, input.issuer, input.tenancyId]);
+    [groupId, claim.handle, userId, parentId, input.issuer, claim.tenancyId]);
   return {groupId, created: true};
 }

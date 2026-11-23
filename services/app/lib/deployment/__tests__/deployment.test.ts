@@ -115,10 +115,10 @@ describe('company admission',()=>{
   await db.query("INSERT INTO groups(id,handle,name,created_by,parent_id) VALUES ('sibling','sibling_team','Sibling',$1,'root')",[owner.userId]);
   await setArtifactGroupShare(owner,siblingPage.id,'sibling','viewer');
   const env={TRUSTED_SIGNIN__JOIN_COMPANY_ROOT:'true',TRUSTED_SIGNIN__ISSUERS:JSON.stringify([{
-   issuer:'host',audience:'app',origins:['https://issuer.example'],publicJwk:generateKeyPairSync('ed25519').publicKey.export({format:'jwk'}),
+   issuer:'host',audience:'app',parentGroup:'other_root',origins:['https://issuer.example'],publicJwk:generateKeyPairSync('ed25519').publicKey.export({format:'jwk'}),
   }])};
   const sign=async(subject:string,joinCompanyRoot=false)=>{
-   const result=await trustedSignIn(db,{issuer:'host',jti:randomUUID(),exp:Date.now()/1000+120,joinCompanyRoot,subject,email:subject+'@host.invalid',group:'host_team',parentGroup:'other_root',tenancyId:'tenant'},
+   const result=await trustedSignIn(db,{issuer:'host',jti:randomUUID(),exp:Date.now()/1000+120,joinCompanyRoot,subject,email:subject+'@host.invalid',groups:[{handle:'host_team',tenancyId:'tenant',parentHandles:['other_root']}],activeGroup:'host_team',parentGroup:'other_root'},
     'auth',undefined,(person,tx)=>admitDeploymentIdentity({...person,emailVerified:true,trustedIssuer:'host'},tx));
    if(!result.ok)throw new Error(result.refusal);
    return result;

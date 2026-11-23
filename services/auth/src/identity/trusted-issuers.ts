@@ -1,19 +1,8 @@
 /**
- * TRUSTED-ISSUER SIGN-IN: another site the operator trusts signs a person in here with a short-lived signed token,
- * submitted by that site's page as a form (`POST /api/auth/trusted-sign-in`, `token` and an optional same-origin
- * `callbackUrl`), typically into a frame it draws. Off unless `TRUSTED_SIGNIN__ISSUERS` names an issuer:
- *
- *   [{"issuer":"<name>","audience":"<aud>","origins":["https://site.example"],"publicJwk":{"kty":"OKP","crv":"Ed25519","x":"…"},
- *     "parentGroup":"<group handle or id, optional>"}]
- *
- * Repeat an issuer with the same audience and parentGroup to add a signing key for its listed origins.
- * The token is a compact JWS, EdDSA (Ed25519) only, verified with the issuer's public key: `iss` a configured issuer,
- * `aud` its audience, `exp` in the future, `iat` present and not ahead of now, at most 300 s between them, and `jti`
- * used once (the verifier rejects repeats locally, and admission spends the id across processes until expiry). Claims: `sub` (the person's email address, or a
- * handle the issuer owns), `group` (the group's handle) and `tenancy_id` (the group's tenancy, refreshed at each admitted sign-in);
- * optional text claims `name` and `group_name` supply display names. The request's
- * `Origin` must be one of the issuer's origins; every other sign-in keeps refusing foreign origins.
- * The identity writes are ../identity-store/trusted-sign-in.
+ * The trusted sign-in form (POST /api/auth/trusted-sign-in) carries one Ed25519 JWT. The deployment selects the
+ * verification key by issuer and allowed Origin. Each issuer has one audience and one live parent ceiling. Each group's
+ * parent_handles runs outermost first and must resolve inside that ceiling. The receiver checks audience and time,
+ * spends the jti once, then writes identities and membership changes in ../identity-store/trusted-sign-in.
  */
 import {createPublicKey, verify, type KeyObject} from 'node:crypto';
 import {isValidHandle} from '@artifactbin/contracts/handles';
@@ -28,7 +17,7 @@ export interface TrustedIssuer {
   issuer: string;
   audience: string;
   keysByOrigin: ReadonlyMap<string, readonly KeyObject[]>;
-  parentGroup?: string;
+  parentGroup: string;
 }
 
 const fail = (message: string): never => { throw new Error(`TRUSTED_SIGNIN__ISSUERS: ${message}`); };
@@ -55,7 +44,7 @@ export function trustedIssuersOf(env: Record<string, string | undefined>): Reado
     if (typeof issuer !== 'string' || !/^[a-z0-9][a-z0-9-]{0,39}$/.test(issuer)) fail('issuer must be 1-40 lowercase letters, digits or hyphens');
     if (typeof audience !== 'string' || !audience.trim()) fail(`issuer ${issuer}: audience must be a nonempty string`);
     if (!Array.isArray(origins) || !origins.length || origins.some(o => typeof o !== 'string' || !isOrigin(o))) fail(`issuer ${issuer}: origins must be a nonempty list of origins (scheme://host[:port])`);
-    if (parentGroup !== undefined && (typeof parentGroup !== 'string' || !parentGroup)) fail(`issuer ${issuer}: parentGroup must be a nonempty string`);
+    if (typeof parentGroup !== 'string' || !parentGroup.trim()) fail(`issuer ${issuer}: parentGroup must be a nonempty string`);
     const jwk = publicJwk as Record<string, unknown> | null;
     if (!jwk || jwk.kty !== 'OKP' || jwk.crv !== 'Ed25519' || typeof jwk.x !== 'string' || 'd' in jwk) fail(`issuer ${issuer}: publicJwk must be a public Ed25519 OKP key`);
     let key: KeyObject;
@@ -65,7 +54,7 @@ export function trustedIssuersOf(env: Record<string, string | undefined>): Reado
       fail(`issuer ${issuer}: entries must agree on audience and parentGroup`);
     const keysByOrigin = new Map(previous?.keysByOrigin);
     for (const origin of new Set(origins as string[])) keysByOrigin.set(origin, [...(keysByOrigin.get(origin) ?? []), key]);
-    issuers.set(issuer as string, {issuer: issuer as string, audience: audience as string, keysByOrigin, parentGroup: parentGroup as string | undefined});
+    issuers.set(issuer as string, {issuer: issuer as string, audience: audience as string, keysByOrigin, parentGroup: parentGroup as string});
   }
   return issuers;
 }
@@ -74,13 +63,41 @@ function isOrigin(value: string): boolean {
   try { const url = new URL(value); return (url.protocol === 'https:' || url.protocol === 'http:') && url.origin === value; } catch { return false; }
 }
 
-export interface TrustedClaims { issuer: TrustedIssuer; subject: string; group: string; tenancyId: string; name?: string; groupName?: string; parentGroups?: string[]; previousHandle?: string; jti: string; exp: number }
+export interface TrustedGroup { handle: string; name?: string; tenancyId: string; parentHandles: string[] }
+export interface TrustedClaims {
+  issuer: TrustedIssuer; subject: string; groups: TrustedGroup[]; activeGroup?: string;
+  name?: string; previousHandle?: string; jti: string; exp: number;
+}
 export type TrustedTokenRefusal = 'invalid_token' | 'unknown_issuer' | 'forbidden_origin' | 'replayed_token';
 
 const json = (part: string): Record<string, unknown> | null => {
   try { const value = JSON.parse(Buffer.from(part, 'base64url').toString('utf8')); return value && typeof value === 'object' && !Array.isArray(value) ? value : null; } catch { return null; }
 };
 const plain = (value: unknown, max: number): value is string => typeof value === 'string' && value.length > 0 && value.length <= max && !/[\u0000-\u001f\u007f]/.test(value);
+
+function validPath(value: unknown): value is string[] {
+  return Array.isArray(value) && value.length > 0 && value.length <= 16 &&
+    value.every(handle => typeof handle === 'string' && isValidHandle(handle)) && new Set(value).size === value.length;
+}
+
+function membershipClaims(payload: Record<string, unknown>): Pick<TrustedClaims,'groups'|'activeGroup'> | null {
+  if (['group','group_name','tenancy_id','parent_groups'].some(field => field in payload)) return null;
+  const list = payload.groups;
+  if (!Array.isArray(list) || list.length > 256) return null;
+  const groups: TrustedGroup[] = [];
+  const handles = new Set<string>();
+  for (const entry of list) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return null;
+    const {handle, name, tenancy_id, parent_handles} = entry;
+    if (typeof handle !== 'string' || !isValidHandle(handle) || handles.has(handle) || !plain(tenancy_id,200) ||
+      !validPath(parent_handles) || parent_handles.includes(handle) || (name !== undefined && !displayName(name))) return null;
+    handles.add(handle);
+    groups.push({handle, name:displayName(name), tenancyId:tenancy_id, parentHandles:parent_handles});
+  }
+  const active = payload.active_group;
+  if (active !== undefined && (typeof active !== 'string' || !handles.has(active))) return null;
+  return {groups, activeGroup: typeof active === 'string' ? active : groups[0]?.handle};
+}
 
 /**
  * One verifier per mount: the issuers and the record of used `jti`s. Checks run in this order so that nothing a
@@ -103,26 +120,23 @@ export function createTrustedTokenVerifier(issuers: ReadonlyMap<string, TrustedI
       const keys = origin && issuer.keysByOrigin.get(origin);
       if (!keys) return {ok: false, refusal: 'forbidden_origin'};
       const message = Buffer.from(`${head}.${body}`), bytes = Buffer.from(signature, 'base64url');
-      if (!keys.some(key => verify(null, message, key, bytes))) return {ok: false, refusal: 'invalid_token'};
+      if (!keys.some(key => verify(null,message,key,bytes))) return {ok: false, refusal: 'invalid_token'};
       const at = now(), seconds = at / 1000;
-      const {aud, exp, iat, jti, sub, group, tenancy_id: tenancyId} = payload;
+      const {aud, exp, iat, jti, sub} = payload;
       const audienceOk = aud === issuer.audience || (Array.isArray(aud) && aud.length === 1 && aud[0] === issuer.audience);
       if (!audienceOk || typeof exp !== 'number' || typeof iat !== 'number' || !Number.isFinite(exp) || !Number.isFinite(iat)
         || exp <= seconds || iat > seconds + CLOCK_SKEW_S || exp <= iat || exp - iat > MAX_LIFETIME_S
-        || !plain(jti, 200) || !plain(sub, 254) || !plain(group, 64) || !plain(tenancyId, 200)) return {ok: false, refusal: 'invalid_token'};
+        || !plain(jti, 200) || !plain(sub, 254)) return {ok: false, refusal: 'invalid_token'};
       const previousHandle = payload.previous_handle;
       if (previousHandle !== undefined && (typeof previousHandle !== 'string' || !isValidHandle(previousHandle) || !sub.includes('@')))
         return {ok:false, refusal:'invalid_token'};
-      const parentGroups = payload.parent_groups;
-      if (parentGroups !== undefined && (!Array.isArray(parentGroups) || !parentGroups.length ||
-        parentGroups.some(handle => typeof handle !== 'string' || !isValidHandle(handle)) ||
-        new Set(parentGroups).size !== parentGroups.length)) return {ok:false, refusal:'invalid_token'};
+      const membership = membershipClaims(payload);
+      if (!membership) return {ok:false,refusal:'invalid_token'};
       prune(at);
       const key = `${issuer.issuer}\u0000${jti}`;
       if (used.has(key)) return {ok: false, refusal: 'replayed_token'};
       used.set(key, exp);
-      return {ok: true, claims: {issuer, subject: sub, group, parentGroups, previousHandle, tenancyId, jti, exp,
-        name: displayName(payload.name), groupName: displayName(payload.group_name)}};
+      return {ok: true, claims: {issuer, subject:sub, ...membership, previousHandle, jti, exp, name:displayName(payload.name)}};
     },
   };
 }
