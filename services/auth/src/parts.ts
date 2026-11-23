@@ -202,7 +202,7 @@ export function loginRoutes(o: AuthOptions): Part<AuthEnv> {
 /**
  * TRUSTED-ISSUER SIGN-IN (./identity/trusted-issuers): a form POST, usually a frame's navigation from the issuer's
  * page, so it answers like a sign-in page would: 303 to the same-origin `callbackUrl` (default `/`, `group` set to the
- * token's group) with the session
+ * token's group when supplied) with the session
  * cookie, or a JSON refusal. Off (404) without a configured issuer. The token is checked before anything is written
  * (and the issuer's Origin before its signature); deployment admission and identity writes share a transaction before the session is created.
  */
@@ -225,7 +225,8 @@ function mountTrustedSignIn(a:AuthApp,o:AuthOptions):void {
       o.admitIdentity && ((person,tx)=>o.admitIdentity!({userId:person.userId,email:person.email,emailVerified:true,trustedIssuer:issuer.issuer},tx)));
     if(!result.ok)return refuse(result.refusal,result.refusal==='parent_group_missing'?503:(result.refusal==='invalid_claims'||result.refusal==='replayed_token')?401:403);
     const cookies=await o.sessions.start(result.userId);
-    const headers=new Headers({location:withGroup(trustedCallbackPath(form.get('callbackUrl')),result.groupId),'cache-control':'no-store'});
+    const callback=trustedCallbackPath(form.get('callbackUrl'));
+    const headers=new Headers({location:result.groupId ? withGroup(callback,result.groupId) : callback,'cache-control':'no-store'});
     for(const cookie of cookies)headers.append('set-cookie',cookie);
     return new Response(null,{status:303,headers});
   });

@@ -18,7 +18,7 @@
  *    created manually or by another issuer is refused. The verified path is resolved under the configured ceiling.
  *    An existing group must still have the signed direct parent.
  *  - Each listed group gains a direct Member seat unless the person already holds a role there. Other seats and
- *    roles are retained. Empty lists cannot start a session. Company root enrollment remains a separate setting.
+ *    roles are retained. An empty list signs the person in without granting seats or selecting a group.
  * One advisory lock serializes these sign-ins, so a double-submitted form never meets its own half-created rows.
  */
 import {hashToken} from '@artifactbin/utils';
@@ -42,9 +42,9 @@ interface TrustedPerson {
   parentGroup: string;
 }
 type TrustedSignInInput = TrustedPerson & Pick<TrustedClaims,'groups'|'activeGroup'>;
-type TrustedSignInRefusal = 'no_authorized_groups' | 'replayed_token' | 'subject_conflict' | 'group_conflict' | 'deployment_admission_required' | 'parent_group_missing' | 'invalid_claims';
+type TrustedSignInRefusal = 'replayed_token' | 'subject_conflict' | 'group_conflict' | 'deployment_admission_required' | 'parent_group_missing' | 'invalid_claims';
 export type TrustedSignInResult =
-  | {ok: true; userId: string; email: string; groupId: string; created: {user: boolean; group: boolean}}
+  | {ok: true; userId: string; email: string; groupId: string | null; created: {user: boolean; group: boolean}}
   | {ok: false; refusal: TrustedSignInRefusal};
 
 class Refused extends Error { constructor(public refusal: TrustedSignInRefusal) { super(refusal); } }
@@ -64,7 +64,6 @@ export async function trustedSignIn(db: TransactionalQueryable, input: TrustedSi
   admit?: (person: {userId: string; email: string}, tx: Queryable) => Promise<boolean>): Promise<TrustedSignInResult> {
   const isEmail = input.subject.includes('@'), address = isEmail ? trustedSubjectEmail(input.subject) : null;
   const {groups,activeGroup} = input;
-  if (!groups.length) return {ok:false,refusal:'no_authorized_groups'};
   const subjectOk = isEmail ? address !== null : isValidHandle(input.subject);
   if (!subjectOk || groups.some(g => !isValidHandle(g.handle) || g.handle === input.subject || g.handle === input.previousHandle) ||
     (input.previousHandle !== undefined && (!address || !isValidHandle(input.previousHandle)))) return {ok:false, refusal:'invalid_claims'};
@@ -88,8 +87,9 @@ export async function trustedSignIn(db: TransactionalQueryable, input: TrustedSi
       const company = await companySignInRoot(tx, t.groups, appSchema);
       if (company && (await tx.query(`SELECT 1 FROM ${t.users} WHERE id=$1 AND deployment_admission_revoked`, [person.userId])).rows.length)
         throw new Refused('deployment_admission_required');
-      if (input.joinCompanyRoot && company && !company.rootId) throw new Refused('parent_group_missing');
-      const rootId = input.joinCompanyRoot ? company?.rootId ?? null : null;
+      const enrollRoot = input.joinCompanyRoot && groups.length > 0;
+      if (enrollRoot && company && !company.rootId) throw new Refused('parent_group_missing');
+      const rootId = enrollRoot ? company?.rootId ?? null : null;
       let active: {groupId:string; created:boolean} | undefined;
       for (const claim of groups) {
         const group = await ensureGroup(tx,input,claim,person.userId,t);
@@ -98,13 +98,13 @@ export async function trustedSignIn(db: TransactionalQueryable, input: TrustedSi
         await tx.query(`INSERT INTO ${t.group_members}(group_id,user_id,role)
           VALUES($1,$2,'member') ON CONFLICT(group_id,user_id) DO NOTHING`,[group.groupId,person.userId]);
       }
-      if (!active) throw new Refused('invalid_claims');
+      if (!active && (groups.length || activeGroup !== undefined)) throw new Refused('invalid_claims');
       if (admit && !await admit(person, tx)) throw new Refused('deployment_admission_required');
       if (rootId) await tx.query(`INSERT INTO ${t.group_members}(group_id,user_id,role) VALUES($1,$2,'member') ON CONFLICT (group_id,user_id) DO NOTHING`, [rootId, person.userId]);
-      await tx.query(`UPDATE ${t.users} SET trusted_sign_in_group=$2,trusted_sign_in_at=now(),
-        trusted_root_granted=COALESCE($3,trusted_root_granted) WHERE id=$1`, [person.userId, active.groupId, rootId]);
+      await tx.query(`UPDATE ${t.users} SET trusted_sign_in_group=COALESCE($2,trusted_sign_in_group),trusted_sign_in_at=now(),
+        trusted_root_granted=COALESCE($3,trusted_root_granted) WHERE id=$1`, [person.userId, active?.groupId ?? null, rootId]);
       if (input.name !== undefined && (emailPerson ? emailPerson.canFillName : person.email === input.email)) await writeDisplayName(tx, t, authSchema, person.userId, input.name);
-      return {ok: true as const, userId: person.userId, email: person.email, groupId: active.groupId, created: {user: person.created, group: active.created}};
+      return {ok: true as const, userId: person.userId, email: person.email, groupId: active?.groupId ?? null, created: {user: person.created, group: active?.created ?? false}};
     });
     // An email person gets their handle the way an email sign-in's does (its own transaction, so after this one).
     if (address) await accountMethods(db, t).ensureUsername({userId: result.userId});

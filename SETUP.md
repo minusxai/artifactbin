@@ -137,7 +137,7 @@ parent. The sign-in can update its display name and tenancy ID. A conflicting ha
 rolls back the entire request. The optional `active_group` must be a listed handle. Omitting it
 opens the first listed group. Every listed group receives a direct Member grant if the person
 has no seat there. Existing roles and memberships persist across sign-ins, including omitted groups.
-An empty list refuses sign-in without changing identity data. Each signed request accepts up to
+An empty list signs the admitted person in without selecting a group or granting any memberships, including company root membership. Each signed request accepts up to
 256 groups, up to 16 parent handles per group, and a form body up to 1 MiB.
 
 Deploy the receiver and all signing hosts together. Single-group signers also send the array.
@@ -230,7 +230,7 @@ that needs enrollment, then resume services.
 **Company root membership for trusted sign-in.** Set `TRUSTED_SIGNIN__JOIN_COMPANY_ROOT=true` on the
 trusted-sign-in and identity hosts only when the company root is ready for every issuer’s people.
 Check its data grants and private page shares first. The setting defaults to false. Restart the hosts
-after changing it. An admitted sign-in adds Member on the root and preserves any stronger role.
+after changing it. An admitted sign-in with a nonempty group list adds Member on the root and preserves any stronger role.
 
 On enabled startup, identity backfills admitted accounts with a current seat in a configured issuer’s
 live group, including people added manually or moved between host groups. Each grant is recorded
