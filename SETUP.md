@@ -106,17 +106,44 @@ COMMIT;
 **Moving an issuer-owned handle to email.** Set `sub` to the verified email and include the original
 handle in the signed string claim `previous_handle`. Only the issuer that bound that handle can move
 its synthetic address to an unclaimed email. The account ID, handle and personal name are preserved,
-and ordinary membership reconciliation still applies. Use a fresh token and unique `jti` to retry
+and listed groups receive their memberships. Use a fresh token and unique `jti` to retry
 the same address. On first use, a free handle and an unclaimed email create one person atomically.
-An occupied email, a handle held by another identity, or a later change of address refuses the sign-in.
+If the person signed in by email first, a free external handle is bound to that verified account
+as an issuer-specific alias. Their personal handle and display name are preserved. An unverified
+occupied address, a conflict between two existing identities, or a later reassignment refuses sign-in.
 After success, email sign-ins can omit `previous_handle`.
 
-**Signed group placement.** An issuer with a configured `parentGroup` may include
-`"parent_groups": ["division", "team"]` in its signed sign-in token. List existing live group handles
-from parent to direct child. The first must be the configured group or a descendant. A new token group
-is created directly under the last handle. An existing token group must already have that parent.
-An empty, missing-member, disconnected or out-of-scope path refuses the sign-in. Omit the claim to
-use the existing issuer placement rules.
+**Signed group placement.** Set the issuer's `parentGroup` to an existing group handle or ID.
+The signing host sends a `groups` array. For example, the application fields for a verified person
+with two groups under the existing `operators` handle look like this:
+
+```json
+{
+  "sub": "sam@example.com",
+  "name": "Sam",
+  "groups": [
+    {"handle":"group_north","name":"North","tenancy_id":"op_101","parent_handles":["operators"]},
+    {"handle":"group_south","name":"South","tenancy_id":"op_202","parent_handles":["operators"]}
+  ],
+  "active_group": "group_north"
+}
+```
+
+The usual signed `iss`, `aud`, `iat`, `exp` and single-use `jti` accompany those fields. Each
+`parent_handles` path lists existing live handles from outermost to innermost. The first handle
+must resolve to the configured ceiling or a descendant. A new group is created directly under the
+last handle. An existing group must belong to the same issuer and already have the specified
+parent. The sign-in can update its display name and tenancy ID. A conflicting handle or hierarchy
+rolls back the entire request. The optional `active_group` must be a listed handle. Omitting it
+opens the first listed group. Every listed group receives a direct Member grant if the person
+has no seat there. Existing roles and memberships persist across sign-ins, including omitted groups.
+An empty list refuses sign-in without changing identity data. Each signed request accepts up to
+256 groups, up to 16 parent handles per group, and a form body up to 1 MiB.
+
+Deploy the receiver and all signing hosts together. Single-group signers also send the array.
+Configure every signing key's `parentGroup` before starting the new version. Verify both sign-in
+hosts with the same test identity before enabling entry points. A rollback requires restoring
+both receiver and signing hosts together.
 
 **Binding a person to a tenant on PostgreSQL.** Use the identity operator command once every
 consumer that enforces warehouse tenancy understands `identity.users.tenancy_id`. Supply the

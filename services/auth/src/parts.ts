@@ -155,10 +155,11 @@ export function loginRoutes(o: AuthOptions): Part<AuthEnv> {
     name: 'loginRoutes',
     mount: (app) => {
       const a = app;
-      // Sign-in bodies are tiny, and the OTP send is anonymous: refuse an oversized one before anything parses it.
+      // A signed group list can be larger than an OTP. Bound both forms before parsing.
       a.use('/api/auth/*', async (c, next) => {
         if (c.req.method === 'GET' || c.req.method === 'HEAD' || c.req.method === 'OPTIONS') return next();
-        try { await readBody(c.req.raw.clone(), { limit: AUTH_BODY_LIMIT }); }
+        const limit = c.req.path === TRUSTED_SIGNIN_PATH ? 1024 * 1024 : AUTH_BODY_LIMIT;
+        try { await readBody(c.req.raw.clone(), {limit}); }
         catch (error) { if (error instanceof BodyTooLargeError) return payloadTooLarge(); throw error; }
         return next();
       });
@@ -218,9 +219,9 @@ function mountTrustedSignIn(a:AuthApp,o:AuthOptions):void {
     const form=new URLSearchParams(await c.req.text());
     const checked=verifier.verify(form.get('token')??'',c.req.header('origin'));
     if(!checked.ok)return refuse(checked.refusal,checked.refusal==='forbidden_origin'?403:401);
-    const {issuer,subject,group,tenancyId,name,groupName,parentGroups,previousHandle,jti,exp}=checked.claims;
-    const result=await trustedSignIn(o.identityTransactions,{issuer:issuer.issuer,jti,exp,subject,group,tenancyId,name,groupName,parentGroups,previousHandle,joinCompanyRoot,
-      ...(issuer.parentGroup?{parentGroup:issuer.parentGroup}:{}),email:trustedEmailOf(issuer.issuer,subject)},schema,o.appSchema??readEnv(o.env,'APP__SCHEMA'),
+    const {issuer,...claims}=checked.claims;
+    const result=await trustedSignIn(o.identityTransactions,{...claims,issuer:issuer.issuer,joinCompanyRoot,
+      parentGroup:issuer.parentGroup,email:trustedEmailOf(issuer.issuer,claims.subject)},schema,o.appSchema??readEnv(o.env,'APP__SCHEMA'),
       o.admitIdentity && ((person,tx)=>o.admitIdentity!({userId:person.userId,email:person.email,emailVerified:true,trustedIssuer:issuer.issuer},tx)));
     if(!result.ok)return refuse(result.refusal,result.refusal==='parent_group_missing'?503:(result.refusal==='invalid_claims'||result.refusal==='replayed_token')?401:403);
     const cookies=await o.sessions.start(result.userId);

@@ -46,10 +46,15 @@ const app = async (env: Record<string, string | undefined> = { TRUSTED_SIGNIN__I
 
 let counter = 0;
 const now = () => Math.floor(Date.now() / 1000);
-function token(claims: Record<string, unknown> = {}, o: { key?: KeyObject; header?: Record<string, unknown> } = {}): string {
+// Short fixture options for single-group tests. wireToken accepts exact claim objects for wire-format assertions.
+function token(options: Record<string, unknown> = {}, o?: { key?: KeyObject; header?: Record<string, unknown> }): string {
+  const {group='group_1',group_name,tenancy_id='tenant-1',parent_groups=['parent_team'],...claims}=options;
+  return wireToken({groups:[{handle:group,name:group_name,tenancy_id,parent_handles:parent_groups}],...claims},o);
+}
+function wireToken(claims: Record<string, unknown>, o: { key?: KeyObject; header?: Record<string, unknown> } = {}): string {
   const part = (value: unknown) => Buffer.from(JSON.stringify(value)).toString('base64url');
   const head = part(o.header ?? { alg: 'EdDSA', typ: 'JWT' });
-  const body = part({ iss: 'issuer-a', aud: AUDIENCE, iat: now(), exp: now() + 120, jti: `jti-${++counter}`, sub: 'user_1', group: 'group_1', tenancy_id: 'tenant-1', ...claims });
+  const body = part({ iss: 'issuer-a', aud: AUDIENCE, iat: Date.now()/1000, exp: now() + 120, jti: `jti-${++counter}`, sub: 'user_1', ...claims });
   return `${head}.${body}.${sign(null, Buffer.from(`${head}.${body}`), o.key ?? keys.privateKey).toString('base64url')}`;
 }
 const post = async (target: Awaited<ReturnType<typeof app>>, form: Record<string, string>, headers: Record<string, string> = { origin: EMBEDDER }) =>
@@ -125,6 +130,67 @@ it('appends handle, tenancy and admission columns without breaking an existing u
 });
 
 describe('trusted-issuer sign-in', () => {
+  it('upserts every listed group atomically, preserving existing seats and group identities', async () => {
+    const target = await app();
+    const north = {handle:'list_north',name:'North',tenancy_id:'101',parent_handles:['parent_team']};
+    const south = {...north,handle:'list_south',name:'South',tenancy_id:'202'};
+    const sub='listed@example.com';
+    const send = (groups:unknown, extra: Record<string,unknown> = {}) => post(target,{token:wireToken({
+      sub,groups,...extra,
+    })});
+    const groups = () => rows(`SELECT g.handle,g.name,g.tenancy_id,g.parent_id FROM auth.group_members m
+      JOIN auth.groups g ON g.id=m.group_id JOIN auth.users u ON u.id=m.user_id WHERE u.email=$1 ORDER BY g.handle`,[sub]);
+    const first=await send([north,south],{active_group:south.handle});
+    expect(first.status).toBe(303);
+    const southId = new URL(first.headers.get('location')!,BASE).searchParams.get('group');
+    expect(await rows('SELECT handle FROM auth.groups WHERE id=$1',[southId])).toEqual([{handle:south.handle}]);
+    expect((await groups()).map(g=>g.handle)).toEqual([north.handle,south.handle]);
+    await pg.query("INSERT INTO auth.group_members(group_id,user_id,role) SELECT 'grp_plain',id,'admin' FROM auth.users WHERE email=$1",[sub]);
+    const before=await groups();
+    await refused(await send([{...north,tenancy_id:'changed'}, {...south,parent_handles:['plain_team']}]),403,'group_conflict');
+    expect(await groups()).toEqual(before);
+    const later=await send([{...south,tenancy_id:'new-202',name:'South team'}]);
+    expect(later.status).toBe(303);
+    expect(new URL(later.headers.get('location')!,BASE).searchParams.get('group')).toBe(southId);
+    expect(await groups()).toEqual([
+      {handle:north.handle,name:'North',tenancy_id:'101',parent_id:'grp_parent'},
+      {handle:south.handle,name:'South team',tenancy_id:'new-202',parent_id:'grp_parent'},
+      {handle:'plain_team',name:'Plain',tenancy_id:null,parent_id:null},
+    ]);
+    for (const [list, extra] of [[[south,south],{}], [[south],{active_group:north.handle}], [[{...south,parent_handles:[]}],{}],
+      [[south],{group:south.handle}], [[],{active_group:south.handle}]] as const) {
+      await refused(await send(list,extra),401,'invalid_token');
+    }
+    await refused(await send([]),403,'no_authorized_groups');
+    expect((await groups()).map(g=>g.handle)).toEqual([north.handle,south.handle,'plain_team']);
+  });
+
+  it('rolls back a new person, earlier group creation and handle reservations when a later group conflicts', async () => {
+    const target=await app();
+    const created={handle:'atomic_first',name:'First team',tenancy_id:'101',parent_handles:['parent_team']};
+    const conflict={...created,handle:'plain_team'};
+    const response=await post(target,{token:wireToken({sub:'atomic_reader',groups:[created,conflict]})});
+    await refused(response,403,'group_conflict');
+    expect(await rows("SELECT id FROM auth.users WHERE username='atomic_reader'")).toEqual([]);
+    expect(await rows("SELECT id FROM auth.groups WHERE handle='atomic_first'")).toEqual([]);
+    expect(await rows("SELECT handle FROM auth.handle_reservations WHERE handle IN ('atomic_first','atomic_reader')")).toEqual([]);
+  });
+
+  it('refuses scalar and mixed tokens and returns no session or identity writes for an empty list', async () => {
+    const target=await app();
+    const group={handle:'format_group',tenancy_id:'101',parent_handles:['parent_team']};
+    for (const claims of [{group:group.handle,tenancy_id:'101'}, {groups:[group],group:group.handle},
+      {groups:[group],parent_groups:group.parent_handles}, {groups:new Array(257).fill(group)}]) {
+      await refused(await post(target,{token:wireToken(claims)}),401,'invalid_token');
+    }
+    const receipts=()=>rows("SELECT count(*) FROM auth.credentials WHERE kind='trusted_sign_in'");
+    const before=await receipts();
+    await refused(await post(target,{token:wireToken({sub:'unadmitted@example.com',groups:[]})}),403,'no_authorized_groups');
+    expect(await receipts()).toEqual(before);
+    expect(await rows("SELECT id FROM auth.users WHERE email='unadmitted@example.com'")).toEqual([]);
+    expect(await rows(`SELECT id FROM auth."user" WHERE email='unadmitted@example.com'`)).toEqual([]);
+  });
+
   it('resolves signed parent handles consecutively within the configured hierarchy', async () => {
     const target = await app();
     await pg.query(`INSERT INTO auth.groups(id,handle,name,created_by,parent_id) VALUES
@@ -140,8 +206,7 @@ describe('trusted-issuer sign-in', () => {
     }
     expect(await rows("SELECT parent_id FROM auth.groups WHERE handle='path_team'")).toEqual([{parent_id:'grp_leaf'}]);
     expect(await rows("SELECT id FROM auth.users WHERE username='path_refused'")).toEqual([]);
-    const unconfigured = await app({TRUSTED_SIGNIN__ISSUERS:issuers({parentGroup:undefined})});
-    await refused(await post(unconfigured,{token:token({parent_groups:['plain_team'],group:'path_denied'})}),403,'group_conflict');
+    await expect(app({TRUSTED_SIGNIN__ISSUERS:issuers({parentGroup:undefined})})).rejects.toThrow(/parentGroup/);
     for (const malformed of [[], 'path_leaf', [null], ['path_leaf','path_leaf']]) {
       await refused(await signIn(malformed,'path_denied'),401,'invalid_token');
     }
@@ -177,6 +242,42 @@ describe('trusted-issuer sign-in', () => {
       expect(await rows(`SELECT id,name FROM ${table} WHERE email=$1`,[email])).toEqual([{id:original.userId,name:'Personal name'}]);
     }
     expect(await memberships()).toEqual(before);
+  });
+  it('binds a free issuer subject to the verified OTP person without taking their personal handle', async () => {
+    const sites=JSON.parse(twoIssuers());
+    const standalone='https://standalone.example';
+    sites.push({...sites[0],origins:[standalone],publicJwk:stranger.publicKey.export({format:'jwk'})});
+    const target=await app({TRUSTED_SIGNIN__ISSUERS:JSON.stringify(sites)});
+    const email='otp.first@example.com', userId='usr_otp_first', handle='external_reader';
+    await pg.query(`INSERT INTO auth."user"(id,email,name,"emailVerified","createdAt","updatedAt")
+      VALUES($1,$2,'Local name',true,now(),now())`,[userId,email]);
+    await pg.query(`INSERT INTO auth.users(id,email,name,username) VALUES($1,$2,'Local name','chosen_handle')`,[userId,email]);
+    const signIn=(fields:Record<string,unknown>,key=keys.privateKey,origin=EMBEDDER)=>post(target,{token:token(fields,{key})},{origin});
+    const claims={sub:email,previous_handle:handle,group:'alias_team'};
+    await refused(await signIn({...claims,group:'plain_team'}),403,'group_conflict');
+    expect(await rows("SELECT handle FROM auth.handle_reservations WHERE handle=$1",[handle])).toEqual([]);
+    for (const fields of [claims,{...claims,group:'second_alias_team'}, {sub:handle,group:'alias_team'}]) {
+      const response=await signIn(fields);
+      expect(response.status).toBe(303);
+      expect(await auth.sessions.resolve(new Request(BASE,{headers:{cookie:cookieOf(response)}}))).toMatchObject({userId,email});
+    }
+    const otherSite=await signIn({...claims,group:'paired_group'},stranger.privateKey,standalone);
+    expect(await auth.sessions.resolve(new Request(BASE,{headers:{cookie:cookieOf(otherSite)}}))).toMatchObject({userId,email});
+    await pg.query(`INSERT INTO auth."user"(id,email,name,"emailVerified","createdAt","updatedAt")
+      VALUES('verified_other','verified.other@example.com','',true,now(),now()),
+        ('unverified_existing','unverified@example.com','',false,now(),now())`);
+    await refused(await signIn({...claims,sub:'verified.other@example.com'}),403,'subject_conflict');
+    await refused(await signIn({...claims,previous_handle:'free_unverified',sub:'unverified@example.com'}),403,'subject_conflict');
+    await refused(await signIn({...claims,previous_handle:'other_external'}),403,'subject_conflict');
+    await refused(await signIn({...claims,sub:'different@example.com'}),403,'subject_conflict');
+    await refused(await signIn({...claims,iss:'issuer-b',group:'another_issuer_team'},otherKeys.privateKey),403,'subject_conflict');
+    await refused(await signIn({...claims,previous_handle:'taken_user'}),403,'subject_conflict');
+    expect(await rows('SELECT username,name FROM auth.users WHERE id=$1',[userId])).toEqual([{username:'chosen_handle',name:'Local name'}]);
+    const store=createIdentityStore({db,authSchema:'auth'});
+    expect(await store.hasManagedUsername({userId})).toBe(false);
+    expect(await store.setUsername({userId,username:'renamed_account'})).toEqual({ok:true,username:'renamed_account'});
+    expect((await signIn(claims)).status).toBe(303);
+    expect(await rows('SELECT username FROM auth.users WHERE id=$1',[userId])).toEqual([{username:'renamed_account'}]);
   });
   it('accepts first use of a free signed handle and email, and preserves their identity on later sign-ins', async () => {
     const target = await app();
@@ -247,19 +348,21 @@ describe('trusted-issuer sign-in', () => {
     await pg.query("UPDATE company_app.identity_settings SET deployment_mode='company'");
     await pg.query("DELETE FROM company_app.deployment_state");
   });
-  it('puts each newly provisioned group under the company root, including when the default is a subgroup', async () => {
-    const target = await app({TRUSTED_SIGNIN__ISSUERS:issuers({parentGroup:undefined}), APP__SCHEMA:'company_app'});
+  it('uses the signed parent even when the deployment default changes', async () => {
+    const target = await app({TRUSTED_SIGNIN__ISSUERS:issuers(), APP__SCHEMA:'company_app'});
     await pg.query("INSERT INTO auth.groups(id,handle,name,created_by,parent_id) VALUES('grp_default','default_team','Default','usr_admin','grp_parent')");
     await pg.query("INSERT INTO company_app.deployment_state VALUES('company','usr_admin','grp_parent',true)");
-    for (const [group, defaultGroup] of [['root_default','grp_parent'],['nested_default','grp_default']]) {
+    const expected: string[]=[];
+    for (const [group, defaultGroup] of [['root_default','grp_parent'],['nested_default','grp_default']] as const) {
+      expected.push(group);
       await pg.query("UPDATE company_app.deployment_state SET default_group_id=$1 WHERE id='company'", [defaultGroup]);
       const response=await post(target,{token:token({sub:'company_reader',group})});
       expect(response.status).toBe(303);
       expect(await rows(`SELECT g.handle FROM identity.users u JOIN auth.groups g ON g.id=u.default_group_id
-        WHERE u.username='company_reader'`)).toEqual([{handle:group}]);
+        WHERE u.username='company_reader'`)).toEqual([{handle:'root_default'}]);
       expect(await rows('SELECT parent_id FROM auth.groups WHERE handle=$1',[group])).toEqual([{parent_id:'grp_parent'}]);
       expect(await rows(`SELECT g.handle FROM auth.group_members m JOIN auth.groups g ON g.id=m.group_id
-        JOIN auth.users u ON u.id=m.user_id WHERE u.username='company_reader'`)).toEqual([{handle:group}]);
+        JOIN auth.users u ON u.id=m.user_id WHERE u.username='company_reader' ORDER BY g.handle`)).toEqual([...expected].sort().map(handle=>({handle})));
     }
   });
   it('does not let a fresh issuer assertion restore admission after removal from the designated root', async () => {
@@ -306,7 +409,7 @@ describe('trusted-issuer sign-in', () => {
     expect(await memberships()).toEqual([{handle:'partner_group',role:'member'},{handle:'plain_team',role:'editor'}]);
     const returning = await post(target,{token:token({...claims,group:'replacement_group'})});
     expect(returning.status).toBe(303);
-    expect(await memberships()).toEqual([{handle:'plain_team',role:'editor'},{handle:'replacement_group',role:'member'}]);
+    expect(await memberships()).toEqual([{handle:'partner_group',role:'member'},{handle:'plain_team',role:'editor'},{handle:'replacement_group',role:'member'}]);
   });
   it('signs the person in, creating the person, the group under its parent with its tenancy, and the membership', async () => {
     const target = await app({TRUSTED_SIGNIN__ISSUERS:issuers(),TRUSTED_SIGNIN__JOIN_COMPANY_ROOT:'true'});
@@ -340,7 +443,7 @@ describe('trusted-issuer sign-in', () => {
     expect(await rows(`SELECT 1 FROM auth.group_members WHERE group_id=$1`, [group!.id])).toHaveLength(2);
   });
 
-  it('leaves the person only in the group of their latest token, and keeps other issuers\' and plain groups', async () => {
+  it('adds the latest group without withdrawing earlier or independent memberships', async () => {
     const target = await app();
     const first = await post(target, { token: token({ sub: 'user_9', group: 'group_9a', tenancy_id: 'tenant-9a' }) });
     const [person] = await rows<{ id: string }>(`SELECT id FROM auth.users WHERE username='user_9'`);
@@ -348,7 +451,7 @@ describe('trusted-issuer sign-in', () => {
     const second = await post(target, { token: token({ sub: 'user_9', group: 'group_9b', tenancy_id: 'tenant-9b' }) });
     expect([first.status, second.status]).toEqual([303, 303]);
     const held = await rows<{ handle: string }>(`SELECT g.handle FROM auth.group_members m JOIN auth.groups g ON g.id=m.group_id WHERE m.user_id=$1 ORDER BY 1`, [person!.id]);
-    expect(held.map(r => r.handle)).toEqual(['group_9b', 'plain_team']);
+    expect(held.map(r => r.handle)).toEqual(['group_9a', 'group_9b', 'plain_team']);
     const [b] = await rows<{ id: string }>(`SELECT id FROM auth.groups WHERE handle='group_9b'`);
     expect(second.headers.get('location')).toBe(`/?group=${b!.id}`);
   });
@@ -414,7 +517,7 @@ describe('trusted-issuer sign-in', () => {
   it('refuses handles it did not create', async () => {
     const target = await app();
     await refused(await post(target, { token: token({ sub: 'user_5', group: 'plain_team' }) }), 403, 'group_conflict');
-    await refused(await post(target, { token: token({ sub: 'user_5', group: 'parent_team' }) }), 403, 'group_conflict');
+    await refused(await post(target, { token: token({ sub: 'user_5', group: 'parent_team' }) }), 401, 'invalid_token');
     await refused(await post(target, { token: token({ sub: 'taken_user', group: 'group_9' }) }), 403, 'subject_conflict');
     // A group handle that is a person's handle is not a group to join.
     await refused(await post(target, { token: token({ sub: 'user_5', group: 'taken_user' }) }), 403, 'group_conflict');
@@ -471,7 +574,7 @@ describe('trusted-issuer sign-in', () => {
     await refused(await post(target, { token: token({ sub: 'split@example.com', group: 'group_e2', tenancy_id: 'tenant-e2' }) }), 403, 'subject_conflict');
   });
 
-  it('lets two issuers sign the same address in, each only moving the person between its own groups', async () => {
+  it('lets two issuers sign the same address in, each adding the person only to its own groups', async () => {
     const target = await app({ TRUSTED_SIGNIN__ISSUERS: twoIssuers() });
     const sub = 'both@example.com';
     expect((await post(target, { token: token({ sub, group: 'group_a1', tenancy_id: 'tenant-a1' }) })).status).toBe(303);
@@ -480,9 +583,9 @@ describe('trusted-issuer sign-in', () => {
     expect(people).toHaveLength(1);
     const held = async () => (await rows<{ handle: string }>(`SELECT g.handle FROM auth.group_members m JOIN auth.groups g ON g.id=m.group_id WHERE m.user_id=$1 ORDER BY 1`, [people[0]!.id])).map(r => r.handle);
     expect(await held()).toEqual(['group_a1', 'group_b1']);
-    // Issuer A moves the person to another of its groups: issuer B's membership stays.
+    // Issuer A adds another group. Both earlier memberships survive.
     expect((await post(target, { token: token({ sub, group: 'group_a2', tenancy_id: 'tenant-a2' }) })).status).toBe(303);
-    expect(await held()).toEqual(['group_a2', 'group_b1']);
+    expect(await held()).toEqual(['group_a1', 'group_a2', 'group_b1']);
     // A group stays its creator's: issuer B may not join issuer A's.
     await refused(await post(target, { token: token({ iss: 'issuer-b', sub, group: 'group_a2', tenancy_id: 'tenant-a2' }, { key: otherKeys.privateKey }) }), 403, 'group_conflict');
   });
