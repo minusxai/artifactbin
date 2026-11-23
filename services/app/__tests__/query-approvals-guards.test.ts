@@ -12,7 +12,7 @@ import sharp from 'sharp';
 import type {RenderRequest} from '@artifactbin/contracts/browser';
 import {identityForUser} from '@/lib/accounts';
 import {getArtifactById} from '@/lib/artifacts';
-import {exportImageResponse,resetExportRenderer} from '@/lib/export';
+import {exportImageResponse,mintExportKey,resetExportRenderer} from '@/lib/export';
 import {readHtmlPage} from '@/lib/html-publication';
 import {pageDeclaredConnectionSql,namingOwner} from '@/lib/page-doors';
 import {approvalRenderState} from '@/lib/query-approvals';
@@ -227,27 +227,59 @@ it('answers a repeated approval of the same query by the same Admin with the app
  expect(page).toBeTruthy();
 });
 
-it('uses the current personal and inherited group bindings for approved queries and stored renders', async () => {
+it('refuses approved queries and cached group renders for a reader with a matching personal tenancy', async () => {
  const host = await composed(), {ada,olga,root,team,page,read,approve} = await setting(host);
+ await sql('UPDATE auth.groups SET tenancy_id=$1 WHERE id=$2',['north',root.id]);
  expect((await approve(ada)).status).toBe(201);
- const actor = identityForUser(olga.userId);
- const render = () => approvalRenderState(page,actor);
- expect((await read(olga)).status).toBe(200);
- const unbound = await render();
+ const reader={...identityForUser(olga.userId),email:'mxmx_test_qa_olga@example.test',documentEditor:false};
+ const image=async(mode?:string,delivery:'bytes'|'redirect'='bytes')=>
+  exportImageResponse((await getArtifactById(page))!,{reader,...(mode?{mode}:{})},origin,delivery);
+ const shot=async(mode?:string)=>Buffer.from(await (await image(mode)).arrayBuffer());
+ const groupImage=await sharp({create:{width:1,height:1,channels:3,background:'#000'}}).png().toBuffer();
+ let renders=0, bindDuringRender=false;
+ const bind=(tenant:string|null)=>sql('UPDATE auth.users SET tenancy_id=$1 WHERE id=$2',[tenant,olga.userId]);
+ setServices({browser:{render:async()=>{
+  renders++;
+  expect((await read(olga)).status).toBe(200);
+  if(bindDuringRender)await bind('north');
+  return {ok:true,mime:'image/png',bytes:groupImage};
+ }}});
  try {
-  await sql('UPDATE auth.users SET tenancy_id=$1 WHERE id=$2',['north',olga.userId]);
-  expect((await read(olga)).status).toBe(403);
-  expect(await render()).not.toEqual(unbound);
-  await sql('UPDATE auth.groups SET tenancy_id=$1 WHERE id=$2',['north',root.id]);
   expect(rows(await read(olga))).toEqual([{region:'EU',total:15,...asGroup(team.id)}]);
-  const matched = await render();
-  expect(matched).not.toEqual(unbound);
-  await sql('UPDATE auth.groups SET tenancy_id=$1 WHERE id=$2',['south',team.id]);
+  const unbound=await approvalRenderState(page,reader);
+  expect(await shot()).toEqual(groupImage);
+  expect(await shot('card')).toEqual(groupImage);
+  const before=renders;
+  expect(await shot()).toEqual(groupImage);
+  expect(await shot('card')).toEqual(groupImage);
+  expect(renders).toBe(before);
+  const download=await image(undefined,'redirect');
+  expect([download.status,download.headers.get('cache-control')]).toEqual([200,'no-store']);
+  expect(Buffer.from(await download.arrayBuffer())).toEqual(groupImage);
+  const [stored]=await sql<{id:string}>('SELECT id FROM export_images WHERE artifact_id=$1 LIMIT 1',[page]);
+  const asset=new URL(`/assets/export/${stored!.id}`,origin);
+  asset.searchParams.set('key',mintExportKey(`export-asset:${stored!.id}`));
+  expect((await host.fetch(new Request(asset))).status).toBe(404);
+  await bind('north');
   expect((await read(olga)).status).toBe(403);
-  expect(await render()).not.toEqual(matched);
+  expect(await approvalRenderState(page,reader)).not.toEqual(unbound);
+  for(const mode of ['full','card']){
+   const denied=await image(mode);
+   expect(denied.status).toBe(403);
+   expect((await denied.json()).error).toBe('permission_denied');
+  }
+  expect(renders).toBe(before);
+  expect(rows(await read(ada))).toEqual([{region:'EU',total:15,...asGroup(team.id)}]);
+  await bind(null);
+  bindDuringRender=true;
+  const inFlight=await image('preview');
+  expect(inFlight.status).toBe(503);
+  expect((await inFlight.json()).error).toBe('render_unavailable');
  } finally {
-  await sql('UPDATE auth.users SET tenancy_id=NULL WHERE id=$1',[olga.userId]);
-  await sql('UPDATE auth.groups SET tenancy_id=NULL WHERE id IN ($1,$2)',[root.id,team.id]);
+  await bind(null);
+  await sql('UPDATE auth.groups SET tenancy_id=NULL WHERE id=$1',[root.id]);
+  await resetExportRenderer();
+  setServices({browser:undefined});
  }
  expect((await read(olga)).status).toBe(200);
 });

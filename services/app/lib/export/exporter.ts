@@ -479,6 +479,12 @@ export async function exportImageResponse(
 
   // Full captures honor canonical reader selections; social cards use saved defaults.
   const isDocument = artifact.format === 'html';
+  const audience = await exportAudience(artifact, q.reader);
+  // Whether the audience reads a query as the page's group (lib/query-approvals) is part of the picture too: an approval
+  // granted, ended or no longer holding moves the revision, and no image of another revision answers for such a page.
+  const approvalState = () => approvalRenderState(artifact.id, audience ? exportReaderActor(audience) : null);
+  const approvals = isDocument ? await approvalState() : { revision: '', current: false, scopeDenied: false };
+  if (approvals.scopeDenied) return json({error:'permission_denied'},403);
   const imageOverview = capture === 'preview' && q.image === '1';
   const imageId = isDocument && (capture === 'card' || imageOverview) ? socialPreviewImage(artifact.source ?? '') : null;
   if (imageId) {
@@ -506,7 +512,7 @@ export async function exportImageResponse(
           cacheKey:`${artifact.id}:cover-g${EXPORT_RENDER_GENERATION}:${format}`,
           artifactId:artifact.id,revision:`${exportRevision(artifact)}:${image.id}:${exportRevision(image)}`,refresh,current,stable:true,
         },async id=>storeBytes(id,await produceCover(),format));
-        return imageResponse(cover,base,delivery);
+        return imageResponse(cover,base,approvals.current?'bytes':delivery);
       } catch {
         // A removed or unreadable asset falls back to the saved document crop.
       }
@@ -515,10 +521,6 @@ export async function exportImageResponse(
   if (imageOverview) return json({ error: 'image_unavailable' }, 404);
 
   const version = q.version ?? null;
-  const audience = await exportAudience(artifact, q.reader);
-  // Whether the audience reads a query as the page's group (lib/query-approvals) is part of the picture too: an approval
-  // granted, ended or no longer holding moves the revision, and no image of another revision answers for such a page.
-  const approvals = isDocument ? await approvalRenderState(artifact.id, audience ? exportReaderActor(audience) : null) : { revision: '', current: false };
   const access = (isDocument ? await datasetAccessRevision(artifact, audience) : '') + approvals.revision;
   const options:ImageOptions = {
     ...(q.deadline === undefined ? {} : { deadline: q.deadline }),
@@ -573,16 +575,23 @@ export async function exportImageResponse(
     if (unavailable) return json({ error: 'render_unavailable' }, 503);
     return json({ error: 'render_failed', hint: RENDER_FAILED_HINT }, 500);
   }
-  if('image' in rendered)return imageResponse(rendered.image,base,delivery);
-  return new Response(new Uint8Array(rendered.bytes), {
-    status: 200,
-    headers: {
-      'Content-Type': rendered.mime,
-      'X-Content-Type-Options': 'nosniff',
-      // Editor overviews are versioned by their caller; draft crops are ephemeral.
-      'Cache-Control': draftCrop ? 'private, no-store' : 'private, max-age=86400',
-    },
-  });
+  // A render or cache lookup can outlast the reader's eligibility. Approved pages deliver under this
+  // request's authorization rather than issuing an asset grant that would survive a binding change.
+  const response = 'image' in rendered
+    ? await imageResponse(rendered.image,base,approvals.current?'bytes':delivery)
+    : new Response(new Uint8Array(rendered.bytes), {
+      headers: {
+        'Content-Type': rendered.mime,
+        'X-Content-Type-Options': 'nosniff',
+        // Editor overviews are versioned by their caller. Approval renders and draft crops are ephemeral.
+        'Cache-Control': draftCrop || approvals.current ? 'private, no-store' : 'private, max-age=86400',
+      },
+    });
+  if (isDocument && (await approvalState()).revision !== approvals.revision) {
+    await response.body?.cancel();
+    return json({error:'render_unavailable'},503);
+  }
+  return response;
 }
 
 /**

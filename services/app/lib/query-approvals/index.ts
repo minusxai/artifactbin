@@ -118,7 +118,7 @@ export async function readsAsGroup(actor:AccessActor,db?:Queryable):Promise<bool
 
 /**
  * Group scope at the time of a delegated read. The group must be live and its ancestry complete.
- * A bound reader can use the approval only under that same binding.
+ * A group connection cannot guarantee a personal row filter, so a bound reader cannot use the approval.
  */
 export async function approvedQueryScope(userId:string|null,groupId:string,db?:Queryable):Promise<string[]|null>{
  if(!userId)return null;
@@ -133,7 +133,7 @@ export async function approvedQueryScope(userId:string|null,groupId:string,db?:Q
   )
   SELECT scope.tenancies FROM users u CROSS JOIN scope
   WHERE u.id=$1 AND u.kind='account' AND u.active AND NOT u.test_account
-    AND (u.tenancy_id IS NULL OR scope.tenancies=ARRAY[u.tenancy_id])`,
+    AND u.tenancy_id IS NULL`,
   [userId,groupId])).rows;
  return row?.tenancies??null;
 }
@@ -378,14 +378,14 @@ export async function assertAudienceChange(tx:Queryable,actor:AccessActor,page:A
  * segment; and `current`, that no image of another revision is ever served for it, not even a card's while it
  * refreshes. A page that never had an approval: `''` and false, as before approvals.
  */
-export async function approvalRenderState(pageId:string,reader:AccessActor|null):Promise<{revision:string;current:boolean}>{
+export async function approvalRenderState(pageId:string,reader:AccessActor|null):Promise<{revision:string;current:boolean;scopeDenied:boolean}>{
  const db=await getDb();
  const all=(await db.query<{id:string;ended:boolean}>('SELECT id,ended_at IS NOT NULL AS ended FROM page_query_approvals WHERE page_id=$1 ORDER BY id',[pageId])).rows;
- if(!all.length)return {revision:'',current:false};
+ if(!all.length)return {revision:'',current:false,scopeDenied:false};
  const group=!!reader&&await readsAsGroup(reader,db);
  const approvals=group?await holding(db,pageId):[];
  const owner=approvals[0]?.group_id;
  const scope=owner?await approvedQueryScope(reader!.userId,owner,db):null;
  const held=scope?approvals.map(row=>row.id).sort():[];
- return {revision:`-q${createHash('sha256').update(JSON.stringify([all,group,held,scope])).digest('hex').slice(0,16)}`,current:true};
+ return {revision:`-q${createHash('sha256').update(JSON.stringify([all,group,held,scope])).digest('hex').slice(0,16)}`,current:true,scopeDenied:!!owner&&!scope};
 }
