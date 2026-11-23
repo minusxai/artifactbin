@@ -15,6 +15,25 @@ import {canUseDeploymentIdentity} from '@/lib/accounts';
 import {DeploymentError,admitDeploymentIdentity,getDeploymentDefaultDestination,getDeploymentState,setupDeployment,validateDeploymentConfiguration} from '..';
 useAppHarness();
 const identity=(userId:string,email:string)=>({userId,email,emailVerified:true});
+
+it('publishes only the configured public sign-in link and rejects invalid destinations at boot', async () => {
+ const readState = () => getDeploymentState(null);
+ overrideConfig({}, {APP__DEPLOYMENT_MODE:'public', LOGIN__SSO_URL:'', LOGIN__SSO_LABEL:'Company SSO'});
+ expect(await readState()).not.toHaveProperty('login_sso');
+ const url = 'https://login.example.test/start';
+ overrideConfig({}, {LOGIN__SSO_URL:url});
+ expect(await readState()).toHaveProperty('login_sso',{url,label:'Company SSO'});
+ overrideConfig({}, {LOGIN__SSO_LABEL:' '});
+ expect(await readState()).toHaveProperty('login_sso',{url,label:'Sign in with company'});
+ for (const invalid of ['javascript:alert(1)','http://signin.example.com','https://user@id.test/start',url+'#state']) {
+  overrideConfig({}, {LOGIN__SSO_URL:invalid});
+  expect(validateDeploymentConfiguration).toThrow('LOGIN__SSO_URL');
+ }
+ overrideConfig({}, {LOGIN__SSO_URL:'http://localhost:9000/start',LOGIN__SSO_LABEL:'two\nlines'});
+ expect(validateDeploymentConfiguration).toThrow('LOGIN__SSO_LABEL');
+ overrideConfig({}, {LOGIN__SSO_URL:undefined, LOGIN__SSO_LABEL:undefined});
+});
+
 describe('company admission',()=>{
  it('binds only designated verified owner, survives config changes and refuses visitors before confirmation',async()=>{
   overrideConfig({}, {APP__DEPLOYMENT_MODE:'company',APP__DEPLOYMENT_OWNER_EMAIL:'owner@example.com'});

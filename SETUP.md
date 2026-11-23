@@ -57,6 +57,7 @@ Set, at least:
   canonical origin people use. In production the server refuses to start without either.
 - `APP__PAGES_HOST`: over https preferably a registrable domain of its own (`__Host-` cookie, `SameSite=None;
   Partitioned`), with wildcard DNS and TLS for `*.<pages host>`. The product never provisions a hostname.
+- The optional `LOGIN__SSO_URL` adds a link alongside the email-code form on `/login`. Set it to the public HTTPS URL that starts your configured sign-in flow. HTTP is supported on local development hosts. An empty URL hides the link. `LOGIN__SSO_LABEL` defaults to “Sign in with company”. Both settings are public. Configure authentication at the destination separately.
 - A login method: `EMAIL__RESEND_API_KEY` or `EMAIL__SMTP_*` with `EMAIL__FROM`, and optionally Google or OIDC.
 - Storage: `DATABASE_URL` for external PostgreSQL (several processes may share it), `S3_URL` for objects. Back up
   the database and the objects together before every upgrade; schema additions apply at startup.

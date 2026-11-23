@@ -1,6 +1,7 @@
 /* @jsxImportSource solid-js */
 import { createEffect, createSignal, Show, untrack, type JSX } from 'solid-js';
 import { loginRedirectTarget } from '@/lib/http/safe-redirect';
+import { useSetupDeployment } from '../lib/deployment-setup';
 import { useSession } from '../lib/session';
 import { apiFetch } from '../lib/api';
 import { replaceDocument } from '../lib/document-navigation';
@@ -25,6 +26,14 @@ function writeProgress(progressKey: string, email: string, sent: boolean, delive
     if (sent) sessionStorage.setItem(progressKey, JSON.stringify({ email, sent, delivery }));
     else sessionStorage.removeItem(progressKey);
   } catch { /* storage unavailable */ }
+}
+
+/** Only standalone login can navigate away; inline email challenges keep their in-memory continuation. */
+function CompanySignIn(): JSX.Element {
+  const deployment = useSetupDeployment();
+  return <Show when={deployment()?.login_sso}>{link =>
+    <Button href={link().url} variant="secondary" rel="noreferrer" class="mt-3 w-full">{link().label}</Button>
+  }</Show>;
 }
 
 export function LoginPage(props:{onAuthenticated?:()=>void;callbackUrl?:string|null;}={}): JSX.Element {
@@ -92,6 +101,7 @@ export function LoginPage(props:{onAuthenticated?:()=>void;callbackUrl?:string|n
           <Field label="Email address"><Input type="email" autofocus autocomplete="email" aria-label="Email" placeholder="you@example.com" value={email()} onInput={event => setEmail(event.currentTarget.value)} /></Field>
           <Button type="submit" aria-label="Log in with email" disabled={busy() || !email()}>{busy() ? 'Sending…' : 'Log in with email'}</Button>
         </form>
+        <Show when={!props.onAuthenticated}><CompanySignIn /></Show>
         <p class="mt-6 border-t border-edge pt-5 text-sm leading-relaxed text-muted">Previously saved guest artifacts and connected agents will join this account.</p>
       </Show>
       <Show when={error()}><StatusMessage kind="error" class="mt-4">{error()}</StatusMessage></Show>
