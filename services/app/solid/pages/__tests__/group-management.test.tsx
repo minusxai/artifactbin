@@ -31,6 +31,13 @@ it.each([true,false])('shows the current tenancy and allows edits only for manua
   await waitFor(()=>expect(fetch).toHaveBeenCalledWith('/api/groups/g1',expect.objectContaining({method:'PATCH',body:JSON.stringify({tenancy_id:'tenant-b'})})));
  }
 });
+it('shows roles without membership controls for an admin of a host-managed group',()=>{
+ render(()=> <GroupManagement detail={{...detail,group:{...detail.group,host_provisioned:true},
+   members:[...detail.members,{user_id:'u2',username:'bob',name:'Bob',role:'member'}]}} refresh={()=>{}} />);
+ expect(screen.getByText('Admin',{exact:true})).toBeInTheDocument();
+ expect(screen.getByText('Member',{exact:true})).toBeInTheDocument();
+ expect(screen.queryByRole('button',{name:/Role for|Remove |Invite person/})).not.toBeInTheDocument();
+});
 it('keeps last-admin refusal visible and preserves member role',async()=>{
  vi.stubGlobal('fetch',vi.fn(async()=>Response.json({error:'last_admin'},{status:409})));
  render(()=> <GroupManagement detail={detail} refresh={()=>{}} />);

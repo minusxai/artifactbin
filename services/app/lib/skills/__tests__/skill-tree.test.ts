@@ -212,6 +212,18 @@ describe('the real tree (skills/) keeps its shape and its reading budget', () =>
     expect(brief).not.toContain('@afbin/cli');
     expect(brief).not.toMatch(/\bafbin (?:push|pull|help|auth|setup)\b/);
   });
+  it('serves Admin and Member as group roles and preserves editor sharing',()=>{
+   const tree=skillTree();
+   const options={base:'https://example.test'};
+   const groups=renderSkill(tree.get('artifactbin/references/groups.md')!,options);
+   const permissions=renderSkill(tree.get('artifactbin/references/permissions.md')!,options);
+   expect(groups).toContain('{email,role:"member"|"admin"}');
+   expect(groups).toContain('{role:"member"|"admin"}');
+   expect(groups).toContain('{role:"viewer"|"commenter"|"editor"}');
+   expect(groups).not.toMatch(/Editor\/Admin|--role editor --yes|Editors also publish/);
+   expect(permissions).not.toContain('group Admin or Editor');
+   expect(permissions).toContain('a named editor');
+  });
   it('teaches native HTML pages, not the JSX compiler',()=>{
     const http=renderSkill(tree.get('artifactbin/SKILL.md')!,{base:BASE});
     expect(http).toContain('normal HTML');expect(http).not.toContain('```jsx');

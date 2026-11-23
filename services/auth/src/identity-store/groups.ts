@@ -26,7 +26,7 @@ import {normalizeCreateGroup, type GroupRole, type GroupSummary} from '@artifact
 import {IDENTITY_SCHEMA} from '@artifactbin/contracts/identity-service';
 import {plainIdentifier} from '@artifactbin/utils/sql-identifier';
 import {companyGroupState} from './company-group';
-import {bumpHierarchy,chainOf,effectiveAdminVia,insertGroup,memberRole,isTestAccount,liveGroup,lockGroups,recordChange,requireAdmin,requireManualMembership,type GroupRow} from './group-access';
+import {bumpHierarchy,chainOf,effectiveAdminVia,insertGroup,memberRole,isTestAccount,liveGroup,lockGroups,recordChange,requireAdmin,type GroupRow} from './group-access';
 import {groupMemberMethods} from './group-members';
 import {internalId,type IdentityTables} from './tables';
 
@@ -154,11 +154,13 @@ export function groupMethods(db: TransactionalQueryable, t: IdentityTables, opti
         return await db.transaction(async tx => {
           const revision = await bumpHierarchy(tx, t);
           // Edges move only under the revision, which this transaction now holds: the parent read here is current.
-          const previous = (await liveGroup(tx, t, id))?.parent_id ?? null;
+          const group = await liveGroup(tx, t, id);
+          const previous = group?.parent_id ?? null;
           await lockGroups(tx, t, [id, ...(previous ? [previous] : []), ...(parentId ? [parentId] : [])]);
           await requireAdmin(tx, t, actorId, id);
           if (fromParentId !== undefined && fromParentId !== previous) throw new IdentityError('parent_changed', 409);
           if (previous === parentId) throw new Unchanged(previous);
+          if (group?.trusted_issuer != null) throw new IdentityError('host_managed_parent', 409);
           if (!parentId && await companyGroupState(tx, options.appSchema)) throw new IdentityError('company_parent_required', 409);
           if (previous && parentId && fromParentId === undefined) throw new IdentityError('already_has_parent', 409);
           if (previous) await requireAdmin(tx, t, actorId, previous, 'parent_not_found');
@@ -184,8 +186,12 @@ export function groupMethods(db: TransactionalQueryable, t: IdentityTables, opti
       return db.transaction(async tx => {
         await bumpHierarchy(tx, t);
         await requireAdmin(tx, t, actorId, id);
-        if (handle !== (await liveGroup(tx, t, id))!.handle) throw new IdentityError('handle_mismatch', 409);
-        await requireManualMembership(tx, t, id);
+        const group = (await liveGroup(tx, t, id))!;
+        if (group.trusted_issuer != null) {
+          if (!group.parent_id) throw new IdentityError('forbidden', 403);
+          await requireAdmin(tx, t, actorId, group.parent_id);
+        }
+        if (handle !== group.handle) throw new IdentityError('handle_mismatch', 409);
         if ((await tx.query(`SELECT 1 FROM ${t.groups} WHERE parent_id=$1 AND deleted_at IS NULL LIMIT 1`, [id])).rows.length) throw new IdentityError('group_has_children', 409);
         const members = (await tx.query<{user_id: string}>(`SELECT user_id FROM ${t.group_members} WHERE group_id=$1`, [id])).rows.map(row => row.user_id);
         const changes: GroupChange[] = [];
