@@ -22,7 +22,9 @@ export async function exportAssetResponse(request:Request,id:string):Promise<Res
  if(!['GET','HEAD'].includes(request.method)||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)
    ||keys.length!==1||keys[0]!=='key'||!verifyExportKey(`export-asset:${id}`,url.searchParams.get('key')??undefined))
   return new Response('not found',{status:404,headers:{'cache-control':'no-store'}});
- const image=(await (await getDb()).query<ExportImage>('SELECT * FROM export_images WHERE id=$1',[id])).rows[0];
+ // Previously issued grants for pages with approvals carry no reader to recheck.
+ const image=(await (await getDb()).query<ExportImage>(`SELECT i.* FROM export_images i WHERE i.id=$1
+  AND NOT EXISTS (SELECT 1 FROM page_query_approvals a WHERE a.page_id=i.artifact_id)`,[id])).rows[0];
  if(!image)return new Response('not found',{status:404,headers:{'cache-control':'no-store'}});
  const grant=assetGrant(Date.now(),Number(url.searchParams.get('key')!.split('.')[0]));
  const etag=`"export-${image.id}"`;

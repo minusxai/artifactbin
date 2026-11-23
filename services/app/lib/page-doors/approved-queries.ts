@@ -3,8 +3,8 @@
  * reader, unless the reader reads as the group (a signed-in ordinary account that can open the page: lib/query-approvals
  * `readsAsGroup`) and an approval holds for exactly the query of the version read (`approvedRun`). Then it runs as an
  * agent signed in as the page's owning group at member level (lib/connections `groupViewer`), the reader's own identity
- * used to check its current tenancy against the group chain before and after the delegated read; a parameter outside what the approval allows is refused, saying the value is not allowed
- * for this query, never run as the reader instead. Only a declared query, read by name from the version, ever runs as
+ * checked before and after the delegated read. A personal tenancy binding or a parameter outside the approval refuses
+ * the delegated read. An out-of-scope parameter receives a notice identifying the value. Only a declared query, read by name from the version, ever runs as
  * the group: a reader's own `sql` always runs as the reader. The approval is asked again after the read, so one revoked
  * meanwhile never answers. Anonymous readers are refused, as everywhere on the default connection. Every read run as
  * the group is recorded (contracts events `approved_query_read`): the real reader as its subject, the approval, query,
