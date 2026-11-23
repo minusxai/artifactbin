@@ -436,6 +436,20 @@ export function resetConfigOverrides(): void {
   envOverrides.clear();
 }
 
+/** Public, operator-configured sign-in destination for both the default login page and custom shells. */
+export function loginLink(): { url: string; label: string } | undefined {
+  const raw = env('LOGIN', 'SSO_URL')?.trim();
+  const label = env('LOGIN', 'SSO_LABEL')?.trim() || 'Sign in with company';
+  if (!raw) return undefined;
+  const url = URL.canParse(raw) ? new URL(raw) : null;
+  if (!url || (url.protocol !== 'https:' && !(url.protocol === 'http:' && isLocalDevelopmentHost(url.hostname))) ||
+      url.username || url.password || raw.includes('#') || /[\u0000-\u001f\u007f\\]/u.test(raw)) {
+    throw new Error('LOGIN__SSO_URL requires an absolute HTTPS URL (HTTP on local development hosts) without credentials or a fragment.');
+  }
+  if (/[\u0000-\u001f\u007f]/u.test(label)) throw new Error('LOGIN__SSO_LABEL must be a single line.');
+  return { url: url.href, label };
+}
+
 /** Explicit company bootstrap identity; changes never replace the persisted owner. */
 export function deploymentConfig():{mode:'public'|'company';ownerEmail:string|undefined} {
  const mode=env('APP','DEPLOYMENT_MODE')??'public';

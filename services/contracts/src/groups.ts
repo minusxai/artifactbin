@@ -38,7 +38,7 @@ export interface GroupAudienceMember {user_id:string;username:string|null;name:s
  * installation's tree; `subgroup_audience` (at most 100) lists the people its shares also reach through its subgroups.
  */
 export interface GroupDetail {group:GroupSummary & {company_root?:boolean;tenancy_id?:string|null;host_provisioned?:boolean};members:GroupMember[];can_publish_pages?:boolean;linked_groups:GroupSummary[];invitations?:GroupInvitation[];parent:GroupRelative|null;subgroups:GroupRelative[];subgroup_audience:GroupAudienceMember[];admin_via?:{id:string;handle:string;name:string}|null;}
-export interface DeploymentState {mode:'public'|'company';setup_complete:boolean;is_owner:boolean;default_group:GroupSummary|null;}
+export interface DeploymentState {login_sso?:{url:string;label:string};mode:'public'|'company';setup_complete:boolean;is_owner:boolean;default_group:GroupSummary|null;}
 export interface CreateGroupInput {handle:string;name:string;description?:string;parent_id?:string|null;}
 
 export interface UpdateGroupInput {name?:string;description?:string;tenancy_id?:string|null;}

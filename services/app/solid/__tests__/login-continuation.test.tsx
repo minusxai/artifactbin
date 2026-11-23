@@ -142,3 +142,15 @@ it('uses the router-provided website destination instead of stale browser histor
  fireEvent.click(screen.getByRole('button',{name:'Verify code'}));
  await waitFor(()=>expect(replaceDocument).toHaveBeenCalledWith('/'));
 });
+
+it('offers the configured company link alongside email as soon as the deployment answers',async()=>{
+ let reply!: (response: Response) => void;
+ const pending = new Promise<Response>(resolve => { reply = resolve; });
+ vi.stubGlobal('fetch', vi.fn(() => pending));
+ render(() => <LoginPage />);
+ expect(screen.getByRole('textbox', {name:'Email'})).toBeTruthy();
+ expect(screen.queryByRole('link')).toBeNull();
+ const url = 'https://id.example.test/sign-in';
+ reply(Response.json({mode:'company',login_sso:{url,label:'Company SSO'}}));
+ expect((await screen.findByRole('link',{name:'Company SSO'})).getAttribute('href')).toBe(url);
+});

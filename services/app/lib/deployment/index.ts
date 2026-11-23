@@ -4,7 +4,7 @@ import {validateDefaultConnection} from '../connections';
 /** Durable company bootstrap and admission. All state transitions hold the singleton row lock. */
 import type {ArtifactDestination, DeploymentState, GroupSummary} from '@artifactbin/contracts/groups';
 import type {Queryable} from '@artifactbin/contracts/db';
-import { getDb, deploymentConfig, embedTrustedOrigins, env, serviceAudiences, services } from '../platform';
+import { getDb, deploymentConfig, loginLink, embedTrustedOrigins, env, serviceAudiences, services } from '../platform';
 import {admissionPolicyOf} from '@artifactbin/auth';
 import {datasetsOwnConnections,groupTrustApprovalsEnabled} from '../platform';
 interface State {owner_user_id:string|null;default_group_id:string|null;setup_complete:boolean}
@@ -12,7 +12,7 @@ const ID='company';
 export class DeploymentError extends Error {constructor(public code:string,public status:number,message:string){super(message);}}
 /** Run at boot (server.ts): a refused setting stops the start with its name. */
 export function validateDeploymentConfiguration():void {
- serviceAudiences();embedTrustedOrigins();
+ serviceAudiences();embedTrustedOrigins();loginLink();
  // DATASETS__DEFAULT_CONNECTION (lib/connections): here too, so a downstream composition refuses a bad value at boot.
  validateDefaultConnection();
  const config=deploymentConfig(),policy=admissionPolicyOf({},(_source,key)=>{const [module,name]=key.split('__');return env(module!,name!);});
@@ -29,9 +29,11 @@ async function group(db:Queryable,id:string|null,userId:string|null):Promise<Gro
  return (await db.query<GroupSummary>(`SELECT g.id,g.handle,g.name,g.description,g.parent_id,${effectiveRoleSql('$2')} AS role FROM groups g WHERE g.id=$1 AND g.deleted_at IS NULL`,[id,userId])).rows[0]??null;
 }
 export async function getDeploymentState(userId:string|null):Promise<DeploymentState> {
- const {mode}=deploymentConfig();if(mode==='public')return {mode,setup_complete:true,is_owner:false,default_group:null};
+ const {mode}=deploymentConfig(),login_sso=loginLink();
+ const info=login_sso?{mode,login_sso}:{mode};
+ if(mode==='public')return {...info,setup_complete:true,is_owner:false,default_group:null};
  const db=await getDb(),s=await state(db),default_group=await group(db,s.default_group_id,userId);
- return {mode,setup_complete:s.setup_complete&&!!default_group,is_owner:!!userId&&s.owner_user_id===userId,default_group};
+ return {...info,setup_complete:s.setup_complete&&!!default_group,is_owner:!!userId&&s.owner_user_id===userId,default_group};
 }
 export async function getDeploymentDefaultDestination():Promise<ArtifactDestination|undefined> {
  const s=await getDeploymentState(null);
