@@ -161,7 +161,10 @@ describe('trusted-issuer sign-in', () => {
       [[south],{group:south.handle}], [[],{active_group:south.handle}]] as const) {
       await refused(await send(list,extra),401,'invalid_token');
     }
-    await refused(await send([]),403,'no_authorized_groups');
+    const empty=await send([]);
+    expect(empty.status).toBe(303);
+    expect(empty.headers.get('location')).toBe('/');
+    expect(await rows('SELECT trusted_sign_in_group FROM auth.users WHERE email=$1',[sub])).toEqual([{trusted_sign_in_group:southId}]);
     expect((await groups()).map(g=>g.handle)).toEqual([north.handle,south.handle,'plain_team']);
   });
 
@@ -176,7 +179,7 @@ describe('trusted-issuer sign-in', () => {
     expect(await rows("SELECT handle FROM auth.handle_reservations WHERE handle IN ('atomic_first','atomic_reader')")).toEqual([]);
   });
 
-  it('refuses scalar and mixed tokens and returns no session or identity writes for an empty list', async () => {
+  it('refuses scalar and mixed tokens and rolls back an empty list when deployment admission is denied', async () => {
     const target=await app();
     const group={handle:'format_group',tenancy_id:'101',parent_handles:['parent_team']};
     for (const claims of [{group:group.handle,tenancy_id:'101'}, {groups:[group],group:group.handle},
@@ -185,7 +188,9 @@ describe('trusted-issuer sign-in', () => {
     }
     const receipts=()=>rows("SELECT count(*) FROM auth.credentials WHERE kind='trusted_sign_in'");
     const before=await receipts();
-    await refused(await post(target,{token:wireToken({sub:'unadmitted@example.com',groups:[]})}),403,'no_authorized_groups');
+    const denied = assemble(authParts(await testAuthOptions({env:{TRUSTED_SIGNIN__ISSUERS:issuers()},
+      sessions:sessionStoreOf(auth),identityTransactions:db,admitIdentity:async()=>false})));
+    await refused(await post(denied,{token:wireToken({sub:'unadmitted@example.com',groups:[]})}),403,'deployment_admission_required');
     expect(await receipts()).toEqual(before);
     expect(await rows("SELECT id FROM auth.users WHERE email='unadmitted@example.com'")).toEqual([]);
     expect(await rows(`SELECT id FROM auth."user" WHERE email='unadmitted@example.com'`)).toEqual([]);
@@ -365,6 +370,20 @@ describe('trusted-issuer sign-in', () => {
         JOIN auth.users u ON u.id=m.user_id WHERE u.username='company_reader' ORDER BY g.handle`)).toEqual([...expected].sort().map(handle=>({handle})));
     }
   });
+  it('starts a personal session with zero groups, even with company root enrollment enabled', async () => {
+    const env = {TRUSTED_SIGNIN__ISSUERS:issuers(),APP__SCHEMA:'company_app',TRUSTED_SIGNIN__JOIN_COMPANY_ROOT:'true'};
+    const sub = 'no-seats@example.com', signed = wireToken({sub,groups:[]});
+    const target = await app(env);
+    const response = await post(target,{token:signed,callbackUrl:'/workspace?notice=directory#home'});
+    expect(response.status).toBe(303);
+    expect(response.headers.get('location')).toBe('/workspace?notice=directory#home');
+    const session = await auth.sessions.resolve(new Request(BASE,{headers:{cookie:cookieOf(response)}}));
+    expect(session?.email).toBe(sub);
+    expect(await rows('SELECT group_id FROM auth.group_members WHERE user_id=$1',[session!.userId])).toEqual([]);
+    expect(await rows('SELECT trusted_root_granted,trusted_sign_in_group FROM auth.users WHERE id=$1',[session!.userId]))
+      .toEqual([{trusted_root_granted:null,trusted_sign_in_group:null}]);
+    await refused(await post(await app(env),{token:signed}),401,'replayed_token');
+  });
   it('does not let a fresh issuer assertion restore admission after removal from the designated root', async () => {
     await pg.query("INSERT INTO auth.groups(id,handle,name,created_by,parent_id) VALUES ('grp_nested_removal','nested_removal','Nested default','usr_admin','grp_parent')");
     await pg.query("INSERT INTO company_app.deployment_state VALUES('company','usr_admin','grp_nested_removal',true) ON CONFLICT (id) DO UPDATE SET default_group_id=EXCLUDED.default_group_id,setup_complete=true");
@@ -382,6 +401,7 @@ describe('trusted-issuer sign-in', () => {
       await store.removeGroupMember({actorId:'usr_admin',groupId:'grp_parent',userId});
       expect(await rows("SELECT active FROM identity.users WHERE id=$1",[userId])).toEqual([{active:false}]);
       await refused(await post(target,{token:token({...claims,group:'replacement_readers'})}),403,'deployment_admission_required');
+      await refused(await post(target,{token:wireToken({sub:claims.sub,groups:[]})}),403,'deployment_admission_required');
       expect(await rows(`SELECT g.handle FROM auth.group_members m JOIN auth.groups g ON g.id=m.group_id WHERE m.user_id=$1`,[userId]))
         .toEqual([{handle:claims.group}]);
       expect(await rows("SELECT id FROM auth.groups WHERE handle='replacement_readers'")).toEqual([]);
