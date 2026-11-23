@@ -4,7 +4,7 @@ import {account,sql} from '@/__tests__/artifact-fixtures';
 import {getDb,services,syncIdentitySettings} from '@/lib/platform';
 import {admitDeploymentIdentity,setupDeployment} from '@/lib/deployment';
 import {overrideConfig,resetConfigOverrides} from '@/lib/platform/config';
-import {createGroup,deleteGroup,inviteGroupMember,removeGroupMember,setGroupMember} from '..';
+import {createGroup,deleteGroup,inviteGroupMember,removeGroupMember,setGroupMember,setGroupParent} from '..';
 useAppHarness();
 afterEach(resetConfigOverrides);
 async function companyGroup(handle:string){
@@ -86,11 +86,20 @@ it('keeps host-managed seats under issuer control for both direct and inherited 
  for(const actor of [owner,direct]){
   await expect(setGroupMember(actor.userId,subgroup.id,member.userId,'admin')).rejects.toMatchObject(refusal);
   await expect(removeGroupMember(actor.userId,subgroup.id,member.userId)).rejects.toMatchObject(refusal);
-  await expect(deleteGroup(actor.userId,subgroup.id,subgroup.handle)).rejects.toMatchObject(refusal);
  }
  await expect(removeGroupMember(member.userId,subgroup.id,member.userId)).rejects.toMatchObject(refusal);
  expect(await services().identity.admitToGroup({userId:owner.userId,email:owner.email!,groupId:subgroup.id,inviteOnly:false}))
   .toEqual({admitted:false,changes:[]});
  expect(await sql('SELECT user_id,role FROM group_members WHERE group_id=$1 ORDER BY role',[subgroup.id]))
   .toEqual([{user_id:direct.userId,role:'admin'},{user_id:member.userId,role:'member'}]);
+ const sibling=await createGroup(owner.userId,{handle:'other_parent',name:'Other parent',parent_id:group.id});
+ await expect(setGroupParent(owner.userId,subgroup.id,sibling.id,group.id)).rejects.toMatchObject({code:'host_managed_parent',status:409});
+ expect(await sql('SELECT parent_id FROM auth.groups WHERE id=$1',[subgroup.id])).toEqual([{parent_id:group.id}]);
+ await expect(deleteGroup(direct.userId,subgroup.id,subgroup.handle)).rejects.toMatchObject({code:'not_found',status:404});
+ await expect(deleteGroup(owner.userId,subgroup.id,'different_handle')).rejects.toMatchObject({code:'handle_mismatch',status:409});
+ const child=await createGroup(owner.userId,{handle:'managed_child',name:'Managed child',parent_id:subgroup.id});
+ await expect(deleteGroup(owner.userId,subgroup.id,subgroup.handle)).rejects.toMatchObject({code:'group_has_children',status:409});
+ await deleteGroup(owner.userId,child.id,child.handle);
+ await deleteGroup(owner.userId,subgroup.id,subgroup.handle);
+ expect(await sql('SELECT id FROM auth.groups WHERE id=$1 AND deleted_at IS NOT NULL',[subgroup.id])).toEqual([{id:subgroup.id}]);
 });

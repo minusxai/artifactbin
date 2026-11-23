@@ -26,6 +26,7 @@ import { Badge } from '../ui/ui';
 
 const MESSAGES: Record<string, string> = {
   forbidden: 'Only someone who is an admin of this group, of its current parent and of the new parent can move it.',
+  host_managed_parent: 'The sign-in provider manages this group’s parent.',
   parent_not_found: 'That parent group is unavailable. Choose a group you are an admin of.',
   already_has_parent: 'This group already has a parent. Reload the page, then move it from its current parent.',
   parent_changed: 'This group’s parent changed since the page loaded. Reload the page and try again.',
@@ -140,7 +141,7 @@ export function GroupTreePanel(props: { detail: GroupDetail; refresh: () => void
       <span class="text-xs font-medium text-muted">Parent group</span>
       <div class="flex flex-wrap items-center justify-between gap-3">
         <Show when={props.detail.parent} fallback={<span>None: {props.detail.group.name} is a top-level group.</span>}>{(parent) => <span>{relativeName(parent())}</span>}</Show>
-        <Show when={admin()}><Button size="sm" variant="secondary" onClick={() => setMoving(true)}>Move group</Button></Show>
+        <Show when={admin() && !props.detail.group.host_provisioned}><Button size="sm" variant="secondary" onClick={() => setMoving(true)}>Move group</Button></Show>
       </div>
     </div>
     <div class="mt-5 grid gap-1">
