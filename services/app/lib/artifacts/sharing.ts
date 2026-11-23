@@ -1,4 +1,4 @@
-import {groupQuota,mailGroupChanges,recordGroupMutation,GroupError,getGroupRole,subtreeMemberIds} from '../groups';
+import {groupQuota,mailGroupChanges,recordGroupMutation,GroupError,getGroupRole,groupPublicationRole,subtreeMemberIds} from '../groups';
 import { managesSharing, ownerScope, sharingScope, type ArtifactRow } from '@/lib/artifact-access';
 import { notifyArtifactSql } from './table';
 import type { AccessActor } from '@/lib/accounts';
@@ -7,7 +7,7 @@ import { writeShares } from './store';
 import { assertAudienceChange } from '@/lib/query-approvals';
 import { artifactQuery } from './document';
 import { ALLOW_PUBLIC_VISIBILITY, getDb, actorSubject, emit } from '../platform';
-import type { DatasetAccess, ShareEntry, ShareRole, SharingPatch, Visibility } from '@artifactbin/contracts/sharing';
+import { maxRole, type DatasetAccess, type ShareEntry, type ShareRole, type SharingPatch, type Visibility } from '@artifactbin/contracts/sharing';
 import type { GroupShareRole } from '@artifactbin/contracts/groups';
 import type { GroupSummary } from '@artifactbin/contracts/groups';
 
@@ -140,13 +140,17 @@ export async function setArtifactGroupShare(actor:AccessActor,id:string,groupId:
   // target membership and the governing one), so a page write's guard and this edit never wait on each other.
   const observed=(await tx.query<{group_id:string|null}>('SELECT group_id FROM artifacts WHERE id=$1 AND deleted_at IS NULL FOR UPDATE NOWAIT',[id])).rows[0];
   if(!observed)return null;
-  const previous=(await tx.query<{role:string}>('SELECT role FROM artifact_group_shares WHERE artifact_id=$1 AND group_id=$2 FOR UPDATE',[id,groupId])).rows[0]?.role??null;
+  const previous=(await tx.query<{role:GroupShareRole}>('SELECT role FROM artifact_group_shares WHERE artifact_id=$1 AND group_id=$2 FOR UPDATE',[id,groupId])).rows[0]?.role??null;
   // Membership read at decision time, unlocked (the identity module's rows); a deleted group is no member's.
   if(!await getGroupRole(actor.userId,groupId,tx))throw new GroupError('share_refused',403);
   const scope=ownerScope(actor);
   const row=(await tx.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id=$1 AND ${scope.where('$2')}`,[id,scope.val])).rows[0];
   if(!row)return null;
   if(previous===role)return {changed:false};
+  // A new or stronger page grant to the company root needs the same authority as publishing there.
+  // Keep existing grants usable and let their owners reduce or remove them.
+  if(row.format==='html'&&role!==null&&maxRole(previous??'none',role)===role
+     &&!await groupPublicationRole(actor,groupId,tx))throw new GroupError('share_refused',403);
   await assertAudienceChange(tx,actor,row,{grant:true});
   await groupQuota(tx,actor.userId!,'share');
   if(role===null)await tx.query('DELETE FROM artifact_group_shares WHERE artifact_id=$1 AND group_id=$2',[id,groupId]);

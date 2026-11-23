@@ -1,14 +1,21 @@
 import {admitGroupMember} from '@/__tests__/harness';
 import {nativeHtml} from './native-html-fixture';
 import {afterEach,describe,expect,it} from 'vitest';
-import {request,useAppHarness,mintAccountToken} from './harness';
-import { createUser } from '@/lib/accounts';
+import {request,useAppHarness,mintAccountToken,params,setDatasetPolicy} from './harness';
+import { createUser,identityForUser } from '@/lib/accounts';
 import {createGroup,getGroupDetail,removeGroupMember,setAccountPreferences} from '@/lib/groups';
 import {admitDeploymentIdentity,setupDeployment} from '@/lib/deployment';
 import {overrideConfig,resetConfigOverrides} from '@/lib/platform/config';
 import {getDb} from '@/lib/platform/db';
 import {POST as publish} from '@/app/api/artifacts/route';
 import {POST as start} from '@/app/api/start/route';
+import {PUT as share,DELETE as unshare} from '@/app/api/artifacts/[id]/group-shares/[groupId]/route';
+import {PUT as edit} from '@/app/api/artifacts/[id]/route';
+import {POST as comment} from '@/app/api/artifacts/[id]/annotations/route';
+import {POST as pageSql} from '@/app/api/artifacts/[id]/sql/route';
+import {nativeAnchor} from './native-annotation-fixture';
+import {getArtifactById} from '@/lib/artifacts';
+import {loadDatasetRows} from '@/lib/datasets';
 useAppHarness();
 afterEach(resetConfigOverrides);
 async function account(name:string){
@@ -17,7 +24,7 @@ async function account(name:string){
 }
 async function create(token:string,json:Record<string,unknown>){
  const response=await publish(request('/api/artifacts',{method:'POST',token,json}));
- return{status:response.status,body:await response.json() as {id?:string;error?:string}};
+ return{status:response.status,body:await response.json() as {id?:string;error?:string;version?:number;state?:string}};
 }
 async function owner(id:string|undefined){
  const db=await getDb();return(await db.query('SELECT user_id,group_id,creator_user_id FROM artifacts WHERE id=$1',[id])).rows[0];
@@ -117,6 +124,89 @@ describe('publication uses shared account destination through the real HTTP hand
   expect((await create(b.token,{...page,destination:{type:'group',id:subgroup.id}})).status).toBe(201);
   expect((await create(a.token,{...page,destination})).status).toBe(201);
   expect((await create(b.token,{...page,destination:{type:'personal'}})).status).toBe(201);
+ });
+ it('requires root Admin authority to widen a page group share and allows removing legacy shares',async()=>{
+  const admin=await account('share-admin'),member=await account('share-member');
+  const root=await createGroup(admin.user.id,{handle:'share_root',name:'Share root'});
+  const ordinary=await createGroup(admin.user.id,{handle:'share_ordinary',name:'Ordinary group'});
+  const nested=await createGroup(admin.user.id,{handle:'share_nested',name:'Nested group',parent_id:root.id});
+  for(const group of [root,ordinary,nested])await admitGroupMember(admin.user.id,group.id,member.user.id,'member');
+  const page={html:nativeHtml('<p>Report</p>'),visibility:'private',destination:{type:'personal'}};
+  const legacy=await create(member.token,page),personal=await create(member.token,page),adminPage=await create(admin.token,page);
+  for(const created of [legacy,personal,adminPage])expect(created.status).toBe(201);
+  const groupShare=(token:string,id:string,groupId:string,role?:'viewer'|'commenter'|'editor')=>{
+   const url=`/api/artifacts/${id}/group-shares/${groupId}`,context={params:Promise.resolve({id,groupId})};
+   return role?share(request(url,{method:'PUT',token,json:{role}}),context):unshare(request(url,{method:'DELETE',token}),context);
+  };
+  expect((await groupShare(member.token,legacy.body.id!,root.id,'commenter')).status).toBe(200);
+  overrideConfig({}, {APP__DEPLOYMENT_MODE:'company',APP__DEPLOYMENT_OWNER_EMAIL:admin.user.email!,AUTH__INVITE_ONLY:'false'});
+  expect(await admitDeploymentIdentity({userId:admin.user.id,email:admin.user.email!,emailVerified:true})).toBe(true);
+  await setupDeployment(admin.user.id,root.id);
+  expect(await admitDeploymentIdentity({userId:member.user.id,email:member.user.email!,emailVerified:true})).toBe(true);
+  const db=await getDb();
+  await db.query("UPDATE deployment_state SET default_group_id=$1 WHERE id='company'",[nested.id]);
+
+  for(const role of ['viewer','commenter','editor'] as const){
+   const denied=await groupShare(member.token,personal.body.id!,root.id,role);
+   expect(denied.status).toBe(403);
+   expect(await denied.json()).toEqual({error:'share_refused'});
+  }
+  expect((await db.query('SELECT role FROM artifact_group_shares WHERE artifact_id=$1',[personal.body.id])).rows).toEqual([]);
+  expect((await groupShare(member.token,legacy.body.id!,root.id,'editor')).status).toBe(403);
+  expect((await groupShare(member.token,legacy.body.id!,root.id,'commenter')).status).toBe(200);
+  expect((await groupShare(member.token,legacy.body.id!,root.id,'viewer')).status).toBe(200);
+  expect((await groupShare(member.token,legacy.body.id!,root.id)).status).toBe(200);
+  expect((await groupShare(member.token,personal.body.id!,ordinary.id,'viewer')).status).toBe(200);
+  expect((await groupShare(member.token,personal.body.id!,nested.id,'viewer')).status).toBe(200);
+  expect((await groupShare(admin.token,adminPage.body.id!,root.id,'viewer')).status).toBe(200);
+ });
+ it('keeps comments, edits and dataset rows on existing root pages governed by their grants',async()=>{
+  const admin=await account('interactive-admin'),member=await account('interactive-member');
+  const root=await createGroup(admin.user.id,{handle:'interactive_root',name:'Interactive root'});
+  const destination={type:'group',id:root.id};
+  await admitGroupMember(admin.user.id,root.id,member.user.id,'member');
+  const data=await create(admin.token,{dataset:[{note:'seed'}],access:'readwrite',visibility:'private',destination});
+  expect(data.status).toBe(201);
+  const source=(note:string)=>nativeHtml(`<link rel="af-dataset" data-af-name="notes" href="ref:${data.body.id}"><p data-af-id="intro">${note}</p>`);
+  const page=(role?:'commenter'|'editor')=>create(admin.token,{html:source('Report'),visibility:'private',destination,
+   ...(role?{shares:[{email:member.user.email,role}]}:{})});
+  const viewer=await page(),commenter=await page('commenter'),editor=await page('editor');
+  for(const created of [viewer,commenter,editor])expect(created.status,JSON.stringify(created.body)).toBe(201);
+
+  overrideConfig({}, {APP__DEPLOYMENT_MODE:'company',APP__DEPLOYMENT_OWNER_EMAIL:admin.user.email!,AUTH__INVITE_ONLY:'false'});
+  expect(await admitDeploymentIdentity({userId:admin.user.id,email:admin.user.email!,emailVerified:true})).toBe(true);
+  await setupDeployment(admin.user.id,root.id);
+  expect(await admitDeploymentIdentity({userId:member.user.id,email:member.user.email!,emailVerified:true})).toBe(true);
+
+  const say=(doc:typeof viewer.body)=>comment(request(`/api/artifacts/${doc.id}/annotations`,{
+   method:'POST',token:member.token,json:{anchor:nativeAnchor('intro',doc.version!),body:'A note'},
+  }),params(doc.id!));
+  expect((await say(viewer.body)).status).toBe(404);
+  expect((await say(commenter.body)).status).toBe(201);
+  const replace=(doc:typeof viewer.body)=>edit(request(`/api/artifacts/${doc.id}`,{
+   method:'PUT',token:member.token,json:{html:source('Updated'),expectedVersion:doc.version,expectedState:doc.state},
+  }),params(doc.id!));
+  expect((await replace(commenter.body)).status).toBe(404);
+  const edited=await replace(editor.body);
+  expect(edited.status,await edited.clone().text()).toBe(200);
+  const shareUrl=`/api/artifacts/${editor.body.id}/group-shares/${root.id}`;
+  expect((await share(request(shareUrl,{method:'PUT',token:member.token,json:{role:'editor'}}),
+   {params:Promise.resolve({id:editor.body.id!,groupId:root.id})})).status).toBe(404);
+
+  const write=(sql:string)=>pageSql(request(`/api/artifacts/${viewer.body.id}/sql`,{
+   method:'POST',token:member.token,json:{sql,revision:String(viewer.body.version)},
+  }),params(viewer.body.id!));
+  const insert="insert into notes (note) values ('allowed')";
+  const denied=await write(insert);
+  expect(denied.status,await denied.clone().text()).toBe(403);
+  await setDatasetPolicy(identityForUser(admin.user.id),data.body.id!,{version:3,tables:[{
+   table:{schema:'public',name:'rows'},insert_permissions:[{role:'viewer',permission:{columns:['note'],check:{note:{_eq:'allowed'}}}}],
+  }]},0);
+  const saved=await write(insert);
+  expect(saved.status,await saved.clone().text()).toBe(200);
+  expect((await write("insert into notes (note) values ('blocked')")).status).toBe(403);
+  const rows=await loadDatasetRows((await getArtifactById(data.body.id!))!);
+  expect(rows.map(row=>row.note).sort()).toEqual(['allowed','seed']);
  });
  it('allows a direct member to create within its group folder',async()=>{
   const a=await account('folder-admin'),b=await account('folder-member');
