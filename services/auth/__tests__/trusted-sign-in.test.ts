@@ -243,6 +243,42 @@ describe('trusted-issuer sign-in', () => {
     }
     expect(await memberships()).toEqual(before);
   });
+  it('binds a free issuer subject to the verified OTP person without taking their personal handle', async () => {
+    const sites=JSON.parse(twoIssuers());
+    const standalone='https://standalone.example';
+    sites.push({...sites[0],origins:[standalone],publicJwk:stranger.publicKey.export({format:'jwk'})});
+    const target=await app({TRUSTED_SIGNIN__ISSUERS:JSON.stringify(sites)});
+    const email='otp.first@example.com', userId='usr_otp_first', handle='external_reader';
+    await pg.query(`INSERT INTO auth."user"(id,email,name,"emailVerified","createdAt","updatedAt")
+      VALUES($1,$2,'Local name',true,now(),now())`,[userId,email]);
+    await pg.query(`INSERT INTO auth.users(id,email,name,username) VALUES($1,$2,'Local name','chosen_handle')`,[userId,email]);
+    const signIn=(fields:Record<string,unknown>,key=keys.privateKey,origin=EMBEDDER)=>post(target,{token:token(fields,{key})},{origin});
+    const claims={sub:email,previous_handle:handle,group:'alias_team'};
+    await refused(await signIn({...claims,group:'plain_team'}),403,'group_conflict');
+    expect(await rows("SELECT handle FROM auth.handle_reservations WHERE handle=$1",[handle])).toEqual([]);
+    for (const fields of [claims,{...claims,group:'second_alias_team'}, {sub:handle,group:'alias_team'}]) {
+      const response=await signIn(fields);
+      expect(response.status).toBe(303);
+      expect(await auth.sessions.resolve(new Request(BASE,{headers:{cookie:cookieOf(response)}}))).toMatchObject({userId,email});
+    }
+    const otherSite=await signIn({...claims,group:'paired_group'},stranger.privateKey,standalone);
+    expect(await auth.sessions.resolve(new Request(BASE,{headers:{cookie:cookieOf(otherSite)}}))).toMatchObject({userId,email});
+    await pg.query(`INSERT INTO auth."user"(id,email,name,"emailVerified","createdAt","updatedAt")
+      VALUES('verified_other','verified.other@example.com','',true,now(),now()),
+        ('unverified_existing','unverified@example.com','',false,now(),now())`);
+    await refused(await signIn({...claims,sub:'verified.other@example.com'}),403,'subject_conflict');
+    await refused(await signIn({...claims,previous_handle:'free_unverified',sub:'unverified@example.com'}),403,'subject_conflict');
+    await refused(await signIn({...claims,previous_handle:'other_external'}),403,'subject_conflict');
+    await refused(await signIn({...claims,sub:'different@example.com'}),403,'subject_conflict');
+    await refused(await signIn({...claims,iss:'issuer-b',group:'another_issuer_team'},otherKeys.privateKey),403,'subject_conflict');
+    await refused(await signIn({...claims,previous_handle:'taken_user'}),403,'subject_conflict');
+    expect(await rows('SELECT username,name FROM auth.users WHERE id=$1',[userId])).toEqual([{username:'chosen_handle',name:'Local name'}]);
+    const store=createIdentityStore({db,authSchema:'auth'});
+    expect(await store.hasManagedUsername({userId})).toBe(false);
+    expect(await store.setUsername({userId,username:'renamed_account'})).toEqual({ok:true,username:'renamed_account'});
+    expect((await signIn(claims)).status).toBe(303);
+    expect(await rows('SELECT username FROM auth.users WHERE id=$1',[userId])).toEqual([{username:'renamed_account'}]);
+  });
   it('accepts first use of a free signed handle and email, and preserves their identity on later sign-ins', async () => {
     const target = await app();
     const handle = 'first_reader', email = 'first.reader@example.com', group = 'first_team';

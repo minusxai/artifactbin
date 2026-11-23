@@ -135,6 +135,13 @@ async function findOrCreateHandlePerson(tx: Queryable, input: TrustedPerson, t: 
     if (!owner.bound) throw new Refused('subject_conflict');
     return {userId:owner.id,email:owner.email,created:false};
   }
+  // A person who first authenticated by email keeps their own public username. This issuer's reserved alias
+  // authenticates the same verified person even when a later token names only the stable handle.
+  const alias = (await tx.query<{id:string;email:string}>(`SELECT u.id,u.email FROM ${t.handle_reservations} r
+    JOIN ${t.users} u ON u.id=r.subject_id AND u.kind='account'
+    JOIN ${better('user')} auth ON auth.id=u.id AND auth.email=u.email AND auth."emailVerified"
+    WHERE r.handle=$1 AND r.kind=$2 FOR UPDATE OF u,auth`,[input.subject,provider])).rows[0];
+  if (alias) return {userId:alias.id,email:alias.email,created:false};
   // Before host handles were fixed the person could release this name. Recover only their original binding.
   const legacy = (await tx.query<{id:string; email:string; provider:string}>(`
     SELECT u.id,u.email,a."providerId" AS provider FROM ${better('account')} a JOIN ${t.users} u ON u.id=a."userId"
@@ -157,8 +164,33 @@ async function findOrCreateHandlePerson(tx: Queryable, input: TrustedPerson, t: 
   return {userId, email: input.email, created: true};
 }
 
+/** When OTP came first, reserve the free external handle as an alias without changing the person's public handle.
+ * The handle PK and unique (kind,subject_id) index allow exactly one person per handle and one alias per issuer/person.
+ * Existing handle identities always follow the original migration path, including its collision checks.
+ */
+async function bindVerifiedEmailAlias(tx: Queryable, t: Tables, better: (table:string)=>string, issuer:string, handle:string, address:string) {
+  const provider = trustedProviderId(issuer);
+  const bound = await tx.query(`SELECT 1 FROM ${better('account')} WHERE "accountId"=$1 AND "providerId" LIKE 'trusted:%'`,[handle]);
+  if (bound.rows.length) return false;
+  // Lock projections in the same order as a profile edit. A new email, or one never verified, cannot bind an alias.
+  await tx.query(`SELECT id FROM ${t.users} WHERE email=$1 FOR UPDATE`,[address]);
+  const auth = (await tx.query<{id:string}>(`SELECT id FROM ${better('user')} WHERE email=$1 AND "emailVerified" FOR UPDATE`,[address])).rows[0];
+  if (!auth) return false;
+  const synthetic = trustedEmailOf(issuer,handle);
+  const occupied = await tx.query(`SELECT 1 FROM ${t.users} WHERE username=$1 OR email=$4
+    UNION ALL SELECT 1 FROM ${t.groups} WHERE handle=$1
+    UNION ALL SELECT 1 FROM ${better('user')} WHERE email=$4
+    UNION ALL SELECT 1 FROM ${better('account')} WHERE "userId"=$2 AND "providerId"=$3`,[handle,auth.id,provider,synthetic]);
+  if (occupied.rows.length) throw new Refused('subject_conflict');
+  await tx.query(`INSERT INTO ${t.handle_reservations}(handle,kind,subject_id) VALUES($1,$2,$3) ON CONFLICT DO NOTHING`,[handle,provider,auth.id]);
+  const same = await tx.query(`SELECT 1 FROM ${t.handle_reservations} WHERE handle=$1 AND kind=$2 AND subject_id=$3`,[handle,provider,auth.id]);
+  if (!same.rows.length) throw new Refused('subject_conflict');
+  return true;
+}
+
 /** Resolve the issuer's stable handle, creating it on first use. Email conflicts roll back that creation too. */
 async function transitionHandle(tx: Queryable, t: Tables, better: (table:string)=>string, input: TrustedPerson, handle:string, address:string) {
+  if (await bindVerifiedEmailAlias(tx,t,better,input.issuer,handle,address)) return false;
   const synthetic = trustedEmailOf(input.issuer,handle);
   const person = await ensurePerson(tx,{...input,subject:handle,email:synthetic},t,better);
   if (person.email !== synthetic && person.email !== address) throw new Refused('subject_conflict');

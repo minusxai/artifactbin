@@ -108,7 +108,9 @@ handle in the signed string claim `previous_handle`. Only the issuer that bound 
 its synthetic address to an unclaimed email. The account ID, handle and personal name are preserved,
 and listed groups receive their memberships. Use a fresh token and unique `jti` to retry
 the same address. On first use, a free handle and an unclaimed email create one person atomically.
-An occupied email, a handle held by another identity, or a later change of address refuses the sign-in.
+If the person signed in by email first, a free external handle is bound to that verified account
+as an issuer-specific alias. Their personal handle and display name are preserved. An unverified
+occupied address, a conflict between two existing identities, or a later reassignment refuses sign-in.
 After success, email sign-ins can omit `previous_handle`.
 
 **Signed group placement.** Set the issuer's `parentGroup` to an existing group handle or ID.
