@@ -83,11 +83,9 @@ describe('writes admit one INSERT, UPDATE or DELETE on the target', () => {
     expect(errorOf(await mutate('insert into sqlite_master values (1,2,3,4,5)'))).toMatch(/sqlite_master|its own table/);
     expect(errorOf(await mutate('insert into ref_other values (1)'))).toMatch(/ref_other/);
   });
-  it('dry-runs apply the same guard', async () => {
+  it('mutation dry runs apply the same guard', async () => {
     const r = await sql.dryRunMutations({ tables: { ref_t: { columns: TABLE.columns } }, mutations: [{ name: 'ok', target: 't', sql: 'delete from ref_t where a = $a' }, { name: 'ddl', target: 't', sql: 'drop table ref_t' }, { name: 'ret', target: 't', sql: 'delete from ref_t returning *' }], paramNames: ['a'] });
     expect(r.errors.map((e) => e.name)).toEqual(['ddl', 'ret']);
-    const q = await sql.dryRun({ tables: { t: { columns: TABLE.columns } }, queries: [{ name: 'ok', sql: 'select a from t' }, { name: 'w', sql: 'delete from t' }, { name: 'sys', sql: 'select * from sqlite_schema' }], paramNames: [] });
-    expect(q.errors.map((e) => e.name)).toEqual(['w', 'sys']);
   });
 });
 

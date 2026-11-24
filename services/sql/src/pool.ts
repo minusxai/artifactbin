@@ -17,7 +17,7 @@ import { existsSync } from 'node:fs';
 import { availableParallelism } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { Worker } from 'node:worker_threads';
-import type { DryRunInput, DryRunMutationsInput, DryRunMutationsResult, DryRunResult, MutationInput, MutationOutcome, QueryOutcome, RunInput, RunManyInput, SqlService } from '@artifactbin/contracts/sql';
+import type { DryRunMutationsInput, DryRunMutationsResult, MutationInput, MutationOutcome, QueryOutcome, RunInput, SqlService } from '@artifactbin/contracts/sql';
 import { SQL_WALL_OVERHEAD_MS, sqlTimeout, type SqlCallContext } from '@artifactbin/contracts/sql';
 import { queryBounds } from './bounds';
 import { sqlCaps, type SqlCaps } from './caps';
@@ -25,9 +25,7 @@ import { preparedKey, type ReadBounds, type WriteBounds } from './sqlite/index';
 
 export type PoolRequest =
   | { id: number; method: 'run'; input: RunInput; bounds: ReadBounds }
-  | { id: number; method: 'runMany'; input: RunManyInput; bounds: ReadBounds[] }
   | { id: number; method: 'mutate'; input: MutationInput; bounds: WriteBounds }
-  | { id: number; method: 'dryRun'; input: DryRunInput }
   | { id: number; method: 'dryRunMutations'; input: DryRunMutationsInput };
 export type PoolAnswer = { id: number; ok: true; result: unknown } | { id: number; ok: false; error: string };
 
@@ -69,9 +67,7 @@ function wellFormed(method: PoolRequest['method'], input: unknown): boolean {
   if (!isObject(input)) return false;
   switch (method) {
     case 'run': return queriesShaped(input) && catalogShaped(input.catalog);
-    case 'runMany': return Array.isArray(input.runs) && input.runs.every(queriesShaped) && (input.shared == null || queriesShaped(input.shared));
     case 'mutate': return input.mounted == null || (isObject(input.mounted) && catalogShaped(input.mounted.catalog));
-    case 'dryRun': return queriesShaped(input);
     case 'dryRunMutations': return objects(input.mutations);
   }
 }
@@ -179,10 +175,9 @@ export function createSqlitePool(opts: Partial<SqlCaps> = {}, pool: SqlPoolOptio
     }
   };
 
-  /** The watchdog's budget: every statement's own deadline, summed, for the runs share one thread one after another. */
+  /** The watchdog's budget: the sum of the statement budgets for this call. */
   const executionBudget = (r: DistributiveOmit<PoolRequest, 'id'>): number => r.method === 'run' ? r.bounds.timeoutMs * Math.max(1, r.input.queries.length)
-    : r.method === 'runMany' ? r.bounds.reduce((sum, b, i) => sum + b.timeoutMs * Math.max(1, (r.input.runs[i] ?? r.input.shared)?.queries.length ?? 1), 0)
-    : r.method === 'mutate' ? r.bounds.timeoutMs : r.method === 'dryRun' ? caps.timeoutMs : caps.mutationTimeoutMs;
+    : r.method === 'mutate' ? r.bounds.timeoutMs : caps.mutationTimeoutMs;
 
   const call = <T>(request: DistributiveOmit<PoolRequest, 'id'>, deadlineMs: number, onError: (error: string) => T, context?: SqlCallContext, started = performance.now()): Promise<T> => {
     deadlineMs = sqlTimeout(context?.wallTimeoutMs, deadlineMs, deadlineMs, 'wallTimeoutMs', true);
@@ -221,27 +216,11 @@ export function createSqlitePool(opts: Partial<SqlCaps> = {}, pool: SqlPoolOptio
           (error) => Object.fromEntries(input.queries.map((q) => [q.name, timedOut(error) ? { error: `<Query name="${q.name}"> ran too long and was stopped (limit ${timeoutMs}ms) — narrow it (filter, aggregate, or LIMIT)`, timedOut: true } : { error }])), context, started);
       } catch { return Object.fromEntries(input.queries.map(q => [q.name, {error:'Invalid SQL read budget'}])); }
     },
-    runMany: async (input, context) => {
-      const started = performance.now();
-      admit('runMany', input);
-      try {
-        const clamp = (run: { limit?: number; timeoutMs?: number }): ReadBounds => { const { limit, timeoutMs } = queryBounds(run, caps); return { limit, timeoutMs, pageLimit: limit }; };
-        // The shared run's bounds last (index -1 in the engine's callback).
-        const bounds: ReadBounds[] = [...input.runs.map(clamp), clamp(input.shared ?? {})];
-        return call<Array<Record<string, QueryOutcome>>>({ method: 'runMany', input, bounds }, caps.timeoutMs + SQL_WALL_OVERHEAD_MS,
-          (error) => input.runs.map((run, i) => Object.fromEntries([...(input.shared?.queries ?? []), ...run.queries].map((q) => [q.name, timedOut(error) ? { error: `<Query name="${q.name}"> ran too long and was stopped (limit ${bounds[i]!.timeoutMs}ms) — narrow it (filter, aggregate, or LIMIT)`, timedOut: true } : { error }]))), context, started);
-      } catch { return input.runs.map(run => Object.fromEntries([...(input.shared?.queries ?? []), ...run.queries].map(q => [q.name, {error:'Invalid SQL read budget'}]))); }
-    },
     mutate: (input) => {
       admit('mutate', input);
       const bounds = queryBounds(input, { ...caps, timeoutMs: caps.mutationTimeoutMs });
       return call<MutationOutcome>({ method: 'mutate', input, bounds }, bounds.timeoutMs + grace,
         (error) => (timedOut(error) ? { error: `the mutation ran too long and was stopped (limit ${bounds.timeoutMs}ms)`, timedOut: true } : { error }));
-    },
-    dryRun: (input) => {
-      admit('dryRun', input);
-      return call<DryRunResult>({ method: 'dryRun', input }, caps.timeoutMs + SQL_WALL_OVERHEAD_MS,
-        (error) => ({ errors: input.queries.map((q) => ({ name: q.name, error })), columns: {} }));
     },
     dryRunMutations: (input) => {
       admit('dryRunMutations', input);

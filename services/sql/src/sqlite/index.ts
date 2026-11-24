@@ -7,10 +7,10 @@
  * structural — except a `held` database, which the page keeps open over the
  * imports it holds.
  */
-import type { DryRunInput, DryRunMutationsInput, DryRunMutationsResult, DryRunResult, MutationInput, MutationOutcome, QueryOutcome, RunInput, RunManyInput } from '@artifactbin/contracts/sql';
+import type { DryRunMutationsInput, DryRunMutationsResult, MutationInput, MutationOutcome, QueryOutcome, RunInput } from '@artifactbin/contracts/sql';
 import { SqliteDatabase, type Relation } from './database';
 import type { PreparedCache } from './prepared';
-import { dryRunQueries, heldDatabase, runManyQueries, runQueries, type HeldDatabase, type ReadBounds } from './reads';
+import { heldDatabase, runQueries, type HeldDatabase, type ReadBounds } from './reads';
 import { dryRunMutations, runMutation, type WriteBounds } from './writes';
 import { loadSqliteModule, type Sqlite3 } from './wasm';
 import type { SqlExtensions } from '../extensions';
@@ -34,8 +34,6 @@ export interface SqliteEngine {
   analyze(sql: string, schema: Relation[], options?: { mode: 'write'; extensions?: SqlExtensions }): StatementAnalysis;
   /** A catalog read keyed on every source is answered from (and kept in) `prepared` (./prepared). */
   run(input: RunInput, bounds: ReadBounds, prepared?: PreparedCache): Record<string, QueryOutcome>;
-  /** `run` once per entry of `input.runs`, the imports loaded once for all of them; `bounds` per run. */
-  runMany(input: RunManyInput, bounds: (run: RunManyInput['runs'][number], index: number) => ReadBounds): Array<Record<string, QueryOutcome>>;
   /**
    * `run`, many times over the same imports: a database kept open, each
    * import table loaded once (and again when given different rows), with the
@@ -44,7 +42,6 @@ export interface SqliteEngine {
   held(schemas: readonly string[]): HeldDatabase;
   /** A keyed write (`input.mounted`) is answered over the database `prepared` keeps for its keys, never changing it. */
   mutate(input: MutationInput, bounds: WriteBounds, extensions?: SqlExtensions, prepared?: PreparedCache): MutationOutcome;
-  dryRun(input: DryRunInput): DryRunResult;
   dryRunMutations(input: DryRunMutationsInput, extensions?: SqlExtensions): DryRunMutationsResult;
   /** A fresh guarded database with the function library, for callers that orchestrate their own statements. */
   open(): SqliteDatabase;
@@ -67,10 +64,8 @@ function engine(sqlite3: Sqlite3): SqliteEngine {
       return prepared.analysis;
     }),
     run: (input, bounds, prepared) => runQueries(sqlite3, input, bounds, prepared),
-    runMany: (input, bounds) => runManyQueries(sqlite3, input, bounds),
     held: (schemas) => heldDatabase(sqlite3, schemas),
     mutate: (input, bounds, extensions, prepared) => runMutation(sqlite3, input, bounds, extensions, prepared),
-    dryRun: (input) => dryRunQueries(sqlite3, input),
     dryRunMutations: (input, extensions) => dryRunMutations(sqlite3, input, extensions),
     open: () => new SqliteDatabase(sqlite3),
     libraryFunctions: () => withDatabase((db) => db.registeredFunctions()),

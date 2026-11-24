@@ -4,10 +4,6 @@
  * nothing persists between calls, so a document's dependent queries travel in
  * ONE `run` (a later query may read an earlier one's result by name).
  *
- * The two dry-runs are the publish-time check that refuses a bad query with a
- * 400 instead of a blank chart at render, and they cross the same wire as the
- * reads and writes, so no caller needs the engine in its own process.
- *
  * WHAT THE SERVICE ENFORCES, whatever the caller says: one statement per query, admitted by type (reads on
  * `run`, one write on `mutate`), params bound and never spliced, a row cap and a per-query interrupt (`limit` and
  * `timeoutMs` may lower the caps, never raise them) and a 64 MiB body. The engine has no credentials, storage,
@@ -15,9 +11,8 @@
  * its callers (production refuses to start without it).
  *
  * ERRORS. A query that cannot run is a `QueryFailure` for that query; a malformed body is 400 `bad_request`, the
- * detail in the operator log only. An unreachable service is a `QueryFailure` on EVERY query at the client's
- * deadline, the dry runs included: an empty `errors` there would admit an unchecked document and move the
- * author's error from publish time to render time. Paged reads keep `totalRows` (the count before the window);
+ * detail in the operator log only. If the service is unreachable, the client returns a `QueryFailure` for each
+ * query or write, and one error per mutation in a dry run. Paged reads keep `totalRows` (the count before the window);
  * `truncated` is set only when the returned rows omit part of that result, never merely for asking for a page.
  *
  * Mutations bind a row action's fields as ordinary named parameters (`$_row.<column>` as `$_row__<column>`,
@@ -109,20 +104,6 @@ export interface RunInput {
   page?: { name: string } & QueryPage;
 }
 
-/**
- * `run`, many times over ONE set of imports: the imports travel and are loaded once, then `shared`
- * runs once — its tables and every result loaded WHOLE and kept, for every run to read by name —
- * then each run is an ordinary `run` of its own tables, queries and values over all of that (a
- * filter's variants: only the values change, and what reads no value is computed once). A run's own
- * tables and results are gone when it returns. Answers one outcome map per run, in order, each with
- * the `shared` outcomes beside its own.
- */
-export interface RunManyInput {
-  imports?: RunInput['imports'];
-  shared?: Omit<RunInput, 'imports' | 'catalog' | 'page'>;
-  runs: Array<Omit<RunInput, 'imports' | 'catalog' | 'page'>>;
-}
-
 export interface MutationInput {
   policy?: DatasetMutationPolicy;
   /** Internal capability preview: analyze only, never execute effects. */
@@ -166,20 +147,6 @@ export interface MutationResult extends TableResult {
 }
 export type MutationOutcome = MutationResult | QueryFailure;
 
-export interface DryRunInput {
-  paramTypes?: Record<string,ColumnType>;
-  tables: Record<string, { columns: DatasetColumn[] }>;
-  /** Imported artifacts' shapes, attached as their own schemas (see RunInput.imports). */
-  imports?: Record<string, Record<string, { columns: DatasetColumn[] }>>;
-  queries: SqlQuery[];
-  /** An ARRAY on the wire — a Set serialises to `{}` and binds nothing. */
-  paramNames: string[];
-}
-export interface DryRunResult {
-  errors: Array<{ name: string; error: string }>;
-  /** The columns each query would produce, for the ones that prepared. */
-  columns: Record<string, DatasetColumn[]>;
-}
 export interface DryRunMutationsInput {
   tables: Record<string, { columns: DatasetColumn[] }>;
   mutations: Array<{
@@ -215,9 +182,7 @@ export interface SqlService {
   /** Engine-owned cap, reported privately so split-service readiness rejects configuration drift. */
   readonly readPolicy?: { readonly queryTimeoutMs:number };
   run(input: RunInput, context?: SqlCallContext): Promise<Record<string, QueryOutcome>>;
-  runMany(input: RunManyInput, context?: SqlCallContext): Promise<Array<Record<string, QueryOutcome>>>;
   mutate(input: MutationInput): Promise<MutationOutcome>;
-  dryRun(input: DryRunInput): Promise<DryRunResult>;
   dryRunMutations(input: DryRunMutationsInput): Promise<DryRunMutationsResult>;
 }
 
@@ -243,4 +208,4 @@ export const SQL_READ_LIMITS = Object.freeze({
 });
 
 /** The wire: one POST per method. `serveSql`/`sqlClient` (the sql package) implement exactly this. */
-export const SQL_ROUTES = { readPolicy:'/read-policy', run: '/run', runMany: '/run-many', mutate: '/mutate', dryRun: '/dry-run', dryRunMutations: '/dry-run-mutations' } as const;
+export const SQL_ROUTES = { readPolicy:'/read-policy', run: '/run', mutate: '/mutate', dryRunMutations: '/dry-run-mutations' } as const;

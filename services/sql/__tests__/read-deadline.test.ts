@@ -107,50 +107,27 @@ describe.each(['local', 'http'] as const)('%s SQL read lifecycle', transport => 
   });
 });
 
-describe.each(['local', 'http'] as const)('%s batch and admission regressions', transport => {
-  async function fixture(test: (svc: SqlService, engine: ReturnType<typeof createSql>) => Promise<void>) {
+describe.each(['local', 'http'] as const)('%s read admission regressions', transport => {
+  async function fixture(test: (svc: SqlService) => Promise<void>) {
     const engine = createSql({timeoutMs: 3000}, {workers:1});
     const server = transport === 'http' ? serveSql(engine) : undefined;
     const svc = server ? sqlClient(server.listen(0).url, {deadlineMs: 6000}) : engine;
-    try { await svc.run(QUICK); await test(svc, engine); }
+    try { await svc.run(QUICK); await test(svc); }
     finally { await server?.close(); await engine.close(); }
   }
-  it('rejects pre-aborted reads and batches without consuming the worker', () => fixture(async svc => {
-    const signal = AbortSignal.abort();
+  it('rejects pre-aborted reads without consuming the worker', () => fixture(async svc => {
+    const signal = AbortSignal.abort(new Error('private abort reason'));
     expect(await svc.run(ENDLESS, {signal})).toMatchObject({q:{error:'SQL call cancelled'}});
-    expect(await svc.runMany({runs:[ENDLESS]}, {signal})).toMatchObject([{q:{error:'SQL call cancelled'}}]);
     expect(await svc.run(QUICK)).toMatchObject({q:{rows:[{n:7}]}});
   }));
-  it('cancels a running batch and does not retry individual statements', () => fixture(async svc => {
-    await prepare(svc);
-    const controller = new AbortController();
-    let aborted = 0;
-    const start = performance.now();
-    const timer = setTimeout(() => { aborted = performance.now(); controller.abort(); }, 50);
-    try {
-      const result = await svc.runMany({shared:QUICK,runs:[ENDLESS,ENDLESS]}, {signal:controller.signal});
-      const phases = `abort timer fired at +${Math.round(aborted - start)} ms (set for 50), answer at +${Math.round(performance.now() - start)} ms`;
-      expect(result, phases).toEqual([{q:{error:'SQL call cancelled'}},{q:{error:'SQL call cancelled'}}]);
-      expect(performance.now()-start, phases).toBeLessThan(1500);
-      await expectReplaced(svc, phases);
-    } finally { clearTimeout(timer); }
-  }));
-  it('bounds the whole batch rather than renewing each statement deadline', () => fixture(async svc => {
-    // Renewed per statement, the two would run to their 3000 ms limits one after the other: 6000 ms.
-    const start = performance.now();
-    const result = await svc.runMany({runs:[ENDLESS,ENDLESS]}, {wallTimeoutMs:80});
-    const phases = `the 80 ms batch answered after ${Math.round(performance.now() - start)} ms`;
-    expect(result, phases).toMatchObject([{q:{timedOut:true}},{q:{timedOut:true}}]);
-    expect(performance.now()-start, phases).toBeLessThan(1500);
-  }));
-  it('removes an aborted queued batch while the active call remains usable', () => fixture(async svc => {
+  it('removes an aborted queued read while the active call remains usable', () => fixture(async svc => {
     const busyController = new AbortController();
     const busy = svc.run(ENDLESS, {signal:busyController.signal});
     await new Promise(resolve => setTimeout(resolve, 40));
     const controller = new AbortController();
-    const queued = svc.runMany({runs:[QUICK]}, {signal:controller.signal});
+    const queued = svc.run(QUICK, {signal:controller.signal});
     controller.abort();
-    expect(await queued).toMatchObject([{q:{error:'SQL call cancelled'}}]);
+    expect(await queued).toMatchObject({q:{error:'SQL call cancelled'}});
     busyController.abort(); await busy;
     expect(await svc.run(QUICK)).toMatchObject({q:{rows:[{n:7}]}});
   }));
@@ -160,10 +137,10 @@ it('shutdown settles queued and active reads and refuses later work', async () =
   const engine = createSql({timeoutMs:1000}, {workers:1});
   await engine.run(QUICK);
   const active = engine.run(ENDLESS);
-  const queued = engine.runMany({runs:[QUICK]});
+  const queued = engine.run(QUICK);
   await engine.close();
   expect(await active).toMatchObject({q:{error:'the SQL engine is closed'}});
-  expect(await queued).toMatchObject([{q:{error:'the SQL engine is closed'}}]);
+  expect(await queued).toMatchObject({q:{error:'the SQL engine is closed'}});
   expect(await engine.run(QUICK)).toMatchObject({q:{error:'the SQL engine is closed'}});
 });
 
@@ -193,7 +170,7 @@ describe.each(['local','http'] as const)('%s request budgets', transport => {
       await svc.run(QUICK);
       for (const value of [0,-1,1.5,NaN,Infinity,Number.MAX_SAFE_INTEGER+1]) {
         expect(await svc.run({...QUICK,timeoutMs:value})).toHaveProperty('q.error');
-        expect(await svc.runMany({runs:[QUICK]}, {wallTimeoutMs:value})).toMatchObject([{q:{error:expect.any(String)}}]);
+        expect(await svc.run(QUICK, {wallTimeoutMs:value})).toHaveProperty('q.error');
       }
       // Unclamped, the read would run for 1000 s: it is clamped to the engine's 80 ms, which its answer names.
       const start = performance.now();
@@ -204,24 +181,6 @@ describe.each(['local','http'] as const)('%s request budgets', transport => {
       expect(await svc.run({...QUICK,limit:Infinity})).toMatchObject({q:{rows:[{n:7}]}});
     } finally { await server?.close(); await engine.close(); }
   });
-});
-
-it('never falls back to run after a failed HTTP batch', async () => {
-  const engine = createSql({timeoutMs:1000}, {workers:1});
-  let runs = 0, batches = 0;
-  const server = serveSql({...engine,
-    run: async (...args) => { runs++; return engine.run(...args); },
-    runMany: async (...args) => { batches++; return engine.runMany(...args); },
-  });
-  const svc = sqlClient(server.listen(0).url);
-  try {
-    await svc.run(QUICK); runs = 0;
-    expect(await svc.runMany({runs:[ENDLESS,ENDLESS]}, {wallTimeoutMs:80})).toMatchObject([{q:{timedOut:true}},{q:{timedOut:true}}]);
-    await new Promise(resolve => setTimeout(resolve, 30));
-    expect({runs,batches}).toEqual({runs:0,batches:1});
-    const controller = new AbortController(); controller.abort(new Error('private abort reason'));
-    expect(await svc.run(QUICK,{signal:controller.signal})).toMatchObject({q:{error:'SQL call cancelled'}});
-  } finally { await server.close(); await engine.close(); }
 });
 
 it('accounts for HTTP body admission before dispatching SQL', async () => {
@@ -243,15 +202,15 @@ it('accounts for HTTP body admission before dispatching SQL', async () => {
   } finally { await server.close(); await engine.close(); }
 });
 
-it('bounds synchronous batches at statement boundaries and honors pre-abort without claiming mid-call abort', async () => {
+it('bounds synchronous reads at statement boundaries and honors pre-abort without claiming mid-call abort', async () => {
   const engine = createSqliteSql({timeoutMs:3000});
   await engine.run(QUICK);
   expect(await engine.run(ENDLESS,{signal:AbortSignal.abort()})).toMatchObject({q:{error:'SQL call cancelled'}});
-  // Each statement under its own 3000 ms limit would take 6000 ms; the batch's 70 ms wall bounds both.
+  // Each statement under its own 3000 ms limit would take 6000 ms; the 70 ms wall bounds both.
   const start = performance.now();
-  const answer = await engine.runMany({runs:[ENDLESS,ENDLESS]}, {wallTimeoutMs:70});
-  const phases = `the 70 ms batch answered after ${Math.round(performance.now() - start)} ms`;
-  expect(answer, phases).toMatchObject([{q:{timedOut:true}},{q:{timedOut:true}}]);
+  const answer = await engine.run({...ENDLESS, queries:[ENDLESS.queries[0]!, {...ENDLESS.queries[0]!, name:'q2'}]}, {wallTimeoutMs:70});
+  const phases = `the 70 ms read answered after ${Math.round(performance.now() - start)} ms`;
+  expect(answer, phases).toMatchObject({q:{timedOut:true},q2:{timedOut:true}});
   expect(performance.now()-start, phases).toBeLessThan(1500);
 });
 

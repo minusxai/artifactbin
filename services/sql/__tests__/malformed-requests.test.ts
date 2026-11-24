@@ -23,19 +23,18 @@ const MALFORMED: Array<[string, unknown]> = [
   [SQL_ROUTES.run, { queries: 'select 1' }],
   [SQL_ROUTES.run, { ...valid, catalog: {} }],
   [SQL_ROUTES.run, { ...valid, catalog: { tables: [null] } }],
-  [SQL_ROUTES.runMany, {}],
-  [SQL_ROUTES.runMany, { runs: [{}] }],
-  [SQL_ROUTES.runMany, { runs: [null] }],
-  [SQL_ROUTES.runMany, { runs: [valid], shared: { queries: [null] } }],
   [SQL_ROUTES.mutate, null],
   [SQL_ROUTES.mutate, { mounted: { catalog: {} } }],
-  [SQL_ROUTES.dryRun, {}],
-  [SQL_ROUTES.dryRun, { queries: [null] }],
   [SQL_ROUTES.dryRunMutations, {}],
   [SQL_ROUTES.dryRunMutations, { mutations: [null] }],
 ];
 
 describe('the SQL service shell over the worker pool', () => {
+  it.each(['/run-many', '/dry-run'])('does not serve the retired %s route', async (route) => {
+    const response = await post(route, '{}');
+    expect([response.status, await response.json()]).toEqual([404, { error: 'not_found' }]);
+  });
+
   it.each(MALFORMED)('%s answers %j with bad_request', async (route, body) => {
     const res = await post(route, JSON.stringify(body));
     expect([res.status, await res.json()]).toEqual([400, { error: 'bad_request' }]);
