@@ -129,7 +129,7 @@ describe('preparePublicationBundle',()=>{
  const keyed=(key:string)=>({idempotencyKey:key});
  it('passes a body without a bundle through, and refuses a bundle without html, a key or its files',async()=>{
   const owner=await actor();
-  expect(await preparePublicationBundle({html:'<p>x</p>'},owner,BASE,{},unused,unused)).toEqual({body:{html:'<p>x</p>'},receipts:[]});
+  expect(await preparePublicationBundle({html:'<p>x</p>'},owner,BASE,{},unused,unused)).toEqual({body:{html:'<p>x</p>'},receipts:[],authored:expect.objectContaining({source:'<p>x</p>'})});
   expect(await preparePublicationBundle({title:'no content'},owner,BASE,{},unused,unused)).toEqual({body:{title:'no content'},receipts:[]});
   const bundle={entryPath:'index.html',files:[file('logo.svg','<svg/>','image/svg+xml')]};
   const refusals:Array<[Record<string,unknown>,{idempotencyKey?:string},string]>=[

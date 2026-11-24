@@ -45,8 +45,8 @@ export function parseSocialPreviewCrop(content: string, minWidth = SOCIAL_PREVIE
 }
 
 interface PreviewMeta { start: number; end: number; content: string | null; contentStart?: number; contentEnd?: number }
-function cropMeta(source: string, name = SOCIAL_PREVIEW_META): { headEnd: number | null; element: PreviewMeta | null; crop: SocialPreviewCrop | null } {
-  const document = parse(source, { sourceCodeLocationInfo: true });
+function cropMeta(source: string | DefaultTreeAdapterMap['document'], name = SOCIAL_PREVIEW_META): { headEnd: number | null; element: PreviewMeta | null; crop: SocialPreviewCrop | null } {
+  const document = typeof source === 'string' ? parse(source, { sourceCodeLocationInfo: true }) : source;
   let headEnd: number | null = null;
   let element: PreviewMeta | null = null;
   const visit = (node: DefaultTreeAdapterMap['node'], inHead = false): void => {
@@ -114,13 +114,17 @@ function writePreviewMeta(source: string, name: string, markup: string | null): 
 }
 
 /** The uploaded image takes precedence over framing, which stays saved. */
-export function socialPreviewImageValue(source: string): string | null {
+export function socialPreviewImageValue(source: string | DefaultTreeAdapterMap['document']): string | null {
   return cropMeta(source, SOCIAL_PREVIEW_IMAGE_META).element?.content ?? null;
 }
 
 export function socialPreviewImage(source: string): string | null {
+  return socialPreviewImageDetails(source).id;
+}
+
+export function socialPreviewImageDetails(source: string | DefaultTreeAdapterMap['document']): {value: string | null; id: string | null} {
   const value = socialPreviewImageValue(source);
-  return value && /^ref:[A-Za-z0-9_-]+$/.test(value) ? value.slice(4) : null;
+  return {value, id: value && /^ref:[A-Za-z0-9_-]+$/.test(value) ? value.slice(4) : null};
 }
 
 export function writeSocialPreviewImage(source: string, id: string | null): string {

@@ -1,3 +1,4 @@
+import {parseHtml,type ParsedHtml} from '@/lib/html-page/html-source';
 import {createHash} from 'node:crypto';
 import type { PublicationActor } from '@/lib/accounts';
 import {getArtifactById,getArtifactFor,recoverCreationIds,reserveIds} from '@/lib/artifacts';
@@ -28,11 +29,14 @@ function csvDatasetFields(path:string,csv:string):{title:string;columns?:{name:s
  const {headers,rows}=parseCsv(csv);
  return {title:file,...(headers.length&&!rows.length?{columns:headers.map(name=>({name,type:'string' as const}))}:{})};
 }
-export async function preparePublicationBundle(body:Record<string,unknown>,actor:PublicationActor,base:string,keys:CreationKeys,create:(body:Record<string,unknown>,keys:CreationKeys)=>Promise<Reply>,update:(id:string,body:Record<string,unknown>,key:string)=>Promise<Reply>,page?:BundlePage):Promise<{body:Record<string,unknown>;receipts:unknown[];entryPath?:string}|Reply>{
+export async function preparePublicationBundle(body:Record<string,unknown>,actor:PublicationActor,base:string,keys:CreationKeys,create:(body:Record<string,unknown>,keys:CreationKeys)=>Promise<Reply>,update:(id:string,body:Record<string,unknown>,key:string)=>Promise<Reply>,page?:BundlePage,authored?:ParsedHtml):Promise<{body:Record<string,unknown>;receipts:unknown[];entryPath?:string;authored?:ParsedHtml}|Reply>{
  if(typeof body.html!=='string')return body.publicationBundle===undefined?{body,receipts:[]}:reply({error:'invalid_publication_bundle'},400);
  let plan;const bundle=body.publicationBundle as PublicationBundle|undefined;
- try{plan=planPublicationBundle(body.html,bundle??{entryPath:'index.html',files:[]},{linksAsWritten:!bundle});}catch(error){return reply({error:'unresolved_publication_dependencies',details:[(error as Error).message]},400);}
- if(!bundle)return {body,receipts:[]};
+ try{
+  if(authored?.source!==body.html)authored=parseHtml(body.html);
+  plan=planPublicationBundle(body.html,bundle??{entryPath:'index.html',files:[]},{linksAsWritten:!bundle},authored.tree);
+ }catch(error){return reply({error:'unresolved_publication_dependencies',details:[(error as Error).message]},400);}
+ if(!bundle)return {body,receipts:[],authored};
  const key=keys.idempotencyKey;if(!key||!/^[-_A-Za-z0-9]{16,128}$/.test(key))return reply({error:'bundle_idempotency_required'},400);
  // Each file is authorized on its own, before anything is written: a recorded,
  // unchanged dependency needs nothing more; a changed or newly mapped one needs
@@ -99,7 +103,7 @@ export async function preparePublicationBundle(body:Record<string,unknown>,actor
    const revision=String(saved.version??1);return {id:saved.id,revision,state:typeof saved.state==='string'?saved.state:undefined,address:input.kind==='dataset'?'ref:'+saved.id:assetAddress(saved.id,revision)};
   },
  },bundle.mappings);
- const next:Record<string,unknown>={...body,reserved_id:body.reserved_id??reserved[99],html:result.html};delete next.publicationBundle;return {body:next,receipts:result.receipts,entryPath:plan.entryPath};
+ const next:Record<string,unknown>={...body,reserved_id:body.reserved_id??reserved[99],html:result.html};delete next.publicationBundle;return {body:next,receipts:result.receipts,entryPath:plan.entryPath,authored:result.html===authored?.source?authored:undefined};
  }catch(error){
   const cause=error instanceof Error?error.cause:undefined;
   if(cause instanceof BundleFileRefusal)return reply({error:cause.code,path:cause.path,dependencyReceipts:(error as {receipts?:unknown[]}).receipts??[]},403);

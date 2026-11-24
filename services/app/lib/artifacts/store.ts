@@ -5,7 +5,8 @@ import { isDeepStrictEqual } from 'node:util';
 import { libraryVersions } from '@/lib/libraries';
 import type {HtmlDatasetLink, HtmlDefaultConnectionLink, HtmlLiveDatasetLink, HtmlPageLink} from '@artifactbin/contracts/html-page';
 import { completeMutationReceipt, type MutationReceipt, type MutationReply } from './mutation-receipt';
-import { canonicalizeHtmlPage, type HtmlIdentityLedger } from '../html-page';
+import { canonicalizeHtmlPage, type HtmlIdentityLedger, type HtmlPageAnalysis, type HtmlPageShape } from '../html-page';
+import {parseSource} from '../html-page/html-source';
 import {scriptFingerprint} from '../html-autofix';
 import {assertOwnerPlacement,assertDestination,newArtifactDestination,permitsMemberPage} from './ownership';
 import { identityForUser, type AccessActor } from '@/lib/accounts';
@@ -62,6 +63,7 @@ export async function setLiveDatasetSummary(tx: Queryable, id: string, summary: 
 
 export interface ArtifactInput {
   /** Server-prepared only; never decoded from caller metadata. */
+  htmlPage?:HtmlPageAnalysis;
   /** The page's dataset links and default-connection links, in source order. */
   htmlDatasets?:readonly (HtmlDatasetLink|HtmlDefaultConnectionLink|HtmlLiveDatasetLink)[];
   destination?:ArtifactDestination;
@@ -183,18 +185,20 @@ export async function createArtifact(
   if (!userId && !tokenId) throw new Error("Artifact creation requires a user or token");
   const destination=atCreation.tx ? (input.destination??{type:'personal'} as const) : await newArtifactDestination(atCreation.principalActor??identityForUser(userId,tokenId),input.destination,input.ancestor_ids?.at(-1),memberPagePublication(input,atCreation));
   input={...input,destination};
+  let sourceIds: readonly string[] = [];
+  let htmlShape: HtmlPageShape | undefined;
   if(input.format==='html'&&input.source){
-    const page=normalizeNewHtmlPage(input.source);
-    input={...input,source:page.html,meta:{...input.meta,htmlIdentity:page.ledger,htmlScriptFingerprint:scriptFingerprint(page.html),htmlLibraries:libraryVersions()}};
+    const page=normalizeNewHtmlPage(input.source,{},input.htmlPage);
+    htmlShape=page.shape;
+    input={...input,source:page.html,meta:{...input.meta,htmlIdentity:page.ledger,htmlScriptFingerprint:scriptFingerprint(htmlShape),htmlLibraries:libraryVersions()}};
+    sourceIds=page.indexIds();
   }
   // A document is born in the current data syntax (lib/dataflow/data-syntax).
   input = { ...input, meta: { ...input.meta } };
-  let sourceIds: string[] = [];
-  if(input.format==='html'&&input.source)sourceIds=[...canonicalizeHtmlPage(input.source).nodeIds];
   // INSIDE THE CALLER'S TRANSACTION: no retry (a PK violation has already
   // poisoned it — the ids are reserved beforehand instead) and no post-commit
   // effects, which are the caller's to run once its own transaction commits.
-  if (atCreation.tx) return insertArtifact(atCreation.tx, atCreation.reservedId ?? generateFileId(), tokenId, userId, input, sourceIds, atCreation);
+  if (atCreation.tx) return insertArtifact(atCreation.tx, atCreation.reservedId ?? generateFileId(), tokenId, userId, input, sourceIds, atCreation, htmlShape);
   const db = await getDb();
   // Birthday collisions at 62^6 are routine once the table is large, so the
   // PK-violation retry is a working path, not a theoretical one.
@@ -205,7 +209,7 @@ export async function createArtifact(
       // A group-owned publish locks the group before the page and its datasets (against lib/artifact-access's lock
       // order): a deadlock with a guarded write aborts one side, and the whole creation is retried.
       const row = await retryOnConflict(async() => {
-        return db.transaction((tx) => insertArtifact(tx, id, tokenId, userId, input, sourceIds, atCreation));
+        return db.transaction((tx) => insertArtifact(tx, id, tokenId, userId, input, sourceIds, atCreation, htmlShape));
       });
       await afterCreated(row, userId);
       return row;
@@ -241,8 +245,9 @@ async function insertArtifact(
   tokenId: string | null,
   userId: string | null,
   input: ArtifactInput,
-  sourceIds: string[],
+  sourceIds: readonly string[],
   atCreation: Parameters<typeof createArtifact>[3] = {},
+  htmlShape?:HtmlPageShape,
 ): Promise<ArtifactRow> {
   // The creator as the row records it: ownership, placement and reservations read its ids, never a grant.
   const creatorId = userId ?? tokenId;
@@ -307,7 +312,7 @@ async function insertArtifact(
     input.description ?? null,
     input.format,
     input.source,
-    JSON.stringify(withWebAssets(input.format, input.source, input.meta)),
+    JSON.stringify(withWebAssets(input.format, htmlShape??input.source, input.meta)),
     // Accounts create private documents, except assets, born
     // unlisted: a public document reaches them at read time, and a
     // born-private ref bakes a 404 into every shared document that uses
@@ -457,7 +462,7 @@ async function lockArtifactWrite(tx: Queryable, actor: AccessActor, id: string, 
     async validateContent(content: Pick<ArtifactInput, 'format' | 'source' | 'meta'>): Promise<void> {
       await validateUserContent(tx, content, actor.userId, key => loadDatasetRows({ meta: { objectKey: key } }));
     },
-    async publish(content: ArtifactInput): Promise<ArtifactRow> {
+    async publish(content: ArtifactInput, htmlShape?:HtmlPageShape): Promise<ArtifactRow> {
       await archiveVersion(tx, current);
       const updated = (await artifactQuery<ArtifactRow>(tx,
         `UPDATE artifacts
@@ -467,7 +472,7 @@ async function lockArtifactWrite(tx: Queryable, actor: AccessActor, id: string, 
              sharing_revision=sharing_revision+CASE WHEN (COALESCE($9,visibility),COALESCE($11,access),COALESCE($14,link_role)) IS DISTINCT FROM (visibility,access,link_role) THEN 1 ELSE 0 END,
              ${headBumpSql('$8', '$12', '$13', '$16')}
          WHERE id=$1 AND ${scope.where('$2')} RETURNING *`,
-        [id, scope.val, content.format, content.source, JSON.stringify(withWebAssets(content.format, content.source, content.meta)),
+        [id, scope.val, content.format, content.source, JSON.stringify(withWebAssets(content.format, htmlShape??content.source, content.meta)),
           content.title !== undefined ? content.title : current.title,
           content.description !== undefined ? content.description : current.description,
           newEditId(), content.visibility ?? null, content.ancestor_ids ?? null, content.access ?? null,
@@ -485,9 +490,9 @@ async function lockArtifactWrite(tx: Queryable, actor: AccessActor, id: string, 
 }
 
 /** Restore only reactivates known IDs; replace also reserves newly authored ones. */
-async function reconcileSourceIds(tx: Queryable, updated: ArtifactRow, mode: 'restore' | 'replace'): Promise<void> {
+async function reconcileSourceIds(tx: Queryable, updated: ArtifactRow, mode: 'restore' | 'replace', sourceIds?:readonly string[]): Promise<void> {
   if (updated.format!=='html' || !updated.source) return;
-  const ids = [...canonicalizeHtmlPage(updated.source).nodeIds];
+  const ids = sourceIds??canonicalizeHtmlPage(updated.source).nodeIds;
   const restore = () => tx.query('UPDATE artifact_source_ids SET retired_version=NULL WHERE artifact_id=$1 AND source_id=ANY($2::text[])', [updated.id, ids]);
   if (mode === 'replace') await tx.query(`INSERT INTO artifact_source_ids (artifact_id,source_id,provenance,first_version)
     SELECT $1,value #>> '{}','authored',$2 FROM jsonb_array_elements($3::jsonb) ON CONFLICT DO NOTHING`, [updated.id, updated.version, JSON.stringify(ids)]);
@@ -790,21 +795,25 @@ async function replaceArtifactInTx(
     current = write.current;
   }
   let regions: RegionPlan | null = null;
+  let htmlShape: HtmlPageShape | undefined;
+  let indexIds: (()=>readonly string[]) | undefined;
   if(input.format==='html'){
     if(opts.expectedVersion===undefined)return reply({error:'expected_version_required'},400);
     // Only the HTML check sits inside the try: a database failure is not invalid HTML, so it throws on to the route's logged, fixed 500.
     const reserved=(await tx.query<{source_id:string}>('SELECT source_id FROM artifact_source_ids WHERE artifact_id=$1',[id])).rows.map(row=>row.source_id);
     const old=current.meta.htmlIdentity as HtmlIdentityLedger|undefined;
-    let page:ReturnType<typeof canonicalizeHtmlPage>;
-    try{page=normalizeNewHtmlPage(input.source??'',{previousHtml:current.source??undefined,ledger:{allocatedIds:reserved,nextNodeId:old?.nextNodeId??1}});}
+    let page:ReturnType<typeof normalizeNewHtmlPage>;
+    try{page=normalizeNewHtmlPage(input.source??'',{previousHtml:current.source??undefined,ledger:{allocatedIds:reserved,nextNodeId:old?.nextNodeId??1}},input.htmlPage);}
     catch(error){if(error instanceof LiveRegionRefusal)return reply({error:error.code,details:error.details},409);return reply({error:'invalid_html',details:[thrownMessage(error,'Invalid HTML')]},400);}
     // Live regions: the written page with editors' unsaved typing merged in, three-way from the head (./regions).
     const merged=current.format==='html'?await planRegionMerge(tx,current,page,{from:fromLive?'live':'saved'}):null;
     if(merged instanceof Reply)return merged;
     regions=merged;
     const html=merged?.html??page.html;
+    if(html===page.html){htmlShape=page.shape;indexIds=page.indexIds;}
+    else htmlShape=parseSource(html);
     // The version's script fingerprint (lib/html-autofix) lets a reader decide morph vs reload; `htmlIdentityCarry` says how this version's missing IDs were filled (D11).
-    input={...input,source:html,meta:{...input.meta,htmlIdentity:merged?.ledger??page.ledger,htmlScriptFingerprint:scriptFingerprint(html),htmlLibraries:libraryVersions(),htmlIdentityCarry:page.carry?{fromVersion:current.version,...page.carry}:undefined}};
+    input={...input,source:html,meta:{...input.meta,htmlIdentity:merged?.ledger??page.ledger,htmlScriptFingerprint:scriptFingerprint(htmlShape),htmlLibraries:libraryVersions(),htmlIdentityCarry:page.carry?{fromVersion:current.version,...page.carry}:undefined}};
   }
   // Republishing the head's own source (same page, same metadata, nothing else asked) adds no version: the head comes back as the answer.
   if(isUnchangedHtmlRepublish(current,input,opts)){
@@ -831,12 +840,12 @@ async function replaceArtifactInTx(
   const source = input.source;
   const updated = await write.publish({
     ...input, source, meta: input.meta,
-  });
+  },htmlShape);
   if(opts.shares!==undefined)Object.assign(updated,await writeShares(tx,id,opts.shares,current.sharing_revision??0));
   else updated.shares=(await tx.query<ShareEntry>('SELECT email,role FROM artifact_shares WHERE artifact_id=$1 ORDER BY email',[id])).rows;
   await bindCurrentUserScopes(tx,updated);
   await logWholeDocumentWrite(tx, current, updated,true);
-  await reconcileSourceIds(tx, updated, 'replace');
+  await reconcileSourceIds(tx, updated, 'replace', indexIds?.());
   if (regions) await regions.commit(tx, updated.version, actor);
   if (leavingHtml) await closeLiveRegions(tx, id);
   if(opts.mutationReceipt&&opts.mutationReply)await completeMutationReceipt(tx,opts.mutationReceipt,await opts.mutationReply(updated));

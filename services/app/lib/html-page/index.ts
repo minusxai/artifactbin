@@ -3,26 +3,35 @@ import {isRuntimeCoreSrc,RUNTIME_CORE_PATH} from './core-script.ts';
 // Types only: the skill's scripts run this module's parsers under plain Node, where the contracts index cannot load.
 import type {HtmlDatasetLink, HtmlDeclaredQuery, HtmlDefaultConnectionLink, HtmlQueryParam, HtmlQueryParams} from '@artifactbin/contracts/html-page';
 import type {HtmlPageDeclarations} from './links-contracts';
-import { parse, serialize } from 'parse5';
-import { applyEdits, attribute, atHeadStart, insertAttribute, parseSource, removeElement, written } from './html-source.ts';
+import { defaultTreeAdapter, html as htmlSyntax, serialize } from 'parse5';
+import { applyEdits, attribute, atHeadStart, insertAttribute, locateSource, parseSource, removeElement, written, type ParsedHtml, type SourceDocument } from './html-source.ts';
+import { nativeCspDeclarations } from './native-csp.ts';
+import { socialPreviewImageDetails } from '../document/social-preview.ts';
+export { nativeCspDeclarations };
 import { normalizeDesignSelection } from './design-system.ts';
 export { normalizeDesignSelection, htmlAppearance } from './design-system.ts';
 export { firstHeadingText, withPageTitle } from './page-title.ts';
 import type { CanonicalHtmlOptions, CanonicalHtmlPage,HtmlPageMetadata,HtmlPwaSettings,HtmlAssetLinks } from './contracts';
 export type { HtmlIdentityLedger, CanonicalHtmlOptions, CanonicalHtmlPage,HtmlPwaSettings } from './contracts';
 const CORE=RUNTIME_CORE_PATH;
-const allElements=(html:string)=>{const document=parseSource(html);return {...document,all:[...document.elements,...document.templateElements]};};
+const allElements=(document:SourceDocument)=>({...document,all:[...document.elements,...document.templateElements]});
 type SourceElement=import('./html-source').Element;
+const isCoreScript=(element:SourceElement)=>element.tagName==='script'&&(attribute(element,'data-af')==='core'||isRuntimeCoreSrc(attribute(element,'src')));
 /** The one blocking core the server requires: exactly one, first script in <head>, plain src. Shared by publish and autofix. */
 export function repairCoreScript(input:string):{html:string;changed:boolean;removed:SourceElement[]}{
- let html=input,document=allElements(html);
- const cores=document.all.filter(element=>element.tagName==='script'&&(attribute(element,'data-af')==='core'||isRuntimeCoreSrc(attribute(element,'src'))));
+ const document=allElements(parseSource(input));
+ return repairCore(document,document.all.filter(isCoreScript));
+}
+function repairCore(parsed:SourceDocument,cores:SourceElement[]){
+ let document=parsed,html=document.source;
  const firstScript=document.elements.find(element=>element.tagName==='script');
  const valid=cores.length===1&&cores[0]===firstScript&&cores[0]?.parentNode===document.head&&isRuntimeCoreSrc(attribute(cores[0],'src'))&&attribute(cores[0],'async')===null&&attribute(cores[0],'defer')===null&&attribute(cores[0],'type')===null;
  if(valid)return {html,changed:false,removed:[]};
  const retained=cores[0]&&attribute(cores[0],'data-af-id');
- html=applyEdits(html,cores.map(element=>removeElement(html,element)));
- document=allElements(html);
+ if(cores.length){
+  html=applyEdits(html,cores.map(element=>removeElement(html,element)));
+  document=parseSource(html);
+ }
  html=applyEdits(html,[atHeadStart(document,[coreTag(retained)])]);
  return {html,changed:true,removed:cores};
 }
@@ -32,24 +41,72 @@ const coreTag=(id?:string|null)=>`<script src="${CORE}"${id?` data-af-id="${esca
 const EXPORT_ONLY_BLOCKS=new Set(['offline-data','offline-sql']);
 /** The persisted source is the authoring source. Runtime wrappers never enter it. */
 export function canonicalizeHtmlPage(input:string, options:CanonicalHtmlOptions={}):CanonicalHtmlPage {
+ return canonicalizeHtmlSource(input,options).canonical;
+}
+
+/** Canonical bytes and their read-only structure for a direct storage caller. */
+export function canonicalizeHtmlSource(input:string,options:CanonicalHtmlOptions) {
+ return canonicalSource(input)(options);
+}
+
+/** Prepare structural edits before assigning IDs, which on replace depend on the locked head. */
+function canonicalSource(input:string, authored?:SourceDocument) {
  if(typeof input!=='string'||!input.trim())throw new Error('HTML source is required');
  if(input.length>4_000_000)throw new Error('HTML source is too large');
- let html=input;
+ let document=authored??parseSource(input);
  // Materialize implied html/head/body so every actual element receives an identity.
- if(parseSource(html).elements.some(element=>!written(element)))html=serialize(parse(html));
- html=repairCoreScript(html).html;
- // D2: platform-owned design attributes and copied system stylesheets never enter stored source (lib/html-page/design-system).
- html=normalizeDesignSelection(html).html;
- const document=allElements(html);
+ if(document.elements.some(element=>!written(element)))document=parseSource(serialize(document.tree));
+ const cores=[...document.elements,...document.templateElements].filter(isCoreScript);
+ let structure=allElements(document);
+ let recovered=hasRecoveredMarkup(structure);
+ const design=cores.length?undefined:normalizeDesignSelection(document.source,document);
+ let insertedCore:SourceElement|undefined;
+ if(design&&!design.changed&&!recovered&&document.head&&written(document.head)){
+  // A plain script at a written head's start preserves the HTML parser's state. Plan its insertion
+  // alongside the ID edits so all authored offsets still refer to the original bytes.
+  insertedCore=defaultTreeAdapter.createElement('script',htmlSyntax.NS.HTML,[{name:'src',value:CORE}]);
+  insertedCore.parentNode=document.head;
+  const elements=[...document.elements];
+  elements.splice(elements.indexOf(document.head)+1,0,insertedCore);
+  structure=allElements({...document,elements});
+ }else{
+  const core=repairCore(document,cores);
+  if(core.changed)document=parseSource(core.html);
+  const selection=core.changed||!design?normalizeDesignSelection(document.source,document):design;
+  if(selection.changed)document=parseSource(selection.html);
+  if(document.source!==structure.source){
+   structure=allElements(document);
+   recovered=hasRecoveredMarkup(structure);
+  }
+ }
  // An export's rows and engine are never a page's source, wherever they are written (lib/publish reduces an export).
- const exportOnly=document.all.map(element=>attribute(element,'data-af')).find(value=>value!==null&&EXPORT_ONLY_BLOCKS.has(value));
+ const exportOnly=structure.all.map(element=>attribute(element,'data-af')).find(value=>value!==null&&EXPORT_ONLY_BLOCKS.has(value));
  if(exportOnly)throw new Error(`data-af="${exportOnly}" is written only into an exported copy, never into a page's source: publish the original source, or export the page again`);
- const previous=new Set(options.previousHtml?allElements(options.previousHtml).all.map(element=>attribute(element,'data-af-id')).filter((id):id is string=>id!==null):[]);
+ const inline=regionInlineElements(structure);
+ const inlineIds=[...inline].some(element=>attribute(element,'data-af-id')!==null);
+ return (options:CanonicalHtmlOptions={})=>assignIdentities({...structure,insertedCore},inline,inlineIds,recovered,options);
+}
+
+/** Changes to IDs on reconstructed formatting elements can affect the browser's recovery. */
+const FORMATTING=new Set(['a','b','big','code','em','font','i','nobr','s','small','strike','strong','tt','u']);
+function hasRecoveredMarkup(document:Parsed):boolean {
+ const starts=new Set<number>();
+ return document.hasParseErrors||document.all.some(element=>{
+  const location=element.sourceCodeLocation,offset=location?.startTag?.startOffset;
+  if(offset===undefined||starts.has(offset)||FORMATTING.has(element.tagName)&&!location?.endTag)return true;
+  starts.add(offset);
+  return false;
+ });
+}
+
+function assignIdentities(document:Parsed,inline:ReadonlySet<SourceElement>,inlineIds:boolean,recovered:boolean,options:CanonicalHtmlOptions) {
+ let html=document.source;
+ const previousDocument=options.previousHtml?allElements(parseSource(options.previousHtml)):undefined;
+ const previous=new Set(previousDocument?previousDocument.all.map(element=>attribute(element,'data-af-id')).filter((id):id is string=>id!==null):[]);
  const allocated=new Set(options.ledger?.allocatedIds??previous);
  const seen=new Set<string>();
  // Inline elements inside an editable region carry no identity: an id written in the source is removed.
- const unidentified=regionInlineElements(document);
- if(options.preserveInlineIds)for(const element of unidentified)if(attribute(element,'data-af-id')!==null)unidentified.delete(element);
+ const unidentified=options.preserveInlineIds&&inlineIds?new Set([...inline].filter(element=>attribute(element,'data-af-id')===null)):inline;
  const edits:import('./html-source').Edit[]=[];
  for(const element of unidentified){
   const at=element.sourceCodeLocation?.attrs?.['data-af-id'];
@@ -67,19 +124,55 @@ export function canonicalizeHtmlPage(input:string, options:CanonicalHtmlOptions=
  let next=options.ledger?.nextNodeId??1;
  const missing=document.all.filter(element=>attribute(element,'data-af-id')===null&&!unidentified.has(element));
  // A regenerated file without IDs keeps the previous version's identities for elements it still has (D11).
- const carried=options.previousHtml&&missing.length?carryForwardIds(allElements(options.previousHtml),document,seen):new Map<SourceElement,string>();
+ const carried=previousDocument&&missing.length?carryForwardIds(previousDocument,document,seen):new Map<SourceElement,string>();
+ const assigned=new Map<SourceElement,string>();
  for(const element of missing){
-  const kept=carried.get(element);
-  if(kept){seen.add(kept);edits.push(insertAttribute(html,element,'data-af-id',kept));continue;}
-  let id:string;do{id=`af-${next++}`;}while(allocated.has(id));
-  seen.add(id);allocated.add(id);edits.push(insertAttribute(html,element,'data-af-id',id));
+  let id=carried.get(element);
+  if(!id){
+   do{id=`af-${next++}`;}while(allocated.has(id));
+   allocated.add(id);
+  }
+  seen.add(id);assigned.set(element,id);
+  edits.push(element===document.insertedCore?atHeadStart(document,[coreTag(id)]):insertAttribute(html,element,'data-af-id',id));
  }
  html=applyEdits(html,edits);
- htmlPageDeclarations(html);
- return {html,ledger:{allocatedIds:[...allocated],nextNodeId:next},nodeIds:[...seen],...(options.previousHtml&&missing.length?{carry:{carried:carried.size,fresh:missing.length-carried.size}}:{})};
+ const canonical:CanonicalHtmlPage={html,ledger:{allocatedIds:[...allocated],nextNodeId:next},nodeIds:[...seen],...(options.previousHtml&&missing.length?{carry:{carried:carried.size,fresh:missing.length-carried.size}}:{})};
+ const shape:HtmlPageShape=recovered&&edits.length?parseSource(html):document;
+ declarationsIn(shape);
+ // The source index historically inserts in document order. A later write builds its ledger from those rows.
+ const indexIds=()=>document.all.flatMap(element=>{
+  if(unidentified.has(element))return [];
+  const id=assigned.get(element)??attribute(element,'data-af-id');
+  return id===null?[]:[id];
+ });
+ return {canonical,shape,inlineIds,recovered,indexIds};
 }
 
-type Parsed=ReturnType<typeof allElements>;
+export type HtmlPageShape=Pick<SourceDocument,'elements'|'templateElements'>;
+export type HtmlPageAnalysis=ReturnType<typeof analyzeHtmlPage>;
+
+/** Admission reads authored head metadata and references. Canonical validation reads the repaired page. */
+export function analyzeHtmlPage(source:string,parsed?:ParsedHtml) {
+ const authored=parsed?.source===source?locateSource(parsed):parseSource(source);
+ const allocate=canonicalSource(source,authored);
+ const admitted=allocate();
+ return {
+  source,
+  canonical:admitted.canonical,
+  // Binding refusals belong to the dataset-admission stage, after the other content and metadata checks.
+  get declarations(){return declarationsIn(authored);},
+  metadata:metadataIn(authored),
+  pwa:pwaIn(authored),
+  csp:nativeCspDeclarations(authored),
+  assets:htmlAssetLinks(authored),
+  socialImage:socialPreviewImageDetails(authored.tree),
+  forStorage(options:CanonicalHtmlOptions={}) {
+   return options.previousHtml||options.ledger||admitted.inlineIds?allocate({...options,preserveInlineIds:true}):admitted;
+  },
+ };
+}
+
+type Parsed=ReturnType<typeof allElements>&{insertedCore?:SourceElement};
 /** Inline tags that never carry `data-af-id` inside an editable region (lib/live-regions keeps identities on blocks only). */
 const REGION_INLINE=new Set(['a','strong','b','em','i','code']);
 /** The inline elements whose nearest `data-af-editable` ancestor is a `rich` or `text` region. */
@@ -114,7 +207,13 @@ function describe(document:Parsed,idOf:(element:SourceElement)=>string|undefined
  const owners=new Map<unknown,SourceElement>();
  for(const element of document.all)if(element.tagName==='template'&&'content' in element)owners.set((element as unknown as {content:unknown}).content,element);
  const parentOf=(element:SourceElement):SourceElement|null=>{const parent=element.parentNode as unknown;if(!parent)return null;if(owners.has(parent))return owners.get(parent)!;return parent&&typeof parent==='object'&&'tagName' in parent?parent as SourceElement:null;};
- const indexOf=(element:SourceElement)=>{const parent=element.parentNode as unknown as {childNodes?:SourceElement[]}|null;let index=0;for(const sibling of parent?.childNodes??[]){if(sibling===element)return index;if(sibling.tagName===element.tagName)index++;}return index;};
+ const indexOf=(element:SourceElement)=>{
+  if(element===document.insertedCore)return 0;
+  const parent=element.parentNode as unknown as {childNodes?:SourceElement[]}|null;
+  let index=document.insertedCore&&parent===document.head&&element.tagName==='script'?1:0;
+  for(const sibling of parent?.childNodes??[]){if(sibling===element)return index;if(sibling.tagName===element.tagName)index++;}
+  return index;
+ };
  const pathOf=(element:SourceElement)=>{const tags=[];for(let at:SourceElement|null=element;at;at=parentOf(at))tags.push(at.tagName);return tags.reverse().join('>');};
  const parentId=(element:SourceElement)=>{for(let at=parentOf(element);at;at=parentOf(at)){const id=idOf(at);if(id!==undefined)return id;if(attribute(at,'data-af-id')===null)return '';}return '';};
  const attrs=(element:SourceElement)=>SIGNATURE_ATTRIBUTES.map(name=>attribute(element,name)??'').join('|').replace(/\|+$/,'');
@@ -190,8 +289,11 @@ function declaredParams(query:string,text:string):HtmlQueryParams{
 }
 /** Namespaces are declarations, never inferred from arbitrary network URLs. */
 export function htmlPageDeclarations(html:string):HtmlPageDeclarations{
+ return declarationsIn(parseSource(html));
+}
+function declarationsIn(document:HtmlPageShape):HtmlPageDeclarations{
  const datasets:HtmlDatasetLink[]=[];const connections:HtmlDefaultConnectionLink[]=[];const queries:HtmlDeclaredQuery[]=[];const names=new Set<string>();
- for(const element of allElements(html).all){
+ for(const element of [...document.elements,...document.templateElements]){
   // A declared query (a live dataset's or the default connection's, checked at publish): its name, the link it runs on,
   // its SQL text and, on the default connection, what a reader may vary in it.
   if(element.tagName==='script'&&(attribute(element,'type')??'').trim().toLowerCase()==='application/sql'&&attribute(element,'data-af-query')!==null){
@@ -235,7 +337,10 @@ export function htmlPageDeclarations(html:string):HtmlPageDeclarations{
 }
 /** The native head supplies listing and share metadata; body content is never executed. */
 export function htmlPageMetadata(html:string):HtmlPageMetadata{
- const document=parseSource(html);let title:string|null=null,description:string|null=null;
+ return metadataIn(parseSource(html));
+}
+function metadataIn(document:SourceDocument):HtmlPageMetadata{
+ let title:string|null=null,description:string|null=null;
  for(const element of document.elements){
   let inHead=false;for(let parent=element.parentNode;parent;parent='parentNode' in parent?parent.parentNode:null)if(parent===document.head){inHead=true;break;}
   if(!inHead)continue;
@@ -249,7 +354,10 @@ export function htmlPageMetadata(html:string):HtmlPageMetadata{
 
 /** Read static head metadata only; scripts and template content never declare install policy. */
 export function htmlPwaSettings(html:string):HtmlPwaSettings {
- const {head,elements}=parseSource(html),settings:HtmlPwaSettings={};
+ return pwaIn(parseSource(html));
+}
+function pwaIn({head,elements}:SourceDocument):HtmlPwaSettings {
+ const settings:HtmlPwaSettings={};
  const fields={enabled:'enabled',name:'name','short-name':'shortName',icon:'icon','theme-color':'themeColor','background-color':'backgroundColor'} as const;
  for(const element of elements){
   if(element.tagName!=='meta'||element.parentNode!==head)continue;
@@ -265,9 +373,10 @@ export function htmlPwaSettings(html:string):HtmlPwaSettings {
 
 const assetAttributes=(element:import('./html-source').Element):string[]=>element.tagName==='img'||element.tagName==='source'?['src']:element.tagName==='video'?['poster']:element.tagName==='a'?['href']:[];
 /** Only byte-bearing HTML attributes are asset references; links and script text are excluded. */
-export function htmlAssetLinks(html:string):HtmlAssetLinks {
+export function htmlAssetLinks(html:string|Pick<SourceDocument,'elements'>):HtmlAssetLinks {
  const refs=new Set<string>(),imageUrls=new Set<string>();
- for(const element of parseSource(html).elements)for(const name of assetAttributes(element)){
+ const document=typeof html==='string'?parseSource(html):html;
+ for(const element of document.elements)for(const name of assetAttributes(element)){
   const value=attribute(element,name);if(!value)continue;
   if(/^ref:[a-zA-Z0-9]{6,12}$/.test(value))refs.add(value.slice(4));
   else if(element.tagName!=='a'&&/^https?:\/\//.test(value))imageUrls.add(value);

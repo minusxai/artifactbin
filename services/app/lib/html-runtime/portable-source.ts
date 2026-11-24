@@ -3,6 +3,7 @@ import {isRuntimeCoreSrc,RUNTIME_CORE_PATH} from '../html-page/core-script';
 import {INLINE_SCRIPT_POLICY} from './inline-scripts';
 import {sha256Hex} from '@artifactbin/utils/sha256';
 import { parse, serialize, type DefaultTreeAdapterMap } from 'parse5';
+import { parseHtml, type ParsedHtml } from '../html-page/html-source';
 import { portableDocumentIn } from './portable';
 import type { PortableDocument } from './portable-contract';
 const generated=new Set(['runtime','apollo','reader','portable','chrome','portable-engine','collab','state-module','offline-data','offline-sql','core',INLINE_SCRIPT_POLICY]);
@@ -14,8 +15,7 @@ export function recoverPortableRendering(fileBytes:string):string {
  * A portable file's envelope (an unreadable one throws) and its rendering with every generated block removed, from ONE
  * parse of the file; undefined when it carries no envelope.
  */
-function recovered(fileBytes:string):{envelope:PortableDocument;rendering:string}|undefined {
- const document=parse(fileBytes,{sourceCodeLocationInfo:true});
+function recovered(fileBytes:string,document=parse(fileBytes,{sourceCodeLocationInfo:true})):{envelope:PortableDocument;rendering:string}|undefined {
  const envelope=portableDocumentIn(document);
  if(!envelope)return undefined;
  const spans:{start:number;end:number;replacement:string}[]=[];
@@ -62,13 +62,14 @@ export class PortableSourceUnverified extends Error {
  * stripped rendering: an export edited outside its envelope, or one whose envelope is unreadable, throws
  * PortableSourceUnverified. HTML with no envelope is returned as it is.
  */
-export function verifiedPortableSource(html:string):string {
+export function verifiedPortableSource(html:string):{source:string;parsed?:ParsedHtml} {
  let source:string|null=null;
  try{
-  const file=recovered(html);
-  if(!file)return html;
+  const parsed=parseHtml(html);
+  const file=recovered(html,parsed.tree);
+  if(!file)return {source:html,parsed};
   source=envelopeSource(file).source;
  }catch{/* An unreadable envelope verifies nothing. */}
  if(source===null)throw new PortableSourceUnverified();
- return source;
+ return {source};
 }

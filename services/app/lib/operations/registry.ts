@@ -222,7 +222,7 @@ const createArtifactOp: Operation = {
     if (!creator) return reply({ error: 'unauthorized' }, 401);
     const authored = authoredHtml(input);
     if (authored instanceof Reply) return authored;
-    return createArtifactFromBody(authored, creator, ctx.base, ctx.request);
+    return createArtifactFromBody(authored.body, creator, ctx.base, ctx.request, {page:authored.page});
   },
 };
 
@@ -252,7 +252,7 @@ const updateArtifactOp: Operation = {
   async run(ctx, input) {
     const authored = authoredHtml(input);
     if (authored instanceof Reply) return authored;
-    return replaceArtifactWithBody(authored, ctx.actor, String(input.id), ctx.base,{mutationReceipt:ctx.mutationReceipt,request:ctx.request});
+    return replaceArtifactWithBody(authored.body, ctx.actor, String(input.id), ctx.base,{page:authored.page,mutationReceipt:ctx.mutationReceipt,request:ctx.request});
   },
 };
 

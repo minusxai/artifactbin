@@ -29,7 +29,7 @@ import {parse as parseJs} from 'acorn';
 import {initSync,parse as parseImports} from 'es-module-lexer';
 // Explicit .ts specifiers: the skill scripts load this module directly under Node in a source checkout (preview-html.mjs).
 import {sha256Hex} from '@artifactbin/utils/sha256';
-import {applyEdits,atHeadStart,attribute,parseSource,type Element} from '../html-page/html-source.ts';
+import {applyEdits,atHeadStart,attribute,parseSource,type Element,type SourceDocument} from '../html-page/html-source.ts';
 import {repairCoreScript} from '../html-page/index.ts';
 import {normalizeDesignSelection} from '../html-page/design-system.ts';
 import {parseCommentViewFieldList} from '@artifactbin/contracts/comment-view-state';
@@ -293,8 +293,8 @@ function moduleSpecifiers(code: string): string[] {
  * two versions with equal fingerprints run exactly the same code. Hosted canonical sources need no `revision`: their
  * local files are already immutable dependency URLs carrying a revision.
  */
-export function scriptFingerprint(html: string, revision?: (relativePath: string) => string | undefined): string {
-  const document = parseSource(html);
+export function scriptFingerprint(html: string | Pick<SourceDocument, 'elements' | 'templateElements'>, revision?: (relativePath: string) => string | undefined): string {
+  const document = typeof html === 'string' ? parseSource(html) : html;
   const parts: unknown[] = [];
   for (const script of [...document.elements, ...document.templateElements]) {
     if (script.tagName !== 'script') continue;

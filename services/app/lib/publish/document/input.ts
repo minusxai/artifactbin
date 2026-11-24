@@ -3,10 +3,10 @@ import type {ContentObjects} from '@/lib/object-store';
  * Native pages use `html`: complete HTML, canonicalized under the publication
  * transaction. Data and byte tiers retain their original inputs and authority.
  */
-import {nativeCspDeclarations} from '@/lib/trust';
 import { Reply, reply, thrownMessage } from '../../http';
-import {socialPreviewImage, socialPreviewImageValue, type StoredContent} from '@/lib/document';
-import {canonicalizeHtmlPage,htmlPageMetadata,htmlPwaSettings,htmlAssetLinks} from '@/lib/html-page';
+import type { StoredContent } from '@/lib/document';
+import {analyzeHtmlPage,type HtmlPageAnalysis} from '@/lib/html-page';
+import type {ParsedHtml} from '@/lib/html-page/html-source';
 import {STORY_TEMPLATE_NAMES} from '@/lib/validation';
 import { ingestDataset, IngestError } from '@/lib/data-ingest';
 import { ingestImageFromUrl } from '@/lib/publish/ingest/image';
@@ -37,7 +37,8 @@ const imageTitleFromUrl = (url: string): string | null => {
 export interface ContentInputCtx {
   objects?: ContentObjects;
   prepareDataset?: (input:unknown,objects?:ContentObjects)=>Promise<StoredContent|Reply>;
-  /** Identity normalization after caller-coordinate validation, before compilation. */
+  /** The authored parse can already be available from portable and bundle admission. */
+  authored?: ParsedHtml;
   /**
    * MAY THIS BODY MAKE A FOLDER — true only where a row is being CREATED.
    *
@@ -75,7 +76,7 @@ export interface ContentInputCtx {
   overByteQuota?: () => Promise<boolean>;
 }
 
-export async function parseContentInput(body: Record<string, unknown>, ctx: ContentInputCtx = {}): Promise<StoredContent | Reply> {
+export async function parseContentInput(body: Record<string, unknown>, ctx: ContentInputCtx = {}): Promise<(StoredContent & {htmlPage?:HtmlPageAnalysis}) | Reply> {
   if(['markup','jsx','markdown','document_update'].some(key=>Object.hasOwn(body,key)))return reply({error:'native_html_required',hint:'Publish a complete HTML document in the html field.'},400);
 
   const textPresent = TEXT_CONTENT_FIELDS.filter(
@@ -100,11 +101,11 @@ export async function parseContentInput(body: Record<string, unknown>, ctx: Cont
     const source=String(body.html);
     const size=tooLarge(source);if(size)return size;
     try{
-      canonicalizeHtmlPage(source);
-      const csp=nativeCspDeclarations(source);if(!csp.ok)return reply({error:'invalid_csp',details:csp.errors.map(error=>error.message)},400);
-      const metadata=htmlPageMetadata(source),pwa=htmlPwaSettings(source);
-      const imageId=socialPreviewImage(source);
-      if(socialPreviewImageValue(source)!==null&&!imageId)return reply({error:'invalid_social_preview_image'},400);
+      const htmlPage=analyzeHtmlPage(source,ctx.authored);
+      const {csp,metadata,pwa,assets,socialImage}=htmlPage;
+      if(!csp.ok)return reply({error:'invalid_csp',details:csp.errors.map(error=>error.message)},400);
+      const imageId=socialImage.id;
+      if(socialImage.value!==null&&!imageId)return reply({error:'invalid_social_preview_image'},400);
       const refs:Array<{id:string;kind:string}>=[];
       if(imageId){
         const image=await ctx.loadRef?.(imageId);
@@ -112,12 +113,12 @@ export async function parseContentInput(body: Record<string, unknown>, ctx: Cont
         refs.push({id:imageId,kind:'image'});
       }
       if(pwa.icon&&ctx.loadRef){const icon=await ctx.loadRef(pwa.icon);if(icon?.format!=='image')return reply({error:'invalid_refs'},400);if(!refs.some(ref=>ref.id===pwa.icon))refs.push({id:pwa.icon,kind:'image'});}
-      const assets=htmlAssetLinks(source);if(assets.refs.length>128)return reply({error:'invalid_refs'},400);
+      if(assets.refs.length>128)return reply({error:'invalid_refs'},400);
       for(const id of assets.refs){if(refs.some(ref=>ref.id===id))continue;const asset=await ctx.loadRef?.(id);if(ctx.loadRef&&(!asset||!['image','file','pdf'].includes(asset.format)))return reply({error:'invalid_refs'},400);if(asset)refs.push({id,kind:asset.format});}
       // The page's starter kind (`doc`: a page that is one editable region, opened for its editors on load). A replace
       // carries the stored one unless the body names another (lib/publish requests), so an agent's write keeps a doc a doc.
       const template=(STORY_TEMPLATE_NAMES as readonly unknown[]).includes(body.template)?{template:body.template as string}:{};
-      return {format:'html',source,meta:{refs,htmlCsp:csp.extensions,...template},derivedTitle:metadata.title,derivedDescription:metadata.description};
+      return {format:'html',source,htmlPage,meta:{refs,htmlCsp:csp.extensions,...template},derivedTitle:metadata.title,derivedDescription:metadata.description};
     }
     catch(error){return reply({error:'invalid_html',details:[thrownMessage(error,'Invalid HTML')]},400);}
   }

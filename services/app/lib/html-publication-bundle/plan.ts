@@ -35,7 +35,7 @@ function rootedPath(value:string):string|null{
  let decoded:string;try{decoded=decodeURIComponent(value.split(/[?#]/)[0]!).slice(1);}catch{return null;}
  try{return normalized(path.posix.normalize(decoded));}catch{return null;}
 }
-function links(source:string,css:boolean,js=false):Link[]{
+function links(source:string,css:boolean,js=false,entry?:DefaultTreeAdapterMap['document']):Link[]{
  if(js){const imports=parseImports(source)[0],runtime=imports.some(item=>item.n===undefined&&item.d!==-2)?admitRuntimeModuleImports(source):[];return imports.flatMap((item):Link[]=>{
   if(item.d===-2)return [];
   if(item.n==='@afbin/apollo'||item.n==='@afbin/reader'||item.n==='@afbin/chrome'||item.n==='@afbin/portable'||item.n==='@afbin/collab'||item.n==='@afbin/state')return [];
@@ -58,7 +58,7 @@ function links(source:string,css:boolean,js=false):Link[]{
    }else if(node.type==='String'&&this.atrule?.name.toLowerCase()==='import')result.push({start:node.loc.start.offset+1,end:node.loc.end.offset-1,value:node.value,kind:'asset',use:'@import'});
   });return result;
  }
- const result:Link[]=[];const doc=parse(source,{sourceCodeLocationInfo:true});
+ const result:Link[]=[];const doc=entry??parse(source,{sourceCodeLocationInfo:true});
  const visit=(node:DefaultTreeAdapterMap['node'])=>{
   if('tagName'in node){
    const dataset=node.tagName==='link'&&node.attrs.some(a=>a.name==='rel'&&a.value.split(/\s+/).includes('af-dataset'));
@@ -102,7 +102,7 @@ function links(source:string,css:boolean,js=false):Link[]{
 }
 /** What a script fetches by a literal path (lib/html-autofix scriptFetchPaths): the page's inline scripts, or a module file. */
 const JS_TYPES=new Set(['','module','text/javascript','application/javascript']);
-function fetchedPaths(source:string,page:boolean):string[]{
+function fetchedPaths(source:string,page?:DefaultTreeAdapterMap['document']):string[]{
  if(!page)return scriptFetchPaths(source);
  const found:string[]=[];
  const visit=(node:DefaultTreeAdapterMap['node'])=>{
@@ -112,9 +112,9 @@ function fetchedPaths(source:string,page:boolean):string[]{
   }
   if('tagName'in node&&node.tagName==='template'&&'content'in node)for(const child of node.content.childNodes)visit(child);
   if('childNodes'in node)for(const child of node.childNodes)visit(child);
- };visit(parse(source));return found;
+ };visit(page);return found;
 }
-export function planPublicationBundle(html:string,bundle:PublicationBundle,context:BundleResolutionContext={}):BundlePlan{
+export function planPublicationBundle(html:string,bundle:PublicationBundle,context:BundleResolutionContext={},parsed?:DefaultTreeAdapterMap['document']):BundlePlan{
  if(!bundle||typeof bundle.entryPath!=='string'||!Array.isArray(bundle.files)||bundle.files.length>MAX_FILES)throw Error('Invalid publication bundle');
  if(html.length>4_000_000||JSON.stringify(bundle).length>24_000_000||Object.keys(bundle.mappings??{}).length>MAX_FILES)throw Error('Publication bundle limit exceeded');
  for(const name of Object.keys(bundle.mappings??{}))if(normalized(name)!==name)throw Error('Noncanonical mapping path');
@@ -129,7 +129,8 @@ export function planPublicationBundle(html:string,bundle:PublicationBundle,conte
  }
  const ordered:BundleDependency[]=[],visiting=new Set<string>(),missing=new Set<string>();
  const visited=new Map<string,{kind:'asset'|'dataset';use:string;owner:string}>();
- const dependencies=(source:string,owner:string,css=false)=>links(source,css,/^(?:text|application)\/javascript$/.test(files.get(owner)?.contentType??'')).flatMap(link=>{
+ const entry=parsed??parse(html,{sourceCodeLocationInfo:true});
+ const dependencies=(source:string,owner:string,css=false)=>links(source,css,/^(?:text|application)\/javascript$/.test(files.get(owner)?.contentType??''),source===html&&owner===entryPath?entry:undefined).flatMap(link=>{
   if(link.runtimeModule)return [];
   // A root-relative reference (`/assets/fonts/x.woff2`) to a file published with the page is that file; one to none is
   // refused unless it is the platform's own (a link to none is navigation, and a bare save keeps everything as written).
@@ -157,14 +158,14 @@ export function planPublicationBundle(html:string,bundle:PublicationBundle,conte
   }
   const file=files.get(name);if(!file){if(!bundle.mappings?.[name]&&!(hyperlink&&context.linksAsWritten))missing.add(name);return;}
   visiting.add(name);const nested=/^(?:text\/css|(?:text|application)\/javascript)$/.test(file.contentType)?dependencies(file.bytes.toString('utf8'),name,file.contentType==='text/css'):[];
-  if(/^(?:text|application)\/javascript$/.test(file.contentType))fetched.push(...fetchedPaths(file.bytes.toString('utf8'),false));
+  if(/^(?:text|application)\/javascript$/.test(file.contentType))fetched.push(...fetchedPaths(file.bytes.toString('utf8')));
   for(const dep of nested)visit(dep.path,dep.kind,false,dep.use,name);
   visiting.delete(name);visited.set(name,{kind,use,owner});ordered.push({path:name,kind,contentType:file.contentType,bytes:file.bytes,dependencies:nested.map(d=>d.path)});
  };
  // A literal fetch is never rewritten: the page's core maps the path it names to the published file wherever the page
  // is read (html-runtime page-fetch, the runtime config's `files`). It resolves against the page, from any file; a path
  // the project does not hold, or that leaves it, names no file of it and stays the script's own.
- const fetched:string[]=fetchedPaths(html,true);
+ const fetched:string[]=fetchedPaths(html,entry);
  for(const dep of dependencies(html,entryPath))visit(dep.path,dep.kind,dep.hyperlink,dep.use);
  for(let at=0;at<fetched.length;at++){
   let name:string|null;try{name=resolve(fetched[at]!,entryPath);}catch{continue;}
@@ -178,7 +179,7 @@ export function planPublicationBundle(html:string,bundle:PublicationBundle,conte
   throw Error(`Not linked from the page: ${unlinked.join(', ')}: a file publishes with its page when the page links it (<a href="${first}">) or a script fetches it by that literal path (fetch('${first}'))`);
  }
  return {html,entryPath,dependencies:ordered,rewrite(source,owner,addresses){
-  const css=files.get(owner)?.contentType==='text/css',js=/^(?:text|application)\/javascript$/.test(files.get(owner)?.contentType??'');const guards=links(source,css,js).filter(link=>link.runtimeModule);const edits=[...dependencies(source,owner,css),...guards.map(link=>({...link,path:''}))];let result=source;
+  const css=files.get(owner)?.contentType==='text/css',js=/^(?:text|application)\/javascript$/.test(files.get(owner)?.contentType??'');const guards=links(source,css,js,source===html&&owner===entryPath?entry:undefined).filter(link=>link.runtimeModule);const edits=[...dependencies(source,owner,css),...guards.map(link=>({...link,path:''}))];let result=source;
   for(const edit of edits.sort((a,b)=>b.start-a.start)){if(edit.runtimeModule){result=result.slice(0,edit.start)+edit.value+result.slice(edit.end);continue;}const address=addresses.get(edit.path);if(!address){if(edit.hyperlink&&context.linksAsWritten)continue;throw Error('Unresolved local dependency: '+edit.path);}const suffix=edit.kind==='asset'?(edit.value.match(/[?#].*$/)?.[0]??''):'';const target=address+(suffix.startsWith('?')&&address.includes('?')?'&'+suffix.slice(1):suffix);const escaped=edit.htmlAttribute?escapeSourceAttribute(target):target;result=result.slice(0,edit.start)+escaped+result.slice(edit.end);}return result;
  }};
 }

@@ -16,8 +16,13 @@ export interface Edit {
   text: string;
 }
 
-export interface SourceDocument {
+export interface ParsedHtml {
   source: string;
+  tree: DefaultTreeAdapterMap["document"];
+  hasParseErrors: boolean;
+}
+
+export interface SourceDocument extends ParsedHtml {
   html: Element | null;
   head: Element | null;
   body: Element | null;
@@ -31,8 +36,18 @@ export interface SourceDocument {
 
 const isElement = (node: Node): node is Element => "tagName" in node;
 
+export function parseHtml(source: string): ParsedHtml {
+  let hasParseErrors = false;
+  const tree = parse(source, { sourceCodeLocationInfo: true, onParseError: () => { hasParseErrors = true; } });
+  return {source, tree, hasParseErrors};
+}
+
 export function parseSource(source: string): SourceDocument {
-  const document = parse(source, { sourceCodeLocationInfo: true });
+  return locateSource(parseHtml(source));
+}
+
+/** Index the tree without parsing again when portable or bundle admission already read it. */
+export function locateSource(parsed: ParsedHtml): SourceDocument {
   const elements: Element[] = [];
   const templateElements: Element[] = [];
   let html: Element | null = null;
@@ -55,8 +70,8 @@ export function parseSource(source: string): SourceDocument {
     }
     if ("childNodes" in node) for (const child of node.childNodes) visit(child, inTemplate);
   };
-  visit(document, false);
-  return { source, html, head, body, elements, templateElements, doctypeEnd };
+  visit(parsed.tree, false);
+  return { ...parsed, html, head, body, elements, templateElements, doctypeEnd };
 }
 
 export function attribute(element: Element, name: string): string | null {

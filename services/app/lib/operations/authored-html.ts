@@ -10,13 +10,14 @@
  * in any source the store writes.
  */
 import { PortableSourceUnverified, verifiedPortableSource } from '@/lib/html-runtime/portable-source';
+import type { ParsedHtml } from '@/lib/html-page/html-source';
 import { Reply, reply } from '@/lib/http';
 
-export function authoredHtml<T extends Record<string, unknown>>(body: T): T | Reply {
-  if (typeof body.html !== 'string') return body;
+export function authoredHtml(body: Record<string, unknown>): {body: Record<string, unknown>; page?: ParsedHtml} | Reply {
+  if (typeof body.html !== 'string') return {body};
   try {
-    const html = verifiedPortableSource(body.html);
-    return html === body.html ? body : { ...body, html };
+    const {source:html,parsed:page} = verifiedPortableSource(body.html);
+    return {body:html===body.html?body:{...body,html},page};
   } catch (error) {
     if (error instanceof PortableSourceUnverified) return reply({ error: 'portable_copy_unverified', details: [error.message] }, 400);
     throw error;

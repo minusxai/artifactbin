@@ -1,10 +1,12 @@
 import { objectStore, prepareObjects, recordObjectWrites, type PreparedObject } from '@/lib/object-store';
 import { Reply, reply } from '@/lib/http';
 import { parseContentInput, type ContentInputCtx } from '../document/input';
+import type {HtmlPageAnalysis} from '@/lib/html-page';
 import type { StoredContent } from '@/lib/document';
 
 export interface PreparedContent {
   content: StoredContent;
+  htmlPage?: HtmlPageAnalysis;
   objects: PreparedObject[];
 }
 type PreparationContext = Omit<ContentInputCtx, 'objects'>;
@@ -15,9 +17,10 @@ export async function prepareContentInput(body: Record<string, unknown>, ctx: Pr
     return reply({error: 'dry_run_unsupported', details: ['Remote imports require publication. Download the source locally and push the file to validate it without importing.']}, 400);
   }
   const staged = prepareObjects({get: key => objectStore().get(key)});
-  const content = await parseContentInput(body, {...ctx, objects: staged.store});
-  if (content instanceof Reply) return content;
-  return {content, objects: staged.objects};
+  const parsed = await parseContentInput(body, {...ctx, objects: staged.store});
+  if (parsed instanceof Reply) return parsed;
+  const {htmlPage, ...content} = parsed;
+  return {content, htmlPage, objects: staged.objects};
 }
 
 /** The only persistent half of a prepared publication. */

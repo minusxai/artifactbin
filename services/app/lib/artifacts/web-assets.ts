@@ -9,15 +9,15 @@
  * serves no web image.
  */
 import { urlHash } from '@/lib/document';
-import { htmlAssetLinks } from '@/lib/html-page';
+import { htmlAssetLinks, type HtmlPageShape } from '@/lib/html-page';
 
 /** The sorted, distinct `web_assets` keys of the images an HTML source names. */
-export function webAssetHashes(source: string | null): string[] {
+export function webAssetHashes(source: string | HtmlPageShape | null): string[] {
   return [...new Set(htmlAssetLinks(source ?? '').imageUrls.map(urlHash))].sort();
 }
 
 /** The meta a content write stores: an HTML page's carries the set of the source it stores, any other format none. */
-export function withWebAssets(format: string, source: string | null | undefined, meta: Record<string, unknown>): Record<string, unknown> {
+export function withWebAssets(format: string, source: string | HtmlPageShape | null | undefined, meta: Record<string, unknown>): Record<string, unknown> {
   const { webAssets: _derived, ...rest } = meta;
   return format === 'html' ? { ...rest, webAssets: webAssetHashes(source ?? null) } : rest;
 }
