@@ -135,3 +135,13 @@ it('pastes a Markdown table into prose and preserves default HTML, prose and cod
     expect(code.dom.querySelector('table')).toBeNull();
   } finally { code.destroy(); }
 });
+
+it('opens a saved table whose rows are separated by blank paragraphs', () => {
+  const spaced = '| Key | Value |\n\n|---|---|\n\n| A | one |\n\n| B | two |';
+  const doc = parseMarkdown('Intro.\n\n' + spaced + '\n\nAfter.');
+  expect(doc.child(1).type.name).toBe('table');
+  expect(doc.child(1).childCount).toBe(3);
+  expect(parseMarkdown(serializeMarkdown(doc)).eq(doc)).toBe(true);
+  expect(parseMarkdown('```\n' + spaced + '\n```').firstChild?.textContent).toBe(spaced);
+  expect(parseMarkdown('| A |\n\n|---|---|\n\n| B |').firstChild?.type.name).toBe('paragraph');
+});

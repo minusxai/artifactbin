@@ -87,6 +87,39 @@ export function rectangularizeTable(table: ProseNode): ProseNode {
 
 const tokenizer = MarkdownIt('commonmark', { html: false }).enable(['strikethrough', 'table'])
   .disable('image');
+// Older rich-text saves placed each pipe row in its own paragraph. Recover only explicit
+// rectangular tables; leave code blocks, nested prose and unrelated paragraphs as parsed.
+tokenizer.core.ruler.after('block', 'spaced_tables', state => {
+  if (!/\|[ \t]*:?-+:?[ \t]*\|/.test(state.src)) return;
+  const tokens = state.tokens;
+  const result: typeof tokens = [];
+  function rowAt(i: number) {
+    if (tokens[i]?.type !== 'paragraph_open' || tokens[i]!.level !== 0) return;
+    const text = tokens[i + 1]?.content.trim();
+    if (text && /^\|[^\n]*\|$/.test(text)) return text;
+  }
+  const divider = (row?: string) => !!row && /^\|(?:[ \t]*:?-+:?[ \t]*\|)+$/.test(row);
+  const width = (row: string) => row.slice(1, -1).split(/(?<!\\)\|/).length;
+  for (let i = 0; i < tokens.length; i++) {
+    const header = rowAt(i), rule = rowAt(i + 3);
+    if (!header || !rule || !divider(rule) || width(header) !== width(rule)) {
+      result.push(tokens[i]!); continue;
+    }
+    const rows = [header, rule];
+    let end = i + 6;
+    for (let row = rowAt(end); row && width(row) === width(rule); row = rowAt(end)) {
+      if (divider(row) || divider(rowAt(end + 3))) break;
+      rows.push(row);
+      end += 3;
+    }
+    const parsed: typeof tokens = [];
+    state.md.block.parse(rows.join('\n'), state.md, state.env, parsed);
+    if (parsed[0]?.type !== 'table_open') { result.push(tokens[i]!); continue; }
+    for (const token of parsed) result.push(token);
+    i = end - 1;
+  }
+  state.tokens = result;
+});
 const { image: _image, ...tokens } = defaultMarkdownParser.tokens;
 // markdown-it puts each column's alignment on its cells and emits thead/tbody wrappers.
 const tableCellToken = (block: string): ParseSpec => ({
