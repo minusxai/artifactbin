@@ -29,6 +29,8 @@ it('serves bare IDs with 200, wrong slugs with 302, and keeps the app canonical'
  const user=await owner(),post=await page(user.token),server=app();
  const res=await server.request(`${base}/${post.id}`);expect(res.status).toBe(200);
  const html=await res.text();expect(html).toContain('Hello owner');expect(html).toContain('https://app.example.test/@alice/');
+ expect(html).toContain('<style data-mx-domain-footer-style="">');
+ expect(html).toContain(`<footer data-mx-domain-footer="">Made with <a href="https://app.example.test/a/${post.id}" rel="noopener">artifactbin</a></footer>`);
  expect(res.headers.get('content-security-policy')).toContain('sandbox allow-scripts');expect(res.headers.get('content-security-policy')).not.toContain('allow-same-origin');
  const wrong=await server.request(`${base}/${post.id}-wrong?q=1`);expect(wrong.status).toBe(302);expect(wrong.headers.get('location')).toBe(`/${post.id}-hello-world?q=1`);
  const head=await server.request(`${base}/${post.id}`,{method:'HEAD'});expect(head.status).toBe(200);expect(await head.text()).toBe('');
