@@ -70,7 +70,8 @@ import {archiveFor} from '@/lib/skills';
 // 1.658 MiB: the shared Markdown editor ships its readable table model, clipboard handling,
 // editing commands and controls. The stored example-origin archive is 1,737,825 bytes.
 // 1.660 MiB includes the editor’s readable parser for paragraph-separated table rows.
-const SKILL_ARCHIVE_MAX_BYTES=1.660*1024*1024;
+// 1.663 MiB includes the shared source view and its controls (1,742,581 bytes stored).
+const SKILL_ARCHIVE_MAX_BYTES=1.663*1024*1024;
 
 describe('the downloadable author skill archive',()=>{
  it('fits its size budget',async()=>{

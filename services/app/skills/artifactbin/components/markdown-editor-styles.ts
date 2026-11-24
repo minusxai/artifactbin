@@ -20,7 +20,15 @@ ${E}>.af-md-frame:focus-within{box-shadow:0 0 0 2px color-mix(in srgb,var(--ring
 ${E}[disabled]>.af-md-frame{cursor:not-allowed;opacity:.5}
 ${E} .af-md-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:2px;padding:4px;` +
   `border-bottom:1px solid var(--border,#e5e7eb)}
-${E}[readonly] .af-md-toolbar,${E}[disabled] .af-md-toolbar{display:none}
+${E}[disabled] .af-md-toolbar{display:none}
+${E}[readonly] .af-md-toolbar>:not(.af-md-modes),
+${E} [data-source] .af-md-toolbar>:not(.af-md-modes),
+${E} [data-source] .af-md-table-panel{display:none}
+${E} .af-md-modes{display:flex;gap:2px;margin-inline-start:auto;padding:2px;
+  border:1px solid var(--border,#ddd);border-radius:var(--radius-sm,4px)}
+${E} .af-md-source{box-sizing:border-box;width:100%;padding:12px 16px;border:0;
+  background:transparent;color:inherit;font:14px/1.5 var(--font-mono,monospace);
+  field-sizing:content;min-height:7rem;resize:vertical;outline:none;overflow-wrap:anywhere}
 ${E} .af-md-toolbar>[role=separator]{width:1px;align-self:stretch;margin:4px;` +
   `background:var(--border,#e5e7eb)}
 ${E} .af-md-toolbar button{box-sizing:border-box;min-width:28px;height:28px;padding:0 6px;` +

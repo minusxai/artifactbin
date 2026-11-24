@@ -35,7 +35,7 @@ const components: Record<string, { style?: string; tags: string[] }> = {
 const helpers = ['accordion-model', 'date-calendar', 'file-upload-model', 'floating-geometry', 'floating-position', 'host-name', 'icon-glyphs', 'isometric-model', 'register-component', 'select-model', 'slide-navigation', 'tab-navigation', 'table-model', 'text-control',
   // Parts split out of their components to keep each source under 200 lines.
   'isometric-geometry', 'isometric-mesh', 'isometric-scene', 'isometric-visibility',
-  'markdown-editor-paste', 'markdown-editor-table-commands', 'markdown-editor-table-menu',
+  'markdown-editor-source', 'markdown-editor-paste', 'markdown-editor-table-commands', 'markdown-editor-table-menu',
   'markdown-styles', 'markdown-editor-commands', 'markdown-editor-model', 'markdown-editor-styles', 'row-identity', 'table-comparison', 'table-values', 'avatar-model', 'chart-data', 'chart-frame', 'chart-model', 'chart-render', 'chart-styles', 'data-source-label', 'data-table-cells', 'data-table-compare', 'data-table-frame', 'data-table-grid', 'data-table-measure', 'data-table-sql', 'page-sql', 'date-picker-styles', 'dialog-model', 'popover-model', 'segmented-model', 'slide-deck-parts', 'tooltip-model', 'user-model'];
 const load = (name: string): Promise<Record<string, unknown>> => import(`./${name}.ts`);
 const define = vi.spyOn(customElements, 'define');

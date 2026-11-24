@@ -8,9 +8,8 @@
  * Examples:
  *   <af-markdown-editor label="Notes" rows="6" placeholder="Write…"></af-markdown-editor>
  *   <af-markdown-editor default-value="## Revenue&#10;Net of discounts."></af-markdown-editor>
- * Gotchas: reflect your state value back for controlled use. The value is written the way the
- *   editor writes Markdown (`*` bullets become `-`, emphasis `*x*`), so it can differ in spelling,
- *   never in content, from what you set. No HTML or images: an image stays its literal text.
+ * Gotchas: Markdown mode edits exact source. Reflect your value back for controlled use. Visual
+ *   edits normalize Markdown spelling. HTML and image syntax stay literal in the visual editor.
  */
 import { EditorState, type Transaction } from 'prosemirror-state';
 import { EditorView } from 'prosemirror-view';
@@ -19,10 +18,10 @@ import { registerComponent } from './register-component';
 import { editorPlugins, toolbarGroups, type EditorAction } from './markdown-editor-commands';
 import { normalizeMarkdown, parseMarkdown, serializeMarkdown } from './markdown-editor-model';
 import { inTable } from './markdown-editor-table-commands';
+import { sourceMode } from './markdown-editor-source';
 import { tableMenu } from './markdown-editor-table-menu';
 import { MARKDOWN_ROOT } from './markdown-styles';
 import { markdownEditorStyles } from './markdown-editor-styles';
-
 /** Author-facing contract: the Markdown value, null when the field is empty. */
 interface MarkdownEditorContract { value: string | null | undefined }
 
@@ -36,6 +35,7 @@ class AfMarkdownEditor extends NamedHost implements MarkdownEditorContract {
   private view?: EditorView;
   private label?: HTMLLabelElement;
   private buttons: Array<[EditorAction, HTMLButtonElement]> = [];
+  private mode?: ReturnType<typeof sourceMode>;
   private refreshTable?: () => void;
   private accepted = '';
   private propertyControlled = false;
@@ -80,7 +80,9 @@ class AfMarkdownEditor extends NamedHost implements MarkdownEditorContract {
     const id = `af-markdown-editor-${++nextEditorId}`;
     this.label = doc.createElement('label'); this.label.dataset.afControlLabel = '';
     this.label.id = `${id}-label`;
-    this.label.addEventListener('click', () => this.view?.focus());
+    this.label.addEventListener('click', () => {
+      if (this.mode?.field.hidden) this.view?.focus(); else this.mode?.field.focus();
+    });
     const frame = doc.createElement('div'); frame.className = 'af-md-frame';
     const toolbar = doc.createElement('div'); toolbar.className = 'af-md-toolbar';
     toolbar.setAttribute('role', 'toolbar'); toolbar.setAttribute('aria-label', 'Formatting');
@@ -94,9 +96,11 @@ class AfMarkdownEditor extends NamedHost implements MarkdownEditorContract {
     this.refreshTable = tableMenu(toolbar, frame, `${id}-table`, () => this.view!,
       () => this.editable());
     frame.append(surface);
+    this.mode = sourceMode(this, frame, toolbar, surface, id, () => this.value ?? '',
+      source => this.change(source), () => this.sync());
     this.append(this.label, frame);
     const state = EditorState.create({ doc: parseMarkdown(source), plugins: editorPlugins() });
-    this.accepted = serializeMarkdown(state.doc);
+    this.accepted = source;
     this.view = new EditorView(surface, {
       state,
       editable: () => this.editable(),
@@ -132,12 +136,15 @@ class AfMarkdownEditor extends NamedHost implements MarkdownEditorContract {
     view.updateState(view.state.apply(transaction));
     this.refreshToolbar();
     if (!transaction.docChanged || transaction.getMeta(EXTERNAL)) return;
-    const value = serializeMarkdown(view.state.doc);
+    this.change(serializeMarkdown(view.state.doc));
+  }
+
+  private change(value: string): void {
     if (value === this.accepted) return;
     const accepted = this.dispatchEvent(new CustomEvent('af-change', { detail: { value:
       value || null }, bubbles: true, composed: true, cancelable: true }));
     if (this.controlled()) this.sync();
-    else if (!accepted) this.replace(this.accepted);
+    else if (!accepted) this.sync();
     else this.accepted = value;
   }
 
@@ -147,7 +154,7 @@ class AfMarkdownEditor extends NamedHost implements MarkdownEditorContract {
     const next = parseMarkdown(source);
     view.dispatch(view.state.tr.replaceWith(0, view.state.doc.content.size, next.content)
       .setMeta('addToHistory', false).setMeta(EXTERNAL, true));
-    this.accepted = serializeMarkdown(view.state.doc);
+    this.accepted = source;
   }
 
   private sync(): void {
@@ -160,13 +167,15 @@ class AfMarkdownEditor extends NamedHost implements MarkdownEditorContract {
     const rows = Number(this.getAttribute('rows'));
     const minimum = Number.isInteger(rows) && rows > 0 ? rows : 3;
     view.dom.style.setProperty('--af-md-rows', String(minimum));
-    if (this.controlled() && !view.composing) {
-      // The value reflected back is what this field wrote (trailing spaces and all): keep it.
-      const current = serializeMarkdown(view.state.doc), value = this.value ?? '';
+    this.mode!.sync(visible || named, minimum);
+    const value = this.value ?? '';
+    if (this.mode!.field.hidden && !view.composing) {
+      const current = serializeMarkdown(view.state.doc);
       if (value !== current && normalizeMarkdown(value) !== normalizeMarkdown(current)) {
         this.replace(value);
-      } else this.accepted = current;
+      }
     }
+    this.accepted = value;
     view.setProps({});
     this.refreshToolbar();
   }
