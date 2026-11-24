@@ -1,7 +1,7 @@
 /** Account library and view/engagement insights; anonymous callers receive the landing response. `part=bootstrap` is the Home destination and its shelf in one answer. */
 import { json } from '@/lib/http';
 import { sessionActor } from '@/lib/authentication';
-import { accountWorkspaceFor, accountWorkspaceCoreFor, accountWorkspaceInsightsFor, homeBootstrapFor } from '@/lib/workspace';
+import { accountWorkspaceFor, accountWorkspaceCoreFor, accountWorkspaceInsightsFor, homeBootstrapFor, workspaceLikedFor } from '@/lib/workspace';
 
 export async function GET(request: Request) {
   const actor = await sessionActor(request);
@@ -13,6 +13,7 @@ export async function GET(request: Request) {
     return json(await homeBootstrapFor(user?.userId ? { userId: user.userId, email: user.email } : null, { personal }), 200, { 'Cache-Control': 'no-store' });
   }
   if (!user?.userId) return json({ signedIn: false }, 200, { 'Cache-Control': 'no-store' });
+  if (part === 'liked') return json({ accountId: user.userId, artifacts: await workspaceLikedFor(user) }, 200, { 'Cache-Control': 'no-store' });
   if(groupId){
     const core=await accountWorkspaceCoreFor(user.userId,user.email,groupId);
     return core?json({signedIn:true,accountId:user.userId,...core},200,{'Cache-Control':'no-store'}):json({error:'not_found'},404);

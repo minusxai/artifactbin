@@ -6,7 +6,7 @@ export { accountWorkspaceCoreFor, accountWorkspaceFor, accountWorkspaceInsightsF
 export { homeBootstrapFor } from './home';
 export { listAccountTokenRows, listArtifactsByUser, listOwnedArtifacts, listPublicArtifactsByUser, listSharedWithEmail } from './listings';
 export type { SharedArtifactSummary } from './listings';
-export { workspaceAssetsFor } from './inventory';
+export { workspaceAssetsFor, workspaceLikedFor } from './inventory';
 export { listTrashFor, ownedArtifactState, restoreArtifactFor, trashArtifactFor } from './trash';
 export { agentStarterHtml, artifactStarter } from './artifact-starters';
 export type { AccountWorkspace, AccountWorkspaceCore, AccountWorkspaceInsights, WorkspaceSharedItem } from './dashboard';

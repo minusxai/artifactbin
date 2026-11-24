@@ -22,6 +22,7 @@ import { Input, SearchField } from '../ui/Field';
 import { Panel } from '../ui/Panel';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { RowMenu } from '../ui/Menu';
+import { Select } from '../ui/Select';
 import { ToggleGroup } from '../ui/ToggleGroup';
 import ShareLink from './ShareLink';
 import { TransferOwnershipDialog } from './TransferOwnershipDialog';
@@ -32,6 +33,8 @@ import { artifactLink } from '../lib/artifact-link';
 type Actions = 'none' | 'share' | 'full';
 interface Props {
   rows: ShelfRow[];
+  liked?: boolean;
+  onLiked?: (value: boolean) => void;
   groupId?: string | null;
   actions?: Actions;
   scopeParentId?: string | null;
@@ -45,6 +48,7 @@ interface Props {
 }
 const nameOf = (row: ShelfRow) => row.title ?? row.id;
 const VISIBILITIES = ['public', 'unlisted', 'private'];
+const visibilityOptions = ['all', ...VISIBILITIES].map(value => ({ value, label: value[0].toUpperCase() + value.slice(1) }));
 
 function Visibility(props: { row: ShelfRow }): JSX.Element {
   return <Show when={props.row.visibility}><Tooltip content={props.row.visibility}><span role="img" tabIndex={0} aria-label={`${nameOf(props.row)} is ${props.row.visibility}`} class="relative z-10 inline-flex shrink-0 bg-surface/85"><Badge><VisibilityGlyph visibility={props.row.visibility} /></Badge></span></Tooltip></Show>;
@@ -132,8 +136,14 @@ export default function Shelf(props: Props): JSX.Element {
   const [creating, setCreating] = createSignal(false);
   const all = createMemo(() => { revision(); return [...props.rows.filter(row => !removed().includes(row.id)), ...added()]; });
   const scoped = createMemo(() => props.scopeParentId === undefined ? all() : all().filter(row => parentOfRow(row) === props.scopeParentId));
-  const filtered = createMemo(() => scoped().filter(row => (!query().trim() || `${row.title ?? ''} ${row.id}`.toLowerCase().includes(query().trim().toLowerCase())) && (!filters().length || filters().includes(row.visibility ?? ''))));
-  const shelf = createMemo(() => buildShelf(filtered()));
+  const [visibility, setVisibility] = createSignal('all');
+  const filtered = createMemo(() => {
+    const needle = query().trim().toLowerCase();
+    const selected = props.onLiked ? (visibility() === 'all' ? [] : [visibility()]) : filters();
+    return scoped().filter(row => `${row.title ?? ''} ${row.id}`.toLowerCase().includes(needle)
+      && (!selected.length || selected.includes(row.visibility ?? '')));
+  });
+  const shelf = createMemo(() => props.liked ? { documents: filtered(), folders: [] } : buildShelf(filtered()));
   const folders = createMemo(() => all().filter(row => row.format === 'folder'));
   const availableFilters = createMemo(() => VISIBILITIES.filter(value => scoped().some(row => row.visibility === value)));
   const toggle = (value: string) => { setFilters(current => current.includes(value) ? current.filter(item => item !== value) : [...current, value]); setPage(0); };
@@ -155,7 +165,11 @@ export default function Shelf(props: Props): JSX.Element {
     <Panel padding="none" class="mb-5 flex flex-col gap-2 px-3 py-1.5 sm:flex-row sm:flex-wrap sm:items-center">
       <div class="min-w-0 sm:flex-1"><SearchField label="Search artifacts" value={query()} onValue={value => { setQuery(value); setPage(0); props.onQuery?.(value); }} /></div>
       <div class="flex flex-wrap items-center gap-2 sm:contents">
-        <Show when={availableFilters().length >= 2}><For each={availableFilters()}>{value => <Button size="sm" variant="ghost" aria-label={`Filter ${value}`} pressed={filters().includes(value)} onClick={() => toggle(value)}>{value}</Button>}</For></Show>
+        <Show when={props.onLiked}>
+          <Select size="sm" ariaLabel={`Artifact visibility, ${visibility()}`} value={visibility()} class="w-24" options={visibilityOptions} onChange={value => { setVisibility(value); setPage(0); }} />
+          <Button size="sm" variant="secondary" pressed={props.liked} onClick={() => { setPage(0); props.onLiked?.(!props.liked); }}>Liked by me</Button>
+        </Show>
+        <Show when={!props.onLiked && availableFilters().length >= 2}><For each={availableFilters()}>{value => <Button size="sm" variant="ghost" aria-label={`Filter ${value}`} pressed={filters().includes(value)} onClick={() => toggle(value)}>{value}</Button>}</For></Show>
         <ToggleGroup label="Shelf view" iconOnly value={view()} onChange={next => setView(next as 'grid' | 'list')} class="ml-auto shrink-0 border-l border-edge pl-1.5"
           options={[{ value: 'grid', label: 'Grid view', icon: () => <GridIcon size={14} /> }, { value: 'list', label: 'List view', icon: () => <ListIcon size={14} /> }]} />
         <Show when={props.canCreateFolders}>
@@ -200,6 +214,6 @@ export default function Shelf(props: Props): JSX.Element {
       </ul>
     </section></Show>
     <Show when={view() === 'list' && shelf().documents.length > 10}><div class="mt-3 flex items-center justify-between font-mono text-xs"><span aria-label="Page range">{page() * 10 + 1}-{Math.min((page() + 1) * 10, shelf().documents.length)} of {shelf().documents.length}</span><span class="flex gap-2"><Button size="sm" variant="secondary" aria-label="Previous page" disabled={page() === 0} onClick={() => setPage(value => value - 1)}>Previous</Button><Button size="sm" variant="secondary" aria-label="Next page" disabled={(page() + 1) * 10 >= shelf().documents.length} onClick={() => setPage(value => value + 1)}>Next</Button></span></div></Show>
-    <Show when={!shelf().folders.length && !shelf().documents.length && (query() || filters().length)}><p aria-label="No matches" class="font-mono text-xs text-faint">nothing matches the active {query() ? 'search' : 'filters'}</p></Show>
+    <Show when={!shelf().folders.length && !shelf().documents.length && (query() || filters().length || visibility() !== 'all')}><p aria-label="No matches" class="font-mono text-xs text-faint">nothing matches the active {query() ? 'search' : 'filters'}</p></Show>
   </div>;
 }
