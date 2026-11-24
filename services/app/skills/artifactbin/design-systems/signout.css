@@ -3,24 +3,22 @@
  * Booking apps, intake forms, rosters, inventories. Mood: Utilitarian. Opens light. Generated from
  * design-systems/specs/signout.json.
  *
- * Use: name it once in <head>: <meta name="artifactbin:design-system" content="signout">. The platform serves this
- * stylesheet, sets data-af-design-system and data-af-dark on <html>, and hosts the fonts: copy, link and read
- * nothing to use it. Only this header is worth reading, for the shared tokens and type roles below.
+ * Use <meta name="artifactbin:design-system" content="signout"> in <head>. The platform loads the CSS and fonts
+ * and sets data-af-design-system and data-af-dark.
  *
  * Shared contract: every system defines these, so build your CSS on them with var(--name):
  *   --background --foreground --card --card-foreground --popover --popover-foreground --primary
  *   --primary-foreground --secondary --secondary-foreground --muted --muted-foreground --accent
  *   --accent-foreground --destructive --destructive-foreground --border --input --ring --chart-1 --chart-2
  *   --chart-3 --chart-4 --chart-5 --radius --font-display --font-body --font-mono
- * Type-role classes (same names in every system, sizes differ), used as class="t-title" etc.:
- *   t-display-xl t-display-l t-display-m t-body t-body-s t-label t-numeral t-mono
- * Each --ds-* below is this system's own palette; its comment says what the token is for (for example a "fill
- * only" colour is never body text). Keep the system's colour and type choices.
+ * Type-role classes shared by every system, used as class="t-title" etc.:
+ *   t-display-xl t-display-l t-display-m t-title t-body-l t-body t-body-s t-label t-numeral t-mono
+ * The --ds-* palette and any unlisted type roles are system-specific.
  *
  * Idea: Signout is the clipboard sign-out sheet every shared workshop has: kraft paper, a marker-black grid,
  * hazard tape along the top, hatching where someone else has already signed, a stamp when you have. It makes a
  * booking tool feel like a thing you can put your hand on, and it keeps the state honest: open, yours, or taken.
- * Fits: Booking and reservation apps, intake and sign-up forms, rosters and shift sheets, inventories and loan
+ * Use for: Booking and reservation apps, intake and sign-up forms, rosters and shift sheets, inventories and loan
  * logs, any tool where people claim slots or things.
  * Avoid when: Reading-heavy pages, luxury or editorial subjects, dashboards with many simultaneous metrics, or
  * anything that needs to feel soft.
@@ -126,22 +124,26 @@
   --ds-chip-radius: 0px;
 }
 :root[data-af-design-system="signout"] body { margin:0; background:var(--background); color:var(--foreground); font-family:var(--font-body); }
-/* Type roles: font family, size / line height, then when to use it. */
-/* display, clamp(56px, 9vw, 120px) / .86: One per sheet. Barlow Condensed at 800 in caps: a marker on kraft. */
+/* Type roles and when to use them. */
+/* One per sheet. Barlow Condensed at 800 in caps: a marker on kraft. */
 :root[data-af-design-system="signout"] .t-display-xl { font-family: "Barlow Condensed", "Arial Narrow", sans-serif; font-size: clamp(56px, 9vw, 120px); line-height: .86; font-weight: 800; letter-spacing: -0.01em; text-transform: uppercase; }
-/* display, clamp(36px, 5vw, 64px) / .9: Section and panel titles. */
+/* Section and panel titles. */
 :root[data-af-design-system="signout"] .t-display-l { font-family: "Barlow Condensed", "Arial Narrow", sans-serif; font-size: clamp(36px, 5vw, 64px); line-height: .9; font-weight: 800; letter-spacing: -0.01em; text-transform: uppercase; }
-/* display, 28px / 28px: Row titles: the machine, the person, the item. */
+/* Row titles: the machine, the person, the item. */
 :root[data-af-design-system="signout"] .t-display-m { font-family: "Barlow Condensed", "Arial Narrow", sans-serif; font-size: 28px; line-height: 28px; font-weight: 700; text-transform: uppercase; }
-/* sans, 16px / 24px: Instructions and reading text. Barlow, plain. */
+/* Group and panel headings. */
+:root[data-af-design-system="signout"] .t-title { font-family: "Barlow Condensed", "Arial Narrow", sans-serif; font-size: 28px; line-height: 28px; font-weight: 700; text-transform: uppercase; }
+/* Lead instructions. */
+:root[data-af-design-system="signout"] .t-body-l { font-family: "Barlow", system-ui, sans-serif; font-size: 19px; line-height: 27px; font-weight: 400; }
+/* Instructions and reading text. Barlow, plain. */
 :root[data-af-design-system="signout"] .t-body { font-family: "Barlow", system-ui, sans-serif; font-size: 16px; line-height: 24px; font-weight: 400; }
-/* sans, 13px / 18px: Specs, captions, helper text. */
+/* Specs, captions, helper text. */
 :root[data-af-design-system="signout"] .t-body-s { font-family: "Barlow", system-ui, sans-serif; font-size: 13px; line-height: 18px; font-weight: 400; }
-/* display, 12px / 14px: Column heads, slot labels, stamps. Condensed caps. */
+/* Column heads, slot labels, stamps. Condensed caps. */
 :root[data-af-design-system="signout"] .t-label { font-family: "Barlow Condensed", "Arial Narrow", sans-serif; font-size: 12px; line-height: 14px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
-/* mono, 36px / 40px: Counts: open slots, members, hours. Mono, tabular. */
+/* Counts: open slots, members, hours. Mono, tabular. */
 :root[data-af-design-system="signout"] .t-numeral { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: 36px; line-height: 40px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
-/* mono, 13px / 20px: Booking ids, times, the shop log. */
+/* Booking ids, times, the shop log. */
 :root[data-af-design-system="signout"] .t-mono { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: 13px; line-height: 20px; font-weight: 400; }
 /* Code highlighting token colours (for @afbin/highlight). */
 :root[data-af-design-system="signout"] .tok-comment, :root[data-af-design-system="signout"] .tok-quote, :root[data-af-design-system="signout"] .tok-meta { color:color-mix(in oklab, var(--muted-foreground) 75%, var(--foreground));font-style:italic; }

@@ -3,25 +3,23 @@
  * Scrolly stories, picture-book explainers, posters, zines. Mood: Printed. Opens light. Generated from
  * design-systems/specs/riso.json.
  *
- * Use: name it once in <head>: <meta name="artifactbin:design-system" content="riso">. The platform serves this
- * stylesheet, sets data-af-design-system and data-af-dark on <html>, and hosts the fonts: copy, link and read
- * nothing to use it. Only this header is worth reading, for the shared tokens and type roles below.
+ * Use <meta name="artifactbin:design-system" content="riso"> in <head>. The platform loads the CSS and fonts and
+ * sets data-af-design-system and data-af-dark.
  *
  * Shared contract: every system defines these, so build your CSS on them with var(--name):
  *   --background --foreground --card --card-foreground --popover --popover-foreground --primary
  *   --primary-foreground --secondary --secondary-foreground --muted --muted-foreground --accent
  *   --accent-foreground --destructive --destructive-foreground --border --input --ring --chart-1 --chart-2
  *   --chart-3 --chart-4 --chart-5 --radius --font-display --font-body --font-mono
- * Type-role classes (same names in every system, sizes differ), used as class="t-title" etc.:
- *   t-display-xl t-display-l t-display-m t-title t-deck t-body-l t-body t-body-s t-label t-numeral t-mono
- * Each --ds-* below is this system's own palette; its comment says what the token is for (for example a "fill
- * only" colour is never body text). Keep the system's colour and type choices.
+ * Type-role classes shared by every system, used as class="t-title" etc.:
+ *   t-display-xl t-display-l t-display-m t-title t-body-l t-body t-body-s t-label t-numeral t-mono
+ * The --ds-* palette and any unlisted type roles are system-specific.
  *
  * Idea: Riso is the print shop: three fluorescent inks laid one pass at a time over a navy key plate, each slipped
  * by a hair, on uncoated paper with a grain you can feel. Headlines overprint themselves. Pages go full-bleed in
  * one ink. Tags hang off things. It makes any subject feel like a picture book someone made by hand, and it is at
  * its best when the story moves in chapters.
- * Fits: Scrolly stories and picture-book explainers, chaptered long reads, posters and zines, launch pages that
+ * Use for: Scrolly stories and picture-book explainers, chaptered long reads, posters and zines, launch pages that
  * want warmth with a spine.
  * Avoid when: Dense dashboards (three inks and a key cannot carry twelve series), institutional or legal subjects,
  * anything that must look neutral, or long UI-heavy apps.
@@ -135,28 +133,28 @@
   --ds-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .5 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23g)'/%3E%3C/svg%3E");
 }
 :root[data-af-design-system="riso"] body { margin:0; background:var(--background); color:var(--foreground); font-family:var(--font-body); }
-/* Type roles: font family, size / line height, then when to use it. */
-/* display, clamp(64px, 12vw, 160px) / .82: One per page. The chapter word, the cover word. Soft, wonky, enormous. */
+/* Type roles and when to use them. */
+/* One per page. The chapter word, the cover word. Soft, wonky, enormous. */
 :root[data-af-design-system="riso"] .t-display-xl { font-family: "Fraunces", Georgia, serif; font-size: clamp(64px, 12vw, 160px); line-height: .82; font-weight: 900; letter-spacing: -0.045em; }
-/* display, clamp(40px, 6.4vw, 84px) / .9: Section openers and plate titles. */
+/* Section openers and plate titles. */
 :root[data-af-design-system="riso"] .t-display-l { font-family: "Fraunces", Georgia, serif; font-size: clamp(40px, 6.4vw, 84px); line-height: .9; font-weight: 900; letter-spacing: -0.03em; }
-/* display, 40px / 40px: Tag titles, stat blocks, page titles. */
+/* Tag titles, stat blocks, page titles. */
 :root[data-af-design-system="riso"] .t-display-m { font-family: "Fraunces", Georgia, serif; font-size: 40px; line-height: 40px; font-weight: 900; letter-spacing: -0.02em; }
-/* display, 24px / 28px: Card and step titles. */
+/* Card and step titles. */
 :root[data-af-design-system="riso"] .t-title { font-family: "Fraunces", Georgia, serif; font-size: 24px; line-height: 28px; font-weight: 900; letter-spacing: -0.01em; }
-/* display, clamp(20px, 2vw, 26px) / 1.25: The italic line under a headline, chapter subtitles, pull quotes. */
+/* The italic line under a headline, chapter subtitles, pull quotes. */
 :root[data-af-design-system="riso"] .t-deck { font-family: "Fraunces", Georgia, serif; font-size: clamp(20px, 2vw, 26px); line-height: 1.25; font-weight: 500; font-style: italic; }
-/* sans, 20px / 1.5: Step cards and lead paragraphs. Fraunces at 500 reads at length. */
+/* Step cards and lead paragraphs. Fraunces at 500 reads at length. */
 :root[data-af-design-system="riso"] .t-body-l { font-family: "Fraunces", Georgia, serif; font-size: 20px; line-height: 1.5; font-weight: 500; }
-/* sans, 17px / 1.55: Default reading and UI text. */
+/* Default reading and UI text. */
 :root[data-af-design-system="riso"] .t-body { font-family: "Fraunces", Georgia, serif; font-size: 17px; line-height: 1.55; font-weight: 500; }
-/* sans, 14px / 1.45: Captions, imprints, helper text. */
+/* Captions, imprints, helper text. */
 :root[data-af-design-system="riso"] .t-body-s { font-family: "Fraunces", Georgia, serif; font-size: 14px; line-height: 1.45; font-weight: 500; }
-/* mono, 12px / 16px: Eyebrows, folios, tag facts, running heads. Caps from CSS. */
+/* Eyebrows, folios, tag facts, running heads. Caps from CSS. */
 :root[data-af-design-system="riso"] .t-label { font-family: "Space Mono", ui-monospace, Menlo, monospace; font-size: 12px; line-height: 16px; font-weight: 400; letter-spacing: 0.09em; text-transform: uppercase; }
-/* mono, 40px / 44px: KPI figures and the numbers inside doors. Tabular. */
+/* KPI figures and the numbers inside doors. Tabular. */
 :root[data-af-design-system="riso"] .t-numeral { font-family: "Space Mono", ui-monospace, Menlo, monospace; font-size: 40px; line-height: 44px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
-/* mono, 13px / 20px: Code, IDs, table figures. */
+/* Code, IDs, table figures. */
 :root[data-af-design-system="riso"] .t-mono { font-family: "Space Mono", ui-monospace, Menlo, monospace; font-size: 13px; line-height: 20px; font-weight: 400; }
 /* Code highlighting token colours (for @afbin/highlight). */
 :root[data-af-design-system="riso"] .tok-comment, :root[data-af-design-system="riso"] .tok-quote, :root[data-af-design-system="riso"] .tok-meta { color:color-mix(in oklab, var(--muted-foreground) 75%, var(--foreground));font-style:italic; }

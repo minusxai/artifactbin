@@ -3,24 +3,22 @@
  * Dev tools, CI, logs, status pages. Mood: Technical. Opens dark. Generated from
  * design-systems/specs/phosphor.json.
  *
- * Use: name it once in <head>: <meta name="artifactbin:design-system" content="phosphor">. The platform serves
- * this stylesheet, sets data-af-design-system and data-af-dark on <html>, and hosts the fonts: copy, link and read
- * nothing to use it. Only this header is worth reading, for the shared tokens and type roles below.
+ * Use <meta name="artifactbin:design-system" content="phosphor"> in <head>. The platform loads the CSS and fonts
+ * and sets data-af-design-system and data-af-dark.
  *
  * Shared contract: every system defines these, so build your CSS on them with var(--name):
  *   --background --foreground --card --card-foreground --popover --popover-foreground --primary
  *   --primary-foreground --secondary --secondary-foreground --muted --muted-foreground --accent
  *   --accent-foreground --destructive --destructive-foreground --border --input --ring --chart-1 --chart-2
  *   --chart-3 --chart-4 --chart-5 --radius --font-display --font-body --font-mono
- * Type-role classes (same names in every system, sizes differ), used as class="t-title" etc.:
- *   t-display-xl t-display-l t-title t-body t-body-s t-label t-numeral t-log
- * Each --ds-* below is this system's own palette; its comment says what the token is for (for example a "fill
- * only" colour is never body text). Keep the system's colour and type choices.
+ * Type-role classes shared by every system, used as class="t-title" etc.:
+ *   t-display-xl t-display-l t-display-m t-title t-body-l t-body t-body-s t-label t-numeral t-mono
+ * The --ds-* palette and any unlisted type roles are system-specific.
  *
  * Idea: Phosphor is the green screen with the lies removed: one monospace face at every size, light that glows
  * instead of shadows that fall, a prompt instead of a hero. It belongs to tools whose readers already trust the
  * terminal and want the web page to behave like it.
- * Fits: CI dashboards, log viewers, status pages, developer docs, release notes, anything a person reads while
+ * Use for: CI dashboards, log viewers, status pages, developer docs, release notes, anything a person reads while
  * something is running.
  * Avoid when: Marketing, long prose, consumer subjects, or any page where more than two colours need to mean
  * something at once.
@@ -134,22 +132,28 @@
   --ds-chip-radius: 0px;
 }
 :root[data-af-design-system="phosphor"] body { margin:0; background:var(--background); color:var(--foreground); font-family:var(--font-body); }
-/* Type roles: font family, size / line height, then when to use it. */
-/* display, clamp(44px, 7vw, 88px) / .95: One per page. Covers and the headline state of a system. */
+/* Type roles and when to use them. */
+/* One per page. Covers and the headline state of a system. */
 :root[data-af-design-system="phosphor"] .t-display-xl { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: clamp(44px, 7vw, 88px); line-height: .95; font-weight: 700; letter-spacing: -0.02em; }
-/* display, clamp(30px, 4vw, 48px) / 1: Section openers and page titles. */
+/* Section openers and page titles. */
 :root[data-af-design-system="phosphor"] .t-display-l { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: clamp(30px, 4vw, 48px); line-height: 1; font-weight: 700; letter-spacing: -0.02em; }
-/* display, 20px / 26px: Panel titles, job names. */
+/* Subsections and slide headings. */
+:root[data-af-design-system="phosphor"] .t-display-m { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: 25px; line-height: 30px; font-weight: 700; letter-spacing: -0.01em; }
+/* Panel titles, job names. */
 :root[data-af-design-system="phosphor"] .t-title { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: 20px; line-height: 26px; font-weight: 700; letter-spacing: -0.01em; }
-/* sans, 15px / 24px: Default reading text. Everything is mono; the rhythm comes from leading. */
+/* Lead text. */
+:root[data-af-design-system="phosphor"] .t-body-l { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: 17px; line-height: 26px; font-weight: 400; }
+/* Default reading text. Everything is mono; the rhythm comes from leading. */
 :root[data-af-design-system="phosphor"] .t-body { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: 15px; line-height: 24px; font-weight: 400; }
-/* sans, 13px / 20px: Timestamps, captions, helper text. */
+/* Timestamps, captions, helper text. */
 :root[data-af-design-system="phosphor"] .t-body-s { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: 13px; line-height: 20px; font-weight: 400; }
-/* sans, 12px / 16px: Eyebrows and column heads. Caps through CSS. */
+/* Eyebrows and column heads. Caps through CSS. */
 :root[data-af-design-system="phosphor"] .t-label { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; }
-/* mono, 40px / 44px: KPI figures. Tabular. */
+/* KPI figures. Tabular. */
 :root[data-af-design-system="phosphor"] .t-numeral { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: 40px; line-height: 44px; font-weight: 500; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
-/* mono, 13px / 20px: Log lines and commands. Prefixed by a prompt glyph, never a box. */
+/* Fixed-width values and log excerpts. */
+:root[data-af-design-system="phosphor"] .t-mono { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: 13px; line-height: 20px; font-weight: 400; }
+/* Log lines and commands. Prefixed by a prompt glyph, never a box. */
 :root[data-af-design-system="phosphor"] .t-log { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: 13px; line-height: 20px; font-weight: 400; }
 /* Code highlighting token colours (for @afbin/highlight). */
 :root[data-af-design-system="phosphor"] .tok-comment, :root[data-af-design-system="phosphor"] .tok-quote, :root[data-af-design-system="phosphor"] .tok-meta { color:color-mix(in oklab, var(--muted-foreground) 75%, var(--foreground));font-style:italic; }

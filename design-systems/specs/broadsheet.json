@@ -199,6 +199,25 @@
    "usage": "Section heads and crossheads."
   },
   {
+   "name": "display-m",
+   "family": "display",
+   "size": "28px",
+   "lh": "32px",
+   "weight": 700,
+   "ls": "-0.01em",
+   "sample": "The Sunday edition",
+   "usage": "Article subsections."
+  },
+  {
+   "name": "title",
+   "family": "display",
+   "size": "21px",
+   "lh": "25px",
+   "weight": 700,
+   "sample": "Notes from the market",
+   "usage": "Panel and group headings."
+  },
+  {
    "name": "deck",
    "family": "display",
    "size": "clamp(19px, 2.2vw, 24px)",
@@ -209,6 +228,15 @@
    "usage": "The deck under the headline. Italic Old Standard."
   },
   {
+   "name": "body-l",
+   "family": "sans",
+   "size": "19px",
+   "lh": "30px",
+   "weight": 400,
+   "sample": "The market opened before sunrise.",
+   "usage": "Lead paragraphs."
+  },
+  {
    "name": "body",
    "family": "sans",
    "size": "17px",
@@ -216,6 +244,15 @@
    "weight": 400,
    "sample": "Before the first tram, before the bakeries lift their shutters, there is a particular smell at the Saltmarsh Flower Market: cold water, cut stems, diesel from the delivery vans.",
    "usage": "Body text, in columns where the width allows. A drop cap opens the piece."
+  },
+  {
+   "name": "body-s",
+   "family": "sans",
+   "size": "14px",
+   "lh": "21px",
+   "weight": 400,
+   "sample": "Source: the market ledger",
+   "usage": "Captions and short notes."
   },
   {
    "name": "small",
@@ -229,6 +266,17 @@
    "usage": "Datelines, figure labels, folios, the small print. Franklin caps."
   },
   {
+   "name": "label",
+   "family": "franklin",
+   "size": "11px",
+   "lh": "15px",
+   "weight": 600,
+   "ls": "0.1em",
+   "tt": "uppercase",
+   "sample": "Sunday edition",
+   "usage": "Datelines and figures."
+  },
+  {
    "name": "numeral",
    "family": "display",
    "size": "clamp(44px, 6vw, 72px)",
@@ -237,6 +285,15 @@
    "sample": "510",
    "usage": "Pull figures, set large in the margin with a Franklin caption.",
    "extra": "font-variant-numeric: tabular-nums"
+  },
+  {
+   "name": "mono",
+   "family": "mono",
+   "size": "13px",
+   "lh": "20px",
+   "weight": 400,
+   "sample": "SALTMARSH — 05:00",
+   "usage": "Wire copy and fixed-width values."
   },
   {
    "name": "wire",

@@ -215,6 +215,17 @@
    "usage": "Section openers, sheet titles."
   },
   {
+   "name": "display-m",
+   "family": "display",
+   "size": "28px",
+   "lh": "31px",
+   "weight": 900,
+   "ls": "-0.02em",
+   "tt": "uppercase",
+   "sample": "Assembly sequence",
+   "usage": "Drawing subsections."
+  },
+  {
    "name": "title",
    "family": "display",
    "size": "22px",
@@ -223,6 +234,15 @@
    "ls": "-0.01em",
    "sample": "Booking flow, revision B",
    "usage": "Panel titles, figure titles."
+  },
+  {
+   "name": "body-l",
+   "family": "sans",
+   "size": "19px",
+   "lh": "29px",
+   "weight": 400,
+   "sample": "Read the drawing from left to right.",
+   "usage": "Lead paragraphs."
   },
   {
    "name": "body",

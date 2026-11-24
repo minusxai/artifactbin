@@ -3,25 +3,23 @@
  * Scrolly explainers, landing pages, long reads, annual reports. Mood: Warm. Opens light. Generated from
  * design-systems/specs/almanac.json.
  *
- * Use: name it once in <head>: <meta name="artifactbin:design-system" content="almanac">. The platform serves this
- * stylesheet, sets data-af-design-system and data-af-dark on <html>, and hosts the fonts: copy, link and read
- * nothing to use it. Only this header is worth reading, for the shared tokens and type roles below.
+ * Use <meta name="artifactbin:design-system" content="almanac"> in <head>. The platform loads the CSS and fonts
+ * and sets data-af-design-system and data-af-dark.
  *
  * Shared contract: every system defines these, so build your CSS on them with var(--name):
  *   --background --foreground --card --card-foreground --popover --popover-foreground --primary
  *   --primary-foreground --secondary --secondary-foreground --muted --muted-foreground --accent
  *   --accent-foreground --destructive --destructive-foreground --border --input --ring --chart-1 --chart-2
  *   --chart-3 --chart-4 --chart-5 --radius --font-display --font-body --font-mono
- * Type-role classes (same names in every system, sizes differ), used as class="t-title" etc.:
- *   t-display-xl t-display-l t-display-m t-title t-numeral-xl t-body-l t-body t-body-s t-label t-numeral t-mono
- * Each --ds-* below is this system's own palette; its comment says what the token is for (for example a "fill
- * only" colour is never body text). Keep the system's colour and type choices.
+ * Type-role classes shared by every system, used as class="t-title" etc.:
+ *   t-display-xl t-display-l t-display-m t-title t-body-l t-body t-body-s t-label t-numeral t-mono
+ * The --ds-* palette and any unlisted type roles are system-specific.
  *
  * Idea: Almanac is the studio that prints field guides: warm paper, one green ink for everything written, one
  * terracotta word where the eye should land, and hairlines so light they feel drawn. Numbers go enormous in a
  * serif and sit still. Panels have arched tops. Buttons are outlines until you touch them. It is calm without
  * being beige, because the one accent is earned.
- * Fits: Scrolly explainers, landing pages for small makers and civic things, long reads, annual and impact
+ * Use for: Scrolly explainers, landing pages for small makers and civic things, long reads, annual and impact
  * reports, anything that wants to feel made by hand and read slowly.
  * Avoid when: Dense operational dashboards, dev tools, anything that must feel fast or cold, and pages that need
  * more than one accent per view.
@@ -127,28 +125,28 @@
   --ds-chip-radius: 0;
 }
 :root[data-af-design-system="almanac"] body { margin:0; background:var(--background); color:var(--foreground); font-family:var(--font-body); }
-/* Type roles: font family, size / line height, then when to use it. */
-/* display, clamp(64px, 10.4vw, 160px) / .92: One per page. Instrument Serif at 400 with the tracking pulled tight; the italic carries the emphasised word. */
+/* Type roles and when to use them. */
+/* One per page. Instrument Serif at 400 with the tracking pulled tight; the italic carries the emphasised word. */
 :root[data-af-design-system="almanac"] .t-display-xl { font-family: "Instrument Serif", Georgia, serif; font-size: clamp(64px, 10.4vw, 160px); line-height: .92; font-weight: 400; letter-spacing: -0.055em; }
-/* display, clamp(40px, 5.5vw, 78px) / .98: Section openers and chapter heads. */
+/* Section openers and chapter heads. */
 :root[data-af-design-system="almanac"] .t-display-l { font-family: "Instrument Serif", Georgia, serif; font-size: clamp(40px, 5.5vw, 78px); line-height: .98; font-weight: 400; letter-spacing: -0.045em; }
-/* display, 40px / 42px: Card titles and page titles. */
+/* Card titles and page titles. */
 :root[data-af-design-system="almanac"] .t-display-m { font-family: "Instrument Serif", Georgia, serif; font-size: 40px; line-height: 42px; font-weight: 400; letter-spacing: -0.03em; }
-/* sans, 24px / 1.2: Sub-heads inside steps and features. */
+/* Sub-heads inside steps and features. */
 :root[data-af-design-system="almanac"] .t-title { font-family: "DM Sans", system-ui, sans-serif; font-size: 24px; line-height: 1.2; font-weight: 500; letter-spacing: -0.03em; }
-/* display, clamp(72px, 9vw, 120px) / 1: The outcome numbers. Instrument Serif, tracked to -.07em, one per block. */
+/* The outcome numbers. Instrument Serif, tracked to -.07em, one per block. */
 :root[data-af-design-system="almanac"] .t-numeral-xl { font-family: "Instrument Serif", Georgia, serif; font-size: clamp(72px, 9vw, 120px); line-height: 1; font-weight: 400; letter-spacing: -0.07em; font-variant-numeric: tabular-nums; }
-/* sans, 18px / 1.7: Step paragraphs and lead copy at a generous 1.7 leading. */
+/* Step paragraphs and lead copy at a generous 1.7 leading. */
 :root[data-af-design-system="almanac"] .t-body-l { font-family: "DM Sans", system-ui, sans-serif; font-size: 18px; line-height: 1.7; font-weight: 400; }
-/* sans, 16px / 1.6: Default reading and UI text. */
+/* Default reading and UI text. */
 :root[data-af-design-system="almanac"] .t-body { font-family: "DM Sans", system-ui, sans-serif; font-size: 16px; line-height: 1.6; font-weight: 400; }
-/* sans, 13px / 1.5: Captions, notes, footer lines. */
+/* Captions, notes, footer lines. */
 :root[data-af-design-system="almanac"] .t-body-s { font-family: "DM Sans", system-ui, sans-serif; font-size: 13px; line-height: 1.5; font-weight: 400; }
-/* mono, 11px / 1.6: Eyebrows, nav links, legends, chapter numbers. Caps from CSS. */
+/* Eyebrows, nav links, legends, chapter numbers. Caps from CSS. */
 :root[data-af-design-system="almanac"] .t-label { font-family: "DM Mono", ui-monospace, Menlo, monospace; font-size: 11px; line-height: 1.6; font-weight: 400; letter-spacing: 0.06em; text-transform: uppercase; }
-/* display, 48px / 1: KPI figures in tiles and tickets. */
+/* KPI figures in tiles and tickets. */
 :root[data-af-design-system="almanac"] .t-numeral { font-family: "Instrument Serif", Georgia, serif; font-size: 48px; line-height: 1; font-weight: 400; letter-spacing: -0.06em; font-variant-numeric: tabular-nums; }
-/* mono, 12px / 1.6: Code, IDs, table figures. */
+/* Code, IDs, table figures. */
 :root[data-af-design-system="almanac"] .t-mono { font-family: "DM Mono", ui-monospace, Menlo, monospace; font-size: 12px; line-height: 1.6; font-weight: 400; }
 /* Code highlighting token colours (for @afbin/highlight). */
 :root[data-af-design-system="almanac"] .tok-comment, :root[data-af-design-system="almanac"] .tok-quote, :root[data-af-design-system="almanac"] .tok-meta { color:color-mix(in oklab, var(--muted-foreground) 75%, var(--foreground));font-style:italic; }

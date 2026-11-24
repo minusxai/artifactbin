@@ -228,6 +228,16 @@
    "usage": "Section openers and chapter heads."
   },
   {
+   "name": "display-m",
+   "family": "display",
+   "size": "29px",
+   "lh": "33px",
+   "weight": 400,
+   "ls": "-0.02em",
+   "sample": "The quiet shift",
+   "usage": "Subsections and slide headings."
+  },
+  {
    "name": "display-italic",
    "family": "display",
    "size": "clamp(32px, 4.5vw, 56px)",
@@ -278,6 +288,15 @@
    "extra": "font-variant-numeric: oldstyle-nums proportional-nums"
   },
   {
+   "name": "body-s",
+   "family": "sans",
+   "size": "15px",
+   "lh": "22px",
+   "weight": 400,
+   "sample": "A lamp beside each window",
+   "usage": "Captions and short notes."
+  },
+  {
    "name": "note",
    "family": "sans",
    "size": "15px",
@@ -308,6 +327,15 @@
    "sample": "640",
    "usage": "Figures. Tabular; lamp when it is the one that glows.",
    "extra": "font-variant-numeric: tabular-nums"
+  },
+  {
+   "name": "mono",
+   "family": "mono",
+   "size": "13px",
+   "lh": "20px",
+   "weight": 500,
+   "sample": "21:40 · 640 visits",
+   "usage": "Fixed-width values and counters."
   }
  ],
  "idea_headline": "One lamp, a dark room, and a long read.",

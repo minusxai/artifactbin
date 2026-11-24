@@ -243,6 +243,15 @@
    "usage": "Section openers."
   },
   {
+   "name": "display-m",
+   "family": "display",
+   "size": "28px",
+   "lh": "32px",
+   "weight": 600,
+   "sample": "Saturday highlights",
+   "usage": "Subsections and slide headings."
+  },
+  {
    "name": "title",
    "family": "display",
    "size": "24px",
@@ -250,6 +259,15 @@
    "weight": 600,
    "sample": "Food court",
    "usage": "Card titles, sticker words."
+  },
+  {
+   "name": "body-l",
+   "family": "sans",
+   "size": "20px",
+   "lh": "30px",
+   "weight": 400,
+   "sample": "Bring a friend to the park.",
+   "usage": "Lead paragraphs."
   },
   {
    "name": "body",

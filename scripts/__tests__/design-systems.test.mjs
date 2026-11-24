@@ -106,7 +106,7 @@ it('annotates every colour token with its use in the stylesheet and keeps text t
   // The opening comment documents the contract every system shares and this system's type roles.
   const header=css.slice(0,css.indexOf('*/'));
   for(const key of ['--background','--foreground','--primary','--chart-1','--chart-5','--radius','--font-display','--font-body','--font-mono','t-display-xl','artifactbin:design-system'])expect(header,`${name} header ${key}`).toContain(key);
-  for(const role of S.type_roles)expect(css,`${name} t-${role.name}`).toMatch(new RegExp(`/\\* [^*]*${role.size.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}[^*]*\\*/\\n:root\\[data-af-design-system="${name}"\\] \\.t-${role.name} `));
+  for(const role of S.type_roles)expect(css,`${name} t-${role.name}`).toMatch(new RegExp(`/\\* [^*]*${role.usage.replace(/\s+/g,' ').trim().replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}[^*]*\\*/\\n:root\\[data-af-design-system="${name}"\\] \\.t-${role.name} `));
   // A token described as text for the page itself meets WCAG AA on the main page grounds.
   const grounds=S.tokens.filter(t=>['paper','canvas','surface','card'].includes(t.name));
   for(const token of S.tokens.filter(t=>/text/i.test(t.usage??'')&&!/never (body )?text|text on (it|the)|for text on/i.test(t.usage)&&!/^on-|soft$|night/.test(t.name)))

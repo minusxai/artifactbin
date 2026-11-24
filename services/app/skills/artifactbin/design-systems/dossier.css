@@ -3,26 +3,24 @@
  * Plans, reports, post-mortems, long features. Mood: Evidential. Opens light. Generated from
  * design-systems/specs/dossier.json.
  *
- * Use: name it once in <head>: <meta name="artifactbin:design-system" content="dossier">. The platform serves this
- * stylesheet, sets data-af-design-system and data-af-dark on <html>, and hosts the fonts: copy, link and read
- * nothing to use it. Only this header is worth reading, for the shared tokens and type roles below.
+ * Use <meta name="artifactbin:design-system" content="dossier"> in <head>. The platform loads the CSS and fonts
+ * and sets data-af-design-system and data-af-dark.
  *
  * Shared contract: every system defines these, so build your CSS on them with var(--name):
  *   --background --foreground --card --card-foreground --popover --popover-foreground --primary
  *   --primary-foreground --secondary --secondary-foreground --muted --muted-foreground --accent
  *   --accent-foreground --destructive --destructive-foreground --border --input --ring --chart-1 --chart-2
  *   --chart-3 --chart-4 --chart-5 --radius --font-display --font-body --font-mono
- * Type-role classes (same names in every system, sizes differ), used as class="t-title" etc.:
- *   t-display-xl t-display-l t-display-m t-title t-body-l t-body t-body-ui t-body-s t-label t-numeral t-mono
- * Each --ds-* below is this system's own palette; its comment says what the token is for (for example a "fill
- * only" colour is never body text). Keep the system's colour and type choices.
+ * Type-role classes shared by every system, used as class="t-title" etc.:
+ *   t-display-xl t-display-l t-display-m t-title t-body-l t-body t-body-s t-label t-numeral t-mono
+ * The --ds-* palette and any unlisted type roles are system-specific.
  *
  * Idea: Dossier is a report of record: a paper page that reads like a feature, cut by full-bleed ink sections that
  * hold the evidence. Every claim wears its class (intel, plan, verified), outcomes land as stamps, what is not yet
  * known is a redaction bar, and one lime stroke marks the word the whole document turns on. It is built for
  * documents that will be argued with.
- * Fits: Implementation plans, incident reviews and post-mortems, board reports, pilot evaluations, long features
- * that make a case and show their working.
+ * Use for: Implementation plans, incident reviews and post-mortems, board reports, pilot evaluations, long
+ * features that make a case and show their working.
  * Avoid when: Playful or warm subjects, product marketing, anything that must feel light; dashboards scanned in
  * seconds (the condensed caps are for reading, not glancing).
  */
@@ -129,28 +127,28 @@
   --ds-chip-radius: 2px;
 }
 :root[data-af-design-system="dossier"] body { margin:0; background:var(--background); color:var(--foreground); font-family:var(--font-body); }
-/* Type roles: font family, size / line height, then when to use it. */
-/* display, clamp(64px, 12vw, 160px) / .8: One per page. The cover word, set condensed and enormous; the second line may be violet. */
+/* Type roles and when to use them. */
+/* One per page. The cover word, set condensed and enormous; the second line may be violet. */
 :root[data-af-design-system="dossier"] .t-display-xl { font-family: "Archivo", "Arial Narrow", system-ui, sans-serif; font-size: clamp(64px, 12vw, 160px); line-height: .8; font-weight: 900; letter-spacing: -0.01em; text-transform: uppercase; font-stretch: 62%; }
-/* display, clamp(40px, 6.5vw, 88px) / .84: Section heads, paired with the inverted number block. */
+/* Section heads, paired with the inverted number block. */
 :root[data-af-design-system="dossier"] .t-display-l { font-family: "Archivo", "Arial Narrow", system-ui, sans-serif; font-size: clamp(40px, 6.5vw, 88px); line-height: .84; font-weight: 900; letter-spacing: -0.01em; text-transform: uppercase; font-stretch: 62%; }
-/* display, 36px / 36px: Page titles, slide titles. */
+/* Page titles, slide titles. */
 :root[data-af-design-system="dossier"] .t-display-m { font-family: "Archivo", "Arial Narrow", system-ui, sans-serif; font-size: 36px; line-height: 36px; font-weight: 800; letter-spacing: -0.005em; text-transform: uppercase; font-stretch: 75%; }
-/* display, 20px / 24px: Card titles, row heads, the stamp word. */
+/* Card titles, row heads, the stamp word. */
 :root[data-af-design-system="dossier"] .t-title { font-family: "Archivo", "Arial Narrow", system-ui, sans-serif; font-size: 20px; line-height: 24px; font-weight: 800; letter-spacing: 0.005em; text-transform: uppercase; font-stretch: 80%; }
-/* sans, 21px / 1.4: Ledes and decks, in Newsreader. */
+/* Ledes and decks, in Newsreader. */
 :root[data-af-design-system="dossier"] .t-body-l { font-family: "Newsreader", Georgia, serif; font-size: 21px; line-height: 1.4; font-weight: 400; }
-/* sans, 18px / 1.56: Reading text. Newsreader at 18 with a 62ch measure. */
+/* Reading text. Newsreader at 18 with a 62ch measure. */
 :root[data-af-design-system="dossier"] .t-body { font-family: "Newsreader", Georgia, serif; font-size: 18px; line-height: 1.56; font-weight: 400; }
-/* ui, 15px / 22px: Interface text: forms, tables, lists, callouts. Archivo at normal width. */
+/* Interface text: forms, tables, lists, callouts. Archivo at normal width. */
 :root[data-af-design-system="dossier"] .t-body-ui { font-family: "Archivo", system-ui, sans-serif; font-size: 15px; line-height: 22px; font-weight: 400; }
-/* ui, 13px / 18px: Captions, helper text, dense cells. */
+/* Captions, helper text, dense cells. */
 :root[data-af-design-system="dossier"] .t-body-s { font-family: "Archivo", system-ui, sans-serif; font-size: 13px; line-height: 18px; font-weight: 400; }
-/* mono, 11px / 16px: Eyebrows, tags, column heads, footers. Mono caps through CSS. */
+/* Eyebrows, tags, column heads, footers. Mono caps through CSS. */
 :root[data-af-design-system="dossier"] .t-label { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: 11px; line-height: 16px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; }
-/* display, 48px / 48px: Facts-rail figures and KPIs. Condensed, tabular. */
+/* Facts-rail figures and KPIs. Condensed, tabular. */
 :root[data-af-design-system="dossier"] .t-numeral { font-family: "Archivo", "Arial Narrow", system-ui, sans-serif; font-size: 48px; line-height: 48px; font-weight: 800; letter-spacing: -0.01em; font-stretch: 75%; font-variant-numeric: tabular-nums; }
-/* mono, 13px / 20px: Code, SQL, identifiers, ledger figures. */
+/* Code, SQL, identifiers, ledger figures. */
 :root[data-af-design-system="dossier"] .t-mono { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: 13px; line-height: 20px; font-weight: 400; }
 /* Code highlighting token colours (for @afbin/highlight). */
 :root[data-af-design-system="dossier"] .tok-comment, :root[data-af-design-system="dossier"] .tok-quote, :root[data-af-design-system="dossier"] .tok-meta { color:color-mix(in oklab, var(--muted-foreground) 75%, var(--foreground));font-style:italic; }

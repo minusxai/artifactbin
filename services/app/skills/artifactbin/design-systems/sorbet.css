@@ -3,25 +3,23 @@
  * Consumer apps, launches, kids and food, celebrations, playful data. Mood: Fun. Opens light. Generated from
  * design-systems/specs/sorbet.json.
  *
- * Use: name it once in <head>: <meta name="artifactbin:design-system" content="sorbet">. The platform serves this
- * stylesheet, sets data-af-design-system and data-af-dark on <html>, and hosts the fonts: copy, link and read
- * nothing to use it. Only this header is worth reading, for the shared tokens and type roles below.
+ * Use <meta name="artifactbin:design-system" content="sorbet"> in <head>. The platform loads the CSS and fonts and
+ * sets data-af-design-system and data-af-dark.
  *
  * Shared contract: every system defines these, so build your CSS on them with var(--name):
  *   --background --foreground --card --card-foreground --popover --popover-foreground --primary
  *   --primary-foreground --secondary --secondary-foreground --muted --muted-foreground --accent
  *   --accent-foreground --destructive --destructive-foreground --border --input --ring --chart-1 --chart-2
  *   --chart-3 --chart-4 --chart-5 --radius --font-display --font-body --font-mono
- * Type-role classes (same names in every system, sizes differ), used as class="t-title" etc.:
- *   t-display-xl t-display-l t-title t-body t-body-s t-label t-numeral t-mono
- * Each --ds-* below is this system's own palette; its comment says what the token is for (for example a "fill
- * only" colour is never body text). Keep the system's colour and type choices.
+ * Type-role classes shared by every system, used as class="t-title" etc.:
+ *   t-display-xl t-display-l t-display-m t-title t-body-l t-body t-body-s t-label t-numeral t-mono
+ * The --ds-* palette and any unlisted type roles are system-specific.
  *
  * Idea: Sorbet is pop: five candy colours on cream, every shape die-cut with a plum outline, a white rim and a
  * hard drop, like stickers on a lunchbox. Headlines are chunky, corners are fat, and exactly one thing springs
  * when you touch it. The colours do the shouting, so the words never have to.
- * Fits: Consumer apps and launches, kids and food subjects, events and celebrations, playful counters, pickers and
- * polls, anything that should feel like a good day.
+ * Use for: Consumer apps and launches, kids and food subjects, events and celebrations, playful counters, pickers
+ * and polls, anything that should feel like a good day.
  * Avoid when: Serious, institutional or grieving subjects, dense data, long reading, or any page where candy would
  * read as not listening.
  */
@@ -136,22 +134,26 @@
   --ds-spring: cubic-bezier(.34,1.56,.64,1);
 }
 :root[data-af-design-system="sorbet"] body { margin:0; background:var(--background); color:var(--foreground); font-family:var(--font-body); }
-/* Type roles: font family, size / line height, then when to use it. */
-/* display, clamp(48px, 8vw, 104px) / .95: One per page. Fredoka bold; one word may sit on a sticker. */
+/* Type roles and when to use them. */
+/* One per page. Fredoka bold; one word may sit on a sticker. */
 :root[data-af-design-system="sorbet"] .t-display-xl { font-family: "Fredoka", "Arial Rounded MT Bold", system-ui, sans-serif; font-size: clamp(48px, 8vw, 104px); line-height: .95; font-weight: 700; letter-spacing: -0.02em; }
-/* display, clamp(32px, 4.5vw, 56px) / 1.02: Section openers. */
+/* Section openers. */
 :root[data-af-design-system="sorbet"] .t-display-l { font-family: "Fredoka", "Arial Rounded MT Bold", system-ui, sans-serif; font-size: clamp(32px, 4.5vw, 56px); line-height: 1.02; font-weight: 700; letter-spacing: -0.01em; }
-/* display, 24px / 28px: Card titles, sticker words. */
+/* Subsections and slide headings. */
+:root[data-af-design-system="sorbet"] .t-display-m { font-family: "Fredoka", "Arial Rounded MT Bold", system-ui, sans-serif; font-size: 28px; line-height: 32px; font-weight: 600; }
+/* Card titles, sticker words. */
 :root[data-af-design-system="sorbet"] .t-title { font-family: "Fredoka", "Arial Rounded MT Bold", system-ui, sans-serif; font-size: 24px; line-height: 28px; font-weight: 600; }
-/* sans, 17px / 27px: Reading and UI text. Nunito, round and soft. */
+/* Lead paragraphs. */
+:root[data-af-design-system="sorbet"] .t-body-l { font-family: "Nunito", system-ui, sans-serif; font-size: 20px; line-height: 30px; font-weight: 400; }
+/* Reading and UI text. Nunito, round and soft. */
 :root[data-af-design-system="sorbet"] .t-body { font-family: "Nunito", system-ui, sans-serif; font-size: 17px; line-height: 27px; font-weight: 400; }
-/* sans, 14px / 20px: Captions and helper text. */
+/* Captions and helper text. */
 :root[data-af-design-system="sorbet"] .t-body-s { font-family: "Nunito", system-ui, sans-serif; font-size: 14px; line-height: 20px; font-weight: 400; }
-/* display, 12px / 16px: Eyebrows, tags, sticker text. Fredoka caps. */
+/* Eyebrows, tags, sticker text. Fredoka caps. */
 :root[data-af-design-system="sorbet"] .t-label { font-family: "Fredoka", "Arial Rounded MT Bold", system-ui, sans-serif; font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
-/* display, 52px / 52px: Counts and prices. Fredoka bold, tabular. */
+/* Counts and prices. Fredoka bold, tabular. */
 :root[data-af-design-system="sorbet"] .t-numeral { font-family: "Fredoka", "Arial Rounded MT Bold", system-ui, sans-serif; font-size: 52px; line-height: 52px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
-/* mono, 13px / 20px: Ticket numbers, timestamps, receipts. */
+/* Ticket numbers, timestamps, receipts. */
 :root[data-af-design-system="sorbet"] .t-mono { font-family: "DM Mono", ui-monospace, Menlo, monospace; font-size: 13px; line-height: 20px; font-weight: 400; }
 /* Code highlighting token colours (for @afbin/highlight). */
 :root[data-af-design-system="sorbet"] .tok-comment, :root[data-af-design-system="sorbet"] .tok-quote, :root[data-af-design-system="sorbet"] .tok-meta { color:color-mix(in oklab, var(--muted-foreground) 75%, var(--foreground));font-style:italic; }

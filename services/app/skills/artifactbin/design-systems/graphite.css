@@ -3,25 +3,23 @@
  * Analytics apps, internal apps and tools. Mood: Quiet, Analytical. Opens light. Generated from
  * design-systems/specs/graphite.json.
  *
- * Use: name it once in <head>: <meta name="artifactbin:design-system" content="graphite">. The platform serves
- * this stylesheet, sets data-af-design-system and data-af-dark on <html>, and hosts the fonts: copy, link and read
- * nothing to use it. Only this header is worth reading, for the shared tokens and type roles below.
+ * Use <meta name="artifactbin:design-system" content="graphite"> in <head>. The platform loads the CSS and fonts
+ * and sets data-af-design-system and data-af-dark.
  *
  * Shared contract: every system defines these, so build your CSS on them with var(--name):
  *   --background --foreground --card --card-foreground --popover --popover-foreground --primary
  *   --primary-foreground --secondary --secondary-foreground --muted --muted-foreground --accent
  *   --accent-foreground --destructive --destructive-foreground --border --input --ring --chart-1 --chart-2
  *   --chart-3 --chart-4 --chart-5 --radius --font-display --font-body --font-mono
- * Type-role classes (same names in every system, sizes differ), used as class="t-title" etc.:
- *   t-display-xl t-display-l t-display-m t-title t-body-l t-body t-body-s t-label t-eyebrow t-numeral t-mono
- * Each --ds-* below is this system's own palette; its comment says what the token is for (for example a "fill
- * only" colour is never body text). Keep the system's colour and type choices.
+ * Type-role classes shared by every system, used as class="t-title" etc.:
+ *   t-display-xl t-display-l t-display-m t-title t-body-l t-body t-body-s t-label t-numeral t-mono
+ * The --ds-* palette and any unlisted type roles are system-specific.
  *
  * Idea: Graphite is the look of an analytics tool that keeps its own voice down: a white page, a light grey rail,
  * hairline borders and near-black ink. The filled button is ink, not a brand colour; selection is a grey pill.
  * Colour appears in exactly two places, the data (flat, vivid series on a dashed grid) and small marks (a kind
  * icon, a status dot, the focus ring), so the first coloured thing anyone sees is an answer.
- * Fits: Analytics and BI apps, data exploration and query tools, internal admin tools, run and job monitors,
+ * Use for: Analytics and BI apps, data exploration and query tools, internal admin tools, run and job monitors,
  * settings and access screens, and any product where charts and tables are the content.
  * Avoid when: Editorial or narrative subjects, consumer brands with a colour to show, warm or textured subjects,
  * or a marketing page that needs a loud brand moment.
@@ -153,28 +151,28 @@
   --ds-chip-radius: 8px;
 }
 :root[data-af-design-system="graphite"] body { margin:0; background:var(--background); color:var(--foreground); font-family:var(--font-body); }
-/* Type roles: font family, size / line height, then when to use it. */
-/* display, clamp(40px, 6vw, 72px) / 1.02: One per page, for a landing hero. Semibold with tight tracking; Graphite never goes bold. */
+/* Type roles and when to use them. */
+/* One per page, for a landing hero. Semibold with tight tracking; Graphite never goes bold. */
 :root[data-af-design-system="graphite"] .t-display-xl { font-family: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif; font-size: clamp(40px, 6vw, 72px); line-height: 1.02; font-weight: 600; letter-spacing: -0.035em; }
-/* display, clamp(28px, 3.6vw, 40px) / 1.1: Section openers and slide titles. */
+/* Section openers and slide titles. */
 :root[data-af-design-system="graphite"] .t-display-l { font-family: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif; font-size: clamp(28px, 3.6vw, 40px); line-height: 1.1; font-weight: 600; letter-spacing: -0.03em; }
-/* display, 34px / 39px: The one greeting or page heading that opens a screen. */
+/* The one greeting or page heading that opens a screen. */
 :root[data-af-design-system="graphite"] .t-display-m { font-family: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 34px; line-height: 39px; font-weight: 600; letter-spacing: -0.025em; }
-/* display, 16px / 22px: Card titles, dialog titles, list heads. The page name in a top bar. */
+/* Card titles, dialog titles, list heads. The page name in a top bar. */
 :root[data-af-design-system="graphite"] .t-title { font-family: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 16px; line-height: 22px; font-weight: 600; letter-spacing: -0.01em; }
-/* sans, 16px / 26px: Lead paragraphs and the question box. */
+/* Lead paragraphs and the question box. */
 :root[data-af-design-system="graphite"] .t-body-l { font-family: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 16px; line-height: 26px; font-weight: 400; }
-/* sans, 14px / 21px: Default UI and reading text: 14px at 1.5. */
+/* Default UI and reading text: 14px at 1.5. */
 :root[data-af-design-system="graphite"] .t-body { font-family: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 14px; line-height: 21px; font-weight: 400; }
-/* sans, 13px / 18px: Captions, helper text, dense cells, timestamps. */
+/* Captions, helper text, dense cells, timestamps. */
 :root[data-af-design-system="graphite"] .t-body-s { font-family: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 13px; line-height: 18px; font-weight: 400; }
-/* sans, 13px / 18px: Field labels, shelf labels, column heads. Medium weight, sentence case, no tracking. */
+/* Field labels, shelf labels, column heads. Medium weight, sentence case, no tracking. */
 :root[data-af-design-system="graphite"] .t-label { font-family: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 13px; line-height: 18px; font-weight: 500; }
-/* sans, 12px / 16px: Group headings in a rail or above a list: the soft ink at 12px, sentence case. Graphite has no caps and no letter-spacing. */
+/* Group headings in a rail or above a list: the soft ink at 12px, sentence case. Graphite has no caps and no letter-spacing. */
 :root[data-af-design-system="graphite"] .t-eyebrow { font-family: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 12px; line-height: 16px; font-weight: 500; }
-/* display, 32px / 36px: KPI figures, tabular, in the sans. */
+/* KPI figures, tabular, in the sans. */
 :root[data-af-design-system="graphite"] .t-numeral { font-family: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 32px; line-height: 36px; font-weight: 600; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
-/* mono, 13px / 20px: SQL, code, IDs, paths. Nowhere else. */
+/* SQL, code, IDs, paths. Nowhere else. */
 :root[data-af-design-system="graphite"] .t-mono { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; line-height: 20px; font-weight: 400; }
 /* Code highlighting token colours (for @afbin/highlight). */
 :root[data-af-design-system="graphite"] .tok-comment, :root[data-af-design-system="graphite"] .tok-quote, :root[data-af-design-system="graphite"] .tok-meta { color:color-mix(in oklab, var(--muted-foreground) 75%, var(--foreground));font-style:italic; }

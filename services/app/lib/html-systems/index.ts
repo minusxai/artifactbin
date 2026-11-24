@@ -36,12 +36,7 @@ export const defaultHtmlSystem = defaultHtmlSystemName;
  * sets itself: `data-af-design-system="NAME"` and `data-af-dark="true|false"` (with `color-scheme` to match). The
  * generated stylesheet headers (design-systems/lib/html-skill) state the same list; theme-tokens.test.ts pins all three.
  */
-export const THEME_TOKENS = [
-  '--background', '--foreground', '--card', '--card-foreground', '--popover', '--popover-foreground', '--primary',
-  '--primary-foreground', '--secondary', '--secondary-foreground', '--muted', '--muted-foreground', '--accent',
-  '--accent-foreground', '--destructive', '--destructive-foreground', '--border', '--input', '--ring', '--chart-1',
-  '--chart-2', '--chart-3', '--chart-4', '--chart-5', '--radius', '--font-display', '--font-body', '--font-mono',
-] as const;
+export {THEME_TOKENS} from './html-systems.ts';
 /** Read by components when set, never required: the radius scale derives from `--radius`, shadows have defaults. */
 export const OPTIONAL_THEME_TOKENS = ['--radius-sm', '--radius-md', '--radius-lg', '--radius-full', '--shadow-xs', '--shadow-md', '--shadow-lg'] as const;
 export const THEME_ATTRIBUTES = { designSystem: 'data-af-design-system', dark: 'data-af-dark' } as const;

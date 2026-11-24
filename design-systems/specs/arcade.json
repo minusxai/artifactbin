@@ -229,6 +229,16 @@
    "usage": "Section openers."
   },
   {
+   "name": "display-m",
+   "family": "display",
+   "size": "clamp(13px, 1.6vw, 20px)",
+   "lh": "1.5",
+   "weight": 400,
+   "tt": "uppercase",
+   "sample": "Stage summary",
+   "usage": "Slide headings."
+  },
+  {
    "name": "title",
    "family": "sans",
    "size": "26px",
@@ -236,6 +246,15 @@
    "weight": 700,
    "sample": "Level 3 · The Foundry",
    "usage": "Card, panel and dialogue titles. Pixelify Sans bold."
+  },
+  {
+   "name": "body-l",
+   "family": "sans",
+   "size": "21px",
+   "lh": "29px",
+   "weight": 400,
+   "sample": "Select a level to begin.",
+   "usage": "Lead text."
   },
   {
    "name": "body",

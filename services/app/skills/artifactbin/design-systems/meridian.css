@@ -3,26 +3,24 @@
  * Product dashboards, docs, SaaS marketing. Mood: Sleek, Professional. Opens light. Generated from
  * design-systems/specs/meridian.json.
  *
- * Use: name it once in <head>: <meta name="artifactbin:design-system" content="meridian">. The platform serves
- * this stylesheet, sets data-af-design-system and data-af-dark on <html>, and hosts the fonts: copy, link and read
- * nothing to use it. Only this header is worth reading, for the shared tokens and type roles below.
+ * Use <meta name="artifactbin:design-system" content="meridian"> in <head>. The platform loads the CSS and fonts
+ * and sets data-af-design-system and data-af-dark.
  *
  * Shared contract: every system defines these, so build your CSS on them with var(--name):
  *   --background --foreground --card --card-foreground --popover --popover-foreground --primary
  *   --primary-foreground --secondary --secondary-foreground --muted --muted-foreground --accent
  *   --accent-foreground --destructive --destructive-foreground --border --input --ring --chart-1 --chart-2
  *   --chart-3 --chart-4 --chart-5 --radius --font-display --font-body --font-mono
- * Type-role classes (same names in every system, sizes differ), used as class="t-title" etc.:
- *   t-display-xl t-display-l t-display-m t-title t-body-l t-body t-body-s t-label t-eyebrow t-numeral t-mono
- * Each --ds-* below is this system's own palette; its comment says what the token is for (for example a "fill
- * only" colour is never body text). Keep the system's colour and type choices.
+ * Type-role classes shared by every system, used as class="t-title" etc.:
+ *   t-display-xl t-display-l t-display-m t-title t-body-l t-body t-body-s t-label t-numeral t-mono
+ * The --ds-* palette and any unlisted type roles are system-specific.
  *
  * Idea: Meridian is the look of software confident enough to be quiet: a grey canvas, white surfaces that sit on
  * it under a 1px top highlight, hairlines instead of shadows, 14px sans everywhere, and one blue used exactly once
  * per view. At night the surfaces turn to glass with a gradient edge and a soft blue glow behind the hero. Nothing
  * decorates; depth comes from layering, hierarchy from spacing and tracking, and the only coloured things are the
  * data and the one action.
- * Fits: Product dashboards, settings and billing screens, developer and product docs, SaaS marketing pages,
+ * Use for: Product dashboards, settings and billing screens, developer and product docs, SaaS marketing pages,
  * changelogs, anything a professional reads every day and should never notice the chrome of.
  * Avoid when: Editorial or narrative subjects, anything that wants warmth, print or texture, consumer brands with
  * a personality to show, or a page whose job is to be remembered rather than used.
@@ -144,28 +142,28 @@
   --ds-chip-radius: 999px;
 }
 :root[data-af-design-system="meridian"] body { margin:0; background:var(--background); color:var(--foreground); font-family:var(--font-body); }
-/* Type roles: font family, size / line height, then when to use it. */
-/* display, clamp(48px, 7vw, 96px) / .98: One per page. Hero headlines. Semibold, never bold: the presence comes from size and tracking, not weight. */
+/* Type roles and when to use them. */
+/* One per page. Hero headlines. Semibold, never bold: the presence comes from size and tracking, not weight. */
 :root[data-af-design-system="meridian"] .t-display-xl { font-family: "Geist", "Inter", system-ui, sans-serif; font-size: clamp(48px, 7vw, 96px); line-height: .98; font-weight: 600; letter-spacing: -0.045em; }
-/* display, clamp(32px, 4.2vw, 52px) / 1.04: Section openers. */
+/* Section openers. */
 :root[data-af-design-system="meridian"] .t-display-l { font-family: "Geist", "Inter", system-ui, sans-serif; font-size: clamp(32px, 4.2vw, 52px); line-height: 1.04; font-weight: 600; letter-spacing: -0.04em; }
-/* display, 28px / 32px: Page titles. */
+/* Page titles. */
 :root[data-af-design-system="meridian"] .t-display-m { font-family: "Geist", "Inter", system-ui, sans-serif; font-size: 28px; line-height: 32px; font-weight: 600; letter-spacing: -0.03em; }
-/* display, 16px / 22px: Card titles, dialog titles, table group heads. */
+/* Card titles, dialog titles, table group heads. */
 :root[data-af-design-system="meridian"] .t-title { font-family: "Geist", "Inter", system-ui, sans-serif; font-size: 16px; line-height: 22px; font-weight: 600; letter-spacing: -0.015em; }
-/* sans, 18px / 28px: Lead paragraphs and marketing copy. */
+/* Lead paragraphs and marketing copy. */
 :root[data-af-design-system="meridian"] .t-body-l { font-family: "Geist", "Inter", system-ui, sans-serif; font-size: 18px; line-height: 28px; font-weight: 400; letter-spacing: -0.01em; }
-/* sans, 14px / 22px: Default UI and reading text. 14px: product density, not a blog. */
+/* Default UI and reading text. 14px: product density, not a blog. */
 :root[data-af-design-system="meridian"] .t-body { font-family: "Geist", "Inter", system-ui, sans-serif; font-size: 14px; line-height: 22px; font-weight: 400; }
-/* sans, 13px / 18px: Captions, helper text, dense cells. */
+/* Captions, helper text, dense cells. */
 :root[data-af-design-system="meridian"] .t-body-s { font-family: "Geist", "Inter", system-ui, sans-serif; font-size: 13px; line-height: 18px; font-weight: 400; }
-/* sans, 12px / 16px: Field labels, column heads, stat labels. Medium weight, sentence case: Meridian never shouts. */
+/* Field labels, column heads, stat labels. Medium weight, sentence case: Meridian never shouts. */
 :root[data-af-design-system="meridian"] .t-label { font-family: "Geist", "Inter", system-ui, sans-serif; font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: 0.01em; }
-/* mono, 12px / 16px: Section eyebrows and breadcrumbs in the mono, with a dot. The only place the mono appears outside code. */
+/* Section eyebrows and breadcrumbs in the mono, with a dot. The only place the mono appears outside code. */
 :root[data-af-design-system="meridian"] .t-eyebrow { font-family: "Geist Mono", ui-monospace, Menlo, monospace; font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: 0.02em; }
-/* sans, 36px / 40px: KPI figures in the sans, tabular, with the unit set smaller beside them. Mono is for code, not for money. */
+/* KPI figures in the sans, tabular, with the unit set smaller beside them. Mono is for code, not for money. */
 :root[data-af-design-system="meridian"] .t-numeral { font-family: "Geist", "Inter", system-ui, sans-serif; font-size: 36px; line-height: 40px; font-weight: 600; letter-spacing: -0.035em; font-variant-numeric: tabular-nums; }
-/* mono, 13px / 20px: Code, paths, IDs, keyboard keys. */
+/* Code, paths, IDs, keyboard keys. */
 :root[data-af-design-system="meridian"] .t-mono { font-family: "Geist Mono", ui-monospace, Menlo, monospace; font-size: 13px; line-height: 20px; font-weight: 400; }
 /* Code highlighting token colours (for @afbin/highlight). */
 :root[data-af-design-system="meridian"] .tok-comment, :root[data-af-design-system="meridian"] .tok-quote, :root[data-af-design-system="meridian"] .tok-meta { color:color-mix(in oklab, var(--muted-foreground) 75%, var(--foreground));font-style:italic; }
