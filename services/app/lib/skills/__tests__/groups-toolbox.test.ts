@@ -17,9 +17,9 @@ async function harness(sub:string,positionals:string[],values:Record<string,unkn
   return Response.json({changed:true});
  }});return {result,calls};
 }
-const ALL={group:'design_crit',role:'editor',handle:'design_crit'};
+const ALL={group:'design_crit',role:'editor',handle:'design_crit'},ADMIN={...ALL,role:'admin'};
 it.each([
- ['remove',['design_crit','teammate'],ALL],['leave',['PAGE12'],ALL],['move',['PAGE12'],ALL],['delete',['PAGE12'],ALL],['invite',['design_crit','a@example.test'],ALL],['role',['design_crit','teammate'],ALL],['share',['PAGE12'],ALL],
+ ['remove',['design_crit','teammate'],ALL],['leave',['PAGE12'],ALL],['move',['PAGE12'],ALL],['delete',['PAGE12'],ALL],['invite',['design_crit','a@example.test'],ADMIN],['role',['design_crit','teammate'],ADMIN],['share',['PAGE12'],ALL],
  ['uninvite',['design_crit','other'],{group:'design_crit'}],['unshare',['design_crit','other'],{group:'design_crit'}],['unlink',['design_crit','other'],{group:'design_crit'}],
  ['approve',['PAGE12','totals'],{hash:'h'}],['unapprove',['PAGE12','pqa_1'],{}],
 ])('%s refuses before any HTTP without --yes',async(sub,positionals,values)=>{
@@ -88,7 +88,7 @@ it('reports multiple invitations individually, including partial failure',async(
 });
 it('show ends on how to change its members and invitations: proposed to the user by handle, role and email, made after they agree',async()=>{
  const {groupsCommand}=await import('../../../skills/artifactbin/scripts/groups.mjs');
- const detail={group:{id:'grp_stable',handle:'design_crit'},members:[{user_id:'usr_a',username:'teammate',role:'editor'}],invitations:[{id:'gin_a',email:'pending@example.test',role:'member'}]};
+ const detail={group:{id:'grp_stable',handle:'design_crit'},members:[{user_id:'usr_a',username:'teammate',role:'admin'}],invitations:[{id:'gin_a',email:'pending@example.test',role:'member'}]};
  const options=(body:any)=>({env:syntheticEnv(server),fetcher:async()=>Response.json(body)});
  const shown=await groupsCommand({sub:'show',positionals:['design_crit'],values:{}},options(detail));
  expect(shown).toMatchObject(detail);
@@ -171,16 +171,19 @@ it.each(['create','update','invite','uninvite','role','remove','leave','share','
  if(sub==='invite')expect(await pending).toMatchObject({ok:false,code:'partial_failure',results:[{ok:false,code:'forbidden',exit:3}]});
  else await expect(pending).rejects.toMatchObject({code:'forbidden',exit:3});expect(writes).toBe(1);
 });
-it('an editor grant says what it gives, refused without --yes and once made; a viewer grant says nothing',async()=>{
+it('an editor share or an Admin grant says what it gives, refused without --yes and once made; a viewer grant says nothing',async()=>{
  const {groupsCommand}=await import('../../../skills/artifactbin/scripts/groups.mjs');
  const {EDITOR_GRANT}=await import('../../../skills/artifactbin/scripts/toolbox-groups.mjs');
  expect(EDITOR_GRANT).toContain('Group Admins also');
  const cases:[string,string[],Record<string,unknown>][]=[['share',['PAGE12'],{group:'design_crit'}],['invite',['design_crit','a@example.test'],{}],['role',['design_crit','teammate'],{}]];
  for(const [sub,positionals,values] of cases){
-  const refused=groupsCommand({sub,positionals,values:{...values,role:'editor'}},{fetcher:async()=>{throw Error('unexpected');}});
+  const granted=sub==='share'?'editor':'admin';
+  const refused=groupsCommand({sub,positionals,values:{...values,role:granted}},{fetcher:async()=>{throw Error('unexpected');}});
   await expect(refused,sub).rejects.toMatchObject({code:'confirmation_required',recovery:expect.stringContaining(EDITOR_GRANT)});
-  expect((await harness(sub,positionals,{...values,role:'editor',yes:true})).result.note,sub).toBe(EDITOR_GRANT);
+  expect((await harness(sub,positionals,{...values,role:granted,yes:true})).result.note,sub).toBe(EDITOR_GRANT);
   expect((await harness(sub,positionals,{...values,role:sub==='share'?'viewer':'member'})).result.note,sub).toBeUndefined();
  }
  await expect(groupsCommand({sub:'remove',positionals:['design_crit','teammate'],values:{}},{fetcher:async()=>{throw Error('unexpected');}})).rejects.toMatchObject({recovery:expect.not.stringContaining(EDITOR_GRANT)});
+ // Editor is a page share role only: no group membership holds it, so the client refuses it before any request.
+ for(const sub of ['invite','role'])await expect(groupsCommand({sub,positionals:sub==='invite'?['design_crit','a@example.test']:['design_crit','teammate'],values:{role:'editor',yes:true}},{fetcher:async()=>{throw Error('unexpected');}})).rejects.toMatchObject({exit:2});
 });

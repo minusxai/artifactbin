@@ -17,7 +17,7 @@ it('lists one exact collection page with an opaque cursor and stable group ID',a
  const {groupsCommand}=await import('../../../skills/artifactbin/scripts/groups.mjs');
  const calls:string[]=[],page={items:[{id:'FOLD12',format:'folder',title:'Reports'}],next_cursor:'next+/='};
  const result=await groupsCommand({sub:'collection',positionals:['@team'],values:{parent:'ROOT12',limit:'20',cursor:'opaque+/='}}, {env,fetcher:async(url:any)=>{
-  calls.push(String(url));return Response.json(calls.length===1?{group:{id:'grp_team',handle:'team',role:'editor'}}:page);
+  calls.push(String(url));return Response.json(calls.length===1?{group:{id:'grp_team',handle:'team',role:'admin'}}:page);
  }});
  expect(calls).toHaveLength(2);
  const queried=new URL(calls[1]!);expect(queried.pathname).toBe('/api/groups/grp_team/collection');
@@ -30,7 +30,7 @@ it('journals a private group folder before POST and resumes the identical reques
  const calls:Array<{body:any;key:string|null}>=[];
  const options={env,fetcher:async(url:any,init:any)=>{
   const route=new URL(String(url)).pathname;
-  if(route==='/api/groups/team')return Response.json({group:{id:'grp_team',handle:'team',role:'editor'}});
+  if(route==='/api/groups/team')return Response.json({group:{id:'grp_team',handle:'team',role:'admin'}});
   expect(route).toBe('/api/artifacts');expect(init.method).toBe('POST');
   const body=JSON.parse(init.body),key=new Headers(init.headers).get('idempotency-key');
   const saved=JSON.parse(await readFile(journal,'utf8'));expect(saved.body).toEqual(body);expect(saved.key).toBe(key);

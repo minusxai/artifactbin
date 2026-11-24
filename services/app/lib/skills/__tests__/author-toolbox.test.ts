@@ -374,20 +374,34 @@ it('teaches script-created element IDs once, in runtime.md, linked from SKILL.md
  expect(runtime).toContain('## Dynamic elements and comments');expect(runtime).toContain('`<list>-<record id>-<role>`');
  expect(runtime).toContain("item.dataset.afId='garden-job-'+job.id;");
 });
-it('publish --group resolves the group first and sends an explicit destination only when you can edit it',async()=>{
+it('publish --group resolves the group, sends its destination for a Member or an Admin and leaves the refusal to the server',async()=>{
  const {publishCommand}=await import('../../../skills/artifactbin/scripts/toolbox-publish.mjs');
  const root=await tempDir('publish-group-',onTestFinished),server='https://example.test';
-  const file=path.join(root,'index.html');await writeFile(file,'<!doctype html><html><head><meta charset="utf-8"><title>T</title></head><body><h1>Hi</h1></body></html>');
-  const seen:string[]=[];let role='editor';
-  const fetcher=async(url:any)=>{seen.push(new URL(String(url)).pathname);return Response.json({group:{id:'grp_team',handle:'team',role}});};
-  const options={env:syntheticEnv(server, root, { token: 'private-fixture' }),fetcher,log:()=>{}};
-  const planned=await publishCommand({values:{server,'dry-run':true,group:'@team',create:true},positionals:[file]},options);
-  expect(seen).toEqual(['/api/groups/team']);expect(planned).toMatchObject({dryRun:true,method:'POST',destination:{type:'group',id:'grp_team'}});
+  const page='<!doctype html><html><head><meta charset="utf-8"><title>T</title></head><body><h1>Hi</h1></body></html>';
+  const dir=path.join(root,'project');await mkdir(dir);const file=path.join(dir,'index.html');await writeFile(file,page);
+  const seen:string[]=[],sent:any[]=[];let role='member',refuse=false;
+  const fetcher=async(url:any,init:any)=>{const route=new URL(String(url)).pathname;seen.push(route);
+   if(route.startsWith('/api/groups/'))return Response.json({group:{id:'grp_team',handle:'team',role}});
+   const body=JSON.parse(String(init.body));sent.push(body);
+   if(refuse)return Response.json({error:'invalid_destination',details:['Publication is unavailable for this group destination']},{status:403});
+   return Response.json({id:'NEW123',url:server+'/a/NEW123',version:1,state:'c'.repeat(64),html:body.html,format:'html'},{status:201});};
+  const options={env:syntheticEnv(server, path.join(root,'home'), { token: 'private-fixture' }),fetcher,log:()=>{}};
+  for(const held of ['member','admin']){role=held;seen.length=0;
+   const planned=await publishCommand({values:{server,'dry-run':true,group:'@team',create:true},positionals:[file]},options);
+   expect(seen,held).toEqual(['/api/groups/team']);expect(planned,held).toMatchObject({dryRun:true,method:'POST',destination:{type:'group',id:'grp_team'}});
+  }
   expect(await publishCommand({values:{server,'dry-run':true,create:true},positionals:[file]},options)).not.toHaveProperty('destination');
   expect(await publishCommand({values:{server,'dry-run':true,personal:true,create:true},positionals:[file]},options)).toMatchObject({destination:{type:'personal'}});
   await expect(publishCommand({values:{server,'dry-run':true,personal:true,group:'team'},positionals:[file]},options)).rejects.toMatchObject({code:'invalid_destination'});
-  role='viewer';
-  await expect(publishCommand({values:{server,'dry-run':true,group:'team',create:true},positionals:[file]},options)).rejects.toMatchObject({code:'group_not_editor'});
+  // A Member's new page is published into the group: the client asks the server and sends the group destination.
+  role='member';
+  const created=await publishCommand({values:{server,group:'team',create:true},positionals:[file]},options);
+  expect(created).toMatchObject({id:'NEW123'});expect(sent.at(-1)).toMatchObject({destination:{type:'group',id:'grp_team'}});
+  // Whatever the server refuses (a dataset, a share, the company root) reaches the user as one clear exit-3 error.
+  await writeFile(file,page);refuse=true;sent.length=0;
+  await expect(publishCommand({values:{server,group:'team',create:true},positionals:[file]},options)).rejects.toMatchObject({code:'group_publish_refused',exit:3,
+   message:expect.stringContaining('Admin'),recovery:expect.stringContaining('--personal'),details:{error:'invalid_destination'}});
+  expect(sent).toHaveLength(1);
 });
 it('exports the same DESCRIPTION the registry reads, from each real script',async()=>{
  const {COMMANDS}=await import('../../../skills/artifactbin/scripts/toolbox-commands.mjs');

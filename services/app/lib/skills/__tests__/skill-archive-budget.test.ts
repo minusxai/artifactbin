@@ -63,7 +63,10 @@ import {archiveFor} from '@/lib/skills';
 // stored), leaving 1,708,556 bytes.
 // 1.631 MiB: main sat ~40 bytes under 1.630; bundling (publish and check --draft) refuses hidden files and a home or root
 // folder, so a hostile page cannot name ~/.aws/credentials into an upload, leaving 1,709,439 bytes.
-const SKILL_ARCHIVE_MAX_BYTES=1.631*1024*1024;
+// 1.632 MiB: main sat 39 bytes under 1.631; group publishing and folder creation leave the role decision to the
+// server and say its refusal plainly (groupRefusal), in place of the client's check for the retired Editor role,
+// leaving 1,710,432 bytes.
+const SKILL_ARCHIVE_MAX_BYTES=1.632*1024*1024;
 
 describe('the downloadable author skill archive',()=>{
  it('fits its size budget',async()=>{

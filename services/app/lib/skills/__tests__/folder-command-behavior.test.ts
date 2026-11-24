@@ -52,17 +52,15 @@ it('refuses invalid placement, update placement and connections before HTTP',asy
   .rejects.toMatchObject({code:'parent_not_for_update'});
  expect(calls).toBe(0);
 }));
-it('denies folder viewers and unsafe references without POST',async()=>{
+it('refuses unsafe references and titles without any request',async()=>{
  const calls:string[]=[];const options={env,fetcher:async(url:any)=>{calls.push(String(url));
   return Response.json({group:{id:'grp_team',handle:'team',role:'member'}});}};
- await expect(groupsCommand({sub:'folder-create',positionals:['team'],values:{title:'Notes'}},options))
-  .rejects.toMatchObject({exit:3});
  for(const parent of ['bad','https://other.test/a/FOLD12'])await expect(groupsCommand({
   sub:'folder-create',positionals:['team'],values:{title:'Notes',parent}},options))
   .rejects.toMatchObject({exit:2});
  for(const title of ['', ' '.repeat(2),'x'.repeat(201)])await expect(groupsCommand({
   sub:'folder-create',positionals:['team'],values:{title}},options)).rejects.toMatchObject({exit:2});
- expect(calls).toHaveLength(1);
+ expect(calls).toHaveLength(0);
 });
 it('rejects malformed, foreign and tampered folder journals without HTTP',async()=>workspace(async root=>{
  let calls=0;const options={env,fetcher:async()=>{calls++;throw Error('unexpected');}};
@@ -107,12 +105,23 @@ it('keeps root collection one page and does not imply publication access',async(
 it.each([{}, {id:'FOLD12',format:'html'}, {id:'bad',format:'folder'}, {id:123456,format:'folder'}])('refuses an incomplete or wrong-kind success receipt %j',async receipt=>workspace(async root=>{
  const journal=path.join(root,'request.json');let posts=0;
  const options={env,fetcher:async(url:any)=>{
-  if(String(url).endsWith('/api/groups/team'))return Response.json({group:{id:'grp_team',handle:'team',role:'editor'}});
+  if(String(url).endsWith('/api/groups/team'))return Response.json({group:{id:'grp_team',handle:'team',role:'admin'}});
   posts++;return Response.json(receipt,{status:201});
  }};
  await expect(groupsCommand({sub:'folder-create',positionals:['team'],values:{title:'Notes',request:journal}},options))
   .rejects.toMatchObject({code:'outcome_unknown',exit:5,details:{journal:expect.stringContaining('/request.json')}});
  expect(posts).toBe(1);expect(JSON.parse(await readFile(journal,'utf8')).body.format).toBe('folder');
+}));
+it.each(['member','admin'])('folder-create as a group %s asks the server and says its refusal plainly',async held=>workspace(async root=>{
+ const journal=path.join(root,'request.json');let posts=0;
+ const options={env,fetcher:async(url:any)=>{
+  if(String(url).endsWith('/api/groups/team'))return Response.json({group:{id:'grp_team',handle:'team',role:held}});
+  posts++;return Response.json({error:'invalid_destination',details:['Publication is unavailable for this group destination']},{status:403});
+ }};
+ await expect(groupsCommand({sub:'folder-create',positionals:['team'],values:{title:'Notes',request:journal}},options))
+  .rejects.toMatchObject({code:'group_folder_refused',exit:3,message:expect.stringContaining('Admin'),
+   recovery:expect.stringContaining('group Admin'),details:{error:'invalid_destination',journal:expect.stringContaining('/request.json')}});
+ expect(posts).toBe(1);
 }));
 it('fresh candidate archive executes the real folder-create parser and helper',async()=>workspace(async root=>{
  const received:any[]=[];
@@ -121,7 +130,7 @@ it('fresh candidate archive executes the real folder-create parser and helper',a
   received.push({url:req.url,method:req.method,body:raw&&JSON.parse(raw)});
   res.setHeader('Content-Type','application/json');
   res.end(JSON.stringify(req.method==='POST'?{id:'FOLD12',title:'Notes',format:'folder',parent_id:null}:
-   {group:{id:'grp_team',handle:'team',role:'editor'}}));
+   {group:{id:'grp_team',handle:'team',role:'admin'}}));
  });
  try{
   const origin=fixture.base;
