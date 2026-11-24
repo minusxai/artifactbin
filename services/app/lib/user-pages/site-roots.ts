@@ -5,6 +5,20 @@ import {handleFromUserPagesHost, ownerForHandle, type UserPagesOwner} from './ho
 export const validSiteLabel = (label: string) => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label);
 const ownedFolder = "user_id=$1 AND group_id IS NULL AND format='folder' AND deleted_at IS NULL";
 
+/** Every recorded ancestor must still be a public folder of this owner at its recorded position. */
+export function publicSiteAncestors(row:string, kind:UserPagesOwner['kind']) {
+  const owned = kind === 'group' ? 'p.group_id=$1' : 'p.user_id=$1 AND p.group_id IS NULL';
+  return `NOT EXISTS (SELECT FROM unnest(${row}.ancestor_ids) WITH ORDINALITY path(id,depth)
+    WHERE NOT EXISTS (SELECT FROM artifacts p WHERE p.id=path.id AND p.format='folder'
+      AND p.deleted_at IS NULL AND p.visibility='public' AND ${owned}
+      AND p.ancestor_ids=${row}.ancestor_ids[1:path.depth::int-1]))`;
+}
+
+export async function hasPublicSiteAncestors(owner:UserPagesOwner,row:{id:string;ancestor_ids?:string[]|null}) {
+  if (!row.ancestor_ids?.length) return true;
+  return !!(await (await getDb()).query(`SELECT 1 FROM artifacts a WHERE id=$2 AND ${publicSiteAncestors('a',owner.kind)}`,[owner.id,row.id])).rows.length;
+}
+
 export async function websiteSettings(userId: string) {
   const db = await getDb();
   const [roots, folders] = await Promise.all([
@@ -40,7 +54,7 @@ export async function siteOwner(address:{handle:string;label:string}):Promise<Us
   const owner = await ownerForHandle(address.handle);
   if (!owner || owner.kind==='group') return address.label ? null : owner;
   const mapping = (await (await getDb()).query<{folder_id:string|null;live:boolean}>(`SELECT folder_id,
-    folder_id IS NULL OR EXISTS(SELECT 1 FROM artifacts WHERE ${ownedFolder} AND id=folder_id) AS live
+    folder_id IS NULL OR EXISTS(SELECT 1 FROM artifacts a WHERE ${ownedFolder} AND id=folder_id AND visibility='public' AND ${publicSiteAncestors('a',owner.kind)}) AS live
     FROM user_site_roots WHERE user_id=$1 AND subdomain_label=$2`,[owner.id,address.label])).rows[0];
   if (!mapping) return address.label ? null : owner;
   return mapping.live ? {...owner,folderId:mapping.folder_id} : null;

@@ -55,6 +55,9 @@ export function linkedStylesheets(html: string): string[] {
     .filter((href): href is string => !!href && href.startsWith('/') && !href.startsWith('//'));
 }
 
+export const siteFilePath = (row:{id:string;title?:string|null;format:string}) =>
+  row.format==='folder' ? `/folders/${encodeURIComponent(row.id)}` : domainPostPath({id:row.id,title:row.title??null});
+
 /** The app listing's empty state. */
 const NOTHING_HERE_HTML = '<p class="reveal font-mono text-sm text-muted"><span class="text-accent">$</span> nothing here yet<span class="caret text-accent">▍</span></p>';
 
@@ -117,7 +120,7 @@ function shelfHtml(files: ProfileFile[]): string {
   const sections = groups.map((group) => {
     const cards = group.rows.map((row) => {
       const file = row as unknown as ProfileFile;
-      return documentCardHtml(file, domainPostPath({ id: file.id, title: file.title ?? null }), documents.indexOf(row));
+      return documentCardHtml(file, siteFilePath(file), documents.indexOf(row));
     }).join('');
     return `<section aria-label="${escapeHtml(group.label)} artifacts">`
       + '<div class="mb-2.5 flex items-center gap-3 px-0.5">'
@@ -136,7 +139,7 @@ function profileListingHtml(data: ProfileListingData): string {
   const count = files.filter((f) => f.format === 'html').length;
   const hero = listingHeroHtml(data.handle, count, data.owner);
   const folders = data.showFolders ? data.files.filter(file => file.format === 'folder') : [];
-  const links = folders.map(file => `<li><a href="/folders/${encodeURIComponent(file.id)}">${escapeHtml(file.title ?? 'Untitled folder')}</a></li>`).join('');
+  const links = folders.map(file => `<li><a href="${siteFilePath(file)}">${escapeHtml(file.title ?? 'Untitled folder')}</a></li>`).join('');
   return hero + (links ? `<nav aria-label="Folders"><ul>${links}</ul></nav>` : '') + (!folders.length && files.length === 0 ? NOTHING_HERE_HTML : shelfHtml(files));
 }
 

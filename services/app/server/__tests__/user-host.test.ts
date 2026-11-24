@@ -287,7 +287,7 @@ it('selects a direct public index and lists navigable direct folders without pri
  expect((await server.request(base+'/folders/fold004')).status).toBe(200);
 });
 
-it('withholds a named-site SQL result if its mapping is removed during the read',async()=>{
+it.each(['removed','repointed'])('withholds a named-site SQL result if its mapping is %s during the read',async change=>{
  const f=await fixture(), db=await getDb(), server=app(), engine=services().sql;
  await setUsername(f.owner.userId!,'alice');
  await db.query("INSERT INTO artifacts(id,user_id,format) VALUES ('foldsql',$1,'folder')",[f.owner.userId]);
@@ -296,11 +296,31 @@ it('withholds a named-site SQL result if its mapping is removed during the read'
  const run=engine.run.bind(engine);
  const spy=vi.spyOn(engine,'run').mockImplementation(async input=>{
    const result=await run(input);
-   await db.query("DELETE FROM user_site_roots WHERE user_id=$1",[f.owner.userId]);
+   await db.query(change==='removed'?"DELETE FROM user_site_roots WHERE user_id=$1":"UPDATE user_site_roots SET folder_id=NULL WHERE user_id=$1",[f.owner.userId]);
    return result;
  });
  try {
-   const res=await server.request('https://notes.alice.u.example.test/api/artifacts/'+f.page+'/sql',{method:'POST',headers:{origin:'null','content-type':'text/plain'},body:JSON.stringify({sql:'select name from staff',revision:'1'})});
+   const res=await server.request('https://notes.alice.u.example.test/api/artifacts/'+f.page+'/sql',{method:'POST',headers:{origin:'null','content-type':'text/plain'},body:JSON.stringify({sql:'select name from staff cross join (select count(*) from _files) files',revision:'1'})});
    expect(spy).toHaveBeenCalled();expect(res.status).toBe(404);expect(await res.text()).not.toContain('ada');
  } finally {spy.mockRestore();}
+});
+
+it('queries the configured index and folder on their publishing origins with guest joins',async()=>{
+ const f=await fixture(), db=await getDb(), server=app(), alias='https://notes.alice.u.example.test';
+ await setUsername(f.owner.userId!,'alice');
+ await db.query("INSERT INTO artifacts(id,user_id,format,visibility) VALUES ('site001',$1,'folder','public'),('hidden01',$1,'folder','private')",[f.owner.userId]);
+ await setArtifact(db,'hidden01',{ancestor_ids:['site001']});
+ const hidden=await page(f.owner.token,'public',{title:'Hidden child'});
+ const foreign=await page(f.other.token,'public');
+ await setArtifact(db,hidden.id,{ancestor_ids:['site001','hidden01']});
+ await setArtifact(db,foreign.id,{ancestor_ids:['site001']});
+ await setArtifact(db,f.page,{title:'Index',visibility:'public',ancestor_ids:['site001']});
+ await db.query("INSERT INTO user_site_roots VALUES ($1,'',NULL),($1,'notes','site001')",[f.owner.userId]);
+ for(const [origin,path] of [[base,'/folders/site001'],[alias,'/']]){
+  const html=await server.request(origin+path);
+  expect(await html.text()).toContain('Staff');
+  const response=await server.request(origin+'/api/artifacts/'+f.page+'/sql',{method:'POST',headers:{origin:'null','content-type':'text/plain'},body:JSON.stringify({revision:'1',sql:"select url,note from _files cross join notes where format='html'"})});
+  expect(await response.json()).toMatchObject({rows:[{url:origin+'/'+f.page+'-index',note:'hello'}]});
+  expect((await server.request(origin+'/'+hidden.id)).status).toBe(404);
+ }
 });

@@ -6,8 +6,8 @@ import { ownerHostServes } from '@artifactbin/contracts/url-space';
 import { ownerHostSqlRead } from '@/lib/page-doors';
 import { getArtifactById } from '@/lib/artifacts';
 import { PUBLIC_BASE_URL, USER_PAGES_HOST, IS_DEV } from '@/lib/platform';
-import { isUserPagesHost, ownerForHandle, siteAddress, siteOwner, inSiteScope, documentOwner, userPagesOrigin, publicHomeFiles, homePageId, eligibleDocument, servesDocument, servesEmbeddedArtifact, servesWebAsset, type UserPagesOwner } from '@/lib/user-pages';
-import { DOMAIN_HOME_CSP, renderDomainHome, type ProfileListingData } from '@/lib/user-pages';
+import { isUserPagesHost, ownerForHandle, siteAddress, siteOwner, hasPublicSiteAncestors, inSiteScope, documentOwner, userPagesOrigin, publicHomeFiles, homePageId, eligibleDocument, servesDocument, servesEmbeddedArtifact, servesWebAsset, type UserPagesOwner } from '@/lib/user-pages';
+import { DOMAIN_HOME_CSP, siteFilePath, renderDomainHome, type ProfileListingData } from '@/lib/user-pages';
 import { PayloadTooLarge, baseUrl, readBody, trustedForwarded } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
 import { runWithRequest } from '@/lib/platform';
@@ -128,6 +128,7 @@ async function post(request: Request, segment: string, hostname: string, site: U
   const actual = site && servesDocument(site,row) ? site : await documentOwner(row);
   const origin = actual && userPagesOrigin(actual.handle);
   if (!actual || !origin) return notFound();
+  if (!await hasPublicSiteAncestors(actual,row)) return notFound();
   if (actual !== site) {
     const destination = await siteOwner({handle:actual.handle,label:''});
     if (!destination || !servesDocument(destination,row)) return notFound();
@@ -144,7 +145,7 @@ async function post(request: Request, segment: string, hostname: string, site: U
 async function documentRoute(request: Request, id: string, route: string, owner: UserPagesOwner): Promise<Response> {
   const method = request.method;
   const row = ID_RE.test(id) ? await getArtifactById(id) : null;
-  if (!row || !servesDocument(owner, row)) return notFound();
+  if (!row || !servesDocument(owner, row) || !await hasPublicSiteAncestors(owner,row)) return notFound();
   const get = method === 'GET';
   switch (route) {
     case 'events': return get ? call(eventsGet, await asGuest(request), id) : notFound();
@@ -162,7 +163,7 @@ async function documentRoute(request: Request, id: string, route: string, owner:
       const ref = params.get('u');
       if (owner.folderId !== undefined && ref?.startsWith('ref:')) {
         const target = await getArtifactById(ref.slice(4));
-        if (!target || !inSiteScope(owner,target)) return notFound();
+        if (!target || !inSiteScope(owner,target) || !await hasPublicSiteAncestors(owner,target)) return notFound();
       }
       return call(assetsGet, await asGuest(request), id);
     }
@@ -200,7 +201,7 @@ async function embedded(request: Request, path: string, owner: UserPagesOwner): 
     // Exactly the thumbnail Shelf draws (the card JPEG); no re-render, archive, slide or key rides in.
     if (asked.get('format') !== 'jpg' || asked.get('mode') !== 'card') return notFound();
     const row = ID_RE.test(id) ? await getArtifactById(id) : null;
-    if (!row || !servesDocument(owner, row)) return notFound();
+    if (!row || !servesDocument(owner, row) || !await hasPublicSiteAncestors(owner,row)) return notFound();
     const url = new URL(request.url);
     url.search = '';
     for (const name of ['format', 'mode', 'v', 'r']) { const value = asked.get(name); if (value !== null) url.searchParams.set(name, value); }
@@ -276,11 +277,11 @@ export function userHostBoundary(options: UserHostOptions = {}): MiddlewareHandl
       return;
     }
     if (path === '/' && readable) return owner?withoutCookies(await home(request, hostname, owner, stylesheets)):notFound();
-    if (readable && owner?.folderId !== undefined) {
+    if (readable && owner) {
       const folderId = /^\/folders\/([A-Za-z0-9]+)\/?$/.exec(path)?.[1];
       if (folderId) {
         const folder = await getArtifactById(folderId);
-        if (!folder || folder.format!=='folder' || folder.deleted_at || folder.visibility==='private' || !inSiteScope(owner,folder)) return notFound();
+        if (!folder || folder.format!=='folder' || folder.deleted_at || folder.visibility==='private' || !inSiteScope(owner,folder) || !await hasPublicSiteAncestors(owner,folder)) return notFound();
         return privacy(await home(request,hostname,owner,stylesheets,folderId),folder.visibility==='unlisted');
       }
     }
@@ -299,9 +300,13 @@ export function userHostBoundary(options: UserHostOptions = {}): MiddlewareHandl
       // Resolve the live handle and true owner at both ends of every read, including identity moves.
       const hostHolds=async()=>{
         const liveOwner=await siteOwner(address),row=await getArtifactById(id);
-        return !!liveOwner&&liveOwner.kind===owner.kind&&liveOwner.id===owner.id&&liveOwner.folderId===owner.folderId&&!!row&&servesDocument(liveOwner,row);
+        return !!liveOwner&&liveOwner.kind===owner.kind&&liveOwner.id===owner.id&&liveOwner.folderId===owner.folderId&&!!row&&servesDocument(liveOwner,row)&&await hasPublicSiteAncestors(liveOwner,row);
       };
-      try{return privacy(await ownerHostSqlRead(request,id,hostHolds));}
+      const siteOrigin=new URL(PUBLIC_BASE_URL);
+      siteOrigin.hostname=hostname;
+      try{return privacy(await ownerHostSqlRead(request,id,hostHolds,{
+        owner,folderId:owner.folderId??null,origin:siteOrigin.origin,sitePath:siteFilePath,
+      }));}
       catch(error){if(error instanceof PayloadTooLarge)return privacy(withReadCors(error.response()));throw error;}
     }
 

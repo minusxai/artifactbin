@@ -37,6 +37,7 @@ it('keeps embedded bytes and copied web images owner-scoped with 200 eligible po
 it('requires both embedded bytes and their referring page to belong to the configured site', async()=>{
  const actor=await mintAccountToken('mxmx_test_mapped_assets'),db=await getDb();
  const site:UserPagesOwner={kind:'user',id:actor.userId!,handle:'mapped',folderId:'folder1'};
+ await seedArtifacts(db,{id:'folder1',user_id:site.id,format:'folder',visibility:'public'});
  await seedArtifacts(db,{id:'image01',user_id:site.id,format:'image',visibility:'public',ancestor_ids:[]});
  await seedArtifacts(db,{id:'page001',user_id:site.id,format:'html',visibility:'public',ancestor_ids:['folder1'],meta:JSON.stringify({refs:[{id:'image01'}],webAssets:[LAST]})});
  await db.query("INSERT INTO web_assets(url_hash,url,object_key,content_type,bytes) VALUES($1,'https://images.example.test/last.png','test','image/png',1)",[LAST]);
