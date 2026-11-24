@@ -31,8 +31,8 @@ Gotchas: status refreshes the saved grant, so authenticated:false means log in a
 Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write outcome.
   Results never contain credentials.`;
 
-import {logoutGrant} from './auth-logout.mjs';
-import {loginGrant, statusGrant} from './auth-grants.mjs';
+import {logoutGrant} from './toolbox-auth-logout.mjs';
+import {loginGrant, statusGrant} from './toolbox-auth-grants.mjs';
 import {runTool, ToolError, serverOrigin, selectedServer, credentialRoot, platform, positional}
   from './toolbox-client.mjs';
 // Subcommands: status (refreshes the saved grant to prove it works), logout (revokes, then
