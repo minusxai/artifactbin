@@ -4,3 +4,4 @@ export type {UserPagesOwner} from './hosts';
 export {eligibleDocument,servesDocument,servesEmbeddedArtifact,servesWebAsset,canonicalDocumentUrl,userPageUrl,userPageUrlForOwner,publicHomeFiles,homePageId} from './serving';
 export {DOMAIN_HOME_CSP,linkedStylesheets,renderDomainHome} from './home';
 export type {ProfileListingData} from './home';
+export {validSiteLabel,websiteSettings,saveSiteRoot,deleteSiteRoot,siteAddress,siteOwner,inSiteScope} from './site-roots';

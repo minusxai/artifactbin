@@ -33,3 +33,15 @@ it('keeps embedded bytes and copied web images owner-scoped with 200 eligible po
  await setArtifact(db, 'post0200', { visibility: 'private' });
  expect(await servesEmbeddedArtifact(group,row)).toBe(false);expect(await servesWebAsset(group,urlHash('https://images.example.test/last.png'))).toBe(false);
 });
+
+it('requires both embedded bytes and their referring page to belong to the configured site', async()=>{
+ const actor=await mintAccountToken('mxmx_test_mapped_assets'),db=await getDb();
+ const site:UserPagesOwner={kind:'user',id:actor.userId!,handle:'mapped',folderId:'folder1'};
+ await seedArtifacts(db,{id:'image01',user_id:site.id,format:'image',visibility:'public',ancestor_ids:[]});
+ await seedArtifacts(db,{id:'page001',user_id:site.id,format:'html',visibility:'public',ancestor_ids:['folder1'],meta:JSON.stringify({refs:[{id:'image01'}],webAssets:[LAST]})});
+ await db.query("INSERT INTO web_assets(url_hash,url,object_key,content_type,bytes) VALUES($1,'https://images.example.test/last.png','test','image/png',1)",[LAST]);
+ const embedded=async()=>servesEmbeddedArtifact(site,(await getArtifactById('image01'))!);
+ expect(await embedded()).toBe(false);expect(await servesWebAsset(site,LAST)).toBe(true);
+ await setArtifact(db,'image01',{ancestor_ids:['folder1']});expect(await embedded()).toBe(true);
+ await setArtifact(db,'page001',{ancestor_ids:[]});expect(await embedded()).toBe(false);expect(await servesWebAsset(site,LAST)).toBe(false);
+});

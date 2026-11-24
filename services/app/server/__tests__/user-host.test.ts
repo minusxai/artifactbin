@@ -244,3 +244,63 @@ it('owner-host SQL follows current group ownership and hides dead or reclaimed i
  await setUsername(f.owner.userId!,'renamed');await owner('alice');expect((await read(base)).status).toBe(404);
  expect((await read('https://renamed.u.example.test')).status).toBe(200);
 });
+
+it('keeps named folder sites bound to a live owned id across duplicate names, moves and removal', async () => {
+ const user = await owner(), other = await owner('other'), db = await getDb(), server = app();
+ const inside = await page(user.token), outside = await page(user.token), quiet = await page(user.token, 'unlisted');
+ await db.query("INSERT INTO artifacts(id,user_id,format,title) VALUES ('root001',$1,'folder','Same'),('root002',$1,'folder','Same')", [user.id]);
+ await setArtifact(db, [inside.id, quiet.id], {ancestor_ids:['root001']});
+ await setArtifact(db, outside.id, {ancestor_ids:['root002']});
+ const named = 'https://notes.alice.u.example.test';
+ expect((await server.request(named+'/'+inside.id)).status).toBe(404);
+ await db.query("INSERT INTO user_site_roots(user_id,subdomain_label,folder_id) VALUES($1,'notes','root001')",[user.id]);
+ const listing = await (await server.request(named+'/')).text();
+ expect(listing).toContain(inside.id);
+ expect(listing).not.toContain(outside.id);
+ expect(listing).not.toContain(quiet.id);
+ expect((await server.request(named+'/'+quiet.id)).status).toBe(200);
+ expect((await server.request(named+'/'+outside.id)).status).toBe(404);
+ await setArtifact(db, inside.id, {ancestor_ids:['root002']});
+ expect((await server.request(named+'/a/'+inside.id+'/events/frame')).status).toBe(404);
+ await setArtifact(db, 'root001', {user_id:other.id});
+ expect((await server.request(named+'/')).status).toBe(404);
+ await setArtifact(db, 'root001', {user_id:user.id,deleted_at:{sql:'now()'}});
+ expect((await server.request(named+'/'+quiet.id)).status).toBe(404);
+ await db.query("DELETE FROM user_site_roots WHERE user_id=$1",[user.id]);
+ expect((await server.request(named+'/'+quiet.id)).status).toBe(404);
+});
+
+it('selects a direct public index and lists navigable direct folders without private or unlisted names', async () => {
+ const user=await owner(), db=await getDb(), server=app();
+ const index=await page(user.token,'public',{title:'Index',html:'<h1>Folder index</h1>'});
+ await db.query(`INSERT INTO artifacts(id,user_id,format,title,visibility) VALUES
+  ('fold001',$1,'folder','Same','public'),('fold002',$1,'folder','Same','public'),
+  ('fold003',$1,'folder','Private folder','private'),('fold004',$1,'folder','Quiet folder','unlisted')`,[user.id]);
+ await setArtifact(db,index.id,{ancestor_ids:['fold001']});
+ await db.query("INSERT INTO user_site_roots(user_id,subdomain_label,folder_id) VALUES($1,'',NULL)",[user.id]);
+ const listing=await (await server.request(base+'/')).text();
+ expect(listing).toContain('/folders/fold001');expect(listing).toContain('/folders/fold002');
+ expect(listing).not.toContain('fold003');expect(listing).not.toContain('fold004');expect(listing).not.toContain(index.id);
+ expect(await (await server.request(base+'/folders/fold001')).text()).toContain('Folder index');
+ expect(await (await server.request(base+'/folders/fold002')).text()).not.toContain('Folder index');
+ expect((await server.request(base+'/folders/fold003')).status).toBe(404);
+ expect((await server.request(base+'/folders/fold004')).status).toBe(200);
+});
+
+it('withholds a named-site SQL result if its mapping is removed during the read',async()=>{
+ const f=await fixture(), db=await getDb(), server=app(), engine=services().sql;
+ await setUsername(f.owner.userId!,'alice');
+ await db.query("INSERT INTO artifacts(id,user_id,format) VALUES ('foldsql',$1,'folder')",[f.owner.userId]);
+ await setArtifact(db,[f.page,f.staff],{ancestor_ids:['foldsql']});
+ await db.query("INSERT INTO user_site_roots VALUES ($1,'notes','foldsql')",[f.owner.userId]);
+ const run=engine.run.bind(engine);
+ const spy=vi.spyOn(engine,'run').mockImplementation(async input=>{
+   const result=await run(input);
+   await db.query("DELETE FROM user_site_roots WHERE user_id=$1",[f.owner.userId]);
+   return result;
+ });
+ try {
+   const res=await server.request('https://notes.alice.u.example.test/api/artifacts/'+f.page+'/sql',{method:'POST',headers:{origin:'null','content-type':'text/plain'},body:JSON.stringify({sql:'select name from staff',revision:'1'})});
+   expect(spy).toHaveBeenCalled();expect(res.status).toBe(404);expect(await res.text()).not.toContain('ada');
+ } finally {spy.mockRestore();}
+});

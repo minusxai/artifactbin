@@ -4,14 +4,15 @@ import {ANONYMOUS_ACTOR,ownerUsername} from '@/lib/accounts';
 import {getDb,PUBLIC_BASE_URL,TITLE_SLUG_SQL,USER_PAGES_HOST} from '@/lib/platform';
 import {canonicalArtifactPath,domainPostPath} from '@/lib/http';
 import {documentOwner,userPagesOrigin,type UserPagesOwner} from './hosts';
-type ServedRow={user_id:string|null;group_id?:string|null;visibility:string;format:string;deleted_at?:unknown};
+import {inSiteScope} from './site-roots';
+type ServedRow={ancestor_ids?:string[]|null;user_id:string|null;group_id?:string|null;visibility:string;format:string;deleted_at?:unknown};
 export const eligibleDocument=(row:ServedRow):boolean=>(row.visibility==='public'||row.visibility==='unlisted')&&row.format==='html'&&!row.deleted_at;
 export function servesDocument(owner:UserPagesOwner,row:ServedRow):boolean {
- return eligibleDocument(row)&&(owner.kind==='group'?row.group_id===owner.id:!row.group_id&&row.user_id===owner.id);
+ return eligibleDocument(row)&&inSiteScope(owner,row);
 }
 const ownerSql=(owner:UserPagesOwner)=>owner.kind==='group'?'group_id = $1':'group_id IS NULL AND user_id = $1';
-export async function publicHomeFiles(owner:UserPagesOwner){
- return (await (await getDb()).query<{id:string;format:string;title:string|null;version:number;updated_at:string}>(`SELECT id,format,title,version,updated_at FROM artifacts WHERE ${ownerSql(owner)} AND visibility='public' AND format='html' AND ${LIVE_ARTIFACT_SQL} ORDER BY updated_at DESC,id`,[owner.id])).rows;
+export async function publicHomeFiles(owner:UserPagesOwner,folderId=owner.folderId){
+ return (await (await getDb()).query<{id:string;format:string;title:string|null;version:number;updated_at:string}>(`SELECT id,format,title,version,updated_at FROM artifacts WHERE ${ownerSql(owner)} AND visibility='public' AND ${folderId===undefined?"format='html'":"format IN ('html','folder') AND ancestor_ids[cardinality(ancestor_ids)] IS NOT DISTINCT FROM $2::text"} AND ${LIVE_ARTIFACT_SQL} ORDER BY updated_at DESC,id`,folderId===undefined?[owner.id]:[owner.id,folderId])).rows;
 }
 /**
  * The page the host's root serves in place of the listing: the owner's EARLIEST live page titled "index" (any case;
@@ -19,15 +20,18 @@ export async function publicHomeFiles(owner:UserPagesOwner){
  * does there: when it is not a public HTML page the root is the listing, never a later "index". One indexed probe
  * (lib/platform/schema idx_artifacts_user_slug / idx_artifacts_group_slug).
  */
-export async function homePageId(owner:UserPagesOwner):Promise<string|null>{
+export async function homePageId(owner:UserPagesOwner,folderId=owner.folderId):Promise<string|null>{
  const scope=owner.kind==='group'?'group_id = $1 AND group_id IS NOT NULL':'user_id = $1 AND group_id IS NULL';
- const row=(await (await getDb()).query<{id:string;visibility:string;format:string}>(`SELECT id,visibility,format FROM artifacts WHERE ${scope} AND deleted_at IS NULL AND title IS NOT NULL AND ${TITLE_SLUG_SQL} = 'index' ORDER BY created_at,id LIMIT 1`,[owner.id])).rows[0];
+ const row=(await (await getDb()).query<{id:string;visibility:string;format:string}>(`SELECT id,visibility,format FROM artifacts WHERE ${scope} AND deleted_at IS NULL AND title IS NOT NULL ${folderId===undefined?'':"AND ancestor_ids[cardinality(ancestor_ids)] IS NOT DISTINCT FROM $2::text AND visibility='public' AND format='html'"} AND ${TITLE_SLUG_SQL} = 'index' ORDER BY created_at,id LIMIT 1`,folderId===undefined?[owner.id]:[owner.id,folderId])).rows[0];
  return row&&row.visibility==='public'&&row.format==='html'?row.id:null;
 }
+const subtreeSql=(owner:UserPagesOwner)=>owner.folderId?'AND ancestor_ids @> ARRAY[$3::text]':'';
+const subtreeParams=(owner:UserPagesOwner)=>owner.folderId?[owner.folderId]:[];
 const embeddedFormats=new Set(['image','file','pdf']);
 export async function servesEmbeddedArtifact(owner:UserPagesOwner,row:ArtifactRow):Promise<boolean>{
+ if(owner.folderId!==undefined && !inSiteScope(owner,row))return false;
  if(!embeddedFormats.has(row.format)||!await canReadArtifact(row,ANONYMOUS_ACTOR))return false;
- return (await (await getDb()).query(`SELECT 1 FROM artifacts WHERE ${ownerSql(owner)} AND visibility IN ('public','unlisted') AND format='html' AND ${LIVE_ARTIFACT_SQL} AND meta->'refs' @> $2::jsonb LIMIT 1`,[owner.id,JSON.stringify([{id:row.id}])])).rows.length>0;
+ return (await (await getDb()).query(`SELECT 1 FROM artifacts WHERE ${ownerSql(owner)} AND visibility IN ('public','unlisted') AND format='html' AND ${LIVE_ARTIFACT_SQL} ${subtreeSql(owner)} AND meta->'refs' @> $2::jsonb LIMIT 1`,[owner.id,JSON.stringify([{id:row.id}]),...subtreeParams(owner)])).rows.length>0;
 }
 /**
  * Whether the owner's host serves `/assets/<hash>`: one of its eligible pages names that image (meta.webAssets,
@@ -37,7 +41,7 @@ export async function servesEmbeddedArtifact(owner:UserPagesOwner,row:ArtifactRo
 export async function servesWebAsset(owner:UserPagesOwner,hash:string):Promise<boolean>{
  const db=await getDb(),pages=`FROM artifacts WHERE ${ownerSql(owner)} AND visibility IN ('public','unlisted') AND format='html' AND ${LIVE_ARTIFACT_SQL}`;
  if(!(await db.query('SELECT 1 FROM web_assets WHERE url_hash=$1',[hash])).rows.length)return false;
- return (await db.query(`SELECT 1 ${pages} AND meta->'webAssets' ? $2 LIMIT 1`,[owner.id,hash])).rows.length>0;
+ return (await db.query(`SELECT 1 ${pages} ${subtreeSql(owner)} AND meta->'webAssets' ? $2 LIMIT 1`,[owner.id,hash,...subtreeParams(owner)])).rows.length>0;
 }
 /** Bare hosts are copies: the app remains canonical, with no domain database lookup. */
 export async function canonicalDocumentUrl(row:Pick<ArtifactRow,'id'|'title'|'user_id'> & {group_id?:string|null}, personalHandle?:string|null):Promise<string>{

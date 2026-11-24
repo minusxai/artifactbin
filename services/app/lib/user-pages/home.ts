@@ -19,6 +19,7 @@ interface ProfileFile {
 /** The profile page route's answer for a guest — what the home page's listing needs from it. */
 export interface ProfileListingData {
   handle: string;
+  showFolders?: boolean;
   owner?: { id: string; image?: string | null };
   files: ProfileFile[];
 }
@@ -134,7 +135,9 @@ function profileListingHtml(data: ProfileListingData): string {
   const files = data.files.filter((f) => f.format !== 'folder');
   const count = files.filter((f) => f.format === 'html').length;
   const hero = listingHeroHtml(data.handle, count, data.owner);
-  return hero + (files.length === 0 ? NOTHING_HERE_HTML : shelfHtml(files));
+  const folders = data.showFolders ? data.files.filter(file => file.format === 'folder') : [];
+  const links = folders.map(file => `<li><a href="/folders/${encodeURIComponent(file.id)}">${escapeHtml(file.title ?? 'Untitled folder')}</a></li>`).join('');
+  return hero + (links ? `<nav aria-label="Folders"><ul>${links}</ul></nav>` : '') + (!folders.length && files.length === 0 ? NOTHING_HERE_HTML : shelfHtml(files));
 }
 
 export function renderDomainHome(input: DomainHomeInput): string {

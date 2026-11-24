@@ -16,7 +16,7 @@ type FolderNode = {id: string | null; name: string; parent: string | null; child
 
 /** Destination selection is local; the caller owns the authenticated move and refresh. */
 export function MoveToFolderDialog(props: {
-  title: string; artifactId: string; currentParentId: string | null; folders: ShelfRow[];
+  title: string; website?: boolean; artifactId?: string; currentParentId: string | null; folders: Pick<ShelfRow,'id'|'title'|'parent_id'|'ancestor_ids'>[];
   onMove: (id: string | null) => Promise<boolean>; onClose: () => void;
 }): JSX.Element {
   const [query, setQuery] = createSignal('');
@@ -42,7 +42,7 @@ export function MoveToFolderDialog(props: {
     return result;
   };
   const [expanded, setExpanded] = createSignal(new Set<string | null>([null, ...ancestors(props.currentParentId).map(node => node.id)]));
-  const blocked = (id: string | null) => id !== null && (id === props.artifactId || ancestors(id).some(node => node.id === props.artifactId)
+  const blocked = (id: string | null) => !!props.artifactId && id !== null && (id === props.artifactId || ancestors(id).some(node => node.id === props.artifactId)
     || props.folders.find(folder => folder.id === id)?.ancestor_ids?.includes(props.artifactId) === true);
   const isExpanded = (id: string | null) => !!query().trim() || expanded().has(id);
   // Keep node identities stable so expansion preserves the focused DOM row.
@@ -81,17 +81,17 @@ export function MoveToFolderDialog(props: {
     event.preventDefault();
   };
   const move = async () => {
-    if (busy() || blocked(selected()) || selected() === props.currentParentId) return;
+    if (busy() || blocked(selected()) || (!props.website && selected() === props.currentParentId)) return;
     setBusy(true); setError('');
-    try {if (!await props.onMove(selected())) setError('Could not move this item. Try another folder or retry.');}
-    catch {setError('Could not move this item. Try another folder or retry.');}
+    try {if (!await props.onMove(selected())) setError(props.website ? 'Could not save this folder. Try again.' : 'Could not move this item. Try another folder or retry.');}
+    catch {setError(props.website ? 'Could not save this folder. Try again.' : 'Could not move this item. Try another folder or retry.');}
     finally {setBusy(false);}
   };
-  return <Dialog title={`Move ${props.title}`} description="Choose a destination folder." size="md" busy={busy()} onClose={props.onClose} lockScroll
-    footer={<><Button variant="secondary" aria-label="Close folder picker" disabled={busy()} onClick={props.onClose}>Cancel</Button><Button disabled={busy() || blocked(selected()) || selected() === props.currentParentId} onClick={() => void move()}>{busy() ? 'Moving…' : 'Move here'}</Button></>}>
+  return <Dialog title={props.website ? props.title : `Move ${props.title}`} description="Choose a destination folder." size="md" busy={busy()} onClose={props.onClose} lockScroll
+    footer={<><Button variant="secondary" aria-label="Close folder picker" disabled={busy()} onClick={props.onClose}>Cancel</Button><Button disabled={busy() || blocked(selected()) || (!props.website && selected() === props.currentParentId)} onClick={() => void move()}>{props.website ? 'Use this folder' : busy() ? 'Moving…' : 'Move here'}</Button></>}>
     <SearchField label="Filter folders" placeholder="find a folder…" disabled={busy()} value={query()} onValue={setQuery} />
     <div class="mt-3 max-h-72 min-h-48 overflow-y-auto">
-      <div role="tree" aria-label="Destination folders" aria-busy={busy()}><For each={visible()}>{node => <div role="treeitem" aria-label={node.id === null ? 'Move to root' : `Move to ${node.name}`}
+      <div role="tree" aria-label="Destination folders" aria-busy={busy()}><For each={visible()}>{node => <div role="treeitem" aria-label={props.website ? node.name : node.id === null ? 'Move to root' : `Move to ${node.name}`}
         aria-level={ancestors(node.id).length + 1} aria-selected={selected() === node.id} aria-expanded={node.children.length ? isExpanded(node.id) : undefined} aria-disabled={blocked(node.id) || busy()}
         aria-current={props.currentParentId === node.id ? 'location' : undefined} tabIndex={selected() === node.id ? 0 : -1}
         onClick={() => select(node.id)} onKeyDown={event => keydown(event, node, visible().indexOf(node))}
