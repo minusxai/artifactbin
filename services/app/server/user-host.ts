@@ -6,8 +6,8 @@ import { ownerHostServes } from '@artifactbin/contracts/url-space';
 import { ownerHostSqlRead } from '@/lib/page-doors';
 import { getArtifactById } from '@/lib/artifacts';
 import { PUBLIC_BASE_URL, USER_PAGES_HOST, IS_DEV } from '@/lib/platform';
-import { isUserPagesHost, handleFromUserPagesHost, ownerForHandle, documentOwner, userPagesOrigin, publicHomeFiles, homePageId, eligibleDocument, servesDocument, servesEmbeddedArtifact, servesWebAsset, type UserPagesOwner } from '@/lib/user-pages';
-import { DOMAIN_HOME_CSP, renderDomainHome, type ProfileListingData } from '@/lib/user-pages';
+import { isUserPagesHost, ownerForHandle, siteAddress, siteOwner, hasPublicSiteAncestors, inSiteScope, documentOwner, userPagesOrigin, publicHomeFiles, homePageId, eligibleDocument, servesDocument, servesEmbeddedArtifact, servesWebAsset, type UserPagesOwner } from '@/lib/user-pages';
+import { DOMAIN_HOME_CSP, siteFilePath, renderDomainHome, type ProfileListingData } from '@/lib/user-pages';
 import { PayloadTooLarge, baseUrl, readBody, trustedForwarded } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
 import { runWithRequest } from '@/lib/platform';
@@ -49,7 +49,7 @@ export function viteMayAnswer(req: import('node:http').IncomingMessage, baseURL:
   const header = (name: string) => { const value = req.headers[name]; return Array.isArray(value) ? value.join(',') : value ?? null; };
   const host = trustedForwarded({ get: header }, 'x-forwarded-host') ?? req.headers.host ?? new URL(baseURL).host;
   if (!isUserPagesHost(host, USER_PAGES_HOST)) return true;
-  if (!handleFromUserPagesHost(host, USER_PAGES_HOST) || !['GET', 'HEAD'].includes(req.method ?? '') || !userHostStaticPath(new URL(req.url ?? '/', baseURL).pathname)) return false;
+  if (!siteAddress(host, USER_PAGES_HOST) || !['GET', 'HEAD'].includes(req.method ?? '') || !userHostStaticPath(new URL(req.url ?? '/', baseURL).pathname)) return false;
   for (const name of USER_HOST_CREDENTIAL_HEADERS) delete req.headers[name];
   return true;
 }
@@ -106,29 +106,35 @@ async function servePage(request: Request, id: string, hostname: string, owner: 
  * The root: the owner's "index" page in place, at `/` (serving homePageId), else a public-only listing,
  * read from the actual owner rather than creator attribution.
  */
-async function home(request: Request, hostname: string, owner: UserPagesOwner, stylesheets: (url: string) => Promise<string[]>): Promise<Response> {
- const index = await homePageId(owner);
+async function home(request: Request, hostname: string, owner: UserPagesOwner, stylesheets: (url: string) => Promise<string[]>, folderId=owner.folderId): Promise<Response> {
+ const index = await homePageId(owner,folderId);
  if (index) return privacy(await servePage(request, index, hostname, owner), false);
- const [files, styles, user] = await Promise.all([publicHomeFiles(owner), stylesheets(request.url), owner.kind === 'user' ? getUserById(owner.id) : null]);
+ const [files, styles, user] = await Promise.all([publicHomeFiles(owner,folderId), stylesheets(request.url), owner.kind === 'user' ? getUserById(owner.id) : null]);
  const app=PUBLIC_BASE_URL.replace(/\/+$/,'');
- const profile:ProfileListingData={handle:owner.handle,files,...(owner.kind==='user'?{owner:{id:owner.id,image:user && 'image' in user && user.image?`/api/users/${owner.id}/avatar`:null}}:{})};
+ const profile:ProfileListingData={handle:owner.handle,showFolders:folderId!==undefined,files,...(owner.kind==='user'?{owner:{id:owner.id,image:user && 'image' in user && user.image?`/api/users/${owner.id}/avatar`:null}}:{})};
  const html=renderDomainHome({hostname,owner:{username:owner.handle,name:user?.name??null},profile,stylesheets:styles,footerHref:`${app}/@${owner.handle}`});
  return new Response(request.method==='HEAD'?null:html,{headers:{'content-type':'text/html; charset=utf-8','cache-control':'no-store','content-security-policy':DOMAIN_HOME_CSP,'x-content-type-options':'nosniff','referrer-policy':'no-referrer'}});
 }
 
 /** A post: `/<id>` or `/<id>-<slug>`; any other slug is redirected to the canonical one on this host. */
-async function post(request: Request, segment: string, hostname: string): Promise<Response> {
+async function post(request: Request, segment: string, hostname: string, site: UserPagesOwner|null): Promise<Response> {
   let decoded: string;
   try { decoded = decodeURIComponent(segment); } catch { return notFound(); }
   const id = artifactIdFromSegment(decoded);
   if (!id) return notFound();
   const row = await getArtifactById(id);
   if (!row || !eligibleDocument(row)) return notFound();
-  const actual = await documentOwner(row);
+  if (site?.folderId !== undefined && !inSiteScope(site,row)) return notFound();
+  const actual = site && servesDocument(site,row) ? site : await documentOwner(row);
   const origin = actual && userPagesOrigin(actual.handle);
   if (!actual || !origin) return notFound();
+  if (!await hasPublicSiteAncestors(actual,row)) return notFound();
+  if (actual !== site) {
+    const destination = await siteOwner({handle:actual.handle,label:''});
+    if (!destination || !servesDocument(destination,row)) return notFound();
+  }
   const canonical = domainPostPath(row);
-  if (new URL(origin).hostname !== hostname) return privacy(new Response(null, {status:301,headers:{location:origin+canonical+new URL(request.url).search,'cache-control':'no-store'}}),row.visibility==='unlisted');
+  if (actual !== site && new URL(origin).hostname !== hostname) return privacy(new Response(null, {status:301,headers:{location:origin+canonical+new URL(request.url).search,'cache-control':'no-store'}}),row.visibility==='unlisted');
   if (decoded !== id && `/${decoded}` !== canonical) {
     return privacy(new Response(null, { status: 302, headers: { location: canonical + new URL(request.url).search, 'cache-control': 'no-store' } }),row.visibility==='unlisted');
   }
@@ -139,7 +145,7 @@ async function post(request: Request, segment: string, hostname: string): Promis
 async function documentRoute(request: Request, id: string, route: string, owner: UserPagesOwner): Promise<Response> {
   const method = request.method;
   const row = ID_RE.test(id) ? await getArtifactById(id) : null;
-  if (!row || !servesDocument(owner, row)) return notFound();
+  if (!row || !servesDocument(owner, row) || !await hasPublicSiteAncestors(owner,row)) return notFound();
   const get = method === 'GET';
   switch (route) {
     case 'events': return get ? call(eventsGet, await asGuest(request), id) : notFound();
@@ -150,7 +156,17 @@ async function documentRoute(request: Request, id: string, route: string, owner:
       const target=ref.startsWith('ref:')&&ID_RE.test(ref.slice(4))?await getArtifactById(ref.slice(4)):null;
       return target&&await servesEmbeddedArtifact(owner,target)?call(resolveGet,await asGuest(request),id):notFound();
     }
-    case 'assets': return get ? call(assetsGet, await asGuest(request), id) : notFound();
+    case 'assets': {
+      if (!get) return notFound();
+      const params = new URL(request.url).searchParams;
+      if (params.has('key')) return notFound();
+      const ref = params.get('u');
+      if (owner.folderId !== undefined && ref?.startsWith('ref:')) {
+        const target = await getArtifactById(ref.slice(4));
+        if (!target || !inSiteScope(owner,target) || !await hasPublicSiteAncestors(owner,target)) return notFound();
+      }
+      return call(assetsGet, await asGuest(request), id);
+    }
     default: return notFound();
   }
 }
@@ -185,7 +201,7 @@ async function embedded(request: Request, path: string, owner: UserPagesOwner): 
     // Exactly the thumbnail Shelf draws (the card JPEG); no re-render, archive, slide or key rides in.
     if (asked.get('format') !== 'jpg' || asked.get('mode') !== 'card') return notFound();
     const row = ID_RE.test(id) ? await getArtifactById(id) : null;
-    if (!row || !servesDocument(owner, row)) return notFound();
+    if (!row || !servesDocument(owner, row) || !await hasPublicSiteAncestors(owner,row)) return notFound();
     const url = new URL(request.url);
     url.search = '';
     for (const name of ['format', 'mode', 'v', 'r']) { const value = asked.get(name); if (value !== null) url.searchParams.set(name, value); }
@@ -241,9 +257,10 @@ export function userHostBoundary(options: UserHostOptions = {}): MiddlewareHandl
     const hostname = named?.toLowerCase().replace(/\.$/,'');
     const base=USER_PAGES_HOST;
     if (!hostname || !isUserPagesHost(hostname,base)) return next();
-    const handle=handleFromUserPagesHost(hostname,base);
-    if(!handle)return notFound();
-    const owner=await ownerForHandle(handle);
+    const address=siteAddress(hostname,base);
+    if(!address)return notFound();
+    const owner=await siteOwner(address);
+    if(!owner && (address.label || await ownerForHandle(address.handle)))return notFound();
     // Posts resolve their true owner first, so renamed/reclaimed names cannot relabel a page.
     const request = c.req.raw;
     const path = new URL(request.url).pathname;
@@ -261,8 +278,20 @@ export function userHostBoundary(options: UserHostOptions = {}): MiddlewareHandl
     }
     if (path === '/' && readable) return owner?withoutCookies(await home(request, hostname, owner, stylesheets)):notFound();
     if (readable && owner) {
+      const folderId = /^\/folders\/([A-Za-z0-9]+)\/?$/.exec(path)?.[1];
+      if (folderId) {
+        const folder = await getArtifactById(folderId);
+        if (!folder || folder.format!=='folder' || folder.deleted_at || folder.visibility==='private' || !inSiteScope(owner,folder) || !await hasPublicSiteAncestors(owner,folder)) return notFound();
+        return privacy(await home(request,hostname,owner,stylesheets,folderId),folder.visibility==='unlisted');
+      }
+    }
+    if (readable && owner) {
       const bytes = await embedded(request, path, owner);
-      if (bytes) return privacy(bytes);
+      if (bytes) {
+        const response = privacy(bytes);
+        if (owner.folderId !== undefined) response.headers.set('cache-control','no-store');
+        return response;
+      }
     }
 
     const sql=/^\/api\/artifacts\/([^/]+)\/sql$/.exec(path);
@@ -270,10 +299,14 @@ export function userHostBoundary(options: UserHostOptions = {}): MiddlewareHandl
       const id=sql[1]!;
       // Resolve the live handle and true owner at both ends of every read, including identity moves.
       const hostHolds=async()=>{
-        const liveOwner=await ownerForHandle(handle),row=await getArtifactById(id);
-        return !!liveOwner&&liveOwner.kind===owner.kind&&liveOwner.id===owner.id&&!!row&&servesDocument(liveOwner,row);
+        const liveOwner=await siteOwner(address),row=await getArtifactById(id);
+        return !!liveOwner&&liveOwner.kind===owner.kind&&liveOwner.id===owner.id&&liveOwner.folderId===owner.folderId&&!!row&&servesDocument(liveOwner,row)&&await hasPublicSiteAncestors(liveOwner,row);
       };
-      try{return privacy(await ownerHostSqlRead(request,id,hostHolds));}
+      const siteOrigin=new URL(PUBLIC_BASE_URL);
+      siteOrigin.hostname=hostname;
+      try{return privacy(await ownerHostSqlRead(request,id,hostHolds,{
+        owner,folderId:owner.folderId??null,origin:siteOrigin.origin,sitePath:siteFilePath,
+      }));}
       catch(error){if(error instanceof PayloadTooLarge)return privacy(withReadCors(error.response()));throw error;}
     }
 
@@ -283,7 +316,7 @@ export function userHostBoundary(options: UserHostOptions = {}): MiddlewareHandl
       catch (error) { if (error instanceof PayloadTooLarge) return privacy(withReadCors(error.response())); throw error; }
     }
     const segment = /^\/([^/]+)$/.exec(path)?.[1];
-    if (segment && readable) return withoutCookies(await post(request, segment, hostname));
+    if (segment && readable) return withoutCookies(await post(request, segment, hostname, owner));
     return notFound();
   };
 }

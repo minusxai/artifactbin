@@ -30,6 +30,19 @@ create index "verification_identifier_idx" on "auth"."verification" ("identifier
 
 -- schema "app" — owned by the app role; tables declared by lib/schema.ts
 
+CREATE TABLE IF NOT EXISTS app.user_site_roots (
+  user_id TEXT NOT NULL,
+  subdomain_label TEXT NOT NULL,
+  folder_id TEXT,
+  PRIMARY KEY (user_id, subdomain_label)
+);
+
+ALTER TABLE app.user_site_roots ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL;
+
+ALTER TABLE app.user_site_roots ADD COLUMN IF NOT EXISTS subdomain_label TEXT NOT NULL;
+
+ALTER TABLE app.user_site_roots ADD COLUMN IF NOT EXISTS folder_id TEXT;
+
 CREATE TABLE IF NOT EXISTS app.legacy_page_migrations (
   artifact_id TEXT NOT NULL,
   backup JSONB NOT NULL,

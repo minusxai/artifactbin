@@ -16,7 +16,7 @@
 import {QUERY_TIMEOUT_MS} from '@/lib/platform';
 import {readLifetime} from '@/lib/datasets';
 import { DatasetAccessError } from './errors';
-import { SQL_READ_LIMITS, type ColumnType, type DatasetColumn, type Scalar } from '@artifactbin/contracts/sql';
+import { SQL_READ_LIMITS, type ColumnType, type DatasetColumn, type Scalar, type Row } from '@artifactbin/contracts/sql';
 import type { SqlFailureCode } from '@artifactbin/contracts/sql-failures';
 import { CatalogQueryFailure, executeMounted, type CatalogMount } from '@/lib/datasets';
 import { readsOf, TimedOut } from '@artifactbin/sql/core';
@@ -57,7 +57,7 @@ export function pageSqlMounts(loaded: readonly SqlLinkedDataset[], selected: Rea
  * `aggregates: 'visible'` (the page SQL door, ./page-sql-door): no `allow_aggregations` gate; the reader aggregates
  * over the rows its role view shows, which is all a mount ever holds.
  */
-export async function runPageSql(loaded: readonly SqlLinkedDataset[], call: PageSqlCall, signal: AbortSignal, options: { wallTimeoutMs?:number;aggregates?: 'gated' | 'visible';retainSelected?:(links:ReadonlySet<string>)=>void } = {}): Promise<PageSqlAnswer> {
+export async function runPageSql(loaded: readonly SqlLinkedDataset[], call: PageSqlCall, signal: AbortSignal, options: { files?:{columns:DatasetColumn[];load:()=>Promise<Row[]>};wallTimeoutMs?:number;aggregates?: 'gated' | 'visible';retainSelected?:(links:ReadonlySet<string>)=>void } = {}): Promise<PageSqlAnswer> {
   let result;
   const life=readLifetime(signal,options.wallTimeoutMs);
   signal=life.signal;
@@ -65,6 +65,7 @@ export async function runPageSql(loaded: readonly SqlLinkedDataset[], call: Page
   try{
   try {
     const relations = loaded.flatMap((l) => pageSqlMounts([l], new Set([l.link]), false).map((m) => ({ link: l.link, schema: m.schema, table: m.name, columns: m.columns })));
+    if(options.files)relations.push({link:'_files',schema:'main',table:'_files',columns:options.files.columns});
     let selected: Set<string>;
     // Which loaded datasets the statement reads: SQLite's own analysis over their shapes, no rows (sql readsOf).
     const check = () => { signal.throwIfAborted(); if (performance.now() >= deadline) throw new Error('sql_deadline'); };
@@ -78,7 +79,8 @@ export async function runPageSql(loaded: readonly SqlLinkedDataset[], call: Page
     signal.throwIfAborted();
     options.retainSelected?.(selected);
     const mounts = pageSqlMounts(loaded, selected, options.aggregates !== 'visible');
-    result = await executeMounted(mounts, call.sql, { ...call.params }, { limit: SQL_READ_LIMITS.rows, timeoutMs: QUERY_TIMEOUT_MS, wallTimeoutMs:life.remaining(), outputBytes: SQL_READ_LIMITS.outputBytes, signal });
+    const tables=options.files&&selected.has('_files')?[...mounts,{schema:'main',name:'_files',columns:options.files.columns,rows:await life.step(options.files.load())}]:mounts;
+    result = await executeMounted(tables, call.sql, { ...call.params }, { limit: SQL_READ_LIMITS.rows, timeoutMs: QUERY_TIMEOUT_MS, wallTimeoutMs:life.remaining(), outputBytes: SQL_READ_LIMITS.outputBytes, signal });
   } catch (e) {
     if (e instanceof CatalogQueryFailure && e.tooLarge) return refuse('result_too_large', TOO_LARGE);
     // The engine never answered: its text (a transport error) is not the reader's to see.

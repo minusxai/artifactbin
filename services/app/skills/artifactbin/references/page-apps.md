@@ -49,6 +49,8 @@ if(!writes)saveButton.disabled=true;
 carried rows), `writes` only in the app (dataset rules still decide). Do not sniff `window.parent` or the runtime's
 own tags.
 
+Only on a public website, join read-only `_files(id,parent_id,title,format,url,created_at,updated_at,views,likes)` to stored datasets. Rows follow live public folders and files under the owner’s site root. Direct children have NULL parent_id. HTML and folder URLs open the website, other formats the app. Views count unique visitors per UTC day. Likes count active accepted likes. A declared link named `_files` (any case) takes precedence.
+
 ## Opening a page with values
 
 A link with `$` values opens that screen for everyone: `route.href(...)`. A link with

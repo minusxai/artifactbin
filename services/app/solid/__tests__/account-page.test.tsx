@@ -11,6 +11,7 @@ function stubAccountFetch({ account = () => Response.json({ username: 'owner', i
   account?: () => Response | Promise<Response>; tokens?: unknown[]; calls?: string[] } = {}) {
   stubFetch({
     '/api/page/account': account,
+    '/api/my/website': {roots:[], folders:[]},
     '/api/my/people': { autoAccept: false, unread: 0, next: null, blocks: [{ user_id: 'blocked', name: 'Blocked Reader', username: 'handle' }], notifications: [] },
     '/api/my/tokens': { tokens },
   }, { session: SESSION, fallback: () => Response.json({}), onCall: (url, init) => { calls?.push(`${init?.method ?? 'GET'} ${url}`); } });
@@ -30,7 +31,7 @@ it('loads the account handle late while keeping profile controls without the ret
   expect(view.container.querySelector('[data-avatar-circle]')).toHaveTextContent('S');
   expect(view.container.querySelector('img[src="/api/users/usr_1/avatar?v=1"]')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Remove photo' })).toBeInTheDocument();
-  expect(screen.getByRole('link',{name:'https://owner.u.example.test'})).toHaveAttribute('href','https://owner.u.example.test');
+  expect(await screen.findByRole('link',{name:'https://owner.u.example.test'})).toHaveAttribute('href','https://owner.u.example.test');
   expect(vi.mocked(fetch).mock.calls.some(([url])=>String(url).includes('/api/my/domain'))).toBe(false);
   expect(screen.queryByRole('heading', { name: 'Data' })).not.toBeInTheDocument();
   expect(screen.queryByLabelText('Upload a CSV')).not.toBeInTheDocument();

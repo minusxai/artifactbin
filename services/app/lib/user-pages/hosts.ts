@@ -1,6 +1,6 @@
 import {isValidHandle} from '@/lib/accounts';
 import {getDb, PUBLIC_BASE_URL, USER_PAGES_HOST} from '@/lib/platform';
-export interface UserPagesOwner {kind:'user'|'group';id:string;handle:string}
+export interface UserPagesOwner {kind:'user'|'group';id:string;handle:string;folderId?:string|null}
 export interface UserPagesSite {app:string;host:string|null}
 export function userPagesLabel(handle:string|null|undefined):string|null{return typeof handle==='string'&&isValidHandle(handle)?handle.replaceAll('_','-'):null;}
 export function handleFromLabel(label:string):string|null {

@@ -111,17 +111,17 @@ const mountKey=(m:CatalogMount)=>sha([m.stored.objectKey??null,m.stored.columns,
  * repeated reads of unchanged rows under the same views answer from the engine's prepared database. The caller has
  * authorized every mount (and checks its fences after); the answer is at most `limit` rows (`truncated` past it).
  */
-export async function executeMounted(mounts:readonly CatalogMount[],sql:string,params:Record<string,Scalar>,opts:MountedQueryOptions):Promise<CatalogResult>{
+export async function executeMounted(mounts:readonly (CatalogMount | {schema:string;name:string;columns:DatasetTable['columns'];rows:Row[]})[],sql:string,params:Record<string,Scalar>,opts:MountedQueryOptions):Promise<CatalogResult>{
  const life=readLifetime(opts.signal,opts.wallTimeoutMs);
  try{
  life.check();
  requireParams(sql,params);
- const keys=mounts.map(mountKey);
+ const keys=mounts.map(m=>'rows' in m?sha(['inline',m.columns,m.rows]):mountKey(m));
  const catalog:ReadCatalog={defaultSchema:'main',tables:mounts.map((m,i)=>({schema:m.schema,name:m.name,columns:m.columns,source:`mount_${i}`,key:keys[i]!}))};
  const signal=life.signal;
  const result=await keyedRead({catalog,sql,params,limit:opts.limit,timeoutMs:opts.timeoutMs,...(opts.outputBytes!==undefined?{outputBytes:opts.outputBytes}:{}),...(opts.execute?{execute:opts.execute}:{})},async()=>Object.fromEntries(await Promise.all(mounts.map(async(m,i)=>
   // Readers missing the same mount at once (a live refetch after a write) load, filter and send its rows once.
-  [`mount_${i}`,{rows:await mountRows(keys[i]!,signal,()=>loadMount(m,opts.objects)),columns:m.columns}] as const,
+  [`mount_${i}`,{rows:'rows' in m?m.rows:await mountRows(keys[i]!,signal,()=>loadMount(m,opts.objects)),columns:m.columns}] as const,
  ))),life);
  life.check();
  return result;

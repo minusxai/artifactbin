@@ -2,6 +2,8 @@
  * THE PAGE'S SQL DOOR (`POST /api/artifacts/<page>/sql`, `sql` in the page runtime), with what every page door
  * shares: the request's reader, the after-read page verification and the write's commit guard.
  */
+import {siteFiles,type SiteFilesScope} from './site-files';
+export type {SiteFilesScope} from './site-files';
 import {deadlineStep} from './deadline';
 import {pageVerifier} from './verify';
 import {ACTOR_HEADER, REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts/actor';
@@ -113,21 +115,21 @@ async function opaqueSqlRead(request:Request,pageId:string,admission:Admission):
  * admission and again after the canonical verifier. No body field or credential chooses the actor or write mode.
  * This is separate from pageSqlDoor: canonical opaque requests still require an export capture key.
  */
-export async function ownerHostSqlRead(request:Request,pageId:string,hostHolds:()=>Promise<boolean>):Promise<Response>{
+export async function ownerHostSqlRead(request:Request,pageId:string,hostHolds:()=>Promise<boolean>,site?:SiteFilesScope):Promise<Response>{
  const admitted=admission(request);
  try{
  if(!await admitted.step(hostHolds()))return unreadable();
  const headers=new Headers(request.headers);
  for(const name of [...CREDENTIAL_HEADERS,'idempotency-key'])headers.delete(name);
  const guest=new Request(request.url,{method:'POST',headers,body:await admitted.step(readBody(request)),signal:request.signal});
- const answered=await runWithRequest(guest,()=>answerSql(guest,pageId,admitted,ANONYMOUS_ACTOR,hostHolds));
+ const answered=await runWithRequest(guest,()=>answerSql(guest,pageId,admitted,ANONYMOUS_ACTOR,hostHolds,site));
  const out=new Headers(answered.headers);
  out.set('access-control-allow-origin','*');out.delete('access-control-allow-credentials');
  return new Response(answered.body,{status:answered.status,statusText:answered.statusText,headers:out});
  }catch{return unreadable();}finally{admitted.close();}
 }
 /** `reader`: a host-selected anonymous reader or capture requester, always read-only; otherwise the request's own. */
-async function answerSql(request:Request,pageId:string,admission:Admission,reader?:AccessActor,hostHolds?:()=>Promise<boolean>):Promise<Response>{
+async function answerSql(request:Request,pageId:string,admission:Admission,reader?:AccessActor,hostHolds?:()=>Promise<boolean>,site?:SiteFilesScope):Promise<Response>{
  const readStartedAt=admission.started;
  // A dispatched read of a page this reader may read that ran out of time, or kept racing a write, says so. Anything
  // else (admission, a write, the page's or host's own checks after the read) keeps the uniform answer.
@@ -152,7 +154,8 @@ async function answerSql(request:Request,pageId:string,admission:Admission,reade
   const idempotencyKey=request.headers.get('idempotency-key')??undefined;
   if(idempotencyKey!==undefined&&!IDEMPOTENCY_KEY.test(idempotencyKey))return json({error:'invalid_idempotency_key'},400,headers);
   const page=body.revision===head.revision?head:await admission.step(readHtmlPage(actor,pageId,body.revision));
-  const scope={admission,pageId,readStartedAt,retainReadDeadline:(deadline:number)=>{readDeadline=deadline;readSignal=AbortSignal.any([request.signal,AbortSignal.timeout(Math.max(0,Math.floor(deadline-performance.now())))]);},...(idempotencyKey?{idempotencyKey}:{}),readOnly:!!reader||body.readOnly===true||page.revision!==head.revision,commitGuard:pageCommitGuard(pageId,actor,admitted)};
+  const files=site&&!page.links.some(link=>link.name.toLowerCase()==='_files')?siteFiles(site):undefined;
+  const scope={files,admission,pageId,readStartedAt,retainReadDeadline:(deadline:number)=>{readDeadline=deadline;readSignal=AbortSignal.any([request.signal,AbortSignal.timeout(Math.max(0,Math.floor(deadline-performance.now())))]);},...(idempotencyKey?{idempotencyKey}:{}),readOnly:!!reader||body.readOnly===true||page.revision!==head.revision,commitGuard:pageCommitGuard(pageId,actor,admitted)};
   const verifyPage=pageVerifier(request,pageId,actor,reader,admitted);
   for(let attempt=1;;attempt++){
    try{
@@ -169,6 +172,7 @@ async function answerSql(request:Request,pageId:string,admission:Admission,reade
     admission.check();checkRead();executing=false;
     await admission.step(readSignal?deadlineStep(readSignal,verifyPage(page.revision)):verifyPage(page.revision));
     if(hostHolds&&!await admission.step(readSignal?deadlineStep(readSignal,hostHolds()):hostHolds()))throw Error('page_unavailable');
+    if(files&&readSignal)await admission.step(deadlineStep(readSignal,files.verify()));
     // The last guard: nothing past the SQL output budget leaves, however it was produced.
     const text=JSON.stringify(reply.body);
     if(new TextEncoder().encode(text).length>SQL_READ_LIMITS.outputBytes)return json({error:'result_too_large',message:`an answer is at most ${SQL_READ_LIMITS.outputBytes} bytes; select fewer rows or columns`},413,headers);
