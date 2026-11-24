@@ -207,7 +207,7 @@ async function scopedTarget(c: NonNullable<ReturnType<typeof selected>>, viewer:
   return { namespace: database + '/' + group.id, viewing_as: label(group), groups: explicit ? [] : groups };
 }
 
-async function run(reader: AccessActor | ConnectorViewer, text: string, params: Readonly<Record<string, Scalar>>, namespace: string | undefined, signal: AbortSignal, choice?: ScopeChoice): Promise<ConnectionSqlReply> {
+async function run(reader: AccessActor | ConnectorViewer, text: string, params: Readonly<Record<string, Scalar>>, namespace: string | undefined, signal: AbortSignal, choice?: ScopeChoice, rows: number = SQL_READ_LIMITS.rows): Promise<ConnectionSqlReply> {
   const life=readLifetime(signal);
   let scopedPage = false;
   try {
@@ -218,7 +218,7 @@ async function run(reader: AccessActor | ConnectorViewer, text: string, params: 
     const scope = await life.step(scopedTarget(c, viewer, choice));
     const metadata = choice && scope.viewing_as ? { viewing_as: scope.viewing_as, reader_id: viewer.id } : {};
     try {
-      const answer = await c.connection.query({ text, params, viewer, namespace: scope.namespace, limits: { rows: SQL_READ_LIMITS.rows }, signal: life.signal });
+      const answer = await c.connection.query({ text, params, viewer, namespace: scope.namespace, limits: { rows }, signal: life.signal });
       life.check();
       return { status: 200, body: { ...metadata, columns: answer.columns, rows: answer.rows, ...(answer.truncated ? { truncated: true } : {}), source: liveSource() } };
     } catch (e) {
@@ -323,12 +323,15 @@ export async function runDeclaredConnectionQuery(viewer: ConnectorViewer, declar
 }
 
 /** An agent's statement, as its signed-in account, passed through; `namespace` (what follows `default:`) the database. */
-export async function agentConnectionSql(actor: AccessActor, raw: { sql?: unknown; params?: unknown; namespace?: unknown }, signal: AbortSignal): Promise<ConnectionSqlReply> {
+export async function agentConnectionSql(actor: AccessActor, raw: { sql?: unknown; params?: unknown; namespace?: unknown; limit?: unknown }, signal: AbortSignal): Promise<ConnectionSqlReply> {
   if (!reader(actor)) return AGENT_SIGN_IN;
   const call = checkedCall(raw);
   if ('status' in call) return call;
   if (raw.namespace !== undefined && typeof raw.namespace !== 'string') return reply('validation_failed', 'namespace is what follows default:, a database name');
-  return run(actor, call.sql, call.params, (raw.namespace as string | undefined) || undefined, signal);
+  const limit = raw.limit === undefined ? 1_000 : raw.limit;
+  if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1 || limit > SQL_READ_LIMITS.rows)
+    return reply('validation_failed', `limit must be an integer from 1 to ${SQL_READ_LIMITS.rows}`);
+  return run(actor, call.sql, call.params, raw.namespace || undefined, signal, undefined, limit);
 }
 
 /** The tables and columns a signed-in person can read in `namespace`'s database (absent: the configured one). */

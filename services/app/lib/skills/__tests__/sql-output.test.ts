@@ -19,12 +19,23 @@ const options = () => ({env: syntheticEnv('https://example.test',root),
     if (route === '/api/artifacts/PAGE12') return Response.json({format: 'html', version: 3});
     if (route === '/api/artifacts/DATA12/query') return Response.json({results: [{columns, rows, next_cursor: null}]});
     if (route === '/api/artifacts/PAGE12/sql') return Response.json({columns, rows});
-    if (route === '/api/default-connection/sql') return Response.json({columns, rows, truncated: true});
+    if (route === '/api/default-connection/sql') {
+      const limit = sent.at(-1)!.body.limit ?? rows.length;
+      return Response.json({columns, rows: rows.slice(0, limit), truncated: true});
+    }
     return Response.json({error: 'not_found'}, {status: 404});
   }});
 const query = (target: string, sql: string | undefined, values: Record<string, unknown>): Promise<any> =>
   sqlCommand({sub: 'query', values, positionals: sql === undefined ? [target] : [target, sql]}, options());
 beforeEach(async () => { root = await tempDir('sql-output-',onTestFinished); sent = []; });
+
+it('sends --limit to the default connection and preserves its truncated marker', async () => {
+  const sql = 'select * from monthly';
+  expect(await query('default:wh', sql, {limit: '2'})).toEqual({
+    columns, rows: rows.slice(0, 2), truncated: true,
+  });
+  expect(sent).toEqual([{route: '/api/default-connection/sql', body: {sql, namespace: 'wh', limit: 2}}]);
+});
 
 it('writes every row of a read to a new CSV and prints the count, columns and a cut sample instead', async () => {
   const out = path.join(root, 'monthly.csv');

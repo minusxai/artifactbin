@@ -169,6 +169,19 @@ it('lets an agent read its schema and query it as its account, never anonymously
   expect((await agent(null, {})).status).toBe(401);
 });
 
+it('bounds agent reads at the requested limit or 1,000 rows by default', async () => {
+  const alice = await person('alice');
+  const sql = 'select g from guarded.many order by g';
+  for (const [limit, count] of [[undefined, 1_000], [1, 1], [2, 2], [10_000, 10_000]] as const) {
+    const response = await agent(alice, {sql, limit});
+    const {rows} = ok(response);
+    expect([rows.length, rows.at(-1), response.body.truncated]).toEqual([count, {g: count}, true]);
+  }
+  for (const limit of [0, -1, 10_001, 1.5, '2', null]) {
+    expect(await agent(alice, {sql, limit})).toMatchObject({status: 400, body: {error: 'validation_failed'}});
+  }
+});
+
 it('shows the settings row without the secret, and tests the connection for signed-in sessions only, within the allowance', async () => {
   const { alice } = await readers();
   const status = await statusGet(request('/api/default-connection', { token: alice.token }));
