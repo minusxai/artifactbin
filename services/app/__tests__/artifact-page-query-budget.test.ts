@@ -17,7 +17,9 @@ import { describe, expect, it } from 'vitest';
 import { createUser, ensureUsername, mintToken } from '@/lib/accounts';
 import { link } from '@/lib/social';
 import { getDb } from '@/lib/platform';
-import { recordStatements, useAppHarness } from '@/__tests__/harness';
+import { serveRawDocument } from '@/lib/document-serving';
+import { mintExportKey } from '@/lib/export';
+import { recordStatements, request, useAppHarness } from '@/__tests__/harness';
 import { createAppServer } from '@/server/app';
 import { BOOTSTRAP_ID } from '@/server/app-shell';
 import { dropShares, seedShares } from '@/__tests__/rows';
@@ -199,4 +201,14 @@ for (const door of ['json', 'html'] as const) describe(`a page view through the 
       expect((await view('json', w.doc, session(w.viewer), '?part=chrome')).status).toBe(404);
     }
   });
+});
+
+it('loads a raw capture and its live revision in one statement', async () => {
+  const { doc: id } = await world();
+  const raw = request(`/a/${id}/raw?key=${encodeURIComponent(mintExportKey(id))}`);
+  const { value, sql } = await recordStatements(() => serveRawDocument(raw, { id }));
+  expect(value.status).toBe(200);
+  expect(await value.text()).toContain('>Body.</p>');
+  const reads = sql.filter(statement => /\bFROM (artifacts|region_states)\b/i.test(statement));
+  expect(reads, sql.join('\n')).toHaveLength(1);
 });

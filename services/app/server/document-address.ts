@@ -8,15 +8,12 @@
  *  - `anonymousDocumentHead(request, pathname)`: the head a link-preview bot sees, only for an anonymous reader's document.
  */
 import { ID_RE, runWithRequest } from '@/lib/platform';
-import { type ArtifactRow, canReadArtifact, type PageRead, readPageRow, slugAddress, slugAddressTarget } from '@/lib/artifacts';
-import { effectiveRole, requestAccessFacts } from '@/lib/artifact-access';
-import { artifactPageAnswer, type ArtifactPageAnswer, documentHeadFor, type DocumentFrame } from '@/lib/document-serving';
+import { canReadArtifact, readPageRow, slugAddress, slugAddressTarget } from '@/lib/artifacts';
+import { artifactPageAnswer, type ArtifactPageAnswer, documentHeadFor, openDocument, type AddressDocument, type DocumentFrame } from '@/lib/document-serving';
 import { artifactViewPath, canonicalArtifactPath, parsePrettyPath, type PagesSite } from '@/lib/http';
 import { ANONYMOUS_ACTOR } from '@/lib/accounts';
 import { sessionActor } from '@/lib/authentication';
-import { verifyExportKey } from '@/lib/export';
 import { canonicalDocumentUrl, userPageUrlForOwner } from '@/lib/user-pages';
-import { canEdit } from '@artifactbin/contracts/sharing';
 import { ROUTES } from './routes.generated';
 
 /** Which document, if any, a path names — `/a/<id>` or a pretty URL. */
@@ -30,7 +27,12 @@ export function candidateDocument(pathname: string): { id: string } | null {
 }
 
 /** A document row this request already fetched and admitted (admitDocumentAddress), and its canonical path when it was computed. */
-export interface Admitted { row: ArtifactRow; canonicalPath?: string; revision?: PageRead['revision']; publishedUrl?: string | null; /** The title-slug address it was resolved from, served there as is. */ servedPath?: string }
+export interface Admitted extends AddressDocument {
+  canonicalPath?: string;
+  publishedUrl?: string | null;
+  /** The title-slug address it was resolved from, served there as is. */
+  servedPath?: string;
+}
 type Admission = { status: 200 | 404; address?: string; canonical?: string; admitted?: Admitted };
 
 /**
@@ -55,29 +57,18 @@ export async function admitDocumentAddress(request: Request): Promise<Admission>
   if (!found && !slugged) return { status: 200 };
   const actor = await sessionActor(request).catch(() => null);
   const admit = async (id: string, bySlug: boolean): Promise<Admission> => {
-    // The row and its live revision in one statement (lib/artifacts readPageRow), for the page's answer below.
-    const read = await readPageRow(id, { includePersonalOwner: true });
-    if (!read) return { status: 404 };
-    const { row, revision } = read;
-    // A key skips canonical healing, but only a valid key admits the page.
-    const key = url.searchParams.get('key');
-    if (!url.pathname.endsWith('/edit') && key && verifyExportKey(row.id, key)) return { status: 200, admitted: { row, revision } };
-    // The page's answer (artifactPageAnswer) decides this actor's role on this request again: one memo of its access facts serves both.
-    const facts = actor ? requestAccessFacts(request, actor, row.id) : undefined;
-    const editingDataset = row.format === 'dataset' && url.pathname.endsWith('/edit');
-    if (editingDataset && (!actor || !canEdit(await effectiveRole(row, actor, facts)))) return { status: 404 };
-    if (!(await canReadArtifact(row, actor ?? ANONYMOUS_ACTOR, facts))) return { status: 404 };
-    // Admitted, by this request's own actor: the page's answer reuses the row and this decision.
-    if (url.searchParams.has('key')) return { status: 200, admitted: { row, revision } };
-    const personalOwner = read.personalOwner;
+    const opened = await openDocument(request, id, { surface: 'address', actor });
+    if (opened === 'not_found') return { status: 404 };
+    if (url.searchParams.has('key')) return { status: 200, admitted: opened };
+    const { row, personalOwner } = opened.read;
     const personalHandle = personalOwner?.handle ?? null;
     const canonicalPath = canonicalArtifactPath(row, personalHandle);
-    const canonical = canonicalPath + (editingDataset ? '/edit' : '');
+    const canonical = canonicalPath + (opened.editingDataset ? '/edit' : '');
     const publishedUrl = row.group_id ? undefined : userPageUrlForOwner(row, personalOwner?.canPublish && personalHandle && row.user_id
       ? { id: row.user_id, handle: personalHandle, kind: 'user' } : null);
     // A title-slug address stays in the address bar: it is the address the person chose to share.
     const servedPath = bySlug ? artifactViewPath(url.pathname) : undefined;
-    return { status: 200, admitted: { row, canonicalPath, revision, publishedUrl, ...(servedPath ? { servedPath } : {}) }, canonical: await canonicalDocumentUrl(row, personalHandle), ...(!bySlug && canonical !== url.pathname ? { address: canonical } : {}) };
+    return { status: 200, admitted: { ...opened, canonicalPath, publishedUrl, ...(servedPath ? { servedPath } : {}) }, canonical: await canonicalDocumentUrl(row, personalHandle), ...(!bySlug && canonical !== url.pathname ? { address: canonical } : {}) };
   };
   const byId = found ? await admit(found.id, false) : { status: 404 as const };
   if (byId.status === 200 || !slugged) return byId;
@@ -109,7 +100,7 @@ export async function pageBootstrap(request: Request, pathname: string, admitted
   // The row admitDocumentAddress already fetched and admitted for this request rides along: one fetch, one check.
   const document = async (id: string) => {
     const answer = await runWithRequest(request, () => artifactPageAnswer(request, id, {
-      admitted: admitted?.row, admittedRevision: admitted?.revision, admittedCanonical: admitted?.canonicalPath, admittedPublishedUrl: admitted?.publishedUrl, pages,
+      opened: admitted, pages,
     }));
     return answer.status === 200 ? answer : null;
   };
@@ -126,7 +117,7 @@ export async function pageBootstrap(request: Request, pathname: string, admitted
      */
     const own = admitted !== undefined && [admitted.canonicalPath, admitted.servedPath].includes(`/${segments.join('/')}`);
     const res = own || !profileData ? null : await runWithRequest(request, () => profileData(request, { params: Promise.resolve({ user: segments[0]!, ...(segments.length > 1 ? { path: segments.slice(1).join('/') } : {}) }) }));
-    const profile = own ? { kind: 'artifact', id: admitted!.row.id } : res?.ok ? await res.json() as { kind?: string; id?: string } : null;
+    const profile = own ? { kind: 'artifact', id: admitted!.read.row.id } : res?.ok ? await res.json() as { kind?: string; id?: string } : null;
     if (!profile) return null;
     const artifact = profile.kind === 'artifact' && profile.id ? await document(profile.id) : null;
     return { data: { path: pathname, profile, ...(artifact ? { artifact: artifact.body } : {}) }, ...documentParts(artifact) };

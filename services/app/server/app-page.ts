@@ -88,7 +88,7 @@ export function createAppPage(opts: { webDir: string; indexHtml?: (url: string) 
     // gets the refusal that names the way on.
     if (code === 404 && !wantsHtml(c.req.raw)) return apiNotFound(c);
     const origin = baseUrl(c.req.raw);
-    const body = renderAppPage(html, { origin, data, frame, canonical, build, appRow: admitted?.row ?? null, preloadListing });
+    const body = renderAppPage(html, { origin, data, frame, canonical, build, appRow: admitted?.read.row ?? null, preloadListing });
     // Brotli for a client that takes it (server/content-encoding); identity otherwise, as before.
     return compressDynamic(c.req.raw, new Response(body, { status: code, headers: {
       'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...APP_SECURITY_HEADERS,

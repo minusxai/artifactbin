@@ -3,8 +3,8 @@ import {htmlAppearance} from '@/lib/html-page';
 import {designSystemChoice} from '@/lib/html-systems';
 import {artifactPwaEnabled} from './artifact-pwa.server';
 import { nativeHtmlTitle } from './native-html.server';
-import { liveConnectionOf, publicCatalogOf, loadDatasetRows } from '@/lib/datasets';
-import { datasetReadAccess, datasetRowsFor, sqlRefusal, viewCatalog } from '@/lib/dataset-permissions';
+import { loadDatasetRows } from '@/lib/datasets';
+import { datasetRowsFor, sqlRefusal } from '@/lib/dataset-permissions';
 /**
  * The owner/editor SHELL's props for one document — everything ArtifactDocument
  * used to compute on the server: the ACL (uniform 404), the exporter's signed
@@ -20,16 +20,15 @@ import { datasetReadAccess, datasetRowsFor, sqlRefusal, viewCatalog } from '@/li
  * A native HTML document is assembled only on its runner origin. This answer
  * carries its original sharing/comment shell and a ticketed frame, never its source.
  */
-import { admitRead, archivedVersionFor, currentPage, readPageRow, servedRow, UnservableDocument, accessMoved, getArtifactHeaderById, hasInvitedUsersFor, type ArtifactHeader, type ArtifactRow, type PageRead } from '@/lib/artifacts';
-import { holdsCreatingToken, effectiveRole, managesSharing, requestAccessFacts } from '@/lib/artifact-access';
+import { admitRead, UnservableDocument, getArtifactHeaderById, hasInvitedUsersFor, type ArtifactHeader, type ArtifactRow } from '@/lib/artifacts';
+import { effectiveRole, managesSharing } from '@/lib/artifact-access';
 import { folderPageFor, accountWorkspaceFor } from '@/lib/workspace';
 import { resolveStoredStoryDesign } from '@/lib/html-systems';
-import { verifyExportKey } from '@/lib/export';
 import { baseUrl, json, parseCookie, canonicalArtifactPath } from '@/lib/http';
 import { forkedFromCredit } from './fork-credit.server';
 import { ID_RE } from '@/lib/platform';
 import { avatarUrl } from '@/lib/avatars';
-import { browserSessionKind, isBrowserSessionRequest, requestOrSessionActor, sessionActor } from '@/lib/authentication';
+import { browserSessionKind, isBrowserSessionRequest, sessionActor } from '@/lib/authentication';
 import { pageSocial } from '@/lib/social';
 import { issuePagesTicket, getUserById } from '@/lib/accounts';
 import {ARTIFACT_FORMATS, type ArtifactFormat} from '@artifactbin/contracts/artifact-format';
@@ -43,6 +42,7 @@ import {storedCspExtensions} from '@/lib/document';
 import { carriedTrust,cspRequestFor } from '@/lib/trust';
 import type { DocumentFrame } from './document-frame';
 import { NO_STORE } from './cache-control';
+import { openDocument, type AddressDocument } from './open-document.server';
 
 export interface ArtifactPageAnswer {
   status: number;
@@ -55,17 +55,7 @@ export interface ArtifactPageAnswer {
 
 /** What the app page (never the JSON door) hands the answer. */
 interface ArtifactPageOptions {
-  /**
-   * The row the caller already fetched AND admitted for this very request (server/document-address
-   * admitDocumentAddress): the answer neither fetches it again nor decides admission again — one row
-   * fetch and one access check per view.
-   */
-  admitted?: ArtifactRow;
-  /** With `admitted`: the live revision read with it (lib/artifacts readPageRow), so the view reads it no second time. */
-  admittedRevision?: PageRead['revision'];
-  /** Canonical path already resolved by the HTML door, even when the byline is loaded later. */
-  admittedCanonical?: string;
-  admittedPublishedUrl?: string | null;
+  opened?: AddressDocument & { canonicalPath?: string; publishedUrl?: string | null };
   /**
    * The app page (the HTML door): it frames the document on its own origin, after handing the reader
    * across with a one-time ticket (lib/accounts/pages-sessions) in the frame's first URL, on its own origin. The JSON door
@@ -163,34 +153,25 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
 }
 
 async function answerArtifactPage(request: Request, id: string, options: ArtifactPageOptions): Promise<ArtifactPageAnswer> {
-  if (!ID_RE.test(id)) return notFound();
-  const admitted = options.admitted?.id === id ? options.admitted : null;
-  // Who may read it is decided from the header (no document); the document is loaded once, after admission.
-  const header = admitted ?? await getArtifactHeaderById(id);
-  if (!header) return notFound();
+  const admitted = options.opened?.header.id === id ? options.opened : undefined;
+  const opened = admitted ?? await openDocument(request, id, { surface: 'page', header: 'only' });
+  if (opened === 'not_found') return notFound();
+  const { header, actor, facts, exporting } = opened;
   const search = new URL(request.url).searchParams;
   const key = search.get('key');
-  const exporting = verifyExportKey(header.id, key ?? undefined);
-  const actor = await sessionActor(request);
-  // Every role decision this view makes reads one memo of the actor's access facts, shared with the app page's own
-  // admission of this very request (server/document-address admitDocumentAddress): the role is resolved once per view.
-  const facts = requestAccessFacts(request, actor, header.id);
-  if (!admitted && !(await admitRead(header, actor, { facts, exporting }))) return notFound();
+  const part = search.get('part');
   if (header.format === 'markup' || header.format === 'program' || !ARTIFACT_FORMATS.includes(header.format as ArtifactFormat)) return notFound();
-  if (!admitted && search.get('part') === 'kind') return kindAnswer(header);
-  if (!options.pages && search.get('part') === 'chrome') {
-    // The current reader must still be admitted. An export key never buys interactive chrome.
+  if (!admitted && part === 'kind') return kindAnswer(header);
+  if (!options.pages && part === 'chrome') {
+    // An export key never buys interactive chrome.
     if (header.format !== 'html' || exporting || search.has('version')) return notFound();
     const role = await effectiveRole(header, actor, facts);
     return { status: 200, body: await readDocumentChrome(header, actor, role === 'owner', true) };
   }
-  // The row and its live revision in one statement (lib/artifacts readPageRow): the current page costs no read of its own.
-  const read = admitted ? null : await readPageRow(id);
-  const artifact = admitted ?? read?.row;
-  const revision = admitted ? options.admittedRevision : read?.revision;
-  if (!artifact) return notFound();
-  // The row moved between the two reads (shared, made private, handed over): admission is asked again of the row served.
-  if (!admitted && accessMoved(header, artifact) && !(await admitRead(artifact, actor, { facts, exporting }))) return notFound();
+  if (header.format !== 'folder' && part !== null && part !== 'kind' && part !== 'chrome') return notFound();
+  const document = await openDocument(request, id, { surface: 'page', opened });
+  if (document === 'not_found') return notFound();
+  const { artifact, at, row, dataset } = document;
 
   // One role per request, beside the reads that need none of it.
   const groupId = (artifact as typeof artifact & { group_id?: string | null }).group_id ?? null;
@@ -239,32 +220,14 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     } };
   }
 
-  /*
-   * `?version=N` — the page renders THAT version, read-only, for whoever may
-   * read the artifact's history. One decision with the served document's
-   * (lib/archived-version), so `/a/<id>?version=2` and `/a/<id>/raw?version=2`
-   * can never disagree about who may see it or about what it resolves to; a
-   * refusal is this route's own uniform 404, so a reader without history access
-   * does not learn the parameter exists.
-   */
-  const at = await archivedVersionFor(request, artifact, () => requestOrSessionActor(request), { capture: exporting });
-  if (at === 'not_found') return notFound();
   const nativeHtml = artifact.format === 'html';
-  const part = search.get('part');
-  if (part !== null && part !== 'kind' && part !== 'chrome') return notFound();
-
-  // Source stays on the runner origin; independent shell reads run beside one another.
-  // A dataset page shows the reader's role view (lib/dataset-permissions); its creating token and an export read whole.
-  // A LIVE dataset's page is its connection (lib/live-datasets): its sharing admitted the reader; it has no rows here.
-  const liveConnection = artifact.format === 'dataset' ? liveConnectionOf(artifact.meta) : null;
-  const datasetDecision = artifact.format === 'dataset' && !liveConnection && !exporting && !holdsCreatingToken(artifact, actor) ? await datasetReadAccess(artifact, actor) : null;
-  if (datasetDecision && !datasetDecision.allowed) return notFound();
+  const liveConnection = dataset?.connection;
+  const datasetDecision = dataset?.decision;
   const starter = nativeHtml && !at && artifact.version === 1 && artifact.meta.startPlaceholder === true;
   // Keep guest cache hits, history, capture and non-frame surfaces on their original bootstrap.
-  const deferChrome = !!(options.pages && admitted && options.admittedCanonical && actor.userId && nativeHtml && !at && !exporting && !starter);
+  const deferChrome = !!(options.pages && admitted && admitted.canonicalPath && actor.userId && nativeHtml && !at && !exporting && !starter);
   const readerPick = options.pages && nativeHtml && !exporting ? readerPickOf(request) : null;
-  const [page, chrome, dataPreview, framedSrc, publishedUrl, cspRequest] = await Promise.all([
-    nativeHtml && !at ? currentPage(artifact, revision ? { revision } : {}) : null,
+  const [chrome, dataPreview, framedSrc, publishedUrl, cspRequest] = await Promise.all([
     deferChrome ? null : readDocumentChrome(artifact, actor, role === 'owner', nativeHtml),
     liveConnection ? '[]' : artifact.format === 'dataset' ? (datasetDecision && !datasetDecision.full ? datasetRowsFor(datasetDecision, artifact) : loadDatasetRows(artifact)).then(rows => JSON.stringify(rows)) : (artifact.format === 'viz' ? artifact.source ?? '' : ''),
     options.pages && nativeHtml ? (async (site) => {
@@ -272,10 +235,9 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
       if (exporting && !admitted && !(await admitRead(artifact, actor, { facts }))) return null;
       return admittedFrameSrc(request, artifact, actor, site, new URL(request.url).search, readerPick);
     })(options.pages) : null,
-    admitted && options.admittedPublishedUrl !== undefined ? options.admittedPublishedUrl : userPageUrl(artifact),
+    admitted && admitted.publishedUrl !== undefined ? admitted.publishedUrl : userPageUrl(artifact),
     nativeHtml ? cspRequestFor({artifact:{id:artifact.id,version:at?.version??artifact.version,declared:storedCspExtensions((at?.meta ?? artifact.meta).htmlCsp)},viewer:actor,request}) : undefined,
   ] as const);
-  const row = page ? { ...servedRow(artifact, at), source: page.row.source, title: page.row.title } : servedRow(artifact, at);
   const pwaEnabled = artifactPwaEnabled(row);
 
   const meta = (row.meta ?? {}) as {
@@ -335,7 +297,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     dataPreview,
     columns: meta.columns ?? [],
     ...(liveConnection ? { liveConnection } : {}),
-    ...(artifact.format==='dataset' && (artifact.meta as Record<string,unknown>).catalog ? {catalog:datasetDecision?.allowed?viewCatalog(datasetDecision,publicCatalogOf(artifact)!):publicCatalogOf(artifact)!,
+    ...(artifact.format==='dataset' && (artifact.meta as Record<string,unknown>).catalog ? {catalog:dataset?.catalog,
       // May the reader run SQL in the explorer (dataset-permissions `sqlRefusal`, the check its door applies)? A creator holding its token owns it.
       canRunSql:datasetDecision?!sqlRefusal(datasetDecision):true}:{}),
     // A stored FILE is not a document the app renders: its page shows the two
@@ -361,7 +323,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     ...(chrome ? { openAnnotations: chrome.openAnnotations } : {}),
   };
   const body = {
-    canonical: deferChrome && !groupId ? options.admittedCanonical : canonicalArtifactPath(artifact, groupId ? ownerGroup?.handle ?? null : chrome?.author.username ?? null),
+    canonical: deferChrome && !groupId ? admitted?.canonicalPath : canonicalArtifactPath(artifact, groupId ? ownerGroup?.handle ?? null : chrome?.author.username ?? null),
     description: row.description,
     ...(cspRequest ? { cspRequest } : {}),
     role,

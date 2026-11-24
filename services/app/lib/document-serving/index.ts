@@ -11,6 +11,7 @@ export { DOCUMENT_FRAME_CSS, documentFrameFallback, documentFrameHtml, documentH
 export type { DocumentFrame } from './document-frame';
 export type { ReaderForkedFrom } from './fork-credit.server';
 export { serveRawDocument } from './raw.server';
+export { openDocument, type AddressDocument } from './open-document.server';
 export { documentHeadFor } from './native-html-presentation.server';
 export type { DomainPost } from './raw.server';
 export { cachedShell } from './shell-cache.server';

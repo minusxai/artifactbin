@@ -17,23 +17,20 @@
  */
 import {designSystemChoice} from '@/lib/html-systems';
 import { LIVE_VERSION_HEADER } from '@/lib/html-runtime';
-import { accessMoved, admitRead, archivedVersionFor, type ArtifactHeader, type ArtifactRow, currentPage, getArtifactById, readPageHeader, readPageRow, refusingUnservable, servedRow, VERSION_PARAM } from '@/lib/artifacts';
-import { holdsCreatingToken } from '@/lib/artifact-access';
+import { type ArtifactHeader, type ArtifactRow, refusingUnservable, VERSION_PARAM } from '@/lib/artifacts';
 import { recordView } from '@/lib/analytics';
-import { verifyExportKey } from '@/lib/export';
 import {storedCspExtensions} from '@/lib/document';
 import {cspExtensionsFor} from '@/lib/trust';
 import { requestOrSessionActor } from '@/lib/authentication';
 import { baseUrl, pagesRequestOf, etagOf, matchingTag, notModified } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
-import { LIVE_DATASET_REFUSAL, liveConnectionOf, serveInlinePdf, serveStoredFile, publicCatalogOf } from '@/lib/datasets';
-import { datasetReadAccess, viewCatalog } from '@/lib/dataset-permissions';
+import { LIVE_DATASET_REFUSAL, serveInlinePdf, serveStoredFile } from '@/lib/datasets';
 import { ObjectUnavailable, loadImage, pdfFilename, pdfMetaOf } from '@/lib/object-store';
-import { servesDocument } from '@/lib/user-pages';
 import { NO_STORE, REVALIDATE, storedBytesCacheControl } from './cache-control';
 import { nativeHtmlPresentation } from './native-html-presentation.server';
 import { anonymousReader, FRAME_TTL_MS, NONCE_PLACEHOLDER, renderCache, renderKey, withFreshNonce } from './render-cache';
 import { nativeHtmlDocument, nativeHtmlPolicy, nativeHtmlRuntimeIdentity } from './native-html.server';
+import { openDocument } from './open-document.server';
 
 // The markup document's policy — per document, built in lib/page-styles/markup-csp:
 // content-independent except for the ONE connect-src that admits exactly this
@@ -98,41 +95,11 @@ async function serveRaw(request: Request, ctx: RawDocumentRequest): Promise<Resp
     && (!!pages || anonymousReader(actor));
   const metadataOnly = cacheable || (!!pages && !key && !fragment && !!asked && !archived)
     || (request.method === 'HEAD' && !key && !archived);
-  const snapshot = metadataOnly ? await readPageHeader(id) : null;
-  const loaded = metadataOnly ? null : await getArtifactById(id);
-  const header: ArtifactHeader | null = snapshot?.row ?? loaded;
-  if (!header) return notFound();
   if (fragment) return notFound();
-  if (domain && !servesDocument(domain.owner, header)) return notFound();
-  /*
-   * The ACL decides before any bytes leave; a denied private doc is
-   * indistinguishable from a missing one.
-   *
-   * The exporter's signed key is the one way in without a session, and it must
-   * be honoured HERE and not only on the page: the page is just the outside,
-   * and the document arrives through a SEPARATE, credential-less request for
-   * this route. Without it a private document exported as a 200 PNG *of a 404
-   * page* — the shot succeeded, so nothing looked wrong.
-   *
-   * The key is scoped to one artifact and lives seconds (lib/export-key). It
-   * admits a reader; it does not relax the sandbox, which is set below either
-   * way.
-   */
-  // The SAME viewer the proxy and the page decide ownership with: sessionActor
-  // uses the proxy-attached actor first, then direct compatibility and the
-  // agent cookie. Resolving it any other way — the account session alone —
-  // makes a claimed-token browser an owner in the shell and a stranger in its
-  // own private document.
-  // Bearer first, then the browser credentials, the same order as the export route, so the CLI
-  // can fetch the page of an artifact its token owns or may read (resolved above).
-  const byExportKey = verifyExportKey(header.id, key ?? undefined);
-  const admits = (row: ArtifactHeader) => admitRead(row, actor, { exporting: byExportKey });
-  if (!(await admits(header))) return notFound();
-  /*
-   * THE CURRENT PAGE (lib/artifacts current-page): the head is served with its regions' unsaved live text composed in,
-   * so its bytes depend on the live revision as well as the row: it is in the validator and the render cache's key.
-   */
-  const live = snapshot?.live ?? 0;
+  const options = { surface: 'raw', actor, owner: domain?.owner } as const;
+  const opened = await openDocument(request, id, { ...options, header: metadataOnly ? 'metadata' : 'row' });
+  if (opened === 'not_found') return notFound();
+  const { header, live, exporting: byExportKey } = opened;
 
   const base = pages?.site.app ?? baseUrl(request);
   /*
@@ -179,21 +146,14 @@ async function serveRaw(request: Request, ctx: RawDocumentRequest): Promise<Resp
     }
   }
 
-  const pageRead = !loaded && header.format === 'html' ? await readPageRow(id) : null;
-  const artifact = loaded ?? (header.format === 'html' ? pageRead?.row : await getArtifactById(id));
-  if (!artifact) return notFound();
-  // Admission is asked again of the row served when its access moved after the header was read.
-  if (!loaded && accessMoved(header, artifact) && !(await admits(artifact))) return notFound();
+  const document = await openDocument(request, id, { ...options, opened });
+  if (document === 'not_found') return notFound();
+  const { artifact, row, at, page, dataset, sameHead } = document;
 
   switch (artifact.format) {
     case 'html': {
-      const at = domain ? null : await archivedVersionFor(request, artifact, () => requestOrSessionActor(request), { capture: byExportKey });
-      if (at === 'not_found') return notFound();
-      // The head is its current page (live text composed in); an archived version is served as it was saved.
-      const page = at ? null : await currentPage(artifact, pageRead ? { revision: pageRead.revision } : {});
-      const row = { ...servedRow(artifact, at), ...(page ? { source: page.row.source, title: page.row.title } : {}), version: at?.version ?? artifact.version };
-      const sameHead = sameRevision(header, artifact) && !accessMoved(header, artifact);
-      if (at || !sameHead) policy = await policyFor(row);
+      const renderRow = at ? { ...row, version: at.version } : row;
+      if (at || !sameHead) policy = await policyFor(renderRow);
       const etag = revalidated && !at ? await validator(artifact, page?.live) : null;
       const held = etag && matchingTag(asked, etag);
       if (held) return notModified(`W/${held}`);
@@ -201,7 +161,7 @@ async function serveRaw(request: Request, ctx: RawDocumentRequest): Promise<Resp
       // Retained only when the row rendered is the one the key was read from (it, or its live text, may have moved since).
       const retained = cacheable && !at && sameHead && page?.live === live ? await frameKey(header) : null;
       // The owner's design-system choice is page metadata, current for every version shown (not part of the source).
-      const rendered = await nativeHtmlDocument({ row, presentation: nativeHtmlPresentation(row, domain), designSystem: designSystemChoice(artifact.meta), ...(page ? { live: page.live, unsavedIds: page.unsavedIds } : {}), ...(pages ? { appOrigin: pages.site.app } : {}), ...(directReads ? { domainReads: true } : {}), ...(capture && key ? { captureKey: key } : {}), ...(retained ? { platformScriptNonce: NONCE_PLACEHOLDER } : {}) });
+      const rendered = await nativeHtmlDocument({ row: renderRow, presentation: nativeHtmlPresentation(renderRow, domain), designSystem: designSystemChoice(artifact.meta), ...(page ? { live: page.live, unsavedIds: page.unsavedIds } : {}), ...(pages ? { appOrigin: pages.site.app } : {}), ...(directReads ? { domainReads: true } : {}), ...(capture && key ? { captureKey: key } : {}), ...(retained ? { platformScriptNonce: NONCE_PLACEHOLDER } : {}) });
       counted();
       const { html } = rendered;
       if (!retained) return new Response(html, { headers: responseHeaders(etag) });
@@ -212,13 +172,9 @@ async function serveRaw(request: Request, ctx: RawDocumentRequest): Promise<Resp
     case 'dataset':
     {
       // A live dataset's raw view is its connection's summary (never a secret): its rows stay in its database.
-      const live=liveConnectionOf(artifact.meta);
+      const live = dataset?.connection;
       if(live)return new Response(JSON.stringify({connection:live,message:LIVE_DATASET_REFUSAL}),{headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'}});
-      // The reader's role view (lib/dataset-permissions); the creating token and a verified export key read whole.
-      const decision=holdsCreatingToken(header,actor)||byExportKey?null:await datasetReadAccess(header as ArtifactRow,actor);
-      if(decision&&!decision.allowed)return notFound();
-      const described=()=>{const open=publicCatalogOf(artifact);return open&&decision?viewCatalog(decision,open):open;};
-      return new Response(JSON.stringify({catalog:described()}), {
+      return new Response(JSON.stringify({ catalog: dataset?.catalog }), {
         status: 200,
         headers: { 'Content-Type': 'application/json; charset=utf-8', ...COMMON },
       });
@@ -280,9 +236,4 @@ async function serveRaw(request: Request, ctx: RawDocumentRequest): Promise<Resp
     default:
       return notFound();
   }
-}
-
-/** The row read whole is the version, edit and metadata its header named. */
-function sameRevision(header: ArtifactHeader, row: ArtifactRow): boolean {
-  return header.version === row.version && header.edit_id === row.edit_id && String(header.updated_at) === String(row.updated_at);
 }
