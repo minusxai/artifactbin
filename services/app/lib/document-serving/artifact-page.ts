@@ -168,7 +168,9 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     const role = await effectiveRole(header, actor, facts);
     return { status: 200, body: await readDocumentChrome(header, actor, role === 'owner', true) };
   }
-  if (header.format !== 'folder' && part !== null && part !== 'kind' && part !== 'chrome') return notFound();
+  // The JSON door answers only the parts it knows. The HTML door passes the address's whole query on to the page's
+  // frame, so a `part` there is the page's own parameter and never selects a part of this answer.
+  if (!options.pages && header.format !== 'folder' && part !== null && part !== 'kind' && part !== 'chrome') return notFound();
   const document = await openDocument(request, id, { surface: 'page', opened });
   if (document === 'not_found') return notFound();
   const { artifact, at, row, dataset } = document;

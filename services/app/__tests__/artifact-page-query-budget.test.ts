@@ -56,6 +56,17 @@ async function view(door: Door, id: string, actor: Actor | null, search = ''): P
   return { status: response.status, page: inlined(await response.text())?.artifact ?? null };
 }
 
+it("keeps a page's own ?part= parameter out of the answer: the HTML door still draws the document", async () => {
+  const w = await world();
+  const plain = await view('html', w.anonymousDoc, null);
+  const withPart = await view('html', w.anonymousDoc, null, '?part=2');
+  expect(withPart.status).toBe(200);
+  expect(withPart.page).not.toBeNull();
+  expect(withPart.page?.id).toBe(plain.page?.id);
+  // The JSON door, which no page address reaches, refuses a part it does not know.
+  expect((await view('json', w.anonymousDoc, null, '?part=2')).status).toBe(404);
+});
+
 const userKindReads = (sql: string[]) => sql.filter((text) => /SELECT kind FROM users/i.test(text)).length;
 
 async function signedInChrome(door: Door, page: Record<string, any>, id: string, actor: Actor) {
