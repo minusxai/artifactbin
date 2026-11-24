@@ -1,6 +1,6 @@
 ---
 name: website
-description: "Publish personal folders and find liked or shared pages."
+description: "Read to publish a personal folder on a website or find liked and shared pages."
 ---
 ## Read first
 
