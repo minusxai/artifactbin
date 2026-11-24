@@ -15,7 +15,6 @@
   "services/app/lib/export/__tests__/native-html-media.test.ts",
   "services/app/lib/annotations/__tests__/html-anchor.test.ts",
   "services/app/lib/data-ingest/__tests__/csv.test.ts",
-  "services/app/lib/data-ingest/__tests__/geojson.test.ts",
   "services/app/lib/dataflow/__tests__/number-format.test.ts",
   "services/app/lib/dataset-access/__tests__/model.test.ts",
   "services/app/lib/datasets/__tests__/catalog-metadata.test.ts",
