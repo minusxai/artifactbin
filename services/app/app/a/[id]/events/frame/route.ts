@@ -4,7 +4,7 @@
  * (id, edit_id) in lib/publish/data/frame. CORS-open like `query`, since the served
  * document (opaque origin) fetches it directly.
  */
-import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
+import { readableArtifact } from '@/lib/artifacts';
 import { ID_RE } from '@/lib/platform';
 import { liveFrameFor } from '@/lib/publish';
 import { sessionActor } from '@/lib/authentication';
@@ -23,10 +23,9 @@ const headers = (): Record<string, string> => ({ 'Content-Type': 'application/js
 export async function GET(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   if (!ID_RE.test(id)) return new Response('not found', { status: 404 });
-  const row = await getArtifactById(id);
-  if (!row) return new Response('not found', { status: 404 });
   const actor = await sessionActor(request);
-  if (!(await canReadArtifact(row, actor))) return new Response('not found', { status: 404 });
+  const row = (await readableArtifact(actor, id, { admission: 'account' }))?.row;
+  if (!row) return new Response('not found', { status: 404 });
   /*
    * A FOLDER HAS NO FRAME, and this route is its OWN door — it never goes
    * through `raw`'s switch, so the rule has to be said again here.

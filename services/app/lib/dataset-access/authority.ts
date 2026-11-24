@@ -1,5 +1,5 @@
 import type { AccessActor } from '@/lib/accounts';
-import { canReadArtifact, getArtifactById, getVersionFor, type ArtifactRow } from '@/lib/artifacts';
+import { readableArtifact, getArtifactById, getVersionFor, type ArtifactRow } from '@/lib/artifacts';
 import { writerFor, type AccessFacts } from '@/lib/artifact-access';
 import type {HtmlDatasetLink} from '@artifactbin/contracts/html-page';
 import {catalogOf} from '@/lib/datasets';
@@ -18,8 +18,8 @@ export function datasetBindingCatalog(row:Pick<ArtifactRow,'meta'>){
 const unavailable=()=>new Error('dataset_not_found');
 /** Direct readership of the dataset (publication, forks): the dataset's own sharing and rules. */
 async function authorizedDataset(actor:AccessActor,id:string){
- const row=await getArtifactById(id);
- if(!row||row.format!=='dataset'||!await canReadArtifact(row,actor))throw unavailable();
+ const row = (await readableArtifact(actor, id, { admission: 'account', formats: ['dataset'] }))?.row;
+ if (!row) throw unavailable();
  return row;
 }
 /**

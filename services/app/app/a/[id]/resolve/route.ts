@@ -1,4 +1,4 @@
-import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
+import { readableArtifact } from '@/lib/artifacts';
 import { ANONYMOUS_ACTOR } from '@/lib/accounts';
 import { ID_RE } from '@/lib/platform';
 import { serveStoredFile } from '@/lib/datasets';
@@ -15,8 +15,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   const target = ref.startsWith('ref:') ? ref.slice(4) : '';
   const missing = () => new Response('not found', { status: 404, headers: { 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' } });
   if (!ID_RE.test(id) || !ID_RE.test(target)) return missing();
-  const row = await getArtifactById(target);
-  if (!row || !['file', 'image', 'pdf'].includes(row.format) || !(await canReadArtifact(row, ANONYMOUS_ACTOR))) return missing();
+  const row = (await readableArtifact(ANONYMOUS_ACTOR, target, { admission: 'account', formats: ['file', 'image', 'pdf'] }))?.row;
+  if (!row) return missing();
   return serveStoredFile(request, row, true);
 }
 export const HEAD = GET;

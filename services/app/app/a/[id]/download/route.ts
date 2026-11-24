@@ -14,7 +14,7 @@ import {loadImage} from '@/lib/object-store';
 import { requestOrSessionActor } from '@/lib/authentication';
 import { baseUrl, json } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
-import { admitRead, getArtifactById, refusingUnservable, canReadArtifact, archivedVersionFor, servedRow } from '@/lib/artifacts';
+import { readableArtifact, refusingUnservable, archivedVersionFor, servedRow } from '@/lib/artifacts';
 import { nativeHtmlDocument, nativeHtmlTitle } from '@/lib/document-serving';
 import { offlinePageSqlData } from '@/lib/dataset-access';
 import type { HtmlPageLink, HtmlDatasetLink } from '@artifactbin/contracts/html-page';
@@ -33,10 +33,9 @@ export function GET(request: Request, ctx: { params: Promise<{ id: string }> }):
 async function download(request: Request, ctx: { params: Promise<{ id: string }> }): Promise<Response> {
   const { id } = await ctx.params;
   if (!ID_RE.test(id)) return json({ error: 'not_found' }, 404);
-  const artifact=await getArtifactById(id);
-  if (artifact?.format === 'html') {
-    const actor = await requestOrSessionActor(request);
-    if (!(await admitRead(artifact, actor))) return json({ error: 'not_found' }, 404);
+  const actor = await requestOrSessionActor(request);
+  const artifact = (await readableArtifact(actor, id, { admission: 'door', formats: ['html'] }))?.row;
+  if (artifact) {
     const at = await archivedVersionFor(request, artifact, async () => actor);
     if (at === 'not_found') return json({ error: 'not_found' }, 404);
     const platformOrigin=new URL(baseUrl(request)).origin;
@@ -45,8 +44,8 @@ async function download(request: Request, ctx: { params: Promise<{ id: string }>
     try{
       packed=await packOfflineHtmlImages({html:row.source??'',admittedIds:((row.meta as {refs?:Array<{id:string}>}).refs??[]).map(ref=>ref.id),maxBytes:OFFLINE_FILE_MAX_BYTES,
         loadImage:async id=>{
-          const image=await getArtifactById(id);
-          if(image?.format!=='image'||!await canReadArtifact(image,actor))return null;
+          const image = (await readableArtifact(actor, id, { admission: 'account', formats: ['image'] }))?.row;
+          if (!image) return null;
           const stored=await loadImage(image);return stored?{bytes:stored.body,mime:stored.contentType}:null;
         }});
     }catch(error){

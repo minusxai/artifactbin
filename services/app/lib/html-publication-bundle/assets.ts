@@ -1,7 +1,7 @@
 import {pinPublicationAssetUrls} from './plan';
 import type { AccessActor } from '@/lib/accounts';
 import {requestOrSessionActor} from '@/lib/authentication';
-import { archivedVersionFor, canReadArtifact, getArtifactById } from '@/lib/artifacts';
+import { archivedVersionFor, canReadArtifact, getArtifactById, readableArtifact } from '@/lib/artifacts';
 import { writerFor } from '@/lib/artifact-access';
 import { getDb } from '@/lib/platform';
 import {serveStoredFile} from '@/lib/datasets';
@@ -19,7 +19,8 @@ async function admission(request:Request,actor:AccessActor,pageId:string,capture
 }
 async function assetVersion(actor:AccessActor,receipt:BundleReceipt):Promise<{id:string;meta:Record<string,unknown>}|null>{
  if(!/^\d+$/.test(receipt.revision))return null;
- const asset=await getArtifactById(receipt.id);if(!asset||!['file','image','pdf'].includes(asset.format)||!await canReadArtifact(asset,actor))return null;
+ const asset = (await readableArtifact(actor, receipt.id, { admission: 'account', formats: ['file', 'image', 'pdf'] }))?.row;
+ if (!asset) return null;
  if(String(asset.version)===receipt.revision)return {id:asset.id,meta:asset.meta};
  const archived=(await (await getDb()).query<{meta:Record<string,unknown>;format:string}>('SELECT meta,format FROM artifact_versions WHERE artifact_id=$1 AND version=$2',[receipt.id,Number(receipt.revision)])).rows[0];
  return archived&&['file','image','pdf'].includes(archived.format)?{id:asset.id,meta:archived.meta}:null;

@@ -14,7 +14,7 @@
  */
 import { ID_RE } from '@/lib/platform';
 import { trackEvent } from '@/lib/analytics';
-import { canReadArtifact, currentPage, getArtifactAccessById, getArtifactById, type ArtifactRow } from '@/lib/artifacts';
+import { canReadArtifact, currentPage, readableArtifact, getArtifactAccessById, getArtifactById, type ArtifactRow } from '@/lib/artifacts';
 import { authorHandle, ANONYMOUS_ACTOR } from '@/lib/accounts';
 import { sessionActor } from '@/lib/authentication';
 import { STORY_ANNOTATIONS_EVENT, type ArtifactVersionPing } from '@/lib/html-reader/contract';
@@ -56,14 +56,13 @@ export type DocumentEvents = { status: 'not_found' } | { status: 'busy' } | { st
 
 export async function openDocumentEvents(request: Request, id: string): Promise<DocumentEvents> {
   if (!ID_RE.test(id)) return { status: 'not_found' };
-  const initial = await getArtifactById(id);
-  if (!initial) return { status: 'not_found' };
   // Same uniform 404 as app/a/[id]/raw — and the same VIEWER as it and the proxy
   // (sessionActor uses the proxy-attached actor first, then direct compatibility
   // and the agent cookie). Resolving it any other way drops an anonymous
   // owner's live stream the moment their document goes private.
   const actor = new URL(request.url).searchParams.get('anonymous')==='1'?ANONYMOUS_ACTOR:await sessionActor(request);
-  if (!(await canReadArtifact(initial, actor))) return { status: 'not_found' };
+  const initial = (await readableArtifact(actor, id, { admission: 'account' }))?.row;
+  if (!initial) return { status: 'not_found' };
   const artifactId = initial.id;
   // Connect only — never in the wakeup loop, which fires per remote edit.
   void trackEvent('sse_connect', artifactId, { userId: actor.userId });
@@ -75,8 +74,8 @@ export async function openDocumentEvents(request: Request, id: string): Promise<
    * readable: the stream ends); `stillReadable` asks of the access columns alone.
    */
   const readableRow = async (): Promise<ArtifactRow | null> => {
-    const row = await getArtifactById(id);
-    if (row && await canReadArtifact(row, actor)) return row;
+    const row = (await readableArtifact(actor, id, { admission: 'account' }))?.row;
+    if (row) return row;
     void close();
     return null;
   };

@@ -11,7 +11,7 @@
 import { artifactToWireWithAnnotations } from '@/lib/annotations';
 import {runOperation} from '@/lib/operations';
 import { ensureUserToken, withAccountToken } from '@/lib/accounts';
-import { getEditableArtifactFor, canReadArtifact, getArtifactById } from '@/lib/artifacts';
+import { getEditableArtifactFor, readableArtifact } from '@/lib/artifacts';
 import { updateMetadataFromBody } from '@/lib/artifact-wire';
 import { browserActor } from '@/lib/authentication';
 import { trashArtifactFor } from '@/lib/workspace';
@@ -37,8 +37,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       // names datasets; an image-heavy document would otherwise pay a lookup
       // per picture on every editor load to answer a question nobody asks.
       if (ref.kind !== 'dataset') return ref;
-      const target = await getArtifactById(ref.id);
-      return target && (await canReadArtifact(target, actor))
+      const target = (await readableArtifact(actor, ref.id, { admission: 'account' }))?.row;
+      return target
         ? { ...ref, title: target.title ?? null }
         : ref;
     }));

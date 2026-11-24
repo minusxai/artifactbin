@@ -9,7 +9,7 @@
  * Title paths traverse readable folders from the owner’s root,
  * so a trailing path that does not identify an artifact is a uniform 404.
  */
-import { canReadArtifact, getArtifactById, slugAddressTarget, type ArtifactSummary } from '@/lib/artifacts';
+import { readableArtifact, slugAddressTarget, type ArtifactSummary } from '@/lib/artifacts';
 import { avatarUrl } from '@/lib/avatars';
 import { getUserByUsername, ownerUsername } from '@/lib/accounts';
 import { json } from '@/lib/http';
@@ -31,8 +31,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ user: strin
 
   const file = parsePrettyPath(path);
   if (file) {
-    const artifact = await getArtifactById(file.id);
-    if (artifact && (await canReadArtifact(artifact, actor))) {
+    const artifact = (await readableArtifact(actor, file.id, { admission: 'account' }))?.row;
+    if (artifact) {
       const groupId=(artifact as ArtifactSummary & {group_id?:string|null}).group_id;
       const canonical = canonicalArtifactPath(artifact, groupId ? (await getGroupById(groupId))?.handle ?? null : await ownerUsername(artifact.user_id));
       const requested = `/@${handle}${path.length ? '/' + path.join('/') : ''}`;
@@ -44,8 +44,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ user: strin
   // An id that named nothing readable may be a title slug instead (lib/artifacts/slug-address): the address stays.
   if (path.length > 0) {
     const id = await slugAddressTarget(request, `/@${handle}/${path.map(encodeURIComponent).join('/')}`, actor);
-    const artifact = id ? await getArtifactById(id) : null;
-    if (artifact && (await canReadArtifact(artifact, actor))) return json({ kind: 'artifact', id: artifact.id });
+    if (id && await readableArtifact(actor, id, { admission: 'account' })) return json({ kind: 'artifact', id });
   }
 
   // Anything left after the id parse is decoration that named nothing. There

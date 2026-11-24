@@ -1,6 +1,6 @@
 import { sessionActor, refusesCrossSite } from '@/lib/authentication';
 import { DatasetError } from '@/lib/datasets';
-import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
+import { readableArtifact } from '@/lib/artifacts';
 import { uploadDatasetImage } from '@/lib/document-data';
 import { MAX_IMAGE_BYTES, ID_RE } from '@/lib/platform';
 import { json } from '@/lib/http';
@@ -11,8 +11,7 @@ export async function POST(request:Request,ctx:{params:Promise<{id:string;datase
   if(!ID_RE.test(id)||!ID_RE.test(datasetId))return json({error:'not_found'},404,headers);
   const actor=await sessionActor(request);
   if(refusesCrossSite(request,actor))return json({error:'forbidden'},403,headers);
-  const doc=await getArtifactById(id);
-  if(!doc||!(await canReadArtifact(doc, actor)))return json({error:'not_found'},404,headers);
+  if (!await readableArtifact(actor, id, { admission: 'account' }))return json({error:'not_found'},404,headers);
   const advertised=Number(request.headers.get('content-length'));
   if(advertised>MAX_IMAGE_BYTES)return json({error:'image_too_large',maxBytes:MAX_IMAGE_BYTES},413,headers);
   const editId=request.headers.get('X-Edit-Id')??'',contentType=(request.headers.get('content-type')??'').split(';')[0]!.trim().toLowerCase();
