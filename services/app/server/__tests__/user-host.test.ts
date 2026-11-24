@@ -255,7 +255,8 @@ it('keeps named folder sites bound to a live owned id across duplicate names, mo
  expect((await server.request(named+'/'+inside.id)).status).toBe(404);
  await db.query("INSERT INTO user_site_roots(user_id,subdomain_label,folder_id) VALUES($1,'notes','root001')",[user.id]);
  const listing = await (await server.request(named+'/')).text();
- expect(listing).toContain(inside.id);
+ expect((await server.request(named+'/')).status).toBe(404);
+ expect(listing).not.toContain(inside.id);
  expect(listing).not.toContain(outside.id);
  expect(listing).not.toContain(quiet.id);
  expect((await server.request(named+'/'+quiet.id)).status).toBe(200);
@@ -270,7 +271,7 @@ it('keeps named folder sites bound to a live owned id across duplicate names, mo
  expect((await server.request(named+'/'+quiet.id)).status).toBe(404);
 });
 
-it('selects a direct public index and lists navigable direct folders without private or unlisted names', async () => {
+it('serves a configured folder by ID only with a direct public index', async () => {
  const user=await owner(), db=await getDb(), server=app();
  const index=await page(user.token,'public',{title:'Index',html:'<h1>Folder index</h1>'});
  await db.query(`INSERT INTO artifacts(id,user_id,format,title,visibility) VALUES
@@ -279,12 +280,13 @@ it('selects a direct public index and lists navigable direct folders without pri
  await setArtifact(db,index.id,{ancestor_ids:['fold001']});
  await db.query("INSERT INTO user_site_roots(user_id,subdomain_label,folder_id) VALUES($1,'',NULL)",[user.id]);
  const listing=await (await server.request(base+'/')).text();
- expect(listing).toContain('/folders/fold001');expect(listing).toContain('/folders/fold002');
+ expect((await server.request(base+'/')).status).toBe(404);
+ expect(listing).not.toContain('/folders/fold001');
  expect(listing).not.toContain('fold003');expect(listing).not.toContain('fold004');expect(listing).not.toContain(index.id);
  expect(await (await server.request(base+'/folders/fold001')).text()).toContain('Folder index');
  expect(await (await server.request(base+'/folders/fold002')).text()).not.toContain('Folder index');
  expect((await server.request(base+'/folders/fold003')).status).toBe(404);
- expect((await server.request(base+'/folders/fold004')).status).toBe(200);
+ expect((await server.request(base+'/folders/fold004')).status).toBe(404);
 });
 
 it.each(['removed','repointed'])('withholds a named-site SQL result if its mapping is %s during the read',async change=>{
@@ -320,7 +322,47 @@ it('queries the configured index and folder on their publishing origins with gue
   const html=await server.request(origin+path);
   expect(await html.text()).toContain('Staff');
   const response=await server.request(origin+'/api/artifacts/'+f.page+'/sql',{method:'POST',headers:{origin:'null','content-type':'text/plain'},body:JSON.stringify({revision:'1',sql:"select url,note from _files cross join notes where format='html'"})});
-  expect(await response.json()).toMatchObject({rows:[{url:origin+'/'+f.page+'-index',note:'hello'}]});
+  expect(await response.json()).toMatchObject({rows:[{url:origin+(origin===alias?'/index':'/'+f.page+'-index'),note:'hello'}]});
   expect((await server.request(origin+'/'+hidden.id)).status).toBe(404);
+ }
+});
+
+it('uses current public folder titles on the legacy host and relative to a mounted folder',async()=>{
+ const user=await owner(),db=await getDb(),server=app(),leaf=await page(user.token);
+ await db.query("INSERT INTO artifacts(id,user_id,format,title,visibility) VALUES ('fold001',$1,'folder','Work area','public')",[user.id]);
+ await setArtifact(db,leaf.id,{ancestor_ids:['fold001']});
+ await db.query("INSERT INTO user_site_roots VALUES ($1,'notes','fold001')",[user.id]);
+ const named='https://notes.alice.u.example.test';
+ for(const [origin,path] of [[base,'/work-area/hello-world'],[named,'/hello-world']]){
+  if(origin===base) expect(await (await server.request(origin+'/')).text()).toContain('href="'+path+'"');
+  expect(await (await server.request(origin+path)).text()).toContain('Hello owner');
+ }
+ expect(await (await server.request(base+'/work-area')).text()).toContain('href="/work-area/hello-world"');
+ await setArtifact(db,'fold001',{visibility:'unlisted'});
+ expect((await server.request(base+'/work-area/hello-world')).status).toBe(404);
+ await setArtifact(db,'fold001',{visibility:'public',title:'Archive'});
+ expect((await server.request(base+'/work-area/hello-world')).status).toBe(404);
+ expect((await server.request(base+'/archive/hello-world')).status).toBe(200);
+ const twin=await page(user.token);
+ await setArtifact(db,twin.id,{ancestor_ids:['fold001']});
+ const listing=await (await server.request(base+'/archive')).text();
+ for(const id of [leaf.id,twin.id]) expect(listing).toContain('href="/'+id+'-hello-world"');
+ expect((await server.request(base+'/archive/hello-world')).status).toBe(404);
+ await setArtifact(db,twin.id,{ancestor_ids:[]});
+ expect((await server.request(base+'/hello-world')).status).toBe(200);
+ expect((await server.request(base+'/archive/hello-world')).status).toBe(200);
+ expect((await server.request(base+'/'+leaf.id)).status).toBe(200);
+});
+
+it('translates the configured directory result to HTTP while the legacy root still lists',async()=>{
+ const user=await owner(),db=await getDb(),server=app(),blog='https://blog.alice.u.example.test';
+ await db.query("INSERT INTO artifacts(id,user_id,format,title,visibility) VALUES ('blog001',$1,'folder','Blog','public')",[user.id]);
+ await db.query("INSERT INTO user_site_roots VALUES ($1,'blog','blog001')",[user.id]);
+ const child=await page(user.token,'public',{title:'Documentary',html:'<h1>Documentary body</h1>'});
+ await setArtifact(db,child.id,{ancestor_ids:['blog001']});
+ for(const [url,status,body] of [[blog+'/',404,'<title>Not found</title>'],[blog+'/documentary',200,'Documentary body'],[base+'/',200,'aria-label="Artifact grid"']] as const){
+  const response=await server.request(url);
+  expect(response.status,url).toBe(status);
+  expect(await response.text(),url).toContain(body);
  }
 });

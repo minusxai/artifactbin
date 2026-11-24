@@ -1,6 +1,6 @@
 # Serving and the trust boundary
 
-Hosts: `app.ts` (with `app-policy.ts` the app page CSP, `app-shell.ts` its HTML, `document-address.ts` admission of the
+`app.ts` (with `app-policy.ts` the app page CSP, `app-shell.ts` its HTML, `document-address.ts` admission of the
 document an address names), `public-files.ts`, `pages-host.ts`, `user-host.ts`, `host.ts`. Also covers
 `lib/document-serving` and `lib/local-connection`.
 
@@ -25,6 +25,7 @@ document an address names), `public-files.ts`, `pages-host.ts`, `user-host.ts`, 
 - A request on a publishing host (`user-host.ts`) is a guest's whatever it carries: native read doors only, no
   shared writes. Its page-specific SQL POST reuses canonical page/revision/dataset verification, forces anonymous
   read-only execution, and checks the live handle and eligible true owner before admission and after execution.
+- Configured site directories require a direct public HTML index.
 - No agent-facing surface issues a credential. The operator mint (`app/api/tokens/route.ts`) is a 404 without
   `ADMIN__SECRET`. Connections are stored hash-only, shown once.
 - An export capture holds no session: its short-lived key names the requester the export door admitted

@@ -25,9 +25,7 @@ const DocumentPage = lazy(() => import('./Document').then(m => ({ default: m.Doc
  * (the same discriminator `ArtifactRoute` uses for `/a/:id`) says whether THIS load served a document's
  * frame, so a framed document is adopted by the document page (`DocumentPage`) and anything else — a
  * folder, a data tier, the starter, a dataset editor — is routed by its answer (`ArtifactAddressRoute`)
- * instead of guessing from the URL shape alone. "Nesting is not in the address" (see
- * the profile API's own doc comment): a rest path that fails to parse as an id is a uniform 404, never
- * a listing — there is no profile sub-page below the handle.
+ * instead of guessing from the URL shape alone.
  */
 export function ProfileAliasRoute(): JSX.Element {
   const params = useParams<{ user: string; rest?: string }>();
@@ -39,9 +37,9 @@ export function ProfileAliasRoute(): JSX.Element {
   // A title-slug address (`/@user/<title-slug>`, lib/artifacts/slug-address) names its page by the server's answer.
   const served = createMemo(() => servedArtifactId(location.pathname));
   const id = createMemo(() => served() ?? parsePrettyPath(segments())?.id ?? null);
-  // A one-segment slug the server has not answered on this load may be a title slug, which only the server resolves:
+  // A title path the server has not answered on this load may be a title slug, which only the server resolves:
   // a miss at it crosses there, once (an address the server already answered is never sent back).
-  const resolvable = createMemo(() => params.user.startsWith('@') && segments().length === 1 && titleSlug(segments()[0]) === segments()[0]!.toLowerCase() && !served() && !servedAt(location.pathname));
+  const resolvable = createMemo(() => params.user.startsWith('@') && segments().length > 0 && segments().every(part => titleSlug(part) === part.toLowerCase()) && !served() && !servedAt(location.pathname));
   // The ROUTER's address: a client navigation renders this route before the address bar moves.
   const cross = () => replaceDocument(location.pathname + location.search + location.hash);
   createEffect(() => { if (!id() && resolvable()) cross(); });

@@ -99,3 +99,20 @@ describe('a title-slug address', () => {
     expect((await app.request(`/@nobody_here/some-page`, { headers: w.stranger })).status).toBe(404);
   });
 });
+
+it('admits every folder in a nested address for the requesting viewer', async () => {
+  const w = await world(), db = await getDb();
+  const id = await w.mk('Daily notes', 'public');
+  await db.query("INSERT INTO artifacts(id,user_id,format,title,visibility) VALUES ('fold001',$1,'folder','Work area','private')",[w.owner.id]);
+  await setArtifact(db,id,{ancestor_ids:['fold001']});
+  const path = '/@'+w.owner.username+'/work-area/daily-notes';
+  expect((await app.request(path,{headers:w.stranger})).status).toBe(404);
+  const own = await app.request(path,{headers:w.ownerHeaders});
+  expect(own.status).toBe(200);
+  expect(JSON.stringify(payloadOf(await own.text()).artifact)).toContain(id);
+  await setArtifact(db,'fold001',{visibility:'public'});
+  const api = await app.request('/api/page/profile'+path,{headers:w.stranger});
+  expect(await api.json()).toEqual({kind:'artifact',id});
+  await setArtifact(db,id,{ancestor_ids:[]});
+  expect((await app.request(path,{headers:w.ownerHeaders})).status).toBe(404);
+});

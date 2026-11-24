@@ -1,4 +1,5 @@
 /** Public HTML home listing on an anonymous owner host. No authenticated controls or private rows. */
+import {usableSitePath} from './title-path';
 import { escapeHtml } from '@artifactbin/utils/escape';
 import { DOMAIN_FOOTER_TEXT } from '@artifactbin/contracts/domain-footer';
 import { THEME_BOOTSTRAP_HASH, THEME_BOOTSTRAP_SCRIPT } from '@/lib/page-styles';
@@ -55,8 +56,8 @@ export function linkedStylesheets(html: string): string[] {
     .filter((href): href is string => !!href && href.startsWith('/') && !href.startsWith('//'));
 }
 
-export const siteFilePath = (row:{id:string;title?:string|null;format:string}) =>
-  row.format==='folder' ? `/folders/${encodeURIComponent(row.id)}` : domainPostPath({id:row.id,title:row.title??null});
+export const siteFilePath = (row:{id:string;title?:string|null;format:string;title_path?:string|null}) =>
+  usableSitePath(row.title_path??null) ?? (row.format==='folder' ? `/folders/${encodeURIComponent(row.id)}` : domainPostPath({id:row.id,title:row.title??null}));
 
 /** The app listing's empty state. */
 const NOTHING_HERE_HTML = '<p class="reveal font-mono text-sm text-muted"><span class="text-accent">$</span> nothing here yet<span class="caret text-accent">▍</span></p>';

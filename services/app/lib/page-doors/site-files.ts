@@ -1,6 +1,6 @@
 /** The publishing host supplies this scope and revalidates its owner and selected root at release. */
 import type { DatasetColumn } from '@artifactbin/contracts/sql';
-import { publicSiteAncestors, type UserPagesOwner } from '@/lib/user-pages';
+import { siteTitlePathSql, publicSiteAncestors, type UserPagesOwner } from '@/lib/user-pages';
 import { canonicalArtifactPath } from '@/lib/http';
 import { getDb, PUBLIC_BASE_URL } from '@/lib/platform';
 import { viewTotalsFor } from '@/lib/analytics';
@@ -9,7 +9,7 @@ export interface SiteFilesScope {
   owner: UserPagesOwner;
   folderId: string | null;
   origin: string;
-  sitePath(row: { id: string; title: string | null; format: 'html' | 'folder' }): string;
+  sitePath(row: { id: string; title: string | null; title_path: string|null; format: 'html' | 'folder' }): string;
 }
 
 const columns: DatasetColumn[] = ['id', 'parent_id', 'title', 'format', 'url', 'created_at', 'updated_at', 'views', 'likes']
@@ -17,6 +17,7 @@ const columns: DatasetColumn[] = ['id', 'parent_id', 'title', 'format', 'url', '
 
 interface FileHeader {
   id: string;
+  title_path: string|null;
   parent_id: string | null;
   title: string | null;
   format: string;
@@ -36,7 +37,7 @@ export function siteFiles(scope: SiteFilesScope) {
   async function headers() {
     const db = await getDb();
     return (await db.query<FileHeader>(`
-      SELECT a.id, a.title, a.format, a.created_at, a.updated_at,
+      SELECT ${siteTitlePathSql(scope.owner.kind,'$2')} AS title_path, a.id, a.title, a.format, a.created_at, a.updated_at,
         NULLIF(a.ancestor_ids[cardinality(a.ancestor_ids)], $2::text) AS parent_id,
         (SELECT count(*)::int FROM relations WHERE verb='like' AND object_kind='artifact'
           AND object_id=a.id AND status='accepted' AND deleted_at IS NULL) AS likes
@@ -53,12 +54,12 @@ export function siteFiles(scope: SiteFilesScope) {
       const rows = await headers();
       admitted = JSON.stringify(rows);
       const views = await viewTotalsFor(rows.map(row => row.id));
-      return rows.map(row => ({
+      return rows.map(({title_path,...row}) => ({
         ...row,
         created_at: new Date(row.created_at).toISOString(),
         updated_at: new Date(row.updated_at).toISOString(),
         url: row.format === 'folder' || row.format === 'html'
-          ? new URL(scope.sitePath({ id: row.id, title: row.title, format: row.format }), scope.origin).href
+          ? new URL(scope.sitePath({ title_path, id: row.id, title: row.title, format: row.format }), scope.origin).href
           : new URL(canonicalArtifactPath(row, scope.owner.handle), PUBLIC_BASE_URL).href,
         views: views.get(row.id) ?? 0,
       }));
