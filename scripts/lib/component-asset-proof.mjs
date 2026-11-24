@@ -1,4 +1,4 @@
-/** Source-bound build receipt used by the capture harness before publication.
+/** Source-bound build receipt used by the native reader gate.
  * @typedef {{format:'component-assets-v1',inputs:readonly {path:string,sha256:string}[],outputs:readonly {path:string,sha256:string}[]}} ComponentAssetReceipt
  */
 import {createHash} from 'node:crypto';
@@ -26,14 +26,6 @@ export async function hostedComponentFiles({root,origin,fetcher=fetch,receiptPat
   if(!response.ok)throw Error(`Hosted component unavailable (${response.status}): ${name}`);
   files.set(name,new Uint8Array(await response.arrayBuffer()));
  }
- return files;
-}
-/** The same receipt-listed modules read from the local build output (what this checkout would serve), keyed `components/<file>`.
- * A missing file reads as a stale build so callers can rebuild.
- * @param {{root:string,receiptPath?:string}} options */
-export async function builtComponentFiles({root,receiptPath=COMPONENT_RECEIPT}){
- const files=new Map();
- for(const name of builtModuleNames(await readReceipt(root,receiptPath)))files.set(name,await readFile(path.resolve(root,BUILT+name)).catch(error=>{if(error.code==='ENOENT')throw Error('Stale component build: '+BUILT+name);throw error;}));
  return files;
 }
 /** Reject a source-stale cache or hosted component modules different from the built bytes.

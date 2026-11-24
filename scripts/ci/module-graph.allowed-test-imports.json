@@ -4,10 +4,6 @@
     "scripts/__tests__/reserved-ids-postgres-proof.ts": [
       "@/lib/artifacts/identities"
     ],
-    "scripts/fixtures/component-baseline/__tests__/interaction-components.test.mjs": [
-      "../../../../services/app/lib/html-components/data-table",
-      "../../../../services/app/lib/html-components/select"
-    ],
     "services/app/__tests__/document-serving-headers.test.ts": [
       "@/lib/object-store/image-store",
       "@/lib/object-store/pdf-store"

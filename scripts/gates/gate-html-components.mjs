@@ -1,27 +1,17 @@
-/** Targeted compiled-module checks. Recorded React SSR parity; candidate browser contracts and review images. */
+/** Browser interaction, focus, theme and layout checks for compiled native components. */
 import { createServer } from 'node:http';
-import { readFile, mkdir, writeFile } from 'node:fs/promises';
-import { createHash } from 'node:crypto';
 import path from 'node:path';
-import { gzipSync } from 'node:zlib';
 import { build } from 'esbuild';
-import { JSDOM } from 'jsdom';
 import { launchChromium } from './lib/browser.mjs';
 import { withNativeFileChooser } from './lib/native-file-chooser.mjs';
 import { createChecker, createSection } from './lib/assert.mjs';
-import { semanticSnapshot, semanticDifferences, tabsParityFixtures, tabsInteractionHtml, tabsInteractionCases, componentBrowserFixtures, contrastRatio, duplicateIdentities } from '../lib/component-parity.mjs';
+import { tabsInteractionHtml, componentBrowserFixtures, contrastRatio, duplicateIdentities } from '../lib/html-components-fixture.mjs';
 
 const check = createChecker('html-components');
 const section = createSection(check);
-const evidenceFiles = [];
 const families=['Tabs','Button','Switch','Progress','Collapsible','Dialog','Slider','Input','Textarea','Accordion','Select','DatePicker','Segmented','Avatar','Icon','FileUpload','SlideDeck','DataTable'];
 const sourceName=family=>family.replace(/[A-Z]/g,(letter,index)=>(index?'-':'')+letter.toLowerCase());
 const repo = path.resolve(import.meta.dirname,'../..');
-// These bytes are the real retained React capture, not a new expected DOM manufactured by this gate.
-const oracleBytes = await readFile(path.join(repo,'scripts/fixtures/component-react-oracle.json'));
-const oracleHash = createHash('sha256').update(oracleBytes).digest('hex');
-if (oracleHash !== 'fc56abeba44af903e616ed3172d5dddaad44c5c7b1afbc10ecf92078e10d468b') throw new Error('Recorded React reference changed: review and explicitly repin the capture');
-const oracle = JSON.parse(oracleBytes);
 const result = await build({stdin:{contents:families.map(family=>`import './services/app/lib/html-components/${sourceName(family)}.ts';`).join('')+"import {STORY_TABLE_CSS} from './services/app/lib/page-styles/chrome-css.ts';const tableStyle=document.createElement('style');tableStyle.textContent=STORY_TABLE_CSS;document.head.append(tableStyle);document.documentElement.dataset.fixtureReady='yes';",resolveDir:repo,sourcefile:'components-gate.ts'},bundle:true,format:'esm',platform:'browser',write:false});
 const bundle = result.outputFiles[0].contents;
 const server = createServer((request,response) => {
@@ -32,13 +22,7 @@ const server = createServer((request,response) => {
 });
 await new Promise(resolve => server.listen(0,'127.0.0.1',resolve));
 const origin = `http://127.0.0.1:${server.address().port}`;
-const screenshots = path.resolve(repo,process.argv[3] ?? 'tmp/component-parity');
-await mkdir(screenshots,{recursive:true});
 const browser = await launchChromium();
-async function saveImage(page,name) {
-  const bytes=await page.screenshot({path:path.join(screenshots,name),fullPage:true});
-  evidenceFiles.push({name,sha256:createHash('sha256').update(bytes).digest('hex'),mediaType:'image/png',base64:bytes.toString('base64')});
-}
 try {
   const errors=[],requests=[];
   function configurePage(candidate) {
@@ -54,46 +38,60 @@ try {
     await page.waitForFunction(()=>document.documentElement.dataset.fixtureReady==='yes');
     await page.evaluate(()=>document.fonts.ready);
   }
-  for (const fixture of tabsParityFixtures()) {
-    const recorded=oracle[fixture.reference.key];
-    if (!recorded) throw new Error(`Missing recorded React fixture ${fixture.id}`);
-    const expected=semanticSnapshot(new JSDOM(recorded).window.document);
-    await mount(fixture.newHtml);
-    const differences=semanticDifferences(expected,await page.evaluate(semanticSnapshot,await page.locator('body').elementHandle()));
-    check(differences.length===0,`${fixture.id} recorded React SSR roles/name/selection (${differences.join('; ') || 'equal'})`);
+  for (const variant of ['default', 'line']) {
+    await mount(`<af-tabs default-value="one"><af-tabs-list variant="${variant}"><af-tabs-trigger value="one">One</af-tabs-trigger></af-tabs-list></af-tabs>`);
+    check(await page.getByRole('tab', {name: 'One', exact: true, selected: true}).count() === 1,
+      `Tabs ${variant} selects its named default tab`);
   }
   for (const theme of ['light','dark']) for (const viewport of [{width:800,height:600},{width:390,height:844}]) {
-    for (const fixtureCase of tabsInteractionCases) {
-      await mount(tabsInteractionHtml,theme,viewport);
-      for (const action of fixtureCase.actions) {
-        if (action.type==='key') await page.keyboard.press(action.key);
-        else await page.getByRole('tab',{name:action.name,exact:true})[action.type]();
-      }
-      const differences=semanticDifferences(fixtureCase.expected,await page.evaluate(semanticSnapshot,await page.locator('body').elementHandle()));
-      check(differences.length===0,`candidate contract ${fixtureCase.id} ${theme} ${viewport.width}px (${differences.join('; ') || 'equal'})`);
+    const tag = `Tabs ${theme} ${viewport.width}px`;
+    const selectedTab = name => page.getByRole('tab', {name, exact: true, selected: true});
+    await mount(tabsInteractionHtml, theme, viewport);
+    const one = page.getByRole('tab', {name: 'One', exact: true});
+    const two = page.getByRole('tab', {name: 'Two', exact: true});
+    const unavailable = page.getByRole('tab', {name: 'Unavailable', exact: true});
+    const tablist = page.getByRole('tablist', {name: 'Sections', exact: true});
+    check(await tablist.getAttribute('aria-orientation') === 'horizontal' &&
+      await tablist.getByRole('tab').count() === 3 && await unavailable.isDisabled(),
+      `${tag} exposes three named horizontal tabs including the disabled tab`);
+    const selectionIs = async name =>
+      await tablist.getByRole('tab', {selected: true}).count() === 1 &&
+      await selectedTab(name).count() === 1 &&
+      await page.getByRole('tabpanel').count() === 1 &&
+      await page.getByRole('tabpanel', {name, exact: true}).isVisible();
+    check(await selectionIs('One'), `${tag} initial selection and panel`);
+    await one.focus();
+    for (const [key, name] of [['ArrowRight', 'Two'], ['Home', 'One'], ['End', 'Two'], ['Home', 'One'], ['ArrowLeft', 'Two']]) {
+      await page.keyboard.press(key);
+      check(await selectionIs(name) && await selectedTab(name).evaluate(node => node === document.activeElement),
+        `${tag} ${key} selects and focuses ${name}`);
     }
-    // Real Tab traversal and retained content need a browser, not synthetic key dispatch.
+    await one.click();
+    await two.click();
+    check(await selectionIs('Two') && await two.evaluate(node => node === document.activeElement),
+      `${tag} click selects and focuses Two`);
+    // Check browser Tab traversal and preserved panel content.
     await mount(tabsInteractionHtml,theme,viewport);
     await page.locator('#before').focus(); await page.keyboard.press('Tab');
-    check(await page.getByRole('tab',{name:'One',exact:true}).evaluate(node=>node===document.activeElement),`candidate Tab entry ${theme} ${viewport.width}px`);
+    check(await page.getByRole('tab',{name:'One',exact:true}).evaluate(node=>node===document.activeElement),`Tabs entry ${theme} ${viewport.width}px`);
     await page.keyboard.press('Shift+Tab');
-    check(await page.locator('#before').evaluate(node=>node===document.activeElement),`candidate Shift+Tab exit ${theme} ${viewport.width}px`);
+    check(await page.locator('#before').evaluate(node=>node===document.activeElement),`Tabs Shift+Tab exit ${theme} ${viewport.width}px`);
     await page.keyboard.press('Tab');
     await page.keyboard.press('ArrowRight'); await page.keyboard.press('Tab');
-    check(await page.getByRole('tabpanel',{name:'Two',exact:true}).evaluate(node=>node===document.activeElement),`candidate Tab enters selected panel ${theme} ${viewport.width}px`);
+    check(await page.getByRole('tabpanel',{name:'Two',exact:true}).evaluate(node=>node===document.activeElement),`Tabs enters selected panel ${theme} ${viewport.width}px`);
     await page.getByRole('tab',{name:'One',exact:true}).click();
     await page.getByLabel('Retained input').fill('Edited');
     await page.getByRole('tab',{name:'Two',exact:true}).click(); await page.getByRole('tab',{name:'One',exact:true}).click();
-    check(await page.getByLabel('Retained input').inputValue()==='Edited',`candidate panel keeps input ${theme} ${viewport.width}px`);
+    check(await page.getByLabel('Retained input').inputValue()==='Edited',`Tabs panel keeps input ${theme} ${viewport.width}px`);
     await page.getByRole('tab',{name:'One',exact:true}).focus(); await page.keyboard.press('ArrowRight');
     // Assert the settled CSS state, not an intermediate frame of the focus/selection transition.
     const expectedColor=theme==='dark'?'rgb(96, 165, 250)':'rgb(37, 99, 235)';
     await page.waitForFunction(expected=>{const tab=document.querySelector('af-tabs-trigger[data-state=active]');return tab && getComputedStyle(tab).backgroundColor===expected;},expectedColor,{timeout:2000});
-    await saveImage(page,`candidate-tabs-${theme}-${viewport.width}.png`);
-    check(await page.getByRole('tab',{name:'Two',exact:true}).evaluate((node,expected)=>getComputedStyle(node).backgroundColor===expected,theme==='dark'?'rgb(96, 165, 250)':'rgb(37, 99, 235)'),`candidate selected theme token ${theme} ${viewport.width}px`);
-    check(await page.evaluate(()=>[...document.querySelectorAll('[aria-controls],[aria-labelledby]')].every(node=>['aria-controls','aria-labelledby'].every(attr=>(node.getAttribute(attr)??'').split(/\s+/).filter(Boolean).every(id=>document.getElementById(id))))),`candidate ID references resolve ${theme} ${viewport.width}px`);
-    check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`candidate no horizontal overflow ${theme} ${viewport.width}px`);
-    check(await page.getByRole('tab',{name:'Two',exact:true}).evaluate(node=>{const style=getComputedStyle(node);return style.outlineStyle!=='none' && parseFloat(style.outlineWidth)>0;}),`candidate keyboard focus visible ${theme} ${viewport.width}px`);
+
+    check(await page.getByRole('tab',{name:'Two',exact:true}).evaluate((node,expected)=>getComputedStyle(node).backgroundColor===expected,theme==='dark'?'rgb(96, 165, 250)':'rgb(37, 99, 235)'),`Tabs selected theme token ${theme} ${viewport.width}px`);
+    check(await page.evaluate(()=>[...document.querySelectorAll('[aria-controls],[aria-labelledby]')].every(node=>['aria-controls','aria-labelledby'].every(attr=>(node.getAttribute(attr)??'').split(/\s+/).filter(Boolean).every(id=>document.getElementById(id))))),`Tabs ID references resolve ${theme} ${viewport.width}px`);
+    check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`Tabs no horizontal overflow ${theme} ${viewport.width}px`);
+    check(await page.getByRole('tab',{name:'Two',exact:true}).evaluate(node=>{const style=getComputedStyle(node);return style.outlineStyle!=='none' && parseFloat(style.outlineWidth)>0;}),`Tabs keyboard focus visible ${theme} ${viewport.width}px`);
   }
   // A real shadow-root regression: document.activeElement is the host, so Tabs
   // must consult its ShadowRoot.activeElement for roving focus and already-focused clicks.
@@ -193,7 +191,7 @@ try {
     await page.evaluate(theme=>{document.documentElement.dataset.afDark=String(theme==='dark');document.documentElement.style.colorScheme=theme;},theme);await settleTransitions();
   }
   for (const theme of ['light','dark']) for (const viewport of [{width:800,height:600},{width:390,height:844}]) {
-    for(const fixture of componentBrowserFixtures) await section(`${fixture.family} candidate ${theme} ${viewport.width}px`,async()=>{
+    for(const fixture of componentBrowserFixtures) await section(`${fixture.family} ${theme} ${viewport.width}px`,async()=>{
       const sharedPage=page;
       // Native chooser interception belongs to a fresh WebContents/context, rather than a
       // page repeatedly navigated through modal/fullscreen cases. Still use real Enter activation.
@@ -380,7 +378,7 @@ try {
           await deck.evaluate(deck=>{const node=document.createElement('af-slide-deck');node.id='other-deck';node.style.setProperty('--af-slide-height','64px');node.innerHTML='<af-slide title="Other first">Other first</af-slide><af-slide title="Other second">Other second</af-slide>';deck.querySelector('af-slide').append(node);node.focus({preventScroll:true});});await page.keyboard.press('ArrowRight');await waitDeck(1,'#other-deck');check(await page.locator('#other-deck').evaluate(node=>node.index)===1 && await deck.evaluate(node=>node.index)===0,`${tag} nested deck keyboard does not page outer deck`);
           await page.locator('#other-deck').evaluate(node=>node.querySelectorAll('af-slide').forEach(slide=>slide.remove()));await page.waitForFunction(()=>document.querySelector('#other-deck').index===-1);check(await page.locator('#other-deck [data-af-deck-count]').textContent()==='0 / 0',`${tag} dynamic empty deck has no selection`);
           await page.locator('#other-deck').evaluate(node=>node.remove());await deck.focus({preventScroll:true});
-          await page.emulateMedia({media:'print'});check(await deck.locator(':scope > nav').isHidden() && await deck.locator(':scope > [data-af-deck-chrome=toolbar]').isHidden(),`${tag} print excludes chrome`);check(await deck.locator('af-slide').evaluateAll(nodes=>nodes.every(node=>getComputedStyle(node).display!=='none' && getComputedStyle(node).breakAfter.match(/page|auto/))),`${tag} print keeps authored slides with page boundaries`);await saveImage(page,`candidate-slide-deck-print-${theme}-${viewport.width}.png`);await page.emulateMedia({media:null});await deck.locator('af-slide').first().evaluate(node=>{node.scrollIntoView({behavior:'instant',block:'start'});window.dispatchEvent(new Event('scroll'));});await waitDeck(0);await readable('af-slide h1',tag);
+          await page.emulateMedia({media:'print'});check(await deck.locator(':scope > nav').isHidden() && await deck.locator(':scope > [data-af-deck-chrome=toolbar]').isHidden(),`${tag} print excludes chrome`);check(await deck.locator('af-slide').evaluateAll(nodes=>nodes.every(node=>getComputedStyle(node).display!=='none' && getComputedStyle(node).breakAfter.match(/page|auto/))),`${tag} print keeps authored slides with page boundaries`);await page.emulateMedia({media:null});await deck.locator('af-slide').first().evaluate(node=>{node.scrollIntoView({behavior:'instant',block:'start'});window.dispatchEvent(new Event('scroll'));});await waitDeck(0);await readable('af-slide h1',tag);
         }
         check(await page.evaluate(()=>[...document.querySelectorAll('[aria-controls],[aria-labelledby],[aria-describedby]')].every(node=>['aria-controls','aria-labelledby','aria-describedby'].every(attr=>(node.getAttribute(attr)??'').split(/\s+/).filter(Boolean).every(id=>document.getElementById(id))))),`${tag} references resolve`);
         check((await page.evaluate(duplicateIdentities,await page.locator('html').elementHandle())).length===0,`${tag} DOM and annotation identities remain unique`);
@@ -392,11 +390,8 @@ try {
         throw error;
       } finally {
         try {
-        if(await page.evaluate(()=>!!document.fullscreenElement))await page.evaluate(()=>document.exitFullscreen());
-        await page.emulateMedia({media:null});
-        // Settle finite transitions while leaving the indeterminate progress animation deterministic.
-        await page.evaluate(async()=>{await Promise.allSettled(document.getAnimations().filter(animation=>animation.effect?.getTiming().iterations!==Infinity).map(animation=>animation.finished));for(const animation of document.getAnimations())if(animation.effect?.getTiming().iterations===Infinity){animation.pause();animation.currentTime=0;}});
-        await saveImage(page,`candidate-${fixture.family}-${theme}-${viewport.width}.png`);
+          if(await page.evaluate(()=>!!document.fullscreenElement))await page.evaluate(()=>document.exitFullscreen());
+          await page.emulateMedia({media:null});
         } finally {
           page=sharedPage;
           if(chooserContext)await chooserContext.close();
@@ -460,17 +455,8 @@ try {
   check(tableFailure.failed.code==='permission_denied'&&tableFailure.failed.visible&&tableFailure.failed.alerts===1&&!tableFailure.failed.noRows&&/^You don't have access/.test(tableFailure.failed.text??''),`table shows a failed read's sentence, never "no rows" (${JSON.stringify(tableFailure.failed)})`);
   check(tableFailure.cut.code===null&&tableFailure.cut.rows===2&&tableFailure.cut.count==='2 of 2 rows',`table draws a cut-off answer with its row count (${JSON.stringify(tableFailure.cut)})`);
 
-  check(errors.length===0,`candidate has no page errors (${errors.join('; ') || 'none'})`);
-  const evidence=JSON.stringify({candidateBundleSha256:createHash('sha256').update(bundle).digest('hex'),reference:{kind:'recorded-react-ssr',sha256:oracleHash,fixtures:tabsParityFixtures().map(fixture=>({id:fixture.id,oldJsx:fixture.oldJsx,newHtml:fixture.newHtml}))},families:componentBrowserFixtures.map(fixture=>({family:fixture.family,evidence:fixture.evidence})),viewports:[800,390],screenshots:'candidate-only; old-browser visual comparison not yet captured',themes:'fixture token pairs, not every product design system'},null,2);
-  await writeFile(path.join(screenshots,'evidence.json'),evidence);
-  evidenceFiles.push({name:'evidence.json',mediaType:'application/json',base64:Buffer.from(evidence).toString('base64')});
-  check.note(`Candidate review images: ${screenshots}; no old-browser screenshot comparison claimed`);
+  check(errors.length===0,`no uncaught page errors (${errors.join('; ') || 'none'})`);
 } finally {
-  // Container --rm removes its filesystem. Preserve synthetic review files in captured stdout too.
-  const run=JSON.stringify({candidateBundleSha256:createHash('sha256').update(bundle).digest('hex'),recordedReactSsrSha256:oracleHash,browser:browser.version(),viewports:[800,390],themes:['light','dark'],failures:check.failures,screenshotComparison:'candidate-only; old-browser visual baseline pending'});
-  evidenceFiles.push({name:'run.json',mediaType:'application/json',base64:Buffer.from(run).toString('base64')});
-  const archive=gzipSync(Buffer.from(JSON.stringify({format:'component-parity-files-v1',files:evidenceFiles})));
-  console.log(`COMPONENT_PARITY_EVIDENCE_GZIP_BASE64 ${archive.toString('base64')}`);
   await browser.close();
   await new Promise(resolve=>server.close(resolve));
 }

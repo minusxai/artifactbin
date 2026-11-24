@@ -1,14 +1,15 @@
-/** Immediate reader behavior, lazy author imports, and the same client in a portable offline file. */
+/** Immediate reader behavior, lazy author imports, hosted components, and the portable offline client. */
 import {createServer} from 'node:http';
 import {randomUUID} from 'node:crypto';
 import {mkdtemp,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
-import {pathToFileURL} from 'node:url';
+import {fileURLToPath,pathToFileURL} from 'node:url';
 import {launchChromium} from './lib/browser.mjs';
 import {connectAgent} from './lib/account-connection.mjs';
 import {documentFrame} from './lib/page-facts.mjs';
 import {createChecker} from './lib/assert.mjs';
+import {hostedComponentFiles,verifyComponentAssetArchive} from '../lib/component-asset-proof.mjs';
 const base=process.argv[2]??'http://localhost:3030',check=createChecker('native-core');
 const connection=await connectAgent(base),browser=await launchChromium(),directory=await mkdtemp(path.join(tmpdir(),'af-portable-'));
 const publish=async body=>{const res=await fetch(base+'/api/artifacts',{method:'POST',headers:{authorization:`Bearer ${connection.token}`,'content-type':'application/json','Idempotency-Key':`native_core_${randomUUID().replaceAll('-','')}`},body:JSON.stringify({visibility:'public',...body})});if(!res.ok)throw Error(`publish ${res.status}`);return res.json();};
@@ -37,6 +38,91 @@ try{
  check(network===0,'portable author module and reader have no network dependencies');
  check((await local.locator('#status').textContent()).includes('7'),'downloaded SQL reads use embedded rows without sending');
  await offline.close();
+ // The app's raw reader must resolve the published import map and serve the current build.
+ const root=fileURLToPath(new URL('../../',import.meta.url));
+ await verifyComponentAssetArchive({root,files:await hostedComponentFiles({root,origin:base})});
+ check(true,'served component module closure and bytes match the current build receipt');
+ const components=await publish({html:`<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head><body>
+  <af-dialog>
+    <af-dialog-trigger>Open review</af-dialog-trigger>
+    <af-dialog-content><af-dialog-title>Review changes</af-dialog-title><af-dialog-close>Close review</af-dialog-close></af-dialog-content>
+  </af-dialog>
+  <af-tabs default-value="one"><af-tabs-list aria-label="Sections">
+    <af-tabs-trigger value="one">One</af-tabs-trigger>
+    <af-tabs-trigger value="blocked" disabled>Unavailable</af-tabs-trigger>
+    <af-tabs-trigger value="two">Two</af-tabs-trigger>
+  </af-tabs-list><af-tabs-content value="one">First panel</af-tabs-content><af-tabs-content value="two">Second panel</af-tabs-content></af-tabs>
+  <af-select label="Person" options='["Ada","Grace","Linus"]' default-value='"Ada"'></af-select>
+  <af-tooltip><af-tooltip-trigger><button>Help</button></af-tooltip-trigger><af-tooltip-content>More information</af-tooltip-content></af-tooltip>
+  <af-user fallback="Unassigned"></af-user>
+  <af-data-table></af-data-table>
+  <script type="module">
+    import "@afbin/dialog";
+    import "@afbin/tabs";
+    import "@afbin/select";
+    import "@afbin/tooltip";
+    import "@afbin/user";
+    import "@afbin/data-table";
+    document.querySelector('af-data-table').data={
+      columns:[{name:'name',type:'string'},{name:'score',type:'number'}],
+      rows:[{name:'Ada',score:92},{name:'Grace',score:98},{name:'Linus',score:85}],
+    };
+  </script>
+ </body></html>`});
+ const raw=await browser.newPage(),resourceErrors=[];
+ raw.on('pageerror',error=>resourceErrors.push(error.message));
+ raw.on('requestfailed',request=>resourceErrors.push(`${request.resourceType()} request failed`));
+ raw.on('response',response=>{
+   if(response.status()>=400&&['document','script','stylesheet','font'].includes(response.request().resourceType())){
+     resourceErrors.push(`${response.request().resourceType()} returned HTTP ${response.status()}`);
+   }
+ });
+ try {
+   for(const [mode,viewport] of [['light',{width:800,height:600}],['dark',{width:390,height:844}]]){
+     await raw.setViewportSize(viewport);
+     await raw.goto(`${base}/a/${components.id}/raw?mx-mode=${mode}`);
+     await raw.locator(`html[data-af-dark="${mode==='dark'}"]`).waitFor({state:'attached'});
+     const open=raw.getByRole('button',{name:'Open review',exact:true});
+     const dialog=raw.getByRole('dialog',{name:'Review changes',exact:true});
+     await open.click();
+     await dialog.waitFor();
+     await raw.keyboard.press('Escape');
+     await dialog.waitFor({state:'hidden'});
+     check(await open.evaluate(node=>node===document.activeElement),`raw ${mode} dialog restores focus on Escape`);
+
+     const first=raw.getByRole('tab',{name:'One',exact:true,selected:true});
+     await first.focus();
+     check(await raw.getByRole('tabpanel',{name:'One',exact:true}).isVisible(),`raw ${mode} shows the selected default panel`);
+     await raw.keyboard.press('ArrowRight');
+     const second=raw.getByRole('tab',{name:'Two',exact:true,selected:true});
+     check(await second.evaluate(node=>node===document.activeElement) &&
+       await raw.getByRole('tabpanel',{name:'Two',exact:true}).textContent()==='Second panel' &&
+       await raw.getByRole('tabpanel',{name:'One',exact:true}).count()===0,
+       `raw ${mode} keyboard selection skips the disabled tab and shows the second panel`);
+
+     const person=raw.getByRole('button',{name:'Person',exact:true});
+     await person.click();
+     check(await raw.getByRole('option',{name:'Ada',exact:true,selected:true}).isVisible(),
+       `raw ${mode} select opens with its default option selected`);
+     await raw.getByRole('option',{name:'Grace',exact:true}).click();
+     check((await person.textContent()).includes('Grace')&&await person.getAttribute('aria-expanded')==='false',
+       `raw ${mode} select applies the choice and closes`);
+
+     await raw.getByRole('button',{name:'Help',exact:true}).focus();
+     const tooltip=raw.getByRole('tooltip');
+     await tooltip.waitFor();
+     check(await tooltip.textContent()==='More information',`raw ${mode} tooltip opens on keyboard focus`);
+     await raw.keyboard.press('Escape');
+     await tooltip.waitFor({state:'hidden'});
+     check(await raw.getByText('Unassigned',{exact:true}).isVisible(),`raw ${mode} user fallback is visible`);
+
+     const rows=raw.getByRole('row');
+     await raw.getByRole('cell',{name:'Linus',exact:true}).waitFor();
+     check(await rows.count()===4,`raw ${mode} table shows the header and all three rows`);
+     check(await raw.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`raw ${mode} components fit the viewport`);
+   }
+   check(resourceErrors.length===0,`raw component reader loads without script or resource errors (${resourceErrors.join('; ')||'none'})`);
+ }finally{await raw.close();}
  // Exact initial code is admitted without permitting newly inserted inline code.
  const policyScript=`window.initialClassic=true;window.tryInline=()=>{const node=document.createElement('script');node.textContent='window.unadmittedInline=true';document.head.appendChild(node);return window.unadmittedInline===true;};window.tryEval=()=>{try{new Function('return 1')();return true;}catch{return false;}};window.evalAllowed=window.tryEval();window.removePolicy=()=>document.querySelector('meta[data-af="script-policy"]').remove();`;
  const policyHtml=`<!doctype html><html><head></head><body><button id="authored-handler" onclick="this.dataset.clicked='yes'">Known handler</button><script type="text/javascript">${policyScript}</script><script type="module" src="./policy-module.js"></script></body></html>`;

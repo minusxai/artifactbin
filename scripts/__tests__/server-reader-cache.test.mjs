@@ -4,7 +4,7 @@
  * main went red after #1180: a gate shard restored a test-builds cache whose marker was written by a FIRST build.
  * A first build has no earlier component receipt, so its marker stamped only the tools, the libraries and the
  * component sources, never the contracts and utils files the components import. The later edit to
- * services/contracts/src/agent.ts was invisible ("inputs unchanged, skipping rebuild") and component-baseline
+ * services/contracts/src/agent.ts was invisible ("inputs unchanged, skipping rebuild") and the reader gate
  * failed on a stale build. The marker now also stamps the inputs of the receipt the build just wrote.
  */
 import { describe, expect, it } from 'vitest';
