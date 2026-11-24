@@ -53,6 +53,7 @@ import { DATASET_SQL_WRITE_LIMITS } from './linked';
 /** One statement and its bound values (`$name`), as the page runtime's `sql` tag sends them. */
 interface PageSqlDoorCall { sql: string; params: Readonly<Record<string, Scalar>> }
 export interface PageSqlDoorScope {
+  files?: {columns:DatasetColumn[]; load:()=>Promise<Row[]>};
   admission?:{step<T>(pending:Promise<T>):Promise<T>;dispatch(read:boolean):AbortSignal};
   pageId: string;
   /** Trusted admission clock, never read from a public payload. */
@@ -158,8 +159,9 @@ function catalogMount(m: Mounted): CatalogMount | null {
 }
 
 /** What the statement is, by SQLite's own analysis over the reader's tables (shapes only, no rows). */
-async function analyzed(mounts: readonly Mounted[], sql: string) {
+async function analyzed(mounts: readonly Mounted[], sql: string, files?:PageSqlDoorScope['files']) {
   const relations = mounts.map((m) => ({ schema: m.schema, table: m.name, columns: [...m.visible, ...m.writeOnly] }));
+  if(files)relations.push({schema:'main',table:'_files',columns:files.columns});
   try { return await analyzeSql(sql, relations, { mode: 'write', extensions: sqlExtensions() }); }
   catch (e) { return refuse('validation_failed', e instanceof Error ? e.message : 'the statement was refused'); }
 }
@@ -285,9 +287,9 @@ export async function executePageSql(actor: AccessActor, links: readonly HtmlDat
     const call = checked(raw);
     const load = (fenced: boolean) => loadLinked(actor, links, { pageId: scope.pageId, fenced, retainReadFence:scope.retainReadFence, skipped: (link) => skipped.add(link.name) }, signal).catch((e) => { if (e instanceof DatasetAccessError) refuse('validation_failed', e.message); throw e; });
     const first = await (scope.admission?scope.admission.step(load(true)):load(true));
-    if (!first.length) refuse(skipped.size ? unreadable() : 'dataset_not_found', 'no linked dataset is readable');
+    if (!first.length && !scope.files) refuse(skipped.size ? unreadable() : 'dataset_not_found', 'no linked dataset is readable');
     const mounts = mountsOf(first, call.sql);
-    const analysis = await (scope.admission?scope.admission.step(analyzed(mounts, call.sql)):analyzed(mounts, call.sql));
+    const analysis = await (scope.admission?scope.admission.step(analyzed(mounts, call.sql,scope.files)):analyzed(mounts, call.sql,scope.files));
     if (analysis.kind === 'select') {
       signal=scope.admission?.dispatch(true)??signal;
       scope.retainReadDeadline?.(started+SQL_READ_WALL_TIMEOUT_MS);
@@ -296,7 +298,7 @@ export async function executePageSql(actor: AccessActor, links: readonly HtmlDat
       const life=readLifetime(signal,remaining);
       try{
       let read: ReadonlySet<string> = new Set();
-      const answer = await runPageSql(first.map((l) => ({ link: l.link!.name, snapshot: l.snapshot, tables: l.tables.map((t) => ({ tableId: t.tableId, selectable: t.model.select !== false })) })), call, life.signal, { wallTimeoutMs:life.remaining(),aggregates: 'visible',retainSelected:(links) => { read = links; scope.retainMountedLinks?.(links); } })
+      const answer = await runPageSql(first.map((l) => ({ link: l.link!.name, snapshot: l.snapshot, tables: l.tables.map((t) => ({ tableId: t.tableId, selectable: t.model.select !== false })) })), call, life.signal, { files:scope.files,wallTimeoutMs:life.remaining(),aggregates: 'visible',retainSelected:(links) => { read = links; scope.retainMountedLinks?.(links); } })
         .catch((e) => { if (e instanceof DatasetAccessError) refuse(e.extensions.code as SqlFailureCode, e.message); throw e; });
       for (const l of first) for (const verify of l.fences) await life.step(verify());
       life.check();
@@ -304,7 +306,7 @@ export async function executePageSql(actor: AccessActor, links: readonly HtmlDat
       }finally{life.close();}
     }
     read = false;
-    if (scope.readOnly) refuse('permission_denied', 'this page is read-only here: it reads, it never writes');
+    if (scope.readOnly || scope.files) refuse('permission_denied', 'this page is read-only here: it reads, it never writes');
     scope.admission?.dispatch(false);
     return await write(actor, call, scope, mounts, analysis.writes[0]!, () => load(false), signal);
   } catch (e) {
