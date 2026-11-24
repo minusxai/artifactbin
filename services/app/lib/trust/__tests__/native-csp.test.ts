@@ -1,5 +1,5 @@
 import {expect,it} from 'vitest';
-import {nativeCspDeclarations} from '../index';
+import {nativeCspDeclarations} from '../../html-page';
 const page=(head:string,body='')=>`<!doctype html><html><head>${head}</head><body>${body}</body></html>`;
 it('reads only actual head metadata, decoding HTML attributes without interpreting scripts or templates',()=>{
  const result=nativeCspDeclarations(page('<meta name="csp-connect" content="https://API.example.com/"><script>"<meta name=csp-script content=https://evil.test>"</script><template><meta name="csp-media" content="https://evil.test"></template>','<meta name="csp-img" content="https://evil.test">'));
