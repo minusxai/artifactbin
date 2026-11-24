@@ -78,13 +78,29 @@ a group gets there through `groups.mjs share PAGE --group GROUP --datasets`, nev
 
 ## What this viewer may change
 
-The rules judge every write; the page only chooses which controls to show. A page knows whether
-its reader is signed in (`watchUploadContext` from `@afbin/apollo`, [runtime](runtime.md)), not
-their account or role: show the write controls to a signed-in reader (`examples/tracker.html`)
-and let the rules decide. A write changes only rows the reader may: `affected: 0` means not
-allowed (or changed meanwhile), and the page must say so; a refused insert fails with
-`permission_denied`. A guest gets no write controls. Rules decide who may write which rows; they
-cannot cap how many rows there are (at most N per group).
+Use `sql.writeAccess` from `@afbin/apollo` for ordinary edit controls (see
+`examples/tracker.html`):
+
+```js
+const hints = await sql.writeAccess('tasks', {
+  insert: ['title', 'status'], update: ['status'], ids: rows.map(row => row._id),
+});
+addButton.hidden = hints.insert === 'denied';
+editButton.hidden = hints.rows[0].update === 'denied';
+removeButton.hidden = !hints.rows[0].delete;
+```
+
+Ask about one stored link (add `table` for a multi-table link), the full column list each
+form sends, and at most 100 IDs from the page's read. Row hints follow the order of `ids`.
+Omit `insert` or `update` to skip that check. `conditional` means a rule checks the submitted
+values. `allowed` means the requested columns and row scope pass the current rules. Missing
+or invisible rows, row filters that need hidden columns, pinned links and
+read-only surfaces and unavailable checks give denied hints. Refresh the hints with watched data and clear them
+when the viewer changes. `seat().writes` describes the surface, without checking any dataset.
+
+The write always checks current access and submitted values. Handle a refused write or
+`affected: 0` by telling the reader and refreshing the controls. Rules cannot cap how many
+rows there are (at most N per group).
 
 ## Change permissions: dry run, read-back, set
 

@@ -87,20 +87,11 @@ Opening a thread or pressing its restore button applies the saved fields through
 ## Datasets
 
 An HTML link declares one unique `data-af-name` (never `viewer`), bound by the page version to
-an authorized dataset. Read and write rows with `` sql`…` `` ([datasets](datasets.md)); no code
-of the page's runs on the server, so the dataset's rules are the only check on a write. Whether
-the reader is signed in comes from `watchUploadContext` (`state` is `signed-in`, `signed-out` or
-`read-only`): a hint for which controls to show, never a grant. Give guests read-only controls.
-Calls wait up to 3 s for the hosted parent; with no app connection `sql` rejects with
-`unavailable`. Do not depend on platform-internal bridge functions.
-
-```js
-import {watchUploadContext} from '@afbin/apollo';
-const who=watchUploadContext(({state})=>{
- showControls(state==='signed-in'); // signed in or out: the controls follow
-});
-// When removing this UI: who.unsubscribe();
-```
+an authorized dataset. Read and write with `` sql`…` `` ([datasets](datasets.md)). Use
+[`sql.writeAccess`](permissions.md#what-this-viewer-may-change) before showing edit controls.
+`watchUploadContext(listener)` reports the frame's sign-in and upload state and returns
+`{unsubscribe()}`. Calls wait up to 3 s for the hosted parent. With no app connection a SQL
+statement rejects with `unavailable`. Do not depend on platform-internal bridge functions.
 
 `onResolverChange(names=>…)` names changed links (and `viewer` on sign-in or out), not results
 or grants; `sql.watch` reruns on its

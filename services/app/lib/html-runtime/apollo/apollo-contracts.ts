@@ -1,5 +1,6 @@
 /** Viewer state storage and the supported SQL transport; no query-language client. */
 import type {HtmlJson as AfJson, HtmlJsonObject as AfJsonObject} from '@artifactbin/contracts/html-page';
+import type {SqlWriteAccessRequest} from '@artifactbin/contracts/sql';
 /** A write against the document: replace top-level fields if they still hold the expected values. */
 export interface StoreWrite {
   /** Top-level field → value it must still have (undefined: must be absent). */
@@ -33,7 +34,7 @@ export type QueryInvalidation = 'data' | 'authority';
 export interface RemotePort {
   subscribe?(listener:(reason?:QueryInvalidation)=>void):()=>void;
   online():boolean;
-  execute(request:{sql?:string;query?:string;params:Record<string,string|number|boolean|null>;idempotencyKey?:string}):Promise<unknown>;
+  execute(request:{sql?:string;query?:string;params:Record<string,string|number|boolean|null>;writeAccess?:SqlWriteAccessRequest;idempotencyKey?:string}):Promise<unknown>;
 }
 
 /** `#af-state=<base64url of the local-state JSON>` on a page address loads that state for the viewer. */

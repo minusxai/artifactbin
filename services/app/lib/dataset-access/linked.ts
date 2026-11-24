@@ -1,11 +1,10 @@
 /**
  * THE DATASETS A REQUEST READS AND WRITES: one dataset directly (its own sharing decides the role) or a page's dataset
  * links (the page audience rule), loaded once per request for the caller: the read snapshot through the retained port
- * (./retained), the write decision, and per table the model both doors read: its columns, what the role may write
- * (`write`) and change (`can`). The SQL door and collaborative cells share these authority decisions.
+ * (./retained), the write decision, and per table the columns and operations the role may write. The SQL door and collaborative cells share these authority decisions.
  * Persisted Hasura-style field identifiers remain separate from the source names SQL reads.
  */
-import type { DatasetBoolExp } from '@artifactbin/contracts/dataset-permissions';
+import type { DatasetMutationPolicy } from '@artifactbin/contracts/dataset-policy';
 import type { DatasetColumn } from '@artifactbin/contracts/sql';
 import type { HtmlDatasetLink } from '@artifactbin/contracts/html-page';
 import type { Queryable } from '@artifactbin/contracts/db';
@@ -18,7 +17,7 @@ import type { DatasetTable } from '@/lib/datasets';
 import { hasuraNames, storedConfiguration, type HasuraTableNames } from '@/lib/datasets/graphql-names';
 import { tableIdentity } from './model';
 import { retainedDatasetPort } from './retained';
-import type { HasuraCan, HasuraColumn, HasuraRowCan, HasuraScalar, HasuraTableModel, HasuraWriteModel } from './table-model';
+import type { HasuraColumn, HasuraScalar, HasuraTableModel, HasuraWriteModel } from './table-model';
 import { datasetBindingCatalog, DatasetBindingUnsupportedError } from './authority';
 import { collaborativeColumns } from './cells';
 import type { DatasetSnapshot } from './types';
@@ -35,7 +34,7 @@ const scalarOf = (type: DatasetColumn['type']): HasuraScalar => (type === 'numbe
 
 const notFound = () => new Error('dataset_not_found');
 
-interface LoadedTable { model: HasuraTableModel; tableId: string; declared: DatasetTable }
+interface LoadedTable { model: HasuraTableModel; tableId: string; declared: DatasetTable; mutationPolicy?: DatasetMutationPolicy }
 export interface Loaded {
   datasetId: string;
   /** Through a page: the link it was loaded for (its page name). */
@@ -50,37 +49,27 @@ export interface Loaded {
 export type LoadedDataset = Loaded;
 type WriteDecision = Awaited<ReturnType<typeof datasetWriteAccess>>;
 
-const NOTHING: HasuraCan = { insert: false, update: false, delete: false };
-
-/**
- * The role's write rules for one table, as the columns each lets it name (presets excluded), and what they let it
- * change (`can`): an insert root it has, an update root or delete rule it has with that rule's filter (true for every
- * row when the filter is empty, the owner's and editors'). A rule the role may not use here (`backend_only`) is absent.
- */
-function writeRules(decision: WriteDecision, table: DatasetTable, names: HasuraTableNames): { write?: HasuraWriteModel; can: HasuraCan } {
-  if (!decision.allowed) return { can: NOTHING };
+/** The usable mutation rules and the columns each lets the role name (presets excluded). */
+function writeRules(decision: WriteDecision, table: DatasetTable, names: HasuraTableNames): {
+  write?: HasuraWriteModel; mutationPolicy?: DatasetMutationPolicy;
+} {
+  if (!decision.allowed) return {};
   const column = (c: DatasetColumn): HasuraColumn => ({ field: names.columns[c.name] ?? (() => { throw notFound(); })(), source: c.name, type: scalarOf(c.type) });
   if (decision.admin) {
     const all = table.columns.map(column);
-    return { write: { insert: all, update: all, delete: true }, can: { insert: all.length > 0, update: all.length > 0, delete: true } };
+    return { write: { insert: all, update: all, delete: true } };
   }
   let policy: ReturnType<typeof tableMutationPolicy>;
-  try { policy = tableMutationPolicy(decision, table); } catch { return { can: NOTHING }; }
-  if (!policy) return { can: NOTHING };
+  try { policy = tableMutationPolicy(decision, table); } catch { return {}; }
+  if (!policy) return {};
   const { table: rules, role, operations } = policy;
   const rule = <P>(op: 'insert' | 'update' | 'delete', entries: Array<{ role: string; permission: P }> | undefined) => (operations.includes(op) ? entries?.find((e) => e.role === role)?.permission : undefined);
   const named = (p: { columns?: '*' | string[]; set?: Record<string, unknown> }) =>
     table.columns.filter((c) => (p.columns === undefined || p.columns === '*' || p.columns.includes(c.name)) && !Object.hasOwn(p.set ?? {}, c.name)).map(column);
   const insert = rule('insert', rules.insert_permissions), update = rule('update', rules.update_permissions), del = rule('delete', rules.delete_permissions);
-  const write: HasuraWriteModel = { ...(insert ? { insert: named(insert) } : {}), ...(update ? { update: named(update) } : {}), ...(del ? { delete: true } : {}) };
-  const rows = (filter: DatasetBoolExp | undefined): HasuraRowCan => (!filter || !Object.keys(filter).length ? true : { filter, session: decision.session });
   return {
-    write,
-    can: {
-      insert: !!write.insert?.length,
-      update: update && write.update?.length ? rows(update.filter as DatasetBoolExp | undefined) : false,
-      delete: del ? rows(del.filter as DatasetBoolExp | undefined) : false,
-    },
+    write: { ...(insert ? { insert: named(insert) } : {}), ...(update ? { update: named(update) } : {}), ...(del ? { delete: true } : {}) },
+    mutationPolicy: policy,
   };
 }
 
@@ -134,7 +123,7 @@ async function load(actor: AccessActor, binding: HtmlDatasetLink, signal: AbortS
   const tables = declared.tables.flatMap((table, i): LoadedTable[] => {
     const tableId = tableIdentity(table), names = snapshot?.names?.[tableId] ?? derived[i]!;
     const visible = snapshot?.catalog.tables.find((t) => tableIdentity(t) === tableId);
-    const { write, can } = writeRules(decision, table, names);
+    const { write, mutationPolicy } = writeRules(decision, table, names);
     if (!visible && !write) return [];
     const model: HasuraTableModel = {
       root: names.root,
@@ -143,9 +132,8 @@ async function load(actor: AccessActor, binding: HtmlDatasetLink, signal: AbortS
       columns: visible ? columnsOf(visible, names, collaborativeColumns(row, table)) : [],
       ...(visible ? {} : { select: false }),
       ...(write ? { write } : {}),
-      can,
     };
-    return [{ model, tableId, declared: table }];
+    return [{ model, tableId, declared: table, mutationPolicy }];
   });
   if (!tables.length) throw notFound();
   return { datasetId: binding.datasetId, snapshot, tables, port, fences };

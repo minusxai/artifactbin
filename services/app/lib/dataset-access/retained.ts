@@ -27,7 +27,7 @@ interface RetainedReadOptions {
  /** The request's memo of the caller's access facts: the one authorization reads each fact once. Fences never use it. */
  facts?:AccessFacts;
 }
-const authorityIdentity=(row:ArtifactRow)=>JSON.stringify([row.edit_id,row.policy_revision,row.sharing_revision,catalogOf(row)]);
+const authorityIdentity=(row:ArtifactRow)=>JSON.stringify([row.edit_id,row.policy_revision,row.sharing_revision,row.access,catalogOf(row)]);
 /** The head's identity and the reader's role view (role, policy, session, rules): any change refuses a continuation. */
 async function readIdentity(actor:AccessActor,id:string,options:RetainedReadOptions,facts:AccessFacts|undefined){
  const read=await authorizedDatasetRead(actor,id,{throughPage:!options.direct,...(options.pageId?{pageId:options.pageId}:{}),...(facts?{facts}:{})});

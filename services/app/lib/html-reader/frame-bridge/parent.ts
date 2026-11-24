@@ -137,7 +137,7 @@ export function relayedRequest(win: Window, id: string, request: { path: unknown
 }
 
 /**
- * The page SQL door (lib/page-doors `pageSqlDoor`): `{sql, params}` only, the trusted revision and read-only state
+ * The page SQL door (lib/page-doors `pageSqlDoor`): a statement, declared query or write hint, with trusted revision and read-only state
  * bound here (the server refuses a read-only page's writes; the parent cannot tell a read from a write). Any statement
  * may write, so its well-formed Idempotency-Key is always relayed.
  */
@@ -148,16 +148,18 @@ function relayedSql(url: URL, request: { headers: unknown; body: unknown }, html
   if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
   // `{sql}` a statement, else `{query}` a declared query's name; only the one chosen travels (a statement wins, so a
   // stray `query` beside it is dropped like any other field). The server decides what either may do.
-  const { sql: text, query: name, params = {} } = input as { sql?: unknown; query?: unknown; params?: unknown };
+  const { sql: text, query: name, writeAccess, params = {} } = input as { sql?: unknown; query?: unknown; writeAccess?: unknown; params?: unknown };
   const sql = typeof text === 'string' ? text : undefined, query = sql === undefined && typeof name === 'string' ? name : undefined;
-  if ((sql === undefined && query === undefined) || !params || typeof params !== 'object' || Array.isArray(params)) return null;
+  if (writeAccess !== undefined ? (!writeAccess || typeof writeAccess !== 'object' || Array.isArray(writeAccess)
+    || text !== undefined || name !== undefined)
+    : ((sql === undefined && query === undefined) || !params || typeof params !== 'object' || Array.isArray(params))) return null;
   const headers: Record<string, string> = {};
   for (const [name, value] of Object.entries((request.headers && typeof request.headers === 'object' ? request.headers : {}) as Record<string, unknown>)) {
     if (typeof value !== 'string') continue;
     if (SENT_HEADERS.includes(name.toLowerCase())) headers[name] = value;
-    else if (name.toLowerCase() === 'idempotency-key' && IDEMPOTENCY_KEY.test(value)) headers['Idempotency-Key'] = value;
+    else if (writeAccess === undefined && name.toLowerCase() === 'idempotency-key' && IDEMPOTENCY_KEY.test(value)) headers['Idempotency-Key'] = value;
   }
-  return { path: url.pathname, init: { method: 'POST', headers, body: JSON.stringify({ ...(query !== undefined ? { query } : { sql }), params, ...(htmlContext.selection && {reader_group_id:htmlContext.selection.group,reader_scope_user:htmlContext.selection.user}), revision: htmlContext.revision, ...(htmlContext.readOnly ? { readOnly: true } : {}) }) } };
+  return { path: url.pathname, init: { method: 'POST', headers, body: JSON.stringify({ ...(writeAccess !== undefined ? {writeAccess} : {...(query !== undefined ? {query} : {sql}), params}), ...(htmlContext.selection && {reader_group_id:htmlContext.selection.group,reader_scope_user:htmlContext.selection.user}), revision: htmlContext.revision, ...(htmlContext.readOnly ? { readOnly: true } : {}) }) } };
 }
 
 /** Only the public SQL result crosses into the document. Dataset rows can have any column names. */
@@ -167,6 +169,7 @@ function publicSqlReply(data: {
   rows?: unknown[]; columns?: {name:string;type:string}[]; truncated?: boolean;
   source?: {kind:string;at?:string;names?:string[]};
   affected?: number; returning?: unknown[]; returningOmitted?: string;
+  writeAccess?: import('@artifactbin/contracts/sql').SqlWriteAccess;
 }) {
   if (data.error) {
     const {error, message, notice} = data;
@@ -175,6 +178,10 @@ function publicSqlReply(data: {
     if (!scoped) return {error, message, notice};
     const generic = error === 'permission_denied' ? "You don't have access to this data. Ask the page's owner for access." : 'This data could not be read.';
     return {error, message:data.page_message ?? generic, notice:notice && generic};
+  }
+  if (data.writeAccess) {
+    const {insert, rows} = data.writeAccess;
+    return {writeAccess:{insert, rows:rows.map(({update,delete:remove})=>({update,delete:remove}))}};
   }
   const {columns, rows, truncated, source, affected, returning, returningOmitted} = data;
   return {columns:columns?.map(({name,type}) => ({name,type})), rows, truncated,

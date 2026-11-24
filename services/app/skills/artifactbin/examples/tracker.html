@@ -9,8 +9,7 @@
 // Usage: node scripts/new-app.mjs --title "NAME" (and --preset tasks|list, --without FEATURE,…)
 //   writes this page with only the chosen features, its dataset, rules and checks, and prints
 //   the next step: edit only APP, then publish and check.
-// Gotchas: the dataset's rules decide every write; a signed-in reader sees the controls and a
-//   write the rules refuse says so.
+// Gotchas: edit hints choose controls; the dataset rules still decide each write.
 // Built with: one HTML page; an entries dataset read and written with sql.
 // Keep rows across page publishes: see references/datasets.md#rows-people-change.
 // Features (to drop one, delete its lines ending "@only NAME" and its @feature…@end blocks):
@@ -71,7 +70,8 @@ const listed=JSON.stringify(APP.groups),listQuery=sql`select _id, name, grp, not
   , description /* @only collab */
   , count(*) over (partition by case when grp in (select value from json_each(${listed}))
   then grp else '' end) as size, count(*) over () as total from entries order by name limit 1000`;
-let rows=[],sizes=new Map(),total=0,signedIn=false,editing=null,failure=null;
+let rows=[],sizes=new Map(),total=0,session='unavailable',editing=null,failure=null;
+let addAllowed=false,access=new Map(),generation=0,activeForm=null,listedOnce=false;
 let typing=null; // the open description's live text // @only collab
 const closeTyping=()=>{typing?.binding.destroy();typing?.text.destroy();typing=null;};//@only collab
 for(const [id,text] of Object.entries({kicker:APP.kicker,title:document.title,summary:APP.summary,
@@ -79,10 +79,8 @@ for(const [id,text] of Object.entries({kicker:APP.kicker,title:document.title,su
   'add-button':APP.addLabel}))$('#'+id).textContent=text;
 const options=selected=>APP.groups.map(g=>new Option(g,g,false,g===selected));
 $('#add-group').replaceChildren(...options(APP.groups[0]));
-// A signed-in reader on the page's own frame sees the controls; the dataset's rules judge every
-// write, and one they refuse changes nothing (affected 0), which the page says.
-const canAdd=()=>signedIn,canChange=()=>signedIn;
-// Script-made nodes take data-af-ids from the entry's _id or the group, stable across renders.
+const fields=['name','grp','note'];
+const canChange=id=>access.has(id)&&access.get(id).update!=='denied';
 const node=(tag,id,props={})=>{const n=Object.assign(document.createElement(tag),props);
   if(id)n.dataset.afId=id;return n;};
 const slug=text=>text.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
@@ -97,7 +95,6 @@ function editForm(row,key){
       onclick:()=>{editing=null;render();}}));
   form.append(wrap(APP.nameLabel,name),wrap(APP.groupLabel,grp),wrap(APP.noteLabel,note),actions);
   // @feature collab
-  // Typed together, live; Save does not send it: it is saved once its editors leave the page.
   const area=node('textarea',key+'-description-input',{value:row.description??'',maxLength:2000});
   const box=wrap('Description',area);box.className='description';form.append(box);
   closeTyping();const text=collab.text('entries',row._id,'description');
@@ -110,29 +107,32 @@ function editForm(row,key){
 }
 function rowView(row){
   const key='entry-'+row._id,li=node('li',key),who=node('span',key+'-who',{className:'who'});
-  if(editing===row._id){li.append(editForm(row,key));return li;}
+  if(editing===row._id){
+    if(activeForm?.dataset.afId!==key+'-form')activeForm=editForm(row,key);
+    li.append(activeForm);return li;
+  }
   who.append(node('strong',key+'-name',{textContent:row.name}));
   if(row.note)who.append(node('span',key+'-note',{className:'note muted',textContent:row.note}));
   if(row.description)who.append(node('span',key+'-desc',{className:'desc', // @only collab
     textContent:row.description})); // @only collab
-  li.append(who); // Edit and Remove for a signed-in reader; the rules decide.
-  if(canChange(row)){const actions=node('div',key+'-actions',{className:'actions'});
-    actions.append(node('button',key+'-edit',{type:'button',textContent:'Edit',
-      ariaLabel:'Edit '+row.name,onclick:()=>{editing=row._id;render();}}),
-    node('button',key+'-remove',{type:'button',textContent:'Remove',ariaLabel:'Remove '+row.name,
-      onclick:()=>void write(`Removed ${row.name}.`,
-        ()=>sql`delete from entries where _id = ${row._id}`)}));
-    li.append(actions);}
+  const actions=node('div',key+'-actions',{className:'actions'});li.append(who);
+  if(canChange(row._id))actions.append(node('button',key+'-edit',{type:'button',textContent:'Edit',
+    ariaLabel:'Edit '+row.name,onclick:()=>{editing=row._id;render();}}));
+  if(access.get(row._id)?.delete)actions.append(node('button',key+'-remove',{type:'button',
+    textContent:'Remove',ariaLabel:'Remove '+row.name,onclick:()=>void write(`Removed ${row.name}.`,
+      ()=>sql`delete from entries where _id = ${row._id}`)}));
+  if(actions.childElementCount)li.append(actions);
   return li;
 }
 function render(){
+  if(!editing)activeForm=null;
   if(!editing)closeTyping(); // @only collab
-  $('#add').hidden=!canAdd();
-  $('#signin').hidden=canAdd(); // @only own-rows
-  // Every listed group gets a section; an entry whose group is no longer listed goes under Other.
+  $('#add').hidden=!addAllowed;
+  $('#signin').hidden=session!=='signed-out'; // @only own-rows
   const known=new Set(APP.groups),other=rows.filter(r=>!known.has(r.grp));
   const groups=failure?[]:[...APP.groups.map(g=>[g,rows.filter(r=>r.grp===g),sizes.get(g)??0]),
     ...other.length?[['Other',other,sizes.get('')??0]]:[]];
+  const focus=activeForm?.contains(document.activeElement)?document.activeElement:null;
   $('#lists').replaceChildren(...groups.map(([group,list,size])=>{
     const key='group-'+slug(group),section=node('section',key,{className:'group'});
     const h2=node('h2',key+'-title',{className:'t-title'}),ul=node('ul',key+'-list');
@@ -141,48 +141,60 @@ function render(){
     ul.append(...list.length?list.map(rowView):[node('li',key+'-empty',{className:'muted',
       textContent:'Nothing yet.'})]);
     section.append(h2,ul);return section;}));$('#lists').setAttribute('aria-busy','false');
+  focus?.focus();
   renderTable(); // @only table
 }
 // @feature table
-// Every entry, sortable; its Edit opens the entry's form in the grouped view (one edit path).
 let view='list';const table=$('#table');table.rowKey='id';
 function renderTable(){
   table.hidden=view!=='table';$('#lists').hidden=view==='table';if(view!=='table')return;
   if(failure)return void(table.error=failure);
   table.columns=[{col:'name',title:APP.nameLabel},{col:'grp',title:APP.groupLabel},
     {col:'note',title:APP.noteLabel},{col:'edit',title:''}];
-  table.data={rows:rows.map(r=>({id:r._id,name:r.name,grp:r.grp,note:r.note,edit:canChange(r)})),
+  table.data={rows:rows.map(r=>({id:r._id,name:r.name,grp:r.grp,note:r.note,
+    edit:canChange(r._id)})),
     columns:['id','name','grp','note','edit'].map(name=>({name,type:'string'}))};}
-// af-edit-intent fires only when a cell renderer calls ctx.edit(value): rows this reader may edit.
 table.cellRenderers={edit:ctx=>ctx.row.edit?node('button',null,{type:'button',textContent:'Edit',
   ariaLabel:'Edit '+ctx.row.name+' in the table',onclick:()=>ctx.edit(true)}):''};
 function setView(next){view=next;$('#view-list').ariaPressed=String(next==='list');
   $('#view-table').ariaPressed=String(next==='table');render();}
 $('#view-list').onclick=()=>setView('list');$('#view-table').onclick=()=>setView('table');
 table.addEventListener('af-edit-intent',event=>{const row=rows.find(r=>r._id===event.detail.key);
-  if(row&&canChange(row)){editing=row._id;setView('list');}});
+  if(row&&canChange(row._id)){editing=row._id;setView('list');}});
 // @end table
-const show=(list,failed=null)=>{rows=list;failure=failed;total=list[0]?.total??0;
+async function show(list,failed=null){
+  const mine=++generation;listedOnce=true;rows=list;failure=failed;total=list[0]?.total??0;
   sizes=new Map(list.map(r=>[APP.groups.includes(r.grp)?r.grp:'',r.size]));
-  if(!rows.some(r=>r._id===editing)){editing=null;render();}};
-// One add or save (an edit or a move): one statement, then a fresh read; a write the rules
-// refuse changes nothing (affected 0).
+  const hints=new Map();let insert=false;
+  if(session==='signed-in'&&!failure)for(let i=0;i===0||i<list.length;i+=100){
+    const ids=list.slice(i,i+100).map(r=>r._id);
+    const result=await sql.writeAccess('entries',{insert:i===0?fields:undefined,update:fields,ids});
+    if(mine!==generation)return;
+    if(i===0)insert=result.insert!=='denied';
+    ids.forEach((id,j)=>hints.set(id,result.rows[j]));
+  }
+  access=hints;addAllowed=insert;
+  if(editing&&(!canChange(editing)||!list.some(r=>r._id===editing)))editing=null;
+  render();
+}
 const add=o=>sql`insert into entries (name, grp, note) values (${o.name}, ${o.grp}, ${o.note})`;
 const save=(row,o)=>sql`update entries set name = ${o.name}, grp = ${o.grp}, note = ${o.note}
   where _id = ${row._id}`;
 async function write(message,run){status.textContent='Saving…';
   try{const {affected}=await run();
     if(!affected)throw Error('Nothing changed: you may not change that entry, or it was removed.');
-    editing=null;show(await listQuery);status.textContent=message;return true;}
-  catch(error){status.textContent=error.message||'Could not save.';return false;}}
+    editing=null;await show(await listQuery);status.textContent=message;return true;}
+  catch(error){void show(rows,failure);status.textContent=error.message||'Could not save.';
+    return false;}}
 $('#add').onsubmit=async event=>{event.preventDefault();const name=$('#add-name').value.trim(),
   grp=$('#add-group').value,note=$('#add-note').value.trim();if(!name)return;
   if(await write(`Added ${name} to ${grp}.`,()=>add({name,grp,note})))
     $('#add-name').value=$('#add-note').value='';};
-// Signing in or out shows or hides the controls (a hint from the page's frame, never a grant); a
-// refusal (access removed) clears the rows and controls.
-watchUploadContext(context=>{signedIn=context.state==='signed-in';editing=null;render();});
-const refused=e=>{signedIn=false;editing=null;show([],e);status.textContent=e.message;};
-try{await new Promise((ok,fail)=>sql.watch(listQuery,list=>{show(list);ok();},
+watchUploadContext(({state})=>{
+  session=state;editing=null;access.clear();addAllowed=false;
+  if(listedOnce){render();void show(rows,failure);}
+});
+const refused=e=>{editing=null;void show([],e);status.textContent=e.message;};
+try{await new Promise((ok,fail)=>sql.watch(listQuery,list=>show(list).then(ok),
   e=>{fail(e);refused(e);}));status.textContent=`${total} so far.`;}catch(e){refused(e);}
 </script></body></html>

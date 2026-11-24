@@ -3,8 +3,7 @@
  * name and what it may change. SQL uses stored `source` names. Persisted Hasura-style `field` identifiers
  * still address collaborative cells and policy metadata.
  */
-import type { DatasetBoolExp, DatasetTableName } from '@artifactbin/contracts/dataset-permissions';
-import type { Scalar } from '@artifactbin/contracts/sql';
+import type { DatasetTableName } from '@artifactbin/contracts/dataset-permissions';
 
 export type HasuraScalar = 'String' | 'Float' | 'Boolean';
 export interface HasuraColumn {
@@ -27,15 +26,7 @@ export interface HasuraTableModel {
   /** May the role select this table (default true)? Without it `columns` is empty and only `write` applies. */
   select?: boolean;
   write?: HasuraWriteModel;
-  /** What `_can` and `<root>_can` answer for this caller; absent, every answer is false. */
-  can?: HasuraCan;
 }
-/**
- * Whether a row-addressed rule (update, delete) admits a row: for every row (owner, editor, an empty filter), for
- * none (no usable rule), or as the rule's filter decides for that row under the caller's session.
- */
-export type HasuraRowCan = boolean | { filter: DatasetBoolExp; session: Readonly<Record<string, Scalar>> };
-export interface HasuraCan { insert: boolean; update: HasuraRowCan; delete: HasuraRowCan }
 /** The columns each of the role's write rules lets it name; an absent key is a rule the role does not have. */
 export interface HasuraWriteModel {
   /** Columns an insert may name: the rule's columns less its presets. */
