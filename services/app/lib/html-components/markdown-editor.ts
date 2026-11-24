@@ -1,6 +1,6 @@
 /**
  * <af-markdown-editor>: a rich text field whose value is Markdown: headings, bold, italic,
- *   strikethrough, inline code, lists, quotes, code blocks and dividers, from a toolbar,
+ *   strikethrough, inline code, lists, quotes, code blocks, tables and dividers, from a toolbar,
  *   shortcuts (Mod-B, Mod-I, Mod-Shift-X, Mod-Shift-E) or typed Markdown (`# `, `- `, `**bold**`).
  * Usage: import '@afbin/markdown-editor';  (registers the tag; this .ts is the readable contract)
  * Props: value (Markdown string), label, placeholder, rows (minimum height), disabled, readonly.
@@ -18,6 +18,8 @@ import { NamedHost, hostName, movingName } from './host-name';
 import { registerComponent } from './register-component';
 import { editorPlugins, toolbarGroups, type EditorAction } from './markdown-editor-commands';
 import { normalizeMarkdown, parseMarkdown, serializeMarkdown } from './markdown-editor-model';
+import { inTable } from './markdown-editor-table-commands';
+import { tableMenu } from './markdown-editor-table-menu';
 import { MARKDOWN_ROOT } from './markdown-styles';
 import { markdownEditorStyles } from './markdown-editor-styles';
 
@@ -34,6 +36,7 @@ class AfMarkdownEditor extends NamedHost implements MarkdownEditorContract {
   private view?: EditorView;
   private label?: HTMLLabelElement;
   private buttons: Array<[EditorAction, HTMLButtonElement]> = [];
+  private refreshTable?: () => void;
   private accepted = '';
   private propertyControlled = false;
   private propertyValue: string | null | undefined;
@@ -87,7 +90,10 @@ class AfMarkdownEditor extends NamedHost implements MarkdownEditorContract {
       for (const action of group) toolbar.append(this.button(action));
     });
     const surface = doc.createElement('div');
-    frame.append(toolbar, surface);
+    frame.append(toolbar);
+    this.refreshTable = tableMenu(toolbar, frame, `${id}-table`, () => this.view!,
+      () => this.editable());
+    frame.append(surface);
     this.append(this.label, frame);
     const state = EditorState.create({ doc: parseMarkdown(source), plugins: editorPlugins() });
     this.accepted = serializeMarkdown(state.doc);
@@ -162,13 +168,15 @@ class AfMarkdownEditor extends NamedHost implements MarkdownEditorContract {
       } else this.accepted = current;
     }
     view.setProps({});
-    for (const [, button] of this.buttons) button.disabled = !this.editable();
     this.refreshToolbar();
   }
 
   private refreshToolbar(): void {
     const state = this.view?.state; if (!state) return;
+    this.refreshTable?.();
+    const inCell = inTable(state);
     for (const [action, button] of this.buttons) {
+      button.disabled = !this.editable() || (inCell && !action.run(state));
       if (action.active) button.setAttribute('aria-pressed', String(action.active(state)));
     }
   }

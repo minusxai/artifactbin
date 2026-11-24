@@ -12,7 +12,9 @@ import { keymap } from 'prosemirror-keymap';
 import type { MarkType, NodeType } from 'prosemirror-model';
 import { liftListItem, sinkListItem, splitListItem, wrapInList } from 'prosemirror-schema-list';
 import type { Command, EditorState, Plugin } from 'prosemirror-state';
+import { tablePaste } from './markdown-editor-paste';
 import { editorSchema as schema } from './markdown-editor-model';
+import { inTable, moveCell, tableFocus } from './markdown-editor-table-commands';
 
 const { nodes, marks } = schema;
 
@@ -58,6 +60,7 @@ const toggleQuote: Command = (state, dispatch) =>
   ancestor(state, nodes.blockquote!) ? lift(state, dispatch) : wrapIn(nodes.blockquote!)(state,
     dispatch);
 const insertRule: Command = (state, dispatch) => {
+  if (inTable(state)) return false;
   dispatch?.(state.tr.replaceSelectionWith(nodes.horizontal_rule!.create()).scrollIntoView());
   return true;
 };
@@ -133,15 +136,16 @@ const rules = inputRules({ rules: [
 /** History, Markdown typing rules and shortcuts, most specific first. */
 export function editorPlugins(): Plugin[] {
   const heading = (level: number) => setBlockType(nodes.heading!, { level });
-  return [history(), rules, keymap({
+  return [history(), rules, tableFocus, tablePaste, keymap({
     'Mod-z': undo, 'Shift-Mod-z': redo, 'Mod-y': redo,
     'Mod-b': toggleMark(marks.strong!), 'Mod-i': toggleMark(marks.em!),
     'Mod-Shift-x': toggleMark(marks.strike!), 'Mod-Shift-e': toggleMark(marks.code!),
     'Ctrl-e': selectTextblockEnd,
     'Mod-Alt-0': setBlockType(nodes.paragraph!), 'Mod-Alt-1': heading(1),
     'Mod-Alt-2': heading(2), 'Mod-Alt-3': heading(3),
-    'Shift-Enter': hardBreak,
-    Enter: splitListItem(nodes.list_item!),
-    Tab: sinkListItem(nodes.list_item!), 'Shift-Tab': liftListItem(nodes.list_item!),
+    'Shift-Enter': chainCommands(moveCell('down'), hardBreak),
+    Enter: chainCommands(moveCell('down'), splitListItem(nodes.list_item!)),
+    Tab: chainCommands(moveCell('next'), sinkListItem(nodes.list_item!)),
+    'Shift-Tab': chainCommands(moveCell('previous'), liftListItem(nodes.list_item!)),
   }), keymap(baseKeymap)];
 }
