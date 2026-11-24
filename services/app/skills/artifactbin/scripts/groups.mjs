@@ -26,17 +26,17 @@ Usage: node scripts/groups.mjs list
        node scripts/groups.mjs approve PAGE QUERY --hash HASH --yes | unapprove PAGE ID --yes
 Flags: --server ORIGIN, --json, --output FILE (exclusive), --help.
 Examples:
+  node scripts/groups.mjs collection
   node scripts/groups.mjs folder-create design_crit --title Reports
-Gotchas: GROUP resolves ID/handle/@handle once; USER matches a unique member ID/handle/name.
-  Invite/uninvite use email; admins see invitations. Bulk invites may partially fail.
-  Share keeps ownership; move transfers descendants; links navigate. --datasets shares at
-  viewer; row rules decide writes. --yes needs conversational consent (references/groups.md).
-  collection without GROUP uses the group signed in. Follow next_cursor or --parent for a folder.
-  folder-create needs Editor/Admin, creates private folders and returns publish --parent's ID.
-  --request is exclusive; resume replays unchanged. Folder --parent accepts same-origin ID/URL;
-  create --parent nests groups inheriting parent shares. Delete needs empty/nondefault group,
-  no subgroups, exact handle. Reconcile other unknown writes by reading state before retrying.
-  approve (Admin) runs a default: query as the group for signed-in accounts; say its statement.
+Gotchas: GROUP accepts ID/handle/@handle; USER must match one member. Only admins see invites.
+  Bulk invites can partially fail. Share keeps ownership; move transfers descendants.
+  Links navigate. --datasets shares as viewer; row rules govern writes. Confirm --yes with the
+  user (references/groups.md). Omit GROUP to browse as the signed group; page with --cursor.
+  Private folders require Editor/Admin; use the returned ID for publish --parent.
+  --request is exclusive; resume replays it unchanged. Folder --parent accepts a local ID/URL.
+  Nested groups inherit parent shares. Delete requires empty/nondefault, no children, exact handle.
+  Read state before retrying other uncertain writes. Approve (Admin): tell the user the statement
+  that signed-in readers may run through the group's default connection.
 Exit: 0 ok; 1 failed or partial failure; 2 invocation/confirmation; 3 auth/access; 4 conflict;
   5 unknown write outcome. Results never contain credentials.`;
 
