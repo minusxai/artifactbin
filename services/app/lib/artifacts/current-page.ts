@@ -95,9 +95,17 @@ function storedRevision(regions: unknown): LiveRevision {
   return revisionOf(parsed ?? []);
 }
 
-/** The live revision alone (a header read: the render cache's and the validator's key), without composing. */
-export async function liveRevision(id: string, q?: Queryable): Promise<number> {
-  return (await liveRevisionOf(q ?? await getDb(), id)).live;
+/** The header without its metadata body: the identity and access columns, and a digest standing for `meta`. */
+export type ArtifactIdentity = Omit<ArtifactHeader, 'meta'> & { meta_digest: string };
+const IDENTITY_SELECT = ARTIFACT_HEADER_COLUMNS.filter((column) => column !== 'meta').join(', ') + ', md5(meta::text) AS meta_digest';
+
+/** A cached shell admits the identity and keys the render by its live revision from the same snapshot. */
+export async function readPageIdentity(id: string): Promise<{ row: ArtifactIdentity; live: number } | null> {
+  const found = (await (await getDb()).query<ArtifactIdentity & { af_live_regions: unknown }>(
+    `SELECT ${IDENTITY_SELECT}, ${LIVE_REGIONS_SQL} AS af_live_regions FROM artifacts WHERE id = $1 AND ${LIVE_ARTIFACT_SQL}`, [id])).rows[0];
+  if (!found) return null;
+  const { af_live_regions: regions, ...row } = found;
+  return { row, live: storedRevision(regions).live };
 }
 
 /**

@@ -31,7 +31,8 @@ useAppHarness();
  */
 const BUDGET = {
   json: { signedIn: 5, anonymous: 3, owner: 5 },
-  html: { signedIn: 5, anonymous: 2, owner: 4 },
+  // A cached anonymous shell reads identity and live revision together. An uncached view also reads social chrome.
+  html: { signedIn: 5, anonymous: 1, anonymousUncached: 2, owner: 4 },
 };
 
 const SECRET = 'vitest-actor-secret-0000000000000000';
@@ -136,7 +137,16 @@ for (const door of ['json', 'html'] as const) describe(`a page view through the 
     expect(page.follow).toEqual({ userId: w.author.id, following: false, count: 2 });
     expect(page.surface.author).toMatchObject({ name: 'Sample Author', username: w.author.username, id: w.author.id });
     expect(page.surface.openAnnotations).toBe(2);
-    expect(count).toBeLessThanOrEqual(BUDGET[door].anonymous);
+    expect(count).toBeLessThanOrEqual(door === 'html' ? BUDGET.html.anonymousUncached : BUDGET.json.anonymous);
+
+    if (door === 'html') {
+      const warmed = await view('html', w.anonymousDoc, null);
+      expect(warmed).toEqual(value);
+      const hit = await recordStatements(() => view('html', w.anonymousDoc, null));
+      expect(hit.value).toEqual(warmed);
+      console.info('[budget] HTML door, cached anonymous page view: statements=%d', hit.count);
+      expect(hit.count, hit.sql.join('\n')).toBe(BUDGET.html.anonymous);
+    }
   });
 
   it('for the owner: ownership short-circuits the role, nothing to follow', async () => {

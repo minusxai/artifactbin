@@ -8,7 +8,8 @@ import { can, refusalFor, effectiveRole, type AccessFacts, type ArtifactRow } fr
 import type { Capability } from '@artifactbin/contracts/testusers';
 import type { Reply } from '@/lib/http';
 import type { AccessActor } from '@/lib/accounts';
-import { getArtifactById, getArtifactHeaderById, getArtifactIdentityById, getEditableArtifactFor, type ArtifactHeader, type ArtifactIdentity } from './rows';
+import { getArtifactById, getArtifactHeaderById, getEditableArtifactFor, type ArtifactHeader } from './rows';
+import { readPageIdentity, type ArtifactIdentity } from './current-page';
 import {servableDocument} from './servable';
 import { holdsCreatingToken } from '@/lib/artifact-access';
 import {liveConnectionOf,publicCatalogOf} from '@/lib/datasets';
@@ -86,11 +87,12 @@ async function readableRow<T extends ArtifactHeader>(actor:AccessActor,row:T|nul
 export async function readableArtifact(actor:AccessActor,id:string){
  return readableRow(actor,await getArtifactById(id));
 }
-/** Admission from the identity columns alone (no source, document or metadata body): a fence's re-check. Access decisions read no `meta`. */
-export async function readableArtifactIdentity(actor:AccessActor,id:string):Promise<{row:ArtifactIdentity;role:ArtifactRole}|null>{
- const row=await getArtifactIdentityById(id);
- const readable=await readableRow(actor,row as unknown as (ArtifactHeader&ArtifactIdentity)|null);
- return readable&&{row:readable.row,role:readable.role};
+/** Admit a source-free identity read, with the live revision for the cached shell. */
+export async function readableArtifactIdentity(actor:AccessActor,id:string):Promise<{row:ArtifactIdentity;role:ArtifactRole;live:number}|null>{
+ const found=await readPageIdentity(id);
+ if(!found)return null;
+ const readable=await readableRow(actor,found.row as ArtifactHeader&ArtifactIdentity);
+ return readable&&{...found,role:readable.role};
 }
 /** Admission without loading a page's source or document; empty sidecar reads stay cheap. */
 export async function readableArtifactHeader(actor:AccessActor,id:string){

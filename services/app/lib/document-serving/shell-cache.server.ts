@@ -11,7 +11,7 @@
  */
 import { ANONYMOUS_ACTOR } from '@/lib/accounts';
 import { sessionActor } from '@/lib/authentication';
-import {liveRevision, readableArtifactIdentity} from '@/lib/artifacts';
+import {readableArtifactIdentity} from '@/lib/artifacts';
 import {baseUrl, parseCookie} from '@/lib/http';
 import {runWithRequest} from '@/lib/platform';
 import {THEME_KEY} from '@/lib/html-reader/contract';
@@ -42,22 +42,23 @@ function cookieFree(request: Request): boolean {
 export async function cachedShell({request, id, encoding, build, fallbackId}: ShellRequest, render: () => Promise<Response>): Promise<Response> {
   const url = new URL(request.url);
   if (request.method !== 'GET' || (!id && !fallbackId) || url.search || url.pathname.endsWith('/edit') || request.headers.has('authorization') || !cookieFree(request)) return render();
-  const row = await runWithRequest(request, async () => {
+  const admitted = await runWithRequest(request, async () => {
     const actor = await sessionActor(request).catch(() => null);
     if (!actor || !anonymousReader(actor)) return null;
-    const named = id ? (await readableArtifactIdentity(ANONYMOUS_ACTOR, id))?.row ?? null : null;
+    const named = id ? await readableArtifactIdentity(ANONYMOUS_ACTOR, id) : null;
     if (named || !fallbackId) return named;
     const fallback = await fallbackId();
-    return fallback && fallback !== id ? (await readableArtifactIdentity(ANONYMOUS_ACTOR, fallback))?.row ?? null : null;
+    return fallback && fallback !== id ? await readableArtifactIdentity(ANONYMOUS_ACTOR, fallback) : null;
   });
   // Not admitted (or not anonymous): the uncached path answers, including its own 404.
-  if (!row) return render();
+  if (!admitted) return render();
+  const {row, live} = admitted;
   const key = renderKey({
     kind: 'shell', origin: baseUrl(request), path: url.pathname, theme: parseCookie(request.headers.get('cookie'), THEME_KEY) ?? null,
     encoding, build, id: row.id, version: row.version, edit: row.edit_id, updated: row.updated_at, meta: row.meta_digest,
     title: row.title, description: row.description, visibility: row.visibility,
     // A page's live text (lib/artifacts current-page) names and draws it too: its live revision is in the key.
-    live: await liveRevision(row.id),
+    live,
   });
   const hit = renderCache.get(key);
   if (hit) return respond(hit);
