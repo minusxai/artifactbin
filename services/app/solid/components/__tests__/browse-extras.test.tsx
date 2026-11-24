@@ -14,6 +14,7 @@ it('keeps shared work absent when empty, and filters by role and search', () => 
   render(() => <SharedWithYou items={[shared('one'), shared('two', 'editor')]} />);
   expect(screen.getByLabelText('Your role on one')).toHaveTextContent('can view');
   expect(screen.getByLabelText('Open shared artifact one')).toHaveAttribute('href', '/a/one');
+  fireEvent.click(screen.getByRole('button', {name: 'Permission'}));
   fireEvent.click(screen.getByLabelText('Filter editor'));
   expect(screen.queryByLabelText('Open shared artifact one')).toBeNull();
   expect(screen.getByLabelText('Open shared artifact two')).toBeInTheDocument();
@@ -43,6 +44,7 @@ it('names each recipient role and uses short artifact links even for untitled wo
 
 it('marks the active role and format filters as pressed and counts what remains', () => {
   render(() => <SharedWithYou items={[shared('one'), shared('two', 'editor')]} />);
+  fireEvent.click(screen.getByRole('button', {name: 'Permission'}));
   const editor = screen.getByRole('button', { name: 'Filter editor' });
   expect(editor).toHaveAttribute('aria-pressed', 'false');
   fireEvent.click(editor);
@@ -93,4 +95,27 @@ it('offers the assets view when no documents have been shared', () => {
   expect(screen.getByRole('status')).toHaveTextContent('no shared documents');
   fireEvent.click(screen.getByRole('button', { name: 'Shared assets' }));
   expect(screen.getByLabelText('Open shared artifact file')).toBeInTheDocument();
+});
+
+it('intersects a distinct owner, multiple permissions and inclusive local days before paging', () => {
+  const local = (day: number, hour: number) => new Date(2026, 7, day, hour, 59).toISOString();
+  render(() => <SharedWithYou items={[
+    ...Array.from({length: 12}, (_, i) => ({...shared('other' + i), owner_username: 'other'})),
+    {...shared('early'), updated_at: local(1, 0)},
+    {...shared('late', 'editor'), updated_at: local(2, 23)},
+    {...shared('later'), updated_at: local(3, 0)},
+    {...shared('comment', 'commenter'), updated_at: local(2, 0)},
+  ]}/>);
+  fireEvent.click(screen.getByLabelText('Next shared page'));
+  fireEvent.click(screen.getByRole('button', {name: 'Owner'}));
+  fireEvent.click(screen.getByRole('button', {name: 'Sample Author (@alice)'}));
+  fireEvent.click(screen.getByRole('button', {name: 'Permission'}));
+  fireEvent.click(screen.getByLabelText('Filter editor'));
+  fireEvent.click(screen.getByLabelText('Filter viewer'));
+  fireEvent.click(screen.getByRole('button', {name: 'Updated'}));
+  fireEvent.input(screen.getByLabelText('Updated from'), {target: {value: '2026-08-01'}});
+  fireEvent.input(screen.getByLabelText('Updated to'), {target: {value: '2026-08-02'}});
+  expect(screen.getAllByRole('link').map(a => a.textContent)).toEqual(['doc early', 'doc late']);
+  fireEvent.click(screen.getByRole('button', {name: 'Clear filters'}));
+  expect(screen.getByLabelText('Shared page range')).toHaveTextContent('1-10 of 16');
 });
