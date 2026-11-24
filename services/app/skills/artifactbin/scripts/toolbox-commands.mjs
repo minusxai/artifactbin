@@ -42,8 +42,10 @@ const commands = {
     }
   },
   read: {flags: {version: flag()}, sub: {list: {cursor: flag(), limit: flag(),
-    type: flag(), relationship: flag(), search: flag(), parent: flag()}, liked: {search: flag()},
-    shared: {owner: flag(), permission: flag(), from: flag(), to: flag()}}},
+    type: flag(), relationship: flag(), search: flag(), parent: flag()},
+    liked: {search: flag(), visibility: flag()},
+    shared: {search: flag(), owner: flag(), permission: flag('string', true),
+      from: flag(), to: flag()}}},
   export: {flags: {format: flag(), slide: flag(), element: flag()}},
   check: {
     flags: {

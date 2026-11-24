@@ -2,8 +2,9 @@
 export const DESCRIPTION = `Read an artifact as JSON, or save its editable source with --output.
 Usage: node scripts/read.mjs ID|URL [--version N] [--output FILE]
        node scripts/read.mjs list [--limit N] [--cursor CURSOR]
-       node scripts/read.mjs liked [--search TEXT]
-       node scripts/read.mjs shared [--owner HANDLE] [--permission ROLE] [--from DAY] [--to DAY]
+       node scripts/read.mjs liked [--search TEXT] [--visibility public|unlisted|private]
+       node scripts/read.mjs shared [--search TEXT] [--owner HANDLE] [--permission ROLE]...
+                                    [--from DAY] [--to DAY]
   list filters: --type artifact|folder|dataset|file --relationship owned|shared|all
                 --search TEXT --parent FOLDER
 Flags: --version N reads a saved version (a page read from one cannot be published back);

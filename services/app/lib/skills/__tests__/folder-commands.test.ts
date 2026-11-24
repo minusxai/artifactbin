@@ -53,7 +53,21 @@ it('filters complete workspace results by exact owner, role and inclusive local 
  const {workspaceList}=await import('../../../skills/artifactbin/scripts/toolbox-website.mjs');
  const row={id:'PAGE12',title:'Field Report',owner_username:'author',role:'viewer',updated_at:new Date(2026,0,3,23).toISOString()};
  const client={request:async()=>({artifacts:[row,{...row,owner_username:'another'},{...row,role:'editor'},{...row,updated_at:new Date(2026,0,4).toISOString()}]})};
- expect(await workspaceList('shared',{owner:'@author',permission:'viewer',from:'2026-01-03',to:'2026-01-03'},client)).toEqual({artifacts:[row]});
+ expect(await workspaceList('shared',{owner:'@author',permission:['viewer'],from:'2026-01-03',to:'2026-01-03'},client)).toEqual({artifacts:[row]});
  await expect(workspaceList('shared',{from:'2026-02-31'},client)).rejects.toMatchObject({exit:2});
  expect(await workspaceList('liked',{search:'missing'},client)).toEqual({artifacts:[]});
+});
+it('combines liked visibility with search and accepts multiple shared permissions',async()=>{
+ const {parseCommand}=await import('../../../skills/artifactbin/scripts/toolbox-commands.mjs');
+ const {workspaceList}=await import('../../../skills/artifactbin/scripts/toolbox-website.mjs');
+ const rows=[
+  {title:'Field notes',visibility:'public',role:'viewer'},
+  {title:'Field notes',visibility:'private',role:'commenter'},
+  {title:'Archive',visibility:'public',role:'editor'}
+ ];
+ const client={request:async()=>({artifacts:rows})};
+ const liked=parseCommand('read',['liked','--search','field','--visibility','public']);
+ expect(await workspaceList('liked',liked.values,client)).toEqual({artifacts:[rows[0]]});
+ const shared=parseCommand('read',['shared','--search','field','--permission','viewer','--permission','commenter']);
+ expect(await workspaceList('shared',shared.values,client)).toEqual({artifacts:rows.slice(0,2)});
 });

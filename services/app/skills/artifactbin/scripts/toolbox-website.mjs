@@ -25,7 +25,9 @@ export async function siteCommand(sub,values,args,options){
 }
 
 export async function workspaceList(sub,values,client){
- if(values.permission)enumValue(values.permission,['viewer','commenter','editor'],'permission');
+ const roles=values.permission??[];
+ for(const role of roles)enumValue(role,['viewer','commenter','editor'],'permission');
+ if(values.visibility)enumValue(values.visibility,['public','unlisted','private'],'visibility');
  for(const day of [values.from,values.to])if(day!==undefined&&
   (!/^\d{4}-\d\d-\d\d$/.test(day)||!Number.isFinite(Date.parse(day))||
    new Date(day).toISOString().slice(0,10)!==day))
@@ -35,7 +37,8 @@ export async function workspaceList(sub,values,client){
   const date=new Date(row.updated_at),day=[date.getFullYear(),
    String(date.getMonth()+1).padStart(2,'0'),String(date.getDate()).padStart(2,'0')].join('-');
   return (!values.owner||row.owner_username===values.owner.replace(/^@/,''))&&
-   (!values.permission||row.role===values.permission)&&(!values.from||day>=values.from)&&
+   (!values.visibility||row.visibility===values.visibility)&&
+   (!roles.length||roles.includes(row.role))&&(!values.from||day>=values.from)&&
    (!values.to||day<=values.to)&&(!values.search||[row.title,row.id].join(' ').toLowerCase()
     .includes(values.search.trim().toLowerCase()));
  })};

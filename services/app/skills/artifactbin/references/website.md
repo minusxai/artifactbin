@@ -26,11 +26,9 @@ The alias `OWNER--notes.PAGES_HOST` uses the existing wildcard DNS and TLS.
 Use lowercase ASCII letters, digits and single internal hyphens. Limits are 63 characters for the
 combined label and 253 for the host. Renaming the folder preserves the alias.
 
-Read `website` before replacing a mapping. To repoint, use
-`groups.mjs site-set NEW_FOLDER --alias notes --expected OLD_FOLDER`. To remove the observed alias,
-use `groups.mjs site-remove notes --expected OLD_FOLDER`. A collision or stale expected folder
-returns 409. Reread and reconcile. Use `root` for the account root (a configured null folder).
-Omit `--alias` to configure the main host.
+Repoint with `groups.mjs site-set NEW_FOLDER --alias notes --expected OLD_FOLDER`; remove with
+`groups.mjs site-remove notes --expected OLD_FOLDER`. On 409, reread `website` for the current ID.
+Omit `--alias` for the main host. Use `root` to select the workspace root.
 
 ## Link and index behavior
 
@@ -58,10 +56,10 @@ WHERE format = 'html' AND id <> ? ORDER BY updated_at DESC, id
 
 ## Find workspace posts
 
-`node scripts/read.mjs liked --search report` filters readable liked pages by title or ID.
+`node scripts/read.mjs liked --search report --visibility public` finds public liked pages.
 `node scripts/read.mjs shared --owner @author --permission editor --from 2026-01-01 --to 2026-01-31`
-filters the signed-in account's email shares by exact owner handle, share role and inclusive local
-calendar days of the last update. Omit filters to inspect the inventory.
+filters shares by owner, role and inclusive local update dates. Repeat `--permission` to match any
+selected role. Both searches match title or ID.
 
 ## HTTP
 
