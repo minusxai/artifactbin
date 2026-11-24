@@ -3,25 +3,23 @@
  * Plans, specs, explainers, process stories. Mood: Technical. Opens light. Generated from
  * design-systems/specs/drafting.json.
  *
- * Use: name it once in <head>: <meta name="artifactbin:design-system" content="drafting">. The platform serves
- * this stylesheet, sets data-af-design-system and data-af-dark on <html>, and hosts the fonts: copy, link and read
- * nothing to use it. Only this header is worth reading, for the shared tokens and type roles below.
+ * Use <meta name="artifactbin:design-system" content="drafting"> in <head>. The platform loads the CSS and fonts
+ * and sets data-af-design-system and data-af-dark.
  *
  * Shared contract: every system defines these, so build your CSS on them with var(--name):
  *   --background --foreground --card --card-foreground --popover --popover-foreground --primary
  *   --primary-foreground --secondary --secondary-foreground --muted --muted-foreground --accent
  *   --accent-foreground --destructive --destructive-foreground --border --input --ring --chart-1 --chart-2
  *   --chart-3 --chart-4 --chart-5 --radius --font-display --font-body --font-mono
- * Type-role classes (same names in every system, sizes differ), used as class="t-title" etc.:
- *   t-display-xl t-display-l t-title t-body t-body-s t-label t-dim t-numeral t-mono
- * Each --ds-* below is this system's own palette; its comment says what the token is for (for example a "fill
- * only" colour is never body text). Keep the system's colour and type choices.
+ * Type-role classes shared by every system, used as class="t-title" etc.:
+ *   t-display-xl t-display-l t-display-m t-title t-body-l t-body t-body-s t-label t-numeral t-mono
+ * The --ds-* palette and any unlisted type roles are system-specific.
  *
  * Idea: Drafting treats every page as a numbered sheet from an engineering drawing set: a gridded vellum, a frame,
  * a title block, and the subject drawn in line-work with its dimensions. The reader is handed something measured.
  * Cobalt carries the hierarchy and evidence; orange marks revisions; yellow flags assumptions. Colour belongs on
  * the sheet, not just on hover.
- * Fits: Implementation plans, specs and RFCs, process explainers, product teardowns, scroll stories where one
+ * Use for: Implementation plans, specs and RFCs, process explainers, product teardowns, scroll stories where one
  * object comes apart or goes together.
  * Avoid when: Warm or emotional subjects, consumer marketing, dashboards that need many simultaneous status
  * colours, or any page whose reader is not expected to inspect.
@@ -125,24 +123,28 @@
   --ds-chip-radius: 0px;
 }
 :root[data-af-design-system="drafting"] body { margin:0; background:var(--background); color:var(--foreground); font-family:var(--font-body); }
-/* Type roles: font family, size / line height, then when to use it. */
-/* display, clamp(48px, 8vw, 104px) / .9: One per sheet. Poster-weight Archivo in caps; the subject as a title block. */
+/* Type roles and when to use them. */
+/* One per sheet. Poster-weight Archivo in caps; the subject as a title block. */
 :root[data-af-design-system="drafting"] .t-display-xl { font-family: "Archivo", "Arial Narrow", system-ui, sans-serif; font-size: clamp(48px, 8vw, 104px); line-height: .9; font-weight: 900; letter-spacing: -0.03em; text-transform: uppercase; }
-/* display, clamp(32px, 4.5vw, 56px) / .95: Section openers, sheet titles. */
+/* Section openers, sheet titles. */
 :root[data-af-design-system="drafting"] .t-display-l { font-family: "Archivo", "Arial Narrow", system-ui, sans-serif; font-size: clamp(32px, 4.5vw, 56px); line-height: .95; font-weight: 900; letter-spacing: -0.025em; text-transform: uppercase; }
-/* display, 22px / 26px: Panel titles, figure titles. */
+/* Drawing subsections. */
+:root[data-af-design-system="drafting"] .t-display-m { font-family: "Archivo", "Arial Narrow", system-ui, sans-serif; font-size: 28px; line-height: 31px; font-weight: 900; letter-spacing: -0.02em; text-transform: uppercase; }
+/* Panel titles, figure titles. */
 :root[data-af-design-system="drafting"] .t-title { font-family: "Archivo", "Arial Narrow", system-ui, sans-serif; font-size: 22px; line-height: 26px; font-weight: 700; letter-spacing: -0.01em; }
-/* sans, 16px / 26px: Reading text. Archivo at a wide leading reads like a spec, not a brochure. */
+/* Lead paragraphs. */
+:root[data-af-design-system="drafting"] .t-body-l { font-family: "Archivo", system-ui, sans-serif; font-size: 19px; line-height: 29px; font-weight: 400; }
+/* Reading text. Archivo at a wide leading reads like a spec, not a brochure. */
 :root[data-af-design-system="drafting"] .t-body { font-family: "Archivo", system-ui, sans-serif; font-size: 16px; line-height: 26px; font-weight: 400; }
-/* sans, 13px / 19px: Notes, captions, helper text. */
+/* Notes, captions, helper text. */
 :root[data-af-design-system="drafting"] .t-body-s { font-family: "Archivo", system-ui, sans-serif; font-size: 13px; line-height: 19px; font-weight: 400; }
-/* narrow, 12px / 16px: Eyebrows, figure numbers, title-block cells. Archivo Narrow in caps. */
+/* Eyebrows, figure numbers, title-block cells. Archivo Narrow in caps. */
 :root[data-af-design-system="drafting"] .t-label { font-family: "Archivo Narrow", "Arial Narrow", sans-serif; font-size: 12px; line-height: 16px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
-/* mono, 13px / 18px: Dimension figures on drawings and in tables. Tabular. */
+/* Dimension figures on drawings and in tables. Tabular. */
 :root[data-af-design-system="drafting"] .t-dim { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: 13px; line-height: 18px; font-weight: 500; font-variant-numeric: tabular-nums; }
-/* mono, 40px / 44px: KPI figures and allocations. */
+/* KPI figures and allocations. */
 :root[data-af-design-system="drafting"] .t-numeral { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: 40px; line-height: 44px; font-weight: 500; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
-/* mono, 13px / 20px: Code, paths, API contracts. */
+/* Code, paths, API contracts. */
 :root[data-af-design-system="drafting"] .t-mono { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: 13px; line-height: 20px; font-weight: 400; }
 /* Code highlighting token colours (for @afbin/highlight). */
 :root[data-af-design-system="drafting"] .tok-comment, :root[data-af-design-system="drafting"] .tok-quote, :root[data-af-design-system="drafting"] .tok-meta { color:color-mix(in oklab, var(--muted-foreground) 75%, var(--foreground));font-style:italic; }

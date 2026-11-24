@@ -3,25 +3,23 @@
  * Features, reports, newsletters, long reads. Mood: Editorial. Opens light. Generated from
  * design-systems/specs/broadsheet.json.
  *
- * Use: name it once in <head>: <meta name="artifactbin:design-system" content="broadsheet">. The platform serves
- * this stylesheet, sets data-af-design-system and data-af-dark on <html>, and hosts the fonts: copy, link and read
- * nothing to use it. Only this header is worth reading, for the shared tokens and type roles below.
+ * Use <meta name="artifactbin:design-system" content="broadsheet"> in <head>. The platform loads the CSS and fonts
+ * and sets data-af-design-system and data-af-dark.
  *
  * Shared contract: every system defines these, so build your CSS on them with var(--name):
  *   --background --foreground --card --card-foreground --popover --popover-foreground --primary
  *   --primary-foreground --secondary --secondary-foreground --muted --muted-foreground --accent
  *   --accent-foreground --destructive --destructive-foreground --border --input --ring --chart-1 --chart-2
  *   --chart-3 --chart-4 --chart-5 --radius --font-display --font-body --font-mono
- * Type-role classes (same names in every system, sizes differ), used as class="t-title" etc.:
- *   t-masthead t-display-xl t-display-l t-deck t-body t-small t-numeral t-wire
- * Each --ds-* below is this system's own palette; its comment says what the token is for (for example a "fill
- * only" colour is never body text). Keep the system's colour and type choices.
+ * Type-role classes shared by every system, used as class="t-title" etc.:
+ *   t-display-xl t-display-l t-display-m t-title t-body-l t-body t-body-s t-label t-numeral t-mono
+ * The --ds-* palette and any unlisted type roles are system-specific.
  *
  * Idea: Broadsheet sets a feature the way a newspaper would: a blackletter masthead between rules, a bold serif
  * headline with one red word, an italic deck, body in columns with a drop cap, engraved plates for pictures, and
  * figures pulled into the margin. The reader gets a document that feels reported.
- * Fits: Features and long reads, pilot reports, newsletters and digests, anything that benefits from the authority
- * of print and the rhythm of columns.
+ * Use for: Features and long reads, pilot reports, newsletters and digests, anything that benefits from the
+ * authority of print and the rhythm of columns.
  * Avoid when: Interactive tools, dashboards, anything scanned rather than read, or subjects that need colour to
  * carry meaning.
  */
@@ -116,22 +114,34 @@
   --ds-chip-radius: 0px;
 }
 :root[data-af-design-system="broadsheet"] body { margin:0; background:var(--background); color:var(--foreground); font-family:var(--font-body); }
-/* Type roles: font family, size / line height, then when to use it. */
-/* masthead, clamp(40px, 7vw, 84px) / 1: The masthead, once, centred, between a double rule. Blackletter is for the name only. */
+/* Type roles and when to use them. */
+/* The masthead, once, centred, between a double rule. Blackletter is for the name only. */
 :root[data-af-design-system="broadsheet"] .t-masthead { font-family: "UnifrakturCook", "Old English Text MT", serif; font-size: clamp(40px, 7vw, 84px); line-height: 1; font-weight: 700; }
-/* display, clamp(44px, 6.5vw, 80px) / 1: The headline. Old Standard bold; the second line may carry the one red word. */
+/* The headline. Old Standard bold; the second line may carry the one red word. */
 :root[data-af-design-system="broadsheet"] .t-display-xl { font-family: "Old Standard TT", "Times New Roman", serif; font-size: clamp(44px, 6.5vw, 80px); line-height: 1; font-weight: 700; letter-spacing: -0.015em; }
-/* display, clamp(30px, 4vw, 48px) / 1.08: Section heads and crossheads. */
+/* Section heads and crossheads. */
 :root[data-af-design-system="broadsheet"] .t-display-l { font-family: "Old Standard TT", "Times New Roman", serif; font-size: clamp(30px, 4vw, 48px); line-height: 1.08; font-weight: 700; letter-spacing: -0.01em; }
-/* display, clamp(19px, 2.2vw, 24px) / 1.35: The deck under the headline. Italic Old Standard. */
+/* Article subsections. */
+:root[data-af-design-system="broadsheet"] .t-display-m { font-family: "Old Standard TT", "Times New Roman", serif; font-size: 28px; line-height: 32px; font-weight: 700; letter-spacing: -0.01em; }
+/* Panel and group headings. */
+:root[data-af-design-system="broadsheet"] .t-title { font-family: "Old Standard TT", "Times New Roman", serif; font-size: 21px; line-height: 25px; font-weight: 700; }
+/* The deck under the headline. Italic Old Standard. */
 :root[data-af-design-system="broadsheet"] .t-deck { font-family: "Old Standard TT", "Times New Roman", serif; font-size: clamp(19px, 2.2vw, 24px); line-height: 1.35; font-weight: 400; font-style: italic; }
-/* sans, 17px / 27px: Body text, in columns where the width allows. A drop cap opens the piece. */
+/* Lead paragraphs. */
+:root[data-af-design-system="broadsheet"] .t-body-l { font-family: "Old Standard TT", "Times New Roman", serif; font-size: 19px; line-height: 30px; font-weight: 400; }
+/* Body text, in columns where the width allows. A drop cap opens the piece. */
 :root[data-af-design-system="broadsheet"] .t-body { font-family: "Old Standard TT", "Times New Roman", serif; font-size: 17px; line-height: 27px; font-weight: 400; }
-/* franklin, 11px / 15px: Datelines, figure labels, folios, the small print. Franklin caps. */
+/* Captions and short notes. */
+:root[data-af-design-system="broadsheet"] .t-body-s { font-family: "Old Standard TT", "Times New Roman", serif; font-size: 14px; line-height: 21px; font-weight: 400; }
+/* Datelines, figure labels, folios, the small print. Franklin caps. */
 :root[data-af-design-system="broadsheet"] .t-small { font-family: "Libre Franklin", system-ui, sans-serif; font-size: 11px; line-height: 15px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
-/* display, clamp(44px, 6vw, 72px) / .95: Pull figures, set large in the margin with a Franklin caption. */
+/* Datelines and figures. */
+:root[data-af-design-system="broadsheet"] .t-label { font-family: "Libre Franklin", system-ui, sans-serif; font-size: 11px; line-height: 15px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
+/* Pull figures, set large in the margin with a Franklin caption. */
 :root[data-af-design-system="broadsheet"] .t-numeral { font-family: "Old Standard TT", "Times New Roman", serif; font-size: clamp(44px, 6vw, 72px); line-height: .95; font-weight: 700; font-variant-numeric: tabular-nums; }
-/* mono, 13px / 20px: Wire copy, tables of figures, datelines in the old style. Courier Prime. */
+/* Wire copy and fixed-width values. */
+:root[data-af-design-system="broadsheet"] .t-mono { font-family: "Courier Prime", "Courier New", monospace; font-size: 13px; line-height: 20px; font-weight: 400; }
+/* Wire copy, tables of figures, datelines in the old style. Courier Prime. */
 :root[data-af-design-system="broadsheet"] .t-wire { font-family: "Courier Prime", "Courier New", monospace; font-size: 13px; line-height: 20px; font-weight: 400; }
 /* Code highlighting token colours (for @afbin/highlight). */
 :root[data-af-design-system="broadsheet"] .tok-comment, :root[data-af-design-system="broadsheet"] .tok-quote, :root[data-af-design-system="broadsheet"] .tok-meta { color:color-mix(in oklab, var(--muted-foreground) 75%, var(--foreground));font-style:italic; }

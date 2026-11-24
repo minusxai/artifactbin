@@ -215,6 +215,25 @@
    "usage": "Row titles: the machine, the person, the item."
   },
   {
+   "name": "title",
+   "family": "display",
+   "size": "28px",
+   "lh": "28px",
+   "weight": 700,
+   "tt": "uppercase",
+   "sample": "Drill press",
+   "usage": "Group and panel headings."
+  },
+  {
+   "name": "body-l",
+   "family": "sans",
+   "size": "19px",
+   "lh": "27px",
+   "weight": 400,
+   "sample": "Check the schedule before opening the shop.",
+   "usage": "Lead instructions."
+  },
+  {
    "name": "body",
    "family": "sans",
    "size": "16px",

@@ -7,6 +7,9 @@
  * `radius_scale`, and the light-only lock for a spec without dark values.
  */
 
+import { THEME_TOKENS, THEME_TYPE_ROLES } from './html-systems';
+export { CONTRACT_KEYS } from './html-systems';
+
 interface SpecToken { name: string; light: string; dark?: string; usage?: string; group?: string }
 interface SpecTypeRole {
   name: string; family: 'display' | 'sans' | 'mono'; size: string; lh: string; weight: number | string;
@@ -28,7 +31,6 @@ export interface DesignSystemSpec {
   status_alias?: Record<string, string> | null;
 }
 
-export const CONTRACT_KEYS = ['background', 'foreground', 'card', 'card-foreground', 'popover', 'popover-foreground', 'primary', 'primary-foreground', 'secondary', 'secondary-foreground', 'muted', 'muted-foreground', 'accent', 'accent-foreground', 'destructive', 'destructive-foreground', 'border', 'input', 'ring', 'chart-1', 'chart-2', 'chart-3', 'chart-4', 'chart-5'] as const;
 export const STATUS_TOKENS = ['positive', 'positive-soft', 'caution', 'caution-soft', 'negative', 'negative-soft'] as const;
 export const RADIUS_STEPS = ['sm', 'md', 'lg', 'full'] as const;
 
@@ -93,14 +95,14 @@ export function specRules(spec: DesignSystemSpec, { comments = false } = {}): st
   const vars = (mode: 'light' | 'dark', documented: boolean) => Object.entries(specVars(spec, mode)).map(([key, value]) => `  ${key}: ${value};${documented && comments && usage.get(key) ? ` /* ${note(usage.get(key))} */` : ''}`).join('\n');
   const roles = typeCss(spec, selector).split('\n').map((rule, index) => {
     const role = spec.type_roles?.[index];
-    return comments && role ? `/* ${role.family}, ${note(role.size)} / ${note(role.lh)}: ${note(role.usage)} */\n${rule}` : rule;
+    return comments && role ? `/* ${note(role.usage)} */\n${rule}` : rule;
   }).join('\n');
   const lead = (text: string) => comments ? `/* ${text} */\n` : '';
   const zero = (sel: string) => comments ? sel : `:where(${sel})`;
   // A light-only system keeps its light values and native controls under data-af-dark="true" (the core's inline
   // color-scheme included): its dark block repeats the light tokens, and this rule holds the scheme.
   const lock = specHasDark(spec) ? '' : `${lead('Light-only: no dark values, so data-af-dark="true" keeps the light palette.')}${selector}[data-af-dark="true"] { color-scheme: light !important; }\n`;
-  return `${lead('Light values; --ds-* are this system\'s own palette, each annotated with its use.')}${zero(selector)} {\n${vars('light', true)}\n}\n${lead('Dark values: the same tokens, under data-af-dark="true".')}${zero(`${selector}[data-af-dark="true"]`)} {\n${vars('dark', false)}\n}\n${lock}${selector} body { margin:0; background:var(--background); color:var(--foreground); font-family:var(--font-body); }\n${lead('Type roles: font family, size / line height, then when to use it.')}${roles}\n${lead('Code highlighting token colours (for @afbin/highlight).')}${tokenCss(selector)}\n`;
+  return `${lead('Light values; --ds-* are this system\'s own palette, each annotated with its use.')}${zero(selector)} {\n${vars('light', true)}\n}\n${lead('Dark values: the same tokens, under data-af-dark="true".')}${zero(`${selector}[data-af-dark="true"]`)} {\n${vars('dark', false)}\n}\n${lock}${selector} body { margin:0; background:var(--background); color:var(--foreground); font-family:var(--font-body); }\n${lead('Type roles and when to use them.')}${roles}\n${lead('Code highlighting token colours (for @afbin/highlight).')}${tokenCss(selector)}\n`;
 }
 
 /** Wrap prose to a readable width, each line prefixed as a comment line. */
@@ -115,20 +117,23 @@ function wrap(text: string, indent = ''): string {
 
 /** html-skill.mjs `cssHeader`: how a page uses the sheet, the shared contract, this system's brief. `source` names
  * where the spec came from; an absent brief field (an installation spec's are optional) leaves its line out. */
-function specHeader(spec: DesignSystemSpec, source = `design-systems/specs/${spec.slug}.json`): string {
-  const shared = Object.keys(specVars(spec, 'light')).filter((key) => !key.startsWith('--ds-')), roleNames = (spec.type_roles ?? []).map((role) => `t-${role.name}`);
-  const brief = ([['Idea', spec.idea], ['Fits', spec.use_for], ['Avoid when', spec.avoid_when]] as const).filter(([, text]) => text !== undefined).map(([label, text]) => `${wrap(`${label}: ${note(text)}`)}\n`).join('');
+function specHeader(spec: DesignSystemSpec, source?: string): string {
+  const roleNames = source ? (spec.type_roles ?? []).map((role) => `t-${role.name}`) : THEME_TYPE_ROLES;
+  const roleHeading = source ? 'Type-role classes available in this installation:' :
+    'Type-role classes shared by every system, used as class="t-title" etc.:';
+  const origin = source ?? `design-systems/specs/${spec.slug}.json`;
+  const brief = ([['Idea', spec.idea], ['Use for', spec.use_for], ['Avoid when', spec.avoid_when]] as const).filter(([, text]) => text !== undefined).map(([label, text]) => `${wrap(`${label}: ${note(text)}`)}\n`).join('');
   return `/*
  * ${spec.name}: ${note(spec.tagline)}
-${wrap(`${note(spec.jobs)}. Mood: ${note(spec.mood)}. Opens ${spec.color_mode ?? 'light'}. Generated from ${source}.`)}
+${wrap(`${note(spec.jobs)}. Mood: ${note(spec.mood)}. Opens ${spec.color_mode ?? 'light'}. Generated from ${origin}.`)}
  *
-${wrap(`Use: name it once in <head>: <meta name="artifactbin:design-system" content="${spec.slug}">. The platform serves this stylesheet, sets data-af-design-system and data-af-dark on <html>, and hosts the fonts: copy, link and read nothing to use it. Only this header is worth reading, for the shared tokens and type roles below.`)}
+${wrap(`Use <meta name="artifactbin:design-system" content="${spec.slug}"> in <head>. The platform loads the CSS and fonts and sets data-af-design-system and data-af-dark.`)}
  *
 ${wrap('Shared contract: every system defines these, so build your CSS on them with var(--name):')}
-${wrap(shared.join(' '), '  ')}
-${wrap('Type-role classes (same names in every system, sizes differ), used as class="t-title" etc.:')}
+${wrap(THEME_TOKENS.join(' '), '  ')}
+${wrap(roleHeading)}
 ${wrap(roleNames.join(' '), '  ')}
-${wrap('Each --ds-* below is this system\'s own palette; its comment says what the token is for (for example a "fill only" colour is never body text). Keep the system\'s colour and type choices.')}
+${wrap('The --ds-* palette and any unlisted type roles are system-specific.')}
  *
 ${brief} */
 `;

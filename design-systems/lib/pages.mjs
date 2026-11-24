@@ -16,11 +16,26 @@ export const CATALOGUE = JSON.parse(readFileSync(path.join(import.meta.dirname, 
 export const ROSTER = CATALOGUE.roster;
 export const PAGES_DIR = process.env.DS_PAGES_DIR || path.join(REPO, 'tmp', 'design-systems');
 export const CONTRACT_KEYS = ['background', 'foreground', 'card', 'card-foreground', 'popover', 'popover-foreground', 'primary', 'primary-foreground', 'secondary', 'secondary-foreground', 'muted', 'muted-foreground', 'accent', 'accent-foreground', 'destructive', 'destructive-foreground', 'border', 'input', 'ring', 'chart-1', 'chart-2', 'chart-3', 'chart-4', 'chart-5'];
+// The portable names exposed by every generated system. Palettes and extra roles are local to a spec.
+export const SHARED_TOKENS = [...CONTRACT_KEYS.map(key => `--${key}`), '--radius', '--font-display', '--font-body', '--font-mono'];
+export const SHARED_TYPE_ROLES = ['t-display-xl', 't-display-l', 't-display-m', 't-title', 't-body-l',
+  't-body', 't-body-s', 't-label', 't-numeral', 't-mono'];
 export const STATUS = ['positive', 'positive-soft', 'caution', 'caution-soft', 'negative', 'negative-soft'];
 
 /** One spec, as frozen under design-systems/specs. */
 export function loadSpec(slug) {
-  return JSON.parse(readFileSync(path.join(import.meta.dirname, '../specs', `${slug}.json`), 'utf8'));
+  const spec = JSON.parse(readFileSync(path.join(import.meta.dirname, '../specs', `${slug}.json`), 'utf8'));
+  const palette = new Set(spec.tokens.map(token => token.name));
+  for (const status of STATUS) if (palette.has(spec.status_alias?.[status])) palette.add(status);
+  const missing = CONTRACT_KEYS.filter(key => !palette.has(spec.contract?.[key])).map(key => `--${key}`);
+  if (!spec.radius_contract) missing.push('--radius');
+  for (const [token, family] of [['display', 'display'], ['body', 'sans'], ['mono', 'mono']]) {
+    if (!spec.families?.[family]) missing.push(`--font-${token}`);
+  }
+  const roles = new Set(spec.type_roles?.map(role => `t-${role.name}`));
+  missing.push(...SHARED_TYPE_ROLES.filter(role => !roles.has(role)));
+  if (missing.length) throw new Error(`${slug}: missing design-system contract: ${missing.join(', ')}`);
+  return spec;
 }
 
 /** The YAML fence: an existing page keeps its identity lines; the base fields are rewritten from the spec. */

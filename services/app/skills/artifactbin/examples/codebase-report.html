@@ -132,7 +132,7 @@ function table(c){const id=`chart-${c.id}-table`,box=node('details',id+'-box'),
   box.append(node('summary',id+'-summary','Values'),t);return box;}
 const token=name=>getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 function spec(c,rows){const ink=token('--foreground'),line=token('--border'),
-  colors=[1,2,3,4,5].map(n=>token('--chart-'+n)).filter(Boolean),
+  colors=['--chart-1','--chart-2','--chart-3','--chart-4','--chart-5'].map(token).filter(Boolean),
   encoding=structuredClone(c.spec.encoding??{}),
   // A count's ramp is one hue, light or dark: the background tinted toward the first series.
   tint=vega.interpolate('rgb')(token('--background'),colors[0]||ink);

@@ -219,6 +219,16 @@
    "usage": "Section openers and page titles."
   },
   {
+   "name": "display-m",
+   "family": "display",
+   "size": "25px",
+   "lh": "30px",
+   "weight": 700,
+   "ls": "-0.01em",
+   "sample": "Queued jobs",
+   "usage": "Subsections and slide headings."
+  },
+  {
    "name": "title",
    "family": "display",
    "size": "20px",
@@ -227,6 +237,15 @@
    "ls": "-0.01em",
    "sample": "deploy-prod · 42s",
    "usage": "Panel titles, job names."
+  },
+  {
+   "name": "body-l",
+   "family": "sans",
+   "size": "17px",
+   "lh": "26px",
+   "weight": 400,
+   "sample": "All workers are ready.",
+   "usage": "Lead text."
   },
   {
    "name": "body",
@@ -267,6 +286,15 @@
    "sample": "99.97%",
    "usage": "KPI figures. Tabular.",
    "extra": "font-variant-numeric: tabular-nums"
+  },
+  {
+   "name": "mono",
+   "family": "mono",
+   "size": "13px",
+   "lh": "20px",
+   "weight": 400,
+   "sample": "12:04:18 · ready",
+   "usage": "Fixed-width values and log excerpts."
   },
   {
    "name": "log",

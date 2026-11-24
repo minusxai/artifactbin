@@ -3,25 +3,23 @@
  * Games, launches, leaderboards, playful dashboards, teaching. Mood: Fun. Opens light. Generated from
  * design-systems/specs/arcade.json.
  *
- * Use: name it once in <head>: <meta name="artifactbin:design-system" content="arcade">. The platform serves this
- * stylesheet, sets data-af-design-system and data-af-dark on <html>, and hosts the fonts: copy, link and read
- * nothing to use it. Only this header is worth reading, for the shared tokens and type roles below.
+ * Use <meta name="artifactbin:design-system" content="arcade"> in <head>. The platform loads the CSS and fonts and
+ * sets data-af-design-system and data-af-dark.
  *
  * Shared contract: every system defines these, so build your CSS on them with var(--name):
  *   --background --foreground --card --card-foreground --popover --popover-foreground --primary
  *   --primary-foreground --secondary --secondary-foreground --muted --muted-foreground --accent
  *   --accent-foreground --destructive --destructive-foreground --border --input --ring --chart-1 --chart-2
  *   --chart-3 --chart-4 --chart-5 --radius --font-display --font-body --font-mono
- * Type-role classes (same names in every system, sizes differ), used as class="t-title" etc.:
- *   t-display-xl t-display-l t-title t-body t-body-s t-label t-numeral t-combo t-mono
- * Each --ds-* below is this system's own palette; its comment says what the token is for (for example a "fill
- * only" colour is never body text). Keep the system's colour and type choices.
+ * Type-role classes shared by every system, used as class="t-title" etc.:
+ *   t-display-xl t-display-l t-display-m t-title t-body-l t-body t-body-s t-label t-numeral t-mono
+ * The --ds-* palette and any unlisted type roles are system-specific.
  *
  * Idea: Arcade is the cabinet with the lights on: a near-white ground with a faint checker, pixel-black ink, and
  * the NES primaries (red, blue, yellow, with magenta and cyan for the power-ups). Status is an HP bar that goes
  * green, yellow, red in blocks. Lives are hearts, points are coins, hints blink, wins get a ribbon. Night is the
  * CRT: black glass, scanlines, the colours lifted to neon.
- * Fits: Game and launch pages, leaderboards and trackers, hackathons, playful dashboards, teaching material for
+ * Use for: Game and launch pages, leaderboards and trackers, hackathons, playful dashboards, teaching material for
  * kids and anyone else, anything that gets better with a score.
  * Avoid when: Serious, institutional or long-reading subjects; dense data; anything where a pixel heart would read
  * as a joke at the reader's expense.
@@ -135,24 +133,28 @@
   --ds-pixel-shadow: 0 -4px 0 0 var(--ds-ink), 0 4px 0 0 var(--ds-ink), -4px 0 0 0 var(--ds-ink), 4px 0 0 0 var(--ds-ink), 4px 8px 0 0 var(--ds-ink), 8px 4px 0 0 var(--ds-ink);
 }
 :root[data-af-design-system="arcade"] body { margin:0; background:var(--background); color:var(--foreground); font-family:var(--font-body); }
-/* Type roles: font family, size / line height, then when to use it. */
-/* display, clamp(22px, 3.4vw, 44px) / 1.4: One per page, three words at most. Press Start 2P is huge per point; 44px is the ceiling. */
+/* Type roles and when to use them. */
+/* One per page, three words at most. Press Start 2P is huge per point; 44px is the ceiling. */
 :root[data-af-design-system="arcade"] .t-display-xl { font-family: "Press Start 2P", "Courier New", monospace; font-size: clamp(22px, 3.4vw, 44px); line-height: 1.4; font-weight: 400; text-transform: uppercase; }
-/* display, clamp(15px, 2vw, 26px) / 1.5: Section openers. */
+/* Section openers. */
 :root[data-af-design-system="arcade"] .t-display-l { font-family: "Press Start 2P", "Courier New", monospace; font-size: clamp(15px, 2vw, 26px); line-height: 1.5; font-weight: 400; text-transform: uppercase; }
-/* sans, 26px / 30px: Card, panel and dialogue titles. Pixelify Sans bold. */
+/* Slide headings. */
+:root[data-af-design-system="arcade"] .t-display-m { font-family: "Press Start 2P", "Courier New", monospace; font-size: clamp(13px, 1.6vw, 20px); line-height: 1.5; font-weight: 400; text-transform: uppercase; }
+/* Card, panel and dialogue titles. Pixelify Sans bold. */
 :root[data-af-design-system="arcade"] .t-title { font-family: "Pixelify Sans", "Verdana", sans-serif; font-size: 26px; line-height: 30px; font-weight: 700; }
-/* sans, 18px / 26px: Reading and UI text. Pixelify Sans at 18px reads cleanly and still looks like a game. */
+/* Lead text. */
+:root[data-af-design-system="arcade"] .t-body-l { font-family: "Pixelify Sans", "Verdana", sans-serif; font-size: 21px; line-height: 29px; font-weight: 400; }
+/* Reading and UI text. Pixelify Sans at 18px reads cleanly and still looks like a game. */
 :root[data-af-design-system="arcade"] .t-body { font-family: "Pixelify Sans", "Verdana", sans-serif; font-size: 18px; line-height: 26px; font-weight: 400; }
-/* sans, 15px / 20px: Captions, helper text, the small print. */
+/* Captions, helper text, the small print. */
 :root[data-af-design-system="arcade"] .t-body-s { font-family: "Pixelify Sans", "Verdana", sans-serif; font-size: 15px; line-height: 20px; font-weight: 400; }
-/* display, 10px / 16px: Eyebrows, HUD labels, column heads, tags. Press Start 2P at 10px. */
+/* Eyebrows, HUD labels, column heads, tags. Press Start 2P at 10px. */
 :root[data-af-design-system="arcade"] .t-label { font-family: "Press Start 2P", "Courier New", monospace; font-size: 10px; line-height: 16px; font-weight: 400; letter-spacing: 0.04em; text-transform: uppercase; }
-/* mono, 56px / 52px: Scores and counts. VT323, zero-padded, tabular, big. */
+/* Scores and counts. VT323, zero-padded, tabular, big. */
 :root[data-af-design-system="arcade"] .t-numeral { font-family: "VT323", "Courier New", monospace; font-size: 56px; line-height: 52px; font-weight: 400; font-variant-numeric: tabular-nums; }
-/* sans, 48px / 48px: The multiplier and the one celebratory word. Pixelify bold italic in red or yellow. */
+/* The multiplier and the one celebratory word. Pixelify bold italic in red or yellow. */
 :root[data-af-design-system="arcade"] .t-combo { font-family: "Pixelify Sans", "Verdana", sans-serif; font-size: 48px; line-height: 48px; font-weight: 700; font-style: italic; }
-/* mono, 22px / 26px: HUD rows, logs, dialogue. VT323 at 22px. */
+/* HUD rows, logs, dialogue. VT323 at 22px. */
 :root[data-af-design-system="arcade"] .t-mono { font-family: "VT323", "Courier New", monospace; font-size: 22px; line-height: 26px; font-weight: 400; }
 /* Code highlighting token colours (for @afbin/highlight). */
 :root[data-af-design-system="arcade"] .tok-comment, :root[data-af-design-system="arcade"] .tok-quote, :root[data-af-design-system="arcade"] .tok-meta { color:color-mix(in oklab, var(--muted-foreground) 75%, var(--foreground));font-style:italic; }

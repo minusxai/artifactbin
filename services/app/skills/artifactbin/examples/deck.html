@@ -7,10 +7,9 @@
 <script type="module" id="slides-data">
 // Usage: cp examples/deck.html index.html && cp examples/deck-steps.mjs steps.mjs; edit <title>
 //   (the deck's name for the tab and link previews), DATA and SLIDES, and restyle in <style> when
-//   the request asks for a look (keep the JS); then node scripts/publish.mjs index.html --create
-//   && node scripts/check.mjs index.html --steps steps.mjs (later publishes drop --create). A
-//   chart from a CSV: put it beside the page, add <link rel="af-dataset" data-af-name="NAME"
-//   href="./NAME.csv"> after <title>, set DATA.dataset to NAME, give its slides x and y columns.
+//   asked. Publish with node scripts/publish.mjs index.html --create (drop --create on update).
+//   Check with node scripts/check.mjs index.html --steps steps.mjs. For a CSV chart, link the CSV
+//   with rel="af-dataset", set DATA.dataset to its data-af-name, and add x and y columns.
 // Gotchas: the sample is the usual pitch order (8 slides: problem, solution, how it works, market,
 //   traction, business model, competition, ask); N topics means N slides. Types: cover is the
 //   problem slide {label "Problem · Company", title ≤40 characters (default: the <title>), text one
@@ -23,8 +22,6 @@
 //   Titles ≤2 lines. Unique ids key data-af-id. Every slide shows "Illustrative figures"; real:true
 //   removes it. The platform already serves each slide as an image
 //   (/a/ID/export?format=png&slide=N; check prints the links), so slides need no export code.
-// Built with: one HTML page from a SLIDES block; Vega-Lite charts; keyboard and click navigation.
-// The only part to edit: DATA, and one SLIDES entry per slide, rendered by the template below.
 window.DATA = {dataset: ''}; // a linked dataset's data-af-name, or '' when charts carry their data
 window.SLIDES = [
   {id:'problem', type:'cover', label:'Problem · [Company]', title:'[Problem: a cost, ≤40 chars]',
@@ -32,7 +29,6 @@ window.SLIDES = [
     stats:[{value:'[41%]', label:'[of something lost]'}, {value:'[$2.6B]', label:'[yearly cost]'}]},
   {id:'solution', type:'bullets', label:'Solution', title:'[What the product does, in one line]',
     items:['[What it replaces]', '[What changes for the buyer]', '[Why now]']},
-  // flow labels wrap onto up to 3 lines: about 13 characters a line with 4 steps, 20 with 3.
   {id:'how', type:'flow', label:'How it works', title:'[How it works, in one line]',
     steps:['[Input]', '[Product]', '[Outcome]']},
   {id:'market', type:'chart', label:'Market', title:'[Market size in one sentence]',
@@ -53,23 +49,29 @@ window.SLIDES = [
 </script>
 <style>
 *{box-sizing:border-box}html{scroll-snap-type:y mandatory}
-body{margin:0;background:var(--ds-paper);color:var(--ds-ink)}
+body{margin:0;background:var(--background);color:var(--foreground)}
 [data-af-slide]{height:100vh;min-height:560px;scroll-snap-align:start;display:flex;
   flex-direction:column;gap:18px;padding:44px 64px 84px;overflow:hidden}
 [data-af-slide] h1,[data-af-slide] h2,[data-af-slide] p{margin:0}[data-af-slide] h2{max-width:22ch}
-.red{background:var(--ds-red);color:var(--ds-on-red)}.soft{color:var(--ds-ink-soft)}
-.ink{background:var(--ds-ink);color:var(--ds-on-ink)}.red .soft,.ink .soft{color:inherit}
+.red{background:var(--primary);color:var(--primary-foreground)}
+.soft{color:var(--deck-soft,var(--muted-foreground))}
+:root[data-af-design-system="nocturne"]:not([data-af-dark="true"]){
+  /* The light secondary is close to the page ground, and muted text is too faint. */
+  --deck-soft:var(--foreground);--deck-ask-bg:var(--foreground);--deck-ask-fg:var(--background)}
+.ink{background:var(--deck-ask-bg,var(--secondary));
+  color:var(--deck-ask-fg,var(--secondary-foreground))}
+.red .soft,.ink .soft{color:inherit}
 .cover{justify-content:center}.cover h1{max-width:13ch}.stats{display:flex;gap:56px}
 .items{list-style:none;margin:0;padding:0;display:grid;gap:16px;max-width:52ch}
 .items li{border-top:2px solid currentColor;padding-top:10px}.chart{width:100%;height:280px}
 .figure{height:300px;max-height:300px;min-width:0;flex:none}.figure svg{width:100%;height:100%}
 .illustrative{align-self:flex-start;border:1px solid currentColor;padding:2px 8px}
 nav[data-af-deck-chrome]{position:fixed;right:24px;bottom:18px;display:flex;align-items:center;
-  gap:10px;padding:6px 10px;background:var(--ds-paper-raised);color:var(--ds-ink);
-  border:1px solid var(--ds-line);z-index:2}
+  gap:10px;padding:6px 10px;background:var(--card);color:var(--card-foreground);
+  border:1px solid var(--border);z-index:2}
 nav button{font:inherit;color:inherit;background:none;border:1px solid currentColor;
   padding:4px 10px;cursor:pointer}nav button:disabled{opacity:.4;cursor:default}nav .dot{width:12px;
-  height:12px;padding:0;border-radius:50%}nav .dot[aria-current=true]{background:var(--ds-red)}
+  height:12px;padding:0;border-radius:50%}nav .dot[aria-current=true]{background:var(--primary)}
 button:focus-visible{outline:3px solid var(--ring);outline-offset:2px}
 @media(max-width:720px){[data-af-slide]{padding:28px 20px 84px;height:auto;min-height:100vh}}
 </style></head><body><main id="deck"></main>
@@ -101,10 +103,10 @@ const list=(id,items)=>{const ul=el('ul',id,{class:'items t-body'});
 function flow(s){const steps=s.steps.slice(0,4),w=900/steps.length;
   const svg=svgEl('svg',{viewBox:'0 0 900 220',role:'img','aria-label':steps.join(' to ')});
   steps.forEach((step,n)=>{
-    const x=n*w+10,mid=n===Math.floor(steps.length/2),ink=mid?'var(--ds-on-red)':'currentColor';
-    svg.append(svgEl('rect',{x,y:60,width:w-70,height:100,fill:mid?'var(--ds-red)':'none',
+    const x=n*w+10,mid=n===Math.floor(steps.length/2);
+    const ink=mid?'var(--primary-foreground)':'currentColor';
+    svg.append(svgEl('rect',{x,y:60,width:w-70,height:100,fill:mid?'var(--primary)':'none',
       stroke:'currentColor','stroke-width':2}));
-    // Labels wrap at spaces (about 11 units a character); a single word over the width overflows.
     const lines=[],max=Math.floor((w-82)/11);for(const word of step.split(' '))lines.length&&
       (lines.at(-1)+' '+word).length<=max?lines.push(lines.pop()+' '+word):lines.push(word);
     const text=svgEl('text',{y:116-(lines.length-1)*11,'text-anchor':'middle','font-size':18,
@@ -119,7 +121,7 @@ function matrix(s){const ink={fill:'currentColor'},svg=svgEl('svg',{viewBox:'0 0
     svgEl('text',{x:460,y:26,'font-size':15,...ink},`↑ ${s.y}`),svgEl('text',{x:890,y:296,
       'text-anchor':'end','font-size':13,...ink},'Positions are illustrative'));
   s.points.forEach((p,n)=>{const cx=200+p.x*500,cy=270-p.y*260;svg.append(svgEl('circle',{cx,cy,
-    r:9,fill:n===0?'var(--ds-red)':'currentColor'}),svgEl('text',{x:cx+14,y:cy+5,'font-size':16,
+    r:9,fill:n===0?'var(--primary)':'currentColor'}),svgEl('text',{x:cx+14,y:cy+5,'font-size':16,
     ...ink},p.label));});return svg;}
 const surface={cover:'red cover',ask:'ink'},charts=[],badge='Illustrative figures';
 SLIDES.forEach((s,n)=>{
@@ -128,8 +130,6 @@ SLIDES.forEach((s,n)=>{
   section.append(el('p',id+'-label',{class:'t-label soft'},n?`${pad(n+1)} · ${s.label}`:s.label));
   section.append(el(n?'h2':'h1',id+'-title',{class:n?'t-display-m':'t-display-l'},
     s.title??document.title));
-  // The ask computes its total and shares (rounded to sum to 100), so the parts always add up,
-  // and starts its milestone from the from chart's last value, so the two slides agree.
   if(s.type==='ask'){const parts=s.items??[],v=p=>p.amount??p.pct??0,fmt=x=>s.unit.replace('#',
       +x.toFixed(2)),total=parts.reduce((t,p)=>t+v(p),0),raw=parts.map(p=>v(p)/total*100);
     const c=SLIDES.find(x=>x.id===s.from),y=c?.data.at(-1)?.y,from=y==null?'':(c.unit??'#')
@@ -173,28 +173,28 @@ const sync=()=>{const i=slides.findIndex(slide=>{const box=slide.getBoundingClie
 const seen=new IntersectionObserver(sync,{threshold:.6});slides.forEach(slide=>seen.observe(slide));
 const token=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();let views=[];
 async function drawCharts(){views.forEach(view=>view.finalize());
-  const ink=token('--ds-ink'),font=token('--font-body'),red=token('--ds-red');
+  const ink=token('--foreground'),font=token('--font-body');
+  const series=['--chart-1','--chart-2'].map(token);
   views=await Promise.all(charts.map(async({s,host})=>{
-    // Labels use the chart's decimals, or two significant digits under 1 ("$0.28B").
     const dp=+(s.format?.match(/\.(\d)/)?.[1]??0),line=s.mark==='line',end=s.data.length-1,num=y=>
       Math.abs(y)<1&&y?String(+y.toPrecision(2)):y.toFixed(dp),values=s.data.map((d,i)=>({...d,
         label:!line||!i||i===end||d.series?(s.unit??'#').replace('#',num(d.y)):''}));
-    const multi=values.some(d=>d.series),hue=multi?{}:{color:red},spec=compile({width:'container',
+    const multi=values.some(d=>d.series),hue=multi?{}:{color:series[0]};
+    const spec=compile({width:'container',
       height:240,autosize:{type:'fit',contains:'padding'},background:'transparent',data:{values},
       layer:[{mark:line?{type:'line',point:true,strokeWidth:3,...hue}:{type:'bar',cornerRadiusEnd:2,
         ...hue}},{mark:{type:'text',dy:-10,color:ink,fontSize:14},encoding:{text:{field:'label'}}}],
-      encoding:{...multi?{color:{field:'series',type:'nominal',sort:null,scale:{range:[red,ink]},
+      encoding:{...multi?{color:{field:'series',type:'nominal',sort:null,scale:{range:series},
         legend:{orient:'top',title:null}},...line?{}:{xOffset:{field:'series',sort:null}}}:{},
         x:{field:'x',type:'ordinal',sort:null,title:null,axis:{labelAngle:0}},
         y:{field:'y',type:'quantitative',title:s.yTitle??null,axis:{format:s.format}},
         tooltip:[{field:'x',type:'nominal',title:s.label},{field:'y',type:'quantitative',
           title:s.yTitle,format:s.format}]},
       config:{view:{stroke:null},axis:{labelColor:ink,titleColor:ink,domainColor:ink,tickColor:ink,
-        gridColor:token('--ds-line'),labelFont:font,titleFont:font,titleLimit:210}}}).spec;
+        gridColor:token('--border'),labelFont:font,titleFont:font,titleLimit:210}}}).spec;
     const view=new vega.View(vega.parse(spec,undefined,{ast:true}),{container:host,renderer:'svg',
       expr:vega.expressionInterpreter});await view.runAsync();return view;}));}
 await drawCharts();const theme=new MutationObserver(drawCharts);
 theme.observe(document.documentElement,{attributes:true,attributeFilter:['data-af-dark']});
 addEventListener('pagehide',()=>{theme.disconnect();seen.disconnect();views.map(v=>v.finalize());});
-</script>
-</body></html>
+</script></body></html>
