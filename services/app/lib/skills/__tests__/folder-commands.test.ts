@@ -49,3 +49,11 @@ it('refuses changing a resumed folder request before sending anything',async()=>
  await expect(groupsCommand({sub:'folder-create',positionals:[],values:{resume:'/unused.json',title:'Changed'}},{env,fetcher:async()=>{count++;throw Error('unexpected');}})).rejects.toMatchObject({exit:2});
  expect(count).toBe(0);
 });
+it('filters complete workspace results by exact owner, role and inclusive local dates',async()=>{
+ const {workspaceList}=await import('../../../skills/artifactbin/scripts/toolbox-website.mjs');
+ const row={id:'PAGE12',title:'Field Report',owner_username:'author',role:'viewer',updated_at:new Date(2026,0,3,23).toISOString()};
+ const client={request:async()=>({artifacts:[row,{...row,owner_username:'another'},{...row,role:'editor'},{...row,updated_at:new Date(2026,0,4).toISOString()}]})};
+ expect(await workspaceList('shared',{owner:'@author',permission:'viewer',from:'2026-01-03',to:'2026-01-03'},client)).toEqual({artifacts:[row]});
+ await expect(workspaceList('shared',{from:'2026-02-31'},client)).rejects.toMatchObject({exit:2});
+ expect(await workspaceList('liked',{search:'missing'},client)).toEqual({artifacts:[]});
+});

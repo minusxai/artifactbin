@@ -66,7 +66,8 @@ import {archiveFor} from '@/lib/skills';
 // 1.632 MiB: main sat 39 bytes under 1.631; group publishing and folder creation leave the role decision to the
 // server and say its refusal plainly (groupRefusal), in place of the client's check for the retired Editor role,
 // leaving 1,710,432 bytes.
-const SKILL_ARCHIVE_MAX_BYTES=1.632*1024*1024;
+// Personal folder, site and workspace commands ship with their website guide.
+const SKILL_ARCHIVE_MAX_BYTES=1.636*1024*1024;
 
 describe('the downloadable author skill archive',()=>{
  it('fits its size budget',async()=>{

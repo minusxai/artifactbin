@@ -3,7 +3,12 @@ export const DESCRIPTION = `Groups: members, sharing, ownership, folders and lin
 Usage: node scripts/groups.mjs list
        node scripts/groups.mjs show GROUP [--pages] [--cursor CURSOR]
        node scripts/groups.mjs collection [GROUP] [--parent FOLDER] [--cursor CURSOR] [--limit N]
-       node scripts/groups.mjs folder-create GROUP --title TITLE [--parent FOLDER] [--request FILE]
+       node scripts/groups.mjs folder-create GROUP|--personal --title TITLE [--parent FOLDER]
+         [--request FILE] [--visibility private|public (personal)]
+       node scripts/groups.mjs website
+       node scripts/groups.mjs site-set FOLDER|root [--alias SLUG] [--expected OLD_FOLDER|root]
+       node scripts/groups.mjs site-remove SLUG --expected OLD_FOLDER|root
+       node scripts/groups.mjs place PAGE --parent FOLDER
        node scripts/groups.mjs folder-create --resume JOURNAL
        node scripts/groups.mjs create HANDLE --name NAME [--description TEXT] [--parent GROUP]
        node scripts/groups.mjs reparent GROUP --parent GROUP|--root --yes
@@ -26,7 +31,7 @@ Usage: node scripts/groups.mjs list
        node scripts/groups.mjs approve PAGE QUERY --hash HASH --yes | unapprove PAGE ID --yes
 Flags: --server ORIGIN, --json, --output FILE (exclusive), --help.
 Examples:
-  node scripts/groups.mjs collection
+  node scripts/groups.mjs folder-create --personal --visibility public --title Notes
   node scripts/groups.mjs folder-create design_crit --title Reports
 Gotchas: GROUP accepts ID/handle/@handle; USER must match one member. Only admins see invites.
   Bulk invites can partially fail. Share keeps ownership; move transfers descendants.
@@ -42,6 +47,7 @@ Exit: 0 ok; 1 failed or partial failure; 2 invocation/confirmation; 3 auth/acces
 
 import {runTool,makeClient,selectedServer,resolveTarget,positional,requireFlags,enumValue,
  ToolError,toolFailure,toolExit} from './toolbox-client.mjs';
+import {siteCommand} from './toolbox-website.mjs';
 import {groupFolders} from './toolbox-group-folders.mjs';
 import {confirmation,groupReference,resolveGroup,resolveMember,resolveInvitation,
  invitationEmail,segment,withDatasets,editorGrant,EDITOR_GRANT} from './toolbox-groups.mjs';
@@ -60,6 +66,8 @@ export async function groupsCommand(parsed,options={}){
   {...result,note:EDITOR_GRANT}:result;
 }
 async function command({sub,values,positionals},options){
+ if(['website','site-set','site-remove','place'].includes(sub))
+  return siteCommand(sub,values,positionals,options);
  if(['collection','folder-create'].includes(sub))return groupFolders({sub,values,positionals},
   options);
  // Confirm before HTTP.

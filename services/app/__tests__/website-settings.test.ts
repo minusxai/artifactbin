@@ -30,3 +30,22 @@ it('saves only live personal folders for the current account, with a unique row 
   expect((await DELETE(request(path,{actor,method:'DELETE',origin:'same',json:{subdomain_label:'notes'}}))).status).toBe(200);
   expect(await (await GET(request(path,{actor}))).json()).toEqual({folders:[],roots:[]});
 });
+
+it('binds agent settings to the bearer account and compares the observed alias on removal',async()=>{
+  const owner=await mintAccountToken('mxmx_test_owner'), foreign=await mintAccountToken('mxmx_test_foreign');
+  const bare=await mintAccountToken('mxmx_test_bare',null),path='/api/my/website';
+  await setUsername(owner.userId!,'site_owner');
+  await seedArtifacts(await getDb(),{id:'folder1',format:'folder',user_id:owner.userId});
+  const json={subdomain_label:'notes',folder_id:'folder1'};
+  expect((await GET(request(path,{token:bare.token}))).status).toBe(401);
+  expect((await PUT(request(path,{token:owner.token,method:'PUT',json}))).status).toBe(200);
+  expect((await PUT(request(path,{token:foreign.token,method:'PUT',json:{...json,subdomain_label:''}}))).status).toBe(404);
+  expect(await (await GET(request(path,{token:foreign.token}))).json()).toEqual({roots:[],folders:[]});
+  const remove=(token:string,expected_folder_id?:string)=>DELETE(request(path,{token,method:'DELETE',json:{...json,expected_folder_id}}));
+  expect((await remove(foreign.token,'folder1')).status).toBe(409);
+  expect((await remove(owner.token)).status).toBe(400);
+  expect((await remove(owner.token,'folder2')).status).toBe(409);
+  const actor={credential:'session' as const,userId:owner.userId!,email:owner.email!,emailVerified:true};
+  expect((await DELETE(request(path,{actor,origin:'https://foreign.test',method:'DELETE',json}))).status).toBe(403);
+  expect((await remove(owner.token,'folder1')).status).toBe(200);
+});
