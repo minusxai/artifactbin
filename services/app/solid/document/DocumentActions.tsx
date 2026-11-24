@@ -32,7 +32,7 @@ interface DocumentActionsProps {
   /** An HTML page's design-system control (solid/document/DocumentDesignSystem), for its editors. */
   designSystem?: import('./DocumentDesignSystem').DesignSystemHost;
   groupId?:string|null;
-  pwaEnabled?: boolean; membershipAvailable?: boolean;
+  pwaEnabled?: boolean;
   id: string; title: string; version: number; archived?: boolean;
   owner: boolean; canEdit: boolean; canAnnotate: boolean; accountSession: boolean;
   /** An editor who may also change who reaches it (the page answer's `canManageSharing`): never an editor by link alone. */
@@ -64,7 +64,7 @@ export function DocumentActions(props: DocumentActionsProps): JSX.Element {
   const toggleComments = () => { const open = !commentsOpen(); setCommentsOpen(open); props.onCommentsChange(open); };
   return <div class="space-y-4" aria-label="Document actions">
     <Show when={activeEditor() && props.designSystem}>{host => <Suspense fallback={null}><DocumentDesignSystem id={props.id} host={host()} /></Suspense>}</Show>
-    <Show when={props.membershipAvailable || peopleOpen()}><Suspense fallback={null}><DocumentPeople id={props.id} revision={props.membershipRevision} onChange={props.onMembershipChange} initialOpen={peopleOpen()} hideJoin /></Suspense></Show>
+    <Show when={peopleOpen()}><Suspense fallback={null}><DocumentPeople id={props.id} revision={props.membershipRevision} onChange={props.onMembershipChange} initialOpen={peopleOpen()} hideJoin /></Suspense></Show>
     <section aria-label="Document actions" class="space-y-1">
       <h2 class="px-2"><MicroLabel>Artifact</MicroLabel></h2>
       <Show when={props.forkedFrom}>{source => <p data-mx-forked-from class="px-2 py-2 font-mono text-xs text-muted">forked from <Show when={source().href} fallback={source().label}>{href => <a href={href()} aria-label="Open the artifact this was forked from" class="underline">{source().label}</a>}</Show></p>}</Show>

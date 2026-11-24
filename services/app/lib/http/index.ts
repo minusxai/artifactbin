@@ -16,4 +16,4 @@ export {
 export type { PagesSite } from './pages-origin';
 export { parseScalarValues } from './scalar-values';
 export type { RetryOptions } from './retry';
-export { REVALIDATE, etagOf, matchingTag, notModified, publicRevalidatedResponse, revalidationHeaders, withEncoding } from './revalidation';
+export { REVALIDATE, etagOf, matchingTag, notModified, publicRevalidatedResponse, withEncoding } from './revalidation';

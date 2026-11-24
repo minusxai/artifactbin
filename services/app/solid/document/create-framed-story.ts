@@ -40,12 +40,6 @@ export function followFramedValues(win: Window, values: string, push = false): v
 /** The `$` params alone of an address's search (`''` for none): what the frame is told after Back or Forward. */
 const dollarValuesOf = (search: string): string => withUrlValuesOf('', search);
 
-/**
- * The framed document's node tree (the page's NODES door, `?part=nodes`): a request of its own because the page draws nothing
- * from it — it is only relayed to the frame's edit controller — and on a large document it is most of the page's bytes.
- * `search` carries an archived version's `?version=N`, so the tree is that version's. A restart is ridden out by the shared
- * policy (lib/http/retry-lazily); a refusal is not. Null when it never arrives: the frame then has no edit controller, and says so nowhere.
- */
 interface FramedStoryOptions {
   id: string;
   framed: FramedDocument;

@@ -25,7 +25,7 @@ import { holdsCreatingToken, effectiveRole, managesSharing, requestAccessFacts }
 import { folderPageFor, accountWorkspaceFor } from '@/lib/workspace';
 import { resolveStoredStoryDesign } from '@/lib/html-systems';
 import { verifyExportKey } from '@/lib/export';
-import { baseUrl, json, parseCookie, canonicalArtifactPath, notModified, revalidationHeaders } from '@/lib/http';
+import { baseUrl, json, parseCookie, canonicalArtifactPath } from '@/lib/http';
 import { forkedFromCredit } from './fork-credit.server';
 import { ID_RE } from '@/lib/platform';
 import { avatarUrl } from '@/lib/avatars';
@@ -51,8 +51,6 @@ export interface ArtifactPageAnswer {
   frame?: DocumentFrame;
   /** Which renderer answered a document's page (the page's `x-mx-reader` header): the compiled page, in its frame. */
   reader?: { mode: 'compiled' };
-  /** The validator of a node answer (lib/http/revalidation); with status 304 the body is the reader's own copy. */
-  etag?: string;
 }
 
 /** What the app page (never the JSON door) hands the answer. */
@@ -82,17 +80,10 @@ const notFound = (): ArtifactPageAnswer => ({ status: 404, body: { error: 'not_f
  * What the app page reads of a FRAMED document's runtime (solid/pages/Document): its title, and the declared
  * dataflow the editor opens on and the live stream's cursor. The runtime itself runs in the frame, on the
  * document's own origin; the rest of the served runtime (sheets, overrides, author script, reader data) never
- * reaches this page, and the tree is the nodes door's.
+ * reaches this page.
  */
 export interface FramedRuntime { title: string; data: Record<string,never> }
 
-/**
- * A document frame's first URL for this request's reader (APP__PAGES_HOST): the document's own origin carrying a
- * one-time ticket for exactly that document (the explicit guest marker for a guest), spent in the response that
- * serves the document (server/pages-host) — or null when the reader
- * may not read the document or it is not a document. `search` carries the reader's `$` values across.
- * The app page draws its frame with it; brief B's framed story asks for a fresh one (app/api/page/frame).
- */
 /**
  * The reader's explicit light/dark pick, as the app origin keeps it for its server (the `mx_theme` cookie
  * lib/story-runtime/reader-mode chooseTheme writes), or null: a reader who never picked reads every document in its
@@ -221,7 +212,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
    * data now: computed once here, inlined into the HTML by `withBootstrap`, so
    * the rows are in the first byte and the first paint is the final geometry.
    *
-   * Above every `isDoc` branch below, because none of them applies: there is no
+   * A folder has no
    * source to compile a sheet for, no declarations to seed, no annotations to
    * count and nothing to frame.
    */
@@ -259,21 +250,9 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   const at = await archivedVersionFor(request, artifact, () => requestOrSessionActor(request), { capture: exporting });
   if (at === 'not_found') return notFound();
   const nativeHtml = artifact.format === 'html';
-  const isDoc = nativeHtml;
+  const part = search.get('part');
+  if (part !== null && part !== 'kind' && part !== 'chrome') return notFound();
 
-  // Browser source editing is no longer a document surface. Authoring APIs remain separate.
-  if (search.get('part') === 'editor') return notFound();
-
-  /*
-   * THE NODES' DOOR: the version's node tree, which the app page relays to the framed document's edit controller to
-   * classify comments and selections against (solid/document/create-framed-story). Asked for by every reader while the
-   * frame loads — it is not the reader payload because nothing the page DRAWS depends on it. Admitted exactly as the
-   * page is (above); a version asked for is that version's tree (archivedVersionFor already refused whoever may not).
-   */
-  if(search.get('part')==='nodes')return notFound();
-
-  // Everything below reads THIS row: the artifact wearing that version's bytes
-  // when one was asked for, the artifact itself otherwise. A document's comes
   // Source stays on the runner origin; independent shell reads run beside one another.
   // A dataset page shows the reader's role view (lib/dataset-permissions); its creating token and an export read whole.
   // A LIVE dataset's page is its connection (lib/live-datasets): its sharing admitted the reader; it has no rows here.
@@ -282,13 +261,13 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   if (datasetDecision && !datasetDecision.allowed) return notFound();
   const starter = nativeHtml && !at && artifact.version === 1 && artifact.meta.startPlaceholder === true;
   // Keep guest cache hits, history, capture and non-frame surfaces on their original bootstrap.
-  const deferChrome = !!(options.pages && admitted && options.admittedCanonical && actor.userId && isDoc && !at && !exporting && !starter);
-  const readerPick = options.pages && isDoc && !exporting ? readerPickOf(request) : null;
+  const deferChrome = !!(options.pages && admitted && options.admittedCanonical && actor.userId && nativeHtml && !at && !exporting && !starter);
+  const readerPick = options.pages && nativeHtml && !exporting ? readerPickOf(request) : null;
   const [page, chrome, dataPreview, framedSrc, publishedUrl, cspRequest] = await Promise.all([
     nativeHtml && !at ? currentPage(artifact, revision ? { revision } : {}) : null,
-    deferChrome ? null : readDocumentChrome(artifact, actor, role === 'owner', isDoc),
+    deferChrome ? null : readDocumentChrome(artifact, actor, role === 'owner', nativeHtml),
     liveConnection ? '[]' : artifact.format === 'dataset' ? (datasetDecision && !datasetDecision.full ? datasetRowsFor(datasetDecision, artifact) : loadDatasetRows(artifact)).then(rows => JSON.stringify(rows)) : (artifact.format === 'viz' ? artifact.source ?? '' : ''),
-    options.pages && isDoc ? (async (site) => {
+    options.pages && nativeHtml ? (async (site) => {
       // An export key admits the page, never its frame: a keyed capture is framed only for a reader the rule admits.
       if (exporting && !admitted && !(await admitRead(artifact, actor, { facts }))) return null;
       return admittedFrameSrc(request, artifact, actor, site, new URL(request.url).search, readerPick);
@@ -297,7 +276,6 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     nativeHtml ? cspRequestFor({artifact:{id:artifact.id,version:at?.version??artifact.version,declared:storedCspExtensions((at?.meta ?? artifact.meta).htmlCsp)},viewer:actor,request}) : undefined,
   ] as const);
   const row = page ? { ...servedRow(artifact, at), source: page.row.source, title: page.row.title } : servedRow(artifact, at);
-  const membershipAvailable = false;
   const pwaEnabled = artifactPwaEnabled(row);
 
   const meta = (row.meta ?? {}) as {
@@ -311,7 +289,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   // An HTML page's design system and default mode are what its core applies.
   const look = nativeHtml ? htmlAppearance(row.source ?? '', designSystemChoice(artifact.meta)) : null;
   const design = look ? { theme: (look.designSystem ?? null) as StoryDesignName | null, colorMode: capturedColor ?? look.mode } : resolveStoredStoryDesign(meta.theme, capturedColor ?? meta.colorMode);
-  const compiledCss = isDoc ? null : meta.compiledCss ?? null;
+  const compiledCss = nativeHtml ? null : meta.compiledCss ?? null;
   const documentTitle = nativeHtml ? nativeHtmlTitle(row) : null;
 
   const framedOrigin = framedSrc?.origin ?? null;
@@ -329,7 +307,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     },
   } : null;
   const surface = {
-    pwaEnabled, membershipAvailable,
+    pwaEnabled,
     captureKey: exporting ? key : null,
     id: artifact.id,
     group_id: groupId,
@@ -341,9 +319,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     title: documentTitle ?? row.title,
     ...(chrome ? { author: chrome.author } : {}),
     ...(documentTitle !== null ? {
-      // The framed page's own sheet, script and reader data are the frame's, and the tree is the nodes door's: the
-      // app keeps what it reads (FramedRuntime), whichever door it asked. The starter's read view, which is app UI
-      // rather than a frame, keeps the whole served runtime, less the tree.
+      // The framed page's sheet, script and reader data stay in the frame. The app keeps the minimal runtime (FramedRuntime).
       runtime: ({ title: documentTitle, data: {} }) satisfies FramedRuntime,
       // What the reader's chrome derived from the source: the document's own
       // name (lib/document/title) and whether it is still the starter placeholder.
@@ -375,7 +351,6 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     // never sees a ref's title, so nobody's page pays for the lookups.
     refs: meta.refs ?? [],
     accountSession: kind === 'account',
-    anonSession: false,
     // The document's own origin when the app page frames it there (solid/pages/Document posts to it).
     ...(framedOrigin ? { framedOrigin } : {}),
     // The rail's Join/Joined/Pending pill (solid/document/DocumentChrome).
@@ -415,8 +390,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
  * Every role reads a native HTML document in the frame the HTML door draws (solid/pages/Document adopts it);
  * nothing renders a document from this answer. A client navigation to an address of unknown kind asks `?part=kind`
  * first and crosses to the server for a document without reading this answer (solid/pages/ArtifactAddress
- * `replaceDocument`), the framed document's selection controller reads
- * `?part=nodes`, and a dataset reader re-reads its catalog. So a framed document's answer carries the same
+ * `replaceDocument`), and a dataset reader re-reads its catalog. The document's answer carries the same
  * `FramedRuntime` as the HTML door's (the title and declared dataflow, nothing the frame draws from): measured at
  * 211 KB on a large document, of which the sheet, system sheet and author script were 209 KB that nothing here
  * reads. The full served runtime is built for /raw, draft preview and prepared pages, none of which come through
@@ -424,11 +398,5 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
  */
 export async function artifactPageResponse(request: Request, id: string): Promise<Response> {
   const answer = await artifactPageAnswer(request, id);
-  if (answer.status === 304 && answer.etag) return notModified(answer.etag);
-  return answer.status === 200 ? json(answer.body, 200, answer.etag ? revalidationHeaders(answer.etag) : { 'Cache-Control': NO_STORE }) : json(answer.body, answer.status);
+  return answer.status === 200 ? json(answer.body, 200, { 'Cache-Control': NO_STORE }) : json(answer.body, answer.status);
 }
-
-/**
- * The validator of a node answer: what determines the bytes is the version and edit it reads, the role that was
- * admitted to it, and the code that prepares a page (a deploy that changes how nodes are made changes the tag).
- */
