@@ -52,10 +52,12 @@ ${E} .af-md-table-wrap{box-sizing:border-box;max-width:100%;margin-block:.75em 1
   background:var(--background,#fff)}
 ${E} .af-md-table-wrap table{display:table;width:100%;max-width:none;margin:0;
   border-collapse:separate;border-spacing:0;table-layout:auto;color:inherit}
+${E} .af-md-table-wrap table:has(tr>:nth-child(3)){min-width:36rem}
 ${E} .af-md-table-wrap :is(th,td){box-sizing:border-box;min-width:7rem;
   padding:.55rem .8rem;border:0;border-inline-end:1px solid var(--border,#d9dce1);
   border-block-end:1px solid var(--border,#d9dce1);vertical-align:top;
   text-align:start;line-height:1.55;overflow-wrap:anywhere}
+${E} .af-md-table-wrap td:has(>code:only-child){min-width:9rem}
 ${E} .af-md-table-wrap th{background:var(--muted,#f3f4f6);font-weight:600;
   color:var(--foreground,#17191d)}
 ${E} .af-md-table-wrap tr>:last-child{border-inline-end:0}
