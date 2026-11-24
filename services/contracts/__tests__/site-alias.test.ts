@@ -19,3 +19,8 @@ it('budgets the owner, separator and suffix in the same DNS label and full hostn
   expect(validSiteAlias('x',longHost)).toBe(true);
   expect(validSiteAlias('xx',longHost)).toBe(false);
 });
+
+it('keeps the double hyphen exclusively between the owner and the alias',()=>{
+  expect(validSiteAlias('research-notes','owner.example.test')).toBe(true);
+  expect(validSiteAlias('research--notes','owner.example.test')).toBe(false);
+});

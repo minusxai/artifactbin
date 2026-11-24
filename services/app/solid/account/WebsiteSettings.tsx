@@ -37,7 +37,7 @@ export function WebsiteSettings(props:{url:string}) {
   }
   function labelError() {
     if(editing()!=='new')return '';
-    if(!validSiteAlias(label(),ownerHost()))return `Use 1–${limit()} lowercase letters, numbers or internal hyphens.`;
+    if(!validSiteAlias(label(),ownerHost()))return `Use 1–${limit()} lowercase letters, numbers or single internal hyphens.`;
     return taken(label())?'This label is taken. Choose another label.':'';
   }
   async function change(method:'PUT'|'DELETE',root:Root,expected?:string|null) {

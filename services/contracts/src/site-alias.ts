@@ -5,5 +5,5 @@ export function siteAliasLimit(ownerHost: string): number {
 }
 
 export function validSiteAlias(label: string, ownerHost: string): boolean {
-  return label.length <= siteAliasLimit(ownerHost) && /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label);
+  return label.length <= siteAliasLimit(ownerHost) && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(label);
 }
