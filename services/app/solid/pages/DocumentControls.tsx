@@ -18,7 +18,7 @@ export default function DocumentControls(props: {
   /** The page's answer: its design system, group, app and membership settings, likes and fork origin. */
   answer: {
     canManageSharing?: boolean;
-    surface?: { theme?: string | null; group_id?: string | null; pwaEnabled?: boolean; membershipAvailable?: boolean; author?: { forkedFrom?: { label: string; href: string | null } | null } | null };
+    surface?: { theme?: string | null; group_id?: string | null; pwaEnabled?: boolean; author?: { forkedFrom?: { label: string; href: string | null } | null } | null };
     like?: { liked: boolean; count: number };
   };
   design: Omit<DesignSystemHost, 'value'>;
@@ -38,7 +38,7 @@ export default function DocumentControls(props: {
   const surface = () => props.answer.surface;
   return <>
     <ReaderPresenceControls preferences={props.presence.preferences()} onChange={props.presence.setPreference} viewers={props.presence.viewers()} total={props.presence.total()} />
-    <DocumentActions designSystem={{ ...props.design, value: surface()?.theme ?? null }} groupId={surface()?.group_id} pwaEnabled={surface()?.pwaEnabled} membershipAvailable={surface()?.membershipAvailable}
+    <DocumentActions designSystem={{ ...props.design, value: surface()?.theme ?? null }} groupId={surface()?.group_id} pwaEnabled={surface()?.pwaEnabled}
       id={props.id} title={props.title} version={props.version} archived={props.archived}
       onSettings={leave(props.onSettings)} onSocialPreview={leave(props.onSocialPreview)} onRenamed={props.onRenamed}
       owner={props.owner} canEdit={props.canEdit} canManageSharing={props.answer.canManageSharing} canAnnotate={props.canAnnotate} accountSession={props.accountSession}

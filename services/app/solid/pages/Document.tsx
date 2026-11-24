@@ -60,11 +60,11 @@ interface DocumentAnswer {
   surface?: {
     group_id?:string|null;
     id: string; title: string | null; format: string; version: number; editId?: string;
-    openAnnotations?: number; accountSession?: boolean; anonSession?: boolean;
+    openAnnotations?: number; accountSession?: boolean;
     runtime?: FramedRuntime;
     refs?: Array<{ id: string; kind: string; title?: string | null }>;
     template?: string | null; theme?: string | null; colorMode?: 'light' | 'dark' | null;
-    heading?: string | null; hasEditableRegions?: boolean; pwaEnabled?: boolean; membershipAvailable?: boolean;
+    heading?: string | null; hasEditableRegions?: boolean; pwaEnabled?: boolean;
     visibility?: Visibility; hasInvitedUsers?: boolean;
     author?: DocumentChromeDetails['author'];
     /** The document's own origin, which the page frames (lib/document-serving/artifact-page). */

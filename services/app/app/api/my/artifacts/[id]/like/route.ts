@@ -22,7 +22,7 @@
  * missing one are the same 404, so the door never confirms that a private id
  * exists.
  */
-import { canReadArtifact, getArtifactById, type ArtifactRow } from '@/lib/artifacts';
+import { readableArtifact, type ArtifactRow } from '@/lib/artifacts';
 import { can, refusalFor } from '@/lib/artifact-access';
 import { refusesCrossSite } from '@/lib/authentication';
 import { json, toResponse, unauthorized } from '@/lib/http';
@@ -37,8 +37,8 @@ async function opened(request: Request, ctx: Ctx): Promise<{ artifact: ArtifactR
   const { id } = await ctx.params;
   const actor = await sessionActor(request);
   if (refusesCrossSite(request, actor)) return json({ error: 'forbidden' }, 403);
-  const artifact = await getArtifactById(id);
-  if (!artifact || !(await canReadArtifact(artifact, actor))) return json({ error: 'not_found' }, 404);
+  const artifact = (await readableArtifact(actor, id, { admission: 'account' }))?.row;
+  if (!artifact) return json({ error: 'not_found' }, 404);
   return { artifact, actor };
 }
 

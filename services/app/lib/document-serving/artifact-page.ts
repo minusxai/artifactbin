@@ -3,8 +3,8 @@ import {htmlAppearance} from '@/lib/html-page';
 import {designSystemChoice} from '@/lib/html-systems';
 import {artifactPwaEnabled} from './artifact-pwa.server';
 import { nativeHtmlTitle } from './native-html.server';
-import { liveConnectionOf, publicCatalogOf, loadDatasetRows } from '@/lib/datasets';
-import { datasetReadAccess, datasetRowsFor, sqlRefusal, viewCatalog } from '@/lib/dataset-permissions';
+import { loadDatasetRows } from '@/lib/datasets';
+import { datasetRowsFor, sqlRefusal } from '@/lib/dataset-permissions';
 /**
  * The owner/editor SHELL's props for one document — everything ArtifactDocument
  * used to compute on the server: the ACL (uniform 404), the exporter's signed
@@ -20,16 +20,15 @@ import { datasetReadAccess, datasetRowsFor, sqlRefusal, viewCatalog } from '@/li
  * A native HTML document is assembled only on its runner origin. This answer
  * carries its original sharing/comment shell and a ticketed frame, never its source.
  */
-import { admitRead, archivedVersionFor, currentPage, readPageRow, servedRow, UnservableDocument, accessMoved, getArtifactHeaderById, hasInvitedUsersFor, type ArtifactHeader, type ArtifactRow, type PageRead } from '@/lib/artifacts';
-import { holdsCreatingToken, effectiveRole, managesSharing, requestAccessFacts } from '@/lib/artifact-access';
+import { admitRead, UnservableDocument, getArtifactHeaderById, hasInvitedUsersFor, type ArtifactHeader, type ArtifactRow } from '@/lib/artifacts';
+import { effectiveRole, managesSharing } from '@/lib/artifact-access';
 import { folderPageFor, accountWorkspaceFor } from '@/lib/workspace';
 import { resolveStoredStoryDesign } from '@/lib/html-systems';
-import { verifyExportKey } from '@/lib/export';
-import { baseUrl, json, parseCookie, canonicalArtifactPath, notModified, revalidationHeaders } from '@/lib/http';
+import { baseUrl, json, parseCookie, canonicalArtifactPath } from '@/lib/http';
 import { forkedFromCredit } from './fork-credit.server';
 import { ID_RE } from '@/lib/platform';
 import { avatarUrl } from '@/lib/avatars';
-import { browserSessionKind, isBrowserSessionRequest, requestOrSessionActor, sessionActor } from '@/lib/authentication';
+import { browserSessionKind, isBrowserSessionRequest, sessionActor } from '@/lib/authentication';
 import { pageSocial } from '@/lib/social';
 import { issuePagesTicket, getUserById } from '@/lib/accounts';
 import {ARTIFACT_FORMATS, type ArtifactFormat} from '@artifactbin/contracts/artifact-format';
@@ -43,6 +42,7 @@ import {storedCspExtensions} from '@/lib/document';
 import { carriedTrust,cspRequestFor } from '@/lib/trust';
 import type { DocumentFrame } from './document-frame';
 import { NO_STORE } from './cache-control';
+import { openDocument, type AddressDocument } from './open-document.server';
 
 export interface ArtifactPageAnswer {
   status: number;
@@ -51,23 +51,11 @@ export interface ArtifactPageAnswer {
   frame?: DocumentFrame;
   /** Which renderer answered a document's page (the page's `x-mx-reader` header): the compiled page, in its frame. */
   reader?: { mode: 'compiled' };
-  /** The validator of a node answer (lib/http/revalidation); with status 304 the body is the reader's own copy. */
-  etag?: string;
 }
 
 /** What the app page (never the JSON door) hands the answer. */
 interface ArtifactPageOptions {
-  /**
-   * The row the caller already fetched AND admitted for this very request (server/document-address
-   * admitDocumentAddress): the answer neither fetches it again nor decides admission again — one row
-   * fetch and one access check per view.
-   */
-  admitted?: ArtifactRow;
-  /** With `admitted`: the live revision read with it (lib/artifacts readPageRow), so the view reads it no second time. */
-  admittedRevision?: PageRead['revision'];
-  /** Canonical path already resolved by the HTML door, even when the byline is loaded later. */
-  admittedCanonical?: string;
-  admittedPublishedUrl?: string | null;
+  opened?: AddressDocument & { canonicalPath?: string; publishedUrl?: string | null };
   /**
    * The app page (the HTML door): it frames the document on its own origin, after handing the reader
    * across with a one-time ticket (lib/accounts/pages-sessions) in the frame's first URL, on its own origin. The JSON door
@@ -82,17 +70,10 @@ const notFound = (): ArtifactPageAnswer => ({ status: 404, body: { error: 'not_f
  * What the app page reads of a FRAMED document's runtime (solid/pages/Document): its title, and the declared
  * dataflow the editor opens on and the live stream's cursor. The runtime itself runs in the frame, on the
  * document's own origin; the rest of the served runtime (sheets, overrides, author script, reader data) never
- * reaches this page, and the tree is the nodes door's.
+ * reaches this page.
  */
 export interface FramedRuntime { title: string; data: Record<string,never> }
 
-/**
- * A document frame's first URL for this request's reader (APP__PAGES_HOST): the document's own origin carrying a
- * one-time ticket for exactly that document (the explicit guest marker for a guest), spent in the response that
- * serves the document (server/pages-host) — or null when the reader
- * may not read the document or it is not a document. `search` carries the reader's `$` values across.
- * The app page draws its frame with it; brief B's framed story asks for a fresh one (app/api/page/frame).
- */
 /**
  * The reader's explicit light/dark pick, as the app origin keeps it for its server (the `mx_theme` cookie
  * lib/story-runtime/reader-mode chooseTheme writes), or null: a reader who never picked reads every document in its
@@ -172,34 +153,27 @@ export async function artifactPageAnswer(request: Request, id: string, options: 
 }
 
 async function answerArtifactPage(request: Request, id: string, options: ArtifactPageOptions): Promise<ArtifactPageAnswer> {
-  if (!ID_RE.test(id)) return notFound();
-  const admitted = options.admitted?.id === id ? options.admitted : null;
-  // Who may read it is decided from the header (no document); the document is loaded once, after admission.
-  const header = admitted ?? await getArtifactHeaderById(id);
-  if (!header) return notFound();
+  const admitted = options.opened?.header.id === id ? options.opened : undefined;
+  const opened = admitted ?? await openDocument(request, id, { surface: 'page', header: 'only' });
+  if (opened === 'not_found') return notFound();
+  const { header, actor, facts, exporting } = opened;
   const search = new URL(request.url).searchParams;
   const key = search.get('key');
-  const exporting = verifyExportKey(header.id, key ?? undefined);
-  const actor = await sessionActor(request);
-  // Every role decision this view makes reads one memo of the actor's access facts, shared with the app page's own
-  // admission of this very request (server/document-address admitDocumentAddress): the role is resolved once per view.
-  const facts = requestAccessFacts(request, actor, header.id);
-  if (!admitted && !(await admitRead(header, actor, { facts, exporting }))) return notFound();
+  const part = search.get('part');
   if (header.format === 'markup' || header.format === 'program' || !ARTIFACT_FORMATS.includes(header.format as ArtifactFormat)) return notFound();
-  if (!admitted && search.get('part') === 'kind') return kindAnswer(header);
-  if (!options.pages && search.get('part') === 'chrome') {
-    // The current reader must still be admitted. An export key never buys interactive chrome.
+  if (!admitted && part === 'kind') return kindAnswer(header);
+  if (!options.pages && part === 'chrome') {
+    // An export key never buys interactive chrome.
     if (header.format !== 'html' || exporting || search.has('version')) return notFound();
     const role = await effectiveRole(header, actor, facts);
     return { status: 200, body: await readDocumentChrome(header, actor, role === 'owner', true) };
   }
-  // The row and its live revision in one statement (lib/artifacts readPageRow): the current page costs no read of its own.
-  const read = admitted ? null : await readPageRow(id);
-  const artifact = admitted ?? read?.row;
-  const revision = admitted ? options.admittedRevision : read?.revision;
-  if (!artifact) return notFound();
-  // The row moved between the two reads (shared, made private, handed over): admission is asked again of the row served.
-  if (!admitted && accessMoved(header, artifact) && !(await admitRead(artifact, actor, { facts, exporting }))) return notFound();
+  // The JSON door answers only the parts it knows. The HTML door passes the address's whole query on to the page's
+  // frame, so a `part` there is the page's own parameter and never selects a part of this answer.
+  if (!options.pages && header.format !== 'folder' && part !== null && part !== 'kind' && part !== 'chrome') return notFound();
+  const document = await openDocument(request, id, { surface: 'page', opened });
+  if (document === 'not_found') return notFound();
+  const { artifact, at, row, dataset } = document;
 
   // One role per request, beside the reads that need none of it.
   const groupId = (artifact as typeof artifact & { group_id?: string | null }).group_id ?? null;
@@ -221,7 +195,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
    * data now: computed once here, inlined into the HTML by `withBootstrap`, so
    * the rows are in the first byte and the first paint is the final geometry.
    *
-   * Above every `isDoc` branch below, because none of them applies: there is no
+   * A folder has no
    * source to compile a sheet for, no declarations to seed, no annotations to
    * count and nothing to frame.
    */
@@ -248,56 +222,24 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     } };
   }
 
-  /*
-   * `?version=N` — the page renders THAT version, read-only, for whoever may
-   * read the artifact's history. One decision with the served document's
-   * (lib/archived-version), so `/a/<id>?version=2` and `/a/<id>/raw?version=2`
-   * can never disagree about who may see it or about what it resolves to; a
-   * refusal is this route's own uniform 404, so a reader without history access
-   * does not learn the parameter exists.
-   */
-  const at = await archivedVersionFor(request, artifact, () => requestOrSessionActor(request), { capture: exporting });
-  if (at === 'not_found') return notFound();
   const nativeHtml = artifact.format === 'html';
-  const isDoc = nativeHtml;
-
-  // Browser source editing is no longer a document surface. Authoring APIs remain separate.
-  if (search.get('part') === 'editor') return notFound();
-
-  /*
-   * THE NODES' DOOR: the version's node tree, which the app page relays to the framed document's edit controller to
-   * classify comments and selections against (solid/document/create-framed-story). Asked for by every reader while the
-   * frame loads — it is not the reader payload because nothing the page DRAWS depends on it. Admitted exactly as the
-   * page is (above); a version asked for is that version's tree (archivedVersionFor already refused whoever may not).
-   */
-  if(search.get('part')==='nodes')return notFound();
-
-  // Everything below reads THIS row: the artifact wearing that version's bytes
-  // when one was asked for, the artifact itself otherwise. A document's comes
-  // Source stays on the runner origin; independent shell reads run beside one another.
-  // A dataset page shows the reader's role view (lib/dataset-permissions); its creating token and an export read whole.
-  // A LIVE dataset's page is its connection (lib/live-datasets): its sharing admitted the reader; it has no rows here.
-  const liveConnection = artifact.format === 'dataset' ? liveConnectionOf(artifact.meta) : null;
-  const datasetDecision = artifact.format === 'dataset' && !liveConnection && !exporting && !holdsCreatingToken(artifact, actor) ? await datasetReadAccess(artifact, actor) : null;
-  if (datasetDecision && !datasetDecision.allowed) return notFound();
+  const liveConnection = dataset?.connection;
+  const datasetDecision = dataset?.decision;
   const starter = nativeHtml && !at && artifact.version === 1 && artifact.meta.startPlaceholder === true;
   // Keep guest cache hits, history, capture and non-frame surfaces on their original bootstrap.
-  const deferChrome = !!(options.pages && admitted && options.admittedCanonical && actor.userId && isDoc && !at && !exporting && !starter);
-  const readerPick = options.pages && isDoc && !exporting ? readerPickOf(request) : null;
-  const [page, chrome, dataPreview, framedSrc, publishedUrl, cspRequest] = await Promise.all([
-    nativeHtml && !at ? currentPage(artifact, revision ? { revision } : {}) : null,
-    deferChrome ? null : readDocumentChrome(artifact, actor, role === 'owner', isDoc),
+  const deferChrome = !!(options.pages && admitted && admitted.canonicalPath && actor.userId && nativeHtml && !at && !exporting && !starter);
+  const readerPick = options.pages && nativeHtml && !exporting ? readerPickOf(request) : null;
+  const [chrome, dataPreview, framedSrc, publishedUrl, cspRequest] = await Promise.all([
+    deferChrome ? null : readDocumentChrome(artifact, actor, role === 'owner', nativeHtml),
     liveConnection ? '[]' : artifact.format === 'dataset' ? (datasetDecision && !datasetDecision.full ? datasetRowsFor(datasetDecision, artifact) : loadDatasetRows(artifact)).then(rows => JSON.stringify(rows)) : (artifact.format === 'viz' ? artifact.source ?? '' : ''),
-    options.pages && isDoc ? (async (site) => {
+    options.pages && nativeHtml ? (async (site) => {
       // An export key admits the page, never its frame: a keyed capture is framed only for a reader the rule admits.
       if (exporting && !admitted && !(await admitRead(artifact, actor, { facts }))) return null;
       return admittedFrameSrc(request, artifact, actor, site, new URL(request.url).search, readerPick);
     })(options.pages) : null,
-    admitted && options.admittedPublishedUrl !== undefined ? options.admittedPublishedUrl : userPageUrl(artifact),
+    admitted && admitted.publishedUrl !== undefined ? admitted.publishedUrl : userPageUrl(artifact),
     nativeHtml ? cspRequestFor({artifact:{id:artifact.id,version:at?.version??artifact.version,declared:storedCspExtensions((at?.meta ?? artifact.meta).htmlCsp)},viewer:actor,request}) : undefined,
   ] as const);
-  const row = page ? { ...servedRow(artifact, at), source: page.row.source, title: page.row.title } : servedRow(artifact, at);
-  const membershipAvailable = false;
   const pwaEnabled = artifactPwaEnabled(row);
 
   const meta = (row.meta ?? {}) as {
@@ -311,7 +253,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   // An HTML page's design system and default mode are what its core applies.
   const look = nativeHtml ? htmlAppearance(row.source ?? '', designSystemChoice(artifact.meta)) : null;
   const design = look ? { theme: (look.designSystem ?? null) as StoryDesignName | null, colorMode: capturedColor ?? look.mode } : resolveStoredStoryDesign(meta.theme, capturedColor ?? meta.colorMode);
-  const compiledCss = isDoc ? null : meta.compiledCss ?? null;
+  const compiledCss = nativeHtml ? null : meta.compiledCss ?? null;
   const documentTitle = nativeHtml ? nativeHtmlTitle(row) : null;
 
   const framedOrigin = framedSrc?.origin ?? null;
@@ -329,7 +271,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     },
   } : null;
   const surface = {
-    pwaEnabled, membershipAvailable,
+    pwaEnabled,
     captureKey: exporting ? key : null,
     id: artifact.id,
     group_id: groupId,
@@ -341,9 +283,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     title: documentTitle ?? row.title,
     ...(chrome ? { author: chrome.author } : {}),
     ...(documentTitle !== null ? {
-      // The framed page's own sheet, script and reader data are the frame's, and the tree is the nodes door's: the
-      // app keeps what it reads (FramedRuntime), whichever door it asked. The starter's read view, which is app UI
-      // rather than a frame, keeps the whole served runtime, less the tree.
+      // The framed page's sheet, script and reader data stay in the frame. The app keeps the minimal runtime (FramedRuntime).
       runtime: ({ title: documentTitle, data: {} }) satisfies FramedRuntime,
       // What the reader's chrome derived from the source: the document's own
       // name (lib/document/title) and whether it is still the starter placeholder.
@@ -359,7 +299,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     dataPreview,
     columns: meta.columns ?? [],
     ...(liveConnection ? { liveConnection } : {}),
-    ...(artifact.format==='dataset' && (artifact.meta as Record<string,unknown>).catalog ? {catalog:datasetDecision?.allowed?viewCatalog(datasetDecision,publicCatalogOf(artifact)!):publicCatalogOf(artifact)!,
+    ...(artifact.format==='dataset' && (artifact.meta as Record<string,unknown>).catalog ? {catalog:dataset?.catalog,
       // May the reader run SQL in the explorer (dataset-permissions `sqlRefusal`, the check its door applies)? A creator holding its token owns it.
       canRunSql:datasetDecision?!sqlRefusal(datasetDecision):true}:{}),
     // A stored FILE is not a document the app renders: its page shows the two
@@ -375,7 +315,6 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     // never sees a ref's title, so nobody's page pays for the lookups.
     refs: meta.refs ?? [],
     accountSession: kind === 'account',
-    anonSession: false,
     // The document's own origin when the app page frames it there (solid/pages/Document posts to it).
     ...(framedOrigin ? { framedOrigin } : {}),
     // The rail's Join/Joined/Pending pill (solid/document/DocumentChrome).
@@ -386,7 +325,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     ...(chrome ? { openAnnotations: chrome.openAnnotations } : {}),
   };
   const body = {
-    canonical: deferChrome && !groupId ? options.admittedCanonical : canonicalArtifactPath(artifact, groupId ? ownerGroup?.handle ?? null : chrome?.author.username ?? null),
+    canonical: deferChrome && !groupId ? admitted?.canonicalPath : canonicalArtifactPath(artifact, groupId ? ownerGroup?.handle ?? null : chrome?.author.username ?? null),
     description: row.description,
     ...(cspRequest ? { cspRequest } : {}),
     role,
@@ -415,8 +354,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
  * Every role reads a native HTML document in the frame the HTML door draws (solid/pages/Document adopts it);
  * nothing renders a document from this answer. A client navigation to an address of unknown kind asks `?part=kind`
  * first and crosses to the server for a document without reading this answer (solid/pages/ArtifactAddress
- * `replaceDocument`), the framed document's selection controller reads
- * `?part=nodes`, and a dataset reader re-reads its catalog. So a framed document's answer carries the same
+ * `replaceDocument`), and a dataset reader re-reads its catalog. The document's answer carries the same
  * `FramedRuntime` as the HTML door's (the title and declared dataflow, nothing the frame draws from): measured at
  * 211 KB on a large document, of which the sheet, system sheet and author script were 209 KB that nothing here
  * reads. The full served runtime is built for /raw, draft preview and prepared pages, none of which come through
@@ -424,11 +362,5 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
  */
 export async function artifactPageResponse(request: Request, id: string): Promise<Response> {
   const answer = await artifactPageAnswer(request, id);
-  if (answer.status === 304 && answer.etag) return notModified(answer.etag);
-  return answer.status === 200 ? json(answer.body, 200, answer.etag ? revalidationHeaders(answer.etag) : { 'Cache-Control': NO_STORE }) : json(answer.body, answer.status);
+  return answer.status === 200 ? json(answer.body, 200, { 'Cache-Control': NO_STORE }) : json(answer.body, answer.status);
 }
-
-/**
- * The validator of a node answer: what determines the bytes is the version and edit it reads, the role that was
- * admitted to it, and the code that prepares a page (a deploy that changes how nodes are made changes the tag).
- */

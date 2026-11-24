@@ -22,7 +22,7 @@ import * as Y from 'yjs';
 import { parseCellKey, REGION_UPDATE_MAX_BYTES, type CellScope, type RegionOpenReply, type RegionUpdateReply } from '@artifactbin/contracts/region-sessions';
 import type { HtmlDatasetLink, HtmlPageLink } from '@artifactbin/contracts/html-page';
 import { applyCellRevision, cellValue, createCellState, snapshotValue } from '@/lib/live-regions';
-import { canReadArtifact, getArtifactById, liveRegionDoc, lockedRegionRows, logRegionUpdate, notifyRegions, saveIsDue, type ArtifactRow, type RegionRow, type SaveDue } from '@/lib/artifacts';
+import { readableArtifact, getArtifactById, liveRegionDoc, lockedRegionRows, logRegionUpdate, notifyRegions, saveIsDue, type ArtifactRow, type RegionRow, type SaveDue } from '@/lib/artifacts';
 import { canUpdateCell, cellCheckAdmits, datasetWriteAccess } from '@/lib/dataset-permissions';
 import { locateDatasetCell, writeDatasetCells, type DatasetCell } from '@/lib/dataset-access';
 import type { AccessActor } from '@/lib/accounts';
@@ -63,8 +63,7 @@ export const liveDatasetLinks = (page: ArtifactRow): HtmlDatasetLink[] =>
 /** The page as a cell writer reaches it: html, readable by a signed-in actor. */
 export async function cellPage(actor: AccessActor, pageId: string): Promise<ArtifactRow | null> {
   if (!actor.userId || !ID_RE.test(pageId)) return null;
-  const page = await getArtifactById(pageId);
-  return page && page.format === 'html' && await canReadArtifact(page, actor) ? page : null;
+  return (await readableArtifact(actor, pageId, { admission: 'account', formats: ['html'] }))?.row ?? null;
 }
 
 /** May `actor` write this cell of `dataset` through `page`? The decision every door and wakeup asks. */

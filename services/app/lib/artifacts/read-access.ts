@@ -16,12 +16,22 @@ import {liveConnectionOf,publicCatalogOf} from '@/lib/datasets';
 import {datasetExportable,datasetReadAccess,datasetRole} from '@/lib/dataset-permissions';
 import {canRead, canEdit, canAnnotate, type ArtifactRole} from '@artifactbin/contracts/sharing';
 
+type ReadSubject = Pick<ArtifactRow, 'id' | 'visibility' | 'user_id' | 'link_role'>
+  & Partial<Pick<ArtifactRow, 'format' | 'group_id' | 'token_id' | 'meta' | 'dataset_policy' | 'policy_revision'>>;
+
+/** A live dataset's sharing admits its connection summary. Stored datasets require a select rule. */
+async function datasetAdmits(row: Parameters<typeof datasetReadAccess>[0], reader: AccessActor): Promise<boolean> {
+  return liveConnectionOf(row.meta)
+    ? (await datasetRole(row, reader)) !== null
+    : (await datasetReadAccess(row, reader)).allowed;
+}
+
 /**
  * The ONE read-access decision, made by every public serving path before any
  * bytes leave. Fail closed: an unresolvable session is just a null viewer.
  */
 export async function canReadArtifact(
-  row: Pick<ArtifactRow, 'id' | 'visibility' | 'user_id' | 'link_role'> & Partial<Pick<ArtifactRow,'format'|'group_id'>>,
+  row: ReadSubject,
   actor: AccessActor,
   /** Where the decision reads groups, kinds and shares (lib/artifact-access access facts): live by default. */
   facts?: AccessFacts,
@@ -29,15 +39,14 @@ export async function canReadArtifact(
   // Bare-token ownership is not consulted here — sound because `private` requires an account to anchor its
   // ACL (getSharingFor's canPrivate), so a token-owned document is never private. The reader is the account.
   const reader: AccessActor = { ...actor, tokenId: null };
-  if(row.format==='dataset'||row.format===undefined){
-    // A dataset's policy and visibility are columns of its header; its rows (the `source`) are never consulted here.
-    const dataset=await getArtifactHeaderById(row.id);
-    if(!dataset)return false;
-    // A dataset is read by its dataset role and select rules (lib/dataset-permissions): admission only; a door
-    // serving rows asks `datasetReadAccess` itself for the role view.
-    // A LIVE dataset's sharing alone admits its page (connector, host, database); its rules decide who runs declared queries.
-    if(dataset.format==='dataset'&&liveConnectionOf(dataset.meta))return (await datasetRole(dataset,reader))!==null;
-    if(dataset.format==='dataset')return (await datasetReadAccess(dataset,reader)).allowed;
+  if (row.format === 'dataset' || row.format === undefined) {
+    // The account rule ignores the creating token. A projection without
+    // dataset metadata or policy still needs a header to decide.
+    const dataset = row.format === 'dataset' && row.meta !== undefined && row.dataset_policy !== undefined
+      ? { ...row, format: row.format, meta: row.meta, token_id: null }
+      : await getArtifactHeaderById(row.id);
+    if (!dataset) return false;
+    if (dataset.format === 'dataset') return datasetAdmits(dataset, reader);
   }
   // One decision, asked one way: reading is simply the bottom of the lattice.
   return canRead(await effectiveRole({ ...row, token_id: '' }, reader, facts));
@@ -49,7 +58,7 @@ export async function canReadArtifact(
  * `need: 'export'` asks a dataset for a role that sees it whole, since its image renders every row.
  */
 export async function admitRead(
-  row: Pick<ArtifactRow, 'id' | 'visibility' | 'user_id' | 'link_role' | 'token_id'> & Partial<Pick<ArtifactRow, 'format' | 'group_id' | 'meta' | 'dataset_policy' | 'policy_revision'>>,
+  row: ReadSubject & Pick<ArtifactRow, 'token_id'>,
   actor: AccessActor,
   options: { facts?: AccessFacts; exporting?: boolean; need?: 'read' | 'export' } = {},
 ): Promise<boolean> {
@@ -80,12 +89,25 @@ interface ReadableArtifact<T extends ArtifactHeader> { row:T; role:ArtifactRole 
 async function readableRow<T extends ArtifactHeader>(actor:AccessActor,row:T|null):Promise<ReadableArtifact<T>|null>{
  if(!row)return null;
  const role=await effectiveRole(row,actor);
- if(row.format==='dataset')return (liveConnectionOf(row.meta)?(await datasetRole(row,actor))!==null:(await datasetReadAccess(row,actor)).allowed)?{row,role:role==='none'?'viewer':role}:null;
+ if(row.format==='dataset')return (await datasetAdmits(row,actor))?{row,role:role==='none'?'viewer':role}:null;
  return canRead(role)?{row,role}:null;
 }
+interface ReadOptions {
+  /** The account rule ignores creating tokens. Byte doors may admit them. */
+  admission: 'account' | 'door';
+  /** Some doors serve only these formats. Check that before consulting their policies. */
+  formats?: readonly ArtifactRow['format'][];
+}
+
 /** Read access never implies access to the editable governance or connection definition. */
-export async function readableArtifact(actor:AccessActor,id:string){
- return readableRow(actor,await getArtifactById(id));
+export function readableArtifact(actor: AccessActor, id: string): Promise<ReadableArtifact<ArtifactRow> | null>;
+export function readableArtifact(actor: AccessActor, id: string, options: ReadOptions): Promise<{ row: ArtifactRow } | null>;
+export async function readableArtifact(actor: AccessActor, id: string, options?: ReadOptions) {
+  const row = await getArtifactById(id);
+  if (!options) return readableRow(actor, row);
+  if (!row || (options.formats && !options.formats.includes(row.format))) return null;
+  const admitted = options.admission === 'account' ? await canReadArtifact(row, actor) : await admitRead(row, actor);
+  return admitted ? { row } : null;
 }
 /** Admit a source-free identity read, with the live revision for the cached shell. */
 export async function readableArtifactIdentity(actor:AccessActor,id:string):Promise<{row:ArtifactIdentity;role:ArtifactRole;live:number}|null>{

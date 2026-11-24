@@ -1,7 +1,7 @@
 import sharp from 'sharp';
 import {htmlPwaSettings, type HtmlPwaSettings} from '@/lib/html-page';
 import { loadImage } from '@/lib/object-store';
-import { canReadArtifact, type ArtifactRow, getArtifactById, unservable } from '@/lib/artifacts';
+import { readableArtifact, type ArtifactRow, unservable } from '@/lib/artifacts';
 import { referencedArtifactForRow } from '@/lib/document-data';
 import { sessionActor } from '@/lib/authentication';
 import { escapeAttr } from '@artifactbin/utils/escape';
@@ -16,10 +16,8 @@ function settingsForRow(row:PwaRow):HtmlPwaSettings {return row.format==='html'&
 /** Metadata uses the same ACL as content, without export-key admission. */
 export async function readableApp(request: Request, id: string) {
   if (!ID_RE.test(id)) return null;
-  const row = await getArtifactById(id);
-  if (!row) return null;
   const actor = await sessionActor(request);
-  return await canReadArtifact(row, actor) ? row : null;
+  return (await readableArtifact(actor, id, { admission: 'account' }))?.row ?? null;
 }
 
 export function artifactManifest(row: PwaRow & Pick<ArtifactRow, 'id' | 'title'>): ArtifactManifest {

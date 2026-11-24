@@ -7,7 +7,7 @@
  * Each dataset channel is paired with the id the document names (channels are
  * lowercased, ids are not), and the annotations channel is granted beside them.
  */
-import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
+import { readableArtifact } from '@/lib/artifacts';
 import { htmlLiveLinks } from '@/lib/html-publication';
 import { ID_RE } from '@/lib/platform';
 import { annotationsChannel, artifactChannel } from '@artifactbin/contracts/live-channels';
@@ -16,10 +16,9 @@ import { sessionActor } from '@/lib/authentication';
 export async function GET(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   if (!ID_RE.test(id)) return new Response('not found', { status: 404 });
-  const row = await getArtifactById(id);
-  if (!row) return new Response('not found', { status: 404 });
   const actor = await sessionActor(request);
-  if (!(await canReadArtifact(row, actor))) return new Response('not found', { status: 404 });
+  const row = (await readableArtifact(actor, id, { admission: 'account' }))?.row;
+  if (!row) return new Response('not found', { status: 404 });
   const datasets = row.format === 'html' ? htmlLiveLinks(row.meta).map(link=>link.datasetId) : [];
   return Response.json(
     {

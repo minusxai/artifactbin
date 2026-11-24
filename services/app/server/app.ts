@@ -23,7 +23,7 @@ import { isPublicAssetRequest, publicAssetResponse } from '@artifactbin/utils/as
 import { getDeploymentState } from '@/lib/deployment';
 import { measureQueries, runWithRequest, ASSETS_ORIGIN, setEventProjection } from '@/lib/platform';
 import { slugAddressTarget, UnservableDocument } from '@/lib/artifacts';
-import { artifactAppAsset, artifactAppPath, readableApp, publicRefAssetResponse, cachedShell } from '@/lib/document-serving';
+import { openDocument, artifactAppAsset, artifactAppPath, readableApp, publicRefAssetResponse, cachedShell } from '@/lib/document-serving';
 import { loginRedirectTarget, spaPaths, APP_BUILD_HEADER, baseUrl, setAppBuild, GITHUB_EXTERNAL_URL, pagesSite as deployedPagesSite, type PagesSite } from '@/lib/http';
 import { exportAssetResponse } from '@/lib/export';
 import { projectNotifications } from '@/lib/notifications';
@@ -230,8 +230,11 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   // App identity stays at its stable URL; never heal it to the pretty reader address.
   const appRow = (c: Context) => runWithRequest(c.req.raw, () => readableApp(c.req.raw, c.req.param('id')!));
   app.get('/a/:id/app/', async c => {
-    const row = await appRow(c);
-    return page(c, row ? 200 : 404, undefined, undefined, row ? { row } : undefined);
+    const request = c.req.raw;
+    const opened = await runWithRequest(request, async () => openDocument(request, c.req.param('id')!, {
+      surface: 'address', actor: await sessionActor(request), requireReader: true,
+    }));
+    return opened === 'not_found' ? page(c, 404) : page(c, 200, undefined, undefined, opened);
   });
   app.get('/a/:id/app', async c => {
     const row = await appRow(c);

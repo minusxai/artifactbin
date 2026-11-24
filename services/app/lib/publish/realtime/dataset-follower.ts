@@ -16,7 +16,7 @@
  * changed, after the stream re-admitted the reader to `row`; `sendData` sends any `data` frame; `position()` is the
  * resume `id:` every document and data frame carries; `followed()` the datasets followed; `close()` drops them all.
  */
-import { canReadArtifact, getArtifactById, type ArtifactRow } from '@/lib/artifacts';
+import { readableArtifact, getArtifactById, type ArtifactRow } from '@/lib/artifacts';
 import type { AccessActor } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
 import { changedHtmlSharedRevisions, htmlLiveLinks, htmlSharedRevisions } from '@/lib/html-publication';
@@ -72,7 +72,7 @@ export function datasetFollower(options: {
   let sharedQueue = Promise.resolve();
   const pushShared = (row: ArtifactRow) => sharedQueue = sharedQueue.then(async () => {
     if (row.format !== 'html' || closed) return;
-    const current = await htmlSharedRevisions(await getDb(), htmlLiveLinks(row.meta), { mayReadDataset: async datasetId => { const dataset = await getArtifactById(datasetId); return !!dataset && dataset.format === 'dataset' && await canReadArtifact(dataset, actor); } });
+    const current = await htmlSharedRevisions(await getDb(), htmlLiveLinks(row.meta), { mayReadDataset: async datasetId => !!await readableArtifact(actor, datasetId, { admission: 'account', formats: ['dataset'] }) });
     if (closed) return;
     const changed = changedHtmlSharedRevisions(sharedMarks, current);
     sharedMarks = new Map(current.map(mark => [mark.name, mark.revision]));

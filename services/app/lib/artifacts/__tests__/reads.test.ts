@@ -4,7 +4,7 @@
  * shapes, archived versions at an address, image references and view admission).
  */
 import { describe, expect, it } from 'vitest';
-import { useAppHarness } from '@/__tests__/harness';
+import { recordStatements, useAppHarness } from '@/__tests__/harness';
 import { identityForUser, mintToken } from '@/lib/accounts';
 import { VERSION_PARAM, canReadArtifact, capabilityGuard, UnservableDocument, accessMoved, archivedVersionFor, archivedVersionForActor, createArtifact, getArtifact, getArtifactAccessById, getArtifactById, getArtifactFor, getArtifactHeaderById, getEditableArtifactFor, getLinkReadableArtifact, getOwnedArtifactFor, hasInvitedUsersFor, readableArtifact, readableArtifactHeader, readableArtifactIdentity, refusingUnservable, replaceArtifactFor, servableDocument, servedRow, snapshotForReader, snapshotHeadFor, unservable, updateSharingFor } from '@/lib/artifacts';
 import { type ArtifactRow } from '@/lib/artifact-access';
@@ -85,6 +85,19 @@ describe('reader admission', () => {
     expect((await capabilityGuard(guest, 'comment', row.id))!.status).toBe(401);
     expect(await capabilityGuard(stranger, 'comment', row.id)).toBeNull();
     expect(await capabilityGuard(guest, 'comment', 'missing')).toBeNull();
+  });
+
+  it('admits a complete dataset row with one lookup, and reloads only a partial dataset row', async () => {
+    const owner = await account('owner@example.test');
+    const row = await dataset(owner, readAllPolicy());
+    const complete = await recordStatements(async () => canReadArtifact((await getArtifactById(row.id))!, owner));
+    expect(complete.value).toBe(true);
+    expect(complete.count, complete.sql.join('\n')).toBe(1);
+
+    const partial = (await getArtifactAccessById(row.id))!;
+    const projected = await recordStatements(() => canReadArtifact(partial, owner));
+    expect(projected.value).toBe(true);
+    expect(projected.count, projected.sql.join('\n')).toBe(1);
   });
 
   it('a readable row carries the reader\'s role; a dataset grant admits a reader with no role', async () => {

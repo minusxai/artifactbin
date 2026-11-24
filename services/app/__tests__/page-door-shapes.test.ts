@@ -34,7 +34,7 @@ async function world() {
   return { owner, actor, make, answer };
 }
 
-const BASE_SURFACE = ['accountSession', 'anonSession', 'author', 'captureKey', 'colorMode', 'columns', 'dataPreview', 'editId', 'format', 'group_id', 'hasInvitedUsers', 'id', 'membershipAvailable', 'openAnnotations', 'pwaEnabled', 'refs', 'template', 'theme', 'title', 'user_page_url', 'version', 'visibility'];
+const BASE_SURFACE = ['accountSession', 'author', 'captureKey', 'colorMode', 'columns', 'dataPreview', 'editId', 'format', 'group_id', 'hasInvitedUsers', 'id', 'openAnnotations', 'pwaEnabled', 'refs', 'template', 'theme', 'title', 'user_page_url', 'version', 'visibility'];
 const DOC_TOP = ['canManageSharing', 'canonical', 'description', 'follow', 'kind', 'like', 'role'];
 
 describe('the JSON door keeps the shape of everything that is not a framed document', () => {
@@ -54,6 +54,19 @@ describe('the JSON door keeps the shape of everything that is not a framed docum
     expect(Object.keys(body.workspace).sort()).toEqual(['artifacts', 'followers', 'forks', 'likes', 'likesOverTime', 'shared', 'stats', 'views', 'viewsOverTime']);
     expect(Object.keys(body.workspace.artifacts[0]).sort()).toEqual(['ancestor_ids', 'format', 'id', 'title', 'updated_at', 'url', 'version', 'views', 'visibility']);
     expect(shape(body.workspace.stats)).toEqual({ artifacts: 'number', assets: 'number', views: 'number' });
+  });
+
+  it('an unknown part is refused for a document and remains ignored for a folder', async () => {
+    const w = await world();
+    const doc = await w.make({ html: '<p>Document</p>' });
+    const folder = await w.make({ format: 'folder', title: 'Shelf' });
+    const partial = (id: string) => pageRoute(request(`/api/page/artifact/${id}?part=unknown`, { actor: w.actor }), params(id));
+    const refused = await partial(doc);
+    expect(refused.status).toBe(404);
+    expect(await refused.json()).toEqual({ error: 'not_found' });
+    const listing = await partial(folder);
+    expect(listing.status).toBe(200);
+    expect(await listing.json()).toHaveProperty('folder.id', folder);
   });
 
   it('a dataset answers its source, sheet, columns and catalog, with no runtime', async () => {
