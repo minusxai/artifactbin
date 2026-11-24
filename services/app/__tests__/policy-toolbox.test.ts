@@ -27,9 +27,9 @@ type Values = Record<string, unknown>;
 const policy = (token: string, sub: string, positionals: string[], values: Values = {}) => policyCommand({ sub, positionals, values }, options(token));
 const failure = async (run: Promise<unknown>) => { try { await run; } catch (error) { return error as { code: string; exit: number; details?: any }; } throw new Error('expected a refusal'); };
 
-async function fixture() {
+async function fixture(visibility: 'private' | 'unlisted' = 'unlisted') {
   const owner = await mintAccountToken('cli_owner'), viewer = await mintAccountToken('cli_viewer');
-  const created = await createArtifactFromBody({ dataset: [{ name: 'seed', created_by: 'nobody' }], title: 'Signups', access: 'readwrite', visibility: 'unlisted' }, identityForUser(owner.userId, owner.id) as AccessActor & { tokenId: string }, SERVER);
+  const created = await createArtifactFromBody({ dataset: [{ name: 'seed', created_by: 'nobody' }], title: 'Signups', access: 'readwrite', visibility }, identityForUser(owner.userId, owner.id) as AccessActor & { tokenId: string }, SERVER);
   expect(created.status, JSON.stringify(created.body)).toBe(201);
   const id = created.body.id as string;
   await seedShares((await getDb()), { artifact_id: id, user_id: viewer.userId, email: viewer.email, role: 'viewer' });
@@ -74,4 +74,26 @@ it('exits 2 with every error by path for an invalid policy, 2 for a legacy file,
   expect(await failure(policy(f.owner.token, 'set', [f.id], { file: legacy, 'expected-revision': '0' }))).toMatchObject({ code: 'policy_version_unsupported', exit: 2 });
   expect(await failure(policy(f.viewer.token, 'get', [f.id]))).toMatchObject({ code: 'not_found', exit: 3 });
   expect(await failure(policy(f.viewer.token, 'set', [f.id], { file: bad, 'dry-run': true }))).toMatchObject({ code: 'not_found', exit: 3 });
+});
+
+
+it('explains that link holders have no access to a private dataset even with rules for them', async () => {
+  const f = await fixture('private');
+  const file = await f.file('policy.json', {version: 3, tables: [{
+    table: {schema: 'public', name: 'rows'},
+    select_permissions: ['viewer', 'signed_in', 'anonymous'].map(role => ({
+      role, permission: {columns: '*', filter: {}, allow_aggregations: true},
+    })),
+    insert_permissions: [{role: 'anonymous', permission: {columns: '*', check: {}}}],
+  }]});
+  await policy(f.owner.token, 'set', [f.id], {file, 'expected-revision': '0'});
+  const explained = await policy(f.owner.token, 'explain', [f.id]);
+  expect(explained.readBack).toEqual([
+    'Table public.rows',
+    '- Owner, editors: see and change everything.',
+    '- Shared viewers: see all rows and columns, and run SQL over them; cannot change anything.',
+    '- Signed-in link holders, signed-out link holders: no access.',
+    'Warnings:',
+    '- dataset is private: signed_in and anonymous rules never apply',
+  ]);
 });
