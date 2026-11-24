@@ -13,7 +13,7 @@ interface DomainPresentation {hostname:string}
 const DOMAIN_FOOTER_STYLE = `<style data-mx-domain-footer-style>
 footer[data-mx-domain-footer] {
   padding-inline: clamp(0.75rem, 3vw, 1.5rem);
-  text-align: start;
+  text-align: center;
   font-family: var(--font-body, system-ui, sans-serif);
   font-size: 0.8125rem;
   line-height: 1.5;
