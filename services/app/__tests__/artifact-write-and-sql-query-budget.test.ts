@@ -10,8 +10,8 @@ import { person, sql } from './page-sql-door-fixture';
 useAppHarness();
 
 const BUDGET = {
-  // 7 credential statements, 2 page header reads (including the verifier), 5 dataset loads and 5 fences.
-  pageSql: 19,
+  // 7 credential statements, 2 page header reads (including the verifier), 1 dataset load and its fence.
+  pageSql: 11,
   // 5 credential statements, 5 admission/owner/lock reads, 8 revision/edit/index statements and 2 events.
   publishPut: 20,
 };
@@ -31,6 +31,9 @@ it('budgets a warm page SQL read that names one of five linked datasets', async 
     status: 200,
     body: { columns: [{ name: 'units', type: 'number' }], rows: [{ units: 21 }], source: { kind: 'snapshot', at: expect.stringMatching(/^\d{4}-\d\d-\d\dT/), names: ['data3'] } },
   });
+  // The admitted page uses headers only. Each retained dataset costs one full-row load and one full-row fence.
+  expect(recorded.sql.filter((statement) => /^SELECT \* FROM artifacts WHERE id = \$1 AND deleted_at IS NULL$/.test(statement)),
+    recorded.sql.join('\n')).toHaveLength(2);
   console.info('[budget] page SQL read: statements=%d', recorded.count);
   expect(recorded.count, recorded.sql.join('\n')).toBe(BUDGET.pageSql);
 });

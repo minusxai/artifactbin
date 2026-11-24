@@ -164,18 +164,17 @@ export interface PageScope {
 
 /** Linked datasets loaded once for the caller through the page's audience and request fences. */
 export async function loadLinked(actor: AccessActor, links: readonly HtmlDatasetLink[], scope: PageScope & { fenced: boolean; deferRowIds?: boolean }, signal: AbortSignal): Promise<Loaded[]> {
-  const loaded: Loaded[] = [];
-  // One authorization per request: every link's decisions read the caller's facts once.
+  // Share facts across concurrent loads. These run outside the write transaction; PGLite queues its queries.
   const facts = memoAccessFacts(liveAccessFacts(actor));
-  for (const link of links) {
+  const loaded = await Promise.all(links.map(async (link): Promise<Loaded | null> => {
     let one: Loaded;
     try { one = await load(actor, link, signal, { direct: false, ...scope, facts }); } catch (e) {
-      if (e instanceof Error && (e.message === 'dataset_not_found' || e instanceof DatasetBindingUnsupportedError)) { scope.skipped?.(link); continue; }
+      if (e instanceof Error && (e.message === 'dataset_not_found' || e instanceof DatasetBindingUnsupportedError)) { scope.skipped?.(link); return null; }
       throw e;
     }
-    loaded.push({ ...one, link, tables: one.tables.map((t) => ({ ...t, model: { ...t.model, root: linkedRoot(link.name, one.tables.length, t.model.root) } })) });
-  }
-  return loaded;
+    return { ...one, link, tables: one.tables.map((t) => ({ ...t, model: { ...t.model, root: linkedRoot(link.name, one.tables.length, t.model.root) } })) };
+  }));
+  return loaded.filter((link) => link !== null);
 }
 
 /** A linked table's root in the page: the link name for a single-table dataset, `<name>_<table root>` otherwise. */

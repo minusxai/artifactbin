@@ -7,6 +7,7 @@
  * conflict retries in page-sql-door-locks.test.ts (split for the CI shards, each one runner's worth of work at most;
  * one fixture, ./page-sql-door-fixture.ts).
  */
+import { trashRow } from './artifact-fixtures';
 import { beforeEach, expect, it } from 'vitest';
 import { setSession, useAppHarness } from './harness';
 import { MAX_ROWS_LIMIT, services, setServices } from '@/lib/platform';
@@ -53,6 +54,24 @@ it('refuses a read the guard refuses, with nothing about hidden data', async () 
   }
   const big = await sql(f.page, f.other, `select ${"'x' || ".repeat(20000)}'x' as a`);
   expect(big.body.error).toBe('input_too_large');
+});
+
+it('keeps the refusal for a statement naming no readable link', async () => {
+  const f = await fixture();
+  await trashRow(f.staff);
+  // Another link still loads: a failed statement naming the missing link reports that link's refusal.
+  const withReadableLink = await sql(f.page, null, 'select name from staff');
+  expect(withReadableLink.body.error).toBe('sign_in_required');
+  expect(withReadableLink.body.message).not.toBe('no linked dataset is readable');
+  expect((await sql(f.page, null, 'select * from unlinked')).body.error).toBe('validation_failed');
+  expect((await sql(f.page, null, 'select 1 as n')).body.rows).toEqual([{ n: 1 }]);
+
+  await trashRow(f.notes);
+  for (const [reader, error] of [[null, 'sign_in_required'], [f.other, 'dataset_not_found']] as const) {
+    for (const statement of ['select name from staff', 'select * from unlinked', 'select 1 as n']) {
+      expect((await sql(f.page, reader, statement)).body).toMatchObject({ error, message: 'no linked dataset is readable' });
+    }
+  }
 });
 
 /* ------------------------------------------------------------------------------------- statement-shape attacks */
