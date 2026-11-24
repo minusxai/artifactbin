@@ -4,10 +4,10 @@ import { browserActor, withTokenAuth } from '@/lib/authentication';
 import { type RequestIdentity } from '@/lib/accounts';
 import {json,readJson} from '../http';
 import {GroupError} from '../groups';
-function groupDoor(handler:(request:Request,userId:string|null,params:Record<string,string>,actor:RequestIdentity)=>Promise<Response>,readOnly=false,interactiveAdmin=false){
+function groupDoor(handler:(request:Request,userId:string|null,params:Record<string,string>,actor:RequestIdentity)=>Promise<Response>,readOnly=false,allowGroup?:(actor:RequestIdentity)=>boolean){
  const run=async(request:Request,actor:RequestIdentity,params:Record<string,string>)=>{
   const userId=actor.userId;
-  if(!userId&&!(interactiveAdmin&&actor.principalGroup?.role==='admin'))return json({error:'account_required'},403);
+  if(!userId&&!(actor.principalGroup&&allowGroup?.(actor)))return json({error:'account_required'},403);
   try{return await handler(request,userId,params,actor);}catch(error){if(error instanceof GroupError)return json({error:error.code},error.status);throw error;}
  };
  const bearer=withTokenAuth((request,{actor,params})=>actor.credential==='bearer'?run(request,actor,params):Promise.resolve(json({error:'auth_required'},401)),{readOnly});
@@ -28,5 +28,5 @@ export function groupOperation(name:string,readOnly=false){return groupDoor(asyn
  const input:Record<string,unknown>={...Object.fromEntries(new URL(request.url).searchParams)};
  if(!['GET','HEAD'].includes(request.method)){const body=await readJson(request,{allowEmpty:true});if(!body)return json({error:'invalid_json'},400);Object.assign(input,body);}
  return runOperation(name,request,actor,{...input,...params});
-},readOnly,name==='update_group');}
+},readOnly,actor=>name==='list_group_collection'||(name==='update_group'&&actor.principalGroup?.role==='admin'));}
 

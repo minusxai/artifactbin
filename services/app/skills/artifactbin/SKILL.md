@@ -238,6 +238,10 @@ Analytical charts are `af-chart`; maps and diagrams use the libraries directly:
 
 ## Sharing and access
 
+To find an artifact while signed in as a group, run
+`node scripts/groups.mjs collection "$ARTIFACTBIN_AS_GROUP"`. Match titles, follow folder IDs with
+`--parent` and additional pages with `--cursor`, then read it with `node scripts/read.mjs ID`.
+
 A link never carries your login: whoever opens it signs in as themselves. Group, sharing and
 ownership changes alone need no comment watch. Visibility only controls who can read; editing,
 comments and dataset writes are separate permissions. A receipt's `user_page_url` is an anonymous

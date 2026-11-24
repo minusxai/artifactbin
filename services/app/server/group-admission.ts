@@ -25,6 +25,7 @@ import { GROUP_PRINCIPAL_REFUSED, type GroupActorRole } from '@artifactbin/contr
 export const GROUP_ADMITTED_ROUTES: readonly (readonly [method: string, path: string])[] = [
   ['POST', '/api/artifacts'],
   ['GET', '/api/artifacts/:id'],
+  ['GET', '/api/groups/:id/collection'],
   ['PUT', '/api/artifacts/:id'],
   ['GET', '/api/artifacts/:id/versions'],
   ['GET', '/api/artifacts/:id/versions/:version'],

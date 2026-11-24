@@ -25,7 +25,9 @@ export async function groupFolders({sub,values,positionals},options){
    visibility:'private',destination:{type:'group',id:'pending'},
    ...(parent!==undefined?{parent_id:parent}:{})}):null;
   client=makeClient(server,{...options,retryDelays:[]});
-  const {group}=await resolveGroup(client,positionals[0]);
+  const signedGroup=(options.env??process.env).ARTIFACTBIN_AS_GROUP;
+  const group=sub==='collection'&&positionals[0]===signedGroup
+   ?{id:signedGroup}:(await resolveGroup(client,positionals[0])).group;
   if(sub==='collection'){
    const query=new URLSearchParams();
    if(parent!==undefined)query.set('parent_id',parent);
