@@ -73,7 +73,7 @@ async function trusted(dataset: ArtifactRow, options: DatasetWriteOptions, db: Q
 }
 
 /**
- * THE PRIVATE CEILING (plan §3/§8: "dataset is private: signed_in and anonymous rules never apply"). On a private
+ * THE PRIVATE CEILING. On a private
  * dataset a signed_in or anonymous caller (a page reader without a share) keeps only its `backend_only` entries,
  * which already need a trusted program on a page whose owner administers the dataset.
  */

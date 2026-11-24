@@ -94,6 +94,21 @@ it('explains that link holders have no access to a private dataset even with rul
     '- Shared viewers: see all rows and columns, and run SQL over them; cannot change anything.',
     '- Signed-in link holders, signed-out link holders: no access.',
     'Warnings:',
-    '- dataset is private: signed_in and anonymous rules never apply',
+    '- dataset is private: ordinary signed_in and anonymous rules do not apply',
   ]);
+});
+
+it('explains the private trusted-program write exception without granting link holders reads or ordinary writes', async () => {
+  const f = await fixture('private');
+  const file = await f.file('trusted-policy.json', {version: 3, tables: [{
+    table: {schema: 'public', name: 'rows'},
+    select_permissions: ['viewer', 'signed_in'].map(role => ({role, permission: {columns: '*', filter: {}}})),
+    insert_permissions: [{role: 'signed_in', permission: {columns: '*', check: {}, backend_only: true}}],
+    delete_permissions: [{role: 'signed_in', permission: {filter: {}}}],
+  }]});
+  await policy(f.owner.token, 'set', [f.id], {file, 'expected-revision': '0'});
+  const explained = await policy(f.owner.token, 'explain', [f.id]);
+  expect(explained.readBack).toContain('- Signed-in link holders, signed-out link holders: no access.');
+  expect(explained.readBack).toContain('- Signed-in: trusted programs on pages whose owner administers the dataset may add rows.');
+  expect(explained.readBack.join('\n')).not.toContain('delete');
 });

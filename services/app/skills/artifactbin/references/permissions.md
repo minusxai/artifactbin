@@ -100,8 +100,9 @@ The owner and editors always have full access, so a rule is tested as another ro
 with check's `--guest-steps` (signed out), `signed_in` with a second account.
 
 Read the warnings too: anonymous can write; a rule uses `X-Hasura-Page-Id` (direct calls are
-denied); an update without `check` lets rows leave the filter; a private dataset never applies
-signed_in or anonymous rules. Never grant anonymous writes unless the user asks for them.
+denied); an update without `check` lets rows leave the filter; a private dataset excludes ordinary
+signed_in and anonymous rules. Only trusted programs on pages whose owner administers the
+dataset can use those roles’ backend-only write rules. Never grant anonymous writes unless the user asks for them.
 
 A role with no rule for an operation, a rule needing a signed-in session, or a read-only
 dataset refuses the write with `permission_denied` (`sql.mjs schema` shows the columns a role
