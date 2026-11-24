@@ -1,21 +1,14 @@
-/** Actual hosted component-module graph (the bytes the app serves at /af/components/), served here under /components/. Candidate behavior/layout evidence only;
- * this gate does not manufacture or claim an old-browser visual baseline.
- * Gates are SLOW-tier: an implementer runs them ONCE at the end of the brief,
- * NEVER per edit. The orchestrator runs this gate with the final coordinated set. */
+/** Native rich component checks using the compiled hosted module graph. */
 import {createServer} from 'node:http';
-import {readFile,readdir,mkdir,writeFile} from 'node:fs/promises';
-import {createHash} from 'node:crypto';
-import {gzipSync} from 'node:zlib';
+import {readFile,readdir} from 'node:fs/promises';
 import path from 'node:path';
 import {launchChromium} from './lib/browser.mjs';
 import {createChecker} from './lib/assert.mjs';
 import {richFamilies,richViewports,richFixtureHtml} from '../lib/html-rich-components-fixture.mjs';
-import {candidateMarkdownCopyCases} from '../fixtures/component-baseline/candidate-markdown-copy.mjs';
 const repo=path.resolve(import.meta.dirname,'../..'),componentDir=path.join(repo,'services/app/lib/build-assets/components');
-const check=createChecker('html-rich-components'),artifacts=[];
+const check=createChecker('html-rich-components');
 const files=new Map();for(const name of (await readdir(componentDir)).filter(name=>/^[a-z][a-z0-9-]*\.js$/.test(name)))files.set(name,await readFile(path.join(componentDir,name)));
 for(const [,file]of richFamilies)if(!files.has(file+'.js'))throw Error(`Missing hosted component ${file}.js: run scripts/build/build-html-components.mjs before this gate`);
-const graph=Object.fromEntries([...files].sort(([a],[b])=>a.localeCompare(b)).map(([name,bytes])=>[name,createHash('sha256').update(bytes).digest('hex')]));
 const server=createServer((request,response)=>{
  const url=new URL(request.url,'http://fixture.invalid');
  if(url.pathname.startsWith('/components/')){const bytes=files.get(url.pathname.slice('/components/'.length));response.writeHead(bytes?200:404,{'content-type':'text/javascript'});response.end(bytes??'Missing fixture module');return;}
@@ -23,13 +16,11 @@ const server=createServer((request,response)=>{
  response.writeHead(200,{'content-type':'text/html'});response.end(richFixtureHtml(url.searchParams.get('dark')==='true'));
 });
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const origin=`http://127.0.0.1:${server.address().port}`;
-const output=path.resolve(repo,process.argv[3]??'tmp/rich-component-review');await mkdir(output,{recursive:true});
 const browser=await launchChromium({args:['--use-angle=swiftshader','--enable-unsafe-swiftshader']});
 const errors=[],remote=[];
 try{
  const page=await browser.newPage();page.setDefaultTimeout(6000);page.on('pageerror',error=>errors.push(error.message));
  await page.route('**/*',route=>{const url=route.request().url();if(!url.startsWith(origin+'/')&&!url.startsWith('data:')&&!url.startsWith('blob:')){remote.push(url);return route.abort();}return route.continue();});
- async function save(name){const bytes=await page.screenshot({path:path.join(output,name),fullPage:true});artifacts.push({name,mediaType:'image/png',base64:bytes.toString('base64')});}
  for(const dark of [false,true])for(const viewport of richViewports){
   const tag=`${dark?'dark':'light'}-${viewport.width}`;await page.setViewportSize(viewport);await page.goto(`${origin}/?dark=${dark}`);await page.waitForFunction(()=>document.documentElement.dataset.fixtureReady==='yes');
   await page.waitForFunction(()=>document.querySelector('#person img')?.naturalWidth>0);
@@ -38,17 +29,17 @@ try{
   const heading=await page.locator('#markdown h1').getAttribute('id');
   await page.evaluate(()=>{const node=document.querySelector('#markdown');node.source='[bad](javascript:alert(1))';});check(await page.locator('#markdown [role=alert]').count()===1,`${tag} Markdown rejects unsafe links`);
   await page.evaluate(()=>{document.querySelector('#markdown').source=window.richFixture.markdownSource;});check(await page.locator('#markdown h1').getAttribute('id')===heading,`${tag} Markdown recovers with stable heading identity`);
-  for(const scenario of candidateMarkdownCopyCases){
-   if(scenario.clipboard==='real')await page.context().grantPermissions(['clipboard-read','clipboard-write'],{origin});
+  for(const [clipboard, expectedStatus] of [['real', 'Copied'], ['rejected', 'Copy unavailable']]){
+   if(clipboard==='real')await page.context().grantPermissions(['clipboard-read','clipboard-write'],{origin});
    else await page.evaluate(()=>Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:()=>Promise.reject(new Error('Simulated clipboard write rejection'))}}));
    const code=await page.locator('#markdown pre code').first().textContent();
    await page.getByRole('button',{name:'Copy code',exact:true}).click();
-   await page.waitForFunction(status=>document.querySelector('#markdown pre button')?.textContent===status,scenario.expectedStatus);
-   if(scenario.clipboard==='real'){
+   await page.waitForFunction(status=>document.querySelector('#markdown pre button')?.textContent===status,expectedStatus);
+   if(clipboard==='real'){
     let copied='';try{copied=await page.evaluate(()=>navigator.clipboard.readText());}catch(error){check(false,`${tag} Markdown actual clipboard read (${error instanceof Error?error.message:String(error)})`);}
-    check(copied===code,`${tag} Markdown candidate-only copy success transfers the rendered code block`);
+    check(copied===code,`${tag} Markdown copy success transfers the rendered code block`);
    }else{
-    check(await page.locator('#markdown pre button').textContent()===scenario.expectedStatus,`${tag} Markdown candidate-only rejected copy announces unavailability`);
+    check(await page.locator('#markdown pre button').textContent()===expectedStatus,`${tag} Markdown rejected copy announces unavailability`);
     await page.evaluate(()=>delete navigator.clipboard);
    }
    await page.evaluate(()=>{document.querySelector('#markdown').source=window.richFixture.markdownSource;});
@@ -68,7 +59,6 @@ try{
   const identities=await page.evaluate(()=>window.richFixture.identityFacts(window.richFixture.authoredIdentities,document));check(identities.retained&&await page.evaluate(()=>window.richFixture.authoredIdentities.length===8),`${tag} every authored node retains its original annotation identity`);check(identities.unique,`${tag} all live authored and generated annotation identities are unique`);
   check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`${tag} rich outputs fit viewport without page overflow`);
   check(await page.evaluate(()=>['#assembly svg'].every(selector=>{const box=document.querySelector(selector).getBoundingClientRect();return box.width>0&&box.height>0&&box.right<=innerWidth+1;})),`${tag} rich output boxes visible within layout`);
-  await save(`candidate-rich-${tag}.png`);
   await page.evaluate(()=>{const element=document.querySelector('#assembly');window.richFixture.assembly={element,parent:element.parentElement};element.remove();});
   await page.evaluate(()=>{const {element,parent}=window.richFixture.assembly;parent.append(element);});
   check(await page.locator('#assembly [data-part=body]').count()===1,`${tag} isometric reconnects without duplicate geometry`);
@@ -76,12 +66,7 @@ try{
  check(errors.length===0,`no uncaught page errors (${errors.join('; ')||'none'})`);check(remote.length===0,`no external account or module requests (${remote.join('; ')||'none'})`);
 }catch(error){
  check(false,`browser rich contract interrupted: ${error instanceof Error?error.stack:String(error)}`);
- const page=browser.contexts()[0]?.pages()[0];
- if(page)try{const bytes=await page.screenshot({path:path.join(output,'candidate-rich-failure.png'),fullPage:true});artifacts.push({name:'candidate-rich-failure.png',mediaType:'image/png',base64:bytes.toString('base64')});}catch{/* Preserve the original failure if the page itself closed. */}
 }finally{
- const report={kind:'candidate-rich-components',comparison:'no baseline pixel comparison claimed',candidateOnlyEnhancements:candidateMarkdownCopyCases.map(({id,baselineCompatibility})=>({id,baselineCompatibility})),graph,viewports:richViewports,themes:[false,true],browser:browser.version(),failures:check.failures};
- await writeFile(path.join(output,'evidence.json'),JSON.stringify(report,null,2));artifacts.push({name:'evidence.json',mediaType:'application/json',base64:Buffer.from(JSON.stringify(report)).toString('base64')});
- console.log(`HTML_RICH_COMPONENT_EVIDENCE_GZIP_BASE64 ${gzipSync(Buffer.from(JSON.stringify({format:'component-parity-files-v1',files:artifacts}))).toString('base64')}`);
  await browser.close();await new Promise(resolve=>server.close(resolve));
 }
 check.done();

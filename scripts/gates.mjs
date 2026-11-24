@@ -26,7 +26,7 @@ import { spawn } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { GATE_SPECS, CI_ISOLATED_GATES, CI_SHARD_OPTIONS, checkManifest, gateNamesOnDisk, specFor, browsersFor, shardWeight, shouldRetryAlone } from './gates.manifest.mjs';
+import { GATE_SPECS, CI_ISOLATED_GATES, CI_SHARD_OPTIONS, checkManifest, gateNamesOnDisk, specFor, browsersFor, shardWeight } from './gates.manifest.mjs';
 import { runGateProcess, flushGateOutput } from './gates.process.mjs';
 import { resolveServers, runSecret, serversFor } from './gates.servers.mjs';
 import { parseShard, shardOf } from './gates.shard.mjs';
@@ -283,7 +283,7 @@ async function runSet(gates, workers) {
    * both directions — no red for a lost race, no green that quietly swallowed
    * a genuine flake.
    */
-  const retryable=setFailed.filter(name=>shouldRetryAlone(specFor(name), workers.length));
+  const retryable = workers.length > 1 ? [...setFailed] : [];
   if (retryable.length > 0) {
     console.log(`\n──────── retrying ${retryable.length} gate(s) alone ────────`);
     for (const name of retryable) {

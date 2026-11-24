@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import {join,dirname} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import assert from 'node:assert/strict';
-import {installedFiles} from './component-baseline/publication.mjs';
+import {installedFiles} from '../lib/skill-archive-install.mjs';
 import {exerciseDirectVisualLibraries} from './direct-visual-libraries.mjs';
 import {launchChromium} from '../gates/lib/browser.mjs';
 import {readPortableDocument} from '../../services/app/lib/html-runtime/portable.ts';

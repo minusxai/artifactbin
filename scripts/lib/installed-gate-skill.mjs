@@ -2,7 +2,7 @@ import {mkdtemp,mkdir,writeFile,rm} from 'node:fs/promises';
 import path from 'node:path';
 import {tmpdir} from 'node:os';
 import {pathToFileURL} from 'node:url';
-import {installedFiles} from '../fixtures/component-baseline/publication.mjs';
+import {installedFiles} from './skill-archive-install.mjs';
 /** Install the actual served archive and execute its own publication contract.
  * @param {Uint8Array} archive
  * @param {string} server

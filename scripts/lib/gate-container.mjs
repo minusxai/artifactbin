@@ -166,11 +166,6 @@ export function dockerRunArgs({ name, image, volume, buildKey, worktree, cpus, m
   const batchRequested=batchRoot!==undefined||batchOutput!==undefined;
   if(batchRequested&&(servers!==1||env.NATIVE_MIGRATION_PILOT__INPUT||[batchRoot,batchOutput].some(value=>typeof value!=='string'||!value.startsWith('/')||/[:\\\n\r]/.test(value))))throw Error('Migration batch requires one server and explicit isolated input/output directories');
   const batchArgs=batchRequested?['-v',`${batchRoot}:/pilot-batch:ro`,'-v',`${batchOutput}:/pilot-batch-output:rw`,'-e','NATIVE_MIGRATION_BATCH__ROOT=/pilot-batch','-e','NATIVE_MIGRATION_BATCH__OUTPUT=/pilot-batch-output']:[];
-  const output=env.COMPONENT_BASELINE__OUTPUT;
-  const input=env.COMPONENT_BASELINE__INPUT;
-  if(input!==undefined&&(typeof input!=='string'||!input.startsWith('/')||/[:\\\n\r]/.test(input)))throw Error('Component capture input requires an explicit absolute private path');
-  if(output!==undefined&&(typeof output!=='string'||!output.startsWith('/')||/[:\\\n\r]/.test(output)))throw Error('Component evidence requires an explicit absolute private path');
-  const componentArgs=[...(output?['-v',`${output}:/component-evidence:rw`,'-e','COMPONENT_BASELINE__OUTPUT=/component-evidence']:[]),...(input?['-v',`${input}:/component-input.json:ro`,'-e','COMPONENT_BASELINE__INPUT=/component-input.json']:[])];
   return [
     'run', '--rm', '-i', '--init',
     '--name', name,
@@ -183,7 +178,6 @@ export function dockerRunArgs({ name, image, volume, buildKey, worktree, cpus, m
     '-v', `${volume}:${INSIDE.deps}`,
     '-v', `${BUILD_VOLUME}:${INSIDE.builds}`,
     ...pilotArgs, ...batchArgs,
-    ...componentArgs,
     '-w', INSIDE.src,
     image,
     'node', `${INSIDE.src}/scripts/gate-container.mjs`, '--inside', '--servers', String(servers), '--build-key', buildKey, ...gates,

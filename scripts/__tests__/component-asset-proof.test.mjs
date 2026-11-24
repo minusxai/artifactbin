@@ -1,10 +1,10 @@
+/** Build-cache and HTTP receipt checks used by the native reader gate. */
 import {mkdir,writeFile,readFile,cp} from 'node:fs/promises';
-import path from 'node:path';import {tmpdir} from 'node:os';
+import path from 'node:path';
 import {expect,it,onTestFinished} from 'vitest';
 import {buildComponentAssets} from '../lib/html-components-build.mjs';
-import {writeComponentAssetReceipt,verifyComponentAssetArchive,builtComponentFiles,COMPONENT_RECEIPT} from '../lib/component-asset-proof.mjs';
+import {writeComponentAssetReceipt,verifyComponentAssetArchive,hostedComponentFiles,COMPONENT_RECEIPT} from '../lib/component-asset-proof.mjs';
 import {BUILD_OUTPUTS} from '../lib/gate-container.mjs';
-import {attachVerifiedComponentAssets,writeBaselineComponentAssets} from '../lib/component-baseline-input.mjs';
 import {tempDir} from '../../services/test-support/src/temp-dir.ts';
 async function fixture(){const root=await tempDir('component-proof-',onTestFinished);return root;}
 // Same layout as the real build: compiled hosted modules under lib/build-assets, readable sources in the skill.
@@ -24,7 +24,6 @@ it('restores generated modules over stale prior modules on the same cache contra
  for(const entry of BUILD_OUTPUTS){try{await cp(path.join(cache,entry),path.join(checkout,entry),{recursive:true});}catch(error){if(error.code!=='ENOENT')throw error;}}
  expect(await readFile(stale)).toEqual(files.get('components/slide.js'));
  expect((await verifyComponentAssetArchive({root:checkout,files})).modules).toHaveLength(1);
- expect(await builtComponentFiles({root:checkout})).toEqual(files);
  expect(await readFile(path.join(checkout,COMPONENT_RECEIPT),'utf8')).toContain('component-assets-v1');
 });
 it('rejects a stale served module, source-stale build and omitted transitive output',async()=>{
@@ -34,25 +33,13 @@ it('rejects a stale served module, source-stale build and omitted transitive out
  await writeFile(path.join(root,'source/slide.ts'),'export const gutter=48;');
  await expect(verifyComponentAssetArchive({root,files})).rejects.toThrow('Stale component build');
 });
-it('adds verified hosted-module proof to supplied reader entries without republishing the private selection',async()=>{
- const root=await fixture(),files=await built(root);
- const entries=[{fixture:'chosen-private-fixture',theme:'dark',url:'http://localhost:3030/a/Private123/raw'}],input={implementation:'html',sourceRevision:'source-bound-candidate',entries,output:path.join(root,'evidence')};
- const requested=[];
- const result=await attachVerifiedComponentAssets(input,{source:root,base:'http://localhost:3030',fetcher:server(files,requested)});
- expect(requested).toEqual(['http://localhost:3030/af/components/slide.js']);expect(result.entries).toBe(entries);expect(result.componentAssets.modules).toEqual([{path:'components/slide.js',sha256:expect.any(String)}]);expect(result.componentAssets.receiptSha256).toMatch(/^[a-f0-9]{64}$/);
- await expect(attachVerifiedComponentAssets(input,{source:root,base:'http://localhost:3030',fetcher:server(new Map([['components/slide.js',Buffer.from('export const gutter=0;')]]))})).rejects.toThrow('Served component bytes differ');
- await expect(attachVerifiedComponentAssets(input,{source:root,base:'http://localhost:3030',fetcher:server(new Map())})).rejects.toThrow('Hosted component unavailable (404): components/slide.js');
- await writeFile(path.join(root,'source/slide.ts'),'export const gutter=48;');
- await expect(attachVerifiedComponentAssets({...input,entries},{source:root,base:'http://localhost:3030',fetcher:server(files)})).rejects.toThrow('Stale component build');
-});
-
-it('writes the exact component asset proof into a fresh nested capture output before capture',async()=>{
- const root=await fixture(),output=path.join(root,'fresh','html-evidence');
- const componentAssets={receiptSha256:'a'.repeat(64),modules:[{path:'components/slide.js',sha256:'b'.repeat(64)}]};
- const input={implementation:'html',sourceRevision:'candidate-source',componentAssets,output};
- await writeBaselineComponentAssets(input);
- expect(JSON.parse(await readFile(path.join(output,'component-assets.json'),'utf8'))).toEqual({implementation:'html',sourceRevision:'candidate-source',componentAssets});
- const updated={...componentAssets,receiptSha256:'c'.repeat(64)};
- await writeBaselineComponentAssets({...input,componentAssets:updated});
- expect(JSON.parse(await readFile(path.join(output,'component-assets.json'),'utf8')).componentAssets).toEqual(updated);
+it('reads the receipt-listed hosted modules over HTTP for verification',async()=>{
+ const root=await fixture(),files=await built(root),requested=[];
+ const origin='http://localhost:3030';
+ const hosted=await hostedComponentFiles({root,origin,fetcher:server(files,requested)});
+ expect(requested).toEqual([origin+'/af/components/slide.js']);
+ expect((await verifyComponentAssetArchive({root,files:hosted})).modules).toEqual([
+  {path:'components/slide.js',sha256:expect.stringMatching(/^[a-f0-9]{64}$/)},
+ ]);
+ await expect(hostedComponentFiles({root,origin,fetcher:server(new Map())})).rejects.toThrow('Hosted component unavailable (404)');
 });

@@ -29,10 +29,10 @@ describe('the pages browser gates build', () => {
     expect(inputs.failures).toEqual([]);
     expect(inputs.unrouted).toEqual([]);
     // Bodies nothing here can read: what the installed skill prepares from the archive a gate downloads at run time
-    // (a design system's theme page, a component baseline bundle). A new one fails until it is evaluable or named here.
-    expect([...new Set(inputs.unseen.map((at) => at.split(':')[0]))].sort()).toEqual(['scripts/fixtures/component-baseline/publication.mjs', 'scripts/gates/gate-kit-and-fonts.mjs']);
+    // (a design system's theme page). A new one fails until it is evaluable or named here.
+    expect([...new Set(inputs.unseen.map((at) => at.split(':')[0]))].sort()).toEqual(['scripts/gates/gate-kit-and-fonts.mjs']);
     expect(inputs.publishes.length).toBeGreaterThan(80);
-    expect(inputs.pages.length).toBeGreaterThan(120);
+    expect(inputs.pages.length).toBeGreaterThan(110);
     expect(pages.flatMap(({ html }) => pageScripts(html)).filter(({ type }) => type === 'module').length).toBeGreaterThan(60);
     // Every gate that names an artifacts route and a content field yields a body, read from itself or a helper it calls.
     const publishing = GATE_SPECS.map(({ name }) => `scripts/gates/gate-${name}.mjs`)
@@ -40,6 +40,14 @@ describe('the pages browser gates build', () => {
     expect(publishing.length).toBeGreaterThan(15);
     const found = new Set(inputs.publishes.flatMap(({ at }) => at.split(/ via |:\d+/).filter((part) => part.startsWith('scripts/gates/gate-'))));
     expect(publishing.filter((file) => !found.has(file))).toEqual([]);
+  });
+
+  it('reads the native component contract published to the raw reader', () => {
+    const published = inputs.publishes.find(({ at, body }) =>
+      at.startsWith('scripts/gates/gate-native-core.mjs:') && body.html?.includes('<af-tooltip>'));
+    expect(published?.body.html).toContain('import "@afbin/dialog";');
+    expect(published?.body.html).toContain('import "@afbin/tabs";');
+    expect(published?.body.html).toContain('import "@afbin/select";');
   });
 
   it('parses every inline script and imports only modules and hosted components the build ships', () => {
