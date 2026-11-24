@@ -10,36 +10,26 @@ Link CSV or JSON rows to read/write with SQL:
 <link rel="af-dataset" data-af-name="orders" href="./orders.csv">
 ```
 
-Publishing the page makes a CSV linked by path a dataset named by the file; link a published one as
-`ref:ID`. An unchanged CSV is never re-imported. A changed CSV replaces the linked dataset
-only if it still matches the last published revision and state. Publish refuses to overwrite
-newer rows. Publish adds `data-af-id` to your local HTML. `data-af-name` is unique per page. A link follows the
-latest rows; `data-af-mode="pinned" data-af-revision="2"` freezes one saved version, read-only.
-`node scripts/publish.mjs rows.csv` alone prints the `--artifact ID` that updates it; HTTP:
-`POST [[ base ]]/api/artifacts` with a durable `Idempotency-Key` and an origin-bound bearer, never
-from page HTML:
+Publish the page to create the dataset. An unchanged CSV is reused. A changed CSV replaces
+its rows only if the dataset still matches the last published revision and state, else publish
+refuses it. Publish adds `data-af-id` to local HTML. Use a unique `data-af-name` per page.
+Links follow live rows. `data-af-mode="pinned" data-af-revision="2"` freezes a read-only version.
 
-```json
-{"dataset":"week,completed,waiting\n2026-W01,18,7\n2026-W02,24,4\n","title":"Repair bench sample","visibility":"unlisted"}
-```
-
-New datasets are readable by anyone who can
-open them; only the owner and editors change rows. To let readers add or edit rows,
-set rules: [permissions](permissions.md).
+New datasets are readable by anyone who can open them. Only owners and editors can write
+until you set [permissions](permissions.md). To upload a CSV alone, publish it as below or
+POST `{"dataset":"name,amount\nWest,50"}` to `[[ base ]]/api/artifacts` with an origin-bound
+bearer and durable `Idempotency-Key` outside page HTML. A standalone CSV update takes `--artifact ID`.
 
 ## Contents
 
-[Tables](#tables-discover-before-querying) · [Read](#read) · [Write](#write) · [Live](#live-views) · [Type together](#type-together-afbincollab) · [CSV](#csv-import) · [Files](#files-attached-to-a-dataset) · [Default](#the-default-connection)
+[Tables](#tables-discover-before-querying) · [Read](#read) · [Write](#write) · [Rows people change](#rows-people-change) · [Live](#live-views) · [Type together](#type-together-afbincollab) · [CSV](#csv-import) · [Files](#files-attached-to-a-dataset) · [Default](#the-default-connection)
 
 ## Tables: discover before querying
 
-`node scripts/sql.mjs schema PAGE_ID` (or `DATASET_ID`) prints each table as a `CREATE TABLE` with
-its column types, as your role sees it. In a page, a dataset is the table named by its
-link's `data-af-name` (`orders`; a multi-table one is `orders.<table>`). A dataset queried by its own ID has
-one table, `rows`; others are HTTP 400. Columns keep the file's
-names: quote one that is not a plain name (`"Created By"`). Every table has `_id`, the stable row
-ID (a CSV `id` column stays ordinary). Types: number, boolean, text; dates are ISO text and user
-columns hold account IDs.
+`node scripts/sql.mjs schema PAGE_ID` (or `DATASET_ID`) shows the tables and column types your
+role can see. Page tables use the link's `data-af-name` (`orders`, or `orders.<table>`). A dataset
+ID has one table, `rows`. Quote names like `"Created By"`. Every row has a stable `_id`, separate
+from a CSV `id` column. Types include numbers, booleans, text, ISO dates and account IDs.
 
 ## Read
 
@@ -55,9 +45,8 @@ const months=await sql`select substr(date, 1, 7) as month, count(*) as n, sum(am
   from orders group by month order by month`;
 ```
 
-Count, total, group and join in SQL, never in script. A reader sees only the rows and columns
-their rule shows. Failures reject with `SqlError` (`code`, reader `message`, `detail`). Read
-codes: `permission_denied`, `sign_in_required`, `unavailable` (down, or no data here),
+Count, total, group and join in SQL. `SqlError` gives a `code`,
+reader `message` and `detail`. Read codes: `permission_denied`, `sign_in_required`, `unavailable` (down, or no data here),
 `validation_failed`, `timeout`, `result_too_large`, `dataset_not_found`, `unknown_query`,
 `consent_required` (live data not yet allowed). Show `message` in place of rows (components do).
 Cut off: `rows.truncated`.
@@ -81,6 +70,13 @@ There is no upsert: read the row, then update or insert. Functions whose result 
 runs (`random()`, `current_timestamp`) are refused: pass the value. Each write sends its own
 `Idempotency-Key`, so a retry applies once. Refusals: `permission_denied`, `check_violation`,
 `too_many_rows`, `validation_failed`, `outcome_unknown` (read before writing again). A page link never grants writes. Pinned links and archived page versions read only.
+
+## Rows people change
+
+1. Run `node scripts/publish.mjs entries.csv --create` once. Take the dataset ID from the reply.
+2. Set `<link rel="af-dataset" data-af-name="entries" href="ref:ID">` and keep it on republish.
+3. Change rows with [SQL](#write), never by republishing the CSV. In the page, write to `entries`.
+   Owners and editors can also run `node scripts/sql.mjs query ID '…'` on the table `rows`.
 
 ## Live views
 
