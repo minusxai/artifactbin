@@ -30,10 +30,10 @@ Skill map:
 - `examples/`: deck.html (deck-steps.mjs); tracker.html (tracker-features, -steps, -guest,
   -cleanup .mjs); csv-dashboard.html/.mjs, codebase-report.html (+ -steps.mjs); report.html;
   gen-*.mjs sample data
-- `scripts/`: publish, check, read, comment, doc, groups, sql, policy, export, auth, autofix,
-serve, new-app, new-page
+- `scripts/`: publish, check, read, comment, events, doc, groups, sql, policy, export, auth,
+  autofix, serve, new-app, new-page, new-codebase-report, update
 - `references/`: guides (read those you need): runtime, page-apps, datasets, permissions,
-dataviz, diagrams, maps, groups
+  dataviz, diagrams, maps, groups, live-docs
 - `components/`: `af-*` element sources (`head -30` each); `design-systems/`: CSS the platform
   serves (read only its header: the shared tokens)
 
