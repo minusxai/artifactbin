@@ -2,9 +2,9 @@
 export const DESCRIPTION = `Events: watch what happens to what you may observe: comments on your
 and shared pages.
 Usage: node scripts/events.mjs watch [--artifact ID] [--category comments] [--types A,B] --next
-Flags: --artifact ID one page's events. --category comments (artifact.annotated, annotation_replied,
-  annotation_edited, annotation_resolved, annotation_reopened, annotation_deleted,
-  annotation_reaction_changed).
+Flags: --artifact ID one page's events. --category comments (artifact.annotated,
+  artifact.annotation_replied, artifact.annotation_edited, artifact.annotation_resolved,
+  artifact.annotation_reopened, artifact.annotation_deleted, artifact.annotation_reaction_changed).
   --types A,B exactly these types. --next returns after the next batch holding an event someone
   else made, and on its own after --wait SECONDS (default 240); it resumes from
   events/<server>/<ID or _all>/<stream>.<session>.ndjson in the sign-in folder, or from --output
