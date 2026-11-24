@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   imageReferenceId, imageRefData,
-  EMPTY_COMPILED_DATAFLOW, LocalStateInputError, localTableOverrides, NUMERIC_AGGS,
+  EMPTY_COMPILED_DATAFLOW, LocalStateInputError, localTableOverrides,
   parseLocalTables, platformValues, rawUrl, readerZone, rowField, scalarMatches,
   VIEWER, VIEWER_ID, type CompiledDataflow,
 } from '..';
@@ -112,13 +112,6 @@ describe('reader local tables', () => {
     expect(() => checkedLocalRows([{ a: 'one' }], columns)).toThrow('Local field "a" has an invalid type');
     expect(() => checkedLocalRows([[1]], columns)).toThrow(LocalStateInputError);
     expect(() => checkedLocalRows('rows', columns)).toThrow(LocalStateInputError);
-  });
-});
-
-describe('numeric aggregates', () => {
-  it('keeps the numeric aggregate vocabulary', () => {
-    expect([...NUMERIC_AGGS].sort()).toEqual(['avg', 'max', 'median', 'min', 'sum']);
-    expect(NUMERIC_AGGS.has('count' as never)).toBe(false);
   });
 });
 

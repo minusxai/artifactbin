@@ -19,6 +19,5 @@ export type { ImageRefData } from './ref-data';
 export { imageRefData, rawUrl } from './ref-data';
 export { imageReferenceId } from './image-source';
 
-export { NUMERIC_AGGS } from './number-aggregation';
 
 export { numberFormatter } from './number-format';
