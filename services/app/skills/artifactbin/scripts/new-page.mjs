@@ -2,8 +2,7 @@
 export const DESCRIPTION = `Set up a page computed from a CSV in one call: a dashboard, report or
 chart page. Copies the CSV into the project as NAME.csv; copies examples/csv-dashboard.html as
 index.html, its renderer csv-dashboard.mjs and its steps file as steps.mjs; links the CSV by its
-path (the page's first publish creates the NAME dataset from it, and a publish after the CSV
-changes updates that dataset) and writes a DATA block whose SQL queries read this CSV's columns
+path and writes a DATA block whose SQL queries read this CSV's columns
 (labels, a total per number column, a chart per number column by the first text column), with
 [bracketed] text for you to write. Nothing is sent to the server.
 Usage: node scripts/new-page.mjs --data FILE.csv --title NAME [--artifact ID] [--dir DIR]
@@ -15,8 +14,8 @@ Examples:
   node scripts/new-page.mjs --data sales.csv --title "Revenue by region"
   node scripts/new-page.mjs --data coffee.csv --title "Coffee at a small startup" --artifact Ab12Cd
 Gotchas: a rerun is safe: the page, renderer and steps file are kept, never overwritten; only
-  the CSV copy takes the rows passed (updated), which the next publish sends over the same
-  dataset. NAME is the file's name made a table name (Q1 sales.csv → q1_sales). The output
+  the CSV copy takes the rows passed. See references/datasets.md for CSV republication.
+  NAME is the file's name made a table name (Q1 sales.csv → q1_sales). The output
   names what DATA draws and how to change it with your columns; steps.mjs needs no edits.
 Exit: 0 ok; 1 failed; 2 invalid (the one next step is printed). Results never contain
   credentials.`;

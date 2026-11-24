@@ -569,6 +569,7 @@ export function readBackDatasetPermissions(
   options: { visibility?: Visibility } = {},
 ): DatasetPermissionsReadBack {
   const found = new Set<DatasetPermissionWarningCode>();
+  const isPrivate = options.visibility === 'private';
   const tables = policy.tables.map((t) => {
     const name = tableKey(t.table);
     const title = t.configuration?.custom_name
@@ -576,7 +577,7 @@ export function readBackDatasetPermissions(
       : `Table ${name}`;
     const groups = new Map<string, DatasetRuleRole[]>();
     for (const role of DATASET_RULE_ROLES) {
-      const sentence = roleSentence(t, role);
+      const sentence = isPrivate && role !== 'viewer' ? 'no access' : roleSentence(t, role);
       groups.set(sentence, [...(groups.get(sentence) ?? []), role]);
     }
     const lines = [
@@ -588,16 +589,16 @@ export function readBackDatasetPermissions(
         ? [`Typed live together (@afbin/collab) by everyone who may change them: ${and(t.collaborative_columns)}.`]
         : []),
     ];
-    const writes = [t.insert_permissions, t.update_permissions, t.delete_permissions];
-    if (writes.some((l) => l?.some((e) => e.role === 'anonymous'))) found.add('anonymous_write');
-    if (usesPageId([t.select_permissions, ...writes])) found.add('page_id_direct_denied');
-    if (t.update_permissions?.some((e) => !isEmpty(e.permission.filter) && isEmpty(e.permission.check)))
+    const rules = [t.select_permissions, t.insert_permissions, t.update_permissions, t.delete_permissions];
+    const active = <T extends {role: DatasetRuleRole}>(list: T[] | undefined) =>
+      list?.filter(entry => !isPrivate || entry.role === 'viewer');
+    if (active(t.insert_permissions)?.some(e => e.role === 'anonymous') ||
+        active(t.update_permissions)?.some(e => e.role === 'anonymous') ||
+        active(t.delete_permissions)?.some(e => e.role === 'anonymous')) found.add('anonymous_write');
+    if (usesPageId(rules.map(list => active<DatasetPermissionEntry<unknown>>(list)))) found.add('page_id_direct_denied');
+    if (active(t.update_permissions)?.some(e => !isEmpty(e.permission.filter) && isEmpty(e.permission.check)))
       found.add('update_without_check');
-    if (
-      options.visibility === 'private' &&
-      [t.select_permissions, ...writes].some((l) => l?.some((e) => e.role !== 'viewer'))
-    )
-      found.add('private_dataset');
+    if (isPrivate && rules.some(list => list?.some(e => e.role !== 'viewer'))) found.add('private_dataset');
     return { title, lines };
   });
   const warnings: DatasetPermissionWarning[] = (Object.keys(WARNINGS) as DatasetPermissionWarningCode[])

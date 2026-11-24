@@ -12,9 +12,10 @@ Flags: --sql-file FILE reads the statement from FILE instead; --output FILE save
   of a read into a new .csv or .json file and prints {columns, rowCount, sample, output} (a few
   rows, long values cut) in place of the rows: put rows in files this way, never by retyping
   them. --params FILE a JSON object of the $name values the SQL binds; --limit N the most rows a
-  read prints (default 1000, at most 10000); --revision N a saved page revision (default:
-  current; pages only; it reads only); --idempotency-key KEY replays a page write (default: a
-  new key, printed as idempotencyKey); --chart FILE a chart description (the JSON <af-chart>
+  read returns (integer 1–10000, default 1000, including default:DB reads);
+  --revision N a saved page revision (default: current; pages only; it reads only);
+  --idempotency-key KEY replays a page write (default: a new key, printed as idempotencyKey);
+  --chart FILE a chart description (the JSON <af-chart>
   takes) drawn over the read's rows into a new --chart-output FILE.png, --chart-width/height N
   pixels (default 640x400), --chart-theme light|dark. Common: --server, --json, --help.
 Examples:
@@ -26,7 +27,7 @@ Gotchas: quote the SQL in single quotes, so the shell leaves $name alone. schema
   CREATE TABLE per table, columns and types as your role sees them (hidden columns are absent).
   schema --revision needs the exact current page revision; it describes pinned stored links only.
   query runs one statement: a SELECT answers {columns, rows} (a dataset ID's read is paged 100
-  rows at a time up to --limit; truncated: true when more rows matched); one INSERT, UPDATE or
+  rows at a time up to --limit); a cut read includes truncated: true. One INSERT, UPDATE or
   DELETE answers {affected, returning}. Through a page ID it runs as you under each dataset's
   rules, so a write works wherever your role may write, and affected 0 means the rules let you
   change no row it named; a write through a dataset ID needs its owner or an editor and answers
@@ -103,11 +104,14 @@ export async function sqlCommand({sub, values, positionals}, options = {}) {
     const done = chart ? {...read, chart: await drawChart(client, chart, read)} : read;
     return saved ? writeRows(saved, done) : done;
   };
+  const limit = values.limit === undefined ? ROWS.default :
+    integer(values.limit, 'limit', 1, ROWS.max);
   if (target.startsWith('default:')) {
     const client = makeClient(selectedServer(values, options.env), options);
     return drawn(client, await client.request('/api/default-connection/sql', {method: 'POST',
       safeToRepeat: true, timeoutMs: WAREHOUSE_MS, body: {sql: statement,
-        namespace: target.slice(8), params: values.params && await jsonFile(values.params)}}));
+        namespace: target.slice(8), limit: sub === 'query' ? limit : undefined,
+        params: values.params && await jsonFile(values.params)}}));
   }
   const {server, id} = resolveTarget(target, selectedServer(values, options.env)),
     client = makeClient(server, options);
@@ -145,8 +149,6 @@ export async function sqlCommand({sub, values, positionals}, options = {}) {
   if (!params || typeof params !== 'object' || Array.isArray(params))
     throw new ToolError('invalid_params', '--params must be a JSON object.', 2);
   const write = WRITE.test(statement);
-  const limit = values.limit === undefined ? ROWS.default :
-    integer(values.limit, 'limit', 1, ROWS.max);
   if (!page && write) {
     const done = await client.request(`/api/artifacts/${id}/mutate`, {method: 'POST',
       body: {sql: statement, values: params}, unsafe: true});

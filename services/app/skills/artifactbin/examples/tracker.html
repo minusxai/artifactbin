@@ -12,6 +12,7 @@
 // Gotchas: the dataset's rules decide every write; a signed-in reader sees the controls and a
 //   write the rules refuse says so.
 // Built with: one HTML page; an entries dataset read and written with sql.
+// Keep rows across page publishes: see references/datasets.md#rows-people-change.
 // Features (to drop one, delete its lines ending "@only NAME" and its @feature…@end blocks):
 // - own-rows: signed-in people add entries and change or remove only theirs. // @only own-rows
 // - team: a group it is shared with (groups.mjs share --datasets) edits every entry. // @only team

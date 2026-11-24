@@ -1,3 +1,6 @@
+import {execFileSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
+import {EVENT_CATEGORIES, EVENT_FEED_TYPES} from '@artifactbin/contracts/event-feed';
 import {it,expect,onTestFinished} from 'vitest';
 import {readdir} from 'node:fs/promises';
 import path from 'node:path';
@@ -62,4 +65,12 @@ it('documents the filters, the event shape and the comment alias',async()=>{
  const flat=DESCRIPTION.replace(/\n\s+/g,' ');
  for(const part of ['--artifact ID','--category comments','--types A,B','--next','--bounded','actor.you','node scripts/comment.mjs watch ID --next is this watch'])
   expect(flat).toContain(part);
+});
+
+it('lists the server-supported feed types in command help', () => {
+ const script = fileURLToPath(new URL('../../../skills/artifactbin/scripts/events.mjs', import.meta.url));
+ const help = execFileSync(process.execPath, [script, '--help'], {encoding:'utf8', timeout:3000});
+ const listed = help.match(/--category comments \(([^)]+)\)/)?.[1]?.split(/,\s*/);
+ expect(listed).toEqual(EVENT_CATEGORIES.comments);
+ expect(new Set(help.match(/\bartifact\.[a-z_]+\b/g))).toEqual(new Set(EVENT_FEED_TYPES));
 });

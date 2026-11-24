@@ -492,7 +492,7 @@ describe('plain-language read-back', () => {
       ].join('\n'),
     ],
     [
-      'conditions, presets, owner apps and every warning',
+      'conditions, presets, owner apps and warnings for active rules',
       {
         version: 3,
         tables: [
@@ -513,7 +513,7 @@ describe('plain-language read-back', () => {
           },
         ],
       },
-      { visibility: 'private' },
+      { visibility: 'unlisted' },
       [
         'Table public.rows',
         '- Owner, editors: see and change everything.',
@@ -524,7 +524,6 @@ describe('plain-language read-back', () => {
         '- anonymous can write (throttled to 30 per minute)',
         '- rule uses X-Hasura-Page-Id: direct API calls are denied',
         '- update without check lets rows move out of the filter',
-        '- dataset is private: signed_in and anonymous rules never apply',
       ].join('\n'),
     ],
   ];

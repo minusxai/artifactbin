@@ -4,10 +4,10 @@ description: >-
   Publishes reports, dashboards, charts, slide decks, docs, trackers and other web pages on
   Artifactbin (artifactbin.dev or self-hosted) as links to share. Load it first, before exploring or
   asking for details, even if the user never says Artifactbin: a report, chart, dashboard or deck
-  asked for with no format named is a published page, never a local HTML, Markdown or image file or
-  a chat reply; with a charting skill, load both. Including a report analysing this codebase or
-  repo, a report, chart or dashboard from a CSV or an HTTP API, a report to send or on a topic with
-  no data, a deck, a doc a team edits together, a landing page, a task tracker, a sign-up sheet.
+  asked for with no format named is a published page unless the host product guide sets its own
+  default; with a charting skill, load both. Including a report analysing this codebase or repo,
+  a report, chart or dashboard from CSV or an HTTP API, a report to send or on a topic with no
+  data, a deck, a doc a team edits together, a landing page, a task tracker, a sign-up sheet.
   Also any Artifactbin link (/a/ID): reading, editing, comments, export, querying its datasets, who
   may change their rows, groups and sharing. Not for questions answered in chat, files in a named
   format (README, PowerPoint, Word, a plotted PNG) or code changes. After every publish, edit or
@@ -30,10 +30,10 @@ Skill map:
 - `examples/`: deck.html (deck-steps.mjs); tracker.html (tracker-features, -steps, -guest,
   -cleanup .mjs); csv-dashboard.html/.mjs, codebase-report.html (+ -steps.mjs); report.html;
   gen-*.mjs sample data
-- `scripts/`: publish, check, read, comment, doc, groups, sql, policy, export, auth, autofix,
-serve, new-app, new-page
+- `scripts/`: publish, check, read, comment, events, doc, groups, sql, policy, export, auth,
+  autofix, serve, new-app, new-page, new-codebase-report, update
 - `references/`: guides (read those you need): runtime, page-apps, datasets, permissions,
-dataviz, diagrams, maps, groups
+  dataviz, diagrams, maps, groups, live-docs
 - `components/`: `af-*` element sources (`head -30` each); `design-systems/`: CSS the platform
   serves (read only its header: the shared tokens)
 
@@ -169,8 +169,7 @@ comments (every page you may see): `node scripts/events.mjs watch --help`.
   TEXT`. Your comments show your agent name, such as "Claude Code Red"; `--as NAME` on any
   `comment.mjs` command chooses your own.
 - **Data, apps, exports.** A page built from a CSV links it by its path: publishing the page
-  creates the dataset; a changed CSV is refused once the dataset was written
-  ([datasets](references/datasets.md)).
+  creates the dataset (see [CSV republication](references/datasets.md#read-first)).
   A page that shows a dataset links it (`<link rel="af-dataset">`), reads and writes its rows
   with `` sql`…` `` from `@afbin/apollo` (each table named by its link, every `${…}` a bound
   value; `sql.watch` for live updates) and computes every number (counts, totals, group by,
