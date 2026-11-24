@@ -169,8 +169,7 @@ comments (every page you may see): `node scripts/events.mjs watch --help`.
   TEXT`. Your comments show your agent name, such as "Claude Code Red"; `--as NAME` on any
   `comment.mjs` command chooses your own.
 - **Data, apps, exports.** A page built from a CSV links it by its path: publishing the page
-  creates the dataset; a changed CSV is refused once the dataset was written
-  ([datasets](references/datasets.md)).
+  creates the dataset (see [CSV republication](references/datasets.md#read-first)).
   A page that shows a dataset links it (`<link rel="af-dataset">`), reads and writes its rows
   with `` sql`…` `` from `@afbin/apollo` (each table named by its link, every `${…}` a bound
   value; `sql.watch` for live updates) and computes every number (counts, totals, group by,

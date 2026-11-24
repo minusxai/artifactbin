@@ -11,8 +11,9 @@ Link CSV or JSON rows to read/write with SQL:
 ```
 
 Publishing the page makes a CSV linked by path a dataset named by the file; link a published one as
-`ref:ID`. An unchanged CSV is never re-imported; a changed one replaces the dataset only if no rows
-were written since, else the publish is refused. It adds `data-af-id` to your local HTML. `data-af-name` is unique per page. A link follows the
+`ref:ID`. An unchanged CSV is never re-imported. A changed CSV replaces the linked dataset
+only if it still matches the last published revision and state. Publish refuses to overwrite
+newer rows. Publish adds `data-af-id` to your local HTML. `data-af-name` is unique per page. A link follows the
 latest rows; `data-af-mode="pinned" data-af-revision="2"` freezes one saved version, read-only.
 `node scripts/publish.mjs rows.csv` alone prints the `--artifact ID` that updates it; HTTP:
 `POST [[ base ]]/api/artifacts` with a durable `Idempotency-Key` and an origin-bound bearer, never
