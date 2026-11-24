@@ -5,9 +5,9 @@
 import {SERVICE_PAYLOAD_LIMIT} from '@artifactbin/contracts/payload-limit';
 import type {HtmlDatasetLink} from '@artifactbin/contracts/html-page';
 import type {AccessActor} from '@/lib/accounts';
-import {getArtifactHeaderById,getArtifactById} from '@/lib/artifacts';
+import {getArtifactById} from '@/lib/artifacts';
 import {SQL_READ_WALL_TIMEOUT_MS,getDb} from '@/lib/platform';
-import {readHtmlPage} from '@/lib/html-publication';
+import {readHtmlPageHeader} from '@/lib/html-publication';
 import {pageRevisionSchema} from '@/lib/dataset-access';
 import {requestOrSessionActor} from '@/lib/authentication';
 import {deadlineStep} from './deadline';
@@ -15,9 +15,8 @@ import {pageVerifier} from './verify';
 async function preparePageRevisionSchema(request:Request,actor:AccessActor,pageId:string,revision:string){
  const signal=request.signal;
  signal.throwIfAborted();
- const admitted=await getArtifactHeaderById(pageId);
- if(!admitted?.group_id)throw Error('page_unavailable');
- const page=await readHtmlPage(actor,pageId);
+ const {page,head:admitted}=await readHtmlPageHeader(actor,pageId);
+ if(!admitted.group_id)throw Error('page_unavailable');
  if(page.revision!==revision)throw Error('page_changed');
  const links=page.links.filter((l):l is HtmlDatasetLink=>l.kind==='dataset'&&l.mode==='pinned');
  if(!links.length)throw Error('page_unavailable');

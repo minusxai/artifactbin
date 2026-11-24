@@ -10,8 +10,8 @@ import { person, sql } from './page-sql-door-fixture';
 useAppHarness();
 
 const BUDGET = {
-  // 7 credential statements, 3 page reads (including the verifier), 5 dataset loads and 5 fences.
-  pageSql: 20,
+  // 7 credential statements, 2 page header reads (including the verifier), 5 dataset loads and 5 fences.
+  pageSql: 19,
   // 5 credential statements, 5 admission/owner/lock reads, 8 revision/edit/index statements and 2 events.
   publishPut: 20,
 };
