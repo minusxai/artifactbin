@@ -68,13 +68,13 @@ const DATAFLOW_BROWSER_LEAVES = [
 ];
 /*
  * lib/document: server code enters through its index, `server` (node-only), or
- * the pure `csp-extensions` entry used by native policy parsing without compiler dependencies; browser-bundled code
+ * the pure `csp-extensions` and `social-preview` entries used by native head readers; browser-bundled code
  * imports values from a listed leaf instead, never the index (browserLeavesOnly), because the island and
  * app bundlers cannot drop the rest of a barrel. Its types come from the index (erased), except
  * annotation-edits: re-pointing editor-engine/annotation-map's type import renames esbuild's minified
  * identifiers in the frame-editor chunks (same raw sizes, different bytes and hashes), so it stays a leaf.
  */
-const DOCUMENT_ENTRIES = ['', 'server', 'csp-extensions'];
+const DOCUMENT_ENTRIES = ['', 'server', 'csp-extensions', 'social-preview'];
 const DOCUMENT_BROWSER_IMPORTERS = [
   'services/app/solid/',
 
@@ -359,9 +359,9 @@ function deepModuleViolations(graph, table) {
           used.add(rel);
           serverRefused.push(`  ${file} imports ${specifier} (${rel ? `entry ${rel}` : 'the index'} is server-only)`);
         } else if (browserLeavesOnly) {
-          if (!browser || (entry && typeOnly)) { if (entry) used.add(rel); else refused.push(`  ${file} imports ${specifier} (server code imports @/${module})`); }
+          if (leaf) usedLeaves.add(rel);
+          else if (!browser || (entry && typeOnly)) { if (entry) used.add(rel); else refused.push(`  ${file} imports ${specifier} (server code imports @/${module})`); }
           else if (entry) refused.push(`  ${file} imports ${specifier} (browser-bundled code imports a leaf file, not the index)`);
-          else if (leaf) usedLeaves.add(rel);
           else refused.push(`  ${file} imports ${specifier} (${rel} is not in ${constantPrefix(module)}_BROWSER_LEAVES)`);
         } else if (entry) used.add(rel);
         else if (leaf) usedLeaves.add(rel);

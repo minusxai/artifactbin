@@ -1,11 +1,12 @@
 /** Read-only validation against real artifact identities and existing permissions. */
+import type {ParsedHtml} from '@/lib/html-page/html-source';
 import {ARTIFACT_ID_PATTERN} from '@artifactbin/contracts/artifact-reference';
 import { findDependentsFor, getArtifactFor, getOwnedArtifactFor } from '@/lib/artifacts';
 import { updateMetadataFromBody } from '@/lib/artifact-wire';
 import {createArtifactFromBody,replaceArtifactWithBody} from './requests';
 import type { TokenHoldingActor } from '@/lib/accounts';
 import {Reply,reply,baseUrl} from '@/lib/http';
-export async function preflightPublication(request:Request,actor:TokenHoldingActor,body:Record<string,unknown>):Promise<Reply>{
+export async function preflightPublication(request:Request,actor:TokenHoldingActor,body:Record<string,unknown>,page?:ParsedHtml):Promise<Reply>{
  const input=body.input;
  if(!input||typeof input!=='object'||Array.isArray(input))return reply({error:'invalid_preflight',hint:'Send {input:{...publication fields},id?:artifact id}.'},400);
  if(body.id!==undefined&&(typeof body.id!=='string'||!ARTIFACT_ID_PATTERN.test(body.id)))return reply({error:'invalid_reference'},400);
@@ -25,6 +26,6 @@ export async function preflightPublication(request:Request,actor:TokenHoldingAct
   return updateMetadataFromBody(actor,current.id,input as Record<string,unknown>,baseUrl(request),true);
  }
  if(body.mode!==undefined&&body.mode!=='replace')return reply({error:'invalid_preflight_mode'},400);
- return current?replaceArtifactWithBody(input as Record<string,unknown>,actor,current.id,baseUrl(request),{dryRun:true})
-  :createArtifactFromBody(input as Record<string,unknown>,actor,baseUrl(request),undefined,{dryRun:true});
+ return current?replaceArtifactWithBody(input as Record<string,unknown>,actor,current.id,baseUrl(request),{dryRun:true,page})
+  :createArtifactFromBody(input as Record<string,unknown>,actor,baseUrl(request),undefined,{dryRun:true,page});
 }

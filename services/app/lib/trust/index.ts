@@ -3,6 +3,6 @@ export {
   allowDocument, carriedTrust, cspExtensionsFor, cspRequestFor, declaredCspExtensions, denyDocument, extensionsHash, hostsPublishedBy,
   revokeTrust, sessionTrustCookie,
 } from './document-trust';
-export { nativeCspDeclarations } from './native-csp';
+export { nativeCspDeclarations } from '../html-page';
 export { listGroupAddresses, parseGroupAddresses, setGroupAddresses, TrustError } from './group-trust';
 export { refusedTrustWrite } from './write-guard';

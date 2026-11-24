@@ -5,7 +5,8 @@ import {preparePublicationBundle,type CreationKeys} from './bundle';
 import { getSharingFor, durableMutation, type MutationReceipt, type MutationReply, parseArtifactDestination, newArtifactDestination, permitsMemberPage, type ArtifactInput, artifactQuotaExceeded, groupArtifactQuotaExceeded, publisherByteQuota, GroupPersonalDestination, type ArtifactRow, byteQuotaFor, canReadArtifact, createArtifact, creationOperation, CreationReplay, findDependentsFor, getArtifactById, getArtifactFor, getOwnedArtifactFor, isVersionConflict, lookupCreation, observedChange, versionConflict, refLoaderForActor, replaceArtifactFor, setMetadataFor } from '@/lib/artifacts';
 import { ownsArtifact, writerFor } from '@/lib/artifact-access';
 import { committedOpenAnnotations, createdArtifactWire, parseAccessValue, parseExpectedVersion, parseLinkRoleValue, parseParentField, parseShareEntries, parseSharingRevision, parseVisibilityValue, placementFor, replacedArtifactWire } from '@/lib/artifact-wire';
-import {htmlAssetLinks, htmlPageDeclarations} from '@/lib/html-page';
+import {htmlAssetLinks} from '@/lib/html-page';
+import type {ParsedHtml} from '@/lib/html-page/html-source';
 import { trackEvent } from '@/lib/analytics';
 import {authorizeDatasetBinding,DatasetBindingUnsupportedError} from '@/lib/dataset-access';
 import type {HtmlDatasetLink, HtmlDeclaredQuery, HtmlDefaultConnectionLink, HtmlLiveDatasetLink} from '@artifactbin/contracts/html-page';
@@ -49,10 +50,10 @@ type HtmlDataLinks=readonly (HtmlDatasetLink|HtmlDefaultConnectionLink|HtmlLiveD
  * `actor` authorizes the stored links (the page's owner on a replace); `publisher`, the person saving, must own or
  * edit each live dataset the page declares queries on (lib/live-datasets).
  */
-async function prepareHtmlDatasets(body:Record<string,unknown>,actor:AccessActor,publisher:AccessActor):Promise<{links:HtmlDataLinks;queries:HtmlDeclaredQuery[]}|undefined|Reply>{
- if(typeof body.html!=='string')return undefined;
+async function prepareHtmlDatasets(prepared:PreparedContent,html:unknown,actor:AccessActor,publisher:AccessActor):Promise<{links:HtmlDataLinks;queries:HtmlDeclaredQuery[]}|undefined|Reply>{
+ if(typeof html!=='string')return undefined;
  try{
-  const {datasets:declared,connections,queries:written}=htmlPageDeclarations(body.html);
+  const {datasets:declared,connections,queries:written}=prepared.htmlPage?.declarations??{datasets:[],connections:[],queries:[]};
   // `default:` reads the install's default connection: refused where the install has none.
   if(connections.length&&!hasDefaultConnection())return reply({error:'default_connection_not_configured',details:connections.map(link=>`link "${link.name}" reads the install's default connection (href="default:${link.namespace}"), and this server has none (DATASETS__DEFAULT_CONNECTION)`)},400);
   const {links,queries}=await livePageDeclarations(actor,publisher,declared,written,connections);
@@ -96,7 +97,7 @@ export async function replaceArtifactWithBody(
   actor: AccessActor,
   id: string,
   base: string,
-  options: {dryRun?:boolean;mutationReceipt?:MutationReceipt;request?:Request} = {},
+  options: {dryRun?:boolean;mutationReceipt?:MutationReceipt;request?:Request;page?:ParsedHtml} = {},
 ): Promise<Reply> {
   if (!body) return reply({ error: 'invalid_json' }, 400);
   if(['markup','jsx','markdown','document_update'].some(key=>Object.hasOwn(body!,key)))return reply({error:'native_html_required',hint:'Replace native pages with the complete html field and observed version and state.'},400);
@@ -123,7 +124,7 @@ export async function replaceArtifactWithBody(
   if(body.annotation_ops!==undefined)return reply({error:'invalid_annotation_operations'},400);
   const expected = parseExpectedVersion(body);
   if (expected instanceof Reply) return expected;
-  let bundleReceipts:unknown[]=[],bundleEntryPath:string|undefined;
+  let bundleReceipts:unknown[]=[],bundleEntryPath:string|undefined,authored:ParsedHtml|undefined;
   const bundleSupplied=body.publicationBundle!==undefined;
   // The caller's own fields: a bundle save injects the head's visibility and shares below, which are no change.
   const sent=body;
@@ -149,9 +150,9 @@ export async function replaceArtifactWithBody(
       const sharing=await getSharingFor(actor,id);
       body={...body,visibility:body.visibility??current.visibility,shares:body.shares??sharing?.shares};
     }
-    const bundled=await preparePublicationBundle(body,actor as PublicationActor,base,creationKeys(options.request),(dependency,dependencyKeys)=>createArtifactFromBodyPrepared(dependency,creator,base,dependencyKeys),(dependencyId,input,key)=>updateBundleDependency(actor as PublicationActor,base,dependencyId,input,key),{id,dependencies:Array.isArray(current.meta.htmlPublicationDependencies)?current.meta.htmlPublicationDependencies:[],creator,newFilesRefused});
+    const bundled=await preparePublicationBundle(body,actor as PublicationActor,base,creationKeys(options.request),(dependency,dependencyKeys)=>createArtifactFromBodyPrepared(dependency,creator,base,dependencyKeys),(dependencyId,input,key)=>updateBundleDependency(actor as PublicationActor,base,dependencyId,input,key),{id,dependencies:Array.isArray(current.meta.htmlPublicationDependencies)?current.meta.htmlPublicationDependencies:[],creator,newFilesRefused},options.page);
     if(bundled instanceof Reply)return bundled;
-    body=bundled.body;bundleReceipts=bundled.receipts;bundleEntryPath=bundled.entryPath;
+    body=bundled.body;bundleReceipts=bundled.receipts;bundleEntryPath=bundled.entryPath;authored=bundled.authored;
   }
   /*
    * A FOLDER HAS NO CONTENT, AND THE REPLACE DOOR IS WHERE THAT IS ENFORCED.
@@ -182,6 +183,7 @@ export async function replaceArtifactWithBody(
   const prepared: PreparedContent | Reply = current.format === 'folder'
     ? {content: { format: 'folder', source: '', meta: {}, derivedTitle: null }, objects: []}
     : await prepareContentInput({...(current.format==='dataset'?{columns:((current.meta.columns??[]) as import('@artifactbin/contracts/sql').DatasetColumn[]).filter(c=>c.type==='user')}:{}),template:current.meta.template,...body}, {
+      authored,
       prepareDataset: (input,objects) => prepareCatalog(input,current,objects),
       loadRef: refLoaderForActor(owner),
       // Account-owned imports may have no historical creator credential.
@@ -228,13 +230,14 @@ export async function replaceArtifactWithBody(
 
   const changed = observedChange(current, expected);
   if (changed) return reply(versionConflict(current, changed), 409);
-  const htmlData=await prepareHtmlDatasets(body,owner,actor);if(htmlData instanceof Reply)return htmlData;
+  const htmlData=await prepareHtmlDatasets(prepared,body.html,owner,actor);if(htmlData instanceof Reply)return htmlData;
   const htmlDatasets=htmlData?.links;
   if (options.dryRun) return preflightReply(prepared);
   // The bytes are put as the write transaction's last step, so a refused write stores nothing.
   const persistPrepared=await preparedPersistence(prepared);
   const input: ArtifactInput = {
     ...parsed,
+    htmlPage:prepared.htmlPage,
     meta:{...parsed.meta,...(htmlData?{htmlQueries:htmlData.queries}:{}),...(bundleSupplied?publicationRecord(bundleReceipts,bundleEntryPath):current.meta.htmlPublicationDependencies?publicationRecord(current.meta.htmlPublicationDependencies as unknown[],current.meta.htmlPublicationEntryPath):{})},
     ...(htmlDatasets?{htmlDatasets}:{}),
     ...(body.title===null || typeof body.title === 'string' ? { title: body.title } : parsed.format==='html'?{title:parsed.derivedTitle}:{}),
@@ -297,7 +300,7 @@ export async function replaceArtifactWithBody(
  * transport-only branch of its own: a raw `Content-Type: image/*` body, which
  * has no JSON envelope for this function to read.
  */
-export async function createArtifactFromBody(body:Record<string,unknown>,actor:PublicationActor,base:string,request?:Request,options:{dryRun?:boolean}={}):Promise<Reply>{
+export async function createArtifactFromBody(body:Record<string,unknown>,actor:PublicationActor,base:string,request?:Request,options:{dryRun?:boolean;page?:ParsedHtml}={}):Promise<Reply>{
  if(options.dryRun&&body.publicationBundle!==undefined)return reply({error:'bundle_preflight_requires_dependency_plan'},400);
  const keys=creationKeys(request);
  // Only files attached to an explicitly targeted new HTML page use its publication allowance.
@@ -306,10 +309,10 @@ export async function createArtifactFromBody(body:Record<string,unknown>,actor:P
  const memberBundle=typeof body.html==='string' && bundleDestination?.type==='group'
    && body.shares===undefined && (body.linkRole===undefined || body.linkRole==='viewer')
    && (body.visibility===undefined || ['private','unlisted','public'].includes(String(body.visibility)));
- const bundled=await preparePublicationBundle(body,actor,base,keys,(dependency,dependencyKeys)=>createArtifactFromBodyPrepared(dependency,actor,base,dependencyKeys,{bundleDependency:memberBundle}),(dependencyId,input,key)=>updateBundleDependency(actor,base,dependencyId,input,key));
+ const bundled=await preparePublicationBundle(body,actor,base,keys,(dependency,dependencyKeys)=>createArtifactFromBodyPrepared(dependency,actor,base,dependencyKeys,{bundleDependency:memberBundle}),(dependencyId,input,key)=>updateBundleDependency(actor,base,dependencyId,input,key),undefined,options.page);
  if(bundled instanceof Reply)return bundled;
 
- const created=await createArtifactFromBodyPrepared(bundled.body,actor,base,keys,{...options,bundleReceipts:bundled.receipts,bundleEntryPath:bundled.entryPath});
+ const created=await createArtifactFromBodyPrepared(bundled.body,actor,base,keys,{...options,page:bundled.authored,bundleReceipts:bundled.receipts,bundleEntryPath:bundled.entryPath});
  if(!bundled.receipts.length)return created;
  return reply({...created.body,dependencyReceipts:bundled.receipts},created.status);
 }
@@ -319,7 +322,7 @@ async function createArtifactFromBodyPrepared(
   actor: PublicationActor,
   base: string,
   keys: CreationKeys = {},
-  options: {dryRun?:boolean;bundleReceipts?:unknown[];bundleEntryPath?:string;bundleDependency?:boolean} = {},
+  options: {dryRun?:boolean;bundleReceipts?:unknown[];bundleEntryPath?:string;bundleDependency?:boolean;page?:ParsedHtml} = {},
 ): Promise<Reply> {
   let destination;
   try{destination=parseArtifactDestination(body.destination);}catch(error){if(error instanceof DatasetError)return reply({error:'invalid_destination',details:[error.message]},error.status);throw error;}
@@ -381,6 +384,7 @@ async function createArtifactFromBodyPrepared(
   const sentMarkup=body.markup;
   const prepared: PreparedContent | Reply = live ? {content:live.content,objects:[]} : await prepareContentInput(body, {
     creating: true,
+    authored: options.page,
     prepareDataset: (input,objects) => prepareCatalog(input,undefined,objects),
     loadRef: refLoaderForActor(publicationActor),
     overByteQuota: publisherByteQuota(actor),
@@ -390,7 +394,7 @@ async function createArtifactFromBodyPrepared(
   const access = parseAccessField(body, parsed.format);
   if (access instanceof Reply) return access;
 
-  const htmlData=await prepareHtmlDatasets(body,publicationActor,actor);if(htmlData instanceof Reply)return htmlData;
+  const htmlData=await prepareHtmlDatasets(prepared,body.html,publicationActor,actor);if(htmlData instanceof Reply)return htmlData;
   const htmlDatasets=htmlData?.links;
   if (options.dryRun) return preflightReply(prepared);
   // The bytes are put as the write transaction's last step, so a refused write stores nothing.
@@ -400,6 +404,7 @@ async function createArtifactFromBodyPrepared(
   // The creation's own transaction reads the prepared bytes before its last step stores them.
   try{row = await readingPrepared(prepared.objects, () => createArtifact(actor.tokenId ?? actor.principalGroup?.tokenId ?? null, actor.userId, {
     ...parsed,
+    htmlPage:prepared.htmlPage,
     meta:{...parsed.meta,...(htmlData?{htmlQueries:htmlData.queries}:{}),...(options.bundleReceipts?.length?publicationRecord(options.bundleReceipts,options.bundleEntryPath):{})},
     ...(htmlDatasets?{htmlDatasets}:{}),
     title: body.title===null || typeof body.title === 'string' ? body.title : parsed.derivedTitle,

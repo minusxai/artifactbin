@@ -1,9 +1,9 @@
 /** Count app database statements through the real page SQL and publish routes, with their results pinned beside the counts. */
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { artifactState } from '@/lib/artifacts';
 import { PUT as replace } from '@/app/api/artifacts/[id]/route';
 import { nativeHtml } from './native-html-fixture';
-import { head, publishedId } from './artifact-fixtures';
+import { head, postArtifact, publishedId } from './artifact-fixtures';
 import { params, recordStatements, request, useAppHarness } from './harness';
 import { person, sql } from './page-sql-door-fixture';
 
@@ -51,4 +51,42 @@ it('budgets a publish PUT that saves a new page revision', async () => {
   expect(await head(id)).toMatchObject({ version: 2, title: 'After', source: expect.stringContaining('New text') });
   console.info('[budget] publish PUT: statements=%d', recorded.count);
   expect(recorded.count, recorded.sql.join('\n')).toBe(BUDGET.publishPut);
+});
+
+// All whole-document parse5 calls, including readers that do not enter through parseSource.
+const pageParses = vi.hoisted(() => ({ sources: [] as string[] | undefined }));
+vi.mock('parse5', async (original) => {
+  const actual = await original<typeof import('parse5')>();
+  return { ...actual, parse: (...args: Parameters<typeof actual.parse>) => {
+    pageParses.sources?.push(args[0]);
+    return actual.parse(...args);
+  } };
+});
+
+async function recordPageParses<T>(work: () => Promise<T>) {
+  const sources: string[] = [];
+  pageParses.sources = sources;
+  try { return { value: await work(), sources }; }
+  finally { pageParses.sources = undefined; }
+}
+
+it('budgets whole-page HTML parses on publish create and replace', async () => {
+  const owner = await person('budget_html');
+  const before = nativeHtml('<p>Original page</p>');
+  const after = nativeHtml('<p>Replacement page</p>');
+  // Create shares the authored parse across portable checks, bundle admission and storage.
+  const created = await recordPageParses(() => postArtifact(owner.token, { html: before }));
+  expect(created.value.status, await created.value.clone().text()).toBe(201);
+  const { id } = await created.value.json();
+  const previous = await head(id);
+  const expectedState = artifactState(previous);
+  const replaced = await recordPageParses(() => replace(request(`/api/artifacts/${id}`, {
+    method: 'PUT', token: owner.token, json: { html: after, expectedVersion: 1, expectedState },
+  }), params(id)));
+  expect(replaced.value.status, await replaced.value.clone().text()).toBe(200);
+  expect(await replaced.value.json()).toMatchObject({id, version: 2});
+  console.info('[budget] HTML create=%d replace=%d', created.sources.length, replaced.sources.length);
+  expect(created.sources).toEqual([before]);
+  // Replace parses the authored page once and the locked previous page once to carry IDs.
+  expect(replaced.sources).toEqual([after, previous.source]);
 });

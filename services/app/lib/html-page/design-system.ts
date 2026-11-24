@@ -32,8 +32,7 @@ const startTag = (source: string, element: Element): string => { const tag = ele
 const lineOf = (element: Element): number => element.sourceCodeLocation?.startLine ?? 0;
 
 /** D2: no platform attributes on <html>; the system lives in the head meta; no copied system stylesheet. Idempotent. */
-export function normalizeDesignSelection(input: string): DesignNormalization {
-  const document = parseSource(input);
+export function normalizeDesignSelection(input: string, document = parseSource(input)): DesignNormalization {
   const root = document.html, links = copiedLinks(document);
   const dark = root?.sourceCodeLocation?.attrs?.['data-af-dark'], design = root?.sourceCodeLocation?.attrs?.['data-af-design-system'];
   const edits: Edit[] = [];

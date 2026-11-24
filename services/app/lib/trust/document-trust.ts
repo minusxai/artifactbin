@@ -31,7 +31,7 @@ import { parseCookie } from '@/lib/http';
 import { type ArtifactRow } from '@/lib/artifacts';
 import type { AccessActor } from '@/lib/accounts';
 import { artifactQuery } from '@/lib/artifacts/table';
-import {nativeCspDeclarations} from './native-csp';
+import {nativeCspDeclarations} from '../html-page';
 import { approvableGroupsFor, groupApprovedFor } from './group-trust';
 import {
   CSP_DIRECTIVES, EMPTY_CSP_EXTENSIONS, coversCspExtensions, emptyCspExtensions, groupEligibleCspExtensions, hasCspExtensions,
