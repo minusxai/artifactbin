@@ -1,10 +1,10 @@
 ---
 name: website
-description: "Read to organize personal folders, publish a folder on an owner website, and search the liked and shared shelves."
+description: "Publish personal folders and find liked or shared pages."
 ---
 ## Read first
 
-Run these commands from the installed skill. For a personal site, sign in as its owner.
+Run as the site owner from the installed skill.
 
 ```sh
 node scripts/groups.mjs website
@@ -15,20 +15,18 @@ node scripts/groups.mjs site-set FOLDER
 node scripts/groups.mjs site-set FOLDER --alias notes
 ```
 
-`website` lists all your live personal folders (ID, title, ancestor IDs) and current mounts.
-Choose by ID after checking the hierarchy for duplicate titles. Folder creation defaults to private.
+`website` lists your folders, ancestor IDs and mounts. Use ancestry to distinguish duplicate titles.
+New folders default to private.
 To browse children use `read.mjs list --parent FOLDER`, following `next_cursor`.
-A new page can use publish's `--parent`. For an existing page, `place` reads its state and
-conditionally changes its parent within the same ownership.
+For an existing page, `place` checks its current state before moving it.
 
 ## Mount or change a folder
 
-The main site uses the empty label. A named alias uses one flat host label,
-`OWNER--notes.PAGES_HOST`, covered by the publishing host's existing wildcard DNS and TLS.
-Use lowercase ASCII letters and digits with single internal hyphens. The combined DNS label must
-fit 63 characters and the full hostname 253. The mapping follows the folder ID across renames.
+The alias `OWNER--notes.PAGES_HOST` uses the existing wildcard DNS and TLS.
+Use lowercase ASCII letters, digits and single internal hyphens. Limits are 63 characters for the
+combined label and 253 for the host. Renaming the folder preserves the alias.
 
-A first set creates only. Read settings before changing an existing mapping. To repoint, use
+Read `website` before replacing a mapping. To repoint, use
 `groups.mjs site-set NEW_FOLDER --alias notes --expected OLD_FOLDER`. To remove the observed alias,
 use `groups.mjs site-remove notes --expected OLD_FOLDER`. A collision or stale expected folder
 returns 409. Reread and reconcile. Use `root` for the account root (a configured null folder).
@@ -51,8 +49,7 @@ lookup and generated listing fallback. An unconfigured alias returns 404.
 
 On the owner website, page SQL supplies the read-only `_files` table for public entries within
 the mount. Columns are `id, parent_id, title, format, url, created_at, updated_at, views, likes`.
-Views and likes are numeric totals. Direct children have null parent_id. Use the emitted URL.
-To list public HTML pages excluding assets and this homepage, bind the homepage ID:
+Direct children have NULL parent_id. To list public pages, bind this homepage’s ID:
 
 ```sql
 SELECT title, url, views, likes FROM _files
