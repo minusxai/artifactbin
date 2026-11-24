@@ -7,11 +7,11 @@ import { stubFetch } from '@/test/helpers/fetch-stub';
 
 const SESSION = { user: { id: 'usr_1', email: 'a@example.com', username: 'owner', image: null }, kind: 'account', onboarded: true };
 /** Stubs the account page's reads: the session, the account (default: no photo), an empty inbox and the given tokens. */
-function stubAccountFetch({ account = () => Response.json({ username: 'owner', image: null }), tokens = [], calls }: {
-  account?: () => Response | Promise<Response>; tokens?: unknown[]; calls?: string[] } = {}) {
+function stubAccountFetch({ account = () => Response.json({ username: 'owner', image: null }), tokens = [], website = {roots:[],folders:[]}, calls }: {
+  account?: () => Response | Promise<Response>; tokens?: unknown[]; website?: {roots:unknown[]; folders:unknown[]}; calls?: string[] } = {}) {
   stubFetch({
     '/api/page/account': account,
-    '/api/my/website': {roots:[], folders:[]},
+    '/api/my/website': website,
     '/api/my/people': { autoAccept: false, unread: 0, next: null, blocks: [{ user_id: 'blocked', name: 'Blocked Reader', username: 'handle' }], notifications: [] },
     '/api/my/tokens': { tokens },
   }, { session: SESSION, fallback: () => Response.json({}), onCall: (url, init) => { calls?.push(`${init?.method ?? 'GET'} ${url}`); } });
@@ -37,6 +37,29 @@ it('loads the account handle late while keeping profile controls without the ret
   expect(screen.queryByLabelText('Upload a CSV')).not.toBeInTheDocument();
   expect(screen.queryByLabelText('Google Sheet URL')).not.toBeInTheDocument();
   expect(screen.getByRole('link',{name:'HTTP authentication guide'})).toHaveAttribute('href','/llms/http-auth');
+});
+
+it('suggests an available label within the combined DNS budget and keeps it editable', async () => {
+  const owner='a'.repeat(32),budget=63-owner.length-2,stem='b'.repeat(budget);
+  const folders=['B'.repeat(80),'✨','  Mixed __ - Notes! '].map((title,i)=>({id:'f'+i,title,ancestor_ids:[]}));
+  const roots=[stem,stem.slice(0,-2)+'-2'].map(subdomain_label=>({subdomain_label,folder_id:'f0'}));
+  stubAccountFetch({account:()=>Response.json({username:owner,user_page_url:'https://'+owner+'.u.example.test'}),website:{roots,folders}});
+  window.history.replaceState(null,'','/account');
+  render(()=><App/>);
+  fireEvent.click(await screen.findByRole('button',{name:'Add subdomain'}));
+  const field=screen.getByLabelText('Website label');
+  const select=(name:string)=>fireEvent.click(screen.getByRole('treeitem',{name:name.trim()}));
+  select(folders[0]!.title);
+  expect(field).toHaveValue(stem.slice(0,-2)+'-3');
+  select(folders[1]!.title);
+  expect(field).toHaveValue('folder');
+  select(folders[2]!.title);
+  expect(field).toHaveValue('mixed-notes');
+  fireEvent.input(field,{target:{value:stem}});
+  expect(screen.getByRole('button',{name:'Use this folder'})).toBeDisabled();
+  expect(screen.getByText('This label is taken. Choose another label.')).toBeVisible();
+  fireEvent.input(field,{target:{value:'custom'}});
+  expect(screen.getByRole('button',{name:'Use this folder'})).toBeEnabled();
 });
 
 it('shows a managed handle and keeps the display name editable', async () => {

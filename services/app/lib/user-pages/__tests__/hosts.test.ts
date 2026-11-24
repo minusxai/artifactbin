@@ -1,14 +1,16 @@
 import {describe,it,expect} from 'vitest';
-import {userPagesLabel,handleFromLabel,handleFromUserPagesHost,userPagesOrigin,servesDocument} from '..';
+import {userPagesLabel,handleFromLabel,handleFromUserPagesHost,userPagesOrigin,servesDocument,siteAddress} from '..';
 describe('anonymous owner hosts',()=>{
  it('maps shared valid handles reversibly and refuses reserved or invalid identities',()=>{
   expect(userPagesLabel('design_crit')).toBe('design-crit');
   expect(handleFromLabel('design-crit')).toBe('design_crit');
-  for(const handle of [null,undefined,'ab','-abc','abc_','app','www','pages','auth','ns1'])expect(userPagesLabel(handle)).toBeNull();
+  for(const handle of [null,undefined,'ab','a__b','xn__example','-abc','abc_','app','www','pages','auth','ns1'])expect(userPagesLabel(handle)).toBeNull();
  });
  it('accepts exactly one normalized label and no apex or nested name',()=>{
   expect(handleFromUserPagesHost('Design-Crit.U.Example.com.:4100','u.example.com')).toBe('design_crit');
   for(const host of ['u.example.com','x.design-crit.u.example.com','app.u.example.com','abc.other.com'])expect(handleFromUserPagesHost(host,'u.example.com')).toBeNull();
+  expect(siteAddress('Design-Team--notes.u.example.com.:4100','u.example.com')).toEqual({handle:'design_team',label:'notes'});
+  for(const prefix of ['notes.design-team','team---notes','xn--bcher-kva','team--'+'x'.repeat(58)])expect(siteAddress(prefix+'.u.example.com','u.example.com')).toBeNull();
   expect(userPagesOrigin('design_crit',{app:'http://localhost:4100',host:'u.lvh.me'})).toBe('http://design-crit.u.lvh.me:4100');
  });
  it('serves public and unlisted HTML for the true typed owner only',()=>{

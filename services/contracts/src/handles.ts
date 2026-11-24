@@ -1,6 +1,6 @@
 /** The handle namespace accounts and groups share (identity's handle reservations): its shape and reserved words. */
-/** 3–32 lowercase letters/digits, with underscores only inside the handle. */
-export const HANDLE_RE = /^[a-z0-9][a-z0-9_]{1,30}[a-z0-9]$/;
+/** 3–32 lowercase letters/digits, with single underscores only inside the handle. */
+export const HANDLE_RE = /^(?!.*__)[a-z0-9][a-z0-9_]{1,30}[a-z0-9]$/;
 export const RESERVED_HANDLES = new Set(['admin','root','support','help','about','settings','security','artifactbin','artifact_bin','api','docs','mcp','oauth','a','login','tokens','www','app','mail','smtp','static','cdn','status','pages','runner','assets','blog','auth','ns1','ns2','u']);
 export const isValidHandle = (handle: string): boolean => HANDLE_RE.test(handle) && !RESERVED_HANDLES.has(handle);
 
