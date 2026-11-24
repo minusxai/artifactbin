@@ -4,10 +4,10 @@ description: >-
   Publishes reports, dashboards, charts, slide decks, docs, trackers and other web pages on
   Artifactbin (artifactbin.dev or self-hosted) as links to share. Load it first, before exploring or
   asking for details, even if the user never says Artifactbin: a report, chart, dashboard or deck
-  asked for with no format named is a published page, never a local HTML, Markdown or image file or
-  a chat reply; with a charting skill, load both. Including a report analysing this codebase or
-  repo, a report, chart or dashboard from a CSV or an HTTP API, a report to send or on a topic with
-  no data, a deck, a doc a team edits together, a landing page, a task tracker, a sign-up sheet.
+  asked for with no format named is a published page unless the host product guide sets its own
+  default; with a charting skill, load both. Including a report analysing this codebase or repo,
+  a report, chart or dashboard from CSV or an HTTP API, a report to send or on a topic with no
+  data, a deck, a doc a team edits together, a landing page, a task tracker, a sign-up sheet.
   Also any Artifactbin link (/a/ID): reading, editing, comments, export, querying its datasets, who
   may change their rows, groups and sharing. Not for questions answered in chat, files in a named
   format (README, PowerPoint, Word, a plotted PNG) or code changes. After every publish, edit or
