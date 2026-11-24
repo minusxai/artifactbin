@@ -32,6 +32,7 @@
    "services/app/__tests__/artifact-page-query-budget.test.ts": 1760,
    "services/app/__tests__/artifact-urls.test.ts": 411,
    "services/app/__tests__/artifact-views.test.ts": 251,
+   "services/app/__tests__/artifact-write-and-sql-query-budget.test.ts": 1010,
    "services/app/__tests__/asset-byte-quota.test.ts": 372,
    "services/app/__tests__/assets-route.test.ts": 483,
    "services/app/__tests__/auth-query-budget.test.ts": 614,

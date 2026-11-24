@@ -404,7 +404,7 @@ const LIVE_HINT = 'readers run the queries the page declares: sql.query(name, pa
  * runs wholly on that dataset's connection, for its owner and editors only. Null: the statement names no live link
  * (the default connection's and the stored datasets' doors answer it).
  */
-export async function pageLiveDatasetSql(actor: AccessActor, page: HtmlPageVersion, raw: { sql?: unknown; params?: unknown; query?: unknown }, signal?: AbortSignal, admission?:{step<T>(pending:Promise<T>):Promise<T>;dispatch(read:boolean):AbortSignal}): Promise<LiveSqlReply | null> {
+export async function pageLiveDatasetSql(actor: AccessActor, page: Pick<HtmlPageVersion, 'pageId' | 'links' | 'queries'>, raw: { sql?: unknown; params?: unknown; query?: unknown }, signal?: AbortSignal, admission?:{step<T>(pending:Promise<T>):Promise<T>;dispatch(read:boolean):AbortSignal}): Promise<LiveSqlReply | null> {
   const step=<T>(pending:Promise<T>)=>admission?admission.step(pending):pending;
   const lives = page.links.filter((l): l is HtmlLiveDatasetLink => l.kind === 'live-dataset');
   try {

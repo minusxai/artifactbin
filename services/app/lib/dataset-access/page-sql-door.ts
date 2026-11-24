@@ -124,11 +124,10 @@ interface Mounted {
   writeOnly: DatasetColumn[];
 }
 
-function mountsOf(loaded: readonly LoadedDataset[], sql: string): Mounted[] {
+function mountsOf(loaded: readonly LoadedDataset[]): Mounted[] {
   const out: Mounted[] = [];
   for (const l of loaded) {
     const link = l.link!.name;
-    if (!mentions(sql, link)) continue;
     const single = (l.snapshot ? Object.keys(l.snapshot.names ?? {}).length : l.tables.length) <= 1;
     for (const t of l.tables) {
       const view = t.model.select === false ? undefined : l.snapshot?.catalog.tables.find((v) => tableIdentity(v) === t.tableId);
@@ -285,10 +284,18 @@ export async function executePageSql(actor: AccessActor, links: readonly HtmlDat
   let read = true;
   try {
     const call = checked(raw);
-    const load = (fenced: boolean) => loadLinked(actor, links, { pageId: scope.pageId, fenced, retainReadFence:scope.retainReadFence, skipped: (link) => skipped.add(link.name) }, signal).catch((e) => { if (e instanceof DatasetAccessError) refuse('validation_failed', e.message); throw e; });
-    const first = await (scope.admission?scope.admission.step(load(true)):load(true));
-    if (!first.length && !scope.files) refuse(skipped.size ? unreadable() : 'dataset_not_found', 'no linked dataset is readable');
-    const mounts = mountsOf(first, call.sql);
+    const named = links.filter((link) => mentions(call.sql, link.name));
+    const load = (bindings: readonly HtmlDatasetLink[], fenced: boolean) => loadLinked(actor, bindings, { pageId: scope.pageId, fenced, retainReadFence:scope.retainReadFence, skipped: (link) => skipped.add(link.name) }, signal).catch((e) => { if (e instanceof DatasetAccessError) refuse('validation_failed', e.message); throw e; });
+    const first = await (scope.admission?scope.admission.step(load(named, true)):load(named, true));
+    // With no loadable named link, the old answer still depends on whether any other link loads. A constant
+    // query can run in that case, and a bad table name gets the SQL refusal instead of the no-readable-link one.
+    let checkedLinks = first;
+    if (!first.length && !scope.files) {
+      const remaining = links.filter((link) => !mentions(call.sql, link.name));
+      checkedLinks = await (scope.admission?scope.admission.step(load(remaining, true)):load(remaining, true));
+      if (!checkedLinks.length) refuse(skipped.size ? unreadable() : 'dataset_not_found', 'no linked dataset is readable');
+    }
+    const mounts = mountsOf(first);
     const analysis = await (scope.admission?scope.admission.step(analyzed(mounts, call.sql,scope.files)):analyzed(mounts, call.sql,scope.files));
     if (analysis.kind === 'select') {
       signal=scope.admission?.dispatch(true)??signal;
@@ -300,7 +307,7 @@ export async function executePageSql(actor: AccessActor, links: readonly HtmlDat
       let read: ReadonlySet<string> = new Set();
       const answer = await runPageSql(first.map((l) => ({ link: l.link!.name, snapshot: l.snapshot, tables: l.tables.map((t) => ({ tableId: t.tableId, selectable: t.model.select !== false })) })), call, life.signal, { files:scope.files,wallTimeoutMs:life.remaining(),aggregates: 'visible',retainSelected:(links) => { read = links; scope.retainMountedLinks?.(links); } })
         .catch((e) => { if (e instanceof DatasetAccessError) refuse(e.extensions.code as SqlFailureCode, e.message); throw e; });
-      for (const l of first) for (const verify of l.fences) await life.step(verify());
+      for (const l of checkedLinks) for (const verify of l.fences) await life.step(verify());
       life.check();
       return { status: 200, body: { ...answer, ...storedSource(first, read) } };
       }finally{life.close();}
@@ -308,7 +315,7 @@ export async function executePageSql(actor: AccessActor, links: readonly HtmlDat
     read = false;
     if (scope.readOnly || scope.files) refuse('permission_denied', 'this page is read-only here: it reads, it never writes');
     scope.admission?.dispatch(false);
-    return await write(actor, call, scope, mounts, analysis.writes[0]!, () => load(false), signal);
+    return await write(actor, call, scope, mounts, analysis.writes[0]!, () => load(named, false), signal);
   } catch (e) {
     if (!(e instanceof Refusal)) throw e;
     // A statement that failed while naming a link this reader could not load failed for that link, not its SQL. Judged
@@ -332,7 +339,7 @@ async function write(actor: AccessActor, call: PageSqlDoorCall, scope: PageSqlDo
     try {
       let current = mounts;
       for (let attempt = 0; ; attempt++) {
-        const target = attempt === 0 ? first : (current = mountsOf(await reload(), call.sql)).find(named) ?? refuse('dataset_changed', 'the linked dataset or your access changed; retry');
+        const target = attempt === 0 ? first : (current = mountsOf(await reload())).find(named) ?? refuse('dataset_changed', 'the linked dataset or your access changed; retry');
         pinned(target);
         // Everything phase 1 reads (the target's role view and every other link mounted) is a read dependency: its
         // authorization is decided again inside the commit, under the row lock, or nothing commits.

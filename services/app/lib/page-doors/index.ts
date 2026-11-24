@@ -11,8 +11,8 @@ import {SQL_READ_LIMITS} from '@artifactbin/contracts/sql';
 import type {HtmlDatasetLink, HtmlPageVersion} from '@artifactbin/contracts/html-page';
 import {sqlReadFailure, type SqlFailureCode} from '@artifactbin/contracts/sql-failures';
 import { ANONYMOUS_ACTOR, type AccessActor } from '@/lib/accounts';
-import { canReadArtifact, getArtifactHeaderById, accessMoved, type ArtifactRow } from '@/lib/artifacts';
-import {readHtmlPage} from '@/lib/html-publication';
+import { canReadArtifact, accessMoved, type ArtifactHeader, type ArtifactRow } from '@/lib/artifacts';
+import {readHtmlPageHeader} from '@/lib/html-publication';
 import {executePageSql,type PageCommitGuard} from '@/lib/dataset-access';
 import {pageConnectionSql} from '@/lib/connections';
 import {pageLiveDatasetSql} from '@/lib/live-datasets';
@@ -25,14 +25,13 @@ import {exportKeyReader} from '@/lib/export';
 import {json,readBody,readJson,PayloadTooLarge} from '@/lib/http';
 import { requestOrSessionActor, refusesCrossSite } from '@/lib/authentication';
 /** The page's dataset links. */
-const datasetLinks=(page:HtmlPageVersion)=>page.links.filter((link):link is HtmlDatasetLink=>link.kind==='dataset');
+const datasetLinks=(page:Pick<HtmlPageVersion,'links'>)=>page.links.filter((link):link is HtmlDatasetLink=>link.kind==='dataset');
 /** How many times a read raced by a linked dataset's write runs before the request is refused. */
 const RACED_READ_ATTEMPTS=3;
 /** Today's receipt key shape (lib/artifacts `durableMutation`): a client Idempotency-Key is held to it. */
 const IDEMPOTENCY_KEY=/^[A-Za-z0-9_-]{16,128}$/;
 /** Every header a credential arrives in (the proxy's attached actor included); an opaque origin's read carries none. */
 const CREDENTIAL_HEADERS=['cookie','authorization','proxy-authorization',ACTOR_HEADER];
-type ArtifactHeader=NonNullable<Awaited<ReturnType<typeof getArtifactHeaderById>>>;
 /**
  * A page write's commit guard (lib/dataset-access PageCommitGuard): inside the dataset write's transaction, the page
  * row is locked and read on `tx`, and the write commits only if the page is the head the request was admitted on
@@ -144,16 +143,15 @@ async function answerSql(request:Request,pageId:string,admission:Admission,reade
  const actor:AccessActor=reader??requested!;
  try{
   if(hostHolds&&!await admission.step(hostHolds()))throw Error('page_unavailable');
-  const admitted=await admission.step(getArtifactHeaderById(pageId));if(!admitted)throw Error('page_unavailable');
   // Readership first: a page this reader cannot read answers exactly as a missing one (the uniform 404), whatever
   // the body or Idempotency-Key; only then is the request itself judged.
-  const head=await admission.step(readHtmlPage(actor,pageId));
+  const {page:head,head:admitted}=await admission.step(readHtmlPageHeader(actor,pageId));
   readable=true;
   const body=await admission.step(readJson(request));
   if(!body||typeof body.revision!=='string'||(body.readOnly!==undefined&&typeof body.readOnly!=='boolean'))return json({error:'validation_failed',message:'send {sql, params?, revision}'},400,headers);
   const idempotencyKey=request.headers.get('idempotency-key')??undefined;
   if(idempotencyKey!==undefined&&!IDEMPOTENCY_KEY.test(idempotencyKey))return json({error:'invalid_idempotency_key'},400,headers);
-  const page=body.revision===head.revision?head:await admission.step(readHtmlPage(actor,pageId,body.revision));
+  const page=body.revision===head.revision?head:(await admission.step(readHtmlPageHeader(actor,pageId,body.revision))).page;
   const files=site&&!page.links.some(link=>link.name.toLowerCase()==='_files')?siteFiles(site):undefined;
   const scope={files,admission,pageId,readStartedAt,retainReadDeadline:(deadline:number)=>{readDeadline=deadline;readSignal=AbortSignal.any([request.signal,AbortSignal.timeout(Math.max(0,Math.floor(deadline-performance.now())))]);},...(idempotencyKey?{idempotencyKey}:{}),readOnly:!!reader||body.readOnly===true||page.revision!==head.revision,commitGuard:pageCommitGuard(pageId,actor,admitted)};
   const verifyPage=pageVerifier(request,pageId,actor,reader,admitted);

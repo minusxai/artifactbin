@@ -20,7 +20,7 @@ import {actorSubject,emit} from '@/lib/platform';
 
 type Admission={step<T>(pending:Promise<T>):Promise<T>;dispatch(read:boolean):AbortSignal};
 
-export async function pageDeclaredConnectionSql(actor:AccessActor,page:HtmlPageVersion,head:HtmlPageVersion,raw:{query?:unknown;params?:unknown},signal:AbortSignal,admission:Admission,choice:{pageGroup?:string|null;requested?:unknown}={}):Promise<ConnectionSqlReply|null>{
+export async function pageDeclaredConnectionSql(actor:AccessActor,page:Pick<HtmlPageVersion,'pageId'|'links'|'queries'>,head:Pick<HtmlPageVersion,'links'|'queries'>,raw:{query?:unknown;params?:unknown},signal:AbortSignal,admission:Admission,choice:{pageGroup?:string|null;requested?:unknown}={}):Promise<ConnectionSqlReply|null>{
  const declared=raw.query===undefined?null:declaredConnectionQuery(page,raw.query);
  if(!declared)return null;
  const viewer=await admission.step(connectorViewer(actor));
