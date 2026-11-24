@@ -6,7 +6,7 @@
  * index for every viewer. An UNREADABLE artifact falls through to the listing
  * exactly like a nonexistent one: no existence oracle in the difference.
  *
- * NESTING IS NOT IN THE ADDRESS. A folder is an artifact with its own page,
+ * Title paths traverse readable folders from the owner’s root,
  * so a trailing path that does not identify an artifact is a uniform 404.
  */
 import { canReadArtifact, getArtifactById, slugAddressTarget, type ArtifactSummary } from '@/lib/artifacts';
@@ -42,8 +42,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ user: strin
   }
 
   // An id that named nothing readable may be a title slug instead (lib/artifacts/slug-address): the address stays.
-  if (path.length === 1) {
-    const id = await slugAddressTarget(request, `/@${handle}/${path[0]}`, actor);
+  if (path.length > 0) {
+    const id = await slugAddressTarget(request, `/@${handle}/${path.map(encodeURIComponent).join('/')}`, actor);
     const artifact = id ? await getArtifactById(id) : null;
     if (artifact && (await canReadArtifact(artifact, actor))) return json({ kind: 'artifact', id: artifact.id });
   }

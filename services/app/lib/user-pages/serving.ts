@@ -5,6 +5,7 @@ import {getDb,PUBLIC_BASE_URL,TITLE_SLUG_SQL,USER_PAGES_HOST} from '@/lib/platfo
 import {canonicalArtifactPath,domainPostPath} from '@/lib/http';
 import {documentOwner,userPagesOrigin,type UserPagesOwner} from './hosts';
 import {inSiteScope, publicSiteAncestors, hasPublicSiteAncestors} from './site-roots';
+import {siteTitlePathSql} from './title-path';
 type ServedRow={ancestor_ids?:string[]|null;user_id:string|null;group_id?:string|null;visibility:string;format:string;deleted_at?:unknown};
 export const eligibleDocument=(row:ServedRow):boolean=>(row.visibility==='public'||row.visibility==='unlisted')&&row.format==='html'&&!row.deleted_at;
 export function servesDocument(owner:UserPagesOwner,row:ServedRow):boolean {
@@ -12,7 +13,7 @@ export function servesDocument(owner:UserPagesOwner,row:ServedRow):boolean {
 }
 const ownerSql=(owner:UserPagesOwner)=>owner.kind==='group'?'group_id = $1':'group_id IS NULL AND user_id = $1';
 export async function publicHomeFiles(owner:UserPagesOwner,folderId=owner.folderId){
- return (await (await getDb()).query<{id:string;format:string;title:string|null;version:number;updated_at:string}>(`SELECT id,format,title,version,updated_at FROM artifacts a WHERE ${publicSiteAncestors('a',owner.kind)} AND ${ownerSql(owner)} AND visibility='public' AND ${folderId===undefined?"format='html'":"format IN ('html','folder') AND ancestor_ids[cardinality(ancestor_ids)] IS NOT DISTINCT FROM $2::text"} AND ${LIVE_ARTIFACT_SQL} ORDER BY updated_at DESC,id`,folderId===undefined?[owner.id]:[owner.id,folderId])).rows;
+ return (await (await getDb()).query<{id:string;format:string;title:string|null;title_path:string|null;version:number;updated_at:string}>(`SELECT id,format,title,version,updated_at,${siteTitlePathSql(owner.kind,folderId===undefined?'$2':'$3')} AS title_path FROM artifacts a WHERE ${publicSiteAncestors('a',owner.kind)} AND ${ownerSql(owner)} AND visibility='public' AND ${folderId===undefined?"format='html'":"format IN ('html','folder') AND ancestor_ids[cardinality(ancestor_ids)] IS NOT DISTINCT FROM $2::text"} AND ${LIVE_ARTIFACT_SQL} ORDER BY updated_at DESC,id`,folderId===undefined?[owner.id,null]:[owner.id,folderId,owner.folderId??null])).rows;
 }
 /**
  * The page the host's root serves in place of the listing: the owner's EARLIEST live page titled "index" (any case;

@@ -38,15 +38,15 @@ it('renders the folder for an id-shaped rest path', async () => {
   await waitFor(() => expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Reports'));
 });
 
-it('is the uniform 404 when the rest path names no id and cannot be a title slug — nesting is not in the address', async () => {
-  await at('/@bob/reports/not-an-artifact');
+it('is the uniform 404 when the rest path names no id and cannot be a title slug', async () => {
+  await at('/@bob/reports/not.a.slug');
   expect(screen.getByLabelText('Not found')).toBeInTheDocument();
   expect(replaceDocument).not.toHaveBeenCalled();
 });
 
-it('crosses a title slug a client navigation found to the server, which alone resolves it', async () => {
-  await at('/@bob/my-notes');
-  await waitFor(() => expect(replaceDocument).toHaveBeenCalledWith('/@bob/my-notes'));
+it.each(['/@bob/my-notes','/@bob/reports/my-notes'])('resolves a client navigation at %s through the server', async path => {
+  await at(path);
+  await waitFor(() => expect(replaceDocument).toHaveBeenCalledWith(path));
   expect(screen.queryByLabelText('Not found')).toBeNull();
 });
 
@@ -90,7 +90,7 @@ it('sends the /edit alias to the dataset editor, not the folder view', async () 
 it('shows the not-found page, not a retry, when the alias answers 404', async () => {
   vi.stubGlobal('EventSource', class { addEventListener() {} removeEventListener() {} close() {} });
   vi.stubGlobal('fetch', vi.fn(async () => Response.json({ error: 'not_found' }, { status: 404 })));
-  await at('/@bob/old-folder/doc002-private');
+  await at('/@bob/old.folder/doc002-private');
   await waitFor(() => expect(screen.getByLabelText('Not found')).toBeInTheDocument());
   expect(screen.queryByRole('button', { name: 'Retry artifact' })).toBeNull();
 });

@@ -25,6 +25,7 @@ document an address names), `public-files.ts`, `pages-host.ts`, `user-host.ts`, 
 - A request on a publishing host (`user-host.ts`) is a guest's whatever it carries: native read doors only, no
   shared writes. Its page-specific SQL POST reuses canonical page/revision/dataset verification, forces anonymous
   read-only execution, and checks the live handle and eligible true owner before admission and after execution.
+- App title paths check each owned folder and leaf with its ordinary title access. On publishing hosts, readable paths use unique public sibling titles relative to the site root. Configured directories (including an explicit workspace root) require a direct public HTML index. Unconfigured hosts retain their legacy home.
 - No agent-facing surface issues a credential. The operator mint (`app/api/tokens/route.ts`) is a 404 without
   `ADMIN__SECRET`. Connections are stored hash-only, shown once.
 - An export capture holds no session: its short-lived key names the requester the export door admitted

@@ -6,7 +6,7 @@ import { ownerHostServes } from '@artifactbin/contracts/url-space';
 import { ownerHostSqlRead } from '@/lib/page-doors';
 import { getArtifactById } from '@/lib/artifacts';
 import { PUBLIC_BASE_URL, USER_PAGES_HOST, IS_DEV } from '@/lib/platform';
-import { isUserPagesHost, ownerForHandle, siteAddress, siteOwner, hasPublicSiteAncestors, inSiteScope, documentOwner, userPagesOrigin, publicHomeFiles, homePageId, eligibleDocument, servesDocument, servesEmbeddedArtifact, servesWebAsset, type UserPagesOwner } from '@/lib/user-pages';
+import { isUserPagesHost, ownerForHandle, siteDestination, siteAddress, siteOwner, hasPublicSiteAncestors, inSiteScope, documentOwner, userPagesOrigin, publicHomeFiles, eligibleDocument, servesDocument, servesEmbeddedArtifact, servesWebAsset, type UserPagesOwner } from '@/lib/user-pages';
 import { DOMAIN_HOME_CSP, siteFilePath, renderDomainHome, type ProfileListingData } from '@/lib/user-pages';
 import { PayloadTooLarge, baseUrl, readBody, trustedForwarded } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
@@ -107,8 +107,6 @@ async function servePage(request: Request, id: string, hostname: string, owner: 
  * read from the actual owner rather than creator attribution.
  */
 async function home(request: Request, hostname: string, owner: UserPagesOwner, stylesheets: (url: string) => Promise<string[]>, folderId=owner.folderId): Promise<Response> {
- const index = await homePageId(owner,folderId);
- if (index) return privacy(await servePage(request, index, hostname, owner), false);
  const [files, styles, user] = await Promise.all([publicHomeFiles(owner,folderId), stylesheets(request.url), owner.kind === 'user' ? getUserById(owner.id) : null]);
  const app=PUBLIC_BASE_URL.replace(/\/+$/,'');
  const profile:ProfileListingData={handle:owner.handle,showFolders:folderId!==undefined,files,...(owner.kind==='user'?{owner:{id:owner.id,image:user && 'image' in user && user.image?`/api/users/${owner.id}/avatar`:null}}:{})};
@@ -276,15 +274,6 @@ export function userHostBoundary(options: UserHostOptions = {}): MiddlewareHandl
       c.res = passed.status === 404 ? notFound() : withoutCookies(passed);
       return;
     }
-    if (path === '/' && readable) return owner?withoutCookies(await home(request, hostname, owner, stylesheets)):notFound();
-    if (readable && owner) {
-      const folderId = /^\/folders\/([A-Za-z0-9]+)\/?$/.exec(path)?.[1];
-      if (folderId) {
-        const folder = await getArtifactById(folderId);
-        if (!folder || folder.format!=='folder' || folder.deleted_at || folder.visibility==='private' || !inSiteScope(owner,folder) || !await hasPublicSiteAncestors(owner,folder)) return notFound();
-        return privacy(await home(request,hostname,owner,stylesheets,folderId),folder.visibility==='unlisted');
-      }
-    }
     if (readable && owner) {
       const bytes = await embedded(request, path, owner);
       if (bytes) {
@@ -316,7 +305,15 @@ export function userHostBoundary(options: UserHostOptions = {}): MiddlewareHandl
       catch (error) { if (error instanceof PayloadTooLarge) return privacy(withReadCors(error.response())); throw error; }
     }
     const segment = /^\/([^/]+)$/.exec(path)?.[1];
-    if (segment && readable) return withoutCookies(await post(request, segment, hostname, owner));
+    if (segment && readable && artifactIdFromSegment(segment)) {
+      const result = await post(request, segment, hostname, owner);
+      if (result.status !== 404) return withoutCookies(result);
+    }
+    if (owner && readable) {
+      const target = await siteDestination(owner,path);
+      if (target?.kind === 'page') return privacy(await servePage(request,target.id,hostname,owner),target.unlisted);
+      if (target?.kind === 'listing') return privacy(await home(request,hostname,owner,stylesheets,target.folderId),target.unlisted);
+    }
     return notFound();
   };
 }
