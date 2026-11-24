@@ -12,6 +12,7 @@ import {refuseEmpty,placeholderProblems,headBaseline,markedBaseline,unmarked,emp
   updateNext} from './toolbox-publish-guard.mjs';
 import {markerOf,stripMarker} from './toolbox-source.mjs';
 import {noteWatchActivity,watchNext} from './toolbox-watch-state.mjs';
+import {groupRefusal} from './toolbox-groups.mjs';
 import {TEMPLATES,applyTemplate,publishConnection,routineChanges} from
   './toolbox-publish-dataset.mjs';
 const media={'.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.svg':'image/svg+xml',
@@ -121,9 +122,6 @@ if(values.visibility)body.visibility=enumValue(values.visibility,['private','unl
  if(values.group!==undefined){
   const detail=await client.request('/api/groups/'+encodeURIComponent(
     values.group.replace(/^@/,'')));
-if(!['editor','admin'].includes(detail.group?.role))throw new ToolError('group_not_editor',
-    'Publishing into a group needs Editor or Admin access in it.',3,
-    'Ask a group Admin for Editor access, or publish without --group.');
   body.destination={type:'group',id:detail.group.id};}
  if(values['dry-run']){
 const report=fixed&&(await import('./preview-html.mjs')).formatAutofixReport(fixed,{file:
@@ -144,7 +142,10 @@ intent.source.output=path.join(path.dirname(file),path.basename(file,
    extension)+'.canonical-'+intent.key.slice(0,8)+(type==='html'?'.html':extension||'.bin'));
  const journal=await createJournal(intent,{file:values.request,root:client.root,project:root});
  const published=await watched(client,await finishPublication(await resumeJournal(journal,client,
-  'publish')),options);
+  'publish').catch(error=>{throw groupRefusal(error,'group_publish_refused','Refused: a Member '+
+   'publishes only new HTML pages; anything else needs a group Admin.',
+   'Ask a group Admin or use --personal. Do not resume this journal.');
+  })),options);
  const notes=[replaced,exported,published.note].filter(Boolean);
  const done={...published,...(notes.length?{note:notes.join(' ')}:{}),next:type==='html'?
   watchNext(published.id):updateNext(name,published.id,type)};

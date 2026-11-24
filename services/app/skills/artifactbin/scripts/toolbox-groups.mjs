@@ -3,6 +3,10 @@
 import {ToolError,toolFailure,toolExit} from './toolbox-client.mjs';
 import {datasetLinks} from './toolbox-check-reply.mjs';
 export const segment=value=>encodeURIComponent(value);
+/** The server alone decides who may create in a group: its refusal, said plainly. */
+export const groupRefusal=(error,code,message,recovery)=>error instanceof ToolError&&
+ error.exit===3&&error.details?.error==='invalid_destination'?
+ new ToolError(code,message,3,recovery,error.details):error;
 export function groupReference(value){
  if(typeof value!=='string'||!/^@?[A-Za-z0-9_]{1,100}$/.test(value))
   throw new ToolError('invalid_group','Use a group ID, handle or @handle.',2);
@@ -11,8 +15,8 @@ export function groupReference(value){
 /** What an editor grant (invite, role or share at editor) gives: its refusal and result say it. */
 export const EDITOR_GRANT='Editors can rewrite pages and their data rules. Group Admins also '+
  'manage members and group-owned sharing. For data entry, use a viewer share with --datasets.';
-export const editorGrant=(sub,role)=>['invite','role','share'].includes(sub)&&
- (role==='editor'||(['invite','role'].includes(sub)&&role==='admin'));
+export const editorGrant=(sub,role)=>sub==='share'&&role==='editor'||
+ ['invite','role'].includes(sub)&&role==='admin';
 export function confirmation(sub,values){
  const editor=editorGrant(sub,values.role);
  if((['remove','leave','move','delete','uninvite','unshare','unlink','reparent','allow','disallow',

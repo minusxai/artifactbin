@@ -8,9 +8,9 @@ Usage: node scripts/groups.mjs list
        node scripts/groups.mjs create HANDLE --name NAME [--description TEXT] [--parent GROUP]
        node scripts/groups.mjs reparent GROUP --parent GROUP|--root --yes
        node scripts/groups.mjs update GROUP [--name NAME] [--description TEXT]
-       node scripts/groups.mjs invite GROUP EMAIL... [--role member|editor|admin] [--yes]
+       node scripts/groups.mjs invite GROUP EMAIL... [--role member|admin] [--yes]
        node scripts/groups.mjs uninvite GROUP EMAIL --yes
-       node scripts/groups.mjs role GROUP USER --role member|editor|admin [--yes]
+       node scripts/groups.mjs role GROUP USER --role member|admin [--yes]
        node scripts/groups.mjs remove GROUP USER --yes
        node scripts/groups.mjs leave GROUP --yes
        node scripts/groups.mjs share PAGE --group GROUP [--role viewer|commenter|editor]
@@ -32,7 +32,7 @@ Gotchas: GROUP accepts ID/handle/@handle; USER must match one member. Only admin
   Bulk invites can partially fail. Share keeps ownership; move transfers descendants.
   Links navigate. --datasets shares as viewer; row rules govern writes. Confirm --yes with the
   user (references/groups.md). Omit GROUP to browse as the signed group; page with --cursor.
-  Private folders require Editor/Admin; use the returned ID for publish --parent.
+  Private folders require Admin; use the returned ID for publish --parent.
   --request is exclusive; resume replays it unchanged. Folder --parent accepts a local ID/URL.
   Nested groups inherit parent shares. Delete requires empty/nondefault, no children, exact handle.
   Read state before retrying other uncertain writes. Approve (Admin): tell the user the statement
@@ -82,7 +82,7 @@ async function command({sub,values,positionals},options){
  if(['invite','role','share'].includes(sub)){
   if(sub==='role')requireFlags(values,['role']);
   role=enumValue(values.role??(sub==='share'?'viewer':'member'),sub==='share'?
-  ['viewer','commenter','editor']:['member','editor','admin'],'role');
+  ['viewer','commenter','editor']:['member','admin'],'role');
  }
  if(values.datasets&&role==='editor')throw new ToolError('datasets_editor',
   '--datasets shares the linked datasets at viewer: a dataset editor bypasses its rules.',2,

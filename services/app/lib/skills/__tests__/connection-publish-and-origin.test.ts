@@ -20,7 +20,7 @@ async function connectionFile(work:(file:string)=>Promise<void>){
 const recording=()=>{const calls:{method:string;url:string}[]=[];return {calls,fetcher:async(url:any,init:any)=>{
  calls.push({method:init?.method??'GET',url:String(url)});
  if(String(url).endsWith('/api/connections'))return Response.json({connectors:[{id:'postgres',fields:[{name:'password',secret:true}]}]});
- if(String(url).includes('/api/groups/'))return Response.json({group:{id:'grp_team',handle:'team',role:'editor'}});
+ if(String(url).includes('/api/groups/'))return Response.json({group:{id:'grp_team',handle:'team',role:'admin'}});
  return Response.json({id:'CONN12',url:server+'/a/CONN12'},{status:201});
 }};};
 

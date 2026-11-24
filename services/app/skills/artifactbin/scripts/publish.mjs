@@ -9,7 +9,8 @@ Flags: --create creates new work; HTML marked for this server instead needs an u
   --root DIR: project boundary (default source directory/marker root); --title T;
   --visibility private|unlisted|public (new work defaults unlisted).
   --template read-only|own-rows|editors-only [--owner-column C] sets new dataset permissions
-  (prints readBack). --group GROUP needs Editor/Admin; --personal overrides the default group.
+  (prints readBack). --group GROUP: Members publish new HTML pages, Admins anything;
+  --personal overrides the default group.
   Omit both for account default. --parent FOLDER accepts an ID or
   same-origin /a/ID URL for new work; conflicting ownership is refused.
   Updates preserve filing/owner and reject destination/parent flags; connections reject parent.
