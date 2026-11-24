@@ -17,7 +17,8 @@ export async function groupFolders({sub,values,positionals},options){
    {...options,retryDelays:[]});
   journal=values.resume;
  }else{
-  groupReference(positional(positionals));
+  const current=sub==='collection'&&positionals.length===0;
+  if(!current)groupReference(positional(positionals));
   const server=serverOrigin(selectedServer(values,options.env));
   const parent=values.parent===undefined?undefined:resolveTarget(values.parent,server).id;
   if(values.limit!==undefined)integer(values.limit,'limit',1,100);
@@ -26,8 +27,8 @@ export async function groupFolders({sub,values,positionals},options){
    ...(parent!==undefined?{parent_id:parent}:{})}):null;
   client=makeClient(server,{...options,retryDelays:[]});
   const signedGroup=(options.env??process.env).ARTIFACTBIN_AS_GROUP;
-  const group=sub==='collection'&&positionals[0]===signedGroup
-   ?{id:signedGroup}:(await resolveGroup(client,positionals[0])).group;
+  const directId=current?'~':sub==='collection'&&positionals[0]===signedGroup?signedGroup:null;
+  const group=directId?{id:directId}:(await resolveGroup(client,positionals[0])).group;
   if(sub==='collection'){
    const query=new URLSearchParams();
    if(parent!==undefined)query.set('parent_id',parent);

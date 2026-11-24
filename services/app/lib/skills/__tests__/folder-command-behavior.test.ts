@@ -137,6 +137,6 @@ it('fresh candidate archive executes the real folder-create parser and helper',a
   expect(received[1].body).toEqual({format:'folder',title:'Notes',visibility:'private',
    destination:{type:'group',id:'grp_team'}});
   const help=await run(process.execPath,['scripts/groups.mjs','--help'],{cwd,env:commandEnv});
-  expect(help.stdout).toContain('collection GROUP');expect(help.stdout).toContain('folder-create');
+  expect(help.stdout).toContain('collection [GROUP]');expect(help.stdout).toContain('folder-create');
  }finally{await fixture.close();}
 }));

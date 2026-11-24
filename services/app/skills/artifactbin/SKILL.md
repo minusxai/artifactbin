@@ -25,7 +25,7 @@ link the user asked for plus what they asked, in the form they asked for; a form
 limits its text, never the watch.
 Describe testing, build and permissions only from what `check` reported.
 
-Skill map (each file's top comment explains it):
+Skill map:
 
 - `examples/`: deck.html (deck-steps.mjs); tracker.html (tracker-features, -steps, -guest,
   -cleanup .mjs); csv-dashboard.html/.mjs, codebase-report.html (+ -steps.mjs); report.html;
@@ -37,7 +37,7 @@ dataviz, diagrams, maps, groups
 - `components/`: `af-*` element sources (`head -30` each); `design-systems/`: CSS the platform
   serves (read only its header: the shared tokens)
 
-A page is a normal HTML file. Use ordinary HTML, CSS, JavaScript, SVG and chosen browser libraries.
+Pages use HTML, CSS, JavaScript, SVG and browser libraries.
 Import `@afbin/state`, `@afbin/apollo` (`sql`) and every hosted library as `@afbin/<name>`
 (`vega`, `vega-lite`, `pele-*`, `deck-gl`, `three`, `highlight`) and the optional components below
 the same way; that prefix is reserved. `@afbin/highlight` exports `highlightAll(root)` for `pre >
@@ -238,14 +238,15 @@ Analytical charts are `af-chart`; maps and diagrams use the libraries directly:
 
 ## Sharing and access
 
-To find an artifact while signed in as a group, run
-`node scripts/groups.mjs collection "$ARTIFACTBIN_AS_GROUP"`. Match titles, follow folder IDs with
-`--parent` and additional pages with `--cursor`, then read it with `node scripts/read.mjs ID`.
+Find existing group artifacts with `node scripts/groups.mjs collection`.
+Match titles, follow folders with `--parent` and pages with `--cursor`, and read matches with
+`node scripts/read.mjs ID`. Return matching links or say none matched. If listing fails,
+report the lookup failure. Ask before creating a replacement.
 
-A link never carries your login: whoever opens it signs in as themselves. Group, sharing and
-ownership changes alone need no comment watch. Visibility only controls who can read; editing,
-comments and dataset writes are separate permissions. A receipt's `user_page_url` is an anonymous
-read-only copy ([groups](references/groups.md#public-view-receipts)).
+Links open as their reader. Group, sharing and ownership changes need no comment watch. Visibility
+governs reads; edits, comments and dataset writes have separate permissions. A receipt's
+`user_page_url` is an anonymous read-only copy
+([groups](references/groups.md#public-view-receipts)).
 
 - Who can read. Unlisted (the default): anyone with the link, signed out too, sees all the page
   shows (a `signed_in` role still admits any signed-in link holder). `--visibility private`: only
