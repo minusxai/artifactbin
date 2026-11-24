@@ -25,7 +25,10 @@ const fields=`a.id,a.title,a.format,a.user_id,a.group_id,a.token_id,a.visibility
 const sign=(payload:string)=>createHmac('sha256',AUTH_SECRET).update('group-collection\0'+payload).digest('base64url');
 const invalid=()=>new GroupError('invalid_cursor',400);
 
-export async function groupCollectionFor(actor:AccessActor,groupId:string,input:GroupCollectionInput={}):Promise<GroupCollection>{
+export async function groupCollectionFor(actor:AccessActor,reference:string,input:GroupCollectionInput={}):Promise<GroupCollection>{
+ // The group credential itself supplies the scope when the caller has no group ID.
+ const groupId=reference==='~'?actor.principalGroup?.id:reference;
+ if(!groupId)throw new GroupError('not_found',404);
  const db=await getDb();
  if(!await actorGroupRole(actor,groupId,db))throw new GroupError('not_found',404);
  const chain=await groupChain(db,groupId);

@@ -42,6 +42,14 @@ it('browses only the signed group collection with the group’s own access',asyn
   fetcher:(url:string,init:RequestInit)=>host.fetch(new Request(url,init)),
  });
  expect(result).toEqual(own.body);
+ // A chat mounts the group-scoped token in the default credential file.
+ await saveCredentials({server:origin,token:agent.token},home);
+ const chat=await groupsCommand({sub:'collection',positionals:[],values:{}},{
+  env:{ARTIFACTBIN_HOME:home,ARTIFACTBIN_URL:origin},
+  fetcher:(url:string,init:RequestInit)=>host.fetch(new Request(url,init)),
+ });
+ expect(chat).toEqual(own.body);
+ expect((await host.call('GET','/api/groups/~/collection',eve.token)).status).toBe(404);
 });
 
 it('default deny: every route a bearer reaches that the admission list does not name refuses a group agent with the one code, and every named one admits it',async()=>{

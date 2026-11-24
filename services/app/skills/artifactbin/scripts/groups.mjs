@@ -2,7 +2,7 @@
 export const DESCRIPTION = `Groups: members, sharing, ownership, folders and links.
 Usage: node scripts/groups.mjs list
        node scripts/groups.mjs show GROUP [--pages] [--cursor CURSOR]
-       node scripts/groups.mjs collection GROUP [--parent FOLDER] [--cursor CURSOR] [--limit N]
+       node scripts/groups.mjs collection [GROUP] [--parent FOLDER] [--cursor CURSOR] [--limit N]
        node scripts/groups.mjs folder-create GROUP --title TITLE [--parent FOLDER] [--request FILE]
        node scripts/groups.mjs folder-create --resume JOURNAL
        node scripts/groups.mjs create HANDLE --name NAME [--description TEXT] [--parent GROUP]
@@ -31,7 +31,7 @@ Gotchas: GROUP resolves ID/handle/@handle once; USER matches a unique member ID/
   Invite/uninvite use email; admins see invitations. Bulk invites may partially fail.
   Share keeps ownership; move transfers descendants; links navigate. --datasets shares at
   viewer; row rules decide writes. --yes needs conversational consent (references/groups.md).
-  collection returns one page/next_cursor; root omits parent; listing grants no writes.
+  collection without GROUP uses the group signed in. Follow next_cursor or --parent for a folder.
   folder-create needs Editor/Admin, creates private folders and returns publish --parent's ID.
   --request is exclusive; resume replays unchanged. Folder --parent accepts same-origin ID/URL;
   create --parent nests groups inheriting parent shares. Delete needs empty/nondefault group,
