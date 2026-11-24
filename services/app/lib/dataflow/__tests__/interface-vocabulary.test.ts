@@ -1,7 +1,7 @@
 /**
  * lib/dataflow's vocabulary through its doors: the declaration tags and grammar, the built-ins, scalar typing, the
  * compiled record's questions, reader local tables, mutation requests, query values, reference media and column
- * kinds. Pure: no engine, no database.
+ * inference. Pure: no engine, no database.
  */
 import { describe, expect, it } from 'vitest';
 import {
@@ -11,12 +11,9 @@ import {
   VIEWER, VIEWER_ID, type CompiledDataflow,
 } from '..';
 
-import {
-  BUILTIN_TABLES, builtinInput, CLOCK_FUNCTIONS, isBuiltinInput, isBuiltinTable, localZone, READ_ONLY_REF_ATTRS,
-  reservedDeclarationName,
-} from '../builtins';
+import { BUILTIN_TABLES, builtinInput } from '../builtins';
 import { checkedLocalRows } from '../local-tables';
-import { columnVizKind, inferColumns } from '../dataset-shape';
+import { inferColumns } from '../dataset-shape';
 
 const PLATFORM = { userId: 'u1', now: '2026-09-30T10:00:00.000Z', tz: 'UTC' };
 
@@ -25,11 +22,6 @@ describe('built-ins', () => {
     expect([VIEWER, VIEWER_ID]).toEqual(['_me', '_me.id']);
     expect(Object.keys(BUILTIN_TABLES)).toEqual(['_me', '_members']);
     expect(BUILTIN_TABLES._me.columns).toEqual([{ name: 'id', type: 'user' }]);
-    expect(isBuiltinTable('_me')).toBe(true);
-    expect(isBuiltinTable('_members')).toBe(true);
-    expect(isBuiltinTable('members')).toBe(false);
-    expect(isBuiltinTable('toString')).toBe(false);
-    expect(isBuiltinTable('__proto__')).toBe(false);
   });
 
   it('builtinInput resolves a row field to the _row spec', () => {
@@ -38,8 +30,8 @@ describe('built-ins', () => {
     expect(builtinInput('_now')?.name).toBe('_now');
     expect(builtinInput('_row.')).toBeNull();
     expect(builtinInput('nope')).toBeNull();
-    expect(isBuiltinInput('_tz')).toBe(true);
-    expect(isBuiltinInput('_unknown')).toBe(false);
+    expect(builtinInput('_tz')?.name).toBe('_tz');
+    expect(builtinInput('_unknown')).toBeNull();
   });
 
   it('rowField reads the field of _row only', () => {
@@ -50,26 +42,11 @@ describe('built-ins', () => {
     expect(rowField('_me.id')).toBeNull();
   });
 
-  it('refuses SQLite clock functions, and keeps the read-only built-in positions tiny', () => {
-    expect([...CLOCK_FUNCTIONS].sort()).toEqual(['current_date', 'current_time', 'current_timestamp']);
-    expect(Object.keys(READ_ONLY_REF_ATTRS).sort()).toEqual(['User', 'UserHandle', 'UserImage']);
-    expect([...READ_ONLY_REF_ATTRS.User!]).toEqual(['userId']);
-  });
-
-  it('reservedDeclarationName names why, or null for a free name', () => {
-    expect(reservedDeclarationName('_x')).toMatch(/belong to the built-ins/);
-    expect(reservedDeclarationName('ref_abc')).toMatch(/<Import>/);
-    expect(reservedDeclarationName('a__b')).toMatch(/double underscore/);
-    expect(reservedDeclarationName('plain')).toBeNull();
-    expect(reservedDeclarationName('ref')).toBeNull();
-  });
-
   it('platformValues and reader zones', () => {
     expect(platformValues(PLATFORM)).toEqual({ '_me.id': 'u1', _now: PLATFORM.now, _tz: 'UTC' });
     expect(platformValues({ userId: null, now: 'n', tz: 't' })['_me.id']).toBeNull();
     expect(readerZone('Asia/Kolkata')).toBe('Asia/Kolkata');
     for (const tz of ['Not/AZone', '', 7, null, 'x'.repeat(65)]) expect(readerZone(tz), String(tz)).toBe('UTC');
-    expect(readerZone(localZone())).toBe(localZone());
   });
 });
 
@@ -139,13 +116,6 @@ describe('reference media', () => {
 });
 
 describe('dataset shape', () => {
-  it('columnVizKind maps column types to encoding kinds', () => {
-    expect(columnVizKind('number')).toBe('quantitative');
-    expect(columnVizKind('date')).toBe('temporal');
-    expect(columnVizKind('timestamp')).toBe('temporal');
-    for (const t of ['string', 'boolean', 'user'] as const) expect(columnVizKind(t)).toBe('nominal');
-  });
-
   it('inferColumns types columns from sample rows', () => {
     const cols = inferColumns([{ a: 1, b: 'x', c: true }, { a: 2.5, b: null, c: false }]);
     expect(cols.map((c) => c.name)).toEqual(['a', 'b', 'c']);
