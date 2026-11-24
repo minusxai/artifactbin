@@ -7,17 +7,20 @@ import {ToolError,serverOrigin,credentialRoot,platform,jsonFile,safeParent,
   within} from './toolbox-client.mjs';
 
 const invalid=()=>new ToolError('invalid_folder_request',
- 'Private group folders need a nonblank title (max 200).',2);
+ 'Folders need a nonblank title (max 200).',2);
 /** Validate the entire replayable body; no other artifact kind or write field is accepted. */
 export function folderBody(body){
  if(!body||Array.isArray(body)||typeof body!=='object'||
  Object.keys(body).some(key=>!['format','title','visibility',
  'destination','parent_id'].includes(key))||
- body.format!=='folder'||body.visibility!=='private'||typeof body.title!=='string'||
- !body.title.trim()||body.title.length>200||!body.destination||
- Object.keys(body.destination).sort().join(',')!=='id,type'||body.destination.type!=='group'||
- typeof body.destination.id!=='string'||!body.destination.id)throw invalid();
- if(!/^[A-Za-z0-9_]{1,100}$/.test(body.destination.id))throw invalid();
+ body.format!=='folder'||typeof body.title!=='string'||!body.title.trim()||
+ body.title.length>200||!body.destination)throw invalid();
+ const dest=body.destination;
+ if(dest.type==='personal'){
+  if(Object.keys(dest).length!==1||!['public','private'].includes(body.visibility))throw invalid();
+ }else if(dest.type!=='group'||Object.keys(dest).sort().join(',')!=='id,type'||
+  body.visibility!=='private'||typeof dest.id!=='string'||!/^[A-Za-z0-9_]{1,100}$/.test(dest.id))
+  throw invalid();
  if(body.parent_id!==undefined&&(!/^[A-Za-z0-9]{6,12}$/.test(body.parent_id)||
  typeof body.parent_id!=='string'))throw invalid();
  return body;

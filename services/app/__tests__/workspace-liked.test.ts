@@ -1,4 +1,6 @@
 import { expect, it } from 'vitest';
+import { attachActor } from '@artifactbin/utils';
+import { GET as agentInventory } from '@/app/api/me/workspace/route';
 import { GET } from '@/app/api/page/home/route';
 import { createUser } from '@/lib/accounts';
 import { link, unlink } from '@/lib/social';
@@ -25,6 +27,16 @@ it('lists only my live readable liked pages across owners in last-liked order', 
   for (const id of ['public1','shared1','link01']) await link(reader.id, 'like', id);
   await link(owner.id, 'like', 'other1');
   expect(await listed()).toEqual(['link01','shared1','public1']);
+  const readerToken=await mintAccountToken('reader',reader.id);
+  const inventory=async(part:string,identity=readerToken)=>{
+    const req=request('/api/me/workspace?part='+part,{token:identity.token});
+    const trusted=attachActor(req,{credential:'bearer',userId:identity.userId!,tokenId:identity.id,email:identity.email!,emailVerified:true});
+    return (await (await agentInventory(trusted)).json()).artifacts;
+  };
+  expect((await inventory('liked')).map((row:{id:string})=>row.id)).toEqual(await listed());
+  expect(await inventory('shared')).toMatchObject([{id:'shared1',role:'viewer'}]);
+  expect(await inventory('shared',token)).toEqual([]);
+  expect((await agentInventory(request('/api/me/workspace?part=liked'))).status).toBe(401);
   await unlink(reader.id, 'like', 'public1');
   await link(reader.id, 'like', 'public1');
   expect(await listed()).toEqual(['public1','link01','shared1']);

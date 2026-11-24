@@ -2,6 +2,11 @@
 export const DESCRIPTION = `Read an artifact as JSON, or save its editable source with --output.
 Usage: node scripts/read.mjs ID|URL [--version N] [--output FILE]
        node scripts/read.mjs list [--limit N] [--cursor CURSOR]
+       node scripts/read.mjs liked [--search TEXT] [--visibility public|unlisted|private]
+       node scripts/read.mjs shared [--search TEXT] [--owner HANDLE] [--permission ROLE]...
+                                    [--from DAY] [--to DAY]
+  list filters: --type artifact|folder|dataset|file --relationship owned|shared|all
+                --search TEXT --parent FOLDER
 Flags: --version N reads a saved version (a page read from one cannot be published back);
   --output FILE saves the editable source (even with --json): a page with its af-authoring
   marker as the last line, which publish reads; list takes --limit 1-100 (default 20) and
@@ -20,6 +25,7 @@ Gotchas: --output onto a page file still unchanged since its read or publish ref
 Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write outcome.
   Results never contain credentials.`;
 
+import {workspaceList} from './toolbox-website.mjs';
 import path from 'node:path';
 import {
   runTool,
@@ -37,11 +43,17 @@ import {updateNext} from './toolbox-publish-guard.mjs';
 // read list pages through your artifacts; read ID returns the record, or saves the editable
 // source with --output.
 export async function readCommand({sub = undefined, values, positionals}, options = {}) {
+  if (sub==='liked'||sub==='shared'){
+    positional(positionals,0);
+    return workspaceList(sub,values,makeClient(selectedServer(values,options.env),options));
+  }
   if (sub === 'list') {
     positional(positionals, 0);
     const client = makeClient(selectedServer(values, options.env), options),
       query = new URLSearchParams();
     if (values.limit) query.set('limit', String(integer(values.limit, 'limit', 1, 100)));
+    for(const key of ['type','relationship','search'])if(values[key])query.set(key,values[key]);
+    if(values.parent)query.set('parent_id',resolveTarget(values.parent,client.server).id);
     if (values.cursor) query.set('cursor', values.cursor);
     return await client.request('/api/artifacts?' + query);
   }

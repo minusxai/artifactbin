@@ -33,7 +33,7 @@ Skill map:
 - `scripts/`: publish, check, read, comment, events, doc, groups, sql, policy, export, auth,
   autofix, serve, new-app, new-page, new-codebase-report, update
 - `references/`: guides (read those you need): runtime, page-apps, datasets, permissions,
-  dataviz, diagrams, maps, groups, live-docs
+  dataviz, diagrams, maps, groups, website, live-docs
 - `components/`: `af-*` element sources (`head -30` each); `design-systems/`: CSS the platform
   serves (read only its header: the shared tokens)
 
@@ -77,6 +77,7 @@ Every script takes `--help` (usage, flags, examples, gotchas), `--json` and an e
 FILE`; all but `serve.mjs` take `--server ORIGIN`. Use these scripts, never shell-built HTTP
 wrappers; they reuse the saved sign-in (`node scripts/auth.mjs status` shows it). Dataset
 permissions: `policy.mjs`. Never ask for a secret in chat. ACLs and trash have no script.
+Personal folders, website aliases, liked posts and shared filters: [website](references/website.md).
 Groups: `node scripts/groups.mjs list` ([groups](references/groups.md)). Events beyond one page's
 comments (every page you may see): `node scripts/events.mjs watch --help`.
 

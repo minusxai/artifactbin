@@ -70,7 +70,7 @@ it('rejects malformed, foreign and tampered folder journals without HTTP',async(
  for(const changed of [{server:'https://other.test'},{method:'PUT'},{path:'/api/groups'},
   {operation:'publish'},{body:{...body,html:'<p>injected</p>'}},
   {body:{...body,parent_id:'https://other.test/a/FOLD12'}},
-  {body:{...body,visibility:'public'}},{body:{...body,destination:{type:'personal'}}},
+  {body:{...body,visibility:'public'}},{body:{...body,destination:{type:'personal',id:'unexpected'}}},
   {body:[]},{source:{file:'/tmp/page.html'}},{key:'bad'}]){
   await writeFile(file,JSON.stringify({...intent,...changed}));
   await expect(groupsCommand({sub:'folder-create',positionals:[],values:{resume:file}},options))

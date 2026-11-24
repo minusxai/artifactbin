@@ -41,7 +41,11 @@ const commands = {
       resume: flag()
     }
   },
-  read: {flags: {version: flag()}, sub: {list: {cursor: flag(), limit: flag()}}},
+  read: {flags: {version: flag()}, sub: {list: {cursor: flag(), limit: flag(),
+    type: flag(), relationship: flag(), search: flag(), parent: flag()},
+    liked: {search: flag(), visibility: flag()},
+    shared: {search: flag(), owner: flag(), permission: flag('string', true),
+      from: flag(), to: flag()}}},
   export: {flags: {format: flag(), slide: flag(), element: flag()}},
   check: {
     flags: {
@@ -65,7 +69,10 @@ const commands = {
   groups: {sub: {
     list: {}, show: {pages: flag('boolean'), cursor: flag()},
     collection: {parent: flag(), cursor: flag(), limit: flag()},
-    'folder-create': {title: flag(), parent: flag(), request: flag(), resume: flag()},
+    website: {}, 'site-set': {alias: flag(), expected: flag()}, 'site-remove': {expected: flag()},
+    place: {parent: flag()},
+    'folder-create': {personal: flag('boolean'), visibility: flag(), title: flag(), parent: flag(),
+      request: flag(), resume: flag()},
     create: {name: flag(), description: flag(), parent: flag()},
     update: {name: flag(), description: flag()},
     reparent: {parent: flag(), root: flag('boolean'), yes: flag('boolean')},

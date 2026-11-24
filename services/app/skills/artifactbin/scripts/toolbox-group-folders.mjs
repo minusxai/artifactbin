@@ -18,17 +18,20 @@ export async function groupFolders({sub,values,positionals},options){
   journal=values.resume;
  }else{
   const current=sub==='collection'&&positionals.length===0;
-  if(!current)groupReference(positional(positionals));
+  if(values.personal)positional(positionals,0);
+  else if(!current)groupReference(positional(positionals));
   const server=serverOrigin(selectedServer(values,options.env));
   const parent=values.parent===undefined?undefined:resolveTarget(values.parent,server).id;
   if(values.limit!==undefined)integer(values.limit,'limit',1,100);
   const body=sub==='folder-create'?folderBody({format:'folder',title:values.title,
-   visibility:'private',destination:{type:'group',id:'pending'},
+   visibility:values.visibility??'private',destination:values.personal?{type:'personal'}:
+   {type:'group',id:'pending'},
    ...(parent!==undefined?{parent_id:parent}:{})}):null;
   client=makeClient(server,{...options,retryDelays:[]});
   const signedGroup=(options.env??process.env).ARTIFACTBIN_AS_GROUP;
   const directId=current?'~':sub==='collection'&&positionals[0]===signedGroup?signedGroup:null;
-  const group=directId?{id:directId}:(await resolveGroup(client,positionals[0])).group;
+  const group=values.personal?null:directId?{id:directId}:
+   (await resolveGroup(client,positionals[0])).group;
   if(sub==='collection'){
    const query=new URLSearchParams();
    if(parent!==undefined)query.set('parent_id',parent);
@@ -36,12 +39,13 @@ export async function groupFolders({sub,values,positionals},options){
    return client.request('/api/groups/'+segment(group.id)+'/collection'+
     (query.size?'?'+query:''));
   }
-  body.destination.id=group.id;
+  if(group)body.destination.id=group.id;
   journal=await createJournal(journalIntent({server,method:'POST',path:'/api/artifacts',
    operation:'folder-create',body}),{file:values.request,root:client.root,
     project:options.project??process.cwd()});
  }
  const {receipt}=await resumeJournal(journal,client,'folder-create').catch(error=>{
+  if(values.personal)throw error;
   throw groupRefusal(error,'group_folder_refused','A group folder needs Admin access.',
    'Ask a group Admin. Do not resume this journal.');});
  if(typeof receipt?.id!=='string'||!/^[A-Za-z0-9]{6,12}$/.test(receipt.id)||

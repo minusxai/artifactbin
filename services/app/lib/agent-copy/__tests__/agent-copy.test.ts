@@ -63,3 +63,16 @@ it('discovers and ships the same bounded groups guide and command resources',asy
  expect(files['scripts/groups.mjs']).toContain('export const DESCRIPTION');
  expect(files['scripts/toolbox-groups.mjs']).toBeDefined();
 });
+
+it('discovers website and workspace HTTP operations and packs the corresponding commands',async()=>{
+ const {publicGuideText,llmsText}=await import('..');
+ const {skillTree,skillPackageFiles}=await import('@/lib/skills');
+ const base='https://example.test';
+ expect(llmsText(base)).toContain(base+'/llms/website');
+ const files=skillPackageFiles(skillTree(),base);
+ for(const guide of [files['references/website.md'],publicGuideText('website',base)]){
+  expect(guide).toContain('GET /api/my/website');
+  expect(guide).toContain('GET /api/me/workspace?part=liked');
+ }
+ expect(files['scripts/toolbox-website.mjs']).toBeDefined();
+});
