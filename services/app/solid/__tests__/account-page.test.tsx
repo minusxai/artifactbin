@@ -39,6 +39,21 @@ it('loads the account handle late while keeping profile controls without the ret
   expect(screen.getByRole('link',{name:'HTTP authentication guide'})).toHaveAttribute('href','/llms/http-auth');
 });
 
+it('checks normalized handles and reserved names before enabling save', async () => {
+  stubAccountFetch();
+  window.history.replaceState(null, '', '/account');
+  render(() => <App />);
+  const input = await screen.findByRole('textbox', {name:'Username'});
+  const save = screen.getByRole('button', {name:'Save username'});
+  for (const value of ['team__one', ' APP ', '_team', 'xy', 'x'.repeat(33)]) {
+    fireEvent.input(input, {target:{value}});
+    expect(save).toBeDisabled();
+    expect(input).toHaveAttribute('aria-invalid','true');
+  }
+  fireEvent.input(input, {target:{value:'  Team_One  '}});
+  expect(save).toBeEnabled();
+});
+
 it('suggests an available label within the combined DNS budget and keeps it editable', async () => {
   const owner='a'.repeat(32),budget=63-owner.length-2,stem='b'.repeat(budget);
   const folders=['B'.repeat(80),'✨','  Mixed __ - Notes! '].map((title,i)=>({id:'f'+i,title,ancestor_ids:[]}));

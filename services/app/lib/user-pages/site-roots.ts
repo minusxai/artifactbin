@@ -44,8 +44,12 @@ export async function saveSiteRoot(userId:string, label:string, folderId:string|
   });
 }
 
-export async function deleteSiteRoot(userId:string,label:string) {
-  await (await getDb()).query("DELETE FROM user_site_roots WHERE user_id=$1 AND subdomain_label=$2 AND subdomain_label<>''",[userId,label]);
+export async function deleteSiteRoot(userId:string,label:string,expectedFolderId?:string|null) {
+  const result = await (await getDb()).query(`DELETE FROM user_site_roots
+    WHERE user_id=$1 AND subdomain_label=$2 AND subdomain_label<>''
+      AND ($3::boolean OR folder_id IS NOT DISTINCT FROM $4::text) RETURNING user_id`,
+    [userId,label,expectedFolderId===undefined,expectedFolderId??null]);
+  return expectedFolderId===undefined || result.rows.length>0;
 }
 
 export function siteAddress(host:string, base=USER_PAGES_HOST) {

@@ -47,7 +47,7 @@ export function WebsiteSettings(props:{url:string}) {
       if(result.ok){await settings.refresh(true);setEditing(null);return true;}
       if(result.status===409){
         await settings.refresh(true);
-        setError(editing()==='new'?'This label is taken. Choose another label.':'This mapping changed. Close the picker and choose the folder again.');
+        setError(method==='DELETE'?'This mapping changed. Review its current folder before removing it.':editing()==='new'?'This label is taken. Choose another label.':'This mapping changed. Close the picker and choose the folder again.');
         return false;
       }
     } catch { /* Network failures can be retried in the picker. */ }
@@ -62,7 +62,7 @@ export function WebsiteSettings(props:{url:string}) {
             <a class="break-all text-accent" href={url(root.subdomain_label)}>{url(root.subdomain_label)}</a>
             <p class="text-sm text-muted">{root.folder_id ? folders().find(f=>f.id===root.folder_id)?.title ?? 'Unavailable folder' : data().roots.includes(root) ? 'Workspace' : 'All public pages'}</p></div>
             <Button variant="secondary" onClick={()=>{setError('');setEditing({...root,expected:data().roots.includes(root)?root.folder_id:undefined});}}>Choose folder</Button>
-            <Show when={root.subdomain_label}><Button variant="ghost" onClick={()=>void change('DELETE',root)}>Remove</Button></Show>
+            <Show when={root.subdomain_label}><Button variant="ghost" onClick={()=>void change('DELETE',root,root.folder_id)}>Remove</Button></Show>
           </div>}</For>
         <Button disabled={limit()<1} onClick={()=>{setEditing('new');suggest(null);}}>Add subdomain</Button>
       </>}</Show>

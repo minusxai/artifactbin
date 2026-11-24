@@ -1,4 +1,5 @@
 /* @jsxImportSource solid-js */
+import {handleInputError} from '../lib/handle-input';
 import { retryingFetch } from '@/lib/http/retry-lazily';
 import { createEffect, createSignal, onCleanup, Show, type JSX } from 'solid-js';
 import { Navigate } from '@solidjs/router';
@@ -36,6 +37,7 @@ export function WelcomePage(): JSX.Element {
     onCleanup(() => { alive = false; });
   });
   const confirm = async () => {
+    if (handleInputError(username())) return;
     setBusy(true); setStatus(null);
     const response = await apiFetch('/api/my/profile', 'PATCH', { username: username(), welcome_pending: false }).catch(() => null);
     setBusy(false);
@@ -51,11 +53,11 @@ export function WelcomePage(): JSX.Element {
         <PageHeader title="Welcome to artifactbin" description="Choose a handle for your profile and the documents you share." />
         <div class="mt-6"><AvatarCircle image={image()} initial={username() || 'a'} userId={session()?.user?.id ?? ''} onChange={setImage} /></div>
         <form class="mt-6" onSubmit={event => { event.preventDefault(); void confirm(); }}>
-          <Field label="Handle">
+          <Field label="Handle" error={username() ? handleInputError(username()) : undefined}>
             <div class="flex items-center gap-2"><span class="w-4 text-center font-mono text-sm text-muted">@</span><Input aria-label="Username" autocomplete="off" spellcheck={false} value={username()} onInput={event => setUsername(event.currentTarget.value)} class="min-w-0 flex-1" /></div>
           </Field>
           <Show when={status()}><StatusMessage kind="error" class="mt-2 ml-6">{status()}</StatusMessage></Show>
-          <div class="mt-6"><Button type="submit" disabled={busy() || !username().trim()} class="w-full">{busy() ? 'Saving…' : 'Confirm'}</Button></div>
+          <div class="mt-6"><Button type="submit" disabled={busy() || !!handleInputError(username())} class="w-full">{busy() ? 'Saving…' : 'Confirm'}</Button></div>
         </form>
       </FormPage>
     </Show>

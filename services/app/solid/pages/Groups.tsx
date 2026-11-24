@@ -1,4 +1,5 @@
 /* @jsxImportSource solid-js */
+import {handleInputError} from '../lib/handle-input';
 import { createSignal, For, Show, type JSX } from 'solid-js';
 import type { GroupDetail, GroupSummary } from '@artifactbin/contracts/groups';
 import Users from 'lucide-solid/icons/users';
@@ -15,12 +16,12 @@ import { Badge } from '../ui/ui';
 
 export function CreateGroup(props:{created:(group:GroupSummary)=>void}):JSX.Element {
  const [name,setName]=createSignal('');const [handle,setHandle]=createSignal('');const [error,setError]=createSignal('');const [busy,setBusy]=createSignal(false);
- return <form class="group-create-form" onSubmit={async e=>{e.preventDefault();if(busy())return;setBusy(true);setError('');try{const result=await apiRequest<GroupDetail|GroupSummary>('/api/groups','POST',{name:name(),handle:handle()});props.created('group' in result?result.group:result);}catch(err){setError(err instanceof Error?err.message:'Could not create group.');}finally{setBusy(false);}}}>
+ return <form class="group-create-form" onSubmit={async e=>{e.preventDefault();if(busy() || handleInputError(handle()))return;setBusy(true);setError('');try{const result=await apiRequest<GroupDetail|GroupSummary>('/api/groups','POST',{name:name(),handle:handle()});props.created('group' in result?result.group:result);}catch(err){setError(err instanceof Error?err.message:'Could not create group.');}finally{setBusy(false);}}}>
   <div><SectionHeading>Create a group</SectionHeading><p class="mt-2 text-sm leading-relaxed text-muted">A shared place for your team’s files, folders and people.</p></div>
   <Field label="Group name"><Input required placeholder="e.g. Design team" value={name()} onInput={e=>setName(e.currentTarget.value)}/></Field>
-  <Field label="Group handle" hint={<span class="break-all">Your group’s address: /@{handle()||'group_handle'}</span>}><Input required placeholder="e.g. design_team" value={handle()} onInput={e=>setHandle(e.currentTarget.value)}/></Field>
+  <Field label="Group handle" error={handle() ? handleInputError(handle()) : undefined} hint={<span class="break-all">Your group’s address: /@{handle()||'group_handle'}</span>}><Input required placeholder="e.g. design_team" value={handle()} onInput={e=>setHandle(e.currentTarget.value)}/></Field>
   <Show when={error()}><StatusMessage kind="error">{error()}</StatusMessage></Show>
-  <Button type="submit" disabled={busy()}><Plus size={16} aria-hidden="true"/>{busy()?'Creating…':'Create group'}</Button>
+  <Button type="submit" disabled={busy() || !!handleInputError(handle())}><Plus size={16} aria-hidden="true"/>{busy()?'Creating…':'Create group'}</Button>
  </form>;
 }
 export function GroupsPage():JSX.Element {

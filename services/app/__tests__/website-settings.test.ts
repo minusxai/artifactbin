@@ -20,6 +20,10 @@ it('saves only live personal folders for the current account, with a unique row 
   expect((await put('x'.repeat(52),null)).status).toBe(400);
   expect((await put('notes',null,null)).status).toBe(409);
   expect((await put('notes',null,'folder1')).status).toBe(200);
+  const staleRemove = await DELETE(request(path,{actor,method:'DELETE',origin:'same',json:{
+    subdomain_label:'notes',expected_folder_id:'folder1',
+  }}));
+  expect(staleRemove.status).toBe(409);
   await setArtifact(db,'folder1',{deleted_at:{sql:'now()'}});
   expect((await put('notes','folder1')).status).toBe(404);
   expect(await (await GET(request(path,{actor}))).json()).toEqual({folders:[],roots:[{subdomain_label:'notes',folder_id:null}]});

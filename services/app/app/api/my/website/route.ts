@@ -10,14 +10,14 @@ async function settings(request:Request) {
   const body=await readJson(request);
   const label=body?.subdomain_label;
   if(typeof label!=='string')return json({error:'invalid_subdomain_label'},400);
+  const expected=body?.expected_folder_id;
+  if(expected!==undefined && expected!==null && typeof expected!=='string')return json({error:'invalid_folder'},400);
   if(request.method==='DELETE'){
     if(!label)return json({error:'main_site_required'},400);
-    await deleteSiteRoot(actor.userId,label);
+    if(!await deleteSiteRoot(actor.userId,label,expected))return json({error:'site_conflict'},409);
   } else {
     const folderId=body?.folder_id;
     if(folderId!==null && typeof folderId!=='string')return json({error:'invalid_folder'},400);
-    const expected=body?.expected_folder_id;
-    if(expected!==undefined && expected!==null && typeof expected!=='string')return json({error:'invalid_folder'},400);
     const result=await saveSiteRoot(actor.userId,label,folderId,expected);
     if(result!=='saved')return json({error:result},result==='site_conflict'?409:result==='folder_not_found'?404:400);
   }
