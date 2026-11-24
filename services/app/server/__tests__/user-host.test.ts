@@ -251,7 +251,7 @@ it('keeps named folder sites bound to a live owned id across duplicate names, mo
  await db.query("INSERT INTO artifacts(id,user_id,format,title) VALUES ('root001',$1,'folder','Same'),('root002',$1,'folder','Same')", [user.id]);
  await setArtifact(db, [inside.id, quiet.id], {ancestor_ids:['root001']});
  await setArtifact(db, outside.id, {ancestor_ids:['root002']});
- const named = 'https://notes.alice.u.example.test';
+ const named = 'https://alice--notes.u.example.test';
  expect((await server.request(named+'/'+inside.id)).status).toBe(404);
  await db.query("INSERT INTO user_site_roots(user_id,subdomain_label,folder_id) VALUES($1,'notes','root001')",[user.id]);
  const listing = await (await server.request(named+'/')).text();
@@ -259,7 +259,11 @@ it('keeps named folder sites bound to a live owned id across duplicate names, mo
  expect(listing).not.toContain(inside.id);
  expect(listing).not.toContain(outside.id);
  expect(listing).not.toContain(quiet.id);
+ await setArtifact(db,'root001',{title:'Renamed folder'});
  expect((await server.request(named+'/'+quiet.id)).status).toBe(200);
+ await setArtifact(db,'root001',{visibility:'private'});
+ expect((await server.request(named+'/'+quiet.id)).status).toBe(404);
+ await setArtifact(db,'root001',{visibility:'public'});
  expect((await server.request(named+'/'+outside.id)).status).toBe(404);
  await setArtifact(db, inside.id, {ancestor_ids:['root002']});
  expect((await server.request(named+'/a/'+inside.id+'/events/frame')).status).toBe(404);
@@ -302,13 +306,13 @@ it.each(['removed','repointed'])('withholds a named-site SQL result if its mappi
    return result;
  });
  try {
-   const res=await server.request('https://notes.alice.u.example.test/api/artifacts/'+f.page+'/sql',{method:'POST',headers:{origin:'null','content-type':'text/plain'},body:JSON.stringify({sql:'select name from staff cross join (select count(*) from _files) files',revision:'1'})});
+   const res=await server.request('https://alice--notes.u.example.test/api/artifacts/'+f.page+'/sql',{method:'POST',headers:{origin:'null','content-type':'text/plain'},body:JSON.stringify({sql:'select name from staff cross join (select count(*) from _files) files',revision:'1'})});
    expect(spy).toHaveBeenCalled();expect(res.status).toBe(404);expect(await res.text()).not.toContain('ada');
  } finally {spy.mockRestore();}
 });
 
 it('queries the configured index and folder on their publishing origins with guest joins',async()=>{
- const f=await fixture(), db=await getDb(), server=app(), alias='https://notes.alice.u.example.test';
+ const f=await fixture(), db=await getDb(), server=app(), alias='https://alice--notes.u.example.test';
  await setUsername(f.owner.userId!,'alice');
  await db.query("INSERT INTO artifacts(id,user_id,format,visibility) VALUES ('site001',$1,'folder','public'),('hidden01',$1,'folder','private')",[f.owner.userId]);
  await setArtifact(db,'hidden01',{ancestor_ids:['site001']});
@@ -332,7 +336,7 @@ it('uses current public folder titles on the legacy host and relative to a mount
  await db.query("INSERT INTO artifacts(id,user_id,format,title,visibility) VALUES ('fold001',$1,'folder','Work area','public')",[user.id]);
  await setArtifact(db,leaf.id,{ancestor_ids:['fold001']});
  await db.query("INSERT INTO user_site_roots VALUES ($1,'notes','fold001')",[user.id]);
- const named='https://notes.alice.u.example.test';
+ const named='https://alice--notes.u.example.test';
  for(const [origin,path] of [[base,'/work-area/hello-world'],[named,'/hello-world']]){
   if(origin===base) expect(await (await server.request(origin+'/')).text()).toContain('href="'+path+'"');
   expect(await (await server.request(origin+path)).text()).toContain('Hello owner');
@@ -355,7 +359,7 @@ it('uses current public folder titles on the legacy host and relative to a mount
 });
 
 it('translates the configured directory result to HTTP while the legacy root still lists',async()=>{
- const user=await owner(),db=await getDb(),server=app(),blog='https://blog.alice.u.example.test';
+ const user=await owner(),db=await getDb(),server=app(),blog='https://alice--blog.u.example.test';
  await db.query("INSERT INTO artifacts(id,user_id,format,title,visibility) VALUES ('blog001',$1,'folder','Blog','public')",[user.id]);
  await db.query("INSERT INTO user_site_roots VALUES ($1,'blog','blog001')",[user.id]);
  const child=await page(user.token,'public',{title:'Documentary',html:'<h1>Documentary body</h1>'});

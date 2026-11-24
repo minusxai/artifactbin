@@ -17,6 +17,7 @@ type FolderNode = {id: string | null; name: string; parent: string | null; child
 /** Destination selection is local; the caller owns the authenticated move and refresh. */
 export function MoveToFolderDialog(props: {
   title: string; website?: boolean; artifactId?: string; currentParentId: string | null; folders: Pick<ShelfRow,'id'|'title'|'parent_id'|'ancestor_ids'>[];
+  children?: JSX.Element; onSelect?: (id:string|null)=>void; saveDisabled?:boolean; saveError?:string;
   onMove: (id: string | null) => Promise<boolean>; onClose: () => void;
 }): JSX.Element {
   const [query, setQuery] = createSignal('');
@@ -60,7 +61,7 @@ export function MoveToFolderDialog(props: {
     return result;
   });
   const toggle = (id: string | null) => setExpanded(previous => {const next = new Set(previous); if (next.has(id)) next.delete(id); else next.add(id); return next;});
-  const select = (id: string | null) => {if (!busy() && !blocked(id)) {setSelected(id); setError('');}};
+  const select = (id: string | null) => {if (!busy() && !blocked(id)) {setSelected(id); props.onSelect?.(id); setError('');}};
   const focusRow = (container: HTMLElement, index: number) => container.querySelectorAll<HTMLElement>('[role="treeitem"]')[index]?.focus();
   const keydown = (event: KeyboardEvent, node: FolderNode, index: number) => {
     const container = (event.currentTarget as HTMLElement).closest<HTMLElement>('[role="tree"]');
@@ -81,14 +82,14 @@ export function MoveToFolderDialog(props: {
     event.preventDefault();
   };
   const move = async () => {
-    if (busy() || blocked(selected()) || (!props.website && selected() === props.currentParentId)) return;
+    if (busy() || props.saveDisabled || blocked(selected()) || (!props.website && selected() === props.currentParentId)) return;
     setBusy(true); setError('');
     try {if (!await props.onMove(selected())) setError(props.website ? 'Could not save this folder. Try again.' : 'Could not move this item. Try another folder or retry.');}
     catch {setError(props.website ? 'Could not save this folder. Try again.' : 'Could not move this item. Try another folder or retry.');}
     finally {setBusy(false);}
   };
   return <Dialog title={props.website ? props.title : `Move ${props.title}`} description="Choose a destination folder." size="md" busy={busy()} onClose={props.onClose} lockScroll
-    footer={<><Button variant="secondary" aria-label="Close folder picker" disabled={busy()} onClick={props.onClose}>Cancel</Button><Button disabled={busy() || blocked(selected()) || (!props.website && selected() === props.currentParentId)} onClick={() => void move()}>{props.website ? 'Use this folder' : busy() ? 'Moving…' : 'Move here'}</Button></>}>
+    footer={<><Button variant="secondary" aria-label="Close folder picker" disabled={busy()} onClick={props.onClose}>Cancel</Button><Button disabled={busy() || props.saveDisabled || blocked(selected()) || (!props.website && selected() === props.currentParentId)} onClick={() => void move()}>{props.website ? 'Use this folder' : busy() ? 'Moving…' : 'Move here'}</Button></>}>
     <SearchField label="Filter folders" placeholder="find a folder…" disabled={busy()} value={query()} onValue={setQuery} />
     <div class="mt-3 max-h-72 min-h-48 overflow-y-auto">
       <div role="tree" aria-label="Destination folders" aria-busy={busy()}><For each={visible()}>{node => <div role="treeitem" aria-label={props.website ? node.name : node.id === null ? 'Move to root' : `Move to ${node.name}`}
@@ -106,6 +107,7 @@ export function MoveToFolderDialog(props: {
       <Show when={query().trim() && visible().length === 1}><StatusMessage kind="empty" class="justify-center py-6">No folders match your search.</StatusMessage></Show>
     </div>
     <p aria-label="Selected destination" class="mt-3 break-words text-xs text-muted">{['Workspace', ...ancestors(selected()).map(node => node.name)].join(' / ')}</p>
-    <Show when={error()}><StatusMessage kind="error" class="mt-3">{error()}</StatusMessage></Show>
+    {props.children}
+    <Show when={props.saveError || error()}><StatusMessage kind="error" class="mt-3">{props.saveError || error()}</StatusMessage></Show>
   </Dialog>;
 }

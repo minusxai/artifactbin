@@ -17,7 +17,7 @@ describe('username rules', () => {
   harness.shared(async () => undefined);
   it('USERNAME_RE: 3–32 lowercase letters, digits and underscores', () => {
     for (const ok of ['abc', 'a_1', 'a'.repeat(32)]) expect(USERNAME_RE.test(ok), ok).toBe(true);
-    for (const bad of ['', '_ab', 'ab_', '___', 'ab', 'a'.repeat(33), 'Abc', 'a-b', 'a.b', 'a b', 'é_ab']) expect(USERNAME_RE.test(bad), bad).toBe(false);
+    for (const bad of ['', '_ab', 'ab_', '___', 'a__b', 'xn__sample', 'ab', 'a'.repeat(33), 'Abc', 'a-b', 'a.b', 'a b', 'é_ab']) expect(USERNAME_RE.test(bad), bad).toBe(false);
   });
 
   it('usernameFromEmail: sanitized local part, +tags dropped, at most 20 characters, never empty', () => {
@@ -36,7 +36,7 @@ describe('username rules', () => {
 describe('usernames', () => {
 
   it('ensureUsername assigns <base>_<4 chars> once, and leaves a guest without a handle', async () => {
-    const user = await createUser({ email: 'Jane.Doe@example.test' });
+    const user = await createUser({ email: 'Jane.__Doe@example.test' });
     expect(user.username).toBeNull();
     const named = await ensureUsername(user);
     expect(named.username).toMatch(/^jane_doe_[a-z0-9]{4}$/);

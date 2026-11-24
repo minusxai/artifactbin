@@ -72,7 +72,7 @@ node scripts/groups.mjs delete design_crit --handle design_crit --yes
 Delete requires the exact current handle, an empty group and a group that is not the deployment
 default. An Admin of the parent can delete a host-managed group. Its sign-in provider controls
 membership and parent placement. Last-admin removal, demotion and leave are refused. Update changes name/description,
-not handle. Group handles have 3–32 lowercase letters/digits with internal underscores; no
+not handle. Group handles have 3–32 lowercase letters/digits with single internal underscores; no
 hyphens or edge underscores. Examples use `design_crit`.
 
 Group addresses: a page asks each reader before it calls an address outside the default policy. An

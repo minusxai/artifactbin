@@ -12,6 +12,7 @@
  * (`from_parent_id`), so the server refuses a stale one (`parent_changed`) instead of silently re-rooting. Every
  * refusal is shown in plain words (`groupTreeMessage`).
  */
+import {handleInputError} from '../lib/handle-input';
 import { personLabel } from '../lib/person-label';
 import { createSignal, For, Show, type JSX } from 'solid-js';
 import type { GroupDetail, GroupRelative, GroupSummary } from '@artifactbin/contracts/groups';
@@ -128,6 +129,7 @@ export function GroupTreePanel(props: { detail: GroupDetail; refresh: () => void
   const [name, setName] = createSignal(''); const [handle, setHandle] = createSignal('');
   const [busy, setBusy] = createSignal(false); const [error, setError] = createSignal(''); const [created, setCreated] = createSignal('');
   const create = async () => {
+    if (handleInputError(handle())) return;
     setBusy(true); setError(''); setCreated('');
     try {
       const group = await apiRequest<GroupSummary>('/api/groups', 'POST', { name: name(), handle: handle(), parent_id: props.detail.group.id });
@@ -154,10 +156,10 @@ export function GroupTreePanel(props: { detail: GroupDetail; refresh: () => void
     <Show when={admin()}>
       <form class="mt-5 grid gap-3 sm:grid-cols-2" onSubmit={(event) => { event.preventDefault(); if (!busy()) void create(); }}>
         <Field label="Subgroup name"><Input required placeholder="e.g. Retail" value={name()} disabled={busy()} onInput={(event) => setName(event.currentTarget.value)} /></Field>
-        <Field label="Subgroup handle"><Input required placeholder="e.g. retail_team" value={handle()} disabled={busy()} onInput={(event) => setHandle(event.currentTarget.value)} /></Field>
+        <Field label="Subgroup handle" error={handle() ? handleInputError(handle()) : undefined}><Input required placeholder="e.g. retail_team" value={handle()} disabled={busy()} onInput={(event) => setHandle(event.currentTarget.value)} /></Field>
         <Show when={error()}><StatusMessage kind="error" class="sm:col-span-2">{error()}</StatusMessage></Show>
         <Show when={created()}><StatusMessage kind="notice" class="sm:col-span-2">{created()}</StatusMessage></Show>
-        <Button class="justify-self-start sm:col-span-2" type="submit" disabled={busy()}>{busy() ? 'Creating…' : 'Create subgroup'}</Button>
+        <Button class="justify-self-start sm:col-span-2" type="submit" disabled={busy() || !!handleInputError(handle())}>{busy() ? 'Creating…' : 'Create subgroup'}</Button>
       </form>
     </Show>
     <Show when={moving()}><MoveGroupDialog detail={props.detail} onClose={() => setMoving(false)} onMoved={() => { setMoving(false); props.refresh(); }} /></Show>
