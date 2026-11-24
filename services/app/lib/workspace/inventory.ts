@@ -1,7 +1,8 @@
 /** Account inventory queries: shelf limits never determine account totals or asset reachability. */
 import { getDb } from '@/lib/platform';
 import { type ArtifactSummary } from '@/lib/artifacts';
-import { LIVE_ARTIFACT_SQL } from '@/lib/artifact-access';
+import type { AccessActor } from '@/lib/accounts';
+import { LIVE_ARTIFACT_SQL, reactionScope } from '@/lib/artifact-access';
 import type { WorkspaceSharedItem } from './dashboard';
 import { viewTotalsFor } from '@/lib/analytics';
 
@@ -20,6 +21,20 @@ export async function workspaceDocumentsFor(userId: string, groupId?:string) {
     FROM artifacts WHERE ${groupId ? 'group_id = $1 AND '+LIVE_ARTIFACT_SQL : OWNED} AND format IN ('html', 'folder')
     ORDER BY updated_at DESC, id DESC LIMIT 1000`, [groupId??userId]);
   return result.rows;
+}
+
+/** The like remembers an address. Its link or private reader grant must still admit the reader. */
+export async function workspaceLikedFor(actor: AccessActor) {
+  const db = await getDb();
+  const result = await db.query<Omit<InventoryRow, 'ancestor_ids'>>(`SELECT id, title, format, version, visibility, updated_at
+    FROM artifacts JOIN (
+      SELECT object_id, COALESCE(accepted_at, created_at) AS liked_at FROM relations
+      WHERE subject_kind = 'user' AND subject_id = $1 AND verb = 'like' AND object_kind = 'artifact'
+        AND status = 'accepted' AND deleted_at IS NULL
+    ) likes ON object_id = artifacts.id
+    WHERE format = 'html' AND ((${LIVE_ARTIFACT_SQL} AND visibility <> 'private') OR (${reactionScope(actor).where('$1')}))
+    ORDER BY liked_at DESC, id`, [actor.userId]);
+  return result.rows.map(row => ({ ...row, url: `/a/${row.id}` }));
 }
 
 /**

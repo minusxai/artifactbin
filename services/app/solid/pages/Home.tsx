@@ -2,7 +2,7 @@ import { usePageBreadcrumbs } from '../lib/page-breadcrumbs';
 import WorkspaceHeading from '../components/WorkspaceHeading';
 /* @jsxImportSource solid-js */
 import { Button } from '../ui/Button';
-import { createEffect, createMemo, createSignal, onMount, Show, type Accessor, type JSX } from 'solid-js';
+import { createEffect, createMemo, createSignal, onCleanup, onMount, Show, type Accessor, type JSX } from 'solid-js';
 import { GroupUnavailable, GroupWorkspace } from './Group';
 import { DeploymentWelcome } from './DeploymentWelcome';
 import { CompanySetup } from './CompanySetup';
@@ -15,6 +15,7 @@ import { dropServedFrame } from '@/solid/lib/served-frame';
 import WorkspaceShell from '../components/WorkspaceShell';
 import GetStarted from '../components/GetStarted';
 import SharedWithYou from '../components/SharedWithYou';
+import type { ShelfRow } from '@/lib/shelf';
 import Shelf from '../components/Shelf';
 import WorkspaceLayout, { HOME_WORKSPACE_COLUMN, WorkspaceSkeleton } from '../components/WorkspaceLayout';
 import { usePageData } from '../lib/use-page-data';
@@ -87,16 +88,33 @@ function PersonalHomePage(props:{core:PersonalCore;defaultControl?:JSX.Element})
   const empty = () => Boolean(account() && account()!.artifacts.length === 0 && account()!.shared.length === 0 && !detail()?.stats?.assets);
   const failed = () => wrongAccount() || Boolean(core.error());
   const greeting = () => { const name = session()?.user?.name?.trim() || session()?.user?.email?.split('@')[0] || ''; return `${name ? `hi ${name}, l` : 'l'}et’s create your first artifact!`; };
+  const [liked, setLiked] = createSignal(false);
+  const likes = usePageData<{ accountId: string; artifacts: ShelfRow[] }>('/api/page/home?part=liked', { enabled: liked });
+  const likedRows = () => !likes.pending() && !likes.error() && likes.data()?.accountId === account()?.accountId ? likes.data()?.artifacts ?? [] : [];
+  const refreshLikes = () => { if (liked()) void likes.refresh(true); };
+  onMount(() => {
+    window.addEventListener('focus', refreshLikes);
+    onCleanup(() => window.removeEventListener('focus', refreshLikes));
+  });
+  const toolbarShelf = () => <>
+    <Shelf rows={liked() ? likedRows() : account()?.artifacts ?? []} actions={liked() ? 'none' : 'full'}
+      scopeParentId={liked() ? undefined : null} liked={liked()} onLiked={setLiked} onQuery={setSharedQuery} />
+    <Show when={liked()}><Show when={!likes.pending()} fallback={<p role="status">Loading liked artifacts…</p>}>
+      <Show when={!likes.error()} fallback={<p role="alert">Could not load liked artifacts. <Button size="sm" variant="link" onClick={refreshLikes}>Retry</Button></p>}>
+        <Show when={!likedRows().length}><p>No liked artifacts.</p></Show>
+      </Show>
+    </Show></Show>
+  </>;
   onMount(dropServedFrame);
   return <Show when={!(session() && session()!.kind !== 'account') && !(home() && !home()!.signedIn)} fallback={<Navigate href="/login" />}>
     <Show when={account()} fallback={<main class={`${HOME_WORKSPACE_COLUMN} mt-8 pb-24`}><Show when={failed()} fallback={<WorkspaceSkeleton />}><div role="alert"><p>Could not load your workspace.</p><Button variant="secondary" size="sm" aria-label="Retry workspace" onClick={session() ? load : reload}>Try again</Button></div></Show></main>}>
       {workspace => <main class={HOME_WORKSPACE_COLUMN}>
-        <Show when={empty()}><WorkspaceShell personal onCreated={load}><div class="workspace-page"><header class="mb-8 flex items-start justify-between gap-4 sm:mb-10"><div><h1 aria-label={greeting()} class="font-serif text-[clamp(1.6rem,3.4vw,2.25rem)] leading-[1.15] font-medium tracking-[-0.01em] text-fg">{greeting()}</h1><p class="mt-1.5 font-sans text-sm text-muted">Hand an agent the instruction below along with what artifact you want, and follow along.</p></div>{props.defaultControl}</header><div class="mb-6"><GetStarted destination={{type:'personal'}} /></div><a href="/datasets/new?personal=1" aria-label="Create dataset" class="inline-flex items-center gap-2 text-accent"><DatabasePlus size={15} />Create dataset</a></div></WorkspaceShell></Show>
+        <Show when={empty()}><WorkspaceShell personal onCreated={load}><div class="workspace-page"><header class="mb-8 flex items-start justify-between gap-4 sm:mb-10"><div><h1 aria-label={greeting()} class="font-serif text-[clamp(1.6rem,3.4vw,2.25rem)] leading-[1.15] font-medium tracking-[-0.01em] text-fg">{greeting()}</h1><p class="mt-1.5 font-sans text-sm text-muted">Hand an agent the instruction below along with what artifact you want, and follow along.</p></div>{props.defaultControl}</header><div class="mb-6"><GetStarted destination={{type:'personal'}} /></div><a href="/datasets/new?personal=1" aria-label="Create dataset" class="inline-flex items-center gap-2 text-accent"><DatabasePlus size={15} />Create dataset</a><div class="mt-6">{toolbarShelf()}</div></div></WorkspaceShell></Show>
         <Show when={failed()}><div role="alert">Could not refresh your workspace. <Button variant="secondary" size="sm" aria-label="Retry workspace" onClick={load}>Try again</Button></div></Show>
         <Show when={!empty()}><WorkspaceLayout personal workspace={workspace()} insights={detail()} insightsError={Boolean(insights.error())} onCreated={load}>
           <WorkspaceHeading title="Artifacts"><div class="flex flex-wrap items-center justify-end gap-3"><span class="workspace-heading-meta">{workspace().artifacts.filter(row => row.format === 'html').length} artifacts</span>{props.defaultControl}</div></WorkspaceHeading>
-          <Show when={workspace().artifacts.length}><Shelf rows={workspace().artifacts} actions="full" assets={false} scopeParentId={null} onQuery={setSharedQuery} /></Show>
-          <SharedWithYou items={workspace().shared} query={sharedQuery()} />
+          {toolbarShelf()}
+          <Show when={!liked()}><SharedWithYou items={workspace().shared} query={sharedQuery()} /></Show>
         </WorkspaceLayout></Show>
       </main>}
     </Show>

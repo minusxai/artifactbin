@@ -193,3 +193,27 @@ it('puts creation and all workspace destinations in the left navigation, separat
   expect(screen.getByLabelText('Dashboard rail')).not.toContainElement(nav);
   expect(screen.getByLabelText('Dashboard rail')).not.toContainElement(screen.getByRole('button', { name: 'Create' }));
 });
+
+it('filters the liked collection independently with the visibility keyboard picker', async () => {
+  const liked = { ...doc('external'), visibility: 'unlisted' };
+  workspaceFetch(fetchRoutes({ '/api/page/home?part=core': core, '/api/page/home?part=liked': { accountId:'one', artifacts:[...Array.from({ length: 12 }, (_, i) => doc('prior' + i)), liked] } }, { session, fallback: () => response(richInsights) }));
+  open();
+  const toggle = await screen.findByRole('button', { name:'Liked by me' });
+  fireEvent.click(toggle);
+  await screen.findByLabelText('Open Doc external');
+  fireEvent.click(screen.getByRole('button', { name: 'List view' }));
+  expect(screen.queryByLabelText('Open Doc external')).toBeNull();
+  const search = screen.getByRole('searchbox', { name: 'Search artifacts' });
+  fireEvent.input(search, { target: { value: 'external' } });
+  expect(screen.getByLabelText('Open Doc external')).toBeInTheDocument();
+  fireEvent.input(search, { target: { value: '' } });
+  expect(toggle).toHaveAttribute('aria-pressed','true');
+  const picker = screen.getByRole('button', { name:/Artifact visibility/ });
+  expect(picker).toHaveTextContent('All');
+  for (const key of ['ArrowDown','End','Enter']) fireEvent.keyDown(picker, { key });
+  expect(picker).toHaveTextContent('Private');
+  expect(screen.queryByLabelText('Open Doc external')).toBeNull();
+  fireEvent.click(toggle);
+  await screen.findByLabelText('Open Private document');
+  expect(picker).toHaveTextContent('Private');
+});
