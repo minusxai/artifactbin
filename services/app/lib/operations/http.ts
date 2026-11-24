@@ -16,7 +16,7 @@ import { json, baseUrl } from '@/lib/http';
 import { GROUP_PRINCIPAL_REFUSED } from '@artifactbin/contracts/actor';
 
 /** The operations a group's sign-in may run: reading, creating in and editing its group's pages, comments, page actions. */
-const GROUP_OPERATIONS = ['get_artifact', 'list_versions', 'get_version', 'create_artifact', 'update_artifact', 'annotate', 'edit_comment', 'mutate_dataset', 'query_resource', 'export_artifact'];
+const GROUP_OPERATIONS = ['list_group_collection', 'get_artifact', 'list_versions', 'get_version', 'create_artifact', 'update_artifact', 'annotate', 'edit_comment', 'mutate_dataset', 'query_resource', 'export_artifact'];
 import type { AccessActor } from '@/lib/accounts';
 import { OPERATIONS, type OpContext, type Operation, type OpReply } from './registry';
 import { QueryApprovalError } from '@/lib/query-approvals';

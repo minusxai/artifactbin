@@ -6,9 +6,12 @@
 import {GROUP_PRINCIPAL_REFUSED} from '@artifactbin/contracts/actor';
 import {ROUTES} from '@/server/routes.generated';
 import {GROUP_ADMITTED_ROUTES,groupAdmitted} from '@/server/group-admission';
-import {expect,it} from 'vitest';
+import {expect,it,onTestFinished} from 'vitest';
+import {tempDir} from '@artifactbin/test-support/temp-dir';
+import {groupsCommand} from '../skills/artifactbin/scripts/groups.mjs';
+import {saveCredentials} from '../skills/artifactbin/scripts/toolbox-platform.mjs';
 import {useAppHarness} from './harness';
-import {composed,useGroupPrincipalHost,world} from './group-principal-fixture';
+import {composed,useGroupPrincipalHost,world,origin} from './group-principal-fixture';
 useAppHarness();
 useGroupPrincipalHost();
 
@@ -22,6 +25,23 @@ it('reads exactly what a direct member of the group reads, at either level',asyn
   // A subgroup's page and a share to it, a person's page, a share by email to the person who signed it in: never.
   for(const id of [pages.squad,pages.sharedSquad,pages.personal,pages.emailed])expect(await status(id),`${role} ${id}`).toBe(404);
  }
+});
+
+it('browses only the signed group collection with the group’s own access',async()=>{
+ const host=await composed(),{eve,team,squad,pages}=await world(host);
+ const agent=await eve.asGroup(team.id,'member');
+ const list=(id:string)=>host.call('GET',`/api/groups/${id}/collection`,agent.token);
+ const own=await list(team.id);
+ expect(own.status).toBe(200);
+ expect((own.body?.items as {id:string}[]).map(item=>item.id).sort()).toEqual([pages.team,pages.root,pages.sharedTeam,pages.sharedRoot].sort());
+ expect((await list(squad.id)).status).toBe(404);
+ const home=await tempDir('group-browse-',onTestFinished);
+ await saveCredentials({server:origin,token:agent.token,group:team.id,groupRole:'member'},home);
+ const result=await groupsCommand({sub:'collection',positionals:[team.id],values:{}},{
+  env:{ARTIFACTBIN_HOME:home,ARTIFACTBIN_URL:origin,ARTIFACTBIN_AS_GROUP:team.id},
+  fetcher:(url:string,init:RequestInit)=>host.fetch(new Request(url,init)),
+ });
+ expect(result).toEqual(own.body);
 });
 
 it('default deny: every route a bearer reaches that the admission list does not name refuses a group agent with the one code, and every named one admits it',async()=>{

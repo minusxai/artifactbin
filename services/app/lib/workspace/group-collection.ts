@@ -10,9 +10,9 @@ import type {ArtifactRow} from '@/lib/artifacts';
 import {listedFolderChild,parentOf} from '@/lib/artifacts';
 import {canAnnotate} from '@artifactbin/contracts/sharing';
 import type { GroupCollection, GroupCollectionItem } from '@artifactbin/contracts/groups';
-import type {AccessActor} from '@/lib/accounts';
+import {principalKey,type AccessActor} from '@/lib/accounts';
 import {LIVE_ARTIFACT_SQL,effectiveRole,roleWithoutLink} from '@/lib/artifact-access';
-import {GroupError,getGroupRole,groupChain} from '@/lib/groups';
+import {GroupError,actorGroupRole,groupChain} from '@/lib/groups';
 import {AUTH_SECRET,getDb} from '@/lib/platform';
 
 interface GroupCollectionInput {parent_id?:string;limit?:number;cursor?:string;}
@@ -27,12 +27,12 @@ const invalid=()=>new GroupError('invalid_cursor',400);
 
 export async function groupCollectionFor(actor:AccessActor,groupId:string,input:GroupCollectionInput={}):Promise<GroupCollection>{
  const db=await getDb();
- if(!actor.userId||!await getGroupRole(actor.userId,groupId,db))throw new GroupError('not_found',404);
+ if(!await actorGroupRole(actor,groupId,db))throw new GroupError('not_found',404);
  const chain=await groupChain(db,groupId);
  if(!chain.length)throw new GroupError('not_found',404);
  const limit=input.limit??50,parent=input.parent_id??null;
  if(!Number.isInteger(limit)||limit<1||limit>100)throw new GroupError('invalid_group',400);
- const scope=JSON.stringify([actor.userId,groupId,parent,limit]);
+ const scope=JSON.stringify([actor.principalGroup?principalKey(actor.principalGroup):actor.userId,groupId,parent,limit]);
  let after:Key|null=null;
  if(input.cursor){
   try{
@@ -54,6 +54,7 @@ export async function groupCollectionFor(actor:AccessActor,groupId:string,input:
  const reached=async(row:Row,seen=new Set<string>()):Promise<boolean>=>{
   if(seen.has(row.id)||seen.size>6)return false;
   if(row.seed&&await roleWithoutLink(row,actor)!=='none')return true;
+  if(actor.principalGroup&&await effectiveRole(row,actor)==='none')return false;
   seen.add(row.id);
   const p=parentOf(row),folder=p?await load(p):null;
   return !!folder&&folder.format==='folder'&&await reached(folder,seen)&&await listedFolderChild(row,actor,canAnnotate(await effectiveRole(folder,actor)));
