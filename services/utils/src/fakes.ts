@@ -12,9 +12,7 @@ const UNAVAILABLE: QueryFailure = { error: 'service_unavailable' };
 export function noopSql(): SqlService {
   return {
     run: async (i) => Object.fromEntries(i.queries.map((q) => [q.name, UNAVAILABLE])),
-    runMany: async (i) => i.runs.map((run) => Object.fromEntries([...(i.shared?.queries ?? []), ...run.queries].map((q) => [q.name, UNAVAILABLE]))),
     mutate: async () => UNAVAILABLE,
-    dryRun: async (i) => ({ errors: i.queries.map((q) => ({ name: q.name, ...UNAVAILABLE })), columns: {} }),
     dryRunMutations: async (i) => ({ errors: i.mutations.map((m) => ({ name: m.name, ...UNAVAILABLE })) }),
   };
 }
@@ -23,16 +21,14 @@ export function noopBrowser(): BrowserService {
 }
 
 export interface FakeSql extends SqlService { calls: Array<{ method: keyof SqlService; input: unknown }> }
-/** Fixtures by query name; anything else fails like an unknown table would. Dry-runs pass. */
+/** Fixtures by query name; anything else fails like an unknown table would. Mutation dry runs pass. */
 export function fakeSql(fixtures: Record<string, TableResult>): FakeSql {
   const calls: FakeSql['calls'] = [];
   const rec = <K extends keyof SqlService>(method: K, fn: SqlService[K]): SqlService[K] => ((input: unknown) => { calls.push({ method, input }); return (fn as (i: unknown) => unknown)(input); }) as SqlService[K];
   return {
     calls,
     run: rec('run', async (i) => Object.fromEntries(i.queries.map((q) => [q.name, fixtures[q.name] ?? { error: `no fixture for ${q.name}` }]))),
-    runMany: rec('runMany', async (i) => i.runs.map((run) => Object.fromEntries([...(i.shared?.queries ?? []), ...run.queries].map((q) => [q.name, fixtures[q.name] ?? { error: `no fixture for ${q.name}` }])))),
     mutate: rec('mutate', async (i) => ({ ...(fixtures[i.table.name] ?? { rows: [], columns: i.table.columns }), affected: 0 })),
-    dryRun: rec('dryRun', async (i) => ({ errors: [], columns: Object.fromEntries(i.queries.map((q) => [q.name, fixtures[q.name]?.columns ?? []])) })),
     dryRunMutations: rec('dryRunMutations', async () => ({ errors: [] })),
   };
 }

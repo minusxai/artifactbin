@@ -37,23 +37,7 @@ export function createSqliteSql(opts: Partial<SqlCaps> = {}, extensions: SqlExte
         return expired ? Object.fromEntries(input.queries.map(q => [q.name, expired])) : result;
       } catch { return Object.fromEntries(input.queries.map(q => [q.name, {error:'Invalid SQL read budget'}])); }
     },
-    runMany: async (input, context) => {
-      try {
-        const life = lifecycle(context);
-        const engine = await loadSqlite();
-        const failed = (failure: QueryFailure) => input.runs.map(run => Object.fromEntries([...(input.shared?.queries ?? []), ...run.queries].map(q => [q.name, failure])));
-        const failure = life.failure();
-        if (failure) return failed(failure);
-        const result = engine.runMany(input, run => {
-          const {limit, timeoutMs} = queryBounds(run, caps);
-          return {limit, timeoutMs, pageLimit:limit, deadline:performance.now() + life.remaining()};
-        });
-        const expired = life.failure();
-        return expired ? failed(expired) : result;
-      } catch { return input.runs.map(run => Object.fromEntries([...(input.shared?.queries ?? []), ...run.queries].map(q => [q.name, {error:'Invalid SQL read budget'}]))); }
-    },
     mutate: async (input) => (await loadSqlite()).mutate(input, queryBounds(input, { ...caps, timeoutMs: caps.mutationTimeoutMs }), extensions, prepared),
-    dryRun: async (input) => (await loadSqlite()).dryRun(input),
     dryRunMutations: async (input) => (await loadSqlite()).dryRunMutations(input, extensions),
   };
 }

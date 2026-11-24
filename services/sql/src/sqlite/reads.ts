@@ -7,8 +7,7 @@
  * query is a `QueryFailure` for that query alone; its dependents then fail on
  * the missing table, which is the honest report.
  */
-import { isQueryFailure, type ColumnType, type DatasetColumn, type DryRunInput, type DryRunResult, type QueryOutcome, type QueryPage, type Row, type RunInput, type RunManyInput, type Scalar } from '@artifactbin/contracts/sql';
-import { DEFAULT_CAPS } from '../caps';
+import { isQueryFailure, type ColumnType, type QueryOutcome, type QueryPage, type Row, type RunInput, type Scalar } from '@artifactbin/contracts/sql';
 import { pagedQuery } from '../paging';
 import { SqliteDatabase, TimedOut, TooLarge, type Prepared, type TableData } from './database';
 import { Refused } from './guard';
@@ -41,7 +40,7 @@ export function runQueries(sqlite3: Sqlite3, input: RunInput, bounds: ReadBounds
  */
 function preparedRead(sqlite3: Sqlite3, input: RunInput, bounds: ReadBounds, key: string, prepared: PreparedCache | undefined): Record<string, QueryOutcome> {
   const cached = prepared?.get(key);
-  if (cached) return cached.scratch(() => readAll(cached, input, bounds, () => {}, false, true));
+  if (cached) return cached.scratch(() => readAll(cached, input, bounds, () => {}, true));
   if (input.catalog!.tables.some((t) => t.source !== undefined && !Object.hasOwn(input.tables, t.source))) {
     return Object.fromEntries(input.queries.map((q) => [q.name, { error: 'the catalog rows are not prepared here: resend them with the keys', rowsRequired: true }]));
   }
@@ -50,31 +49,9 @@ function preparedRead(sqlite3: Sqlite3, input: RunInput, bounds: ReadBounds, key
   try {
     try { mountCatalog(db, input); } catch (error) { return failedAll(input, error); }
     kept = prepared?.keep(key, db) ?? false;
-    return db.scratch(() => readAll(db, input, bounds, () => {}, false, true));
+    return db.scratch(() => readAll(db, input, bounds, () => {}, true));
   } finally {
     if (!kept) db.close();
-  }
-}
-
-/**
- * RunManyInput over ONE throwaway database: the imports loaded once, `shared` run once with every
- * result kept whole, then each run in a scratch transaction — its own tables and results are gone
- * when it returns, exactly as in a throwaway run. `bounds` are each run's own (index -1: `shared`),
- * already clamped.
- */
-export function runManyQueries(sqlite3: Sqlite3, input: RunManyInput, bounds: (run: RunManyInput['runs'][number], index: number) => ReadBounds): Array<Record<string, QueryOutcome>> {
-  const db = new SqliteDatabase(sqlite3);
-  try {
-    let shared: Record<string, QueryOutcome> = {};
-    try {
-      for (const [schema, tables] of Object.entries(input.imports ?? {})) for (const [table, t] of Object.entries(tables)) db.load({ schema, table, ...t });
-    } catch (error) {
-      return input.runs.map((run) => failedAll({ ...run, queries: [...(input.shared?.queries ?? []), ...run.queries] }, error));
-    }
-    if (input.shared) shared = readAll(db, input.shared, bounds(input.shared, -1), () => {}, true);
-    return input.runs.map((run, i) => ({ ...shared, ...db.scratch(() => readAll(db, run, bounds(run, i), () => {})) }));
-  } finally {
-    db.close();
   }
 }
 
@@ -124,10 +101,10 @@ const failedAll = (input: RunInput, error: unknown): Record<string, QueryOutcome
   Object.fromEntries(input.queries.map((q) => [q.name, { error: message(error) }]));
 
 /**
- * Every query of `input`, in order, over `db`; `loadImports` puts the imports in place. `keepAll` loads even
- * the last result whole. `mounted`: the catalog is already in place (a prepared database).
+ * Every query of `input`, in order, over `db`; `loadImports` puts the imports in place.
+ * `mounted`: the catalog is already in place (a prepared database).
  */
-function readAll(db: SqliteDatabase, input: RunInput, bounds: ReadBounds, loadImports: () => void, keepAll = false, mounted = false): Record<string, QueryOutcome> {
+function readAll(db: SqliteDatabase, input: RunInput, bounds: ReadBounds, loadImports: () => void, mounted = false): Record<string, QueryOutcome> {
   const out: Record<string, QueryOutcome> = {};
   const types = input.paramTypes ?? input.catalog?.paramTypes ?? {};
   try {
@@ -140,7 +117,7 @@ function readAll(db: SqliteDatabase, input: RunInput, bounds: ReadBounds, loadIm
       const page = input.page?.name === query.name ? input.page : null;
       // A query a later one may read is materialised WHOLE: the cap is what
       // travels, never what a downstream query sees. The last cannot be read.
-      const whole = !page && !input.catalog && (keepAll || i < input.queries.length - 1);
+      const whole = !page && !input.catalog && i < input.queries.length - 1;
       const read = readOne(db, query.name, query.sql, input.params, types, page, page ? bounds.pageLimit : bounds.limit, Math.min(bounds.timeoutMs, Math.max(0, (bounds.deadline ?? Infinity) - performance.now())), whole, bounds.outputBytes);
       if (isQueryFailure(read)) { out[query.name] = read; continue; }
       const { all, ...result } = read;
@@ -234,35 +211,4 @@ export function mountCatalog(db: SqliteDatabase, input: RunInput): void {
     db.load({ schema: table.schema, table: table.name, columns: table.columns, rows: source!.rows });
   }
   db.createViews(catalog.tables.flatMap((t) => (t.sql === undefined ? [] : [{ schema: t.schema, table: t.name, columns: t.columns, sql: t.sql }])));
-}
-
-/**
- * Publish-time check: does each query prepare, bind and run against EMPTY
- * tables of the declared shapes? Rows are never needed; the engine's message
- * names the offending column. Each (empty) result is loaded for later queries.
- */
-export function dryRunQueries(sqlite3: Sqlite3, input: DryRunInput): DryRunResult {
-  const deadline = performance.now() + DEFAULT_CAPS.timeoutMs;
-  const errors: DryRunResult['errors'] = [];
-  const columns: Record<string, DatasetColumn[]> = {};
-  const db = new SqliteDatabase(sqlite3);
-  const params = Object.fromEntries(input.paramNames.map((p) => [p, null]));
-  try {
-    for (const [table, t] of Object.entries(input.tables)) db.load({ schema: 'main', table, columns: t.columns, rows: [] });
-    for (const [schema, tables] of Object.entries(input.imports ?? {})) for (const [table, t] of Object.entries(tables)) db.load({ schema, table, columns: t.columns, rows: [] });
-    for (const query of input.queries) {
-      let prepared: Prepared | null = null;
-      try {
-        prepared = db.prepare(query.sql, 'read');
-        columns[query.name] = prepared.bind(params, input.paramTypes).rows(DEFAULT_CAPS.maxRows, Math.max(0, Math.min(5_000, deadline - performance.now()))).columns;
-        db.load({ schema: 'main', table: query.name, columns: columns[query.name]!, rows: [] });
-      } catch (e) {
-        delete columns[query.name];
-        errors.push({ name: query.name, error: message(e) });
-      } finally { prepared?.finalize(); }
-    }
-  } finally {
-    db.close();
-  }
-  return { errors, columns };
 }

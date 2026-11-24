@@ -7,7 +7,7 @@ describe('noops', () => {
   it('sql answers a failure per query, and refuses a dry-run', async () => {
     const r = await noopSql().run({ tables: {}, queries: [{ name: 'q', sql: 'select 1' }], params: {} });
     expect(isQueryFailure(r.q) && r.q.error).toBe('service_unavailable');
-    expect((await noopSql().dryRun({ tables: {}, queries: [{ name: 'q', sql: 'select 1' }], paramNames: [] })).errors[0]?.error).toBe('service_unavailable');
+    expect((await noopSql().dryRunMutations({ tables: {}, mutations: [{ name: 'm', target: 't', sql: 'delete from t' }], paramNames: [] })).errors[0]?.error).toBe('service_unavailable');
   });
   it('browser answers unavailable', async () => {
     expect(await noopBrowser().render({ url: 'http://x', format: 'png', viewport: { width: 1, height: 1 }, selector: 'body', capture: 'full' })).toEqual({ ok: false, reason: 'unavailable' });

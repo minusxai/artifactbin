@@ -1,7 +1,7 @@
 import type { BrowserService, RenderRequest, RenderUploadResult, RenderResult, SvgHarvestResult, PageInspection } from '@artifactbin/contracts/browser';
 import type { BrowserSessionResult } from '@artifactbin/contracts/browser-sessions';
 import type { EventEnvelope, EventsService } from '@artifactbin/contracts/events';
-import type { DryRunMutationsResult, DryRunResult, MutationOutcome, QueryFailure, QueryOutcome, SqlService } from '@artifactbin/contracts/sql';
+import type { DryRunMutationsResult, MutationOutcome, QueryFailure, QueryOutcome, SqlService } from '@artifactbin/contracts/sql';
 import { sqlTimeout, SQL_QUERY_DEFAULT_MS, SQL_WALL_OVERHEAD_MS, SQL_ROUTES } from '@artifactbin/contracts/sql';
 import { BROWSER_ROUTES, ELEMENT_CAPTURE_HEADER } from '@artifactbin/contracts/browser';
 import { EVENTS_ROUTES } from '@artifactbin/contracts/events';
@@ -27,17 +27,9 @@ export function sqlClient(url: string, opts: { deadlineMs?: number; serviceSecre
       try { return (await client.post<{ results: Record<string, QueryOutcome> }>(SQL_ROUTES.run, input, context ?? {})).results; }
       catch (e) { return Object.fromEntries(input.queries.map((q) => [q.name, context?.signal?.aborted ? {error: 'SQL call cancelled'} : failure(e)])); }
     },
-    async runMany(input, context) {
-      try { return (await client.post<{ results: Array<Record<string, QueryOutcome>> }>(SQL_ROUTES.runMany, input, context ?? {})).results; }
-      catch (e) { return input.runs.map(run => Object.fromEntries([...(input.shared?.queries ?? []), ...run.queries].map(q => [q.name, context?.signal?.aborted ? {error: 'SQL call cancelled'} : failure(e)]))); }
-    },
     async mutate(input) {
       try { return (await client.post<{ result: MutationOutcome }>(SQL_ROUTES.mutate, input)).result; }
       catch (e) { return failure(e); }
-    },
-    async dryRun(input) {
-      try { return await client.post<DryRunResult>(SQL_ROUTES.dryRun, { ...input, paramNames: [...input.paramNames] }); }
-      catch (e) { return { errors: input.queries.map((q) => ({ name: q.name, error: failure(e).error })), columns: {} }; }
     },
     async dryRunMutations(input) {
       try { return await client.post<DryRunMutationsResult>(SQL_ROUTES.dryRunMutations, { ...input, paramNames: [...input.paramNames] }); }

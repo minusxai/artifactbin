@@ -27,9 +27,7 @@ export function serveSql(svc: SqlService, opts: { maxBody?: number; serviceSecre
   const routes: JsonRoutes = {
     [SQL_ROUTES.readPolicy]: async () => ({version:1,queryTimeoutMs:svc.readPolicy?.queryTimeoutMs??null}),
     [SQL_ROUTES.run]: async (b, context) => ({ results: await svc.run(b as Parameters<SqlService['run']>[0], context) }),
-    [SQL_ROUTES.runMany]: async (b, context) => ({ results: await svc.runMany(b as Parameters<SqlService['runMany']>[0], context) }),
     [SQL_ROUTES.mutate]: async (b) => ({ result: await svc.mutate(b as Parameters<SqlService['mutate']>[0]) }),
-    [SQL_ROUTES.dryRun]: (b) => svc.dryRun(b as Parameters<SqlService['dryRun']>[0]),
     [SQL_ROUTES.dryRunMutations]: (b) => svc.dryRunMutations(b as Parameters<SqlService['dryRunMutations']>[0]),
   };
   return jsonServer(routes, { maxBody: opts.maxBody ?? 64 * 1024 * 1024, health: HEALTH, serviceSecret: opts.serviceSecret, label: 'sql-shell',redactErrors:true });

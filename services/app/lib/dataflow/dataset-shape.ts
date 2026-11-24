@@ -1,6 +1,6 @@
 /**
  * Column types and inference live with the SQL service (the engine infers the
- * same way); the viz kind is the document's.
+ * same way).
  *
  * From `@artifactbin/utils/shape`, never the package root: the root also carries
  * HTTP clients and reaches `node:http` — and this
@@ -9,7 +9,3 @@
  */
 export type { ColumnType, DatasetColumn } from '@artifactbin/contracts/sql';
 export { inferColumns } from '@artifactbin/utils/shape';
-import type { ColumnType } from '@artifactbin/contracts/sql';
-
-export const columnVizKind = (t: ColumnType): 'quantitative' | 'temporal' | 'nominal' =>
-  t === 'number' ? 'quantitative' : (t === 'date' || t === 'timestamp') ? 'temporal' : 'nominal';

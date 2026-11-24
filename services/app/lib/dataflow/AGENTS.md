@@ -16,5 +16,5 @@ It owns no database, access check or HTTP; those stay with its callers.
   rendering can fail on one.
 
 ## Checks
-- `npm test -- --files services/app/lib/dataflow/__tests__/interface-vocabulary.test.ts services/app/lib/dataflow/__tests__/interface-server.test.ts services/app/lib/dataflow/__tests__/compiled-flow.test.ts services/app/lib/dataflow/__tests__/number-format.test.ts services/app/lib/dataflow/__tests__/cell-value.test.ts`
+- `npm test -- --files services/app/lib/dataflow/__tests__/interface-vocabulary.test.ts services/app/lib/dataflow/__tests__/interface-server.test.ts services/app/lib/dataflow/__tests__/compiled-flow.test.ts services/app/lib/dataflow/__tests__/number-format.test.ts`
 - `npm run validate` after any import change (module graph and knip).

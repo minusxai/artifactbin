@@ -19,10 +19,8 @@ parentPort!.on('message', (request: PoolRequest) => {
   let answer: PoolAnswer;
   try {
     const result = request.method === 'run' ? engine.run(request.input, request.bounds, prepared)
-      : request.method === 'runMany' ? engine.runMany(request.input, (_run, i) => request.bounds.at(i)!)
       : request.method === 'mutate' ? engine.mutate(request.input, request.bounds, extensions, prepared)
-        : request.method === 'dryRun' ? engine.dryRun(request.input)
-          : engine.dryRunMutations(request.input, extensions);
+        : engine.dryRunMutations(request.input, extensions);
     answer = { id: request.id, ok: true, result };
   } catch (error) {
     answer = { id: request.id, ok: false, error: error instanceof Error ? error.message : String(error) };

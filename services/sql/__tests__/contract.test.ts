@@ -47,32 +47,6 @@ describe.each(SHAPES)('%s', (_name, _engine, svc) => {
     expect(r.q.totalRows).toBe(4);
     expect(r.q2.rows[0]).toEqual({ n: 4 });
   });
-  it('runs many value sets over imports loaded once, each run its own tables, queries and values, answered in order', async () => {
-    const imports = { sales: { rows: { rows: [{ region: 'west', n: 1 }, { region: 'east', n: 2 }, { region: 'west', n: 3 }], columns: [{ name: 'region', type: 'string' as const }, { name: 'n', type: 'number' as const }] } } };
-    const byRegion = { name: 'total', sql: 'select sum(n) as total from sales.rows where region = $region' };
-    const out = await svc.runMany({ imports, runs: [
-      { tables: {}, queries: [byRegion], params: { region: 'west' } },
-      { tables: {}, queries: [byRegion], params: { region: 'east' } },
-      // A run's own main tables and results are its alone: the next run never sees `q`.
-      { tables: { t: TABLE }, queries: [{ name: 'q', sql: 'select count(*) as n from t' }], params: {} },
-      { tables: {}, queries: [{ name: 'gone', sql: 'select * from q' }, { name: 'x', sql: 'drop table sales.rows' }], params: {} },
-    ] });
-    expect(out).toHaveLength(4);
-    expect(!isQueryFailure(out[0]!.total!) && out[0]!.total.rows).toEqual([{ total: 4 }]);
-    expect(!isQueryFailure(out[1]!.total!) && out[1]!.total.rows).toEqual([{ total: 2 }]);
-    expect(!isQueryFailure(out[2]!.q!) && out[2]!.q.rows).toEqual([{ n: 4 }]);
-    expect(isQueryFailure(out[3]!.gone!)).toBe(true);
-    expect(isQueryFailure(out[3]!.x!)).toBe(true);
-  });
-  it('runs a shared stage once, kept whole for every run, beside each run\'s own outcomes', async () => {
-    const imports = { d: { rows: TABLE } };
-    const out = await svc.runMany({ imports,
-      shared: { tables: { k: { rows: [{ m: 2 }], columns: [{ name: 'm', type: 'number' as const }] } }, queries: [{ name: 'stage', sql: 'select a * m as a from d.rows, k' }], params: {} },
-      runs: [0, 5].map((min) => ({ tables: {}, queries: [{ name: 'n', sql: 'select count(*) as n from stage where a > $min' }], params: { min } })) });
-    // The row cap (3) bounds what travels, never what a run reads: every run sees all four staged rows.
-    expect(out.map((r) => !isQueryFailure(r.n!) && r.n.rows)).toEqual([[{ n: 4 }], [{ n: 2 }]]);
-    expect(out.every((r) => !isQueryFailure(r.stage!) && r.stage.totalRows === 4)).toBe(true);
-  });
   it('refuses a write on the read path, as a per-query failure', async () => {
     const r = await svc.run({ ...input, queries: [{ name: 'x', sql: 'drop table t' }] });
     expect(isQueryFailure(r.x)).toBe(true);
@@ -109,11 +83,6 @@ describe.each(SHAPES)('%s', (_name, _engine, svc) => {
     const r = await svc.mutate({ table: { name: 'ref_x', ...TABLE }, sql: 'insert into ref_x values (5)', params: {}, limit: 10 });
     expect(isQueryFailure(r) && r.full).toBe(true);
   });
-  it('dry-runs a query against empty tables and names the bad column', async () => {
-    const r = await svc.dryRun({ tables: { t: { columns: TABLE.columns } }, queries: [{ name: 'q', sql: 'select nope from t' }, { name: 'ok', sql: 'select a from t' }], paramNames: [] });
-    expect(r.errors.map((e) => e.name)).toEqual(['q']);
-    expect(r.columns.ok).toEqual([{ name: 'a', type: 'number' }]);
-  });
   it('dry-runs a mutation against its target only', async () => {
     const r = await svc.dryRunMutations({ tables: { ref_t: { columns: TABLE.columns } }, mutations: [{ name: 'm', sql: 'insert into ref_t values ($v)', target: 't' }, { name: 'bad', sql: 'insert into ref_zz values (1)', target: 'zz' }], paramNames: ['v'] });
     expect(r.errors.map((e) => e.name)).toEqual(['bad']);
@@ -130,23 +99,10 @@ describe('sqlClient', () => {
     expect(isQueryFailure(await dead.mutate({ table: { name: 't', ...TABLE }, sql: 'delete from t', params: {} }))).toBe(true);
   });
 
-  /**
-   * A DRY RUN THAT COULD NOT RUN IS NOT A CLEAN ONE. These two are the
-   * publish-time check: an empty `errors` array from an unreachable service
-   * would admit the document unchecked and the author would meet the error at
-   * render time — precisely what the dry run exists to prevent. (A rejection
-   * would be no better: it becomes a 500 on the publish path.)
-   */
-  it('reports a dead service as every query failing, never as a clean dry run', async () => {
+  it('reports a dead service as a mutation validation failure', async () => {
     const dead = sqlClient('http://127.0.0.1:1', { deadlineMs: 500 });
-    const r = await dead.dryRun({ tables: {}, queries: [{ name: 'q', sql: 'select 1' }], paramNames: [] });
-    expect(r.errors.map((e) => e.name)).toEqual(['q']);
     const m = await dead.dryRunMutations({ tables: {}, mutations: [{ name: 'm', sql: 'delete from t', target: 't' }], paramNames: [] });
     expect(m.errors.map((e) => e.name)).toEqual(['m']);
-  });
-  it('sends paramNames as an array even when handed a Set', async () => {
-    const r = await remote.dryRun({ tables: { t: { columns: TABLE.columns } }, queries: [{ name: 'q', sql: 'select a from t where a > $min' }], paramNames: new Set(['min']) as unknown as string[] });
-    expect(r.errors).toEqual([]);
   });
 });
 
