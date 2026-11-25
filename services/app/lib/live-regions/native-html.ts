@@ -2,6 +2,8 @@
  * Strict native HTML codec; never accepts executable attributes. Link target/rel are semantic mark attributes:
  * keep them across serialization so compaction's identity-only write-back does not change the live document.
  * Absent target/rel stay absent; browser-created links retain Tiptap's safe new-window defaults.
+ * Whitespace-only text between blocks (hand-written HTML's newlines and indentation) is not content: it is dropped
+ * at the top level as inside every non-textblock node; any other text outside a block still refuses.
  */
 import { parseFragment, type DefaultTreeAdapterMap } from 'parse5';
 import type { JSONContent } from '@tiptap/core';
@@ -13,6 +15,7 @@ const tags: Record<string,string> = { p:'paragraph', ul:'bulletList', ol:'ordere
 const marks: Record<string,string> = { strong:'bold', b:'bold', em:'italic', i:'italic', code:'code', a:'link' };
 const refuse = (detail:string):never => { throw new LiveRegionRefusal('unsupported_content',[detail]); };
 type HtmlNode = DefaultTreeAdapterMap['childNode'];
+const blocks = (children:JSONContent[]):JSONContent[] => children.filter(child=>!(child.type==='text' && /^\s*$/.test(child.text??'')));
 export function readNativeHtml(html:string):PMNode {
   const walk = (nodes:HtmlNode[], inherited:NonNullable<JSONContent['marks']> = [], code=false):JSONContent[] => nodes.flatMap(node => {
     if(node.nodeName==='#text') { const text=(node as DefaultTreeAdapterMap['textNode']).value;return text ? [{type:'text',text,marks:inherited}] : []; }
@@ -42,9 +45,9 @@ export function readNativeHtml(html:string):PMNode {
     if(type==='orderedList'){own.start=Number(attrs.start??1);if(!Number.isSafeInteger(own.start)||Number(own.start)<1)refuse('list start');}
     if(type==='taskItem'){if(!['true','false'].includes(attrs['data-checked']??''))refuse('task checked');own.checked=attrs['data-checked']==='true';}
     const children=walk(node.childNodes,[],type==='codeBlock');
-    return [{type,attrs:own,content:children.filter(child=>!(child.type==='text' && /^\s*$/.test(child.text??'') && !['paragraph','heading','codeBlock'].includes(type)))}];
+    return [{type,attrs:own,content:['paragraph','heading','codeBlock'].includes(type)?children:blocks(children)}];
   });
-  try {const doc=nativeSchema.nodeFromJSON({type:'doc',content:walk(parseFragment(html).childNodes)});doc.check();return doc;}catch(error){if(error instanceof LiveRegionRefusal)throw error;return refuse('invalid native structure');}
+  try {const doc=nativeSchema.nodeFromJSON({type:'doc',content:blocks(walk(parseFragment(html).childNodes))});doc.check();return doc;}catch(error){if(error instanceof LiveRegionRefusal)throw error;return refuse('invalid native structure');}
 }
 const escape=(s:string)=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 export function writeNativeHtml(doc:PMNode):string {

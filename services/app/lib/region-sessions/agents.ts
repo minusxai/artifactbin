@@ -7,6 +7,8 @@
  *          checkpointLiveRegions), and the region is read at that saved head: its version is then a base that holds
  *          exactly the text read, so the write's three-way merge never applies others' unsaved typing a second time.
  *          A reader, who cannot write, reads the current page (lib/artifacts current-page) at the saved version.
+ *          Saved content its kind cannot write as Markdown is `unsupported_content` (422, with details); its HTML
+ *          still reads.
  *   write  made from a version the agent read (`baseVersion`): merged three-way from that version's snapshot into
  *          the live state (lib/live-regions applyRegionRevision), so people's unsaved typing survives; logged as
  *          the agent's update and woken to the editors' streams, then saved as one new version with everyone's
@@ -69,7 +71,9 @@ export function agentRegions(db: () => Promise<Db>, now: () => number): AgentReg
       const page = canEdit(readable.role) ? readable.row : (await currentPage(readable.row)).row;
       const region = target(editableRegions(page.source ?? ''), regionId);
       if (!isRegion(region)) return region;
-      const content = format === 'html' ? { html: region.inner } : { markdown: regionMarkdown(region.kind, region.inner) };
+      let content: { html: string } | { markdown: string };
+      try { content = format === 'html' ? { html: region.inner } : { markdown: regionMarkdown(region.kind, region.inner) }; }
+      catch (error) { if (error instanceof LiveRegionRefusal) return refuse('unsupported_content', { details: [...error.details] }); throw error; }
       return { status: 200, body: { regionId: region.id, kind: region.kind, version: readable.row.version, ...content } };
     },
 
