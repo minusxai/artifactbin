@@ -1,10 +1,8 @@
 # Artifact access
 
-The access rule for artifacts, in JavaScript (`access.ts`) and in SQL (`scopes.ts`): ownership, the role lattice,
-access facts, dataset grant context, capabilities and the authorization lock order (`locks.ts`). It writes no
-artifact row; lib/artifacts does. Named share rows are written in `shares.ts`. Callers in lib/artifacts hold the
-artifact lock for ACL changes and advance its sharing revision in the same transaction. Ordinary reads resolve
-matching invitations. Server-only, entered through `index.ts`.
+Server-only access rules (`index.ts`) cover roles, dataset grants, capabilities and lock order (`locks.ts`).
+`shares.ts` writes named shares. lib/artifacts owns artifact rows, locks them for ACL changes and advances
+the sharing revision in the same transaction. Ordinary reads resolve matching invitations.
 
 ## Rules
 - Change the rule in both languages in one edit: `access.ts` and `scopes.ts` must give every actor the same role.
@@ -36,7 +34,7 @@ matching invitations. Server-only, entered through `index.ts`.
   order list in the `locks.ts` header.
 
 ## Checks
-- `npm test -- --files services/app/lib/artifact-access/__tests__/access.test.ts services/app/lib/artifact-access/__tests__/grants.test.ts services/app/lib/artifact-access/__tests__/group-shares.test.ts services/app/lib/artifact-access/__tests__/proofs.test.ts services/app/lib/artifact-access/__tests__/subgroups.test.ts services/app/lib/dataset-permissions/__tests__/role.test.ts services/app/__tests__/page-sql-door-locks.test.ts`
+- `npm test -- --files services/app/lib/artifact-access/__tests__/{access,grants,group-shares,proofs,subgroups}.test.ts services/app/lib/dataset-permissions/__tests__/role.test.ts services/app/__tests__/page-sql-door-locks.test.ts`
 - `__tests__/lock-order-postgres.test.ts` is the two-connection Postgres regression (subtree cases, identity changes
   not waiting, the next decision refusing); `services/app/lib/platform/__tests__/identity-roles-postgres.test.ts` proves the
   split-role grants. Both run only where Docker has the Postgres image (CI's integration project, locally

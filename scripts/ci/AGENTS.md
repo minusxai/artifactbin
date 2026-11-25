@@ -1,9 +1,7 @@
 # CI
 
-The scripts behind the workflows: the required PR lane and its budget, the test lists, the timings that pack shards, merge
-admission, and the validate checks (`module-graph.mjs`, `check-ui-primitives.mjs`, `table-ownership.mjs`).
-The workflows themselves are `.github/workflows/*.yml`; job, runner and shard counts live there and in
-`test-timings.mjs`, never in prose.
+CI scripts own test selection, shard timings, merge admission and validation. Workflow files and
+`test-timings.mjs` specify job, runner and shard counts.
 
 ## Rules
 - The required check for PRs into `main` is `pr fast` (`.github/workflows/pr-fast.yml`). Aim under 40 s, warn at
