@@ -97,7 +97,7 @@ describe('canonical writers', () => {
 });
 
 describe('canonical readers and history boundary', () => {
-  it('dedupes within UTC days, counts different days and null subjects, ignores legacy caches', async () => {
+  it('dedupes canonical views across UTC days and ignores retired history before and after removal', async () => {
     const db = await harness.db();
     await db.query("SET TIME ZONE 'America/Los_Angeles'");
     try {
@@ -116,6 +116,11 @@ describe('canonical readers and history boundary', () => {
       expect(Object.fromEntries(await viewTotalsFor(['art1', 'legacy', 'never']))).toEqual({ art1: 5, legacy: 0, never: 0 });
       expect((await db.query('SELECT views FROM artifact_view_totals ORDER BY artifact_id')).rows).toEqual([{ views: 999 }, { views: 888 }]);
       expect(await retired()).toHaveLength(1);
+
+      await db.query("DELETE FROM analytics_events WHERE artifact_id='legacy'");
+      expect(Object.fromEntries(await viewTotalsFor(['art1', 'legacy', 'never']))).toEqual({ art1: 5, legacy: 0, never: 0 });
+      await trackEvent('view', 'art1', { userId: 'new-visitor' });
+      expect(Object.fromEntries(await viewTotalsFor(['art1', 'legacy', 'never']))).toEqual({ art1: 6, legacy: 0, never: 0 });
     } finally { await db.query("SET TIME ZONE 'UTC'"); }
   });
 

@@ -6,7 +6,6 @@ import { createUser } from '@/lib/accounts/testing';
 import { artifactSummaryToWire } from '@/lib/artifact-wire';
 import { getDb, measureQueries, EVENTS_SCHEMA } from '@/lib/platform';
 import { accountWorkspaceFor, accountWorkspaceInsightsFor, listOwnedArtifacts } from '@/lib/workspace';
-import { trackEvent } from '@/lib/analytics';
 import { ensureEventsSchema } from '@artifactbin/events/local';
 import { mintAccountToken, request, useAppHarness } from '@/__tests__/harness';
 import { seedArtifacts } from '@/__tests__/rows';
@@ -126,24 +125,6 @@ describe('the owner listing', () => {
       `SELECT object_id AS id, SUM(n)::int AS views FROM (SELECT object_id, (at AT TIME ZONE 'UTC')::date AS day, COUNT(DISTINCT COALESCE(subject_id,id)) AS n FROM ${EVENTS_SCHEMA}.events WHERE verb='viewed' GROUP BY object_id,day) d GROUP BY object_id`,
     );
     expect(viewsById(rows)).toEqual(viewsById(reference.rows));
-  });
-
-  it('ignores retired history removal and counts newly canonical views', async () => {
-    const docs = 30;
-    const user = await seed(docs);
-    const first = await listOwnedArtifacts('user_id', user.id);
-    expect(viewsById(first.filter((row) => row.format === 'html'))).toEqual(expectedById(docs));
-    const db = await getDb();
-    // Retired history does not supply these totals; canonical records remain intact.
-    await db.query("INSERT INTO analytics_events (event,artifact_id,visitor,created_at) VALUES ('view',$1,'retired',now()-interval '2 days')", [docId(3)]);
-    await db.query("DELETE FROM analytics_events WHERE created_at < (now() AT TIME ZONE 'UTC')::date");
-    const second = await listOwnedArtifacts('user_id', user.id);
-    expect(viewsById(second.filter((row) => row.format === 'html'))).toEqual(expectedById(docs));
-    // A newly canonical view is added once.
-    await trackEvent('view', docId(3), { userId: 'brand-new-visitor' });
-    const third = await listOwnedArtifacts('user_id', user.id);
-    expect(third.find((row) => row.id === docId(3))?.views).toBe(expectedViews(3) + 1);
-    expect(third.find((row) => row.id === docId(4))?.views).toBe(expectedViews(4));
   });
 
   it('answers concurrent canonical reads consistently', async () => {
