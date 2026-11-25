@@ -17,6 +17,7 @@ import { getGroupRole, groupReachSql, reachedGroupsSql, subtreeSql } from '@/lib
 import { userKindOf } from '@/lib/user-kinds';
 import { getDb } from '@/lib/platform';
 import type { AccessActor, GroupPrincipal } from '@/lib/accounts';
+import { resolveSharesSql } from './shares';
 
 /**
  * THE FACTS FOR A GROUP'S SIGN-IN (lib/accounts `GroupPrincipal`), the one rule for it: exactly a person whose ONLY
@@ -73,7 +74,6 @@ export interface AccessFacts {
 const SHARED_WITH_SQL = 'SELECT 1 FROM artifact_shares s WHERE s.artifact_id=$1 AND (s.user_id=$2 OR(s.user_id IS NULL AND s.email=(SELECT email FROM users WHERE id=$2)))';
 const NAMES_READER_SQL = '(s.user_id = $2 OR (s.user_id IS NULL AND (s.email = $3 OR s.email = (SELECT email FROM users WHERE id = $2))))';
 const UNRESOLVED_ACCOUNT_SHARE_SQL = '(s.user_id IS NULL AND s.email = (SELECT email FROM users WHERE id = $2))';
-const RESOLVE_SHARES_SQL = (artifacts: string) => `UPDATE artifact_shares SET user_id = $2 WHERE artifact_id ${artifacts} AND user_id IS NULL AND email = (SELECT email FROM users WHERE id = $2)`;
 export const EDITOR_GROUPS_SQL = "SELECT ga.group_id FROM group_admins ga WHERE ga.user_id=$1";
 /** The best role a group share reaching the actor names: a share to any group the actor's memberships climb to. */
 const GROUP_SHARE_ROLES_SQL = `SELECT s.role FROM artifact_group_shares s JOIN users u ON u.id=$2 WHERE s.artifact_id=$1 AND u.kind='account' AND s.group_id IN (${reachedGroupsSql('$2')})`;
@@ -109,7 +109,7 @@ export function liveAccessFacts(actor: AccessActor, query?: Queryable): AccessFa
         `SELECT s.role, ${UNRESOLVED_ACCOUNT_SHARE_SQL} AS unresolved FROM artifact_shares s WHERE s.artifact_id = $1 AND ${NAMES_READER_SQL}`,
         [artifactId, actor.userId, sessionEmail(actor)],
       );
-      if (r.rows.some((x) => x.unresolved)) await q.query(RESOLVE_SHARES_SQL('= $1'), [artifactId, actor.userId]);
+      if (r.rows.some((x) => x.unresolved)) await q.query(resolveSharesSql('= $1'), [artifactId, actor.userId]);
       return maxRole(...r.rows.map((x) => x.role));
     },
     async editorGroupIds() {
@@ -205,7 +205,7 @@ function pageAccessFacts(actor: AccessActor, artifactId: string): AccessFacts {
     async namedRole(id) {
       if (id !== artifactId) return live.namedRole(id);
       const facts = await read();
-      if (facts.unresolved) await (await getDb()).query(RESOLVE_SHARES_SQL('= $1'), [id, userId]);
+      if (facts.unresolved) await (await getDb()).query(resolveSharesSql('= $1'), [id, userId]);
       return maxRole(...facts.named_roles);
     },
   };
@@ -319,7 +319,7 @@ export async function preloadAccessFacts(db: Queryable, actor: AccessActor, rows
     },
     editorGroupIds() { return editorGroups ??= live.editorGroupIds(); },
     async settle() {
-      if (resolving.size) await db.query(RESOLVE_SHARES_SQL('= ANY($1::text[])'), [[...resolving], actor.userId]);
+      if (resolving.size) await db.query(resolveSharesSql('= ANY($1::text[])'), [[...resolving], actor.userId]);
       resolving.clear();
     },
   };

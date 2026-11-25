@@ -1,7 +1,5 @@
 /**
- * The table-ownership check (scripts/ci/table-ownership.mjs) bites on a write outside its owner and on a row lock of
- * an identity table outside the identity module, reads only literals (a comment quoting a statement is not one),
- * passes artifact locks, reads and other tables, and the real tree is clean.
+ * The validate guard covers app and identity table writes and identity row locks.
  */
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
@@ -37,6 +35,45 @@ describe('table ownership', () => {
     }
   });
 
+  it('checks product writers of sharing, connections, notifications and audit, even with schema qualifiers', () => {
+    for (const [table, owner] of [
+      ['artifact_shares', 'artifact-access'],
+      ['dataset_connections', 'artifacts'],
+      ['member_notifications', 'notifications'],
+      ['group_audit', 'groups'],
+      ['artifact_versions', 'artifacts'],
+      ['user_blocks', 'notifications'],
+    ]) {
+      const text = `tx.query('UPDATE "arbitrary_schema"."${table}" SET x = 1')`;
+      expect(check(OUTSIDE, text), table).toHaveLength(1);
+      expect(check(`services/app/lib/${owner}/store.ts`, text), table).toEqual([]);
+    }
+    expect(check(OUTSIDE, 'q.query(`TRUNCATE TABLE public.artifacts`)')).toHaveLength(1);
+    expect(check(OUTSIDE, 'q.query("TRUNCATE other, ONLY app.artifacts, app.relations")')).toHaveLength(2);
+    expect(check(OUTSIDE, 'q.query(`MERGE INTO ${schema}.dataset_connections USING temp ON false WHEN NOT MATCHED THEN DO NOTHING`)')).toHaveLength(1);
+    expect(check(OUTSIDE, 'q.query("UPDATE analytics_events SET x=1")')).toHaveLength(1);
+    expect(check(OUTSIDE, String.raw`q.query("UPDATE\n\"app\".\"artifacts\" SET title=$1")`)).toHaveLength(1);
+  });
+
+  it('grants only the reviewed file, write operation and table for each cross-owner transaction', () => {
+    const dismiss = 'services/app/lib/artifacts/membership/membership.ts';
+    const erase = 'services/app/lib/operations/testuser-erase.ts';
+    const boot = 'services/app/lib/platform/db.ts';
+    const scripts = ['prepare-company-root', 'enroll-company-root'].map(name => `services/auth/scripts/${name}.ts`);
+    expect(check(dismiss, 'q.query("UPDATE member_notifications SET kind=\'dismissed\'")')).toEqual([]);
+    expect(check(dismiss, 'q.query("DELETE FROM member_notifications")')).toHaveLength(1);
+    expect(check(erase, 'q.query("DELETE FROM member_notifications")')).toEqual([]);
+    expect(check(erase, 'q.query("DELETE FROM dataset_connections")')).toHaveLength(1);
+    expect(check(erase, 'q.query("UPDATE artifacts SET title=$2")')).toHaveLength(1);
+    expect(check(boot, 'q.query("UPDATE relations SET initiated_by=subject_id")')).toEqual([]);
+    expect(check(boot, 'q.query("DELETE FROM relations")')).toHaveLength(1);
+    for (const file of scripts) {
+      expect(check(file, 'q.query(`INSERT INTO ${app}.group_audit VALUES ($1)`)')).toEqual([]);
+      expect(check(file, 'q.query(`DELETE FROM ${app}.group_audit`)')).toHaveLength(1);
+    }
+    expect(check('services/auth/scripts/other.ts', 'q.query("INSERT INTO app.group_audit VALUES ($1)")')).toHaveLength(1);
+  });
+
   it("passes the owner's own writes and the listed importers", () => {
     expect(check('services/app/lib/artifacts/store.ts', "q.query('UPDATE artifacts SET title=$2 WHERE id=$1')")).toEqual([]);
     expect(check('services/auth/src/identity-store/accounts.ts', "q.query('UPDATE users SET name=$2'); q.query('DELETE FROM tokens'); q.query('SELECT id FROM users WHERE id=$1 FOR UPDATE')")).toEqual([]);
@@ -64,8 +101,6 @@ describe('table ownership', () => {
       "q.query('SELECT id FROM artifacts WHERE id=$1 FOR UPDATE')",
       "q.query('SELECT id FROM tokens WHERE id=$1')",
       "q.query('SELECT 1 FROM users u JOIN artifacts a ON a.user_id=u.id FOR UPDATE OF a')",
-      "q.query('INSERT INTO artifact_versions (artifact_id) VALUES ($1)')",
-      "q.query('DELETE FROM user_blocks WHERE user_id=$1')",
       "q.query('INSERT INTO x VALUES (1) ON CONFLICT (id) DO UPDATE SET n = 1')",
       '// UPDATE artifacts SET user_id is the merge this calls\n/** DELETE FROM users, as the docs say */\nconst n = 1;',
       'q.query(`UPDATE ${table} SET seen=1`)',

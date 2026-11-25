@@ -18,3 +18,4 @@ export { lockAuthorization, lockOrder } from './locks';
 export { readThrough, uploadGrantContext } from './grants';
 export { attestSavedHtmlUpload } from './saved-html-upload';
 export { can, refusalFor } from './capabilities';
+export { grantNamedViewer, replaceNamedShares } from './shares';

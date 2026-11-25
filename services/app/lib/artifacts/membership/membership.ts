@@ -3,7 +3,7 @@ import { JOIN_RELATIONS, setRelationState } from '@/lib/social';
 import {artifactQuery} from '../document';
 import {recordEvent, getDb, lockSubjects} from '@/lib/platform';
 import {DatasetError} from '@/lib/datasets';
-import { readThrough } from '@/lib/artifact-access';
+import { grantNamedViewer, readThrough } from '@/lib/artifact-access';
 import { assertAudienceChange } from '@/lib/query-approvals';
 import type { ArtifactMember, MembershipInput, MembershipState, MembershipDirection, MembershipStatus } from '@artifactbin/contracts/membership';
 import type { Queryable } from '@artifactbin/contracts/db';
@@ -102,8 +102,8 @@ export async function changeMembership(actor: AccessActor, id: string, input: Me
           // A page with a live approved query: only an Admin of its group gives a person access (lib/query-approvals).
           await assertAudienceChange(tx,actor,current,{grant:true});
           const recipient=(await tx.query<{email:string|null}>("SELECT email FROM users WHERE id=$1 AND kind='account'",[target])).rows[0];
-          if(!recipient?.email)fail('This person cannot receive shared access');
-          await tx.query("INSERT INTO artifact_shares(artifact_id,user_id,email,role) VALUES($1,$2,$3,'viewer') ON CONFLICT(artifact_id,email) DO NOTHING",[id,target,recipient.email]);
+          if(!recipient?.email)return fail('This person cannot receive shared access');
+          await grantNamedViewer(tx, id, target, recipient.email);
           await tx.query('UPDATE artifacts SET sharing_revision=sharing_revision+1 WHERE id=$1',[id]);
         }
         await invitePeople(tx,current,actor,[target],undefined,true);continue;

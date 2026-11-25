@@ -2,7 +2,9 @@
 
 The access rule for artifacts, in JavaScript (`access.ts`) and in SQL (`scopes.ts`): ownership, the role lattice,
 access facts, dataset grant context, capabilities and the authorization lock order (`locks.ts`). It writes no
-artifact row; lib/artifacts does. Server-only, entered through `index.ts`.
+artifact row; lib/artifacts does. Named share rows are written in `shares.ts`. Callers in lib/artifacts hold the
+artifact lock for ACL changes and advance its sharing revision in the same transaction. Ordinary reads resolve
+matching invitations. Server-only, entered through `index.ts`.
 
 ## Rules
 - Change the rule in both languages in one edit: `access.ts` and `scopes.ts` must give every actor the same role.

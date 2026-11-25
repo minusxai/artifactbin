@@ -24,7 +24,7 @@ export { slugAddress, slugAddressTarget } from './slug-address';
 
 /** Write path (publish, operations, offline): create, edit, replace and revert; metadata; quotas; version conflicts; the creation ledger; id reservation; mutation receipts; and the deployment's two seams. */
 /** Token claim and guest merge (lib/authentication), inside the caller's transaction. */
-export { setLiveDatasetSummary, type LiveConnectionInsert } from './store';
+export { saveLiveDatasetConnection, type LiveConnectionInsert } from './store';
 export { createArtifact, replaceArtifactFor, revertArtifactFor, setMetadataFor, artifactQuotaExceeded, publicationCountQuotaExceeded, publisherByteQuota, isVersionConflict } from './store';
 export type { ArtifactInput, MetadataPatch, ReplaceOpts } from './store';
 /** Live regions as page storage (lib/region-sessions): the editable head, the region rows and the save as a version. */
