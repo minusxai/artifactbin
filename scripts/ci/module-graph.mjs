@@ -220,7 +220,8 @@ export const DEEP_MODULES = {
   'lib/social': { entries: [''], serverOnly: [''] },
   'lib/allowances': { entries: [''], serverOnly: [''] },
   'lib/datasets': { ...bundled('lib/datasets'), downstream: ['execute'], testOnly: ['testing'] },
-  'lib/http': { ...bundled('lib/http'), testOnly: ['testing'] },
+  // The pages-host adapter imports its Host and Origin parsers directly.
+  'lib/http': { ...bundled('lib/http'), entries: ['', 'pages-origin'], serverOnly: ['pages-origin'], testOnly: ['testing'] },
   'lib/operations': { entries: [''], downstream: ['http', 'registry'] },
   'lib/export': { entries: [''], downstream: ['assets'] },
   // Their indexes are in browser and skill-archive bundles, so node-only names have a server entry.

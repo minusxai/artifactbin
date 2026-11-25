@@ -2,7 +2,8 @@
 import type { EditorView } from 'prosemirror-view';
 import type { RegionFrameMessage, RegionKind } from '@artifactbin/contracts/region-sessions';
 import type { RegionCaretPaint } from './bridge/region-carets';
-export const REGION_BATCH_MS = 50;
+
+/** Marks the mounted editor in the page frame. */
 export const REGION_EDITOR_ATTR = 'data-af-region-editor';
 
 export interface RegionEditorOptions {

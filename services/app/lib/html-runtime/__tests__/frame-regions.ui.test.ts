@@ -14,7 +14,7 @@ import { createRegionState, openRegionDoc, regionHtml } from '../../live-regions
 import * as nativeEditorModule from '../native-region-editor';
 import { startFrameRegions, type FrameRegions } from '../frame-regions';
 import { applyHtmlVersion, LOADED_SOURCE } from '../live-morph';
-import { REGION_BATCH_MS, type RegionEditor } from '../region-editor-contract';
+import type { RegionEditor } from '../region-editor-contract';
 
 let restoreGeometry: () => void;
 beforeAll(() => { restoreGeometry = installEditorGeometry(); });
@@ -162,7 +162,7 @@ describe('a region session in the page frame', () => {
     select(editor, 1);
     typeInto(editor, '>');
     expect(h.updates()).toHaveLength(0);
-    await sleep(REGION_BATCH_MS + 30);
+    await sleep(nativeEditorModule.REGION_UPDATE_FLUSH_MS + 30);
     const sent = h.updates();
     expect(sent).toHaveLength(1);
     expect(sent[0]!.regionId).toBe('r1');
@@ -190,7 +190,7 @@ describe('a region session in the page frame', () => {
     h.receive({ kind: 'region-remote', regionId: 'r1', updates: [update, update], seq: 4 });
     h.receive({ kind: 'region-ack', regionId: 'r1', seq: 4 });
     expect(texts(h.root)).toEqual(['Hi Live text', 'Second']);
-    await sleep(REGION_BATCH_MS + 30);
+    await sleep(nativeEditorModule.REGION_UPDATE_FLUSH_MS + 30);
     expect(h.updates()).toHaveLength(0);
   });
 
@@ -206,10 +206,10 @@ describe('a region session in the page frame', () => {
     h.receive({ kind: 'region-remote', regionId: 'r1', updates: [update], seq: 4 });
     // Held: the composed text is not disturbed and no partial composition leaves the frame.
     expect(texts(h.root)[0]).toBe('Live textかな');
-    await sleep(REGION_BATCH_MS + 30);
+    await sleep(nativeEditorModule.REGION_UPDATE_FLUSH_MS + 30);
     expect(h.updates()).toHaveLength(0);
     editor.view.dom.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: 'かな' }));
-    await sleep(REGION_BATCH_MS + 60);
+    await sleep(nativeEditorModule.REGION_UPDATE_FLUSH_MS + 60);
     expect(editor.view.composing).toBe(false);
     expect(texts(h.root)[0]).toBe('Hi Live textかな');
     const sent = h.updates();
@@ -255,11 +255,11 @@ describe('a region session in the page frame', () => {
     h.receive({ kind: 'region-session', regionId: 'r1', regionKind: 'rich-native-v1', clientId: CLIENT + 1, state: Y.encodeStateAsUpdate(h.server), seq: 9 });
     expect(h.editors,JSON.stringify(h.posted)).toHaveLength(1);
     expect(texts(h.root)).toEqual(['Hi Live text', 'Second end']);
-    await sleep(REGION_BATCH_MS + 30);
+    await sleep(nativeEditorModule.REGION_UPDATE_FLUSH_MS + 30);
     h.posted.length = 0;
     select(editor, 1);
     typeInto(editor, 'Z');
-    await sleep(REGION_BATCH_MS + 30);
+    await sleep(nativeEditorModule.REGION_UPDATE_FLUSH_MS + 30);
     expect(new Set(Y.decodeUpdate(h.updates()[0]!.update).structs.map((struct) => struct.id.client))).toEqual(new Set([CLIENT + 1]));
   });
 
@@ -429,7 +429,7 @@ describe('keys typed between the press and the editor', () => {
     expect(h.root.querySelector('strong')?.textContent).toBe('bold');
     expect(keysInput()).toBeNull();
     // The replay is ordinary typing: it goes to the server like any other.
-    await sleep(REGION_BATCH_MS + 30);
+    await sleep(nativeEditorModule.REGION_UPDATE_FLUSH_MS + 30);
     Y.applyUpdate(h.server, h.updates().at(-1)!.update);
     expect(serverHtml(h)).toBe('<p>H!</p><p data-af-id="a1">Next <strong>bold</strong>Live text</p><p data-af-id="a2">Second</p>');
   });

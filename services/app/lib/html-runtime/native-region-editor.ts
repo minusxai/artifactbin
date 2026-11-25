@@ -12,7 +12,10 @@ import * as Y from 'yjs';
 import { nativeExtensions, NATIVE_ROOT, openRegionDoc } from '../live-regions/native-browser';
 import { createRegionCaretPainter } from './bridge/region-carets';
 import { safeHref } from '../live-regions/href';
-import type { RegionEditor, RegionEditorOptions } from './region-editor-contract';
+import { REGION_EDITOR_ATTR, type RegionEditor, type RegionEditorOptions } from './region-editor-contract';
+
+/** Delay before posting local Yjs updates from the frame to its parent. */
+export const REGION_UPDATE_FLUSH_MS = 50;
 // Markdown is loaded only on paste; keep its parser out of the typing/collaboration chunk.
 const MARKDOWN_MODULE='@afbin/native-markdown';
 const REMOTE=Symbol('native-remote');
@@ -34,13 +37,13 @@ export function mountRegionEditor(options:RegionEditorOptions):RegionEditor {
  const doc=openRegionDoc(options.state,{kind:'rich-native-v1',clientId});
  const fragment=doc.getXmlFragment(NATIVE_ROOT);
  const previous=root.innerHTML;
- root.replaceChildren();root.setAttribute('data-af-region-editor','rich-native-v1');
+ root.replaceChildren();root.setAttribute(REGION_EDITOR_ATTR,'rich-native-v1');
  let pending:Uint8Array[]=[];let held:Uint8Array[]=[];let timer:ReturnType<typeof setTimeout>|undefined;let destroyed=false;
  let editor: Editor;
  let plainPaste=false;
  let painter:ReturnType<typeof createRegionCaretPainter>|undefined;
  const flush=()=>{if(timer)clearTimeout(timer);timer=undefined;if(destroyed||editor.view.composing||!pending.length)return;post({kind:'region-update',regionId,update:Y.mergeUpdates(pending)});pending=[];};
- doc.on('update',(update:Uint8Array,origin:unknown)=>{if(origin!==REMOTE){pending.push(update);timer??=setTimeout(flush,50);}});
+ doc.on('update',(update:Uint8Array,origin:unknown)=>{if(origin!==REMOTE){pending.push(update);timer??=setTimeout(flush,REGION_UPDATE_FLUSH_MS);}});
  const encode=(pos:number)=>{const sync=ySyncPluginKey.getState(editor.state);return base64(Y.encodeRelativePosition(absolutePositionToRelativePosition(pos,fragment,sync!.binding.mapping)));};
  const decode=(_state:unknown,position:string)=>{try{if(position.length>344)return null;const sync=ySyncPluginKey.getState(editor.state);return relativePositionToAbsolutePosition(doc,fragment,Y.decodeRelativePosition(Uint8Array.from(atob(position),c=>c.charCodeAt(0))),sync!.binding.mapping);}catch{return null;}};
  const caret=()=>{if(!editor?.isFocused || !editor.view.hasFocus() || !ySyncPluginKey.getState(editor.state))return;const s=editor.state.selection;post({kind:'region-caret',regionId,anchor:encode(s.anchor),head:encode(s.head),marks:(editor.state.storedMarks ?? s.$head.marks()).map(m=>m.type.name==='bold'?'strong':m.type.name==='italic'?'em':m.type.name),block:s.$head.parent.type.name==='heading'?`h${s.$head.parent.attrs.level}`:'paragraph'});};
@@ -77,7 +80,7 @@ export function mountRegionEditor(options:RegionEditorOptions):RegionEditor {
     const undo=yUndoPluginKey.getState(view.state)?.undoManager;undo?.stopCapturing();
     view.dispatch(view.state.tr.replaceRange(from,to,new Slice(parsed.content,1,1)));undo?.stopCapturing();
    }).catch(()=>{if(!destroyed){const from=decode(view.state,anchor),to=decode(view.state,head);if(from!==null&&to!==null)view.dispatch(view.state.tr.insertText(text,from,to));}});
-   return true;},attributes:{'data-af-region-editor':'rich-native-v1'},handleDOMEvents:{cut:(view,event)=>{const slice=view.state.selection.content();const clipboard=event.clipboardData;if(!clipboard)return false;const serialized=view.serializeForClipboard(slice);if(!deleteListSeparator(editor))return false;clipboard.clearData();clipboard.setData('text/html',serialized.dom.innerHTML);clipboard.setData('text/plain',serialized.text);event.preventDefault();return true;},keydown:(_,event)=>{plainPaste=event.shiftKey;return false;},keyup:()=>{plainPaste=false;return false;},compositionend:()=>{setTimeout(()=>{apply(held);held=[];flush();},0);return false;},blur:()=>{post({kind:'region-blur'});return false;}}},
+   return true;},attributes:{[REGION_EDITOR_ATTR]:'rich-native-v1'},handleDOMEvents:{cut:(view,event)=>{const slice=view.state.selection.content();const clipboard=event.clipboardData;if(!clipboard)return false;const serialized=view.serializeForClipboard(slice);if(!deleteListSeparator(editor))return false;clipboard.clearData();clipboard.setData('text/html',serialized.dom.innerHTML);clipboard.setData('text/plain',serialized.text);event.preventDefault();return true;},keydown:(_,event)=>{plainPaste=event.shiftKey;return false;},keyup:()=>{plainPaste=false;return false;},compositionend:()=>{setTimeout(()=>{apply(held);held=[];flush();},0);return false;},blur:()=>{post({kind:'region-blur'});return false;}}},
   onTransaction:()=>caret(),onUpdate:()=>{painter?.refresh();},
  });
  const view=editor.view;
@@ -87,7 +90,7 @@ export function mountRegionEditor(options:RegionEditorOptions):RegionEditor {
  root.addEventListener('change',checkboxBoundary,true);
  painter=createRegionCaretPainter(view,regionId,decode);
  if(!root.ownerDocument.querySelector('[data-af-native-editor-style]')){
-  const style=root.ownerDocument.createElement('style');style.setAttribute('data-af-native-editor-style','');style.textContent=`[data-af-region-editor="rich-native-v1"] .tiptap{outline:none;white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}`;root.ownerDocument.head.append(style);
+  const style=root.ownerDocument.createElement('style');style.setAttribute('data-af-native-editor-style','');style.textContent=`[${REGION_EDITOR_ATTR}="rich-native-v1"] .tiptap{outline:none;white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}`;root.ownerDocument.head.append(style);
  }
  if(options.at!==undefined){let at:ReturnType<typeof view.posAtCoords>|null=null;if(options.at)try{at=view.posAtCoords({left:options.at.x,top:options.at.y});}catch{/* A detached or layout-less frame has no coordinate target. */}if(at)view.dispatch(view.state.tr.setSelection(TextSelection.near(view.state.doc.resolve(at.pos))));if(options.focus!==false)view.focus();}
  if(options.caret){select(options.caret);view.focus();}
@@ -123,6 +126,6 @@ export function mountRegionEditor(options:RegionEditorOptions):RegionEditor {
      else if(entry.key==='Delete'&&$from.parentOffset<$from.parent.content.size){const width=Array.from($from.parent.textBetween($from.parentOffset,$from.parent.content.size)).at(0)!.length;view.dispatch(view.state.tr.delete(to,to+width));}
     }}}},
   paint(carets){painter?.paint(carets);},owns:node=>!!painter?.owns(node),caret(){if(!view.hasFocus())return null;return {anchor:encode(view.state.selection.anchor),head:encode(view.state.selection.head)};},
-  destroy(){root.removeEventListener('change',checkboxBoundary,true);flush();destroyed=true;if(timer)clearTimeout(timer);painter?.dispose();editor.destroy();doc.destroy();root.removeAttribute('data-af-region-editor');root.innerHTML=previous;},
+  destroy(){root.removeEventListener('change',checkboxBoundary,true);flush();destroyed=true;if(timer)clearTimeout(timer);painter?.dispose();editor.destroy();doc.destroy();root.removeAttribute(REGION_EDITOR_ATTR);root.innerHTML=previous;},
  };
 }
