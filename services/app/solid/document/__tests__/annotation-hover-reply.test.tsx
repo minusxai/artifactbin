@@ -11,7 +11,7 @@ import type { AnnotationWire } from '@/lib/annotations';
 import { fireEvent, render } from '../../__tests__/helpers';
 import { AnnotationPreview } from '../AnnotationPreview';
 import { preloadCommentField } from '../LazyCommentField';
-import { ANN, flush, httpBackend, installAnnotationFetch, knobs, layer, makeRuntime, trustedRoot, emitLayout } from './annotation-rig';
+import { ANN, emitPin, flush, httpBackend, installAnnotationFetch, knobs, layer, makeRuntime, trustedRoot, emitLayout } from './annotation-rig';
 import { replaceComment } from './comment-input';
 
 const SECOND: AnnotationWire = { ...ANN, id: 'ann_9', anchor: { key: 'k9', path: '2', spanStart: 0, spanEnd: 5 },
@@ -19,7 +19,7 @@ const SECOND: AnnotationWire = { ...ANN, id: 'ann_9', anchor: { key: 'k9', path:
 const SINGLE: AnnotationWire = { ...ANN, thread: [ANN.thread[0]!] };
 
 beforeAll(() => preloadCommentField());
-beforeEach(installAnnotationFetch);
+beforeEach(() => { sessionStorage.clear(); installAnnotationFetch(); });
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 const markerCard = (name: RegExp | string) => screen.getByLabelText(name).closest<HTMLElement>('[data-annotation-id]')!;
@@ -343,4 +343,44 @@ describe('who gets a box', () => {
     expect(within(card).getByRole('list', { name: 'Thread replies' })).toHaveTextContent('one more thought');
     expect(screen.queryByRole('textbox', { name: 'Reply to annotation' })).toBeNull();
   });
+});
+
+it('moves one reply between the marker and rail, then clears it on send', async () => {
+  const { view } = await expandedCard();
+  replaceComment(await replyField(), 'Started at the marker');
+  emitPin(view.runtime, ANN.id);
+  view.set({ showViewComments: true, railOpen: true });
+  expect(await replyField()).toHaveTextContent('Started at the marker');
+  replaceComment(await replyField(), 'Finished in the rail');
+  view.set({ showViewComments: true });
+  emitLayout(view.runtime, 120);
+  const mark = markerCard(/Open annotation conversation by/);
+  fireEvent.mouseEnter(mark);
+  expect(await replyField()).toHaveTextContent('Finished in the rail');
+  fireEvent.click(within(mark).getByRole('button', { name: 'Send reply' }));
+  await waitFor(() => expect(within(mark).getByRole('textbox', { name: 'Reply to annotation' }).textContent).toBe(''));
+  emitPin(view.runtime, ANN.id);
+  view.set({ showViewComments: true, railOpen: true });
+  expect((await replyField()).textContent).toBe('');
+});
+
+it('restores both distinct legacy replies as one draft and does not revive them after cancel', async () => {
+  const markerKey = `artifactbin:draft:doc1:reply:${ANN.id}`;
+  const railKey = `artifactbin:draft:doc1:thread-reply:${ANN.id}`;
+  sessionStorage.setItem(markerKey, 'First draft');
+  sessionStorage.setItem(railKey, 'Second draft');
+  const { view } = await expandedCard();
+  expect(await replyField()).toHaveTextContent('First draft');
+  expect(await replyField()).toHaveTextContent('Second draft');
+  expect(sessionStorage.getItem(markerKey)).toBe('First draft\n\nSecond draft');
+  expect(sessionStorage.getItem(railKey)).toBeNull();
+  view.unmount();
+  const reloaded = await expandedCard();
+  emitPin(reloaded.view.runtime, ANN.id);
+  reloaded.view.set({ showViewComments: true, railOpen: true });
+  expect(await replyField()).toHaveTextContent('First draft');
+  expect(await replyField()).toHaveTextContent('Second draft');
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel reply' }));
+  expect(sessionStorage.getItem(markerKey)).toBeNull();
+  expect(sessionStorage.getItem(railKey)).toBeNull();
 });

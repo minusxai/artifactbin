@@ -19,13 +19,14 @@ export function readDraft(key: string): string {
   try { return storage()?.getItem(PREFIX + key) ?? ''; } catch { return ''; }
 }
 
-/** Keep `value` under `key`; an empty one is removed. */
-export function writeDraft(key: string, value: string): void {
+/** Keep `value` under `key` (remove an empty one); report whether storage accepted the change. */
+export function writeDraft(key: string, value: string): boolean {
   try {
     const store = storage();
-    if (!store) return;
+    if (!store) return false;
     if (value) store.setItem(PREFIX + key, value); else store.removeItem(PREFIX + key);
-  } catch { /* storage full or unavailable: the draft still lives in the page */ }
+    return true;
+  } catch { return false; /* storage full or unavailable: the draft still lives in the page */ }
 }
 
 /** Every draft kept under keys starting `prefix`, by the rest of the key. */

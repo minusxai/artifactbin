@@ -6,8 +6,7 @@
  * image, CommentImageAttach) included: staged at send, carried by the reply, kept with the words when
  * sending fails.
  *
- * The draft is the caller's: the rail keeps it on the thread, the hover card keeps it per thread
- * on the layer so closing the card cannot lose it.
+ * The caller supplies the thread's shared text and this surface's staged image.
  */
 import { createSignal, Show, type JSX } from 'solid-js';
 import { BackendRequestError, type ArtifactBackend } from '@/lib/artifact-backend';
@@ -53,12 +52,14 @@ export function AnnotationReplyBox(props: AnnotationReplyBoxProps): JSX.Element 
   const imageBusy = () => !!image?.capture.busy();
   // ONE send for the button and for ⌘↵ — the field owns the key, the box owns whether there is anything to send.
   const send = async () => {
-    if (props.busy || sending() || imageBusy() || !hasReplyText(props.value)) return;
+    const body = props.value;
+    if (props.busy || sending() || imageBusy() || !hasReplyText(body)) return;
     setSending(true); setError('');
     try {
-      const write = (attachment?: CommentImageAttachment) => props.onSend(props.value, attachment);
+      const write = (attachment?: CommentImageAttachment) => props.onSend(body, attachment);
       if (!await (image ? image.send(write) : write())) throw new Error(REPLY_FAILED);
-      props.onChange('');
+      // The reader may have edited the draft on the other surface while this send was pending.
+      if (props.value === body) props.onChange('');
       image?.capture.reset();
       props.onSent?.();
     } catch (cause) {

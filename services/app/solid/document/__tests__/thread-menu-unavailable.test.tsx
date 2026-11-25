@@ -21,7 +21,7 @@ it('keeps the thread and an unavailable actions trigger when the menu chunk cann
   const onError = (event: ErrorEvent) => { errors.push(event.error); };
   window.addEventListener('error', onError);
   try {
-    render(() => <AnnotationThread artifactId="doc1" backend={{ unavailable: () => null } as unknown as ArtifactBackend} a={ANN} canDeleteAny open hovered={false} busy={false}
+    render(() => <AnnotationThread artifactId="doc1" replyDraft="" onReplyDraftChange={() => {}} backend={{ unavailable: () => null } as unknown as ArtifactBackend} a={ANN} canDeleteAny open hovered={false} busy={false}
       folded={false} justOpened={false} isCommentFolded={() => false} onOpen={() => {}} onHover={() => {}} onReply={async () => false}
       onResolve={() => {}} onReopen={() => {}} onDelete={() => {}} onToggleFold={() => {}} onToggleComment={() => {}} />);
     await waitFor(() => expect(screen.getByRole('button', { name: 'Annotation actions' })).toBeDisabled());

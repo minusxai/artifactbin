@@ -37,7 +37,7 @@ import { AnnotationComposer, CAPTURE_CHROME_CSS } from './AnnotationComposer';
 import { AnnotationPreview, CommentsOffline, positionedComments, VIEW_COMMENT_COLLAPSED_H, VIEW_COMMENT_INSET } from './AnnotationPreview';
 import { CommentRail } from './AnnotationRail';
 import { CommentImagesProvider } from './CommentImageAttach';
-import { draftsUnder, writeDraft } from '../lib/draft-store';
+import { createReplyDrafts } from './reply-drafts';
 import { PersonMentionProvider } from './PersonMention';
 import { connectFrameAnnotations } from './annotation-frame';
 import { createCommentDraft } from './annotation-draft';
@@ -157,13 +157,6 @@ function ConfirmDelete(props: { thread: boolean; remove: () => Promise<unknown>;
     onCancel={() => { if (!busy()) props.onClose(); }} onConfirm={() => void confirm()} />;
 }
 
-/** A per-thread record kept in step: `value` empty removes the entry. */
-const withEntry = <T,>(current: Record<string, T>, id: string, value: T | undefined) => {
-  const next = { ...current };
-  if (value) next[id] = value; else delete next[id];
-  return next;
-};
-
 export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   const backend = props.backend ?? createHttpBackend(props.id);
   // A Solid prop getter notifies whenever its source does, even for an equal value. These memos
@@ -192,17 +185,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   const [pinnedId, setPinnedId] = createSignal<string | null>(null);
   /** The hover card that shows: the pinned one, else the one under the pointer. */
   const previewId = () => pinnedId() ?? hoverId();
-  /** Unsent hover-card replies per thread, for this page session: closing a card never loses one. */
-  // Kept for this tab too (solid/lib/draft-store): a reload — the page loading a new build — gives them back.
-  const [replyDrafts, setReplyDrafts] = createSignal<Record<string, string>>(draftsUnder(`${props.id}:reply:`));
-  const setReplyDraft = (id: string, value: string) => setReplyDrafts((current) => {
-    if ((current[id] ?? '') === value) return current;
-    writeDraft(`${props.id}:reply:${id}`, value);
-    return withEntry(current, id, value);
-  });
-  /** Rail threads whose reply box holds words (each thread owns its own reply draft). */
-  const [threadReplies, setThreadReplies] = createSignal<Record<string, true>>({});
-  const noteThreadReply = (id: string, typed: boolean) => setThreadReplies((current) => Boolean(current[id]) === typed ? current : withEntry(current, id, typed || undefined));
+  const replies = createReplyDrafts(props.id);
   const closePreview = () => batch(() => { setPinnedId(null); hoverUi(null); });
   let threadsRoot: HTMLDivElement | undefined;
   /** On a phone the rail is a bottom sheet — a 320px rail over a 390px screen covers the document. */
@@ -263,7 +246,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   });
   createEffect(on(pickOnOpen, (mayPick) => { if (!mayPick && !mayCreate()) setDeleting(null); }));
   const drafting = createMemo(() => draft.selection() !== null || hasReplyText(draft.words())
-    || Object.values(replyDrafts()).some(hasReplyText) || Object.keys(threadReplies()).length > 0);
+    || Object.values(replies.values()).some(hasReplyText));
   createEffect(on(drafting, (value) => props.onDraftingChange?.(value)));
 
   const frame = connectFrameAnnotations({
@@ -344,7 +327,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
                 hovered={previewId() === id} resolving={threads.busy()} resolveError={ambientResolveError()?.id === id ? ambientResolveError()?.message : undefined}
                 onResolve={mayCreate() ? () => void resolveFromPreview(id) : undefined} rightInset={props.panelWidth} onOpen={() => openThread(id)} onHover={hoverUi}
                 onReply={mayCreate() && item().annotation.status === 'open' ? (body, attachment) => threads.actOrThrow(id, { reply: body, ...attachment }) : undefined}
-                backend={backend} artifactId={props.id} busy={threads.busy()} draft={replyDrafts()[id] ?? ''} onDraftChange={(value) => setReplyDraft(id, value)}
+                backend={backend} artifactId={props.id} busy={threads.busy()} draft={replies.get(id)} onDraftChange={(value) => replies.set(id, value)}
                 pinned={pinnedId() === id} onPin={() => setPinnedId(id)} onClose={closePreview} />
             )}</Show>
           )}</For>
@@ -373,7 +356,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
         <CommentRail threads={threads} draft={draft} artifactId={props.id} backend={backend} mayCreate={mayCreate()} canDeleteAny={props.canDeleteAny}
           phone={phoneRail() || !!props.railSheet} host={props.railHost ?? undefined} topOffset={topOffset()} rightInset={props.rightInset ?? 0}
           onClose={() => props.onRailOpenChange(false)} offerSignIn={props.offerSignIn ?? false} onSignIn={signIn} hoverId={hoverId()} onHover={hoverUi}
-          viewStateError={frame.viewStateError()} missing={frame.missing()} onReplyDraftChange={noteThreadReply} onDelete={askDelete} onOpenThread={openThread}
+          viewStateError={frame.viewStateError()} missing={frame.missing()} replyDraft={replies.get} onReplyDraftChange={replies.set} onDelete={askDelete} onOpenThread={openThread}
           threadsRef={(element) => { threadsRoot = element; }} />
       </Show>
 

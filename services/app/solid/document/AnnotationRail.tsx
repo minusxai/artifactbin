@@ -82,7 +82,8 @@ export function CommentRail(props: {
   /** What the document last said about each thread's passage. */
   viewStateError: { id: string; message: string } | null;
   missing: Set<string>;
-  onReplyDraftChange: (id: string, typed: boolean) => void;
+  replyDraft: (id: string) => string;
+  onReplyDraftChange: (id: string, value: string) => void;
   onDelete: (commentId: string, thread: boolean) => void;
   onOpenThread: (id: string) => void;
   threadsRef: (element: HTMLDivElement) => void;
@@ -116,7 +117,6 @@ export function CommentRail(props: {
   const handlers = (id: string, resolved: boolean) => ({
     canCreateComment: props.mayCreate,
     onHover: props.onHover,
-    onReplyDraftChange: (typed: boolean) => props.onReplyDraftChange(id, typed),
     onDelete: (commentId: string) => props.onDelete(commentId, commentId === id),
     onReact: (commentId: string, active: boolean) => threads.react(commentId, active),
     onSignIn: () => props.onSignIn(),
@@ -139,6 +139,7 @@ export function CommentRail(props: {
   const thread = (id: string, row: () => AnnotationWire | undefined, resolved: boolean) => <Show when={row()}>{(a) => (
     <AnnotationThread artifactId={props.artifactId} backend={props.backend} a={a()} canDeleteAny={props.canDeleteAny} open={threads.openId() === id} resolved={resolved || undefined} hovered={props.hoverId === id} busy={threads.busy()}
       viewStateError={props.viewStateError?.id === id ? props.viewStateError?.message : undefined} targetMissing={props.missing.has(id)} folded={threads.folded('threads', id)} receded={threads.openId() !== null && threads.openId() !== id} justOpened={threads.justOpenedId() === id}
+      replyDraft={props.replyDraft(id)} onReplyDraftChange={(value) => props.onReplyDraftChange(id, value)}
       isCommentFolded={(commentId) => threads.folded('comments', commentId)} {...handlers(id, resolved)} />
   )}</Show>;
 
