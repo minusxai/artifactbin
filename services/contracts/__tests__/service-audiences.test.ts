@@ -1,6 +1,5 @@
 /**
- * IDENTITY__SERVICE_AUDIENCES across a removal: an entry that still carries a removed feature's key parses as the same
- * entry without it, the caller hears the entry's id and the key (never its value), and every other check holds.
+ * IDENTITY__SERVICE_AUDIENCES: validate opt-ins and report removed keys without retaining or revealing their values.
  */
 import {describe,expect,it} from 'vitest';
 import {parseServiceAudiences} from '../src/service-audiences';
@@ -29,4 +28,22 @@ describe('a removed key',()=>{
    expect(told).toEqual([]);
   }
  });
+});
+
+describe('service opt-ins that require a secret', () => {
+  it.each([
+    { key: 'group_principals', property: 'groupPrincipals', origin: 'https://warehouse.example' },
+    { key: 'run_sign_ins', property: 'runSignIns', origin: 'https://warehouse.example' },
+    { key: 'group_sign_ins', property: 'groupSignIns', origin: 'http://warehouse.localhost:7444' },
+  ])('parses $key only as an explicit boolean and requires a secret when enabled', ({ key, property, origin }) => {
+    const service = { id: 'warehouse', origin };
+    const withSecret = { ...service, introspection_secret_sha256: 'a'.repeat(64) };
+
+    expect(parse([withSecret]).audiences[0]).not.toHaveProperty(property);
+    expect(parse([{ ...withSecret, [key]: false }]).audiences[0]).not.toHaveProperty(property);
+    expect(parse([{ ...withSecret, [key]: true }]).audiences[0]).toHaveProperty(property, true);
+
+    expect(() => parse([{ ...withSecret, [key]: 'yes' }])).toThrow(/IDENTITY__SERVICE_AUDIENCES/);
+    expect(() => parse([{ ...service, [key]: true }])).toThrow(/IDENTITY__SERVICE_AUDIENCES/);
+  });
 });

@@ -6,8 +6,8 @@
  */
 import { beforeEach, expect, it } from 'vitest';
 import { storePolicy } from '@/__tests__/artifact-fixtures';
-import { mintAccountToken, request, setSession, useAppHarness, params } from './harness';
-import { ANONYMOUS_ACTOR, identityForUser, type AccessActor } from '@/lib/accounts';
+import { mintAccountWithActor, request, setSession, useAppHarness, params } from './harness';
+import { ANONYMOUS_ACTOR, type AccessActor } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
 import { getArtifactById, canReadArtifact } from '@/lib/artifacts';
 import { createArtifactFromBody } from '@/lib/publish';
@@ -30,14 +30,11 @@ const POLICY = { version: 3, tables: [{ table: { schema: 'public', name: 'rows' 
 ] }] };
 const SQL_POLICY = { ...POLICY, tables: [{ ...POLICY.tables[0], select_permissions: [{ role: 'viewer', permission: { ...POLICY.tables[0]!.select_permissions[0]!.permission, allow_aggregations: true } }] }] };
 
-async function person(name: string) {
-  const token = await mintAccountToken(`doors_${name}`);
-  return { ...token, actor: identityForUser(token.userId, token.id, token.email) as AccessActor };
-}
-
 async function setup() {
-  const owner = await person('owner'), viewer = await person('viewer'), other = await person('other');
-  const created = await createArtifactFromBody({ dataset: ROWS, access: 'readwrite', visibility: 'unlisted' }, owner.actor as AccessActor & { tokenId: string }, 'http://localhost:3000');
+  const owner = await mintAccountWithActor('doors_owner');
+  const viewer = await mintAccountWithActor('doors_viewer');
+  const other = await mintAccountWithActor('doors_other');
+  const created = await createArtifactFromBody({ dataset: ROWS, access: 'readwrite', visibility: 'unlisted' }, owner.actor, 'http://localhost:3000');
   expect(created.status, JSON.stringify(created.body)).toBe(201);
   const id = created.body.id as string;
   const db = await getDb();
@@ -85,7 +82,7 @@ it('SQL doors (/a/:id/tables, query_resource) run over the role view: hidden col
 it('query_resource SQL needs allow_aggregations: a flagless role reads rows by table name only', async () => {
   const { owner, viewer, other, id } = await setup();
   const db = await getDb();
-  const editor = await person('editor');
+  const editor = await mintAccountWithActor('doors_editor');
   await seedShares(db, { artifact_id: id, user_id: editor.userId, email: editor.email, role: 'editor' });
   // signed_in (the link holder) gets a flagless rule too; viewer keeps POLICY's.
   const flagless = { columns: ['name', 'team'], filter: { team: { _eq: 'red' } } };

@@ -148,6 +148,12 @@ export async function mintAccountToken(...args: Parameters<typeof mintRawToken>)
   return { ...await mintRawToken(name, userId, options), userId, email: rows[0]?.email ?? null };
 }
 
+/** An account's bearer token and the access actor rebuilt from the same identity. */
+export async function mintAccountWithActor(name: string) {
+  const token = await mintAccountToken(name);
+  return { ...token, actor: identityForUser(token.userId, token.id, token.email) };
+}
+
 /** What a route test may send. `token` (bearer) and `actor` (proxy-attached) are two DIFFERENT credentials: naming both is a test bug, refused. */
 export interface RequestOptions {
   method?: string;
