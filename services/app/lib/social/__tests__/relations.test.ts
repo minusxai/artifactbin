@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { useAppHarness } from '@/__tests__/harness';
 import { count, has, link, linked, replaceLinked, unlink } from '@/lib/social';
-import { createUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { getDb } from '@/lib/platform';
 import type { ImmediateRelationVerb, RelationVerb } from '../relations';
 

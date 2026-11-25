@@ -25,7 +25,7 @@ import { GET as serveRaw, HEAD as headRaw } from '@/app/a/[id]/raw/route';
 import { POST as bearerCreate } from '@/app/api/artifacts/route';
 import { pdfFilename } from '@/lib/object-store';
 import { mintAccountToken as mintToken, params } from '@/__tests__/harness';
-import { createUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { request, useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();

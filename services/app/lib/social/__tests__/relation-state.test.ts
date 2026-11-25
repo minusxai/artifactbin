@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { useAppHarness } from '@/__tests__/harness';
-import { createUser, setUsername } from '@/lib/accounts';
+import { createUser, setUsername } from '@/lib/accounts/testing';
 import { getDb } from '@/lib/platform';
 import { JOIN_RELATIONS, dismissPendingRelations, link, profileSocial, seedOwnerJoin, setRelationState } from '@/lib/social';
 

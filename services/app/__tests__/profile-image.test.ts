@@ -14,7 +14,8 @@ import { GET as getAvatar } from '@/app/api/users/[id]/avatar/route';
 import { GET as getProfile, PATCH as patchProfile } from '@/app/api/my/profile/route';
 import { AVATAR_MAX_BYTES, avatarVersion } from '@/lib/avatars';
 import { getDb } from '@/lib/platform';
-import { createUser, ensureUsername, getUserById } from '@/lib/accounts';
+import { ensureUsername, getUserById } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { request, useAppHarness, useSessionUser, params } from '@/__tests__/harness';
 
 useAppHarness();

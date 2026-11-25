@@ -2,8 +2,8 @@
 import { expect, it } from 'vitest';
 import { request, useAppHarness, mintAccountToken } from '@/__tests__/harness';
 import { POST as newTestUser } from '@/app/api/testusers/route';
-import { createUser } from '@/lib/accounts';
-import { people } from '@/lib/datasets';
+import { createUser } from '@/lib/accounts/testing';
+import { people } from '@/lib/datasets/testing';
 import { getDb } from '@/lib/platform/db';
 
 useAppHarness();

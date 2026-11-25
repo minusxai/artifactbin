@@ -1,7 +1,8 @@
 import {afterEach,it,expect} from 'vitest';
 import {useAppHarness} from '@/__tests__/harness';
 import {account,sql} from '@/__tests__/artifact-fixtures';
-import {getDb,services,syncIdentitySettings} from '@/lib/platform';
+import {getDb,services} from '@/lib/platform';
+import { syncIdentitySettings } from '@/lib/platform/testing';
 import {admitDeploymentIdentity,setupDeployment} from '@/lib/deployment';
 import {overrideConfig,resetConfigOverrides} from '@/lib/platform/config';
 import {createGroup,deleteGroup,inviteGroupMember,removeGroupMember,setGroupMember,setGroupParent} from '..';

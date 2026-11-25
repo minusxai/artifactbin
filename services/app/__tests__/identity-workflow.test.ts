@@ -2,7 +2,8 @@
 import {it,expect,vi} from 'vitest';
 import { useAppHarness, request, createGuestOwner, mintAccountToken as mintToken, params } from './harness';
 import {nativeHtml} from './native-html-fixture';
-import { identityForUser, createUser } from '@/lib/accounts';
+import { identityForUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import {POST as create} from '@/app/api/artifacts/route';
 import {GET as read,DELETE as remove} from '@/app/api/artifacts/[id]/route';
 import {reserveIds} from '@/lib/artifacts';

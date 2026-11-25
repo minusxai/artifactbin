@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { createGuestOwner, useAppHarness } from '@/__tests__/harness';
 import { USERNAME_RE } from '@/lib/accounts/users';
 import { usernameFromEmail } from '@artifactbin/auth/identity-store/accounts';
-import { authorHandle, createUser, ensureUsername, getUserByEmail, getUserById, getUserByUsername, hasCreatedDocument, isAccountRow, mintToken, revokeUserToken, ownerUsername, setUsername } from '@/lib/accounts';
+import { authorHandle, createUser as createLegacyUser, ensureUsername, getUserByEmail, getUserById, getUserByUsername, hasCreatedDocument, isAccountRow, mintToken, revokeUserToken, ownerUsername } from '@/lib/accounts';
+import { createUser, setUsername } from '@/lib/accounts/testing';
 import { getDb } from '@/lib/platform';
 import { seedArtifacts } from '@/__tests__/rows';
 
@@ -75,14 +76,14 @@ describe('usernames', () => {
 });
 
 describe('accounts', () => {
-  it('createUser stores a lowercased, trimmed address and a fresh account row; duplicates are refused', async () => {
+  it('creates a normalized account through the fixture entry and refuses a duplicate through the legacy entry', async () => {
     const user = await createUser({ email: '  Person@Example.TEST ', name: 'Person' });
     expect(user).toMatchObject({ email: 'person@example.test', kind: 'account', name: 'Person', username: null, image_key: null, welcome_pending: false, parent_user_id: null });
     expect(user.id).toMatch(/^usr_/);
     expect(isAccountRow(user)).toBe(true);
     expect((await getUserByEmail('PERSON@example.test '))!.id).toBe(user.id);
     expect((await getUserById(user.id))!.email).toBe('person@example.test');
-    await expect(createUser({ email: 'person@EXAMPLE.test' })).rejects.toThrow();
+    await expect(createLegacyUser({ email: 'person@EXAMPLE.test' })).rejects.toThrow();
     expect(await getUserById('usr_missing')).toBeNull();
     expect(await getUserByEmail('nobody@example.test')).toBeNull();
   });

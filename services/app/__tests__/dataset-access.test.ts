@@ -17,7 +17,7 @@ import { getArtifactById } from '@/lib/artifacts';
 
 
 import { mintAccountToken as mintToken, params } from '@/__tests__/harness';
-import { createUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { useAppHarness, request } from '@/__tests__/harness';
 
 useAppHarness();

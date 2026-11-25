@@ -8,7 +8,7 @@ import { resolveUserColumnScope, retainUserScope, validateUserContent } from '..
 import { validateStoredDatasetPolicy } from '../policy/validation';
 import type { DatasetColumn } from '@artifactbin/contracts/sql';
 import { useAppHarness } from '@/__tests__/harness';
-import { createUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { objectStore, prepareObjects } from '@/lib/object-store';
 import { MAX_FILE_BYTES, MAX_IMAGE_BYTES, getDb } from '@/lib/platform';
 import { seedOwnerJoin } from '@/lib/social';
@@ -16,9 +16,10 @@ import {
   DatasetError, catalogOf, datasetResponse, importedRows, importedTables, loadDatasetRows,
   publicCatalogOf, publishDataset, publishFile, publishImage, publishPdf, publishVizRecipe,
   readFileUpload, serveStoredFile,
-  storeDatasetRows, storeFileContent, storeImageContent, storePdfContent, storedMediaReferences, throttlePublicMutation, uploadedSha256,
-  userOptions, validateDatasetPolicyForRow, validateUserWrites, type DatasetCatalog,
+  storeDatasetRows, storeFileContent, storeImageContent, storePdfContent, storedMediaReferences, throttlePublicMutation,
+  uploadedSha256, validateDatasetPolicyForRow, validateUserWrites, type DatasetCatalog,
 } from '@/lib/datasets';
+import { userOptions } from '@/lib/datasets/testing';
 import { seedArtifacts } from '@/__tests__/rows';
 import { Reply } from '@/lib/http';
 

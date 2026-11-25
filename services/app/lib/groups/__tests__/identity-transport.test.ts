@@ -10,7 +10,8 @@ import {IDENTITY_CALL_PATH, IdentityError, type TransactionalQueryable} from '@a
 import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts/routes';
 import {identityClient} from '@artifactbin/utils/identity-client';
 import {useAppHarness} from '@/__tests__/harness';
-import {createUser,mintToken,revokeToken,setUsername} from '@/lib/accounts';
+import {mintToken,revokeToken} from '@/lib/accounts';
+import { createUser, setUsername } from '@/lib/accounts/testing';
 import {getDb,setServices} from '@/lib/platform';
 import {acceptGroupInvitations,createGroup,deleteGroup,getGroupRole,inviteGroupMember,removeGroupMember,setGroupParent} from '..';
 

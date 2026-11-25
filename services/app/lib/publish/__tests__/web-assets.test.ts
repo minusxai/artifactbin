@@ -23,7 +23,8 @@ import { withHttpServer, type RunningServer } from '@artifactbin/test-support/ne
 import { useLoopbackLookup } from '@artifactbin/utils/node/loopback-lookup';
 import { allowLocalWebIngest, restoreWebIngestPolicy } from '@/test/helpers/web-ingest';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { identityForUser, createUser } from '@/lib/accounts';
+import { identityForUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { getDb } from '@/lib/platform';
 import { objectStore } from '@/lib/object-store';
 import { setAssetByteQuotaForTests } from '@/lib/artifacts/testing';

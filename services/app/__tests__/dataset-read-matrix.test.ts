@@ -8,7 +8,8 @@
 import {expect,it} from 'vitest';
 import {useAppHarness,mintAccountToken,request,params} from './harness';
 import {POST as tables} from '@/app/a/[id]/tables/route';
-import {ANONYMOUS_ACTOR,createUser,identityForUser,type AccessActor} from '@/lib/accounts';
+import {ANONYMOUS_ACTOR,identityForUser,type AccessActor} from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import {getDb} from '@/lib/platform';
 import {canReadArtifact,getArtifactById} from '@/lib/artifacts';
 import {createArtifactFromBody} from '@/lib/publish';

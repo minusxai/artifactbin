@@ -1,7 +1,7 @@
 import { expect, it, vi } from 'vitest';
 import { GET as assetsPage } from '@/app/api/page/assets/route';
 import { GET } from '@/app/api/page/home/route';
-import { createUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { request, useAppHarness } from '@/__tests__/harness';
 import * as feed from '@/lib/workspace/analytics';
 import { accountWorkspaceInsightsFor, accountWorkspaceFor } from '@/lib/workspace';

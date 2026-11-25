@@ -2,9 +2,9 @@ import {afterEach,expect,it,vi} from 'vitest';
 import {GET as documentEvents} from '@/app/a/[id]/events/route';
 import {GET as peopleEvents} from '@/app/api/my/people/events/route';
 import {request,useAppHarness,params} from './harness';
-import { createUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import {runWithRequest} from '@/lib/platform';
-import {LIVE_KEEPALIVE_EVENT} from '@/lib/http';
+import {LIVE_KEEPALIVE_EVENT} from '@/lib/http/testing';
 const harness=useAppHarness();
 afterEach(()=>{vi.useRealTimers();});
 /** Every long-lived stream the app serves speaks within 25s, under the 60s idle timeout of the proxies in front of it. */

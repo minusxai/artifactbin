@@ -7,7 +7,7 @@ import { POST as forkOpRoute } from '@/app/api/artifacts/[id]/fork/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { getArtifactById } from '@/lib/artifacts';
 import { mintAccountToken as mintToken, params } from '@/__tests__/harness';
-import { createUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 
 export const BASE = 'http://localhost:3000';
 export const sessionUser = { id: '', email: '' };

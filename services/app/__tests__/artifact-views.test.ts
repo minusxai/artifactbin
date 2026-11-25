@@ -6,7 +6,7 @@ import { EVENTS_SCHEMA } from '@/lib/platform';
 import { viewSeriesByUser } from '@/lib/workspace';
 import { runWithRequest } from '@/lib/platform';
 import { setServices } from '@/lib/platform';
-import { createUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { seedArtifacts } from '@/__tests__/rows';
 
 const harness = useAppHarness();

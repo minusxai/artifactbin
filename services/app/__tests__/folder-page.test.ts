@@ -25,7 +25,8 @@ import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { GET as frameRoute } from '@/app/a/[id]/events/frame/route';
 import { getArtifactById, updateSharingFor } from '@/lib/artifacts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { createUser, identityForUser, setUsername } from '@/lib/accounts';
+import { identityForUser } from '@/lib/accounts';
+import { createUser, setUsername } from '@/lib/accounts/testing';
 
 useAppHarness();
 const j = async (r: Response) => ({ status: r.status, body: (await r.json()) as Record<string, any> });

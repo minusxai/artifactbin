@@ -6,7 +6,7 @@ import {mine} from '@/__tests__/artifact-fixtures';
 import {trashArtifactFor,restoreArtifactFor} from '@/lib/workspace';
 import {describe,it,expect} from 'vitest';
 import {useAppHarness} from '@/__tests__/harness';
-import {createUser} from '@/lib/accounts';
+import {createUser} from '@/lib/accounts/testing';
 import * as groups from '..';
 useAppHarness();
 const account=(name:string)=>createUser({email:`mxmx_test_${name}@example.com`});

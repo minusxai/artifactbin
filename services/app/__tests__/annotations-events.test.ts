@@ -14,7 +14,8 @@ import { createArtifact } from '@/lib/artifacts';
 import type { AccessActor } from '@/lib/accounts';
 import { setServices } from '@/lib/platform';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { identityForUser, createUser } from '@/lib/accounts';
+import { identityForUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 
 useAppHarness();
 

@@ -13,7 +13,7 @@ import { PUT as putArtifactRoute } from '@/app/api/artifacts/[id]/route';
 import { DELETE as removeRoute, GET as listRoute, POST as allowRoute } from '@/app/api/groups/[id]/allowed-addresses/route';
 import { GET as trustRoute, POST as grantRoute } from '@/app/api/trust/route';
 import { GET as serveArtifact } from '@/app/a/[id]/raw/route';
-import { createUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { mintAccountToken } from '@/__tests__/harness';
 import * as groups from '@/lib/groups';
 import { overrideConfig, resetConfigOverrides } from '@/lib/platform/config';

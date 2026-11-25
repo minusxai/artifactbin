@@ -18,7 +18,7 @@ export class TransactionConflict extends Error {
 }
 
 /** Whether `error` is Postgres aborting the transaction for a deadlock or a serialization failure. */
-export function isTransactionConflict(error: unknown): boolean {
+function isTransactionConflict(error: unknown): boolean {
   for (let e = error as { code?: unknown; cause?: unknown } | undefined, depth = 0; e && depth < 4; e = e.cause as typeof e, depth++) {
     if (typeof e.code === 'string' && CONFLICT_CODES.has(e.code)) return true;
   }

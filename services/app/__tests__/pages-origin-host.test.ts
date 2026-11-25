@@ -13,7 +13,8 @@ import { BROWSER_SESSION_HEADER } from '@artifactbin/contracts/browser-sessions'
 import type { Actor } from '@artifactbin/contracts/actor';
 import { testIdentity as baseIdentity, useAppHarness, request, testPagesSite as pagesSiteFor } from '@/__tests__/harness';
 import { POST as createRoute } from '@/app/api/artifacts/route';
-import { createUser, exchangePagesTicket, issuePagesTicket, revokeToken } from '@/lib/accounts';
+import { exchangePagesTicket, issuePagesTicket, revokeToken } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { pagesSessionActor } from '@/lib/accounts/pages-sessions';
 import { DELETE as clearSession } from '@/app/api/session/token/route';
 import { setServices, measureQueries } from '@/lib/platform';

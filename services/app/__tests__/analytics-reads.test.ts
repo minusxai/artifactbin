@@ -3,7 +3,7 @@
  */
 import { nativeHtml } from './native-html-fixture';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { overrideRequestHeaders } from '@/lib/platform';
+import { overrideRequestHeaders } from '@/lib/platform/testing';
 import { useAppHarness, request, useSessionUser } from '@/__tests__/harness';
 import { artifactPage as ArtifactPage, artifactMetadata as artifactPageMetadata, profilePage as UserPage } from '@/test/helpers/pages';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
@@ -11,7 +11,7 @@ import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { GET as exportRoute } from '@/app/a/[id]/export/route';
 import { mintExportKey } from '@/lib/export';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { createUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { BASE, sessionUser, requestHeaders, params, outcome, create, eventRows, expectEvent, settle, holdTelemetry } from './analytics-fixture';
 
 holdTelemetry();

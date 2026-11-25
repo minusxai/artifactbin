@@ -4,7 +4,8 @@ import {createRegionState,editableRegions,openRegionDoc,regionText,regionHtml} f
 import {expect,it} from 'vitest';
 import {migrateLegacyPage} from '@/lib/artifacts';
 import {createRegionSessions} from '@/lib/region-sessions';
-import {identityForUser,createUser} from '@/lib/accounts';
+import {identityForUser} from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import {useAppHarness} from './harness';
 import { setArtifact } from '@/__tests__/rows';
 const harness=useAppHarness();

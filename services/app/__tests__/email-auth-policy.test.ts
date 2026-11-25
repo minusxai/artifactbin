@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
-import { mintToken, createUser, resolveToken, issuePagesTicket, exchangePagesTicket, pagesSessionOf } from '@/lib/accounts';
+import { mintToken, resolveToken, issuePagesTicket, exchangePagesTicket, pagesSessionOf } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { sessionActor } from '@/lib/authentication';
 import { POST as start } from '@/app/api/start/route';
 import { POST as exchange } from '@/app/api/session/token/route';

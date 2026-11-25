@@ -10,7 +10,8 @@ import {createHistoricalPage} from './historical-page';
  * real PostgreSQL, where concurrent transactions really race on FOR UPDATE and NOTIFY really crosses connections.
  */
 import { describe, it } from 'vitest';
-import { createUser, identityForUser } from '@/lib/accounts';
+import { identityForUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { editableRegions } from '@/lib/live-regions';
 import { getDb } from '@/lib/platform';
 import { nativeHtml } from './native-html-fixture';

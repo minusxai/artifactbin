@@ -6,8 +6,10 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  LIVE_BACKOFF_MAX_MS, LIVE_KEEPALIVE_EVENT, LIVE_SILENCE_MS, LIVE_STALE_MS, liveBackoffDelay, liveKeepaliveFrame, observeLiveBuild, openLiveStream, setAppBuild, type LiveStreamHost,
+  liveKeepaliveFrame, setAppBuild,
 } from '@/lib/http';
+import { LIVE_BACKOFF_MAX_MS, LIVE_KEEPALIVE_EVENT, LIVE_SILENCE_MS, LIVE_STALE_MS, type LiveStreamHost } from '@/lib/http/testing';
+import { liveBackoffDelay, observeLiveBuild, openLiveStream } from '@/lib/http/live-stream';
 
 class FakeEventSource extends EventTarget {
   static made: FakeEventSource[] = [];

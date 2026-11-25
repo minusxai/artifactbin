@@ -9,7 +9,7 @@ import {afterAll,beforeAll,describe,expect,it,vi} from 'vitest';
 import pg from 'pg';
 import * as platform from '@/lib/platform';
 import {PostgresDb} from '@/lib/platform/db';
-import {SCHEMA_STATEMENTS} from '@/lib/platform';
+import {SCHEMA_STATEMENTS} from '@/lib/platform/testing';
 import {identityViewStatements} from '@artifactbin/auth/identity-store/views';
 import {dockerImage,startPostgres,type DisposablePostgres} from '@artifactbin/test-support/docker';
 import {approvePageQuery,pageQueryApprovals} from '..';

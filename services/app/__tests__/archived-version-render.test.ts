@@ -19,7 +19,8 @@ import {nativeHtml} from './native-html-fixture';
 import {observedRequest} from './conditional-request';
 import { updateSharingFor } from '@/lib/artifacts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { identityForUser, createUser } from '@/lib/accounts';
+import { identityForUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 
 useAppHarness();
 

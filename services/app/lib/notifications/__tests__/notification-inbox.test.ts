@@ -5,7 +5,7 @@ import {beforeEach,expect,it} from 'vitest';
 import {useAppHarness,request,setSession} from '@/__tests__/harness';
 import {PATCH as patchInbox} from '@/app/api/my/people/route';
 import {POST as create} from '@/app/api/artifacts/route';
-import { createUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {getDb} from '@/lib/platform';
 import {notifyThread,recordNotification} from '@/lib/notifications';

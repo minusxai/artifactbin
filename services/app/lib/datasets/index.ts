@@ -17,7 +17,7 @@ export type { ServerRefLoader } from './asset-reference';
 export type {
   CatalogInput, CatalogRowView, DatasetCatalog, DatasetTable,
 } from './types';
-export { people, userOptions, validateUserWrites } from './user-fields';
+export { validateUserWrites } from './user-fields';
 
 
 export {readLifetime} from './read-lifetime';

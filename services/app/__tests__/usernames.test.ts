@@ -11,7 +11,8 @@ import { GET as getProfileRoute, PATCH as patchProfileRoute } from '@/app/api/my
 
 import { getDb } from '@/lib/platform';
 import { GET as readResource, PATCH as patchResource } from '@/app/api/account/profile/route';
-import { createUser, ensureUsername } from '@/lib/accounts';
+import { ensureUsername } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { bearerIdentity, mintAccountToken, useAppHarness, request, useSessionUser } from '@/__tests__/harness';
 
 useAppHarness();

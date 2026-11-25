@@ -7,7 +7,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { mintAccountToken, setSession, useAppHarness, testPagesSite as pagesSiteFor } from '@/__tests__/harness';
 import { createArtifact } from '@/lib/artifacts';
-import { createUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { GUEST_TICKET, PAGES_TICKET_PARAM, pagesOriginFor } from '@/lib/http';
 import { artifactPageAnswer, artifactPageResponse, readableApp } from '@/lib/document-serving';
 

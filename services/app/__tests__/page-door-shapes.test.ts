@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { useAppHarness, request, mintAccountToken, params } from './harness';
-import { createUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { POST as publish } from '@/app/api/artifacts/route';
 import { POST as createBrowserArtifact } from '@/app/api/my/artifacts/route';
 import { GET as pageRoute } from '@/app/api/page/artifact/[id]/route';

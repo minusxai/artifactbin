@@ -1,5 +1,6 @@
 import {it,expect} from 'vitest';
-import {createSecretCipher,datasetConnectionCipher,secretCipher} from '..';
+import {datasetConnectionCipher} from '..';
+import { createSecretCipher, secretCipher } from '../secret-cipher';
 it('encrypts with fresh nonces and authenticates the secret\'s whole context',()=>{
  const cipher=createSecretCipher('test-key'),context=['owner','record','TOKEN'],a=cipher.seal('private-value',context),b=cipher.seal('private-value',context);
  expect(a).not.toBe(b);expect(a).not.toContain('private-value');expect(cipher.open(a,context)).toBe('private-value');

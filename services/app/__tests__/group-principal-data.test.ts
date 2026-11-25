@@ -4,7 +4,8 @@
  * its group, its quota charged to the group, and its life tied to its person's admission in a company deployment.
  */
 import {onTestFinished} from 'vitest';
-import {getDb,syncIdentitySettings} from '@/lib/platform';
+import {getDb} from '@/lib/platform';
+import { syncIdentitySettings } from '@/lib/platform/testing';
 import {overrideConfig} from '@/lib/platform/config';
 import {setArtifactQuotaForTests} from '@/lib/artifacts/testing';
 import {SECRET} from './group-principal-fixture';

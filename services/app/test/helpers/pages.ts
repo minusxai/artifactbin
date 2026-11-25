@@ -9,7 +9,7 @@ import { GET as artifactData } from '@/app/api/page/artifact/[id]/route';
 import { GET as profileData } from '@/app/api/page/profile/[user]/[[...path]]/route';
 import { getArtifactById, type ArtifactRow } from '@/lib/artifacts';
 import { CARD_HEIGHT, CARD_RENDER_GENERATION, CARD_WIDTH } from '@artifactbin/contracts/og-card';
-import { publicOrigin } from '@/lib/http';
+import { publicOrigin } from '@/lib/http/testing';
 import { displayTitle } from '@/lib/document';
 
 type PageOutcome = { kind: 'render' | 'redirect' | 'notFound'; to?: string };

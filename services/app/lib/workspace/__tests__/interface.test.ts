@@ -6,7 +6,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import { useAppHarness } from '@/__tests__/harness';
-import { createUser, mintToken } from '@/lib/accounts';
+import { mintToken } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { getDb } from '@/lib/platform';
 import { link } from '@/lib/social';
 import {

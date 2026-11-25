@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { setVisibility } from '@/__tests__/artifact-fixtures';
 import { setSession, useAppHarness } from '@/__tests__/harness';
 import { createArtifact } from '@/lib/artifacts';
-import { createUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { storeFileContent } from '@/lib/datasets';
 import { getDb } from '@/lib/platform';
 import { publicRefAsset, publicRefAssetResponse } from '@/lib/document-serving';

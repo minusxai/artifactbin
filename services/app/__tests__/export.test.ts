@@ -147,7 +147,7 @@ describe('readable = exportable includes BEARER-readable', () => {
     // doc, asks for its export, gets refused, and silently falls back to
     // screenshotting local files. The token that can WRITE the doc must be
     // able to export it.
-    const { createUser } = await import('@/lib/accounts');
+    const { createUser } = await import('@/lib/accounts/testing');
     const { mintToken } = await import('@/lib/accounts/tokens');
     const user = await createUser({ email: 'exporter@example.com' });
     const owned = await mintToken('agent', user.id);
@@ -204,7 +204,7 @@ describe('GET /a/:id/export?element=SELECTOR', () => {
     const browser = fakeBrowser();
     setServices({ browser });
     const { mintToken } = await import('@/lib/accounts/tokens');
-    const { createUser } = await import('@/lib/accounts');
+    const { createUser } = await import('@/lib/accounts/testing');
     const owned = await mintToken('agent', (await createUser({ email: 'element-owner@example.com' })).id);
     const created = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: owned.token, json: { title: 'p', html: nativeHtml('<div id="chart">secret</div>'), visibility: 'private' } }));
     const { id } = await created.json();

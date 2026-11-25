@@ -14,7 +14,7 @@ import { withTokenAuth } from '@/lib/authentication';
 import { profileWrites } from '@/lib/accounts/profiles';
 import { syncProfile } from '@/lib/accounts';
 import { mintAccountToken as mintToken, params as routeParams } from '@/__tests__/harness';
-import { createUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { sessionActor } from '@/lib/authentication';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { POST as tablesRoute } from '@/app/a/[id]/tables/route';

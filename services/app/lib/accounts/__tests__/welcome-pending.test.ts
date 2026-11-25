@@ -11,7 +11,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { GET as sessionPage } from '@/app/api/page/session/route';
 import { syncProfile } from '@/lib/accounts';
-import { createUser, getUserById } from '@/lib/accounts';
+import { getUserById } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { avatarUrl, avatarVersion, setAvatar } from '@/lib/avatars';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { getDb } from '@/lib/platform';

@@ -6,18 +6,22 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  APP_BUILD_HEADER, APP_BUILD_META, GITHUB_EXTERNAL_URL, GUEST_TICKET, LIVE_KEEPALIVE_EVENT, MARKDOWN_CONTENT_TYPE, PAGES_TICKET_PARAM,
-  REPO_URL, REVALIDATE, appBuild, artifactViewPath, baseUrl, canonicalArtifactPath, decodePage, domainPostPath, encodeCursor,
-  forgetShared, internalRedirectTarget, isCrossSiteRequest, liveKeepaliveFrame, loginHref, loginRedirectTarget, markPagesRequest,
-  pagesRequestOf, pagesSite, parseByteRange, parseCookie, parsePrettyPath, parseScalarValues, primeShared, publicOrigin,
-  publicRevalidatedResponse, setAppBuild, sharedRequest, spaPaths, titleSlug, unauthorized,
+  APP_BUILD_HEADER, APP_BUILD_META, GITHUB_EXTERNAL_URL, GUEST_TICKET, MARKDOWN_CONTENT_TYPE, PAGES_TICKET_PARAM,
+  REPO_URL, REVALIDATE, artifactViewPath, baseUrl, canonicalArtifactPath, decodePage, domainPostPath, encodeCursor,
+  isCrossSiteRequest, liveKeepaliveFrame, loginRedirectTarget, markPagesRequest,
+  pagesRequestOf, pagesSite, parseByteRange, parseCookie, parsePrettyPath, parseScalarValues,
+  publicRevalidatedResponse, setAppBuild, spaPaths, unauthorized,
 } from '@/lib/http';
+import { LIVE_KEEPALIVE_EVENT, appBuild, forgetShared, publicOrigin } from '@/lib/http/testing';
+import { internalRedirectTarget } from '@/lib/http/safe-redirect';
+import { loginHref } from '@/lib/http/login-href';
+import { primeShared, resetShared, sharedRequest } from '@/lib/http/shared-request';
+import { artifactEditPath, titleSlug } from '@/lib/http/urls';
 import { DEV_SPA_PATHS, SPA_PATHS, isAppPagePath } from '@/lib/http/app-pages';
 import { readIntent, withIntent } from '@/lib/http/intent';
-import { resetShared } from '@/lib/http/shared-request';
-import { artifactEditPath } from '@/lib/http/urls';
 import { retryingFetch } from '@/lib/http/retry-lazily';
-import { PUBLIC_BASE_URL, overrideRequestHeaders, runWithRequest } from '@/lib/platform';
+import { PUBLIC_BASE_URL, runWithRequest } from '@/lib/platform';
+import { overrideRequestHeaders } from '@/lib/platform/testing';
 import { request } from '@/__tests__/harness';
 import { overrideConfig, resetConfigOverrides } from '@/lib/platform/config';
 import { Reply } from '@/lib/http';

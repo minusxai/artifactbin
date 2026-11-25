@@ -14,7 +14,8 @@ import { describe, expect, it } from 'vitest';
 import { postArtifact } from '@/__tests__/artifact-fixtures';
 
 
-import { mintToken, createUser, ensureUsername } from '@/lib/accounts';
+import { mintToken, ensureUsername } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { getArtifactById } from '@/lib/artifacts';
 import { mintExportKey } from '@/lib/export';
 import { createAppServer } from '../app';

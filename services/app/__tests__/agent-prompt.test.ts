@@ -10,7 +10,7 @@ import { existingPaste } from '@/lib/agent-copy';
 
 
 import { mintAccountToken as mintToken, params } from '@/__tests__/harness';
-import { createUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { useAppHarness, request, useSessionUser } from '@/__tests__/harness';
 
 const harness = useAppHarness();

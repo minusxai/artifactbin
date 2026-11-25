@@ -13,7 +13,7 @@ import { GET as deploymentState } from '@/app/api/deployment/route';
 import { GET as preferences } from '@/app/api/me/preferences/route';
 import { GET as groupDetail } from '@/app/api/groups/[id]/route';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
-import { createUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { overrideConfig, resetConfigOverrides } from '@/lib/platform/config';
 import { getDb, measureQueries } from '@/lib/platform';
 import { createGroup } from '@/lib/groups';

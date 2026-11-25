@@ -5,8 +5,10 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  LIVE_BACKOFF_MAX_MS, LIVE_KEEPALIVE_EVENT, LIVE_KEEPALIVE_MS, LIVE_SILENCE_MS, LIVE_STALE_MS, liveBackoffDelay, observeLiveBuild, openLiveStream,
+  LIVE_KEEPALIVE_MS,
 } from '@/lib/http';
+import { LIVE_BACKOFF_MAX_MS, LIVE_KEEPALIVE_EVENT, LIVE_SILENCE_MS, LIVE_STALE_MS } from '@/lib/http/testing';
+import { liveBackoffDelay, observeLiveBuild, openLiveStream } from '@/lib/http/live-stream';
 
 class FakeSource {
   static opened: FakeSource[] = [];

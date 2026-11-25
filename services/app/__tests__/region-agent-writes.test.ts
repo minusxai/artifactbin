@@ -9,7 +9,7 @@ import {createHistoricalPage} from './historical-page';
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
-import { createUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { getArtifactById } from '@/lib/artifacts';
 import { editableRegions, openRegionDoc, regionHtml, regionText } from '@/lib/live-regions';
 import { runWithRequest } from '@/lib/platform';

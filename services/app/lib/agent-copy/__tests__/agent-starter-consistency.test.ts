@@ -15,7 +15,7 @@ import { AGENT_HELP_TITLE, agentDiscovery, agentDiscoveryHead } from '@/lib/agen
 import { createArtifact } from '@/lib/artifacts';
 import { MARKDOWN_CONTENT_TYPE, unauthorized } from '@/lib/http';
 import { buildQuickSheet, QUICK_SHEET_MAX_BYTES } from '@/test/helpers/skill-docs';
-import { createUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { request, useAppHarness, params } from '@/__tests__/harness';
 
 

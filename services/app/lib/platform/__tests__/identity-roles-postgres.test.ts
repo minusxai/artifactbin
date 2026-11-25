@@ -29,7 +29,8 @@ import {IDENTITY_INTROSPECT_PATH} from '@artifactbin/contracts/identity-service'
 import {CHAT_SIGN_IN_PATH,SCHEDULE_SIGN_IN_PATH,SERVICE_TOKEN_PATH,parseServiceAudiences} from '@artifactbin/contracts/service-audiences';
 import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts/routes';
 import {createHash} from 'node:crypto';
-import {SCHEMA_STATEMENTS,TABLES} from '@/lib/platform';
+import {TABLES} from '@/lib/platform';
+import { SCHEMA_STATEMENTS } from '@/lib/platform/testing';
 import {ensureTable} from '@artifactbin/utils/schema';
 import {tenancyIssuer} from '@/test/helpers/trusted-tenancy';
 import {projectHostTenancyChanges,reachedGroupsSql,subtreeSql} from '@/lib/groups';

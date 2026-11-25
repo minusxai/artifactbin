@@ -2,7 +2,7 @@ import { expect, it } from 'vitest';
 import { attachActor } from '@artifactbin/utils';
 import { GET as agentInventory } from '@/app/api/me/workspace/route';
 import { GET } from '@/app/api/page/home/route';
-import { createUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { link, unlink } from '@/lib/social';
 import { mintAccountToken, request, useAppHarness } from './harness';
 import { dropShares, seedArtifacts, seedShares, setArtifact } from './rows';

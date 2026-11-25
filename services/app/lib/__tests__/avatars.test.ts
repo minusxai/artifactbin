@@ -4,7 +4,8 @@ import { randomBytes } from 'node:crypto';
 import sharp from 'sharp';
 import { AVATAR_MAX_BYTES, AvatarError, avatarPath, avatarUrl, avatarVersion, clearAvatar, setAvatar } from '@/lib/avatars';
 import { createLocalStore, ObjectUnavailable, type ObjectStore } from '@/lib/object-store';
-import { createUser, getUserById } from '@/lib/accounts';
+import { getUserById } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { useAppHarness } from '@/__tests__/harness';
 import {tempDir} from '@artifactbin/test-support/temp-dir';
 

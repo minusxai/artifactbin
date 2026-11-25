@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { request, useAppHarness, params } from '@/__tests__/harness';
 import { DELETE as unlike, GET as likeState, POST as like } from '@/app/api/my/artifacts/[id]/like/route';
 import { DELETE as unfollow, GET as followState, POST as follow } from '@/app/api/users/[id]/follow/route';
-import { createUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { seedArtifacts } from '@/__tests__/rows';
 
 const harness = useAppHarness();

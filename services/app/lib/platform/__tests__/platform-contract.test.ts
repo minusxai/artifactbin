@@ -5,9 +5,9 @@
 import type { EventEnvelope, EventsService } from '@artifactbin/contracts/events';
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  FILE_ID_LENGTH, ID_RE, actorSubject, currentHeaders, currentRequest, emit, envelope, generateFileId, generateInternalId,
-  generateTokenId, overrideRequestHeaders, runWithRequest, services, setServices,
+  ID_RE, actorSubject, currentHeaders, currentRequest, emit, envelope, generateFileId, generateInternalId, runWithRequest, services, setServices,
 } from '@/lib/platform';
+import { FILE_ID_LENGTH, generateTokenId, overrideRequestHeaders } from '@/lib/platform/testing';
 
 describe('identifiers', () => {
   it('mints file ids of FILE_ID_LENGTH alphanumerics that ID_RE accepts', () => {

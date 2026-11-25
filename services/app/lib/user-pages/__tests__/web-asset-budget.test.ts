@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { useAppHarness } from '@/__tests__/harness';
-import { createUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { createArtifact } from '@/lib/artifacts';
 import { urlHash } from '@/lib/document';
 import { getDb, measureQueries } from '@/lib/platform';

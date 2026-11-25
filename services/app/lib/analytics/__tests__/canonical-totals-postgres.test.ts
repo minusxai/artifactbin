@@ -6,7 +6,8 @@ import { execFileSync } from 'node:child_process';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { Pool } from 'pg';
 import { createEvents, ensureEventsSchema } from '@artifactbin/events/local';
-import { EVENTS_SCHEMA, PostgresDb, SCHEMA_STATEMENTS, envelope, type Db } from '@/lib/platform';
+import { EVENTS_SCHEMA, envelope, type Db } from '@/lib/platform';
+import { PostgresDb, SCHEMA_STATEMENTS } from '@/lib/platform/testing';
 import { canonicalViewTotals } from '../view-totals';
 
 const barrier = () => {

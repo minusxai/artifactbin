@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { useAppHarness } from '@/__tests__/harness';
-import { setUsername } from '@/lib/accounts';
+import { setUsername } from '@/lib/accounts/testing';
 import {
   MembershipError, accountProfile, changeMembership, getSharingFor, invitePeople, membershipState, mentionCandidates, updateAccountProfile,
   updateSharingFor,

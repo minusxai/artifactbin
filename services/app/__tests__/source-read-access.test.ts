@@ -12,7 +12,7 @@ import {BROWSER_SESSION_HEADER} from '@artifactbin/contracts/browser-sessions';
 import {AUTH_SECRET} from '@/lib/platform';
 
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { createUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { setArtifact } from '@/__tests__/rows';
 import { serviceAuthHost } from '../../auth/__tests__/helpers';
 const harness=useAppHarness();

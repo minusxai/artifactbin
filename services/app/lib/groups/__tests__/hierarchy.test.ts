@@ -5,7 +5,7 @@
  */
 import {describe,it,expect} from 'vitest';
 import {useAppHarness} from '@/__tests__/harness';
-import {createUser} from '@/lib/accounts';
+import {createUser} from '@/lib/accounts/testing';
 import {getDb} from '@/lib/platform';
 import * as groups from '..';
 import {groupChain,hierarchyRevision} from '../hierarchy';

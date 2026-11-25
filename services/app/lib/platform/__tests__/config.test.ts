@@ -5,8 +5,9 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  deploymentConfig, env, envNamesRead, parseUserPagesHost, requirePagesHost, resolveHmrPort, unknownEnvNames,
+  deploymentConfig, env, envNamesRead, requirePagesHost, resolveHmrPort, unknownEnvNames,
 } from '@/lib/platform';
+import { parseUserPagesHost } from '@/lib/platform/config';
 import { overrideConfig, parseAliasOrigins, parsePagesHost, resetConfigOverrides } from '@/lib/platform/config';
 
 /** A fresh copy of the configuration module, read from exactly these environment variables. */

@@ -5,9 +5,9 @@ schema as data (`schema.ts`), ids, the event outbox, the request scope, the inje
 No product rules live here. Server-only.
 
 ## Rules
-- Other modules import the index, `index.ts`, never a file here, and never from browser-bundled code. Export a new
-  name through the index. A downstream deployment also imports `config.ts`, `db.ts` and `services.ts` by path, so
-  their exports are pinned by `services/app/__tests__/downstream-exports.test.ts`: renaming one breaks it.
+- Product modules import the index, `index.ts`, from server code. Tests and harnesses can import fixtures from
+  `testing.ts`. A downstream deployment also imports `config.ts`, `db.ts` and `services.ts` by path, so their
+  exports are pinned by `services/app/__tests__/downstream-exports.test.ts`: renaming one breaks it.
 - The boot is the migration: PostgreSQL applies missing table changes from the declaration and then `applyBackfills`.
   Keep a warm boot compatible with concurrent reads and writes. `SCHEMA_STATEMENTS` is the full bootstrap SQL.
   So a schema change is additive. A column added to an existing table is nullable or has a `default`. A unique

@@ -5,9 +5,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useAppHarness } from '@/__tests__/harness';
 import {
-  CreationReplay, completeMutationReceipt, createArtifact, prepareCreation, durableMutation, mutationInvocation, pinMutationContext,
-  recoverCreationIds, reserveArtifactIds, reserveIds, setMutationInvocation, type MutationReceipt,
+  CreationReplay, completeMutationReceipt, createArtifact, prepareCreation, durableMutation, mutationInvocation,
+  recoverCreationIds, reserveIds, setMutationInvocation, type MutationReceipt,
 } from '@/lib/artifacts';
+import { pinMutationContext } from '@/lib/artifacts/testing';
+import { reserveArtifactIds } from '@/lib/artifacts/identities';
 import { account, page, sql, trashRow } from '@/__tests__/artifact-fixtures';
 import { MUTATION_REPLY_TIMEOUT_MS } from '../mutation-receipt';
 

@@ -1,7 +1,7 @@
 import {expect,it} from 'vitest';
 import {useAppHarness,mintAccountToken,request} from './harness';
 import {GET,PUT,DELETE} from '@/app/api/my/website/route';
-import {setUsername} from '@/lib/accounts';
+import {setUsername} from '@/lib/accounts/testing';
 import {getDb} from '@/lib/platform';
 import {seedArtifacts,setArtifact} from './rows';
 

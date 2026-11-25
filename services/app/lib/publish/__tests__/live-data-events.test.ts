@@ -1,6 +1,7 @@
 /** Native dataset aliases invalidate readers; reconnect always refetches authoritative revisions. */
 import { expect, it, vi } from 'vitest';
-import { identityForUser, createUser } from '@/lib/accounts';
+import { identityForUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { changeMembership, getArtifactById } from '@/lib/artifacts';
 import { loadDatasetRows } from '@/lib/datasets';
 import { observedRequest } from '@/__tests__/conditional-request';

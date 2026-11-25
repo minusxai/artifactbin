@@ -7,7 +7,8 @@ import {createHistoricalPage} from './historical-page';
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
-import { createUser, identityForUser } from '@/lib/accounts';
+import { identityForUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { artifactState, currentPage, getArtifactById } from '@/lib/artifacts';
 import { editableRegions, openRegionDoc, regionText } from '@/lib/live-regions';
 import { getDb, runWithRequest, type Queryable } from '@/lib/platform';

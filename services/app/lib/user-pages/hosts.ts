@@ -1,5 +1,5 @@
 import {ownerHandleFromLabel, ownerSiteAddress} from '@artifactbin/contracts/owner-host';
-import {isValidHandle} from '@/lib/accounts';
+import {isValidHandle} from '@artifactbin/contracts/handles';
 import {getDb, PUBLIC_BASE_URL, USER_PAGES_HOST} from '@/lib/platform';
 export interface UserPagesOwner {kind:'user'|'group';id:string;handle:string;folderId?:string|null}
 export interface UserPagesSite {app:string;host:string|null}

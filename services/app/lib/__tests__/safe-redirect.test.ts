@@ -6,7 +6,8 @@
  * on an attacker's page.
  */
 import { describe, it, expect } from 'vitest';
-import { internalRedirectTarget, loginRedirectTarget } from '@/lib/http';
+import { loginRedirectTarget } from '@/lib/http';
+import { internalRedirectTarget } from '@/lib/http/safe-redirect';
 
 const ORIGIN = 'https://artifactbin.dev';
 const target = (raw: string | null | undefined) => internalRedirectTarget(raw, ORIGIN);

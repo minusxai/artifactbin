@@ -4,7 +4,7 @@
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { useAppHarness } from '@/__tests__/harness';
-import { createUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { notificationDelivery, projectNotifications, setNotificationDelivery } from '@/lib/notifications';
 import { envelope, getDb } from '@/lib/platform';
 import { seedArtifacts } from '@/__tests__/rows';

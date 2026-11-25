@@ -15,7 +15,8 @@ import { postArtifact } from '@/__tests__/artifact-fixtures';
 import { PATCH as patchArtifactRoute } from '@/app/api/my/artifacts/[id]/route';
 import { mintExportKey } from '@/lib/export';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { createUser, ensureUsername, setUsername } from '@/lib/accounts';
+import { ensureUsername } from '@/lib/accounts';
+import { createUser, setUsername } from '@/lib/accounts/testing';
 
 const harness = useAppHarness();
 const sessionUser = useSessionUser();

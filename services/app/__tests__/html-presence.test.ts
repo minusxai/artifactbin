@@ -5,7 +5,7 @@ import {POST} from '@/app/api/artifacts/[id]/presence/route';
 import {GET} from '@/app/a/[id]/events/route';
 import {request,useAppHarness, params } from './harness';
 import {attachActor} from '@artifactbin/utils';
-import { createUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import {runWithRequest} from '@/lib/platform';
 import {overridePresenceFrameInterval} from '@/lib/publish';
 import {getDb} from '@/lib/platform/db';
