@@ -12,6 +12,7 @@
  *   <dialog> (showModal) while mounted; focus returns to the opener on close.
  */
 import { registerComponent, type ComponentDescriptor } from './register-component';
+import { tabWrapTarget } from '../ui-runtime/dialog-tab';
 import { dialogStyles, identify, restoreAttribute, tabStops } from './dialog-model';
 export { dialogStyles } from './dialog-model';
 /** Author-owned visibility: af-change announces a cancelable request, never persists state. */
@@ -83,13 +84,10 @@ if (event.defaultPrevented || !(event.target instanceof Element) || event.target
       'af-dialog') !== this) return;
     if (event.key === 'Tab' && this.native?.open && this.native.contains(event.target)) {
       // Trap Tab inside the modal: wrap at either end, or hold focus on the dialog if empty.
-      const stops = tabStops(this.native); const first = stops[0]; const last = stops.at(-1);
-      const active = this.ownerDocument.activeElement;
-if(!stops.length || active === this.native || (event.shiftKey ? active === first :
-        active === last)) {
-event.preventDefault(); (event.shiftKey ? last : first)?.focus(); if(
-          !stops.length) this.native.focus();
-      }
+      const stops = tabStops(this.native), active = this.ownerDocument.activeElement;
+      const target = stops.length ? tabWrapTarget(stops, active, event.shiftKey,
+        active === this.native) : this.native;
+      if (target) { event.preventDefault(); target.focus(); }
       return;
     }
     const control = event.target.closest<HTMLElement>('af-dialog-trigger,af-dialog-close');
