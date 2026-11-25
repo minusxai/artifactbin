@@ -10,16 +10,21 @@ import { DefaultDestinationControl } from '../components/DefaultDestinationContr
 import { useLocation } from '@solidjs/router';
 import { Navigate } from '@solidjs/router';
 import DatabasePlus from 'lucide-solid/icons/database-plus';
-import { homeBootstrapKey, type HomeBootstrap, type HomeCore, type HomeInsights } from '@/solid/lib/home-resource';
-import { dropServedFrame } from '@/solid/lib/served-frame';
+import type { AccountWorkspaceCore, AccountWorkspaceInsights, HomeBootstrap } from '@/lib/workspace';
+import type { ShelfRow } from '@/lib/shelf';
+import { dropServedFrame } from '@/solid/pages/served-frame';
 import WorkspaceShell from '../components/WorkspaceShell';
 import GetStarted from '../components/GetStarted';
 import SharedWithYou from '../components/SharedWithYou';
 import type { ShelfRow } from '@/lib/shelf';
 import Shelf from '../components/Shelf';
 import WorkspaceLayout, { HOME_WORKSPACE_COLUMN, WorkspaceSkeleton } from '../components/WorkspaceLayout';
-import { usePageData } from '../lib/use-page-data';
+import { homeBootstrapKey, usePageData } from '../lib/use-page-data';
 import { useSession } from '../lib/session';
+
+/** Home's wire projections; retention belongs to the shared PageDataStore. Its first request (HomeBootstrap) is lib/workspace/home's. */
+type HomeCore = ({ signedIn: true; accountId: string } & AccountWorkspaceCore) | { signedIn: false; drafts?: ShelfRow[] };
+type HomeInsights = AccountWorkspaceInsights & { signedIn: true; accountId: string };
 
 /**
  * Home is one request: `/api/page/home?part=bootstrap` resolves the destination (account preference,

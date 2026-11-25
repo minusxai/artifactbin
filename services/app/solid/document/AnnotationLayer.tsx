@@ -36,7 +36,7 @@ import { AnnotationComposer, CAPTURE_CHROME_CSS } from './AnnotationComposer';
 import { AnnotationPreview, CommentsOffline, positionedComments, VIEW_COMMENT_COLLAPSED_H, VIEW_COMMENT_INSET } from './AnnotationPreview';
 import { CommentRail } from './AnnotationRail';
 import { CommentImagesProvider } from './CommentImageAttach';
-import { draftsUnder, writeDraft } from '../lib/draft-store';
+import { draftsUnder, writeDraft } from './draft-store';
 import { PersonMentionProvider } from './PersonMention';
 import { connectFrameAnnotations } from './annotation-frame';
 import { createCommentDraft } from './annotation-draft';
@@ -185,7 +185,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   /** The hover card that shows: the pinned one, else the one under the pointer. */
   const previewId = () => pinnedId() ?? hoverId();
   /** Unsent hover-card replies per thread, for this page session: closing a card never loses one. */
-  // Kept for this tab too (solid/lib/draft-store): a reload — the page loading a new build — gives them back.
+  // Kept for this tab too (solid/document/draft-store): a reload — the page loading a new build — gives them back.
   const [replyDrafts, setReplyDrafts] = createSignal<Record<string, string>>(draftsUnder(`${props.id}:reply:`));
   const setReplyDraft = (id: string, value: string) => setReplyDrafts((current) => {
     if ((current[id] ?? '') === value) return current;

@@ -2,7 +2,7 @@
 /**
  * DRAFTS OUTLIVE A RELOAD. The page reloads itself to load a new build after a deploy (solid/lib/app-build), and a
  * reader may reload it themselves: an unsent comment, a typed reply and a comment being rewritten come back in the
- * reloaded page (solid/lib/draft-store, this tab's session storage) — and, once sent or cancelled, they do not.
+ * reloaded page (solid/document/draft-store, this tab's session storage) — and, once sent or cancelled, they do not.
  */
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen } from '@testing-library/dom';

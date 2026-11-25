@@ -12,9 +12,9 @@ import type { DocumentRuntimeRef } from '@/lib/html-reader/document-endpoint';
 import type { FramedRuntime } from '@/lib/document-serving';
 import {createReaderHttpBackend} from '@/lib/artifact-backend/reader-http';
 import { loginHref } from '@/lib/http/login-href';
-import { takeBootstrap } from '@/solid/lib/bootstrap';
+import { takeBootstrap } from '@/solid/pages/bootstrap';
 import { isEmbeddedView } from '@/solid/lib/embedded';
-import { reportArtifactView } from '@/solid/lib/artifact-view-report';
+import { reportArtifactView } from '@/solid/pages/artifact-view-report';
 import { useSession } from '../lib/session';
 import type { DocumentChromeDetails } from '../document/deferred-document-chrome';
 import { commentAccess } from '../document/comment-access';
@@ -106,7 +106,7 @@ function createReaderMode(authorMode: 'light' | 'dark') {
  * and sharing. Comments, selections and the reader's colour choice reach the document through the
  * bridge (solid/document/create-framed-story); the address's `#hash` goes to its page behaviour. A link to an app path
  * inside the document comes back here and this page follows it (solid/document/frame-navigation). Showing the
- * document is its view (solid/lib/artifact-view-report).
+ * document is its view (solid/pages/artifact-view-report).
  *
  * EMBEDDED (solid/lib/embedded: `?embed=1`, framed by a trusted embedder): the same page without the bar; the frame
  * takes the whole viewport and one comment control stays, so discussion is reachable as on the bar.

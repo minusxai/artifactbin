@@ -13,9 +13,8 @@
  *    (`reloadForNewBuild`), ONCE per build change: the reload is remembered in the tab's session storage under the
  *    build it left, and the same build failing again shows a Reload button rather than looping.
  *
- * Before either navigation the page's unsaved work is flushed (`registerBeforeReload`, bounded); drafts that live
- * only in the page (comment and reply drafts) are kept in session storage as they are typed (solid/lib/draft-store),
- * so the reloaded page shows them again.
+ * Drafts that live only in the page (comment and reply drafts) are kept in session storage as they are typed
+ * (solid/document/draft-store), so the reloaded page shows them again.
  */
 import { createSignal } from 'solid-js';
 import { APP_BUILD_META } from '@/lib/http/app-build';
@@ -34,13 +33,10 @@ export interface BuildHost {
 const RELOAD_KEY = 'artifactbin:build-reload';
 /** With no build to tell builds apart (development), one automatic reload per this long. */
 const UNKNOWN_BUILD_WINDOW_MS = 10 * 60_000;
-/** How long unsaved work may hold a reload. */
-const FLUSH_BOUND_MS = 2_000;
 
 let host: BuildHost | null = typeof window === 'undefined' ? null : window;
 let own: string | null = null;
 const [stale, setStale] = createSignal(false);
-const flushes = new Set<() => unknown>();
 /**
  * The page is being left (beforeunload/pagehide): imports in flight fail as the navigation aborts them, in the same
  * words as a missing chunk, and a reload then would cancel the navigation the reader asked for. A navigation that is
@@ -58,23 +54,10 @@ export function noteServerBuild(build: string | null | undefined): void {
   if (build && own && build !== own) setStale(true);
 }
 
-/** Unsaved work to flush before the page navigates for a new build. Returns the unregister. */
-export function registerBeforeReload(flush: () => unknown): () => void {
-  flushes.add(flush);
-  return () => { flushes.delete(flush); };
-}
-
 /** Whether `error` is a lazy chunk (or its stylesheet) that could not be loaded, in any engine's wording. */
 export function isChunkLoadError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
   return /Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed|Unable to preload CSS|Loading (?:CSS )?chunk \S+ failed/i.test(message);
-}
-
-async function settle(): Promise<void> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const all = Promise.all([...flushes].map(async (flush) => { try { await flush(); } catch { /* the reload goes ahead */ } }));
-  await Promise.race([all, new Promise<void>((resolve) => { timer = setTimeout(resolve, FLUSH_BOUND_MS); })]);
-  clearTimeout(timer);
 }
 
 /**
@@ -95,20 +78,18 @@ export function reloadForNewBuild(): 'reloading' | 'exhausted' {
     if (last?.from === from && (own !== null || Date.now() - Number(last.at) < UNKNOWN_BUILD_WINDOW_MS)) return 'exhausted';
     storage.setItem(RELOAD_KEY, JSON.stringify({ from, at: Date.now() }));
   } catch { return 'exhausted'; }
-  void settle().then(() => { if (!leaving) target.location.reload(); });
+  target.location.reload();
   return 'reloading';
 }
 
 /** The reader's own Reload (always allowed). */
 export function reloadNow(): void {
-  const target = host;
-  if (target) void settle().then(() => target.location.reload());
+  host?.location.reload();
 }
 
 /** Go to `to` as a full load (the next navigation of a stale page). */
 export function navigateFresh(to: string): void {
-  const target = host;
-  if (target) void settle().then(() => target.location.assign(to));
+  host?.location.assign(to);
 }
 
 /** Start watching: read the page's own build, and listen for every sign the server moved on. Returns the stop. */

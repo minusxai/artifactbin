@@ -21,7 +21,7 @@ function serve(path: string, payload: Record<string, unknown> | null) {
   // Where the server writes it: the body's last element, after the story (server/app-shell withBootstrap).
   document.body.appendChild(script);
 }
-const evaluate = async () => { vi.resetModules(); await import('@/solid/lib/heal-address'); };
+const evaluate = async () => { vi.resetModules(); await import('@/solid/heal-address'); };
 afterEach(() => { document.getElementById(BOOTSTRAP)?.remove(); window.history.replaceState(null, '', '/'); });
 
 describe('heal-address', () => {

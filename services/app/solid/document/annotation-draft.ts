@@ -22,7 +22,7 @@ import { COMMENT_TARGET_UNSAVED } from '@artifactbin/contracts/annotation-commen
 import type { StoryEditParentMessage, StoryEditSelection } from '@/lib/html-runtime/bridge/selection-contract';
 import { createCommentCapture } from './CommentCapture';
 import { createCommentImageDraft, preloadScreenshotEditor, type CommentImageAttachment } from './CommentImageAttach';
-import { persistedText } from '../lib/draft-store';
+import { persistedText } from './draft-store';
 import type { ThreadStore } from './annotation-threads';
 
 export type CommentDraft = ReturnType<typeof createCommentDraft>;

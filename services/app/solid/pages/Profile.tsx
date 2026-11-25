@@ -10,7 +10,7 @@ import type { ProfileSocial } from '@/lib/social';
 import { refusedForSignIn } from '@artifactbin/contracts/sign-in-required';
 import { loginHref } from '@/lib/http/login-href';
 import { pageDataChanged } from '@/solid/lib/page-data-events';
-import { takeBootstrap } from '@/solid/lib/bootstrap';
+import { takeBootstrap } from '@/solid/pages/bootstrap';
 import { Avatar } from '../ui/Avatar';
 import { usePageData } from '../lib/use-page-data';
 import { NotFoundPage } from './NotFound';

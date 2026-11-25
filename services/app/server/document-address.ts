@@ -45,7 +45,7 @@ type Admission = { status: 200 | 404; address?: string; canonical?: string; admi
  * The canonical address for a document, when the one the viewer asked for is
  * not it — served IN PLACE, not redirected: the page is rendered as the
  * canonical address and names it (`address`) for the SPA to put in the
- * address bar (solid/lib/heal-address), saving a shared link its round trip. It
+ * address bar (solid/heal-address), saving a shared link its round trip. It
  * runs AFTER the ACL, so a private document never leaks its owner to a
  * viewer who cannot read it; a valid export key skips the healing, because a
  * capture must stay at the address it was handed.

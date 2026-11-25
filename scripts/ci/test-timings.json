@@ -1003,7 +1003,7 @@
    "services/app/solid/lib/__tests__/embedded.test.ts": 3,
    "services/app/solid/lib/__tests__/request-id.test.ts": 3,
    "services/app/solid/lib/__tests__/retrying-reads.test.tsx": 310,
-   "services/app/solid/lib/__tests__/served-frame.test.ts": 6,
+   "services/app/solid/pages/__tests__/served-frame.test.ts": 6,
    "services/app/solid/pages/__tests__/artifact-data-page.test.tsx": 3438,
    "services/app/solid/pages/__tests__/folder-page.test.tsx": 550,
    "services/app/solid/pages/__tests__/group-home.test.tsx": 1165,

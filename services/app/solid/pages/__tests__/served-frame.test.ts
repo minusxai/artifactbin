@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it } from 'vitest';
-import { captureServedFrame, claimServedPath, dropServedFrameOnRoute } from '@/solid/lib/served-frame';
+import { captureServedFrame, claimServedPath, dropServedFrameOnRoute } from '@/solid/pages/served-frame';
 
 /**
  * The address this document load was served at is claimed ONCE, by the first page drawn there, and only until the

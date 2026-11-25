@@ -1,7 +1,7 @@
 /** A local file selection; publication validates the complete native HTML contract server-side. */
-export interface HtmlUploadFile { name: string; size: number }
+interface HtmlUploadFile { name: string; size: number }
 export interface HtmlUploadSelection { filename: string; html: string }
-export type HtmlUploadCheck = { ok: true } | { ok: false; error: string };
+type HtmlUploadCheck = { ok: true } | { ok: false; error: string };
 
 import { MAX_DOCUMENT_BYTES } from '@artifactbin/contracts/document-update';
 export function checkHtmlUpload(file: HtmlUploadFile): HtmlUploadCheck {

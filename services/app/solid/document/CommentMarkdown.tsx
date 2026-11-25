@@ -4,7 +4,7 @@ import { parseMarkdownLite, plainText, type MdInline, type MdNode } from '@/lib/
 import { isPersonMentionHref } from '@/lib/document/person-mentions';
 import { isSessionMentionHref } from '@/lib/annotations/session-mentions';
 import { Tooltip } from '../ui/Tooltip';
-import { agentNameColor } from '../lib/agent-identity';
+import { agentNameColor } from './agent-identity';
 import { PersonMention } from './PersonMention';
 
 // Fenced code loads Prism lazily when rendered.
