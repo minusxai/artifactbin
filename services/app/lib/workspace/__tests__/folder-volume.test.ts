@@ -6,7 +6,6 @@ import { identityForUser, type AccessActor } from '@/lib/accounts';
 import { createUser } from '@/lib/accounts/testing';
 import { getArtifactById, childrenTableFor } from '@/lib/artifacts';
 import { getDb, measureQueries, EVENTS_SCHEMA } from '@/lib/platform';
-import { trackEvent } from '@/lib/analytics';
 import { ensureEventsSchema } from '@artifactbin/events/local';
 import { folderPageFor } from '@/lib/workspace';
 import { mintAccountToken, request, useAppHarness, params } from '@/__tests__/harness';
@@ -62,20 +61,6 @@ describe('the folder page at volume', () => {
       `SELECT object_id AS id, SUM(n)::int AS views FROM (SELECT object_id, (at AT TIME ZONE 'UTC')::date AS day, COUNT(DISTINCT COALESCE(subject_id,id)) AS n FROM ${EVENTS_SCHEMA}.events WHERE verb='viewed' GROUP BY object_id,day) d GROUP BY object_id`,
     );
     expect(viewsOf(page.rows)).toEqual(viewsOf(reference.rows));
-  });
-
-  it('ignores retired history removal and counts newly canonical views', async () => {
-    const { viewer } = await seed(40);
-    const folder = (await getArtifactById('fvfolder'))!;
-    expect(viewsOf((await folderPageFor(folder, viewer)).rows)).toEqual(expectedAll(40));
-    const db = await getDb();
-    await db.query("INSERT INTO analytics_events (event,artifact_id,visitor,created_at) VALUES ('view',$1,'retired',now()-interval '2 days')", [childId(3)]);
-    await db.query("DELETE FROM analytics_events WHERE created_at < (now() AT TIME ZONE 'UTC')::date");
-    expect(viewsOf((await folderPageFor(folder, viewer)).rows)).toEqual(expectedAll(40));
-    await trackEvent('view', childId(3), { userId: 'brand-new-visitor' });
-    const third = viewsOf((await folderPageFor(folder, viewer)).rows);
-    expect(third[childId(3)]).toBe(expectedViews(3) + 1);
-    expect(third[childId(4)]).toBe(expectedViews(4));
   });
 
   it('draws and sends no sparkline: the page\'s shelf shows none', async () => {

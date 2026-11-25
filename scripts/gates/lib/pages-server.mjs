@@ -6,11 +6,9 @@
  * Chromium and this process resolve `*.localhost` to loopback themselves. A base is driven rather than a server booted
  * only when it already frames documents under that host (its app page's `frame-src` names `*.<host>:<port>`).
  *
- * The gate runner's servers boot without the setting, so a gate that frames documents boots its own production
- * server (dist/server.mjs, as scripts/gates.mjs does) with `APP__PAGES_HOST=lvh.me` and the app at
- * `http://app.lvh.me:<port>` — unless the base it is handed already serves pages (a developer's
- * `npm run setup -- --pages-host` dev server), which it then drives. `*.lvh.me` is mapped to loopback in Chromium
- * (`browserArgs`) and in this process (node's dns.lookup), so no DNS is needed.
+ * When the supplied server cannot be reused, the gate boots its own production server (dist/server.mjs)
+ * on a port coordinated with the runner's servers and other gates. `*.lvh.me` is mapped to loopback in
+ * Chromium (`browserArgs`) and in this process (node's dns.lookup), so no DNS is needed.
  *
  *   const pages = await pagesServer(process.argv[2], 'frame-editor');
  *   const crossSite = await pagesServer(process.argv[2], 'live-regions-oop', { pagesHost: 'localhost' });
@@ -20,22 +18,16 @@
  */
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
-import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { claimFreePort } from '../../lib/free-port.mjs';
 import { PAGES_BROWSER_ARGS, PAGES_HOST } from './browser.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 
 /** The DNS label a document id rides as (lib/http/pages-origin pagesLabel). */
 const pagesLabel = (id) => Buffer.from(id, 'utf8').toString('hex');
-
-const freePort = () => new Promise((resolve, reject) => {
-  const probe = net.createServer();
-  probe.on('error', reject);
-  probe.listen(0, '127.0.0.1', () => { const { port } = probe.address(); probe.close(() => resolve(port)); });
-});
 
 /** Does the server on this port serve pages at `host`? Its apex is not a document and answers every path 404 `not_found`. */
 async function servesPages(port, host = PAGES_HOST) {
@@ -64,7 +56,7 @@ export async function pagesServer(given, name, { pagesHost = PAGES_HOST, env = {
   if (!port) {
     const bundle = path.join(ROOT, 'dist/server.mjs');
     if (!existsSync(bundle)) throw new Error(`the ${name} gate boots its own server from dist/server.mjs: run \`npm run build\` first`);
-    port = await freePort();
+    port = await claimFreePort();
     scratch = mkdtempSync(path.join(os.tmpdir(), `gate-${name}-`));
     const objects = path.join(scratch, 'objects');
     mkdirSync(objects, { recursive: true });
