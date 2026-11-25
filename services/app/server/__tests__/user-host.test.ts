@@ -422,3 +422,8 @@ it('records a view for a personal-site page answered 304',async()=>{
  const {rows}=await (await getDb()).query<{n:number}>(`SELECT count(*)::int AS n FROM ${EVENTS_SCHEMA}.events WHERE object_id=$1 AND object_kind='artifact' AND verb='viewed'`,[post.id]);
  expect(rows[0]!.n).toBe(2);
 });
+it('revalidates a personal-site page the same way under brotli',async()=>{
+ const user=await owner(),post=await page(user.token),server=app(),br={'accept-encoding':'br'};
+ const first=await server.request(`${base}/${post.id}`,{headers:br});expect(first.status).toBe(200);
+ const again=await server.request(`${base}/${post.id}`,{headers:{...br,'if-none-match':first.headers.get('etag')!}});expect(again.status).toBe(304);
+});

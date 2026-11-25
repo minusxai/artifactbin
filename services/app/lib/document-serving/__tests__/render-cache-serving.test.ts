@@ -116,4 +116,13 @@ describe('an anonymous reader is served a shared render', () => {
     const {rows} = await (await harness.db()).query<{n: number}>(`SELECT count(*)::int AS n FROM ${EVENTS_SCHEMA}.events WHERE object_id=$1 AND object_kind='artifact' AND verb='viewed'`, [id]);
     expect(rows[0]!.n).toBe(2);
   });
+
+  it('revalidates the frame under brotli with the tag it was sent', async () => {
+    const {id} = await publish();
+    const url = `${pagesOriginFor(id, site)}/?${PAGES_TICKET_PARAM}=${GUEST_TICKET}`, br = {'accept-encoding': 'br'};
+    const first = await app.request(url, {headers: br});
+    expect(first.headers.get('content-encoding')).toBe('br');
+    const again = await app.request(url, {headers: {...br, 'if-none-match': first.headers.get('etag')!}});
+    expect(again.status).toBe(304);
+  });
 });
