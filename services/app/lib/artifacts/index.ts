@@ -60,6 +60,7 @@ export { VERSION_PARAM, archivedVersionFor, servedRow } from './archived-version
 /** Independent ownership destinations and atomic ownership transfer. */
 export {parseArtifactDestination,newArtifactDestination,permitsMemberPage,ArtifactParentRefusal,GroupPersonalDestination} from './ownership';
 export {transferArtifact} from './transfer';
+export {TransferConflict} from './transfer-dependencies';
 
 /**
  * For the document data module alone (its runs, writes, policies, files and notifications stand on these): the
