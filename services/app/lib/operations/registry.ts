@@ -778,7 +778,7 @@ const forkArtifactOp: Operation = {
 
     const copy = await forkArtifact(forker, source, overrides, owner.actor);
     if (copy instanceof Reply) return copy;
-    return { status: 201, body: { ...createdArtifactWire(copy.artifact, ctx.base, undefined, await documentOwner(copy.artifact)), forked_from: source.id, datasets: copy.datasets, ...(owner.testuser ? { owner: owner.testuser } : {}) } };
+    return { status: 201, body: { ...createdArtifactWire(copy.artifact, ctx.base, await documentOwner(copy.artifact)), forked_from: source.id, datasets: copy.datasets, ...(owner.testuser ? { owner: owner.testuser } : {}) } };
   },
 };
 

@@ -99,6 +99,16 @@ describe('replaceArtifactWithBody',()=>{
  });
 });
 
+it('preserves each publish door’s refusal order when multiple fields are invalid',async()=>{
+ const owner=await actor();
+ const invalid={html:page('Invalid'),visibility:'invalid',linkRole:'invalid'};
+ expect(await errorOf(await createArtifactFromBody(invalid,owner,BASE))).toEqual([400,'invalid_link_role']);
+ const {body:{id}}=await created(owner,{html:page('Saved')});
+ expect(await errorOf(await replaceArtifactWithBody({...invalid,...await observed(id)},owner,id,BASE))).toEqual([400,'invalid_visibility']);
+ expect(await errorOf(await replaceArtifactWithBody({markup:null},owner,'Missing123',BASE))).toEqual([400,'native_html_required']);
+ expect((await getArtifactById(id))?.version).toBe(1);
+});
+
 describe('preflightPublication',()=>{
  const preflight=(owner:TokenHoldingActor,body:Record<string,unknown>)=>preflightPublication(new Request(`${BASE}/api/preflight`),owner,body);
  it('validates a create, a replace and a delete against real identities and permissions',async()=>{

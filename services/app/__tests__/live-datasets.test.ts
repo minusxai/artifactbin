@@ -86,8 +86,10 @@ async function everyStoredRow(): Promise<string> {
 
 it('creates a live dataset through the create door: a dataset with the connection summary, its secret sealed and answered nowhere', async () => {
   const { alice, bob } = await people();
-  const created = await call(((r: Request) => import('@/app/api/artifacts/route').then((m) => m.POST(r))) as never, '/api/artifacts', '', alice, { method: 'POST', json: { connection: config(), title: 'Shop' } });
+  const created = await call(((r: Request) => import('@/app/api/artifacts/route').then((m) => m.POST(r))) as never, '/api/artifacts', '', alice, { method: 'POST', json: { connection: config(), title: 'Shop', markup: null } });
   expect(created.status, created.text).toBe(201);
+  expect(created.body).toMatchObject({ markup: null });
+  expect(created.body).not.toHaveProperty('markup_changed');
   const id = created.body.id as string;
   const row = (await getArtifactById(id))!;
   expect([row.format, row.meta.connection, row.meta.catalog, row.dataset_policy]).toEqual(['dataset', { connector: 'postgres', label: 'PostgreSQL', fields: { host: '127.0.0.1', port: wire.port, database: 'postgres' } }, undefined, null]);
