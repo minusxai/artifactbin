@@ -17,7 +17,7 @@ export { accessMoved, getArtifact, getArtifactAccessById, getArtifactById, getAr
 export type { ArtifactHeader } from './rows';
 export { getVersionFor, listVersionsFor, listVersionPageFor, listArtifactPageFor, isVersionNotArchived } from './store';
 export type { ArtifactSummary, VersionContent } from './store';
-export { artifactState, observedChange, versionConflict } from './state';
+export { artifactState, versionConflictFor } from './state';
 /** The page every read serves: the saved source with its regions' unsaved live text composed in, and its live revision. */
 export { currentPage, readPageHeader, readPageRow, type PageRead } from './current-page';
 export { slugAddress, slugAddressTarget } from './slug-address';
@@ -25,7 +25,7 @@ export { slugAddress, slugAddressTarget } from './slug-address';
 /** Write path (publish, operations, offline): create, edit, replace and revert; metadata; quotas; version conflicts; the creation ledger; id reservation; mutation receipts; and the deployment's two seams. */
 /** Token claim and guest merge (lib/authentication), inside the caller's transaction. */
 export { setLiveDatasetSummary, type LiveConnectionInsert } from './store';
-export { createArtifact, afterCreated, replaceArtifactFor, revertArtifactFor, setMetadataFor, artifactQuotaExceeded, groupArtifactQuotaExceeded, byteQuotaFor, publisherByteQuota, isVersionConflict } from './store';
+export { createArtifact, afterCreated, replaceArtifactFor, revertArtifactFor, setMetadataFor, artifactQuotaExceeded, publicationCountQuotaExceeded, byteQuotaFor, publisherByteQuota, isVersionConflict } from './store';
 export type { ArtifactInput, MetadataPatch, ReplaceOpts } from './store';
 /** Live regions as page storage (lib/region-sessions): the editable head, the region rows and the save as a version. */
 export { checkpointLiveRegions, saveLiveRegionsInTx } from './store';
@@ -34,7 +34,7 @@ export { saveIsDue } from './regions';
 export type { RegionRow, SaveDue } from './regions';
 export { assetByteQuotaExceeded, assetByteQuotaLimit } from './asset-quota';
 /** The web images a page serves on its owner's host (meta.webAssets), derived at every content write. */
-export { CreationReplay, creationOperation, lookupCreation, recoverCreationIds } from './creation-ledger';
+export { CreationReplay, prepareCreation, recoverCreationIds } from './creation-ledger';
 export { reserveArtifactIds, reserveIds } from './identities';
 export { completeMutationReceipt, durableMutation } from './mutation-receipt';
 export type { MutationReceipt } from './mutation-receipt';

@@ -19,12 +19,6 @@ const ordered = (value: unknown): unknown => Array.isArray(value) ? value.map(or
   : value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().map(key => [key,ordered((value as Record<string,unknown>)[key])])) : value;
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(ordered(value))).digest('hex');
 
-export async function creationOperation(actor: AccessActor, origin: string, key: string | null | undefined, payload: unknown, reply: CreationOperation['reply'], workspaceAccount?: string | null): Promise<CreationOperation | null> {
-  if (!key) return null;
-  if (!/^[A-Za-z0-9_-]{16,128}$/.test(key)) throw new CreationReplay({status:400,body:{error:'invalid_idempotency_key'}});
-  return {scope:await creationScope(actor,origin,workspaceAccount),key,fingerprint:hash(payload),reply};
-}
-
 async function creationScope(actor:AccessActor,origin:string,workspaceAccount?:string|null):Promise<string>{
   const current = accountOf(actor);
   // A retry retains its original ledger scope after verified adoption. Never
@@ -40,7 +34,7 @@ export async function recoverCreationIds(actor:AccessActor,origin:string,keys:re
  return new Map(rows.rows.map(row=>[row.operation_key,row.artifact_id]));
 }
 
-export async function lookupCreation(db: Queryable, operation: CreationOperation): Promise<CreationReply | null> {
+async function lookupCreation(db: Queryable, operation: CreationOperation): Promise<CreationReply | null> {
   const row = (await db.query<{
     request_hash: string; artifact_id: string | null; existing_id: string | null;
     deleted_at: unknown; response: Record<string,unknown> | null; response_status: number | null; fresh: boolean;
@@ -53,6 +47,16 @@ export async function lookupCreation(db: Queryable, operation: CreationOperation
   if (!row.existing_id || row.deleted_at) return {status:410,body:{error:'result_deleted',id:row.artifact_id}};
   if (row.fresh && row.response && row.response_status) return {status:row.response_status,body:row.response};
   return {status:200,body:{id:row.artifact_id,recovered:true,response_expired:true}};
+}
+
+/** Check for a replay before preparing content. The write still reserves the operation in its transaction. */
+export async function prepareCreation(actor: AccessActor, origin: string, key: string | null | undefined, payload: unknown, reply: CreationOperation['reply'], workspaceAccount?: string | null): Promise<CreationOperation | null> {
+  if (!key) return null;
+  if (!/^[A-Za-z0-9_-]{16,128}$/.test(key)) throw new CreationReplay({status:400,body:{error:'invalid_idempotency_key'}});
+  const operation = {scope:await creationScope(actor,origin,workspaceAccount),key,fingerprint:hash(payload),reply};
+  const replay = await lookupCreation(await getDb(), operation);
+  if (replay) throw new CreationReplay(replay);
+  return operation;
 }
 
 /** Reservation and completion run on the same transaction as artifact creation. */

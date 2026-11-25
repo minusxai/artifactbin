@@ -2,6 +2,7 @@ import {nativeHtml} from '@/__tests__/native-html-fixture';
 import {expect,it} from 'vitest';
 import {request,useAppHarness,params} from './harness';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
+import {setArtifactQuotaForTests} from '@/lib/artifacts/testing';
 import {POST as create} from '@/app/api/artifacts/route';
 import {DELETE as remove} from '@/app/api/artifacts/[id]/route';
 const harness=useAppHarness();
@@ -13,7 +14,13 @@ it('commits one artifact for simultaneous same-key requests and replays the orig
  expect(first.status).toBe(201);expect(second.status).toBe(201);
  const original=await first.json();expect(await second.json()).toEqual(original);
  const db=await harness.db();expect((await db.query<{n:number}>('SELECT count(*)::int n FROM artifacts WHERE token_id=$1',[token.id])).rows[0].n).toBe(1);
- const replay=await createRequest(token.token,body);expect(await replay.json()).toEqual(original);
+ setArtifactQuotaForTests(1);
+ const refused=await createRequest(token.token,body,'a-different-operation-key');
+ expect(refused.status).toBe(403);
+ expect(await refused.json()).toMatchObject({error:'quota_exceeded'});
+ const replay=await createRequest(token.token,body);
+ expect(replay.status).toBe(201);
+ expect(await replay.json()).toEqual(original);
 });
 it('refuses payload mismatch and never recreates a deleted result',async()=>{
  const token=await mintToken('idempotency');const body={html:nativeHtml('<p>Same</p>')};

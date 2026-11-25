@@ -2,7 +2,7 @@ import {ArtifactParentRefusal,PARENT_REFUSED} from '@/lib/artifacts';
 import {LiveRegionRefusal} from '@/lib/live-regions';
 import {documentOwner,type UserPagesOwner} from '@/lib/user-pages';
 import {preparePublicationBundle,type CreationKeys} from './bundle';
-import { getSharingFor, durableMutation, type MutationReceipt, type MutationReply, parseArtifactDestination, newArtifactDestination, permitsMemberPage, type ArtifactInput, artifactQuotaExceeded, groupArtifactQuotaExceeded, publisherByteQuota, GroupPersonalDestination, type ArtifactRow, byteQuotaFor, canReadArtifact, createArtifact, creationOperation, CreationReplay, findDependentsFor, getArtifactById, getArtifactFor, getOwnedArtifactFor, isVersionConflict, lookupCreation, observedChange, versionConflict, refLoaderForActor, replaceArtifactFor, setMetadataFor } from '@/lib/artifacts';
+import { getSharingFor, durableMutation, type MutationReceipt, type MutationReply, parseArtifactDestination, newArtifactDestination, permitsMemberPage, type ArtifactInput, publicationCountQuotaExceeded, publisherByteQuota, GroupPersonalDestination, type ArtifactRow, canReadArtifact, createArtifact, prepareCreation, CreationReplay, findDependentsFor, getArtifactById, getArtifactFor, getOwnedArtifactFor, isVersionConflict, versionConflictFor, refLoaderForActor, replaceArtifactFor, setMetadataFor } from '@/lib/artifacts';
 import { ownsArtifact, writerFor } from '@/lib/artifact-access';
 import { committedOpenAnnotations, createdArtifactWire, parseAccessValue, parseExpectedVersion, parseLinkRoleValue, parseParentField, parseShareEntries, parseSharingRevision, parseVisibilityValue, placementFor, replacedArtifactWire } from '@/lib/artifact-wire';
 import {htmlAssetLinks} from '@/lib/html-page';
@@ -28,7 +28,7 @@ import type { DatasetAccess, Visibility } from '@artifactbin/contracts/sharing';
 import { identityForUser, shareTargetsRefusal, TEST_ACCOUNT_RESTRICTED, type AccessActor, type PublicationActor } from '@/lib/accounts';
 import { prepareCatalog, DatasetError } from '@/lib/datasets';
 import { Reply, reply } from '@/lib/http';
-import { ID_RE, getDb } from '@/lib/platform';
+import { ID_RE } from '@/lib/platform';
 import { prepareContentInput, preparedPersistence, type PreparedContent } from '../prepared/prepare-content';
 import { readingPrepared } from '@/lib/object-store';
 import { lookupWebAssets, refreshWebAssets, type WebAssetImporter } from '../assets/web-assets';
@@ -130,7 +130,8 @@ export async function replaceArtifactWithBody(
   const sent=body;
   if(typeof body.html==='string'){
     // A content write is fenced only on what it replaces (lib/artifacts state): a sharing or policy change since the read never refuses it.
-    const changed=observedChange(current,expected);if(changed)return reply(versionConflict(current,changed),409);
+    const conflict = versionConflictFor(current, expected);
+    if (conflict) return reply(conflict, 409);
     if(body.publicationBundle!==undefined&&(expected.expectedVersion===undefined||expected.expectedState===undefined))return reply({error:'bundle_requires_observed_state'},400);
     // A group's sign-in commits a bundle as itself (its page's existing files only: it creates none for a group page).
     if(body.publicationBundle!==undefined&&((!actor.tokenId&&!actor.principalGroup)||options.dryRun))return reply({error:'bundle_requires_authenticated_commit'},400);
@@ -188,7 +189,7 @@ export async function replaceArtifactWithBody(
       loadRef: refLoaderForActor(owner),
       // Account-owned imports may have no historical creator credential.
       // A group's sign-in is charged to its group, never the page owner's token, and imports no remote input.
-      overByteQuota: actor.principalGroup?publisherByteQuota(actor):byteQuotaFor(owner.tokenId, owner.userId),
+      overByteQuota: publisherByteQuota(actor, owner),
     }, {allowRemoteInputs:!options.dryRun&&!actor.principalGroup});
   if (prepared instanceof Reply) return prepared;
   let parsed = prepared.content;
@@ -228,8 +229,8 @@ export async function replaceArtifactWithBody(
   const placement = await placementFor(writerFor(current), parent, { id: current.id, format: current.format }, !!owned);
   if (placement instanceof Reply) return placement;
 
-  const changed = observedChange(current, expected);
-  if (changed) return reply(versionConflict(current, changed), 409);
+  const conflict = versionConflictFor(current, expected);
+  if (conflict) return reply(conflict, 409);
   const htmlData=await prepareHtmlDatasets(prepared,body.html,owner,actor);if(htmlData instanceof Reply)return htmlData;
   const htmlDatasets=htmlData?.links;
   if (options.dryRun) return preflightReply(prepared);
@@ -349,13 +350,13 @@ async function createArtifactFromBodyPrepared(
    try{live=prepareLiveDataset(body.connection);}catch(error){if(error instanceof LiveDatasetRefusal)return reply(error.body,error.status);throw error;}
   }
   let operation;
-  try {operation = await creationOperation(actor,base,keys.idempotencyKey,live?{...body,connection:withoutSecrets(body.connection)}:body,row=>({status:201,body:responseBody(row)}),keys.account);}
+  try {operation = await prepareCreation(actor,base,keys.idempotencyKey,live?{...body,connection:withoutSecrets(body.connection)}:body,row=>({status:201,body:responseBody(row)}),keys.account);}
   catch(error){if(error instanceof LiveRegionRefusal)return reply({error:error.code,details:error.details},409);if(error instanceof CreationReplay)return reply(error.reply.body,error.reply.status);throw error;}
-  if(operation){const replay=await lookupCreation(await getDb(),operation);if(replay)return reply(replay.body,replay.status);}
   // A group's sign-in shares nothing (sharing is its Admins'), and its count quota is its group's, never a token's.
   if (actor.principalGroup && body.shares !== undefined) return reply({ error: 'group_principal_refused', details: ['A sign-in acting as a group does not share; ask an Admin of the group.'] }, 403);
-  if (actor.principalGroup && await groupArtifactQuotaExceeded(actor.principalGroup.id)) return reply({ error: 'quota_exceeded', details: ['this group has hit its artifact COUNT quota for agent sign-ins — deleting does not free it'] }, 403);
-  if (!actor.principalGroup && await artifactQuotaExceeded(actor.tokenId!)) return reply({ error: 'quota_exceeded', details: ['this token has hit its artifact COUNT quota — deleting does not free it (nothing is erased), so ask your user for another token'] }, 403);
+  const countQuota = await publicationCountQuotaExceeded(actor);
+  if (countQuota === 'group') return reply({ error: 'quota_exceeded', details: ['this group has hit its artifact COUNT quota for agent sign-ins — deleting does not free it'] }, 403);
+  if (countQuota === 'token') return reply({ error: 'quota_exceeded', details: ['this token has hit its artifact COUNT quota — deleting does not free it (nothing is erased), so ask your user for another token'] }, 403);
   const shares=parseShareEntries(body.shares);if(shares instanceof Reply)return shares;const boxed=await shareTargetsRefusal(actor,shares);if(boxed)return reply({error:TEST_ACCOUNT_RESTRICTED,detail:boxed},403);
   if(body.visibility===null||body.linkRole===null)return reply({error:'invalid_metadata',hint:'visibility and linkRole cannot be null.'},400);
   const link=parseLinkRoleValue(body.linkRole);if(link instanceof Reply)return link;

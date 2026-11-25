@@ -9,7 +9,7 @@ import { canonicalizeHtmlPage, type HtmlIdentityLedger, type HtmlPageAnalysis, t
 import {parseSource} from '../html-page/html-source';
 import {scriptFingerprint} from '../html-autofix';
 import {assertOwnerPlacement,assertDestination,newArtifactDestination,permitsMemberPage} from './ownership';
-import { identityForUser, type AccessActor } from '@/lib/accounts';
+import { identityForUser, type AccessActor, type PublicationActor } from '@/lib/accounts';
 import { groupAdminSql } from '@/lib/groups';
 import type {ArtifactDestination} from '@artifactbin/contracts/groups';
 import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, groupMemberPredicate, editorScope, lockOrder, ownerPredicate, ownerScope, sharingScope, writerFor, type ArtifactRow, type Scope } from '@/lib/artifact-access';
@@ -104,7 +104,7 @@ const SUMMARY_COLS = 'id, user_id, group_id, title, description, format, meta, v
  * THE COUNT QUOTA FOR A GROUP'S SIGN-INS (lib/accounts `GroupPrincipal`): charged to the GROUP, never the sign-in's
  * rotating token: every row any of the group's sign-ins created, deleted or not, against the same cap.
  */
-export async function groupArtifactQuotaExceeded(groupId: string, creating = 1): Promise<boolean> {
+async function groupArtifactQuotaExceeded(groupId: string, creating = 1): Promise<boolean> {
   const cap = artifactQuotaLimit();
   if (!cap) return false;
   const r = await (await getDb()).query<{ n: number }>('SELECT COUNT(*)::int AS n FROM artifacts WHERE token_id IN (SELECT id FROM tokens WHERE group_id = $1)', [groupId]);
@@ -126,6 +126,12 @@ export async function artifactQuotaExceeded(tokenId: string, creating = 1): Prom
    */
   const r = await db.query<{ n: number }>('SELECT COUNT(*)::int AS n FROM artifacts WHERE token_id = $1', [tokenId]);
   return (r.rows[0]?.n ?? 0) + creating > cap;
+}
+
+/** A group sign-in charges the group; all other publications charge the presenting token. */
+export async function publicationCountQuotaExceeded(actor: PublicationActor): Promise<'group' | 'token' | null> {
+  if (actor.principalGroup) return await groupArtifactQuotaExceeded(actor.principalGroup.id) ? 'group' : null;
+  return await artifactQuotaExceeded(actor.tokenId!) ? 'token' : null;
 }
 
 /** First owning report attachment freezes unresolved memberOf scopes atomically. */
@@ -913,8 +919,10 @@ export function byteQuotaFor(tokenId: string | null, ownerUserId?: string | null
   return () => assetByteQuotaExceeded(tokenId, ownerUserId);
 }
 /** The byte quota a publication is charged to: a group's sign-in's GROUP (lib/accounts `GroupPrincipal`), else its token or account. */
-export function publisherByteQuota(actor: AccessActor, ownerUserId?: string | null): () => Promise<boolean> {
-  return actor.principalGroup ? () => groupAssetByteQuotaExceeded(actor.principalGroup!.id) : byteQuotaFor(actor.tokenId, ownerUserId);
+export function publisherByteQuota(actor: AccessActor, owner?: Pick<AccessActor, 'tokenId' | 'userId'>): () => Promise<boolean> {
+  const groupId = actor.principalGroup?.id;
+  if (groupId) return () => groupAssetByteQuotaExceeded(groupId);
+  return owner ? byteQuotaFor(owner.tokenId, owner.userId) : byteQuotaFor(actor.tokenId);
 }
 
 /** Stable keyset pagination; creation timestamps never move when content is edited. */
