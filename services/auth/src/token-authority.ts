@@ -16,7 +16,7 @@ import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts/routes';
 import {parseAliasOrigins} from '@artifactbin/contracts/server-identity';
 import type {ServiceAudience, ServiceTokenParent} from '@artifactbin/contracts/service-audiences';
 import type {TokenRecord} from '@artifactbin/contracts/identity';
-import type {Context, Hono} from 'hono';
+import type {Context, Hono, Next} from 'hono';
 import type {AuthEnv,AuthOptions} from './parts';
 import {acceptedOriginsOf,baseUrlOf} from './routes/grants';
 import {listServiceGroupSignInGrants,mintRunSignIn,mintServiceGroupSignIn} from './identity-store/accounts';
@@ -45,6 +45,7 @@ const PERSON={group_id:null,group_role:null,issued_by:null} as const;
 /** The lifetime a run sign-in asks for (`expires_in`, seconds; absent: the default), clamped to the token bounds; null when malformed. */
 const runLifetime=(asked:unknown):number|null=>asked===undefined?DEFAULT_TOKEN_TTL_MS
  :typeof asked==='number'&&Number.isFinite(asked)&&asked>0?Math.min(MAX_TOKEN_TTL_MS,Math.max(MIN_TOKEN_TTL_MS,Math.round(asked*1000))):null;
+const sessionUnavailable=()=>answer({error:'session_unavailable'},503);
 export function mountTokenAuthority(app:Hono<AuthEnv>,o:AuthOptions,{secret,audiences,tokenKey,groupKey,authSchema,readSchema}:AuthorityConfig):void{
  /**
   * Is the bearer read's record a live credential of this deployment's account: an account's token, an OAuth access
@@ -78,9 +79,19 @@ export function mountTokenAuthority(app:Hono<AuthEnv>,o:AuthOptions,{secret,audi
   const expiresAt=minted.expiresAt!;
   return answer({access_token:minted.token,token_type:'Bearer',token_id:minted.id,expires_at:expiresAt,expires_at_ms:Date.parse(expiresAt),server} satisfies RunSignIn);
  };
- const runError=(error:unknown)=>error instanceof IdentityError
+ const signInError=(error:unknown)=>error instanceof IdentityError
   ?answer({error:error.code,...(error.retryAfter!==undefined?{retry_after:error.retryAfter}:{})},error.status)
-  :answer({error:'session_unavailable'},503);
+  :sessionUnavailable();
+ // Match the service and its opt-in before inspecting the request: a closed route falls through as an unknown path.
+ const serviceRoute=(optIn:'runSignIns'|'groupSignIns',
+  handle:(input:Record<string,unknown>,service:ServiceAudience,c:Context<AuthEnv>)=>Promise<Response>,
+  onError:(error:unknown)=>Response=signInError,
+ )=>async(c:Context<AuthEnv>,next:Next)=>{
+  const service=serviceOf(audiences,c.req.header(SERVICE_AUTH_HEADER));
+  if(!service?.[optIn])return next();
+  const input=await admitService(c,()=>true);if(input instanceof Response)return input;
+  try{return await handle(input,service,c);}catch(error){return onError(error);}
+ };
  app.all(IDENTITY_INTROSPECT_PATH,async c=>{
   // The installation itself (every token), or one configured service (only tokens bound to its own origin).
   const asker:{only:ServiceAudience|null}={only:null};
@@ -106,127 +117,98 @@ export function mountTokenAuthority(app:Hono<AuthEnv>,o:AuthOptions,{secret,audi
    if(!token||(only&&token.audience!==only.origin))return inactive;
    if(token.groupId&&token.groupRole&&token.issuedBy)return answer({active:true,principal_kind:'group',user_id:token.auditUserId??null,token_id:token.id,scopes:token.scope?.split(/\s+/).filter(Boolean)??[],audience:token.audience??null,expires_at:token.expiresAt??null,parent:null,group_id:token.groupId,group_role:token.groupRole,issued_by:token.issuedBy} satisfies IdentityIntrospectResponse);
    return answer({active:true,principal_kind:'user',user_id:token.userId!,token_id:token.id,scopes:token.scope?.split(/\s+/).filter(Boolean)??[],audience:token.audience??null,expires_at:token.expiresAt??null,parent:null,...PERSON,issued_by:token.issuedBy??null} satisfies IdentityIntrospectResponse);
-  }catch{return answer({error:'session_unavailable'},503);}
+  }catch{return sessionUnavailable();}
  });
- app.all(RUN_SIGN_IN_PATH,async(c,next)=>{
-  // Only a service that opted in, presenting its own secret, reaches this route; anyone else meets an unknown path.
-  const service=serviceOf(audiences,c.req.header(SERVICE_AUTH_HEADER));
-  if(!service?.runSignIns)return next();
-  const input=await admitService(c,()=>true);if(input instanceof Response)return input;
+ app.all(RUN_SIGN_IN_PATH,serviceRoute('runSignIns',async(input,service,c)=>{
   if(Object.keys(input).some(key=>!['token','expires_in','group_id','group_role'].includes(key))||typeof input.token!=='string'||!input.token)return answer({error:'bad_request'},400);
   const groupId=input.group_id;
   if((groupId!==undefined||input.group_role!==undefined)&&(typeof groupId!=='string'||!/^grp_[a-z0-9]+$/.test(groupId)||input.group_role!=='member'))return answer({error:'bad_request'},400);
   const lifetime=runLifetime(input.expires_in);
   if(lifetime===null)return answer({error:'invalid_expiry'},400);
-  try{
-   const claims=await verifiedServiceParent(input.token,service);
-   const server=serverOf(c);
-   const minted=await mintRunSignIn(identityTables(authSchema),o.identityDb!,authSchema,readSchema,{groupId:typeof groupId==='string'?groupId:null,userId:claims.sub,service:service.id,parent:claims.par,expiresInMs:lifetime,audience:`${server}${API_RESOURCE_PATH}`,scope:ARTIFACT_SCOPE});
-   return respondRun(minted,server,claims.sub);
-  }catch(error){return runError(error);}
- });
- app.all(SCHEDULE_SIGN_IN_PATH,async(c,next)=>{
-  const service=serviceOf(audiences,c.req.header(SERVICE_AUTH_HEADER));
-  if(!service?.runSignIns)return next();
-  const input=await admitService(c,()=>true);if(input instanceof Response)return input;
+  const claims=await verifiedServiceParent(input.token,service);
+  const server=serverOf(c);
+  const minted=await mintRunSignIn(identityTables(authSchema),o.identityDb!,authSchema,readSchema,{groupId:typeof groupId==='string'?groupId:null,userId:claims.sub,service:service.id,parent:claims.par,expiresInMs:lifetime,audience:`${server}${API_RESOURCE_PATH}`,scope:ARTIFACT_SCOPE});
+  return respondRun(minted,server,claims.sub);
+ }));
+ app.all(SCHEDULE_SIGN_IN_PATH,serviceRoute('runSignIns',async(input,service,c)=>{
   const {action,schedule_id:id,revision,token,group_id:groupId,grant_id:grantId}=input;
   const fields=action==='consent'?['token','group_id']:action==='issue'?['grant_id','expires_in']:action==='revoke'?['grant_id']:null;
   if(!fields||Object.keys(input).some(key=>!['action','schedule_id','revision',...fields].includes(key))
     ||typeof id!=='string'||!id.trim()||id.length>256||typeof revision!=='string'||!revision.trim()||revision.length>256)
    return answer({error:'bad_request'},400);
   const db=o.identityDb;
-  if(!db)return answer({error:'session_unavailable'},503);
+  if(!db)return sessionUnavailable();
   const target={service,id,revision};
-  try{
-   if(action==='consent'){
-    if(typeof token!=='string'||!token||typeof groupId!=='string'||!/^grp_[a-z0-9]+$/.test(groupId))return answer({error:'bad_request'},400);
-    const claims=await verifiedServiceParent(token,service);
-    return answer(await recordScheduleConsent(db,authSchema,readSchema,{...target,userId:claims.sub,groupId}));
-   }
-   if(typeof grantId!=='string'||!/^scg_[a-z0-9]{1,40}$/.test(grantId))return answer({error:'bad_request'},400);
-   const grant={...target,grantId};
-   if(action==='revoke'){
-    await revokeScheduleConsent(db,authSchema,grant);
-    return answer({ok:true});
-   }
-   const lifetime=runLifetime(input.expires_in);
-   if(lifetime===null)return answer({error:'invalid_expiry'},400);
-   const owner=await readScheduleConsent(db,authSchema,grant);
-   if(o.admitIdentity&&!await o.admitIdentity({userId:owner.subject_id}))return answer({error:'grant_refused'},403);
-   const server=serverOf(c);
-   const minted=await mintRunSignIn(identityTables(authSchema),db,authSchema,readSchema,{
-    groupId:owner.group_id,userId:owner.subject_id,service:service.id,parent:{kind:'schedule',id:grantId,origin:service.origin,scheduleId:id,revision},
-    expiresInMs:Math.min(lifetime,SERVICE_GROUP_SIGN_IN_MAX_TTL_MS),audience:`${server}${API_RESOURCE_PATH}`,scope:ARTIFACT_SCOPE,
-   });
-   return respondRun(minted,server,owner.subject_id);
-  }catch(error){return runError(error);}
- });
- app.all(CHAT_SIGN_IN_PATH,async(c,next)=>{
-  const service=serviceOf(audiences,c.req.header(SERVICE_AUTH_HEADER));
-  if(!service?.runSignIns)return next();
-  const input=await admitService(c,()=>true);if(input instanceof Response)return input;
+  if(action==='consent'){
+   if(typeof token!=='string'||!token||typeof groupId!=='string'||!/^grp_[a-z0-9]+$/.test(groupId))return answer({error:'bad_request'},400);
+   const claims=await verifiedServiceParent(token,service);
+   return answer(await recordScheduleConsent(db,authSchema,readSchema,{...target,userId:claims.sub,groupId}));
+  }
+  if(typeof grantId!=='string'||!/^scg_[a-z0-9]{1,40}$/.test(grantId))return answer({error:'bad_request'},400);
+  const grant={...target,grantId};
+  if(action==='revoke'){
+   await revokeScheduleConsent(db,authSchema,grant);
+   return answer({ok:true});
+  }
+  const lifetime=runLifetime(input.expires_in);
+  if(lifetime===null)return answer({error:'invalid_expiry'},400);
+  const owner=await readScheduleConsent(db,authSchema,grant);
+  if(o.admitIdentity&&!await o.admitIdentity({userId:owner.subject_id}))return answer({error:'grant_refused'},403);
+  const server=serverOf(c);
+  const minted=await mintRunSignIn(identityTables(authSchema),db,authSchema,readSchema,{
+   groupId:owner.group_id,userId:owner.subject_id,service:service.id,parent:{kind:'schedule',id:grantId,origin:service.origin,scheduleId:id,revision},
+   expiresInMs:Math.min(lifetime,SERVICE_GROUP_SIGN_IN_MAX_TTL_MS),audience:`${server}${API_RESOURCE_PATH}`,scope:ARTIFACT_SCOPE,
+  });
+  return respondRun(minted,server,owner.subject_id);
+ }));
+ app.all(CHAT_SIGN_IN_PATH,serviceRoute('runSignIns',async(input,service,c)=>{
   const {action,chat_id:contextId,group_id:groupId,token,grant_id:grantId}=input;
   const fields=action==='consent'?['token','group_role']:action==='issue'?['token','grant_id','expires_in']:action==='revoke'?['grant_id']:null;
   if(!fields||Object.keys(input).some(key=>!['action','chat_id','group_id',...fields].includes(key))
     ||typeof contextId!=='string'||!contextId.trim()||contextId.length>256
     ||typeof groupId!=='string'||!/^grp_[a-z0-9]+$/.test(groupId))return answer({error:'bad_request'},400);
   const db=o.identityDb;
-  if(!db)return answer({error:'session_unavailable'},503);
+  if(!db)return sessionUnavailable();
   const target={service,contextId,groupId};
-  try{
-   if(action==='consent'){
-    if(input.group_role!=='admin'||typeof token!=='string'||!token)return answer({error:'bad_request'},400);
-    const claims=await verifiedServiceParent(token,service);
-    return answer(await recordInteractiveConsent(db,authSchema,readSchema,{...target,userId:claims.sub,parent:claims.par}));
-   }
-   if(typeof grantId!=='string'||!/^icg_[a-z0-9]{1,40}$/.test(grantId))return answer({error:'bad_request'},400);
-   if(action==='revoke'){
-    await revokeInteractiveConsent(db,authSchema,{...target,grantId});
-    return answer({ok:true});
-   }
-   const lifetime=runLifetime(input.expires_in);
-   if(lifetime===null)return answer({error:'invalid_expiry'},400);
-   if(typeof token!=='string'||!token)return answer({error:'bad_request'},400);
+  if(action==='consent'){
+   if(input.group_role!=='admin'||typeof token!=='string'||!token)return answer({error:'bad_request'},400);
    const claims=await verifiedServiceParent(token,service);
-   const server=serverOf(c);
-   const minted=await mintRunSignIn(identityTables(authSchema),db,authSchema,readSchema,{
-    groupId,userId:claims.sub,service:service.id,parent:{kind:'interactive',id:grantId,origin:service.origin,contextId,personal:claims.par},
-    expiresInMs:Math.min(lifetime,SERVICE_GROUP_SIGN_IN_MAX_TTL_MS),audience:`${server}${API_RESOURCE_PATH}`,scope:ARTIFACT_SCOPE,
-   });
-   return respondRun(minted,server,claims.sub);
-  }catch(error){return runError(error);}
- });
- app.all(GROUP_SIGN_IN_PATH,async(c,next)=>{
-  // Only a service that opted in, presenting its own secret, reaches this route; anyone else meets an unknown path.
-  const service=serviceOf(audiences,c.req.header(SERVICE_AUTH_HEADER));
-  if(!service?.groupSignIns)return next();
-  const input=await admitService(c,()=>true);if(input instanceof Response)return input;
+   return answer(await recordInteractiveConsent(db,authSchema,readSchema,{...target,userId:claims.sub,parent:claims.par}));
+  }
+  if(typeof grantId!=='string'||!/^icg_[a-z0-9]{1,40}$/.test(grantId))return answer({error:'bad_request'},400);
+  if(action==='revoke'){
+   await revokeInteractiveConsent(db,authSchema,{...target,grantId});
+   return answer({ok:true});
+  }
+  const lifetime=runLifetime(input.expires_in);
+  if(lifetime===null)return answer({error:'invalid_expiry'},400);
+  if(typeof token!=='string'||!token)return answer({error:'bad_request'},400);
+  const claims=await verifiedServiceParent(token,service);
+  const server=serverOf(c);
+  const minted=await mintRunSignIn(identityTables(authSchema),db,authSchema,readSchema,{
+   groupId,userId:claims.sub,service:service.id,parent:{kind:'interactive',id:grantId,origin:service.origin,contextId,personal:claims.par},
+   expiresInMs:Math.min(lifetime,SERVICE_GROUP_SIGN_IN_MAX_TTL_MS),audience:`${server}${API_RESOURCE_PATH}`,scope:ARTIFACT_SCOPE,
+  });
+  return respondRun(minted,server,claims.sub);
+ }));
+ app.all(GROUP_SIGN_IN_PATH,serviceRoute('groupSignIns',async(input,service,c)=>{
   if(Object.keys(input).some(key=>key!=='grant_id'&&key!=='expires_in')||typeof input.grant_id!=='string'||!/^sgg_[a-z0-9]{1,40}$/.test(input.grant_id))return answer({error:'bad_request'},400);
   // A run sign-in's lifetime (default six hours), clamped to a day: the service asks again, under a live approval.
   const asked=runLifetime(input.expires_in);
   if(asked===null)return answer({error:'invalid_expiry'},400);
   const lifetime=Math.min(asked,SERVICE_GROUP_SIGN_IN_MAX_TTL_MS);
-  if(!o.identityDb)return answer({error:'session_unavailable'},503);
-  try{
-   const server=baseUrlOf(c.req.raw,o.trustedHops??0,readEnv(o.env,'APP__PUBLIC_BASE_URL'));
-   const minted=await mintServiceGroupSignIn(identityTables(authSchema),o.identityDb,{grantId:input.grant_id,service:service.id,origin:service.origin,expiresInMs:lifetime,audience:`${server}${API_RESOURCE_PATH}`,scope:ARTIFACT_SCOPE});
-   void say(o.events,{kind:'group',id:minted.groupId},'minted',{kind:'token',id:minted.id},{name:minted.name,group_id:minted.groupId,grant_id:input.grant_id,service:service.id});
-   const expiresAt=minted.expiresAt!;
-   return answer({access_token:minted.token,token_type:'Bearer',token_id:minted.id,expires_at:expiresAt,expires_at_ms:Date.parse(expiresAt),server,group_id:minted.groupId,group_role:minted.role,grant_id:input.grant_id} satisfies GroupSignIn);
-  }catch(error){
-   if(error instanceof IdentityError)return answer({error:error.code,...(error.retryAfter!==undefined?{retry_after:error.retryAfter}:{})},error.status);
-   return answer({error:'session_unavailable'},503);
-  }
- });
- app.all(GROUP_SIGN_IN_GRANTS_PATH,async(c,next)=>{
-  // The same door as the sign-in route: only a service that opted in, with its own secret; anyone else, an unknown path.
-  const service=serviceOf(audiences,c.req.header(SERVICE_AUTH_HEADER));
-  if(!service?.groupSignIns)return next();
-  const input=await admitService(c,()=>true);if(input instanceof Response)return input;
+  if(!o.identityDb)return sessionUnavailable();
+  const server=serverOf(c);
+  const minted=await mintServiceGroupSignIn(identityTables(authSchema),o.identityDb,{grantId:input.grant_id,service:service.id,origin:service.origin,expiresInMs:lifetime,audience:`${server}${API_RESOURCE_PATH}`,scope:ARTIFACT_SCOPE});
+  void say(o.events,{kind:'group',id:minted.groupId},'minted',{kind:'token',id:minted.id},{name:minted.name,group_id:minted.groupId,grant_id:input.grant_id,service:service.id});
+  const expiresAt=minted.expiresAt!;
+  return answer({access_token:minted.token,token_type:'Bearer',token_id:minted.id,expires_at:expiresAt,expires_at_ms:Date.parse(expiresAt),server,group_id:minted.groupId,group_role:minted.role,grant_id:input.grant_id} satisfies GroupSignIn);
+ }));
+ app.all(GROUP_SIGN_IN_GRANTS_PATH,serviceRoute('groupSignIns',async(input,service)=>{
   // It takes no question: what it lists is the caller's own, never another service's or a chosen group's.
+  // Any failed listing is an availability failure. The sign-in route reports specific approval refusals.
   if(Object.keys(input).length)return answer({error:'bad_request'},400);
-  if(!o.identityDb)return answer({error:'session_unavailable'},503);
-  try{return answer({approvals:await listServiceGroupSignInGrants(identityTables(authSchema),o.identityDb,{service:service.id,origin:service.origin})});}
-  catch{return answer({error:'session_unavailable'},503);}
- });
+  if(!o.identityDb)return sessionUnavailable();
+  return answer({approvals:await listServiceGroupSignInGrants(identityTables(authSchema),o.identityDb,{service:service.id,origin:service.origin})});
+ },sessionUnavailable));
 }
