@@ -25,7 +25,8 @@ import MobileSheet from '../ui/MobileSheet';
 import { Button } from '../ui/Button';
 import { FeatureGate } from '../components/FeatureGate';
 import { RIGHT_RAIL_W } from '@/lib/html-reader/edit-bar';
-import { AnnotationThread } from './AnnotationThread';
+import { AnnotationThread, type ThreadActions } from './AnnotationThread';
+import type { ReplyDrafts } from './reply-drafts';
 import type { CommentDraft } from './annotation-draft';
 import type { ThreadStore } from './annotation-threads';
 
@@ -34,7 +35,6 @@ function RailChrome(props: {
   /** The editor's panel, when it hosts the rail. */
   host?: HTMLElement;
   topOffset: number;
-  rightInset: number;
   onClose: () => void;
   header: JSX.Element;
   children: JSX.Element;
@@ -46,8 +46,8 @@ function RailChrome(props: {
   }>
     <Show when={props.host} fallback={
       <aside data-capture-chrome aria-label="Annotation sidebar"
-        class="fixed bottom-0 z-20 flex flex-col gap-2.5 border-l border-edge bg-bg p-2.5"
-        style={{ top: `${props.topOffset}px`, right: `${props.rightInset}px`, width: `${RIGHT_RAIL_W}px` }}>
+        class="fixed bottom-0 right-0 z-20 flex flex-col gap-2.5 border-l border-edge bg-bg p-2.5"
+        style={{ top: `${props.topOffset}px`, width: `${RIGHT_RAIL_W}px` }}>
         <div class="shrink-0">{props.header}</div>
         <div class="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto">{props.children}</div>
       </aside>
@@ -73,19 +73,14 @@ export function CommentRail(props: {
   phone: boolean;
   host?: HTMLElement;
   topOffset: number;
-  rightInset: number;
   onClose: () => void;
   offerSignIn: boolean;
-  onSignIn: () => void;
   hoverId: string | null;
-  onHover: (id: string | null) => void;
   /** What the document last said about each thread's passage. */
   viewStateError: { id: string; message: string } | null;
   missing: Set<string>;
-  replyDraft: (id: string) => string;
-  onReplyDraftChange: (id: string, value: string) => void;
-  onDelete: (commentId: string, thread: boolean) => void;
-  onOpenThread: (id: string) => void;
+  replies: ReplyDrafts;
+  actions: ThreadActions;
   threadsRef: (element: HTMLDivElement) => void;
 }): JSX.Element {
   const { threads, draft } = props;
@@ -94,7 +89,7 @@ export function CommentRail(props: {
       <h2 class="font-mono text-micro font-semibold uppercase tracking-[0.12em] text-faint">comments</h2>
       <Button type="button" variant="ghost" size="sm" icon aria-label="Close comments" onClick={() => props.onClose()}><X size={14} strokeWidth={1.8} /></Button>
     </div>
-    <Show when={props.mayCreate} fallback={<Show when={props.offerSignIn} fallback={<p class="text-2xs text-muted">You have read-only comment access.</p>}><Button type="button" variant="secondary" size="sm" onClick={() => props.onSignIn()}>Sign in to comment</Button></Show>}>
+    <Show when={props.mayCreate} fallback={<Show when={props.offerSignIn} fallback={<p class="text-2xs text-muted">You have read-only comment access.</p>}><Button type="button" variant="secondary" size="sm" onClick={() => props.actions.signIn()}>Sign in to comment</Button></Show>}>
     <div role="group" aria-label="Comment tools" class="grid grid-cols-2 gap-2">
       {/* A tool in use is the primary variant; min-h-16 grows the control past its fixed height without fighting it. */}
       <Button type="button" variant={draft.pick() === 'block' ? 'primary' : 'secondary'} size="sm" aria-label="Select" aria-pressed={draft.pick() === 'block'} onClick={draft.toggleSelect}
@@ -114,41 +109,19 @@ export function CommentRail(props: {
     </Show>
   </div>;
 
-  const handlers = (id: string, resolved: boolean) => ({
-    canCreateComment: props.mayCreate,
-    onHover: props.onHover,
-    onDelete: (commentId: string) => props.onDelete(commentId, commentId === id),
-    onReact: (commentId: string, active: boolean) => threads.react(commentId, active),
-    onSignIn: () => props.onSignIn(),
-    onEdit: (commentId: string, body: string) => threads.edit(id, commentId, body),
-    onToggleFold: () => threads.toggleFold('threads', id),
-    onToggleComment: (commentId: string) => threads.toggleFold('comments', commentId),
-    ...(resolved ? {
-      // Expanding it makes it the open thread — the document highlights its passage and scrolls there.
-      onOpen: () => threads.inspect(id),
-      onReply: async () => false,
-      onResolve: () => {},
-      onReopen: () => void threads.act(id, { reopen: true }),
-    } : {
-      onOpen: () => props.onOpenThread(id),
-      onReply: (body: string, attachment?: { attachment_id: string; edit_id: string }) => threads.actOrThrow(id, { reply: body, ...attachment }),
-      onResolve: () => void threads.act(id, { resolve: true }),
-      onReopen: () => {},
-    }),
-  });
-  const thread = (id: string, row: () => AnnotationWire | undefined, resolved: boolean) => <Show when={row()}>{(a) => (
-    <AnnotationThread artifactId={props.artifactId} backend={props.backend} a={a()} canDeleteAny={props.canDeleteAny} open={threads.openId() === id} resolved={resolved || undefined} hovered={props.hoverId === id} busy={threads.busy()}
-      viewStateError={props.viewStateError?.id === id ? props.viewStateError?.message : undefined} targetMissing={props.missing.has(id)} folded={threads.folded('threads', id)} receded={threads.openId() !== null && threads.openId() !== id} justOpened={threads.justOpenedId() === id}
-      replyDraft={props.replyDraft(id)} onReplyDraftChange={(value) => props.onReplyDraftChange(id, value)}
-      isCommentFolded={(commentId) => threads.folded('comments', commentId)} {...handlers(id, resolved)} />
+  const thread = (id: string, row: () => AnnotationWire | undefined) => <Show when={row()}>{(annotation) => (
+    <AnnotationThread row={annotation()} threads={threads} replies={props.replies} actions={props.actions}
+      artifactId={props.artifactId} backend={props.backend} mayCreate={props.mayCreate} canDeleteAny={props.canDeleteAny}
+      hovered={props.hoverId === id} targetMissing={props.missing.has(id)}
+      viewStateError={props.viewStateError?.id === id ? props.viewStateError.message : undefined} />
   )}</Show>;
 
-  return <RailChrome phone={props.phone} host={props.host} topOffset={props.topOffset} rightInset={props.rightInset} onClose={props.onClose} header={header()}>
+  return <RailChrome phone={props.phone} host={props.host} topOffset={props.topOffset} onClose={props.onClose} header={header()}>
     <div ref={props.threadsRef} class="contents">
       <Show when={threads.rows().length === 0 && !draft.selection()}>
         <p class="p-2 font-mono text-xs text-muted">{props.mayCreate ? 'no open comments — select text in the document, or pick a block, to leave one' : 'no open comments'}</p>
       </Show>
-      <For each={threads.openIds()}>{(id) => thread(id, () => threads.rows().find((row) => row.id === id), false)}</For>
+      <For each={threads.openIds()}>{(id) => thread(id, () => threads.rows().find((row) => row.id === id))}</For>
       {/* Nothing resolved: no toggle, the heading stays plain and the note below says so. */}
       <div role="separator" aria-labelledby="resolved-annotations-heading" class="mt-1 flex items-center gap-2 px-1">
         <span aria-hidden="true" class="h-px flex-1 bg-edge" />
@@ -165,7 +138,7 @@ export function CommentRail(props: {
       </div>
       <div id="resolved-annotations-list" class="contents">
         <Show when={threads.resolvedOpen()}>
-          <For each={threads.resolvedIds()}>{(id) => thread(id, () => (threads.resolved() ?? []).find((row) => row.id === id), true)}</For>
+          <For each={threads.resolvedIds()}>{(id) => thread(id, () => (threads.resolved() ?? []).find((row) => row.id === id))}</For>
         </Show>
       </div>
       <Show when={(threads.resolved()?.length ?? 0) === 0}>

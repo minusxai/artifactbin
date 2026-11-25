@@ -378,13 +378,13 @@ describe('a thread resolved elsewhere counts down on its marker', () => {
       }),
       deleteAnnotation: vi.fn(async () => {}),
     };
-    const view = layer({ railOpen: true, pickOnOpen: false, showViewComments: true, backend });
+    const view = layer({ railOpen: true, showViewComments: true, backend });
     await screen.findByText('is this right?');
     await flush();
     emitLayout(view.runtime, 220);
 
     remotelyResolved = true;
-    view.set({ railOpen: true, pickOnOpen: false, showViewComments: true, backend, liveAnnotations: [] });
+    view.set({ railOpen: true, showViewComments: true, backend, liveAnnotations: [] });
     await flush(); await flush();
     await showResolved();
     const history = await screen.findByLabelText('Resolved annotation thread');
@@ -402,7 +402,7 @@ describe('a thread resolved elsewhere counts down on its marker', () => {
     expect(screen.getByText('reply to keep')).toBeTruthy();
     expect(screen.queryByText('reply to delete')).toBeNull();
 
-    view.set({ railOpen: false, pickOnOpen: false, showViewComments: true, backend, liveAnnotations: [] });
+    view.set({ railOpen: false, showViewComments: true, backend, liveAnnotations: [] });
     await flush();
     expect(pendingRefreshes.length).toBeGreaterThan(0);
     expect(screen.getByLabelText('Open annotation conversation by vivek, 2 messages')).toBeTruthy();
@@ -410,7 +410,7 @@ describe('a thread resolved elsewhere counts down on its marker', () => {
     expect(screen.getByRole('status')).toHaveTextContent('10 seconds');
     expect(view.runtime.posts().at(-1).pins).toContainEqual(expect.objectContaining({ id: ANN.id }));
 
-    view.set({ railOpen: true, pickOnOpen: false, showViewComments: true, backend, liveAnnotations: [] });
+    view.set({ railOpen: true, showViewComments: true, backend, liveAnnotations: [] });
     await showResolved();
     const remainingHistory = await screen.findByLabelText('Resolved annotation thread');
     await showResolved();
@@ -422,7 +422,7 @@ describe('a thread resolved elsewhere counts down on its marker', () => {
     await flush();
     expect(backend.deleteAnnotation).toHaveBeenCalledWith(ANN.id);
     expect(screen.queryByLabelText('Resolved annotation thread')).toBeNull();
-    view.set({ railOpen: false, pickOnOpen: false, showViewComments: true, backend, liveAnnotations: [] });
+    view.set({ railOpen: false, showViewComments: true, backend, liveAnnotations: [] });
     await flush();
     expect(screen.queryByLabelText(/Open annotation conversation/)).toBeNull();
     expect(view.runtime.posts().at(-1).pins).not.toContainEqual(expect.objectContaining({ id: ANN.id }));
@@ -433,62 +433,62 @@ describe('a thread resolved elsewhere counts down on its marker', () => {
     const resolved: AnnotationWire = { ...ANN, status: 'resolved', revision: 2 };
     let finish!: (row: AnnotationWire) => void;
     const backend = { ...httpBackend('doc1'), actOnAnnotation: vi.fn(() => new Promise<AnnotationWire>((done) => { finish = done; })) };
-    const view = layer({ railOpen: true, pickOnOpen: false, showViewComments: true, backend });
+    const view = layer({ railOpen: true, showViewComments: true, backend });
     await flush(); await flush();
     emitLayout(view.runtime, 220);
     fireEvent.click(screen.getByLabelText('Resolve annotation'));
     knobs.open = [];
     knobs.resolved = [resolved];
-    view.set({ railOpen: true, pickOnOpen: false, showViewComments: true, backend, liveAnnotations: [] });
+    view.set({ railOpen: true, showViewComments: true, backend, liveAnnotations: [] });
     await flush(); await flush();
     finish(resolved);
     await flush(); await flush();
     expect(screen.queryByLabelText(/Open annotation conversation/)).toBeNull();
-    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.queryByText(/^Resolved · \d+ seconds$/)).toBeNull();
     expect(view.runtime.posts().at(-1).pins).toEqual([]);
     // A subsequent snapshot must not bring back the countdown for my revision.
-    view.set({ railOpen: false, pickOnOpen: false, showViewComments: true, backend, liveAnnotations: [] });
+    view.set({ railOpen: false, showViewComments: true, backend, liveAnnotations: [] });
     await flush(); await flush();
-    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.queryByText(/^Resolved · \d+ seconds$/)).toBeNull();
     expect(view.runtime.posts().at(-1).pins).toEqual([]);
-    view.set({ railOpen: true, pickOnOpen: false, showViewComments: true, backend, liveAnnotations: [] });
+    view.set({ railOpen: true, showViewComments: true, backend, liveAnnotations: [] });
     await flush(); await flush();
     await showResolved();
     expect(screen.getByLabelText('Show resolved conversation')).toBeTruthy();
     // A refresh starts with resolved history, without a transient marker.
     view.unmount();
-    const refreshed = layer({ railOpen: true, pickOnOpen: false, showViewComments: true });
+    const refreshed = layer({ railOpen: true, showViewComments: true });
     await flush(); await flush();
-    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.queryByText(/^Resolved · \d+ seconds$/)).toBeNull();
     expect(refreshed.runtime.posts().at(-1).pins).toEqual([]);
   });
 
   it('dismisses my resolution when the save response arrives before the live update', async () => {
     const resolved: AnnotationWire = { ...ANN, status: 'resolved', revision: 2 };
     const backend = { ...httpBackend('doc1'), actOnAnnotation: vi.fn(async () => resolved) };
-    const view = layer({ railOpen: true, pickOnOpen: false, showViewComments: true, backend });
+    const view = layer({ railOpen: true, showViewComments: true, backend });
     await flush(); await flush();
     emitLayout(view.runtime, 220);
     knobs.resolved = [resolved];
     fireEvent.click(screen.getByLabelText('Resolve annotation'));
     await flush(); await flush();
-    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.queryByText(/^Resolved · \d+ seconds$/)).toBeNull();
     expect(view.runtime.posts().at(-1).pins).toEqual([]);
-    view.set({ railOpen: false, pickOnOpen: false, showViewComments: true, backend, liveAnnotations: [] });
+    view.set({ railOpen: false, showViewComments: true, backend, liveAnnotations: [] });
     await flush(); await flush();
-    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.queryByText(/^Resolved · \d+ seconds$/)).toBeNull();
     // The same thread reopened and resolved remotely has a different revision.
-    view.set({ railOpen: false, pickOnOpen: false, showViewComments: true, backend, liveAnnotations: [{ ...ANN, revision: 3 }] });
+    view.set({ railOpen: false, showViewComments: true, backend, liveAnnotations: [{ ...ANN, revision: 3 }] });
     await flush(); await flush();
     knobs.resolved = [{ ...resolved, revision: 4 }];
-    view.set({ railOpen: false, pickOnOpen: false, showViewComments: true, backend, liveAnnotations: [] });
+    view.set({ railOpen: false, showViewComments: true, backend, liveAnnotations: [] });
     await flush(); await flush();
-    expect(screen.getByRole('status')).toHaveTextContent('10 seconds');
+    expect(screen.getByText('Resolved · 10 seconds')).toBeInTheDocument();
   });
 
   it('keeps the comment after a failed save and still notices a remote resolution', async () => {
     const backend = { ...httpBackend('doc1'), actOnAnnotation: vi.fn(async () => { throw new Error('save failed'); }) };
-    const view = layer({ railOpen: true, pickOnOpen: false, showViewComments: true, backend });
+    const view = layer({ railOpen: true, showViewComments: true, backend });
     await flush(); await flush();
     emitLayout(view.runtime, 220);
     fireEvent.click(screen.getByLabelText('Resolve annotation'));
@@ -496,9 +496,9 @@ describe('a thread resolved elsewhere counts down on its marker', () => {
     expect(screen.getByLabelText('Resolve annotation')).toBeEnabled();
     expect(view.runtime.posts().at(-1).pins).toContainEqual(expect.objectContaining({ id: ANN.id }));
     knobs.resolved = [{ ...ANN, status: 'resolved', revision: 2 }];
-    view.set({ railOpen: false, pickOnOpen: false, showViewComments: true, backend, liveAnnotations: [] });
+    view.set({ railOpen: false, showViewComments: true, backend, liveAnnotations: [] });
     await flush(); await flush();
-    expect(screen.getByRole('status')).toHaveTextContent('10 seconds');
+    expect(screen.getByText('Resolved · 10 seconds')).toBeInTheDocument();
   });
 
   it('counts only visible unpaused seconds and expires without acknowledging the notification', async () => {

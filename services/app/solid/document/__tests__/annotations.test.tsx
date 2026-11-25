@@ -390,19 +390,31 @@ describe('AnnotationLayer', () => {
     });
   });
 
-  it('reopens an expanded resolved thread and moves it back to the open list', async () => {
-    layer({ railOpen: true });
-    await flush(); await flush();
+  it('shows only the applicable thread actions as a resolved conversation is opened, hidden and reopened', async () => {
+    const view = layer({ railOpen: true });
     await showResolved();
-    fireEvent.click(await screen.findByLabelText('Show resolved conversation'));
-    fireEvent.click(screen.getByLabelText('Reopen annotation'));
-    await flush();
-    const reopen = fetchCalls.find((c) => c.url.endsWith('/annotations/ann_old') && c.init?.method === 'POST');
-    expect(JSON.parse(String(reopen!.init!.body))).toEqual({ reopen: true });
-    await flush();
+    const resolved = within(screen.getByLabelText('Resolved annotation thread'));
+    expect(resolved.queryByRole('button', { name: 'Reopen annotation' })).toBeNull();
+    fireEvent.click(resolved.getByRole('button', { name: 'Show resolved conversation' }));
+    expect(resolved.getByText('verified and corrected')).toBeVisible();
+    expect(resolved.queryByRole('button', { name: 'Resolve annotation' })).toBeNull();
+    expect(resolved.queryByRole('textbox', { name: 'Reply to annotation' })).toBeNull();
+    expect(view.runtime.posts().at(-1)?.openId).toBe(RESOLVED.id);
+
+    fireEvent.click(resolved.getByRole('button', { name: 'Hide resolved conversation' }));
+    expect(resolved.queryByText('verified and corrected')).toBeNull();
+    expect(view.runtime.posts().at(-1)?.openId).toBeNull();
+    fireEvent.click(resolved.getByRole('button', { name: 'Show resolved conversation' }));
+    fireEvent.click(resolved.getByRole('button', { name: 'Reopen annotation' }));
+    const reply = await screen.findByRole('textbox', { name: 'Reply to annotation' });
+    const writes = fetchCalls.filter((call) => call.url.endsWith('/annotations/ann_old') && call.init?.method === 'POST');
+    expect(writes.map((call) => JSON.parse(String(call.init?.body)))).toEqual([{ reopen: true }]);
     expect(screen.queryByLabelText('Resolved annotation thread')).toBeNull();
     expect(screen.getAllByLabelText('Annotation thread')).toHaveLength(2);
-    expect(screen.getByText('please verify the older figure')).toBeTruthy();
+    const reopened = within(reply.closest('[aria-label="Annotation thread"]') as HTMLElement);
+    expect(reopened.getByText('verified and corrected')).toBeVisible();
+    expect(reopened.getByRole('button', { name: 'Resolve annotation' })).toBeEnabled();
+    expect(reopened.queryByRole('button', { name: 'Reopen annotation' })).toBeNull();
   });
 
   it('mirrors document-node hover onto its card and gives agent replies their brand mark', async () => {

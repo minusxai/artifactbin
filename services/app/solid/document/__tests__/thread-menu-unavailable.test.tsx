@@ -6,7 +6,7 @@
 import { expect, it, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/dom';
 import { render } from '../../__tests__/helpers';
-import { AnnotationThread } from '../AnnotationThread';
+import { AnnotationLayer } from '../AnnotationLayer';
 import type { ArtifactBackend } from '@/lib/artifact-backend';
 import type { AnnotationWire } from '@/lib/annotations';
 
@@ -21,9 +21,12 @@ it('keeps the thread and an unavailable actions trigger when the menu chunk cann
   const onError = (event: ErrorEvent) => { errors.push(event.error); };
   window.addEventListener('error', onError);
   try {
-    render(() => <AnnotationThread artifactId="doc1" replyDraft="" onReplyDraftChange={() => {}} backend={{ unavailable: () => null } as unknown as ArtifactBackend} a={ANN} canDeleteAny open hovered={false} busy={false}
-      folded={false} justOpened={false} isCommentFolded={() => false} onOpen={() => {}} onHover={() => {}} onReply={async () => false}
-      onResolve={() => {}} onReopen={() => {}} onDelete={() => {}} onToggleFold={() => {}} onToggleComment={() => {}} />);
+    const backend = {
+      unavailable: () => null,
+      listAnnotations: async (status?: string) => status === 'resolved' ? [] : [ANN],
+      members: async () => null,
+    } as unknown as ArtifactBackend;
+    render(() => <AnnotationLayer id="doc1" backend={backend} canDeleteAny railOpen onRailOpenChange={() => {}} />);
     await waitFor(() => expect(screen.getByRole('button', { name: 'Annotation actions' })).toBeDisabled());
     expect(screen.getByText('is this right?')).toBeTruthy();
     expect(errors).toEqual([]);

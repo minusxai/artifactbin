@@ -159,7 +159,7 @@ describe('attaching an image to a reply', () => {
   beforeAll(() => preloadCommentField());
   const replies = () => fetchCalls.filter((call) => call.url.endsWith(`/api/my/artifacts/doc1/annotations/${ANN.id}`) && call.init?.method === 'POST');
   const openThread = async (over: Parameters<typeof layer>[0] = {}) => {
-    layer({ railOpen: true, pickOnOpen: false, editId: 'edit-current', ...over }); await flush();
+    layer({ railOpen: true, editId: 'edit-current', ...over }); await flush();
     fireEvent.click(screen.getByRole('button', { name: 'Open annotation thread' })); await flush();
     return screen.getByLabelText('Reply to annotation');
   };
@@ -353,7 +353,7 @@ describe('an attached image when the document moved', () => {
   });
 
   it('a reply with a pasted image follows a moved head without asking', async () => {
-    layer({ railOpen: true, pickOnOpen: false, editId: 'edit-loaded' }); await flush();
+    layer({ railOpen: true, editId: 'edit-loaded' }); await flush();
     fireEvent.click(screen.getByRole('button', { name: 'Open annotation thread' })); await flush();
     const reply = screen.getByLabelText('Reply to annotation');
     refuse((url) => url.endsWith(`/annotations/${ANN.id}`), 1, 409, { error: 'stale', edit_id: 'edit-live', message: 'The document changed while you were replying; send again to attach the image.' });

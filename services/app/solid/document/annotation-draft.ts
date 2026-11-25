@@ -3,8 +3,8 @@
  *
  * `createCommentDraft` is one state machine. A PICK (Select outlines blocks and keeps text selection; Screenshot draws
  * an area) ends in a SELECTION, which opens the composer; saving or cancelling a comment that a Select started resumes
- * the Select. Opening the rail starts a pick, unless it opened for a thread, a composer is open, the page says not
- * (`pickOnOpen`) or it is a phone's sheet. Escape stands a pick down first, then cancels the composer. Page state,
+ * the Select. Opening the rail starts a pick, unless it opened for a thread, a composer is open, the reader lacks
+ * comment access, or the rail is a phone's sheet. Escape stands a pick down first, then cancels the composer. Page state,
  * never the URL.
  *
  * Interface: `selection`, `pick`, `words`/`setWords`, `failure`, `capture`, `image`, `screenshotUnavailable`;
@@ -38,7 +38,7 @@ export function createCommentDraft(options: {
   mayCreate: () => boolean;
   signIn: () => void;
   threads: ThreadStore;
-  rail: { open: Accessor<boolean>; set: (open: boolean) => void; pickOnOpen: Accessor<boolean>; phone: Accessor<boolean> };
+  rail: { open: Accessor<boolean>; set: (open: boolean) => void; phone: Accessor<boolean> };
   /** A selection handed down by the page, and telling it the composer now has it. */
   handed: Accessor<StoryEditSelection | null>;
   consumed: () => void;
@@ -98,7 +98,7 @@ export function createCommentDraft(options: {
    * it opened, unless a pick is what put the sheet away. DECLARED BEFORE the handed-in selection below, so a rail
    * opening together with a selection ends with the composer, not the pick.
    */
-  createEffect(on([rail.open, rail.pickOnOpen, rail.phone], ([isOpen, mayPick, phone]) => {
+  createEffect(on([rail.open, mayCreate, rail.phone], ([isOpen, mayPick, phone]) => {
     const composing = untrack(selection) !== null;
     if (isOpen) {
       const forThread = openedForThread;
@@ -110,10 +110,10 @@ export function createCommentDraft(options: {
     if (untrack(pick) || !composing) capture.reset();
     setPick(null);
   }));
-  createEffect(on(rail.pickOnOpen, (mayPick) => {
-    if (mayPick) return;
+  createEffect(on(mayCreate, (allowed) => {
+    if (allowed) return;
     resumeSelectAfterCompose = false; setPick(null); capture.reset();
-    if (!mayCreate()) setSelection(null);
+    setSelection(null);
   }));
 
   // A selection handed down by the page opens the composer on those exact words.
@@ -247,7 +247,7 @@ export function createCommentDraft(options: {
     onCleanup(() => window.removeEventListener('keydown', onKey));
   });
   // A Select pressed while this code was arriving is started once, on arrival.
-  onMount(() => { if (options.pickRequested && untrack(rail.pickOnOpen)) startPick(); });
+  onMount(() => { if (options.pickRequested && untrack(mayCreate)) startPick(); });
 
   return {
     selection,

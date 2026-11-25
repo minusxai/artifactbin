@@ -211,8 +211,6 @@ function MoreReplies(props: { thread: AnnotationCommentWire[]; expanded: boolean
 export function AnnotationPreview(props: {
   row: AnnotationWire; top: number; remaining?: number; hovered: boolean;
   resolving?: boolean; resolveError?: string;
-  /** Room taken on the right (the edit panel): the mark sits beside it, never under it. */
-  rightInset?: number;
   onOpen: () => void; onHover: (id: string | null) => void; onResolve?: () => void;
   /** Saves a reply to this thread; absent (no permission, or not open) the card has no reply box. */
   onReply?: (body: string, attachment?: CommentImageAttachment) => Promise<boolean>;
@@ -268,7 +266,6 @@ export function AnnotationPreview(props: {
   const working = () => activeAgents().length > 0;
   const compactWidth = () => messages() > 9 ? VIEW_COMMENT_MANY_W : messages() > 1 ? VIEW_COMMENT_COUNTED_W : VIEW_COMMENT_COLLAPSED_W;
   const radius = () => props.hovered ? '5px' : '50% 50% 50% 3px';
-  const inset = () => props.rightInset ?? 0;
   const expanded = () => props.hovered && repliesExpanded();
   // A card with a reply box near the viewport's bottom lifts until the box fits under it.
   const top = () => expanded() && canReply() ? `max(${VIEW_COMMENT_INSET}px, min(${props.top}px, calc(100dvh - ${VIEW_COMMENT_REPLY_ROOM}px)))` : `${props.top}px`;
@@ -284,9 +281,9 @@ export function AnnotationPreview(props: {
       position: 'fixed',
       outline: work() ? `2px solid ${agentNameColor(work()!.name)}` : undefined,
       top: top(),
-      right: `${inset() + VIEW_COMMENT_INSET}px`,
+      right: `${VIEW_COMMENT_INSET}px`,
       width: `${props.hovered ? 288 : compactWidth()}px`,
-      'max-width': `calc(100vw - ${inset() + VIEW_COMMENT_INSET * 2}px)`,
+      'max-width': `calc(100vw - ${VIEW_COMMENT_INSET * 2}px)`,
       // Hovered, the card is as tall as its content (whole lines: a fixed height cut the body mid-line), at least the preview's.
       height: props.hovered ? 'auto' : `${VIEW_COMMENT_COLLAPSED_H}px`,
       'min-height': props.hovered && !repliesExpanded() ? `${VIEW_COMMENT_EXPANDED_H}px` : undefined,
