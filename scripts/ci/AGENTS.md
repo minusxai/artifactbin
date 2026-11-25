@@ -4,12 +4,11 @@ CI scripts own test selection, shard timings, merge admission and validation. Wo
 `test-timings.mjs` specify job, runner and shard counts.
 
 ## Rules
-- The required check for PRs into `main` is `pr fast` (`.github/workflows/pr-fast.yml`). Aim under 40 s, warn at
-  40 s, fail above 60 s, measured from its first job's start through the last workload job's final runner step.
-  `pr-fast-timing.yml` runs `observe-fast.mjs` to publish the required `pr fast timing` status. Both the observer
-  and merge admission require successful completed jobs with the runner's terminal `Complete job` records.
-  The clock includes post-action work and orphan cleanup, and ends before GitHub job finalization and observer publication.
-  Each job's last step (`scripts/lib/ci-elapsed.mjs --pr`) is an early diagnostic.
+- PRs into `main` require `pr fast` (pr-fast.yml). Warn at 40 s and fail above 60 s, from first job start
+  through the final runner step, including post-actions and orphan cleanup. GitHub finalization and observer
+  publication follow. Both merge admission and `pr-fast-timing.yml` (`observe-fast.mjs`, status `pr fast timing`)
+  require successful completed jobs with terminal `Complete job` records. Each job runs
+  `scripts/lib/ci-elapsed.mjs --pr` for early diagnostics.
 - Main verifies in batches: one `ci.yml` run per ref at a time, never cancelled; the newest pending run tests
   every merge since. A red one names those commits and failing files; production admits only green revisions.
 - Its chain runs from the attempt's first job starting (not `run_started_at`, which keeps a batch's wait) through
