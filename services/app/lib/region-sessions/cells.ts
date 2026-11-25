@@ -21,8 +21,8 @@
 import * as Y from 'yjs';
 import { parseCellKey, REGION_UPDATE_MAX_BYTES, type CellScope, type RegionOpenReply, type RegionUpdateReply } from '@artifactbin/contracts/region-sessions';
 import type { HtmlDatasetLink, HtmlPageLink } from '@artifactbin/contracts/html-page';
-import { applyCellRevision, cellValue, createCellState, snapshotValue } from '@/lib/live-regions';
-import { readableArtifact, getArtifactById, liveRegionDoc, lockedRegionRows, logRegionUpdate, notifyRegions, saveIsDue, type ArtifactRow, type RegionRow, type SaveDue } from '@/lib/artifacts';
+import { applyCellRevision, cellValue, snapshotValue } from '@/lib/live-regions';
+import { readableArtifact, getArtifactById, liveRegionDoc, lockedRegionRows, cleanCellRegion, closeCellRegion, commitCellRegions, openCellRegion, readRegionSnapshot, reconcileCellRegion, saveIsDue, type ArtifactRow, type RegionRow, type SaveDue } from '@/lib/artifacts';
 import { canUpdateCell, cellCheckAdmits, datasetWriteAccess } from '@/lib/dataset-permissions';
 import { locateDatasetCell, writeDatasetCells, type DatasetCell } from '@/lib/dataset-access';
 import type { AccessActor } from '@/lib/accounts';
@@ -37,14 +37,9 @@ const parseCellStorage = (regionId: string): { rowId: string; source: string } |
   return match ? { rowId: match[1]!, source: match[2]! } : null;
 };
 
-/** The server's attribution of a merged-in dataset write: nobody's client. */
-const SYSTEM = { userId: null, tokenId: null };
 const SAVE_ATTEMPTS = 4;
 /** The most passes one save makes (each writes one table, or loses one race; see saveDataset). */
 const SAVE_PASSES = 8;
-const bytes = (value: Uint8Array): Buffer => Buffer.from(value.buffer, value.byteOffset, value.byteLength);
-const clientOf = (update: Uint8Array): number => Y.decodeUpdate(update).structs[0]?.id.client ?? 0;
-
 export interface CellAccess {
   page: ArtifactRow;
   dataset: ArtifactRow;
@@ -93,22 +88,6 @@ async function datasetVersion(tx: Queryable, datasetId: string): Promise<number 
   return (await tx.query<{ version: number }>('SELECT version FROM artifacts WHERE id = $1 AND deleted_at IS NULL FOR SHARE', [datasetId])).rows[0]?.version ?? null;
 }
 
-async function deleteCellRows(tx: Queryable, datasetId: string, regionId: string): Promise<void> {
-  for (const table of ['region_updates', 'region_snapshots', 'region_states']) await tx.query(`DELETE FROM ${table} WHERE artifact_id = $1 AND region_id = $2`, [datasetId, regionId]);
-  await notifyRegions(tx, datasetId, `closed:${regionId}`);
-}
-
-async function snapshotOf(tx: Queryable, datasetId: string, regionId: string): Promise<Uint8Array | null> {
-  return (await tx.query<{ snapshot: Uint8Array }>('SELECT snapshot FROM region_snapshots WHERE artifact_id = $1 AND region_id = $2 AND version = 0', [datasetId, regionId])).rows[0]?.snapshot ?? null;
-}
-async function keepSnapshot(tx: Queryable, datasetId: string, regionId: string, snapshot: Uint8Array): Promise<void> {
-  await tx.query(
-    `INSERT INTO region_snapshots (artifact_id, region_id, version, snapshot) VALUES ($1, $2, 0, $3)
-     ON CONFLICT (artifact_id, region_id, version) DO UPDATE SET snapshot = EXCLUDED.snapshot, created_at = now()`,
-    [datasetId, regionId, bytes(snapshot)],
-  );
-}
-
 /**
  * RECONCILE a locked cell row with the dataset at `version`, whose cell holds `value`: the value merged three-way
  * from the cell's last seen value (logged as one update, attributed to nobody, and woken), or only the version noted
@@ -117,18 +96,14 @@ async function keepSnapshot(tx: Queryable, datasetId: string, regionId: string, 
 async function reconcileCell(tx: Queryable, datasetId: string, row: RegionRow, value: string, version: number, doc?: Y.Doc): Promise<{ doc: Y.Doc; seq: number }> {
   const live = doc ?? await liveRegionDoc(tx, datasetId, row);
   if (row.saved_version === version) return { doc: live, seq: row.last_seq };
-  const saved = await snapshotOf(tx, datasetId, row.region_id);
+  const saved = await readRegionSnapshot(tx, datasetId, row.region_id, 0);
   if (saved && snapshotValue(live, saved) === value) {
-    await tx.query('UPDATE region_states SET saved_version = $3 WHERE artifact_id = $1 AND region_id = $2', [datasetId, row.region_id, version]);
-    return { doc: live, seq: row.last_seq };
+    const seq = await reconcileCellRegion(tx, datasetId, row, version);
+    return { doc: live, seq };
   }
   const revision = applyCellRevision({ live: Y.encodeStateAsUpdate(live), savedSnapshot: saved, value });
-  const seq = row.last_seq + 1;
   Y.applyUpdate(live, revision.update);
-  await logRegionUpdate(tx, datasetId, row.region_id, seq, clientOf(revision.update), revision.update, SYSTEM);
-  await tx.query('UPDATE region_states SET last_seq = $3, saved_version = $4 WHERE artifact_id = $1 AND region_id = $2', [datasetId, row.region_id, seq, version]);
-  await keepSnapshot(tx, datasetId, row.region_id, revision.snapshot);
-  await notifyRegions(tx, datasetId, `${row.region_id}:${seq}`);
+  const seq = await reconcileCellRegion(tx, datasetId, row, version, revision);
   return { doc: live, seq };
 }
 
@@ -194,7 +169,7 @@ export function cellStore(db: () => Promise<Db>, core: SessionCore): CellStore {
         const at = parseCellStorage(region_id);
         if (!at) continue;
         const access = await cellAccess(actor, page, dataset, at.rowId, { source: at.source });
-        if (access === 'removed') await core.transact(async (tx) => { await reconcileGone(tx, datasetId, region_id); return { answer: NOT_FOUND }; });
+        if (access === 'removed') await core.transact(async (tx) => { await closeCellRegion(tx, datasetId, region_id); return { answer: NOT_FOUND }; });
         else if (typeof access !== 'string') writable.push(access);
       }
       if (!writable.length) return saved;
@@ -212,8 +187,7 @@ export function cellStore(db: () => Promise<Db>, core: SessionCore): CellStore {
           const value = cellValue(doc);
           if (value === access.cell.value && seq === row.last_seq) {
             // Typed back to what is stored: nothing to write, the cell is clean.
-            await tx.query('UPDATE region_states SET state = $3, state_seq = $4, dirty_since = NULL WHERE artifact_id = $1 AND region_id = $2', [datasetId, row.region_id, bytes(Y.encodeStateAsUpdate(doc)), seq]);
-            await keepSnapshot(tx, datasetId, row.region_id, Y.encodeSnapshot(Y.snapshot(doc)));
+            await cleanCellRegion(tx, datasetId, row.region_id, doc, seq);
             continue;
           }
           merged.push({ access, doc, seq, value });
@@ -224,20 +198,9 @@ export function cellStore(db: () => Promise<Db>, core: SessionCore): CellStore {
       if (!merged.length) { if (alone) continue; return saved; }
       const outcome = await writeDatasetCells(actor, dataset, page.id, batch[0]!.cell, merged.map(({ access, value }) => ({ rowId: access.cell.rowId, source: access.cell.source, value })), async (commit, written) => {
         const tx = commit as unknown as Queryable;
-        for (const { access, doc, seq } of merged) {
-          await lockedRegionRows(tx, datasetId, access.storage);
-          await tx.query(
-            `UPDATE region_states SET state = CASE WHEN state_seq <= $3 THEN $4 ELSE state END, state_seq = GREATEST(state_seq, $3), saved_version = $5,
-               dirty_since = CASE WHEN last_seq > $3 THEN dirty_since ELSE NULL END
-             WHERE artifact_id = $1 AND region_id = $2`,
-            [datasetId, access.storage, seq, bytes(Y.encodeStateAsUpdate(doc)), written.version],
-          );
-          await keepSnapshot(tx, datasetId, access.storage, Y.encodeSnapshot(Y.snapshot(doc)));
-          core.forget(datasetId, access.storage);
-        }
-        // Live cells the write did not touch hold the value they saw: they are at the new version too.
-        await tx.query("UPDATE region_states SET saved_version = $3 WHERE artifact_id = $1 AND region_id LIKE 'cell:%' AND saved_version = $2", [datasetId, dataset.version, written.version]);
-        await notifyRegions(tx, datasetId, `saved:${written.version}`);
+        const cells = merged.map(({ access, doc, seq }) => ({ regionId: access.storage, doc, seq }));
+        await commitCellRegions(tx, datasetId, dataset.version, written.version, cells);
+        for (const { regionId } of cells) core.forget(datasetId, regionId);
       });
       // Written: the next pass takes another table's cells, and any typed while this one wrote.
       if ('written' in outcome) { saved++; continue; }
@@ -246,7 +209,7 @@ export function cellStore(db: () => Promise<Db>, core: SessionCore): CellStore {
         // The dataset will not take this text: the cell closes for everyone (`rejected`) rather than stay dirty forever.
         console.warn('[region-sessions] a cell save was refused:', outcome.detail);
         await core.transact<null>(async (tx) => {
-          for (const { access } of merged) { await reconcileGone(tx, datasetId, access.storage); core.forget(datasetId, access.storage); }
+          for (const { access } of merged) { await closeCellRegion(tx, datasetId, access.storage); core.forget(datasetId, access.storage); }
           return { answer: NOT_FOUND };
         });
         if (alone) continue;
@@ -256,30 +219,15 @@ export function cellStore(db: () => Promise<Db>, core: SessionCore): CellStore {
     return saved;
   }
 
-  /** A cell whose row is gone: its rows deleted and its editors told. */
-  async function reconcileGone(tx: Queryable, datasetId: string, regionId: string): Promise<void> {
-    const [row] = await lockedRegionRows(tx, datasetId, regionId);
-    if (row) await deleteCellRows(tx, datasetId, regionId);
-  }
-
   return {
     async open(actor, pageId, key) {
       const scope = parseCellKey(key);
       if (!scope) return NOT_FOUND;
       return atHead<RegionOpenReply>(actor, pageId, scope, async (tx, access, row, reconciled) => {
         const datasetId = access.dataset.id;
-        let locked = row;
-        if (!locked) {
-          const initial = createCellState(access.cell.value);
-          await tx.query(
-            'INSERT INTO region_states (artifact_id, region_id, kind, state, saved_version) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING',
-            [datasetId, access.storage, 'text', bytes(initial.state), access.dataset.version],
-          );
-          await keepSnapshot(tx, datasetId, access.storage, initial.snapshot);
-          [locked] = await lockedRegionRows(tx, datasetId, access.storage);
-        }
-        const doc = reconciled ?? await core.documentOf(tx, datasetId, locked!);
-        const { clientId, seq, after } = await core.issue(tx, datasetId, locked!, doc, actor);
+        const locked = row ?? await openCellRegion(tx, datasetId, access.storage, access.cell.value, access.dataset.version);
+        const doc = reconciled ?? await core.documentOf(tx, datasetId, locked);
+        const { clientId, seq, after } = await core.issue(tx, datasetId, locked, doc, actor);
         return { answer: { status: 200, body: { regionId: key, kind: 'text', clientId, seq, state: base64(Y.encodeStateAsUpdate(doc)), savedVersion: access.dataset.version } }, after };
       });
     },
@@ -319,8 +267,5 @@ export function cellStore(db: () => Promise<Db>, core: SessionCore): CellStore {
 
 /** Closes a cell whose row the dataset no longer holds (a stream wakeup found it removed). */
 export async function closeRemovedCell(db: () => Promise<Db>, datasetId: string, regionId: string): Promise<void> {
-  await (await db()).transaction(async (tx) => {
-    const [row] = await lockedRegionRows(tx, datasetId, regionId);
-    if (row) await deleteCellRows(tx, datasetId, regionId);
-  });
+  await (await db()).transaction((tx) => closeCellRegion(tx, datasetId, regionId));
 }

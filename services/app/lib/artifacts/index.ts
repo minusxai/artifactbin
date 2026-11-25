@@ -29,8 +29,8 @@ export { createArtifact, afterCreated, replaceArtifactFor, revertArtifactFor, se
 export type { ArtifactInput, MetadataPatch, ReplaceOpts } from './store';
 /** Live regions as page storage (lib/region-sessions): the editable head, the region rows and the save as a version. */
 export { checkpointLiveRegions, saveLiveRegionsInTx } from './store';
-export { editablePage, liveRegionDoc, lockedRegionRows, logRegionUpdate, notifyRegions, regionUpdatesAfter } from './regions';
-export { saveIsDue } from './regions';
+export { editablePage, liveRegionDoc, lockedRegionRows, openPageRegion, recordRegionOpen, recordRegionUpdate, readRegionSnapshot, regionUpdatesAfter } from './regions';
+export { cleanCellRegion, closeCellRegion, commitCellRegions, openCellRegion, reconcileCellRegion, saveIsDue } from './regions';
 export type { RegionRow, SaveDue } from './regions';
 export { assetByteQuotaExceeded, assetByteQuotaLimit } from './asset-quota';
 /** The web images a page serves on its owner's host (meta.webAssets), derived at every content write. */

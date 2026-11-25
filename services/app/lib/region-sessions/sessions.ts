@@ -11,10 +11,10 @@
 import { randomInt } from 'node:crypto';
 import * as Y from 'yjs';
 import { REGION_UPDATE_MAX_BYTES, type RegionFlushReply, type RegionOpenReply, type RegionRefusalBody, type RegionRefusalCode, type RegionUpdateReply } from '@artifactbin/contracts/region-sessions';
-import { createRegionState, editableRegions, isRegionId, LiveRegionRefusal, openRegionDoc, validateRegionUpdate, type PageRegion } from '@/lib/live-regions';
-import { editablePage, liveRegionDoc, lockedRegionRows, logRegionUpdate, notifyRegions, saveLiveRegionsInTx, type RegionRow, type SaveDue } from '@/lib/artifacts';
+import { editableRegions, isRegionId, LiveRegionRefusal, validateRegionUpdate } from '@/lib/live-regions';
+import { editablePage, liveRegionDoc, lockedRegionRows, openPageRegion, recordRegionOpen, recordRegionUpdate, saveLiveRegionsInTx, type RegionRow, type SaveDue } from '@/lib/artifacts';
 import type { AccessActor } from '@/lib/accounts';
-import { ID_RE, type Db, type Queryable } from '@/lib/platform';
+import { ID_RE, type Db } from '@/lib/platform';
 
 /** A route's answer: the contract's reply, the uniform not-found, or a typed refusal. */
 export type RegionAnswer<T> = { status: 200; body: T } | { status: 404; body?: RegionRefusalBody } | { status: 409 | 413 | 422; body: RegionRefusalBody };
@@ -33,32 +33,11 @@ function refusalOf(error: unknown): RegionAnswer<never> {
 }
 
 export const base64 = (bytes: Uint8Array): string => Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString('base64');
-const EMPTY_UPDATE = Y.encodeStateAsUpdate(openRegionDoc());
-/** The log is folded into the stored state at saves and at least this often. */
-const FOLD_EVERY = 100;
 const CACHED_DOCS = 64;
 
 const actorKey = (actor: { userId: string | null; tokenId: string | null }) => `${actor.userId ?? ''}\u0000${actor.tokenId || ''}`;
 /** A row's content identity: the same row (created_at) at the same sequence holds the same state. */
 const stamp = (row: Pick<RegionRow, 'created_at' | 'last_seq'>, seq = row.last_seq) => `${row.created_at}#${seq}`;
-
-/**
- * A region's row, locked: created once, on first use, from the saved region (with the saved version's snapshot, so a
- * write made from that version merges from it). Every live state starts from these server-built bytes.
- */
-export async function regionRow(tx: Queryable, artifactId: string, savedVersion: number, region: PageRegion): Promise<RegionRow> {
-  const [existing] = await lockedRegionRows(tx, artifactId, region.id);
-  if (existing) return existing;
-  const initial = createRegionState(region.kind, region.inner);
-  const created = await tx.query(
-    'INSERT INTO region_states (artifact_id, region_id, kind, state, saved_version) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING RETURNING region_id',
-    [artifactId, region.id, region.kind, Buffer.from(initial.state), savedVersion],
-  );
-  if (created.rows.length) {
-    await tx.query('INSERT INTO region_snapshots (artifact_id, region_id, version, snapshot) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING', [artifactId, region.id, savedVersion, Buffer.from(initial.snapshot)]);
-  }
-  return (await lockedRegionRows(tx, artifactId, region.id))[0]!;
-}
 
 export interface RegionStore {
   open(actor: AccessActor, artifactId: string, regionId: string): Promise<RegionAnswer<RegionOpenReply>>;
@@ -116,9 +95,7 @@ export function sessionCore(db: () => Promise<Db>, now: () => number): SessionCo
       let clientId: number;
       do clientId = randomInt(1, 2 ** 32 - 1);
       while (used.has(clientId) || (await tx.query('SELECT 1 FROM region_updates WHERE artifact_id = $1 AND region_id = $2 AND client_id = $3 LIMIT 1', [artifactId, regionId, clientId])).rows.length);
-      const seq = row.last_seq + 1;
-      await logRegionUpdate(tx, artifactId, regionId, seq, clientId, EMPTY_UPDATE, actor);
-      await tx.query('UPDATE region_states SET last_seq = $3 WHERE artifact_id = $1 AND region_id = $2', [artifactId, regionId, seq]);
+      const seq = await recordRegionOpen(tx, artifactId, row, clientId, actor);
       return { clientId, seq, after: () => { keep(`${artifactId}/${regionId}`, stamp(row, seq), doc); holders.set(`${artifactId}/${regionId}/${row.created_at}/${clientId}`, actorKey(actor)); } };
     },
     async accept(tx, artifactId, row, request, actor, admit) {
@@ -140,16 +117,7 @@ export function sessionCore(db: () => Promise<Db>, now: () => number): SessionCo
       // The scope's own rule on the merged result (a cell's `check`); the document held the update, so it is dropped.
       const refused = admit?.(doc);
       if (refused) return { answer: refuse(refused) };
-      const seq = row.last_seq + 1;
-      const at = new Date(now()).toISOString();
-      await logRegionUpdate(tx, artifactId, regionId, seq, request.clientId, request.update, actor);
-      const fold = seq - row.state_seq >= FOLD_EVERY;
-      await tx.query(
-        `UPDATE region_states SET last_seq = $3, last_update_at = $4, dirty_since = COALESCE(dirty_since, $4)${fold ? ', state = $5, state_seq = $3' : ''}
-         WHERE artifact_id = $1 AND region_id = $2`,
-        [artifactId, regionId, seq, at, ...(fold ? [Buffer.from(Y.encodeStateAsUpdate(doc))] : [])],
-      );
-      await notifyRegions(tx, artifactId, `${regionId}:${seq}`);
+      const seq = await recordRegionUpdate(tx, artifactId, row, request, actor, new Date(now()).toISOString(), doc);
       return { answer: { status: 200, body: { seq } }, after: () => keep(key, stamp(row, seq), doc) };
     },
     forget(artifactId, regionId) { docs.delete(`${artifactId}/${regionId}`); },
@@ -169,7 +137,7 @@ export function regionStore(db: () => Promise<Db>, now: () => number, core: Sess
         if (!row) {
           const region = editableRegions(page.source ?? '').find((candidate) => candidate.id === regionId);
           if (!region) return { answer: refuse('region_not_found') };
-          row = await regionRow(tx, artifactId, page.version, region);
+          row = await openPageRegion(tx, artifactId, page.version, region);
         }
         const doc = await documentOf(tx, artifactId, row!);
         const { clientId, seq, after } = await core.issue(tx, artifactId, row!, doc, actor);

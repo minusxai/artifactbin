@@ -32,7 +32,7 @@ import { artifactState, observedChange, versionConflict, type ConflictChange } f
 import { trackEvent } from '../analytics';
 import { ALLOW_PUBLIC_VISIBILITY, getDb, retryOnConflict, type Queryable, actorSubject, emit, generateFileId } from '../platform';
 import { assetByteQuotaExceeded, groupAssetByteQuotaExceeded } from './asset-quota';
-import { closeLiveRegions, liveRevisionOf, pageLedger, planRegionMerge, planRegionSave, type RegionPlan, type SaveDue } from './regions';
+import { closeLiveRegions, installMigratedRegion, liveRevisionOf, pageLedger, planRegionMerge, planRegionSave, type RegionPlan, type SaveDue } from './regions';
 import { docTitleAfterSave } from './doc-title';
 import { withWebAssets } from './web-assets';
 import type { ArtifactFormat } from '@artifactbin/contracts/artifact-format';
@@ -1090,8 +1090,8 @@ export async function migrateLegacyPage(id:string,options:{apply?:boolean}={}):P
   await logWholeDocumentWrite(tx,write.current,updated);
   await closeLiveRegions(tx,id);
   for(const region of proof.states){
-   await tx.query(`INSERT INTO region_states(artifact_id,region_id,kind,state,saved_version,created_at) VALUES($1,$2,'rich-native-v1',$3,$4,GREATEST(clock_timestamp(),$5::timestamptz+interval '1 millisecond'))`,[id,region.id,Buffer.from(region.state),updated.version,(backup.region_states as {created_at:string}[]).find(old=>'region_id' in old && old.region_id===region.id)?.created_at??before.created_at]);
-   await tx.query('INSERT INTO region_snapshots(artifact_id,region_id,version,snapshot) VALUES($1,$2,$3,$4)',[id,region.id,updated.version,Buffer.from(region.snapshot)]);
+   const previousCreatedAt = (backup.region_states as {created_at:string}[]).find(old=>'region_id' in old && old.region_id===region.id)?.created_at??before.created_at;
+   await installMigratedRegion(tx,id,updated.version,region,previousCreatedAt);
   }
   const hash=(value:string)=>createHash('sha256').update(value).digest('hex');
   await tx.query('INSERT INTO legacy_page_migrations(artifact_id,backup,receipt) VALUES($1,$2::jsonb,$3::jsonb)',[id,JSON.stringify(backup),JSON.stringify({converter:1,oldVersion:before.version,newVersion:updated.version,oldEdit:before.edit_id,newEdit:updated.edit_id,oldHash:hash(before.source??''),newHash:hash(proof.html)})]);

@@ -25,6 +25,18 @@ describe('table ownership', () => {
     expect(check(OUTSIDE, 'q.query(`UPDATE ${schema}.users SET name=$2`)')).toHaveLength(1);
   });
 
+  it('keeps region state, snapshots and updates under artifacts', () => {
+    for (const statement of [
+      "UPDATE region_states SET last_seq = $3 WHERE artifact_id = $1 AND region_id = $2",
+      "INSERT INTO region_snapshots (artifact_id,region_id,version,snapshot) VALUES ($1,$2,$3,$4)",
+      "DELETE FROM region_updates WHERE artifact_id = $1",
+    ]) {
+      const text = `tx.query(${JSON.stringify(statement)})`;
+      expect(check('services/app/lib/region-sessions/sessions.ts', text)).toHaveLength(1);
+      expect(check('services/app/lib/artifacts/regions.ts', text)).toEqual([]);
+    }
+  });
+
   it("passes the owner's own writes and the listed importers", () => {
     expect(check('services/app/lib/artifacts/store.ts', "q.query('UPDATE artifacts SET title=$2 WHERE id=$1')")).toEqual([]);
     expect(check('services/auth/src/identity-store/accounts.ts', "q.query('UPDATE users SET name=$2'); q.query('DELETE FROM tokens'); q.query('SELECT id FROM users WHERE id=$1 FOR UPDATE')")).toEqual([]);
