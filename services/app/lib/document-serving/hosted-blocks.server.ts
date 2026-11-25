@@ -11,6 +11,8 @@
  *   /af/v1/styles/<sha256>.css          the whole platform stylesheet, or one design system's
  *   /af/v1/host/<sha256>.js             the document host module (lib/html-reader/host-shell), and the host comments
  *                                       module it imports by this address when a shell asks for comments
+ *   /af/v1/runtime/<sha256>/<file>.js   this build's runtime modules (lib/html-runtime runtimeModuleFile), which a served
+ *                                       page names; an older digest redirects to the flat /af/<file>.js (not retained)
  *   /af/fonts/<name>.woff2              already immutable: a font name never changes its bytes
  *
  * Kept by the runtime's retention (lib/html-runtime createSourceRetention, a namespace per kind): an address
@@ -21,7 +23,7 @@
 import { createHash } from 'node:crypto';
 import { publicComponentFiles } from '@/lib/libraries/server';
 import { hostedComponentEntries } from '@/lib/libraries';
-import { buildHtmlAssets, hostCommentsPath, createSourceRetention, retainedPublicAssets, type SourceRetention } from '@/lib/html-runtime/server';
+import { buildHtmlAssets, hostCommentsPath, createSourceRetention, retainedPublicAssets, runtimeModuleFile, type SourceRetention } from '@/lib/html-runtime/server';
 import { PLATFORM_FONTS_PATH, THEME_ATTRIBUTES, THEME_TOKENS, OPTIONAL_THEME_TOKENS, defaultHtmlSystem, designSystemsManifest, htmlSystemNames, htmlSystemsCss, installationDesignSystem } from '@/lib/html-systems';
 import { matchingTag, publicRevalidatedResponse } from '@/lib/http';
 import { NO_STORE, PUBLIC_IMMUTABLE } from './cache-control';
@@ -148,3 +150,12 @@ async function pinnedSource(request: Request, file: string, kind: 'styles' | 'ho
 }
 export const pinnedStylesResponse = (request: Request, file: string) => pinnedSource(request, file, 'styles');
 export const pinnedHostResponse = (request: Request, file: string) => pinnedSource(request, file, 'host');
+
+/** GET /af/v1/runtime/<digest>/<file>: this build's runtime module by its content address; another digest goes to the flat one. */
+export async function pinnedRuntimeResponse(request: Request, digest: string, file: string): Promise<Response> {
+  const current = /^[a-z][a-z-]*\.js$/.test(file) ? await runtimeModuleFile(file) : null;
+  if (!current) return notFound();
+  // An opaque-origin page (raw, a publishing host) imports in CORS mode: the redirect must admit it as the module does.
+  if (current.digest !== digest) return new Response(null, { status: 302, headers: { location: `/af/${file}`, 'cache-control': NO_STORE, 'access-control-allow-origin': '*' } });
+  return immutable(request, current.source, 'text/javascript; charset=utf-8', digest);
+}

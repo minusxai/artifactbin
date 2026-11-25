@@ -30,7 +30,7 @@ import { AUTH_SECRET } from '@/lib/platform/config';
 import { getDb, recycleDbSession, resetDb, type Db, type Queryable } from '@/lib/platform/db';
 import { syncIdentitySettings } from '@/lib/platform/testing';
 import { resetExportRenderer } from '@/lib/export';
-import { flushViews } from '@/lib/analytics';
+import { flushViews, settleViewTotals, viewTotalsFor } from '@/lib/analytics';
 import { resetRenderCache } from '@/lib/document-serving/render-cache';
 import { resetLiveSubscriptions } from '@/lib/publish/realtime/live';
 import { SCHEMA_STATEMENTS } from '@/lib/platform/schema';
@@ -328,9 +328,10 @@ export function useAppHarness(): AppHarness {
   });
 
   beforeEach(async () => {
-    // A view the last test buffered lands before the wipe, no render outlives the rows it was made from, and every
-    // test starts with no live subscription (a stream an earlier test left open, or one it counted).
+    // A view the last test buffered lands and every view-total fold settles before the wipe, no render outlives the
+    // rows it was made from, and every test starts with no live subscription (a stream an earlier test left open, or one it counted).
     await flushViews();
+    await settleViewTotals();
     resetRenderCache();
     await resetLiveSubscriptions();
     await wipe();
@@ -347,7 +348,9 @@ export function useAppHarness(): AppHarness {
     // The export cache holds the database it was opened on; the next file on this worker (the api
     // project shares one module graph per worker) must open its own, not reuse a closed one.
     await resetExportRenderer();
+    // No view-total fold may run into the recycled or closed database.
     await flushViews();
+    await settleViewTotals();
     resetRenderCache();
     // Its listeners hold connections on this file's database, which closes next.
     await resetLiveSubscriptions();
@@ -438,6 +441,16 @@ export async function setDatasetPolicy(actor: AccessActor, id: string, policy: u
  * EVERY STATEMENT THE DATABASE SEES while `work` runs, for query-budget tests: their text (inside transactions
  * too), how many transactions `work` opened, and the statement count `measureQueries` reports.
  */
+/**
+ * Views a test wrote straight into the log have no fold after them, like history another process ingested: reading
+ * them schedules the catch-up fold (lib/analytics view-totals), and this awaits it, so the next read counts them.
+ */
+export async function catchUpLoggedViews(): Promise<void> {
+  const logged = await (await getDb()).query<{ id: string }>(`SELECT DISTINCT object_id AS id FROM ${EVENTS_SCHEMA}.events WHERE verb='viewed' AND object_id IS NOT NULL`);
+  await viewTotalsFor(logged.rows.map(row => row.id));
+  await settleViewTotals();
+}
+
 export async function recordStatements<T>(work: () => Promise<T>): Promise<{ value: T; sql: string[]; transactions: number; count: number }> {
   const db = await getDb();
   // Restored exactly as found (an own property only if there was one), so the harness's reuse check sees no change.

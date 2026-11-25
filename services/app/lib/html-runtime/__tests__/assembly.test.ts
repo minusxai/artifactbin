@@ -35,3 +35,28 @@ it('provides source identities independently of runtime-created DOM or caller co
  const match=output.match(/<script type="application\/json" data-af="runtime">([^<]*)<\/script>/);
  expect(JSON.parse(match![1]!).savedNodeIds).toEqual(['tasks']);
 });
+const pinned={apollo:`/af/v1/runtime/${'a'.repeat(64)}/apollo.js`,reader:`/af/v1/runtime/${'b'.repeat(64)}/reader.js`,state:`/af/v1/runtime/${'c'.repeat(64)}/state.js`,morph:`/af/v1/runtime/${'d'.repeat(64)}/morph.js`};
+const preloads=(html:string)=>[...html.matchAll(/<link [^>]*rel="modulepreload"[^>]*>/g)].map(match=>match[0]);
+it('preloads apollo, reader and state at the addresses the runtime config names, after the core installs its import map',()=>{
+ for(const script of ['import {sql} from "@afbin/apollo";','const {sql}=await import(\'@afbin/apollo\');']){
+  const html=assembleHtmlPage({html:`<!doctype html><html><head><link rel="stylesheet" href="./mine.css"><script type="module">${script}</script></head><body></body></html>`,core:'core()',config:{pageId:'p',revision:'1',backends:[],appearance:{designSystem:'redline',mode:'light'},modules:pinned},systemsHref:'/af/styles.css'});
+  const links=preloads(html);
+  expect(links).toEqual([pinned.apollo,pinned.reader,pinned.state].map(href=>`<link rel="modulepreload" href="${href}" crossorigin="">`));
+  const config=JSON.parse(/data-af="runtime">([^<]*)<\/script>/.exec(html)![1]!);
+  expect(config.modules).toEqual(pinned);
+  // The core is a classic inline script that installs the import map synchronously: a link the parser reaches after it cannot start a fetch first.
+  const core=html.indexOf('core()'),first=html.indexOf(links[0]!);
+  expect(core).toBeGreaterThan(-1);expect(first).toBeGreaterThan(core);
+  expect(html.indexOf('data-af="platform-styles"')).toBeLessThan(first);
+  expect(first).toBeLessThan(html.indexOf('mine.css'));
+ }
+});
+it('preloads nothing for a page that does not import apollo, an export, or a page with no pinned modules',()=>{
+ const page='<html><head><script type="module">import "@afbin/state";</script></head><body></body></html>';
+ expect(preloads(assembleHtmlPage({html:page,core:'core()',config:{pageId:'p',revision:'1',backends:[],modules:pinned}}))).toEqual([]);
+ const apollo='<html><head><script type="module">import {sql} from "@afbin/apollo";</script></head><body></body></html>';
+ expect(preloads(assembleHtmlPage({html:apollo,core:'core()',config:{pageId:'p',revision:'1',backends:[]}}))).toEqual([]);
+ const exported=assembleHtmlPage({html:apollo,core:'core()',config:{pageId:'p',revision:'1',backends:[],modules:pinned},offline:true});
+ expect(preloads(exported)).toEqual([]);
+ expect(JSON.parse(/data-af="runtime">([^<]*)<\/script>/.exec(exported)![1]!).modules).toBeUndefined();
+});

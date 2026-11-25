@@ -7,7 +7,8 @@ import {overrideConfig} from '@/lib/platform/config';
 import {mintToken} from '@/lib/accounts';
 import { createUser, setUsername } from '@/lib/accounts/testing';
 import {mintExportKey} from '@/lib/export';
-import {getDb,services} from '@/lib/platform';
+import {getDb,services,EVENTS_SCHEMA} from '@/lib/platform';
+import {flushViews} from '@/lib/analytics';
 import {POST as publish} from '@/app/api/artifacts/route';
 import {createAppServer} from '../app';
 import {fixture,sql,stored} from '@/__tests__/page-sql-door-fixture';
@@ -375,4 +376,54 @@ it('translates the configured directory result to HTTP while the legacy root sti
   expect(response.status,url).toBe(status);
   expect(await response.text(),url).toContain(body);
  }
+});
+it('answers a repeat view of a personal-site page with 304',async()=>{
+ const user=await owner(),post=await page(user.token),server=app();
+ const first=await server.request(`${base}/${post.id}`);expect(first.status).toBe(200);
+ const etag=first.headers.get('etag');
+ expect(first.headers.get('cache-control')).toBe('private, no-cache');expect(etag).toBeTruthy();
+ const again=await server.request(`${base}/${post.id}`,{headers:{'if-none-match':etag!}});
+ expect(again.status).toBe(304);expect(await again.text()).toBe('');
+ const stale=await server.request(`${base}/${post.id}`,{headers:{'if-none-match':'"other"'}});expect(stale.status).toBe(200);
+});
+const tagOf=async(url:string)=>{const res=await app().request(url);expect(res.status,url).toBe(200);return res.headers.get('etag')!;};
+const repeat=(url:string,etag:string)=>app().request(url,{headers:{'if-none-match':etag}});
+it('answers a republished personal-site page in full',async()=>{
+ const user=await owner(),post=await page(user.token),server=app(),etag=await tagOf(`${base}/${post.id}`);
+ const head=await (await server.request(`https://app.example.test/api/artifacts/${post.id}`,{headers:{authorization:`Bearer ${user.token}`}})).json();
+ const replaced=await server.request(`https://app.example.test/api/artifacts/${post.id}`,{method:'PUT',headers:{authorization:`Bearer ${user.token}`,'content-type':'application/json'},body:JSON.stringify({html:head.html.replace('Hello owner','Replacement'),title:head.title,expectedVersion:head.version,expectedState:head.state})});
+ expect(replaced.status,await replaced.clone().text()).toBe(200);
+ const again=await repeat(`${base}/${post.id}`,etag);expect(again.status).toBe(200);expect(again.headers.get('etag')).not.toBe(etag);expect(await again.text()).toContain('Replacement');
+});
+it('changes the personal-site tag when the owner handle changes',async()=>{
+ const user=await owner(),post=await page(user.token),etag=await tagOf(`${base}/${post.id}`);
+ await setUsername(user.id,'renamed');
+ const again=await repeat(`https://renamed.u.example.test/${post.id}`,etag);
+ expect(again.status).toBe(200);expect(again.headers.get('etag')).not.toBe(etag);expect(await again.text()).toContain('/@renamed/');
+});
+it('changes the personal-site tag when the page moves to another title path',async()=>{
+ const user=await owner(),post=await page(user.token),etag=await tagOf(`${base}/${post.id}`);
+ // The row's title alone, its version, edit and timestamp untouched: the canonical address and title still change the bytes.
+ await setArtifact(await getDb(),post.id,{title:'Moved elsewhere'});
+ const again=await repeat(`${base}/${post.id}`,etag);
+ expect(again.status).toBe(200);expect(again.headers.get('etag')).not.toBe(etag);expect(await again.text()).toContain(`${post.id}-moved-elsewhere`);
+});
+it('never answers 304 to a reader who can no longer read a personal-site page',async()=>{
+ const user=await owner(),post=await page(user.token),etag=await tagOf(`${base}/${post.id}`);
+ await setVisibility(post.id,'private');
+ const hidden=await repeat(`${base}/${post.id}`,etag);expect(hidden.status).toBe(404);expect(hidden.headers.get('etag')).toBeNull();
+ await setVisibility(post.id,'unlisted');
+ const unlisted=await repeat(`${base}/${post.id}`,etag);expect(unlisted.status).not.toBe(404);expect(unlisted.headers.get('x-robots-tag')).toBe('noindex, nofollow');
+});
+it('records a view for a personal-site page answered 304',async()=>{
+ const user=await owner(),post=await page(user.token),etag=await tagOf(`${base}/${post.id}`);
+ expect((await repeat(`${base}/${post.id}`,etag)).status).toBe(304);
+ await flushViews();
+ const {rows}=await (await getDb()).query<{n:number}>(`SELECT count(*)::int AS n FROM ${EVENTS_SCHEMA}.events WHERE object_id=$1 AND object_kind='artifact' AND verb='viewed'`,[post.id]);
+ expect(rows[0]!.n).toBe(2);
+});
+it('revalidates a personal-site page the same way under brotli',async()=>{
+ const user=await owner(),post=await page(user.token),server=app(),br={'accept-encoding':'br'};
+ const first=await server.request(`${base}/${post.id}`,{headers:br});expect(first.status).toBe(200);
+ const again=await server.request(`${base}/${post.id}`,{headers:{...br,'if-none-match':first.headers.get('etag')!}});expect(again.status).toBe(304);
 });

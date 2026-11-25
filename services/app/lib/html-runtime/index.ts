@@ -65,7 +65,7 @@ function assemble(input: HtmlAssemblyInput, keepOfflineSql?: (html: string) => b
     scan(document);
     publicConfig.libraries = Object.fromEntries(Object.entries(publicConfig.libraries).filter(([key]) => !claimed.has(key)));
   }
-  if (input.offline) delete publicConfig.libraries;
+  if (input.offline) { delete publicConfig.libraries; delete publicConfig.modules; }
   if (!publicConfig.initialState) {
     const visit = (node: DefaultTreeAdapterMap['node']): HtmlJsonObject | undefined => {
       if ('attrs' in node && node.attrs.some((attr) => attr.name === 'data-af' && attr.value === 'state')) {
@@ -105,6 +105,19 @@ function assemble(input: HtmlAssemblyInput, keepOfflineSql?: (html: string) => b
     const link=parseFragment('<link>').childNodes[0] as DefaultTreeAdapterMap['element'];
     link.attrs=[{name:'rel',value:'stylesheet'},{name:'data-af',value:'platform-styles'},{name:'href',value:input.systemsHref}];
     link.parentNode=head;head.childNodes.splice(head.childNodes.indexOf(boot.childNodes.at(-1) as DefaultTreeAdapterMap['childNode'])+1,0,link);
+  }
+  // A page that imports apollo fetches apollo, reader and state together rather than one after another. The links
+  // follow the core, a classic inline script that installs the import map before the parser reaches them: a preloaded
+  // module's bare imports (`@afbin/reader`) resolve through the map, at the very addresses the map names (one per module).
+  const pinned=publicConfig.modules;
+  if(!input.offline&&pinned&&/["']@afbin\/apollo["']/.test(input.html)){
+    const after=head.childNodes.find(node=>'attrs'in node&&node.attrs.some(attr=>attr.name==='data-af'&&attr.value==='platform-styles'))??boot.childNodes.at(-1)!;
+    const links=[pinned.apollo,pinned.reader,pinned.state].filter((href):href is string=>typeof href==='string').map(href=>{
+      const link=parseFragment('<link>').childNodes[0] as DefaultTreeAdapterMap['element'];
+      link.attrs=[{name:'rel',value:'modulepreload'},{name:'href',value:href},{name:'crossorigin',value:''}];
+      link.parentNode=head;return link;
+    });
+    head.childNodes.splice(head.childNodes.indexOf(after as DefaultTreeAdapterMap['childNode'])+1,0,...links);
   }
   // The single core import map must see the inert table before it executes.
   // Keep it in the rendered source so portable-source digest validation binds it.

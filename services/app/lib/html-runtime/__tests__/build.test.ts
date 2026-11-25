@@ -5,7 +5,7 @@ import { expect, it } from 'vitest';
 import { buildHtmlCore,buildHtmlAssets } from '../build.server';
 import { hostCommentsPath } from '../host-comments-address.server';
 import { downloadableHtml,assembleHtmlPage } from '../index';
-import { DRAFT_SQL_ENGINE_PATH } from '../contract';
+import { DRAFT_SQL_ENGINE_PATH, RUNTIME_MODULE_PATHS } from '../contract';
 import { PLATFORM_STYLES_PATH } from '../../html-systems';
 /** `@afbin/offline-sql` gzipped: the SQLite engine and its wasm, carried only by an export with rows (594,406 B measured 2026-11-10). */
 const OFFLINE_SQL_GZIP_BUDGET=600*1024;
@@ -224,7 +224,7 @@ it('the core sets the platform attributes before authored code, with the viewer 
 it('ships one native editor without the retired rich editor or binding',async()=>{
  const assets=await buildHtmlAssets();
  expect(assets.core).not.toContain('@afbin/regions');
- expect(assets.core).toMatch(/"@afbin\/native-regions":new URL\("\/af\/native-regions\.js"/);
+ expect(assets.core).toMatch(/"@afbin\/native-regions":[\w$]+\("nativeRegions","\/af\/native-regions\.js"\)/);
  expect(assets).not.toHaveProperty('regions');
  const {build}=await import('esbuild');
  const graph=await build({entryPoints:[fileURLToPath(new URL('../native-region-editor.ts',import.meta.url))],bundle:true,write:false,format:'esm',platform:'browser',metafile:true,logLevel:'silent'});
@@ -243,7 +243,7 @@ it('ships @afbin/collab as its own small module over the page reader: Yjs, no Pr
  expect(assets.reader).not.toMatch(/yjs|Y\.Doc/);
  // Mapped for every hosted page (not only framed live ones), so an author's import always resolves; a page the app
  // does not frame answers readonly. Offline, only from the copy's own embedded block (no network).
- expect(assets.core).toMatch(/new URL\("\/af\/collab\.js"/);
+ expect(assets.core).toMatch(/[\w$]+\("collab","\/af\/collab\.js"\)/);
  expect(assets.core).toContain('[data-af="collab"]');
  expect(assets.core).toMatch(/"@afbin\/collab":\w+/);
 });
@@ -264,7 +264,7 @@ it('ships @afbin/state as its own small module that @afbin/apollo imports: Zusta
  expect(assets.reader).not.toContain('af:viewer:');
  expect(assets.reader).not.toContain('zustand');
  // Mapped for every page; offline, only from the copy's own embedded block.
- expect(assets.core).toMatch(/new URL\("\/af\/state\.js"/);
+ expect(assets.core).toMatch(/[\w$]+\("state","\/af\/state\.js"\)/);
  expect(assets.core).toContain('[data-af="state-module"]');
  expect(assets.core).toMatch(/"@afbin\/state":\w+/);
 });
@@ -339,4 +339,29 @@ it('ships the host comments module apart, at the pinned address the host module 
  expect(assets.host).not.toMatch(/data-trusted-ui|ProseMirror/);
  expect(assets.core).not.toContain('host-comments');
  expect(comments).not.toContain('afbin:runtime-reload');
+});
+
+it('maps every runtime module to the address its config names, falling back to the flat one, so each module has one address',async()=>{
+ const assets=await buildHtmlAssets();
+ const keys=Object.keys(RUNTIME_MODULE_PATHS).map(key=>key.slice(0,-'Path'.length));
+ const modules=Object.fromEntries(keys.map((key,index)=>[key,`/af/v1/runtime/${String(index).repeat(64)}/${RUNTIME_MODULE_PATHS[`${key}Path` as keyof typeof RUNTIME_MODULE_PATHS].slice(4)}`]));
+ const mapped=(config:Record<string,unknown>)=>{
+  let imports:Record<string,string>={};const blocks:Record<string,string>={runtime:JSON.stringify({pageId:'p',revision:'1',backends:[],...config})};
+  const win:Record<string,unknown>={addEventListener(){}};win.parent=win;
+  const document={readyState:'loading',addEventListener(){},documentElement:{setAttribute(){},hasAttribute(){return false;},outerHTML:''},querySelector(selector:string){const name=/data-af="([^"]+)"/.exec(selector)?.[1];return name&&blocks[name]?{textContent:blocks[name]}:null;},createElement(){return {type:'',textContent:''};},currentScript:{src:'',after(node:{textContent:string}){imports=JSON.parse(node.textContent).imports;}}};
+  runInNewContext(assets.core,{document,location:{href:'https://p1.pages.example/',pathname:'/',search:''},window:win,URL,Blob,addEventListener(){},sessionStorage:{getItem(){return null;},setItem(){}}});
+  return imports;
+ };
+ const names:Record<string,string>={apollo:'@afbin/apollo',reader:'@afbin/reader',state:'@afbin/state',chrome:'@afbin/chrome',portableEngine:'@afbin/portable',collab:'@afbin/collab',morph:'@afbin/morph',nativeMarkdown:'@afbin/native-markdown',nativeRegions:'@afbin/native-regions'};
+ // An unframed page maps all but the live-only modules (morph, native regions and markdown), which go through the same lookup.
+ const mappedKeys=keys.filter(key=>!['morph','nativeMarkdown','nativeRegions'].includes(key));
+ expect(mappedKeys).toEqual(expect.arrayContaining(['apollo','reader','state','collab']));
+ const hashed=mapped({modules});
+ for(const key of mappedKeys)expect(hashed[names[key]!],key).toBe(`https://p1.pages.example${modules[key]}`);
+ const flat=mapped({});
+ for(const key of mappedKeys)expect(flat[names[key]!],key).toBe(`https://p1.pages.example${RUNTIME_MODULE_PATHS[`${key}Path` as keyof typeof RUNTIME_MODULE_PATHS]}`);
+ // Only a pinned runtime address is honoured: anything else in the config falls back to the flat module.
+ expect(mapped({modules:{reader:'https://evil.example/reader.js'}})['@afbin/reader']).toBe('https://p1.pages.example/af/reader.js');
+ // Modules reach one another only through the map (bare specifiers), never a literal address that would load a second copy.
+ for(const key of keys){const source=(assets as unknown as Record<string,string>)[key]!;for(const path of Object.values(RUNTIME_MODULE_PATHS))expect(source,`${key} names ${path}`).not.toContain(path);}
 });

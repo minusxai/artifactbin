@@ -19,12 +19,13 @@ const script=`document.querySelector('#start').onclick=async()=>{const {state}=a
 const html=`<!doctype html><html><head><script data-af="core" src="/af/core.js"></script><script type="application/json" data-af="state">{"count":3}</script><link rel="af-dataset" data-af-name="orders" href="ref:${dataset.id}"></head><body>${body}<script>${script}</script></body></html>`;
 try{
  const doc=await publish({html}),page=await browser.newPage();let authorRequests=0,relayRequests=0;
- page.on('request',request=>{if(new URL(request.url()).pathname==='/af/apollo.js')authorRequests++;if(request.url().endsWith(`/api/artifacts/${doc.id}/sql`))relayRequests++;});
+ page.on('request',request=>{if(/^\/af\/(?:v1\/runtime\/[a-f0-9]{64}\/)?apollo\.js$/.test(new URL(request.url()).pathname))authorRequests++;if(request.url().endsWith(`/api/artifacts/${doc.id}/sql`))relayRequests++;});
  await page.goto(`${base}/a/${doc.id}`,{waitUntil:'load'});const frame=await documentFrame(page);
  await frame.locator('[data-af="presence-overlay"]').waitFor();
- check(authorRequests===0,'reader/comments/presence initialize without fetching the author engine');
+ // A page that imports apollo preloads it beside the reader (fetched, not run): the reader never waits for it.
+ check(authorRequests<=1,'reader/comments/presence initialize without waiting for the author engine');
  await frame.locator('#start').click();await frame.locator('#count').filter({hasText:'4'}).waitFor();
- check(authorRequests===1,'first actual author import fetches the one author module');
+ check(authorRequests===1,'first actual author import uses the one preloaded author module');
  check(await frame.locator('#count').textContent()==='4','lazy client initializes and updates private viewer state');
  await frame.locator('#remote').click();await frame.locator('#status').filter({hasText:'7'}).waitFor();
  check(relayRequests===1,'lazy client reuses the already attached trusted parent relay');

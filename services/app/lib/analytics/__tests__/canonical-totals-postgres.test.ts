@@ -8,7 +8,7 @@ import { Pool } from 'pg';
 import { createEvents, ensureEventsSchema } from '@artifactbin/events/local';
 import { EVENTS_SCHEMA, envelope, type Db } from '@/lib/platform';
 import { PostgresDb, SCHEMA_STATEMENTS } from '@/lib/platform/testing';
-import { canonicalViewTotals } from '../view-totals';
+import { canonicalViewTotals, foldViewTotals, settleViewTotals } from '../view-totals';
 
 const barrier = () => {
   let resolve!: () => void;
@@ -39,7 +39,8 @@ describe('canonical folds over independent PostgreSQL connections', () => {
     await ensureEventsSchema(db, EVENTS_SCHEMA);
   }, 120_000);
   afterAll(async () => {
-    try { await pool?.end(); }
+    // No catch-up a read scheduled may reach a closed pool.
+    try { await settleViewTotals(); await pool?.end(); }
     finally {
       if (container) execFileSync('docker', ['rm', '-f', container], { stdio: 'ignore' });
     }
@@ -66,9 +67,9 @@ describe('canonical folds over independent PostgreSQL connections', () => {
         },
       })),
     };
-    const first = canonicalViewTotals(held, ['a', 'b']);
+    const first = foldViewTotals(held, ['a', 'b']);
     await Promise.race([locked.promise, first.then(() => { throw new Error('first fold did not hold its lock'); })]);
-    const second = canonicalViewTotals(db, ['b', 'a']);
+    const second = foldViewTotals(db, ['b', 'a']);
     try {
       await vi.waitFor(async () => {
         const waiting = await pool.query(`SELECT count(*)::int AS n FROM pg_stat_activity

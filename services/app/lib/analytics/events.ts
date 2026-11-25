@@ -3,12 +3,14 @@
  * no implicit migration is performed. trackEvent never rejects. Call after the caller's transaction
  * commits: an events service can share PGLite's serialized connection.
  * Views use a daily salted visitor hash, including the account when signed in. Raw IP/UA never leave
- * request scope. Without request identity each envelope counts separately. sse_connect has no log verb.
+ * request scope. Every view append is followed by one fold of exactly its artifacts (lib/analytics view-totals),
+ * after the append, never failing the caller. Without request identity each envelope counts separately. sse_connect has no log verb.
  */
 import { createHash } from 'crypto';
 import type { EventEnvelope, EventVerb } from '@artifactbin/contracts/events';
 import { forwardedFor, identifyClient } from '../accounts';
 import { ANALYTICS_SECRET, TRUSTED_PROXY_HOPS, currentHeaders, emit, envelope, services, type EventSubject } from '../platform';
+import { foldWrittenViews } from './view-totals';
 
 type AnalyticsEvent =
   | 'view'
@@ -68,6 +70,7 @@ export async function trackEvent(
     // count is the difference between losing a document and losing a shelf.
     else if (verb === 'deleted') await emit(subject, verb, object, { ...payload, ...(opts.format !== undefined ? { format: opts.format } : {}), ...(opts.subtree !== undefined ? { subtree: opts.subtree } : {}) });
     else await emit(subject, verb, object, payload);
+    if (verb === 'viewed') await foldWrittenViews([artifactId]);
   } catch {
     // trackEvent never rejects, whatever the mapping or the service did.
   }
@@ -103,20 +106,30 @@ export async function recordView(artifactId: string, opts: { userId?: string | n
   return batch.promise;
 }
 
-/** Write every buffered view now. Never rejects; resolves once they are written (or failed quietly). */
-export async function flushViews(): Promise<void> {
+/**
+ * Write every buffered view now, then fold their artifacts. Never rejects; resolves once both are done (or failed
+ * quietly), and only after every earlier flush has too: a flush the timer started is still drained by the next call.
+ */
+let flushing: Promise<void> = Promise.resolve();
+export function flushViews(): Promise<void> {
+  return flushing = flushing.then(flushBuffered);
+}
+async function flushBuffered(): Promise<void> {
   if (viewTimer) clearTimeout(viewTimer);
   viewTimer = undefined;
   const views = pendingViews, batch = viewBatch;
   pendingViews = [];
   viewBatch = undefined;
   if (!views.length) { batch?.resolve(); return; }
+  let written = true;
   try {
     await services().events.emit(views.map(v => v.sentence));
   } catch (error) {
+    written = false;
     console.error('[events] emit failed:', error);
   }
   batch?.resolve();
+  if (written) await foldWrittenViews([...new Set(views.map(v => v.sentence.object_id))]);
 }
 
 /** Request metadata only: no database access. */

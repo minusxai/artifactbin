@@ -44,6 +44,12 @@ export interface HtmlRuntimeConfig {
   files?: Readonly<Record<string, string>>;
   /** The https origins the page declares in `csp-connect`: its core sends a GET to one through the page's fetch door (./page-fetch). */
   connect?: readonly string[];
+  /**
+   * A served page's runtime modules at their content addresses (RUNTIME_ADDRESS_PREFIX, ./runtime-addresses.server):
+   * the core maps each `@afbin/*` runtime specifier there, so the core, its import map, the preload links and every
+   * module's bare imports name one address per module. Absent (drafts, exports): the flat RUNTIME_MODULE_PATHS.
+   */
+  modules?: Readonly<Partial<Record<RuntimeModule, string>>>;
   /** `@afbin/<name>` -> platform library URL, resolved server-side from the page's recorded pins. */
   libraries?: Readonly<Record<string, string>>;
   initialState?: HtmlJsonObject;
@@ -101,8 +107,16 @@ export interface HtmlRuntimeAssets { core:string; apollo:string; apolloPath:stri
  host?:string;
  /** The host comments module (solid/document/browser-host-comments) the host module imports when a shell asks for comments. */
  hostComments?:string }
-/** D17: the platform runtime's flat public addresses (core: lib/html-page/core-script). No version or hash; strong ETag and `no-cache`. */
+/**
+ * D17: the platform runtime's flat public addresses (core: lib/html-page/core-script), strong ETag and `no-cache`. A
+ * served page names this build's copies at `/af/v1/runtime/<sha256>/<file>` instead (`modules`), immutable; another
+ * digest there answers a redirect to the flat address, so a page open across a deploy reaches the skew guard.
+ */
 export const RUNTIME_MODULE_PATHS={apolloPath:'/af/apollo.js',readerPath:'/af/reader.js',chromePath:'/af/chrome.js',portableEnginePath:'/af/portable.js',morphPath:'/af/morph.js',nativeRegionsPath:'/af/native-regions.js',nativeMarkdownPath:'/af/native-markdown.js',collabPath:'/af/collab.js',statePath:'/af/state.js'} as const;
+/** A runtime module: its key in RUNTIME_MODULE_PATHS without `Path`, and its source in HtmlRuntimeAssets. */
+export type RuntimeModule=keyof typeof RUNTIME_MODULE_PATHS extends `${infer Name}Path`?Name:never;
+/** The content-addressed runtime modules: `/af/v1/runtime/<sha256 of the bytes>/<flat file name>`. */
+export const RUNTIME_ADDRESS_PREFIX='/af/v1/runtime/';
 /** A draft's `sql` engine (`@afbin/offline-sql`, ./offline-sql), served for drafts only (lib/page-drafts): no published page maps it. */
 export const DRAFT_SQL_ENGINE_PATH='/af/offline-sql.js';
 /** `Symbol.for` key under which core records its build id for the lazy modules' skew guard (build.server). */
