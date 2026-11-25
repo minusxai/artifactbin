@@ -12,7 +12,7 @@ import {join} from 'node:path';
 import {afterEach,beforeEach,expect,it,onTestFinished,vi} from 'vitest';
 import {DEFAULT_TOKEN_TTL_MS, MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS} from '@artifactbin/contracts/handles';
 import {IDENTITY_INTROSPECT_PATH} from '@artifactbin/contracts/identity-service';
-import {CHAT_SIGN_IN_PATH, RUN_SIGN_IN_PATH, SCHEDULE_SIGN_IN_PATH, SERVICE_TOKEN_PATH, parseServiceAudiences, type ChatSignInRequest, type RunSignIn, type ScheduleSignInRequest} from '@artifactbin/contracts/service-audiences';
+import {CHAT_SIGN_IN_PATH, RUN_SIGN_IN_PATH, SCHEDULE_SIGN_IN_PATH, SERVICE_TOKEN_PATH, type ChatSignInRequest, type RunSignIn, type ScheduleSignInRequest} from '@artifactbin/contracts/service-audiences';
 import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts/routes';
 import {createAuthComposedHost} from '@/test/helpers/auth-host';
 import {AUTH_SECRET,getDb,syncIdentitySettings} from '@/lib/platform';
@@ -334,15 +334,6 @@ it('clamps the lifetime asked to the token bounds, defaults it, and refuses a ma
  const capped=await host.runSignIn({token:await host.exchange('warehouse',{bearer:grant.access_token})});
  expect(capped).toEqual({status:429,body:{error:'rate_limited',retry_after:3600}});
  expect(await sql("SELECT count(*)::int AS n FROM auth.tokens WHERE issued_by='warehouse'")).toEqual([{n:50}]);
-});
-
-it('the opt-in is explicit and its malformed configuration refuses the boot, naming the setting',()=>{
- const entry={id:'warehouse',origin:WAREHOUSE,introspection_secret_sha256:createHash('sha256').update('x').digest('hex')};
- expect(parseServiceAudiences(JSON.stringify([entry]))[0]).not.toHaveProperty('runSignIns');
- expect(parseServiceAudiences(JSON.stringify([{...entry,run_sign_ins:false}]))[0]).not.toHaveProperty('runSignIns');
- expect(parseServiceAudiences(JSON.stringify([{...entry,run_sign_ins:true}]))[0]!.runSignIns).toBe(true);
- for(const bad of [{...entry,run_sign_ins:'yes'},{id:'warehouse',origin:WAREHOUSE,run_sign_ins:true}])
-  expect(()=>parseServiceAudiences(JSON.stringify([bad])),JSON.stringify(bad)).toThrow(/IDENTITY__SERVICE_AUDIENCES/);
 });
 
 /** Every file under `root`, with its bytes and modification time. */

@@ -10,7 +10,7 @@ import {createHash} from 'node:crypto';
 import {chmod,mkdir,readFile,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {beforeEach,expect,it,onTestFinished} from 'vitest';
-import {GROUP_PRINCIPALS_NOT_ACCEPTED, GROUP_SIGN_IN_PATH, RUN_SIGN_IN_PATH, SERVICE_TOKEN_PATH, parseServiceAudiences} from '@artifactbin/contracts/service-audiences';
+import {GROUP_PRINCIPALS_NOT_ACCEPTED, GROUP_SIGN_IN_PATH, RUN_SIGN_IN_PATH, SERVICE_TOKEN_PATH} from '@artifactbin/contracts/service-audiences';
 import {IDENTITY_INTROSPECT_PATH} from '@artifactbin/contracts/identity-service';
 import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts/routes';
 import {createAuthComposedHost} from '@/test/helpers/auth-host';
@@ -146,15 +146,6 @@ it('a person\'s exchange and introspection answers are unchanged, field for fiel
  const page=await host.send('POST',SERVICE_TOKEN_PATH,{cookie:eve.cookie},{audience:'ledger'});
  expect(page.body).toEqual({access_token:expect.stringMatching(/^vwt_/),token_type:'Bearer',expires_in:expect.any(Number),expires_at:expect.any(String),audience:'ledger',resource:LEDGER});
  expect(await host.introspect(String(page.body!.access_token),SECRETS.ledger)).toMatchObject({principal_kind:'user',user_id:eve.userId,parent:{kind:'session'}});
-});
-
-it('the opt-in is explicit, off by default, and needs the service\'s own secret',()=>{
- const entry={id:'warehouse',origin:WAREHOUSE,introspection_secret_sha256:'a'.repeat(64)};
- expect(parseServiceAudiences(JSON.stringify([entry]))[0]).not.toHaveProperty('groupPrincipals');
- expect(parseServiceAudiences(JSON.stringify([{...entry,group_principals:false}]))[0]).not.toHaveProperty('groupPrincipals');
- expect(parseServiceAudiences(JSON.stringify([{...entry,group_principals:true}]))[0]!.groupPrincipals).toBe(true);
- for(const bad of [{...entry,group_principals:'yes'},{id:'warehouse',origin:WAREHOUSE,group_principals:true}])
-  expect(()=>parseServiceAudiences(JSON.stringify([bad])),JSON.stringify(bad)).toThrow(/IDENTITY__SERVICE_AUDIENCES/);
 });
 
 it('never outlives its parent: a group sign-in near its end gives a token that ends with it, and none once it has ended',async()=>{

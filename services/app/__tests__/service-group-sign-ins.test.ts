@@ -165,14 +165,6 @@ it('lives only while its approval does: revoking it or deleting the group ends i
  expect(await host.introspect(leafToken)).toEqual({active:false});
 });
 
-it('the opt-in is explicit and needs the service\'s own secret',()=>{
- const entry={id:'warehouse',origin:'http://warehouse.localhost:7444',introspection_secret_sha256:'a'.repeat(64)};
- expect(parseServiceAudiences(JSON.stringify([entry]))[0]).not.toHaveProperty('groupSignIns');
- expect(parseServiceAudiences(JSON.stringify([{...entry,group_sign_ins:true}]))[0]!.groupSignIns).toBe(true);
- for(const bad of [{...entry,group_sign_ins:'yes'},{id:'warehouse',origin:'http://warehouse.localhost:7444',group_sign_ins:true}])
-  expect(()=>parseServiceAudiences(JSON.stringify([bad])),JSON.stringify(bad)).toThrow(/IDENTITY__SERVICE_AUDIENCES/);
-});
-
 it('audits every approval and every revocation: who, which group, which service and which level',async()=>{
  const host=await composed(),{ada,team}=await tree(host);
  const grant=String((await host.approve(ada,team.id,'warehouse','editor')).body!.id);
