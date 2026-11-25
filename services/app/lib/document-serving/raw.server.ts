@@ -28,6 +28,7 @@ import { LIVE_DATASET_REFUSAL, serveInlinePdf, serveStoredFile } from '@/lib/dat
 import { ObjectUnavailable, loadImage, pdfFilename, pdfMetaOf } from '@/lib/object-store';
 import { NO_STORE, REVALIDATE, storedBytesCacheControl } from './cache-control';
 import { nativeHtmlPresentation } from './native-html-presentation.server';
+import { canonicalDocumentUrl } from '@/lib/user-pages';
 import { anonymousReader, FRAME_TTL_MS, NONCE_PLACEHOLDER, renderCache, renderKey, withFreshNonce } from './render-cache';
 import { nativeHtmlDocument, nativeHtmlPolicy, nativeHtmlRuntimeIdentity } from './native-html.server';
 import { openDocument } from './open-document.server';
@@ -93,7 +94,12 @@ async function serveRaw(request: Request, ctx: RawDocumentRequest): Promise<Resp
   const actor = await requestOrSessionActor(request);
   const cacheable = request.method === 'GET' && !domain && !fragment && !key && !archived && !search.has('v')
     && (!!pages || anonymousReader(actor));
-  const metadataOnly = cacheable || (!!pages && !key && !fragment && !!asked && !archived)
+  /*
+   * A reader's own browser keeps the document (`private, no-cache`) and revalidates it: on its own origin and on a
+   * publishing host alike. Every access check below runs before any 304; a key or an archived version never revalidates.
+   */
+  const revalidated = (!!pages || !!domain) && !key && !archived;
+  const metadataOnly = cacheable || (revalidated && !fragment && !!asked)
     || (request.method === 'HEAD' && !key && !archived);
   if (fragment) return notFound();
   const options = { surface: 'raw', actor, owner: domain?.owner } as const;
@@ -115,11 +121,14 @@ async function serveRaw(request: Request, ctx: RawDocumentRequest): Promise<Resp
   // Declarations belong to each immutable version; current viewer grants remain dynamic.
   const policyFor=async(row:Pick<ArtifactRow,'id'|'version'|'meta'>)=>nativeHtmlPolicy(id,base,pages?{self:pages.self,app:pages.site.app}:undefined,await cspExtensionsFor({artifact:{id:row.id,version:row.version,declared:storedCspExtensions(row.meta.htmlCsp)},viewer:actor,request,carried:pages?.carried}),{domainReads:directReads});
   let policy=await policyFor(header);
-  const revalidated = !!pages && !key && !archived;
   const validator = async (row: ArtifactHeader, at = live) => etagOf({
     id: row.id, version: row.version, edit: row.edit_id, updated: row.updated_at, live: at,
     // Source is immutable within a published version; bindings are header metadata.
     links: row.meta.htmlLinks ?? [], designSystem: designSystemChoice(row.meta), runtime: await nativeHtmlRuntimeIdentity(), policy, actor,
+    // What presentation writes around the source (native-html-presentation): the head's title and description, the
+    // canonical address (its owner's live handle and title path) and, on a publishing host, whose host it is.
+    title: row.title, description: row.description, canonical: await canonicalDocumentUrl(row),
+    domain: domain && { hostname: domain.hostname, owner: { kind: domain.owner.kind, id: domain.owner.id, handle: domain.owner.handle, folderId: domain.owner.folderId ?? null } },
   });
   const responseHeaders = (etag: string | null) => ({
     ...COMMON, 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': policy,
@@ -132,12 +141,12 @@ async function serveRaw(request: Request, ctx: RawDocumentRequest): Promise<Resp
     id: row.id, version: row.version, edit: row.edit_id, updated: row.updated_at, title: row.title, description: row.description, meta: row.meta,
     live, policy, runtime: await nativeHtmlRuntimeIdentity(),
   });
-  // An open page reading its own newest version (lib/html-runtime/live-morph) is the same view, not another.
+  // An open page reading its own newest version (lib/html-runtime/live-morph) is the same view, not another. A 304 is a view.
   const counted = () => { if (!key && request.method !== 'HEAD' && !request.headers.has(LIVE_VERSION_HEADER)) void recordView(header.id, { userId: actor.userId }); };
   if (header.format === 'html' && metadataOnly) {
     const etag = revalidated ? await validator(header) : null;
     const held = etag && matchingTag(asked, etag);
-    if (held) return notModified(`W/${held}`);
+    if (held) { counted(); return notModified(`W/${held}`); }
     if (request.method === 'HEAD') return new Response(null, { headers: responseHeaders(etag) });
     const hit = cacheable ? renderCache.get(await frameKey(header)) : undefined;
     if (hit) {
@@ -156,7 +165,7 @@ async function serveRaw(request: Request, ctx: RawDocumentRequest): Promise<Resp
       if (at || !sameHead) policy = await policyFor(renderRow);
       const etag = revalidated && !at ? await validator(artifact, page?.live) : null;
       const held = etag && matchingTag(asked, etag);
-      if (held) return notModified(`W/${held}`);
+      if (held) { counted(); return notModified(`W/${held}`); }
       if (request.method === 'HEAD') return new Response(null, { headers: responseHeaders(etag) });
       // Retained only when the row rendered is the one the key was read from (it, or its live text, may have moved since).
       const retained = cacheable && !at && sameHead && page?.live === live ? await frameKey(header) : null;
