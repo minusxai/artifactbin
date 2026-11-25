@@ -60,6 +60,7 @@ interface LiveArtifactOptions {
   onPublication?: (version: number, editId?: string, title?: string | null, live?: number) => void;
   /** The ANNOTATIONS on this readable document changed. */
   onAnnotations?: (annotations: AnnotationWire[]) => void;
+  onConnectionChange?: () => void;
   /** Where the stream picks up (ServedResults.since), read when the stream opens. */
   since?: string;
 }
@@ -202,6 +203,7 @@ export function createLiveArtifact(options: LiveArtifactOptions): Accessor<Artif
                 });
               }).catch(() => { /* the stream's own reconnect covers an unreachable server */ });
             },
+            onConnectionChange: options.onConnectionChange,
             onPresence: frame => options.onPresence?.(frame),
             onData: (frame) => {
               if (!Array.isArray(frame.datasets) || frame.datasets.length === 0) return;

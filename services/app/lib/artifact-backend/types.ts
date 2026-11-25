@@ -131,6 +131,8 @@ interface LiveHandlers {
   onAnnotations: () => void;
   /** The page came back (visible, online) while the stream still looked alive: check the head with `liveFrame()`. */
   onWake?: () => void;
+  /** A gap can hide a membership change, including a revocation that refuses the next connection. */
+  onConnectionChange?: () => void;
 }
 
 /** A reply and/or a state transition; a reply may carry the comment image staged for it. */

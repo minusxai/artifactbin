@@ -125,9 +125,10 @@ it('keeps loaded notifications when a refresh fails and treats a dropped live st
     addEventListener() {}
     close() {}
   });
-  let fail = false;
+  vi.spyOn(Date, 'now').mockReturnValue(Date.now());
+  let fail = false, reads = 0;
   stubFetch({
-    '/api/my/people': () => fail ? Response.json({}, { status: 500 }) : Response.json(INBOX),
+    '/api/my/people': () => { reads++; return fail ? Response.json({}, { status: 500 }) : Response.json(INBOX); },
   }, { session: SESSION });
   window.history.replaceState(null, '', '/notifications');
   render(() => <App />);
@@ -137,6 +138,13 @@ it('keeps loaded notifications when a refresh fails and treats a dropped live st
   expect(await screen.findByRole('status', { name: 'Live updates' })).toHaveTextContent('Reconnecting');
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   expect(link).toBeInTheDocument();
+
+  const prior = reads;
+  // Network recovery immediately follows a successful read, inside the ordinary focus debounce.
+  window.dispatchEvent(new Event('online'));
+  await waitFor(() => expect(streams.length).toBeGreaterThan(1));
+  streams.at(-1)!.onmessage?.(new MessageEvent('message', {data:'{}'}));
+  await waitFor(() => expect(reads).toBe(prior + 1));
 
   fail = true;
   fireEvent.click(await screen.findByRole('button', { name: 'Mark all as read' }));

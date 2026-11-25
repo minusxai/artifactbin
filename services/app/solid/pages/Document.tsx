@@ -52,7 +52,7 @@ const FrameNotices = lazy(() => import('../document/FrameNotices'));
 const RegionEditingChrome = lazy(() => import('../document/RegionToolbar').then(m => ({ default: m.RegionEditingChrome })));
 const ForkConfirm = lazy(() => import('../document/ForkArtifact').then(m => ({ default: m.ForkConfirm })));
 
-interface DocumentAnswer {
+export interface DocumentAnswer {
   role: ArtifactRole; kind: string;
   /** The viewer may change who reaches the page (lib/artifact-access `managesSharing`). */
   canManageSharing?: boolean;
@@ -149,6 +149,7 @@ export function DocumentPage(): JSX.Element {
   /** A doc ("New" made it: one rich region for its whole body) is edited from the moment it loads, and can be handed to an agent. */
   const isDoc = () => (live()?.template ?? page?.surface?.template) === 'doc';
   const [membershipRevision, setMembershipRevision] = createSignal(0);
+  let refreshAdmission: (() => Promise<void>) | undefined;
   const [nonce, setNonce] = createSignal<string | null>(null);
   const phone = createIsPhoneViewport();
   const runtimeRef: DocumentRuntimeRef = { current: null };
@@ -169,6 +170,7 @@ export function DocumentPage(): JSX.Element {
   const live = backend && page?.surface ? createLiveArtifact({
     backend, id: id!, initialEditId: page.surface.editId ?? '', initialVersion: page.surface.version,
     get enabled() { return ready() && !archivedNow() && typeof EventSource === 'function'; },
+    onConnectionChange: () => refreshAdmission?.(),
     onData: (event) => {
       if (event.datasets.includes('_members')) {
         setMembershipRevision((n) => n + 1);
@@ -219,7 +221,8 @@ export function DocumentPage(): JSX.Element {
     if (page.deferredChrome) void import('../document/deferred-document-chrome').then(({ bindDocumentChrome }) => {
       if (!unmounted) runWithOwner(owner, () => bindDocumentChrome(id, setChrome));
     }).catch(() => { /* The document and its discussion remain usable without social details. */ });
-    void import('../document/create-framed-story').then(({ bindFrameFragment, answerFrameNavigation, createFramedStory, createReaderGroups, takeIntent, uploadSessionOf }) => { if (!unmounted) runWithOwner(owner, () => {
+    void import('../document/create-framed-story').then(({ bindFrameFragment, answerFrameNavigation, createFramedStory, createReaderGroups, refreshReaderAccess, takeIntent, uploadSessionOf }) => { if (!unmounted) runWithOwner(owner, () => {
+      refreshAdmission = refreshReaderAccess(window, id, page, () => setMembershipRevision(n => n + 1), reload);
       const groups = createReaderGroups(id, framed.frame, () => session()?.user?.id);
       setReaderGroups(groups);
       story = createFramedStory({
