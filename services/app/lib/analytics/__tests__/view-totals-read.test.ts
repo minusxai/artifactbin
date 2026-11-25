@@ -81,3 +81,22 @@ it('folds recorded views when they are flushed, without any read',async()=>{
  const stored=await db.query<{artifact_id:string;views:string}>(`SELECT artifact_id,views::text AS views FROM canonical_view_totals ORDER BY artifact_id`);
  expect(stored.rows).toEqual([{artifact_id:'flushed',views:'2'},{artifact_id:'other',views:'1'}]);
 });
+
+it('drains a flush already in flight: flushing again and settling waits for its append and its fold',async()=>{
+ const db=await harness.db();
+ const store=services().events;
+ let release!:()=>void;
+ const held=new Promise<void>(resolve=>{release=resolve;});
+ setServices({events:{emit:async events=>{await held;return store.emit(events);}}});
+ const pending=recordView('inflight');
+ await new Promise<void>(resolve=>setImmediate(resolve));
+ const first=flushViews();
+ let drained=false;
+ const drain=flushViews().then(settle).then(()=>{drained=true;});
+ for(let turn=0;turn<5;turn++)await new Promise<void>(resolve=>setImmediate(resolve));
+ expect(drained,'a reset after flush and settle would run before the held append').toBe(false);
+ release();
+ await Promise.all([first,drain,pending]);
+ const stored=await db.query<{artifact_id:string;views:string}>(`SELECT artifact_id,views::text AS views FROM canonical_view_totals`);
+ expect(stored.rows).toEqual([{artifact_id:'inflight',views:'1'}]);
+});

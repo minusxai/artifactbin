@@ -106,8 +106,15 @@ export async function recordView(artifactId: string, opts: { userId?: string | n
   return batch.promise;
 }
 
-/** Write every buffered view now, then fold their artifacts. Never rejects; resolves once both are done (or failed quietly). */
-export async function flushViews(): Promise<void> {
+/**
+ * Write every buffered view now, then fold their artifacts. Never rejects; resolves once both are done (or failed
+ * quietly), and only after every earlier flush has too: a flush the timer started is still drained by the next call.
+ */
+let flushing: Promise<void> = Promise.resolve();
+export function flushViews(): Promise<void> {
+  return flushing = flushing.then(flushBuffered);
+}
+async function flushBuffered(): Promise<void> {
   if (viewTimer) clearTimeout(viewTimer);
   viewTimer = undefined;
   const views = pendingViews, batch = viewBatch;

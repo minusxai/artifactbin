@@ -8,7 +8,7 @@ import { Pool } from 'pg';
 import { createEvents, ensureEventsSchema } from '@artifactbin/events/local';
 import { EVENTS_SCHEMA, envelope, type Db } from '@/lib/platform';
 import { PostgresDb, SCHEMA_STATEMENTS } from '@/lib/platform/testing';
-import { canonicalViewTotals, foldViewTotals } from '../view-totals';
+import { canonicalViewTotals, foldViewTotals, settleViewTotals } from '../view-totals';
 
 const barrier = () => {
   let resolve!: () => void;
@@ -39,7 +39,8 @@ describe('canonical folds over independent PostgreSQL connections', () => {
     await ensureEventsSchema(db, EVENTS_SCHEMA);
   }, 120_000);
   afterAll(async () => {
-    try { await pool?.end(); }
+    // No catch-up a read scheduled may reach a closed pool.
+    try { await settleViewTotals(); await pool?.end(); }
     finally {
       if (container) execFileSync('docker', ['rm', '-f', container], { stdio: 'ignore' });
     }
