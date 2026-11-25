@@ -105,4 +105,15 @@ describe('an anonymous reader is served a shared render', () => {
     const {rows} = await (await harness.db()).query<{n: number}>(`SELECT count(*)::int AS n FROM ${EVENTS_SCHEMA}.events WHERE object_id=$1 AND object_kind='artifact' AND verb='viewed'`, [id]);
     expect(rows[0]!.n).toBe(3);
   });
+
+  it('counts a repeat view answered 304 as a view', async () => {
+    const {id} = await publish();
+    const first = await frame(id);
+    expect(first.status).toBe(200);
+    const again = await app.request(`${pagesOriginFor(id, site)}/?${PAGES_TICKET_PARAM}=${GUEST_TICKET}`, {headers: {'if-none-match': first.headers.get('etag')!}});
+    expect(again.status).toBe(304);
+    await flushViews();
+    const {rows} = await (await harness.db()).query<{n: number}>(`SELECT count(*)::int AS n FROM ${EVENTS_SCHEMA}.events WHERE object_id=$1 AND object_kind='artifact' AND verb='viewed'`, [id]);
+    expect(rows[0]!.n).toBe(2);
+  });
 });
