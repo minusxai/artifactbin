@@ -8,7 +8,7 @@ import { getArtifactById, childrenTableFor } from '@/lib/artifacts';
 import { getDb, measureQueries, EVENTS_SCHEMA } from '@/lib/platform';
 import { ensureEventsSchema } from '@artifactbin/events/local';
 import { folderPageFor } from '@/lib/workspace';
-import { mintAccountToken, request, useAppHarness, params } from '@/__tests__/harness';
+import { catchUpLoggedViews, mintAccountToken, request, useAppHarness, params } from '@/__tests__/harness';
 import { seedArtifacts } from '@/__tests__/rows';
 
 useAppHarness();
@@ -43,6 +43,7 @@ async function seed(children: number) {
      SELECT 'fvnull' || i || '_' || n, 'app','viewed','artifact', 'fv' || lpad(i::text, 3, '0'), NULL, now() - interval '5 days' FROM generate_series(1, $1::int) i, generate_series(1, 2) n`,
     [children],
   );
+  await catchUpLoggedViews();
   return { user, token, viewer: identityForUser(user.id, token.id, user.email) };
 }
 

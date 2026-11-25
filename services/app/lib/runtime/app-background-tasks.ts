@@ -1,7 +1,7 @@
 /** Process compositions share this lifecycle; creating a request handler never starts workers. */
 import {type Db, startEventPublisher} from '@/lib/platform';
 import {projectHostTenancyChanges} from '@/lib/groups';
-import { flushViews } from '../analytics';
+import { flushViews, settleViewTotals } from '../analytics';
 import {startGroupMailDelivery} from '@/lib/notifications';
 import {objectStore, sweepObjects} from '@/lib/object-store';
 import {expireExportImages} from '@/lib/export';
@@ -44,10 +44,10 @@ export async function startAppBackgroundTasks(db:Db):Promise<()=>Promise<void>>{
  const stopStorageSweep=startStorageSweep(db);
  const stopPagesTicketSweep=startPagesTicketSweep(db);
  let closing:Promise<void>|undefined;
- // Buffered views (lib/analytics recordView) are written before the publisher drains the outbox.
+ // Buffered views (lib/analytics recordView) are written and every view-total fold settles before the publisher drains the outbox.
  return () => closing ??= (async () => {
   clearInterval(auditTimer);
   try { await Promise.all([auditPending,stopGroupMail(),stopStorageSweep(),stopPagesTicketSweep()]); }
-  finally { await flushViews(); await stopPublisher(); }
+  finally { await flushViews(); await settleViewTotals(); await stopPublisher(); }
  })();
 }

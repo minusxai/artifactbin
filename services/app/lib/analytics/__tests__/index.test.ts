@@ -4,7 +4,8 @@ import { createEvents, ensureEventsSchema } from '@artifactbin/events/local';
 import { useAppHarness } from '@/__tests__/harness';
 import { EVENTS_SCHEMA, envelope, services, setServices } from '@/lib/platform';
 import { overrideRequestHeaders } from '@/lib/platform/testing';
-import { flushViews, recordView, trackEvent, viewTotalsFor, viewSeriesFor, forgetEventsTable } from '..';
+import { flushViews, recordView, settleViewTotals, trackEvent, viewTotalsFor, viewSeriesFor, forgetEventsTable } from '..';
+import { foldViewTotals } from '../view-totals';
 
 const harness = useAppHarness();
 const headers = new Map<string, string>();
@@ -24,6 +25,8 @@ const log = async () => (await (await harness.db()).query<{ verb: string; subjec
 /** A view is queued once recordView has read its request metadata (no I/O: lib/analytics events): one event-loop turn,
  * however many awaits that read takes. */
 const queued = () => new Promise<void>((resolve) => setImmediate(resolve));
+/** Events appended with no fold after them (another process, history) are folded by the catch-up a read schedules. */
+const caughtUp = async (ids: string[]) => { await viewTotalsFor(ids); await settleViewTotals(); return viewTotalsFor(ids); };
 
 describe('canonical writers', () => {
   it('writes only the log, preserves signed-in payload and daily visitor identity', async () => {
@@ -113,7 +116,7 @@ describe('canonical readers and history boundary', () => {
         ('h','2026-01-02T00:06:00Z','viewed','user','v4')) x(id,at,verb,kind,visitor)`);
       await db.query("INSERT INTO analytics_events (event,artifact_id,visitor) VALUES ('view','legacy','v')");
       await db.query("INSERT INTO artifact_view_totals (artifact_id,closed_through,views) VALUES ('art1','2026-01-01',999),('legacy','2026-01-01',888)");
-      expect(Object.fromEntries(await viewTotalsFor(['art1', 'legacy', 'never']))).toEqual({ art1: 5, legacy: 0, never: 0 });
+      expect(Object.fromEntries(await caughtUp(['art1', 'legacy', 'never']))).toEqual({ art1: 5, legacy: 0, never: 0 });
       expect((await db.query('SELECT views FROM artifact_view_totals ORDER BY artifact_id')).rows).toEqual([{ views: 999 }, { views: 888 }]);
       expect(await retired()).toHaveLength(1);
 
@@ -150,6 +153,8 @@ describe('incremental canonical totals', () => {
 
   it('folds late events and concurrent overlapping batches without double counting, even after pruning', async () => {
     await append('first', 'v1', '2026-01-01T23:59:00Z');
+    expect(Object.fromEntries(await viewTotalsFor(['art1', 'art2']))).toEqual({ art1: 0, art2: 0 });
+    await settleViewTotals();
     expect(Object.fromEntries(await viewTotalsFor(['art1', 'art2']))).toEqual({ art1: 1, art2: 0 });
     const db = await harness.db();
     // A folded membership survives source pruning and still dedupes a later delivery.
@@ -162,7 +167,7 @@ describe('incremental canonical totals', () => {
     await append('anonymous2', null, '2026-01-01T00:01:00Z');
     await append('other', 'v1', '2026-01-01T00:01:00Z', 'art2');
     const racers = await Promise.all([
-      viewTotalsFor(['art1', 'art2']), viewTotalsFor(['art2', 'art1']), viewTotalsFor(['art1']),
+      foldViewTotals(db, ['art1', 'art2']), foldViewTotals(db, ['art2', 'art1']), foldViewTotals(db, ['art1']),
     ]);
     expect(Object.fromEntries(racers[0])).toEqual({ art1: 5, art2: 1 });
     expect(Object.fromEntries(racers[1])).toEqual({ art2: 1, art1: 5 });
@@ -172,7 +177,7 @@ describe('incremental canonical totals', () => {
 
   it('does not read folded event rows again on unchanged listings', async () => {
     await append('once', 'v1', '2026-01-01T00:01:00Z');
-    await viewTotalsFor(['art1']);
+    await caughtUp(['art1']);
     const db = await harness.db();
     // A retained row whose timestamp can no longer be read proves the incremental predicate
     // excludes old positions, rather than a query-count assertion hiding a full-history scan.
@@ -186,7 +191,7 @@ describe('incremental canonical totals', () => {
       await db.query(`INSERT INTO ${EVENTS_SCHEMA}.stored_events (id,at,source,verb,object_kind,object_id,subject_id,position)
         SELECT 'fresh', '2026-01-01T00:00:00Z', 'app', 'viewed', 'artifact', 'art1', 'v2', max(position)+1
         FROM ${EVENTS_SCHEMA}.stored_events`);
-      expect((await viewTotalsFor(['art1'])).get('art1')).toBe(2);
+      expect((await caughtUp(['art1'])).get('art1')).toBe(2);
     } finally {
       await db.query(`DROP VIEW ${EVENTS_SCHEMA}.events`);
       await db.query(`ALTER TABLE ${EVENTS_SCHEMA}.stored_events RENAME TO events`);
@@ -198,16 +203,20 @@ describe('incremental canonical totals', () => {
 it('isolates canonical source versions and rolls memberships and cursor back together', async () => {
   const db = await harness.db();
   await db.query(`INSERT INTO canonical_view_totals (source,artifact_id,position,views) VALUES ('different-source','art1',99999,999)`);
-  await trackEvent('view', 'art1');
+  await services().events.emit([envelope(null, 'viewed', { kind: 'artifact', id: 'art1' }, {})]);
   const transaction = db.transaction.bind(db);
   const injected = vi.spyOn(db, 'transaction').mockImplementation(fn => transaction(async tx => {
     await fn(tx);
     throw new Error('abort fold');
   }));
+  const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
   try {
-    await expect(viewTotalsFor(['art1'])).rejects.toThrow('abort fold');
-  } finally { injected.mockRestore(); }
+    // The read never fails: the catch-up fold it scheduled fails alone, logged.
+    expect((await viewTotalsFor(['art1'])).get('art1')).toBe(0);
+    await settleViewTotals();
+    expect(logged).toHaveBeenCalledWith('[view totals] fold failed:', expect.objectContaining({ message: 'abort fold' }));
+  } finally { injected.mockRestore(); logged.mockRestore(); }
   expect((await db.query('SELECT * FROM canonical_view_visitors')).rows).toEqual([]);
   expect((await db.query('SELECT views FROM canonical_view_totals')).rows).toEqual([{ views: 999 }]);
-  expect((await viewTotalsFor(['art1'])).get('art1')).toBe(1);
+  expect((await caughtUp(['art1'])).get('art1')).toBe(1);
 });
