@@ -1,27 +1,83 @@
-import {expect,it} from 'vitest';
-import {ensureEventsSchema} from '@artifactbin/events/local';
-import {EVENTS_SCHEMA} from '@/lib/platform';
+/** Reading view totals never writes; folds run where views are written, or in the background after a read. */
+import {afterAll,beforeEach,expect,it} from 'vitest';
+import {createEvents,ensureEventsSchema} from '@artifactbin/events/local';
+import {EVENTS_SCHEMA,envelope,services,setServices,type Db} from '@/lib/platform';
 import {useAppHarness} from '@/__tests__/harness';
 import * as totals from '../view-totals';
+import {flushViews,recordView} from '..';
 
 const harness=useAppHarness();
-it('reads stored view totals without opening a transaction, and folds pending views afterwards',async()=>{
+const previous=services().events;
+beforeEach(async()=>{
  const db=await harness.db();
  await ensureEventsSchema(db,EVENTS_SCHEMA);
- const view=(n:number,visitor:string)=>db.query(`INSERT INTO ${EVENTS_SCHEMA}.events (id,at,source,verb,object_kind,object_id,subject_kind,subject_id)
-  VALUES ($1,'2026-01-01'::timestamptz,'app','viewed','artifact','seen','visitor',$2)`,['view'+n,visitor]);
- await view(1,'a');
- let during=0,reading=true;
- const spied={query:db.query.bind(db),transaction:((work:never)=>{if(reading)during++;return db.transaction(work);}) as typeof db.transaction};
- const first=await totals.canonicalViewTotals(spied,['seen','quiet']);
- reading=false;
- expect(during).toBe(0);
- expect(first.get('quiet')).toBe(0);
- const settle=(totals as unknown as {settleViewTotals?:()=>Promise<void>}).settleViewTotals;
- expect(settle,'view-totals exports settleViewTotals for tests and shutdown').toBeTypeOf('function');
- await settle!();
- reading=true;
- expect((await totals.canonicalViewTotals(spied,['seen','quiet'])).get('seen')).toBe(1);
- expect(during).toBe(0);
- reading=false;await settle!();
+ setServices({events:createEvents({db,schema:EVENTS_SCHEMA})});
+});
+afterAll(()=>setServices({events:previous}));
+const settle=()=>{
+ const seam=(totals as unknown as {settleViewTotals?:()=>Promise<void>}).settleViewTotals;
+ expect(seam,'view-totals exports settleViewTotals for tests and shutdown').toBeTypeOf('function');
+ return seam!();
+};
+/** A view appended through the events service alone: ingestion no fold followed. */
+const view=async(_db:Db,n:number,visitor:string,artifact='seen')=>services().events.emit([{...envelope({kind:'visitor',id:visitor},'viewed',{kind:'artifact',id:artifact},{}),id:'view'+n,at:'2026-01-01T00:00:00Z'}]);
+/** The handle, with every transaction counted while `reading` and every fold's admitted ids recorded. */
+const spy=(db:Db)=>{
+ const seen={reading:true,during:0,folded:[] as string[][]};
+ const handle:Pick<Db,'query'|'transaction'>={query:db.query.bind(db),transaction:(work=>{
+  if(seen.reading)seen.during++;
+  return db.transaction(tx=>work({query:(async(sql:string,args?:unknown[])=>{
+   if(sql.includes('INSERT INTO canonical_view_totals AS c'))seen.folded.push([...(args![1] as string[])]);
+   return tx.query(sql,args);
+  }) as typeof tx.query}));
+ }) as typeof db.transaction};
+ return {seen,handle};
+};
+
+it('reads stored view totals without opening a transaction, and folds pending views afterwards',async()=>{
+ const db=await harness.db();
+ await view(db,1,'a');
+ const {seen,handle}=spy(db);
+ const first=await totals.canonicalViewTotals(handle,['seen','quiet']);
+ seen.reading=false;
+ expect(seen.during).toBe(0);
+ expect(Object.fromEntries(first)).toEqual({seen:0,quiet:0});
+ await settle();
+ seen.reading=true;
+ expect(Object.fromEntries(await totals.canonicalViewTotals(handle,['seen','quiet']))).toEqual({seen:1,quiet:0});
+ seen.reading=false;
+ expect(seen.during).toBe(0);
+ await settle();
+});
+
+it('folds only the ids a read found pending, and the stored totals then include the new unique visitors',async()=>{
+ const db=await harness.db();
+ await view(db,1,'a','seen');
+ await view(db,2,'a','steady');
+ const {seen,handle}=spy(db);
+ seen.reading=false;
+ await totals.canonicalViewTotals(handle,['seen','steady']);
+ await settle();
+ seen.folded.length=0;
+ await view(db,3,'b','seen');
+ await view(db,4,'a','seen');
+ seen.reading=true;
+ expect(Object.fromEntries(await totals.canonicalViewTotals(handle,['steady','seen']))).toEqual({seen:1,steady:1});
+ seen.reading=false;
+ expect(seen.during).toBe(0);
+ await settle();
+ expect(seen.folded).toEqual([['seen']]);
+ const stored=await db.query<{artifact_id:string;views:string}>(`SELECT artifact_id,views::text AS views FROM canonical_view_totals ORDER BY artifact_id`);
+ expect(stored.rows).toEqual([{artifact_id:'seen',views:'2'},{artifact_id:'steady',views:'1'}]);
+});
+
+it('folds recorded views when they are flushed, without any read',async()=>{
+ const db=await harness.db();
+ const pending=[recordView('flushed'),recordView('flushed'),recordView('other')];
+ await new Promise<void>(resolve=>setImmediate(resolve));
+ await flushViews();
+ await Promise.all(pending);
+ // Off-request views have no visitor hash: each counts separately.
+ const stored=await db.query<{artifact_id:string;views:string}>(`SELECT artifact_id,views::text AS views FROM canonical_view_totals ORDER BY artifact_id`);
+ expect(stored.rows).toEqual([{artifact_id:'flushed',views:'2'},{artifact_id:'other',views:'1'}]);
 });
