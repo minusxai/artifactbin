@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
 import { idFromPagesLabel, isOwnerTitlePath, ownerDocumentDoor, ownerFolderId, ownerHandleFromLabel, ownerHostConflicts, ownerSiteAddress, ownerSqlArtifactId, parseDnsHostname } from '@artifactbin/contracts/owner-host';
+import { RESERVED_HANDLES } from '../src/handles';
 
 const base = 'u.example.test';
 const longHost = [63, 63, 63, 61].map(size => 'a'.repeat(size)).join('.');
@@ -31,7 +32,9 @@ it.each([
 
 it('decodes a single owner label and leaves the stricter app alias grammar to the app', () => {
   expect(ownerHandleFromLabel('team-one')).toBe('team_one');
-  for (const label of ['app', 'artifact-bin', 'tokens', 'team_one', 'ab', 'a--b', 'Team-One', 'a'.repeat(33)])
+  for (const handle of RESERVED_HANDLES)
+    expect(ownerHandleFromLabel(handle.replaceAll('_', '-')), handle).toBeNull();
+  for (const label of ['team_one', 'ab', 'a--b', 'Team-One', 'a'.repeat(33)])
     expect(ownerHandleFromLabel(label), label).toBeNull();
   expect(ownerHandleFromLabel('a'.repeat(32))).toBe('a'.repeat(32));
   expect(ownerSiteAddress('Team-One.' + base.toUpperCase() + '.:4100', base)).toEqual({ handle: 'team_one', label: '' });
