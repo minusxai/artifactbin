@@ -1,5 +1,5 @@
-/** A page published with a file bundle, then opened on its own pages origin as its owner (ticket, cookie): bundle-links and
- * script-fetch-files; `openPage` is the open step alone, for a test that opens the page as several people. */
+/** A page published with a file bundle, then opened on its own pages origin as its owner (ticket, cookie): `openPage` is
+ * the open step alone, for a test that opens the page as several people. */
 import {expect} from 'vitest';
 import {mintAccountToken,request,testIdentity,testPagesSite} from '@/__tests__/harness';
 import {POST} from '@/app/api/artifacts/route';

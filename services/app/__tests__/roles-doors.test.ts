@@ -374,7 +374,7 @@ describe('editors through every door', () => {
     const annotate = async (id: string, body: unknown) =>
       createAnnotationRoute(await jreq(`/api/my/artifacts/${id}/annotations`, 'POST', body), params({ id }));
 
-    it('an editor creates and replies; a viewer and a stranger get the uniform 404', async () => {
+    it('a session editor creates and replies; a viewer gets 404 and a signed-out caller gets 401', async () => {
       const w = await world();
       await inviteEditor(w);
       const id = w.doc.id;
@@ -400,7 +400,7 @@ describe('editors through every door', () => {
       asSession({ id: w.carol.id, email: w.carol.email });
       expect((await annotate(id, { anchor:nativeAnchor('root'), edit_id: (await head(id)).edit_id, body: 'nope' })).status).toBe(404);
 
-      // A stranger with no share at all.
+      // A request with no session is refused by the browser door.
       noSession();
       expect((await annotate(id, { anchor:nativeAnchor('root'), edit_id: (await head(id)).edit_id, body: 'nope' })).status).toBe(401);
     });
@@ -544,22 +544,19 @@ describe('editors through every door', () => {
       expect((await db.query<{ email: string }>('SELECT email FROM users WHERE id = $1', [userId])).rows[0]?.email).toBe(email);
     });
 
-    it('a COMMENTER comments, and still may not rewrite the document', async () => {
-      const { call, id } = await invitedTo('commenter');
+    it.each([
+      { role: 'commenter', annotation: { anchor: nativeAnchor('root', 1, 'hello'), body: 'looks right to me' }, status: 201 },
+      { role: 'viewer', annotation: { quote: 'hello', body: 'nope' }, status: 404 },
+    ] as const)('an invited $role cannot rewrite the document and gets $status when commenting', async ({ role, annotation, status }) => {
+      const { call, id } = await invitedTo(role);
+      if (role === 'viewer') {
+        expect(await listedIds(await listArtifactsRoute(await call('/api/artifacts')))).toEqual([id]);
+        expect((await getArtifactRoute(await call(`/api/artifacts/${id}`), params({ id }))).status).toBe(200);
+      }
 
-      const made = await annotateBearerRoute(await call(`/api/artifacts/${id}/annotations`, 'POST', { anchor:nativeAnchor('root',1,'hello'), body: 'looks right to me' }), params({ id }));
-      expect(made.status, await made.clone().text()).toBe(201);
-
+      const made = await annotateBearerRoute(await call(`/api/artifacts/${id}/annotations`, 'POST', annotation), params({ id }));
+      expect(made.status, await made.clone().text()).toBe(status);
       expect((await putArtifactRoute(await call(`/api/artifacts/${id}`, 'PUT', { html:nativeHtml(PROSE2) }), params({ id }))).status).toBe(404);
-    });
-
-    it('a VIEWER reads and lists, but neither writes nor comments', async () => {
-      const { call, id } = await invitedTo('viewer');
-
-      expect(await listedIds(await listArtifactsRoute(await call('/api/artifacts')))).toEqual([id]);
-      expect((await getArtifactRoute(await call(`/api/artifacts/${id}`), params({ id }))).status).toBe(200);
-      expect((await putArtifactRoute(await call(`/api/artifacts/${id}`, 'PUT', { html:nativeHtml(PROSE2) }), params({ id }))).status).toBe(404);
-      expect((await annotateBearerRoute(await call(`/api/artifacts/${id}/annotations`, 'POST', { quote: 'hello', body: 'nope' }), params({ id }))).status).toBe(404);
     });
 
     it('an account nobody invited keeps the uniform 404 and an empty listing', async () => {

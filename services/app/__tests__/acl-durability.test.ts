@@ -126,17 +126,31 @@ describe('a private document stays private through every write', () => {
   });
 });
 
-describe('a public document stays public through the same writes', () => {
-  it('an edit does not silently lock a shared link', async () => {
+describe('public visibility survives a content replacement', () => {
+  it('PUT can make a private document public and a later PUT can omit visibility', async () => {
     const { token } = await fixtures();
-    const doc = await create(token, {
-      title: 'Open', html: '<section><p>alpha text</p></section>', visibility: 'public',
-    });
-    await putArtifact(
-      await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: token, json: await preparedText(doc.id,'alpha text','beta text') }),
-      params({ id: doc.id }),
+    const doc = await create(token, { title: 'Open', html: '<h1>draft</h1>' });
+    expect((await stateOf(doc.id)).visibility).toBe('private');
+
+    const url = `/api/artifacts/${doc.id}`;
+    const flipped = await putArtifact(
+      await observedRequest(url, { method: 'PUT', token, json: { html: '<h1>alpha text</h1>', visibility: 'public' } }),
+      params(doc.id),
     );
+    expect(flipped.status).toBe(200);
+    expect(await flipped.json()).toMatchObject({ visibility: 'public' });
     expect((await stateOf(doc.id)).visibility).toBe('public');
-    expect((await rawRoute(request(`/a/${doc.id}/raw`), params({ id: doc.id }))).status).toBe(200);
+
+    const kept = await putArtifact(
+      await observedRequest(url, { method: 'PUT', token, json: await preparedText(doc.id, 'alpha text', 'beta text') }),
+      params(doc.id),
+    );
+    expect(kept.status).toBe(200);
+    expect(await kept.json()).toMatchObject({ visibility: 'public' });
+    expect((await stateOf(doc.id)).visibility).toBe('public');
+
+    const raw = await rawRoute(request(`/a/${doc.id}/raw`), params(doc.id));
+    expect(raw.status).toBe(200);
+    expect(await raw.text()).toContain('beta text');
   });
 });

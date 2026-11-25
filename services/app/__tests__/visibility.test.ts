@@ -1,4 +1,3 @@
-import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * The visibility ACL — the thing that makes a 6-char id safe to be short.
  *
@@ -15,7 +14,7 @@ import { useAppHarness, request, useSessionUser, params } from '@/__tests__/harn
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 import { GET as exportRoute } from '@/app/a/[id]/export/route';
-import { GET as getArtifactRoute, PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
+import { GET as getArtifactRoute } from '@/app/api/artifacts/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as getSharingRoute, PUT as putSharingRoute } from '@/app/api/my/artifacts/[id]/sharing/route';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
@@ -88,21 +87,6 @@ describe('defaults and validation', () => {
     );
     expect(res.status).toBe(200);
     expect(((await res.json()) as { visibility: string }).visibility).toBe('unlisted');
-  });
-
-  it('PUT may flip visibility; omitting it preserves the current value', async () => {
-    const { ownedToken } = await fixtures();
-    const doc = await create(ownedToken, { title: 'o', html: '<h1>o</h1>' });
-    const flipped = await (await putArtifact(
-      await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: ownedToken, json: { html: '<h1>o2</h1>', visibility: 'public' } }),
-      params({ id: doc.id }),
-    )).json();
-    expect(flipped.visibility).toBe('public');
-    const kept = await (await putArtifact(
-      await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: ownedToken, json: { html: '<h1>o3</h1>' } }),
-      params({ id: doc.id }),
-    )).json();
-    expect(kept.visibility).toBe('public');
   });
 
   it('the wire shape carries visibility', async () => {
