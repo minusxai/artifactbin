@@ -377,13 +377,18 @@ describe('module graph', () => {
     });
   });
 
-  it('lists every deep path the downstream deployment imports as an entry or downstream path of its row', () => {
+  it('matches pinned downstream imports to runtime entries and explicitly test-only fixtures', () => {
     const pinned = fs.readFileSync(path.join(ROOT, 'services/app/__tests__/downstream-exports.test.ts'), 'utf8');
     const deep = [...new Set([...pinned.matchAll(/'@\/(lib\/[^/']+)\/([^']+)'/g)].map(([, module, rel]) => `${module} ${rel}`))];
     expect(deep.length).toBeGreaterThan(0);
+    // The downstream contract also pins the test harness's user factory. Only this fixture is test-only.
+    const fixtures = ['lib/accounts testing'];
+    for (const fixture of fixtures) expect(deep).toContain(fixture);
     for (const line of deep) {
       const [module, rel] = line.split(' ');
-      expect([...(DEEP_MODULES[module]?.entries ?? []), ...(DEEP_MODULES[module]?.downstream ?? [])], line).toContain(rel);
+      const row = DEEP_MODULES[module];
+      const allowed = fixtures.includes(line) ? row?.testOnly : [...(row?.entries ?? []), ...(row?.downstream ?? [])];
+      expect(allowed, line).toContain(rel);
     }
     // A downstream path is never stale: nothing in this tree need import it.
     const files = { 'services/app/lib/operations/index.ts': '', 'services/app/lib/operations/http.ts': '', 'services/app/lib/runner/a.ts': "import '@/lib/operations';\n" };
