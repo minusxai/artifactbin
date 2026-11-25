@@ -1,12 +1,10 @@
+import {ownerHandleFromLabel, ownerSiteAddress} from '@artifactbin/contracts/owner-host';
 import {isValidHandle} from '@/lib/accounts';
 import {getDb, PUBLIC_BASE_URL, USER_PAGES_HOST} from '@/lib/platform';
 export interface UserPagesOwner {kind:'user'|'group';id:string;handle:string;folderId?:string|null}
 export interface UserPagesSite {app:string;host:string|null}
 export function userPagesLabel(handle:string|null|undefined):string|null{return typeof handle==='string'&&isValidHandle(handle)?handle.replaceAll('_','-'):null;}
-export function handleFromLabel(label:string):string|null {
- const handle=label.replaceAll('-','_');
- return userPagesLabel(handle)===label?handle:null;
-}
+export {ownerHandleFromLabel as handleFromLabel};
 /** Includes apex and malformed/reserved child labels so boundaries can fail closed. */
 export function isUserPagesHost(host:string,base:string|null=USER_PAGES_HOST):boolean {
  if(!base)return false;
@@ -14,11 +12,8 @@ export function isUserPagesHost(host:string,base:string|null=USER_PAGES_HOST):bo
  return named===base||named.endsWith(`.${base}`);
 }
 export function handleFromUserPagesHost(host:string,base:string|null):string|null {
- if(!base)return null;
- const named=host.toLowerCase().replace(/:\d+$/,'').replace(/\.$/,'');
- const suffix=`.${base.toLowerCase().replace(/\.$/,'')}`;
- if(!named.endsWith(suffix))return null;
- return handleFromLabel(named.slice(0,-suffix.length));
+ const address=ownerSiteAddress(host,base);
+ return address?.label===''?address.handle:null;
 }
 export function userPagesOrigin(handle:string,site:UserPagesSite={app:PUBLIC_BASE_URL,host:USER_PAGES_HOST}):string|null {
  const label=userPagesLabel(handle);if(!label||!site.host)return null;

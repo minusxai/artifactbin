@@ -7,15 +7,17 @@
  */
 import { expect, expectTypeOf, it } from 'vitest';
 import {
-  SERVING_POOL, actorOf, actorReceiver, assemble, buildAssetRequest, buildAssetResponse, createEnv, envelope,
+  SERVING_POOL, actorReceiver, assemble, buildAssetRequest, buildAssetResponse, createEnv, envelope,
   eventsClient, fakeEvents, hashToken, httpClient, humanSessionClient, inProcess, isPublicAssetRequest, log, noopEvents,
   overHttp, parseAssetsOrigin, parseDatasetPolicy, publicAssetResponse, serve, serviceSecretForServer, signActor,
   verifyActor, withPoolErrors,
   type EventObject, type EventSubject, type FakeEvents,
 } from '@artifactbin/utils';
 
+import { BodyTooLargeError, readBody } from '@artifactbin/utils/body';
+
 it('exports the values the deployment imports', () => {
-  const values = { SERVING_POOL, actorOf, actorReceiver, assemble, buildAssetRequest, buildAssetResponse, createEnv, envelope, eventsClient, fakeEvents, hashToken, httpClient, humanSessionClient, inProcess, isPublicAssetRequest, log, noopEvents, overHttp, parseAssetsOrigin, parseDatasetPolicy, publicAssetResponse, serve, serviceSecretForServer, signActor, verifyActor, withPoolErrors };
+  const values = { BodyTooLargeError, readBody, SERVING_POOL, actorReceiver, assemble, buildAssetRequest, buildAssetResponse, createEnv, envelope, eventsClient, fakeEvents, hashToken, httpClient, humanSessionClient, inProcess, isPublicAssetRequest, log, noopEvents, overHttp, parseAssetsOrigin, parseDatasetPolicy, publicAssetResponse, serve, serviceSecretForServer, signActor, verifyActor, withPoolErrors };
   for (const [name, value] of Object.entries(values)) expect(value, name).toBeDefined();
 });
 

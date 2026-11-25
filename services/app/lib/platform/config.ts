@@ -4,6 +4,7 @@ import {isIP} from 'node:net';
 import { parseAssetsOrigin } from '@artifactbin/utils/assets-origin';
 import { parseOutboundIps } from '@artifactbin/utils/public-address';
 import { DEFAULT_UPLOAD_MAX_BYTES } from '@artifactbin/contracts/upload-limits';
+import { ownerHostConflicts, parseDnsHostname } from '@artifactbin/contracts/owner-host';
 import { IDENTITY_SCHEMA } from '@artifactbin/contracts/identity-service';
 import { isLocalDevelopmentHost, parseAliasOrigins } from '@artifactbin/contracts/server-identity';
 import { parseServiceAudiences, type ServiceAudience } from '@artifactbin/contracts/service-audiences';
@@ -281,12 +282,11 @@ export let OUTBOUND_IPS = parseOutboundIps(env('APP', 'OUTBOUND_IPS'));
  * this module without serving (the teaching compiler, scripts) does not need it. `npm run setup` writes `lvh.me`.
  */
 export function parsePagesHost(value: string | undefined): string | null {
-  const host = value?.trim().toLowerCase().replace(/\.$/, '') ?? '';
-  if (!host) return null;
-  if (!/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/.test(host)) {
+  try {
+    return parseDnsHostname(value);
+  } catch {
     throw new Error('APP__PAGES_HOST must be a bare hostname documents are served under (for example pages.example.com, or lvh.me in development), without a scheme, port, path or wildcard.');
   }
-  return host;
 }
 const PAGES_HOST = parsePagesHost(env('APP', 'PAGES_HOST'));
 /** This deployment's pages host; unset refuses the boot with the setting's name. */
@@ -326,15 +326,11 @@ export const ALLOW_PUBLIC_VISIBILITY = env('ARTIFACTS', 'ALLOW_PUBLIC') === '1' 
 /** Anonymous user/group publishing hosts. Unset is off; this never grants account authority. */
 export function parseUserPagesHost(value: string | undefined, app = PUBLIC_BASE_URL, pages: string | null = PAGES_HOST, aliases: readonly string[] = ALIAS_ORIGINS): string | null {
   let host: string | null;
-  try { host = parsePagesHost(value); } catch { throw new Error('APP__USER_PAGES_HOST must be a bare hostname without a scheme, port, path or credentials.'); }
+  try { host = parseDnsHostname(value); } catch { throw new Error('APP__USER_PAGES_HOST must be a bare hostname without a scheme, port, path or credentials.'); }
   if (!host) return null;
   if (isIP(host)) throw new Error('APP__USER_PAGES_HOST must be a DNS hostname.');
-  const own = [app, ...aliases, ...(ASSETS_ORIGIN ? [ASSETS_ORIGIN] : [])].map(origin => new URL(origin).hostname.toLowerCase());
-  const under = (name: string, base: string) => name === base || name.endsWith(`.${base}`);
-  // A pages host may be an ancestor (u.lvh.me under lvh.me), but a hex label
-  // at that depth would collide with an existing document origin.
-  const suffix = pages && host.endsWith(`.${pages}`) ? host.slice(0, -pages.length - 1) : null;
-  if (own.some(name => under(name, host)) || pages && (under(pages, host) || suffix !== null && /^[a-f0-9]+$/.test(suffix))) {
+  const own = [app, ...aliases, ...(ASSETS_ORIGIN ? [ASSETS_ORIGIN] : [])].map(origin => new URL(origin).hostname.toLowerCase().replace(/\.$/, ''));
+  if (ownerHostConflicts(host, own, pages)) {
     throw new Error('APP__USER_PAGES_HOST conflicts with an app, alias, assets or pages host.');
   }
   return host;

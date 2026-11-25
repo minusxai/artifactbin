@@ -152,6 +152,9 @@ describe('parsers', () => {
     expect(parseUserPagesHost(undefined)).toBeNull();
     expect(parseUserPagesHost('  ')).toBeNull();
     expect(parseUserPagesHost(' U.Example.net. ')).toBe('u.example.net');
+    expect(parseUserPagesHost('publish')).toBe('publish');
+    expect(() => parseUserPagesHost('127.0.0.1')).toThrow('must be a DNS hostname');
+    expect(() => parseUserPagesHost('u.example.net', 'https://app.u.example.net.', null, [])).toThrow('conflicts');
     for(const value of ['https://u.example.net','u.example.net:4100','user@u.example.net','u.example.net/path'])expect(()=>parseUserPagesHost(value)).toThrow('APP__USER_PAGES_HOST');
     for(const value of ['app.example.test','pages.example.test','abc.pages.example.test','example.test'])expect(()=>parseUserPagesHost(value,'https://app.example.test','pages.example.test',[])).toThrow('conflicts');
     expect(()=>parseUserPagesHost('alias.example.test','https://app.example.test','pages.example.test',['https://alias.example.test'])).toThrow('conflicts');

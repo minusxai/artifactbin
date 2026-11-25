@@ -1,7 +1,8 @@
 /** Personal publishing mounts. Absence on the main host preserves its historical account-wide home. */
 import {getDb, USER_PAGES_HOST} from '@/lib/platform';
-import {handleFromLabel, userPagesLabel, ownerForHandle, type UserPagesOwner} from './hosts';
+import {userPagesLabel, ownerForHandle, type UserPagesOwner} from './hosts';
 
+import {ownerSiteAddress} from '@artifactbin/contracts/owner-host';
 import {validSiteAlias} from '@artifactbin/contracts/site-alias';
 const ownedFolder = "user_id=$1 AND group_id IS NULL AND format='folder' AND deleted_at IS NULL";
 
@@ -53,16 +54,9 @@ export async function deleteSiteRoot(userId:string,label:string,expectedFolderId
 }
 
 export function siteAddress(host:string, base=USER_PAGES_HOST) {
-  if (!base) return null;
-  const hostname = host.toLowerCase().replace(/:\d+$/,'').replace(/\.$/,'');
-  const suffix = '.' + base.toLowerCase().replace(/\.$/,'');
-  if (hostname.length > 253 || !hostname.endsWith(suffix)) return null;
-  const child = hostname.slice(0,-suffix.length);
-  const split = child.indexOf('--');
-  const owner = split < 0 ? child : child.slice(0,split);
-  const handle = handleFromLabel(owner);
-  const label = split < 0 ? '' : child.slice(split+2);
-  return handle && (split < 0 || validSiteAlias(label,owner+suffix)) ? {handle,label} : null;
+  const address = ownerSiteAddress(host,base);
+  if (!address || !base) return null;
+  return !address.label || validSiteAlias(address.label,address.handle.replaceAll('_','-')+'.'+base.replace(/\.$/,'')) ? address : null;
 }
 
 export async function siteOwner(address:{handle:string;label:string}):Promise<UserPagesOwner|null> {

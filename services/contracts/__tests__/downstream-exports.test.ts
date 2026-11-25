@@ -10,9 +10,14 @@ import { expect, expectTypeOf, it } from 'vitest';
 // The root entry: the seam every service shares (the actor, the part and its upstream, the database, the forwarded
 // and service headers). Everything else is imported by topic.
 import { ACTOR_HEADER, ANONYMOUS, FORWARDED_HOST, FORWARDED_PROTO, HUMAN_SESSION_LIVE_PATH, SERVICE_AUTH_HEADER, type Actor, type Part, type Queryable, type Upstream } from '@artifactbin/contracts';
+import { ACTOR_HEADER as actorHeader, ANONYMOUS as anonymous, type Actor as TopicActor } from '@artifactbin/contracts/actor';
+import { FORWARDED_HOST as forwardedHost, FORWARDED_PROTO as forwardedProto, HUMAN_SESSION_LIVE_PATH as humanSessionLivePath, SERVICE_AUTH_HEADER as serviceAuthHeader } from '@artifactbin/contracts/routes';
+import type { Part as TopicPart, Upstream as TopicUpstream } from '@artifactbin/contracts/part';
+import type { Queryable as TopicQueryable } from '@artifactbin/contracts/db';
+import { idFromPagesLabel, isOwnerTitlePath, ownerDocumentDoor, ownerFolderId, ownerHandleFromLabel, ownerHostConflicts, ownerSiteAddress, ownerSqlArtifactId, parseDnsHostname } from '@artifactbin/contracts/owner-host';
 import { ARTIFACT_ID_PATTERN } from '@artifactbin/contracts/artifact-reference';
-import { COMMENT_CHANGES_MAX_WAIT_SECONDS, EVENT_FEED_MAX_WAIT_SECONDS } from '@artifactbin/contracts/event-feed';
-import { IDENTITY_CALL_PATH, IDENTITY_OWNED_TABLES, type TransactionalQueryable } from '@artifactbin/contracts/identity-module';
+import { EVENT_FEED_MAX_WAIT_SECONDS } from '@artifactbin/contracts/event-feed';
+import { IDENTITY_OWNED_TABLES, type TransactionalQueryable } from '@artifactbin/contracts/identity-module';
 import { IDENTITY_INTROSPECT_PATH } from '@artifactbin/contracts/identity-service';
 import { eventName, type EventEnvelope, type EventPayload, type EventVerb, type EventsService, type ObjectKind } from '@artifactbin/contracts/events';
 import { isQueryFailure, type MutationInput, type MutationOutcome, type SqlService } from '@artifactbin/contracts/sql';
@@ -22,19 +27,29 @@ import type { DatasetPolicy } from '@artifactbin/contracts/dataset-policy';
 import type { TokenReader, TokenRecord } from '@artifactbin/contracts/identity';
 // The URL map the deployment's proxy (and any co-hosted router) reads instead of keeping its own path lists:
 // the classifier, the host allowlists, the e-mail link builder its mail extension writes.
-import { URL_SPACE, URL_SPACE_PATH, classifyPath, documentHostServes, ownerHostServes, isAppBuildPath, emailLinkPath, personLinkPath, isScreenPath, type PathKind } from '@artifactbin/contracts/url-space';
+import { URL_SPACE_PATH, classifyPath, ownerHostServes, emailLinkPath, personLinkPath } from '@artifactbin/contracts/url-space';
 
 it('exports the values the deployment imports', () => {
-  const values = { ACTOR_HEADER, ANONYMOUS, ARTIFACT_ID_PATTERN, COMMENT_CHANGES_MAX_WAIT_SECONDS, EVENT_FEED_MAX_WAIT_SECONDS, FORWARDED_HOST, FORWARDED_PROTO, HUMAN_SESSION_LIVE_PATH, IDENTITY_CALL_PATH, IDENTITY_INTROSPECT_PATH, SERVICE_AUTH_HEADER, eventName, isQueryFailure, BUILD_ASSET_PATH, IDENTITY_OWNED_TABLES, isTestDomainEmail };
+  const values = { ACTOR_HEADER, ANONYMOUS, ARTIFACT_ID_PATTERN, EVENT_FEED_MAX_WAIT_SECONDS, FORWARDED_HOST, FORWARDED_PROTO, HUMAN_SESSION_LIVE_PATH, IDENTITY_INTROSPECT_PATH, SERVICE_AUTH_HEADER, eventName, isQueryFailure, BUILD_ASSET_PATH, IDENTITY_OWNED_TABLES, isTestDomainEmail };
   for (const [name, value] of Object.entries(values)) expect(value, name).toBeDefined();
 });
 
+it('exports the shared seam by topic as well as from the root', () => {
+  expect([actorHeader, anonymous, forwardedHost, forwardedProto, humanSessionLivePath, serviceAuthHeader])
+    .toEqual([ACTOR_HEADER, ANONYMOUS, FORWARDED_HOST, FORWARDED_PROTO, HUMAN_SESSION_LIVE_PATH, SERVICE_AUTH_HEADER]);
+  expectTypeOf<[TopicActor, TopicPart, TopicQueryable, TopicUpstream]>().toEqualTypeOf<[Actor, Part, Queryable, Upstream]>();
+});
+
+it('exports the owner hostname and path classifiers by topic', () => {
+  for (const [name, value] of Object.entries({ idFromPagesLabel, isOwnerTitlePath, ownerDocumentDoor, ownerFolderId, ownerHandleFromLabel, ownerHostConflicts, ownerSiteAddress, ownerSqlArtifactId, parseDnsHostname }))
+    expect(value, name).toBeTypeOf('function');
+});
+
 it('exports the URL map the deployment classifies paths with', () => {
-  for (const [name, value] of Object.entries({ URL_SPACE, URL_SPACE_PATH, classifyPath, documentHostServes, ownerHostServes, isAppBuildPath, emailLinkPath, personLinkPath, isScreenPath })) expect(value, name).toBeDefined();
+  for (const [name, value] of Object.entries({ URL_SPACE_PATH, classifyPath, ownerHostServes, emailLinkPath, personLinkPath })) expect(value, name).toBeDefined();
   expect(URL_SPACE_PATH).toBe('/af/url-space.json');
   expect(emailLinkPath('d1')).toBe('/api/email/d1');
   expect(classifyPath('/email/d1')).toBe('screen');
-  expectTypeOf<PathKind>().not.toBeNever();
 });
 
 it('exports the types the deployment imports', () => {
