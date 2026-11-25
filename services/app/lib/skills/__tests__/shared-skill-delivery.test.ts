@@ -13,12 +13,10 @@ describe('one root for installed and direct HTTP agents',()=>{
   const http=llmsText(origin);
   for(const operation of ['POST /api/artifacts','PUT /api/artifacts/ID'])expect(http).toContain(operation);
   for(const field of ['expectedVersion','expectedState','Idempotency-Key','@afbin/apollo'])expect(http).toContain(field);
-  expect(http).not.toContain('afbin pull');expect(http).not.toContain('afbin push');
  });
- it('names no CLI install',()=>{
+ it('keeps retired CLI commands and setup out of the served root',()=>{
   const root=llmsText('https://skills-contract.example');
-  expect(root).not.toContain('@afbin/cli');
-  expect(root).not.toContain('If `afbin` is missing: run');
+  expect(root.match(/@afbin\/cli|If `afbin` is missing: run|\bafbin (?:push|pull|help|auth|setup)\b/g)).toBeNull();
  });
  it('serves precisely the root body with online topic links, without appending a second manual',()=>{
   const origin='https://skills-contract.example';

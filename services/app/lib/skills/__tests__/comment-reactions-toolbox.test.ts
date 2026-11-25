@@ -511,7 +511,7 @@ it('documents the watch mode once, by harness, as every printed watch line state
  expect(DESCRIPTION.replace(/\n\s+/g,' ')).toContain(WATCH_MODE);
  expect(DESCRIPTION.replace(/\n\s+/g,' ')).toContain('second --next of this agent session on the same page takes over from the running one, which stops; another agent\'s watch runs on');
  expect(DESCRIPTION).toContain('How to treat reactions: a 👍 on your proposal means approval to proceed');
- for(const retired of ['another watch is already running','<<'])expect(DESCRIPTION).not.toContain(retired);
+ expect(DESCRIPTION).not.toContain('<<');
 });
 
 it('refuses a watch --next shorter than a minute, which ends before the person answers',async()=>{

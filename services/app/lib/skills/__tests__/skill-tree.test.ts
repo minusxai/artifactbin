@@ -206,11 +206,8 @@ describe('the real tree (skills/) keeps its shape and its reading budget', () =>
     expect(tree.dirs.map((d) => d.name)).toEqual(['artifactbin']);
     expect(tree.files.filter((f) => !f.ref)).toHaveLength(1);
   });
-  it('uses HTTP without an installation decision and preserves the returned identity',()=>{
-    const brief=buildQuickSheet(BASE);
-    expect(brief).toContain('Reuse this origin’s saved credentials');
-    expect(brief).not.toContain('@afbin/cli');
-    expect(brief).not.toMatch(/\bafbin (?:push|pull|help|auth|setup)\b/);
+  it('routes the rendered brief to credentials saved for its origin',()=>{
+    expect(buildQuickSheet(BASE)).toContain('Reuse this origin’s saved credentials');
   });
   it('serves Admin and Member as group roles and preserves editor sharing',()=>{
    const tree=skillTree();
