@@ -2,7 +2,7 @@ import { assertWriteCommit, datasetWriteAccess, tableMutationPolicy, type Datase
 import { artifactState, completeMutationReceipt, type MutationReceipt, commitDatasetWrite, type ArtifactRow, mutationInvocation } from '@/lib/artifacts';
 import { artifactQuery } from '@/lib/artifacts/table';
 import { LIVE_ARTIFACT_SQL } from '@/lib/artifact-access';
-import {validateUserWrites, DatasetError, throttlePublicMutation, catalogOf, importedTables, loadDatasetRows, storeDatasetRows} from '@/lib/datasets';
+import {validateUserWrites, DatasetError, throttlePublicMutation, catalogOf, loadDatasetRows, storeDatasetRows} from '@/lib/datasets';
 import { recheckMutation } from './dataset-policy';
 import {SIGN_IN_REQUIRED} from '@artifactbin/contracts/sign-in-required';
 import {analyzeSql} from '@artifactbin/sql/core';
@@ -92,34 +92,28 @@ export interface MutationStep { affected: number; written: Scalar[]; before: Rec
 export const isMutationRefused = (r: MutationApplied | MutationRefused): r is MutationRefused => 'reason' in r;
 
 /**
- * Apply one DML statement as its actual actor. Recheck dataset edit access
+ * Apply a batch of DML statements to one table as their actual actor. Recheck dataset edit access
  * on every retry and in the final UPDATE itself, so revoking a share while
  * SQL is executing prevents that write from landing.
  *
- * `guard.target` names the table as the statement names it — a document's
- * `<Import>` schema and the table (`bookings.rows`), which the compiler
- * established; absent (the owner's direct write door), SQLite's own analysis
- * of the statement over the dataset's stored tables, under their catalog
- * schemas, says which one it writes. `params` are bound by SQL name and never
+ * The page door supplies the exact catalog target. The direct door uses SQLite's
+ * analysis of its statement over the dataset's stored tables to find the target.
+ * Statement parameters are bound by SQL name and never
  * interpolated, under the declared types the caller passes — the typing the
  * publish-time analysis used, so the two cannot plan the statement differently.
  */
+type Statement = {sql:string;params:Record<string,Scalar>};
+
 export async function mutateDataset(
   dataset: ArtifactRow,
   actor: AccessActor,
-  sql: string,
-  params: Record<string, Scalar> = {},
+  statements: readonly [Statement, ...Statement[]],
   guard: Pick<MutationInput, 'expectedAffected' | 'paramTypes' | 'reads'> & {target?:{schema:string;table:string};receipt?:MutationReceipt;expectedState?:string;
     /** The policy revision the operation was prepared under: the observed state does not cover the policy (lib/artifacts state). */
     expectedPolicyRevision?:number;
-    /** Native dataset API: all statements and identity metadata commit in the existing pointer CAS. */
-    statements?:readonly {sql:string;params:Record<string,Scalar>}[];
     /** Row identities: fixed, or derived from each attempt's head (a lost CAS re-reads it) and the table's stored rows. */
     rowIdentity?:{column:string;ids:readonly string[]|((current:ArtifactRow,objectKey:string,count:number)=>readonly string[]);tableId:string};
-    nativePolicy?:boolean;
-    /** The dataset's own GraphQL endpoint: a declared native write whose role is the dataset's sharing alone (no page). */
-    directPolicy?:boolean;
-    /** A page's generated dataset API: a declared native write through the page (its audience rule), naming the page as `X-Hasura-Page-Id`. */
+    /** A page's SQL or cell write supplies its page id to the policy. */
     pagePolicy?:string;
     /** Re-runs after a lost CAS (default WRITE_CAS_RETRIES). */
     casRetries?:number;
@@ -143,14 +137,14 @@ export async function mutateDataset(
     commitEffect?:(tx:Queryable,result:MutationApplied)=>Promise<void>;
   } = {},
 ): Promise<MutationApplied | MutationRefused> {
-  if(Object.hasOwn(params,paramSqlName('_me.id'))&&!actor.userId)return {reason:'policy_denied',detail:'$_me.id requires a logged-in user',code:SIGN_IN_REQUIRED};
+  const [first] = statements;
+  if(Object.hasOwn(first.params,paramSqlName('_me.id'))&&!actor.userId)return {reason:'policy_denied',detail:'$_me.id requires a logged-in user',code:SIGN_IN_REQUIRED};
   const db = await getDb();
   // One write decision (lib/dataset-permissions) for every door: the role and the v3 rules. Asked before each
   // attempt and again inside the commit transaction.
-  const door=(guard.pagePolicy?{pageId:guard.pagePolicy}:undefined)??guard.nativePolicy??false;
-  const access:DatasetWriteOptions={throughPage:!!(guard.nativePolicy||guard.pagePolicy)&&!guard.directPolicy,...(guard.pagePolicy?{pageId:guard.pagePolicy}:{})};
+  const access:DatasetWriteOptions=guard.pagePolicy?{throughPage:true,pageId:guard.pagePolicy}:{};
   const invocation=mutationInvocation({dataset,actor,db,recheckAccess:async()=>{
-    try{await recheckMutation(dataset,actor,door);}catch{throw new DatasetError('Mutation permission changed',403);}
+    try{await recheckMutation(dataset,actor,access);}catch{throw new DatasetError('Mutation permission changed',403);}
   }});
   const admitted=await datasetWriteAccess(dataset,actor,access);
   // Every write a rule admits (not the owner's or an editor's) is rate-limited per dataset, signed-out writes included.
@@ -178,11 +172,8 @@ export async function mutateDataset(
     let schema:string;
     try{
       if(!catalog||catalog.kind!=='stored')throw new Error('only stored datasets are writable');
-      const target=guard.target??await writtenTable(catalog,sql);
-      // Native IDs select an exact catalog table, including non-default schemas.
-      // Legacy document imports still resolve through their default-schema aliases.
-      const candidates=guard.rowIdentity?catalog.tables.filter(t=>t.schema===target.schema):guard.target?importedTables(catalog):catalog.tables.filter(t=>t.schema===target.schema);
-      const table=candidates.find(t=>t.name===target.table);
+      const target=guard.target??await writtenTable(catalog,first.sql);
+      const table=catalog.tables.find(t=>t.schema===target.schema&&t.name===target.table);
       if(!table||table.sql!==undefined||!table.objectKey)throw new Error(`${target.schema}.${target.table} is not a stored table of this dataset`);
       selected=table;schema=target.schema;
     }catch(error){return {reason:'invalid_sql',detail:`Stored mutation: ${error instanceof Error?error.message:'invalid target'}`};}
@@ -204,8 +195,7 @@ export async function mutateDataset(
       // Identity allocation is platform-owned; users cannot select this column in their schema.
       // A rule's `_id` reads the identity column (utils compilePolicyPredicate `rowId`).
       if(identity&&policy)policy={...policy,rowId:identity.column,table:{...policy.table,insert_permissions:policy.table.insert_permissions?.map(entry=>({...entry,permission:{...entry.permission,...(Array.isArray(entry.permission.columns)?{columns:[...entry.permission.columns,identity.column]}:{})}}))}};
-      const statements=guard.statements??[{sql,params}];
-      if(!statements.length||statements.length>100)throw new Error('Invalid dataset mutation batch');
+      if(statements.length>100)throw new Error('Invalid dataset mutation batch');
       let currentRows=rows,affected=0;
       const userWrites:NonNullable<Exclude<MutationOutcome,{error:string}>['userWrites']>=[];
       out={rows,columns,affected:0};
@@ -235,8 +225,10 @@ export async function mutateDataset(
       out={...out,columns:out.columns.filter(c=>c.name!==identity.column),rows:out.rows.map(row=>Object.fromEntries(Object.entries(row).filter(([key])=>key!==identity.column)))};
     }
     const located = await storeDatasetRows(out.rows);
+    // A written dataset is no longer "the first N rows of a bigger source".
+    const {totalRows:_totalRows,truncated:_truncated,...previousMeta} = current.meta;
     const meta = {
-      ...(current.meta as Record<string, unknown>),
+      ...previousMeta,
       ...(identity?{graphqlRowIds:{...((current.meta as {graphqlRowIds?:Record<string,unknown>}).graphqlRowIds??{}),[identity.tableId]:{objectKey:located.objectKey,ids:committedIds}}}:{}),
       // The engine reports the table's real shape back; a write may not change
       // it (the columns are the dataset's contract), but recording what came
@@ -245,16 +237,11 @@ export async function mutateDataset(
       rowCount: out.rows.length,
       objectKey: located.objectKey,
       ...(catalog?{catalog:{...catalog,tables:catalog.tables.map(t=>t===selected?{...t,objectKey:located.objectKey,columns:out.columns.length?out.columns:columns}:t)}}:{}),
-      // A written dataset is no longer "the first N rows of a bigger source".
-      totalRows: undefined,
-      truncated: undefined,
     };
     if(selected.schema!=='public'||selected.name!=='rows'){
       const old=current.meta as typeof meta;
       meta.columns=old.columns;meta.objectKey=old.objectKey;meta.rowCount=old.rowCount;
     }
-    delete meta.totalRows;
-    delete meta.truncated;
 
     // ONE guarded statement (lib/artifacts commitDatasetWrite): swap the pointer if and only if the rows
     // we read are still the rows on disk, archive the previous state (coalesced, like the edit protocol),
@@ -270,7 +257,7 @@ export async function mutateDataset(
       if(!locked||prepareMoved(locked))return undefined;
      }
      const committed=await commitDatasetWrite(tx,{current,actor,meta,
-      policyRole:policy?.role??null,policyDeclared:(!!guard.nativePolicy||!!guard.directPolicy||!!guard.pagePolicy)&&!!policy,granted:true});
+      policyRole:policy?.role??null,policyDeclared:!!guard.pagePolicy&&!!policy,granted:true});
      if(committed){
       await guard.commitEffect?.(tx,{row:committed,affected:out.affected,rowCount:out.rows.length,...(trace?{steps}:{})});
       if(guard.receipt){

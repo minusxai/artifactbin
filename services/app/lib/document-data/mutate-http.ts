@@ -56,7 +56,7 @@ export async function respondToMutate(
   // The built-ins read as they do in a document: `$_me.id` is the caller, `$_now` the moment, `$_tz` UTC.
   const { sql, fields } = rewriteBuiltinFields(body.sql);
   const builtins = bindParams([...fields.values(), '_now', '_tz'], platformValues({ userId: actor.userId ?? null, now: new Date().toISOString(), tz: 'UTC' }));
-  const result = await mutateDataset(dataset, actor, sql, { ...values, ...builtins }, { receipt, expectedState: expected?.expectedState, ...(policyRevision!==undefined?{expectedPolicyRevision:policyRevision as number}:{}), paramTypes: bindTypes([...fields.values(), '_now', '_tz'], {}) });
+  const result = await mutateDataset(dataset, actor, [{sql,params:{...values,...builtins}}], { receipt, expectedState: expected?.expectedState, ...(policyRevision!==undefined?{expectedPolicyRevision:policyRevision as number}:{}), paramTypes: bindTypes([...fields.values(), '_now', '_tz'], {}) });
   if (isMutationRefused(result)) {
     if(result.reason==='row_changed')return reply({error:'row_changed',details:[result.detail]},409);
     if (result.reason === 'dataset_read_only' || result.reason === 'policy_denied') return reply({error:result.reason,details:[result.detail]},403);

@@ -81,11 +81,10 @@ export type CellWriteOutcome = { written: ArtifactRow } | { refused: 'row_change
 export async function writeDatasetCells(actor: AccessActor, head: ArtifactRow, pageId: string, table: Pick<DatasetCell, 'table' | 'tableId'>, writes: readonly { rowId: string; source: string; value: string }[], commitEffect: (tx: Queryable, written: ArtifactRow) => Promise<void>): Promise<CellWriteOutcome> {
   const target = `${quote(table.table.schema)}.${quote(table.table.name)}`;
   const statements = writes.map((write) => ({ sql: `UPDATE ${target} SET ${quote(write.source)} = $v WHERE ${quote(ID_COLUMN)} = $pk`, params: { v: write.value, pk: write.rowId } }));
-  const [first] = statements;
+  const [first, ...rest] = statements;
   if (!first) return { refused: 'failed', detail: 'nothing to write' };
-  const result = await mutateDataset(head, actor, first.sql, first.params, {
+  const result = await mutateDataset(head, actor, [first, ...rest], {
     target: { schema: table.table.schema, table: table.table.name },
-    statements,
     pagePolicy: pageId,
     expectedState: artifactState(head),
     casRetries: 0,

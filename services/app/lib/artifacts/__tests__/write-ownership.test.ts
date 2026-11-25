@@ -32,12 +32,12 @@ describe('a dataset write', () => {
   it('bumps the head, stamps the actor, archives the previous state once per window and notifies its channel', async () => {
     const { row, actor, owner } = await dataset();
     const channel = await heard(row.id);
-    const first = await mutateDataset(row, actor, 'insert into rows (n) values (2)');
+    const first = await mutateDataset(row, actor, [{sql:'insert into rows (n) values (2)',params:{}}]);
     if (isMutationRefused(first)) throw new Error(first.detail);
     expect(first.row).toMatchObject({ version: row.version + 1, actor_user_id: owner.userId, actor_token_id: owner.id });
     expect(first.row.edit_id).not.toBe(row.edit_id);
     expect(first).toMatchObject({ affected: 1, rowCount: 2 });
-    const second = await mutateDataset(first.row, actor, 'insert into rows (n) values (3)');
+    const second = await mutateDataset(first.row, actor, [{sql:'insert into rows (n) values (3)',params:{}}]);
     if (isMutationRefused(second)) throw new Error(second.detail);
     expect(second.row.version).toBe(row.version + 2);
     // Coalesced: the second write inside the snapshot window archives nothing new.
@@ -50,7 +50,7 @@ describe('a dataset write', () => {
   it('the commit statement itself refuses a dataset made read-only after the caller read it', async () => {
     const { row, actor } = await dataset();
     await setArtifact((await harness.db()), row.id, { access: 'read' });
-    const refused = await mutateDataset(row, actor, 'insert into rows (n) values (2)');
+    const refused = await mutateDataset(row, actor, [{sql:'insert into rows (n) values (2)',params:{}}]);
     expect(isMutationRefused(refused) && refused.reason).toBe('dataset_read_only');
     expect((await getArtifactById(row.id))!.version).toBe(row.version);
   });
