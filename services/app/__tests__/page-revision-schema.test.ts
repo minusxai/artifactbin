@@ -4,7 +4,7 @@
  * dataset's head or a link the page does not pin, never opens a row, holds its answer to SERVICE_PAYLOAD_LIMIT, and
  * answers 404 once the page, a dataset or the group no longer holds.
  */
-import {expect,it,vi} from 'vitest';
+import {expect,it,onTestFinished,vi} from 'vitest';
 import {storePolicy,trashRow} from '@/__tests__/artifact-fixtures';
 import {setArtifact} from '@/__tests__/rows';
 import {createAppHost} from '@/server/host';
@@ -20,7 +20,8 @@ it('describes only the pinned revision of pinned links, opens no rows, holds the
  const owner=await mintAccountToken('mxmx_test_schema_owner'),member=await mintAccountToken('mxmx_test_schema_member');
  const group=await createGroup(owner.userId!,{handle:'schema_door',name:'Schema door'});
  await admitGroupMember(owner.userId!,group.id,member.userId!,'member');
- const host=await createAppHost(),db=await getDb();
+ const host=await createAppHost({ownsDatabase:false}),db=await getDb();
+ onTestFinished(host.close);
  const as=(who:typeof owner)=>({credential:'bearer' as const,userId:who.userId!,tokenId:who.id});
  const call=(who:typeof owner,path:string,method='GET',body?:unknown)=>host.request(new Request('http://localhost'+path,{method,...(body===undefined?{}:{body:JSON.stringify(body),headers:{'content-type':'application/json'}})}),as(who));
  const create=async(body:Record<string,unknown>)=>{const r=await call(owner,'/api/artifacts','POST',{visibility:'private',destination:{type:'group',id:group.id},...body});const b=await r.json();expect(r.status,JSON.stringify(b)).toBe(201);return b as {id:string};};

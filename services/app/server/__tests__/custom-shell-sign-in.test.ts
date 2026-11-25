@@ -22,14 +22,14 @@ const ORIGIN='http://localhost:3000',DOMAIN='shell-sign-in.test',CODE='c'.repeat
 const SHELL='<!doctype html><html><head><script nonce="__CSP_NONCE__">window.signIn=1</script></head><body data-shell></body></html>';
 const dir=await tempDir('shell-sign-in-',afterAll);
 let application:Awaited<ReturnType<typeof createAuthComposedHost>>;
-// One composed host for the file: closing it closes the harness database.
+// One composed host for the file, drained before the test harness recycles its database.
 beforeAll(async()=>{
  const file=join(dir,'shell.html');await writeFile(file,SHELL);
  overrideConfig({},{APP__DEPLOYMENT_MODE:'public',APP__SHELL_FILE:file});
  application=await createAuthComposedHost({APP__PUBLIC_BASE_URL:ORIGIN,AUTH__SECRET:AUTH_SECRET,TEST_DOMAIN:DOMAIN,TEST_DOMAIN_OTP:CODE,
   EMAIL__DEV_OUTBOX_PATH:join(dir,'outbox.jsonl')});
 });
-afterAll(async()=>{await application?.close().catch(()=>{});});
+afterAll(async()=>{await application?.close();});
 const get=(path:string,cookie='')=>application.fetch(request(path,{headers:{accept:'text/html'},...(cookie?{cookie}:{})}));
 const post=(path:string,body:unknown,headers:Record<string,string>={})=>application.fetch(request(path,{method:'POST',
  headers:{origin:ORIGIN,...headers},json:body}));

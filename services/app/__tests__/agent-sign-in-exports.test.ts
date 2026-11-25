@@ -62,6 +62,7 @@ afterEach(async()=>{await resetExportRenderer();setServices({});});
 
 async function composed(){
  const application=await createAuthComposedHost({APP__PUBLIC_BASE_URL:origin,AUTH__SECRET:AUTH_SECRET,INTERNAL__SERVICE_SECRET:SECRET,IDENTITY__SERVICE_AUDIENCES:AUDIENCES,EMAIL__DEV_OUTBOX_PATH:join(directory,'outbox.jsonl')});
+ onTestFinished(application.close);
  const fetch=(input:Request)=>application.fetch(input);
  const post=(path:string,body:unknown,headers:Record<string,string>={})=>fetch(new Request(origin+path,{method:'POST',headers:{origin,'content-type':'application/json',...headers},body:JSON.stringify(body)}));
  const call=async(method:string,path:string,token:string,body?:unknown)=>{

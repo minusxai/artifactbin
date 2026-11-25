@@ -17,6 +17,8 @@ export interface AppHostOptions extends AppServerOptions {
  documentEditorPolicy?:DocumentEditorPolicy;
  mutationInvocation?:MutationInvocationFactory;
  shutdown?:()=>Promise<void>;
+ /** False when the caller owns the shared database lifetime. Host close still drains its workers. */
+ ownsDatabase?:boolean;
  initialize?:(db:Db)=>Promise<void>;
  identity?:(upstream:Upstream)=>{fetch:(request:Request)=>Promise<Response>};
  /**
@@ -51,6 +53,6 @@ export async function createAppHost(options:AppHostOptions={}):Promise<AppHost>{
  let closing:Promise<void>|undefined;
  return {fetch,request:(incoming,actor)=>request(incoming,actor),close:()=>closing??=(async()=>{
   try{await stopBackgroundTasks();await services().events.close?.();await options.shutdown?.();}
-  finally{await db.close();}
+  finally{if(options.ownsDatabase!==false)await db.close();}
  })()};
 }

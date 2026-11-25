@@ -25,8 +25,14 @@ const ROWS = [{ choice: 'ramen', who: 'seed' }];
 
 const previous = services().sql;
 const pool = createSql({}, { workers: 1, extensions: FIXTURE });
-beforeAll(async () => { await createAppHost({ sqlExtensions: FIXTURE, services: { sql: pool } }); });
-afterAll(async () => { setServices({ sql: previous }); await useSqlExtensions(undefined); await pool.close(); });
+let host: Awaited<ReturnType<typeof createAppHost>> | undefined;
+beforeAll(async () => {
+  host = await createAppHost({ ownsDatabase: false, sqlExtensions: FIXTURE, services: { sql: pool } });
+});
+afterAll(async () => {
+  try { await host?.close(); }
+  finally { setServices({ sql: previous }); await useSqlExtensions(undefined); await pool.close(); }
+});
 
 const create = (token: string, body: Record<string, unknown>) => createArtifactRoute(request('/api/artifacts', { method: 'POST', token, json: body }));
 async function dataset() {
