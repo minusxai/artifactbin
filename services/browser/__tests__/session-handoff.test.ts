@@ -1,6 +1,8 @@
 import {afterEach, expect, it} from 'vitest';
 import {request} from 'node:http';
-import {mkdtemp, rm, stat, chmod} from 'node:fs/promises';
+import {spawn} from 'node:child_process';
+import {once} from 'node:events';
+import {mkdtemp, rm, stat, chmod, writeFile, readFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {openSessionHandoff} from '../src/session-handoff';
@@ -35,4 +37,22 @@ it('the host can hold an idle registry and release it through its private unix s
  }finally{await close();await sessions.close();}
  await chmod(dir,0o755);
  await expect(openSessionHandoff(path,sessions)).rejects.toThrow('private directory');
+});
+
+it('reopens a socket left by a crashed process while preserving live sockets and ordinary files',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'session-restart-'));dirs.push(dir);
+ const path=join(dir,'control.sock');
+ const crashed=spawn(process.execPath,['-e',"require('node:net').createServer().listen(process.argv[1],()=>process.send('ready'))",path],{stdio:['ignore','ignore','inherit','ipc']});
+ try { await once(crashed,'message'); } finally {
+  const exit=once(crashed,'exit');crashed.kill('SIGKILL');await exit;
+ }
+ const registry={holdIfIdle:()=>true,resume(){}};
+ const close=await openSessionHandoff(path,registry);
+ try {
+  await expect(openSessionHandoff(path,registry)).rejects.toMatchObject({code:'EADDRINUSE'});
+  expect(await call(path,'/hold')).toBe(204);
+ }finally{await close();}
+ await writeFile(path,'owned file');
+ await expect(openSessionHandoff(path,registry)).rejects.toMatchObject({code:'EADDRINUSE'});
+ expect(await readFile(path,'utf8')).toBe('owned file');
 });
