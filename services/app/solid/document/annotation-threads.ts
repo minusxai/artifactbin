@@ -79,16 +79,6 @@ export function createThreadStore(options: {
   const [busy, setBusy] = createSignal(false);
 
   createEffect(on(annotations, (list) => setInspectedResolvedId((current) => list.some((row) => row.id === current) ? null : current)));
-  const hasRemoteWork = createMemo(() => annotations().some((row) => row.remote_work?.length));
-  createEffect(() => {
-    void railOpen();
-    if (!hasRemoteWork() || busy()) return;
-    const abort = new AbortController();
-    const timer = setInterval(() => {
-      readAnnotations(abort.signal);
-    }, 15000);
-    onCleanup(() => { clearInterval(timer); abort.abort(); });
-  });
   // Folds are per artifact: a different document's rail starts from its own.
   createEffect(on(options.artifactId, (id) => setFolds(readFolds(id)), { defer: true }));
 

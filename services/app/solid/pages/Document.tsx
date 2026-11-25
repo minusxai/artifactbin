@@ -3,11 +3,10 @@ import {createReaderPresence} from '../document/create-reader-presence';
 import { replaceDocument } from '../lib/document-navigation';
 /* @jsxImportSource solid-js */
 import { artifactAppPath } from '@/lib/document-serving/artifact-pwa';
-import { createEffect, createSignal, getOwner, lazy, on, onCleanup, onMount, runWithOwner, Show, Suspense, type JSX } from 'solid-js';
+import { createSignal, getOwner, lazy, onCleanup, onMount, runWithOwner, Show, Suspense, type JSX } from 'solid-js';
 import { APP_BAR_H, REGION_TOOLBAR_H, RIGHT_RAIL_W } from '@/lib/html-reader/edit-bar';
 import { useLocation, useNavigate } from '@solidjs/router';
 import { chooseTheme, storedTheme } from '@/lib/html-reader/reader-mode';
-import { STORY_READER_MODE_MESSAGE } from '@/lib/html-reader/contract';
 import type { DocumentRuntimeRef } from '@/lib/html-reader/document-endpoint';
 import type { FramedRuntime } from '@/lib/document-serving';
 import {createReaderHttpBackend} from '@/lib/artifact-backend/reader-http';
@@ -221,7 +220,7 @@ export function DocumentPage(): JSX.Element {
     if (page.deferredChrome) void import('../document/deferred-document-chrome').then(({ bindDocumentChrome }) => {
       if (!unmounted) runWithOwner(owner, () => bindDocumentChrome(id, setChrome));
     }).catch(() => { /* The document and its discussion remain usable without social details. */ });
-    void import('../document/create-framed-story').then(({ bindFrameFragment, answerFrameNavigation, createFramedStory, createReaderGroups, refreshReaderAccess, takeIntent, uploadSessionOf }) => { if (!unmounted) runWithOwner(owner, () => {
+    void import('../document/create-framed-story').then(({ bindReaderFrame, answerFrameNavigation, createFramedStory, createReaderGroups, refreshReaderAccess, takeIntent, uploadSessionOf }) => { if (!unmounted) runWithOwner(owner, () => {
       refreshAdmission = refreshReaderAccess(window, id, page, () => setMembershipRevision(n => n + 1), reload);
       const groups = createReaderGroups(id, framed.frame, () => session()?.user?.id);
       setReaderGroups(groups);
@@ -245,19 +244,7 @@ export function DocumentPage(): JSX.Element {
       });
       // The document's links to app paths take this page (another document by a full load, an app page by the router).
       const stopNavigation = answerFrameNavigation({ win: window, frame: framed.frame, frameOrigin: framed.origin, navigate: (path) => navigate(path) });
-      const framedStory = story;
-      // The region toolbar takes a strip over the frame's top edge while it shows: the document reserves it.
-      createEffect(on(() => !!framedStory.regionUi.toolbar(), (shown) => framedStory.setTopInset(shown ? REGION_TOOLBAR_H : 0)));
-      bindFrameFragment(framed, nonce);
-      // Null until the bridge is made (the tree arrives), then the bridge's stand-in for the document's controller.
-      runtimeRef.current = framedStory.controller();
-      createEffect(on(framedStory.controller, (next) => { runtimeRef.current = next; }, { defer: true }));
-      // The frame's controller signs its events once it runs: the nonce arrives then (and again after the frame loads
-      // anew). It is told the mode then, and whenever that changes (the reader's pick).
-      createEffect(on(() => story?.nonce() ?? null, setNonce));
-      createEffect(on([nonce, pick], ([signed, mode]) => {
-        if (signed && mode) runtimeRef.current?.send({ type: STORY_READER_MODE_MESSAGE, mode });
-      }));
+      bindReaderFrame(story, framed, runtimeRef, pick, setNonce);
       setReady(true);
       const carried = takeIntent();
       if (carried) act(carried);

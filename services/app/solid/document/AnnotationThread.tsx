@@ -18,13 +18,12 @@ import Trash2 from 'lucide-solid/icons/trash-2';
 import type { AnnotationWire } from '@/lib/annotations';
 import type { AnnotationCommentWire } from '@artifactbin/contracts/annotation-comment';
 import { BackendRequestError, type ArtifactBackend } from '@/lib/artifact-backend';
-import { hasReplyText, remoteWorkLabel, remoteWorkActive } from '@/lib/annotations/remote-reply';
-import { agentNameColor } from '../lib/agent-identity';
+import { hasReplyText } from '@/lib/annotations/remote-reply';
 import { Button } from '../ui/Button';
 import { Tooltip } from '../ui/Tooltip';
 import { useOptionalInbox } from '../lib/notifications';
 import { useSession } from '../lib/session';
-import { AuthorIdentity, CommentEdited, CommentTimestamp, firstLine, latestWork, previewText, ThreadContinuation } from './AnnotationPreview';
+import { AuthorIdentity, CommentEdited, CommentTimestamp, firstLine, previewText, ThreadContinuation } from './AnnotationPreview';
 import { AnnotationReplyBox } from './AnnotationReplyBox';
 import { CommentFoldingBody } from './CommentFoldingBody';
 import { CommentSubmitHint } from './CommentMarkdown';
@@ -139,17 +138,6 @@ function createCommentEdit(key: string, thread: { save: (commentId: string, body
   };
 }
 
-/** What each agent working on the thread is doing now: its latest report per session. */
-function AgentWorkStatus(props: { work: AnnotationWire['remote_work'] }): JSX.Element {
-  return <For each={latestWork(props.work)}>{(work) => (
-    <p role="status" class="comment-agent-status border-b border-edge px-3 py-1.5 text-2xs text-muted">
-      <a class="comment-agent-status-name" href={`/chat?session=${work.sessionId}`} target="_blank" rel="noopener noreferrer" style={{ color: agentNameColor(work.name) }}>@{work.name}</a>
-      <Show when={remoteWorkActive(work)}><span class="comment-agent-spinner" aria-hidden="true" /></Show>
-      <Tooltip content={remoteWorkLabel(work)}><span class="comment-agent-status-label" tabIndex={0}>{work.phase === 'delivered' && remoteWorkActive(work) ? 'Awaiting acknowledgment' : remoteWorkLabel(work)}</span></Tooltip>
-    </p>
-  )}</For>;
-}
-
 export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
   let threadElement: HTMLDivElement | undefined;
   const { session } = useSession();
@@ -212,7 +200,6 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
       </div>
     </Show>
     <Show when={!folded() && !receded()}>
-      <AgentWorkStatus work={props.row.remote_work} />
       <Show when={props.row.view_state}>
         <div class="flex items-center justify-between gap-2 border-b border-edge px-3 py-1.5 text-2xs text-muted">
           <span role="status">{open() && props.viewStateError ? props.viewStateError : 'Saved view attached'}</span>

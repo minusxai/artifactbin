@@ -2,7 +2,9 @@
 import { createEffect, createSignal, on, onCleanup, type Accessor } from 'solid-js';
 import { createFrameBridgeParent, type FrameBridgeParent, type ReaderScope } from '@/lib/html-reader/frame-bridge/parent';
 import { withUrlValuesOf } from '@/lib/dataflow/url-values';
-import { STORY_FRAME_HASH_MESSAGE, STORY_URL_VALUES_MESSAGE, type IslandStoryController } from '@/lib/html-reader/contract';
+import type { DocumentRuntimeRef } from '@/lib/html-reader/document-endpoint';
+import { REGION_TOOLBAR_H } from '@/lib/html-reader/edit-bar';
+import { STORY_READER_MODE_MESSAGE, STORY_FRAME_HASH_MESSAGE, STORY_URL_VALUES_MESSAGE, type IslandStoryController } from '@/lib/html-reader/contract';
 import { commentAfterRegionSave, type RegionCommentSubject } from '@/lib/annotations/region-comment';
 import type { RegionEditing, RegionToolbarState, startRegionEditing } from './region-editing';
 import type { CellEditing, startCellEditing } from './cell-editing';
@@ -38,9 +40,22 @@ export function followFramedValues(win: Window, values: string, push = false): v
   win.history[push ? 'pushState' : 'replaceState'](win.history.state, '', `${pathname}${next}${hash}`);
 }
 
+/** Connect reader controls once the frame bridge is available. */
+export function bindReaderFrame(story: FramedStory, framed: FramedDocument, runtimeRef: DocumentRuntimeRef,
+  pick: Accessor<'light' | 'dark' | null>, setNonce: (value: string | null) => void) {
+  createEffect(on(() => !!story.regionUi.toolbar(), shown => story.setTopInset(shown ? REGION_TOOLBAR_H : 0)));
+  bindFrameFragment(framed, story.nonce);
+  runtimeRef.current = story.controller();
+  createEffect(on(story.controller, next => { runtimeRef.current = next; }, { defer: true }));
+  createEffect(on(story.nonce, setNonce));
+  createEffect(on([story.nonce, pick], ([signed, mode]) => {
+    if (signed && mode) runtimeRef.current?.send({ type: STORY_READER_MODE_MESSAGE, mode });
+  }));
+}
+
 /** Forward fragments when the frame loads or the address changes. Once the bridge is ready,
  * consume the one-shot af-state fields while keeping the rest of the reader's address. */
-export function bindFrameFragment({frame, origin}: FramedDocument, nonce: Accessor<string | null>) {
+function bindFrameFragment({frame, origin}: FramedDocument, nonce: Accessor<string | null>) {
   const forward = () => {
     const hash = window.location.hash;
     if (hash && hash !== '#edit') frame.contentWindow?.postMessage({ type: STORY_FRAME_HASH_MESSAGE, hash }, origin);

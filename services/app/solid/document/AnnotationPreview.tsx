@@ -20,7 +20,6 @@ import Reply from 'lucide-solid/icons/reply';
 import X from 'lucide-solid/icons/x';
 import type { ArtifactBackend } from '@/lib/artifact-backend';
 import { parseMarkdownLite, plainText } from '@/lib/annotations/markdown-lite';
-import { remoteWorkLabel } from '@/lib/annotations/remote-reply';
 import { agentNameColor } from '../lib/agent-identity';
 import { Avatar } from '../ui/Avatar';
 import { Button } from '../ui/Button';
@@ -190,10 +189,6 @@ export function positionedComments(annotations: AnnotationWire[], rects: Record<
   return shift > 0 ? placed.map((item) => ({ ...item, top: item.top - shift })) : placed;
 }
 
-const ACTIVE_PHASES = ['queued', 'dispatching', 'delivered', 'acknowledged'];
-
-/** What each agent working on a thread reported last: one entry per session, newest kept. */
-export const latestWork = (work: AnnotationWire['remote_work']) => (work ?? []).filter((item, index, all) => !all.slice(index + 1).some((next) => next.sessionId === item.sessionId));
 /** A control's click, kept from the card's own (which opens the rail). */
 const only = (run: () => void) => (event: MouseEvent) => { event.stopPropagation(); run(); };
 
@@ -258,12 +253,8 @@ export function AnnotationPreview(props: {
   const first = () => props.row.thread[0];
   const label = () => first() ? authorLabel(first()!.author) : 'Unknown';
   const messages = () => props.row.thread.length;
-  const agents = () => latestWork(props.row.remote_work);
-  const activeAgents = () => agents().filter((work) => work.connection === 'online' && ACTIVE_PHASES.includes(work.phase) && work.activity !== 'unknown');
-  const work = () => activeAgents().at(-1) ?? agents().at(-1);
   const inbox = useOptionalInbox();
   const unread = () => inbox?.state()?.notifications.some((n) => !n.read_at && n.source === `comment:${props.row.id}`);
-  const working = () => activeAgents().length > 0;
   const compactWidth = () => messages() > 9 ? VIEW_COMMENT_MANY_W : messages() > 1 ? VIEW_COMMENT_COUNTED_W : VIEW_COMMENT_COLLAPSED_W;
   const radius = () => props.hovered ? '5px' : '50% 50% 50% 3px';
   const expanded = () => props.hovered && repliesExpanded();
@@ -276,10 +267,9 @@ export function AnnotationPreview(props: {
     onFocusOut={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) props.onHover(null); }}
     data-annotation-id={props.row.id}
     data-hovered={props.hovered ? 'true' : undefined}
-    class={`${working() ? 'motion-safe:animate-pulse' : ''} group pointer-events-auto overflow-hidden border text-left shadow-md transition-[top,width,height,border-color,background-color,box-shadow] duration-150 ${props.hovered ? 'z-10 flex flex-col border-edge-bright bg-comment-hover px-3 py-2.5 shadow-xl' : 'border-transparent bg-raised hover:bg-raised'}`}
+    class={`group pointer-events-auto overflow-hidden border text-left shadow-md transition-[top,width,height,border-color,background-color,box-shadow] duration-150 ${props.hovered ? 'z-10 flex flex-col border-edge-bright bg-comment-hover px-3 py-2.5 shadow-xl' : 'border-transparent bg-raised hover:bg-raised'}`}
     style={{
       position: 'fixed',
-      outline: work() ? `2px solid ${agentNameColor(work()!.name)}` : undefined,
       top: top(),
       right: `${VIEW_COMMENT_INSET}px`,
       width: `${props.hovered ? 288 : compactWidth()}px`,
@@ -304,8 +294,6 @@ export function AnnotationPreview(props: {
       <span role="img" aria-label="Unsent reply draft" class="pointer-events-none absolute bottom-0 left-0 z-10 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-accent text-bg"><PenLine size={8} strokeWidth={2.5} /></span>
     </Show>
     <Show when={props.row.status === 'resolved'}><span aria-label="Resolved" class="pointer-events-none absolute bottom-0 right-0 z-10 text-xs text-accent">✓</span></Show>
-    <Show when={work()}>{(current) => <span class="sr-only">{remoteWorkLabel(current())}{agents().length > 1 ? ` · ${agents().length} agents` : null}</span>}</Show>
-    <Show when={props.hovered && agents().length > 1}><span class="absolute right-2 top-1 text-micro text-muted">{agents().length} agents</span></Show>
     <Show when={props.remaining !== undefined}><span role="status" class="sr-only motion-reduce:not-sr-only">Resolved · {Math.ceil((props.remaining ?? 0) / 1000)} seconds</span></Show>
     <Show when={first() && !props.hovered}>
       <span class="pointer-events-none absolute inset-0 flex items-center justify-start pl-[7px]">
