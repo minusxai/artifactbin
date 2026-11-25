@@ -779,6 +779,23 @@ it('activates an empty guest reader when its annotation subscription delivers a 
  await waitFor(()=>expect(vi.mocked(fetch).mock.calls.some(([url])=>String(url).includes('/annotations'))).toBe(true));
  expect(loginHref).not.toHaveBeenCalled();
 });
+it('rechecks admission across a stream interruption and preserves an unchanged document', async () => {
+ const replace=vi.spyOn(documentNavigation,'replaceDocument').mockImplementation(()=>{});
+ await mountReady();
+ let role='commenter',status=200;
+ const original=vi.mocked(fetch).getMockImplementation()!;
+ vi.mocked(fetch).mockImplementation((url,init)=>String(url)==='/api/page/artifact/doc12345'
+   ? Promise.resolve(Response.json({role,kind:'account',canManageSharing:false,surface:{}},{status})) : original(url,init));
+ await mockLiveOptions!.onConnectionChange!();
+ expect(replace).not.toHaveBeenCalled();
+ role='viewer';
+ await mockLiveOptions!.onConnectionChange!();
+ expect(replace).toHaveBeenCalledTimes(1);
+ role='commenter';status=404;
+ await mockLiveOptions!.onConnectionChange!();
+ expect(replace).toHaveBeenCalledTimes(2);
+});
+
 it('reloads admission and the frame ticket when the live membership authority changes',async () => {
  const replace=vi.spyOn(documentNavigation,'replaceDocument').mockImplementation(()=>{});await mountReady();
  mockLiveOptions!.onData!({datasets:['_members'],version:4});

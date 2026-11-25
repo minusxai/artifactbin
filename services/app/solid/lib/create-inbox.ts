@@ -48,7 +48,7 @@ export function createInboxController(ownerId: Accessor<string | null>): InboxCo
     void load();
     if (typeof EventSource === 'undefined') return;
     // Reconnecting with backoff and a heartbeat watchdog (lib/live-stream); its first frame after a reopen re-reads.
-    const source = openLiveStream({ url: '/api/my/people/events', onMessage: () => { setReconnecting(false); refreshSoon(); }, onError: () => setReconnecting(true) });
+    const source = openLiveStream({ url: '/api/my/people/events', onMessage: () => { setReconnecting(false); refreshSoon(); }, onReconnect: () => { void load(); }, onError: () => setReconnecting(true) });
     const refresh = () => { if (document.visibilityState === 'visible') refreshSoon(); };
     window.addEventListener('focus', refresh);
     document.addEventListener('visibilitychange', refresh);

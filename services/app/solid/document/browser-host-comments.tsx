@@ -23,7 +23,7 @@
  * `af-document-thread` {id}, `af-document-presence` {viewers, total}, `af-document-sign-in` (cancelable: the reader
  * needs to sign in to comment or react; the default goes to the sign-in page).
  */
-import { createEffect, createSignal, on, onCleanup, untrack } from 'solid-js';
+import { createEffect, createSignal, on, untrack } from 'solid-js';
 import { render } from 'solid-js/web';
 import type { ArtifactRole } from '@artifactbin/contracts/sharing';
 import { createReaderHttpBackend } from '@/lib/artifact-backend/reader-http';
@@ -34,6 +34,7 @@ import type { HostComments, HostCommentsOptions, HostMode } from '@/lib/html-rea
 import { createTrustedOverlayHost } from '@/lib/ui-runtime/trusted-overlay-host';
 import { configureTrustedUiStyles } from '@/lib/ui-runtime/trusted-ui-styles';
 import { createLiveArtifact } from '../editor/create-live-artifact';
+import { documentAdmissionReader } from './refresh-admission';
 import { createReaderDiscussion } from './create-reader-discussion';
 import { createReaderPresence } from './create-reader-presence';
 import { HOST_THEME_ATTR, HOST_THEME_CSS, hostSetsTheme } from './host-theme';
@@ -74,10 +75,8 @@ export function mountHostComments(options: HostCommentsOptions): HostComments {
   const unmount = render(() => <SessionProvider>{(() => {
     const backend = createReaderHttpBackend(id);
     const [page, setPage] = createSignal<PageAnswer | null>(null);
-    const abort = new AbortController();
-    void win.fetch(`/api/page/artifact/${encodeURIComponent(id)}`, { credentials: 'same-origin', cache: 'no-store', signal: abort.signal })
-      .then((response) => response.ok ? response.json() as Promise<PageAnswer> : null).then(setPage).catch(() => {});
-    onCleanup(() => abort.abort());
+    const refreshAdmission = documentAdmissionReader<PageAnswer>(win, id, next => setPage(next));
+    void refreshAdmission();
     const [head, setHead] = createSignal({ version: options.version, editId: options.editId });
     const discussion = createReaderDiscussion({
       reader: () => ({ role: page()?.role ?? 'viewer', accountSession: page()?.kind === 'account', archived: !!page()?.archived }),
@@ -97,6 +96,7 @@ export function mountHostComments(options: HostCommentsOptions): HostComments {
         if (editId && version >= untrack(head).version) setHead({ version, editId });
         options.followVersion(version, liveRevision ?? 0);
       },
+      onConnectionChange: () => { setMembershipRevision(n => n + 1); void refreshAdmission(); },
       onData: (event) => {
         if (event.datasets.includes('_members')) setMembershipRevision((n) => n + 1);
         options.notifyData(event.datasets);

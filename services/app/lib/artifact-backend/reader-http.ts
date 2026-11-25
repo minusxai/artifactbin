@@ -47,6 +47,8 @@ export function createReaderHttpBackend(id:string,options:ReaderHttpOptions={}):
           [STORY_ANNOTATIONS_EVENT]: () => handlers.onAnnotations(),
         },
         onWake: handlers.onWake,
+        onError: handlers.onConnectionChange,
+        onReconnect: handlers.onConnectionChange,
       }, credentials==='omit');
       return () => stream.close();
     },

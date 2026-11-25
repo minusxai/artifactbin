@@ -13,16 +13,25 @@ it('keeps reader head, frame and presence HTTP requests and refusal behavior',as
  expect(await backend.load()).toBeNull();expect(await backend.liveFrame()).toBeNull();expect(await backend.publishPresence(publication)).toBeNull();
 });
 it('preserves resumable live pings, data, annotations and presence until unsubscribe',()=>{
- const sources:Array<{url:string;onmessage:((e:{data:string})=>void)|null;listeners:Record<string,(e:{data:string})=>void>;closed:boolean}>=[];
- vi.stubGlobal('EventSource',class{onmessage=null;listeners:Record<string,(e:{data:string})=>void>={};closed=false;constructor(public url:string){sources.push(this);}addEventListener(name:string,fn:(e:{data:string})=>void){this.listeners[name]=fn;}close(){this.closed=true;}});
- const onPing=vi.fn(),onData=vi.fn(),onAnnotations=vi.fn(),onPresence=vi.fn();
- const stop=createReaderHttpBackend('Page123').live({onPing,onData,onAnnotations,onPresence},{since:'cursor/1'}),source=sources[0]!;
+ const sources:Array<{url:string;onmessage:((e:{data:string})=>void)|null;onerror:(()=>void)|null;listeners:Record<string,(e:{data:string})=>void>;closed:boolean}>=[];
+ vi.stubGlobal('EventSource',class{onmessage=null;onerror=null;listeners:Record<string,(e:{data:string})=>void>={};closed=false;constructor(public url:string){sources.push(this);}addEventListener(name:string,fn:(e:{data:string})=>void){this.listeners[name]=fn;}close(){this.closed=true;}});
+ const onPing=vi.fn(),onData=vi.fn(),onAnnotations=vi.fn(),onPresence=vi.fn(),onConnectionChange=vi.fn();
+ const stop=createReaderHttpBackend('Page123').live({onPing,onData,onAnnotations,onPresence,onConnectionChange},{since:'cursor/1'}),source=sources[0]!;
  expect(source.url).toBe('/a/Page123/events?since=cursor%2F1');
  source.onmessage!({data:JSON.stringify({version:3,editId:'e3'})});expect(onPing).toHaveBeenCalledWith({version:3,editId:'e3'});
  source.listeners.data!({data:JSON.stringify({datasets:['votes'],version:3})});expect(onData).toHaveBeenCalledWith({datasets:['votes'],version:3});
  source.listeners.annotations!({data:'{}'});expect(onAnnotations).toHaveBeenCalledOnce();
  source.listeners.presence!({data:JSON.stringify({viewers:[{id:'peer',label:'Reader'}],total:30})});expect(onPresence).toHaveBeenCalledWith({viewers:[{id:'peer',label:'Reader'}],total:30});source.listeners.presence!({data:JSON.stringify({viewers:[],total:'many'})});expect(onPresence).toHaveBeenCalledTimes(1);
- source.onmessage!({data:'broken'});expect(onPing).toHaveBeenCalledOnce();stop();expect(source.closed).toBe(true);
+ source.onmessage!({data:'broken'});expect(onPing).toHaveBeenCalledOnce();
+ expect(onConnectionChange).not.toHaveBeenCalled();
+ vi.useFakeTimers();
+ try {
+  source.onerror!();expect(onConnectionChange).toHaveBeenCalledTimes(1);
+  vi.advanceTimersByTime(1001);
+  sources[1]!.onmessage!({data:JSON.stringify({version:3,editId:'e3'})});
+  expect(onConnectionChange).toHaveBeenCalledTimes(2);
+ } finally {stop();vi.useRealTimers();}
+ expect(source.closed).toBe(true);
 });
 
 it('reads every annotation page with the same status and cancellation signal',async()=>{
