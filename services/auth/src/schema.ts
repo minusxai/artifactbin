@@ -78,7 +78,7 @@ export async function ensureAuthSchema(db: Queryable, schema = 'auth'): Promise<
     if (columns.has('subject') && !columns.has('subject_id')) {
       await db.query(`ALTER TABLE ${schema}.credentials RENAME COLUMN subject TO subject_id`);
     }
-    await db.query(`ALTER TABLE ${schema}.credentials DROP COLUMN IF EXISTS attempts`);
+    if (columns.has('attempts')) await db.query(`ALTER TABLE ${schema}.credentials DROP COLUMN IF EXISTS attempts`);
     await db.query(`DROP INDEX IF EXISTS ${schema}.idx_codes_kind_subject`);
   }
   await ensureTable(db, AUTH_TABLES, { schema });

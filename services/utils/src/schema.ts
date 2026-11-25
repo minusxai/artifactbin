@@ -62,7 +62,12 @@ EXCEPTION WHEN feature_not_supported THEN NULL;
 END $$`;
 }
 
-function renderTable(table: Table, qualified: (name: string) => string, schemaExpr: string): string[] {
+interface InstalledTable {
+  columns: Map<string, {attnotnull: boolean; attcompression: string}>;
+  indexes: Set<string>;
+}
+
+function renderTable(table: Table, qualified: (name: string) => string, schemaExpr: string, installed?: InstalledTable): string[] {
   const name = qualified(table.name);
   const body = table.columns.map((c) => `  ${renderColumn(c)}`);
   // Table-level PK so the constraint gets the conventional <table>_pkey name.
@@ -70,33 +75,33 @@ function renderTable(table: Table, qualified: (name: string) => string, schemaEx
   for (const u of table.uniques ?? []) body.push(`  UNIQUE (${u.join(', ')})`);
 
   return [
-    `CREATE TABLE IF NOT EXISTS ${name} (\n${body.join(',\n')}\n)`,
+    ...(installed ? [] : [`CREATE TABLE IF NOT EXISTS ${name} (\n${body.join(',\n')}\n)`]),
     // Lets a database built from an older declaration gain newly-declared columns.
-    ...table.columns.map((c) => `ALTER TABLE ${name} ADD COLUMN IF NOT EXISTS ${renderColumn(c)}`),
+    ...table.columns.filter(c => !installed?.columns.has(c.name)).map((c) => `ALTER TABLE ${name} ADD COLUMN IF NOT EXISTS ${renderColumn(c)}`),
     ...(table.checks??[]).map(check=>`DO $check$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='${name}'::regclass AND conname='${check.name}') THEN ALTER TABLE ${name} ADD CONSTRAINT ${check.name} CHECK (${check.expression}); END IF; END $check$`),
     // A DECLARED rename: copy the old column across and drop it, guarded so
     // the second boot is a no-op. AFTER the adds (the new column must exist to
     // be written into) and BEFORE the drops and the indexes.
     ...table.columns
-      .filter((c) => c.renamedFrom)
+      .filter((c) => c.renamedFrom && (!installed || installed.columns.has(c.renamedFrom)))
       .map((c) => renderRename(name, table.name, schemaExpr, c)),
     ...table.columns
-      .filter((c) => c.compression)
+      .filter((c) => c.compression && installed?.columns.get(c.name)?.attcompression !== 'l')
       .map((c) => renderCompression(name, c)),
     // Relax constraints an older declaration applied — see Column.retired.
     ...table.columns
-      .filter((c) => c.retired || c.relaxNotNull)
+      .filter((c) => (c.retired || c.relaxNotNull) && (!installed || (installed.columns.get(c.name)?.attnotnull ?? c.notNull)))
       .map((c) => `ALTER TABLE ${name} ALTER COLUMN ${c.name} DROP NOT NULL`),
     // Columns the declaration no longer carries (Table.dropped) — the whole
     // migration for a retired column, and idempotent, so it is safe on every
     // boot. It runs BEFORE the indexes: dropping a column takes any index over
     // it with it, so the other order would create one this statement removes.
-    ...(table.dropped ?? []).map((c) => `ALTER TABLE ${name} DROP COLUMN IF EXISTS ${c}`),
+    ...(table.dropped ?? []).filter(column => !installed || installed.columns.has(column)).map((c) => `ALTER TABLE ${name} DROP COLUMN IF EXISTS ${c}`),
     // `using` picks the access method (gin, gist, …); a column entry that is
     // not a plain name is an EXPRESSION and rides through verbatim — the
     // declaration owns its parentheses — which is what lets an index be over
     // `f(col)` with nothing stored twice.
-    ...(table.indexes ?? []).map(
+    ...(table.indexes ?? []).filter(index => !installed?.indexes.has(index.name)).map(
       (i) => `CREATE ${i.unique ? 'UNIQUE ' : ''}INDEX IF NOT EXISTS ${i.name} ON ${name}${i.using ? ` USING ${i.using}` : ''} (${i.columns.join(', ')})${i.where ? ` WHERE ${i.where}` : ''}`,
     ),
   ];
@@ -119,7 +124,29 @@ export function renderDroppedTables(names: readonly string[], o: { schema?: stri
   return names.map((name) => `DROP TABLE IF EXISTS ${o.schema ? `${o.schema}.${name}` : name}`);
 }
 
-/** Apply renderSchema's statements, in order, on every boot. */
+/**
+ * PostgreSQL takes the table lock before checking IF [NOT] EXISTS. Inspect the installed
+ * definitions first so an ordinary restart can run beside the existing readers and writers.
+ * Fresh databases and changed declarations use the same DDL renderer as the bootstrap SQL.
+ */
 export async function ensureTable(db: Queryable, tables: Table[], o: { schema?: string } = {}): Promise<void> {
-  for (const stmt of renderSchema(tables, o)) await db.query(stmt);
+  const installed = new Map<string, InstalledTable>();
+  const schema = o.schema ?? null;
+  const columns = await db.query<{table_name:string; attname:string; attnotnull:boolean; attcompression:string}>(`
+    SELECT c.relname AS table_name,a.attname,a.attnotnull,a.attcompression
+      FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_attribute a ON a.attrelid=c.oid
+      WHERE n.nspname=COALESCE($1,current_schema()) AND c.relkind IN ('r','p') AND a.attnum>0 AND NOT a.attisdropped`, [schema]);
+  for (const row of columns.rows) {
+    let table = installed.get(row.table_name);
+    if (!table) { table={columns:new Map(),indexes:new Set()}; installed.set(row.table_name,table); }
+    table.columns.set(row.attname,row);
+  }
+  const indexes=await db.query<{tablename:string; indexname:string}>(
+    'SELECT tablename,indexname FROM pg_indexes WHERE schemaname=COALESCE($1,current_schema())',[schema]);
+  for (const row of indexes.rows) installed.get(row.tablename)?.indexes.add(row.indexname);
+  const qualify=(name:string)=>o.schema ? o.schema+'.'+name : name;
+  for (const table of tables) {
+    const statements=renderTable(table,qualify,o.schema ? `'${o.schema}'` : 'current_schema()',installed.get(table.name));
+    for (const statement of statements) await db.query(statement);
+  }
 }

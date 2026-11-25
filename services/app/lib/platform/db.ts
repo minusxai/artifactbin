@@ -14,7 +14,8 @@ import { fileURLToPath } from 'node:url';
 import { AUTH_SCHEMA, DATABASE_URL, IDENTITY_READ_SCHEMA } from './config';
 import { identitySchemaStatements } from '@artifactbin/auth';
 import { openIdentity } from './identity-host';
-import { SCHEMA_STATEMENTS } from './schema';
+import { DROPPED_TABLES, SCHEMA_STATEMENTS, TABLES } from './schema';
+import { ensureTable, renderDroppedTables } from '@artifactbin/utils/schema';
 import { recordQuery } from './query-stats';
 import { SERVING_POOL, withPoolErrors } from '@artifactbin/utils/pool';
 
@@ -411,7 +412,8 @@ async function createDb(): Promise<Db> {
     await boot.connect();
     try {
       await boot.query(`SELECT pg_advisory_lock(hashtext('${SCHEMA_LOCK}'))`);
-      for (const stmt of SCHEMA_STATEMENTS) await boot.query(stmt);
+      await ensureTable(boot, TABLES);
+      for (const stmt of renderDroppedTables(DROPPED_TABLES)) await boot.query(stmt);
       await applyBackfills(boot);
     } finally {
       await boot.end();
