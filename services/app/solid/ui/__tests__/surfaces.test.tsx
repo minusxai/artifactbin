@@ -13,6 +13,7 @@ import { Tooltip } from '../Tooltip';
 import { Dialog } from '../Dialog';
 import { FloatingPanel } from '../FloatingPanel';
 import { Drawer } from '../Drawer';
+import MobileSheet from '../MobileSheet';
 import { LAYER } from '../layers';
 
 afterEach(() => { document.documentElement.removeAttribute('data-theme'); });
@@ -95,4 +96,54 @@ it('opens a Drawer over a scrim that closes it, at the dialog layer, returning f
   fireEvent.click(opener);
   fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
   expect(screen.queryByRole('navigation', { name: 'Menu' })).toBeNull();
+});
+
+it.each(['tall', 'half'] as const)('keeps a %s sheet distinct from the bottom navigation drawer', (size) => {
+  const [menu, setMenu] = createSignal(false);
+  const [sheet, setSheet] = createSignal(false);
+  render(() => <div data-app-appearance="dark">
+    <button onClick={() => setMenu(true)}>Open menu</button>
+    <Show when={menu()}>
+      <Drawer label="Menu" role="navigation" side="bottom" top={44} onClose={() => setMenu(false)}>
+        <button onClick={() => setSheet(true)}>Open sheet</button>
+      </Drawer>
+    </Show>
+    <Show when={sheet()}>
+      <MobileSheet label="Preferences" size={size} header={<h2>Preferences</h2>} onClose={() => setSheet(false)}>
+        <button>First option</button><button>Last option</button>
+      </MobileSheet>
+    </Show>
+  </div>);
+  const opener = screen.getByRole('button', { name: 'Open menu' });
+  opener.focus();
+  fireEvent.click(opener);
+  const nav = screen.getByRole('navigation', { name: 'Menu' });
+  expect(nav.style.top).toBe('');
+  expect(layer(nav)).toBe(LAYER.dialog);
+  expect(screen.getByRole('button', { name: 'Close panel' }).style.top).toBe('44px');
+
+  const sheetOpener = screen.getByRole('button', { name: 'Open sheet' });
+  sheetOpener.focus();
+  fireEvent.click(sheetOpener);
+  const panel = screen.getByRole('dialog', { name: 'Preferences' });
+  expect(panel).toHaveAttribute('aria-modal', 'true');
+  expect(appearance(panel)).toBe('dark');
+  expect(layer(panel)).toBe(LAYER.sheet);
+  const backdrop = screen.queryByRole('button', { name: 'Close sheet' });
+  if (size === 'half') expect(backdrop).toBeNull();
+  else expect(layer(backdrop)).toBe(LAYER.sheetBackdrop);
+
+  const last = screen.getByRole('button', { name: 'Last option' });
+  last.focus();
+  fireEvent.keyDown(last, { key: 'Tab' });
+  const first = screen.getByRole('button', { name: 'First option' });
+  expect(document.activeElement).toBe(first);
+  fireEvent.keyDown(first, { key: 'Escape' });
+  expect(panel).not.toBeInTheDocument();
+  expect(nav).toBeInTheDocument();
+  expect(document.activeElement).toBe(sheetOpener);
+
+  fireEvent.keyDown(sheetOpener, { key: 'Escape' });
+  expect(nav).not.toBeInTheDocument();
+  expect(document.activeElement).toBe(opener);
 });

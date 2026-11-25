@@ -1,18 +1,8 @@
 /* @jsxImportSource solid-js */
-/**
- * The bottom sheet a phone gets where desktop gets an anchored
- * panel. The caller decides when it is used; the sheet owns the backdrop, Escape, the grab handle,
- * the scroll cap and swipe-to-close. It portals to <body> so a fixed ancestor cannot re-anchor it.
- *
- * Open sheets are COUNTED (`subscribeSheets`): the served reader chrome steps its rail aside while
- * one is up, and comes back when the last one closes.
- */
+/** A phone dialog with a handle, a fixed header and a scrolling body. */
 import { createSignal, onCleanup, onMount, Show, type Accessor, type JSX } from 'solid-js';
-import { Portal } from 'solid-js/web';
-import { trustedPortalOf } from '@/lib/ui-runtime/trusted-portal';
-import { createDialogShell } from '@/lib/ui-runtime/dialog-shell';
 import { LAYER } from './layers';
-import { createPlacedAppearance } from './theme';
+import { PanelSurface } from './PanelSurface';
 
 /** Tailwind's `sm` threshold, by innerWidth (jsdom implements no media queries). */
 export const isPhoneViewport = (): boolean => typeof window !== 'undefined' && window.innerWidth < 640;
@@ -29,62 +19,20 @@ export function createIsPhoneViewport(): Accessor<boolean> {
   return phone;
 }
 
-let openSheets = 0;
-const sheetListeners = new Set<(open: boolean) => void>();
-const announceSheets = () => { for (const listener of sheetListeners) listener(openSheets > 0); };
-
-const SWIPE_CLOSE_PX = 64;
-
 export default function MobileSheet(props: {
   label: string;
   onClose: () => void;
   size?: 'tall' | 'half';
   header?: JSX.Element;
-  swipeToClose?: boolean;
   children: JSX.Element;
 }): JSX.Element {
-  onMount(() => {
-    openSheets += 1;
-    announceSheets();
-    onCleanup(() => { openSheets -= 1; announceSheets(); });
-  });
-  let panel: HTMLDivElement | undefined;
-  createDialogShell({ panel: () => panel, onClose: () => props.onClose() });
-  let dragFrom: number | null = null;
-  const [dragged, setDragged] = createSignal(0);
-  const onTouchStart = (event: TouchEvent) => { if (props.swipeToClose) dragFrom = event.touches[0]?.clientY ?? null; };
-  const onTouchMove = (event: TouchEvent) => {
-    if (!props.swipeToClose || dragFrom === null) return;
-    setDragged(Math.max(0, (event.touches[0]?.clientY ?? dragFrom) - dragFrom));
-  };
-  const onTouchEnd = () => {
-    if (!props.swipeToClose) return;
-    const close = dragged() >= SWIPE_CLOSE_PX;
-    dragFrom = null;
-    setDragged(0);
-    if (close) props.onClose();
-  };
-  const half = () => (props.size ?? 'tall') === 'half';
-  // The sheet takes the appearance of where it is rendered, else of its opener (solid/ui/theme).
-  const placed = createPlacedAppearance();
-  const appearance = () => placed.appearance();
-  return (<>
-    <span ref={placed.marker} hidden />
-    <Portal mount={trustedPortalOf(document) ?? document.body}>
-      <Show when={!half()}>
-        <button type="button" aria-label="Close sheet" data-app-appearance={appearance()} onClick={() => props.onClose()} style={{ 'z-index': LAYER.sheetBackdrop }}
-          class="fixed inset-0 cursor-default border-0 bg-black/40 p-0" />
-      </Show>
-      <div ref={panel} role="dialog" aria-modal="true" aria-label={props.label} data-app-appearance={appearance()}
-        style={{ 'z-index': LAYER.sheet, transform: dragged() ? `translateY(${dragged()}px)` : undefined }}
-        class={`fixed inset-x-0 bottom-0 ${half() ? 'max-h-[50vh]' : 'max-h-[80vh]'} flex animate-[sheet-in_.2s_ease-out] flex-col rounded-t-dialog border-t border-edge bg-surface p-3 text-fg pb-[max(0.75rem,env(safe-area-inset-bottom))] font-mono text-xs shadow-lg`}>
-        <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
-          class={props.swipeToClose ? 'shrink-0 touch-none' : 'contents'}>
-          <div aria-hidden="true" class="mx-auto mb-2 h-1 w-9 shrink-0 rounded-full bg-edge" />
-          <Show when={props.header}><div class="shrink-0">{props.header}</div></Show>
-        </div>
-        <div class="min-h-0 flex-1 overflow-y-auto">{props.children}</div>
-      </div>
-    </Portal>
-  </>);
+  const half = () => props.size === 'half';
+  return <PanelSurface label={props.label} role="dialog" placement="bottom" layer={LAYER.sheet}
+    onClose={props.onClose}
+    scrim={half() ? undefined : { label: 'Close sheet', layer: LAYER.sheetBackdrop, shade: 'bg-black/40' }}
+    class={`${half() ? 'max-h-[50vh]' : 'max-h-[80vh]'} animate-[sheet-in_.2s_ease-out] pb-[max(0.75rem,env(safe-area-inset-bottom))] text-xs shadow-lg`}>
+    <div aria-hidden="true" class="mx-auto mb-2 h-1 w-9 shrink-0 rounded-full bg-edge" />
+    <Show when={props.header}><div class="shrink-0">{props.header}</div></Show>
+    <div class="min-h-0 flex-1 overflow-y-auto">{props.children}</div>
+  </PanelSurface>;
 }
