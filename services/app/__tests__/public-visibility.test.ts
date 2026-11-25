@@ -15,9 +15,10 @@ async function withPublic(enabled: boolean) {
   vi.stubEnv('NODE_ENV', 'production');
   vi.stubEnv('ARTIFACTS__ALLOW_PUBLIC', enabled ? '1' : '');
   if (!enabled) delete process.env.ARTIFACTS__ALLOW_PUBLIC;
-  const [{ POST: createArtifact }, { createUser, mintToken }] = await Promise.all([
+  const [{ POST: createArtifact }, { mintToken }, { createUser }] = await Promise.all([
     import('@/app/api/artifacts/route'),
     import('@/lib/accounts'),
+    import('@/lib/accounts/testing'),
   ]);
   // Import account creation and minting from the same reset module graph as
   // the route so these fixtures use its deployment config and current DB.

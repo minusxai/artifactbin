@@ -11,7 +11,7 @@ import { randomBytes } from 'node:crypto';
 import { identityForUser } from '@/lib/accounts';
 import { canonicalizeHtmlPage } from '@/lib/html-page';
 import { editableRegions } from '@/lib/live-regions';
-import { PostgresDb, SCHEMA_STATEMENTS } from '@/lib/platform';
+import { PostgresDb, SCHEMA_STATEMENTS } from '@/lib/platform/testing';
 import { identityViewStatements } from '@artifactbin/auth/identity-store/views';
 import { dockerImage, startPostgres, type DisposablePostgres } from '@artifactbin/test-support/docker';
 import { nativeHtml } from './native-html-fixture';

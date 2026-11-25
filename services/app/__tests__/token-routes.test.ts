@@ -10,7 +10,7 @@ import {nativeHtml} from './native-html-fixture';
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { createUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { overrideConfig } from '@/lib/platform/config';
 import { mintToken } from '@/lib/accounts';
 import { POST as mintAdmin } from '@/app/api/tokens/route';

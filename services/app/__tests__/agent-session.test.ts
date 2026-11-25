@@ -5,7 +5,8 @@ import { POST as exchangeRoute, DELETE as clearSession } from '@/app/api/session
 import { GET as listMine } from '@/app/api/my/artifacts/route';
 import { GET as raw } from '@/app/a/[id]/raw/route';
 import { GET as events } from '@/app/a/[id]/events/route';
-import { AGENT_COOKIE, createUser, mintToken } from '@/lib/accounts';
+import { AGENT_COOKIE, mintToken } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { sessionActor } from '@/lib/authentication';
 import { createArtifact } from '@/lib/artifacts';
 import { agentCookie, request, setSession, useAppHarness, createGuestOwner, params } from './harness';

@@ -1,7 +1,8 @@
 import {POST as mutateDirect} from '@/app/api/artifacts/[id]/mutate/route';
 import { expect, it } from 'vitest';
 import { useAppHarness, request, params } from '@/__tests__/harness';
-import { identityForUser, createUser } from '@/lib/accounts';
+import { identityForUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { POST as create } from '@/app/api/artifacts/route';
 

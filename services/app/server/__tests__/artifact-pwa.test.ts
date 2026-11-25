@@ -7,7 +7,8 @@ import { createAppServer } from '../app';
 import { useAppHarness } from '@/__tests__/harness';
 import { postArtifact } from '@/__tests__/artifact-fixtures';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { createUser, ensureUsername } from '@/lib/accounts';
+import { ensureUsername } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { mintExportKey } from '@/lib/export';
 import { setArtifact } from '@/__tests__/rows';
 

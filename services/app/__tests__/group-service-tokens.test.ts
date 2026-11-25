@@ -14,7 +14,8 @@ import {GROUP_PRINCIPALS_NOT_ACCEPTED, GROUP_SIGN_IN_PATH, RUN_SIGN_IN_PATH, SER
 import {IDENTITY_INTROSPECT_PATH} from '@artifactbin/contracts/identity-service';
 import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts/routes';
 import {createAuthComposedHost} from '@/test/helpers/auth-host';
-import {AUTH_SECRET,getDb,syncIdentitySettings} from '@/lib/platform';
+import {AUTH_SECRET,getDb} from '@/lib/platform';
+import { syncIdentitySettings } from '@/lib/platform/testing';
 import {overrideConfig} from '@/lib/platform/config';
 import {createGroup,deleteGroup,removeGroupMember,setGroupMember} from '@/lib/groups';
 import {admitGroupMember,useAppHarness} from './harness';

@@ -17,7 +17,7 @@ import { describe, expect, it, beforeEach } from 'vitest';
 import { useAppHarness } from '@/__tests__/harness';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { getDb } from '@/lib/platform';
-import { createUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { assetByteQuotaExceeded, getArtifactById } from '@/lib/artifacts';
 import { assetBytesForToken, setAssetByteQuotaForTests } from '@/lib/artifacts/testing';
 import { POST as bearerCreate } from '@/app/api/artifacts/route';
@@ -178,7 +178,7 @@ it('tokenless human-owned pages keep the account byte quota and never charge ano
  expect(await assetBytesForToken(null,other.userId)).toBe(0);
  setAssetByteQuotaForTests(100);
  expect(await assetByteQuotaExceeded(null,owner.userId)).toBe(true);
- const {byteQuotaFor}=await import('@/lib/artifacts');
+ const {byteQuotaFor}=await import('@/lib/artifacts/testing');
  expect(await byteQuotaFor(null,owner.userId)()).toBe(true);
  expect(await byteQuotaFor(null,other.userId)()).toBe(false);
  await expect(assetBytesForToken(null,null)).rejects.toThrow('Byte quota requires a user or token');

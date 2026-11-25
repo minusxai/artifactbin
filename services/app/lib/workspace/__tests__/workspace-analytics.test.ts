@@ -4,7 +4,8 @@
  * are empty, never an error. And live: the real in-process writer, two opens by one visitor today count once.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { overrideRequestHeaders, EVENTS_SCHEMA, setServices } from '@/lib/platform';
+import { EVENTS_SCHEMA, setServices } from '@/lib/platform';
+import { overrideRequestHeaders } from '@/lib/platform/testing';
 import type { Queryable } from '@artifactbin/contracts/db';
 import { createEvents, ensureEventsSchema } from '@artifactbin/events/local';
 import { useAppHarness } from '@/__tests__/harness';

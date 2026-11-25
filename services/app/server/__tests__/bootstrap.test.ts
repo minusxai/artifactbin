@@ -12,7 +12,8 @@ import { describe, expect, it } from 'vitest';
 import { postArtifact } from '@/__tests__/artifact-fixtures';
 
 import { mintToken } from '@/lib/accounts';
-import { createUser, ensureUsername } from '@/lib/accounts';
+import { ensureUsername } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { createAppServer } from '../app';
 import { BOOTSTRAP_ID, withBootstrap } from '../app-shell';
 import { STORY_FAMILY_ASSETS } from '@/lib/html-systems';

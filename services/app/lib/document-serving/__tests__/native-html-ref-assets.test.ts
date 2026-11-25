@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { useAppHarness } from '@/__tests__/harness';
-import { createUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { getDb, measureQueries } from '@/lib/platform';
 import { nativeHtmlAssets } from '@/lib/document-serving/native-html-assets.server';
 import { seedArtifacts, setArtifact } from '@/__tests__/rows';

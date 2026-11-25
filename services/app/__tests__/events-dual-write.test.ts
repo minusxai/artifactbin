@@ -1,7 +1,8 @@
 /** Canonical-only telemetry: catalogue mapping, visitor identity, fork payload and failure isolation.
  * Retired rows must never be written, even when the canonical service fails. */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { overrideRequestHeaders, setServices } from '@/lib/platform';
+import { setServices } from '@/lib/platform';
+import { overrideRequestHeaders } from '@/lib/platform/testing';
 import { fakeEvents, type FakeEvents } from '@artifactbin/utils';
 import { useAppHarness } from '@/__tests__/harness';
 import { trackEvent } from '@/lib/analytics';

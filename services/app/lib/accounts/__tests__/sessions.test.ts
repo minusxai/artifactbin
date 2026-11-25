@@ -2,7 +2,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { ANONYMOUS } from '@artifactbin/contracts/actor';
 import { request, createGuestOwner, testIdentity as baseIdentity, useAppHarness } from '@/__tests__/harness';
-import { createUser, endPagesSession, endPagesSessionsFor, identityForUser, exchangePagesTicket, issuePagesTicket, mintToken, pagesSessionOf, revokeToken, sweepExpiredPagesTickets } from '@/lib/accounts';
+import { endPagesSession, endPagesSessionsFor, identityForUser, exchangePagesTicket, issuePagesTicket, mintToken, pagesSessionOf, revokeToken, sweepExpiredPagesTickets } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { pagesSessionActor } from '@/lib/accounts/pages-sessions';
 import { setServices,getDb } from '@/lib/platform';
 

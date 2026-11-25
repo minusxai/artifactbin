@@ -6,7 +6,8 @@
  * are refused before anything is made. The real-Chromium half is lib/page-drafts/__tests__/check-sign-in-browser.test.ts.
  */
 import {afterEach,beforeEach,expect,it,onTestFinished} from 'vitest';
-import {EXPORT_INTERNAL_ORIGIN,getDb,services,setServices,syncIdentitySettings} from '@/lib/platform';
+import {EXPORT_INTERNAL_ORIGIN,getDb,services,setServices} from '@/lib/platform';
+import { syncIdentitySettings } from '@/lib/platform/testing';
 import {overrideConfig} from '@/lib/platform/config';
 import {pagesSite} from '@/lib/http';
 import {setDraftCheckCapForTests} from '@/lib/allowances';

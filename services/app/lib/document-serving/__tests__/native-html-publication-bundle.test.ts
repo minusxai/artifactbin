@@ -64,7 +64,7 @@ it('returns partial receipts and retries the same dependency creations without d
  const db=await harness.db();expect((await db.query<{n:number}>('SELECT count(*)::int n FROM artifacts')).rows[0]?.n).toBe(1);
 });
 it('serves private nested CSS/JS/image dependencies through the page session and revokes the page immediately',async()=>{
- const {createUser}=await import('@/lib/accounts');
+ const {createUser}=await import('@/lib/accounts/testing');
  const {testIdentity}=await import('@/__tests__/harness');
  const {pagesOriginFor}=await import('@/lib/http'),{testPagesSite:pagesSiteFor}=await import('@/__tests__/harness');
  const {createAppServer}=await import('@/server/app');
@@ -101,7 +101,7 @@ it('serves private nested CSS/JS/image dependencies through the page session and
  expect((await app.request(url,{headers:{cookie:'__Host-afbin_pages='+cookie}})).status).toBe(404);
 });
 it('publishes and conditionally retries through browser account routes without a bearer token',async()=>{
- const {createUser}=await import('@/lib/accounts');
+ const {createUser}=await import('@/lib/accounts/testing');
  const {POST:browserCreate}=await import('@/app/api/my/artifacts/route');
  const {GET:browserGet,PUT:browserPut}=await import('@/app/api/my/artifacts/[id]/route');
  const user=await createUser({email:'mxmx_test_browser_bundle@example.com'});const actor={credential:'session' as const,userId:user.id,email:user.email!,emailVerified:true};
@@ -154,7 +154,7 @@ it('keeps partial dependency-update receipts and never increments an already-upd
  const db=await harness.db();expect((await db.query<{version:number}>('SELECT version FROM artifacts WHERE id=$1',[dataset.id])).rows[0]?.version).toBe(2);expect((await db.query<{version:number}>('SELECT version FROM artifacts WHERE id=$1',[saved.id])).rows[0]?.version).toBe(1);
 });
 it('delegates private dependencies when the page is shared later and revokes with page or owner authority',async()=>{
- const {createUser}=await import('@/lib/accounts');const {updateSharingFor,transferArtifact}=await import('@/lib/artifacts');const {createGroup}=await import('@/lib/groups');const {GET:assetGet}=await import('@/app/a/[id]/assets/route');const {GET:rawGet}=await import('@/app/a/[id]/raw/route');
+ const {createUser}=await import('@/lib/accounts/testing');const {updateSharingFor,transferArtifact}=await import('@/lib/artifacts');const {createGroup}=await import('@/lib/groups');const {GET:assetGet}=await import('@/app/a/[id]/assets/route');const {GET:rawGet}=await import('@/app/a/[id]/raw/route');
  const user=await createUser({email:'mxmx_test_bundle_late_share_owner@example.com'}),reader=await createUser({email:'mxmx_test_bundle_late_share_reader@example.com'});const owner=await mintAccountToken('bundle-late-share',user.id);
  const ownerActor={credential:'session' as const,userId:user.id,email:user.email!,emailVerified:true},readerActor={credential:'session' as const,userId:reader.id,email:reader.email!,emailVerified:true};
  const {testIdentity}=await import('@/__tests__/harness');const ownerIdentity=testIdentity('session',{userId:user.id,email:user.email});
@@ -168,7 +168,7 @@ it('delegates private dependencies when the page is shared later and revokes wit
  await trashRow(child.id);expect((await read(ownerActor)).status).toBe(404);
 });
 it('supports group membership granted after private bundle publication without broadening direct child URLs',async()=>{
- const {createUser}=await import('@/lib/accounts');const {createGroup,removeGroupMember}=await import('@/lib/groups');const {GET:assetGet}=await import('@/app/a/[id]/assets/route');
+ const {createUser}=await import('@/lib/accounts/testing');const {createGroup,removeGroupMember}=await import('@/lib/groups');const {GET:assetGet}=await import('@/app/a/[id]/assets/route');
  const user=await createUser({email:'mxmx_test_bundle_group_owner@example.com'}),member=await createUser({email:'mxmx_test_bundle_group_member@example.com'});const actor=await mintAccountToken('bundle-group-share',user.id);const group=await createGroup(user.id,{handle:'bundle_group_access',name:'Bundle access'});
  const created=await POST(request('/api/artifacts',{method:'POST',token:actor.token,headers:{'Idempotency-Key':'bundle_group_share_create'},json:{visibility:'private',destination:{type:'group',id:group.id},html:'<img src="./logo.svg">',publicationBundle:{entryPath:'index.html',files:[file('logo.svg','<svg/>','image/svg+xml')]}}}));const saved=await created.json();expect(created.status,JSON.stringify(saved)).toBe(201);const child=saved.dependencyReceipts[0],params=routeParams(saved.id);
  const read=()=>assetGet(request(`/a/${saved.id}/assets?dependency=${child.id}&revision=1`,{actor:{credential:'session',userId:member.id,email:member.email!,emailVerified:true}}),params);

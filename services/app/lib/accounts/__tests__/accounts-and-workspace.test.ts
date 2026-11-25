@@ -7,7 +7,8 @@
 import { ACTOR_HEADER, type Actor } from '@artifactbin/contracts/actor';
 import { signActor } from '@artifactbin/utils';
 import { describe, expect, it } from 'vitest';
-import { createUser, mintToken } from '@/lib/accounts';
+import { mintToken } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { useAppHarness } from '@/__tests__/harness';
 import { createAppServer } from '@/server/app';
 import { postArtifact } from '@/__tests__/artifact-fixtures';

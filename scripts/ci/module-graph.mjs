@@ -86,8 +86,6 @@ const DOCUMENT_BROWSER_LEAVES = [
 /** lib/page-styles: retained server consumers use its public index. */
 const PAGE_STYLES_BROWSER_IMPORTERS = [];
 const PAGE_STYLES_BROWSER_LEAVES = [];
-/** lib/accounts: its index, downstream tokens, and the browser-safe shared handle contract. */
-const ACCOUNTS_ENTRIES = ['', 'tokens', 'handles'];
 /**
  * lib/document-serving and lib/agent-copy: server code enters through the index (it reads the database, the skill
  * tree and image tools); the app's browser code imports these pure leaf files for values (the app address of an
@@ -209,10 +207,10 @@ export const DEEP_MODULES = {
   'lib/dataflow': { entries: ['', 'server'], browserImporters: DATAFLOW_BROWSER_IMPORTERS, browserLeaves: DATAFLOW_BROWSER_LEAVES },
   'lib/document': { entries: DOCUMENT_ENTRIES, browserImporters: DOCUMENT_BROWSER_IMPORTERS, browserLeaves: DOCUMENT_BROWSER_LEAVES, browserLeavesOnly: true },
   'lib/page-styles': { entries: [''], browserImporters: PAGE_STYLES_BROWSER_IMPORTERS, browserLeaves: PAGE_STYLES_BROWSER_LEAVES },
-  'lib/accounts': { entries: ACCOUNTS_ENTRIES },
+  'lib/accounts': { entries: ['', 'tokens'], testOnly: ['testing'] },
   'lib/notifications': { entries: [''], serverOnly: [''] },
   // Infrastructure (config, db, schema, ids, events, request scope, services): its index only, and never in a browser bundle.
-  'lib/platform': { entries: [''], downstream: ['config', 'db', 'services'], serverOnly: [''] },
+  'lib/platform': { entries: [''], downstream: ['config', 'db', 'services'], serverOnly: [''], testOnly: ['testing'] },
   'lib/document-serving': { entries: [''], serverOnly: [''], browserImporters: ['services/app/solid/'], browserLeaves: DOCUMENT_SERVING_BROWSER_LEAVES },
   'lib/user-pages': { entries: [''], serverOnly: [''] },
   'lib/agent-copy': { entries: [''], serverOnly: [''], browserImporters: ['services/app/solid/'], browserLeaves: AGENT_COPY_BROWSER_LEAVES },
@@ -221,7 +219,8 @@ export const DEEP_MODULES = {
   'lib/avatars': { entries: [''], serverOnly: [''] },
   'lib/social': { entries: [''], serverOnly: [''] },
   'lib/allowances': { entries: [''], serverOnly: [''] },
-  'lib/datasets': { ...bundled('lib/datasets'), downstream: ['execute'] },
+  'lib/datasets': { ...bundled('lib/datasets'), downstream: ['execute'], testOnly: ['testing'] },
+  'lib/http': { ...bundled('lib/http'), testOnly: ['testing'] },
   'lib/operations': { entries: [''], downstream: ['http', 'registry'] },
   'lib/export': { entries: [''], downstream: ['assets'] },
   // Their indexes are in browser and skill-archive bundles, so node-only names have a server entry.

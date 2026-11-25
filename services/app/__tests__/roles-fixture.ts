@@ -8,7 +8,8 @@ import { type ArtifactRow, createArtifact, updateSharingFor } from '@/lib/artifa
 import { artifactQuery } from '@/lib/artifacts/table';
 import type { ShareRole, Visibility } from '@artifactbin/contracts/sharing';
 import type { Queryable } from '@artifactbin/contracts/db';
-import { identityForUser, createUser } from '@/lib/accounts';
+import { identityForUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { getDb } from '@/lib/platform';
 import { setArtifact } from '@/__tests__/rows';
 

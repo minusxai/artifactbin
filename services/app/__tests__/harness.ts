@@ -28,7 +28,7 @@ import { EVENTS_SCHEMA } from '@/lib/platform/config';
 import { overrideCatalogExecutor } from '@/lib/datasets/execute';
 import { AUTH_SECRET } from '@/lib/platform/config';
 import { getDb, recycleDbSession, resetDb, type Db, type Queryable } from '@/lib/platform/db';
-import { syncIdentitySettings } from '@/lib/platform';
+import { syncIdentitySettings } from '@/lib/platform/testing';
 import { resetExportRenderer } from '@/lib/export';
 import { flushViews } from '@/lib/analytics';
 import { resetRenderCache } from '@/lib/document-serving/render-cache';

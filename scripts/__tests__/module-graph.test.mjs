@@ -212,11 +212,26 @@ describe('module graph', () => {
 
   });
 
+  it.each(['accounts', 'datasets', 'http', 'platform'])('admits %s fixtures only through the test graph', module => {
+    const entry = `@/lib/${module}/testing`;
+    const files = {
+      [`services/app/lib/${module}/testing.ts`]: 'export const fixture = 1;',
+      'services/app/__tests__/fixture.test.ts': `import { fixture } from '${entry}';`,
+      'services/app/test/helpers/fixture.ts': `import { fixture } from '${entry}';`,
+    };
+    const tests = scanModuleGraph(tree(files));
+    expect(recordTestImports(tests).testImports).toEqual({});
+    const product = 'services/app/server/fixture.ts';
+    const violations = checkModuleGraph(scanModuleGraph(tree({
+      ...files, [product]: `import { fixture } from '${entry}';`,
+    })), allowList([])).violations.join('\n');
+    expect(violations).toContain(`lib/${module}'s test-only entries are imported by product code`);
+    expect(violations).toContain(`${product} imports ${entry}`);
+  });
+
   describe('lib/accounts row as shipped (DEEP_MODULES)', () => {
     const check = files => checkModuleGraph(scanModuleGraph(tree(files)), allowList([])).violations.join('\n');
     const accounts = {
-      'services/app/lib/accounts/handles.ts': '',
-      'services/app/lib/serving/handles.ts': "import { HANDLE_RE } from '../accounts/handles';\n",
       'services/app/lib/accounts/index.ts': '', 'services/app/lib/accounts/tokens.ts': '', 'services/app/lib/accounts/viewer.ts': '', 'services/app/lib/accounts/actors.ts': '',
       'services/app/lib/serving/a.ts': "import { sessionActor, type TokenActor } from '@/lib/accounts';\n",
       'services/app/lib/listings/b.ts': "import { LIVE_TOKEN_SQL } from '../accounts/tokens';\n",

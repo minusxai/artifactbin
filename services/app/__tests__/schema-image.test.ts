@@ -6,7 +6,8 @@
 import { existsSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterAll, describe, expect, inject, it } from 'vitest';
-import { getDb, resetDb, schemaImageInputs, schemaImageKey } from '@/lib/platform';
+import { getDb } from '@/lib/platform';
+import { resetDb, schemaImageInputs, schemaImageKey } from '@/lib/platform/testing';
 import { readSchemaImage, schemaImageFile, schemaImageWrites, writeSchemaImage } from '@/test/setup/schema-image-file';
 import {tempDirSync} from '@artifactbin/test-support/temp-dir';
 

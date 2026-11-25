@@ -10,7 +10,8 @@ import { useAppHarness, mintAccountToken as mintToken, request, params } from '@
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as serveRaw } from '@/app/a/[id]/raw/route';
 import { GET as pageData } from '@/app/api/page/artifact/[id]/route';
-import { createUser, ensureUsername } from '@/lib/accounts';
+import { ensureUsername } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { setArtifact } from '@/__tests__/rows';
 
 const harness = useAppHarness();

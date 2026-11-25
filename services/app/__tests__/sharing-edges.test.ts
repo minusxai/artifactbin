@@ -16,8 +16,9 @@ import { GET as listMineRoute } from '@/app/api/my/artifacts/route';
 import { DELETE as deleteMineRoute } from '@/app/api/my/artifacts/[id]/route';
 import { PUT as putSharingRoute } from '@/app/api/my/artifacts/[id]/sharing/route';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { createUser, ensureUsername, setUsername } from '@/lib/accounts';
-import { people } from '@/lib/datasets';
+import { ensureUsername } from '@/lib/accounts';
+import { createUser, setUsername } from '@/lib/accounts/testing';
+import { people } from '@/lib/datasets/testing';
 import { getDb } from '@/lib/platform';
 import { setArtifact } from '@/__tests__/rows';
 

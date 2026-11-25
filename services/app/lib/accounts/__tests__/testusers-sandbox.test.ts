@@ -18,10 +18,11 @@ import { POST as annotateWeb } from '@/app/api/my/artifacts/[id]/annotations/rou
 import { POST as likeRoute } from '@/app/api/my/artifacts/[id]/like/route';
 import { POST as followRoute } from '@/app/api/users/[id]/follow/route';
 import { getArtifactById } from '@/lib/artifacts';
-import { getUserById, identityForUser, createTestUser, createUser, getUserByUsername } from '@/lib/accounts';
+import { getUserById, identityForUser, createTestUser, getUserByUsername } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { getDb } from '@/lib/platform';
 import { request, useAppHarness, params } from '@/__tests__/harness';
-import { userOptions } from '@/lib/datasets';
+import { userOptions } from '@/lib/datasets/testing';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { listPublicArtifactsByUser } from '@/lib/workspace';
 

@@ -7,9 +7,9 @@ import { mintAccountToken, setSession } from '@/__tests__/harness';
  *   touch     → last_used_at is stamped where the app first trusts a token-bearing actor, sampled per minute
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { createUser } from '@/lib/accounts';
-import { DEFAULT_TOKEN_TTL_MS, listTokensByUser, mintToken } from '@/lib/accounts';
-import { TOUCH_INTERVAL_MS } from '@/lib/accounts/tokens';
+import { createUser } from '@/lib/accounts/testing';
+import { listTokensByUser, mintToken } from '@/lib/accounts';
+import { DEFAULT_TOKEN_TTL_MS, TOUCH_INTERVAL_MS } from '@/lib/accounts/tokens';
 import { POST as mintAnonymous } from '@/app/api/internal/tokens/route';
 import { GET as listArtifacts } from '@/app/api/artifacts/route';
 import { request, useAppHarness } from '@/__tests__/harness';

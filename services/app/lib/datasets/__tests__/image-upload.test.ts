@@ -17,7 +17,7 @@ import { storeImageContent } from '@/lib/datasets';
 
 
 import { mintAccountToken as mintToken, params } from '@/__tests__/harness';
-import { createUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import type { StoredContent } from '@/lib/document';
 import { useAppHarness, request, useSessionUser } from '@/__tests__/harness';
 import { POST as previewRoute } from '@/app/api/preview/route';

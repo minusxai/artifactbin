@@ -8,7 +8,7 @@ import { request, setSession, useAppHarness, params } from '@/__tests__/harness'
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { GET as exportRoute } from '@/app/a/[id]/export/route';
 import { GET as downloadRoute } from '@/app/a/[id]/download/route';
-import { createUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { createArtifact } from '@/lib/artifacts';
 import { holdsCreatingToken } from '@/lib/artifact-access';
 import { artifactPageResponse, readableApp } from '@/lib/document-serving';

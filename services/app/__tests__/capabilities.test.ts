@@ -13,7 +13,7 @@ import { can } from '@/lib/artifact-access';
 import { identityForUser, createTestUser } from '@/lib/accounts';
 import { createArtifact } from '@/lib/artifacts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { createUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { nativeHtml } from './native-html-fixture';
 
 useAppHarness();

@@ -8,9 +8,10 @@ import {createBearerReader} from '../src/identity/bearer';
 import {ensureHumanAuthSchema} from '../src/auth/human';
 import {ensureAuthSchema} from '../src/schema';
 import {mintTestToken,resetTestDb,testDb,testAuthOptions} from './helpers';
-import { createUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import {attachActor} from '@artifactbin/utils';
-import {getDb,resetDb} from '@/lib/platform';
+import {getDb} from '@/lib/platform';
+import { resetDb } from '@/lib/platform/testing';
 import {createAppServer} from '@/server/app';
 
 /**

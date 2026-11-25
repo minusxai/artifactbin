@@ -24,7 +24,8 @@ import { EVENTS_SCHEMA } from '@/lib/platform';
 import { getDb } from '@/lib/platform';
 import { viewSeriesByUser } from '@/lib/workspace';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { createUser, ensureUsername } from '@/lib/accounts';
+import { ensureUsername } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 
 useAppHarness();
 

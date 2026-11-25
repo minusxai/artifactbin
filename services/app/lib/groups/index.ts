@@ -15,7 +15,7 @@ import type {UpdateGroupInput, AccountPreferences, CreateGroupInput, DefaultDest
 import type {Queryable as ContractQueryable} from '@artifactbin/contracts/db';
 import { getDb, services, deploymentConfig, env, emit, serviceAudiences } from '../platform';
 import {groupSignInServiceConfigured} from '@artifactbin/contracts/service-audiences';
-export interface GroupRecord {trusted_issuer:string|null;tenancy_id:string|null;id:string;handle:string;name:string;description:string;created_by:string;deleted_at:string|null;parent_id:string|null;}
+interface GroupRecord {trusted_issuer:string|null;tenancy_id:string|null;id:string;handle:string;name:string;description:string;created_by:string;deleted_at:string|null;parent_id:string|null;}
 export {GroupError} from './errors';
 const summary=(group:GroupRecord,role:GroupRole|null):GroupSummary=>({id:group.id,handle:group.handle,name:group.name,description:group.description,role,parent_id:group.parent_id??null});
 export async function getGroupById(id:string,query?:ContractQueryable):Promise<GroupRecord|null>{return (await (query??await getDb()).query<GroupRecord>('SELECT * FROM groups WHERE id=$1 AND deleted_at IS NULL',[id])).rows[0]??null;}
@@ -229,7 +229,7 @@ interface GroupSignIn {id:string;name:string|null;role:GroupRole|'editor';issued
  */
 interface GroupServiceSignIns {grant_id:string;service_id:string;role:'member'|'editor';count:number;last_issued_at:string;approved_at:string;}
 /** One page of a group's sign-ins: people's newest first (`next` positions the following page), and every approval's row. */
-export interface GroupSignInPage {sign_ins:GroupSignIn[];next:{created:string;id:string}|null;services:GroupServiceSignIns[];}
+interface GroupSignInPage {sign_ins:GroupSignIn[];next:{created:string;id:string}|null;services:GroupServiceSignIns[];}
 /** Refuse anyone but an Admin of the group (direct, or through an ancestor): `forbidden` for its other people, `not_found` otherwise. */
 async function requireGroupAdmin(userId:string,groupId:string,db:ContractQueryable):Promise<void>{
  if((await db.query('SELECT 1 FROM group_admins WHERE group_id=$1 AND user_id=$2',[groupId,userId])).rows.length)return;
@@ -274,7 +274,7 @@ export async function revokeGroupSignIn(userId:string,groupId:string,id:string):
  * on the group's settings page: each live approval with who approved it (history only), and the configured services
  * that may be approved (those that opted in with `group_sign_ins`). The identity module writes and re-checks the Admin.
  */
-export interface ServiceGroupSignIn {id:string;service_id:string;role:'member'|'editor';approved_by:{id:string;username:string|null;name:string|null};created_at:string;
+interface ServiceGroupSignIn {id:string;service_id:string;role:'member'|'editor';approved_by:{id:string;username:string|null;name:string|null};created_at:string;
  /** Whether the service is still configured as it was approved (with the opt-in, at the same origin): only then does it act. */
  configured:boolean;}
 export async function listServiceGroupSignIns(userId:string,groupId:string):Promise<{approvals:ServiceGroupSignIn[];services:{id:string;origin:string}[]}>{

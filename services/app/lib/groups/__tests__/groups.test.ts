@@ -1,7 +1,7 @@
 import {admitGroupMember} from '@/__tests__/harness';
 import {describe,it,expect} from 'vitest';
 import {useAppHarness} from '@/__tests__/harness';
-import { createUser, setUsername } from '@/lib/accounts';
+import { createUser, setUsername } from '@/lib/accounts/testing';
 import {overrideConfig,resetConfigOverrides} from '@/lib/platform/config';
 import {getDb} from '@/lib/platform/db';
 import {createGroup,getGroupDetail,searchGroupMembers,getGroupRole,setGroupMember,removeGroupMember,getAccountPreferences,setAccountPreferences,inviteGroupMember,acceptGroupInvitations,setGroupLink} from '..';

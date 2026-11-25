@@ -10,7 +10,8 @@ import { GET as listAnnotations, POST as createAnnotation } from '@/app/api/arti
 import { DELETE as deleteAnnotation } from '@/app/api/artifacts/[id]/annotations/[annId]/route';
 import { accountProfile, updateAccountProfile } from '@/lib/artifacts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { identityForUser, createUser } from '@/lib/accounts';
+import { identityForUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 
 useAppHarness();
 const body = async (r: Response) => (await r.json()) as Record<string, any>;

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { useAppHarness, request, mintAccountToken, params } from './harness';
 import { avatarUrl } from '@/lib/avatars';
-import { createUser, identityForUser, ownerUsername } from '@/lib/accounts';
+import { identityForUser, ownerUsername } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 const face=async(id:string)=>({kind:'human',label:await ownerUsername(id),user_id:id,image:avatarUrl({id,image_key:null})});
 import { createArtifact, updateSharingFor } from '@/lib/artifacts';
 import { listAnnotationsFor } from '@/lib/annotations';

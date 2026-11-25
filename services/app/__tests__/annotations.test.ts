@@ -28,7 +28,7 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { DELETE as myDeleteAnnotationRoute, POST as myActOnAnnotationRoute } from '@/app/api/my/artifacts/[id]/annotations/[annId]/route';
 import { GET as myListAnnotationsRoute, POST as myCreateAnnotationRoute } from '@/app/api/my/artifacts/[id]/annotations/route';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { setUsername } from '@/lib/accounts';
+import { setUsername } from '@/lib/accounts/testing';
 import { countOpenAnnotations } from '@/lib/annotations';
 import { avatarUrl } from '@/lib/avatars';
 import { setArtifact } from '@/__tests__/rows';

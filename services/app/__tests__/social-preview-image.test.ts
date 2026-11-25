@@ -6,7 +6,7 @@ import {PUT as replace} from '@/app/api/artifacts/[id]/route';
 import { POST as create } from '@/app/api/artifacts/route';
 import {exportImage,EXPORT_PNG} from './export-helpers';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { createUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { getArtifactById,artifactState } from '@/lib/artifacts';
 import { setServices } from '@/lib/platform';
 import { fakeBrowser } from '@artifactbin/utils';

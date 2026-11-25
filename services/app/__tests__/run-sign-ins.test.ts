@@ -15,7 +15,8 @@ import {IDENTITY_INTROSPECT_PATH} from '@artifactbin/contracts/identity-service'
 import {CHAT_SIGN_IN_PATH, RUN_SIGN_IN_PATH, SCHEDULE_SIGN_IN_PATH, SERVICE_TOKEN_PATH, type ChatSignInRequest, type RunSignIn, type ScheduleSignInRequest} from '@artifactbin/contracts/service-audiences';
 import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts/routes';
 import {createAuthComposedHost} from '@/test/helpers/auth-host';
-import {AUTH_SECRET,getDb,syncIdentitySettings} from '@/lib/platform';
+import {AUTH_SECRET,getDb} from '@/lib/platform';
+import { syncIdentitySettings } from '@/lib/platform/testing';
 import {overrideConfig} from '@/lib/platform/config';
 import {useAppHarness} from './harness';
 import {tempDir} from '@artifactbin/test-support/temp-dir';

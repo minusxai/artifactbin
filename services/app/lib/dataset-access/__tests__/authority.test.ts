@@ -3,7 +3,8 @@ import { publishedWithActor, setVisibility } from '@/__tests__/artifact-fixtures
 import {useAppHarness,request,mintAccountToken,params} from '@/__tests__/harness';
 import {POST as create} from '@/app/api/artifacts/route';
 import {GET as readPage,PUT as replacePage} from '@/app/api/artifacts/[id]/route';
-import { createUser, identityForUser, type AccessActor } from '@/lib/accounts';
+import { identityForUser, type AccessActor } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import {getVersionFor,updateSharingFor} from '@/lib/artifacts';
 import {getDb} from '@/lib/platform';
 import {linkedSql,errorCode} from '@/__tests__/linked-datasets';

@@ -2,7 +2,8 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createEvents, ensureEventsSchema } from '@artifactbin/events/local';
 import { useAppHarness } from '@/__tests__/harness';
-import { EVENTS_SCHEMA, envelope, overrideRequestHeaders, services, setServices } from '@/lib/platform';
+import { EVENTS_SCHEMA, envelope, services, setServices } from '@/lib/platform';
+import { overrideRequestHeaders } from '@/lib/platform/testing';
 import { flushViews, recordView, trackEvent, viewTotalsFor, viewSeriesFor, forgetEventsTable } from '..';
 
 const harness = useAppHarness();

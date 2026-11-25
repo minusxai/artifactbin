@@ -18,7 +18,8 @@ import {RUN_SIGN_IN_PATH, SERVICE_TOKEN_PATH} from '@artifactbin/contracts/servi
 import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts/routes';
 import type {RenderRequest} from '@artifactbin/contracts/browser';
 import {createAuthComposedHost} from '@/test/helpers/auth-host';
-import {AUTH_SECRET,getDb,setServices,syncIdentitySettings} from '@/lib/platform';
+import {AUTH_SECRET,getDb,setServices} from '@/lib/platform';
+import { syncIdentitySettings } from '@/lib/platform/testing';
 import {overrideConfig} from '@/lib/platform/config';
 import {createGroup} from '@/lib/groups';
 import type {AccessActor} from '@/lib/accounts';

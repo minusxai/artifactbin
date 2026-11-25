@@ -2,7 +2,7 @@
  * per-artifact UTC deduplication, and no rendered sparklines in insight payloads. */
 import { describe, expect, it, vi } from 'vitest';
 import { GET as homeRoute } from '@/app/api/page/home/route';
-import { createUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { artifactSummaryToWire } from '@/lib/artifact-wire';
 import { getDb, measureQueries, EVENTS_SCHEMA } from '@/lib/platform';
 import { accountWorkspaceFor, accountWorkspaceInsightsFor, listOwnedArtifacts } from '@/lib/workspace';

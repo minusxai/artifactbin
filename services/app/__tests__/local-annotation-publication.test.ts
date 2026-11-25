@@ -3,7 +3,7 @@ import {nativeAnchor} from './native-annotation-fixture';
 import {htmlTextFingerprint} from '@artifactbin/contracts/html-annotation';
 import {it,expect} from 'vitest';
 import {useAppHarness,request,params} from '@/__tests__/harness';
-import { createUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {POST as createArtifact} from '@/app/api/artifacts/route';
 import {POST as createComment,GET as listComments} from '@/app/api/artifacts/[id]/annotations/route';

@@ -5,7 +5,7 @@ import { POST as like } from '@/app/api/my/artifacts/[id]/like/route';
 import { nativeHtml } from './native-html-fixture';
 import { accountProfile } from '@/lib/artifacts';
 import { mintAccountToken as mintToken, params } from '@/__tests__/harness';
-import { createUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { count, has, link } from '@/lib/social';
 import { request, useAppHarness } from './harness';
 useAppHarness();

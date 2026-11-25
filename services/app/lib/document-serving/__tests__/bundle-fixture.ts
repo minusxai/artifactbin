@@ -5,7 +5,7 @@ import {mintAccountToken,request,testIdentity,testPagesSite} from '@/__tests__/h
 import {POST} from '@/app/api/artifacts/route';
 
 export async function publishBundleAndOpen(keyPrefix:string,sessionPrefix:string,visibility:'unlisted'|'private',name:string,html:string,publicationBundle:{entryPath:string;files:unknown[]}){
- const {createUser}=await import('@/lib/accounts');
+ const {createUser}=await import('@/lib/accounts/testing');
  const {setServices}=await import('@/lib/platform');
  const {pagesOriginFor}=await import('@/lib/http');
  const {createAppServer}=await import('@/server/app');

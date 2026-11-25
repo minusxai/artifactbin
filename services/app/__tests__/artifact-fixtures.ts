@@ -1,7 +1,8 @@
 /** The rows and people these tests stand on, made through public interfaces only. */
 import { expect } from 'vitest';
 import { nativeHtml } from '@/__tests__/native-html-fixture';
-import { createUser, identityForUser, type AccessActor } from '@/lib/accounts';
+import { identityForUser, type AccessActor } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { getDb } from '@/lib/platform';
 import { createArtifact } from '@/lib/artifacts';
 import { type ArtifactRow } from '@/lib/artifact-access';

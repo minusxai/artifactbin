@@ -2,7 +2,8 @@
  * for unauthorized readers, no eager sparkline rendering, and shared series for children tables. */
 import { describe, expect, it, vi } from 'vitest';
 import { GET as pageRoute } from '@/app/api/page/artifact/[id]/route';
-import { identityForUser, createUser, type AccessActor } from '@/lib/accounts';
+import { identityForUser, type AccessActor } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { getArtifactById, childrenTableFor } from '@/lib/artifacts';
 import { getDb, measureQueries, EVENTS_SCHEMA } from '@/lib/platform';
 import { trackEvent } from '@/lib/analytics';

@@ -1,7 +1,7 @@
 /** Every door to /login leads back to the address the person left — path, query and hash. */
 import { describe, expect, it } from 'vitest';
-import { loginHref } from '@/lib/http';
-import { internalRedirectTarget } from '@/lib/http';
+import { loginHref } from '@/lib/http/login-href';
+import { internalRedirectTarget } from '@/lib/http/safe-redirect';
 
 const back = (href: string) => internalRedirectTarget(new URL(href, 'https://app.test').searchParams.get('callbackUrl'), 'https://app.test');
 

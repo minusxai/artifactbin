@@ -8,9 +8,9 @@ import type { EventEnvelope, EventsService } from '@artifactbin/contracts/events
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useAppHarness } from '@/__tests__/harness';
 import {
-  PostgresDb, SCHEMA_STATEMENTS, TABLES, databaseTargetForRuntime, enqueueEvent, enqueueEvents, envelope, getDb, measureQueries,
-  parseDatabaseUrl, recordEvent, resetDb, services, setEventProjection, setServices, startEventPublisher,
+  TABLES, enqueueEvent, enqueueEvents, envelope, getDb, measureQueries, recordEvent, services, setEventProjection, setServices, startEventPublisher,
 } from '@/lib/platform';
+import { PostgresDb, SCHEMA_STATEMENTS, databaseTargetForRuntime, parseDatabaseUrl, resetDb } from '@/lib/platform/testing';
 import { SCHEMA_LOCK, configureDb } from '@/lib/platform/db';
 
 const harness = useAppHarness();

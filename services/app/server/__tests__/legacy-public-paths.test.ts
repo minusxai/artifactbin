@@ -6,7 +6,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { classifyPath, emailLinkPath } from '@artifactbin/contracts/url-space';
 import { setNotificationDelivery } from '@/lib/notifications';
 import { useAppHarness } from '@/__tests__/harness';
-import { createUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { getDb } from '@/lib/platform';
 import { createAppServer } from '../app';
 import {tempDirSync} from '@artifactbin/test-support/temp-dir';

@@ -6,7 +6,9 @@
 import { describe, expect, it } from 'vitest';
 import { recordStatements, useAppHarness } from '@/__tests__/harness';
 import { identityForUser, mintToken } from '@/lib/accounts';
-import { VERSION_PARAM, canReadArtifact, capabilityGuard, UnservableDocument, accessMoved, archivedVersionFor, archivedVersionForActor, createArtifact, getArtifact, getArtifactAccessById, getArtifactById, getArtifactFor, getArtifactHeaderById, getEditableArtifactFor, getLinkReadableArtifact, getOwnedArtifactFor, hasInvitedUsersFor, readableArtifact, readableArtifactHeader, readableArtifactIdentity, refusingUnservable, replaceArtifactFor, servableDocument, servedRow, snapshotForReader, snapshotHeadFor, unservable, updateSharingFor } from '@/lib/artifacts';
+import { VERSION_PARAM, canReadArtifact, capabilityGuard, UnservableDocument, accessMoved, archivedVersionFor, createArtifact, getArtifactAccessById, getArtifactById, getArtifactFor, getArtifactHeaderById, getEditableArtifactFor, getLinkReadableArtifact, getOwnedArtifactFor, hasInvitedUsersFor, readableArtifact, readableArtifactHeader, readableArtifactIdentity, refusingUnservable, replaceArtifactFor, servableDocument, servedRow, snapshotForReader, snapshotHeadFor, unservable, updateSharingFor } from '@/lib/artifacts';
+import { archivedVersionForActor } from '@/lib/artifacts/archived-version';
+import { getArtifact } from '@/lib/artifacts/rows';
 import { type ArtifactRow } from '@/lib/artifact-access';
 import { account, dataset, mine, page, readAllPolicy, setVisibility, trashRow } from '@/__tests__/artifact-fixtures';
 

@@ -13,7 +13,8 @@ import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { getArtifactById, updateSharingFor } from '@/lib/artifacts';
 import { getDb } from '@/lib/platform';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { createUser, identityForUser } from '@/lib/accounts';
+import { identityForUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { buildShelf } from '@/lib/shelf';
 import { setArtifact } from '@/__tests__/rows';
 

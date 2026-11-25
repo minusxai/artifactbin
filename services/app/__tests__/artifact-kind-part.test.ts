@@ -4,7 +4,7 @@ import { request, setSession, useAppHarness, params } from './harness';
 import { POST as createRoute } from '@/app/api/artifacts/route';
 import { GET as pageRoute } from '@/app/api/page/artifact/[id]/route';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { createUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { measureQueries } from '@/lib/platform';
 
 useAppHarness();

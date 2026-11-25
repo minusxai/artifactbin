@@ -23,7 +23,7 @@ import { setAssetByteQuotaForTests } from '@/lib/artifacts/testing';
 import { LOCAL_OBJECT_DIR } from '@/lib/platform';
 import { objectStore } from '@/lib/object-store';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { createUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { allowLocalWebIngest, restoreWebIngestPolicy } from '@/test/helpers/web-ingest';
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 import { useLoopbackLookup } from '@artifactbin/utils/node/loopback-lookup';

@@ -1,6 +1,6 @@
 import {nativeHtml} from '@/__tests__/native-html-fixture';
 import {SKILL_MAIN_MAX_BYTES} from '@/lib/skills';
-import { createUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { artifactQuery } from '@/lib/artifacts/table';
 import {observedRequest} from '@/__tests__/conditional-request';
 /**

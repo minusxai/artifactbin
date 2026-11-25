@@ -1,4 +1,4 @@
-import {isValidHandle} from '../accounts/handles';
+import {isValidHandle} from '@artifactbin/contracts/handles';
 import {normalizeOrigin} from '@artifactbin/contracts/server-identity';
 
 export interface SetupInstructionOptions {serverOrigin:string;groupHandle?:string;setDefault?:boolean;}

@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { mintAccountToken, useAppHarness } from '@/__tests__/harness';
 import { seedArtifacts, setArtifact } from '@/__tests__/rows';
-import { setUsername } from '@/lib/accounts';
+import { setUsername } from '@/lib/accounts/testing';
 import { getDb } from '@/lib/platform';
 import { saveSiteRoot, siteDestination, siteOwner } from '..';
 

@@ -5,7 +5,8 @@ import { GET as listAnnotations, POST as browserComment } from '@/app/api/my/art
 import { POST as apiComment } from '@/app/api/artifacts/[id]/annotations/route';
 import { PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
 import { observedRequest } from '@/__tests__/conditional-request';
-import { createUser, ensureUsername } from '@/lib/accounts';
+import { ensureUsername } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { htmlTextFingerprint } from '@artifactbin/contracts/html-annotation';
 import { setArtifact } from '@/__tests__/rows';
 const harness = useAppHarness();

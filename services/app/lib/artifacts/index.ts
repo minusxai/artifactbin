@@ -13,7 +13,7 @@ export type { ArtifactRow } from '@/lib/artifact-access';
 
 /** Reads (every server caller): the one read decision and the route gate, the reader snapshot, the lookups, versions and listings, and the state digest. */
 export { admitRead, canReadArtifact, capabilityGuard, readableArtifact, readableArtifactHeader, readableArtifactIdentity, snapshotForReader, snapshotHeadFor } from './read-access';
-export { accessMoved, getArtifact, getArtifactAccessById, getArtifactById, getArtifactFor, getArtifactHeaderById, getArtifactHeadersByIds, getEditableArtifactFor, getLinkReadableArtifact, getOwnedArtifactFor, getSharingArtifactFor, hasInvitedUsersFor } from './rows';
+export { accessMoved, getArtifactAccessById, getArtifactById, getArtifactFor, getArtifactHeaderById, getArtifactHeadersByIds, getEditableArtifactFor, getLinkReadableArtifact, getOwnedArtifactFor, getSharingArtifactFor, hasInvitedUsersFor } from './rows';
 export type { ArtifactHeader } from './rows';
 export { getVersionFor, listVersionsFor, listVersionPageFor, listArtifactPageFor, isVersionNotArchived } from './store';
 export type { ArtifactSummary, VersionContent } from './store';
@@ -25,7 +25,7 @@ export { slugAddress, slugAddressTarget } from './slug-address';
 /** Write path (publish, operations, offline): create, edit, replace and revert; metadata; quotas; version conflicts; the creation ledger; id reservation; mutation receipts; and the deployment's two seams. */
 /** Token claim and guest merge (lib/authentication), inside the caller's transaction. */
 export { setLiveDatasetSummary, type LiveConnectionInsert } from './store';
-export { createArtifact, afterCreated, replaceArtifactFor, revertArtifactFor, setMetadataFor, artifactQuotaExceeded, publicationCountQuotaExceeded, byteQuotaFor, publisherByteQuota, isVersionConflict } from './store';
+export { createArtifact, replaceArtifactFor, revertArtifactFor, setMetadataFor, artifactQuotaExceeded, publicationCountQuotaExceeded, publisherByteQuota, isVersionConflict } from './store';
 export type { ArtifactInput, MetadataPatch, ReplaceOpts } from './store';
 /** Live regions as page storage (lib/region-sessions): the editable head, the region rows and the save as a version. */
 export { checkpointLiveRegions, saveLiveRegionsInTx } from './store';
@@ -35,7 +35,7 @@ export type { RegionRow, SaveDue } from './regions';
 export { assetByteQuotaExceeded, assetByteQuotaLimit } from './asset-quota';
 /** The web images a page serves on its owner's host (meta.webAssets), derived at every content write. */
 export { CreationReplay, prepareCreation, recoverCreationIds } from './creation-ledger';
-export { reserveArtifactIds, reserveIds } from './identities';
+export { reserveIds } from './identities';
 export { completeMutationReceipt, durableMutation } from './mutation-receipt';
 export type { MutationReceipt } from './mutation-receipt';
 export { setMutationInvocation } from './mutation-invocation';
@@ -55,7 +55,7 @@ export { rerootArtifact, restoreTrashedSubtree, trashSubtree } from './trash';
 
 /** Serving: what may be served, and archived versions. */
 export { UnservableDocument, refusingUnservable, servableDocument, unservable } from './servable';
-export { VERSION_PARAM, archivedVersionFor, archivedVersionForActor, servedRow } from './archived-version';
+export { VERSION_PARAM, archivedVersionFor, servedRow } from './archived-version';
 
 /** Independent ownership destinations and atomic ownership transfer. */
 export {parseArtifactDestination,newArtifactDestination,permitsMemberPage,ArtifactParentRefusal,GroupPersonalDestination} from './ownership';
@@ -67,7 +67,6 @@ export {transferArtifact} from './transfer';
  * compiled-row result and its error text, and the folder table.
  */
 export { commitDatasetPolicy, commitDatasetWrite } from './dataset-commit';
-export { pinMutationContext } from './mutation-receipt';
 export type { MutationReply } from './mutation-receipt';
 export { mutationInvocation } from './mutation-invocation';
 export { childrenTableFor } from './placement';

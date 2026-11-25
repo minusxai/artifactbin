@@ -9,7 +9,7 @@ import { EVENTS_SCHEMA } from '@/lib/platform';
 import { link } from '@/lib/social';
 import { setServices } from '@/lib/platform';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { createUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 type UserRow = Awaited<ReturnType<typeof createUser>>;
 
 const harness = useAppHarness();

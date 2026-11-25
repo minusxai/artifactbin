@@ -15,7 +15,7 @@ import { DELETE as deleteTestUser } from '@/app/api/testusers/[id]/route';
 import { getArtifactById } from '@/lib/artifacts';
 import { getUserById } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { createUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { TESTUSER_LIMITS } from '@artifactbin/contracts/testusers';
 
 const BASE = 'http://localhost:3000';

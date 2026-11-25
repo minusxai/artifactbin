@@ -6,7 +6,9 @@
 import { TESTUSER_ERRORS } from '@artifactbin/contracts/testusers';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createGuestOwner, mintAccountToken, useAppHarness } from '@/__tests__/harness';
-import { ANONYMOUS_ACTOR, DuplicateProfileEmail, NO_IDENTITY, RESERVED_HANDLES, accountOf, answeredOnce, closeTestUserSessions, confirmWelcome, createTestUser, createUser, forgetTestUserSession, forwardedFor, getTestUserRow, hasAdminCredential, hostedCredentialDescriptor, identityForUser, matchesWorkspaceAccount, noteTestUserSession, rememberTokenClient, replaceUserImageKey, resolveTestUser, revokeToken, syncProfile, testUserSessionCount, welcomePending } from '@/lib/accounts';
+import { ANONYMOUS_ACTOR, DuplicateProfileEmail, NO_IDENTITY, accountOf, answeredOnce, closeTestUserSessions, confirmWelcome, createTestUser, forgetTestUserSession, forwardedFor, getTestUserRow, hasAdminCredential, hostedCredentialDescriptor, identityForUser, matchesWorkspaceAccount, noteTestUserSession, rememberTokenClient, replaceUserImageKey, resolveTestUser, revokeToken, syncProfile, testUserSessionCount, welcomePending } from '@/lib/accounts';
+import { RESERVED_HANDLES } from '@artifactbin/contracts/handles';
+import { createUser } from '@/lib/accounts/testing';
 import { forgetRequestCredentials, markRequestAuthority } from '@/lib/accounts/tokens';
 import { TRUSTED_PROXY_HOPS, getDb, runWithRequest, services, setServices } from '@/lib/platform';
 

@@ -1,5 +1,6 @@
 import { getDb } from '@/lib/platform';
-import { identityForUser, createUser, ANONYMOUS_ACTOR, type AccessActor } from '@/lib/accounts';
+import { identityForUser, ANONYMOUS_ACTOR, type AccessActor } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { it, expect, vi } from 'vitest';
 import { publishedId } from '@/__tests__/artifact-fixtures';
 import { PUT as replace } from '@/app/api/artifacts/[id]/route';

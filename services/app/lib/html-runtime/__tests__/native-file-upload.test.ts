@@ -1,7 +1,8 @@
 import type {Actor} from '@artifactbin/contracts/actor';
 import { storePolicy } from '@/__tests__/artifact-fixtures';
 import {expect,it,vi} from 'vitest';
-import { createUser, identityForUser } from '@/lib/accounts';
+import { identityForUser } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import {changeMembership,membershipState} from '@/lib/artifacts';
 import {mintAccountToken,request,useAppHarness,params} from '@/__tests__/harness';
 import {POST as createArtifact} from '@/app/api/artifacts/route';

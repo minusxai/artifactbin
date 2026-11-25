@@ -11,7 +11,8 @@ import { getArtifactById } from '@/lib/artifacts';
 
 
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { createUser, getUserById } from '@/lib/accounts';
+import { getUserById } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts/testing';
 import { agentCookie, request, useAppHarness, useSessionUser } from '@/__tests__/harness';
 
 useAppHarness();

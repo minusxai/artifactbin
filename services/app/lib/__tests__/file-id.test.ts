@@ -5,7 +5,8 @@
  * ID_RE accepts 6-12 so longer ids can be minted later with no migration.
  */
 import { describe, expect, it } from 'vitest';
-import { FILE_ID_LENGTH, generateFileId, generateInternalId, generateTokenId, ID_RE } from '@/lib/platform';
+import { generateFileId, generateInternalId, ID_RE } from '@/lib/platform';
+import { FILE_ID_LENGTH, generateTokenId } from '@/lib/platform/testing';
 
 describe('generateFileId', () => {
   it('mints exactly 6 chars of [a-zA-Z0-9]', () => {

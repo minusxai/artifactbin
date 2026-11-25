@@ -14,7 +14,8 @@ import {GROUP_PRINCIPALS_NOT_ACCEPTED, SERVICE_TOKEN_PATH} from '@artifactbin/co
 import {IDENTITY_INTROSPECT_PATH} from '@artifactbin/contracts/identity-service';
 import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts/routes';
 import {createAuthComposedHost} from '@/test/helpers/auth-host';
-import {AUTH_SECRET,getDb,syncIdentitySettings} from '@/lib/platform';
+import {AUTH_SECRET,getDb} from '@/lib/platform';
+import { syncIdentitySettings } from '@/lib/platform/testing';
 import {overrideConfig} from '@/lib/platform/config';
 import {createGroup,deleteGroup,removeGroupMember,setGroupMember,setGroupParent} from '@/lib/groups';
 import {resolveTokenById} from '@/lib/accounts';
