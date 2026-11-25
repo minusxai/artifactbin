@@ -49,7 +49,8 @@ import { ANONYMOUS } from '@artifactbin/contracts/actor';
 import { documentHostServes } from '@artifactbin/contracts/url-space';
 import { endPagesSession, exchangePagesTicket, pagesSessionOf, type PagesSession } from '@/lib/accounts';
 import { runWithRequest } from '@/lib/platform';
-import { addressedHost as requestHost, draftFromPagesHost, draftFromPagesOrigin, draftOriginFor, GUEST_TICKET, idFromPagesHost, idFromPagesOrigin, isPagesApexHost, markPagesRequest, PAGES_TICKET_PARAM, pagesCookieName, pagesOriginFor, withoutPagesTicket, type PagesSite } from '@/lib/http';
+import { addressedHost, draftOriginFor, GUEST_TICKET, markPagesRequest, PAGES_TICKET_PARAM, pagesCookieName, pagesOriginFor, withoutPagesTicket, type PagesSite } from '@/lib/http';
+import { draftFromPagesHost, draftFromPagesOrigin, idFromPagesHost, idFromPagesOrigin, isPagesApexHost } from '@/lib/http/pages-origin';
 import { GET as rawGet, HEAD as rawHead } from '@/app/a/[id]/raw/route';
 import { compressDynamic } from './content-encoding';
 import { nativeDraftPolicy } from '@/lib/document-serving';
@@ -73,9 +74,6 @@ const DOORS = ['events', 'events/frame', 'story', 'viewer', 'assets', 'resolve',
 const isStatic = documentHostServes;
 
 const NO_STORE = { 'cache-control': 'no-store' };
-
-/** The host the client addressed: a trusted proxy's forwarded host, else `Host` (lib/http `addressedHost`). */
-const addressedHost = (request: Request): string => requestHost(request);
 
 /** Which door of `id` a path names, or null. */
 function doorOf(pathname: string, id: string): string | null {

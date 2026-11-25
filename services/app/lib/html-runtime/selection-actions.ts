@@ -1,5 +1,6 @@
 import { COMMENT_ACTIONS_CSS } from "./bridge/comment-actions-presentation";
 import type { StoryEditSelection } from "./bridge/selection-contract";
+import { REGION_EDITOR_ATTR } from "./region-editor-contract";
 
 /** Native reader chrome only offers actions explicitly granted by the parent. */
 export interface HtmlSelectionActions {
@@ -47,14 +48,14 @@ export function createHtmlSelectionActions({
       'input,textarea,select,[contenteditable]:not([contenteditable="false"])',
     );
   };
-  /** A selection in a mounted region editor (region-editor REGION_EDITOR_ATTR) is page text an editor may comment on. */
+  /** A selection in a mounted region editor is page text an editor may comment on. */
   const selectable = (node: Node | null) => {
     const element =
       node?.nodeType === 1 ? (node as Element) : node?.parentElement;
     const host = element?.closest(
       'input,textarea,select,[contenteditable]:not([contenteditable="false"])',
     );
-    return !host || host.hasAttribute("data-af-region-editor");
+    return !host || host.hasAttribute(REGION_EDITOR_ATTR);
   };
   const coarse = () => win.matchMedia?.("(pointer: coarse)").matches === true;
   const show = (selected: StoryEditSelection, x?: number, y?: number) => {
