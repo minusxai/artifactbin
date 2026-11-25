@@ -1,19 +1,19 @@
 import {pinPublicationAssetUrls} from './plan';
 import type { AccessActor } from '@/lib/accounts';
-import {requestOrSessionActor} from '@/lib/authentication';
-import { archivedVersionFor, canReadArtifact, getArtifactById, readableArtifact } from '@/lib/artifacts';
+import { archivedVersionFor, canReadArtifact, getArtifactById, readableArtifact, type ArtifactRow } from '@/lib/artifacts';
 import { writerFor } from '@/lib/artifact-access';
 import { getDb } from '@/lib/platform';
 import {serveStoredFile} from '@/lib/datasets';
 import {REVALIDATE,etagOf,matchingTag,notModified} from '@/lib/http';
 import type {BundleReceipt} from './execute';
 interface Admission {delegator:AccessActor;version:number;receipts:BundleReceipt[]}
-/** `capture`: the door verified an export key for this page (lib/export read-key), which admits the page and the version
- * the capture shows, on exactly the terms the capture's own page is admitted (document-serving/raw). */
-async function admission(request:Request,actor:AccessActor,pageId:string,capture=false):Promise<Admission|null>{
- const page=await getArtifactById(pageId);if(!page||page.format!=='html'||!(capture||await canReadArtifact(page,actor)))return null;
+/** `page`: the page row this request read (once, at its door). `actor`: the request's actor, which also decides a
+ * version asked. `capture`: the door verified an export key for this page (lib/export read-key), which admits the page and
+ * the version the capture shows, on exactly the terms the capture's own page is admitted (document-serving/raw). */
+async function admission(request:Request,actor:AccessActor,page:ArtifactRow|null,capture=false):Promise<Admission|null>{
+ if(!page||page.format!=='html'||!(capture||await canReadArtifact(page,actor)))return null;
  // Naming the current version grants no history access beyond the already-readable head.
- const version=new URL(request.url).searchParams.get('version')===String(page.version)?null:await archivedVersionFor(request,page,()=>requestOrSessionActor(request),{capture});
+ const version=new URL(request.url).searchParams.get('version')===String(page.version)?null:await archivedVersionFor(request,page,async()=>actor,{capture});
  if(version==='not_found')return null;
  return {delegator:writerFor(page),version:version?.version??page.version,receipts:((version?.meta??page.meta) as {htmlPublicationDependencies?:BundleReceipt[]}).htmlPublicationDependencies??[]};
 }
@@ -25,30 +25,42 @@ async function assetVersion(actor:AccessActor,receipt:BundleReceipt):Promise<{id
  const archived=(await (await getDb()).query<{meta:Record<string,unknown>;format:string}>('SELECT meta,format FROM artifact_versions WHERE artifact_id=$1 AND version=$2',[receipt.id,Number(receipt.revision)])).rows[0];
  return archived&&['file','image','pdf'].includes(archived.format)?{id:asset.id,meta:archived.meta}:null;
 }
+/** The types pinned text is rewritten in (`pinPublicationAssetUrls`): its bytes depend on the page, not the file alone. */
+const REWRITTEN_TYPES=['text/css','text/javascript','application/javascript'];
+/** Pinned bytes the reader's browser keeps: the address names the page version and the file revision. */
+const IMMUTABLE='private, max-age=31536000, immutable';
 /**
  * Page admission selects immutable bytes; the current page ACL and the current owner’s child-read grant are checked on every request.
+ * `page`: the row the door read for this request (app/a/[id]/assets), never re-read here.
  * `captureKey`: an export key the door already verified for this page (app/a/[id]/assets). The capture holds no session, so
  * pinned text it is served names its own-door addresses with that key, and nothing keyed is cached or revalidated.
  */
-export async function serveBundleAsset(request:Request,actor:AccessActor,pageId:string,dependencyId:string,captureKey:string|null=null):Promise<Response|null>{
- const admitted=await admission(request,actor,pageId,captureKey!==null);if(!admitted)return null;
- const askedRevision=new URL(request.url).searchParams.get('revision');
+export async function serveBundleAsset(request:Request,actor:AccessActor,page:ArtifactRow,dependencyId:string,captureKey:string|null=null):Promise<Response|null>{
+ const admitted=await admission(request,actor,page,captureKey!==null);if(!admitted)return null;
+ const asked=new URL(request.url).searchParams,askedRevision=asked.get('revision');
  const receipt=admitted.receipts.find(item=>item.kind==='asset'&&item.id===dependencyId&&(!askedRevision||item.revision===askedRevision));if(!receipt)return null;
  const asset=await assetVersion(admitted.delegator,receipt);if(!asset)return null;
- // Cached privately and revalidated on every use: access is checked above before any 304, so a reader who lost
- // access gets nothing. The tag names every input of the bytes: the stored object, and for pinned text the page
- // version and sibling receipts it is rewritten against, plus the rewrite itself.
- const pinned=new URL(request.url).searchParams.has('version');
- const etag=etagOf({page:pageId,dependency:dependencyId,revision:receipt.revision,pdfDisposition:1,object:asset.meta.objectKey??null,sha256:asset.meta.sha256??null,
+ // THE CACHE RULE. Access is checked above, against current state, before any byte or 304 leaves. An address that names
+ // both the page version and the file revision, answered whole with bytes that are not rewritten text, names immutable
+ // bytes: the reader's own browser keeps them a year without asking again (`private`, never a shared cache). A reader
+ // who already holds them keeps them after losing access; nobody new can fetch them. Rewritten text and an address
+ // without both pins are cached privately and revalidated on every use; a capture key's answer is never cached.
+ // The tag names every input of the bytes: the stored object, and for pinned text the page version and sibling
+ // receipts it is rewritten against, plus the rewrite itself.
+ const pinned=asked.has('version'),rewritten=pinned&&REWRITTEN_TYPES.includes(asset.meta.contentType as string);
+ const immutable=captureKey===null&&pinned&&!!askedRevision&&!rewritten;
+ const etag=etagOf({page:page.id,dependency:dependencyId,revision:receipt.revision,pdfDisposition:1,object:asset.meta.objectKey??null,sha256:asset.meta.sha256??null,
   pin:pinned?{version:admitted.version,receipts:admitted.receipts.filter(item=>item.kind==='asset'),rewrite:PIN_REWRITE}:null});
  const held=captureKey===null&&matchingTag(request.headers.get('if-none-match'),etag);
- if(held){const answer=notModified(held);answer.headers.set('Access-Control-Allow-Origin','*');return answer;}
+ // A 304 replaces the stored rule, so it carries the one its 200 would: a browser holding these bytes under the
+ // revalidating rule stops asking.
+ if(held){const answer=notModified(held);answer.headers.set('Access-Control-Allow-Origin','*');if(immutable)answer.headers.set('Cache-Control',IMMUTABLE);return answer;}
  // Opaque /raw runners need CORS for admitted modules and fonts; admission
  // above remains the authority, and no credentialed wildcard is granted.
  const response=await serveStoredFile(request,asset,true,{etag}),contentType=response.headers.get('content-type')??'';
  const headers=new Headers(response.headers);
- if(captureKey!==null){headers.set('Cache-Control','no-store');headers.delete('ETag');}else if(response.ok){headers.set('Cache-Control',REVALIDATE);headers.set('ETag',etag);}
- if(response.ok&&request.method!=='HEAD'&&['text/css','text/javascript','application/javascript'].includes(contentType)&&pinned)return new Response(pinPublicationAssetUrls(await response.text(),pageId,admitted.version,contentType,admitted.receipts.filter(item=>item.kind==='asset'),captureKey),{status:response.status,headers});
+ if(captureKey!==null){headers.set('Cache-Control','no-store');headers.delete('ETag');}else if(response.ok){headers.set('Cache-Control',immutable&&response.status===200?IMMUTABLE:REVALIDATE);headers.set('ETag',etag);}
+ if(response.ok&&request.method!=='HEAD'&&REWRITTEN_TYPES.includes(contentType)&&pinned)return new Response(pinPublicationAssetUrls(await response.text(),page.id,admitted.version,contentType,admitted.receipts.filter(item=>item.kind==='asset'),captureKey),{status:response.status,headers});
  return new Response(response.body,{status:response.status,statusText:response.statusText,headers});
 }
 /** The pinning rewrite's own identity: a change to how pinned text is rewritten is a change to its bytes. */
@@ -58,7 +70,7 @@ async function parallel<T,R>(items:readonly T[],work:(item:T)=>Promise<R>):Promi
 }
 /** One page admission snapshot and bounded parallel current-ACL checks; no credential URLs. */
 export async function loadBundleAssetResources(request:Request,actor:AccessActor,pageId:string):Promise<Array<{url:string;contentType:string;bytes:Uint8Array;name:string}>>{
- const admitted=await admission(request,actor,pageId);if(!admitted)throw Error('Bundle page unavailable');
+ const admitted=await admission(request,actor,await getArtifactById(pageId));if(!admitted)throw Error('Bundle page unavailable');
  const receipts=[...new Map(admitted.receipts.filter(receipt=>receipt.kind==='asset').map(receipt=>[receipt.id+':'+receipt.revision,receipt])).values()];
  const assets=await parallel(receipts,async receipt=>{const asset=await assetVersion(admitted.delegator,receipt);if(!asset)throw Error('Bundle dependency unavailable');return {receipt,asset};});
  let total=0;for(const {asset}of assets){const size=asset.meta.bytes;if(typeof size!=='number'||!Number.isSafeInteger(size)||size<0||(total+=size)>16_000_000)throw Error('Bundle export limit exceeded');}

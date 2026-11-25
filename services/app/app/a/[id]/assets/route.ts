@@ -27,7 +27,7 @@ import {serveBundleAsset} from '@/lib/html-publication-bundle';
  * document is admitted through belongs with every other door in the app, and
  * the import bounds belong with the importer.
  */
-import { admitRead, getArtifactById } from '@/lib/artifacts';
+import { admitRead, getArtifactById, type ArtifactRow } from '@/lib/artifacts';
 import { resolveImageReference } from '@/lib/artifact-wire';
 import { requestOrSessionActor } from '@/lib/authentication';
 import { importForDocument, WebAssetRefused, WEB_ASSET_KINDS, type WebAssetKind } from '@/lib/publish';
@@ -36,7 +36,9 @@ import { verifyExportKey } from '@/lib/export';
 import { publicRefAsset } from '@/lib/document-serving';
 import { json } from '@/lib/http';
 
-export async function GET(request: Request, ctx: { params: Promise<{ id: string }> }) {
+/** `page`: the row an in-process door (server/user-host) already read for this request, so it is read once; every
+ * access decision below still runs on it. */
+export async function GET(request: Request, ctx: { params: Promise<{ id: string }>; page?: ArtifactRow }) {
   const { id } = await ctx.params;
   const params = new URL(request.url).searchParams;
   const managed = params.has('kind');
@@ -48,7 +50,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
 
   // The uniform 404 — an unreachable id and an unreadable one are the same
   // answer, before any fetch, exactly as every other read of a document is.
-  const artifact = await getArtifactById(id);
+  const artifact = ctx.page?.id === id ? ctx.page : await getArtifactById(id);
   if (!artifact) return missing();
   const actor = await requestOrSessionActor(request);
   // …and the exporter's own credential, on exactly the terms `raw` admits it:
@@ -63,7 +65,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     if(!['GET','HEAD'].includes(request.method)||params.getAll('dependency').length!==1||params.getAll('revision').length>1||params.has('u')||managed)return missing();
     const dependency=params.get('dependency');
     // A capture's own file is admitted by its verified key as its page is (lib/html-publication-bundle serveBundleAsset).
-    return dependency?await serveBundleAsset(request,actor,id,dependency,byExportKey?key:null)??missing():missing();
+    return dependency?await serveBundleAsset(request,actor,artifact,dependency,byExportKey?key:null)??missing():missing();
   }
   if(!url)return reply({error:'missing_url'},400);
   const kind = params.get('kind') ?? 'image';
