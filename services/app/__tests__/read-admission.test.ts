@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { BrowserService, RenderResult } from '@artifactbin/contracts/browser';
 import { mintAccountToken, params, request, setSession, testPagesSite, useAppHarness, type RequestOptions } from '@/__tests__/harness';
 import { EXPORT_PNG } from './export-helpers';
+import { nativeHtml } from './native-html-fixture';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { GET as exportRoute } from '@/app/a/[id]/export/route';
 import { GET as downloadRoute } from '@/app/a/[id]/download/route';
@@ -38,13 +39,14 @@ afterEach(async () => { await resetExportRenderer(); setServices({ browser: unde
 
 type Caller = 'guest' | 'stranger' | 'owner' | 'creator' | 'key' | 'otherKey';
 const CALLERS: Caller[] = ['guest', 'stranger', 'owner', 'creator', 'key', 'otherKey'];
+const PRIVATE_HTML_TEXT = 'Private document body';
 
 async function world() {
   const owner = (await createUser({ email: 'mxmx_test_admission_owner@example.com' })).id;
   const stranger = (await createUser({ email: 'mxmx_test_admission_stranger@example.com' })).id;
   // The creating token is another account's: only the token clause can admit its holder to the owner's private row.
   const creator = await mintAccountToken('admission-agent');
-  const html = await createArtifact(creator.id, owner, { format: 'html', title: 'Plan', source: '<!doctype html><p>secret</p>', meta: {}, visibility: 'private' });
+  const html = await createArtifact(creator.id, owner, { format: 'html', title: 'Plan', source: nativeHtml(`<h1>${PRIVATE_HTML_TEXT}</h1>`), meta: {}, visibility: 'private' });
   const dataset = await createArtifact(creator.id, owner, { format: 'dataset', title: 'Rows', source: '[{"a":1}]', meta: {}, visibility: 'private' });
   return { owner, stranger, creator, html: html.id, dataset: dataset.id };
 }
@@ -67,7 +69,16 @@ type Door = (w: World, caller: Caller, id: string) => Promise<boolean>;
 const DOORS: Record<string, Door> = {
   page: async (w, c, id) => !refused((await artifactPageResponse(as(w, c, id, `/a/${id}`), id)).status),
   frame: async (w, c, id) => (await framedDocumentSrc(as(w, c, id, `/api/page/frame/${id}`), id, site)) !== null,
-  raw: async (w, c, id) => !refused((await rawRoute(as(w, c, id, `/a/${id}/raw`), params({ id }))).status),
+  raw: async (w, c, id) => {
+    const response = await rawRoute(as(w, c, id, `/a/${id}/raw`), params({ id }));
+    expect([200, 404], `raw response for ${c}`).toContain(response.status);
+    if (c === 'key' && id === w.html) {
+      const csp = response.headers.get('content-security-policy');
+      expect(csp).toContain('sandbox');
+      expect(csp).toContain("default-src 'none'");
+    }
+    return response.status === 200;
+  },
   assets: async (w, c, id) => !refused((await assetsRoute(as(w, c, id, `/a/${id}/assets?u=${encodeURIComponent("http://127.0.0.1/x.png")}`), params({ id }))).status),
   download: async (w, c, id) => !refused((await downloadRoute(as(w, c, id, `/a/${id}/download`), params({ id }))).status),
   fetch: async (w, c, id) => !refused((await fetchRoute(as(w, c, id, `/a/${id}/fetch`), params({ id }))).status),
@@ -114,6 +125,17 @@ describe('read admission across the doors', () => {
       exportOperation: 'owner creator',
       forkOperation: 'owner creator',
     });
+  });
+
+  it('serves private HTML to a sessionless capture and refuses a malformed export key', async () => {
+    const w = await world();
+    const id = w.html;
+    const capture = await rawRoute(as(w, 'key', id, `/a/${id}/raw?chrome=0`), params({ id }));
+    expect(capture.status).toBe(200);
+    expect(await capture.text()).toContain(PRIVATE_HTML_TEXT);
+
+    const malformed = await rawRoute(as(w, 'guest', id, `/a/${id}/raw?key=not-a-key`), params({ id }));
+    expect(malformed.status).toBe(404);
   });
 
   it('a dataset: the creating token reads it on every door; an export reads only a role that sees it whole', async () => {

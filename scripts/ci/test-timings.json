@@ -184,7 +184,6 @@
    "services/app/__tests__/policy-toolbox.test.ts": 414,
    "services/app/__tests__/pretty-urls-encoding.test.ts": 524,
    "services/app/__tests__/pretty-urls.test.ts": 2125,
-   "services/app/__tests__/private-export.test.ts": 377,
    "services/app/__tests__/process-socket.test.ts": 6185,
    "services/app/__tests__/profile-image.test.ts": 731,
    "services/app/__tests__/profile-redirect.test.ts": 98,

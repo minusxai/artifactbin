@@ -35,10 +35,6 @@ async function fixture(data:Record<string,unknown>={dataset:[{n:1}],access:'read
 }
 /** The write's outcome: a role without the rule has no root to call, so nothing is written (rejected). */
 const outcome=(reply:Awaited<ReturnType<ReturnType<typeof nativeDatasetClient>['sql']>>)=>reply.response.ok&&typeof reply.body.affected==='number'?'committed':'rejected';
-it('lets anonymous readers read public rows while refusing their ungranted writes',async()=>{
- const f=await fixture();const read=await f.rows('n');expect(read.body.error).toBeUndefined();expect(read.body.rows).toHaveLength(1);
- const write=await f.insert();expect(outcome(write),JSON.stringify(write.body)).toBe('rejected');expect((await getArtifactById(f.dataset))?.version).toBe(1);
-});
 it('uses dataset roles independently of page roles and rechecks revocation',async()=>{
  const f=await fixture();await f.share(f.page,'editor');expect(outcome(await f.insert(f.actor))).toBe('rejected');
  await f.share(f.dataset,'editor');expect(outcome(await f.insert(f.actor))).toBe('committed');
@@ -59,7 +55,10 @@ it('refuses a commit when dataset sharing is revoked while preparing the pending
  try{const result=await f.insert(f.actor);expect(revoked).toBe(true);expect(outcome(result),JSON.stringify(result.body)).toBe('rejected');expect((await getArtifactById(f.dataset))?.version).toBe(1);}finally{spy.mockRestore();}
 });
 it('requires the explicit viewers-write dataset policy for shared viewers and the link audience',async()=>{
- const f=await fixture();await f.share(f.dataset,'viewer');expect(outcome(await f.insert(f.actor))).toBe('rejected');expect(outcome(await f.insert())).toBe('rejected');
+ const f=await fixture();
+ const read=await f.rows('n');expect(read.body.error).toBeUndefined();expect(read.body.rows).toHaveLength(1);
+ await f.share(f.dataset,'viewer');expect(outcome(await f.insert(f.actor))).toBe('rejected');
+ const write=await f.insert();expect(outcome(write),JSON.stringify(write.body)).toBe('rejected');expect((await getArtifactById(f.dataset))?.version).toBe(1);
  const saved=await f.grant();expect(saved.dataset_policy).toEqual(VIEWERS_WRITE);
  expect(outcome(await f.insert(f.actor))).toBe('committed');expect(outcome(await f.insert())).toBe('committed');expect((await getArtifactById(f.dataset))?.version).toBe(3);
 });
