@@ -99,13 +99,17 @@ export async function sqlCommand({sub, values, positionals}, options = {}) {
       'query takes an ID and one SQL statement.', 2, 'Read --help.');
   const chart = await chartRequest(values, sub, WRITE.test(statement ?? ''));
   const saved = await outputRequest(values, sub, WRITE.test(statement ?? ''));
-  /** The read, its chart when --chart asks for one, and its rows in a file for --output. */
-  const drawn = async (client, read) => {
-    const done = chart ? {...read, chart: await drawChart(client, chart, read)} : read;
-    return saved ? writeRows(saved, done) : done;
-  };
   const limit = values.limit === undefined ? ROWS.default :
     integer(values.limit, 'limit', 1, ROWS.max);
+  /** The read, its chart when --chart asks for one, and its rows in a file for --output; a cut
+   * read also warns once on stderr, the result unchanged. */
+  const drawn = async (client, read) => {
+    const done = chart ? {...read, chart: await drawChart(client, chart, read)} : read;
+    const shown = saved ? await writeRows(saved, done) : done;
+    if (read.truncated) process.stderr.write(`warning: result cut at ${read.rows?.length ?? 0}` +
+      ` rows (limit ${limit}; the most is ${ROWS.max}): aggregate in SQL or narrow the query.\n`);
+    return shown;
+  };
   if (target.startsWith('default:')) {
     const client = makeClient(selectedServer(values, options.env), options);
     return drawn(client, await client.request('/api/default-connection/sql', {method: 'POST',

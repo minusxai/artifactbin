@@ -180,8 +180,9 @@ comments (every page you may see): `node scripts/events.mjs watch --help`.
   `examples/gen-transactions.mjs`, change only its names (payers, categories, merchants) and run it
   once; label the data as sample. Who may see and change rows:
   [permissions](references/permissions.md) (read it before modeling identity or writes): the
-  dataset's rules are the only check on a write. `node scripts/sql.mjs schema ID`
-  for the tables (a dataset ID: its own), `node
+  dataset's rules are the only check on a write. `sql.mjs query` returns at most 10,000 rows and
+  a cut result carries `"truncated": true`: aggregate in SQL instead. `node scripts/sql.mjs
+  schema ID` for the tables (a dataset ID: its own), `node
   scripts/policy.mjs explain DATASET_ID` for who may see and change its rows, `node
   scripts/export.mjs ID --format html --output copy.html` for a portable copy; one chart or
   section of a page saves as an image with `--format png --element SELECTOR`, so nothing else
