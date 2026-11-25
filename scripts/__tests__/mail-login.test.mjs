@@ -1,7 +1,11 @@
+import fs from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {EventEmitter} from 'node:events';
 import {expect,it,vi} from 'vitest';
 import {JSDOM} from 'jsdom';
-import {loginViaEmail,passTheWelcomePage} from '../lib/mail-login.mjs';
+import {loginViaEmail,passTheWelcomePage,startMailSink} from '../lib/mail-login.mjs';
 
 it('reports initial navigation/resource/session failures without credential values or an extra wait',async()=>{
  const original=new Error('form timeout');
@@ -70,4 +74,42 @@ it('keeps resource and session diagnostics through OTP navigation and removes li
   expect(failure.message).not.toContain('private workspace text');
   expect(failure.message).not.toContain('123456');
   for (const event of ['requestfailed', 'pageerror', 'response']) expect(page.listenerCount(event)).toBe(0);
+});
+
+it('reads the latest code per address from an explicit outbox ahead of the environment', async () => {
+ const dir = fs.mkdtempSync(join(tmpdir(), 'mail-login-test-'));
+ const explicit = join(dir, 'explicit.jsonl');
+ const fromEnv = join(dir, 'env.jsonl');
+ const alice = 'alice@example.test', bob = 'bob@example.test';
+ const line = message => JSON.stringify(message) + '\n';
+ vi.stubEnv('EMAIL__DEV_OUTBOX_PATH', fromEnv);
+ try {
+  fs.writeFileSync(fromEnv, line({ to: alice, otp: '999999' }));
+  const sink = await startMailSink({ outboxPath: explicit });
+  expect(sink.inbox).toEqual([]);
+  expect(sink.lastCode(alice)).toBeNull();
+  fs.writeFileSync(explicit, line({ to: alice, otp: '111111' }) + line({ to: alice, text: 'Your code is 222222.' }) + line({ to: bob, otp: '333333' }));
+  expect(sink.lastCode(alice)).toBe('222222');
+  expect(sink.lastCode(bob)).toBe('333333');
+  expect(sink.lastCode()).toBe('333333');
+  expect(sink.lastCode('missing@example.test')).toBeNull();
+  expect((await startMailSink()).lastCode(alice)).toBe('999999');
+ } finally {
+  vi.unstubAllEnvs();
+  fs.rmSync(dir, { recursive: true, force: true });
+ }
+});
+
+it('reads the toolkit-relative default outbox when no path is supplied or configured', async () => {
+ const fallback = fileURLToPath(new URL('../../.artifactbin/dev-mail.jsonl', import.meta.url));
+ vi.stubEnv('EMAIL__DEV_OUTBOX_PATH', undefined);
+ const original = fs.readFileSync;
+ const read = vi.spyOn(fs, 'readFileSync').mockImplementation((file, ...args) => {
+  if (file === fallback) return '{"to":"alice@example.test","otp":"123456"}\n';
+  return original(file, ...args);
+ });
+ try {
+  expect((await startMailSink()).lastCode('alice@example.test')).toBe('123456');
+  expect(read).toHaveBeenCalledWith(fallback, 'utf8');
+ } finally { read.mockRestore(); vi.unstubAllEnvs(); }
 });

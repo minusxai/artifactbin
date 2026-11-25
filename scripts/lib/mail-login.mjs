@@ -10,15 +10,17 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
-const outboxPath = () => process.env.EMAIL__DEV_OUTBOX_PATH ?? path.join(ROOT, '.artifactbin', 'dev-mail.jsonl');
-const inbox = () => {
-  try { return fs.readFileSync(outboxPath(), 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line)); }
+const defaultOutboxPath = () => process.env.EMAIL__DEV_OUTBOX_PATH ?? path.join(ROOT, '.artifactbin', 'dev-mail.jsonl');
+const inbox = (file) => {
+  try { return fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line)); }
   catch (error) { if (error?.code === 'ENOENT') return []; throw error; }
 };
 
-export async function startMailSink() {
+export async function startMailSink({ outboxPath } = {}) {
+  const file = () => outboxPath ?? defaultOutboxPath();
   return {
-    get inbox() { return inbox(); },
+    get outboxPath() { return file(); },
+    get inbox() { return inbox(file()); },
     /**
      * The 6 digits from the most recent email, as a user would read them —
      * addressed to `address` when one is given.
@@ -27,7 +29,7 @@ export async function startMailSink() {
      * The unique address (mxmx_test_<gate>_<ts>) is the ownership boundary.
      */
     lastCode: (address) => {
-      const messages = inbox();
+      const messages = inbox(file());
       const mine = address ? messages.filter((m) => m.to === address) : messages;
       const latest = mine.at(-1);
       return latest?.otp ?? /\b(\d{6})\b/.exec(latest?.text ?? '')?.[1] ?? null;
@@ -83,7 +85,7 @@ export async function loginViaEmail(page, base, sink, email) {
     const code = sink.lastCode(email);
     if (!code) {
       throw new Error(
-        `No login code reached the development outbox ${outboxPath()}. ` +
+        `No login code reached the development outbox ${sink.outboxPath ?? defaultOutboxPath()}. ` +
         `Request a new code, then run: npm run dev:otp -- ${email}`,
       );
     }

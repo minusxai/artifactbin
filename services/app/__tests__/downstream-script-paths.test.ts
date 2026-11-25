@@ -32,7 +32,7 @@ interface DownstreamPath {
 const DOWNSTREAM_SCRIPT_PATHS: DownstreamPath[] = [
   { path: 'services/auth/package.json', repo: SERVER, usedAt: ['scripts/build-source.mjs (workspace manifest)', 'scripts/assemble-release.mjs (groupRoleModelVersion compatibility fence)'] },
   { path: 'services/app/scripts/migrate-legacy-pages.ts', repo: SERVER, usedAt: ['scripts/build-source.mjs (bundles the privileged maintenance CLI into the app image)'] },
-  { path: 'scripts/build/build-islands.mjs', repo: SERVER, usedAt: ['scripts/build.mjs:7 (run from toolkit/services/app)', 'test/source-runtime.test.mjs:44'] },
+  { path: 'scripts/lib/mail-login.mjs', repo: SERVER, exports: ['startMailSink'], usedAt: ['scripts/lib/account-session.mjs (reads the development outbox)'] },
   { path: 'scripts/build/html-core.mjs', repo: SERVER, exports: ['prebuiltPreviewAssets'], usedAt: ['scripts/build-native-core.mjs:38 (imports prebuiltPreviewAssets from toolkit/scripts/build/html-core.mjs)', 'test/native-core.test.mjs:33 (reads it)'] },
   // The server's native build test imports these by name through its bundle. Removing `buildPreviewDatasets` here on
   // 2026-11-11 (the skill dropped GraphQL) failed the server's composition for five pins and held every deploy.
@@ -44,9 +44,8 @@ const DOWNSTREAM_SCRIPT_PATHS: DownstreamPath[] = [
   { path: 'services/app/scripts/copy-assets.mjs', repo: SERVER, usedAt: ['scripts/build.mjs:5 (runs it from the toolkit root for the native build)'] },
   { path: 'services/app/scripts/build-server-reader.mjs', repo: SERVER, usedAt: ['scripts/build.mjs:6 (runs it from toolkit/services/app)'] },
   { path: 'services/app/lib/html-runtime/build.server.ts', repo: SERVER, usedAt: ['scripts/build-native-core.mjs:9,33 (imports the runtime build)'] },
-  { path: 'services/sql/src/', repo: SERVER, holds: ['pool-worker.ts', 'server.ts'], usedAt: ['scripts/build-source.mjs:40 (emits pool-worker beside the bundle)', 'scripts/source-api.mjs:14'] },
+  { path: 'services/sql/src/', repo: SERVER, holds: ['pool-worker.ts'], usedAt: ['scripts/build-source.mjs (emits pool-worker beside the bundle)'] },
   { path: 'services/browser/src/', repo: SERVER, holds: ['upload-gateway-server.ts', 'server.ts'], usedAt: ['scripts/build-source.mjs:41 (bundles the upload gateway)', 'services/browser/main.mjs:1', 'scripts/source-api.mjs:14'] },
-  { path: 'services/events/src/server.ts', repo: SERVER, usedAt: ['scripts/source-api.mjs:14 (aliases @artifactbin/events/server)'] },
   { path: 'services/app/skills/artifactbin/SKILL.md', repo: SERVER, usedAt: ['scripts/source-runtime.mjs:43 (refuses to copy app assets without it)'] },
   { path: 'services/app/scripts/system-font-packages.mjs', repo: SERVER, usedAt: ['scripts/native-runtime-cache.mjs:41 (keys the runtime cache by the fonts it installs)'] },
   { path: 'services/app/lib/html-systems/font-manifest.json', repo: SERVER, usedAt: ['scripts/native-runtime-cache.mjs:42 and the install action (cache key)'] },
@@ -96,15 +95,15 @@ describe('scripts/ paths other repositories depend on', () => {
   it('lists the server and evals paths once each', () => {
     const paths = DOWNSTREAM_SCRIPT_PATHS.map((row) => row.path);
     expect(new Set(paths).size).toBe(paths.length);
-    expect(DOWNSTREAM_SCRIPT_PATHS.filter((row) => row.repo === SERVER)).toHaveLength(21);
+    expect(DOWNSTREAM_SCRIPT_PATHS.filter((row) => row.repo === SERVER)).toHaveLength(20);
     expect(DOWNSTREAM_SCRIPT_PATHS.filter((row) => row.repo === EVALS)).toHaveLength(4);
   });
 
   it('names the repository when a path is moved', () => {
-    const moved = (path: string) => path !== 'scripts/build/build-islands.mjs' && path !== 'scripts/lib/shard.mjs';
+    const moved = (path: string) => path !== 'scripts/lib/mail-login.mjs' && path !== 'scripts/lib/shard.mjs';
     const problems = missingDownstreamPaths(DOWNSTREAM_SCRIPT_PATHS, moved);
     expect(problems).toHaveLength(2);
-    expect(problems[0]).toMatch(/^scripts\/build\/build-islands\.mjs is gone, but minusxai\/artifactbin-server depends on it \(scripts\/build\.mjs/);
+    expect(problems[0]).toMatch(/^scripts\/lib\/mail-login\.mjs is gone, but minusxai\/artifactbin-server depends on it \(scripts\/lib\/account-session\.mjs/);
     expect(problems[1]).toMatch(/^scripts\/lib\/shard\.mjs is gone, but minusxai\/artifactbin-evals depends on it/);
   });
 
