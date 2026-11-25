@@ -17,7 +17,7 @@ import {afterEach, expect, it, vi} from 'vitest';
 import * as vega from 'vega';
 import {compile} from 'vega-lite';
 import {expressionInterpreter} from 'vega-interpreter';
-import {createSqliteSql} from '@artifactbin/sql/sqlite';
+import {createSqliteSql} from '@artifactbin/sql/testing';
 import {createChartView, planChart} from '@/lib/viz/chart-plan';
 import {trackerFeatures, trackerFiles} from '../../../skills/artifactbin/scripts/toolbox-tracker.mjs';
 /** A condition wait's bound (vi.waitFor's own default is 1 s): the condition decides; this only names one that never came. */

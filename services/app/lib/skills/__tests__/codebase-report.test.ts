@@ -12,7 +12,7 @@ import {afterEach, expect, it} from 'vitest';
 import * as vega from 'vega';
 import {compile} from 'vega-lite';
 import {expressionInterpreter} from 'vega-interpreter';
-import {createSqliteSql} from '@artifactbin/sql/sqlite';
+import {createSqliteSql} from '@artifactbin/sql/testing';
 
 const EXAMPLES = new URL('../../../skills/artifactbin/examples/', import.meta.url);
 const read = (name: string) => readFileSync(new URL(name, EXAMPLES), 'utf8');

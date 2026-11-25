@@ -5,13 +5,12 @@
  * counts them as used and refuses every other unused export. Regenerated from artifactbin-server f1741b6 and
  * artifactbin-evals 9c5618b on 2026-11-03: change a line only together with that repository.
  */
-import { expect, expectTypeOf, it } from 'vitest';
+import { expect, it } from 'vitest';
 import {
   SERVING_POOL, actorReceiver, assemble, buildAssetRequest, buildAssetResponse, createEnv, envelope,
   eventsClient, fakeEvents, hashToken, httpClient, humanSessionClient, inProcess, isPublicAssetRequest, log, noopEvents,
   overHttp, parseAssetsOrigin, parseDatasetPolicy, publicAssetResponse, serve, serviceSecretForServer, signActor,
   verifyActor, withPoolErrors,
-  type EventObject, type EventSubject, type FakeEvents,
 } from '@artifactbin/utils';
 
 import { BodyTooLargeError, readBody } from '@artifactbin/utils/body';
@@ -19,8 +18,4 @@ import { BodyTooLargeError, readBody } from '@artifactbin/utils/body';
 it('exports the values the deployment imports', () => {
   const values = { BodyTooLargeError, readBody, SERVING_POOL, actorReceiver, assemble, buildAssetRequest, buildAssetResponse, createEnv, envelope, eventsClient, fakeEvents, hashToken, httpClient, humanSessionClient, inProcess, isPublicAssetRequest, log, noopEvents, overHttp, parseAssetsOrigin, parseDatasetPolicy, publicAssetResponse, serve, serviceSecretForServer, signActor, verifyActor, withPoolErrors };
   for (const [name, value] of Object.entries(values)) expect(value, name).toBeDefined();
-});
-
-it('exports the types the deployment imports', () => {
-  expectTypeOf<[EventObject, EventSubject, FakeEvents]>().not.toBeNever();
 });

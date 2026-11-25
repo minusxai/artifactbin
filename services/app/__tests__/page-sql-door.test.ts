@@ -11,7 +11,7 @@ import { trashRow } from './artifact-fixtures';
 import { beforeEach, expect, it } from 'vitest';
 import { setSession, useAppHarness } from './harness';
 import { MAX_ROWS_LIMIT, services, setServices } from '@/lib/platform';
-import { createSqliteSql } from '@artifactbin/sql/sqlite';
+import { createSqliteSql } from '@artifactbin/sql/testing';
 import { sql, fixture, stored, refused } from './page-sql-door-fixture';
 
 useAppHarness();

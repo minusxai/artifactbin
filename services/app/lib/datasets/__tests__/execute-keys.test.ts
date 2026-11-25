@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { RunInput } from '@artifactbin/contracts/sql';
-import { createSqliteSql } from '@artifactbin/sql/sqlite';
+import { createSqliteSql } from '@artifactbin/sql/testing';
 import { executeCatalog } from '../execute';
 import type { CatalogRowView, DatasetCatalog } from '../types';
 

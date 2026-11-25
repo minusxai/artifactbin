@@ -10,7 +10,7 @@ import type { SqlService } from '@artifactbin/contracts/sql';
 import { isQueryFailure } from '@artifactbin/contracts/sql';
 import { SQL_ROUTES, serveSql, sqlClient } from '@artifactbin/sql';
 import { createSql } from '@artifactbin/sql/local';
-import { createSqliteSql } from '@artifactbin/sql/sqlite';
+import { createSqliteSql } from '@artifactbin/sql/testing';
 import { loadSqlite, type SqliteDatabase, type SqlExtensions } from '@artifactbin/sql/core';
 
 type Engine = 'sqlite';

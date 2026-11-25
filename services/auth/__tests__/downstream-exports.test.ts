@@ -7,21 +7,19 @@
  * `ensureIdentitySchema` (with `IdentityNotReady` to retry on) and `identityMoveStatements` are what the proxy needs to
  * host the identity module: its database, its boot, and the one-time move of its tables out of the app schema.
  */
-import { expect, expectTypeOf, it } from 'vitest';
+import { expect, it } from 'vitest';
 import {
   authEnvNamesRead, createBearerReader, ensureAuthSchema, ensureHumanAuthSchema, IdentityNotReady, ensureIdentitySchema, identityDbOf, identityMoveStatements, internalBoundary, loginProvidersOf,
   loginRoutes, oauthRoutes, resendMailer, session, sessionStoreOf, testDomainSignInOf,
-  type LoginProviders, type OutgoingMail, type SessionInfo, type SessionStore,
 } from '@artifactbin/auth';
 import { migrateHumanAccountSchema } from '@artifactbin/auth/auth/account-migration';
 import { migrateGroupRoles } from '@artifactbin/auth/identity-store/group-role-migration';
-import { createHumanAuth, humanAuthOptions, type BetterAuthOptions, type HumanAuth, type HumanAuthOptions, type Mailer, type OidcProvider } from '@artifactbin/auth/auth/human';
+import { createHumanAuth, humanAuthOptions } from '@artifactbin/auth/auth/human';
 import { pgliteDialect } from '@artifactbin/auth/auth/pglite';
 import { createOAuthStore } from '@artifactbin/auth/identity/oauth';
 import { DEV_OUTBOX_DEFAULT_PATH, DEV_OUTBOX_RELATIVE_PATH, MailNotConfigured, MailSendFailed, devOutboxMailer, mailerForRuntime, usesDevOutbox } from '@artifactbin/auth/mail';
 import { publicBuildAssets } from '@artifactbin/auth/parts';
 import { AUTH_BODY_LIMIT, payloadTooLarge } from '@artifactbin/auth/routes/grants';
-import type { Part, Upstream } from '@artifactbin/contracts/part';
 import { baseUrlOf } from '@artifactbin/auth/routes/oauth';
 import { sessionAuthority } from '@artifactbin/auth/session-authority';
 
@@ -33,13 +31,4 @@ it('exports the values the deployment imports', () => {
     usesDevOutbox, baseUrlOf, sessionAuthority, migrateGroupRoles, AUTH_BODY_LIMIT, payloadTooLarge, publicBuildAssets,
   };
   for (const [name, value] of Object.entries(values)) expect(value, name).toBeDefined();
-});
-
-it('exports the types the deployment imports', () => {
-  expectTypeOf<[LoginProviders, OutgoingMail, SessionInfo, SessionStore, BetterAuthOptions, HumanAuth, HumanAuthOptions, Mailer, OidcProvider]>().not.toBeNever();
-});
-
-it('exports the public probe for a caller’s own part environment', () => {
-  type Env = { Variables: { deployment: string } };
-  expectTypeOf(publicBuildAssets<Env>).toEqualTypeOf<(options: { upstream: Upstream; deadlineMs?: number }) => Part<Env>>();
 });

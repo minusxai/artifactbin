@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 import { isQueryFailure, type DatasetColumn, type Row } from '@artifactbin/contracts/sql';
 import type { DatasetMutationPolicy } from '@artifactbin/contracts/dataset-policy';
 import { loadSqlite } from '@artifactbin/sql/core';
-import { createSqliteSql } from '@artifactbin/sql/sqlite';
+import { createSqliteSql } from '@artifactbin/sql/testing';
 
 const sql = createSqliteSql({ maxRows: 100, timeoutMs: 2000 });
 const errorOf = (o: object): string => ('error' in o ? String(o.error) : 'admitted');

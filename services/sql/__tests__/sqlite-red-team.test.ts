@@ -8,7 +8,7 @@
 import { describe, expect, it } from 'vitest';
 import { isQueryFailure, type MutationOutcome, type QueryOutcome } from '@artifactbin/contracts/sql';
 import type { DatasetMutationPolicy } from '@artifactbin/contracts/dataset-policy';
-import { createSqliteSql } from '@artifactbin/sql/sqlite';
+import { createSqliteSql } from '@artifactbin/sql/testing';
 
 const sql = createSqliteSql({ maxRows: 100, timeoutMs: 2000 });
 const T = { rows: [{ a: 1 }, { a: 2 }], columns: [{ name: 'a', type: 'number' as const }] };

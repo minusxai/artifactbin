@@ -7,7 +7,7 @@
  */
 import { afterAll, describe, it, expect } from 'vitest';
 import { createSql } from '@artifactbin/sql/local';
-import { createSqliteSql } from '@artifactbin/sql/sqlite';
+import { createSqliteSql } from '@artifactbin/sql/testing';
 import { serveSql, sqlClient } from '@artifactbin/sql';
 import type { DatasetMutationPolicy } from '@artifactbin/contracts/dataset-policy';
 import type { Scalar, SqlService } from '@artifactbin/contracts/sql';
