@@ -11,7 +11,7 @@ import { isQueryFailure } from '@artifactbin/contracts/sql';
 import { serveSql, sqlClient } from '@artifactbin/sql';
 import { loadSqlite, PreparedCache, type ReadBounds } from '@artifactbin/sql/core';
 import { createSql } from '@artifactbin/sql/local';
-import { createSqliteSql } from '@artifactbin/sql/sqlite';
+import { createSqliteSql } from '@artifactbin/sql/testing';
 
 const engine = await loadSqlite();
 const BOUNDS: ReadBounds = { limit: 100, pageLimit: 100, timeoutMs: 2000 };

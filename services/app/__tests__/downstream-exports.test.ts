@@ -8,7 +8,7 @@
  * artifactbin-server f1741b6 and artifactbin-evals 9c5618b on 2026-11-03. Removing a line here is a change to the
  * deployment contract: do it only together with that repository.
  */
-import { describe, expect, expectTypeOf, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { bearerIdentity, mintAccountToken, request, testIdentity, useAppHarness } from '@/__tests__/harness';
 import { GET as getArtifact } from '@/app/api/artifacts/[id]/route';
 import { GET as listAnnotations, POST as createAnnotation } from '@/app/api/artifacts/[id]/annotations/route';
@@ -18,14 +18,13 @@ import { GET as skillZip } from '@/app/skills/artifactbin.zip/route';
 import { createUser, exchangePagesTicket, identityForUser, issuePagesTicket, pagesSessionOf } from '@/lib/accounts';
 import { createUser as createTestUser } from '@/lib/accounts/testing';
 import { mintToken } from '@/lib/accounts/tokens';
-import type { MutationInvocationFactory } from '@/lib/artifacts/mutation-invocation';
 import { mintExportKey } from '@/lib/export';
 import { exportAssetUrl } from '@/lib/export/assets';
 import { objectStore } from '@/lib/object-store';
 import { setServices } from '@/lib/platform';
 import * as config from '@/lib/platform/config';
-import { getDb, resetDb, type Db } from '@/lib/platform/db';
-import { createAppHost, type AppHostOptions, type NotificationDelivery } from '@/server/host';
+import { getDb, resetDb } from '@/lib/platform/db';
+import { createAppHost } from '@/server/host';
 
 describe('the deployment and the evals compose from', () => {
   it('these functions', () => {
@@ -42,9 +41,5 @@ describe('the deployment and the evals compose from', () => {
     // Present, whatever this process's environment sets them to.
     for (const name of ['AUTH_SERVICE_URL', 'BROWSER_SERVICE_URL', 'DATABASE_URL', 'ACTOR_SECRET', 'INTERNAL_SERVICE_SECRET', 'SQL_SERVICE_URL'])
       expect(name in config, name).toBe(true);
-  });
-
-  it('these types', () => {
-    expectTypeOf<[MutationInvocationFactory, Db, AppHostOptions, NotificationDelivery]>().not.toBeNever();
   });
 });

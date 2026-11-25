@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { isQueryFailure, type Row, type Scalar } from '@artifactbin/contracts/sql';
-import { createSqliteSql } from '@artifactbin/sql/sqlite';
+import { createSqliteSql } from '@artifactbin/sql/testing';
 import { loadSqlite } from '@artifactbin/sql/core';
 import { SQL_FUNCTIONS } from '../src/sqlite/functions';
 

@@ -106,7 +106,7 @@ export default {
     },
     // THE PACKAGES: an export of a package entry (its package.json `exports`, or a server) that nothing imports is
     // reported too (`includeEntryExports`). What the private deployment imports is pinned, by name, in each
-    // package's __tests__/downstream-exports.test.ts, so those imports count as uses here. knip does not count an
+    // package's __tests__/downstream-exports.test.ts and .test-d.ts, so those imports count as uses here. knip does not count an
     // inline `import('@artifactbin/…').Name` type query as a use: import the type instead.
     'services/contracts': { includeEntryExports: true },
     'services/utils': { project: ['**/*.{ts,mjs}!', '!**/__tests__/**!'], includeEntryExports: true },

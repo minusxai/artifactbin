@@ -6,25 +6,23 @@
  * artifactbin-evals 9c5618b on 2026-11-03, and from artifactbin-server f2063bd on 2026-11-20: change a line only
  * together with that repository.
  */
-import { expect, expectTypeOf, it } from 'vitest';
+import { expect, it } from 'vitest';
 // The root entry: the seam every service shares (the actor, the part and its upstream, the database, the forwarded
 // and service headers). Everything else is imported by topic.
-import { ACTOR_HEADER, ANONYMOUS, FORWARDED_HOST, FORWARDED_PROTO, HUMAN_SESSION_LIVE_PATH, SERVICE_AUTH_HEADER, type Actor, type Part, type Queryable, type Upstream } from '@artifactbin/contracts';
-import { ACTOR_HEADER as actorHeader, ANONYMOUS as anonymous, type Actor as TopicActor } from '@artifactbin/contracts/actor';
+import { ACTOR_HEADER, ANONYMOUS, FORWARDED_HOST, FORWARDED_PROTO, HUMAN_SESSION_LIVE_PATH, SERVICE_AUTH_HEADER } from '@artifactbin/contracts';
+import { ACTOR_HEADER as actorHeader, ANONYMOUS as anonymous } from '@artifactbin/contracts/actor';
 import { FORWARDED_HOST as forwardedHost, FORWARDED_PROTO as forwardedProto, HUMAN_SESSION_LIVE_PATH as humanSessionLivePath, SERVICE_AUTH_HEADER as serviceAuthHeader } from '@artifactbin/contracts/routes';
-import type { Part as TopicPart, Upstream as TopicUpstream } from '@artifactbin/contracts/part';
-import type { Queryable as TopicQueryable } from '@artifactbin/contracts/db';
 import { idFromPagesLabel, isOwnerTitlePath, ownerDocumentDoor, ownerFolderId, ownerHandleFromLabel, ownerHostConflicts, ownerSiteAddress, ownerSqlArtifactId, parseDnsHostname } from '@artifactbin/contracts/owner-host';
+import { CONNECTORS, CONNECTOR_ERROR_CODES, CONNECTOR_LIMITS, CONNECTOR_VALUE_TYPES } from '@artifactbin/contracts/connectors';
 import { ARTIFACT_ID_PATTERN } from '@artifactbin/contracts/artifact-reference';
 import { EVENT_FEED_MAX_WAIT_SECONDS } from '@artifactbin/contracts/event-feed';
-import { IDENTITY_OWNED_TABLES, type TransactionalQueryable } from '@artifactbin/contracts/identity-module';
+import { IDENTITY_OWNED_TABLES } from '@artifactbin/contracts/identity-module';
 import { IDENTITY_INTROSPECT_PATH } from '@artifactbin/contracts/identity-service';
-import { eventName, type EventEnvelope, type EventPayload, type EventVerb, type EventsService, type ObjectKind } from '@artifactbin/contracts/events';
-import { isQueryFailure, type MutationInput, type MutationOutcome, type SqlService } from '@artifactbin/contracts/sql';
+import { eventName } from '@artifactbin/contracts/events';
+import { isQueryFailure } from '@artifactbin/contracts/sql';
 import { BUILD_ASSET_PATH } from '@artifactbin/contracts/build-assets';
 import { isTestDomainEmail } from '@artifactbin/contracts/test-domain';
-import type { DatasetPolicy } from '@artifactbin/contracts/dataset-policy';
-import type { TokenReader, TokenRecord } from '@artifactbin/contracts/identity';
+
 // The URL map the deployment's proxy (and any co-hosted router) reads instead of keeping its own path lists:
 // the classifier, the host allowlists, the e-mail link builder its mail extension writes.
 import { URL_SPACE_PATH, classifyPath, ownerHostServes, emailLinkPath, personLinkPath } from '@artifactbin/contracts/url-space';
@@ -37,7 +35,6 @@ it('exports the values the deployment imports', () => {
 it('exports the shared seam by topic as well as from the root', () => {
   expect([actorHeader, anonymous, forwardedHost, forwardedProto, humanSessionLivePath, serviceAuthHeader])
     .toEqual([ACTOR_HEADER, ANONYMOUS, FORWARDED_HOST, FORWARDED_PROTO, HUMAN_SESSION_LIVE_PATH, SERVICE_AUTH_HEADER]);
-  expectTypeOf<[TopicActor, TopicPart, TopicQueryable, TopicUpstream]>().toEqualTypeOf<[Actor, Part, Queryable, Upstream]>();
 });
 
 it('exports the owner hostname and path classifiers by topic', () => {
@@ -52,18 +49,10 @@ it('exports the URL map the deployment classifies paths with', () => {
   expect(classifyPath('/email/d1')).toBe('screen');
 });
 
-it('exports the types the deployment imports', () => {
-  expectTypeOf<[Actor, TransactionalQueryable, DatasetPolicy, EventEnvelope, EventPayload<'artifact', 'created'>, EventVerb<'artifact'>, EventsService, MutationInput, MutationOutcome, ObjectKind, Part, Queryable, SqlService, TokenReader, TokenRecord, Upstream]>().not.toBeNever();
-});
-
-// The connector contract (./src/connectors.ts) a deployment's own data endpoint and the live-dataset screens build on.
-import { CONNECTORS, CONNECTOR_ERROR_CODES, CONNECTOR_LIMITS, CONNECTOR_VALUE_TYPES, type Connection, type ConnectionConfig, type ConnectionSummary, type ConnectorAnswer, type ConnectorColumn, type ConnectorError, type ConnectorErrorCode, type ConnectorField, type ConnectorId, type ConnectorNetworkPolicy, type ConnectorQuery, type ConnectorSchema, type ConnectorSpec, type ConnectorTestResult, type ConnectorValueType, type ConnectorViewer, type ConnectorFieldKind, type ConnectorDialect, type ConnectorScalar, type ConnectorJson, type ConnectorLimits, type ConnectorSchemaTable } from '@artifactbin/contracts/connectors';
-
 it('exports the connector contract', () => {
   expect(CONNECTORS.map((c) => c.id)).toEqual(['postgres', 'mysql', 'bigquery']);
   expect(CONNECTOR_VALUE_TYPES).toEqual(['text', 'number', 'boolean', 'date', 'timestamp', 'json']);
   for (const c of CONNECTORS) for (const f of c.fields) expect(f.secret && f.shown, `${c.id}.${f.name}`).toBe(false);
   expect(CONNECTOR_ERROR_CODES).toContain('read_only');
   expect(CONNECTOR_LIMITS.rows).toBeGreaterThan(0);
-  expectTypeOf<[Connection, ConnectionConfig, ConnectionSummary, ConnectorAnswer, ConnectorColumn, ConnectorError, ConnectorErrorCode, ConnectorField, ConnectorId, ConnectorNetworkPolicy, ConnectorQuery, ConnectorSchema, ConnectorSpec, ConnectorTestResult, ConnectorValueType, ConnectorViewer, ConnectorFieldKind, ConnectorDialect, ConnectorScalar, ConnectorJson, ConnectorLimits, ConnectorSchemaTable]>().not.toBeNever();
 });

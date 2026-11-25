@@ -45,7 +45,7 @@ const { setServices } = await import('@/lib/platform/services');
 const { EVENTS_SCHEMA, MAX_ROWS_LIMIT, QUERY_TIMEOUT_MS, resetConfigOverrides } = await import('@/lib/platform/config');
 const { overrideRequestHeaders } = await import('@/lib/platform/request-context');
 const { getDb } = await import('@/lib/platform/db');
-const { createSqliteSql } = await import('@artifactbin/sql/sqlite');
+const { createSqliteSql } = await import('@artifactbin/sql/testing');
 const { createEvents } = await import('@artifactbin/events/local');
 const { setEventProjection } = await import('@/lib/platform/event-outbox');
 

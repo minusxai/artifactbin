@@ -9,7 +9,7 @@ import type { RunInput } from '@artifactbin/contracts/sql';
 import { execFileSync } from 'node:child_process';
 import { serveSql } from '@artifactbin/sql';
 import { createSql } from '@artifactbin/sql/local';
-import { createSqliteSql } from '@artifactbin/sql/sqlite';
+import { createSqliteSql } from '@artifactbin/sql/testing';
 import { createSqlitePool } from '../src/pool';
 
 /** Counts forever; only the engine's deadline stops it. */

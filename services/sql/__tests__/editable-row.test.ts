@@ -6,7 +6,7 @@
  */
 import { afterAll, describe, expect, it } from 'vitest';
 import { createSql } from '@artifactbin/sql/local';
-import { createSqliteSql } from '@artifactbin/sql/sqlite';
+import { createSqliteSql } from '@artifactbin/sql/testing';
 import { serveSql, sqlClient } from '@artifactbin/sql';
 const pool = createSql({ maxRows: 100, timeoutMs: 2000 }, { workers: 1 });
 const server = serveSql(pool);

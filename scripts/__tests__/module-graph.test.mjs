@@ -378,7 +378,9 @@ describe('module graph', () => {
   });
 
   it('matches pinned downstream imports to runtime entries and explicitly test-only fixtures', () => {
-    const pinned = fs.readFileSync(path.join(ROOT, 'services/app/__tests__/downstream-exports.test.ts'), 'utf8');
+    const pinned = ['test.ts', 'test-d.ts'].map(suffix =>
+      fs.readFileSync(path.join(ROOT, `services/app/__tests__/downstream-exports.${suffix}`), 'utf8')
+    ).join('\n');
     const deep = [...new Set([...pinned.matchAll(/'@\/(lib\/[^/']+)\/([^']+)'/g)].map(([, module, rel]) => `${module} ${rel}`))];
     expect(deep.length).toBeGreaterThan(0);
     // The downstream contract also pins the test harness's user factory. Only this fixture is test-only.

@@ -1,6 +1,6 @@
 /**
  * THE SQLITE ENGINE, browser-safe (`@artifactbin/sql/core`). No Node imports:
- * the server wraps it as a `SqlService` (`createSqliteSql`, `@artifactbin/sql/sqlite`), and the
+ * the worker pool uses it to serve SQL, and the in-thread adapter uses it in tests. The
  * runtime bundle and the offline file call it directly, on the main thread,
  * with in-memory databases. Every method is synchronous once the module is
  * loaded, and every call opens its own throwaway database — isolation is

@@ -1,6 +1,6 @@
 /** Read budgets include queueing; cancellation must reach the engine over either service transport. */
 import http from 'node:http';
-import { createSqliteSql } from '@artifactbin/sql/sqlite';
+import { createSqliteSql } from '@artifactbin/sql/testing';
 import { sqlCaps } from '../src/caps';
 import { describe, expect, it } from 'vitest';
 import { SQL_READ_LIMITS, type RunInput, type SqlService } from '@artifactbin/contracts/sql';

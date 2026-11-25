@@ -2,8 +2,8 @@
  * THE SQL SERVICE, from the outside: the contract (re-exported from
  * @artifactbin/contracts/sql), an HTTP client that speaks it, and the server
  * shell that serves ANY SqlService over the same wire. No engine here — the
- * engine is `@artifactbin/sql/local` (worker threads) or `./sqlite` (this
- * thread), and only a composition root loads one.
+ * server composes `@artifactbin/sql/local` (worker threads). Tests can compose
+ * `@artifactbin/sql/testing` in the calling thread.
  */
 import type { SqlService } from '@artifactbin/contracts/sql';
 import { SQL_ROUTES } from '@artifactbin/contracts/sql';

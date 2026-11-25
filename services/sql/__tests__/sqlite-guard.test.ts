@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { isQueryFailure, type QueryOutcome } from '@artifactbin/contracts/sql';
-import { createSqliteSql } from '@artifactbin/sql/sqlite';
+import { createSqliteSql } from '@artifactbin/sql/testing';
 import { loadSqlite, type SqliteDatabase } from '@artifactbin/sql/core';
 
 const sql = createSqliteSql({ maxRows: 100, timeoutMs: 2000 });
