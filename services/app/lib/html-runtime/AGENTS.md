@@ -14,9 +14,9 @@ build that serve them. Access decisions belong to the doors behind the trusted p
   (`readViewerDocument`).
 - Page editing uses only the native engine. The editor loads through `@afbin/native-regions`; legacy page sessions are refused before decoding. Keep the cell Y.Text engine and historical storage compatibility.
 - Runtime modules are public code: no page, viewer, cookie or credential is an input to their bytes, so they
-  never carry viewer state (`native-html.server.ts`). A served page names this build's modules at
-  `/af/v1/runtime/<sha256>/<file>` (`config.modules`), the core, its import map, preload links and module imports one
-  address per module; drafts and exports use the flat revalidated addresses; pinned host assets retain exact bytes.
+  never carry viewer state (`native-html.server.ts`). A served page names each module at one
+  address, `/af/v1/runtime/<sha256>/<file>` (`config.modules`); drafts and exports use the flat revalidated
+  addresses; pinned host assets retain exact bytes.
 - A page's extra script, frame or connect origins come only from publish-validated `<head>` declarations
   (`<meta name="csp-connect" …>`, `lib/document/csp-extensions.ts`) and reader consent, never another way.
 - Unframed publishing-host SQL uses only its page-specific SQL address: the verified host selects anonymous, read-only

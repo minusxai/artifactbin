@@ -108,7 +108,9 @@ it('serves an unlisted page as before: a page read without a key names no key, a
       expect(new URL(address, BASE).searchParams.has('key')).toBe(false);
       const answer = await ask(id, address);
       expect(answer.status).toBe(200);
-      expect(answer.headers.get('cache-control')).toBe('private, no-cache');
+      // Pinned bytes are kept by the reader's browser; pinned text is rewritten per page version, so it revalidates.
+      const rewritten = /css|javascript/.test(answer.headers.get('content-type') ?? '');
+      expect(answer.headers.get('cache-control'), address).toBe(rewritten ? 'private, no-cache' : 'private, max-age=31536000, immutable');
     }
   }
   const html = await served(id, mintExportKey(id, undefined, undefined, owner));
