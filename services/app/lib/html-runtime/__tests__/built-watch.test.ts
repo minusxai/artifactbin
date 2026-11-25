@@ -32,6 +32,12 @@ it('the emitted author module watches backend results with explicit loading with
  for(let i=0;i<12;i++)await Promise.resolve();
  expect(results.at(-1)).toMatchObject([{total:17}]);
  expect(runtime.readViewerDocument()).toEqual({filter:'private'});
+ const hints=runtime.sql.writeAccess('orders',{update:['total'],ids:['row']});
+ finish({writeAccess:{insert:'denied',rows:[{update:'conditional',delete:false}]}});
+ await expect(hints).resolves.toEqual({insert:'denied',rows:[{update:'conditional',delete:false}]});
+ const stale=runtime.sql.writeAccess('orders',{ids:['row']});
+ finish({writeAccess:{insert:'allowed',rows:[]}});
+ await expect(stale).resolves.toEqual({insert:'denied',rows:[{update:'denied',delete:false}]});
  stop();
 });
 

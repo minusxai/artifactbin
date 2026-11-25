@@ -426,7 +426,7 @@ const WARNINGS: Record<DatasetPermissionWarningCode, string> = {
   anonymous_write: 'anonymous can write (throttled to 30 per minute)',
   page_id_direct_denied: 'rule uses X-Hasura-Page-Id: direct API calls are denied',
   update_without_check: 'update without check lets rows move out of the filter',
-  private_dataset: 'dataset is private: signed_in and anonymous rules never apply',
+  private_dataset: 'dataset is private: ordinary signed_in and anonymous rules do not apply',
 };
 const OPERATOR_WORDS: Record<string, string> = {
   _eq: 'is',
@@ -580,11 +580,23 @@ export function readBackDatasetPermissions(
       const sentence = isPrivate && role !== 'viewer' ? 'no access' : roleSentence(t, role);
       groups.set(sentence, [...(groups.get(sentence) ?? []), role]);
     }
+    const trustedWrites = isPrivate ? (['signed_in', 'anonymous'] as const).flatMap((role) => {
+      const operations = [
+        entryFor(t.insert_permissions, role)?.backend_only && 'add',
+        entryFor(t.update_permissions, role)?.backend_only && 'change',
+        entryFor(t.delete_permissions, role)?.backend_only && 'delete',
+      ].filter((op): op is string => !!op);
+      const audience = role === 'signed_in' ? 'Signed-in' : 'Signed-out';
+      return operations.length
+        ? [`${audience}: trusted programs on pages whose owner administers the dataset may ${and(operations)} rows.`]
+        : [];
+    }) : [];
     const lines = [
       'Owner, editors: see and change everything.',
       ...[...groups].map(
         ([sentence, roles]) => `${capitalize(roles.map((r) => ROLE_NAMES[r]).join(', '))}: ${sentence}.`,
       ),
+      ...trustedWrites,
       ...(t.collaborative_columns?.length
         ? [`Typed live together (@afbin/collab) by everyone who may change them: ${and(t.collaborative_columns)}.`]
         : []),

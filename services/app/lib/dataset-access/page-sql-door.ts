@@ -113,7 +113,7 @@ function checked(call: { sql?: unknown; params?: unknown }): PageSqlDoorCall {
 }
 
 /** One linked table as phase 1 mounts it: SQL names, the reader's columns (and write-only ones) and its loaded link. */
-interface Mounted {
+export interface Mounted {
   loaded: LoadedDataset;
   table: LoadedDataset['tables'][number];
   schema: string;
@@ -124,7 +124,7 @@ interface Mounted {
   writeOnly: DatasetColumn[];
 }
 
-function mountsOf(loaded: readonly LoadedDataset[]): Mounted[] {
+export function mountsOf(loaded: readonly LoadedDataset[]): Mounted[] {
   const out: Mounted[] = [];
   for (const l of loaded) {
     const link = l.link!.name;

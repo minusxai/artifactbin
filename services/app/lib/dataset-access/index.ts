@@ -6,3 +6,5 @@ export {datasetPermissionTemplates,readDatasetPermissions,writeDatasetPermission
 export {locateDatasetCell,writeDatasetCells,type DatasetCell} from './cells';
 
 export {pageRevisionSchema} from './revision-schema';
+
+export {checkedWriteAccess,pageWriteAccess} from './page-write-access';

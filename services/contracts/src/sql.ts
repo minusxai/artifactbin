@@ -209,3 +209,20 @@ export const SQL_READ_LIMITS = Object.freeze({
 
 /** The wire: one POST per method. `serveSql`/`sqlClient` (the sql package) implement exactly this. */
 export const SQL_ROUTES = { readPolicy:'/read-policy', run: '/run', mutate: '/mutate', dryRunMutations: '/dry-run-mutations' } as const;
+
+/** A page's editable affordances for one stored dataset link and up to 100 visible row IDs. */
+export interface SqlWriteAccessRequest {
+  link: string;
+  /** SQL table name within a multi-table link. */
+  table?: string;
+  insert?: string[];
+  update?: string[];
+  ids?: string[];
+}
+export type SqlWriteAccessStatus = 'denied' | 'allowed' | 'conditional';
+export interface SqlWriteAccess {
+  insert: SqlWriteAccessStatus;
+  /** Answers in the request's ID order, with the same denial for missing and invisible rows. */
+  rows: {update: SqlWriteAccessStatus; delete: boolean}[];
+}
+export const SQL_WRITE_ACCESS_LIMIT = 100;

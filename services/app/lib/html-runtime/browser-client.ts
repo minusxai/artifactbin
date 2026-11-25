@@ -1,5 +1,6 @@
 import {config,remote,onResolverChange} from './browser-reader';
 import {createSql,SqlError} from './apollo/sql';
+import {SQL_WRITE_ACCESS_LIMIT,type SqlWriteAccessRequest,type SqlWriteAccess,type SqlWriteAccessStatus} from '@artifactbin/contracts/sql';
 import {SQL_FAILURES} from '@artifactbin/contracts/sql-failures';
 import {RemoteUnreachable} from './apollo/apollo-contracts';
 import {offlineSqlNoData} from './portable-chrome-contract';
@@ -34,13 +35,24 @@ const draftSql=(request:{sql?:string;query?:string;params:Record<string,string|n
   if(!config.draftLive)return Promise.reject(new SqlError('consent_required',SQL_FAILURES.consent_required.notice,`${live} reads live data, which this draft may read only once the reader allows it in the app showing it`));
   return remote.execute(request).then((reply)=>reply as never,(error:unknown)=>{throw error instanceof RemoteUnreachable?new SqlError('unavailable','live data is read through the app showing this draft'):error;});
 };
-export const sql=createSql({
+export const sql=Object.assign(createSql({
   run:(request)=>config.localPreview?Promise.reject(new SqlError('unavailable','sql runs in a page the app frames'))
    :config.draft?draftSql(request) as never
    :config.offline?offlineSql(request) as never
    :(config.domainReads&&window.parent===window?createDomainSql(config,location,fetch.bind(window))(request):remote.execute(request)).then((reply)=>reply as never,(error:unknown)=>{throw error instanceof RemoteUnreachable?new SqlError('unavailable','sql runs in a page the app frames'):error;}),
   subscribe:(listener)=>{const subscription=onResolverChange((names,reason)=>listener(reason==='authority'?undefined:names));return()=>subscription.unsubscribe();},
-});
+}),{writeAccess:async (link:string, request:Omit<SqlWriteAccessRequest,'link'>={}):Promise<SqlWriteAccess>=>{
+  const ids=request.ids??[];
+  if(ids.length>SQL_WRITE_ACCESS_LIMIT)throw new TypeError(`writeAccess takes at most ${SQL_WRITE_ACCESS_LIMIT} row IDs`);
+  const denied:SqlWriteAccess={insert:'denied',rows:ids.map(()=>({update:'denied',delete:false}))};
+  if(config.localPreview||config.draft||config.offline||!remote.online())return denied;
+  const reply=await remote.execute({params:{},writeAccess:{...request,link}}).catch(()=>null) as {writeAccess?:SqlWriteAccess}|null;
+  const hints=reply?.writeAccess;
+  const status=(value:unknown):value is SqlWriteAccessStatus=>value==='denied'||value==='allowed'||value==='conditional';
+  if(!hints||!status(hints.insert)||!Array.isArray(hints.rows)||hints.rows.length!==ids.length||
+    !hints.rows.every(row=>row&&status(row.update)&&typeof row.delete==='boolean'))return denied;
+  return hints;
+}});
 export {SqlError} from './apollo/sql';
 // The page's one local-state document is @afbin/state's (./browser-state). Loaded
 // dynamically, never as a static import: a page whose core predates @afbin/state has no import-map entry for it, and a

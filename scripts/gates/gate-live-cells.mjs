@@ -16,7 +16,7 @@
  *      reads exactly it;
  *   6. typing before the session arrives (a slowed open) is kept and merged in, not lost or doubled;
  *   7. the generated tracker (new-app.mjs's tasks preset, toolbox-tracker): a signed-in link holder adds an entry, and
- *      the rules (own-rows) refuse their removing the owner's, which the page reports and the entry survives; owner and
+ *      own-rows controls are hidden on the owner's entry and after policy revocation; owner and
  *      author type its description together and the save reaches a signed-out reader; the table's Edit opens the form
  *      with no page or console error, and the page counts each group with SQL;
  *   8. a downloaded copy opened from disk with no network loads the library and shows the field read-only.
@@ -239,12 +239,10 @@ try {
     const added = await until(() => tb.locator('#status').textContent(), (text) => /^Added Bo task/.test(text ?? ''));
     check(/^Added Bo task/.test(added ?? ''), `the signed-in link holder adds an entry through the page (${JSON.stringify(added)})`);
     await row(tb, 'Bo task').getByRole('button', { name: 'Edit Bo task' }).waitFor({ timeout: 5000 });
-    // The page offers every signed-in reader the controls; the rules refuse the owner's entry, and the page says so.
-    await row(tb, 'Ada task').getByRole('button', { name: 'Remove Ada task' }).click();
-    const refusedRemove = await until(() => tb.locator('#status').textContent(), (text) => /^Nothing changed/.test(text ?? ''));
-    check(/^Nothing changed/.test(refusedRemove ?? ''), `the rules refuse the link holder removing the owner's entry, and the page says so (${JSON.stringify(refusedRemove)})`);
-    const ada = await trackerSql("select count(*) as n from entries where name = 'Ada task'");
-    check(Number(ada?.[0]?.n) === 1, `the owner's entry is still there (${JSON.stringify(ada)})`);
+    check(await row(tb, 'Ada task').getByRole('button').count() === 0,
+      'the signed-in link holder reads the owner’s entry without Edit or Remove');
+    check(await row(tb, 'Bo task').getByRole('button', { name: 'Remove Bo task' }).isVisible(),
+      'the signed-in link holder can remove their own entry');
     check(await tc.locator('#add').isVisible() === false && await tc.getByRole('button', { name: /^(?:Edit|Remove) / }).count() === 0, 'the signed-out reader gets no add form and no controls');
 
     // collab: the owner and the link holder type into the link holder's entry at once.
@@ -280,6 +278,24 @@ try {
     const read = await until(() => tc2.locator('#lists').textContent(), (text) => !!text?.includes('author-typed') && text.includes('owner-typed'), 15_000);
     check(!!read?.includes('author-typed') && read.includes('owner-typed'), 'the signed-out reader reloads and reads the saved description in the list');
     await TC.close();
+
+    const viewer = await contexts[1].newPage();
+    await viewer.goto(`${BASE}/a/${trackerId}`, {waitUntil: 'load'});
+    const frame = await documentFrame(viewer);
+    await frame.getByRole('button', {name: 'Edit Bo task'}).click();
+    const {policy, revision: expectedPolicyRevision} = await api(`/api/artifacts/${entriesId}/policy`);
+    for (const table of policy.tables) {
+      for (const key of ['insert_permissions', 'update_permissions', 'delete_permissions'])
+        table[key] = table[key].filter(({role}) => role !== 'signed_in');
+    }
+    await api(`/api/artifacts/${entriesId}/policy`, {
+      method: 'PUT', body: JSON.stringify({policy, expectedPolicyRevision}),
+    });
+    await frame.getByRole('button', {name: 'Save', exact: true}).waitFor({state: 'hidden', timeout: 15_000});
+    check(await frame.getByText('Bo task', {exact:true}).isVisible() && await frame.locator('#add').isHidden()
+      && await frame.getByRole('button', {name: /^(?:Edit|Remove) /}).count() === 0,
+    'revocation closes the form and leaves the signed-in reader with the rows and no write controls');
+    await viewer.close();
   });
 
   await section('a downloaded copy works offline: the library loads and the field is read-only', async () => {

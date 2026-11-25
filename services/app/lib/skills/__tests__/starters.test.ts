@@ -73,7 +73,9 @@ const project = ({width, height, longitude, latitude, zoom}: View, [lon, lat]: n
   const k = 512 * 2 ** zoom / 360;
   return [width / 2 + (lon! - longitude) * k, height / 2 - (lat! - latitude) * k];
 };
-async function load(html: string, answer: Answer, signedIn: SignIn = 'signed-out'): Promise<Page> {
+type TrackerAccess = (ids: string[]) => {insert: string; rows: {update: string; delete: boolean}[]};
+async function load(html: string, answer: Answer, signedIn: SignIn = 'signed-out', access: TrackerAccess =
+  ids => ({insert: 'allowed', rows: ids.map(() => ({update: 'allowed', delete: true}))})): Promise<Page> {
   html = inline(html);
   const scripts = [...html.matchAll(/<script type="module"[^>]*>([\s\S]*?)<\/script>/g)].map(m => m[1]!);
   const dom = new JSDOM(html.replace(/<script type="module"[\s\S]*?<\/script>/g, ''), {runScripts: 'outside-only', url: 'https://page.test/'});
@@ -90,6 +92,7 @@ async function load(html: string, answer: Answer, signedIn: SignIn = 'signed-out
     values.forEach((value, i) => { params['p' + i] = value; text += '$p' + i + strings[i + 1]; });
     return {text, params, then: (ok: (v: unknown) => unknown, bad: (e: unknown) => unknown) => run(text, params).then(ok, bad)};
   }, {
+    writeAccess: async (_link: string, {ids}: {ids: string[]}) => access(ids),
     // A watch answers once here (no dataset changes in jsdom), even after its stop: the page must drop a superseded
     // answer itself. `rerun` stands for a dataset change. The page's handler is awaited by `load` and `settle`.
     watch: (statement: {text: string; params: Record<string, unknown>}, next: (rows: unknown) => unknown, error?: (e: unknown) => unknown) => {
@@ -531,18 +534,21 @@ const trackerAnswer = (entries: Entry[]): Answer => (text, params) => {
   return runSql(text, params, {entries: {columns, rows}});
 };
 
-it('shows a signed-in reader the add form and Edit and Remove on every entry, and a guest none: the rules decide', async () => {
+it('shows add, edit and remove independently for the current reader and refreshes them when policy changes', async () => {
   const entries = [{id: 'a1', name: 'Ada', grp: 'First choice', note: 'gloves', by: 'usr_me'},
     {id: 'b2', name: 'Bo', grp: 'Second choice', note: '', by: 'usr_other'},
     {id: 'c3', name: 'Cy', grp: 'A shift since renamed', note: '', by: null}];
-  const signedIn = await load(await tracker('list'), trackerAnswer(entries), 'signed-in');
+  let revoked = false;
+  const signedIn = await load(await tracker('list'), trackerAnswer(entries), 'signed-in', ids => ({
+    insert: revoked ? 'denied' : 'conditional',
+    rows: ids.map(id => ({update: !revoked && id === 'a1' ? 'conditional' : 'denied', delete: !revoked && id === 'b2'})),
+  }));
   expect(signedIn.error).toBeUndefined();
   const doc = signedIn.dom.window.document, ids = (suffix: string) =>
     [...doc.querySelectorAll(`[data-af-id$="${suffix}"]`)].map(n => (n as HTMLElement).dataset.afId);
   expect((doc.querySelector('#add') as HTMLFormElement).hidden).toBe(false);
-  // The page cannot know whose an entry is: it offers every one, and a write the rules refuse says so.
-  expect(ids('-edit')).toEqual(['entry-a1-edit', 'entry-b2-edit', 'entry-c3-edit']);
-  expect(ids('-remove')).toHaveLength(3);
+  expect(ids('-edit')).toEqual(['entry-a1-edit']);
+  expect(ids('-remove')).toEqual(['entry-b2-remove']);
   // Counts are SQL's: one per listed group, and an entry whose group is no longer listed counts under Other.
   expect(doc.querySelector('[data-af-id="group-first-choice-count"]')?.textContent).toBe('1');
   expect(doc.querySelector('[data-af-id="group-third-choice-empty"]')?.textContent).toBe('Nothing yet.');
@@ -556,18 +562,25 @@ it('shows a signed-in reader the add form and Edit and Remove on every entry, an
     const guest = await load(await tracker('list'), trackerAnswer(entries), state);
     const g = guest.dom.window.document;
     expect((g.querySelector('#add') as HTMLFormElement).hidden, state).toBe(true);
-    expect((g.querySelector('#signin') as HTMLElement).hidden, state).toBe(false);
+    expect((g.querySelector('#signin') as HTMLElement).hidden, state).toBe(state === 'read-only');
     expect(g.querySelectorAll('[data-af-id$="-edit"],[data-af-id$="-remove"]').length, state).toBe(0);
   }
+  (doc.querySelector('[data-af-id="entry-a1-edit"]') as HTMLButtonElement).click();
+  expect(doc.querySelector('[data-af-id="entry-a1-form"]')).not.toBeNull();
+  revoked = true;
+  await rerun(signedIn);
+  expect(doc.querySelector('[data-af-id="entry-a1-form"]')).toBeNull();
+  expect(doc.querySelector('#lists')?.textContent).toContain('Ada');
+  expect((doc.querySelector('#add') as HTMLFormElement).hidden).toBe(true);
+  expect(ids('-edit')).toEqual([]);
+  expect(ids('-remove')).toEqual([]);
   // Signing out on the open page takes the controls away.
   signedIn.signIn!('signed-out');
   expect((doc.querySelector('#add') as HTMLFormElement).hidden).toBe(true);
   expect(doc.querySelectorAll('[data-af-id$="-edit"],[data-af-id$="-remove"]')).toHaveLength(0);
 });
 
-it('a tracker stripped of its team and own-rows rules keeps the plain signed-in controls, and no preset calls server code', async () => {
-  const strip = (html: string) => html.replace(/^.*@only (?:team|own-rows).*$\n?/gm, '');
-  expect(strip(await tracker('tasks'))).toContain('const canAdd=()=>signedIn,canChange=()=>signedIn;');
+it('no tracker preset calls server code', async () => {
   for (const preset of ['tasks', 'list'] as const) expect(await tracker(preset)).not.toMatch(/fetch\(|\/fn\/|tracker\.ts|APP\.limit/);
 });
 

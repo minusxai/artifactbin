@@ -3,6 +3,7 @@ import { setVisibility } from '@/__tests__/artifact-fixtures';
 import {artifactChannel} from '@artifactbin/contracts/live-channels';
 import {useAppHarness,request,mintAccountToken,params as routeParams} from '@/__tests__/harness';
 import {POST as createArtifact} from '@/app/api/artifacts/route';
+import {PUT as writePolicy} from '@/app/api/artifacts/[id]/policy/route';
 import {GET as eventsRoute} from '@/app/a/[id]/events/route';
 import {sseStream} from '@/__tests__/sse';
 import { setArtifact } from '@/__tests__/rows';
@@ -63,6 +64,18 @@ it('native live dataset links hear mutations and pinned aliases stay out of inva
   const event=await nextData(stream);
   expect(event?.data.datasets).toEqual(['live']);
   expect(event?.data.revisions).toMatchObject({live:expect.stringContaining(`dataset:${dataset}:2:`)});
+  // A policy-only change leaves the row version at 2 but must invalidate the open page's edit hints.
+  const policy = {version:3,tables:[{table:{schema:'public',name:'rows'},
+   select_permissions:[{role:'anonymous',permission:{columns:'*',filter:{}}}],
+  }]};
+  const changed = await writePolicy(request(`/api/artifacts/${dataset}/policy`, {
+   method:'PUT',token:token.token,json:{policy,expectedPolicyRevision:0},
+  }),routeParams(dataset));
+  expect(changed.status,await changed.clone().text()).toBe(200);
+  const update = await nextData(stream);
+  expect(update.data.datasets).toEqual(['live']);
+  expect(update.data.revisions).toMatchObject({live:expect.stringContaining(`dataset:${dataset}:2:`)});
+  expect(update.data.revisions).not.toEqual(event.data.revisions);
  }finally{stream.close();}
 });
 

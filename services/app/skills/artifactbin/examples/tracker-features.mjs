@@ -4,7 +4,7 @@
  * Usage: node scripts/new-app.mjs --kind tracker [--preset tasks|list] [--without F,…] reads it;
  *   no edits needed.
  * Gotchas: own-rows and team change who may do what, so they live in the dataset rules: the
- *   page shows its controls to a signed-in reader, and the rules judge every write.
+ *   page checks which controls to show, and the rules judge every write.
  */
 export const FEATURES = {
   'own-rows': {requires: [],

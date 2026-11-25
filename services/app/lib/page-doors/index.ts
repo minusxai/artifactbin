@@ -13,7 +13,7 @@ import {sqlReadFailure, type SqlFailureCode} from '@artifactbin/contracts/sql-fa
 import { ANONYMOUS_ACTOR, type AccessActor } from '@/lib/accounts';
 import { canReadArtifact, accessMoved, type ArtifactHeader, type ArtifactRow } from '@/lib/artifacts';
 import {readHtmlPageHeader} from '@/lib/html-publication';
-import {executePageSql,type PageCommitGuard} from '@/lib/dataset-access';
+import {checkedWriteAccess,executePageSql,pageWriteAccess,type PageCommitGuard} from '@/lib/dataset-access';
 import {pageConnectionSql} from '@/lib/connections';
 import {pageLiveDatasetSql} from '@/lib/live-datasets';
 import {namingOwner,pageDeclaredConnectionSql} from './approved-queries';
@@ -155,6 +155,20 @@ async function answerSql(request:Request,pageId:string,admission:Admission,reade
   const files=site&&!page.links.some(link=>link.name.toLowerCase()==='_files')?siteFiles(site):undefined;
   const scope={files,admission,pageId,readStartedAt,retainReadDeadline:(deadline:number)=>{readDeadline=deadline;readSignal=AbortSignal.any([request.signal,AbortSignal.timeout(Math.max(0,Math.floor(deadline-performance.now())))]);},...(idempotencyKey?{idempotencyKey}:{}),readOnly:!!reader||body.readOnly===true||page.revision!==head.revision,commitGuard:pageCommitGuard(pageId,actor,admitted)};
   const verifyPage=pageVerifier(request,pageId,actor,reader,admitted);
+  if(body.writeAccess!==undefined){
+   const input=checkedWriteAccess(body.writeAccess);
+   if(!input||body.sql!==undefined||body.query!==undefined)return json({error:'validation_failed',message:'send one bounded writeAccess request'},400,headers);
+   const fences:Array<()=>Promise<void>>=[];
+   const signal=admission.dispatch(true);
+   const hints=await admission.step(pageWriteAccess(actor,datasetLinks(page),input,{
+    pageId,readOnly:scope.readOnly,retainReadFence:verify=>fences.push(verify),
+   },signal));
+   await admission.step(verifyPage(page.revision));
+   if(hostHolds&&!await admission.step(hostHolds()))return unreadable();
+   for(const verify of fences)await admission.step(verify());
+   admission.check();
+   return json({writeAccess:hints},200,headers);
+  }
   for(let attempt=1;;attempt++){
    try{
     // A declared query, or a statement naming a live dataset link, runs on that dataset's connection (lib/live-datasets);

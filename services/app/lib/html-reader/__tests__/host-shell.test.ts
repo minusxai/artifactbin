@@ -84,6 +84,27 @@ function framedDocument(win: Window & typeof globalThis, mounted: MountedDocumen
 }
 
 describe('a host page on the app\'s own origin', () => {
+  it('preserves the trusted revision and scope for a write hint, and forwards only its decisions', async () => {
+    const w = world();
+    const {win, container} = hostPage(session(w.owner));
+    const path = '/api/artifacts/' + w.privatePage + '/sql';
+    const server = win.fetch;
+    win.fetch = async (url, init) => {
+      if (url !== path) return server(url, init);
+      expect(JSON.parse(String(init?.body))).toEqual({revision:'1', writeAccess:{link:'people', ids:['visible']}});
+      return Response.json({writeAccess:{insert:'denied', policy:'private', rows:[{
+        update:'allowed', delete:true, row:{name:'hidden'},
+      }]}});
+    };
+    const mounted = await mountDocument(container,{id:w.privatePage},win);
+    const frame = framedDocument(win,mounted);
+    const answer = await frame.fetchThrough(path,'POST',JSON.stringify({
+      revision:'spoofed', readOnly:false, reader_id:'spoofed', writeAccess:{link:'people',ids:['visible']},
+    }));
+    expect(answer.status).toBe(200);
+    expect(answer.body).toEqual({writeAccess:{insert:'denied',rows:[{update:'allowed',delete:true}]}});
+    mounted.destroy();
+  });
   it.each([false, true])('requires a click for eligible and link-required groups (link-required %s)', async required => {
     const w = world();
     const {win, container} = hostPage(session(w.owner));
