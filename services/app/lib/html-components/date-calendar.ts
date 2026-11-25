@@ -86,14 +86,14 @@ export function calendarIcon(doc: Document): SVGSVGElement {
   return icon;
 }
 /** A calendar button; day cells, arrows and footer actions all share this shape. */
-export function dateButton(doc: Document, text: string, name: string, action: () => void,
+function dateButton(doc: Document, text: string, name: string, action: () => void,
   className = ''): HTMLButtonElement {
   const b=doc.createElement('button'); b.type='button'; b.textContent=text;
   b.setAttribute('aria-label',name); if(className)b.className=className;
   b.addEventListener('click',action); return b;
 }
 /** The day grid, seeded with one-letter weekday headings (full name as aria-label). */
-export function weekdayGrid(doc: Document): HTMLDivElement {
+function weekdayGrid(doc: Document): HTMLDivElement {
   const grid=doc.createElement('div'); grid.className='af-date-grid';
   for(const day of ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']) {
     const el=doc.createElement('abbr'); el.textContent=day.slice(0,1);
@@ -102,14 +102,14 @@ export function weekdayGrid(doc: Document): HTMLDivElement {
   return grid;
 }
 /** Roving-tabindex day: keep `focused` if selectable, else the value, first in month, first. */
-export function focusTarget(selectable: CalendarDay[], focused: string | null,
+function focusTarget(selectable: CalendarDay[], focused: string | null,
   value: string | null): string | null {
   if(selectable.some(cell=>cell.value===focused)) return focused;
   return selectable.find(cell=>cell.value===value)?.value ??
     selectable.find(cell=>cell.inMonth)?.value ?? selectable[0]?.value ?? null;
 }
 /** Live month heading, e.g. "March 2026", for the popup header. */
-export function monthTitle(doc: Document, view: CalendarMonth): HTMLSpanElement {
+function monthTitle(doc: Document, view: CalendarMonth): HTMLSpanElement {
   const title=doc.createElement('span'); const d=new Date(0);
   d.setFullYear(view.year,view.month-1,1);
   title.textContent=new Intl.DateTimeFormat('en',{month:'long',year:'numeric'}).format(d);

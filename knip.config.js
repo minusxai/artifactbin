@@ -8,6 +8,12 @@
  * deployment imports appear there too, and so does @aws-sdk/client-s3, which lib/object-store loads through
  * createRequire (a test imports it, so the plain run needs no ignore for it).
  */
+import { readFileSync } from 'node:fs';
+
+const hostedComponents = JSON.parse(
+  readFileSync(new URL('./services/app/lib/html-components/hosted.json', import.meta.url), 'utf8'),
+).components;
+
 /** @type {import('knip').KnipConfig} */
 export default {
   workspaces: {
@@ -28,12 +34,12 @@ export default {
         // guard (scripts/ci/check-local.mjs), the gate container, agent tooling (scripts/AGENTS.md),
         // proofs spawned by their tests and the preview gate's build.
         'scripts/gates/gate-*.mjs', 'scripts/ci/check-ui-primitives.mjs', 'scripts/gate-container.mjs',
-        'scripts/{agent-dev-flow,agent-worktree,port-block}.mjs', 'scripts/{dataset-graphql,dataset-read}-latency.ts', 'scripts/__tests__/reserved-ids-postgres-proof.ts',
+        'scripts/{agent-dev-flow,agent-worktree,port-block}.mjs', 'scripts/dataset-read-latency.ts', 'scripts/__tests__/reserved-ids-postgres-proof.ts',
         // Design-system tooling (generate:design-systems and its screenshot helpers).
         'design-systems/*.mjs',
         // Gate and page-speed fixtures, read by path.
         'scripts/fixtures/**/*.{mjs,jsx}',
-        // Imported by the evals repository (evals/lib re-exports them).
+        // Operator credential helper and shared env/slug helpers re-exported by the evals repository.
         'scripts/lib/{credential,env,slug}.ts',
       ],
       project: ['**/*.{ts,tsx,mjs,js,jsx,css}'],
@@ -60,8 +66,8 @@ export default {
         // (scripts/build-libraries.mjs over lib/libraries/registry.json), the SPA (vite.config.mts).
         // Native HTML core bundles this module by URL; its exports are the author ABI.
         'lib/html-runtime/{browser-client,browser-state,build.server,index}.ts!',
-        // Public custom-element API, bundled by build-html-components.
-        'lib/html-components/{tabs,tab-navigation,button,switch,progress,collapsible,dialog,slider,input,textarea,text-control,avatar,segmented,popover,tooltip,floating-position,date-picker,date-calendar,select,select-model,icon,icon-glyphs,floating-geometry,accordion,accordion-model,file-upload,file-upload-model,data-table,table-model,markdown,mermaid,slide-deck,slide-navigation,deck-gl,deck-gl-engine,deck-gl-model,isometric,isometric-model,user,user-model,avatar-model,segmented-model,dialog-model,popover-model,date-picker-styles,tooltip-model,slide-deck-parts,data-table-frame,data-table-grid,data-table-cells,data-table-compare,data-table-measure,chart,chart-data,chart-frame,chart-model,chart-render,chart-styles,markdown-editor,markdown-editor-commands,markdown-editor-model,markdown-editor-styles}.ts!',
+        // The public custom-element entry points in build-html-components.
+        ...hostedComponents.map((name) => `lib/html-components/${name}.ts!`),
         'lib/libraries/*.js!', 'web/solid-entry.tsx!', 'web/shell.css!',
         // Server bundle workers (scripts/build/build-server.mjs).
         'lib/viz/chart-image-worker.ts!', 'lib/viz/chart-image-worker-dev.mjs',
@@ -72,10 +78,7 @@ export default {
         // The HTTP author-skill ZIP loads these explicit text assets by path (lib/skills/assets).
         'skills/artifactbin/{scripts/*.mjs,examples/*.{html,ts,csv,mjs},resolvers/*.ts,design-systems/*.css}!',
         // The deployment's @artifactbin/app entry points (minusxai/artifactbin-server tsconfig paths).
-        'server/host.ts!', 'lib/platform/{config,db}.ts!', 'lib/accounts/tokens.ts!', 'lib/artifacts/{mutation-invocation,document-policy}.ts!',
-        // Reached in ways knip does not follow: `Promise.all([import(...)])` (lib/mermaid-images/reader-draw.ts)
-        // Native browser assets are reached through explicit build and HTTP entry points.
-        // Test fixtures run as their own tsx processes by the tests beside them.
+        'server/host.ts!', 'lib/platform/{config,db}.ts!', 'lib/accounts/tokens.ts!', 'lib/artifacts/mutation-invocation.ts!',
         // The setup file of pr fast's guard tier (vitest.guard.config.ts at the root).
         'test/setup/guard.setup.ts',
         // The shared-graph check of pr fast's node batch (vitest.node-batch.config.ts at the root).

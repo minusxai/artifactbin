@@ -46,7 +46,7 @@ const droppedTags=['script','style','link','iframe','object','embed','audio','vi
   'template'];
 /** Rebuild only passive HTML: no custom element upgrade, copied identity, event attribute, URL
  * or nested control. */
-export function previewNode(source:Node,doc:Document):Node {
+function previewNode(source:Node,doc:Document):Node {
   if(source.nodeType===3)return doc.createTextNode(source.textContent??'');
   if(!(source instanceof Element))return doc.createTextNode('');
   if(droppedTags.includes(source.localName))return doc.createTextNode('');
@@ -96,7 +96,7 @@ export function buildDeckChrome(doc:Document) {
   return {rail,toolbar,previous,next,present,count,status};
 }
 /** Fill a rail row: number + title label and an inert, scaled-down passive preview. */
-export function fillSlideRow(row:HTMLButtonElement,slide:HTMLElement,i:number,title:string):void {
+function fillSlideRow(row:HTMLButtonElement,slide:HTMLElement,i:number,title:string):void {
   const doc=row.ownerDocument;
   const label=doc.createElement('span');label.dataset.afDeckLabel='';
   const number=doc.createElement('span');number.dataset.afDeckIndex='';
@@ -124,7 +124,7 @@ export function railRow(rows:WeakMap<HTMLElement,HTMLButtonElement>,slide:HTMLEl
   row.setAttribute('aria-controls',slide.id);row.setAttribute('aria-current',String(i===index));
   fillSlideRow(row,slide,i,title);return row;
 }
-export function slideTitle(slide:HTMLElement,index:number):string{
+function slideTitle(slide:HTMLElement,index:number):string{
   return slide.getAttribute('title')??slide.querySelector('h1,h2,h3')?.textContent?.trim()??
     `Slide ${index+1}`;
 }

@@ -10,8 +10,8 @@ import { houseTokens, tokensFromThemeVariables, type ChartTokens } from '@/lib/v
 
 export type ChartRows = Record<string, unknown>[];
 /** At most this many rows in the values table; a note says how many more were drawn. */
-export const TABLE_ROWS = 50;
-export const DEFAULT_HEIGHT = 320;
+const TABLE_ROWS = 50;
+const DEFAULT_HEIGHT = 320;
 
 /** Re-set properties a page assigned before the element was defined, through its accessors. */
 export function upgradeProperties(host: object, keys: readonly string[]): void {
@@ -68,7 +68,7 @@ function surfaceBehind(host: Element, style: CSSStyleDeclaration): string {
 }
 
 /** Whether the page reads dark: its `data-af-dark`, else the reader's colour scheme. */
-export function prefersDark(doc: Document): boolean {
+function prefersDark(doc: Document): boolean {
   const flag = doc.documentElement.getAttribute('data-af-dark');
   if (flag !== null) return flag === 'true';
   return doc.defaultView?.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;

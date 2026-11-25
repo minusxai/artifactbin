@@ -31,6 +31,13 @@ describe('generic og image for non-artifact pages', () => {
     expect(png.readUInt32BE(20)).toBe(OG_HEIGHT);
   });
 
+  it('the OG source logo covers its 300px slot without a large public asset', () => {
+    const logo = readFileSync(path.join(ROOT, 'public/img/logo.png'));
+    expect(logo.readUInt32BE(16)).toBe(300);
+    expect(logo.readUInt32BE(20)).toBe(300);
+    expect(logo.byteLength).toBeLessThan(100 * 1024);
+  });
+
   it('the SPA shell carries the title and description, and leaves og:image to the server', () => {
     const html = readFileSync(path.join(ROOT, 'web', 'solid-app.html'), 'utf8');
     expect(html).toContain('<title>artifactbin</title>');

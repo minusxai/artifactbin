@@ -3,8 +3,7 @@
  * Used by: popover.ts, tooltip.ts, date-picker.ts.
  */
 import {floatingPosition,type FloatingSide} from './floating-geometry';
-export {floatingPosition} from './floating-geometry';
-export type {FloatingSide,FloatingRect,FloatingPosition} from './floating-geometry';
+export type {FloatingSide} from './floating-geometry';
 /** Library lifecycle metadata only; shared across independently bundled entries. */
 interface FloatingRegistry { overlays: HTMLElement[]; nextIdentity: number }
 // Symbol.for joins separately bundled component entry points without putting viewer data

@@ -53,7 +53,7 @@ export function chooseSource(sql: string | null, dataset: string | null,
 const quoted = (name: string) => `"${name.replaceAll('"', '""')}"`;
 
 /** Column names: the answer's own, else every key the rows use, in first-seen order. */
-export function columnsOf(rows: ChartRows): string[] {
+function columnsOf(rows: ChartRows): string[] {
   const named = (rows as { columns?: unknown }).columns;
   if (Array.isArray(named) && named.every(c => typeof c?.name === 'string')) {
     return named.map(c => c.name as string);

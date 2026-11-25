@@ -32,11 +32,11 @@ export type UserImageState = 'empty' | 'loading' | 'loaded' | 'error';
 
 /** Boolean attribute that is on unless absent or literally "false". */
 export const isOn = (value: string | null): boolean => value !== null && value !== 'false';
-export const isSize = (value: string | null): value is UserSize =>
+const isSize = (value: string | null): value is UserSize =>
   value === 'sm' || value === 'md' || value === 'lg';
-export const isMode = (value: string | null): value is UserMode =>
+const isMode = (value: string | null): value is UserMode =>
   value === 'user' || value === 'avatar' || value === 'handle';
-export const isIdentityState = (value: string | null): value is UserIdentityState =>
+const isIdentityState = (value: string | null): value is UserIdentityState =>
   value === 'unknown' || value === 'missing' || value === 'deleted';
 // Attribute readers: an unknown value falls back to the default.
 export const sizeOf = (value: string | null): UserSize => isSize(value) ? value : 'sm';
