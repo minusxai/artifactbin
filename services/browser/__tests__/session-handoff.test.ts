@@ -42,7 +42,9 @@ it('the host can hold an idle registry and release it through its private unix s
 it('reopens a socket left by a crashed process while preserving live sockets and ordinary files',async()=>{
  const dir=await mkdtemp(join(tmpdir(),'session-restart-'));dirs.push(dir);
  const path=join(dir,'control.sock');
- const crashed=spawn(process.execPath,['-e',"require('node:net').createServer().listen(process.argv[1],()=>process.send('ready'))",path],{stdio:['ignore','ignore','inherit','ipc']});
+ const moduleUrl=new URL('../src/session-handoff.ts',import.meta.url).href;
+ const start="const {openSessionHandoff}=await import(process.argv[1]); await openSessionHandoff(process.argv[2],{holdIfIdle:()=>true,resume(){}});process.send('ready');";
+ const crashed=spawn(process.execPath,['--import','tsx','--input-type=module','-e',start,moduleUrl,path],{stdio:['ignore','ignore','inherit','ipc']});
  try { await once(crashed,'message'); } finally {
   const exit=once(crashed,'exit');crashed.kill('SIGKILL');await exit;
  }
