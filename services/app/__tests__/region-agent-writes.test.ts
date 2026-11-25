@@ -282,6 +282,26 @@ describe('refusals', () => {
   });
 });
 
+it('a hand-written native region with whitespace between its blocks reads as Markdown, takes a write and opens',async()=>{
+ const authored='\n  <p>First <code>x</code></p>\n  <ul>\n    <li><p>One</p></li>\n    <li><p>Two</p></li>\n  </ul>\n  <p>Last</p>\n';
+ const row=await createArtifact(null,owner.id,{format:'html',source:nativeHtml(`<article data-af-editable="rich-native-v1">${authored}</article>`),meta:{},visibility:'private'});
+ const readBack=await read({person:owner},'_doc','',row.id);
+ expect(readBack).toEqual({status:200,body:{regionId:expect.any(String),kind:'rich-native-v1',version:1,markdown:'First `x`\n\n* One\n\n* Two\n\nLast'}});
+ const regionId=String(readBack.body.regionId);
+ const req=request(`/api/artifacts/${row.id}/regions/${regionId}/open`,{method:'POST',actor:as(owner),origin:'same'});
+ expect((await call(req,()=>openRoute(req,params({ id:row.id,regionId })))).status).toBe(200);
+ expect((await read({person:owner},'_doc','',row.id)).body.version).toBe(1);
+ const written=await write({person:owner},{base_version:1,markdown:'First `x`\n\n* One\n\n* Two\n\nLast edited'},'_doc',{},row.id);
+ expect([written.status,written.body.version]).toEqual([200,2]);
+ expect((await read({person:owner},'_doc','',row.id)).body).toMatchObject({version:2,markdown:expect.stringContaining('Last edited')});
+});
+it('a native region whose saved content the kind cannot hold reads as unsupported_content, never a server error; its HTML still reads',async()=>{
+ const row=await createHistoricalPage(null,owner.id,{format:'html',source:nativeHtml('<section data-af-editable="rich-native-v1"><p>a</p><svg></svg></section>'),meta:{},visibility:'private'});
+ const refused=await read({person:owner},'_doc','',row.id);
+ expect(refused).toEqual({status:422,body:{error:'unsupported_content',details:['node svg']}});
+ expect((await read({person:owner},'_doc','?format=html',row.id)).status).toBe(200);
+});
+
 it('native agent revisions keep the versioned XML root and remain editable through the authenticated session door',async()=>{
  const row=await createArtifact(null,owner.id,{format:'html',source:nativeHtml('<article data-af-editable="rich-native-v1"><p>Keep</p><ul><li><p>Nested</p></li></ul></article>'),meta:{},visibility:'private'});
  const readBack=await read({person:owner},'_doc','',row.id);

@@ -29,7 +29,7 @@ const readRegionOp: Operation = {
   input: { id: z.string(), regionId: region, format: z.enum(TEXT_FORMATS as [RegionFormat, ...RegionFormat[]]).optional() },
   annotations: { readOnly: true },
   example: { input: { id: 'aB3xK9', regionId: DOC_REGION } },
-  errors: [NOT_FOUND, REGION_NOT_FOUND, AMBIGUOUS],
+  errors: [NOT_FOUND, REGION_NOT_FOUND, AMBIGUOUS, { status: 422, code: 'unsupported_content', fix: 'details names what the saved region holds that Markdown cannot: read it with format html' }],
   async run(ctx, input) {
     // The region's text representation (never a page format): Markdown unless HTML is asked for.
     const format = input.format ?? TEXT_FORMATS[0];

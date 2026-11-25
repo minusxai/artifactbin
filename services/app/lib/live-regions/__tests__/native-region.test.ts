@@ -144,3 +144,10 @@ it('the shared editor schema itself rejects invalid legacy checkbox values',asyn
  const {nativeSchema}=await import('../native-schema');
  expect(()=>nativeSchema.nodes.listItem!.create({legacyChecked:'mixed'},nativeSchema.nodes.paragraph!.create()).check()).toThrow('legacy checkbox value');
 });
+
+it('whitespace between native blocks is not content: it reads, builds state and roundtrips; other bare text still refuses',()=>{
+ const source='\n <p data-af-id="af-1">A</p>\n <ul data-af-id="af-2">\n  <li data-af-id="af-3"><p data-af-id="af-4">B</p></li>\n </ul>\n';
+ expect(regionMarkdown(kind,source)).toBe('A\n\n* B');
+ expect(regionHtml(kind,createRegionState(kind,source).state)).toBe('<p data-af-id="af-1">A</p><ul data-af-id="af-2"><li data-af-id="af-3"><p data-af-id="af-4">B</p></li></ul>');
+ expect(()=>regionMarkdown(kind,'bare<p>A</p>')).toThrow(/invalid native structure/);
+});
