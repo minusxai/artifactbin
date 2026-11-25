@@ -13,6 +13,8 @@
  */
 const INTERNAL_API_PREFIX = '/api/internal';
 export const INTERNAL_MINT_PATH = `${INTERNAL_API_PREFIX}/tokens`;
+/** Auth-owned, service-authenticated POST; body {sessionId,userId}, response {live:boolean}. */
+export const HUMAN_SESSION_LIVE_PATH = `${INTERNAL_API_PREFIX}/auth/session-live`;
 export function isInternalApiPath(pathname: string): boolean {
   return pathname === INTERNAL_API_PREFIX || pathname.startsWith(`${INTERNAL_API_PREFIX}/`);
 }

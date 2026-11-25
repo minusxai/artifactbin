@@ -12,7 +12,8 @@
  *
  * Pure: the site is an argument (tests build their own); `pagesSite()` is this deployment's.
  */
-import { ID_RE, PUBLIC_BASE_URL, requirePagesHost } from '@/lib/platform';
+import { idFromPagesLabel } from '@artifactbin/contracts/owner-host';
+import { PUBLIC_BASE_URL, requirePagesHost } from '@/lib/platform';
 
 export interface PagesSite {
   /** The pages hostname, lowercase, no port (`pages.example.com`, `lvh.me`). */
@@ -40,12 +41,7 @@ export function pagesSite(): PagesSite {
 /** The DNS label a document id rides as: its UTF-8 bytes in lowercase hex. */
 export const pagesLabel = (id: string): string => Buffer.from(id, 'utf8').toString('hex');
 
-/** The id a label names, or null when it is not the hex of a valid id. */
-export function idFromPagesLabel(label: string): string | null {
-  if (!/^(?:[0-9a-f]{2}){1,32}$/.test(label)) return null;
-  const id = Buffer.from(label, 'hex').toString('utf8');
-  return ID_RE.test(id) ? id : null;
-}
+export { idFromPagesLabel };
 
 const suffix = (site: PagesSite): string => (site.port ? `:${site.port}` : '');
 

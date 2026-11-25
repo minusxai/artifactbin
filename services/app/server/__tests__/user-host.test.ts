@@ -110,6 +110,11 @@ it('serves native static and live read doors and no credential-bearing script en
   const head=await server.request(base+path,{method:'HEAD'});expect(head.status,path).toBe(200);expect(await head.text()).toBe('');
   expect((await server.request(base+path,{method:'POST'})).status).toBe(404);
  }
+ for(const door of ['events','events/frame','assets']){
+  for(const method of ['HEAD','POST'])expect((await server.request(`${base}/a/${post.id}/${door}`,{method})).status,door+' '+method).toBe(404);
+  expect((await server.request(`${base}/a/${post.id}/${door}/`)).status,door).toBe(404);
+ }
+ expect((await server.request(`${base}/a/X/assets`)).status).toBe(404);
  expect((await server.request(`${base}/a/${post.id}/assets`)).status).toBe(400);
  expect((await server.request(`${base}/a/${post.id}/resolve`)).status).toBe(404);
  expect((await server.request(`${base}/a/${post.id}/events/frame`)).status).toBe(200);

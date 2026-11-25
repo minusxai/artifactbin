@@ -2,6 +2,7 @@
 import type { Context, MiddlewareHandler } from 'hono';
 import { artifactIdFromSegment } from '@artifactbin/utils/artifact-reference';
 import { ACTOR_HEADER } from '@artifactbin/contracts/actor';
+import { ownerDocumentDoor, ownerSqlArtifactId } from '@artifactbin/contracts/owner-host';
 import { ownerHostServes } from '@artifactbin/contracts/url-space';
 import { ownerHostSqlRead } from '@/lib/page-doors';
 import { getArtifactById } from '@/lib/artifacts';
@@ -180,10 +181,9 @@ async function documentRoute(request: Request, id: string, route: string, owner:
  * picture (lib/avatars). Same rule: the app's handler, a guest, this owner's
  * public posts and nobody else's.
  */
-async function embedded(request: Request, path: string, owner: UserPagesOwner): Promise<Response | null> {
-  const raw = /^\/a\/([^/]+)\/raw$/.exec(path);
-  if (raw) {
-    const id = raw[1]!;
+async function embedded(request: Request, path: string, document: ReturnType<typeof ownerDocumentDoor>, owner: UserPagesOwner): Promise<Response | null> {
+  if (document?.door === 'raw') {
+    const { id } = document;
     const row = ID_RE.test(id) ? await getArtifactById(id) : null;
     if (!row || !(await servesEmbeddedArtifact(owner, row))) return notFound();
     // No capability rides in on the URL: an export key never admits bytes here.
@@ -192,9 +192,8 @@ async function embedded(request: Request, path: string, owner: UserPagesOwner): 
     const guest = await asGuest(new Request(url, request));
     return call(request.method === 'HEAD' ? rawHead : rawGet, guest, id);
   }
-  const card = /^\/a\/([^/]+)\/export$/.exec(path);
-  if (card) {
-    const id = card[1]!;
+  if (document?.door === 'export') {
+    const { id } = document;
     const asked = new URL(request.url).searchParams;
     // Exactly the thumbnail Shelf draws (the card JPEG); no re-render, archive, slide or key rides in.
     if (asked.get('format') !== 'jpg' || asked.get('mode') !== 'card') return notFound();
@@ -237,8 +236,6 @@ function withReadCors(response: Response): Response {
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 
-const DOCUMENT_ROUTE = /^\/a\/([^/]+)\/(events|events\/frame|resolve|assets)$/;
-
 /**
  * The boundary as Hono middleware. Mounted before every other route, so a
  * verified host never reaches the app behind it except for the static trees.
@@ -274,8 +271,9 @@ export function userHostBoundary(options: UserHostOptions = {}): MiddlewareHandl
       c.res = passed.status === 404 ? notFound() : withoutCookies(passed);
       return;
     }
+    const document = ownerDocumentDoor(path);
     if (readable && owner) {
-      const bytes = await embedded(request, path, owner);
+      const bytes = await embedded(request, path, document, owner);
       if (bytes) {
         const response = privacy(bytes);
         if (owner.folderId !== undefined) response.headers.set('cache-control','no-store');
@@ -283,9 +281,8 @@ export function userHostBoundary(options: UserHostOptions = {}): MiddlewareHandl
       }
     }
 
-    const sql=/^\/api\/artifacts\/([^/]+)\/sql$/.exec(path);
-    if(sql&&owner&&request.method==='POST'&&ID_RE.test(sql[1]!)){
-      const id=sql[1]!;
+    const id=ownerSqlArtifactId(path);
+    if(id&&owner&&request.method==='POST'&&ID_RE.test(id)){
       // Resolve the live handle and true owner at both ends of every read, including identity moves.
       const hostHolds=async()=>{
         const liveOwner=await siteOwner(address),row=await getArtifactById(id);
@@ -299,9 +296,8 @@ export function userHostBoundary(options: UserHostOptions = {}): MiddlewareHandl
       catch(error){if(error instanceof PayloadTooLarge)return privacy(withReadCors(error.response()));throw error;}
     }
 
-    const document = DOCUMENT_ROUTE.exec(path);
-    if (document && owner) {
-      try { return privacy(await documentRoute(request, document[1]!, document[2]!, owner)); }
+    if (owner && document && document.door !== 'raw' && document.door !== 'export') {
+      try { return privacy(await documentRoute(request, document.id, document.door, owner)); }
       catch (error) { if (error instanceof PayloadTooLarge) return privacy(withReadCors(error.response())); throw error; }
     }
     const segment = /^\/([^/]+)$/.exec(path)?.[1];

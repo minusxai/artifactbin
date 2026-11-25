@@ -33,8 +33,10 @@ export type EventFeedType = (typeof EVENT_CATEGORIES)[keyof typeof EVENT_CATEGOR
 export const EVENT_FEED_SCHEMA_VERSION = 1;
 /** `wait` holds a request until an event arrives, at most this long. */
 export const EVENT_FEED_MAX_WAIT_SECONDS = 30;
-/** The removed comment feed's wait, kept only until the production proxy (artifactbin-server) moves its long-poll
- * deadline to EVENT_FEED_MAX_WAIT_SECONDS: the pin moves on every merge here, so dropping it first breaks that build. */
+/** The removed comment feed's wait, retained as a public export for callers pinned to the older feed.
+ * @public
+ * @deprecated Use EVENT_FEED_MAX_WAIT_SECONDS for the events feed.
+ */
 export const COMMENT_CHANGES_MAX_WAIT_SECONDS = 60;
 
 /** `group`: an agent signed in as that group (./identity-service `GROUP_SIGN_IN_RULE`), no person behind it. */

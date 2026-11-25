@@ -1,3 +1,4 @@
+import { ownerFolderId } from '@artifactbin/contracts/owner-host';
 import { getDb } from '@/lib/platform';
 import { publicSiteAncestors } from './site-roots';
 import { homePageId } from './serving';
@@ -14,18 +15,18 @@ export async function siteDestination(owner: UserPagesOwner, path: string): Prom
   let folderId = owner.folderId;
   let unlisted = false;
   if (path !== '/') {
-    const stable = /^\/folders\/([A-Za-z0-9]+)\/?$/.exec(path);
+    const stable = ownerFolderId(path);
     if (stable) {
       const ownership = owner.kind === 'group' ? 'group_id=$1' : 'user_id=$1 AND group_id IS NULL';
       const folder = (await (await getDb()).query<{visibility:string}>(`SELECT visibility FROM artifacts a
         WHERE id=$2 AND ${ownership} AND format='folder' AND deleted_at IS NULL AND visibility IN ('public','unlisted')
           AND ($3::text IS NULL OR $3=ANY(ancestor_ids)) AND ${publicSiteAncestors('a',owner.kind)}`,
-        [owner.id,stable[1],owner.folderId??null])).rows[0];
+        [owner.id,stable,owner.folderId??null])).rows[0];
       if (!folder) return null;
-      folderId = stable[1]!;
+      folderId = stable;
       unlisted = folder.visibility === 'unlisted';
     } else {
-      const target = await siteTitleTarget(owner,path.replace(/\/$/,''));
+      const target = await siteTitleTarget(owner,path);
       if (!target) return null;
       if (target.format === 'html') return path.endsWith('/') ? null : { kind:'page', id:target.id, unlisted:false };
       folderId = target.id;
