@@ -1,10 +1,11 @@
 import {createHash} from 'node:crypto';
-import {serviceAuthHost} from './helpers';
+import {delegatedService,serviceAudiences,serviceAuthHost} from './helpers';
 import {describe,it,expect} from 'vitest';
 import {HUMAN_SESSION_LIVE_PATH} from '@artifactbin/contracts/actor';
-import {IDENTITY_CALL_PATH} from '@artifactbin/contracts/identity-module';
+import {IDENTITY_CALL_PATH,IdentityError} from '@artifactbin/contracts/identity-module';
 import {IDENTITY_INTROSPECT_PATH} from '@artifactbin/contracts/identity-service';
 import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts/routes';
+import {CHAT_SIGN_IN_PATH,GROUP_SIGN_IN_GRANTS_PATH,GROUP_SIGN_IN_PATH,RUN_SIGN_IN_PATH,SCHEDULE_SIGN_IN_PATH} from '@artifactbin/contracts/service-audiences';
 import type {ServiceAudience} from '@artifactbin/contracts/service-audiences';
 import type {TokenReader, TokenRecord} from '@artifactbin/contracts/identity';
 import {serviceTokenKey,signServiceToken} from '../src/identity/service-tokens';
@@ -166,6 +167,55 @@ describe('identity introspection (contracts IDENTITY_INTROSPECT_PATH)',()=>{
   for(const path of ['/api/internal/identity/resolve','/api/internal/identity/groups','/api/internal/events/publish']){
    expect((await call(app,path,{user_id:'usr_1'})).status,path).toBe(404);
   }
+ });
+});
+
+describe('service sign-in route admission',()=>{
+ const installation='installation-secret',runSecret='run-service-secret',groupSecret='group-service-secret';
+ const runner=delegatedService('runner','http://runner.test',runSecret);
+ const groups=delegatedService('groups','http://groups.test',groupSecret);
+ const token=signServiceToken(serviceTokenKey('test'),runner,{userId:'usr_1',parent:{kind:'session',id:'ses_1'}}).token;
+ const routes=[
+  {path:RUN_SIGN_IN_PATH,allowed:runSecret,other:groupSecret,body:{token}},
+  {path:SCHEDULE_SIGN_IN_PATH,allowed:runSecret,other:groupSecret,body:{action:'issue',schedule_id:'schedule',revision:'rev',grant_id:'scg_1'}},
+  {path:CHAT_SIGN_IN_PATH,allowed:runSecret,other:groupSecret,body:{action:'issue',chat_id:'chat',group_id:'grp_1',grant_id:'icg_1',token}},
+  {path:GROUP_SIGN_IN_PATH,allowed:groupSecret,other:runSecret,body:{grant_id:'sgg_1'}},
+  {path:GROUP_SIGN_IN_GRANTS_PATH,allowed:groupSecret,other:runSecret,body:{}},
+ ];
+ const host=(identityDb?:Parameters<typeof serviceAuthHost>[0]['identityDb'])=>serviceAuthHost({
+  env:{INTERNAL__SERVICE_SECRET:installation,IDENTITY__SERVICE_AUDIENCES:serviceAudiences(
+   {...runner,run_sign_ins:true},{...groups,group_sign_ins:true},
+  )},
+  identityDb,
+  upstream:async()=>Response.json({error:'not_found'},{status:404}),
+ });
+ const ask=async(app:ReturnType<typeof host>,path:string,secret?:string,body?:string)=>{
+  const response=await app.request(path,{method:body===undefined?'GET':'POST',body,headers:secret===undefined?{}:{[SERVICE_AUTH_HEADER]:secret}});
+  return {status:response.status,cache:response.headers.get('cache-control'),body:await response.json()};
+ };
+ const reply=(status:number,body:unknown)=>({status,cache:'no-store',body});
+
+ it.each(routes)('hides $path before method and body validation, and keeps the admitted wire errors',async({path,allowed,other,body})=>{
+  const app=host(),malformed='{';
+  const unknown=await ask(app,'/api/internal/identity/no-such-route',undefined,malformed);
+  expect(unknown.status).toBe(404);
+  for(const denied of [undefined,'wrong',installation,other]){
+   expect(await ask(app,path,denied)).toEqual(unknown);
+   expect(await ask(app,path,denied,malformed)).toEqual(unknown);
+  }
+  expect(await ask(app,path,allowed)).toEqual(reply(405,{error:'method_not_allowed'}));
+  for(const rejected of [malformed,'[]',JSON.stringify({...body,extra:true})])
+   expect(await ask(app,path,allowed,rejected)).toEqual(reply(400,{error:'bad_request'}));
+  expect(await ask(app,path,allowed,JSON.stringify('x'.repeat(8192)))).toEqual(reply(413,{error:'too_large',max:8192}));
+ });
+
+ it.each(routes)('keeps the public error contract for $path if the identity store fails',async({path,allowed,body})=>{
+  const fail=(error:Error)=>host({query:async()=>{throw error;}});
+  const unavailable=reply(503,{error:'session_unavailable'}),payload=JSON.stringify(body);
+  expect(await ask(fail(new Error('storage failed')),path,allowed,payload)).toEqual(unavailable);
+  const throttled=fail(new IdentityError('rate_limited',429,3600,'internal detail'));
+  expect(await ask(throttled,path,allowed,payload)).toEqual(path===GROUP_SIGN_IN_GRANTS_PATH
+   ?unavailable:reply(429,{error:'rate_limited',retry_after:3600}));
  });
 });
 
