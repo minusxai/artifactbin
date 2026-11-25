@@ -190,7 +190,6 @@ export function DocumentPage(): JSX.Element {
 
   const railInset = () => railOpen() && !phone() ? RIGHT_RAIL_W : 0;
   const framedPage = createFramedPage({ origin: framedOrigin, top: barHeight, right: railInset, ground: () => DOCUMENT_GROUND[documentMode()] });
-  const { forwardHash, settleStateFragment } = framedPage;
 
   /** A rail action by name: a press, a carried `?intent=` (after a sign-in), or a pill. */
   const act = (name: string) => {
@@ -220,7 +219,7 @@ export function DocumentPage(): JSX.Element {
     if (page.deferredChrome) void import('../document/deferred-document-chrome').then(({ bindDocumentChrome }) => {
       if (!unmounted) runWithOwner(owner, () => bindDocumentChrome(id, setChrome));
     }).catch(() => { /* The document and its discussion remain usable without social details. */ });
-    void import('../document/create-framed-story').then(({ answerFrameNavigation, createFramedStory, createReaderGroups, takeIntent, uploadSessionOf }) => { if (!unmounted) runWithOwner(owner, () => {
+    void import('../document/create-framed-story').then(({ bindFrameFragment, answerFrameNavigation, createFramedStory, createReaderGroups, takeIntent, uploadSessionOf }) => { if (!unmounted) runWithOwner(owner, () => {
       const groups = createReaderGroups(id, framed.frame, () => session()?.user?.id);
       setReaderGroups(groups);
       story = createFramedStory({
@@ -246,28 +245,20 @@ export function DocumentPage(): JSX.Element {
       const framedStory = story;
       // The region toolbar takes a strip over the frame's top edge while it shows: the document reserves it.
       createEffect(on(() => !!framedStory.regionUi.toolbar(), (shown) => framedStory.setTopInset(shown ? REGION_TOOLBAR_H : 0)));
-      window.addEventListener('hashchange', forwardHash);
-      framed.frame.addEventListener('load', forwardHash);
-      // The served frame may have loaded before the app did: forward now as well.
-      forwardHash();
+      bindFrameFragment(framed, nonce);
       // Null until the bridge is made (the tree arrives), then the bridge's stand-in for the document's controller.
       runtimeRef.current = framedStory.controller();
       createEffect(on(framedStory.controller, (next) => { runtimeRef.current = next; }, { defer: true }));
       // The frame's controller signs its events once it runs: the nonce arrives then (and again after the frame loads
       // anew). It is told the mode then, and whenever that changes (the reader's pick).
       createEffect(on(() => story?.nonce() ?? null, setNonce));
-      createEffect(on(nonce, (signed) => { if (signed) settleStateFragment(); }));
       createEffect(on([nonce, pick], ([signed, mode]) => {
         if (signed && mode) runtimeRef.current?.send({ type: STORY_READER_MODE_MESSAGE, mode });
       }));
       setReady(true);
       const carried = takeIntent();
       if (carried) act(carried);
-      onCleanup(() => {
-        stopNavigation();
-        framed.frame.removeEventListener('load', forwardHash);
-        window.removeEventListener('hashchange', forwardHash);
-      });
+      onCleanup(stopNavigation);
     }); });
   });
   const currentVersion = head.version;

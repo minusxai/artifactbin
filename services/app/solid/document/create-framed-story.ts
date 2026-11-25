@@ -2,7 +2,7 @@
 import { createEffect, createSignal, on, onCleanup, type Accessor } from 'solid-js';
 import { createFrameBridgeParent, type FrameBridgeParent, type ReaderScope } from '@/lib/html-reader/frame-bridge/parent';
 import { withUrlValuesOf } from '@/lib/dataflow/url-values';
-import { STORY_URL_VALUES_MESSAGE, type IslandStoryController } from '@/lib/html-reader/contract';
+import { STORY_FRAME_HASH_MESSAGE, STORY_URL_VALUES_MESSAGE, type IslandStoryController } from '@/lib/html-reader/contract';
 import { commentAfterRegionSave, type RegionCommentSubject } from '@/lib/annotations/region-comment';
 import type { RegionEditing, RegionToolbarState, startRegionEditing } from './region-editing';
 import type { CellEditing, startCellEditing } from './cell-editing';
@@ -35,6 +35,29 @@ export function followFramedValues(win: Window, values: string, push = false): v
   const next = withUrlValuesOf(search, values);
   if (next === search) return;
   win.history[push ? 'pushState' : 'replaceState'](win.history.state, '', `${pathname}${next}${hash}`);
+}
+
+/** Forward fragments when the frame loads or the address changes. Once the bridge is ready,
+ * consume the one-shot af-state fields while keeping the rest of the reader's address. */
+export function bindFrameFragment({frame, origin}: FramedDocument, nonce: Accessor<string | null>) {
+  const forward = () => {
+    const hash = window.location.hash;
+    if (hash && hash !== '#edit') frame.contentWindow?.postMessage({ type: STORY_FRAME_HASH_MESSAGE, hash }, origin);
+  };
+  window.addEventListener('hashchange', forward);
+  frame.addEventListener('load', forward);
+  forward();
+  createEffect(on(nonce, signed => {
+    const { pathname, search, hash } = window.location;
+    if (!signed || !/^#(?:.*&)?af-state=/.test(hash)) return;
+    forward();
+    const rest = hash.slice(1).split('&').filter(part => !part.startsWith('af-state=')).join('&');
+    window.history.replaceState(window.history.state, '', `${pathname}${search}${rest ? `#${rest}` : ''}`);
+  }));
+  onCleanup(() => {
+    frame.removeEventListener('load', forward);
+    window.removeEventListener('hashchange', forward);
+  });
 }
 
 /** The `$` params alone of an address's search (`''` for none): what the frame is told after Back or Forward. */
