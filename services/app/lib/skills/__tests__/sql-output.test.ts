@@ -104,3 +104,32 @@ it('through runTool, the rows file stays the command\'s own and the summary is p
   expect(summary).not.toHaveProperty('rows');
   expect((await readFile(out, 'utf8')).split('\r\n')[0]).toBe('month,region,note,revenue');
 });
+
+it('warns once on stderr when a read is cut, leaving stdout and the result as they were', async () => {
+  const {runTool} = await import('../../../skills/artifactbin/scripts/toolbox-client.mjs');
+  const argv = process.argv[1];
+  await writeFile(path.join(root, 'sql.mjs'), '');
+  const entry = await realpath(path.join(root, 'sql.mjs'));
+  const run = async (...args: string[]) => {
+    let out = '', err = '';
+    const write = process.stdout.write.bind(process.stdout), werr = process.stderr.write.bind(process.stderr);
+    process.argv[1] = entry;
+    process.stdout.write = ((text: string) => { out += text; return true; }) as typeof process.stdout.write;
+    process.stderr.write = ((text: string) => { err += text; return true; }) as typeof process.stderr.write;
+    try {
+      await runTool('sql', pathToFileURL(entry).href, (parsed: any) => sqlCommand(parsed, options()),
+        [...args, '--json', '--no-update']);
+    } finally { process.stdout.write = write; process.stderr.write = werr; process.argv[1] = argv; }
+    return {out: JSON.parse(out), err};
+  };
+  const cut = 'warning: result cut at 2 rows (limit 2; the most is 10000): aggregate in SQL or narrow the query.\n';
+  expect(await run('query', 'default:wh', 'select * from monthly', '--limit', '2')).toEqual({err: cut,
+    out: {ok: true, code: 'completed', columns, rows: rows.slice(0, 2), truncated: true}});
+  const saved = await run('query', 'default:wh', 'select * from monthly', '--limit', '2', '--output', path.join(root, 'cut.csv'));
+  expect(saved.err).toBe(cut);
+  expect(saved.out).toMatchObject({ok: true, rowCount: 2, truncated: true});
+  expect(await run('query', 'PAGE12', 'select * from t', '--limit', '3')).toMatchObject({err: cut.replaceAll('2', '3'),
+    out: {rows: rows.slice(0, 3), truncated: true}});
+  expect(await run('query', 'PAGE12', 'select * from t')).toEqual({err: '', out: {ok: true, code: 'completed', columns, rows}});
+  expect((await run('query', 'DATA12', 'select * from rows')).err).toBe('');
+});
