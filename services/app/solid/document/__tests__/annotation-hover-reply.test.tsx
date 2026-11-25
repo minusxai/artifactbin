@@ -42,7 +42,7 @@ describe('the marker layer', () => {
   it('carries the marks without covering the page: no full-viewport box, and the whole-card hit target is a ui link Button', async () => {
     knobs.open = [ANN];
     const view = layer({ showViewComments: true });
-    await flush(); await flush();
+    await waitFor(() => expect(view.runtime.posts().at(-1)).toMatchObject({ pins: [{ id: ANN.id }] }));
     emitLayout(view.runtime, 120);
     const carrier = screen.getByLabelText('Open annotation comments');
     expect(carrier).toHaveClass('pointer-events-none');
