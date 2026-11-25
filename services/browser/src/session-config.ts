@@ -3,7 +3,7 @@ import { overHttp } from '@artifactbin/utils/upstream';
 import type { SessionProcessOptions } from './session-process';
 
 /** What a composition hands `createBrowser` for sessions: how to spawn one, and how many may live. */
-export type BrowserSessionOptions = SessionProcessOptions & { capacity?: SessionCapacity };
+export type BrowserSessionOptions = SessionProcessOptions & { capacity?: SessionCapacity; handoffSocket?: string };
 
 /**
  * WHERE THE SANDBOX IS DECIDED — once, at this service's env boundary, never by a
@@ -48,7 +48,7 @@ function readSessionEnv(source: NodeJS.ProcessEnv) {
     sessionsPerActor: wholeCount('BROWSER__SESSION_MAX_PER_ACTOR', env('BROWSER', 'SESSION_MAX_PER_ACTOR'), DEFAULT_SESSION_CAPACITY.sessionsPerActor),
   };
   const renderSandbox = renderSandboxFrom(env('BROWSER', 'RENDER_SANDBOX'));
-  return { cgroupRoot, capacity, sandbox: sandboxFrom(env('BROWSER', 'SANDBOX'), source), renderSandbox, pagesHost: pagesHostFrom(env('APP', 'PAGES_HOST')), names: namesRead() };
+  return { handoffSocket: env('BROWSER','HANDOFF_SOCKET'), cgroupRoot, capacity, sandbox: sandboxFrom(env('BROWSER', 'SANDBOX'), source), renderSandbox, pagesHost: pagesHostFrom(env('APP', 'PAGES_HOST')), names: namesRead() };
 }
 
 /**
@@ -99,9 +99,9 @@ function sandboxFrom(value: string | undefined, source: NodeJS.ProcessEnv): Sess
 }
 
 /** Every session setting a composition spreads into `createBrowser({ sessions })`, read once — the pages host included. */
-export function sessionProcessPaths(source: NodeJS.ProcessEnv): Pick<BrowserSessionOptions, 'cgroupRoot' | 'browsersPath' | 'sandbox' | 'capacity' | 'pagesHost'> {
-  const { cgroupRoot, sandbox, capacity, pagesHost } = readSessionEnv(source);
-  return { cgroupRoot, sandbox, capacity, ...(pagesHost ? { pagesHost } : {}), ...(source.PLAYWRIGHT_BROWSERS_PATH ? { browsersPath: source.PLAYWRIGHT_BROWSERS_PATH } : {}) };
+export function sessionProcessPaths(source: NodeJS.ProcessEnv): Pick<BrowserSessionOptions, 'cgroupRoot' | 'browsersPath' | 'sandbox' | 'capacity' | 'pagesHost' | 'handoffSocket'> {
+  const { cgroupRoot, sandbox, capacity, pagesHost, handoffSocket } = readSessionEnv(source);
+  return { cgroupRoot, sandbox, capacity, ...(handoffSocket ? {handoffSocket} : {}), ...(pagesHost ? { pagesHost } : {}), ...(source.PLAYWRIGHT_BROWSERS_PATH ? { browsersPath: source.PLAYWRIGHT_BROWSERS_PATH } : {}) };
 }
 
 /** Browser-service environment boundary; these credentials never enter a worker. */

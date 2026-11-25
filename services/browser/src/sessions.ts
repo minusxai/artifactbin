@@ -56,8 +56,9 @@ function capacityRefusal(limit: 'server' | 'actor', capacity: SessionCapacity, y
 const idValid = (id: unknown): id is string => typeof id === 'string' && /^[a-zA-Z0-9_-]{1,80}$/.test(id);
 
 /** Owns leases, execution receipts, and serialization; workers own live browser objects. */
-export function createBrowserSessions(factory: SessionWorkerFactory, capacity: SessionCapacity = DEFAULT_SESSION_CAPACITY): BrowserSessions {
+export function createBrowserSessions(factory: SessionWorkerFactory, capacity: SessionCapacity = DEFAULT_SESSION_CAPACITY): BrowserSessions & {holdIfIdle(): boolean; resume(): void} {
   const sessions = new Map<string, Session>();
+  let held = false;
   const empty = (id: string, code: string, message: string): BrowserSessionResult => ({ session_id: id, status: 'failed', pages: [], attachments: [], error: { code, message } });
   const close = async (session: Session, status: 'lost' | 'closed') => {
     session.status = status;
@@ -76,6 +77,12 @@ export function createBrowserSessions(factory: SessionWorkerFactory, capacity: S
   }, 30000);
   sweep.unref();
   return {
+    holdIfIdle() {
+      if ([...sessions.values()].some(session=>session.status==='idle')) return false;
+      held=true;
+      return true;
+    },
+    resume() { held=false; },
     async request(input: BrowserSessionRequest) {
       const owner = ownerOf(input.actor);
       if (!owner) return empty(input.session_id, 'AUTH_REQUIRED', 'Authenticate before using browser sessions');
@@ -87,6 +94,7 @@ export function createBrowserSessions(factory: SessionWorkerFactory, capacity: S
         if(input.requestScope!==undefined&&(typeof input.requestScope!=='string'||!input.requestScope.trim()||input.requestScope.length>256))return empty(input.session_id,'INVALID_REQUEST','Invalid browser request scope');
         if (!idValid(input.execution_id) || typeof input.code !== 'string' || Buffer.byteLength(input.code) > SESSION_LIMITS.scriptBytes) return empty(input.session_id, 'INVALID_REQUEST', 'Invalid execution ID or script exceeds 64 KiB');
         if (!session && input.create) {
+          if (held) return empty('', 'SESSION_CAPACITY', 'The browser is switching releases. Retry opening the session.');
           if (sessions.size >= capacity.sessions) {
             const ended = [...sessions].find(([, value]) => value.status !== 'idle');
             if (ended) sessions.delete(ended[0]);
