@@ -196,20 +196,15 @@ export function layer(over: Over = {}, runtime = makeRuntime(), options: { trust
       liveAnnotations={p().liveAnnotations ?? null}
       showViewComments={p().showViewComments ?? false}
       topOffset={p().topOffset ?? 100}
-      rightInset={p().rightInset}
+      documentTopInset={p().documentTopInset}
       onRailOpenChange={(open) => p().onRailOpenChange?.(open)}
       initialSelection={p().initialSelection}
       onSelectionConsumed={p().onSelectionConsumed}
-      pickOnOpen={p().pickOnOpen}
       pickRequested={p().pickRequested}
       editId={p().editId}
       beforeComment={p().beforeComment}
       railHost={p().railHost}
-      railSheet={p().railSheet}
-      panelWidth={p().panelWidth}
-      linkTarget={p().linkTarget}
       onAnnotationsChange={p().onAnnotationsChange}
-      onDraftingChange={p().onDraftingChange}
     />;
     const mounted = () => (options.trusted ? <TrustedUi overlay>{ui()}</TrustedUi> : ui());
     return options.wrap ? options.wrap(mounted) : mounted();

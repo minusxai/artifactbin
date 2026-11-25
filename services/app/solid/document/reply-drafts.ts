@@ -6,6 +6,8 @@
 import { createSignal } from 'solid-js';
 import { draftsUnder, writeDraft } from '../lib/draft-store';
 
+export type ReplyDrafts = ReturnType<typeof createReplyDrafts>;
+
 export function createReplyDrafts(artifactId: string) {
   const prefix = `${artifactId}:reply:`;
   const legacy = `${artifactId}:thread-reply:`;
@@ -23,7 +25,6 @@ export function createReplyDrafts(artifactId: string) {
 
   const [values, setValues] = createSignal(initial);
   return {
-    values,
     get: (id: string) => values()[id] ?? '',
     set(id: string, value: string) {
       persist(id, value);

@@ -1,38 +1,30 @@
-import { replaceComment } from './comment-input';
 /* @jsxImportSource solid-js */
-/**
- * WHAT THE VIEWER HAS NOT SENT. A page that reloads itself to follow its source (the local preview) must not
- * do it under an open composer or a typed reply; the layer says when it holds either, and when it no longer does.
- */
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+// Losing comment access puts away the composer. Its unsent words still belong to the reader's tab.
+import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { screen } from '@testing-library/dom';
 import type { StoryEditSelection } from '@/lib/html-runtime/bridge/selection-contract';
-import { fireEvent } from '../../__tests__/helpers';
-import { flush, installAnnotationFetch, layer, openPinnedThread } from './annotation-rig';
+import { flush, installAnnotationFetch, layer } from './annotation-rig';
 import { preloadCommentField } from '../LazyCommentField';
+import { replaceComment } from './comment-input';
 
-beforeEach(installAnnotationFetch);
-afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
-const TEXT = { kind: 'text', path: '1', tag: 'p', rect: { x: 5, y: 6, width: 200, height: 40 }, className: '', style: '', ancestors: [] } as unknown as StoryEditSelection;
+beforeAll(() => preloadCommentField());
+beforeEach(() => { sessionStorage.clear(); installAnnotationFetch(); });
+afterEach(() => { sessionStorage.clear(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
-describe('the layer reports unsent drafts', () => {
-  beforeAll(() => preloadCommentField());
-  it('is drafting while a composer is open, and stops once it is cancelled', async () => {
-    const onDraftingChange = vi.fn();
-    layer({ initialSelection: TEXT, onDraftingChange }); await flush();
-    expect(screen.getByRole('dialog', { name: 'Annotation composer' })).toBeTruthy();
-    expect(onDraftingChange).toHaveBeenLastCalledWith(true);
-    fireEvent.click(screen.getByLabelText('Close annotation composer')); await flush();
-    expect(onDraftingChange).toHaveBeenLastCalledWith(false);
-  });
-  it('is drafting while an open thread\'s reply holds words, and stops once they are cleared', async () => {
-    const onDraftingChange = vi.fn();
-    await openPinnedThread('ann_1', { railOpen: true, onDraftingChange });
-    await screen.findByLabelText('Annotation thread');
-    expect(onDraftingChange).toHaveBeenLastCalledWith(false);
-    replaceComment(screen.getByLabelText('Reply to annotation'), 'half a thought'); await flush();
-    expect(onDraftingChange).toHaveBeenLastCalledWith(true);
-    fireEvent.click(screen.getByLabelText('Cancel reply')); await flush();
-    expect(onDraftingChange).toHaveBeenLastCalledWith(false);
-  });
+const TEXT: StoryEditSelection = {
+  kind: 'text', path: '1', nodeId: 'node-1', tag: 'p', rect: { x: 5, y: 6, width: 200, height: 40 },
+  className: '', style: '', ancestors: [],
+};
+
+it('puts away the composer when permission is revoked and keeps the words for the next selection', async () => {
+  const view = layer({ initialSelection: TEXT });
+  replaceComment(await screen.findByRole('textbox', { name: 'Annotation comment' }), 'half a thought');
+  view.set({ canCreateComment: false });
+  expect(screen.queryByRole('dialog', { name: 'Annotation composer' })).toBeNull();
+
+  view.set({ canCreateComment: true });
+  expect(screen.queryByRole('dialog', { name: 'Annotation composer' })).toBeNull();
+  view.set({ canCreateComment: true, initialSelection: TEXT });
+  await flush();
+  expect(screen.getByRole('textbox', { name: 'Annotation comment' })).toHaveTextContent('half a thought');
 });

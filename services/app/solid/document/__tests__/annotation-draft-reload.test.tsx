@@ -30,12 +30,10 @@ describe('a reload keeps what the reader has not sent', () => {
     replaceComment(screen.getByLabelText('Reply to annotation'), 'half a thought'); await flush();
     cleanup(); // the page reloads
 
-    const onDraftingChange = vi.fn();
-    const again = layer({ railOpen: true, onDraftingChange }); await flush();
+    const again = layer({ railOpen: true }); await flush();
     emitPin(again.runtime, 'ann_1');
     await screen.findByLabelText('Annotation thread');
     expect(screen.getByLabelText('Reply to annotation')).toHaveTextContent('half a thought');
-    expect(onDraftingChange, 'the page knows it holds unsent words again').toHaveBeenLastCalledWith(true);
     fireEvent.click(screen.getByLabelText('Cancel reply')); await flush();
     cleanup();
 

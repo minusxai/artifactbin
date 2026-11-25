@@ -2,7 +2,7 @@ import { replaceComment } from './comment-input';
 /* @jsxImportSource solid-js */
 /**
  * PICKING — the Select tool. Opening
- * the rail starts a pick; the editor ends one; the document answers with the block (or the drawn
+ * the rail starts a pick; losing comment access ends one; the document answers with the block (or the drawn
  * area) the reader chose, and the composer opens on it. Includes where the rail sits under the bars.
  */
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -170,7 +170,7 @@ describe('picking a block from the rail', () => {
     const view = layer({ railOpen: true, topOffset: 44 }, makeRuntime({ left: 0, top: 0, width: 800, height: 600 }));
     await flush();
     expect(pill()).toHaveStyle({ top: '56px' });
-    view.set({ railOpen: true, topOffset: 88 });
+    view.set({ railOpen: true, topOffset: 44, documentTopInset: 44 });
     expect(pill()).toHaveStyle({ top: '100px' });
   });
 
@@ -305,18 +305,20 @@ describe('opening the rail opens a pick', () => {
     expect(screen.getByLabelText('Select')).toHaveAttribute('aria-pressed', 'false');
   });
 
-  it('never starts under the editor, and a pick already on ends when the editor opens', async () => {
-    const view = layer({ railOpen: true, pickOnOpen: false });
+  it('starts a pick when write access is granted and ends it when access is revoked', async () => {
+    const view = layer({ railOpen: true, canCreateComment: false });
     await flush();
     expect(pill()).toBeNull();
-    fireEvent.click(screen.getByLabelText('Select'));
-    expect(pill()).not.toBeNull();
-    view.set({ railOpen: true, pickOnOpen: true });
-    await flush();
-    expect(pill()).not.toBeNull();
-    view.set({ railOpen: true, pickOnOpen: false });
-    await flush();
+    expect(picks(view).at(-1)).toBeNull();
+
+    view.set({ railOpen: true, canCreateComment: true });
+    expect(pill()).toBeVisible();
+    expect(picks(view).at(-1)).toBe('block');
+
+    view.set({ railOpen: true, canCreateComment: false });
     expect(pill()).toBeNull();
+    expect(picks(view).at(-1)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Select' })).toBeNull();
   });
 
   it('a composer arriving by another route ends the pick', async () => {
@@ -374,11 +376,10 @@ describe('drawing an area from the rail', () => {
 
 describe('the rail under the bar', () => {
   it('starts at the offset the page gives it and leaves the document\'s scrollbar visible', async () => {
-    layer({ railOpen: true, topOffset: 44, rightInset: 15 });
+    layer({ railOpen: true, topOffset: 44 });
     await flush();
     const rail = screen.getByLabelText('Annotation sidebar');
     expect(rail.style.top).toBe('44px');
-    expect(rail.style.right).toBe('15px');
     expect(rail.style.width).toBe('320px');
   });
 });

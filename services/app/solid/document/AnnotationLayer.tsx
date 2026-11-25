@@ -26,7 +26,6 @@ import X from 'lucide-solid/icons/x';
 import type { AnnotationWire } from '@/lib/annotations';
 import { createHttpBackend, type ArtifactBackend } from '@/lib/artifact-backend';
 import { loginHref } from '@/lib/http/login-href';
-import { hasReplyText } from '@/lib/annotations/remote-reply';
 import { APP_BAR_H, RIGHT_RAIL_W } from '@/lib/html-reader/edit-bar';
 import { documentRect, sendDocument, type DocumentRuntimeRef } from '@/lib/html-reader/document-endpoint';
 import type { StoryEditParentMessage, StoryEditSelection } from '@/lib/html-runtime/bridge/selection-contract';
@@ -70,11 +69,6 @@ export interface AnnotationLayerProps {
   onRailOpenChange: (open: boolean) => void;
   /** The latest full open list from the live stream; null until the first frame. Replaces the read wholesale. */
   liveAnnotations?: AnnotationWire[] | null;
-  /**
-   * Whether this viewer holds something unsent: an open composer, or words typed into a reply. A page that would
-   * reload itself (the local preview following its file) waits while this is true.
-   */
-  onDraftingChange?: (drafting: boolean) => void;
   /** Every change to the list this layer holds — creates, replies, resolves — so the page's count follows it. */
   onAnnotationsChange?: (annotations: AnnotationWire[]) => void;
   /** Changes whenever the document's membership does (the live `_members` event); mention statuses read again. */
@@ -85,27 +79,17 @@ export interface AnnotationLayerProps {
   initialSelection?: StoryEditSelection | null;
   /** The handed-in selection is now the composer's; the page may forget it. */
   onSelectionConsumed?: () => void;
-  /** May opening the rail open a PICK? False under the editor, which holds the document's clicks. */
-  pickOnOpen?: boolean;
   /** Where the rail starts: under the document's bar, plus the editor toolbar when one is up. */
   topOffset?: number;
   /** App chrome laid over the document's top beside the rail (a live region's formatting toolbar): the pick's hint sits under it. */
   documentTopInset?: number;
-  /** What the rail leaves free on the right. */
-  rightInset?: number;
   /**
    * The editor's right panel hosts the rail (its Comments tab): the rail renders INTO this element.
    * `null` means hosted but the tab is not showing, so the rail draws nowhere. Absent: its own home.
    */
   railHost?: HTMLElement | null;
-  /** The rail is a bottom sheet at this width too (the editor below its panel breakpoint). */
-  railSheet?: boolean;
-  /** The right-edge panel that is up whether or not comments are — the editor's. */
-  panelWidth?: number;
   /** The document's Select was pressed before this layer arrived: start the pick on mount. */
   pickRequested?: boolean;
-  /** A notification's comment or thread id; read from `?comment=`/`?thread=` when absent. */
-  linkTarget?: string | null;
   /** The document's frame, when something other than the window can resize it (a host page's own panel): its marks follow. */
   frame?: Element;
   /** The thread the rail has open, open or resolved (null when none): a host page reports it. */
@@ -124,18 +108,16 @@ const linkedFrom = (search: string | undefined) => {
 const optionalRouterLocation = () => { try { return useLocation(); } catch { return null; } };
 
 /**
- * The comment or thread a notification points at: the page's `linkTarget`, else `?comment=`/`?thread=`. A notification
- * followed inside the app changes the query without reloading this page: follow the router's location when there is
- * one, and history navigation either way.
+ * A notification's `?comment=` or `?thread=` can change without remounting the layer. Follow the app router
+ * when there is one, and browser history navigation on standalone surfaces.
  */
-function createLinkedComment(linkTarget: () => string | null | undefined) {
+function createLinkedComment() {
   const routerLocation = optionalRouterLocation();
   const currentSearch = () => routerLocation ? routerLocation.search : typeof location === 'undefined' ? undefined : location.search;
-  const [linked, setLinked] = createSignal<string | null>(untrack(linkTarget) ?? linkedFrom(untrack(currentSearch)));
-  createEffect(() => { const target = linkTarget(); if (target !== undefined) setLinked(target); });
-  createEffect(on(currentSearch, (search) => { if (untrack(linkTarget) === undefined) setLinked(linkedFrom(search)); }, { defer: true }));
+  const [linked, setLinked] = createSignal(linkedFrom(untrack(currentSearch)));
+  createEffect(on(currentSearch, (search) => setLinked(linkedFrom(search)), { defer: true }));
   onMount(() => {
-    const navigate = () => { if (untrack(linkTarget) === undefined) setLinked(linkedFrom(location.search)); };
+    const navigate = () => setLinked(linkedFrom(location.search));
     window.addEventListener('popstate', navigate);
     onCleanup(() => window.removeEventListener('popstate', navigate));
   });
@@ -162,12 +144,11 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   // A Solid prop getter notifies whenever its source does, even for an equal value. These memos
   // are the dependency list: an effect keyed on one runs on a real change.
   const railOpen = createMemo(() => props.railOpen);
-  const mayCreate = () => props.canCreateComment !== false;
+  const mayCreate = createMemo(() => props.canCreateComment !== false);
   const signIn = () => {
     if (props.onSignIn) props.onSignIn();
     else window.location.assign(loginHref(window.location, 'comment'));
   };
-  const pickOnOpen = createMemo(() => mayCreate() && props.pickOnOpen !== false);
   const handedSelection = createMemo(() => props.initialSelection ?? null);
   const sessionNonce = createMemo(() => props.sessionNonce ?? null);
   const runtimeRef = createMemo(() => props.runtimeRef);
@@ -209,7 +190,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
 
   // Notification links identify a comment; resolve it through the authorised open/resolved indexes
   // so a reply opens its containing conversation.
-  const linkedComment = createLinkedComment(() => props.linkTarget);
+  const linkedComment = createLinkedComment();
   let followedLink = false;
   createEffect(on(linkedComment, () => { followedLink = false; }));
   createEffect(() => {
@@ -240,20 +221,17 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
 
   const draft = createCommentDraft({
     artifactId: props.id, backend, editId: () => props.editId, beforeComment: () => props.beforeComment, mayCreate, threads, signIn,
-    rail: { open: railOpen, set: (open) => props.onRailOpenChange(open), pickOnOpen, phone: phoneRail },
+    rail: { open: railOpen, set: (open) => props.onRailOpenChange(open), phone: phoneRail },
     handed: handedSelection, consumed: () => props.onSelectionConsumed?.(), frameOffset: documentBox, post: postToFrame,
     pickRequested: Boolean(props.pickRequested),
   });
-  createEffect(on(pickOnOpen, (mayPick) => { if (!mayPick && !mayCreate()) setDeleting(null); }));
-  const drafting = createMemo(() => draft.selection() !== null || hasReplyText(draft.words())
-    || Object.values(replies.values()).some(hasReplyText));
-  createEffect(on(drafting, (value) => props.onDraftingChange?.(value)));
+  createEffect(on(mayCreate, (allowed) => { if (!allowed) setDeleting(null); }));
 
   const frame = connectFrameAnnotations({
     runtimeRef, nonce: sessionNonce,
     state: () => ({ pins: threads.pinRows(), openId: threads.openId(), hoverId: previewId(), selected: draft.selection(), canComment: mayCreate(), pick: draft.pick(), capturing: draft.capture.busy() }),
     on: {
-      select: () => { if (props.pickOnOpen !== false) draft.beginPick('block'); },
+      select: () => draft.beginPick('block'),
       pin: openThread,
       hover: (id) => setHoverId(uiHoverId ?? id),
       selection: draft.receive,
@@ -268,6 +246,8 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
     if (!await threads.act(id, { resolve: true })) setAmbientResolveError({ id, message: 'Could not resolve this thread. Try again.' });
   };
   const askDelete = (commentId: string, thread: boolean) => { if (!mayCreate() || deleting()) return; setDeleting({ id: commentId, thread }); };
+
+  const threadActions = { openThread, hoverThread: hoverUi, askDelete, signIn };
 
   const topOffset = () => props.topOffset ?? 0;
   // The collapsed identity mark is small enough for phones too; its click opens the same rail as a sheet.
@@ -301,7 +281,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
 
   // The document is full-width under an open rail, so what the composer and the pill may use is the
   // document LESS the rail — never its own width.
-  const railWidth = () => props.panelWidth ?? (props.railOpen && !phoneRail() && !props.railSheet && props.railHost === undefined ? RIGHT_RAIL_W : 0);
+  const railWidth = () => props.railOpen && !phoneRail() && props.railHost === undefined ? RIGHT_RAIL_W : 0;
   const frameRect = createMemo(() => {
     const { width } = viewport();
     const measured = documentBox();
@@ -325,7 +305,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
             <Show when={placement(id)}>{(item) => (
               <AnnotationPreview row={item().annotation} top={item().top} remaining={threads.recent()[id]?.remaining}
                 hovered={previewId() === id} resolving={threads.busy()} resolveError={ambientResolveError()?.id === id ? ambientResolveError()?.message : undefined}
-                onResolve={mayCreate() ? () => void resolveFromPreview(id) : undefined} rightInset={props.panelWidth} onOpen={() => openThread(id)} onHover={hoverUi}
+                onResolve={mayCreate() ? () => void resolveFromPreview(id) : undefined} onOpen={() => openThread(id)} onHover={hoverUi}
                 onReply={mayCreate() && item().annotation.status === 'open' ? (body, attachment) => threads.actOrThrow(id, { reply: body, ...attachment }) : undefined}
                 backend={backend} artifactId={props.id} busy={threads.busy()} draft={replies.get(id)} onDraftChange={(value) => replies.set(id, value)}
                 pinned={pinnedId() === id} onPin={() => setPinnedId(id)} onClose={closePreview} />
@@ -354,9 +334,9 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
       {/* The rail — a panel, open in either mode; a bottom sheet on a phone. */}
       <Show when={props.railOpen && props.railHost !== null}>
         <CommentRail threads={threads} draft={draft} artifactId={props.id} backend={backend} mayCreate={mayCreate()} canDeleteAny={props.canDeleteAny}
-          phone={phoneRail() || !!props.railSheet} host={props.railHost ?? undefined} topOffset={topOffset()} rightInset={props.rightInset ?? 0}
-          onClose={() => props.onRailOpenChange(false)} offerSignIn={props.offerSignIn ?? false} onSignIn={signIn} hoverId={hoverId()} onHover={hoverUi}
-          viewStateError={frame.viewStateError()} missing={frame.missing()} replyDraft={replies.get} onReplyDraftChange={replies.set} onDelete={askDelete} onOpenThread={openThread}
+          phone={phoneRail()} host={props.railHost ?? undefined} topOffset={topOffset()}
+          onClose={() => props.onRailOpenChange(false)} offerSignIn={props.offerSignIn ?? false} hoverId={hoverId()}
+          viewStateError={frame.viewStateError()} missing={frame.missing()} replies={replies} actions={threadActions}
           threadsRef={(element) => { threadsRoot = element; }} />
       </Show>
 
