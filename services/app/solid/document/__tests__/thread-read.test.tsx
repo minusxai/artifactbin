@@ -33,7 +33,7 @@ it.each([
   const load = vi.fn(async () => {});
   const controller = { createInboxController: () => ({ load, loadMore: async () => {}, state: () => null, error: () => '', failedAt: () => null, loading: () => false, reconnecting: () => false }) as InboxContext };
   render(() => <SessionProvider><InboxProvider loadController={async () => controller}>
-    <AnnotationThread artifactId="doc1" backend={{ unavailable: () => null } as unknown as ArtifactBackend} a={ANN} open={open} folded={folded} hovered={false} busy={false}
+    <AnnotationThread artifactId="doc1" replyDraft="" onReplyDraftChange={() => {}} backend={{ unavailable: () => null } as unknown as ArtifactBackend} a={ANN} open={open} folded={folded} hovered={false} busy={false}
       justOpened={false} isCommentFolded={() => false} onOpen={() => {}} onHover={() => {}} onReply={async () => false}
       onResolve={() => {}} onReopen={() => {}} onDelete={() => {}} onToggleFold={() => {}} onToggleComment={() => {}} />
   </InboxProvider></SessionProvider>);

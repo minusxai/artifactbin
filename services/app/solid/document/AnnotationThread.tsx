@@ -8,7 +8,7 @@
  * comment, the chevron folds the conversation — all per viewer (lib/comment-folds). A resolved card
  * is muted until hovered or focused, and says what it was about when the document no longer can.
  */
-import { createEffect, createSignal, ErrorBoundary, For, lazy, on, onCleanup, Show, Suspense, type JSX } from 'solid-js';
+import { createEffect, createSignal, ErrorBoundary, For, lazy, onCleanup, Show, Suspense, type JSX } from 'solid-js';
 import Check from 'lucide-solid/icons/check';
 import ChevronDown from 'lucide-solid/icons/chevron-down';
 import ChevronRight from 'lucide-solid/icons/chevron-right';
@@ -29,7 +29,7 @@ import { AnnotationReplyBox } from './AnnotationReplyBox';
 import { CommentFoldingBody } from './CommentFoldingBody';
 import { CommentSubmitHint } from './CommentMarkdown';
 import { CommentMarkdownField } from './LazyCommentField';
-import { persistedText, readDraft, writeDraft } from '../lib/draft-store';
+import { readDraft, writeDraft } from '../lib/draft-store';
 import { isChunkLoadError, reloadForNewBuild } from '../lib/app-build';
 // Reaction controls load with an opened comment, keeping the reader shell small.
 const CommentReactions = lazy(() => import('./CommentReactions').then(module => ({default:module.CommentReactions})));
@@ -96,8 +96,9 @@ interface AnnotationThreadProps {
   onEdit?: (commentId: string, body: string) => Promise<void>;
   onToggleFold: () => void;
   onToggleComment: (commentId: string) => void;
-  /** Whether this thread's reply box holds words; false again once they are sent, cleared or the thread is gone. */
-  onReplyDraftChange?: (typed: boolean) => void;
+  /** Text shared with this thread's marker reply box. */
+  replyDraft: string;
+  onReplyDraftChange: (value: string) => void;
 }
 
 /**
@@ -169,12 +170,8 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
   const newestFolded = () => props.isCommentFolded(props.a.thread.at(-1)?.id ?? '');
   markReadWhenSeen(() => props.open && !props.folded && !newestFolded() ? { id: props.a.id, revision: props.a.revision ?? 1, element: threadElement } : null);
 
-  // The reply draft — words and image — belongs to the thread, so folding the thread away keeps it.
-  // Kept for this tab too (solid/lib/draft-store): a reload — the page loading a new build — gives it back.
-  const [reply, setReply] = persistedText(`${props.artifactId}:thread-reply:${props.a.id}`);
+  // The rail's staged image survives folding the thread. The layer owns its text.
   const replyImage = createCommentImageDraft();
-  createEffect(on(() => hasReplyText(reply()), (typed) => props.onReplyDraftChange?.(typed)));
-  onCleanup(() => props.onReplyDraftChange?.(false));
   const visibleComments = () => props.open ? props.a.thread : props.a.thread.slice(0, 1);
   const first = () => props.a.thread[0];
   const replyCount = () => Math.max(0, props.a.thread.length - 1);
@@ -345,8 +342,8 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
       <Show when={props.open && !props.resolved && props.canCreateComment !== false}>
         <div class="border-t border-edge bg-raised p-3">
           <AnnotationReplyBox backend={props.backend} artifactId={props.artifactId} busy={props.busy}
-            value={reply()} onChange={setReply} onSend={props.onReply} image={replyImage}
-            actions={<Button type="button" variant="ghost" size="sm" aria-label="Cancel reply" onClick={() => { setReply(''); replyImage?.capture.reset(); props.onOpen(); }}>cancel</Button>} />
+            value={props.replyDraft} onChange={props.onReplyDraftChange} onSend={props.onReply} image={replyImage}
+            actions={<Button type="button" variant="ghost" size="sm" aria-label="Cancel reply" onClick={() => { props.onReplyDraftChange(''); replyImage?.capture.reset(); props.onOpen(); }}>cancel</Button>} />
         </div>
       </Show>
       <Show when={props.open && props.resolved && props.canCreateComment !== false}>

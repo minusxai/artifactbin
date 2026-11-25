@@ -7,22 +7,23 @@
  * request the real backends over a stubbed `fetch` (./annotation-rig).
  */
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { waitFor, within } from '@testing-library/dom';
+import { fireEvent, waitFor, within } from '@testing-library/dom';
 import type { ArtifactRole } from '@artifactbin/contracts/sharing';
 import { OPTIONAL_THEME_TOKENS, THEME_TOKENS } from '@/lib/html-systems';
 import type { FrameBridgeParent } from '@/lib/html-reader/frame-bridge/parent';
 import type { HostComments } from '@/lib/html-reader/host-comments-contract';
 import { cleanup } from '@/solid/__tests__/helpers';
-import { ANN, NONCE, flush, installAnnotationFetch, knobs } from './annotation-rig';
+import { ANN, NONCE, fetchCalls, flush, installAnnotationFetch, knobs } from './annotation-rig';
 import { mountHostComments } from '../browser-host-comments';
 import { HOST_THEME_ATTR, HOST_THEME_CSS } from '../host-theme';
+import { replaceComment } from './comment-input';
 import { stubFetch } from '@/test/helpers/fetch-stub';
 
 const mounted: HostComments[] = [];
 beforeEach(() => installAnnotationFetch());
 afterEach(() => {
   for (const comments of mounted.splice(0)) comments.destroy();
-  cleanup(); document.documentElement.removeAttribute('style'); document.body.replaceChildren(); vi.unstubAllGlobals();
+  cleanup(); sessionStorage.clear(); document.documentElement.removeAttribute('style'); document.body.replaceChildren(); vi.unstubAllGlobals();
 });
 
 /** The admission door's answer for this reader, and the session's, in front of the rig's annotation doors. */
@@ -44,15 +45,24 @@ function mount(page: Parameters<typeof serve>[0], { signIn = true } = {}) {
     getViewportRect: () => new DOMRect(0, 56, 800, 600), dispose: () => {},
   } as unknown as FrameBridgeParent;
   const events: Array<{ name: string; detail: unknown }> = [];
+  const signInEvents: CustomEvent[] = [];
+  const container = document.createElement('div');
+  if (!signIn) container.addEventListener('af-document-sign-in', (event) => event.preventDefault());
   const comments = mountHostComments({
     win: window, id: 'doc1', stylesheet: '', bridge, frame: document.createElement('iframe'), version: 3, editId: 'e3', mode: null, presence: false,
-    emit: (name, detail) => { events.push({ name, detail }); return name === 'af-document-sign-in' ? signIn : true; },
+    emit: (name, detail, cancelable) => {
+      const event = new CustomEvent(name, { detail, cancelable });
+      const allowed = container.dispatchEvent(event);
+      events.push({ name, detail });
+      if (name === 'af-document-sign-in') signInEvents.push(event);
+      return allowed;
+    },
     nonce: () => NONCE, onNonce: () => () => {}, followVersion: vi.fn(), notifyData: vi.fn(),
   });
   mounted.push(comments);
   const fromFrame = (event: unknown) => { for (const listener of [...listeners]) listener(event); };
   const grants = () => sent.filter((command) => command.type === 'mx:selection-actions');
-  return { comments, sent, events, fromFrame, grants };
+  return { comments, sent, events, fromFrame, grants, signInEvents };
 }
 
 const selection = { kind: 'text', path: '1', nodeId: 'p1', tag: 'p', rect: { x: 0, y: 0, width: 10, height: 10 }, className: '', style: '', ancestors: [], quote: 'Revenue' };
@@ -127,4 +137,30 @@ it('knows a signed-in reader in the rail: reacting is offered, never a sign-in',
   await within(shadow).findByRole('button', { name: 'React with thumbs up' });
   expect(within(shadow).queryByRole('button', { name: 'Sign in to react' })).toBeNull();
   knobs.open = [];
+});
+
+it('lets the host cancel both the rail sign-in and a guest reaction', async () => {
+  const { comments, signInEvents } = mount({ role: 'viewer', kind: 'none', openAnnotations: 1 }, { signIn: false });
+  const panel = document.body.appendChild(document.createElement('aside'));
+  comments.open(panel);
+  const shadow = panel.querySelector('[data-trusted-ui]')!.shadowRoot as unknown as HTMLElement;
+  fireEvent.click(await within(shadow).findByRole('button', { name: 'Sign in to comment' }));
+  fireEvent.click(await within(shadow).findByRole('button', { name: 'Sign in to react' }));
+  expect(signInEvents.map((event) => [event.cancelable, event.defaultPrevented])).toEqual([[true, true], [true, true]]);
+  expect(fetchCalls.some(({ init }) => init?.method === 'PUT')).toBe(false);
+});
+
+it('lets the host cancel sign-in after an expired composer save and preserves the draft', async () => {
+  knobs.createRefusal = { error: 'unauthorized' };
+  knobs.createRefusalStatus = 401;
+  const { fromFrame, grants, signInEvents } = mount({ role: 'commenter', kind: 'account' }, { signIn: false });
+  await waitFor(() => expect(grants().at(-1)?.annotate).toBe(true));
+  fromFrame({ type: 'mx:selection-action', nonce: NONCE, action: 'annotate', selection });
+  const shadow = document.querySelector('[data-trusted-ui]')!.shadowRoot as unknown as HTMLElement;
+  const field = await within(shadow).findByRole('textbox', { name: 'Annotation comment' });
+  replaceComment(field, 'Keep this after sign-in');
+  fireEvent.click(within(shadow).getByRole('button', { name: 'Save annotation' }));
+  await waitFor(() => expect(signInEvents.map((event) => [event.cancelable, event.defaultPrevented])).toEqual([[true, true]]));
+  expect(field).toHaveTextContent('Keep this after sign-in');
+  expect(sessionStorage.getItem('artifactbin:draft:doc1:comment')).toBe('Keep this after sign-in');
 });

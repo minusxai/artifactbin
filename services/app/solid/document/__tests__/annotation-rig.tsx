@@ -90,14 +90,15 @@ export const FACES: AnnotationWire = {
 
 export const fetchCalls: Array<{ url: string; init?: RequestInit }> = [];
 /** Per-case knobs: an imported binding cannot be assigned to, so they live here. */
-export const knobs: { refuseCreate: boolean; createRefusal: Record<string, unknown> | null; resolvedVisible: boolean; open: AnnotationWire[]; resolved: AnnotationWire[] | null; sessions: unknown[] | null } =
-  { refuseCreate: false, createRefusal: null, resolvedVisible: true, open: [ANN], resolved: null, sessions: null };
+export const knobs: { refuseCreate: boolean; createRefusal: Record<string, unknown> | null; createRefusalStatus: number; resolvedVisible: boolean; open: AnnotationWire[]; resolved: AnnotationWire[] | null; sessions: unknown[] | null } =
+  { refuseCreate: false, createRefusal: null, createRefusalStatus: 400, resolvedVisible: true, open: [ANN], resolved: null, sessions: null };
 
 /** Reset the knobs and install the annotations fetch stub. Call from `beforeEach`. */
 export function installAnnotationFetch() {
   fetchCalls.length = 0;
   knobs.refuseCreate = false;
   knobs.createRefusal = null;
+  knobs.createRefusalStatus = 400;
   knobs.resolvedVisible = true;
   knobs.open = [ANN];
   knobs.resolved = null;
@@ -123,7 +124,7 @@ export function installAnnotationFetch() {
       return new Response(JSON.stringify({ ...RESOLVED, status: body.reopen ? 'open' : 'resolved', resolved_at: body.reopen ? null : RESOLVED.resolved_at }), { status: 200 });
     }
     if (init?.method === 'POST') {
-      if (knobs.createRefusal) return new Response(JSON.stringify(knobs.createRefusal), { status: 400 });
+      if (knobs.createRefusal) return new Response(JSON.stringify(knobs.createRefusal), { status: knobs.createRefusalStatus });
       if (knobs.refuseCreate) {
         return new Response(JSON.stringify({ error: 'invalid_jsx', details: [{ message: 'Inline style attribute is not allowed' }] }), { status: 400 });
       }
@@ -185,6 +186,7 @@ export function layer(over: Over = {}, runtime = makeRuntime(), options: { trust
     const ui = () => <AnnotationLayer
       id={p().id ?? 'doc1'}
       canCreateComment={p().canCreateComment}
+      offerSignIn={p().offerSignIn}
       onSignIn={p().onSignIn}
       backend={p().backend ?? httpBackend(p().id ?? 'doc1')}
       canDeleteAny={p().canDeleteAny ?? true}

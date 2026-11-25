@@ -36,7 +36,7 @@ describe('AnnotationLayer', () => {
     await fireEvent.click(within(rail).getByRole('button',{name:'Close comments'}));expect(close).toHaveBeenCalledWith(false);expect(fetchCalls.some(call=>call.init?.method&&call.init.method!=='GET')).toBe(false);
   });
   it('lets a read-only viewer open existing conversations without mutation controls', async () => {
-    const view = layer({ railOpen: true, canCreateComment: false, onSignIn: vi.fn() });
+    const view = layer({ railOpen: true, canCreateComment: false, offerSignIn: true, onSignIn: vi.fn() });
     await screen.findByText('is this right?');
     await fireEvent.click(view.container.querySelector('[data-thread-id="ann_1"] button[aria-label="Open annotation thread"]')!);
     await screen.findByText('one more thought');

@@ -134,7 +134,7 @@ export function createHttpBackend(id: string): ArtifactBackend {
       throw new BackendRequestError(
         annotationFailure(res.status, refusal),
         res.status,
-        code.error === SIGN_IN_REQUIRED || code.code === SIGN_IN_REQUIRED,
+        res.status === 401 || code.error === SIGN_IN_REQUIRED || code.code === SIGN_IN_REQUIRED,
         typeof code.error === 'string' ? code.error : undefined,
         typeof code.edit_id === 'string' ? code.edit_id : undefined,
       );

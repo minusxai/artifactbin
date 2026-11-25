@@ -57,8 +57,7 @@ export interface ReaderDiscussionProps extends LayerProps {
 /** What this composition decided, handed to the lazy layer as accessors (one object, no forwarding getters). */
 export interface ReaderDiscussionState {
   comments: Accessor<CommentAccess>;
-  /** Sends a signed-out reader to sign in; nothing for anyone else. */
-  signIn: () => void;
+  offerSignIn: Accessor<boolean>;
   initialSelection: Accessor<StoryEditSelection | null>;
   setInitialSelection: Setter<StoryEditSelection | null>;
   pickRequested: Accessor<boolean>;
@@ -68,8 +67,8 @@ export function ReaderDiscussion(props: ReaderDiscussionProps): JSX.Element {
   const comments = () => commentAccess(props.role, props.accountSession, props.archived);
   const annotatable = () => comments().canCreateComment;
   // Permission to START the comment flow, not to write a comment: a signed-out reader is offered it and signs in.
-  const canStartComment = () => !props.archived && (annotatable() || !props.accountSession);
-  const signIn = () => { if (!props.accountSession && !props.archived) props.onSignIn(); };
+  const offerSignIn = () => !props.accountSession && !props.archived;
+  const canStartComment = () => annotatable() || offerSignIn();
   const [pickRequested, setPickRequested] = createSignal(false);
   const [initialSelection, setInitialSelection] = createSignal<StoryEditSelection | null>(null);
   const [active, setActive] = createSignal(false);
@@ -77,11 +76,11 @@ export function ReaderDiscussion(props: ReaderDiscussionProps): JSX.Element {
     setActive(needsCommentPresentation({ canRead: comments().canReadComments, active: active(), linked: props.linked, railOpen: props.railOpen,
       composing: !!initialSelection(), picking: pickRequested(), openCount: props.openCount, liveCount: props.liveAnnotations?.length ?? 0 }));
   });
-  const state: ReaderDiscussionState = { comments, signIn, initialSelection, setInitialSelection, pickRequested };
+  const state: ReaderDiscussionState = { comments, offerSignIn, initialSelection, setInitialSelection, pickRequested };
   return <>
     <Show when={props.ready && props.nonce}>
       <SelectionActions runtimeRef={props.runtimeRef} nonce={props.nonce} canAnnotate={canStartComment()} onSelect={() => { if (annotatable()) setPickRequested(true); }}
-        onAnnotate={(selection) => { if (annotatable()) setInitialSelection(selection); else signIn(); }} />
+        onAnnotate={(selection) => { if (annotatable()) setInitialSelection(selection); else if (offerSignIn()) props.onSignIn(); }} />
     </Show>
     <Show when={props.ready && active() && comments().canReadComments}>
       <Suspense fallback={null}><ReaderDiscussionLayer discussion={props} state={state} /></Suspense>
