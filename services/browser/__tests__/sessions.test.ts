@@ -230,7 +230,7 @@ it('acquires the handoff only when empty, without racing creation or closing exi
   for(const session_id of ['one','two'])await registry.request({actor,op:'close',session_id});
   expect(registry.holdIfIdle()).toBe(true);
   expect(registry.holdIfIdle()).toBe(true);
-  expect((await registry.request({...first,session_id:'three'})).error?.code).toBe('SESSION_DRAINING');
+  expect((await registry.request({...first,session_id:'three'})).error?.code).toBe('SESSION_CAPACITY');
   registry.resume();
   registry.resume();
   expect((await registry.request({...first,session_id:'three'})).status).toBe('queued');

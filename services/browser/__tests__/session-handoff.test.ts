@@ -29,7 +29,7 @@ it('the host can hold an idle registry and release it through its private unix s
   expect(await call(path,'/hold')).toBe(409);
   expect((await sessions.request({op:'close',actor,session_id:'one'})).status).toBe('closed');
   expect(await call(path,'/hold')).toBe(204);
-  expect((await sessions.request({...input,session_id:'two'})).error?.code).toBe('SESSION_DRAINING');
+  expect((await sessions.request({...input,session_id:'two'})).error?.code).toBe('SESSION_CAPACITY');
   expect(await call(path,'/resume')).toBe(204);
   expect((await sessions.request({...input,session_id:'two'})).status).toBe('queued');
  }finally{await close();await sessions.close();}

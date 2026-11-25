@@ -94,7 +94,7 @@ export function createBrowserSessions(factory: SessionWorkerFactory, capacity: S
         if(input.requestScope!==undefined&&(typeof input.requestScope!=='string'||!input.requestScope.trim()||input.requestScope.length>256))return empty(input.session_id,'INVALID_REQUEST','Invalid browser request scope');
         if (!idValid(input.execution_id) || typeof input.code !== 'string' || Buffer.byteLength(input.code) > SESSION_LIMITS.scriptBytes) return empty(input.session_id, 'INVALID_REQUEST', 'Invalid execution ID or script exceeds 64 KiB');
         if (!session && input.create) {
-          if (held) return empty('', 'SESSION_DRAINING', 'The browser is switching releases. Retry opening the session.');
+          if (held) return empty('', 'SESSION_CAPACITY', 'The browser is switching releases. Retry opening the session.');
           if (sessions.size >= capacity.sessions) {
             const ended = [...sessions].find(([, value]) => value.status !== 'idle');
             if (ended) sessions.delete(ended[0]);
