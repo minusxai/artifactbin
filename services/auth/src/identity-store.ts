@@ -5,12 +5,13 @@
  * app's schema. Accounts, handles and tokens: ./identity-store/accounts; groups, membership, invitations and the tree:
  * ./identity-store/groups; the group mail outbox: ./identity-store/mail.
  */
+import {randomUUID} from 'node:crypto';
 import {IDENTITY_OWNED_TABLES, type IdentityService, type TransactionalQueryable} from '@artifactbin/contracts/identity-module';
 import type {Queryable} from '@artifactbin/contracts/db';
 import {ensureTable, renderSchema} from '@artifactbin/utils/schema';
 import {ensureAuthSchema} from './schema';
 import {IDENTITY_TABLES} from './identity-store/schema';
-import {identityViewColumns,identityViewStatements,plainIdentifier,type IdentitySchemas} from './identity-store/views';
+import {identityViewColumns,identityViewDefinitions,identityViewStatements,plainIdentifier,type IdentitySchemas} from './identity-store/views';
 import type {Pool} from 'pg';
 import {accountMethods} from './identity-store/accounts';
 import {groupMethods} from './identity-store/groups';
@@ -135,7 +136,21 @@ export async function ensureIdentitySchema(db: TransactionalQueryable, schemas: 
     const grows = (columns: string[], want: readonly string[] | undefined) => !!want && columns.length <= want.length && columns.every((column, i) => column === want[i]);
     const stale = [...current].filter(([name, columns]) => !grows(columns, wanted[name]));
     for (const [name] of stale) await tx.query(`DROP VIEW IF EXISTS ${read}.${name} CASCADE`);
-    for (const statement of identityViewStatements({auth, app, read}, {sessions})) await tx.query(statement);
+    // Compare PostgreSQL's parsed definitions, including rule expressions with unchanged column names.
+    // The comparison view is transaction-private and lives in the schema this role already owns.
+    // Replacing a live view takes an exclusive lock; probing its definition only reads its inputs.
+    const probe = read+'._definition_'+randomUUID().replaceAll('-','');
+    for (const {name,select} of identityViewDefinitions({auth, app, read}, {sessions})) {
+      const installed=(await tx.query<{definition:string|null}>(
+        'SELECT pg_get_viewdef(to_regclass($1)) AS definition',[name])).rows[0]?.definition;
+      if (installed) {
+        await tx.query(`CREATE VIEW ${probe} AS ${select}`);
+        const candidate=(await tx.query<{definition:string}>('SELECT pg_get_viewdef($1::regclass) AS definition',[probe])).rows[0]!.definition;
+        await tx.query('DROP VIEW '+probe);
+        if (candidate===installed) continue;
+      }
+      await tx.query(`CREATE OR REPLACE VIEW ${name} AS ${select}`);
+    }
   });
 }
 

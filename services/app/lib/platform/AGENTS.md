@@ -8,7 +8,8 @@ No product rules live here. Server-only.
 - Other modules import the index, `index.ts`, never a file here, and never from browser-bundled code. Export a new
   name through the index. A downstream deployment also imports `config.ts`, `db.ts` and `services.ts` by path, so
   their exports are pinned by `services/app/__tests__/downstream-exports.test.ts`: renaming one breaks it.
-- The boot is the migration: every start runs `SCHEMA_STATEMENTS` (idempotent DDL) and then `applyBackfills`.
+- The boot is the migration: PostgreSQL applies missing table changes from the declaration and then `applyBackfills`.
+  Keep a warm boot compatible with concurrent reads and writes. `SCHEMA_STATEMENTS` is the full bootstrap SQL.
   So a schema change is additive. A column added to an existing table is nullable or has a `default`. A unique
   constraint on an existing table goes in `indexes` with `unique: true` (`uniques` render only inside CREATE TABLE).
   A rename is `renamedFrom` (copies, then drops). A row migration is an idempotent statement in `applyBackfills`.

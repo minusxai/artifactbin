@@ -43,6 +43,15 @@ describe('ensureIdentitySchema readiness',()=>{
   expect((await pg.query('SELECT role FROM identity.group_invitations')).rows).toEqual([{role:'member'}]);
   expect((await pg.query('SELECT user_id,role FROM identity.group_members ORDER BY user_id')).rows).toEqual([{user_id:'new',role:'member'},{user_id:'old',role:'admin'}]);
  });
+ it('updates a changed view expression even when its column names and types still match',async()=>{
+  const {pg,db}=open();
+  await pg.exec(APP_TABLES(",service_audiences TEXT[] NOT NULL DEFAULT '{}'"));
+  await ensureIdentitySchema(db,schemas);
+  await pg.exec('CREATE OR REPLACE VIEW identity.group_hierarchy AS SELECT id,revision,role_model_version+1 AS role_model_version FROM auth.group_hierarchy');
+  expect((await pg.query('SELECT role_model_version FROM identity.group_hierarchy')).rows).toEqual([{role_model_version:3}]);
+  await ensureIdentitySchema(db,schemas);
+  expect((await pg.query('SELECT role_model_version FROM identity.group_hierarchy')).rows).toEqual([{role_model_version:2}]);
+ });
  it('answers IdentityNotReady while identity_settings lacks a column the views read, then boots once the app adds it',async()=>{
   const {pg,db}=open();
   await pg.exec(APP_TABLES(''));

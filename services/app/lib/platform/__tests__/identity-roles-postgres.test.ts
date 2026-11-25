@@ -29,7 +29,8 @@ import {IDENTITY_INTROSPECT_PATH} from '@artifactbin/contracts/identity-service'
 import {CHAT_SIGN_IN_PATH,SCHEDULE_SIGN_IN_PATH,SERVICE_TOKEN_PATH,parseServiceAudiences} from '@artifactbin/contracts/service-audiences';
 import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts/routes';
 import {createHash} from 'node:crypto';
-import {SCHEMA_STATEMENTS} from '@/lib/platform';
+import {SCHEMA_STATEMENTS,TABLES} from '@/lib/platform';
+import {ensureTable} from '@artifactbin/utils/schema';
 import {tenancyIssuer} from '@/test/helpers/trusted-tenancy';
 import {projectHostTenancyChanges,reachedGroupsSql,subtreeSql} from '@/lib/groups';
 import {enrollCompanyRoot,planCompanyRootEnrollment} from '../../../../auth/scripts/enroll-company-root';
@@ -85,6 +86,25 @@ describe.skipIf(!dockerImage('postgres:17-alpine'))('identity tables in a split-
   if(container)spawnSync('docker',['rm','-f',container],{stdio:'ignore'});
  },30_000);
 
+ it('a warm identity and app boot completes while an incumbent reads identity and writes audit records',async()=>{
+  const reader=await app.connect(),appBoot=await app.connect(),db=identityDbOf(auth);
+  try {
+   await reader.query('BEGIN');
+   await reader.query("SELECT active FROM identity.users WHERE id='prior'");
+   await reader.query('SELECT * FROM identity.host_tenancy_changes LIMIT 1');
+   await reader.query('LOCK TABLE app.group_audit IN ROW EXCLUSIVE MODE');
+   await appBoot.query("SET lock_timeout='500ms'");
+   await ensureTable({query:async<T>(sql:string,params?:unknown[])=>({rows:(await appBoot.query(sql,params)).rows as T[]})},TABLES);
+   await ensureIdentitySchema({...db,transaction:fn=>db.transaction(async tx=>{
+    await tx.query("SET LOCAL lock_timeout='500ms'");
+    return fn(tx);
+   })},{auth:'auth',app:'app',read:'identity'});
+   expect((await reader.query("SELECT active FROM identity.users WHERE id='prior'")).rows[0]?.active).toBe(true);
+  } finally {
+   await appBoot.query('RESET lock_timeout');appBoot.release();
+   await reader.query('ROLLBACK');reader.release();
+  }
+ });
  it('serializes competing context consents and invalidates old credentials',async()=>{
   const db=identityDbOf(auth),baseURL='http://app.test',secret='disposable-schedule-cookie-key-0000';
   const serviceSecret='disposable-schedule-service-key',otherSecret='disposable-other-service-key';

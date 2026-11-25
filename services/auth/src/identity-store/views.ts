@@ -73,7 +73,7 @@ export function identityViewColumns(): Record<string, string[]> {
 }
 
 /** The view DDL, in dependency order (`tokens` reads `users`). `sessions` only where Better Auth's table exists. */
-export function identityViewStatements(schemas: IdentitySchemas, options: {sessions?: boolean} = {}): string[] {
+export function identityViewDefinitions(schemas: IdentitySchemas, options: {sessions?: boolean} = {}): {name:string; select:string}[] {
   const auth = plainIdentifier(schemas.auth, 'auth schema'), app = plainIdentifier(schemas.app, 'app schema'), read = plainIdentifier(schemas.read, 'read schema');
   const names: RuleNames = {users: `${auth}.users`, deploymentMembers: `${app}.deployment_members`, deploymentState: `${app}.deployment_state`};
   const settings = `${app}.identity_settings`;
@@ -81,11 +81,11 @@ export function identityViewStatements(schemas: IdentitySchemas, options: {sessi
   /** The view's SELECT list in its column order: a table column as `alias.column`, a rule column as its expression. */
   const plain = (table: string, alias: string, rules: Record<string, string> = {}) =>
     views[table]!.map(column => rules[column] ?? `${alias}.${quoted(column)}`).map((item, i) => i === 0 ? item : item.startsWith('\n') ? `,${item}` : `, ${item}`).join('');
-  const statements: string[] = [];
+  const definitions: {name:string; select:string}[] = [];
+  const define=(name:string, select:string)=>definitions.push({name:read+'.'+name,select});
   for (const table of IDENTITY_TABLES.map(t => t.name)) {
     if (table === 'users') {
-      statements.push(`CREATE OR REPLACE VIEW ${read}.users AS
-  SELECT ${plain('users', 'u', {active: `
+      define('users',`SELECT ${plain('users', 'u', {active: `
     COALESCE((SELECT ${authenticatingUserSql('u', names)} AND (s.deployment_mode = 'public' OR ${deploymentMemberSql('u.id', names)})
       FROM ${settings} s WHERE s.id = 'installation'), false) AS active`, default_group_id: `
     (SELECT m.group_id FROM ${auth}.group_members m
@@ -98,8 +98,7 @@ export function identityViewStatements(schemas: IdentitySchemas, options: {sessi
   FROM ${auth}.users u`);
     } else if (table === 'tokens') {
       const {exists} = bearerLiveSql({auth, tokens: `${auth}.tokens`, sessions: options.sessions !== false, groupConsents: true});
-      statements.push(`CREATE OR REPLACE VIEW ${read}.tokens AS
-  SELECT ${plain('tokens', 't', {user_id: 'CASE WHEN t.group_id IS NOT NULL AND t.grant_id IS NULL THEN t.issued_by ELSE t.user_id END AS user_id', scopes: `
+      define('tokens',`SELECT ${plain('tokens', 't', {user_id: 'CASE WHEN t.group_id IS NOT NULL AND t.grant_id IS NULL THEN t.issued_by ELSE t.user_id END AS user_id', scopes: `
     array_remove(regexp_split_to_array(coalesce(t.scope, ''), '\\s+'), '') AS scopes`, live: `
     (${exists}
       AND EXISTS (SELECT 1 FROM ${settings} s WHERE s.id = 'installation' AND (COALESCE(t.audience, '') = '' OR t.audience = ANY(s.api_audiences) OR t.audience = ANY(s.service_audiences)))
@@ -107,14 +106,15 @@ export function identityViewStatements(schemas: IdentitySchemas, options: {sessi
         ELSE ${groupSignInLiveSql('t', {groups: `${auth}.groups`, group_members: `${auth}.group_members`, group_sign_in_grants: `${auth}.group_sign_in_grants`, users: `${auth}.users`}, id => `COALESCE((SELECT issuer.active AND issuer.kind = 'account' AND NOT issuer.test_account FROM ${read}.users issuer WHERE issuer.id = ${id}), false)`)} END) AS live`})}
   FROM ${auth}.tokens t`);
     } else {
-      statements.push(`CREATE OR REPLACE VIEW ${read}.${table} AS
-  SELECT ${plain(table, 'x')} FROM ${auth}.${table} x`);
+      define(table,`SELECT ${plain(table, 'x')} FROM ${auth}.${table} x`);
     }
   }
-  statements.push(`CREATE OR REPLACE VIEW ${read}.group_admins AS
-  ${groupAdminsSql({groups: `${auth}.groups`, group_members: `${auth}.group_members`})}`);
-  if (options.sessions !== false) statements.push(`CREATE OR REPLACE VIEW ${read}.sessions AS
-  SELECT ${plain('sessions', 's', {live: '(s."expiresAt" > now()) AS live'})} FROM ${auth}.session s`);
-  return statements;
+  define('group_admins',groupAdminsSql({groups: `${auth}.groups`, group_members: `${auth}.group_members`}));
+  if (options.sessions !== false) define('sessions',`SELECT ${plain('sessions', 's', {live: '(s."expiresAt" > now()) AS live'})} FROM ${auth}.session s`);
+  return definitions;
 }
 
+
+export function identityViewStatements(schemas: IdentitySchemas, options: {sessions?: boolean} = {}): string[] {
+  return identityViewDefinitions(schemas,options).map(({name,select})=>`CREATE OR REPLACE VIEW ${name} AS\n  ${select}`);
+}
