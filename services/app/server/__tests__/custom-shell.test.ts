@@ -6,6 +6,8 @@
  */
 import {nativeHtml} from '@/__tests__/native-html-fixture';
 import {writeFile} from 'node:fs/promises';
+import {createHash} from 'node:crypto';
+import {brotliDecompressSync} from 'node:zlib';
 import {join} from 'node:path';
 import {afterAll,beforeAll,beforeEach,describe,expect,it} from 'vitest';
 import {postArtifact} from '@/__tests__/artifact-fixtures';
@@ -186,6 +188,41 @@ describe('with a custom shell',()=>{
   overrideConfig({},{APP__SHELL_FILE:undefined});expect(shellFile()).toBeNull();
   overrideConfig({},{APP__SHELL_FILE:` ${plain} `});expect(shellFile()).toBe(plain);
   overrideConfig({},{APP__SHELL_FILE:undefined});
+ });
+});
+
+describe('the scripts and styles a custom shell names',()=>{
+ const SCRIPT='export const shell = 1;\n'.repeat(200), STYLES='body { margin: 0; }\n'.repeat(100);
+ const NAMING='<!doctype html><html><head><link rel="stylesheet" href="/af/shell/app.css"><!-- /af/shell/app.css --></head><body data-shell><script type="module" src="/af/shell/app.js"></script><p>/af/shell/app.js</p></body></html>';
+ const sha=(text:string)=>createHash('sha256').update(text).digest('hex');
+ let naming='';
+ beforeAll(async()=>{const own=await tempDir('shell-files-',afterAll);naming=join(own,'index.html');
+  await writeFile(naming,NAMING);await writeFile(join(own,'app.js'),SCRIPT);await writeFile(join(own,'app.css'),STYLES);await writeFile(join(own,'secret.txt'),'no');});
+ it('serves each beside the shell at its content address, kept for good by every browser, and names that address in the shell',async()=>{
+  const app=server(naming),shell=await (await app.request('/',html)).text();
+  const js=`/af/shell/${sha(SCRIPT)}/app.js`,css=`/af/shell/${sha(STYLES)}/app.css`;
+  // Only the attribute values become content addresses; the comment and the text stay as written.
+  expect(shell).toBe(NAMING.replace('href="/af/shell/app.css"',`href="${css}"`).replace('src="/af/shell/app.js"',`src="${js}"`));
+  for(const [path,body,type] of [[js,SCRIPT,'text/javascript; charset=utf-8'],[css,STYLES,'text/css; charset=utf-8']]){
+   const plain=await app.request(path);
+   expect([plain.status,plain.headers.get('content-type'),plain.headers.get('cache-control'),plain.headers.get('access-control-allow-origin'),plain.headers.get('x-content-type-options'),plain.headers.get('content-encoding')],path)
+    .toEqual([200,type,'public, max-age=31536000, immutable','*','nosniff',null]);
+   expect(await plain.text(),path).toBe(body);
+   const brotli=await app.request(path,{headers:{'accept-encoding':'gzip, br'}});
+   expect([brotli.headers.get('content-encoding'),brotli.headers.get('vary')],path).toEqual(['br','Accept-Encoding']);
+   expect(brotliDecompressSync(Buffer.from(await brotli.arrayBuffer())).toString(),path).toBe(body);
+   const head=await app.request(path,{method:'HEAD'});expect([head.status,await head.text()],path).toEqual([200,'']);
+  }
+  // Nothing else beside the shell, no other version and no other path is served.
+  for(const path of [`/af/shell/${sha(SCRIPT)}/app.css`,`/af/shell/${'0'.repeat(64)}/app.js`,'/af/shell/app.js',`/af/shell/${sha('no')}/secret.txt`,`/af/shell/${sha(SCRIPT)}/../app.js`,'/af/shell/'])
+   expect((await app.request(path)).status,path).toBe(404);
+  expect((await server(plain).request(js)).status,'a shell that names none serves none').toBe(404);
+  expect((await server(null).request(js)).status,'no shell, nothing').toBe(404);
+ });
+ it('refuses to boot on a file it names but cannot read, naming the setting and the file',async()=>{
+  const own=await tempDir('shell-missing-',afterAll),file=join(own,'index.html');
+  await writeFile(file,'<html><head><script type="module" src="/af/shell/gone.js"></script></head><body></body></html>');
+  expect(()=>server(file)).toThrow(/APP__SHELL_FILE .*index\.html.*\/af\/shell\/gone\.js.*cannot be read/);
  });
 });
 

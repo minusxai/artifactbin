@@ -49,10 +49,20 @@
  *  Every other occurrence stays literal: in text or the body, in a comment, in the body of a raw-text element (script,
  *  style, title, textarea and the like), in a tag outside an attribute value, or a second `__HEAD_TAGS__`.
  * Read once at boot: a missing or unreadable file stops the boot, naming the setting.
+ *
+ * ITS OWN SCRIPTS AND STYLES: the file stays small (it can never be cached: a fresh nonce per response) by naming its
+ * code and styles as files beside it, `src="/af/shell/<name>.js"` or `href="/af/shell/<name>.css"` (an attribute value,
+ * exactly; anywhere else the text stays literal). Each is read with the file at boot (one it names but that cannot be
+ * read stops the boot, naming it), and the attribute becomes the file's content address, `/af/shell/<sha256>/<name>`,
+ * served immutable (`CACHE_CONTROL.immutable`, a year) with Brotli made once at boot: a browser fetches it again only
+ * when a new file changes its address. Nothing else beside the shell is served, and no other version.
  */
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { classifyPath, isScreenPath } from '@artifactbin/contracts/url-space';
+import { dirname, join } from 'node:path';
+import { brotliCompressSync, constants as zlibConstants } from 'node:zlib';
+import { CACHE_CONTROL, classifyPath, isScreenPath } from '@artifactbin/contracts/url-space';
+import { negotiateEncoding } from './content-encoding';
 
 const NONCE_PLACEHOLDER = '__CSP_NONCE__';
 const HEAD_PLACEHOLDER = '__HEAD_TAGS__';
@@ -123,8 +133,15 @@ function slotsOf(html: string): Piece[] {
   return pieces;
 }
 
-/** The file and its slots; `nonced` and `headed` say whether it has a nonce slot and a head slot. */
-export interface CustomShell { html: string; pieces: readonly Piece[]; nonced: boolean; headed: boolean }
+/** One script or stylesheet the shell names, as read at boot. */
+interface ShellFile { type: string; body: Buffer; brotli: Buffer }
+const SHELL_FILE_TYPES: Readonly<Record<string, string>> = { js: 'text/javascript; charset=utf-8', css: 'text/css; charset=utf-8' };
+/** `src="/af/shell/<name>"` or `href="…"`: a name beside the file, a script or a stylesheet, nothing else. */
+const NAMED_FILE = /\b(src|href)=(["'])\/af\/shell\/([A-Za-z0-9][A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]+)*\.(js|css))\2/g;
+const SHELL_FILE_PATH = /^\/af\/shell\/([a-f0-9]{64}\/[^/]+)$/;
+
+/** The file and its slots; `nonced` and `headed` say whether it has a nonce slot and a head slot; `files` what it names, by content address. */
+export interface CustomShell { html: string; pieces: readonly Piece[]; nonced: boolean; headed: boolean; files: ReadonlyMap<string, ShellFile> }
 
 /** The operator's file, read now; throws naming APP__SHELL_FILE when it cannot be. */
 export function loadCustomShell(file: string): CustomShell {
@@ -133,8 +150,18 @@ export function loadCustomShell(file: string): CustomShell {
     throw new Error(`[boot] APP__SHELL_FILE ${JSON.stringify(file)} cannot be read (${(error as NodeJS.ErrnoException).code ?? 'error'}): set it to an HTML file this process can read, or unset it.`);
   }
   if (!html.trim()) throw new Error(`[boot] APP__SHELL_FILE ${JSON.stringify(file)} is empty.`);
+  const files = new Map<string, ShellFile>();
+  html = html.replace(NAMED_FILE, (_attribute, name: string, quote: string, base: string, extension: string) => {
+    let body: Buffer;
+    try { body = readFileSync(join(dirname(file), base)); } catch (error) {
+      throw new Error(`[boot] APP__SHELL_FILE ${JSON.stringify(file)} names /af/shell/${base}, which cannot be read beside it (${(error as NodeJS.ErrnoException).code ?? 'error'}).`);
+    }
+    const address = `${createHash('sha256').update(body).digest('hex')}/${base}`;
+    files.set(address, { type: SHELL_FILE_TYPES[extension]!, body, brotli: brotliCompressSync(body, { params: { [zlibConstants.BROTLI_PARAM_QUALITY]: 11 } }) });
+    return `${name}=${quote}/af/shell/${address}${quote}`;
+  });
   const pieces = slotsOf(html);
-  return { html, pieces, nonced: pieces.includes(NONCE), headed: pieces.includes(HEAD) };
+  return { html, pieces, nonced: pieces.includes(NONCE), headed: pieces.includes(HEAD), files };
 }
 
 /**
@@ -147,5 +174,18 @@ export function customShellResponse(shell: CustomShell, method: string, csp: str
   const policy = nonce ? csp.replace("script-src 'self'", `script-src 'self' 'nonce-${nonce}'`) : csp;
   return new Response(method === 'HEAD' ? null : body, { status: 200, headers: {
     'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...headers, 'content-security-policy': policy,
+  } });
+}
+
+/** A script or stylesheet the shell names, at its content address (`/af/shell/<sha256>/<name>`); null for anything else. */
+export function shellFileResponse(shell: CustomShell | null, request: Request, pathname: string): Response | null {
+  const address = SHELL_FILE_PATH.exec(pathname)?.[1];
+  const found = address ? shell?.files.get(address) : undefined;
+  if (!found) return null;
+  const brotli = request.method !== 'HEAD' && negotiateEncoding(request.headers.get('accept-encoding'), ['br']) === 'br';
+  const body = brotli ? found.brotli : found.body;
+  return new Response(request.method === 'HEAD' ? null : new Uint8Array(body), { status: 200, headers: {
+    'content-type': found.type, 'cache-control': CACHE_CONTROL.immutable, 'x-content-type-options': 'nosniff', vary: 'Accept-Encoding',
+    'content-length': String(body.byteLength), ...(brotli ? { 'content-encoding': 'br' } : {}),
   } });
 }

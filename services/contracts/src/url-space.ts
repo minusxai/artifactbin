@@ -68,6 +68,7 @@ const PUBLIC_FILE_CLASSES: readonly PublicFileClass[] = [
   { prefix: '/af/lib/', what: 'hosted libraries, `/af/lib/<name>-<version>/index.js`', cache: 'versioned', staticDirectory: true, ownerHost: '^/af/lib/[a-z][a-z0-9-]*-\\d+\\.\\d+\\.\\d+/index\\.js$' },
   { prefix: '/af/geojson/', what: 'boundary files a map fetches, `/af/geojson/<name>.json`', cache: 'day', staticDirectory: true, ownerHost: '^/af/geojson/[a-z0-9-]+\\.json$' },
   { prefix: '/af/img/', what: 'the app\'s images: logos, design-system previews', cache: 'day', staticDirectory: true, ownerHost: null },
+  { prefix: '/af/shell/', what: 'a custom shell\'s own scripts and styles (APP__SHELL_FILE), `/af/shell/<sha256>/<name>`', cache: 'immutable', staticDirectory: false, ownerHost: null },
   { prefix: '/af/v1/', what: 'pinned host, component and style builds, and this build\'s runtime modules by content address', cache: 'immutable', staticDirectory: false, ownerHost: '^/af/v1/runtime/[a-f0-9]{64}/(?:apollo|reader|state)\\.js$' },
   { prefix: PUBLIC_FILES_PREFIX, what: 'runtime modules (`/af/<name>.js`), styles.css, import-map.json, manifest.json, host.js, host-comments.js, url-space.json', cache: 'revalidate', staticDirectory: false, ownerHost: '^/af/(?:apollo|reader|state)\\.js$|^/af/styles\\.css$' },
 ];
