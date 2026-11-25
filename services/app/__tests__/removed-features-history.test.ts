@@ -6,7 +6,7 @@
  *  - the saved revision's schema (GET /api/artifacts/<page>/sql/schema?revision=N, the skill's `sql.mjs schema
  *    --revision`) still answers a reader of the page with its pinned links under the reader's own policy.
  */
-import {expect,it} from 'vitest';
+import {expect,it,onTestFinished} from 'vitest';
 import {storePolicy} from '@/__tests__/artifact-fixtures';
 import {createAppHost} from '@/server/host';
 import {createGroup} from '@/lib/groups';
@@ -19,7 +19,8 @@ async function setting(){
  const group=await createGroup(owner.userId!,{handle:'removal_history',name:'History'});
  await admitGroupMember(owner.userId!,group.id,member.userId!,'member');
  await admitGroupMember(owner.userId!,group.id,editor.userId!,'admin');
- const host=await createAppHost();
+ const host=await createAppHost({ownsDatabase:false});
+ onTestFinished(host.close);
  const as=(who:typeof owner)=>({credential:'bearer' as const,userId:who.userId!,tokenId:who.id});
  const call=async(who:typeof owner,path:string,method='GET',body?:unknown)=>{
   const response=await host.request(new Request('http://localhost'+path,{method,...(body===undefined?{}:{body:JSON.stringify(body),headers:{'content-type':'application/json'}})}),as(who));

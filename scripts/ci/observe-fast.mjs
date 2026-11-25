@@ -1,5 +1,5 @@
 /** Run by pr-fast-timing.yml when a `pr fast` run completes: publish the required `pr fast timing` status, measured
- * from its first job's start to its last workload job's completion (scripts/lib/ci-elapsed.mjs budgets).
+ * from its first job's start through the last workload job's final runner step (scripts/lib/ci-elapsed.mjs budgets).
  *
  * The observer's own run is red only when it found something: the attempt over budget, or a successful attempt whose
  * evidence does not match. An attempt that itself failed or was cancelled gets a `failure` status naming that

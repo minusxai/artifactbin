@@ -36,6 +36,7 @@ const otpOf=async(email:string)=>(await readFile(join(directory,'outbox.jsonl'),
 
 async function composed(audiences=AUDIENCES){
  const application=await createAuthComposedHost({APP__PUBLIC_BASE_URL:origin,AUTH__SECRET:AUTH_SECRET,INTERNAL__SERVICE_SECRET:SECRET,IDENTITY__SERVICE_AUDIENCES:audiences,EMAIL__DEV_OUTBOX_PATH:join(directory,'outbox.jsonl')});
+ onTestFinished(application.close);
  const fetch=(request:Request)=>application.fetch(request);
  const send=async(method:string,path:string,headers:Record<string,string>,body?:unknown)=>{
   const response=await fetch(new Request(origin+path,{method,headers:{origin,...(body===undefined?{}:{'content-type':'application/json'}),...headers},...(body===undefined?{}:{body:JSON.stringify(body)})}));

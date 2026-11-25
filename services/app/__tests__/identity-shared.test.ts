@@ -37,6 +37,7 @@ beforeEach(async()=>{overrideConfig({internalServiceSecret:SECRET,publicBaseUrl:
 /** The composed host, whose boot (its database open, then Better Auth's tables) made the views. */
 async function composed(){
  const application=await createAuthComposedHost({APP__PUBLIC_BASE_URL:origin,AUTH__SECRET:AUTH_SECRET,INTERNAL__SERVICE_SECRET:SECRET,IDENTITY__SERVICE_AUDIENCES:AUDIENCES,EMAIL__DEV_OUTBOX_PATH:join(directory,'outbox.jsonl')});
+ onTestFinished(application.close);
  const post=(path:string,body:unknown,headers:Record<string,string>={})=>application.fetch(new Request(origin+path,{method:'POST',headers:{origin,'content-type':'application/json',...headers},body:JSON.stringify(body)}));
  const service=async(path:string,body:unknown,secret=SECRET)=>{const response=await post(path,body,{[SERVICE_AUTH_HEADER]:secret});return {status:response.status,body:await response.json()};};
  /** Email sign-in, then the bearer grant for `audience`, a configured service id (absent: this API). */
