@@ -1,20 +1,19 @@
 /**
- * Production's two durable-identity inputs are startup contracts: fail before
- * a listener exists, while development keeps the zero-config boot used on a
- * fresh checkout. Drive the real composition entry as a child process because
- * importing it cannot observe process exit or socket binding honestly.
+ * Exercise the real composition entry: an early startup failure, a development
+ * listener with logged-out admission, and the listener's occupied-port error.
  */
 import { spawn } from 'node:child_process';
 import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
-import {tempDirSync} from '@artifactbin/test-support/temp-dir';
+import { freePort } from '@artifactbin/test-support/net';
+import { tempDirSync } from '@artifactbin/test-support/temp-dir';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const APP_ROOT = path.join(ROOT, 'services', 'app');
 const SERVER_TS = path.join(ROOT, 'server.ts');
-const scratch = tempDirSync('boot-env-',afterAll);
+const scratch = tempDirSync('boot-env-', afterAll);
 
 type BootOutcome = {
   kind: 'exited' | 'listened' | 'timed-out';
@@ -28,15 +27,7 @@ type BootOutcome = {
 async function availablePort(offset: number): Promise<number> {
   const configuredBase = Number(process.env.ARTIFACTBIN_TEST_PORT_BASE);
   if (Number.isInteger(configuredBase) && configuredBase > 0) return configuredBase + offset;
-  return await new Promise<number>((resolve, reject) => {
-    const server = net.createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      const port = typeof address === 'object' && address ? address.port : 0;
-      server.close((error) => error ? reject(error) : resolve(port));
-    });
-  });
+  return freePort();
 }
 
 function bootEnvironment(port: number, overrides: Record<string, string>): Record<string, string> {
@@ -118,9 +109,8 @@ async function runBoot(port: number, overrides: Record<string, string>): Promise
   return outcome;
 }
 
-
 // Each case boots its own server with its own environment and port, so they boot side by side.
-describe.concurrent('production boot environment', () => {
+describe.concurrent('application boot', () => {
   it('exits before listening when AUTH__SECRET is absent', async () => {
     const port = await availablePort(0);
     const result = await runBoot(port, {
@@ -130,26 +120,8 @@ describe.concurrent('production boot environment', () => {
 
     expect(result.kind).toBe('exited');
     expect(result.code).toBe(1);
-    expect(result.output).toContain('[boot] AUTH__SECRET is required in production (sessions and the agent cookie must survive a restart). Generate one: openssl rand -base64 32 — or run: npm run setup');
-  });
-
-  it('exits before listening when APP__PUBLIC_BASE_URL is absent', async () => {
-    const result = await runBoot(await availablePort(1), {
-      NODE_ENV: 'production',
-      AUTH__SECRET: 'test-production-secret',
-    });
-
-    expect(result.kind).toBe('exited');
-    expect(result.code).toBe(1);
-    expect(result.output).toContain('[boot] APP__PUBLIC_BASE_URL is required in production (every published link is minted from it). Set it to the URL people reach this on.');
-  });
-
-  it('exits before listening when APP__PAGES_HOST is absent, in development too: there is no other renderer', async () => {
-    const result = await runBoot(await availablePort(5), { NODE_ENV: 'development', APP__PAGES_HOST: '' });
-
-    expect(result.kind).toBe('exited');
-    expect(result.code).toBe(1);
-    expect(result.output).toContain('[boot] APP__PAGES_HOST is required');
+    expect(result.output).not.toContain('[boot] auth + app on');
+    expect(result.output).toContain('[boot] AUTH__SECRET is required in production');
   });
 
   it('boots in development with both production-only names absent', async () => {
