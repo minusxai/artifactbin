@@ -19,6 +19,9 @@ import { createHumanAuth, humanAuthOptions, type BetterAuthOptions, type HumanAu
 import { pgliteDialect } from '@artifactbin/auth/auth/pglite';
 import { createOAuthStore } from '@artifactbin/auth/identity/oauth';
 import { DEV_OUTBOX_DEFAULT_PATH, DEV_OUTBOX_RELATIVE_PATH, MailNotConfigured, MailSendFailed, devOutboxMailer, mailerForRuntime, usesDevOutbox } from '@artifactbin/auth/mail';
+import { publicBuildAssets } from '@artifactbin/auth/parts';
+import { AUTH_BODY_LIMIT, payloadTooLarge } from '@artifactbin/auth/routes/grants';
+import type { Part, Upstream } from '@artifactbin/contracts/part';
 import { baseUrlOf } from '@artifactbin/auth/routes/oauth';
 import { sessionAuthority } from '@artifactbin/auth/session-authority';
 
@@ -27,11 +30,16 @@ it('exports the values the deployment imports', () => {
     authEnvNamesRead, createBearerReader, ensureAuthSchema, ensureHumanAuthSchema, IdentityNotReady, ensureIdentitySchema, identityDbOf, identityMoveStatements, internalBoundary, loginProvidersOf, loginRoutes, oauthRoutes,
     resendMailer, session, sessionStoreOf, testDomainSignInOf, migrateHumanAccountSchema, createHumanAuth, humanAuthOptions, pgliteDialect,
     createOAuthStore, DEV_OUTBOX_DEFAULT_PATH, DEV_OUTBOX_RELATIVE_PATH, MailNotConfigured, MailSendFailed, devOutboxMailer, mailerForRuntime,
-    usesDevOutbox, baseUrlOf, sessionAuthority, migrateGroupRoles,
+    usesDevOutbox, baseUrlOf, sessionAuthority, migrateGroupRoles, AUTH_BODY_LIMIT, payloadTooLarge, publicBuildAssets,
   };
   for (const [name, value] of Object.entries(values)) expect(value, name).toBeDefined();
 });
 
 it('exports the types the deployment imports', () => {
   expectTypeOf<[LoginProviders, OutgoingMail, SessionInfo, SessionStore, BetterAuthOptions, HumanAuth, HumanAuthOptions, Mailer, OidcProvider]>().not.toBeNever();
+});
+
+it('exports the public probe for a caller’s own part environment', () => {
+  type Env = { Variables: { deployment: string } };
+  expectTypeOf(publicBuildAssets<Env>).toEqualTypeOf<(options: { upstream: Upstream; deadlineMs?: number }) => Part<Env>>();
 });

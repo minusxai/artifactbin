@@ -48,13 +48,20 @@ describe('auth bodies are capped at 16 KB', () => {
   it('refuses an oversized OTP send with 413 before anything parses it, declared or chunked', async () => {
     const app = await proxy({});
     const big = JSON.stringify({ email: 'i@example.com', type: 'sign-in', pad: 'x'.repeat(20 * 1024) });
-    const declared = await app.request(`${BASE}/api/auth/email-otp/send-verification-otp`, { method: 'POST', headers: { 'content-type': 'application/json', origin: BASE }, body: big });
-    expect(declared.status).toBe(413);
+    const declared = await app.request(`${BASE}/api/auth/email-otp/send-verification-otp`, { method: 'POST', headers: { 'content-type': 'application/json', origin: BASE, 'content-length': String(Buffer.byteLength(big)) }, body: big });
     const chunked = await app.request(new Request(`${BASE}/api/auth/email-otp/send-verification-otp`, {
       method: 'POST', headers: { 'content-type': 'application/json', origin: BASE }, duplex: 'half',
       body: new ReadableStream({ start(c) { c.enqueue(new TextEncoder().encode(big)); c.close(); } }),
     } as RequestInit));
-    expect(chunked.status).toBe(413);
+    for (const response of [declared, chunked]) {
+      expect(response.status).toBe(413);
+      expect(Object.fromEntries(response.headers)).toEqual({
+        'content-type': 'application/json', 'cache-control': 'no-store', pragma: 'no-cache',
+        'access-control-allow-origin': '*', 'access-control-allow-methods': 'POST, OPTIONS',
+        'access-control-allow-headers': 'Content-Type, Authorization',
+      });
+      expect(await response.text()).toBe('{"error":"payload_too_large"}');
+    }
     expect(sent).toEqual([]);
     expect((await send(app)).status).toBe(200);
   });

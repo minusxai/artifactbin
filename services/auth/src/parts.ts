@@ -10,7 +10,7 @@ import type {Part, Upstream} from '@artifactbin/contracts/part';
 import type {Queryable} from '@artifactbin/contracts/db';
 import type {TokenReader} from '@artifactbin/contracts/identity';
 import type {TransactionalQueryable} from '@artifactbin/contracts/identity-module';
-import type {Hono} from 'hono';
+import type {Env, Hono} from 'hono';
 import {BodyTooLargeError, readBody} from '@artifactbin/utils/body';
 import {assemble} from '@artifactbin/utils/assemble';
 import {buildAssetRequest, buildAssetResponse} from '@artifactbin/utils/build-assets';
@@ -275,20 +275,25 @@ function groupSignInsOf(db: Queryable, authSchema: string, readSchema: string, s
   };
 }
 
-function publicBuildAssets(o: AuthOptions): Part<AuthEnv> {
+/** Probe the app for public build bytes before resolving a session. The deadline covers the response head. */
+export function publicBuildAssets<T extends Env>({ upstream, deadlineMs }: { upstream: Upstream; deadlineMs?: number }): Part<T> {
   return {
     name: 'publicBuildAssets',
     mount: app => app.use('*', async (c, next) => {
       const request = buildAssetRequest(c.req.raw);
       if (!request) return next();
+      const controller = deadlineMs !== undefined && Number.isFinite(deadlineMs) && deadlineMs > 0 ? new AbortController() : null;
+      const timer = controller ? setTimeout(() => controller.abort(new Error('build asset handshake deadline exceeded')), deadlineMs) : null;
       try {
-        const response = await o.upstream(request, ANONYMOUS);
+        const probe = controller ? new Request(request, { signal: AbortSignal.any([request.signal, controller.signal]) }) : request;
+        const response = await upstream(probe, ANONYMOUS);
         const safe = buildAssetResponse(response);
         if (safe) return safe;
-        await response.body?.cancel();
+        void response.body?.cancel().catch(() => {});
       } catch {
-        // Never turn an unverified response into public bytes; the normal
-        // forwarding path retains its own availability and access behavior.
+        // The normal forwarding path retains its own availability and access behavior.
+      } finally {
+        if (timer !== null) clearTimeout(timer);
       }
       return next();
     }),
