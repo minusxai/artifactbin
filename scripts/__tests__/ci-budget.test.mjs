@@ -485,14 +485,12 @@ it('clocks from the prefetched attempt without fetching it again, and fetches it
   rmSync(directory,{recursive:true,force:true});
   return {result,fetched};
  };
- const warm=run(true);
- expect(warm.result.status,warm.result.stderr).toBe(0);
- expect(warm.result.stdout).toContain('(target): aim for 40s; the limit is 60s');
- expect(warm.fetched).toBe('');
- const cold=run(false);
- expect(cold.result.status,cold.result.stderr).toBe(0);
- expect(cold.result.stdout).toContain('(target): aim for 40s; the limit is 60s');
- expect(cold.fetched).toBe('api /repos/o/r/actions/runs/7/attempts/1/jobs?per_page=100\n');
+ for (const [prefetched, expectedFetch] of [[true, ''], [false, 'api /repos/o/r/actions/runs/7/attempts/1/jobs?per_page=100\n']]) {
+  const {result, fetched} = run(prefetched);
+  expect(result.status, result.stderr).toBe(0);
+  expect(result.stdout).toMatch(/^PR CI took .+ \(target\):/m);
+  expect(fetched).toBe(expectedFetch);
+ }
 });
 // The job list is fetched at a job's first step, when GitHub may still report every job, this one included, as queued:
 // the clock then times from the fetch (the file's write time; this job had started by then, so a few seconds lenient at
@@ -537,20 +535,20 @@ it('reconciles the nearest install on a lock miss, restore only, and falls back 
  expect(exact.if).toBe("${{ !matrix.install && !matrix.suite && !matrix.shard && !matrix.batch }}");
  expect(workflow('pr-fast.yml').jobs.fast.strategy.matrix.include.filter(entry=>entry.install)).toEqual([{part:'install',install:true}]);
 });
-it('fails the pull request lane past 60 seconds with the plain budget message',()=>{
- const directory=tempDirSync('afbin-pr-elapsed-',onTestFinished);
- const attempt=join(directory,'attempt.json'),summary=join(directory,'summary.md');
- const run=(seconds)=>{
-  writeFileSync(attempt,JSON.stringify({jobs:[{status:'in_progress',started_at:new Date(Date.now()-seconds*1000).toISOString()}]}));
-  return spawnSync(process.execPath,[fileURLToPath(new URL('../lib/ci-elapsed.mjs',import.meta.url)),'--pr',attempt,summary],{encoding:'utf8'});
- };
-  const slow=run(75);
-  expect(slow.status).toBe(1);
-  expect(slow.stdout).toMatch(/::error::PR CI took 7\d\.\ds: the limit is 60s \(aim for 40s\)\. Fix the critical path; do not raise the budget\./);
-  const warning=run(45);
-  expect(warning.status).toBe(0); expect(warning.stdout).toContain('::warning::PR CI took');
-  const fast=run(5);
-  expect(fast.status).toBe(0); expect(fast.stdout).toContain('(target): aim for 40s; the limit is 60s');
+it('reports the pull request elapsed time with the corresponding exit status and annotation', () => {
+  const directory = tempDirSync('afbin-pr-elapsed-', onTestFinished);
+  const attempt = join(directory, 'attempt.json');
+  const cli = fileURLToPath(new URL('../lib/ci-elapsed.mjs', import.meta.url));
+
+  for (const [seconds, exitCode, annotation] of [[75, 1, '::error::'], [50, 0, '::warning::'], [5, 0, null]]) {
+    const started_at = new Date(Date.now() - seconds * 1000).toISOString();
+    writeFileSync(attempt, JSON.stringify({jobs: [{status: 'in_progress', started_at}]}));
+    const result = spawnSync(process.execPath, [cli, '--pr', attempt], {encoding: 'utf8'});
+    expect(result.status, result.stderr || result.stdout).toBe(exitCode);
+    const [message, ...annotations] = result.stdout.trimEnd().split('\n');
+    expect(message).toMatch(/^PR CI took \d+\.\ds/);
+    expect(annotations).toEqual(annotation ? [annotation + message] : []);
+  }
 });
 
 // THE PULL REQUEST CI BUDGET IS A HARD RULE: aim for 40s; the limit is 60s. These fail when anyone
@@ -570,9 +568,10 @@ it('fails a pull request run just past 60 seconds and passes one at 60', () => {
 });
 
 it('says what failed and that the budget must not be raised', () => {
+  const {targetSeconds, hardSeconds} = CI_BUDGETS.pr;
   const failed = measureCiElapsed(prStart, after(75), {lane: 'pr'});
-  expect(describeCiElapsed(failed, 'pr')).toBe('PR CI took 75.0s: the limit is 60s (aim for 40s). Fix the critical path; do not raise the budget.');
-  expect(describeCiElapsed(measureCiElapsed(prStart, after(30), {lane: 'pr'}), 'pr')).toContain('aim for 40s; the limit is 60s');
+  expect(describeCiElapsed(failed, 'pr')).toBe(`PR CI took 75.0s: the limit is ${hardSeconds}s (aim for ${targetSeconds}s). Fix the critical path; do not raise the budget.`);
+  expect(describeCiElapsed(measureCiElapsed(prStart, after(30), {lane: 'pr'}), 'pr')).toContain(`aim for ${targetSeconds}s; the limit is ${hardSeconds}s`);
 });
 
 it('keeps the full-suite budget separate and rejects unknown lanes', () => {

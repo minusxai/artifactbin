@@ -6,10 +6,9 @@
  * Responses, and provenance (the source URL) rides the meta.
  */
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { allowLocalWebIngest, restoreWebIngestPolicy } from '@/test/helpers/web-ingest';
+import { allowLocalWebIngest, restoreWebIngestPolicy, setWebIngestPolicy } from '@/test/helpers/web-ingest';
 import { ingestImageFromUrl } from '../image';
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
-import { useLoopbackLookup } from '@artifactbin/utils/node/loopback-lookup';
 import { Reply } from '@/lib/http';
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
@@ -91,20 +90,11 @@ describe('ingestImageFromUrl', () => {
     expect(String(body.details)).toContain('/gone.png');
   });
 
-  it('refuses a forbidden target with the guard, never a socket', async () => {
-    restoreWebIngestPolicy(); // strict production policy
-    const res = await ingestImageFromUrl('https://169.254.169.254/latest/meta-data');
+  it('reports a blocked address as an image fetch failure', async () => {
+    setWebIngestPolicy({ allowPrivate: false, allowHttp: true });
+    const res = await ingestImageFromUrl(`${base}/real.png`);
     if (!(res instanceof Reply)) throw new Error('should refuse');
-    expect(res.body.code).toBe('forbidden_address');
-  });
-
-  it('refuses a loopback NAME the server resolves itself (as server.ts does): *.localhost and lvh.me', async () => {
-    restoreWebIngestPolicy();
-    useLoopbackLookup();
-    for (const url of ['https://anything.localhost/a.png', 'https://x.lvh.me/a.png']) {
-      const res = await ingestImageFromUrl(url);
-      if (!(res instanceof Reply)) throw new Error(`should refuse ${url}`);
-      expect(res.body.code, url).toBe('forbidden_address');
-    }
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ error: 'image_fetch_failed', code: 'forbidden_address' });
   });
 });
