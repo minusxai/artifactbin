@@ -17,8 +17,8 @@ import { isEmbeddedView } from '@/solid/lib/embedded';
 import { reportArtifactView } from '@/solid/lib/artifact-view-report';
 import { useSession } from '../lib/session';
 import type { DocumentChromeDetails } from '../document/deferred-document-chrome';
-import { commentAccess } from '../document/comment-access';
-import type { AnnotationWire } from '@/lib/annotations';
+import { commentLink } from '../document/comment-presentation';
+import { createReaderDiscussion } from '../document/create-reader-discussion';
 import { ARTIFACT_ID_PATTERN } from '@artifactbin/contracts/artifact-reference';
 import { type ArtifactRole, canEdit as canEditRole, canGovern, type Visibility } from '@artifactbin/contracts/sharing';
 import {ReaderNotice} from '../document/ReaderNotice';
@@ -129,15 +129,16 @@ export function DocumentPage(): JSX.Element {
   const archivedNow = () => !!page?.archived;
   const isOwner = () => canGovern(role()) && !archivedNow();
   const editable = () => canEditRole(role()) && !archivedNow() && page?.surface?.format === 'html';
-  const comments = () => commentAccess(role(), accountSession(), archivedNow());
-  const annotatable = () => comments().canCreateComment;
+  const accountSession = () => page?.kind === 'account' || session()?.kind === 'account';
   const backend = id ? createReaderHttpBackend(id) : null;
   const [pwaEnabled, setPwaEnabled] = createSignal(page?.surface?.pwaEnabled === true);
   const [ready, setReady] = createSignal(false);
   const [railOpen, setRailOpen] = createSignal(false);
-  const [annotationItems, setAnnotationItems] = createSignal<AnnotationWire[] | null>(null);
-  const [liveAnnotations, setLiveAnnotations] = createSignal<AnnotationWire[] | null>(null);
-  const openAnnotationCount = () => (annotationItems() ?? liveAnnotations())?.filter((row) => row.status === 'open').length ?? chrome()?.openAnnotations ?? page?.surface?.openAnnotations ?? 0;
+  const discussion = createReaderDiscussion({
+    reader: () => ({ role: role(), accountSession: accountSession(), archived: archivedNow() }),
+    railOpen, onRailOpenChange: setRailOpen, search: () => location.search,
+    deferredCount: () => chrome()?.openAnnotations, servedCount: () => page?.surface?.openAnnotations,
+  });
   const [panel, setPanel] = createSignal<Panel>(null);
   const [fork, setFork] = createSignal(false);
   const { pick, documentMode, chooseMode } = createReaderMode(page?.surface?.colorMode === 'dark' ? 'dark' : 'light');
@@ -183,7 +184,7 @@ export function DocumentPage(): JSX.Element {
     onPublication: page.surface.format === 'html' ? (version, editId, title, live) => (title !== undefined && head.published(title, version), import('../document/follow-html-version')).then(({ followPublication }) => followPublication({
       version, editId, live, drawn: htmlHead().version, frame: archivedNow() ? null : runtimeRef.current, show: head.show, reload,
     }), reload) : undefined,
-    onAnnotations: setLiveAnnotations,
+    onAnnotations: discussion.setLiveAnnotations,
     onPresence: readerPresence.receive,
   }) : () => null;
 
@@ -191,7 +192,6 @@ export function DocumentPage(): JSX.Element {
   const framedPage = createFramedPage({ origin: framedOrigin, top: barHeight, right: railInset, ground: () => DOCUMENT_GROUND[documentMode()] });
   const { forwardHash, settleStateFragment } = framedPage;
 
-  const accountSession = () => page?.kind === 'account' || session()?.kind === 'account';
   /** A rail action by name: a press, a carried `?intent=` (after a sign-in), or a pill. */
   const act = (name: string) => {
     if (name === 'controls' || name === 'menu' || name === 'notifications') setPanel(name);
@@ -220,7 +220,7 @@ export function DocumentPage(): JSX.Element {
     if (page.deferredChrome) void import('../document/deferred-document-chrome').then(({ bindDocumentChrome }) => {
       if (!unmounted) runWithOwner(owner, () => bindDocumentChrome(id, setChrome));
     }).catch(() => { /* The document and its discussion remain usable without social details. */ });
-    void import('../document/create-framed-story').then(({ answerFrameNavigation, createFramedStory, createReaderGroups, opensComment, takeIntent, uploadSessionOf }) => { if (!unmounted) runWithOwner(owner, () => {
+    void import('../document/create-framed-story').then(({ answerFrameNavigation, createFramedStory, createReaderGroups, takeIntent, uploadSessionOf }) => { if (!unmounted) runWithOwner(owner, () => {
       const groups = createReaderGroups(id, framed.frame, () => session()?.user?.id);
       setReaderGroups(groups);
       story = createFramedStory({
@@ -239,7 +239,7 @@ export function DocumentPage(): JSX.Element {
         // Live editing of the page's editable regions: editors of the head only (a viewer or commenter never opens one).
         regions: backend ? {
           // The shell knows whether this saved version can have regions. Recheck after publication.
-          enabled: () => editable() && (page.surface?.hasEditableRegions !== false || htmlHead().version !== page.surface.version), loadHtml: async () => (await backend.load())?.html ?? null, autoOpen: page.surface?.template === 'doc', autoFocus: !opensComment(window.location.search) } : undefined,
+          enabled: () => editable() && (page.surface?.hasEditableRegions !== false || htmlHead().version !== page.surface.version), loadHtml: async () => (await backend.load())?.html ?? null, autoOpen: page.surface?.template === 'doc', autoFocus: !commentLink(window.location.search).takesFocus } : undefined,
       });
       // The document's links to app paths take this page (another document by a full load, an app page by the router).
       const stopNavigation = answerFrameNavigation({ win: window, frame: framed.frame, frameOrigin: framed.origin, navigate: (path) => navigate(path) });
@@ -274,9 +274,9 @@ export function DocumentPage(): JSX.Element {
   const shownTitle = head.title;
   const scriptErrors = () => currentVersion() <= (page?.surface?.version ?? 0) ? page?.scriptFailure?.errors : undefined;
   return <Show when={id && page && page.surface?.framedOrigin} fallback={<Suspense fallback={<main role="status" aria-busy="true">Loading page…</main>}><NotFoundPage /></Suspense>}>
-    <Show when={embedded}><TrustedUi overlay layer="navigation"><div class="fixed right-3 top-3 z-40"><DocumentCommentAction count={openAnnotationCount()} active={railOpen()} onClick={() => act('comment')} /></div></TrustedUi></Show>
+    <Show when={embedded}><TrustedUi overlay layer="navigation"><div class="fixed right-3 top-3 z-40"><DocumentCommentAction count={discussion.openCount()} active={railOpen()} onClick={() => act('comment')} /></div></TrustedUi></Show>
     <Show when={!embedded}><DocumentChrome id={id!} title={shownTitle} author={author()} follow={chrome()?.follow ?? page!.follow ?? null}
-      like={like() ?? { liked: false, count: 0 }} likeUnavailable={page?.deferredChrome && !like()} signedIn={accountSession} comments={openAnnotationCount}
+      like={like() ?? { liked: false, count: 0 }} likeUnavailable={page?.deferredChrome && !like()} signedIn={accountSession} comments={discussion.openCount}
       archived={page!.archived ?? null} canFork={!archivedNow()} owner={isOwner()}
       install={pwaEnabled() && !archivedNow()} visibility={page!.surface?.visibility} hasInvitedUsers={chrome()?.hasInvitedUsers ?? page!.surface?.hasInvitedUsers}
       membership={page!.surface?.membership}
@@ -284,8 +284,8 @@ export function DocumentPage(): JSX.Element {
       onComment={() => act('comment')} onFork={() => act('fork')} onShare={() => act('share')} onMembership={() => act('membership')}
       controls={(close) => <Suspense fallback={<p role="status" aria-busy="true">Loading artifact controls…</p>}><DocumentControls close={close} presence={readerPresence} answer={{ ...page!, like: like(), surface: page!.surface && { ...page!.surface, author: author() } }} likeUnavailable={page?.deferredChrome && !like()}
         design={{ colorMode: documentMode(), send: (command) => runtimeRef.current?.send(command), pick }} id={id!} title={shownTitle()} version={currentVersion()} archived={archivedNow()}
-        owner={isOwner()} canEdit={editable()} canAnnotate={annotatable()} accountSession={accountSession()} phone={phone()}
-        commentsOpen={railOpen()} openAnnotations={openAnnotationCount()} membershipRevision={membershipRevision()} onCommentsChange={setRailOpen}
+        owner={isOwner()} canEdit={editable()} canAnnotate={discussion.access().canCreateComment} accountSession={accountSession()} phone={phone()}
+        commentsOpen={railOpen()} openAnnotations={discussion.openCount()} membershipRevision={membershipRevision()} onCommentsChange={setRailOpen}
         onMembershipChange={() => setMembershipRevision((n) => n + 1)} onSettings={() => dialogs.show('settings')} onSocialPreview={() => void dialogs.openSocialPreview()}
         onRenamed={head.renamed} onShare={() => dialogs.show('sharing')} onHandToAgent={isDoc() ? () => setHandoffOpen(true) : undefined} /></Suspense>} /></Show>
     {/* First in document order: lib/islands/trusted-portal hands its portal to every popover, tooltip and dialog. */}
@@ -307,10 +307,8 @@ export function DocumentPage(): JSX.Element {
     </Show>
     <TrustedUi overlay layer="discussion">
     <Show when={id}>
-      <ReaderDiscussion id={id!} role={role()} accountSession={accountSession()} archived={archivedNow()} runtimeRef={runtimeRef} ready={ready()} nonce={nonce()}
-        editId={head.editId()} canDeleteAny={isOwner()} railOpen={railOpen()} onRailOpenChange={setRailOpen} liveAnnotations={liveAnnotations()}
-        openCount={openAnnotationCount()} linked={!!(new URLSearchParams(location.search).get('comment') || new URLSearchParams(location.search).get('thread'))}
-        onAnnotationsChange={setAnnotationItems} onSignIn={() => window.location.assign(loginHref(window.location, 'comment'))}
+      <ReaderDiscussion id={id!} discussion={discussion} runtimeRef={runtimeRef} ready={ready()} nonce={nonce()}
+        editId={head.editId()} canDeleteAny={isOwner()} onSignIn={() => window.location.assign(loginHref(window.location, 'comment'))}
         beforeComment={(subject) => story ? story.beforeComment(subject) : Promise.resolve(subject)} membershipRevision={membershipRevision()}
         topOffset={barHeight} documentTopInset={regionUi()?.toolbar() ? REGION_TOOLBAR_H : 0} />
     </Show>

@@ -91,15 +91,6 @@ export interface RegionUi {
   closeLink(): void;
 }
 
-/**
- * The page's address opens a comment (`?comment=`, `?thread=`, or the comment intent): the comment takes the focus, so a
- * doc's auto-open still opens its region but leaves the focus alone.
- */
-export function opensComment(search: string): boolean {
-  const params = new URLSearchParams(search);
-  return params.has('comment') || params.has('thread') || params.get('intent') === 'comment';
-}
-
 /** A rail action carried through a sign-in (`?intent=`), taken off the address so a reload does not repeat it. */
 export function takeIntent(): string | null {
   const address = new URL(window.location.href);

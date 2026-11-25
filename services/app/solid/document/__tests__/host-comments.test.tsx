@@ -13,7 +13,7 @@ import { OPTIONAL_THEME_TOKENS, THEME_TOKENS } from '@/lib/html-systems';
 import type { FrameBridgeParent } from '@/lib/html-reader/frame-bridge/parent';
 import type { HostComments } from '@/lib/html-reader/host-comments-contract';
 import { cleanup } from '@/solid/__tests__/helpers';
-import { ANN, NONCE, fetchCalls, flush, installAnnotationFetch, knobs } from './annotation-rig';
+import { ANN, NONCE, RESOLVED, fetchCalls, flush, installAnnotationFetch, knobs } from './annotation-rig';
 import { mountHostComments } from '../browser-host-comments';
 import { HOST_THEME_ATTR, HOST_THEME_CSS } from '../host-theme';
 import { replaceComment } from './comment-input';
@@ -85,6 +85,28 @@ it('grants the frame its comment action exactly as the app page does: a commente
   await waitFor(() => expect(guest.grants().at(-1)).toEqual({ type: 'mx:selection-actions', edit: false, annotate: true }));
   guest.fromFrame({ type: 'mx:selection-action', nonce: NONCE, action: 'annotate', selection });
   expect(guest.events.filter((event) => event.name === 'af-document-sign-in')).toHaveLength(1);
+});
+
+it('keeps selection eager on an empty document and follows a resolved reply link in the mounted rail', async () => {
+  const { comments, events, grants } = mount({ role: 'commenter', kind: 'account' });
+  await waitFor(() => expect(grants().at(-1)?.annotate).toBe(true));
+  await flush();
+  expect(fetchCalls.some(({ url }) => url.includes('/annotations'))).toBe(false);
+
+  const panel = document.body.appendChild(document.createElement('aside'));
+  comments.open(panel);
+  const shadow = panel.querySelector('[data-trusted-ui]')!.shadowRoot as unknown as HTMLElement;
+  await within(shadow).findByRole('region', { name: 'Annotation sidebar' });
+
+  const initial = window.location.href;
+  try {
+    window.history.pushState(null, '', '?comment=ann_reply');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    await waitFor(() => expect(events).toContainEqual({ name: 'af-document-thread', detail: { id: RESOLVED.id } }));
+    expect(await within(shadow).findByText('verified and corrected')).toBeVisible();
+  } finally {
+    window.history.replaceState(null, '', initial);
+  }
 });
 
 it('reports the open threads, draws the rail inside the shell\'s panel in the shell\'s tokens, and follows its light or dark', async () => {
