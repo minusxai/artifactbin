@@ -42,7 +42,7 @@ import { dynamicEncoding, negotiateEncoding } from './content-encoding';
 import { mountPublicFiles, publicFilePath } from './public-files';
 import { userHostBoundary } from './user-host';
 import { pagesHost } from './pages-host';
-import { shellAnswers } from './custom-shell';
+import { shellAnswers, shellFileResponse } from './custom-shell';
 import { admitDocumentAddress, candidateDocument } from './document-address';
 import { apiNotFound, createAppPage } from './app-page';
 
@@ -162,6 +162,8 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   const publicDir = opts.publicDir ?? path.resolve('public');
   // Every public file (server/public-files): /af/, its old addresses, the two root files.
   mountPublicFiles(app, { webDir, publicDir });
+  // The custom shell's own scripts and styles, at their content addresses (./custom-shell).
+  app.on(['GET', 'HEAD'], '/af/shell/*', (c) => shellFileResponse(customShell, c.req.raw, c.req.path) ?? c.notFound());
   for (const retired of ['/chat/*', '/install.sh', '/login/cli']) app.all(retired, async c => c.notFound());
 
   app.on(['GET', 'HEAD'], '/', async c => {

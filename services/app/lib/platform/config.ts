@@ -511,7 +511,8 @@ export function datasetsOwnConnections(): boolean {
 
 /**
  * APP__SHELL_FILE: the path of one HTML file this process can read, served in place of the app's own screens
- * (server/custom-shell says which addresses, and what stays the app's). Unset, the default: the app's screens.
+ * (server/custom-shell says which addresses, and what stays the app's), with the scripts and styles beside it that it
+ * names as `/af/shell/<name>`. Unset, the default: the app's screens.
  */
 env('APP', 'SHELL_FILE');
 export const shellFile = (): string | null => env('APP', 'SHELL_FILE')?.trim() || null;

@@ -8,6 +8,7 @@
  *   /af/lib/        hosted libraries (public/libraries)                   a day, stale for a week
  *   /af/geojson/    boundary files (public/geojson)                       a day
  *   /af/img/        logos, design-system previews (public/img)            a day
+ *   /af/shell/      a custom shell's own scripts and styles (custom-shell) immutable, by content address
  *   /af/v1/         pinned content-addressed runtime copies (routes)      immutable
  *   /af/<name>      runtime modules, styles.css, import-map.json, manifest.json, host.js, url-space.json (routes)
  *
