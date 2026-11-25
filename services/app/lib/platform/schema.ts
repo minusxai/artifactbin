@@ -118,6 +118,10 @@ const ARTIFACTS: Table = {
     // pages carrying that slug, earliest first. The slug is the SQL twin of titleSlug, so nothing stores it.
     { name: 'idx_artifacts_user_slug', columns: [TITLE_SLUG_SQL, 'user_id', 'created_at'], where: 'deleted_at IS NULL AND group_id IS NULL AND title IS NOT NULL' },
     { name: 'idx_artifacts_group_slug', columns: [TITLE_SLUG_SQL, 'group_id', 'created_at'], where: 'deleted_at IS NULL AND group_id IS NOT NULL AND title IS NOT NULL' },
+    // A site's title path (lib/user-pages siteTitlePathSql): does another public page of this user or group, in the
+    // same folder, carry the same title slug? Asked once per path segment of every listed page, so it must be one
+    // exact probe; the GIN index above would instead return every root artifact of every owner for `'{}'`.
+    { name: 'idx_artifacts_site_siblings', columns: ['ancestor_ids', TITLE_SLUG_SQL, 'user_id', 'group_id'], where: "deleted_at IS NULL AND visibility='public' AND format IN ('html','folder') AND title IS NOT NULL" },
     // An owner host's `/assets/<hash>` (lib/user-pages servesWebAsset): the pages naming that web image,
     // `meta->'webAssets' ? $hash`, without reading any page's source (lib/artifacts web-assets).
     { name: 'idx_artifacts_web_assets', columns: ["(meta->'webAssets')"], using: 'gin' },

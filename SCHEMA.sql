@@ -859,6 +859,8 @@ CREATE INDEX IF NOT EXISTS idx_artifacts_user_slug ON app.artifacts ((rtrim(left
 
 CREATE INDEX IF NOT EXISTS idx_artifacts_group_slug ON app.artifacts ((rtrim(left(btrim(regexp_replace(lower(coalesce(title, '')), '[^a-z0-9]+', '-', 'g'), '-'), 60), '-')), group_id, created_at) WHERE deleted_at IS NULL AND group_id IS NOT NULL AND title IS NOT NULL;
 
+CREATE INDEX IF NOT EXISTS idx_artifacts_site_siblings ON app.artifacts (ancestor_ids, (rtrim(left(btrim(regexp_replace(lower(coalesce(title, '')), '[^a-z0-9]+', '-', 'g'), '-'), 60), '-')), user_id, group_id) WHERE deleted_at IS NULL AND visibility='public' AND format IN ('html','folder') AND title IS NOT NULL;
+
 CREATE INDEX IF NOT EXISTS idx_artifacts_web_assets ON app.artifacts USING gin ((meta->'webAssets'));
 
 CREATE TABLE IF NOT EXISTS app.artifact_versions (
