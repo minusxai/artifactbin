@@ -20,7 +20,7 @@ export function invalidateMeasurements(s: TableState, retainRowEstimates = false
 /** Re-renders after a resize on the next frame, once however many sizes arrive. Rendering inside
  * a ResizeObserver callback resizes observed nodes in the same frame, which the browser reports as
  * "ResizeObserver loop completed with undelivered notifications" (a page error to every check). */
-export function renderAfterResize(s: TableState) {
+function renderAfterResize(s: TableState) {
   if (s.resizeFrame !== undefined) return;
   s.resizeFrame = requestAnimationFrame(() => {
     s.resizeFrame = undefined;
