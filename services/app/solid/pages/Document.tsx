@@ -1,4 +1,3 @@
-import { documentAdmissionReader } from '../document/refresh-admission';
 import type {createReaderGroups} from '../document/create-framed-story';
 import {createReaderPresence} from '../document/create-reader-presence';
 import { replaceDocument } from '../lib/document-navigation';
@@ -53,7 +52,7 @@ const FrameNotices = lazy(() => import('../document/FrameNotices'));
 const RegionEditingChrome = lazy(() => import('../document/RegionToolbar').then(m => ({ default: m.RegionEditingChrome })));
 const ForkConfirm = lazy(() => import('../document/ForkArtifact').then(m => ({ default: m.ForkConfirm })));
 
-interface DocumentAnswer {
+export interface DocumentAnswer {
   role: ArtifactRole; kind: string;
   /** The viewer may change who reaches the page (lib/artifact-access `managesSharing`). */
   canManageSharing?: boolean;
@@ -150,13 +149,7 @@ export function DocumentPage(): JSX.Element {
   /** A doc ("New" made it: one rich region for its whole body) is edited from the moment it loads, and can be handed to an agent. */
   const isDoc = () => (live()?.template ?? page?.surface?.template) === 'doc';
   const [membershipRevision, setMembershipRevision] = createSignal(0);
-  // Membership notifications have no replay cursor. Keep the editor mounted when the reader's access still matches.
-  const refreshAdmission = page && id ? documentAdmissionReader<DocumentAnswer>(window, id, next => {
-    setMembershipRevision(n => n + 1);
-    if (!next || next.role !== page.role || next.kind !== page.kind || next.canManageSharing !== page.canManageSharing
-      || next.surface?.group_id !== page.surface?.group_id || next.surface?.membership !== page.surface?.membership)
-      replaceDocument(window.location.href);
-  }) : undefined;
+  let refreshAdmission: (() => Promise<void>) | undefined;
   const [nonce, setNonce] = createSignal<string | null>(null);
   const phone = createIsPhoneViewport();
   const runtimeRef: DocumentRuntimeRef = { current: null };
@@ -177,7 +170,7 @@ export function DocumentPage(): JSX.Element {
   const live = backend && page?.surface ? createLiveArtifact({
     backend, id: id!, initialEditId: page.surface.editId ?? '', initialVersion: page.surface.version,
     get enabled() { return ready() && !archivedNow() && typeof EventSource === 'function'; },
-    onConnectionChange: refreshAdmission,
+    onConnectionChange: () => refreshAdmission?.(),
     onData: (event) => {
       if (event.datasets.includes('_members')) {
         setMembershipRevision((n) => n + 1);
@@ -228,7 +221,8 @@ export function DocumentPage(): JSX.Element {
     if (page.deferredChrome) void import('../document/deferred-document-chrome').then(({ bindDocumentChrome }) => {
       if (!unmounted) runWithOwner(owner, () => bindDocumentChrome(id, setChrome));
     }).catch(() => { /* The document and its discussion remain usable without social details. */ });
-    void import('../document/create-framed-story').then(({ bindFrameFragment, answerFrameNavigation, createFramedStory, createReaderGroups, takeIntent, uploadSessionOf }) => { if (!unmounted) runWithOwner(owner, () => {
+    void import('../document/create-framed-story').then(({ bindFrameFragment, answerFrameNavigation, createFramedStory, createReaderGroups, refreshReaderAccess, takeIntent, uploadSessionOf }) => { if (!unmounted) runWithOwner(owner, () => {
+      refreshAdmission = refreshReaderAccess(window, id, page, () => setMembershipRevision(n => n + 1), reload);
       const groups = createReaderGroups(id, framed.frame, () => session()?.user?.id);
       setReaderGroups(groups);
       story = createFramedStory({

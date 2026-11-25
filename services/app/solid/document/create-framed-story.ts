@@ -9,6 +9,7 @@ import type { CellEditing, startCellEditing } from './cell-editing';
 import { CELL_READONLY, isCellKey } from '@artifactbin/contracts/region-sessions';
 import type { useSession } from '../lib/session';
 
+export { refreshReaderAccess } from './refresh-admission';
 export { answerFrameNavigation } from '@/lib/html-reader/frame-navigation';
 
 /** Region editing (live co-editing of the page's editable regions) is an intentional lazy browser chunk: it carries Yjs, for editors only. */
