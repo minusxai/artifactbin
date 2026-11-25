@@ -6,7 +6,7 @@
 import { TESTUSER_ERRORS } from '@artifactbin/contracts/testusers';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createGuestOwner, mintAccountToken, useAppHarness } from '@/__tests__/harness';
-import { ANONYMOUS_ACTOR, DuplicateProfileEmail, NO_IDENTITY, accountOf, answeredOnce, closeTestUserSessions, confirmWelcome, createTestUser, forgetTestUserSession, forwardedFor, getTestUserRow, hasAdminCredential, hostedCredentialDescriptor, identityForUser, matchesWorkspaceAccount, noteTestUserSession, rememberTokenClient, replaceUserImageKey, resolveTestUser, revokeToken, syncProfile, testUserSessionCount, welcomePending } from '@/lib/accounts';
+import { ANONYMOUS_ACTOR, DuplicateProfileEmail, NO_IDENTITY, accountOf, answeredOnce, closeTestUserSessions, confirmWelcome, createTestUser, forgetTestUserSession, forwardedFor, getTestUserRow, hasAdminCredential, hostedCredentialDescriptor, identityForUser, matchesWorkspaceAccount, noteTestUserSession, recordBearerUse, replaceUserImageKey, resolveTestUser, revokeToken, syncProfile, testUserSessionCount, welcomePending } from '@/lib/accounts';
 import { RESERVED_HANDLES } from '@artifactbin/contracts/handles';
 import { createUser } from '@/lib/accounts/testing';
 import { forgetRequestCredentials, markRequestAuthority } from '@/lib/accounts/tokens';
@@ -104,7 +104,7 @@ describe('per-request credential answers', () => {
 
   it('remembers the client that declared itself on a token', async () => {
     const t = await mintAccountToken('cli');
-    await rememberTokenClient(t.id, 'claude-code' as never);
+    await recordBearerUse(t.id, true, 'claude-code');
     expect(await tokenRow(t.id)).toMatchObject({ client_harness: 'claude-code' });
   });
 });
