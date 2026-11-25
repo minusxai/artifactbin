@@ -6,7 +6,8 @@
 import { createRoot, createSignal } from 'solid-js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { STORY_FRAME_BRIDGE_MESSAGE } from '@/lib/html-reader/contract';
-import { createFramedStory, opensComment, type FramedStory, type RegionEditingLoader } from '../create-framed-story';
+import { commentLink } from '../comment-presentation';
+import { createFramedStory, type FramedStory, type RegionEditingLoader } from '../create-framed-story';
 import { stubFetch } from '@/test/helpers/fetch-stub';
 
 const PAGES = 'https://6869.pages.test';
@@ -95,8 +96,8 @@ describe('region editing on the page', () => {
 
   it('a doc opened at a comment opens its region but leaves the focus to the comment', async () => {
     vi.useFakeTimers();
-    for (const search of ['?comment=c1', '?thread=t1', '?intent=comment', '?x=1&comment=c2']) expect(opensComment(search)).toBe(true);
-    for (const search of ['', '?intent=like', '?version=3']) expect(opensComment(search)).toBe(false);
+    for (const search of ['?comment=c1', '?thread=t1', '?intent=comment', '?x=1&comment=c2']) expect(commentLink(search).takesFocus).toBe(true);
+    for (const search of ['', '?intent=like', '?version=3']) expect(commentLink(search).takesFocus).toBe(false);
     const page = framedPage(() => true, undefined, true, false);
     const focus = vi.spyOn(page.frame, 'focus');
     page.say({ kind: 'ready', nonce: 'n1' });

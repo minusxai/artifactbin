@@ -20,7 +20,7 @@
  * Mounted for anyone who may comment (the owner, a named editor, or a commenter).
  */
 import { useLocation } from '@solidjs/router';
-import { batch, createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, untrack, type JSX } from 'solid-js';
+import { batch, createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, untrack, type Accessor, type JSX } from 'solid-js';
 import SquareDashedMousePointer from 'lucide-solid/icons/square-dashed-mouse-pointer';
 import X from 'lucide-solid/icons/x';
 import type { AnnotationWire } from '@/lib/annotations';
@@ -39,6 +39,7 @@ import { CommentImagesProvider } from './CommentImageAttach';
 import { createReplyDrafts } from './reply-drafts';
 import { PersonMentionProvider } from './PersonMention';
 import { connectFrameAnnotations } from './annotation-frame';
+import { createCommentLink } from './create-reader-discussion';
 import { createCommentDraft } from './annotation-draft';
 import { createThreadStore } from './annotation-threads';
 
@@ -92,6 +93,8 @@ export interface AnnotationLayerProps {
   pickRequested?: boolean;
   /** The document's frame, when something other than the window can resize it (a host page's own panel): its marks follow. */
   frame?: Element;
+  /** A notification target, when the reader composition already tracks the address. */
+  linkedComment?: Accessor<string | null>;
   /** The thread the rail has open, open or resolved (null when none): a host page reports it. */
   onOpenThreadChange?: (id: string | null) => void;
 }
@@ -99,29 +102,12 @@ export interface AnnotationLayerProps {
 const cardClass = 'rounded-panel border border-edge bg-raised text-sm';
 const DELETE_THREAD_CONFIRMATION = { title: 'Delete this thread?', description: 'This thread and its replies will be permanently deleted. This cannot be undone.', action: 'Delete thread', confirmLabel: 'Confirm delete thread' };
 const DELETE_REPLY_CONFIRMATION = { title: 'Delete this comment?', description: 'This comment will be removed. The rest of the thread will stay.', action: 'Delete comment', confirmLabel: 'Confirm delete comment' };
-const linkedFrom = (search: string | undefined) => {
-  if (search === undefined) return null;
-  const query = new URLSearchParams(search);
-  return query.get('comment') ?? query.get('thread');
-};
-/** The app router's location where the layer is inside one (the document page); none in isolation. */
-const optionalRouterLocation = () => { try { return useLocation(); } catch { return null; } };
-
-/**
- * A notification's `?comment=` or `?thread=` can change without remounting the layer. Follow the app router
- * when there is one, and browser history navigation on standalone surfaces.
- */
-function createLinkedComment() {
-  const routerLocation = optionalRouterLocation();
-  const currentSearch = () => routerLocation ? routerLocation.search : typeof location === 'undefined' ? undefined : location.search;
-  const [linked, setLinked] = createSignal(linkedFrom(untrack(currentSearch)));
-  createEffect(on(currentSearch, (search) => setLinked(linkedFrom(search)), { defer: true }));
-  onMount(() => {
-    const navigate = () => setLinked(linkedFrom(location.search));
-    window.addEventListener('popstate', navigate);
-    onCleanup(() => window.removeEventListener('popstate', navigate));
-  });
-  return linked;
+/** Standalone layers can follow the app router when they are rendered inside one. */
+function standaloneLink() {
+  let routerLocation: ReturnType<typeof useLocation> | undefined;
+  try { routerLocation = useLocation(); } catch { /* no router */ }
+  const link = createCommentLink(routerLocation ? () => routerLocation.search : undefined);
+  return createMemo(() => link().target);
 }
 
 /** Deleting a thread or one reply, once confirmed: a refusal stays in the dialog, which stays while it runs. */
@@ -190,7 +176,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
 
   // Notification links identify a comment; resolve it through the authorised open/resolved indexes
   // so a reply opens its containing conversation.
-  const linkedComment = createLinkedComment();
+  const linkedComment = props.linkedComment ?? standaloneLink();
   let followedLink = false;
   createEffect(on(linkedComment, () => { followedLink = false; }));
   createEffect(() => {

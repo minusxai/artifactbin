@@ -2,7 +2,6 @@
 import {PRESENCE_EVENT,type PresenceFrame,type PresencePublication} from '@/lib/html-presence/contract';
 import {STORY_ANNOTATIONS_EVENT,STORY_DATA_EVENT,type ArtifactDataEvent,type ArtifactLiveEvent,type ArtifactVersionPing} from '@/lib/html-reader/contract';
 import {openDocumentStream} from './document-stream';
-import {readAnnotationPages} from '@/lib/annotations/pages';
 import type {ArtifactHead,ReaderArtifactBackend} from './types';
 // The reader's reads ride out a restart without carrying the comment backend's retry listeners (./retrying).
 import {retryLazily} from '@/lib/http/retry-lazily';
@@ -15,7 +14,8 @@ export function createReaderHttpBackend(id:string,options:ReaderHttpOptions={}):
  const mine=`/api/my/artifacts/${id}`;
  return {
     unavailable:()=>null,
-    listAnnotations(status, options = {}) {
+    async listAnnotations(status, options = {}) {
+      const {readAnnotationPages} = await import('@/lib/annotations/pages');
       return readAnnotationPages(`${mine}/annotations${status ? `?status=${status}` : ''}`, {...options,...(credentials==='omit'?{credentials}: {})});
     },
 

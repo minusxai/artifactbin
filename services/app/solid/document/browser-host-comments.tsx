@@ -26,7 +26,6 @@
 import { createEffect, createSignal, on, onCleanup, untrack } from 'solid-js';
 import { render } from 'solid-js/web';
 import type { ArtifactRole } from '@artifactbin/contracts/sharing';
-import type { AnnotationWire } from '@/lib/annotations';
 import { createReaderHttpBackend } from '@/lib/artifact-backend/reader-http';
 import { loginHref } from '@/lib/http/login-href';
 import { SessionProvider, useSession } from '@/solid/lib/session';
@@ -35,6 +34,7 @@ import type { HostComments, HostCommentsOptions, HostMode } from '@/lib/html-rea
 import { createTrustedOverlayHost } from '@/lib/ui-runtime/trusted-overlay-host';
 import { configureTrustedUiStyles } from '@/lib/ui-runtime/trusted-ui-styles';
 import { createLiveArtifact } from '../editor/create-live-artifact';
+import { createReaderDiscussion } from './create-reader-discussion';
 import { createReaderPresence } from './create-reader-presence';
 import { HOST_THEME_ATTR, HOST_THEME_CSS, hostSetsTheme } from './host-theme';
 import { ReaderDiscussion } from './ReaderDiscussion';
@@ -79,8 +79,11 @@ export function mountHostComments(options: HostCommentsOptions): HostComments {
       .then((response) => response.ok ? response.json() as Promise<PageAnswer> : null).then(setPage).catch(() => {});
     onCleanup(() => abort.abort());
     const [head, setHead] = createSignal({ version: options.version, editId: options.editId });
-    const [listed, setListed] = createSignal<AnnotationWire[] | null>(null);
-    const [live, setLive] = createSignal<AnnotationWire[] | null>(null);
+    const discussion = createReaderDiscussion({
+      reader: () => ({ role: page()?.role ?? 'viewer', accountSession: page()?.kind === 'account', archived: !!page()?.archived }),
+      railOpen, onRailOpenChange: (open) => { if (open) hostComments.open(lastPanel); else hostComments.close(); },
+      servedCount: () => page()?.surface?.openAnnotations, win,
+    });
     const [membershipRevision, setMembershipRevision] = createSignal(0);
     const ready = () => !!page() && !!nonce();
     const presence = options.presence
@@ -98,22 +101,19 @@ export function mountHostComments(options: HostCommentsOptions): HostComments {
         if (event.datasets.includes('_members')) setMembershipRevision((n) => n + 1);
         options.notifyData(event.datasets);
       },
-      onAnnotations: setLive,
+      onAnnotations: discussion.setLiveAnnotations,
       ...(presence ? { onPresence: presence.receive } : {}),
     });
-    const openRows = () => (listed() ?? live())?.filter((row) => row.status === 'open') ?? null;
-    const openCount = () => openRows()?.length ?? page()?.surface?.openAnnotations ?? 0;
     // Unread: an open thread whose newest comment, by someone else, arrived while the rail was closed (since this mount).
     const { session } = useSession();
     const me = () => session()?.user?.id ?? null;
     const seen = new Map<string, string>();
     let primed = false;
     const [unread, setUnread] = createSignal<ReadonlySet<string>>(new Set());
-    createEffect(on([() => listed() ?? live(), railOpen], ([rows, open]) => {
+    createEffect(on([discussion.openRows, discussion.railOpen], ([rows, open]) => {
       if (!rows) return;
       const next = new Set<string>();
       for (const row of rows) {
-        if (row.status !== 'open') continue;
         const newest = row.thread.at(-1);
         const signature = newest?.id ?? row.id;
         if (!primed || open || newest?.author?.user_id === untrack(me)) seen.set(row.id, signature);
@@ -122,14 +122,12 @@ export function mountHostComments(options: HostCommentsOptions): HostComments {
       primed = true;
       setUnread(next);
     }));
-    createEffect(() => options.emit('af-document-comments', { open: openCount(), unread: unread().size, panel: railOpen() }));
+    createEffect(() => options.emit('af-document-comments', { open: discussion.openCount(), unread: unread().size, panel: discussion.railOpen() }));
     if (presence) createEffect(() => options.emit('af-document-presence', { viewers: presence.viewers().map(({ id: viewer, label, colorId }) => ({ id: viewer, label, colorId })), total: presence.total() }));
     const signIn = () => { if (options.emit('af-document-sign-in', {}, true)) win.location.assign(loginHref(win.location, 'comment')); };
-    const linked = () => { const query = new URLSearchParams(win.location.search); return !!(query.get('comment') || query.get('thread')); };
-    return <>{page() && <ReaderDiscussion id={id} role={page()!.role ?? 'viewer'} accountSession={page()!.kind === 'account'} archived={!!page()!.archived}
+    return <>{page() && <ReaderDiscussion id={id} discussion={discussion}
       runtimeRef={runtimeRef} ready={ready()} nonce={nonce()} editId={head().editId} canDeleteAny={page()!.role === 'owner'}
-      railOpen={railOpen()} onRailOpenChange={(open) => { if (open) hostComments.open(lastPanel); else hostComments.close(); }} liveAnnotations={live()} openCount={openCount()} linked={linked()}
-      onAnnotationsChange={setListed} onOpenThreadChange={(thread) => options.emit('af-document-thread', { id: thread })} onSignIn={signIn}
+      onOpenThreadChange={(thread) => options.emit('af-document-thread', { id: thread })} onSignIn={signIn}
       membershipRevision={membershipRevision()} topOffset={Math.max(0, Math.round(bridge.getViewportRect().top))}
       railHost={panel()?.content} frame={options.frame} />}</>;
   })()}</SessionProvider>, overlay.content);

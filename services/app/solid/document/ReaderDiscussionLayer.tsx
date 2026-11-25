@@ -6,20 +6,22 @@
  */
 import { splitProps, type JSX } from 'solid-js';
 import { AnnotationLayer, type AnnotationLayerProps } from './AnnotationLayer';
-import type { ReaderDiscussionProps, ReaderDiscussionState } from './ReaderDiscussion';
+import type { DiscussionSelection, ReaderDiscussionProps } from './ReaderDiscussion';
 
 /** The props the layer takes exactly as the discussion's caller gives them, named once. */
-const LAYER_PROPS = ['id', 'canDeleteAny', 'editId', 'beforeComment', 'runtimeRef', 'railOpen', 'onRailOpenChange', 'liveAnnotations',
-  'onAnnotationsChange', 'onOpenThreadChange', 'membershipRevision', 'topOffset', 'documentTopInset', 'railHost', 'frame'] as const satisfies readonly (keyof AnnotationLayerProps)[];
+const LAYER_PROPS = ['id', 'canDeleteAny', 'editId', 'beforeComment',
+  'onOpenThreadChange', 'membershipRevision', 'topOffset', 'documentTopInset', 'railHost', 'frame'] as const satisfies readonly (keyof AnnotationLayerProps)[];
 
 export type LayerProps = Pick<AnnotationLayerProps, (typeof LAYER_PROPS)[number]>;
 
-export function ReaderDiscussionLayer(props: { discussion: ReaderDiscussionProps; state: ReaderDiscussionState }): JSX.Element {
-  const [layer] = splitProps(props.discussion, LAYER_PROPS);
-  const discussion = props.discussion;
-  const state = props.state;
-  return <AnnotationLayer {...layer} canCreateComment={state.comments().canCreateComment}
-    offerSignIn={state.offerSignIn()} onSignIn={discussion.onSignIn} sessionNonce={discussion.nonce}
-    showViewComments={state.comments().canReadComments} initialSelection={state.initialSelection()} onSelectionConsumed={() => state.setInitialSelection(null)}
-    pickRequested={state.pickRequested()} />;
+export function ReaderDiscussionLayer(props: { reader: ReaderDiscussionProps; selection: DiscussionSelection }): JSX.Element {
+  const [layer] = splitProps(props.reader, LAYER_PROPS);
+  const reader = props.reader;
+  const discussion = reader.discussion;
+  const selection = props.selection;
+  return <AnnotationLayer {...layer} runtimeRef={reader.runtimeRef} sessionNonce={reader.nonce}
+    canCreateComment={discussion.access().canCreateComment} offerSignIn={discussion.access().offerSignIn} onSignIn={reader.onSignIn}
+    showViewComments={discussion.access().canReadComments} railOpen={discussion.railOpen()} onRailOpenChange={discussion.onRailOpenChange}
+    liveAnnotations={discussion.live()} onAnnotationsChange={discussion.setLayerAnnotations} linkedComment={discussion.linkedComment}
+    initialSelection={selection.initialSelection()} onSelectionConsumed={selection.consumeSelection} pickRequested={selection.pickRequested()} />;
 }

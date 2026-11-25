@@ -12,3 +12,20 @@ export interface CommentPresentation {
 export function needsCommentPresentation(state: CommentPresentation): boolean {
   return state.canRead && (state.active || state.linked || state.railOpen || state.composing || state.picking || state.openCount > 0 || state.liveCount > 0);
 }
+
+/** Only active threads contribute to reader counts and unread indicators. */
+export function openAnnotations<T extends { status: string }>(rows: readonly T[]): T[] {
+  return rows.filter((row) => row.status === 'open');
+}
+
+/** Project an address for lazy loading, target lookup and initial editor focus. */
+export function commentLink(search: string | undefined) {
+  const query = new URLSearchParams(search);
+  const comment = query.get('comment');
+  const thread = query.get('thread');
+  return {
+    target: comment ?? thread,
+    requested: Boolean(comment || thread),
+    takesFocus: comment !== null || thread !== null || query.get('intent') === 'comment',
+  };
+}
