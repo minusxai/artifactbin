@@ -21,7 +21,6 @@ import SquareDashedMousePointer from 'lucide-solid/icons/square-dashed-mouse-poi
 import X from 'lucide-solid/icons/x';
 import type { AnnotationWire } from '@/lib/annotations';
 import type { ArtifactBackend } from '@/lib/artifact-backend';
-import { loginHref } from '@/lib/http/login-href';
 import MobileSheet from '../ui/MobileSheet';
 import { Button } from '../ui/Button';
 import { FeatureGate } from '../components/FeatureGate';
@@ -76,8 +75,8 @@ export function CommentRail(props: {
   topOffset: number;
   rightInset: number;
   onClose: () => void;
-  /** A reader who could comment once signed in; absent, the rail says the access is read-only. */
-  onSignIn?: () => void;
+  offerSignIn: boolean;
+  onSignIn: () => void;
   hoverId: string | null;
   onHover: (id: string | null) => void;
   /** What the document last said about each thread's passage. */
@@ -94,7 +93,7 @@ export function CommentRail(props: {
       <h2 class="font-mono text-micro font-semibold uppercase tracking-[0.12em] text-faint">comments</h2>
       <Button type="button" variant="ghost" size="sm" icon aria-label="Close comments" onClick={() => props.onClose()}><X size={14} strokeWidth={1.8} /></Button>
     </div>
-    <Show when={props.mayCreate} fallback={<Show when={props.onSignIn} fallback={<p class="text-2xs text-muted">You have read-only comment access.</p>}><Button type="button" variant="secondary" size="sm" onClick={() => props.onSignIn?.()}>Sign in to comment</Button></Show>}>
+    <Show when={props.mayCreate} fallback={<Show when={props.offerSignIn} fallback={<p class="text-2xs text-muted">You have read-only comment access.</p>}><Button type="button" variant="secondary" size="sm" onClick={() => props.onSignIn()}>Sign in to comment</Button></Show>}>
     <div role="group" aria-label="Comment tools" class="grid grid-cols-2 gap-2">
       {/* A tool in use is the primary variant; min-h-16 grows the control past its fixed height without fighting it. */}
       <Button type="button" variant={draft.pick() === 'block' ? 'primary' : 'secondary'} size="sm" aria-label="Select" aria-pressed={draft.pick() === 'block'} onClick={draft.toggleSelect}
@@ -120,7 +119,7 @@ export function CommentRail(props: {
     onReplyDraftChange: (typed: boolean) => props.onReplyDraftChange(id, typed),
     onDelete: (commentId: string) => props.onDelete(commentId, commentId === id),
     onReact: (commentId: string, active: boolean) => threads.react(commentId, active),
-    onSignIn: () => window.location.assign(loginHref(window.location, 'comment')),
+    onSignIn: () => props.onSignIn(),
     onEdit: (commentId: string, body: string) => threads.edit(id, commentId, body),
     onToggleFold: () => threads.toggleFold('threads', id),
     onToggleComment: (commentId: string) => threads.toggleFold('comments', commentId),

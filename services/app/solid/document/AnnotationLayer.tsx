@@ -25,6 +25,7 @@ import SquareDashedMousePointer from 'lucide-solid/icons/square-dashed-mouse-poi
 import X from 'lucide-solid/icons/x';
 import type { AnnotationWire } from '@/lib/annotations';
 import { createHttpBackend, type ArtifactBackend } from '@/lib/artifact-backend';
+import { loginHref } from '@/lib/http/login-href';
 import { hasReplyText } from '@/lib/annotations/remote-reply';
 import { APP_BAR_H, RIGHT_RAIL_W } from '@/lib/html-reader/edit-bar';
 import { documentRect, sendDocument, type DocumentRuntimeRef } from '@/lib/html-reader/document-endpoint';
@@ -46,6 +47,9 @@ export interface AnnotationLayerProps {
   id: string;
   /** Explicitly false for readers and archived versions; omitted by authoring surfaces. */
   canCreateComment?: boolean;
+  /** Whether the rail offers sign-in instead of the read-only message. */
+  offerSignIn?: boolean;
+  /** The reader's sign-in action, also used if the server refuses an expired session. */
   onSignIn?: () => void;
   /** Every request the comments make; the page's surface backend when it has one. */
   backend?: ArtifactBackend;
@@ -166,6 +170,10 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   // are the dependency list: an effect keyed on one runs on a real change.
   const railOpen = createMemo(() => props.railOpen);
   const mayCreate = () => props.canCreateComment !== false;
+  const signIn = () => {
+    if (props.onSignIn) props.onSignIn();
+    else window.location.assign(loginHref(window.location, 'comment'));
+  };
   const pickOnOpen = createMemo(() => mayCreate() && props.pickOnOpen !== false);
   const handedSelection = createMemo(() => props.initialSelection ?? null);
   const sessionNonce = createMemo(() => props.sessionNonce ?? null);
@@ -248,7 +256,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   });
 
   const draft = createCommentDraft({
-    artifactId: props.id, backend, editId: () => props.editId, beforeComment: () => props.beforeComment, mayCreate, threads,
+    artifactId: props.id, backend, editId: () => props.editId, beforeComment: () => props.beforeComment, mayCreate, threads, signIn,
     rail: { open: railOpen, set: (open) => props.onRailOpenChange(open), pickOnOpen, phone: phoneRail },
     handed: handedSelection, consumed: () => props.onSelectionConsumed?.(), frameOffset: documentBox, post: postToFrame,
     pickRequested: Boolean(props.pickRequested),
@@ -364,7 +372,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
       <Show when={props.railOpen && props.railHost !== null}>
         <CommentRail threads={threads} draft={draft} artifactId={props.id} backend={backend} mayCreate={mayCreate()} canDeleteAny={props.canDeleteAny}
           phone={phoneRail() || !!props.railSheet} host={props.railHost ?? undefined} topOffset={topOffset()} rightInset={props.rightInset ?? 0}
-          onClose={() => props.onRailOpenChange(false)} onSignIn={props.onSignIn} hoverId={hoverId()} onHover={hoverUi}
+          onClose={() => props.onRailOpenChange(false)} offerSignIn={props.offerSignIn ?? false} onSignIn={signIn} hoverId={hoverId()} onHover={hoverUi}
           viewStateError={frame.viewStateError()} missing={frame.missing()} onReplyDraftChange={noteThreadReply} onDelete={askDelete} onOpenThread={openThread}
           threadsRef={(element) => { threadsRoot = element; }} />
       </Show>

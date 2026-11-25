@@ -20,8 +20,8 @@
  *
  * Events on the shell's container: `af-document-comments` {open, unread, panel} (unread: open threads that changed on
  * the stream while the rail was closed, since this mount: a count this module keeps, not a server one),
- * `af-document-thread` {id}, `af-document-presence` {viewers, total}, `af-document-sign-in` (cancelable: a signed-out
- * reader asked to comment; the default goes to the sign-in page).
+ * `af-document-thread` {id}, `af-document-presence` {viewers, total}, `af-document-sign-in` (cancelable: the reader
+ * needs to sign in to comment or react; the default goes to the sign-in page).
  */
 import { createEffect, createSignal, on, onCleanup, untrack } from 'solid-js';
 import { render } from 'solid-js/web';

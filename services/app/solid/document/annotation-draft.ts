@@ -17,7 +17,6 @@ import { runtimeId } from '@artifactbin/utils/runtime-id';
 import type { AnnotationWire } from '@/lib/annotations';
 import { BackendRequestError, type ArtifactBackend } from '@/lib/artifact-backend';
 import { hasReplyText } from '@/lib/annotations/remote-reply';
-import { loginHref } from '@/lib/http/login-href';
 import { COMMENT_TARGET_UNSAVED } from '@artifactbin/contracts/annotation-comment';
 import type { StoryEditParentMessage, StoryEditSelection } from '@/lib/html-runtime/bridge/selection-contract';
 import { createCommentCapture } from './CommentCapture';
@@ -37,6 +36,7 @@ export function createCommentDraft(options: {
   /** The page's step before a comment is sent (AnnotationLayerProps.beforeComment). */
   beforeComment: () => ((subject: StoryEditSelection) => Promise<StoryEditSelection>) | undefined;
   mayCreate: () => boolean;
+  signIn: () => void;
   threads: ThreadStore;
   rail: { open: Accessor<boolean>; set: (open: boolean) => void; pickOnOpen: Accessor<boolean>; phone: Accessor<boolean> };
   /** A selection handed down by the page, and telling it the composer now has it. */
@@ -203,8 +203,8 @@ export function createCommentDraft(options: {
           wire = await image.send(create);
         } catch (error) {
           if (!(error instanceof BackendRequestError)) throw error;
-          // A guest may READ a thread and may not start one: the login page, and back here with the ask.
-          if (error.signInRequired) window.location.assign(loginHref(window.location, 'comment'));
+          // A session can expire while writing. Keep the draft and let the reader handle sign-in.
+          if (error.signInRequired) options.signIn();
           // The server holds no such element in the saved document (an edit not saved yet): the same true thing.
           else setFailure(error.code === 'bad_path' ? COMMENT_TARGET_UNSAVED : error.message);
           return;

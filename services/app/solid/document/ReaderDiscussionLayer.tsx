@@ -19,7 +19,7 @@ export function ReaderDiscussionLayer(props: { discussion: ReaderDiscussionProps
   const discussion = props.discussion;
   const state = props.state;
   return <AnnotationLayer {...layer} canCreateComment={state.comments().canCreateComment}
-    onSignIn={!discussion.accountSession && !discussion.archived ? state.signIn : undefined} sessionNonce={discussion.nonce}
+    offerSignIn={state.offerSignIn()} onSignIn={discussion.onSignIn} sessionNonce={discussion.nonce}
     showViewComments={state.comments().canReadComments} initialSelection={state.initialSelection()} onSelectionConsumed={() => state.setInitialSelection(null)}
     pickRequested={state.pickRequested()} pickOnOpen />;
 }

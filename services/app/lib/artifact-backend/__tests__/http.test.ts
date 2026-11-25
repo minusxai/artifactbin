@@ -181,6 +181,8 @@ describe('createHttpBackend', () => {
     });
     stubFetch(json({ error: 'sign_in_required' }, 401));
     await expect(backend.createAnnotation(body, 'k')).rejects.toMatchObject({ signInRequired: true, status: 401 });
+    stubFetch(json({ error: 'unauthorized' }, 401));
+    await expect(backend.createAnnotation(body, 'k')).rejects.toMatchObject({ signInRequired: true, status: 401 });
     stubFetch(json({ code: 'sign_in_required' }, 403));
     await expect(backend.createAnnotation(body, 'k')).rejects.toMatchObject({ signInRequired: true });
     stubFetch(json({ error: 'invalid_anchor', details: [{ message: 'node moved' }] }, 400));
