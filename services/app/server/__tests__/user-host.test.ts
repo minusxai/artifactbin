@@ -376,3 +376,12 @@ it('translates the configured directory result to HTTP while the legacy root sti
   expect(await response.text(),url).toContain(body);
  }
 });
+it('answers a repeat view of a personal-site page with 304',async()=>{
+ const user=await owner(),post=await page(user.token),server=app();
+ const first=await server.request(`${base}/${post.id}`);expect(first.status).toBe(200);
+ const etag=first.headers.get('etag');
+ expect(first.headers.get('cache-control')).toBe('private, no-cache');expect(etag).toBeTruthy();
+ const again=await server.request(`${base}/${post.id}`,{headers:{'if-none-match':etag!}});
+ expect(again.status).toBe(304);expect(await again.text()).toBe('');
+ const stale=await server.request(`${base}/${post.id}`,{headers:{'if-none-match':'"other"'}});expect(stale.status).toBe(200);
+});
