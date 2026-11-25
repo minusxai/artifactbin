@@ -31,13 +31,13 @@ const doorOptions = (declared: WriteDoor): DatasetWriteOptions =>
 export async function recheckMutation(
   dataset: ArtifactRow,
   actor: AccessActor,
-  declared: WriteDoor = false,
+  options: DatasetWriteOptions,
 ): Promise<ArtifactRow> {
   const current = await getArtifactById(dataset.id);
   if (
     !current ||
     (current.policy_revision ?? 0) !== (dataset.policy_revision ?? 0) ||
-    !(await datasetWriteAccess(current, actor, doorOptions(declared))).allowed
+    !(await datasetWriteAccess(current, actor, options)).allowed
   )
     throw new Error('Mutation permission changed');
   return current;

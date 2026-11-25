@@ -12,14 +12,16 @@ export { publishFile, readFileUpload, serveStoredFile, storeFileContent, uploade
 export { datasetResponse } from './http';
 export { storedMediaReferences } from './media-references';
 export { throttlePublicMutation } from './policy/usage';
-export { keepDatasetConfiguration, LEGACY_POLICY_REFUSED, readOnlyDatasetPolicy, validateDatasetPolicyForRow, validateStoredDatasetPolicy } from './policy/validation';
+export { keepDatasetConfiguration, LEGACY_POLICY_REFUSED, validateDatasetPolicyForRow } from './policy/validation';
 export type { ServerRefLoader } from './asset-reference';
 export type {
   CatalogInput, CatalogRowView, DatasetCatalog, DatasetTable,
 } from './types';
-export { people, resolveDefinitionScope, resolveUserColumnScope, retainUserScope, userOptions, validateUserContent, validateUserWrites } from './user-fields';
+export { people, userOptions, validateUserWrites } from './user-fields';
 
 
 export {readLifetime} from './read-lifetime';
 
 export { serveInlinePdf } from './pdf-response';
+
+export { bindDatasetUserScope, datasetCreationDefaults, prepareDatasetReplacement, prepareDatasetRestore, validatePublishedDataset } from './publication';

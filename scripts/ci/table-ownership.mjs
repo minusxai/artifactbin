@@ -1,7 +1,7 @@
 /**
  * THE TABLE-OWNERSHIP CHECK (part of `npm run validate`).
  *
- * A table is written by the module that owns it: `artifacts` by lib/artifacts; the identity tables
+ * A table is written by the module that owns it: artifacts and their live region tables by lib/artifacts; the identity tables
  * (contracts `IDENTITY_OWNED_TABLES`: users, tokens, handles, groups, memberships, invitations, the hierarchy
  * revision and the group mail outbox) by the identity module, the auth package (`services/auth/src/`), which the
  * app reaches only through its service contract (lib/platform `services().identity`). Every other module that
@@ -29,13 +29,17 @@ const ts = createRequire(import.meta.url)('typescript');
 const { IDENTITY_OWNED_TABLES } = await tsImport('../../services/contracts/src/identity-module.ts', import.meta.url);
 
 const IDENTITY_OWNER = 'services/auth/src/';
+const ARTIFACT_OWNER = 'services/app/lib/artifacts/';
 const OWNERS = {
-  artifacts: 'services/app/lib/artifacts/',
+  artifacts: ARTIFACT_OWNER,
+  region_states: ARTIFACT_OWNER,
+  region_updates: ARTIFACT_OWNER,
+  region_snapshots: ARTIFACT_OWNER,
   ...Object.fromEntries(IDENTITY_OWNED_TABLES.map(table => [table, IDENTITY_OWNER])),
 };
 /** Owned tables no other module may row-lock either (see the header). */
 const LOCK_OWNED = new Set(IDENTITY_OWNED_TABLES);
-/** Path prefixes (ending in `/`) or exact files allowed to write any owned table outside the identity set. */
+/** Path prefixes (ending in `/`) or exact files allowed to rewrite artifact rows. */
 const IMPORTERS = [
   'services/app/lib/operations/testuser-erase.ts',
   'services/test-support/',
@@ -96,7 +100,7 @@ export function tableOwnershipViolations(files, importers = IMPORTERS) {
     for (const literal of literals(file, text)) {
       if (writes) for (const match of literal.text.matchAll(WRITE)) {
         const table = match[2].toLowerCase();
-        if (file.startsWith(OWNERS[table]) || (OWNERS[table] !== IDENTITY_OWNER && allowed(file, importers))) continue;
+        if (file.startsWith(OWNERS[table]) || (table === 'artifacts' && allowed(file, importers))) continue;
         violations.push(`  ${file}:${literal.line} ${match[1].replace(/\s+/g, ' ').toUpperCase()} ${table} — ${OWNERS[table] === IDENTITY_OWNER ? 'call the identity service (lib/platform services().identity)' : `call a ${OWNERS[table].replace(/^services\/app\//, '').replace(/\/$/, '')} function with this transaction`} instead`);
       }
       if (locks) for (const table of lockedIdentityTables(literal.text))
@@ -122,5 +126,5 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   if (violations.length) {
     console.error(`[table ownership] ${violations.length} write(s) to a table outside its owning module:\n${violations.join('\n')}`);
     process.exitCode = 1;
-  } else console.log(`[table ownership] artifacts and the identity tables are written only by their owners, and identity rows are locked only by theirs (${Math.round(performance.now() - started)} ms).`);
+  } else console.log(`[table ownership] artifact, region and identity tables are written only by their owners, and identity rows are locked only by theirs (${Math.round(performance.now() - started)} ms).`);
 }

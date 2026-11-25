@@ -1,6 +1,6 @@
 /**
  * THE WRITE MATRIX: stored policy shapes (none, and version 3 rules) × caller × door × operation, run through
- * mutateDataset (the one executor every write door calls) and compared with the decision lib/dataset-permissions/write
+ * the real page SQL route and the direct-write executor, compared with the decision lib/dataset-permissions/write
  * writes down (datasetRole, the stored rules, the access ceiling and the private ceiling). backend_only entries
  * need program trust, which no mutateDataset door carries (lib/dataset-permissions/__tests__/write.test.ts).
  */
@@ -10,18 +10,19 @@ import {ANONYMOUS_ACTOR,type AccessActor} from '@/lib/accounts';
 import {getDb} from '@/lib/platform';
 import {getArtifactById} from '@/lib/artifacts';
 import {createArtifactFromBody} from '@/lib/publish';
-import {account,refusal,write} from './dataset-fixture';
+import {sql} from '@/__tests__/page-sql-door-fixture';
+import {account,datasetPage,refusal,write} from './dataset-fixture';
 import { seedShares, setArtifact } from '@/__tests__/rows';
 
 useAppHarness();
 
 type Caller='owner'|'editor'|'viewer'|'signedIn'|'anonymous';
-type Door='generic'|'direct';
+type Door='page'|'direct';
 type Op='insert'|'update'|'delete';
 const CALLERS:Caller[]=['owner','editor','viewer','signedIn','anonymous'];
-const DOORS:Door[]=['generic','direct'];
+const DOORS:Door[]=['page','direct'];
 const OPS:Op[]=['insert','update','delete'];
-const SQL:Record<Op,string>={insert:'insert into public.rows values (2)',update:'update public.rows set n=n+10',delete:'delete from public.rows where n>100'};
+const SQL:Record<Op,string>={insert:'insert into public.rows (n) values (2)',update:'update public.rows set n=n+10',delete:'delete from public.rows where n>100'};
 
 const RULE_ROLES=['viewer','signed_in','anonymous'];
 /** Everyone reads; `writers` insert, update and delete every row (`backend_only`: only through a trusted program). */
@@ -71,15 +72,24 @@ it('decides every policy shape × caller × door × operation as the stored rule
   const f={db,owner,id:created.body.id as string,row:async()=>(await getArtifactById(f.id))!};
   await seedShares(f.db, { artifact_id: f.id, user_id: editor.id, email: editor.email, role: 'editor' }, { artifact_id: f.id, user_id: viewer.id, email: viewer.email, role: 'viewer' });
   await setArtifact(f.db, f.id, { dataset_policy: JSON.stringify(shape.policy), access: shape.access });
+  const page=await datasetPage(owner,f.id);
+  const people={owner,editor,viewer,signedIn,anonymous:null};
   const actors:Record<Caller,AccessActor>={owner:f.owner.actor,editor:editor.actor,viewer:viewer.actor,signedIn:signedIn.actor,anonymous:ANONYMOUS_ACTOR};
   for(const caller of CALLERS)for(const door of DOORS)for(const op of OPS){
    await f.db.query('DELETE FROM dataset_usage');
-   const guard=door==='generic'?{nativePolicy:true}:{};
    const key=`${shape.name}|${caller}|${door}|${op}`;
-   const result=await write(await f.row(),actors[caller],SQL[op],guard);
-   const reason=refusal(result);
-   expect(['dataset_read_only','policy_denied',null],`${key}: ${JSON.stringify(result)}`).toContain(reason);
-   actual[key]=reason===null;want[key]=expected(shape,caller,door,op);
+   let allowed;
+   if(door==='page'){
+    const result=await sql(page,people[caller],SQL[op].replace('public.rows','data_rows'));
+    expect([200,403,404],`${key}: ${JSON.stringify(result)}`).toContain(result.status);
+    allowed=result.status===200;
+   }else{
+    const result=await write(await f.row(),actors[caller],SQL[op]);
+    const reason=refusal(result);
+    expect(['dataset_read_only','policy_denied',null],`${key}: ${JSON.stringify(result)}`).toContain(reason);
+    allowed=reason===null;
+   }
+   actual[key]=allowed;want[key]=expected(shape,caller,door,op);
   }
  }
  expect(actual).toEqual(want);

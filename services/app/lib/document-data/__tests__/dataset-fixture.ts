@@ -11,7 +11,7 @@ import {isMutationRefused,mutateDataset} from '@/lib/document-data';
 export type Db=Awaited<ReturnType<typeof getDb>>;
 export async function account(name:string){
  const user=await createUser({email:`${name}@example.test`});const token=await mintAccountToken(name,user.id);
- return {id:user.id,email:user.email!,tokenId:token.id,actor:identityForUser(user.id,token.id,user.email)};
+ return {id:user.id,email:user.email!,token:token.token,tokenId:token.id,actor:identityForUser(user.id,token.id,user.email)};
 }
 /** A dataset published by a fresh owner through the create pipeline (public, readwrite unless `body` says otherwise). */
 export async function datasetFixture(body:Record<string,unknown>={}){
@@ -23,5 +23,15 @@ export async function datasetFixture(body:Record<string,unknown>={}){
  const rows=async()=>loadDatasetRows(await row());
  return {db,owner,id,row,rows};
 }
-export const write=(dataset:ArtifactRow,actor:AccessActor,sql:string,guard:Parameters<typeof mutateDataset>[4]={})=>mutateDataset(dataset,actor,sql,{},guard);
+export const write=(dataset:ArtifactRow,actor:AccessActor,sql:string,guard:Parameters<typeof mutateDataset>[3]={})=>mutateDataset(dataset,actor,[{sql,params:{}}],guard);
 export const refusal=(result:Awaited<ReturnType<typeof mutateDataset>>)=>isMutationRefused(result)?result.reason:null;
+
+/** A published page names the dataset as data_rows at its public SQL door. */
+export async function datasetPage(owner: Awaited<ReturnType<typeof account>>, id: string) {
+ const created=await createArtifactFromBody({
+  html:`<html><head><link rel="af-dataset" data-af-name="data_rows" href="ref:${id}"></head><body>Dataset</body></html>`,
+  visibility:'unlisted',
+ },{...owner.actor,tokenId:owner.tokenId},'http://localhost:3000');
+ expect(created.status,JSON.stringify(created.body)).toBe(201);
+ return created.body.id as string;
+}

@@ -5,7 +5,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useAppHarness } from '@/__tests__/harness';
 import {
-  CreationReplay, completeMutationReceipt, createArtifact, creationOperation, durableMutation, lookupCreation, mutationInvocation, pinMutationContext,
+  CreationReplay, completeMutationReceipt, createArtifact, prepareCreation, durableMutation, mutationInvocation, pinMutationContext,
   recoverCreationIds, reserveArtifactIds, reserveIds, setMutationInvocation, type MutationReceipt,
 } from '@/lib/artifacts';
 import { account, page, sql, trashRow } from '@/__tests__/artifact-fixtures';
@@ -20,24 +20,21 @@ describe('idempotent creation', () => {
   it('a key reserves one creation; a replay answers the stored reply, a changed payload is a mismatch', async () => {
     const owner = await account('owner@example.test');
     const reply = (row: { id: string }) => ({ status: 201, body: { id: row.id } });
-    await expect(creationOperation(owner, ORIGIN, 'short', {}, reply)).rejects.toBeInstanceOf(CreationReplay);
-    expect(await creationOperation(owner, ORIGIN, null, {}, reply)).toBeNull();
-    const operation = (await creationOperation(owner, ORIGIN, KEY, { title: 'A' }, reply))!;
-    const db = await harness.db();
-    expect(await lookupCreation(db, operation)).toBeNull();
+    await expect(prepareCreation(owner, ORIGIN, 'short', {}, reply)).rejects.toBeInstanceOf(CreationReplay);
+    expect(await prepareCreation(owner, ORIGIN, null, {}, reply)).toBeNull();
+    const operation = (await prepareCreation(owner, ORIGIN, KEY, { title: 'A' }, reply))!;
     const row = await createArtifact(null, owner.userId, page('A'), { operation });
-    expect(await lookupCreation(db, operation)).toEqual({ status: 201, body: { id: row.id } });
+    await expect(prepareCreation(owner, ORIGIN, KEY, { title: 'A' }, reply)).rejects.toMatchObject({ reply: { status: 201, body: { id: row.id } } });
     await expect(createArtifact(null, owner.userId, page('A'), { operation })).rejects.toMatchObject({ reply: { status: 201, body: { id: row.id } } });
-    const changed = (await creationOperation(owner, ORIGIN, KEY, { title: 'B' }, reply))!;
-    expect(await lookupCreation(db, changed)).toEqual({ status: 409, body: { error: 'idempotency_mismatch' } });
+    await expect(prepareCreation(owner, ORIGIN, KEY, { title: 'B' }, reply)).rejects.toMatchObject({ reply: { status: 409, body: { error: 'idempotency_mismatch' } } });
     // The same key from another origin is another operation.
-    expect(await lookupCreation(db, (await creationOperation(owner, 'https://other.test', KEY, { title: 'A' }, reply))!)).toBeNull();
+    expect(await prepareCreation(owner, 'https://other.test', KEY, { title: 'A' }, reply)).not.toBeNull();
     expect(await recoverCreationIds(owner, ORIGIN, [KEY, 'unknown-key-000001'])).toEqual(new Map([[KEY, row.id]]));
     expect(await recoverCreationIds(owner, ORIGIN, [])).toEqual(new Map());
     await sql("UPDATE artifact_creation_operations SET response_until=now()-interval '1 second'");
-    expect(await lookupCreation(db, operation)).toEqual({ status: 200, body: { id: row.id, recovered: true, response_expired: true } });
+    await expect(prepareCreation(owner, ORIGIN, KEY, { title: 'A' }, reply)).rejects.toMatchObject({ reply: { status: 200, body: { id: row.id, recovered: true, response_expired: true } } });
     await trashRow(row.id);
-    expect(await lookupCreation(db, operation)).toEqual({ status: 410, body: { error: 'result_deleted', id: row.id } });
+    await expect(prepareCreation(owner, ORIGIN, KEY, { title: 'A' }, reply)).rejects.toMatchObject({ reply: { status: 410, body: { error: 'result_deleted', id: row.id } } });
   });
 
   it('reserved identities: a batch is 100 stable ids in its owner\'s namespace; a count reservation is consumed once', async () => {

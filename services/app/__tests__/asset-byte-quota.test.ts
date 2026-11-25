@@ -18,11 +18,12 @@ import { useAppHarness } from '@/__tests__/harness';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { getDb } from '@/lib/platform';
 import { createUser } from '@/lib/accounts';
-import { assetByteQuotaExceeded } from '@/lib/artifacts';
+import { assetByteQuotaExceeded, getArtifactById } from '@/lib/artifacts';
 import { assetBytesForToken, setAssetByteQuotaForTests } from '@/lib/artifacts/testing';
 import { POST as bearerCreate } from '@/app/api/artifacts/route';
-import { request } from '@/__tests__/harness';
-import { seedArtifacts } from '@/__tests__/rows';
+import { PUT as bearerReplace } from '@/app/api/artifacts/[id]/route';
+import { params, request } from '@/__tests__/harness';
+import { seedArtifacts, seedShares } from '@/__tests__/rows';
 
 useAppHarness();
 
@@ -147,6 +148,26 @@ describe('the image doors ask the byte quota', () => {
       method: 'POST', token: t.token, json: { image: `data:image/png;base64,${PNG.toString('base64')}` },
     }));
     expect(res.status).toBe(201);
+  });
+
+  it('charges an editor’s replacement to the stored owner', async () => {
+    const owner = await mintToken('owner'), editor = await mintToken('editor');
+    const image = `data:image/png;base64,${PNG.toString('base64')}`;
+    const first = await bearerCreate(request('/api/artifacts', {method:'POST',token:owner.token,json:{image}}));
+    expect(first.status).toBe(201);
+    const {id,version,state} = await first.json();
+    const db = await getDb();
+    await seedShares(db, {artifact_id:id,user_id:editor.userId,email:editor.email!,role:'editor'});
+    await seedWebAsset(owner.id, 'https://a.example/owner.png', 4_000_000, owner.userId);
+    setAssetByteQuotaForTests(1_000_000);
+    expect(await assetByteQuotaExceeded(editor.id)).toBe(false);
+
+    const refused = await bearerReplace(request(`/api/artifacts/${id}`, {
+      method:'PUT',token:editor.token,json:{image,expectedVersion:version,expectedState:state},
+    }),params(id));
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toMatchObject({error:'quota_exceeded'});
+    expect((await getArtifactById(id))?.version).toBe(version);
   });
 });
 

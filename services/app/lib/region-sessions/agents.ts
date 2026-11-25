@@ -19,10 +19,10 @@ import * as Y from 'yjs';
 import { canEdit } from '@artifactbin/contracts/sharing';
 import { DOC_REGION, type RegionContentReply, type RegionFlushReply, type RegionFormat, type RegionWriteReply } from '@artifactbin/contracts/region-sessions';
 import { applyRegionRevision, editableRegions, isRegionId, LiveRegionRefusal, regionMarkdown, validateRegionState, type PageRegion } from '@/lib/live-regions';
-import { checkpointLiveRegions, completeMutationReceipt, currentPage, editablePage, liveRegionDoc, logRegionUpdate, notifyRegions, readableArtifact, saveLiveRegionsInTx, type MutationReceipt } from '@/lib/artifacts';
+import { checkpointLiveRegions, completeMutationReceipt, currentPage, editablePage, liveRegionDoc, openPageRegion, readRegionSnapshot, recordRegionUpdate, readableArtifact, saveLiveRegionsInTx, type MutationReceipt } from '@/lib/artifacts';
 import type { AccessActor } from '@/lib/accounts';
 import { ID_RE, type Db } from '@/lib/platform';
-import { NOT_FOUND, refuse, regionRow, regionStore, type RegionAnswer } from './sessions';
+import { NOT_FOUND, refuse, regionStore, type RegionAnswer } from './sessions';
 
 interface RegionWrite {
   /** Exactly one of markdown and html. */
@@ -82,15 +82,13 @@ export function agentRegions(db: () => Promise<Db>, now: () => number): AgentReg
           if (!page || page.format !== 'html') return NOT_FOUND;
           const region = target(editableRegions(page.source ?? ''), regionId);
           if (!isRegion(region)) return region;
-          const row = await regionRow(tx, artifactId, page.version, region);
+          const row = await openPageRegion(tx, artifactId, page.version, region);
           const stale = refuse('region_snapshot_missing', { version: page.version });
-          const saved = (await tx.query<{ snapshot: Uint8Array }>(
-            'SELECT snapshot FROM region_snapshots WHERE artifact_id = $1 AND region_id = $2 AND version = $3', [artifactId, region.id, request.baseVersion],
-          )).rows[0];
+          const saved = await readRegionSnapshot(tx, artifactId, region.id, request.baseVersion);
           if (!saved) return stale;
           const doc = await liveRegionDoc(tx, artifactId, row);
           let update: Uint8Array;
-          try { ({ update } = applyRegionRevision({ kind: row.kind, live: Y.encodeStateAsUpdate(doc), savedSnapshot: saved.snapshot, ...revised })); }
+          try { ({ update } = applyRegionRevision({ kind: row.kind, live: Y.encodeStateAsUpdate(doc), savedSnapshot: saved, ...revised })); }
           catch (error) {
             if (!(error instanceof LiveRegionRefusal)) throw error;
             return error.code === 'unsupported_content' ? refuse('unsupported_content', { details: [...error.details] }) : stale;
@@ -98,14 +96,8 @@ export function agentRegions(db: () => Promise<Db>, now: () => number): AgentReg
           if (!isEmptyUpdate(update)) {
             Y.applyUpdate(doc, update);
             try { validateRegionState(row.kind,doc); } catch(error) { if(error instanceof LiveRegionRefusal)return refuse(error.code==='too_large'?'too_large':'unsupported_content'); throw error; }
-            const seq = row.last_seq + 1;
-            const at = new Date(now()).toISOString();
-            await logRegionUpdate(tx, artifactId, region.id, seq, Y.decodeUpdate(update).structs[0]?.id.client ?? 0, update, actor);
-            await tx.query(
-              'UPDATE region_states SET last_seq = $3, last_update_at = $4, dirty_since = COALESCE(dirty_since, $4) WHERE artifact_id = $1 AND region_id = $2',
-              [artifactId, region.id, seq, at],
-            );
-            await notifyRegions(tx, artifactId, `${region.id}:${seq}`);
+            const clientId = Y.decodeUpdate(update).structs[0]?.id.client ?? 0;
+            await recordRegionUpdate(tx, artifactId, row, {clientId,update}, actor, new Date(now()).toISOString());
           }
           const save = await saveLiveRegionsInTx(tx, actor, artifactId);
           if (!save) return NOT_FOUND;

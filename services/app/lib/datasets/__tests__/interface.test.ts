@@ -4,6 +4,8 @@
  * public mutation throttle and the JSON door's error mapping.
  */
 import { describe, expect, it, vi } from 'vitest';
+import { resolveUserColumnScope, retainUserScope, validateUserContent } from '../user-fields';
+import { validateStoredDatasetPolicy } from '../policy/validation';
 import type { DatasetColumn } from '@artifactbin/contracts/sql';
 import { useAppHarness } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
@@ -13,9 +15,9 @@ import { seedOwnerJoin } from '@/lib/social';
 import {
   DatasetError, catalogOf, datasetResponse, importedRows, importedTables, loadDatasetRows,
   publicCatalogOf, publishDataset, publishFile, publishImage, publishPdf, publishVizRecipe,
-  readFileUpload, resolveUserColumnScope, retainUserScope, serveStoredFile,
+  readFileUpload, serveStoredFile,
   storeDatasetRows, storeFileContent, storeImageContent, storePdfContent, storedMediaReferences, throttlePublicMutation, uploadedSha256,
-  userOptions, validateDatasetPolicyForRow, validateStoredDatasetPolicy, validateUserContent, validateUserWrites, type DatasetCatalog,
+  userOptions, validateDatasetPolicyForRow, validateUserWrites, type DatasetCatalog,
 } from '@/lib/datasets';
 import { seedArtifacts } from '@/__tests__/rows';
 import { Reply } from '@/lib/http';

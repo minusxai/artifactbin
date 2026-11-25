@@ -1,8 +1,7 @@
 /**
- * A PAGE'S LIVE REGIONS AS PAGE STORAGE: the region rows (lib/platform/schema region_states, region_updates,
- * region_snapshots) as every head-bumping write of an HTML page has to keep them. The session side (opening a region,
- * accepting validated updates, streaming them) is lib/region-sessions; what a new page version does to the rows is
- * here, beside the writes that make versions (store.ts):
+ * LIVE REGION STORAGE: writes to region_states, region_updates and region_snapshots for page regions and dataset
+ * cells. lib/region-sessions owns the editors' protocol and decides which transitions to run.
+ * Page versions keep their region state in the same transaction:
  *
  *  - SAVING ("compaction"): the merged live text of every region with unsaved edits is written into the saved
  *    source (lib/live-regions compactRegion), which becomes one new version; the id write-back is logged, the state
@@ -13,12 +12,12 @@
  *  - Every new version carries a snapshot of EVERY live region (a clean one's is copied forward), because the next
  *    whole-page write merges from the head's.
  *
- * Lock order (as every page write): the artifacts row first (store.ts lockArtifactWrite, FOR UPDATE), then the
- * region rows, FOR UPDATE. Wakeups are `pg_notify(regionsChannel)` inside the transaction, delivered at commit.
+ * Transitions take the caller's transaction. When a write locks both, it locks the artifact row before its region
+ * rows. Wakeups are `pg_notify(regionsChannel)` inside the transaction, delivered at commit.
  */
 import * as Y from 'yjs';
 import { regionsChannel } from '@artifactbin/contracts/region-sessions';
-import { applyRegionRevision, compactRegion, editableRegions, LiveRegionRefusal, openRegionDoc, type RegionKind } from '@/lib/live-regions';
+import { applyRegionRevision, compactRegion, createCellState, createRegionState, editableRegions, LiveRegionRefusal, openRegionDoc, type PageRegion, type RegionKind } from '@/lib/live-regions';
 import type { HtmlIdentityLedger } from '../html-page';
 import type { AccessActor } from '@/lib/accounts';
 import { editorScope, type ArtifactRow } from '@/lib/artifact-access';
@@ -27,6 +26,8 @@ import { Reply, reply } from '../http';
 
 /** Snapshots are kept for the last 50 versions or 7 days, whichever keeps more; logged updates for 30 days. */
 const SNAPSHOT_VERSIONS_KEPT = 50;
+const FOLD_EVERY = 100;
+const EMPTY_UPDATE = Y.encodeStateAsUpdate(openRegionDoc());
 
 export interface RegionRow {
   region_id: string;
@@ -76,7 +77,7 @@ export async function liveRegionDoc(q: Queryable, artifactId: string, row: Pick<
 }
 
 /** One logged update, attributed. */
-export async function logRegionUpdate(tx: Queryable, artifactId: string, regionId: string, seq: number, clientId: number, update: Uint8Array, actor: Pick<AccessActor, 'userId' | 'tokenId'>): Promise<void> {
+async function logRegionUpdate(tx: Queryable, artifactId: string, regionId: string, seq: number, clientId: number, update: Uint8Array, actor: Pick<AccessActor, 'userId' | 'tokenId'>): Promise<void> {
   await tx.query(
     'INSERT INTO region_updates (artifact_id, region_id, seq, client_id, "update", actor_user_id, actor_token_id) VALUES ($1, $2, $3, $4, $5, $6, $7)',
     [artifactId, regionId, seq, clientId, bytes(update), actor.userId, actor.tokenId || null],
@@ -84,8 +85,67 @@ export async function logRegionUpdate(tx: Queryable, artifactId: string, regionI
 }
 
 /** Wakes the page's region streams (a pointer: they catch up from the rows). */
-export async function notifyRegions(tx: Queryable, artifactId: string, payload: string): Promise<void> {
+async function notifyRegions(tx: Queryable, artifactId: string, payload: string): Promise<void> {
   await tx.query('SELECT pg_notify($1, $2)', [regionsChannel(artifactId), payload]);
+}
+
+/** Creates the region from the saved page on first use, with the snapshot a whole-page write will merge from. */
+export async function openPageRegion(tx: Queryable, artifactId: string, savedVersion: number, region: PageRegion): Promise<RegionRow> {
+  const [existing] = await lockedRegionRows(tx, artifactId, region.id);
+  if (existing) return existing;
+  const initial = createRegionState(region.kind, region.inner);
+  const created = await insertRegionState(tx, artifactId, region.id, region.kind, initial.state, savedVersion);
+  if (created) await tx.query(
+    'INSERT INTO region_snapshots (artifact_id, region_id, version, snapshot) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING',
+    [artifactId, region.id, savedVersion, bytes(initial.snapshot)],
+  );
+  return (await lockedRegionRows(tx, artifactId, region.id))[0]!;
+}
+
+async function insertRegionState(tx: Queryable, artifactId: string, regionId: string, kind: RegionKind, state: Uint8Array, version: number): Promise<boolean> {
+  const inserted = await tx.query(
+    'INSERT INTO region_states (artifact_id, region_id, kind, state, saved_version) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING RETURNING region_id',
+    [artifactId, regionId, kind, bytes(state), version],
+  );
+  return inserted.rows.length > 0;
+}
+
+export async function readRegionSnapshot(q: Queryable, artifactId: string, regionId: string, version: number): Promise<Uint8Array | null> {
+  return (await q.query<{snapshot:Uint8Array}>(
+    'SELECT snapshot FROM region_snapshots WHERE artifact_id = $1 AND region_id = $2 AND version = $3',
+    [artifactId, regionId, version],
+  )).rows[0]?.snapshot ?? null;
+}
+
+/** Register an opener's client id on a locked region row. The first log entry proves who holds it. */
+export async function recordRegionOpen(tx: Queryable, artifactId: string, row: RegionRow, clientId: number, actor: AccessActor): Promise<number> {
+  const seq = row.last_seq + 1;
+  await logRegionUpdate(tx, artifactId, row.region_id, seq, clientId, EMPTY_UPDATE, actor);
+  await tx.query('UPDATE region_states SET last_seq = $3 WHERE artifact_id = $1 AND region_id = $2', [artifactId, row.region_id, seq]);
+  return seq;
+}
+
+/** Records a validated update on a locked row. Sessions fold periodically; agent writes immediately checkpoint. */
+export async function recordRegionUpdate(tx: Queryable, artifactId: string, row: RegionRow, request: {clientId:number;update:Uint8Array}, actor: AccessActor, at: string, doc?: Y.Doc): Promise<number> {
+  const seq = row.last_seq + 1;
+  await logRegionUpdate(tx, artifactId, row.region_id, seq, request.clientId, request.update, actor);
+  const fold = doc && seq - row.state_seq >= FOLD_EVERY ? bytes(Y.encodeStateAsUpdate(doc)) : undefined;
+  await tx.query(
+    `UPDATE region_states SET last_seq = $3, last_update_at = $4, dirty_since = COALESCE(dirty_since, $4)${fold ? ', state = $5, state_seq = $3' : ''}
+     WHERE artifact_id = $1 AND region_id = $2`,
+    [artifactId, row.region_id, seq, at, ...(fold ? [fold] : [])],
+  );
+  await notifyRegions(tx, artifactId, `${row.region_id}:${seq}`);
+  return seq;
+}
+
+export async function installMigratedRegion(tx: Queryable, artifactId: string, version: number, region: {id:string;state:Uint8Array;snapshot:Uint8Array}, previousCreatedAt: string): Promise<void> {
+  await tx.query(
+    `INSERT INTO region_states(artifact_id,region_id,kind,state,saved_version,created_at)
+     VALUES($1,$2,'rich-native-v1',$3,$4,GREATEST(clock_timestamp(),$5::timestamptz+interval '1 millisecond'))`,
+    [artifactId,region.id,bytes(region.state),version,previousCreatedAt],
+  );
+  await tx.query('INSERT INTO region_snapshots(artifact_id,region_id,version,snapshot) VALUES($1,$2,$3,$4)',[artifactId,region.id,version,bytes(region.snapshot)]);
 }
 
 /**
@@ -173,6 +233,66 @@ async function deleteRegionRows(tx: Queryable, artifactId: string, regionIds?: r
   for (const table of ['region_updates', 'region_snapshots', 'region_states']) {
     await tx.query(`DELETE FROM ${table} WHERE artifact_id = $1${regionIds ? ' AND region_id = ANY($2::text[])' : ''}`, regionIds ? [artifactId, [...regionIds]] : [artifactId]);
   }
+}
+
+/** Cell snapshots use version 0, while the row records the dataset version it last saw. */
+async function keepCellSnapshot(tx: Queryable, datasetId: string, regionId: string, snapshot: Uint8Array): Promise<void> {
+  await tx.query(
+    `INSERT INTO region_snapshots (artifact_id, region_id, version, snapshot) VALUES ($1, $2, 0, $3)
+     ON CONFLICT (artifact_id, region_id, version) DO UPDATE SET snapshot = EXCLUDED.snapshot, created_at = now()`,
+    [datasetId, regionId, bytes(snapshot)],
+  );
+}
+
+export async function openCellRegion(tx: Queryable, datasetId: string, regionId: string, value: string, version: number): Promise<RegionRow> {
+  const initial = createCellState(value);
+  await insertRegionState(tx, datasetId, regionId, 'text', initial.state, version);
+  await keepCellSnapshot(tx, datasetId, regionId, initial.snapshot);
+  return (await lockedRegionRows(tx, datasetId, regionId))[0]!;
+}
+
+/** Reconcile a locked cell to the dataset head, with an optional merged-in update belonging to no editor. */
+export async function reconcileCellRegion(tx: Queryable, datasetId: string, row: RegionRow, version: number, revision?: {update:Uint8Array;snapshot:Uint8Array}): Promise<number> {
+  if (!revision) {
+    await tx.query('UPDATE region_states SET saved_version = $3 WHERE artifact_id = $1 AND region_id = $2', [datasetId, row.region_id, version]);
+    return row.last_seq;
+  }
+  const seq = row.last_seq + 1;
+  await logRegionUpdate(tx, datasetId, row.region_id, seq, clientOf(revision.update), revision.update, {userId:null,tokenId:null});
+  await tx.query('UPDATE region_states SET last_seq = $3, saved_version = $4 WHERE artifact_id = $1 AND region_id = $2', [datasetId, row.region_id, seq, version]);
+  await keepCellSnapshot(tx, datasetId, row.region_id, revision.snapshot);
+  await notifyRegions(tx, datasetId, `${row.region_id}:${seq}`);
+  return seq;
+}
+
+export async function closeCellRegion(tx: Queryable, datasetId: string, regionId: string): Promise<void> {
+  const [row] = await lockedRegionRows(tx, datasetId, regionId);
+  if (!row) return;
+  await deleteRegionRows(tx, datasetId, [regionId]);
+  await notifyRegions(tx, datasetId, `closed:${regionId}`);
+}
+
+/** Text returned to its stored value, so the locked cell is clean without a dataset write. */
+export async function cleanCellRegion(tx: Queryable, datasetId: string, regionId: string, doc: Y.Doc, seq: number): Promise<void> {
+  await tx.query('UPDATE region_states SET state = $3, state_seq = $4, dirty_since = NULL WHERE artifact_id = $1 AND region_id = $2', [datasetId, regionId, bytes(Y.encodeStateAsUpdate(doc)), seq]);
+  await keepCellSnapshot(tx, datasetId, regionId, Y.encodeSnapshot(Y.snapshot(doc)));
+}
+
+/** In the dataset write's commit: advance snapshots, leaving edits newer than each saved sequence dirty. */
+export async function commitCellRegions(tx: Queryable, datasetId: string, previousVersion: number, version: number, cells: readonly {regionId:string;doc:Y.Doc;seq:number}[]): Promise<void> {
+  for (const {regionId, doc, seq} of cells) {
+    await lockedRegionRows(tx, datasetId, regionId);
+    await tx.query(
+      `UPDATE region_states SET state = CASE WHEN state_seq <= $3 THEN $4 ELSE state END, state_seq = GREATEST(state_seq, $3), saved_version = $5,
+         dirty_since = CASE WHEN last_seq > $3 THEN dirty_since ELSE NULL END
+       WHERE artifact_id = $1 AND region_id = $2`,
+      [datasetId, regionId, seq, bytes(Y.encodeStateAsUpdate(doc)), version],
+    );
+    await keepCellSnapshot(tx, datasetId, regionId, Y.encodeSnapshot(Y.snapshot(doc)));
+  }
+  // Live cells the write did not touch hold the value they saw at the new version too.
+  await tx.query("UPDATE region_states SET saved_version = $3 WHERE artifact_id = $1 AND region_id LIKE 'cell:%' AND saved_version = $2", [datasetId, previousVersion, version]);
+  await notifyRegions(tx, datasetId, `saved:${version}`);
 }
 
 /**
@@ -275,11 +395,11 @@ export async function planRegionMerge(tx: Queryable, current: ArtifactRow, page:
     const region = declared.get(row.region_id);
     if (!region || region.kind !== row.kind) { closed.push(row.region_id); continue; }
     const doc = await liveRegionDoc(tx, current.id, row);
-    const saved = options.from === 'live' ? { snapshot: Y.encodeSnapshot(Y.snapshot(doc)) }
-      : (await tx.query<{ snapshot: Uint8Array }>('SELECT snapshot FROM region_snapshots WHERE artifact_id = $1 AND region_id = $2 AND version = $3', [current.id, row.region_id, current.version])).rows[0];
+    const saved = options.from === 'live' ? Y.encodeSnapshot(Y.snapshot(doc))
+      : await readRegionSnapshot(tx, current.id, row.region_id, current.version);
     if (!saved) return reply({ error: 'region_snapshot_missing', regionId: row.region_id }, 409);
     let revision: { update: Uint8Array };
-    try { revision = applyRegionRevision({ kind: row.kind, live: Y.encodeStateAsUpdate(doc), savedSnapshot: saved.snapshot, html: region.inner }); }
+    try { revision = applyRegionRevision({ kind: row.kind, live: Y.encodeStateAsUpdate(doc), savedSnapshot: saved, html: region.inner }); }
     catch (error) {
       if (!(error instanceof LiveRegionRefusal)) throw error;
       if (error.code === 'unsupported_content') return reply({ error: 'unsupported_content', regionId: row.region_id, details: error.details }, 422);

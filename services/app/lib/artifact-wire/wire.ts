@@ -104,29 +104,6 @@ export function artifactSummaryToWire(
 }
 
 /**
- * The write echo, priced.
- *
- * Stored markup is CANONICAL — a `<p>` holding a block becomes a `<div>`, a
- * `<Helmet>` is hoisted — so an agent must edit against what was STORED, not
- * what it sent. That is why every write echoes the document. But when
- * canonicalization changed nothing, the echo is the caller's own bytes handed
- * straight back, and it is not free: it lands in the agent's context and is
- * replayed on every later turn (~3.5k tokens per write on a deck, fifteen
- * write attempts in one measured run).
- *
- * So the field is present exactly when it is NEWS, and `markup_changed` names
- * which case it is — an absent field alone would be ambiguous between "same as
- * you sent" and "this response has no markup".
- *
- * A caller that sent no markup (a dataset write, a metadata-only PUT) is
- * unchanged: there is nothing to compare, so the echo rides as before.
- */
-function markupEcho(sent: unknown, stored: string | null): Record<string, unknown> {
-  if (typeof sent !== 'string') return { markup: stored };
-  return sent === stored ? { markup_changed: false } : { markup_changed: true, markup: stored };
-}
-
-/**
  * The open-thread count a COMMITTED row carries: the commit counts it in the statement that writes the row
  * (store setMetadataFor). A row with no count is a data tier, which has no threads.
  */
@@ -334,16 +311,14 @@ export async function placementFor(
 
 /**
  * WHAT A REPLACE ANSWERS — the echo of the stored row after the replace door
- * (story/publish/requests) wrote it, with the dependents it touched and the
- * refresh warnings it computed. The open-annotation count is the caller's: the
+ * wrote it, with its affected dependents. The open-annotation count is the caller's: the
  * commit that wrote the row counted it, so neither publishing nor this module
  * reaches the annotation store.
  */
 export function replacedArtifactWire(
   row: ArtifactRow,
   base: string,
-  sentMarkup: unknown,
-  { affected, warnings, openAnnotations }: { affected: ArtifactRow[] | null; warnings: Array<{ id: string; title: string | null; details: string[] }>; openAnnotations: number },
+  { affected, openAnnotations }: { affected: ArtifactRow[] | null; openAnnotations: number },
   owner: UserPagesOwner | null = null,
 ): Record<string, unknown> {
   return {
@@ -358,14 +333,13 @@ export function replacedArtifactWire(
     // the only thing it is for.
     edit_id: row.edit_id, state: artifactState(row),...(row.shares!==undefined?{shares:row.shares}:{}),
     title:row.title,description:row.description,theme:row.meta.theme??null,template:row.meta.template??null,link_role:row.link_role??'viewer',parent_id:parentOf(row),format:row.format,
-    ...(row.format==='html'?{html:row.source,...(row.meta.htmlIdentityCarry?{identity:row.meta.htmlIdentityCarry}:{})}:markupEcho(sentMarkup, row.source)),
+    ...(row.format==='html'?{html:row.source,...(row.meta.htmlIdentityCarry?{identity:row.meta.htmlIdentityCarry}:{})}:{markup:row.source}),
     // A dataset echoes its WRITE acl too: an agent that just set it should not
     // have to re-read to see what it got.
     ...(row.format === 'dataset' ? { access: row.access } : {}),
     // Annotations are sidecar state a replace cannot touch — the count is the
     // echo's signal that feedback exists (the GET inlines the full set).
     ...(row.format === 'html' ? { open_annotations: openAnnotations } : {}),
-    ...(warnings.length ? { warnings } : {}),
   };
 }
 
@@ -377,7 +351,7 @@ export function replacedArtifactWire(
  * shape — a fork that answered its own vocabulary would make the copy a
  * second thing to learn.
  */
-export function createdArtifactWire(row: ArtifactRow, base: string, sentMarkup: unknown, owner: UserPagesOwner | null = null): Record<string, unknown> {
+export function createdArtifactWire(row: ArtifactRow, base: string, owner: UserPagesOwner | null = null): Record<string, unknown> {
   const meta = row.meta as { columns?: unknown; rowCount?: unknown; slots?: unknown; bytes?: number; pages?: number; filename?: string; contentType?: string };
   return {
     ...monitoringGuidance(base,row.id,row.format),
@@ -390,7 +364,7 @@ export function createdArtifactWire(row: ArtifactRow, base: string, sentMarkup: 
     // Where it landed. `parent_id` is what a caller writes back, so the create
     // reply hands it straight into the next call.
     parent_id: parentOf(row), ancestor_ids: row.ancestor_ids,
-    ...(row.format==='html'?{html:row.source}:markupEcho(sentMarkup, row.source)),
+    ...(row.format==='html'?{html:row.source}:{markup:row.source}),
     // Echoes teach the agent its bindable surface without a second round trip.
     ...(row.format === 'dataset' ? datasetCreateFields(row.id, meta.columns, meta.rowCount, meta as { totalRows?: number; truncated?: boolean }, row.access) : {}),
     ...(row.format === 'viz' ? { slots: meta.slots } : {}),

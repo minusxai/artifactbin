@@ -9,7 +9,7 @@ import { canonicalizeHtmlPage, type HtmlIdentityLedger, type HtmlPageAnalysis, t
 import {parseSource} from '../html-page/html-source';
 import {scriptFingerprint} from '../html-autofix';
 import {assertOwnerPlacement,assertDestination,newArtifactDestination,permitsMemberPage} from './ownership';
-import { identityForUser, type AccessActor } from '@/lib/accounts';
+import { identityForUser, type AccessActor, type PublicationActor } from '@/lib/accounts';
 import { groupAdminSql } from '@/lib/groups';
 import type {ArtifactDestination} from '@artifactbin/contracts/groups';
 import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, groupMemberPredicate, editorScope, lockOrder, ownerPredicate, ownerScope, sharingScope, writerFor, type ArtifactRow, type Scope } from '@/lib/artifact-access';
@@ -25,22 +25,20 @@ import {normalizeNewHtmlPage} from './new-page';
 import { seedOwnerJoin } from '@/lib/social';
 import { QueryApprovalError, assertAudienceChange, endQueryApprovals } from '@/lib/query-approvals';
 import { claimArtifactId } from './identities';
-import { resolveDefinitionScope, validateUserContent, retainUserScope, resolveUserColumnScope, catalogOf, DatasetError, liveConnectionOf, loadDatasetRows } from '@/lib/datasets';
+import { bindDatasetUserScope, datasetCreationDefaults, DatasetError, liveConnectionOf, prepareDatasetReplacement, prepareDatasetRestore, validateDatasetPolicyForRow, validatePublishedDataset } from '@/lib/datasets';
 import { userKindOf } from '@/lib/user-kinds';
 import { reserveCreation, completeCreation, type CreationOperation } from './creation-ledger';
 import { artifactState, observedChange, versionConflict, type ConflictChange } from './state';
 import { trackEvent } from '../analytics';
 import { ALLOW_PUBLIC_VISIBILITY, getDb, retryOnConflict, type Queryable, actorSubject, emit, generateFileId } from '../platform';
 import { assetByteQuotaExceeded, groupAssetByteQuotaExceeded } from './asset-quota';
-import { closeLiveRegions, liveRevisionOf, pageLedger, planRegionMerge, planRegionSave, type RegionPlan, type SaveDue } from './regions';
+import { closeLiveRegions, installMigratedRegion, liveRevisionOf, pageLedger, planRegionMerge, planRegionSave, type RegionPlan, type SaveDue } from './regions';
 import { docTitleAfterSave } from './doc-title';
 import { withWebAssets } from './web-assets';
-import { readOnlyDatasetPolicy, validateDatasetPolicyForRow, validateStoredDatasetPolicy } from '../datasets';
 import type { ArtifactFormat } from '@artifactbin/contracts/artifact-format';
 import { Reply, reply, thrownMessage } from '../http';
 import { servableDocument } from './servable';
 import { ancestorsForMove, notifyParent, parentOf } from './placement';
-import type { DatasetColumn } from '@/lib/dataflow';
 import type { DatasetAccess, ShareEntry, ShareRole, Visibility } from '@artifactbin/contracts/sharing';
 
 const openAnnotationsSql=(artifactId:string)=>`(SELECT count(*)::int FROM annotations a WHERE a.artifact_id=${artifactId} AND a.root_id IS NULL AND a.deleted_at IS NULL AND a.status='open')`;
@@ -104,7 +102,7 @@ const SUMMARY_COLS = 'id, user_id, group_id, title, description, format, meta, v
  * THE COUNT QUOTA FOR A GROUP'S SIGN-INS (lib/accounts `GroupPrincipal`): charged to the GROUP, never the sign-in's
  * rotating token: every row any of the group's sign-ins created, deleted or not, against the same cap.
  */
-export async function groupArtifactQuotaExceeded(groupId: string, creating = 1): Promise<boolean> {
+async function groupArtifactQuotaExceeded(groupId: string, creating = 1): Promise<boolean> {
   const cap = artifactQuotaLimit();
   if (!cap) return false;
   const r = await (await getDb()).query<{ n: number }>('SELECT COUNT(*)::int AS n FROM artifacts WHERE token_id IN (SELECT id FROM tokens WHERE group_id = $1)', [groupId]);
@@ -128,6 +126,12 @@ export async function artifactQuotaExceeded(tokenId: string, creating = 1): Prom
   return (r.rows[0]?.n ?? 0) + creating > cap;
 }
 
+/** A group sign-in charges the group; all other publications charge the presenting token. */
+export async function publicationCountQuotaExceeded(actor: PublicationActor): Promise<'group' | 'token' | null> {
+  if (actor.principalGroup) return await groupArtifactQuotaExceeded(actor.principalGroup.id) ? 'group' : null;
+  return await artifactQuotaExceeded(actor.tokenId!) ? 'token' : null;
+}
+
 /** First owning report attachment freezes unresolved memberOf scopes atomically. */
 async function bindCurrentUserScopes(tx:Queryable,document:ArtifactRow,memberPublication=false):Promise<void> {
  if(document.format!=='html')return;
@@ -136,15 +140,13 @@ async function bindCurrentUserScopes(tx:Queryable,document:ArtifactRow,memberPub
  // The one multi-artifact lock order (lib/artifact-access lockOrder): the page is held; its datasets by id.
  for(const ref of [...refs].sort((a,b)=>lockOrder(a.id,b.id))) {
   const dataset=(await artifactQuery<ArtifactRow>(tx,"SELECT * FROM artifacts WHERE id=$1 AND format='dataset' AND deleted_at IS NULL FOR UPDATE",[ref.id])).rows[0];
-  const catalog=dataset?catalogOf(dataset):null;
-  if(!dataset||!catalog||!catalog.tables.some(t=>t.columns.some(c=>c.constraints?.memberOf?.includes('current'))))continue;
-  if(memberPublication || (document.group_id ? dataset.group_id!==document.group_id : dataset.group_id || (document.user_id ? dataset.user_id!==document.user_id : dataset.token_id!==document.token_id)))throw new DatasetError('Only the dataset owner can bind memberOf current to a report',403);
-  const columns=(cs:DatasetColumn[])=>resolveUserColumnScope(cs,document.id);
-  const bound={...catalog,tables:catalog.tables.map(t=>({...t,columns:columns(t.columns)}))};
-  const source=resolveDefinitionScope(dataset.source,document.id)??null;
+  if (!dataset) continue;
+  const ownsDataset = document.group_id ? dataset.group_id===document.group_id
+    : !dataset.group_id && (document.user_id ? dataset.user_id===document.user_id : dataset.token_id===document.token_id);
+  const bound = bindDatasetUserScope(dataset,document.id,!memberPublication&&ownsDataset);
+  if (!bound) continue;
   await archiveVersion(tx,dataset);
-  const meta={...dataset.meta,userScopeDocument:document.id,catalog:bound,columns:columns((dataset.meta.columns??[]) as DatasetColumn[])};
-  const updated=(await artifactQuery<ArtifactRow>(tx,'UPDATE artifacts SET meta=$2,source=$3,version=version+1,edit_id=$4,updated_at=now() WHERE id=$1 RETURNING *',[dataset.id,JSON.stringify(meta),source,newEditId()])).rows[0];
+  const updated=(await artifactQuery<ArtifactRow>(tx,'UPDATE artifacts SET meta=$2,source=$3,version=version+1,edit_id=$4,updated_at=now() WHERE id=$1 RETURNING *',[dataset.id,JSON.stringify(bound.meta),bound.source,newEditId()])).rows[0];
   await logWholeDocumentWrite(tx,dataset,updated);
  }
 }
@@ -259,11 +261,7 @@ async function insertArtifact(
   const memberPublication=await assertDestination(tx,creator,input.destination??{type:'personal'},memberPagePublication(input,atCreation));
   if (atCreation.operation) await reserveCreation(tx,atCreation.operation);
   await claimArtifactId(tx,id,creator,!!atCreation.reservedId);
-  // A FORK carries its source's rows verbatim — a snapshot the forker may read,
-  // not rows the forker wrote — so a user column's "must be the logged-in user"
-  // rule is not re-judged under the forker's id: that would make every app
-  // whose rows name its members unforkable by anyone but the one person named.
-  if (!atCreation.forkedFrom) await validateUserContent(tx,input,userId,key=>loadDatasetRows({meta:{objectKey:key}}));
+  await validatePublishedDataset(tx,input,userId,atCreation.forkedFrom);
   const ownerKind = await userKindOf(userId, tx);
   /*
    * THE SANDBOX CEILING. A test user's work never lists anywhere and is never
@@ -278,11 +276,7 @@ async function insertArtifact(
     : input.visibility ??
       (!userId && !actorGroupId ? (ALLOW_PUBLIC_VISIBILITY ? 'public' : 'unlisted')
         : input.format === 'image' || input.format === 'dataset' || input.format === 'pdf' || input.format === 'file' ? 'unlisted' : 'private');
-  // A new stored dataset that names no access gets the read-only template (v3) and `readwrite` access: every
-  // reader of the dataset reads, and only the owner and editors write (no rule admits anyone else).
-  // A live dataset is born with no rules (lib/live-datasets): only its owner and editors may query it until one is set.
-  const defaultPolicy = !atCreation.datasetPolicy && !atCreation.forkedFrom && input.access===undefined && input.format==='dataset' && !liveConnectionOf(input.meta);
-  const datasetPolicy = atCreation.datasetPolicy?.policy ?? (defaultPolicy ? readOnlyDatasetPolicy(input) : null);
+  const datasetSettings = datasetCreationDefaults(input,atCreation);
   if(input.format==='html'&&input.htmlDatasets)input={...input,meta:{...input.meta,htmlLinks:[...input.htmlDatasets]}};
   if (!!atCreation.liveConnection !== !!liveConnectionOf(input.meta) || (atCreation.liveConnection && input.format !== 'dataset')) throw new Error('A live dataset is created with its connection, and only it');
   const created = await artifactQuery<ArtifactRow>(tx,
@@ -324,16 +318,13 @@ async function insertArtifact(
     atCreation.linkRole ?? null,
     input.ancestor_ids ?? [],
     newEditId(),
-    // Read-only unless the caller asked otherwise: a dataset that could
-    // be written by default would make every existing document's data
-    // mutable without anyone choosing it.
-    input.access ?? (defaultPolicy ? 'readwrite' : 'read'),
+    datasetSettings.access,
     atCreation.forkedFrom ?? null,
     JSON.stringify(sourceIds),
     // A DATASET carried whole, policy included. NULL for every other
     // creation, which is also what makes the audit CTE above a no-op.
-    datasetPolicy ? JSON.stringify(datasetPolicy) : null,
-    atCreation.datasetPolicy?.revision ?? 0,
+    datasetSettings.policy ? JSON.stringify(datasetSettings.policy) : null,
+    datasetSettings.revision,
     sourceStorage(input.format,input.source,!atCreation.forkedFrom).document,
     input.destination?.type==='group'?input.destination.id:null,
     actorGroupId,
@@ -459,9 +450,6 @@ async function lockArtifactWrite(tx: Queryable, actor: AccessActor, id: string, 
   if (!current) return null;
   return {
     current,
-    async validateContent(content: Pick<ArtifactInput, 'format' | 'source' | 'meta'>): Promise<void> {
-      await validateUserContent(tx, content, actor.userId, key => loadDatasetRows({ meta: { objectKey: key } }));
-    },
     async publish(content: ArtifactInput, htmlShape?:HtmlPageShape): Promise<ArtifactRow> {
       await archiveVersion(tx, current);
       const updated = (await artifactQuery<ArtifactRow>(tx,
@@ -534,7 +522,7 @@ async function saveRegionsLocked(tx: Queryable, actor: AccessActor, write: Artif
     format: 'html', source: html, ...(named ? { title: named.title } : {}),
     meta: { ...current.meta, htmlIdentity: plan.ledger, htmlScriptFingerprint: scriptFingerprint(html), htmlLibraries: libraryVersions(), htmlIdentityCarry: undefined },
   };
-  await write.validateContent(input);
+  await validatePublishedDataset(tx,input,actor.userId);
   const updated = await write.publish(input);
   await logWholeDocumentWrite(tx, current, updated, true);
   await reconcileSourceIds(tx, updated, 'replace');
@@ -667,9 +655,7 @@ async function revertScoped(actor: AccessActor, id: string, version: number, opt
       current = write.current;
     }
 
-    if(target.format==='dataset'&&!catalogOf(target))return {notArchived:true,refusal:reply({error:'dataset_error',details:['Historical dataset has no catalog or stored object key']},400)};
-    target=retainUserScope(target,current);
-    try { await write.validateContent(target); }
+    try { target = await prepareDatasetRestore(tx,target,current,actor.userId); }
     catch(error) { if(error instanceof DatasetError)return {notArchived:true,refusal:reply({error:'dataset_error',details:[error.message]},error.status)};throw error; }
 
     const updated = await write.publish(target);
@@ -822,25 +808,9 @@ async function replaceArtifactInTx(
     return current;
   }
   if(input.format==='html')input={...input,meta:{...input.meta,htmlLinks:[...(input.htmlDatasets??[])]}};
-  input=retainUserScope(input,current);
-  /*
-   * The policy is re-validated against the REPLACEMENT's catalog, inside this
-   * transaction, by the same function that validated it when it was set — so
-   * a replacement that drops a table or a permission column is refused
-   * (`policy_mismatch`, naming what is missing) instead of leaving a policy
-   * pointing at columns that no longer exist. The policy row and its revision
-   * are untouched by a replace: what was granted stays granted.
-   */
-  if (current.dataset_policy) {
-    try { validateStoredDatasetPolicy({format:input.format,meta:input.meta,dataset_policy:null}, current.dataset_policy); }
-    catch (error) { return reply({error:'policy_mismatch',detail:error instanceof Error?error.message:'The dataset policy does not fit this replacement.'},400); }
-  }
-  await write.validateContent(input);
-
-  const source = input.source;
-  const updated = await write.publish({
-    ...input, source, meta: input.meta,
-  },htmlShape);
+  const prepared = await prepareDatasetReplacement(tx,input,current,actor.userId);
+  if (prepared instanceof Reply) return prepared;
+  const updated = await write.publish(prepared,htmlShape);
   if(opts.shares!==undefined)Object.assign(updated,await writeShares(tx,id,opts.shares,current.sharing_revision??0));
   else updated.shares=(await tx.query<ShareEntry>('SELECT email,role FROM artifact_shares WHERE artifact_id=$1 ORDER BY email',[id])).rows;
   await bindCurrentUserScopes(tx,updated);
@@ -913,8 +883,10 @@ export function byteQuotaFor(tokenId: string | null, ownerUserId?: string | null
   return () => assetByteQuotaExceeded(tokenId, ownerUserId);
 }
 /** The byte quota a publication is charged to: a group's sign-in's GROUP (lib/accounts `GroupPrincipal`), else its token or account. */
-export function publisherByteQuota(actor: AccessActor, ownerUserId?: string | null): () => Promise<boolean> {
-  return actor.principalGroup ? () => groupAssetByteQuotaExceeded(actor.principalGroup!.id) : byteQuotaFor(actor.tokenId, ownerUserId);
+export function publisherByteQuota(actor: AccessActor, owner?: Pick<AccessActor, 'tokenId' | 'userId'>): () => Promise<boolean> {
+  const groupId = actor.principalGroup?.id;
+  if (groupId) return () => groupAssetByteQuotaExceeded(groupId);
+  return owner ? byteQuotaFor(owner.tokenId, owner.userId) : byteQuotaFor(actor.tokenId);
 }
 
 /** Stable keyset pagination; creation timestamps never move when content is edited. */
@@ -1118,8 +1090,8 @@ export async function migrateLegacyPage(id:string,options:{apply?:boolean}={}):P
   await logWholeDocumentWrite(tx,write.current,updated);
   await closeLiveRegions(tx,id);
   for(const region of proof.states){
-   await tx.query(`INSERT INTO region_states(artifact_id,region_id,kind,state,saved_version,created_at) VALUES($1,$2,'rich-native-v1',$3,$4,GREATEST(clock_timestamp(),$5::timestamptz+interval '1 millisecond'))`,[id,region.id,Buffer.from(region.state),updated.version,(backup.region_states as {created_at:string}[]).find(old=>'region_id' in old && old.region_id===region.id)?.created_at??before.created_at]);
-   await tx.query('INSERT INTO region_snapshots(artifact_id,region_id,version,snapshot) VALUES($1,$2,$3,$4)',[id,region.id,updated.version,Buffer.from(region.snapshot)]);
+   const previousCreatedAt = (backup.region_states as {created_at:string}[]).find(old=>'region_id' in old && old.region_id===region.id)?.created_at??before.created_at;
+   await installMigratedRegion(tx,id,updated.version,region,previousCreatedAt);
   }
   const hash=(value:string)=>createHash('sha256').update(value).digest('hex');
   await tx.query('INSERT INTO legacy_page_migrations(artifact_id,backup,receipt) VALUES($1,$2::jsonb,$3::jsonb)',[id,JSON.stringify(backup),JSON.stringify({converter:1,oldVersion:before.version,newVersion:updated.version,oldEdit:before.edit_id,newEdit:updated.edit_id,oldHash:hash(before.source??''),newHash:hash(proof.html)})]);

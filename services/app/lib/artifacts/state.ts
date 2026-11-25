@@ -39,3 +39,9 @@ export function observedChange(current: ArtifactRow, expected: {expectedVersion?
 export function versionConflict(current: ArtifactRow, changed: ConflictChange) {
   return {error: 'version_conflict' as const, currentVersion: current.version, currentState: artifactState(current), changed};
 }
+
+/** The conflict body for a preflight observation, if it no longer names the head. */
+export function versionConflictFor(current: ArtifactRow, expected: Parameters<typeof observedChange>[1]) {
+  const changed = observedChange(current, expected);
+  return changed ? versionConflict(current, changed) : null;
+}

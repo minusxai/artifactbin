@@ -352,9 +352,8 @@ async function write(actor: AccessActor, call: PageSqlDoorCall, scope: PageSqlDo
         // world judged the statement's own shape, before anything is written).
         writable(target, effect.op);
         const statement = compiled(effect, stored, (j) => `r_${digest([seed, 0, j])}`);
-        const result = await mutateDataset(head!, actor, statement.sql, statement.params, {
+        const result = await mutateDataset(head!, actor, [statement], {
           target: { schema: stored.schema, table: stored.name },
-          statements: [statement],
           pagePolicy: scope.pageId,
           expectedState: artifactState(head!),
           casRetries: 0,

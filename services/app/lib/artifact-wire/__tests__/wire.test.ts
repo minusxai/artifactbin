@@ -91,16 +91,14 @@ describe('echoes', () => {
   it('create and replace replies hand back the next edit\'s inputs; an archived version carries its bytes', async () => {
     const owner = await account('owner@example.test');
     const row = await mine(owner);
-    expect(createdArtifactWire(row, BASE, row.source)).toMatchObject({ id: row.id, edit_id: row.edit_id, state: artifactState(row), html: row.source, link_role: 'viewer', ancestor_ids: [], sharing_revision: 0 });
+    expect(createdArtifactWire(row, BASE)).toMatchObject({ id: row.id, edit_id: row.edit_id, state: artifactState(row), html: row.source, link_role: 'viewer', ancestor_ids: [], sharing_revision: 0 });
     const markupRow = { ...row, format: 'markup' as const, source: '<p>stored</p>' };
-    expect(createdArtifactWire(markupRow, BASE, '<p>stored</p>')).toMatchObject({ markup_changed: false });
-    expect(createdArtifactWire(markupRow, BASE, '<p>sent</p>')).toMatchObject({ markup_changed: true, markup: '<p>stored</p>' });
-    expect(createdArtifactWire(markupRow, BASE, undefined)).toMatchObject({ markup: '<p>stored</p>' });
+    expect(createdArtifactWire(markupRow, BASE)).toMatchObject({ markup: '<p>stored</p>' });
     const next = await replaceArtifactFor(owner, row.id, page('Two'), { expectedVersion: 1 }) as ArtifactRow;
     // Transaction receipts must render synchronously, without querying the global DB.
-    const replaced = replacedArtifactWire(next, BASE, undefined, { affected: [row], warnings: [{ id: 'w', title: null, details: ['x'] }], openAnnotations: 1 });
-    expect(replaced).toMatchObject({ version: 2, edit_id: next.edit_id, affected_dependents: [{ id: row.id, title: 'Doc' }], warnings: [{ id: 'w' }], shares: [] });
-    expect(await replacedArtifactWire(next, BASE, undefined, { affected: null, warnings: [], openAnnotations: 0 })).not.toHaveProperty('warnings');
+    const replaced = replacedArtifactWire(next, BASE, { affected: [row], openAnnotations: 1 });
+    expect(replaced).toMatchObject({ version: 2, edit_id: next.edit_id, affected_dependents: [{ id: row.id, title: 'Doc' }], shares: [] });
+    expect(replaced).not.toHaveProperty('warnings');
     const version = (await getVersionFor(owner, row.id, 1))!;
     expect(versionToWire(version)).toMatchObject({ version: 1, html: row.source });
     expect(versionToWire({ ...version, format: 'markup' })).toMatchObject({ markup: row.source });
