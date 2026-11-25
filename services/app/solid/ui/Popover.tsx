@@ -1,15 +1,10 @@
 /* @jsxImportSource solid-js */
 /**
- * A click-toggle popover anchored to its trigger and portalled out of the document flow — the Solid
- * counterpart of a Radix popover. A scrolling toolbar or a clipped rail must not clip the panel (the same
- * reason AnchoredPanel gives for its own portal), so it is placed with the framework-free Radix popper
- * model the islands and solid/ui/Tooltip already use, and portalled to the trusted UI host
- * when the page has one, else <body>.
+ * A click-toggle popover anchored with lib/ui-runtime/popper and portalled to the trusted UI
+ * host (else <body>), so a scrolling toolbar or clipped rail cannot clip it.
  *
- * The caller owns `open`; this owns placement and dismissal through the kit's one popup contract
- * (lib/islands/kit/popup-dismiss): an outside pointerdown or Escape reports a close, and opening one
- * closes any other open popup. Opening never steals focus from the trigger (Radix's onOpenAutoFocus prevented) — a
- * field inside the panel that wants focus asks for it itself (the `autofocus` attribute, or a ref).
+ * The caller owns `open`. lib/ui-runtime/popup-dismiss reports a close on outside pointerdown,
+ * Escape or when another popup opens. Focus stays on the trigger unless content requests it.
  * The panel takes the appearance of its trigger (solid/ui/theme), so a popover opened inside a dark editor is dark.
  */
 import { createEffect, createSignal, createUniqueId, on, onCleanup, Show, untrack, type JSX } from 'solid-js';

@@ -127,12 +127,16 @@ describe('UI-primitive guard', () => {
     expect(run(repository({ 'services/app/solid/ui/Thing.tsx': "const LOCAL = 'w-full'; export const LAYER = { dialog: 40 };" })).status).toBe(0);
   });
 
-  it('scans the offline file chrome in lib/ and leaves document content kits unscanned', () => {
+  it('scans Solid app chrome and leaves the web entry and authored components outside the guard', () => {
     const offender = '<button type="button" class="rounded px-2">Go</button>';
-    const offline = run(repository({ 'services/app/lib/offline/solid-entry.tsx': offender }));
-    expect(offline.status).toBe(1);
-    expect(offline.output).toContain('styled-button');
-    expect(run(repository({ 'services/app/lib/islands/kit/select.tsx': offender, 'services/app/lib/frame-edit/GridEdit.tsx': offender, 'services/app/lib/offline/__tests__/t.test.tsx': offender })).status).toBe(0);
+    const chrome = run(repository({ 'services/app/solid/pages/Page.tsx': offender }));
+    expect(chrome.status).toBe(1);
+    expect(chrome.output).toContain('styled-button');
+    expect(run(repository({
+      'services/app/web/solid-entry.tsx': offender,
+      'services/app/lib/html-components/example.ts': offender,
+      'services/app/lib/offline/retired.tsx': offender,
+    })).status).toBe(0);
   });
 
   describe('documented exceptions', () => {

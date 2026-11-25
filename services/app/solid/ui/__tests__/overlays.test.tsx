@@ -1,5 +1,5 @@
 /* @jsxImportSource solid-js */
-/** The shared overlay contracts: the modal shell (kit/dialog-shell) and the one-open popup rule. */
+/** The shared overlay contracts: the modal shell (lib/ui-runtime/dialog-shell) and the one-open popup rule. */
 import { expect, it, vi } from 'vitest';
 import { createSignal, Show } from 'solid-js';
 import { screen } from '@testing-library/dom';
