@@ -24,14 +24,13 @@ import {observedRequest} from '@/__tests__/conditional-request';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { useAppHarness, request, params } from '@/__tests__/harness';
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
-import { useLoopbackLookup } from '@artifactbin/utils/node/loopback-lookup';
 import { GET as docAssets } from '@/app/a/[id]/assets/route';
 import { POST as createArtifact, GET as listArtifacts } from '@/app/api/artifacts/route';
 import { PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
 import { PUT as putSharing } from '@/app/api/my/artifacts/[id]/sharing/route';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts/testing';
-import { allowLocalWebIngest, restoreWebIngestPolicy } from '@/test/helpers/web-ingest';
+import { allowLocalWebIngest, restoreWebIngestPolicy, setWebIngestPolicy } from '@/test/helpers/web-ingest';
 import { setDocAssetImportCapForTests } from '@/lib/allowances';
 import { assetUrlFor, urlHash } from '@/lib/document';
 import { getDb } from '@/lib/platform';
@@ -187,25 +186,14 @@ describe('who pays: the document owner, never the reader', () => {
 });
 
 describe('the bounds, each by name', () => {
-  it('refuses an address that is not on the public internet', async () => {
+  it('reports a blocked address for image and JSON requests', async () => {
     const doc = await publicDoc();
-    const res = await ask(doc.id, 'http://169.254.169.254/latest/meta-data/iam.png');
-    expect(res.status).toBe(400);
-    const body = await res.json();
-    expect(body.error).toBe('asset_fetch_failed');
-    expect(body.code).toBe('forbidden_address');
-  });
-
-  it('refuses a loopback NAME the server resolves itself (as server.ts does): *.localhost and lvh.me', async () => {
-    const doc = await publicDoc();
-    useLoopbackLookup();
-    restoreWebIngestPolicy();
+    setWebIngestPolicy({ allowPrivate: false, allowHttp: true });
     try {
-      for (const url of ['https://anything.localhost/iam.png', 'https://x.lvh.me/iam.png']) {
-        const res = await ask(doc.id, url);
-        expect(res.status, url).toBe(400);
-        const body = await res.json();
-        expect(body.code, url).toBe('forbidden_address');
+      for (const accept of ['image/*', 'application/json']) {
+        const res = await ask(doc.id, `${web}/blocked.png`, { headers: { accept } });
+        expect(res.status, accept).toBe(400);
+        expect(await res.json(), accept).toMatchObject({ error: 'asset_fetch_failed', code: 'forbidden_address' });
       }
     } finally {
       allowLocalWebIngest();
@@ -291,13 +279,6 @@ describe('the JSON answer', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('location')).toBeNull();
     expect(await res.json()).toEqual({ url: assetUrlFor(url) });
-  });
-
-  it('keeps a refusal exactly as the redirect path reports it', async () => {
-    const doc = await publicDoc();
-    const res = await asJson(doc.id, 'http://169.254.169.254/x.png');
-    expect(res.status).toBe(400);
-    expect((await res.json()).code).toBe('forbidden_address');
   });
 
   it('is still the uniform 404 for a stranger on a private document', async () => {

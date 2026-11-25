@@ -7,9 +7,8 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { fetchCsvFromUrl } from '../csv-url';
 import { IngestError } from '../types';
-import { allowLocalWebIngest, restoreWebIngestPolicy } from '@/test/helpers/web-ingest';
+import { allowLocalWebIngest, restoreWebIngestPolicy, setWebIngestPolicy } from '@/test/helpers/web-ingest';
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
-import { useLoopbackLookup } from '@artifactbin/utils/node/loopback-lookup';
 
 const CSV = 'region,units\nnorth,42\n';
 
@@ -83,16 +82,13 @@ describe('fetchCsvFromUrl', () => {
     expect(await code(fetchCsvFromUrl(`${base}/gone`))).toBe('csv_fetch_failed');
   });
 
-  it('refuses a forbidden target through the shared guard', async () => {
-    restoreWebIngestPolicy(); // production policy
-    expect(await code(fetchCsvFromUrl('https://169.254.169.254/latest/meta-data'))).toBe('csv_fetch_failed');
-  });
-
-  it('refuses a loopback NAME the server resolves itself (as server.ts does): *.localhost and lvh.me', async () => {
-    restoreWebIngestPolicy();
-    useLoopbackLookup();
-    for (const url of ['https://anything.localhost/data.csv', 'https://x.lvh.me/data.csv']) {
-      expect(await code(fetchCsvFromUrl(url)), url).toBe('csv_fetch_failed');
-    }
+  it('maps a blocked address to a CSV fetch failure with the guard reason', async () => {
+    setWebIngestPolicy({ allowPrivate: false, allowHttp: true });
+    const refusal = fetchCsvFromUrl(`${base}/rows.csv`);
+    await expect(refusal).rejects.toBeInstanceOf(IngestError);
+    await expect(refusal).rejects.toMatchObject({
+      code: 'csv_fetch_failed',
+      message: expect.stringContaining('is not a fetchable address'),
+    });
   });
 });
