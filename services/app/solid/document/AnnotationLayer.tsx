@@ -31,7 +31,7 @@ import { documentRect, sendDocument, type DocumentRuntimeRef } from '@/lib/html-
 import type { StoryEditParentMessage, StoryEditSelection } from '@/lib/html-runtime/bridge/selection-contract';
 import { Button } from '../ui/Button';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
-import { createIsPhoneViewport } from '../ui/MobileSheet';
+import { createIsPhoneViewport } from '../ui/phone-viewport';
 import { AnnotationComposer, CAPTURE_CHROME_CSS } from './AnnotationComposer';
 import { AnnotationPreview, CommentsOffline, positionedComments, VIEW_COMMENT_COLLAPSED_H, VIEW_COMMENT_INSET } from './AnnotationPreview';
 import { CommentRail } from './AnnotationRail';

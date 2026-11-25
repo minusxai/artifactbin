@@ -1,23 +1,8 @@
 /* @jsxImportSource solid-js */
 /** A phone dialog with a handle, a fixed header and a scrolling body. */
-import { createSignal, onCleanup, onMount, Show, type Accessor, type JSX } from 'solid-js';
+import { Show, type JSX } from 'solid-js';
 import { LAYER } from './layers';
 import { PanelSurface } from './PanelSurface';
-
-/** Tailwind's `sm` threshold, by innerWidth (jsdom implements no media queries). */
-export const isPhoneViewport = (): boolean => typeof window !== 'undefined' && window.innerWidth < 640;
-
-/** The same answer, LIVE. */
-export function createIsPhoneViewport(): Accessor<boolean> {
-  const [phone, setPhone] = createSignal(isPhoneViewport());
-  onMount(() => {
-    const onResize = () => setPhone(isPhoneViewport());
-    onResize();
-    window.addEventListener('resize', onResize);
-    onCleanup(() => window.removeEventListener('resize', onResize));
-  });
-  return phone;
-}
 
 export default function MobileSheet(props: {
   label: string;

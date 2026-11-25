@@ -2,7 +2,7 @@
 /** Editor geometry and view navigation, shared by hosted, preview and portable-file adapters. */
 import { createMemo, type JSX } from 'solid-js';
 import { Tabs } from '../ui/Tabs';
-import { createIsPhoneViewport } from '../ui/MobileSheet';
+import { createIsPhoneViewport } from '../ui/phone-viewport';
 interface EditorViewTab { key: string; label: string; aria: string; tip: string; icon: JSX.Element; active: boolean; disabled?: boolean; choose: () => void }
 /**
  * The editor's view switch. The tabs are ui/Tabs; labels collapse to icons (named and tooltipped by their label) on a
