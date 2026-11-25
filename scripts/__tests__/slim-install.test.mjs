@@ -43,14 +43,16 @@ const OWNERS = new Set([
  * its test resolves barlow, one of them).
  */
 const READERS = new Set(['services/app/lib/viz/chart-fonts.server.ts', 'services/app/lib/viz/__tests__/chart-tokens.test.ts']);
+const chartFontSource = read('services/app/lib/viz/chart-fonts.server.ts');
+const chartFontPackages = [...(chartFontSource.match(/const FACES = \[(.*)\] as const;/)?.[1] ?? '').matchAll(/\['([a-z0-9-]+)'/g)]
+  .map((match) => `@fontsource/${match[1]}`);
 const readFiles = () => {
-  const source = read('services/app/lib/viz/chart-fonts.server.ts');
-  const faces = [...(source.match(/const FACES = \[(.*)\] as const;/)?.[1] ?? '').matchAll(/\['([a-z0-9-]+)'/g)].map((match) => match[1]);
-  const files = [...(source.match(/for \(const file of \[([^\]]*)\]\)/)?.[1] ?? '').matchAll(/'([a-z0-9-]+)'/g)].map((match) => match[1]);
-  expect(faces).toContain('barlow');
+  const files = [...(chartFontSource.match(/for \(const file of \[([^\]]*)\]\)/)?.[1] ?? '').matchAll(/'([a-z0-9-]+)'/g)].map((match) => match[1]);
+  expect(chartFontPackages).toContain('@fontsource/barlow');
   expect(files).toHaveLength(4);
-  return faces.flatMap((pkg) => {
-    const dir = `node_modules/@fontsource/${pkg}`;
+  return chartFontPackages.flatMap((name) => {
+    const dir = `node_modules/${name}`;
+    const pkg = path.basename(name);
     const manifest = JSON.parse(read(`${dir}/package.json`));
     const entry = (typeof manifest.exports?.['.'] === 'string' ? manifest.exports['.'] : manifest.main ?? 'index.js').replace(/^\.\//, '');
     return [`${dir}/package.json`, `${dir}/${entry}`, ...files.map((file) => `${dir}/files/${pkg}-${file}-normal.woff`)];
@@ -104,6 +106,12 @@ it('is the whole install\'s entries minus exactly the listed exclusions, under o
   for (const step of all) expect(paths(step)).toEqual(list);
   expect(all.filter((step) => step.uses.startsWith('actions/cache/save@'))).toHaveLength(5);
   expect(fast.steps.some((step) => /^install-slim-/.test(step.with?.key ?? '')) || warm.steps.some((step) => /^install-slim-/.test(step.with?.key ?? ''))).toBe(false);
+});
+
+it('installs only the chart WOFF providers as runtime font dependencies', () => {
+  const { dependencies } = JSON.parse(read('services/app/package.json'));
+  const fontPackages = Object.keys(dependencies).filter((name) => /^@fontsource(?:-variable)?\//.test(name));
+  expect(fontPackages.sort()).toEqual([...chartFontPackages].sort());
 });
 
 it('keeps every file a reader loads from an excluded package, in every kit', () => {
