@@ -51,8 +51,10 @@ it('has the core add validated library entries to the import map, skipped for po
  expect(core).toMatch(/if\(!\w+\)for\(let\[\w+,\w+\]of Object\.entries\(\w+\.libraries/);
  expect(core.indexOf('.libraries')).toBeLessThan(core.indexOf('"@afbin/apollo"'));
  // The core's own value check admits every address the server names (libraries under /af/lib/, components).
- const check=/&&\/(\^\\\/af\\\/[^\n]*?\$)\/\.test\(/.exec(core)?.[1];
- expect(check).toBeDefined();
+ // The core checks more than one kind of /af/ address (runtime modules have their own): this is the libraries' one.
+ const checks=[...core.matchAll(/\/(\^\\\/af\\\/[^\n]*?\$)\/\.test\(/g)].map(match=>match[1]!);
+ const check=checks.find(source=>source.includes('lib'));
+ expect(check,checks.join(' | ')).toBeDefined();
  for(const url of Object.values(libraryImports({})))expect(new RegExp(check!).test(url),url).toBe(true);
  expect(new RegExp(check!).test('/libraries/vega-6.3.1/index.js')).toBe(false);
 });
