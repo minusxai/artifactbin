@@ -97,12 +97,23 @@ function startCatchUp(): Promise<void> {
   }));
 }
 
-/** Fold the artifacts a committed append just wrote views for. Never rejects. */
+/**
+ * Fold the artifacts an append just wrote views for, if the log already shows them. Never rejects.
+ * Only pending ids open a transaction: behind the events service the append is acknowledged before its rows
+ * are visible, so nothing is pending here and the next read's catch-up folds them.
+ */
 export async function foldWrittenViews(ids: readonly string[]): Promise<void> {
   if (!ids.length) return;
   await track((async () => {
     if (!(await eventsTablePresent())) return;
-    await foldViewTotals(await getDb(), ids);
+    const db = await getDb();
+    const pending = (await db.query<{ id: string }>(`
+      SELECT requested.artifact_id AS id FROM unnest($2::text[]) requested(artifact_id)
+      LEFT JOIN canonical_view_totals c ON c.source=$1 AND c.artifact_id=requested.artifact_id
+      WHERE c.position IS NULL OR EXISTS (
+        SELECT 1 FROM ${EVENTS_SCHEMA}.events e WHERE e.object_id=requested.artifact_id AND e.position>c.position)`,
+      [SOURCE, [...new Set(ids)]])).rows.map(row => row.id);
+    if (pending.length) await foldViewTotals(db, pending);
   })().catch(logged));
 }
 
