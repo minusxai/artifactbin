@@ -20,6 +20,7 @@ import sharp from 'sharp';
 import type { BrowserService, HarvestedSvg, PageInspection, RenderResult, SvgHarvestResult } from '@artifactbin/contracts/browser';
 import type { BrowserSessions } from '@artifactbin/contracts/browser-sessions';
 import { createBrowserSessions } from './sessions';
+import { openSessionHandoff } from './session-handoff';
 import { createSessionProcess } from './session-process';
 import { renderSandboxChoice, type BrowserSessionOptions, type RenderSandboxChoice } from './session-config';
 import { admittedUploadUrl, uploadImage, type UploadOptions } from './upload';
@@ -56,6 +57,7 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
     try { executablePath = await opts.executablePath(); return null; } catch (error) { return { ok: false as const, reason: 'unavailable' as const, detail: (error as Error).message }; }
   };
 
+  let closeHandoff: (() => Promise<void>) | undefined;
   const started = createBrowserSessions(actor => {
     if (!opts.sessions) throw new Error('Browser session forwarding is not configured');
     return createSessionProcess(actor, opts.sessions);
@@ -131,12 +133,13 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
      * its sandbox, and a host that cannot give it one is refused here, at boot, by name (never a silent fallback).
      */
     async start() {
+      if (opts.sessions?.handoffSocket && !closeHandoff) closeHandoff=await openSessionHandoff(opts.sessions.handoffSocket,started);
       if (sandbox.mode !== 'chromium') return;
       if(opts.executablePath)executablePath=await opts.executablePath();
       try { await exportsLane.warm(30_000); }
       catch (error) { throw new Error(`BROWSER__RENDER_SANDBOX=chromium, but Chromium could not start inside its sandbox (${(error as Error).message.split('\n')[0]}). The host must allow unprivileged user namespaces (SETUP.md, "On a server"); set BROWSER__RENDER_SANDBOX=none to accept rendering without it.`); }
     },
-    async close() { await sessions.close(); await Promise.all([exportsLane.close(), checksLane.close()]); },
+    async close() { await closeHandoff?.(); await sessions.close(); await Promise.all([exportsLane.close(), checksLane.close()]); },
   };
   if(upload)service.renderAndUpload=async request=>{
     try{

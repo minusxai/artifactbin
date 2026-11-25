@@ -216,3 +216,23 @@ it('names why a worker died on the running execution instead of a generic sessio
     await vi.waitFor(async () => expect(await sessions.request({ actor, op: 'status', session_id: 'dies', execution_id: 'first' })).toMatchObject({ status: 'lost', error: { code: 'SESSION_LOST', message: 'Error: out of memory' } }));
   } finally { await sessions.close(); }
 });
+
+it('acquires the handoff only when empty, without racing creation or closing existing handles', async () => {
+ const run=vi.fn(async()=>({pages:[],attachments:[]}));
+ const registry=createBrowserSessions(async()=>({ run, close:async()=>{} }));
+ const actor={credential:'bearer' as const,tokenId:'owner'};
+ const first={actor,op:'script' as const,session_id:'one',execution_id:'a',code:'return 1',create:true};
+ try {
+  const opening=registry.request(first);
+  expect(registry.holdIfIdle()).toBe(false);
+  await opening;
+  expect((await registry.request({...first,session_id:'two'})).status).toBe('queued');
+  for(const session_id of ['one','two'])await registry.request({actor,op:'close',session_id});
+  expect(registry.holdIfIdle()).toBe(true);
+  expect(registry.holdIfIdle()).toBe(true);
+  expect((await registry.request({...first,session_id:'three'})).error?.code).toBe('SESSION_DRAINING');
+  registry.resume();
+  registry.resume();
+  expect((await registry.request({...first,session_id:'three'})).status).toBe('queued');
+ } finally {await registry.close();}
+});
