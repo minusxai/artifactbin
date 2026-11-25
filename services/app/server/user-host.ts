@@ -5,7 +5,7 @@ import { ACTOR_HEADER } from '@artifactbin/contracts/actor';
 import { ownerDocumentDoor, ownerSqlArtifactId } from '@artifactbin/contracts/owner-host';
 import { ownerHostServes } from '@artifactbin/contracts/url-space';
 import { ownerHostSqlRead } from '@/lib/page-doors';
-import { getArtifactById } from '@/lib/artifacts';
+import { getArtifactById, type ArtifactRow } from '@/lib/artifacts';
 import { PUBLIC_BASE_URL, USER_PAGES_HOST, IS_DEV } from '@/lib/platform';
 import { isUserPagesHost, ownerForHandle, siteDestination, siteAddress, siteOwner, hasPublicSiteAncestors, inSiteScope, documentOwner, userPagesOrigin, publicHomeFiles, eligibleDocument, servesDocument, servesEmbeddedArtifact, servesWebAsset, type UserPagesOwner } from '@/lib/user-pages';
 import { DOMAIN_HOME_CSP, siteFilePath, renderDomainHome, type ProfileListingData } from '@/lib/user-pages';
@@ -23,7 +23,7 @@ import { GET as webAssetGet } from '@/app/assets/[hash]/route';
 import { GET as exportGet } from '@/app/a/[id]/export/route';
 import { GET as avatarGet } from '@/app/api/users/[id]/avatar/route';
 
-type Handler = (request: Request, ctx: { params: Promise<{ id: string }> }) => Promise<Response> | Response;
+type Handler = (request: Request, ctx: { params: Promise<{ id: string }>; page?: ArtifactRow }) => Promise<Response> | Response;
 
 /**
  * The public files a served document and its runtime load from, passed on to the app's own static handlers: the
@@ -93,8 +93,9 @@ async function asGuest(request: Request, body?: Uint8Array<ArrayBuffer> | null):
 }
 
 
-const call = (handler: Handler, request: Request, id: string) =>
-  runWithRequest(request, async () => handler(request, { params: Promise.resolve({ id }) }));
+/** `page`: the row this request already read, handed to a door that reads it (assets) so it is read once. */
+const call = (handler: Handler, request: Request, id: string, page?: ArtifactRow) =>
+  runWithRequest(request, async () => handler(request, { params: Promise.resolve({ id }), ...(page ? { page } : {}) }));
 
 /** The owner's served page, as a guest, through the app's own raw handler; the app stays canonical (lib/document-serving). */
 async function servePage(request: Request, id: string, hostname: string, owner: UserPagesOwner): Promise<Response> {
@@ -164,7 +165,7 @@ async function documentRoute(request: Request, id: string, route: string, owner:
         const target = await getArtifactById(ref.slice(4));
         if (!target || !inSiteScope(owner,target) || !await hasPublicSiteAncestors(owner,target)) return notFound();
       }
-      return call(assetsGet, await asGuest(request), id);
+      return call(assetsGet, await asGuest(request), id, row);
     }
     default: return notFound();
   }

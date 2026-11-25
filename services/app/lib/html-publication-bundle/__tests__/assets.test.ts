@@ -3,7 +3,8 @@ import {describe,expect,it} from 'vitest';
 import {mintAccountToken,useAppHarness} from '@/__tests__/harness';
 import {ANONYMOUS_ACTOR,identityForUser} from '@/lib/accounts';
 import {createArtifactFromBody} from '@/lib/publish';
-import {loadBundleAssetResources,serveBundleAsset} from '../index';
+import {getArtifactById} from '@/lib/artifacts';
+import {loadBundleAssetResources,serveBundleAsset as serveForRow} from '../index';
 
 useAppHarness();
 const BASE='http://localhost:3030';
@@ -19,6 +20,8 @@ async function bundledPage(visibility:'private'|'public'='private'){
  const receipt=(path:string)=>saved.dependencyReceipts.find(entry=>entry.path===path)!;
  return {owner,id:saved.id,logo:receipt('logo.svg'),css:receipt('main.css')};
 }
+/** The door reads the page row once and hands it down; a page that names nothing never reaches the server. */
+const serveBundleAsset=async(request:Request,actor:Parameters<typeof serveForRow>[1],page:string,dependency:string)=>{const row=await getArtifactById(page);return row?serveForRow(request,actor,row,dependency):null;};
 const asset=(page:string,dependency:string,query='&revision=1')=>new Request(`${BASE}/a/${page}/assets?dependency=${dependency}${query}`);
 
 describe('serveBundleAsset',()=>{
